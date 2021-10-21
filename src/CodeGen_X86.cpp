@@ -137,11 +137,12 @@ const x86Intrinsic intrinsic_defs[] = {
     {"psubuswx16", UInt(16, 16), "saturating_sub", {UInt(16, 16), UInt(16, 16)}, Target::AVX},
     {"psubuswx8", UInt(16, 8), "saturating_sub", {UInt(16, 8), UInt(16, 8)}},
 
-    // LLVM 6.0+ require using helpers from x86.ll, x86_avx.ll
-    {"pavgbx32", UInt(8, 32), "rounding_halving_add", {UInt(8, 32), UInt(8, 32)}, Target::AVX2},
-    {"pavgbx16", UInt(8, 16), "rounding_halving_add", {UInt(8, 16), UInt(8, 16)}},
-    {"pavgwx16", UInt(16, 16), "rounding_halving_add", {UInt(16, 16), UInt(16, 16)}, Target::AVX2},
-    {"pavgwx8", UInt(16, 8), "rounding_halving_add", {UInt(16, 8), UInt(16, 8)}},
+    {"llvm.x86.avx512.pavg.b.512", UInt(8, 64), "rounding_halving_add", {UInt(8, 64), UInt(8, 64)}, Target::AVX512_Skylake},
+    {"llvm.x86.avx2.pavg.b", UInt(8, 32), "rounding_halving_add", {UInt(8, 32), UInt(8, 32)}, Target::AVX2},
+    {"llvm.x86.sse2.pavg.b", UInt(8, 16), "rounding_halving_add", {UInt(8, 16), UInt(8, 16)}},
+    {"llvm.x86.avx512.pavg.w.512", UInt(16, 32), "rounding_halving_add", {UInt(16, 32), UInt(16, 32)}, Target::AVX512_Skylake},
+    {"llvm.x86.avx2.pavg.w", UInt(16, 16), "rounding_halving_add", {UInt(16, 16), UInt(16, 16)}, Target::AVX2},
+    {"llvm.x86.sse2.pavg.w", UInt(16, 8), "rounding_halving_add", {UInt(16, 8), UInt(16, 8)}},
 
     {"packssdwx16", Int(16, 16), "saturating_narrow", {Int(32, 16)}, Target::AVX2},
     {"packssdwx8", Int(16, 8), "saturating_narrow", {Int(32, 8)}},
@@ -483,8 +484,7 @@ void CodeGen_X86::visit(const Call *op) {
     // clang-format on
 
     vector<Expr> matches;
-    for (size_t i = 0; i < sizeof(patterns) / sizeof(patterns[0]); i++) {
-        const Pattern &pattern = patterns[i];
+    for (const auto &pattern : patterns) {
         if (expr_match(pattern.pattern, op, matches)) {
             value = call_overloaded_intrin(op->type, pattern.intrin, matches);
             if (value) {

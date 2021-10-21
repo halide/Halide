@@ -1244,12 +1244,12 @@ bool LoopNest::computes(const FunctionDAG::Node *f) const {
 // Inline a Func into all consumers within this loop.
 void LoopNest::inline_func(const FunctionDAG::Node *f) {
     // Inline it into the children
-    for (size_t i = 0; i < children.size(); i++) {
-        if (children[i]->calls(f)) {
+    for (auto &child : children) {
+        if (child->calls(f)) {
             std::unique_ptr<LoopNest> new_child{new LoopNest};
-            new_child->copy_from(*children[i]);
+            new_child->copy_from(*child);
             new_child->inline_func(f);
-            children[i] = new_child.release();
+            child = new_child.release();
         }
     }
 
@@ -1625,8 +1625,7 @@ vector<IntrusivePtr<const LoopNest>> LoopNest::compute_in_tiles(const FunctionDA
 
         const auto &c = children[child];
         int num_ones = 0;
-        for (size_t i = 0; i < c->size.size(); i++) {
-            int64_t s = c->size[i];
+        for (int64_t s : c->size) {
             num_ones += (s == 1) ? 1 : 0;
         }
 

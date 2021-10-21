@@ -1185,6 +1185,10 @@ public:
             check(arm32 ? "vqmovn.u32" : "uqxtn", 4 * w, u16(min(u32_1, max_u16)));
             check(arm32 ? "vqmovn.u32" : "uqxtn", 4 * w, u16(min(u64_1, max_u16)));
             check(arm32 ? "vqmovn.u64" : "uqxtn", 2 * w, u32(min(u64_1, max_u32)));
+            // Double/Triple saturating narrow from float
+            check(arm32 ? "vqmovn.s16" : "sqxtn", 8 * w, i8_sat(f32_1));
+            check(arm32 ? "vqmovn.s16" : "sqxtn", 8 * w, i8_sat(f64_1));
+            check(arm32 ? "vqmovn.s32" : "sqxtn", 4 * w, i16_sat(f64_1));
 
             // VQMOVUN  I       -       Saturating Move and Unsigned Narrow
             check(arm32 ? "vqmovun.s16" : "sqxtun", 8 * w, u8_sat(i16_1));
@@ -1193,6 +1197,10 @@ public:
             check(arm32 ? "vqmovun.s32" : "sqxtun", 4 * w, u16_sat(i32_1));
             check(arm32 ? "vqmovun.s32" : "sqxtun", 4 * w, u16_sat(i64_1));
             check(arm32 ? "vqmovun.s64" : "sqxtun", 2 * w, u32_sat(i64_1));
+            // Double/Triple saturating narrow from float
+            check(arm32 ? "vqmovun.s16" : "sqxtun", 8 * w, u8_sat(f32_1));
+            check(arm32 ? "vqmovun.s16" : "sqxtun", 8 * w, u8_sat(f64_1));
+            check(arm32 ? "vqmovun.s32" : "sqxtun", 4 * w, u16_sat(f64_1));
 
             // VQNEG    I       -       Saturating Negate
             check(arm32 ? "vqneg.s8" : "sqneg", 8 * w, -max(i8_1, -max_i8));

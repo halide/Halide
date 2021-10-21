@@ -1,8 +1,7 @@
 #include "HalideRuntime.h"
 #include "runtime_internal.h"
 
-// TODO: consider getting rid of this
-#define MAX_THREADS 256
+constexpr int MAX_THREADS = 256;
 
 extern "C" {
 

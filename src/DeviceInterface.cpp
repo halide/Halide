@@ -19,10 +19,10 @@ bool lookup_runtime_routine(const std::string &name,
     std::vector<JITModule> runtime(
         JITSharedRuntime::get(nullptr, target.with_feature(Target::JIT)));
 
-    for (size_t i = 0; i < runtime.size(); i++) {
+    for (const auto &module : runtime) {
         std::map<std::string, JITModule::Symbol>::const_iterator f =
-            runtime[i].exports().find(name);
-        if (f != runtime[i].exports().end()) {
+            module.exports().find(name);
+        if (f != module.exports().end()) {
             result = reinterpret_bits<fn_type>(f->second.address);
             return true;
         }
@@ -50,11 +50,11 @@ bool host_supports_target_device(const Target &t) {
     temp.fill(0);
     temp.set_host_dirty();
 
-    Halide::Internal::JITHandlers handlers;
-    handlers.custom_error = [](void *user_context, const char *msg) {
+    Halide::JITHandlers handlers;
+    handlers.custom_error = [](JITUserContext *user_context, const char *msg) {
         debug(1) << "host_supports_device_api: saw error (" << msg << ")\n";
     };
-    Halide::Internal::JITHandlers old_handlers = Halide::Internal::JITSharedRuntime::set_default_handlers(handlers);
+    Halide::JITHandlers old_handlers = Halide::Internal::JITSharedRuntime::set_default_handlers(handlers);
 
     int result = temp.copy_to_device(i);
 

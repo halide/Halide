@@ -546,12 +546,6 @@ struct halide_trace_event_t {
 
     /** The length of the coordinates array */
     int32_t dimensions;
-
-#if (__cplusplus >= 201103L || _MSVC_LANG >= 201103L)
-    // If we don't explicitly mark the default ctor as inline,
-    // certain build configurations can fail (notably iOS)
-    HALIDE_ALWAYS_INLINE halide_trace_event_t() = default;
-#endif
 };
 
 /** Called when Funcs are marked as trace_load, trace_store, or
@@ -617,10 +611,6 @@ struct halide_trace_packet_t {
     // @}
 
 #if (__cplusplus >= 201103L || _MSVC_LANG >= 201103L)
-    // If we don't explicitly mark the default ctor as inline,
-    // certain build configurations can fail (notably iOS)
-    HALIDE_ALWAYS_INLINE halide_trace_packet_t() = default;
-
     /** Get the coordinates array, assuming this packet is laid out in
      * memory as it was written. The coordinates array comes
      * immediately after the packet header. */
@@ -1278,6 +1268,7 @@ typedef enum halide_target_feature_t {
     halide_target_feature_cuda_capability70,  ///< Enable CUDA compute capability 7.0 (Volta)
     halide_target_feature_cuda_capability75,  ///< Enable CUDA compute capability 7.5 (Turing)
     halide_target_feature_cuda_capability80,  ///< Enable CUDA compute capability 8.0 (Ampere)
+    halide_target_feature_cuda_capability86,  ///< Enable CUDA compute capability 8.6 (Ampere)
 
     halide_target_feature_opencl,       ///< Enable the OpenCL runtime.
     halide_target_feature_cl_doubles,   ///< Enable double support on OpenCL targets

@@ -493,8 +493,8 @@ class DerivativeBounds : public IRVisitor {
             return;
         }
 
-        for (size_t i = 0; i < op->args.size(); i++) {
-            op->args[i].accept(this);
+        for (const auto &arg : op->args) {
+            arg.accept(this);
             if (!is_constant(result)) {
                 // One of the args is not constant.
                 result = ConstantInterval::everything();
@@ -520,8 +520,8 @@ class DerivativeBounds : public IRVisitor {
     }
 
     void visit(const Shuffle *op) override {
-        for (size_t i = 0; i < op->vectors.size(); i++) {
-            op->vectors[i].accept(this);
+        for (const auto &vector : op->vectors) {
+            vector.accept(this);
             if (!is_constant(result)) {
                 result = ConstantInterval::everything();
                 return;

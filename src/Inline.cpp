@@ -38,8 +38,7 @@ void validate_schedule_inlined_function(Function f) {
                    << f.name() << " because the function is scheduled inline.\n";
     }
 
-    for (size_t i = 0; i < stage_s.dims().size(); i++) {
-        Dim d = stage_s.dims()[i];
+    for (const auto &d : stage_s.dims()) {
         if (d.is_unordered_parallel()) {
             user_error << "Cannot parallelize dimension "
                        << d.var << " of function "
@@ -55,40 +54,40 @@ void validate_schedule_inlined_function(Function f) {
         }
     }
 
-    for (size_t i = 0; i < stage_s.splits().size(); i++) {
-        if (stage_s.splits()[i].is_rename()) {
+    for (const auto &split : stage_s.splits()) {
+        if (split.is_rename()) {
             user_warning << "It is meaningless to rename variable "
-                         << stage_s.splits()[i].old_var << " of function "
-                         << f.name() << " to " << stage_s.splits()[i].outer
+                         << split.old_var << " of function "
+                         << f.name() << " to " << split.outer
                          << " because " << f.name() << " is scheduled inline.\n";
-        } else if (stage_s.splits()[i].is_fuse()) {
+        } else if (split.is_fuse()) {
             user_warning << "It is meaningless to fuse variables "
-                         << stage_s.splits()[i].inner << " and " << stage_s.splits()[i].outer
+                         << split.inner << " and " << split.outer
                          << " because " << f.name() << " is scheduled inline.\n";
         } else {
             user_warning << "It is meaningless to split variable "
-                         << stage_s.splits()[i].old_var << " of function "
+                         << split.old_var << " of function "
                          << f.name() << " into "
-                         << stage_s.splits()[i].outer << " * "
-                         << stage_s.splits()[i].factor << " + "
-                         << stage_s.splits()[i].inner << " because "
+                         << split.outer << " * "
+                         << split.factor << " + "
+                         << split.inner << " because "
                          << f.name() << " is scheduled inline.\n";
         }
     }
 
-    for (size_t i = 0; i < func_s.bounds().size(); i++) {
-        if (func_s.bounds()[i].min.defined()) {
+    for (const auto &b : func_s.bounds()) {
+        if (b.min.defined()) {
             user_warning << "It is meaningless to bound dimension "
-                         << func_s.bounds()[i].var << " of function "
+                         << b.var << " of function "
                          << f.name() << " to be within ["
-                         << func_s.bounds()[i].min << ", "
-                         << func_s.bounds()[i].extent << "] because the function is scheduled inline.\n";
-        } else if (func_s.bounds()[i].modulus.defined()) {
+                         << b.min << ", "
+                         << b.extent << "] because the function is scheduled inline.\n";
+        } else if (b.modulus.defined()) {
             user_warning << "It is meaningless to align the bounds of dimension "
-                         << func_s.bounds()[i].var << " of function "
+                         << b.var << " of function "
                          << f.name() << " to have modulus/remainder ["
-                         << func_s.bounds()[i].modulus << ", "
-                         << func_s.bounds()[i].remainder << "] because the function is scheduled inline.\n";
+                         << b.modulus << ", "
+                         << b.remainder << "] because the function is scheduled inline.\n";
         }
     }
 }

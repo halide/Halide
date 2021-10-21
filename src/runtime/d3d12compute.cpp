@@ -2143,33 +2143,21 @@ static void wait_until_idle() {
 }
 
 class D3D12ContextHolder {
-    void *user_context;
-
-    // Define these out-of-line as WEAK, to avoid LLVM error "MachO doesn't support COMDATs"
-    void save(void *user_context, bool create);
-    void restore();
+    void *const user_context;
 
 public:
     d3d12_device *device;
     d3d12_command_queue *queue;
     int error;
 
-    ALWAYS_INLINE D3D12ContextHolder(void *user_context, bool create) {
-        save(user_context, create);
+    ALWAYS_INLINE D3D12ContextHolder(void *user_context, bool create)
+        : user_context(user_context) {
+        error = halide_d3d12compute_acquire_context(user_context, &device, &queue, create);
     }
     ALWAYS_INLINE ~D3D12ContextHolder() {
-        restore();
+        halide_d3d12compute_release_context(user_context);
     }
 };
-
-WEAK void D3D12ContextHolder::save(void *user_context_arg, bool create) {
-    user_context = user_context_arg;
-    error = halide_d3d12compute_acquire_context(user_context, &device, &queue, create);
-}
-
-WEAK void D3D12ContextHolder::restore() {
-    halide_d3d12compute_release_context(user_context);
-}
 
 static bool is_buffer_managed(d3d12_buffer *buffer) {
     return buffer->xfer != nullptr;
@@ -2667,12 +2655,12 @@ static bool d3d12_allocation_cache_put_buffer(void *user_context, d3d12_buffer *
 
     ScopedMutexLock lock(&buffer_pool_lock);
 
-    for (size_t i = 0; i < MaxBuffersInCache; ++i) {
-        if (buffer_pool[i] != nullptr) {
+    for (auto &buffer : buffer_pool) {
+        if (buffer != nullptr) {
             continue;
         }
         TRACEPRINT("caching allocation for later use...\n");
-        buffer_pool[i] = dbuffer;
+        buffer = dbuffer;
         return true;
     }
 
@@ -2824,13 +2812,11 @@ WEAK int halide_d3d12compute_device_release(void *user_context) {
     if (device) {
         d3d12compute_device_sync_internal(device, nullptr);
 
-        for (int i = 0; i < MaxFrames; ++i) {
-            d3d12_frame *frame = &frame_pool[i];
-            release_object(frame);
+        for (auto &frame : frame_pool) {
+            release_object(&frame);
         }
 
-        for (int i = 0; i < MaxBuffersInCache; ++i) {
-            d3d12_buffer *buffer = buffer_pool[i];
+        for (auto &buffer : buffer_pool) {
             release_object(buffer);
         }
 

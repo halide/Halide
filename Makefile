@@ -417,6 +417,7 @@ SOURCE_FILES = \
   Buffer.cpp \
   CanonicalizeGPUVars.cpp \
   Closure.cpp \
+  ClampUnsafeAccesses.cpp \
   CodeGen_ARM.cpp \
   CodeGen_C.cpp \
   CodeGen_D3D12Compute_Dev.cpp \
@@ -590,6 +591,7 @@ HEADER_FILES = \
   BoundSmallAllocations.h \
   Buffer.h \
   CanonicalizeGPUVars.h \
+  ClampUnsafeAccesses.h \
   Closure.h \
   CodeGen_C.h \
   CodeGen_D3D12Compute_Dev.h \
@@ -801,13 +803,11 @@ RUNTIME_CPP_COMPONENTS = \
   qurt_allocator \
   qurt_hvx \
   qurt_hvx_vtcm \
-  qurt_init_fini \
   qurt_threads \
   qurt_threads_tsan \
   qurt_yield \
   riscv_cpu_features \
   runtime_api \
-  ssp \
   to_string \
   trace_helper \
   tracing \
@@ -991,7 +991,9 @@ RUNTIME_TRIPLE_WIN_GENERIC_64 = "le64-unknown-windows-unknown"
 
 # `-fno-threadsafe-statics` is very important here (note that it allows us to use a 'modern' C++
 # standard but still skip threadsafe guards for static initialization in our runtime code)
-RUNTIME_CXX_FLAGS = -std=c++17 -O3 -fno-vectorize -ffreestanding -fno-blocks -fno-exceptions -fno-unwind-tables -fno-threadsafe-statics
+#
+# `-fno-rtti` is necessary to allow us to use classes with virtual functions in the runtime code
+RUNTIME_CXX_FLAGS = -std=c++17 -O3 -fno-vectorize -ffreestanding -fno-blocks -fno-exceptions -fno-unwind-tables -fno-threadsafe-statics -fno-rtti
 
 $(BUILD_DIR)/initmod.windows_%_x86_32.ll: $(SRC_DIR)/runtime/windows_%_x86.cpp $(BUILD_DIR)/clang_ok
 	@mkdir -p $(@D)

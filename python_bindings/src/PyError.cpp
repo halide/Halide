@@ -5,11 +5,11 @@ namespace PythonBindings {
 
 namespace {
 
-void halide_python_error(void *, const char *msg) {
+void halide_python_error(JITUserContext *, const char *msg) {
     throw Error(msg);
 }
 
-void halide_python_print(void *, const char *msg) {
+void halide_python_print(JITUserContext *, const char *msg) {
     py::print(msg, py::arg("end") = "");
 }
 
@@ -31,7 +31,7 @@ void define_error(py::module &m) {
     static HalidePythonCompileTimeErrorReporter reporter;
     set_custom_compile_time_error_reporter(&reporter);
 
-    Halide::Internal::JITHandlers handlers;
+    Halide::JITHandlers handlers;
     handlers.custom_error = halide_python_error;
     handlers.custom_print = halide_python_print;
     Halide::Internal::JITSharedRuntime::set_default_handlers(handlers);

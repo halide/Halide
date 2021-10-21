@@ -33,7 +33,7 @@
 #include <llvm/ADT/StringRef.h>
 #include <llvm/ADT/Triple.h>
 #include <llvm/ADT/Twine.h>
-#if LLVM_VERSION >= 12
+#if LLVM_VERSION >= 120
 #include <llvm/Analysis/AliasAnalysis.h>
 #endif
 #include <llvm/Analysis/TargetLibraryInfo.h>
@@ -72,7 +72,7 @@
 #include <llvm/Passes/PassBuilder.h>
 #include <llvm/Support/Casting.h>
 #include <llvm/Support/CodeGen.h>
-#if LLVM_VERSION >= 12
+#if LLVM_VERSION >= 120
 #include <llvm/Support/CommandLine.h>
 #endif
 #include <llvm/Support/DataExtractor.h>
@@ -80,7 +80,11 @@
 #include <llvm/Support/ErrorHandling.h>
 #include <llvm/Support/FileSystem.h>
 #include <llvm/Support/FormattedStream.h>
+#if LLVM_VERSION >= 140
+#include <llvm/MC/TargetRegistry.h>
+#else
 #include <llvm/Support/TargetRegistry.h>
+#endif
 #include <llvm/Support/TargetSelect.h>
 #include <llvm/Support/TypeSize.h>
 #include <llvm/Support/raw_os_ostream.h>

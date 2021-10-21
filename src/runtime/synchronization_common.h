@@ -228,12 +228,10 @@ ALWAYS_INLINE void atomic_thread_fence_acquire() {
 }  // namespace
 
 class spin_control {
+    // Everyone says this should be 40. Have not measured it.
     int spin_count = 40;
 
 public:
-    // Everyone says this should be 40. Have not measured it.
-    ALWAYS_INLINE spin_control() = default;
-
     ALWAYS_INLINE bool should_spin() {
         if (spin_count > 0) {
             spin_count--;
@@ -273,11 +271,6 @@ struct word_lock_queue_data {
     word_lock_queue_data *next = nullptr;
     word_lock_queue_data *prev = nullptr;
     word_lock_queue_data *tail = nullptr;
-
-    ALWAYS_INLINE word_lock_queue_data() = default;
-
-    // Inlined, empty dtor needed to avoid confusing MachO builds
-    ALWAYS_INLINE ~word_lock_queue_data() = default;
 };
 
 class word_lock {
@@ -287,7 +280,6 @@ class word_lock {
     void unlock_full();
 
 public:
-    ALWAYS_INLINE word_lock() = default;
     ALWAYS_INLINE void lock() {
         if_tsan_pre_lock(this);
 
@@ -451,36 +443,26 @@ struct queue_data {
     uintptr_t sleep_address = 0;
     queue_data *next = nullptr;
     uintptr_t unpark_info = 0;
-
-    ALWAYS_INLINE queue_data() = default;
-    // Inlined, empty dtor needed to avoid confusing MachO builds
-    ALWAYS_INLINE ~queue_data() = default;
 };
 
 // Must be a power of two.
-#define LOAD_FACTOR 4
+constexpr int LOAD_FACTOR = 4;
 
 struct hash_bucket {
     word_lock mutex;
 
-    queue_data *head;  // Is this queue_data or thread_data?
-    queue_data *tail;  // Is this queue_data or thread_data?
+    queue_data *head = nullptr;  // Is this queue_data or thread_data?
+    queue_data *tail = nullptr;  // Is this queue_data or thread_data?
 };
 
-// The use of a #define here and table_storage is because if
-// a class with a constructor is used, clang generates a COMDAT
-// which cannot be lowered for Mac OS due to MachO. A better
-// solution is desired of course.
-#define HASH_TABLE_BITS 10
+constexpr int HASH_TABLE_SIZE = MAX_THREADS * LOAD_FACTOR;
 struct hash_table {
-    hash_bucket buckets[MAX_THREADS * LOAD_FACTOR];
+    hash_bucket buckets[HASH_TABLE_SIZE];
 };
-WEAK char table_storage[sizeof(hash_table)];
-#define table (*(hash_table *)table_storage)
+WEAK hash_table table;
 
-ALWAYS_INLINE void check_hash(uintptr_t hash) {
-    halide_assert(nullptr, hash < sizeof(table.buckets) / sizeof(table.buckets[0]));
-}
+constexpr int HASH_TABLE_BITS = 10;
+static_assert((1 << HASH_TABLE_BITS) >= MAX_THREADS * LOAD_FACTOR);
 
 #if 0
 WEAK void dump_hash() {
@@ -496,20 +478,29 @@ WEAK void dump_hash() {
 }
 #endif
 
-static ALWAYS_INLINE uintptr_t addr_hash(uintptr_t addr, uint32_t bits) {
+static ALWAYS_INLINE uintptr_t addr_hash(uintptr_t addr) {
     // Fibonacci hashing. The golden ratio is 1.9E3779B97F4A7C15F39...
     // in hexadecimal.
     if (sizeof(uintptr_t) >= 8) {
-        return (addr * (uintptr_t)0x9E3779B97F4A7C15) >> (64 - bits);
+        return (addr * (uintptr_t)0x9E3779B97F4A7C15) >> (64 - HASH_TABLE_BITS);
     } else {
-        return (addr * (uintptr_t)0x9E3779B9) >> (32 - bits);
+        return (addr * (uintptr_t)0x9E3779B9) >> (32 - HASH_TABLE_BITS);
     }
 }
 
-WEAK hash_bucket &lock_bucket(uintptr_t addr) {
-    uintptr_t hash = addr_hash(addr, HASH_TABLE_BITS);
+#ifdef DEBUG_RUNTIME
+// Any hash calculated by addr_hash() should be incapable of being outside this range.
+ALWAYS_INLINE void check_hash(uintptr_t hash) {
+    halide_assert(nullptr, hash < HASH_TABLE_SIZE);
+}
+#endif  // DEBUG_RUNTIME
 
+WEAK hash_bucket &lock_bucket(uintptr_t addr) {
+    uintptr_t hash = addr_hash(addr);
+
+#ifdef DEBUG_RUNTIME
     check_hash(hash);
+#endif
 
     // TODO: if resizing is implemented, loop, etc.
     hash_bucket &bucket = table.buckets[hash];
@@ -530,11 +521,13 @@ struct bucket_pair {
 
 WEAK bucket_pair lock_bucket_pair(uintptr_t addr_from, uintptr_t addr_to) {
     // TODO: if resizing is implemented, loop, etc.
-    uintptr_t hash_from = addr_hash(addr_from, HASH_TABLE_BITS);
-    uintptr_t hash_to = addr_hash(addr_to, HASH_TABLE_BITS);
+    uintptr_t hash_from = addr_hash(addr_from);
+    uintptr_t hash_to = addr_hash(addr_to);
 
+#ifdef DEBUG_RUNTIME
     check_hash(hash_from);
     check_hash(hash_to);
+#endif
 
     // Lock the bucket with the smaller hash first in order
     // to prevent deadlock.
@@ -576,39 +569,36 @@ WEAK void unlock_bucket_pair(bucket_pair &buckets) {
 struct validate_action {
     bool unpark_one = false;
     uintptr_t invalid_unpark_info = 0;
-
-    ALWAYS_INLINE validate_action() = default;
 };
-
-WEAK bool parking_control_validate(void *control, validate_action &action) {
-    return true;
-};
-WEAK void parking_control_before_sleep(void *control){};
-WEAK uintptr_t parking_control_unpark(void *control, int unparked, bool more_waiters) {
-    return 0;
-};
-WEAK void parking_control_requeue_callback(void *control, const validate_action &action, bool one_to_wake, bool some_requeued){};
 
 struct parking_control {
-    bool (*validate)(void *control, validate_action &action);
-    void (*before_sleep)(void *control);
-    uintptr_t (*unpark)(void *control, int unparked, bool more_waiters);
-    void (*requeue_callback)(void *control, const validate_action &action, bool one_to_wake, bool some_requeued);
+    uintptr_t park(uintptr_t addr);
+    uintptr_t unpark_one(uintptr_t addr);
+    int unpark_requeue(uintptr_t addr_from, uintptr_t addr_to, uintptr_t unpark_info);
 
-    ALWAYS_INLINE parking_control()
-        : validate(parking_control_validate), before_sleep(parking_control_before_sleep),
-          unpark(parking_control_unpark), requeue_callback(parking_control_requeue_callback) {
+protected:
+    virtual bool validate(validate_action &action) {
+        return true;
+    }
+    virtual void before_sleep() {
+        // nothing
+    }
+    virtual uintptr_t unpark(int unparked, bool more_waiters) {
+        return 0;
+    }
+    virtual void requeue_callback(const validate_action &action, bool one_to_wake, bool some_requeued) {
+        // nothing
     }
 };
 
 // TODO: Do we need a park_result thing here?
-WEAK uintptr_t park(uintptr_t addr, parking_control &control) {
+WEAK uintptr_t parking_control::park(uintptr_t addr) {
     queue_data queue_data;
 
     hash_bucket &bucket = lock_bucket(addr);
 
     validate_action action;
-    if (!control.validate(&control, action)) {
+    if (!validate(action)) {
         bucket.mutex.unlock();
         return action.invalid_unpark_info;
     }
@@ -624,7 +614,7 @@ WEAK uintptr_t park(uintptr_t addr, parking_control &control) {
     bucket.tail = &queue_data;
     bucket.mutex.unlock();
 
-    control.before_sleep(&control);
+    before_sleep();
 
     queue_data.parker.park();
 
@@ -633,7 +623,7 @@ WEAK uintptr_t park(uintptr_t addr, parking_control &control) {
     // TODO: handling timeout.
 }
 
-WEAK uintptr_t unpark_one(uintptr_t addr, parking_control &control) {
+WEAK uintptr_t parking_control::unpark_one(uintptr_t addr) {
     hash_bucket &bucket = lock_bucket(addr);
 
     queue_data **data_location = &bucket.head;
@@ -660,7 +650,7 @@ WEAK uintptr_t unpark_one(uintptr_t addr, parking_control &control) {
                 }
             }
 
-            data->unpark_info = control.unpark(&control, 1, more_waiters);
+            data->unpark_info = unpark(1, more_waiters);
 
             data->parker.unpark_start();
             bucket.mutex.unlock();
@@ -676,7 +666,7 @@ WEAK uintptr_t unpark_one(uintptr_t addr, parking_control &control) {
         }
     }
 
-    control.unpark(&control, 0, false);
+    unpark(0, false);
 
     bucket.mutex.unlock();
 
@@ -684,77 +674,11 @@ WEAK uintptr_t unpark_one(uintptr_t addr, parking_control &control) {
     return 0;
 }
 
-WEAK uintptr_t unpark_all(uintptr_t addr, uintptr_t unpark_info) {
-    hash_bucket &bucket = lock_bucket(addr);
-
-    queue_data **data_location = &bucket.head;
-    queue_data *prev = nullptr;
-    queue_data *data = *data_location;
-    size_t waiters = 0;
-    queue_data *temp_list_storage[16];
-    queue_data **temp_list = &temp_list_storage[0];
-    size_t max_waiters = sizeof(temp_list_storage) / sizeof(temp_list_storage[0]);
-
-    while (data != nullptr) {
-        uintptr_t cur_addr;
-        atomic_load_relaxed(&data->sleep_address, &cur_addr);
-
-        queue_data *next = data->next;
-        if (cur_addr == addr) {
-            *data_location = next;
-
-            if (bucket.tail == data) {
-                bucket.tail = prev;
-            }
-
-            if (waiters == max_waiters) {
-                queue_data **temp = temp_list;
-                temp_list = (queue_data **)malloc(sizeof(queue_data *) * max_waiters * 2);
-                for (size_t i = 0; i < max_waiters; i++) {
-                    temp_list[i] = temp[i];
-                }
-                max_waiters *= 2;
-                if (temp != &temp_list_storage[0]) {
-                    free(temp);
-                }
-            }
-
-            data->unpark_info = unpark_info;
-
-            temp_list[waiters++] = data;
-            data->parker.unpark_start();
-
-            data = next;
-        } else {
-            *data_location = data->next;
-            prev = data;
-            data = next;
-        }
-    }
-
-    bucket.mutex.unlock();
-
-    for (size_t i = 0; i < waiters; i++) {
-        temp_list[i]->parker.unpark();
-    }
-
-    // TODO: decide if this really needs to be two loops.
-    for (size_t i = 0; i < waiters; i++) {
-        temp_list[i]->parker.unpark_finish();
-    }
-
-    if (temp_list != &temp_list_storage[0]) {
-        free(temp_list);
-    }
-
-    return waiters;
-}
-
-WEAK int unpark_requeue(uintptr_t addr_from, uintptr_t addr_to, parking_control &control, uintptr_t unpark_info) {
+WEAK int parking_control::unpark_requeue(uintptr_t addr_from, uintptr_t addr_to, uintptr_t unpark_info) {
     bucket_pair buckets = lock_bucket_pair(addr_from, addr_to);
 
     validate_action action;
-    if (!control.validate(&control, action)) {
+    if (!validate(action)) {
         unlock_bucket_pair(buckets);
         return 0;
     }
@@ -809,7 +733,7 @@ WEAK int unpark_requeue(uintptr_t addr_from, uintptr_t addr_to, parking_control 
         buckets.to.tail = requeue_tail;
     }
 
-    control.requeue_callback(&control, action, wakeup != nullptr, requeue != nullptr);
+    requeue_callback(action, wakeup != nullptr, requeue != nullptr);
 
     if (wakeup != nullptr) {
         wakeup->unpark_info = unpark_info;
@@ -824,40 +748,30 @@ WEAK int unpark_requeue(uintptr_t addr_from, uintptr_t addr_to, parking_control 
     return wakeup != nullptr && action.unpark_one;
 }
 
-WEAK bool mutex_parking_control_validate(void *control, validate_action &action);
-WEAK uintptr_t mutex_parking_control_unpark(void *control, int unparked, bool more_waiters);
-struct mutex_parking_control : parking_control {
-    uintptr_t *lock_state;
+struct mutex_parking_control final : public parking_control {
+    uintptr_t *const lock_state;
 
     ALWAYS_INLINE mutex_parking_control(uintptr_t *lock_state)
         : lock_state(lock_state) {
-        validate = mutex_parking_control_validate;
-        unpark = mutex_parking_control_unpark;
+    }
+
+protected:
+    bool validate(validate_action &action) final {
+        uintptr_t result;
+        atomic_load_relaxed(lock_state, &result);
+        return result == (lock_bit | parked_bit);
+    }
+
+    uintptr_t unpark(int unparked, bool more_waiters) final {
+        // TODO: consider handling fairness.
+        uintptr_t return_state = more_waiters ? parked_bit : 0;
+        atomic_store_release(lock_state, &return_state);
+        return 0;
     }
 };
 
-// Only used in parking -- lock_full.
-WEAK bool mutex_parking_control_validate(void *control, validate_action &action) {
-    mutex_parking_control *mutex_control = (mutex_parking_control *)control;
-
-    uintptr_t result;
-    atomic_load_relaxed(mutex_control->lock_state, &result);
-    return result == (lock_bit | parked_bit);
-}
-
-// Only used in unparking -- unlock_full.
-WEAK uintptr_t mutex_parking_control_unpark(void *control, int unparked, bool more_waiters) {
-    mutex_parking_control *mutex_control = (mutex_parking_control *)control;
-
-    // TODO: consider handling fairness.
-    uintptr_t return_state = more_waiters ? parked_bit : 0;
-    atomic_store_release(mutex_control->lock_state, &return_state);
-
-    return 0;
-}
-
 class fast_mutex {
-    uintptr_t state;
+    uintptr_t state = 0;
 
     ALWAYS_INLINE void lock_full() {
         // Everyone says this should be 40. Have not measured it.
@@ -893,7 +807,7 @@ class fast_mutex {
 
             // TODO: consider handling fairness, timeout
             mutex_parking_control control(&state);
-            uintptr_t result = park((uintptr_t)this, control);
+            uintptr_t result = control.park((uintptr_t)this);
             if (result == (uintptr_t)this) {
                 return;
             }
@@ -913,7 +827,7 @@ class fast_mutex {
         }
 
         mutex_parking_control control(&state);
-        unpark_one((uintptr_t)this, control);
+        control.unpark_one((uintptr_t)this);
     }
 
 public:
@@ -954,127 +868,104 @@ public:
         atomic_or_fetch_relaxed(&state, parked_bit);
     }
 };
-WEAK uintptr_t signal_parking_control_unpark(void *control, int unparked, bool more_waiters);
-struct signal_parking_control : parking_control {
-    uintptr_t *cond_state;
-    fast_mutex *mutex;
+
+struct signal_parking_control final : public parking_control {
+    uintptr_t *const cond_state;
+    fast_mutex *const mutex;
 
     ALWAYS_INLINE signal_parking_control(uintptr_t *cond_state, fast_mutex *mutex)
         : cond_state(cond_state), mutex(mutex) {
-        unpark = signal_parking_control_unpark;
+    }
+
+protected:
+    uintptr_t unpark(int unparked, bool more_waiters) final {
+        if (!more_waiters) {
+            uintptr_t val = 0;
+            atomic_store_relaxed(cond_state, &val);
+        }
+
+#if 0  // TODO: figure out why this was here.
+        return (uintptr_t)mutex;
+#else
+        return 0;
+#endif
     }
 };
 
-WEAK uintptr_t signal_parking_control_unpark(void *control, int unparked, bool more_waiters) {
-    signal_parking_control *signal_control = (signal_parking_control *)control;
-
-    if (!more_waiters) {
-        uintptr_t val = 0;
-        atomic_store_relaxed(signal_control->cond_state, &val);
-    }
-
-#if 0  // TODO: figure out why this was here.
-    return (uintptr_t)signal_control->mutex;
-#else
-    return 0;
-#endif
-}
-WEAK bool broadcast_parking_control_validate(void *control, validate_action &action);
-WEAK void broadcast_parking_control_requeue_callback(void *control, const validate_action &action,
-                                                     bool one_to_wake, bool some_requeued);
-struct broadcast_parking_control : parking_control {
-    uintptr_t *cond_state;
-    fast_mutex *mutex;
+struct broadcast_parking_control final : public parking_control {
+    uintptr_t *const cond_state;
+    fast_mutex *const mutex;
 
     ALWAYS_INLINE broadcast_parking_control(uintptr_t *cond_state, fast_mutex *mutex)
         : cond_state(cond_state), mutex(mutex) {
-        validate = broadcast_parking_control_validate;
-        requeue_callback = broadcast_parking_control_requeue_callback;
+    }
+
+protected:
+    bool validate(validate_action &action) final {
+        uintptr_t val;
+        atomic_load_relaxed(cond_state, &val);
+        // By the time this broadcast locked everything and was processed, the cond
+        // has progressed to a new mutex, do nothing since any waiting threads have
+        // to be waiting on what is effectively a different condition.
+        if (val != (uintptr_t)mutex) {
+            return false;
+        }
+        // Clear the cond's connection to the mutex as all waiting threads are going to reque onto the mutex.
+        val = 0;
+        atomic_store_relaxed(cond_state, &val);
+        action.unpark_one = !mutex->make_parked_if_locked();
+        return true;
+    }
+
+    void requeue_callback(const validate_action &action, bool one_to_wake, bool some_requeued) final {
+        if (action.unpark_one && some_requeued) {
+            mutex->make_parked();
+        }
     }
 };
 
-WEAK bool broadcast_parking_control_validate(void *control, validate_action &action) {
-    broadcast_parking_control *broadcast_control = (broadcast_parking_control *)control;
-
-    uintptr_t val;
-    atomic_load_relaxed(broadcast_control->cond_state, &val);
-    // By the time this broadcast locked everything and was processed, the cond
-    // has progressed to a new mutex, do nothing since any waiting threads have
-    // to be waiting on what is effectively a different condition.
-    if (val != (uintptr_t)broadcast_control->mutex) {
-        return false;
-    }
-    // Clear the cond's connection to the mutex as all waiting threads are going to reque onto the mutex.
-    val = 0;
-    atomic_store_relaxed(broadcast_control->cond_state, &val);
-
-    action.unpark_one = !broadcast_control->mutex->make_parked_if_locked();
-
-    return true;
-}
-
-WEAK void broadcast_parking_control_requeue_callback(void *control, const validate_action &action, bool one_to_wake, bool some_requeued) {
-    broadcast_parking_control *broadcast_control = (broadcast_parking_control *)control;
-
-    if (action.unpark_one && some_requeued) {
-        broadcast_control->mutex->make_parked();
-    }
-}
-WEAK bool wait_parking_control_validate(void *control, validate_action &action);
-WEAK void wait_parking_control_before_sleep(void *control);
-WEAK uintptr_t wait_parking_control_unpark(void *control, int unparked, bool more_waiters);
-struct wait_parking_control : parking_control {
-    uintptr_t *cond_state;
-    fast_mutex *mutex;
+struct wait_parking_control final : public parking_control {
+    uintptr_t *const cond_state;
+    fast_mutex *const mutex;
 
     ALWAYS_INLINE wait_parking_control(uintptr_t *cond_state, fast_mutex *mutex)
         : cond_state(cond_state), mutex(mutex) {
-        validate = wait_parking_control_validate;
-        before_sleep = wait_parking_control_before_sleep;
-        unpark = wait_parking_control_unpark;
+    }
+
+protected:
+    bool validate(validate_action &action) final {
+        uintptr_t val;
+        atomic_load_relaxed(cond_state, &val);
+
+        if (val == 0) {
+            val = (uintptr_t)mutex;
+            atomic_store_relaxed(cond_state, &val);
+        } else if (val != (uintptr_t)mutex) {
+            // TODO: signal error.
+            action.invalid_unpark_info = (uintptr_t)mutex;
+            return false;
+        }
+
+        return true;
+    }
+
+    void before_sleep() final {
+        mutex->unlock();
+    }
+
+    uintptr_t unpark(int unparked, bool more_waiters) final {
+        if (!more_waiters) {
+            uintptr_t val = 0;
+            atomic_store_relaxed(cond_state, &val);
+        }
+        return 0;
     }
 };
-
-WEAK bool wait_parking_control_validate(void *control, validate_action &action) {
-    wait_parking_control *wait_control = (wait_parking_control *)control;
-
-    uintptr_t val;
-    atomic_load_relaxed(wait_control->cond_state, &val);
-
-    if (val == 0) {
-        val = (uintptr_t)wait_control->mutex;
-        atomic_store_relaxed(wait_control->cond_state, &val);
-    } else if (val != (uintptr_t)wait_control->mutex) {
-        // TODO: signal error.
-        action.invalid_unpark_info = (uintptr_t)wait_control->mutex;
-        return false;
-    }
-
-    return true;
-}
-
-WEAK void wait_parking_control_before_sleep(void *control) {
-    wait_parking_control *wait_control = (wait_parking_control *)control;
-
-    wait_control->mutex->unlock();
-}
-
-WEAK uintptr_t wait_parking_control_unpark(void *control, int unparked, bool more_waiters) {
-    wait_parking_control *wait_control = (wait_parking_control *)control;
-
-    if (!more_waiters) {
-        uintptr_t val = 0;
-        atomic_store_relaxed(wait_control->cond_state, &val);
-    }
-    return 0;
-}
 
 class fast_cond {
     uintptr_t state = 0;
 
 public:
-    ALWAYS_INLINE fast_cond() = default;
-
     ALWAYS_INLINE void signal() {
         if_tsan_pre_signal(this);
 
@@ -1085,7 +976,7 @@ public:
             return;
         }
         signal_parking_control control(&state, (fast_mutex *)val);
-        unpark_one((uintptr_t)this, control);
+        control.unpark_one((uintptr_t)this);
         if_tsan_post_signal(this);
     }
 
@@ -1098,13 +989,13 @@ public:
             return;
         }
         broadcast_parking_control control(&state, (fast_mutex *)val);
-        unpark_requeue((uintptr_t)this, val, control, 0);
+        control.unpark_requeue((uintptr_t)this, val, 0);
         if_tsan_post_signal(this);
     }
 
     ALWAYS_INLINE void wait(fast_mutex *mutex) {
         wait_parking_control control(&state, mutex);
-        uintptr_t result = park((uintptr_t)this, control);
+        uintptr_t result = control.park((uintptr_t)this);
         if (result != (uintptr_t)mutex) {
             mutex->lock();
         } else {
