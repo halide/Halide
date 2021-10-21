@@ -6,7 +6,7 @@ To try it out,
 
 - Build with `make all`
 
-- Run a local webserver using, e.g.: python3 -m http.server 8080 &
+- Run a local webserver: `python3 ../serve_with_cross_origin_isolation.py`. (This is a trivial wrapper about Python 3's `http.server` that also sets the necessary headers for "cross-origin isolated" that allow for threading to work in recent browsers; see https://developer.chrome.com/blog/enabling-shared-array-buffer/ for more information.)
 
 - Load Google chrome (at least version 84), go to chrome://flags, and turn on all the experimental webassembly stuff (e.g. threads, simd). If you don't do this, only the single-threaded scalar variant will work (at the time of writing).
 
