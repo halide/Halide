@@ -24,6 +24,26 @@ void fold_constants(OpGroup *op);
 // Verify that no Op comes before any of its input Tensors are produced.
 bool check_op_order(OpGroup *op_group, std::unordered_set<Tensor *> &valid_tensors);
 
+template<typename T>
+inline T *cast_op(Op *x) {
+    class Caster : public OpVisitor {
+    public:
+        T *result = nullptr;
+
+        void visit(T *op) override {
+            result = op;
+        }
+    };
+
+    Caster caster;
+    x->accept(&caster);
+    if (caster.result == x) {
+        return caster.result;
+    } else {
+        return nullptr;
+    }
+}
+
 }  // namespace hannk
 
 #endif  // HANNK_TRANSFORMS_H

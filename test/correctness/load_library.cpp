@@ -74,7 +74,7 @@ int main(int argc, char **argv) {
     //
     // For JIT code, we must use JITSharedRuntime::set_default_handlers().
 
-    Internal::JITHandlers handlers;
+    JITHandlers handlers;
     handlers.custom_get_symbol = my_get_symbol_impl;
     handlers.custom_load_library = my_load_library_impl;
     handlers.custom_get_library_symbol = my_get_library_symbol_impl;

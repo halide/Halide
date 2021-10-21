@@ -208,11 +208,12 @@ public:
 };
 
 class GatherOp : public Op {
-    int axis_;
+    const int axis_;
+    const int batch_dims_;
 
 public:
-    GatherOp(TensorPtr input, TensorPtr indices, TensorPtr output, int axis)
-        : Op({input, indices}, {output}), axis_(axis) {
+    GatherOp(TensorPtr input, TensorPtr indices, TensorPtr output, int axis, int batch_dims)
+        : Op({input, indices}, {output}), axis_(axis), batch_dims_(batch_dims) {
     }
 
     void accept(OpVisitor *v) override;
@@ -227,9 +228,11 @@ public:
 };
 
 class L2NormalizationOp : public Op {
+    const int axis_;
+
 public:
-    L2NormalizationOp(const TensorPtr &input, const TensorPtr &output)
-        : Op({input}, {output}) {
+    L2NormalizationOp(const TensorPtr &input, const TensorPtr &output, int axis)
+        : Op({input}, {output}), axis_(axis) {
     }
 
     void accept(OpVisitor *v) override;

@@ -5,26 +5,6 @@ namespace hannk {
 
 namespace {
 
-template<typename T>
-T *cast_op(Op *x) {
-    class Caster : public OpVisitor {
-    public:
-        T *result = nullptr;
-
-        void visit(T *op) override {
-            result = op;
-        }
-    };
-
-    Caster caster;
-    x->accept(&caster);
-    if (caster.result == x) {
-        return caster.result;
-    } else {
-        return nullptr;
-    }
-}
-
 class RemoveDeadOps {
     const Op *const root_;
 
