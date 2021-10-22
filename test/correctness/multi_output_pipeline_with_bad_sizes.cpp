@@ -4,7 +4,7 @@
 using namespace Halide;
 
 bool error_occurred;
-void halide_error(void *user_context, const char *msg) {
+void halide_error(JITUserContext *user_context, const char *msg) {
     printf("%s\n", msg);
     error_occurred = true;
 }
@@ -18,7 +18,7 @@ int main(int argc, char **argv) {
     Buffer<int> x_out(100);
     Buffer<float> sin_x_out(101);
 
-    f.set_error_handler(&halide_error);
+    f.jit_handlers().custom_error = &halide_error;
     error_occurred = false;
 
     Realization r(x_out, sin_x_out);
