@@ -168,3 +168,5 @@ if (CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
                           xargs $<TARGET_FILE:clang-format> -i -style=file)
     endif ()
 endif ()
+
+add_subdirectory(apps/random_pipeline)

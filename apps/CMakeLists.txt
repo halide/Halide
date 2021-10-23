@@ -44,3 +44,5 @@ add_subdirectory(resize)
 add_subdirectory(stencil_chain)
 add_subdirectory(unsharp)
 add_subdirectory(wavelet)
+
+add_subdirectory(random_pipeline) # resurrecting random_pipeline
