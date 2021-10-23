@@ -506,6 +506,15 @@ void merge_handlers(JITHandlers &base, const JITHandlers &addins) {
     if (addins.custom_get_library_symbol) {
         base.custom_get_library_symbol = addins.custom_get_library_symbol;
     }
+    if (addins.custom_cuda_acquire_context) {
+        base.custom_cuda_acquire_context = addins.custom_cuda_acquire_context;
+    }
+    if (addins.custom_cuda_release_context) {
+        base.custom_cuda_release_context = addins.custom_cuda_release_context;
+    }
+    if (addins.custom_cuda_get_stream) {
+        base.custom_cuda_get_stream = addins.custom_cuda_get_stream;
+    }
 }
 
 void print_handler(JITUserContext *context, const char *msg) {
@@ -576,6 +585,30 @@ void *load_library_handler(const char *name) {
 
 void *get_library_symbol_handler(void *lib, const char *name) {
     return (*active_handlers.custom_get_library_symbol)(lib, name);
+}
+
+int cuda_acquire_context_handler(JITUserContext *context, void **cuda_context_ptr, bool create) {
+    if (context) {
+        return (*context->handlers.custom_cuda_acquire_context)(context, cuda_context_ptr, create);
+    } else {
+        return (*active_handlers.custom_cuda_acquire_context)(context, cuda_context_ptr, create);
+    }
+}
+
+int cuda_release_context_handler(JITUserContext *context) {
+    if (context) {
+        return (*context->handlers.custom_cuda_release_context)(context);
+    } else {
+        return (*active_handlers.custom_cuda_release_context)(context);
+    }
+}
+
+int cuda_get_stream_handler(JITUserContext *context, void *cuda_context, void **cuda_stream_ptr) {
+    if (context) {
+        return (*context->handlers.custom_cuda_get_stream)(context, cuda_context, cuda_stream_ptr);
+    } else {
+        return (*active_handlers.custom_cuda_get_stream)(context, cuda_context, cuda_stream_ptr);
+    }
 }
 
 template<typename function_t>
@@ -794,6 +827,21 @@ JITModule &make_module(llvm::Module *for_module, Target target,
             runtime.jit_module->name = "MainShared";
         } else {
             runtime.jit_module->name = "GPU";
+
+            if (runtime_kind == CUDA || runtime_kind == CUDADebug) {
+
+                runtime_internal_handlers.custom_cuda_acquire_context =
+                    hook_function(runtime.exports(), "halide_set_cuda_acquire_context", cuda_acquire_context_handler);
+
+                runtime_internal_handlers.custom_cuda_release_context =
+                    hook_function(runtime.exports(), "halide_set_cuda_release_context", cuda_release_context_handler);
+
+                runtime_internal_handlers.custom_cuda_get_stream =
+                    hook_function(runtime.exports(), "halide_set_cuda_get_stream", cuda_get_stream_handler);
+
+                active_handlers = runtime_internal_handlers;
+                merge_handlers(active_handlers, default_handlers);
+            }
         }
 
         uint64_t arg_addr =

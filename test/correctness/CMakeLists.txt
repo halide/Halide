@@ -65,6 +65,7 @@ tests(GROUPS correctness
       cuda_8_bit_dot_product.cpp
       custom_allocator.cpp
       custom_auto_scheduler.cpp
+      custom_cuda_context.cpp
       custom_error_reporter.cpp
       custom_jit_context.cpp
       custom_lowering_pass.cpp
