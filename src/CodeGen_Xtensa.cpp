@@ -1437,7 +1437,7 @@ HALIDE_ALWAYS_INLINE int16x64_t convert_to_int16x64_t_from_int8x64_t(const int8x
                         IVP_CVT16S2NX24L(wide), IVP_CVT16S2NX24H(wide));
 }
 
-/*
+
 HALIDE_ALWAYS_INLINE uint16x64_t convert_to_uint16x64_t_from_uint8x64_t(const uint8x64_t& src) {
   xb_vec2Nx24 wide = src * uint8x64_t(1);
   return uint16x64_t(uint16x64_t::from_native_vector,
@@ -1449,7 +1449,7 @@ HALIDE_ALWAYS_INLINE int16x64_t convert_to_int16x64_t_from_uint8x64_t(const uint
   return int16x64_t(int16x64_t::from_native_vector,
                         IVP_CVT16S2NX24L(wide), IVP_CVT16S2NX24H(wide));
 }
-*/
+
 HALIDE_ALWAYS_INLINE int16x64_t convert_to_int16x64_t_from_int24x64_t(const int24x64_t& wide) {
   return int16x64_t(int16x64_t::from_native_vector,
                         IVP_CVT16S2NX24L(wide), IVP_CVT16S2NX24H(wide));
