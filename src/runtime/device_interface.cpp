@@ -409,9 +409,9 @@ WEAK int halide_device_detach_native(void *user_context, struct halide_buffer_t 
 }
 
 WEAK int halide_default_device_wrap_native(void *user_context, struct halide_buffer_t *buf, uint64_t handle) {
-    int result = debug_log_and_validate_buf(user_context, buf, "halide_default_device_wrap_native");
-    if (result != 0) {
-        return result;
+    halide_assert(user_context, buf->device == 0);
+    if (buf->device != 0) {
+        return halide_error_code_device_wrap_native_failed;
     }
     buf->device_interface->impl->use_module();
     buf->device = handle;
