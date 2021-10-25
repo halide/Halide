@@ -1,22 +1,14 @@
 #!/bin/bash
 
-# Start a watchdog to kill any compilations that take too long
-./watchdog.sh &
-WATCHDOG_PID=$!
-
-function finish {
-  kill $WATCHDOG_PID  
-}
-trap finish EXIT
-
 PIPELINES=${1:-5}
 SCHEDULES=${2:-32}
-HL_RANDOM_DROPOUT=${3:-1}
-HL_BEAM_SIZE=${4:-1}
+START_FROM=${3:-0}
+HL_RANDOM_DROPOUT=${4:-1}
+HL_BEAM_SIZE=${5:-1}
 PROGRAM_NAME=`basename $0 .sh`
-LOGFILEBASE=${5:-${PROGRAM_NAME}.log}
-TIME_ME=${6:-true}
-DATE=${7:-`date +'%F-%H-%M-%S'`}
+LOGFILEBASE=${6:-${PROGRAM_NAME}.log}
+TIME_ME=${7:-true}
+DATE=${8:-`date +'%F-%H-%M-%S'`}
 
 LOG_DIR="./logs"
 LOGFILE="$LOG_DIR/$LOGFILEBASE.$DATE"
@@ -24,18 +16,29 @@ TIME_TMP_LOG="$LOGFILEBASE.$DATE.tmp"
 
 if [ "$TIME_ME" = true ]; then
   time /usr/bin/time -f "\nreal\t%E\nuser\t%U\nsys\t%S" -o $TIME_TMP_LOG \
-    $0 $PIPELINES $SCHEDULES $HL_RANDOM_DROPOUT $HL_BEAM_SIZE $LOGFILEBASE false $DATE
+    $0 $PIPELINES $SCHEDULES $START_FROM $HL_RANDOM_DROPOUT $HL_BEAM_SIZE \
+       $LOGFILEBASE false $DATE
   cat $TIME_TMP_LOG >> $LOGFILE
   rm $TIME_TMP_LOG
   exit
 fi
 
+# Start a watchdog to kill any compilations that take too long
+./watchdog.sh &
+WATCHDOG_PID=$!
+
+function finish {
+  kill $WATCHDOG_PID
+}
+trap finish EXIT
+
 printf "Running %s with the following parameters:\n\
         PIPELINES=%d\n\
         SCHEDULES=%d\n\
+        START_FROM=%d\n\
         HL_RANDOM_DROPOUT=%d\n\
         HL_BEAM_SIZE=%d\n\
-        LOGFILEBASE=%s\n " $PROGRAM_NAME $PIPELINES $SCHEDULES \
+        LOGFILEBASE=%s\n " $PROGRAM_NAME $PIPELINES $SCHEDULES $START_FROM \
                            $HL_RANDOM_DROPOUT $HL_BEAM_SIZE $LOGFILEBASE | tee -a $LOGFILE
 
 b=0
@@ -45,11 +48,18 @@ INITIAL_WEIGHTS=$ADAMS2019_DIR/baseline.weights
 WEIGHTS_OUT=./updated.weights
 mkdir -p $LOG_DIR
 
+if [ -d "./bin" ]; then
+  # Don't clobber existing samples
+  FIRST=$(ls ./bin | cut -d_ -f2 | sort -n | tail -n1)
+else
+  mkdir -p bin
+  FIRST=$((START_FROM-1))
+fi
+
 # Build lots of pipelines
-for ((p=0;p<$PIPELINES;p++)); do
+for ((p=$((FIRST+1));p<$((FIRST+PIPELINES+1));p++)); do
   P=$((b * $PIPELINES + p))
   STAGES=$(((P % 30) + 10))
-  mkdir -p bin 
   mkdir -p bin/pipeline_${P}_${STAGES}
 
   # First, renerate and compile all the schedules
