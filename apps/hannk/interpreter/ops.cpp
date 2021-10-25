@@ -487,15 +487,8 @@ void mul_uint8(const HalideBuffer<const void> &in1, const QuantizationInfo &in1q
 void requantize(const HalideBuffer<const void> &in, const QuantizationInfo &inq,
                 HalideBuffer<void> out, const QuantizationInfo &outq,
                 ActivationFunction activation = ActivationFunction::None) {
-    if (inq == outq) {
-        // Some of these are just copies, or no-ops.
-        if (is_alias(in.raw_buffer(), out.raw_buffer())) {
-            return;
-        } else {
-            out.copy_from(in);
-        }
-    } else if (in.type() == halide_type_of<uint8_t>() &&
-               out.type() == halide_type_of<uint8_t>()) {
+    if (in.type() == halide_type_of<uint8_t>() &&
+        out.type() == halide_type_of<uint8_t>()) {
         // TODO: Maybe a dedicated pipeline for this would be better. It
         // could be a little faster, and avoid some quantization error.
         add_uint8(in, inq, 1, in, inq, 0, out, outq, activation);
