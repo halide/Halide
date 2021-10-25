@@ -484,7 +484,6 @@ void mul_uint8(const HalideBuffer<const void> &in1, const QuantizationInfo &in1q
     elementwise_loop_nest<2>(mul_rank2, in1, in2, out);
 }
 
-// This function should *only* be called for buffer types that are quantized.
 bool try_requantize(const HalideBuffer<const void> &in, const QuantizationInfo &inq,
                     HalideBuffer<void> out, const QuantizationInfo &outq,
                     ActivationFunction activation = ActivationFunction::None) {
