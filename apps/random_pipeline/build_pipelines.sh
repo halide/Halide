@@ -67,9 +67,9 @@ for ((p=0;p<$PIPELINES;p++)); do
          $PIPELINE_DIR/random_pipeline.registration.cpp \
          $PIPELINE_DIR/random_pipeline.a librandom_pipeline.runtime.a \
          -o $PIPELINE_DIR/bench -DHALIDE_NO_PNG -DHALIDE_NO_JPEG  -pthread -ldl" | tee -a $LOGFILE
-  done | xargs -P16 -I{} bash -c "{}"
+  done | xargs -P16 -I{} bash -c "{}" | tee -a $LOGFILE
 
-  echo Benchmarking schedules
+  echo Benchmarking schedules | tee -a $LOGFILE
   # Now let's benchmark them
   for ((s=0;s<$SCHEDULES;s++)); do
     PIPELINE_DIR=./bin/pipeline_${P}_${STAGES}/schedule_${s}_${HL_RANDOM_DROPOUT}_${HL_BEAM_SIZE}_0
@@ -82,11 +82,11 @@ for ((p=0;p<$PIPELINES;p++)); do
     $ADAMS2019_DIR/featurization_to_sample $PIPELINE_DIR/random_pipeline.featurization $t onnx $id $PIPELINE_DIR/random_pipeline.sample
   done
 
-  echo Retraining weights
+  echo Retraining weights | tee -a $LOGFILE
   cd bin/pipeline_${P}_${STAGES} 
   find . -name "*.sample" | $ADAMS2019_DIR/retrain_cost_model  --epochs=4 --rates=0.001 --num_cores=8 \
      --initial_weights=$INITIAL_WEIGHTS --weights_out=$WEIGHTS_OUT --best_benchmark=./best.onnx.benchmark.txt \
-     --best_schedule=./best.onnx.schedule.h --best_python_schedule=./best_onnx_schedule.py
+     --best_schedule=./best.onnx.schedule.h --best_python_schedule=./best_onnx_schedule.py | tee -a ../../$LOGFILE
   INITIAL_WEIGHTS=`pwd`/updated.weights
   cd ../..
 done
