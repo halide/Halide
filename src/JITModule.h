@@ -26,30 +26,18 @@ class Module;
 
 struct JITUserContext;
 
-/** A set of custom overrides of runtime functions */
+/** A set of custom overrides of runtime functions. These only apply
+ * when JIT-compiling code. If you are doing AOT compilation, see
+ * HalideRuntime.h for instructions on how to replace runtime
+ * functions. */
 struct JITHandlers {
-    /** Set the function called to print messages from the runtime.
-     * If you are compiling statically, you can also just define your
-     * own function with signature
-     \code
-     extern "C" void halide_print(void *user_context, const char *);
-     \endcode
-     * This will clobber Halide's version.
-     */
+    /** Set the function called to print messages from the runtime. */
     void (*custom_print)(JITUserContext *, const char *){nullptr};
 
     /** A custom malloc and free for halide to use. Malloc should
      * return 32-byte aligned chunks of memory, and it should be safe
      * for Halide to read slightly out of bounds (up to 8 bytes before
-     * the start or beyond the end). If compiling statically, routines
-     * with appropriate signatures can be provided directly
-    \code
-     extern "C" void *halide_malloc(void *, size_t)
-     extern "C" void halide_free(void *, void *)
-     \endcode
-     * These will clobber Halide's versions. See HalideRuntime.h
-     * for declarations.
-     */
+     * the start or beyond the end). */
     // @{
     void *(*custom_malloc)(JITUserContext *, size_t){nullptr};
     void (*custom_free)(JITUserContext *, void *){nullptr};
@@ -66,12 +54,9 @@ struct JITHandlers {
          return f(user_context, idx, state);
      }
      \endcode
-     * If you are statically compiling, you can also just define your
-     * own version of the above function that takes a void * instead
-     * of a JITUserContext *, and it will clobber Halide's version.
      *
      * If you're trying to use a custom parallel runtime, you probably
-     * don't want to call this. See instead \ref Func::set_custom_do_par_for .
+     * don't want to call this. See instead custom_do_par_for.
     */
     int (*custom_do_task)(JITUserContext *, int (*)(JITUserContext *, int, uint8_t *), int, uint8_t *){nullptr};
 
@@ -94,32 +79,17 @@ struct JITHandlers {
      * However, notwithstanding the above example code, if one task
      * fails, we may skip over other tasks, and if two tasks return
      * different error codes, we may select one arbitrarily to return.
-     *
-     * If you are statically compiling, you can also just define your
-     * own version of the above function that takes a void * instead
-     * of a JITUserContext *, and it will clobber Halide's version.
      */
     int (*custom_do_par_for)(JITUserContext *, int (*)(JITUserContext *, int, uint8_t *), int, int, uint8_t *){nullptr};
 
     /** The error handler function that be called in the case of
-     * runtime errors during halide pipelines. If you are compiling
-     * statically, you can also just define your own function with
-     * signature
-     \code
-     extern "C" void halide_error(void *user_context, const char *);
-     \endcode
-     * This will clobber Halide's version.
-     */
+     * runtime errors during halide pipelines. */
     void (*custom_error)(JITUserContext *, const char *){nullptr};
 
     /** A custom routine to call when tracing is enabled. Call this
      * on the output Func of your pipeline. This then sets custom
      * routines for the entire pipeline, not just calls to this
-     * Func.
-     *
-     * If you are statically compiling, you can also just define your
-     * own versions of the tracing functions (see HalideRuntime.h),
-     * and they will clobber Halide's versions. */
+     * Func. */
     int32_t (*custom_trace)(JITUserContext *, const halide_trace_event_t *){nullptr};
 
     /** A method to use for Halide to resolve symbol names dynamically
