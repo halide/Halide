@@ -1927,17 +1927,14 @@ extern void halide_register_device_allocation_pool(struct halide_device_allocati
 namespace {
 
 template<typename T>
-struct check_is_pointer_helper {
+struct check_is_pointer {
     static constexpr bool value = false;
 };
 
 template<typename T>
-struct check_is_pointer_helper<T *> {
+struct check_is_pointer<T *> {
     static constexpr bool value = true;
 };
-
-template<class T>
-struct check_is_pointer : check_is_pointer_helper<T> {};
 
 }  // namespace
 
