@@ -22,3 +22,7 @@ if (NOT MSVC)
     target_compile_options(random_pipeline_test PRIVATE "-Wno-unknown-pragmas")
   endif()
 endif()
+
+# Configure scripts
+configure_file("${CMAKE_CURRENT_SOURCE_DIR}/watchdog.sh" "${CMAKE_CURRENT_BINARY_DIR}/watchdog.sh" COPYONLY)
+configure_file("${CMAKE_CURRENT_SOURCE_DIR}/build_pipelines.sh" "${CMAKE_CURRENT_BINARY_DIR}/build_pipelines.sh" @ONLY)

@@ -1,3 +1,4 @@
+project(adams2019)
 ##
 # Resources for the autoscheduler library
 ##
