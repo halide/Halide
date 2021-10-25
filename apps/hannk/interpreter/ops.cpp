@@ -484,17 +484,44 @@ void mul_uint8(const HalideBuffer<const void> &in1, const QuantizationInfo &in1q
     elementwise_loop_nest<2>(mul_rank2, in1, in2, out);
 }
 
-void requantize(const HalideBuffer<const void> &in, const QuantizationInfo &inq,
-                HalideBuffer<void> out, const QuantizationInfo &outq,
-                ActivationFunction activation = ActivationFunction::None) {
+// This function should *only* be called for buffer types that are quantized.
+bool try_requantize(const HalideBuffer<const void> &in, const QuantizationInfo &inq,
+                    HalideBuffer<void> out, const QuantizationInfo &outq,
+                    ActivationFunction activation = ActivationFunction::None) {
+    if (in.type() != out.type()) {
+        HLOG(ERROR) << "requantize: input and output types must match";
+        return false;
+    }
+
     if (in.type() == halide_type_of<uint8_t>() &&
         out.type() == halide_type_of<uint8_t>()) {
         // TODO: Maybe a dedicated pipeline for this would be better. It
         // could be a little faster, and avoid some quantization error.
         add_uint8(in, inq, 1, in, inq, 0, out, outq, activation);
-    } else {
-        HLOG(FATAL) << "Unable to requantize " << in.type() << " -> " << out.type() << "\n";
+        return true;
     }
+
+    return false;
+}
+
+// Input and output buffer types must match.
+// If the input and output buffers are quantized, we always call requantize.
+// If not, we simply copy.
+bool requantize_or_copy(const HalideBuffer<const void> &in, const QuantizationInfo &inq,
+                        HalideBuffer<void> out, const QuantizationInfo &outq,
+                        ActivationFunction activation = ActivationFunction::None) {
+    if (in.type() != out.type()) {
+        HLOG(ERROR) << "requantize_or_copy: input and output types must match";
+        return false;
+    }
+    if (try_requantize(in, inq, out, outq, activation)) {
+        return true;
+    }
+
+    if (!is_alias(in.raw_buffer(), out.raw_buffer())) {
+        out.copy_from(in);
+    }
+    return true;
 }
 
 ActivationFunction to_activation(UnaryOp::Operator op) {
@@ -721,7 +748,9 @@ void ConcatenationOp::execute() {
 
         auto output_crop = output_buf;
         crop_to_union(output_crop, input_buf);
-        requantize(input_buf, input(i)->quantization(), output_crop, output()->quantization());
+
+        bool copied = requantize_or_copy(input_buf, input(i)->quantization(), output_crop, output()->quantization());
+        HCHECK(copied);
     }
 }
 
@@ -1628,7 +1657,8 @@ void SplitOp::execute() {
         assert(output_buf.dim(axis_).min() == 0);
 
         output_buf.translate(axis_, concatenated_i);
-        requantize(input_buf, input()->quantization(), output_buf, output(i)->quantization());
+        bool copied = requantize_or_copy(input_buf, input()->quantization(), output_buf, output(i)->quantization());
+        HCHECK(copied);
 
         concatenated_i += output_buf.dim(axis_).extent();
     }
@@ -1778,7 +1808,8 @@ void UnaryOp::execute() {
             mul_uint8(in_buf, in->quantization(), in_buf, in->quantization(), out_buf, out->quantization());
             return;
         } else if (op_ == Relu || op_ == Relu6 || op_ == ReluN1To1) {
-            requantize(in_buf, in->quantization(), out_buf, out->quantization(), to_activation(op_));
+            bool copied = try_requantize(in_buf, in->quantization(), out_buf, out->quantization(), to_activation(op_));
+            HCHECK(copied);
             return;
         }
     }
