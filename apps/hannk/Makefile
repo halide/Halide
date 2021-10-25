@@ -4,7 +4,7 @@ include ../support/Makefile.inc
 #
 # -fPIC is necessary for .so builds (at least on Linux); not necessary for the non-delegate
 # builds but easier to enable it for everything.
-CXXFLAGS += -Wno-unused-private-field -fno-exceptions -fPIC -fvisibility=hidden -fvisibility-inlines-hidden -Wunused-variable -I$(MAKEFILE_DIR)
+CXXFLAGS += -Wno-unused-private-field -fno-exceptions -fPIC -fvisibility=hidden -fvisibility-inlines-hidden -Wunused-variable -Wsuggest-override -Woverloaded-virtual -I$(MAKEFILE_DIR)
 
 BENCHMARK_OUT = benchmark
 ifeq (hexagon-32-qurt,$(findstring hexagon-32-qurt,$(HL_TARGET)))

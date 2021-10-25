@@ -1,4 +1,5 @@
 #include "FindIntrinsics.h"
+#include "CSE.h"
 #include "CodeGen_Internal.h"
 #include "ConciseCasts.h"
 #include "IRMatch.h"
@@ -428,7 +429,7 @@ protected:
             auto is_x_wide_int_or_uint = is_x_wide_int || is_x_wide_uint;
             // We can't do everything we want here with rewrite rules alone. So, we rewrite them
             // to rounding_shifts with the widening still in place, and narrow it after the rewrite
-            // scuceeds.
+            // succeeds.
             // clang-format off
             if (rewrite(max(min(rounding_shift_right(x, y), upper), lower), rounding_shift_right(x, y), is_x_wide_int_or_uint) ||
                 rewrite(rounding_shift_right(x, y), rounding_shift_right(x, y), is_x_wide_int_or_uint) ||
@@ -569,14 +570,157 @@ protected:
     }
 };
 
+// Substitute in let values than have an output vector
+// type wider than all the types of other variables
+// referenced. This can't cause combinatorial explosion,
+// because each let in a chain has a wider value than the
+// ones it refers to.
+class SubstituteInWideningLets : public IRMutator {
+    using IRMutator::visit;
+
+    bool widens(const Expr &e) {
+        class AllInputsNarrowerThan : public IRVisitor {
+            int bits;
+
+            using IRVisitor::visit;
+
+            void visit(const Variable *op) override {
+                result &= op->type.bits() < bits;
+            }
+
+            void visit(const Load *op) override {
+                result &= op->type.bits() < bits;
+            }
+
+            void visit(const Call *op) override {
+                if (op->is_pure() && op->is_intrinsic()) {
+                    IRVisitor::visit(op);
+                } else {
+                    result &= op->type.bits() < bits;
+                }
+            }
+
+        public:
+            AllInputsNarrowerThan(Type t)
+                : bits(t.bits()) {
+            }
+            bool result = true;
+        } widens(e.type());
+        e.accept(&widens);
+        return widens.result;
+    }
+
+    Scope<Expr> replacements;
+    Expr visit(const Variable *op) override {
+        if (replacements.contains(op->name)) {
+            return replacements.get(op->name);
+        } else {
+            return op;
+        }
+    }
+
+    template<typename T>
+    auto visit_let(const T *op) -> decltype(op->body) {
+        struct Frame {
+            std::string name;
+            Expr new_value;
+            ScopedBinding<Expr> bind;
+            Frame(const std::string &name, const Expr &new_value, ScopedBinding<Expr> &&bind)
+                : name(name), new_value(new_value), bind(std::move(bind)) {
+            }
+        };
+        std::vector<Frame> frames;
+        decltype(op->body) body;
+        do {
+            body = op->body;
+            Expr value = op->value;
+            bool should_replace = find_intrinsics_for_type(value.type()) && widens(value);
+
+            // We can only substitute in pure stuff. Isolate all
+            // impure subexpressions and leave them behind here as
+            // lets.
+            class LeaveBehindSubexpressions : public IRMutator {
+                using IRMutator::visit;
+
+                Expr visit(const Call *op) override {
+                    if (!op->is_pure() || !op->is_intrinsic()) {
+                        // Only enter pure intrinsics (e.g. existing uses of widening_add)
+                        std::string name = unique_name('t');
+                        frames.emplace_back(name, op, ScopedBinding<Expr>{});
+                        return Variable::make(op->type, name);
+                    } else {
+                        return IRMutator::visit(op);
+                    }
+                }
+
+                Expr visit(const Load *op) override {
+                    // Never enter loads. They can be impure and none
+                    // of our patterns match them.
+                    std::string name = unique_name('t');
+                    frames.emplace_back(name, op, ScopedBinding<Expr>{});
+                    return Variable::make(op->type, name);
+                }
+
+                std::vector<Frame> &frames;
+
+            public:
+                LeaveBehindSubexpressions(std::vector<Frame> &frames)
+                    : frames(frames) {
+                }
+            } extractor(frames);
+
+            if (should_replace) {
+                value = extractor.mutate(value);
+                // Check it wasn't lifted entirely
+                should_replace = !value.as<Variable>();
+            }
+
+            // TODO: If it's an int32/64 vector, it may be
+            // implicitly widening because overflow is UB. Hard to
+            // see how to handle this without worrying about
+            // combinatorial explosion of substitutions.
+            value = mutate(value);
+            ScopedBinding<Expr> bind(should_replace, replacements, op->name, value);
+            frames.emplace_back(op->name, value, std::move(bind));
+            op = body.template as<T>();
+        } while (op);
+
+        body = mutate(body);
+
+        while (!frames.empty()) {
+            if (!frames.back().bind.bound()) {
+                body = T::make(frames.back().name, frames.back().new_value, body);
+            }
+            frames.pop_back();
+        }
+
+        return body;
+    }
+
+    Expr visit(const Let *op) override {
+        return visit_let(op);
+    }
+
+    Stmt visit(const LetStmt *op) override {
+        return visit_let(op);
+    }
+};
+
 }  // namespace
 
 Stmt find_intrinsics(const Stmt &s) {
-    return FindIntrinsics().mutate(s);
+    Stmt stmt = SubstituteInWideningLets().mutate(s);
+    stmt = FindIntrinsics().mutate(stmt);
+    // In case we want to hoist widening ops back out
+    stmt = common_subexpression_elimination(stmt);
+    return stmt;
 }
 
 Expr find_intrinsics(const Expr &e) {
-    return FindIntrinsics().mutate(e);
+    Expr expr = SubstituteInWideningLets().mutate(e);
+    expr = FindIntrinsics().mutate(expr);
+    expr = common_subexpression_elimination(expr);
+    return expr;
 }
 
 Expr lower_widening_add(const Expr &a, const Expr &b) {

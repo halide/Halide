@@ -150,9 +150,9 @@ public:
         internal_assert(size <= kMaxAllocSize);
         bddebug(2) << "size -> " << size << "\n";
 
-        for (auto it = regions.begin(); it != regions.end(); it++) {
-            const uint32_t start = it->first;
-            Region &r = it->second;
+        for (auto &region : regions) {
+            const uint32_t start = region.first;
+            Region &r = region.second;
             if (!r.used && r.size >= size) {
                 bddebug(2) << "alloc @ " << start << "," << (uint32_t)r.size << "\n";
                 if (r.size > size + kAlignment) {

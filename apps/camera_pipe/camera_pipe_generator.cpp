@@ -41,7 +41,7 @@ public:
     GeneratorParam<LoopLevel> output_compute_at{"output_compute_at", LoopLevel::inlined()};
 
     // Inputs and outputs
-    Input<Func> deinterleaved{"deinterleaved", Int(16), 3};
+    Input<Func> deinterleaved{"deinterleaved", UInt(16), 3};
     Output<Func> output{"output", Int(16), 3};
 
     // Defines outputs using inputs
@@ -140,7 +140,10 @@ public:
         b = interleave_y(interleave_x(b_gr, b_r),
                          interleave_x(b_b, b_gb));
 
-        output(x, y, c) = mux(c, {r(x, y), g(x, y), b(x, y)});
+        // It's possible that some of the final additions of
+        // correction terms underflowed, so reinterpret the output as
+        // signed.
+        output(x, y, c) = cast<int16_t>(mux(c, {r(x, y), g(x, y), b(x, y)}));
 
         // These are the stencil stages we want to schedule
         // separately. Everything else we'll just inline.
@@ -409,10 +412,9 @@ void CameraPipe::generate() {
     // shift things inwards to give us enough padding on the
     // boundaries so that we don't need to check bounds. We're going
     // to make a 2560x1920 output image, just like the FCam pipe, so
-    // shift by 16, 12. We also convert it to be signed, so we can deal
-    // with values that fall below 0 during processing.
+    // shift by 16, 12.
     Func shifted;
-    shifted(x, y) = cast<int16_t>(input(x + 16, y + 12));
+    shifted(x, y) = input(x + 16, y + 12);
 
     Func denoised = hot_pixel_suppression(shifted);
 

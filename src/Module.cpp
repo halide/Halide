@@ -240,8 +240,7 @@ static Registerer registerer;
 std::string indent_string(const std::string &src, const std::string &indent) {
     std::ostringstream o;
     bool prev_was_newline = true;
-    for (size_t i = 0; i < src.size(); i++) {
-        const char c = src[i];
+    for (char c : src) {
         const bool is_newline = (c == '\n');
         if (prev_was_newline && !is_newline) {
             o << indent;
@@ -450,9 +449,7 @@ void Module::append(const ExternalCode &external_code) {
 Module link_modules(const std::string &name, const std::vector<Module> &modules) {
     Module output(name, modules.front().target());
 
-    for (size_t i = 0; i < modules.size(); i++) {
-        const Module &input = modules[i];
-
+    for (const auto &input : modules) {
         if (output.target() != input.target()) {
             user_error << "Mismatched targets in modules to link ("
                        << output.name() << ", " << output.target().to_string()
@@ -911,8 +908,8 @@ void compile_multitarget(const std::string &fn_name,
         Expr can_use;
         if (target != base_target) {
             std::vector<Expr> features_struct_args;
-            for (int i = 0; i < kFeaturesWordCount; ++i) {
-                features_struct_args.emplace_back(UIntImm::make(UInt(64), cur_target_features[i]));
+            for (uint64_t feature : cur_target_features) {
+                features_struct_args.emplace_back(UIntImm::make(UInt(64), feature));
             }
             can_use = Call::make(Int(32), "halide_can_use_target_features",
                                  {kFeaturesWordCount, Call::make(type_of<uint64_t *>(), Call::make_struct, features_struct_args, Call::Intrinsic)},

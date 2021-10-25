@@ -715,8 +715,8 @@ class VectorSubs : public IRMutator {
         }
 
         // Widen the args to have the same lanes as the max lanes found
-        for (size_t i = 0; i < new_args.size(); i++) {
-            new_args[i] = widen(new_args[i], max_lanes);
+        for (auto &arg : new_args) {
+            arg = widen(arg, max_lanes);
         }
         Type new_op_type = op->type.with_lanes(max_lanes);
 
@@ -1018,8 +1018,8 @@ class VectorSubs : public IRMutator {
             new_extents.emplace_back(vv.lanes);
         }
 
-        for (size_t i = 0; i < op->extents.size(); i++) {
-            Expr extent = mutate(op->extents[i]);
+        for (const auto &e : op->extents) {
+            Expr extent = mutate(e);
             // For vector sizes, take the max over the lanes. Note
             // that we haven't changed the strides, which also may
             // vary per lane. This is a bit weird, but the way we

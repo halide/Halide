@@ -417,6 +417,7 @@ SOURCE_FILES = \
   Buffer.cpp \
   CanonicalizeGPUVars.cpp \
   Closure.cpp \
+  ClampUnsafeAccesses.cpp \
   CodeGen_ARM.cpp \
   CodeGen_C.cpp \
   CodeGen_D3D12Compute_Dev.cpp \
@@ -455,6 +456,7 @@ SOURCE_FILES = \
   EmulateFloat16Math.cpp \
   Error.cpp \
   Expr.cpp \
+  ExtractTileOperations.cpp \
   FastIntegerDivide.cpp \
   FindCalls.cpp \
   FindIntrinsics.cpp \
@@ -593,6 +595,7 @@ HEADER_FILES = \
   BoundSmallAllocations.h \
   Buffer.h \
   CanonicalizeGPUVars.h \
+  ClampUnsafeAccesses.h \
   Closure.h \
   CodeGen_C.h \
   CodeGen_D3D12Compute_Dev.h \
@@ -631,6 +634,7 @@ HEADER_FILES = \
   ExprUsesVar.h \
   Extern.h \
   ExternFuncArgument.h \
+  ExtractTileOperations.h \
   FastIntegerDivide.h \
   FindCalls.h \
   FindIntrinsics.h \
@@ -847,6 +851,11 @@ RUNTIME_LL_COMPONENTS = \
   x86_avx512 \
   x86_sse41
 
+ifeq (,$(findstring $(LLVM_VERSION_TIMES_10), 110 111))
+# x86_amx.ll won't compile under LLVM11, but we don't need it there, either
+RUNTIME_LL_COMPONENTS += x86_amx
+endif
+
 RUNTIME_EXPORTED_INCLUDES = $(INCLUDE_DIR)/HalideRuntime.h \
                             $(INCLUDE_DIR)/HalideRuntimeD3D12Compute.h \
                             $(INCLUDE_DIR)/HalideRuntimeCuda.h \
@@ -995,7 +1004,9 @@ RUNTIME_TRIPLE_WIN_GENERIC_64 = "le64-unknown-windows-unknown"
 
 # `-fno-threadsafe-statics` is very important here (note that it allows us to use a 'modern' C++
 # standard but still skip threadsafe guards for static initialization in our runtime code)
-RUNTIME_CXX_FLAGS = -std=c++17 -O3 -fno-vectorize -ffreestanding -fno-blocks -fno-exceptions -fno-unwind-tables -fno-threadsafe-statics
+#
+# `-fno-rtti` is necessary to allow us to use classes with virtual functions in the runtime code
+RUNTIME_CXX_FLAGS = -std=c++17 -O3 -fno-vectorize -ffreestanding -fno-blocks -fno-exceptions -fno-unwind-tables -fno-threadsafe-statics -fno-rtti
 
 $(BUILD_DIR)/initmod.windows_%_x86_32.ll: $(SRC_DIR)/runtime/windows_%_x86.cpp $(BUILD_DIR)/clang_ok
 	@mkdir -p $(@D)

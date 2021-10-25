@@ -384,6 +384,7 @@ ModelRunner::RunResult ModelRunner::run_in_hannk(const std::vector<char> &buffer
 
     std::unique_ptr<OpGroup> model = parse_tflite_model_from_buffer(buffer.data());
     if (verbosity) {
+        std::cout << "Model after parsing:\n";
         model->dump(std::cout);
     }
 

@@ -183,6 +183,7 @@ WEAK int halide_trace_helper(void *user_context,
 struct halide_pseudostack_slot_t {
     void *ptr;
     size_t size;
+    size_t cumulative_size;
 };
 
 WEAK void halide_use_jit_module();

@@ -108,8 +108,8 @@ WEAK int halide_hexagon_free_dma_resource(void *user_context, void *virtual_engi
     // Lock the Mutex
     ScopedMutexLock lock(&hexagon_dma_pool_mutex);
     hexagon_dma_virtual_engine_t *virtual_engine_addr = (hexagon_dma_virtual_engine_t *)virtual_engine_id;
-    for (int j = 0; j < MAX_NUMBER_OF_WORK_UNITS; j++) {
-        int num = virtual_engine_addr->mapped_engines[j] - 1;
+    for (uint8_t &mapped_engine : virtual_engine_addr->mapped_engines) {
+        int num = mapped_engine - 1;
         if (num != -1) {
             hexagon_dma_pool->dma_engine_list[num].assigned = false;
             hexagon_dma_pool->dma_engine_list[num].used = false;
@@ -117,22 +117,22 @@ WEAK int halide_hexagon_free_dma_resource(void *user_context, void *virtual_engi
                 nDmaWrapper_FinishFrame(hexagon_dma_pool->dma_engine_list[num].engine_addr);
             }
         }
-        virtual_engine_addr->mapped_engines[j] = 0;
+        mapped_engine = 0;
     }
     virtual_engine_addr->num_of_engines = 0;
     virtual_engine_addr->in_use = false;
 
     bool delete_dma_pool = true;
-    for (int k = 0; k < MAX_NUMBER_OF_DMA_ENGINES; k++) {
-        if (hexagon_dma_pool->virtual_engine_list[k].in_use) {
+    for (const auto &engine : hexagon_dma_pool->virtual_engine_list) {
+        if (engine.in_use) {
             delete_dma_pool = false;
         }
     }
 
     if (delete_dma_pool) {
-        for (int i = 0; i < MAX_NUMBER_OF_DMA_ENGINES; i++) {
-            if (hexagon_dma_pool->dma_engine_list[i].engine_addr) {
-                int err = nDmaWrapper_FreeDma((t_DmaWrapper_DmaEngineHandle)hexagon_dma_pool->dma_engine_list[i].engine_addr);
+        for (const auto &engine : hexagon_dma_pool->dma_engine_list) {
+            if (engine.engine_addr) {
+                int err = nDmaWrapper_FreeDma((t_DmaWrapper_DmaEngineHandle)engine.engine_addr);
                 if (err != QURT_EOK) {
                     error(user_context) << "Hexagon: Failure to Free DMA\n";
                     nRet = err;
@@ -163,17 +163,17 @@ WEAK void *halide_hexagon_allocate_dma_resource(void *user_context) {
             hexagon_dma_pool->dma_engine_list[i].engine_addr = nullptr;
             hexagon_dma_pool->dma_engine_list[i].assigned = false;
             hexagon_dma_pool->virtual_engine_list[i].in_use = false;
-            for (int j = 0; j < MAX_NUMBER_OF_WORK_UNITS; j++) {
-                hexagon_dma_pool->virtual_engine_list[i].mapped_engines[j] = 0;
+            for (uint8_t &engine : hexagon_dma_pool->virtual_engine_list[i].mapped_engines) {
+                engine = 0;
             }
             hexagon_dma_pool->virtual_engine_list[i].num_of_engines = 0;
         }
     }
 
-    for (int i = 0; i < MAX_NUMBER_OF_DMA_ENGINES; i++) {
-        if (hexagon_dma_pool->virtual_engine_list[i].in_use == false) {
-            hexagon_dma_pool->virtual_engine_list[i].in_use = true;
-            void *virtual_addr = &(hexagon_dma_pool->virtual_engine_list[i]);
+    for (auto &engine : hexagon_dma_pool->virtual_engine_list) {
+        if (engine.in_use == false) {
+            engine.in_use = true;
+            void *virtual_addr = &engine;
             return (void *)virtual_addr;
         }
     }
