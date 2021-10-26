@@ -381,11 +381,12 @@ public:
 };
 
 class SoftmaxOp : public Op {
-    float beta_;
+    const float beta_;
+    const int axis_;
 
 public:
-    SoftmaxOp(const TensorPtr &input, const TensorPtr &output, float beta)
-        : Op({input}, {output}), beta_(beta) {
+    SoftmaxOp(const TensorPtr &input, const TensorPtr &output, float beta, int axis)
+        : Op({input}, {output}), beta_(beta), axis_(axis) {
     }
 
     void accept(OpVisitor *v) override;
