@@ -770,6 +770,9 @@ halide_type_t ConvOp::filter_type() const {
 }
 
 BoundsMap ConvOp::map_bounds(int input_idx, int output_idx) const {
+    assert(vector_reduction_ > 0);
+    assert(vector_tile_ > 0);
+
 #ifdef CONV_R16
     const int unroll_reduction = filter()->extent(0) >= 16 ? 16 : 4;
 #else
@@ -785,22 +788,13 @@ BoundsMap ConvOp::map_bounds(int input_idx, int output_idx) const {
         }
         return result;
     } else if (input_idx == 1) {
-        // Pass minimal sized buffers to learn about the alignment requirements.
-        HalideBuffer<uint8_t> input_buf(nullptr, 1, 1, 1, 1);
-        HalideBuffer<int32_t> bias_buf(nullptr, 1);
-        HalideBuffer<void> filter_buf(filter_type(), nullptr, 1, 1, 1, 1, 1, 1);
-        HalideBuffer<uint8_t> output_buf(nullptr, 1, 1, 1, 1);
-        conv_u8_u8_u8(input_buf, 0, filter_buf, 0, bias_buf, 1, 1, 1, 1, 0, 0, 0, 0, 0, output_buf);
-
-        const int vector_reduction = filter_buf.dim(0).extent();
-        const int vector_tile = filter_buf.dim(1).extent();
-        const int channel_alignment = unroll_reduction / vector_reduction;
+        const int channel_alignment = unroll_reduction / vector_reduction_;
         BoundsMap result(input()->rank() + 2, output()->rank());
         result
-            .constant(0, vector_reduction)
-            .constant(1, vector_tile)
-            .constant(2, align_up(ceil_div(filter()->extent(0), vector_reduction), channel_alignment))
-            .upsample(3, 0, vector_tile);
+            .constant(0, vector_reduction_)
+            .constant(1, vector_tile_)
+            .constant(2, align_up(ceil_div(filter()->extent(0), vector_reduction_), channel_alignment))
+            .upsample(3, 0, vector_tile_);
         for (int i = 1; i < output()->rank() - 1; i++) {
             result.constant(i + 3, filter()->bounds(i));
         }
@@ -838,6 +832,22 @@ void call_conv2d(halide_buffer_t *input, halide_buffer_t *filter, halide_buffer_
 }
 
 }  // namespace
+
+bool ConvOp::prepare() {
+    // Pass minimal sized buffers to learn about the alignment requirements.
+    // TODO: need to adapt this to the types of in, filt, out once we support multiple variants
+    HalideBuffer<uint8_t> input_buf(nullptr, 1, 1, 1, 1);
+    HalideBuffer<int32_t> bias_buf(nullptr, 1);
+    HalideBuffer<void> filter_buf(filter_type(), nullptr, 1, 1, 1, 1, 1, 1);
+    HalideBuffer<uint8_t> output_buf(nullptr, 1, 1, 1, 1);
+    if (conv_u8_u8_u8(input_buf, 0, filter_buf, 0, bias_buf, 1, 1, 1, 1, 0, 0, 0, 0, 0, output_buf) != 0) {
+        return false;
+    }
+
+    vector_reduction_ = filter_buf.dim(0).extent();
+    vector_tile_ = filter_buf.dim(1).extent();
+    return true;
+}
 
 void ConvOp::execute() {
     const TensorPtr &in = input();
@@ -918,18 +928,8 @@ void call_depthwise_conv_uint8(
     }
 }
 
-// TODO: this could probably be cached rather than recalculated each time
-int get_depthwise_conv_channel_alignment() {
-    // Pass minimal sized buffers to learn about the alignment requirements.
-    HalideBuffer<uint8_t> input_buf(nullptr, 1, 1, 1, 1);
-    HalideBuffer<int32_t> bias_buf(nullptr, 1);
-    HalideBuffer<uint8_t> filter_buf(nullptr, 1, 1, 1);
-    HalideBuffer<uint8_t> output_buf(nullptr, 1, 1, 1, 1);
-    depthwise_conv_uint8(input_buf, 0, filter_buf, 0, bias_buf, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, output_buf);
-    return input_buf.dim(0).extent();
-}
-
 bool can_be_shallow(int alignment, int extent_0, int extent_1) {
+    assert(alignment > 0);
     // This is correct: we want to use shallow when the vector size (ie, alignment)
     // is evenly divisble by the number of channels (ie, extent(0)).
     //
@@ -942,6 +942,8 @@ bool can_be_shallow(int alignment, int extent_0, int extent_1) {
 
 BoundsMap DepthwiseConv2DOp::map_bounds(int input_idx, int output_idx) const {
     assert(output_idx == 0);
+    assert(channel_alignment_ > 0);
+
     if (input_idx == 0) {
         BoundsMap result(4, 4);
         result
@@ -950,12 +952,11 @@ BoundsMap DepthwiseConv2DOp::map_bounds(int input_idx, int output_idx) const {
             .downsample(2, 2, stride_[1], Interval(0, dilation_[1] * (filter()->extent(2) - 1)))
             .elementwise(3, 3);
         if (depth_multiplier_ == 1) {
-            const int alignment = get_depthwise_conv_channel_alignment();
             if (stride_[0] == 1 &&
-                can_be_shallow(alignment, input()->extent(0), input()->extent(1))) {
+                can_be_shallow(channel_alignment_, input()->extent(0), input()->extent(1))) {
                 // We can use the shallow version of depthwise here.
             } else {
-                result.align_input(0, alignment);
+                result.align_input(0, channel_alignment_);
             }
         }
         return result;
@@ -969,6 +970,20 @@ BoundsMap DepthwiseConv2DOp::map_bounds(int input_idx, int output_idx) const {
     } else {
         return BoundsMap(0, 4);
     }
+}
+
+bool DepthwiseConv2DOp::prepare() {
+    // Pass minimal sized buffers to learn about the alignment requirements.
+    // TODO: need to adapt this to the types of in, filt, out once we support multiple variants
+    HalideBuffer<uint8_t> input_buf(nullptr, 1, 1, 1, 1);
+    HalideBuffer<int32_t> bias_buf(nullptr, 1);
+    HalideBuffer<uint8_t> filter_buf(nullptr, 1, 1, 1);
+    HalideBuffer<uint8_t> output_buf(nullptr, 1, 1, 1, 1);
+    if (depthwise_conv_uint8(input_buf, 0, filter_buf, 0, bias_buf, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, output_buf) != 0) {
+        return false;
+    }
+    channel_alignment_ = input_buf.dim(0).extent();
+    return true;
 }
 
 void DepthwiseConv2DOp::execute() {
@@ -997,7 +1012,7 @@ void DepthwiseConv2DOp::execute() {
         if (stride_[0] == 1 &&
             can_fuse_cx(FuseType::InPlace, input_buf) &&
             can_fuse_cx(FuseType::InPlace, output_buf) &&
-            can_be_shallow(get_depthwise_conv_channel_alignment(), input_buf.dim(0).extent(), input_buf.dim(1).extent())) {
+            can_be_shallow(channel_alignment_, input_buf.dim(0).extent(), input_buf.dim(1).extent())) {
             input_stride_x = input_buf.dim(1).stride();
             fuse_cx(FuseType::InPlace, input_buf);
             fuse_cx(FuseType::InPlace, output_buf);
