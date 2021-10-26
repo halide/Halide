@@ -1,19 +1,7 @@
 #include "Halide.h"
 
-#ifndef __linux__
-
-int main(int argc, char **argv) {
-    printf("[SKIP] Test only runs on linux.\n");
-    return 0;
-}
-
-#else
-
-#include <dlfcn.h>
-
 using namespace Halide;
 
-void *lib_cuda = nullptr;
 int (*cuStreamCreate)(void **, uint32_t) = nullptr;
 int (*cuCtxCreate)(void **, uint32_t, int) = nullptr;
 int (*cuCtxDestroy)(void *) = nullptr;
@@ -45,9 +33,9 @@ struct CudaState : public Halide::JITUserContext {
     }
 
     CudaState() {
-        handlers.custom_cuda_acquire_context = CudaState::my_cuda_acquire_context;
-        handlers.custom_cuda_release_context = CudaState::my_cuda_release_context;
-        handlers.custom_cuda_get_stream = CudaState::my_cuda_get_stream;
+        handlers.custom_cuda_acquire_context = my_cuda_acquire_context;
+        handlers.custom_cuda_release_context = my_cuda_release_context;
+        handlers.custom_cuda_get_stream = my_cuda_get_stream;
     }
 };
 
@@ -59,30 +47,39 @@ int main(int argc, char **argv) {
     }
 
     {
-        // Do some nonsense to load libcuda without having to the CUDA
-        // sdk. This would not be necessary in a real application.
+        // Do some nonsense to get symbols out of libcuda without
+        // having to the CUDA sdk. This would not be necessary in a
+        // real application.
 
-        // Trick the runtime into loading libcuda
-        Func f;
-        Var x;
-        f(x) = x;
-        f.gpu_single_thread();
-        f.realize({8});
+        // We'll find cuda module in the Halide runtime so
+        // that we can use it resolve symbols into libcuda in a
+        // portable way.
 
-        // Get a handle to it
-        lib_cuda = dlopen("libcuda.so", RTLD_LAZY | RTLD_GLOBAL | RTLD_NOLOAD);
+        // Force-initialize the cuda runtime module by running something trivial.
+        evaluate_may_gpu<float>(Expr(0.f));
 
-        if (!lib_cuda) {
-            printf("[SKIP] Failed to load libcuda\n");
-            return 0;
+        // Go get it, and dig out the method used to resolve symbols in libcuda.
+        auto runtime_modules = Internal::JITSharedRuntime::get(nullptr, target, false);
+        void *(*halide_cuda_get_symbol)(void *, const char *) = nullptr;
+        for (Internal::JITModule &m : runtime_modules) {
+            auto sym = m.find_symbol_by_name("halide_cuda_get_symbol");
+            if (sym.address != nullptr) {
+                halide_cuda_get_symbol = (decltype(halide_cuda_get_symbol))sym.address;
+                break;
+            }
         }
 
-        cuStreamCreate = (decltype(cuStreamCreate))dlsym(lib_cuda, "cuStreamCreate");
-        cuCtxCreate = (decltype(cuCtxCreate))dlsym(lib_cuda, "cuCtxCreate_v2");
-        cuCtxDestroy = (decltype(cuCtxDestroy))dlsym(lib_cuda, "cuCtxDestroy_v2");
-        cuCtxSetCurrent = (decltype(cuCtxSetCurrent))dlsym(lib_cuda, "cuCtxSetCurrent");
-        cuMemAlloc = (decltype(cuMemAlloc))dlsym(lib_cuda, "cuMemAlloc_v2");
-        cuMemFree = (decltype(cuMemFree))dlsym(lib_cuda, "cuMemFree_v2");
+        if (halide_cuda_get_symbol == nullptr) {
+            printf("Failed to extract halide_cuda_get_symbol from Halide cuda runtime\n");
+            return -1;
+        }
+
+        cuStreamCreate = (decltype(cuStreamCreate))halide_cuda_get_symbol(nullptr, "cuStreamCreate");
+        cuCtxCreate = (decltype(cuCtxCreate))halide_cuda_get_symbol(nullptr, "cuCtxCreate_v2");
+        cuCtxDestroy = (decltype(cuCtxDestroy))halide_cuda_get_symbol(nullptr, "cuCtxDestroy_v2");
+        cuCtxSetCurrent = (decltype(cuCtxSetCurrent))halide_cuda_get_symbol(nullptr, "cuCtxSetCurrent");
+        cuMemAlloc = (decltype(cuMemAlloc))halide_cuda_get_symbol(nullptr, "cuMemAlloc_v2");
+        cuMemFree = (decltype(cuMemFree))halide_cuda_get_symbol(nullptr, "cuMemFree_v2");
 
         if (cuStreamCreate == nullptr ||
             cuCtxCreate == nullptr ||
@@ -131,10 +128,7 @@ int main(int argc, char **argv) {
     auto device_interface = get_device_interface_for_device_api(DeviceAPI::CUDA);
     in.device_wrap_native(device_interface,
                           (uintptr_t)ptr, &state);
-    in.set_host_dirty(true);
-    in.set_device_dirty(false);
     in.copy_to_device(device_interface, &state);
-    in.device_sync(&state);
 
     // Run a kernel on multiple threads that copies slices of it into
     // a Halide-allocated temporary buffer.  This would likely crash
@@ -148,7 +142,6 @@ int main(int argc, char **argv) {
 
     for (int i = 0; i < 10; i++) {
         Buffer<float> out = g.realize(&state, {width, height});
-        out.device_sync(&state);
         out.copy_to_host(&state);
         for (int y = 0; y < height; y++) {
             for (int x = 0; x < width; x++) {
@@ -176,5 +169,3 @@ int main(int argc, char **argv) {
     printf("Success!\n");
     return 0;
 }
-
-#endif
