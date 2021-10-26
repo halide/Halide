@@ -809,13 +809,13 @@ JITModule &make_module(llvm::Module *for_module, Target target,
                 hook_function(runtime.exports(), "halide_set_custom_trace", trace_handler);
 
             runtime_internal_handlers.custom_get_symbol =
-                hook_function(shared_runtimes(MainShared).exports(), "halide_set_custom_get_symbol", get_symbol_handler);
+                hook_function(runtime.exports(), "halide_set_custom_get_symbol", get_symbol_handler);
 
             runtime_internal_handlers.custom_load_library =
-                hook_function(shared_runtimes(MainShared).exports(), "halide_set_custom_load_library", load_library_handler);
+                hook_function(runtime.exports(), "halide_set_custom_load_library", load_library_handler);
 
             runtime_internal_handlers.custom_get_library_symbol =
-                hook_function(shared_runtimes(MainShared).exports(), "halide_set_custom_get_library_symbol", get_library_symbol_handler);
+                hook_function(runtime.exports(), "halide_set_custom_get_library_symbol", get_library_symbol_handler);
 
             active_handlers = runtime_internal_handlers;
             merge_handlers(active_handlers, default_handlers);
@@ -856,10 +856,10 @@ JITModule &make_module(llvm::Module *for_module, Target target,
                     // The CUDADebug module has already been created.
                     // Use the context in the CUDADebug module and add
                     // a dependence edge from the CUDA module to it.
-                    shared_runtimes(CUDA).add_dependency(shared_runtimes(CUDADebug));
+                    runtime.add_dependency(shared_runtimes(CUDADebug));
                 } else {
                     // The CUDA module has already been created.
-                    shared_runtimes(CUDADebug).add_dependency(shared_runtimes(CUDA));
+                    runtime.add_dependency(shared_runtimes(CUDA));
                 }
             }
         }
