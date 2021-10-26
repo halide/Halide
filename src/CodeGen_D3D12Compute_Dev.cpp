@@ -1232,10 +1232,10 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::add_kernel(Stmt s,
     print(s);
     close_scope("kernel " + name);
 
-    for (size_t i = 0; i < args.size(); i++) {
+    for (const auto &arg : args) {
         // Remove buffer arguments from allocation scope
-        if (args[i].is_buffer) {
-            allocations.pop(args[i].name);
+        if (arg.is_buffer) {
+            allocations.pop(arg.name);
         }
     }
 

@@ -49,8 +49,8 @@ class FindImageInputs : public IRVisitor {
                 }
             }
         }
-        for (size_t i = 0; i < call->args.size(); i++) {
-            call->args[i].accept(this);
+        for (const auto &arg : call->args) {
+            arg.accept(this);
         }
     }
 
@@ -240,8 +240,8 @@ class ExprCost : public IRVisitor {
             }
         }
 
-        for (size_t i = 0; i < call->args.size(); i++) {
-            call->args[i].accept(this);
+        for (const auto &arg : call->args) {
+            arg.accept(this);
         }
     }
 
@@ -318,8 +318,8 @@ Expr get_func_value_size(const Function &f) {
     Expr size = 0;
     const vector<Type> &types = f.output_types();
     internal_assert(!types.empty());
-    for (size_t i = 0; i < types.size(); i++) {
-        size += types[i].bytes();
+    for (auto type : types) {
+        size += type.bytes();
     }
     return simplify(size);
 }

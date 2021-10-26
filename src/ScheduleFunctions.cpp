@@ -1684,8 +1684,7 @@ private:
                     }
                     // Now that we are going to add a stage to the order, go over dependent nodes
                     // and decrease their dependency count.
-                    for (size_t k = 0; k < adj_list[i][stage_index[i]].size(); k++) {
-                        const auto &edge = adj_list[i][stage_index[i]][k];
+                    for (auto &edge : adj_list[i][stage_index[i]]) {
                         internal_assert(stage_dependencies[edge.func_index][edge.stage_index] > 0);
                         stage_dependencies[edge.func_index][edge.stage_index]--;
                     }

@@ -1582,9 +1582,9 @@ bool save_mat(ImageType &im, const std::string &filename) {
     if (name.empty() || !std::isalpha(name[0])) {
         name = "v" + name;
     }
-    for (size_t i = 0; i < name.size(); i++) {
-        if (!std::isalnum(name[i])) {
-            name[i] = '_';
+    for (char &c : name) {
+        if (!std::isalnum(c)) {
+            c = '_';
         }
     }
 
