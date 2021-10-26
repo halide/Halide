@@ -518,60 +518,60 @@ void merge_handlers(JITHandlers &base, const JITHandlers &addins) {
 }
 
 void print_handler(JITUserContext *context, const char *msg) {
-    if (context) {
-        (*context->handlers.custom_print)(context, msg);
+    if (context && context->handlers.custom_print) {
+        context->handlers.custom_print(context, msg);
     } else {
-        return (*active_handlers.custom_print)(context, msg);
+        return active_handlers.custom_print(context, msg);
     }
 }
 
 void *malloc_handler(JITUserContext *context, size_t x) {
-    if (context) {
-        return (*context->handlers.custom_malloc)(context, x);
+    if (context && context->handlers.custom_malloc) {
+        return context->handlers.custom_malloc(context, x);
     } else {
-        return (*active_handlers.custom_malloc)(context, x);
+        return active_handlers.custom_malloc(context, x);
     }
 }
 
 void free_handler(JITUserContext *context, void *ptr) {
-    if (context) {
-        (*context->handlers.custom_free)(context, ptr);
+    if (context && context->handlers.custom_free) {
+        context->handlers.custom_free(context, ptr);
     } else {
-        (*active_handlers.custom_free)(context, ptr);
+        active_handlers.custom_free(context, ptr);
     }
 }
 
 int do_task_handler(JITUserContext *context, int (*f)(JITUserContext *, int, uint8_t *), int idx,
                     uint8_t *closure) {
-    if (context) {
-        return (*context->handlers.custom_do_task)(context, f, idx, closure);
+    if (context && context->handlers.custom_do_task) {
+        return context->handlers.custom_do_task(context, f, idx, closure);
     } else {
-        return (*active_handlers.custom_do_task)(context, f, idx, closure);
+        return active_handlers.custom_do_task(context, f, idx, closure);
     }
 }
 
 int do_par_for_handler(JITUserContext *context, int (*f)(JITUserContext *, int, uint8_t *),
                        int min, int size, uint8_t *closure) {
-    if (context) {
-        return (*context->handlers.custom_do_par_for)(context, f, min, size, closure);
+    if (context && context->handlers.custom_do_par_for) {
+        return context->handlers.custom_do_par_for(context, f, min, size, closure);
     } else {
-        return (*active_handlers.custom_do_par_for)(context, f, min, size, closure);
+        return active_handlers.custom_do_par_for(context, f, min, size, closure);
     }
 }
 
 void error_handler_handler(JITUserContext *context, const char *msg) {
-    if (context) {
-        (*context->handlers.custom_error)(context, msg);
+    if (context && context->handlers.custom_error) {
+        context->handlers.custom_error(context, msg);
     } else {
-        (*active_handlers.custom_error)(context, msg);
+        active_handlers.custom_error(context, msg);
     }
 }
 
 int32_t trace_handler(JITUserContext *context, const halide_trace_event_t *e) {
-    if (context) {
-        return (*context->handlers.custom_trace)(context, e);
+    if (context && context->handlers.custom_trace) {
+        return context->handlers.custom_trace(context, e);
     } else {
-        return (*active_handlers.custom_trace)(context, e);
+        return active_handlers.custom_trace(context, e);
     }
 }
 
@@ -588,26 +588,26 @@ void *get_library_symbol_handler(void *lib, const char *name) {
 }
 
 int cuda_acquire_context_handler(JITUserContext *context, void **cuda_context_ptr, bool create) {
-    if (context) {
-        return (*context->handlers.custom_cuda_acquire_context)(context, cuda_context_ptr, create);
+    if (context && context->handlers.custom_cuda_acquire_context) {
+        return context->handlers.custom_cuda_acquire_context(context, cuda_context_ptr, create);
     } else {
-        return (*active_handlers.custom_cuda_acquire_context)(context, cuda_context_ptr, create);
+        return active_handlers.custom_cuda_acquire_context(context, cuda_context_ptr, create);
     }
 }
 
 int cuda_release_context_handler(JITUserContext *context) {
-    if (context) {
-        return (*context->handlers.custom_cuda_release_context)(context);
+    if (context && context->handlers.custom_cuda_release_context) {
+        return context->handlers.custom_cuda_release_context(context);
     } else {
-        return (*active_handlers.custom_cuda_release_context)(context);
+        return active_handlers.custom_cuda_release_context(context);
     }
 }
 
 int cuda_get_stream_handler(JITUserContext *context, void *cuda_context, void **cuda_stream_ptr) {
-    if (context) {
-        return (*context->handlers.custom_cuda_get_stream)(context, cuda_context, cuda_stream_ptr);
+    if (context && context->handlers.custom_cuda_get_stream) {
+        return context->handlers.custom_cuda_get_stream(context, cuda_context, cuda_stream_ptr);
     } else {
-        return (*active_handlers.custom_cuda_get_stream)(context, cuda_context, cuda_stream_ptr);
+        return active_handlers.custom_cuda_get_stream(context, cuda_context, cuda_stream_ptr);
     }
 }
 
