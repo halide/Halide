@@ -828,19 +828,39 @@ JITModule &make_module(llvm::Module *for_module, Target target,
         } else {
             runtime.jit_module->name = "GPU";
 
+            // There are two versions of these cuda context
+            // management handlers we could use - one in the cuda
+            // module, and one in the cuda-debug module. If both
+            // modules are in use, we'll just want to use one of
+            // them, so that we don't needlessly create two cuda
+            // contexts. We'll use whichever was first
+            // created. The second one will then declare a
+            // dependency on the first one, to make sure things
+            // are destroyed in the correct order.
+
             if (runtime_kind == CUDA || runtime_kind == CUDADebug) {
+                if (!runtime_internal_handlers.custom_cuda_acquire_context) {
+                    // Neither module has been created.
+                    runtime_internal_handlers.custom_cuda_acquire_context =
+                        hook_function(runtime.exports(), "halide_set_cuda_acquire_context", cuda_acquire_context_handler);
 
-                runtime_internal_handlers.custom_cuda_acquire_context =
-                    hook_function(runtime.exports(), "halide_set_cuda_acquire_context", cuda_acquire_context_handler);
+                    runtime_internal_handlers.custom_cuda_release_context =
+                        hook_function(runtime.exports(), "halide_set_cuda_release_context", cuda_release_context_handler);
 
-                runtime_internal_handlers.custom_cuda_release_context =
-                    hook_function(runtime.exports(), "halide_set_cuda_release_context", cuda_release_context_handler);
+                    runtime_internal_handlers.custom_cuda_get_stream =
+                        hook_function(runtime.exports(), "halide_set_cuda_get_stream", cuda_get_stream_handler);
 
-                runtime_internal_handlers.custom_cuda_get_stream =
-                    hook_function(runtime.exports(), "halide_set_cuda_get_stream", cuda_get_stream_handler);
-
-                active_handlers = runtime_internal_handlers;
-                merge_handlers(active_handlers, default_handlers);
+                    active_handlers = runtime_internal_handlers;
+                    merge_handlers(active_handlers, default_handlers);
+                } else if (runtime_kind == CUDA) {
+                    // The CUDADebug module has already been created.
+                    // Use the context in the CUDADebug module and add
+                    // a dependence edge from the CUDA module to it.
+                    shared_runtimes(CUDA).add_dependency(shared_runtimes(CUDADebug));
+                } else {
+                    // The CUDA module has already been created.
+                    shared_runtimes(CUDADebug).add_dependency(shared_runtimes(CUDA));
+                }
             }
         }
 
