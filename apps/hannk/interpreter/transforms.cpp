@@ -397,7 +397,7 @@ bool pad_for_ops(OpGroup *op) {
         }
         // Add returns nullptr on success; on failure, it returns the OpPtr we passed it
         OpPtr result = op->add(std::move(*i));
-        if (result == nullptr) {
+        if (result != nullptr) {
             HLOG(ERROR) << "Unable to add op: " << result->name();
             return false;
         }
