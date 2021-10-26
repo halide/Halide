@@ -97,6 +97,10 @@ class ConvOp : public Op {
     Padding padding_;
     ActivationFunction activation_;
 
+    // calculated in prepare()
+    int vector_reduction_ = 0;
+    int vector_tile_ = 0;
+
 public:
     ConvOp(const TensorPtr &input, const TensorPtr &filter, const TensorPtr &bias, const TensorPtr &output,
            std::array<int, 2> stride, std::array<int, 2> dilation, Padding padding,
@@ -129,6 +133,8 @@ public:
     halide_type_t filter_type() const;
     BoundsMap map_bounds(int input_idx, int output_idx) const override;
 
+    bool prepare() override;
+
     void execute() override;
 
     std::string name() const override {
@@ -142,6 +148,9 @@ class DepthwiseConv2DOp : public Op {
     std::array<int, 2> dilation_;
     Padding padding_;
     ActivationFunction activation_;
+
+    // calculated in prepare()
+    int channel_alignment_ = 0;
 
 public:
     DepthwiseConv2DOp(const TensorPtr &input, const TensorPtr &filter, const TensorPtr &bias, const TensorPtr &output,
@@ -178,6 +187,8 @@ public:
     }
 
     BoundsMap map_bounds(int input_idx, int output_idx) const override;
+
+    bool prepare() override;
 
     void execute() override;
 
@@ -382,11 +393,12 @@ public:
 };
 
 class SoftmaxOp : public Op {
-    float beta_;
+    const float beta_;
+    const int axis_;
 
 public:
-    SoftmaxOp(const TensorPtr &input, const TensorPtr &output, float beta)
-        : Op({input}, {output}), beta_(beta) {
+    SoftmaxOp(const TensorPtr &input, const TensorPtr &output, float beta, int axis)
+        : Op({input}, {output}), beta_(beta), axis_(axis) {
     }
 
     void accept(OpVisitor *v) override;

@@ -484,24 +484,43 @@ void mul_uint8(const HalideBuffer<const void> &in1, const QuantizationInfo &in1q
     elementwise_loop_nest<2>(mul_rank2, in1, in2, out);
 }
 
-void requantize(const HalideBuffer<const void> &in, const QuantizationInfo &inq,
-                HalideBuffer<void> out, const QuantizationInfo &outq,
-                ActivationFunction activation = ActivationFunction::None) {
-    if (inq == outq) {
-        // Some of these are just copies, or no-ops.
-        if (is_alias(in.raw_buffer(), out.raw_buffer())) {
-            return;
-        } else {
-            out.copy_from(in);
-        }
-    } else if (in.type() == halide_type_of<uint8_t>() &&
-               out.type() == halide_type_of<uint8_t>()) {
+bool try_requantize(const HalideBuffer<const void> &in, const QuantizationInfo &inq,
+                    HalideBuffer<void> out, const QuantizationInfo &outq,
+                    ActivationFunction activation = ActivationFunction::None) {
+    if (in.type() != out.type()) {
+        HLOG(ERROR) << "requantize: input and output types must match";
+        return false;
+    }
+
+    if (in.type() == halide_type_of<uint8_t>() &&
+        out.type() == halide_type_of<uint8_t>()) {
         // TODO: Maybe a dedicated pipeline for this would be better. It
         // could be a little faster, and avoid some quantization error.
         add_uint8(in, inq, 1, in, inq, 0, out, outq, activation);
-    } else {
-        HLOG(FATAL) << "Unable to requantize " << in.type() << " -> " << out.type() << "\n";
+        return true;
     }
+
+    return false;
+}
+
+// Input and output buffer types must match.
+// If the input and output buffers are quantized, we always call requantize.
+// If not, we simply copy.
+bool requantize_or_copy(const HalideBuffer<const void> &in, const QuantizationInfo &inq,
+                        HalideBuffer<void> out, const QuantizationInfo &outq,
+                        ActivationFunction activation = ActivationFunction::None) {
+    if (in.type() != out.type()) {
+        HLOG(ERROR) << "requantize_or_copy: input and output types must match";
+        return false;
+    }
+    if (try_requantize(in, inq, out, outq, activation)) {
+        return true;
+    }
+
+    if (!is_alias(in.raw_buffer(), out.raw_buffer())) {
+        out.copy_from(in);
+    }
+    return true;
 }
 
 ActivationFunction to_activation(UnaryOp::Operator op) {
@@ -565,23 +584,24 @@ double dequantize_scalar(const Tensor *t) {
     int zero = q.zero.empty() ? 0 : q.zero.front();
 
     const auto &buf = t->buffer();
-    if (buf.type() == halide_type_of<uint8_t>()) {
+    switch (buf.type().element_of().as_u32()) {
+    case halide_type_of<uint8_t>().as_u32():
         return (as_scalar<uint8_t>(buf) - zero) * scale;
-    } else if (buf.type() == halide_type_of<int8_t>()) {
+    case halide_type_of<int8_t>().as_u32():
         return (as_scalar<int8_t>(buf) - zero) * scale;
-    } else if (buf.type() == halide_type_of<uint16_t>()) {
+    case halide_type_of<uint16_t>().as_u32():
         return (as_scalar<uint16_t>(buf) - zero) * scale;
-    } else if (buf.type() == halide_type_of<int16_t>()) {
+    case halide_type_of<int16_t>().as_u32():
         return (as_scalar<int16_t>(buf) - zero) * scale;
-    } else if (buf.type() == halide_type_of<uint32_t>()) {
+    case halide_type_of<uint32_t>().as_u32():
         return (as_scalar<uint32_t>(buf) - zero) * scale;
-    } else if (buf.type() == halide_type_of<int32_t>()) {
+    case halide_type_of<int32_t>().as_u32():
         return (as_scalar<int32_t>(buf) - zero) * scale;
-    } else if (buf.type() == halide_type_of<float>()) {
+    case halide_type_of<float>().as_u32():
         return (as_scalar<float>(buf) - zero) * scale;
-    } else if (buf.type() == halide_type_of<double>()) {
+    case halide_type_of<double>().as_u32():
         return (as_scalar<double>(buf) - zero) * scale;
-    } else {
+    default:
         HLOG(FATAL) << "Unsupported type " << buf.type();
         return std::numeric_limits<double>::quiet_NaN();
     }
@@ -728,7 +748,9 @@ void ConcatenationOp::execute() {
 
         auto output_crop = output_buf;
         crop_to_union(output_crop, input_buf);
-        requantize(input_buf, input(i)->quantization(), output_crop, output()->quantization());
+
+        bool copied = requantize_or_copy(input_buf, input(i)->quantization(), output_crop, output()->quantization());
+        HCHECK(copied);
     }
 }
 
@@ -748,6 +770,9 @@ halide_type_t ConvOp::filter_type() const {
 }
 
 BoundsMap ConvOp::map_bounds(int input_idx, int output_idx) const {
+    assert(vector_reduction_ > 0);
+    assert(vector_tile_ > 0);
+
 #ifdef CONV_R16
     const int unroll_reduction = filter()->extent(0) >= 16 ? 16 : 4;
 #else
@@ -763,22 +788,13 @@ BoundsMap ConvOp::map_bounds(int input_idx, int output_idx) const {
         }
         return result;
     } else if (input_idx == 1) {
-        // Pass minimal sized buffers to learn about the alignment requirements.
-        HalideBuffer<uint8_t> input_buf(nullptr, 1, 1, 1, 1);
-        HalideBuffer<int32_t> bias_buf(nullptr, 1);
-        HalideBuffer<void> filter_buf(filter_type(), nullptr, 1, 1, 1, 1, 1, 1);
-        HalideBuffer<uint8_t> output_buf(nullptr, 1, 1, 1, 1);
-        conv_u8_u8_u8(input_buf, 0, filter_buf, 0, bias_buf, 1, 1, 1, 1, 0, 0, 0, 0, 0, output_buf);
-
-        const int vector_reduction = filter_buf.dim(0).extent();
-        const int vector_tile = filter_buf.dim(1).extent();
-        const int channel_alignment = unroll_reduction / vector_reduction;
+        const int channel_alignment = unroll_reduction / vector_reduction_;
         BoundsMap result(input()->rank() + 2, output()->rank());
         result
-            .constant(0, vector_reduction)
-            .constant(1, vector_tile)
-            .constant(2, align_up(ceil_div(filter()->extent(0), vector_reduction), channel_alignment))
-            .upsample(3, 0, vector_tile);
+            .constant(0, vector_reduction_)
+            .constant(1, vector_tile_)
+            .constant(2, align_up(ceil_div(filter()->extent(0), vector_reduction_), channel_alignment))
+            .upsample(3, 0, vector_tile_);
         for (int i = 1; i < output()->rank() - 1; i++) {
             result.constant(i + 3, filter()->bounds(i));
         }
@@ -816,6 +832,22 @@ void call_conv2d(halide_buffer_t *input, halide_buffer_t *filter, halide_buffer_
 }
 
 }  // namespace
+
+bool ConvOp::prepare() {
+    // Pass minimal sized buffers to learn about the alignment requirements.
+    // TODO: need to adapt this to the types of in, filt, out once we support multiple variants
+    HalideBuffer<uint8_t> input_buf(nullptr, 1, 1, 1, 1);
+    HalideBuffer<int32_t> bias_buf(nullptr, 1);
+    HalideBuffer<void> filter_buf(filter_type(), nullptr, 1, 1, 1, 1, 1, 1);
+    HalideBuffer<uint8_t> output_buf(nullptr, 1, 1, 1, 1);
+    if (conv_u8_u8_u8(input_buf, 0, filter_buf, 0, bias_buf, 1, 1, 1, 1, 0, 0, 0, 0, 0, output_buf) != 0) {
+        return false;
+    }
+
+    vector_reduction_ = filter_buf.dim(0).extent();
+    vector_tile_ = filter_buf.dim(1).extent();
+    return true;
+}
 
 void ConvOp::execute() {
     const TensorPtr &in = input();
@@ -896,18 +928,8 @@ void call_depthwise_conv_uint8(
     }
 }
 
-// TODO: this could probably be cached rather than recalculated each time
-int get_depthwise_conv_channel_alignment() {
-    // Pass minimal sized buffers to learn about the alignment requirements.
-    HalideBuffer<uint8_t> input_buf(nullptr, 1, 1, 1, 1);
-    HalideBuffer<int32_t> bias_buf(nullptr, 1);
-    HalideBuffer<uint8_t> filter_buf(nullptr, 1, 1, 1);
-    HalideBuffer<uint8_t> output_buf(nullptr, 1, 1, 1, 1);
-    depthwise_conv_uint8(input_buf, 0, filter_buf, 0, bias_buf, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, output_buf);
-    return input_buf.dim(0).extent();
-}
-
 bool can_be_shallow(int alignment, int extent_0, int extent_1) {
+    assert(alignment > 0);
     // This is correct: we want to use shallow when the vector size (ie, alignment)
     // is evenly divisble by the number of channels (ie, extent(0)).
     //
@@ -920,6 +942,8 @@ bool can_be_shallow(int alignment, int extent_0, int extent_1) {
 
 BoundsMap DepthwiseConv2DOp::map_bounds(int input_idx, int output_idx) const {
     assert(output_idx == 0);
+    assert(channel_alignment_ > 0);
+
     if (input_idx == 0) {
         BoundsMap result(4, 4);
         result
@@ -928,12 +952,11 @@ BoundsMap DepthwiseConv2DOp::map_bounds(int input_idx, int output_idx) const {
             .downsample(2, 2, stride_[1], Interval(0, dilation_[1] * (filter()->extent(2) - 1)))
             .elementwise(3, 3);
         if (depth_multiplier_ == 1) {
-            const int alignment = get_depthwise_conv_channel_alignment();
             if (stride_[0] == 1 &&
-                can_be_shallow(alignment, input()->extent(0), input()->extent(1))) {
+                can_be_shallow(channel_alignment_, input()->extent(0), input()->extent(1))) {
                 // We can use the shallow version of depthwise here.
             } else {
-                result.align_input(0, alignment);
+                result.align_input(0, channel_alignment_);
             }
         }
         return result;
@@ -947,6 +970,20 @@ BoundsMap DepthwiseConv2DOp::map_bounds(int input_idx, int output_idx) const {
     } else {
         return BoundsMap(0, 4);
     }
+}
+
+bool DepthwiseConv2DOp::prepare() {
+    // Pass minimal sized buffers to learn about the alignment requirements.
+    // TODO: need to adapt this to the types of in, filt, out once we support multiple variants
+    HalideBuffer<uint8_t> input_buf(nullptr, 1, 1, 1, 1);
+    HalideBuffer<int32_t> bias_buf(nullptr, 1);
+    HalideBuffer<uint8_t> filter_buf(nullptr, 1, 1, 1);
+    HalideBuffer<uint8_t> output_buf(nullptr, 1, 1, 1, 1);
+    if (depthwise_conv_uint8(input_buf, 0, filter_buf, 0, bias_buf, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, output_buf) != 0) {
+        return false;
+    }
+    channel_alignment_ = input_buf.dim(0).extent();
+    return true;
 }
 
 void DepthwiseConv2DOp::execute() {
@@ -975,7 +1012,7 @@ void DepthwiseConv2DOp::execute() {
         if (stride_[0] == 1 &&
             can_fuse_cx(FuseType::InPlace, input_buf) &&
             can_fuse_cx(FuseType::InPlace, output_buf) &&
-            can_be_shallow(get_depthwise_conv_channel_alignment(), input_buf.dim(0).extent(), input_buf.dim(1).extent())) {
+            can_be_shallow(channel_alignment_, input_buf.dim(0).extent(), input_buf.dim(1).extent())) {
             input_stride_x = input_buf.dim(1).stride();
             fuse_cx(FuseType::InPlace, input_buf);
             fuse_cx(FuseType::InPlace, output_buf);
@@ -1524,10 +1561,23 @@ void SoftmaxOp::execute() {
     const TensorPtr &in = input();
     const TensorPtr &out = output();
 
+    // Negative values for axis_ must be normalized by the parser
+    assert(axis_ >= 0 && axis_ < in->rank());
+
     if (in->type() == halide_type_of<uint8_t>() &&
         out->type() == halide_type_of<uint8_t>()) {
-        const auto &in_buf = in->buffer();
-        const auto &out_buf = out->buffer();
+        // Make local copies in case we need to transpose them
+        HalideBuffer<void> in_buf = in->buffer();
+        HalideBuffer<void> out_buf = out->buffer();
+
+        // TODO: we currently assume that the axis-is-0 case is the most common
+        // and most important, and optimize for it; the other cases, we just transpose,
+        // which currently requires less-efficient specializations in the Halide code.
+        // Revisit if this proves too slow in practice.
+        if (axis_ != 0) {
+            in_buf.transpose(0, axis_);
+            out_buf.transpose(0, axis_);
+        }
 
         // We don't need the input zero point because this op exploits the
         // identity exp(x_i)/sum(exp(x_i)) == exp(x_i + C)/sum(exp(x_i + C))
@@ -1647,7 +1697,8 @@ void SplitOp::execute() {
         assert(output_buf.dim(axis_).min() == 0);
 
         output_buf.translate(axis_, concatenated_i);
-        requantize(input_buf, input()->quantization(), output_buf, output(i)->quantization());
+        bool copied = requantize_or_copy(input_buf, input()->quantization(), output_buf, output(i)->quantization());
+        HCHECK(copied);
 
         concatenated_i += output_buf.dim(axis_).extent();
     }
@@ -1797,7 +1848,8 @@ void UnaryOp::execute() {
             mul_uint8(in_buf, in->quantization(), in_buf, in->quantization(), out_buf, out->quantization());
             return;
         } else if (op_ == Relu || op_ == Relu6 || op_ == ReluN1To1) {
-            requantize(in_buf, in->quantization(), out_buf, out->quantization(), to_activation(op_));
+            bool copied = try_requantize(in_buf, in->quantization(), out_buf, out->quantization(), to_activation(op_));
+            HCHECK(copied);
             return;
         }
     }

@@ -564,7 +564,7 @@ void CodeGen_OpenGLCompute_C::visit(const Ramp *op) {
     }
 
     rhs << ")";
-    print_assignment(op->base.type(), rhs.str());
+    print_assignment(op->type, rhs.str());
 }
 
 void CodeGen_OpenGLCompute_C::visit(const Broadcast *op) {

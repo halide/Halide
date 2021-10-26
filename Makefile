@@ -843,8 +843,12 @@ RUNTIME_LL_COMPONENTS = \
   x86_avx \
   x86_avx2 \
   x86_avx512 \
-  x86_amx \
   x86_sse41
+
+ifeq (,$(findstring $(LLVM_VERSION_TIMES_10), 110 111))
+# x86_amx.ll won't compile under LLVM11, but we don't need it there, either
+RUNTIME_LL_COMPONENTS += x86_amx
+endif
 
 RUNTIME_EXPORTED_INCLUDES = $(INCLUDE_DIR)/HalideRuntime.h \
                             $(INCLUDE_DIR)/HalideRuntimeD3D12Compute.h \
