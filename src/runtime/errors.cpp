@@ -276,4 +276,14 @@ WEAK int halide_error_buffer_is_null(void *user_context, const char *routine) {
     return halide_error_code_buffer_is_null;
 }
 
+WEAK int halide_error_storage_bound_too_small(void *user_context, const char *func_name, const char *var_name,
+                                              int provided_size, int required_size) {
+    error(user_context)
+        << "The explicit allocation bound (" << provided_size
+        << ") of dimension " << var_name << " of " << func_name
+        << " is too small to store the required region ("
+        << required_size << ").";
+    return halide_error_code_storage_bound_too_small;
+}
+
 }  // extern "C"

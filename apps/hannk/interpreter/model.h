@@ -278,6 +278,13 @@ public:
         }
     }
 
+    // Prepare the op for future execution. The Op can assume that the types and dimensions
+    // of all its input/output Tensors will remain the same after this.
+    // Return false on error.
+    virtual bool prepare() {
+        return true;
+    }
+
     // Execute the op on a given crop.
     virtual void execute() = 0;
 
@@ -358,6 +365,8 @@ public:
     [[nodiscard]] bool remove(const Op *op);
 
     BoundsMap map_bounds(int input_idx, int output_idx) const override;
+
+    bool prepare() override;
 
     void execute() override;
 

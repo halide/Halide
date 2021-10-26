@@ -383,16 +383,24 @@ class FusePadOps : public LeafOpVisitor {
 
 }  // namespace
 
-void pad_for_ops(OpGroup *op) {
+bool pad_for_ops(OpGroup *op) {
     PadForOps padder;
     op->accept(&padder);
+
     // We need to add in reverse order, so ops that depend on newly added ops go
     // in the right place.
     for (auto i = padder.new_ops.rbegin(); i != padder.new_ops.rend(); ++i) {
         assert(*i != nullptr);
+        if (!i->get()->prepare()) {
+            HLOG(ERROR) << "pad_for_ops: new_op " << i->get()->name() << " failed prepare()";
+            return false;
+        }
         // Add returns nullptr on success; on failure, it returns the OpPtr we passed it
         OpPtr result = op->add(std::move(*i));
-        HCHECK(result == nullptr) << "Unable to add op: " << result->name();
+        if (result == nullptr) {
+            HLOG(ERROR) << "Unable to add op: " << result->name();
+            return false;
+        }
     }
 
     // Some networks use padding already for other reasons, so
@@ -400,6 +408,8 @@ void pad_for_ops(OpGroup *op) {
     // a waste.
     FusePadOps fuser;
     op->accept(&fuser);
+
+    return true;
 }
 
 namespace {

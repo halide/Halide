@@ -95,6 +95,15 @@ void Op::dump(std::ostream &os, int indent) const {
     os << "\n";
 }
 
+bool OpGroup::prepare() {
+    for (int i = 0; i < op_count(); i++) {
+        if (!op(i)->prepare()) {
+            return false;
+        }
+    }
+    return true;
+}
+
 void OpGroup::execute() {
     for (int i = 0; i < op_count(); i++) {
         op(i)->execute();

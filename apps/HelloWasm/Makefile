@@ -75,7 +75,7 @@ clean:
 
 $(BIN)/$(HL_TARGET)/run: $(BIN)/$(HL_TARGET)/reaction_diffusion_init.a $(BIN)/$(HL_TARGET)/reaction_diffusion_update.a $(BIN)/$(HL_TARGET)/reaction_diffusion_render.a $(BIN)/$(HL_TARGET)/runtime.a
 	mkdir -p $(@D)
-	$(CXX) $(HALIDE_DISTRIB_PATH)/tools/RunGenMain.cpp $(BIN)/$(HL_TARGET)/reaction_diffusion_*.registration.cpp $^ -o $@ -I $(HALIDE_DISTRIB_PATH)/include $(IMAGE_IO_FLAGS) $(LDFLAGS)
+	$(CXX) $(CXXFLAGS) $(HALIDE_DISTRIB_PATH)/tools/RunGenMain.cpp $(BIN)/$(HL_TARGET)/reaction_diffusion_*.registration.cpp $^ -o $@ -I $(HALIDE_DISTRIB_PATH)/include $(IMAGE_IO_FLAGS) $(LDFLAGS)
 
 benchmark_native: $(BIN)/$(HL_TARGET)/run
 	$(BIN)/$(HL_TARGET)/run --benchmarks=all --benchmark_min_time=1 --name=reaction_diffusion_init --output_extents=[1024,1024] --parsable_output
