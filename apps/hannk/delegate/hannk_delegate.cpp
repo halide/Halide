@@ -749,7 +749,8 @@ private:
         auto input = GetTensorById(context, node->inputs->data[0]);
         auto output = GetTensorById(context, node->outputs->data[0]);
         const TfLiteSoftmaxParams *params = (const TfLiteSoftmaxParams *)(node->builtin_data);
-        return make_op<SoftmaxOp>(input, output, params->beta);
+        const int axis = 0;  // In TFLite, normalization is always against the first axis.
+        return make_op<SoftmaxOp>(input, output, params->beta, axis);
     }
 
     OpPtr BuildL2Normalization(TfLiteContext *context, TfLiteNode *node) {
