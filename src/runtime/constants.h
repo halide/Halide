@@ -8,6 +8,8 @@
  * public API of the runtime.
  */
 
+#include "HalideRuntime.h"
+
 namespace Halide {
 namespace Runtime {
 namespace Internal {
