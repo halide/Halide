@@ -13,6 +13,7 @@ enable_testing()
 # Make our custom helpers available throughout the project via include().
 list(APPEND CMAKE_MODULE_PATH ${CMAKE_CURRENT_LIST_DIR}/cmake)
 include(HalideGeneratorHelpers)
+include(HalideWasmHelpers)
 include(MakeShellPath)
 include(CMakeDependentOption)
 

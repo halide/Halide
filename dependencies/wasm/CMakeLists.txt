@@ -69,18 +69,8 @@ if (WITH_WASM_SHELL)
         set(WASM_SHELL_PLATFORM "linux64")
     endif ()
 
-    # We want to deliberately choose a stable version (rather than top-of-tree);
-    # this might be a canary version (if needed to get the updates to v8 that we need)
-    # but should be carefully tested before landing.
-    #
-    # Note that V8 9.1+ is apparently first version of V8/D8 that really does properly
-    # implement the final WASM SIMD spec; versions 8.9 and 9.0 weren't quite complete
-    # (there were some opcode renumberings) so they should be specifically avoided.
-    # As of this writing, v9.1 is still in beta; the shell version below should be updated
-    # to a proper release version (vs canary) once it is final.
-    #
-    # see https://github.com/WebAssembly/simd/blob/master/proposals/simd/ImplementationStatus.md
-    set(WASM_SHELL_VERSION 9.1.269)
+    # We want to deliberately choose a stable version (rather than top-of-tree).
+    set(WASM_SHELL_VERSION 9.5.172)
     set(WASM_SHELL_URL "https://storage.googleapis.com/chromium-v8/official/canary/v8-${WASM_SHELL_PLATFORM}-rel-${WASM_SHELL_VERSION}.zip")
     message(STATUS "Fetching WASM_SHELL ${WASM_SHELL_URL}...")
     FetchContent_Declare(wasm_shell URL "${WASM_SHELL_URL}")
@@ -97,105 +87,3 @@ if (WITH_WASM_SHELL)
     set_target_properties(d8 PROPERTIES IMPORTED_LOCATION "${D8_PATH}")
 endif ()
 
-function(add_wasm_executable TARGET)
-    set(options)
-    set(oneValueArgs)
-    set(multiValueArgs SRCS DEPS INCLUDES ENABLE_IF)
-    cmake_parse_arguments(args "${options}" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
-
-    if (args_ENABLE_IF AND NOT (${args_ENABLE_IF}))
-        return()
-    endif ()
-
-    # Conceptually, we want something like this:
-    # add_executable(${TARGET} ${args_SRCS})
-    # if (args_INCLUDES)
-    #     target_include_directories("${TARGET}" PRIVATE ${args_INCLUDES})
-    # endif()
-    # if (args_DEPS)
-    #     target_link_libraries(${TARGET} PRIVATE ${args_DEPS})
-    # endif ()
-
-    find_program(EMCC emcc HINTS "$ENV{EMSDK}/upstream/emscripten")
-
-    if (NOT EMCC)
-        message(FATAL_ERROR "Building tests or apps for WASM requires that EMSDK point to a valid Emscripten install.")
-    endif ()
-
-    set(EMCC_FLAGS
-        -O3
-        -g
-        -std=c++17
-        -Wall
-        -Wcast-qual
-        -Werror
-        -Wignored-qualifiers
-        -Wno-comment
-        -Wno-psabi
-        -Wno-unknown-warning-option
-        -Wno-unused-function
-        -Wsign-compare
-        -Wsuggest-override
-        -s ASSERTIONS=1
-        -s ALLOW_MEMORY_GROWTH=1
-        -s WASM_BIGINT=1
-        -s STANDALONE_WASM=1
-        -s ENVIRONMENT=shell)
-
-    set(SRCS)
-    foreach (S IN LISTS args_SRCS)
-        list(APPEND SRCS "${CMAKE_CURRENT_SOURCE_DIR}/${S}")
-    endforeach ()
-
-    set(INCLUDES)
-    foreach (I IN LISTS args_INCLUDES)
-        list(APPEND INCLUDES "-I${I}")
-    endforeach ()
-
-    set(DEPS)
-    foreach (D IN LISTS args_DEPS)
-        list(APPEND DEPS $<TARGET_FILE:${D}>)
-    endforeach ()
-
-    add_custom_command(OUTPUT "${TARGET}.wasm" "${TARGET}.js"
-                       COMMAND ${EMCC} ${EMCC_FLAGS} ${INCLUDES} ${SRCS} ${DEPS} -o "${TARGET}.js"
-                       DEPENDS ${SRCS} ${DEPS}
-                       VERBATIM)
-
-    add_custom_target("${TARGET}" ALL
-                      DEPENDS "${TARGET}.wasm" "${TARGET}.js")
-
-endfunction()
-
-function(add_wasm_halide_test TARGET)
-    set(options)
-    set(oneValueArgs)
-    set(multiValueArgs GROUPS ENABLE_IF)
-    cmake_parse_arguments(args "${options}" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
-
-    if (args_ENABLE_IF AND NOT (${args_ENABLE_IF}))
-        return()
-    endif ()
-
-    if (NOT WITH_WASM_SHELL)
-        message(FATAL_ERROR "WITH_WASM_SHELL must be enabled if testing AOT WASM code.")
-    endif ()
-
-    set(WASM_SHELL_FLAGS)
-    if (Halide_TARGET MATCHES "wasm_simd128")
-        list(APPEND WASM_SHELL_FLAGS "--experimental-wasm-simd")
-    endif ()
-    if (Halide_TARGET MATCHES "wasm_threads")
-        # wasm_threads requires compilation with Emscripten, against a *browser*
-        # environment rather than a shell environment. (This is because the 'pthreads'
-        # support is an elaborate wrapper than Emscripten provides around WebWorkers.)
-        # The version of d8/v8 that we pull does provide enough of a browser-like
-        # environment to support this, but many shell tools (e.g. wabt-interp) don't,
-        # so if you use a different WASM_SHELL, you may have to disable this.
-        list(APPEND WASM_SHELL_FLAGS "--experimental-wasm-threads")
-    endif ()
-
-    add_halide_test("${TARGET}"
-                    GROUPS ${args_GROUPS}
-                    COMMAND d8 ${WASM_SHELL_FLAGS} "${TARGET}.js")
-endfunction()
