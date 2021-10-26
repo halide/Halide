@@ -14,7 +14,7 @@ public:
 };
 
 int trace_min, trace_extent;
-int my_trace(void *user_context, const halide_trace_event_t *e) {
+int my_trace(JITUserContext *user_context, const halide_trace_event_t *e) {
     if (e->event == 2) {
         trace_min = e->coordinates[0];
         trace_extent = e->coordinates[1];
@@ -48,7 +48,7 @@ int main(int argc, char **argv) {
         }
 
         p.set(3);
-        h.set_custom_trace(my_trace);
+        h.jit_handlers().custom_trace = my_trace;
         Buffer<int> result = h.realize({10});
 
         for (int i = 0; i < 10; i++) {
@@ -111,7 +111,7 @@ int main(int argc, char **argv) {
         }
 
         p.set(3);
-        h.set_custom_trace(my_trace);
+        h.jit_handlers().custom_trace = my_trace;
         Buffer<int> result = h.realize({10});
 
         for (int i = 0; i < 10; i++) {
@@ -162,7 +162,7 @@ int main(int argc, char **argv) {
         g.compute_root().align_extent(x, 32).trace_realizations();
 
         p.set(3);
-        h.set_custom_trace(my_trace);
+        h.jit_handlers().custom_trace = my_trace;
         Buffer<int> result = h.realize({10});
 
         for (int i = 0; i < 10; i++) {

@@ -62,9 +62,9 @@ extern "C" {
  * replaced with user-defined versions by defining an extern "C"
  * function with the same name and signature.
  *
- * When doing Just In Time (JIT) compilation methods on the Func being
- * compiled must be called instead. The corresponding methods are
- * documented below.
+ * When doing Just In Time (JIT) compilation members of
+ * some_pipeline_or_func.jit_handlers() must be replaced instead. The
+ * corresponding methods are documented below.
  *
  * All of these functions take a "void *user_context" parameter as their
  * first argument; if the Halide kernel that calls back to any of these

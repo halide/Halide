@@ -532,7 +532,7 @@ void free_handler(JITUserContext *context, void *ptr) {
     }
 }
 
-int do_task_handler(JITUserContext *context, halide_task_t f, int idx,
+int do_task_handler(JITUserContext *context, int (*f)(JITUserContext *, int, uint8_t *), int idx,
                     uint8_t *closure) {
     if (context) {
         return (*context->handlers.custom_do_task)(context, f, idx, closure);
@@ -541,7 +541,7 @@ int do_task_handler(JITUserContext *context, halide_task_t f, int idx,
     }
 }
 
-int do_par_for_handler(JITUserContext *context, halide_task_t f,
+int do_par_for_handler(JITUserContext *context, int (*f)(JITUserContext *, int, uint8_t *),
                        int min, int size, uint8_t *closure) {
     if (context) {
         return (*context->handlers.custom_do_par_for)(context, f, min, size, closure);

@@ -856,7 +856,7 @@ int argmin_rfactor_test() {
     return 0;
 }
 
-int allocation_bound_test_trace(void *user_context, const halide_trace_event_t *e) {
+int allocation_bound_test_trace(JITUserContext *user_context, const halide_trace_event_t *e) {
     // The schedule implies that f will be stored from 0 to 1
     if (e->event == 2 && std::string(e->func) == "f") {
         if (e->coordinates[1] != 2) {
@@ -884,7 +884,7 @@ int check_allocation_bound_test() {
     g.update(0).rfactor({{rxo, u}}).compute_at(g, rxo);
 
     f.trace_realizations();
-    g.set_custom_trace(allocation_bound_test_trace);
+    g.jit_handlers().custom_trace = allocation_bound_test_trace;
     g.realize({23});
 
     return 0;
