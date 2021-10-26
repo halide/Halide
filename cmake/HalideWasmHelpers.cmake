@@ -1,5 +1,56 @@
 cmake_minimum_required(VERSION 3.16)
 
+function(find_node_js)
+
+    if (NOT NODE_JS)
+        # If HALIDE_NODE_JS_PATH is specified, always look there, ignoring normal lookup paths;
+        # otherwise, just rely on find_program(). (This is fairly essential, since many EMSDK versions
+        # include a too-old version of Node that is likely to be in the current search path
+        # when EMCC is in use.)
+        if ("$ENV{HALIDE_NODE_JS_PATH}" STREQUAL "")
+            find_program(NODE_JS node)
+        else ()
+            get_filename_component(HALIDE_NODE_JS_DIR $ENV{HALIDE_NODE_JS_PATH} DIRECTORY)
+            message(STATUS "HALIDE_NODE_JS_DIR ${HALIDE_NODE_JS_DIR}")
+            find_program(NODE_JS node
+                         NO_DEFAULT_PATH
+                         PATHS "${HALIDE_NODE_JS_DIR}")
+            message(STATUS "NODE_JS ${NODE_JS}")
+        endif ()
+
+        if (NOT NODE_JS)
+            message(FATAL_ERROR "Could not find Node.js shell")
+        endif ()
+
+        if (DEFINED CACHE{NODE_JS_VERSION_OK})
+            message(STATUS "NODE_JS_VERSION_OK is defined")
+            return()
+        endif()
+
+        execute_process(COMMAND "${NODE_JS}" --version
+                        OUTPUT_VARIABLE NODE_JS_VERSION_RAW
+                        OUTPUT_STRIP_TRAILING_WHITESPACE)
+        string(REPLACE "v" "" NODE_JS_VERSION ${NODE_JS_VERSION_RAW})
+        string(REPLACE "." ";" NODE_JS_VERSION ${NODE_JS_VERSION})
+        message(STATUS "Found Node.js runtime at ${NODE_JS}, version ${NODE_JS_VERSION_RAW}")
+
+        list(GET NODE_JS_VERSION 0 NODE_JS_MAJOR)
+        list(GET NODE_JS_VERSION 1 NODE_JS_MINOR)
+        list(GET NODE_JS_VERSION 2 NODE_JS_PATCH)
+
+        if (NODE_JS_MAJOR LESS 16)
+            message(FATAL_ERROR "Halide requires Node v16.13 or later, but found ${NODE_JS_VERSION_RAW} at ${NODE_JS}")
+        endif ()
+
+        if ((NODE_JS_MAJOR EQUALS 16) AND (NODE_JS_MINOR LESS 13))
+            message(FATAL_ERROR "Halide requires Node v16.13 or later, but found ${NODE_JS_VERSION_RAW} at ${NODE_JS}")
+        endif ()
+
+        set(NODE_JS_VERSION_OK "YES" CACHE INTERNAL "Node is OK")
+    endif ()
+
+endfunction()
+
 function(add_wasm_executable TARGET)
     set(options)
     set(oneValueArgs)
@@ -45,7 +96,7 @@ function(add_wasm_executable TARGET)
         -s ALLOW_MEMORY_GROWTH=1
         -s WASM_BIGINT=1
         -s STANDALONE_WASM=1
-        -s ENVIRONMENT=shell)
+        -s ENVIRONMENT=node)
 
     set(SRCS)
     foreach (S IN LISTS args_SRCS)
@@ -82,28 +133,7 @@ function(add_wasm_halide_test TARGET)
         return()
     endif ()
 
-    if (NOT WITH_WASM_SHELL)
-        message(FATAL_ERROR "WITH_WASM_SHELL must be enabled if testing AOT WASM code.")
-    endif ()
-
-    set(WASM_SHELL_FLAGS)
-
-    # Note that recent versions of d8 don't require these flags any more.
-    # If you are using a different shell (e.g. Node), they might still be required.
-    if (Halide_TARGET MATCHES "wasm_simd128")
-        list(APPEND WASM_SHELL_FLAGS "--experimental-wasm-simd")
-    endif ()
-    if (Halide_TARGET MATCHES "wasm_threads")
-        # wasm_threads requires compilation with Emscripten, against a *browser*
-        # environment rather than a shell environment. (This is because the 'pthreads'
-        # support is an elaborate wrapper than Emscripten provides around WebWorkers.)
-        # The version of d8/v8 that we pull does provide enough of a browser-like
-        # environment to support this, but many shell tools (e.g. wabt-interp) don't,
-        # so if you use a different WASM_SHELL, you may have to disable this.
-        list(APPEND WASM_SHELL_FLAGS "--experimental-wasm-threads")
-    endif ()
-
     add_halide_test("${TARGET}"
                     GROUPS ${args_GROUPS}
-                    COMMAND d8 ${WASM_SHELL_FLAGS} "${TARGET}.js")
+                    COMMAND ${NODE_JS} "${TARGET}.js")
 endfunction()
