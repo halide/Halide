@@ -21,7 +21,7 @@ CUDA_FN(CUresult, cuDeviceGetCount, (int *count));
 CUDA_FN(CUresult, cuDeviceGet, (CUdevice * device, int ordinal));
 CUDA_FN(CUresult, cuDeviceGetAttribute, (int *, CUdevice_attribute attrib, CUdevice dev));
 CUDA_FN(CUresult, cuDeviceGetName, (char *, int len, CUdevice dev));
-CUDA_FN(CUresult, cuDeviceTotalMem, (size_t *, CUdevice dev));
+CUDA_FN_3020(CUresult, cuDeviceTotalMem, cuDeviceTotalMem_v2, (size_t *, CUdevice dev));
 CUDA_FN_3020(CUresult, cuCtxCreate, cuCtxCreate_v2, (CUcontext * pctx, unsigned int flags, CUdevice dev));
 CUDA_FN_4000(CUresult, cuCtxDestroy, cuCtxDestroy_v2, (CUcontext pctx));
 CUDA_FN(CUresult, cuProfilerStop, ());

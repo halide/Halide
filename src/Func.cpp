@@ -2602,6 +2602,23 @@ Func &Func::align_storage(const Var &dim, const Expr &alignment) {
     return *this;
 }
 
+Func &Func::bound_storage(const Var &dim, const Expr &bound) {
+    invalidate_cache();
+
+    vector<StorageDim> &dims = func.schedule().storage_dims();
+    for (auto &d : dims) {
+        if (var_name_match(d.var, dim.name())) {
+            d.bound = bound;
+            return *this;
+        }
+    }
+    user_error << "In schedule for " << name()
+               << ", could not find var " << dim.name()
+               << " to bound the storage of.\n"
+               << dump_dim_list(func.schedule().storage_dims());
+    return *this;
+}
+
 Func &Func::fold_storage(const Var &dim, const Expr &factor, bool fold_forward) {
     invalidate_cache();
 

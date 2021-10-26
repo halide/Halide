@@ -391,6 +391,11 @@ ModelRunner::RunResult ModelRunner::run_in_hannk(const std::vector<char> &buffer
     InterpreterOptions options;
     options.verbosity = verbosity;
     Interpreter interpreter(std::move(model), std::move(options));
+    if (!interpreter.prepare()) {
+        std::cerr << "hannk::Interpreter::prepare() failed\n";
+        // TODO: probably better form to return an error here, but for now, this is fine.
+        exit(-1);
+    }
 
     // Fill in the inputs with pseudorandom data (save the seeds for later).
     for (TensorPtr t : interpreter.inputs()) {

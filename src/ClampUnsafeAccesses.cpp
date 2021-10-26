@@ -50,7 +50,7 @@ protected:
             }
         }
 
-        ScopedValue s(is_inside_indexing, true);
+        ScopedValue<bool> s(is_inside_indexing, true);
         return IRMutator::visit(call);
     }
 
@@ -60,7 +60,7 @@ private:
         ScopedBinding<bool> binding(let_var_inside_indexing, let->name, false);
         Body body = mutate(let->body);
 
-        ScopedValue s(is_inside_indexing, is_inside_indexing || let_var_inside_indexing.get(let->name));
+        ScopedValue<bool> s(is_inside_indexing, is_inside_indexing || let_var_inside_indexing.get(let->name));
         Expr value = mutate(let->value);
 
         return L::make(let->name, std::move(value), std::move(body));

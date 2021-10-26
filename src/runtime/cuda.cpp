@@ -442,6 +442,9 @@ WEAK CUresult create_cuda_context(void *user_context, CUcontext *ctx) {
         case 7:
             threads_per_core = 64;
             break;
+        case 8:
+            threads_per_core = 128;
+            break;
         default:
             threads_per_core = 0;
             break;

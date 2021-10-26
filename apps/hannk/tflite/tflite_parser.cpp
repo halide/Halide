@@ -359,7 +359,8 @@ public:
         float beta = options->beta();
         TensorPtr input = tensors_[op->inputs()->Get(0)];
         TensorPtr output = tensors_[op->outputs()->Get(0)];
-        return make_op<SoftmaxOp>(input, output, beta);
+        const int axis = 0;  // In TFLite, normalization is always against the first axis.
+        return make_op<SoftmaxOp>(input, output, beta, axis);
     }
 
     OpPtr parse_l2_normalization(const tflite::Operator *op) {
