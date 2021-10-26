@@ -765,7 +765,7 @@ public:
     int lanes = -1;
 
     CheckAlignedDenseVectorLoadStore(string buffer)
-        : buffer(buffer) {
+        : buffer(std::move(buffer)) {
     }
 
 private:
