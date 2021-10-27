@@ -4,12 +4,12 @@ target_include_directories(error_util PUBLIC
                            $<BUILD_INTERFACE:${hannk_SOURCE_DIR}>)
 target_link_libraries(error_util PRIVATE Halide::Runtime)
 
-add_library(hannk_log_stderr STATIC
+add_library(hannk_log_stderr STATIC EXCLUDE_FROM_ALL
             hannk_log_stderr.cpp)
 target_include_directories(hannk_log_stderr PUBLIC
                            $<BUILD_INTERFACE:${hannk_SOURCE_DIR}>)
 
-add_library(hannk_log_tflite STATIC
+add_library(hannk_log_tflite STATIC EXCLUDE_FROM_ALL
             hannk_log_tflite.cpp)
 target_link_libraries(hannk_log_tflite PRIVATE tensorflowlite_headers)
 target_include_directories(hannk_log_tflite PUBLIC
@@ -41,12 +41,16 @@ target_compile_definitions(model_runner PRIVATE
                            -DTFLITE_VERSION_MINOR=${TFLITE_VERSION_MINOR}
                            -DTFLITE_VERSION_PATCH=${TFLITE_VERSION_PATCH})
 target_link_libraries(model_runner PRIVATE
-                      tensorflowlite_c
                       interpreter
                       error_util
                       file_util
-                      hannk_delegate
                       tflite_parser
                       Halide::Tools  # for halide_benchmark.h
                       Halide::Runtime
                       tensorflowlite_headers)
+
+if (HANNK_BUILD_TFLITE_DELEGATE)
+    target_link_libraries(model_runner PRIVATE
+                          tensorflowlite_c
+                          hannk_delegate)
+endif ()

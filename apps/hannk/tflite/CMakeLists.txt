@@ -17,6 +17,9 @@ set(FLATBUFFERS_BUILD_TESTS OFF)
 set(FLATBUFFERS_INSTALL OFF)
 set(FLATBUFFERS_BUILD_FLATC OFF)
 
+# Enable this to see details about downloading -- useful for debugging
+# set(FETCHCONTENT_QUIET NO)
+
 FetchContent_Declare(tflite
                      GIT_REPOSITORY https://github.com/tensorflow/tensorflow
                      GIT_TAG ${TFLITE_TAG}
@@ -33,8 +36,10 @@ if (NOT tflite_POPULATED)
     set(CMAKE_MESSAGE_LOG_LEVEL ${OLD_CMAKE_MESSAGE_LOG_LEVEL})
 endif ()
 
-
-# tensorflowlite_c is implicitly declared by this FetchContent
+# tensorflowlite_c is implicitly declared by this FetchContent.
+# Mark it as EXCLUDE_FROM_ALL so that it won't be built unless we actually
+# depend on it (which we might not depending on HANNK_BUILD_TFLITE_DELEGATE)
+set_property(TARGET tensorflowlite_c PROPERTY EXCLUDE_FROM_ALL TRUE)
 
 # Disable some noisy warnings in abseil
 foreach (LIB IN ITEMS

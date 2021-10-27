@@ -6,6 +6,9 @@ include ../support/Makefile.inc
 # builds but easier to enable it for everything.
 CXXFLAGS += -Wno-unused-private-field -fno-exceptions -fPIC -fvisibility=hidden -fvisibility-inlines-hidden -Wunused-variable -Wsuggest-override -Woverloaded-virtual -I$(MAKEFILE_DIR)
 
+# No option to build without TFLite/Delegate in Make (use CMake for that)
+CXXFLAGS += -DHANNK_BUILD_TFLITE_DELEGATE=1
+
 BENCHMARK_OUT = benchmark
 ifeq (hexagon-32-qurt,$(findstring hexagon-32-qurt,$(HL_TARGET)))
 	# Building benchmark application as shared object instead of elf for

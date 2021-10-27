@@ -9,7 +9,9 @@
 
 #include "util/model_runner.h"
 
+#if HANNK_BUILD_TFLITE_DELEGATE
 #include "delegate/hannk_delegate.h"
+#endif
 #include "halide_benchmark.h"
 #include "interpreter/interpreter.h"
 #include "tflite/tflite_parser.h"
@@ -17,9 +19,11 @@
 #include "util/error_util.h"
 #include "util/file_util.h"
 
+#if HANNK_BUILD_TFLITE_DELEGATE
 // IMPORTANT: use only the TFLite C API here.
 #include "tensorflow/lite/c/c_api.h"
 #include "tensorflow/lite/c/common.h"
+#endif
 
 namespace hannk {
 namespace {
@@ -29,6 +33,7 @@ std::chrono::duration<double> bench(std::function<void()> f) {
     return std::chrono::duration<double>(result.wall_time);
 }
 
+#if HANNK_BUILD_TFLITE_DELEGATE
 halide_type_t tf_lite_type_to_halide_type(TfLiteType t) {
     switch (t) {
     case kTfLiteBool:
@@ -141,6 +146,7 @@ public:
         }
     }
 };
+#endif
 
 static const char *const RunNames[ModelRunner::kNumRuns] = {
     "TfLite",
@@ -234,6 +240,7 @@ int SeedTracker::seed_for_name(const std::string &name) {
     return seed_here;
 }
 
+#if HANNK_BUILD_TFLITE_DELEGATE
 /*static*/ void TfLiteModelRunner::ErrorReporter(void *user_data, const char *format, va_list args) {
     TfLiteModelRunner *self = (TfLiteModelRunner *)user_data;
     if (self->verbose_output_) {
@@ -340,10 +347,15 @@ TfLiteModelRunner::~TfLiteModelRunner() {
         TfLiteModelDelete(tf_model_);
     }
 }
+#endif
 
 ModelRunner::ModelRunner() {
     for (int i = 0; i < kNumRuns; i++) {
+#if HANNK_BUILD_TFLITE_DELEGATE
         do_run[i] = true;
+#else
+        do_run[i] = (i == kHannk);
+#endif
     }
 #if defined(__arm__) || defined(__aarch64__)
     // TFLite on Arm devices generally uses the rounding-shift instructions,
@@ -369,6 +381,7 @@ void ModelRunner::status() {
         std::cout << "Using random seed: " << seed_tracker_.next_seed() << "\n";
         std::cout << "Using threads: " << threads << "\n";
 
+#if HANNK_BUILD_TFLITE_DELEGATE
         std::string tf_ver = TfLiteVersion();
         std::cout << "Using TFLite version: " << tf_ver << "\n";
         std::string expected = std::to_string(TFLITE_VERSION_MAJOR) + "." + std::to_string(TFLITE_VERSION_MINOR) + ".";
@@ -376,6 +389,9 @@ void ModelRunner::status() {
             std::cerr << "*** WARNING: compare_vs_tflite has been tested against TFLite v" << expected << "x, "
                       << "but is using " << tf_ver << "; results may be inaccurate or wrong.\n";
         }
+#else
+        std::cout << "Built without TFLite support.\n";
+#endif
     }
 }
 
@@ -437,6 +453,7 @@ ModelRunner::RunResult ModelRunner::run_in_hannk(const std::vector<char> &buffer
     return result;
 }
 
+#if HANNK_BUILD_TFLITE_DELEGATE
 ModelRunner::RunResult ModelRunner::run_in_tflite(const std::vector<char> &buffer, TfLiteDelegate *delegate) {
     RunResult result;
 
@@ -457,6 +474,7 @@ ModelRunner::RunResult ModelRunner::run_in_tflite(const std::vector<char> &buffe
 
     return result;
 }
+#endif
 
 bool ModelRunner::compare_results(const std::string &name_a, const std::string &name_b, const RunResult &a, const RunResult &b) {
     bool all_matched = true;
@@ -518,11 +536,12 @@ int ModelRunner::parse_flags(int argc, char **argv, std::vector<std::string> &fi
              }
              for (char c : value) {
                  switch (c) {
-                 case 't':
-                     this->do_run[ModelRunner::kTfLite] = true;
-                     break;
                  case 'h':
                      this->do_run[ModelRunner::kHannk] = true;
+                     break;
+#if HANNK_BUILD_TFLITE_DELEGATE
+                 case 't':
+                     this->do_run[ModelRunner::kTfLite] = true;
                      break;
                  case 'x':
                      this->do_run[ModelRunner::kExternalDelegate] = true;
@@ -530,6 +549,14 @@ int ModelRunner::parse_flags(int argc, char **argv, std::vector<std::string> &fi
                  case 'i':
                      this->do_run[ModelRunner::kInternalDelegate] = true;
                      break;
+#else
+                 case 't':
+                 case 'x':
+                 case 'i':
+                    std::cerr << "Unsupported option to --enable (TFLite is not enabled in this build): " << c << "\n";
+                    return -1;
+                    break;
+#endif
                  default:
                      std::cerr << "Unknown option to --enable: " << c << "\n";
                      return -1;
@@ -623,6 +650,7 @@ void ModelRunner::run(const std::string &filename) {
 
     const std::vector<char> buffer = read_entire_file(filename);
 
+#if HANNK_BUILD_TFLITE_DELEGATE
     const auto exec_tflite = [this, &buffer]() {
         return run_in_tflite(buffer);
     };
@@ -648,9 +676,18 @@ void ModelRunner::run(const std::string &filename) {
         {kExternalDelegate, exec_hannk_external_delegate},
         {kInternalDelegate, exec_hannk_internal_delegate},
     };
+#endif
 
     for (WhichRun i : active_runs) {
+#if HANNK_BUILD_TFLITE_DELEGATE
         results[i] = execs.at(i)();
+#else
+        if (i != kHannk) {
+            std::cerr << "Only kHannk is available in this build.\n";
+            exit(1);
+        }
+        results[i] = run_in_hannk(buffer);
+#endif
     }
 
     // ----- Log benchmark times

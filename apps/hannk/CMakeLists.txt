@@ -6,6 +6,9 @@ set(CMAKE_POLICY_DEFAULT_CMP0077 NEW)
 
 enable_testing()
 
+option(HANNK_BUILD_TFLITE_DELEGATE "Build TFLite Delegate for HANNK" ON)
+message(STATUS "HANNK_BUILD_TFLITE_DELEGATE is ${HANNK_BUILD_TFLITE_DELEGATE}")
+
 # -fPIC is necessary for .so builds (at least on Linux); not necessary for the non-delegate
 # builds but easier to enable it for everything.
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
@@ -19,6 +22,8 @@ set(CMAKE_CXX_EXTENSIONS NO)
 find_package(Halide REQUIRED)
 
 # Set up the version of TFLite we expect
+# (We need to do this even if HANNK_BUILD_TFLITE_DELEGATE is off,
+# so that the .tflite file parser can get the right schema)
 set(TFLITE_VERSION_MAJOR "2" CACHE STRING "Major version of TFLite to assume")
 set(TFLITE_VERSION_MINOR "6" CACHE STRING "Minor version of TFLite to assume")
 set(TFLITE_VERSION_PATCH "0" CACHE STRING "Patch version of TFLite to assume")
@@ -26,14 +31,21 @@ set(TFLITE_VERSION_PATCH "0" CACHE STRING "Patch version of TFLite to assume")
 add_compile_definitions(TFLITE_VERSION_MAJOR=${TFLITE_VERSION_MAJOR})
 add_compile_definitions(TFLITE_VERSION_MINOR=${TFLITE_VERSION_MINOR})
 add_compile_definitions(TFLITE_VERSION_PATCH=${TFLITE_VERSION_PATCH})
+if (HANNK_BUILD_TFLITE_DELEGATE)
+    add_compile_definitions(HANNK_BUILD_TFLITE_DELEGATE=1)
+else ()
+    add_compile_definitions(HANNK_BUILD_TFLITE_DELEGATE=0)
+endif ()
 
 set(TFLITE_VERSION "${TFLITE_VERSION_MAJOR}.${TFLITE_VERSION_MINOR}.${TFLITE_VERSION_PATCH}")
 
-add_subdirectory(delegate)
 add_subdirectory(halide)
 add_subdirectory(interpreter)
 add_subdirectory(tflite)
 add_subdirectory(util)
+if (HANNK_BUILD_TFLITE_DELEGATE)
+    add_subdirectory(delegate)
+endif ()
 
 # Benchmarking executable
 add_executable(benchmark benchmark.cpp)

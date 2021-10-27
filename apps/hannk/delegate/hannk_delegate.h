@@ -1,6 +1,10 @@
 #ifndef HANNK_DELEGATE_H
 #define HANNK_DELEGATE_H
 
+#if !HANNK_BUILD_TFLITE_DELEGATE
+    #error "This file should not be included when HANNK_BUILD_TFLITE_DELEGATE=0"
+#endif
+
 #include "tensorflow/lite/c/c_api.h"
 
 #ifdef __cplusplus

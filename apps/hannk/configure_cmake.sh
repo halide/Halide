@@ -28,6 +28,13 @@ CMAKE_BUILD_TYPE=Release
 fi
 echo Using CMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}
 
+if [ -z "${HANNK_BUILD_TFLITE_DELEGATE}" ]; then
+HANNK_BUILD_TFLITE_DELEGATE=ON
+else
+HANNK_BUILD_TFLITE_DELEGATE=OFF
+fi
+echo Using HANNK_BUILD_TFLITE_DELEGATE=${HANNK_BUILD_TFLITE_DELEGATE}
+
 EXTRAS=
 # TODO: this doesn't work (yet); crosscompiling in CMake is painful.
 if [[ "${HL_TARGET}" =~ ^arm-64-android.* ]]; then
@@ -45,6 +52,7 @@ cmake \
   -DHalide_DIR="${HALIDE_INSTALL_PATH}" \
   -DCMAKE_PREFIX_PATH="${HALIDE_INSTALL_PATH}" \
   -DHalide_TARGET=${HL_TARGET} \
+  -DHANNK_BUILD_TFLITE_DELEGATE=${HANNK_BUILD_TFLITE_DELEGATE} \
   -S "${HANNK_DIR}" \
   -B "${BUILD_DIR}"
 
