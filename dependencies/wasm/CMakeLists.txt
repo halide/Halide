@@ -2,17 +2,11 @@ include(FetchContent)
 include(CMakeDependentOption)
 
 cmake_dependent_option(WITH_WABT "Include WABT Interpreter for WASM testing" ON "TARGET_WEBASSEMBLY" OFF)
-cmake_dependent_option(WITH_WASM_SHELL "Download a wasm shell (e.g. d8) for testing AOT wasm code." ON "TARGET_WEBASSEMBLY" OFF)
 
 if ("${CMAKE_HOST_SYSTEM_NAME}" STREQUAL "Windows")
     if (WITH_WABT)
         message(STATUS "WITH_WABT is not yet supported on Windows")
         set(WITH_WABT OFF CACHE BOOL "WITH_WABT is not yet supported on Windows" FORCE)
-    endif ()
-
-    if (WITH_WASM_SHELL)
-        message(STATUS "WITH_WASM_SHELL is not yet supported on Windows")
-        set(WITH_WASM_SHELL OFF CACHE BOOL "WITH_WASM_SHELL is not yet supported on Windows" FORCE)
     endif ()
 endif ()
 
@@ -54,49 +48,6 @@ if (WITH_WABT)
     set_target_properties(Halide_wabt PROPERTIES EXPORT_NAME wabt)
 endif ()
 
-if (WITH_WASM_SHELL)
-    # Even if we have the latest Emscripten SDK installed, we can't rely on it having
-    # an up-to-date shell for running wasm; it includes a version of Node.js that usually
-    # lags on wasm updates, so we need something more recent to reliably test wasm.
-    # We'll go with a predictable version of d8 (the command-line shell for v8); this
-    # is directly mimicking the approach useed by jsvu.
-    # These are hosted at
-    if ("${CMAKE_HOST_SYSTEM_NAME}" STREQUAL "Windows")
-        set(WASM_SHELL_PLATFORM "win64")
-    elseif ("${CMAKE_HOST_SYSTEM_NAME}" STREQUAL "Darwin")
-        set(WASM_SHELL_PLATFORM "mac64")
-    else ()
-        set(WASM_SHELL_PLATFORM "linux64")
-    endif ()
-
-    # We want to deliberately choose a stable version (rather than top-of-tree);
-    # this might be a canary version (if needed to get the updates to v8 that we need)
-    # but should be carefully tested before landing.
-    #
-    # Note that V8 9.1+ is apparently first version of V8/D8 that really does properly
-    # implement the final WASM SIMD spec; versions 8.9 and 9.0 weren't quite complete
-    # (there were some opcode renumberings) so they should be specifically avoided.
-    # As of this writing, v9.1 is still in beta; the shell version below should be updated
-    # to a proper release version (vs canary) once it is final.
-    #
-    # see https://github.com/WebAssembly/simd/blob/master/proposals/simd/ImplementationStatus.md
-    set(WASM_SHELL_VERSION 9.1.269)
-    set(WASM_SHELL_URL "https://storage.googleapis.com/chromium-v8/official/canary/v8-${WASM_SHELL_PLATFORM}-rel-${WASM_SHELL_VERSION}.zip")
-    message(STATUS "Fetching WASM_SHELL ${WASM_SHELL_URL}...")
-    FetchContent_Declare(wasm_shell URL "${WASM_SHELL_URL}")
-    FetchContent_MakeAvailable(wasm_shell)
-
-    find_program(D8_PATH d8
-                 HINTS "${CMAKE_BINARY_DIR}/_deps/wasm_shell-src")
-
-    if (NOT D8_PATH)
-        message(FATAL_ERROR "Could not find or download D8 WASM shell")
-    endif ()
-
-    add_executable(d8 IMPORTED GLOBAL)
-    set_target_properties(d8 PROPERTIES IMPORTED_LOCATION "${D8_PATH}")
-endif ()
-
 function(add_wasm_executable TARGET)
     set(options)
     set(oneValueArgs)
@@ -122,6 +73,8 @@ function(add_wasm_executable TARGET)
         message(FATAL_ERROR "Building tests or apps for WASM requires that EMSDK point to a valid Emscripten install.")
     endif ()
 
+    # TODO: this is currently hardcoded to settings that are sensible for most of Halide's
+    # internal purposes. Consider adding ways to customize this as appropriate.
     set(EMCC_FLAGS
         -O3
         -g
@@ -140,7 +93,7 @@ function(add_wasm_executable TARGET)
         -s ALLOW_MEMORY_GROWTH=1
         -s WASM_BIGINT=1
         -s STANDALONE_WASM=1
-        -s ENVIRONMENT=shell)
+        -s ENVIRONMENT=node)
 
     set(SRCS)
     foreach (S IN LISTS args_SRCS)
@@ -177,25 +130,30 @@ function(add_wasm_halide_test TARGET)
         return()
     endif ()
 
-    if (NOT WITH_WASM_SHELL)
-        message(FATAL_ERROR "WITH_WASM_SHELL must be enabled if testing AOT WASM code.")
-    endif ()
-
-    set(WASM_SHELL_FLAGS)
-    if (Halide_TARGET MATCHES "wasm_simd128")
-        list(APPEND WASM_SHELL_FLAGS "--experimental-wasm-simd")
-    endif ()
-    if (Halide_TARGET MATCHES "wasm_threads")
-        # wasm_threads requires compilation with Emscripten, against a *browser*
-        # environment rather than a shell environment. (This is because the 'pthreads'
-        # support is an elaborate wrapper than Emscripten provides around WebWorkers.)
-        # The version of d8/v8 that we pull does provide enough of a browser-like
-        # environment to support this, but many shell tools (e.g. wabt-interp) don't,
-        # so if you use a different WASM_SHELL, you may have to disable this.
-        list(APPEND WASM_SHELL_FLAGS "--experimental-wasm-threads")
-    endif ()
-
     add_halide_test("${TARGET}"
                     GROUPS ${args_GROUPS}
-                    COMMAND d8 ${WASM_SHELL_FLAGS} "${TARGET}.js")
+                    COMMAND ${NODE_JS_EXECUTABLE} "${TARGET}.js")
 endfunction()
+
+function(find_node_js)
+    find_program(NODE_JS_EXECUTABLE node nodejs)
+
+    # TODO: when we eventually upgrade to CMake >= 3.18, replace with REQUIRED in find_program
+    if (NOT NODE_JS_EXECUTABLE)
+        message(FATAL_ERROR "Could not find nodejs. Please set NODE_JS_EXECUTABLE on the CMake command line.")
+    endif ()
+
+    execute_process(COMMAND "${NODE_JS_EXECUTABLE}" --version
+                    OUTPUT_VARIABLE NODE_JS_VERSION_RAW
+                    OUTPUT_STRIP_TRAILING_WHITESPACE)
+    string(REPLACE "v" "" NODE_JS_VERSION ${NODE_JS_VERSION_RAW})
+
+    if (NODE_JS_VERSION VERSION_LESS "16.13")
+        message(FATAL_ERROR "Halide requires Node v16.13 or later, but found ${NODE_JS_VERSION_RAW} at ${NODE_JS_EXECUTABLE}. Please set NODE_JS_EXECUTABLE on the CMake command line.")
+    endif ()
+endfunction()
+
+if (Halide_TARGET MATCHES "wasm")
+    # Check and warn up front if a suitable Node.js isn't found
+    find_node_js()
+endif ()
