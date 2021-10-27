@@ -48,8 +48,9 @@ int main(int argc, char **argv) {
 
     {
         // Do some nonsense to get symbols out of libcuda without
-        // having to the CUDA sdk. This would not be necessary in a
-        // real application.
+        // needing the CUDA sdk. This would not be a concern in a real
+        // cuda-using application but is helpful for our
+        // build-and-test infrastructure.
 
         // We'll find cuda module in the Halide runtime so
         // that we can use it resolve symbols into libcuda in a
@@ -62,6 +63,8 @@ int main(int argc, char **argv) {
         auto runtime_modules = Internal::JITSharedRuntime::get(nullptr, target, false);
         void *(*halide_cuda_get_symbol)(void *, const char *) = nullptr;
         for (Internal::JITModule &m : runtime_modules) {
+            // Just rifle through all the runtime modules for this
+            // target until we find the method we want.
             auto sym = m.find_symbol_by_name("halide_cuda_get_symbol");
             if (sym.address != nullptr) {
                 halide_cuda_get_symbol = (decltype(halide_cuda_get_symbol))sym.address;
@@ -74,6 +77,7 @@ int main(int argc, char **argv) {
             return -1;
         }
 
+        // Go get the CUDA API functions we actually intend to use.
         cuStreamCreate = (decltype(cuStreamCreate))halide_cuda_get_symbol(nullptr, "cuStreamCreate");
         cuCtxCreate = (decltype(cuCtxCreate))halide_cuda_get_symbol(nullptr, "cuCtxCreate_v2");
         cuCtxDestroy = (decltype(cuCtxDestroy))halide_cuda_get_symbol(nullptr, "cuCtxDestroy_v2");
@@ -92,6 +96,7 @@ int main(int argc, char **argv) {
         }
     }
 
+    // Make a cuda context and stream.
     CudaState state;
     int err = cuCtxCreate(&state.cuda_context, 0, 0);
     if (state.cuda_context == nullptr) {
@@ -122,7 +127,7 @@ int main(int argc, char **argv) {
         return -1;
     }
 
-    // Point a buffer to it
+    // Wrap a Halide buffer around it, with some host memory too.
     Buffer<float> in(width, height);
     in.fill(4.0f);
     auto device_interface = get_device_interface_for_device_api(DeviceAPI::CUDA);
@@ -132,7 +137,9 @@ int main(int argc, char **argv) {
 
     // Run a kernel on multiple threads that copies slices of it into
     // a Halide-allocated temporary buffer.  This would likely crash
-    // if we don't allocate the outputs on the right context.
+    // if we don't allocate the outputs on the right context. If the
+    // copies don't happen on the same stream as the compute, we'll
+    // get incorrect outputs due to race conditions.
     Func f, g;
     Var x, xi, y;
     f(x, y) = sqrt(in(x, y));
