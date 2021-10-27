@@ -136,50 +136,20 @@ function(add_wasm_halide_test TARGET)
 endfunction()
 
 function(find_node_js)
+    find_program(NODE_JS_EXECUTABLE node nodejs)
+
+    # TODO: when we eventually upgrade to CMake >= 3.18, replace with REQUIRED in find_program
     if (NOT NODE_JS_EXECUTABLE)
-        # If HALIDE_NODE_JS_PATH is specified, always look there, ignoring normal lookup paths;
-        # otherwise, just rely on find_program(). (This is fairly essential, since many EMSDK versions
-        # include a too-old version of Node that is likely to be in the current search path
-        # when EMCC is in use.)
-        if ("$ENV{HALIDE_NODE_JS_PATH}" STREQUAL "")
-            find_program(NODE_JS_EXECUTABLE node)
-        else ()
-            get_filename_component(HALIDE_NODE_JS_DIR $ENV{HALIDE_NODE_JS_PATH} DIRECTORY)
-            message(STATUS "HALIDE_NODE_JS_DIR ${HALIDE_NODE_JS_DIR}")
-            find_program(NODE_JS_EXECUTABLE node
-                         NO_DEFAULT_PATH
-                         PATHS "${HALIDE_NODE_JS_DIR}")
-        endif ()
+        message(FATAL_ERROR "Could not find nodejs. Please set NODE_JS_EXECUTABLE on the CMake command line.")
+    endif ()
 
-        if (NOT NODE_JS_EXECUTABLE)
-            message(FATAL_ERROR "Could not find Node.js shell")
-        endif ()
+    execute_process(COMMAND "${NODE_JS_EXECUTABLE}" --version
+                    OUTPUT_VARIABLE NODE_JS_VERSION_RAW
+                    OUTPUT_STRIP_TRAILING_WHITESPACE)
+    string(REPLACE "v" "" NODE_JS_VERSION ${NODE_JS_VERSION_RAW})
 
-        if (DEFINED CACHE{NODE_JS_VERSION_OK})
-            message(STATUS "NODE_JS_VERSION_OK is defined")
-            return()
-        endif()
-
-        execute_process(COMMAND "${NODE_JS_EXECUTABLE}" --version
-                        OUTPUT_VARIABLE NODE_JS_VERSION_RAW
-                        OUTPUT_STRIP_TRAILING_WHITESPACE)
-        string(REPLACE "v" "" NODE_JS_VERSION ${NODE_JS_VERSION_RAW})
-        string(REPLACE "." ";" NODE_JS_VERSION ${NODE_JS_VERSION})
-        message(STATUS "Found Node.js runtime at ${NODE_JS_EXECUTABLE}, version ${NODE_JS_VERSION_RAW}")
-
-        list(GET NODE_JS_VERSION 0 NODE_JS_MAJOR)
-        list(GET NODE_JS_VERSION 1 NODE_JS_MINOR)
-        list(GET NODE_JS_VERSION 2 NODE_JS_PATCH)
-
-        if ()
-            message(FATAL_ERROR "Halide requires Node v16.13 or later, but found ${NODE_JS_VERSION_RAW} at ${NODE_JS_EXECUTABLE}")
-        endif ()
-
-        if ((NODE_JS_MAJOR LESS 16) OR ((NODE_JS_MAJOR EQUALS 16) AND (NODE_JS_MINOR LESS 13)))
-            message(FATAL_ERROR "Halide requires Node v16.13 or later, but found ${NODE_JS_VERSION_RAW} at ${NODE_JS_EXECUTABLE}. Try setting the HALIDE_NODE_JS_PATH env var or defining NODE_JS_EXECUTABLE on the CMake command line.")
-        endif ()
-
-        set(NODE_JS_VERSION_OK "YES" CACHE INTERNAL "Node is OK")
+    if (NODE_JS_VERSION VERSION_LESS "16.13")
+        message(FATAL_ERROR "Halide requires Node v16.13 or later, but found ${NODE_JS_VERSION_RAW} at ${NODE_JS_EXECUTABLE}. Please set NODE_JS_EXECUTABLE on the CMake command line.")
     endif ()
 endfunction()
 
