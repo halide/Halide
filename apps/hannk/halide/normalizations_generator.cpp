@@ -131,6 +131,14 @@ public:
             .vectorize(rx, vector_size, TailStrategy::GuardWithIf);
 
         inv_sum_exp_row.compute_at(output_, y);
+
+        // Normally we'd expect both buffers to be planar, but in unusual
+        // cases, Hannk can transpose the buffers (to normalize along another
+        // dimension), so for those cases, we'll just fall back to less-efficient
+        // code.
+        input_.dim(0).set_stride(Expr());
+        output_.dim(0).set_stride(Expr());
+        output_.specialize(input_.dim(0).stride() == 1 && output_.dim(0).stride() == 1);
     }
 };
 

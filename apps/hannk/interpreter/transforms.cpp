@@ -8,6 +8,8 @@ namespace {
 template<typename T>
 T *cast_op(Op *x) {
     class Caster : public OpVisitor {
+        using OpVisitor::visit;
+
     public:
         T *result = nullptr;
 
@@ -293,6 +295,8 @@ void replace_consumers(const TensorPtr &from, const TensorPtr &to) {
 
 // Find ops that need padding and add an explicit pad op.
 class PadForOps : public OpVisitor {
+    using OpVisitor::visit;
+
     void pad_for_op(Op *op, int input_idx, int output_idx) {
         TensorPtr input = op->input(input_idx);
         TensorPtr output = op->output(output_idx);
@@ -387,6 +391,8 @@ public:
 };
 
 class FusePadOps : public OpVisitor {
+    using OpVisitor::visit;
+
     void visit(PadOp *op) override {
         if (op->input()->producers().size() != 1 || op->input()->consumers().size() != 1) {
             return;
@@ -416,12 +422,17 @@ class FusePadOps : public OpVisitor {
 
 }  // namespace
 
-void pad_for_ops(OpGroup *op) {
+bool pad_for_ops(OpGroup *op) {
     PadForOps padder;
     op->accept(&padder);
+
     // We need to add in reverse order, so ops that depend on newly added ops go
     // in the right place.
     for (auto i = padder.new_ops.rbegin(); i != padder.new_ops.rend(); ++i) {
+        if (!i->get()->prepare()) {
+            HLOG(ERROR) << "pad_for_ops: new_op " << i->get()->name() << " failed prepare()";
+            return false;
+        }
         op->add(std::move(*i));
     }
 
@@ -430,6 +441,8 @@ void pad_for_ops(OpGroup *op) {
     // a waste.
     FusePadOps fuser;
     op->accept(&fuser);
+
+    return true;
 }
 
 namespace {

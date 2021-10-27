@@ -65,11 +65,11 @@ extern "C" DLLEXPORT int computed_eviction_key(int a) {
 }
 HalideExtern_1(int, computed_eviction_key, int);
 
-void simple_free(void *user_context, void *ptr) {
+void simple_free(JITUserContext *user_context, void *ptr) {
     free(ptr);
 }
 
-void *flakey_malloc(void * /* user_context */, size_t x) {
+void *flakey_malloc(JITUserContext * /* user_context */, size_t x) {
     if ((rand() % 4) == 0) {
         return nullptr;
     } else {
@@ -78,7 +78,7 @@ void *flakey_malloc(void * /* user_context */, size_t x) {
 }
 
 bool error_occured = false;
-void record_error(void *user_context, const char *msg) {
+void record_error(JITUserContext *user_context, const char *msg) {
     error_occured = true;
 }
 
@@ -586,7 +586,7 @@ int main(int argc, char **argv) {
     }
 
     if (get_jit_target_from_environment().arch == Target::WebAssembly) {
-        printf("[SKIP] WebAssembly JIT does not support set_custom_allocator().\n");
+        printf("[SKIP] WebAssembly JIT does not support custom allocators.\n");
         return 0;
     } else {
         // Test out of memory handling.
@@ -605,8 +605,9 @@ int main(int argc, char **argv) {
         g(x, y) = Tuple(f(x, y)[0] + f(x - 1, y)[0] + f(x + 1, y)[0], f(x, y)[1]);
 
         Pipeline pipe(g);
-        pipe.set_error_handler(record_error);
-        pipe.set_custom_allocator(flakey_malloc, simple_free);
+        pipe.jit_handlers().custom_error = record_error;
+        pipe.jit_handlers().custom_malloc = flakey_malloc;
+        pipe.jit_handlers().custom_free = simple_free;
 
         int total_errors = 0;
         int completed = 0;

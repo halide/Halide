@@ -6,7 +6,7 @@ using namespace Halide;
 
 std::atomic<bool> error_occurred{false};
 
-void halide_error(void *ctx, const char *msg) {
+void halide_error(JITUserContext *ctx, const char *msg) {
     printf("Expected: %s\n", msg);
     error_occurred = true;
 }
@@ -35,7 +35,7 @@ int main(int argc, char **argv) {
 
     split.set(11);
 
-    g.set_error_handler(&halide_error);
+    g.jit_handlers().custom_error = halide_error;
     g.realize({40, 40});
 
     if (!error_occurred) {

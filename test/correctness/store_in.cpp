@@ -4,12 +4,12 @@ using namespace Halide;
 
 int mallocs = 0;
 
-void *my_malloc(void *, size_t sz) {
+void *my_malloc(JITUserContext *, size_t sz) {
     mallocs++;
     return (uint8_t *)malloc(sz);
 }
 
-void my_free(void *, void *ptr) {
+void my_free(JITUserContext *, void *ptr) {
     free(ptr);
 }
 
@@ -39,7 +39,8 @@ void check(MemoryType t1, MemoryType t2, MemoryType t3) {
                             (t3 == MemoryType::Heap ? 1 : 0));
 
     mallocs = 0;
-    f.set_custom_allocator(my_malloc, my_free);
+    f.jit_handlers().custom_malloc = my_malloc;
+    f.jit_handlers().custom_free = my_free;
     f.realize({1024});
     if (mallocs != expected_mallocs) {
         std::cerr << "Wrong number of mallocs for " << t1 << ", " << t2 << ", " << t3 << "\n"
@@ -50,7 +51,7 @@ void check(MemoryType t1, MemoryType t2, MemoryType t3) {
 
 int main(int argc, char **argv) {
     if (get_jit_target_from_environment().arch == Target::WebAssembly) {
-        printf("[SKIP] WebAssembly JIT does not support set_custom_allocator().\n");
+        printf("[SKIP] WebAssembly JIT does not support custom allocators.\n");
         return 0;
     }
 

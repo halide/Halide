@@ -5,7 +5,7 @@ using namespace Halide;
 const int tolerance = 3 * sizeof(int);
 std::vector<int> mallocs;
 
-void *my_malloc(void *user_context, size_t x) {
+void *my_malloc(JITUserContext *user_context, size_t x) {
     mallocs.push_back((int)x);
     void *orig = malloc(x + 32);
     void *ptr = (void *)((((size_t)orig + 32) >> 5) << 5);
@@ -13,13 +13,13 @@ void *my_malloc(void *user_context, size_t x) {
     return ptr;
 }
 
-void my_free(void *user_context, void *ptr) {
+void my_free(JITUserContext *user_context, void *ptr) {
     free(((void **)ptr)[-1]);
 }
 
 int main(int argc, char **argv) {
     if (get_jit_target_from_environment().arch == Target::WebAssembly) {
-        printf("[SKIP] WebAssembly JIT does not support set_custom_allocator().\n");
+        printf("[SKIP] WebAssembly JIT does not support custom allocators.\n");
         return 0;
     }
 
@@ -47,7 +47,8 @@ int main(int argc, char **argv) {
         for (size_t i = 0; i < chain.size() - 1; i++) {
             chain[i].compute_at(chain.back(), xo).store_in(MemoryType::Stack);
         }
-        chain.back().set_custom_allocator(my_malloc, my_free);
+        chain.back().jit_handlers().custom_malloc = my_malloc;
+        chain.back().jit_handlers().custom_free = my_free;
 
         // Use sizes that trigger actual heap allocations
         for (int sz = 20000; sz <= 20016; sz += 8) {
@@ -91,7 +92,8 @@ int main(int argc, char **argv) {
         for (size_t i = 0; i < chain.size() - 1; i++) {
             chain[i].compute_at(chain.back(), xo).store_in(MemoryType::Stack);
         }
-        chain.back().set_custom_allocator(my_malloc, my_free);
+        chain.back().jit_handlers().custom_malloc = my_malloc;
+        chain.back().jit_handlers().custom_free = my_free;
 
         for (int sz = 160000; sz <= 160128; sz += 64) {
             mallocs.clear();

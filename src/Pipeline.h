@@ -349,103 +349,27 @@ public:
      */
     void compile_jit(const Target &target = get_jit_target_from_environment());
 
-    // TODO: deprecate all of these and replace with versions that take a JITUserContext
-
-    /** Set the error handler function that be called in the case of
-     * runtime errors during halide pipelines. If you are compiling
-     * statically, you can also just define your own function with
-     * signature
-     \code
-     extern "C" void halide_error(void *user_context, const char *);
-     \endcode
-     * This will clobber Halide's version.
-     */
+    /** Deprecated variants of the above that use a void pointer
+     * instead of a JITUserContext pointer. */
+    // @{
+    HALIDE_ATTRIBUTE_DEPRECATED("Custom handlers should by set by modifying the struct returned by jit_handlers()")
     void set_error_handler(void (*handler)(void *, const char *));
-
-    /** Set a custom malloc and free for halide to use. Malloc should
-     * return 32-byte aligned chunks of memory, and it should be safe
-     * for Halide to read slightly out of bounds (up to 8 bytes before
-     * the start or beyond the end). If compiling statically, routines
-     * with appropriate signatures can be provided directly
-    \code
-     extern "C" void *halide_malloc(void *, size_t)
-     extern "C" void halide_free(void *, void *)
-     \endcode
-     * These will clobber Halide's versions. See HalideRuntime.h
-     * for declarations.
-     */
+    HALIDE_ATTRIBUTE_DEPRECATED("Custom handlers should by set by modifying the struct returned by jit_handlers()")
     void set_custom_allocator(void *(*malloc)(void *, size_t),
                               void (*free)(void *, void *));
-
-    /** Set a custom task handler to be called by the parallel for
-     * loop. It is useful to set this if you want to do some
-     * additional bookkeeping at the granularity of parallel
-     * tasks. The default implementation does this:
-     \code
-     extern "C" int halide_do_task(void *user_context,
-                                   int (*f)(void *, int, uint8_t *),
-                                   int idx, uint8_t *state) {
-         return f(user_context, idx, state);
-     }
-     \endcode
-     * If you are statically compiling, you can also just define your
-     * own version of the above function, and it will clobber Halide's
-     * version.
-     *
-     * If you're trying to use a custom parallel runtime, you probably
-     * don't want to call this. See instead \ref Func::set_custom_do_par_for .
-    */
+    HALIDE_ATTRIBUTE_DEPRECATED("Custom handlers should by set by modifying the struct returned by jit_handlers()")
     void set_custom_do_task(
         int (*custom_do_task)(void *, int (*)(void *, int, uint8_t *),
                               int, uint8_t *));
-
-    /** Set a custom parallel for loop launcher. Useful if your app
-     * already manages a thread pool. The default implementation is
-     * equivalent to this:
-     \code
-     extern "C" int halide_do_par_for(void *user_context,
-                                      int (*f)(void *, int, uint8_t *),
-                                      int min, int extent, uint8_t *state) {
-         int exit_status = 0;
-         parallel for (int idx = min; idx < min+extent; idx++) {
-             int job_status = halide_do_task(user_context, f, idx, state);
-             if (job_status) exit_status = job_status;
-         }
-         return exit_status;
-     }
-     \endcode
-     *
-     * However, notwithstanding the above example code, if one task
-     * fails, we may skip over other tasks, and if two tasks return
-     * different error codes, we may select one arbitrarily to return.
-     *
-     * If you are statically compiling, you can also just define your
-     * own version of the above function, and it will clobber Halide's
-     * version.
-     */
+    HALIDE_ATTRIBUTE_DEPRECATED("Custom handlers should by set by modifying the struct returned by jit_handlers()")
     void set_custom_do_par_for(
         int (*custom_do_par_for)(void *, int (*)(void *, int, uint8_t *), int,
                                  int, uint8_t *));
-
-    /** Set custom routines to call when tracing is enabled. Call this
-     * on the output Func of your pipeline. This then sets custom
-     * routines for the entire pipeline, not just calls to this
-     * Func.
-     *
-     * If you are statically compiling, you can also just define your
-     * own versions of the tracing functions (see HalideRuntime.h),
-     * and they will clobber Halide's versions. */
+    HALIDE_ATTRIBUTE_DEPRECATED("Custom handlers should by set by modifying the struct returned by jit_handlers()")
     void set_custom_trace(int (*trace_fn)(void *, const halide_trace_event_t *));
-
-    /** Set the function called to print messages from the runtime.
-     * If you are compiling statically, you can also just define your
-     * own function with signature
-     \code
-     extern "C" void halide_print(void *user_context, const char *);
-     \endcode
-     * This will clobber Halide's version.
-     */
+    HALIDE_ATTRIBUTE_DEPRECATED("Custom handlers should by set by modifying the struct returned by jit_handlers()")
     void set_custom_print(void (*handler)(void *, const char *));
+    // @}
 
     /** Install a set of external C functions or Funcs to satisfy
      * dependencies introduced by HalideExtern and define_extern

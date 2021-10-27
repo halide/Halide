@@ -62,7 +62,7 @@ bool check_coordinates(const Bound &b, const int32_t *coordinates, int32_t dims,
 }
 
 // A trace that check the region accessed by stores/loads of a buffer
-int my_trace(void *user_context, const halide_trace_event_t *e) {
+int my_trace(JITUserContext *user_context, const halide_trace_event_t *e) {
     string fname = std::string(e->func);
     if (e->event == halide_trace_store) {
         std::lock_guard<std::mutex> lock(stores_mutex);
@@ -129,7 +129,7 @@ int split_test() {
             {g.name(), Bound(2, 201, -2, 197)},
             {h.name(), Bound()},  // There shouldn't be any load from h
         };
-        h.set_custom_trace(&my_trace);
+        h.jit_handlers().custom_trace = &my_trace;
 
         im = h.realize({200, 200});
     }
@@ -184,7 +184,7 @@ int fuse_test() {
             {g.name(), Bound(-5, size - 6, -6, size - 7, 2, size + 1)},
             {h.name(), Bound()},  // There shouldn't be any load from h
         };
-        h.set_custom_trace(&my_trace);
+        h.jit_handlers().custom_trace = &my_trace;
 
         im = h.realize({size, size, size});
     }
@@ -265,7 +265,7 @@ int multiple_fuse_group_test() {
             {p.name(), Bound(0, 199, 0, 199)},
             {q.name(), Bound()},  // There shouldn't be any load from q
         };
-        q.set_custom_trace(&my_trace);
+        q.jit_handlers().custom_trace = &my_trace;
 
         im = q.realize({200, 200});
     }
@@ -322,7 +322,7 @@ int multiple_outputs_test() {
         };
 
         Pipeline p({f, g});
-        p.set_custom_trace(&my_trace);
+        p.jit_handlers().custom_trace = &my_trace;
         p.realize({f_im, g_im});
     }
 
@@ -403,7 +403,7 @@ int fuse_compute_at_test() {
             {q.name(), Bound(-1, 165, 0, 166)},
             {r.name(), Bound()},  // There shouldn't be any load from r
         };
-        r.set_custom_trace(&my_trace);
+        r.jit_handlers().custom_trace = &my_trace;
 
         im = r.realize({167, 167});
     }
@@ -460,7 +460,7 @@ int double_split_fuse_test() {
             {g.name(), Bound(0, 199, 0, 199)},
             {h.name(), Bound()},  // There shouldn't be any load from h
         };
-        h.set_custom_trace(&my_trace);
+        h.jit_handlers().custom_trace = &my_trace;
 
         im = h.realize({200, 200});
     }
@@ -510,7 +510,7 @@ int rgb_yuv420_test() {
         loads_total = 0;
         stores_total = 0;
         Pipeline p({y_part, u_part, v_part});
-        p.set_custom_trace(&my_trace);
+        p.jit_handlers().custom_trace = &my_trace;
         p.realize({y_im_ref, u_im_ref, v_im_ref}, get_jit_target_from_environment().with_feature(Target::TraceLoads).with_feature(Target::TraceStores));
         load_count_ref = loads_total;
         store_count_ref = stores_total;
@@ -573,7 +573,7 @@ int rgb_yuv420_test() {
         loads_total = 0;
         stores_total = 0;
         Pipeline p({y_part, u_part, v_part});
-        p.set_custom_trace(&my_trace);
+        p.jit_handlers().custom_trace = &my_trace;
         p.realize({y_im, u_im, v_im}, get_jit_target_from_environment().with_feature(Target::TraceLoads).with_feature(Target::TraceStores));
 
         bool too_many_memops = false;
@@ -683,7 +683,7 @@ int vectorize_test() {
             {g.name(), Bound(2, width + 1, -2, height - 3)},
             {h.name(), Bound()},  // There shouldn't be any load from h
         };
-        h.set_custom_trace(&my_trace);
+        h.jit_handlers().custom_trace = &my_trace;
 
         im = h.realize({width, height});
     }
@@ -745,7 +745,7 @@ int some_are_skipped_test() {
             {p.name(), Bound(0, 199, 0, 199)},
             {h.name(), Bound(0, 199, 0, 199)},
         };
-        h.set_custom_trace(&my_trace);
+        h.jit_handlers().custom_trace = &my_trace;
 
         im = h.realize({200, 200});
     }
@@ -886,7 +886,7 @@ int mixed_tile_factor_test() {
         };
 
         Pipeline p({f, g, h});
-        p.set_custom_trace(&my_trace);
+        p.jit_handlers().custom_trace = &my_trace;
         p.realize({f_im, g_im, h_im});
     }
 
@@ -984,7 +984,7 @@ int multi_tile_mixed_tile_factor_test() {
         };
 
         Pipeline p({f, g, h});
-        p.set_custom_trace(&my_trace);
+        p.jit_handlers().custom_trace = &my_trace;
         p.realize({f_im, g_im, h_im});
     }
 
@@ -1075,7 +1075,7 @@ int only_some_are_tiled_test() {
         };
 
         Pipeline p({f, g, h});
-        p.set_custom_trace(&my_trace);
+        p.jit_handlers().custom_trace = &my_trace;
         p.realize({f_im, g_im, h_im});
     }
 
@@ -1145,7 +1145,7 @@ int with_specialization_test() {
             {g.name(), Bound(2, 201, -2, 197)},
             {h.name(), Bound()},  // There shouldn't be any load from h
         };
-        h.set_custom_trace(&my_trace);
+        h.jit_handlers().custom_trace = &my_trace;
 
         tile.set(true);
         im = h.realize({200, 200});
@@ -1212,7 +1212,7 @@ int nested_compute_with_test() {
         };
 
         Pipeline p({g1, g2});
-        p.set_custom_trace(&my_trace);
+        p.jit_handlers().custom_trace = &my_trace;
         p.realize({g1_im, g2_im});
     }
 
@@ -1763,7 +1763,7 @@ int vectorize_inlined_test() {
         loads_total = 0;
         stores_total = 0;
         Pipeline p({h, g});
-        p.set_custom_trace(&my_trace);
+        p.jit_handlers().custom_trace = &my_trace;
         p.realize({h_im_ref, g_im_ref}, get_jit_target_from_environment().with_feature(Target::TraceLoads).with_feature(Target::TraceStores));
         load_count_ref = loads_total;
         store_count_ref = stores_total;
@@ -1799,7 +1799,7 @@ int vectorize_inlined_test() {
         loads_total = 0;
         stores_total = 0;
         Pipeline p({h, g});
-        p.set_custom_trace(&my_trace);
+        p.jit_handlers().custom_trace = &my_trace;
         p.realize({h_im, g_im}, get_jit_target_from_environment().with_feature(Target::TraceLoads).with_feature(Target::TraceStores));
 
         bool too_many_memops = false;
@@ -1945,7 +1945,7 @@ int different_arg_num_compute_at_test() {
         loads_total = 0;
         stores_total = 0;
         Pipeline p({output_a, output_b});
-        p.set_custom_trace(&my_trace);
+        p.jit_handlers().custom_trace = &my_trace;
         p.realize({buffer_a, buffer_b}, get_jit_target_from_environment().with_feature(Target::TraceLoads).with_feature(Target::TraceStores));
 
         bool too_many_memops = false;

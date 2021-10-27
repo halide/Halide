@@ -15,7 +15,7 @@ namespace {
 int load_library_calls = 0;
 int get_library_symbol_calls = 0;
 
-void my_error_handler(void *u, const char *msg) {
+void my_error_handler(JITUserContext *u, const char *msg) {
     // Emitting "error.*:" to stdout or stderr will cause CMake to report the
     // test as a failure on Windows, regardless of error code returned,
     // hence the abbreviation to "err".
@@ -84,7 +84,7 @@ int main(int argc, char **argv) {
     Func f;
     f(x, y) = cast<int32_t>(x + y);
     f.gpu_tile(x, y, xi, yi, 8, 8, TailStrategy::Auto, DeviceAPI::OpenCL);
-    f.set_error_handler(my_error_handler);
+    f.jit_handlers().custom_error = my_error_handler;
 
     Buffer<int32_t> out = f.realize({64, 64}, target);
 
