@@ -9,7 +9,7 @@ enable_testing()
 option(HANNK_BUILD_TFLITE "Build TFLite+Delegate for HANNK" ON)
 if (HANNK_BUILD_TFLITE AND (Halide_TARGET MATCHES "wasm"))
     message(FATAL_ERROR "HANNK_BUILD_TFLITE must be OFF when targeting wasm")
-endif()
+endif ()
 message(STATUS "HANNK_BUILD_TFLITE is ${HANNK_BUILD_TFLITE}")
 
 # -fPIC is necessary for .so builds (at least on Linux); not necessary for the non-delegate
@@ -73,17 +73,13 @@ target_include_directories(compare_vs_tflite
 if (Halide_TARGET MATCHES "wasm")
     foreach (t IN ITEMS benchmark compare_vs_tflite)
         target_link_libraries(${t} PRIVATE
-            "-s ALLOW_MEMORY_GROWTH=1"
-            "-s ENVIRONMENT=node"
-            "-s NODERAWFS"
-        )
-        if (CMAKE_BUILD_TYPE STREQUAL "Debug")
-            target_link_libraries(${t} PRIVATE
-                "-s ASSERTIONS=1"
-            )
-        endif()
-    endforeach()
-endif()
+                              "-s ALLOW_MEMORY_GROWTH=1"
+                              "-s ENVIRONMENT=node"
+                              "-s NODERAWFS"
+                              "$<$<CONFIG:Debug>:-s ASSERTIONS=1>"
+                              )
+    endforeach ()
+endif ()
 
 # TODO: Replicated from Halide's wasm dependency code; we should move this
 # into a Helper file included in the install, perhaps?
@@ -121,6 +117,4 @@ foreach (t IN LISTS TEST_FILES)
     endif()
     set_tests_properties(${test_name} PROPERTIES
                          LABELS hannk_tests)
-endforeach()
-
-
+endforeach ()
