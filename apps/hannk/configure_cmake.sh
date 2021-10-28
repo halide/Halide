@@ -24,10 +24,10 @@ if [ -z "${CMAKE_BUILD_TYPE}" ]; then
 CMAKE_BUILD_TYPE=Release
 fi
 
-if [ -z "${HANNK_BUILD_TFLITE_DELEGATE}" ]; then
-HANNK_BUILD_TFLITE_DELEGATE=ON
+if [ -z "${HANNK_BUILD_TFLITE}" ]; then
+HANNK_BUILD_TFLITE=ON
 else
-HANNK_BUILD_TFLITE_DELEGATE=OFF
+HANNK_BUILD_TFLITE=OFF
 fi
 
 PREFIX=
@@ -45,7 +45,7 @@ if [[ "${HL_TARGET}" =~ ^arm-64-android.* ]]; then
 elif [[ "${HL_TARGET}" =~ ^wasm-32-wasmrt.* ]]; then
 
     PREFIX=emcmake
-    HANNK_BUILD_TFLITE_DELEGATE=OFF
+    HANNK_BUILD_TFLITE=OFF
 
 else
 
@@ -63,7 +63,7 @@ echo Using BUILD_DIR=${BUILD_DIR}
 echo Using build tool=${CMAKE_GENERATOR}
 echo Using CMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}
 echo Using HL_TARGET=${HL_TARGET}
-echo Using HANNK_BUILD_TFLITE_DELEGATE=${HANNK_BUILD_TFLITE_DELEGATE}
+echo Using HANNK_BUILD_TFLITE=${HANNK_BUILD_TFLITE}
 
 mkdir -p "${BUILD_DIR}"
 cd "${BUILD_DIR}"
@@ -75,6 +75,6 @@ ${PREFIX} cmake \
   -DHalide_DIR="${HALIDE_INSTALL_PATH}/lib/cmake/Halide" \
   -DHalideHelpers_DIR="${HALIDE_INSTALL_PATH}/lib/cmake/HalideHelpers" \
   -DHalide_TARGET=${HL_TARGET} \
-  -DHANNK_BUILD_TFLITE_DELEGATE=${HANNK_BUILD_TFLITE_DELEGATE} \
+  -DHANNK_BUILD_TFLITE=${HANNK_BUILD_TFLITE} \
   -S "${HANNK_DIR}" \
   -B "${BUILD_DIR}"

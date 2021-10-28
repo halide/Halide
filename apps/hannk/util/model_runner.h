@@ -10,7 +10,7 @@
 
 #include "util/buffer_util.h"
 
-#if HANNK_BUILD_TFLITE_DELEGATE
+#if HANNK_BUILD_TFLITE
 struct TfLiteDelegate;
 struct TfLiteInterpreter;
 struct TfLiteInterpreterOptions;
@@ -62,7 +62,7 @@ private:
     SeedTracker &operator=(SeedTracker &&) = delete;
 };
 
-#if HANNK_BUILD_TFLITE_DELEGATE
+#if HANNK_BUILD_TFLITE
 class TfLiteModelRunner {
     TfLiteModel *tf_model_ = nullptr;
     TfLiteInterpreterOptions *tf_options_ = nullptr;
@@ -134,7 +134,7 @@ private:
         std::chrono::duration<double> time{0};
     };
     RunResult run_in_hannk(const std::vector<char> &buffer);
-#if HANNK_BUILD_TFLITE_DELEGATE
+#if HANNK_BUILD_TFLITE
     RunResult run_in_tflite(const std::vector<char> &buffer, TfLiteDelegate *delegate = nullptr);
 #endif
     bool compare_results(const std::string &name_a, const std::string &name_b, const RunResult &a, const RunResult &b);
