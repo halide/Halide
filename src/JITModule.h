@@ -106,6 +106,22 @@ struct JITHandlers {
      * an opened library. Equivalent to dlsym. Takes a handle
      * returned by custom_load_library as the first argument. */
     void *(*custom_get_library_symbol)(void *lib, const char *name){nullptr};
+
+    /** A custom method for the Halide runtime acquire a cuda
+     * context. The cuda context is treated as a void * to avoid a
+     * dependence on the cuda headers. If the create argument is set
+     * to true, a context should be created if one does not already
+     * exist. */
+    int32_t (*custom_cuda_acquire_context)(JITUserContext *user_context, void **cuda_context_ptr, bool create){nullptr};
+
+    /** The Halide runtime calls this when it is done with a cuda
+     * context. The default implementation does nothing. */
+    int32_t (*custom_cuda_release_context)(JITUserContext *user_context){nullptr};
+
+    /** A custom method for the Halide runtime to acquire a cuda
+     * stream to use. The cuda context and stream are both modelled
+     * as a void *, to avoid a dependence on the cuda headers. */
+    int32_t (*custom_cuda_get_stream)(JITUserContext *user_context, void *cuda_context, void **stream_ptr){nullptr};
 };
 
 namespace Internal {
