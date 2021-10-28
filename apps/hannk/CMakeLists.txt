@@ -7,6 +7,9 @@ set(CMAKE_POLICY_DEFAULT_CMP0077 NEW)
 enable_testing()
 
 option(HANNK_BUILD_TFLITE_DELEGATE "Build TFLite Delegate for HANNK" ON)
+if (HANNK_BUILD_TFLITE_DELEGATE AND (Halide_TARGET MATCHES "wasm"))
+    message(FATAL_ERROR "HANNK_BUILD_TFLITE_DELEGATE must be OFF when targeting wasm")
+endif()
 message(STATUS "HANNK_BUILD_TFLITE_DELEGATE is ${HANNK_BUILD_TFLITE_DELEGATE}")
 
 # -fPIC is necessary for .so builds (at least on Linux); not necessary for the non-delegate
@@ -18,8 +21,8 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED YES)
 set(CMAKE_CXX_EXTENSIONS NO)
 
-# Find Halide
-find_package(Halide REQUIRED)
+# Find HalideHelpers -- this is just the Runtime headers, but no libraries
+find_package(HalideHelpers REQUIRED)
 
 # Set up the version of TFLite we expect
 # (We need to do this even if HANNK_BUILD_TFLITE_DELEGATE is off,
@@ -66,12 +69,58 @@ target_link_libraries(compare_vs_tflite PRIVATE
 target_include_directories(compare_vs_tflite
                            PUBLIC $<BUILD_INTERFACE:${hannk_SOURCE_DIR}>)
 
+# TODO: Surely there's a better way to set Emscripten flags.
+if (Halide_TARGET MATCHES "wasm")
+    foreach (t IN ITEMS benchmark compare_vs_tflite)
+        target_link_libraries(${t} PRIVATE
+            "-s ALLOW_MEMORY_GROWTH=1"
+            "-s ENVIRONMENT=node"
+            "-s NODERAWFS"
+        )
+        if (CMAKE_BUILD_TYPE STREQUAL "Debug")
+            target_link_libraries(${t} PRIVATE
+                "-s ASSERTIONS=1"
+            )
+        endif()
+    endforeach()
+endif()
+
+# TODO: Replicated from Halide's wasm dependency code; we should move this
+# into a Helper file included in the install, perhaps?
+function(_find_node_js)
+    find_program(NODE_JS_EXECUTABLE node nodejs)
+
+    if (NOT NODE_JS_EXECUTABLE)
+        message(FATAL_ERROR "Could not find nodejs. Please set NODE_JS_EXECUTABLE on the CMake command line.")
+    endif ()
+
+    execute_process(COMMAND "${NODE_JS_EXECUTABLE}" --version
+                    OUTPUT_VARIABLE NODE_JS_VERSION_RAW
+                    OUTPUT_STRIP_TRAILING_WHITESPACE)
+    string(REPLACE "v" "" NODE_JS_VERSION ${NODE_JS_VERSION_RAW})
+
+    if (NODE_JS_VERSION VERSION_LESS "16.13")
+        message(FATAL_ERROR "Halide requires Node v16.13 or later, but found ${NODE_JS_VERSION_RAW} at ${NODE_JS_EXECUTABLE}. Please set NODE_JS_EXECUTABLE on the CMake command line.")
+    endif ()
+endfunction()
+
+
 # Tests
 file(GLOB TEST_FILES CONFIGURE_DEPENDS "test/*/*")
 foreach (t IN LISTS TEST_FILES)
     file(RELATIVE_PATH test_name ${hannk_SOURCE_DIR} ${t})
-    add_test(NAME ${test_name} COMMAND compare_vs_tflite ${t} --benchmark 0)
+
+    set(LAUNCHER "")
+    if (Halide_TARGET MATCHES "wasm")
+        _find_node_js()
+        add_test(NAME ${test_name}
+                 COMMAND ${NODE_JS_EXECUTABLE} compare_vs_tflite.js ${t} --benchmark 0)
+    else()
+        add_test(NAME ${test_name}
+                 COMMAND compare_vs_tflite ${t} --benchmark 0)
+    endif()
     set_tests_properties(${test_name} PROPERTIES
                          LABELS hannk_tests)
 endforeach()
+
 
