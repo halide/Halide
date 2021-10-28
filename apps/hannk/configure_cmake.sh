@@ -2,79 +2,106 @@
 
 set -e
 
-HANNK_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
+HANNK_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
 
-if [ -z ${BUILD_DIR} ]; then
-BUILD_DIR="${HANNK_DIR}/build"
+if [ -z "${BUILD_DIR}" ]; then
+  BUILD_DIR="${HANNK_DIR}/build"
 fi
 
-if [ -z ${HALIDE_INSTALL_PATH} ]; then
-HALIDE_INSTALL_PATH=${HOME}/halide-14-install/
+if [ -z "${HALIDE_INSTALL_PATH}" ]; then
+  HALIDE_INSTALL_PATH="${HOME}/halide-14-install/"
 fi
 
-if [ -z ${HL_TARGET} ]; then
-HL_TARGET=host
+if [ -z "${HL_TARGET}" ]; then
+  HL_TARGET=host
 fi
 
 if [ -z "${CMAKE_GENERATOR}" ]; then
-CMAKE_GENERATOR=Ninja
+  CMAKE_GENERATOR=Ninja
 fi
 
 if [ -z "${CMAKE_BUILD_TYPE}" ]; then
-CMAKE_BUILD_TYPE=Release
+  CMAKE_BUILD_TYPE=Release
+fi
+
+if [ -z "${ANDROID_PLATFORM}" ]; then
+  ANDROID_PLATFORM=21
 fi
 
 if [ -z "${HANNK_BUILD_TFLITE}" ]; then
-HANNK_BUILD_TFLITE=ON
+  HANNK_BUILD_TFLITE=ON
 else
-HANNK_BUILD_TFLITE=OFF
+  HANNK_BUILD_TFLITE=OFF
 fi
 
-PREFIX=
-EXTRAS=
+## In a cross-compiling scenario, use a separate host and build dir
 
 if [[ "${HL_TARGET}" =~ ^arm-64-android.* ]]; then
-
-  # TODO: this doesn't work (yet); crosscompiling in CMake is painful.
-  echo Configuring for Android arm64-v8a build...
-  echo Using ANDROID_NDK_ROOT=${ANDROID_NDK_ROOT}
-  echo Using CMAKE_TOOLCHAIN_FILE=${ANDROID_NDK_ROOT}/build/cmake/android.toolchain.cmake
-
-  EXTRAS="-DCMAKE_TOOLCHAIN_FILE=${CMAKE_TOOLCHAIN_FILE} -DANDROID_ABI=arm64-v8a"
-
+  HOST_BUILD_DIR="${BUILD_DIR}/_host"
+  HOST_BUILD_TARGET=(--target hannk_tools)
+  HL_HOST_TARGET=host
 elif [[ "${HL_TARGET}" =~ ^wasm-32-wasmrt.* ]]; then
-
-    PREFIX=emcmake
-    HANNK_BUILD_TFLITE=OFF
-
+  HOST_BUILD_DIR="${BUILD_DIR}/_host"
+  HOST_BUILD_TARGET=(--target hannk_tools)
+  HL_HOST_TARGET=host
 else
-
-  echo Assuming host build...
-
+  HOST_BUILD_DIR="${BUILD_DIR}"
+  HOST_BUILD_TARGET=()
+  HL_HOST_TARGET="${HL_TARGET}"
 fi
 
-if [ -n "${NODE_JS_EXECUTABLE}" ]; then
-EXTRAS="${EXTRAS} -DNODE_JS_EXECUTABLE=${NODE_JS_EXECUTABLE}"
-echo Using NODE_JS_EXECUTABLE=${NODE_JS_EXECUTABLE}
-fi
+## Build HANNK for the host no matter what
 
-echo Using HalideInstall=${HALIDE_INSTALL_PATH}
-echo Using BUILD_DIR=${BUILD_DIR}
-echo Using build tool=${CMAKE_GENERATOR}
-echo Using CMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}
-echo Using HL_TARGET=${HL_TARGET}
-echo Using HANNK_BUILD_TFLITE=${HANNK_BUILD_TFLITE}
-
-mkdir -p "${BUILD_DIR}"
-cd "${BUILD_DIR}"
-
-${PREFIX} cmake \
-  ${EXTRAS} \
+echo "Configuring HANNK for ${HL_HOST_TARGET}"
+cmake \
   -G "${CMAKE_GENERATOR}" \
+  -S "${HANNK_DIR}" \
+  -B "${HOST_BUILD_DIR}" \
   -DCMAKE_BUILD_TYPE="${CMAKE_BUILD_TYPE}" \
   -DHalide_DIR="${HALIDE_INSTALL_PATH}/lib/cmake/Halide" \
   -DHalideHelpers_DIR="${HALIDE_INSTALL_PATH}/lib/cmake/HalideHelpers" \
-  -DHalide_TARGET=${HL_TARGET} \
-  -DHANNK_BUILD_TFLITE=${HANNK_BUILD_TFLITE} \
+  -DHalide_TARGET="${HL_HOST_TARGET}" \
+  -DHANNK_BUILD_TFLITE=${HANNK_BUILD_TFLITE}
+
+echo "Building HANNK for ${HL_HOST_TARGET}"
+cmake --build "${HOST_BUILD_DIR}" "${HOST_BUILD_TARGET[@]}"
+
+## Now if we're cross-compiling for Android or WASM, set up the build
+## for that, using the platform-provided CMake toolchain files.
+
+if [[ "${HL_TARGET}" =~ ^arm-64-android.* ]]; then
+  # TODO: this doesn't work (yet); crosscompiling in CMake is painful.
+  echo "Using ANDROID_NDK_ROOT=${ANDROID_NDK_ROOT}"
+  echo "Using CMAKE_TOOLCHAIN_FILE=${ANDROID_NDK_ROOT}/build/cmake/android.toolchain.cmake"
+  CROSS_OPTIONS=(
+    -DCMAKE_TOOLCHAIN_FILE="${ANDROID_NDK_ROOT}/build/cmake/android.toolchain.cmake"
+    -DANDROID_ABI=arm64-v8a
+    "-DANDROID_PLATFORM=${ANDROID_PLATFORM}"
+    # Required because TFLite's internal Eigen tries to compile an unnecessary BLAS with the system Fortran compiler.
+    "-DCMAKE_Fortran_COMPILER=NO"
+  )
+elif [[ "${HL_TARGET}" =~ ^wasm-32-wasmrt.* ]]; then
+  echo "Using NODE_JS_EXECUTABLE=${NODE_JS_EXECUTABLE}"
+  CROSS_OPTIONS=(
+    -DCMAKE_TOOLCHAIN_FILE="${EMSDK}/upstream/emscripten/cmake/Modules/Platform/Emscripten.cmake"
+    -DNODE_JS_EXECUTABLE="${NODE_JS_EXECUTABLE}"
+  )
+else
+  # Not cross-compiling, so we're done.
+  exit
+fi
+
+echo "Configuring HANNK for ${HL_TARGET}"
+cmake \
+  -G "${CMAKE_GENERATOR}" \
   -S "${HANNK_DIR}" \
-  -B "${BUILD_DIR}"
+  -B "${BUILD_DIR}" \
+  "${CROSS_OPTIONS[@]}" \
+  -DCMAKE_BUILD_TYPE="${CMAKE_BUILD_TYPE}" \
+  -DHANNK_BUILD_TFLITE=OFF \
+  -DHalide_TARGET="${HL_TARGET}" \
+  -DHalideHelpers_DIR="${HALIDE_INSTALL_PATH}/lib/cmake/HalideHelpers" \
+  -Dhannk_tools_ROOT="${HOST_BUILD_DIR}"
+
+echo "Building HANNK for ${HL_TARGET}"
+cmake --build "${BUILD_DIR}"
