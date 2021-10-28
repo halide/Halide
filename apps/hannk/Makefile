@@ -7,7 +7,7 @@ include ../support/Makefile.inc
 CXXFLAGS += -Wno-unused-private-field -fno-exceptions -fPIC -fvisibility=hidden -fvisibility-inlines-hidden -Wunused-variable -Wsuggest-override -Woverloaded-virtual -I$(MAKEFILE_DIR)
 
 # No option to build without TFLite/Delegate in Make (use CMake for that)
-CXXFLAGS += -DHANNK_BUILD_TFLITE_DELEGATE=1
+CXXFLAGS += -DHANNK_BUILD_TFLITE=1
 
 BENCHMARK_OUT = benchmark
 ifeq (hexagon-32-qurt,$(findstring hexagon-32-qurt,$(HL_TARGET)))

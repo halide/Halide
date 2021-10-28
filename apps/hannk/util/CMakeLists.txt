@@ -49,7 +49,7 @@ target_link_libraries(model_runner PRIVATE
                       Halide::Runtime
                       tensorflowlite_headers)
 
-if (HANNK_BUILD_TFLITE_DELEGATE)
+if (HANNK_BUILD_TFLITE)
     target_link_libraries(model_runner PRIVATE
                           tensorflowlite_c
                           hannk_delegate)

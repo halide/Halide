@@ -38,7 +38,7 @@ endif ()
 
 # tensorflowlite_c is implicitly declared by this FetchContent.
 # Mark it as EXCLUDE_FROM_ALL so that it won't be built unless we actually
-# depend on it (which we might not depending on HANNK_BUILD_TFLITE_DELEGATE)
+# depend on it (which we might not depending on HANNK_BUILD_TFLITE)
 set_property(TARGET tensorflowlite_c PROPERTY EXCLUDE_FROM_ALL TRUE)
 
 # Disable some noisy warnings in abseil
