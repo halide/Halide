@@ -90,7 +90,7 @@ bool has_storage(const TensorPtr &t) {
 }
 
 // Try to alias outputs to inputs when it is safe.
-class InPlace : public OpVisitor {
+class InPlace : public LeafOpVisitor {
     using OpVisitor::visit;
 
     bool is_alias_possible(TensorPtr input, TensorPtr output) const {
@@ -253,12 +253,6 @@ class InPlace : public OpVisitor {
         }
     }
 
-    void visit(OpGroup *op) override {
-        for (int i = 0; i < op->op_count(); i++) {
-            op->op(i)->accept(this);
-        }
-    }
-
     const Op *const root_;
 
     bool is_root_input_or_output(const TensorPtr &t) const {
@@ -294,7 +288,7 @@ void replace_consumers(const TensorPtr &from, const TensorPtr &to) {
 }
 
 // Find ops that need padding and add an explicit pad op.
-class PadForOps : public OpVisitor {
+class PadForOps : public LeafOpVisitor {
     using OpVisitor::visit;
 
     void pad_for_op(Op *op, int input_idx, int output_idx) {
@@ -380,17 +374,11 @@ class PadForOps : public OpVisitor {
         pad_for_op(op, 0, 0);
     }
 
-    void visit(OpGroup *op) override {
-        for (int i = 0; i < op->op_count(); i++) {
-            op->op(i)->accept(this);
-        }
-    }
-
 public:
     std::vector<OpPtr> new_ops;
 };
 
-class FusePadOps : public OpVisitor {
+class FusePadOps : public LeafOpVisitor {
     using OpVisitor::visit;
 
     void visit(PadOp *op) override {
@@ -410,12 +398,6 @@ class FusePadOps : public OpVisitor {
         for (int d = 0; d < std::min(prev_padding.dimensions(), padding.dimensions()); d++) {
             padding(0, d) += prev_padding(0, d);
             padding(1, d) += prev_padding(1, d);
-        }
-    }
-
-    void visit(OpGroup *op) override {
-        for (int i = 0; i < op->op_count(); i++) {
-            op->op(i)->accept(this);
         }
     }
 };
