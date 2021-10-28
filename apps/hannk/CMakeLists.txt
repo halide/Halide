@@ -6,7 +6,7 @@ set(CMAKE_POLICY_DEFAULT_CMP0077 NEW)
 
 enable_testing()
 
-option(HANNK_BUILD_TFLITE "Build TFLite Delegate for HANNK" ON)
+option(HANNK_BUILD_TFLITE "Build TFLite+Delegate for HANNK" ON)
 if (HANNK_BUILD_TFLITE AND (Halide_TARGET MATCHES "wasm"))
     message(FATAL_ERROR "HANNK_BUILD_TFLITE must be OFF when targeting wasm")
 endif()

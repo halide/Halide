@@ -2,7 +2,7 @@
 #define HANNK_DELEGATE_H
 
 #if !HANNK_BUILD_TFLITE
-    #error "This file should not be included when HANNK_BUILD_TFLITE=0"
+#error "This file should not be included when HANNK_BUILD_TFLITE=0"
 #endif
 
 #include "tensorflow/lite/c/c_api.h"

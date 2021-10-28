@@ -136,7 +136,7 @@ extern "C" {
 // - A call to halide_cuda_acquire_context is followed by a matching call to
 //   halide_cuda_release_context. halide_cuda_acquire_context should block while a
 //   previous call (if any) has not yet been released via halide_cuda_release_context.
-WEAK int halide_cuda_acquire_context(void *user_context, CUcontext *ctx, bool create = true) {
+WEAK int halide_default_cuda_acquire_context(void *user_context, CUcontext *ctx, bool create = true) {
     // TODO: Should we use a more "assertive" assert? these asserts do
     // not block execution on failure.
     halide_assert(user_context, ctx != nullptr);
@@ -179,7 +179,7 @@ WEAK int halide_cuda_acquire_context(void *user_context, CUcontext *ctx, bool cr
     return 0;
 }
 
-WEAK int halide_cuda_release_context(void *user_context) {
+WEAK int halide_default_cuda_release_context(void *user_context) {
     return 0;
 }
 
@@ -188,7 +188,7 @@ WEAK int halide_cuda_release_context(void *user_context) {
 // for the context (nullptr stream). The context is passed in for convenience, but
 // any sort of scoping must be handled by that of the
 // halide_cuda_acquire_context/halide_cuda_release_context pair, not this call.
-WEAK int halide_cuda_get_stream(void *user_context, CUcontext ctx, CUstream *stream) {
+WEAK int halide_default_cuda_get_stream(void *user_context, CUcontext ctx, CUstream *stream) {
     // There are two default streams we could use. stream 0 is fully
     // synchronous. stream 2 gives a separate non-blocking stream per
     // thread.
@@ -197,6 +197,53 @@ WEAK int halide_cuda_get_stream(void *user_context, CUcontext ctx, CUstream *str
 }
 
 }  // extern "C"
+
+namespace Halide {
+namespace Runtime {
+namespace Internal {
+namespace CUDA {
+
+WEAK halide_cuda_acquire_context_t acquire_context = (halide_cuda_acquire_context_t)halide_default_cuda_acquire_context;
+WEAK halide_cuda_release_context_t release_context = (halide_cuda_release_context_t)halide_default_cuda_release_context;
+WEAK halide_cuda_get_stream_t get_stream = (halide_cuda_get_stream_t)halide_default_cuda_get_stream;
+
+}  // namespace CUDA
+}  // namespace Internal
+}  // namespace Runtime
+}  // namespace Halide
+
+extern "C" {
+
+WEAK int halide_cuda_acquire_context(void *user_context, CUcontext *ctx, bool create = true) {
+    return CUDA::acquire_context(user_context, (void **)ctx, create);
+}
+
+WEAK halide_cuda_acquire_context_t halide_set_cuda_acquire_context(halide_cuda_acquire_context_t handler) {
+    halide_cuda_acquire_context_t result = CUDA::acquire_context;
+    CUDA::acquire_context = handler;
+    return result;
+}
+
+WEAK int halide_cuda_release_context(void *user_context) {
+    return CUDA::release_context(user_context);
+}
+
+WEAK halide_cuda_release_context_t halide_set_cuda_release_context(halide_cuda_release_context_t handler) {
+    halide_cuda_release_context_t result = CUDA::release_context;
+    CUDA::release_context = handler;
+    return result;
+}
+
+WEAK int halide_cuda_get_stream(void *user_context, CUcontext ctx, CUstream *stream) {
+    return CUDA::get_stream(user_context, (void *)ctx, (void **)stream);
+}
+
+WEAK halide_cuda_get_stream_t halide_set_cuda_get_stream(halide_cuda_get_stream_t handler) {
+    halide_cuda_get_stream_t result = CUDA::get_stream;
+    CUDA::get_stream = handler;
+    return result;
+}
+}
 
 namespace Halide {
 namespace Runtime {
@@ -845,7 +892,8 @@ WEAK int halide_cuda_device_malloc(void *user_context, halide_buffer_t *buf) {
 
 namespace {
 WEAK int cuda_do_multidimensional_copy(void *user_context, const device_copy &c,
-                                       uint64_t src, uint64_t dst, int d, bool from_host, bool to_host) {
+                                       uint64_t src, uint64_t dst, int d, bool from_host, bool to_host,
+                                       CUstream stream) {
     if (d > MAX_COPY_DIMS) {
         error(user_context) << "Buffer has too many dimensions to copy to/from GPU\n";
         return -1;
@@ -858,15 +906,27 @@ WEAK int cuda_do_multidimensional_copy(void *user_context, const device_copy &c,
         if (!from_host && to_host) {
             debug(user_context) << "cuMemcpyDtoH(" << (void *)dst << ", " << (void *)src << ", " << c.chunk_size << ")\n";
             copy_name = "cuMemcpyDtoH";
-            err = cuMemcpyDtoH((void *)dst, (CUdeviceptr)src, c.chunk_size);
+            if (stream) {
+                err = cuMemcpyDtoHAsync((void *)dst, (CUdeviceptr)src, c.chunk_size, stream);
+            } else {
+                err = cuMemcpyDtoH((void *)dst, (CUdeviceptr)src, c.chunk_size);
+            }
         } else if (from_host && !to_host) {
             debug(user_context) << "cuMemcpyHtoD(" << (void *)dst << ", " << (void *)src << ", " << c.chunk_size << ")\n";
             copy_name = "cuMemcpyHtoD";
-            err = cuMemcpyHtoD((CUdeviceptr)dst, (void *)src, c.chunk_size);
+            if (stream) {
+                err = cuMemcpyHtoDAsync((CUdeviceptr)dst, (void *)src, c.chunk_size, stream);
+            } else {
+                err = cuMemcpyHtoD((CUdeviceptr)dst, (void *)src, c.chunk_size);
+            }
         } else if (!from_host && !to_host) {
             debug(user_context) << "cuMemcpyDtoD(" << (void *)dst << ", " << (void *)src << ", " << c.chunk_size << ")\n";
             copy_name = "cuMemcpyDtoD";
-            err = cuMemcpyDtoD((CUdeviceptr)dst, (CUdeviceptr)src, c.chunk_size);
+            if (stream) {
+                err = cuMemcpyDtoDAsync((CUdeviceptr)dst, (CUdeviceptr)src, c.chunk_size, stream);
+            } else {
+                err = cuMemcpyDtoD((CUdeviceptr)dst, (CUdeviceptr)src, c.chunk_size);
+            }
         } else if (dst != src) {
             debug(user_context) << "memcpy(" << (void *)dst << ", " << (void *)src << ", " << c.chunk_size << ")\n";
             // Could reach here if a user called directly into the
@@ -881,7 +941,7 @@ WEAK int cuda_do_multidimensional_copy(void *user_context, const device_copy &c,
     } else {
         ssize_t src_off = 0, dst_off = 0;
         for (int i = 0; i < (int)c.extent[d - 1]; i++) {
-            int err = cuda_do_multidimensional_copy(user_context, c, src + src_off, dst + dst_off, d - 1, from_host, to_host);
+            int err = cuda_do_multidimensional_copy(user_context, c, src + src_off, dst + dst_off, d - 1, from_host, to_host, stream);
             dst_off += c.dst_stride_bytes[d - 1];
             src_off += c.src_stride_bytes[d - 1];
             if (err) {
@@ -938,7 +998,15 @@ WEAK int halide_cuda_buffer_copy(void *user_context, struct halide_buffer_t *src
         }
 #endif
 
-        err = cuda_do_multidimensional_copy(user_context, c, c.src + c.src_begin, c.dst, dst->dimensions, from_host, to_host);
+        CUstream stream = nullptr;
+        if (cuStreamSynchronize != nullptr) {
+            int result = halide_cuda_get_stream(user_context, ctx.context, &stream);
+            if (result != 0) {
+                error(user_context) << "CUDA: In cuda_do_multidimensional_copy, halide_cuda_get_stream returned " << result << "\n";
+            }
+        }
+
+        err = cuda_do_multidimensional_copy(user_context, c, c.src + c.src_begin, c.dst, dst->dimensions, from_host, to_host, stream);
 
 #ifdef DEBUG_RUNTIME
         uint64_t t_after = halide_current_time_ns(user_context);
