@@ -8,6 +8,7 @@ add_library(hannk_log_stderr STATIC EXCLUDE_FROM_ALL
             hannk_log_stderr.cpp)
 target_include_directories(hannk_log_stderr PUBLIC
                            $<BUILD_INTERFACE:${hannk_SOURCE_DIR}>)
+target_link_libraries(hannk_log_stderr PUBLIC "$<$<PLATFORM_ID:Android>:log>")
 
 add_library(hannk_log_tflite STATIC EXCLUDE_FROM_ALL
             hannk_log_tflite.cpp)
