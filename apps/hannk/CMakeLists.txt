@@ -111,6 +111,8 @@ file(GLOB TEST_FILES CONFIGURE_DEPENDS "test/*/*")
 foreach (t IN LISTS TEST_FILES)
     file(RELATIVE_PATH test_name ${hannk_SOURCE_DIR} ${t})
 
+    # Emscripten sets CMAKE_CROSSCOMPILING_TOOLCHAIN to NODE_JS_EXECUTABLE,
+    # which ensures these tests will run in Node.
     add_test(NAME ${test_name}
              COMMAND compare_vs_tflite ${t} --benchmark 0)
 
