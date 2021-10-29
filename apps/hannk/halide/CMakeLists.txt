@@ -8,49 +8,49 @@ set(CMAKE_CXX_EXTENSIONS NO)
 
 # ----------------------------
 
-if (NOT CMAKE_CROSSCOMPILING)
+add_custom_target(hannk_tools)
+
+function(_export_hannk_tool TARGET)
+    add_dependencies(hannk_tools ${TARGET})
+    export(TARGETS ${TARGET}
+           NAMESPACE hannk::tools::
+           APPEND FILE "${hannk_BINARY_DIR}/hannk_tools-config.cmake")
+endfunction()
+
+# Emscripten tries to disable finding packages outside its sysroot,
+# but we need our native generators. Setting CMAKE_FIND_ROOT_PATH_BOTH
+# here overrides Emscripten's search preference.
+find_package(hannk_tools QUIET CMAKE_FIND_ROOT_PATH_BOTH)
+
+if (hannk_tools_FOUND)
+    message(STATUS "Using hannk_tools from ${hannk_tools_DIR}")
+else ()
+    if (CMAKE_CROSSCOMPILING)
+        message(WARNING
+                "hannk_tools were not found and it looks like you are cross-compiling. "
+                "This is likely to fail. Please set -Dhannk_tools_ROOT=... at the CMake "
+                "command line to the build directory of a host-built hannk.")
+    endif ()
     find_package(Halide REQUIRED)
+endif ()
+
+if (NOT TARGET hannk::tools::common_halide)
     add_library(common_halide STATIC common_halide.cpp)
+    add_library(hannk::tools::common_halide ALIAS common_halide)
+
     target_link_libraries(common_halide PRIVATE Halide::Halide)
     target_include_directories(common_halide PUBLIC $<BUILD_INTERFACE:${hannk_SOURCE_DIR}>)
-endif()
+
+    _export_hannk_tool(common_halide)
+endif ()
 
 # ----------------------------
 
 function(_begin_halide_library_set LIBRARY_SET)
-    set(${LIBRARY_SET}_CMAKE_LIB_LIST "" PARENT_SCOPE)
-    if (CMAKE_CROSSCOMPILING)
-        # Make a subdir to put all the forced-host-mode stuff.
-        # Make it a double-subdir so that include paths of the form "halide/foo.h" can work as-is.
-        set(GEN_DIR "${CMAKE_CURRENT_BINARY_DIR}/host_build_dir/halide")
-        set(${LIBRARY_SET}_GEN_DIR "${GEN_DIR}" PARENT_SCOPE)
+    add_library(${LIBRARY_SET} INTERFACE)
+    target_include_directories(${LIBRARY_SET} INTERFACE "$<BUILD_INTERFACE:${hannk_BINARY_DIR}>")
 
-        file(MAKE_DIRECTORY ${GEN_DIR})
-
-        # Unset CC, CXX, etc so that the sub-cmake file picks up host defaults, rather than (e.g.) emcc
-        set(CC_SAVE "$ENV{CC}")
-        set(CXX_SAVE "$ENV{CXX}")
-        set(ENV{CC} "")
-        set(ENV{CXX} "")
-        execute_process(
-            COMMAND "${CMAKE_COMMAND}"
-                    "-DCMAKE_GENERATOR=${CMAKE_GENERATOR}"
-                    "-DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}"
-                    "-DHalide_DIR=${Halide_DIR}"
-                    "-DHalideHelpers_DIR=${HalideHelpers_DIR}"
-                    "-Dhannk_SOURCE_DIR=${hannk_SOURCE_DIR}"
-                    "${CMAKE_CURRENT_SOURCE_DIR}"
-            WORKING_DIRECTORY ${GEN_DIR}
-        )
-        set(ENV{CC} "${CC_SAVE}")
-        set(ENV{CXX} "${CXX_SAVE}")
-    else()
-        find_package(Halide REQUIRED)
-        # TODO: when crosscompiling, the "runtime.a" files don't get produced;
-        # create a fake target that we can add them to as depdendencies, then
-        # pass the fake target to the sub-build.
-        add_custom_target("${LIBRARY_SET}.build_all")
-    endif()
+    add_custom_target(${LIBRARY_SET}.build_all)
 endfunction()
 
 function(_add_halide_library_set LIBRARY_SET)
@@ -59,63 +59,30 @@ function(_add_halide_library_set LIBRARY_SET)
     set(multiValueArgs SRCS GENERATOR_ARGS GENERATOR_DEPS FEATURES)
     cmake_parse_arguments(args "" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
 
-    if (CMAKE_CROSSCOMPILING)
-        set(GEN_DIR "${${LIBRARY_SET}_GEN_DIR}")
-        foreach (t IN ITEMS "${args_TARGET}" "${args_TARGET}.runtime")
-            add_library("${t}" STATIC IMPORTED GLOBAL)
-            add_dependencies("${t}" ${LIBRARY_SET}.crosscompile)
-            set_target_properties("${t}" PROPERTIES
-                                  IMPORTED_LOCATION "${GEN_DIR}/${t}.a")
-        endforeach()
-    else()
+    set(gen hannk::tools::${args_TARGET}.generator)
+
+    if (NOT TARGET ${gen})
         add_executable(${args_TARGET}.generator ${args_SRCS})
+        add_executable(${gen} ALIAS ${args_TARGET}.generator)
+
         target_link_libraries(${args_TARGET}.generator PRIVATE ${args_GENERATOR_DEPS} common_halide Halide::Generator)
         target_include_directories(${args_TARGET}.generator PUBLIC $<BUILD_INTERFACE:${hannk_SOURCE_DIR}>)
 
-        add_halide_library(${args_TARGET} FROM ${args_TARGET}.generator
-                           NAMESPACE hannk
-                           GENERATOR ${args_GENERATOR_NAME}
-                           FEATURES c_plus_plus_name_mangling ${args_FEATURES}
-                           PARAMS ${args_GENERATOR_ARGS})
+        _export_hannk_tool(${args_TARGET}.generator)
+    endif ()
 
-        add_dependencies("${LIBRARY_SET}.build_all" "${args_TARGET}" "${args_TARGET}.runtime")
-    endif()
-    set(${LIBRARY_SET}_CMAKE_LIB_LIST ${${LIBRARY_SET}_CMAKE_LIB_LIST} "${args_TARGET}" PARENT_SCOPE)
+    add_halide_library(${args_TARGET} FROM ${gen}
+                       NAMESPACE hannk
+                       GENERATOR ${args_GENERATOR_NAME}
+                       FEATURES c_plus_plus_name_mangling ${args_FEATURES}
+                       PARAMS ${args_GENERATOR_ARGS})
+
+    add_dependencies("${LIBRARY_SET}.build_all" "${args_TARGET}" "${args_TARGET}.runtime")
+    target_link_libraries(${LIBRARY_SET} INTERFACE ${args_TARGET})
 endfunction()
 
 function(_finish_halide_library_set LIBRARY_SET)
-    if (CMAKE_CROSSCOMPILING)
-        set(GEN_DIR "${${LIBRARY_SET}_GEN_DIR}")
-
-        set(BYPRODUCTS "")
-        set(LIB_LIST "")
-        foreach (t IN LISTS ${LIBRARY_SET}_CMAKE_LIB_LIST)
-            set(BYPRODUCTS ${BYPRODUCTS} "${GEN_DIR}/${t}.a" "${GEN_DIR}/${t}.runtime.a" "${GEN_DIR}/${t}.h")
-            set(LIB_LIST ${LIB_LIST} "${t}" "${t}.runtime")
-        endforeach()
-
-        # TODO: set --parallel here, is this the best way?
-        cmake_host_system_information(RESULT NUMCORES QUERY NUMBER_OF_LOGICAL_CORES)
-        add_custom_target(${LIBRARY_SET}.crosscompile
-            COMMAND "${CMAKE_COMMAND}"
-                    --build "${GEN_DIR}"
-                    --parallel ${NUMCORES}
-                    --config $<CONFIG>
-                    --target "${LIBRARY_SET}.build_all"
-            BYPRODUCTS "${BYPRODUCTS}"
-            WORKING_DIRECTORY "${GEN_DIR}"
-            USES_TERMINAL
-        )
-
-        set(INCLUDE_PATH "${GEN_DIR}/..")
-    else ()
-        set(INCLUDE_PATH $<BUILD_INTERFACE:${hannk_BINARY_DIR}>)
-        set(LIB_LIST ${${LIBRARY_SET}_CMAKE_LIB_LIST})
-    endif ()
-
-    add_library(${LIBRARY_SET} INTERFACE)
-    target_link_libraries(${LIBRARY_SET} INTERFACE ${LIB_LIST})
-    target_include_directories(${LIBRARY_SET} INTERFACE ${INCLUDE_PATH})
+    # Nothing to do for now.
 endfunction()
 
 # ---------------------------
@@ -143,7 +110,6 @@ _add_halide_library_set(halide_op_implementations
         GENERATOR_NAME Conv
         GENERATOR_ARGS output.type=uint8
         GENERATOR_DEPS)
-
 
 _add_halide_library_set(halide_op_implementations
         TARGET conv_u8_u8_i16
