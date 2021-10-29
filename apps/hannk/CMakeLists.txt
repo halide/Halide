@@ -98,15 +98,9 @@ file(GLOB TEST_FILES CONFIGURE_DEPENDS "test/*/*")
 foreach (t IN LISTS TEST_FILES)
     file(RELATIVE_PATH test_name ${hannk_SOURCE_DIR} ${t})
 
-    set(LAUNCHER "")
-    if (Halide_TARGET MATCHES "wasm")
-        _find_node_js()
-        add_test(NAME ${test_name}
-                 COMMAND ${NODE_JS_EXECUTABLE} compare_vs_tflite.js ${t} --benchmark 0)
-    else()
-        add_test(NAME ${test_name}
-                 COMMAND compare_vs_tflite ${t} --benchmark 0)
-    endif()
+    add_test(NAME ${test_name}
+             COMMAND compare_vs_tflite ${t} --benchmark 0)
+
     set_tests_properties(${test_name} PROPERTIES
                          LABELS hannk_tests)
 endforeach ()
