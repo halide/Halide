@@ -40,34 +40,38 @@ fi
 if [[ "${HL_TARGET}" =~ ^arm-64-android.* ]]; then
   HOST_BUILD_DIR="${BUILD_DIR}/_host"
   HOST_BUILD_TARGET=(--target hannk_tools)
-  HL_HOST_TARGET=host
+  HOST_HL_TARGET=host
+  HOST_CMAKE_DEFS=(-DHANNK_AOT_HOST_ONLY=ON)
 elif [[ "${HL_TARGET}" =~ ^wasm-32-wasmrt.* ]]; then
   HOST_BUILD_DIR="${BUILD_DIR}/_host"
   HOST_BUILD_TARGET=(--target hannk_tools)
-  HL_HOST_TARGET=host
+  HOST_HL_TARGET=host
+  HOST_CMAKE_DEFS=(-DHANNK_AOT_HOST_ONLY=ON)
 else
   HOST_BUILD_DIR="${BUILD_DIR}"
   HOST_BUILD_TARGET=()
-  HL_HOST_TARGET="${HL_TARGET}"
+  HOST_HL_TARGET="${HL_TARGET}"
+  HOST_CMAKE_DEFS=()
 fi
 
 ## Build HANNK for the host no matter what
 
-echo "Configuring HANNK for ${HL_HOST_TARGET}"
+echo "Configuring HANNK for ${HOST_HL_TARGET}"
 cmake \
   -G "${CMAKE_GENERATOR}" \
   -S "${HANNK_DIR}" \
   -B "${HOST_BUILD_DIR}" \
+  "${HOST_CMAKE_DEFS[@]}" \
   -DCMAKE_BUILD_TYPE="${CMAKE_BUILD_TYPE}" \
   -DHalide_DIR="${HALIDE_INSTALL_PATH}/lib/cmake/Halide" \
   -DHalideHelpers_DIR="${HALIDE_INSTALL_PATH}/lib/cmake/HalideHelpers" \
-  -DHalide_TARGET="${HL_HOST_TARGET}" \
+  -DHalide_TARGET="${HOST_HL_TARGET}" \
   -DHANNK_BUILD_TFLITE=${HANNK_BUILD_TFLITE}
 
 if [ -z "${HOST_BUILD_TARGET[*]}" ]; then
-  echo "Building HANNK for ${HL_HOST_TARGET}"
+  echo "Building HANNK for ${HOST_HL_TARGET}"
 else
-  echo "Building HANNK host generator executables for ${HL_HOST_TARGET}"
+  echo "Building HANNK host generator executables"
 fi
 cmake --build "${HOST_BUILD_DIR}" "${HOST_BUILD_TARGET[@]}"
 
@@ -77,7 +81,7 @@ cmake --build "${HOST_BUILD_DIR}" "${HOST_BUILD_TARGET[@]}"
 if [[ "${HL_TARGET}" =~ ^arm-64-android.* ]]; then
   echo "Using ANDROID_NDK_ROOT=${ANDROID_NDK_ROOT}"
   echo "Using CMAKE_TOOLCHAIN_FILE=${ANDROID_NDK_ROOT}/build/cmake/android.toolchain.cmake"
-  CROSS_OPTIONS=(
+  CROSS_CMAKE_DEFS=(
     -DCMAKE_TOOLCHAIN_FILE="${ANDROID_NDK_ROOT}/build/cmake/android.toolchain.cmake"
     -DANDROID_ABI=arm64-v8a
     "-DANDROID_PLATFORM=${ANDROID_PLATFORM}"
@@ -86,7 +90,7 @@ if [[ "${HL_TARGET}" =~ ^arm-64-android.* ]]; then
   )
 elif [[ "${HL_TARGET}" =~ ^wasm-32-wasmrt.* ]]; then
   echo "Using NODE_JS_EXECUTABLE=${NODE_JS_EXECUTABLE}"
-  CROSS_OPTIONS=(
+  CROSS_CMAKE_DEFS=(
     -DCMAKE_TOOLCHAIN_FILE="${EMSDK}/upstream/emscripten/cmake/Modules/Platform/Emscripten.cmake"
     -DNODE_JS_EXECUTABLE="${NODE_JS_EXECUTABLE}"
   )
@@ -100,7 +104,7 @@ cmake \
   -G "${CMAKE_GENERATOR}" \
   -S "${HANNK_DIR}" \
   -B "${BUILD_DIR}" \
-  "${CROSS_OPTIONS[@]}" \
+  "${CROSS_CMAKE_DEFS[@]}" \
   -DCMAKE_BUILD_TYPE="${CMAKE_BUILD_TYPE}" \
   -DHANNK_BUILD_TFLITE=OFF \
   -DHalide_TARGET="${HL_TARGET}" \

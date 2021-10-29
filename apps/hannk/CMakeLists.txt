@@ -6,6 +6,10 @@ set(CMAKE_POLICY_DEFAULT_CMP0077 NEW)
 
 enable_testing()
 
+# ----------------------------
+
+option(HANNK_AOT_HOST_ONLY "Only build AOT host tools for cross-compiling" OFF)
+
 option(HANNK_BUILD_TFLITE "Build TFLite+Delegate for HANNK" ON)
 if (HANNK_BUILD_TFLITE AND (Halide_TARGET MATCHES "wasm"))
     message(FATAL_ERROR "HANNK_BUILD_TFLITE must be OFF when targeting wasm")
@@ -21,34 +25,42 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED YES)
 set(CMAKE_CXX_EXTENSIONS NO)
 
-# Find HalideHelpers -- this is just the Runtime headers, but no libraries
-find_package(HalideHelpers REQUIRED)
-
 # Set up the version of TFLite we expect
 # (We need to do this even if HANNK_BUILD_TFLITE is off,
 # so that the .tflite file parser can get the right schema)
 set(TFLITE_VERSION_MAJOR "2" CACHE STRING "Major version of TFLite to assume")
 set(TFLITE_VERSION_MINOR "6" CACHE STRING "Minor version of TFLite to assume")
 set(TFLITE_VERSION_PATCH "0" CACHE STRING "Patch version of TFLite to assume")
+set(TFLITE_VERSION "${TFLITE_VERSION_MAJOR}.${TFLITE_VERSION_MINOR}.${TFLITE_VERSION_PATCH}")
+
+# ----------------------------
 
 add_compile_definitions(TFLITE_VERSION_MAJOR=${TFLITE_VERSION_MAJOR})
 add_compile_definitions(TFLITE_VERSION_MINOR=${TFLITE_VERSION_MINOR})
 add_compile_definitions(TFLITE_VERSION_PATCH=${TFLITE_VERSION_PATCH})
-if (HANNK_BUILD_TFLITE)
-    add_compile_definitions(HANNK_BUILD_TFLITE=1)
-else ()
-    add_compile_definitions(HANNK_BUILD_TFLITE=0)
-endif ()
+add_compile_definitions(HANNK_BUILD_TFLITE=$<BOOL:${HANNK_BUILD_TFLITE}>)
 
-set(TFLITE_VERSION "${TFLITE_VERSION_MAJOR}.${TFLITE_VERSION_MINOR}.${TFLITE_VERSION_PATCH}")
+# ----------------------------
+
+# Find HalideHelpers -- this is just the Runtime headers and CMake functions, but no libraries
+find_package(HalideHelpers REQUIRED)
+
+# ----------------------------
 
 add_subdirectory(halide)
+if (HANNK_AOT_HOST_ONLY)
+    # Don't add anything else to the build... everything for AOT is in the halide subdirectory
+    return()
+endif ()
+
 add_subdirectory(interpreter)
 add_subdirectory(tflite)
 add_subdirectory(util)
 if (HANNK_BUILD_TFLITE)
     add_subdirectory(delegate)
 endif ()
+
+# ----------------------------
 
 # Benchmarking executable
 add_executable(benchmark benchmark.cpp)
