@@ -67,7 +67,7 @@ target_include_directories(compare_vs_tflite
                            PUBLIC $<BUILD_INTERFACE:${hannk_SOURCE_DIR}>)
 
 # Tests
-file(GLOB TEST_FILES CONFIGURE_DEPENDS "test/*/*")
+file(GLOB TEST_FILES CONFIGURE_DEPENDS "test/*/*.tflite")
 foreach (t IN LISTS TEST_FILES)
     file(RELATIVE_PATH test_name ${hannk_SOURCE_DIR} ${t})
     add_test(NAME ${test_name} COMMAND compare_vs_tflite ${t} --benchmark 0)
