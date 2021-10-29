@@ -82,15 +82,7 @@ if (Halide_TARGET MATCHES "wasm")
     endforeach ()
 endif ()
 
-# TODO: Replicated from Halide's wasm dependency code; we should move this
-# into a Helper file included in the install, perhaps?
-function(_find_node_js)
-    find_program(NODE_JS_EXECUTABLE node nodejs)
-
-    if (NOT NODE_JS_EXECUTABLE)
-        message(FATAL_ERROR "Could not find nodejs. Please set NODE_JS_EXECUTABLE on the CMake command line.")
-    endif ()
-
+if (Halide_TARGET MATCHES "wasm" AND NODE_JS_EXECUTABLE)
     execute_process(COMMAND "${NODE_JS_EXECUTABLE}" --version
                     OUTPUT_VARIABLE NODE_JS_VERSION_RAW
                     OUTPUT_STRIP_TRAILING_WHITESPACE)
@@ -99,8 +91,7 @@ function(_find_node_js)
     if (NODE_JS_VERSION VERSION_LESS "16.13")
         message(FATAL_ERROR "Halide requires Node v16.13 or later, but found ${NODE_JS_VERSION_RAW} at ${NODE_JS_EXECUTABLE}. Please set NODE_JS_EXECUTABLE on the CMake command line.")
     endif ()
-endfunction()
-
+endif ()
 
 # Tests
 file(GLOB TEST_FILES CONFIGURE_DEPENDS "test/*/*")
