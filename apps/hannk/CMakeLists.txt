@@ -72,12 +72,13 @@ target_include_directories(compare_vs_tflite
 # TODO: Surely there's a better way to set Emscripten flags.
 if (Halide_TARGET MATCHES "wasm")
     foreach (t IN ITEMS benchmark compare_vs_tflite)
-        target_link_libraries(${t} PRIVATE
-                              "-s ALLOW_MEMORY_GROWTH=1"
-                              "-s ENVIRONMENT=node"
-                              "-s NODERAWFS"
-                              "$<$<CONFIG:Debug>:-s ASSERTIONS=1>"
-                              )
+        target_link_options(
+            ${t} PRIVATE
+            "SHELL:-s ALLOW_MEMORY_GROWTH=1"
+            "SHELL:-s ENVIRONMENT=node"
+            "SHELL:-s NODERAWFS"
+            "SHELL:$<$<CONFIG:Debug>:-s ASSERTIONS=1>"
+        )
     endforeach ()
 endif ()
 
