@@ -35,6 +35,7 @@ else
 fi
 
 ## In a cross-compiling scenario, use a separate host and build dir
+# TODO: figure out if there's a way to generalize "is this crosscompiling or not", and just make this a single if-else
 
 if [[ "${HL_TARGET}" =~ ^arm-64-android.* ]]; then
   HOST_BUILD_DIR="${BUILD_DIR}/_host"
@@ -63,14 +64,17 @@ cmake \
   -DHalide_TARGET="${HL_HOST_TARGET}" \
   -DHANNK_BUILD_TFLITE=${HANNK_BUILD_TFLITE}
 
-echo "Building HANNK for ${HL_HOST_TARGET}"
+if [ -z "${HOST_BUILD_TARGET[*]}" ]; then
+  echo "Building HANNK for ${HL_HOST_TARGET}"
+else
+  echo "Building HANNK host generator executables for ${HL_HOST_TARGET}"
+fi
 cmake --build "${HOST_BUILD_DIR}" "${HOST_BUILD_TARGET[@]}"
 
 ## Now if we're cross-compiling for Android or WASM, set up the build
 ## for that, using the platform-provided CMake toolchain files.
 
 if [[ "${HL_TARGET}" =~ ^arm-64-android.* ]]; then
-  # TODO: this doesn't work (yet); crosscompiling in CMake is painful.
   echo "Using ANDROID_NDK_ROOT=${ANDROID_NDK_ROOT}"
   echo "Using CMAKE_TOOLCHAIN_FILE=${ANDROID_NDK_ROOT}/build/cmake/android.toolchain.cmake"
   CROSS_OPTIONS=(
@@ -91,7 +95,7 @@ else
   exit
 fi
 
-echo "Configuring HANNK for ${HL_TARGET}"
+echo "Configuring cross-build HANNK for ${HL_TARGET}"
 cmake \
   -G "${CMAKE_GENERATOR}" \
   -S "${HANNK_DIR}" \
@@ -103,5 +107,5 @@ cmake \
   -DHalideHelpers_DIR="${HALIDE_INSTALL_PATH}/lib/cmake/HalideHelpers" \
   -Dhannk_tools_ROOT="${HOST_BUILD_DIR}"
 
-echo "Building HANNK for ${HL_TARGET}"
+echo "Building cross-build HANNK for ${HL_TARGET}"
 cmake --build "${BUILD_DIR}"

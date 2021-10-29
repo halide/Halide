@@ -72,6 +72,7 @@ target_include_directories(compare_vs_tflite
 # TODO: Surely there's a better way to set Emscripten flags.
 if (Halide_TARGET MATCHES "wasm")
     foreach (t IN ITEMS benchmark compare_vs_tflite)
+        # Note: "SHELL:" prevents de-duplication of the -s flag.
         target_link_options(
             ${t} PRIVATE
             "SHELL:-s ALLOW_MEMORY_GROWTH=1"
