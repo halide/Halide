@@ -17,6 +17,12 @@ function(_Halide_cmake_target OUTVAR)
     # Get OS from CMake
     string(TOLOWER "${CMAKE_SYSTEM_NAME}" os)
     list(TRANSFORM os REPLACE "^darwin$" "osx")
+    list(TRANSFORM os REPLACE "^emscripten$" "wasmrt")
+
+    # Fix up emscripten usage
+    if (os STREQUAL "wasmrt" AND arch STREQUAL "x86")
+        set(arch "wasm")
+    endif ()
 
     set(${OUTVAR} "${arch}-${bits}-${os}" PARENT_SCOPE)
 endfunction()
