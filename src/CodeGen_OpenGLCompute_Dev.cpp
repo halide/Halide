@@ -550,20 +550,24 @@ void CodeGen_OpenGLCompute_C::visit(const For *loop) {
 }
 
 void CodeGen_OpenGLCompute_C::visit(const Ramp *op) {
-    ostringstream rhs;
-    rhs << print_type(op->type) << "(";
-
     if (op->lanes > 4) {
         internal_error << "GLSL: ramp lanes " << op->lanes << " is not supported\n";
     }
 
-    rhs << print_expr(op->base);
-
-    for (int i = 1; i < op->lanes; ++i) {
-        rhs << ", " << print_expr(Add::make(op->base, Mul::make(i, op->stride)));
+    ostringstream rhs;
+    // Print the sequence vec(0, 1, 2, ...).
+    rhs << print_type(op->type) << "(";
+    for (int i = 0; i < op->type.lanes(); i++) {
+        rhs << i;
+        if (i != op->type.lanes() - 1) {
+            rhs << ", ";
+        }
     }
-
     rhs << ")";
+
+    // Multiply by the stride and add the base.
+    rhs << " * " << print_expr(op->stride) << " + " << print_expr(op->base);
+
     print_assignment(op->type, rhs.str());
 }
 
