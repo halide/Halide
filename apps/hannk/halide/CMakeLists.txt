@@ -1,37 +1,37 @@
-add_custom_target(hannk_tools)
+add_custom_target(hannk-halide_generators)
 
-function(_export_hannk_tool TARGET)
-    add_dependencies(hannk_tools ${TARGET})
+function(_export_host_target TARGET)
+    add_dependencies(hannk-halide_generators ${TARGET})
     export(TARGETS ${TARGET}
-           NAMESPACE hannk::tools::
-           APPEND FILE "${hannk_BINARY_DIR}/hannk_tools-config.cmake")
+           NAMESPACE hannk::halide_generators::
+           APPEND FILE "${hannk_BINARY_DIR}/hannk-halide_generators-config.cmake")
 endfunction()
 
 # Emscripten tries to disable finding packages outside its sysroot,
 # but we need our native generators. Setting CMAKE_FIND_ROOT_PATH_BOTH
 # here overrides Emscripten's search preference.
-find_package(hannk_tools QUIET CMAKE_FIND_ROOT_PATH_BOTH)
+find_package(hannk-halide_generators QUIET CMAKE_FIND_ROOT_PATH_BOTH)
 
-if (hannk_tools_FOUND)
-    message(STATUS "Using hannk_tools from ${hannk_tools_DIR}")
+if (hannk-halide_generators_FOUND)
+    message(STATUS "Using hannk-halide_generators from ${hannk-halide_generators_DIR}")
 else ()
     if (CMAKE_CROSSCOMPILING)
         message(WARNING
-                "hannk_tools were not found and it looks like you are cross-compiling. "
-                "This is likely to fail. Please set -Dhannk_tools_ROOT=... at the CMake "
+                "hannk-halide_generators were not found and it looks like you are cross-compiling. "
+                "This is likely to fail. Please set -Dhannk-halide_generators_ROOT=... at the CMake "
                 "command line to the build directory of a host-built hannk.")
     endif ()
     find_package(Halide REQUIRED)
 endif ()
 
-if (NOT TARGET hannk::tools::common_halide)
+if (NOT TARGET hannk::halide_generators::common_halide)
     add_library(common_halide STATIC common_halide.cpp)
-    add_library(hannk::tools::common_halide ALIAS common_halide)
+    add_library(hannk::halide_generators::common_halide ALIAS common_halide)
 
     target_link_libraries(common_halide PRIVATE Halide::Halide)
     target_include_directories(common_halide PUBLIC $<BUILD_INTERFACE:${hannk_SOURCE_DIR}>)
 
-    _export_hannk_tool(common_halide)
+    _export_host_target(common_halide)
 endif ()
 
 # ----------------------------
@@ -49,7 +49,7 @@ function(_add_halide_library_set LIBRARY_SET)
     set(multiValueArgs SRCS GENERATOR_ARGS GENERATOR_DEPS FEATURES)
     cmake_parse_arguments(args "" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
 
-    set(gen hannk::tools::${args_TARGET}.generator)
+    set(gen hannk::halide_generators::${args_TARGET}.generator)
 
     if (NOT TARGET ${gen})
         add_executable(${args_TARGET}.generator ${args_SRCS})
@@ -58,7 +58,7 @@ function(_add_halide_library_set LIBRARY_SET)
         target_link_libraries(${args_TARGET}.generator PRIVATE ${args_GENERATOR_DEPS} common_halide Halide::Generator)
         target_include_directories(${args_TARGET}.generator PUBLIC $<BUILD_INTERFACE:${hannk_SOURCE_DIR}>)
 
-        _export_hannk_tool(${args_TARGET}.generator)
+        _export_host_target(${args_TARGET}.generator)
     endif ()
 
     add_halide_library(${args_TARGET} FROM ${gen}

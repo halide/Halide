@@ -39,12 +39,12 @@ fi
 
 if [[ "${HL_TARGET}" =~ ^arm-64-android.* ]]; then
   HOST_BUILD_DIR="${BUILD_DIR}/_host"
-  HOST_BUILD_TARGET=(--target hannk_tools)
+  HOST_BUILD_TARGET=(--target hannk-halide_generators)
   HOST_HL_TARGET=host
   HOST_CMAKE_DEFS=(-DHANNK_AOT_HOST_ONLY=ON)
 elif [[ "${HL_TARGET}" =~ ^wasm-32-wasmrt.* ]]; then
   HOST_BUILD_DIR="${BUILD_DIR}/_host"
-  HOST_BUILD_TARGET=(--target hannk_tools)
+  HOST_BUILD_TARGET=(--target hannk-halide_generators)
   HOST_HL_TARGET=host
   HOST_CMAKE_DEFS=(-DHANNK_AOT_HOST_ONLY=ON)
 else
@@ -109,7 +109,7 @@ cmake \
   -DHANNK_BUILD_TFLITE=OFF \
   -DHalide_TARGET="${HL_TARGET}" \
   -DHalideHelpers_DIR="${HALIDE_INSTALL_PATH}/lib/cmake/HalideHelpers" \
-  -Dhannk_tools_ROOT="${HOST_BUILD_DIR}"
+  -Dhannk-halide_generators_ROOT="${HOST_BUILD_DIR}"
 
 echo "Building cross-build HANNK for ${HL_TARGET}"
 cmake --build "${BUILD_DIR}"
