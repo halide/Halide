@@ -1,5 +1,9 @@
 add_custom_target(hannk-halide_generators)
 
+# This function adds the target ${TARGET} to the hannk-halide_generators
+# CMake package that exists in the build-tree of a host build. It also adds
+# it to the target of the same name that can be used as a convenience for
+# just building the host targets.
 function(_export_host_target TARGET)
     add_dependencies(hannk-halide_generators ${TARGET})
     export(TARGETS ${TARGET}
