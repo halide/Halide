@@ -36,7 +36,7 @@ int main(int argc, char *argv[]) {
 
     result(x) = in_a(x) + in_b(x);
     if (vectorize_amount != 0) {
-      result.vectorize(x, vectorize_amount);
+        result.vectorize(x, vectorize_amount);
     }
 
     result.compile_to_llvm_assembly("/tmp/rvv_experiment.ll", { in_a, in_b }, "vec_add_1d", t);

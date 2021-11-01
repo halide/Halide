@@ -61,12 +61,14 @@ void unpack_closure(const Closure &closure,
                     llvm::Value *src,
                     llvm::IRBuilder<llvm::ConstantFolder, llvm::IRBuilderDefaultInserter> *builder);
 
-/** Get the llvm type equivalent to a given halide type */
-llvm::Type *llvm_type_of(llvm::LLVMContext *context, Halide::Type t);
-
-/** Get the number of elements in an llvm vector type, or return 1 if
- * it's not a vector type. */
-int get_vector_num_elements(llvm::Type *);
+/** Get the llvm type equivalent to a given halide type. If
+ * target_vscale is nonzero and the type is a vector type, an LLVM
+ * vscale vector type is generated based on target_vscale == 1
+ * implying a 128-bit total vector size. If vector total size is not a
+ * multiple of 128-bits a non vscale type is generated even if
+ * target_vscale is nonzero.
+ */
+llvm::Type *llvm_type_of(llvm::LLVMContext *context, Halide::Type t, int target_vscale);
 
 /** Get the scalar type of an llvm vector type. Returns the argument
  * if it's not a vector type. */
@@ -74,7 +76,7 @@ llvm::Type *get_vector_element_type(llvm::Type *);
 
 llvm::ElementCount element_count(int e);
 
-llvm::Type *get_vector_type(llvm::Type *, int);
+llvm::Type *get_vector_type(llvm::Type *, int, bool scalable = false);
 
 /** Which built-in functions require a user-context first argument? */
 bool function_takes_user_context(const std::string &name);

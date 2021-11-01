@@ -130,6 +130,11 @@ protected:
     /** What's the natural vector bit-width to use for loads, stores, etc. */
     virtual int native_vector_bits() const = 0;
 
+    /** For architectures that have vscale vectors, return the constant vscale to use.
+     * Default of 0 means do not use vscale vectors.
+     */
+    virtual int target_vscale() const { return 0; };
+
     /** Return the type in which arithmetic should be done for the
      * given storage type. */
     virtual Type upgrade_type_for_arithmetic(const Type &) const;
@@ -151,7 +156,6 @@ protected:
     llvm::MDNode *default_fp_math_md;
     llvm::MDNode *strict_fp_math_md;
     std::vector<LoweredArgument> current_function_args;
-    //@}
 
     /** The target we're generating code for */
     Halide::Target target;
@@ -464,9 +468,10 @@ protected:
                              const std::string &name, std::vector<Expr>);
     llvm::Value *call_intrin(const Type &t, int intrin_lanes,
                              llvm::Function *intrin, std::vector<Expr>);
-    llvm::Value *call_intrin(llvm::Type *t, int intrin_lanes,
-                             const std::string &name, std::vector<llvm::Value *>);
-    llvm::Value *call_intrin(llvm::Type *t, int intrin_lanes,
+    llvm::Value *call_intrin(const llvm::Type *t, int intrin_lanes,
+                             const std::string &name, std::vector<llvm::Value *>,
+                             bool scalable_vector_result = false);
+    llvm::Value *call_intrin(const llvm::Type *t, int intrin_lanes,
                              llvm::Function *intrin, std::vector<llvm::Value *>);
     // @}
 
@@ -521,6 +526,14 @@ protected:
         This is used to avoid "emulated" equivalent code-gen in case target has FP16 feature **/
     virtual bool supports_call_as_float16(const Call *op) const;
 
+    /** Wrap a cast around a fixed-length vector value to generate a
+     *  vscale one if required by the target.
+     */
+    llvm::Value *normalize_fixed_to_scalable_vector_type(const Type &result_type, llvm::Value *result);
+  
+    /** Get number of vector elements, taking into account scalable vectors. Returns 1 for scalars. */
+    int get_vector_num_elements(const llvm::Type *t);
+
 private:
     /** All the values in scope at the current code location during
      * codegen. Use sym_push and sym_pop to access. */
@@ -540,6 +553,11 @@ private:
 
     /** Use the LLVM large code model when this is set. */
     bool llvm_large_code_model;
+
+    /** Cache the result of target_vscale from architecture specific implementation
+     * as this is used on every Halide to LLVM type conversion.
+     */
+    int effective_vscale;
 
     /** Embed an instance of halide_filter_metadata_t in the code, using
      * the given name (by convention, this should be ${FUNCTIONNAME}_metadata)

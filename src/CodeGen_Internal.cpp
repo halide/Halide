@@ -22,10 +22,10 @@ namespace {
 vector<llvm::Type *> llvm_types(const Closure &closure, llvm::StructType *halide_buffer_t_type, LLVMContext &context) {
     vector<llvm::Type *> res;
     for (const auto &v : closure.vars) {
-        res.push_back(llvm_type_of(&context, v.second));
+      res.push_back(llvm_type_of(&context, v.second, 0));
     }
     for (const auto &b : closure.buffers) {
-        res.push_back(llvm_type_of(&context, b.second.type)->getPointerTo());
+        res.push_back(llvm_type_of(&context, b.second.type, 0)->getPointerTo());
         res.push_back(halide_buffer_t_type->getPointerTo());
     }
     return res;
@@ -112,7 +112,7 @@ void unpack_closure(const Closure &closure,
     }
 }
 
-llvm::Type *llvm_type_of(LLVMContext *c, Halide::Type t) {
+llvm::Type *llvm_type_of(LLVMContext *c, Halide::Type t, int effective_vscale) {
     if (t.lanes() == 1) {
         if (t.is_float() && !t.is_bfloat()) {
             switch (t.bits()) {
@@ -132,30 +132,22 @@ llvm::Type *llvm_type_of(LLVMContext *c, Halide::Type t) {
             return llvm::Type::getIntNTy(*c, t.bits());
         }
     } else {
-        llvm::Type *element_type = llvm_type_of(c, t.element_of());
-        return get_vector_type(element_type, t.lanes());
+        llvm::Type *element_type = llvm_type_of(c, t.element_of(), 0);
+        bool scalable = false;
+        int lanes = t.lanes();
+        if (effective_vscale != 0) {
+            int total_bits = t.bits() * t.lanes();
+            scalable = ((total_bits % effective_vscale) == 0);
+            if (scalable) {
+                lanes /= effective_vscale;
+            } else {
+                debug(0) << "Failed to make scalable with bits " << t.bits() << " lanes " << t.lanes() << " effective_vscale " << effective_vscale << " total_bits " << total_bits << "\n";
+            }
+                    
+        }
+        return get_vector_type(element_type, lanes, scalable);
     }
 }
-
-#if LLVM_VERSION >= 120
-int get_vector_num_elements(llvm::Type *t) {
-    if (t->isVectorTy()) {
-        auto *vt = dyn_cast<llvm::FixedVectorType>(t);
-        internal_assert(vt) << "Called get_vector_num_elements on a scalable vector type\n";
-        return vt->getNumElements();
-    } else {
-        return 1;
-    }
-}
-#else
-int get_vector_num_elements(llvm::Type *t) {
-    if (t->isVectorTy()) {
-        return dyn_cast<llvm::VectorType>(t)->getNumElements();
-    } else {
-        return 1;
-    }
-}
-#endif
 
 llvm::Type *get_vector_element_type(llvm::Type *t) {
     if (t->isVectorTy()) {
@@ -175,8 +167,13 @@ llvm::ElementCount element_count(int e) {
 }
 #endif
 
-llvm::Type *get_vector_type(llvm::Type *t, int n) {
+llvm::Type *get_vector_type(llvm::Type *t, int n, bool scalable) {
+#if LLVM_VERSION >= 120  // TODO(zvookin): figure out when scalable vector types were added.
+    return VectorType::get(t, n, scalable);
+#else
+    internal_assert(!scalable) << "LLVM version too old to support scalable vector types.\n";
     return VectorType::get(t, element_count(n));
+#endif
 }
 
 // Returns true if the given function name is one of the Halide runtime
@@ -762,6 +759,11 @@ void set_function_attributes_for_target(llvm::Function *fn, const Target &t) {
     // Turn off approximate reciprocals for division. It's too
     // inaccurate even for us.
     fn->addFnAttr("reciprocal-estimates", "none");
+    if (t.vector_bits != 0) {
+        internal_assert(t.vector_bits % 128 == 0);
+        int vscale = t.vector_bits / 128;
+        fn->addFnAttr("vscale_range", std::to_string(vscale) + ", " + std::to_string(vscale));
+    }
 }
 
 void embed_bitcode(llvm::Module *M, const string &halide_command) {

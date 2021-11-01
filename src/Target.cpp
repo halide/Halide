@@ -964,6 +964,13 @@ int Target::natural_vector_size(const Halide::Type &t) const {
             // No vectors, sorry.
             return 1;
         }
+    } else if (arch == Target::RISCV) {
+        if (vector_bits != 0 &&
+            has_feature(Halide::Target::RVV)) {
+            return vector_bits / (data_size * 8);
+        } else {
+            return 1;
+        }
     } else {
         // Assume 128-bit vectors on other targets.
         return 16 / data_size;
