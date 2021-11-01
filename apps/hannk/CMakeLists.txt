@@ -107,7 +107,7 @@ if (Halide_TARGET MATCHES "wasm" AND NODE_JS_EXECUTABLE)
 endif ()
 
 # Tests
-file(GLOB TEST_FILES CONFIGURE_DEPENDS "test/*/*")
+file(GLOB TEST_FILES CONFIGURE_DEPENDS "test/*/*.tflite")
 foreach (t IN LISTS TEST_FILES)
     file(RELATIVE_PATH test_name ${hannk_SOURCE_DIR} ${t})
 
