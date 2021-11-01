@@ -587,6 +587,13 @@ public:
     }
 };
 
+class LeafOpVisitor : public OpVisitor {
+public:
+    using OpVisitor::visit;
+
+    void visit(OpGroup *op) override;
+};
+
 }  // namespace hannk
 
 #endif  // HANNK_OPS_H_
