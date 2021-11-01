@@ -1425,10 +1425,6 @@ void ReductionOp::execute() {
         pad_to_rank(4, input_buf);
         pad_to_rank(4, output_buf);
 
-        // TODO: I have yet to find a test case where the setting of keep_dims_
-        // seems to have any effect on the correctness of the output. Revisit
-        // if/when we find such a case.
-
         if (op_ == Mean) {
             int mins[4] = {0, 0, 0, 0};
             int extents[4] = {1, 1, 1, 1};

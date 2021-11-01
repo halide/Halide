@@ -333,13 +333,12 @@ public:
 
 protected:
     const Operator op_;
-    const bool keep_dims_;
 
     bool reducing(int d) const;
 
 public:
-    ReductionOp(Operator op, const TensorPtr &input, const TensorPtr &indices, bool keep_dims, const TensorPtr &output)
-        : Op({input, indices}, {output}), op_(op), keep_dims_(keep_dims) {
+    ReductionOp(Operator op, const TensorPtr &input, const TensorPtr &indices, const TensorPtr &output)
+        : Op({input, indices}, {output}), op_(op) {
     }
 
     BoundsMap map_bounds(int input_idx, int output_idx) const override;

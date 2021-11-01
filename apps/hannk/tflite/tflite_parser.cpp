@@ -375,8 +375,13 @@ public:
         TensorPtr indices = tensors_[op->inputs()->Get(1)];
         TensorPtr output = tensors_[op->outputs()->Get(0)];
         const tflite::ReducerOptions *options = op->builtin_options_as_ReducerOptions();
+#ifndef NDEBUG
         const bool keep_dims = options ? options->keep_dims() : false;
-        return make_op<ReductionOp>(reduction_op, input, indices, keep_dims, output);
+        // TODO: I have yet to find any examples of keep_dims == false in the wild.
+        // If/when we do, handle it appropriately.
+        assert(keep_dims == true);
+#endif
+        return make_op<ReductionOp>(reduction_op, input, indices, output);
     }
 
     OpPtr parse_unary(const tflite::Operator *op, UnaryOp::Operator type) {

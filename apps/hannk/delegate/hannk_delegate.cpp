@@ -799,8 +799,13 @@ private:
         auto indices = GetTensorById(context, node->inputs->data[1]);
         auto output = GetTensorById(context, node->outputs->data[0]);
         const TfLiteReducerParams *params = (const TfLiteReducerParams *)(node->builtin_data);
+#ifndef NDEBUG
         const bool keep_dims = params ? params->keep_dims : false;
-        return make_op<ReductionOp>(ReductionOp::Mean, input, indices, keep_dims, output);
+        // TODO: I have yet to find any examples of keep_dims == false in the wild.
+        // If/when we do, handle it appropriately.
+        assert(keep_dims == true);
+#endif
+        return make_op<ReductionOp>(ReductionOp::Mean, input, indices, output);
     }
 
     OpPtr BuildSpaceToDepth(TfLiteContext *context, TfLiteNode *node) {
