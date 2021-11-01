@@ -87,12 +87,26 @@ class Tensor {
     // Currently only used in conjunction with the TFLite delegate.
     bool is_dynamic_ = false;
 
-    // All the Tensors in this list share their TensorStorage with each other.
-    // An arbitrary number of Tensors can alias each other, but at most *one* may be external.
-    //
-    // Note that this list should never have size() of 0 or 1 (the pointer should simply be null).
-    std::shared_ptr<std::vector<std::weak_ptr<Tensor>>> aliases_;
-    AliasType alias_type_ = AliasType::None;
+    struct AliasInfo {
+        // All the Tensors in this list share their TensorStorage with each other.
+        // An arbitrary number of Tensors can alias each other, but at most *one* may be external.
+        //
+        // Note that this list should never have size() of 0 or 1 (the pointer should simply be null).
+        std::vector<std::weak_ptr<Tensor>> aliases;
+        AliasType alias_type = AliasType::None;
+
+        AliasInfo() = default;
+
+        explicit AliasInfo(const TensorPtr &t, AliasType a)
+            : aliases(1, t), alias_type(a) {
+        }
+
+        AliasInfo(const AliasInfo &) = delete;
+        AliasInfo &operator=(const AliasInfo &) = delete;
+        AliasInfo(AliasInfo &&) = delete;
+        AliasInfo &operator=(AliasInfo &&) = delete;
+    };
+    std::shared_ptr<AliasInfo> alias_info_;
 
     // Possibly shared storage for this tensor.
     TensorStoragePtr storage_;
@@ -219,9 +233,8 @@ public:
 
     void resize_dynamic(const Box &new_shape);
 
-    // Return true iff this Tensor aliases another Tensor.
     AliasType alias_type() const {
-        return alias_type_;
+        return alias_info_ != nullptr ? alias_info_->alias_type : AliasType::None;
     }
 
     // Return true iff 'this' can be an alias of 'source' of the given type.

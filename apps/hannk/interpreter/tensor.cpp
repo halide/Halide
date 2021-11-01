@@ -82,8 +82,8 @@ void Tensor::set_external_buffer(HalideBuffer<void> external_buffer) {
     storage()->buffer = std::move(external_buffer);
     finish_buffer_allocation();
 
-    if (aliases_ != nullptr) {
-        for (const auto &weak : *aliases_) {
+    if (alias_info_ != nullptr) {
+        for (const auto &weak : alias_info_->aliases) {
             TensorPtr tp = weak.lock();  // null if the weak_ptr has expired
             if (tp != nullptr && tp.get() != this) {
                 assert(!tp->is_external());
@@ -123,7 +123,7 @@ void Tensor::finish_buffer_allocation() {
     halide_buffer_t *raw_storage_buffer = storage_buffer.raw_buffer();
     assert(raw_storage_buffer->host);
 
-    if (alias_type_ == AliasType::Reshaped) {
+    if (alias_type() == AliasType::Reshaped) {
         assert(raw_storage_buffer->number_of_elements() == buffer_.number_of_elements());
         assert(raw_storage_buffer->type == buffer_.type());
         assert(storage_offset_.empty());
@@ -198,8 +198,8 @@ void Tensor::resize_dynamic(const Box &new_shape) {
 }
 
 bool Tensor::has_external_alias() const {
-    if (aliases_ != nullptr) {
-        for (const auto &weak : *aliases_) {
+    if (alias_info_ != nullptr) {
+        for (const auto &weak : alias_info_->aliases) {
             TensorPtr tp = weak.lock();  // null if the weak_ptr has expired
             if (tp != nullptr && tp->is_external()) {
                 return true;
@@ -230,7 +230,7 @@ bool Tensor::can_alias(const TensorPtr &source, AliasType alias_type) const {
         return false;
     }
 
-    if (this->alias_type() != AliasType::None || this->aliases_ != nullptr) {
+    if (this->alias_type() != AliasType::None || this->alias_info_ != nullptr) {
         // Can't alias a tensor multiple times.
         return false;
     }
@@ -265,17 +265,15 @@ bool Tensor::can_alias(const TensorPtr &source, AliasType alias_type) const {
 /*static*/ void Tensor::make_offset_alias(TensorPtr alias, TensorPtr source, const TensorOffset &storage_offset) {
     assert(alias->can_alias(source, AliasType::Offset));
 
-    if (source->aliases_ == nullptr) {
-        source->aliases_ = std::make_shared<std::vector<std::weak_ptr<Tensor>>>(1, source);
-        source->alias_type_ = AliasType::Offset;
+    if (source->alias_info_ == nullptr) {
+        source->alias_info_ = std::make_shared<AliasInfo>(source, AliasType::Offset);
+    } else {
+        assert(source->alias_info_->alias_type == AliasType::Offset);
     }
 
-    assert(alias->aliases_ == nullptr);
-    alias->aliases_ = source->aliases_;
-    alias->aliases_->push_back(alias);
-
-    assert(alias->alias_type_ == AliasType::None);
-    alias->alias_type_ = AliasType::Offset;
+    assert(alias->alias_info_ == nullptr);
+    alias->alias_info_ = source->alias_info_;
+    alias->alias_info_->aliases.push_back(alias);
 
     assert(alias->storage_ == nullptr);
     alias->storage_ = source->storage();
@@ -310,20 +308,15 @@ bool Tensor::can_alias(const TensorPtr &source, AliasType alias_type) const {
         assert(!alias->has_external_alias());
     }
 
-    if (source->aliases_ == nullptr) {
-        source->aliases_ = std::make_shared<std::vector<std::weak_ptr<Tensor>>>(1, source);
-        assert(source->alias_type_ == AliasType::None);
-        source->alias_type_ = AliasType::Reshaped;
+    if (source->alias_info_ == nullptr) {
+        source->alias_info_ = std::make_shared<AliasInfo>(source, AliasType::Reshaped);
     } else {
-        assert(source->alias_type_ == AliasType::Reshaped);
+        assert(source->alias_info_->alias_type == AliasType::Reshaped);
     }
 
-    assert(alias->aliases_ == nullptr);
-    alias->aliases_ = source->aliases_;
-    alias->aliases_->push_back(alias);
-
-    assert(alias->alias_type_ == AliasType::None);
-    alias->alias_type_ = AliasType::Reshaped;
+    assert(alias->alias_info_ == nullptr);
+    alias->alias_info_ = source->alias_info_;
+    alias->alias_info_->aliases.push_back(alias);
 
     assert(alias->storage_ == nullptr);
     alias->storage_ = source->storage();
@@ -368,9 +361,9 @@ void Tensor::dump(std::ostream &os) const {
     if (is_dynamic()) {
         os << " dynamic";
     }
-    if (alias_type_ != AliasType::None) {
-        os << (alias_type_ == AliasType::Offset ? " alias_offset{" : " alias_reshaped{");
-        for (const auto &weak : *aliases_) {
+    if (alias_type() != AliasType::None) {
+        os << (alias_type() == AliasType::Offset ? " alias_offset{" : " alias_reshaped{");
+        for (const auto &weak : alias_info_->aliases) {
             TensorPtr tp = weak.lock();  // null if the weak_ptr has expired
             os << " " << (void *)tp.get();
         }
