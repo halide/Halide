@@ -40,24 +40,6 @@ void Op::set_input(int idx, TensorPtr t) {
     }
 }
 
-void Op::set_output(int idx, TensorPtr t) {
-    if (outputs_[idx]) {
-        outputs_[idx]->remove_producer(this);
-    }
-    outputs_[idx] = std::move(t);
-    if (outputs_[idx]) {
-        outputs_[idx]->add_producer(this);
-    }
-}
-
-void Op::set_input(TensorPtr t) {
-    set_input(0, std::move(t));
-}
-
-void Op::set_output(TensorPtr t) {
-    set_output(0, std::move(t));
-}
-
 bool Op::is_input(const TensorPtr &t) const {
     for (auto &i : inputs_) {
         if (i == t) {

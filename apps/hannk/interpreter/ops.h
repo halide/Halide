@@ -123,15 +123,6 @@ public:
     const TensorPtr &bias() const {
         return Op::input(2);
     }
-    const TensorPtr &filter() {
-        return Op::input(1);
-    }
-    void set_filter(TensorPtr filter) {
-        Op::set_input(1, std::move(filter));
-    }
-    const TensorPtr &bias() {
-        return Op::input(2);
-    }
 
     std::array<int, 2> stride() const { return stride_; }
     std::array<int, 2> dilation() const { return dilation_; }
@@ -178,20 +169,10 @@ public:
     int depth_multiplier() const {
         return depth_multiplier_;
     }
-    void set_depth_multiplier(int depth_multiplier) {
-        depth_multiplier_ = depth_multiplier;
-    }
-
     const TensorPtr &filter() const {
         return Op::input(1);
     }
     const TensorPtr &bias() const {
-        return Op::input(2);
-    }
-    const TensorPtr &filter() {
-        return Op::input(1);
-    }
-    const TensorPtr &bias() {
         return Op::input(2);
     }
 

@@ -301,35 +301,15 @@ public:
     int output_count() const {
         return outputs_.size();
     }
-    const TensorPtr &input(int idx) const {
+    const TensorPtr &input(int idx = 0) const {
         return inputs_[idx];
     }
-    const TensorPtr &output(int idx) const {
+    const TensorPtr &output(int idx = 0) const {
         return outputs_[idx];
-    }
-    const TensorPtr &input() const {
-        return input(0);
-    }
-    const TensorPtr &output() const {
-        return output(0);
-    }
-    const TensorPtr &input(int idx) {
-        return inputs_[idx];
-    }
-    const TensorPtr &output(int idx) {
-        return outputs_[idx];
-    }
-    const TensorPtr &input() {
-        return input(0);
-    }
-    const TensorPtr &output() {
-        return output(0);
     }
 
+    // TODO: remove me
     void set_input(int idx, TensorPtr t);
-    void set_output(int idx, TensorPtr t);
-    void set_input(TensorPtr t);
-    void set_output(TensorPtr t);
 
     bool is_input(const TensorPtr &t) const;
     bool is_output(const TensorPtr &t) const;

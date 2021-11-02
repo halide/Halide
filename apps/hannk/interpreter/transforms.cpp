@@ -50,29 +50,31 @@ std::unique_ptr<T> cast_op_ptr(OpPtr op) {
 class RemoveDeadOps : public OpMutator {
     using OpMutator::visit;
 
-    const Op *const root_;
+    std::unordered_set<Tensor *> root_outputs_;
     int removed_ = 0;
 
     bool is_root_output(const TensorPtr &t) const {
-        return root_->is_output(t);
+        return root_outputs_.count(t.get()) > 0;
     };
 
     bool is_dead(const Op *op) const {
         for (int j = 0; j < op->input_count(); j++) {
-            if (is_root_output(op->input(j))) {
+            const auto &input = op->input(j);
+            if (is_root_output(input)) {
                 // TODO: is it ever actually possible to have an Op's input be a root output?
                 // (This is what the previous, OpVisitor-based code did)
                 return false;
             }
         }
         for (int j = 0; j < op->output_count(); j++) {
+            const auto &output = op->output(j);
             // An op isn't dead if its output is an output
             // of the graph.
-            if (is_root_output(op->output(j))) {
+            if (is_root_output(output)) {
                 return false;
             }
 
-            if (!op->output(j)->consumers().empty()) {
+            if (!output->consumers().empty()) {
                 return false;
             }
         }
@@ -82,7 +84,11 @@ class RemoveDeadOps : public OpMutator {
 public:
     // Go in reverse order so removing a dead op enables earlier ops to be seen as dead.
     explicit RemoveDeadOps(const Op *root)
-        : OpMutator(OpMutator::Reverse), root_(root) {
+        : OpMutator(OpMutator::Reverse) {
+        // Build a set so that we don't have to worry about the root op mutating
+        for (int i = 0; i < root->output_count(); i++) {
+            root_outputs_.insert(root->output(i).get());
+        }
     }
 
     int removed() const { return removed_; }
@@ -99,10 +105,6 @@ protected:
     }
 
     OpPtr visit(std::unique_ptr<OpGroup> op) override {
-        // We don't want to remove the 'root' op passed in,
-        // even if it ends up empty. (Must check this before self is mutated.)
-        const bool is_root = (op.get() == root_);
-
         OpPtr new_op = OpMutator::visit(std::move(op));
 
         // If the OpGroup is empty after mutation, remove it as well.
