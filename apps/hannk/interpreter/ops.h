@@ -133,7 +133,6 @@ public:
     BoundsMap map_bounds(int input_idx, int output_idx) const override;
 
     bool prepare() override;
-
     void execute() const override;
 
     std::string name() const override {
@@ -184,7 +183,6 @@ public:
     ActivationFunction activation() const { return activation_; }
 
     bool prepare() override;
-
     void execute() const override;
 
     std::string name() const override {

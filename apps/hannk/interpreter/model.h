@@ -339,7 +339,6 @@ public:
     BoundsMap map_bounds(int input_idx, int output_idx) const override;
 
     bool prepare() override;
-
     void execute() const override;
 
     int op_count() const {
@@ -361,7 +360,9 @@ public:
 
     void accept(OpVisitor *v) const override;
     OpPtr mutate(OpMutator *m, OpPtr op) override;
+
     void dump(std::ostream &os, int indent = 0) const override;
+
     std::string name() const override {
         return "OpGroup";
     }
