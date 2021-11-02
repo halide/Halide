@@ -314,8 +314,12 @@ public:
     bool is_input(const TensorPtr &t) const;
     bool is_output(const TensorPtr &t) const;
 
-    std::vector<TensorPtr> inputs() const { return inputs_; }
-    std::vector<TensorPtr> outputs() const { return outputs_; }
+    std::vector<TensorPtr> inputs() const {
+        return inputs_;
+    }
+    std::vector<TensorPtr> outputs() const {
+        return outputs_;
+    }
 
     // Neither movable nor copyable.
     Op() = delete;

@@ -124,10 +124,18 @@ public:
         return Op::input(2);
     }
 
-    std::array<int, 2> stride() const { return stride_; }
-    std::array<int, 2> dilation() const { return dilation_; }
-    Padding padding() const { return padding_; }
-    ActivationFunction activation() const { return activation_; }
+    std::array<int, 2> stride() const {
+        return stride_;
+    }
+    std::array<int, 2> dilation() const {
+        return dilation_;
+    }
+    Padding padding() const {
+        return padding_;
+    }
+    ActivationFunction activation() const {
+        return activation_;
+    }
 
     halide_type_t filter_type() const;
     BoundsMap map_bounds(int input_idx, int output_idx) const override;
@@ -177,10 +185,18 @@ public:
 
     BoundsMap map_bounds(int input_idx, int output_idx) const override;
 
-    std::array<int, 2> stride() const { return stride_; }
-    std::array<int, 2> dilation() const { return dilation_; }
-    Padding padding() const { return padding_; }
-    ActivationFunction activation() const { return activation_; }
+    std::array<int, 2> stride() const {
+        return stride_;
+    }
+    std::array<int, 2> dilation() const {
+        return dilation_;
+    }
+    Padding padding() const {
+        return padding_;
+    }
+    ActivationFunction activation() const {
+        return activation_;
+    }
 
     bool prepare() override;
     void execute() const override;
@@ -613,7 +629,9 @@ public:
     };
 
     OpMutator() = default;
-    explicit OpMutator(Direction d) : direction_(d) {}
+    explicit OpMutator(Direction d)
+        : direction_(d) {
+    }
     virtual ~OpMutator() = default;
 
 protected:
@@ -642,7 +660,7 @@ protected:
     friend class OpGroup;
 
     template<typename T>
-    inline OpPtr visit_typed(T* self, OpPtr op) {
+    inline OpPtr visit_typed(T *self, OpPtr op) {
         /* ugh, horrible but legal */
         assert(op.get() == self);
         std::unique_ptr<T> o(static_cast<T *>(op.release()));

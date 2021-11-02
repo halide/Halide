@@ -75,7 +75,9 @@ public:
         }
     }
 
-    int removed() const { return removed_; }
+    int removed() const {
+        return removed_;
+    }
 
 protected:
     OpPtr visit_leaf(OpPtr op) override {
@@ -301,7 +303,7 @@ void replace_consumers(const TensorPtr &from, const TensorPtr &to) {
 class PadForOps : public OpMutator {
     using OpMutator::visit;
 
-    std::unique_ptr<PadOp> get_padding_for_op(const Op *op, int input_idx = 0, int output_idx= 0) {
+    std::unique_ptr<PadOp> get_padding_for_op(const Op *op, int input_idx = 0, int output_idx = 0) {
         TensorPtr input = op->input(input_idx);
         TensorPtr output = op->output(output_idx);
         BoundsMap deps = op->map_bounds(input_idx, output_idx);
@@ -313,7 +315,7 @@ class PadForOps : public OpMutator {
 
         // Make a PadOp and a new tensor for the padded result.
         TensorPtr padded = std::make_shared<Tensor>(input->name() + ".padded",
-            input->type(), required, input->quantization());
+                                                    input->type(), required, input->quantization());
 
         HalideBuffer<int32_t> padding_data(2, input->rank());
         // Center the crop, except for the channel dimension.
@@ -350,7 +352,7 @@ class PadForOps : public OpMutator {
                 std::fill(quantization.zero.begin(), quantization.zero.end(), 0);
             }
             TensorPtr tiled = std::make_shared<Tensor>(filter->name() + ".tiled",
-                type, tiled_shape, quantization);
+                                                       type, tiled_shape, quantization);
             // Maybe more than one op uses this same filter...?
             replace_consumers(filter, tiled);
 
@@ -375,7 +377,7 @@ class PadForOps : public OpMutator {
             auto inputs = op->inputs();
             auto outputs = op->outputs();
             op = make_prepared_op<ConvOp>(conv_input, conv_filter, op->bias(), op->output(),
-                op->stride(), op->dilation(), op->padding(), op->activation());
+                                          op->stride(), op->dilation(), op->padding(), op->activation());
             new_ops.push_back(std::move(op));
 
             return make_prepared_op<OpGroup>(std::move(inputs), std::move(outputs), std::move(new_ops));
@@ -394,14 +396,14 @@ class PadForOps : public OpMutator {
             upsampled_shape[0].min *= op->depth_multiplier();
             upsampled_shape[0].max = (upsampled_shape[0].max + 1) * op->depth_multiplier() - 1;
             TensorPtr upsampled = std::make_shared<Tensor>(input->name() + ".upsampled",
-                input->type(), upsampled_shape, input->quantization());
+                                                           input->type(), upsampled_shape, input->quantization());
 
             // Add the new tensor, op, and update the input.
             upsample_op = make_prepared_op<UpsampleChannelsOp>(input, op->depth_multiplier(), upsampled);
 
             op = make_prepared_op<DepthwiseConv2DOp>(upsampled, op->filter(), op->bias(), op->output(),
-                              /*depth_multiplier*/ 1, op->stride(), op->dilation(),
-                              op->padding(), op->activation());
+                                                     /*depth_multiplier*/ 1, op->stride(), op->dilation(),
+                                                     op->padding(), op->activation());
         }
 
         // TODO: It might be worth enabling UpsampleChannels to handle padding, and fusing the padding
@@ -418,8 +420,8 @@ class PadForOps : public OpMutator {
                 TensorPtr padding_output = padding_op->output();
                 new_ops.push_back(std::move(padding_op));
                 op = make_prepared_op<DepthwiseConv2DOp>(padding_output, op->filter(), op->bias(), op->output(),
-                                  op->depth_multiplier(), op->stride(), op->dilation(),
-                                  op->padding(), op->activation());
+                                                         op->depth_multiplier(), op->stride(), op->dilation(),
+                                                         op->padding(), op->activation());
             }
 
             auto inputs = op->inputs();
@@ -500,7 +502,6 @@ public:
 };
 
 }  // namespace
-
 
 OpPtr fuse_pad_ops(OpPtr op) {
     // Some networks use padding already for other reasons, so
@@ -585,7 +586,7 @@ OpPtr flatten_groups(OpPtr op) {
     std::vector<TensorPtr> outputs = op->outputs();
 
     GroupFlattener flattener;
-    (void) op->mutate(&flattener, std::move(op));
+    (void)op->mutate(&flattener, std::move(op));
 
     return make_op<OpGroup>(inputs, outputs, std::move(flattener.flattened));
 }

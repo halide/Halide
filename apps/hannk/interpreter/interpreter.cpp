@@ -278,7 +278,9 @@ TensorPtr Interpreter::get_tensor(const std::string &name) {
         const std::string &name_;
 
     public:
-        explicit Finder(const std::string &name) : name_(name) {}
+        explicit Finder(const std::string &name)
+            : name_(name) {
+        }
         TensorPtr result = nullptr;
     };
 
