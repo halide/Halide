@@ -18,7 +18,7 @@ add_library(interpreter STATIC
             tensor.cpp
             transforms.cpp)
 target_include_directories(interpreter PUBLIC $<BUILD_INTERFACE:${hannk_SOURCE_DIR}>)
-target_link_libraries(interpreter PRIVATE elementwise_program op_impls interpreter_lower Halide::Runtime)
+target_link_libraries(interpreter PRIVATE elementwise_program halide_op_implementations interpreter_lower Halide::Runtime)
 
 foreach (LIB IN ITEMS
             elementwise_program

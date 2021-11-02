@@ -506,63 +506,72 @@ void merge_handlers(JITHandlers &base, const JITHandlers &addins) {
     if (addins.custom_get_library_symbol) {
         base.custom_get_library_symbol = addins.custom_get_library_symbol;
     }
+    if (addins.custom_cuda_acquire_context) {
+        base.custom_cuda_acquire_context = addins.custom_cuda_acquire_context;
+    }
+    if (addins.custom_cuda_release_context) {
+        base.custom_cuda_release_context = addins.custom_cuda_release_context;
+    }
+    if (addins.custom_cuda_get_stream) {
+        base.custom_cuda_get_stream = addins.custom_cuda_get_stream;
+    }
 }
 
 void print_handler(JITUserContext *context, const char *msg) {
-    if (context) {
-        (*context->handlers.custom_print)(context, msg);
+    if (context && context->handlers.custom_print) {
+        context->handlers.custom_print(context, msg);
     } else {
-        return (*active_handlers.custom_print)(context, msg);
+        return active_handlers.custom_print(context, msg);
     }
 }
 
 void *malloc_handler(JITUserContext *context, size_t x) {
-    if (context) {
-        return (*context->handlers.custom_malloc)(context, x);
+    if (context && context->handlers.custom_malloc) {
+        return context->handlers.custom_malloc(context, x);
     } else {
-        return (*active_handlers.custom_malloc)(context, x);
+        return active_handlers.custom_malloc(context, x);
     }
 }
 
 void free_handler(JITUserContext *context, void *ptr) {
-    if (context) {
-        (*context->handlers.custom_free)(context, ptr);
+    if (context && context->handlers.custom_free) {
+        context->handlers.custom_free(context, ptr);
     } else {
-        (*active_handlers.custom_free)(context, ptr);
+        active_handlers.custom_free(context, ptr);
     }
 }
 
-int do_task_handler(JITUserContext *context, halide_task_t f, int idx,
+int do_task_handler(JITUserContext *context, int (*f)(JITUserContext *, int, uint8_t *), int idx,
                     uint8_t *closure) {
-    if (context) {
-        return (*context->handlers.custom_do_task)(context, f, idx, closure);
+    if (context && context->handlers.custom_do_task) {
+        return context->handlers.custom_do_task(context, f, idx, closure);
     } else {
-        return (*active_handlers.custom_do_task)(context, f, idx, closure);
+        return active_handlers.custom_do_task(context, f, idx, closure);
     }
 }
 
-int do_par_for_handler(JITUserContext *context, halide_task_t f,
+int do_par_for_handler(JITUserContext *context, int (*f)(JITUserContext *, int, uint8_t *),
                        int min, int size, uint8_t *closure) {
-    if (context) {
-        return (*context->handlers.custom_do_par_for)(context, f, min, size, closure);
+    if (context && context->handlers.custom_do_par_for) {
+        return context->handlers.custom_do_par_for(context, f, min, size, closure);
     } else {
-        return (*active_handlers.custom_do_par_for)(context, f, min, size, closure);
+        return active_handlers.custom_do_par_for(context, f, min, size, closure);
     }
 }
 
 void error_handler_handler(JITUserContext *context, const char *msg) {
-    if (context) {
-        (*context->handlers.custom_error)(context, msg);
+    if (context && context->handlers.custom_error) {
+        context->handlers.custom_error(context, msg);
     } else {
-        (*active_handlers.custom_error)(context, msg);
+        active_handlers.custom_error(context, msg);
     }
 }
 
 int32_t trace_handler(JITUserContext *context, const halide_trace_event_t *e) {
-    if (context) {
-        return (*context->handlers.custom_trace)(context, e);
+    if (context && context->handlers.custom_trace) {
+        return context->handlers.custom_trace(context, e);
     } else {
-        return (*active_handlers.custom_trace)(context, e);
+        return active_handlers.custom_trace(context, e);
     }
 }
 
@@ -576,6 +585,30 @@ void *load_library_handler(const char *name) {
 
 void *get_library_symbol_handler(void *lib, const char *name) {
     return (*active_handlers.custom_get_library_symbol)(lib, name);
+}
+
+int cuda_acquire_context_handler(JITUserContext *context, void **cuda_context_ptr, bool create) {
+    if (context && context->handlers.custom_cuda_acquire_context) {
+        return context->handlers.custom_cuda_acquire_context(context, cuda_context_ptr, create);
+    } else {
+        return active_handlers.custom_cuda_acquire_context(context, cuda_context_ptr, create);
+    }
+}
+
+int cuda_release_context_handler(JITUserContext *context) {
+    if (context && context->handlers.custom_cuda_release_context) {
+        return context->handlers.custom_cuda_release_context(context);
+    } else {
+        return active_handlers.custom_cuda_release_context(context);
+    }
+}
+
+int cuda_get_stream_handler(JITUserContext *context, void *cuda_context, void **cuda_stream_ptr) {
+    if (context && context->handlers.custom_cuda_get_stream) {
+        return context->handlers.custom_cuda_get_stream(context, cuda_context, cuda_stream_ptr);
+    } else {
+        return active_handlers.custom_cuda_get_stream(context, cuda_context, cuda_stream_ptr);
+    }
 }
 
 template<typename function_t>
@@ -776,13 +809,13 @@ JITModule &make_module(llvm::Module *for_module, Target target,
                 hook_function(runtime.exports(), "halide_set_custom_trace", trace_handler);
 
             runtime_internal_handlers.custom_get_symbol =
-                hook_function(shared_runtimes(MainShared).exports(), "halide_set_custom_get_symbol", get_symbol_handler);
+                hook_function(runtime.exports(), "halide_set_custom_get_symbol", get_symbol_handler);
 
             runtime_internal_handlers.custom_load_library =
-                hook_function(shared_runtimes(MainShared).exports(), "halide_set_custom_load_library", load_library_handler);
+                hook_function(runtime.exports(), "halide_set_custom_load_library", load_library_handler);
 
             runtime_internal_handlers.custom_get_library_symbol =
-                hook_function(shared_runtimes(MainShared).exports(), "halide_set_custom_get_library_symbol", get_library_symbol_handler);
+                hook_function(runtime.exports(), "halide_set_custom_get_library_symbol", get_library_symbol_handler);
 
             active_handlers = runtime_internal_handlers;
             merge_handlers(active_handlers, default_handlers);
@@ -794,6 +827,41 @@ JITModule &make_module(llvm::Module *for_module, Target target,
             runtime.jit_module->name = "MainShared";
         } else {
             runtime.jit_module->name = "GPU";
+
+            // There are two versions of these cuda context
+            // management handlers we could use - one in the cuda
+            // module, and one in the cuda-debug module. If both
+            // modules are in use, we'll just want to use one of
+            // them, so that we don't needlessly create two cuda
+            // contexts. We'll use whichever was first
+            // created. The second one will then declare a
+            // dependency on the first one, to make sure things
+            // are destroyed in the correct order.
+
+            if (runtime_kind == CUDA || runtime_kind == CUDADebug) {
+                if (!runtime_internal_handlers.custom_cuda_acquire_context) {
+                    // Neither module has been created.
+                    runtime_internal_handlers.custom_cuda_acquire_context =
+                        hook_function(runtime.exports(), "halide_set_cuda_acquire_context", cuda_acquire_context_handler);
+
+                    runtime_internal_handlers.custom_cuda_release_context =
+                        hook_function(runtime.exports(), "halide_set_cuda_release_context", cuda_release_context_handler);
+
+                    runtime_internal_handlers.custom_cuda_get_stream =
+                        hook_function(runtime.exports(), "halide_set_cuda_get_stream", cuda_get_stream_handler);
+
+                    active_handlers = runtime_internal_handlers;
+                    merge_handlers(active_handlers, default_handlers);
+                } else if (runtime_kind == CUDA) {
+                    // The CUDADebug module has already been created.
+                    // Use the context in the CUDADebug module and add
+                    // a dependence edge from the CUDA module to it.
+                    runtime.add_dependency(shared_runtimes(CUDADebug));
+                } else {
+                    // The CUDA module has already been created.
+                    runtime.add_dependency(shared_runtimes(CUDA));
+                }
+            }
         }
 
         uint64_t arg_addr =

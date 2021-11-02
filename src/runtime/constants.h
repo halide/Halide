@@ -14,7 +14,7 @@ namespace Internal {
 namespace Constants {
 
 /** The threshold at which "stack" allocations should actually be backed by the heap. */
-static constexpr size_t maximum_stack_allocation_bytes = 16384;
+static constexpr int maximum_stack_allocation_bytes = 16384;
 
 }  // namespace Constants
 }  // namespace Internal
