@@ -55,7 +55,7 @@ public:
         : ElementwiseOp({a, b}, {output}), op_(op), activation_(activation) {
     }
 
-    void accept(OpVisitor *v) override;
+    void accept(OpVisitor *v) const override;
     OpPtr mutate(OpMutator *m, OpPtr op) override;
 
     void execute() override;
@@ -81,7 +81,7 @@ public:
         is_no_op_ = true;
     }
 
-    void accept(OpVisitor *v) override;
+    void accept(OpVisitor *v) const override;
     OpPtr mutate(OpMutator *m, OpPtr op) override;
 
     BoundsMap map_bounds(int input_idx, int output_idx) const override;
@@ -114,7 +114,7 @@ public:
           activation_(activation) {
     }
 
-    void accept(OpVisitor *v) override;
+    void accept(OpVisitor *v) const override;
     OpPtr mutate(OpMutator *m, OpPtr op) override;
 
     const TensorPtr &filter() const {
@@ -172,7 +172,7 @@ public:
           activation_(activation) {
     }
 
-    void accept(OpVisitor *v) override;
+    void accept(OpVisitor *v) const override;
     OpPtr mutate(OpMutator *m, OpPtr op) override;
 
     int depth_multiplier() const {
@@ -223,7 +223,7 @@ public:
         : ElementwiseOp(std::move(inputs), std::move(outputs)), program_(program) {
     }
 
-    void accept(OpVisitor *v) override;
+    void accept(OpVisitor *v) const override;
     OpPtr mutate(OpMutator *m, OpPtr op) override;
 
     void execute() override;
@@ -242,7 +242,7 @@ public:
         : Op({input, indices}, {output}), axis_(axis), batch_dims_(batch_dims) {
     }
 
-    void accept(OpVisitor *v) override;
+    void accept(OpVisitor *v) const override;
     OpPtr mutate(OpMutator *m, OpPtr op) override;
 
     BoundsMap map_bounds(int input_idx, int output_idx) const override;
@@ -262,7 +262,7 @@ public:
         : Op({input}, {output}), axis_(axis) {
     }
 
-    void accept(OpVisitor *v) override;
+    void accept(OpVisitor *v) const override;
     OpPtr mutate(OpMutator *m, OpPtr op) override;
 
     BoundsMap map_bounds(int input_idx, int output_idx) const override;
@@ -287,7 +287,7 @@ public:
         return Op::input(1);
     }
 
-    void accept(OpVisitor *v) override;
+    void accept(OpVisitor *v) const override;
     OpPtr mutate(OpMutator *m, OpPtr op) override;
 
     BoundsMap map_bounds(int input_idx, int output_idx) const override;
@@ -336,7 +336,7 @@ public:
 
     BoundsMap map_bounds(int input_idx, int output_idx) const override;
 
-    void accept(OpVisitor *v) override;
+    void accept(OpVisitor *v) const override;
     OpPtr mutate(OpMutator *m, OpPtr op) override;
 
     void execute() override;
@@ -366,7 +366,7 @@ public:
 
     BoundsMap map_bounds(int input_idx, int output_idx) const override;
 
-    void accept(OpVisitor *v) override;
+    void accept(OpVisitor *v) const override;
     OpPtr mutate(OpMutator *m, OpPtr op) override;
 
     void execute() override;
@@ -387,7 +387,7 @@ public:
         }
     }
 
-    void accept(OpVisitor *v) override;
+    void accept(OpVisitor *v) const override;
     OpPtr mutate(OpMutator *m, OpPtr op) override;
 
     BoundsMap map_bounds(int input_idx, int output_idx) const override;
@@ -405,7 +405,7 @@ public:
         : Op({input}, {output}) {
     }
 
-    void accept(OpVisitor *v) override;
+    void accept(OpVisitor *v) const override;
     OpPtr mutate(OpMutator *m, OpPtr op) override;
 
     BoundsMap map_bounds(int input_idx, int output_idx) const override;
@@ -426,7 +426,7 @@ public:
         : Op({input}, {output}), beta_(beta), axis_(axis) {
     }
 
-    void accept(OpVisitor *v) override;
+    void accept(OpVisitor *v) const override;
     OpPtr mutate(OpMutator *m, OpPtr op) override;
 
     BoundsMap map_bounds(int input_idx, int output_idx) const override;
@@ -446,7 +446,7 @@ public:
         : Op({input}, {output}), block_size_(block_size) {
     }
 
-    void accept(OpVisitor *v) override;
+    void accept(OpVisitor *v) const override;
     OpPtr mutate(OpMutator *m, OpPtr op) override;
 
     BoundsMap map_bounds(int input_idx, int output_idx) const override;
@@ -474,7 +474,7 @@ public:
         is_no_op_ = true;
     }
 
-    void accept(OpVisitor *v) override;
+    void accept(OpVisitor *v) const override;
     OpPtr mutate(OpMutator *m, OpPtr op) override;
 
     BoundsMap map_bounds(int input_idx, int output_idx) const override;
@@ -492,7 +492,7 @@ public:
         : Op({input}, {output}) {
     }
 
-    void accept(OpVisitor *v) override;
+    void accept(OpVisitor *v) const override;
     OpPtr mutate(OpMutator *m, OpPtr op) override;
 
     BoundsMap map_bounds(int input_idx, int output_idx) const override;
@@ -510,7 +510,7 @@ public:
         : Op({input, dims}, {output}) {
     }
 
-    void accept(OpVisitor *v) override;
+    void accept(OpVisitor *v) const override;
     OpPtr mutate(OpMutator *m, OpPtr op) override;
 
     BoundsMap map_bounds(int input_idx, int output_idx) const override;
@@ -544,7 +544,7 @@ public:
         : ElementwiseOp({input}, {output}), op_(op) {
     }
 
-    void accept(OpVisitor *v) override;
+    void accept(OpVisitor *v) const override;
     OpPtr mutate(OpMutator *m, OpPtr op) override;
 
     void execute() override;
@@ -562,7 +562,7 @@ public:
         : Op({input}, {output}), factor_(factor) {
     }
 
-    void accept(OpVisitor *v) override;
+    void accept(OpVisitor *v) const override;
     OpPtr mutate(OpMutator *m, OpPtr op) override;
 
     BoundsMap map_bounds(int input_idx, int output_idx) const override;
@@ -602,26 +602,26 @@ protected:
     friend class OpGroup;
 
     // clang-format off
-    virtual void visit(BinaryOp *op) {}
-    virtual void visit(ConcatenationOp *op) {}
-    virtual void visit(ConvOp *op) {}
-    virtual void visit(DepthwiseConv2DOp *op) {}
-    virtual void visit(ElementwiseProgramOp *op) {}
-    virtual void visit(GatherOp *op) {}
-    virtual void visit(L2NormalizationOp *op) {}
-    virtual void visit(PadOp *op) {}
-    virtual void visit(Pool2DOp *op) {}
-    virtual void visit(ReductionOp *op) {}
-    virtual void visit(ReshapeOp *op) {}
-    virtual void visit(ShapeOp *op) {}
-    virtual void visit(SoftmaxOp *op) {}
-    virtual void visit(SpaceDepthOp *op) {}
-    virtual void visit(SplitOp *op) {}
-    virtual void visit(TileConvFilterOp *op) {}
-    virtual void visit(TransposeOp *op) {}
-    virtual void visit(UnaryOp *op) {}
-    virtual void visit(UpsampleChannelsOp *op) {}
-    virtual void visit(OpGroup *op);
+    virtual void visit(const BinaryOp *op) {}
+    virtual void visit(const ConcatenationOp *op) {}
+    virtual void visit(const ConvOp *op) {}
+    virtual void visit(const DepthwiseConv2DOp *op) {}
+    virtual void visit(const ElementwiseProgramOp *op) {}
+    virtual void visit(const GatherOp *op) {}
+    virtual void visit(const L2NormalizationOp *op) {}
+    virtual void visit(const PadOp *op) {}
+    virtual void visit(const Pool2DOp *op) {}
+    virtual void visit(const ReductionOp *op) {}
+    virtual void visit(const ReshapeOp *op) {}
+    virtual void visit(const ShapeOp *op) {}
+    virtual void visit(const SoftmaxOp *op) {}
+    virtual void visit(const SpaceDepthOp *op) {}
+    virtual void visit(const SplitOp *op) {}
+    virtual void visit(const TileConvFilterOp *op) {}
+    virtual void visit(const TransposeOp *op) {}
+    virtual void visit(const UnaryOp *op) {}
+    virtual void visit(const UpsampleChannelsOp *op) {}
+    virtual void visit(const OpGroup *op);
     // clang-format on
 };
 

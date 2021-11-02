@@ -141,7 +141,7 @@ void OpGroup::remove(const Op *op) {
     }
 }
 
-void OpGroup::accept(OpVisitor *v) {
+void OpGroup::accept(OpVisitor *v) const {
     v->visit(this);
 }
 

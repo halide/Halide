@@ -10,14 +10,14 @@ namespace {
 // Does *not* transfer ownership!
 // If not castable, returns nullptr but original op is still valid.
 template<typename T>
-T *cast_op(Op *x) {
+const T *cast_op(const Op *x) {
     class Caster : public OpVisitor {
         using OpVisitor::visit;
 
     public:
-        T *result = nullptr;
+        const T *result = nullptr;
 
-        void visit(T *op) override {
+        void visit(const T *op) override {
             result = op;
         }
     };
@@ -35,10 +35,11 @@ T *cast_op(Op *x) {
 // If not castable, returns nullptr and the original op is discarded.
 template<typename T>
 std::unique_ptr<T> cast_op_ptr(OpPtr op) {
-    T* t = cast_op<T>(op.get());
+    const T* t = cast_op<T>(op.get());
     if (t != nullptr) {
         assert((void*)t == (void*)op.get());
-        auto result = std::unique_ptr<T>(t);
+        // TODO: ugh
+        auto result = std::unique_ptr<T>(const_cast<T*>(t));
         op.release();
         return result;
     } else {

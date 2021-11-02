@@ -1869,7 +1869,7 @@ void UpsampleChannelsOp::execute() {
 }
 
 #define ACCEPT_AND_MUTATE(OP)                       \
-    void OP::accept(OpVisitor *v) {                 \
+    void OP::accept(OpVisitor *v) const {           \
         v->visit(this);                             \
     }                                               \
     OpPtr OP::mutate(OpMutator *m, OpPtr op) {      \
@@ -1898,7 +1898,7 @@ ACCEPT_AND_MUTATE(UnaryOp)
 
 #undef ACCEPT_AND_MUTATE
 
-void OpVisitor::visit(OpGroup *op) {
+void OpVisitor::visit(const OpGroup *op) {
     for (int i = 0; i < op->op_count(); i++) {
         op->op(i)->accept(this);
     }

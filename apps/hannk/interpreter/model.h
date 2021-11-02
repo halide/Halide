@@ -288,7 +288,7 @@ public:
     // Execute the op on a given crop.
     virtual void execute() = 0;
 
-    virtual void accept(OpVisitor *v) = 0;
+    virtual void accept(OpVisitor *v) const = 0;
     virtual OpPtr mutate(OpMutator *m, OpPtr op) = 0;
 
     virtual void dump(std::ostream &os, int indent = 0) const;
@@ -377,7 +377,7 @@ public:
         return ops_[i].get();
     }
 
-    void accept(OpVisitor *v) override;
+    void accept(OpVisitor *v) const override;
     OpPtr mutate(OpMutator *m, OpPtr op) override;
     void dump(std::ostream &os, int indent = 0) const override;
     std::string name() const override {

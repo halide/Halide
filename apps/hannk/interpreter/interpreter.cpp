@@ -28,10 +28,10 @@ class TensorVisitor : public OpVisitor {
 
     virtual void visit_tensor(const TensorPtr &t) = 0;
 
-    void visit(OpGroup *g) override {
+    void visit(const OpGroup *g) override {
         for (int i = 0; i < g->op_count(); i++) {
             op_index_++;
-            Op *op = g->op(i);
+            const Op *op = g->op(i);
             for (int j = 0; j < op->input_count(); j++) {
                 visit_tensor(op->input(j));
             }
