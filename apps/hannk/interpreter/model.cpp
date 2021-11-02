@@ -100,7 +100,7 @@ bool OpGroup::prepare() {
     return true;
 }
 
-void OpGroup::execute() {
+void OpGroup::execute() const {
     for (int i = 0; i < op_count(); i++) {
         op(i)->execute();
     }

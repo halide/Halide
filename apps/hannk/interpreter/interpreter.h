@@ -40,7 +40,7 @@ public:
     // Returns false if an error occurs, in which case execute() should not be called.
     [[nodiscard]] bool prepare();
 
-    void execute();
+    void execute() const;
 
     // Return the Tensor(s) that are the initial input(s) of the Model.
     std::vector<TensorPtr> inputs();

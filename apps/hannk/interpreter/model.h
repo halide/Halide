@@ -286,7 +286,7 @@ public:
     }
 
     // Execute the op on a given crop.
-    virtual void execute() = 0;
+    virtual void execute() const = 0;
 
     virtual void accept(OpVisitor *v) const = 0;
     virtual OpPtr mutate(OpMutator *m, OpPtr op) = 0;
@@ -360,7 +360,7 @@ public:
 
     bool prepare() override;
 
-    void execute() override;
+    void execute() const override;
 
     int op_count() const {
         return ops_.size();
