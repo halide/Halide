@@ -350,6 +350,8 @@ public:
         std::swap(ops_[i], result);
         return result;
     }
+
+    // TODO: remove me
     Op *op(int i) {
         return ops_[i].get();
     }
@@ -363,6 +365,13 @@ public:
     std::string name() const override {
         return "OpGroup";
     }
+
+    // Neither movable nor copyable.
+    OpGroup() = delete;
+    OpGroup(const OpGroup &) = delete;
+    OpGroup &operator=(const OpGroup &) = delete;
+    OpGroup(OpGroup &&) = delete;
+    OpGroup &operator=(OpGroup &&) = delete;
 };
 
 }  // namespace hannk

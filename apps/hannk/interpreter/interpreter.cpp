@@ -240,7 +240,7 @@ void Interpreter::execute() const {
 TensorPtr Interpreter::get_tensor(const std::string &name) {
     HCHECK(prepared_);
     for (int i = 0; i < model_->op_count(); i++) {
-        Op *op = model_->op(i);
+        const Op *op = model_->op(i);
         for (int j = 0; j < op->input_count(); j++) {
             if (op->input(j)->name() == name) {
                 return op->input(j);
