@@ -128,7 +128,7 @@ void OpGroup::accept(OpVisitor *v) const {
 }
 
 OpPtr OpGroup::mutate(OpMutator *m, OpPtr op) {
-    return m->visit_typed(this, std::move(op));
+    return m->visit_typed<OpGroup>(std::move(op));
 }
 
 void OpGroup::dump(std::ostream &os, int indent) const {

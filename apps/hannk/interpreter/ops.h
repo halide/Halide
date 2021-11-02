@@ -660,9 +660,8 @@ protected:
     friend class OpGroup;
 
     template<typename T>
-    inline OpPtr visit_typed(T *self, OpPtr op) {
+    inline OpPtr visit_typed(OpPtr op) {
         /* ugh, horrible but legal */
-        assert(op.get() == self);
         std::unique_ptr<T> o(static_cast<T *>(op.release()));
         return visit(std::move(o));
     }

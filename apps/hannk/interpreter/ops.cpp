@@ -1873,7 +1873,7 @@ void UpsampleChannelsOp::execute() const {
         v->visit(this);                             \
     }                                               \
     OpPtr OP::mutate(OpMutator *m, OpPtr op) {      \
-        return m->visit_typed(this, std::move(op)); \
+        return m->visit_typed<OP>(std::move(op)); \
     }
 
 ACCEPT_AND_MUTATE(BinaryOp)
