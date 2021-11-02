@@ -5,11 +5,13 @@
 
 namespace hannk {
 
+using OpGroupPtr = std::unique_ptr<OpGroup>;
+
 // Rewrites ops to be in-place operations when possible.
-void in_place(Op *op);
+[[nodiscard]] OpGroupPtr in_place(OpGroupPtr op);
 
 // Remove ops that are unused.
-void remove_dead_ops(OpGroup *op);
+[[nodiscard]] OpGroupPtr remove_dead_ops(OpGroupPtr op);
 
 // Add pad ops before ops that need it, so those ops can
 // assume everything needed of the input is in bounds.
@@ -19,7 +21,7 @@ void remove_dead_ops(OpGroup *op);
 
 // Execute ops that are constant, and mark the results
 // constant as well.
-void fold_constants(OpGroup *op);
+[[nodiscard]] OpGroupPtr fold_constants(OpGroupPtr op);
 
 }  // namespace hannk
 

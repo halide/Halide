@@ -255,13 +255,13 @@ public:
 };
 
 class OpVisitor;
+class OpMutator;
 
 class Op {
-private:
+protected:
     std::vector<TensorPtr> inputs_;
     std::vector<TensorPtr> outputs_;
 
-protected:
     Op(std::vector<TensorPtr> inputs, std::vector<TensorPtr> outputs);
 
 public:
@@ -289,6 +289,7 @@ public:
     virtual void execute() = 0;
 
     virtual void accept(OpVisitor *v) = 0;
+    virtual OpPtr mutate(OpMutator *m, OpPtr op) = 0;
 
     virtual void dump(std::ostream &os, int indent = 0) const;
 
@@ -333,7 +334,10 @@ public:
     bool is_input(const TensorPtr &t) const;
     bool is_output(const TensorPtr &t) const;
 
-    // Movable but not copyable.
+    std::vector<TensorPtr> inputs() const { return inputs_; }
+    std::vector<TensorPtr> outputs() const { return outputs_; }
+
+    // Neither movable nor copyable.
     Op() = delete;
     Op(const Op &) = delete;
     Op &operator=(const Op &) = delete;
@@ -361,6 +365,11 @@ public:
     int op_count() const {
         return ops_.size();
     }
+    OpPtr op_ptr(int i) {
+        OpPtr result = nullptr;
+        std::swap(ops_[i], result);
+        return result;
+    }
     Op *op(int i) {
         return ops_[i].get();
     }
@@ -369,6 +378,7 @@ public:
     }
 
     void accept(OpVisitor *v) override;
+    OpPtr mutate(OpMutator *m, OpPtr op) override;
     void dump(std::ostream &os, int indent = 0) const override;
     std::string name() const override {
         return "OpGroup";

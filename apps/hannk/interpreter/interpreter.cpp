@@ -182,9 +182,33 @@ bool Interpreter::prepare() {
         HLOG(ERROR) << "pad_for_ops() failed.";
         return false;
     }
-    in_place(model_.get());
-    fold_constants(model_.get());
-    remove_dead_ops(model_.get());
+
+    model_ = in_place(std::move(model_));
+
+    // {
+    //     std::ostringstream os;
+    //     os << "Model before fold_constants:\n";
+    //     model_->dump(os);
+    //     HLOG(INFO) << os.str();
+    // }
+
+    model_ = fold_constants(std::move(model_));
+
+    // {
+    //     std::ostringstream os;
+    //     os << "Model after fold_constants:\n";
+    //     model_->dump(os);
+    //     HLOG(INFO) << os.str();
+    // }
+
+    model_ = remove_dead_ops(std::move(model_));
+
+    // {
+    //     std::ostringstream os;
+    //     os << "Model after remove_dead_ops:\n";
+    //     model_->dump(os);
+    //     HLOG(INFO) << os.str();
+    // }
 
     assert(tensor_storage_arena_ == nullptr);
     tensor_storage_arena_ = allocate_tensors(model_.get(), options_);

@@ -56,6 +56,7 @@ public:
     }
 
     void accept(OpVisitor *v) override;
+    OpPtr mutate(OpMutator *m, OpPtr op) override;
 
     void execute() override;
 
@@ -81,6 +82,7 @@ public:
     }
 
     void accept(OpVisitor *v) override;
+    OpPtr mutate(OpMutator *m, OpPtr op) override;
 
     BoundsMap map_bounds(int input_idx, int output_idx) const override;
 
@@ -113,6 +115,7 @@ public:
     }
 
     void accept(OpVisitor *v) override;
+    OpPtr mutate(OpMutator *m, OpPtr op) override;
 
     const TensorPtr &filter() const {
         return Op::input(1);
@@ -165,6 +168,7 @@ public:
     }
 
     void accept(OpVisitor *v) override;
+    OpPtr mutate(OpMutator *m, OpPtr op) override;
 
     int depth_multiplier() const {
         return depth_multiplier_;
@@ -210,6 +214,7 @@ public:
     }
 
     void accept(OpVisitor *v) override;
+    OpPtr mutate(OpMutator *m, OpPtr op) override;
 
     void execute() override;
 
@@ -228,6 +233,7 @@ public:
     }
 
     void accept(OpVisitor *v) override;
+    OpPtr mutate(OpMutator *m, OpPtr op) override;
 
     BoundsMap map_bounds(int input_idx, int output_idx) const override;
 
@@ -247,6 +253,7 @@ public:
     }
 
     void accept(OpVisitor *v) override;
+    OpPtr mutate(OpMutator *m, OpPtr op) override;
 
     BoundsMap map_bounds(int input_idx, int output_idx) const override;
 
@@ -267,6 +274,7 @@ public:
     }
 
     void accept(OpVisitor *v) override;
+    OpPtr mutate(OpMutator *m, OpPtr op) override;
 
     BoundsMap map_bounds(int input_idx, int output_idx) const override;
 
@@ -315,6 +323,7 @@ public:
     BoundsMap map_bounds(int input_idx, int output_idx) const override;
 
     void accept(OpVisitor *v) override;
+    OpPtr mutate(OpMutator *m, OpPtr op) override;
 
     void execute() override;
 
@@ -344,6 +353,7 @@ public:
     BoundsMap map_bounds(int input_idx, int output_idx) const override;
 
     void accept(OpVisitor *v) override;
+    OpPtr mutate(OpMutator *m, OpPtr op) override;
 
     void execute() override;
 
@@ -364,6 +374,7 @@ public:
     }
 
     void accept(OpVisitor *v) override;
+    OpPtr mutate(OpMutator *m, OpPtr op) override;
 
     BoundsMap map_bounds(int input_idx, int output_idx) const override;
 
@@ -381,6 +392,7 @@ public:
     }
 
     void accept(OpVisitor *v) override;
+    OpPtr mutate(OpMutator *m, OpPtr op) override;
 
     BoundsMap map_bounds(int input_idx, int output_idx) const override;
 
@@ -401,6 +413,7 @@ public:
     }
 
     void accept(OpVisitor *v) override;
+    OpPtr mutate(OpMutator *m, OpPtr op) override;
 
     BoundsMap map_bounds(int input_idx, int output_idx) const override;
 
@@ -420,6 +433,7 @@ public:
     }
 
     void accept(OpVisitor *v) override;
+    OpPtr mutate(OpMutator *m, OpPtr op) override;
 
     BoundsMap map_bounds(int input_idx, int output_idx) const override;
 
@@ -447,6 +461,7 @@ public:
     }
 
     void accept(OpVisitor *v) override;
+    OpPtr mutate(OpMutator *m, OpPtr op) override;
 
     BoundsMap map_bounds(int input_idx, int output_idx) const override;
 
@@ -464,6 +479,7 @@ public:
     }
 
     void accept(OpVisitor *v) override;
+    OpPtr mutate(OpMutator *m, OpPtr op) override;
 
     BoundsMap map_bounds(int input_idx, int output_idx) const override;
 
@@ -481,6 +497,7 @@ public:
     }
 
     void accept(OpVisitor *v) override;
+    OpPtr mutate(OpMutator *m, OpPtr op) override;
 
     BoundsMap map_bounds(int input_idx, int output_idx) const override;
 
@@ -514,6 +531,7 @@ public:
     }
 
     void accept(OpVisitor *v) override;
+    OpPtr mutate(OpMutator *m, OpPtr op) override;
 
     void execute() override;
 
@@ -531,6 +549,7 @@ public:
     }
 
     void accept(OpVisitor *v) override;
+    OpPtr mutate(OpMutator *m, OpPtr op) override;
 
     BoundsMap map_bounds(int input_idx, int output_idx) const override;
 
@@ -545,53 +564,120 @@ class OpVisitor {
 public:
     virtual ~OpVisitor() = default;
 
-    virtual void visit(BinaryOp *op) {
-    }
-    virtual void visit(ConcatenationOp *op) {
-    }
-    virtual void visit(ConvOp *op) {
-    }
-    virtual void visit(DepthwiseConv2DOp *op) {
-    }
-    virtual void visit(ElementwiseProgramOp *op) {
-    }
-    virtual void visit(GatherOp *op) {
-    }
-    virtual void visit(L2NormalizationOp *op) {
-    }
-    virtual void visit(PadOp *op) {
-    }
-    virtual void visit(Pool2DOp *op) {
-    }
-    virtual void visit(ReductionOp *op) {
-    }
-    virtual void visit(ReshapeOp *op) {
-    }
-    virtual void visit(ShapeOp *op) {
-    }
-    virtual void visit(SoftmaxOp *op) {
-    }
-    virtual void visit(SpaceDepthOp *op) {
-    }
-    virtual void visit(SplitOp *op) {
-    }
-    virtual void visit(TileConvFilterOp *op) {
-    }
-    virtual void visit(TransposeOp *op) {
-    }
-    virtual void visit(UnaryOp *op) {
-    }
-    virtual void visit(UpsampleChannelsOp *op) {
-    }
-    virtual void visit(OpGroup *op) {
-    }
+protected:
+    // Only the classes in the list are allowed to call visit() (to implement accept())
+    friend class BinaryOp;
+    friend class ConcatenationOp;
+    friend class ConvOp;
+    friend class DepthwiseConv2DOp;
+    friend class ElementwiseProgramOp;
+    friend class GatherOp;
+    friend class L2NormalizationOp;
+    friend class PadOp;
+    friend class Pool2DOp;
+    friend class ReductionOp;
+    friend class ReshapeOp;
+    friend class ShapeOp;
+    friend class SoftmaxOp;
+    friend class SpaceDepthOp;
+    friend class SplitOp;
+    friend class TileConvFilterOp;
+    friend class TransposeOp;
+    friend class UnaryOp;
+    friend class UpsampleChannelsOp;
+    friend class OpGroup;
+
+    // clang-format off
+    virtual void visit(BinaryOp *op) {}
+    virtual void visit(ConcatenationOp *op) {}
+    virtual void visit(ConvOp *op) {}
+    virtual void visit(DepthwiseConv2DOp *op) {}
+    virtual void visit(ElementwiseProgramOp *op) {}
+    virtual void visit(GatherOp *op) {}
+    virtual void visit(L2NormalizationOp *op) {}
+    virtual void visit(PadOp *op) {}
+    virtual void visit(Pool2DOp *op) {}
+    virtual void visit(ReductionOp *op) {}
+    virtual void visit(ReshapeOp *op) {}
+    virtual void visit(ShapeOp *op) {}
+    virtual void visit(SoftmaxOp *op) {}
+    virtual void visit(SpaceDepthOp *op) {}
+    virtual void visit(SplitOp *op) {}
+    virtual void visit(TileConvFilterOp *op) {}
+    virtual void visit(TransposeOp *op) {}
+    virtual void visit(UnaryOp *op) {}
+    virtual void visit(UpsampleChannelsOp *op) {}
+    virtual void visit(OpGroup *op);
+    // clang-format on
 };
 
-class LeafOpVisitor : public OpVisitor {
+class OpMutator {
 public:
-    using OpVisitor::visit;
+    enum Direction {
+        Forward,
+        Reverse
+    };
 
-    void visit(OpGroup *op) override;
+    OpMutator() = default;
+    explicit OpMutator(Direction d) : direction_(d) {}
+    virtual ~OpMutator() = default;
+
+protected:
+    const Direction direction_ = Forward;
+
+    // Only the classes in the list are allowed to call visit() (to implement mutate())
+    friend class BinaryOp;
+    friend class ConcatenationOp;
+    friend class ConvOp;
+    friend class DepthwiseConv2DOp;
+    friend class ElementwiseProgramOp;
+    friend class GatherOp;
+    friend class L2NormalizationOp;
+    friend class PadOp;
+    friend class Pool2DOp;
+    friend class ReductionOp;
+    friend class ReshapeOp;
+    friend class ShapeOp;
+    friend class SoftmaxOp;
+    friend class SpaceDepthOp;
+    friend class SplitOp;
+    friend class TileConvFilterOp;
+    friend class TransposeOp;
+    friend class UnaryOp;
+    friend class UpsampleChannelsOp;
+    friend class OpGroup;
+
+    template<typename T>
+    inline OpPtr visit_typed(T* self, OpPtr op) {
+        /* ugh, horrible but legal */
+        assert(op.get() == self);
+        std::unique_ptr<T> o(static_cast<T *>(op.release()));
+        return visit(std::move(o));
+    }
+
+    // clang-format off
+    virtual OpPtr visit_leaf(OpPtr op) { return op; }
+    virtual OpPtr visit(std::unique_ptr<BinaryOp> op) { return visit_leaf(std::move(op)); }
+    virtual OpPtr visit(std::unique_ptr<ConcatenationOp> op) { return visit_leaf(std::move(op)); }
+    virtual OpPtr visit(std::unique_ptr<ConvOp> op) { return visit_leaf(std::move(op)); }
+    virtual OpPtr visit(std::unique_ptr<DepthwiseConv2DOp> op) { return visit_leaf(std::move(op)); }
+    virtual OpPtr visit(std::unique_ptr<ElementwiseProgramOp> op) { return visit_leaf(std::move(op)); }
+    virtual OpPtr visit(std::unique_ptr<GatherOp> op) { return visit_leaf(std::move(op)); }
+    virtual OpPtr visit(std::unique_ptr<L2NormalizationOp> op) { return visit_leaf(std::move(op)); }
+    virtual OpPtr visit(std::unique_ptr<PadOp> op) { return visit_leaf(std::move(op)); }
+    virtual OpPtr visit(std::unique_ptr<Pool2DOp> op) { return visit_leaf(std::move(op)); }
+    virtual OpPtr visit(std::unique_ptr<ReductionOp> op) { return visit_leaf(std::move(op)); }
+    virtual OpPtr visit(std::unique_ptr<ReshapeOp> op) { return visit_leaf(std::move(op)); }
+    virtual OpPtr visit(std::unique_ptr<ShapeOp> op) { return visit_leaf(std::move(op)); }
+    virtual OpPtr visit(std::unique_ptr<SoftmaxOp> op) { return visit_leaf(std::move(op)); }
+    virtual OpPtr visit(std::unique_ptr<SpaceDepthOp> op) { return visit_leaf(std::move(op)); }
+    virtual OpPtr visit(std::unique_ptr<SplitOp> op) { return visit_leaf(std::move(op)); }
+    virtual OpPtr visit(std::unique_ptr<TileConvFilterOp> op) { return visit_leaf(std::move(op)); }
+    virtual OpPtr visit(std::unique_ptr<TransposeOp> op) { return visit_leaf(std::move(op)); }
+    virtual OpPtr visit(std::unique_ptr<UnaryOp> op) { return visit_leaf(std::move(op)); }
+    virtual OpPtr visit(std::unique_ptr<UpsampleChannelsOp> op) { return visit_leaf(std::move(op)); }
+    virtual OpPtr visit(std::unique_ptr<OpGroup> op);
+    // clang-format on
 };
 
 }  // namespace hannk

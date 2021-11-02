@@ -1868,86 +1868,66 @@ void UpsampleChannelsOp::execute() {
         << "Unsupported UpsampleChannels op for types " << in->type() << ", " << out->type();
 }
 
-void BinaryOp::accept(OpVisitor *v) {
-    v->visit(this);
-}
+#define ACCEPT_AND_MUTATE(OP)                       \
+    void OP::accept(OpVisitor *v) {                 \
+        v->visit(this);                             \
+    }                                               \
+    OpPtr OP::mutate(OpMutator *m, OpPtr op) {      \
+        return m->visit_typed(this, std::move(op)); \
+    }
 
-void ConcatenationOp::accept(OpVisitor *v) {
-    v->visit(this);
-}
+ACCEPT_AND_MUTATE(BinaryOp)
+ACCEPT_AND_MUTATE(ConcatenationOp)
+ACCEPT_AND_MUTATE(ConvOp)
+ACCEPT_AND_MUTATE(DepthwiseConv2DOp)
+ACCEPT_AND_MUTATE(ElementwiseProgramOp)
+ACCEPT_AND_MUTATE(GatherOp)
+ACCEPT_AND_MUTATE(L2NormalizationOp)
+ACCEPT_AND_MUTATE(PadOp)
+ACCEPT_AND_MUTATE(Pool2DOp)
+ACCEPT_AND_MUTATE(ShapeOp)
+ACCEPT_AND_MUTATE(SoftmaxOp)
+ACCEPT_AND_MUTATE(SpaceDepthOp)
+ACCEPT_AND_MUTATE(SplitOp)
+ACCEPT_AND_MUTATE(ReductionOp)
+ACCEPT_AND_MUTATE(ReshapeOp)
+ACCEPT_AND_MUTATE(TileConvFilterOp)
+ACCEPT_AND_MUTATE(TransposeOp)
+ACCEPT_AND_MUTATE(UpsampleChannelsOp)
+ACCEPT_AND_MUTATE(UnaryOp)
 
-void ConvOp::accept(OpVisitor *v) {
-    v->visit(this);
-}
+#undef ACCEPT_AND_MUTATE
 
-void DepthwiseConv2DOp::accept(OpVisitor *v) {
-    v->visit(this);
-}
-
-void ElementwiseProgramOp::accept(OpVisitor *v) {
-    v->visit(this);
-}
-
-void GatherOp::accept(OpVisitor *v) {
-    v->visit(this);
-}
-
-void L2NormalizationOp::accept(OpVisitor *v) {
-    v->visit(this);
-}
-
-void PadOp::accept(OpVisitor *v) {
-    v->visit(this);
-}
-
-void Pool2DOp::accept(OpVisitor *v) {
-    v->visit(this);
-}
-
-void ShapeOp::accept(OpVisitor *v) {
-    v->visit(this);
-}
-
-void SoftmaxOp::accept(OpVisitor *v) {
-    v->visit(this);
-}
-
-void SpaceDepthOp::accept(OpVisitor *v) {
-    v->visit(this);
-}
-
-void SplitOp::accept(OpVisitor *v) {
-    v->visit(this);
-}
-
-void ReductionOp::accept(OpVisitor *v) {
-    v->visit(this);
-}
-
-void ReshapeOp::accept(OpVisitor *v) {
-    v->visit(this);
-}
-
-void TileConvFilterOp::accept(OpVisitor *v) {
-    v->visit(this);
-}
-
-void TransposeOp::accept(OpVisitor *v) {
-    v->visit(this);
-}
-
-void UpsampleChannelsOp::accept(OpVisitor *v) {
-    v->visit(this);
-}
-
-void UnaryOp::accept(OpVisitor *v) {
-    v->visit(this);
-}
-
-void LeafOpVisitor::visit(OpGroup *op) {
+void OpVisitor::visit(OpGroup *op) {
     for (int i = 0; i < op->op_count(); i++) {
         op->op(i)->accept(this);
     }
+}
+
+OpPtr OpMutator::visit(std::unique_ptr<OpGroup> op) {
+    std::vector<TensorPtr> inputs = op->inputs();
+    std::vector<TensorPtr> outputs = op->outputs();
+
+    const int old_op_count = op->op_count();
+
+    std::vector<OpPtr> ops_new;
+    ops_new.reserve(old_op_count);
+    // Would a separate loop for Reverse be better?
+    for (int i = 0; i < old_op_count; i++) {
+        const int idx = (direction_ == Reverse) ? (old_op_count - i - 1) : i;
+        OpPtr sub_op_old = op->op_ptr(idx);
+        assert(sub_op_old != nullptr);
+        OpPtr sub_op_new = sub_op_old->mutate(this, std::move(sub_op_old));
+        if (sub_op_new != nullptr) {
+            ops_new.push_back(std::move(sub_op_new));
+        }
+    }
+    if (direction_ == Reverse) {
+        std::reverse(ops_new.begin(), ops_new.end());
+    }
+    // TODO: we don't bother trying to optimize for an unchanged op here. Is it worthwhile?
+    // TODO: verify that inputs and outputs are still correct. Or recalculate from scratch?
+    return make_op<OpGroup>(inputs, outputs, std::move(ops_new));
 }
 
 }  // namespace hannk

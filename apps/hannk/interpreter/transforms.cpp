@@ -1,10 +1,14 @@
 #include "interpreter/transforms.h"
 #include "util/small_vector.h"
 
+#include <unordered_set>
+
 namespace hannk {
 
 namespace {
 
+// Does *not* transfer ownership!
+// If not castable, returns nullptr but original op is still valid.
 template<typename T>
 T *cast_op(Op *x) {
     class Caster : public OpVisitor {
@@ -27,67 +31,102 @@ T *cast_op(Op *x) {
     }
 }
 
-class RemoveDeadOps {
+// Transfers ownership to return value.
+// If not castable, returns nullptr and the original op is discarded.
+template<typename T>
+std::unique_ptr<T> cast_op_ptr(OpPtr op) {
+    T* t = cast_op<T>(op.get());
+    if (t != nullptr) {
+        assert((void*)t == (void*)op.get());
+        auto result = std::unique_ptr<T>(t);
+        op.release();
+        return result;
+    } else {
+        return nullptr;
+    }
+}
+
+class RemoveDeadOps : public OpMutator {
+    using OpMutator::visit;
+
     const Op *const root_;
+    int removed_ = 0;
 
     bool is_root_output(const TensorPtr &t) const {
         return root_->is_output(t);
     };
 
-public:
-    explicit RemoveDeadOps(Op *root)
-        : root_(root) {
-    }
-
-    void remove_in_group(OpGroup *op_group) {
-        // Find ops with outputs that are unused.
-        // Go in reverse order so removing a dead op
-        // enables earlier ops to be seen as dead.
-        for (int i = op_group->op_count() - 1; i >= 0; --i) {
-            Op *op = op_group->op(i);
-            if (OpGroup *group = cast_op<OpGroup>(op)) {
-                remove_in_group(group);
-            }
-            bool dead = true;
-            for (int j = 0; dead && j < op->input_count(); j++) {
-                if (is_root_output(op->input(j))) {
-                    dead = false;
-                    break;
-                }
-            }
-            for (int j = 0; dead && j < op->output_count(); j++) {
-                // An op isn't dead if its output is an output
-                // of the graph.
-                if (is_root_output(op->output(j))) {
-                    dead = false;
-                    break;
-                }
-
-                if (!op->output(j)->consumers().empty()) {
-                    dead = false;
-                    break;
-                }
-            }
-
-            if (dead) {
-                op_group->remove(op);
+    bool is_dead(const Op *op) const {
+        for (int j = 0; j < op->input_count(); j++) {
+            if (is_root_output(op->input(j))) {
+                // TODO: is it ever actually possible to have an Op's input be a root output?
+                // (This is what the previous, OpVisitor-based code did)
+                return false;
             }
         }
+        for (int j = 0; j < op->output_count(); j++) {
+            // An op isn't dead if its output is an output
+            // of the graph.
+            if (is_root_output(op->output(j))) {
+                return false;
+            }
+
+            if (!op->output(j)->consumers().empty()) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+public:
+    // Go in reverse order so removing a dead op enables earlier ops to be seen as dead.
+    explicit RemoveDeadOps(const Op *root)
+        : OpMutator(OpMutator::Reverse), root_(root) {
+    }
+
+    int removed() const { return removed_; }
+
+protected:
+    OpPtr visit_leaf(OpPtr op) override {
+        if (is_dead(op.get())) {
+            removed_++;
+            return nullptr;
+        } else {
+            return op;
+        }
+    }
+
+    OpPtr visit(std::unique_ptr<OpGroup> op) override {
+        // We don't want to remove the 'root' op passed in,
+        // even if it ends up empty. (Must check this before self is mutated.)
+        const bool is_root = (op.get() == root_);
+
+        OpPtr new_op = OpMutator::visit(std::move(op));
+
+        // If the OpGroup is empty after mutation, remove it as well.
+        const OpGroup *new_op_group = cast_op<OpGroup>(new_op.get());
+        if (new_op_group && new_op_group->op_count() == 0) {
+            removed_++;
+            return nullptr;
+        }
+
+        return new_op;
     }
 };
 
 }  // namespace
 
-void remove_dead_ops(OpGroup *root) {
-    RemoveDeadOps(root).remove_in_group(root);
+OpGroupPtr remove_dead_ops(OpGroupPtr op) {
+    RemoveDeadOps r(op.get());
+    return cast_op_ptr<OpGroup>(op->mutate(&r, std::move(op)));
 }
 
 namespace {
 
-class InPlaceReshape : public LeafOpVisitor {
-    using OpVisitor::visit;
+class InPlaceReshape : public OpMutator {
+    using OpMutator::visit;
 
-    void visit(ReshapeOp *op) override {
+    OpPtr visit(std::unique_ptr<ReshapeOp> op) override {
         TensorPtr input = op->input();
         TensorPtr output = op->output();
 
@@ -100,12 +139,14 @@ class InPlaceReshape : public LeafOpVisitor {
         } else if (output->can_alias(input, AliasType::Reshaped)) {
             Tensor::make_reshape_alias(output, input);
         }
+
+        return op;
     }
 };
 
 // Try to alias outputs to inputs when it is safe.
-class InPlace : public LeafOpVisitor {
-    using OpVisitor::visit;
+class InPlace : public OpMutator {
+    using OpMutator::visit;
 
     // We can alias two tensors if the input is not used after the output is written,
     // and we meet a number of other requirements.
@@ -146,7 +187,7 @@ class InPlace : public LeafOpVisitor {
         return false;
     }
 
-    void maybe_alias_elementwise(ElementwiseOp *op) const {
+    void maybe_alias_elementwise(const ElementwiseOp *op) const {
         for (int j = 0; j < op->output_count(); j++) {
             for (int i = 0; i < op->input_count(); i++) {
                 if (maybe_alias_tensors(op->input(i), op->output(j))) {
@@ -157,19 +198,22 @@ class InPlace : public LeafOpVisitor {
         }
     }
 
-    void visit(BinaryOp *op) override {
-        maybe_alias_elementwise(op);
+    OpPtr visit(std::unique_ptr<BinaryOp> op) override {
+        maybe_alias_elementwise(op.get());
+        return op;
     }
 
-    void visit(UnaryOp *op) override {
-        maybe_alias_elementwise(op);
+    OpPtr visit(std::unique_ptr<UnaryOp> op) override {
+        maybe_alias_elementwise(op.get());
+        return op;
     }
 
-    void visit(ElementwiseProgramOp *op) override {
-        maybe_alias_elementwise(op);
+    OpPtr visit(std::unique_ptr<ElementwiseProgramOp> op) override {
+        maybe_alias_elementwise(op.get());
+        return op;
     }
 
-    void visit(ConcatenationOp *op) override {
+    OpPtr visit(std::unique_ptr<ConcatenationOp> op) override {
         bool is_no_op = true;
         TensorOffset offset(op->axis() + 1);
         for (int i = 0; i < op->input_count(); i++) {
@@ -181,9 +225,10 @@ class InPlace : public LeafOpVisitor {
             // TODO: Try actually deleting the op?
             op->set_no_op();
         }
+        return op;
     }
 
-    void visit(SplitOp *op) override {
+    OpPtr visit(std::unique_ptr<SplitOp> op) override {
         bool is_no_op = true;
         TensorOffset offset(op->axis() + 1);
         for (int i = 0; i < op->output_count(); i++) {
@@ -195,11 +240,12 @@ class InPlace : public LeafOpVisitor {
             // TODO: Try actually deleting the op?
             op->set_no_op();
         }
+        return op;
     }
 
-    void visit(PadOp *op) override {
+    OpPtr visit(std::unique_ptr<PadOp> op) override {
         if (!op->input(1) || !op->input(1)->is_constant()) {
-            return;
+            return op;
         }
         assert(op->input(1)->is_allocated());
 
@@ -211,31 +257,40 @@ class InPlace : public LeafOpVisitor {
         }
 
         maybe_alias_tensors(op->input(), op->output(), offset);
+        return op;
     }
 
-    const Op *const root_;
+    std::unordered_set<Tensor *> inputs_and_outputs_;
 
     bool is_root_input_or_output(const TensorPtr &t) const {
-        return root_->is_input(t) || root_->is_output(t);
+        return inputs_and_outputs_.count(t.get()) > 0;
     };
 
 public:
-    explicit InPlace(Op *root)
-        : root_(root) {
+    explicit InPlace(const Op *root) {
+        // Build a set so that we don't have to worry about the root op mutating
+        for (int i = 0; i < root->input_count(); i++) {
+            inputs_and_outputs_.insert(root->input(i).get());
+        }
+        for (int i = 0; i < root->output_count(); i++) {
+            inputs_and_outputs_.insert(root->output(i).get());
+        }
     }
 };
 
 }  // namespace
 
-void in_place(Op *op) {
+OpGroupPtr in_place(OpGroupPtr op) {
     // Always check for ReshapeOp before anything else; we want
     // to try our best to alias those tensors, and the luck of the
     // draw could put other aliases in place first that could thwart this.
     InPlaceReshape handle_reshapes;
-    op->accept(&handle_reshapes);
+    op = cast_op_ptr<OpGroup>(op->mutate(&handle_reshapes, std::move(op)));
 
-    InPlace v(op);
-    op->accept(&v);
+    InPlace handle_in_place(op.get());
+    op = cast_op_ptr<OpGroup>(op->mutate(&handle_in_place, std::move(op)));
+
+    return op;
 }
 
 namespace {
@@ -254,7 +309,7 @@ void replace_consumers(const TensorPtr &from, const TensorPtr &to) {
 }
 
 // Find ops that need padding and add an explicit pad op.
-class PadForOps : public LeafOpVisitor {
+class PadForOps : public OpVisitor {
     using OpVisitor::visit;
 
     void pad_for_op(Op *op, int input_idx, int output_idx) {
@@ -344,7 +399,7 @@ public:
     std::vector<OpPtr> new_ops;
 };
 
-class FusePadOps : public LeafOpVisitor {
+class FusePadOps : public OpVisitor {
     using OpVisitor::visit;
 
     void visit(PadOp *op) override {
@@ -395,7 +450,7 @@ bool pad_for_ops(OpGroup *op) {
 
 namespace {
 
-bool can_execute(const Op *op) {
+bool can_execute_with_all_constant_inputs(const Op *op) {
     for (int i = 0; i < op->input_count(); i++) {
         if (!op->input(i)->is_constant()) {
             return false;
@@ -405,16 +460,11 @@ bool can_execute(const Op *op) {
     return true;
 }
 
-}  // namespace
+class ConstantFolder : public OpMutator {
+    using OpMutator::visit;
 
-void fold_constants(OpGroup *root) {
-    std::vector<const Op *> to_remove;
-    for (int i = 0; i < root->op_count(); i++) {
-        Op *op = root->op(i);
-        if (OpGroup *group = cast_op<OpGroup>(op)) {
-            fold_constants(group);
-        }
-        if (can_execute(op)) {
+    OpPtr visit_leaf(OpPtr op) override {
+        if (can_execute_with_all_constant_inputs(op.get())) {
             // Allocate all the outputs.
             // Since we aren't ready for arena allocation,
             // we'll just do these as one-off heap allocs.
@@ -434,13 +484,18 @@ void fold_constants(OpGroup *root) {
                 op->output(j)->set_constant();
             }
 
-            to_remove.push_back(op);
+            return nullptr;
+        } else {
+            return op;
         }
     }
+};
 
-    for (const Op *i : to_remove) {
-        root->remove(i);
-    }
+}  // namespace
+
+OpGroupPtr fold_constants(OpGroupPtr op) {
+    ConstantFolder folder;
+    return cast_op_ptr<OpGroup>(op->mutate(&folder, std::move(op)));
 }
 
 }  // namespace hannk
