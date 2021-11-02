@@ -178,37 +178,42 @@ bool Interpreter::prepare() {
         return false;
     }
 
-    if (!pad_for_ops(model_.get())) {
+    const auto dump_model = [this](const char *msg, int min_verbosity) {
+        if (options_.verbosity >= min_verbosity) {
+            std::ostringstream os;
+            os << msg << "\n";
+            model_->dump(os);
+            HLOG(INFO) << os.str();
+        }
+    };
+
+    dump_model("Model after prepare():", 3);
+
+    model_ = pad_for_ops(std::move(model_));
+    if (!model_) {
         HLOG(ERROR) << "pad_for_ops() failed.";
         return false;
     }
+    dump_model("Model after pad_for_ops():", 3);
 
     model_ = in_place(std::move(model_));
-
-    // {
-    //     std::ostringstream os;
-    //     os << "Model before fold_constants:\n";
-    //     model_->dump(os);
-    //     HLOG(INFO) << os.str();
-    // }
+    dump_model("Model after in_place():", 3);
 
     model_ = fold_constants(std::move(model_));
+    dump_model("Model after fold_constants():", 3);
 
-    // {
-    //     std::ostringstream os;
-    //     os << "Model after fold_constants:\n";
-    //     model_->dump(os);
-    //     HLOG(INFO) << os.str();
-    // }
+    model_ = flatten_groups(std::move(model_));
+    dump_model("Model after flatten_groups:", 3);
+
+    model_ = fuse_pad_ops(std::move(model_));
+    if (!model_) {
+        HLOG(ERROR) << "fuse_pad_ops() failed.";
+        return false;
+    }
+    dump_model("Model after fuse_pad_ops:", 3);
 
     model_ = remove_dead_ops(std::move(model_));
-
-    // {
-    //     std::ostringstream os;
-    //     os << "Model after remove_dead_ops:\n";
-    //     model_->dump(os);
-    //     HLOG(INFO) << os.str();
-    // }
+    dump_model("Model after remove_dead_ops:", 3);
 
     assert(tensor_storage_arena_ == nullptr);
     tensor_storage_arena_ = allocate_tensors(model_.get(), options_);
@@ -218,12 +223,7 @@ bool Interpreter::prepare() {
     model_->accept(&verify_all);
 #endif
 
-    if (options_.verbosity >= 2) {
-        std::ostringstream os;
-        os << "Model after transformations:\n";
-        model_->dump(os);
-        HLOG(INFO) << os.str();
-    }
+    dump_model("Model after all transformations:", 2);
 
     prepared_ = true;
     return true;

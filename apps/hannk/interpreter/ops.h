@@ -133,6 +133,11 @@ public:
         return Op::input(2);
     }
 
+    std::array<int, 2> stride() const { return stride_; }
+    std::array<int, 2> dilation() const { return dilation_; }
+    Padding padding() const { return padding_; }
+    ActivationFunction activation() const { return activation_; }
+
     halide_type_t filter_type() const;
     BoundsMap map_bounds(int input_idx, int output_idx) const override;
 
@@ -191,6 +196,11 @@ public:
     }
 
     BoundsMap map_bounds(int input_idx, int output_idx) const override;
+
+    std::array<int, 2> stride() const { return stride_; }
+    std::array<int, 2> dilation() const { return dilation_; }
+    Padding padding() const { return padding_; }
+    ActivationFunction activation() const { return activation_; }
 
     bool prepare() override;
 
@@ -271,6 +281,10 @@ public:
         if (input->rank() == 0 || !padding->is_constant()) {
             output->set_dynamic();
         }
+    }
+
+    const TensorPtr &padding() const {
+        return Op::input(1);
     }
 
     void accept(OpVisitor *v) override;

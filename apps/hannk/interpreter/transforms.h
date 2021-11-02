@@ -15,13 +15,23 @@ using OpGroupPtr = std::unique_ptr<OpGroup>;
 
 // Add pad ops before ops that need it, so those ops can
 // assume everything needed of the input is in bounds.
-// New ops will have prepare() called on them; this will return false
+// New ops will have prepare() called on them; this will return nullptr
 // if any of those calls fail.
-[[nodiscard]] bool pad_for_ops(OpGroup *op);
+[[nodiscard]] OpGroupPtr pad_for_ops(OpGroupPtr op);
 
 // Execute ops that are constant, and mark the results
 // constant as well.
 [[nodiscard]] OpGroupPtr fold_constants(OpGroupPtr op);
+
+// Flatten all nested OpGroups into a single OpGroup.
+// TODO: OpGroups that represent subgraphs shouldn't be flattened;
+// this will need smartening when we represent subgraphs in hannk.
+[[nodiscard]] OpGroupPtr flatten_groups(OpGroupPtr op);
+
+// Some networks use padding already for other reasons, so
+// we might have introduced two paddings in a row, which is
+// a waste; this combines them. (This should be run after flatten_groups().)
+[[nodiscard]] OpGroupPtr fuse_pad_ops(OpGroupPtr op);
 
 }  // namespace hannk
 
