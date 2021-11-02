@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.20)
+cmake_minimum_required(VERSION 3.16...3.21)
 project(hannk_superbuild LANGUAGES NONE)
 
 ##
@@ -40,6 +40,20 @@ foreach (entry IN LISTS cache)
 endforeach ()
 
 ##
+# Common ExternalProject options
+
+set(ep_opts
+    SOURCE_DIR "${CMAKE_CURRENT_LIST_DIR}/../.."
+    INSTALL_COMMAND ""  # Disables install stage
+    BUILD_ALWAYS YES
+    USES_TERMINAL_CONFIGURE YES
+    USES_TERMINAL_BUILD YES)
+
+if (CMAKE_VERSION VERSION_GREATER_EQUAL 3.20)
+    list(APPEND ep_opts CONFIGURE_HANDLED_BY_BUILD TRUE)
+endif ()
+
+##
 # Define host and target builds
 
 include(ExternalProject)
@@ -50,15 +64,8 @@ foreach (entry IN LISTS host_args)
     message(STATUS "\t${entry}")
 endforeach ()
 
-ExternalProject_Add(
-        hannk_host
-        SOURCE_DIR ${CMAKE_CURRENT_LIST_DIR}/../..
-        CMAKE_ARGS ${host_args}
-        INSTALL_COMMAND ""  # Disables install stage
-        CONFIGURE_HANDLED_BY_BUILD TRUE  # Requires CMake 3.20+
-        BUILD_ALWAYS YES
-        USES_TERMINAL YES
-)
+ExternalProject_Add(hannk_host ${ep_opts}
+                    CMAKE_ARGS ${host_args})
 
 ExternalProject_Get_Property(hannk_host BINARY_DIR)
 list(APPEND cross_args "-Dhannk-halide_generators_ROOT:FILEPATH=${BINARY_DIR}")
@@ -69,15 +76,8 @@ foreach (entry IN LISTS cross_args)
     message(STATUS "\t${entry}")
 endforeach ()
 
-ExternalProject_Add(
-        hannk
-        SOURCE_DIR ${CMAKE_CURRENT_LIST_DIR}/../..
-        CMAKE_ARGS ${cross_args}
-        INSTALL_COMMAND ""
-        CONFIGURE_HANDLED_BY_BUILD TRUE
-        BUILD_ALWAYS YES
-        USES_TERMINAL YES
-)
+ExternalProject_Add(hannk ${ep_opts}
+                    CMAKE_ARGS ${cross_args})
 
 ExternalProject_Add_StepDependencies(hannk configure hannk_host)
 
