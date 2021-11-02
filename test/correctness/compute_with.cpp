@@ -2110,9 +2110,9 @@ int rvar_bounds_test() {
     return 0;
 }
 
+// Test for the issue described in https://github.com/halide/Halide/issues/6367.
 int two_compute_at_test() {
     ImageParam input1(Int(16), 2, "input1");
-    ;
     Func output1("output1"), output2("output2"), output3("output3");
     Var k{"k"};
 
