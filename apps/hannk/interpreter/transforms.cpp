@@ -31,22 +31,6 @@ const T *cast_op(const Op *x) {
     }
 }
 
-// Transfers ownership to return value.
-// If not castable, returns nullptr and the original op is discarded.
-template<typename T>
-std::unique_ptr<T> cast_op_ptr(OpPtr op) {
-    const T* t = cast_op<T>(op.get());
-    if (t != nullptr) {
-        assert((void*)t == (void*)op.get());
-        // TODO: ugh
-        auto result = std::unique_ptr<T>(const_cast<T*>(t));
-        op.release();
-        return result;
-    } else {
-        return nullptr;
-    }
-}
-
 class RemoveDeadOps : public OpMutator {
     using OpMutator::visit;
 
@@ -121,9 +105,9 @@ protected:
 
 }  // namespace
 
-OpGroupPtr remove_dead_ops(OpGroupPtr op) {
+OpPtr remove_dead_ops(OpPtr op) {
     RemoveDeadOps r(op.get());
-    return cast_op_ptr<OpGroup>(op->mutate(&r, std::move(op)));
+    return op->mutate(&r, std::move(op));
 }
 
 namespace {
@@ -285,15 +269,15 @@ public:
 
 }  // namespace
 
-OpGroupPtr in_place(OpGroupPtr op) {
+OpPtr in_place(OpPtr op) {
     // Always check for ReshapeOp before anything else; we want
     // to try our best to alias those tensors, and the luck of the
     // draw could put other aliases in place first that could thwart this.
     InPlaceReshape handle_reshapes;
-    op = cast_op_ptr<OpGroup>(op->mutate(&handle_reshapes, std::move(op)));
+    op = op->mutate(&handle_reshapes, std::move(op));
 
     InPlace handle_in_place(op.get());
-    op = cast_op_ptr<OpGroup>(op->mutate(&handle_in_place, std::move(op)));
+    op = op->mutate(&handle_in_place, std::move(op));
 
     return op;
 }
@@ -464,9 +448,9 @@ public:
 
 }  // namespace
 
-OpGroupPtr pad_for_ops(OpGroupPtr op) {
+OpPtr pad_for_ops(OpPtr op) {
     PadForOps padder;
-    op = cast_op_ptr<OpGroup>(op->mutate(&padder, std::move(op)));
+    op = op->mutate(&padder, std::move(op));
     if (padder.prepare_failed) {
         return nullptr;
     }
@@ -518,12 +502,12 @@ public:
 }  // namespace
 
 
-OpGroupPtr fuse_pad_ops(OpGroupPtr op) {
+OpPtr fuse_pad_ops(OpPtr op) {
     // Some networks use padding already for other reasons, so
     // we might have introduced two paddings in a row, which is
     // a waste. (This should be run after flatten_groups().)
     FusePadOps fuser;
-    op = cast_op_ptr<OpGroup>(op->mutate(&fuser, std::move(op)));
+    op = op->mutate(&fuser, std::move(op));
     if (fuser.prepare_failed) {
         return nullptr;
     }
@@ -575,9 +559,9 @@ class ConstantFolder : public OpMutator {
 
 }  // namespace
 
-OpGroupPtr fold_constants(OpGroupPtr op) {
+OpPtr fold_constants(OpPtr op) {
     ConstantFolder folder;
-    return cast_op_ptr<OpGroup>(op->mutate(&folder, std::move(op)));
+    return op->mutate(&folder, std::move(op));
 }
 
 namespace {
@@ -596,7 +580,7 @@ public:
 
 }  // namespace
 
-OpGroupPtr flatten_groups(OpGroupPtr op) {
+OpPtr flatten_groups(OpPtr op) {
     std::vector<TensorPtr> inputs = op->inputs();
     std::vector<TensorPtr> outputs = op->outputs();
 

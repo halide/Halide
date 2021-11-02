@@ -581,25 +581,26 @@ protected:
     friend class OpGroup;
 
     // clang-format off
-    virtual void visit(const BinaryOp *op) {}
-    virtual void visit(const ConcatenationOp *op) {}
-    virtual void visit(const ConvOp *op) {}
-    virtual void visit(const DepthwiseConv2DOp *op) {}
-    virtual void visit(const ElementwiseProgramOp *op) {}
-    virtual void visit(const GatherOp *op) {}
-    virtual void visit(const L2NormalizationOp *op) {}
-    virtual void visit(const PadOp *op) {}
-    virtual void visit(const Pool2DOp *op) {}
-    virtual void visit(const ReductionOp *op) {}
-    virtual void visit(const ReshapeOp *op) {}
-    virtual void visit(const ShapeOp *op) {}
-    virtual void visit(const SoftmaxOp *op) {}
-    virtual void visit(const SpaceDepthOp *op) {}
-    virtual void visit(const SplitOp *op) {}
-    virtual void visit(const TileConvFilterOp *op) {}
-    virtual void visit(const TransposeOp *op) {}
-    virtual void visit(const UnaryOp *op) {}
-    virtual void visit(const UpsampleChannelsOp *op) {}
+    virtual void visit_leaf(const Op *op) { }
+    virtual void visit(const BinaryOp *op) { visit_leaf(op); }
+    virtual void visit(const ConcatenationOp *op) { visit_leaf(op); }
+    virtual void visit(const ConvOp *op) { visit_leaf(op); }
+    virtual void visit(const DepthwiseConv2DOp *op) { visit_leaf(op); }
+    virtual void visit(const ElementwiseProgramOp *op) { visit_leaf(op); }
+    virtual void visit(const GatherOp *op) { visit_leaf(op); }
+    virtual void visit(const L2NormalizationOp *op) { visit_leaf(op); }
+    virtual void visit(const PadOp *op) { visit_leaf(op); }
+    virtual void visit(const Pool2DOp *op) { visit_leaf(op); }
+    virtual void visit(const ReductionOp *op) { visit_leaf(op); }
+    virtual void visit(const ReshapeOp *op) { visit_leaf(op); }
+    virtual void visit(const ShapeOp *op) { visit_leaf(op); }
+    virtual void visit(const SoftmaxOp *op) { visit_leaf(op); }
+    virtual void visit(const SpaceDepthOp *op) { visit_leaf(op); }
+    virtual void visit(const SplitOp *op) { visit_leaf(op); }
+    virtual void visit(const TileConvFilterOp *op) { visit_leaf(op); }
+    virtual void visit(const TransposeOp *op) { visit_leaf(op); }
+    virtual void visit(const UnaryOp *op) { visit_leaf(op); }
+    virtual void visit(const UpsampleChannelsOp *op) { visit_leaf(op); }
     virtual void visit(const OpGroup *op);
     // clang-format on
 };

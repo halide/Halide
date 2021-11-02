@@ -13,7 +13,7 @@ extern "C" int halide_malloc_alignment();
 
 namespace hannk {
 
-Interpreter::Interpreter(std::unique_ptr<OpGroup> m, InterpreterOptions options)
+Interpreter::Interpreter(OpPtr m, InterpreterOptions options)
     : model_(std::move(m)), options_(std::move(options)) {
 }
 
@@ -88,7 +88,7 @@ public:
     std::map<TensorStoragePtr, TensorAllocationInfo> tensor_info;
 };
 
-std::unique_ptr<char[]> allocate_tensors(OpGroup *root, const InterpreterOptions &options) {
+std::unique_ptr<char[]> allocate_tensors(const Op *root, const InterpreterOptions &options) {
     // Find the tensors that we want to allocate in an arena,
     // along the needed storage size and lifetime for each.
     FindAllocatableTensors find_tensors;
@@ -239,20 +239,52 @@ void Interpreter::execute() const {
 
 TensorPtr Interpreter::get_tensor(const std::string &name) {
     HCHECK(prepared_);
-    for (int i = 0; i < model_->op_count(); i++) {
-        const Op *op = model_->op(i);
-        for (int j = 0; j < op->input_count(); j++) {
-            if (op->input(j)->name() == name) {
-                return op->input(j);
+
+    class Finder : public OpVisitor {
+        using OpVisitor::visit;
+
+        bool find_tensor(const Op *op) {
+            if (result) {
+                return true;
+            }
+            for (int j = 0; j < op->input_count(); j++) {
+                if (op->input(j)->name() == name_) {
+                    result = op->input(j);
+                    return true;
+                }
+            }
+            for (int j = 0; j < op->output_count(); j++) {
+                if (op->output(j)->name() == name_) {
+                    result = op->output(j);
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        void visit_leaf(const Op *op) override {
+            if (find_tensor(op)) {
+                return;
             }
         }
-        for (int j = 0; j < op->output_count(); j++) {
-            if (op->output(j)->name() == name) {
-                return op->output(j);
+
+        void visit(const OpGroup *op) override {
+            if (find_tensor(op)) {
+                return;
             }
+            OpVisitor::visit(op);
         }
-    }
-    return nullptr;
+
+        const std::string &name_;
+
+    public:
+        explicit Finder(const std::string &name) : name_(name) {}
+        TensorPtr result = nullptr;
+    };
+
+    Finder finder(name);
+    model_->accept(&finder);
+    return finder.result;
 }
 
 std::vector<TensorPtr> Interpreter::inputs() {
