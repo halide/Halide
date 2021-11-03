@@ -125,6 +125,7 @@ public:
                         old_table[i].kernel_id != kDeletedId) {
                         bool result = insert(old_table[i]);
                         HALIDE_DEBUG_ASSERT(nullptr, result);  // Resizing the table while resizing the table is a logic error.
+                        (void) result;
                     }
                 }
             }
@@ -213,6 +214,7 @@ public:
         uint32_t id = (uint32_t)(uintptr_t)state_ptr;
         bool result = find_internal(context, id, mod, -1);
         HALIDE_DEBUG_ASSERT(user_context, result);  // Value must be in cache to be released
+        (void) result;
     }
 };
 
