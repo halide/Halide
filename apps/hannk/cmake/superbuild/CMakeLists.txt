@@ -89,10 +89,14 @@ ExternalProject_Add_StepDependencies(hannk configure hannk_host)
 set(CMAKE_SKIP_INSTALL_RULES YES)
 
 ExternalProject_Get_Property(hannk BINARY_DIR)
-file(WRITE "cmake_install.cmake" "include(\"${BINARY_DIR}/cmake_install.cmake\")")
+file(GENERATE OUTPUT "cmake_install.cmake"
+     CONTENT "include(\"${BINARY_DIR}/cmake_install.cmake\")")
+
 
 # Don't let CMake generate a CTestTestfile.cmake file (don't uncomment!)
 # enable_testing()
 
 file(RELATIVE_PATH ctest_dir "${CMAKE_CURRENT_BINARY_DIR}" "${BINARY_DIR}")
-file(WRITE "CTestTestfile.cmake" "subdirs(\"${ctest_dir}\")")
+file(GENERATE OUTPUT "CTestTestfile.cmake"
+     CONTENT "subdirs(\"${ctest_dir}\")")
+
