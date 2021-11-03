@@ -495,7 +495,7 @@ WEAK int halide_hexagon_dma_buffer_copy(void *user_context, struct halide_buffer
                                         struct halide_buffer_t *dst) {
 
     HALIDE_CHECK(user_context, dst_device_interface == nullptr ||
-                                    dst_device_interface == &hexagon_dma_device_interface);
+                                   dst_device_interface == &hexagon_dma_device_interface);
 
     if (src->device_dirty() &&
         src->device_interface != &hexagon_dma_device_interface) {

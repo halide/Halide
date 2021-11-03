@@ -3240,7 +3240,7 @@ WEAK int halide_d3d12compute_buffer_copy(void *user_context, struct halide_buffe
 
     // We only handle copies to d3d12 device or to host
     HALIDE_CHECK(user_context, (dst_device_interface == nullptr) ||
-                                    (dst_device_interface == &d3d12compute_device_interface));
+                                   (dst_device_interface == &d3d12compute_device_interface));
 
     if ((src->device_dirty() || src->host == nullptr) &&
         src->device_interface != &d3d12compute_device_interface) {

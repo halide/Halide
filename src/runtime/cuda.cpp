@@ -958,7 +958,7 @@ WEAK int halide_cuda_buffer_copy(void *user_context, struct halide_buffer_t *src
                                  struct halide_buffer_t *dst) {
     // We only handle copies to cuda or to host
     HALIDE_CHECK(user_context, dst_device_interface == nullptr ||
-                                    dst_device_interface == &cuda_device_interface);
+                                   dst_device_interface == &cuda_device_interface);
 
     if ((src->device_dirty() || src->host == nullptr) &&
         src->device_interface != &cuda_device_interface) {

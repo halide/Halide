@@ -971,7 +971,7 @@ WEAK int halide_opencl_buffer_copy(void *user_context, struct halide_buffer_t *s
                                    struct halide_buffer_t *dst) {
     // We only handle copies to opencl or to host
     HALIDE_CHECK(user_context, dst_device_interface == nullptr ||
-                                    dst_device_interface == &opencl_device_interface);
+                                   dst_device_interface == &opencl_device_interface);
 
     if ((src->device_dirty() || src->host == nullptr) &&
         src->device_interface != &opencl_device_interface) {
@@ -1239,7 +1239,7 @@ WEAK int halide_opencl_detach_cl_mem(void *user_context, halide_buffer_t *buf) {
         return 0;
     }
     HALIDE_CHECK(user_context, buf->device_interface == &opencl_device_interface ||
-                                    buf->device_interface == &opencl_image_device_interface);
+                                   buf->device_interface == &opencl_image_device_interface);
     free((device_handle *)buf->device);
     buf->device = 0;
     buf->device_interface->impl->release_module();
@@ -1252,7 +1252,7 @@ WEAK uintptr_t halide_opencl_get_cl_mem(void *user_context, halide_buffer_t *buf
         return 0;
     }
     HALIDE_CHECK(user_context, buf->device_interface == &opencl_device_interface ||
-                                    buf->device_interface == &opencl_image_device_interface);
+                                   buf->device_interface == &opencl_image_device_interface);
     return (uintptr_t)((device_handle *)buf->device)->mem;
 }
 
@@ -1683,7 +1683,7 @@ WEAK int halide_opencl_image_buffer_copy(void *user_context, struct halide_buffe
         << ", src: " << src << ", dst: " << dst << ")\n";
 
     HALIDE_CHECK(user_context, dst_device_interface == nullptr ||
-                                    dst_device_interface == &opencl_image_device_interface);
+                                   dst_device_interface == &opencl_image_device_interface);
 
     if ((src->device_dirty() || src->host == nullptr) &&
         src->device_interface != &opencl_image_device_interface) {

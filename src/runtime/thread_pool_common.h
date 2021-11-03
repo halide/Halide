@@ -523,8 +523,8 @@ WEAK void enqueue_work_already_locked(int num_jobs, work *jobs, work *task_paren
     } else {
         log_message("enqueue_work_already_locked job " << jobs[0].task.name << " with min_threads " << min_threads << " task_parent " << task_parent->task.name << " task_parent->task.min_threads " << task_parent->task.min_threads << " task_parent->threads_reserved " << task_parent->threads_reserved);
         HALIDE_CHECK(nullptr, (min_threads <= ((task_parent->task.min_threads * task_parent->active_workers) -
-                                                task_parent->threads_reserved)) &&
-                                   "Logic error: thread over commit.\n");
+                                               task_parent->threads_reserved)) &&
+                                  "Logic error: thread over commit.\n");
         if (job_has_acquires || job_may_block) {
             task_parent->threads_reserved++;
         }

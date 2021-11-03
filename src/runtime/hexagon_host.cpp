@@ -775,7 +775,7 @@ WEAK int halide_hexagon_buffer_copy(void *user_context, struct halide_buffer_t *
                                     struct halide_buffer_t *dst) {
     // We only handle copies to hexagon buffers or to host
     HALIDE_CHECK(user_context, dst_device_interface == nullptr ||
-                                    dst_device_interface == &hexagon_device_interface);
+                                   dst_device_interface == &hexagon_device_interface);
 
     if ((src->device_dirty() || src->host == nullptr) &&
         src->device_interface != &hexagon_device_interface) {

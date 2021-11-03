@@ -233,12 +233,12 @@ using namespace Halide::Runtime::Internal;
  * the condition will be checked in *all* build modes! */
 #define _HALIDE_CHECK_STRINGIFY(x) #x
 #define _HALIDE_CHECK_EXPAND_AND_STRINGIFY(x) _HALIDE_CHECK_STRINGIFY(x)
-#define HALIDE_CHECK(user_context, cond)                                                                                         \
-    do {                                                                                                                         \
-        if (!(cond)) {                                                                                                           \
+#define HALIDE_CHECK(user_context, cond)                                                                                               \
+    do {                                                                                                                               \
+        if (!(cond)) {                                                                                                                 \
             halide_print(user_context, __FILE__ ":" _HALIDE_CHECK_EXPAND_AND_STRINGIFY(__LINE__) " HALIDE_CHECK failed: " #cond "\n"); \
-            abort();                                                                                                             \
-        }                                                                                                                        \
+            abort();                                                                                                                   \
+        }                                                                                                                              \
     } while (0)
 
 #endif

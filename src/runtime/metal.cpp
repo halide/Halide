@@ -902,7 +902,7 @@ WEAK int halide_metal_buffer_copy(void *user_context, struct halide_buffer_t *sr
 
     // We only handle copies to metal buffers or to host
     HALIDE_CHECK(user_context, dst_device_interface == nullptr ||
-                                    dst_device_interface == &metal_device_interface);
+                                   dst_device_interface == &metal_device_interface);
 
     if ((src->device_dirty() || src->host == nullptr) &&
         src->device_interface != &metal_device_interface) {
