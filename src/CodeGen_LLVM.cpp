@@ -1159,21 +1159,30 @@ void CodeGen_LLVM::optimize_module() {
 #endif
         pb.registerOptimizerLastEPCallback(
             [](ModulePassManager &mpm, OptimizationLevel level) {
+#if LLVM_VERSION >= 140
+                AddressSanitizerOptions asan_options;  // default values are good...
+                asan_options.UseAfterScope = true;     // ... except this one
+                mpm.addPass(createModuleToFunctionPassAdaptor(AddressSanitizerPass(asan_options)));
+#else
                 constexpr bool compile_kernel = false;
                 constexpr bool recover = false;
                 constexpr bool use_after_scope = true;
-#if LLVM_VERSION >= 140
-                // TODO: this is the value that the default ctor uses.
-                // Not sure if it's ideal for Halide.
-                constexpr AsanDetectStackUseAfterReturnMode use_after_return = AsanDetectStackUseAfterReturnMode::Runtime;
-                mpm.addPass(createModuleToFunctionPassAdaptor(AddressSanitizerPass(
-                    AddressSanitizerOptions{compile_kernel, recover, use_after_scope, use_after_return})));
-#else
                 mpm.addPass(createModuleToFunctionPassAdaptor(AddressSanitizerPass(
                     compile_kernel, recover, use_after_scope)));
 #endif
             });
-#if LLVM_VERSION >= 120
+#if LLVM_VERSION >= 140
+        pb.registerPipelineStartEPCallback(
+            [](ModulePassManager &mpm, OptimizationLevel) {
+                AddressSanitizerOptions asan_options;  // default values are good
+                constexpr bool use_global_gc = true;
+                constexpr bool use_odr_indicator = true;
+                constexpr auto destructor_kind = AsanDtorKind::Global;
+                mpm.addPass(ModuleAddressSanitizerPass(
+                    asan_options, use_global_gc,
+                    use_odr_indicator, destructor_kind));
+            });
+#elif LLVM_VERSION >= 120
         pb.registerPipelineStartEPCallback(
             [](ModulePassManager &mpm, OptimizationLevel) {
                 constexpr bool compile_kernel = false;
