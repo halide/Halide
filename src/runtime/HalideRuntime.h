@@ -55,6 +55,22 @@ extern "C" {
 #endif
 #endif
 
+// [[nodiscard]] in C++17 doesn't apply to function pointers;
+// we'll define a separate macro we can use for those; it will only
+// work for GCC and Clang, but that's better than nothing.
+#ifndef HALIDE_FNPTR_MUST_USE_RESULT
+#ifdef __has_attribute
+#if __has_attribute(warn_unused_result)
+// Clang/GCC
+#define HALIDE_FNPTR_MUST_USE_RESULT __attribute__((warn_unused_result))
+#else
+#define HALIDE_FNPTR_MUST_USE_RESULT
+#endif
+#else
+#define HALIDE_FNPTR_MUST_USE_RESULT
+#endif
+#endif
+
 /** \file
  *
  * This file declares the routines used by Halide internally in its
@@ -142,8 +158,8 @@ struct halide_mutex_array;
 //@{
 extern struct halide_mutex_array *halide_mutex_array_create(int sz);
 extern void halide_mutex_array_destroy(void *user_context, void *array);
-extern HALIDE_MUST_USE_RESULT int halide_mutex_array_lock(struct halide_mutex_array *array, int entry);
-extern HALIDE_MUST_USE_RESULT int halide_mutex_array_unlock(struct halide_mutex_array *array, int entry);
+HALIDE_MUST_USE_RESULT extern int halide_mutex_array_lock(struct halide_mutex_array *array, int entry);
+HALIDE_MUST_USE_RESULT extern int halide_mutex_array_unlock(struct halide_mutex_array *array, int entry);
 //@}
 
 /** Define halide_do_par_for to replace the default thread pool
@@ -156,7 +172,7 @@ extern HALIDE_MUST_USE_RESULT int halide_mutex_array_unlock(struct halide_mutex_
  */
 //@{
 typedef int (*halide_task_t)(void *user_context, int task_number, uint8_t *closure);
-extern HALIDE_MUST_USE_RESULT int halide_do_par_for(void *user_context,
+HALIDE_MUST_USE_RESULT extern int halide_do_par_for(void *user_context,
                                                     halide_task_t task,
                                                     int min, int size, uint8_t *closure);
 extern void halide_shutdown_thread_pool();
@@ -178,9 +194,9 @@ struct halide_semaphore_acquire_t {
     struct halide_semaphore_t *semaphore;
     int count;
 };
-extern HALIDE_MUST_USE_RESULT int halide_semaphore_init(struct halide_semaphore_t *, int n);
-extern HALIDE_MUST_USE_RESULT int halide_semaphore_release(struct halide_semaphore_t *, int n);
-extern HALIDE_MUST_USE_RESULT bool halide_semaphore_try_acquire(struct halide_semaphore_t *, int n);
+HALIDE_MUST_USE_RESULT extern int halide_semaphore_init(struct halide_semaphore_t *, int n);
+HALIDE_MUST_USE_RESULT extern int halide_semaphore_release(struct halide_semaphore_t *, int n);
+HALIDE_MUST_USE_RESULT extern bool halide_semaphore_try_acquire(struct halide_semaphore_t *, int n);
 typedef int (*halide_semaphore_init_t)(struct halide_semaphore_t *, int);
 typedef int (*halide_semaphore_release_t)(struct halide_semaphore_t *, int);
 typedef bool (*halide_semaphore_try_acquire_t)(struct halide_semaphore_t *, int);
@@ -249,7 +265,7 @@ struct halide_parallel_task_t {
  * system. Note that task_parent should be NULL for top-level calls
  * and the pass through argument if this call is being made from
  * another task. */
-extern HALIDE_MUST_USE_RESULT int halide_do_parallel_tasks(void *user_context, int num_tasks,
+HALIDE_MUST_USE_RESULT extern int halide_do_parallel_tasks(void *user_context, int num_tasks,
                                                            struct halide_parallel_task_t *tasks,
                                                            void *task_parent);
 
@@ -258,7 +274,7 @@ extern HALIDE_MUST_USE_RESULT int halide_do_parallel_tasks(void *user_context, i
 //@{
 typedef int (*halide_do_task_t)(void *, halide_task_t, int, uint8_t *);
 extern halide_do_task_t halide_set_custom_do_task(halide_do_task_t do_task);
-extern HALIDE_MUST_USE_RESULT int halide_do_task(void *user_context, halide_task_t f, int idx,
+HALIDE_MUST_USE_RESULT extern int halide_do_task(void *user_context, halide_task_t f, int idx,
                                                  uint8_t *closure);
 //@}
 
@@ -267,7 +283,7 @@ extern HALIDE_MUST_USE_RESULT int halide_do_task(void *user_context, halide_task
 // @{
 typedef int (*halide_do_loop_task_t)(void *, halide_loop_task_t, int, int, uint8_t *, void *);
 extern halide_do_loop_task_t halide_set_custom_do_loop_task(halide_do_loop_task_t do_task);
-extern HALIDE_MUST_USE_RESULT int halide_do_loop_task(void *user_context, halide_loop_task_t f, int min, int extent,
+HALIDE_MUST_USE_RESULT extern int halide_do_loop_task(void *user_context, halide_loop_task_t f, int min, int extent,
                                                       uint8_t *closure, void *task_parent);
 //@}
 
@@ -292,21 +308,21 @@ extern void halide_set_custom_parallel_runtime(
 
 /** The default versions of the parallel runtime functions. */
 // @{
-extern HALIDE_MUST_USE_RESULT int halide_default_do_par_for(void *user_context,
+HALIDE_MUST_USE_RESULT extern int halide_default_do_par_for(void *user_context,
                                                             halide_task_t task,
                                                             int min, int size, uint8_t *closure);
-extern HALIDE_MUST_USE_RESULT int halide_default_do_parallel_tasks(void *user_context,
+HALIDE_MUST_USE_RESULT extern int halide_default_do_parallel_tasks(void *user_context,
                                                                    int num_tasks,
                                                                    struct halide_parallel_task_t *tasks,
                                                                    void *task_parent);
-extern HALIDE_MUST_USE_RESULT int halide_default_do_task(void *user_context, halide_task_t f, int idx,
+HALIDE_MUST_USE_RESULT extern int halide_default_do_task(void *user_context, halide_task_t f, int idx,
                                                          uint8_t *closure);
-extern HALIDE_MUST_USE_RESULT int halide_default_do_loop_task(void *user_context, halide_loop_task_t f,
+HALIDE_MUST_USE_RESULT extern int halide_default_do_loop_task(void *user_context, halide_loop_task_t f,
                                                               int min, int extent,
                                                               uint8_t *closure, void *task_parent);
-extern HALIDE_MUST_USE_RESULT int halide_default_semaphore_init(struct halide_semaphore_t *, int n);
-extern HALIDE_MUST_USE_RESULT int halide_default_semaphore_release(struct halide_semaphore_t *, int n);
-extern HALIDE_MUST_USE_RESULT bool halide_default_semaphore_try_acquire(struct halide_semaphore_t *, int n);
+HALIDE_MUST_USE_RESULT extern int halide_default_semaphore_init(struct halide_semaphore_t *, int n);
+HALIDE_MUST_USE_RESULT extern int halide_default_semaphore_release(struct halide_semaphore_t *, int n);
+HALIDE_MUST_USE_RESULT extern bool halide_default_semaphore_try_acquire(struct halide_semaphore_t *, int n);
 // @}
 
 struct halide_thread;
@@ -692,11 +708,11 @@ extern void halide_set_trace_file(int fd);
  * a custom file descriptor per user_context. Return zero from your
  * implementation to tell Halide to print human-readable trace
  * information to stdout. */
-extern HALIDE_MUST_USE_RESULT int halide_get_trace_file(void *user_context);
+HALIDE_MUST_USE_RESULT extern int halide_get_trace_file(void *user_context);
 
 /** If tracing is writing to a file. This call closes that file
  * (flushing the trace). Returns zero on success. */
-extern HALIDE_MUST_USE_RESULT int halide_shutdown_trace();
+HALIDE_MUST_USE_RESULT extern int halide_shutdown_trace();
 
 /** All Halide GPU or device backend implementations provide an
  * interface to be used with halide_device_malloc, etc. This is
@@ -722,29 +738,29 @@ struct halide_device_interface_impl_t;
  * hidden inside the impl field.
  */
 struct halide_device_interface_t {
-    HALIDE_MUST_USE_RESULT int (*device_malloc)(void *user_context, struct halide_buffer_t *buf,
-                                                const struct halide_device_interface_t *device_interface);
-    HALIDE_MUST_USE_RESULT int (*device_free)(void *user_context, struct halide_buffer_t *buf);
-    HALIDE_MUST_USE_RESULT int (*device_sync)(void *user_context, struct halide_buffer_t *buf);
-    /* void ---> unused */ void (*device_release)(void *user_context,
-                                                  const struct halide_device_interface_t *device_interface);
-    HALIDE_MUST_USE_RESULT int (*copy_to_host)(void *user_context, struct halide_buffer_t *buf);
-    HALIDE_MUST_USE_RESULT int (*copy_to_device)(void *user_context, struct halide_buffer_t *buf,
-                                                 const struct halide_device_interface_t *device_interface);
-    HALIDE_MUST_USE_RESULT int (*device_and_host_malloc)(void *user_context, struct halide_buffer_t *buf,
-                                                         const struct halide_device_interface_t *device_interface);
-    HALIDE_MUST_USE_RESULT int (*device_and_host_free)(void *user_context, struct halide_buffer_t *buf);
-    HALIDE_MUST_USE_RESULT int (*buffer_copy)(void *user_context, struct halide_buffer_t *src,
-                                              const struct halide_device_interface_t *dst_device_interface, struct halide_buffer_t *dst);
-    HALIDE_MUST_USE_RESULT int (*device_crop)(void *user_context, const struct halide_buffer_t *src,
-                                              struct halide_buffer_t *dst);
-    HALIDE_MUST_USE_RESULT int (*device_slice)(void *user_context, const struct halide_buffer_t *src,
-                                               int slice_dim, int slice_pos, struct halide_buffer_t *dst);
-    HALIDE_MUST_USE_RESULT int (*device_release_crop)(void *user_context, struct halide_buffer_t *buf);
-    HALIDE_MUST_USE_RESULT int (*wrap_native)(void *user_context, struct halide_buffer_t *buf, uint64_t handle,
-                                              const struct halide_device_interface_t *device_interface);
-    HALIDE_MUST_USE_RESULT int (*detach_native)(void *user_context, struct halide_buffer_t *buf);
-    HALIDE_MUST_USE_RESULT int (*compute_capability)(void *user_context, int *major, int *minor);
+    HALIDE_FNPTR_MUST_USE_RESULT int (*device_malloc)(void *user_context, struct halide_buffer_t *buf,
+                                                      const struct halide_device_interface_t *device_interface);
+    HALIDE_FNPTR_MUST_USE_RESULT int (*device_free)(void *user_context, struct halide_buffer_t *buf);
+    HALIDE_FNPTR_MUST_USE_RESULT int (*device_sync)(void *user_context, struct halide_buffer_t *buf);
+    /* void is always unused  */ void (*device_release)(void *user_context,
+                                                        const struct halide_device_interface_t *device_interface);
+    HALIDE_FNPTR_MUST_USE_RESULT int (*copy_to_host)(void *user_context, struct halide_buffer_t *buf);
+    HALIDE_FNPTR_MUST_USE_RESULT int (*copy_to_device)(void *user_context, struct halide_buffer_t *buf,
+                                                       const struct halide_device_interface_t *device_interface);
+    HALIDE_FNPTR_MUST_USE_RESULT int (*device_and_host_malloc)(void *user_context, struct halide_buffer_t *buf,
+                                                               const struct halide_device_interface_t *device_interface);
+    HALIDE_FNPTR_MUST_USE_RESULT int (*device_and_host_free)(void *user_context, struct halide_buffer_t *buf);
+    HALIDE_FNPTR_MUST_USE_RESULT int (*buffer_copy)(void *user_context, struct halide_buffer_t *src,
+                                                    const struct halide_device_interface_t *dst_device_interface, struct halide_buffer_t *dst);
+    HALIDE_FNPTR_MUST_USE_RESULT int (*device_crop)(void *user_context, const struct halide_buffer_t *src,
+                                                    struct halide_buffer_t *dst);
+    HALIDE_FNPTR_MUST_USE_RESULT int (*device_slice)(void *user_context, const struct halide_buffer_t *src,
+                                                     int slice_dim, int slice_pos, struct halide_buffer_t *dst);
+    HALIDE_FNPTR_MUST_USE_RESULT int (*device_release_crop)(void *user_context, struct halide_buffer_t *buf);
+    HALIDE_FNPTR_MUST_USE_RESULT int (*wrap_native)(void *user_context, struct halide_buffer_t *buf, uint64_t handle,
+                                                    const struct halide_device_interface_t *device_interface);
+    HALIDE_FNPTR_MUST_USE_RESULT int (*detach_native)(void *user_context, struct halide_buffer_t *buf);
+    HALIDE_FNPTR_MUST_USE_RESULT int (*compute_capability)(void *user_context, int *major, int *minor);
     const struct halide_device_interface_impl_t *impl;
 };
 
@@ -759,7 +775,7 @@ extern void halide_device_release(void *user_context,
 
 /** Copy image data from device memory to host memory. This must be called
  * explicitly to copy back the results of a GPU-based filter. */
-extern HALIDE_MUST_USE_RESULT int halide_copy_to_host(void *user_context, struct halide_buffer_t *buf);
+HALIDE_MUST_USE_RESULT extern int halide_copy_to_host(void *user_context, struct halide_buffer_t *buf);
 
 /** Copy image data from host memory to device memory. This should not
  * be called directly; Halide handles copying to the device
@@ -767,7 +783,7 @@ extern HALIDE_MUST_USE_RESULT int halide_copy_to_host(void *user_context, struct
  * field, the device associated with the dev handle will be
  * used. Otherwise if the dev field is 0 and interface is NULL, an
  * error is returned. */
-extern HALIDE_MUST_USE_RESULT int halide_copy_to_device(void *user_context, struct halide_buffer_t *buf,
+HALIDE_MUST_USE_RESULT extern int halide_copy_to_device(void *user_context, struct halide_buffer_t *buf,
                                                         const struct halide_device_interface_t *device_interface);
 
 /** Copy data from one buffer to another. The buffers may have
@@ -780,7 +796,7 @@ extern HALIDE_MUST_USE_RESULT int halide_copy_to_device(void *user_context, stru
  * host memory on the source, depending on the dirty flags. host is
  * preferred if both are valid. The dst_device_interface parameter
  * controls the destination memory space. NULL means host memory. */
-extern HALIDE_MUST_USE_RESULT int halide_buffer_copy(void *user_context, struct halide_buffer_t *src,
+HALIDE_MUST_USE_RESULT extern int halide_buffer_copy(void *user_context, struct halide_buffer_t *src,
                                                      const struct halide_device_interface_t *dst_device_interface,
                                                      struct halide_buffer_t *dst);
 
@@ -800,7 +816,7 @@ extern HALIDE_MUST_USE_RESULT int halide_buffer_copy(void *user_context, struct 
  * still not support cropping a crop (instead, create a new crop of the parent
  * buffer); in practice, no known implementation has this limitation, although
  * it is possible that some future implementations may require it. */
-extern HALIDE_MUST_USE_RESULT int halide_device_crop(void *user_context,
+HALIDE_MUST_USE_RESULT extern int halide_device_crop(void *user_context,
                                                      const struct halide_buffer_t *src,
                                                      struct halide_buffer_t *dst);
 
@@ -816,26 +832,26 @@ extern HALIDE_MUST_USE_RESULT int halide_device_crop(void *user_context,
  * care must be taken to update them together as needed. Note that the dst buffer
  * must have exactly one fewer dimension than the src buffer, and that slice_dim
  * and slice_pos must be valid within src. */
-extern HALIDE_MUST_USE_RESULT int halide_device_slice(void *user_context,
+HALIDE_MUST_USE_RESULT extern int halide_device_slice(void *user_context,
                                                       const struct halide_buffer_t *src,
                                                       int slice_dim, int slice_pos,
                                                       struct halide_buffer_t *dst);
 
 /** Release any resources associated with a cropped/sliced view of another
  * buffer. */
-extern HALIDE_MUST_USE_RESULT int halide_device_release_crop(void *user_context,
+HALIDE_MUST_USE_RESULT extern int halide_device_release_crop(void *user_context,
                                                              struct halide_buffer_t *buf);
 
 /** Wait for current GPU operations to complete. Calling this explicitly
  * should rarely be necessary, except maybe for profiling. */
-extern HALIDE_MUST_USE_RESULT int halide_device_sync(void *user_context, struct halide_buffer_t *buf);
+HALIDE_MUST_USE_RESULT extern int halide_device_sync(void *user_context, struct halide_buffer_t *buf);
 
 /** Allocate device memory to back a halide_buffer_t. */
-extern HALIDE_MUST_USE_RESULT int halide_device_malloc(void *user_context, struct halide_buffer_t *buf,
+HALIDE_MUST_USE_RESULT extern int halide_device_malloc(void *user_context, struct halide_buffer_t *buf,
                                                        const struct halide_device_interface_t *device_interface);
 
 /** Free device memory. */
-extern HALIDE_MUST_USE_RESULT int halide_device_free(void *user_context, struct halide_buffer_t *buf);
+HALIDE_MUST_USE_RESULT extern int halide_device_free(void *user_context, struct halide_buffer_t *buf);
 
 /** Wrap or detach a native device handle, setting the device field
  * and device_interface field as appropriate for the given GPU
@@ -844,11 +860,11 @@ extern HALIDE_MUST_USE_RESULT int halide_device_free(void *user_context, struct 
  * more specific functions in the runtime headers for your specific
  * device API instead (e.g. HalideRuntimeCuda.h). */
 // @{
-extern HALIDE_MUST_USE_RESULT int halide_device_wrap_native(void *user_context,
+HALIDE_MUST_USE_RESULT extern int halide_device_wrap_native(void *user_context,
                                                             struct halide_buffer_t *buf,
                                                             uint64_t handle,
                                                             const struct halide_device_interface_t *device_interface);
-extern HALIDE_MUST_USE_RESULT int halide_device_detach_native(void *user_context, struct halide_buffer_t *buf);
+HALIDE_MUST_USE_RESULT extern int halide_device_detach_native(void *user_context, struct halide_buffer_t *buf);
 // @}
 
 /** Selects which gpu device to use. 0 is usually the display
@@ -862,7 +878,7 @@ extern void halide_set_gpu_device(int n);
  * user_context. The default implementation returns the value set by
  * halide_set_gpu_device, or the environment variable
  * HL_GPU_DEVICE. */
-extern HALIDE_MUST_USE_RESULT int halide_get_gpu_device(void *user_context);
+HALIDE_MUST_USE_RESULT extern int halide_get_gpu_device(void *user_context);
 
 /** Set the soft maximum amount of memory, in bytes, that the LRU
  *  cache will use to memoize Func results.  This is not a strict
@@ -889,7 +905,7 @@ extern void halide_memoization_cache_set_size(int64_t size);
  *  0: Success and cache hit.
  *  1: Success and cache miss.
  */
-extern HALIDE_MUST_USE_RESULT int halide_memoization_cache_lookup(void *user_context, const uint8_t *cache_key, int32_t size,
+HALIDE_MUST_USE_RESULT extern int halide_memoization_cache_lookup(void *user_context, const uint8_t *cache_key, int32_t size,
                                                                   struct halide_buffer_t *realized_bounds,
                                                                   int32_t tuple_count, struct halide_buffer_t **tuple_buffers);
 
@@ -910,7 +926,7 @@ extern HALIDE_MUST_USE_RESULT int halide_memoization_cache_lookup(void *user_con
  * If has_eviction_key is true, the entry is marked with eviction_key to
  * allow removing the key with halide_memoization_cache_evict.
  */
-extern HALIDE_MUST_USE_RESULT int halide_memoization_cache_store(void *user_context, const uint8_t *cache_key, int32_t size,
+HALIDE_MUST_USE_RESULT extern int halide_memoization_cache_store(void *user_context, const uint8_t *cache_key, int32_t size,
                                                                  struct halide_buffer_t *realized_bounds,
                                                                  int32_t tuple_count,
                                                                  struct halide_buffer_t **tuple_buffers,
@@ -949,7 +965,7 @@ extern void halide_memoization_cache_cleanup();
  *
  * The return value should always be zero.
  */
-extern HALIDE_MUST_USE_RESULT int halide_msan_check_memory_is_initialized(void *user_context, const void *ptr, uint64_t len, const char *name);
+HALIDE_MUST_USE_RESULT extern int halide_msan_check_memory_is_initialized(void *user_context, const void *ptr, uint64_t len, const char *name);
 
 /** Verify that the data pointed to by the halide_buffer_t is initialized (but *not* the halide_buffer_t itself),
  * using halide_msan_check_memory_is_initialized() for checking.
@@ -962,7 +978,7 @@ extern HALIDE_MUST_USE_RESULT int halide_msan_check_memory_is_initialized(void *
  *
  * The return value should always be zero.
  */
-extern HALIDE_MUST_USE_RESULT int halide_msan_check_buffer_is_initialized(void *user_context, struct halide_buffer_t *buffer, const char *buf_name);
+HALIDE_MUST_USE_RESULT extern int halide_msan_check_buffer_is_initialized(void *user_context, struct halide_buffer_t *buffer, const char *buf_name);
 
 /** Annotate that a given range of memory has been initialized;
  * only used when Target::MSAN is enabled.
@@ -971,7 +987,7 @@ extern HALIDE_MUST_USE_RESULT int halide_msan_check_buffer_is_initialized(void *
  *
  * The return value should always be zero.
  */
-extern HALIDE_MUST_USE_RESULT int halide_msan_annotate_memory_is_initialized(void *user_context, const void *ptr, uint64_t len);
+HALIDE_MUST_USE_RESULT extern int halide_msan_annotate_memory_is_initialized(void *user_context, const void *ptr, uint64_t len);
 
 /** Mark the data pointed to by the halide_buffer_t as initialized (but *not* the halide_buffer_t itself),
  * using halide_msan_annotate_memory_is_initialized() for marking.
@@ -984,7 +1000,7 @@ extern HALIDE_MUST_USE_RESULT int halide_msan_annotate_memory_is_initialized(voi
  *
  * The return value should always be zero.
  */
-extern HALIDE_MUST_USE_RESULT int halide_msan_annotate_buffer_is_initialized(void *user_context, struct halide_buffer_t *buffer);
+HALIDE_MUST_USE_RESULT extern int halide_msan_annotate_buffer_is_initialized(void *user_context, struct halide_buffer_t *buffer);
 extern void halide_msan_annotate_buffer_is_initialized_as_destructor(void *user_context, void *buffer);
 
 /** The error codes that may be returned by a Halide pipeline. */
@@ -1366,7 +1382,7 @@ typedef enum halide_target_feature_t {
  * bits to represent all the currently known features. Any excess bits must be set to zero.
  */
 // @{
-extern HALIDE_MUST_USE_RESULT int halide_can_use_target_features(int count, const uint64_t *features);
+HALIDE_MUST_USE_RESULT extern int halide_can_use_target_features(int count, const uint64_t *features);
 typedef int (*halide_can_use_target_features_t)(int count, const uint64_t *features);
 extern halide_can_use_target_features_t halide_set_custom_can_use_target_features(halide_can_use_target_features_t);
 // @}
@@ -1385,7 +1401,7 @@ extern halide_can_use_target_features_t halide_set_custom_can_use_target_feature
  *          return halide_default_can_use_target_features(count, features);
  *     }
  */
-extern HALIDE_MUST_USE_RESULT int halide_default_can_use_target_features(int count, const uint64_t *features);
+HALIDE_MUST_USE_RESULT extern int halide_default_can_use_target_features(int count, const uint64_t *features);
 
 typedef struct halide_dimension_t {
 #if (__cplusplus >= 201103L || _MSVC_LANG >= 201103L)
@@ -1903,14 +1919,14 @@ extern double halide_float16_bits_to_double(uint16_t);
  * If set to false, releases all unused device allocations back to the
  * underlying device APIs. For finer-grained control, see specific
  * methods in each device api runtime. */
-extern HALIDE_MUST_USE_RESULT int halide_reuse_device_allocations(void *user_context, bool);
+HALIDE_MUST_USE_RESULT extern int halide_reuse_device_allocations(void *user_context, bool);
 
 /** Determines whether on device_free the memory is returned
  * immediately to the device API, or placed on a free list for future
  * use. Override and switch based on the user_context for
  * finer-grained control. By default just returns the value most
  * recently set by the method above. */
-extern HALIDE_MUST_USE_RESULT bool halide_can_reuse_device_allocations(void *user_context);
+HALIDE_MUST_USE_RESULT extern bool halide_can_reuse_device_allocations(void *user_context);
 
 struct halide_device_allocation_pool {
     int (*release_unused)(void *user_context);

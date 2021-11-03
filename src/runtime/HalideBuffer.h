@@ -252,6 +252,7 @@ private:
                 }
                 // No reasonable way to return the error, but we can at least assert-fail in debug builds.
                 assert((result == 0) && "device_interface call returned a nonzero result in Buffer::decref()");
+                (void)result;
             }
             if (dev_ref_count) {
                 if (dev_ref_count->ownership == BufferDeviceOwnership::Cropped) {
