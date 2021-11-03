@@ -225,28 +225,28 @@ namespace Internal {
 }  // namespace Halide
 using namespace Halide::Runtime::Internal;
 
-/** HALIDE_CHECK() is a macro that calls halide_print if the supplied condition is
+/** halide_abort_if_false() is a macro that calls halide_print if the supplied condition is
  * false, then aborts. Used for unrecoverable errors, or should-never-happen errors.
  *
  * Note that this is *NOT* a debug-only macro;
  * the condition will be checked in *all* build modes! */
 #define _HALIDE_CHECK_STRINGIFY(x) #x
 #define _HALIDE_CHECK_EXPAND_AND_STRINGIFY(x) _HALIDE_CHECK_STRINGIFY(x)
-#define HALIDE_CHECK(user_context, cond)                                                                                               \
-    do {                                                                                                                               \
-        if (!(cond)) {                                                                                                                 \
-            halide_print(user_context, __FILE__ ":" _HALIDE_CHECK_EXPAND_AND_STRINGIFY(__LINE__) " HALIDE_CHECK failed: " #cond "\n"); \
-            abort();                                                                                                                   \
-        }                                                                                                                              \
+#define halide_abort_if_false(user_context, cond)                                                                                                 \
+    do {                                                                                                                                          \
+        if (!(cond)) {                                                                                                                            \
+            halide_print(user_context, __FILE__ ":" _HALIDE_CHECK_EXPAND_AND_STRINGIFY(__LINE__) " halide_abort_if_false() failed: " #cond "\n"); \
+            abort();                                                                                                                              \
+        }                                                                                                                                         \
     } while (0)
 
 /** halide_debug_assert() is like HALIDE_CHECK(), but only expands into a check when
- * DEBUG_RUNTIME is defined. It is what you want to use in most cases. */
+ * DEBUG_RUNTIME is defined. It is what you want to use in almost all cases. */
 #ifdef DEBUG_RUNTIME
 #define halide_debug_assert(user_context, cond)                                                                                               \
     do {                                                                                                                                      \
         if (!(cond)) {                                                                                                                        \
-            halide_print(user_context, __FILE__ ":" _HALIDE_CHECK_EXPAND_AND_STRINGIFY(__LINE__) " halide_debug_assert failed: " #cond "\n"); \
+            halide_print(user_context, __FILE__ ":" _HALIDE_CHECK_EXPAND_AND_STRINGIFY(__LINE__) " halide_debug_assert() failed: " #cond "\n"); \
             abort();                                                                                                                          \
         }                                                                                                                                     \
     } while (0)

@@ -249,7 +249,7 @@ WEAK int halide_device_free(void *user_context, struct halide_buffer_t *buf) {
         device_interface->impl->use_module();
         result = device_interface->impl->device_free(user_context, buf);
         device_interface->impl->release_module();
-        HALIDE_CHECK(user_context, buf->device == 0);
+        halide_abort_if_false(user_context, buf->device == 0);
         if (result) {
             return halide_error_code_device_free_failed;
         } else {
@@ -314,7 +314,7 @@ WEAK int halide_device_and_host_free(void *user_context, struct halide_buffer_t 
         device_interface->impl->use_module();
         result = device_interface->impl->device_and_host_free(user_context, buf);
         device_interface->impl->release_module();
-        HALIDE_CHECK(user_context, buf->device == 0);
+        halide_abort_if_false(user_context, buf->device == 0);
         if (result) {
             return halide_error_code_device_free_failed;
         } else {
@@ -400,7 +400,7 @@ WEAK int halide_device_detach_native(void *user_context, struct halide_buffer_t 
         device_interface->impl->use_module();
         result = device_interface->impl->detach_native(user_context, buf);
         device_interface->impl->release_module();
-        HALIDE_CHECK(user_context, buf->device == 0);
+        halide_abort_if_false(user_context, buf->device == 0);
         if (result) {
             result = halide_error_code_device_detach_native_failed;
         }
@@ -409,7 +409,15 @@ WEAK int halide_device_detach_native(void *user_context, struct halide_buffer_t 
 }
 
 WEAK int halide_default_device_wrap_native(void *user_context, struct halide_buffer_t *buf, uint64_t handle) {
-    HALIDE_CHECK(user_context, buf->device == 0);
+    // No: this can return halide_error_no_device_interface for OGLC and HVX,
+    // since `device_interface` may be set but `device` may not be. Instead,
+    // just return halide_error_code_device_wrap_native_failed if buf->device isn't set.
+    // (And *don't* halide_assert() here, as that will abort. Just return an error and let the caller handle it.)
+    //
+    // int result = debug_log_and_validate_buf(user_context, buf, "halide_default_device_wrap_native");
+    // if (result != 0) {
+    //     return result;
+    // }
     if (buf->device != 0) {
         return halide_error_code_device_wrap_native_failed;
     }
