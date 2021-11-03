@@ -268,7 +268,7 @@ WEAK int halide_openglcompute_device_malloc(void *user_context, halide_buffer_t 
     }
 
     size_t size = buf->size_in_bytes();
-    HALIDE_CHECK(user_context, size != 0);
+    halide_abort_if_false(user_context, size != 0);
 
     if (buf->device) {
         // This buffer already has a device allocation
@@ -278,7 +278,7 @@ WEAK int halide_openglcompute_device_malloc(void *user_context, halide_buffer_t 
     }
 
     for (int i = 0; i < buf->dimensions; i++) {
-        HALIDE_CHECK(user_context, buf->dim[i].stride >= 0);
+        halide_abort_if_false(user_context, buf->dim[i].stride >= 0);
     }
 
     debug(user_context) << "    allocating buffer, "
@@ -314,7 +314,7 @@ WEAK int halide_openglcompute_device_malloc(void *user_context, halide_buffer_t 
     // types, all of which are 4 bytes. We'll inflate the size for
     // smaller types.
     size *= (4 / buf->type.bytes());
-    HALIDE_CHECK(user_context, size != 0);
+    halide_abort_if_false(user_context, size != 0);
     global_state.BufferData(GL_ARRAY_BUFFER, size, nullptr, GL_DYNAMIC_COPY);
     if (global_state.CheckAndReportError(user_context, "oglc: BufferData")) {
         return 1;
@@ -499,7 +499,7 @@ WEAK int halide_openglcompute_copy_to_host(void *user_context, halide_buffer_t *
 
     GLuint the_buffer = (GLuint)buf->device;
     size_t size = buf->size_in_bytes();
-    HALIDE_CHECK(user_context, size != 0);
+    halide_abort_if_false(user_context, size != 0);
 
     debug(user_context) << "OGLC: halide_openglcompute_copy_to_host ("
                         << "user_context: " << user_context
