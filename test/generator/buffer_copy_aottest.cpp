@@ -16,7 +16,11 @@ int main(int argc, char **argv) {
         Buffer<int> out(64, 64);
         out.set_min(32, 32);
 
-        halide_buffer_copy(nullptr, input, nullptr, out);
+        int result = halide_buffer_copy(nullptr, input, nullptr, out);
+        if (result != 0) {
+            printf("halide_buffer_copy() failed\n");
+            exit(-1);
+        }
 
         Buffer<int> in_crop = input.cropped(0, 32, 64).cropped(1, 32, 64);
         out.for_each_value([&](int a, int b) {

@@ -142,7 +142,10 @@ WEAK extern "C" int32_t halide_debug_to_file(void *user_context, const char *fil
         return -1;
     }
 
-    halide_copy_to_host(user_context, buf);
+    if (halide_copy_to_host(user_context, buf) != 0) {
+        halide_error(user_context, "halide_copy_to_host failed.\n");
+        return -1;
+    }
 
     ScopedFile f(filename, "wb");
     if (!f.open()) {
