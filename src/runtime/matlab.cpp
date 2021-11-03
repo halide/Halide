@@ -507,12 +507,18 @@ WEAK int halide_matlab_call_pipeline(void *user_context,
 
         if (arg_metadata->kind == halide_argument_kind_output_buffer) {
             halide_buffer_t *buf = (halide_buffer_t *)args[i];
-            halide_copy_to_host(user_context, buf);
+            if ((result = halide_copy_to_host(user_context, buf)) != 0) {
+                error(user_context) << "halide_matlab_call_pipeline: halide_copy_to_host failed.\n";
+                return result;
+            }
         }
         if (arg_metadata->kind == halide_argument_kind_input_buffer ||
             arg_metadata->kind == halide_argument_kind_output_buffer) {
             halide_buffer_t *buf = (halide_buffer_t *)args[i];
-            halide_device_free(user_context, buf);
+            if ((result = halide_device_free(user_context, buf)) != 0) {
+                error(user_context) << "halide_matlab_call_pipeline: halide_device_free failed.\n";
+                return result;
+            }
         }
     }
 
