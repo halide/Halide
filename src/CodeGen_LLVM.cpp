@@ -1164,6 +1164,9 @@ void CodeGen_LLVM::optimize_module() {
                 asan_options.UseAfterScope = true;     // ... except this one
                 mpm.addPass(createModuleToFunctionPassAdaptor(AddressSanitizerPass(asan_options)));
 #else
+                constexpr bool compile_kernel = false;
+                constexpr bool recover = false;
+                constexpr bool use_after_scope = true;
                 mpm.addPass(createModuleToFunctionPassAdaptor(AddressSanitizerPass(
                     compile_kernel, recover, use_after_scope)));
 #endif
