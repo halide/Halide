@@ -7,6 +7,7 @@
 
 #include <map>
 #include <set>
+#include <unordered_set>
 
 // TODO: apparently not part of the public Halide API. Should it be?
 extern "C" int halide_malloc_alignment();
@@ -161,6 +162,62 @@ class VerifyAllAllocated : public TensorVisitor {
     }
 };
 
+#ifndef NDEBUG
+
+class Checker : public OpVisitor {
+    using OpVisitor::visit;
+
+    std::unordered_set<Tensor *> valid_tensors_;
+
+    void check_tensors(const Op *op) {
+        for (int j = 0; j < op->input_count(); j++) {
+            Tensor *t = op->input(j).get();
+            if (!t->is_constant() && !valid_tensors_.count(t)) {
+                HLOG(ERROR) << "Op " << op->name() << " uses tensor " << op->input(j)->name() << " but it is not produced yet\n";
+                correct = false;
+                return;
+            }
+        }
+        for (int j = 0; j < op->output_count(); j++) {
+            valid_tensors_.insert(op->output(j).get());
+        }
+    }
+
+    void visit_leaf(const Op *op) override {
+        if (!correct) {
+            return;
+        }
+        check_tensors(op);
+    }
+
+    void visit(const OpGroup *op) override {
+        if (!correct) {
+            return;
+        }
+        check_tensors(op);
+        OpVisitor::visit(op);
+    }
+
+public:
+    explicit Checker(const Op *root) {
+        for (int j = 0; j < root->input_count(); j++) {
+            valid_tensors_.insert(root->input(j).get());
+        }
+    }
+
+    bool correct = true;
+};
+
+// Verify that no Op comes before any of its input Tensors are produced.
+void do_check_op_order(const Op *root) {
+    Checker checker(root);
+    root->accept(&checker);
+    if (!checker.correct) {
+        HCHECK(0) << "The model is not in the correct order.";
+    }
+}
+#endif
+
 }  // namespace
 
 bool Interpreter::prepare() {
@@ -215,6 +272,9 @@ bool Interpreter::prepare() {
     model_ = remove_dead_ops(std::move(model_));
     dump_model("Model after remove_dead_ops:", 3);
 
+#ifndef NDEBUG
+    do_check_op_order(model_.get());
+#endif
     assert(tensor_storage_arena_ == nullptr);
     tensor_storage_arena_ = allocate_tensors(model_.get(), options_);
 
