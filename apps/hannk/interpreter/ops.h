@@ -58,7 +58,7 @@ public:
     void accept(OpVisitor *v) const override;
     OpPtr mutate(OpMutator *m, OpPtr op) override;
 
-    void execute() const override;
+    void execute() override;
 
     std::string name() const override {
         return std::string("BinaryOp(") + to_string(op_) + ")";
@@ -86,7 +86,7 @@ public:
 
     BoundsMap map_bounds(int input_idx, int output_idx) const override;
 
-    void execute() const override;
+    void execute() override;
 
     std::string name() const override {
         return "ConcatenationOp";
@@ -141,7 +141,7 @@ public:
     BoundsMap map_bounds(int input_idx, int output_idx) const override;
 
     bool prepare() override;
-    void execute() const override;
+    void execute() override;
 
     std::string name() const override {
         return "ConvOp";
@@ -199,7 +199,7 @@ public:
     }
 
     bool prepare() override;
-    void execute() const override;
+    void execute() override;
 
     std::string name() const override {
         return "DepthwiseConv2DOp";
@@ -208,7 +208,7 @@ public:
 
 class ElementwiseProgramOp : public ElementwiseOp {
 private:
-    mutable Halide::Runtime::Buffer<int16_t> program_;
+    Halide::Runtime::Buffer<int16_t> program_;
 
 public:
     ElementwiseProgramOp(std::vector<TensorPtr> inputs, const TensorPtr &output, HalideBuffer<int16_t> program)
@@ -221,7 +221,7 @@ public:
     void accept(OpVisitor *v) const override;
     OpPtr mutate(OpMutator *m, OpPtr op) override;
 
-    void execute() const override;
+    void execute() override;
 
     std::string name() const override {
         return "ElementwiseProgramOp";
@@ -242,7 +242,7 @@ public:
 
     BoundsMap map_bounds(int input_idx, int output_idx) const override;
 
-    void execute() const override;
+    void execute() override;
 
     std::string name() const override {
         return "GatherOp";
@@ -262,7 +262,7 @@ public:
 
     BoundsMap map_bounds(int input_idx, int output_idx) const override;
 
-    void execute() const override;
+    void execute() override;
 
     std::string name() const override {
         return "L2NormalizationOp";
@@ -287,7 +287,7 @@ public:
 
     BoundsMap map_bounds(int input_idx, int output_idx) const override;
 
-    void execute() const override;
+    void execute() override;
 
     std::string name() const override {
         return "PadOp";
@@ -334,7 +334,7 @@ public:
     void accept(OpVisitor *v) const override;
     OpPtr mutate(OpMutator *m, OpPtr op) override;
 
-    void execute() const override;
+    void execute() override;
 
     std::string name() const override {
         return std::string("Pool2DOp(") + to_string(op_) + ")";
@@ -364,7 +364,7 @@ public:
     void accept(OpVisitor *v) const override;
     OpPtr mutate(OpMutator *m, OpPtr op) override;
 
-    void execute() const override;
+    void execute() override;
 
     std::string name() const override {
         return std::string("ReductionOp(") + to_string(op_) + ")";
@@ -387,7 +387,7 @@ public:
 
     BoundsMap map_bounds(int input_idx, int output_idx) const override;
 
-    void execute() const override;
+    void execute() override;
 
     std::string name() const override {
         return "ReshapeOp";
@@ -405,7 +405,7 @@ public:
 
     BoundsMap map_bounds(int input_idx, int output_idx) const override;
 
-    void execute() const override;
+    void execute() override;
 
     std::string name() const override {
         return "ShapeOp";
@@ -426,7 +426,7 @@ public:
 
     BoundsMap map_bounds(int input_idx, int output_idx) const override;
 
-    void execute() const override;
+    void execute() override;
 
     std::string name() const override {
         return "SoftmaxOp";
@@ -446,7 +446,7 @@ public:
 
     BoundsMap map_bounds(int input_idx, int output_idx) const override;
 
-    void execute() const override;
+    void execute() override;
 
     std::string name() const override {
         return block_size_ > 0 ? "SpaceToDepthOp" : "DepthToSpaceOp";
@@ -474,7 +474,7 @@ public:
 
     BoundsMap map_bounds(int input_idx, int output_idx) const override;
 
-    void execute() const override;
+    void execute() override;
 
     std::string name() const override {
         return "SplitOp";
@@ -492,7 +492,7 @@ public:
 
     BoundsMap map_bounds(int input_idx, int output_idx) const override;
 
-    void execute() const override;
+    void execute() override;
 
     std::string name() const override {
         return "TileConvFilterOp";
@@ -510,7 +510,7 @@ public:
 
     BoundsMap map_bounds(int input_idx, int output_idx) const override;
 
-    void execute() const override;
+    void execute() override;
 
     std::string name() const override {
         return "TransposeOp";
@@ -542,7 +542,7 @@ public:
     void accept(OpVisitor *v) const override;
     OpPtr mutate(OpMutator *m, OpPtr op) override;
 
-    void execute() const override;
+    void execute() override;
 
     std::string name() const override {
         return std::string("UnaryOp(") + to_string(op_) + ")";
@@ -562,7 +562,7 @@ public:
 
     BoundsMap map_bounds(int input_idx, int output_idx) const override;
 
-    void execute() const override;
+    void execute() override;
 
     std::string name() const override {
         return "UpsampleChannelsOp";

@@ -289,7 +289,7 @@ bool Interpreter::prepare() {
     return true;
 }
 
-void Interpreter::execute() const {
+void Interpreter::execute() {
     if (!prepared_) {
         HLOG(ERROR) << "Must call prepare() before execute()";
         return;

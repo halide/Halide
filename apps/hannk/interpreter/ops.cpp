@@ -651,7 +651,7 @@ bool try_scalar_binary_op(BinaryOp::Operator op, const TensorPtr &a, const Tenso
 
 }  // namespace
 
-void BinaryOp::execute() const {
+void BinaryOp::execute() {
     const TensorPtr &in1 = input(0);
     const TensorPtr &in2 = input(1);
     const TensorPtr &out = output();
@@ -733,7 +733,7 @@ BoundsMap ConcatenationOp::map_bounds(int input_idx, int output_idx) const {
     return result;
 }
 
-void ConcatenationOp::execute() const {
+void ConcatenationOp::execute() {
     if (is_no_op_) {
         return;
     }
@@ -849,7 +849,7 @@ bool ConvOp::prepare() {
     return true;
 }
 
-void ConvOp::execute() const {
+void ConvOp::execute() {
     const TensorPtr &in = input();
     const TensorPtr &filt = filter();
     const TensorPtr &out = output();
@@ -986,7 +986,7 @@ bool DepthwiseConv2DOp::prepare() {
     return true;
 }
 
-void DepthwiseConv2DOp::execute() const {
+void DepthwiseConv2DOp::execute() {
     const TensorPtr &in = input();
     const TensorPtr &filt = filter();
     const TensorPtr &out = output();
@@ -1076,7 +1076,7 @@ bool can_use_elementwise_program(const Op *op) {
 
 }  // namespace
 
-void ElementwiseProgramOp::execute() const {
+void ElementwiseProgramOp::execute() {
     const auto &in0 = input(0)->buffer();
     const auto &in1 = input(std::min(input_count() - 1, 1))->buffer();
     const auto &in2 = input(std::min(input_count() - 1, 2))->buffer();
@@ -1115,7 +1115,7 @@ BoundsMap GatherOp::map_bounds(int input_idx, int output_idx) const {
     }
 }
 
-void GatherOp::execute() const {
+void GatherOp::execute() {
     const HalideBuffer<const void> &in = input(0)->buffer();
     HalideBuffer<const int32_t> indices = input(1)->buffer();
     const HalideBuffer<void> &out = output()->buffer();
@@ -1170,7 +1170,7 @@ BoundsMap L2NormalizationOp::map_bounds(int input_idx, int output_idx) const {
         .elementwise(1, 1);
 }
 
-void L2NormalizationOp::execute() const {
+void L2NormalizationOp::execute() {
     const TensorPtr &in = input();
     const TensorPtr &out = output();
 
@@ -1227,7 +1227,7 @@ BoundsMap PadOp::map_bounds(int input_idx, int output_idx) const {
     }
 }
 
-void PadOp::execute() const {
+void PadOp::execute() {
     const TensorPtr &in = input(0);
     const TensorPtr &padding = input(1);
     const TensorPtr &out = output();
@@ -1333,7 +1333,7 @@ BoundsMap Pool2DOp::map_bounds(int input_idx, int output_idx) const {
         .elementwise(3, 3);
 }
 
-void Pool2DOp::execute() const {
+void Pool2DOp::execute() {
     const TensorPtr &in = input();
     const TensorPtr &out = output();
 
@@ -1406,7 +1406,7 @@ BoundsMap ReductionOp::map_bounds(int input_idx, int output_idx) const {
     }
 }
 
-void ReductionOp::execute() const {
+void ReductionOp::execute() {
     const TensorPtr &in = input();
     const TensorPtr &out = output();
 
@@ -1477,7 +1477,7 @@ SmallVector<int, max_rank> ReshapeOp::calc_new_shape() const {
     return new_shape;
 }
 
-void ReshapeOp::execute() const {
+void ReshapeOp::execute() {
     const TensorPtr &in = input();
     const TensorPtr &out = output();
 
@@ -1522,7 +1522,7 @@ BoundsMap ShapeOp::map_bounds(int input_idx, int output_idx) const {
     return BoundsMap(input()->rank(), 1);
 }
 
-void ShapeOp::execute() const {
+void ShapeOp::execute() {
     const TensorPtr &in = input();
     const TensorPtr &out = output();
 
@@ -1545,7 +1545,7 @@ BoundsMap SoftmaxOp::map_bounds(int input_idx, int output_idx) const {
         .elementwise(1, 1);
 }
 
-void SoftmaxOp::execute() const {
+void SoftmaxOp::execute() {
     const TensorPtr &in = input();
     const TensorPtr &out = output();
 
@@ -1640,7 +1640,7 @@ BoundsMap SpaceDepthOp::map_bounds(int input_idx, int output_idx) const {
     return result;
 }
 
-void SpaceDepthOp::execute() const {
+void SpaceDepthOp::execute() {
     const TensorPtr &in = input();
     const TensorPtr &out = output();
 
@@ -1673,7 +1673,7 @@ BoundsMap SplitOp::map_bounds(int input_idx, int output_idx) const {
     return result;
 }
 
-void SplitOp::execute() const {
+void SplitOp::execute() {
     if (is_no_op_) {
         return;
     }
@@ -1700,7 +1700,7 @@ BoundsMap TileConvFilterOp::map_bounds(int input_idx, int output_idx) const {
     return BoundsMap::all(input()->bounds(), output()->rank());
 }
 
-void TileConvFilterOp::execute() const {
+void TileConvFilterOp::execute() {
     const TensorPtr &in = input();
     const TensorPtr &out = output();
 
@@ -1733,7 +1733,7 @@ BoundsMap TransposeOp::map_bounds(int input_idx, int output_idx) const {
     }
 }
 
-void TransposeOp::execute() const {
+void TransposeOp::execute() {
     auto in_buf = input(0)->buffer();
     const auto &dims_buf = input(1)->buffer<const int32_t>();
     auto out_buf = output()->buffer();
@@ -1774,7 +1774,7 @@ const char *UnaryOp::to_string(UnaryOp::Operator op) {
     }
 }
 
-void UnaryOp::execute() const {
+void UnaryOp::execute() {
     const TensorPtr &in = input();
     const TensorPtr &out = output();
 
@@ -1854,7 +1854,7 @@ BoundsMap UpsampleChannelsOp::map_bounds(int input_idx, int output_idx) const {
     return BoundsMap::elementwise(rank).upsample(0, 0, factor_);
 }
 
-void UpsampleChannelsOp::execute() const {
+void UpsampleChannelsOp::execute() {
     const TensorPtr &in = input();
     const TensorPtr &out = output();
 
