@@ -83,7 +83,7 @@ int main(int argc, char **argv) {
     printf("\n");
 
     int result = halide_do_par_for(nullptr, launcher_task, 0, num_launcher_tasks, nullptr);
-    assert(result != 0);
+    assert(result == 0);
     (void)result;
 
     halide_profiler_state *state = halide_profiler_get_state();
