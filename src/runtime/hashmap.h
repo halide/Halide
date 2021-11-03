@@ -336,7 +336,7 @@ inline int HashMap::store(void *user_context,
     CacheEntry *new_entry = (CacheEntry *)hashmap_malloc(user_context, sizeof(CacheEntry));
     bool inited = new_entry->init(user_context, cache_key, size, h, cache_value, cache_value_size, copy_value);
     HALIDE_DEBUG_ASSERT(user_context, inited);
-    (void) inited;
+    (void)inited;
 
     uint64_t added_size = cache_value_size;
     current_cache_size += added_size;
