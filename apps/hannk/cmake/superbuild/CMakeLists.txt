@@ -44,7 +44,6 @@ endforeach ()
 
 set(ep_opts
     SOURCE_DIR "${CMAKE_CURRENT_LIST_DIR}/../.."
-    INSTALL_COMMAND ""  # Disables install stage
     BUILD_ALWAYS YES
     USES_TERMINAL_CONFIGURE YES
     USES_TERMINAL_BUILD YES)
@@ -65,6 +64,7 @@ foreach (entry IN LISTS host_args)
 endforeach ()
 
 ExternalProject_Add(hannk_host ${ep_opts}
+                    INSTALL_COMMAND ""  # Disables install stage
                     CMAKE_ARGS ${host_args})
 
 ExternalProject_Get_Property(hannk_host BINARY_DIR)
@@ -77,6 +77,7 @@ foreach (entry IN LISTS cross_args)
 endforeach ()
 
 ExternalProject_Add(hannk ${ep_opts}
+                    INSTALL_COMMAND ""  # Disables install stage
                     CMAKE_ARGS ${cross_args})
 
 ExternalProject_Add_StepDependencies(hannk configure hannk_host)
