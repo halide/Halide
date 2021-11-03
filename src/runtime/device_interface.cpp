@@ -249,7 +249,7 @@ WEAK int halide_device_free(void *user_context, struct halide_buffer_t *buf) {
         device_interface->impl->use_module();
         result = device_interface->impl->device_free(user_context, buf);
         device_interface->impl->release_module();
-        halide_assert(user_context, buf->device == 0);
+        HALIDE_CHECK(user_context, buf->device == 0);
         if (result) {
             return halide_error_code_device_free_failed;
         } else {
@@ -314,7 +314,7 @@ WEAK int halide_device_and_host_free(void *user_context, struct halide_buffer_t 
         device_interface->impl->use_module();
         result = device_interface->impl->device_and_host_free(user_context, buf);
         device_interface->impl->release_module();
-        halide_assert(user_context, buf->device == 0);
+        HALIDE_CHECK(user_context, buf->device == 0);
         if (result) {
             return halide_error_code_device_free_failed;
         } else {
@@ -400,7 +400,7 @@ WEAK int halide_device_detach_native(void *user_context, struct halide_buffer_t 
         device_interface->impl->use_module();
         result = device_interface->impl->detach_native(user_context, buf);
         device_interface->impl->release_module();
-        halide_assert(user_context, buf->device == 0);
+        HALIDE_CHECK(user_context, buf->device == 0);
         if (result) {
             result = halide_error_code_device_detach_native_failed;
         }
@@ -409,7 +409,7 @@ WEAK int halide_device_detach_native(void *user_context, struct halide_buffer_t 
 }
 
 WEAK int halide_default_device_wrap_native(void *user_context, struct halide_buffer_t *buf, uint64_t handle) {
-    halide_assert(user_context, buf->device == 0);
+    HALIDE_CHECK(user_context, buf->device == 0);
     if (buf->device != 0) {
         return halide_error_code_device_wrap_native_failed;
     }

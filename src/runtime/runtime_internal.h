@@ -227,15 +227,18 @@ using namespace Halide::Runtime::Internal;
 
 /** A macro that calls halide_print if the supplied condition is
  * false, then aborts. Used for unrecoverable errors, or
- * should-never-happen errors. */
-#define _halide_stringify(x) #x
-#define _halide_expand_and_stringify(x) _halide_stringify(x)
-#define halide_assert(user_context, cond)                                                                                  \
-    do {                                                                                                                   \
-        if (!(cond)) {                                                                                                     \
-            halide_print(user_context, __FILE__ ":" _halide_expand_and_stringify(__LINE__) " Assert failed: " #cond "\n"); \
-            abort();                                                                                                       \
-        }                                                                                                                  \
+ * should-never-happen errors.
+ *
+ * Note that this is *NOT* a debug-only macro;
+ * the condition will be checked in *all* build modes! */
+#define _HALIDE_CHECK_STRINGIFY(x) #x
+#define _HALIDE_CHECK_EXPAND_AND_STRINGIFY(x) _HALIDE_CHECK_STRINGIFY(x)
+#define HALIDE_CHECK(user_context, cond)                                                                                         \
+    do {                                                                                                                         \
+        if (!(cond)) {                                                                                                           \
+            halide_print(user_context, __FILE__ ":" _HALIDE_CHECK_EXPAND_AND_STRINGIFY(__LINE__) " HALIDE_CHECK failed: " #cond "\n"); \
+            abort();                                                                                                             \
+        }                                                                                                                        \
     } while (0)
 
 #endif

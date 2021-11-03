@@ -66,7 +66,7 @@ public:
         }
         // This is a logic error that should never occur. It means the table is
         // full, but it should have been resized.
-        halide_assert(nullptr, false);
+        HALIDE_CHECK(nullptr, false);
         return false;
     }
 
@@ -124,7 +124,7 @@ public:
                     if (old_table[i].kernel_id != kInvalidId &&
                         old_table[i].kernel_id != kDeletedId) {
                         bool result = insert(old_table[i]);
-                        halide_assert(nullptr, result);  // Resizing the table while resizing the table is a logic error.
+                        HALIDE_CHECK(nullptr, result);  // Resizing the table while resizing the table is a logic error.
                     }
                 }
             }
@@ -212,7 +212,7 @@ public:
         ModuleStateT *mod;
         uint32_t id = (uint32_t)(uintptr_t)state_ptr;
         bool result = find_internal(context, id, mod, -1);
-        halide_assert(user_context, result);  // Value must be in cache to be released
+        HALIDE_CHECK(user_context, result);  // Value must be in cache to be released
     }
 };
 

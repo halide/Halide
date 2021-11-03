@@ -384,7 +384,7 @@ WEAK void word_lock::unlock_full() {
         int times_through = 0;
         while (tail == nullptr) {
             word_lock_queue_data *next = current->next;
-            halide_assert(nullptr, next != nullptr);
+            HALIDE_CHECK(nullptr, next != nullptr);
             next->prev = current;
             current = next;
             tail = current->tail;
@@ -491,7 +491,7 @@ static ALWAYS_INLINE uintptr_t addr_hash(uintptr_t addr) {
 #ifdef DEBUG_RUNTIME
 // Any hash calculated by addr_hash() should be incapable of being outside this range.
 ALWAYS_INLINE void check_hash(uintptr_t hash) {
-    halide_assert(nullptr, hash < HASH_TABLE_SIZE);
+    HALIDE_CHECK(nullptr, hash < HASH_TABLE_SIZE);
 }
 #endif  // DEBUG_RUNTIME
 
@@ -1004,7 +1004,7 @@ public:
             // TODO: this is debug only.
             uintptr_t val;
             atomic_load_relaxed((uintptr_t *)mutex, &val);
-            halide_assert(nullptr, val & 0x1);
+            HALIDE_CHECK(nullptr, val & 0x1);
 
             if_tsan_post_lock(mutex);
         }
