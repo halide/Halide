@@ -1167,7 +1167,7 @@ void CodeGen_LLVM::optimize_module() {
                 // Not sure if it's ideal for Halide.
                 constexpr AsanDetectStackUseAfterReturnMode use_after_return = AsanDetectStackUseAfterReturnMode::Runtime;
                 mpm.addPass(createModuleToFunctionPassAdaptor(AddressSanitizerPass(
-                    AddressSanitizerOptions(compile_kernel, recover, use_after_scope, use_after_return))));
+                    AddressSanitizerOptions{compile_kernel, recover, use_after_scope, use_after_return})));
 #else
                 mpm.addPass(createModuleToFunctionPassAdaptor(AddressSanitizerPass(
                     compile_kernel, recover, use_after_scope)));
