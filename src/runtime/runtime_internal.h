@@ -225,7 +225,7 @@ namespace Internal {
 }  // namespace Halide
 using namespace Halide::Runtime::Internal;
 
-/** HALIDE_CHECK is a macro that calls halide_print if the supplied condition is
+/** HALIDE_CHECK() is a macro that calls halide_print if the supplied condition is
  * false, then aborts. Used for unrecoverable errors, or should-never-happen errors.
  *
  * Note that this is *NOT* a debug-only macro;
@@ -240,18 +240,18 @@ using namespace Halide::Runtime::Internal;
         }                                                                                                                              \
     } while (0)
 
-/** HALIDE_DEBUG_ASSERT is like HALIDE_CHECK, but only expands into a check when
+/** halide_debug_assert() is like HALIDE_CHECK(), but only expands into a check when
  * DEBUG_RUNTIME is defined. It is what you want to use in most cases. */
 #ifdef DEBUG_RUNTIME
-#define HALIDE_DEBUG_ASSERT(user_context, cond)                                                                                               \
+#define halide_debug_assert(user_context, cond)                                                                                               \
     do {                                                                                                                                      \
         if (!(cond)) {                                                                                                                        \
-            halide_print(user_context, __FILE__ ":" _HALIDE_CHECK_EXPAND_AND_STRINGIFY(__LINE__) " HALIDE_DEBUG_ASSERT failed: " #cond "\n"); \
+            halide_print(user_context, __FILE__ ":" _HALIDE_CHECK_EXPAND_AND_STRINGIFY(__LINE__) " halide_debug_assert failed: " #cond "\n"); \
             abort();                                                                                                                          \
         }                                                                                                                                     \
     } while (0)
 #else
-#define HALIDE_DEBUG_ASSERT(user_context, cond)
+#define halide_debug_assert(user_context, cond)
 #endif
 
 #endif  // HALIDE_RUNTIME_INTERNAL_H
