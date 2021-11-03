@@ -1868,11 +1868,11 @@ void UpsampleChannelsOp::execute() {
         << "Unsupported UpsampleChannels op for types " << in->type() << ", " << out->type();
 }
 
-#define ACCEPT_AND_MUTATE(OP)                       \
-    void OP::accept(OpVisitor *v) const {           \
-        v->visit(this);                             \
-    }                                               \
-    OpPtr OP::mutate(OpMutator *m, OpPtr op) {      \
+#define ACCEPT_AND_MUTATE(OP)                     \
+    void OP::accept(OpVisitor *v) const {         \
+        v->visit(this);                           \
+    }                                             \
+    OpPtr OP::mutate(OpMutator *m, OpPtr op) {    \
         return m->visit_typed<OP>(std::move(op)); \
     }
 
