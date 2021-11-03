@@ -94,35 +94,6 @@ BoundsMap OpGroup::map_bounds(int input_idx, int output_idx) const {
     return result;
 }
 
-void OpGroup::add(OpPtr to_add, const Op *before) {
-    for (auto i = ops_.begin(); i != ops_.end(); ++i) {
-        if (i->get() == before) {
-            ops_.insert(i, std::move(to_add));
-            return;
-        } else {
-            for (int j = 0; j < to_add->output_count(); ++j) {
-                for (int k = 0; k < (*i)->input_count(); ++k) {
-                    if ((*i)->input(k) == to_add->output(j)) {
-                        // i consumes an output of to_add.
-                        ops_.insert(i, std::move(to_add));
-                        return;
-                    }
-                }
-            }
-        }
-    }
-    ops_.push_back(std::move(to_add));
-}
-
-void OpGroup::remove(const Op *op) {
-    for (auto i = ops_.begin(); i != ops_.end(); ++i) {
-        if (i->get() == op) {
-            ops_.erase(i);
-            return;
-        }
-    }
-}
-
 void OpGroup::accept(OpVisitor *v) const {
     v->visit(this);
 }

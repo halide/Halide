@@ -337,9 +337,6 @@ public:
         : Op(std::move(inputs), std::move(outputs)), ops_(std::move(ops)) {
     }
 
-    void add(OpPtr to_insert, const Op *before = nullptr);
-    void remove(const Op *op);
-
     BoundsMap map_bounds(int input_idx, int output_idx) const override;
 
     bool prepare() override;
