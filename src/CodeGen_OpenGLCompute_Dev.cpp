@@ -684,11 +684,21 @@ void CodeGen_OpenGLCompute_C::visit(const Select *op) {
     string true_val = print_expr(op->true_value);
     string false_val = print_expr(op->false_value);
     string cond = print_expr(op->condition);
-    rhs << print_type(op->type)
-        << "(" << cond
-        << " ? " << true_val
-        << " : " << false_val
-        << ")";
+    if (op->type.is_scalar()) {
+        rhs << cond << " ? " << true_val << " : " << false_val;
+    } else {
+        rhs << print_type(op->type) << "(";
+        for (int i = 0; i < op->type.lanes(); i++) {
+            string index = "[" + std::to_string(i) + "]";
+            rhs << cond << index << " ? "
+                << true_val << index << " : "
+                << false_val << index;
+            if (i != op->type.lanes() - 1) {
+                rhs << ", ";
+            }
+        }
+        rhs << ")";
+    }
     print_assignment(op->type, rhs.str());
 }
 
