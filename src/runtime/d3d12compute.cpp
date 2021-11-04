@@ -984,33 +984,33 @@ static void D3D12LoadDependencies(void *user_context) {
 
     // Windows x64 follows the LLP64 integer type convention:
     // https://msdn.microsoft.com/en-us/library/windows/desktop/aa383751(v=vs.85).aspx
-    halide_assert(user_context, sizeof(BOOL) == (32 / 8));      // BOOL      must be  32 bits
-    halide_assert(user_context, sizeof(CHAR) == (8 / 8));       // CHAR      must be   8 bits
-    halide_assert(user_context, sizeof(SHORT) == (16 / 8));     // SHORT     must be  16 bits
-    halide_assert(user_context, sizeof(LONG) == (32 / 8));      // LONG      must be  32 bits
-    halide_assert(user_context, sizeof(ULONG) == (32 / 8));     // ULONG     must be  32 bits
-    halide_assert(user_context, sizeof(LONGLONG) == (64 / 8));  // LONGLONG  must be  16 bits
-    halide_assert(user_context, sizeof(BYTE) == (8 / 8));       // BYTE      must be   8 bits
-    halide_assert(user_context, sizeof(WORD) == (16 / 8));      // WORD      must be  16 bits
-    halide_assert(user_context, sizeof(DWORD) == (32 / 8));     // DWORD     must be  32 bits
-    halide_assert(user_context, sizeof(WCHAR) == (16 / 8));     // WCHAR     must be  16 bits
-    halide_assert(user_context, sizeof(INT) == (32 / 8));       // INT       must be  32 bits
-    halide_assert(user_context, sizeof(UINT) == (32 / 8));      // UINT      must be  32 bits
-    halide_assert(user_context, sizeof(IID) == (128 / 8));      // COM GUIDs must be 128 bits
+    static_assert(sizeof(BOOL) == (32 / 8));      // BOOL      must be  32 bits
+    static_assert(sizeof(CHAR) == (8 / 8));       // CHAR      must be   8 bits
+    static_assert(sizeof(SHORT) == (16 / 8));     // SHORT     must be  16 bits
+    static_assert(sizeof(LONG) == (32 / 8));      // LONG      must be  32 bits
+    static_assert(sizeof(ULONG) == (32 / 8));     // ULONG     must be  32 bits
+    static_assert(sizeof(LONGLONG) == (64 / 8));  // LONGLONG  must be  16 bits
+    static_assert(sizeof(BYTE) == (8 / 8));       // BYTE      must be   8 bits
+    static_assert(sizeof(WORD) == (16 / 8));      // WORD      must be  16 bits
+    static_assert(sizeof(DWORD) == (32 / 8));     // DWORD     must be  32 bits
+    static_assert(sizeof(WCHAR) == (16 / 8));     // WCHAR     must be  16 bits
+    static_assert(sizeof(INT) == (32 / 8));       // INT       must be  32 bits
+    static_assert(sizeof(UINT) == (32 / 8));      // UINT      must be  32 bits
+    static_assert(sizeof(IID) == (128 / 8));      // COM GUIDs must be 128 bits
 
     // Paranoid checks (I am not taking any chances...)
-    halide_assert(user_context, sizeof(INT8) == (8 / 8));
-    halide_assert(user_context, sizeof(INT16) == (16 / 8));
-    halide_assert(user_context, sizeof(INT32) == (32 / 8));
-    halide_assert(user_context, sizeof(INT64) == (64 / 8));
-    halide_assert(user_context, sizeof(UINT8) == (8 / 8));
-    halide_assert(user_context, sizeof(UINT16) == (16 / 8));
-    halide_assert(user_context, sizeof(UINT32) == (32 / 8));
-    halide_assert(user_context, sizeof(UINT64) == (64 / 8));
+    static_assert(sizeof(INT8) == (8 / 8));
+    static_assert(sizeof(INT16) == (16 / 8));
+    static_assert(sizeof(INT32) == (32 / 8));
+    static_assert(sizeof(INT64) == (64 / 8));
+    static_assert(sizeof(UINT8) == (8 / 8));
+    static_assert(sizeof(UINT16) == (16 / 8));
+    static_assert(sizeof(UINT32) == (32 / 8));
+    static_assert(sizeof(UINT64) == (64 / 8));
 #ifdef BITS_64
-    halide_assert(user_context, sizeof(SIZE_T) == (64 / 8));
+    static_assert(sizeof(SIZE_T) == (64 / 8));
 #else
-    halide_assert(user_context, sizeof(SIZE_T) == (32 / 8));
+    static_assert(sizeof(SIZE_T) == (32 / 8));
 #endif
 }
 
