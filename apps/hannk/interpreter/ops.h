@@ -332,12 +332,12 @@ public:
     static const char *to_string(Operator op);
 
 protected:
-    Operator op_;
+    const Operator op_;
 
     bool reducing(int d) const;
 
 public:
-    ReductionOp(const TensorPtr &input, const TensorPtr &indices, const TensorPtr &output, Operator op)
+    ReductionOp(Operator op, const TensorPtr &input, const TensorPtr &indices, const TensorPtr &output)
         : Op({input, indices}, {output}), op_(op) {
     }
 
