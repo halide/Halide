@@ -13,6 +13,10 @@ int main(int argc, char **argv) {
         return 0;
     }
 
+    if (target.has_feature(Target::OpenGLCompute)) {
+        printf("[SKIP] OpenGLCompute does not support dynamic-sized shared memory\n");
+    }
+
     // This test demonstrates a trick for writing interpreters in
     // Halide, and as a side-effect tests our ability to correctly
     // emit switch statements.

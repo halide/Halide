@@ -227,6 +227,16 @@ int thread_loop_workgroup_index(const string &name) {
 
 void CodeGen_OpenGLCompute_C::visit(const FloatImm *op) {
     ostringstream oss;
+    // Handle infinities
+    if (std::isinf(op->value)) {
+        if (op->value > 0) {
+            oss << "inf_f32()";
+        } else {
+            oss << "neg_inf_f32()";
+        }
+        id = oss.str();
+        return;
+    }
     // Print integral numbers with trailing ".0". For fractional numbers use a
     // precision of 9 digits, which should be enough to recover the binary
     // float unambiguously from the decimal representation (if iostreams
@@ -424,6 +434,21 @@ void CodeGen_OpenGLCompute_C::visit(const Call *op) {
     } else if (op->name == "fast_inverse_sqrt_f32") {
         print_expr(make_one(op->type) / sqrt(op->args[0]));
         return;
+    } else if (op->name == "is_nan_f32") {
+        ostringstream rhs;
+        rhs << "isnan(" << print_expr(op->args[0]) << ")";
+        print_assignment(op->type, rhs.str());
+        return;
+    } else if (op->name == "is_inf_f32") {
+        ostringstream rhs;
+        rhs << "isinf(" << print_expr(op->args[0]) << ")";
+        print_assignment(op->type, rhs.str());
+        return;
+    } else if (op->name == "is_finite_f32") {
+        ostringstream rhs;
+        rhs << "!(isinf(" << print_expr(op->args[0]) << "))";
+        print_assignment(op->type, rhs.str());
+        return;
     } else if (op->name == "pow_f32") {
         if (can_prove(op->args[0] > 0)) {
             ostringstream rhs;
@@ -463,6 +488,10 @@ void CodeGen_OpenGLCompute_C::visit(const Call *op) {
         print_assignment(op->type, print_expr(op->args[0]) + " / " + print_expr(op->args[1]));
     } else if (op->is_intrinsic(Call::mod_round_to_zero)) {
         print_assignment(op->type, print_expr(op->args[0]) + " % " + print_expr(op->args[1]));
+    } else if (op->is_intrinsic(Call::strict_float)) {
+        internal_assert(op->args.size() == 1);
+        string arg0 = print_expr(op->args[0]);
+        print_assignment(op->type, arg0);
     } else {
         auto it = builtin.find(op->name);
         if (it == builtin.end()) {
@@ -701,6 +730,8 @@ void CodeGen_OpenGLCompute_C::add_kernel(const Stmt &s,
         stream << "#version 430\n";
     }
     stream << "float float_from_bits(int x) { return intBitsToFloat(int(x)); }\n";
+    stream << "float inf_f32() { return (1.0 / 0.0); }\n";
+    stream << "float neg_inf_f32() { return -(1.0 / 0.0); }\n";
     stream << "#define halide_unused(x) (void)(x)\n";
 
     for (size_t i = 0; i < args.size(); i++) {
