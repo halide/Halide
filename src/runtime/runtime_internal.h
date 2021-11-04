@@ -248,12 +248,12 @@ using namespace Halide::Runtime::Internal;
 /** halide_debug_assert() is like halide_assert(), but only expands into a check when
  * DEBUG_RUNTIME is defined. It is what you want to use in almost all cases. */
 #ifdef DEBUG_RUNTIME
-#define halide_debug_assert(user_context, cond)                                                                                                 \
-    do {                                                                                                                                        \
-        if (!(cond)) {                                                                                                                          \
+#define halide_debug_assert(user_context, cond)                                                                                           \
+    do {                                                                                                                                  \
+        if (!(cond)) {                                                                                                                    \
             halide_print(user_context, __FILE__ ":" _halide_expand_and_stringify(__LINE__) " halide_debug_assert() failed: " #cond "\n"); \
-            abort();                                                                                                                            \
-        }                                                                                                                                       \
+            abort();                                                                                                                      \
+        }                                                                                                                                 \
     } while (0)
 #else
 #define halide_debug_assert(user_context, cond)
