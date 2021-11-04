@@ -21,7 +21,7 @@ int main(int argc, char **argv) {
     // Let the Halide runtime hold onto GPU allocations for
     // intermediates and reuse them instead of eagerly freeing
     // them. cuMemAlloc/cuMemFree is slower than the algorithm!
-    (void)halide_reuse_device_allocations(nullptr, true);  // ignore errors
+    halide_reuse_device_allocations(nullptr, true);
 
     Buffer<uint8_t> left_im = load_image(argv[1]);
     Buffer<uint8_t> right_im = load_image(argv[1]);
