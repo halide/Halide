@@ -29,7 +29,7 @@ public:
         : Op(std::move(inputs), std::move(outputs)) {
     }
 
-    BoundsMap map_bounds(int input_idx, int output_idx) const;
+    BoundsMap map_bounds(int input_idx, int output_idx) const override;
 };
 
 class BinaryOp : public ElementwiseOp {
@@ -55,12 +55,12 @@ public:
         : ElementwiseOp({a, b}, {output}), op_(op), activation_(activation) {
     }
 
-    void accept(OpVisitor *v);
+    void accept(OpVisitor *v) override;
 
-    void execute();
+    void execute() override;
 
-    void dump(std::ostream &os) const {
-        os << "  " << to_string(op_) << " " << output()->name() << std::endl;
+    std::string name() const override {
+        return std::string("BinaryOp(") + to_string(op_) + ")";
     }
 };
 
@@ -80,14 +80,14 @@ public:
         is_no_op_ = true;
     }
 
-    void accept(OpVisitor *v);
+    void accept(OpVisitor *v) override;
 
-    BoundsMap map_bounds(int input_idx, int output_idx) const;
+    BoundsMap map_bounds(int input_idx, int output_idx) const override;
 
-    void execute();
+    void execute() override;
 
-    void dump(std::ostream &os) const {
-        os << "  Concatenation " << output()->name() << std::endl;
+    std::string name() const override {
+        return "ConcatenationOp";
     }
 };
 
@@ -96,6 +96,10 @@ class ConvOp : public Op {
     std::array<int, 2> dilation_;
     Padding padding_;
     ActivationFunction activation_;
+
+    // calculated in prepare()
+    int vector_reduction_ = 0;
+    int vector_tile_ = 0;
 
 public:
     ConvOp(const TensorPtr &input, const TensorPtr &filter, const TensorPtr &bias, const TensorPtr &output,
@@ -108,7 +112,7 @@ public:
           activation_(activation) {
     }
 
-    void accept(OpVisitor *v);
+    void accept(OpVisitor *v) override;
 
     const TensorPtr &filter() const {
         return Op::input(1);
@@ -127,12 +131,14 @@ public:
     }
 
     halide_type_t filter_type() const;
-    BoundsMap map_bounds(int input_idx, int output_idx) const;
+    BoundsMap map_bounds(int input_idx, int output_idx) const override;
 
-    void execute();
+    bool prepare() override;
 
-    void dump(std::ostream &os) const {
-        os << "  Conv " << output()->name() << std::endl;
+    void execute() override;
+
+    std::string name() const override {
+        return "ConvOp";
     }
 };
 
@@ -142,6 +148,9 @@ class DepthwiseConv2DOp : public Op {
     std::array<int, 2> dilation_;
     Padding padding_;
     ActivationFunction activation_;
+
+    // calculated in prepare()
+    int channel_alignment_ = 0;
 
 public:
     DepthwiseConv2DOp(const TensorPtr &input, const TensorPtr &filter, const TensorPtr &bias, const TensorPtr &output,
@@ -155,7 +164,7 @@ public:
           activation_(activation) {
     }
 
-    void accept(OpVisitor *v);
+    void accept(OpVisitor *v) override;
 
     int depth_multiplier() const {
         return depth_multiplier_;
@@ -177,12 +186,14 @@ public:
         return Op::input(2);
     }
 
-    BoundsMap map_bounds(int input_idx, int output_idx) const;
+    BoundsMap map_bounds(int input_idx, int output_idx) const override;
 
-    void execute();
+    bool prepare() override;
 
-    void dump(std::ostream &os) const {
-        os << "  DepthwiseConv2D " << output()->name() << std::endl;
+    void execute() override;
+
+    std::string name() const override {
+        return "DepthwiseConv2DOp";
     }
 };
 
@@ -198,48 +209,51 @@ public:
         : ElementwiseOp(std::move(inputs), std::move(outputs)), program_(program) {
     }
 
-    void accept(OpVisitor *v);
+    void accept(OpVisitor *v) override;
 
-    void execute();
+    void execute() override;
 
-    void dump(std::ostream &os) const {
-        os << "  ElementwiseProgram" << std::endl;
+    std::string name() const override {
+        return "ElementwiseProgramOp";
     }
 };
 
 class GatherOp : public Op {
-    int axis_;
+    const int axis_;
+    const int batch_dims_;
 
 public:
-    GatherOp(TensorPtr input, TensorPtr indices, TensorPtr output, int axis)
-        : Op({input, indices}, {output}), axis_(axis) {
+    GatherOp(TensorPtr input, TensorPtr indices, TensorPtr output, int axis, int batch_dims)
+        : Op({input, indices}, {output}), axis_(axis), batch_dims_(batch_dims) {
     }
 
-    void accept(OpVisitor *v);
+    void accept(OpVisitor *v) override;
 
-    BoundsMap map_bounds(int input_idx, int output_idx) const;
+    BoundsMap map_bounds(int input_idx, int output_idx) const override;
 
-    void execute();
+    void execute() override;
 
-    void dump(std::ostream &os) const {
-        os << "  Gather " << output()->name() << std::endl;
+    std::string name() const override {
+        return "GatherOp";
     }
 };
 
 class L2NormalizationOp : public Op {
+    const int axis_;
+
 public:
-    L2NormalizationOp(const TensorPtr &input, const TensorPtr &output)
-        : Op({input}, {output}) {
+    L2NormalizationOp(const TensorPtr &input, const TensorPtr &output, int axis)
+        : Op({input}, {output}), axis_(axis) {
     }
 
-    void accept(OpVisitor *v);
+    void accept(OpVisitor *v) override;
 
-    BoundsMap map_bounds(int input_idx, int output_idx) const;
+    BoundsMap map_bounds(int input_idx, int output_idx) const override;
 
-    void execute();
+    void execute() override;
 
-    void dump(std::ostream &os) const {
-        os << "  L2Normalization " << output()->name() << std::endl;
+    std::string name() const override {
+        return "L2NormalizationOp";
     }
 };
 
@@ -252,14 +266,14 @@ public:
         }
     }
 
-    void accept(OpVisitor *v);
+    void accept(OpVisitor *v) override;
 
-    BoundsMap map_bounds(int input_idx, int output_idx) const;
+    BoundsMap map_bounds(int input_idx, int output_idx) const override;
 
-    void execute();
+    void execute() override;
 
-    void dump(std::ostream &os) const {
-        os << "  Pad " << output()->name() << std::endl;
+    std::string name() const override {
+        return "PadOp";
     }
 };
 
@@ -298,14 +312,14 @@ public:
         return padding_;
     }
 
-    BoundsMap map_bounds(int input_idx, int output_idx) const;
+    BoundsMap map_bounds(int input_idx, int output_idx) const override;
 
-    void accept(OpVisitor *v);
+    void accept(OpVisitor *v) override;
 
-    void execute();
+    void execute() override;
 
-    void dump(std::ostream &os) const {
-        os << "  " << to_string(op_) << "Pool " << output()->name() << std::endl;
+    std::string name() const override {
+        return std::string("Pool2DOp(") + to_string(op_) + ")";
     }
 };
 
@@ -318,23 +332,23 @@ public:
     static const char *to_string(Operator op);
 
 protected:
-    Operator op_;
+    const Operator op_;
 
     bool reducing(int d) const;
 
 public:
-    ReductionOp(const TensorPtr &input, const TensorPtr &indices, const TensorPtr &output, Operator op)
+    ReductionOp(Operator op, const TensorPtr &input, const TensorPtr &indices, const TensorPtr &output)
         : Op({input, indices}, {output}), op_(op) {
     }
 
-    BoundsMap map_bounds(int input_idx, int output_idx) const;
+    BoundsMap map_bounds(int input_idx, int output_idx) const override;
 
-    void accept(OpVisitor *v);
+    void accept(OpVisitor *v) override;
 
-    void execute();
+    void execute() override;
 
-    void dump(std::ostream &os) const {
-        os << "  " << to_string(op_) << " " << output()->name() << std::endl;
+    std::string name() const override {
+        return std::string("ReductionOp(") + to_string(op_) + ")";
     }
 };
 
@@ -349,14 +363,14 @@ public:
         }
     }
 
-    void accept(OpVisitor *v);
+    void accept(OpVisitor *v) override;
 
-    BoundsMap map_bounds(int input_idx, int output_idx) const;
+    BoundsMap map_bounds(int input_idx, int output_idx) const override;
 
-    void execute();
+    void execute() override;
 
-    void dump(std::ostream &os) const {
-        os << "  Reshape " << output()->name() << std::endl;
+    std::string name() const override {
+        return "ReshapeOp";
     }
 };
 
@@ -366,33 +380,34 @@ public:
         : Op({input}, {output}) {
     }
 
-    void accept(OpVisitor *v);
+    void accept(OpVisitor *v) override;
 
-    BoundsMap map_bounds(int input_idx, int output_idx) const;
+    BoundsMap map_bounds(int input_idx, int output_idx) const override;
 
-    void execute();
+    void execute() override;
 
-    void dump(std::ostream &os) const {
-        os << "  Shape " << output()->name() << std::endl;
+    std::string name() const override {
+        return "ShapeOp";
     }
 };
 
 class SoftmaxOp : public Op {
-    float beta_;
+    const float beta_;
+    const int axis_;
 
 public:
-    SoftmaxOp(const TensorPtr &input, const TensorPtr &output, float beta)
-        : Op({input}, {output}), beta_(beta) {
+    SoftmaxOp(const TensorPtr &input, const TensorPtr &output, float beta, int axis)
+        : Op({input}, {output}), beta_(beta), axis_(axis) {
     }
 
-    void accept(OpVisitor *v);
+    void accept(OpVisitor *v) override;
 
-    BoundsMap map_bounds(int input_idx, int output_idx) const;
+    BoundsMap map_bounds(int input_idx, int output_idx) const override;
 
-    void execute();
+    void execute() override;
 
-    void dump(std::ostream &os) const {
-        os << "  Softmax " << output()->name() << std::endl;
+    std::string name() const override {
+        return "SoftmaxOp";
     }
 };
 
@@ -404,15 +419,14 @@ public:
         : Op({input}, {output}), block_size_(block_size) {
     }
 
-    void accept(OpVisitor *v);
+    void accept(OpVisitor *v) override;
 
-    BoundsMap map_bounds(int input_idx, int output_idx) const;
+    BoundsMap map_bounds(int input_idx, int output_idx) const override;
 
-    void execute();
+    void execute() override;
 
-    void dump(std::ostream &os) const {
-        const char *name = block_size_ > 0 ? "SpaceToDepth" : "DepthToSpace";
-        os << "  " << name << " " << output()->name() << std::endl;
+    std::string name() const override {
+        return block_size_ > 0 ? "SpaceToDepthOp" : "DepthToSpaceOp";
     }
 };
 
@@ -432,14 +446,14 @@ public:
         is_no_op_ = true;
     }
 
-    void accept(OpVisitor *v);
+    void accept(OpVisitor *v) override;
 
-    BoundsMap map_bounds(int input_idx, int output_idx) const;
+    BoundsMap map_bounds(int input_idx, int output_idx) const override;
 
-    void execute();
+    void execute() override;
 
-    void dump(std::ostream &os) const {
-        os << "  Split" << std::endl;
+    std::string name() const override {
+        return "SplitOp";
     }
 };
 
@@ -449,14 +463,14 @@ public:
         : Op({input}, {output}) {
     }
 
-    void accept(OpVisitor *v);
+    void accept(OpVisitor *v) override;
 
-    BoundsMap map_bounds(int input_idx, int output_idx) const;
+    BoundsMap map_bounds(int input_idx, int output_idx) const override;
 
-    void execute();
+    void execute() override;
 
-    void dump(std::ostream &os) const {
-        os << "  TileConvFilterOp " << output()->name() << std::endl;
+    std::string name() const override {
+        return "TileConvFilterOp";
     }
 };
 
@@ -466,14 +480,14 @@ public:
         : Op({input, dims}, {output}) {
     }
 
-    void accept(OpVisitor *v);
+    void accept(OpVisitor *v) override;
 
-    BoundsMap map_bounds(int input_idx, int output_idx) const;
+    BoundsMap map_bounds(int input_idx, int output_idx) const override;
 
-    void execute();
+    void execute() override;
 
-    void dump(std::ostream &os) const {
-        os << "  TransposeOp " << output()->name() << std::endl;
+    std::string name() const override {
+        return "TransposeOp";
     }
 };
 
@@ -499,12 +513,12 @@ public:
         : ElementwiseOp({input}, {output}), op_(op) {
     }
 
-    void accept(OpVisitor *v);
+    void accept(OpVisitor *v) override;
 
-    void execute();
+    void execute() override;
 
-    void dump(std::ostream &os) const {
-        os << "  " << to_string(op_) << " " << output()->name() << std::endl;
+    std::string name() const override {
+        return std::string("UnaryOp(") + to_string(op_) + ")";
     }
 };
 
@@ -516,14 +530,14 @@ public:
         : Op({input}, {output}), factor_(factor) {
     }
 
-    void accept(OpVisitor *v);
+    void accept(OpVisitor *v) override;
 
-    BoundsMap map_bounds(int input_idx, int output_idx) const;
+    BoundsMap map_bounds(int input_idx, int output_idx) const override;
 
-    void execute();
+    void execute() override;
 
-    void dump(std::ostream &os) const {
-        os << "  UpsampleChannels " << output()->name() << std::endl;
+    std::string name() const override {
+        return "UpsampleChannelsOp";
     }
 };
 
@@ -571,6 +585,13 @@ public:
     }
     virtual void visit(OpGroup *op) {
     }
+};
+
+class LeafOpVisitor : public OpVisitor {
+public:
+    using OpVisitor::visit;
+
+    void visit(OpGroup *op) override;
 };
 
 }  // namespace hannk

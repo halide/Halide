@@ -98,7 +98,7 @@ public:
                 shape.push_back(t->shape()->Get(shape_size - 1 - i));
             }
         }
-        //HCHECK(t->shape()) << "Dynamic shapes not supported.";
+        // HCHECK(t->shape()) << "Dynamic shapes not supported.";
 
         halide_type_t type = parse_type(t->type());
 
@@ -294,6 +294,7 @@ public:
         const tflite::GatherOptions *options =
             op->builtin_options_as_GatherOptions();
         int axis = options->axis();
+        int batch_dims = options->batch_dims();
         TensorPtr input = tensors_[op->inputs()->Get(0)];
         TensorPtr indices = tensors_[op->inputs()->Get(1)];
         TensorPtr output = tensors_[op->outputs()->Get(0)];
@@ -301,7 +302,7 @@ public:
             axis += input->rank();
         }
         axis = input->rank() - 1 - axis;
-        return make_op<GatherOp>(input, indices, output, axis);
+        return make_op<GatherOp>(input, indices, output, axis, batch_dims);
     }
 
     OpPtr parse_space_to_depth(const tflite::Operator *op) {
@@ -358,20 +359,29 @@ public:
         float beta = options->beta();
         TensorPtr input = tensors_[op->inputs()->Get(0)];
         TensorPtr output = tensors_[op->outputs()->Get(0)];
-        return make_op<SoftmaxOp>(input, output, beta);
+        const int axis = 0;  // In TFLite, normalization is always against the first axis.
+        return make_op<SoftmaxOp>(input, output, beta, axis);
     }
 
     OpPtr parse_l2_normalization(const tflite::Operator *op) {
         TensorPtr input = tensors_[op->inputs()->Get(0)];
         TensorPtr output = tensors_[op->outputs()->Get(0)];
-        return make_op<L2NormalizationOp>(input, output);
+        const int axis = 0;  // In TFLite, normalization is always against the first axis.
+        return make_op<L2NormalizationOp>(input, output, axis);
     }
 
     OpPtr parse_reduction(const tflite::Operator *op, ReductionOp::Operator reduction_op) {
         TensorPtr input = tensors_[op->inputs()->Get(0)];
         TensorPtr indices = tensors_[op->inputs()->Get(1)];
         TensorPtr output = tensors_[op->outputs()->Get(0)];
-        return make_op<ReductionOp>(input, indices, output, reduction_op);
+        const tflite::ReducerOptions *options = op->builtin_options_as_ReducerOptions();
+#ifndef NDEBUG
+        const bool keep_dims = options ? options->keep_dims() : false;
+        // TODO: I have yet to find any examples of keep_dims == false in the wild.
+        // If/when we do, handle it appropriately.
+        assert(keep_dims == true);
+#endif
+        return make_op<ReductionOp>(reduction_op, input, indices, output);
     }
 
     OpPtr parse_unary(const tflite::Operator *op, UnaryOp::Operator type) {
@@ -437,10 +447,13 @@ public:
             return parse_fully_connected(op);
         case tflite::BuiltinOperator_GATHER:
             return parse_gather(op);
+        // TODO: support GATHER_ND once we find a testcase for it
+        // case tflite::BuiltinOperator_GATHER_ND:
+        //     return parse_gather_nd(op);
         case tflite::BuiltinOperator_GREATER:
-            return parse_binary(op, BinaryOp::Less, true);
-        case tflite::BuiltinOperator_GREATER_EQUAL:
             return parse_binary(op, BinaryOp::LessEqual, true);
+        case tflite::BuiltinOperator_GREATER_EQUAL:
+            return parse_binary(op, BinaryOp::Less, true);
         case tflite::BuiltinOperator_L2_NORMALIZATION:
             return parse_l2_normalization(op);
         case tflite::BuiltinOperator_LESS:

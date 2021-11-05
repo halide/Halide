@@ -33,6 +33,19 @@ namespace hannk {
 
 namespace {
 
+#if 0
+// Useful for debugging
+std::string dims_to_string(const halide_buffer_t *buf) {
+    std::ostringstream oss;
+    oss << "{";
+    for (int i = 0; i < buf->dimensions; i++) {
+        oss << "{" << buf->dim[i] << "},";
+    }
+    oss << "}";
+    return oss.str();
+}
+#endif
+
 // Split a dimension d into two new dimensions. Dim d will have min 0
 // and extent factor, while the new dim d + 1 will have the outer split dimension.
 template<typename T>
@@ -50,6 +63,7 @@ void split(int d, int factor, HalideBuffer<T> &buf) {
     dim1.stride *= factor;
 }
 
+// TODO: FuseType::Delete is unused and could likely be removed.
 enum class FuseType {
     // Delete the second of the fused dimension, reducing the rank by 1.
     Delete,
@@ -98,8 +112,8 @@ bool can_fuse_xy(FuseType type, const halide_buffer_t *buf) {
 }
 
 // Fuse dimensions d0 and d1 of buf.
-// If pad is true, add a new dimension of extent 1 and min 0 at the end.
-// If pad is false, d1 is deleted from the buffer.
+// If type==Pad, add a new dimension of extent 1 and min 0 at the end.
+// If type==Delete, d1 is deleted from the buffer.
 void fuse(int d0, int d1, FuseType type, halide_buffer_t *buf) {
     assert(can_fuse(d0, d1, type, buf));
     halide_dimension_t &dim0 = buf->dim[d0];
@@ -470,24 +484,43 @@ void mul_uint8(const HalideBuffer<const void> &in1, const QuantizationInfo &in1q
     elementwise_loop_nest<2>(mul_rank2, in1, in2, out);
 }
 
-void requantize(const HalideBuffer<const void> &in, const QuantizationInfo &inq,
-                HalideBuffer<void> out, const QuantizationInfo &outq,
-                ActivationFunction activation = ActivationFunction::None) {
-    if (inq == outq) {
-        // Some of these are just copies, or no-ops.
-        if (is_alias(in.raw_buffer(), out.raw_buffer())) {
-            return;
-        } else {
-            out.copy_from(in);
-        }
-    } else if (in.type() == halide_type_of<uint8_t>() &&
-               out.type() == halide_type_of<uint8_t>()) {
+bool try_requantize(const HalideBuffer<const void> &in, const QuantizationInfo &inq,
+                    HalideBuffer<void> out, const QuantizationInfo &outq,
+                    ActivationFunction activation = ActivationFunction::None) {
+    if (in.type() != out.type()) {
+        HLOG(ERROR) << "requantize: input and output types must match";
+        return false;
+    }
+
+    if (in.type() == halide_type_of<uint8_t>() &&
+        out.type() == halide_type_of<uint8_t>()) {
         // TODO: Maybe a dedicated pipeline for this would be better. It
         // could be a little faster, and avoid some quantization error.
         add_uint8(in, inq, 1, in, inq, 0, out, outq, activation);
-    } else {
-        HLOG(FATAL) << "Unable to requantize " << in.type() << " -> " << out.type() << "\n";
+        return true;
     }
+
+    return false;
+}
+
+// Input and output buffer types must match.
+// If the input and output buffers are quantized, we always call requantize.
+// If not, we simply copy.
+bool requantize_or_copy(const HalideBuffer<const void> &in, const QuantizationInfo &inq,
+                        HalideBuffer<void> out, const QuantizationInfo &outq,
+                        ActivationFunction activation = ActivationFunction::None) {
+    if (in.type() != out.type()) {
+        HLOG(ERROR) << "requantize_or_copy: input and output types must match";
+        return false;
+    }
+    if (try_requantize(in, inq, out, outq, activation)) {
+        return true;
+    }
+
+    if (!is_alias(in.raw_buffer(), out.raw_buffer())) {
+        out.copy_from(in);
+    }
+    return true;
 }
 
 ActivationFunction to_activation(UnaryOp::Operator op) {
@@ -551,23 +584,24 @@ double dequantize_scalar(const Tensor *t) {
     int zero = q.zero.empty() ? 0 : q.zero.front();
 
     const auto &buf = t->buffer();
-    if (buf.type() == halide_type_of<uint8_t>()) {
+    switch (buf.type().element_of().as_u32()) {
+    case halide_type_of<uint8_t>().as_u32():
         return (as_scalar<uint8_t>(buf) - zero) * scale;
-    } else if (buf.type() == halide_type_of<int8_t>()) {
+    case halide_type_of<int8_t>().as_u32():
         return (as_scalar<int8_t>(buf) - zero) * scale;
-    } else if (buf.type() == halide_type_of<uint16_t>()) {
+    case halide_type_of<uint16_t>().as_u32():
         return (as_scalar<uint16_t>(buf) - zero) * scale;
-    } else if (buf.type() == halide_type_of<int16_t>()) {
+    case halide_type_of<int16_t>().as_u32():
         return (as_scalar<int16_t>(buf) - zero) * scale;
-    } else if (buf.type() == halide_type_of<uint32_t>()) {
+    case halide_type_of<uint32_t>().as_u32():
         return (as_scalar<uint32_t>(buf) - zero) * scale;
-    } else if (buf.type() == halide_type_of<int32_t>()) {
+    case halide_type_of<int32_t>().as_u32():
         return (as_scalar<int32_t>(buf) - zero) * scale;
-    } else if (buf.type() == halide_type_of<float>()) {
+    case halide_type_of<float>().as_u32():
         return (as_scalar<float>(buf) - zero) * scale;
-    } else if (buf.type() == halide_type_of<double>()) {
+    case halide_type_of<double>().as_u32():
         return (as_scalar<double>(buf) - zero) * scale;
-    } else {
+    default:
         HLOG(FATAL) << "Unsupported type " << buf.type();
         return std::numeric_limits<double>::quiet_NaN();
     }
@@ -596,6 +630,25 @@ TResult implement_binary(BinaryOp::Operator op, TOperand a, TOperand b) {
     }
 }
 
+template<typename TOperand, typename TResult>
+bool try_scalar_binary_op(BinaryOp::Operator op, const TensorPtr &a, const TensorPtr &b, const TensorPtr &result) {
+    if (a->type() == halide_type_of<TOperand>() &&
+        b->type() == halide_type_of<TOperand>() &&
+        result->type() == halide_type_of<TResult>()) {
+        const auto &a_buf = a->buffer<const TOperand>();
+        const auto &b_buf = b->buffer<const TOperand>();
+        const auto &result_buf = result->buffer<TResult>();
+
+        // This is really slow, only intended to support scalar operations.
+        const auto scalar_op = [&](TOperand a_scalar, TOperand b_scalar, TResult &result_scalar) {
+            result_scalar = implement_binary<TResult, TOperand>(op, a_scalar, b_scalar);
+        };
+        scalar_elementwise_loop_nest(scalar_op, a_buf, b_buf, result_buf);
+        return true;
+    }
+    return false;
+}
+
 }  // namespace
 
 void BinaryOp::execute() {
@@ -621,39 +674,45 @@ void BinaryOp::execute() {
         default:
             break;
         }
-    } else if (in1->type() == halide_type_of<int32_t>() &&
-               in2->type() == halide_type_of<int32_t>() &&
-               out->type() == halide_type_of<int32_t>()) {
-        const auto &in1_buf = in1->buffer<const int32_t>();
-        const auto &in2_buf = in2->buffer<const int32_t>();
-        const auto &out_buf = out->buffer<int32_t>();
-
+    } else {
         // This is really slow, only intended to support scalar operations.
-        auto scalar_op = [&](int32_t a, int32_t b, int32_t &result) {
-            result = implement_binary<int32_t>(op_, a, b);
-        };
-        scalar_elementwise_loop_nest(scalar_op, in1_buf, in2_buf, out_buf);
-        return;
-    } else if (out->type() == halide_type_of<bool>() && out->rank() == 0) {
-        double in1_scalar = dequantize_scalar(in1.get());
-        double in2_scalar = dequantize_scalar(in2.get());
-        auto out_buf = out->buffer<bool>();
+        if (try_scalar_binary_op<int32_t, int32_t>(op_, in1, in2, out)) {
+            return;
+        }
 
-        switch (op_) {
-        case Less:
-            out_buf() = in1_scalar < in2_scalar;
-            return;
-        case LessEqual:
-            out_buf() = in1_scalar <= in2_scalar;
-            return;
-        case Equal:
-            out_buf() = in1_scalar == in2_scalar;
-            return;
-        case NotEqual:
-            out_buf() = in1_scalar != in2_scalar;
-            return;
-        default:
-            break;
+        // TODO: these can be useful for debugging pipelines that use op variants we don't fully support yet
+        // (e.g. float32) -- leaving this here (but commented out) as a useful reference, but *please*
+        // don't add any permanent usage here at this time (the ops almost certainly need to be written in Halide).
+        //
+        // if (try_scalar_binary_op<float, float>(op_, in1, in2, out)) {
+        //     return;
+        // }
+        // // This is for the LESS, etc operators, which may store results in uint8 rather than bool
+        // if (try_scalar_binary_op<float, uint8_t>(op_, in1, in2, out)) {
+        //     return;
+        // }
+
+        if (out->type() == halide_type_of<bool>() && out->rank() == 0) {
+            double in1_scalar = dequantize_scalar(in1.get());
+            double in2_scalar = dequantize_scalar(in2.get());
+            auto out_buf = out->buffer<bool>();
+
+            switch (op_) {
+            case Less:
+                out_buf() = in1_scalar < in2_scalar;
+                return;
+            case LessEqual:
+                out_buf() = in1_scalar <= in2_scalar;
+                return;
+            case Equal:
+                out_buf() = in1_scalar == in2_scalar;
+                return;
+            case NotEqual:
+                out_buf() = in1_scalar != in2_scalar;
+                return;
+            default:
+                break;
+            }
         }
     }
     HLOG(FATAL)
@@ -689,7 +748,9 @@ void ConcatenationOp::execute() {
 
         auto output_crop = output_buf;
         crop_to_union(output_crop, input_buf);
-        requantize(input_buf, input(i)->quantization(), output_crop, output()->quantization());
+
+        bool copied = requantize_or_copy(input_buf, input(i)->quantization(), output_crop, output()->quantization());
+        HCHECK(copied);
     }
 }
 
@@ -709,6 +770,9 @@ halide_type_t ConvOp::filter_type() const {
 }
 
 BoundsMap ConvOp::map_bounds(int input_idx, int output_idx) const {
+    assert(vector_reduction_ > 0);
+    assert(vector_tile_ > 0);
+
 #ifdef CONV_R16
     const int unroll_reduction = filter()->extent(0) >= 16 ? 16 : 4;
 #else
@@ -724,22 +788,13 @@ BoundsMap ConvOp::map_bounds(int input_idx, int output_idx) const {
         }
         return result;
     } else if (input_idx == 1) {
-        // Pass minimal sized buffers to learn about the alignment requirements.
-        HalideBuffer<uint8_t> input_buf(nullptr, 1, 1, 1, 1);
-        HalideBuffer<int32_t> bias_buf(nullptr, 1);
-        HalideBuffer<void> filter_buf(filter_type(), nullptr, 1, 1, 1, 1, 1, 1);
-        HalideBuffer<uint8_t> output_buf(nullptr, 1, 1, 1, 1);
-        conv_u8_u8_u8(input_buf, 0, filter_buf, 0, bias_buf, 1, 1, 1, 1, 0, 0, 0, 0, 0, output_buf);
-
-        const int vector_reduction = filter_buf.dim(0).extent();
-        const int vector_tile = filter_buf.dim(1).extent();
-        const int channel_alignment = unroll_reduction / vector_reduction;
+        const int channel_alignment = unroll_reduction / vector_reduction_;
         BoundsMap result(input()->rank() + 2, output()->rank());
         result
-            .constant(0, vector_reduction)
-            .constant(1, vector_tile)
-            .constant(2, align_up(ceil_div(filter()->extent(0), vector_reduction), channel_alignment))
-            .upsample(3, 0, vector_tile);
+            .constant(0, vector_reduction_)
+            .constant(1, vector_tile_)
+            .constant(2, align_up(ceil_div(filter()->extent(0), vector_reduction_), channel_alignment))
+            .upsample(3, 0, vector_tile_);
         for (int i = 1; i < output()->rank() - 1; i++) {
             result.constant(i + 3, filter()->bounds(i));
         }
@@ -778,6 +833,22 @@ void call_conv2d(halide_buffer_t *input, halide_buffer_t *filter, halide_buffer_
 
 }  // namespace
 
+bool ConvOp::prepare() {
+    // Pass minimal sized buffers to learn about the alignment requirements.
+    // TODO: need to adapt this to the types of in, filt, out once we support multiple variants
+    HalideBuffer<uint8_t> input_buf(nullptr, 1, 1, 1, 1);
+    HalideBuffer<int32_t> bias_buf(nullptr, 1);
+    HalideBuffer<void> filter_buf(filter_type(), nullptr, 1, 1, 1, 1, 1, 1);
+    HalideBuffer<uint8_t> output_buf(nullptr, 1, 1, 1, 1);
+    if (conv_u8_u8_u8(input_buf, 0, filter_buf, 0, bias_buf, 1, 1, 1, 1, 0, 0, 0, 0, 0, output_buf) != 0) {
+        return false;
+    }
+
+    vector_reduction_ = filter_buf.dim(0).extent();
+    vector_tile_ = filter_buf.dim(1).extent();
+    return true;
+}
+
 void ConvOp::execute() {
     const TensorPtr &in = input();
     const TensorPtr &filt = filter();
@@ -810,7 +881,8 @@ void ConvOp::execute() {
             // small output sizes.
             // TODO: Maybe we can just treat all of x, y, b as batch dimensions and fuse
             // them all where possible, which might be a further improvement.
-            while (can_fuse_xy(FuseType::Pad, input_buf) && can_fuse_xy(FuseType::Pad, output_buf) &&
+            while (can_fuse_xy(FuseType::Pad, input_buf) &&
+                   can_fuse_xy(FuseType::Pad, output_buf) &&
                    input_buf.dim(1).extent() == output_buf.dim(1).extent()) {
                 fuse_xy(FuseType::Pad, input_buf);
                 fuse_xy(FuseType::Pad, output_buf);
@@ -856,20 +928,22 @@ void call_depthwise_conv_uint8(
     }
 }
 
-int get_depthwise_conv_channel_alignment() {
-    // Pass minimal sized buffers to learn about the alignment requirements.
-    HalideBuffer<uint8_t> input_buf(nullptr, 1, 1, 1, 1);
-    HalideBuffer<int32_t> bias_buf(nullptr, 1);
-    HalideBuffer<uint8_t> filter_buf(nullptr, 1, 1, 1);
-    HalideBuffer<uint8_t> output_buf(nullptr, 1, 1, 1, 1);
-    depthwise_conv_uint8(input_buf, 0, filter_buf, 0, bias_buf, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, output_buf);
-    return input_buf.dim(0).extent();
+bool can_be_shallow(int alignment, int extent_0, int extent_1) {
+    assert(alignment > 0);
+    // This is correct: we want to use shallow when the vector size (ie, alignment)
+    // is evenly divisble by the number of channels (ie, extent(0)).
+    //
+    // To avoid OOB access for tiny buffers, we also check that the fused width
+    // is at least one vector wide.
+    return (alignment % extent_0) == 0 && (extent_0 * extent_1 >= alignment);
 }
 
 }  // namespace
 
 BoundsMap DepthwiseConv2DOp::map_bounds(int input_idx, int output_idx) const {
     assert(output_idx == 0);
+    assert(channel_alignment_ > 0);
+
     if (input_idx == 0) {
         BoundsMap result(4, 4);
         result
@@ -878,11 +952,11 @@ BoundsMap DepthwiseConv2DOp::map_bounds(int input_idx, int output_idx) const {
             .downsample(2, 2, stride_[1], Interval(0, dilation_[1] * (filter()->extent(2) - 1)))
             .elementwise(3, 3);
         if (depth_multiplier_ == 1) {
-            const int alignment = get_depthwise_conv_channel_alignment();
-            if (alignment % input()->extent(0) == 0 && stride_[0] == 1) {
+            if (stride_[0] == 1 &&
+                can_be_shallow(channel_alignment_, input()->extent(0), input()->extent(1))) {
                 // We can use the shallow version of depthwise here.
             } else {
-                result.align_input(0, alignment);
+                result.align_input(0, channel_alignment_);
             }
         }
         return result;
@@ -896,6 +970,20 @@ BoundsMap DepthwiseConv2DOp::map_bounds(int input_idx, int output_idx) const {
     } else {
         return BoundsMap(0, 4);
     }
+}
+
+bool DepthwiseConv2DOp::prepare() {
+    // Pass minimal sized buffers to learn about the alignment requirements.
+    // TODO: need to adapt this to the types of in, filt, out once we support multiple variants
+    HalideBuffer<uint8_t> input_buf(nullptr, 1, 1, 1, 1);
+    HalideBuffer<int32_t> bias_buf(nullptr, 1);
+    HalideBuffer<uint8_t> filter_buf(nullptr, 1, 1, 1);
+    HalideBuffer<uint8_t> output_buf(nullptr, 1, 1, 1, 1);
+    if (depthwise_conv_uint8(input_buf, 0, filter_buf, 0, bias_buf, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, output_buf) != 0) {
+        return false;
+    }
+    channel_alignment_ = input_buf.dim(0).extent();
+    return true;
 }
 
 void DepthwiseConv2DOp::execute() {
@@ -924,13 +1012,13 @@ void DepthwiseConv2DOp::execute() {
         if (stride_[0] == 1 &&
             can_fuse_cx(FuseType::InPlace, input_buf) &&
             can_fuse_cx(FuseType::InPlace, output_buf) &&
-            get_depthwise_conv_channel_alignment() % input_buf.dim(0).extent() == 0) {
+            can_be_shallow(channel_alignment_, input_buf.dim(0).extent(), input_buf.dim(1).extent())) {
             input_stride_x = input_buf.dim(1).stride();
             fuse_cx(FuseType::InPlace, input_buf);
             fuse_cx(FuseType::InPlace, output_buf);
         }
 
-        assert(depth_multiplier_ == 1);
+        assert(depth_multiplier_ == 1 || depth_multiplier_ >= out->extent(0));
         call_depthwise_conv_uint8(input_buf, filter_buf, bias_buf, params,
                                   stride_, dilation_, input_stride_x, output_range, output_buf);
     } else {
@@ -1032,15 +1120,46 @@ void GatherOp::execute() {
     HalideBuffer<const int32_t> indices = input(1)->buffer();
     const HalideBuffer<void> &out = output()->buffer();
 
+    // Haven't yet found an instance of TFLite's Gather op that
+    // specifies a nonzero values. Implement and test once we do.
+    HCHECK(batch_dims_ == 0) << "TODO: GatherOp doesn't yet support batch_dim != 0";
+
     if (indices.dimensions() == 0) {
-        indices.embed(0, 0);
+        // Yes, a 0D (scalar) here is documented as legal in TFLite
+        indices.embed(0, 0);  // make 1-D
     }
 
-    for (int i = out.dim(axis_).min(); i <= out.dim(axis_).max(); i++) {
-        HalideBuffer<const void> in_i = in.sliced(axis_, indices(i));
-        HalideBuffer<void> out_i = out.sliced(axis_, i);
-        out_i.copy_from(in_i);
+#ifndef NDEBUG
+    assert(out.dimensions() == in.dimensions() + indices.dimensions() - 1);
+    for (int i = 0; i < out.dimensions(); i++) {
+        if (i < axis_) {
+            assert(out.dim(i).extent() == in.dim(i).extent());
+        } else if (i < axis_ + indices.dimensions()) {
+            assert(out.dim(i).extent() == indices.dim(i - axis_).extent());
+        } else {
+            assert(out.dim(i).extent() == in.dim(i - indices.dimensions() + 1).extent());
+        }
     }
+
+    // Negative values for axis_ are handled by the parser
+    assert(axis_ >= 0 && axis_ < in.dimensions());
+#endif
+
+    // Note that the TFLite Gather op restricts indices to 1D (or 0D),
+    // but other NN libraries (eg NNAPI) alloe for it to be multidimensional,
+    // so we must copy more robustly.
+    //
+    // (TODO: support TFLite's GatherNd op, which is similar to this.)
+    const int pos_dims = indices.dimensions();
+    indices.for_each_element([&](const int *pos) {
+        const int index = indices(pos);
+        HalideBuffer<const void> in_i = in.sliced(axis_, index);
+        HalideBuffer<void> out_i = out.sliced(axis_, pos[0]);
+        for (int i = 1; i < pos_dims; i++) {
+            out_i = out_i.sliced(axis_, pos[i]);
+        }
+        out_i.copy_from(in_i);
+    });
 }
 
 BoundsMap L2NormalizationOp::map_bounds(int input_idx, int output_idx) const {
@@ -1055,10 +1174,23 @@ void L2NormalizationOp::execute() {
     const TensorPtr &in = input();
     const TensorPtr &out = output();
 
+    // Negative values for axis_ must be normalized by the parser
+    assert(axis_ >= 0 && axis_ < in->rank());
+
     if (in->type() == halide_type_of<uint8_t>() &&
         out->type() == halide_type_of<uint8_t>()) {
-        const auto &in_buf = in->buffer();
-        const auto &out_buf = out->buffer();
+        // Make local copies in case we need to transpose them
+        HalideBuffer<void> in_buf = in->buffer();
+        HalideBuffer<void> out_buf = out->buffer();
+
+        // TODO: we currently assume that the axis-is-0 case is the most common
+        // and most important, and optimize for it; the other cases, we just transpose,
+        // which currently requires less-efficient specializations in the Halide code.
+        // Revisit if this proves too slow in practice.
+        if (axis_ != 0) {
+            in_buf.transpose(0, axis_);
+            out_buf.transpose(0, axis_);
+        }
 
         const int input_zero = in->quantization().uniform_zero();
         assert(input_zero >= 0 && input_zero <= 255);
@@ -1245,9 +1377,17 @@ const char *ReductionOp::to_string(Operator op) {
 }
 
 bool ReductionOp::reducing(int d) const {
-    const auto &indices = input(1)->buffer<const int32_t>();
-    for (int i = 0; i < indices.dim(0).extent(); i++) {
-        if (indices(i) == d) {
+    const TensorPtr &in = input(0);
+    const TensorPtr &indices = input(1);
+    const auto &indices_buf = indices->buffer<const int32_t>();
+    for (int i = 0; i < indices_buf.dim(0).extent(); i++) {
+        int index = indices_buf(i);
+        if (index < 0) {
+            index += in->rank();
+        }
+        index = in->rank() - 1 - index;
+        assert(index >= 0 && index < in->rank());
+        if (index == d) {
             return true;
         }
     }
@@ -1417,10 +1557,23 @@ void SoftmaxOp::execute() {
     const TensorPtr &in = input();
     const TensorPtr &out = output();
 
+    // Negative values for axis_ must be normalized by the parser
+    assert(axis_ >= 0 && axis_ < in->rank());
+
     if (in->type() == halide_type_of<uint8_t>() &&
         out->type() == halide_type_of<uint8_t>()) {
-        const auto &in_buf = in->buffer();
-        const auto &out_buf = out->buffer();
+        // Make local copies in case we need to transpose them
+        HalideBuffer<void> in_buf = in->buffer();
+        HalideBuffer<void> out_buf = out->buffer();
+
+        // TODO: we currently assume that the axis-is-0 case is the most common
+        // and most important, and optimize for it; the other cases, we just transpose,
+        // which currently requires less-efficient specializations in the Halide code.
+        // Revisit if this proves too slow in practice.
+        if (axis_ != 0) {
+            in_buf.transpose(0, axis_);
+            out_buf.transpose(0, axis_);
+        }
 
         // We don't need the input zero point because this op exploits the
         // identity exp(x_i)/sum(exp(x_i)) == exp(x_i + C)/sum(exp(x_i + C))
@@ -1499,8 +1652,7 @@ void SpaceDepthOp::execute() {
     const TensorPtr &in = input();
     const TensorPtr &out = output();
 
-    if (in->type() == halide_type_of<uint8_t>() &&
-        out->type() == halide_type_of<uint8_t>()) {
+    if (in->type() == out->type()) {
         const auto &in_buf = in->buffer();
         const auto &out_buf = out->buffer();
 
@@ -1509,6 +1661,8 @@ void SpaceDepthOp::execute() {
         } else {
             DepthToSpace(in_buf, -block_size_, out_buf);
         }
+    } else {
+        HLOG(FATAL) << "Unsupported types " << in->type() << " " << out->type() << "\n";
     }
 }
 
@@ -1539,7 +1693,8 @@ void SplitOp::execute() {
         assert(output_buf.dim(axis_).min() == 0);
 
         output_buf.translate(axis_, concatenated_i);
-        requantize(input_buf, input()->quantization(), output_buf, output(i)->quantization());
+        bool copied = requantize_or_copy(input_buf, input()->quantization(), output_buf, output(i)->quantization());
+        HCHECK(copied);
 
         concatenated_i += output_buf.dim(axis_).extent();
     }
@@ -1689,7 +1844,8 @@ void UnaryOp::execute() {
             mul_uint8(in_buf, in->quantization(), in_buf, in->quantization(), out_buf, out->quantization());
             return;
         } else if (op_ == Relu || op_ == Relu6 || op_ == ReluN1To1) {
-            requantize(in_buf, in->quantization(), out_buf, out->quantization(), to_activation(op_));
+            bool copied = try_requantize(in_buf, in->quantization(), out_buf, out->quantization(), to_activation(op_));
+            HCHECK(copied);
             return;
         }
     }
@@ -1794,6 +1950,12 @@ void UpsampleChannelsOp::accept(OpVisitor *v) {
 
 void UnaryOp::accept(OpVisitor *v) {
     v->visit(this);
+}
+
+void LeafOpVisitor::visit(OpGroup *op) {
+    for (int i = 0; i < op->op_count(); i++) {
+        op->op(i)->accept(this);
+    }
 }
 
 }  // namespace hannk

@@ -16,12 +16,14 @@
 #include "BoundsInference.h"
 #include "CSE.h"
 #include "CanonicalizeGPUVars.h"
+#include "ClampUnsafeAccesses.h"
 #include "CompilerLogger.h"
 #include "Debug.h"
 #include "DebugArguments.h"
 #include "DebugToFile.h"
 #include "Deinterleave.h"
 #include "EarlyFree.h"
+#include "ExtractTileOperations.h"
 #include "FindCalls.h"
 #include "FindIntrinsics.h"
 #include "FlattenNestedRamps.h"
@@ -164,6 +166,12 @@ void lower_impl(const vector<Function> &output_funcs,
     // function. Used in later bounds inference passes.
     debug(1) << "Computing bounds of each function's value\n";
     FuncValueBounds func_bounds = compute_function_value_bounds(order, env);
+
+    // Clamp unsafe instances where a Func f accesses a Func g using
+    // an index which depends on a third Func h.
+    debug(1) << "Clamping unsafe data-dependent accesses\n";
+    s = clamp_unsafe_accesses(s, env, func_bounds);
+    log("Lowering after clamping unsafe data-dependent accesses", s);
 
     // This pass injects nested definitions of variable names, so we
     // can't simplify statements from here until we fix them up. (We
@@ -378,6 +386,14 @@ void lower_impl(const vector<Function> &output_funcs,
     s = lower_unsafe_promises(s, t);
     log("Lowering after lowering unsafe promises:", s);
 
+#if LLVM_VERSION >= 120
+    if (t.has_feature(Target::AVX512_SapphireRapids)) {
+        debug(1) << "Extracting tile operations...\n";
+        s = extract_tile_operations(s);
+        log("Lowering after extracting tile operations:", s);
+    }
+#endif
+
     debug(1) << "Flattening nested ramps...\n";
     s = flatten_nested_ramps(s);
     log("Lowering after flattening nested ramps:", s);
@@ -390,6 +406,8 @@ void lower_impl(const vector<Function> &output_funcs,
     log("Lowering after removing dead allocations and hoisting loop invariants:", s);
 
     debug(1) << "Finding intrinsics...\n";
+    // Must be run after the last simplification, because it turns
+    // divisions into shifts, which the simplifier reverses.
     s = find_intrinsics(s);
     log("Lowering after finding intrinsics:", s);
 
@@ -484,8 +502,8 @@ void lower_impl(const vector<Function> &output_funcs,
                 << ", which was not found in the argument list.\n";
 
             err << "\nArgument list specified: ";
-            for (size_t i = 0; i < args.size(); i++) {
-                err << args[i].name << " ";
+            for (const auto &arg : args) {
+                err << arg.name << " ";
             }
             err << "\n\nParameters referenced in generated code: ";
             for (const InferredArgument &ia : inferred_args) {

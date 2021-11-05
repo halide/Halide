@@ -280,9 +280,9 @@ string make_entity_name(void *stack_ptr, const string &type, char prefix) {
         return unique_name(prefix);
     } else {
         // Halide names may not contain '.'
-        for (size_t i = 0; i < name.size(); i++) {
-            if (name[i] == '.') {
-                name[i] = ':';
+        for (char &c : name) {
+            if (c == '.') {
+                c = ':';
             }
         }
         return unique_name(name);
@@ -584,15 +584,15 @@ std::string c_print_name(const std::string &name,
         oss << "_";
     }
 
-    for (size_t i = 0; i < name.size(); i++) {
-        if (name[i] == '.') {
+    for (char c : name) {
+        if (c == '.') {
             oss << "_";
-        } else if (name[i] == '$') {
+        } else if (c == '$') {
             oss << "__";
-        } else if (name[i] != '_' && !isalnum(name[i])) {
+        } else if (c != '_' && !isalnum(c)) {
             oss << "___";
         } else {
-            oss << name[i];
+            oss << c;
         }
     }
     return oss.str();

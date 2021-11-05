@@ -44,11 +44,18 @@ public:
         output_.compute_root()
             .vectorize(x, vector_size * 2, TailStrategy::Predicate);
 
-        // Support broadcasting in the c dimension for input2.
+        // Support broadcasting in the c dimension for either input.
+        input1_.dim(0).set_stride(Expr());
         input2_.dim(0).set_stride(Expr());
-        output_.specialize(input2_.dim(0).stride() == 1);
-        output_.specialize(input2_.dim(0).stride() == 0);
-        output_.specialize_fail("input2 dimension 0 must have a stride of 0 or 1.");
+        // Most common case
+        output_.specialize(input1_.dim(0).stride() == 1 && input2_.dim(0).stride() == 1);
+        // Second most common case
+        output_.specialize(input1_.dim(0).stride() == 1 && input2_.dim(0).stride() == 0);
+        // Very uncommon (not seen in the wild)
+        output_.specialize(input1_.dim(0).stride() == 0 && input2_.dim(0).stride() == 1);
+        // Don't specialize for both strides being 0
+        // output_.specialize(input1_.dim(0).stride() == 0 && input2_.dim(0).stride() == 0);
+        output_.specialize_fail("input dimension 0 must have a stride of 0 or 1.");
     }
 };
 
@@ -85,11 +92,18 @@ public:
         output_.compute_root()
             .vectorize(x, vector_size * 2, TailStrategy::Predicate);
 
-        // Support broadcasting in the c dimension for input2.
+        // Support broadcasting in the c dimension for either input.
+        input1_.dim(0).set_stride(Expr());
         input2_.dim(0).set_stride(Expr());
-        output_.specialize(input2_.dim(0).stride() == 1);
-        output_.specialize(input2_.dim(0).stride() == 0);
-        output_.specialize_fail("input2 dimension 0 must have a stride of 0 or 1.");
+        // Most common case
+        output_.specialize(input1_.dim(0).stride() == 1 && input2_.dim(0).stride() == 1);
+        // Second most common case
+        output_.specialize(input1_.dim(0).stride() == 1 && input2_.dim(0).stride() == 0);
+        // Very uncommon (not seen in the wild)
+        output_.specialize(input1_.dim(0).stride() == 0 && input2_.dim(0).stride() == 1);
+        // Don't specialize for both strides being 0
+        // output_.specialize(input1_.dim(0).stride() == 0 && input2_.dim(0).stride() == 0);
+        output_.specialize_fail("input dimension 0 must have a stride of 0 or 1.");
     }
 };
 

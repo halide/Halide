@@ -17,13 +17,13 @@ namespace {
 
 string sanitize_name(const string &name) {
     ostringstream oss;
-    for (size_t i = 0; i < name.size(); i++) {
-        if (name[i] == '.' || name[i] == '_') {
+    for (char c : name) {
+        if (c == '.' || c == '_') {
             oss << "_";
-        } else if (!isalnum(name[i])) {
-            oss << "_" << (int)name[i];
+        } else if (!isalnum(c)) {
+            oss << "_" << (int)c;
         } else {
-            oss << name[i];
+            oss << c;
         }
     }
     return oss.str();
@@ -124,8 +124,8 @@ PythonExtensionGen::PythonExtensionGen(std::ostream &dest)
 }
 
 void PythonExtensionGen::release_buffers(const string &prefix = "    ") {
-    for (size_t i = 0; i < buffer_refs.size(); i++) {
-        dest << prefix << "PyBuffer_Release(&" << buffer_refs[i] << ");\n";
+    for (auto &buffer_ref : buffer_refs) {
+        dest << prefix << "PyBuffer_Release(&" << buffer_ref << ");\n";
     }
 }
 
@@ -328,8 +328,8 @@ void PythonExtensionGen::compile(const LoweredFunc &f) {
         dest << "    " << print_type(&args[i]).second << " py_" << arg_names[i] << ";\n";
     }
     dest << "    if (!PyArg_ParseTupleAndKeywords(args, kwargs, \"";
-    for (size_t i = 0; i < args.size(); i++) {
-        dest << print_type(&args[i]).first;
+    for (const auto &arg : args) {
+        dest << print_type(&arg).first;
     }
     dest << "\", (char**)kwlist";
     for (size_t i = 0; i < args.size(); i++) {

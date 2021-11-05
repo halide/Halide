@@ -19,6 +19,7 @@ tests(GROUPS correctness
       bitwise_ops.cpp
       bool_compute_root_vectorize.cpp
       bound.cpp
+      bound_storage.cpp
       bound_small_allocations.cpp
       boundary_conditions.cpp
       bounds.cpp
@@ -65,7 +66,9 @@ tests(GROUPS correctness
       cuda_8_bit_dot_product.cpp
       custom_allocator.cpp
       custom_auto_scheduler.cpp
+      custom_cuda_context.cpp
       custom_error_reporter.cpp
+      custom_jit_context.cpp
       custom_lowering_pass.cpp
       dead_realization_in_specialization.cpp
       debug_to_file.cpp
@@ -153,6 +156,7 @@ tests(GROUPS correctness
       gpu_transpose.cpp
       gpu_vectorize.cpp
       gpu_vectorized_shared_memory.cpp
+      growing_stack.cpp
       half_native_interleave.cpp
       halide_buffer.cpp
       handle.cpp
@@ -169,6 +173,7 @@ tests(GROUPS correctness
       implicit_args.cpp
       implicit_args_tests.cpp
       in_place.cpp
+      indexing_access_undef.cpp
       infer_arguments.cpp
       inline_reduction.cpp
       inlined_generator.cpp
@@ -309,6 +314,7 @@ tests(GROUPS correctness
       strided_load.cpp
       target.cpp
       thread_safety.cpp
+      tiled_matmul.cpp
       tracing.cpp
       tracing_bounds.cpp
       tracing_broadcast.cpp

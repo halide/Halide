@@ -16,11 +16,6 @@ namespace hannk {
 template<typename T>
 using HalideBuffer = Halide::Runtime::Buffer<T, max_rank>;
 
-// Must be constexpr to allow use in case clauses.
-inline constexpr int halide_type_code(halide_type_code_t code, int bits) {
-    return (((int)code) << 8) | bits;
-}
-
 // dynamic_type_dispatch is a utility for functors that want to be able
 // to dynamically dispatch a halide_type_t to type-specialized code.
 // To use it, a functor must be a *templated* class, e.g.
@@ -40,10 +35,11 @@ template<template<typename> class Functor, typename... Args>
 auto dynamic_type_dispatch(const halide_type_t &type, Args &&...args)
     -> decltype(std::declval<Functor<uint8_t>>()(std::forward<Args>(args)...)) {
 
-#define HANDLE_CASE(CODE, BITS, TYPE)  \
-    case halide_type_code(CODE, BITS): \
+#define HANDLE_CASE(CODE, BITS, TYPE)        \
+    case halide_type_t(CODE, BITS).as_u32(): \
         return Functor<TYPE>()(std::forward<Args>(args)...);
-    switch (halide_type_code((halide_type_code_t)type.code, type.bits)) {
+
+    switch (type.element_of().as_u32()) {
         // HANDLE_CASE(halide_type_float, 16, float)  // TODO
         HANDLE_CASE(halide_type_float, 32, float)
         HANDLE_CASE(halide_type_float, 64, double)
@@ -64,6 +60,7 @@ auto dynamic_type_dispatch(const halide_type_t &type, Args &&...args)
         using ReturnType = decltype(std::declval<Functor<uint8_t>>()(std::forward<Args>(args)...));
         return ReturnType();
     }
+
 #undef HANDLE_CASE
 }
 

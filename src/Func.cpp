@@ -346,15 +346,15 @@ bool is_const_assignment(const string &func_name, const vector<Expr> &args, cons
 void Stage::set_dim_type(const VarOrRVar &var, ForType t) {
     bool found = false;
     vector<Dim> &dims = definition.schedule().dims();
-    for (size_t i = 0; i < dims.size(); i++) {
-        if (var_name_match(dims[i].var, var.name())) {
+    for (auto &dim : dims) {
+        if (var_name_match(dim.var, var.name())) {
             found = true;
-            dims[i].for_type = t;
+            dim.for_type = t;
 
             // If it's an rvar and the for type is parallel, we need to
             // validate that this doesn't introduce a race condition,
             // unless it is flagged explicitly or is a associative atomic operation.
-            if (!dims[i].is_pure() && var.is_rvar && is_parallel(t)) {
+            if (!dim.is_pure() && var.is_rvar && is_parallel(t)) {
                 if (!definition.schedule().allow_race_conditions() &&
                     definition.schedule().atomic()) {
                     if (!definition.schedule().override_atomic_associativity_test()) {
@@ -409,10 +409,10 @@ void Stage::set_dim_type(const VarOrRVar &var, ForType t) {
 void Stage::set_dim_device_api(const VarOrRVar &var, DeviceAPI device_api) {
     bool found = false;
     vector<Dim> &dims = definition.schedule().dims();
-    for (size_t i = 0; i < dims.size(); i++) {
-        if (var_name_match(dims[i].var, var.name())) {
+    for (auto &dim : dims) {
+        if (var_name_match(dim.var, var.name())) {
             found = true;
-            dims[i].device_api = device_api;
+            dim.device_api = device_api;
         }
     }
 
@@ -970,13 +970,13 @@ void Stage::split(const string &old, const string &outer, const string &inner, c
     vector<Dim> &dims = definition.schedule().dims();
 
     // Check that the new names aren't already in the dims list.
-    for (size_t i = 0; i < dims.size(); i++) {
+    for (auto &dim : dims) {
         string new_names[2] = {inner, outer};
-        for (int j = 0; j < 2; j++) {
-            if (var_name_match(dims[i].var, new_names[j]) && new_names[j] != old) {
+        for (const auto &new_name : new_names) {
+            if (var_name_match(dim.var, new_name) && new_name != old) {
                 user_error << "In schedule for " << name()
-                           << ", can't create var " << new_names[j]
-                           << " using a split or tile, because " << new_names[j]
+                           << ", can't create var " << new_name
+                           << " using a split or tile, because " << new_name
                            << " is already used in this Func's schedule elsewhere.\n"
                            << dump_argument_list();
             }
@@ -2589,9 +2589,9 @@ Func &Func::align_storage(const Var &dim, const Expr &alignment) {
     invalidate_cache();
 
     vector<StorageDim> &dims = func.schedule().storage_dims();
-    for (size_t i = 0; i < dims.size(); i++) {
-        if (var_name_match(dims[i].var, dim.name())) {
-            dims[i].alignment = alignment;
+    for (auto &d : dims) {
+        if (var_name_match(d.var, dim.name())) {
+            d.alignment = alignment;
             return *this;
         }
     }
@@ -2602,14 +2602,31 @@ Func &Func::align_storage(const Var &dim, const Expr &alignment) {
     return *this;
 }
 
+Func &Func::bound_storage(const Var &dim, const Expr &bound) {
+    invalidate_cache();
+
+    vector<StorageDim> &dims = func.schedule().storage_dims();
+    for (auto &d : dims) {
+        if (var_name_match(d.var, dim.name())) {
+            d.bound = bound;
+            return *this;
+        }
+    }
+    user_error << "In schedule for " << name()
+               << ", could not find var " << dim.name()
+               << " to bound the storage of.\n"
+               << dump_dim_list(func.schedule().storage_dims());
+    return *this;
+}
+
 Func &Func::fold_storage(const Var &dim, const Expr &factor, bool fold_forward) {
     invalidate_cache();
 
     vector<StorageDim> &dims = func.schedule().storage_dims();
-    for (size_t i = 0; i < dims.size(); i++) {
-        if (var_name_match(dims[i].var, dim.name())) {
-            dims[i].fold_factor = factor;
-            dims[i].fold_forward = fold_forward;
+    for (auto &d : dims) {
+        if (var_name_match(d.var, dim.name())) {
+            d.fold_factor = factor;
+            d.fold_forward = fold_forward;
             return *this;
         }
     }
@@ -2735,10 +2752,10 @@ class CountImplicitVars : public Internal::IRGraphVisitor {
 public:
     int count;
 
-    CountImplicitVars(const vector<Expr> &e)
+    CountImplicitVars(const vector<Expr> &exprs)
         : count(0) {
-        for (size_t i = 0; i < e.size(); i++) {
-            e[i].accept(this);
+        for (const auto &e : exprs) {
+            e.accept(this);
         }
     }
 
@@ -2772,21 +2789,21 @@ FuncRef::FuncRef(Internal::Function f, const vector<Var> &a, int placeholder_pos
     }
 }
 
-vector<Expr> FuncRef::args_with_implicit_vars(const vector<Expr> &e) const {
-    vector<Expr> a = args;
+vector<Expr> FuncRef::args_with_implicit_vars(const vector<Expr> &exprs) const {
+    vector<Expr> result = args;
 
-    for (size_t i = 0; i < a.size(); i++) {
-        user_assert(a[i].defined())
+    for (size_t i = 0; i < result.size(); i++) {
+        user_assert(result[i].defined())
             << "Argument " << (i + 1) << " in call to \"" << func.name() << "\" is undefined.\n";
     }
-    for (size_t i = 0; i < e.size(); i++) {
-        user_assert(e[i].defined())
+    for (size_t i = 0; i < exprs.size(); i++) {
+        user_assert(exprs[i].defined())
             << "Value " << (i + 1) << " in definition of \"" << func.name() << "\" is undefined.\n";
     }
 
-    CountImplicitVars count(e);
-    for (size_t i = 0; i < a.size(); i++) {
-        a[i].accept(&count);
+    CountImplicitVars count(exprs);
+    for (const auto &e : exprs) {
+        e.accept(&count);
     }
 
     if (count.count > 0) {
@@ -2804,9 +2821,9 @@ vector<Expr> FuncRef::args_with_implicit_vars(const vector<Expr> &e) const {
 
             Internal::debug(2) << "Adding " << count.count << " implicit vars to LHS of " << func.name() << "\n";
 
-            vector<Expr>::iterator iter = a.begin() + implicit_placeholder_pos;
+            vector<Expr>::iterator iter = result.begin() + implicit_placeholder_pos;
             for (int i = 0; i < count.count; i++) {
-                iter = a.insert(iter, Var::implicit(i));
+                iter = result.insert(iter, Var::implicit(i));
                 iter++;
             }
         }
@@ -2816,8 +2833,8 @@ vector<Expr> FuncRef::args_with_implicit_vars(const vector<Expr> &e) const {
     for (int i = 0; i < count.count; i++) {
         Var v = Var::implicit(i);
         bool found = false;
-        for (size_t j = 0; j < a.size(); j++) {
-            if (const Variable *arg = a[j].as<Variable>()) {
+        for (auto &e : result) {
+            if (const Variable *arg = e.as<Variable>()) {
                 if (arg->name == v.name()) {
                     found = true;
                 }
@@ -2829,7 +2846,7 @@ vector<Expr> FuncRef::args_with_implicit_vars(const vector<Expr> &e) const {
             << " contain the placeholder symbol '_'.\n";
     }
 
-    return a;
+    return result;
 }
 
 Stage FuncRef::operator=(const Expr &e) {
@@ -3089,7 +3106,22 @@ Realization Func::realize(std::vector<int32_t> sizes, const Target &target,
     return pipeline().realize(std::move(sizes), target, param_map);
 }
 
+Realization Func::realize(JITUserContext *context,
+                          std::vector<int32_t> sizes,
+                          const Target &target,
+                          const ParamMap &param_map) {
+    user_assert(defined()) << "Can't realize undefined Func.\n";
+    return pipeline().realize(context, std::move(sizes), target, param_map);
+}
+
 void Func::infer_input_bounds(const std::vector<int32_t> &sizes,
+                              const Target &target,
+                              const ParamMap &param_map) {
+    infer_input_bounds(nullptr, sizes, target, param_map);
+}
+
+void Func::infer_input_bounds(JITUserContext *context,
+                              const std::vector<int32_t> &sizes,
                               const Target &target,
                               const ParamMap &param_map) {
     user_assert(defined()) << "Can't infer input bounds on an undefined Func.\n";
@@ -3099,7 +3131,7 @@ void Func::infer_input_bounds(const std::vector<int32_t> &sizes,
         outputs[i] = std::move(im);
     }
     Realization r(outputs);
-    infer_input_bounds(r, target, param_map);
+    infer_input_bounds(context, r, target, param_map);
 }
 
 OutputImageParam Func::output_buffer() const {
@@ -3243,29 +3275,38 @@ void Func::compile_to_assembly(const string &filename, const vector<Argument> &a
 
 // JIT-related code
 
+namespace {
+template<typename A, typename B>
+void set_handler(A &a, B b) {
+    a = (A)b;
+}
+}  // namespace
+
+// Deprecated setters for JIT handlers
 void Func::set_error_handler(void (*handler)(void *, const char *)) {
-    pipeline().set_error_handler(handler);
+    set_handler(jit_handlers().custom_error, handler);
 }
 
 void Func::set_custom_allocator(void *(*cust_malloc)(void *, size_t),
                                 void (*cust_free)(void *, void *)) {
-    pipeline().set_custom_allocator(cust_malloc, cust_free);
+    set_handler(jit_handlers().custom_malloc, cust_malloc);
+    set_handler(jit_handlers().custom_free, cust_free);
 }
 
 void Func::set_custom_do_par_for(int (*cust_do_par_for)(void *, int (*)(void *, int, uint8_t *), int, int, uint8_t *)) {
-    pipeline().set_custom_do_par_for(cust_do_par_for);
+    set_handler(jit_handlers().custom_do_par_for, cust_do_par_for);
 }
 
 void Func::set_custom_do_task(int (*cust_do_task)(void *, int (*)(void *, int, uint8_t *), int, uint8_t *)) {
-    pipeline().set_custom_do_task(cust_do_task);
+    set_handler(jit_handlers().custom_do_task, cust_do_task);
 }
 
 void Func::set_custom_trace(int (*trace_fn)(void *, const halide_trace_event_t *)) {
-    pipeline().set_custom_trace(trace_fn);
+    set_handler(jit_handlers().custom_trace, trace_fn);
 }
 
 void Func::set_custom_print(void (*cust_print)(void *, const char *)) {
-    pipeline().set_custom_print(cust_print);
+    set_handler(jit_handlers().custom_print, cust_print);
 }
 
 void Func::add_custom_lowering_pass(IRMutator *pass, std::function<void()> deleter) {
@@ -3280,18 +3321,34 @@ const vector<CustomLoweringPass> &Func::custom_lowering_passes() {
     return pipeline().custom_lowering_passes();
 }
 
-const Internal::JITHandlers &Func::jit_handlers() {
+JITHandlers &Func::jit_handlers() {
     return pipeline().jit_handlers();
 }
 
-void Func::realize(Pipeline::RealizationArg outputs, const Target &target,
+void Func::realize(Pipeline::RealizationArg outputs,
+                   const Target &target,
                    const ParamMap &param_map) {
     pipeline().realize(std::move(outputs), target, param_map);
 }
 
-void Func::infer_input_bounds(Pipeline::RealizationArg outputs, const Target &target,
+void Func::realize(JITUserContext *context,
+                   Pipeline::RealizationArg outputs,
+                   const Target &target,
+                   const ParamMap &param_map) {
+    pipeline().realize(context, std::move(outputs), target, param_map);
+}
+
+void Func::infer_input_bounds(Pipeline::RealizationArg outputs,
+                              const Target &target,
                               const ParamMap &param_map) {
     pipeline().infer_input_bounds(std::move(outputs), target, param_map);
+}
+
+void Func::infer_input_bounds(JITUserContext *context,
+                              Pipeline::RealizationArg outputs,
+                              const Target &target,
+                              const ParamMap &param_map) {
+    pipeline().infer_input_bounds(context, std::move(outputs), target, param_map);
 }
 
 void Func::compile_jit(const Target &target) {

@@ -10,6 +10,90 @@ define_property(TARGET PROPERTY Halide_GENERATOR_HAS_POST_BUILD
                 BRIEF_DOCS "On a Halide generator target, true if Halide.dll copy command has already been added."
                 FULL_DOCS "On a Halide generator target, true if Halide.dll copy command has already been added.")
 
+##
+# Function to simplify writing the CMake rules for creating a generator executable
+# that follows our recommended cross-compiling workflow.
+##
+
+function(add_halide_generator TARGET)
+    set(options "")
+    set(oneValueArgs PACKAGE_NAME PACKAGE_NAMESPACE EXPORT_FILE)
+    set(multiValueArgs SOURCES)
+    cmake_parse_arguments(ARG "${options}" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
+
+    if (NOT ARG_PACKAGE_NAME)
+        set(ARG_PACKAGE_NAME "${PROJECT_NAME}-halide_generators")
+    endif ()
+
+    if (NOT ARG_PACKAGE_NAMESPACE)
+        set(ARG_PACKAGE_NAMESPACE "${PROJECT_NAME}::halide_generators::")
+    endif ()
+
+    if (NOT ARG_EXPORT_FILE)
+        file(MAKE_DIRECTORY "${PROJECT_BINARY_DIR}/cmake")
+        set(ARG_EXPORT_FILE "${PROJECT_BINARY_DIR}/cmake/${ARG_PACKAGE_NAME}-config.cmake")
+    endif ()
+
+    if (NOT ARG_SOURCES)
+        set(ARG_SOURCES "${ARG_UNPARSED_ARGUMENTS}")
+    endif ()
+
+    _Halide_try_load_generators()
+
+    # Communicate found information to the caller
+    set(${ARG_PACKAGE_NAME}_FOUND "${${ARG_PACKAGE_NAME}_FOUND}" PARENT_SCOPE)
+
+    set(gen "${ARG_PACKAGE_NAMESPACE}${TARGET}")
+    if (NOT TARGET "${gen}")
+        if (NOT TARGET "${ARG_PACKAGE_NAME}")
+            add_custom_target("${ARG_PACKAGE_NAME}")
+        endif ()
+
+        if (NOT Halide_FOUND)
+            find_package(Halide REQUIRED)
+        endif ()
+
+        add_executable(${TARGET} ${ARG_SOURCES})
+        add_executable(${gen} ALIAS ${TARGET})
+        target_link_libraries(${TARGET} PRIVATE Halide::Generator)
+
+        add_dependencies("${ARG_PACKAGE_NAME}" ${TARGET})
+        export(TARGETS ${TARGET}
+               NAMESPACE ${ARG_PACKAGE_NAMESPACE}
+               APPEND FILE "${ARG_EXPORT_FILE}")
+    endif ()
+endfunction()
+
+# NOTE: this function must only be called by add_halide_generator
+# since it reads from its scope.
+function(_Halide_try_load_generators)
+    # Don't repeatedly run the search for the tools package.
+    if (NOT DEFINED ${ARG_PACKAGE_NAME}_FOUND)
+        # Some toolchains, like Emscripten, try to disable finding packages
+        # outside their sysroots, but we always want to find the native
+        # generators. Setting CMAKE_FIND_ROOT_PATH_BOTH here overrides
+        # the toolchain search preference. This is okay since a user can
+        # always override this call by setting ${ARG_PACKAGE_NAME}_ROOT.
+        find_package(${ARG_PACKAGE_NAME} QUIET
+                     CMAKE_FIND_ROOT_PATH_BOTH)
+
+        # Communicate found information to the caller
+        set(${ARG_PACKAGE_NAME}_FOUND "${${ARG_PACKAGE_NAME}_FOUND}" PARENT_SCOPE)
+
+        if (NOT ${ARG_PACKAGE_NAME}_FOUND AND CMAKE_CROSSCOMPILING)
+            message(WARNING
+                    "${ARG_PACKAGE_NAME} were not found and it looks like you are cross-compiling. "
+                    "This is likely to fail. Please set -D${ARG_PACKAGE_NAME}_ROOT=... at the CMake "
+                    "command line to the build directory of a host-built ${PROJECT_NAME}.")
+        endif ()
+    endif ()
+endfunction()
+
+##
+# Function to simplify writing the CMake rules for invoking a generator executable
+# and getting a usable CMake library out of it.
+##
+
 function(add_halide_library TARGET)
     ##
     # Set up argument parsing for extra outputs.

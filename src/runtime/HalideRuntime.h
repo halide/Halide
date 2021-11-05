@@ -62,9 +62,9 @@ extern "C" {
  * replaced with user-defined versions by defining an extern "C"
  * function with the same name and signature.
  *
- * When doing Just In Time (JIT) compilation methods on the Func being
- * compiled must be called instead. The corresponding methods are
- * documented below.
+ * When doing Just In Time (JIT) compilation members of
+ * some_pipeline_or_func.jit_handlers() must be replaced instead. The
+ * corresponding methods are documented below.
  *
  * All of these functions take a "void *user_context" parameter as their
  * first argument; if the Halide kernel that calls back to any of these
@@ -450,45 +450,56 @@ struct halide_type_t {
      * code: The fundamental type from an enum.
      * bits: The bit size of one element.
      * lanes: The number of vector elements in the type. */
-    HALIDE_ALWAYS_INLINE halide_type_t(halide_type_code_t code, uint8_t bits, uint16_t lanes = 1)
+    HALIDE_ALWAYS_INLINE constexpr halide_type_t(halide_type_code_t code, uint8_t bits, uint16_t lanes = 1)
         : code(code), bits(bits), lanes(lanes) {
     }
 
     /** Default constructor is required e.g. to declare halide_trace_event
      * instances. */
-    HALIDE_ALWAYS_INLINE halide_type_t()
+    HALIDE_ALWAYS_INLINE constexpr halide_type_t()
         : code((halide_type_code_t)0), bits(0), lanes(0) {
     }
 
-    HALIDE_ALWAYS_INLINE halide_type_t with_lanes(uint16_t new_lanes) const {
+    HALIDE_ALWAYS_INLINE constexpr halide_type_t with_lanes(uint16_t new_lanes) const {
         return halide_type_t((halide_type_code_t)code, bits, new_lanes);
     }
 
+    HALIDE_ALWAYS_INLINE constexpr halide_type_t element_of() const {
+        return with_lanes(1);
+    }
     /** Compare two types for equality. */
-    HALIDE_ALWAYS_INLINE bool operator==(const halide_type_t &other) const {
+    HALIDE_ALWAYS_INLINE constexpr bool operator==(const halide_type_t &other) const {
         return as_u32() == other.as_u32();
     }
 
-    HALIDE_ALWAYS_INLINE bool operator!=(const halide_type_t &other) const {
+    HALIDE_ALWAYS_INLINE constexpr bool operator!=(const halide_type_t &other) const {
         return !(*this == other);
     }
 
-    HALIDE_ALWAYS_INLINE bool operator<(const halide_type_t &other) const {
+    HALIDE_ALWAYS_INLINE constexpr bool operator<(const halide_type_t &other) const {
         return as_u32() < other.as_u32();
     }
 
     /** Size in bytes for a single element, even if width is not 1, of this type. */
-    HALIDE_ALWAYS_INLINE int bytes() const {
+    HALIDE_ALWAYS_INLINE constexpr int bytes() const {
         return (bits + 7) / 8;
     }
 
-    HALIDE_ALWAYS_INLINE uint32_t as_u32() const {
-        uint32_t u;
-        memcpy(&u, this, sizeof(u));
-        return u;
+    HALIDE_ALWAYS_INLINE constexpr uint32_t as_u32() const {
+        // Note that this produces a result that is identical to memcpy'ing 'this'
+        // into a u32 (on a little-endian machine, anyway), and at -O1 or greater
+        // on Clang, the compiler knows this and optimizes this into a single 32-bit move.
+        // (At -O0 it will look awful.)
+        return static_cast<uint8_t>(code) |
+               (static_cast<uint16_t>(bits) << 8) |
+               (static_cast<uint32_t>(lanes) << 16);
     }
 #endif
 };
+
+#if (__cplusplus >= 201103L || _MSVC_LANG >= 201103L)
+static_assert(sizeof(halide_type_t) == sizeof(uint32_t), "size mismatch in halide_type_t");
+#endif
 
 enum halide_trace_event_code_t { halide_trace_load = 0,
                                  halide_trace_store = 1,
@@ -1163,6 +1174,9 @@ enum halide_error_code_t {
      * pipeline, or enable the appropriate device backend. */
     halide_error_code_device_dirty_with_no_device_support = -44,
 
+    /** An explicit storage bound provided is too small to store
+     * all the values produced by the function. */
+    halide_error_code_storage_bound_too_small = -45,
 };
 
 /** Halide calls the functions below on various error conditions. The
@@ -1234,6 +1248,8 @@ extern int halide_error_device_interface_no_device(void *user_context);
 extern int halide_error_host_and_device_dirty(void *user_context);
 extern int halide_error_buffer_is_null(void *user_context, const char *routine);
 extern int halide_error_device_dirty_with_no_device_support(void *user_context, const char *buffer_name);
+extern int halide_error_storage_bound_too_small(void *user_context, const char *func_name, const char *var_name,
+                                                int provided_size, int required_size);
 // @}
 
 /** Optional features a compilation Target can have.
@@ -1268,6 +1284,7 @@ typedef enum halide_target_feature_t {
     halide_target_feature_cuda_capability70,  ///< Enable CUDA compute capability 7.0 (Volta)
     halide_target_feature_cuda_capability75,  ///< Enable CUDA compute capability 7.5 (Turing)
     halide_target_feature_cuda_capability80,  ///< Enable CUDA compute capability 8.0 (Ampere)
+    halide_target_feature_cuda_capability86,  ///< Enable CUDA compute capability 8.6 (Ampere)
 
     halide_target_feature_opencl,       ///< Enable the OpenCL runtime.
     halide_target_feature_cl_doubles,   ///< Enable double support on OpenCL targets
@@ -1913,74 +1930,82 @@ extern void halide_register_device_allocation_pool(struct halide_device_allocati
 #if (__cplusplus >= 201103L || _MSVC_LANG >= 201103L)
 
 namespace {
+
 template<typename T>
-struct check_is_pointer;
+struct check_is_pointer {
+    static constexpr bool value = false;
+};
+
 template<typename T>
-struct check_is_pointer<T *> {};
+struct check_is_pointer<T *> {
+    static constexpr bool value = true;
+};
+
 }  // namespace
 
 /** Construct the halide equivalent of a C type */
 template<typename T>
-HALIDE_ALWAYS_INLINE halide_type_t halide_type_of() {
+HALIDE_ALWAYS_INLINE constexpr halide_type_t halide_type_of() {
     // Create a compile-time error if T is not a pointer (without
     // using any includes - this code goes into the runtime).
-    check_is_pointer<T> check;
-    (void)check;
+    // (Note that we can't have uninitialized variables in constexpr functions,
+    // even if those variables aren't used.)
+    static_assert(check_is_pointer<T>::value, "Expected a pointer type here");
     return halide_type_t(halide_type_handle, 64);
 }
 
 template<>
-HALIDE_ALWAYS_INLINE halide_type_t halide_type_of<float>() {
+HALIDE_ALWAYS_INLINE constexpr halide_type_t halide_type_of<float>() {
     return halide_type_t(halide_type_float, 32);
 }
 
 template<>
-HALIDE_ALWAYS_INLINE halide_type_t halide_type_of<double>() {
+HALIDE_ALWAYS_INLINE constexpr halide_type_t halide_type_of<double>() {
     return halide_type_t(halide_type_float, 64);
 }
 
 template<>
-HALIDE_ALWAYS_INLINE halide_type_t halide_type_of<bool>() {
+HALIDE_ALWAYS_INLINE constexpr halide_type_t halide_type_of<bool>() {
     return halide_type_t(halide_type_uint, 1);
 }
 
 template<>
-HALIDE_ALWAYS_INLINE halide_type_t halide_type_of<uint8_t>() {
+HALIDE_ALWAYS_INLINE constexpr halide_type_t halide_type_of<uint8_t>() {
     return halide_type_t(halide_type_uint, 8);
 }
 
 template<>
-HALIDE_ALWAYS_INLINE halide_type_t halide_type_of<uint16_t>() {
+HALIDE_ALWAYS_INLINE constexpr halide_type_t halide_type_of<uint16_t>() {
     return halide_type_t(halide_type_uint, 16);
 }
 
 template<>
-HALIDE_ALWAYS_INLINE halide_type_t halide_type_of<uint32_t>() {
+HALIDE_ALWAYS_INLINE constexpr halide_type_t halide_type_of<uint32_t>() {
     return halide_type_t(halide_type_uint, 32);
 }
 
 template<>
-HALIDE_ALWAYS_INLINE halide_type_t halide_type_of<uint64_t>() {
+HALIDE_ALWAYS_INLINE constexpr halide_type_t halide_type_of<uint64_t>() {
     return halide_type_t(halide_type_uint, 64);
 }
 
 template<>
-HALIDE_ALWAYS_INLINE halide_type_t halide_type_of<int8_t>() {
+HALIDE_ALWAYS_INLINE constexpr halide_type_t halide_type_of<int8_t>() {
     return halide_type_t(halide_type_int, 8);
 }
 
 template<>
-HALIDE_ALWAYS_INLINE halide_type_t halide_type_of<int16_t>() {
+HALIDE_ALWAYS_INLINE constexpr halide_type_t halide_type_of<int16_t>() {
     return halide_type_t(halide_type_int, 16);
 }
 
 template<>
-HALIDE_ALWAYS_INLINE halide_type_t halide_type_of<int32_t>() {
+HALIDE_ALWAYS_INLINE constexpr halide_type_t halide_type_of<int32_t>() {
     return halide_type_t(halide_type_int, 32);
 }
 
 template<>
-HALIDE_ALWAYS_INLINE halide_type_t halide_type_of<int64_t>() {
+HALIDE_ALWAYS_INLINE constexpr halide_type_t halide_type_of<int64_t>() {
     return halide_type_t(halide_type_int, 64);
 }
 

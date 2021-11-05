@@ -619,11 +619,11 @@ void CodeGen_LLVM::end_func(const std::vector<LoweredArgument> &args) {
     return_with_error_code(ConstantInt::get(i32_t, 0));
 
     // Remove the arguments from the symbol table
-    for (size_t i = 0; i < args.size(); i++) {
-        if (args[i].is_buffer()) {
-            sym_pop(args[i].name + ".buffer");
+    for (const auto &arg : args) {
+        if (arg.is_buffer()) {
+            sym_pop(arg.name + ".buffer");
         } else {
-            sym_pop(args[i].name);
+            sym_pop(arg.name);
         }
     }
 
@@ -1160,21 +1160,30 @@ void CodeGen_LLVM::optimize_module() {
 #endif
         pb.registerOptimizerLastEPCallback(
             [](ModulePassManager &mpm, OptimizationLevel level) {
+#if LLVM_VERSION >= 140
+                AddressSanitizerOptions asan_options;  // default values are good...
+                asan_options.UseAfterScope = true;     // ... except this one
+                mpm.addPass(createModuleToFunctionPassAdaptor(AddressSanitizerPass(asan_options)));
+#else
                 constexpr bool compile_kernel = false;
                 constexpr bool recover = false;
                 constexpr bool use_after_scope = true;
-#if LLVM_VERSION >= 140
-                // TODO: this is the value that the default ctor uses.
-                // Not sure if it's ideal for Halide.
-                constexpr AsanDetectStackUseAfterReturnMode use_after_return = AsanDetectStackUseAfterReturnMode::Runtime;
-                mpm.addPass(createModuleToFunctionPassAdaptor(AddressSanitizerPass(
-                    AddressSanitizerOptions(compile_kernel, recover, use_after_scope, use_after_return))));
-#else
                 mpm.addPass(createModuleToFunctionPassAdaptor(AddressSanitizerPass(
                     compile_kernel, recover, use_after_scope)));
 #endif
             });
-#if LLVM_VERSION >= 120
+#if LLVM_VERSION >= 140
+        pb.registerPipelineStartEPCallback(
+            [](ModulePassManager &mpm, OptimizationLevel) {
+                AddressSanitizerOptions asan_options;  // default values are good
+                constexpr bool use_global_gc = true;
+                constexpr bool use_odr_indicator = true;
+                constexpr auto destructor_kind = AsanDtorKind::Global;
+                mpm.addPass(ModuleAddressSanitizerPass(
+                    asan_options, use_global_gc,
+                    use_odr_indicator, destructor_kind));
+            });
+#elif LLVM_VERSION >= 120
         pb.registerPipelineStartEPCallback(
             [](ModulePassManager &mpm, OptimizationLevel) {
                 constexpr bool compile_kernel = false;
@@ -1207,22 +1216,22 @@ void CodeGen_LLVM::optimize_module() {
             });
     }
 
-    for (llvm::Module::iterator i = module->begin(); i != module->end(); i++) {
+    for (auto &function : *module) {
         if (get_target().has_feature(Target::ASAN)) {
-            i->addFnAttr(Attribute::SanitizeAddress);
+            function.addFnAttr(Attribute::SanitizeAddress);
         }
         if (get_target().has_feature(Target::TSAN)) {
             // Do not annotate any of Halide's low-level synchronization code as it has
             // tsan interface calls to mark its behavior and is much faster if
             // it is not analyzed instruction by instruction.
-            if (!(i->getName().startswith("_ZN6Halide7Runtime8Internal15Synchronization") ||
+            if (!(function.getName().startswith("_ZN6Halide7Runtime8Internal15Synchronization") ||
                   // TODO: this is a benign data race that re-initializes the detected features;
                   // we should really fix it properly inside the implementation, rather than disabling
                   // it here as a band-aid.
-                  i->getName().startswith("halide_default_can_use_target_features") ||
-                  i->getName().startswith("halide_mutex_") ||
-                  i->getName().startswith("halide_cond_"))) {
-                i->addFnAttr(Attribute::SanitizeThread);
+                  function.getName().startswith("halide_default_can_use_target_features") ||
+                  function.getName().startswith("halide_mutex_") ||
+                  function.getName().startswith("halide_cond_"))) {
+                function.addFnAttr(Attribute::SanitizeThread);
             }
         }
     }
@@ -2558,11 +2567,9 @@ void CodeGen_LLVM::visit(const Call *op) {
     internal_assert(op->is_extern() || op->is_intrinsic())
         << "Can only codegen extern calls and intrinsics\n";
 
-    if (op->type.is_vector()) {
-        value = call_overloaded_intrin(op->type, op->name, op->args);
-        if (value) {
-            return;
-        }
+    value = call_overloaded_intrin(op->type, op->name, op->args);
+    if (value) {
+        return;
     }
 
     // Some call nodes are actually injected at various stages as a
@@ -3017,10 +3024,10 @@ void CodeGen_LLVM::visit(const Call *op) {
 
             // Compute the maximum possible size of the message.
             int buf_size = 1;  // One for the terminating zero.
-            for (size_t i = 0; i < op->args.size(); i++) {
-                Type t = op->args[i].type();
-                if (op->args[i].as<StringImm>()) {
-                    buf_size += op->args[i].as<StringImm>()->value.size();
+            for (const auto &arg : op->args) {
+                Type t = arg.type();
+                if (arg.as<StringImm>()) {
+                    buf_size += arg.as<StringImm>()->value.size();
                 } else if (t.is_int() || t.is_uint()) {
                     buf_size += 19;  // 2^64 = 18446744073709551616
                 } else if (t.is_float()) {
@@ -3063,44 +3070,44 @@ void CodeGen_LLVM::visit(const Call *op) {
             internal_assert(append_pointer);
             internal_assert(append_buffer);
 
-            for (size_t i = 0; i < op->args.size(); i++) {
-                const StringImm *s = op->args[i].as<StringImm>();
-                Type t = op->args[i].type();
+            for (const auto &arg : op->args) {
+                const StringImm *s = arg.as<StringImm>();
+                Type t = arg.type();
                 internal_assert(t.lanes() == 1);
                 vector<Value *> call_args(2);
                 call_args[0] = dst;
                 call_args[1] = buf_end;
 
                 if (s) {
-                    call_args.push_back(codegen(op->args[i]));
+                    call_args.push_back(codegen(arg));
                     dst = builder->CreateCall(append_string, call_args);
                 } else if (t.is_bool()) {
-                    Value *a = codegen(op->args[i]);
+                    Value *a = codegen(arg);
                     Value *t = codegen(StringImm::make("true"));
                     Value *f = codegen(StringImm::make("false"));
                     call_args.push_back(builder->CreateSelect(a, t, f));
                     dst = builder->CreateCall(append_string, call_args);
                 } else if (t.is_int()) {
-                    call_args.push_back(codegen(Cast::make(Int(64), op->args[i])));
+                    call_args.push_back(codegen(Cast::make(Int(64), arg)));
                     call_args.push_back(ConstantInt::get(i32_t, 1));
                     dst = builder->CreateCall(append_int64, call_args);
                 } else if (t.is_uint()) {
-                    call_args.push_back(codegen(Cast::make(UInt(64), op->args[i])));
+                    call_args.push_back(codegen(Cast::make(UInt(64), arg)));
                     call_args.push_back(ConstantInt::get(i32_t, 1));
                     dst = builder->CreateCall(append_uint64, call_args);
                 } else if (t.is_float()) {
-                    call_args.push_back(codegen(Cast::make(Float(64), op->args[i])));
+                    call_args.push_back(codegen(Cast::make(Float(64), arg)));
                     // Use scientific notation for doubles
                     call_args.push_back(ConstantInt::get(i32_t, t.bits() == 64 ? 1 : 0));
                     dst = builder->CreateCall(append_double, call_args);
                 } else if (t == type_of<halide_buffer_t *>()) {
-                    Value *buf = codegen(op->args[i]);
+                    Value *buf = codegen(arg);
                     buf = builder->CreatePointerCast(buf, append_buffer->getFunctionType()->getParamType(2));
                     call_args.push_back(buf);
                     dst = builder->CreateCall(append_buffer, call_args);
                 } else {
                     internal_assert(t.is_handle());
-                    Value *ptr = codegen(op->args[i]);
+                    Value *ptr = codegen(arg);
                     ptr = builder->CreatePointerCast(ptr, i8_t->getPointerTo());
                     call_args.push_back(ptr);
                     dst = builder->CreateCall(append_pointer, call_args);
@@ -3980,8 +3987,8 @@ void CodeGen_LLVM::visit(const IfThenElse *op) {
     Expr lhs;
     bool use_switch = blocks.size() > 1;
     vector<int> rhs;
-    for (size_t i = 0; i < blocks.size(); i++) {
-        const EQ *eq = blocks[i].first.as<EQ>();
+    for (auto &block : blocks) {
+        const EQ *eq = block.first.as<EQ>();
         const int64_t *r = eq ? as_const_int(eq->b) : nullptr;
         if (eq &&
             r &&
@@ -4860,8 +4867,7 @@ std::pair<llvm::Function *, int> CodeGen_LLVM::find_vector_runtime_function(cons
     // vector implementation).
     sizes_to_try.push_back(l * 2);
 
-    for (size_t i = 0; i < sizes_to_try.size(); i++) {
-        int l = sizes_to_try[i];
+    for (int l : sizes_to_try) {
         llvm::Function *vec_fn = module->getFunction(name + "x" + std::to_string(l));
         if (vec_fn) {
             return {vec_fn, l};

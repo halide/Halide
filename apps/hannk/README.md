@@ -65,3 +65,46 @@ Usage:
 
     compare_vs_tflite a.tflite [b.tflite ...]
 
+### WebAssembly
+
+There is limited support for building and running hannk under WebAssembly.
+
+#### Requirements:
+
+- You must use CMake to build (Make isn't supported).
+- You must have Emscripten v2.0.32 (or later) installed and activated.
+- You must have Node.js v16.13 (or later) installed for testing.
+  Note that (as of this writing), EMSDK includes an older version of Node that *will not* work.
+
+#### Building:
+
+The simplest way is:
+
+```
+$ HL_TARGET=wasm-32-wasmrt-wasm_simd128 NODE_JS_EXECUTABLE=/path/to/good/version/of/node ./configure_cmake.sh
+...output...
+$ ninja
+```
+
+Note that `wasm_simd128` is optional, but highly recommended.
+
+
+#### Running:
+
+If you've built as described above, you can just run `ctest` to run the basic self-tests.
+
+If you want to run `benchmark` or `compare_vs_tflite` manually, you'll need to launch it under `node`
+manually; as noted above, when EMSDK is activated, `node` will likely refer to a version of Node.js
+that won't work, so you will need to provide a path to a suitable version:
+
+```
+$ cd build
+$ /path/to/good/version/of/node benchmark ../test/*/*.tflite
+$ /path/to/good/version/of/node compare_vs_tflite ../test/*/*.tflite
+
+```
+
+Note that compare_vs_tflite doesn't actually build or use tflite when compiling under WebAssembly!
+The only mode it supports is directly parsing the .tflite files, which is pretty close to the same as
+the `benchmark` tool.
+

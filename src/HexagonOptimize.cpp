@@ -2269,8 +2269,8 @@ class ScatterGatherGenerator : public IRMutator {
         }
         // Calculate the size of the buffer lut in bytes.
         Expr size = ty.bytes();
-        for (size_t i = 0; i < alloc->extents.size(); i++) {
-            size *= alloc->extents[i];
+        for (const auto &extent : alloc->extents) {
+            size *= extent;
         }
         Expr src = Variable::make(Handle(), op->name);
         Expr new_index = mutate(cast(ty.with_code(Type::Int), index));
@@ -2327,8 +2327,8 @@ class ScatterGatherGenerator : public IRMutator {
         }
         // Calculate the size of the buffer in bytes.
         Expr size = ty.bytes();
-        for (size_t i = 0; i < alloc->extents.size(); i++) {
-            size *= alloc->extents[i];
+        for (const auto &extent : alloc->extents) {
+            size *= extent;
         }
         // Check for scatter-acc.
         Expr value = is_scatter_acc(op);

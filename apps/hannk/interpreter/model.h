@@ -278,12 +278,21 @@ public:
         }
     }
 
+    // Prepare the op for future execution. The Op can assume that the types and dimensions
+    // of all its input/output Tensors will remain the same after this.
+    // Return false on error.
+    virtual bool prepare() {
+        return true;
+    }
+
     // Execute the op on a given crop.
     virtual void execute() = 0;
 
     virtual void accept(OpVisitor *v) = 0;
 
-    virtual void dump(std::ostream &os) const = 0;
+    virtual void dump(std::ostream &os, int indent = 0) const;
+
+    virtual std::string name() const = 0;
 
     int input_count() const {
         return inputs_.size();
@@ -343,9 +352,11 @@ public:
     void add(OpPtr to_insert, const Op *before = nullptr);
     void remove(const Op *op);
 
-    BoundsMap map_bounds(int input_idx, int output_idx) const;
+    BoundsMap map_bounds(int input_idx, int output_idx) const override;
 
-    void execute();
+    bool prepare() override;
+
+    void execute() override;
 
     int op_count() const {
         return ops_.size();
@@ -357,8 +368,11 @@ public:
         return ops_[i].get();
     }
 
-    void accept(OpVisitor *v);
-    void dump(std::ostream &os) const;
+    void accept(OpVisitor *v) override;
+    void dump(std::ostream &os, int indent = 0) const override;
+    std::string name() const override {
+        return "OpGroup";
+    }
 };
 
 }  // namespace hannk
