@@ -73,6 +73,7 @@ protected:
     void visit(const Free *op) override;
     void visit(const Select *op) override;
     void visit(const Evaluate *op) override;
+    void visit(const Atomic *op) override;
 
     const std::map<std::string, std::string> builtin = {
         {"abs", "abs"},
@@ -93,7 +94,9 @@ protected:
         {"floor_f32", "floor"},
         {"greaterThan", "greaterThan"},
         {"greaterThanEqual", "greaterThanEqual"},
-        {"isnan", "isnan"},
+        {"is_nan_f32", "isnan"},
+        {"is_inf_f32", "isinf"},
+        {"is_finite_f32", "is_finite_f32"},
         {"lessThan", "lessThan"},
         {"lessThanEqual", "lessThanEqual"},
         {"log_f32", "log"},
@@ -338,6 +341,12 @@ void CodeGen_OpenGLCompute_C::visit(const GE *op) {
     }
 }
 
+void CodeGen_OpenGLCompute_C::visit(const Atomic *op) {
+    // Currently, we don't implement atomics for OpenGLCompute.  GLSL only supports
+    // the notion of an atomic counter, which must be uint.
+    user_error << "OpenGLCompute does not currently support atomic operations.\n";
+}
+
 void CodeGen_OpenGLCompute_C::visit(const Shuffle *op) {
     // The halide Shuffle represents the llvm intrinisc
     // shufflevector, however, for GLSL its use is limited to swizzling
@@ -437,21 +446,6 @@ void CodeGen_OpenGLCompute_C::visit(const Call *op) {
     } else if (op->name == "fast_inverse_sqrt_f32") {
         print_expr(make_one(op->type) / sqrt(op->args[0]));
         return;
-    } else if (op->name == "is_nan_f32") {
-        ostringstream rhs;
-        rhs << "isnan(" << print_expr(op->args[0]) << ")";
-        print_assignment(op->type, rhs.str());
-        return;
-    } else if (op->name == "is_inf_f32") {
-        ostringstream rhs;
-        rhs << "isinf(" << print_expr(op->args[0]) << ")";
-        print_assignment(op->type, rhs.str());
-        return;
-    } else if (op->name == "is_finite_f32") {
-        ostringstream rhs;
-        rhs << "!(isinf(" << print_expr(op->args[0]) << "))";
-        print_assignment(op->type, rhs.str());
-        return;
     } else if (op->name == "pow_f32") {
         if (can_prove(op->args[0] > 0)) {
             ostringstream rhs;
@@ -495,6 +489,30 @@ void CodeGen_OpenGLCompute_C::visit(const Call *op) {
         internal_assert(op->args.size() == 1);
         string arg0 = print_expr(op->args[0]);
         print_assignment(op->type, arg0);
+    } else if (op->is_intrinsic(Call::reinterpret)) {
+        internal_assert(op->args.size() == 1);
+        // GLSL uses a variety of functions to implement this.
+        auto from_type = op->args[0].type();
+        auto to_type = op->type;
+        user_assert(from_type.bits() == 32 && to_type.bits() == 32) 
+            << "GLSL only allows reinterpret on 32-bit types.\n";
+        ostringstream rhs;
+        if (from_type.is_uint() && to_type.is_float()) {
+            rhs << "uintBitsToFloat(";
+        } else if (from_type.is_int() && to_type.is_float()) {
+            rhs << "intBitsToFloat(";
+        } else if (from_type.is_float() && to_type.is_uint()) {
+            rhs << "floatBitsToUint(";
+        } else if (from_type.is_float() && to_type.is_int()) {
+            rhs << "floatBitsToInt(";
+        } else {
+            // Fall back to casting logic (either it is a no-op, or a signed-to-unsigned/vice versa)
+            print_expr(Cast::make(op->type, op->args[0]));
+        }
+        rhs << print_expr(op->args[0]) << ")";
+        print_assignment(op->type, rhs.str());
+    } else if (op->is_intrinsic(Call::if_then_else)) {
+        CodeGen_C::visit(op);
     } else {
         auto it = builtin.find(op->name);
         if (it == builtin.end()) {
@@ -772,6 +790,12 @@ void CodeGen_OpenGLCompute_Dev::add_kernel(Stmt s,
                                            const vector<DeviceArgument> &args) {
     debug(2) << "CodeGen_OpenGLCompute_Dev::compile " << name << "\n";
 
+    // Scalarize/de-predicate loads/stores, since GLSL does not support predication
+    s = scalarize_predicated_loads_stores(s);
+
+    debug(2) << "CodeGen_OpenGLCompute_Dev: after removing predication: \n"
+             << s;
+
     // TODO: do we have to uniquify these names, or can we trust that they are safe?
     cur_kernel_name = name;
     glc.add_kernel(s, name, args);
@@ -901,6 +925,7 @@ void CodeGen_OpenGLCompute_C::add_kernel(const Stmt &s,
     stream << "float float_from_bits(int x) { return intBitsToFloat(int(x)); }\n";
     stream << "float inf_f32() { return (1.0 / 0.0); }\n";
     stream << "float neg_inf_f32() { return -(1.0 / 0.0); }\n";
+    stream << "bool is_finite_f32(float x) { return !(isinf(x) || isnan(x)); }\n";
     stream << "#define halide_unused(x) (void)(x)\n";
 
     for (size_t i = 0; i < args.size(); i++) {

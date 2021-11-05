@@ -15,6 +15,7 @@ int main(int argc, char **argv) {
 
     if (target.has_feature(Target::OpenGLCompute)) {
         printf("[SKIP] OpenGLCompute does not support dynamic-sized shared memory\n");
+        return 0;
     }
 
     // This test demonstrates a trick for writing interpreters in
