@@ -15,9 +15,6 @@ extern "C" {
 #include "known_symbols.h"
 #include "log.h"
 
-const int stack_alignment = 128;
-const int stack_size = 1024 * 1024;
-
 typedef halide_hexagon_remote_handle_t handle_t;
 typedef halide_hexagon_remote_buffer buffer;
 typedef halide_hexagon_remote_scalar_t scalar_t;
@@ -310,34 +307,26 @@ int halide_hexagon_remote_get_symbol_v4(handle_t module_ptr, const char *name, i
     return *sym_ptr != 0 ? 0 : -1;
 }
 
-// Thread priority for QURT threads
+// Thread priority/stack_size for QURT threads
 // Negative: use the current default (don't explicitly reset it)
 // Positive: the priority needs to be set once the shared runtime is loaded
-int saved_thread_priority = -1;
+static int saved_thread_priority = -1;
+static int saved_stack_size = -1;
 
-int halide_hexagon_remote_set_thread_priority(int priority) {
-    // Just save requested priority for now.  The priority can't actually
+int halide_hexagon_remote_set_thread_params(int priority, int stack_size) {
+    // Just save requested priority/stack_size for now. They can't actually
     // be set in qurt_thread_pool until the shared runtime has been loaded.
     saved_thread_priority = priority;
+    saved_stack_size = stack_size;
     return 0;
 }
 
-int halide_hexagon_runtime_set_thread_priority(int priority) {
-    if (priority < 0) {
-        return 0;
-    }
+int halide_hexagon_runtime_get_thread_priority() {
+    return saved_thread_priority;
+}
 
-    // Find the halide_set_default_thread_priority function in the shared runtime,
-    // which we loaded with RTLD_GLOBAL.
-    void (*set_priority)(int) = (void (*)(int))halide_get_symbol("halide_set_default_thread_priority");
-
-    if (set_priority) {
-        set_priority(priority);
-    } else {
-        // This code being run is old, doesn't have set priority feature, do nothing.
-    }
-
-    return 0;
+int halide_hexagon_runtime_get_stack_size() {
+    return saved_stack_size;
 }
 
 int halide_hexagon_remote_run_v2(handle_t module_ptr, handle_t function,
@@ -420,11 +409,6 @@ int halide_hexagon_remote_release_library(handle_t module_ptr) {
 }
 
 int halide_hexagon_remote_poll_profiler_state(int *func, int *threads) {
-    // Increase the current thread priority to match working threads priorities,
-    // so profiler can access the remote state without extra latency.
-    qurt_thread_t current_thread_id = qurt_thread_get_id();
-    qurt_thread_set_priority(current_thread_id, 100);
-
     *func = halide_profiler_get_state()->current_func;
     *threads = halide_profiler_get_state()->active_threads;
     return 0;

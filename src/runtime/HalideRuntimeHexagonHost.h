@@ -118,16 +118,18 @@ extern int halide_hexagon_set_performance_mode(void *user_context, halide_hexago
 extern int halide_hexagon_set_performance(void *user_context, halide_hexagon_power_t *perf);
 // @}
 
-/** Set the default priority for Halide Hexagon user threads:
- *   - Valid priority values range from 1 to 255
+/** Set the default priority/stack_size for dsp threads:
+ *   - Valid priority values range from 1 to 255. -1 to use default (100)
+ *   - Stack size in bytes. Range: (16KB - 8MB). -1 to use default (16KB)
  *   - Smaller number for higher priority
  *   - The highest priority for a user thread is 1
  *   - Priority 0 is reserved for OS usage
- * If this routine is not called, the priority will default to 100.
- * This is intended to be called before dispatching any pipeline. */
-// @{
-extern int halide_hexagon_set_thread_priority(void *user_context, int priority);
-// @}
+ * If halide_hexagon_set_thread_params routine is not called by the user,
+ * then it is called automatically during  init_hexagon_runtime with
+ * priority=100 and stack size=16KB. It should be called before
+ * making any other FastRPC calls (because remote_session_control has to be
+ * the first fastRPC call made by the program). */
+extern int halide_hexagon_set_thread_params(void *user_context, int priority, int stack_size);
 
 /** These are forward declared here to allow clients to override the
  *  Halide Hexagon runtime. Do not call them. */

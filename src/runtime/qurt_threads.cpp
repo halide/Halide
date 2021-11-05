@@ -24,42 +24,30 @@ void spawn_thread_helper(void *arg) {
 
 extern "C" {
 
-extern void *memalign(size_t, size_t);
+void *memalign(size_t, size_t);
+
+int halide_hexagon_runtime_get_thread_priority();
+
+int halide_hexagon_runtime_get_stack_size();
 
 int halide_host_cpu_count() {
     // Assume a Snapdragon 820
     return 4;
 }
 
-#define STACK_SIZE (256 * 1024)
-
-WEAK uint16_t halide_qurt_default_thread_priority = 100;
-
-WEAK void halide_set_default_thread_priority(int priority) {
-    if (priority > 0xFF) {
-        priority = 0xFF;  // Clamp to max priority
-    } else if (priority <= 0) {
-        return;  // Ignore settings of zero and below
-    }
-    halide_qurt_default_thread_priority = priority;
-}
-
-WEAK uint16_t halide_get_default_thread_priority() {
-    return halide_qurt_default_thread_priority;
-}
-
 WEAK struct halide_thread *halide_spawn_thread(void (*f)(void *), void *closure) {
-    uint16_t priority = halide_get_default_thread_priority();
+    int thread_priority = halide_hexagon_runtime_get_thread_priority();
+    int stack_size = halide_hexagon_runtime_get_stack_size();
     spawned_thread *t = (spawned_thread *)malloc(sizeof(spawned_thread));
     t->f = f;
     t->closure = closure;
-    t->stack = memalign(128, STACK_SIZE);
+    t->stack = memalign(128, stack_size);
     memset(&t->handle, 0, sizeof(t->handle));
     qurt_thread_attr_t thread_attr;
     qurt_thread_attr_init(&thread_attr);
     qurt_thread_attr_set_stack_addr(&thread_attr, t->stack);
-    qurt_thread_attr_set_stack_size(&thread_attr, STACK_SIZE);
-    qurt_thread_attr_set_priority(&thread_attr, priority);
+    qurt_thread_attr_set_stack_size(&thread_attr, stack_size);
+    qurt_thread_attr_set_priority(&thread_attr, thread_priority);
     qurt_thread_create(&t->handle.val, &thread_attr, &spawn_thread_helper, t);
     return (halide_thread *)t;
 }

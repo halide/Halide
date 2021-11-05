@@ -45,6 +45,11 @@ int main(int argc, char **argv) {
     std::vector<PipelineDescriptorBase *> pipelines = {&conv3x3a16_pipeline, &dilate3x3_pipeine, &median3x3_pipeline,
                                                        &gaussian5x5_pipeline, &sobel_pipeline, &conv3x3a32_pipeline};
 
+#ifdef HALIDE_RUNTIME_HEXAGON
+    // Set thread_priority = 80 and stack_size = 32KB for dsp threads.
+    halide_hexagon_set_thread_params(NULL, 80, 32 * 1024);
+#endif
+
     for (PipelineDescriptorBase *p : pipelines) {
         if (!p->defined()) {
             continue;
