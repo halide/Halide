@@ -225,24 +225,19 @@ namespace Internal {
 }  // namespace Halide
 using namespace Halide::Runtime::Internal;
 
-/** A macro that calls halide_print if the supplied condition is
- * false, then aborts. Used for unrecoverable errors, or
- * should-never-happen errors.
+/** halide_abort_if_false() is a macro that calls halide_print if the supplied condition is
+ * false, then aborts. Used for unrecoverable errors, or should-never-happen errors.
  *
  * Note that this is *NOT* a debug-only macro;
- * the condition will be checked (and abort() possibly called) in *all* build modes!
- *
- * It should be used very rarely in new code, and only when the condition
- * is truly unrecoverable.
- */
+ * the condition will be checked in *all* build modes! */
 #define _halide_stringify(x) #x
 #define _halide_expand_and_stringify(x) _halide_stringify(x)
-#define halide_assert(user_context, cond)                                                                                  \
-    do {                                                                                                                   \
-        if (!(cond)) {                                                                                                     \
-            halide_print(user_context, __FILE__ ":" _halide_expand_and_stringify(__LINE__) " Assert failed: " #cond "\n"); \
-            abort();                                                                                                       \
-        }                                                                                                                  \
+#define halide_abort_if_false(user_context, cond)                                                                                           \
+    do {                                                                                                                                    \
+        if (!(cond)) {                                                                                                                      \
+            halide_print(user_context, __FILE__ ":" _halide_expand_and_stringify(__LINE__) " halide_abort_if_false() failed: " #cond "\n"); \
+            abort();                                                                                                                        \
+        }                                                                                                                                   \
     } while (0)
 
 /** halide_debug_assert() is like halide_assert(), but only expands into a check when
