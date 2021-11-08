@@ -21,7 +21,12 @@ function(_add_halide_library_set LIBRARY_SET)
                        NAMESPACE hannk
                        GENERATOR ${args_GENERATOR_NAME}
                        FEATURES c_plus_plus_name_mangling ${args_FEATURES}
-                       PARAMS ${args_GENERATOR_ARGS})
+                       PARAMS ${args_GENERATOR_ARGS}
+                       # These aren't really necessary, but are useful for looking at codegen quality,
+                       # and cost very little in terms of extra compile time
+                       ASSEMBLY ${args_TARGET}_ASSEMBLY
+                       LLVM_ASSEMBLY ${args_TARGET}_LL
+                       STMT ${args_TARGET}_STMT)
 
     add_dependencies("${LIBRARY_SET}.build_all" "${args_TARGET}" "${args_TARGET}.runtime")
     target_link_libraries(${LIBRARY_SET} INTERFACE ${args_TARGET})
