@@ -179,7 +179,10 @@ WEAK bool CacheEntry::init(const uint8_t *cache_key, size_t cache_key_size,
 
 WEAK void CacheEntry::destroy() {
     for (uint32_t i = 0; i < tuple_count; i++) {
-        halide_device_free(nullptr, &buf[i]);
+        if (halide_device_free(nullptr, &buf[i]) != 0) {
+            // Just log a debug message, there's not much we can do in response here
+            debug(nullptr) << "CacheEntry::destroy: halide_device_free failed\n";
+        }
         halide_free(nullptr, get_pointer_to_header(buf[i].host));
     }
     halide_free(nullptr, metadata_storage);

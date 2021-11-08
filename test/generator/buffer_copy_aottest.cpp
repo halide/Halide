@@ -10,13 +10,22 @@ using namespace Halide::Runtime;
 int main(int argc, char **argv) {
     // Test simple host to host buffer copy.
 
+    // Note that  only way halide_buffer_copy() could possibly fail is if
+    // the allocation of the images failed (which would simply crash us),
+    // so checking the return code is arguably redundant in this context
+    // (but testing to verify that is part of a good test).
+
     {
         Buffer<int> input(128, 128);
         input.fill([&](int x, int y) { return x + 10 * y; });
         Buffer<int> out(64, 64);
         out.set_min(32, 32);
 
-        halide_buffer_copy(nullptr, input, nullptr, out);
+        int result = halide_buffer_copy(nullptr, input, nullptr, out);
+        if (result != 0) {
+            printf("halide_buffer_copy() failed\n");
+            exit(-1);
+        }
 
         Buffer<int> in_crop = input.cropped(0, 32, 64).cropped(1, 32, 64);
         out.for_each_value([&](int a, int b) {
@@ -44,7 +53,11 @@ int main(int argc, char **argv) {
         out.set_min(32, 32);
         Buffer<int> in_crop = input.cropped(0, 32, 64).cropped(1, 32, 64);
 
-        halide_buffer_copy(nullptr, in_crop, dev, out);
+        int result = halide_buffer_copy(nullptr, in_crop, dev, out);
+        if (result != 0) {
+            printf("halide_buffer_copy() failed\n");
+            exit(-1);
+        }
 
         out.copy_to_host();
 
@@ -72,7 +85,11 @@ int main(int argc, char **argv) {
         in_crop.set_host_dirty(false);
         in_crop.set_device_dirty();
 
-        halide_buffer_copy(nullptr, in_crop, nullptr, out);
+        int result = halide_buffer_copy(nullptr, in_crop, nullptr, out);
+        if (result != 0) {
+            printf("halide_buffer_copy() failed\n");
+            exit(-1);
+        }
 
         in_crop.copy_to_host();
 
