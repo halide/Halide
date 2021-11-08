@@ -1166,9 +1166,9 @@ void CodeGen_LLVM::optimize_module() {
 #else
                 constexpr bool compile_kernel = false;
                 constexpr bool recover = false;
-                constexpr bool use_after_scope = true;
+                constexpr bool use_global_gc = true;
                 mpm.addPass(createModuleToFunctionPassAdaptor(AddressSanitizerPass(
-                    compile_kernel, recover, use_after_scope)));
+                    compile_kernel, recover, use_global_gc)));
 #endif
             });
 #if LLVM_VERSION >= 140
@@ -1187,10 +1187,10 @@ void CodeGen_LLVM::optimize_module() {
             [](ModulePassManager &mpm, OptimizationLevel) {
                 constexpr bool compile_kernel = false;
                 constexpr bool recover = false;
-                constexpr bool module_use_after_scope = false;
+                constexpr bool module_use_global_gc = false;
                 constexpr bool use_odr_indicator = true;
                 mpm.addPass(ModuleAddressSanitizerPass(
-                    compile_kernel, recover, module_use_after_scope,
+                    compile_kernel, recover, module_use_global_gc,
                     use_odr_indicator));
             });
 #else
@@ -1198,10 +1198,10 @@ void CodeGen_LLVM::optimize_module() {
             [](ModulePassManager &mpm) {
                 constexpr bool compile_kernel = false;
                 constexpr bool recover = false;
-                constexpr bool module_use_after_scope = false;
+                constexpr bool module_use_global_gc = false;
                 constexpr bool use_odr_indicator = true;
                 mpm.addPass(ModuleAddressSanitizerPass(
-                    compile_kernel, recover, module_use_after_scope,
+                    compile_kernel, recover, module_use_global_gc,
                     use_odr_indicator));
             });
 #endif
