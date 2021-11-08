@@ -48,7 +48,7 @@ WEAK int copy_to_host_already_locked(void *user_context, struct halide_buffer_t 
         return halide_error_code_copy_to_host_failed;
     }
     buf->set_device_dirty(false);
-    halide_msan_annotate_buffer_is_initialized(user_context, buf);
+    (void)halide_msan_annotate_buffer_is_initialized(user_context, buf);  // ignore errors
 
     return result;
 }
@@ -264,7 +264,7 @@ WEAK int halide_device_free(void *user_context, struct halide_buffer_t *buf) {
  * error. Used when freeing as a destructor on an error. */
 WEAK void halide_device_free_as_destructor(void *user_context, void *obj) {
     struct halide_buffer_t *buf = (struct halide_buffer_t *)obj;
-    halide_device_free(user_context, buf);
+    (void)halide_device_free(user_context, buf);  // ignore errors
 }
 
 /** Allocate host and device memory to back a halide_buffer_t. Ideally this

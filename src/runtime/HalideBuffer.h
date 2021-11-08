@@ -240,15 +240,19 @@ private:
                        "Call device_free explicitly if you want to drop dirty device-side data. "
                        "Call copy_to_host explicitly if you want the data copied to the host allocation "
                        "before the device allocation is freed.");
+                int result = 0;
                 if (dev_ref_count && dev_ref_count->ownership == BufferDeviceOwnership::WrappedNative) {
-                    buf.device_interface->detach_native(nullptr, &buf);
+                    result = buf.device_interface->detach_native(nullptr, &buf);
                 } else if (dev_ref_count && dev_ref_count->ownership == BufferDeviceOwnership::AllocatedDeviceAndHost) {
-                    buf.device_interface->device_and_host_free(nullptr, &buf);
+                    result = buf.device_interface->device_and_host_free(nullptr, &buf);
                 } else if (dev_ref_count && dev_ref_count->ownership == BufferDeviceOwnership::Cropped) {
-                    buf.device_interface->device_release_crop(nullptr, &buf);
+                    result = buf.device_interface->device_release_crop(nullptr, &buf);
                 } else if (dev_ref_count == nullptr || dev_ref_count->ownership == BufferDeviceOwnership::Allocated) {
-                    buf.device_interface->device_free(nullptr, &buf);
+                    result = buf.device_interface->device_free(nullptr, &buf);
                 }
+                // No reasonable way to return the error, but we can at least assert-fail in debug builds.
+                assert((result == 0) && "device_interface call returned a nonzero result in Buffer::decref()");
+                (void)result;
             }
             if (dev_ref_count) {
                 if (dev_ref_count->ownership == BufferDeviceOwnership::Cropped) {
