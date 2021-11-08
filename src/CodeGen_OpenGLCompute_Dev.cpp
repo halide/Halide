@@ -111,6 +111,9 @@ protected:
         {"trunc_f32", "trunc"},
     };
     int workgroup_size[3] = {0, 0, 0};
+
+    // Maps each buffer with whether its base type is a vector.
+    std::map<string, bool> buffer_is_vector;
 };
 
 CodeGen_OpenGLCompute_C::CodeGen_OpenGLCompute_C(std::ostream &s, const Target &t)
@@ -550,20 +553,24 @@ void CodeGen_OpenGLCompute_C::visit(const For *loop) {
 }
 
 void CodeGen_OpenGLCompute_C::visit(const Ramp *op) {
-    ostringstream rhs;
-    rhs << print_type(op->type) << "(";
-
     if (op->lanes > 4) {
         internal_error << "GLSL: ramp lanes " << op->lanes << " is not supported\n";
     }
 
-    rhs << print_expr(op->base);
-
-    for (int i = 1; i < op->lanes; ++i) {
-        rhs << ", " << print_expr(Add::make(op->base, Mul::make(i, op->stride)));
+    ostringstream rhs;
+    // Print the sequence vec(0, 1, 2, ...).
+    rhs << print_type(op->type) << "(";
+    for (int i = 0; i < op->type.lanes(); i++) {
+        rhs << i;
+        if (i != op->type.lanes() - 1) {
+            rhs << ", ";
+        }
     }
-
     rhs << ")";
+
+    // Multiply by the stride and add the base.
+    rhs << " * " << print_expr(op->stride) << " + " << print_expr(op->base);
+
     print_assignment(op->type, rhs.str());
 }
 
@@ -576,34 +583,96 @@ void CodeGen_OpenGLCompute_C::visit(const Broadcast *op) {
 
 void CodeGen_OpenGLCompute_C::visit(const Load *op) {
     user_assert(is_const_one(op->predicate)) << "GLSL: predicated load is not supported.\n";
-    // TODO: support vectors
     // https://github.com/halide/Halide/issues/4975
-    internal_assert(op->type.is_scalar());
-    string id_index = print_expr(op->index);
 
-    ostringstream oss;
-    oss << print_name(op->name);
+    string name = print_name(op->name);
     if (!allocations.contains(op->name)) {
-        oss << ".data";
+        name += ".data";
     }
-    oss << "[" << id_index << "]";
-    print_assignment(op->type, oss.str());
+
+    // If the index is scalar, just index the buffer using the index.
+    if (op->type.is_scalar()) {
+        internal_assert(!buffer_is_vector[op->name]);
+        string index_id = print_expr(op->index);
+        string rhs = name + "[" + index_id + "]";
+        print_assignment(op->type, rhs);
+        return;
+    }
+
+    // If this is a dense vector load and the buffer has a vector base type,
+    // then index the buffer using the base of the ramp divided by the number
+    // of lanes.
+    Expr ramp_base = strided_ramp_base(op->index);
+    if (ramp_base.defined() && buffer_is_vector[op->name]) {
+        string index_id = print_expr(ramp_base / op->type.lanes());
+        string rhs = name + "[" + index_id + "]";
+        print_assignment(op->type, rhs);
+        return;
+    }
+
+    // Gather vector elements.
+    internal_assert(op->type.is_vector());
+    internal_assert(!buffer_is_vector[op->name]);
+    string index_id = print_expr(op->index);
+    string rhs = print_type(op->type) + "(";
+    for (int i = 0; i < op->type.lanes(); i++) {
+        rhs += name + "[" + index_id + "[" + std::to_string(i) + "]]";
+        if (i != op->type.lanes() - 1) {
+            rhs += ", ";
+        }
+    }
+    rhs += ")";
+    print_assignment(op->type, rhs);
 }
 
 void CodeGen_OpenGLCompute_C::visit(const Store *op) {
     user_assert(is_const_one(op->predicate)) << "GLSL: predicated store is not supported.\n";
-    // TODO: support vectors
     // https://github.com/halide/Halide/issues/4975
-    internal_assert(op->value.type().is_scalar());
-    string id_index = print_expr(op->index);
 
-    string id_value = print_expr(op->value);
-
-    stream << get_indent() << print_name(op->name);
+    string name = print_name(op->name);
     if (!allocations.contains(op->name)) {
-        stream << ".data";
+        name += ".data";
     }
-    stream << "[" << id_index << "] = " << print_type(op->value.type()) << "(" << id_value << ");\n";
+
+    string value_id = print_expr(op->value);
+
+    // If the index is scalar, just index the buffer using the index.
+    if (op->value.type().is_scalar()) {
+        internal_assert(!buffer_is_vector[op->name]);
+        string index_id = print_expr(op->index);
+        stream << get_indent() << name << "[" << index_id << "] = ";
+        stream << value_id << ";\n";
+
+        // Need a cache clear on stores to avoid reusing stale loaded
+        // values from before the store.
+        cache.clear();
+        return;
+    }
+
+    // If this is a dense vector store and the buffer has a vector base type,
+    // then index the buffer using the base of the ramp divided by the number
+    // of lanes.
+    Expr ramp_base = strided_ramp_base(op->index);
+    if (ramp_base.defined() && buffer_is_vector[op->name]) {
+        string index_id = print_expr(ramp_base / op->value.type().lanes());
+        stream << get_indent() << name << "[" << index_id << "] = ";
+        stream << value_id << ";\n";
+
+        // Need a cache clear on stores to avoid reusing stale loaded
+        // values from before the store.
+        cache.clear();
+        return;
+    }
+
+    // Scatter vector elements.
+    internal_assert(op->value.type().is_vector());
+    internal_assert(!buffer_is_vector[op->name]);
+    string index_id = print_expr(op->index);
+    for (int i = 0; i < op->value.type().lanes(); i++) {
+        string sub_index_id = index_id + "[" + std::to_string(i) + "]";
+        stream << get_indent() << name << "[" << sub_index_id << "] = ";
+        stream << value_id << "[" << std::to_string(i) << "];\n";
+    }
 
     // Need a cache clear on stores to avoid reusing stale loaded
     // values from before the store.
@@ -615,11 +684,21 @@ void CodeGen_OpenGLCompute_C::visit(const Select *op) {
     string true_val = print_expr(op->true_value);
     string false_val = print_expr(op->false_value);
     string cond = print_expr(op->condition);
-    rhs << print_type(op->type)
-        << "(" << cond
-        << " ? " << true_val
-        << " : " << false_val
-        << ")";
+    if (op->type.is_scalar()) {
+        rhs << cond << " ? " << true_val << " : " << false_val;
+    } else {
+        rhs << print_type(op->type) << "(";
+        for (int i = 0; i < op->type.lanes(); i++) {
+            string index = "[" + std::to_string(i) + "]";
+            rhs << cond << index << " ? "
+                << true_val << index << " : "
+                << false_val << index;
+            if (i != op->type.lanes() - 1) {
+                rhs << ", ";
+            }
+        }
+        rhs << ")";
+    }
     print_assignment(op->type, rhs.str());
 }
 
@@ -683,6 +762,96 @@ class FindSharedAllocations : public IRVisitor {
 public:
     vector<const Allocate *> allocs;
 };
+
+// Check if all loads and stores to the member 'buffer' are dense, aligned, and
+// have the same number of lanes. If this is indeed the case then the 'lanes'
+// member stores the number of lanes in those loads and stores.
+class CheckAlignedDenseVectorLoadStore : public IRVisitor {
+public:
+    // True if all loads and stores from the buffer are dense, aligned, and all
+    // have the same number of lanes, false otherwise.
+    bool are_all_dense = true;
+
+    // The number of lanes in the loads and stores. If the number of lanes is
+    // variable, then are_all_dense is set to false regardless, and this value
+    // is undefined. Initially set to -1 before any dense operation is
+    // discovered.
+    int lanes = -1;
+
+    CheckAlignedDenseVectorLoadStore(string buffer)
+        : buffer(std::move(buffer)) {
+    }
+
+private:
+    // The name of the buffer to check.
+    string buffer;
+
+    using IRVisitor::visit;
+
+    void visit(const Load *op) override {
+        IRVisitor::visit(op);
+
+        if (op->name != buffer) {
+            return;
+        }
+
+        if (op->type.is_scalar()) {
+            are_all_dense = false;
+            return;
+        }
+
+        Expr ramp_base = strided_ramp_base(op->index);
+        if (!ramp_base.defined()) {
+            are_all_dense = false;
+            return;
+        }
+
+        if ((op->alignment.modulus % op->type.lanes() != 0) ||
+            (op->alignment.remainder % op->type.lanes() != 0)) {
+            are_all_dense = false;
+            return;
+        }
+
+        if (lanes != -1 && op->type.lanes() != lanes) {
+            are_all_dense = false;
+            return;
+        }
+
+        lanes = op->type.lanes();
+    }
+
+    void visit(const Store *op) override {
+        IRVisitor::visit(op);
+
+        if (op->name != buffer) {
+            return;
+        }
+
+        if (op->value.type().is_scalar()) {
+            are_all_dense = false;
+            return;
+        }
+
+        Expr ramp_base = strided_ramp_base(op->index);
+        if (!ramp_base.defined()) {
+            are_all_dense = false;
+            return;
+        }
+
+        if ((op->alignment.modulus % op->value.type().lanes() != 0) ||
+            (op->alignment.remainder % op->value.type().lanes() != 0)) {
+            are_all_dense = false;
+            return;
+        }
+
+        if (lanes != -1 && op->value.type().lanes() != lanes) {
+            are_all_dense = false;
+            return;
+        }
+
+        lanes = op->value.type().lanes();
+    }
+};
 }  // namespace
 
 void CodeGen_OpenGLCompute_C::add_kernel(const Stmt &s,
@@ -710,9 +879,13 @@ void CodeGen_OpenGLCompute_C::add_kernel(const Stmt &s,
             //     vec3 data[];
             // } inBuffer;
             //
+            CheckAlignedDenseVectorLoadStore check_dense(args[i].name);
+            s.accept(&check_dense);
+            int lanes = check_dense.are_all_dense ? check_dense.lanes : 1;
+            buffer_is_vector[args[i].name] = lanes > 1;
             stream << "layout(binding=" << i << ")"
                    << " buffer buffer" << i << " { "
-                   << print_type(args[i].type) << " data[]; } "
+                   << print_type(args[i].type.with_lanes(lanes)) << " data[]; } "
                    << print_name(args[i].name) << ";\n";
         } else {
             stream << "layout(location = " << i << ") uniform " << print_type(args[i].type)
@@ -792,6 +965,8 @@ void CodeGen_OpenGLCompute_C::visit(const Allocate *op) {
         indent -= 2;
         stream << get_indent() << "}\n";
     }
+
+    buffer_is_vector[op->name] = op->type.is_vector();
 }
 
 void CodeGen_OpenGLCompute_C::visit(const Free *op) {

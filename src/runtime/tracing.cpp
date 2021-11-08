@@ -385,7 +385,7 @@ WEAK int halide_shutdown_trace() {
 
 namespace {
 WEAK __attribute__((destructor)) void halide_trace_cleanup() {
-    halide_shutdown_trace();
+    (void)halide_shutdown_trace();  // ignore errors
 }
 }  // namespace
 }
