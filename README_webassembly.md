@@ -6,8 +6,6 @@ backend.
 As WebAssembly itself is still under active development, Halide's support has
 some limitations. Some of the most important:
 
--   We require using LLVM 11 or later for Wasm codegen; earlier versions of LLVM
-    will not work.
 -   Fixed-width SIMD (128 bit) can be enabled via Target::WasmSimd128.
 -   Sign-extension operations can be enabled via Target::WasmSignExt.
 -   Non-trapping float-to-int conversions can be enabled via
@@ -19,9 +17,7 @@ some limitations. Some of the most important:
 
 # Additional Tooling Requirements:
 
--   In additional to the usual install of LLVM and clang, you'll need lld. All
-    should be at least v11 or later (codegen will be improved under LLVM
-    v12/trunk, at least as of July 2020).
+-   In additional to the usual install of LLVM and clang, you'll need lld.
 -   Locally-installed version of Emscripten, 1.39.19+
 
 Note that for all of the above, earlier versions might work, but have not been
