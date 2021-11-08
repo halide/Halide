@@ -232,12 +232,12 @@ using namespace Halide::Runtime::Internal;
  * the condition will be checked in *all* build modes! */
 #define _halide_stringify(x) #x
 #define _halide_expand_and_stringify(x) _halide_stringify(x)
-#define halide_abort_if_false(user_context, cond)                                                                                                 \
-    do {                                                                                                                                          \
-        if (!(cond)) {                                                                                                                            \
+#define halide_abort_if_false(user_context, cond)                                                                                           \
+    do {                                                                                                                                    \
+        if (!(cond)) {                                                                                                                      \
             halide_print(user_context, __FILE__ ":" _halide_expand_and_stringify(__LINE__) " halide_abort_if_false() failed: " #cond "\n"); \
-            abort();                                                                                                                              \
-        }                                                                                                                                         \
+            abort();                                                                                                                        \
+        }                                                                                                                                   \
     } while (0)
 
 /** halide_debug_assert() is like halide_assert(), but only expands into a check when
