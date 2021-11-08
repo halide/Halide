@@ -494,7 +494,7 @@ void CodeGen_OpenGLCompute_C::visit(const Call *op) {
         // GLSL uses a variety of functions to implement this.
         auto from_type = op->args[0].type();
         auto to_type = op->type;
-        user_assert(from_type.bits() == 32 && to_type.bits() == 32) 
+        user_assert(from_type.bits() == 32 && to_type.bits() == 32)
             << "GLSL only allows reinterpret on 32-bit types.\n";
         ostringstream rhs;
         if (from_type.is_uint() && to_type.is_float()) {

@@ -8,9 +8,8 @@ int main(int argc, char **argv) {
         printf("[SKIP] No GPU target enabled.\n");
         return 0;
     }
-    
-    if (!target.has_feature(Target::OpenGLCompute))
-    {
+
+    if (!target.has_feature(Target::OpenGLCompute)) {
         Func f, g;
         Var x;
         const int size = 256;
@@ -57,8 +56,7 @@ int main(int argc, char **argv) {
         g.realize({size});
     }
 
-    if (!target.has_feature(Target::OpenGLCompute))
-    {
+    if (!target.has_feature(Target::OpenGLCompute)) {
         // Another example which uses an amount of shared memory
         // non-monotonic in multiple dimensions.
         Func f, g;
@@ -122,8 +120,7 @@ int main(int argc, char **argv) {
         g.realize({width, height});
     }
 
-    if (!target.has_feature(Target::OpenGLCompute))
-    {
+    if (!target.has_feature(Target::OpenGLCompute)) {
         // Finally, we have a case where there is both a precomputed
         // shared allocation and a precomputed global allocation.
         Func f1, f2, g;
