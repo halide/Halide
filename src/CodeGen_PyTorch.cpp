@@ -204,6 +204,5 @@ void CodeGen_PyTorch::compile(const LoweredFunc &f, bool is_cuda) {
     }
 }
 
-
 }  // namespace Internal
 }  // namespace Halide
