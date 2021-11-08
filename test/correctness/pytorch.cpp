@@ -73,14 +73,13 @@ int main(int argc, char **argv) {
     buf(x) = cast<int32_t>(alpha + cast<float>(beta));
 
     {
-        // TODO(mgharbi): test that Target("host-cuda") raises an exception since
-        // we require the "user_context" feature when using CUDA
+        Target t = get_host_target();
 
         std::string pytorch_out = Internal::get_test_tmp_dir() + "pytorch_test1.pytorch.h";
         Internal::ensure_no_file_exists(pytorch_out);
 
         std::vector<Argument> args{alpha, beta};
-        buf.compile_to({{Output::pytorch_wrapper, pytorch_out}}, args, "test1", Target("host"));
+        buf.compile_to({{Output::pytorch_wrapper, pytorch_out}}, args, "test1", t);
 
         Internal::assert_file_exists(pytorch_out);
         std::string actual = read_entire_file(pytorch_out);
@@ -149,11 +148,21 @@ inline int test1_th_(float _alpha, int32_t _beta, at::Tensor &_buf) {
     }
 
     {
+        // No: parsing a target string with 'cuda' in it will always call `calculate_host_cuda_capability()`,
+        // this is suboptimal because (1) we don't want to initialize cuda here just to find the capabilities,
+        // and (2) on some systems (eg arm-32-linux) it can be crashy to even make the inquiry.
+        // Instead, we will just append the CUDA feature onto a host target, which (currently) doesn't trigger
+        // the capability sniffing.
+        //
+        // Target t("host-cuda-user_context");
+
+        Target t = get_host_target().with_feature(Target::UserContext).with_feature(Target::CUDA);
+
         std::string pytorch_out = Internal::get_test_tmp_dir() + "pytorch_test2.pytorch.h";
         Internal::ensure_no_file_exists(pytorch_out);
 
         std::vector<Argument> args{alpha, beta};
-        buf.compile_to({{Output::pytorch_wrapper, pytorch_out}}, args, "test2", Target("host-cuda-user_context"));
+        buf.compile_to({{Output::pytorch_wrapper, pytorch_out}}, args, "test2", t);
 
         Internal::assert_file_exists(pytorch_out);
         std::string actual = read_entire_file(pytorch_out);
