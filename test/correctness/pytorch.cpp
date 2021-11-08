@@ -6,6 +6,16 @@ using namespace Halide;
 
 namespace {
 
+std::string replace_all(const std::string &str, const std::string &find, const std::string &replace) {
+    size_t pos = 0;
+    std::string result = str;
+    while ((pos = result.find(find, pos)) != std::string::npos) {
+        result.replace(pos, find.length(), replace);
+        pos += replace.length();
+    }
+    return result;
+}
+
 std::string read_entire_file(const std::string &pathname) {
     std::ifstream f(pathname, std::ios::in | std::ios::binary);
     std::string result;
@@ -20,6 +30,8 @@ std::string read_entire_file(const std::string &pathname) {
         exit(1);
     }
     f.close();
+    // Normalize file to Unix line endings
+    result = replace_all(result, "\r\n", "\n");
     return result;
 }
 
