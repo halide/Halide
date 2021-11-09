@@ -73,7 +73,9 @@ int main(int argc, char **argv) {
     buf(x) = cast<int32_t>(alpha + cast<float>(beta));
 
     {
-        Target t = get_host_target();
+        // We are using a fixed target here (rather than "host") since
+        // we are crosscompiling and want a uniform result everywhere.
+        Target t = Target("x86-64-linux");
 
         std::string pytorch_out = Internal::get_test_tmp_dir() + "pytorch_test1.pytorch.h";
         Internal::ensure_no_file_exists(pytorch_out);
@@ -148,15 +150,11 @@ inline int test1_th_(float _alpha, int32_t _beta, at::Tensor &_buf) {
     }
 
     {
-        // No: parsing a target string with 'cuda' in it will always call `calculate_host_cuda_capability()`,
-        // this is suboptimal because (1) we don't want to initialize cuda here just to find the capabilities,
-        // and (2) on some systems (eg arm-32-linux) it can be crashy to even make the inquiry.
-        // Instead, we will just append the CUDA feature onto a host target, which (currently) doesn't trigger
-        // the capability sniffing.
-        //
-        // Target t("host-cuda-user_context");
-
-        Target t = get_host_target().with_feature(Target::UserContext).with_feature(Target::CUDA);
+        // We are using an explicit target here (rather than "host") to avoid sniffing
+        // the system for capabilities; in particular, we don't care what Cuda capabilities
+        // the system has, and don't want to initialize Cuda to find out. (Since this test
+        // is just a crosscompilation for generated C++ code, this is fine.)
+        Target t = Target("x86-64-linux-cuda-user_context");
 
         std::string pytorch_out = Internal::get_test_tmp_dir() + "pytorch_test2.pytorch.h";
         Internal::ensure_no_file_exists(pytorch_out);
