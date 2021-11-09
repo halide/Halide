@@ -608,9 +608,6 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
     internal_assert(llvm_target) << err_str << "\n";
 
     TargetOptions options;
-#if LLVM_VERSION < 120
-    options.PrintMachineCode = false;
-#endif
     options.AllowFPOpFusion = FPOpFusion::Fast;
     options.UnsafeFPMath = true;
     options.NoInfsFPMath = true;

@@ -1066,11 +1066,9 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
             if (t.has_feature(Target::AVX512)) {
                 modules.push_back(get_initmod_x86_avx512_ll(c));
             }
-#if LLVM_VERSION >= 120
             if (t.has_feature(Target::AVX512_SapphireRapids)) {
                 modules.push_back(get_initmod_x86_amx_ll(c));
             }
-#endif
             if (t.has_feature(Target::Profile)) {
                 user_assert(t.os != Target::WebAssemblyRuntime) << "The profiler cannot be used in a threadless environment.";
                 modules.push_back(get_initmod_profiler_inlined(c, bits_64, debug));
