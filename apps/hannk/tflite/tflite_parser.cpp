@@ -374,8 +374,8 @@ public:
         TensorPtr input = tensors_[op->inputs()->Get(0)];
         TensorPtr indices = tensors_[op->inputs()->Get(1)];
         TensorPtr output = tensors_[op->outputs()->Get(0)];
-        const tflite::ReducerOptions *options = op->builtin_options_as_ReducerOptions();
 #ifndef NDEBUG
+        const tflite::ReducerOptions *options = op->builtin_options_as_ReducerOptions();
         const bool keep_dims = options ? options->keep_dims() : false;
         // TODO: I have yet to find any examples of keep_dims == false in the wild.
         // If/when we do, handle it appropriately.

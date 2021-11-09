@@ -798,8 +798,8 @@ private:
         auto input = GetTensorById(context, node->inputs->data[0]);
         auto indices = GetTensorById(context, node->inputs->data[1]);
         auto output = GetTensorById(context, node->outputs->data[0]);
-        const TfLiteReducerParams *params = (const TfLiteReducerParams *)(node->builtin_data);
 #ifndef NDEBUG
+        const TfLiteReducerParams *params = (const TfLiteReducerParams *)(node->builtin_data);
         const bool keep_dims = params ? params->keep_dims : false;
         // TODO: I have yet to find any examples of keep_dims == false in the wild.
         // If/when we do, handle it appropriately.
