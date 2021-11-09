@@ -103,7 +103,10 @@ class FoldStorageOfFunction : public IRMutator {
                 Expr new_mins = Call::make(type_of<int *>(), Call::make_struct, mins, Call::Intrinsic);
                 vector<Expr> new_args = op->args;
                 new_args[3] = new_mins;
-                expr = Call::make(op->type, op->name, new_args, op->call_type);
+                internal_assert(op->type == type_of<halide_buffer_t *>() &&
+                                op->name == Call::buffer_crop &&
+                                op->call_type == Call::Extern);
+                expr = make_checked_buffer_crop(new_args);
 
                 // Inject the assertion
                 Expr no_wraparound = mins[dim] + extents[dim] <= factor;

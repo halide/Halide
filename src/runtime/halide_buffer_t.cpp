@@ -157,8 +157,11 @@ halide_buffer_t *_halide_buffer_crop(void *user_context,
     dst->device = 0;
     if (src->device_interface) {
         if (src->device_interface->device_crop(user_context, src, dst) != 0) {
-            // No way to report it: just ignore it
-            // debug(user_context) << "_halide_buffer_crop: device_crop failed\n";
+            // This is uncommon: either a runtime error, or a backend that
+            // doesn't replace the default definition of device_crop. But it
+            // does happen, so let's return a nullptr here, and require the caller
+            // to check the result.
+            return nullptr;
         }
     }
     return dst;

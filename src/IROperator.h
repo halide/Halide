@@ -385,6 +385,10 @@ Expr mul_shift_right(Expr a, Expr b, int q);
 Expr rounding_mul_shift_right(Expr a, Expr b, Expr q);
 Expr rounding_mul_shift_right(Expr a, Expr b, int q);
 
+// This is a call to Call::buffer_crop, wrapped with a require() that the result is non-null.
+// (You should never call Call::buffer_crop directly.)
+Expr make_checked_buffer_crop(const std::vector<Expr> &args);
+
 }  // namespace Internal
 
 /** Cast an expression to the halide type corresponding to the C++ type T. */

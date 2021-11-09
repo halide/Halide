@@ -1276,6 +1276,15 @@ Expr rounding_mul_shift_right(Expr a, Expr b, int q) {
     return rounding_mul_shift_right(std::move(a), std::move(b), make_const(qt, q));
 }
 
+Expr make_checked_buffer_crop(const std::vector<Expr> &args) {
+    const Type t = type_of<struct halide_buffer_t *>();
+    Expr cropped = Call::make(t, Call::buffer_crop, args, Call::Extern);
+    Expr cropped_u64 = reinterpret(UInt(64), cropped);
+    Expr error = Call::make(Int(32), "halide_error_device_crop_failed", std::vector<Expr>(), Call::Extern);
+    Expr checked = Call::make(t, Call::require, {cropped_u64 != cast<uint64_t>(0), cropped, error}, Call::Intrinsic);
+    return checked;
+}
+
 }  // namespace Internal
 
 Expr fast_log(const Expr &x) {

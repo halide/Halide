@@ -618,8 +618,7 @@ Stmt build_extern_produce(const map<string, Function> &env, Function f, const Ta
                     args[3] = Call::make(type_of<const int *>(), Call::make_struct, mins, Call::Intrinsic);
                     args[4] = Call::make(type_of<const int *>(), Call::make_struct, extents, Call::Intrinsic);
 
-                    cropped_input = Call::make(type_of<struct halide_buffer_t *>(), Call::buffer_crop,
-                                               args, Call::Extern);
+                    cropped_input = make_checked_buffer_crop(args);
 
                     string buf_name = input.name() + "." + std::to_string(k) + ".tmp_buffer";
                     extern_call_args.push_back(Variable::make(type_of<struct halide_buffer_t *>(), buf_name));
@@ -705,8 +704,7 @@ Stmt build_extern_produce(const map<string, Function> &env, Function f, const Ta
             args[3] = Call::make(type_of<const int *>(), Call::make_struct, mins, Call::Intrinsic);
             args[4] = Call::make(type_of<const int *>(), Call::make_struct, extents, Call::Intrinsic);
 
-            output_buffer_t = Call::make(type_of<struct halide_buffer_t *>(), Call::buffer_crop, args,
-                                         Call::Extern);
+            output_buffer_t = make_checked_buffer_crop(args);
 
             string buf_name = f.name() + "." + std::to_string(j) + ".tmp_buffer";
             extern_call_args.push_back(Variable::make(type_of<struct halide_buffer_t *>(), buf_name));
