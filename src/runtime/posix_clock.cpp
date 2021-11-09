@@ -41,6 +41,9 @@ WEAK int halide_start_clock(void *user_context) {
 // doesn't provide the former. (Use linux_clock.cpp to use clock_gettime(),
 // which will provide actual nanosecond accuracy.)
 WEAK int64_t halide_current_time_ns(void *user_context) {
+    // It is an error to call halide_current_time_ns() if halide_start_clock() has never been called
+    halide_debug_assert(user_context, halide_reference_clock_inited);
+
     timeval now;
     gettimeofday(&now, nullptr);
     int64_t d = int64_t(now.tv_sec - halide_reference_clock.tv_sec) * 1000000;
