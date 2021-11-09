@@ -545,7 +545,7 @@ WEAK int halide_buffer_copy_already_locked(void *user_context, struct halide_buf
             device_copy c = make_buffer_copy(src, true, dst, true);
             copy_memory(c, user_context);
             err = 0;
-        } else if (to_host) {
+        } else if (to_host && from_device_valid) {
             debug(user_context) << "halide_buffer_copy_already_locked: to host case.\n";
             err = src->device_interface->impl->buffer_copy(user_context, src, nullptr, dst);
             // Return on success or an error indicating something other
@@ -566,13 +566,15 @@ WEAK int halide_buffer_copy_already_locked(void *user_context, struct halide_buf
                     dst->set_host_dirty(true);
                     err = copy_to_device_already_locked(user_context, dst, dst_device_interface);
                 }
-            } else {
+            } else if (to_device) {
                 debug(user_context) << "halide_buffer_copy_already_locked: dev -> dev via src host memory.\n";
                 // dev -> dev via src host memory.
                 err = copy_to_host_already_locked(user_context, src);
                 if (err == 0) {
                     err = dst_device_interface->impl->buffer_copy(user_context, src, dst_device_interface, dst);
                 }
+            } else {
+                debug(user_context) << "halide_buffer_copy_already_locked: no valid copy mode found, failing.\n";
             }
         }
     }
