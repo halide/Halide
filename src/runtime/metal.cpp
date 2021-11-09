@@ -553,10 +553,10 @@ WEAK int halide_metal_initialize_kernels(void *user_context, void **state_ptr, c
 #endif
 
     mtl_library *library{};
-    if (!compilation_cache.kernel_state_setup(user_context, state_ptr, metal_context.device, library,
-                                              new_library_with_source, metal_context.device,
-                                              source, source_size) ||
-        library == nullptr) {
+    const bool setup = compilation_cache.kernel_state_setup(user_context, state_ptr, metal_context.device, library,
+                                                            new_library_with_source, metal_context.device,
+                                                            source, source_size);
+    if (!setup || library == nullptr) {
         error(user_context) << "halide_metal_initialize_kernels: setup failed.\n";
         return halide_error_code_generic_error;
     }
@@ -942,11 +942,11 @@ WEAK int halide_metal_buffer_copy(void *user_context, struct halide_buffer_t *sr
     bool to_host = !dst_device_interface;
 
     if (!(from_host || src->device)) {
-        error(user_context) << "halide_metal_buffer_copy: impossible copy source\n";
+        error(user_context) << "halide_metal_buffer_copy: invalid copy source\n";
         return halide_error_code_device_buffer_copy_failed;
     }
     if (!(to_host || dst->device)) {
-        error(user_context) << "halide_metal_buffer_copy: impossible copy destination\n";
+        error(user_context) << "halide_metal_buffer_copy: invalid copy destination\n";
         return halide_error_code_device_buffer_copy_failed;
     }
 
