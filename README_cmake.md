@@ -407,7 +407,7 @@ LLVM component names):
 | `TARGET_NVPTX`       | `ON`, _if available_ | Enable the NVidia PTX backend                            |
 | `TARGET_POWERPC`     | `ON`, _if available_ | Enable the PowerPC backend                               |
 | `TARGET_RISCV`       | `ON`, _if available_ | Enable the RISC V backend                                |
-| `TARGET_WEBASSEMBLY` | `ON`, _if available_ | Enable the WebAssembly backend. Only valid for LLVM 11+. |
+| `TARGET_WEBASSEMBLY` | `ON`, _if available_ | Enable the WebAssembly backend.                          |
 | `TARGET_X86`         | `ON`, _if available_ | Enable the x86 (and x86_64) backend                      |
 
 The following options enable/disable various Halide-specific backends:

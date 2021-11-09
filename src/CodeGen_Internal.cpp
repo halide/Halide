@@ -137,7 +137,6 @@ llvm::Type *llvm_type_of(LLVMContext *c, Halide::Type t) {
     }
 }
 
-#if LLVM_VERSION >= 120
 int get_vector_num_elements(llvm::Type *t) {
     if (t->isVectorTy()) {
         auto *vt = dyn_cast<llvm::FixedVectorType>(t);
@@ -147,15 +146,6 @@ int get_vector_num_elements(llvm::Type *t) {
         return 1;
     }
 }
-#else
-int get_vector_num_elements(llvm::Type *t) {
-    if (t->isVectorTy()) {
-        return dyn_cast<llvm::VectorType>(t)->getNumElements();
-    } else {
-        return 1;
-    }
-}
-#endif
 
 llvm::Type *get_vector_element_type(llvm::Type *t) {
     if (t->isVectorTy()) {
@@ -165,15 +155,9 @@ llvm::Type *get_vector_element_type(llvm::Type *t) {
     }
 }
 
-#if LLVM_VERSION >= 120
 llvm::ElementCount element_count(int e) {
     return llvm::ElementCount::getFixed(e);
 }
-#else
-llvm::ElementCount element_count(int e) {
-    return llvm::ElementCount(e, /*scalable*/ false);
-}
-#endif
 
 llvm::Type *get_vector_type(llvm::Type *t, int n) {
     return VectorType::get(t, element_count(n));

@@ -107,14 +107,14 @@ issue.
 
 ### TL;DR
 
-Have llvm-11.0 (or greater) installed and run `make` in the root directory of
+Have llvm-12.0 (or greater) installed and run `make` in the root directory of
 the repository (where this README is).
 
 ### Acquiring LLVM
 
 At any point in time, building Halide requires either the latest stable version
 of LLVM, the previous stable version of LLVM, and trunk. At the time of writing,
-this means versions 12.0 and 11.0 are supported, but 10.0 is not. The commands
+this means versions 13.0 and 12.0 are supported, but 11.0 is not. The commands
 `llvm-config` and `clang` must be somewhere in the path.
 
 If your OS does not have packages for LLVM, you can find binaries for it at
@@ -128,7 +128,7 @@ If you want to build it yourself, first check it out from GitHub:
 % git clone --depth 1 --branch llvmorg-13.0.0 https://github.com/llvm/llvm-project.git
 ```
 
-(If you want to build LLVM 11.x, use branch `llvmorg-11.1.0`; for current trunk,
+(If you want to build LLVM 12.x, use branch `release/12.x`; for current trunk,
 use `main`)
 
 Then build it like so:
