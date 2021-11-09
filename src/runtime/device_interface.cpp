@@ -48,7 +48,7 @@ WEAK int copy_to_host_already_locked(void *user_context, struct halide_buffer_t 
         return halide_error_code_copy_to_host_failed;
     }
     buf->set_device_dirty(false);
-    halide_msan_annotate_buffer_is_initialized(user_context, buf);
+    (void)halide_msan_annotate_buffer_is_initialized(user_context, buf);  // ignore errors
 
     return result;
 }
@@ -249,7 +249,7 @@ WEAK int halide_device_free(void *user_context, struct halide_buffer_t *buf) {
         device_interface->impl->use_module();
         result = device_interface->impl->device_free(user_context, buf);
         device_interface->impl->release_module();
-        halide_assert(user_context, buf->device == 0);
+        halide_abort_if_false(user_context, buf->device == 0);
         if (result) {
             return halide_error_code_device_free_failed;
         } else {
@@ -264,7 +264,7 @@ WEAK int halide_device_free(void *user_context, struct halide_buffer_t *buf) {
  * error. Used when freeing as a destructor on an error. */
 WEAK void halide_device_free_as_destructor(void *user_context, void *obj) {
     struct halide_buffer_t *buf = (struct halide_buffer_t *)obj;
-    halide_device_free(user_context, buf);
+    (void)halide_device_free(user_context, buf);  // ignore errors
 }
 
 /** Allocate host and device memory to back a halide_buffer_t. Ideally this
@@ -314,7 +314,7 @@ WEAK int halide_device_and_host_free(void *user_context, struct halide_buffer_t 
         device_interface->impl->use_module();
         result = device_interface->impl->device_and_host_free(user_context, buf);
         device_interface->impl->release_module();
-        halide_assert(user_context, buf->device == 0);
+        halide_abort_if_false(user_context, buf->device == 0);
         if (result) {
             return halide_error_code_device_free_failed;
         } else {
@@ -400,7 +400,7 @@ WEAK int halide_device_detach_native(void *user_context, struct halide_buffer_t 
         device_interface->impl->use_module();
         result = device_interface->impl->detach_native(user_context, buf);
         device_interface->impl->release_module();
-        halide_assert(user_context, buf->device == 0);
+        halide_abort_if_false(user_context, buf->device == 0);
         if (result) {
             result = halide_error_code_device_detach_native_failed;
         }
