@@ -5,13 +5,12 @@
 #endif
 
 #include "Util.h"
-#include "Debug.h"
-#include "Error.h"
-#include "Introspection.h"
+
 #include <atomic>
 #include <chrono>
+#include <cstdlib>
 #include <fstream>
-#include <iomanip>
+#include <iomanip>  // IWYU pragma: keep
 #include <map>
 #include <mutex>
 #include <sstream>
@@ -22,7 +21,7 @@
 #else
 #include <cstdlib>
 #include <sys/mman.h>  // For mmap
-#include <unistd.h>
+#include <unistd.h>    // IWYU pragma: keep
 #endif
 #include <sys/stat.h>
 #include <sys/types.h>
@@ -32,6 +31,7 @@
 #include <linux/limits.h>  // For PATH_MAX
 #include <ucontext.h>      // For swapcontext
 #endif
+
 #if defined(_MSC_VER) && !defined(NOMINMAX)
 #define NOMINMAX
 #endif
@@ -42,10 +42,11 @@
 #else
 #include <dlfcn.h>
 #endif
+
 #ifdef __APPLE__
 #define CAN_GET_RUNNING_PROGRAM_NAME
 #include <mach-o/dyld.h>
-
+#include <sys/syslimits.h>  // For PATH_MAX
 // Get swapcontext/makecontext etc.
 //
 // Apple gets cranky about people using these (because at least some
@@ -64,6 +65,10 @@
 #define __API_DEPRECATED(...)
 #include <ucontext.h>
 #endif
+
+#include "Debug.h"
+#include "Error.h"
+#include "Introspection.h"
 
 #ifdef _WIN32
 namespace {

@@ -1,6 +1,8 @@
 #ifndef HALIDE_GENERATOR_H_
 #define HALIDE_GENERATOR_H_
 
+// IWYU pragma: private, include "Halide.h"
+
 /** \file
  *
  * Generator is a class used to encapsulate the building of Funcs in user
