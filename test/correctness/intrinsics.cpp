@@ -315,8 +315,8 @@ int main(int argc, char **argv) {
     check_intrinsics_over_range<uint32_t>();
 
     // The intrinsics-matching pass substitutes in widening lets. At
-    // one point caused a missing symbol bug for the code below due to
-    // a subexpression not getting mutated.
+    // one point this caused a missing symbol bug for the code below
+    // due to a subexpression not getting mutated.
     {
         Func f, g;
         Var x;
