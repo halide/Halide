@@ -336,7 +336,6 @@ int main(int argc, char **argv) {
         // Now use that in a widening let
         Expr widened2 = absd(cast<uint16_t>(lut), cast<uint16_t>(d));
 
-        // Use that value multiple times, so the load also ends up in a let
         g(x) = widened2 * widened2;
 
         g.vectorize(x, 8);
