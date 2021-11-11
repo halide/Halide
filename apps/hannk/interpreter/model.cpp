@@ -94,14 +94,6 @@ BoundsMap OpGroup::map_bounds(int input_idx, int output_idx) const {
     return result;
 }
 
-void OpGroup::accept(OpVisitor *v) const {
-    v->visit(this);
-}
-
-OpPtr OpGroup::mutate(OpMutator *m, OpPtr op) {
-    return m->visit_typed<OpGroup>(std::move(op));
-}
-
 void OpGroup::dump(std::ostream &os, int indent) const {
     Op::dump(os, indent);
     for (const auto &i : ops_) {

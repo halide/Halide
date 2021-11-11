@@ -1876,35 +1876,38 @@ void UpsampleChannelsOp::execute() {
         << "Unsupported UpsampleChannels op for types " << in->type() << ", " << out->type();
 }
 
-#define ACCEPT_AND_MUTATE(OP)                     \
-    void OP::accept(OpVisitor *v) const {         \
-        v->visit(this);                           \
-    }                                             \
-    OpPtr OP::mutate(OpMutator *m, OpPtr op) {    \
-        return m->visit_typed<OP>(std::move(op)); \
+#define ACCEPT_AND_MUTATE_IMPL(OP)                              \
+    void OP::accept_impl(OpVisitor *v) const {                  \
+        v->visit(this);                                         \
+    }                                                           \
+    OpPtr OP::mutate_impl(OpMutator *m, OpPtr op) {             \
+        std::unique_ptr<OP> o(static_cast<OP *>(op.release())); \
+        return m->visit(std::move(o));                          \
     }
 
-ACCEPT_AND_MUTATE(BinaryOp)
-ACCEPT_AND_MUTATE(ConcatenationOp)
-ACCEPT_AND_MUTATE(ConvOp)
-ACCEPT_AND_MUTATE(DepthwiseConv2DOp)
-ACCEPT_AND_MUTATE(ElementwiseProgramOp)
-ACCEPT_AND_MUTATE(GatherOp)
-ACCEPT_AND_MUTATE(L2NormalizationOp)
-ACCEPT_AND_MUTATE(PadOp)
-ACCEPT_AND_MUTATE(Pool2DOp)
-ACCEPT_AND_MUTATE(ShapeOp)
-ACCEPT_AND_MUTATE(SoftmaxOp)
-ACCEPT_AND_MUTATE(SpaceDepthOp)
-ACCEPT_AND_MUTATE(SplitOp)
-ACCEPT_AND_MUTATE(ReductionOp)
-ACCEPT_AND_MUTATE(ReshapeOp)
-ACCEPT_AND_MUTATE(TileConvFilterOp)
-ACCEPT_AND_MUTATE(TransposeOp)
-ACCEPT_AND_MUTATE(UpsampleChannelsOp)
-ACCEPT_AND_MUTATE(UnaryOp)
+ACCEPT_AND_MUTATE_IMPL(BinaryOp)
+ACCEPT_AND_MUTATE_IMPL(ConcatenationOp)
+ACCEPT_AND_MUTATE_IMPL(ConvOp)
+ACCEPT_AND_MUTATE_IMPL(DepthwiseConv2DOp)
+ACCEPT_AND_MUTATE_IMPL(ElementwiseProgramOp)
+ACCEPT_AND_MUTATE_IMPL(GatherOp)
+ACCEPT_AND_MUTATE_IMPL(L2NormalizationOp)
+ACCEPT_AND_MUTATE_IMPL(PadOp)
+ACCEPT_AND_MUTATE_IMPL(Pool2DOp)
+ACCEPT_AND_MUTATE_IMPL(ShapeOp)
+ACCEPT_AND_MUTATE_IMPL(SoftmaxOp)
+ACCEPT_AND_MUTATE_IMPL(SpaceDepthOp)
+ACCEPT_AND_MUTATE_IMPL(SplitOp)
+ACCEPT_AND_MUTATE_IMPL(ReductionOp)
+ACCEPT_AND_MUTATE_IMPL(ReshapeOp)
+ACCEPT_AND_MUTATE_IMPL(TileConvFilterOp)
+ACCEPT_AND_MUTATE_IMPL(TransposeOp)
+ACCEPT_AND_MUTATE_IMPL(UpsampleChannelsOp)
+ACCEPT_AND_MUTATE_IMPL(UnaryOp)
 
-#undef ACCEPT_AND_MUTATE
+ACCEPT_AND_MUTATE_IMPL(OpGroup)
+
+#undef ACCEPT_AND_MUTATE_IMPL
 
 void OpVisitor::visit(const OpGroup *op) {
     for (int i = 0; i < op->op_count(); i++) {
@@ -1925,7 +1928,7 @@ OpPtr OpMutator::visit(std::unique_ptr<OpGroup> op) {
         const int idx = (direction_ == Reverse) ? (old_op_count - i - 1) : i;
         OpPtr sub_op_old = op->take_op(idx);
         assert(sub_op_old != nullptr);
-        OpPtr sub_op_new = sub_op_old->mutate(this, std::move(sub_op_old));
+        OpPtr sub_op_new = mutate(std::move(sub_op_old));
         if (sub_op_new != nullptr) {
             ops_new.push_back(std::move(sub_op_new));
         }

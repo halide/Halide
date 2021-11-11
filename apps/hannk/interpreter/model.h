@@ -288,8 +288,26 @@ public:
     // Execute the op on a given crop.
     virtual void execute() = 0;
 
-    virtual void accept(OpVisitor *v) const = 0;
-    virtual OpPtr mutate(OpMutator *m, OpPtr op) = 0;
+    // Call the visitor's appropriate methods for this op, and any sub-ops.
+    inline void accept(OpVisitor *v) const {
+        return accept_impl(v);
+    }
+
+    // Call the mutator's appropriate methods for this op, and any sub-ops.
+    // The op passed in is owned by the callee, who will return a (possibly) mutated Op
+    // which should be used in place of the original; the callee may also return nullptr,
+    // in which case the original should be deleted from its container.
+    //
+    // Note that this is a static method because we need to pass the op in question
+    // via unique_ptr (since the callee needs to take ownership); we also
+    // need to use the 'naked' pointer to dispatch a virtual method, which
+    // is weird-looking and could lead to wrong behavior if you passed different
+    // objects. To avoid this, we restrict access to the dispatching code
+    // by making the virtual dispatches private, and add inline wrappers that
+    // enforce a sane calling convention.
+    static inline OpPtr mutate(OpPtr op, OpMutator *m) {
+        return op->mutate_impl(m, std::move(op));
+    }
 
     virtual void dump(std::ostream &os, int indent = 0) const;
 
@@ -327,6 +345,10 @@ public:
     Op &operator=(const Op &) = delete;
     Op(Op &&) = delete;
     Op &operator=(Op &&) = delete;
+
+private:
+    virtual void accept_impl(OpVisitor *v) const = 0;
+    virtual OpPtr mutate_impl(OpMutator *m, OpPtr op) = 0;
 };
 
 class OpGroup : public Op {
@@ -364,9 +386,6 @@ public:
         return ops_[i].get();
     }
 
-    void accept(OpVisitor *v) const override;
-    OpPtr mutate(OpMutator *m, OpPtr op) override;
-
     void dump(std::ostream &os, int indent = 0) const override;
 
     std::string name() const override {
@@ -379,6 +398,10 @@ public:
     OpGroup &operator=(const OpGroup &) = delete;
     OpGroup(OpGroup &&) = delete;
     OpGroup &operator=(OpGroup &&) = delete;
+
+private:
+    void accept_impl(OpVisitor *v) const override;
+    OpPtr mutate_impl(OpMutator *m, OpPtr op) override;
 };
 
 }  // namespace hannk

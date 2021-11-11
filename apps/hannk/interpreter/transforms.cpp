@@ -108,8 +108,7 @@ protected:
 }  // namespace
 
 OpPtr remove_dead_ops(OpPtr op) {
-    RemoveDeadOps r(op.get());
-    return op->mutate(&r, std::move(op));
+    return RemoveDeadOps(op.get()).mutate(std::move(op));
 }
 
 namespace {
@@ -276,10 +275,10 @@ OpPtr in_place(OpPtr op) {
     // to try our best to alias those tensors, and the luck of the
     // draw could put other aliases in place first that could thwart this.
     InPlaceReshape handle_reshapes;
-    op = op->mutate(&handle_reshapes, std::move(op));
+    op = handle_reshapes.mutate(std::move(op));
 
     InPlace handle_in_place(op.get());
-    op = op->mutate(&handle_in_place, std::move(op));
+    op = handle_in_place.mutate(std::move(op));
 
     return op;
 }
@@ -452,7 +451,7 @@ public:
 
 OpPtr pad_for_ops(OpPtr op) {
     PadForOps padder;
-    op = op->mutate(&padder, std::move(op));
+    op = padder.mutate(std::move(op));
     if (padder.prepare_failed) {
         return nullptr;
     }
@@ -508,7 +507,7 @@ OpPtr fuse_pad_ops(OpPtr op) {
     // we might have introduced two paddings in a row, which is
     // a waste. (This should be run after flatten_groups().)
     FusePadOps fuser;
-    op = op->mutate(&fuser, std::move(op));
+    op = fuser.mutate(std::move(op));
     if (fuser.prepare_failed) {
         return nullptr;
     }
@@ -562,7 +561,7 @@ class ConstantFolder : public OpMutator {
 
 OpPtr fold_constants(OpPtr op) {
     ConstantFolder folder;
-    return op->mutate(&folder, std::move(op));
+    return folder.mutate(std::move(op));
 }
 
 namespace {
@@ -586,8 +585,7 @@ OpPtr flatten_groups(OpPtr op) {
     std::vector<TensorPtr> outputs = op->outputs();
 
     GroupFlattener flattener;
-    (void)op->mutate(&flattener, std::move(op));
-
+    (void)flattener.mutate(std::move(op));
     return make_op<OpGroup>(inputs, outputs, std::move(flattener.flattened));
 }
 
