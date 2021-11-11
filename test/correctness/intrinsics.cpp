@@ -314,6 +314,39 @@ int main(int argc, char **argv) {
     check_intrinsics_over_range<int32_t>();
     check_intrinsics_over_range<uint32_t>();
 
+    // The intrinsics-matching pass substitutes in widening lets. At
+    // one point this caused a missing symbol bug for the code below
+    // due to a subexpression not getting mutated.
+    {
+        Func f, g;
+        Var x;
+        Param<uint8_t> d;
+
+        f(x) = cast<uint8_t>(x);
+        f.compute_root();
+
+        // We want a widening let that uses a load that uses a widening let
+
+        // Widen it, but in a way that won't result in the cast being
+        // substituted in by the simplifier. We want it to only be
+        // substituted when we reach the intrinsics-matching pass.
+        Expr widened = absd(cast<uint16_t>(f(x)), cast<uint16_t>(d));
+
+        // Now use it in a load, twice, so that CSE pulls it out as a let.
+        Expr lut = f(cast<int32_t>(widened * widened));
+
+        // Now use that in another widening op...
+        Expr widened2 = absd(cast<uint16_t>(lut), cast<uint16_t>(d));
+
+        // ...which we will use twice so that CSE makes it another let.
+        g(x) = widened2 * widened2;
+
+        g.vectorize(x, 8);
+
+        // This used to crash with a missing symbol error
+        g.compile_jit();
+    }
+
     printf("Success!\n");
     return 0;
 }
