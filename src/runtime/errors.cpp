@@ -286,4 +286,9 @@ WEAK int halide_error_storage_bound_too_small(void *user_context, const char *fu
     return halide_error_code_storage_bound_too_small;
 }
 
+WEAK int halide_error_device_crop_failed(void *user_context) {
+    error(user_context) << "Buffer could not be cropped (runtime error or unimplemented device option).\n";
+    return halide_error_code_device_crop_failed;
+}
+
 }  // extern "C"

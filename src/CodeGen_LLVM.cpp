@@ -1101,10 +1101,8 @@ void CodeGen_LLVM::optimize_module() {
 
 #if LLVM_VERSION >= 130
     llvm::PassBuilder pb(tm.get(), pto);
-#elif LLVM_VERSION >= 120
-    llvm::PassBuilder pb(/*DebugLogging*/ false, tm.get(), pto);
 #else
-    llvm::PassBuilder pb(tm.get(), pto);
+    llvm::PassBuilder pb(/*DebugLogging*/ false, tm.get(), pto);
 #endif
 
     bool debug_pass_manager = false;
@@ -1145,54 +1143,45 @@ void CodeGen_LLVM::optimize_module() {
     OptimizationLevel level = OptimizationLevel::O3;
 
     if (get_target().has_feature(Target::ASAN)) {
-#if LLVM_VERSION >= 120
         pb.registerPipelineStartEPCallback([&](ModulePassManager &mpm,
                                                OptimizationLevel) {
             mpm.addPass(
                 RequireAnalysisPass<ASanGlobalsMetadataAnalysis, llvm::Module>());
         });
-#else
-        pb.registerPipelineStartEPCallback([&](ModulePassManager &mpm) {
-            mpm.addPass(
-                RequireAnalysisPass<ASanGlobalsMetadataAnalysis, llvm::Module>());
-        });
-#endif
         pb.registerOptimizerLastEPCallback(
             [](ModulePassManager &mpm, OptimizationLevel level) {
+#if LLVM_VERSION >= 140
+                AddressSanitizerOptions asan_options;  // default values are good...
+                asan_options.UseAfterScope = true;     // ... except this one
+                mpm.addPass(createModuleToFunctionPassAdaptor(AddressSanitizerPass(asan_options)));
+#else
                 constexpr bool compile_kernel = false;
                 constexpr bool recover = false;
-                constexpr bool use_after_scope = true;
-#if LLVM_VERSION >= 140
-                // TODO: this is the value that the default ctor uses.
-                // Not sure if it's ideal for Halide.
-                constexpr AsanDetectStackUseAfterReturnMode use_after_return = AsanDetectStackUseAfterReturnMode::Runtime;
+                constexpr bool use_global_gc = true;
                 mpm.addPass(createModuleToFunctionPassAdaptor(AddressSanitizerPass(
-                    AddressSanitizerOptions(compile_kernel, recover, use_after_scope, use_after_return))));
-#else
-                mpm.addPass(createModuleToFunctionPassAdaptor(AddressSanitizerPass(
-                    compile_kernel, recover, use_after_scope)));
+                    compile_kernel, recover, use_global_gc)));
 #endif
             });
-#if LLVM_VERSION >= 120
+#if LLVM_VERSION >= 140
+        pb.registerPipelineStartEPCallback(
+            [](ModulePassManager &mpm, OptimizationLevel) {
+                AddressSanitizerOptions asan_options;  // default values are good
+                constexpr bool use_global_gc = true;
+                constexpr bool use_odr_indicator = true;
+                constexpr auto destructor_kind = AsanDtorKind::Global;
+                mpm.addPass(ModuleAddressSanitizerPass(
+                    asan_options, use_global_gc,
+                    use_odr_indicator, destructor_kind));
+            });
+#else
         pb.registerPipelineStartEPCallback(
             [](ModulePassManager &mpm, OptimizationLevel) {
                 constexpr bool compile_kernel = false;
                 constexpr bool recover = false;
-                constexpr bool module_use_after_scope = false;
+                constexpr bool module_use_global_gc = false;
                 constexpr bool use_odr_indicator = true;
                 mpm.addPass(ModuleAddressSanitizerPass(
-                    compile_kernel, recover, module_use_after_scope,
-                    use_odr_indicator));
-            });
-#else
-        pb.registerPipelineStartEPCallback(
-            [](ModulePassManager &mpm) {
-                constexpr bool compile_kernel = false;
-                constexpr bool recover = false;
-                constexpr bool module_use_after_scope = false;
-                constexpr bool use_odr_indicator = true;
-                mpm.addPass(ModuleAddressSanitizerPass(
-                    compile_kernel, recover, module_use_after_scope,
+                    compile_kernel, recover, module_use_global_gc,
                     use_odr_indicator));
             });
 #endif
@@ -1230,7 +1219,7 @@ void CodeGen_LLVM::optimize_module() {
     if (tm) {
         tm->registerPassBuilderCallbacks(pb);
     }
-#elif LLVM_VERSION >= 120
+#else
     if (tm) {
         tm->registerPassBuilderCallbacks(pb, debug_pass_manager);
     }
@@ -4499,33 +4488,21 @@ void CodeGen_LLVM::codegen_vector_reduce(const VectorReduce *op, const Expr &ini
 
         if (llvm_has_intrinsic) {
             std::stringstream name;
-#if LLVM_VERSION >= 120
             name << "llvm.vector.reduce.";
-#else
-            name << "llvm.experimental.vector.reduce.";
-#endif
             const int bits = op->type.bits();
             bool takes_initial_value = false;
             Expr initial_value = init;
             if (op->type.is_float()) {
                 switch (op->op) {
                 case VectorReduce::Add:
-#if LLVM_VERSION >= 120
                     name << "fadd";
-#else
-                    name << "v2.fadd.f" << bits;
-#endif
                     takes_initial_value = true;
                     if (!initial_value.defined()) {
                         initial_value = make_zero(op->type);
                     }
                     break;
                 case VectorReduce::Mul:
-#if LLVM_VERSION >= 120
                     name << "fmul";
-#else
-                    name << "v2.fmul.f" << bits;
-#endif
                     takes_initial_value = true;
                     if (!initial_value.defined()) {
                         initial_value = make_one(op->type);

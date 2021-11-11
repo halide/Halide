@@ -670,7 +670,15 @@ class SubstituteInWideningLets : public IRMutator {
             } extractor(frames);
 
             if (should_replace) {
+                size_t start_of_new_lets = frames.size();
                 value = extractor.mutate(value);
+                // Mutate any subexpressions the extractor decided to
+                // leave behind, in case they in turn depend on lets
+                // we've decided to substitute in.
+                for (size_t i = start_of_new_lets; i < frames.size(); i++) {
+                    frames[i].new_value = mutate(frames[i].new_value);
+                }
+
                 // Check it wasn't lifted entirely
                 should_replace = !value.as<Variable>();
             }

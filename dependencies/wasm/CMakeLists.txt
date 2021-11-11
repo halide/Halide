@@ -91,9 +91,8 @@ function(add_wasm_executable TARGET)
         -Wsuggest-override
         -s ASSERTIONS=1
         -s ALLOW_MEMORY_GROWTH=1
-        -s WASM_BIGINT=1
-        -s STANDALONE_WASM=1
-        -s ENVIRONMENT=node)
+        -s ENVIRONMENT=node
+    )
 
     set(SRCS)
     foreach (S IN LISTS args_SRCS)

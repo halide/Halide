@@ -74,17 +74,23 @@ TensorStoragePtr Tensor::storage() {
 void Tensor::set_external_buffer(HalideBuffer<void> external_buffer) {
     assert(!is_dynamic());
     assert(is_external());
-    assert(storage_ == nullptr);
 
     // No: it's ok to set this to different values over time,
     // so don't assert that host is currently null (or already equal to the new value)
     // assert(!is_allocated());
 
-    for (int i = 0; i < buffer_.dimensions(); i++) {
-        assert(external_buffer.dim(i).min() == buffer_.dim(i).min());
-        assert(external_buffer.dim(i).extent() == buffer_.dim(i).extent());
+    storage()->buffer = std::move(external_buffer);
+    finish_buffer_allocation();
+
+    if (alias_info_ != nullptr) {
+        for (const auto &weak : alias_info_->aliases) {
+            TensorPtr tp = weak.lock();  // null if the weak_ptr has expired
+            if (tp != nullptr && tp.get() != this) {
+                assert(!tp->is_external());
+                tp->finish_buffer_allocation();
+            }
+        }
     }
-    buffer_ = std::move(external_buffer);
 }
 
 void Tensor::allocate_from_arena_pointer(void *host) {
@@ -117,7 +123,7 @@ void Tensor::finish_buffer_allocation() {
     halide_buffer_t *raw_storage_buffer = storage_buffer.raw_buffer();
     assert(raw_storage_buffer->host);
 
-    if (is_reshape_alias_) {
+    if (alias_type() == AliasType::Reshaped) {
         assert(raw_storage_buffer->number_of_elements() == buffer_.number_of_elements());
         assert(raw_storage_buffer->type == buffer_.type());
         assert(storage_offset_.empty());
@@ -191,67 +197,155 @@ void Tensor::resize_dynamic(const Box &new_shape) {
     storage_ = nullptr;
 }
 
-void Tensor::set_alias_of(const TensorPtr &t, const SmallVector<int, max_rank> &storage_offset, bool is_reshape) {
-    assert(!is_dynamic());
-    assert(!is_external());
-    assert(!is_alias());
-
-    // No: 't' may (or may not) already have is_alias_ = true,
-    // but both will be considered an alias after this call.
-    // assert(!t->is_alias_);
-
-    storage_ = t->storage();
-    storage_offset_ = storage_offset;
-
-    if (is_reshape) {
-        is_reshape_alias_ = true;
-
-        // No: assume that t->storage() matches the rank+dimensions expected by t
-        // (or, if not, that t->is_reshape_alias_ is already set to true).
-        //
-        // t->is_reshape_alias_ = true;
+bool Tensor::has_external_alias() const {
+    if (alias_info_ != nullptr) {
+        for (const auto &weak : alias_info_->aliases) {
+            TensorPtr tp = weak.lock();  // null if the weak_ptr has expired
+            if (tp != nullptr && tp->is_external()) {
+                return true;
+            }
+        }
     }
+    return false;
+}
+
+// Return true iff 'this' can be an alias of 'source' of the given type.
+bool Tensor::can_alias(const TensorPtr &source, AliasType alias_type) const {
+    if (alias_type == AliasType::None || this == source.get()) {
+        return false;  // Bad inputs, just say no
+    }
+
+    if (this->is_allocated()) {
+        // Can't alias a tensor that already has an allocation.
+        return false;
+    }
+
+    // If either tensor is dynamic, can't alias them.
+    if (this->is_dynamic() || source->is_dynamic()) {
+        return false;
+    }
+
+    if (this->type().bytes() != source->type().bytes()) {
+        // We can't alias tensors with types of different size.
+        return false;
+    }
+
+    if (this->alias_type() != AliasType::None || this->alias_info_ != nullptr) {
+        // Can't alias a tensor multiple times.
+        return false;
+    }
+
+    if (source->alias_type() != AliasType::None && source->alias_type() != alias_type) {
+        // The source of the aliasing must either be unaliased or of the type we want
+        return false;
+    }
+
+    if (alias_type == AliasType::Offset) {
+        // AliasType::Offset allows for NO external tensors in the alias group
+        if (this->is_external() || source->is_external()) {
+            return false;
+        }
+
+        if (this->rank() != source->rank()) {
+            // AliasType::Offset can't alias tensors with different rank.
+            return false;
+        }
+    } else if (alias_type == AliasType::Reshaped) {
+        // AliasType::Reshaped allows for at most one external tensor in the alias group
+        const bool this_external = this->is_external() || this->has_external_alias();
+        const bool source_external = source->is_external() || source->has_external_alias();
+        if (this_external && source_external) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+/*static*/ void Tensor::make_offset_alias(TensorPtr alias, TensorPtr source, const TensorOffset &storage_offset) {
+    assert(alias->can_alias(source, AliasType::Offset));
+
+    if (source->alias_info_ == nullptr) {
+        source->alias_info_ = std::make_shared<AliasInfo>(source, AliasType::Offset);
+    } else {
+        assert(source->alias_info_->alias_type == AliasType::Offset);
+    }
+
+    assert(alias->alias_info_ == nullptr);
+    alias->alias_info_ = source->alias_info_;
+    alias->alias_info_->aliases.push_back(alias);
+
+    assert(alias->storage_ == nullptr);
+    alias->storage_ = source->storage();
+    assert(alias->storage_offset_.empty());
+    alias->storage_offset_ = storage_offset;
 
 #ifndef NDEBUG
-    if (is_reshape) {
-        assert(storage_offset_.empty());
-        assert(this->buffer().type() == t->buffer().type());
-        assert(this->buffer().number_of_elements() == t->buffer().number_of_elements());
-    } else {
-        // Reality-check.
-        Box offset_bounds = bounds();
-        for (int i = 0; i < (int)storage_offset_.size(); i++) {
-            offset_bounds[i] += storage_offset_[i];
-        }
-        auto &shared_buffer = storage_->buffer;
-        assert(shared_buffer.type().bytes() == type().bytes());
-        assert(shared_buffer.dimensions() == (int)offset_bounds.size());
-        assert(!shared_buffer.data());
+    // Reality-check.
+    Box offset_bounds = alias->bounds();
+    for (int i = 0; i < (int)alias->storage_offset_.size(); i++) {
+        offset_bounds[i] += alias->storage_offset_[i];
+    }
+    auto &shared_buffer = alias->storage_->buffer;
+    assert(shared_buffer.type().bytes() == alias->type().bytes());
+    assert(shared_buffer.dimensions() == (int)offset_bounds.size());
+    assert(!shared_buffer.data());
 
-        // Check that the storage is big enough for this buffer.
-        for (int i = 0; i < shared_buffer.dimensions(); i++) {
-            assert(offset_bounds[i].min >= shared_buffer.dim(i).min());
-            assert(offset_bounds[i].max <= shared_buffer.dim(i).max());
-        }
+    // Check that the storage is big enough for this buffer.
+    for (int i = 0; i < shared_buffer.dimensions(); i++) {
+        assert(offset_bounds[i].min >= shared_buffer.dim(i).min());
+        assert(offset_bounds[i].max <= shared_buffer.dim(i).max());
     }
 #endif
+}
 
-    is_alias_ = true;
-    t->is_alias_ = true;
+/*static*/ void Tensor::make_reshape_alias(TensorPtr alias, TensorPtr source) {
+    assert(alias->can_alias(source, AliasType::Reshaped));
+
+    if (alias->is_external()) {
+        assert(!source->has_external_alias());
+    } else if (source->is_external()) {
+        assert(!alias->has_external_alias());
+    }
+
+    if (source->alias_info_ == nullptr) {
+        source->alias_info_ = std::make_shared<AliasInfo>(source, AliasType::Reshaped);
+    } else {
+        assert(source->alias_info_->alias_type == AliasType::Reshaped);
+    }
+
+    assert(alias->alias_info_ == nullptr);
+    alias->alias_info_ = source->alias_info_;
+    alias->alias_info_->aliases.push_back(alias);
+
+    assert(alias->storage_ == nullptr);
+    alias->storage_ = source->storage();
+    assert(alias->storage_offset_.empty());
+
+#ifndef NDEBUG
+    assert(alias->storage_offset_.empty());
+    assert(alias->buffer().type().bytes() == source->buffer().type().bytes());
+    assert(alias->buffer().number_of_elements() == source->buffer().number_of_elements());
+#endif
 }
 
 void Tensor::dump(std::ostream &os) const {
-    os << "  " << buffer_.type() << " x ";
+    os << "  \"" << name() << "\" this:@" << (const void *)this;
 
-    const auto *b = buffer_.raw_buffer();
-    os << '{';
-    for (int i = 0; i < b->dimensions; i++) {
-        if (i > 0) {
-            os << ", ";
+    os << " " << buffer_.type() << " x ";
+
+    const auto dump_dims = [&os](const halide_buffer_t *b) {
+        os << '{';
+        for (int i = 0; i < b->dimensions; i++) {
+            if (i > 0) {
+                os << ", ";
+            }
+            os << b->dim[i];
         }
-        os << b->dim[i];
-    }
-    os << '}';
+        os << '}';
+    };
+
+    dump_dims(buffer_.raw_buffer());
 
     if (is_allocated()) {
         os << " allocated";
@@ -267,9 +361,13 @@ void Tensor::dump(std::ostream &os) const {
     if (is_dynamic()) {
         os << " dynamic";
     }
-    if (is_alias()) {
-        os << " alias";
-        os << " storage_offset{";
+    if (alias_type() != AliasType::None) {
+        os << (alias_type() == AliasType::Offset ? " alias_offset{" : " alias_reshaped{");
+        for (const auto &weak : alias_info_->aliases) {
+            TensorPtr tp = weak.lock();  // null if the weak_ptr has expired
+            os << " " << (void *)tp.get();
+        }
+        os << " } storage_offset{";
         for (size_t i = 0; i < storage_offset_.size(); i++) {
             if (i > 0) {
                 os << ", ";
@@ -285,8 +383,12 @@ void Tensor::dump(std::ostream &os) const {
     }
 
     os << " storage:@" << (void *)storage_.get();
+    if (storage_) {
+        os << ' ';
+        dump_dims(storage_->buffer.raw_buffer());
+    }
 
-    os << " " << name() << " this:@" << (const void *)this << std::endl;
+    os << std::endl;
 }
 
 }  // namespace hannk

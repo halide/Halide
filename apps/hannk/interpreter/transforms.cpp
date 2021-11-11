@@ -84,56 +84,41 @@ void remove_dead_ops(OpGroup *root) {
 
 namespace {
 
-// Check if a tensor already has storage configured.
-bool has_storage(const TensorPtr &t) {
-    return t->is_alias() || t->is_allocated();
-}
-
-// Try to alias outputs to inputs when it is safe.
-class InPlace : public OpVisitor {
+class InPlaceReshape : public LeafOpVisitor {
     using OpVisitor::visit;
 
-    bool is_alias_possible(TensorPtr input, TensorPtr output) const {
-        // If either tensor is dynamic, can't alias them.
-        if (input->is_dynamic() || output->is_dynamic()) {
-            return false;
-        }
+    void visit(ReshapeOp *op) override {
+        TensorPtr input = op->input();
+        TensorPtr output = op->output();
 
-        // If either tensor is external, can't alias them.
-        // TODO: maybe we can, but it's not clear how to update storage_.host in that case?
-        if (input->is_external() || output->is_external()) {
-            return false;
-        }
+        HCHECK(input->type().bytes() == output->type().bytes());
+        HCHECK(input->is_dense() == output->is_dense());
+        HCHECK(input->number_of_elements() == output->number_of_elements());
 
-        if (input->type().bytes() != output->type().bytes()) {
-            // We can't alias tensors with types of different size.
-            return false;
+        if (input->can_alias(output, AliasType::Reshaped)) {
+            Tensor::make_reshape_alias(input, output);
+        } else if (output->can_alias(input, AliasType::Reshaped)) {
+            Tensor::make_reshape_alias(output, input);
         }
+    }
+};
 
+// Try to alias outputs to inputs when it is safe.
+class InPlace : public LeafOpVisitor {
+    using OpVisitor::visit;
+
+    // We can alias two tensors if the input is not used after the output is written,
+    // and we meet a number of other requirements.
+    bool maybe_alias_tensors(TensorPtr input, TensorPtr output, TensorOffset offset = {}) const {
         // We can't alias an input that is an input or output of the root graph.
         // TODO: We could, if we don't change the shape.
         if (is_root_input_or_output(input)) {
             return false;
         }
 
-        return true;
-    }
-
-    // We can alias two tensors if the input is not used after the output is written,
-    // and we meet a number of other requirements.
-    bool maybe_alias_tensors(TensorPtr input, TensorPtr output, TensorOffset offset = {}) const {
-        if (!is_alias_possible(input, output)) {
-            return false;
-        }
-
         // If the input is used anywhere else, we should not alias it.
         // TODO: This is conservative, we could alias it if it is the *last* use.
         if (input->consumers().size() != 1) {
-            return false;
-        }
-
-        // rank has to match for most aliasing (note that Reshape is an exception to this)
-        if (input->rank() != output->rank()) {
             return false;
         }
 
@@ -146,16 +131,15 @@ class InPlace : public OpVisitor {
             input_bounds_with_offset[i] += offset[i];
             output_bounds_with_negative_offset[i] -= offset[i];
         }
-        bool input_subset_of_output = is_subset_of(input_bounds_with_offset, output->bounds());
-        bool output_subset_of_input = is_subset_of(output_bounds_with_negative_offset, input->bounds());
-        if (input_subset_of_output && !has_storage(input)) {
-            input->set_alias_of(output, offset);
+
+        if (is_subset_of(input_bounds_with_offset, output->bounds()) && input->can_alias(output, AliasType::Offset)) {
+            Tensor::make_offset_alias(input, output, offset);
             return true;
-        } else if (output_subset_of_input && !has_storage(output)) {
+        } else if (is_subset_of(output_bounds_with_negative_offset, input->bounds()) && output->can_alias(input, AliasType::Offset)) {
             for (int &i : offset) {
                 i = -i;
             }
-            output->set_alias_of(input, offset);
+            Tensor::make_offset_alias(output, input, offset);
             return true;
         }
 
@@ -229,36 +213,6 @@ class InPlace : public OpVisitor {
         maybe_alias_tensors(op->input(), op->output(), offset);
     }
 
-    void visit(ReshapeOp *op) override {
-        const TensorPtr &input = op->input();
-        const TensorPtr &output = op->output();
-
-        // Reshape is unusual in that it's OK to alias Reshapes with mismatched rank
-        // (indeed, this is almost always the case), so we handle everything here
-        // instead of calling maybe_alias_tensors().
-        if (!is_alias_possible(input, output)) {
-            return;
-        }
-
-        if (!input->is_dense() || !output->is_dense()) {
-            // Can't alias a Reshape unless both Tensors have dense strides.
-            return;
-        }
-
-        constexpr bool is_reshape = true;
-        if (!has_storage(input)) {
-            input->set_alias_of(output, {}, is_reshape);
-        } else if (!has_storage(output)) {
-            output->set_alias_of(input, {}, is_reshape);
-        }
-    }
-
-    void visit(OpGroup *op) override {
-        for (int i = 0; i < op->op_count(); i++) {
-            op->op(i)->accept(this);
-        }
-    }
-
     const Op *const root_;
 
     bool is_root_input_or_output(const TensorPtr &t) const {
@@ -274,6 +228,12 @@ public:
 }  // namespace
 
 void in_place(Op *op) {
+    // Always check for ReshapeOp before anything else; we want
+    // to try our best to alias those tensors, and the luck of the
+    // draw could put other aliases in place first that could thwart this.
+    InPlaceReshape handle_reshapes;
+    op->accept(&handle_reshapes);
+
     InPlace v(op);
     op->accept(&v);
 }
@@ -294,7 +254,7 @@ void replace_consumers(const TensorPtr &from, const TensorPtr &to) {
 }
 
 // Find ops that need padding and add an explicit pad op.
-class PadForOps : public OpVisitor {
+class PadForOps : public LeafOpVisitor {
     using OpVisitor::visit;
 
     void pad_for_op(Op *op, int input_idx, int output_idx) {
@@ -380,17 +340,11 @@ class PadForOps : public OpVisitor {
         pad_for_op(op, 0, 0);
     }
 
-    void visit(OpGroup *op) override {
-        for (int i = 0; i < op->op_count(); i++) {
-            op->op(i)->accept(this);
-        }
-    }
-
 public:
     std::vector<OpPtr> new_ops;
 };
 
-class FusePadOps : public OpVisitor {
+class FusePadOps : public LeafOpVisitor {
     using OpVisitor::visit;
 
     void visit(PadOp *op) override {
@@ -410,12 +364,6 @@ class FusePadOps : public OpVisitor {
         for (int d = 0; d < std::min(prev_padding.dimensions(), padding.dimensions()); d++) {
             padding(0, d) += prev_padding(0, d);
             padding(1, d) += prev_padding(1, d);
-        }
-    }
-
-    void visit(OpGroup *op) override {
-        for (int i = 0; i < op->op_count(); i++) {
-            op->op(i)->accept(this);
         }
     }
 };

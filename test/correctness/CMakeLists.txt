@@ -66,6 +66,7 @@ tests(GROUPS correctness
       cuda_8_bit_dot_product.cpp
       custom_allocator.cpp
       custom_auto_scheduler.cpp
+      custom_cuda_context.cpp
       custom_error_reporter.cpp
       custom_jit_context.cpp
       custom_lowering_pass.cpp
@@ -263,6 +264,7 @@ tests(GROUPS correctness
       process_some_tiles.cpp
       pseudostack_shares_slots.cpp
       python_extension_gen.cpp
+      pytorch.cpp
       random.cpp
       realize_larger_than_two_gigs.cpp
       realize_over_shifted_domain.cpp

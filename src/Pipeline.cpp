@@ -757,7 +757,7 @@ Realization Pipeline::realize(JITUserContext *context,
         if (needs_crop) {
             r[i].crop(crop);
         }
-        r[i].copy_to_host();
+        r[i].copy_to_host(context);
     }
     return r;
 }

@@ -6,6 +6,9 @@ include ../support/Makefile.inc
 # builds but easier to enable it for everything.
 CXXFLAGS += -Wno-unused-private-field -fno-exceptions -fPIC -fvisibility=hidden -fvisibility-inlines-hidden -Wunused-variable -Wsuggest-override -Woverloaded-virtual -I$(MAKEFILE_DIR)
 
+# No option to build without TFLite/Delegate in Make (use CMake for that)
+CXXFLAGS += -DHANNK_BUILD_TFLITE=1
+
 BENCHMARK_OUT = benchmark
 ifeq (hexagon-32-qurt,$(findstring hexagon-32-qurt,$(HL_TARGET)))
 	# Building benchmark application as shared object instead of elf for
@@ -34,12 +37,12 @@ build: \
 	$(BIN)/$(HL_TARGET)/compare_vs_tflite
 
 test: compare_vs_tflite
-	$(foreach test_model, $(shell ls -1 test/*/*), $(BIN)/$(HL_TARGET)/compare_vs_tflite $(test_model) --benchmark 0;)
+	$(foreach test_model, $(shell ls -1 test/*/*.tflite), $(BIN)/$(HL_TARGET)/compare_vs_tflite $(test_model) --benchmark 0;)
 
 test-hexagon-sim: $(BIN)/$(HL_TARGET)/$(BENCHMARK_OUT)
 	@mkdir -p $@
 	echo "Benchmarking tests..."
-	$(foreach test_model, $(shell ls -1 test/*/*), BIN=$(BIN) ./run_benchmark_on_hexagon_sim.sh $(test_model);)
+	$(foreach test_model, $(shell ls -1 test/*/*.tflite), BIN=$(BIN) ./run_benchmark_on_hexagon_sim.sh $(test_model);)
 
 test-hexagon-device: $(BIN)/$(HL_TARGET)/$(BENCHMARK_OUT)
 	echo "Benchmarking tests..."
@@ -48,7 +51,7 @@ test-hexagon-device: $(BIN)/$(HL_TARGET)/$(BENCHMARK_OUT)
 	adb push test/. /vendor/bin/hannk-test
 	adb push $(HEXAGON_SDK_ROOT)/libs/run_main_on_hexagon/ship/android_aarch64/run_main_on_hexagon /vendor/bin/run_main_on_hexagon
 	adb push $(HEXAGON_SDK_ROOT)/libs/run_main_on_hexagon/ship/hexagon_toolv84_v65/librun_main_on_hexagon_skel.so /vendor/lib/rfsa/adsp/
-	$(foreach test_model, $(shell ls -1 test/*/*), adb shell 'cd /vendor/bin; touch /vendor/lib/rfsa/adsp/run_main_on_hexagon.farf; ./run_main_on_hexagon 3 /vendor/bin/$(BENCHMARK_OUT) --verbose hannk-$(test_model)';)
+	$(foreach test_model, $(shell ls -1 test/*/*.tflite), adb shell 'cd /vendor/bin; touch /vendor/lib/rfsa/adsp/run_main_on_hexagon.farf; ./run_main_on_hexagon 3 /vendor/bin/$(BENCHMARK_OUT) --verbose hannk-$(test_model)';)
 
 clean:
 	rm -rf $(BIN)
@@ -56,7 +59,7 @@ clean:
 # ---------------------- TFLite glue
 
 TFLITE_VERSION_MAJOR ?= 2
-TFLITE_VERSION_MINOR ?= 6
+TFLITE_VERSION_MINOR ?= 7
 TFLITE_VERSION_PATCH ?= 0
 
 TFLITE_VERSION = $(TFLITE_VERSION_MAJOR).$(TFLITE_VERSION_MINOR).$(TFLITE_VERSION_PATCH)

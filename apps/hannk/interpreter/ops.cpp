@@ -1377,9 +1377,17 @@ const char *ReductionOp::to_string(Operator op) {
 }
 
 bool ReductionOp::reducing(int d) const {
-    const auto &indices = input(1)->buffer<const int32_t>();
-    for (int i = 0; i < indices.dim(0).extent(); i++) {
-        if (indices(i) == d) {
+    const TensorPtr &in = input(0);
+    const TensorPtr &indices = input(1);
+    const auto &indices_buf = indices->buffer<const int32_t>();
+    for (int i = 0; i < indices_buf.dim(0).extent(); i++) {
+        int index = indices_buf(i);
+        if (index < 0) {
+            index += in->rank();
+        }
+        index = in->rank() - 1 - index;
+        assert(index >= 0 && index < in->rank());
+        if (index == d) {
             return true;
         }
     }
@@ -1942,6 +1950,12 @@ void UpsampleChannelsOp::accept(OpVisitor *v) {
 
 void UnaryOp::accept(OpVisitor *v) {
     v->visit(this);
+}
+
+void LeafOpVisitor::visit(OpGroup *op) {
+    for (int i = 0; i < op->op_count(); i++) {
+        op->op(i)->accept(this);
+    }
 }
 
 }  // namespace hannk

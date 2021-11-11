@@ -2372,7 +2372,7 @@ void CodeGen_C::visit(const Call *op) {
             string size = print_expr(simplify((op->args[0] + 7) / 8));
             stream << get_indent();
             string array_name = unique_name('a');
-            stream << "uint64_t " << array_name << "[" << size << "];";
+            stream << "uint64_t " << array_name << "[" << size << "];\n";
             rhs << "(" << print_type(op->type) << ")(&" << array_name << ")";
         }
     } else if (op->is_intrinsic(Call::make_struct)) {

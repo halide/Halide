@@ -64,7 +64,7 @@ ALWAYS_INLINE T get_cl_symbol(void *user_context, const char *name, bool req) {
 // Load an OpenCL shared object/dll, and get the function pointers for the OpenCL API from it.
 WEAK void load_libopencl(void *user_context) {
     debug(user_context) << "    load_libopencl (user_context: " << user_context << ")\n";
-    halide_assert(user_context, clCreateContext == nullptr);
+    halide_abort_if_false(user_context, clCreateContext == nullptr);
 
 // clang-format off
 #define CL_FN(ret, fn, args)    fn = get_cl_symbol<ret(CL_API_CALL *) args>(user_context, #fn, true);   // NOLINT(bugprone-macro-parentheses)
@@ -212,16 +212,16 @@ WEAK const char *halide_opencl_get_build_options(void *user_context) {
 WEAK int halide_acquire_cl_context(void *user_context, cl_context *ctx, cl_command_queue *q, bool create = true) {
     // TODO: Should we use a more "assertive" assert? These asserts do
     // not block execution on failure.
-    halide_assert(user_context, ctx != nullptr);
-    halide_assert(user_context, q != nullptr);
+    halide_abort_if_false(user_context, ctx != nullptr);
+    halide_abort_if_false(user_context, q != nullptr);
 
-    halide_assert(user_context, &thread_lock != nullptr);
+    halide_abort_if_false(user_context, &thread_lock != nullptr);
     while (__atomic_test_and_set(&thread_lock, __ATOMIC_ACQUIRE)) {
     }
 
     // If the context has not been initialized, initialize it now.
-    halide_assert(user_context, &context != nullptr);
-    halide_assert(user_context, &command_queue != nullptr);
+    halide_abort_if_false(user_context, &context != nullptr);
+    halide_abort_if_false(user_context, &command_queue != nullptr);
     if (!context && create) {
         cl_int error = create_opencl_context(user_context, &context, &command_queue);
         if (error != CL_SUCCESS) {
@@ -325,7 +325,7 @@ WEAK bool validate_device_pointer(void *user_context, halide_buffer_t *buf, size
                         << ", actual allocated " << (uint64_t)real_size << "\n";
 
     if (size) {
-        halide_assert(user_context, real_size >= (size + offset) && "Validating pointer with insufficient size");
+        halide_abort_if_false(user_context, real_size >= (size + offset) && "Validating pointer with insufficient size");
     }
     return true;
 }
@@ -336,8 +336,8 @@ WEAK int create_opencl_context(void *user_context, cl_context *ctx, cl_command_q
     debug(user_context)
         << "    create_opencl_context (user_context: " << user_context << ")\n";
 
-    halide_assert(user_context, ctx != nullptr && *ctx == nullptr);
-    halide_assert(user_context, q != nullptr && *q == nullptr);
+    halide_abort_if_false(user_context, ctx != nullptr && *ctx == nullptr);
+    halide_abort_if_false(user_context, q != nullptr && *q == nullptr);
 
     if (clGetPlatformIDs == nullptr) {
         error(user_context) << "CL: clGetPlatformIDs not found\n";
@@ -650,7 +650,7 @@ WEAK int halide_opencl_device_free(void *user_context, halide_buffer_t *buf) {
     }
 
     cl_mem dev_ptr = ((device_handle *)buf->device)->mem;
-    halide_assert(user_context, (((device_handle *)buf->device)->offset == 0) && "halide_opencl_device_free on buffer obtained from halide_device_crop");
+    halide_abort_if_false(user_context, (((device_handle *)buf->device)->offset == 0) && "halide_opencl_device_free on buffer obtained from halide_device_crop");
 
     debug(user_context)
         << "CL: halide_opencl_device_free (user_context: " << user_context
@@ -665,7 +665,7 @@ WEAK int halide_opencl_device_free(void *user_context, halide_buffer_t *buf) {
     uint64_t t_before = halide_current_time_ns(user_context);
 #endif
 
-    halide_assert(user_context, validate_device_pointer(user_context, buf));
+    halide_abort_if_false(user_context, validate_device_pointer(user_context, buf));
     debug(user_context) << "    clReleaseMemObject " << (void *)dev_ptr << "\n";
     cl_int result = clReleaseMemObject((cl_mem)dev_ptr);
     // If clReleaseMemObject fails, it is unlikely to succeed in a later call, so
@@ -759,7 +759,7 @@ WEAK int halide_opencl_initialize_kernels(void *user_context, void **state_ptr, 
                                               compile_kernel, user_context, ctx.context, src, size)) {
         return halide_error_code_generic_error;
     }
-    halide_assert(user_context, program != nullptr);
+    halide_abort_if_false(user_context, program != nullptr);
 
 #ifdef DEBUG_RUNTIME
     uint64_t t_after = halide_current_time_ns(user_context);
@@ -822,7 +822,7 @@ WEAK int halide_opencl_device_release(void *user_context) {
 
     if (ctx) {
         err = clFinish(q);
-        halide_assert(user_context, err == CL_SUCCESS);
+        halide_abort_if_false(user_context, err == CL_SUCCESS);
 
         compilation_cache.delete_context(user_context, ctx, clReleaseProgram);
 
@@ -830,12 +830,12 @@ WEAK int halide_opencl_device_release(void *user_context) {
         if (ctx == context) {
             debug(user_context) << "    clReleaseCommandQueue " << command_queue << "\n";
             err = clReleaseCommandQueue(command_queue);
-            halide_assert(user_context, err == CL_SUCCESS);
+            halide_abort_if_false(user_context, err == CL_SUCCESS);
             command_queue = nullptr;
 
             debug(user_context) << "    clReleaseContext " << context << "\n";
             err = clReleaseContext(context);
-            halide_assert(user_context, err == CL_SUCCESS);
+            halide_abort_if_false(user_context, err == CL_SUCCESS);
             context = nullptr;
         }
     }
@@ -856,14 +856,14 @@ WEAK int halide_opencl_device_malloc(void *user_context, halide_buffer_t *buf) {
     }
 
     size_t size = buf->size_in_bytes();
-    halide_assert(user_context, size != 0);
+    halide_abort_if_false(user_context, size != 0);
     if (buf->device) {
-        halide_assert(user_context, validate_device_pointer(user_context, buf, size));
+        halide_abort_if_false(user_context, validate_device_pointer(user_context, buf, size));
         return 0;
     }
 
     for (int i = 0; i < buf->dimensions; i++) {
-        halide_assert(user_context, buf->dim[i].stride >= 0);
+        halide_abort_if_false(user_context, buf->dim[i].stride >= 0);
     }
 
     debug(user_context) << "    allocating " << *buf << "\n";
@@ -900,7 +900,7 @@ WEAK int halide_opencl_device_malloc(void *user_context, halide_buffer_t *buf) {
         << "    Allocated device buffer " << (void *)buf->device
         << " for buffer " << buf << "\n";
 
-    halide_assert(user_context, validate_device_pointer(user_context, buf, size));
+    halide_abort_if_false(user_context, validate_device_pointer(user_context, buf, size));
 
 #ifdef DEBUG_RUNTIME
     uint64_t t_after = halide_current_time_ns(user_context);
@@ -970,12 +970,12 @@ WEAK int halide_opencl_buffer_copy(void *user_context, struct halide_buffer_t *s
                                    const struct halide_device_interface_t *dst_device_interface,
                                    struct halide_buffer_t *dst) {
     // We only handle copies to opencl or to host
-    halide_assert(user_context, dst_device_interface == nullptr ||
-                                    dst_device_interface == &opencl_device_interface);
+    halide_abort_if_false(user_context, dst_device_interface == nullptr ||
+                                            dst_device_interface == &opencl_device_interface);
 
     if ((src->device_dirty() || src->host == nullptr) &&
         src->device_interface != &opencl_device_interface) {
-        halide_assert(user_context, dst_device_interface == &opencl_device_interface);
+        halide_abort_if_false(user_context, dst_device_interface == &opencl_device_interface);
         // This is handled at the higher level.
         return halide_error_code_incompatible_device_interface;
     }
@@ -985,8 +985,8 @@ WEAK int halide_opencl_buffer_copy(void *user_context, struct halide_buffer_t *s
                      (src->host_dirty() && src->host != nullptr);
     bool to_host = !dst_device_interface;
 
-    halide_assert(user_context, from_host || src->device);
-    halide_assert(user_context, to_host || dst->device);
+    halide_abort_if_false(user_context, from_host || src->device);
+    halide_abort_if_false(user_context, to_host || dst->device);
 
     device_copy c = make_buffer_copy(src, from_host, dst, to_host);
 
@@ -1004,10 +1004,10 @@ WEAK int halide_opencl_buffer_copy(void *user_context, struct halide_buffer_t *s
 #ifdef DEBUG_RUNTIME
         uint64_t t_before = halide_current_time_ns(user_context);
         if (!from_host) {
-            halide_assert(user_context, validate_device_pointer(user_context, src));
+            halide_abort_if_false(user_context, validate_device_pointer(user_context, src));
         }
         if (!to_host) {
-            halide_assert(user_context, validate_device_pointer(user_context, dst));
+            halide_abort_if_false(user_context, validate_device_pointer(user_context, dst));
         }
 #endif
 
@@ -1062,11 +1062,11 @@ WEAK int halide_opencl_run(void *user_context,
 #endif
 
     // Create kernel object for entry_name from the program for this module.
-    halide_assert(user_context, state_ptr);
+    halide_abort_if_false(user_context, state_ptr);
 
     cl_program program{};
     bool found = compilation_cache.lookup(ctx.context, state_ptr, program);
-    halide_assert(user_context, found && program != nullptr);
+    halide_abort_if_false(user_context, found && program != nullptr);
 
     debug(user_context) << "    clCreateKernel " << entry_name << " -> ";
     cl_kernel f = clCreateKernel(program, entry_name, &err);
@@ -1118,7 +1118,7 @@ WEAK int halide_opencl_run(void *user_context,
         cl_int err = CL_SUCCESS;
 
         if (arg_is_buffer[i]) {
-            halide_assert(user_context, arg_sizes[i] == sizeof(uint64_t));
+            halide_abort_if_false(user_context, arg_sizes[i] == sizeof(uint64_t));
             cl_mem mem = ((device_handle *)((halide_buffer_t *)this_arg)->device)->mem;
             uint64_t offset = ((device_handle *)((halide_buffer_t *)this_arg)->device)->offset;
 
@@ -1209,7 +1209,7 @@ WEAK int halide_opencl_device_and_host_free(void *user_context, struct halide_bu
 }
 
 WEAK int halide_opencl_wrap_cl_mem(void *user_context, struct halide_buffer_t *buf, uint64_t mem) {
-    halide_assert(user_context, buf->device == 0);
+    halide_abort_if_false(user_context, buf->device == 0);
     if (buf->device != 0) {
         return -2;
     }
@@ -1238,8 +1238,8 @@ WEAK int halide_opencl_detach_cl_mem(void *user_context, halide_buffer_t *buf) {
     if (buf->device == 0) {
         return 0;
     }
-    halide_assert(user_context, buf->device_interface == &opencl_device_interface ||
-                                    buf->device_interface == &opencl_image_device_interface);
+    halide_abort_if_false(user_context, buf->device_interface == &opencl_device_interface ||
+                                            buf->device_interface == &opencl_image_device_interface);
     free((device_handle *)buf->device);
     buf->device = 0;
     buf->device_interface->impl->release_module();
@@ -1251,8 +1251,8 @@ WEAK uintptr_t halide_opencl_get_cl_mem(void *user_context, halide_buffer_t *buf
     if (buf->device == 0) {
         return 0;
     }
-    halide_assert(user_context, buf->device_interface == &opencl_device_interface ||
-                                    buf->device_interface == &opencl_image_device_interface);
+    halide_abort_if_false(user_context, buf->device_interface == &opencl_device_interface ||
+                                            buf->device_interface == &opencl_image_device_interface);
     return (uintptr_t)((device_handle *)buf->device)->mem;
 }
 
@@ -1260,7 +1260,7 @@ WEAK uint64_t halide_opencl_get_crop_offset(void *user_context, halide_buffer_t 
     if (buf->device == 0) {
         return 0;
     }
-    halide_assert(user_context, buf->device_interface == &opencl_device_interface);
+    halide_abort_if_false(user_context, buf->device_interface == &opencl_device_interface);
     return ((device_handle *)buf->device)->offset;
 }
 
@@ -1329,7 +1329,7 @@ WEAK int halide_opencl_device_release_crop(void *user_context,
     uint64_t t_before = halide_current_time_ns(user_context);
 #endif
 
-    halide_assert(user_context, validate_device_pointer(user_context, buf));
+    halide_abort_if_false(user_context, validate_device_pointer(user_context, buf));
     debug(user_context) << "    clReleaseMemObject " << (void *)dev_ptr << "\n";
     // Sub-buffers are released with clReleaseMemObject
     cl_int result = clReleaseMemObject((cl_mem)dev_ptr);
@@ -1545,14 +1545,14 @@ WEAK int halide_opencl_image_device_malloc(void *user_context, halide_buffer_t *
     }
 
     size_t size = buf->size_in_bytes();
-    halide_assert(user_context, size != 0);
+    halide_abort_if_false(user_context, size != 0);
     if (buf->device) {
-        halide_assert(user_context, validate_device_pointer(user_context, buf, size));
+        halide_abort_if_false(user_context, validate_device_pointer(user_context, buf, size));
         return 0;
     }
 
     for (int i = 0; i < buf->dimensions; i++) {
-        halide_assert(user_context, buf->dim[i].stride >= 0);
+        halide_abort_if_false(user_context, buf->dim[i].stride >= 0);
     }
 
     debug(user_context) << "    allocating " << *buf << "\n";
@@ -1664,7 +1664,7 @@ WEAK int halide_opencl_image_device_malloc(void *user_context, halide_buffer_t *
         << "    Allocated device buffer " << (void *)buf->device
         << " for buffer " << buf << "\n";
 
-    halide_assert(user_context, validate_device_pointer(user_context, buf, size));
+    halide_abort_if_false(user_context, validate_device_pointer(user_context, buf, size));
 
 #ifdef DEBUG_RUNTIME
     uint64_t t_after = halide_current_time_ns(user_context);
@@ -1682,12 +1682,12 @@ WEAK int halide_opencl_image_buffer_copy(void *user_context, struct halide_buffe
         << "CL: halide_opencl_image_buffer_copy (user_context: " << user_context
         << ", src: " << src << ", dst: " << dst << ")\n";
 
-    halide_assert(user_context, dst_device_interface == nullptr ||
-                                    dst_device_interface == &opencl_image_device_interface);
+    halide_abort_if_false(user_context, dst_device_interface == nullptr ||
+                                            dst_device_interface == &opencl_image_device_interface);
 
     if ((src->device_dirty() || src->host == nullptr) &&
         src->device_interface != &opencl_image_device_interface) {
-        halide_assert(user_context, dst_device_interface == &opencl_image_device_interface);
+        halide_abort_if_false(user_context, dst_device_interface == &opencl_image_device_interface);
         // This is handled at the higher level.
         return halide_error_code_incompatible_device_interface;
     }
@@ -1697,8 +1697,8 @@ WEAK int halide_opencl_image_buffer_copy(void *user_context, struct halide_buffe
                      (src->host_dirty() && src->host != nullptr);
     bool to_host = !dst_device_interface;
 
-    halide_assert(user_context, from_host || src->device);
-    halide_assert(user_context, to_host || dst->device);
+    halide_abort_if_false(user_context, from_host || src->device);
+    halide_abort_if_false(user_context, to_host || dst->device);
 
     device_copy c = make_buffer_copy(src, from_host, dst, to_host);
 
@@ -1712,10 +1712,10 @@ WEAK int halide_opencl_image_buffer_copy(void *user_context, struct halide_buffe
 #ifdef DEBUG_RUNTIME
         uint64_t t_before = halide_current_time_ns(user_context);
         if (!from_host) {
-            halide_assert(user_context, validate_device_pointer(user_context, src));
+            halide_abort_if_false(user_context, validate_device_pointer(user_context, src));
         }
         if (!to_host) {
-            halide_assert(user_context, validate_device_pointer(user_context, dst));
+            halide_abort_if_false(user_context, validate_device_pointer(user_context, dst));
         }
 #endif
 
@@ -1811,7 +1811,7 @@ WEAK int halide_opencl_image_device_and_host_free(void *user_context, struct hal
 }
 
 WEAK int halide_opencl_image_wrap_cl_mem(void *user_context, struct halide_buffer_t *buf, uint64_t mem) {
-    halide_assert(user_context, buf->device == 0);
+    halide_abort_if_false(user_context, buf->device == 0);
     if (buf->device != 0) {
         return -2;
     }
