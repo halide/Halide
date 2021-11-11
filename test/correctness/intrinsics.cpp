@@ -327,15 +327,18 @@ int main(int argc, char **argv) {
 
         // We want a widening let that uses a load that uses a widening let
 
-        // Widen it, but in a way that won't result in it being substituted in
+        // Widen it, but in a way that won't result in the cast being
+        // substituted in by the simplifier. We want it to only be
+        // substituted when we reach the intrinsics-matching pass.
         Expr widened = absd(cast<uint16_t>(f(x)), cast<uint16_t>(d));
 
-        // Now use it in a load
+        // Now use it in a load, twice, so that CSE pulls it out as a let.
         Expr lut = f(cast<int32_t>(widened * widened));
 
-        // Now use that in a widening let
+        // Now use that in another widening op...
         Expr widened2 = absd(cast<uint16_t>(lut), cast<uint16_t>(d));
 
+        // ...which we will use twice so that CSE makes it another let.
         g(x) = widened2 * widened2;
 
         g.vectorize(x, 8);
