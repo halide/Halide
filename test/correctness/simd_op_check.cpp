@@ -1746,13 +1746,8 @@ public:
                     check("v128.const", 8 * w, f32_1 * f32(42));
                     check("v128.const", 4 * w, f64_1 * f64(42));
                 } else {
-                    if (Halide::Internal::get_llvm_version() == 120) {
-                        check("i64x2.splat", 8 * w, u16_1 * u16(42));
-                        check("i64x2.splat", 4 * w, u32_1 * u32(42));
-                    } else {
-                        check("i16x8.splat", 8 * w, u16_1 * u16(42));
-                        check("i32x4.splat", 4 * w, u32_1 * u32(42));
-                    }
+                    check("i64x2.splat", 8 * w, u16_1 * u16(42));
+                    check("i64x2.splat", 4 * w, u32_1 * u32(42));
                     check("i64x2.splat", 2 * w, u64_1 * u64(42));
                     check("f32x4.splat", 8 * w, f32_1 * f32(42));
                     check("f64x2.splat", 4 * w, f64_1 * f64(42));
@@ -1764,16 +1759,9 @@ public:
                 // to be used explicitly
 
                 // Shuffling using immediate indices
-                if (Halide::Internal::get_llvm_version() >= 120) {
-                    check("i8x16.shuffle", 16 * w, in_u8(2 * x));
-                    check("i8x16.shuffle", 8 * w, in_u16(2 * x));
-                    check("i8x16.shuffle", 4 * w, in_u32(2 * x));
-                } else {
-                    // older mnemonics
-                    check("v8x16.shuffle", 16 * w, in_u8(2 * x));
-                    check("v8x16.shuffle", 8 * w, in_u16(2 * x));
-                    check("v8x16.shuffle", 4 * w, in_u32(2 * x));
-                }
+                check("i8x16.shuffle", 16 * w, in_u8(2 * x));
+                check("i8x16.shuffle", 8 * w, in_u16(2 * x));
+                check("i8x16.shuffle", 4 * w, in_u32(2 * x));
 
                 // Swizzling using variable indices
                 // (This fails to generate, but that's not entirely surprising -- I don't
@@ -1994,12 +1982,10 @@ public:
 
                 check("v128.bitselect", 16 * w, select(bool_1, u8_1, u8_2));
                 check("v128.bitselect", 8 * w, select(bool_1, u16_1, u16_2));
-                if (Halide::Internal::get_llvm_version() >= 120) {
-                    check("v128.bitselect", 4 * w, select(bool_1, u32_1, u32_2));
-                    check("v128.bitselect", 2 * w, select(bool_1, u64_1, u64_2));
-                    check("v128.bitselect", 4 * w, select(bool_1, f32_1, f32_2));
-                    check("v128.bitselect", 2 * w, select(bool_1, f64_1, f64_2));
-                }
+                check("v128.bitselect", 4 * w, select(bool_1, u32_1, u32_2));
+                check("v128.bitselect", 2 * w, select(bool_1, u64_1, u64_2));
+                check("v128.bitselect", 4 * w, select(bool_1, f32_1, f32_2));
+                check("v128.bitselect", 2 * w, select(bool_1, f64_1, f64_2));
 
                 // Lane-wise Population Count
                 // TODO(https://github.com/halide/Halide/issues/5130): NOT BEING GENERATED AT TRUNK
@@ -2091,18 +2077,10 @@ public:
                 // check("v128.load64_zero", 2 * w, in_u64(0));
 
                 // Load vector with identical lanes
-                if (Halide::Internal::get_llvm_version() >= 120) {
-                    check("v128.load8_splat", 16 * w, in_u8(0));
-                    check("v128.load16_splat", 8 * w, in_u16(0));
-                    check("v128.load32_splat", 4 * w, in_u32(0));
-                    check("v128.load64_splat", 2 * w, in_u64(0));
-                } else {
-                    // older mnemonics
-                    check("v8x16.load_splat", 16 * w, in_u8(0));
-                    check("v16x8.load_splat", 8 * w, in_u16(0));
-                    check("v32x4.load_splat", 4 * w, in_u32(0));
-                    check("v64x2.load_splat", 2 * w, in_u64(0));
-                }
+                check("v128.load8_splat", 16 * w, in_u8(0));
+                check("v128.load16_splat", 8 * w, in_u16(0));
+                check("v128.load32_splat", 4 * w, in_u32(0));
+                check("v128.load64_splat", 2 * w, in_u64(0));
 
                 // Load Lane
                 // TODO: does Halide have any idiom that obviously generates these?

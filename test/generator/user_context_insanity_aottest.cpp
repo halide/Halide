@@ -39,10 +39,15 @@ int main(int argc, char **argv) {
 
     // Hijack halide's runtime to run a bunch of instances of this function
     // in parallel.
-    halide_do_par_for(nullptr, launcher_task, 0, num_launcher_tasks, nullptr);
+    // Note that launcher_task() always returns zero, thus halide_do_par_for()
+    // should always return zero, but since this is a test, let's verify that.
+    int result = halide_do_par_for(nullptr, launcher_task, 0, num_launcher_tasks, nullptr);
+    assert(result == 0);
+    (void)result;
 
-    for (int i = 0; i < num_launcher_tasks; ++i)
+    for (int i = 0; i < num_launcher_tasks; ++i) {
         assert(got_context[i] == true);
+    }
 
     printf("Success!\n");
     return 0;

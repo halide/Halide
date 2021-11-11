@@ -1,10 +1,10 @@
 #ifndef HALIDE_LLVM_HEADERS_H
 #define HALIDE_LLVM_HEADERS_H
 
-#if LLVM_VERSION >= 110
+#if LLVM_VERSION >= 120
 // We're good to go
 #else
-#error "Compiling Halide requires LLVM 11.0 or newer"
+#error "Compiling Halide requires LLVM 12.0 or newer"
 #endif
 
 // No msvc warnings from llvm headers please
@@ -30,9 +30,7 @@
 #include <llvm/ADT/StringRef.h>
 #include <llvm/ADT/Triple.h>
 #include <llvm/ADT/Twine.h>
-#if LLVM_VERSION >= 120
 #include <llvm/Analysis/AliasAnalysis.h>
-#endif
 #include <llvm/Analysis/TargetLibraryInfo.h>
 #include <llvm/Analysis/TargetTransformInfo.h>
 #include <llvm/Bitcode/BitcodeReader.h>
@@ -69,9 +67,7 @@
 #include <llvm/Passes/PassBuilder.h>
 #include <llvm/Support/Casting.h>
 #include <llvm/Support/CodeGen.h>
-#if LLVM_VERSION >= 120
 #include <llvm/Support/CommandLine.h>
-#endif
 #include <llvm/Support/DataExtractor.h>
 #include <llvm/Support/DynamicLibrary.h>
 #include <llvm/Support/ErrorHandling.h>
@@ -130,11 +126,7 @@ inline std::string get_llvm_function_name(const llvm::Function &f) {
 }
 
 inline llvm::StructType *get_llvm_struct_type_by_name(llvm::Module *module, const char *name) {
-#if LLVM_VERSION >= 120
     return llvm::StructType::getTypeByName(module->getContext(), name);
-#else
-    return module->getTypeByName(name);
-#endif
 }
 
 }  // namespace Internal

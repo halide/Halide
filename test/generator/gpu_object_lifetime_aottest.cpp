@@ -162,7 +162,12 @@ int main(int argc, char **argv) {
             {
                 Buffer<int> copy(raw_buf);
             }
-            halide_device_free(nullptr, &raw_buf);
+            // Note that a nonzero result should be impossible here (in theory)
+            int result = halide_device_free(nullptr, &raw_buf);
+            if (result != 0) {
+                printf("Error! halide_device_free() returned: %d\n", result);
+                return -1;
+            }
         }
 
         // Test coverage for Halide::Runtime::Buffer construction from halide_buffer_t, taking ownership

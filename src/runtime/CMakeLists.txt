@@ -107,16 +107,12 @@ set(RUNTIME_LL
     wasm_math
     win32_math
     x86
+    x86_amx
     x86_avx
     x86_avx2
     x86_avx512
     x86_sse41
     )
-
-if (Halide_LLVM_VERSION VERSION_GREATER_EQUAL 12.0)
-  # AMX instructions require LLVM 12 or newer
-  list(APPEND RUNTIME_LL x86_amx)
-endif ()
 
 set(RUNTIME_BC
     compute_20

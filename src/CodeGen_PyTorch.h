@@ -34,8 +34,6 @@ public:
     /** Emit the PyTorch C++ wrapper for the Halide pipeline. */
     void compile(const Module &module);
 
-    static void test();
-
 private:
     void compile(const LoweredFunc &func, bool is_cuda);
 };
