@@ -488,19 +488,10 @@ static ALWAYS_INLINE uintptr_t addr_hash(uintptr_t addr) {
     }
 }
 
-#ifdef DEBUG_RUNTIME
-// Any hash calculated by addr_hash() should be incapable of being outside this range.
-ALWAYS_INLINE void check_hash(uintptr_t hash) {
-    halide_abort_if_false(nullptr, hash < HASH_TABLE_SIZE);
-}
-#endif  // DEBUG_RUNTIME
-
 WEAK hash_bucket &lock_bucket(uintptr_t addr) {
     uintptr_t hash = addr_hash(addr);
 
-#ifdef DEBUG_RUNTIME
-    check_hash(hash);
-#endif
+    halide_debug_assert(nullptr, hash < HASH_TABLE_SIZE);
 
     // TODO: if resizing is implemented, loop, etc.
     hash_bucket &bucket = table.buckets[hash];
@@ -524,10 +515,8 @@ WEAK bucket_pair lock_bucket_pair(uintptr_t addr_from, uintptr_t addr_to) {
     uintptr_t hash_from = addr_hash(addr_from);
     uintptr_t hash_to = addr_hash(addr_to);
 
-#ifdef DEBUG_RUNTIME
-    check_hash(hash_from);
-    check_hash(hash_to);
-#endif
+    halide_debug_assert(nullptr, hash_from < HASH_TABLE_SIZE);
+    halide_debug_assert(nullptr, hash_to < HASH_TABLE_SIZE);
 
     // Lock the bucket with the smaller hash first in order
     // to prevent deadlock.
