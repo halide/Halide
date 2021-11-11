@@ -1923,7 +1923,7 @@ OpPtr OpMutator::visit(std::unique_ptr<OpGroup> op) {
     // Would a separate loop for Reverse be better?
     for (int i = 0; i < old_op_count; i++) {
         const int idx = (direction_ == Reverse) ? (old_op_count - i - 1) : i;
-        OpPtr sub_op_old = op->op_ptr(idx);
+        OpPtr sub_op_old = op->take_op(idx);
         assert(sub_op_old != nullptr);
         OpPtr sub_op_new = sub_op_old->mutate(this, std::move(sub_op_old));
         if (sub_op_new != nullptr) {

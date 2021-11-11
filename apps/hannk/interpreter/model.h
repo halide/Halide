@@ -345,7 +345,12 @@ public:
     int op_count() const {
         return ops_.size();
     }
-    OpPtr op_ptr(int i) {
+
+    // Extract the given Op from this OpGroup, transferring ownership
+    // to the caller. The OpGroup is left with a null entry, which
+    // is not generally legal; this should only be called on OpGroups
+    // which will be discarded afterwards.
+    OpPtr take_op(int i) {
         OpPtr result = nullptr;
         std::swap(ops_[i], result);
         return result;
