@@ -1876,13 +1876,15 @@ void UpsampleChannelsOp::execute() {
         << "Unsupported UpsampleChannels op for types " << in->type() << ", " << out->type();
 }
 
-#define ACCEPT_AND_MUTATE_IMPL(OP)                              \
-    void OP::accept_impl(OpVisitor *v) const {                  \
-        v->visit(this);                                         \
-    }                                                           \
-    OpPtr OP::mutate_impl(OpMutator *m, OpPtr op) {             \
-        std::unique_ptr<OP> o(static_cast<OP *>(op.release())); \
-        return m->visit(std::move(o));                          \
+#define ACCEPT_AND_MUTATE_IMPL(OP)                                  \
+    void OP::accept_impl(OpVisitor *v) const {                      \
+        v->visit(this);                                             \
+    }                                                               \
+    Op::OpMutatorFn OP::mutate_impl() const {                       \
+        return [](OpPtr op, OpMutator *m) -> OpPtr {                \
+            std::unique_ptr<OP> o(static_cast<OP *>(op.release())); \
+            return m->visit(std::move(o));                          \
+        };                                                          \
     }
 
 ACCEPT_AND_MUTATE_IMPL(BinaryOp)

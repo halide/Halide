@@ -300,13 +300,13 @@ public:
     //
     // Note that this is a static method because we need to pass the op in question
     // via unique_ptr (since the callee needs to take ownership); we also
-    // need to use the 'naked' pointer to dispatch a virtual method, which
-    // is weird-looking and could lead to wrong behavior if you passed different
-    // objects. To avoid this, we restrict access to the dispatching code
-    // by making the virtual dispatches private, and add inline wrappers that
-    // enforce a sane calling convention.
+    // need to use the 'naked' pointer to dispatch a virtual method which returns a function pointer,
+    // to avoid any possible UB from order-of-operations (e.g., op->mutate_impl(std::move(op)), which
+    // has undefined order wrt the move vs the virtual lookup).
+    using OpMutatorFn = OpPtr (*)(OpPtr op, OpMutator *m);
     static inline OpPtr mutate(OpPtr op, OpMutator *m) {
-        return op->mutate_impl(m, std::move(op));
+        OpMutatorFn mutate_fn = op->mutate_impl();
+        return mutate_fn(std::move(op), m);
     }
 
     virtual void dump(std::ostream &os, int indent = 0) const;
@@ -348,7 +348,7 @@ public:
 
 private:
     virtual void accept_impl(OpVisitor *v) const = 0;
-    virtual OpPtr mutate_impl(OpMutator *m, OpPtr op) = 0;
+    virtual OpMutatorFn mutate_impl() const = 0;
 };
 
 class OpGroup : public Op {
@@ -401,7 +401,7 @@ public:
 
 private:
     void accept_impl(OpVisitor *v) const override;
-    OpPtr mutate_impl(OpMutator *m, OpPtr op) override;
+    OpMutatorFn mutate_impl() const override;
 };
 
 }  // namespace hannk
