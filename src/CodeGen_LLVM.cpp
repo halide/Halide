@@ -1148,7 +1148,8 @@ void CodeGen_LLVM::optimize_module() {
         });
         pb.registerPipelineStartEPCallback([](ModulePassManager &mpm, OptimizationLevel) {
 #if LLVM_VERSION >= 140
-            AddressSanitizerOptions asan_options;  // default values are good
+            AddressSanitizerOptions asan_options;  // default values are good...
+            asan_options.UseAfterScope = true;     // ...except this one
             constexpr bool use_global_gc = true;
             constexpr bool use_odr_indicator = true;
             constexpr auto destructor_kind = AsanDtorKind::Global;
