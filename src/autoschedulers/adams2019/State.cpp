@@ -198,6 +198,8 @@ IntrusivePtr<State> State::make_child() const {
     return s;
 }
 
+#include <iostream>
+using namespace std;
 // Generate the successor states to this state
 void State::generate_children(const FunctionDAG &dag,
                               const MachineParams &params,
@@ -534,6 +536,10 @@ void State::dump() const {
     aslog(0) << schedule_source;
     aslog(0) << "----- Python schedule -----";
     aslog(0) << python_schedule_source;
+}
+
+string State::dump(bool dummy) const {
+    return root->dump(nullptr);
 }
 
 // Apply the schedule represented by this state to a Halide

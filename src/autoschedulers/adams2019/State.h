@@ -91,6 +91,9 @@ struct State {
     // Dumps cost, the `root` LoopNest, and then `schedule_source` to `aslog(0)`.
     void dump() const;
 
+    // Dump schedule "feature vector"
+    string dump(bool dummy) const;
+
     // Apply the schedule represented by this state to a Halide
     // Pipeline. Also generate source code for the schedule for the
     // user to copy-paste to freeze this schedule as permanent artifact.

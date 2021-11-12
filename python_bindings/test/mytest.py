@@ -18,15 +18,15 @@ def main():
     p = hl.Pipeline(f_2)
     target = hl.Target('x86-64-linux-no_runtime')
     # Only first parameter is used (number of cores on CPU)
-    params = hl.MachineParams(32, 16777216, 40);
-    #result = p.auto_schedule('Adams2019', target, params)
+    params = hl.MachineParams(8, 16777216, 40);
+    result = p.auto_schedule('Adams2019', target, params)
 
     print("Loop nest!")
     f_2.print_loop_nest()
     #print('Schedule:')
     #print(result.schedule_source)
-    #print('Python Schedule:')
-    #print(result.python_schedule_source)
+    print('Python Schedule:')
+    print(result.python_schedule_source)
 
     # applying the schedule
     print("Applying Python Schedule...")

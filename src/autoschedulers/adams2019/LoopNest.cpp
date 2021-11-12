@@ -1120,7 +1120,7 @@ void LoopNest::dump(string prefix, const LoopNest *parent) const {
             const auto &bounds = get_bounds(node);
             for (size_t i = 0; i < size.size(); i++) {
                 const auto &p = bounds->loops(stage->index, i);
-                aslog(0) << " [" << p.first << ", " << p.second << "]";
+                aslog(0) << " [" << p.min() << ", " << p.max() << "]";
             }
         */
 
@@ -1146,6 +1146,59 @@ void LoopNest::dump(string prefix, const LoopNest *parent) const {
     for (auto it = inlined.begin(); it != inlined.end(); it++) {
         aslog(0) << prefix << "inlined: " << it.key()->func.name() << " " << it.value() << "\n";
     }
+}
+
+string LoopNest::dump(const LoopNest *parent) const {
+    string result;
+
+    if (!is_root()) {
+        // Non-root nodes always have parents.
+        internal_assert(parent != nullptr);
+
+        for (size_t i = 0; i < size.size(); i++) {
+            result += (std::to_string(size[i]) + ",");
+            // The vectorized loop gets a 'v' suffix
+            if (innermost && i == (size_t)vectorized_loop_index) {
+                result += "v,";
+            }
+            // Loops that have a known constant size get a
+            // 'c'. Useful for knowing what we can unroll.
+            if (parent->get_bounds(node)->loops(stage->index, i).constant_extent()) {
+                result += "c,";
+            }
+        }
+
+        // Uncomment when debugging the representative loop bounds selected.
+        /*
+            const auto &bounds = get_bounds(node);
+            for (size_t i = 0; i < size.size(); i++) {
+                const auto &p = bounds->loops(stage->index, i);
+                aslog(0) << " [" << p.min() << ", " << p.max() << "]";
+            }
+        */
+
+        result += std::to_string(vectorized_loop_index) + "," + std::to_string(vector_dim) + ",";
+    }
+
+    if (tileable) {
+        result += "t,";
+    }
+    if (innermost) {
+        result += "i,";
+    } else if (parallel) {
+        result += "p,";
+    } else {
+    }
+    for (const auto *p : store_at) {
+        //aslog(0) << prefix << "realize: " << p->func.name() << "\n";
+    }
+    for (size_t i = children.size(); i > 0; i--) {
+        result += children[i - 1]->dump(this);
+    }
+    for (auto it = inlined.begin(); it != inlined.end(); it++) {
+        //aslog(0) << prefix << "inlined: " << it.key()->func.name() << " " << it.value() << "\n";
+    }
+    return result;
 }
 
 // Does this loop nest access the given Func

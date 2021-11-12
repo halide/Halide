@@ -444,6 +444,7 @@ IntrusivePtr<State> optimal_schedule_pass(FunctionDAG &dag,
                 auto state = q[choice_label];
                 aslog(0) << "\n[" << choice_label << "]:\n";
                 state->dump();
+                aslog(0) << "\nFeature vector: " << state->dump(true) << "\n";
                 state->calculate_cost(dag, params, cost_model, cache->options, memory_limit, true);
             }
             cost_model->evaluate_costs();
@@ -457,6 +458,7 @@ IntrusivePtr<State> optimal_schedule_pass(FunctionDAG &dag,
 
             auto selected = q[selection];
             selected->dump();
+            aslog(0) << "\nFeature vector: " << selected->dump(true) << "\n";
             q.clear();
             q.emplace(std::move(selected));
         }

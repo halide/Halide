@@ -1,6 +1,8 @@
 #include "Cache.h"
 #include "LoopNest.h"
 #include "State.h"
+#include <iostream>
+using namespace std;
 
 namespace Halide {
 namespace Internal {

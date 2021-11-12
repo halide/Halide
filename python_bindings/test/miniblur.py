@@ -26,13 +26,13 @@ def main():
     p = hl.Pipeline(gradient)
     target = hl.Target('x86-64-linux-no_runtime')
     # Only first parameter is used (number of cores on CPU)
-    params = hl.MachineParams(32, 16777216, 40);
+    params = hl.MachineParams(16, 16777216, 40);
     result = p.auto_schedule('Adams2019', target, params)
     print("Loop nest!")
     gradient.print_loop_nest()
 
-    print('Schedule:')
-    print(result.schedule_source)
+#    print('Schedule:')
+#    print(result.schedule_source)
     print('Python Schedule:')
     print(result.python_schedule_source)
 
