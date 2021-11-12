@@ -306,7 +306,12 @@ public:
     // by making the virtual dispatches private, and add inline wrappers that
     // enforce a sane calling convention.
     static inline OpPtr mutate(OpPtr op, OpMutator *m) {
-        return op->mutate_impl(m, std::move(op));
+        // clang-tidy will complain if we just do `op->mutate_impl(m, move(op))`
+        // because the order of evaluation between the move and the invocation is
+        // undefined; while that's true, we know that op will remain valid throughout
+        // this sequence, so we decompose into a couple of steps here just to pacify clang-tidy.
+        Op *op_ptr = op.get();
+        return op_ptr->mutate_impl(m, std::move(op));
     }
 
     virtual void dump(std::ostream &os, int indent = 0) const;
