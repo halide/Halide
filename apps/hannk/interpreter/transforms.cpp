@@ -67,8 +67,7 @@ class RemoveDeadOps : public OpMutator {
 
 public:
     // Go in reverse order so removing a dead op enables earlier ops to be seen as dead.
-    explicit RemoveDeadOps(const Op *root)
-        : OpMutator(OpMutator::Reverse) {
+    explicit RemoveDeadOps(const Op *root) {
         // Build a set so that we don't have to worry about the root op mutating
         for (int i = 0; i < root->output_count(); i++) {
             root_outputs_.insert(root->output(i).get());
@@ -83,7 +82,6 @@ protected:
     OpPtr visit_leaf(OpPtr op) override {
         if (is_dead(op.get())) {
             removed_++;
-            // std::cout << "REMOVE LEAF: "; op->dump(std::cout);
             return nullptr;
         } else {
             return op;
@@ -91,18 +89,39 @@ protected:
     }
 
     OpPtr visit(std::unique_ptr<OpGroup> op) override {
-        OpPtr new_op = OpMutator::visit(std::move(op));
+        // Don't call super; roll our own code to go in reverse order.
+        // TODO: is this even the right thing to do? May be better to
+        // to a graph traverse andkeep removing ops until none get removed.
+
+        std::vector<TensorPtr> inputs = op->inputs();
+        std::vector<TensorPtr> outputs = op->outputs();
+
+        const int old_op_count = op->op_count();
+
+        std::vector<OpPtr> ops_new;
+        ops_new.reserve(old_op_count);
+        for (int i = 0; i < old_op_count; i++) {
+            const int idx = (old_op_count - i - 1);
+            OpPtr sub_op_old = op->take_op(idx);
+            assert(sub_op_old != nullptr);
+            OpPtr sub_op_new = mutate(std::move(sub_op_old));
+            if (sub_op_new != nullptr) {
+                ops_new.push_back(std::move(sub_op_new));
+            }
+        }
+        std::reverse(ops_new.begin(), ops_new.end());
+        auto new_op_group = make_op<OpGroup>(inputs, outputs, std::move(ops_new));
 
         // If the OpGroup is empty after mutation, remove it as well.
-        const OpGroup *new_op_group = cast_op<OpGroup>(new_op.get());
         if (new_op_group && new_op_group->op_count() == 0) {
             removed_++;
-            // std::cout << "REMOVE GROUP: "; op->dump(std::cout);
             return nullptr;
         }
 
-        return new_op;
+        return new_op_group;
     }
+
+private:
 };
 
 }  // namespace

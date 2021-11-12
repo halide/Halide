@@ -642,15 +642,6 @@ protected:
 
 class OpMutator {
 public:
-    enum Direction {
-        Forward,
-        Reverse
-    };
-
-    OpMutator() = default;
-    explicit OpMutator(Direction d)
-        : direction_(d) {
-    }
     virtual ~OpMutator() = default;
 
     // Convenience function for calling Op::mutate;
@@ -660,8 +651,6 @@ public:
     }
 
 protected:
-    const Direction direction_ = Forward;
-
     // Only the classes in the list are allowed to call visit() (to implement mutate_impl())
     friend class BinaryOp;
     friend class ConcatenationOp;

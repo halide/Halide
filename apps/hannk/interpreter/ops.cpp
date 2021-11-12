@@ -1923,18 +1923,13 @@ OpPtr OpMutator::visit(std::unique_ptr<OpGroup> op) {
 
     std::vector<OpPtr> ops_new;
     ops_new.reserve(old_op_count);
-    // Would a separate loop for Reverse be better?
     for (int i = 0; i < old_op_count; i++) {
-        const int idx = (direction_ == Reverse) ? (old_op_count - i - 1) : i;
-        OpPtr sub_op_old = op->take_op(idx);
+        OpPtr sub_op_old = op->take_op(i);
         assert(sub_op_old != nullptr);
         OpPtr sub_op_new = mutate(std::move(sub_op_old));
         if (sub_op_new != nullptr) {
             ops_new.push_back(std::move(sub_op_new));
         }
-    }
-    if (direction_ == Reverse) {
-        std::reverse(ops_new.begin(), ops_new.end());
     }
     // TODO: we don't bother trying to optimize for an unchanged op here. Is it worthwhile?
     // TODO: verify that inputs and outputs are still correct. Or recalculate from scratch?
