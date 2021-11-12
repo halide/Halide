@@ -5,10 +5,12 @@ SCHEDULES=${2:-32}
 START_FROM=${3:-0}
 HL_RANDOM_DROPOUT=${4:-1}
 HL_BEAM_SIZE=${5:-1}
+ADAMS2019_DIR=@adams2019_BINARY_DIR@
+INITIAL_WEIGHTS=${6:-$ADAMS2019_DIR/baseline.weights}
 PROGRAM_NAME=`basename $0 .sh`
-LOGFILEBASE=${6:-${PROGRAM_NAME}.log}
-TIME_ME=${7:-true}
-DATE=${8:-`date +'%F-%H-%M-%S'`}
+LOGFILEBASE=${7:-${PROGRAM_NAME}.log}
+TIME_ME=${8:-true}
+DATE=${9:-`date +'%F-%H-%M-%S'`}
 
 LOG_DIR="./logs"
 LOGFILE="$LOG_DIR/$LOGFILEBASE.$DATE"
@@ -17,7 +19,7 @@ TIME_TMP_LOG="$LOGFILEBASE.$DATE.tmp"
 if [ "$TIME_ME" = true ]; then
   time /usr/bin/time -f "\nreal\t%E\nuser\t%U\nsys\t%S" -o $TIME_TMP_LOG \
     $0 $PIPELINES $SCHEDULES $START_FROM $HL_RANDOM_DROPOUT $HL_BEAM_SIZE \
-       $LOGFILEBASE false $DATE
+       $INITIAL_WEIGHTS $LOGFILEBASE false $DATE
   cat $TIME_TMP_LOG >> $LOGFILE
   rm $TIME_TMP_LOG
   exit
@@ -38,19 +40,23 @@ printf "Running %s with the following parameters:\n\
         START_FROM=%d\n\
         HL_RANDOM_DROPOUT=%d\n\
         HL_BEAM_SIZE=%d\n\
+        INITIAL_WEIGHTS=%s\n\
         LOGFILEBASE=%s\n " $PROGRAM_NAME $PIPELINES $SCHEDULES $START_FROM \
-                           $HL_RANDOM_DROPOUT $HL_BEAM_SIZE $LOGFILEBASE | tee -a $LOGFILE
+                           $HL_RANDOM_DROPOUT $HL_BEAM_SIZE $INITIAL_WEIGHTS \
+                           $LOGFILEBASE | tee -a $LOGFILE
 
 b=0
-ADAMS2019_DIR=@adams2019_BINARY_DIR@
 HL_TARGET=$($ADAMS2019_DIR/get_host_target)
-INITIAL_WEIGHTS=$ADAMS2019_DIR/baseline.weights
 WEIGHTS_OUT=./updated.weights
 mkdir -p $LOG_DIR
 
 if [ -d "./bin" ]; then
   # Don't clobber existing samples
   FIRST=$(ls ./bin | cut -d_ -f2 | sort -n | tail -n1)
+  # Change initial weights to the updated.weights in FIRST directory
+  P=$FIRST # ignore b*$PIPELINES term for now
+  STAGES=$(((P % 30) + 10))
+  INITIAL_WEIGHTS=`pwd`/bin/pipeline_${P}_${STAGES}/updated.weights
 else
   mkdir -p bin
   FIRST=$((START_FROM-1))
