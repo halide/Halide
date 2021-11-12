@@ -2874,7 +2874,7 @@ void CodeGen_Xtensa::visit(const Call *op) {
         rhs << "sqrtf(" << a0 << ")";
     } else if (op->name == "round_f32") {
         string a0 = print_expr(op->args[0]);
-        rhs << "roundf(" << a0 << ")";
+        rhs << "nearbyint(" << a0 << ")";
     } else if (op->name.find("halide_xtensa_") == 0) {
         rhs << print_xtensa_call(op);
     } else {
