@@ -140,6 +140,7 @@ DECLARE_CPP_INITMOD(runtime_api)
 DECLARE_CPP_INITMOD(to_string)
 DECLARE_CPP_INITMOD(trace_helper)
 DECLARE_CPP_INITMOD(tracing)
+DECLARE_CPP_INITMOD(webgpu)
 DECLARE_CPP_INITMOD(windows_clock)
 DECLARE_CPP_INITMOD(windows_cuda)
 DECLARE_CPP_INITMOD(windows_get_symbol)
@@ -1166,6 +1167,13 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
                 modules.push_back(get_initmod_windows_d3d12compute_arm(c, bits_64, debug));
             } else {
                 user_error << "Direct3D 12 can only be used on ARM or X86 architectures.\n";
+            }
+        }
+        if (t.has_feature(Target::WebGPU)) {
+            if (t.os == Target::Windows) {
+                user_error << "WebGPU runtime not yet supported on Windows.\n";
+            } else {
+                modules.push_back(get_initmod_webgpu(c, bits_64, debug));
             }
         }
         if (t.arch != Target::Hexagon && t.has_feature(Target::HVX)) {

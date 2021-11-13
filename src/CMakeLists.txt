@@ -36,6 +36,7 @@ set(HEADER_FILES
     CodeGen_PTX_Dev.h
     CodeGen_PyTorch.h
     CodeGen_Targets.h
+    CodeGen_WebGPU_Dev.h
     CompilerLogger.h
     ConciseCasts.h
     CPlusPlusMangle.h
@@ -202,6 +203,7 @@ set(SOURCE_FILES
     CodeGen_PyTorch.cpp
     CodeGen_RISCV.cpp
     CodeGen_WebAssembly.cpp
+    CodeGen_WebGPU_Dev.cpp
     CodeGen_X86.cpp
     CompilerLogger.cpp
     CPlusPlusMangle.cpp
@@ -506,6 +508,11 @@ endif ()
 option(TARGET_OPENGLCOMPUTE "Include OpenGLCompute target" ON)
 if (TARGET_OPENGLCOMPUTE)
     target_compile_definitions(Halide PRIVATE WITH_OPENGLCOMPUTE)
+endif ()
+
+option(TARGET_WEBGPU "Include WebGPU target" ON)
+if (TARGET_WEBGPU)
+    target_compile_definitions(Halide PRIVATE WITH_WEBGPU)
 endif ()
 
 ##

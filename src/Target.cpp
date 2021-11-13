@@ -377,6 +377,7 @@ const std::map<std::string, Target::Feature> feature_name_map = {
     {"wasm_sat_float_to_int", Target::WasmSatFloatToInt},
     {"wasm_threads", Target::WasmThreads},
     {"wasm_bulk_memory", Target::WasmBulkMemory},
+    {"webgpu", Target::WebGPU},
     {"sve", Target::SVE},
     {"sve2", Target::SVE2},
     {"arm_dot_prod", Target::ARMDotProd},
@@ -678,6 +679,9 @@ bool Target::supported() const {
 #if !defined(WITH_D3D12)
     bad |= has_feature(Target::D3D12Compute);
 #endif
+#if !defined(WITH_WEBGPU)
+    bad |= has_feature(Target::WebGPU);
+#endif
     return !bad;
 }
 
@@ -742,7 +746,8 @@ bool Target::has_gpu_feature() const {
             has_feature(OpenCL) ||
             has_feature(Metal) ||
             has_feature(D3D12Compute) ||
-            has_feature(OpenGLCompute));
+            has_feature(OpenGLCompute) ||
+            has_feature(WebGPU));
 }
 
 int Target::get_cuda_capability_lower_bound() const {
@@ -864,6 +869,9 @@ DeviceAPI Target::get_required_device_api() const {
     if (has_feature(Target::OpenGLCompute)) {
         return DeviceAPI::OpenGLCompute;
     }
+    if (has_feature(Target::WebGPU)) {
+        return DeviceAPI::WebGPU;
+    }
     return DeviceAPI::None;
 }
 
@@ -881,6 +889,8 @@ Target::Feature target_feature_for_device_api(DeviceAPI api) {
         return Target::HVX;
     case DeviceAPI::D3D12Compute:
         return Target::D3D12Compute;
+    case DeviceAPI::WebGPU:
+        return Target::WebGPU;
     default:
         return Target::FeatureEnd;
     }
@@ -948,7 +958,7 @@ bool Target::get_runtime_compatible_target(const Target &other, Target &result) 
     // (c) must match across both targets; it is an error if one target has the feature and the other doesn't
 
     // clang-format off
-    const std::array<Feature, 18> union_features = {{
+    const std::array<Feature, 19> union_features = {{
         // These are true union features.
         CUDA,
         D3D12Compute,
@@ -956,6 +966,7 @@ bool Target::get_runtime_compatible_target(const Target &other, Target &result) 
         NoNEON,
         OpenCL,
         OpenGLCompute,
+        WebGPU,
 
         // These features are actually intersection-y, but because targets only record the _highest_,
         // we have to put their union in the result and then take a lower bound.

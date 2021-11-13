@@ -80,6 +80,7 @@ set(RUNTIME_CPP
     trace_helper
     tracing
     wasm_cpu_features
+    webgpu
     windows_clock
     windows_cuda
     windows_d3d12compute_x86
@@ -133,6 +134,7 @@ set(RUNTIME_HEADER_FILES
     HalideRuntimeOpenCL.h
     HalideRuntimeOpenGLCompute.h
     HalideRuntimeQurt.h
+    HalideRuntimeWebGPU.h
     )
 
 # Need to create an object library for this because CMake
