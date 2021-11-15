@@ -445,6 +445,15 @@ void lower_impl(const vector<Function> &output_funcs,
         debug(1) << "Skipping GPU offload...\n";
     }
 
+    // TODO: This needs to happen before lowering parallel tasks, because global
+    // images used inside parallel loops are rewritten from loads from images to
+    // loads from closure parameters. Closure parameters are missing the Buffer<>
+    // object, which needs to be found by infer_arguments here. Running
+    // infer_arguments prior to lower_parallel_tasks is a hacky solution to this
+    // problem. It would be better if closures could directly reference globals
+    // so they don't add overhead to the closure.
+    vector<InferredArgument> inferred_args = infer_arguments(s, outputs);
+
     std::vector<LoweredFunc> closure_implementations;
     debug(1) << "Lowering Parallel Tasks...\n";
     s = lower_parallel_tasks(s, closure_implementations, pipeline_name, t);
@@ -472,7 +481,6 @@ void lower_impl(const vector<Function> &output_funcs,
         }
     }
 
-    vector<InferredArgument> inferred_args = infer_arguments(s, outputs);
     for (const InferredArgument &arg : inferred_args) {
         if (arg.param.defined() && arg.param.name() == "__user_context") {
             // The user context is always in the inferred args, but is
