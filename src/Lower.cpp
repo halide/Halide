@@ -383,13 +383,11 @@ void lower_impl(const vector<Function> &output_funcs,
     s = lower_unsafe_promises(s, t);
     log("Lowering after lowering unsafe promises:", s);
 
-#if LLVM_VERSION >= 120
     if (t.has_feature(Target::AVX512_SapphireRapids)) {
         debug(1) << "Extracting tile operations...\n";
         s = extract_tile_operations(s);
         log("Lowering after extracting tile operations:", s);
     }
-#endif
 
     debug(1) << "Flattening nested ramps...\n";
     s = flatten_nested_ramps(s);

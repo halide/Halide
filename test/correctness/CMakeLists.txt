@@ -264,6 +264,7 @@ tests(GROUPS correctness
       process_some_tiles.cpp
       pseudostack_shares_slots.cpp
       python_extension_gen.cpp
+      pytorch.cpp
       random.cpp
       realize_larger_than_two_gigs.cpp
       realize_over_shifted_domain.cpp

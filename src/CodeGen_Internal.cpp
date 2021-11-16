@@ -157,15 +157,9 @@ llvm::Type *get_vector_element_type(llvm::Type *t) {
     }
 }
 
-#if LLVM_VERSION >= 120
 llvm::ElementCount element_count(int e) {
     return llvm::ElementCount::getFixed(e);
 }
-#else
-llvm::ElementCount element_count(int e) {
-    return llvm::ElementCount(e, /*scalable*/ false);
-}
-#endif
 
 llvm::Type *get_vector_type(llvm::Type *t, int n, bool scalable) {
 #if LLVM_VERSION >= 120  // TODO(zvookin): figure out when scalable vector types were added.

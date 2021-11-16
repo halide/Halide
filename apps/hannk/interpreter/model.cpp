@@ -40,24 +40,6 @@ void Op::set_input(int idx, TensorPtr t) {
     }
 }
 
-void Op::set_output(int idx, TensorPtr t) {
-    if (outputs_[idx]) {
-        outputs_[idx]->remove_producer(this);
-    }
-    outputs_[idx] = std::move(t);
-    if (outputs_[idx]) {
-        outputs_[idx]->add_producer(this);
-    }
-}
-
-void Op::set_input(TensorPtr t) {
-    set_input(0, std::move(t));
-}
-
-void Op::set_output(TensorPtr t) {
-    set_output(0, std::move(t));
-}
-
 bool Op::is_input(const TensorPtr &t) const {
     for (auto &i : inputs_) {
         if (i == t) {
@@ -110,39 +92,6 @@ BoundsMap OpGroup::map_bounds(int input_idx, int output_idx) const {
     BoundsMap result(input(input_idx)->rank(), output(output_idx)->rank());
     // TODO
     return result;
-}
-
-void OpGroup::add(OpPtr to_add, const Op *before) {
-    for (auto i = ops_.begin(); i != ops_.end(); ++i) {
-        if (i->get() == before) {
-            ops_.insert(i, std::move(to_add));
-            return;
-        } else {
-            for (int j = 0; j < to_add->output_count(); ++j) {
-                for (int k = 0; k < (*i)->input_count(); ++k) {
-                    if ((*i)->input(k) == to_add->output(j)) {
-                        // i consumes an output of to_add.
-                        ops_.insert(i, std::move(to_add));
-                        return;
-                    }
-                }
-            }
-        }
-    }
-    ops_.push_back(std::move(to_add));
-}
-
-void OpGroup::remove(const Op *op) {
-    for (auto i = ops_.begin(); i != ops_.end(); ++i) {
-        if (i->get() == op) {
-            ops_.erase(i);
-            return;
-        }
-    }
-}
-
-void OpGroup::accept(OpVisitor *v) {
-    v->visit(this);
 }
 
 void OpGroup::dump(std::ostream &os, int indent) const {
