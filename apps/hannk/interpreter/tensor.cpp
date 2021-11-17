@@ -263,6 +263,10 @@ bool Tensor::can_alias(const TensorPtr &source, AliasType alias_type) const {
 }
 
 /*static*/ void Tensor::make_offset_alias(TensorPtr alias, TensorPtr source, const TensorOffset &storage_offset) {
+    // std::cout << "make_offset_alias:\n";
+    // std::cout << "   alias: "; alias->dump(std::cout);
+    // std::cout << "   source: "; source->dump(std::cout);
+
     assert(alias->can_alias(source, AliasType::Offset));
 
     if (source->alias_info_ == nullptr) {
@@ -300,6 +304,10 @@ bool Tensor::can_alias(const TensorPtr &source, AliasType alias_type) const {
 }
 
 /*static*/ void Tensor::make_reshape_alias(TensorPtr alias, TensorPtr source) {
+    // std::cout << "make_reshape_alias:\n";
+    // std::cout << "   alias: "; alias->dump(std::cout);
+    // std::cout << "   source: "; source->dump(std::cout);
+
     assert(alias->can_alias(source, AliasType::Reshaped));
 
     if (alias->is_external()) {

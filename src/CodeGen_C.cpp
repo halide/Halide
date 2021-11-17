@@ -109,7 +109,7 @@ inline float log_f32(float x) {return logf(x);}
 inline float pow_f32(float x, float y) {return powf(x, y);}
 inline float floor_f32(float x) {return floorf(x);}
 inline float ceil_f32(float x) {return ceilf(x);}
-inline float round_f32(float x) {return roundf(x);}
+inline float round_f32(float x) {return nearbyint(x);}
 
 inline double sqrt_f64(double x) {return sqrt(x);}
 inline double sin_f64(double x) {return sin(x);}
@@ -128,7 +128,7 @@ inline double log_f64(double x) {return log(x);}
 inline double pow_f64(double x, double y) {return pow(x, y);}
 inline double floor_f64(double x) {return floor(x);}
 inline double ceil_f64(double x) {return ceil(x);}
-inline double round_f64(double x) {return round(x);}
+inline double round_f64(double x) {return nearbyint(x);}
 
 inline float nan_f32() {return NAN;}
 inline float neg_inf_f32() {return -INFINITY;}
@@ -2372,7 +2372,7 @@ void CodeGen_C::visit(const Call *op) {
             string size = print_expr(simplify((op->args[0] + 7) / 8));
             stream << get_indent();
             string array_name = unique_name('a');
-            stream << "uint64_t " << array_name << "[" << size << "];";
+            stream << "uint64_t " << array_name << "[" << size << "];\n";
             rhs << "(" << print_type(op->type) << ")(&" << array_name << ")";
         }
     } else if (op->is_intrinsic(Call::make_struct)) {
