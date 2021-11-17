@@ -17,6 +17,7 @@
 
 #include <cstdio>
 #include <iostream>
+#include <map>
 #include <sstream>
 #include <string>
 
@@ -77,7 +78,7 @@ class DebugSections {
         EntryFormat() = default;
         vector<FieldFormat> fields;
     };
-    vector<EntryFormat> entry_formats;
+    map<uint64_t, EntryFormat> entry_formats;
 
     struct LiveRange {
         uint64_t pc_begin, pc_end;
@@ -940,7 +941,7 @@ private:
 
     void parse_object_file(llvm::object::ObjectFile *obj) {
         // Look for the debug_info, debug_abbrev, debug_line, and debug_str sections
-        llvm::StringRef debug_info, debug_abbrev, debug_str, debug_line, debug_ranges;
+        llvm::StringRef debug_info, debug_abbrev, debug_str, debug_line, debug_line_str, debug_ranges;
 
 #ifdef __APPLE__
         std::string prefix = "__";
@@ -963,6 +964,8 @@ private:
                     debug_abbrev = *e;
                 } else if (name == prefix + "debug_str") {
                     debug_str = *e;
+                } else if (name == prefix + "debug_line_str") {
+                    debug_line_str = *e;
                 } else if (name == prefix + "debug_line") {
                     debug_line = *e;
                 } else if (name == prefix + "debug_ranges") {
@@ -976,6 +979,7 @@ private:
             debug_str.empty() ||
             debug_line.empty() ||
             debug_ranges.empty()) {
+            // It's OK for debug_line_str to be empty
             debug(2) << "Debugging sections not found\n";
             working = false;
             return;
@@ -985,7 +989,10 @@ private:
             // Parse the debug_info section to populate the functions and local variables
             llvm::DataExtractor extractor(debug_info, true, obj->getBytesInAddress());
             llvm::DataExtractor debug_abbrev_extractor(debug_abbrev, true, obj->getBytesInAddress());
-            parse_debug_info(extractor, debug_abbrev_extractor, debug_str, debug_ranges);
+            parse_debug_info(extractor, debug_abbrev_extractor, debug_str, debug_line_str, debug_ranges);
+            if (!working) {
+                return;
+            }
         }
 
         {
@@ -1019,18 +1026,19 @@ private:
                 if (!name && !form) {
                     break;
                 }
-                //printf(" name = %lu, form = %lu\n", name, form);
+                // printf(" name = %lu, form = %lu\n", name, form);
 
                 FieldFormat f_fmt(name, form);
                 fmt.fields.push_back(f_fmt);
             }
-            entry_formats.push_back(fmt);
+            entry_formats[fmt.code] = std::move(fmt);
         }
     }
 
     void parse_debug_info(const llvm::DataExtractor &e,
                           const llvm::DataExtractor &debug_abbrev,
                           llvm::StringRef debug_str,
+                          llvm::StringRef debug_line_str,
                           llvm::StringRef debug_ranges) {
         // Offset into the section
         llvm_offset_t off = 0;
@@ -1053,6 +1061,11 @@ private:
             } else {
                 dwarf_64 = false;
             }
+            // clang-format off
+            const auto parse_offset = dwarf_64 ?
+                [](const llvm::DataExtractor &e, llvm_offset_t *off) -> uint64_t { return e.getU64(off); } :
+                [](const llvm::DataExtractor &e, llvm_offset_t *off) -> uint64_t { return e.getU32(off); };
+            // clang-format on
 
             if (!unit_length) {
                 // A zero-length compilation unit indicates the end of
@@ -1063,16 +1076,35 @@ private:
             uint64_t start_of_unit = off;
 
             uint16_t dwarf_version = e.getU16(&off);
+            // DWARF v4 and lower is well-tested; DWARF v5 is very lightly
+            // tested and is almost certainly incomplete.
+            internal_assert(dwarf_version <= 5);  // We haven't tested on anything larger
 
             uint64_t debug_abbrev_offset = 0;
-            if (dwarf_64) {
-                debug_abbrev_offset = e.getU64(&off);
+            uint8_t address_size = 0;
+            if (dwarf_version == 5) {
+                constexpr uint8_t DW_UT_compile = 0x01;
+                // constexpr uint8_t DW_UT_type = 0x02;
+                // constexpr uint8_t DW_UT_partial = 0x03;
+                constexpr uint8_t DW_UT_skeleton = 0x04;
+                // constexpr uint8_t DW_UT_split_compile = 0x05;
+                // constexpr uint8_t DW_UT_split_type = 0x06;
+                const uint8_t unit_type = e.getU8(&off);
+                internal_assert(unit_type == DW_UT_compile || unit_type == DW_UT_skeleton) << unit_type;
+
+                address_size = e.getU8(&off);
+                debug_abbrev_offset = parse_offset(e, &off);
+
+                if (unit_type == DW_UT_skeleton) {
+                    (void)e.getU64(&off);
+                }
             } else {
-                debug_abbrev_offset = e.getU32(&off);
+                debug_abbrev_offset = parse_offset(e, &off);
+                address_size = e.getU8(&off);
             }
             parse_debug_abbrev(debug_abbrev, debug_abbrev_offset);
 
-            uint8_t address_size = e.getU8(&off);
+            internal_assert(address_size == sizeof(uintptr_t));
 
             vector<pair<FunctionInfo, int>> func_stack;
             vector<pair<TypeInfo, int>> type_stack;
@@ -1147,9 +1179,16 @@ private:
                     continue;
                 }
 
-                internal_assert(abbrev_code <= entry_formats.size());
-                const EntryFormat &fmt = entry_formats[abbrev_code - 1];
-                internal_assert(fmt.code == abbrev_code);
+                auto it = entry_formats.find(abbrev_code);
+                if (it == entry_formats.end()) {
+                    // Either the DWARF is malformed or we are parsing it incorrectly.
+                    // (This has only been reported when compiling with TSAN enabled,
+                    // so either is quite possible.)
+                    debug(2) << "Unspecified abbrev_code, ignoring introspection\n";
+                    working = false;
+                    return;
+                }
+                const EntryFormat &fmt = it->second;
 
                 LocalVariable var;
                 GlobalVariable gvar;
@@ -1274,12 +1313,7 @@ private:
                     }
                     case 14:  // strp (offset into debug_str section. 4 bytes in dwarf 32, 8 in dwarf 64)
                     {
-                        uint64_t offset;
-                        if (dwarf_64) {
-                            offset = e.getU64(&off);
-                        } else {
-                            offset = e.getU32(&off);
-                        }
+                        uint64_t offset = parse_offset(e, &off);
                         val = 0;
                         payload = (const uint8_t *)(debug_str.data() + offset);
                         break;
@@ -1331,11 +1365,7 @@ private:
                     }
                     case 23:  // sec_offset
                     {
-                        if (dwarf_64) {
-                            val = e.getU64(&off);
-                        } else {
-                            val = e.getU32(&off);
-                        }
+                        val = parse_offset(e, &off);
                         break;
                     }
                     case 24:  // exprloc
@@ -1353,6 +1383,13 @@ private:
                         // Just the existence of this field is information apparently? There's no data.
                         break;
                     }
+                    case 31:  // line_strp (offset into debug_line_str section. 4 bytes in dwarf 32, 8 in dwarf 64)
+                    {
+                        uint64_t offset = parse_offset(e, &off);
+                        val = 0;
+                        payload = (const uint8_t *)(debug_line_str.data() + offset);
+                        break;
+                    }
                     case 32:  // ref_sig8
                     {
                         // 64-bit type signature for a reference in its own type unit
@@ -1360,7 +1397,7 @@ private:
                         break;
                     }
                     default:
-                        internal_error << "Unknown form";
+                        internal_error << "Unknown form " << fmt.fields[i].form;
                         break;
                     }
 
@@ -1861,7 +1898,7 @@ private:
                 if (!f.pc_begin ||
                     !f.pc_end ||
                     f.name.empty()) {
-                    //debug(5) << "Dropping " << f.name << "\n";
+                    // debug(5) << "Dropping " << f.name << "\n";
                     continue;
                 }
 
@@ -1870,7 +1907,7 @@ private:
                     if (!v.name.empty() && v.type && v.stack_offset != no_location) {
                         vars.push_back(v);
                     } else {
-                        //debug(5) << "Dropping " << v.name << "\n";
+                        // debug(5) << "Dropping " << v.name << "\n";
                     }
                 }
                 f.variables.clear();
