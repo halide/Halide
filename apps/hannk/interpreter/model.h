@@ -255,13 +255,13 @@ public:
 };
 
 class OpVisitor;
+class OpMutator;
 
 class Op {
-private:
+protected:
     std::vector<TensorPtr> inputs_;
     std::vector<TensorPtr> outputs_;
 
-protected:
     Op(std::vector<TensorPtr> inputs, std::vector<TensorPtr> outputs);
 
 public:
@@ -288,7 +288,26 @@ public:
     // Execute the op on a given crop.
     virtual void execute() = 0;
 
-    virtual void accept(OpVisitor *v) = 0;
+    // Call the visitor's appropriate methods for this op, and any sub-ops.
+    inline void accept(OpVisitor *v) const {
+        return accept_impl(v);
+    }
+
+    // Call the mutator's appropriate methods for this op, and any sub-ops.
+    // The op passed in is owned by the callee, who will return a (possibly) mutated Op
+    // which should be used in place of the original; the callee may also return nullptr,
+    // in which case the original should be deleted from its container.
+    //
+    // Note that this is a static method because we need to pass the op in question
+    // via unique_ptr (since the callee needs to take ownership); we also
+    // need to use the 'naked' pointer to dispatch a virtual method which returns a function pointer,
+    // to avoid any possible UB from order-of-operations (e.g., op->mutate_impl(std::move(op)), which
+    // has undefined order wrt the move vs the virtual lookup).
+    using OpMutatorFn = OpPtr (*)(OpPtr op, OpMutator *m);
+    static inline OpPtr mutate(OpPtr op, OpMutator *m) {
+        OpMutatorFn mutate_fn = op->mutate_impl();
+        return mutate_fn(std::move(op), m);
+    }
 
     virtual void dump(std::ostream &os, int indent = 0) const;
 
@@ -300,45 +319,36 @@ public:
     int output_count() const {
         return outputs_.size();
     }
-    const TensorPtr &input(int idx) const {
+    const TensorPtr &input(int idx = 0) const {
         return inputs_[idx];
     }
-    const TensorPtr &output(int idx) const {
+    const TensorPtr &output(int idx = 0) const {
         return outputs_[idx];
-    }
-    const TensorPtr &input() const {
-        return input(0);
-    }
-    const TensorPtr &output() const {
-        return output(0);
-    }
-    const TensorPtr &input(int idx) {
-        return inputs_[idx];
-    }
-    const TensorPtr &output(int idx) {
-        return outputs_[idx];
-    }
-    const TensorPtr &input() {
-        return input(0);
-    }
-    const TensorPtr &output() {
-        return output(0);
     }
 
+    // TODO: remove me
     void set_input(int idx, TensorPtr t);
-    void set_output(int idx, TensorPtr t);
-    void set_input(TensorPtr t);
-    void set_output(TensorPtr t);
 
     bool is_input(const TensorPtr &t) const;
     bool is_output(const TensorPtr &t) const;
 
-    // Movable but not copyable.
+    std::vector<TensorPtr> inputs() const {
+        return inputs_;
+    }
+    std::vector<TensorPtr> outputs() const {
+        return outputs_;
+    }
+
+    // Neither movable nor copyable.
     Op() = delete;
     Op(const Op &) = delete;
     Op &operator=(const Op &) = delete;
     Op(Op &&) = delete;
     Op &operator=(Op &&) = delete;
+
+private:
+    virtual void accept_impl(OpVisitor *v) const = 0;
+    virtual OpMutatorFn mutate_impl() const = 0;
 };
 
 class OpGroup : public Op {
@@ -349,18 +359,26 @@ public:
         : Op(std::move(inputs), std::move(outputs)), ops_(std::move(ops)) {
     }
 
-    void add(OpPtr to_insert, const Op *before = nullptr);
-    void remove(const Op *op);
-
     BoundsMap map_bounds(int input_idx, int output_idx) const override;
 
     bool prepare() override;
-
     void execute() override;
 
     int op_count() const {
         return ops_.size();
     }
+
+    // Extract the given Op from this OpGroup, transferring ownership
+    // to the caller. The OpGroup is left with a null entry, which
+    // is not generally legal; this should only be called on OpGroups
+    // which will be discarded afterwards.
+    OpPtr take_op(int i) {
+        OpPtr result = nullptr;
+        std::swap(ops_[i], result);
+        return result;
+    }
+
+    // TODO: remove me
     Op *op(int i) {
         return ops_[i].get();
     }
@@ -368,11 +386,22 @@ public:
         return ops_[i].get();
     }
 
-    void accept(OpVisitor *v) override;
     void dump(std::ostream &os, int indent = 0) const override;
+
     std::string name() const override {
         return "OpGroup";
     }
+
+    // Neither movable nor copyable.
+    OpGroup() = delete;
+    OpGroup(const OpGroup &) = delete;
+    OpGroup &operator=(const OpGroup &) = delete;
+    OpGroup(OpGroup &&) = delete;
+    OpGroup &operator=(OpGroup &&) = delete;
+
+private:
+    void accept_impl(OpVisitor *v) const override;
+    OpMutatorFn mutate_impl() const override;
 };
 
 }  // namespace hannk

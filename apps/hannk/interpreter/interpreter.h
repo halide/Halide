@@ -17,13 +17,13 @@ struct InterpreterOptions {
 };
 
 class Interpreter {
-    std::unique_ptr<OpGroup> model_;
+    OpPtr model_;
     std::unique_ptr<char[]> tensor_storage_arena_;
     InterpreterOptions options_;
     bool prepared_ = false;
 
 public:
-    explicit Interpreter(std::unique_ptr<OpGroup> m, InterpreterOptions options = InterpreterOptions());
+    explicit Interpreter(OpPtr m, InterpreterOptions options = InterpreterOptions());
     ~Interpreter();
 
     // Return the Tensor in the current Model with the given name.

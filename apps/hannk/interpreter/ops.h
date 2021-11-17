@@ -55,13 +55,15 @@ public:
         : ElementwiseOp({a, b}, {output}), op_(op), activation_(activation) {
     }
 
-    void accept(OpVisitor *v) override;
-
     void execute() override;
 
     std::string name() const override {
         return std::string("BinaryOp(") + to_string(op_) + ")";
     }
+
+private:
+    void accept_impl(OpVisitor *v) const override;
+    OpMutatorFn mutate_impl() const override;
 };
 
 class ConcatenationOp : public Op {
@@ -80,8 +82,6 @@ public:
         is_no_op_ = true;
     }
 
-    void accept(OpVisitor *v) override;
-
     BoundsMap map_bounds(int input_idx, int output_idx) const override;
 
     void execute() override;
@@ -89,6 +89,10 @@ public:
     std::string name() const override {
         return "ConcatenationOp";
     }
+
+private:
+    void accept_impl(OpVisitor *v) const override;
+    OpMutatorFn mutate_impl() const override;
 };
 
 class ConvOp : public Op {
@@ -112,34 +116,39 @@ public:
           activation_(activation) {
     }
 
-    void accept(OpVisitor *v) override;
-
     const TensorPtr &filter() const {
         return Op::input(1);
     }
     const TensorPtr &bias() const {
         return Op::input(2);
     }
-    const TensorPtr &filter() {
-        return Op::input(1);
+
+    std::array<int, 2> stride() const {
+        return stride_;
     }
-    void set_filter(TensorPtr filter) {
-        Op::set_input(1, std::move(filter));
+    std::array<int, 2> dilation() const {
+        return dilation_;
     }
-    const TensorPtr &bias() {
-        return Op::input(2);
+    Padding padding() const {
+        return padding_;
+    }
+    ActivationFunction activation() const {
+        return activation_;
     }
 
     halide_type_t filter_type() const;
     BoundsMap map_bounds(int input_idx, int output_idx) const override;
 
     bool prepare() override;
-
     void execute() override;
 
     std::string name() const override {
         return "ConvOp";
     }
+
+private:
+    void accept_impl(OpVisitor *v) const override;
+    OpMutatorFn mutate_impl() const override;
 };
 
 class DepthwiseConv2DOp : public Op {
@@ -164,37 +173,41 @@ public:
           activation_(activation) {
     }
 
-    void accept(OpVisitor *v) override;
-
     int depth_multiplier() const {
         return depth_multiplier_;
     }
-    void set_depth_multiplier(int depth_multiplier) {
-        depth_multiplier_ = depth_multiplier;
-    }
-
     const TensorPtr &filter() const {
         return Op::input(1);
     }
     const TensorPtr &bias() const {
         return Op::input(2);
     }
-    const TensorPtr &filter() {
-        return Op::input(1);
-    }
-    const TensorPtr &bias() {
-        return Op::input(2);
-    }
 
     BoundsMap map_bounds(int input_idx, int output_idx) const override;
 
-    bool prepare() override;
+    std::array<int, 2> stride() const {
+        return stride_;
+    }
+    std::array<int, 2> dilation() const {
+        return dilation_;
+    }
+    Padding padding() const {
+        return padding_;
+    }
+    ActivationFunction activation() const {
+        return activation_;
+    }
 
+    bool prepare() override;
     void execute() override;
 
     std::string name() const override {
         return "DepthwiseConv2DOp";
     }
+
+private:
+    void accept_impl(OpVisitor *v) const override;
+    OpMutatorFn mutate_impl() const override;
 };
 
 class ElementwiseProgramOp : public ElementwiseOp {
@@ -209,13 +222,15 @@ public:
         : ElementwiseOp(std::move(inputs), std::move(outputs)), program_(program) {
     }
 
-    void accept(OpVisitor *v) override;
-
     void execute() override;
 
     std::string name() const override {
         return "ElementwiseProgramOp";
     }
+
+private:
+    void accept_impl(OpVisitor *v) const override;
+    OpMutatorFn mutate_impl() const override;
 };
 
 class GatherOp : public Op {
@@ -227,8 +242,6 @@ public:
         : Op({input, indices}, {output}), axis_(axis), batch_dims_(batch_dims) {
     }
 
-    void accept(OpVisitor *v) override;
-
     BoundsMap map_bounds(int input_idx, int output_idx) const override;
 
     void execute() override;
@@ -236,6 +249,10 @@ public:
     std::string name() const override {
         return "GatherOp";
     }
+
+private:
+    void accept_impl(OpVisitor *v) const override;
+    OpMutatorFn mutate_impl() const override;
 };
 
 class L2NormalizationOp : public Op {
@@ -246,8 +263,6 @@ public:
         : Op({input}, {output}), axis_(axis) {
     }
 
-    void accept(OpVisitor *v) override;
-
     BoundsMap map_bounds(int input_idx, int output_idx) const override;
 
     void execute() override;
@@ -255,6 +270,10 @@ public:
     std::string name() const override {
         return "L2NormalizationOp";
     }
+
+private:
+    void accept_impl(OpVisitor *v) const override;
+    OpMutatorFn mutate_impl() const override;
 };
 
 class PadOp : public Op {
@@ -266,7 +285,9 @@ public:
         }
     }
 
-    void accept(OpVisitor *v) override;
+    const TensorPtr &padding() const {
+        return Op::input(1);
+    }
 
     BoundsMap map_bounds(int input_idx, int output_idx) const override;
 
@@ -275,6 +296,10 @@ public:
     std::string name() const override {
         return "PadOp";
     }
+
+private:
+    void accept_impl(OpVisitor *v) const override;
+    OpMutatorFn mutate_impl() const override;
 };
 
 class Pool2DOp : public Op {
@@ -314,13 +339,15 @@ public:
 
     BoundsMap map_bounds(int input_idx, int output_idx) const override;
 
-    void accept(OpVisitor *v) override;
-
     void execute() override;
 
     std::string name() const override {
         return std::string("Pool2DOp(") + to_string(op_) + ")";
     }
+
+private:
+    void accept_impl(OpVisitor *v) const override;
+    OpMutatorFn mutate_impl() const override;
 };
 
 class ReductionOp : public Op {
@@ -343,13 +370,15 @@ public:
 
     BoundsMap map_bounds(int input_idx, int output_idx) const override;
 
-    void accept(OpVisitor *v) override;
-
     void execute() override;
 
     std::string name() const override {
         return std::string("ReductionOp(") + to_string(op_) + ")";
     }
+
+private:
+    void accept_impl(OpVisitor *v) const override;
+    OpMutatorFn mutate_impl() const override;
 };
 
 class ReshapeOp : public Op {
@@ -363,8 +392,6 @@ public:
         }
     }
 
-    void accept(OpVisitor *v) override;
-
     BoundsMap map_bounds(int input_idx, int output_idx) const override;
 
     void execute() override;
@@ -372,6 +399,10 @@ public:
     std::string name() const override {
         return "ReshapeOp";
     }
+
+private:
+    void accept_impl(OpVisitor *v) const override;
+    OpMutatorFn mutate_impl() const override;
 };
 
 class ShapeOp : public Op {
@@ -380,8 +411,6 @@ public:
         : Op({input}, {output}) {
     }
 
-    void accept(OpVisitor *v) override;
-
     BoundsMap map_bounds(int input_idx, int output_idx) const override;
 
     void execute() override;
@@ -389,6 +418,10 @@ public:
     std::string name() const override {
         return "ShapeOp";
     }
+
+private:
+    void accept_impl(OpVisitor *v) const override;
+    OpMutatorFn mutate_impl() const override;
 };
 
 class SoftmaxOp : public Op {
@@ -400,8 +433,6 @@ public:
         : Op({input}, {output}), beta_(beta), axis_(axis) {
     }
 
-    void accept(OpVisitor *v) override;
-
     BoundsMap map_bounds(int input_idx, int output_idx) const override;
 
     void execute() override;
@@ -409,6 +440,10 @@ public:
     std::string name() const override {
         return "SoftmaxOp";
     }
+
+private:
+    void accept_impl(OpVisitor *v) const override;
+    OpMutatorFn mutate_impl() const override;
 };
 
 class SpaceDepthOp : public Op {
@@ -419,8 +454,6 @@ public:
         : Op({input}, {output}), block_size_(block_size) {
     }
 
-    void accept(OpVisitor *v) override;
-
     BoundsMap map_bounds(int input_idx, int output_idx) const override;
 
     void execute() override;
@@ -428,6 +461,10 @@ public:
     std::string name() const override {
         return block_size_ > 0 ? "SpaceToDepthOp" : "DepthToSpaceOp";
     }
+
+private:
+    void accept_impl(OpVisitor *v) const override;
+    OpMutatorFn mutate_impl() const override;
 };
 
 class SplitOp : public Op {
@@ -446,8 +483,6 @@ public:
         is_no_op_ = true;
     }
 
-    void accept(OpVisitor *v) override;
-
     BoundsMap map_bounds(int input_idx, int output_idx) const override;
 
     void execute() override;
@@ -455,6 +490,10 @@ public:
     std::string name() const override {
         return "SplitOp";
     }
+
+private:
+    void accept_impl(OpVisitor *v) const override;
+    OpMutatorFn mutate_impl() const override;
 };
 
 class TileConvFilterOp : public Op {
@@ -463,8 +502,6 @@ public:
         : Op({input}, {output}) {
     }
 
-    void accept(OpVisitor *v) override;
-
     BoundsMap map_bounds(int input_idx, int output_idx) const override;
 
     void execute() override;
@@ -472,6 +509,10 @@ public:
     std::string name() const override {
         return "TileConvFilterOp";
     }
+
+private:
+    void accept_impl(OpVisitor *v) const override;
+    OpMutatorFn mutate_impl() const override;
 };
 
 class TransposeOp : public Op {
@@ -480,8 +521,6 @@ public:
         : Op({input, dims}, {output}) {
     }
 
-    void accept(OpVisitor *v) override;
-
     BoundsMap map_bounds(int input_idx, int output_idx) const override;
 
     void execute() override;
@@ -489,6 +528,10 @@ public:
     std::string name() const override {
         return "TransposeOp";
     }
+
+private:
+    void accept_impl(OpVisitor *v) const override;
+    OpMutatorFn mutate_impl() const override;
 };
 
 class UnaryOp : public ElementwiseOp {
@@ -513,13 +556,15 @@ public:
         : ElementwiseOp({input}, {output}), op_(op) {
     }
 
-    void accept(OpVisitor *v) override;
-
     void execute() override;
 
     std::string name() const override {
         return std::string("UnaryOp(") + to_string(op_) + ")";
     }
+
+private:
+    void accept_impl(OpVisitor *v) const override;
+    OpMutatorFn mutate_impl() const override;
 };
 
 class UpsampleChannelsOp : public Op {
@@ -530,8 +575,6 @@ public:
         : Op({input}, {output}), factor_(factor) {
     }
 
-    void accept(OpVisitor *v) override;
-
     BoundsMap map_bounds(int input_idx, int output_idx) const override;
 
     void execute() override;
@@ -539,59 +582,120 @@ public:
     std::string name() const override {
         return "UpsampleChannelsOp";
     }
+
+private:
+    void accept_impl(OpVisitor *v) const override;
+    OpMutatorFn mutate_impl() const override;
 };
 
 class OpVisitor {
 public:
     virtual ~OpVisitor() = default;
 
-    virtual void visit(BinaryOp *op) {
-    }
-    virtual void visit(ConcatenationOp *op) {
-    }
-    virtual void visit(ConvOp *op) {
-    }
-    virtual void visit(DepthwiseConv2DOp *op) {
-    }
-    virtual void visit(ElementwiseProgramOp *op) {
-    }
-    virtual void visit(GatherOp *op) {
-    }
-    virtual void visit(L2NormalizationOp *op) {
-    }
-    virtual void visit(PadOp *op) {
-    }
-    virtual void visit(Pool2DOp *op) {
-    }
-    virtual void visit(ReductionOp *op) {
-    }
-    virtual void visit(ReshapeOp *op) {
-    }
-    virtual void visit(ShapeOp *op) {
-    }
-    virtual void visit(SoftmaxOp *op) {
-    }
-    virtual void visit(SpaceDepthOp *op) {
-    }
-    virtual void visit(SplitOp *op) {
-    }
-    virtual void visit(TileConvFilterOp *op) {
-    }
-    virtual void visit(TransposeOp *op) {
-    }
-    virtual void visit(UnaryOp *op) {
-    }
-    virtual void visit(UpsampleChannelsOp *op) {
-    }
-    virtual void visit(OpGroup *op) {
-    }
+protected:
+    // Only the classes in the list are allowed to call visit() (to implement accept_impl())
+    friend class BinaryOp;
+    friend class ConcatenationOp;
+    friend class ConvOp;
+    friend class DepthwiseConv2DOp;
+    friend class ElementwiseProgramOp;
+    friend class GatherOp;
+    friend class L2NormalizationOp;
+    friend class PadOp;
+    friend class Pool2DOp;
+    friend class ReductionOp;
+    friend class ReshapeOp;
+    friend class ShapeOp;
+    friend class SoftmaxOp;
+    friend class SpaceDepthOp;
+    friend class SplitOp;
+    friend class TileConvFilterOp;
+    friend class TransposeOp;
+    friend class UnaryOp;
+    friend class UpsampleChannelsOp;
+    friend class OpGroup;
+
+    // clang-format off
+    virtual void visit_leaf(const Op *op) { }
+    virtual void visit(const BinaryOp *op) { visit_leaf(op); }
+    virtual void visit(const ConcatenationOp *op) { visit_leaf(op); }
+    virtual void visit(const ConvOp *op) { visit_leaf(op); }
+    virtual void visit(const DepthwiseConv2DOp *op) { visit_leaf(op); }
+    virtual void visit(const ElementwiseProgramOp *op) { visit_leaf(op); }
+    virtual void visit(const GatherOp *op) { visit_leaf(op); }
+    virtual void visit(const L2NormalizationOp *op) { visit_leaf(op); }
+    virtual void visit(const PadOp *op) { visit_leaf(op); }
+    virtual void visit(const Pool2DOp *op) { visit_leaf(op); }
+    virtual void visit(const ReductionOp *op) { visit_leaf(op); }
+    virtual void visit(const ReshapeOp *op) { visit_leaf(op); }
+    virtual void visit(const ShapeOp *op) { visit_leaf(op); }
+    virtual void visit(const SoftmaxOp *op) { visit_leaf(op); }
+    virtual void visit(const SpaceDepthOp *op) { visit_leaf(op); }
+    virtual void visit(const SplitOp *op) { visit_leaf(op); }
+    virtual void visit(const TileConvFilterOp *op) { visit_leaf(op); }
+    virtual void visit(const TransposeOp *op) { visit_leaf(op); }
+    virtual void visit(const UnaryOp *op) { visit_leaf(op); }
+    virtual void visit(const UpsampleChannelsOp *op) { visit_leaf(op); }
+    virtual void visit(const OpGroup *op);
+    // clang-format on
 };
 
-class LeafOpVisitor : public OpVisitor {
+class OpMutator {
 public:
-    using OpVisitor::visit;
+    virtual ~OpMutator() = default;
 
-    void visit(OpGroup *op) override;
+    // Convenience function for calling Op::mutate;
+    // this is syntactically cleaner in most cases.
+    inline OpPtr mutate(OpPtr op) {
+        return Op::mutate(std::move(op), this);
+    }
+
+protected:
+    // Only the classes in the list are allowed to call visit() (to implement mutate_impl())
+    friend class BinaryOp;
+    friend class ConcatenationOp;
+    friend class ConvOp;
+    friend class DepthwiseConv2DOp;
+    friend class ElementwiseProgramOp;
+    friend class GatherOp;
+    friend class L2NormalizationOp;
+    friend class PadOp;
+    friend class Pool2DOp;
+    friend class ReductionOp;
+    friend class ReshapeOp;
+    friend class ShapeOp;
+    friend class SoftmaxOp;
+    friend class SpaceDepthOp;
+    friend class SplitOp;
+    friend class TileConvFilterOp;
+    friend class TransposeOp;
+    friend class UnaryOp;
+    friend class UpsampleChannelsOp;
+    friend class OpGroup;
+
+    // clang-format off
+    virtual OpPtr visit_leaf(OpPtr op) { return op; }
+    virtual OpPtr visit(std::unique_ptr<BinaryOp> op) { return visit_leaf(std::move(op)); }
+    virtual OpPtr visit(std::unique_ptr<ConcatenationOp> op) { return visit_leaf(std::move(op)); }
+    virtual OpPtr visit(std::unique_ptr<ConvOp> op) { return visit_leaf(std::move(op)); }
+    virtual OpPtr visit(std::unique_ptr<DepthwiseConv2DOp> op) { return visit_leaf(std::move(op)); }
+    virtual OpPtr visit(std::unique_ptr<ElementwiseProgramOp> op) { return visit_leaf(std::move(op)); }
+    virtual OpPtr visit(std::unique_ptr<GatherOp> op) { return visit_leaf(std::move(op)); }
+    virtual OpPtr visit(std::unique_ptr<L2NormalizationOp> op) { return visit_leaf(std::move(op)); }
+    virtual OpPtr visit(std::unique_ptr<PadOp> op) { return visit_leaf(std::move(op)); }
+    virtual OpPtr visit(std::unique_ptr<Pool2DOp> op) { return visit_leaf(std::move(op)); }
+    virtual OpPtr visit(std::unique_ptr<ReductionOp> op) { return visit_leaf(std::move(op)); }
+    virtual OpPtr visit(std::unique_ptr<ReshapeOp> op) { return visit_leaf(std::move(op)); }
+    virtual OpPtr visit(std::unique_ptr<ShapeOp> op) { return visit_leaf(std::move(op)); }
+    virtual OpPtr visit(std::unique_ptr<SoftmaxOp> op) { return visit_leaf(std::move(op)); }
+    virtual OpPtr visit(std::unique_ptr<SpaceDepthOp> op) { return visit_leaf(std::move(op)); }
+    virtual OpPtr visit(std::unique_ptr<SplitOp> op) { return visit_leaf(std::move(op)); }
+    virtual OpPtr visit(std::unique_ptr<TileConvFilterOp> op) { return visit_leaf(std::move(op)); }
+    virtual OpPtr visit(std::unique_ptr<TransposeOp> op) { return visit_leaf(std::move(op)); }
+    virtual OpPtr visit(std::unique_ptr<UnaryOp> op) { return visit_leaf(std::move(op)); }
+    virtual OpPtr visit(std::unique_ptr<UpsampleChannelsOp> op) { return visit_leaf(std::move(op)); }
+    virtual OpPtr visit(std::unique_ptr<OpGroup> op);
+    // clang-format on
 };
 
 }  // namespace hannk
