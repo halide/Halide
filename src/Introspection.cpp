@@ -17,6 +17,7 @@
 
 #include <cstdio>
 #include <iostream>
+#include <map>
 #include <sstream>
 #include <string>
 
@@ -77,7 +78,11 @@ class DebugSections {
         EntryFormat() = default;
         vector<FieldFormat> fields;
     };
-    vector<EntryFormat> entry_formats;
+    // In practice, ~every set of these we've seen ends up being in
+    // monotonically increasing order, with no holes, so a vector would
+    // likely work, but nothing in the DWARF spec seems to require this,
+    // so let's use a map for robustness.
+    map<uint64_t, EntryFormat> entry_formats;
 
     struct LiveRange {
         uint64_t pc_begin, pc_end;
@@ -997,8 +1002,7 @@ private:
     void parse_debug_ranges(const llvm::DataExtractor &e) {
     }
 
-    void parse_debug_abbrev(const llvm::DataExtractor &e, llvm_offset_t off = 0) {
-        entry_formats.clear();
+    void parse_debug_abbrev_impl(const llvm::DataExtractor &e, llvm_offset_t &off) {
         while (true) {
             EntryFormat fmt;
             fmt.code = e.getULEB128(&off);
@@ -1013,19 +1017,32 @@ private:
               " tag = %lu\n"
               " has_children = %u\n", fmt.code, fmt.tag, fmt.has_children);
             */
+
             while (true) {
                 uint64_t name = e.getULEB128(&off);
                 uint64_t form = e.getULEB128(&off);
                 if (!name && !form) {
                     break;
                 }
-                //printf(" name = %lu, form = %lu\n", name, form);
+                // printf(" name = %lu, form = %lu\n", name, form);
 
                 FieldFormat f_fmt(name, form);
-                fmt.fields.push_back(f_fmt);
+                fmt.fields.push_back(std::move(f_fmt));
             }
-            entry_formats.push_back(fmt);
+            const bool has_children = fmt.has_children;  // can't use fmt after std::move!
+            entry_formats[fmt.code] = std::move(fmt);
+            if (has_children) {
+                // If we don't parse this recursively, we'll end up terminating
+                // at the end of the first list of child siblings we see, leaving
+                // the abbreviations table incomplete.
+                parse_debug_abbrev_impl(e, off);
+            }
         }
+    }
+
+    void parse_debug_abbrev(const llvm::DataExtractor &e, llvm_offset_t off) {
+        entry_formats.clear();
+        parse_debug_abbrev_impl(e, off);
     }
 
     void parse_debug_info(const llvm::DataExtractor &e,
@@ -1120,7 +1137,6 @@ private:
 
                 // Grab the next debugging information entry
                 uint64_t abbrev_code = e.getULEB128(&off);
-
                 // A null entry indicates we're popping the stack.
                 if (abbrev_code == 0) {
                     if (!func_stack.empty() &&
@@ -1147,9 +1163,9 @@ private:
                     continue;
                 }
 
-                internal_assert(abbrev_code <= entry_formats.size());
-                const EntryFormat &fmt = entry_formats[abbrev_code - 1];
-                internal_assert(fmt.code == abbrev_code);
+                auto it = entry_formats.find(abbrev_code);
+                internal_assert(it != entry_formats.end());
+                const EntryFormat &fmt = it->second;
 
                 LocalVariable var;
                 GlobalVariable gvar;
@@ -1861,7 +1877,7 @@ private:
                 if (!f.pc_begin ||
                     !f.pc_end ||
                     f.name.empty()) {
-                    //debug(5) << "Dropping " << f.name << "\n";
+                    // debug(5) << "Dropping " << f.name << "\n";
                     continue;
                 }
 
@@ -1870,7 +1886,7 @@ private:
                     if (!v.name.empty() && v.type && v.stack_offset != no_location) {
                         vars.push_back(v);
                     } else {
-                        //debug(5) << "Dropping " << v.name << "\n";
+                        // debug(5) << "Dropping " << v.name << "\n";
                     }
                 }
                 f.variables.clear();
