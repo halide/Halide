@@ -133,7 +133,7 @@ struct GlobalState {
     };
 
     InitResult init(void *user_context);
-    void add_module(void *user_context, ModuleState *module);
+    ModuleState *init_module(void *user_context, void **state_ptr);
     void release_modules(void *user_context);
     bool CheckAndReportError(void *user_context, const char *location);
 
@@ -147,6 +147,8 @@ struct GlobalState {
 #undef GLFUNC
 
 private:
+    bool fill_in_funcs(void *user_context);
+
     halide_mutex global_state_lock_ = {{0}};
 
     InitResult init_result_ = NotInitialized;
@@ -204,41 +206,57 @@ WEAK bool GlobalState::is_inited_ok() {
 }
 #endif
 
-WEAK GlobalState::InitResult GlobalState::init(void *user_context) {
-    ScopedMutexLock lock(&global_state_lock_);
-
-    if (init_result_ != GlobalState::NotInitialized) {
-        return init_result_;
-    }
-
-    init_result_ = GlobalState::InitializedWithError;
-
-    // Make a context if there isn't one
-    if (halide_opengl_create_context(user_context)) {
-        error(user_context) << "Failed to make OpenGL context";
-        goto fail;
-    }
-
+WEAK bool GlobalState::fill_in_funcs(void *user_context) {
     // Initialize pointers to OpenGL functions.
 #define GLFUNC(TYPE, VAR)                                                 \
     if (load_gl_func(user_context, "gl" #VAR, (void **)&VAR, true) < 0) { \
-        goto fail;                                                        \
+        return false;                                                        \
     }
     USED_GL_FUNCTIONS;
 #undef GLFUNC
 
-    debug(user_context) << "OpenGLCompute: Halide running on " << (const char *)GetString(GL_VERSION) << "\n";
-    init_result_ = GlobalState::InitializedOK;
+    return true;
+}
 
-fail:
+WEAK GlobalState::InitResult GlobalState::init(void *user_context) {
+    ScopedMutexLock lock(&global_state_lock_);
+
+    if (init_result_ == GlobalState::NotInitialized) {
+        init_result_ = InitializedWithError;
+
+        // Make a context if there isn't one
+        if (halide_opengl_create_context(user_context)) {
+            error(user_context) << "Failed to make OpenGL context";
+            return init_result_;
+        }
+        if (!fill_in_funcs(user_context)) {
+            return init_result_;
+        }
+
+        init_result_ = InitializedOK;
+        debug(user_context) << "OpenGLCompute: Halide running on " << (const char *)GetString(GL_VERSION) << "\n";
+    }
+
     return init_result_;
 }
 
-WEAK void GlobalState::add_module(void *user_context, ModuleState *module) {
+WEAK ModuleState *GlobalState::init_module(void *user_context, void **state_ptr) {
     ScopedMutexLock lock(&global_state_lock_);
 
-    module->next = module_state_list_;
-    module_state_list_ = module;
+    if (init_result_ == InitializedOK) {
+        ModuleState **state = (ModuleState **)state_ptr;
+        ModuleState *module = *state;
+        if (!module) {
+            module = (ModuleState *)malloc(sizeof(ModuleState));
+            memset(module, 0, sizeof(ModuleState));
+            module->next = module_state_list_;
+            module_state_list_ = module;
+            *state = module;
+        }
+        return module;
+    }
+
+    return nullptr;
 }
 
 WEAK void GlobalState::release_modules(void *user_context) {
@@ -809,13 +827,10 @@ WEAK int halide_openglcompute_initialize_kernels(void *user_context, void **stat
         return error;
     }
 
-    ModuleState **state = (ModuleState **)state_ptr;
-    ModuleState *module = *state;
+    ModuleState *module = global_state.init_module(user_context, state_ptr);
     if (!module) {
-        module = (ModuleState *)malloc(sizeof(ModuleState));
-        memset(module, 0, sizeof(ModuleState));
-        global_state.add_module(user_context, module);
-        *state = module;
+        debug(user_context) << "halide_openglcompute_initialize_kernels(" << (void *)module << "): init_module() failed\n";
+        return -1;
     }
 
     if (module->has_kernels()) {
