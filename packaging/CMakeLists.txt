@@ -98,6 +98,7 @@ install(FILES
         ${Halide_SOURCE_DIR}/README.md
         ${Halide_SOURCE_DIR}/README_rungen.md
         ${Halide_SOURCE_DIR}/README_webassembly.md
+        ${Halide_SOURCE_DIR}/LICENSE.txt
         COMPONENT Halide_Documentation
         TYPE DOC)
 
