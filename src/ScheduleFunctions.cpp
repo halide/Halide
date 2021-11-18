@@ -133,21 +133,12 @@ class AddPredicates : public IRGraphMutator {
     using IRMutator::visit;
 
     Stmt visit(const Provide *p) override {
-        vector<Expr> values;
-        vector<Expr> args;
-        bool changed = false;
-        for (const Expr &i : p->args) {
-            args.push_back(mutate(i));
-            changed = changed || !args.back().same_as(i);
-        }
-        for (const Expr &i : p->values) {
-            values.push_back(mutate(i));
-            changed = changed || !args.back().same_as(i);
-        }
+        auto [args, changed_args] = mutate_with_changes(p->args);
+        auto [values, changed_values] = mutate_with_changes(p->values);
         Expr predicate = mutate(p->predicate);
         if (provides) {
             return Provide::make(p->name, values, args, predicate && cond);
-        } else if (changed || !predicate.same_as(p->predicate)) {
+        } else if (changed_args || changed_values || !predicate.same_as(p->predicate)) {
             return Provide::make(p->name, values, args, predicate);
         } else {
             return p;
@@ -792,6 +783,20 @@ Stmt build_extern_produce(const map<string, Function> &env, Function f, const Ta
     Stmt check = AssertStmt::make(EQ::make(result, 0), error);
 
     if (!cropped_buffers.empty()) {
+        // We need to check that all cropped buffers are non-null (since Call::buffer_crop can return nullptr)
+        for (const auto &p : cropped_buffers) {
+            Expr cropped = p.first;
+            Expr cropped_u64 = reinterpret(UInt(64), cropped);
+            Expr error = Call::make(Int(32), "halide_error_device_crop_failed", std::vector<Expr>(), Call::Extern);
+            Stmt assertion = AssertStmt::make(cropped_u64 != 0, error);
+
+            if (!is_no_op(pre_call)) {
+                pre_call = Block::make(pre_call, assertion);
+            } else {
+                pre_call = assertion;
+            }
+        }
+
         // We need to clean up the temporary crops we made for the
         // outputs in case any of them have device allocations.
         vector<Expr> cleanup_args;
@@ -1693,8 +1698,7 @@ private:
                     }
                     // Now that we are going to add a stage to the order, go over dependent nodes
                     // and decrease their dependency count.
-                    for (size_t k = 0; k < adj_list[i][stage_index[i]].size(); k++) {
-                        const auto &edge = adj_list[i][stage_index[i]][k];
+                    for (auto &edge : adj_list[i][stage_index[i]]) {
                         internal_assert(stage_dependencies[edge.func_index][edge.stage_index] > 0);
                         stage_dependencies[edge.func_index][edge.stage_index]--;
                     }

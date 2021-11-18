@@ -57,9 +57,9 @@ public:
     }
 
     void clear() {
-        for (size_t i = 0; i < entries.size(); i++) {
-            entries[i].a = Expr();
-            entries[i].b = Expr();
+        for (auto &entry : entries) {
+            entry.a = Expr();
+            entry.b = Expr();
         }
     }
 

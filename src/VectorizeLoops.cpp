@@ -3,6 +3,7 @@
 
 #include "CSE.h"
 #include "CodeGen_GPU_Dev.h"
+#include "Deinterleave.h"
 #include "ExprUsesVar.h"
 #include "IREquality.h"
 #include "IRMutator.h"
@@ -633,18 +634,11 @@ class VectorSubs : public IRMutator {
     Expr visit(const Call *op) override {
         // Widen the call by changing the lanes of all of its
         // arguments and its return type
-        vector<Expr> new_args(op->args.size());
-        bool changed = false;
 
         // Mutate the args
+        auto [new_args, changed] = mutate_with_changes(op->args);
         int max_lanes = 0;
-        for (size_t i = 0; i < op->args.size(); i++) {
-            Expr old_arg = op->args[i];
-            Expr new_arg = mutate(old_arg);
-            if (!new_arg.same_as(old_arg)) {
-                changed = true;
-            }
-            new_args[i] = new_arg;
+        for (const auto &new_arg : new_args) {
             max_lanes = std::max(new_arg.type().lanes(), max_lanes);
         }
 
@@ -721,10 +715,24 @@ class VectorSubs : public IRMutator {
         }
 
         // Widen the args to have the same lanes as the max lanes found
-        for (size_t i = 0; i < new_args.size(); i++) {
-            new_args[i] = widen(new_args[i], max_lanes);
+        for (auto &arg : new_args) {
+            arg = widen(arg, max_lanes);
         }
-        return Call::make(op->type.with_lanes(max_lanes), op->name, new_args,
+        Type new_op_type = op->type.with_lanes(max_lanes);
+
+        if (op->is_intrinsic(Call::prefetch)) {
+            // We don't want prefetch args to ve vectorized, but we can't just skip the mutation
+            // (otherwise we can end up with dead loop variables. Instead, use extract_lane() on each arg
+            // to scalarize it again.
+            for (auto &arg : new_args) {
+                if (arg.type().is_vector()) {
+                    arg = extract_lane(arg, 0);
+                }
+            }
+            new_op_type = op->type;
+        }
+
+        return Call::make(new_op_type, op->name, new_args,
                           op->call_type, op->func, op->value_index, op->image, op->param);
     }
 
@@ -1010,8 +1018,8 @@ class VectorSubs : public IRMutator {
             new_extents.emplace_back(vv.lanes);
         }
 
-        for (size_t i = 0; i < op->extents.size(); i++) {
-            Expr extent = mutate(op->extents[i]);
+        for (const auto &e : op->extents) {
+            Expr extent = mutate(e);
             // For vector sizes, take the max over the lanes. Note
             // that we haven't changed the strides, which also may
             // vary per lane. This is a bit weird, but the way we

@@ -65,6 +65,23 @@ extern uintptr_t halide_cuda_get_device_ptr(void *user_context, struct halide_bu
  * driver. See halide_reuse_device_allocations. */
 extern int halide_cuda_release_unused_device_allocations(void *user_context);
 
+// These typedefs treat both a CUcontext and a CUstream as a void *,
+// to avoid dependencies on cuda headers.
+typedef int (*halide_cuda_acquire_context_t)(void *,   // user_context
+                                             void **,  // cuda context out parameter
+                                             bool);    // should create a context if none exist
+typedef int (*halide_cuda_release_context_t)(void * /* user_context */);
+typedef int (*halide_cuda_get_stream_t)(void *,    // user_context
+                                        void *,    // context
+                                        void **);  // stream out parameter
+
+/** Set custom methods to acquire and release cuda contexts and streams */
+// @{
+extern halide_cuda_acquire_context_t halide_set_cuda_acquire_context(halide_cuda_acquire_context_t handler);
+extern halide_cuda_release_context_t halide_set_cuda_release_context(halide_cuda_release_context_t handler);
+extern halide_cuda_get_stream_t halide_set_cuda_get_stream(halide_cuda_get_stream_t handler);
+// @}
+
 #ifdef __cplusplus
 }  // End extern "C"
 #endif

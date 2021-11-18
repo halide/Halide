@@ -5,7 +5,7 @@ using namespace Halide;
 const int tolerance = 3 * sizeof(int);
 std::vector<int> mallocs;
 
-void *my_malloc(void *user_context, size_t x) {
+void *my_malloc(JITUserContext *user_context, size_t x) {
     mallocs.push_back((int)x);
     void *orig = malloc(x + 32);
     void *ptr = (void *)((((size_t)orig + 32) >> 5) << 5);
@@ -13,13 +13,13 @@ void *my_malloc(void *user_context, size_t x) {
     return ptr;
 }
 
-void my_free(void *user_context, void *ptr) {
+void my_free(JITUserContext *user_context, void *ptr) {
     free(((void **)ptr)[-1]);
 }
 
 int main(int argc, char **argv) {
     if (get_jit_target_from_environment().arch == Target::WebAssembly) {
-        printf("[SKIP] WebAssembly JIT does not support set_custom_allocator().\n");
+        printf("[SKIP] WebAssembly JIT does not support custom allocators.\n");
         return 0;
     }
 
@@ -47,12 +47,14 @@ int main(int argc, char **argv) {
         for (size_t i = 0; i < chain.size() - 1; i++) {
             chain[i].compute_at(chain.back(), xo).store_in(MemoryType::Stack);
         }
-        chain.back().set_custom_allocator(my_malloc, my_free);
+        chain.back().jit_handlers().custom_malloc = my_malloc;
+        chain.back().jit_handlers().custom_free = my_free;
 
-        for (int sz = 8; sz <= 16; sz += 8) {
+        // Use sizes that trigger actual heap allocations
+        for (int sz = 20000; sz <= 20016; sz += 8) {
             mallocs.clear();
             p.set(sz);
-            chain.back().realize({1024});
+            chain.back().realize({sz * 4});
             int sz1 = sz + 2 * 20 - 1;
             int sz2 = sz1 - 2;
             if (mallocs.size() != 2 ||
@@ -76,7 +78,7 @@ int main(int argc, char **argv) {
         for (int i = 1; i < 20; i++) {
             Func next;
             if (i == 10) {
-                next(x) = chain.back()(x / 8);
+                next(x) = chain.back()(x / 4);
             } else {
                 next(x) = chain.back()(x - 1) + chain.back()(x + 1);
             }
@@ -90,13 +92,14 @@ int main(int argc, char **argv) {
         for (size_t i = 0; i < chain.size() - 1; i++) {
             chain[i].compute_at(chain.back(), xo).store_in(MemoryType::Stack);
         }
-        chain.back().set_custom_allocator(my_malloc, my_free);
+        chain.back().jit_handlers().custom_malloc = my_malloc;
+        chain.back().jit_handlers().custom_free = my_free;
 
-        for (int sz = 64; sz <= 128; sz += 64) {
+        for (int sz = 160000; sz <= 160128; sz += 64) {
             mallocs.clear();
             p.set(sz);
-            chain.back().realize({1024});
-            int sz1 = sz / 8 + 23;
+            chain.back().realize({sz * 4});
+            int sz1 = sz / 4 + 23;
             int sz2 = sz1 - 2;
             int sz3 = sz + 19;
             int sz4 = sz3 - 2;

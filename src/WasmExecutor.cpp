@@ -1,5 +1,13 @@
 #include "WasmExecutor.h"
 
+#include <cmath>
+#include <csignal>
+#include <cstdlib>
+#include <mutex>
+#include <sstream>
+#include <unordered_map>
+#include <vector>
+
 #include "CodeGen_Posix.h"
 #include "CodeGen_Targets.h"
 #include "Error.h"
@@ -14,23 +22,18 @@
 #include "LLVM_Runtime_Linker.h"
 #include "Target.h"
 
-#include <cmath>
-#include <csignal>
-#include <cstdlib>
-#include <mutex>
-#include <sstream>
-#include <unordered_map>
-#include <vector>
-
 #if WITH_WABT
 #include "wabt-src/src/binary-reader.h"
+#include "wabt-src/src/cast.h"
+#include "wabt-src/src/common.h"
 #include "wabt-src/src/error-formatter.h"
+#include "wabt-src/src/error.h"
 #include "wabt-src/src/feature.h"
 #include "wabt-src/src/interp/binary-reader-interp.h"
 #include "wabt-src/src/interp/interp-util.h"
-#include "wabt-src/src/interp/interp-wasi.h"
 #include "wabt-src/src/interp/interp.h"
-#include "wabt-src/src/option-parser.h"
+#include "wabt-src/src/interp/istream.h"
+#include "wabt-src/src/result.h"
 #include "wabt-src/src/stream.h"
 #endif
 
@@ -150,9 +153,9 @@ public:
         internal_assert(size <= kMaxAllocSize);
         bddebug(2) << "size -> " << size << "\n";
 
-        for (auto it = regions.begin(); it != regions.end(); it++) {
-            const uint32_t start = it->first;
-            Region &r = it->second;
+        for (auto &region : regions) {
+            const uint32_t start = region.first;
+            Region &r = region.second;
             if (!r.used && r.size >= size) {
                 bddebug(2) << "alloc @ " << start << "," << (uint32_t)r.size << "\n";
                 if (r.size > size + kAlignment) {
@@ -355,10 +358,6 @@ std::vector<char> compile_to_wasm(const Module &module, const std::string &fn_na
     return read_entire_file(wasm_output.pathname());
 }
 
-inline constexpr int halide_type_code(halide_type_code_t code, int bits) {
-    return ((int)code) | (bits << 8);
-}
-
 // dynamic_type_dispatch is a utility for functors that want to be able
 // to dynamically dispatch a halide_type_t to type-specialized code.
 // To use it, a functor must be a *templated* class, e.g.
@@ -380,10 +379,10 @@ template<template<typename> class Functor, typename... Args>
 auto dynamic_type_dispatch(const halide_type_t &type, Args &&... args) -> decltype(std::declval<Functor<uint8_t>>()(std::forward<Args>(args)...)) {
 
 #define HANDLE_CASE(CODE, BITS, TYPE)  \
-    case halide_type_code(CODE, BITS): \
+    case halide_type_t(CODE, BITS).as_u32(): \
         return Functor<TYPE>()(std::forward<Args>(args)...);
 
-    switch (halide_type_code((halide_type_code_t)type.code, type.bits)) {
+    switch (type.element_of().as_u32()) {
         HANDLE_CASE(halide_type_bfloat, 16, bfloat16_t)
         HANDLE_CASE(halide_type_float, 16, float16_t)
         HANDLE_CASE(halide_type_float, 32, float)
@@ -1011,6 +1010,21 @@ WABT_HOST_CALLBACK(memcpy) {
     return wabt::Result::Ok;
 }
 
+WABT_HOST_CALLBACK(memmove) {
+    WabtContext &wabt_context = get_wabt_context(thread);
+
+    const int32_t dst = args[0].Get<int32_t>();
+    const int32_t src = args[1].Get<int32_t>();
+    const int32_t n = args[2].Get<int32_t>();
+
+    uint8_t *base = get_wasm_memory_base(wabt_context);
+
+    memmove(base + dst, base + src, n);
+
+    results[0] = wabt::interp::Value::Make(dst);
+    return wabt::Result::Ok;
+}
+
 WABT_HOST_CALLBACK(memset) {
     WabtContext &wabt_context = get_wabt_context(thread);
 
@@ -1079,6 +1093,7 @@ const HostCallbackMap &get_host_callback_map() {
         DEFINE_CALLBACK(malloc)
         DEFINE_CALLBACK(memcmp)
         DEFINE_CALLBACK(memcpy)
+        DEFINE_CALLBACK(memmove)
         DEFINE_CALLBACK(memset)
         DEFINE_CALLBACK(strlen)
         DEFINE_CALLBACK(write)
@@ -1352,9 +1367,6 @@ WasmModuleContents::WasmModuleContents(
       trampolines(JITModule::make_trampolines_module(get_host_target(), jit_externs, kTrampolineSuffix, extern_deps)) {
 
 #if WITH_WABT
-    // TODO: we should probably move this to LLVM 12 or 13, since LLVM11 won't support SIMD usefully enough for Halide
-    user_assert(LLVM_VERSION >= 110) << "Using the WebAssembly JIT is only supported under LLVM 11+.";
-
     user_assert(!target.has_feature(Target::WasmThreads)) << "wasm_threads requires Emscripten (or a similar compiler); it will never be supported under JIT.";
 
     wdebug(1) << "Compiling wasm function " << fn_name << "\n";

@@ -23,6 +23,13 @@
 #include "Util.h"
 #include "Var.h"
 
+#ifndef DO_TRACK_BOUNDS_INTERVALS
+#define DO_TRACK_BOUNDS_INTERVALS 0
+#endif
+#ifndef DO_DUMP_BOXES_TOUCHED
+#define DO_DUMP_BOXES_TOUCHED 0
+#endif
+
 namespace Halide {
 namespace Internal {
 
@@ -130,53 +137,48 @@ public:
         }
     }
 
-private:
-#ifndef DO_TRACK_BOUNDS_INTERVALS
-#define DO_TRACK_BOUNDS_INTERVALS 0
-#endif
-
 #if DO_TRACK_BOUNDS_INTERVALS
+public:
+    int log_indent = 0;
 
-    static int &get_logging() {
-        static int do_log = 1;
-        return do_log;
+private:
+    std::string log_spaces() const {
+        return std::string(log_indent, ' ');
     }
 
-    int interval_log_indent = 0;
-
-    void log_interval(const std::string &msg) const {
-        if (get_logging()) {
-            std::string spaces(interval_log_indent, ' ');
-            debug(0) << spaces << msg << "\n"
-                     << spaces << "  mn=" << interval.min << "\n"
-                     << spaces << "  mx=" << interval.max << "\n";
-        }
-    }
-
-    void log_interval_msg(const std::string &msg) {
-        if (get_logging()) {
-            std::string spaces(interval_log_indent, ' ');
-            debug(0) << spaces << msg << "\n";
-        }
-    }
-
-    struct IntervalLogger {
-        Bounds *self;
-        std::string name;
-        IntervalLogger(Bounds *self, const char *pretty_function)
+    struct BoundsLogger final {
+        Bounds *const self;
+        BoundsLogger(Bounds *self, const char *pretty_function)
             : self(self) {
-            name = replace_all(pretty_function, "virtual void Halide::Internal::", "");
+            string name = replace_all(pretty_function, "(anonymous namespace)::", "");
+            name = replace_all(name, "virtual void Halide::Internal::", "");
             name = replace_all(name, "(const Halide::Internal::", "(");
-            self->log_interval_msg("Enter " + name);
-            self->interval_log_indent++;
+            name = replace_all(name, "::visit", "");
+            name = replace_all(name, " *)", ")");
+            log_line(name, " {");
+            self->log_indent++;
         }
-        ~IntervalLogger() {
-            self->interval_log_indent--;
-            self->log_interval("Exit  " + name);
+
+        template<typename... Args>
+        void log_line(Args &&...args) {
+            debug(0) << self->log_spaces();
+            // C++17 right fold
+            (debug(0) << ... << args) << "\n";
+        }
+
+        ~BoundsLogger() {
+            log_line("mn=", self->interval.min);
+            log_line("mx=", self->interval.max);
+            self->log_indent--;
+            log_line('}');
         }
     };
 
-#define TRACK_BOUNDS_INTERVAL IntervalLogger log_me_here_(this, __PRETTY_FUNCTION__)
+#define TRACK_BOUNDS_INTERVAL BoundsLogger log_me_here_(this, __PRETTY_FUNCTION__)
+#define TRACK_BOUNDS_INFO(...)              \
+    do {                                    \
+        log_me_here_.log_line(__VA_ARGS__); \
+    } while (0)
 
 #else
 
@@ -184,8 +186,13 @@ private:
     do {                      \
     } while (0)
 
-#endif
+#define TRACK_BOUNDS_INFO(...) \
+    do {                       \
+    } while (0)
 
+#endif  // DO_TRACK_BOUNDS_INTERVALS
+
+private:
     // Compute the intrinsic bounds of a function.
     void bounds_of_func(const string &name, int value_index, Type t) {
         // if we can't get a good bound from the function, fall back to the bounds of the type.
@@ -348,6 +355,8 @@ private:
 
     void visit(const Variable *op) override {
         TRACK_BOUNDS_INTERVAL;
+        TRACK_BOUNDS_INFO("name:", op->name);
+
         if (const_bound) {
             bounds_of_type(op->type);
             if (scope.contains(op->name)) {
@@ -1089,6 +1098,7 @@ private:
 
     void visit(const Call *op) override {
         TRACK_BOUNDS_INTERVAL;
+        TRACK_BOUNDS_INFO("name:", op->name);
         // Tags are hints that don't affect the results of the expression,
         // and can be very deeply nested in the case of strict_float. The
         // bounds of this call are *always* exactly that of its first argument,
@@ -1631,13 +1641,23 @@ private:
     }
 };
 
-}  // namespace
-
-Interval bounds_of_expr_in_scope(const Expr &expr, const Scope<Interval> &scope, const FuncValueBounds &fb, bool const_bound) {
-    //debug(3) << "computing bounds_of_expr_in_scope " << expr << "\n";
+// Version that exposes 'indent' is for internal use only
+Interval bounds_of_expr_in_scope_with_indent(const Expr &expr, const Scope<Interval> &scope, const FuncValueBounds &fb, bool const_bound, int indent) {
+#if DO_TRACK_BOUNDS_INTERVALS
+    const string spaces(indent, ' ');
+    debug(0) << spaces << "BoundsOfExprInScope {\n"
+             << spaces << " expr: " << expr << "\n";
+#endif
     Bounds b(&scope, fb, const_bound);
+#if DO_TRACK_BOUNDS_INTERVALS
+    b.log_indent = indent + 1;
+#endif
     expr.accept(&b);
-    //debug(3) << "bounds_of_expr_in_scope " << expr << " = " << simplify(b.interval.min) << ", " << simplify(b.interval.max) << "\n";
+#if DO_TRACK_BOUNDS_INTERVALS
+    debug(0) << spaces << " mn=" << simplify(b.interval.min) << "\n"
+             << spaces << " mx=" << simplify(b.interval.max) << "\n"
+             << spaces << "}\n";
+#endif
     Type expected = expr.type().element_of();
     if (b.interval.has_lower_bound()) {
         internal_assert(b.interval.min.type() == expected)
@@ -1654,6 +1674,12 @@ Interval bounds_of_expr_in_scope(const Expr &expr, const Scope<Interval> &scope,
     return b.interval;
 }
 
+}  // namespace
+
+Interval bounds_of_expr_in_scope(const Expr &expr, const Scope<Interval> &scope, const FuncValueBounds &fb, bool const_bound) {
+    return bounds_of_expr_in_scope_with_indent(expr, scope, fb, const_bound, 0);
+}
+
 Region region_union(const Region &a, const Region &b) {
     internal_assert(a.size() == b.size()) << "Mismatched dimensionality in region union\n";
     Region result;
@@ -1664,7 +1690,6 @@ Region region_union(const Region &a, const Region &b) {
         Expr max_plus_one = Max::make(max_a, max_b);
         Expr extent = max_plus_one - min;
         result.push_back(Range(simplify(min), simplify(extent)));
-        //result.push_back(Range(min, extent));
     }
     return result;
 }
@@ -1884,10 +1909,30 @@ class SolveIfThenElse : public IRMutator {
     }
 
     Stmt visit(const LetStmt *op) override {
-        push_var(op->name);
-        Stmt stmt = IRMutator::visit(op);
-        pop_var(op->name);
-        return stmt;
+        Stmt orig = op;
+        vector<const LetStmt *> frames;
+        Stmt body;
+        do {
+            frames.push_back(op);
+            push_var(op->name);
+            body = op->body;
+            op = body.as<LetStmt>();
+        } while (op);
+
+        Stmt s = mutate(body);
+
+        if (s.same_as(body)) {
+            for (auto it = frames.rbegin(); it != frames.rend(); it++) {
+                pop_var((*it)->name);
+            }
+            return orig;
+        } else {
+            for (auto it = frames.rbegin(); it != frames.rend(); it++) {
+                pop_var((*it)->name);
+                s = LetStmt::make((*it)->name, (*it)->value, s);
+            }
+            return s;
+        }
     }
 
     Stmt visit(const For *op) override {
@@ -1945,6 +1990,133 @@ public:
     }
 
     map<string, Box> boxes;
+
+#if DO_TRACK_BOUNDS_INTERVALS
+private:
+    int log_indent = 0;
+
+    HALIDE_ALWAYS_INLINE
+    Interval bounds_of_expr_in_scope(const Expr &expr,
+                                     const Scope<Interval> &scope,
+                                     const FuncValueBounds &func_bounds = empty_func_value_bounds(),
+                                     bool const_bound = false) {
+        return bounds_of_expr_in_scope_with_indent(expr, scope, func_bounds, const_bound, log_indent);
+    }
+
+    std::string log_spaces() const {
+        return std::string(log_indent, ' ');
+    }
+
+    struct BoxesTouchedLogger final {
+        BoxesTouched *const self;
+        BoxesTouchedLogger *const parent_logger;
+        map<string, Box> boxes;
+
+        template<typename... Args>
+        void log_line(Args &&...args) {
+            debug(0) << self->log_spaces();
+            // C++17 right fold
+            (debug(0) << ... << args) << "\n";
+        }
+
+        BoxesTouchedLogger(BoxesTouched *self, const char *pretty_function)
+            : self(self), parent_logger(self->current_logger), boxes(self->boxes) {
+            string name = replace_all(pretty_function, "(anonymous namespace)::", "");
+            name = replace_all(name, "virtual void Halide::Internal::", "");
+            name = replace_all(name, "(const Halide::Internal::", "(");
+            name = replace_all(name, "::visit", "");
+            name = replace_all(name, " *)", ")");
+
+            if (self->consider_calls && !self->consider_provides) {
+                name = replace_all(name, "BoxesTouched", "BoxesRequired");
+            } else if (!self->consider_calls && self->consider_provides) {
+                name = replace_all(name, "BoxesTouched", "BoxesProvided");
+            }
+
+            log_line(name, " {");
+            self->log_indent++;
+            self->current_logger = this;
+        }
+
+        static bool boxes_equal(const Box &a, const Box &b) {
+            if (!equal(a.used, b.used)) {
+                return false;
+            }
+            if (a.bounds.size() != b.bounds.size()) {
+                return false;
+            }
+            for (size_t i = 0; i < a.bounds.size(); i++) {
+                if (!equal(a.bounds[i].min, a.bounds[i].min)) {
+                    return false;
+                }
+                if (!equal(a.bounds[i].max, a.bounds[i].max)) {
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        void log_box_diffs(const map<string, Box> &before, const map<string, Box> &after) {
+            const std::string spaces = self->log_spaces();
+            for (const auto &it : after) {
+                const auto &key = it.first;
+                const auto &new_box = it.second;
+                const auto old_box_it = before.find(key);
+                if (old_box_it == before.end()) {
+                    // Added.
+                    debug(0) << spaces << "Added: " << key << " = " << new_box << "\n";
+                } else {
+                    const auto &old_box = old_box_it->second;
+                    if (!boxes_equal(old_box, new_box)) {
+                        debug(0) << spaces << "Changed: " << key << " = " << old_box << " -> " << new_box << "\n";
+                    }
+                }
+            }
+        }
+
+        ~BoxesTouchedLogger() {
+            log_box_diffs(this->boxes, self->boxes);
+            self->log_indent--;
+            log_line('}');
+            internal_assert(self->current_logger == this);
+            if (parent_logger) {
+                // Propagate changes to our parent.
+                // This isn't efficient at all, but it's usually-disabled debugging code.
+                for (const auto &it : self->boxes) {
+                    parent_logger->boxes[it.first] = it.second;
+                }
+            }
+            self->current_logger = parent_logger;
+        }
+    };
+
+    BoxesTouchedLogger *current_logger = nullptr;
+
+#define TRACK_BOXES_TOUCHED BoxesTouchedLogger log_me_here_(this, __PRETTY_FUNCTION__)
+#define TRACK_BOXES_TOUCHED_INFO(...)       \
+    do {                                    \
+        log_me_here_.log_line(__VA_ARGS__); \
+    } while (0)
+
+#else
+
+    HALIDE_ALWAYS_INLINE
+    Interval bounds_of_expr_in_scope(const Expr &expr,
+                                     const Scope<Interval> &scope,
+                                     const FuncValueBounds &func_bounds = empty_func_value_bounds(),
+                                     bool const_bound = false) {
+        return ::Halide::Internal::bounds_of_expr_in_scope(expr, scope, func_bounds, const_bound);
+    }
+
+#define TRACK_BOXES_TOUCHED \
+    do {                    \
+    } while (0)
+
+#define TRACK_BOXES_TOUCHED_INFO(...) \
+    do {                              \
+    } while (0)
+
+#endif  // DO_TRACK_BOUNDS_INTERVALS
 
 private:
     struct VarInstance {
@@ -2025,6 +2197,8 @@ private:
     }
 
     void visit(const Call *op) override {
+        TRACK_BOXES_TOUCHED;
+        TRACK_BOXES_TOUCHED_INFO("name:", op->name);
         if (op->is_intrinsic(Call::declare_box_touched)) {
             internal_assert(!op->args.empty());
             const Variable *handle = op->args[0].as<Variable>();
@@ -2297,10 +2471,14 @@ private:
     }
 
     void visit(const Let *op) override {
+        TRACK_BOXES_TOUCHED;
+        TRACK_BOXES_TOUCHED_INFO("name:", op->name);
         visit_let(op);
     }
 
     void visit(const LetStmt *op) override {
+        TRACK_BOXES_TOUCHED;
+        TRACK_BOXES_TOUCHED_INFO("name:", op->name);
         visit_let(op);
     }
 
@@ -2460,6 +2638,7 @@ private:
     }
 
     void visit(const IfThenElse *op) override {
+        TRACK_BOXES_TOUCHED;
         op->condition.accept(this);
         if (expr_uses_vars(op->condition, scope)) {
             // We need to simplify the condition to get it into a
@@ -2632,6 +2811,8 @@ private:
     }
 
     void visit(const For *op) override {
+        TRACK_BOXES_TOUCHED;
+        TRACK_BOXES_TOUCHED_INFO("var:", op->name);
         if (consider_calls) {
             op->min.accept(this);
             op->extent.accept(this);
@@ -2661,6 +2842,8 @@ private:
     }
 
     void visit(const Provide *op) override {
+        TRACK_BOXES_TOUCHED;
+        TRACK_BOXES_TOUCHED_INFO("name:", op->name);
         if (consider_provides) {
             if (op->name == func || func.empty()) {
                 if (!is_const_one(op->predicate)) {
@@ -2679,16 +2862,18 @@ private:
         }
 
         if (consider_calls) {
-            for (size_t i = 0; i < op->args.size(); i++) {
-                op->args[i].accept(this);
+            for (const auto &arg : op->args) {
+                arg.accept(this);
             }
-            for (size_t i = 0; i < op->values.size(); i++) {
-                op->values[i].accept(this);
+            for (const auto &value : op->values) {
+                value.accept(this);
             }
         }
     }
 
     void visit(const ProducerConsumer *op) override {
+        TRACK_BOXES_TOUCHED;
+        TRACK_BOXES_TOUCHED_INFO("name:", op->name);
         if (op->is_producer && (op->name == func || func.empty())) {
             ScopedValue<bool> save_in_producer(in_producer, true);
             IRGraphVisitor::visit(op);
@@ -2736,6 +2921,41 @@ map<string, Box> boxes_touched(const Expr &e, Stmt s, bool consider_calls, bool 
                     relevant = true;
                 }
                 return op;
+            }
+
+            Stmt visit(const LetStmt *op) override {
+                // Walk eagerly through an entire let chain and either
+                // accept or reject all of them, not worrying about
+                // the case where some outer lets are relevant and
+                // some inner lets are not.
+                vector<const LetStmt *> frames;
+                Stmt orig = op;
+                Stmt body;
+                do {
+                    // Visit the value just to check relevance. We
+                    // don't expect Exprs to be mutated, so no need to
+                    // keep the result.
+                    mutate(op->value);
+                    frames.push_back(op);
+                    body = op->body;
+                    op = body.as<LetStmt>();
+                } while (op);
+
+                Stmt s = mutate(body);
+
+                if (s.same_as(body)) {
+                    return orig;
+                } else if (!relevant) {
+                    // All the lets were irrelevant and so was the body
+                    internal_assert(s.same_as(no_op));
+                    return s;
+                } else {
+                    // Rewrap the lets around the mutated body
+                    for (auto it = frames.rbegin(); it != frames.rend(); it++) {
+                        s = LetStmt::make((*it)->name, (*it)->value, s);
+                    }
+                    return s;
+                }
             }
 
         public:
@@ -2789,6 +3009,39 @@ map<string, Box> boxes_touched(const Expr &e, Stmt s, bool consider_calls, bool 
             s.accept(&provides);
         }
     }
+
+#if DO_DUMP_BOXES_TOUCHED
+    if (consider_calls && consider_provides) {
+        debug(0) << "boxes_touched:\n";
+    } else if (consider_calls && !consider_provides) {
+        debug(0) << "boxes_required:\n";
+    } else if (!consider_calls && consider_provides) {
+        debug(0) << "boxes_provided:\n";
+    } else {
+        internal_error;
+    }
+
+    for (const auto &it : calls.boxes) {
+        debug(0) << "calls.boxes[" << it.first << "] ->:\n";
+        for (size_t j = 0; j < it.second.size(); j++) {
+            debug(0) << "  " << j << ": " << it.second[j].min
+                     << " .. "
+                     << it.second[j].max
+                     << "\n";
+        }
+    }
+
+    for (const auto &it : provides.boxes) {
+        debug(0) << "provides.boxes[" << it.first << "] ->:\n";
+        for (size_t j = 0; j < it.second.size(); j++) {
+            debug(0) << "  " << j << ": " << it.second[j].min
+                     << " .. "
+                     << it.second[j].max
+                     << "\n";
+        }
+    }
+#endif  // DO_DUMP_BOXES_TOUCHED
+
     if (!consider_calls) {
         return provides.boxes;
     }
@@ -2888,8 +3141,8 @@ FuncValueBounds compute_function_value_bounds(const vector<string> &order,
                                               const map<string, Function> &env) {
     FuncValueBounds fb;
 
-    for (size_t i = 0; i < order.size(); i++) {
-        Function f = env.find(order[i])->second;
+    for (const auto &func_name : order) {
+        Function f = env.find(func_name)->second;
         const vector<string> f_args = f.args();
         for (int j = 0; j < f.outputs(); j++) {
             pair<string, int> key = {f.name(), j};
@@ -2931,7 +3184,7 @@ FuncValueBounds compute_function_value_bounds(const vector<string> &order,
             }
 
             debug(2) << "Bounds on value " << j
-                     << " for func " << order[i]
+                     << " for func " << func_name
                      << " are: " << result.min << ", " << result.max << "\n";
         }
     }

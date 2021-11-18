@@ -108,6 +108,9 @@ Arguments:
 
 Flags:
 
+    --help:
+        print this message and exit.
+
     --describe:
         print names and types of all arguments to stdout and exit.
 
@@ -325,6 +328,13 @@ int main(int argc, char **argv) {
             std::vector<std::string> v = split_string(p, "=");
             std::string flag_name = v[0];
             std::string flag_value = v.size() > 1 ? v[1] : "";
+            // Check for the help flag early so that it takes
+            // precedence over other errors that occur before full
+            // argument parsing.
+            if (flag_name == "help") {
+                usage(argv[0]);
+                return 0;
+            }
             if (v.size() > 2) {
                 fail() << "Invalid argument: " << argv[i];
             }
@@ -510,7 +520,10 @@ int main(int argc, char **argv) {
 
     // This is a single-purpose binary to benchmark this filter, so we
     // shouldn't be eagerly returning device memory.
-    halide_reuse_device_allocations(nullptr, true);
+    int result = halide_reuse_device_allocations(nullptr, true);
+    if (result != 0) {
+        std::cerr << "halide_reuse_device_allocations() returned an error: " << result << "\n";
+    }
 
     if (benchmark) {
         if (benchmarks_flag_value.empty()) {

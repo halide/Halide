@@ -2,49 +2,74 @@
 
 set -e
 
-HANNK_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
-BUILD_DIR="${HANNK_DIR}/build"
+die() {
+  echo "$@"
+  exit 1
+}
 
-mkdir -p "${BUILD_DIR}"
-cd "${BUILD_DIR}"
+HANNK_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
 
-if [ -z ${HALIDE_INSTALL_PATH} ]; then
-HALIDE_INSTALL_PATH=${HOME}/halide-13-install/
-fi
-echo Using HalideInstall=${HALIDE_INSTALL_PATH}
+# Set variable default values
+: "${BUILD_DIR:=${HANNK_DIR}/build}"
+: "${HALIDE_INSTALL_PATH:=${HOME}/halide-14-install}"
+: "${HL_TARGET:=host}"
+: "${CMAKE_GENERATOR:=Ninja}"
+: "${CMAKE_BUILD_TYPE:=Release}"
 
-if [ -z ${HL_TARGET} ]; then
-HL_TARGET=host
-fi
-echo Using HL_TARGET=${HL_TARGET}
+# Validate HALIDE_INSTALL_PATH (too brittle without the check)
+[ -d "${HALIDE_INSTALL_PATH}" ] || die "HALIDE_INSTALL_PATH must point to a directory"
 
-if [ -z "${CMAKE_GENERATOR}" ]; then
-CMAKE_GENERATOR=Ninja
-fi
-echo Using build tool=${CMAKE_GENERATOR}
+# Default options for host-only build.
+SOURCE_DIR="${HANNK_DIR}"
+CMAKE_DEFS=(
+  -DCMAKE_BUILD_TYPE="${CMAKE_BUILD_TYPE}"
+  -DHalide_DIR="${HALIDE_INSTALL_PATH}/lib/cmake/Halide"
+  -DHalideHelpers_DIR="${HALIDE_INSTALL_PATH}/lib/cmake/HalideHelpers"
+  -DHalide_TARGET="${HL_TARGET}"
+)
 
-if [ -z "${CMAKE_BUILD_TYPE}" ]; then
-CMAKE_BUILD_TYPE=Release
-fi
-echo Using CMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}
+# Ask the provided Halide install for the host target
+HL_HOST_TARGET="host"
+get_host_target="${HALIDE_INSTALL_PATH}/bin/get_host_target"
+[ -x "${get_host_target}" ] && HL_HOST_TARGET="$("${get_host_target}" | cut -d- -f1-3)"
 
-EXTRAS=
-# TODO: this doesn't work (yet); crosscompiling in CMake is painful.
-if [[ "${HL_TARGET}" =~ ^arm-64-android.* ]]; then
-echo Configuring for Android arm64-v8a build...
-echo Using ANDROID_NDK_ROOT=${ANDROID_NDK_ROOT}
-EXTRAS="-DCMAKE_TOOLCHAIN_FILE=${ANDROID_NDK_ROOT}/build/cmake/android.toolchain.cmake -DANDROID_ABI=arm64-v8a"
-else
-echo Assuming host build...
+# Cross compile when HL_TARGET does not match the host target.
+if [[ ! "${HL_TARGET}" =~ ^host*|${HL_HOST_TARGET}* ]]; then
+  SOURCE_DIR="${HANNK_DIR}/cmake/superbuild"
+  CMAKE_DEFS=(
+    "${CMAKE_DEFS[@]}"
+    -DHANNK_HOST_Halide_DIR="${HALIDE_INSTALL_PATH}/lib/cmake/Halide"
+    -DHANNK_HOST_HalideHelpers_DIR="${HALIDE_INSTALL_PATH}/lib/cmake/HalideHelpers"
+  )
+
+  # Special settings for cross-compiling targets with known quirks
+  if [[ "${HL_TARGET}" =~ ^arm-64-android.* ]]; then
+    : "${ANDROID_PLATFORM:=21}"
+    [ -d "${ANDROID_NDK_ROOT}" ] || die "Must set ANDROID_NDK_ROOT"
+
+    CMAKE_DEFS=(
+      "${CMAKE_DEFS[@]}"
+      -DHANNK_CROSS_CMAKE_TOOLCHAIN_FILE="${ANDROID_NDK_ROOT}/build/cmake/android.toolchain.cmake"
+      -DANDROID_ABI=arm64-v8a
+      -DANDROID_PLATFORM="${ANDROID_PLATFORM}"
+      # Required because TFLite's internal Eigen tries to compile an unnecessary BLAS with the system Fortran compiler.
+      -DCMAKE_Fortran_COMPILER=NO
+    )
+  elif [[ "${HL_TARGET}" =~ ^wasm-32-wasmrt.* ]]; then
+    [ -d "${EMSDK}" ] || die "Must set EMSDK"
+    [ -x "${NODE_JS_EXECUTABLE}" ] || die "Must set NODE_JS_EXECUTABLE (version 16.13+ required)"
+
+    CMAKE_DEFS=(
+      "${CMAKE_DEFS[@]}"
+      -DHANNK_CROSS_CMAKE_TOOLCHAIN_FILE="${EMSDK}/upstream/emscripten/cmake/Modules/Platform/Emscripten.cmake"
+      -DNODE_JS_EXECUTABLE="${NODE_JS_EXECUTABLE}"
+    )
+  fi
 fi
 
 cmake \
-  ${EXTRAS} \
   -G "${CMAKE_GENERATOR}" \
-  -DCMAKE_BUILD_TYPE="${CMAKE_BUILD_TYPE}" \
-  -DHalide_DIR="${HALIDE_INSTALL_PATH}" \
-  -DCMAKE_PREFIX_PATH="${HALIDE_INSTALL_PATH}" \
-  -DHalide_TARGET=${HL_TARGET} \
-  -S "${HANNK_DIR}" \
-  -B "${BUILD_DIR}"
-
+  -S "${SOURCE_DIR}" \
+  -B "${BUILD_DIR}" \
+  "${CMAKE_DEFS[@]}" \
+  "$@"

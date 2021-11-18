@@ -914,6 +914,12 @@ private:
     }
 
     Expr visit(const Call *op) override {
+        if (op->is_intrinsic(Call::if_then_else) && op->args[0].type().is_vector()) {
+            const Broadcast *b = op->args[0].as<Broadcast>();
+            if (!b || b->value.type().is_vector()) {
+                return op;
+            }
+        }
         if (op->is_intrinsic(Call::widening_add)) {
             Expr mpyadds = find_mpyadds(Add::make(cast(op->type, op->args[0]), cast(op->type, op->args[1])));
             if (mpyadds.defined()) {
@@ -1071,6 +1077,16 @@ class VectorReducePatterns : public IRMutator {
             return true;
         }
         return false;
+    }
+
+    Expr visit(const Call *op) override {
+        if (op->is_intrinsic(Call::if_then_else) && op->args[0].type().is_vector()) {
+            const Broadcast *b = op->args[0].as<Broadcast>();
+            if (!b || b->value.type().is_vector()) {
+                return op;
+            }
+        }
+        return IRMutator::visit(op);
     }
 
     Expr visit(const VectorReduce *op) override {
@@ -1950,6 +1966,16 @@ class OptimizeShuffles : public IRMutator {
 
     using IRMutator::visit;
 
+    Expr visit(const Call *op) override {
+        if (op->is_intrinsic(Call::if_then_else) && op->args[0].type().is_vector()) {
+            const Broadcast *b = op->args[0].as<Broadcast>();
+            if (!b || b->value.type().is_vector()) {
+                return op;
+            }
+        }
+        return IRMutator::visit(op);
+    }
+
     template<typename NodeType, typename T>
     NodeType visit_let(const T *op) {
         // We only care about vector lets.
@@ -2174,6 +2200,16 @@ class ScatterGatherGenerator : public IRMutator {
 
     using IRMutator::visit;
 
+    Expr visit(const Call *op) override {
+        if (op->is_intrinsic(Call::if_then_else) && op->args[0].type().is_vector()) {
+            const Broadcast *b = op->args[0].as<Broadcast>();
+            if (!b || b->value.type().is_vector()) {
+                return op;
+            }
+        }
+        return IRMutator::visit(op);
+    }
+
     template<typename NodeType, typename T>
     NodeType visit_let(const T *op) {
         // We only care about vector lets.
@@ -2233,8 +2269,8 @@ class ScatterGatherGenerator : public IRMutator {
         }
         // Calculate the size of the buffer lut in bytes.
         Expr size = ty.bytes();
-        for (size_t i = 0; i < alloc->extents.size(); i++) {
-            size *= alloc->extents[i];
+        for (const auto &extent : alloc->extents) {
+            size *= extent;
         }
         Expr src = Variable::make(Handle(), op->name);
         Expr new_index = mutate(cast(ty.with_code(Type::Int), index));
@@ -2291,8 +2327,8 @@ class ScatterGatherGenerator : public IRMutator {
         }
         // Calculate the size of the buffer in bytes.
         Expr size = ty.bytes();
-        for (size_t i = 0; i < alloc->extents.size(); i++) {
-            size *= alloc->extents[i];
+        for (const auto &extent : alloc->extents) {
+            size *= extent;
         }
         // Check for scatter-acc.
         Expr value = is_scatter_acc(op);

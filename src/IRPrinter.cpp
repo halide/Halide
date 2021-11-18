@@ -135,6 +135,9 @@ std::ostream &operator<<(std::ostream &out, const MemoryType &t) {
     case MemoryType::VTCM:
         out << "VTCM";
         break;
+    case MemoryType::AMXTile:
+        out << "AMXTile";
+        break;
     }
     return out;
 }
@@ -444,8 +447,7 @@ void IRPrinter::visit(const FloatImm *op) {
 
 void IRPrinter::visit(const StringImm *op) {
     stream << "\"";
-    for (size_t i = 0; i < op->value.size(); i++) {
-        unsigned char c = op->value[i];
+    for (unsigned char c : op->value) {
         if (c >= ' ' && c <= '~' && c != '\\' && c != '"') {
             stream << c;
         } else {
@@ -840,9 +842,9 @@ void IRPrinter::visit(const Provide *op) {
 void IRPrinter::visit(const Allocate *op) {
     ScopedBinding<> bind(known_type, op->name);
     stream << get_indent() << "allocate " << op->name << "[" << op->type;
-    for (size_t i = 0; i < op->extents.size(); i++) {
+    for (const auto &extent : op->extents) {
         stream << " * ";
-        print(op->extents[i]);
+        print(extent);
     }
     stream << "]";
     if (op->memory_type != MemoryType::Auto) {
@@ -911,7 +913,7 @@ void IRPrinter::visit(const Prefetch *op) {
         indent++;
         stream << get_indent();
     }
-    stream << "prefetch " << op->name << "(";
+    stream << "prefetch " << op->name << ", " << op->prefetch.at << ", " << op->prefetch.from << ", (";
     for (size_t i = 0; i < op->bounds.size(); i++) {
         stream << "[";
         print_no_parens(op->bounds[i].min);

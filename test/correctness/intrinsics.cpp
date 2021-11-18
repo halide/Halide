@@ -12,7 +12,18 @@ Expr narrow(Expr a) {
 void check(Expr test, Expr expected, Type required_type) {
     // Some of the below tests assume the simplifier has run.
     test = simplify(test);
-    Expr result = find_intrinsics(test);
+
+    // Make sure the pattern is robust to CSE. We only enforce this
+    // for types with well-defined overflow for now.
+    if (test.type().bits() < 32 || test.type().is_uint()) {
+        auto bundle = [](const Expr &e) {
+            return Call::make(e.type(), Call::bundle, {e, e}, Call::PureIntrinsic);
+        };
+        test = common_subexpression_elimination(bundle(test));
+        expected = bundle(expected);
+    }
+
+    Expr result = substitute_in_all_lets(find_intrinsics(test));
     if (!equal(result, expected) || required_type != expected.type()) {
         std::cerr << "failure!\n";
         std::cerr << "test: " << test << "\n";
@@ -101,23 +112,30 @@ void check_intrinsics_over_range() {
     }
 }
 
+Var x;
+Expr make_leaf(Type t, const char *name) {
+    return Load::make(t, name, Ramp::make(x, 1, t.lanes()),
+                      Buffer<>{}, Parameter{},
+                      const_true(t.lanes()), ModulusRemainder{});
+}
+
 int main(int argc, char **argv) {
-    Expr i8x = Variable::make(Int(8, 4), "i8x");
-    Expr i8y = Variable::make(Int(8, 4), "i8y");
-    Expr i8z = Variable::make(Int(8, 4), "i8w");
-    Expr i8w = Variable::make(Int(8, 4), "i8z");
-    Expr u8x = Variable::make(UInt(8, 4), "u8x");
-    Expr u8y = Variable::make(UInt(8, 4), "u8y");
-    Expr u8z = Variable::make(UInt(8, 4), "u8w");
-    Expr u8w = Variable::make(UInt(8, 4), "u8z");
-    Expr u32x = Variable::make(UInt(32, 4), "u32x");
-    Expr u32y = Variable::make(UInt(32, 4), "u32y");
-    Expr i32x = Variable::make(Int(32, 4), "i32x");
-    Expr i32y = Variable::make(Int(32, 4), "i32y");
-    Expr f16x = Variable::make(Float(16, 4), "f16x");
-    Expr f16y = Variable::make(Float(16, 4), "f16y");
-    Expr f32x = Variable::make(Float(32, 4), "f32x");
-    Expr f32y = Variable::make(Float(32, 4), "f32y");
+    Expr i8x = make_leaf(Int(8, 4), "i8x");
+    Expr i8y = make_leaf(Int(8, 4), "i8y");
+    Expr i8z = make_leaf(Int(8, 4), "i8w");
+    Expr i8w = make_leaf(Int(8, 4), "i8z");
+    Expr u8x = make_leaf(UInt(8, 4), "u8x");
+    Expr u8y = make_leaf(UInt(8, 4), "u8y");
+    Expr u8z = make_leaf(UInt(8, 4), "u8w");
+    Expr u8w = make_leaf(UInt(8, 4), "u8z");
+    Expr u32x = make_leaf(UInt(32, 4), "u32x");
+    Expr u32y = make_leaf(UInt(32, 4), "u32y");
+    Expr i32x = make_leaf(Int(32, 4), "i32x");
+    Expr i32y = make_leaf(Int(32, 4), "i32y");
+    Expr f16x = make_leaf(Float(16, 4), "f16x");
+    Expr f16y = make_leaf(Float(16, 4), "f16y");
+    Expr f32x = make_leaf(Float(32, 4), "f32x");
+    Expr f32y = make_leaf(Float(32, 4), "f32y");
 
     // Check powers of two multiply/divide rewritten to shifts.
     check(i8x * 2, i8x << 1);
@@ -127,7 +145,7 @@ int main(int argc, char **argv) {
 
     check(i16(i8x) * 4096, widening_shift_left(i8x, 12));
     check(u16(u8x) * 128, widening_shift_left(u8x, 7));
-    //check(u32(u8x) * 256, u32(widening_shift_left(u8x, u8(8))));
+    // check(u32(u8x) * 256, u32(widening_shift_left(u8x, u8(8))));
 
     // Check widening arithmetic
     check(i16(i8x) + i8y, widening_add(i8x, i8y));
@@ -295,6 +313,39 @@ int main(int argc, char **argv) {
     check_intrinsics_over_range<uint16_t>();
     check_intrinsics_over_range<int32_t>();
     check_intrinsics_over_range<uint32_t>();
+
+    // The intrinsics-matching pass substitutes in widening lets. At
+    // one point this caused a missing symbol bug for the code below
+    // due to a subexpression not getting mutated.
+    {
+        Func f, g;
+        Var x;
+        Param<uint8_t> d;
+
+        f(x) = cast<uint8_t>(x);
+        f.compute_root();
+
+        // We want a widening let that uses a load that uses a widening let
+
+        // Widen it, but in a way that won't result in the cast being
+        // substituted in by the simplifier. We want it to only be
+        // substituted when we reach the intrinsics-matching pass.
+        Expr widened = absd(cast<uint16_t>(f(x)), cast<uint16_t>(d));
+
+        // Now use it in a load, twice, so that CSE pulls it out as a let.
+        Expr lut = f(cast<int32_t>(widened * widened));
+
+        // Now use that in another widening op...
+        Expr widened2 = absd(cast<uint16_t>(lut), cast<uint16_t>(d));
+
+        // ...which we will use twice so that CSE makes it another let.
+        g(x) = widened2 * widened2;
+
+        g.vectorize(x, 8);
+
+        // This used to crash with a missing symbol error
+        g.compile_jit();
+    }
 
     printf("Success!\n");
     return 0;

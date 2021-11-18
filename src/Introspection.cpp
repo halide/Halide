@@ -17,6 +17,7 @@
 
 #include <cstdio>
 #include <iostream>
+#include <map>
 #include <sstream>
 #include <string>
 
@@ -77,7 +78,7 @@ class DebugSections {
         EntryFormat() = default;
         vector<FieldFormat> fields;
     };
-    vector<EntryFormat> entry_formats;
+    map<uint64_t, EntryFormat> entry_formats;
 
     struct LiveRange {
         uint64_t pc_begin, pc_end;
@@ -227,11 +228,11 @@ public:
         bool found = false;
         uint64_t pc_real = (uint64_t)fn;
         int64_t pc_adjust = 0;
-        for (size_t i = 0; i < functions.size(); i++) {
-            if (functions[i].name == "HalideIntrospectionCanary::offset_marker" &&
-                functions[i].pc_begin) {
+        for (auto &function : functions) {
+            if (function.name == "HalideIntrospectionCanary::offset_marker" &&
+                function.pc_begin) {
 
-                uint64_t pc_debug = functions[i].pc_begin;
+                uint64_t pc_debug = function.pc_begin;
 
                 if (calibrated) {
                     // If we're already calibrated, we should find a function with a matching pc
@@ -268,25 +269,23 @@ public:
 
         debug(5) << "Program counter adjustment between debug info and actual code: " << pc_adjust << "\n";
 
-        for (size_t i = 0; i < functions.size(); i++) {
-            FunctionInfo &f = functions[i];
+        for (auto &f : functions) {
             f.pc_begin += pc_adjust;
             f.pc_end += pc_adjust;
-            for (size_t j = 0; j < f.variables.size(); j++) {
-                LocalVariable &v = f.variables[j];
-                for (size_t k = 0; k < v.live_ranges.size(); k++) {
-                    v.live_ranges[k].pc_begin += pc_adjust;
-                    v.live_ranges[k].pc_end += pc_adjust;
+            for (auto &v : f.variables) {
+                for (auto &live_range : v.live_ranges) {
+                    live_range.pc_begin += pc_adjust;
+                    live_range.pc_end += pc_adjust;
                 }
             }
         }
 
-        for (size_t i = 0; i < source_lines.size(); i++) {
-            source_lines[i].pc += pc_adjust;
+        for (auto &source_line : source_lines) {
+            source_line.pc += pc_adjust;
         }
 
-        for (size_t i = 0; i < global_variables.size(); i++) {
-            global_variables[i].addr += pc_adjust;
+        for (auto &global_variable : global_variables) {
+            global_variable.addr += pc_adjust;
         }
 
         calibrated = true;
@@ -430,8 +429,7 @@ public:
         heap_object.addr = (uint64_t)obj;
 
         // Recursively enumerate the members.
-        for (size_t i = 0; i < object_type->members.size(); i++) {
-            const LocalVariable &member_spec = object_type->members[i];
+        for (auto &member_spec : object_type->members) {
             HeapObject::Member member;
             member.name = member_spec.name;
             member.type = member_spec.type;
@@ -489,9 +487,8 @@ public:
         std::stable_sort(heap_object.members.begin(), heap_object.members.end());
 
         debug(5) << "Children of heap object of type " << object_type->name << " at " << obj << ":\n";
-        for (size_t i = 0; i < heap_object.members.size(); i++) {
-            const HeapObject::Member &mem = heap_object.members[i];
-            debug(5) << std::hex << mem.addr << std::dec << ": " << mem.type->name << " " << mem.name << "\n";
+        for (auto &member : heap_object.members) {
+            debug(5) << std::hex << member.addr << std::dec << ": " << member.type->name << " " << member.name << "\n";
         }
 
         heap_objects[heap_object.addr] = heap_object;
@@ -535,29 +532,29 @@ public:
         std::regex re(type_name);
 
         // Look in the members for the appropriate offset.
-        for (size_t i = 0; i < obj.members.size(); i++) {
-            TypeInfo *t = obj.members[i].type;
+        for (const auto &member : obj.members) {
+            TypeInfo *t = member.type;
 
             if (!t) {
                 continue;
             }
 
-            debug(5) << "Comparing to member " << obj.members[i].name
-                     << " at address " << std::hex << obj.members[i].addr << std::dec
+            debug(5) << "Comparing to member " << member.name
+                     << " at address " << std::hex << member.addr << std::dec
                      << " with type " << t->name
                      << " and type type " << (int)t->type << "\n";
 
-            if (obj.members[i].addr == addr &&
+            if (member.addr == addr &&
                 (type_name.empty() ||
                  regex_match(t->name, re))) {
-                name << obj.members[i].name;
+                name << member.name;
                 return name.str();
             }
 
             // For arrays, we only unpacked the first element.
             if (t->type == TypeInfo::Array) {
                 TypeInfo *elem_type = t->members[0].type;
-                uint64_t array_start_addr = obj.members[i].addr;
+                uint64_t array_start_addr = member.addr;
                 uint64_t array_end_addr = array_start_addr + t->size * elem_type->size;
                 debug(5) << "Array runs from " << std::hex << array_start_addr << " to " << array_end_addr << "\n";
                 if (elem_type && addr >= array_start_addr && addr < array_end_addr) {
@@ -568,17 +565,17 @@ public:
                     addr -= containing_elem * elem_type->size;
                     debug(5) << "Query belongs to this array. Adjusting query address backwards to "
                              << std::hex << addr << std::dec << "\n";
-                    name << obj.members[i].name << "[" << containing_elem << "]";
+                    name << member.name << "[" << containing_elem << "]";
                 }
             } else if (t->type == TypeInfo::Struct ||
                        t->type == TypeInfo::Class ||
                        t->type == TypeInfo::Primitive) {
                 // If I'm not this member, but am contained within it, incorporate its name.
-                uint64_t struct_start_addr = obj.members[i].addr;
+                uint64_t struct_start_addr = member.addr;
                 uint64_t struct_end_addr = struct_start_addr + t->size;
                 debug(5) << "Struct runs from " << std::hex << struct_start_addr << " to " << struct_end_addr << "\n";
                 if (addr >= struct_start_addr && addr < struct_end_addr) {
-                    name << obj.members[i].name << ".";
+                    name << member.name << ".";
                 }
             }
         }
@@ -680,16 +677,15 @@ public:
 
         std::regex re(type_name);
 
-        for (size_t j = 0; j < func->variables.size(); j++) {
-            const LocalVariable &var = func->variables[j];
+        for (auto &var : func->variables) {
             debug(5) << "Var " << var.name << " is at offset " << var.stack_offset << "\n";
 
             // Reject it if we're not in its live ranges
             if (!var.live_ranges.empty()) {
                 bool in_live_range = false;
-                for (size_t i = 0; i < var.live_ranges.size(); i++) {
-                    if (pc >= var.live_ranges[i].pc_begin &&
-                        pc < var.live_ranges[i].pc_end) {
+                for (auto live_range : var.live_ranges) {
+                    if (pc >= live_range.pc_begin &&
+                        pc < live_range.pc_end) {
                         in_live_range = true;
                         break;
                     }
@@ -830,35 +826,33 @@ public:
 
     void dump() {
         // Dump all the types
-        for (size_t i = 0; i < types.size(); i++) {
+        for (auto &type : types) {
             printf("Class %s of size %llu @ %llx: \n",
-                   types[i].name.c_str(),
-                   (unsigned long long)(types[i].size),
-                   (unsigned long long)(types[i].def_loc));
-            for (size_t j = 0; j < types[i].members.size(); j++) {
-                TypeInfo *c = types[i].members[j].type;
+                   type.name.c_str(),
+                   (unsigned long long)(type.size),
+                   (unsigned long long)(type.def_loc));
+            for (auto &member : type.members) {
+                TypeInfo *c = member.type;
                 const char *type_name = "(unknown)";
                 if (c) {
                     type_name = c->name.c_str();
                 }
                 printf("  Member %s at %d of type %s @ %llx\n",
-                       types[i].members[j].name.c_str(),
-                       types[i].members[j].stack_offset,
+                       member.name.c_str(),
+                       member.stack_offset,
                        type_name,
-                       (long long unsigned)types[i].members[j].type_def_loc);
+                       (long long unsigned)member.type_def_loc);
             }
         }
 
         // Dump all the functions and their local variables
-        for (size_t i = 0; i < functions.size(); i++) {
-            const FunctionInfo &f = functions[i];
+        for (auto &f : functions) {
             printf("Function %s at %llx - %llx (frame_base %d): \n",
                    f.name.c_str(),
                    (unsigned long long)(f.pc_begin),
                    (unsigned long long)(f.pc_end),
                    (int)f.frame_base);
-            for (size_t j = 0; j < f.variables.size(); j++) {
-                const LocalVariable &v = f.variables[j];
+            for (const auto &v : f.variables) {
                 TypeInfo *c = v.type;
                 const char *type_name = "(unknown)";
                 if (c) {
@@ -869,25 +863,24 @@ public:
                        v.stack_offset,
                        type_name,
                        (long long unsigned)v.type_def_loc);
-                for (size_t k = 0; k < v.live_ranges.size(); k++) {
+                for (auto live_range : v.live_ranges) {
                     printf("    Live range: %llx - %llx\n",
-                           (unsigned long long)v.live_ranges[k].pc_begin,
-                           (unsigned long long)v.live_ranges[k].pc_end);
+                           (unsigned long long)live_range.pc_begin,
+                           (unsigned long long)live_range.pc_end);
                 }
             }
         }
 
         // Dump the pc -> source file relationship
-        for (size_t i = 0; i < source_lines.size(); i++) {
+        for (auto &source_line : source_lines) {
             printf("%p -> %s:%d\n",
-                   (void *)(source_lines[i].pc),
-                   source_files[source_lines[i].file].c_str(),
-                   source_lines[i].line);
+                   (void *)(source_line.pc),
+                   source_files[source_line.file].c_str(),
+                   source_line.line);
         }
 
         // Dump the global variables
-        for (size_t i = 0; i < global_variables.size(); i++) {
-            const GlobalVariable &v = global_variables[i];
+        for (auto &v : global_variables) {
             TypeInfo *c = v.type;
             const char *type_name = "(unknown)";
             if (c) {
@@ -948,7 +941,7 @@ private:
 
     void parse_object_file(llvm::object::ObjectFile *obj) {
         // Look for the debug_info, debug_abbrev, debug_line, and debug_str sections
-        llvm::StringRef debug_info, debug_abbrev, debug_str, debug_line, debug_ranges;
+        llvm::StringRef debug_info, debug_abbrev, debug_str, debug_line, debug_line_str, debug_ranges;
 
 #ifdef __APPLE__
         std::string prefix = "__";
@@ -971,6 +964,8 @@ private:
                     debug_abbrev = *e;
                 } else if (name == prefix + "debug_str") {
                     debug_str = *e;
+                } else if (name == prefix + "debug_line_str") {
+                    debug_line_str = *e;
                 } else if (name == prefix + "debug_line") {
                     debug_line = *e;
                 } else if (name == prefix + "debug_ranges") {
@@ -984,6 +979,7 @@ private:
             debug_str.empty() ||
             debug_line.empty() ||
             debug_ranges.empty()) {
+            // It's OK for debug_line_str to be empty
             debug(2) << "Debugging sections not found\n";
             working = false;
             return;
@@ -993,7 +989,10 @@ private:
             // Parse the debug_info section to populate the functions and local variables
             llvm::DataExtractor extractor(debug_info, true, obj->getBytesInAddress());
             llvm::DataExtractor debug_abbrev_extractor(debug_abbrev, true, obj->getBytesInAddress());
-            parse_debug_info(extractor, debug_abbrev_extractor, debug_str, debug_ranges);
+            parse_debug_info(extractor, debug_abbrev_extractor, debug_str, debug_line_str, debug_ranges);
+            if (!working) {
+                return;
+            }
         }
 
         {
@@ -1027,18 +1026,19 @@ private:
                 if (!name && !form) {
                     break;
                 }
-                //printf(" name = %lu, form = %lu\n", name, form);
+                // printf(" name = %lu, form = %lu\n", name, form);
 
                 FieldFormat f_fmt(name, form);
                 fmt.fields.push_back(f_fmt);
             }
-            entry_formats.push_back(fmt);
+            entry_formats[fmt.code] = std::move(fmt);
         }
     }
 
     void parse_debug_info(const llvm::DataExtractor &e,
                           const llvm::DataExtractor &debug_abbrev,
                           llvm::StringRef debug_str,
+                          llvm::StringRef debug_line_str,
                           llvm::StringRef debug_ranges) {
         // Offset into the section
         llvm_offset_t off = 0;
@@ -1061,6 +1061,11 @@ private:
             } else {
                 dwarf_64 = false;
             }
+            // clang-format off
+            const auto parse_offset = dwarf_64 ?
+                [](const llvm::DataExtractor &e, llvm_offset_t *off) -> uint64_t { return e.getU64(off); } :
+                [](const llvm::DataExtractor &e, llvm_offset_t *off) -> uint64_t { return e.getU32(off); };
+            // clang-format on
 
             if (!unit_length) {
                 // A zero-length compilation unit indicates the end of
@@ -1071,16 +1076,35 @@ private:
             uint64_t start_of_unit = off;
 
             uint16_t dwarf_version = e.getU16(&off);
+            // DWARF v4 and lower is well-tested; DWARF v5 is very lightly
+            // tested and is almost certainly incomplete.
+            internal_assert(dwarf_version <= 5);  // We haven't tested on anything larger
 
             uint64_t debug_abbrev_offset = 0;
-            if (dwarf_64) {
-                debug_abbrev_offset = e.getU64(&off);
+            uint8_t address_size = 0;
+            if (dwarf_version == 5) {
+                constexpr uint8_t DW_UT_compile = 0x01;
+                // constexpr uint8_t DW_UT_type = 0x02;
+                // constexpr uint8_t DW_UT_partial = 0x03;
+                constexpr uint8_t DW_UT_skeleton = 0x04;
+                // constexpr uint8_t DW_UT_split_compile = 0x05;
+                // constexpr uint8_t DW_UT_split_type = 0x06;
+                const uint8_t unit_type = e.getU8(&off);
+                internal_assert(unit_type == DW_UT_compile || unit_type == DW_UT_skeleton) << unit_type;
+
+                address_size = e.getU8(&off);
+                debug_abbrev_offset = parse_offset(e, &off);
+
+                if (unit_type == DW_UT_skeleton) {
+                    (void)e.getU64(&off);
+                }
             } else {
-                debug_abbrev_offset = e.getU32(&off);
+                debug_abbrev_offset = parse_offset(e, &off);
+                address_size = e.getU8(&off);
             }
             parse_debug_abbrev(debug_abbrev, debug_abbrev_offset);
 
-            uint8_t address_size = e.getU8(&off);
+            internal_assert(address_size == sizeof(uintptr_t));
 
             vector<pair<FunctionInfo, int>> func_stack;
             vector<pair<TypeInfo, int>> type_stack;
@@ -1155,9 +1179,16 @@ private:
                     continue;
                 }
 
-                internal_assert(abbrev_code <= entry_formats.size());
-                const EntryFormat &fmt = entry_formats[abbrev_code - 1];
-                internal_assert(fmt.code == abbrev_code);
+                auto it = entry_formats.find(abbrev_code);
+                if (it == entry_formats.end()) {
+                    // Either the DWARF is malformed or we are parsing it incorrectly.
+                    // (This has only been reported when compiling with TSAN enabled,
+                    // so either is quite possible.)
+                    debug(2) << "Unspecified abbrev_code, ignoring introspection\n";
+                    working = false;
+                    return;
+                }
+                const EntryFormat &fmt = it->second;
 
                 LocalVariable var;
                 GlobalVariable gvar;
@@ -1174,8 +1205,8 @@ private:
                 if (!type_stack.empty()) {
                     containing_namespace = type_stack.back().first.name + "::";
                 } else {
-                    for (size_t i = 0; i < namespace_stack.size(); i++) {
-                        containing_namespace += namespace_stack[i].first + "::";
+                    for (auto &i : namespace_stack) {
+                        containing_namespace += i.first + "::";
                     }
                 }
 
@@ -1282,12 +1313,7 @@ private:
                     }
                     case 14:  // strp (offset into debug_str section. 4 bytes in dwarf 32, 8 in dwarf 64)
                     {
-                        uint64_t offset;
-                        if (dwarf_64) {
-                            offset = e.getU64(&off);
-                        } else {
-                            offset = e.getU32(&off);
-                        }
+                        uint64_t offset = parse_offset(e, &off);
                         val = 0;
                         payload = (const uint8_t *)(debug_str.data() + offset);
                         break;
@@ -1339,11 +1365,7 @@ private:
                     }
                     case 23:  // sec_offset
                     {
-                        if (dwarf_64) {
-                            val = e.getU64(&off);
-                        } else {
-                            val = e.getU32(&off);
-                        }
+                        val = parse_offset(e, &off);
                         break;
                     }
                     case 24:  // exprloc
@@ -1361,6 +1383,13 @@ private:
                         // Just the existence of this field is information apparently? There's no data.
                         break;
                     }
+                    case 31:  // line_strp (offset into debug_line_str section. 4 bytes in dwarf 32, 8 in dwarf 64)
+                    {
+                        uint64_t offset = parse_offset(e, &off);
+                        val = 0;
+                        payload = (const uint8_t *)(debug_line_str.data() + offset);
+                        break;
+                    }
                     case 32:  // ref_sig8
                     {
                         // 64-bit type signature for a reference in its own type unit
@@ -1368,7 +1397,7 @@ private:
                         break;
                     }
                     default:
-                        internal_error << "Unknown form";
+                        internal_error << "Unknown form " << fmt.fields[i].form;
                         break;
                     }
 
@@ -1644,15 +1673,15 @@ private:
         // Connect function definitions to their declarations
         {
             std::map<uint64_t, FunctionInfo *> func_map;
-            for (size_t i = 0; i < functions.size(); i++) {
-                func_map[functions[i].def_loc] = &functions[i];
+            for (auto &function : functions) {
+                func_map[function.def_loc] = &function;
             }
 
-            for (size_t i = 0; i < functions.size(); i++) {
-                if (functions[i].spec_loc) {
-                    FunctionInfo *spec = func_map[functions[i].spec_loc];
+            for (auto &function : functions) {
+                if (function.spec_loc) {
+                    FunctionInfo *spec = func_map[function.spec_loc];
                     if (spec) {
-                        functions[i].name = spec->name;
+                        function.name = spec->name;
                     }
                 }
             }
@@ -1661,15 +1690,14 @@ private:
         // Connect inlined variable instances to their origins
         {
             std::map<uint64_t, LocalVariable *> var_map;
-            for (size_t i = 0; i < functions.size(); i++) {
-                for (size_t j = 0; j < functions[i].variables.size(); j++) {
-                    var_map[functions[i].variables[j].def_loc] = &(functions[i].variables[j]);
+            for (auto &function : functions) {
+                for (auto &variable : function.variables) {
+                    var_map[variable.def_loc] = &variable;
                 }
             }
 
-            for (size_t i = 0; i < functions.size(); i++) {
-                for (size_t j = 0; j < functions[i].variables.size(); j++) {
-                    LocalVariable &v = functions[i].variables[j];
+            for (auto &function : functions) {
+                for (auto &v : function.variables) {
                     uint64_t loc = v.origin_loc;
                     if (loc) {
                         LocalVariable *origin = var_map[loc];
@@ -1688,8 +1716,7 @@ private:
         // Connect global variable instances to their prototypes
         {
             std::map<uint64_t, GlobalVariable *> var_map;
-            for (size_t i = 0; i < global_variables.size(); i++) {
-                GlobalVariable &var = global_variables[i];
+            for (auto &var : global_variables) {
                 debug(5) << "var " << var.name << " is at " << var.def_loc << "\n";
                 if (var.spec_loc || var.name.empty()) {
                     // Not a prototype
@@ -1698,8 +1725,7 @@ private:
                 var_map[var.def_loc] = &var;
             }
 
-            for (size_t i = 0; i < global_variables.size(); i++) {
-                GlobalVariable &var = global_variables[i];
+            for (auto &var : global_variables) {
                 if (var.name.empty() && var.spec_loc) {
                     GlobalVariable *spec = var_map[var.spec_loc];
                     if (spec) {
@@ -1716,34 +1742,34 @@ private:
         // Hook up the type pointers
         {
             std::map<uint64_t, TypeInfo *> type_map;
-            for (size_t i = 0; i < types.size(); i++) {
-                type_map[types[i].def_loc] = &types[i];
+            for (auto &type : types) {
+                type_map[type.def_loc] = &type;
             }
 
-            for (size_t i = 0; i < functions.size(); i++) {
-                for (size_t j = 0; j < functions[i].variables.size(); j++) {
-                    functions[i].variables[j].type =
-                        type_map[functions[i].variables[j].type_def_loc];
+            for (auto &function : functions) {
+                for (auto &variable : function.variables) {
+                    variable.type =
+                        type_map[variable.type_def_loc];
                 }
             }
 
-            for (size_t i = 0; i < global_variables.size(); i++) {
-                global_variables[i].type =
-                    type_map[global_variables[i].type_def_loc];
+            for (auto &global_variable : global_variables) {
+                global_variable.type =
+                    type_map[global_variable.type_def_loc];
             }
 
-            for (size_t i = 0; i < types.size(); i++) {
-                for (size_t j = 0; j < types[i].members.size(); j++) {
-                    types[i].members[j].type =
-                        type_map[types[i].members[j].type_def_loc];
+            for (auto &type : types) {
+                for (auto &member : type.members) {
+                    member.type =
+                        type_map[member.type_def_loc];
                 }
             }
         }
 
-        for (size_t i = 0; i < types.size(); i++) {
+        for (auto &type : types) {
             // Set the names of the pointer types
             vector<std::string> suffix;
-            TypeInfo *t = &types[i];
+            TypeInfo *t = &type;
             while (t) {
                 if (t->type == TypeInfo::Pointer) {
                     suffix.emplace_back("*");
@@ -1774,18 +1800,18 @@ private:
             }
 
             if (t && !suffix.empty()) {
-                types[i].name = t->name;
+                type.name = t->name;
                 while (!suffix.empty()) {
-                    types[i].name += " " + suffix.back();
+                    type.name += " " + suffix.back();
                     suffix.pop_back();
                 }
             }
         }
 
         // Fix up the sizes of typedefs where we know the underlying type
-        for (size_t i = 0; i < types.size(); i++) {
-            TypeInfo *t = &types[i];
-            if (types[i].type == TypeInfo::Typedef &&
+        for (auto &type : types) {
+            TypeInfo *t = &type;
+            if (type.type == TypeInfo::Typedef &&
                 !t->members.empty() &&
                 t->members[0].type) {
                 t->size = t->members[0].type->size;
@@ -1793,8 +1819,8 @@ private:
         }
 
         // Unpack class members into the local variables list.
-        for (size_t i = 0; i < functions.size(); i++) {
-            vector<LocalVariable> new_vars = functions[i].variables;
+        for (auto &function : functions) {
+            vector<LocalVariable> new_vars = function.variables;
             for (size_t j = 0; j < new_vars.size(); j++) {
                 // If new_vars[j] is a class type, unpack its members
                 // immediately after this point.
@@ -1824,13 +1850,13 @@ private:
                     }
                 }
             }
-            functions[i].variables.swap(new_vars);
+            function.variables.swap(new_vars);
 
-            if (!functions[i].variables.empty()) {
-                debug(5) << "Function " << functions[i].name << ":\n";
-                for (size_t j = 0; j < functions[i].variables.size(); j++) {
-                    if (functions[i].variables[j].type) {
-                        debug(5) << " " << functions[i].variables[j].type->name << " " << functions[i].variables[j].name << "\n";
+            if (!function.variables.empty()) {
+                debug(5) << "Function " << function.name << ":\n";
+                for (auto &variable : function.variables) {
+                    if (variable.type) {
+                        debug(5) << " " << variable.type->name << " " << variable.name << "\n";
                     }
                 }
             }
@@ -1845,17 +1871,17 @@ private:
                  v.type->type == TypeInfo::Typedef)) {
                 debug(5) << "Unpacking members of " << v.name << " at " << std::hex << v.addr << "\n";
                 vector<LocalVariable> &members = v.type->members;
-                for (size_t j = 0; j < members.size(); j++) {
+                for (auto &member : members) {
                     GlobalVariable mem;
-                    if (!v.name.empty() && !members[j].name.empty()) {
-                        mem.name = v.name + "." + members[j].name;
+                    if (!v.name.empty() && !member.name.empty()) {
+                        mem.name = v.name + "." + member.name;
                     } else {
                         // Might be a member of an anonymous struct?
-                        mem.name = members[j].name;
+                        mem.name = member.name;
                     }
-                    mem.type = members[j].type;
-                    mem.type_def_loc = members[j].type_def_loc;
-                    mem.addr = v.addr + members[j].stack_offset;
+                    mem.type = member.type;
+                    mem.type_def_loc = member.type_def_loc;
+                    mem.addr = v.addr + member.stack_offset;
                     debug(5) << " Member " << mem.name << " goes at " << mem.addr << "\n";
                     global_variables.push_back(mem);
                 }
@@ -1868,22 +1894,20 @@ private:
         // name, or type.
         {
             vector<FunctionInfo> trimmed;
-            for (size_t i = 0; i < functions.size(); i++) {
-                FunctionInfo &f = functions[i];
+            for (auto &f : functions) {
                 if (!f.pc_begin ||
                     !f.pc_end ||
                     f.name.empty()) {
-                    //debug(5) << "Dropping " << f.name << "\n";
+                    // debug(5) << "Dropping " << f.name << "\n";
                     continue;
                 }
 
                 vector<LocalVariable> vars;
-                for (size_t j = 0; j < f.variables.size(); j++) {
-                    LocalVariable &v = f.variables[j];
+                for (auto &v : f.variables) {
                     if (!v.name.empty() && v.type && v.stack_offset != no_location) {
                         vars.push_back(v);
                     } else {
-                        //debug(5) << "Dropping " << v.name << "\n";
+                        // debug(5) << "Dropping " << v.name << "\n";
                     }
                 }
                 f.variables.clear();
@@ -1896,8 +1920,7 @@ private:
         // Drop globals for which we don't know the address or name
         {
             vector<GlobalVariable> trimmed;
-            for (size_t i = 0; i < global_variables.size(); i++) {
-                GlobalVariable &v = global_variables[i];
+            for (auto &v : global_variables) {
                 if (!v.name.empty() && v.addr) {
                     trimmed.push_back(v);
                 }

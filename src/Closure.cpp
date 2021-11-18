@@ -69,8 +69,8 @@ void Closure::visit(const Allocate *op) {
         op->new_expr.accept(this);
     }
     ScopedBinding<> p(ignore, op->name);
-    for (size_t i = 0; i < op->extents.size(); i++) {
-        op->extents[i].accept(this);
+    for (const auto &extent : op->extents) {
+        extent.accept(this);
     }
     op->condition.accept(this);
     op->body.accept(this);

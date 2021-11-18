@@ -1185,6 +1185,10 @@ public:
             check(arm32 ? "vqmovn.u32" : "uqxtn", 4 * w, u16(min(u32_1, max_u16)));
             check(arm32 ? "vqmovn.u32" : "uqxtn", 4 * w, u16(min(u64_1, max_u16)));
             check(arm32 ? "vqmovn.u64" : "uqxtn", 2 * w, u32(min(u64_1, max_u32)));
+            // Double/Triple saturating narrow from float
+            check(arm32 ? "vqmovn.s16" : "sqxtn", 8 * w, i8_sat(f32_1));
+            check(arm32 ? "vqmovn.s16" : "sqxtn", 8 * w, i8_sat(f64_1));
+            check(arm32 ? "vqmovn.s32" : "sqxtn", 4 * w, i16_sat(f64_1));
 
             // VQMOVUN  I       -       Saturating Move and Unsigned Narrow
             check(arm32 ? "vqmovun.s16" : "sqxtun", 8 * w, u8_sat(i16_1));
@@ -1193,6 +1197,10 @@ public:
             check(arm32 ? "vqmovun.s32" : "sqxtun", 4 * w, u16_sat(i32_1));
             check(arm32 ? "vqmovun.s32" : "sqxtun", 4 * w, u16_sat(i64_1));
             check(arm32 ? "vqmovun.s64" : "sqxtun", 2 * w, u32_sat(i64_1));
+            // Double/Triple saturating narrow from float
+            check(arm32 ? "vqmovun.s16" : "sqxtun", 8 * w, u8_sat(f32_1));
+            check(arm32 ? "vqmovun.s16" : "sqxtun", 8 * w, u8_sat(f64_1));
+            check(arm32 ? "vqmovun.s32" : "sqxtun", 4 * w, u16_sat(f64_1));
 
             // VQNEG    I       -       Saturating Negate
             check(arm32 ? "vqneg.s8" : "sqneg", 8 * w, -max(i8_1, -max_i8));
@@ -1738,13 +1746,8 @@ public:
                     check("v128.const", 8 * w, f32_1 * f32(42));
                     check("v128.const", 4 * w, f64_1 * f64(42));
                 } else {
-                    if (Halide::Internal::get_llvm_version() == 120) {
-                        check("i64x2.splat", 8 * w, u16_1 * u16(42));
-                        check("i64x2.splat", 4 * w, u32_1 * u32(42));
-                    } else {
-                        check("i16x8.splat", 8 * w, u16_1 * u16(42));
-                        check("i32x4.splat", 4 * w, u32_1 * u32(42));
-                    }
+                    check("i64x2.splat", 8 * w, u16_1 * u16(42));
+                    check("i64x2.splat", 4 * w, u32_1 * u32(42));
                     check("i64x2.splat", 2 * w, u64_1 * u64(42));
                     check("f32x4.splat", 8 * w, f32_1 * f32(42));
                     check("f64x2.splat", 4 * w, f64_1 * f64(42));
@@ -1756,16 +1759,9 @@ public:
                 // to be used explicitly
 
                 // Shuffling using immediate indices
-                if (Halide::Internal::get_llvm_version() >= 120) {
-                    check("i8x16.shuffle", 16 * w, in_u8(2 * x));
-                    check("i8x16.shuffle", 8 * w, in_u16(2 * x));
-                    check("i8x16.shuffle", 4 * w, in_u32(2 * x));
-                } else {
-                    // older mnemonics
-                    check("v8x16.shuffle", 16 * w, in_u8(2 * x));
-                    check("v8x16.shuffle", 8 * w, in_u16(2 * x));
-                    check("v8x16.shuffle", 4 * w, in_u32(2 * x));
-                }
+                check("i8x16.shuffle", 16 * w, in_u8(2 * x));
+                check("i8x16.shuffle", 8 * w, in_u16(2 * x));
+                check("i8x16.shuffle", 4 * w, in_u32(2 * x));
 
                 // Swizzling using variable indices
                 // (This fails to generate, but that's not entirely surprising -- I don't
@@ -1986,12 +1982,10 @@ public:
 
                 check("v128.bitselect", 16 * w, select(bool_1, u8_1, u8_2));
                 check("v128.bitselect", 8 * w, select(bool_1, u16_1, u16_2));
-                if (Halide::Internal::get_llvm_version() >= 120) {
-                    check("v128.bitselect", 4 * w, select(bool_1, u32_1, u32_2));
-                    check("v128.bitselect", 2 * w, select(bool_1, u64_1, u64_2));
-                    check("v128.bitselect", 4 * w, select(bool_1, f32_1, f32_2));
-                    check("v128.bitselect", 2 * w, select(bool_1, f64_1, f64_2));
-                }
+                check("v128.bitselect", 4 * w, select(bool_1, u32_1, u32_2));
+                check("v128.bitselect", 2 * w, select(bool_1, u64_1, u64_2));
+                check("v128.bitselect", 4 * w, select(bool_1, f32_1, f32_2));
+                check("v128.bitselect", 2 * w, select(bool_1, f64_1, f64_2));
 
                 // Lane-wise Population Count
                 // TODO(https://github.com/halide/Halide/issues/5130): NOT BEING GENERATED AT TRUNK
@@ -2083,18 +2077,10 @@ public:
                 // check("v128.load64_zero", 2 * w, in_u64(0));
 
                 // Load vector with identical lanes
-                if (Halide::Internal::get_llvm_version() >= 120) {
-                    check("v128.load8_splat", 16 * w, in_u8(0));
-                    check("v128.load16_splat", 8 * w, in_u16(0));
-                    check("v128.load32_splat", 4 * w, in_u32(0));
-                    check("v128.load64_splat", 2 * w, in_u64(0));
-                } else {
-                    // older mnemonics
-                    check("v8x16.load_splat", 16 * w, in_u8(0));
-                    check("v16x8.load_splat", 8 * w, in_u16(0));
-                    check("v32x4.load_splat", 4 * w, in_u32(0));
-                    check("v64x2.load_splat", 2 * w, in_u64(0));
-                }
+                check("v128.load8_splat", 16 * w, in_u8(0));
+                check("v128.load16_splat", 8 * w, in_u16(0));
+                check("v128.load32_splat", 4 * w, in_u32(0));
+                check("v128.load64_splat", 2 * w, in_u64(0));
 
                 // Load Lane
                 // TODO: does Halide have any idiom that obviously generates these?
@@ -2182,12 +2168,9 @@ public:
                 check("f32x4.convert_i32x4_u", 8 * w, cast<float>(u32_1));
 
                 // Integer to double-precision floating point
-                if (Halide::Internal::get_llvm_version() >= 130) {
-                    // TODO: we can't directly generate these instructions at LLVM top of tree,
-                    // but LLVM isn't generating the f64x2.convert_low_i32x4_s/u instructions;
-                    // investigation needed.
-                    // check("f64x2.convert_low_i32x4_s", 2 * w, cast<double>(i32_1));
-                    // check("f64x2.convert_low_i32x4_u", 2 * w, cast<double>(u32_1));
+                if (Halide::Internal::get_llvm_version() >= 140) {
+                    check("f64x2.convert_low_i32x4_s", 2 * w, cast<double>(i32_1));
+                    check("f64x2.convert_low_i32x4_u", 2 * w, cast<double>(u32_1));
                 }
 
                 // Single-precision floating point to integer with saturation
@@ -2204,7 +2187,12 @@ public:
                 // check("f32x4.demote_f64x2_zero", 4 * w, ???);
 
                 // Single-precision floating point to double-precision
-                if (Halide::Internal::get_llvm_version() >= 130) {
+                if (Halide::Internal::get_llvm_version() >= 140) {
+                    // TODO(https://github.com/halide/Halide/issues/5130): broken for > 128bit vector widths
+                    if (w < 2) {
+                        check("f64x2.promote_low_f32x4", 2 * w, cast<double>(f32_1));
+                    }
+                } else if (Halide::Internal::get_llvm_version() >= 130) {
                     check("f64x2.promote_low_f32x4", 2 * w, cast<double>(f32_1));
                 }
 
@@ -2255,12 +2243,6 @@ int main(int argc, char **argv) {
     Target hl_target = get_target_from_environment();
     printf("host is:      %s\n", host.to_string().c_str());
     printf("HL_TARGET is: %s\n", hl_target.to_string().c_str());
-
-    if (Halide::Internal::get_llvm_version() < 110 &&
-        hl_target.arch == Target::WebAssembly) {
-        printf("[SKIP] WebAssembly simd code is only supported with LLVM 11+ (saw %d).\n", Halide::Internal::get_llvm_version());
-        return 0;
-    }
 
     SimdOpCheck test(hl_target);
 

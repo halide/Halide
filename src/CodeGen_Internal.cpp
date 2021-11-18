@@ -7,6 +7,7 @@
 #include "LLVM_Headers.h"
 #include "Simplify.h"
 #include "Simplify_Internal.h"
+#include "runtime/constants.h"
 
 namespace Halide {
 namespace Internal {
@@ -136,7 +137,6 @@ llvm::Type *llvm_type_of(LLVMContext *c, Halide::Type t) {
     }
 }
 
-#if LLVM_VERSION >= 120
 int get_vector_num_elements(llvm::Type *t) {
     if (t->isVectorTy()) {
         auto *vt = dyn_cast<llvm::FixedVectorType>(t);
@@ -146,15 +146,6 @@ int get_vector_num_elements(llvm::Type *t) {
         return 1;
     }
 }
-#else
-int get_vector_num_elements(llvm::Type *t) {
-    if (t->isVectorTy()) {
-        return dyn_cast<llvm::VectorType>(t)->getNumElements();
-    } else {
-        return 1;
-    }
-}
-#endif
 
 llvm::Type *get_vector_element_type(llvm::Type *t) {
     if (t->isVectorTy()) {
@@ -164,15 +155,9 @@ llvm::Type *get_vector_element_type(llvm::Type *t) {
     }
 }
 
-#if LLVM_VERSION >= 120
 llvm::ElementCount element_count(int e) {
     return llvm::ElementCount::getFixed(e);
 }
-#else
-llvm::ElementCount element_count(int e) {
-    return llvm::ElementCount(e, /*scalable*/ false);
-}
-#endif
 
 llvm::Type *get_vector_type(llvm::Type *t, int n) {
     return VectorType::get(t, element_count(n));
@@ -249,10 +234,8 @@ bool function_takes_user_context(const std::string &name) {
         "_halide_buffer_retire_crop_after_extern_stage",
         "_halide_buffer_retire_crops_after_extern_stage",
     };
-    const int num_funcs = sizeof(user_context_runtime_funcs) /
-                          sizeof(user_context_runtime_funcs[0]);
-    for (int i = 0; i < num_funcs; ++i) {
-        if (name == user_context_runtime_funcs[i]) {
+    for (const char *user_context_runtime_func : user_context_runtime_funcs) {
+        if (name == user_context_runtime_func) {
             return true;
         }
     }
@@ -262,7 +245,7 @@ bool function_takes_user_context(const std::string &name) {
 
 bool can_allocation_fit_on_stack(int64_t size) {
     user_assert(size > 0) << "Allocation size should be a positive number\n";
-    return (size <= 1024 * 16);
+    return (size <= (int64_t)Runtime::Internal::Constants::maximum_stack_allocation_bytes);
 }
 
 Expr lower_int_uint_div(const Expr &a, const Expr &b) {
@@ -348,11 +331,24 @@ Expr lower_int_uint_div(const Expr &a, const Expr &b) {
         if (method == 2) {
             // Average with original numerator.
             val = Call::make(val.type(), Call::sorted_avg, {val, num}, Call::PureIntrinsic);
+        } else if (method == 3) {
+            // Average with original numerator, rounding up. This
+            // method exists because this is cheaper than averaging
+            // with the original numerator on x86, where there's an
+            // average-round-up instruction (pavg), but no
+            // average-round-down instruction. Using method 2,
+            // sorted_avg lowers to three instructions on x86.
+            //
+            // On ARM and other architectures with both
+            // average-round-up and average-round-down instructions
+            // there's no reason to prefer either method 2 or method 3
+            // over the other.
+            val = rounding_halving_add(val, num);
+        }
 
-            // Do the final shift
-            if (shift) {
-                val = val >> make_const(UInt(t.bits()), shift);
-            }
+        // Do the final shift
+        if (shift && (method == 2 || method == 3)) {
+            val = val >> make_const(UInt(t.bits()), shift);
         }
 
         return val;
@@ -676,7 +672,7 @@ void get_target_options(const llvm::Module &module, llvm::TargetOptions &options
     options.HonorSignDependentRoundingFPMathOption = !per_instruction_fast_math_flags;
     options.NoZerosInBSS = false;
     options.GuaranteedTailCallOpt = false;
-#if LLVM_VERSION >= 13
+#if LLVM_VERSION >= 130
     // nothing
 #else
     options.StackAlignmentOverride = 0;

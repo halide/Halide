@@ -30,28 +30,6 @@ define weak_odr <8 x i16> @psubuswx8(<8 x i16> %a0, <8 x i16> %a1) nounwind alwa
   ret <8 x i16> %3
 }
 
-; Note that this is only used for LLVM 6.0+
-define weak_odr <16 x i8>  @pavgbx16(<16 x i8> %a, <16 x i8> %b) nounwind alwaysinline {
-  %1 = zext <16 x i8> %a to <16 x i32>
-  %2 = zext <16 x i8> %b to <16 x i32>
-  %3 = add nuw nsw <16 x i32> %1, <i32 1, i32 1, i32 1, i32 1, i32 1, i32 1, i32 1, i32 1, i32 1, i32 1, i32 1, i32 1, i32 1, i32 1, i32 1, i32 1>
-  %4 = add nuw nsw <16 x i32> %3, %2
-  %5 = lshr <16 x i32> %4, <i32 1, i32 1, i32 1, i32 1, i32 1, i32 1, i32 1, i32 1, i32 1, i32 1, i32 1, i32 1, i32 1, i32 1, i32 1, i32 1>
-  %6 = trunc <16 x i32> %5 to <16 x i8>
-  ret <16 x i8> %6
-}
-
-; Note that this is only used for LLVM 6.0+
-define weak_odr <8 x i16>  @pavgwx8(<8 x i16> %a, <8 x i16> %b) nounwind alwaysinline {
-  %1 = zext <8 x i16> %a to <8 x i32>
-  %2 = zext <8 x i16> %b to <8 x i32>
-  %3 = add nuw nsw <8 x i32> %1, <i32 1, i32 1, i32 1, i32 1, i32 1, i32 1, i32 1, i32 1>
-  %4 = add nuw nsw <8 x i32> %3, %2
-  %5 = lshr <8 x i32> %4, <i32 1, i32 1, i32 1, i32 1, i32 1, i32 1, i32 1, i32 1>
-  %6 = trunc <8 x i32> %5 to <8 x i16>
-  ret <8 x i16> %6
-}
-
 declare <16 x i8> @llvm.x86.sse2.packsswb.128(<8 x i16>, <8 x i16>)
 declare <16 x i8> @llvm.x86.sse2.packuswb.128(<8 x i16>, <8 x i16>)
 declare <8 x i16> @llvm.x86.sse2.packssdw.128(<4 x i32>, <4 x i32>)
@@ -148,6 +126,11 @@ define weak_odr <4 x float> @fast_inverse_sqrt_f32x4(<4 x float> %x) nounwind uw
 ; and cause it to fail via running out of registers.
 define weak_odr void @x86_cpuid_halide(i32* %info) nounwind uwtable {
   call void asm sideeffect inteldialect "xchg ebx, esi\0A\09mov eax, dword ptr $$0 $0\0A\09mov ecx, dword ptr $$4 $0\0A\09cpuid\0A\09mov dword ptr $$0 $0, eax\0A\09mov dword ptr $$4 $0, ebx\0A\09mov dword ptr $$8 $0, ecx\0A\09mov dword ptr $$12 $0, edx\0A\09xchg ebx, esi", "=*m,~{eax},~{ebx},~{ecx},~{edx},~{esi},~{dirflag},~{fpsr},~{flags}"(i32* %info)
+  ret void
+}
 
+; Same, but ensure that we save/restore the full 64 bits of rbx/rsi.
+define weak_odr void @x64_cpuid_halide(i32* %info) nounwind uwtable {
+  call void asm sideeffect inteldialect "xchg rbx, rsi\0A\09mov eax, dword ptr $$0 $0\0A\09mov ecx, dword ptr $$4 $0\0A\09cpuid\0A\09mov dword ptr $$0 $0, eax\0A\09mov dword ptr $$4 $0, ebx\0A\09mov dword ptr $$8 $0, ecx\0A\09mov dword ptr $$12 $0, edx\0A\09xchg rbx, rsi", "=*m,~{eax},~{ebx},~{ecx},~{edx},~{esi},~{dirflag},~{fpsr},~{flags}"(i32* %info)
   ret void
 }

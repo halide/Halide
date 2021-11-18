@@ -14,9 +14,16 @@ int gettid() {
 }
 }  // namespace
 
-#define log_message(stuff) print(nullptr) << gettid() << ": " << stuff << "\n"
+// clang-format off
+#define log_message(stuff) do { print(nullptr) << gettid() << ": " << stuff << "\n"; } while (0)
+// clang-format on
+
 #else
-#define log_message(stuff)
+
+// clang-format off
+#define log_message(stuff) do { /*nothing*/ } while (0)
+// clang-format on
+
 #endif
 
 namespace Halide {
@@ -64,30 +71,25 @@ struct work {
     }
 };
 
-#define MAX_THREADS 256
-
-WEAK int clamp_num_threads(int threads) {
+ALWAYS_INLINE int clamp_num_threads(int threads) {
     if (threads > MAX_THREADS) {
-        threads = MAX_THREADS;
+        return MAX_THREADS;
     } else if (threads < 1) {
-        threads = 1;
+        return 1;
+    } else {
+        return threads;
     }
-    return threads;
 }
 
 WEAK int default_desired_num_threads() {
-    int desired_num_threads = 0;
     char *threads_str = getenv("HL_NUM_THREADS");
     if (!threads_str) {
         // Legacy name for HL_NUM_THREADS
         threads_str = getenv("HL_NUMTHREADS");
     }
-    if (threads_str) {
-        desired_num_threads = atoi(threads_str);
-    } else {
-        desired_num_threads = halide_host_cpu_count();
-    }
-    return desired_num_threads;
+    return threads_str ?
+               atoi(threads_str) :
+               halide_host_cpu_count();
 }
 
 // The work queue and thread pool is weak, so one big work queue is shared by all halide functions
@@ -144,13 +146,13 @@ struct work_queue_t {
 
     // Used to check initial state is correct.
     ALWAYS_INLINE void assert_zeroed() const {
-        // Assert that all fields except the mutex and desired hreads count are zeroed.
+        // Assert that all fields except the mutex and desired threads count are zeroed.
         const char *bytes = ((const char *)&this->zero_marker);
         const char *limit = ((const char *)this) + sizeof(work_queue_t);
         while (bytes < limit && *bytes == 0) {
             bytes++;
         }
-        halide_assert(nullptr, bytes == limit && "Logic error in thread pool work queue initialization.\n");
+        halide_abort_if_false(nullptr, bytes == limit && "Logic error in thread pool work queue initialization.\n");
     }
 
     // Return the work queue to initial state. Must be called while locked
@@ -166,6 +168,7 @@ struct work_queue_t {
 WEAK work_queue_t work_queue = {};
 
 #if EXTENDED_DEBUG
+
 WEAK void print_job(work *job, const char *indent, const char *prefix = nullptr) {
     if (prefix == nullptr) {
         prefix = indent;
@@ -187,9 +190,14 @@ WEAK void dump_job_state() {
     }
     log_message("Done dumping job state.");
 }
+
 #else
-#define print_job(job, indent, prefix)
-#define dump_job_state()
+
+// clang-format off
+#define print_job(job, indent, prefix)  do { /*nothing*/ } while (0)
+#define dump_job_state()                do { /*nothing*/ } while (0)
+// clang-format on
+
 #endif
 
 WEAK void worker_thread(void *);
@@ -250,7 +258,6 @@ WEAK void worker_thread_already_locked(work *owned_job) {
             enough_threads = threads_available >= job->task.min_threads;
 
             if (!enough_threads) {
-
                 log_message("Not enough threads for job " << job->task.name << " available: " << threads_available << " min_threads: " << job->task.min_threads);
             }
             bool can_use_this_thread_stack = !owned_job || (job->siblings == owned_job->siblings) || job->task.min_threads == 0;
@@ -515,9 +522,9 @@ WEAK void enqueue_work_already_locked(int num_jobs, work *jobs, work *task_paren
         }
     } else {
         log_message("enqueue_work_already_locked job " << jobs[0].task.name << " with min_threads " << min_threads << " task_parent " << task_parent->task.name << " task_parent->task.min_threads " << task_parent->task.min_threads << " task_parent->threads_reserved " << task_parent->threads_reserved);
-        halide_assert(nullptr, (min_threads <= ((task_parent->task.min_threads * task_parent->active_workers) -
-                                                task_parent->threads_reserved)) &&
-                                   "Logic error: thread over commit.\n");
+        halide_abort_if_false(nullptr, (min_threads <= ((task_parent->task.min_threads * task_parent->active_workers) -
+                                                        task_parent->threads_reserved)) &&
+                                           "Logic error: thread over commit.\n");
         if (job_has_acquires || job_may_block) {
             task_parent->threads_reserved++;
         }

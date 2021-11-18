@@ -218,8 +218,8 @@ void CodeGen_PTX_Dev::add_kernel(Stmt stmt,
     debug(2) << "Done generating llvm bitcode for PTX\n";
 
     // Clear the symbol table
-    for (size_t i = 0; i < arg_sym_names.size(); i++) {
-        sym_pop(arg_sym_names[i]);
+    for (const auto &arg_sym_name : arg_sym_names) {
+        sym_pop(arg_sym_name);
     }
 }
 
@@ -543,7 +543,10 @@ string CodeGen_PTX_Dev::march() const {
 }
 
 string CodeGen_PTX_Dev::mcpu() const {
-    if (target.has_feature(Target::CUDACapability80)) {
+    if (target.has_feature(Target::CUDACapability86)) {
+        user_assert(LLVM_VERSION >= 130) << "The linked LLVM version does not support cuda compute capability 8.6\n";
+        return "sm_86";
+    } else if (target.has_feature(Target::CUDACapability80)) {
         return "sm_80";
     } else if (target.has_feature(Target::CUDACapability75)) {
         return "sm_75";
@@ -565,7 +568,9 @@ string CodeGen_PTX_Dev::mcpu() const {
 }
 
 string CodeGen_PTX_Dev::mattrs() const {
-    if (target.has_feature(Target::CUDACapability80)) {
+    if (target.has_feature(Target::CUDACapability86)) {
+        return "+ptx71";
+    } else if (target.has_feature(Target::CUDACapability80)) {
         return "+ptx70";
     } else if (target.has_feature(Target::CUDACapability70) ||
                target.has_feature(Target::CUDACapability75)) {
@@ -603,9 +608,6 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
     internal_assert(llvm_target) << err_str << "\n";
 
     TargetOptions options;
-#if LLVM_VERSION < 120
-    options.PrintMachineCode = false;
-#endif
     options.AllowFPOpFusion = FPOpFusion::Fast;
     options.UnsafeFPMath = true;
     options.NoInfsFPMath = true;
@@ -613,7 +615,7 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
     options.HonorSignDependentRoundingFPMathOption = false;
     options.NoZerosInBSS = false;
     options.GuaranteedTailCallOpt = false;
-#if LLVM_VERSION >= 13
+#if LLVM_VERSION >= 130
     // nothing
 #else
     options.StackAlignmentOverride = 0;
@@ -703,8 +705,8 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
 
     // Run optimization passes
     function_pass_manager.doInitialization();
-    for (llvm::Module::iterator i = module->begin(); i != module->end(); i++) {
-        function_pass_manager.run(*i);
+    for (auto &function : *module) {
+        function_pass_manager.run(function);
     }
     function_pass_manager.doFinalization();
     module_pass_manager.run(*module);

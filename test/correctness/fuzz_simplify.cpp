@@ -275,7 +275,7 @@ Expr x3(Expr x) {
     return Broadcast::make(x, 3);
 }
 Expr x4(Expr x) {
-    return Broadcast::make(x, 2);
+    return Broadcast::make(x, 4);
 }
 Expr x6(Expr x) {
     return Broadcast::make(x, 6);

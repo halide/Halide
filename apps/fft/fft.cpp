@@ -501,8 +501,7 @@ ComplexFunc fft2d_c2c(ComplexFunc x,
     TwiddleFactorSet twiddle_cache;
 
     // transpose the input to the FFT.
-    ComplexFunc xT, x_tiled;
-    std::tie(xT, x_tiled) = tiled_transpose(x, N1, target, prefix);
+    auto [xT, x_tiled] = tiled_transpose(x, N1, target, prefix);
 
     // Compute the DFT of dimension 1 (originally dimension 0).
     ComplexFunc dft1T = fft_dim1(xT,
@@ -516,8 +515,7 @@ ComplexFunc fft2d_c2c(ComplexFunc x,
                                  &twiddle_cache);
 
     // transpose back.
-    ComplexFunc dft1, dft1_tiled;
-    std::tie(dft1, dft1_tiled) = tiled_transpose(dft1T, N0, target, prefix);
+    auto [dft1, dft1_tiled] = tiled_transpose(dft1T, N0, target, prefix);
 
     // Compute the DFT of dimension 1.
     ComplexFunc dft = fft_dim1(dft1,
@@ -783,8 +781,7 @@ ComplexFunc fft2d_r2c(Func r,
     int zipped_extent0 = std::min((N1 + 1) / 2, zip_width);
 
     // transpose so we can FFT dimension 0 (by making it dimension 1).
-    ComplexFunc unzippedT, unzippedT_tiled;
-    std::tie(unzippedT, unzippedT_tiled) = tiled_transpose(zipped_0, zipped_extent0, target, prefix);
+    auto [unzippedT, unzippedT_tiled] = tiled_transpose(zipped_0, zipped_extent0, target, prefix);
 
     // DFT down the columns again (the rows of the original).
     ComplexFunc dftT = fft_dim1(unzippedT,
@@ -949,8 +946,7 @@ Func fft2d_c2r(ComplexFunc c,
         }
 
         // transpose the input.
-        ComplexFunc cT, cT_tiled;
-        std::tie(cT, cT_tiled) =
+        auto [cT, cT_tiled] =
             tiled_transpose(c_zipped, zipped_extent0, target, prefix);
 
         // Take the inverse DFT of the columns (rows in the final result).
@@ -971,8 +967,7 @@ Func fft2d_c2r(ComplexFunc c,
         }
 
         // transpose so we can take the DFT of the columns again.
-        ComplexFunc dft0, dft0_tiled;
-        std::tie(dft0, dft0_tiled) = tiled_transpose(dft0T, zip_width, target, prefix, true);
+        auto [dft0, dft0_tiled] = tiled_transpose(dft0T, zip_width, target, prefix, true);
 
         // Unzip the DC and Nyquist DFTs.
         ComplexFunc dft0_unzipped("dft0_unzipped");

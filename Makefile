@@ -417,6 +417,7 @@ SOURCE_FILES = \
   Buffer.cpp \
   CanonicalizeGPUVars.cpp \
   Closure.cpp \
+  ClampUnsafeAccesses.cpp \
   CodeGen_ARM.cpp \
   CodeGen_C.cpp \
   CodeGen_D3D12Compute_Dev.cpp \
@@ -454,6 +455,7 @@ SOURCE_FILES = \
   EmulateFloat16Math.cpp \
   Error.cpp \
   Expr.cpp \
+  ExtractTileOperations.cpp \
   FastIntegerDivide.cpp \
   FindCalls.cpp \
   FindIntrinsics.cpp \
@@ -591,6 +593,7 @@ HEADER_FILES = \
   BoundSmallAllocations.h \
   Buffer.h \
   CanonicalizeGPUVars.h \
+  ClampUnsafeAccesses.h \
   Closure.h \
   CodeGen_C.h \
   CodeGen_D3D12Compute_Dev.h \
@@ -628,6 +631,7 @@ HEADER_FILES = \
   ExprUsesVar.h \
   Extern.h \
   ExternFuncArgument.h \
+  ExtractTileOperations.h \
   FastIntegerDivide.h \
   FindCalls.h \
   FindIntrinsics.h \
@@ -802,13 +806,11 @@ RUNTIME_CPP_COMPONENTS = \
   qurt_allocator \
   qurt_hvx \
   qurt_hvx_vtcm \
-  qurt_init_fini \
   qurt_threads \
   qurt_threads_tsan \
   qurt_yield \
   riscv_cpu_features \
   runtime_api \
-  ssp \
   to_string \
   trace_helper \
   tracing \
@@ -839,6 +841,7 @@ RUNTIME_LL_COMPONENTS = \
   wasm_math \
   win32_math \
   x86 \
+  x86_amx \
   x86_avx \
   x86_avx2 \
   x86_avx512 \
@@ -992,7 +995,9 @@ RUNTIME_TRIPLE_WIN_GENERIC_64 = "le64-unknown-windows-unknown"
 
 # `-fno-threadsafe-statics` is very important here (note that it allows us to use a 'modern' C++
 # standard but still skip threadsafe guards for static initialization in our runtime code)
-RUNTIME_CXX_FLAGS = -std=c++17 -O3 -fno-vectorize -ffreestanding -fno-blocks -fno-exceptions -fno-unwind-tables -fno-threadsafe-statics
+#
+# `-fno-rtti` is necessary to allow us to use classes with virtual functions in the runtime code
+RUNTIME_CXX_FLAGS = -std=c++17 -O3 -fno-vectorize -ffreestanding -fno-blocks -fno-exceptions -fno-unwind-tables -fno-threadsafe-statics -fno-rtti
 
 $(BUILD_DIR)/initmod.windows_%_x86_32.ll: $(SRC_DIR)/runtime/windows_%_x86.cpp $(BUILD_DIR)/clang_ok
 	@mkdir -p $(@D)
@@ -1166,18 +1171,6 @@ GENERATOR_AOTCPP_TESTS := $(filter-out generator_aotcpp_cleanup_on_error,$(GENER
 
 # https://github.com/halide/Halide/issues/2084 (only if opencl enabled)
 GENERATOR_AOTCPP_TESTS := $(filter-out generator_aotcpp_buffer_copy,$(GENERATOR_AOTCPP_TESTS))
-
-# https://github.com/halide/Halide/issues/2071
-GENERATOR_AOTCPP_TESTS := $(filter-out generator_aotcpp_user_context,$(GENERATOR_AOTCPP_TESTS))
-
-# https://github.com/halide/Halide/issues/2071
-GENERATOR_AOTCPP_TESTS := $(filter-out generator_aotcpp_argvcall,$(GENERATOR_AOTCPP_TESTS))
-
-# https://github.com/halide/Halide/issues/2071
-GENERATOR_AOTCPP_TESTS := $(filter-out generator_aotcpp_metadata_tester,$(GENERATOR_AOTCPP_TESTS))
-
-# https://github.com/halide/Halide/issues/2071
-GENERATOR_AOTCPP_TESTS := $(filter-out generator_aotcpp_cxx_mangling,$(GENERATOR_AOTCPP_TESTS))
 
 # https://github.com/halide/Halide/issues/2075
 GENERATOR_AOTCPP_TESTS := $(filter-out generator_aotcpp_msan,$(GENERATOR_AOTCPP_TESTS))
@@ -1468,6 +1461,8 @@ $(FILTERS_DIR)/metadata_tester_ucon.a: $(BIN_DIR)/metadata_tester.generator
 	$(CURDIR)/$< -g metadata_tester -f metadata_tester_ucon $(GEN_AOT_OUTPUTS) -o $(CURDIR)/$(FILTERS_DIR) target=$(TARGET)-user_context-no_runtime $(METADATA_TESTER_GENERATOR_ARGS)
 
 $(BIN_DIR)/$(TARGET)/generator_aot_metadata_tester: $(FILTERS_DIR)/metadata_tester_ucon.a
+
+$(BIN_DIR)/$(TARGET)/generator_aotcpp_metadata_tester: $(FILTERS_DIR)/metadata_tester_ucon.halide_generated.cpp
 
 $(FILTERS_DIR)/multitarget.a: $(BIN_DIR)/multitarget.generator
 	@mkdir -p $(@D)
@@ -2153,7 +2148,7 @@ $(BUILD_DIR)/clang_ok:
 	@exit 1
 endif
 
-ifneq (,$(findstring $(LLVM_VERSION_TIMES_10), 110 111 120 130 140))
+ifneq (,$(findstring $(LLVM_VERSION_TIMES_10), 120 130 140))
 LLVM_OK=yes
 endif
 
@@ -2347,7 +2342,7 @@ $(BIN_DIR)/HalideTraceDump: $(ROOT_DIR)/util/HalideTraceDump.cpp $(ROOT_DIR)/uti
 
 # Note: you must have CLANG_FORMAT_LLVM_INSTALL_DIR set for this rule to work.
 # Let's default to the Ubuntu install location.
-CLANG_FORMAT_LLVM_INSTALL_DIR ?= /usr/lib/llvm-11
+CLANG_FORMAT_LLVM_INSTALL_DIR ?= /usr/lib/llvm-12
 
 .PHONY: format
 format:
@@ -2355,7 +2350,7 @@ format:
 
 # Note: you must have CLANG_TIDY_LLVM_INSTALL_DIR set for these rules to work.
 # Let's default to the Ubuntu install location.
-CLANG_TIDY_LLVM_INSTALL_DIR ?= /usr/lib/llvm-11
+CLANG_TIDY_LLVM_INSTALL_DIR ?= /usr/lib/llvm-12
 
 .PHONY: clang-tidy
 clang-tidy:

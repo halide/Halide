@@ -133,12 +133,10 @@ DECLARE_CPP_INITMOD(hexagon_cache_allocator)
 DECLARE_CPP_INITMOD(hexagon_dma_pool)
 DECLARE_CPP_INITMOD(qurt_hvx)
 DECLARE_CPP_INITMOD(qurt_hvx_vtcm)
-DECLARE_CPP_INITMOD(qurt_init_fini)
 DECLARE_CPP_INITMOD(qurt_threads)
 DECLARE_CPP_INITMOD(qurt_threads_tsan)
 DECLARE_CPP_INITMOD(qurt_yield)
 DECLARE_CPP_INITMOD(runtime_api)
-DECLARE_CPP_INITMOD(ssp)
 DECLARE_CPP_INITMOD(to_string)
 DECLARE_CPP_INITMOD(trace_helper)
 DECLARE_CPP_INITMOD(tracing)
@@ -230,6 +228,7 @@ DECLARE_NO_INITMOD(windows_d3d12compute_arm)
 #endif  // WITH_D3D12
 
 #ifdef WITH_X86
+DECLARE_LL_INITMOD(x86_amx)
 DECLARE_LL_INITMOD(x86_avx512)
 DECLARE_LL_INITMOD(x86_avx2)
 DECLARE_LL_INITMOD(x86_avx)
@@ -237,6 +236,7 @@ DECLARE_LL_INITMOD(x86)
 DECLARE_LL_INITMOD(x86_sse41)
 DECLARE_CPP_INITMOD(x86_cpu_features)
 #else
+DECLARE_NO_INITMOD(x86_amx)
 DECLARE_NO_INITMOD(x86_avx512)
 DECLARE_NO_INITMOD(x86_avx2)
 DECLARE_NO_INITMOD(x86_avx)
@@ -348,11 +348,19 @@ llvm::DataLayout get_data_layout_for_target(Target target) {
             "e-m:e-p:32:32:32-a:0-n16:32-i64:64:64-i32:32:32-i16:16:16-i1:8:8"
             "-f32:32:32-f64:64:64-v32:32:32-v64:64:64-v512:512:512-v1024:1024:1024-v2048:2048:2048");
     } else if (target.arch == Target::WebAssembly) {
+#if LLVM_VERSION >= 140
+        if (target.bits == 32) {
+            return llvm::DataLayout("e-m:e-p:32:32-p10:8:8-p20:8:8-i64:64-n32:64-S128-ni:1:10:20");
+        } else {
+            return llvm::DataLayout("e-m:e-p:64:64-p10:8:8-p20:8:8-i64:64-n32:64-S128-ni:1:10:20");
+        }
+#else
         if (target.bits == 32) {
             return llvm::DataLayout("e-m:e-p:32:32-i64:64-n32:64-S128");
         } else {
             return llvm::DataLayout("e-m:e-p:64:64-i64:64-n32:64-S128");
         }
+#endif
     } else if (target.arch == Target::RISCV) {
         // TODO: Valdidate this data layout is correct for RISCV. Assumption is it is like MIPS.
         if (target.bits == 32) {
@@ -506,8 +514,6 @@ llvm::Triple get_triple_for_target(const Target &target) {
 
         if (target.os == Target::Linux) {
             triple.setOS(llvm::Triple::Linux);
-            // TODO: Check what options there are here.
-            triple.setEnvironment(llvm::Triple::GNUEABIHF);
         } else if (target.os == Target::NoOS) {
             // for baremetal environment
         } else {
@@ -545,21 +551,21 @@ void link_modules(std::vector<std::unique_ptr<llvm::Module>> &modules, Target t,
 
     // Set the layout and triple on the modules before linking, so
     // llvm doesn't complain while combining them.
-    for (size_t i = 0; i < modules.size(); i++) {
+    for (auto &module : modules) {
         if (t.os == Target::Windows &&
-            !Internal::starts_with(modules[i]->getName().str(), "windows_")) {
+            !Internal::starts_with(module->getName().str(), "windows_")) {
             // When compiling for windows, all wchars are
             // 16-bit. Generic modules may have it set to 32-bit. Drop
             // any module flags on the generic modules and use the
             // more correct ones on the windows-specific modules to
             // avoid a conflict. This is safe as long as the generic
             // modules never actually use a wchar.
-            if (auto *module_flags = modules[i]->getModuleFlagsMetadata()) {
-                modules[i]->eraseNamedMetadata(module_flags);
+            if (auto *module_flags = module->getModuleFlagsMetadata()) {
+                module->eraseNamedMetadata(module_flags);
             }
         }
-        modules[i]->setDataLayout(data_layout);
-        modules[i]->setTargetTriple(triple.str());
+        module->setDataLayout(data_layout);
+        module->setTargetTriple(triple.str());
     }
 
     // Link them all together
@@ -578,11 +584,7 @@ void link_modules(std::vector<std::unique_ptr<llvm::Module>> &modules, Target t,
     // The symbols that we might want to call as a user even if not
     // used in the Halide-generated code must remain weak. This is
     // handled automatically by assuming any symbol starting with
-    // "halide_" that is weak will be retained. There are a few
-    // symbols for which this convention is not followed and these are
-    // in this set.
-    const std::set<string> retain = {"__stack_chk_guard",
-                                     "__stack_chk_fail"};
+    // "halide_" that is weak will be retained.
 
     // COMDAT is not supported in MachO object files, hence it does
     // not work on Mac OS or iOS. These sometimes show up in the
@@ -612,6 +614,7 @@ void link_modules(std::vector<std::unique_ptr<llvm::Module>> &modules, Target t,
     // Enumerate the functions.
     for (auto &f : *modules[0]) {
         const std::string f_name = Internal::get_llvm_function_name(f);
+        assert(f_name != "__stack_chk_guard" && f_name != "__stack_chk_fail");
 
         bool is_halide_extern_c_sym = Internal::starts_with(f_name, "halide_");
         internal_assert(!is_halide_extern_c_sym || f.isWeakForLinker() || f.isDeclaration())
@@ -622,7 +625,7 @@ void link_modules(std::vector<std::unique_ptr<llvm::Module>> &modules, Target t,
         if (f.getLinkage() == llvm::GlobalValue::ExternalWeakLinkage) {
             f.setLinkage(llvm::GlobalValue::ExternalLinkage);
         } else {
-            const bool can_strip = !is_halide_extern_c_sym && retain.count(f_name) == 0;
+            const bool can_strip = !is_halide_extern_c_sym;
             if (can_strip || allow_stripping_all_weak_functions) {
                 convert_weak_to_linkonce(f);
             }
@@ -917,7 +920,6 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
                 } else {
                     modules.push_back(get_initmod_qurt_threads(c, bits_64, debug));
                 }
-                modules.push_back(get_initmod_qurt_init_fini(c, bits_64, debug));
             } else if (t.os == Target::NoOS) {
                 // The OS-specific symbols provided by the modules
                 // above are expected to be provided by the containing
@@ -1063,6 +1065,9 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
             }
             if (t.has_feature(Target::AVX512)) {
                 modules.push_back(get_initmod_x86_avx512_ll(c));
+            }
+            if (t.has_feature(Target::AVX512_SapphireRapids)) {
+                modules.push_back(get_initmod_x86_amx_ll(c));
             }
             if (t.has_feature(Target::Profile)) {
                 user_assert(t.os != Target::WebAssemblyRuntime) << "The profiler cannot be used in a threadless environment.";
@@ -1225,9 +1230,7 @@ std::unique_ptr<llvm::Module> get_initial_module_for_ptx_device(Target target, l
 
     // For now, the PTX backend does not handle calling functions. So mark all functions
     // AvailableExternally to ensure they are inlined or deleted.
-    for (llvm::Module::iterator iter = modules[0]->begin(); iter != modules[0]->end(); iter++) {
-        llvm::Function &f = *iter;
-
+    for (auto &f : *modules[0]) {
         // This is intended to set all definitions (not extern declarations)
         // to "available externally" which should guarantee they do not exist
         // after the resulting module is finalized to code. That is they must

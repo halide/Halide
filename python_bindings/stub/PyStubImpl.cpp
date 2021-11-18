@@ -36,11 +36,11 @@ namespace {
 // This seems redundant to the code in PyError.cpp, but is necessary
 // in case the Stub builder links in a separate copy of libHalide, rather
 // sharing the same halide.so that is built by default.
-void halide_python_error(void *, const char *msg) {
+void halide_python_error(JITUserContext *, const char *msg) {
     throw Error(msg);
 }
 
-void halide_python_print(void *, const char *msg) {
+void halide_python_print(JITUserContext *, const char *msg) {
     py::print(msg, py::arg("end") = "");
 }
 
@@ -60,7 +60,7 @@ void install_error_handlers(py::module &m) {
     static HalidePythonCompileTimeErrorReporter reporter;
     set_custom_compile_time_error_reporter(&reporter);
 
-    Halide::Internal::JITHandlers handlers;
+    Halide::JITHandlers handlers;
     handlers.custom_error = halide_python_error;
     handlers.custom_print = halide_python_print;
     Halide::Internal::JITSharedRuntime::set_default_handlers(handlers);

@@ -8,6 +8,7 @@
 #include "IRPrinter.h"
 #include "Parameter.h"
 #include "Scope.h"
+#include "Simplify.h"
 
 #include <sstream>
 
@@ -117,10 +118,9 @@ private:
         Stmt body = mutate(op->body);
 
         // Compute the size
-        vector<Expr> extents;
+        vector<Expr> extents(op->bounds.size());
         for (size_t i = 0; i < op->bounds.size(); i++) {
-            extents.push_back(op->bounds[i].extent);
-            extents[i] = mutate(extents[i]);
+            extents[i] = mutate(op->bounds[i].extent);
         }
         Expr condition = mutate(op->condition);
 
@@ -132,6 +132,7 @@ private:
         // also affects the device allocation in some backends).
         vector<Expr> allocation_extents(extents.size());
         vector<int> storage_permutation;
+        vector<Stmt> bound_asserts;
         {
             auto iter = env.find(op->name);
             internal_assert(iter != env.end()) << "Realize node refers to function not in environment.\n";
@@ -142,6 +143,20 @@ private:
                 for (size_t j = 0; j < args.size(); j++) {
                     if (args[j] == storage_dims[i].var) {
                         storage_permutation.push_back((int)j);
+                        Expr bound = storage_dims[i].bound;
+                        if (bound.defined()) {
+                            if (can_prove(extents[j] > bound)) {
+                                user_error << "Explicit storage bound (" << bound << ") for variable " << args[j] << " of function " << op->name << " is smaller than required (" << extents[j] << ")\n";
+                            }
+                            Expr bound_too_small_error =
+                                Call::make(Int(32),
+                                           "halide_error_storage_bound_too_small",
+                                           {StringImm::make(op->name), StringImm::make(args[j]), bound, extents[j]},
+                                           Call::Extern);
+                            Stmt size_to_small_check = AssertStmt::make(extents[j] <= bound, bound_too_small_error);
+                            bound_asserts.push_back(size_to_small_check);
+                            extents[j] = bound;
+                        }
                         Expr alignment = storage_dims[i].alignment;
                         if (alignment.defined()) {
                             allocation_extents[j] = ((extents[j] + alignment - 1) / alignment) * alignment;
@@ -189,6 +204,11 @@ private:
 
         // Make the allocation node
         stmt = Allocate::make(op->name, op->types[0], op->memory_type, allocation_extents, condition, stmt);
+
+        // Wrap it into storage bound asserts.
+        if (!bound_asserts.empty()) {
+            stmt = Block::make(Block::make(bound_asserts), stmt);
+        }
 
         // Compute the strides
         for (int i = (int)op->bounds.size() - 1; i > 0; i--) {
@@ -340,8 +360,8 @@ private:
 
         auto iter = env.find(op->name);
         if (iter != env.end()) {
-            // Order the <min, extent> args based on the storage dims (i.e. innermost
-            // dimension should be first in args)
+            // Order the <min, extent> args based on the storage dims
+            // (i.e. innermost dimension should be first in args)
             vector<int> storage_permutation;
             {
                 Function f = iter->second.first;
@@ -424,11 +444,7 @@ class PromoteToMemoryType : public IRMutator {
     Stmt visit(const Allocate *op) override {
         Type t = upgrade(op->type);
         if (t != op->type) {
-            vector<Expr> extents;
-            for (const Expr &e : op->extents) {
-                extents.push_back(mutate(e));
-            }
-            return Allocate::make(op->name, t, op->memory_type, extents,
+            return Allocate::make(op->name, t, op->memory_type, mutate(op->extents),
                                   mutate(op->condition), mutate(op->body),
                                   mutate(op->new_expr), op->free_function);
         } else {

@@ -20,8 +20,11 @@ message(STATUS "Found LLVM ${LLVM_PACKAGE_VERSION}")
 message(STATUS "Using LLVMConfig.cmake in: ${LLVM_DIR}")
 message(STATUS "Using ClangConfig.cmake in: ${Clang_DIR}")
 
-if (LLVM_PACKAGE_VERSION VERSION_LESS 11.0)
-    message(FATAL_ERROR "LLVM version must be 11.0 or newer")
+# LLVM_PACKAGE_VERSION does not propagate to higher scopes
+set(Halide_LLVM_VERSION ${LLVM_PACKAGE_VERSION} CACHE INTERNAL "Provided LLVM version")
+
+if (LLVM_PACKAGE_VERSION VERSION_LESS 12.0)
+    message(FATAL_ERROR "LLVM version must be 12.0 or newer")
 endif ()
 
 if (LLVM_PACKAGE_VERSION VERSION_GREATER 14.0)
@@ -55,13 +58,6 @@ endif ()
 
 set(active_components mcjit bitwriter linker passes)
 set(known_components AArch64 AMDGPU ARM Hexagon Mips NVPTX PowerPC RISCV WebAssembly X86)
-
-# We don't support LLVM10 or below for wasm codegen.
-# TODO: we should probably move this to LLVM 12 or 13, since LLVM11 won't
-# support SIMD usefully enough for Halide
-if (LLVM_PACKAGE_VERSION VERSION_LESS 11.0)
-    list(REMOVE_ITEM known_components WebAssembly)
-endif ()
 
 foreach (comp IN LISTS known_components)
     string(TOUPPER "TARGET_${comp}" OPTION)

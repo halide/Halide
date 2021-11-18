@@ -204,7 +204,7 @@ WEAK void halide_profiler_stack_peak_update(void *user_context,
                                             void *pipeline_state,
                                             uint64_t *f_values) {
     halide_profiler_pipeline_stats *p_stats = (halide_profiler_pipeline_stats *)pipeline_state;
-    halide_assert(user_context, p_stats != nullptr);
+    halide_abort_if_false(user_context, p_stats != nullptr);
 
     // Note: Update to the counter is done without grabbing the state's lock to
     // reduce lock contention. One potential issue is that other call that frees the
@@ -231,9 +231,9 @@ WEAK void halide_profiler_memory_allocate(void *user_context,
     }
 
     halide_profiler_pipeline_stats *p_stats = (halide_profiler_pipeline_stats *)pipeline_state;
-    halide_assert(user_context, p_stats != nullptr);
-    halide_assert(user_context, func_id >= 0);
-    halide_assert(user_context, func_id < p_stats->num_funcs);
+    halide_abort_if_false(user_context, p_stats != nullptr);
+    halide_abort_if_false(user_context, func_id >= 0);
+    halide_abort_if_false(user_context, func_id < p_stats->num_funcs);
 
     halide_profiler_func_stats *f_stats = &p_stats->funcs[func_id];
 
@@ -267,9 +267,9 @@ WEAK void halide_profiler_memory_free(void *user_context,
     }
 
     halide_profiler_pipeline_stats *p_stats = (halide_profiler_pipeline_stats *)pipeline_state;
-    halide_assert(user_context, p_stats != nullptr);
-    halide_assert(user_context, func_id >= 0);
-    halide_assert(user_context, func_id < p_stats->num_funcs);
+    halide_abort_if_false(user_context, p_stats != nullptr);
+    halide_abort_if_false(user_context, func_id >= 0);
+    halide_abort_if_false(user_context, func_id < p_stats->num_funcs);
 
     halide_profiler_func_stats *f_stats = &p_stats->funcs[func_id];
 

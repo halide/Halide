@@ -119,7 +119,7 @@ inline void *hexagon_cache_pool_get(void *user_context, size_t size, bool retry)
 
 inline void hexagon_cache_pool_put(void *user_context, void *cache_mem) {
     ScopedMutexLock lock(&hexagon_cache_mutex);
-    halide_assert(user_context, cache_mem);
+    halide_abort_if_false(user_context, cache_mem);
     pcache_pool temp = hexagon_cache_pool;
     while (temp != nullptr) {
         if (temp->l2memory == cache_mem) {
