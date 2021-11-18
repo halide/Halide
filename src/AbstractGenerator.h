@@ -218,6 +218,8 @@ public:
     virtual bool emit_cpp_stub(const std::string &stub_file_path) = 0;
 };
 
+using AbstractGeneratorPtr = std::unique_ptr<AbstractGenerator>;
+
 }  // namespace Internal
 }  // namespace Halide
 

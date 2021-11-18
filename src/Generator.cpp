@@ -1322,8 +1322,8 @@ void GeneratorRegistry::unregister_factory(const std::string &name) {
 }
 
 /* static */
-std::unique_ptr<AbstractGenerator> GeneratorRegistry::create(const std::string &name,
-                                                             const GeneratorContext &context) {
+AbstractGeneratorPtr GeneratorRegistry::create(const std::string &name,
+                                               const GeneratorContext &context) {
     GeneratorRegistry &registry = get_registry();
     std::lock_guard<std::mutex> lock(registry.mutex);
     auto it = registry.factories.find(name);
@@ -1337,7 +1337,7 @@ std::unique_ptr<AbstractGenerator> GeneratorRegistry::create(const std::string &
         user_error << o.str();
     }
     GeneratorFactory f = it->second;
-    std::unique_ptr<AbstractGenerator> g = f(context);
+    AbstractGeneratorPtr g = f(context);
     internal_assert(g != nullptr);
     return g;
 }

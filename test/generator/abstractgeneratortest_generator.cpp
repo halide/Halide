@@ -158,7 +158,7 @@ public:
 };
 
 RegisterGenerator register_something(AbstractGeneratorTestName,
-                                     [](const GeneratorContext &context) -> std::unique_ptr<AbstractGenerator> {
+                                     [](const GeneratorContext &context) -> AbstractGeneratorPtr {
                                          return std::unique_ptr<AbstractGeneratorTest>(new AbstractGeneratorTest(context));
                                      });
 

@@ -1490,7 +1490,7 @@ protected:
     friend class GeneratorParamInfo;
 
     mutable int array_size_;  // always 1 if is_array() == false.
-        // -1 if is_array() == true but unspecified.
+                              // -1 if is_array() == true but unspecified.
 
     const std::string name_;
     const IOKind kind_;
@@ -2233,7 +2233,7 @@ public:
     }
 
     // Avoid ambiguity between Func-with-dim and int-with-default
-    //template <typename T2 = T, typename std::enable_if<std::is_same<TBase, Func>::value>::type * = nullptr>
+    // template <typename T2 = T, typename std::enable_if<std::is_same<TBase, Func>::value>::type * = nullptr>
     GeneratorInput(size_t array_size, const std::string &name, IntIfNonScalar d)
         : Super(array_size, name, d) {
     }
@@ -3038,7 +3038,7 @@ struct NoRealizations<T, Args...> {
 
 // Note that these functions must never return null:
 // if they cannot return a valid Generator, they must assert-fail.
-using GeneratorFactory = std::function<std::unique_ptr<AbstractGenerator>(const GeneratorContext &context)>;
+using GeneratorFactory = std::function<AbstractGeneratorPtr(const GeneratorContext &context)>;
 
 struct StringOrLoopLevel {
     std::string string_value;
@@ -3510,8 +3510,8 @@ public:
     static std::vector<std::string> enumerate();
     // Note that this method will never return null:
     // if it cannot return a valid Generator, it should assert-fail.
-    static std::unique_ptr<AbstractGenerator> create(const std::string &name,
-                                                     const Halide::GeneratorContext &context);
+    static AbstractGeneratorPtr create(const std::string &name,
+                                       const Halide::GeneratorContext &context);
 
 private:
     using GeneratorFactoryMap = std::map<const std::string, GeneratorFactory>;
