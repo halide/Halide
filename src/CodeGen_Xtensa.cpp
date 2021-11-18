@@ -2788,11 +2788,11 @@ void CodeGen_Xtensa::visit(const Call *op) {
         } else if (is_native_xtensa_vector<int8_t>(op->type) && bits) {
             rhs << "IVP_SRAI2NX8U(" << a0 << ", " << std::to_string(*bits) << ")";
         } else if (is_native_xtensa_vector<int16_t>(op->type) && bits) {
-            rhs << "IVP_SRLINX16(" << a0 << ", " << std::to_string(*bits) << ")";
+            rhs << "IVP_SRAINX16(" << a0 << ", " << std::to_string(*bits) << ")";
         } else if (is_native_xtensa_vector<uint16_t>(op->type) && bits) {
             rhs << "IVP_SRLINX16U(" << a0 << ", " << std::to_string(*bits) << ")";
         } else if (is_native_xtensa_vector<int32_t>(op->type) && bits) {
-            rhs << "IVP_SRLIN_2X32(" << a0 << ", " << std::to_string(*bits) << ")";
+            rhs << "IVP_SRAIN_2X32(" << a0 << ", " << std::to_string(*bits) << ")";
         } else if (is_native_xtensa_vector<uint32_t>(op->type) && bits) {
             rhs << "IVP_SRLIN_2X32U(" << a0 << ", " << std::to_string(*bits) << ")";
         } else {
