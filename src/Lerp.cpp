@@ -136,6 +136,8 @@ Expr lower_lerp(Expr zero_val, Expr one_val, const Expr &weight) {
             case 32: {
                 Expr shift = Cast::make(UInt(2 * bits), bits);
                 Expr prod_sum = widening_mul(zero_val, inverse_typed_weight) + widening_mul(one_val, typed_weight);
+                // Computes x / (2 ** N - 1) as (x / 2 ** N + x) / 2 ** N.
+                // TODO: on x86 it's actually one instruction cheaper to do the division directly.
                 Expr divided = rounding_shift_right(rounding_shift_right(prod_sum, shift) + prod_sum, shift);
 
                 result = Cast::make(UInt(bits, computation_type.lanes()), divided);
