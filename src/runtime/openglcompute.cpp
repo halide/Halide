@@ -208,9 +208,9 @@ WEAK bool GlobalState::is_inited_ok() {
 
 WEAK bool GlobalState::fill_in_funcs(void *user_context) {
     // Initialize pointers to OpenGL functions.
-#define GLFUNC(TYPE, VAR)                                                 \
+#define GLFUNC(TYPE, VAR)                                                   \
     if (load_gl_func(user_context, "gl" #VAR, (void **)&(VAR), true) < 0) { \
-        return false;                                                     \
+        return false;                                                       \
     }
     USED_GL_FUNCTIONS;
 #undef GLFUNC
