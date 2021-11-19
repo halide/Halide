@@ -658,6 +658,7 @@ void generate_schedule(const std::vector<Function> &outputs,
         auto_scheduler_results->scheduler_name = "Adams2019";
         auto_scheduler_results->schedule_source = optimal->schedule_source;
         auto_scheduler_results->python_schedule_source = optimal->python_schedule_source;
+        auto_scheduler_results->path_featurization = optimal->dump(true);
         {
             std::ostringstream out;
             optimal->save_featurization(dag, params, cache_options, out);

@@ -48,6 +48,7 @@ std::map<Output, const OutputInfo> get_output_info(const Target &target) {
         {Output::compiler_log, {"compiler_log", ".halide_compiler_log", IsSingle}},
         {Output::cpp_stub, {"cpp_stub", ".stub.h", IsSingle}},
         {Output::featurization, {"featurization", ".featurization", IsMulti}},
+        {Output::path_featurization, {"path_featurization", ".path_featurization", IsMulti}},
         {Output::llvm_assembly, {"llvm_assembly", ".ll", IsMulti}},
         {Output::object, {"object", is_windows_coff ? ".obj" : ".o", IsMulti}},
         {Output::python_extension, {"python_extension", ".py.cpp", IsSingle}},
@@ -755,6 +756,17 @@ void Module::compile(const std::map<Output, std::string> &output_files) const {
             binfile.write((const char *)r->featurization.data(), r->featurization.size());
         }
         binfile.close();
+    }
+    if (contains(output_files, Output::path_featurization)) {
+        debug(1) << "Module.compile(): path_featurization " << output_files.at(Output::path_featurization) << "\n";
+        // If the path_featurization data is empty, just write an empty file
+        std::ofstream file(output_files.at(Output::path_featurization));
+        auto *r = contents->auto_scheduler_results.get();
+        if (r) {
+            file << r->path_featurization << std::endl;
+        }
+        file.close();
+        internal_assert(!file.fail());
     }
     if (contains(output_files, Output::registration)) {
         debug(1) << "Module.compile(): registration " << output_files.at(Output::registration) << "\n";

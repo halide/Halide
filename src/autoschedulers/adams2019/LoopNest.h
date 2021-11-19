@@ -160,7 +160,7 @@ struct LoopNest {
     void dump(string prefix, const LoopNest *parent) const;
 
     // Recursively collect dump info above into a feature vector
-    string dump(const LoopNest *parent) const;
+    string dump(string prefix, const LoopNest *parent, bool dummy) const;
 
     // Does this loop nest access the given Func
     bool calls(const FunctionDAG::Node *f) const;

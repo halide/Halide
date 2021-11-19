@@ -32,6 +32,7 @@ enum class Output {
     compiler_log,
     cpp_stub,
     featurization,
+    path_featurization,
     llvm_assembly,
     object,
     python_extension,

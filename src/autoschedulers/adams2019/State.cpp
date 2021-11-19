@@ -539,7 +539,7 @@ void State::dump() const {
 }
 
 string State::dump(bool dummy) const {
-    return root->dump(nullptr);
+    return root->dump("", nullptr, dummy);
 }
 
 // Apply the schedule represented by this state to a Halide

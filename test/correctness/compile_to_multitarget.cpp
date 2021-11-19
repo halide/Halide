@@ -165,7 +165,7 @@ void test_compile_to_everything(Func j, bool do_object) {
 
     // multi-file outputs
     for (const auto &s : target_strings) {
-        for (const char *ext : {".s", ".bc", ".featurization", ".ll", ".stmt", ".stmt.html", o}) {
+        for (const char *ext : {".s", ".bc", ".featurization", ".path_featurization", ".ll", ".stmt", ".stmt.html", o}) {
             if (!do_object && !strcmp(ext, o)) continue;
             files.push_back(fname + "-" + s + ext);
         }
@@ -191,6 +191,7 @@ void test_compile_to_everything(Func j, bool do_object) {
         // even if you pass this in.
         // {Output::cpp_stub, fname + ".stub.h"},  // IsSingle
         {Output::featurization, fname + ".featurization"},    // IsMulti
+        {Output::path_featurization, fname + ".path_featurization"},    // IsMulti
         {Output::llvm_assembly, fname + ".ll"},               // IsMulti
         {Output::object, fname + o},                          // IsMulti
         {Output::python_extension, fname + ".py.cpp"},        // IsSingle

@@ -18,6 +18,7 @@ void define_module(py::module &m) {
             .def_readwrite("schedule_source", &AutoSchedulerResults::schedule_source)
             .def_readwrite("python_schedule_source", &AutoSchedulerResults::python_schedule_source)
             .def_readwrite("featurization", &AutoSchedulerResults::featurization)
+            .def_readwrite("path_featurization", &AutoSchedulerResults::path_featurization)
             .def("__repr__", [](const AutoSchedulerResults &o) -> std::string {
                 return "<halide.AutoSchedulerResults>";
             });

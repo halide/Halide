@@ -1148,12 +1148,14 @@ void LoopNest::dump(string prefix, const LoopNest *parent) const {
     }
 }
 
-string LoopNest::dump(const LoopNest *parent) const {
+string LoopNest::dump(string prefix, const LoopNest *parent, bool dummy) const {
     string result;
 
     if (!is_root()) {
         // Non-root nodes always have parents.
         internal_assert(parent != nullptr);
+        result += prefix;
+        prefix += ">";
 
         for (size_t i = 0; i < size.size(); i++) {
             result += (std::to_string(size[i]) + ",");
@@ -1184,16 +1186,17 @@ string LoopNest::dump(const LoopNest *parent) const {
         result += "t,";
     }
     if (innermost) {
-        result += "i,";
+        result += "i,\n";
     } else if (parallel) {
-        result += "p,";
+        result += "p,\n";
     } else {
+        result += "\n";
     }
     for (const auto *p : store_at) {
         //aslog(0) << prefix << "realize: " << p->func.name() << "\n";
     }
     for (size_t i = children.size(); i > 0; i--) {
-        result += children[i - 1]->dump(this);
+        result += children[i - 1]->dump(prefix, this, true);
     }
     for (auto it = inlined.begin(); it != inlined.end(); it++) {
         //aslog(0) << prefix << "inlined: " << it.key()->func.name() << " " << it.value() << "\n";

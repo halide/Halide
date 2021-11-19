@@ -758,7 +758,7 @@ int generate_filter_main_inner(int argc, char **argv, std::ostream &error_output
         "     in TensorFlow or PyTorch. See Generator::build_gradient_module() documentation.\n"
         "\n"
         " -e  A comma separated list of files to emit. Accepted values are:\n"
-        "     [assembly, bitcode, c_header, c_source, cpp_stub, featurization,\n"
+        "     [assembly, bitcode, c_header, c_source, cpp_stub, featurization,path_featurization,\n"
         "      llvm_assembly, object, python_extension, pytorch_wrapper, registration,\n"
         "      schedule, python_schedule, static_library, stmt, stmt_html, compiler_log].\n"
         "     If omitted, default value is [c_header, static_library, registration].\n"
