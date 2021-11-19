@@ -2413,7 +2413,7 @@ WasmModuleContents::WasmModuleContents(
         // Skip any leading :: nonsense that we needed to add
         // to disambiguate (say) ::sin() from Halide::sin()
         while (*name == ':') {
-          name++;
+            name++;
         }
         Local<v8::String> key = NewLocalString(isolate, name);
         Local<v8::Function> value = FunctionTemplate::New(isolate, f)->GetFunction(context).ToLocalChecked();
