@@ -88,8 +88,9 @@ instead of Wabt. This is enabled by the CMake command line options
 also requires building V8 yourself, then passing the path to the library and
 headers as CMake options. This is currently only tested on x86-64-Linux.
 
-The canonical instructions to build V8 are on
-[v8.dev](https://v8.dev/docs/build), summarized below.
+The canonical instructions to build V8 are at
+[v8.dev](https://v8.dev/docs/build), and [there are examples for embedding
+v8](https://v8.dev/docs/embed). The process is summarized below.
 
 - Install
   [`depot_tools`](https://commondatastorage.googleapis.com/chrome-infra-docs/flat/depot_tools/docs/html/depot_tools_tutorial.html#_setting_up)
