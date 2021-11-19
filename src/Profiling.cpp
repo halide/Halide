@@ -49,7 +49,7 @@ Stmt activate_thread(const Stmt &s, const Expr &profiler_state) {
                         decr_active_threads(profiler_state)});
 }
 
-Stmt suspend_thread(Stmt s, const Expr &profiler_state) {
+Stmt suspend_thread(const Stmt &s, const Expr &profiler_state) {
     return Block::make({decr_active_threads(profiler_state),
                         s,
                         incr_active_threads(profiler_state)});
