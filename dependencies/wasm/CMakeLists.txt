@@ -54,6 +54,7 @@ if (WITH_WABT)
 endif ()
 
 if (WITH_V8)
+    # Instructions to build V8 can be found in README_webassembly.md.
     if (NOT V8_INCLUDE_PATH)
         message(FATAL_ERROR "Please set V8_INCLUDE_PATH on the CMake command line.")
     endif()
