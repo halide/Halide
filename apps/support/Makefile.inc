@@ -36,8 +36,6 @@ HEXAGON_SDK_ROOT ?= ${SDK_ROOT}/Hexagon_SDK/4.0.0
 # if we output them to $(BIN), it would just be inefficient.)
 GENERATOR_BIN ?= $(BIN)/host
 
-SANITIZER_FLAGS ?=
-
 # The outputs to produce when running a Generator (ie the args to the -e flag).
 # If -e is unspecified, Halide normally defaults to the equivalent of
 # `-e static_library,h,registration`; we add assembly and stmt to the 'default'
@@ -55,6 +53,23 @@ CXX ?= g++
 GXX ?= g++
 
 OPTIMIZE ?= -O3
+
+SANITIZER_FLAGS ?=
+
+ifneq (,$(findstring tsan,$(HL_TARGET)$(HL_JIT_TARGET)))
+# Note that attempting to use TSAN with the JIT can produce false positives
+# if libHalide is not also compiled with TSAN enabled; we tack the relevant
+# flag onto OPTIMIZE here, but that's really only effective if you ensure
+# to do a clean build before testing. (In general, most of the Sanitizers
+# only work well when used in a completely clean environment.)
+OPTIMIZE += -fsanitize=thread
+SANITIZER_FLAGS += -fsanitize=thread
+endif
+
+ifneq (,$(findstring asan,$(HL_TARGET)$(HL_JIT_TARGET)))
+OPTIMIZE += -fsanitize=address
+SANITIZER_FLAGS += -fsanitize=address
+endif
 
 CFLAGS += $(OPTIMIZE) -I $(HALIDE_DISTRIB_PATH)/include/ -I $(HALIDE_DISTRIB_PATH)/tools/ -I $(HALIDE_DISTRIB_PATH)/apps/support/
 CXXFLAGS += $(OPTIMIZE) -std=c++17 -I $(HALIDE_DISTRIB_PATH)/include/ -I $(HALIDE_DISTRIB_PATH)/tools/ $(SANITIZER_FLAGS) -Wall -Werror -Wno-unused-function -Wcast-qual -Wignored-qualifiers -Wno-comment -Wsign-compare -Wno-unknown-warning-option -Wno-psabi
