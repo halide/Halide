@@ -6,11 +6,12 @@
 #include "IROperator.h"
 #include "Lerp.h"
 #include "Simplify.h"
+#include "Target.h"
 
 namespace Halide {
 namespace Internal {
 
-Expr lower_lerp(Expr zero_val, Expr one_val, const Expr &weight) {
+Expr lower_lerp(Expr zero_val, Expr one_val, const Expr &weight, const Target &target) {
 
     Expr result;
 
@@ -134,13 +135,25 @@ Expr lower_lerp(Expr zero_val, Expr one_val, const Expr &weight) {
             case 8:
             case 16:
             case 32: {
-                Expr shift = Cast::make(UInt(2 * bits), bits);
-                Expr prod_sum = widening_mul(zero_val, inverse_typed_weight) + widening_mul(one_val, typed_weight);
-                // Computes x / (2 ** N - 1) as (x / 2 ** N + x) / 2 ** N.
-                // TODO: on x86 it's actually one instruction cheaper to do the division directly.
-                Expr divided = rounding_shift_right(rounding_shift_right(prod_sum, shift) + prod_sum, shift);
-
-                result = Cast::make(UInt(bits, computation_type.lanes()), divided);
+                Expr prod_sum = (widening_mul(zero_val, inverse_typed_weight) +
+                                 widening_mul(one_val, typed_weight));
+                // Now we need to do a rounding divide and narrow. For
+                // 8-bit, this rounding divide looks like (x + 127) /
+                // 255. On most platforms it's we can compute this as
+                // ((x + 128) / 256 + x + 128) / 256. Note that
+                // overflow is impossible here because the most our
+                // prod_sum can be is 255^2.
+                if (target.arch == Target::X86) {
+                    // On x86 we have no rounding shifts but we do
+                    // have a multiply-keep-high-half. So it's
+                    // actually one instruction cheaper to do the
+                    // division directly.
+                    Expr divisor = cast(UInt(bits), -1);
+                    result = (prod_sum + divisor / 2) / divisor;
+                } else {
+                    result = rounding_shift_right(rounding_shift_right(prod_sum, bits) + prod_sum, bits);
+                }
+                result = Cast::make(UInt(bits, computation_type.lanes()), result);
                 break;
             }
             case 64:
