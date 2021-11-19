@@ -2909,7 +2909,7 @@ void CodeGen_LLVM::visit(const Call *op) {
                 // TODO(zalman): This is a bit of a hack. Halide IR is not strongly typed re: pointers,
                 // especially to structs. Specific case that is failing is halide_semaphore_t *.
                 //
-                // This first case converts an i8_t* (the represenation of void * being used in LLVM) to
+                // This first case converts an i8_t* (the representation of void * being used in LLVM) to
                 // the correct pointer type.
                 //
                 // The second case handles converting between bool and integer as i1_t and i8_t/u8_t are
