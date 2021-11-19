@@ -34,6 +34,11 @@ if (WITH_TEST_PERFORMANCE)
     add_subdirectory(performance)
 endif ()
 
+option(WITH_TEST_PERFORMANCE_AOT "Build performance_aot tests" ON)
+if (WITH_TEST_PERFORMANCE_AOT)
+    add_subdirectory(performance_aot)
+endif ()
+
 option(WITH_TEST_GENERATOR "Build generator tests" ON)
 if (WITH_TEST_GENERATOR)
     add_subdirectory(generator)
