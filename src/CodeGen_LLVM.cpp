@@ -2697,7 +2697,8 @@ void CodeGen_LLVM::visit(const Call *op) {
         Type wt = upgrade_type_for_arithmetic(op->args[2].type());
         Expr e = lower_lerp(cast(t, op->args[0]),
                             cast(t, op->args[1]),
-                            cast(wt, op->args[2]));
+                            cast(wt, op->args[2]),
+                            target);
         e = cast(op->type, e);
         codegen(e);
     } else if (op->is_intrinsic(Call::popcount)) {
