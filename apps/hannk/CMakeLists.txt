@@ -29,7 +29,7 @@ set(CMAKE_CXX_EXTENSIONS NO)
 # (We need to do this even if HANNK_BUILD_TFLITE is off,
 # so that the .tflite file parser can get the right schema)
 set(TFLITE_VERSION_MAJOR "2" CACHE STRING "Major version of TFLite to assume")
-set(TFLITE_VERSION_MINOR "6" CACHE STRING "Minor version of TFLite to assume")
+set(TFLITE_VERSION_MINOR "7" CACHE STRING "Minor version of TFLite to assume")
 set(TFLITE_VERSION_PATCH "0" CACHE STRING "Patch version of TFLite to assume")
 set(TFLITE_VERSION "${TFLITE_VERSION_MAJOR}.${TFLITE_VERSION_MINOR}.${TFLITE_VERSION_PATCH}")
 

@@ -1,19 +1,23 @@
 #include "interpreter/transforms.h"
 #include "util/small_vector.h"
 
+#include <unordered_set>
+
 namespace hannk {
 
 namespace {
 
+// Does *not* transfer ownership!
+// If not castable, returns nullptr but original op is still valid.
 template<typename T>
-T *cast_op(Op *x) {
+const T *cast_op(const Op *x) {
     class Caster : public OpVisitor {
         using OpVisitor::visit;
 
     public:
-        T *result = nullptr;
+        const T *result = nullptr;
 
-        void visit(T *op) override {
+        void visit(const T *op) override {
             result = op;
         }
     };
@@ -27,67 +31,111 @@ T *cast_op(Op *x) {
     }
 }
 
-class RemoveDeadOps {
-    const Op *const root_;
+class RemoveDeadOps : public OpMutator {
+    using OpMutator::visit;
+
+    std::unordered_set<Tensor *> root_outputs_;
+    int removed_ = 0;
 
     bool is_root_output(const TensorPtr &t) const {
-        return root_->is_output(t);
+        return root_outputs_.count(t.get()) > 0;
     };
 
-public:
-    explicit RemoveDeadOps(Op *root)
-        : root_(root) {
-    }
-
-    void remove_in_group(OpGroup *op_group) {
-        // Find ops with outputs that are unused.
-        // Go in reverse order so removing a dead op
-        // enables earlier ops to be seen as dead.
-        for (int i = op_group->op_count() - 1; i >= 0; --i) {
-            Op *op = op_group->op(i);
-            if (OpGroup *group = cast_op<OpGroup>(op)) {
-                remove_in_group(group);
-            }
-            bool dead = true;
-            for (int j = 0; dead && j < op->input_count(); j++) {
-                if (is_root_output(op->input(j))) {
-                    dead = false;
-                    break;
-                }
-            }
-            for (int j = 0; dead && j < op->output_count(); j++) {
-                // An op isn't dead if its output is an output
-                // of the graph.
-                if (is_root_output(op->output(j))) {
-                    dead = false;
-                    break;
-                }
-
-                if (!op->output(j)->consumers().empty()) {
-                    dead = false;
-                    break;
-                }
-            }
-
-            if (dead) {
-                op_group->remove(op);
+    bool is_dead(const Op *op) const {
+        for (int j = 0; j < op->input_count(); j++) {
+            const auto &input = op->input(j);
+            if (is_root_output(input)) {
+                // TODO: is it ever actually possible to have an Op's input be a root output?
+                // (This is what the previous, OpVisitor-based code did)
+                return false;
             }
         }
+        for (int j = 0; j < op->output_count(); j++) {
+            const auto &output = op->output(j);
+            // An op isn't dead if its output is an output
+            // of the graph.
+            if (is_root_output(output)) {
+                return false;
+            }
+
+            if (!output->consumers().empty()) {
+                return false;
+            }
+        }
+        return true;
     }
+
+public:
+    // Go in reverse order so removing a dead op enables earlier ops to be seen as dead.
+    explicit RemoveDeadOps(const Op *root) {
+        // Build a set so that we don't have to worry about the root op mutating
+        for (int i = 0; i < root->output_count(); i++) {
+            root_outputs_.insert(root->output(i).get());
+        }
+    }
+
+    int removed() const {
+        return removed_;
+    }
+
+protected:
+    OpPtr visit_leaf(OpPtr op) override {
+        if (is_dead(op.get())) {
+            removed_++;
+            return nullptr;
+        } else {
+            return op;
+        }
+    }
+
+    OpPtr visit(std::unique_ptr<OpGroup> op) override {
+        // Don't call super; roll our own code to go in reverse order.
+        // TODO: is this even the right thing to do? May be better to
+        // to a graph traverse andkeep removing ops until none get removed.
+
+        std::vector<TensorPtr> inputs = op->inputs();
+        std::vector<TensorPtr> outputs = op->outputs();
+
+        const int old_op_count = op->op_count();
+
+        std::vector<OpPtr> ops_new;
+        ops_new.reserve(old_op_count);
+        for (int i = 0; i < old_op_count; i++) {
+            const int idx = (old_op_count - i - 1);
+            OpPtr sub_op_old = op->take_op(idx);
+            assert(sub_op_old != nullptr);
+            OpPtr sub_op_new = mutate(std::move(sub_op_old));
+            if (sub_op_new != nullptr) {
+                ops_new.push_back(std::move(sub_op_new));
+            }
+        }
+        std::reverse(ops_new.begin(), ops_new.end());
+        auto new_op_group = make_op<OpGroup>(inputs, outputs, std::move(ops_new));
+
+        // If the OpGroup is empty after mutation, remove it as well.
+        if (new_op_group && new_op_group->op_count() == 0) {
+            removed_++;
+            return nullptr;
+        }
+
+        return new_op_group;
+    }
+
+private:
 };
 
 }  // namespace
 
-void remove_dead_ops(OpGroup *root) {
-    RemoveDeadOps(root).remove_in_group(root);
+OpPtr remove_dead_ops(OpPtr op) {
+    return RemoveDeadOps(op.get()).mutate(std::move(op));
 }
 
 namespace {
 
-class InPlaceReshape : public LeafOpVisitor {
-    using OpVisitor::visit;
+class InPlaceReshape : public OpMutator {
+    using OpMutator::visit;
 
-    void visit(ReshapeOp *op) override {
+    OpPtr visit(std::unique_ptr<ReshapeOp> op) override {
         TensorPtr input = op->input();
         TensorPtr output = op->output();
 
@@ -100,12 +148,14 @@ class InPlaceReshape : public LeafOpVisitor {
         } else if (output->can_alias(input, AliasType::Reshaped)) {
             Tensor::make_reshape_alias(output, input);
         }
+
+        return op;
     }
 };
 
 // Try to alias outputs to inputs when it is safe.
-class InPlace : public LeafOpVisitor {
-    using OpVisitor::visit;
+class InPlace : public OpMutator {
+    using OpMutator::visit;
 
     // We can alias two tensors if the input is not used after the output is written,
     // and we meet a number of other requirements.
@@ -146,7 +196,7 @@ class InPlace : public LeafOpVisitor {
         return false;
     }
 
-    void maybe_alias_elementwise(ElementwiseOp *op) const {
+    void maybe_alias_elementwise(const ElementwiseOp *op) const {
         for (int j = 0; j < op->output_count(); j++) {
             for (int i = 0; i < op->input_count(); i++) {
                 if (maybe_alias_tensors(op->input(i), op->output(j))) {
@@ -157,19 +207,22 @@ class InPlace : public LeafOpVisitor {
         }
     }
 
-    void visit(BinaryOp *op) override {
-        maybe_alias_elementwise(op);
+    OpPtr visit(std::unique_ptr<BinaryOp> op) override {
+        maybe_alias_elementwise(op.get());
+        return op;
     }
 
-    void visit(UnaryOp *op) override {
-        maybe_alias_elementwise(op);
+    OpPtr visit(std::unique_ptr<UnaryOp> op) override {
+        maybe_alias_elementwise(op.get());
+        return op;
     }
 
-    void visit(ElementwiseProgramOp *op) override {
-        maybe_alias_elementwise(op);
+    OpPtr visit(std::unique_ptr<ElementwiseProgramOp> op) override {
+        maybe_alias_elementwise(op.get());
+        return op;
     }
 
-    void visit(ConcatenationOp *op) override {
+    OpPtr visit(std::unique_ptr<ConcatenationOp> op) override {
         bool is_no_op = true;
         TensorOffset offset(op->axis() + 1);
         for (int i = 0; i < op->input_count(); i++) {
@@ -181,9 +234,10 @@ class InPlace : public LeafOpVisitor {
             // TODO: Try actually deleting the op?
             op->set_no_op();
         }
+        return op;
     }
 
-    void visit(SplitOp *op) override {
+    OpPtr visit(std::unique_ptr<SplitOp> op) override {
         bool is_no_op = true;
         TensorOffset offset(op->axis() + 1);
         for (int i = 0; i < op->output_count(); i++) {
@@ -195,11 +249,12 @@ class InPlace : public LeafOpVisitor {
             // TODO: Try actually deleting the op?
             op->set_no_op();
         }
+        return op;
     }
 
-    void visit(PadOp *op) override {
+    OpPtr visit(std::unique_ptr<PadOp> op) override {
         if (!op->input(1) || !op->input(1)->is_constant()) {
-            return;
+            return op;
         }
         assert(op->input(1)->is_allocated());
 
@@ -211,31 +266,40 @@ class InPlace : public LeafOpVisitor {
         }
 
         maybe_alias_tensors(op->input(), op->output(), offset);
+        return op;
     }
 
-    const Op *const root_;
+    std::unordered_set<Tensor *> inputs_and_outputs_;
 
     bool is_root_input_or_output(const TensorPtr &t) const {
-        return root_->is_input(t) || root_->is_output(t);
+        return inputs_and_outputs_.count(t.get()) > 0;
     };
 
 public:
-    explicit InPlace(Op *root)
-        : root_(root) {
+    explicit InPlace(const Op *root) {
+        // Build a set so that we don't have to worry about the root op mutating
+        for (int i = 0; i < root->input_count(); i++) {
+            inputs_and_outputs_.insert(root->input(i).get());
+        }
+        for (int i = 0; i < root->output_count(); i++) {
+            inputs_and_outputs_.insert(root->output(i).get());
+        }
     }
 };
 
 }  // namespace
 
-void in_place(Op *op) {
+OpPtr in_place(OpPtr op) {
     // Always check for ReshapeOp before anything else; we want
     // to try our best to alias those tensors, and the luck of the
     // draw could put other aliases in place first that could thwart this.
     InPlaceReshape handle_reshapes;
-    op->accept(&handle_reshapes);
+    op = handle_reshapes.mutate(std::move(op));
 
-    InPlace v(op);
-    op->accept(&v);
+    InPlace handle_in_place(op.get());
+    op = handle_in_place.mutate(std::move(op));
+
+    return op;
 }
 
 namespace {
@@ -254,23 +318,22 @@ void replace_consumers(const TensorPtr &from, const TensorPtr &to) {
 }
 
 // Find ops that need padding and add an explicit pad op.
-class PadForOps : public LeafOpVisitor {
-    using OpVisitor::visit;
+class PadForOps : public OpMutator {
+    using OpMutator::visit;
 
-    void pad_for_op(Op *op, int input_idx, int output_idx) {
+    std::unique_ptr<PadOp> get_padding_for_op(const Op *op, int input_idx = 0, int output_idx = 0) {
         TensorPtr input = op->input(input_idx);
         TensorPtr output = op->output(output_idx);
         BoundsMap deps = op->map_bounds(input_idx, output_idx);
         Box required = deps.evaluate(output->bounds());
 
         if (is_subset_of(required, input->bounds())) {
-            return;
+            return nullptr;
         }
 
         // Make a PadOp and a new tensor for the padded result.
-        TensorPtr padded =
-            std::make_shared<Tensor>(input->name() + "_padded", input->type(), required, input->quantization());
-        op->set_input(padded);
+        TensorPtr padded = std::make_shared<Tensor>(input->name() + ".padded",
+                                                    input->type(), required, input->quantization());
 
         HalideBuffer<int32_t> padding_data(2, input->rank());
         // Center the crop, except for the channel dimension.
@@ -286,12 +349,12 @@ class PadForOps : public LeafOpVisitor {
         padding->set_constant();
 
         // Add the new tensor, op, and update the input.
-        OpPtr pad = make_op<PadOp>(input, padding, padded);
-        new_ops.emplace_back(std::move(pad));
+        return make_prepared_op<PadOp>(input, padding, padded);
     }
 
-    void visit(ConvOp *op) override {
-        pad_for_op(op, 0, 0);
+    OpPtr visit(std::unique_ptr<ConvOp> op) override {
+        OpPtr padding = get_padding_for_op(op.get());
+        OpPtr tile = nullptr;
 
         // We also need to tile the filter.
         TensorPtr filter = op->filter();
@@ -306,96 +369,173 @@ class PadForOps : public LeafOpVisitor {
                 // We're widening the filter. Subtract the offset.
                 std::fill(quantization.zero.begin(), quantization.zero.end(), 0);
             }
-            TensorPtr tiled =
-                std::make_shared<Tensor>(filter->name() + ".tiled", type, tiled_shape, quantization);
+            TensorPtr tiled = std::make_shared<Tensor>(filter->name() + ".tiled",
+                                                       type, tiled_shape, quantization);
             // Maybe more than one op uses this same filter...?
             replace_consumers(filter, tiled);
 
-            OpPtr tile = make_op<TileConvFilterOp>(filter, tiled);
-            new_ops.emplace_back(std::move(tile));
+            tile = make_prepared_op<TileConvFilterOp>(filter, tiled);
+        }
+
+        if (padding || tile) {
+            TensorPtr conv_input = op->input();
+            TensorPtr conv_filter = op->filter();
+
+            std::vector<OpPtr> new_ops;
+            if (padding) {
+                conv_input = padding->output();
+                new_ops.push_back(std::move(padding));
+            }
+
+            if (tile) {
+                conv_filter = tile->output();
+                new_ops.push_back(std::move(tile));
+            }
+
+            auto inputs = op->inputs();
+            auto outputs = op->outputs();
+            op = make_prepared_op<ConvOp>(conv_input, conv_filter, op->bias(), op->output(),
+                                          op->stride(), op->dilation(), op->padding(), op->activation());
+            new_ops.push_back(std::move(op));
+
+            return make_prepared_op<OpGroup>(std::move(inputs), std::move(outputs), std::move(new_ops));
+        } else {
+            return op;
         }
     }
 
-    void visit(DepthwiseConv2DOp *op) override {
-        TensorPtr input = op->input();
-        TensorPtr output = op->output();
-        if (op->depth_multiplier() != 1 && op->depth_multiplier() < output->extent(0)) {
+    OpPtr visit(std::unique_ptr<DepthwiseConv2DOp> op) override {
+        OpPtr upsample_op = nullptr;
+        if (op->depth_multiplier() != 1 && op->depth_multiplier() < op->output()->extent(0)) {
             // Make an UpsampleChannels op and a new tensor for the upsampled result.
+            TensorPtr input = op->input();
+            TensorPtr output = op->output();
             Box upsampled_shape = input->bounds();
             upsampled_shape[0].min *= op->depth_multiplier();
             upsampled_shape[0].max = (upsampled_shape[0].max + 1) * op->depth_multiplier() - 1;
-            TensorPtr upsampled =
-                std::make_shared<Tensor>(input->name() + "_upsampled", input->type(), upsampled_shape, input->quantization());
-            op->set_input(upsampled);
+            TensorPtr upsampled = std::make_shared<Tensor>(input->name() + ".upsampled",
+                                                           input->type(), upsampled_shape, input->quantization());
 
             // Add the new tensor, op, and update the input.
-            OpPtr upsample = make_op<UpsampleChannelsOp>(input, op->depth_multiplier(), upsampled);
-            new_ops.emplace_back(std::move(upsample));
+            upsample_op = make_prepared_op<UpsampleChannelsOp>(input, op->depth_multiplier(), upsampled);
 
-            op->set_depth_multiplier(1);
+            op = make_prepared_op<DepthwiseConv2DOp>(upsampled, op->filter(), op->bias(), op->output(),
+                                                     /*depth_multiplier*/ 1, op->stride(), op->dilation(),
+                                                     op->padding(), op->activation());
         }
 
         // TODO: It might be worth enabling UpsampleChannels to handle padding, and fusing the padding
         // in the case we need to upsample the channels.
-        pad_for_op(op, 0, 0);
+        OpPtr padding_op = get_padding_for_op(op.get());
+
+        if (padding_op || upsample_op) {
+            std::vector<OpPtr> new_ops;
+            if (upsample_op) {
+                new_ops.push_back(std::move(upsample_op));
+            }
+
+            if (padding_op) {
+                TensorPtr padding_output = padding_op->output();
+                new_ops.push_back(std::move(padding_op));
+                op = make_prepared_op<DepthwiseConv2DOp>(padding_output, op->filter(), op->bias(), op->output(),
+                                                         op->depth_multiplier(), op->stride(), op->dilation(),
+                                                         op->padding(), op->activation());
+            }
+
+            auto inputs = op->inputs();
+            auto outputs = op->outputs();
+            new_ops.push_back(std::move(op));
+
+            return make_prepared_op<OpGroup>(std::move(inputs), std::move(outputs), std::move(new_ops));
+        } else {
+            return op;
+        }
+    }
+
+    template<class T, class... Args>
+    std::unique_ptr<T> make_prepared_op(Args &&...args) {
+        auto op = std::make_unique<T>(std::forward<Args>(args)...);
+        if (!op->prepare()) {
+            HLOG(ERROR) << "pad_for_ops: new_op " << op->name() << " failed prepare()";
+            prepare_failed = true;
+        }
+        return op;
     }
 
 public:
-    std::vector<OpPtr> new_ops;
-};
-
-class FusePadOps : public LeafOpVisitor {
-    using OpVisitor::visit;
-
-    void visit(PadOp *op) override {
-        if (op->input()->producers().size() != 1 || op->input()->consumers().size() != 1) {
-            return;
-        }
-        PadOp *prev_pad = cast_op<PadOp>(op->input()->producers().front());
-        if (!prev_pad) {
-            return;
-        }
-
-        op->set_input(prev_pad->input());
-
-        auto prev_padding = prev_pad->input(1)->buffer<const int32_t>();
-        auto padding = op->input(1)->buffer<int32_t>();
-
-        for (int d = 0; d < std::min(prev_padding.dimensions(), padding.dimensions()); d++) {
-            padding(0, d) += prev_padding(0, d);
-            padding(1, d) += prev_padding(1, d);
-        }
-    }
+    bool prepare_failed = false;
 };
 
 }  // namespace
 
-bool pad_for_ops(OpGroup *op) {
+OpPtr pad_for_ops(OpPtr op) {
     PadForOps padder;
-    op->accept(&padder);
-
-    // We need to add in reverse order, so ops that depend on newly added ops go
-    // in the right place.
-    for (auto i = padder.new_ops.rbegin(); i != padder.new_ops.rend(); ++i) {
-        if (!i->get()->prepare()) {
-            HLOG(ERROR) << "pad_for_ops: new_op " << i->get()->name() << " failed prepare()";
-            return false;
-        }
-        op->add(std::move(*i));
+    op = padder.mutate(std::move(op));
+    if (padder.prepare_failed) {
+        return nullptr;
     }
-
-    // Some networks use padding already for other reasons, so
-    // we might have introduced two paddings in a row, which is
-    // a waste.
-    FusePadOps fuser;
-    op->accept(&fuser);
-
-    return true;
+    return op;
 }
 
 namespace {
 
-bool can_execute(const Op *op) {
+class FusePadOps : public OpMutator {
+    using OpMutator::visit;
+
+    OpPtr visit(std::unique_ptr<PadOp> op) override {
+        TensorPtr input = op->input();
+        if (input->producers().size() != 1 || input->consumers().size() != 1) {
+            return op;
+        }
+        const PadOp *prev_pad = cast_op<PadOp>(input->producers().front());
+        if (!prev_pad) {
+            return op;
+        }
+
+        // Combine prev's padding into our padding. (We'll rely on remove_dead_ops
+        // to get rid of the prev padding later on.)
+
+        auto prev_padding = prev_pad->padding()->buffer<const int32_t>();
+        auto cur_padding = op->padding()->buffer<int32_t>();
+        for (int d = 0; d < std::min(prev_padding.dimensions(), cur_padding.dimensions()); d++) {
+            cur_padding(0, d) += prev_padding(0, d);
+            cur_padding(1, d) += prev_padding(1, d);
+        }
+
+        return make_prepared_op<PadOp>(prev_pad->input(), op->padding(), op->output());
+    }
+
+    template<class T, class... Args>
+    std::unique_ptr<T> make_prepared_op(Args &&...args) {
+        auto op = std::make_unique<T>(std::forward<Args>(args)...);
+        if (!op->prepare()) {
+            HLOG(ERROR) << "fuse_pad_ops: new_op " << op->name() << " failed prepare()";
+            prepare_failed = true;
+        }
+        return op;
+    }
+
+public:
+    bool prepare_failed = false;
+};
+
+}  // namespace
+
+OpPtr fuse_pad_ops(OpPtr op) {
+    // Some networks use padding already for other reasons, so
+    // we might have introduced two paddings in a row, which is
+    // a waste. (This should be run after flatten_groups().)
+    FusePadOps fuser;
+    op = fuser.mutate(std::move(op));
+    if (fuser.prepare_failed) {
+        return nullptr;
+    }
+    return op;
+}
+
+namespace {
+
+bool can_execute_with_all_constant_inputs(const Op *op) {
     for (int i = 0; i < op->input_count(); i++) {
         if (!op->input(i)->is_constant()) {
             return false;
@@ -405,16 +545,11 @@ bool can_execute(const Op *op) {
     return true;
 }
 
-}  // namespace
+class ConstantFolder : public OpMutator {
+    using OpMutator::visit;
 
-void fold_constants(OpGroup *root) {
-    std::vector<const Op *> to_remove;
-    for (int i = 0; i < root->op_count(); i++) {
-        Op *op = root->op(i);
-        if (OpGroup *group = cast_op<OpGroup>(op)) {
-            fold_constants(group);
-        }
-        if (can_execute(op)) {
+    OpPtr visit_leaf(OpPtr op) override {
+        if (can_execute_with_all_constant_inputs(op.get())) {
             // Allocate all the outputs.
             // Since we aren't ready for arena allocation,
             // we'll just do these as one-off heap allocs.
@@ -434,13 +569,43 @@ void fold_constants(OpGroup *root) {
                 op->output(j)->set_constant();
             }
 
-            to_remove.push_back(op);
+            return nullptr;
+        } else {
+            return op;
         }
     }
+};
 
-    for (const Op *i : to_remove) {
-        root->remove(i);
+}  // namespace
+
+OpPtr fold_constants(OpPtr op) {
+    ConstantFolder folder;
+    return folder.mutate(std::move(op));
+}
+
+namespace {
+
+class GroupFlattener : public OpMutator {
+    using OpMutator::visit;
+
+    OpPtr visit_leaf(OpPtr op) override {
+        flattened.push_back(std::move(op));
+        return nullptr;
     }
+
+public:
+    std::vector<OpPtr> flattened;
+};
+
+}  // namespace
+
+OpPtr flatten_groups(OpPtr op) {
+    std::vector<TensorPtr> inputs = op->inputs();
+    std::vector<TensorPtr> outputs = op->outputs();
+
+    GroupFlattener flattener;
+    (void)flattener.mutate(std::move(op));
+    return make_op<OpGroup>(inputs, outputs, std::move(flattener.flattened));
 }
 
 }  // namespace hannk
