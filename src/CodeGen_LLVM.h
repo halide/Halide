@@ -526,11 +526,16 @@ protected:
         This is used to avoid "emulated" equivalent code-gen in case target has FP16 feature **/
     virtual bool supports_call_as_float16(const Call *op) const;
 
-    /** Wrap a cast around a fixed-length vector value to generate a
-     *  vscale one if required by the target.
+    /** Ensure that a vector value is correctly either fixed of vscale
      */
-    llvm::Value *normalize_fixed_to_scalable_vector_type(const Type &result_type, llvm::Value *result);
+    llvm::Value *normalize_fixed_scalable_vector_type(llvm::Type *desired_type, llvm::Value *result);
   
+    /** Convert fixed vector to a vscale one. */
+    llvm::Value *fixed_to_scalable_vector_type(llvm::Value *fixed);
+
+    /** Convert vscale vector to a fixed one. */
+    llvm::Value *scalable_to_fixed_vector_type(llvm::Value *scalable);
+
     /** Get number of vector elements, taking into account scalable vectors. Returns 1 for scalars. */
     int get_vector_num_elements(const llvm::Type *t);
 
