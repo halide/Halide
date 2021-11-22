@@ -182,6 +182,11 @@ int main(int argc, char **argv) {
                 fprintf(c_out, "const int64_t table_u%d[256][4] = {\n", bits);
             }
             for (int d = 0; d < 256; d++) {
+                if (runtime && d < 2) {
+                    fprintf(c_out, "    {0, 0, 0, 0}, \\ unused\n");
+                    continue;
+                }
+
                 int den = d;
                 if (den == 0) den = 256;
                 if (!runtime) {
@@ -214,7 +219,8 @@ int main(int argc, char **argv) {
                     goto next_unsigned;
                 }
 
-                for (int shift = 0; shift < 8; shift++) {
+                {
+                    int shift = 31 - __builtin_clz(den - 1);
                     int64_t mul = (1L << (bits + shift + 1)) / den - (1L << bits) + 1;
                     mul &= (1L << bits) - 1;
                     if (u_method_2(den, mul, shift, bits)) {
@@ -236,6 +242,10 @@ int main(int argc, char **argv) {
                 fprintf(c_out, "const int64_t table_s%d[256][4] = {\n", bits);
             }
             for (int d = 0; d < 256; d++) {
+                if (runtime && d < 2) {
+                    fprintf(c_out, "    {0, 0, 0, 0}, \\ unused\n");
+                    continue;
+                }
                 int den = d;
                 if (den == 0) den = 256;
                 if (!runtime) {
@@ -247,7 +257,8 @@ int main(int argc, char **argv) {
                     }
                 }
 
-                for (int shift = 0; shift < 8; shift++) {
+                {
+                    int shift = 31 - __builtin_clz(den - 1);
                     int64_t mul = (1L << (shift + bits)) / den + 1;
                     if (s_method_1(den, mul, shift, bits)) {
                         fprintf(c_out, "    {%d, 1, %lldLL, %d},\n", den, (long long)mul, shift);
