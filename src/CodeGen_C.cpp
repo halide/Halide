@@ -2317,7 +2317,7 @@ void CodeGen_C::visit(const Call *op) {
         }
     } else if (op->is_intrinsic(Call::lerp)) {
         internal_assert(op->args.size() == 3);
-        Expr e = lower_lerp(op->args[0], op->args[1], op->args[2]);
+        Expr e = lower_lerp(op->args[0], op->args[1], op->args[2], target);
         rhs << print_expr(e);
     } else if (op->is_intrinsic(Call::absd)) {
         internal_assert(op->args.size() == 2);
