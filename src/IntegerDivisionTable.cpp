@@ -1565,8 +1565,8 @@ const int64_t table_s32[256][4] = {
     {255, 1, 2155905153LL, 7},
 };
 const int64_t table_runtime_u8[256][4] = {
-    {0, 0, 0, 0}, \ unused
-    {0, 0, 0, 0}, \ unused
+    {0, 0, 0, 0},  // unused
+    {0, 0, 0, 0},  // unused
     {2, 2, 1ULL, 0},
     {3, 2, 86ULL, 1},
     {4, 2, 1ULL, 1},
@@ -1823,8 +1823,8 @@ const int64_t table_runtime_u8[256][4] = {
     {255, 2, 2ULL, 7},
 };
 const int64_t table_runtime_s8[256][4] = {
-    {0, 0, 0, 0}, \ unused
-    {0, 0, 0, 0}, \ unused
+    {0, 0, 0, 0},  // unused
+    {0, 0, 0, 0},  // unused
     {2, 1, 129LL, 0},
     {3, 1, 171LL, 1},
     {4, 1, 129LL, 1},
@@ -2081,8 +2081,8 @@ const int64_t table_runtime_s8[256][4] = {
     {255, 1, 129LL, 7},
 };
 const int64_t table_runtime_u16[256][4] = {
-    {0, 0, 0, 0}, \ unused
-    {0, 0, 0, 0}, \ unused
+    {0, 0, 0, 0},  // unused
+    {0, 0, 0, 0},  // unused
     {2, 2, 1ULL, 0},
     {3, 2, 21846ULL, 1},
     {4, 2, 1ULL, 1},
@@ -2339,8 +2339,8 @@ const int64_t table_runtime_u16[256][4] = {
     {255, 2, 258ULL, 7},
 };
 const int64_t table_runtime_s16[256][4] = {
-    {0, 0, 0, 0}, \ unused
-    {0, 0, 0, 0}, \ unused
+    {0, 0, 0, 0},  // unused
+    {0, 0, 0, 0},  // unused
     {2, 1, 32769LL, 0},
     {3, 1, 43691LL, 1},
     {4, 1, 32769LL, 1},
@@ -2597,8 +2597,8 @@ const int64_t table_runtime_s16[256][4] = {
     {255, 1, 32897LL, 7},
 };
 const int64_t table_runtime_u32[256][4] = {
-    {0, 0, 0, 0}, \ unused
-    {0, 0, 0, 0}, \ unused
+    {0, 0, 0, 0},  // unused
+    {0, 0, 0, 0},  // unused
     {2, 2, 1ULL, 0},
     {3, 2, 1431655766ULL, 1},
     {4, 2, 1ULL, 1},
@@ -2855,8 +2855,8 @@ const int64_t table_runtime_u32[256][4] = {
     {255, 2, 16843010ULL, 7},
 };
 const int64_t table_runtime_s32[256][4] = {
-    {0, 0, 0, 0}, \ unused
-    {0, 0, 0, 0}, \ unused
+    {0, 0, 0, 0},  // unused
+    {0, 0, 0, 0},  // unused
     {2, 1, 2147483649LL, 0},
     {3, 1, 2863311531LL, 1},
     {4, 1, 2147483649LL, 1},
@@ -3112,6 +3112,6 @@ const int64_t table_runtime_s32[256][4] = {
     {254, 1, 2164392969LL, 7},
     {255, 1, 2155905153LL, 7},
 };
-}
-}
-}
+}  // namespace IntegerDivision
+}  // namespace Internal
+}  // namespace Halide
