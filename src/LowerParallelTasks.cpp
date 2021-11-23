@@ -206,17 +206,6 @@ struct LowerParallelTasks : public IRMutator {
         for (int i = 0; i < num_tasks; i++) {
             ParallelTask t = tasks[i];
 
-            // Analyze the task body
-            class MayBlock : public IRVisitor {
-                using IRVisitor::visit;
-                void visit(const Acquire *op) override {
-                    result = true;
-                }
-
-            public:
-                bool result = false;
-            };
-
             // TODO(zvookin|abadams): This makes multiple passes over the
             // IR to cover each node. (One tree walk produces the min
             // thread count for all nodes, but we redo each subtree when
