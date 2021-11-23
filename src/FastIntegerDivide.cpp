@@ -21,118 +21,89 @@ Expr shift_for_denominator(const Expr &d) {
 }
 
 Buffer<uint8_t> integer_divide_table_u8() {
-    static std::mutex initialize_lock;
-    std::lock_guard<std::mutex> lock_guard(initialize_lock);
-    {
-        static Buffer<uint8_t> im(256);
-        static bool initialized = false;
-        if (!initialized) {
-            initialized = true;
-            for (uint32_t i = 0; i < 256; i++) {
-                im(i) = table_runtime_u8[i][2];
-                if (i > 1) {
-                    internal_assert(table_runtime_u8[i][3] == shift_for_denominator(i));
-                }
+    static auto im = []() {
+        Buffer<uint8_t> im(256);
+        for (uint32_t i = 0; i < 256; i++) {
+            im(i) = table_runtime_u8[i][2];
+            if (i > 1) {
+                internal_assert(table_runtime_u8[i][3] == shift_for_denominator(i));
             }
         }
         return im;
-    }
+    }();
+    return im;
 }
 
 Buffer<uint8_t> integer_divide_table_s8() {
-    static std::mutex initialize_lock;
-    std::lock_guard<std::mutex> lock_guard(initialize_lock);
-    {
-        static Buffer<uint8_t> im(256);
-        static bool initialized = false;
-        if (!initialized) {
-            initialized = true;
-            for (uint32_t i = 0; i < 256; i++) {
-                im(i) = table_runtime_s8[i][2];
-                if (i > 1) {
-                    internal_assert(table_runtime_s8[i][3] == shift_for_denominator(i));
-                }
+    static auto im = []() {
+        Buffer<uint8_t> im(256);
+        for (uint32_t i = 0; i < 256; i++) {
+            im(i) = table_runtime_s8[i][2];
+            if (i > 1) {
+                internal_assert(table_runtime_s8[i][3] == shift_for_denominator(i));
             }
         }
         return im;
-    }
+    }();
+    return im;
 }
 
 Buffer<uint16_t> integer_divide_table_u16() {
-    static std::mutex initialize_lock;
-    std::lock_guard<std::mutex> lock_guard(initialize_lock);
-    {
-        static Buffer<uint16_t> im(256);
-        static bool initialized = false;
-        if (!initialized) {
-            initialized = true;
-            for (uint32_t i = 0; i < 256; i++) {
-                im(i) = table_runtime_u16[i][2];
-                if (i > 1) {
-                    internal_assert(table_runtime_u16[i][3] == shift_for_denominator(i));
-                }
+    static auto im = []() {
+        Buffer<uint16_t> im(256);
+        for (uint32_t i = 0; i < 256; i++) {
+            im(i) = table_runtime_u16[i][2];
+            if (i > 1) {
+                internal_assert(table_runtime_u16[i][3] == shift_for_denominator(i));
             }
         }
         return im;
-    }
+    }();
+    return im;
 }
 
 Buffer<uint16_t> integer_divide_table_s16() {
-    static std::mutex initialize_lock;
-    std::lock_guard<std::mutex> lock_guard(initialize_lock);
-    {
-        static Buffer<uint16_t> im(256);
-        static bool initialized = false;
-        if (!initialized) {
-            initialized = true;
-            for (uint32_t i = 0; i < 256; i++) {
-                im(i) = table_runtime_s16[i][2];
-                if (i > 1) {
-                    internal_assert(table_runtime_s16[i][3] == shift_for_denominator(i));
-                }
+    static auto im = []() {
+        Buffer<uint16_t> im(256);
+        for (uint32_t i = 0; i < 256; i++) {
+            im(i) = table_runtime_s16[i][2];
+            if (i > 1) {
+                internal_assert(table_runtime_s16[i][3] == shift_for_denominator(i));
             }
         }
         return im;
-    }
+    }();
+    return im;
 }
 
 Buffer<uint32_t> integer_divide_table_u32() {
-    static std::mutex initialize_lock;
-    std::lock_guard<std::mutex> lock_guard(initialize_lock);
-    {
-        static Buffer<uint32_t> im(256);
-        static bool initialized = false;
-        if (!initialized) {
-            initialized = true;
-            for (uint32_t i = 0; i < 256; i++) {
-                im(i) = table_runtime_u32[i][2];
-                if (i > 1) {
-                    internal_assert(table_runtime_u32[i][3] == shift_for_denominator(i));
-                }
+    static auto im = []() {
+        Buffer<uint32_t> im(256);
+        for (uint32_t i = 0; i < 256; i++) {
+            im(i) = table_runtime_u32[i][2];
+            if (i > 1) {
+                internal_assert(table_runtime_u32[i][3] == shift_for_denominator(i));
             }
         }
         return im;
-    }
+    }();
+    return im;
 }
 
 Buffer<uint32_t> integer_divide_table_s32() {
-    static std::mutex initialize_lock;
-    std::lock_guard<std::mutex> lock_guard(initialize_lock);
-    {
-        static Buffer<uint32_t> im(256);
-        static bool initialized = false;
-        if (!initialized) {
-            initialized = true;
-            for (uint32_t i = 0; i < 256; i++) {
-                im(i) = table_runtime_s32[i][2];
-                if (i > 1) {
-                    internal_assert(table_runtime_s32[i][3] == shift_for_denominator(i));
-                }
+    static auto im = []() {
+        Buffer<uint32_t> im(256);
+        for (uint32_t i = 0; i < 256; i++) {
+            im(i) = table_runtime_s32[i][2];
+            if (i > 1) {
+                internal_assert(table_runtime_s32[i][3] == shift_for_denominator(i));
             }
         }
         return im;
-    }
+    }();
+    return im;
 }
+
 }  // namespace
 
 Expr fast_integer_divide(Expr numerator, Expr denominator) {
