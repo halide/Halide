@@ -72,7 +72,9 @@ public:
 
     string pipeline_name;
 
-    bool in_fork = false, in_parallel = false, in_leaf_task = false;
+    bool in_fork = false;
+    bool in_parallel = false;
+    bool in_leaf_task = false;
 
     InjectProfiling(const string &pipeline_name)
         : pipeline_name(pipeline_name) {
