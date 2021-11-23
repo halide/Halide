@@ -753,16 +753,19 @@ class InjectHexagonRpc : public IRMutator {
                              DeviceAPI::None, loop->body);
         }
 
+        // Build a closure for the device code.
+        // Note that we must do this *before* calling lower_parallel_tasks();
+        // otherwise the Closure may fail to find buffers that are referenced
+        // only in the closure.
+        // TODO: Should this move the body of the loop to Hexagon,
+        // or the loop itself? Currently, this moves the loop itself.
+        Closure c(body);
+
         std::vector<LoweredFunc> closure_implementations;
         body = lower_parallel_tasks(body, closure_implementations, hex_name, device_code.target());
         for (auto &lowered_func : closure_implementations) {
             device_code.append(lowered_func);
         }
-
-        // Build a closure for the device code.
-        // TODO: Should this move the body of the loop to Hexagon,
-        // or the loop itself? Currently, this moves the loop itself.
-        Closure c(body);
 
         // A buffer parameter potentially generates 3 scalar parameters (min,
         // extent, stride) per dimension. Pipelines with many buffers may
