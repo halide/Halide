@@ -6,12 +6,13 @@
 
 namespace Halide {
 
+using namespace Halide::Internal;
 using namespace Halide::Internal::IntegerDivision;
 
 namespace {
 
 int shift_for_denominator(uint32_t d) {
-    return 31 - __builtin_clz(d - 1);
+    return 63 - clz64(d - 1);
 }
 
 Expr shift_for_denominator(const Expr &d) {
