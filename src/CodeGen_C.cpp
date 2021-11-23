@@ -109,7 +109,7 @@ inline float log_f32(float x) {return logf(x);}
 inline float pow_f32(float x, float y) {return powf(x, y);}
 inline float floor_f32(float x) {return floorf(x);}
 inline float ceil_f32(float x) {return ceilf(x);}
-inline float round_f32(float x) {return roundf(x);}
+inline float round_f32(float x) {return nearbyint(x);}
 
 inline double sqrt_f64(double x) {return sqrt(x);}
 inline double sin_f64(double x) {return sin(x);}
@@ -128,7 +128,7 @@ inline double log_f64(double x) {return log(x);}
 inline double pow_f64(double x, double y) {return pow(x, y);}
 inline double floor_f64(double x) {return floor(x);}
 inline double ceil_f64(double x) {return ceil(x);}
-inline double round_f64(double x) {return round(x);}
+inline double round_f64(double x) {return nearbyint(x);}
 
 inline float nan_f32() {return NAN;}
 inline float neg_inf_f32() {return -INFINITY;}
@@ -1957,17 +1957,23 @@ void CodeGen_C::compile(const Buffer<> &buffer) {
         stream << "\n};\n";
     }
 
-    // Emit the shape (constant even for scalar buffers)
-    stream << "static const halide_dimension_t " << name << "_buffer_shape[] = {";
-    for (int i = 0; i < buffer.dimensions(); i++) {
-        stream << "halide_dimension_t(" << buffer.dim(i).min()
-               << ", " << buffer.dim(i).extent()
-               << ", " << buffer.dim(i).stride() << ")";
-        if (i < buffer.dimensions() - 1) {
-            stream << ", ";
+    std::string buffer_shape = "nullptr";
+    if (buffer.dimensions()) {
+        // Emit the shape -- note that we can't use this for scalar buffers because
+        // we'd emit a statement of the form "foo_buffer_shape[] = {}", and a zero-length
+        // array will make some compilers unhappy.
+        stream << "static const halide_dimension_t " << name << "_buffer_shape[] = {";
+        for (int i = 0; i < buffer.dimensions(); i++) {
+            stream << "halide_dimension_t(" << buffer.dim(i).min()
+                   << ", " << buffer.dim(i).extent()
+                   << ", " << buffer.dim(i).stride() << ")";
+            if (i < buffer.dimensions() - 1) {
+                stream << ", ";
+            }
         }
+        stream << "};\n";
+        buffer_shape = "const_cast<halide_dimension_t*>(" + name + "_buffer_shape)";
     }
-    stream << "};\n";
 
     Type t = buffer.type();
 
@@ -1983,7 +1989,7 @@ void CodeGen_C::compile(const Buffer<> &buffer) {
            << "0, "                                              // flags
            << "halide_type_t((halide_type_code_t)(" << (int)t.code() << "), " << t.bits() << ", " << t.lanes() << "), "
            << buffer.dimensions() << ", "
-           << "const_cast<halide_dimension_t*>(" << name << "_buffer_shape)};\n";
+           << buffer_shape << "};\n";
 
     // Make a global pointer to it.
     stream << "static halide_buffer_t * const " << name << "_buffer = &" << name << "_buffer_;\n";
@@ -2306,7 +2312,7 @@ void CodeGen_C::visit(const Call *op) {
         }
     } else if (op->is_intrinsic(Call::lerp)) {
         internal_assert(op->args.size() == 3);
-        Expr e = lower_lerp(op->args[0], op->args[1], op->args[2]);
+        Expr e = lower_lerp(op->args[0], op->args[1], op->args[2], target);
         rhs << print_expr(e);
     } else if (op->is_intrinsic(Call::absd)) {
         internal_assert(op->args.size() == 2);
@@ -2372,7 +2378,7 @@ void CodeGen_C::visit(const Call *op) {
             string size = print_expr(simplify((op->args[0] + 7) / 8));
             stream << get_indent();
             string array_name = unique_name('a');
-            stream << "uint64_t " << array_name << "[" << size << "];";
+            stream << "uint64_t " << array_name << "[" << size << "];\n";
             rhs << "(" << print_type(op->type) << ")(&" << array_name << ")";
         }
     } else if (op->is_intrinsic(Call::make_struct)) {

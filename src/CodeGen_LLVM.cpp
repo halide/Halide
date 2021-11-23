@@ -1042,8 +1042,8 @@ llvm::Function *CodeGen_LLVM::embed_metadata_getter(const std::string &metadata_
         /* version */ version,
         /* num_arguments */ ConstantInt::get(i32_t, num_args),
         /* arguments */ ConstantExpr::getInBoundsGetElementPtr(arguments_array, arguments_array_storage, zeros),
-        /* target */ create_string_constant(map_string(target.to_string())),
-        /* name */ create_string_constant(map_string(function_name))};
+        /* target */ create_string_constant(target.to_string()),
+        /* name */ create_string_constant(function_name)};
 
     GlobalVariable *metadata_storage = new GlobalVariable(
         *module,
@@ -1143,48 +1143,27 @@ void CodeGen_LLVM::optimize_module() {
     OptimizationLevel level = OptimizationLevel::O3;
 
     if (get_target().has_feature(Target::ASAN)) {
-        pb.registerPipelineStartEPCallback([&](ModulePassManager &mpm,
-                                               OptimizationLevel) {
-            mpm.addPass(
-                RequireAnalysisPass<ASanGlobalsMetadataAnalysis, llvm::Module>());
+        pb.registerPipelineStartEPCallback([&](ModulePassManager &mpm, OptimizationLevel) {
+            mpm.addPass(RequireAnalysisPass<ASanGlobalsMetadataAnalysis, llvm::Module>());
         });
-        pb.registerOptimizerLastEPCallback(
-            [](ModulePassManager &mpm, OptimizationLevel level) {
+        pb.registerPipelineStartEPCallback([](ModulePassManager &mpm, OptimizationLevel) {
 #if LLVM_VERSION >= 140
-                AddressSanitizerOptions asan_options;  // default values are good...
-                asan_options.UseAfterScope = true;     // ... except this one
-                mpm.addPass(createModuleToFunctionPassAdaptor(AddressSanitizerPass(asan_options)));
+            AddressSanitizerOptions asan_options;  // default values are good...
+            asan_options.UseAfterScope = true;     // ...except this one
+            constexpr bool use_global_gc = false;
+            constexpr bool use_odr_indicator = true;
+            constexpr auto destructor_kind = AsanDtorKind::Global;
+            mpm.addPass(ModuleAddressSanitizerPass(
+                asan_options, use_global_gc, use_odr_indicator, destructor_kind));
 #else
-                constexpr bool compile_kernel = false;
-                constexpr bool recover = false;
-                constexpr bool use_global_gc = true;
-                mpm.addPass(createModuleToFunctionPassAdaptor(AddressSanitizerPass(
-                    compile_kernel, recover, use_global_gc)));
+            constexpr bool compile_kernel = false;
+            constexpr bool recover = false;
+            constexpr bool module_use_global_gc = false;
+            constexpr bool use_odr_indicator = true;
+            mpm.addPass(ModuleAddressSanitizerPass(
+                compile_kernel, recover, module_use_global_gc, use_odr_indicator));
 #endif
-            });
-#if LLVM_VERSION >= 140
-        pb.registerPipelineStartEPCallback(
-            [](ModulePassManager &mpm, OptimizationLevel) {
-                AddressSanitizerOptions asan_options;  // default values are good
-                constexpr bool use_global_gc = true;
-                constexpr bool use_odr_indicator = true;
-                constexpr auto destructor_kind = AsanDtorKind::Global;
-                mpm.addPass(ModuleAddressSanitizerPass(
-                    asan_options, use_global_gc,
-                    use_odr_indicator, destructor_kind));
-            });
-#else
-        pb.registerPipelineStartEPCallback(
-            [](ModulePassManager &mpm, OptimizationLevel) {
-                constexpr bool compile_kernel = false;
-                constexpr bool recover = false;
-                constexpr bool module_use_global_gc = false;
-                constexpr bool use_odr_indicator = true;
-                mpm.addPass(ModuleAddressSanitizerPass(
-                    compile_kernel, recover, module_use_global_gc,
-                    use_odr_indicator));
-            });
-#endif
+        });
     }
 
     if (get_target().has_feature(Target::TSAN)) {
@@ -2718,7 +2697,8 @@ void CodeGen_LLVM::visit(const Call *op) {
         Type wt = upgrade_type_for_arithmetic(op->args[2].type());
         Expr e = lower_lerp(cast(t, op->args[0]),
                             cast(t, op->args[1]),
-                            cast(wt, op->args[2]));
+                            cast(wt, op->args[2]),
+                            target);
         e = cast(op->type, e);
         codegen(e);
     } else if (op->is_intrinsic(Call::popcount)) {

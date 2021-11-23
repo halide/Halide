@@ -1876,86 +1876,66 @@ void UpsampleChannelsOp::execute() {
         << "Unsupported UpsampleChannels op for types " << in->type() << ", " << out->type();
 }
 
-void BinaryOp::accept(OpVisitor *v) {
-    v->visit(this);
-}
+#define ACCEPT_AND_MUTATE_IMPL(OP)                                  \
+    void OP::accept_impl(OpVisitor *v) const {                      \
+        v->visit(this);                                             \
+    }                                                               \
+    Op::OpMutatorFn OP::mutate_impl() const {                       \
+        return [](OpPtr op, OpMutator *m) -> OpPtr {                \
+            std::unique_ptr<OP> o(static_cast<OP *>(op.release())); \
+            return m->visit(std::move(o));                          \
+        };                                                          \
+    }
 
-void ConcatenationOp::accept(OpVisitor *v) {
-    v->visit(this);
-}
+ACCEPT_AND_MUTATE_IMPL(BinaryOp)
+ACCEPT_AND_MUTATE_IMPL(ConcatenationOp)
+ACCEPT_AND_MUTATE_IMPL(ConvOp)
+ACCEPT_AND_MUTATE_IMPL(DepthwiseConv2DOp)
+ACCEPT_AND_MUTATE_IMPL(ElementwiseProgramOp)
+ACCEPT_AND_MUTATE_IMPL(GatherOp)
+ACCEPT_AND_MUTATE_IMPL(L2NormalizationOp)
+ACCEPT_AND_MUTATE_IMPL(PadOp)
+ACCEPT_AND_MUTATE_IMPL(Pool2DOp)
+ACCEPT_AND_MUTATE_IMPL(ShapeOp)
+ACCEPT_AND_MUTATE_IMPL(SoftmaxOp)
+ACCEPT_AND_MUTATE_IMPL(SpaceDepthOp)
+ACCEPT_AND_MUTATE_IMPL(SplitOp)
+ACCEPT_AND_MUTATE_IMPL(ReductionOp)
+ACCEPT_AND_MUTATE_IMPL(ReshapeOp)
+ACCEPT_AND_MUTATE_IMPL(TileConvFilterOp)
+ACCEPT_AND_MUTATE_IMPL(TransposeOp)
+ACCEPT_AND_MUTATE_IMPL(UpsampleChannelsOp)
+ACCEPT_AND_MUTATE_IMPL(UnaryOp)
 
-void ConvOp::accept(OpVisitor *v) {
-    v->visit(this);
-}
+ACCEPT_AND_MUTATE_IMPL(OpGroup)
 
-void DepthwiseConv2DOp::accept(OpVisitor *v) {
-    v->visit(this);
-}
+#undef ACCEPT_AND_MUTATE_IMPL
 
-void ElementwiseProgramOp::accept(OpVisitor *v) {
-    v->visit(this);
-}
-
-void GatherOp::accept(OpVisitor *v) {
-    v->visit(this);
-}
-
-void L2NormalizationOp::accept(OpVisitor *v) {
-    v->visit(this);
-}
-
-void PadOp::accept(OpVisitor *v) {
-    v->visit(this);
-}
-
-void Pool2DOp::accept(OpVisitor *v) {
-    v->visit(this);
-}
-
-void ShapeOp::accept(OpVisitor *v) {
-    v->visit(this);
-}
-
-void SoftmaxOp::accept(OpVisitor *v) {
-    v->visit(this);
-}
-
-void SpaceDepthOp::accept(OpVisitor *v) {
-    v->visit(this);
-}
-
-void SplitOp::accept(OpVisitor *v) {
-    v->visit(this);
-}
-
-void ReductionOp::accept(OpVisitor *v) {
-    v->visit(this);
-}
-
-void ReshapeOp::accept(OpVisitor *v) {
-    v->visit(this);
-}
-
-void TileConvFilterOp::accept(OpVisitor *v) {
-    v->visit(this);
-}
-
-void TransposeOp::accept(OpVisitor *v) {
-    v->visit(this);
-}
-
-void UpsampleChannelsOp::accept(OpVisitor *v) {
-    v->visit(this);
-}
-
-void UnaryOp::accept(OpVisitor *v) {
-    v->visit(this);
-}
-
-void LeafOpVisitor::visit(OpGroup *op) {
+void OpVisitor::visit(const OpGroup *op) {
     for (int i = 0; i < op->op_count(); i++) {
         op->op(i)->accept(this);
     }
+}
+
+OpPtr OpMutator::visit(std::unique_ptr<OpGroup> op) {
+    std::vector<TensorPtr> inputs = op->inputs();
+    std::vector<TensorPtr> outputs = op->outputs();
+
+    const int old_op_count = op->op_count();
+
+    std::vector<OpPtr> ops_new;
+    ops_new.reserve(old_op_count);
+    for (int i = 0; i < old_op_count; i++) {
+        OpPtr sub_op_old = op->take_op(i);
+        assert(sub_op_old != nullptr);
+        OpPtr sub_op_new = mutate(std::move(sub_op_old));
+        if (sub_op_new != nullptr) {
+            ops_new.push_back(std::move(sub_op_new));
+        }
+    }
+    // TODO: we don't bother trying to optimize for an unchanged op here. Is it worthwhile?
+    // TODO: verify that inputs and outputs are still correct. Or recalculate from scratch?
+    return make_op<OpGroup>(inputs, outputs, std::move(ops_new));
 }
 
 }  // namespace hannk
