@@ -5,6 +5,7 @@
 
 #include "AssociativeOpsTable.h"
 #include "Associativity.h"
+#include "Closure.h"
 #include "IROperator.h"
 #include "Module.h"
 #include "Target.h"
@@ -385,6 +386,27 @@ std::ostream &operator<<(std::ostream &out, const DimType &t) {
     case DimType::ImpureRVar:
         out << "ImpureRVar";
         break;
+    }
+    return out;
+}
+
+std::ostream &operator<<(std::ostream &out, const Closure &c) {
+    for (const auto &v : c.vars) {
+        out << "var: " << v.first << "\n";
+    }
+    for (const auto &b : c.buffers) {
+        out << "buffer: " << b.first << " " << b.second.size;
+        if (b.second.read) {
+            out << " (read)";
+        }
+        if (b.second.write) {
+            out << " (write)";
+        }
+        if (b.second.memory_type == MemoryType::GPUTexture) {
+            out << " <texture>";
+        }
+        out << " dims=" << (int)b.second.dimensions;
+        out << "\n";
     }
     return out;
 }
