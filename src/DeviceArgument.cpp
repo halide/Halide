@@ -5,8 +5,11 @@
 namespace Halide {
 namespace Internal {
 
-HostClosure::HostClosure(const Stmt &s, const std::string &loop_variable)
-    : Closure(s, loop_variable) {
+HostClosure::HostClosure(const Stmt &s, const std::string &loop_variable) {
+    if (!loop_variable.empty()) {
+        ignore.push(loop_variable);
+    }
+    s.accept(this);
 }
 
 std::vector<DeviceArgument> HostClosure::arguments() {
