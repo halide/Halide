@@ -14,7 +14,7 @@ int shift_for_denominator(uint32_t d) {
     return 31 - __builtin_clz(d - 1);
 }
 
-Expr shift_for_denominator(Expr d) {
+Expr shift_for_denominator(const Expr &d) {
     internal_assert(d.type().element_of() == UInt(8));
     return 7 - count_leading_zeros(d - 1);
 }
