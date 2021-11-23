@@ -1957,17 +1957,23 @@ void CodeGen_C::compile(const Buffer<> &buffer) {
         stream << "\n};\n";
     }
 
-    // Emit the shape (constant even for scalar buffers)
-    stream << "static const halide_dimension_t " << name << "_buffer_shape[] = {";
-    for (int i = 0; i < buffer.dimensions(); i++) {
-        stream << "halide_dimension_t(" << buffer.dim(i).min()
-               << ", " << buffer.dim(i).extent()
-               << ", " << buffer.dim(i).stride() << ")";
-        if (i < buffer.dimensions() - 1) {
-            stream << ", ";
+    std::string buffer_shape = "nullptr";
+    if (buffer.dimensions()) {
+        // Emit the shape -- note that we can't use this for scalar buffers because
+        // we'd emit a statement of the form "foo_buffer_shape[] = {}", and a zero-length
+        // array will make some compilers unhappy.
+        stream << "static const halide_dimension_t " << name << "_buffer_shape[] = {";
+        for (int i = 0; i < buffer.dimensions(); i++) {
+            stream << "halide_dimension_t(" << buffer.dim(i).min()
+                   << ", " << buffer.dim(i).extent()
+                   << ", " << buffer.dim(i).stride() << ")";
+            if (i < buffer.dimensions() - 1) {
+                stream << ", ";
+            }
         }
+        stream << "};\n";
+        buffer_shape = "const_cast<halide_dimension_t*>(" + name + "_buffer_shape)";
     }
-    stream << "};\n";
 
     Type t = buffer.type();
 
@@ -1983,7 +1989,7 @@ void CodeGen_C::compile(const Buffer<> &buffer) {
            << "0, "                                              // flags
            << "halide_type_t((halide_type_code_t)(" << (int)t.code() << "), " << t.bits() << ", " << t.lanes() << "), "
            << buffer.dimensions() << ", "
-           << "const_cast<halide_dimension_t*>(" << name << "_buffer_shape)};\n";
+           << buffer_shape << "};\n";
 
     // Make a global pointer to it.
     stream << "static halide_buffer_t * const " << name << "_buffer = &" << name << "_buffer_;\n";
