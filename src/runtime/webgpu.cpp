@@ -236,15 +236,60 @@ using namespace Halide::Runtime::Internal::WebGPU;
 extern "C" {
 
 WEAK int halide_webgpu_device_malloc(void *user_context, halide_buffer_t *buf) {
-    // TODO: Implement this.
-    halide_debug_assert(user_context, false && "unimplemented");
-    return 1;
+    debug(user_context)
+        << "WGPU: halide_webgpu_device_malloc (user_context: " << user_context
+        << ", buf: " << buf << ")\n";
+
+    WgpuContext context(user_context);
+    if (context.error_code) {
+        return context.error_code;
+    }
+
+    ErrorScope error_scope(user_context, context.device);
+
+    WGPUBufferDescriptor desc = {
+        .nextInChain = nullptr,
+        .label = nullptr,
+        .usage = WGPUBufferUsage_Storage |
+                 WGPUBufferUsage_CopyDst |
+                 WGPUBufferUsage_CopySrc,
+        .size = buf->size_in_bytes(),
+        .mappedAtCreation = false,
+    };
+    WGPUBuffer device_buffer = wgpuDeviceCreateBuffer(context.device, &desc);
+
+    int error_code = error_scope.wait();
+    if (error_code != halide_error_code_success) {
+        return error_code;
+    }
+
+    buf->device = (uint64_t)device_buffer;
+    buf->device_interface = &webgpu_device_interface;
+    buf->device_interface->impl->use_module();
+
+    debug(user_context)
+        << "      Allocated device buffer " << (void *)buf->device << "\n";
+
+    return halide_error_code_success;
 }
 
 WEAK int halide_webgpu_device_free(void *user_context, halide_buffer_t *buf) {
-    // TODO: Implement this.
-    halide_debug_assert(user_context, false && "unimplemented");
-    return 1;
+    if (buf->device == 0) {
+        return 0;
+    }
+
+    WGPUBuffer buffer = (WGPUBuffer)buf->device;
+
+    debug(user_context)
+        << "WGPU: halide_webgpu_device_free (user_context: " << user_context
+        << ", buf: " << buf << ") WGPUBuffer: " << buffer << "\n";
+
+    wgpuBufferRelease(buffer);
+    buf->device = 0;
+    buf->device_interface->impl->release_module();
+    buf->device_interface = nullptr;
+
+    return halide_error_code_success;
 }
 
 WEAK int halide_webgpu_device_sync(void *user_context, halide_buffer_t *) {
