@@ -99,6 +99,85 @@ public:
     }
 };
 
+// Helper class for handling asynchronous errors for a set of WebGPU API calls
+// within a particular scope.
+class ErrorScope {
+public:
+    ALWAYS_INLINE ErrorScope(void *user_context, WGPUDevice device)
+        : user_context(user_context), device(device) {
+        // Capture validation and OOM errors.
+        wgpuDevicePushErrorScope(device, WGPUErrorFilter_Validation);
+        wgpuDevicePushErrorScope(device, WGPUErrorFilter_OutOfMemory);
+        callbacks_remaining = 2;
+    }
+
+    ALWAYS_INLINE ~ErrorScope() {
+        if (callbacks_remaining > 0) {
+            // Pop the error scopes to flush any pending errors.
+            wait();
+        }
+    }
+
+    // Wait for all error callbacks in this scope to fire.
+    // Returns the error code (or success).
+    int wait() {
+        if (callbacks_remaining == 0) {
+            error(user_context) << "no outstanding error scopes\n";
+            return halide_error_code_internal_error;
+        }
+
+        error_code = halide_error_code_success;
+        wgpuDevicePopErrorScope(device, error_callback, this);
+        wgpuDevicePopErrorScope(device, error_callback, this);
+
+        // Wait for the error callbacks to fire.
+        while (__atomic_load_n(&callbacks_remaining, __ATOMIC_ACQUIRE) > 0) {
+            emscripten_sleep(1);
+        }
+
+        return error_code;
+    }
+
+private:
+    void *user_context;
+    WGPUDevice device;
+
+    // The error code reported by the callback functions.
+    volatile int error_code;
+
+    // Used to track outstanding error callbacks.
+    volatile int callbacks_remaining = 0;
+
+    // The error callback function.
+    // Logs any errors, and decrements the remaining callback count.
+    static void error_callback(WGPUErrorType type,
+                               char const *message,
+                               void *userdata) {
+        ErrorScope *context = (ErrorScope *)userdata;
+        switch (type) {
+        case WGPUErrorType_NoError:
+            // Do not overwrite the error_code to avoid masking earlier errors.
+            break;
+        case WGPUErrorType_Validation:
+            error(context->user_context) << "WGPU: validation error: "
+                                         << message << "\n";
+            context->error_code = halide_error_code_generic_error;
+            break;
+        case WGPUErrorType_OutOfMemory:
+            error(context->user_context) << "WGPU: out-of-memory error: "
+                                         << message << "\n";
+            context->error_code = halide_error_code_out_of_memory;
+            break;
+        default:
+            error(context->user_context) << "WGPU: unknown error (" << type
+                                         << "): " << message << "\n";
+            context->error_code = halide_error_code_generic_error;
+        }
+
+        __atomic_sub_fetch(&context->callbacks_remaining, 1, __ATOMIC_RELEASE);
+    }
+};
+
 namespace {
 
 halide_error_code_t init_error_code = halide_error_code_success;
