@@ -3,6 +3,7 @@
 #include "IRVisitor.h"
 #include "Module.h"
 #include "Scope.h"
+#include "Util.h"
 
 #include <cstdio>
 #include <fstream>
@@ -762,8 +763,29 @@ public:
     }
 
     void print(const Buffer<> &op) {
+        bool include_data = ends_with(op.name(), "_gpu_source_kernels");
+        int id = 0;
+        if (include_data) {
+            id = unique_id();
+            stream << open_expand_button(id);
+            stream << open_span("Matched");
+        }
         stream << open_div("Buffer<>");
         stream << keyword("buffer ") << var(op.name());
+        if (include_data) {
+            stream << " = ";
+            stream << matched("{");
+            stream << close_expand_button();
+
+            stream << open_div("BufferData", id);
+            stream << "<pre>\n";
+            std::string str((const char *)op.data(), op.size_in_bytes());
+            stream << str;
+            stream << "</pre>\n";
+            stream << close_div();
+
+            stream << " " << matched("}");
+        }
         stream << close_div();
     }
 
