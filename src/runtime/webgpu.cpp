@@ -175,8 +175,18 @@ WEAK int halide_webgpu_device_sync(void *user_context, halide_buffer_t *) {
 }
 
 WEAK int halide_webgpu_device_release(void *user_context) {
-    // TODO: Implement this.
-    halide_debug_assert(user_context, false && "unimplemented");
+    debug(user_context)
+        << "WGPU: halide_webgpu_device_release (user_context: " << user_context
+        << ")\n";
+
+    WgpuContext context(user_context);
+    if (context.error_code) {
+        return context.error_code;
+    }
+
+    wgpuDeviceRelease(context.device);
+    wgpuAdapterRelease(context.adapter);
+
     return 1;
 }
 
