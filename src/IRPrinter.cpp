@@ -8,6 +8,7 @@
 #include "IROperator.h"
 #include "Module.h"
 #include "Target.h"
+#include "Util.h"
 
 namespace Halide {
 
@@ -58,7 +59,17 @@ ostream &operator<<(ostream &stream, const Expr &ir) {
 }
 
 ostream &operator<<(ostream &stream, const Buffer<> &buffer) {
-    return stream << "buffer " << buffer.name() << " = {...}\n";
+    bool include_data = Internal::ends_with(buffer.name(), "_gpu_source_kernels");
+    stream << "buffer " << buffer.name() << " = {";
+    if (include_data) {
+        std::string str((const char *)buffer.data(), buffer.size_in_bytes());
+        stream << "\n"
+               << str << "\n";
+    } else {
+        stream << "...";
+    }
+    stream << "}\n";
+    return stream;
 }
 
 ostream &operator<<(ostream &stream, const Module &m) {
