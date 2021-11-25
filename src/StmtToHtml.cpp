@@ -853,13 +853,13 @@ public:
 
             // Predicated instructions
             if (line.front() == '@' && indent) {
-                idx = line.find(" ");
+                idx = line.find(' ');
                 std::string pred = line.substr(1, idx - 1);
                 line = "<span class='Pred'>@" + var(pred) + "</span>" + line.substr(idx);
             }
 
             // Labels
-            if (line.front() == 'L' && !indent && (idx = line.find(":")) != std::string::npos) {
+            if (line.front() == 'L' && !indent && (idx = line.find(':')) != std::string::npos) {
                 std::string label = line.substr(0, idx);
                 line = "<span class='Label'>" + var(label) + "</span>:" + line.substr(idx + 1);
             }
@@ -872,7 +872,7 @@ public:
                 operands_str = "";
                 for (size_t opidx = 0; opidx < operands.size(); ++opidx) {
                     std::string op = operands[opidx];
-                    internal_assert(op.size() > 0);
+                    internal_assert(!op.empty());
                     if (opidx != 0) {
                         operands_str += ", ";
                     }
@@ -891,7 +891,7 @@ public:
                         operands_str += op;
                         operands_str += close_span();
                     } else if (op.front() == '[' && op.back() == ']') {
-                        size_t idx = op.find("+");
+                        size_t idx = op.find('+');
                         if (idx == std::string::npos) {
                             std::string reg = op.substr(1, op.size() - 2);
                             operands_str += '[' + var(reg) + ']';
