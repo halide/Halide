@@ -5,8 +5,14 @@
 
 #include "AssociativeOpsTable.h"
 #include "Associativity.h"
+#include "DerivativeUtils.h"
+#include "FindCalls.h"
+#include "Func.h"
+#include "IRMutator.h"
 #include "IROperator.h"
 #include "Module.h"
+#include "RealizationOrder.h"
+#include "Simplify.h"
 #include "Target.h"
 #include "Util.h"
 
@@ -190,6 +196,118 @@ ostream &operator<<(ostream &stream, const Target &target) {
     return stream << "target(" << target.to_string() << ")";
 }
 
+namespace {
+
+void print_func(ostream &stream, const Func &func, bool include_dependencies) {
+    using Internal::ReductionDomain;
+
+    Internal::IRPrinter printer(stream);
+
+    stream << "Func " << func.name() << "; {\n";
+
+    // Topologically sort the functions
+    std::map<std::string, Internal::Function> env =
+        include_dependencies ?
+            find_transitive_calls(func.function()) :
+            std::map<std::string, Internal::Function>{{func.function().name(), func.function()}};
+    std::vector<std::string> order =
+        include_dependencies ?
+            realization_order({func.function()}, env).first :
+            std::vector<std::string>{func.function().name()};
+
+    for (int i = (int)order.size() - 1; i >= 0; i--) {
+        Func f(env[order[i]]);
+        std::set<string> rdoms_declared;
+        for (int update_id = -1; update_id < f.num_update_definitions(); update_id++) {
+            vector<Expr> args, vals;
+            if (update_id == -1) {
+                args.reserve(f.args().size());
+                for (Var v : f.args()) {
+                    args.push_back(v);
+                }
+                vals = f.values().as_vector();
+            } else {
+                args = f.update_args(update_id);
+                vals = f.update_values(update_id).as_vector();
+            }
+
+            class ExtractRDom : public Internal::IRMutator {
+                using Internal::IRMutator::visit;
+
+                Expr visit(const Internal::Variable *op) override {
+                    if (op->reduction_domain.defined()) {
+                        rdom = op->reduction_domain;
+                        int idx = 0;
+                        for (const auto &v : rdom.domain()) {
+                            if (v.var == op->name) {
+                                string new_name = rdom_name + "[" + std::to_string(idx) + "]";
+                                return Internal::Variable::make(op->type, new_name);
+                            }
+                            idx++;
+                        }
+                    }
+                    return op;
+                }
+
+            public:
+                ReductionDomain rdom;
+                string rdom_name;
+            } extract_rdom;
+            extract_rdom.rdom_name = "r" + std::to_string(update_id);
+            for (auto &v : vals) {
+                v = extract_rdom.mutate(v);
+            }
+            for (auto &v : args) {
+                v = extract_rdom.mutate(v);
+            }
+
+            if (extract_rdom.rdom.defined()) {
+                stream << "  RDom " << extract_rdom.rdom_name << "(";
+                std::vector<Expr> e;
+                for (const auto &d : extract_rdom.rdom.domain()) {
+                    e.push_back(d.min);
+                    e.push_back(d.extent);
+                }
+                printer.print_list(e);
+                stream << ");\n";
+                Expr pred = extract_rdom.rdom.predicate();
+                if (pred.defined() && !is_one(pred)) {
+                    pred = extract_rdom.mutate(pred);
+                    stream << "  " << extract_rdom.rdom_name << ".where(";
+                    printer.print_no_parens(pred);
+                    stream << ");\n";
+                }
+            }
+            stream
+                << "  " << f.name() << "(";
+            printer.print_list(args);
+            stream << ") = ";
+            if (vals.size() > 1) {
+                stream << "{";
+                printer.print_list(vals);
+                stream << "}";
+            } else {
+                printer.print_list(vals);
+            }
+            stream << ";\n";
+        }
+    }
+
+    stream << "}\n";
+}
+
+}  // namespace
+
+ostream &operator<<(ostream &stream, const Func &f) {
+    print_func(stream, f, /*include_dependencies*/ false);
+    return stream;
+}
+
+ostream &operator<<(ostream &stream, const FuncWithDependencies &f) {
+    print_func(stream, f.func, /*include_dependencies*/ true);
+    return stream;
+}
+
 namespace Internal {
 
 void IRPrinter::test() {
@@ -220,21 +338,65 @@ void IRPrinter::test() {
     Stmt allocate = Allocate::make("buf", f32, MemoryType::Stack, {1023}, const_true(), let_stmt);
 
     ostringstream source;
+    source << "\n";
     source << allocate;
-    std::string correct_source =
-        "allocate buf[float32 * 1023] in Stack\n"
-        "let y = 17\n"
-        "assert(y >= 3, halide_error_param_too_small_i64(\"y\", y, 3))\n"
-        "produce buf {\n"
-        " parallel (x, -2, y + 2) {\n"
-        "  buf[y - 1] = (x*17)/(x - 3)\n"
-        " }\n"
-        "}\n"
-        "consume buf {\n"
-        " vectorized (x, 0, y) {\n"
-        "  out[x] = buf(x % 3) + 1\n"
-        " }\n"
-        "}\n";
+
+    Func f("some_func");
+    Var xx("xx");
+    RDom rr(1, 99, "rr");
+    f(xx) = 0;
+    f(rr) += rr;
+    f(rr) *= rr;
+    source << f;
+
+    Func g("tuple_func");
+    g(xx) = Tuple(0, 0);
+    g(rr) = Tuple(g(rr - 1)[0], g(rr)[1] + 1);
+    source << g;
+
+    Func h1("multi_func1"), h2("multi_func2"), h3("multi_func3");
+    h1(xx) = xx + 1;
+    h2(xx) = h1(xx) / 2;
+    source << h2;
+
+    h3(xx) = h2(xx) % 3;
+    source << FuncWithDependencies(h3);
+
+    std::string correct_source = R"GOLDEN(
+allocate buf[float32 * 1023] in Stack
+let y = 17
+assert(y >= 3, halide_error_param_too_small_i64("y", y, 3))
+produce buf {
+ parallel (x, -2, y + 2) {
+  buf[y - 1] = (x*17)/(x - 3)
+ }
+}
+consume buf {
+ vectorized (x, 0, y) {
+  out[x] = buf(x % 3) + 1
+ }
+}
+Func some_func; {
+  some_func(xx) = 0;
+  RDom r0(1, 99);
+  some_func(r0[0]) = some_func(r0[0]) + r0[0];
+  RDom r1(1, 99);
+  some_func(r1[0]) = some_func(r1[0])*r1[0];
+}
+Func tuple_func; {
+  tuple_func(xx) = {0, 0};
+  RDom r0(1, 99);
+  tuple_func(r0[0]) = {tuple_func(r0[0] - 1)[0], tuple_func(r0[0])[1] + 1};
+}
+Func multi_func2; {
+  multi_func2(xx) = multi_func1(xx)/2;
+}
+Func multi_func3; {
+  multi_func3(xx) = multi_func2(xx) % 3;
+  multi_func2(xx) = multi_func1(xx)/2;
+  multi_func1(xx) = xx + 1;
+}
+)GOLDEN";
 
     if (source.str() != correct_source) {
         internal_error << "Correct output:\n"
@@ -422,7 +584,7 @@ void IRPrinter::print(const Stmt &ir) {
 void IRPrinter::print_list(const std::vector<Expr> &exprs) {
     for (size_t i = 0; i < exprs.size(); i++) {
         print_no_parens(exprs[i]);
-        if (i < exprs.size() - 1) {
+        if (i + 1 < exprs.size()) {
             stream << ", ";
         }
     }
@@ -703,6 +865,11 @@ void IRPrinter::visit(const Call *op) {
     stream << op->name << "(";
     print_list(op->args);
     stream << ")";
+    if (op->call_type == Call::Halide &&
+        op->func.defined() &&
+        Function(op->func).values().size() > 1) {
+        stream << "[" << std::to_string(op->value_index) << "]";
+    }
 }
 
 void IRPrinter::visit(const Let *op) {
