@@ -896,7 +896,7 @@ public:
                             std::string reg = op.substr(1, op.size() - 2);
                             operands_str += '[' + var(reg) + ']';
                         } else {
-                            std::string reg = op.substr(1, idx - 2);
+                            std::string reg = op.substr(1, idx - 1);
                             std::string offset = op.substr(idx + 1);
                             offset = offset.substr(0, offset.size() - 1);
                             operands_str += '[' + var(reg) + "+";
