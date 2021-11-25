@@ -1,5 +1,6 @@
 #include "HalideRuntimeWebGPU.h"
 #include "device_interface.h"
+#include "gpu_context_common.h"
 #include "printer.h"
 #include "scoped_spin_lock.h"
 
@@ -182,6 +183,10 @@ private:
         __atomic_sub_fetch(&context->callbacks_remaining, 1, __ATOMIC_RELEASE);
     }
 };
+
+// A cache for compiled WGSL shader modules.
+WEAK Halide::Internal::GPUCompilationCache<WGPUDevice, WGPUShaderModule>
+    shader_cache;
 
 namespace {
 
@@ -520,14 +525,61 @@ WEAK int halide_webgpu_detach_native(void *user_context, halide_buffer_t *buf) {
 }
 
 WEAK int halide_webgpu_initialize_kernels(void *user_context, void **state_ptr, const char *src, int size) {
-    // TODO: Implement this.
-    halide_debug_assert(user_context, false && "unimplemented");
-    return 1;
+    debug(user_context)
+        << "WGPU: halide_webgpu_initialize_kernels (user_context: " << user_context
+        << ", state_ptr: " << state_ptr
+        << ", program: " << (void *)src
+        << ", size: " << size << ")\n";
+
+    WgpuContext context(user_context);
+    if (context.error_code) {
+        return context.error_code;
+    }
+
+    // Get the shader module from the cache, compiling it if necessary.
+    WGPUShaderModule shader_module;
+    if (!shader_cache.kernel_state_setup(
+            user_context, state_ptr, context.device, shader_module,
+            [&]() -> WGPUShaderModule {
+                ErrorScope error_scope(user_context, context.device);
+
+                WGPUShaderModuleWGSLDescriptor wgsl_desc = {
+                    .chain = {
+                        .next = nullptr,
+                        .sType = WGPUSType_ShaderModuleWGSLDescriptor,
+                    },
+                    .source = src,
+                };
+                WGPUShaderModuleDescriptor desc = {
+                    .nextInChain = (const WGPUChainedStruct *)(&wgsl_desc),
+                    .label = nullptr,
+                };
+                WGPUShaderModule shader_module =
+                    wgpuDeviceCreateShaderModule(context.device, &desc);
+
+                int error_code = error_scope.wait();
+                if (error_code != halide_error_code_success) {
+                    return nullptr;
+                }
+
+                return shader_module;
+            })) {
+        return halide_error_code_generic_error;
+    }
+    halide_abort_if_false(user_context, shader_module != nullptr);
+
+    return halide_error_code_success;
 }
 
 WEAK void halide_webgpu_finalize_kernels(void *user_context, void *state_ptr) {
-    // TODO: Implement this.
-    halide_debug_assert(user_context, false && "unimplemented");
+    debug(user_context)
+        << "CL: halide_webgpu_finalize_kernels (user_context: " << user_context
+        << ", state_ptr: " << state_ptr << "\n";
+
+    WgpuContext context(user_context);
+    if (context.error_code == halide_error_code_success) {
+        shader_cache.release_hold(user_context, context.device, state_ptr);
+    }
 }
 
 WEAK int halide_webgpu_run(void *user_context,
