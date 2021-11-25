@@ -940,7 +940,6 @@ public:
             stream << " = ";
             stream << matched("{");
             stream << close_expand_button();
-
             stream << open_div("BufferData Indent", id);
             std::string str((const char *)op.data(), op.size_in_bytes());
             if (starts_with(op.name(), "cuda_")) {
