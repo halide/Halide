@@ -318,9 +318,40 @@ WEAK int halide_webgpu_device_free(void *user_context, halide_buffer_t *buf) {
 }
 
 WEAK int halide_webgpu_device_sync(void *user_context, halide_buffer_t *) {
-    // TODO: Implement this.
-    halide_debug_assert(user_context, false && "unimplemented");
-    return 1;
+    WgpuContext context(user_context);
+    if (context.error_code) {
+        return context.error_code;
+    }
+
+    ErrorScope error_scope(user_context, context.device);
+
+    // Wait for all work on the queue to finish.
+    struct WorkDoneResult {
+        volatile bool complete = false;
+        volatile WGPUQueueWorkDoneStatus status;
+    };
+    WorkDoneResult result;
+    wgpuQueueOnSubmittedWorkDone(
+        wgpuDeviceGetQueue(context.device), 0,
+        [](WGPUQueueWorkDoneStatus status, void *userdata) {
+            WorkDoneResult *result = (WorkDoneResult *)userdata;
+            result->status = status;
+            __atomic_store_n(&result->complete, true, __ATOMIC_RELEASE);
+        },
+        &result);
+
+    int error_code = error_scope.wait();
+    if (error_code != halide_error_code_success) {
+        return error_code;
+    }
+
+    while (!__atomic_load_n(&result.complete, __ATOMIC_ACQUIRE)) {
+        emscripten_sleep(1);
+    }
+
+    return result.status == WGPUQueueWorkDoneStatus_Success ?
+               halide_error_code_success :
+               halide_error_code_device_sync_failed;
 }
 
 WEAK int halide_webgpu_device_release(void *user_context) {
