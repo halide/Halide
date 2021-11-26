@@ -63,6 +63,7 @@ protected:
                                    DoNotAppendSpace) override;
         std::string print_assignment(Type t, const std::string &rhs) override;
 
+        void visit(const Cast *) override;
         void visit(const IntImm *) override;
         void visit(const UIntImm *) override;
         void visit(const For *) override;
@@ -283,6 +284,11 @@ void CodeGen_WebGPU_Dev::CodeGen_WGSL::add_kernel(
     print(s);
 
     close_scope("shader " + name);
+}
+
+void CodeGen_WebGPU_Dev::CodeGen_WGSL::visit(const Cast *op) {
+    print_assignment(op->type,
+                     print_type(op->type) + "(" + print_expr(op->value) + ")");
 }
 
 void CodeGen_WebGPU_Dev::CodeGen_WGSL::visit(const IntImm *op) {
