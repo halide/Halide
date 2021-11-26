@@ -130,7 +130,7 @@ struct DeviceRefCount {
 template<typename T = void, int D = 4>
 class Buffer {
     /** The underlying halide_buffer_t */
-    halide_buffer_t buf = {0};
+    halide_buffer_t buf = {};
 
     /** Some in-class storage for shape of the dimensions. */
     halide_dimension_t shape[D];
