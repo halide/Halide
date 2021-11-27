@@ -97,6 +97,10 @@ void CodeGen_WebGPU_Dev::init_module() {
     // Wipe the internal shader source.
     src_stream.str("");
     src_stream.clear();
+
+    // Write out the Halide math functions.
+    src_stream
+        << "fn float_from_bits(x : i32) -> f32 {return bitcast<f32>(x);}\n";
 }
 
 vector<char> CodeGen_WebGPU_Dev::compile_to_src() {
