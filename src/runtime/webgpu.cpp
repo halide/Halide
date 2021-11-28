@@ -585,15 +585,175 @@ WEAK void halide_webgpu_finalize_kernels(void *user_context, void *state_ptr) {
 WEAK int halide_webgpu_run(void *user_context,
                            void *state_ptr,
                            const char *entry_name,
-                           int blocksX, int blocksY, int blocksZ,
+                           int groupsX, int groupsY, int groupsZ,
                            int threadsX, int threadsY, int threadsZ,
-                           int shared_mem_bytes,
+                           int workgroup_mem_bytes,
                            size_t arg_sizes[],
                            void *args[],
                            int8_t arg_is_buffer[]) {
-    // TODO: Implement this.
-    halide_debug_assert(user_context, false && "unimplemented");
-    return 1;
+    debug(user_context)
+        << "WGPU: halide_webgpu_run (user_context: " << user_context << ", "
+        << "entry: " << entry_name << ", "
+        << "groups: " << groupsX << "x" << groupsY << "x" << groupsZ << ", "
+        << "threads: " << threadsX << "x" << threadsY << "x" << threadsZ << ", "
+        << "workgroup_mem: " << workgroup_mem_bytes << "\n";
+
+    WgpuContext context(user_context);
+    if (context.error_code) {
+        return context.error_code;
+    }
+
+    ErrorScope error_scope(user_context, context.device);
+
+    WGPUShaderModule shader_module = nullptr;
+    bool found = shader_cache.lookup(context.device, state_ptr, shader_module);
+    halide_abort_if_false(user_context, found && shader_module != nullptr);
+
+    // TODO: Add support for workgroup memory via a pipeline-overridable
+    // workgroup storage array.
+    halide_abort_if_false(user_context, workgroup_mem_bytes == 0);
+
+    // Create the compute pipeline.
+    WGPUProgrammableStageDescriptor stage_desc = {
+        .nextInChain = nullptr,
+        .module = shader_module,
+        .entryPoint = entry_name,
+        .constantCount = 0,
+        .constants = nullptr,
+    };
+    WGPUComputePipelineDescriptor pipeline_desc = {
+        .nextInChain = nullptr,
+        .label = nullptr,
+        .layout = nullptr,
+        .compute = stage_desc,
+    };
+    WGPUComputePipeline pipeline =
+        wgpuDeviceCreateComputePipeline(context.device, &pipeline_desc);
+
+    // Set up a compute shader dispatch command.
+    WGPUCommandEncoder encoder =
+        wgpuDeviceCreateCommandEncoder(context.device, nullptr);
+    WGPUComputePassEncoder pass =
+        wgpuCommandEncoderBeginComputePass(encoder, nullptr);
+    wgpuComputePassEncoderSetPipeline(pass, pipeline);
+
+    // Process function arguments.
+    uint32_t num_args = 0;
+    uint32_t num_buffers = 0;
+    uint32_t uniform_size = 0;
+    while (arg_sizes[num_args] != 0) {
+        if (arg_is_buffer[num_args]) {
+            num_buffers++;
+        } else {
+            // TODO: Support non-buffer args with different sizes.
+            halide_abort_if_false(user_context, arg_sizes[num_args] == 4);
+            uniform_size += arg_sizes[num_args];
+        }
+        num_args++;
+    }
+    if (num_buffers > 0) {
+        // Set up a bind group entry for each buffer argument.
+        WGPUBindGroupEntry *bind_group_entries =
+            (WGPUBindGroupEntry *)malloc(
+                num_buffers * sizeof(WGPUBindGroupEntry));
+        for (uint32_t i = 0, b = 0; i < num_args; i++) {
+            if (arg_is_buffer[i]) {
+                halide_buffer_t *buffer = (halide_buffer_t *)args[i];
+                bind_group_entries[b] = WGPUBindGroupEntry{
+                    .nextInChain = nullptr,
+                    .binding = i,
+                    .buffer = (WGPUBuffer)(buffer->device),
+                    .offset = 0,
+                    .size = buffer->size_in_bytes(),
+                    .sampler = nullptr,
+                    .textureView = nullptr,
+                };
+                b++;
+            }
+        }
+
+        // Create a bind group for the buffer arguments.
+        WGPUBindGroupLayout layout =
+            wgpuComputePipelineGetBindGroupLayout(pipeline, 0);
+        WGPUBindGroupDescriptor bindgroup_desc = {
+            .nextInChain = nullptr,
+            .label = nullptr,
+            .layout = layout,
+            .entryCount = num_buffers,
+            .entries = bind_group_entries,
+        };
+        WGPUBindGroup bind_group =
+            wgpuDeviceCreateBindGroup(context.device, &bindgroup_desc);
+        wgpuComputePassEncoderSetBindGroup(pass, 0, bind_group, 0, nullptr);
+        wgpuBindGroupRelease(bind_group);
+        wgpuBindGroupLayoutRelease(layout);
+
+        free(bind_group_entries);
+    }
+    if (num_args > num_buffers) {
+        // Create a uniform buffer for the non-buffer arguments.
+        WGPUBufferDescriptor desc = {
+            .nextInChain = nullptr,
+            .label = nullptr,
+            .usage = WGPUBufferUsage_Uniform,
+            .size = uniform_size,
+            .mappedAtCreation = true,
+        };
+        WGPUBuffer arg_buffer = wgpuDeviceCreateBuffer(context.device, &desc);
+
+        // Write the argument values to the uniform buffer.
+        uint32_t *arg_values =
+            (uint32_t *)wgpuBufferGetMappedRange(arg_buffer, 0, uniform_size);
+        for (uint32_t a = 0, i = 0; a < num_args; a++) {
+            if (arg_is_buffer[a]) {
+                continue;
+            }
+            // TODO: Support non-buffer args with different sizes.
+            halide_abort_if_false(user_context, arg_sizes[a] == 4);
+            arg_values[i] = *(((uint32_t **)args)[a]);
+            i++;
+        }
+        wgpuBufferUnmap(arg_buffer);
+
+        // Create a bind group for the uniform buffer.
+        WGPUBindGroupLayout layout =
+            wgpuComputePipelineGetBindGroupLayout(pipeline, 1);
+        WGPUBindGroupEntry entry = {
+            .nextInChain = nullptr,
+            .binding = 0,
+            .buffer = arg_buffer,
+            .offset = 0,
+            .size = uniform_size,
+            .sampler = nullptr,
+            .textureView = nullptr,
+        };
+        WGPUBindGroupDescriptor bindgroup_desc = {
+            .nextInChain = nullptr,
+            .label = nullptr,
+            .layout = layout,
+            .entryCount = 1,
+            .entries = &entry,
+        };
+        WGPUBindGroup bind_group =
+            wgpuDeviceCreateBindGroup(context.device, &bindgroup_desc);
+        wgpuComputePassEncoderSetBindGroup(pass, 1, bind_group, 0, nullptr);
+        wgpuBindGroupRelease(bind_group);
+        wgpuBindGroupLayoutRelease(layout);
+
+        wgpuBufferRelease(arg_buffer);
+    }
+
+    wgpuComputePassEncoderDispatch(pass, groupsX, groupsY, groupsZ);
+    wgpuComputePassEncoderEndPass(pass);
+
+    // Submit the compute command.
+    WGPUCommandBuffer commands = wgpuCommandEncoderFinish(encoder, nullptr);
+    wgpuQueueSubmit(wgpuDeviceGetQueue(context.device), 1, &commands);
+
+    wgpuCommandEncoderRelease(encoder);
+    wgpuComputePipelineRelease(pipeline);
+
+    return error_scope.wait();
 }
 
 WEAK const struct halide_device_interface_t *halide_webgpu_device_interface() {
