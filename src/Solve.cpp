@@ -417,9 +417,8 @@ private:
     }
 
     Expr visit(const Call *op) override {
-        // Ignore likely intrinsics
-        if (op->is_intrinsic(Call::likely) ||
-            op->is_intrinsic(Call::likely_if_innermost)) {
+        // Ignore intrinsics that shouldn't affect the results.
+        if (Call::as_tag(op)) {
             return mutate(op->args[0]);
         } else {
             return IRMutator::visit(op);
@@ -1295,18 +1294,18 @@ void solve_test() {
         for (int num = 5; num <= 10; num++) {
             Expr in[] = {x * den<num, x * den <= num, x * den == num, x * den != num, x * den >= num, x * den> num,
                          x / den<num, x / den <= num, x / den == num, x / den != num, x / den >= num, x / den> num};
-            for (int j = 0; j < 12; j++) {
-                SolverResult solved = solve_expression(in[j], "x");
-                internal_assert(solved.fully_solved) << "Error: failed to solve for x in " << in[j] << "\n";
+            for (const auto &e : in) {
+                SolverResult solved = solve_expression(e, "x");
+                internal_assert(solved.fully_solved) << "Error: failed to solve for x in " << e << "\n";
                 Expr out = simplify(solved.result);
                 for (int i = -10; i < 10; i++) {
-                    Expr in_val = substitute("x", i, in[j]);
+                    Expr in_val = substitute("x", i, e);
                     Expr out_val = substitute("x", i, out);
                     in_val = simplify(in_val);
                     out_val = simplify(out_val);
                     internal_assert(equal(in_val, out_val))
                         << "Error: "
-                        << in[j] << " is not equivalent to "
+                        << e << " is not equivalent to "
                         << out << " when x == " << i << "\n";
                 }
             }

@@ -11,7 +11,6 @@
 
 #include "Bounds.h"
 #include "Definition.h"
-#include "IRMutator.h"
 #include "IRVisitor.h"
 #include "Interval.h"
 
@@ -32,8 +31,8 @@ class FindAllCalls : public IRVisitor {
             funcs_called.insert(call->name);
             call_args.emplace_back(call->name, call->args);
         }
-        for (size_t i = 0; i < call->args.size(); i++) {
-            call->args[i].accept(this);
+        for (const auto &arg : call->args) {
+            arg.accept(this);
         }
     }
 

@@ -18,7 +18,7 @@ int main(int argc, char **argv) {
     f.store_at(g, xo)
         .compute_at(g, xi)
         .vectorize(x, 8);
-    g.realize(1024);
+    g.realize({1024});
 
     return 0;
 }

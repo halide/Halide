@@ -8,6 +8,7 @@
 #include "IROperator.h"
 #include "Module.h"
 #include "Target.h"
+#include "Util.h"
 
 namespace Halide {
 
@@ -58,7 +59,17 @@ ostream &operator<<(ostream &stream, const Expr &ir) {
 }
 
 ostream &operator<<(ostream &stream, const Buffer<> &buffer) {
-    return stream << "buffer " << buffer.name() << " = {...}\n";
+    bool include_data = Internal::ends_with(buffer.name(), "_gpu_source_kernels");
+    stream << "buffer " << buffer.name() << " = {";
+    if (include_data) {
+        std::string str((const char *)buffer.data(), buffer.size_in_bytes());
+        stream << "\n"
+               << str << "\n";
+    } else {
+        stream << "...";
+    }
+    stream << "}\n";
+    return stream;
 }
 
 ostream &operator<<(ostream &stream, const Module &m) {
@@ -92,9 +103,6 @@ ostream &operator<<(ostream &out, const DeviceAPI &api) {
         break;
     case DeviceAPI::OpenGLCompute:
         out << "<OpenGLCompute>";
-        break;
-    case DeviceAPI::GLSL:
-        out << "<GLSL>";
         break;
     case DeviceAPI::Metal:
         out << "<Metal>";
@@ -141,6 +149,9 @@ std::ostream &operator<<(std::ostream &out, const MemoryType &t) {
     case MemoryType::VTCM:
         out << "VTCM";
         break;
+    case MemoryType::AMXTile:
+        out << "AMXTile";
+        break;
     }
     return out;
 }
@@ -152,6 +163,15 @@ std::ostream &operator<<(std::ostream &out, const TailStrategy &t) {
         break;
     case TailStrategy::GuardWithIf:
         out << "GuardWithIf";
+        break;
+    case TailStrategy::Predicate:
+        out << "Predicate";
+        break;
+    case TailStrategy::PredicateLoads:
+        out << "PredicateLoads";
+        break;
+    case TailStrategy::PredicateStores:
+        out << "PredicateStores";
         break;
     case TailStrategy::ShiftInwards:
         out << "ShiftInwards";
@@ -284,6 +304,9 @@ ostream &operator<<(ostream &out, const VectorReduce::Operator &op) {
     switch (op) {
     case VectorReduce::Add:
         out << "Add";
+        break;
+    case VectorReduce::SaturatingAdd:
+        out << "SaturatingAdd";
         break;
     case VectorReduce::Mul:
         out << "Mul";
@@ -438,8 +461,7 @@ void IRPrinter::visit(const FloatImm *op) {
 
 void IRPrinter::visit(const StringImm *op) {
     stream << "\"";
-    for (size_t i = 0; i < op->value.size(); i++) {
-        unsigned char c = op->value[i];
+    for (unsigned char c : op->value) {
         if (c >= ' ' && c <= '~' && c != '\\' && c != '"') {
             stream << c;
         } else {
@@ -805,7 +827,16 @@ void IRPrinter::visit(const Store *op) {
 }
 
 void IRPrinter::visit(const Provide *op) {
-    stream << get_indent() << op->name << "(";
+    stream << get_indent();
+    const bool has_pred = !is_const_one(op->predicate);
+    if (has_pred) {
+        stream << "predicate (";
+        print_no_parens(op->predicate);
+        stream << ")\n";
+        indent++;
+        stream << get_indent();
+    }
+    stream << op->name << "(";
     print_list(op->args);
     stream << ") = ";
     if (op->values.size() > 1) {
@@ -817,14 +848,17 @@ void IRPrinter::visit(const Provide *op) {
     }
 
     stream << "\n";
+    if (has_pred) {
+        indent--;
+    }
 }
 
 void IRPrinter::visit(const Allocate *op) {
     ScopedBinding<> bind(known_type, op->name);
     stream << get_indent() << "allocate " << op->name << "[" << op->type;
-    for (size_t i = 0; i < op->extents.size(); i++) {
+    for (const auto &extent : op->extents) {
         stream << " * ";
-        print(op->extents[i]);
+        print(extent);
     }
     stream << "]";
     if (op->memory_type != MemoryType::Auto) {
@@ -893,7 +927,7 @@ void IRPrinter::visit(const Prefetch *op) {
         indent++;
         stream << get_indent();
     }
-    stream << "prefetch " << op->name << "(";
+    stream << "prefetch " << op->name << ", " << op->prefetch.at << ", " << op->prefetch.from << ", (";
     for (size_t i = 0; i < op->bounds.size(); i++) {
         stream << "[";
         print_no_parens(op->bounds[i].min);
@@ -940,7 +974,7 @@ void IRPrinter::visit(const Fork *op) {
 
 void IRPrinter::visit(const IfThenElse *op) {
     stream << get_indent();
-    while (1) {
+    while (true) {
         stream << "if (";
         print_no_parens(op->condition);
         stream << ") {\n";
@@ -1018,7 +1052,7 @@ void IRPrinter::visit(const VectorReduce *op) {
            << op->op
            << ", "
            << op->value
-           << ")\n";
+           << ")";
 }
 
 void IRPrinter::visit(const Atomic *op) {

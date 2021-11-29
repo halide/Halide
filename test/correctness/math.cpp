@@ -137,7 +137,7 @@ struct TestArgs {
         } else if (target.has_feature(Target::HVX)) {                                        \
             test_##name.hexagon();                                                           \
         }                                                                                    \
-        Buffer<type_ret> result = test_##name.realize(in.extent(0), target);                 \
+        Buffer<type_ret> result = test_##name.realize({in.extent(0)}, target);               \
         for (int i = 0; i < in.extent(0); i++) {                                             \
             type_ret c_result = c_name(in(i));                                               \
             if (!relatively_equal(c_result, result(i), target)) {                            \
@@ -164,7 +164,7 @@ struct TestArgs {
         } else if (target.has_feature(Target::HVX)) {                                               \
             test_##name.hexagon();                                                                  \
         }                                                                                           \
-        Buffer<type_ret> result = test_##name.realize(in.height(), target);                         \
+        Buffer<type_ret> result = test_##name.realize({in.height()}, target);                       \
         for (int i = 0; i < in.height(); i++) {                                                     \
             type_ret c_result = c_name(in(0, i), in(1, i));                                         \
             if (!relatively_equal(c_result, result(i), target)) {                                   \

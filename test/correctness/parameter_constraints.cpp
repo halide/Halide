@@ -4,7 +4,7 @@
 using namespace Halide;
 
 bool error_occurred;
-void my_error_handler(void *user_callback, const char *msg) {
+void my_error_handler(JITUserContext *user_context, const char *msg) {
     error_occurred = true;
 }
 
@@ -24,11 +24,11 @@ int main(int argc, char **argv) {
         g.compute_root();
         f(x, y) = g(cast<int>(x / p), y);
 
-        f.set_error_handler(my_error_handler);
+        f.jit_handlers().custom_error = my_error_handler;
 
         error_occurred = false;
         p.set(2);
-        f.realize(100, 100);
+        f.realize({100, 100});
         if (error_occurred) {
             printf("Error incorrectly raised\n");
             return -1;
@@ -36,7 +36,7 @@ int main(int argc, char **argv) {
 
         p.set(0);
         error_occurred = false;
-        f.realize(100, 100);
+        f.realize({100, 100});
         if (!error_occurred) {
             printf("Error should have been raised\n");
             return -1;
@@ -55,10 +55,10 @@ int main(int argc, char **argv) {
         g.compute_root();
         f(x, y) = g(cast<int>(x / p), y);
 
-        f.set_error_handler(my_error_handler);
+        f.jit_handlers().custom_error = my_error_handler;
 
         error_occurred = false;
-        f.realize(100, 100);
+        f.realize({100, 100});
         if (error_occurred) {
             printf("Error incorrectly raised\n");
             return -1;
@@ -66,7 +66,7 @@ int main(int argc, char **argv) {
 
         p.set(0);
         error_occurred = false;
-        f.realize(100, 100);
+        f.realize({100, 100});
         if (!error_occurred) {
             printf("Error should have been raised\n");
             return -1;

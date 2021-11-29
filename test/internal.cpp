@@ -4,8 +4,6 @@
 #include "CPlusPlusMangle.h"
 #include "CSE.h"
 #include "CodeGen_C.h"
-#include "CodeGen_PyTorch.h"
-#include "CodeGen_X86.h"
 #include "Deinterleave.h"
 #include "Func.h"
 #include "Generator.h"
@@ -26,7 +24,6 @@ using namespace Halide::Internal;
 int main(int argc, const char **argv) {
     IRPrinter::test();
     CodeGen_C::test();
-    CodeGen_PyTorch::test();
     ir_equality_test();
     bounds_test();
     expr_match_test();

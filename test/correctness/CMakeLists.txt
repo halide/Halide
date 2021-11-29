@@ -14,16 +14,12 @@ tests(GROUPS correctness
       atomic_tuples.cpp
       atomics.cpp
       autodiff.cpp
-      autotune_bug.cpp
-      autotune_bug_2.cpp
-      autotune_bug_3.cpp
-      autotune_bug_4.cpp
-      autotune_bug_5.cpp
       bad_likely.cpp
       bit_counting.cpp
       bitwise_ops.cpp
       bool_compute_root_vectorize.cpp
       bound.cpp
+      bound_storage.cpp
       bound_small_allocations.cpp
       boundary_conditions.cpp
       bounds.cpp
@@ -36,6 +32,7 @@ tests(GROUPS correctness
       bounds_of_func.cpp
       bounds_of_monotonic_math.cpp
       bounds_of_multiply.cpp
+      bounds_of_split.cpp
       bounds_query.cpp
       buffer_t.cpp
       c_function.cpp
@@ -69,7 +66,9 @@ tests(GROUPS correctness
       cuda_8_bit_dot_product.cpp
       custom_allocator.cpp
       custom_auto_scheduler.cpp
+      custom_cuda_context.cpp
       custom_error_reporter.cpp
+      custom_jit_context.cpp
       custom_lowering_pass.cpp
       dead_realization_in_specialization.cpp
       debug_to_file.cpp
@@ -78,6 +77,7 @@ tests(GROUPS correctness
       deferred_loop_level.cpp
       deinterleave4.cpp
       device_buffer_copy.cpp
+      device_copy_at_inner_loop.cpp
       device_crop.cpp
       device_slice.cpp
       dilate3x3.cpp
@@ -108,6 +108,7 @@ tests(GROUPS correctness
       float16_t_comparison.cpp
       float16_t_constants.cpp
       float16_t_image_type.cpp
+      float16_t_neon_op_check.cpp
       for_each_element.cpp
       force_onto_stack.cpp
       func_clone.cpp
@@ -117,6 +118,7 @@ tests(GROUPS correctness
       fuse.cpp
       fuse_gpu_threads.cpp
       fused_where_inner_extent_is_zero.cpp
+      fuzz_bounds.cpp
       fuzz_cse.cpp
       fuzz_float_stores.cpp
       fuzz_simplify.cpp
@@ -135,6 +137,7 @@ tests(GROUPS correctness
       gpu_give_input_buffers_device_allocations.cpp
       gpu_jit_explicit_copy_to_device.cpp
       gpu_large_alloc.cpp
+      gpu_many_kernels.cpp
       gpu_mixed_dimensionality.cpp
       gpu_mixed_shared_mem_types.cpp
       gpu_multi_kernel.cpp
@@ -151,7 +154,9 @@ tests(GROUPS correctness
       gpu_texture.cpp
       gpu_thread_barrier.cpp
       gpu_transpose.cpp
+      gpu_vectorize.cpp
       gpu_vectorized_shared_memory.cpp
+      growing_stack.cpp
       half_native_interleave.cpp
       halide_buffer.cpp
       handle.cpp
@@ -168,6 +173,7 @@ tests(GROUPS correctness
       implicit_args.cpp
       implicit_args_tests.cpp
       in_place.cpp
+      indexing_access_undef.cpp
       infer_arguments.cpp
       inline_reduction.cpp
       inlined_generator.cpp
@@ -177,7 +183,9 @@ tests(GROUPS correctness
       interleave.cpp
       interleave_rgb.cpp
       interleave_x.cpp
+      interpreter.cpp
       interval.cpp
+      intrinsics.cpp
       introspection.cpp
       inverse.cpp
       isnan.cpp
@@ -216,6 +224,7 @@ tests(GROUPS correctness
       multipass_constraints.cpp
       multiple_outputs.cpp
       multiple_outputs_extern.cpp
+      multiple_scatter.cpp
       mux.cpp
       named_updates.cpp
       nested_shiftinwards.cpp
@@ -234,6 +243,7 @@ tests(GROUPS correctness
       parallel_gpu_nested.cpp
       parallel_nested.cpp
       parallel_nested_1.cpp
+      parallel_scatter.cpp
       parallel_reductions.cpp
       parallel_rvar.cpp
       param.cpp
@@ -254,6 +264,7 @@ tests(GROUPS correctness
       process_some_tiles.cpp
       pseudostack_shares_slots.cpp
       python_extension_gen.cpp
+      pytorch.cpp
       random.cpp
       realize_larger_than_two_gigs.cpp
       realize_over_shifted_domain.cpp
@@ -304,6 +315,7 @@ tests(GROUPS correctness
       strided_load.cpp
       target.cpp
       thread_safety.cpp
+      tiled_matmul.cpp
       tracing.cpp
       tracing_bounds.cpp
       tracing_broadcast.cpp
@@ -322,6 +334,7 @@ tests(GROUPS correctness
       uninitialized_read.cpp
       unique_func_image.cpp
       unroll_dynamic_loop.cpp
+      unroll_huge_mux.cpp
       unrolled_reduction.cpp
       unsafe_dedup_lets.cpp
       unsafe_promises.cpp

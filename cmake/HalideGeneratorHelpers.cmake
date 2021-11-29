@@ -6,6 +6,94 @@ define_property(TARGET PROPERTY Halide_RT_TARGETS
                 BRIEF_DOCS "On a Halide runtime target, lists the targets the runtime backs"
                 FULL_DOCS "On a Halide runtime target, lists the targets the runtime backs")
 
+define_property(TARGET PROPERTY Halide_GENERATOR_HAS_POST_BUILD
+                BRIEF_DOCS "On a Halide generator target, true if Halide.dll copy command has already been added."
+                FULL_DOCS "On a Halide generator target, true if Halide.dll copy command has already been added.")
+
+##
+# Function to simplify writing the CMake rules for creating a generator executable
+# that follows our recommended cross-compiling workflow.
+##
+
+function(add_halide_generator TARGET)
+    set(options "")
+    set(oneValueArgs PACKAGE_NAME PACKAGE_NAMESPACE EXPORT_FILE)
+    set(multiValueArgs SOURCES)
+    cmake_parse_arguments(ARG "${options}" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
+
+    if (NOT ARG_PACKAGE_NAME)
+        set(ARG_PACKAGE_NAME "${PROJECT_NAME}-halide_generators")
+    endif ()
+
+    if (NOT ARG_PACKAGE_NAMESPACE)
+        set(ARG_PACKAGE_NAMESPACE "${PROJECT_NAME}::halide_generators::")
+    endif ()
+
+    if (NOT ARG_EXPORT_FILE)
+        file(MAKE_DIRECTORY "${PROJECT_BINARY_DIR}/cmake")
+        set(ARG_EXPORT_FILE "${PROJECT_BINARY_DIR}/cmake/${ARG_PACKAGE_NAME}-config.cmake")
+    endif ()
+
+    if (NOT ARG_SOURCES)
+        set(ARG_SOURCES "${ARG_UNPARSED_ARGUMENTS}")
+    endif ()
+
+    _Halide_try_load_generators()
+
+    # Communicate found information to the caller
+    set(${ARG_PACKAGE_NAME}_FOUND "${${ARG_PACKAGE_NAME}_FOUND}" PARENT_SCOPE)
+
+    set(gen "${ARG_PACKAGE_NAMESPACE}${TARGET}")
+    if (NOT TARGET "${gen}")
+        if (NOT TARGET "${ARG_PACKAGE_NAME}")
+            add_custom_target("${ARG_PACKAGE_NAME}")
+        endif ()
+
+        if (NOT Halide_FOUND)
+            find_package(Halide REQUIRED)
+        endif ()
+
+        add_executable(${TARGET} ${ARG_SOURCES})
+        add_executable(${gen} ALIAS ${TARGET})
+        target_link_libraries(${TARGET} PRIVATE Halide::Generator)
+
+        add_dependencies("${ARG_PACKAGE_NAME}" ${TARGET})
+        export(TARGETS ${TARGET}
+               NAMESPACE ${ARG_PACKAGE_NAMESPACE}
+               APPEND FILE "${ARG_EXPORT_FILE}")
+    endif ()
+endfunction()
+
+# NOTE: this function must only be called by add_halide_generator
+# since it reads from its scope.
+function(_Halide_try_load_generators)
+    # Don't repeatedly run the search for the tools package.
+    if (NOT DEFINED ${ARG_PACKAGE_NAME}_FOUND)
+        # Some toolchains, like Emscripten, try to disable finding packages
+        # outside their sysroots, but we always want to find the native
+        # generators. Setting CMAKE_FIND_ROOT_PATH_BOTH here overrides
+        # the toolchain search preference. This is okay since a user can
+        # always override this call by setting ${ARG_PACKAGE_NAME}_ROOT.
+        find_package(${ARG_PACKAGE_NAME} QUIET
+                     CMAKE_FIND_ROOT_PATH_BOTH)
+
+        # Communicate found information to the caller
+        set(${ARG_PACKAGE_NAME}_FOUND "${${ARG_PACKAGE_NAME}_FOUND}" PARENT_SCOPE)
+
+        if (NOT ${ARG_PACKAGE_NAME}_FOUND AND CMAKE_CROSSCOMPILING)
+            message(WARNING
+                    "${ARG_PACKAGE_NAME} were not found and it looks like you are cross-compiling. "
+                    "This is likely to fail. Please set -D${ARG_PACKAGE_NAME}_ROOT=... at the CMake "
+                    "command line to the build directory of a host-built ${PROJECT_NAME}.")
+        endif ()
+    endif ()
+endfunction()
+
+##
+# Function to simplify writing the CMake rules for invoking a generator executable
+# and getting a usable CMake library out of it.
+##
+
 function(add_halide_library TARGET)
     ##
     # Set up argument parsing for extra outputs.
@@ -17,7 +105,7 @@ function(add_halide_library TARGET)
     # - `object` is selected for CMake-target-compile
     # - `static_library` is selected for cross-compile
     # - `cpp_stub` is not available
-    set(EXTRA_OUTPUT_NAMES
+    set(extra_output_names
         ASSEMBLY
         BITCODE
         COMPILER_LOG
@@ -48,7 +136,7 @@ function(add_halide_library TARGET)
     ##
 
     set(options C_BACKEND GRADIENT_DESCENT)
-    set(oneValueArgs FROM GENERATOR FUNCTION_NAME NAMESPACE USE_RUNTIME AUTOSCHEDULER ${EXTRA_OUTPUT_NAMES})
+    set(oneValueArgs FROM GENERATOR FUNCTION_NAME NAMESPACE USE_RUNTIME AUTOSCHEDULER HEADER ${extra_output_names})
     set(multiValueArgs TARGETS FEATURES PARAMS PLUGINS)
     cmake_parse_arguments(ARG "${options}" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
 
@@ -60,6 +148,8 @@ function(add_halide_library TARGET)
         message(FATAL_ERROR "Missing FROM argument specifying a Halide generator target")
     endif ()
 
+    _Halide_place_dll(${ARG_FROM})
+
     if (ARG_C_BACKEND)
         if (ARG_USE_RUNTIME)
             message(AUTHOR_WARNING "The C backend does not use a runtime.")
@@ -69,7 +159,7 @@ function(add_halide_library TARGET)
         endif ()
     endif ()
 
-    set(GRADIENT_DESCENT "$<BOOL:${ARG_GRADIENT_DESCENT}>")
+    set(gradient_descent "$<BOOL:${ARG_GRADIENT_DESCENT}>")
 
     if (NOT ARG_GENERATOR)
         set(ARG_GENERATOR "${TARGET}")
@@ -116,17 +206,15 @@ function(add_halide_library TARGET)
     if (ARG_C_BACKEND)
         # The C backend does not provide a runtime, so just supply headers.
         set(ARG_USE_RUNTIME Halide::Runtime)
-    else ()
+    elseif (NOT ARG_USE_RUNTIME)
         # If we're not using an existing runtime, create one.
-        if (NOT ARG_USE_RUNTIME)
-            _Halide_add_halide_runtime("${TARGET}.runtime" FROM ${ARG_FROM}
-                                       TARGETS ${ARG_TARGETS})
-            set(ARG_USE_RUNTIME "${TARGET}.runtime")
-        elseif (NOT TARGET ${ARG_USE_RUNTIME})
-            message(FATAL_ERROR "Invalid runtime target ${ARG_USE_RUNTIME}")
-        else ()
-            _Halide_add_targets_to_runtime(${ARG_USE_RUNTIME} TARGETS ${ARG_TARGETS})
-        endif ()
+        _Halide_add_halide_runtime("${TARGET}.runtime" FROM ${ARG_FROM}
+                                   TARGETS ${ARG_TARGETS})
+        set(ARG_USE_RUNTIME "${TARGET}.runtime")
+    elseif (NOT TARGET ${ARG_USE_RUNTIME})
+        message(FATAL_ERROR "Invalid runtime target ${ARG_USE_RUNTIME}")
+    else ()
+        _Halide_add_targets_to_runtime(${ARG_USE_RUNTIME} TARGETS ${ARG_TARGETS})
     endif ()
 
     ##
@@ -134,46 +222,48 @@ function(add_halide_library TARGET)
     ##
 
     _Halide_get_platform_details(
-            generator_cmd
-            crosscompiling
+            is_crosscompiling
             object_suffix
             static_library_suffix
             ${ARG_TARGETS})
 
     # Always emit a C header
-    set(GENERATOR_OUTPUTS c_header)
-    set(GENERATOR_OUTPUT_FILES "${TARGET}.h")
+    set(generator_outputs c_header)
+    set(generator_output_files "${TARGET}.h")
+    if (ARG_HEADER)
+        set(${ARG_HEADER} "${TARGET}.h" PARENT_SCOPE)
+    endif ()
 
     # Then either a C source, a set of object files, or a cross-compiled static library.
     if (ARG_C_BACKEND)
-        list(APPEND GENERATOR_OUTPUTS c_source)
-        set(GENERATOR_SOURCES "${TARGET}.halide_generated.cpp")
-    elseif (crosscompiling)
+        list(APPEND generator_outputs c_source)
+        set(generator_sources "${TARGET}.halide_generated.cpp")
+    elseif (is_crosscompiling)
         # When cross-compiling, we need to use a static, imported library
-        list(APPEND GENERATOR_OUTPUTS static_library)
-        set(GENERATOR_SOURCES "${TARGET}${static_library_suffix}")
+        list(APPEND generator_outputs static_library)
+        set(generator_sources "${TARGET}${static_library_suffix}")
     else ()
         # When compiling for the current CMake toolchain, create a native
-        list(APPEND GENERATOR_OUTPUTS object)
+        list(APPEND generator_outputs object)
         list(LENGTH ARG_TARGETS len)
         if (len EQUAL 1)
-            set(GENERATOR_SOURCES "${TARGET}${object_suffix}")
+            set(generator_sources "${TARGET}${object_suffix}")
         else ()
-            set(GENERATOR_SOURCES ${ARG_TARGETS})
-            list(TRANSFORM GENERATOR_SOURCES PREPEND "${TARGET}-")
-            list(TRANSFORM GENERATOR_SOURCES APPEND "${object_suffix}")
-            list(APPEND GENERATOR_SOURCES "${TARGET}_wrapper${object_suffix}")
+            set(generator_sources ${ARG_TARGETS})
+            list(TRANSFORM generator_sources PREPEND "${TARGET}-")
+            list(TRANSFORM generator_sources APPEND "${object_suffix}")
+            list(APPEND generator_sources "${TARGET}_wrapper${object_suffix}")
         endif ()
     endif ()
-    list(APPEND GENERATOR_OUTPUT_FILES ${GENERATOR_SOURCES})
+    list(APPEND generator_output_files ${generator_sources})
 
     # Add in extra outputs using the table defined at the start of this function
-    foreach (out IN LISTS EXTRA_OUTPUT_NAMES)
+    foreach (out IN LISTS extra_output_names)
         if (ARG_${out})
             set(${ARG_${out}} "${TARGET}${${out}_extension}" PARENT_SCOPE)
-            list(APPEND GENERATOR_OUTPUT_FILES "${TARGET}${${out}_extension}")
+            list(APPEND generator_output_files "${TARGET}${${out}_extension}")
             string(TOLOWER "${out}" out)
-            list(APPEND GENERATOR_OUTPUTS ${out})
+            list(APPEND generator_outputs ${out})
         endif ()
     endforeach ()
 
@@ -181,7 +271,7 @@ function(add_halide_library TARGET)
     # Attach an autoscheduler if the user requested it
     ##
 
-    set(GEN_AUTOSCHEDULER "")
+    set(autoscheduler "")
     if (ARG_AUTOSCHEDULER)
         if ("${ARG_AUTOSCHEDULER}" MATCHES "::")
             if (NOT TARGET "${ARG_AUTOSCHEDULER}")
@@ -195,7 +285,7 @@ function(add_halide_library TARGET)
         elseif (NOT ARG_PLUGINS)
             message(AUTHOR_WARNING "AUTOSCHEDULER set to a scheduler name but no plugins were loaded")
         endif ()
-        set(GEN_AUTOSCHEDULER -s "${ARG_AUTOSCHEDULER}")
+        set(autoscheduler -s "${ARG_AUTOSCHEDULER}")
         list(PREPEND ARG_PARAMS auto_schedule=true)
     endif ()
 
@@ -203,48 +293,81 @@ function(add_halide_library TARGET)
     # Main library target for filter.
     ##
 
-    if (crosscompiling)
+    if (is_crosscompiling)
         add_library("${TARGET}" STATIC IMPORTED GLOBAL)
         set_target_properties("${TARGET}" PROPERTIES
-                              IMPORTED_LOCATION "${CMAKE_CURRENT_BINARY_DIR}/${GENERATOR_SOURCES}")
+                              IMPORTED_LOCATION "${CMAKE_CURRENT_BINARY_DIR}/${generator_sources}")
     else ()
-        add_library("${TARGET}" STATIC ${GENERATOR_SOURCES})
+        add_library("${TARGET}" STATIC ${generator_sources})
         set_target_properties("${TARGET}" PROPERTIES
                               POSITION_INDEPENDENT_CODE ON
                               LINKER_LANGUAGE CXX)
+        _Halide_fix_xcode("${TARGET}")
     endif ()
 
     # Load the plugins and setup dependencies
-    set(GEN_PLUGINS "")
+    set(generator_plugins "")
     if (ARG_PLUGINS)
         foreach (p IN LISTS ARG_PLUGINS)
-            list(APPEND GEN_PLUGINS "$<TARGET_FILE:${p}>")
+            list(APPEND generator_plugins "$<TARGET_FILE:${p}>")
         endforeach ()
-        set(GEN_PLUGINS -p "$<JOIN:${GEN_PLUGINS},$<COMMA>>")
+        set(generator_plugins -p "$<JOIN:${generator_plugins},$<COMMA>>")
     endif ()
 
-    add_custom_command(OUTPUT ${GENERATOR_OUTPUT_FILES}
-                       COMMAND ${generator_cmd}
+    add_custom_command(OUTPUT ${generator_output_files}
+                       COMMAND ${ARG_FROM}
                        -n "${TARGET}"
-                       -d "${GRADIENT_DESCENT}"
+                       -d "${gradient_descent}"
                        -g "${ARG_GENERATOR}"
                        -f "${ARG_FUNCTION_NAME}"
-                       -e "$<JOIN:${GENERATOR_OUTPUTS},$<COMMA>>"
-                       ${GEN_PLUGINS}
-                       ${GEN_AUTOSCHEDULER}
+                       -e "$<JOIN:${generator_outputs},$<COMMA>>"
+                       ${generator_plugins}
+                       ${autoscheduler}
                        -o .
                        "target=$<JOIN:${ARG_TARGETS},$<COMMA>>"
                        ${ARG_PARAMS}
                        DEPENDS "${ARG_FROM}" ${ARG_PLUGINS}
                        VERBATIM)
 
-    list(TRANSFORM GENERATOR_OUTPUT_FILES PREPEND "${CMAKE_CURRENT_BINARY_DIR}/")
-    add_custom_target("${TARGET}.update" ALL DEPENDS ${GENERATOR_OUTPUT_FILES})
+    list(TRANSFORM generator_output_files PREPEND "${CMAKE_CURRENT_BINARY_DIR}/")
+    add_custom_target("${TARGET}.update" ALL DEPENDS ${generator_output_files})
 
     add_dependencies("${TARGET}" "${TARGET}.update")
 
-    target_include_directories("${TARGET}" INTERFACE "${CMAKE_CURRENT_BINARY_DIR}")
+    target_include_directories("${TARGET}" INTERFACE "$<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}>")
     target_link_libraries("${TARGET}" INTERFACE "${ARG_USE_RUNTIME}")
+endfunction()
+
+##
+# Function for ensuring that Halide.dll is visible to the generator
+##
+
+function(_Halide_place_dll GEN)
+    if (NOT WIN32)
+        return()
+    endif ()
+
+    # Short circuit so that Halide::Halide isn't checked when importing a generator from another CMake project
+    get_property(is_imported TARGET ${GEN} PROPERTY IMPORTED)
+    if (is_imported)
+        return()
+    endif ()
+
+    get_property(has_post_build TARGET ${GEN} PROPERTY Halide_GENERATOR_HAS_POST_BUILD)
+    if (has_post_build)
+        return()
+    endif ()
+
+    # Here GEN is not IMPORTED, which means that it must be linked
+    # to Halide::Halide and therefore Halide::Halide must exist.
+    get_property(halide_type TARGET Halide::Halide PROPERTY TYPE)
+    if (NOT halide_type STREQUAL "SHARED_LIBRARY")
+        return()
+    endif ()
+
+    add_custom_command(TARGET ${GEN} POST_BUILD
+                       COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_FILE:Halide::Halide> $<TARGET_FILE_DIR:${GEN}>)
+    set_property(TARGET ${GEN} PROPERTY Halide_GENERATOR_HAS_POST_BUILD 1)
 endfunction()
 
 ##
@@ -254,13 +377,12 @@ endfunction()
 function(_Halide_add_halide_runtime RT)
     cmake_parse_arguments(ARG "" "FROM" "TARGETS" ${ARGN})
     _Halide_get_platform_details(
-            generator_cmd
-            crosscompiling
+            is_crosscompiling
             object_suffix
             static_library_suffix
             ${ARG_TARGETS})
 
-    if (crosscompiling)
+    if (is_crosscompiling)
         set(GEN_OUTS "${RT}${static_library_suffix}")
         set(GEN_ARGS "")
     else ()
@@ -269,14 +391,14 @@ function(_Halide_add_halide_runtime RT)
     endif ()
 
     add_custom_command(OUTPUT ${GEN_OUTS}
-                       COMMAND ${generator_cmd} -r "${TARGET}.runtime" -o . ${GEN_ARGS}
+                       COMMAND ${ARG_FROM} -r "${TARGET}.runtime" -o . ${GEN_ARGS}
                        # Defers reading the list of targets for which to generate a common runtime to CMake _generation_ time.
                        # This prevents issues where a lower GCD is required by a later Halide library linking to this runtime.
                        target=$<JOIN:$<TARGET_PROPERTY:${TARGET}.runtime,Halide_RT_TARGETS>,$<COMMA>>
                        DEPENDS "${ARG_FROM}"
                        VERBATIM)
 
-    if (crosscompiling)
+    if (is_crosscompiling)
         add_custom_target("${RT}.update" DEPENDS "${GEN_OUTS}")
 
         add_library("${RT}" STATIC IMPORTED GLOBAL)
@@ -287,13 +409,14 @@ function(_Halide_add_halide_runtime RT)
     else ()
         add_library("${RT}" STATIC ${GEN_OUTS})
         set_target_properties("${RT}" PROPERTIES LINKER_LANGUAGE CXX)
+        _Halide_fix_xcode("${RT}")
     endif ()
 
     target_link_libraries("${RT}" INTERFACE Halide::Runtime Threads::Threads ${CMAKE_DL_LIBS})
     _Halide_add_targets_to_runtime("${RT}" TARGETS ${ARG_TARGETS})
 endfunction()
 
-function(_Halide_get_platform_details OUT_GEN OUT_XC OUT_OBJ OUT_STATIC)
+function(_Halide_get_platform_details OUT_XC OUT_OBJ OUT_STATIC)
     if ("${ARGN}" MATCHES "host")
         set(ARGN "${Halide_HOST_TARGET}")
     endif ()
@@ -308,16 +431,13 @@ function(_Halide_get_platform_details OUT_GEN OUT_XC OUT_OBJ OUT_STATIC)
         set(${OUT_STATIC} ".a" PARENT_SCOPE)
     endif ()
 
-    if (WIN32)
-        # On Linux, RPATH allows the generator to find Halide, but we need to add it to the PATH on Windows.
-        set(newPath "$<TARGET_FILE_DIR:Halide::Halide>" $ENV{PATH})
-        string(REPLACE ";" "$<SEMICOLON>" newPath "${newPath}")
-        set(${OUT_GEN} ${CMAKE_COMMAND} -E env "PATH=$<SHELL_PATH:${newPath}>" "$<TARGET_FILE:${ARG_FROM}>" PARENT_SCOPE)
+    # Well-formed targets must either start with "host" or a target triple.
+    if ("${ARGN}" MATCHES "host")
+        set(halide_triple ${Halide_HOST_TARGET})
     else ()
-        set(${OUT_GEN} ${ARG_FROM} PARENT_SCOPE)
+        string(REGEX REPLACE "^([^-]+-[^-]+-[^-]+).*$" "\\1" halide_triple "${ARGN}")
     endif ()
 
-    _Halide_get_triple(halide_triple "${ARGN}")
     if (NOT Halide_CMAKE_TARGET STREQUAL halide_triple)
         set("${OUT_XC}" 1 PARENT_SCOPE)
     else ()
@@ -342,22 +462,20 @@ function(_Halide_add_targets_to_runtime TARGET)
 endfunction()
 
 function(_Halide_target_link_gpu_libs TARGET VISIBILITY)
-    if ("${ARGN}" MATCHES "opengl")
-        if (NOT TARGET X11::X11)
-            find_package(X11)
-            if (NOT X11_FOUND)
-                message(AUTHOR_WARNING "X11 dependency not found on system.")
+    # TODO(https://github.com/halide/Halide/issues/5633): verify that this is correct & necessary for OpenGLCompute
+    if ("${ARGN}" MATCHES "openglcompute")
+        if ("${ARGN}" MATCHES "egl")
+            find_package(OpenGL REQUIRED COMPONENTS OpenGL EGL)
+            target_link_libraries(${TARGET} ${VISIBILITY} OpenGL::OpenGL OpenGL::EGL)
+        else ()
+            if ("${ARGN}" MATCHES "linux" OR ("${ARGN}" MATCHES "host" AND Halide_HOST_TARGET MATCHES "linux"))
+                find_package(X11 REQUIRED)
+                target_link_libraries(${TARGET} ${VISIBILITY} X11::X11)
             endif ()
-        endif ()
-        target_link_libraries(${TARGET} ${VISIBILITY} X11::X11)
 
-        if (NOT TARGET OpenGL::GL)
-            find_package(OpenGL QUIET)
-            if (NOT OPENGL_FOUND)
-                message(AUTHOR_WARNING "OpenGL dependency not found on system.")
-            endif ()
+            find_package(OpenGL REQUIRED)
+            target_link_libraries(${TARGET} ${VISIBILITY} OpenGL::GL)
         endif ()
-        target_link_libraries(${TARGET} ${VISIBILITY} OpenGL::GL)
     endif ()
 
     if ("${ARGN}" MATCHES "metal")
@@ -374,5 +492,22 @@ function(_Halide_target_link_gpu_libs TARGET VISIBILITY)
         else ()
             target_link_libraries(${TARGET} ${VISIBILITY} "${FOUNDATION_LIBRARY}")
         endif ()
+    endif ()
+endfunction()
+
+##
+# Function for working around Xcode backend bugs
+##
+
+function(_Halide_fix_xcode TARGET)
+    if (CMAKE_GENERATOR STREQUAL "Xcode")
+        # Xcode generator requires at least one source file to work correctly.
+        # Touching the empty file unconditionally would cause the archiver to
+        # re-run every time CMake re-runs, even if nothing actually changed.
+        set(empty_file "${CMAKE_CURRENT_BINARY_DIR}/Halide_${TARGET}_empty.cpp")
+        if (NOT EXISTS "${empty_file}")
+            file(TOUCH "${empty_file}")
+        endif ()
+        target_sources("${TARGET}" PRIVATE "${empty_file}")
     endif ()
 endfunction()

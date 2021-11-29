@@ -7,7 +7,7 @@
 using namespace Halide;
 
 bool error_occurred = false;
-void my_error_handler(void *user_context, const char *msg) {
+void my_error_handler(JITUserContext *user_context, const char *msg) {
     //printf("%s\n", msg);
     error_occurred = true;
 }
@@ -23,12 +23,12 @@ int basic_constraints() {
 
     param.dim(0).set_bounds(0, 128);
 
-    f.set_error_handler(my_error_handler);
+    f.jit_handlers().custom_error = my_error_handler;
 
     // This should be fine
     param.set(image1);
     error_occurred = false;
-    f.realize(20, 20);
+    f.realize({20, 20});
 
     if (error_occurred) {
         printf("Error incorrectly raised\n");
@@ -37,7 +37,7 @@ int basic_constraints() {
     // This should be an error, because dimension 0 of image 2 is not from 0 to 128 like we promised
     param.set(image2);
     error_occurred = false;
-    f.realize(20, 20);
+    f.realize({20, 20});
 
     if (!error_occurred) {
         printf("Error incorrectly not raised\n");
@@ -46,7 +46,7 @@ int basic_constraints() {
 
     // Now try constraining the output buffer of a function
     g(x, y) = x * y;
-    g.set_error_handler(my_error_handler);
+    g.jit_handlers().custom_error = my_error_handler;
     g.output_buffer().dim(0).set_stride(2);
     error_occurred = false;
     g.realize(image1);
@@ -57,7 +57,7 @@ int basic_constraints() {
 
     Func h;
     h(x, y) = x * y;
-    h.set_error_handler(my_error_handler);
+    h.jit_handlers().custom_error = my_error_handler;
     h.output_buffer()
         .dim(0)
         .set_stride(1)
@@ -155,12 +155,12 @@ int unstructured_constraints() {
     pf.add_requirement(param.dim(0).min() == required_min && param.dim(0).extent() == required_extent,
                        "Custom message:", param.dim(0).min(), param.dim(0).max());
 
-    pf.set_error_handler(my_error_handler);
+    pf.jit_handlers().custom_error = my_error_handler;
 
     // This should be fine
     param.set(image1);
     error_occurred = false;
-    pf.realize(20, 20);
+    pf.realize({20, 20});
 
     if (error_occurred) {
         printf("Error incorrectly raised\n");
@@ -169,7 +169,7 @@ int unstructured_constraints() {
     // This should be an error, because dimension 0 of image 2 is not from 0 to 128 like we promised
     param.set(image2);
     error_occurred = false;
-    pf.realize(20, 20);
+    pf.realize({20, 20});
 
     if (!error_occurred) {
         printf("Error incorrectly not raised\n");
@@ -184,7 +184,7 @@ int unstructured_constraints() {
     Param<int> required_stride;
     required_stride.set(2);
     pg.add_requirement(g.output_buffer().dim(0).stride() == required_stride);
-    pg.set_error_handler(my_error_handler);
+    pg.jit_handlers().custom_error = my_error_handler;
 
     error_occurred = false;
     pg.realize(image1);
@@ -197,7 +197,7 @@ int unstructured_constraints() {
     h(x, y) = x * y;
 
     Pipeline ph(h);
-    ph.set_error_handler(my_error_handler);
+    ph.jit_handlers().custom_error = my_error_handler;
     ph.add_requirement(h.output_buffer().dim(0).stride() == 1);
     ph.add_requirement(h.output_buffer().dim(0).min() == 0);
     ph.add_requirement(h.output_buffer().dim(0).extent() % 8 == 0);

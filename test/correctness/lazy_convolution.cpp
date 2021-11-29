@@ -31,7 +31,7 @@ int main(int argc, char **argv) {
     blur(x, y) = select(f(x, y) > 0, sum(f(x + r.x, y + r.y)), 0);
 
     call_count = 0;
-    blur.realize(100, 100);
+    blur.realize({100, 100});
 
     // If we computed the convolution everywhere, call_count would be
     // 100*100*20*20. Because we only compute it in half of the

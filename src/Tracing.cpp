@@ -6,6 +6,8 @@
 #include "RealizationOrder.h"
 #include "runtime/HalideRuntime.h"
 
+#include <set>
+
 namespace Halide {
 namespace Internal {
 
@@ -195,6 +197,10 @@ private:
                 builder.value_index = (int)i;
                 builder.value = {value_var};
                 Expr trace = builder.build();
+                if (!is_const_one(op->predicate)) {
+                    trace = Call::make(trace.type(), Call::if_then_else,
+                                       {op->predicate, trace}, Call::PureIntrinsic);
+                }
 
                 traces[i] = Let::make(value_var_name, values[i],
                                       Call::make(t, Call::return_second,
@@ -206,15 +212,15 @@ private:
             // is traced before any loads in the index.
             vector<Expr> args = op->args;
             vector<pair<string, Expr>> lets;
-            for (size_t i = 0; i < args.size(); i++) {
-                if (!args[i].as<Variable>() && !is_const(args[i])) {
+            for (auto &arg : args) {
+                if (!arg.as<Variable>() && !is_const(arg)) {
                     string name = unique_name('t');
-                    lets.emplace_back(name, args[i]);
-                    args[i] = Variable::make(args[i].type(), name);
+                    lets.emplace_back(name, arg);
+                    arg = Variable::make(arg.type(), name);
                 }
             }
 
-            stmt = Provide::make(op->name, traces, args);
+            stmt = Provide::make(op->name, traces, args, op->predicate);
             for (const auto &p : lets) {
                 stmt = LetStmt::make(p.first, p.second, stmt);
             }
@@ -243,9 +249,9 @@ private:
             builder.func = op->name;
             builder.parent_id = Variable::make(Int(32), "pipeline.trace_id");
             builder.event = halide_trace_begin_realization;
-            for (size_t i = 0; i < op->bounds.size(); i++) {
-                builder.coordinates.push_back(op->bounds[i].min);
-                builder.coordinates.push_back(op->bounds[i].extent);
+            for (const auto &bound : op->bounds) {
+                builder.coordinates.push_back(bound.min);
+                builder.coordinates.push_back(bound.extent);
             }
 
             // Begin realization returns a unique token to pass to further trace calls affecting this buffer.
@@ -455,7 +461,7 @@ Stmt inject_tracing(Stmt s, const string &pipeline_name, bool trace_pipeline,
                 Internal::Call::make(type_of<const char *>(),
                                      Internal::Call::stringify,
                                      strings,
-                                     Internal::Call::Intrinsic);
+                                     Internal::Call::PureIntrinsic);
             s = Block::make(Evaluate::make(builder.build()), s);
         }
 

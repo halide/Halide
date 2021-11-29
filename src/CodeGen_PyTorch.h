@@ -14,10 +14,14 @@
  */
 
 #include "IRPrinter.h"
-#include "Module.h"
 
 namespace Halide {
+
+class Module;
+
 namespace Internal {
+
+struct LoweredFunc;
 
 /** This class emits C++ code to wrap a Halide pipeline so that it can
  * be used as a C++ extension operator in PyTorch.
@@ -29,8 +33,6 @@ public:
 
     /** Emit the PyTorch C++ wrapper for the Halide pipeline. */
     void compile(const Module &module);
-
-    static void test();
 
 private:
     void compile(const LoweredFunc &func, bool is_cuda);

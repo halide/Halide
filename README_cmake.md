@@ -367,6 +367,7 @@ compiled.
 | `Halide_ENABLE_EXCEPTIONS`               | `ON`                  | Enable exceptions when building Halide                                                                           |
 | `Halide_USE_CODEMODEL_LARGE`             | `OFF`                 | Use the Large LLVM codemodel                                                                                     |
 | `Halide_TARGET`                          | _empty_               | The default target triple to use for `add_halide_library` (and the generator tests, by extension)                |
+| `Halide_CCACHE_BUILD`                    | `OFF`                 | Use ccache to accelerate rebuilds.                                                                               |
 
 The following options are only available when building Halide directly, ie. not
 through the [`add_subdirectory`][add_subdirectory] or
@@ -376,7 +377,6 @@ targets (like tests and documentation) are built.
 | Option                 | Default              | Description                                                                              |
 | ---------------------- | -------------------- | ---------------------------------------------------------------------------------------- |
 | `WITH_TESTS`           | `ON`                 | Enable building unit and integration tests                                               |
-| `WITH_APPS`            | `ON`                 | Enable testing sample applications (run `ctest -L apps` to actually build and test them) |
 | `WITH_PYTHON_BINDINGS` | `ON` if Python found | Enable building Python 3.x bindings                                                      |
 | `WITH_DOCS`            | `OFF`                | Enable building the documentation via Doxygen                                            |
 | `WITH_UTILS`           | `ON`                 | Enable building various utilities including the trace visualizer                         |
@@ -392,7 +392,6 @@ apply when `WITH_TESTS=ON`:
 | `WITH_TEST_ERROR`         | `ON`    | enable the expected-error tests   |
 | `WITH_TEST_WARNING`       | `ON`    | enable the expected-warning tests |
 | `WITH_TEST_PERFORMANCE`   | `ON`    | enable performance testing        |
-| `WITH_TEST_OPENGL`        | `OFF`   | enable the OpenGL tests           |
 | `WITH_TEST_GENERATOR`     | `ON`    | enable the AOT generator tests    |
 
 The following options enable/disable various LLVM backends (they correspond to
@@ -408,7 +407,7 @@ LLVM component names):
 | `TARGET_NVPTX`       | `ON`, _if available_ | Enable the NVidia PTX backend                            |
 | `TARGET_POWERPC`     | `ON`, _if available_ | Enable the PowerPC backend                               |
 | `TARGET_RISCV`       | `ON`, _if available_ | Enable the RISC V backend                                |
-| `TARGET_WEBASSEMBLY` | `ON`, _if available_ | Enable the WebAssembly backend. Only valid for LLVM 11+. |
+| `TARGET_WEBASSEMBLY` | `ON`, _if available_ | Enable the WebAssembly backend.                          |
 | `TARGET_X86`         | `ON`, _if available_ | Enable the x86 (and x86_64) backend                      |
 
 The following options enable/disable various Halide-specific backends:
@@ -416,7 +415,6 @@ The following options enable/disable various Halide-specific backends:
 | Option                | Default | Description                            |
 | --------------------- | ------- | -------------------------------------- |
 | `TARGET_OPENCL`       | `ON`    | Enable the OpenCL-C backend            |
-| `TARGET_OPENGL`       | `ON`    | Enable the OpenGL/GLSL backend         |
 | `TARGET_METAL`        | `ON`    | Enable the Metal backend               |
 | `TARGET_D3D12COMPUTE` | `ON`    | Enable the Direct3D 12 Compute backend |
 
@@ -426,7 +424,6 @@ The following options are WebAssembly-specific. They only apply when
 | Option            | Default | Description                                                |
 | ----------------- | ------- | ---------------------------------------------------------- |
 | `WITH_WABT`       | `ON`    | Include WABT Interpreter for WASM testing                  |
-| `WITH_WASM_SHELL` | `ON`    | Download a wasm shell (e.g. d8) for testing AOT wasm code. |
 
 ### Find module options
 
@@ -465,6 +462,8 @@ CUDA installation automatically, you can point it to it by setting:
 If the CMake version is lower than 3.18, the deprecated [`FindCUDA`][findcuda]
 module will be used instead. It reads the variable `CUDA_TOOLKIT_ROOT_DIR`
 instead of `CUDAToolkit_ROOT` above.
+
+TODO(https://github.com/halide/Halide/issues/5633): update this section for OpenGLCompute, which needs some (but maybe not all) of this.
 
 When targeting OpenGL, the [`FindOpenGL`][findopengl] and [`FindX11`][findx11]
 modules will be used to link AOT generated binaries. These modules can be
@@ -542,7 +541,7 @@ boilerplate.
 cmake_minimum_required(VERSION 3.16)
 project(HalideExample)
 
-set(CMAKE_CXX_STANDARD 11)  # or newer
+set(CMAKE_CXX_STANDARD 17)  # or newer
 set(CMAKE_CXX_STANDARD_REQUIRED YES)
 set(CMAKE_CXX_EXTENSIONS NO)
 
@@ -558,7 +557,7 @@ immediately after setting the minimum version.
 
 The next three variables set the project-wide C++ standard. The first,
 [`CMAKE_CXX_STANDARD`][cmake_cxx_standard], simply sets the standard version.
-Halide requires at least C++11. The second,
+Halide requires at least C++17. The second,
 [`CMAKE_CXX_STANDARD_REQUIRED`][cmake_cxx_standard_required], tells CMake to
 fail if the compiler cannot provide the requested standard version. Lastly,
 [`CMAKE_CXX_EXTENSIONS`][cmake_cxx_extensions] tells CMake to disable
@@ -805,6 +804,7 @@ add_halide_library(<target> FROM <generator-target>
                    [GRADIENT_DESCENT]
                    [C_BACKEND]
                    [REGISTRATION OUTVAR]
+                   [HEADER OUTVAR]
                    [<extra-output> OUTVAR])
 
 extra-output = ASSEMBLY | BITCODE | COMPILER_LOG | CPP_STUB
@@ -869,10 +869,16 @@ compiler on a generated source. Note that a `<target>.runtime` target is _not_
 created in this case, and the `USE_RUNTIME` option is ignored. Other options
 work as expected.
 
-If `REGISTRATION` is set, the path to the generated `.registration.cpp` file
-will be set in `OUTVAR`. This can be used to generate a runner for a Halide
-library that is useful for benchmarking and testing, as documented above. This
-is equivalent to setting `-e registration` at the generator command line.
+If `REGISTRATION` is set, the path (relative to `CMAKE_CURRENT_BINARY_DIR`)
+to the generated `.registration.cpp` file will be set in `OUTVAR`. This can be
+used to generate a runner for a Halide library that is useful for benchmarking
+and testing, as documented above. This is equivalent to setting
+`-e registration` at the generator command line.
+
+If `HEADER` is set, the path (relative to `CMAKE_CURRENT_BINARY_DIR`) to the
+generated `.h` header file will be set in `OUTVAR`. This can be used with
+`install(FILES)` to conveniently deploy the generated header along with your
+library.
 
 Lastly, each of the `extra-output` arguments directly correspond to an extra
 output (via `-e`) from the generator. The value `OUTVAR` names a variable into

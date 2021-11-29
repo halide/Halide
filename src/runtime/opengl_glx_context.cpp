@@ -7,7 +7,7 @@ typedef void *GLXFBConfig;
 typedef int Bool;
 typedef void Display;
 
-typedef void (*__GLXextFuncPtr)(void);
+typedef void (*__GLXextFuncPtr)();
 extern __GLXextFuncPtr glXGetProcAddressARB(const char *);
 extern void *XOpenDisplay(void *);
 extern int XDefaultScreen(void *);

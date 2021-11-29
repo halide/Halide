@@ -27,10 +27,6 @@ inline std::ostream &operator<<(std::ostream &o, const halide_type_t &type) {
     return o;
 }
 
-inline constexpr int halide_type_code(halide_type_code_t code, int bits) {
-    return (((int)code) << 8) | bits;
-}
-
 struct typed_scalar {
     halide_type_t type;
     halide_scalar_value_t value;
@@ -44,30 +40,30 @@ struct typed_scalar {
             std::cerr << "Mismatched types\n";
             exit(-1);
         }
-        switch (halide_type_code((halide_type_code_t)type.code, type.bits)) {
-        case halide_type_code(halide_type_float, 32):
+        switch (type.element_of().as_u32()) {
+        case halide_type_t(halide_type_float, 32).as_u32():
             return value.u.f32 == that.value.u.f32;
-        case halide_type_code(halide_type_float, 64):
+        case halide_type_t(halide_type_float, 64).as_u32():
             return value.u.f64 == that.value.u.f64;
-        case halide_type_code(halide_type_int, 8):
+        case halide_type_t(halide_type_int, 8).as_u32():
             return value.u.i8 == that.value.u.i8;
-        case halide_type_code(halide_type_int, 16):
+        case halide_type_t(halide_type_int, 16).as_u32():
             return value.u.i16 == that.value.u.i16;
-        case halide_type_code(halide_type_int, 32):
+        case halide_type_t(halide_type_int, 32).as_u32():
             return value.u.i32 == that.value.u.i32;
-        case halide_type_code(halide_type_int, 64):
+        case halide_type_t(halide_type_int, 64).as_u32():
             return value.u.i64 == that.value.u.i64;
-        case halide_type_code(halide_type_uint, 1):
+        case halide_type_t(halide_type_uint, 1).as_u32():
             return value.u.b == that.value.u.b;
-        case halide_type_code(halide_type_uint, 8):
+        case halide_type_t(halide_type_uint, 8).as_u32():
             return value.u.u8 == that.value.u.u8;
-        case halide_type_code(halide_type_uint, 16):
+        case halide_type_t(halide_type_uint, 16).as_u32():
             return value.u.u16 == that.value.u.u16;
-        case halide_type_code(halide_type_uint, 32):
+        case halide_type_t(halide_type_uint, 32).as_u32():
             return value.u.u32 == that.value.u.u32;
-        case halide_type_code(halide_type_uint, 64):
+        case halide_type_t(halide_type_uint, 64).as_u32():
             return value.u.u64 == that.value.u.u64;
-        case halide_type_code(halide_type_handle, 64):
+        case halide_type_t(halide_type_handle, 64).as_u32():
             return value.u.handle == that.value.u.handle;
         default:
             std::cerr << "Unsupported type\n";
@@ -81,41 +77,41 @@ struct typed_scalar {
     }
 
     friend std::ostream &operator<<(std::ostream &o, const typed_scalar &s) {
-        switch (halide_type_code((halide_type_code_t)s.type.code, s.type.bits)) {
-        case halide_type_code(halide_type_float, 32):
+        switch (s.type.element_of().as_u32()) {
+        case halide_type_t(halide_type_float, 32).as_u32():
             o << s.value.u.f32;
             break;
-        case halide_type_code(halide_type_float, 64):
+        case halide_type_t(halide_type_float, 64).as_u32():
             o << s.value.u.f64;
             break;
-        case halide_type_code(halide_type_int, 8):
+        case halide_type_t(halide_type_int, 8).as_u32():
             o << (int)s.value.u.i8;
             break;
-        case halide_type_code(halide_type_int, 16):
+        case halide_type_t(halide_type_int, 16).as_u32():
             o << s.value.u.i16;
             break;
-        case halide_type_code(halide_type_int, 32):
+        case halide_type_t(halide_type_int, 32).as_u32():
             o << s.value.u.i32;
             break;
-        case halide_type_code(halide_type_int, 64):
+        case halide_type_t(halide_type_int, 64).as_u32():
             o << s.value.u.i64;
             break;
-        case halide_type_code(halide_type_uint, 1):
+        case halide_type_t(halide_type_uint, 1).as_u32():
             o << (s.value.u.b ? "true" : "false");
             break;
-        case halide_type_code(halide_type_uint, 8):
+        case halide_type_t(halide_type_uint, 8).as_u32():
             o << (int)s.value.u.u8;
             break;
-        case halide_type_code(halide_type_uint, 16):
+        case halide_type_t(halide_type_uint, 16).as_u32():
             o << s.value.u.u16;
             break;
-        case halide_type_code(halide_type_uint, 32):
+        case halide_type_t(halide_type_uint, 32).as_u32():
             o << s.value.u.u32;
             break;
-        case halide_type_code(halide_type_uint, 64):
+        case halide_type_t(halide_type_uint, 64).as_u32():
             o << s.value.u.u64;
             break;
-        case halide_type_code(halide_type_handle, 64):
+        case halide_type_t(halide_type_handle, 64).as_u32():
             o << (uint64_t)s.value.u.handle;
             break;
         default:
@@ -226,7 +222,7 @@ void verify(const Buffer<uint8_t> &input,
     for (int x = 0; x < kSize; x++) {
         for (int y = 0; y < kSize; y++) {
             for (int c = 0; c < 3; c++) {
-                const float expected0 = static_cast<float>(input(x, y, c));
+                const float expected0 = static_cast<float>(input(x, y, c) + 1);
                 const float expected1 = expected0 + 1;
                 const float actual0 = output0(x, y, c);
                 const float actual1 = output1(x, y, c);
@@ -1000,6 +996,17 @@ void check_metadata(const halide_filter_metadata_t &md, bool expect_ucon_at_0) {
             nullptr,
         },
         {
+            "untyped_scalar_input",
+            halide_argument_kind_input_scalar,
+            0,
+            halide_type_t(halide_type_uint, 8),
+            nullptr,
+            nullptr,
+            nullptr,
+            nullptr,
+            nullptr,
+        },
+        {
             "output.0",
             halide_argument_kind_output_buffer,
             3,
@@ -1412,6 +1419,7 @@ int main(int argc, char **argv) {
         input_array[0], input_array[1],                                          // Input<Buffer<float>[2]>
         input_f16,                                                               // Input<Buffer<float16>>
         input_f16,                                                               // Input<Buffer<float16>>
+        1,                                                                       // Input<u8>
         output0, output1,                                                        // Output<Tuple(Func, Func)>
         typed_output_buffer,                                                     // Output<Buffer<float>>(3)
         type_only_output_buffer,                                                 // Output<Buffer<float>>
@@ -1473,6 +1481,7 @@ int main(int argc, char **argv) {
         input_array[0], input_array[1],                                          // Input<Buffer<float>[2]>
         input_f16,                                                               // Input<Buffer<float16>>
         input_f16,                                                               // Input<Buffer<float16>>
+        1,                                                                       // Input<u8>
         output0, output1,                                                        // Output<Tuple(Func, Func)>
         typed_output_buffer,                                                     // Output<Buffer<float>>(3)
         type_only_output_buffer,                                                 // Output<Buffer<float>>

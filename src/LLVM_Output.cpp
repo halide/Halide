@@ -159,15 +159,11 @@ void write_symbol_table(std::ostream &out,
         }
         llvm::object::SymbolicFile &obj = *obj_or_err.get();
         for (const auto &sym : obj.symbols()) {
-#if LLVM_VERSION >= 110
             auto flags = sym.getFlags();
             if (!flags) {
                 internal_error << llvm::toString(flags.takeError()) << "\n";
             }
             const uint32_t sym_flags = flags.get();
-#else
-            const uint32_t sym_flags = sym.getFlags();
-#endif
             if (sym_flags & llvm::object::SymbolRef::SF_FormatSpecific) {
                 continue;
             }
@@ -310,7 +306,7 @@ void write_coff_archive(std::ostream &out,
 std::unique_ptr<llvm::raw_fd_ostream> make_raw_fd_ostream(const std::string &filename) {
     std::string error_string;
     std::error_code err;
-    std::unique_ptr<llvm::raw_fd_ostream> raw_out(new llvm::raw_fd_ostream(filename, err, llvm::sys::fs::F_None));
+    std::unique_ptr<llvm::raw_fd_ostream> raw_out(new llvm::raw_fd_ostream(filename, err, llvm::sys::fs::OF_None));
     if (err) {
         error_string = err.message();
     }

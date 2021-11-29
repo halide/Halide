@@ -4,7 +4,7 @@ using namespace Halide;
 
 int num_stores = 0;
 
-int my_trace(void *user_context, const halide_trace_event_t *e) {
+int my_trace(JITUserContext *user_context, const halide_trace_event_t *e) {
     if (e->event == halide_trace_store) {
         num_stores++;
     }
@@ -69,8 +69,8 @@ int main(int argc, char **argv) {
                     iters * (last_iteration_extent + first_iteration_extent - 2) / 2);  // third update
 
     g.trace_stores();
-    h.set_custom_trace(&my_trace);
-    h.realize(output_extent);
+    h.jit_handlers().custom_trace = &my_trace;
+    h.realize({output_extent});
 
     if (num_stores != expected) {
         printf("Did not store to g the right numbers of times\n"

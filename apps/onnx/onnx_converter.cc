@@ -1439,7 +1439,7 @@ Node convert_tile_node(
     // Evaluate repeats if possible to compute output_shape.
     try {
         Halide::Func tiles = repeats.rep;
-        Halide::Buffer<int64_t> realized_shape = tiles.realize(rank);
+        Halide::Buffer<int64_t> realized_shape = tiles.realize({rank});
         for (int i = 0; i < rank; ++i) {
             int64_t tiling_factor = realized_shape(i);
             output_shape.push_back(
@@ -3116,7 +3116,7 @@ Node convert_reshape_node(
     bool new_shape_known = false;
     try {
         Halide::Func mutable_func = new_shape.rep;
-        Halide::Buffer<int64_t> realized_shape = mutable_func.realize(output_rank);
+        Halide::Buffer<int64_t> realized_shape = mutable_func.realize({output_rank});
         int unknown_dim = -1;
         int64_t known_size = 1;
         for (int i = 0; i < output_rank; ++i) {

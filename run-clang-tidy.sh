@@ -8,23 +8,23 @@ ROOT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
 
 FIX=$1
 
-# We are currently standardized on using LLVM/Clang10 for this script.
+# We are currently standardized on using LLVM/Clang12 for this script.
 # Note that this is totally independent of the version of LLVM that you
-# are using to build Halide itself. If you don't have LLVM10 installed,
+# are using to build Halide itself. If you don't have LLVM12 installed,
 # you can usually install what you need easily via:
 #
-# sudo apt-get install llvm-10 clang-10 libclang-10-dev clang-tidy-10
-# export CLANG_TIDY_LLVM_INSTALL_DIR=/usr/lib/llvm-10
+# sudo apt-get install llvm-12 clang-12 libclang-12-dev clang-tidy-12
+# export CLANG_TIDY_LLVM_INSTALL_DIR=/usr/lib/llvm-12
 
 [ -z "$CLANG_TIDY_LLVM_INSTALL_DIR" ] && echo "CLANG_TIDY_LLVM_INSTALL_DIR must point to an LLVM installation dir for this script." && exit
 echo CLANG_TIDY_LLVM_INSTALL_DIR = ${CLANG_TIDY_LLVM_INSTALL_DIR}
 
 VERSION=$(${CLANG_TIDY_LLVM_INSTALL_DIR}/bin/clang-tidy --version)
-if [[ ${VERSION} =~ .*version\ 10.* ]]
+if [[ ${VERSION} =~ .*version\ 12.* ]]
 then
-    echo "clang-tidy version 10 found."
+    echo "clang-tidy version 12 found."
 else
-    echo "CLANG_TIDY_LLVM_INSTALL_DIR must point to an LLVM 10 install!"
+    echo "CLANG_TIDY_LLVM_INSTALL_DIR must point to an LLVM 12 install!"
     exit 1
 fi
 
@@ -33,10 +33,12 @@ fi
 CLANG_TIDY_BUILD_DIR=`mktemp -d`
 echo CLANG_TIDY_BUILD_DIR = ${CLANG_TIDY_BUILD_DIR}
 
+# Specify Halide_SHARED_LLVM=ON because some installers may provide only that.
 echo Building compile_commands.json...
 cmake -DCMAKE_BUILD_TYPE=Debug \
       -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
       -DHalide_CLANG_TIDY_BUILD=ON \
+      -DHalide_SHARED_LLVM=ON \
       -DLLVM_DIR=${CLANG_TIDY_LLVM_INSTALL_DIR}/lib/cmake/llvm \
       -S ${ROOT_DIR} \
       -B ${CLANG_TIDY_BUILD_DIR} \
@@ -45,7 +47,7 @@ cmake -DCMAKE_BUILD_TYPE=Debug \
 [ -a ${CLANG_TIDY_BUILD_DIR}/compile_commands.json ]
 
 # We must populate the includes directory to check things outside of src/
-cd ${CLANG_TIDY_BUILD_DIR} && make HalideIncludes
+cmake --build ${CLANG_TIDY_BUILD_DIR} --target HalideIncludes
 
 RUN_CLANG_TIDY=${CLANG_TIDY_LLVM_INSTALL_DIR}/share/clang/run-clang-tidy.py
 

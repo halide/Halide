@@ -68,21 +68,20 @@ class ExtractBlockSize : public IRVisitor {
         Scope<Interval> scope;
         scope.push(op->name, Interval(op->min, simplify(op->min + op->extent - 1)));
         // For non-rectangular thread loops, use a bounding box. We'll inject if statements later.
-        for (int i = 0; i < 4; i++) {
-            if (block_extent[i].defined() &&
-                expr_uses_var(block_extent[i], op->name)) {
-                block_extent[i] = simplify(common_subexpression_elimination(block_extent[i]));
-                block_extent[i] = simplify(bounds_of_expr_in_scope(block_extent[i], scope).max);
+        for (Expr &e : block_extent) {
+            if (e.defined() && expr_uses_var(e, op->name)) {
+                e = simplify(common_subexpression_elimination(e));
+                e = simplify(bounds_of_expr_in_scope(e, scope).max);
             }
         }
     }
 
     void visit(const LetStmt *op) override {
         IRVisitor::visit(op);
-        for (int i = 0; i < 4; i++) {
-            if (block_extent[i].defined() &&
-                expr_uses_var(block_extent[i], op->name)) {
-                block_extent[i] = simplify(Let::make(op->name, op->value, block_extent[i]));
+        for (Expr &e : block_extent) {
+            if (e.defined() &&
+                expr_uses_var(e, op->name)) {
+                e = simplify(Let::make(op->name, op->value, e));
             }
         }
     }
@@ -349,29 +348,33 @@ private:
                 // repeated dependence on the block var
                 s.size = solve_expression(s.size, op->name).result;
                 s.size = simplify(common_subexpression_elimination(s.size));
-                auto result = is_monotonic(s.size, op->name);
-                if (result == Monotonic::Unknown) {
+                switch (is_monotonic(s.size, op->name)) {
+                case Monotonic::Unknown:
+                    // TODO: if bounds_of_expr_in_scope becomes more
+                    // powerful than is_monotonic, it might be better
+                    // to call it here. That would be risky though, as
+                    // it's not exact.
                     debug(1)
                         << "Shared allocation for " << s.name
-                        << " has a size that is non-monontonic in the gpu block variable " << op->name
+                        << " has a size that is non-monotonic in the gpu block variable " << op->name
                         << ": " << s.size << "\n";
                     if (get_compiler_logger()) {
                         get_compiler_logger()->record_non_monotonic_loop_var(op->name, s.size);
                     }
                     precompute_allocation_size(s);
-                } else {
-                    auto interval_bounds = bounds_of_expr_in_scope(s.size, scope);
-                    user_assert(interval_bounds.has_upper_bound())
-                        << "Couldn't infer bounds for " << s.name << " shared memory allocation\n";
-                    // In theory we could precompute the allocation
-                    // size if there's no upper bound too, but for the
-                    // assert above to fail we'd have to encounter an
-                    // expression that is_monotonic detects as
-                    // increasing, decreasing, or constant, but is
-                    // somehow unbounded. It's probable that no such
-                    // expression exists. is_monotonic is generally
-                    // less capable than bounds_of_expr_in_scope.
-                    s.size = interval_bounds.max;
+                    break;
+                case Monotonic::Increasing:
+                    s.size = substitute(op->name, simplify(op->min + op->extent - 1), s.size);
+                    break;
+                case Monotonic::Constant:
+                    // The size expression used the variable, but we
+                    // may have successfully eliminated it above, or
+                    // is_monotonic might have detected that the
+                    // dependence is false somehow. Just treat it as
+                    // decreasing...
+                case Monotonic::Decreasing:
+                    s.size = substitute(op->name, op->min, s.size);
+                    break;
                 }
             }
             if (in_threads && op->is_parallel()) {
@@ -478,8 +481,8 @@ private:
         alloc.type = op->type;
         alloc.liveness = IntInterval(barrier_stage, barrier_stage);
         alloc.size = 1;
-        for (size_t i = 0; i < op->extents.size(); i++) {
-            alloc.size *= op->extents[i];
+        for (const auto &extent : op->extents) {
+            alloc.size *= extent;
         }
         alloc.size = simplify(alloc.size);
         alloc.memory_type = op->memory_type;
@@ -1117,8 +1120,8 @@ class ExtractRegisterAllocations : public IRMutator {
         alloc.type = op->type;
         alloc.size = 1;
         alloc.loop_var = loop_var;
-        for (size_t i = 0; i < op->extents.size(); i++) {
-            alloc.size *= op->extents[i];
+        for (const auto &extent : op->extents) {
+            alloc.size *= extent;
         }
         alloc.size = simplify(mutate(alloc.size));
         alloc.memory_type = op->memory_type;
@@ -1275,6 +1278,7 @@ class InjectThreadBarriers : public IRMutator {
         case MemoryType::Register:
         case MemoryType::LockedCache:
         case MemoryType::VTCM:
+        case MemoryType::AMXTile:
             break;
         }
 
@@ -1299,6 +1303,7 @@ class InjectThreadBarriers : public IRMutator {
         case MemoryType::Register:
         case MemoryType::LockedCache:
         case MemoryType::VTCM:
+        case MemoryType::AMXTile:
             break;
         }
 
@@ -1442,10 +1447,6 @@ class FuseGPUThreadLoops : public IRMutator {
     using IRMutator::visit;
 
     Stmt visit(const For *op) override {
-        if (op->device_api == DeviceAPI::GLSL) {
-            return op;
-        }
-
         user_assert(!(CodeGen_GPU_Dev::is_gpu_thread_var(op->name)))
             << "Loops over GPU thread variable: \"" << op->name
             << "\" is outside of any loop over a GPU block variable. "

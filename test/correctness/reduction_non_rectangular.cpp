@@ -9,7 +9,7 @@ bool run_tracer = false;
 int niters_expected = 0;
 int niters = 0;
 
-int intermediate_bound_depend_on_output_trace(void *user_context, const halide_trace_event_t *e) {
+int intermediate_bound_depend_on_output_trace(JITUserContext *user_context, const halide_trace_event_t *e) {
     std::string buffer_name = "g_" + std::to_string(buffer_index);
     if (std::string(e->func) == buffer_name) {
         if (e->event == halide_trace_produce) {
@@ -33,7 +33,7 @@ int intermediate_bound_depend_on_output_trace(void *user_context, const halide_t
     return 0;
 }
 
-int func_call_bound_trace(void *user_context, const halide_trace_event_t *e) {
+int func_call_bound_trace(JITUserContext *user_context, const halide_trace_event_t *e) {
     std::string buffer_name = "g_" + std::to_string(buffer_index);
     if (std::string(e->func) == buffer_name) {
         if (e->event == halide_trace_produce) {
@@ -55,7 +55,7 @@ int func_call_bound_trace(void *user_context, const halide_trace_event_t *e) {
     return 0;
 }
 
-int box_bound_trace(void *user_context, const halide_trace_event_t *e) {
+int box_bound_trace(JITUserContext *user_context, const halide_trace_event_t *e) {
     std::string buffer_name = "g_" + std::to_string(buffer_index);
     if (std::string(e->func) == buffer_name) {
         if (e->event == halide_trace_produce) {
@@ -90,7 +90,7 @@ int equality_inequality_bound_test(int index) {
     r.where(!(r.x != 10));
     f(r.x, r.y) += 1;
 
-    Buffer<int> im = f.realize(200, 200);
+    Buffer<int> im = f.realize({200, 200});
     for (int y = 0; y < im.height(); y++) {
         for (int x = 0; x < im.width(); x++) {
             int correct = x + y;
@@ -123,7 +123,7 @@ int split_fuse_test(int index) {
     f.update().split(r.x, rx_outer, rx_inner, 4);
     f.update().fuse(rx_inner, r.y, r_fused);
 
-    Buffer<int> im = f.realize(200, 200);
+    Buffer<int> im = f.realize({200, 200});
     for (int y = 0; y < im.height(); y++) {
         for (int x = 0; x < im.width(); x++) {
             int correct = x + y;
@@ -151,7 +151,7 @@ int free_variable_bound_test(int index) {
     r.where(r.x < r.y + z);
     f(r.x, r.y, z) += 1;
 
-    Buffer<int> im = f.realize(200, 200, 200);
+    Buffer<int> im = f.realize({200, 200, 200});
     for (int z = 0; z < im.channels(); z++) {
         for (int y = 0; y < im.height(); y++) {
             for (int x = 0; x < im.width(); x++) {
@@ -187,14 +187,14 @@ int func_call_inside_bound_test(int index) {
     // Expect g to be computed over x=[10, 109].
     g.compute_root();
 
-    f.set_custom_trace(&func_call_bound_trace);
+    f.jit_handlers().custom_trace = &func_call_bound_trace;
     g.trace_stores();
     g.trace_realizations();
 
     run_tracer = false;
     niters_expected = 100;
     niters = 0;
-    Buffer<int> im = f.realize(200, 200);
+    Buffer<int> im = f.realize({200, 200});
 
     for (int y = 0; y < im.height(); y++) {
         for (int x = 0; x < im.width(); x++) {
@@ -233,7 +233,7 @@ int func_call_inside_bound_inline_test(int index) {
     r.where(r.x < g(r.y) + h(r.x));
     f(r.x, r.y) += 1;
 
-    Buffer<int> im = f.realize(200, 200);
+    Buffer<int> im = f.realize({200, 200});
 
     for (int y = 0; y < im.height(); y++) {
         for (int x = 0; x < im.width(); x++) {
@@ -268,7 +268,7 @@ int two_linear_bounds_test(int index) {
     // Expect g to be computed over x=[0,99] and y=[1,99].
     g.compute_root();
 
-    f.set_custom_trace(&box_bound_trace);
+    f.jit_handlers().custom_trace = &box_bound_trace;
     g.trace_stores();
     g.trace_realizations();
 
@@ -282,7 +282,7 @@ int two_linear_bounds_test(int index) {
     // boxes for bounds relationships.
     niters_expected = 34 * 34;
     niters = 0;
-    Buffer<int> im = f.realize(200, 200);
+    Buffer<int> im = f.realize({200, 200});
     for (int y = 0; y < im.height(); y++) {
         for (int x = 0; x < im.width(); x++) {
             int correct = x + y;
@@ -322,14 +322,14 @@ int circle_bound_test(int index) {
     // i.e. f loop will still iterate over x=[0,99] and y=[0,99].
     g.compute_at(f, r.y);
 
-    f.set_custom_trace(&box_bound_trace);
+    f.jit_handlers().custom_trace = &box_bound_trace;
     g.trace_stores();
     g.trace_realizations();
 
     run_tracer = false;
     niters_expected = 100 * 100;
     niters = 0;
-    Buffer<int> im = f.realize(200, 200);
+    Buffer<int> im = f.realize({200, 200});
     for (int y = 0; y < im.height(); y++) {
         for (int x = 0; x < im.width(); x++) {
             int correct = x + y;
@@ -364,7 +364,7 @@ int intermediate_computed_if_param_test(int index) {
     // than 3.
     g.compute_root();
 
-    f.set_custom_trace(&box_bound_trace);
+    f.jit_handlers().custom_trace = &box_bound_trace;
     g.trace_stores();
     g.trace_realizations();
 
@@ -374,7 +374,7 @@ int intermediate_computed_if_param_test(int index) {
         run_tracer = false;
         niters_expected = 100 * 100;
         niters = 0;
-        Buffer<int> im = f.realize(200, 200);
+        Buffer<int> im = f.realize({200, 200});
         for (int y = 0; y < im.height(); y++) {
             for (int x = 0; x < im.width(); x++) {
                 int correct = x + y;
@@ -401,7 +401,7 @@ int intermediate_computed_if_param_test(int index) {
         run_tracer = false;
         niters_expected = 0;
         niters = 0;
-        Buffer<int> im = f.realize(200, 200);
+        Buffer<int> im = f.realize({200, 200});
         for (int y = 0; y < im.height(); y++) {
             for (int x = 0; x < im.width(); x++) {
                 int correct = x + y;
@@ -438,14 +438,14 @@ int intermediate_bound_depend_on_output_test(int index) {
     // bound of f on r.x, which should have been r.x = [0, r.y) in this case
     g.compute_at(f, r.y);
 
-    f.set_custom_trace(&intermediate_bound_depend_on_output_trace);
+    f.jit_handlers().custom_trace = &intermediate_bound_depend_on_output_trace;
     g.trace_stores();
     g.trace_realizations();
 
     run_tracer = false;
     niters_expected = 200 * 199 / 2;
     niters = 0;
-    Buffer<int> im = f.realize(200, 200);
+    Buffer<int> im = f.realize({200, 200});
 
     for (int y = 0; y < im.height(); y++) {
         for (int x = 0; x < im.width(); x++) {
@@ -492,14 +492,14 @@ int tile_intermediate_bound_depend_on_output_test(int index) {
     // bound of f on r.x, which should have been r.x = [0, r.y) in this case
     g.compute_at(f, ryi);
 
-    f.set_custom_trace(&intermediate_bound_depend_on_output_trace);
+    f.jit_handlers().custom_trace = &intermediate_bound_depend_on_output_trace;
     g.trace_stores();
     g.trace_realizations();
 
     run_tracer = false;
     niters_expected = 200 * 199 / 2;
     niters = 0;
-    Buffer<int> im = f.realize(200, 200);
+    Buffer<int> im = f.realize({200, 200});
 
     for (int y = 0; y < im.height(); y++) {
         for (int x = 0; x < im.width(); x++) {
@@ -541,7 +541,7 @@ int self_reference_bound_test(int index) {
     r2.where(f(r2.x, r2.y) < 30);
     g(r2.x, r2.y) += f(r2.x, r2.y);
 
-    Buffer<int> im1 = f.realize(200, 200);
+    Buffer<int> im1 = f.realize({200, 200});
     for (int y = 0; y < im1.height(); y++) {
         for (int x = 0; x < im1.width(); x++) {
             int correct = x + y;
@@ -556,7 +556,7 @@ int self_reference_bound_test(int index) {
         }
     }
 
-    Buffer<int> im2 = g.realize(200, 200);
+    Buffer<int> im2 = g.realize({200, 200});
     for (int y = 0; y < im2.height(); y++) {
         for (int x = 0; x < im2.width(); x++) {
             int correct = 10;
@@ -586,7 +586,7 @@ int random_float_bound_test(int index) {
     r.where(f(r.x, r.y)[0]);
     f(r.x, r.y) = Tuple(f(r.x, r.y)[0], f(r.x, r.y)[1] + 10);
 
-    Realization res = f.realize(200, 200);
+    Realization res = f.realize({200, 200});
     assert(res.size() == 2);
     Buffer<bool> im0 = res[0];
     Buffer<int> im1 = res[1];
@@ -628,7 +628,7 @@ int newton_method_test() {
     inverse(x) = {inverse(x)[0] * (2 - (x + 1) * inverse(x)[0]),
                   r + 1};
     {
-        Realization r = inverse.realize(128);
+        Realization r = inverse.realize({128});
         Buffer<float> r0 = r[0];
         Buffer<int> r1 = r[1];
         for (int i = 0; i < r0.width(); i++) {
@@ -665,7 +665,7 @@ int init_on_gpu_update_on_cpu_test(int index) {
     Var xi("xi"), yi("yi");
     f.gpu_tile(x, y, xi, yi, 4, 4);
 
-    Buffer<int> im = f.realize(200, 200);
+    Buffer<int> im = f.realize({200, 200});
     for (int y = 0; y < im.height(); y++) {
         for (int x = 0; x < im.width(); x++) {
             int correct = x + y;
@@ -697,7 +697,7 @@ int init_on_cpu_update_on_gpu_test(int index) {
     RVar rxi("rxi"), ryi("ryi");
     f.update(0).gpu_tile(r.x, r.y, r.x, r.y, rxi, ryi, 4, 4);
 
-    Buffer<int> im = f.realize(200, 200);
+    Buffer<int> im = f.realize({200, 200});
     for (int y = 0; y < im.height(); y++) {
         for (int x = 0; x < im.width(); x++) {
             int correct = x + y;
@@ -746,7 +746,7 @@ int gpu_intermediate_computed_if_param_test(int index) {
         run_tracer = false;
         niters_expected = 100 * 100;
         niters = 0;
-        Buffer<int> im = f.realize(200, 200);
+        Buffer<int> im = f.realize({200, 200});
         for (int y = 0; y < im.height(); y++) {
             for (int x = 0; x < im.width(); x++) {
                 int correct = x + y;
@@ -768,7 +768,7 @@ int gpu_intermediate_computed_if_param_test(int index) {
         run_tracer = false;
         niters_expected = 0;
         niters = 0;
-        Buffer<int> im = f.realize(200, 200);
+        Buffer<int> im = f.realize({200, 200});
         for (int y = 0; y < im.height(); y++) {
             for (int x = 0; x < im.width(); x++) {
                 int correct = x + y;
@@ -801,7 +801,7 @@ int vectorize_predicated_rvar_test() {
 
     f.update(0).unroll(r.x, 2).allow_race_conditions().vectorize(r.x, 8);
 
-    Buffer<int> im = f.realize(200, 200);
+    Buffer<int> im = f.realize({200, 200});
     for (int y = 0; y < im.height(); y++) {
         for (int x = 0; x < im.width(); x++) {
             int correct = 0;

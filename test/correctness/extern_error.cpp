@@ -10,13 +10,13 @@ using namespace Halide;
 #endif
 
 bool extern_error_called = false;
-extern "C" DLLEXPORT int extern_error(void *user_context, halide_buffer_t *out) {
+extern "C" DLLEXPORT int extern_error(JITUserContext *user_context, halide_buffer_t *out) {
     extern_error_called = true;
     return -1;
 }
 
 bool error_occurred = false;
-extern "C" DLLEXPORT void my_halide_error(void *user_context, const char *msg) {
+extern "C" DLLEXPORT void my_halide_error(JITUserContext *user_context, const char *msg) {
     printf("Expected: %s\n", msg);
     error_occurred = true;
 }
@@ -27,8 +27,8 @@ int main(int argc, char **argv) {
 
     Func f;
     f.define_extern("extern_error", args, Float(32), 1);
-    f.set_error_handler(&my_halide_error);
-    f.realize(100);
+    f.jit_handlers().custom_error = my_halide_error;
+    f.realize({100});
 
     if (!error_occurred || !extern_error_called) {
         printf("There was supposed to be an error\n");

@@ -268,7 +268,7 @@ WEAK int halide_openglcompute_device_malloc(void *user_context, halide_buffer_t 
     }
 
     size_t size = buf->size_in_bytes();
-    halide_assert(user_context, size != 0);
+    halide_abort_if_false(user_context, size != 0);
 
     if (buf->device) {
         // This buffer already has a device allocation
@@ -278,7 +278,7 @@ WEAK int halide_openglcompute_device_malloc(void *user_context, halide_buffer_t 
     }
 
     for (int i = 0; i < buf->dimensions; i++) {
-        halide_assert(user_context, buf->dim[i].stride >= 0);
+        halide_abort_if_false(user_context, buf->dim[i].stride >= 0);
     }
 
     debug(user_context) << "    allocating buffer, "
@@ -314,7 +314,7 @@ WEAK int halide_openglcompute_device_malloc(void *user_context, halide_buffer_t 
     // types, all of which are 4 bytes. We'll inflate the size for
     // smaller types.
     size *= (4 / buf->type.bytes());
-    halide_assert(user_context, size != 0);
+    halide_abort_if_false(user_context, size != 0);
     global_state.BufferData(GL_ARRAY_BUFFER, size, nullptr, GL_DYNAMIC_COPY);
     if (global_state.CheckAndReportError(user_context, "oglc: BufferData")) {
         return 1;
@@ -499,7 +499,7 @@ WEAK int halide_openglcompute_copy_to_host(void *user_context, halide_buffer_t *
 
     GLuint the_buffer = (GLuint)buf->device;
     size_t size = buf->size_in_bytes();
-    halide_assert(user_context, size != 0);
+    halide_abort_if_false(user_context, size != 0);
 
     debug(user_context) << "OGLC: halide_openglcompute_copy_to_host ("
                         << "user_context: " << user_context
@@ -592,9 +592,7 @@ WEAK int halide_openglcompute_run(void *user_context, void *state_ptr,
                                   const char *entry_name, int blocksX, int blocksY,
                                   int blocksZ, int threadsX, int threadsY, int threadsZ,
                                   int shared_mem_bytes, halide_type_t arg_types[], void *args[],
-                                  int8_t arg_is_buffer[], int num_attributes,
-                                  float *vertex_buffer, int num_coords_dim0,
-                                  int num_coords_dim1) {
+                                  int8_t arg_is_buffer[]) {
 #ifdef DEBUG_RUNTIME
     uint64_t t_before = halide_current_time_ns(user_context);
 #endif
@@ -604,10 +602,7 @@ WEAK int halide_openglcompute_run(void *user_context, void *state_ptr,
         << "entry: " << entry_name << ", "
         << "blocks: " << blocksX << "x" << blocksY << "x" << blocksZ << ", "
         << "threads: " << threadsX << "x" << threadsY << "x" << threadsZ << ", "
-        << "shmem: " << shared_mem_bytes << ", "
-        << "num_attributes: " << num_attributes << ", "
-        << "num_coords_dim0: " << num_coords_dim0 << ", "
-        << "num_coords_dim1: " << num_coords_dim1 << "\n";
+        << "shmem: " << shared_mem_bytes << "\n";
 
     if (!global_state.initialized) {
         error(user_context) << "OpenGL runtime not initialized (halide_openglcompute_run).";
@@ -760,6 +755,7 @@ WEAK char *get_kernel_name(const char *start, const char *end) {
 WEAK int halide_openglcompute_initialize_kernels(void *user_context, void **state_ptr,
                                                  const char *src, int size) {
 #ifdef DEBUG_RUNTIME
+    halide_start_clock(user_context);
     uint64_t t_before = halide_current_time_ns(user_context);
 #endif
 
@@ -784,7 +780,7 @@ WEAK int halide_openglcompute_initialize_kernels(void *user_context, void **stat
     const char *END_OF_KERNEL_MARKER = "\n// end of kernel ";
     const size_t END_OF_KERNEL_MARKER_LENGTH = strlen(END_OF_KERNEL_MARKER);
 
-    while (1) {
+    while (true) {
         const char *end_of_kernel_marker = strstr(src, END_OF_KERNEL_MARKER);
         if (!end_of_kernel_marker) {
             break;  // end of kernels sources is reached
@@ -902,6 +898,9 @@ WEAK int halide_openglcompute_initialize_kernels(void *user_context, void **stat
 #endif
 
     return 0;
+}
+
+WEAK void halide_openglcompute_finalize_kernels(void *user_context, void *state_ptr) {
 }
 
 WEAK int halide_openglcompute_device_and_host_malloc(void *user_context, struct halide_buffer_t *buf) {

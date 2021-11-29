@@ -5,7 +5,7 @@ using namespace Halide;
 
 int percentage = 0;
 float ms = 0;
-void my_print(void *, const char *msg) {
+void my_print(JITUserContext *, const char *msg) {
     float this_ms;
     int this_percentage;
     int val = sscanf(msg, " fn13: %fms (%d", &this_ms, &this_percentage);
@@ -46,7 +46,7 @@ int main(int argc, char **argv) {
     RDom r(0, iters);
     out(c, x) += r * f[29](c, x);
 
-    out.set_custom_print(&my_print);
+    out.jit_handlers().custom_print = my_print;
     out.compute_root();
     out.update().reorder(c, x, r);
     for (int i = 0; i < 30; i++) {
@@ -54,9 +54,9 @@ int main(int argc, char **argv) {
     }
 
     Target t = get_jit_target_from_environment().with_feature(Target::Profile);
-    Buffer<float> im = out.realize(10, 1000, t);
+    Buffer<float> im = out.realize({10, 1000}, t);
 
-    //out.compile_to_assembly("/dev/stdout", {}, t.with_feature(Target::JIT));
+    // out.compile_to_assembly("/dev/stdout", {}, t.with_feature(Target::JIT));
 
     printf("Time spent in fn13: %fms\n", ms);
 

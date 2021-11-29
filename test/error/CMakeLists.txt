@@ -9,6 +9,7 @@ tests(GROUPS error
       auto_schedule_no_parallel.cpp
       auto_schedule_no_reorder.cpp
       autodiff_unbounded.cpp
+      bad_bound_storage.cpp
       bad_bound.cpp
       bad_compute_at.cpp
       bad_compute_with.cpp
@@ -20,6 +21,7 @@ tests(GROUPS error
       bad_extern_split.cpp
       bad_fold.cpp
       bad_host_alignment.cpp
+      bad_prefetch.cpp
       bad_reorder.cpp
       bad_reorder_storage.cpp
       bad_rvar_order.cpp
@@ -53,6 +55,7 @@ tests(GROUPS error
       memoize_different_compute_store.cpp
       memoize_redefine_eviction_key.cpp
       metal_vector_too_large.cpp
+      metal_threads_too_large.cpp
       missing_args.cpp
       no_default_device.cpp
       nonexistent_update_stage.cpp
@@ -61,6 +64,7 @@ tests(GROUPS error
       pointer_arithmetic.cpp
       race_condition.cpp
       rdom_undefined.cpp
+      realization_with_too_many_outputs.cpp
       realize_constantly_larger_than_two_gigs.cpp
       reduction_bounds.cpp
       reduction_type_mismatch.cpp
@@ -68,8 +72,10 @@ tests(GROUPS error
       reuse_var_in_schedule.cpp
       reused_args.cpp
       rfactor_inner_dim_non_commutative.cpp
+      run_with_large_stack_throws.cpp
       specialize_fail.cpp
       split_inner_wrong_tail_strategy.cpp
+      split_non_innermost_predicated.cpp
       thread_id_outside_block_id.cpp
       too_many_args.cpp
       tuple_arg_select_undef.cpp

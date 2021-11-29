@@ -17,7 +17,7 @@ int main(int argc, char **argv) {
     one.compute_root();
     one.compute_at(two, Var::outermost());
 
-    output.realize(64, 64);
+    output.realize({64, 64});
 
     printf("Success!\n");
     return 0;

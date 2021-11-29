@@ -15,6 +15,7 @@
 
 #include <cstdint>
 #include <cstring>
+#include <functional>
 #include <limits>
 #include <string>
 #include <utility>
@@ -42,11 +43,6 @@
 #define HALIDE_NO_USER_CODE_INLINE
 #else
 #define HALIDE_NO_USER_CODE_INLINE HALIDE_NEVER_INLINE
-#endif
-
-// On windows, Halide needs a larger stack than the default MSVC provides
-#ifdef _MSC_VER
-#pragma comment(linker, "/STACK:8388608,1048576")
 #endif
 
 namespace Halide {
@@ -212,6 +208,9 @@ struct all_are_convertible : meta_and<std::is_convertible<Args, To>...> {};
 /** Returns base name and fills in namespaces, outermost one first in vector. */
 std::string extract_namespaces(const std::string &name, std::vector<std::string> &namespaces);
 
+/** Overload that returns base name only */
+std::string extract_namespaces(const std::string &name);
+
 struct FileStat {
     uint64_t file_size;
     uint32_t mod_time;  // Unix epoch time
@@ -349,61 +348,6 @@ struct ScopedValue {
     ScopedValue(ScopedValue &&that) noexcept = default;
 };
 
-// Wrappers for some C++14-isms that are useful and trivially implementable
-// in C++11; these are defined in the Halide::Internal namespace. If we
-// are compiling under C++14 or later, we just use the standard implementations
-// rather than our own.
-#if __cplusplus >= 201402L
-
-// C++14: Use the standard implementations
-using std::index_sequence;
-using std::integer_sequence;
-using std::make_index_sequence;
-using std::make_integer_sequence;
-
-#else
-
-// C++11: std::integer_sequence (etc) is standard in C++14 but not C++11, but
-// is easily written in C++11. This is a simple version that could
-// probably be improved.
-
-template<typename T, T... Ints>
-struct integer_sequence {
-    static constexpr size_t size() {
-        return sizeof...(Ints);
-    }
-};
-
-template<typename T>
-struct next_integer_sequence;
-
-template<typename T, T... Ints>
-struct next_integer_sequence<integer_sequence<T, Ints...>> {
-    using type = integer_sequence<T, Ints..., sizeof...(Ints)>;
-};
-
-template<typename T, T I, T N>
-struct make_integer_sequence_helper {
-    using type = typename next_integer_sequence<
-        typename make_integer_sequence_helper<T, I + 1, N>::type>::type;
-};
-
-template<typename T, T N>
-struct make_integer_sequence_helper<T, N, N> {
-    using type = integer_sequence<T>;
-};
-
-template<typename T, T N>
-using make_integer_sequence = typename make_integer_sequence_helper<T, 0, N>::type;
-
-template<size_t... Ints>
-using index_sequence = integer_sequence<size_t, Ints...>;
-
-template<size_t N>
-using make_index_sequence = make_integer_sequence<size_t, N>;
-
-#endif
-
 // Helpers for timing blocks of code. Put 'TIC;' at the start and
 // 'TOC;' at the end. Timing is reported at the toc via
 // debug(0). The calls can be nested and will pretty-print
@@ -465,6 +409,65 @@ std::string c_print_name(const std::string &name);
  * only for internal tests which need to verify behavior; please don't use this outside
  * of Halide tests. */
 int get_llvm_version();
+
+}  // namespace Internal
+
+/** Set how much stack the compiler should use for compilation in
+ * bytes. This can also be set through the environment variable
+ * HL_COMPILER_STACK_SIZE, though this function takes precedence. A
+ * value of zero causes the compiler to just use the calling stack for
+ * all compilation tasks.
+ *
+ * Calling this or setting the environment variable should not be
+ * necessary. It is provided for three kinds of testing:
+ *
+ * First, Halide uses it in our internal tests to make sure
+ * we're not using a silly amount of stack size on some
+ * canary programs to avoid stack usage regressions.
+ *
+ * Second, if you have a mysterious crash inside a generator, you can
+ * set a larger stack size as a way to test if it's a stack
+ * overflow. Perhaps our default stack size is not large enough for
+ * your program and schedule. Use this call or the environment var as
+ * a workaround, and then open a bug with a reproducer at
+ * github.com/halide/Halide/issues so that we can determine what's
+ * going wrong that is causing your code to use so much stack.
+ *
+ * Third, perhaps using a side-stack is causing problems with
+ * sanitizing, debugging, or profiling tools. If this is a problem,
+ * you can set HL_COMPILER_STACK_SIZE to zero to make Halide stay on
+ * the main thread's stack.
+ */
+void set_compiler_stack_size(size_t);
+
+/** The default amount of stack used for lowering and codegen. 32 MB
+ * ought to be enough for anyone. */
+constexpr size_t default_compiler_stack_size = 32 * 1024 * 1024;
+
+/** Return how much stack size the compiler should use for calls that
+ * go through run_with_large_stack below. Currently that's lowering
+ * and codegen. If no call to set_compiler_stack_size has been made,
+ * this checks the value of the environment variable
+ * HL_COMPILER_STACK_SIZE. If that's unset, it returns
+ * default_compiler_stack_size, defined above. */
+size_t get_compiler_stack_size();
+
+namespace Internal {
+
+/** Call the given action in a platform-specific context that
+ * provides at least the stack space returned by
+ * get_compiler_stack_size. If that value is zero, just calls the
+ * function on the calling thread. Otherwise on Windows this
+ * uses a Fiber, and on other platforms it uses swapcontext. */
+void run_with_large_stack(const std::function<void()> &action);
+
+/** Portable versions of popcount, count-leading-zeros, and
+    count-trailing-zeros. */
+// @{
+int popcount64(uint64_t x);
+int clz64(uint64_t x);
+int ctz64(uint64_t x);
+// @}
 
 }  // namespace Internal
 }  // namespace Halide

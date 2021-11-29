@@ -3,6 +3,7 @@
 #include <array>
 #include <fstream>
 #include <future>
+#include <memory>
 #include <utility>
 
 #include "CodeGen_C.h"
@@ -238,8 +239,7 @@ static Registerer registerer;
 std::string indent_string(const std::string &src, const std::string &indent) {
     std::ostringstream o;
     bool prev_was_newline = true;
-    for (size_t i = 0; i < src.size(); i++) {
-        const char c = src[i];
+    for (char c : src) {
         const bool is_newline = (c == '\n');
         if (prev_was_newline && !is_newline) {
             o << indent;
@@ -376,7 +376,7 @@ Module::Module(const std::string &name, const Target &target)
 
 void Module::set_auto_scheduler_results(const AutoSchedulerResults &auto_scheduler_results) {
     internal_assert(contents->auto_scheduler_results.get() == nullptr);
-    contents->auto_scheduler_results.reset(new AutoSchedulerResults(auto_scheduler_results));
+    contents->auto_scheduler_results = std::make_unique<AutoSchedulerResults>(auto_scheduler_results);
 }
 
 void Module::set_any_strict_float(bool any_strict_float) {
@@ -448,9 +448,7 @@ void Module::append(const ExternalCode &external_code) {
 Module link_modules(const std::string &name, const std::vector<Module> &modules) {
     Module output(name, modules.front().target());
 
-    for (size_t i = 0; i < modules.size(); i++) {
-        const Module &input = modules[i];
-
+    for (const auto &input : modules) {
         if (output.target() != input.target()) {
             user_error << "Mismatched targets in modules to link ("
                        << output.name() << ", " << output.target().to_string()
@@ -556,10 +554,6 @@ std::map<std::string, std::string> Module::get_metadata_name_map() const {
 
 void Module::compile(const std::map<Output, std::string> &output_files) const {
     validate_outputs(output_files);
-
-    if (target().has_feature(Target::OpenGL)) {
-        user_warning << "WARNING: OpenGL is deprecated in Halide 11 and will be removed in Halide 12.\n";
-    }
 
     // output stmt and html prior to resolving submodules. We need to
     // clear the output after writing it, otherwise the output will
@@ -712,7 +706,7 @@ void Module::compile(const std::map<Output, std::string> &output_files) const {
     }
 }
 
-std::map<Output, std::string> compile_standalone_runtime(const std::map<Output, std::string> &output_files, Target t) {
+std::map<Output, std::string> compile_standalone_runtime(const std::map<Output, std::string> &output_files, const Target &t) {
     validate_outputs(output_files);
 
     Module empty("standalone_runtime", t.without_feature(Target::NoRuntime).without_feature(Target::JIT));
@@ -729,7 +723,7 @@ std::map<Output, std::string> compile_standalone_runtime(const std::map<Output, 
     return actual_outputs;
 }
 
-void compile_standalone_runtime(const std::string &object_filename, Target t) {
+void compile_standalone_runtime(const std::string &object_filename, const Target &t) {
     compile_standalone_runtime({{Output::object, object_filename}}, t);
 }
 
@@ -906,8 +900,8 @@ void compile_multitarget(const std::string &fn_name,
         Expr can_use;
         if (target != base_target) {
             std::vector<Expr> features_struct_args;
-            for (int i = 0; i < kFeaturesWordCount; ++i) {
-                features_struct_args.emplace_back(UIntImm::make(UInt(64), cur_target_features[i]));
+            for (uint64_t feature : cur_target_features) {
+                features_struct_args.emplace_back(UIntImm::make(UInt(64), feature));
             }
             can_use = Call::make(Int(32), "halide_can_use_target_features",
                                  {kFeaturesWordCount, Call::make(type_of<uint64_t *>(), Call::make_struct, features_struct_args, Call::Intrinsic)},

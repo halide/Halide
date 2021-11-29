@@ -67,11 +67,12 @@ typedef size_t mwIndex;
 typedef ptrdiff_t mwSignedIndex;
 #endif
 
-typedef void (*mex_exit_fn)(void);
+typedef void (*mex_exit_fn)();
 
 // Declare function pointers for the mex APIs.
-#define MEX_FN(ret, func, args) ret(*func) args;
+#define MEX_FN(ret, func, args) ret(*func) args;  // NOLINT(bugprone-macro-parentheses)
 #include "mex_functions.h"
+#undef MEX_FN
 
 // Given a halide type code and bit width, find the equivalent matlab class ID.
 WEAK mxClassID get_class_id(int32_t type_code, int32_t type_bits) {
@@ -261,10 +262,15 @@ WEAK int halide_matlab_init(void *user_context) {
         return halide_error_code_success;
     }
 
-#define MEX_FN(ret, func, args) func = get_mex_symbol<ret(*) args>(user_context, #func, true);
-#define MEX_FN_700(ret, func, func_700, args) func_700 = get_mex_symbol<ret(*) args>(user_context, #func, false);
-#define MEX_FN_730(ret, func, func_730, args) func_730 = get_mex_symbol<ret(*) args>(user_context, #func_730, false);
+// clang-format off
+#define MEX_FN(ret, func, args)                 func = get_mex_symbol<ret(*) args>(user_context, #func, true);          // NOLINT(bugprone-macro-parentheses)
+#define MEX_FN_700(ret, func, func_700, args)   func_700 = get_mex_symbol<ret(*) args>(user_context, #func, false);     // NOLINT(bugprone-macro-parentheses)
+#define MEX_FN_730(ret, func, func_730, args)   func_730 = get_mex_symbol<ret(*) args>(user_context, #func_730, false); // NOLINT(bugprone-macro-parentheses)
 #include "mex_functions.h"
+#undef MEX_FN_730
+#undef MEX_FN_700
+#undef MEX_FN
+    // clang-format on
 
     if (!mexWarnMsgTxt) {
         return halide_error_code_matlab_init_failed;
@@ -501,12 +507,18 @@ WEAK int halide_matlab_call_pipeline(void *user_context,
 
         if (arg_metadata->kind == halide_argument_kind_output_buffer) {
             halide_buffer_t *buf = (halide_buffer_t *)args[i];
-            halide_copy_to_host(user_context, buf);
+            if ((result = halide_copy_to_host(user_context, buf)) != 0) {
+                error(user_context) << "halide_matlab_call_pipeline: halide_copy_to_host failed.\n";
+                return result;
+            }
         }
         if (arg_metadata->kind == halide_argument_kind_input_buffer ||
             arg_metadata->kind == halide_argument_kind_output_buffer) {
             halide_buffer_t *buf = (halide_buffer_t *)args[i];
-            halide_device_free(user_context, buf);
+            if ((result = halide_device_free(user_context, buf)) != 0) {
+                error(user_context) << "halide_matlab_call_pipeline: halide_device_free failed.\n";
+                return result;
+            }
         }
     }
 

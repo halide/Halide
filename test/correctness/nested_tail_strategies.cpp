@@ -4,7 +4,7 @@ using namespace Halide;
 
 size_t largest_allocation = 0;
 
-void *my_malloc(void *user_context, size_t x) {
+void *my_malloc(JITUserContext *user_context, size_t x) {
     largest_allocation = std::max(x, largest_allocation);
     void *orig = malloc(x + 32);
     void *ptr = (void *)((((size_t)orig + 32) >> 5) << 5);
@@ -12,13 +12,15 @@ void *my_malloc(void *user_context, size_t x) {
     return ptr;
 }
 
-void my_free(void *user_context, void *ptr) {
+void my_free(JITUserContext *user_context, void *ptr) {
     free(((void **)ptr)[-1]);
 }
 
 void check(Func out, int line, std::vector<TailStrategy> tails) {
     bool has_round_up =
-        std::find(tails.begin(), tails.end(), TailStrategy::RoundUp) != tails.end();
+        std::find(tails.begin(), tails.end(), TailStrategy::RoundUp) != tails.end() ||
+        std::find(tails.begin(), tails.end(), TailStrategy::PredicateLoads) != tails.end() ||
+        std::find(tails.begin(), tails.end(), TailStrategy::PredicateStores) != tails.end();
     bool has_shift_inwards =
         std::find(tails.begin(), tails.end(), TailStrategy::ShiftInwards) != tails.end();
 
@@ -39,20 +41,22 @@ void check(Func out, int line, std::vector<TailStrategy> tails) {
         sizes_to_try.push_back(3);
     }
 
-    out.set_custom_allocator(my_malloc, my_free);
+    out.jit_handlers().custom_malloc = my_malloc;
+    out.jit_handlers().custom_free = my_free;
 
     for (int s : sizes_to_try) {
         largest_allocation = 0;
-        out.realize(s);
+        out.realize({s});
         size_t expected = (s + 1) * 4;
-        if (largest_allocation > expected) {
+        size_t tolerance = 3 * sizeof(int);
+        if (largest_allocation > expected + tolerance) {
             std::cerr << "Failure on line " << line << "\n"
                       << "with tail strategies: ";
             for (auto t : tails) {
                 std::cerr << t << " ";
             }
             std::cerr << "\n allocation of " << largest_allocation
-                      << " bytes is too large. Expected " << expected << "\n";
+                      << " bytes is too large. Expected " << expected + tolerance << "\n";
             abort();
         }
     }
@@ -60,7 +64,7 @@ void check(Func out, int line, std::vector<TailStrategy> tails) {
 
 int main(int argc, char **argv) {
     if (get_jit_target_from_environment().arch == Target::WebAssembly) {
-        printf("[SKIP] WebAssembly JIT does not support set_custom_allocator().\n");
+        printf("[SKIP] WebAssembly JIT does not support custom allocators.\n");
         return 0;
     }
 
@@ -68,11 +72,23 @@ int main(int argc, char **argv) {
     // producer-consumer pipelines. The bounds being tight sometimes
     // depends on the simplifier being able to cancel out things.
 
-    TailStrategy tails[] = {TailStrategy::RoundUp, TailStrategy::GuardWithIf, TailStrategy::ShiftInwards};
+    TailStrategy tails[] = {
+        TailStrategy::RoundUp,
+        TailStrategy::GuardWithIf,
+        TailStrategy::ShiftInwards,
+    };
+
+    TailStrategy innermost_tails[] = {
+        TailStrategy::RoundUp,
+        TailStrategy::GuardWithIf,
+        TailStrategy::PredicateLoads,
+        TailStrategy::PredicateStores,
+        TailStrategy::ShiftInwards,
+    };
 
     // Two stages. First stage computed at tiles of second.
-    for (auto t1 : tails) {
-        for (auto t2 : tails) {
+    for (auto t1 : innermost_tails) {
+        for (auto t2 : innermost_tails) {
             Func in, f, g;
             Var x;
 
@@ -91,9 +107,9 @@ int main(int argc, char **argv) {
 
     // Three stages. First stage computed at tiles of second, second
     // stage computed at tiles of third.
-    for (auto t1 : tails) {
-        for (auto t2 : tails) {
-            for (auto t3 : tails) {
+    for (auto t1 : innermost_tails) {
+        for (auto t2 : innermost_tails) {
+            for (auto t3 : innermost_tails) {
                 Func in("in"), f("f"), g("g"), h("h");
                 Var x;
 
@@ -116,8 +132,8 @@ int main(int argc, char **argv) {
     // Three stages. First stage computed at tiles of third, second
     // stage computed at smaller tiles of third.
     for (auto t1 : tails) {
-        for (auto t2 : tails) {
-            for (auto t3 : tails) {
+        for (auto t2 : innermost_tails) {
+            for (auto t3 : innermost_tails) {
                 Func in, f, g, h;
                 Var x;
 
@@ -140,9 +156,9 @@ int main(int argc, char **argv) {
     // Same as above, but the splits on the output are composed in
     // reverse order so we don't get a perfect split on the inner one
     // (but can handle smaller outputs).
-    for (auto t1 : tails) {
+    for (auto t1 : innermost_tails) {
         for (auto t2 : tails) {
-            for (auto t3 : tails) {
+            for (auto t3 : tails) {  // Not innermost_tails because of n^4 complexity here.
                 for (auto t4 : tails) {
                     Func in("in"), f("f"), g("g"), h("h");
                     Var x;

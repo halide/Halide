@@ -57,17 +57,31 @@ typedef struct CUctx_st *CUcontext;
 typedef struct cl_context_st *cl_context;
 typedef struct cl_command_queue_st *cl_command_queue;
 
-void load_opengl() {
+void load_opengl(bool needs_egl) {
 #if defined(__linux__)
     if (have_symbol("glXGetCurrentContext") && have_symbol("glDeleteTextures")) {
         debug(1) << "OpenGL support code already linked in...\n";
     } else {
         debug(1) << "Looking for OpenGL support code...\n";
         string error;
-        llvm::sys::DynamicLibrary::LoadLibraryPermanently("libGL.so.1", &error);
-        user_assert(error.empty()) << "Could not find libGL.so\n";
-        llvm::sys::DynamicLibrary::LoadLibraryPermanently("libX11.so", &error);
-        user_assert(error.empty()) << "Could not find libX11.so\n";
+        if (needs_egl) {
+            // NVIDIA EGL prefers users to load libOpenGL.so instead of libGL.so
+            // The way we're using it, it seems like libGL.so.1 is a valid fallback.
+            // See here for more details: https://developer.nvidia.com/blog/linking-opengl-server-side-rendering
+            llvm::sys::DynamicLibrary::LoadLibraryPermanently("libOpenGL.so.0", &error);
+            if (!error.empty()) {
+                debug(1) << "Could not find libOpenGL.so.0 when EGL requested. Falling back to libGL.so.1\n";
+                llvm::sys::DynamicLibrary::LoadLibraryPermanently("libGL.so.1", &error);
+            }
+            user_assert(error.empty()) << "Could not find libOpenGL.so.0 or libGL.so.1\n";
+            llvm::sys::DynamicLibrary::LoadLibraryPermanently("libEGL.so.1", &error);
+            user_assert(error.empty()) << "Could not find libEGL.so.1\n";
+        } else {
+            llvm::sys::DynamicLibrary::LoadLibraryPermanently("libGL.so.1", &error);
+            user_assert(error.empty()) << "Could not find libGL.so\n";
+            llvm::sys::DynamicLibrary::LoadLibraryPermanently("libX11.so.6", &error);
+            user_assert(error.empty()) << "Could not find libX11.so.6\n";
+        }
     }
 #elif defined(__APPLE__)
     if (have_symbol("aglCreateContext") && have_symbol("glDeleteTextures")) {
@@ -110,8 +124,17 @@ void load_vulkan() {
         llvm::sys::DynamicLibrary::LoadLibraryPermanently("libvulkan.so.1", &error);
         user_assert(error.empty()) << "Could not find libvulkan.so.1\n";
     }
+#elif defined(__APPLE__)
+    if (have_symbol("VkGetPhysicalDeviceProperties")) {
+        debug(1) << "Vulkan library already linked in...\n";
+    } else {
+        debug(1) << "Looking for Vulkan library...\n";
+        string error;
+        llvm::sys::DynamicLibrary::LoadLibraryPermanently("libMoltenVK.dylib", &error);
+        user_assert(error.empty()) << "Could not find libMoltenVK.dylib\n";
+    }
 #else
-    internal_error << "Vulkan support only implemented in Linux\n";
+    internal_error << "Vulkan support only implemented in Linux and MacOS\n";
 #endif
 }
 
@@ -183,13 +206,12 @@ public:
     }
 
     uint64_t getSymbolAddress(const std::string &name) override {
-        for (size_t i = 0; i < modules.size(); i++) {
-            const JITModule &m = modules[i];
-            std::map<std::string, JITModule::Symbol>::const_iterator iter = m.exports().find(name);
-            if (iter == m.exports().end() && starts_with(name, "_")) {
-                iter = m.exports().find(name.substr(1));
+        for (const auto &module : modules) {
+            std::map<std::string, JITModule::Symbol>::const_iterator iter = module.exports().find(name);
+            if (iter == module.exports().end() && starts_with(name, "_")) {
+                iter = module.exports().find(name.substr(1));
             }
-            if (iter != m.exports().end()) {
+            if (iter != module.exports().end()) {
                 return (uint64_t)iter->second.address;
             }
         }
@@ -300,10 +322,10 @@ void JITModule::compile_module(std::unique_ptr<llvm::Module> m, const string &fu
         listeners.push_back(llvm::JITEventListener::createIntelJITEventListener());
     }
     // TODO: If this ever works in LLVM, this would allow profiling of JIT code with symbols with oprofile.
-    //listeners.push_back(llvm::createOProfileJITEventListener());
+    // listeners.push_back(llvm::createOProfileJITEventListener());
 
-    for (size_t i = 0; i < listeners.size(); i++) {
-        ee->RegisterJITEventListener(listeners[i]);
+    for (auto &listener : listeners) {
+        ee->RegisterJITEventListener(listener);
     }
 
     // Retrieve function pointers from the compiled module (which also
@@ -322,16 +344,16 @@ void JITModule::compile_module(std::unique_ptr<llvm::Module> m, const string &fu
         exports[function_name + "_argv"] = argv_entrypoint;
     }
 
-    for (size_t i = 0; i < requested_exports.size(); i++) {
-        exports[requested_exports[i]] = compile_and_get_function(*ee, requested_exports[i]);
+    for (const auto &requested_export : requested_exports) {
+        exports[requested_export] = compile_and_get_function(*ee, requested_export);
     }
 
     debug(2) << "Finalizing object\n";
     ee->finalizeObject();
     // Do any target-specific post-compilation module meddling
-    for (size_t i = 0; i < listeners.size(); i++) {
-        ee->UnregisterJITEventListener(listeners[i]);
-        delete listeners[i];
+    for (auto &listener : listeners) {
+        ee->UnregisterJITEventListener(listener);
+        delete listener;
     }
     listeners.clear();
 
@@ -508,70 +530,72 @@ void merge_handlers(JITHandlers &base, const JITHandlers &addins) {
     if (addins.custom_get_library_symbol) {
         base.custom_get_library_symbol = addins.custom_get_library_symbol;
     }
-}
-
-void print_handler(void *context, const char *msg) {
-    if (context) {
-        JITUserContext *jit_user_context = (JITUserContext *)context;
-        (*jit_user_context->handlers.custom_print)(context, msg);
-    } else {
-        return (*active_handlers.custom_print)(context, msg);
+    if (addins.custom_cuda_acquire_context) {
+        base.custom_cuda_acquire_context = addins.custom_cuda_acquire_context;
+    }
+    if (addins.custom_cuda_release_context) {
+        base.custom_cuda_release_context = addins.custom_cuda_release_context;
+    }
+    if (addins.custom_cuda_get_stream) {
+        base.custom_cuda_get_stream = addins.custom_cuda_get_stream;
     }
 }
 
-void *malloc_handler(void *context, size_t x) {
-    if (context) {
-        JITUserContext *jit_user_context = (JITUserContext *)context;
-        return (*jit_user_context->handlers.custom_malloc)(context, x);
+void print_handler(JITUserContext *context, const char *msg) {
+    if (context && context->handlers.custom_print) {
+        context->handlers.custom_print(context, msg);
     } else {
-        return (*active_handlers.custom_malloc)(context, x);
+        return active_handlers.custom_print(context, msg);
     }
 }
 
-void free_handler(void *context, void *ptr) {
-    if (context) {
-        JITUserContext *jit_user_context = (JITUserContext *)context;
-        (*jit_user_context->handlers.custom_free)(context, ptr);
+void *malloc_handler(JITUserContext *context, size_t x) {
+    if (context && context->handlers.custom_malloc) {
+        return context->handlers.custom_malloc(context, x);
     } else {
-        (*active_handlers.custom_free)(context, ptr);
+        return active_handlers.custom_malloc(context, x);
     }
 }
 
-int do_task_handler(void *context, halide_task f, int idx,
+void free_handler(JITUserContext *context, void *ptr) {
+    if (context && context->handlers.custom_free) {
+        context->handlers.custom_free(context, ptr);
+    } else {
+        active_handlers.custom_free(context, ptr);
+    }
+}
+
+int do_task_handler(JITUserContext *context, int (*f)(JITUserContext *, int, uint8_t *), int idx,
                     uint8_t *closure) {
-    if (context) {
-        JITUserContext *jit_user_context = (JITUserContext *)context;
-        return (*jit_user_context->handlers.custom_do_task)(context, f, idx, closure);
+    if (context && context->handlers.custom_do_task) {
+        return context->handlers.custom_do_task(context, f, idx, closure);
     } else {
-        return (*active_handlers.custom_do_task)(context, f, idx, closure);
+        return active_handlers.custom_do_task(context, f, idx, closure);
     }
 }
 
-int do_par_for_handler(void *context, halide_task f,
+int do_par_for_handler(JITUserContext *context, int (*f)(JITUserContext *, int, uint8_t *),
                        int min, int size, uint8_t *closure) {
-    if (context) {
-        JITUserContext *jit_user_context = (JITUserContext *)context;
-        return (*jit_user_context->handlers.custom_do_par_for)(context, f, min, size, closure);
+    if (context && context->handlers.custom_do_par_for) {
+        return context->handlers.custom_do_par_for(context, f, min, size, closure);
     } else {
-        return (*active_handlers.custom_do_par_for)(context, f, min, size, closure);
+        return active_handlers.custom_do_par_for(context, f, min, size, closure);
     }
 }
 
-void error_handler_handler(void *context, const char *msg) {
-    if (context) {
-        JITUserContext *jit_user_context = (JITUserContext *)context;
-        (*jit_user_context->handlers.custom_error)(context, msg);
+void error_handler_handler(JITUserContext *context, const char *msg) {
+    if (context && context->handlers.custom_error) {
+        context->handlers.custom_error(context, msg);
     } else {
-        (*active_handlers.custom_error)(context, msg);
+        active_handlers.custom_error(context, msg);
     }
 }
 
-int32_t trace_handler(void *context, const halide_trace_event_t *e) {
-    if (context) {
-        JITUserContext *jit_user_context = (JITUserContext *)context;
-        return (*jit_user_context->handlers.custom_trace)(context, e);
+int32_t trace_handler(JITUserContext *context, const halide_trace_event_t *e) {
+    if (context && context->handlers.custom_trace) {
+        return context->handlers.custom_trace(context, e);
     } else {
-        return (*active_handlers.custom_trace)(context, e);
+        return active_handlers.custom_trace(context, e);
     }
 }
 
@@ -585,6 +609,30 @@ void *load_library_handler(const char *name) {
 
 void *get_library_symbol_handler(void *lib, const char *name) {
     return (*active_handlers.custom_get_library_symbol)(lib, name);
+}
+
+int cuda_acquire_context_handler(JITUserContext *context, void **cuda_context_ptr, bool create) {
+    if (context && context->handlers.custom_cuda_acquire_context) {
+        return context->handlers.custom_cuda_acquire_context(context, cuda_context_ptr, create);
+    } else {
+        return active_handlers.custom_cuda_acquire_context(context, cuda_context_ptr, create);
+    }
+}
+
+int cuda_release_context_handler(JITUserContext *context) {
+    if (context && context->handlers.custom_cuda_release_context) {
+        return context->handlers.custom_cuda_release_context(context);
+    } else {
+        return active_handlers.custom_cuda_release_context(context);
+    }
+}
+
+int cuda_get_stream_handler(JITUserContext *context, void *cuda_context, void **cuda_stream_ptr) {
+    if (context && context->handlers.custom_cuda_get_stream) {
+        return context->handlers.custom_cuda_get_stream(context, cuda_context, cuda_stream_ptr);
+    } else {
+        return active_handlers.custom_cuda_get_stream(context, cuda_context, cuda_stream_ptr);
+    }
 }
 
 template<typename function_t>
@@ -625,7 +673,6 @@ enum RuntimeKind {
     OpenCL,
     Metal,
     CUDA,
-    OpenGL,  // NOTE: this feature is deprecated and will be removed in Halide 12.
     OpenGLCompute,
     Hexagon,
     D3D12Compute,
@@ -633,7 +680,6 @@ enum RuntimeKind {
     OpenCLDebug,
     MetalDebug,
     CUDADebug,
-    OpenGLDebug,  // NOTE: this feature is deprecated and will be removed in Halide 12.
     OpenGLComputeDebug,
     HexagonDebug,
     D3D12ComputeDebug,
@@ -671,7 +717,6 @@ JITModule &make_module(llvm::Module *for_module, Target target,
         one_gpu.set_feature(Target::Metal, false);
         one_gpu.set_feature(Target::CUDA, false);
         one_gpu.set_feature(Target::HVX, false);
-        one_gpu.set_feature(Target::OpenGL, false);
         one_gpu.set_feature(Target::OpenGLCompute, false);
         one_gpu.set_feature(Target::D3D12Compute, false);
         one_gpu.set_feature(Target::Vulkan, false);
@@ -706,27 +751,16 @@ JITModule &make_module(llvm::Module *for_module, Target target,
             one_gpu.set_feature(Target::CUDA);
             module_name += "cuda";
             break;
-        case OpenGLDebug:
-            one_gpu.set_feature(Target::Debug);
-            one_gpu.set_feature(Target::OpenGL);
-            module_name = "debug_opengl";
-            load_opengl();
-            break;
-        case OpenGL:
-            one_gpu.set_feature(Target::OpenGL);
-            module_name += "opengl";
-            load_opengl();
-            break;
         case OpenGLComputeDebug:
             one_gpu.set_feature(Target::Debug);
             one_gpu.set_feature(Target::OpenGLCompute);
             module_name = "debug_openglcompute";
-            load_opengl();
+            load_opengl(one_gpu.has_feature(Target::EGL));
             break;
         case OpenGLCompute:
             one_gpu.set_feature(Target::OpenGLCompute);
             module_name += "openglcompute";
-            load_opengl();
+            load_opengl(one_gpu.has_feature(Target::EGL));
             break;
         case VulkanDebug:
             one_gpu.set_feature(Target::Debug);
@@ -813,13 +847,13 @@ JITModule &make_module(llvm::Module *for_module, Target target,
                 hook_function(runtime.exports(), "halide_set_custom_trace", trace_handler);
 
             runtime_internal_handlers.custom_get_symbol =
-                hook_function(shared_runtimes(MainShared).exports(), "halide_set_custom_get_symbol", get_symbol_handler);
+                hook_function(runtime.exports(), "halide_set_custom_get_symbol", get_symbol_handler);
 
             runtime_internal_handlers.custom_load_library =
-                hook_function(shared_runtimes(MainShared).exports(), "halide_set_custom_load_library", load_library_handler);
+                hook_function(runtime.exports(), "halide_set_custom_load_library", load_library_handler);
 
             runtime_internal_handlers.custom_get_library_symbol =
-                hook_function(shared_runtimes(MainShared).exports(), "halide_set_custom_get_library_symbol", get_library_symbol_handler);
+                hook_function(runtime.exports(), "halide_set_custom_get_library_symbol", get_library_symbol_handler);
 
             active_handlers = runtime_internal_handlers;
             merge_handlers(active_handlers, default_handlers);
@@ -831,6 +865,41 @@ JITModule &make_module(llvm::Module *for_module, Target target,
             runtime.jit_module->name = "MainShared";
         } else {
             runtime.jit_module->name = "GPU";
+
+            // There are two versions of these cuda context
+            // management handlers we could use - one in the cuda
+            // module, and one in the cuda-debug module. If both
+            // modules are in use, we'll just want to use one of
+            // them, so that we don't needlessly create two cuda
+            // contexts. We'll use whichever was first
+            // created. The second one will then declare a
+            // dependency on the first one, to make sure things
+            // are destroyed in the correct order.
+
+            if (runtime_kind == CUDA || runtime_kind == CUDADebug) {
+                if (!runtime_internal_handlers.custom_cuda_acquire_context) {
+                    // Neither module has been created.
+                    runtime_internal_handlers.custom_cuda_acquire_context =
+                        hook_function(runtime.exports(), "halide_set_cuda_acquire_context", cuda_acquire_context_handler);
+
+                    runtime_internal_handlers.custom_cuda_release_context =
+                        hook_function(runtime.exports(), "halide_set_cuda_release_context", cuda_release_context_handler);
+
+                    runtime_internal_handlers.custom_cuda_get_stream =
+                        hook_function(runtime.exports(), "halide_set_cuda_get_stream", cuda_get_stream_handler);
+
+                    active_handlers = runtime_internal_handlers;
+                    merge_handlers(active_handlers, default_handlers);
+                } else if (runtime_kind == CUDA) {
+                    // The CUDADebug module has already been created.
+                    // Use the context in the CUDADebug module and add
+                    // a dependence edge from the CUDA module to it.
+                    runtime.add_dependency(shared_runtimes(CUDADebug));
+                } else {
+                    // The CUDA module has already been created.
+                    runtime.add_dependency(shared_runtimes(CUDA));
+                }
+            }
         }
 
         uint64_t arg_addr =
@@ -889,6 +958,7 @@ std::vector<JITModule> JITSharedRuntime::get(llvm::Module *for_module, const Tar
             result.push_back(m);
         }
     }
+<<<<<<< HEAD
     if (target.has_feature(Target::OpenGL)) {
         auto kind = target.has_feature(Target::Debug) ? OpenGLDebug : OpenGL;
         JITModule m = make_module(for_module, target, kind, result, create);
@@ -903,6 +973,8 @@ std::vector<JITModule> JITSharedRuntime::get(llvm::Module *for_module, const Tar
             result.push_back(m);
         }
     }
+=======
+>>>>>>> master
     if (target.has_feature(Target::OpenGLCompute)) {
         auto kind = target.has_feature(Target::Debug) ? OpenGLComputeDebug : OpenGLCompute;
         JITModule m = make_module(for_module, target, kind, result, create);
@@ -928,16 +1000,14 @@ std::vector<JITModule> JITSharedRuntime::get(llvm::Module *for_module, const Tar
     return result;
 }
 
-// TODO: Either remove user_context argument figure out how to make
-// caller provided user context work with JIT. (At present, this
-// cascaded handler calls cannot work with the right context as
-// JITModule needs its context to be passed in case the called handler
-// calls another callback which is not overriden by the caller.)
-void JITSharedRuntime::init_jit_user_context(JITUserContext &jit_user_context,
-                                             void *user_context, const JITHandlers &handlers) {
-    jit_user_context.handlers = active_handlers;
-    jit_user_context.user_context = user_context;
-    merge_handlers(jit_user_context.handlers, handlers);
+void JITSharedRuntime::populate_jit_handlers(JITUserContext *jit_user_context, const JITHandlers &handlers) {
+    // Take the active global handlers
+    JITHandlers merged = active_handlers;
+    // Clobber with any custom handlers set on the pipeline
+    merge_handlers(merged, handlers);
+    // Clobber with any custom handlers set on the call
+    merge_handlers(merged, jit_user_context->handlers);
+    jit_user_context->handlers = merged;
 }
 
 void JITSharedRuntime::release_all() {

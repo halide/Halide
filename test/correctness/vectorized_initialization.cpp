@@ -22,7 +22,7 @@ int main(int argc, char **argv) {
     f.update();
 
     g(x) = f(x);
-    Buffer<int> result = g.realize(4);
+    Buffer<int> result = g.realize({4});
 
     // The sequence generated should be:
     // -1, (-1 + 1) = 0, 0 + 2 = 2, 2 + 3 = 5, 5 + 4 = 9

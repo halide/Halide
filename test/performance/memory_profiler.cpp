@@ -15,13 +15,13 @@ void reset_stats() {
     stack_peak = 0;
 }
 
-void my_print(void *, const char *msg) {
+void my_print(JITUserContext *, const char *msg) {
     float this_ms, this_threads;
     int idx, this_percentage, this_heap_peak;
     int this_num_mallocs, this_malloc_avg, this_stack_peak;
     int val;
 
-    //printf("%s", msg);
+    // printf("%s", msg);
     val = sscanf(msg, " g_%d: %fms (%d%%) threads: %f peak: %d num: %d avg: %d",
                  &idx, &this_ms, &this_percentage, &this_threads, &this_heap_peak,
                  &this_num_mallocs, &this_malloc_avg);
@@ -123,10 +123,10 @@ int main(int argc, char **argv) {
         f1(x, y) = g1(x % size_x, y % size_y);
         g1.compute_root();
 
-        f1.set_custom_print(&my_print);
+        f1.jit_handlers().custom_print = my_print;
 
         reset_stats();
-        f1.realize(size_x, size_y, t);
+        f1.realize({size_x, size_y}, t);
         int stack_size = size_x * size_y * sizeof(int);
         if (check_error(0, 0, 0, stack_size) != 0) {
             return -1;
@@ -144,10 +144,10 @@ int main(int argc, char **argv) {
         f2(x, y) = g2(x - 1, y) + g2(x, y - 1);
         g2.compute_root();
 
-        f2.set_custom_print(&my_print);
+        f2.jit_handlers().custom_print = my_print;
 
         reset_stats();
-        f2.realize(size_x, size_y, t);
+        f2.realize({size_x, size_y}, t);
         int total = (size_x + 1) * (size_y + 1) * sizeof(int);
         if (check_error(total, 1, total, 0) != 0) {
             return -1;
@@ -162,10 +162,10 @@ int main(int argc, char **argv) {
         f3(x, y) = select(1 == 2, g3(x - 1, y), 0);
         g3.compute_root();
 
-        f3.set_custom_print(&my_print);
+        f3.jit_handlers().custom_print = my_print;
 
         reset_stats();
-        f3.realize(1000, 1000, t);
+        f3.realize({1000, 1000}, t);
         if (check_error(0, 0, 0, 0) != 0) {
             return -1;
         }
@@ -179,10 +179,10 @@ int main(int argc, char **argv) {
         f3(x, y) = select(1 == 2, g3((x - 1) % 10, y % 10), 0);
         g3.compute_root();
 
-        f3.set_custom_print(&my_print);
+        f3.jit_handlers().custom_print = my_print;
 
         reset_stats();
-        f3.realize(1000, 1000, t);
+        f3.realize({1000, 1000}, t);
         if (check_error(0, 0, 0, 0) != 0) {
             return -1;
         }
@@ -206,14 +206,14 @@ int main(int argc, char **argv) {
         f4.compute_root();
         f5.compute_root();
 
-        f6.set_custom_print(&my_print);
+        f6.jit_handlers().custom_print = my_print;
 
         int total = 0;
 
         reset_stats();
         toggle1.set(true);
         toggle2.set(true);
-        f6.realize(size_x, t);
+        f6.realize({size_x}, t);
         total = size_x * sizeof(float);
         if (check_error(total, 1, total, 0) != 0) {
             return -1;
@@ -222,7 +222,7 @@ int main(int argc, char **argv) {
         reset_stats();
         toggle1.set(true);
         toggle2.set(false);
-        f6.realize(size_x, t);
+        f6.realize({size_x}, t);
         total = size_x * sizeof(float);
         if (check_error(total, 1, total, 0) != 0) {
             return -1;
@@ -231,7 +231,7 @@ int main(int argc, char **argv) {
         reset_stats();
         toggle1.set(false);
         toggle2.set(true);
-        f6.realize(size_x, t);
+        f6.realize({size_x}, t);
         total = size_x * sizeof(float);
         if (check_error(total, 1, total, 0) != 0) {
             return -1;
@@ -240,7 +240,7 @@ int main(int argc, char **argv) {
         reset_stats();
         toggle1.set(false);
         toggle2.set(false);
-        f6.realize(size_x, t);
+        f6.realize({size_x}, t);
         if (check_error(0, 0, 0, 0) != 0) {
             return -1;
         }
@@ -259,10 +259,10 @@ int main(int argc, char **argv) {
         g5.store_at(f8, y).compute_at(f8, y);
         f7.compute_at(f8, y);
 
-        f8.set_custom_print(&my_print);
+        f8.jit_handlers().custom_print = my_print;
 
         reset_stats();
-        f8.realize(size_x, size_y, t);
+        f8.realize({size_x, size_y}, t);
         int peak = size_x * sizeof(int);
         int total = size_x * size_y * sizeof(int);
         if (check_error(peak, size_y, total / size_y, 0) != 0) {
@@ -285,10 +285,10 @@ int main(int argc, char **argv) {
 
         f10.parallel(y);
 
-        f10.set_custom_print(&my_print);
+        f10.jit_handlers().custom_print = my_print;
 
         reset_stats();
-        f10.realize(size_x, size_y, t);
+        f10.realize({size_x, size_y}, t);
         int min_heap_peak = size_x * sizeof(int);
         int total = size_x * size_y * sizeof(int);
         if (check_error_parallel(min_heap_peak, total, size_y, total / size_y, 0) != 0) {
@@ -306,10 +306,10 @@ int main(int argc, char **argv) {
         f11(x, y) = g7(x % size_x, y % size_y);
         g7.compute_root();
 
-        f11.set_custom_print(&my_print);
+        f11.jit_handlers().custom_print = my_print;
 
         reset_stats();
-        f11.realize(size_x, size_y, t);
+        f11.realize({size_x, size_y}, t);
         int total = size_x * size_y * sizeof(int);
         if (check_error(total, 1, total, 0) != 0) {
             return -1;
@@ -327,10 +327,10 @@ int main(int argc, char **argv) {
 
         f12.parallel(y);
 
-        f12.set_custom_print(&my_print);
+        f12.jit_handlers().custom_print = my_print;
 
         reset_stats();
-        f12.realize(size_x, size_y, t);
+        f12.realize({size_x, size_y}, t);
         int stack_size = size_x * size_y * sizeof(int);
         if (check_error(0, 0, 0, stack_size) != 0) {
             return -1;

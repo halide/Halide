@@ -45,7 +45,7 @@ $(BIN)/.wrapper: $(OPS) $(CUDA_OPS) setup.py
 	      HALIDE_DISTRIB_PATH=$(HALIDE_DISTRIB_PATH) \
 	      BIN=$(BIN)/$(HL_TARGET) \
 	      PYTHONPATH=$(EXT_LIB):${PYTHONPATH} \
-	      $(PIP) install . -t $(EXT_LIB) -b $(BIN)
+	      $(PIP) install . -t $(EXT_LIB)
 	@touch $(BIN)/.wrapper
 
 
@@ -94,6 +94,8 @@ $(BIN)/%/add_halidegrad_float32.a: $(GENERATOR_BIN)/add.generator
 		$(ADD_TYPES_F32) \
 		-f add_halidegrad_float32 \
 		-e static_library,c_header,pytorch_wrapper \
+		-p $(HALIDE_DISTRIB_PATH)/lib/libautoschedule_li2018.so \
+		-s Li2018 \
 		-o $(@D) \
 		-d 1 \
 		target=$* \
@@ -129,6 +131,8 @@ $(BIN)/%/add_halidegrad_float64.a: $(GENERATOR_BIN)/add.generator
 		-f add_halidegrad_float64 \
 		-e static_library,c_header,pytorch_wrapper \
 		-o $(@D) \
+		-p $(HALIDE_DISTRIB_PATH)/lib/libautoschedule_li2018.so \
+		-s Li2018 \
 		target=$* \
 		-d 1 \
 		target=$* \
@@ -167,6 +171,8 @@ $(BIN)/%/add_halidegrad_cuda_float32.a: $(GENERATOR_BIN)/add.generator
 		-f add_halidegrad_cuda_float32 \
 		-e static_library,c_header,pytorch_wrapper \
 		-o $(@D) \
+		-p $(HALIDE_DISTRIB_PATH)/lib/libautoschedule_li2018.so \
+		-s Li2018 \
 		-d 1 \
 		target=$(CUDA_TARGET) \
 		auto_schedule=true
@@ -201,6 +207,8 @@ $(BIN)/%/add_halidegrad_cuda_float64.a: $(GENERATOR_BIN)/add.generator
 		-f add_halidegrad_cuda_float64 \
 		-e static_library,c_header,pytorch_wrapper \
 		-o $(@D) \
+		-p $(HALIDE_DISTRIB_PATH)/lib/libautoschedule_li2018.so \
+		-s Li2018 \
 		-d 1 \
 		target=$(CUDA_TARGET) \
 		auto_schedule=true

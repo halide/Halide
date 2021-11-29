@@ -21,7 +21,7 @@ using std::string;
 
 stack<string> stack_trace;
 
-int my_trace(void *user_context, const halide_trace_event_t *e) {
+int my_trace(JITUserContext *user_context, const halide_trace_event_t *e) {
     const string event_types[] = {"Load ",
                                   "Store ",
                                   "Begin realization ",
@@ -85,8 +85,8 @@ int main(int argc, char **argv) {
     h(x, y) = g(x, y) + input(x, y);
     h.trace_realizations();
 
-    h.set_custom_trace(&my_trace);
-    h.realize(100, 100);
+    h.jit_handlers().custom_trace = &my_trace;
+    h.realize({100, 100});
 
     printf("The code should not have reached this print statement.\n");
     return -1;

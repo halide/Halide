@@ -43,10 +43,9 @@ class GlobalVariable;
 #include "Target.h"
 
 namespace Halide {
-struct ExternSignature;
-}  // namespace Halide
 
-namespace Halide {
+struct ExternSignature;
+
 namespace Internal {
 
 /** A code generator abstract base class. Actual code generators
@@ -58,8 +57,7 @@ namespace Internal {
 class CodeGen_LLVM : public IRVisitor {
 public:
     /** Create an instance of CodeGen_LLVM suitable for the target. */
-    static CodeGen_LLVM *new_for_target(const Target &target,
-                                        llvm::LLVMContext &context);
+    static std::unique_ptr<CodeGen_LLVM> new_for_target(const Target &target, llvm::LLVMContext &context);
 
     ~CodeGen_LLVM() override;
 
@@ -88,7 +86,7 @@ public:
     }
 
 protected:
-    CodeGen_LLVM(Target t);
+    CodeGen_LLVM(const Target &t);
 
     /** Compile a specific halide declaration into the llvm Module. */
     // @{
@@ -114,6 +112,7 @@ protected:
     // @{
     virtual std::string mcpu() const = 0;
     virtual std::string mattrs() const = 0;
+    virtual std::string mabi() const;
     virtual bool use_soft_float_abi() const = 0;
     virtual bool use_pic() const;
     // @}
@@ -138,21 +137,6 @@ protected:
     /** Return the type that a Halide type should be passed in and out
      * of functions as. */
     virtual Type upgrade_type_for_argument_passing(const Type &) const;
-
-    /** State needed by llvm for code generation, including the
-     * current module, function, context, builder, and most recently
-     * generated llvm value. */
-    //@{
-    static bool llvm_X86_enabled;
-    static bool llvm_ARM_enabled;
-    static bool llvm_Hexagon_enabled;
-    static bool llvm_AArch64_enabled;
-    static bool llvm_NVPTX_enabled;
-    static bool llvm_Mips_enabled;
-    static bool llvm_PowerPC_enabled;
-    static bool llvm_AMDGPU_enabled;
-    static bool llvm_WebAssembly_enabled;
-    static bool llvm_RISCV_enabled;
 
     std::unique_ptr<llvm::Module> module;
     llvm::Function *function;
@@ -430,10 +414,6 @@ protected:
      */
     size_t requested_alloca_total = 0;
 
-    /** Which buffers came in from the outside world (and so we can't
-     * guarantee their alignment) */
-    std::set<std::string> external_buffer;
-
     /** The user_context argument. May be a constant null if the
      * function is being compiled without a user context. */
     llvm::Value *get_user_context() const;
@@ -458,8 +438,12 @@ protected:
     /** Mapping of intrinsic functions to the various overloads implementing it. */
     std::map<std::string, std::vector<Intrinsic>> intrinsics;
 
+    /** Get an LLVM intrinsic declaration. If it doesn't exist, it will be created. */
+    llvm::Function *get_llvm_intrin(const Type &ret_type, const std::string &name, const std::vector<Type> &arg_types, bool scalars_are_vectors = false);
+    llvm::Function *get_llvm_intrin(llvm::Type *ret_type, const std::string &name, const std::vector<llvm::Type *> &arg_types);
     /** Declare an intrinsic function that participates in overload resolution. */
-    void declare_intrin_overload(const std::string &name, const Type &ret_type, const std::string &impl_name, std::vector<Type> arg_types);
+    llvm::Function *declare_intrin_overload(const std::string &name, const Type &ret_type, const std::string &impl_name, std::vector<Type> arg_types, bool scalars_are_vectors = false);
+    void declare_intrin_overload(const std::string &name, const Type &ret_type, llvm::Function *impl, std::vector<Type> arg_types);
     /** Call an overloaded intrinsic function. Returns nullptr if no suitable overload is found. */
     llvm::Value *call_overloaded_intrin(const Type &result_type, const std::string &name, const std::vector<Expr> &args);
 
@@ -529,6 +513,10 @@ protected:
     /** Emit atomic store instructions? */
     bool emit_atomic_stores;
 
+    /** Can we call this operation with float16 type?
+        This is used to avoid "emulated" equivalent code-gen in case target has FP16 feature **/
+    virtual bool supports_call_as_float16(const Call *op) const;
+
 private:
     /** All the values in scope at the current code location during
      * codegen. Use sym_push and sym_pop to access. */
@@ -564,19 +552,22 @@ private:
 
     llvm::Function *add_argv_wrapper(llvm::Function *fn, const std::string &name, bool result_in_argv = false);
 
-    llvm::Value *codegen_dense_vector_load(const Load *load, llvm::Value *vpred = nullptr);
+    llvm::Value *codegen_dense_vector_load(const Type &type, const std::string &name, const Expr &base,
+                                           const Buffer<> &image, const Parameter &param, const ModulusRemainder &alignment,
+                                           llvm::Value *vpred = nullptr, bool slice_to_native = true);
+    llvm::Value *codegen_dense_vector_load(const Load *load, llvm::Value *vpred = nullptr, bool slice_to_native = true);
 
-    virtual void codegen_predicated_vector_load(const Load *op);
-    virtual void codegen_predicated_vector_store(const Store *op);
+    virtual void codegen_predicated_load(const Load *op);
+    virtual void codegen_predicated_store(const Store *op);
 
-    void codegen_atomic_store(const Store *op);
+    void codegen_atomic_rmw(const Store *op);
 
     void init_codegen(const std::string &name, bool any_strict_float = false);
     std::unique_ptr<llvm::Module> finish_codegen();
 
     /** A helper routine for generating folded vector reductions. */
     template<typename Op>
-    bool try_to_fold_vector_reduce(const Op *op);
+    bool try_to_fold_vector_reduce(const Expr &a, Expr b);
 };
 
 }  // namespace Internal

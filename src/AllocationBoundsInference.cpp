@@ -1,10 +1,13 @@
 #include "AllocationBoundsInference.h"
 #include "Bounds.h"
+#include "CSE.h"
 #include "ExternFuncArgument.h"
 #include "Function.h"
 #include "IRMutator.h"
 #include "IROperator.h"
 #include "Simplify.h"
+
+#include <set>
 
 namespace Halide {
 namespace Internal {
@@ -15,6 +18,10 @@ using std::string;
 using std::vector;
 
 namespace {
+
+Expr cse_and_simplify(const Expr &x) {
+    return simplify(common_subexpression_elimination(x));
+}
 
 // Figure out the region touched of each buffer, and deposit them as
 // let statements outside of each realize node, or at the top level if
@@ -50,8 +57,7 @@ class AllocationInference : public IRMutator {
         for (size_t i = 0; i < b.size(); i++) {
             // Get any applicable bound on this dimension
             Bound bound;
-            for (size_t j = 0; j < f.schedule().bounds().size(); j++) {
-                Bound b = f.schedule().bounds()[j];
+            for (const auto &b : f.schedule().bounds()) {
                 if (f_args[i] == b.var) {
                     bound = b;
                 }
@@ -66,8 +72,8 @@ class AllocationInference : public IRMutator {
                            << f_args[i] << "\n";
             }
             Expr min, max, extent;
-            b[i].min = simplify(b[i].min);
-            b[i].max = simplify(b[i].max);
+            b[i].min = cse_and_simplify(b[i].min);
+            b[i].max = cse_and_simplify(b[i].max);
             if (bound.min.defined()) {
                 min = bound.min;
             } else {
@@ -75,22 +81,26 @@ class AllocationInference : public IRMutator {
             }
             if (bound.extent.defined()) {
                 extent = bound.extent;
-                max = simplify(min + extent - 1);
+                max = cse_and_simplify(min + extent - 1);
             } else {
                 max = b[i].max;
-                extent = simplify((max - min) + 1);
+                extent = cse_and_simplify((max - min) + 1);
             }
             if (bound.modulus.defined()) {
-                internal_assert(bound.remainder.defined());
-                min -= bound.remainder;
-                min = (min / bound.modulus) * bound.modulus;
-                min += bound.remainder;
-                Expr max_plus_one = max + 1;
-                max_plus_one -= bound.remainder;
-                max_plus_one = ((max_plus_one + bound.modulus - 1) / bound.modulus) * bound.modulus;
-                max_plus_one += bound.remainder;
-                extent = simplify(max_plus_one - min);
-                max = max_plus_one - 1;
+                if (bound.remainder.defined()) {
+                    min -= bound.remainder;
+                    min = (min / bound.modulus) * bound.modulus;
+                    min += bound.remainder;
+                    Expr max_plus_one = max + 1;
+                    max_plus_one -= bound.remainder;
+                    max_plus_one = ((max_plus_one + bound.modulus - 1) / bound.modulus) * bound.modulus;
+                    max_plus_one += bound.remainder;
+                    extent = cse_and_simplify(max_plus_one - min);
+                    max = max_plus_one - 1;
+                } else {
+                    extent = cse_and_simplify(((extent + bound.modulus - 1) / bound.modulus) * bound.modulus);
+                    max = cse_and_simplify(min + extent - 1);
+                }
             }
 
             Expr min_var = Variable::make(Int(32), min_name);
@@ -121,13 +131,11 @@ public:
     AllocationInference(const map<string, Function> &e, const FuncValueBounds &fb)
         : env(e), func_bounds(fb) {
         // Figure out which buffers are touched by extern stages
-        for (map<string, Function>::const_iterator iter = e.begin();
-             iter != e.end(); ++iter) {
-            Function f = iter->second;
+        for (const auto &iter : e) {
+            Function f = iter.second;
             if (f.has_extern_definition()) {
                 touched_by_extern.insert(f.name());
-                for (size_t i = 0; i < f.extern_arguments().size(); i++) {
-                    ExternFuncArgument arg = f.extern_arguments()[i];
+                for (const auto &arg : f.extern_arguments()) {
                     if (!arg.is_func()) {
                         continue;
                     }

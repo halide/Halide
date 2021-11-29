@@ -26,14 +26,15 @@ BIN_DIR ?= bin
 BIN ?= $(BIN_DIR)
 HL_TARGET ?= host
 
+# Running examples on Hexagon requires Hexagon_SDK
+SDK_ROOT ?= ${HOME}/Qualcomm
+HEXAGON_SDK_ROOT ?= ${SDK_ROOT}/Hexagon_SDK/4.0.0
 
 # GENERATOR_BIN is used mainly for Generators, which are always built
 # (and executed) on the host, regardless of the final target; this saves a bit
 # of recompile time (and disk space). (It would still provide correct results
 # if we output them to $(BIN), it would just be inefficient.)
 GENERATOR_BIN ?= $(BIN)/host
-
-SANITIZER_FLAGS ?=
 
 # The outputs to produce when running a Generator (ie the args to the -e flag).
 # If -e is unspecified, Halide normally defaults to the equivalent of
@@ -53,8 +54,25 @@ GXX ?= g++
 
 OPTIMIZE ?= -O3
 
+SANITIZER_FLAGS ?=
+
+ifneq (,$(findstring tsan,$(HL_TARGET)$(HL_JIT_TARGET)))
+# Note that attempting to use TSAN with the JIT can produce false positives
+# if libHalide is not also compiled with TSAN enabled; we tack the relevant
+# flag onto OPTIMIZE here, but that's really only effective if you ensure
+# to do a clean build before testing. (In general, most of the Sanitizers
+# only work well when used in a completely clean environment.)
+OPTIMIZE += -fsanitize=thread
+SANITIZER_FLAGS += -fsanitize=thread
+endif
+
+ifneq (,$(findstring asan,$(HL_TARGET)$(HL_JIT_TARGET)))
+OPTIMIZE += -fsanitize=address
+SANITIZER_FLAGS += -fsanitize=address
+endif
+
 CFLAGS += $(OPTIMIZE) -I $(HALIDE_DISTRIB_PATH)/include/ -I $(HALIDE_DISTRIB_PATH)/tools/ -I $(HALIDE_DISTRIB_PATH)/apps/support/
-CXXFLAGS += $(OPTIMIZE) -std=c++11 -I $(HALIDE_DISTRIB_PATH)/include/ -I $(HALIDE_DISTRIB_PATH)/tools/ $(SANITIZER_FLAGS) -Wall -Werror -Wno-unused-function -Wcast-qual -Wignored-qualifiers -Wno-comment -Wsign-compare -Wno-unknown-warning-option -Wno-psabi
+CXXFLAGS += $(OPTIMIZE) -std=c++17 -I $(HALIDE_DISTRIB_PATH)/include/ -I $(HALIDE_DISTRIB_PATH)/tools/ $(SANITIZER_FLAGS) -Wall -Werror -Wno-unused-function -Wcast-qual -Wignored-qualifiers -Wno-comment -Wsign-compare -Wno-unknown-warning-option -Wno-psabi
 
 CXX_VERSION = $(shell $(CXX) --version | head -n1)
 ifneq (,$(findstring clang,$(CXX_VERSION)))
@@ -98,37 +116,48 @@ ANDROID_API_VERSION ?= 26
 
 CXX-host ?= $(CXX)
 CXX-host-opencl ?= $(CXX)
-CXX-host-opengl ?= $(CXX)
 CXX-host-cuda ?= $(CXX)
 CXX-host-metal ?= $(CXX)
-CXX-host-hvx_128 ?= $(CXX)
-CXX-host-hvx_64 ?= $(CXX)
 CXX-host-hvx ?= $(CXX)
+CXX-hexagon-32-qurt-hvx ?= hexagon-clang++
 CXX-arm-64-android ?= ${ANDROID_NDK_ROOT}/toolchains/llvm/prebuilt/${ANDROID_NDK_HOST_PLATFORM}-x86_64/bin/aarch64-linux-android${ANDROID_API_VERSION}-clang++
+CXX-arm-64-android-arm_dot_prod ?= $(CXX-arm-64-android)
 CXX-arm-32-android ?= ${ANDROID_NDK_ROOT}/toolchains/llvm/prebuilt/${ANDROID_NDK_HOST_PLATFORM}-x86_64/bin/armv7a-linux-androideabi${ANDROID_API_VERSION}-clang++
 CXX-arm-64-profile-android ?= $(CXX-arm-64-android)
 CXX-arm-32-profile-android ?= $(CXX-arm-32-android)
 
 CXXFLAGS-host ?= $(CXXFLAGS)
 CXXFLAGS-host-opencl ?= $(CXXFLAGS)
-CXXFLAGS-host-opengl ?= $(CXXFLAGS)
 CXXFLAGS-host-cuda ?= $(CXXFLAGS)
 CXXFLAGS-host-metal ?= $(CXXFLAGS)
-CXXFLAGS-host-hvx_128 ?= $(CXXFLAGS)
-CXXFLAGS-host-hvx_64 ?= $(CXXFLAGS)
 CXXFLAGS-arm-64-android ?= $(CXXFLAGS)
+CXXFLAGS-arm-64-android-arm_dot_prod ?= $(CXXFLAGS-arm-64-android)
+CXXFLAGS-hexagon-32-qurt-hvx ?= -mv65 $(CXXFLAGS) -I$(HEXAGON_SDK_ROOT)/rtos/qurt/computev65/include/qurt -I$(HEXAGON_SDK_ROOT)/rtos/qurt/computev65/include/posix
 CXXFLAGS-arm-32-android ?= $(CXXFLAGS)
+
+AR-host ?= ar
+AR-host-debug ?= ar
+AR-host-opencl ?= $(AR)
+AR-host-cuda ?= $(AR)
+AR-host-metal ?= $(AR)
+AR-host-hvx ?= $(AR)
+AR-hexagon-32-qurt-hvx ?= ar
+AR-arm-64-android ?= ${ANDROID_NDK_ROOT}/toolchains/llvm/prebuilt/${ANDROID_NDK_HOST_PLATFORM}-x86_64/bin/aarch64-linux-android-ar
+AR-arm-64-android-arm_dot_prod ?= $(AR-arm-64-android)
+AR-arm-32-android ?= ${ANDROID_NDK_ROOT}/toolchains/llvm/prebuilt/${ANDROID_NDK_HOST_PLATFORM}-x86_64/bin/armv7a-linux-androideabi-ar
+AR-arm-64-profile-android ?= $(AR-arm-64-android)
+AR-arm-32-profile-android ?= $(AR-arm-32-android)
 
 LDFLAGS-host ?= $(LDFLAGS)
 LDFLAGS-host-opencl ?= $(LDFLAGS)
-LDFLAGS-host-opengl ?= $(LDFLAGS)
 LDFLAGS-host-cuda ?= $(LDFLAGS)
 LDFLAGS-host-metal ?= $(LDFLAGS)
-LDFLAGS-host-hvx_128 ?= $(LDFLAGS)
-LDFLAGS-host-hvx_64 ?= $(LDFLAGS)
+LDFLAGS-host-hvx ?= $(LDFLAGS)
+LDFLAGS-hexagon-32-qurt-hvx =
 # Use the statically-linked version of libc++ on Android by default, for simplicity
 # of deployment. (Despite the name, this applies to libc++, not libstdc++)
 LDFLAGS-arm-64-android ?= -llog -fPIE -pie -static-libstdc++
+LDFLAGS-arm-64-android-arm_dot_prod ?= $(LDFLAGS-arm-64-android)
 LDFLAGS-arm-32-android ?= -llog -fPIE -pie -static-libstdc++
 
 # Put HL_TARGET variants of all of these last, to avoid conflict with the android variants
@@ -184,15 +213,6 @@ IMAGE_IO_LIBS = $(LIBPNG_LIBS) $(LIBJPEG_LIBS)
 IMAGE_IO_CXX_FLAGS = $(LIBPNG_CXX_FLAGS) $(LIBJPEG_CXX_FLAGS)
 
 IMAGE_IO_FLAGS = $(IMAGE_IO_LIBS) $(IMAGE_IO_CXX_FLAGS)
-
-PLATFORM_OPENGL_LDFLAGS=-lGL -lX11
-ifeq ($(UNAME), Darwin)
-PLATFORM_OPENGL_LDFLAGS=-framework OpenGL
-endif
-
-ifneq (, $(findstring opengl,$(HL_TARGET)))
-  OPENGL_LDFLAGS=$(PLATFORM_OPENGL_LDFLAGS)
-endif
 
 ifneq (, $(findstring metal,$(HL_TARGET)))
   LDFLAGS += -framework Metal -framework Foundation

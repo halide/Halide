@@ -28,7 +28,7 @@ namespace {
 
 class CodeGen_OpenCL_Dev : public CodeGen_GPU_Dev {
 public:
-    CodeGen_OpenCL_Dev(Target target);
+    CodeGen_OpenCL_Dev(const Target &target);
 
     /** Compile a GPU kernel into the module. This may be called many times
      * with different kernels, which will all be accumulated into a single
@@ -107,7 +107,7 @@ protected:
     CodeGen_OpenCL_C clc;
 };
 
-CodeGen_OpenCL_Dev::CodeGen_OpenCL_Dev(Target t)
+CodeGen_OpenCL_Dev::CodeGen_OpenCL_Dev(const Target &t)
     : clc(src_stream, t) {
 }
 
@@ -121,6 +121,8 @@ string CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::print_type(Type type, AppendSpaceIf
         } else if (type.bits() == 32) {
             oss << "float";
         } else if (type.bits() == 64) {
+            user_assert(target.has_feature(Target::CLDoubles))
+                << "OpenCL kernel uses double type, but CLDoubles target flag not enabled\n";
             oss << "double";
         } else {
             user_error << "Can't represent a float with this many bits in OpenCL C: " << type << "\n";
@@ -338,8 +340,16 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Call *op) {
         // if the RHS is uint, quietly cast it back to int if the LHS is int
         if (op->args[0].type().is_int() && op->args[1].type().is_uint()) {
             Type t = op->args[0].type().with_code(halide_type_int);
-            Expr e = Call::make(op->type, op->name, {op->args[0], cast(t, op->args[1])}, op->call_type);
-            e.accept(this);
+            Expr shift = cast(t, op->args[1]);
+            // Emit code here, because CodeGen_C visitor will attempt to lower signed shift
+            // back to unsigned.
+            string a0 = print_expr(op->args[0]);
+            string a1 = print_expr(shift);
+            if (op->is_intrinsic(Call::shift_left)) {
+                print_assignment(op->type, a0 + " << " + a1);
+            } else {
+                print_assignment(op->type, a0 + " >> " + a1);
+            }
         } else {
             CodeGen_C::visit(op);
         }
@@ -877,6 +887,13 @@ void CodeGen_OpenCL_Dev::add_kernel(Stmt s,
                                     const vector<DeviceArgument> &args) {
     debug(2) << "CodeGen_OpenCL_Dev::compile " << name << "\n";
 
+    // We need to scalarize/de-predicate any loads/stores, since OpenCL does not
+    // support predication.
+    s = scalarize_predicated_loads_stores(s);
+
+    debug(2) << "CodeGen_OpenCL_Dev: after removing predication: \n"
+             << s;
+
     // TODO: do we have to uniquify these names, or can we trust that they are safe?
     cur_kernel_name = name;
     clc.add_kernel(s, name, args);
@@ -919,11 +936,11 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::add_kernel(Stmt s,
     // The last condition is handled via the preprocessor in the kernel
     // declaration.
     vector<BufferSize> constants;
-    for (size_t i = 0; i < args.size(); i++) {
-        if (args[i].is_buffer &&
-            CodeGen_GPU_Dev::is_buffer_constant(s, args[i].name) &&
-            args[i].size > 0) {
-            constants.emplace_back(args[i].name, args[i].size);
+    for (const auto &arg : args) {
+        if (arg.is_buffer &&
+            CodeGen_GPU_Dev::is_buffer_constant(s, arg.name) &&
+            arg.size > 0) {
+            constants.emplace_back(arg.name, arg.size);
         }
     }
 
@@ -940,23 +957,23 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::add_kernel(Stmt s,
 
     // Create preprocessor replacements for the address spaces of all our buffers.
     stream << "// Address spaces for " << name << "\n";
-    for (size_t i = 0; i < args.size(); i++) {
-        if (args[i].is_buffer) {
+    for (const auto &arg : args) {
+        if (arg.is_buffer) {
             vector<BufferSize>::iterator constant = constants.begin();
             while (constant != constants.end() &&
-                   constant->name != args[i].name) {
+                   constant->name != arg.name) {
                 constant++;
             }
 
             if (constant != constants.end()) {
                 stream << "#if " << constant->size << " <= MAX_CONSTANT_BUFFER_SIZE && "
                        << constant - constants.begin() << " < MAX_CONSTANT_ARGS\n";
-                stream << "#define " << get_memory_space(args[i].name) << " __constant\n";
+                stream << "#define " << get_memory_space(arg.name) << " __constant\n";
                 stream << "#else\n";
-                stream << "#define " << get_memory_space(args[i].name) << " __global\n";
+                stream << "#define " << get_memory_space(arg.name) << " __global\n";
                 stream << "#endif\n";
             } else {
-                stream << "#define " << get_memory_space(args[i].name) << " __global\n";
+                stream << "#define " << get_memory_space(arg.name) << " __global\n";
             }
         }
     }
@@ -1042,30 +1059,30 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::add_kernel(Stmt s,
     open_scope();
 
     // Reinterpret half args passed as uint16 back to half
-    for (size_t i = 0; i < args.size(); i++) {
-        if (!args[i].is_buffer &&
-            args[i].type.is_float() &&
-            args[i].type.bits() < 32) {
-            stream << " const " << print_type(args[i].type)
-                   << " " << print_name(args[i].name)
-                   << " = half_from_bits(" << print_name(args[i].name + "_bits") << ");\n";
+    for (const auto &arg : args) {
+        if (!arg.is_buffer &&
+            arg.type.is_float() &&
+            arg.type.bits() < 32) {
+            stream << " const " << print_type(arg.type)
+                   << " " << print_name(arg.name)
+                   << " = half_from_bits(" << print_name(arg.name + "_bits") << ");\n";
         }
     }
 
     print(s);
     close_scope("kernel " + name);
 
-    for (size_t i = 0; i < args.size(); i++) {
+    for (const auto &arg : args) {
         // Remove buffer arguments from allocation scope
-        if (args[i].is_buffer) {
-            allocations.pop(args[i].name);
+        if (arg.is_buffer) {
+            allocations.pop(arg.name);
         }
     }
 
     // Undef all the buffer address spaces, in case they're different in another kernel.
-    for (size_t i = 0; i < args.size(); i++) {
-        if (args[i].is_buffer) {
-            stream << "#undef " << get_memory_space(args[i].name) << "\n";
+    for (const auto &arg : args) {
+        if (arg.is_buffer) {
+            stream << "#undef " << get_memory_space(arg.name) << "\n";
         }
     }
 }
@@ -1220,8 +1237,8 @@ std::string CodeGen_OpenCL_Dev::print_gpu_name(const std::string &name) {
 
 }  // namespace
 
-CodeGen_GPU_Dev *new_CodeGen_OpenCL_Dev(const Target &target) {
-    return new CodeGen_OpenCL_Dev(target);
+std::unique_ptr<CodeGen_GPU_Dev> new_CodeGen_OpenCL_Dev(const Target &target) {
+    return std::make_unique<CodeGen_OpenCL_Dev>(target);
 }
 
 }  // namespace Internal

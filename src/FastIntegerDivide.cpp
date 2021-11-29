@@ -6,111 +6,104 @@
 
 namespace Halide {
 
+using namespace Halide::Internal;
 using namespace Halide::Internal::IntegerDivision;
 
 namespace {
 
+int shift_for_denominator(uint32_t d) {
+    return 63 - clz64(d - 1);
+}
+
+Expr shift_for_denominator(const Expr &d) {
+    internal_assert(d.type().element_of() == UInt(8));
+    return 7 - count_leading_zeros(d - 1);
+}
+
 Buffer<uint8_t> integer_divide_table_u8() {
-    static std::mutex initialize_lock;
-    std::lock_guard<std::mutex> lock_guard(initialize_lock);
-    {
-        static Buffer<uint8_t> im(256, 2);
-        static bool initialized = false;
-        if (!initialized) {
-            initialized = true;
-            for (size_t i = 0; i < 256; i++) {
-                im(i, 0) = table_runtime_u8[i][2];
-                im(i, 1) = table_runtime_u8[i][3];
+    static auto im = []() {
+        Buffer<uint8_t> im(256);
+        for (uint32_t i = 0; i < 256; i++) {
+            im(i) = table_runtime_u8[i][2];
+            if (i > 1) {
+                internal_assert(table_runtime_u8[i][3] == shift_for_denominator(i));
             }
         }
         return im;
-    }
+    }();
+    return im;
 }
 
 Buffer<uint8_t> integer_divide_table_s8() {
-    static std::mutex initialize_lock;
-    std::lock_guard<std::mutex> lock_guard(initialize_lock);
-    {
-        static Buffer<uint8_t> im(256, 2);
-        static bool initialized = false;
-        if (!initialized) {
-            initialized = true;
-            for (size_t i = 0; i < 256; i++) {
-                im(i, 0) = table_runtime_s8[i][2];
-                im(i, 1) = table_runtime_s8[i][3];
+    static auto im = []() {
+        Buffer<uint8_t> im(256);
+        for (uint32_t i = 0; i < 256; i++) {
+            im(i) = table_runtime_s8[i][2];
+            if (i > 1) {
+                internal_assert(table_runtime_s8[i][3] == shift_for_denominator(i));
             }
         }
         return im;
-    }
+    }();
+    return im;
 }
 
 Buffer<uint16_t> integer_divide_table_u16() {
-    static std::mutex initialize_lock;
-    std::lock_guard<std::mutex> lock_guard(initialize_lock);
-    {
-        static Buffer<uint16_t> im(256, 2);
-        static bool initialized = false;
-        if (!initialized) {
-            initialized = true;
-            for (size_t i = 0; i < 256; i++) {
-                im(i, 0) = table_runtime_u16[i][2];
-                im(i, 1) = table_runtime_u16[i][3];
+    static auto im = []() {
+        Buffer<uint16_t> im(256);
+        for (uint32_t i = 0; i < 256; i++) {
+            im(i) = table_runtime_u16[i][2];
+            if (i > 1) {
+                internal_assert(table_runtime_u16[i][3] == shift_for_denominator(i));
             }
         }
         return im;
-    }
+    }();
+    return im;
 }
 
 Buffer<uint16_t> integer_divide_table_s16() {
-    static std::mutex initialize_lock;
-    std::lock_guard<std::mutex> lock_guard(initialize_lock);
-    {
-        static Buffer<uint16_t> im(256, 2);
-        static bool initialized = false;
-        if (!initialized) {
-            initialized = true;
-            for (size_t i = 0; i < 256; i++) {
-                im(i, 0) = table_runtime_s16[i][2];
-                im(i, 1) = table_runtime_s16[i][3];
+    static auto im = []() {
+        Buffer<uint16_t> im(256);
+        for (uint32_t i = 0; i < 256; i++) {
+            im(i) = table_runtime_s16[i][2];
+            if (i > 1) {
+                internal_assert(table_runtime_s16[i][3] == shift_for_denominator(i));
             }
         }
         return im;
-    }
+    }();
+    return im;
 }
 
 Buffer<uint32_t> integer_divide_table_u32() {
-    static std::mutex initialize_lock;
-    std::lock_guard<std::mutex> lock_guard(initialize_lock);
-    {
-        static Buffer<uint32_t> im(256, 2);
-        static bool initialized = false;
-        if (!initialized) {
-            initialized = true;
-            for (size_t i = 0; i < 256; i++) {
-                im(i, 0) = table_runtime_u32[i][2];
-                im(i, 1) = table_runtime_u32[i][3];
+    static auto im = []() {
+        Buffer<uint32_t> im(256);
+        for (uint32_t i = 0; i < 256; i++) {
+            im(i) = table_runtime_u32[i][2];
+            if (i > 1) {
+                internal_assert(table_runtime_u32[i][3] == shift_for_denominator(i));
             }
         }
         return im;
-    }
+    }();
+    return im;
 }
 
 Buffer<uint32_t> integer_divide_table_s32() {
-    static std::mutex initialize_lock;
-    std::lock_guard<std::mutex> lock_guard(initialize_lock);
-    {
-        static Buffer<uint32_t> im(256, 2);
-        static bool initialized = false;
-        if (!initialized) {
-            initialized = true;
-            for (size_t i = 0; i < 256; i++) {
-                im(i, 0) = table_runtime_s32[i][2];
-                im(i, 1) = table_runtime_s32[i][3];
+    static auto im = []() {
+        Buffer<uint32_t> im(256);
+        for (uint32_t i = 0; i < 256; i++) {
+            im(i) = table_runtime_s32[i][2];
+            if (i > 1) {
+                internal_assert(table_runtime_s32[i][3] == shift_for_denominator(i));
             }
         }
         return im;
-    }
+    }();
+    return im;
 }
+
 }  // namespace
 
 Expr fast_integer_divide(Expr numerator, Expr denominator) {
@@ -130,25 +123,22 @@ Expr fast_integer_divide(Expr numerator, Expr denominator) {
 
     Expr result;
     if (t.is_uint()) {
-        Expr mul, shift;
+        Expr mul, shift = shift_for_denominator(denominator);
         switch (t.bits()) {
         case 8: {
             Buffer<uint8_t> table = integer_divide_table_u8();
-            mul = table(denominator, 0);
-            shift = table(denominator, 1);
+            mul = table(denominator);
             break;
         }
         case 16: {
             Buffer<uint16_t> table = integer_divide_table_u16();
-            mul = table(denominator, 0);
-            shift = table(denominator, 1);
+            mul = table(denominator);
             break;
         }
         default:  // 32
         {
             Buffer<uint32_t> table = integer_divide_table_u32();
-            mul = table(denominator, 0);
-            shift = table(denominator, 1);
+            mul = table(denominator);
             break;
         }
         }
@@ -172,31 +162,28 @@ Expr fast_integer_divide(Expr numerator, Expr denominator) {
 
     } else {
 
-        Expr mul, shift;
+        Expr mul, shift = shift_for_denominator(denominator);
         switch (t.bits()) {
         case 8: {
             Buffer<uint8_t> table = integer_divide_table_s8();
-            mul = table(denominator, 0);
-            shift = table(denominator, 1);
+            mul = table(denominator);
             break;
         }
         case 16: {
             Buffer<uint16_t> table = integer_divide_table_s16();
-            mul = table(denominator, 0);
-            shift = table(denominator, 1);
+            mul = table(denominator);
             break;
         }
         default:  // 32
         {
             Buffer<uint32_t> table = integer_divide_table_s32();
-            mul = table(denominator, 0);
-            shift = table(denominator, 1);
+            mul = table(denominator);
             break;
         }
         }
 
         // Extract sign bit
-        //Expr xsign = (t.bits() < 32) ? (numerator / (1 << (t.bits()-1))) : (numerator >> (t.bits()-1));
+        // Expr xsign = (t.bits() < 32) ? (numerator / (1 << (t.bits()-1))) : (numerator >> (t.bits()-1));
         Expr xsign = select(numerator > 0, cast(t, 0), cast(t, -1));
 
         // If it's negative, flip the bits of the

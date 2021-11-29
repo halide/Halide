@@ -172,9 +172,9 @@ class GenerateProducerBody : public NoOpCollapsingMutator {
         } else {
             // This semaphore will end up on both sides of the fork,
             // so we'd better duplicate it.
-            string cloned_acquire = var->name + unique_name('_');
-            cloned_acquires[var->name] = cloned_acquire;
-            return Acquire::make(Variable::make(type_of<halide_semaphore_t *>(), cloned_acquire), op->count, body);
+            vector<string> &clones = cloned_acquires[var->name];
+            clones.push_back(var->name + unique_name('_'));
+            return Acquire::make(Variable::make(type_of<halide_semaphore_t *>(), clones.back()), op->count, body);
         }
     }
 
@@ -192,11 +192,11 @@ class GenerateProducerBody : public NoOpCollapsingMutator {
         return op;
     }
 
-    map<string, string> &cloned_acquires;
+    map<string, vector<string>> &cloned_acquires;
     set<string> inner_semaphores;
 
 public:
-    GenerateProducerBody(const string &f, const vector<Expr> &s, map<string, string> &a)
+    GenerateProducerBody(const string &f, const vector<Expr> &s, map<string, vector<string>> &a)
         : func(f), sema(s), cloned_acquires(a) {
     }
 };
@@ -311,7 +311,7 @@ class ForkAsyncProducers : public IRMutator {
 
     const map<string, Function> &env;
 
-    map<string, string> cloned_acquires;
+    map<string, vector<string>> cloned_acquires;
 
     Stmt visit(const Realize *op) override {
         auto it = env.find(op->name);
@@ -354,10 +354,10 @@ class ForkAsyncProducers : public IRMutator {
                 // If there's a nested async producer, we may have
                 // recursively cloned this semaphore inside the mutation
                 // of the producer and consumer.
-                auto it = cloned_acquires.find(sema_name);
-                if (it != cloned_acquires.end()) {
-                    body = CloneAcquire(sema_name, it->second).mutate(body);
-                    body = LetStmt::make(it->second, sema_space, body);
+                const vector<string> &clones = cloned_acquires[sema_name];
+                for (const auto &i : clones) {
+                    body = CloneAcquire(sema_name, i).mutate(body);
+                    body = LetStmt::make(i, sema_space, body);
                 }
 
                 body = LetStmt::make(sema_name, sema_space, body);
@@ -457,28 +457,56 @@ class TightenProducerConsumerNodes : public IRMutator {
 
     Stmt make_producer_consumer(const string &name, bool is_producer, Stmt body, const Scope<int> &scope) {
         if (const LetStmt *let = body.as<LetStmt>()) {
-            if (expr_uses_vars(let->value, scope)) {
-                return ProducerConsumer::make(name, is_producer, body);
-            } else {
-                return LetStmt::make(let->name, let->value, make_producer_consumer(name, is_producer, let->body, scope));
+            Stmt orig = body;
+            // 'orig' is only used to keep a reference to the let
+            // chain in scope. We're going to be keeping pointers to
+            // LetStmts we peeled off 'body' while also mutating
+            // 'body', which is probably the only reference counted
+            // object that keeps those pointers live.
+
+            // Peel off all lets that don't depend on any vars in scope.
+            vector<const LetStmt *> containing_lets;
+            while (let && !expr_uses_vars(let->value, scope)) {
+                containing_lets.push_back(let);
+                body = let->body;
+                let = body.as<LetStmt>();
             }
+
+            if (let) {
+                // That's as far as we can go
+                body = ProducerConsumer::make(name, is_producer, body);
+            } else {
+                // Recurse onto a non-let-node
+                body = make_producer_consumer(name, is_producer, body, scope);
+            }
+
+            for (auto it = containing_lets.rbegin(); it != containing_lets.rend(); it++) {
+                body = LetStmt::make((*it)->name, (*it)->value, body);
+            }
+
+            return body;
         } else if (const Block *block = body.as<Block>()) {
-            // Check which sides it's used on
-            bool first = stmt_uses_vars(block->first, scope);
-            bool rest = stmt_uses_vars(block->rest, scope);
             if (is_producer) {
+                // We don't push produce nodes into blocks
                 return ProducerConsumer::make(name, is_producer, body);
-            } else if (first && rest) {
-                return Block::make(make_producer_consumer(name, is_producer, block->first, scope),
-                                   make_producer_consumer(name, is_producer, block->rest, scope));
-            } else if (first) {
-                return Block::make(make_producer_consumer(name, is_producer, block->first, scope), block->rest);
-            } else if (rest) {
-                return Block::make(block->first, make_producer_consumer(name, is_producer, block->rest, scope));
-            } else {
-                // Used on neither side?!
-                return body;
             }
+            vector<Stmt> sub_stmts;
+            Stmt rest;
+            do {
+                Stmt first = block->first;
+                sub_stmts.push_back(block->first);
+                rest = block->rest;
+                block = rest.as<Block>();
+            } while (block);
+            sub_stmts.push_back(rest);
+
+            for (Stmt &s : sub_stmts) {
+                if (stmt_uses_vars(s, scope)) {
+                    s = make_producer_consumer(name, is_producer, s, scope);
+                }
+            }
+
+            return Block::make(sub_stmts);
         } else if (const ProducerConsumer *pc = body.as<ProducerConsumer>()) {
             return ProducerConsumer::make(pc->name, pc->is_producer, make_producer_consumer(name, is_producer, pc->body, scope));
         } else if (const Realize *r = body.as<Realize>()) {
@@ -561,16 +589,38 @@ class ExpandAcquireNodes : public IRMutator {
     }
 
     Stmt visit(const LetStmt *op) override {
-        Stmt body = mutate(op->body);
-        const Acquire *a = body.as<Acquire>();
-        if (a &&
-            !expr_uses_var(a->semaphore, op->name) &&
-            !expr_uses_var(a->count, op->name)) {
-            return Acquire::make(a->semaphore, a->count,
-                                 LetStmt::make(op->name, op->value, a->body));
-        } else {
-            return LetStmt::make(op->name, op->value, body);
+        Stmt orig = op;
+        Stmt body;
+        vector<const LetStmt *> frames;
+        do {
+            frames.push_back(op);
+            body = op->body;
+            op = body.as<LetStmt>();
+        } while (op);
+
+        Stmt s = mutate(body);
+
+        if (const Acquire *a = s.as<Acquire>()) {
+            // Pull the acquire node outside as many lets as possible,
+            // wrapping them around the Acquire node's original body.
+            body = a->body;
+            while (!frames.empty() &&
+                   !expr_uses_var(a->semaphore, frames.back()->name) &&
+                   !expr_uses_var(a->count, frames.back()->name)) {
+                body = LetStmt::make(frames.back()->name, frames.back()->value, body);
+                frames.pop_back();
+            }
+            s = Acquire::make(a->semaphore, a->count, body);
+        } else if (body.same_as(s)) {
+            return orig;
         }
+
+        // Rewrap the rest of the lets
+        for (auto it = frames.rbegin(); it != frames.rend(); it++) {
+            s = LetStmt::make((*it)->name, (*it)->value, s);
+        }
+
+        return s;
     }
 
     Stmt visit(const ProducerConsumer *op) override {

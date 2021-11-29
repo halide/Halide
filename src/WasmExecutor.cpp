@@ -1,6 +1,15 @@
 #include "WasmExecutor.h"
 
-#include "CodeGen_WebAssembly.h"
+#include <cmath>
+#include <csignal>
+#include <cstdlib>
+#include <mutex>
+#include <sstream>
+#include <unordered_map>
+#include <vector>
+
+#include "CodeGen_Posix.h"
+#include "CodeGen_Targets.h"
 #include "Error.h"
 #include "Float16.h"
 #include "Func.h"
@@ -13,23 +22,18 @@
 #include "LLVM_Runtime_Linker.h"
 #include "Target.h"
 
-#include <cmath>
-#include <csignal>
-#include <cstdlib>
-#include <mutex>
-#include <sstream>
-#include <unordered_map>
-#include <vector>
-
 #if WITH_WABT
 #include "wabt-src/src/binary-reader.h"
+#include "wabt-src/src/cast.h"
+#include "wabt-src/src/common.h"
 #include "wabt-src/src/error-formatter.h"
+#include "wabt-src/src/error.h"
 #include "wabt-src/src/feature.h"
 #include "wabt-src/src/interp/binary-reader-interp.h"
 #include "wabt-src/src/interp/interp-util.h"
-#include "wabt-src/src/interp/interp-wasi.h"
 #include "wabt-src/src/interp/interp.h"
-#include "wabt-src/src/option-parser.h"
+#include "wabt-src/src/interp/istream.h"
+#include "wabt-src/src/result.h"
 #include "wabt-src/src/stream.h"
 #endif
 
@@ -149,9 +153,9 @@ public:
         internal_assert(size <= kMaxAllocSize);
         bddebug(2) << "size -> " << size << "\n";
 
-        for (auto it = regions.begin(); it != regions.end(); it++) {
-            const uint32_t start = it->first;
-            Region &r = it->second;
+        for (auto &region : regions) {
+            const uint32_t start = region.first;
+            Region &r = region.second;
             if (!r.used && r.size >= size) {
                 bddebug(2) << "alloc @ " << start << "," << (uint32_t)r.size << "\n";
                 if (r.size > size + kAlignment) {
@@ -285,7 +289,7 @@ std::vector<char> compile_to_wasm(const Module &module, const std::string &fn_na
     // for the alloca usage.
     size_t stack_size = 65536;
     {
-        std::unique_ptr<CodeGen_WebAssembly> cg(new CodeGen_WebAssembly(module.target()));
+        std::unique_ptr<CodeGen_Posix> cg(new_CodeGen_WebAssembly(module.target()));
         cg->set_context(context);
         fn_module = cg->compile(module);
         stack_size += cg->get_requested_alloca_total();
@@ -339,20 +343,10 @@ std::vector<char> compile_to_wasm(const Module &module, const std::string &fn_na
     // Note that we must restore it before using internal_error (and also on the non-error path).
     auto old_abort_handler = std::signal(SIGABRT, SIG_DFL);
 
-#if LLVM_VERSION >= 110
     if (!lld::wasm::link(lld_args, /*CanExitEarly*/ false, llvm::outs(), llvm::errs())) {
         std::signal(SIGABRT, old_abort_handler);
         internal_error << "lld::wasm::link failed\n";
     }
-#else
-    std::string lld_errs_string;
-    llvm::raw_string_ostream lld_errs(lld_errs_string);
-
-    if (!lld::wasm::link(lld_args, /*CanExitEarly*/ false, llvm::outs(), llvm::errs())) {
-        std::signal(SIGABRT, old_abort_handler);
-        internal_error << "lld::wasm::link failed: (" << lld_errs.str() << ")\n";
-    }
-#endif
 
     std::signal(SIGABRT, old_abort_handler);
 
@@ -362,10 +356,6 @@ std::vector<char> compile_to_wasm(const Module &module, const std::string &fn_na
 #endif
 
     return read_entire_file(wasm_output.pathname());
-}
-
-inline constexpr int halide_type_code(halide_type_code_t code, int bits) {
-    return ((int)code) | (bits << 8);
 }
 
 // dynamic_type_dispatch is a utility for functors that want to be able
@@ -389,10 +379,10 @@ template<template<typename> class Functor, typename... Args>
 auto dynamic_type_dispatch(const halide_type_t &type, Args &&... args) -> decltype(std::declval<Functor<uint8_t>>()(std::forward<Args>(args)...)) {
 
 #define HANDLE_CASE(CODE, BITS, TYPE)  \
-    case halide_type_code(CODE, BITS): \
+    case halide_type_t(CODE, BITS).as_u32(): \
         return Functor<TYPE>()(std::forward<Args>(args)...);
 
-    switch (halide_type_code((halide_type_code_t)type.code, type.bits)) {
+    switch (type.element_of().as_u32()) {
         HANDLE_CASE(halide_type_bfloat, 16, bfloat16_t)
         HANDLE_CASE(halide_type_float, 16, float16_t)
         HANDLE_CASE(halide_type_float, 32, float)
@@ -632,13 +622,13 @@ void wasmbuf_to_hostbuf(WabtContext &wabt_context, wasm32_ptr_t src_ptr, Halide:
 
     halide_buffer_t dst_tmp;
     dst_tmp.device = 0;
-    dst_tmp.device_interface = 0;
+    dst_tmp.device_interface = nullptr;
     dst_tmp.host = nullptr;  // src->host ? (base + src->host) : nullptr;
     dst_tmp.flags = src->flags;
     dst_tmp.type = src->type;
     dst_tmp.dimensions = src->dimensions;
     dst_tmp.dim = src->dim ? (halide_dimension_t *)(base + src->dim) : nullptr;
-    dst_tmp.padding = 0;
+    dst_tmp.padding = nullptr;
 
     dump_hostbuf(wabt_context, &dst_tmp, "dst_tmp");
 
@@ -679,7 +669,7 @@ void copy_wasmbuf_to_existing_hostbuf(WabtContext &wabt_context, wasm32_ptr_t sr
     }
 
     dst->device = 0;
-    dst->device_interface = 0;
+    dst->device_interface = nullptr;
     dst->flags = src->flags;
 
     dump_hostbuf(wabt_context, dst, "dst_post");
@@ -1020,6 +1010,21 @@ WABT_HOST_CALLBACK(memcpy) {
     return wabt::Result::Ok;
 }
 
+WABT_HOST_CALLBACK(memmove) {
+    WabtContext &wabt_context = get_wabt_context(thread);
+
+    const int32_t dst = args[0].Get<int32_t>();
+    const int32_t src = args[1].Get<int32_t>();
+    const int32_t n = args[2].Get<int32_t>();
+
+    uint8_t *base = get_wasm_memory_base(wabt_context);
+
+    memmove(base + dst, base + src, n);
+
+    results[0] = wabt::interp::Value::Make(dst);
+    return wabt::Result::Ok;
+}
+
 WABT_HOST_CALLBACK(memset) {
     WabtContext &wabt_context = get_wabt_context(thread);
 
@@ -1088,6 +1093,7 @@ const HostCallbackMap &get_host_callback_map() {
         DEFINE_CALLBACK(malloc)
         DEFINE_CALLBACK(memcmp)
         DEFINE_CALLBACK(memcpy)
+        DEFINE_CALLBACK(memmove)
         DEFINE_CALLBACK(memset)
         DEFINE_CALLBACK(strlen)
         DEFINE_CALLBACK(write)
@@ -1157,6 +1163,7 @@ struct ExternArgType {
     halide_type_t type;
     bool is_void;
     bool is_buffer;
+    bool is_ucon;
 };
 
 using TrampolineFn = void (*)(void **);
@@ -1180,7 +1187,15 @@ wabt::Result extern_callback_wrapper(const std::vector<ExternArgType> &arg_types
 
     for (size_t i = 0; i < arg_types_len; ++i) {
         const auto &a = arg_types[i + 1];
-        if (a.is_buffer) {
+        if (a.is_ucon) {
+            // We have to special-case ucon because Halide considers it an int64 everywhere
+            // (even for wasm, where pointers are int32), and trying to extract it as an
+            // int64 from a Value that is int32 will assert-fail. In JIT mode the value
+            // doesn't even matter (except for guarding that it is our predicted constant).
+            wassert(args[i].Get<int32_t>() == 0 || args[i].Get<int32_t>() == kMagicJitUserContextValue);
+            store_value(Int(32), args[i], &scalars[i]);
+            trampoline_args[i] = &scalars[i];
+        } else if (a.is_buffer) {
             const wasm32_ptr_t buf_ptr = args[i].Get<int32_t>();
             wasmbuf_to_hostbuf(wabt_context, buf_ptr, buffers[i]);
             trampoline_args[i] = buffers[i].raw_buffer();
@@ -1254,22 +1269,27 @@ wabt::interp::HostFunc::Ptr make_extern_callback(wabt::interp::Store &store,
     if (sig.is_void_return()) {
         const bool is_void = true;
         const bool is_buffer = false;
+        const bool is_ucon = false;
         // Specifying a type here with bits == 0 should trigger a proper 'void' return type
-        arg_types.push_back(ExternArgType{{halide_type_int, 0, 0}, is_void, is_buffer});
+        arg_types.push_back(ExternArgType{{halide_type_int, 0, 0}, is_void, is_buffer, is_ucon});
     } else {
         const Type &t = sig.ret_type();
         const bool is_void = false;
         const bool is_buffer = (t == type_of<halide_buffer_t *>());
+        const bool is_ucon = false;
         user_assert(t.lanes() == 1) << "Halide Extern functions cannot return vector values.";
         user_assert(!is_buffer) << "Halide Extern functions cannot return halide_buffer_t.";
-        arg_types.push_back(ExternArgType{t, is_void, is_buffer});
+        arg_types.push_back(ExternArgType{t, is_void, is_buffer, is_ucon});
     }
     for (size_t i = 0; i < arg_count; ++i) {
         const Type &t = sig.arg_types()[i];
         const bool is_void = false;
         const bool is_buffer = (t == type_of<halide_buffer_t *>());
+        // Since arbitrary pointer args aren't legal for extern calls,
+        // assume that anything that is a void* is a user context.
+        const bool is_ucon = (t == type_of<void *>());
         user_assert(t.lanes() == 1) << "Halide Extern functions cannot accept vector values as arguments.";
-        arg_types.push_back(ExternArgType{t, is_void, is_buffer});
+        arg_types.push_back(ExternArgType{t, is_void, is_buffer, is_ucon});
     }
 
     const auto callback_wrapper =
@@ -1347,7 +1367,7 @@ WasmModuleContents::WasmModuleContents(
       trampolines(JITModule::make_trampolines_module(get_host_target(), jit_externs, kTrampolineSuffix, extern_deps)) {
 
 #if WITH_WABT
-    user_assert(LLVM_VERSION >= 110) << "Using the WebAssembly JIT is only supported under LLVM 11+.";
+    user_assert(!target.has_feature(Target::WasmThreads)) << "wasm_threads requires Emscripten (or a similar compiler); it will never be supported under JIT.";
 
     wdebug(1) << "Compiling wasm function " << fn_name << "\n";
 
@@ -1569,11 +1589,11 @@ WasmModule WasmModule::compile(
 #if !defined(WITH_WABT)
     user_error << "Cannot run JITted WebAssembly without configuring a WebAssembly engine.";
     return WasmModule();
-#endif
-
+#else
     WasmModule wasm_module;
     wasm_module.contents = new WasmModuleContents(module, arguments, fn_name, jit_externs, extern_deps);
     return wasm_module;
+#endif
 }
 
 /** Run generated previously compiled wasm code with a set of arguments. */

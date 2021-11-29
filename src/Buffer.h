@@ -11,6 +11,8 @@ namespace Halide {
 template<typename T = void>
 class Buffer;
 
+struct JITUserContext;
+
 namespace Internal {
 
 struct BufferContents {
@@ -52,7 +54,7 @@ inline std::string get_name_from_end_of_parameter_pack() {
 template<typename First,
          typename Second,
          typename... Args>
-std::string get_name_from_end_of_parameter_pack(First first, Second second, Args &&... rest) {
+std::string get_name_from_end_of_parameter_pack(First first, Second second, Args &&...rest) {
     return get_name_from_end_of_parameter_pack(second, std::forward<Args>(rest)...);
 }
 
@@ -63,13 +65,13 @@ inline void get_shape_from_start_of_parameter_pack_helper(std::vector<int> &) {
 }
 
 template<typename... Args>
-void get_shape_from_start_of_parameter_pack_helper(std::vector<int> &result, int x, Args &&... rest) {
+void get_shape_from_start_of_parameter_pack_helper(std::vector<int> &result, int x, Args &&...rest) {
     result.push_back(x);
     get_shape_from_start_of_parameter_pack_helper(result, std::forward<Args>(rest)...);
 }
 
 template<typename... Args>
-std::vector<int> get_shape_from_start_of_parameter_pack(Args &&... args) {
+std::vector<int> get_shape_from_start_of_parameter_pack(Args &&...args) {
     std::vector<int> result;
     get_shape_from_start_of_parameter_pack_helper(result, std::forward<Args>(args)...);
     return result;
@@ -248,7 +250,7 @@ public:
              typename = typename std::enable_if<Internal::all_ints_and_optional_name<Args...>::value>::type>
     explicit Buffer(Type t,
                     Internal::add_const_if_T_is_const<T, void> *data,
-                    int first, Args &&... rest)
+                    int first, Args &&...rest)
         : Buffer(Runtime::Buffer<T>(t, data, Internal::get_shape_from_start_of_parameter_pack(first, rest...)),
                  Internal::get_name_from_end_of_parameter_pack(rest...)) {
     }
@@ -265,7 +267,7 @@ public:
     template<typename... Args,
              typename = typename std::enable_if<Internal::all_ints_and_optional_name<Args...>::value>::type>
     explicit Buffer(T *data,
-                    int first, Args &&... rest)
+                    int first, Args &&...rest)
         : Buffer(Runtime::Buffer<T>(data, Internal::get_shape_from_start_of_parameter_pack(first, rest...)),
                  Internal::get_name_from_end_of_parameter_pack(rest...)) {
     }
@@ -387,18 +389,18 @@ public:
     // @}
 
     // We forward numerous methods from the underlying Buffer
-#define HALIDE_BUFFER_FORWARD_CONST(method)                                                                                      \
-    template<typename... Args>                                                                                                   \
-    auto method(Args &&... args) const->decltype(std::declval<const Runtime::Buffer<T>>().method(std::forward<Args>(args)...)) { \
-        user_assert(defined()) << "Undefined buffer calling const method " #method "\n";                                         \
-        return get()->method(std::forward<Args>(args)...);                                                                       \
+#define HALIDE_BUFFER_FORWARD_CONST(method)                                                                                     \
+    template<typename... Args>                                                                                                  \
+    auto method(Args &&...args) const->decltype(std::declval<const Runtime::Buffer<T>>().method(std::forward<Args>(args)...)) { \
+        user_assert(defined()) << "Undefined buffer calling const method " #method "\n";                                        \
+        return get()->method(std::forward<Args>(args)...);                                                                      \
     }
 
-#define HALIDE_BUFFER_FORWARD(method)                                                                                \
-    template<typename... Args>                                                                                       \
-    auto method(Args &&... args)->decltype(std::declval<Runtime::Buffer<T>>().method(std::forward<Args>(args)...)) { \
-        user_assert(defined()) << "Undefined buffer calling method " #method "\n";                                   \
-        return get()->method(std::forward<Args>(args)...);                                                           \
+#define HALIDE_BUFFER_FORWARD(method)                                                                               \
+    template<typename... Args>                                                                                      \
+    auto method(Args &&...args)->decltype(std::declval<Runtime::Buffer<T>>().method(std::forward<Args>(args)...)) { \
+        user_assert(defined()) << "Undefined buffer calling method " #method "\n";                                  \
+        return get()->method(std::forward<Args>(args)...);                                                          \
     }
 
 // This is a weird-looking but effective workaround for a deficiency in "perfect forwarding":
@@ -536,12 +538,12 @@ public:
     }
 
     template<typename... Args>
-    auto operator()(int first, Args &&... args) -> decltype(std::declval<Runtime::Buffer<T>>()(first, std::forward<Args>(args)...)) {
+    auto operator()(int first, Args &&...args) -> decltype(std::declval<Runtime::Buffer<T>>()(first, std::forward<Args>(args)...)) {
         return (*get())(first, std::forward<Args>(args)...);
     }
 
     template<typename... Args>
-    auto operator()(int first, Args &&... args) const -> decltype(std::declval<const Runtime::Buffer<T>>()(first, std::forward<Args>(args)...)) {
+    auto operator()(int first, Args &&...args) const -> decltype(std::declval<const Runtime::Buffer<T>>()(first, std::forward<Args>(args)...)) {
         return (*get())(first, std::forward<Args>(args)...);
     }
 
@@ -568,32 +570,32 @@ public:
     Expr operator()(const Expr &first, Args... rest) const {
         std::vector<Expr> args = {first, rest...};
         return (*this)(args);
-    };
+    }
 
     template<typename... Args>
     Expr operator()(const std::vector<Expr> &args) const {
         return buffer_accessor(Buffer<>(*this), args);
-    };
+    }
     // @}
 
     /** Copy to the GPU, using the device API that is the default for the given Target. */
-    int copy_to_device(const Target &t = get_jit_target_from_environment()) {
-        return copy_to_device(DeviceAPI::Default_GPU, t);
+    int copy_to_device(const Target &t = get_jit_target_from_environment(), JITUserContext *context = nullptr) {
+        return copy_to_device(DeviceAPI::Default_GPU, t, context);
     }
 
     /** Copy to the GPU, using the given device API */
-    int copy_to_device(const DeviceAPI &d, const Target &t = get_jit_target_from_environment()) {
-        return contents->buf.copy_to_device(get_device_interface_for_device_api(d, t, "Buffer::copy_to_device"));
+    int copy_to_device(const DeviceAPI &d, const Target &t = get_jit_target_from_environment(), JITUserContext *context = nullptr) {
+        return contents->buf.copy_to_device(get_device_interface_for_device_api(d, t, "Buffer::copy_to_device"), context);
     }
 
     /** Allocate on the GPU, using the device API that is the default for the given Target. */
-    int device_malloc(const Target &t = get_jit_target_from_environment()) {
-        return device_malloc(DeviceAPI::Default_GPU, t);
+    int device_malloc(const Target &t = get_jit_target_from_environment(), JITUserContext *context = nullptr) {
+        return device_malloc(DeviceAPI::Default_GPU, t, context);
     }
 
     /** Allocate storage on the GPU, using the given device API */
-    int device_malloc(const DeviceAPI &d, const Target &t = get_jit_target_from_environment()) {
-        return contents->buf.device_malloc(get_device_interface_for_device_api(d, t, "Buffer::device_malloc"));
+    int device_malloc(const DeviceAPI &d, const Target &t = get_jit_target_from_environment(), JITUserContext *context = nullptr) {
+        return contents->buf.device_malloc(get_device_interface_for_device_api(d, t, "Buffer::device_malloc"), context);
     }
 
     /** Wrap a native handle, using the given device API.
@@ -601,8 +603,8 @@ public:
      * as the handle argument must match the API that the default
      * resolves to and it is clearer and more reliable to pass the
      * resolved DeviceAPI explicitly. */
-    int device_wrap_native(const DeviceAPI &d, uint64_t handle, const Target &t = get_jit_target_from_environment()) {
-        return contents->buf.device_wrap_native(get_device_interface_for_device_api(d, t, "Buffer::device_wrap_native"), handle);
+    int device_wrap_native(const DeviceAPI &d, uint64_t handle, const Target &t = get_jit_target_from_environment(), JITUserContext *context = nullptr) {
+        return contents->buf.device_wrap_native(get_device_interface_for_device_api(d, t, "Buffer::device_wrap_native"), handle, context);
     }
 };
 

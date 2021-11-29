@@ -2,16 +2,16 @@
 #include <memory>
 #include <stdio.h>
 
+using namespace Halide;
+
 int error_occurred = false;
-void halide_error(void *ctx, const char *msg) {
+void halide_error(JITUserContext *ctx, const char *msg) {
     // Emitting "error.*:" to stdout or stderr will cause CMake to report the
     // test as a failure on Windows, regardless of error code returned,
     // hence the abbreviation to "err".
     printf("Saw (Expected) Halide Err: %s\n", msg);
     error_occurred = true;
 }
-
-using namespace Halide;
 
 static void test(int vector_width) {
     Target target = get_jit_target_from_environment();
@@ -36,13 +36,13 @@ static void test(int vector_width) {
     if (target.has_feature(Target::HVX)) {
         f.hexagon();
     }
-    f.set_error_handler(&halide_error);
+    f.jit_handlers().custom_error = halide_error;
 
     // choose values that will fail
     p1.set(1);
     p2.set(2);
     error_occurred = false;
-    result = f.realize(realize_width);
+    result = f.realize({realize_width});
     if (!error_occurred) {
         printf("There should have been a requirement error (vector_width = %d)\n", vector_width);
         exit(1);
@@ -51,7 +51,7 @@ static void test(int vector_width) {
     p1.set(1);
     p2.set(kPrime1 - 1);
     error_occurred = false;
-    result = f.realize(realize_width);
+    result = f.realize({realize_width});
     if (error_occurred) {
         printf("There should not have been a requirement error (vector_width = %d)\n", vector_width);
         exit(1);
@@ -68,7 +68,7 @@ static void test(int vector_width) {
     ImageParam input(Int(32), 2);
     Expr h = require(p1 == p2, p1);
     Func clamped = BoundaryConditions::repeat_edge(input, {{0, 64}, {0, h}});
-    clamped.set_error_handler(&halide_error);
+    clamped.jit_handlers().custom_error = &halide_error;
 
     Buffer<int32_t> input_buf(64, 64);
     input_buf.fill(0);
@@ -77,7 +77,7 @@ static void test(int vector_width) {
     p2.set(15);
 
     error_occurred = false;
-    result = clamped.realize(64, 3);
+    result = clamped.realize({64, 3});
     if (!error_occurred) {
         printf("There should have been a requirement error (vector_width = %d)\n", vector_width);
         exit(1);
@@ -87,7 +87,7 @@ static void test(int vector_width) {
     p2.set(16);
 
     error_occurred = false;
-    result = clamped.realize(64, 3);
+    result = clamped.realize({64, 3});
     if (error_occurred) {
         printf("There should NOT have been a requirement error (vector_width = %d)\n", vector_width);
         exit(1);

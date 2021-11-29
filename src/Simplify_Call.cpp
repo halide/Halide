@@ -17,63 +17,6 @@ using std::vector;
 
 namespace {
 
-// Consider moving these to (say) Util.h if we need them elsewhere.
-int popcount64(uint64_t x) {
-#ifdef _MSC_VER
-#if defined(_WIN64)
-    return __popcnt64(x);
-#else
-    return __popcnt((uint32_t)(x >> 32)) + __popcnt((uint32_t)(x & 0xffffffff));
-#endif
-#else
-    static_assert(sizeof(unsigned long long) >= sizeof(uint64_t), "");
-    return __builtin_popcountll(x);
-#endif
-}
-
-int clz64(uint64_t x) {
-    internal_assert(x != 0);
-#ifdef _MSC_VER
-    unsigned long r = 0;
-#if defined(_WIN64)
-    return _BitScanReverse64(&r, x) ? (63 - r) : 64;
-#else
-    if (_BitScanReverse(&r, (uint32_t)(x >> 32))) {
-        return (63 - (r + 32));
-    } else if (_BitScanReverse(&r, (uint32_t)(x & 0xffffffff))) {
-        return 63 - r;
-    } else {
-        return 64;
-    }
-#endif
-#else
-    static_assert(sizeof(unsigned long long) >= sizeof(uint64_t), "");
-    constexpr int offset = (sizeof(unsigned long long) - sizeof(uint64_t)) * 8;
-    return __builtin_clzll(x) + offset;
-#endif
-}
-
-int ctz64(uint64_t x) {
-    internal_assert(x != 0);
-#ifdef _MSC_VER
-    unsigned long r = 0;
-#if defined(_WIN64)
-    return _BitScanForward64(&r, x) ? r : 64;
-#else
-    if (_BitScanForward(&r, (uint32_t)(x & 0xffffffff))) {
-        return r;
-    } else if (_BitScanForward(&r, (uint32_t)(x >> 32))) {
-        return r + 32;
-    } else {
-        return 64;
-    }
-#endif
-#else
-    static_assert(sizeof(unsigned long long) >= sizeof(uint64_t), "");
-    return __builtin_ctzll(x);
-#endif
-}
-
 // Rewrite name(broadcast(args)) to broadcast(name(args)).
 // Assumes that scalars are implicitly broadcast.
 Expr lift_elementwise_broadcasts(Type type, const std::string &name, std::vector<Expr> args, Call::CallType call_type) {
@@ -110,13 +53,22 @@ Expr Simplify::visit(const Call *op, ExprInfo *bounds) {
         found_buffer_reference(op->name, op->args.size());
     }
 
-    if (op->is_intrinsic(Call::strict_float)) {
-        ScopedValue<bool> save_no_float_simplify(no_float_simplify, true);
-        Expr arg = mutate(op->args[0], nullptr);
-        if (arg.same_as(op->args[0])) {
-            return op;
+    if (op->is_intrinsic(Call::unreachable)) {
+        in_unreachable = true;
+        return op;
+    } else if (op->is_intrinsic(Call::strict_float)) {
+        if (Call::as_intrinsic(op->args[0], {Call::strict_float})) {
+            // Always simplify strict_float(strict_float(x)) -> strict_float(x).
+            Expr arg = mutate(op->args[0], nullptr);
+            return arg.same_as(op->args[0]) ? op->args[0] : arg;
         } else {
-            return strict_float(arg);
+            ScopedValue<bool> save_no_float_simplify(no_float_simplify, true);
+            Expr arg = mutate(op->args[0], nullptr);
+            if (arg.same_as(op->args[0])) {
+                return op;
+            } else {
+                return strict_float(arg);
+            }
         }
     } else if (op->is_intrinsic(Call::popcount) ||
                op->is_intrinsic(Call::count_leading_zeros) ||
@@ -157,6 +109,9 @@ Expr Simplify::visit(const Call *op, ExprInfo *bounds) {
     } else if (op->is_intrinsic(Call::shift_left) ||
                op->is_intrinsic(Call::shift_right)) {
         Expr a = mutate(op->args[0], nullptr);
+        // TODO: When simplifying b, it would be nice to specify the min/max useful bounds, so
+        // stronger simplifications could occur. For example, x >> min(-i8, 0) should be simplified
+        // to x >> -max(i8, 0) and then x << max(i8, 0). This isn't safe because -i8 can overflow.
         ExprInfo b_info;
         Expr b = mutate(op->args[1], &b_info);
 
@@ -188,6 +143,7 @@ Expr Simplify::visit(const Call *op, ExprInfo *bounds) {
             // LLVM shl and shr instructions produce poison for
             // shifts >= typesize, so we will follow suit in our simplifier.
             if (ub >= (uint64_t)(t.bits())) {
+                clear_bounds_info(bounds);
                 return make_signed_integer_overflow(t);
             }
             if (a.type().is_uint() || ub < ((uint64_t)t.bits() - 1)) {
@@ -206,6 +162,15 @@ Expr Simplify::visit(const Call *op, ExprInfo *bounds) {
                 } else {
                     return mutate(select(a < 0, make_const(t, -1), make_zero(t)), bounds);
                 }
+            }
+        }
+
+        // Rewrite shifts with negated RHSes as shifts of the other direction.
+        if (const Sub *sub = b.as<Sub>()) {
+            if (is_const_zero(sub->a)) {
+                result_op = Call::get_intrinsic_name(op->is_intrinsic(Call::shift_right) ? Call::shift_left : Call::shift_right);
+                b = sub->b;
+                return mutate(Call::make(op->type, result_op, {a, b}, Call::PureIntrinsic), bounds);
             }
         }
 
@@ -240,6 +205,9 @@ Expr Simplify::visit(const Call *op, ExprInfo *bounds) {
             return Mod::make(a, make_const(a.type(), ib + 1));
         } else if (const_uint(b, &ub) &&
                    b.type().is_max(ub)) {
+            return a;
+        } else if (const_int(b, &ib) &&
+                   ib == -1) {
             return a;
         } else if (const_uint(b, &ub) &&
                    is_const_power_of_two_integer(make_const(a.type(), ub + 1), &bits)) {
@@ -405,9 +373,9 @@ Expr Simplify::visit(const Call *op, ExprInfo *bounds) {
         bool changed = false;
         vector<Expr> new_args;
         const StringImm *last = nullptr;
-        for (size_t i = 0; i < op->args.size(); i++) {
-            Expr arg = mutate(op->args[i], nullptr);
-            if (!arg.same_as(op->args[i])) {
+        for (const auto &a : op->args) {
+            Expr arg = mutate(a, nullptr);
+            if (!arg.same_as(a)) {
                 changed = true;
             }
             const StringImm *string_imm = arg.as<StringImm>();
@@ -454,16 +422,9 @@ Expr Simplify::visit(const Call *op, ExprInfo *bounds) {
         // Collapse the prefetched region into lower dimension whenever is possible.
         // TODO(psuriana): Deal with negative strides and overlaps.
 
-        internal_assert(op->args.size() % 2 == 0);  // Format: {base, offset, extent0, min0, ...}
+        internal_assert(op->args.size() % 2 == 0);  // Prefetch: {base, offset, extent0, stride0, ...}
 
-        vector<Expr> args(op->args);
-        bool changed = false;
-        for (size_t i = 0; i < op->args.size(); ++i) {
-            args[i] = mutate(op->args[i], nullptr);
-            if (!args[i].same_as(op->args[i])) {
-                changed = true;
-            }
-        }
+        auto [args, changed] = mutate_with_changes(op->args, nullptr);
 
         // The {extent, stride} args in the prefetch call are sorted
         // based on the storage dimension in ascending order (i.e. innermost
@@ -545,6 +506,11 @@ Expr Simplify::visit(const Call *op, ExprInfo *bounds) {
         Expr arg = mutate(op->args[0], &arg_info);
         Expr lower = mutate(op->args[1], &lower_info);
         Expr upper = mutate(op->args[2], &upper_info);
+
+        const Broadcast *b_arg = arg.as<Broadcast>();
+        const Broadcast *b_lower = lower.as<Broadcast>();
+        const Broadcast *b_upper = upper.as<Broadcast>();
+
         if (arg_info.min_defined &&
             arg_info.max_defined &&
             lower_info.max_defined &&
@@ -552,17 +518,23 @@ Expr Simplify::visit(const Call *op, ExprInfo *bounds) {
             arg_info.min >= lower_info.max &&
             arg_info.max <= upper_info.min) {
             return arg;
+        } else if (b_arg && b_lower && b_upper) {
+            // Move broadcasts outwards
+            return Broadcast::make(Call::make(b_arg->value.type(), op->name,
+                                              {b_arg->value, b_lower->value, b_upper->value},
+                                              Call::Intrinsic),
+                                   b_arg->lanes);
         } else if (arg.same_as(op->args[0]) &&
                    lower.same_as(op->args[1]) &&
                    upper.same_as(op->args[2])) {
             return op;
+
         } else {
             return Call::make(op->type, op->name,
                               {arg, lower, upper},
                               Call::Intrinsic);
         }
-    } else if (op->is_intrinsic(Call::likely) ||
-               op->is_intrinsic(Call::likely_if_innermost)) {
+    } else if (Call::as_tag(op)) {
         // The bounds of the result are the bounds of the arg
         internal_assert(op->args.size() == 1);
         Expr arg = mutate(op->args[0], bounds);
@@ -575,35 +547,91 @@ Expr Simplify::visit(const Call *op, ExprInfo *bounds) {
         // Note that this call promises to evaluate exactly one of the conditions,
         // so this optimization should be safe.
 
-        internal_assert(op->args.size() == 3);
+        internal_assert(op->args.size() == 2 || op->args.size() == 3);
         Expr cond_value = mutate(op->args[0], nullptr);
 
-        // Ignore likelies for our purposes here
-        Expr cond = cond_value;
-        if (const Call *c = cond.as<Call>()) {
-            if (c->is_intrinsic(Call::likely) ||
-                op->is_intrinsic(Call::likely_if_innermost)) {
-                cond = c->args[0];
-            }
+        // Ignore tags for our purposes here
+        Expr cond = unwrap_tags(cond_value);
+        if (in_unreachable) {
+            return op;
         }
 
         if (is_const_one(cond)) {
             return mutate(op->args[1], bounds);
         } else if (is_const_zero(cond)) {
-            return mutate(op->args[2], bounds);
+            if (op->args.size() == 3) {
+                return mutate(op->args[2], bounds);
+            } else {
+                return mutate(make_zero(op->type), bounds);
+            }
         } else {
             Expr true_value = mutate(op->args[1], nullptr);
-            Expr false_value = mutate(op->args[2], nullptr);
+            bool true_unreachable = in_unreachable;
+            in_unreachable = false;
+            Expr false_value = op->args.size() == 3 ? mutate(op->args[2], nullptr) : Expr();
+            bool false_unreachable = in_unreachable;
+
+            if (true_unreachable && false_unreachable) {
+                return true_value;
+            }
+            in_unreachable = false;
+            if (true_unreachable) {
+                return false_value;
+            } else if (false_unreachable) {
+                return true_value;
+            }
+
             if (cond_value.same_as(op->args[0]) &&
                 true_value.same_as(op->args[1]) &&
-                false_value.same_as(op->args[2])) {
+                (op->args.size() == 2 || false_value.same_as(op->args[2]))) {
                 return op;
             } else {
-                return Internal::Call::make(op->type,
-                                            Call::if_then_else,
-                                            {std::move(cond_value), std::move(true_value), std::move(false_value)},
-                                            op->call_type);
+                vector<Expr> args = {std::move(cond_value), std::move(true_value)};
+                if (op->args.size() == 3) {
+                    args.push_back(std::move(false_value));
+                }
+                return Internal::Call::make(op->type, Call::if_then_else, args, op->call_type);
             }
+        }
+    } else if (op->is_intrinsic(Call::mux)) {
+        internal_assert(op->args.size() >= 2);
+        int num_values = (int)op->args.size() - 1;
+        if (num_values == 1) {
+            // Mux of a single value
+            return mutate(op->args[1], bounds);
+        }
+        ExprInfo index_info;
+        Expr index = mutate(op->args[0], &index_info);
+
+        // Check if the mux has statically resolved
+        if (index_info.min_defined &&
+            index_info.max_defined &&
+            index_info.min == index_info.max) {
+            if (index_info.min >= 0 && index_info.min < num_values) {
+                // In-range, return the (simplified) corresponding value.
+                return mutate(op->args[index_info.min + 1], bounds);
+            } else {
+                // It's out-of-range, so return the last value.
+                return mutate(op->args.back(), bounds);
+            }
+        }
+
+        // The logic above could be extended to also truncate the
+        // range of values in the case where the mux index has a
+        // constant bound. This seems unlikely to ever come up though.
+
+        bool unchanged = index.same_as(op->args[0]);
+        vector<Expr> mutated_args(op->args.size());
+        mutated_args[0] = index;
+        for (size_t i = 1; i < op->args.size(); ++i) {
+            mutated_args[i] = mutate(op->args[i], nullptr);
+            unchanged &= mutated_args[i].same_as(op->args[i]);
+        }
+
+        if (unchanged) {
+            return op;
+        } else {
+            return Call::make(op->type, Call::mux, mutated_args, Call::PureIntrinsic);
         }
     } else if (op->call_type == Call::PureExtern) {
         // TODO: This could probably be simplified into a single map-lookup
@@ -747,23 +775,13 @@ Expr Simplify::visit(const Call *op, ExprInfo *bounds) {
         // There are other PureExterns we don't bother with (e.g. fast_inverse_f32)...
         // just fall thru and take the general case.
         debug(2) << "Simplifier: unhandled PureExtern: " << op->name;
+    } else if (op->is_intrinsic(Call::signed_integer_overflow)) {
+        clear_bounds_info(bounds);
     }
 
     // No else: we want to fall thru from the PureExtern clause.
     {
-        vector<Expr> new_args(op->args.size());
-        bool changed = false;
-
-        // Mutate the args
-        for (size_t i = 0; i < op->args.size(); i++) {
-            const Expr &old_arg = op->args[i];
-            Expr new_arg = mutate(old_arg, nullptr);
-            if (!new_arg.same_as(old_arg)) {
-                changed = true;
-            }
-            new_args[i] = std::move(new_arg);
-        }
-
+        auto [new_args, changed] = mutate_with_changes(op->args, nullptr);
         if (!changed) {
             return op;
         } else {

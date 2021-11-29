@@ -2,6 +2,7 @@
 #include "IREquality.h"
 #include "IRMutator.h"
 #include "IROperator.h"
+#include "IRVisitor.h"
 #include "Scope.h"
 #include "Var.h"
 #include <sstream>
@@ -130,20 +131,25 @@ class FindFreeVars : public IRVisitor {
         }
     }
 
+    template<typename T>
+    void visit_let(const T *op) {
+        vector<ScopedBinding<>> frame;
+        decltype(op->body) body;
+        do {
+            op->value.accept(this);
+            frame.emplace_back(scope, op->name);
+            body = op->body;
+            op = body.template as<T>();
+        } while (op);
+        body.accept(this);
+    }
+
     void visit(const Let *op) override {
-        op->value.accept(this);
-        {
-            ScopedBinding<> bind(scope, op->name);
-            op->body.accept(this);
-        }
+        visit_let(op);
     }
 
     void visit(const LetStmt *op) override {
-        op->value.accept(this);
-        {
-            ScopedBinding<> bind(scope, op->name);
-            op->body.accept(this);
-        }
+        visit_let(op);
     }
 
     void visit(const For *op) override {
@@ -242,7 +248,7 @@ void uniquify_variable_names_test() {
           {{x, Let::make(y.name(), 3, y)},
            {x_1, Let::make(y.name(), 4, y)}});
 
-    std::cout << "is_monotonic test passed" << std::endl;
+    std::cout << "uniquify_variable_names test passed" << std::endl;
 }
 
 }  // namespace Internal

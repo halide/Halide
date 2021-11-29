@@ -3,6 +3,7 @@
 #include "Function.h"
 #include "IRMutator.h"
 #include "IROperator.h"
+#include "IRVisitor.h"
 #include "Param.h"
 #include "Scope.h"
 #include "Util.h"
@@ -26,14 +27,14 @@ public:
         if (function.has_extern_definition()) {
             const std::vector<ExternFuncArgument> &extern_args =
                 function.extern_arguments();
-            for (size_t i = 0; i < extern_args.size(); i++) {
-                if (extern_args[i].is_buffer()) {
+            for (const auto &extern_arg : extern_args) {
+                if (extern_arg.is_buffer()) {
                     // Function with an extern definition
-                    record(Halide::Internal::Parameter(extern_args[i].buffer.type(), true,
-                                                       extern_args[i].buffer.dimensions(),
-                                                       extern_args[i].buffer.name()));
-                } else if (extern_args[i].is_image_param()) {
-                    record(extern_args[i].image_param);
+                    record(Halide::Internal::Parameter(extern_arg.buffer.type(), true,
+                                                       extern_arg.buffer.dimensions(),
+                                                       extern_arg.buffer.name()));
+                } else if (extern_arg.is_image_param()) {
+                    record(extern_arg.image_param);
                 }
             }
         }
@@ -214,7 +215,7 @@ public:
     // for the target function. Make sure it takes 4 bytes in cache key.
     Expr key_size() {
         return cast<int32_t>(key_size_expr);
-    };
+    }
 
     // Code to fill in the Allocation named key_name with the byte of
     // the key. The Allocation is guaranteed to be 1d, of type uint8_t

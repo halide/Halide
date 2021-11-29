@@ -72,9 +72,9 @@ string get_sanitized_name(string name) {
     if (isdigit(name[0])) {
         name = "_" + name;
     }
-    for (size_t i = 0; i < name.size(); ++i) {
-        if (!isalnum(name[i])) {
-            name[i] = '_';
+    for (char &c : name) {
+        if (!isalnum(c)) {
+            c = '_';
         }
     }
     return name;
@@ -811,14 +811,16 @@ struct AutoSchedule {
                 }
             }
 
-            for (const auto &s : f.second) {
-                internal_assert(!s.second.empty());
+            for (const auto &m : f.second) {
+                const int stage = m.first;
+                const vector<string> &schedules = m.second;
+                internal_assert(!schedules.empty());
                 schedule_ss << "    " << fname;
-                if (s.first > 0) {
-                    schedule_ss << ".update(" << std::to_string(s.first - 1) << ")";
+                if (stage > 0) {
+                    schedule_ss << ".update(" << std::to_string(stage - 1) << ")";
                 }
-                for (size_t i = 0; i < s.second.size(); ++i) {
-                    schedule_ss << "\n        ." << s.second[i];
+                for (const std::string &s : schedules) {
+                    schedule_ss << "\n        ." << s;
                 }
                 schedule_ss << ";\n";
             }
@@ -1632,7 +1634,7 @@ void Partitioner::group(Partitioner::Level level) {
         Cost pre_merge = get_pipeline_cost();
 
         fixpoint = true;
-        vector<pair<string, string>> cand;
+        vector<pair<string, string>> candidates;
         for (const pair<const FStage, Group> &g : groups) {
             bool is_output = false;
             for (const Function &f : outputs) {
@@ -1670,10 +1672,10 @@ void Partitioner::group(Partitioner::Level level) {
                 if ((num_children == 1) && (level == Partitioner::Level::FastMem)) {
                     const string &prod_name = prod_f.name();
                     const string &cons_name = (*child_groups.begin());
-                    cand.emplace_back(prod_name, cons_name);
+                    candidates.emplace_back(prod_name, cons_name);
                 } else if ((level == Partitioner::Level::Inline) && prod_f.is_pure()) {
                     const string &prod_name = prod_f.name();
-                    cand.emplace_back(prod_name, "");
+                    candidates.emplace_back(prod_name, "");
                 }
             }
         }
@@ -1681,11 +1683,11 @@ void Partitioner::group(Partitioner::Level level) {
         debug(3) << "\n============================\n"
                  << "Current grouping candidates:\n"
                  << "============================\n";
-        for (size_t i = 0; i < cand.size(); ++i) {
-            debug(3) << "{" << cand[i].first << ", " << cand[i].second << "}\n";
+        for (auto &c : candidates) {
+            debug(3) << "{" << c.first << ", " << c.second << "}\n";
         }
 
-        vector<pair<GroupingChoice, GroupConfig>> best = choose_candidate_grouping(cand, level);
+        vector<pair<GroupingChoice, GroupConfig>> best = choose_candidate_grouping(candidates, level);
         if (best.empty()) {
             continue;
         } else {
@@ -1911,8 +1913,8 @@ Partitioner::GroupAnalysis Partitioner::analyze_group(const Group &g, bool show_
     Box out_tile_extent;
     if (g.output.stage_num == 0) {
         const vector<string> &args = g.output.func.args();
-        for (size_t d = 0; d < args.size(); d++) {
-            const auto &iter = tile_bounds.find(args[d]);
+        for (const auto &arg : args) {
+            const auto &iter = tile_bounds.find(arg);
             if (iter != tile_bounds.end()) {
                 out_tile_extent.push_back(iter->second);
             } else {
@@ -1957,7 +1959,7 @@ Partitioner::GroupAnalysis Partitioner::analyze_group(const Group &g, bool show_
     float load_slope = arch_params.balance / arch_params.last_level_cache_size;
     for (const auto &f_load : group_load_costs) {
         internal_assert(g.inlined.find(f_load.first) == g.inlined.end())
-            << "Intermediates of inlined pure fuction \"" << f_load.first
+            << "Intermediates of inlined pure function \"" << f_load.first
             << "\" should not have been in the group_load_costs\n";
 
         const auto &alloc_reg = get_element(alloc_regions, f_load.first);

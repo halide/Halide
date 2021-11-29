@@ -45,7 +45,7 @@ int simple_rfactor_test(bool compile_module) {
             return -1;
         }
     } else {
-        Buffer<int> im = g.realize(80, 80);
+        Buffer<int> im = g.realize({80, 80});
         auto func = [](int x, int y, int z) {
             return (10 <= x && x <= 29) && (30 <= y && y <= 69) ? std::max(40 + x + y, 40) : 40;
         };
@@ -94,7 +94,7 @@ int reorder_split_rfactor_test(bool compile_module) {
             return -1;
         }
     } else {
-        Buffer<int> im = g.realize(80, 80);
+        Buffer<int> im = g.realize({80, 80});
         auto func = [](int x, int y, int z) {
             return ((10 <= x && x <= 29) && (20 <= y && y <= 49)) ? x - y + 1 : 1;
         };
@@ -146,7 +146,7 @@ int multi_split_rfactor_test(bool compile_module) {
             return -1;
         }
     } else {
-        Buffer<int> im = g.realize(80, 80);
+        Buffer<int> im = g.realize({80, 80});
         auto func = [](int x, int y, int z) {
             return ((10 <= x && x <= 29) && (20 <= y && y <= 49)) ? x - y + 1 : 1;
         };
@@ -197,7 +197,7 @@ int reorder_fuse_wrapper_rfactor_test(bool compile_module) {
             return -1;
         }
     } else {
-        Buffer<int> im = g.realize(20, 20, 20);
+        Buffer<int> im = g.realize({20, 20, 20});
         auto func = [](int x, int y, int z) {
             return ((5 <= x && x <= 14) && (5 <= y && y <= 14) &&
                     (5 <= z && z <= 14)) ?
@@ -236,7 +236,7 @@ int non_trivial_lhs_rfactor_test(bool compile_module) {
         f.compute_root();
 
         g(x, y, z) = 2 * f(x, y);
-        im_ref = g.realize(20, 20, 20);
+        im_ref = g.realize({20, 20, 20});
     }
 
     {
@@ -273,7 +273,7 @@ int non_trivial_lhs_rfactor_test(bool compile_module) {
                 return -1;
             }
         } else {
-            Buffer<int> im = g.realize(20, 20, 20);
+            Buffer<int> im = g.realize({20, 20, 20});
             auto func = [im_ref](int x, int y, int z) {
                 return im_ref(x, y, z);
             };
@@ -321,7 +321,7 @@ int simple_rfactor_with_specialize_test(bool compile_module) {
     } else {
         {
             p.set(0);
-            Buffer<int> im = g.realize(80, 80);
+            Buffer<int> im = g.realize({80, 80});
             auto func = [](int x, int y, int z) {
                 return (10 <= x && x <= 29) && (30 <= y && y <= 69) ? std::min(x + y + 2, 40) : 40;
             };
@@ -331,7 +331,7 @@ int simple_rfactor_with_specialize_test(bool compile_module) {
         }
         {
             p.set(20);
-            Buffer<int> im = g.realize(80, 80);
+            Buffer<int> im = g.realize({80, 80});
             auto func = [](int x, int y, int z) {
                 return (10 <= x && x <= 29) && (30 <= y && y <= 69) ? std::min(x + y + 2, 40) : 40;
             };
@@ -378,7 +378,7 @@ int rdom_with_predicate_rfactor_test(bool compile_module) {
             return -1;
         }
     } else {
-        Buffer<int> im = g.realize(20, 20, 20);
+        Buffer<int> im = g.realize({20, 20, 20});
         auto func = [](int x, int y, int z) {
             return (5 <= x && x <= 14) && (5 <= y && y <= 14) &&
                            (0 <= z && z <= 19) && (x < y) && (x + 2 * y <= z) ?
@@ -440,7 +440,7 @@ int histogram_rfactor_test(bool compile_module) {
             return -1;
         }
     } else {
-        Buffer<int32_t> histogram = g.realize(10);  // buckets 10-20 only
+        Buffer<int32_t> histogram = g.realize({10});  // buckets 10-20 only
         for (int i = 10; i < 20; i++) {
             if (histogram(i - 10) != reference_hist[i]) {
                 printf("Error: bucket %d is %d instead of %d\n",
@@ -529,7 +529,7 @@ int tuple_rfactor_test(bool compile_module) {
     Func ref("ref");
     ref(x, y) = Tuple(1, 3);
     ref(x, y) = Tuple(ref(x, y)[0] + f(r.x, r.y)[0] + 3, min(ref(x, y)[1], f(r.x, r.y)[1]));
-    Realization ref_rn = ref.realize(80, 80);
+    Realization ref_rn = ref.realize({80, 80});
 
     g(x, y) = Tuple(1, 3);
     g(x, y) = Tuple(g(x, y)[0] + f(r.x, r.y)[0] + 3, min(g(x, y)[1], f(r.x, r.y)[1]));
@@ -567,7 +567,7 @@ int tuple_rfactor_test(bool compile_module) {
             return -1;
         }
     } else {
-        Realization rn = g.realize(80, 80);
+        Realization rn = g.realize({80, 80});
         Buffer<int> im1(rn[0]);
         Buffer<int> im2(rn[1]);
 
@@ -605,7 +605,7 @@ int tuple_specialize_rdom_predicate_rfactor_test(bool compile_module) {
     Func ref("ref");
     ref(x, y) = Tuple(1, 3);
     ref(x, y) = Tuple(ref(x, y)[0] * f(r.x, r.y, r.z)[0], ref(x, y)[1] + 2 * f(r.x, r.y, r.z)[1]);
-    Realization ref_rn = ref.realize(10, 10);
+    Realization ref_rn = ref.realize({10, 10});
 
     g(x, y) = Tuple(1, 3);
 
@@ -648,7 +648,7 @@ int tuple_specialize_rdom_predicate_rfactor_test(bool compile_module) {
         {
             p.set(10);
             q.set(true);
-            Realization rn = g.realize(10, 10);
+            Realization rn = g.realize({10, 10});
             Buffer<int> im1(rn[0]);
             Buffer<int> im2(rn[1]);
 
@@ -671,7 +671,7 @@ int tuple_specialize_rdom_predicate_rfactor_test(bool compile_module) {
         {
             p.set(10);
             q.set(false);
-            Realization rn = g.realize(10, 10);
+            Realization rn = g.realize({10, 10});
             Buffer<int> im1(rn[0]);
             Buffer<int> im2(rn[1]);
 
@@ -694,7 +694,7 @@ int tuple_specialize_rdom_predicate_rfactor_test(bool compile_module) {
         {
             p.set(0);
             q.set(true);
-            Realization rn = g.realize(10, 10);
+            Realization rn = g.realize({10, 10});
             Buffer<int> im1(rn[0]);
             Buffer<int> im2(rn[1]);
 
@@ -717,7 +717,7 @@ int tuple_specialize_rdom_predicate_rfactor_test(bool compile_module) {
         {
             p.set(0);
             q.set(false);
-            Realization rn = g.realize(10, 10);
+            Realization rn = g.realize({10, 10});
             Buffer<int> im1(rn[0]);
             Buffer<int> im2(rn[1]);
 
@@ -769,10 +769,10 @@ int complex_multiply_rfactor_test() {
     intm.compute_root();
     intm.update(0).vectorize(u, 2);
 
-    Realization ref_rn = ref.realize(80, 80);
+    Realization ref_rn = ref.realize({80, 80});
     Buffer<int> ref_im1(ref_rn[0]);
     Buffer<int> ref_im2(ref_rn[1]);
-    Realization rn = g.realize(80, 80);
+    Realization rn = g.realize({80, 80});
     Buffer<int> im1(rn[0]);
     Buffer<int> im2(rn[1]);
 
@@ -856,7 +856,7 @@ int argmin_rfactor_test() {
     return 0;
 }
 
-int allocation_bound_test_trace(void *user_context, const halide_trace_event_t *e) {
+int allocation_bound_test_trace(JITUserContext *user_context, const halide_trace_event_t *e) {
     // The schedule implies that f will be stored from 0 to 1
     if (e->event == 2 && std::string(e->func) == "f") {
         if (e->coordinates[1] != 2) {
@@ -884,8 +884,8 @@ int check_allocation_bound_test() {
     g.update(0).rfactor({{rxo, u}}).compute_at(g, rxo);
 
     f.trace_realizations();
-    g.set_custom_trace(allocation_bound_test_trace);
-    g.realize(23);
+    g.jit_handlers().custom_trace = allocation_bound_test_trace;
+    g.realize({23});
 
     return 0;
 }
@@ -918,8 +918,8 @@ int rfactor_tile_reorder_test() {
         .parallel(u)
         .parallel(v);
 
-    Buffer<int> im_ref = ref.realize(8);
-    Buffer<int> im = f.realize(8);
+    Buffer<int> im_ref = ref.realize({8});
+    Buffer<int> im = f.realize({8});
     auto func = [&im_ref](int x, int y) {
         return im_ref(x, y);
     };
@@ -942,7 +942,7 @@ int tuple_partial_reduction_rfactor_test(bool compile_module) {
     Func ref("ref");
     ref(x, y) = Tuple(1, 3);
     ref(x, y) = Tuple(ref(x, y)[0] + f(r.x, r.y)[0] + 3, ref(x, y)[1]);
-    Realization ref_rn = ref.realize(80, 80);
+    Realization ref_rn = ref.realize({80, 80});
 
     g(x, y) = Tuple(1, 3);
     g(x, y) = Tuple(g(x, y)[0] + f(r.x, r.y)[0] + 3, g(x, y)[1]);
@@ -980,7 +980,7 @@ int tuple_partial_reduction_rfactor_test(bool compile_module) {
             return -1;
         }
     } else {
-        Realization rn = g.realize(80, 80);
+        Realization rn = g.realize({80, 80});
         Buffer<int> im1(rn[0]);
         Buffer<int> im2(rn[1]);
 
@@ -1016,7 +1016,7 @@ int self_assignment_rfactor_test() {
     Func intm = g.update(0).rfactor(r.y, u);
     intm.compute_root();
 
-    Buffer<int> im = g.realize(10, 10);
+    Buffer<int> im = g.realize({10, 10});
     auto func = [](int x, int y, int z) {
         return x + y;
     };

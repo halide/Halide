@@ -172,6 +172,15 @@ Target calculate_host_target() {
             }
             if ((info2[1] & avx512_cannonlake) == avx512_cannonlake) {
                 initial_features.push_back(Target::AVX512_Cannonlake);
+
+                const uint32_t avx512vnni = 1U << 11;  // vnni result in ecx
+                const uint32_t avx512bf16 = 1U << 5;   // bf16 result in eax, with cpuid(eax=7, ecx=1)
+                int info3[4];
+                cpuid(info3, 7, 1);
+                if ((info2[2] & avx512vnni) == avx512vnni &&
+                    (info3[0] & avx512bf16) == avx512bf16) {
+                    initial_features.push_back(Target::AVX512_SapphireRapids);
+                }
             }
         }
     }
@@ -245,8 +254,10 @@ Target::Feature calculate_host_cuda_capability(Target t) {
         return Target::CUDACapability70;
     } else if (ver < 80) {
         return Target::CUDACapability75;
-    } else {
+    } else if (ver < 86 || LLVM_VERSION < 130) {
         return Target::CUDACapability80;
+    } else {
+        return Target::CUDACapability86;
     }
 }
 
@@ -320,11 +331,11 @@ const std::map<std::string, Target::Feature> feature_name_map = {
     {"cuda_capability_70", Target::CUDACapability70},
     {"cuda_capability_75", Target::CUDACapability75},
     {"cuda_capability_80", Target::CUDACapability80},
+    {"cuda_capability_86", Target::CUDACapability86},
     {"opencl", Target::OpenCL},
     {"cl_doubles", Target::CLDoubles},
     {"cl_half", Target::CLHalf},
     {"cl_atomics64", Target::CLAtomics64},
-    {"opengl", Target::OpenGL},
     {"openglcompute", Target::OpenGLCompute},
     {"egl", Target::EGL},
     {"user_context", Target::UserContext},
@@ -347,6 +358,7 @@ const std::map<std::string, Target::Feature> feature_name_map = {
     {"avx512_knl", Target::AVX512_KNL},
     {"avx512_skylake", Target::AVX512_Skylake},
     {"avx512_cannonlake", Target::AVX512_Cannonlake},
+    {"avx512_sapphirerapids", Target::AVX512_SapphireRapids},
     {"trace_loads", Target::TraceLoads},
     {"trace_stores", Target::TraceStores},
     {"trace_realizations", Target::TraceRealizations},
@@ -368,7 +380,10 @@ const std::map<std::string, Target::Feature> feature_name_map = {
     {"sve", Target::SVE},
     {"sve2", Target::SVE2},
     {"arm_dot_prod", Target::ARMDotProd},
+    {"arm_fp16", Target::ARMFp16},
     {"llvm_large_code_model", Target::LLVMLargeCodeModel},
+    {"rvv", Target::RVV},
+    {"armv81a", Target::ARMv81a},
     {"vulkan", Target::Vulkan},
     // NOTE: When adding features to this map, be sure to update PyEnums.cpp as well.
 };
@@ -483,7 +498,8 @@ bool merge_string(Target &t, const std::string &target) {
         !t.has_feature(Target::CUDACapability61) &&
         !t.has_feature(Target::CUDACapability70) &&
         !t.has_feature(Target::CUDACapability75) &&
-        !t.has_feature(Target::CUDACapability80)) {
+        !t.has_feature(Target::CUDACapability80) &&
+        !t.has_feature(Target::CUDACapability86)) {
         // Detect host cuda capability
         t.set_feature(get_host_cuda_capability(t));
     }
@@ -655,8 +671,8 @@ bool Target::supported() const {
 #if !defined(WITH_METAL)
     bad |= has_feature(Target::Metal);
 #endif
-#if !defined(WITH_OPENGL)
-    bad |= has_feature(Target::OpenGL) || has_feature(Target::OpenGLCompute);
+#if !defined(WITH_OPENGLCOMPUTE)
+    bad |= has_feature(Target::OpenGLCompute);
 #endif
 #if !defined(WITH_D3D12)
     bad |= has_feature(Target::D3D12Compute);
@@ -760,6 +776,9 @@ int Target::get_cuda_capability_lower_bound() const {
     if (has_feature(Target::CUDACapability80)) {
         return 80;
     }
+    if (has_feature(Target::CUDACapability86)) {
+        return 86;
+    }
     return 20;
 }
 
@@ -767,14 +786,12 @@ bool Target::supports_type(const Type &t) const {
     if (t.bits() == 64) {
         if (t.is_float()) {
             return !has_feature(Metal) &&
-                   !has_feature(OpenGL) &&
                    !has_feature(OpenGLCompute) &&
                    !has_feature(D3D12Compute) &&
                    (!has_feature(Target::OpenCL) || has_feature(Target::CLDoubles));
         } else {
             return (!has_feature(Metal) &&
                     !has_feature(OpenGLCompute) &&
-                    !has_feature(OpenGL) &&
                     !has_feature(D3D12Compute));
         }
     }
@@ -850,9 +867,6 @@ DeviceAPI Target::get_required_device_api() const {
     if (has_feature(Target::OpenCL)) {
         return DeviceAPI::OpenCL;
     }
-    if (has_feature(Target::OpenGL)) {
-        return DeviceAPI::GLSL;
-    }
     if (has_feature(Target::OpenGLCompute)) {
         return DeviceAPI::OpenGLCompute;
     }
@@ -868,8 +882,6 @@ Target::Feature target_feature_for_device_api(DeviceAPI api) {
         return Target::CUDA;
     case DeviceAPI::OpenCL:
         return Target::OpenCL;
-    case DeviceAPI::GLSL:
-        return Target::OpenGL;
     case DeviceAPI::OpenGLCompute:
         return Target::OpenGLCompute;
     case DeviceAPI::Metal:
@@ -928,10 +940,6 @@ int Target::natural_vector_size(const Halide::Type &t) const {
         }
     } else if (arch == Target::WebAssembly) {
         if (has_feature(Halide::Target::WasmSimd128)) {
-            if (t.bits() == 64) {
-                // int64 and float64 aren't supported in simd128.
-                return 1;
-            }
             // 128-bit vectors for other types.
             return 16 / data_size;
         } else {
@@ -958,7 +966,6 @@ bool Target::get_runtime_compatible_target(const Target &other, Target &result) 
         Metal,
         NoNEON,
         OpenCL,
-        OpenGL,
         OpenGLCompute,
         Vulkan,
 
@@ -972,6 +979,7 @@ bool Target::get_runtime_compatible_target(const Target &other, Target &result) 
         CUDACapability70,
         CUDACapability75,
         CUDACapability80,
+        CUDACapability86,
         HVX_v62,
         HVX_v65,
         HVX_v66,
@@ -979,13 +987,15 @@ bool Target::get_runtime_compatible_target(const Target &other, Target &result) 
     // clang-format on
 
     // clang-format off
-    const std::array<Feature, 12> intersection_features = {{
+    const std::array<Feature, 14> intersection_features = {{
         ARMv7s,
+        ARMv81a,
         AVX,
         AVX2,
         AVX512,
         AVX512_Cannonlake,
         AVX512_KNL,
+        AVX512_SapphireRapids,
         AVX512_Skylake,
         F16C,
         FMA,
@@ -1078,6 +1088,9 @@ bool Target::get_runtime_compatible_target(const Target &other, Target &result) 
     if (cuda_capability < 80) {
         output.features.reset(CUDACapability80);
     }
+    if (cuda_capability < 86) {
+        output.features.reset(CUDACapability86);
+    }
 
     // Pick tight lower bound for HVX version. Use fall-through to clear redundant features
     int hvx_a = get_hvx_lower_bound(*this);
@@ -1119,7 +1132,6 @@ void target_test() {
         {{"x86-64-linux-cuda", "x86-64-linux", "x86-64-linux-cuda"}},
         {{"x86-64-linux-cuda-cuda_capability_50", "x86-64-linux-cuda", "x86-64-linux-cuda"}},
         {{"x86-64-linux-cuda-cuda_capability_50", "x86-64-linux-cuda-cuda_capability_30", "x86-64-linux-cuda-cuda_capability_30"}},
-        {{"x86-64-linux-cuda", "x86-64-linux-opengl", "x86-64-linux-cuda-opengl"}},
         {{"hexagon-32-qurt-hvx_v65", "hexagon-32-qurt-hvx_v62", "hexagon-32-qurt-hvx_v62"}},
         {{"hexagon-32-qurt-hvx_v62", "hexagon-32-qurt", "hexagon-32-qurt"}},
         {{"hexagon-32-qurt-hvx_v62-hvx", "hexagon-32-qurt", ""}},

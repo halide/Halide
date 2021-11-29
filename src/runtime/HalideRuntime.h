@@ -62,9 +62,9 @@ extern "C" {
  * replaced with user-defined versions by defining an extern "C"
  * function with the same name and signature.
  *
- * When doing Just In Time (JIT) compilation methods on the Func being
- * compiled must be called instead. The corresponding methods are
- * documented below.
+ * When doing Just In Time (JIT) compilation members of
+ * some_pipeline_or_func.jit_handlers() must be replaced instead. The
+ * corresponding methods are documented below.
  *
  * All of these functions take a "void *user_context" parameter as their
  * first argument; if the Halide kernel that calls back to any of these
@@ -187,7 +187,7 @@ typedef bool (*halide_semaphore_try_acquire_t)(struct halide_semaphore_t *, int)
 
 /** A task representing a serial for loop evaluated over some range.
  * Note that task_parent is a pass through argument that should be
- * passed to any dependent taks that are invokved using halide_do_parallel_tasks
+ * passed to any dependent taks that are invoked using halide_do_parallel_tasks
  * underneath this call. */
 typedef int (*halide_loop_task_t)(void *user_context, int min, int extent,
                                   uint8_t *closure, void *task_parent);
@@ -450,45 +450,56 @@ struct halide_type_t {
      * code: The fundamental type from an enum.
      * bits: The bit size of one element.
      * lanes: The number of vector elements in the type. */
-    HALIDE_ALWAYS_INLINE halide_type_t(halide_type_code_t code, uint8_t bits, uint16_t lanes = 1)
+    HALIDE_ALWAYS_INLINE constexpr halide_type_t(halide_type_code_t code, uint8_t bits, uint16_t lanes = 1)
         : code(code), bits(bits), lanes(lanes) {
     }
 
     /** Default constructor is required e.g. to declare halide_trace_event
      * instances. */
-    HALIDE_ALWAYS_INLINE halide_type_t()
+    HALIDE_ALWAYS_INLINE constexpr halide_type_t()
         : code((halide_type_code_t)0), bits(0), lanes(0) {
     }
 
-    HALIDE_ALWAYS_INLINE halide_type_t with_lanes(uint16_t new_lanes) const {
+    HALIDE_ALWAYS_INLINE constexpr halide_type_t with_lanes(uint16_t new_lanes) const {
         return halide_type_t((halide_type_code_t)code, bits, new_lanes);
     }
 
+    HALIDE_ALWAYS_INLINE constexpr halide_type_t element_of() const {
+        return with_lanes(1);
+    }
     /** Compare two types for equality. */
-    HALIDE_ALWAYS_INLINE bool operator==(const halide_type_t &other) const {
+    HALIDE_ALWAYS_INLINE constexpr bool operator==(const halide_type_t &other) const {
         return as_u32() == other.as_u32();
     }
 
-    HALIDE_ALWAYS_INLINE bool operator!=(const halide_type_t &other) const {
+    HALIDE_ALWAYS_INLINE constexpr bool operator!=(const halide_type_t &other) const {
         return !(*this == other);
     }
 
-    HALIDE_ALWAYS_INLINE bool operator<(const halide_type_t &other) const {
+    HALIDE_ALWAYS_INLINE constexpr bool operator<(const halide_type_t &other) const {
         return as_u32() < other.as_u32();
     }
 
     /** Size in bytes for a single element, even if width is not 1, of this type. */
-    HALIDE_ALWAYS_INLINE int bytes() const {
+    HALIDE_ALWAYS_INLINE constexpr int bytes() const {
         return (bits + 7) / 8;
     }
 
-    HALIDE_ALWAYS_INLINE uint32_t as_u32() const {
-        uint32_t u;
-        memcpy(&u, this, sizeof(u));
-        return u;
+    HALIDE_ALWAYS_INLINE constexpr uint32_t as_u32() const {
+        // Note that this produces a result that is identical to memcpy'ing 'this'
+        // into a u32 (on a little-endian machine, anyway), and at -O1 or greater
+        // on Clang, the compiler knows this and optimizes this into a single 32-bit move.
+        // (At -O0 it will look awful.)
+        return static_cast<uint8_t>(code) |
+               (static_cast<uint16_t>(bits) << 8) |
+               (static_cast<uint32_t>(lanes) << 16);
     }
 #endif
 };
+
+#if (__cplusplus >= 201103L || _MSVC_LANG >= 201103L)
+static_assert(sizeof(halide_type_t) == sizeof(uint32_t), "size mismatch in halide_type_t");
+#endif
 
 enum halide_trace_event_code_t { halide_trace_load = 0,
                                  halide_trace_store = 1,
@@ -546,12 +557,6 @@ struct halide_trace_event_t {
 
     /** The length of the coordinates array */
     int32_t dimensions;
-
-#if (__cplusplus >= 201103L || _MSVC_LANG >= 201103L)
-    // If we don't explicitly mark the default ctor as inline,
-    // certain build configurations can fail (notably iOS)
-    HALIDE_ALWAYS_INLINE halide_trace_event_t() = default;
-#endif
 };
 
 /** Called when Funcs are marked as trace_load, trace_store, or
@@ -617,10 +622,6 @@ struct halide_trace_packet_t {
     // @}
 
 #if (__cplusplus >= 201103L || _MSVC_LANG >= 201103L)
-    // If we don't explicitly mark the default ctor as inline,
-    // certain build configurations can fail (notably iOS)
-    HALIDE_ALWAYS_INLINE halide_trace_packet_t() = default;
-
     /** Get the coordinates array, assuming this packet is laid out in
      * memory as it was written. The coordinates array comes
      * immediately after the packet header. */
@@ -929,7 +930,7 @@ extern void halide_memoization_cache_evict(void *user_context, uint64_t eviction
  * the case where halide_memoization_cache_lookup is handling multiple
  * buffers.  (This corresponds to memoizing a Tuple in Halide.) Note
  * that the host pointer must be sufficient to get to all information
- * the relase operation needs. The default Halide cache impleemntation
+ * the release operation needs. The default Halide cache impleemntation
  * accomplishes this by storing extra data before the start of the user
  * modifiable host storage.
  *
@@ -1173,6 +1174,9 @@ enum halide_error_code_t {
      * pipeline, or enable the appropriate device backend. */
     halide_error_code_device_dirty_with_no_device_support = -44,
 
+    /** An explicit storage bound provided is too small to store
+     * all the values produced by the function. */
+    halide_error_code_storage_bound_too_small = -45,
 };
 
 /** Halide calls the functions below on various error conditions. The
@@ -1244,6 +1248,9 @@ extern int halide_error_device_interface_no_device(void *user_context);
 extern int halide_error_host_and_device_dirty(void *user_context);
 extern int halide_error_buffer_is_null(void *user_context, const char *routine);
 extern int halide_error_device_dirty_with_no_device_support(void *user_context, const char *buffer_name);
+extern int halide_error_storage_bound_too_small(void *user_context, const char *func_name, const char *var_name,
+                                                int provided_size, int required_size);
+extern int halide_error_device_crop_failed(void *user_context);
 // @}
 
 /** Optional features a compilation Target can have.
@@ -1278,12 +1285,12 @@ typedef enum halide_target_feature_t {
     halide_target_feature_cuda_capability70,  ///< Enable CUDA compute capability 7.0 (Volta)
     halide_target_feature_cuda_capability75,  ///< Enable CUDA compute capability 7.5 (Turing)
     halide_target_feature_cuda_capability80,  ///< Enable CUDA compute capability 8.0 (Ampere)
+    halide_target_feature_cuda_capability86,  ///< Enable CUDA compute capability 8.6 (Ampere)
 
     halide_target_feature_opencl,       ///< Enable the OpenCL runtime.
     halide_target_feature_cl_doubles,   ///< Enable double support on OpenCL targets
     halide_target_feature_cl_atomic64,  ///< Enable 64-bit atomics operations on OpenCL targets
 
-    halide_target_feature_opengl,         ///< Enable the OpenGL runtime. NOTE: this feature is deprecated and will be removed in Halide 12.
     halide_target_feature_openglcompute,  ///< Enable OpenGL Compute runtime.
 
     halide_target_feature_vulkan,   ///< Enable Vulkan runtime.
@@ -1310,6 +1317,7 @@ typedef enum halide_target_feature_t {
     halide_target_feature_avx512_knl,             ///< Enable the AVX512 features supported by Knight's Landing chips, such as the Xeon Phi x200. This includes the base AVX512 set, and also AVX512-CD and AVX512-ER.
     halide_target_feature_avx512_skylake,         ///< Enable the AVX512 features supported by Skylake Xeon server processors. This adds AVX512-VL, AVX512-BW, and AVX512-DQ to the base set. The main difference from the base AVX512 set is better support for small integer ops. Note that this does not include the Knight's Landing features. Note also that these features are not available on Skylake desktop and mobile processors.
     halide_target_feature_avx512_cannonlake,      ///< Enable the AVX512 features expected to be supported by future Cannonlake processors. This includes all of the Skylake features, plus AVX512-IFMA and AVX512-VBMI.
+    halide_target_feature_avx512_sapphirerapids,  ///< Enable the AVX512 features supported by Sapphire Rapids processors. This include all of the Cannonlake features, plus AVX512-VNNI and AVX512-BF16.
     halide_target_feature_hvx_use_shared_object,  ///< Deprecated
     halide_target_feature_trace_loads,            ///< Trace all loads done by the pipeline. Equivalent to calling Func::trace_loads on every non-inlined Func.
     halide_target_feature_trace_stores,           ///< Trace all stores done by the pipeline. Equivalent to calling Func::trace_stores on every non-inlined Func.
@@ -1330,13 +1338,16 @@ typedef enum halide_target_feature_t {
     halide_target_feature_wasm_simd128,           ///< Enable +simd128 instructions for WebAssembly codegen.
     halide_target_feature_wasm_signext,           ///< Enable +sign-ext instructions for WebAssembly codegen.
     halide_target_feature_wasm_sat_float_to_int,  ///< Enable saturating (nontrapping) float-to-int instructions for WebAssembly codegen.
-    halide_target_feature_wasm_threads,           ///< Enable the thread pool for WebAssembly codegen. (Also enables +atomics)
+    halide_target_feature_wasm_threads,           ///< Enable use of threads in WebAssembly codegen. Requires the use of a wasm runtime that provides pthread-compatible wrappers (typically, Emscripten with the -pthreads flag). Unsupported under WASI.
     halide_target_feature_wasm_bulk_memory,       ///< Enable +bulk-memory instructions for WebAssembly codegen.
     halide_target_feature_sve,                    ///< Enable ARM Scalable Vector Extensions
     halide_target_feature_sve2,                   ///< Enable ARM Scalable Vector Extensions v2
     halide_target_feature_egl,                    ///< Force use of EGL support.
     halide_target_feature_arm_dot_prod,           ///< Enable ARMv8.2-a dotprod extension (i.e. udot and sdot instructions)
+    halide_target_feature_arm_fp16,               ///< Enable ARMv8.2-a half-precision floating point data processing
     halide_llvm_large_code_model,                 ///< Use the LLVM large code model to compile
+    halide_target_feature_rvv,                    ///< Enable RISCV "V" Vector Extension
+    halide_target_feature_armv81a,                ///< Enable ARMv8.1-a instructions
     halide_target_feature_end                     ///< A sentinel. Every target is considered to have this feature, and setting this feature does nothing.
 } halide_target_feature_t;
 
@@ -1460,7 +1471,7 @@ typedef struct halide_buffer_t {
         if (value) {
             flags |= flag;
         } else {
-            flags &= ~flag;
+            flags &= ~uint64_t(flag);
         }
     }
 
@@ -1491,40 +1502,59 @@ typedef struct halide_buffer_t {
         return s;
     }
 
-    /** A pointer to the element with the lowest address. If all
-     * strides are positive, equal to the host pointer. */
-    HALIDE_ALWAYS_INLINE uint8_t *begin() const {
+    /** Offset to the element with the lowest address.
+     * If all strides are positive, equal to zero.
+     * Offset is in elements, not bytes.
+     * Unlike begin(), this is ok to call on an unallocated buffer. */
+    HALIDE_ALWAYS_INLINE ptrdiff_t begin_offset() const {
         ptrdiff_t index = 0;
         for (int i = 0; i < dimensions; i++) {
-            if (dim[i].stride < 0) {
-                index += dim[i].stride * (dim[i].extent - 1);
+            const int stride = dim[i].stride;
+            if (stride < 0) {
+                index += stride * (ptrdiff_t)(dim[i].extent - 1);
             }
         }
-        return host + index * type.bytes();
+        return index;
     }
 
-    /** A pointer to one beyond the element with the highest address. */
-    HALIDE_ALWAYS_INLINE uint8_t *end() const {
+    /** An offset to one beyond the element with the highest address.
+     * Offset is in elements, not bytes.
+     * Unlike end(), this is ok to call on an unallocated buffer. */
+    HALIDE_ALWAYS_INLINE ptrdiff_t end_offset() const {
         ptrdiff_t index = 0;
         for (int i = 0; i < dimensions; i++) {
-            if (dim[i].stride > 0) {
-                index += dim[i].stride * (dim[i].extent - 1);
+            const int stride = dim[i].stride;
+            if (stride > 0) {
+                index += stride * (ptrdiff_t)(dim[i].extent - 1);
             }
         }
         index += 1;
-        return host + index * type.bytes();
+        return index;
+    }
+
+    /** A pointer to the element with the lowest address.
+     * If all strides are positive, equal to the host pointer.
+     * Illegal to call on an unallocated buffer. */
+    HALIDE_ALWAYS_INLINE uint8_t *begin() const {
+        return host + begin_offset() * type.bytes();
+    }
+
+    /** A pointer to one beyond the element with the highest address.
+     * Illegal to call on an unallocated buffer. */
+    HALIDE_ALWAYS_INLINE uint8_t *end() const {
+        return host + end_offset() * type.bytes();
     }
 
     /** The total number of bytes spanned by the data in memory. */
     HALIDE_ALWAYS_INLINE size_t size_in_bytes() const {
-        return (size_t)(end() - begin());
+        return (size_t)(end_offset() - begin_offset()) * type.bytes();
     }
 
     /** A pointer to the element at the given location. */
     HALIDE_ALWAYS_INLINE uint8_t *address_of(const int *pos) const {
         ptrdiff_t index = 0;
         for (int i = 0; i < dimensions; i++) {
-            index += dim[i].stride * (pos[i] - dim[i].min);
+            index += (ptrdiff_t)dim[i].stride * (pos[i] - dim[i].min);
         }
         return host + index * type.bytes();
     }
@@ -1903,74 +1933,82 @@ extern void halide_register_device_allocation_pool(struct halide_device_allocati
 #if (__cplusplus >= 201103L || _MSVC_LANG >= 201103L)
 
 namespace {
+
 template<typename T>
-struct check_is_pointer;
+struct check_is_pointer {
+    static constexpr bool value = false;
+};
+
 template<typename T>
-struct check_is_pointer<T *> {};
+struct check_is_pointer<T *> {
+    static constexpr bool value = true;
+};
+
 }  // namespace
 
 /** Construct the halide equivalent of a C type */
 template<typename T>
-HALIDE_ALWAYS_INLINE halide_type_t halide_type_of() {
+HALIDE_ALWAYS_INLINE constexpr halide_type_t halide_type_of() {
     // Create a compile-time error if T is not a pointer (without
     // using any includes - this code goes into the runtime).
-    check_is_pointer<T> check;
-    (void)check;
+    // (Note that we can't have uninitialized variables in constexpr functions,
+    // even if those variables aren't used.)
+    static_assert(check_is_pointer<T>::value, "Expected a pointer type here");
     return halide_type_t(halide_type_handle, 64);
 }
 
 template<>
-HALIDE_ALWAYS_INLINE halide_type_t halide_type_of<float>() {
+HALIDE_ALWAYS_INLINE constexpr halide_type_t halide_type_of<float>() {
     return halide_type_t(halide_type_float, 32);
 }
 
 template<>
-HALIDE_ALWAYS_INLINE halide_type_t halide_type_of<double>() {
+HALIDE_ALWAYS_INLINE constexpr halide_type_t halide_type_of<double>() {
     return halide_type_t(halide_type_float, 64);
 }
 
 template<>
-HALIDE_ALWAYS_INLINE halide_type_t halide_type_of<bool>() {
+HALIDE_ALWAYS_INLINE constexpr halide_type_t halide_type_of<bool>() {
     return halide_type_t(halide_type_uint, 1);
 }
 
 template<>
-HALIDE_ALWAYS_INLINE halide_type_t halide_type_of<uint8_t>() {
+HALIDE_ALWAYS_INLINE constexpr halide_type_t halide_type_of<uint8_t>() {
     return halide_type_t(halide_type_uint, 8);
 }
 
 template<>
-HALIDE_ALWAYS_INLINE halide_type_t halide_type_of<uint16_t>() {
+HALIDE_ALWAYS_INLINE constexpr halide_type_t halide_type_of<uint16_t>() {
     return halide_type_t(halide_type_uint, 16);
 }
 
 template<>
-HALIDE_ALWAYS_INLINE halide_type_t halide_type_of<uint32_t>() {
+HALIDE_ALWAYS_INLINE constexpr halide_type_t halide_type_of<uint32_t>() {
     return halide_type_t(halide_type_uint, 32);
 }
 
 template<>
-HALIDE_ALWAYS_INLINE halide_type_t halide_type_of<uint64_t>() {
+HALIDE_ALWAYS_INLINE constexpr halide_type_t halide_type_of<uint64_t>() {
     return halide_type_t(halide_type_uint, 64);
 }
 
 template<>
-HALIDE_ALWAYS_INLINE halide_type_t halide_type_of<int8_t>() {
+HALIDE_ALWAYS_INLINE constexpr halide_type_t halide_type_of<int8_t>() {
     return halide_type_t(halide_type_int, 8);
 }
 
 template<>
-HALIDE_ALWAYS_INLINE halide_type_t halide_type_of<int16_t>() {
+HALIDE_ALWAYS_INLINE constexpr halide_type_t halide_type_of<int16_t>() {
     return halide_type_t(halide_type_int, 16);
 }
 
 template<>
-HALIDE_ALWAYS_INLINE halide_type_t halide_type_of<int32_t>() {
+HALIDE_ALWAYS_INLINE constexpr halide_type_t halide_type_of<int32_t>() {
     return halide_type_t(halide_type_int, 32);
 }
 
 template<>
-HALIDE_ALWAYS_INLINE halide_type_t halide_type_of<int64_t>() {
+HALIDE_ALWAYS_INLINE constexpr halide_type_t halide_type_of<int64_t>() {
     return halide_type_t(halide_type_int, 64);
 }
 

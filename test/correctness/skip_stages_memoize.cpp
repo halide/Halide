@@ -7,7 +7,7 @@ int buffer_index = 0;
 bool set_toggle1 = false;
 bool set_toggle2 = false;
 
-int single_toggle_trace(void *user_context, const halide_trace_event_t *e) {
+int single_toggle_trace(JITUserContext *user_context, const halide_trace_event_t *e) {
     if (!set_toggle1) {
         std::string buffer_name = "f1_" + std::to_string(buffer_index);
         if ((e->event == halide_trace_store) && (std::string(e->func) == buffer_name)) {
@@ -19,7 +19,7 @@ int single_toggle_trace(void *user_context, const halide_trace_event_t *e) {
     return 0;
 }
 
-int double_toggle_trace(void *user_context, const halide_trace_event_t *e) {
+int double_toggle_trace(JITUserContext *user_context, const halide_trace_event_t *e) {
     if (!set_toggle1) {
         std::string buffer_name = "f1_" + std::to_string(buffer_index);
         if ((e->event == halide_trace_store) && (std::string(e->func) == buffer_name)) {
@@ -86,7 +86,7 @@ int single_memoize_test(int index) {
 
     f1.compute_root().memoize();
 
-    f2.set_custom_trace(&single_toggle_trace);
+    f2.jit_handlers().custom_trace = &single_toggle_trace;
     f1.trace_stores();
 
     f2.compile_jit();
@@ -94,7 +94,7 @@ int single_memoize_test(int index) {
     for (bool toggle_val : {false, true}) {
         set_toggle1 = toggle_val;
         toggle.set(set_toggle1);
-        Buffer<int> out = f2.realize(10);
+        Buffer<int> out = f2.realize({10});
         if (check_correctness_single(out, set_toggle1) != 0) {
             return -1;
         }
@@ -115,7 +115,7 @@ int tuple_memoize_test(int index) {
 
     f1.compute_root().memoize();
 
-    f2.set_custom_trace(&single_toggle_trace);
+    f2.jit_handlers().custom_trace = &single_toggle_trace;
     f1.trace_stores();
 
     f2.compile_jit();
@@ -123,7 +123,7 @@ int tuple_memoize_test(int index) {
     for (bool toggle_val : {false, true}) {
         set_toggle1 = toggle_val;
         toggle.set(set_toggle1);
-        Realization out = f2.realize(128);
+        Realization out = f2.realize({128});
         Buffer<int> out0 = out[0];
         Buffer<int> out1 = out[1];
 
@@ -153,7 +153,7 @@ int non_trivial_allocate_predicate_test(int index) {
     f1.compute_root().memoize();
     f2.compute_root().memoize();
 
-    f3.set_custom_trace(&double_toggle_trace);
+    f3.jit_handlers().custom_trace = &double_toggle_trace;
     f1.trace_stores();
     f2.trace_stores();
 
@@ -163,7 +163,7 @@ int non_trivial_allocate_predicate_test(int index) {
         set_toggle1 = toggle_val;
         set_toggle2 = toggle_val;
         toggle.set(set_toggle1);
-        Buffer<int> out = f3.realize(10);
+        Buffer<int> out = f3.realize({10});
         if (check_correctness_single(out, set_toggle1) != 0) {
             return -1;
         }
@@ -186,7 +186,7 @@ int double_memoize_test(int index) {
     f1.compute_root().memoize();
     f2.compute_root().memoize();
 
-    f3.set_custom_trace(&double_toggle_trace);
+    f3.jit_handlers().custom_trace = &double_toggle_trace;
     f1.trace_stores();
     f2.trace_stores();
 
@@ -198,7 +198,7 @@ int double_memoize_test(int index) {
             set_toggle2 = toggle_val2;
             toggle1.set(set_toggle1);
             toggle2.set(toggle_val2);
-            Buffer<int> out = f3.realize(10);
+            Buffer<int> out = f3.realize({10});
             if (check_correctness_double(out, set_toggle1, set_toggle2) != 0) {
                 return -1;
             }

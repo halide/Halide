@@ -63,7 +63,7 @@ int main(int argc, char **argv) {
     f.compute_at(h, y);
     g.compute_at(h, y).store_root();
 
-    Buffer<int> result = h.realize(10, 10);
+    Buffer<int> result = h.realize({10, 10});
 
     for (int y = 0; y < result.height(); y++) {
         for (int x = 0; x < result.width(); x++) {

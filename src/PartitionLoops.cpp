@@ -329,28 +329,44 @@ class FindSimplifications : public IRVisitor {
         }
     }
 
-    void visit(const Select *op) override {
-        op->condition.accept(this);
+    void visit_select(const Expr &condition, const Expr &old, const Expr &true_value, const Expr &false_value) {
+        condition.accept(this);
 
-        bool likely_t = has_uncaptured_likely_tag(op->true_value);
-        bool likely_f = has_uncaptured_likely_tag(op->false_value);
+        bool likely_t = has_uncaptured_likely_tag(true_value);
+        bool likely_f = has_uncaptured_likely_tag(false_value);
 
         if (!likely_t && !likely_f) {
-            likely_t = has_likely_tag(op->true_value);
-            likely_f = has_likely_tag(op->false_value);
+            likely_t = has_likely_tag(true_value);
+            likely_f = has_likely_tag(false_value);
         }
 
         if (!likely_t) {
-            op->false_value.accept(this);
+            false_value.accept(this);
         }
         if (!likely_f) {
-            op->true_value.accept(this);
+            true_value.accept(this);
         }
 
         if (likely_t && !likely_f) {
-            new_simplification(op->condition, op, op->true_value, op->false_value);
+            new_simplification(condition, old, true_value, false_value);
         } else if (likely_f && !likely_t) {
-            new_simplification(!op->condition, op, op->false_value, op->true_value);
+            new_simplification(!condition, old, false_value, true_value);
+        }
+    }
+
+    void visit(const Select *op) override {
+        visit_select(op->condition, op, op->true_value, op->false_value);
+    }
+
+    void visit(const Call *op) override {
+        if (op->is_intrinsic(Call::if_then_else)) {
+            if (op->args.size() == 3) {
+                visit_select(op->args[0], op, op->args[1], op->args[2]);
+            } else {
+                visit_select(op->args[0], op, op->args[1], make_zero(op->type));
+            }
+        } else {
+            IRVisitor::visit(op);
         }
     }
 
@@ -389,6 +405,22 @@ class FindSimplifications : public IRVisitor {
         }
 
         simplifications.insert(simplifications.end(), old.begin(), old.end());
+    }
+
+    void visit(const Store *op) override {
+        IRVisitor::visit(op);
+        if (has_uncaptured_likely_tag(op->predicate)) {
+            const int lanes = op->predicate.type().lanes();
+            new_simplification(op->predicate, op->predicate, const_true(lanes), op->predicate);
+        }
+    }
+
+    void visit(const Load *op) override {
+        IRVisitor::visit(op);
+        if (has_uncaptured_likely_tag(op->predicate)) {
+            const int lanes = op->predicate.type().lanes();
+            new_simplification(op->predicate, op->predicate, const_true(lanes), op->predicate);
+        }
     }
 
     template<typename LetOrLetStmt>
@@ -494,12 +526,6 @@ class PartitionLoops : public IRMutator {
         // barriers or warp shuffles, it's not safe to partition loops.
         if (in_gpu_loop && contains_warp_synchronous_logic(op)) {
             return IRMutator::visit(op);
-        }
-
-        // We shouldn't partition GLSL loops - they have control-flow
-        // constraints.
-        if (op->device_api == DeviceAPI::GLSL) {
-            return op;
         }
 
         // Find simplifications in this loop body
@@ -777,11 +803,6 @@ class RenormalizeGPULoops : public IRMutator {
     vector<pair<string, Expr>> lifted_lets;
 
     Stmt visit(const For *op) override {
-        if (op->device_api == DeviceAPI::GLSL) {
-            // The partitioner did not enter GLSL loops
-            return op;
-        }
-
         bool old_in_gpu_loop = in_gpu_loop;
         Stmt stmt;
 
@@ -991,10 +1012,25 @@ class CollapseSelects : public IRMutator {
     }
 };
 
-class ContainsLoop : public IRVisitor {
+class ContainsHotLoop : public IRVisitor {
     using IRVisitor::visit;
     void visit(const For *op) override {
         result = true;
+    }
+
+    void visit(const IfThenElse *op) override {
+        op->then_case.accept(this);
+
+        // Don't count loops that appear in cold paths
+        const Call *c = op->condition.as<Call>();
+        bool else_case_is_cold =
+            (c &&
+             (c->is_intrinsic(Call::likely_if_innermost) ||
+              c->is_intrinsic(Call::likely)));
+        if (op->else_case.defined() &&
+            !else_case_is_cold) {
+            op->else_case.accept(this);
+        }
     }
 
 public:
@@ -1020,7 +1056,7 @@ class LowerLikelyIfInnermost : public IRMutator {
     }
 
     Stmt visit(const For *op) override {
-        ContainsLoop c;
+        ContainsHotLoop c;
         op->body.accept(&c);
         inside_innermost_loop = !c.result;
         Stmt stmt = IRMutator::visit(op);

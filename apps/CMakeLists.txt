@@ -5,11 +5,16 @@
 cmake_minimum_required(VERSION 3.16)
 project(Halide_apps)
 
+if (WIN32)
+    option(ENABLE_APPS_HANNK "Build apps/hannk" OFF)
+else ()
+    option(ENABLE_APPS_HANNK "Build apps/hannk" ON)
+endif ()
+
 enable_testing()
 
 # add_subdirectory(HelloAndroid)  # TODO(#5374): missing CMake build
 # add_subdirectory(HelloAndroidCamera2)  # TODO(#5374): missing CMake build
-# add_subdirectory(HelloAndroidGL)  # TODO(#5374): missing CMake build
 # add_subdirectory(HelloMatlab)  # TODO(#5374): missing CMake build
 # add_subdirectory(HelloPyTorch)  # TODO(#5374): missing CMake build
 # add_subdirectory(HelloWasm)  # TODO(#5374): missing CMake build
@@ -24,7 +29,9 @@ add_subdirectory(conv_layer)
 add_subdirectory(cuda_mat_mul)
 add_subdirectory(depthwise_separable_conv)
 add_subdirectory(fft)
-# add_subdirectory(glsl)  # TODO(#4937): bugged; not built by Makefile
+if (ENABLE_APPS_HANNK)
+    add_subdirectory(hannk)
+endif ()
 add_subdirectory(harris)
 # add_subdirectory(hexagon_benchmarks)  # TODO(#5374): missing CMake build
 # add_subdirectory(hexagon_dma)  # TODO(#5374): missing CMake build
@@ -39,7 +46,6 @@ add_subdirectory(max_filter)
 add_subdirectory(nl_means)
 # add_subdirectory(nn_ops)  # TODO(#5374): missing CMake build
 # add_subdirectory(onnx)  # TODO(#5374): missing CMake build
-# add_subdirectory(opengl_demo)  # TODO(#5374): missing CMake build
 # add_subdirectory(openglcompute)  # TODO(#5374): missing CMake build
 add_subdirectory(resize)
 # add_subdirectory(resnet_50)  # TODO(#5374): missing CMake build

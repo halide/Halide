@@ -2,6 +2,7 @@
 export HL_TRACE_FILE=/dev/stdout
 export HL_NUM_THREADS=4
 rm -f $1/local_laplacian.mp4
+set -euo pipefail
 make $1/process_viz && \
 ./$1/process_viz ../images/rgb_small.png 4 1 1 0 ./$1/out_small.png | \
 ../../bin/HalideTraceViz \

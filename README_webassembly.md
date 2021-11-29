@@ -6,22 +6,18 @@ backend.
 As WebAssembly itself is still under active development, Halide's support has
 some limitations. Some of the most important:
 
--   We require using LLVM 11 or later for Wasm codegen; earlier versions of LLVM
-    will not work.
 -   Fixed-width SIMD (128 bit) can be enabled via Target::WasmSimd128.
 -   Sign-extension operations can be enabled via Target::WasmSignExt.
 -   Non-trapping float-to-int conversions can be enabled via
     Target::WasmSatFloatToInt.
--   Threads are not available yet. We'd like to support this in the future but
-    don't yet have a timeline.
+-   Threads have very limited support via Target::WasmThreads; see
+    [below](#using-threads) for more details.
 -   Halide's JIT for Wasm is extremely limited and really useful only for
     internal testing purposes.
 
 # Additional Tooling Requirements:
 
--   In additional to the usual install of LLVM and clang, you'll need lld. All
-    should be at least v11 or later (codegen will be improved under LLVM
-    v12/trunk, at least as of July 2020).
+-   In additional to the usual install of LLVM and clang, you'll need lld.
 -   Locally-installed version of Emscripten, 1.39.19+
 
 Note that for all of the above, earlier versions might work, but have not been
@@ -130,6 +126,26 @@ they include JIT overhead as described elsewhere. Suitable benchmarks for Wasm
 will be provided at a later date. (See
 https://github.com/halide/Halide/issues/5119 and
 https://github.com/halide/Halide/issues/5047 to track progress.)
+
+# Using Threads
+
+You can use the `wasm_threads` feature to enable use of a normal pthread-based
+thread pool in Halide code, but with some careful caveats:
+
+-   This requires that you use a wasm runtime environment that provides
+    pthread-compatible wrappers. At this time of this writing, the only
+    environment known to support this well is Emscripten (when using the
+    `-pthread` flag, and compiling for a Web environment). In this
+    configuration, Emscripten goes to great lengths to make WebWorkers available
+    via the pthreads API. (You can see an example of this usage in
+    apps/HelloWasm.) Note that not all wasm runtimes support WebWorkers;
+    generally, you need a full browser environment to make this work (though
+    some versions of some shell tools may also support this, e.g. nodejs).
+-   There is currently no support for using threads in a WASI environment, due
+    to current limitations in the WASI specification. (We hope that this will
+    improve in the future.)
+-   There is no support for using threads in the Halide JIT environment, and no
+    plans to add them anytime in the near-term future.
 
 # Known Limitations And Caveats
 

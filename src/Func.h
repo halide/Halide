@@ -376,7 +376,7 @@ public:
 
     template<typename... Args>
     HALIDE_NO_USER_CODE_INLINE typename std::enable_if<Internal::all_are_convertible<VarOrRVar, Args...>::value, Stage &>::type
-    reorder(const VarOrRVar &x, const VarOrRVar &y, Args &&... args) {
+    reorder(const VarOrRVar &x, const VarOrRVar &y, Args &&...args) {
         std::vector<VarOrRVar> collected_args{x, y, std::forward<Args>(args)...};
         return reorder(collected_args);
     }
@@ -441,14 +441,31 @@ public:
     Stage &atomic(bool override_associativity_test = false);
 
     Stage &hexagon(const VarOrRVar &x = Var::outermost());
-    Stage &prefetch(const Func &f, const VarOrRVar &var, Expr offset = 1,
+
+    HALIDE_ATTRIBUTE_DEPRECATED("Call prefetch() with the two-var form instead.")
+    Stage &prefetch(const Func &f, const VarOrRVar &var, int offset = 1,
+                    PrefetchBoundStrategy strategy = PrefetchBoundStrategy::GuardWithIf) {
+        return prefetch(f, var, var, offset, strategy);
+    }
+    HALIDE_ATTRIBUTE_DEPRECATED("Call prefetch() with the two-var form instead.")
+    Stage &prefetch(const Internal::Parameter &param, const VarOrRVar &var, int offset = 1,
+                    PrefetchBoundStrategy strategy = PrefetchBoundStrategy::GuardWithIf) {
+        return prefetch(param, var, var, offset, strategy);
+    }
+    template<typename T>
+    HALIDE_ATTRIBUTE_DEPRECATED("Call prefetch() with the two-var form instead.")
+    Stage &prefetch(const T &image, VarOrRVar var, int offset = 1,
+                    PrefetchBoundStrategy strategy = PrefetchBoundStrategy::GuardWithIf) {
+        return prefetch(image.parameter(), var, var, offset, strategy);
+    }
+    Stage &prefetch(const Func &f, const VarOrRVar &at, const VarOrRVar &from, Expr offset = 1,
                     PrefetchBoundStrategy strategy = PrefetchBoundStrategy::GuardWithIf);
-    Stage &prefetch(const Internal::Parameter &param, const VarOrRVar &var, Expr offset = 1,
+    Stage &prefetch(const Internal::Parameter &param, const VarOrRVar &at, const VarOrRVar &from, Expr offset = 1,
                     PrefetchBoundStrategy strategy = PrefetchBoundStrategy::GuardWithIf);
     template<typename T>
-    Stage &prefetch(const T &image, VarOrRVar var, Expr offset = 1,
+    Stage &prefetch(const T &image, const VarOrRVar &at, const VarOrRVar &from, Expr offset = 1,
                     PrefetchBoundStrategy strategy = PrefetchBoundStrategy::GuardWithIf) {
-        return prefetch(image.parameter(), var, offset, strategy);
+        return prefetch(image.parameter(), at, from, std::move(offset), strategy);
     }
     // @}
 
@@ -780,7 +797,7 @@ public:
      params.set(img, arg_img);
 
      Target t = get_jit_target_from_environment();
-     Buffer<int32_t> result = f.realize(10, 10, t, params);
+     Buffer<int32_t> result = f.realize({10, 10}, t, params);
      \endcode
      *
      * Alternatively, an initializer list can be used
@@ -795,7 +812,7 @@ public:
      <fill in arg_img...>
 
      Target t = get_jit_target_from_environment();
-     Buffer<int32_t> result = f.realize(10, 10, t, { { p, 17 }, { img, arg_img } });
+     Buffer<int32_t> result = f.realize({10, 10}, t, { { p, 17 }, { img, arg_img } });
      \endcode
      *
      * If the Func cannot be realized into a buffer of the given size
@@ -809,20 +826,18 @@ public:
      * instead.
      *
      */
-    // @{
-    Realization realize(std::vector<int32_t> sizes, const Target &target = Target(),
+    Realization realize(std::vector<int32_t> sizes = {}, const Target &target = Target(),
                         const ParamMap &param_map = ParamMap::empty_map());
-    Realization realize(int x_size, int y_size, int z_size, int w_size, const Target &target = Target(),
+
+    /** Same as above, but takes a custom user-provided context to be
+     * passed to runtime functions. This can be used to pass state to
+     * runtime overrides in a thread-safe manner. A nullptr context is
+     * legal, and is equivalent to calling the variant of realize
+     * that does not take a context. */
+    Realization realize(JITUserContext *context,
+                        std::vector<int32_t> sizes = {},
+                        const Target &target = Target(),
                         const ParamMap &param_map = ParamMap::empty_map());
-    Realization realize(int x_size, int y_size, int z_size, const Target &target = Target(),
-                        const ParamMap &param_map = ParamMap::empty_map());
-    Realization realize(int x_size, int y_size, const Target &target = Target(),
-                        const ParamMap &param_map = ParamMap::empty_map());
-    Realization realize(int x_size, const Target &target = Target(),
-                        const ParamMap &param_map = ParamMap::empty_map());
-    Realization realize(const Target &target = Target(),
-                        const ParamMap &param_map = ParamMap::empty_map());
-    // @}
 
     /** Evaluate this function into an existing allocated buffer or
      * buffers. If the buffer is also one of the arguments to the
@@ -831,6 +846,16 @@ public:
      * they must have matching sizes. This form of realize does *not*
      * automatically copy data back from the GPU. */
     void realize(Pipeline::RealizationArg outputs, const Target &target = Target(),
+                 const ParamMap &param_map = ParamMap::empty_map());
+
+    /** Same as above, but takes a custom user-provided context to be
+     * passed to runtime functions. This can be used to pass state to
+     * runtime overrides in a thread-safe manner. A nullptr context is
+     * legal, and is equivalent to calling the variant of realize
+     * that does not take a context. */
+    void realize(JITUserContext *context,
+                 Pipeline::RealizationArg outputs,
+                 const Target &target = Target(),
                  const ParamMap &param_map = ParamMap::empty_map());
 
     /** For a given size of output, or a given output buffer,
@@ -860,24 +885,23 @@ public:
     void infer_input_bounds(const std::vector<int32_t> &sizes,
                             const Target &target = get_jit_target_from_environment(),
                             const ParamMap &param_map = ParamMap::empty_map());
-    HALIDE_ATTRIBUTE_DEPRECATED("Call infer_input_bounds() with an explicit vector<int> instead")
-    void infer_input_bounds(int x_size = 0, int y_size = 0, int z_size = 0, int w_size = 0,
-                            const Target &target = get_jit_target_from_environment(),
-                            const ParamMap &param_map = ParamMap::empty_map());
-    // TODO: this is a temporary wrapper used to disambiguate the cases where
-    // a single-entry braced list would match the deprecated overload
-    // (rather than the vector overload); when the deprecated method is removed,
-    // this should be removed, too
-    void infer_input_bounds(const std::initializer_list<int> &sizes,
-                            const Target &target = get_jit_target_from_environment(),
-                            const ParamMap &param_map = ParamMap::empty_map()) {
-        infer_input_bounds(std::vector<int>{sizes}, target, param_map);
-    }
     void infer_input_bounds(Pipeline::RealizationArg outputs,
                             const Target &target = get_jit_target_from_environment(),
                             const ParamMap &param_map = ParamMap::empty_map());
     // @}
 
+    /** Versions of infer_input_bounds that take a custom user context
+     * to pass to runtime functions. */
+    // @{
+    void infer_input_bounds(JITUserContext *context,
+                            const std::vector<int32_t> &sizes,
+                            const Target &target = get_jit_target_from_environment(),
+                            const ParamMap &param_map = ParamMap::empty_map());
+    void infer_input_bounds(JITUserContext *context,
+                            Pipeline::RealizationArg outputs,
+                            const Target &target = get_jit_target_from_environment(),
+                            const ParamMap &param_map = ParamMap::empty_map());
+    // @}
     /** Statically compile this function to llvm bitcode, with the
      * given filename (which should probably end in .bc), type
      * signature, and C function name (which defaults to the same name
@@ -1024,105 +1048,33 @@ public:
      */
     void compile_jit(const Target &target = get_jit_target_from_environment());
 
-    /** Set the error handler function that be called in the case of
-     * runtime errors during halide pipelines. If you are compiling
-     * statically, you can also just define your own function with
-     * signature
-     \code
-     extern "C" void halide_error(void *user_context, const char *);
-     \endcode
-     * This will clobber Halide's version.
-     */
+    /** Deprecated variants of the above that use a void pointer
+     * instead of a JITUserContext pointer. */
+    // @{
+    HALIDE_ATTRIBUTE_DEPRECATED("Custom handlers should by set by modifying the struct returned by jit_handlers()")
     void set_error_handler(void (*handler)(void *, const char *));
-
-    /** Set a custom malloc and free for halide to use. Malloc should
-     * return 32-byte aligned chunks of memory, and it should be safe
-     * for Halide to read slightly out of bounds (up to 8 bytes before
-     * the start or beyond the end). If compiling statically, routines
-     * with appropriate signatures can be provided directly
-    \code
-     extern "C" void *halide_malloc(void *, size_t)
-     extern "C" void halide_free(void *, void *)
-     \endcode
-     * These will clobber Halide's versions. See HalideRuntime.h
-     * for declarations.
-     */
+    HALIDE_ATTRIBUTE_DEPRECATED("Custom handlers should by set by modifying the struct returned by jit_handlers()")
     void set_custom_allocator(void *(*malloc)(void *, size_t),
                               void (*free)(void *, void *));
-
-    /** Set a custom task handler to be called by the parallel for
-     * loop. It is useful to set this if you want to do some
-     * additional bookkeeping at the granularity of parallel
-     * tasks. The default implementation does this:
-     \code
-     extern "C" int halide_do_task(void *user_context,
-                                   int (*f)(void *, int, uint8_t *),
-                                   int idx, uint8_t *state) {
-         return f(user_context, idx, state);
-     }
-     \endcode
-     * If you are statically compiling, you can also just define your
-     * own version of the above function, and it will clobber Halide's
-     * version.
-     *
-     * If you're trying to use a custom parallel runtime, you probably
-     * don't want to call this. See instead \ref Func::set_custom_do_par_for .
-    */
+    HALIDE_ATTRIBUTE_DEPRECATED("Custom handlers should by set by modifying the struct returned by jit_handlers()")
     void set_custom_do_task(
         int (*custom_do_task)(void *, int (*)(void *, int, uint8_t *),
                               int, uint8_t *));
-
-    /** Set a custom parallel for loop launcher. Useful if your app
-     * already manages a thread pool. The default implementation is
-     * equivalent to this:
-     \code
-     extern "C" int halide_do_par_for(void *user_context,
-                                      int (*f)(void *, int, uint8_t *),
-                                      int min, int extent, uint8_t *state) {
-         int exit_status = 0;
-         parallel for (int idx = min; idx < min+extent; idx++) {
-             int job_status = halide_do_task(user_context, f, idx, state);
-             if (job_status) exit_status = job_status;
-         }
-         return exit_status;
-     }
-     \endcode
-     *
-     * However, notwithstanding the above example code, if one task
-     * fails, we may skip over other tasks, and if two tasks return
-     * different error codes, we may select one arbitrarily to return.
-     *
-     * If you are statically compiling, you can also just define your
-     * own version of the above function, and it will clobber Halide's
-     * version.
-     */
+    HALIDE_ATTRIBUTE_DEPRECATED("Custom handlers should by set by modifying the struct returned by jit_handlers()")
     void set_custom_do_par_for(
         int (*custom_do_par_for)(void *, int (*)(void *, int, uint8_t *), int,
                                  int, uint8_t *));
-
-    /** Set custom routines to call when tracing is enabled. Call this
-     * on the output Func of your pipeline. This then sets custom
-     * routines for the entire pipeline, not just calls to this
-     * Func.
-     *
-     * If you are statically compiling, you can also just define your
-     * own versions of the tracing functions (see HalideRuntime.h),
-     * and they will clobber Halide's versions. */
+    HALIDE_ATTRIBUTE_DEPRECATED("Custom handlers should by set by modifying the struct returned by jit_handlers()")
     void set_custom_trace(int (*trace_fn)(void *, const halide_trace_event_t *));
 
-    /** Set the function called to print messages from the runtime.
-     * If you are compiling statically, you can also just define your
-     * own function with signature
-     \code
-     extern "C" void halide_print(void *user_context, const char *);
-     \endcode
-     * This will clobber Halide's version.
-     */
+    HALIDE_ATTRIBUTE_DEPRECATED("Custom handlers should by set by modifying the struct returned by jit_handlers()")
     void set_custom_print(void (*handler)(void *, const char *));
+    // @}
 
     /** Get a struct containing the currently set custom functions
-     * used by JIT. */
-    const Internal::JITHandlers &jit_handlers();
+     * used by JIT. This can be mutated. Changes will take effect the
+     * next time this Func is realized. */
+    JITHandlers &jit_handlers();
 
     /** Add a custom pass to be used during lowering. It is run after
      * all other lowering passes. Can be used to verify properties of
@@ -1298,7 +1250,7 @@ public:
 
     template<typename... Args>
     HALIDE_NO_USER_CODE_INLINE typename std::enable_if<Internal::all_are_convertible<Var, Args...>::value, FuncRef>::type
-    operator()(Args &&... args) const {
+    operator()(Args &&...args) const {
         std::vector<Var> collected_args{std::forward<Args>(args)...};
         return this->operator()(collected_args);
     }
@@ -1315,7 +1267,7 @@ public:
 
     template<typename... Args>
     HALIDE_NO_USER_CODE_INLINE typename std::enable_if<Internal::all_are_convertible<Expr, Args...>::value, FuncRef>::type
-    operator()(const Expr &x, Args &&... args) const {
+    operator()(const Expr &x, Args &&...args) const {
         std::vector<Expr> collected_args{x, std::forward<Args>(args)...};
         return (*this)(collected_args);
     }
@@ -1543,11 +1495,6 @@ public:
      * only by the auto scheduler if the function is a pipeline output. */
     Func &set_estimate(const Var &var, const Expr &min, const Expr &extent);
 
-    HALIDE_ATTRIBUTE_DEPRECATED("Use set_estimate() instead")
-    Func &estimate(const Var &var, const Expr &min, const Expr &extent) {
-        return set_estimate(var, min, extent);
-    }
-
     /** Set (min, extent) estimates for all dimensions in the Func
      * at once; this is equivalent to calling `set_estimate(args()[n], min, extent)`
      * repeatedly, but slightly terser. The size of the estimates vector
@@ -1561,8 +1508,18 @@ public:
      * f.align_bounds(x, 2, 1) forces the min to be odd and the extent
      * to be even. The region computed always contains the region that
      * would have been computed without this directive, so no
-     * assertions are injected. */
+     * assertions are injected.
+     */
     Func &align_bounds(const Var &var, Expr modulus, Expr remainder = 0);
+
+    /** Expand the region computed so that the extent is a
+     * multiple of 'modulus'. For example, f.align_extent(x, 2) forces
+     * the extent realized to be even. The region computed always contains the
+     * region that would have been computed without this directive, so no
+     * assertions are injected. (This is essentially equivalent to align_bounds(),
+     * but always leaving the min untouched.)
+     */
+    Func &align_extent(const Var &var, Expr modulus);
 
     /** Bound the extent of a Func's realization, but not its
      * min. This means the dimension can be unrolled or vectorized
@@ -1614,7 +1571,7 @@ public:
 
     template<typename... Args>
     HALIDE_NO_USER_CODE_INLINE typename std::enable_if<Internal::all_are_convertible<VarOrRVar, Args...>::value, Func &>::type
-    reorder(const VarOrRVar &x, const VarOrRVar &y, Args &&... args) {
+    reorder(const VarOrRVar &x, const VarOrRVar &y, Args &&...args) {
         std::vector<VarOrRVar> collected_args{x, y, std::forward<Args>(args)...};
         return reorder(collected_args);
     }
@@ -1974,16 +1931,6 @@ public:
                    DeviceAPI device_api = DeviceAPI::Default_GPU);
     // @}
 
-    /** Schedule for execution using coordinate-based hardware api.
-     * GLSL is an example of this. Conceptually, this is
-     * similar to parallelization over 'x' and 'y' (since GLSL shaders compute
-     * individual output pixels in parallel) and vectorization over 'c'
-     * (since GLSL/RS implicitly vectorizes the color channel). */
-    Func &shader(const Var &x, const Var &y, const Var &c, DeviceAPI device_api);
-
-    /** Schedule for execution as GLSL kernel. */
-    Func &glsl(const Var &x, const Var &y, const Var &c);
-
     /** Schedule for execution on Hexagon. When a loop is marked with
      * Hexagon, that loop is executed on a Hexagon DSP. */
     Func &hexagon(const VarOrRVar &x = Var::outermost());
@@ -2019,14 +1966,109 @@ public:
      *     g(x, y) = 2 * f(x, y)
      */
     // @{
-    Func &prefetch(const Func &f, const VarOrRVar &var, Expr offset = 1,
+    HALIDE_ATTRIBUTE_DEPRECATED("Call prefetch() with the two-var form instead.")
+    Func &prefetch(const Func &f, const VarOrRVar &var, int offset = 1,
+                   PrefetchBoundStrategy strategy = PrefetchBoundStrategy::GuardWithIf) {
+        return prefetch(f, var, var, offset, strategy);
+    }
+    HALIDE_ATTRIBUTE_DEPRECATED("Call prefetch() with the two-var form instead.")
+    Func &prefetch(const Internal::Parameter &param, const VarOrRVar &var, int offset = 1,
+                   PrefetchBoundStrategy strategy = PrefetchBoundStrategy::GuardWithIf) {
+        return prefetch(param, var, var, offset, strategy);
+    }
+    template<typename T>
+    HALIDE_ATTRIBUTE_DEPRECATED("Call prefetch() with the two-var form instead.")
+    Func &prefetch(const T &image, VarOrRVar var, int offset = 1,
+                   PrefetchBoundStrategy strategy = PrefetchBoundStrategy::GuardWithIf) {
+        return prefetch<T>(image, var, var, offset, strategy);
+    }
+    // @}
+
+    /** prefetch() is a more fine-grained version of prefetch(), which allows
+     * specification of different vars for the location of the prefetch() instruction
+     * vs. the location that is being prefetched:
+     *
+     * - the first var specified, 'at', indicates the loop in which the prefetch will be placed
+     * - the second var specified, 'from', determines the var used to find the bounds to prefetch
+     *   (in conjunction with 'offset')
+     *
+     * If 'at' and 'from' are distinct vars, then 'from' must be at a nesting level outside 'at.'
+     * Note that the value for 'offset' applies only to 'from', not 'at'.
+     *
+     * For example, consider this pipeline:
+     \code
+     Func f, g;
+     Var x, y, z;
+     f(x, y) = x + y;
+     g(x, y) = 2 * f(x, y);
+     h(x, y) = 3 * f(x, y);
+     \endcode
+     *
+     * The following schedule:
+     \code
+     f.compute_root();
+     g.prefetch(f, x, x, 2, PrefetchBoundStrategy::NonFaulting);
+     h.prefetch(f, x, y, 2, PrefetchBoundStrategy::NonFaulting);
+     \endcode
+     *
+     * will inject prefetch call at the innermost loop of 'g' and 'h' and generate
+     * the following loop nest:
+     \code
+     for y = ...
+       for x = ...
+         f(x, y) = x + y
+     for y = ..
+       for x = ...
+         prefetch(&f[x + 2, y], 1, 16);
+         g(x, y) = 2 * f(x, y)
+     for y = ..
+       for x = ...
+         prefetch(&f[x, y + 2], 1, 16);
+         h(x, y) = 3 * f(x, y)
+     \endcode
+     *
+     * Note that the 'from' nesting level need not be adjacent to 'at':
+     \code
+     Func f, g;
+     Var x, y, z, w;
+     f(x, y, z, w) = x + y + z + w;
+     g(x, y, z, w) = 2 * f(x, y, z, w);
+     \endcode
+     *
+     * The following schedule:
+     \code
+     f.compute_root();
+     g.prefetch(f, y, w, 2, PrefetchBoundStrategy::NonFaulting);
+     \endcode
+     *
+     * will produce code that prefetches a tile of data:
+     \code
+     for w = ...
+       for z = ...
+         for y = ...
+           for x = ...
+         f(x, y, z, w) = x + y + z + w
+     for w = ...
+       for z = ...
+         for y = ...
+           for x0 = ...
+              prefetch(&f[x0, y, z, w + 2], 1, 16);
+           for x = ...
+             g(x, y, z, w) = 2 * f(x, y, z, w)
+     \endcode
+     *
+     * Note that calling prefetch() with the same var for both 'at' and 'from'
+     * is equivalent to calling prefetch() with that var.
+     */
+    // @{
+    Func &prefetch(const Func &f, const VarOrRVar &at, const VarOrRVar &from, Expr offset = 1,
                    PrefetchBoundStrategy strategy = PrefetchBoundStrategy::GuardWithIf);
-    Func &prefetch(const Internal::Parameter &param, const VarOrRVar &var, Expr offset = 1,
+    Func &prefetch(const Internal::Parameter &param, const VarOrRVar &at, const VarOrRVar &from, Expr offset = 1,
                    PrefetchBoundStrategy strategy = PrefetchBoundStrategy::GuardWithIf);
     template<typename T>
-    Func &prefetch(const T &image, VarOrRVar var, Expr offset = 1,
+    Func &prefetch(const T &image, const VarOrRVar &at, const VarOrRVar &from, Expr offset = 1,
                    PrefetchBoundStrategy strategy = PrefetchBoundStrategy::GuardWithIf) {
-        return prefetch(image.parameter(), var, offset, strategy);
+        return prefetch(image.parameter(), at, from, std::move(offset), strategy);
     }
     // @}
 
@@ -2050,7 +2092,7 @@ public:
     Func &reorder_storage(const Var &x, const Var &y);
     template<typename... Args>
     HALIDE_NO_USER_CODE_INLINE typename std::enable_if<Internal::all_are_convertible<Var, Args...>::value, Func &>::type
-    reorder_storage(const Var &x, const Var &y, Args &&... args) {
+    reorder_storage(const Var &x, const Var &y, Args &&...args) {
         std::vector<Var> collected_args{x, y, std::forward<Args>(args)...};
         return reorder_storage(collected_args);
     }
@@ -2257,6 +2299,14 @@ public:
      * deadlock and a bound on the number of threads launched.
      */
     Func &async();
+
+    /** Bound the extent of a Func's storage, but not extent of its
+     * compute. This can be useful for forcing a function's allocation 
+     * to be a fixed size, which often means it can go on the stack. 
+     * If bounds inference decides that it requires more storage for 
+     * this function than the allocation size you have stated, a runtime
+     * error will occur when you try to run the pipeline. */
+    Func &bound_storage(const Var &dim, const Expr &bound);
 
     /** Allocate storage for this function within f's loop over
      * var. Scheduling storage is optional, and can be used to
@@ -2492,7 +2542,7 @@ inline void assign_results(Realization &r, int idx, Last last) {
 }
 
 template<typename First, typename Second, typename... Rest>
-inline void assign_results(Realization &r, int idx, First first, Second second, Rest &&... rest) {
+inline void assign_results(Realization &r, int idx, First first, Second second, Rest &&...rest) {
     assign_results<First>(r, idx, first);
     assign_results<Second, Rest...>(r, idx + 1, second, rest...);
 }
@@ -2503,26 +2553,38 @@ inline void assign_results(Realization &r, int idx, First first, Second second, 
  * expression. This can be thought of as a scalar version of
  * \ref Func::realize */
 template<typename T>
-HALIDE_NO_USER_CODE_INLINE T evaluate(const Expr &e) {
+HALIDE_NO_USER_CODE_INLINE T evaluate(JITUserContext *ctx, const Expr &e) {
     user_assert(e.type() == type_of<T>())
         << "Can't evaluate expression "
         << e << " of type " << e.type()
         << " as a scalar of type " << type_of<T>() << "\n";
     Func f;
     f() = e;
-    Buffer<T> im = f.realize();
+    Buffer<T> im = f.realize(ctx);
     return im();
+}
+
+/** evaluate with a default user context */
+template<typename T>
+HALIDE_NO_USER_CODE_INLINE T evaluate(const Expr &e) {
+    return evaluate<T>(nullptr, e);
 }
 
 /** JIT-compile and run enough code to evaluate a Halide Tuple. */
 template<typename First, typename... Rest>
-HALIDE_NO_USER_CODE_INLINE void evaluate(Tuple t, First first, Rest &&... rest) {
+HALIDE_NO_USER_CODE_INLINE void evaluate(JITUserContext *ctx, Tuple t, First first, Rest &&...rest) {
     Internal::check_types<First, Rest...>(t, 0);
 
     Func f;
     f() = t;
-    Realization r = f.realize();
+    Realization r = f.realize(ctx);
     Internal::assign_results(r, 0, first, rest...);
+}
+
+/** JIT-compile and run enough code to evaluate a Halide Tuple. */
+template<typename First, typename... Rest>
+HALIDE_NO_USER_CODE_INLINE void evaluate(Tuple t, First first, Rest &&...rest) {
+    evaluate<First, Rest...>(nullptr, std::move(t), std::forward<First>(first), std::forward<Rest...>(rest...));
 }
 
 namespace Internal {
@@ -2561,7 +2623,7 @@ HALIDE_NO_USER_CODE_INLINE T evaluate_may_gpu(const Expr &e) {
  *  use GPU if jit target from environment specifies one. */
 // @{
 template<typename First, typename... Rest>
-HALIDE_NO_USER_CODE_INLINE void evaluate_may_gpu(Tuple t, First first, Rest &&... rest) {
+HALIDE_NO_USER_CODE_INLINE void evaluate_may_gpu(Tuple t, First first, Rest &&...rest) {
     Internal::check_types<First, Rest...>(t, 0);
 
     Func f;

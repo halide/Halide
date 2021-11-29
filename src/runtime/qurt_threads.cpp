@@ -1,8 +1,7 @@
 #include "HalideRuntime.h"
 #include "mini_qurt.h"
 
-// TODO: consider getting rid of this
-#define MAX_THREADS 256
+constexpr int MAX_THREADS = 256;
 
 using namespace Halide::Runtime::Internal::Qurt;
 
@@ -32,7 +31,7 @@ int halide_host_cpu_count() {
     return 4;
 }
 
-#define STACK_SIZE 256 * 1024
+#define STACK_SIZE (256 * 1024)
 
 WEAK uint16_t halide_qurt_default_thread_priority = 100;
 

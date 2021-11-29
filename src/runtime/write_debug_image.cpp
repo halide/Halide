@@ -113,13 +113,15 @@ struct ScopedFile {
         f = fopen(filename, mode);
     }
     ALWAYS_INLINE ~ScopedFile() {
-        fclose(f);
+        if (f) {
+            fclose(f);
+        }
     }
     ALWAYS_INLINE bool write(const void *ptr, size_t bytes) {
-        return fwrite(ptr, bytes, 1, f);
+        return f ? fwrite(ptr, bytes, 1, f) > 0 : false;
     }
     ALWAYS_INLINE bool open() const {
-        return f;
+        return f != nullptr;
     }
 };
 
@@ -140,7 +142,10 @@ WEAK extern "C" int32_t halide_debug_to_file(void *user_context, const char *fil
         return -1;
     }
 
-    halide_copy_to_host(user_context, buf);
+    int result = halide_copy_to_host(user_context, buf);
+    if (result != 0) {
+        return result;
+    }
 
     ScopedFile f(filename, "wb");
     if (!f.open()) {
@@ -269,9 +274,11 @@ WEAK extern "C" int32_t halide_debug_to_file(void *user_context, const char *fil
         f.write(header, 128);
 
         size_t payload_bytes = buf->size_in_bytes();
+        final_padding_bytes = 7 - ((payload_bytes - 1) & 7);
 
-        // level 5 .mat files have a size limit
-        if ((uint64_t)payload_bytes >> 32) {
+        // level 5 .mat files have a size limit. (Padding itself should never cause the overflow.
+        // Code written this way for safety.)
+        if (((uint64_t)payload_bytes + final_padding_bytes) >> 32) {
             halide_error(user_context, "Can't debug_to_file to a .mat file greater than 4GB\n");
             return -6;
         }
@@ -286,7 +293,7 @@ WEAK extern "C" int32_t halide_debug_to_file(void *user_context, const char *fil
 
         uint32_t tags[] = {
             // This is a matrix
-            14, 40 + padded_dimensions * 4 + padded_name_size + (uint32_t)payload_bytes,
+            14, 40 + padded_dimensions * 4 + padded_name_size + (uint32_t)payload_bytes + final_padding_bytes,
             // The element type
             6, 8, pixel_type_to_matlab_class_code[type_code], 1,
             // The shape
@@ -310,8 +317,6 @@ WEAK extern "C" int32_t halide_debug_to_file(void *user_context, const char *fil
         if (!f.write(array_name, padded_name_size)) {
             return -10;
         }
-
-        final_padding_bytes = 7 - ((payload_bytes - 1) & 7);
 
         // Payload header
         uint32_t payload_header[2] = {

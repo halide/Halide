@@ -337,8 +337,9 @@ struct Provide : public StmtNode<Provide> {
     std::string name;
     std::vector<Expr> values;
     std::vector<Expr> args;
+    Expr predicate;
 
-    static Stmt make(const std::string &name, const std::vector<Expr> &values, const std::vector<Expr> &args);
+    static Stmt make(const std::string &name, const std::vector<Expr> &values, const std::vector<Expr> &args, const Expr &predicate);
 
     static const IRNodeType _node_type = IRNodeType::Provide;
 };
@@ -412,12 +413,13 @@ struct Realize : public StmtNode<Realize> {
     static const IRNodeType _node_type = IRNodeType::Realize;
 };
 
-/** A sequence of statements to be executed in-order. 'rest' may be
- * undefined. Used rest.defined() to find out. */
+/** A sequence of statements to be executed in-order. 'first' is never
+    a Block, so this can be treated as a linked list. */
 struct Block : public StmtNode<Block> {
     Stmt first, rest;
 
     static Stmt make(Stmt first, Stmt rest);
+
     /** Construct zero or more Blocks to invoke a list of statements in order.
      * This method may not return a Block statement if stmts.size() <= 1. */
     static Stmt make(const std::vector<Stmt> &stmts);
@@ -509,10 +511,9 @@ struct Call : public ExprNode<Call> {
         div_round_to_zero,
         dynamic_shuffle,
         extract_mask_element,
-        glsl_texture_load,
-        glsl_texture_store,
-        glsl_varying,
         gpu_thread_barrier,
+        halving_add,
+        halving_sub,
         hvx_gather,
         hvx_scatter,
         hvx_scatter_acc,
@@ -527,7 +528,8 @@ struct Call : public ExprNode<Call> {
         make_struct,
         memoize_expr,
         mod_round_to_zero,
-        mulhi_shr,  // Compute high_half(arg[0] * arg[1]) >> arg[3]. Note that this is a shift in addition to taking the upper half of multiply result. arg[3] must be an unsigned integer immediate.
+        mul_shift_right,
+        mux,
         popcount,
         prefetch,
         promise_clamped,
@@ -538,6 +540,14 @@ struct Call : public ExprNode<Call> {
         require_mask,
         return_second,
         rewrite_buffer,
+        rounding_halving_add,
+        rounding_halving_sub,
+        rounding_mul_shift_right,
+        rounding_shift_left,
+        rounding_shift_right,
+        saturating_add,
+        saturating_sub,
+        scatter_gather,
         select_mask,
         shift_left,
         shift_right,
@@ -547,7 +557,13 @@ struct Call : public ExprNode<Call> {
         strict_float,
         stringify,
         undef,
+        unreachable,
         unsafe_promise_clamped,
+        widening_add,
+        widening_mul,
+        widening_shift_left,
+        widening_shift_right,
+        widening_sub,
         IntrinsicOpCount  // Sentinel: keep last.
     };
 
@@ -636,6 +652,19 @@ struct Call : public ExprNode<Call> {
         return is_intrinsic() && this->name == get_intrinsic_name(op);
     }
 
+    bool is_intrinsic(std::initializer_list<IntrinsicOp> intrinsics) const {
+        for (IntrinsicOp i : intrinsics) {
+            if (is_intrinsic(i)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    bool is_tag() const {
+        return is_intrinsic({Call::likely, Call::likely_if_innermost, Call::strict_float});
+    }
+
     /** Returns a pointer to a call node if the expression is a call to
      * one of the requested intrinsics. */
     static const Call *as_intrinsic(const Expr &e, std::initializer_list<IntrinsicOp> intrinsics) {
@@ -647,6 +676,10 @@ struct Call : public ExprNode<Call> {
             }
         }
         return nullptr;
+    }
+
+    static const Call *as_tag(const Expr &e) {
+        return as_intrinsic(e, {Call::likely, Call::likely_if_innermost, Call::strict_float});
     }
 
     bool is_extern() const {
@@ -855,6 +888,7 @@ struct VectorReduce : public ExprNode<VectorReduce> {
     // operators.
     typedef enum {
         Add,
+        SaturatingAdd,
         Mul,
         Min,
         Max,

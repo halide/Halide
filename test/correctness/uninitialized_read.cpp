@@ -3,7 +3,7 @@
 
 using namespace Halide;
 
-int my_trace(void *user_context, const halide_trace_event_t *e) {
+int my_trace(JITUserContext *user_context, const halide_trace_event_t *e) {
 
     if (e->event == 2) {  // begin realization
         if (e->coordinates[1] != 4) {
@@ -33,8 +33,8 @@ int main(int argc, char **argv) {
     h.output_buffer().dim(0).set_bounds(0, 1);
 
     f.trace_realizations();
-    h.set_custom_trace(&my_trace);
-    h.realize(1);
+    h.jit_handlers().custom_trace = &my_trace;
+    h.realize({1});
 
     printf("Success!\n");
     return 0;

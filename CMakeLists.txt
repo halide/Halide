@@ -1,9 +1,8 @@
-cmake_minimum_required(VERSION 3.16)
-
-if (NOT DEFINED Halide_VERSION)
-    set(Halide_VERSION 12.0.0)
-endif ()
-project(Halide VERSION ${Halide_VERSION})
+cmake_minimum_required(VERSION 3.16...3.20)
+project(Halide
+        VERSION 14.0.0
+        DESCRIPTION "Halide compiler and libraries"
+        HOMEPAGE_URL "https://halide-lang.org")
 
 enable_testing()
 
@@ -18,9 +17,7 @@ include(MakeShellPath)
 include(CMakeDependentOption)
 
 # Build Halide as a shared lib by default, but still honor command-line settings.
-if (NOT DEFINED BUILD_SHARED_LIBS)
-    set(BUILD_SHARED_LIBS YES)
-endif ()
+option(BUILD_SHARED_LIBS "Build shared libraries" ON)
 
 # Warn if the user did not set a build type and is using a single-configuration generator.
 get_property(IS_MULTI_CONFIG GLOBAL PROPERTY GENERATOR_IS_MULTI_CONFIG)
@@ -41,10 +38,33 @@ endif ()
 # Export all symbols on Windows to match GCC/Clang behavior on Linux/macOS
 set(CMAKE_WINDOWS_EXPORT_ALL_SYMBOLS ON)
 
-# Require standard C++14
-set(CMAKE_CXX_STANDARD 14)
-set(CMAKE_CXX_STANDARD_REQUIRED ON)
-set(CMAKE_CXX_EXTENSIONS OFF)
+# Require standard C++17
+if(NOT CMAKE_CXX_STANDARD)
+    set(CMAKE_CXX_STANDARD 17)
+    set(CMAKE_CXX_STANDARD_REQUIRED ON)
+    set(CMAKE_CXX_EXTENSIONS OFF)
+elseif(CMAKE_CXX_STANDARD LESS 17)
+    message(FATAL_ERROR "Halide requires C++17 or newer")
+endif()
+
+# Build Halide with ccache if the package is present
+option(Halide_CCACHE_BUILD "Set to ON for a ccache enabled build" OFF)
+if (Halide_CCACHE_BUILD)
+    find_program(CCACHE_PROGRAM ccache)
+    if (CCACHE_PROGRAM)
+        # TODO: ccache recommends setting CCACHE_SLOPPINESS=pch_defines,time_macros to
+        # enable precompiled header caching. Our timing found it slightly faster with
+        # just CCACHE_SLOPPINESS=pch_defines, so that's what we're using. Maybe revisit
+        # if issues occur (but we don't use any of the time macros so should be irrelevant).
+        set(Halide_CCACHE_PARAMS CCACHE_CPP2=yes CCACHE_HASHDIR=yes CCACHE_SLOPPINESS=pch_defines
+            CACHE STRING "Parameters to pass through to ccache")
+        set(CMAKE_C_COMPILER_LAUNCHER ${CMAKE_COMMAND} -E env ${Halide_CCACHE_PARAMS} ${CCACHE_PROGRAM})
+        set(CMAKE_CXX_COMPILER_LAUNCHER ${CMAKE_COMMAND} -E env ${Halide_CCACHE_PARAMS} ${CCACHE_PROGRAM})
+        message(STATUS "Enabling ccache usage for building.")
+    else ()
+        message(FATAL_ERROR "Unable to find the program ccache. Set Halide_CCACHE_BUILD to OFF")
+    endif ()
+endif ()
 
 ##
 # Import dependencies

@@ -8,7 +8,7 @@ int main(int argc, char **argv) {
     Func f;
 
     f(x) = clamp(cast<int8_t>(x), 0, 255);
-    Buffer<> result = f.realize(42);
+    Buffer<> result = f.realize({42});
 
     printf("Success!\n");
     return 0;

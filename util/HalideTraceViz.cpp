@@ -105,36 +105,30 @@ struct fail {
 
 // -------------------------------------------------------------
 
-// Combine type-and-code into a single integer to avoid nested switches.
-// Must be constexpr to allow use in case clauses.
-inline constexpr int halide_type_code(halide_type_code_t code, int bits) {
-    return (((int)code) << 8) | bits;
-}
-
 template<typename T>
 T value_as(const halide_type_t &type, const halide_scalar_value_t &value) {
-    switch (halide_type_code((halide_type_code_t)type.code, type.bits)) {
-    case halide_type_code(halide_type_int, 8):
+    switch (type.element_of().as_u32()) {
+    case halide_type_t(halide_type_int, 8).as_u32():
         return (T)value.u.i8;
-    case halide_type_code(halide_type_int, 16):
+    case halide_type_t(halide_type_int, 16).as_u32():
         return (T)value.u.i16;
-    case halide_type_code(halide_type_int, 32):
+    case halide_type_t(halide_type_int, 32).as_u32():
         return (T)value.u.i32;
-    case halide_type_code(halide_type_int, 64):
+    case halide_type_t(halide_type_int, 64).as_u32():
         return (T)value.u.i64;
-    case halide_type_code(halide_type_uint, 1):
+    case halide_type_t(halide_type_uint, 1).as_u32():
         return (T)value.u.b;
-    case halide_type_code(halide_type_uint, 8):
+    case halide_type_t(halide_type_uint, 8).as_u32():
         return (T)value.u.u8;
-    case halide_type_code(halide_type_uint, 16):
+    case halide_type_t(halide_type_uint, 16).as_u32():
         return (T)value.u.u16;
-    case halide_type_code(halide_type_uint, 32):
+    case halide_type_t(halide_type_uint, 32).as_u32():
         return (T)value.u.u32;
-    case halide_type_code(halide_type_uint, 64):
+    case halide_type_t(halide_type_uint, 64).as_u32():
         return (T)value.u.u64;
-    case halide_type_code(halide_type_float, 32):
+    case halide_type_t(halide_type_float, 32).as_u32():
         return (T)value.u.f32;
-    case halide_type_code(halide_type_float, 64):
+    case halide_type_t(halide_type_float, 64).as_u32():
         return (T)value.u.f64;
     default:
         fail() << "Can't convert packet with type: " << (int)type.code << "bits: " << type.bits;
@@ -1115,7 +1109,7 @@ int run(bool ignore_trace_tags, FlagProcessor flag_processor) {
         flag_processor(&state);
 
         // allocate the surface after all tags and flags are processed
-        surface = std::unique_ptr<Surface>(new Surface(state.globals.frame_size));
+        surface = std::make_unique<Surface>(state.globals.frame_size);
 
         if (state.globals.auto_layout_grid.x < 0 || state.globals.auto_layout_grid.y < 0) {
             int cells_needed = 0;
