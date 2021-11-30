@@ -233,59 +233,10 @@ void CodeGen_LLVM::set_context(llvm::LLVMContext &context) {
     this->context = &context;
 }
 
-<<<<<<< HEAD
-CodeGen_LLVM *CodeGen_LLVM::new_for_target(const Target &target,
-                                           llvm::LLVMContext &context) {
-    // The awkward mapping from targets to code generators
-    if (target.features_any_of({Target::CUDA,
-                                Target::OpenCL,
-                                Target::OpenGL,
-                                Target::OpenGLCompute,
-                                Target::Metal,
-                                Target::D3D12Compute,
-                                Target::Vulkan})) {
-#ifdef WITH_X86
-        if (target.arch == Target::X86) {
-            return make_codegen<CodeGen_GPU_Host<CodeGen_X86>>(target, context);
-        }
-#endif
-#if defined(WITH_ARM) || defined(WITH_AARCH64)
-        if (target.arch == Target::ARM) {
-            return make_codegen<CodeGen_GPU_Host<CodeGen_ARM>>(target, context);
-        }
-#endif
-#ifdef WITH_MIPS
-        if (target.arch == Target::MIPS) {
-            return make_codegen<CodeGen_GPU_Host<CodeGen_MIPS>>(target, context);
-        }
-#endif
-#ifdef WITH_POWERPC
-        if (target.arch == Target::POWERPC) {
-            return make_codegen<CodeGen_GPU_Host<CodeGen_PowerPC>>(target, context);
-        }
-#endif
-#ifdef WITH_WEBASSEMBLY
-        if (target.arch == Target::WebAssembly) {
-            return make_codegen<CodeGen_GPU_Host<CodeGen_WebAssembly>>(target, context);
-        }
-#endif
-#ifdef WITH_RISCV
-        if (target.arch == Target::RISCV) {
-            return make_codegen<CodeGen_GPU_Host<CodeGen_RISCV>>(target, context);
-        }
-#endif
-        user_error << "Invalid target architecture for GPU backend: "
-                   << target.to_string() << "\n";
-        return nullptr;
-
-    } else if (target.arch == Target::X86) {
-        return make_codegen<CodeGen_X86>(target, context);
-=======
 std::unique_ptr<CodeGen_LLVM> CodeGen_LLVM::new_for_target(const Target &target, llvm::LLVMContext &context) {
     std::unique_ptr<CodeGen_LLVM> result;
     if (target.arch == Target::X86) {
         result = new_CodeGen_X86(target);
->>>>>>> master
     } else if (target.arch == Target::ARM) {
         result = new_CodeGen_ARM(target);
     } else if (target.arch == Target::MIPS) {

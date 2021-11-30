@@ -1,6 +1,7 @@
 #include <memory>
 
 #include "Closure.h"
+#include "CodeGen_Vulkan_Dev.h"
 #include "CodeGen_D3D12Compute_Dev.h"
 #include "CodeGen_GPU_Dev.h"
 #include "CodeGen_Metal_Dev.h"
@@ -266,6 +267,9 @@ public:
         }
         if (target.has_feature(Target::D3D12Compute)) {
             cgdev[DeviceAPI::D3D12Compute] = new_CodeGen_D3D12Compute_Dev(target);
+        }
+        if (target.has_feature(Target::D3D12Compute)) {
+            cgdev[DeviceAPI::Vulkan] = new_CodeGen_Vulkan_Dev(target);
         }
 
         internal_assert(!cgdev.empty()) << "Requested unknown GPU target: " << target.to_string() << "\n";

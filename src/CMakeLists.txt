@@ -201,6 +201,7 @@ set(SOURCE_FILES
     CodeGen_PTX_Dev.cpp
     CodeGen_PyTorch.cpp
     CodeGen_RISCV.cpp
+    CodeGen_Vulkan_Dev.cpp
     CodeGen_WebAssembly.cpp
     CodeGen_X86.cpp
     CompilerLogger.cpp
@@ -490,26 +491,31 @@ target_compile_definitions(Halide
 
 option(TARGET_OPENCL "Include OpenCL-C target" ON)
 if (TARGET_OPENCL)
+    message(STATUS "Enabling OpenCL-C target")
     target_compile_definitions(Halide PRIVATE WITH_OPENCL)
 endif ()
 
 option(TARGET_METAL "Include Metal target" ON)
 if (TARGET_METAL)
+    message(STATUS "Enabling Metal target")
     target_compile_definitions(Halide PRIVATE WITH_METAL)
 endif ()
 
 option(TARGET_D3D12COMPUTE "Include Direct3D 12 Compute target" ON)
 if (TARGET_D3D12COMPUTE)
+    message(STATUS "Enabling Direct3D 12 Compute target")
     target_compile_definitions(Halide PRIVATE WITH_D3D12)
 endif ()
 
 option(TARGET_VULKAN "Include Vulkan target" ON)
 if (TARGET_VULKAN)
+    message(STATUS "Enabling Vulkan target")
     target_compile_definitions(Halide PRIVATE WITH_VULKAN)
 endif()
 
-option(TARGET_OPENGLCOMPUTE "Include OpenGLCompute target" ON)
+option(TARGET_OPENGLCOMPUTE "Include OpenGL Compute target" ON)
 if (TARGET_OPENGLCOMPUTE)
+    message(STATUS "Enabling OpenGL Compute target")
     target_compile_definitions(Halide PRIVATE WITH_OPENGLCOMPUTE)
 endif ()
 

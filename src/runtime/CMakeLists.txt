@@ -79,6 +79,7 @@ set(RUNTIME_CPP
     to_string
     trace_helper
     tracing
+    vulkan
     wasm_cpu_features
     windows_clock
     windows_cuda
@@ -133,6 +134,7 @@ set(RUNTIME_HEADER_FILES
     HalideRuntimeOpenCL.h
     HalideRuntimeOpenGLCompute.h
     HalideRuntimeQurt.h
+    HalideRuntimeVulkan.h
     )
 
 # Need to create an object library for this because CMake

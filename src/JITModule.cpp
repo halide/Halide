@@ -958,23 +958,6 @@ std::vector<JITModule> JITSharedRuntime::get(llvm::Module *for_module, const Tar
             result.push_back(m);
         }
     }
-<<<<<<< HEAD
-    if (target.has_feature(Target::OpenGL)) {
-        auto kind = target.has_feature(Target::Debug) ? OpenGLDebug : OpenGL;
-        JITModule m = make_module(for_module, target, kind, result, create);
-        if (m.compiled()) {
-            result.push_back(m);
-        }
-    }
-    if (target.has_feature(Target::Vulkan)) {
-        auto kind = target.has_feature(Target::Debug) ? VulkanDebug : Vulkan;
-        JITModule m = make_module(for_module, target, kind, result, create);
-        if (m.compiled()) {
-            result.push_back(m);
-        }
-    }
-=======
->>>>>>> master
     if (target.has_feature(Target::OpenGLCompute)) {
         auto kind = target.has_feature(Target::Debug) ? OpenGLComputeDebug : OpenGLCompute;
         JITModule m = make_module(for_module, target, kind, result, create);
@@ -991,6 +974,13 @@ std::vector<JITModule> JITSharedRuntime::get(llvm::Module *for_module, const Tar
     }
     if (target.has_feature(Target::D3D12Compute)) {
         auto kind = target.has_feature(Target::Debug) ? D3D12ComputeDebug : D3D12Compute;
+        JITModule m = make_module(for_module, target, kind, result, create);
+        if (m.compiled()) {
+            result.push_back(m);
+        }
+    }
+    if (target.has_feature(Target::Vulkan)) {
+        auto kind = target.has_feature(Target::Debug) ? VulkanDebug : Vulkan;
         JITModule m = make_module(for_module, target, kind, result, create);
         if (m.compiled()) {
             result.push_back(m);
