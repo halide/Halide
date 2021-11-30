@@ -6,6 +6,10 @@ namespace Internal {
 
 using std::string;
 
+namespace {
+constexpr int DBG = 3;
+}  // namespace
+
 Closure::Closure(const Stmt &s, const string &loop_variable) {
     if (!loop_variable.empty()) {
         ignore.push(loop_variable);
@@ -35,7 +39,7 @@ void Closure::visit(const For *op) {
 void Closure::found_buffer_ref(const string &name, Type type,
                                bool read, bool written, const Halide::Buffer<> &image) {
     if (!ignore.contains(name)) {
-        debug(3) << "Adding buffer " << name << " to closure\n";
+        debug(DBG) << "Adding buffer " << name << " to closure:\n";
         Buffer &ref = buffers[name];
         ref.type = type.element_of();  // TODO: Validate type is the same as existing refs?
         ref.read = ref.read || read;
@@ -46,8 +50,15 @@ void Closure::found_buffer_ref(const string &name, Type type,
             ref.size = image.size_in_bytes();
             ref.dimensions = image.dimensions();
         }
+        debug(DBG) << "   "
+                   << " t=" << ref.type
+                   << " d=" << (int)ref.dimensions
+                   << " r=" << ref.read
+                   << " w=" << ref.write
+                   << " mt=" << (int)ref.memory_type
+                   << " sz=" << ref.size << "\n";
     } else {
-        debug(3) << "Not adding " << name << " to closure\n";
+        debug(DBG) << "Not adding buffer " << name << " to closure\n";
     }
 }
 
@@ -78,9 +89,9 @@ void Closure::visit(const Allocate *op) {
 
 void Closure::visit(const Variable *op) {
     if (ignore.contains(op->name)) {
-        debug(3) << "Not adding " << op->name << " to closure\n";
+        debug(DBG) << "Not adding var " << op->name << " to closure\n";
     } else {
-        debug(3) << "Adding " << op->name << " to closure\n";
+        debug(DBG) << "Adding var " << op->name << " to closure\n";
         vars[op->name] = op->type;
     }
 }
