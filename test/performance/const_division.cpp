@@ -49,10 +49,10 @@ bool test(int w, bool div, bool round_to_zero) {
 
     if (div) {
         if (round_to_zero) {
-            // Test div
+            // Test div. We'll unroll entirely across y to turn the denominator into a constant.
             f(x, y) = div_round_to_zero(input(x, y), cast<T>(y + min_val));
 
-            // Reference good version
+            // Reference good version. Not unrolled across y.
             g(x, y) = div_round_to_zero(input(x, y), cast<T>(y + min_val));
 
             // Version that uses fast_integer_divide
