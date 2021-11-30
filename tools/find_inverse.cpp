@@ -24,12 +24,7 @@ int64_t srzdiv(int64_t a, int64_t b) {
 
 bool u_method_0(int den, int sh_post, int bits) {
     uint64_t max = (1L << bits) - 1;
-    // for (int64_t num = 0; num <= max; num++) {
-    for (unsigned iter = 0; iter < 1000000UL; iter++) {
-        uint64_t num = r(0, max);
-        // Make sure we hit the extremes
-        if (iter == 0) num = 0;
-        if (iter == 1) num = max;
+    for (int64_t num = 0; num <= max; num++) {
         uint64_t result = num;
         result >>= sh_post;
         if (num / den != result) return false;
@@ -40,12 +35,7 @@ bool u_method_0(int den, int sh_post, int bits) {
 bool u_method_1(int den, int64_t mul, int sh_post, int bits) {
     uint64_t max = (1L << bits) - 1;
     if (mul > max) return false;
-    // for (uint64_t num = 0; num <= max; num++) {
-    for (unsigned iter = 0; iter < 1000000UL; iter++) {
-        uint64_t num = r(0, max);
-        // Make sure we hit the extremes
-        if (iter == 0) num = 0;
-        if (iter == 1) num = max;
+    for (uint64_t num = 0; num <= max; num++) {
         uint64_t result = num;
         result *= mul;
         result >>= bits;
@@ -59,12 +49,7 @@ bool u_method_1(int den, int64_t mul, int sh_post, int bits) {
 bool u_method_2(int den, int64_t mul, int sh_post, int bits) {
     uint64_t max = (1UL << bits) - 1;
     if (mul > max) return false;
-    // for (uint64_t num = 0; num <= max; num++) {
-    for (unsigned iter = 0; iter < 1000000UL; iter++) {
-        uint64_t num = r(0, max);
-        // Make sure we hit the extremes
-        if (iter == 0) num = 0;
-        if (iter == 1) num = max;
+    for (uint64_t num = 0; num <= max; num++) {
         uint64_t result = num;
         result *= mul;
         result >>= bits;
@@ -80,12 +65,7 @@ bool u_method_2(int den, int64_t mul, int sh_post, int bits) {
 bool u_method_3(int den, int64_t mul, int sh_post, int bits) {
     uint64_t max = (1UL << bits) - 1;
     if (mul > max) return false;
-    // for (uint64_t num = 0; num <= max; num++) {
-    for (unsigned iter = 0; iter < 1000000UL; iter++) {
-        uint64_t num = r(0, max);
-        // Make sure we hit the extremes
-        if (iter == 0) num = 0;
-        if (iter == 1) num = max;
+    for (uint64_t num = 0; num <= max; num++) {
         uint64_t result = num;
         result *= mul;
         result >>= bits;
@@ -100,12 +80,7 @@ bool u_method_3(int den, int64_t mul, int sh_post, int bits) {
 
 bool s_method_0(int den, int sh_post, int bits) {
     int64_t min = -(1L << (bits - 1)), max = (1L << (bits - 1)) - 1;
-    // for (int64_t num = min; num <= max; num++) {
-    for (int iter = 0; iter < 1000000L; iter++) {
-        int64_t num = r(min, max);
-        // Make sure we hit the extremes
-        if (iter == 0) num = min;
-        if (iter == 1) num = max;
+    for (int64_t num = min; num <= max; num++) {
         int64_t result = num;
         result >>= sh_post;
         if (sdiv(num, den) != result) return false;
@@ -116,12 +91,7 @@ bool s_method_0(int den, int sh_post, int bits) {
 bool s_method_1(int den, int64_t mul, int sh_post, int bits) {
     int64_t min = -(1 << (bits - 1)), max = (1 << (bits - 1)) - 1;
 
-    // for (int64_t num = min; num <= max; num++) {
-    for (int iter = 0; iter < 1000000L; iter++) {
-        int64_t num = r(min, max);
-        // Make sure we hit the extremes
-        if (iter == 0) num = min;
-        if (iter == 1) num = max;
+    for (int64_t num = min; num <= max; num++) {
         int64_t result = num;
         uint64_t xsign = result >> (bits - 1);
         uint64_t q0 = (mul * (xsign ^ result)) >> bits;
@@ -134,11 +104,6 @@ bool s_method_1(int den, int64_t mul, int sh_post, int bits) {
 bool srz_method_0(int den, int sh_post, int bits) {
     int64_t min = -(1L << (bits - 1)), max = (1L << (bits - 1)) - 1;
     for (int64_t num = min; num <= max; num++) {
-        // for (int iter = 0; iter < 1000000L; iter++) {
-        // int64_t num = r(min, max);
-        // Make sure we hit the extremes
-        // if (iter == 0) num = min;
-        // if (iter == 1) num = max;
         int64_t result = num;
         result += (result >> (bits - 1)) & (den - 1);
         result >>= sh_post;
@@ -151,22 +116,15 @@ bool srz_method_1(int den, int64_t mul, int sh_post, int bits) {
     int64_t min = -(1 << (bits - 1)), max = (1 << (bits - 1)) - 1;
 
     for (int64_t num = min; num <= max; num++) {
-        // for (int iter = 0; iter < 1000000L; iter++) {
-        // int64_t num = r(min, max);
-        // Make sure we hit the extremes
-        // if (iter == 0) num = min;
-        // if (iter == 1) num = max;
         int64_t result = num;
         uint64_t xsign = result >> (bits - 1);
         uint64_t q0 = (mul * result) >> bits;
         result = (q0 >> sh_post);
         uint64_t mask = (1ULL << bits) - 1;
-        // printf("%lld %lld\n", (long long int)result, (long long int)mask);
         result -= (xsign & mask);
         // Fix-up the sign bits
         result <<= (64 - bits);
         result >>= (64 - bits);
-        // printf("%d %d %lld %lld\n", (int)num, (int)den, (long long int)srzdiv(num, den), (long long int)result);
         if (srzdiv(num, den) != result) {
             printf("Fail\n");
             return false;
