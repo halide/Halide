@@ -24,6 +24,20 @@ endfunction()
 
 add_subdirectory(common)
 
-add_subdirectory(adams2019)
-add_subdirectory(li2018)
-add_subdirectory(mullapudi2016)
+option(BUILD_ADAMS2019 "Build Adams-2019 autoscheduler" ON)
+if (BUILD_ADAMS2019)
+    message(STATUS "Enabling Adams-2019 autoscheduler")
+    add_subdirectory(adams2019)
+endif()
+
+option(BUILD_LI2018 "Build Li-2018 autoscheduler" ON)
+if (BUILD_LI2018)
+    message(STATUS "Enabling Li-2018 autoscheduler")
+    add_subdirectory(li2018)
+endif()
+
+option(BUILD_MULLAPUDI2016 "Build Mullapudi-2016 autoscheduler" ON)
+if (BUILD_MULLAPUDI2016)
+    message(STATUS "Enabling Mullapudi-2016 autoscheduler")
+    add_subdirectory(mullapudi2016)
+endif()
