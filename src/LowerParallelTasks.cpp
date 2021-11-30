@@ -444,11 +444,11 @@ struct LowerParallelTasks : public IRMutator {
                 t.body = acquire->body;
                 acquire = t.body.as<Acquire>();
             }
-            result.emplace_back(t);
+            result.emplace_back(std::move(t));
         } else if (loop && loop->for_type == ForType::Parallel) {
             add_suffix(prefix, ".par_for." + loop->name);
             ParallelTask t{loop->body, {}, loop->name, loop->min, loop->extent, const_false(), task_debug_name(prefix)};
-            result.emplace_back(t);
+            result.emplace_back(std::move(t));
         } else if (loop &&
                    loop->for_type == ForType::Serial &&
                    acquire &&
@@ -462,11 +462,11 @@ struct LowerParallelTasks : public IRMutator {
                 t.body = acquire->body;
                 acquire = t.body.as<Acquire>();
             }
-            result.emplace_back(t);
+            result.emplace_back(std::move(t));
         } else {
             add_suffix(prefix, "." + std::to_string(result.size()));
             ParallelTask t{s, {}, "", 0, 1, const_false(), task_debug_name(prefix)};
-            result.emplace_back(t);
+            result.emplace_back(std::move(t));
         }
     }
 
