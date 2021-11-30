@@ -1369,6 +1369,22 @@ HALIDE_ALWAYS_INLINE int8x64_t halide_xtensa_narrow_i24_with_shift_i8(const int2
   return IVP_PACKVR2NX24(a, shift);
 }
 
+HALIDE_ALWAYS_INLINE int32x32_t halide_xtensa_narrow_i48_with_shift_i32(const int48x32_t& a, int shift) {
+    int32x16_t even = IVP_PACKVRNRNX48_0(a, shift);
+    int32x16_t odd = IVP_PACKVRNRNX48_1(a, shift);
+    int32x32_t r;
+    IVP_DSELN_2X32I(r.native_vector[1], r.native_vector[0], odd, even, IVP_DSELI_INTERLEAVE_2);
+    return r;
+}
+
+HALIDE_ALWAYS_INLINE uint32x32_t halide_xtensa_narrow_i48_with_shift_u32(const int48x32_t& a, int shift) {
+    uint32x16_t even = IVP_PACKVRNRNX48_0(a, shift);
+    uint32x16_t odd = IVP_PACKVRNRNX48_1(a, shift);
+    uint32x32_t r;
+    IVP_DSELN_2X32UI(r.native_vector[1], r.native_vector[0], odd, even, IVP_DSELI_INTERLEAVE_2);
+    return r;
+}
+
 HALIDE_ALWAYS_INLINE uint16x32_t halide_xtensa_narrow_i48_with_shift_u16(const int48x32_t& a, int shift) {
   return xb_vecNx16_rtor_xb_vecNx16U(IVP_PACKVRNRNX48(a, shift));
 }

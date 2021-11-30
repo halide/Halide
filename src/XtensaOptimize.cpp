@@ -765,6 +765,8 @@ private:
             static const std::vector<Pattern> divs = {
                 // TODO(vksnk): Before enabling it add a check for ExactLogOp
                 // {"halide_xtensa_div_i32_i16", wild_i32x / wild_i32x, Pattern::NarrowOp1}
+              {"halide_xtensa_narrow_i48_with_shift_i32", i32(wild_i48x) / wild_i32, Pattern::ExactLog2Op1},
+              {"halide_xtensa_narrow_i48_with_shift_u32", u32(wild_i48x) / wild_u32, Pattern::ExactLog2Op1},
             };
 
             Expr new_expr = apply_patterns(div, divs, this);
@@ -850,6 +852,14 @@ private:
             {"halide_xtensa_narrow_i48_with_shift_i16", i16(i32(wild_i48x) / wild_i32), Pattern::ExactLog2Op1},
             {"halide_xtensa_narrow_i48_with_shift_u16", u16(u32(wild_i48x) >> wild_u32)},
             {"halide_xtensa_narrow_i48_with_shift_u16", u16(u32(wild_i48x) / wild_u32), Pattern::ExactLog2Op1},
+
+            {"halide_xtensa_narrow_i48_with_shift_i16", i16(wild_i48x >> wild_i32)},
+            {"halide_xtensa_narrow_i48_with_shift_i16", i16(wild_i48x / wild_i32), Pattern::ExactLog2Op1},
+            {"halide_xtensa_narrow_i48_with_shift_u16", u16(wild_i48x >> wild_u32)},
+            {"halide_xtensa_narrow_i48_with_shift_u16", u16(wild_i48x / wild_u32), Pattern::ExactLog2Op1},
+
+            {"halide_xtensa_narrow_i48_with_shift_i16", i16(rounding_shift_right(i32(wild_i48x), wild_i32))},
+            {"halide_xtensa_narrow_i48_with_shift_u16", u16(rounding_shift_right(u32(wild_i48x), wild_u32))},
 
             {"halide_xtensa_narrow_with_shift_i16", i16(wild_i32x >> wild_i32)},
             {"halide_xtensa_narrow_with_shift_i16", i16(wild_i32x / wild_i32), Pattern::ExactLog2Op1},
@@ -1111,6 +1121,9 @@ private:
             {"halide_xtensa_convert_to_int32x16_t_from_uint1x16_t", halide_xtensa_slice_to_native_i32(i32(halide_xtensa_concat_from_native_u1(wild_u1x, wild_u1x, wild_u1x, wild_u1x)), 1, 16, 64), Pattern::PassOnlyOp1},
             {"halide_xtensa_convert_to_int32x16_t_from_uint1x16_t", halide_xtensa_slice_to_native_i32(i32(halide_xtensa_concat_from_native_u1(wild_u1x, wild_u1x, wild_u1x, wild_u1x)), 2, 16, 64), Pattern::PassOnlyOp2},
             {"halide_xtensa_convert_to_int32x16_t_from_uint1x16_t", halide_xtensa_slice_to_native_i32(i32(halide_xtensa_concat_from_native_u1(wild_u1x, wild_u1x, wild_u1x, wild_u1x)), 3, 16, 64), Pattern::PassOnlyOp3},
+
+            {"halide_xtensa_narrow_i48_with_shift_i32", i32(wild_i48x) >> wild_i32},
+            {"halide_xtensa_narrow_i48_with_shift_u32", u32(wild_i48x) >> wild_u32},
 
             // Predicated saturated add/sub.
             // NOTE(vksnk): patterns below are for predicated instructions and look like they may
@@ -1770,7 +1783,9 @@ private:
         }
 
         int native_lanes = get_native_vector_lanes_num(op->type);
-        std::set<std::string> skip_slicing = {"halide_xtensa_widening_load", "halide_xtensa_interleave_i16", "halide_xtensa_narrow_i24_with_shift_i16"};
+        std::set<std::string> skip_slicing = {"halide_xtensa_widening_load", "halide_xtensa_interleave_i16",
+                                              "halide_xtensa_narrow_i24_with_shift_i16", "halide_xtensa_narrow_i48_with_shift_i32",
+                                              "halide_xtensa_narrow_i48_with_shift_u32"};
         if (native_lanes > 0 && (skip_slicing.count(op->name) == 0)) {
             const int total_lanes = op->type.lanes();
             int split_to = op->type.lanes() / native_lanes;
