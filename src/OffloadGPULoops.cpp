@@ -268,7 +268,7 @@ public:
         if (target.has_feature(Target::D3D12Compute)) {
             cgdev[DeviceAPI::D3D12Compute] = new_CodeGen_D3D12Compute_Dev(target);
         }
-        if (target.has_feature(Target::D3D12Compute)) {
+        if (target.has_feature(Target::Vulkan)) {
             cgdev[DeviceAPI::Vulkan] = new_CodeGen_Vulkan_Dev(target);
         }
 

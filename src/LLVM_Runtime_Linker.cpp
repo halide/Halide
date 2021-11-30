@@ -813,7 +813,7 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
         module_type = ModuleAOT;
     }
 
-    //    Halide::Internal::debug(0) << "Getting initial module type " << (int)module_type << "\n";
+    // Halide::Internal::debug(0) << "Getting initial module type " << (int)module_type << "\n";
 
     internal_assert(t.bits == 32 || t.bits == 64)
         << "Bad target: " << t.to_string();
@@ -1175,7 +1175,8 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
             }
         }
         if (t.has_feature(Target::Vulkan)) {
-            //TODO: probably need to add some checks here
+            user_assert(bits_64) << "Vulkan target only available on 64-bit targets for now.\n";
+            Halide::Internal::debug(0) << "Adding Vulkan module ... \n";
             modules.push_back(get_initmod_vulkan(c, bits_64, debug));
         }
         if (t.arch != Target::Hexagon && t.has_feature(Target::HVX)) {

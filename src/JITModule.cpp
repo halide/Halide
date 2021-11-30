@@ -128,6 +128,7 @@ void load_vulkan() {
     if (have_symbol("VkGetPhysicalDeviceProperties")) {
         debug(1) << "Vulkan library already linked in...\n";
     } else {
+        load_metal(); // Molten requires Metal ...
         debug(1) << "Looking for Vulkan library...\n";
         string error;
         llvm::sys::DynamicLibrary::LoadLibraryPermanently("libMoltenVK.dylib", &error);

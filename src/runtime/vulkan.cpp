@@ -59,29 +59,37 @@ WEAK int halide_vulkan_acquire_context(void *user_context, VkInstance *instance,
     halide_abort_if_false(user_context, device != nullptr);
     halide_abort_if_false(user_context, queue != nullptr);
 
-    // TODO: make validation optional & only in debug
-
-    const char* val_layers[] = {"VK_LAYER_KHRONOS_validation"};
 #define VK_MAKE_VERSION(major, minor, patch) \
     ((((uint32_t)(major)) << 22) | (((uint32_t)(minor)) << 12) | ((uint32_t)(patch)))
+
+    // TODO: make validation optional & only in debug
+#if defined(__linux__)
+    const int num_layers = 1;
+    const char* val_layers[] = {"VK_LAYER_KHRONOS_validation"};
+    const uint32_t vk_version = VK_MAKE_VERSION(1, 2, 0);
+#else
+    const int num_layers = 1;
+    const char* const * val_layers = nullptr;
+    const uint32_t vk_version = VK_MAKE_VERSION(1, 1, 0);
+#endif
 
     if (cached_instance == nullptr && create) {
         VkApplicationInfo app_info = {
             VK_STRUCTURE_TYPE_APPLICATION_INFO, // struct type
             nullptr, // Next
-            nullptr, // application name
-            0, // app version
+            "Runtime", // application name
+            VK_MAKE_VERSION(1, 0, 0), // app version
             "Halide", // engine name
-            0, // engine version
-            VK_MAKE_VERSION(1, 2, 0)
+            VK_MAKE_VERSION(HALIDE_VERSION_MAJOR, HALIDE_VERSION_MINOR, HALIDE_VERSION_PATCH), // engine version
+            vk_version
         };
+
         VkInstanceCreateInfo create_info = {
             VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,
             nullptr,    // Next
             0,       // Flags
             &app_info,    // ApplicationInfo
-//            0, nullptr, // Layers
-            1, val_layers,
+            num_layers, val_layers,
             0, nullptr  // Extensions
         };
         VkResult ret_code = vkCreateInstance(&create_info, nullptr, &cached_instance);
@@ -325,6 +333,17 @@ WEAK int halide_vulkan_initialize_kernels(void *user_context, void **state_ptr, 
     #endif
 
     return 0;
+}
+
+WEAK void halide_vulkan_finalize_kernels(void *user_context, void *state_ptr) {
+    debug(user_context)
+        << "CL: halide_vulkan_finalize_kernels (user_context: " << user_context
+        << ", state_ptr: " << state_ptr << "\n";
+    VulkanContext ctx(user_context);
+    if (ctx.error == VK_SUCCESS) {
+// TODO: FIXME
+//        compilation_cache.release_hold(user_context, ctx.context, state_ptr);
+    }
 }
 
 // Used to generate correct timings when tracing
@@ -914,11 +933,7 @@ WEAK int halide_vulkan_run(void *user_context,
                            int shared_mem_bytes,
                            size_t arg_sizes[],
                            void* args[],
-                           int8_t arg_is_buffer[],
-                           int num_attributes,
-                           float* vertex_buffer,
-                           int num_coords_dim0,
-                           int num_coords_dim1) {
+                           int8_t arg_is_buffer[]) {
     debug(user_context)
         << "Vulkan: halide_vulkan_run (user_context: " << user_context << ", "
         << "entry: " << entry_name << ", "
