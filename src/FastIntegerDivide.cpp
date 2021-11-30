@@ -297,17 +297,17 @@ Expr fast_integer_divide_impl(Expr numerator, Expr denominator, bool round_to_ze
 
 }  // namespace
 
-Expr fast_integer_divide_round_to_zero(Expr numerator, Expr denominator) {
+Expr fast_integer_divide_round_to_zero(const Expr &numerator, const Expr &denominator) {
     return fast_integer_divide_impl(numerator, denominator, /** round to zero **/ true);
 }
 
-Expr fast_integer_divide(Expr numerator, Expr denominator) {
+Expr fast_integer_divide(const Expr &numerator, const Expr &denominator) {
     return fast_integer_divide_impl(numerator, denominator, /** round to zero **/ false);
 }
 
-Expr fast_integer_modulo(Expr numerator, Expr denominator) {
+Expr fast_integer_modulo(const Expr &numerator, const Expr &denominator) {
     Expr ratio = fast_integer_divide(numerator, denominator);
-    return std::move(numerator) - ratio * std::move(denominator);
+    return numerator - ratio * denominator;
 }
 
 }  // namespace Halide
