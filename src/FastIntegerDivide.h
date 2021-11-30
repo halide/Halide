@@ -28,6 +28,10 @@ namespace Halide {
  */
 Expr fast_integer_divide(Expr numerator, Expr denominator);
 
+/** A variant of the above which rounds towards zero instead of rounding towards
+ * negative infinity. */
+Expr fast_integer_divide_round_to_zero(Expr numerator, Expr denominator);
+
 /** Use the fast integer division tables to implement a modulo
  * operation via the Euclidean identity: a%b = a - (a/b)*b
  */
