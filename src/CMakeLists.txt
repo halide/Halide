@@ -389,6 +389,13 @@ set_target_properties(Halide PROPERTIES
                       VERSION ${Halide_VERSION}
                       SOVERSION ${Halide_VERSION_MAJOR})
 
+target_compile_definitions(Halide PUBLIC 
+                           HALIDE_VERSION=${Halide_VERSION} 
+                           HALIDE_VERSION_MAJOR=${Halide_VERSION_MAJOR}
+                           HALIDE_VERSION_MINOR=${Halide_VERSION_MINOR}
+                           HALIDE_VERSION_PATCH=${Halide_VERSION_PATCH})
+
+
 target_include_directories(Halide INTERFACE "$<BUILD_INTERFACE:${Halide_BINARY_DIR}/include>")
 add_dependencies(Halide HalideIncludes)
 
