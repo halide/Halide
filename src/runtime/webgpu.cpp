@@ -92,15 +92,22 @@ class WgpuContext {
 public:
     WGPUAdapter adapter = nullptr;
     WGPUDevice device = nullptr;
+    WGPUQueue queue = nullptr;
     int error_code = 0;
 
     ALWAYS_INLINE WgpuContext(void *user_context)
         : user_context(user_context) {
         error_code = halide_webgpu_acquire_context(
             user_context, &adapter, &device);
+        if (error_code == halide_error_code_success) {
+            queue = wgpuDeviceGetQueue(device);
+        }
     }
 
     ALWAYS_INLINE ~WgpuContext() {
+        if (queue) {
+            wgpuQueueRelease(queue);
+        }
         halide_webgpu_release_context(user_context);
     }
 };
@@ -337,7 +344,7 @@ WEAK int halide_webgpu_device_sync(void *user_context, halide_buffer_t *) {
     };
     WorkDoneResult result;
     wgpuQueueOnSubmittedWorkDone(
-        wgpuDeviceGetQueue(context.device), 0,
+        context.queue, 0,
         [](WGPUQueueWorkDoneStatus status, void *userdata) {
             WorkDoneResult *result = (WorkDoneResult *)userdata;
             result->status = status;
@@ -410,7 +417,7 @@ WEAK int halide_webgpu_copy_to_host(void *user_context, halide_buffer_t *buf) {
                                              staging_buffer, 0, num_bytes);
         WGPUCommandBuffer command_buffer =
             wgpuCommandEncoderFinish(encoder, nullptr);
-        wgpuQueueSubmit(wgpuDeviceGetQueue(context.device), 1, &command_buffer);
+        wgpuQueueSubmit(context.queue, 1, &command_buffer);
 
         struct BufferMapResult {
             volatile bool map_complete = false;
@@ -461,8 +468,8 @@ WEAK int halide_webgpu_copy_to_device(void *user_context, halide_buffer_t *buf) 
     ErrorScope error_scope(user_context, context.device);
 
     WGPUBuffer buffer = (WGPUBuffer)buf->device;
-    wgpuQueueWriteBuffer(wgpuDeviceGetQueue(context.device),
-                         buffer, 0, buf->host, buf->size_in_bytes());
+    wgpuQueueWriteBuffer(context.queue, buffer, 0, buf->host,
+                         buf->size_in_bytes());
 
     return error_scope.wait();
 }
@@ -748,7 +755,7 @@ WEAK int halide_webgpu_run(void *user_context,
 
     // Submit the compute command.
     WGPUCommandBuffer commands = wgpuCommandEncoderFinish(encoder, nullptr);
-    wgpuQueueSubmit(wgpuDeviceGetQueue(context.device), 1, &commands);
+    wgpuQueueSubmit(context.queue, 1, &commands);
 
     wgpuCommandEncoderRelease(encoder);
     wgpuComputePipelineRelease(pipeline);
