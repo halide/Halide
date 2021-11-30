@@ -149,7 +149,7 @@ int main(int argc, char **argv) {
         success = success && test<int32_t>(1, i == 0, i == 1);
         success = success && test<int16_t>(1, i == 0, i == 1);
         success = success && test<int8_t>(1, i == 0, i == 1);
-        if (i < 2) {
+        if (i != 1) {
             success = success && test<uint32_t>(1, i == 0, false);
             success = success && test<uint16_t>(1, i == 0, false);
             success = success && test<uint8_t>(1, i == 0, false);
@@ -159,7 +159,7 @@ int main(int argc, char **argv) {
         success = success && test<int32_t>(8, i == 0, i == 1);
         success = success && test<int16_t>(16, i == 0, i == 1);
         success = success && test<int8_t>(32, i == 0, i == 1);
-        if (i < 2) {
+        if (i != 1) {
             success = success && test<uint32_t>(8, i == 0, false);
             success = success && test<uint16_t>(16, i == 0, false);
             success = success && test<uint8_t>(32, i == 0, false);
