@@ -2,6 +2,7 @@
 #include <memory>
 
 #include "Closure.h"
+#include "CodeGen_Hexagon.h"
 #include "Elf.h"
 #include "HexagonOffload.h"
 #include "IRMutator.h"
@@ -286,7 +287,7 @@ void do_reloc(char *addr, uint32_t mask, uintptr_t val, bool is_signed, bool ver
             // Pull out the subinstructions. They're the low 13
             // bits of each half-word.
             uint32_t hi = (inst >> 16) & ((1 << 13) - 1);
-            //uint32_t lo = inst & ((1 << 13) - 1);
+            // uint32_t lo = inst & ((1 << 13) - 1);
 
             // We only understand the ones where hi starts with 010
             internal_assert((hi >> 10) == 2);
@@ -753,13 +754,11 @@ class InjectHexagonRpc : public IRMutator {
                              DeviceAPI::None, loop->body);
         }
 
-        // Build a closure for the device code.
-        // Note that we must do this *before* calling lower_parallel_tasks();
-        // otherwise the Closure may fail to find buffers that are referenced
-        // only in the closure.
-        // TODO: Should this move the body of the loop to Hexagon,
-        // or the loop itself? Currently, this moves the loop itself.
-        Closure c(body);
+        debug(2) << "Before inject_hvx_lock_unlock:\n"
+                 << body << "\n";
+        body = inject_hvx_lock_unlock(body, device_code.target());
+        debug(2) << "After inject_hvx_lock_unlock:\n"
+                 << body << "\n";
 
         std::vector<LoweredFunc> closure_implementations;
         body = lower_parallel_tasks(body, closure_implementations, hex_name, device_code.target());

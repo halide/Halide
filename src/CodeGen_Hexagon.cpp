@@ -3,6 +3,7 @@
 
 #include "AlignLoads.h"
 #include "CSE.h"
+#include "CodeGen_Hexagon.h"
 #include "CodeGen_Internal.h"
 #include "CodeGen_Posix.h"
 #include "Debug.h"
@@ -437,17 +438,6 @@ private:
     Target target;
 };
 
-Stmt inject_hvx_lock_unlock(Stmt body, const Target &target) {
-    InjectHVXLocks i(target);
-    body = i.mutate(body);
-    if (i.uses_hvx) {
-        body = acquire_hvx_context(body, target);
-    }
-    body = substitute("uses_hvx", i.uses_hvx, body);
-    body = simplify(body);
-    return body;
-}
-
 void CodeGen_Hexagon::compile_func(const LoweredFunc &f,
                                    const string &simple_name,
                                    const string &extern_name) {
@@ -455,46 +445,48 @@ void CodeGen_Hexagon::compile_func(const LoweredFunc &f,
 
     Stmt body = f.body;
 
-    debug(1) << "Unpredicating loads and stores...\n";
+    // debug(1) << "Unpredicating loads and stores...\n";
     // Replace dense vector predicated loads with sloppy scalarized
     // predicates, and scalarize predicated stores
     body = sloppy_unpredicate_loads_and_stores(body);
 
-    debug(2) << "Lowering after unpredicating loads/stores:\n"
-             << body << "\n\n";
+    // debug(2) << "Lowering after unpredicating loads/stores:\n"
+    //          << body << "\n\n";
 
     if (is_hvx_v65_or_later()) {
         // Generate vscatter-vgathers before optimize_hexagon_shuffles.
-        debug(1) << "Looking for vscatter-vgather...\n";
+        // debug(1) << "Looking for vscatter-vgather...\n";
         body = scatter_gather_generator(body);
     }
 
-    debug(1) << "Optimizing shuffles...\n";
+    // debug(1) << "Optimizing shuffles...\n";
     // vlut always indexes 64 bytes of the LUT at a time, even in 128 byte mode.
     const int lut_alignment = 64;
     body = optimize_hexagon_shuffles(body, lut_alignment);
-    debug(2) << "Lowering after optimizing shuffles:\n"
-             << body << "\n\n";
+    // debug(2) << "Lowering after optimizing shuffles:\n"
+    //          << body << "\n\n";
 
-    debug(1) << "Aligning loads for HVX....\n";
+    // debug(1) << "Aligning loads for HVX....\n";
     body = align_loads(body, target.natural_vector_size(Int(8)), 8);
     body = common_subexpression_elimination(body);
     // Don't simplify here, otherwise it will re-collapse the loads we
     // want to carry across loop iterations.
-    debug(2) << "Lowering after aligning loads:\n"
-             << body << "\n\n";
+    // debug(2) << "Lowering after aligning loads:\n"
+    //          << body << "\n\n";
 
-    debug(1) << "Carrying values across loop iterations...\n";
+    // debug(1) << "Carrying values across loop iterations...\n";
     // Use at most 16 vector registers for carrying values.
     body = loop_carry(body, 16);
     body = simplify(body);
-    debug(2) << "Lowering after forwarding stores:\n"
-             << body << "\n\n";
+    // debug(2) << "Lowering after forwarding stores:\n"
+    //          << body << "\n\n";
 
     // Optimize the IR for Hexagon.
-    debug(1) << "Optimizing Hexagon instructions...\n";
+    // debug(1) << "Optimizing Hexagon instructions...\n";
     body = optimize_hexagon_instructions(body, target);
 
+    debug(1) << "Before qurt_hvx_lock:\n";
+    debug(1) << body << "\n";
     debug(1) << "Adding calls to qurt_hvx_lock, if necessary...\n";
     body = inject_hvx_lock_unlock(body, target);
 
@@ -2245,12 +2237,29 @@ std::unique_ptr<CodeGen_Posix> new_CodeGen_Hexagon(const Target &target) {
     return std::make_unique<CodeGen_Hexagon>(target);
 }
 
+Stmt inject_hvx_lock_unlock(Stmt body, const Target &target) {
+    InjectHVXLocks i(target);
+    body = i.mutate(body);
+    if (i.uses_hvx) {
+        body = acquire_hvx_context(body, target);
+    }
+    body = substitute("uses_hvx", i.uses_hvx, body);
+    body = simplify(body);
+    return body;
+}
+
 #else  // WITH_HEXAGON
 
 std::unique_ptr<CodeGen_Posix> new_CodeGen_Hexagon(const Target &target) {
     user_error << "hexagon not enabled for this build of Halide.\n";
     return nullptr;
 }
+
+Stmt inject_hvx_lock_unlock(Stmt body, const Target &target) {
+    user_error << "hexagon not enabled for this build of Halide.\n";
+    return Stmt();
+}
+
 
 #endif  // WITH_HEXAGON
 
