@@ -5,7 +5,7 @@
 
 namespace Halide {
 
-class Target;
+struct Target;
 
 namespace Internal {
 

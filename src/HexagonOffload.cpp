@@ -760,6 +760,14 @@ class InjectHexagonRpc : public IRMutator {
         debug(2) << "After inject_hvx_lock_unlock:\n"
                  << body << "\n";
 
+        // Build a closure for the device code.
+        // Note that we must do this *before* calling lower_parallel_tasks();
+        // otherwise the Closure may fail to find buffers that are referenced
+        // only in the closure.
+        // TODO: Should this move the body of the loop to Hexagon,
+        // or the loop itself? Currently, this moves the loop itself.
+        Closure c(body);
+
         std::vector<LoweredFunc> closure_implementations;
         body = lower_parallel_tasks(body, closure_implementations, hex_name, device_code.target());
         for (auto &lowered_func : closure_implementations) {
