@@ -435,11 +435,10 @@ private:
             internal_assert(op->args.size() == 4);
 
             std::vector<Expr> args = op->args;
-            args.push_back(uses_hvx ? 1 : 0);
+            args.push_back(cast<int>(uses_hvx_var));
 
             return Call::make(Int(32), "_halide_hexagon_do_par_for", args, Call::Extern);
         }
-
         return op;
     }
 
