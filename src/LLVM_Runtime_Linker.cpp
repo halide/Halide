@@ -1176,7 +1176,7 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
         }
         if (t.has_feature(Target::Vulkan)) {
             user_assert(bits_64) << "Vulkan target only available on 64-bit targets for now.\n";
-            Halide::Internal::debug(0) << "Adding Vulkan module ... \n";
+            Halide::Internal::debug(1) << "Adding Vulkan module ... \n";
             modules.push_back(get_initmod_vulkan(c, bits_64, debug));
         }
         if (t.arch != Target::Hexagon && t.has_feature(Target::HVX)) {

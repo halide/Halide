@@ -59,18 +59,20 @@ WEAK int halide_vulkan_acquire_context(void *user_context, VkInstance *instance,
     halide_abort_if_false(user_context, device != nullptr);
     halide_abort_if_false(user_context, queue != nullptr);
 
-#define VK_MAKE_VERSION(major, minor, patch) \
-    ((((uint32_t)(major)) << 22) | (((uint32_t)(minor)) << 12) | ((uint32_t)(patch)))
 
-    // TODO: make validation optional & only in debug
-#if defined(__linux__)
+#define VK_MAKE_API_VERSION(variant, major, minor, patch) \
+    ((((uint32_t)(variant)) << 29) | (((uint32_t)(major)) << 22) | (((uint32_t)(minor)) << 12) | ((uint32_t)(patch)))
+
+// Vulkan 1.0 version number
+#define VK_API_VERSION_1_0 VK_MAKE_API_VERSION(0, 1, 0, 0)// Patch version should always be set to 0
+
+    // TODO: make validation optional in debug
+#if defined(DEBUG_RUNTIME) 
     const int num_layers = 1;
     const char* val_layers[] = {"VK_LAYER_KHRONOS_validation"};
-    const uint32_t vk_version = VK_MAKE_VERSION(1, 2, 0);
 #else
-    const int num_layers = 1;
+    const int num_layers = 0;
     const char* const * val_layers = nullptr;
-    const uint32_t vk_version = VK_MAKE_VERSION(1, 1, 0);
 #endif
 
     if (cached_instance == nullptr && create) {
@@ -78,10 +80,10 @@ WEAK int halide_vulkan_acquire_context(void *user_context, VkInstance *instance,
             VK_STRUCTURE_TYPE_APPLICATION_INFO, // struct type
             nullptr, // Next
             "Runtime", // application name
-            VK_MAKE_VERSION(1, 0, 0), // app version
+            VK_MAKE_API_VERSION(0, 1, 0, 0), // app version
             "Halide", // engine name
-            VK_MAKE_VERSION(HALIDE_VERSION_MAJOR, HALIDE_VERSION_MINOR, HALIDE_VERSION_PATCH), // engine version
-            vk_version
+            VK_MAKE_API_VERSION(0, HALIDE_VERSION_MAJOR, HALIDE_VERSION_MINOR, HALIDE_VERSION_PATCH), // engine version
+            VK_API_VERSION_1_0
         };
 
         VkInstanceCreateInfo create_info = {

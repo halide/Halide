@@ -128,11 +128,11 @@ void load_vulkan() {
     if (have_symbol("VkGetPhysicalDeviceProperties")) {
         debug(1) << "Vulkan library already linked in...\n";
     } else {
-        load_metal(); // Molten requires Metal ...
+//        load_metal(); // Molten requires Metal ...
         debug(1) << "Looking for Vulkan library...\n";
         string error;
-        llvm::sys::DynamicLibrary::LoadLibraryPermanently("libMoltenVK.dylib", &error);
-        user_assert(error.empty()) << "Could not find libMoltenVK.dylib\n";
+        llvm::sys::DynamicLibrary::LoadLibraryPermanently("libvulkan.1.dylib", &error);
+        user_assert(error.empty()) << "Could not find libvulkan.1.dylib\n";
     }
 #else
     internal_error << "Vulkan support only implemented in Linux and MacOS\n";
