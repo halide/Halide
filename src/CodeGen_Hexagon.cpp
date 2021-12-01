@@ -365,10 +365,8 @@ private:
                 body = substitute("uses_hvx", true, body);
                 Stmt new_for = For::make(op->name, op->min, op->extent, op->for_type,
                                          op->device_api, body);
-                Stmt prolog =
-                    IfThenElse::make(uses_hvx_var, call_halide_qurt_hvx_unlock());
-                Stmt epilog =
-                    IfThenElse::make(uses_hvx_var, call_halide_qurt_hvx_lock(target));
+                Stmt prolog = IfThenElse::make(uses_hvx_var, call_halide_qurt_hvx_unlock());
+                Stmt epilog = IfThenElse::make(uses_hvx_var, call_halide_qurt_hvx_lock(target));
                 s = Block::make({prolog, new_for, epilog});
                 debug(4) << "Wrapping prolog & epilog around par loop\n"
                          << s << "\n";
@@ -431,6 +429,17 @@ private:
     }
     Expr visit(const Call *op) override {
         uses_hvx = uses_hvx || op->type.is_vector();
+
+        if (op->name == "halide_do_par_for") {
+            internal_assert(op->call_type == Call::Extern);
+            internal_assert(op->args.size() == 4);
+
+            std::vector<Expr> args = op->args;
+            args.push_back(uses_hvx ? 1 : 0);
+
+            return Call::make(Int(32), "_halide_hexagon_do_par_for", args, Call::Extern);
+        }
+
         return op;
     }
 
