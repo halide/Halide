@@ -451,7 +451,7 @@ void CodeGen_Hexagon::compile_func(const LoweredFunc &f,
     body = sloppy_unpredicate_loads_and_stores(body);
 
     debug(2) << "Lowering after unpredicating loads/stores:\n"
-    //          << body << "\n\n";
+             << body << "\n\n";
 
     if (is_hvx_v65_or_later()) {
         // Generate vscatter-vgathers before optimize_hexagon_shuffles.
@@ -464,7 +464,7 @@ void CodeGen_Hexagon::compile_func(const LoweredFunc &f,
     const int lut_alignment = 64;
     body = optimize_hexagon_shuffles(body, lut_alignment);
     debug(2) << "Lowering after optimizing shuffles:\n"
-    //          << body << "\n\n";
+             << body << "\n\n";
 
     debug(1) << "Aligning loads for HVX....\n";
     body = align_loads(body, target.natural_vector_size(Int(8)), 8);
@@ -472,14 +472,14 @@ void CodeGen_Hexagon::compile_func(const LoweredFunc &f,
     // Don't simplify here, otherwise it will re-collapse the loads we
     // want to carry across loop iterations.
     debug(2) << "Lowering after aligning loads:\n"
-    //          << body << "\n\n";
+             << body << "\n\n";
 
     debug(1) << "Carrying values across loop iterations...\n";
     // Use at most 16 vector registers for carrying values.
     body = loop_carry(body, 16);
     body = simplify(body);
     debug(2) << "Lowering after forwarding stores:\n"
-    //          << body << "\n\n";
+             << body << "\n\n";
 
     // Optimize the IR for Hexagon.
     debug(1) << "Optimizing Hexagon instructions...\n";
@@ -2259,7 +2259,6 @@ Stmt inject_hvx_lock_unlock(Stmt body, const Target &target) {
     user_error << "hexagon not enabled for this build of Halide.\n";
     return Stmt();
 }
-
 
 #endif  // WITH_HEXAGON
 
