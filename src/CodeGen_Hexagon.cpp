@@ -365,8 +365,10 @@ private:
                 body = substitute("uses_hvx", true, body);
                 Stmt new_for = For::make(op->name, op->min, op->extent, op->for_type,
                                          op->device_api, body);
-                Stmt prolog = IfThenElse::make(uses_hvx_var, call_halide_qurt_hvx_unlock());
-                Stmt epilog = IfThenElse::make(uses_hvx_var, call_halide_qurt_hvx_lock(target));
+                Stmt prolog =
+                    IfThenElse::make(uses_hvx_var, call_halide_qurt_hvx_unlock());
+                Stmt epilog =
+                    IfThenElse::make(uses_hvx_var, call_halide_qurt_hvx_lock(target));
                 s = Block::make({prolog, new_for, epilog});
                 debug(4) << "Wrapping prolog & epilog around par loop\n"
                          << s << "\n";
