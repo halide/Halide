@@ -6,6 +6,11 @@ namespace Halide {
 namespace Internal {
 
 HostClosure::HostClosure(const Stmt &s, const std::string &loop_variable) {
+    // It looks tempting to just collapse this into a call to the Closure ctor,
+    // since the bodies are the same, but there is a subtle trap: if we do that,
+    // the vtable for 'this' will only be that of a Closure, not a HostClosure,
+    // and so our overrides for visit() won't be triggered, and we'll get
+    // incorrect results.
     if (!loop_variable.empty()) {
         ignore.push(loop_variable);
     }
