@@ -1288,17 +1288,6 @@ string CodeGen_C::print_type(Type type, AppendSpaceIfNeeded space_option) {
     return type_to_c_type(type, space_option == AppendSpace);
 }
 
-namespace {
-
-bool is_const_pointer(const Type &t) {
-    if (t.is_handle() && t.handle_type != nullptr && !t.handle_type->cpp_type_modifiers.empty()) {
-        return (t.handle_type->cpp_type_modifiers[0] & halide_handle_cplusplus_type::Const) != 0;
-    }
-    return false;
-}
-
-}  // anonymous namespace
-
 string CodeGen_C::print_reinterpret(Type type, const Expr &e) {
     ostringstream oss;
     if (type.is_handle() || e.type().is_handle()) {
