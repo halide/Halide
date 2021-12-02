@@ -461,6 +461,14 @@ namespace Internal {
  * uses a Fiber, and on other platforms it uses swapcontext. */
 void run_with_large_stack(const std::function<void()> &action);
 
+/** Portable versions of popcount, count-leading-zeros, and
+    count-trailing-zeros. */
+// @{
+int popcount64(uint64_t x);
+int clz64(uint64_t x);
+int ctz64(uint64_t x);
+// @}
+
 }  // namespace Internal
 }  // namespace Halide
 
