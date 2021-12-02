@@ -1899,11 +1899,13 @@ void CodeGen_C::compile(const LoweredFunc &f, const std::map<std::string, std::s
         stream << "}\n";
     }
 
-    if (f.linkage == LinkageType::ExternalPlusMetadata) {
+    if (f.linkage == LinkageType::ExternalPlusArgv || f.linkage == LinkageType::ExternalPlusMetadata) {
         // Emit the argv version
         emit_argv_wrapper(simple_name, args);
+    }
 
-        // And also the metadata.
+    if (f.linkage == LinkageType::ExternalPlusMetadata) {
+        // Emit the metadata.
         emit_metadata_getter(simple_name, args, metadata_name_map);
     }
 

@@ -169,6 +169,7 @@ llvm::GlobalValue::LinkageTypes llvm_linkage(LinkageType t) {
     return llvm::GlobalValue::ExternalLinkage;
 
     // switch (t) {
+    // case LinkageType::ExternalPlusArgv:
     // case LinkageType::ExternalPlusMetadata:
     // case LinkageType::External:
     //     return llvm::GlobalValue::ExternalLinkage;
@@ -512,13 +513,15 @@ std::unique_ptr<llvm::Module> CodeGen_LLVM::compile(const Module &input) {
 
         // If the Func is externally visible, also create the argv wrapper and metadata.
         // (useful for calling from JIT and other machine interfaces).
-        if (f.linkage == LinkageType::ExternalPlusMetadata) {
+        if (f.linkage == LinkageType::ExternalPlusArgv || f.linkage == LinkageType::ExternalPlusMetadata) {
             llvm::Function *wrapper = add_argv_wrapper(function, names.argv_name);
-            llvm::Function *metadata_getter = embed_metadata_getter(names.metadata_name,
-                                                                    names.simple_name, f.args, input.get_metadata_name_map());
+            if (f.linkage == LinkageType::ExternalPlusMetadata) {
+                llvm::Function *metadata_getter = embed_metadata_getter(names.metadata_name,
+                                                                        names.simple_name, f.args, input.get_metadata_name_map());
 
-            if (target.has_feature(Target::Matlab)) {
-                define_matlab_wrapper(module.get(), wrapper, metadata_getter);
+                if (target.has_feature(Target::Matlab)) {
+                    define_matlab_wrapper(module.get(), wrapper, metadata_getter);
+                }
             }
         }
     }

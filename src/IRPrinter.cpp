@@ -365,6 +365,9 @@ ostream &operator<<(ostream &stream, const LoweredFunc &function) {
 
 std::ostream &operator<<(std::ostream &stream, const LinkageType &type) {
     switch (type) {
+    case LinkageType::ExternalPlusArgv:
+        stream << "external_plus_argv";
+        break;
     case LinkageType::ExternalPlusMetadata:
         stream << "external_plus_metadata";
         break;
