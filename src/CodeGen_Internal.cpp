@@ -137,6 +137,7 @@ bool function_takes_user_context(const std::string &name) {
         "_halide_buffer_crop",
         "_halide_buffer_retire_crop_after_extern_stage",
         "_halide_buffer_retire_crops_after_extern_stage",
+        "_halide_hexagon_do_par_for",
     };
     for (const char *user_context_runtime_func : user_context_runtime_funcs) {
         if (name == user_context_runtime_func) {
