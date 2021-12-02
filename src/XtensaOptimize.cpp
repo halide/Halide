@@ -506,6 +506,8 @@ class MatchXtensaPatterns : public IRGraphMutator {
 private:
     using IRGraphMutator::visit;
 
+    const Target target;
+
     static Expr halide_xtensa_widen_mul_u24(Expr v0, Expr v1) {
         Expr call = Call::make(wild_i24x.type(), "halide_xtensa_widen_mul_u24", {std::move(v0), std::move(v1)}, Call::PureExtern);
         return call;
@@ -1009,7 +1011,7 @@ private:
             // We need to lower lerps now to optimize the arithmetic
             // that they generate.
             internal_assert(op->args.size() == 3);
-            return mutate(lower_lerp(op->args[0], op->args[1], op->args[2]));
+            return mutate(lower_lerp(op->args[0], op->args[1], op->args[2], target));
         } else if (op->is_intrinsic(Call::absd) && op->type.is_vector() && op->type.is_uint() && (op->type.bits() == 16)) {
             internal_assert(op->args.size() == 2);
             return Call::make(op->type, "halide_xtensa_absd_i16",
@@ -1271,7 +1273,7 @@ private:
     }
 
 public:
-    MatchXtensaPatterns() {
+    MatchXtensaPatterns(const Target &target) : target(target) {
     }
 };
 
@@ -2080,12 +2082,11 @@ private:
     }
 
 public:
-    SimplifySliceConcat() {
-    }
+    SimplifySliceConcat() = default;
 };
 
-Stmt match_xtensa_patterns(Stmt s) {
-    s = OptimizeShuffles(64).mutate(s);
+Stmt match_xtensa_patterns(const Stmt &stmt, const Target &target) {
+    Stmt s = OptimizeShuffles(64).mutate(stmt);
     s = align_loads(s, 64, 1);
     // NOTE(vksnk): CSE seemed to break loop carry
     // s = common_subexpression_elimination(s);
@@ -2097,7 +2098,7 @@ Stmt match_xtensa_patterns(Stmt s) {
     s = loop_carry(s, 16);
     s = simplify(s);
     for (int ix = 0; ix < 10; ix++) {
-        s = MatchXtensaPatterns().mutate(s);
+        s = MatchXtensaPatterns(target).mutate(s);
     }
 
     // Split to the native vectors sizes.
@@ -2109,7 +2110,7 @@ Stmt match_xtensa_patterns(Stmt s) {
 
     // Extra run to replace cast + concat, etc.
     for (int ix = 0; ix < 10; ix++) {
-        s = MatchXtensaPatterns().mutate(s);
+        s = MatchXtensaPatterns(target).mutate(s);
     }
     // NOTE(vksnk): looks like we shouldn't do simplification in the end.
     // s = simplify(common_subexpression_elimination(s));

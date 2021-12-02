@@ -77,8 +77,7 @@ void CodeGen_Xtensa::compile(const LoweredFunc &f, const std::map<std::string, s
         stream << "\n";
     }
 
-    Stmt body = f.body;
-    body = match_xtensa_patterns(body);
+    Stmt body = match_xtensa_patterns(f.body, target);
 
     // Emit the function prototype
     if (f.linkage == LinkageType::Internal) {
