@@ -22,6 +22,7 @@ void define_enums(py::module &m) {
     py::enum_<LinkageType>(m, "LinkageType")
         .value("External", LinkageType::External)
         .value("ExternalPlusMetadata", LinkageType::ExternalPlusMetadata)
+        .value("ExternalPlusArgv", LinkageType::ExternalPlusArgv)
         .value("Internal", LinkageType::Internal);
 
     py::enum_<LoopAlignStrategy>(m, "LoopAlignStrategy")

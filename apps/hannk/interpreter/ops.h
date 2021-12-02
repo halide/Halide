@@ -63,7 +63,7 @@ public:
 
 private:
     void accept_impl(OpVisitor *v) const override;
-    OpPtr mutate_impl(OpMutator *m, OpPtr op) override;
+    OpMutatorFn mutate_impl() const override;
 };
 
 class ConcatenationOp : public Op {
@@ -92,7 +92,7 @@ public:
 
 private:
     void accept_impl(OpVisitor *v) const override;
-    OpPtr mutate_impl(OpMutator *m, OpPtr op) override;
+    OpMutatorFn mutate_impl() const override;
 };
 
 class ConvOp : public Op {
@@ -148,7 +148,7 @@ public:
 
 private:
     void accept_impl(OpVisitor *v) const override;
-    OpPtr mutate_impl(OpMutator *m, OpPtr op) override;
+    OpMutatorFn mutate_impl() const override;
 };
 
 class DepthwiseConv2DOp : public Op {
@@ -207,7 +207,7 @@ public:
 
 private:
     void accept_impl(OpVisitor *v) const override;
-    OpPtr mutate_impl(OpMutator *m, OpPtr op) override;
+    OpMutatorFn mutate_impl() const override;
 };
 
 class ElementwiseProgramOp : public ElementwiseOp {
@@ -230,7 +230,7 @@ public:
 
 private:
     void accept_impl(OpVisitor *v) const override;
-    OpPtr mutate_impl(OpMutator *m, OpPtr op) override;
+    OpMutatorFn mutate_impl() const override;
 };
 
 class GatherOp : public Op {
@@ -252,7 +252,7 @@ public:
 
 private:
     void accept_impl(OpVisitor *v) const override;
-    OpPtr mutate_impl(OpMutator *m, OpPtr op) override;
+    OpMutatorFn mutate_impl() const override;
 };
 
 class L2NormalizationOp : public Op {
@@ -273,7 +273,7 @@ public:
 
 private:
     void accept_impl(OpVisitor *v) const override;
-    OpPtr mutate_impl(OpMutator *m, OpPtr op) override;
+    OpMutatorFn mutate_impl() const override;
 };
 
 class PadOp : public Op {
@@ -299,7 +299,7 @@ public:
 
 private:
     void accept_impl(OpVisitor *v) const override;
-    OpPtr mutate_impl(OpMutator *m, OpPtr op) override;
+    OpMutatorFn mutate_impl() const override;
 };
 
 class Pool2DOp : public Op {
@@ -347,7 +347,7 @@ public:
 
 private:
     void accept_impl(OpVisitor *v) const override;
-    OpPtr mutate_impl(OpMutator *m, OpPtr op) override;
+    OpMutatorFn mutate_impl() const override;
 };
 
 class ReductionOp : public Op {
@@ -378,7 +378,7 @@ public:
 
 private:
     void accept_impl(OpVisitor *v) const override;
-    OpPtr mutate_impl(OpMutator *m, OpPtr op) override;
+    OpMutatorFn mutate_impl() const override;
 };
 
 class ReshapeOp : public Op {
@@ -402,7 +402,7 @@ public:
 
 private:
     void accept_impl(OpVisitor *v) const override;
-    OpPtr mutate_impl(OpMutator *m, OpPtr op) override;
+    OpMutatorFn mutate_impl() const override;
 };
 
 class ShapeOp : public Op {
@@ -421,7 +421,7 @@ public:
 
 private:
     void accept_impl(OpVisitor *v) const override;
-    OpPtr mutate_impl(OpMutator *m, OpPtr op) override;
+    OpMutatorFn mutate_impl() const override;
 };
 
 class SoftmaxOp : public Op {
@@ -443,7 +443,7 @@ public:
 
 private:
     void accept_impl(OpVisitor *v) const override;
-    OpPtr mutate_impl(OpMutator *m, OpPtr op) override;
+    OpMutatorFn mutate_impl() const override;
 };
 
 class SpaceDepthOp : public Op {
@@ -464,7 +464,7 @@ public:
 
 private:
     void accept_impl(OpVisitor *v) const override;
-    OpPtr mutate_impl(OpMutator *m, OpPtr op) override;
+    OpMutatorFn mutate_impl() const override;
 };
 
 class SplitOp : public Op {
@@ -493,7 +493,7 @@ public:
 
 private:
     void accept_impl(OpVisitor *v) const override;
-    OpPtr mutate_impl(OpMutator *m, OpPtr op) override;
+    OpMutatorFn mutate_impl() const override;
 };
 
 class TileConvFilterOp : public Op {
@@ -512,7 +512,7 @@ public:
 
 private:
     void accept_impl(OpVisitor *v) const override;
-    OpPtr mutate_impl(OpMutator *m, OpPtr op) override;
+    OpMutatorFn mutate_impl() const override;
 };
 
 class TransposeOp : public Op {
@@ -531,7 +531,7 @@ public:
 
 private:
     void accept_impl(OpVisitor *v) const override;
-    OpPtr mutate_impl(OpMutator *m, OpPtr op) override;
+    OpMutatorFn mutate_impl() const override;
 };
 
 class UnaryOp : public ElementwiseOp {
@@ -564,7 +564,7 @@ public:
 
 private:
     void accept_impl(OpVisitor *v) const override;
-    OpPtr mutate_impl(OpMutator *m, OpPtr op) override;
+    OpMutatorFn mutate_impl() const override;
 };
 
 class UpsampleChannelsOp : public Op {
@@ -585,7 +585,7 @@ public:
 
 private:
     void accept_impl(OpVisitor *v) const override;
-    OpPtr mutate_impl(OpMutator *m, OpPtr op) override;
+    OpMutatorFn mutate_impl() const override;
 };
 
 class OpVisitor {
