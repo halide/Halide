@@ -759,7 +759,8 @@ class InjectHexagonRpc : public IRMutator {
         // only in the closure.
         // TODO: Should this move the body of the loop to Hexagon,
         // or the loop itself? Currently, this moves the loop itself.
-        Closure c(body);
+        Closure c;
+        c.include(body);
 
         std::vector<LoweredFunc> closure_implementations;
         body = lower_parallel_tasks(body, closure_implementations, hex_name, device_code.target());
