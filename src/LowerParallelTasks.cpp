@@ -289,7 +289,7 @@ struct LowerParallelTasks : public IRMutator {
             if (!t.loop_var.empty()) {
                 s = LetStmt::make(t.loop_var, 0, s);
             }
-            s.accept(&closure);
+            closure.include(s);
         }
 
         // The same name can appear as a var and a buffer. Remove the var name in this case.
