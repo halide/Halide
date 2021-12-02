@@ -36,6 +36,7 @@ set(HEADER_FILES
     CodeGen_PTX_Dev.h
     CodeGen_PyTorch.h
     CodeGen_Targets.h
+    CodeGen_Xtensa.h
     CompilerLogger.h
     ConciseCasts.h
     CPlusPlusMangle.h
@@ -164,6 +165,7 @@ set(HEADER_FILES
     VectorizeLoops.h
     WasmExecutor.h
     WrapCalls.h
+    XtensaOptimize.h
     )
 
 set(SOURCE_FILES
@@ -204,6 +206,7 @@ set(SOURCE_FILES
     CodeGen_RISCV.cpp
     CodeGen_WebAssembly.cpp
     CodeGen_X86.cpp
+    CodeGen_Xtensa.cpp
     CompilerLogger.cpp
     CPlusPlusMangle.cpp
     CSE.cpp
@@ -339,6 +342,7 @@ set(SOURCE_FILES
     VectorizeLoops.cpp
     WasmExecutor.cpp
     WrapCalls.cpp
+    XtensaOptimize.cpp
     )
 
 ##
