@@ -27,39 +27,38 @@ LoweredFunc generate_closure_ir(const std::string &name, const Closure &closure,
     Expr closure_arg = Variable::make(type_of<void *>(), closure_arg_name);
 
     Stmt wrapped_body = body;
-    std::vector<Expr> type_args(closure.vars.size() + closure.buffers.size() * 2 + 2);
+    std::vector<Expr> type_args(closure.vars.size() + closure.buffers.size() * 2 + 1);
     std::string closure_type_name = unique_name("closure_struct_type");
     Expr struct_type = Variable::make(Handle(), closure_type_name);
     type_args[0] = StringImm::make(closure_type_name);
-    type_args[1] = 1;
 
     int struct_index = 0;
     for (const auto &v : closure.vars) {
-        type_args[struct_index + 2] = make_zero(v.second);
+        type_args[struct_index + 1] = make_zero(v.second);
         wrapped_body = LetStmt::make(v.first,
-                                     Call::make(v.second, Call::load_struct_member,
+                                     Call::make(v.second, Call::load_typed_struct_member,
                                                 {closure_arg, struct_type, make_const(UInt(32), struct_index)},
                                                 Call::Intrinsic),
                                      wrapped_body);
         struct_index++;
     }
     for (const auto &b : closure.buffers) {
-        type_args[struct_index + 2] = make_zero(type_of<void *>());
-        type_args[struct_index + 3] = make_zero(type_of<halide_buffer_t *>());
+        type_args[struct_index + 1] = make_zero(type_of<void *>());
+        type_args[struct_index + 2] = make_zero(type_of<halide_buffer_t *>());
         wrapped_body = LetStmt::make(b.first,
-                                     Call::make(type_of<void *>(), Call::load_struct_member,
+                                     Call::make(type_of<void *>(), Call::load_typed_struct_member,
                                                 {closure_arg, struct_type, make_const(UInt(32), struct_index)},
                                                 Call::PureIntrinsic),
                                      wrapped_body);
         wrapped_body = LetStmt::make(b.first + ".buffer",
-                                     Call::make(type_of<halide_buffer_t *>(), Call::load_struct_member,
+                                     Call::make(type_of<halide_buffer_t *>(), Call::load_typed_struct_member,
                                                 {closure_arg, struct_type, make_const(UInt(32), struct_index + 1)},
                                                 Call::Intrinsic),
                                      wrapped_body);
         struct_index += 2;
     }
 
-    Expr struct_type_decl = Call::make(Handle(), Call::declare_struct_type, type_args, Call::PureIntrinsic);
+    Expr struct_type_decl = Call::make(Handle(), Call::define_typed_struct, type_args, Call::PureIntrinsic);
     wrapped_body = Block::make(Evaluate::make(closure_arg), wrapped_body);
     wrapped_body = LetStmt::make(closure_type_name, struct_type_decl, wrapped_body);
 
@@ -83,7 +82,6 @@ Expr allocate_closure(const std::string &name, const Closure &closure) {
     closure_elements.emplace_back(Expr());
     closure_elements.emplace_back(1);
     closure_types.emplace_back(unique_name(name + "_type"));
-    closure_types.emplace_back(1);
 
     for (const auto &v : closure.vars) {
         Expr var = Variable::make(v.second, v.first);
@@ -98,7 +96,7 @@ Expr allocate_closure(const std::string &name, const Closure &closure) {
         closure_types.emplace_back(ptr_var);
         closure_types.emplace_back(buffer_t_type);
     }
-    Expr closure_struct_type = Call::make(Handle(), Call::declare_struct_type, closure_types, Call::PureIntrinsic);
+    Expr closure_struct_type = Call::make(Handle(), Call::define_typed_struct, closure_types, Call::PureIntrinsic);
     std::string closure_type_name = unique_name("closure_struct_type");
     Expr struct_type = Variable::make(Handle(), closure_type_name);
 
@@ -107,7 +105,7 @@ Expr allocate_closure(const std::string &name, const Closure &closure) {
     Expr result = Let::make(closure_type_name, closure_struct_type,
                             Call::make(type_of<void *>(), Call::make_typed_struct, closure_elements, Call::Intrinsic));
     if (!closure.buffers.empty()) {
-        result = Let::make(buffer_t_type_name, Call::make(Handle(), Call::declare_struct_type, {StringImm::make("halide_buffer_t"), 0}, Call::PureIntrinsic),
+        result = Let::make(buffer_t_type_name, Call::make(Handle(), Call::forward_declare_typed_struct, {StringImm::make("halide_buffer_t")}, Call::PureIntrinsic),
                            result);
     }
     return result;
@@ -299,7 +297,7 @@ struct LowerParallelTasks : public IRMutator {
 
         int num_tasks = (int)(tasks.size());
         std::vector<Expr> tasks_array_args(2);
-        tasks_array_args[0] = Call::make(type_of<halide_parallel_task_t *>(), Call::declare_struct_type, {StringImm::make("halide_parallel_task_t"), 0}, Call::PureIntrinsic);
+        tasks_array_args[0] = Call::make(type_of<halide_parallel_task_t *>(), Call::forward_declare_typed_struct, {StringImm::make("halide_parallel_task_t")}, Call::PureIntrinsic);
         tasks_array_args[1] = num_tasks;
 
         std::string closure_name = unique_name("parallel_closure");
@@ -321,8 +319,8 @@ struct LowerParallelTasks : public IRMutator {
                                      t.semaphores.empty() &&
                                      !has_task_parent);
 
-            Expr semaphore_type = Call::make(type_of<halide_semaphore_acquire_t *>(), Call::declare_struct_type,
-                                             {StringImm::make("halide_semaphore_acquire_t"), 0}, Call::PureIntrinsic);
+            Expr semaphore_type = Call::make(type_of<halide_semaphore_acquire_t *>(), Call::forward_declare_typed_struct,
+                                             {StringImm::make("halide_semaphore_acquire_t")}, Call::PureIntrinsic);
             std::string semaphores_array_name = unique_name("task_semaphores");
             Expr semaphores_array;
             if (!t.semaphores.empty()) {

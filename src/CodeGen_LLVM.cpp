@@ -2811,33 +2811,37 @@ void CodeGen_LLVM::visit(const Call *op) {
                 }
             }
         }
-    } else if (op->is_intrinsic(Call::declare_struct_type)) {
-        // Declares a struct type. Returns a null pointer of the new type.
-        internal_assert(op->args.size() >= 2);
+    } else if (op->is_intrinsic(Call::forward_declare_typed_struct)) {
+        // Forward-declare a struct type, which is assumed to have already been declared via `define_typed_struct`.
+        // Sets 'value' to a null pointer of the existing type.
+        internal_assert(op->args.size() == 1);
 
         const StringImm *str_imm = op->args[0].as<StringImm>();
         internal_assert(str_imm != nullptr);
         std::string name = str_imm->value;
 
-        const int64_t *mode = as_const_int(op->args[1]);
-        internal_assert(mode != nullptr);
+        llvm::Type *struct_type = get_llvm_struct_type_by_name(module.get(), ("struct." + name).c_str());
+        internal_assert(struct_type != nullptr) << "Failed to find structure " << name << "\n";
+        value = llvm::ConstantPointerNull::get(struct_type->getPointerTo());
+    } else if (op->is_intrinsic(Call::define_typed_struct)) {
+        // Declares a new struct type. Sets 'value' to a null pointer of the new type.
+        const size_t args_size = op->args.size();
+        internal_assert(args_size >= 1);
 
-        llvm::Type *struct_type;
-        if (*mode == 1) {
-            vector<llvm::Type *> types(op->args.size() - 2);
-            for (size_t i = 2; i < op->args.size(); i++) {
-                types[i - 2] = codegen(op->args[i])->getType();
-            }
-            struct_type = (llvm::Type *)llvm::StructType::create(*context, types, "struct." + name);
-        } else {
-            struct_type = get_llvm_struct_type_by_name(module.get(), ("struct." + name).c_str());
-            internal_assert(struct_type != nullptr) << "Failed to find structure " << name << "\n";
+        const StringImm *str_imm = op->args[0].as<StringImm>();
+        internal_assert(str_imm != nullptr);
+        std::string name = str_imm->value;
+
+        vector<llvm::Type *> types(args_size - 1);
+        for (size_t i = 1; i < args_size; i++) {
+            types[i - 1] = codegen(op->args[i])->getType();
         }
+        llvm::Type *struct_type = (llvm::Type *)llvm::StructType::create(*context, types, "struct." + name);
         value = llvm::ConstantPointerNull::get(struct_type->getPointerTo());
     } else if (op->is_intrinsic(Call::make_typed_struct)) {
         internal_assert(op->args.size() >= 2);
 
-        llvm::Value *type_carrier = codegen(op->args[0]);
+        llvm::Value *typed_struct_definition = codegen(op->args[0]);
         const int64_t *count_ptr = as_const_int(op->args[1]);
         internal_assert(count_ptr != nullptr);
         int64_t count = *count_ptr;
@@ -2852,7 +2856,7 @@ void CodeGen_LLVM::visit(const Call *op) {
             types[i - 2] = value->getType();
         }
 
-        llvm::Type *aggregate_t_ptr = type_carrier->getType();
+        llvm::Type *aggregate_t_ptr = typed_struct_definition->getType();
         llvm::Type *aggregate_t;
         aggregate_t = aggregate_t_ptr->getPointerElementType();
         value = create_alloca_at_entry(aggregate_t, count);
@@ -2891,18 +2895,23 @@ void CodeGen_LLVM::visit(const Call *op) {
             }
             item += 1;
         } while (item < count);
-    } else if (op->is_intrinsic(Call::load_struct_member)) {
+    } else if (op->is_intrinsic(Call::load_typed_struct_member)) {
+        // Given an instance of a typed_struct, a definition of a typed_struct,
+        // and the index of a slot, load the value of that slot.
+        // It is assumed that the instance has been created with make_typed_struct
+        // and that the definiton has been created with define_typed_struct.
+        // It is also assumed that the slot index is valid for the given typed_struct.
+
         // TODO(zalman): Validate the Halide type of the result matches the LLVM type?
         // TODO(zalman): Are struct types the right level of indirection.
         internal_assert(op->args.size() == 3);
-        llvm::Value *struct_ref = codegen(op->args[0]);
-        llvm::Type *struct_type;
-        llvm::Value *typed_value = codegen(op->args[1]);
-        struct_type = typed_value->getType();
-        struct_ref = builder->CreatePointerCast(struct_ref, struct_type);
+        llvm::Value *untyped_struct_instance = codegen(op->args[0]);
+        llvm::Value *typed_struct_definition = codegen(op->args[1]);
         const uint64_t *index = as_const_uint(op->args[2]);
         internal_assert(index != nullptr);
-        llvm::Value *gep = CreateInBoundsGEP(builder, struct_ref, {ConstantInt::get(i32_t, 0), ConstantInt::get(i32_t, (int)*index)});
+        llvm::Type *struct_type = typed_struct_definition->getType();
+        llvm::Value *typed_struct_instance = builder->CreatePointerCast(untyped_struct_instance, struct_type);
+        llvm::Value *gep = CreateInBoundsGEP(builder, typed_struct_instance, {ConstantInt::get(i32_t, 0), ConstantInt::get(i32_t, (int)*index)});
         value = builder->CreateLoad(gep->getType()->getPointerElementType(), gep);
     } else if (op->is_intrinsic(Call::resolve_function_name)) {
         internal_assert(op->args.size() == 1);
@@ -2948,8 +2957,8 @@ void CodeGen_LLVM::visit(const Call *op) {
         internal_assert(name != nullptr);
         value = sym_get(name->value, false);
         if (value == nullptr) {
-            llvm::Value *type_carrier = codegen(op->args[1]);
-            llvm::PointerType *expected_type = type_carrier->getType()->getPointerElementType()->getPointerTo();
+            llvm::Value *typed_struct_definition = codegen(op->args[1]);
+            llvm::PointerType *expected_type = typed_struct_definition->getType()->getPointerElementType()->getPointerTo();
             value = ConstantPointerNull::get(expected_type);
         }
     } else if (op->is_intrinsic(Call::saturating_add) || op->is_intrinsic(Call::saturating_sub)) {
