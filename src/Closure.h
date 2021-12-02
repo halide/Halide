@@ -71,14 +71,24 @@ protected:
 public:
     Closure() = default;
 
+    // Movable but not copyable.
+    Closure(const Closure &) = delete;
+    Closure &operator=(const Closure &) = delete;
+    Closure(Closure &&) = default;
+    Closure &operator=(Closure &&) = default;
+
     /** Traverse a statement and find all references to external
      * symbols.
      *
      * When the closure encounters a read or write to 'foo', it
      * assumes that the host pointer is found in the symbol table as
      * 'foo.host', and any halide_buffer_t pointer is found under
-     * 'foo.buffer'. */
-    Closure(const Stmt &s, const std::string &loop_variable = "");
+     * 'foo.buffer'.
+     *
+     * Calling this multiple times (on multiple statements) is legal
+     * (and will produce a unified closure).
+     **/
+    void include(const Stmt &s, const std::string &loop_variable = "");
 
     /** External variables referenced. */
     std::map<std::string, Type> vars;

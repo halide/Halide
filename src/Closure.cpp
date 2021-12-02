@@ -6,11 +6,14 @@ namespace Internal {
 
 using std::string;
 
-Closure::Closure(const Stmt &s, const string &loop_variable) {
+void Closure::include(const Stmt &s, const string &loop_variable) {
     if (!loop_variable.empty()) {
         ignore.push(loop_variable);
     }
     s.accept(this);
+    if (!loop_variable.empty()) {
+        ignore.pop(loop_variable);
+    }
 }
 
 void Closure::visit(const Let *op) {
