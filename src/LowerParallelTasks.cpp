@@ -14,10 +14,12 @@
 namespace Halide {
 namespace Internal {
 
+namespace {
+
 // TODO(zalman): Find a better place for this code to live.
-LoweredFunc GenerateClosureIR(const std::string &name, const Closure &closure,
-                              std::vector<LoweredArgument> &args, int closure_arg_index,
-                              const Stmt &body, const Target &t) {
+LoweredFunc generate_closure_ir(const std::string &name, const Closure &closure,
+                                std::vector<LoweredArgument> &args, int closure_arg_index,
+                                const Stmt &body, const Target &t) {
     // Figure out if user_context has to be dealt with here.
     std::string closure_arg_name = unique_name("closure_arg");
     args[closure_arg_index] = LoweredArgument(closure_arg_name, Argument::Kind::InputScalar,
@@ -70,7 +72,7 @@ LoweredFunc GenerateClosureIR(const std::string &name, const Closure &closure,
     return result;
 }
 
-Expr AllocateClosure(const std::string &name, const Closure &closure) {
+Expr allocate_closure(const std::string &name, const Closure &closure) {
     std::vector<Expr> closure_elements;
     std::vector<Expr> closure_types;
 
@@ -111,8 +113,6 @@ Expr AllocateClosure(const std::string &name, const Closure &closure) {
     return result;
 }
 
-namespace {
-
 std::string task_debug_name(const std::pair<std::string, int> &prefix) {
     if (prefix.second <= 1) {
         return prefix.first;
@@ -136,7 +136,111 @@ void add_suffix(std::pair<std::string, int> &prefix, const std::string &suffix) 
     prefix.first += suffix;
 }
 
-}  // namespace
+// TODO(zvookin|abadams): This makes multiple passes over the
+// IR to cover each node. (One tree walk produces the min
+// thread count for all nodes, but we redo each subtree when
+// compiling a given node.) Ideally we'd move to a lowering pass
+// that converts our parallelism constructs to Call nodes, or
+// direct hardware operations in some cases.
+// Also, this code has to exactly mirror the logic in get_parallel_tasks.
+// It would be better to do one pass on the tree and centralize the task
+// deduction logic in one place.
+class MinThreads : public IRVisitor {
+    using IRVisitor::visit;
+
+    std::pair<Stmt, int> skip_acquires(Stmt first) {
+        int count = 0;
+        while (first.defined()) {
+            const Acquire *acq = first.as<Acquire>();
+            if (acq == nullptr) {
+                break;
+            }
+            count++;
+            first = acq->body;
+        }
+        return {first, count};
+    }
+
+    void visit(const Fork *op) override {
+        int total_threads = 0;
+        int direct_acquires = 0;
+        // Take the sum of min threads across all
+        // cascaded Fork nodes.
+        const Fork *node = op;
+        while (node != nullptr) {
+            result = 0;
+            auto after_acquires = skip_acquires(node->first);
+            direct_acquires += after_acquires.second;
+
+            after_acquires.first.accept(this);
+            total_threads += result;
+
+            const Fork *continued_branches = node->rest.as<Fork>();
+            if (continued_branches == nullptr) {
+                result = 0;
+                after_acquires = skip_acquires(node->rest);
+                direct_acquires += after_acquires.second;
+                after_acquires.first.accept(this);
+                total_threads += result;
+            }
+            node = continued_branches;
+        }
+        if (direct_acquires == 0 && total_threads == 0) {
+            result = 0;
+        } else {
+            result = total_threads + 1;
+        }
+    }
+
+    void visit(const For *op) override {
+        result = 0;
+
+        if (op->for_type == ForType::Parallel) {
+            IRVisitor::visit(op);
+            if (result > 0) {
+                result += 1;
+            }
+        } else if (op->for_type == ForType::Serial) {
+            auto after_acquires = skip_acquires(op->body);
+            if (after_acquires.second > 0 &&
+                !expr_uses_var(op->body.as<Acquire>()->count, op->name)) {
+                after_acquires.first.accept(this);
+                result++;
+            } else {
+                IRVisitor::visit(op);
+            }
+        } else {
+            IRVisitor::visit(op);
+        }
+    }
+
+    // This is a "standalone" Acquire and will result in its own task.
+    // Treat it requiring one more thread than its body.
+    void visit(const Acquire *op) override {
+        result = 0;
+        auto after_inner_acquires = skip_acquires(op);
+        after_inner_acquires.first.accept(this);
+        result = result + 1;
+    }
+
+    void visit(const Block *op) override {
+        result = 0;
+        op->first.accept(this);
+        int result_first = result;
+        result = 0;
+        op->rest.accept(this);
+        result = std::max(result, result_first);
+    }
+
+public:
+    int result = 0;
+};
+
+int calculate_min_threads(const Stmt &body) {
+    MinThreads min_threads;
+    body.accept(&min_threads);
+    return min_threads.result;
+}
 
 struct LowerParallelTasks : public IRMutator {
 
@@ -199,121 +303,21 @@ struct LowerParallelTasks : public IRMutator {
         tasks_array_args[1] = num_tasks;
 
         std::string closure_name = unique_name("parallel_closure");
-        Expr closure_struct_allocation = AllocateClosure(closure_name, closure);
+        Expr closure_struct_allocation = allocate_closure(closure_name, closure);
         Expr closure_struct = Variable::make(Handle(), closure_name);
 
         Expr result;
         for (int i = 0; i < num_tasks; i++) {
             ParallelTask t = tasks[i];
 
-            // TODO(zvookin|abadams): This makes multiple passes over the
-            // IR to cover each node. (One tree walk produces the min
-            // thread count for all nodes, but we redo each subtree when
-            // compiling a given node.) Ideally we'd move to a lowering pass
-            // that converts our parallelism constructs to Call nodes, or
-            // direct hardware operations in some cases.
-            // Also, this code has to exactly mirror the logic in get_parallel_tasks.
-            // It would be better to do one pass on the tree and centralize the task
-            // deduction logic in one place.
-            class MinThreads : public IRVisitor {
-                using IRVisitor::visit;
-
-                std::pair<Stmt, int> skip_acquires(Stmt first) {
-                    int count = 0;
-                    while (first.defined()) {
-                        const Acquire *acq = first.as<Acquire>();
-                        if (acq == nullptr) {
-                            break;
-                        }
-                        count++;
-                        first = acq->body;
-                    }
-                    return {first, count};
-                }
-
-                void visit(const Fork *op) override {
-                    int total_threads = 0;
-                    int direct_acquires = 0;
-                    // Take the sum of min threads across all
-                    // cascaded Fork nodes.
-                    const Fork *node = op;
-                    while (node != nullptr) {
-                        result = 0;
-                        auto after_acquires = skip_acquires(node->first);
-                        direct_acquires += after_acquires.second;
-
-                        after_acquires.first.accept(this);
-                        total_threads += result;
-
-                        const Fork *continued_branches = node->rest.as<Fork>();
-                        if (continued_branches == nullptr) {
-                            result = 0;
-                            after_acquires = skip_acquires(node->rest);
-                            direct_acquires += after_acquires.second;
-                            after_acquires.first.accept(this);
-                            total_threads += result;
-                        }
-                        node = continued_branches;
-                    }
-                    if (direct_acquires == 0 && total_threads == 0) {
-                        result = 0;
-                    } else {
-                        result = total_threads + 1;
-                    }
-                }
-
-                void visit(const For *op) override {
-                    result = 0;
-
-                    if (op->for_type == ForType::Parallel) {
-                        IRVisitor::visit(op);
-                        if (result > 0) {
-                            result += 1;
-                        }
-                    } else if (op->for_type == ForType::Serial) {
-                        auto after_acquires = skip_acquires(op->body);
-                        if (after_acquires.second > 0 &&
-                            !expr_uses_var(op->body.as<Acquire>()->count, op->name)) {
-                            after_acquires.first.accept(this);
-                            result++;
-                        } else {
-                            IRVisitor::visit(op);
-                        }
-                    } else {
-                        IRVisitor::visit(op);
-                    }
-                }
-
-                // This is a "standalone" Acquire and will result in its own task.
-                // Treat it requiring one more thread than its body.
-                void visit(const Acquire *op) override {
-                    result = 0;
-                    auto after_inner_acquires = skip_acquires(op);
-                    after_inner_acquires.first.accept(this);
-                    result = result + 1;
-                }
-
-                void visit(const Block *op) override {
-                    result = 0;
-                    op->first.accept(this);
-                    int result_first = result;
-                    result = 0;
-                    op->rest.accept(this);
-                    result = std::max(result, result_first);
-                }
-
-            public:
-                int result = 0;
-            };
-            MinThreads min_threads;
-            t.body.accept(&min_threads);
+            const int min_threads = calculate_min_threads(t.body);
 
             // Decide if we're going to call do_par_for or
             // do_parallel_tasks. halide_do_par_for is simpler, but
             // assumes a bunch of things. Programs that don't use async
             // can also enter the task system via do_par_for.
             bool use_parallel_for = (num_tasks == 1 &&
-                                     min_threads.result == 0 &&
+                                     min_threads == 0 &&
                                      t.semaphores.empty() &&
                                      !has_task_parent);
 
@@ -371,8 +375,8 @@ struct LowerParallelTasks : public IRMutator {
             }
 
             std::string new_function_name = c_print_name(unique_name(t.name), false);
-            closure_implementations.emplace_back(GenerateClosureIR(new_function_name, closure, closure_args,
-                                                                   closure_arg_index, t.body, target));
+            closure_implementations.emplace_back(generate_closure_ir(new_function_name, closure, closure_args,
+                                                                     closure_arg_index, t.body, target));
 
             if (use_parallel_for) {
                 std::vector<Expr> function_decl_args(3);
@@ -405,7 +409,7 @@ struct LowerParallelTasks : public IRMutator {
                 tasks_array_args.emplace_back((int)t.semaphores.size());
                 tasks_array_args.emplace_back(t.min);
                 tasks_array_args.emplace_back(t.extent);
-                tasks_array_args.emplace_back(min_threads.result);
+                tasks_array_args.emplace_back(min_threads);
                 tasks_array_args.emplace_back(Cast::make(Bool(), t.serial));
             }
         }
@@ -485,6 +489,8 @@ struct LowerParallelTasks : public IRMutator {
     std::vector<LoweredFunc> closure_implementations;
     bool has_task_parent;
 };
+
+}  // namespace
 
 Stmt lower_parallel_tasks(const Stmt &s, std::vector<LoweredFunc> &closure_implementations,
                           const std::string &name, const Target &t) {
