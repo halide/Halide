@@ -755,7 +755,8 @@ class InjectHexagonRpc : public IRMutator {
         // Build a closure for the device code.
         // TODO: Should this move the body of the loop to Hexagon,
         // or the loop itself? Currently, this moves the loop itself.
-        Closure c(body);
+        Closure c;
+        c.include(body);
 
         // A buffer parameter potentially generates 3 scalar parameters (min,
         // extent, stride) per dimension. Pipelines with many buffers may
