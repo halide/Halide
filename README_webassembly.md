@@ -113,7 +113,7 @@ With V8 built, we can pass the CMake options:
 An example to configure Halide with V8 support, build and run an example test:
 
 ```
-$ cd ~/v8/v8
+$ cd /path/to/halide
 $ export HL_TARGET=wasm-32-wasmrt-wasm_simd128
 $ export HL_JIT_TARGET=${HL_TARGET}
 $ cmake -G Ninja \
