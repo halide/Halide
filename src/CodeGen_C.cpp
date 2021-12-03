@@ -2565,8 +2565,13 @@ void CodeGen_C::visit(const Call *op) {
     } else if (op->is_intrinsic(Call::load_typed_struct_member)) {
         // Given an instance of a typed_struct, a definition of a typed_struct,
         // and the index of a slot, load the value of that slot.
-        // It is assumed that the instance has been created with make_typed_struct
-        // and that the definiton has been created with define_typed_struct.
+        //
+        // An instance of a typed_struct is an Expr of Handle() type that has been
+        // created by a call to make_typed_struct.
+        //
+        // An definiton of a typed_struct is an Expr of Handle() type that has been
+        // created by a call to define_typed_struct.
+        //
         // It is also assumed that the slot index is valid for the given typed_struct.
 
         internal_assert(op->args.size() == 3);
