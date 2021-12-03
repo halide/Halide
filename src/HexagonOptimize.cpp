@@ -991,7 +991,7 @@ private:
             // We need to lower lerps now to optimize the arithmetic
             // that they generate.
             internal_assert(op->args.size() == 3);
-            return mutate(lower_lerp(op->args[0], op->args[1], op->args[2]));
+            return mutate(lower_lerp(op->args[0], op->args[1], op->args[2], target));
         } else if ((op->is_intrinsic(Call::div_round_to_zero) ||
                     op->is_intrinsic(Call::mod_round_to_zero)) &&
                    !op->type.is_float() && op->type.is_vector()) {

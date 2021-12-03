@@ -25,13 +25,6 @@ int main(int argc, char **argv) {
         return 0;
     }
 
-    // Issue https://github.com/halide/Halide/issues/3586 -- failing
-    // on Windows; disabling pending a fix
-    if (target.has_feature(Target::D3D12Compute)) {
-        printf("[SKIP] D3D12Compute broken; see https://github.com/halide/Halide/issues/3586\n");
-        return 0;
-    }
-
     double times[2];
     for (int use_async = 0; use_async < 2; use_async++) {
         Var x, y, t, xi, yi;

@@ -446,6 +446,16 @@ public:
         return type != other.type || (code() == Handle && !same_handle_type(other));
     }
 
+    /** Compare two types for equality */
+    bool operator==(const halide_type_t &other) const {
+        return type == other;
+    }
+
+    /** Compare two types for inequality */
+    bool operator!=(const halide_type_t &other) const {
+        return type != other;
+    }
+
     /** Compare ordering of two types so they can be used in certain containers and algorithms */
     bool operator<(const Type &other) const {
         if (type < other.type) {
