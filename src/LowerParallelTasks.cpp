@@ -39,7 +39,7 @@ LoweredFunc generate_closure_ir(const std::string &name, const Closure &closure,
         wrapped_body = LetStmt::make(v.first,
                                      Call::make(v.second, Call::load_struct_member,
                                                 {closure_arg, struct_type, make_const(UInt(32), struct_index)},
-                                                Call::Intrinsic),
+                                                Call::PureIntrinsic),
                                      wrapped_body);
         struct_index++;
     }
@@ -54,7 +54,7 @@ LoweredFunc generate_closure_ir(const std::string &name, const Closure &closure,
         wrapped_body = LetStmt::make(b.first + ".buffer",
                                      Call::make(type_of<halide_buffer_t *>(), Call::load_struct_member,
                                                 {closure_arg, struct_type, make_const(UInt(32), struct_index + 1)},
-                                                Call::Intrinsic),
+                                                Call::PureIntrinsic),
                                      wrapped_body);
         struct_index += 2;
     }
