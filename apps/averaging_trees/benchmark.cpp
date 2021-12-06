@@ -182,8 +182,8 @@ int main(int argc, char **argv) {
 
     float_.time = Halide::Tools::benchmark(10, 10, [&]() {
         bilinear_upsample_float(float_circle_in, noise0, float_circle1);
-        bilinear_upsample_float(float_circle1, noise1, float_circle0);
-        bilinear_upsample_float(float_circle0, noise2, float_circle1);
+        // bilinear_upsample_float(float_circle1, noise1, float_circle0);
+        // bilinear_upsample_float(float_circle0, noise2, float_circle1);
         bilinear_upsample_float(float_circle1, noise3, float_circle0);
         bilinear_upsample_float_dither(float_circle0, noise4, circle1);
     });
@@ -191,8 +191,8 @@ int main(int argc, char **argv) {
 
     averaging.time = Halide::Tools::benchmark(10, 10, [&]() {
         bilinear_upsample_averaging(circle_in, noise0, circle1);
-        bilinear_upsample_averaging(circle1, noise1, circle0);
-        bilinear_upsample_averaging(circle0, noise2, circle1);
+        // bilinear_upsample_averaging(circle1, noise1, circle0);
+        // bilinear_upsample_averaging(circle0, noise2, circle1);
         bilinear_upsample_averaging(circle1, noise3, circle0);
         bilinear_upsample_averaging(circle0, noise4, circle1);
     });
@@ -201,8 +201,8 @@ int main(int argc, char **argv) {
 
     round_up.time = Halide::Tools::benchmark(10, 10, [&]() {
         bilinear_upsample_round_up(circle_in, noise0, circle1);
-        bilinear_upsample_round_up(circle1, noise1, circle0);
-        bilinear_upsample_round_up(circle0, noise2, circle1);
+        // bilinear_upsample_round_up(circle1, noise1, circle0);
+        // bilinear_upsample_round_up(circle0, noise2, circle1);
         bilinear_upsample_round_up(circle1, noise3, circle0);
         bilinear_upsample_round_up(circle0, noise4, circle1);
     });
@@ -211,8 +211,8 @@ int main(int argc, char **argv) {
 
     round_to_even.time = Halide::Tools::benchmark(10, 10, [&]() {
         bilinear_upsample_round_to_even(circle_in, noise0, circle1);
-        bilinear_upsample_round_to_even(circle1, noise1, circle0);
-        bilinear_upsample_round_to_even(circle0, noise2, circle1);
+        // bilinear_upsample_round_to_even(circle1, noise1, circle0);
+        // bilinear_upsample_round_to_even(circle0, noise2, circle1);
         bilinear_upsample_round_to_even(circle1, noise3, circle0);
         bilinear_upsample_round_to_even(circle0, noise4, circle1);
     });
@@ -221,8 +221,8 @@ int main(int argc, char **argv) {
 
     dither.time = Halide::Tools::benchmark(10, 10, [&]() {
         bilinear_upsample_dither(circle_in, noise0, circle1);
-        bilinear_upsample_dither(circle1, noise1, circle0);
-        bilinear_upsample_dither(circle0, noise2, circle1);
+        // bilinear_upsample_dither(circle1, noise1, circle0);
+        // bilinear_upsample_dither(circle0, noise2, circle1);
         bilinear_upsample_dither(circle1, noise3, circle0);
         bilinear_upsample_dither(circle0, noise4, circle1);
     });
@@ -230,15 +230,15 @@ int main(int argc, char **argv) {
     compute_relative_bias_and_error(circ, float_circle1, &dither);
 
     printf("Averaging     ");
-    averaging.show(5);
+    averaging.show(3);
     printf("Round up      ");
-    round_up.show(5);
+    round_up.show(3);
     printf("Round to even ");
-    round_to_even.show(5);
+    round_to_even.show(3);
     printf("Dither        ");
-    dither.show(5);
+    dither.show(3);
     printf("Float         ");
-    float_.show(5);
+    float_.show(3);
 
     return 0;
 }

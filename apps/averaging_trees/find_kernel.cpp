@@ -1,7 +1,14 @@
 
 #include "dag.h"
 
-vector<Dag> enumerate_dags(const vector<int> &ids, const vector<int> &kernel, int num_inputs, Round round = Round::Down) {
+template<typename AcceptDAGCount, typename AcceptDag>
+vector<Dag> enumerate_dags(std::mt19937 *rng,
+                           const vector<int> &ids,
+                           const vector<int> &kernel,
+                           int num_inputs,
+                           Round round = Round::Down,
+                           AcceptDAGCount *accept_dag_count = nullptr,
+                           AcceptDag *accept_dag = nullptr) {
 
     vector<Dag> result;
     // For all possible partitions of ids into two equal sets,
@@ -18,7 +25,15 @@ vector<Dag> enumerate_dags(const vector<int> &ids, const vector<int> &kernel, in
     // and treat that as a bit-mask telling us which side each id goes
     // to.
 
-    for (size_t i = 0; i < (1ULL << (int)ids.size()); i++) {
+    size_t count = 0;
+
+    size_t num_partitions = (1ULL << (int)ids.size());
+
+    for (size_t p = 0; p < num_partitions; p++) {
+        // Arbitrarily rotate the set of partitions so that we start
+        // somewhere interesting.
+        size_t i = rng ? ((*rng)() & (num_partitions - 1)) : p;
+
         if (__builtin_popcount(i) != ids.size() / 2) {
             // Not a balanced partition
             continue;
@@ -64,8 +79,25 @@ vector<Dag> enumerate_dags(const vector<int> &ids, const vector<int> &kernel, in
         if (bad) continue;
 
         Round subround = round == Round::Down ? Round::Up : Round::Down;
-        vector<Dag> left = enumerate_dags(left_ids, kernel, num_inputs, subround);
-        vector<Dag> right = enumerate_dags(right_ids, kernel, num_inputs, subround);
+        vector<Dag> left = enumerate_dags<void, void>(rng, left_ids, kernel, num_inputs, subround);
+        vector<Dag> right = enumerate_dags<void, void>(rng, right_ids, kernel, num_inputs, subround);
+
+        if constexpr (!std::is_void<AcceptDAGCount>::value) {
+            count += left.size() * right.size();
+            (*accept_dag_count)(count);
+        }
+
+        // We want to iterate over all pairs in a pseudo-random order
+        if (rng) {
+            std::shuffle(left.begin(), left.end(), *rng);
+            std::shuffle(right.begin(), right.end(), *rng);
+            if (left.size() > 32) {
+                left.erase(left.begin() + 32, left.end());
+            }
+            if (right.size() > 32) {
+                right.erase(right.begin() + 32, right.end());
+            }
+        }
 
         for (const auto &l : left) {
             for (const auto &r : right) {
@@ -112,7 +144,11 @@ vector<Dag> enumerate_dags(const vector<int> &ids, const vector<int> &kernel, in
                     }
                 }
                 if (!bad) {
-                    result.push_back(combined);
+                    if constexpr (!std::is_void<AcceptDag>::value) {
+                        (*accept_dag)(combined);
+                    } else {
+                        result.push_back(combined);
+                    }
                 }
             }
         }
@@ -123,15 +159,16 @@ vector<Dag> enumerate_dags(const vector<int> &ids, const vector<int> &kernel, in
 
 int main(int argc, const char **argv) {
 
-    if (argc < 2) {
-        std::cerr << "Usage: " << argv[0] << " 1 4 6 4 1\n";
+    if (argc < 3) {
+        std::cerr << "Usage: " << argv[0] << " seed 1 4 6 4 1\n";
         return 0;
     }
 
-    const int num_inputs = argc - 1;
+    const int num_inputs = argc - 2;
     vector<int> kernel;
     int kernel_sum = 0;
-    for (int i = 1; i < argc; i++) {
+    int seed = std::atoi(argv[1]);
+    for (int i = 2; i < argc; i++) {
         kernel.push_back(std::atoi(argv[i]));
         kernel_sum += kernel.back();
     }
@@ -147,9 +184,8 @@ int main(int argc, const char **argv) {
         id++;
     }
 
-    vector<Dag> dags = enumerate_dags(ids, kernel, num_inputs);
+    // vector<Dag> dags = enumerate_dags(ids, kernel, num_inputs);
     auto start = std::chrono::high_resolution_clock::now();
-    std::cout << "Dags: " << dags.size() << "\n";
     int counter = 0;
     double best_bias = 1e100, error_of_best_bias = 1e100;
     double best_error = 1e100, bias_of_best_error = 1e100;
@@ -160,32 +196,46 @@ int main(int argc, const char **argv) {
 
     set<Dag> seen_dags;
 
-    for (auto &dag : dags) {
+    size_t num_dags;
 
+    const bool random = kernel_sum > 16;
+    std::mt19937 rng{(unsigned)seed};
+
+    if (random) {
+        std::cout << "Kernel sums to more than 16. Using randomization. Search will not be"
+                     " exhaustive.\n";
+    }
+
+    auto accept_dag_count = [&](size_t s) {
+        num_dags = s;
+    };
+
+    auto accept_dag = [&](Dag &dag) {
         dag.simplify(false);
 
         if (counter % 10 == 0) {
             auto t = std::chrono::high_resolution_clock::now();
             double elapsed = std::chrono::duration_cast<std::chrono::duration<double>>(t - start).count();
-            auto total_time = (elapsed / counter) * dags.size();
+            auto total_time = (elapsed / counter) * num_dags;
             auto minutes_remaining = (total_time - elapsed) / 60;
-            std::cout << counter << " / " << dags.size() << " (" << minutes_remaining << " minutes remaining) " << difficult_inputs.size() << " " << quick_rejected << " " << quick_accepted << "\n";
+            std::cout << counter << " / " << num_dags << " (" << minutes_remaining << " minutes remaining) " << difficult_inputs.size() << " " << quick_rejected << " " << quick_accepted << "\n";
         }
         counter++;
         // Try all rounding options for this dag
         std::set<size_t> positive_bias, negative_bias;
-        size_t rounding_choices = (size_t)1 << dag.ops.size();
-        for (size_t i = 0; i < rounding_choices; i++) {
+        size_t tried = 0;
+        size_t rounding_choices = random ? 65536 : ((size_t)1 << dag.ops.size());
+        for (size_t c = 0; c < rounding_choices; c++) {
+
+            size_t i = random ? rng() : c;
 
             for (size_t j = 0; j < dag.ops.size(); j++) {
-                dag.ops[j].round = ((i >> j) & 1) ? Round::Up : Round::Down;
+                // Try solutions that round up first, because x86 has
+                // average-round-up but not average-round-down.
+                dag.ops[j].round = ((i >> j) & 1) ? Round::Down : Round::Up;
             }
 
-            if (!seen_dags.insert(dag).second) {
-                continue;
-            }
-
-            if (dag.estimated_bias() != 0) {
+            if (!random && !seen_dags.insert(dag).second) {
                 continue;
             }
 
@@ -213,9 +263,14 @@ int main(int argc, const char **argv) {
             }
             if (skip_it) continue;
 
+            tried++;
+            if (random && tried >= 16) {
+                break;
+            }
+
             {
                 auto p = dag.bias_on(difficult_inputs);
-                if (p.error >= best_error) {
+                if (p.error > best_error) {
                     // std::cerr << "Quick reject because error is: " << p.error << "\n";
                     quick_rejected++;
                     continue;
@@ -228,7 +283,7 @@ int main(int argc, const char **argv) {
             double bias = p.bias;
             double error = p.error;
 
-            if (error >= best_error) {
+            if (error > best_error) {
                 if (difficult_inputs.count(p.worst_input)) {
                     // We should have quick rejected it
                     std::cout << p.worst_input << " " << p.error << "\n";
@@ -262,8 +317,19 @@ int main(int argc, const char **argv) {
                 dag.dump();
                 std::cout << "Bias: " << bias << " Error: " << error << " Estimated bias: " << dag.estimated_bias() << "\n";
             }
+
+            if (bias == 0.f && error == 0.5f) {
+                std::cout << "Optimal tree found. Terminating.\n";
+                exit(0);
+            }
         }
-    }
+    };
+
+    do {
+        enumerate_dags(random ? &rng : nullptr, ids, kernel, num_inputs, Round::Down, &accept_dag_count, &accept_dag);
+    } while (random);
+
+    std::cout << "No optimal averaging tree found. Try doubling the coefficients.\n";
 
     return 0;
 }

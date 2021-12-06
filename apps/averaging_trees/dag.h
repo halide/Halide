@@ -347,8 +347,8 @@ Result compute_bias_and_error(Runtime::Buffer<int32_t> inputs,
     auto max_error_out = Buffer<float>::make_scalar();
     auto worst_index_out = Buffer<int32_t>::make_scalar();
     f.realize({bias_out, min_error_out, max_error_out, worst_index_out});
-    assert(min_error_out() <= 0.f);
-    assert(max_error_out() >= 0.f);
+    // assert(min_error_out() <= 0.f);
+    // assert(max_error_out() >= 0.f);
     return {bias_out() / size,
             std::max(std::abs(min_error_out()), std::abs(max_error_out())),
             min_error_out(),

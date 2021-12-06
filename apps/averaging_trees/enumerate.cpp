@@ -86,12 +86,6 @@ int main(int argc, const char **argv) {
             continue;
         }
 
-        if (dag.ops.back().i < dag.num_inputs ||
-            dag.ops.back().j < dag.num_inputs) {
-            // Boring. Skip it for now
-            continue;
-        }
-
         // Shift all the kernel coefficients as rightwards as possible
         // to canonicalize the kernel.
         vector<int> normalized_kernel;
@@ -118,6 +112,7 @@ int main(int argc, const char **argv) {
                 dag.ops[j].round = ((i >> j) & 1) ? Round::Up : Round::Down;
             }
 
+            /*
             // Experimentally I've found that the following is a valid
             // filter (i.e. we don't miss any perfect kernels this
             // way).
@@ -125,6 +120,7 @@ int main(int argc, const char **argv) {
             if (bias_estimate != 0) {
                 continue;
             }
+            */
 
             // Skip dags that duplicate an op
             bool bad = false;
@@ -189,8 +185,13 @@ int main(int argc, const char **argv) {
             (best_error.error == error_it->second.error &&
              std::abs(best_error.bias) < std::abs(bias_it->second.bias));
 
-        better_error &= (best_error.error == 0.5 && best_error.bias == 0);
-        better_bias &= (best_bias.error == 0.5 && best_bias.bias == 0);
+        // Uncomment if you only want perfect trees (zero bias, minimum peak error)
+        // better_error &= (best_error.error == 0.5 && best_error.bias == 0);
+        // better_bias &= (best_bias.error == 0.5 && best_bias.bias == 0);
+
+        // Uncomment if you only want unbiased trees
+        better_error &= best_error.bias == 0;
+        better_bias &= best_bias.bias == 0;
 
         if (better_bias) {
             // This breaks a record for the best bias seen so far
@@ -219,7 +220,7 @@ int main(int argc, const char **argv) {
                 }
                 std::cout << "\n"
                           << "Bias: " << best_error.bias << "\n"
-                          << "Max eabs rror: " << best_error.error << "\n"
+                          << "Max abs error: " << best_error.error << "\n"
                           << "Min error: " << best_error.min_error << "\n"
                           << "Max error: " << best_error.max_error << "\n";
             }
