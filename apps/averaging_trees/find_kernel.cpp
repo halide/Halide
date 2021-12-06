@@ -189,6 +189,7 @@ int main(int argc, const char **argv) {
     int counter = 0;
     double best_bias = 1e100, error_of_best_bias = 1e100;
     double best_error = 1e100, bias_of_best_error = 1e100;
+    size_t ops_of_best_bias = -1, ops_of_best_error = -1;
 
     set<int32_t> difficult_inputs;
 
@@ -222,7 +223,6 @@ int main(int argc, const char **argv) {
         }
         counter++;
         // Try all rounding options for this dag
-        std::set<size_t> positive_bias, negative_bias;
         size_t tried = 0;
         size_t rounding_choices = random ? 65536 : ((size_t)1 << dag.ops.size());
         for (size_t c = 0; c < rounding_choices; c++) {
@@ -238,30 +238,6 @@ int main(int argc, const char **argv) {
             if (!random && !seen_dags.insert(dag).second) {
                 continue;
             }
-
-            // Before we do an expensive bias computation, see if we
-            // already know this bias will be worse than a similar
-            // tree
-            bool skip_it = false;
-            for (size_t j : positive_bias) {
-                if ((i & j) == j) {
-                    // We round up everywhere this other tree does,
-                    // and more, and it has positive bias, so we're
-                    // screwed.
-                    skip_it = true;
-                    break;
-                }
-            }
-            for (size_t j : negative_bias) {
-                if ((i & j) == i) {
-                    // We round down everywhere this other tree does,
-                    // and more, and it has negative bias, so we're
-                    // screwed.
-                    skip_it = true;
-                    break;
-                }
-            }
-            if (skip_it) continue;
 
             tried++;
             if (random && tried >= 16) {
@@ -293,34 +269,34 @@ int main(int argc, const char **argv) {
 
             difficult_inputs.insert(p.worst_input);
 
-            if (bias > 0) {
-                positive_bias.insert(i);
-            } else if (bias < 0) {
-                negative_bias.insert(i);
-            }
+            dag.simplify(true);
 
             bool better_bias =
                 (std::abs(bias) < std::abs(best_bias) ||
-                 (std::abs(bias) == std::abs(best_bias) && error < error_of_best_bias));
+                 (std::abs(bias) == std::abs(best_bias) &&
+                  (error < error_of_best_bias ||
+                   (error == error_of_best_bias &&
+                    dag.ops.size() < ops_of_best_bias))));
             bool better_error =
                 (error < best_error ||
-                 (error == best_error && std::abs(bias) < std::abs(bias_of_best_error)));
+                 (error == best_error &&
+                  (std::abs(bias) < std::abs(bias_of_best_error) ||
+                   (std::abs(bias) == std::abs(bias_of_best_error) &&
+                    dag.ops.size() < ops_of_best_error))));
+
             if (better_bias) {
                 best_bias = bias;
                 error_of_best_bias = error;
+                ops_of_best_bias = dag.ops.size();
             }
             if (better_error) {
                 best_error = error;
                 bias_of_best_error = bias;
+                ops_of_best_error = dag.ops.size();
             }
             if (better_bias || better_error) {
                 dag.dump();
-                std::cout << "Bias: " << bias << " Error: " << error << " Estimated bias: " << dag.estimated_bias() << "\n";
-            }
-
-            if (bias == 0.f && error == 0.5f) {
-                std::cout << "Optimal tree found. Terminating.\n";
-                exit(0);
+                std::cout << "Bias: " << bias << " Error: " << error << "\n";
             }
         }
     };
@@ -329,7 +305,9 @@ int main(int argc, const char **argv) {
         enumerate_dags(random ? &rng : nullptr, ids, kernel, num_inputs, Round::Down, &accept_dag_count, &accept_dag);
     } while (random);
 
-    std::cout << "No optimal averaging tree found. Try doubling the coefficients.\n";
+    if (best_error > 0.5 || best_bias > 0) {
+        std::cout << "No optimal averaging tree found. Try doubling the coefficients.\n";
+    }
 
     return 0;
 }
