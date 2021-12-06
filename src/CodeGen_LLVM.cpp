@@ -2902,10 +2902,18 @@ void CodeGen_LLVM::visit(const Call *op) {
         // An instance of a typed_struct is an Expr of Handle() type that has been
         // created by a call to make_typed_struct.
         //
-        // An definiton of a typed_struct is an Expr of Handle() type that has been
+        // A definiton of a typed_struct is an Expr of Handle() type that has been
         // created by a call to define_typed_struct.
         //
-        // It is also assumed that the slot index is valid for the given typed_struct.
+        // Note that both the instance and definition are needed because the instance
+        // is often a void* by the time it is -- it will have been been passed through
+        // an API that takes an opaque pointer as a void*, and needs explicit casting
+        // back to the correct type for safe field access.
+        //
+        // It is assumed that the slot index is valid for the given typed_struct.
+        //
+        // TODO: this comment is replicated in CodeGen_C and should be updated there too.
+        // TODO: https://github.com/halide/Halide/issues/6468
 
         // TODO(zalman): Validate the Halide type of the result matches the LLVM type?
         // TODO(zalman): Are struct types the right level of indirection.
