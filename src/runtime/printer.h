@@ -55,12 +55,7 @@ public:
     }
 
     Printer &operator<<(const char *arg) {
-        // Crashing on nullptr here is a big debugging time sink.
-        if (arg == nullptr) {
-            dst = halide_string_to_string(dst, end, "<nullptr>");
-        } else {
-            dst = halide_string_to_string(dst, end, arg);
-        }
+        dst = halide_string_to_string(dst, end, arg);
         return *this;
     }
 
