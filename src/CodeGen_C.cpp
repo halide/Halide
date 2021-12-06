@@ -2467,34 +2467,46 @@ void CodeGen_C::visit(const Call *op) {
             }
             rhs << "(&" << struct_name << ")";
         }
-    } else if (op->is_intrinsic(Call::declare_struct_type)) {
+    } else if (op->is_intrinsic(Call::define_typed_struct)) {
         // Emit a declaration like:
-        // struct {const int f_0, const char f_1, const int f_2} foo;
+        //
+        //    struct {const int f_0, const char f_1, const int f_2} foo;
+        //
+        // rhs is set to a nullptr of the new type.
 
         // Declares a struct type. Returns a null pointer of the new type.
-        internal_assert(op->args.size() >= 2);
+        const size_t args_size = op->args.size();
+        internal_assert(args_size >= 1);
 
         const StringImm *str_imm = op->args[0].as<StringImm>();
         internal_assert(str_imm != nullptr);
         std::string name = c_print_name(str_imm->value, false);
 
-        const int64_t *mode = as_const_int(op->args[1]);
-        internal_assert(mode != nullptr);
+        stream << get_indent() << "struct " << name;
+        stream << " {\n";
+        // List the types.
+        indent++;
+        for (size_t i = 1; i < args_size; i++) {
+            stream << get_indent() << print_type(op->args[i].type(), AppendSpace) << "f_" << i - 1 << ";\n";
+        }
+        indent--;
+        stream << get_indent() << "};\n";
+        rhs << "((" << name << " *)nullptr)";
+    } else if (op->is_intrinsic(Call::forward_declare_typed_struct)) {
+        // Emit a declaration like:
+        //
+        //   struct foo;
+        //
+        // rhs is set to a nullptr of the given type.
+        internal_assert(op->args.size() == 1);
 
-        if (*mode == 1 || !starts_with(name, "halide_")) {
-            stream << get_indent() << "struct " << name;
-            if (*mode == 1) {
-                stream << " {\n";
-                // List the types.
-                indent++;
-                for (size_t i = 2; i < op->args.size(); i++) {
-                    stream << get_indent() << print_type(op->args[i].type(), AppendSpace) << "f_" << i - 2 << ";\n";
-                }
-                indent--;
-                stream << get_indent() << "};\n";
-            } else {
-                stream << ";\n";
-            }
+        const StringImm *str_imm = op->args[0].as<StringImm>();
+        internal_assert(str_imm != nullptr);
+        std::string name = c_print_name(str_imm->value, false);
+
+        if (!starts_with(name, "halide_")) {
+            // Types beginning with halide_ don't need forward declaration (e.g. halide_buffer_t).
+            stream << get_indent() << "struct " << name << ";\n";
         }
         rhs << "((" << name << " *)nullptr)";
     } else if (op->is_intrinsic(Call::make_typed_struct)) {
@@ -2550,13 +2562,32 @@ void CodeGen_C::visit(const Call *op) {
             rhs << "(" << print_type(op->type) << ")";
         }
         rhs << "(&" << struct_name << ((count > 0) ? "[0])" : ")");
-    } else if (op->is_intrinsic(Call::load_struct_member)) {
+    } else if (op->is_intrinsic(Call::load_typed_struct_member)) {
+        // Given an instance of a typed_struct, a definition of a typed_struct,
+        // and the index of a slot, load the value of that slot.
+        //
+        // An instance of a typed_struct is an Expr of Handle() type that has been
+        // created by a call to make_typed_struct.
+        //
+        // A definiton of a typed_struct is an Expr of Handle() type that has been
+        // created by a call to define_typed_struct.
+        //
+        // Note that both the instance and definition are needed because the instance
+        // is often a void* by the time it is -- it will have been been passed through
+        // an API that takes an opaque pointer as a void*, and needs explicit casting
+        // back to the correct type for safe field access.
+        //
+        // It is assumed that the slot index is valid for the given typed_struct.
+        //
+        // TODO: this comment is replicated in CodeGen_LLVM and should be updated there too.
+        // TODO: https://github.com/halide/Halide/issues/6468
+
         internal_assert(op->args.size() == 3);
+        std::string typed_struct_instance = print_expr(op->args[0]);
+        std::string typed_struct_definition = print_expr(op->args[1]);
         const uint64_t *index = as_const_uint(op->args[2]);
         internal_assert(index != nullptr);
-        std::string struct_base = print_expr(op->args[0]);
-        std::string type_carrier = print_expr(op->args[1]);
-        rhs << "((decltype(" << type_carrier << "))" << struct_base << ")->"
+        rhs << "((decltype(" << typed_struct_definition << "))" << typed_struct_instance << ")->"
             << "f_" << *index;
     } else if (op->is_intrinsic(Call::resolve_function_name)) {
         internal_assert(op->args.size() == 1);
@@ -2670,9 +2701,9 @@ void CodeGen_C::visit(const Call *op) {
         stream << get_indent() << rhs.str() << ";\n";
         // Make an innocuous assignment value for our caller (probably an Evaluate node) to ignore.
         print_assignment(op->type, "0");
-    } else if (op->is_intrinsic(Call::declare_struct_type) ||
+    } else if (op->is_intrinsic(Call::define_typed_struct) ||
                op->is_intrinsic(Call::make_typed_struct) ||
-               op->is_intrinsic(Call::load_struct_member) ||
+               op->is_intrinsic(Call::load_typed_struct_member) ||
                op->is_intrinsic(Call::resolve_function_name)) {
         // print_assigment will get the type info wrong for this case.
         std::string rhs_str = rhs.str();
