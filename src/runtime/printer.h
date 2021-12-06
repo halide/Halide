@@ -1,5 +1,8 @@
 #ifndef HALIDE_RUNTIME_PRINTER_H
 #define HALIDE_RUNTIME_PRINTER_H
+
+#include "runtime_internal.h"
+
 namespace Halide {
 namespace Runtime {
 namespace Internal {
@@ -27,158 +30,99 @@ constexpr uint64_t default_printer_buffer_length = 1024;
 // Then remember the print only happens when the debug object leaves
 // scope, which may print at a confusing time.
 
-namespace {
-template<PrinterType printer_type, uint64_t buffer_length = default_printer_buffer_length>
-class Printer {
-    char *buf, *dst, *end;
-    void *user_context;
-    bool own_mem;
+class PrinterBase {
+protected:
+    char *buf, *dst, *end, *mem_to_free;
+    void *const user_context;
+    uint64_t const length;
 
 public:
-    explicit Printer(void *ctx, char *mem = nullptr)
-        : user_context(ctx), own_mem(mem == nullptr) {
-        if (mem != nullptr) {
-            buf = mem;
-        } else {
-            buf = (char *)malloc(buffer_length);
-        }
+    PrinterBase &operator<<(const char *arg);
+    PrinterBase &operator<<(int64_t arg);
+    PrinterBase &operator<<(int32_t arg);
+    PrinterBase &operator<<(uint64_t arg);
+    PrinterBase &operator<<(uint32_t arg);
+    PrinterBase &operator<<(double arg);
+    PrinterBase &operator<<(float arg);
+    PrinterBase &operator<<(const void *arg);
+    PrinterBase &write_float16_from_bits(uint16_t arg);
+    PrinterBase &operator<<(const halide_type_t &t);
+    PrinterBase &operator<<(const halide_buffer_t &buf);
 
-        dst = buf;
-        if (dst) {
-            end = buf + (buffer_length - 1);
-            *end = 0;
-        } else {
-            // Pointers equal ensures no writes to buffer via formatting code
-            end = dst;
-        }
-    }
-
-    // Not movable, not copyable
-    Printer(const Printer &copy) = delete;
-    Printer &operator=(const Printer &) = delete;
-    Printer(Printer &&) = delete;
-    Printer &operator=(Printer &&) = delete;
-
-    Printer &operator<<(const char *arg) {
-        dst = halide_string_to_string(dst, end, arg);
-        return *this;
-    }
-
-    Printer &operator<<(int64_t arg) {
-        dst = halide_int64_to_string(dst, end, arg, 1);
-        return *this;
-    }
-
-    Printer &operator<<(int32_t arg) {
-        dst = halide_int64_to_string(dst, end, arg, 1);
-        return *this;
-    }
-
-    Printer &operator<<(uint64_t arg) {
-        dst = halide_uint64_to_string(dst, end, arg, 1);
-        return *this;
-    }
-
-    Printer &operator<<(uint32_t arg) {
-        dst = halide_uint64_to_string(dst, end, arg, 1);
-        return *this;
-    }
-
-    Printer &operator<<(double arg) {
-        dst = halide_double_to_string(dst, end, arg, 1);
-        return *this;
-    }
-
-    Printer &operator<<(float arg) {
-        dst = halide_double_to_string(dst, end, arg, 0);
-        return *this;
-    }
-
-    Printer &operator<<(const void *arg) {
-        dst = halide_pointer_to_string(dst, end, arg);
-        return *this;
-    }
-
-    Printer &write_float16_from_bits(const uint16_t arg) {
-        double value = halide_float16_bits_to_double(arg);
-        dst = halide_double_to_string(dst, end, value, 1);
-        return *this;
-    }
-
-    Printer &operator<<(const halide_type_t &t) {
-        dst = halide_type_to_string(dst, end, &t);
-        return *this;
-    }
-
-    Printer &operator<<(const halide_buffer_t &buf) {
-        dst = halide_buffer_to_string(dst, end, &buf);
-        return *this;
-    }
-
-    // Use it like a stringstream.
-    const char *str() {
-        if (buf) {
-            if (printer_type == StringStreamPrinterType) {
-                msan_annotate_is_initialized();
-            }
-            return buf;
-        } else {
-            return allocation_error();
-        }
-    }
-
-    // Clear it. Useful for reusing a stringstream.
-    void clear() {
-        dst = buf;
-        if (dst) {
-            dst[0] = 0;
-        }
-    }
+    const char *str();
+    void clear();
+    // Delete the last N characters
+    void erase(int n);
 
     // Returns the number of characters in the buffer
-    uint64_t size() const {
+    inline uint64_t size() const {
         return (uint64_t)(dst - buf);
     }
 
-    uint64_t capacity() const {
-        return buffer_length;
+    inline uint64_t capacity() const {
+        return length;
     }
 
-    // Delete the last N characters
-    void erase(int n) {
-        if (dst) {
-            dst -= n;
-            if (dst < buf) {
-                dst = buf;
-            }
-            dst[0] = 0;
-        }
+protected:
+    PrinterBase(void *ctx, char *mem, uint64_t length);
+
+    // This ctor assumes length = default_printer_buffer_length and mem == nullptr,
+    // which is the case for almost all callers.
+    PrinterBase(void *ctx);
+
+    ~PrinterBase();
+
+    // This exists just to avoid inlining a couple of calls when we
+    // could inline just a single one; since almost all instances of this
+    // tend to be in error handling, debugging, etc., we want to optimize for
+    // code size.
+    void finish_error();
+    void finish_print();
+
+public:
+    // (clang-tidy wants deleted member functions to be public)
+    // Not movable, not copyable
+    PrinterBase(const PrinterBase &copy) = delete;
+    PrinterBase &operator=(const PrinterBase &) = delete;
+    PrinterBase(PrinterBase &&) = delete;
+    PrinterBase &operator=(PrinterBase &&) = delete;
+};
+
+template<PrinterType printer_type, uint64_t buffer_length = default_printer_buffer_length>
+class Printer : public PrinterBase {
+public:
+    // Use SFINAE to select the single-arg ctor in the oh-so-common case of default buffer_length.
+    // We can't use std::enable_if here, so we'll roll our own:
+    template<bool B, class T = void>
+    struct halide_enable_if {};
+
+    template<class T>
+    struct halide_enable_if<true, T> { typedef T type; };
+
+    template<uint64_t buffer_length_here = buffer_length,
+             typename halide_enable_if<buffer_length_here == default_printer_buffer_length, int>::type = 0>
+    inline Printer(void *ctx)
+        : PrinterBase(ctx) {
     }
 
-    const char *allocation_error() {
-        return "Printer buffer allocation failed.\n";
+    template<uint64_t buffer_length_here = buffer_length,
+             typename halide_enable_if<buffer_length_here != default_printer_buffer_length, int>::type = 0>
+    inline Printer(void *ctx)
+        : PrinterBase(ctx, nullptr, buffer_length) {
     }
 
-    void msan_annotate_is_initialized() {
-        (void)halide_msan_annotate_memory_is_initialized(user_context, buf, dst - buf + 1);
+    inline Printer(void *ctx, char *mem)
+        : PrinterBase(ctx, mem, buffer_length) {
     }
 
-    ~Printer() {
-        if (!buf) {
-            halide_error(user_context, allocation_error());
+    inline ~Printer() {
+        if constexpr (printer_type == ErrorPrinterType) {
+            finish_error();
+        } else if constexpr (printer_type == BasicPrinterType) {
+            finish_print();
         } else {
-            msan_annotate_is_initialized();
-            if (printer_type == ErrorPrinterType) {
-                halide_error(user_context, buf);
-            } else if (printer_type == BasicPrinterType) {
-                halide_print(user_context, buf);
-            } else {
-                // It's a stringstream. Do nothing.
-            }
-        }
-
-        if (own_mem) {
-            free(buf);
+            static_assert(printer_type == StringStreamPrinterType);
+            // It's a stringstream. Do nothing.
         }
     }
 };
@@ -213,18 +157,28 @@ using debug = BasicPrinter<>;
 #else
 using debug = SinkPrinter;
 #endif
-}  // namespace
 
 // A Printer that automatically reserves stack space for the printer buffer, rather than malloc.
 // Note that this requires an explicit buffer_length, and it (generally) should be <= 256.
 template<PrinterType printer_type, uint64_t buffer_length>
-class StackPrinter : public Printer<printer_type, buffer_length> {
+class StackPrinter : public PrinterBase {
     char scratch[buffer_length];
 
 public:
     explicit StackPrinter(void *ctx)
-        : Printer<printer_type, buffer_length>(ctx, scratch) {
+        : PrinterBase(ctx, scratch, buffer_length) {
         static_assert(buffer_length <= 256, "StackPrinter is meant only for small buffer sizes; you are probably making a mistake.");
+    }
+
+    inline ~StackPrinter() {
+        if constexpr (printer_type == ErrorPrinterType) {
+            finish_error();
+        } else if constexpr (printer_type == BasicPrinterType) {
+            finish_print();
+        } else {
+            static_assert(printer_type == StringStreamPrinterType);
+            // It's a stringstream. Do nothing.
+        }
     }
 };
 

@@ -711,9 +711,10 @@ std::map<Output, std::string> compile_standalone_runtime(const std::map<Output, 
 
     Module empty("standalone_runtime", t.without_feature(Target::NoRuntime).without_feature(Target::JIT));
     // For runtime, it only makes sense to output object files or static_library, so ignore
-    // everything else.
+    // everything else. (Well, LLVM IR and actual assembly can be useful for debugging and optimzation
+    // as well, so let's allow that, too.)
     std::map<Output, std::string> actual_outputs;
-    for (auto key : {Output::object, Output::static_library}) {
+    for (auto key : {Output::object, Output::static_library, Output::llvm_assembly, Output::assembly}) {
         auto it = output_files.find(key);
         if (it != output_files.end()) {
             actual_outputs[key] = it->second;

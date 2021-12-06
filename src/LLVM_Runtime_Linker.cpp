@@ -125,6 +125,7 @@ DECLARE_CPP_INITMOD(posix_print)
 DECLARE_CPP_INITMOD(posix_threads)
 DECLARE_CPP_INITMOD(posix_threads_tsan)
 DECLARE_CPP_INITMOD(prefetch)
+DECLARE_CPP_INITMOD(printer)
 DECLARE_CPP_INITMOD(profiler)
 DECLARE_CPP_INITMOD(profiler_inlined)
 DECLARE_CPP_INITMOD(pseudostack)
@@ -1111,8 +1112,10 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
 
     if (module_type == ModuleJITShared || module_type == ModuleGPU) {
         modules.push_back(get_initmod_module_jit_ref_count(c, bits_64, debug));
+        modules.push_back(get_initmod_printer(c, bits_64, debug));
     } else if (module_type == ModuleAOT) {
         modules.push_back(get_initmod_module_aot_ref_count(c, bits_64, debug));
+        modules.push_back(get_initmod_printer(c, bits_64, debug));
     }
 
     if (module_type == ModuleAOT || module_type == ModuleGPU) {
