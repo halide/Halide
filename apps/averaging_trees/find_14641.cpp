@@ -62,27 +62,20 @@ Dag avg_dags(const Dag &l, const Dag &r, Round round) {
 int main(int argc, char **argv) {
 
     vector<Dag> all_dags;
+    // All possible 1 4 6 4 1 trees of a specific simple structure
     for (size_t i = 0; i < 32; i++) {
         Dag dag;
         dag.num_inputs = 5;
-
-        /*
-        if (i & 1) {
-            dag.ops.emplace_back(0, 0, Round::Up);
-        } else {
-            dag.ops.emplace_back(4, 4, Round::Up);
-        }
-        */
         dag.ops.emplace_back(0, 4, (i & 1) ? Round::Down : Round::Up);   // 5
         dag.ops.emplace_back(2, 5, (i & 2) ? Round::Down : Round::Up);   // 6
         dag.ops.emplace_back(2, 6, (i & 4) ? Round::Down : Round::Up);   // 7
         dag.ops.emplace_back(1, 3, (i & 8) ? Round::Down : Round::Up);   // 8
         dag.ops.emplace_back(7, 8, (i & 16) ? Round::Down : Round::Up);  // 9
-
         all_dags.push_back(dag);
     }
 
     // Now try all combinations of N of these, starting with N = 2
+    size_t best_op_count = -1;
     for (int n = 2; n < 4; n++) {
         int num_ops = n;  // total guess
         vector<Dag> combiners = enumerate_dags(n, num_ops);
@@ -115,8 +108,12 @@ int main(int argc, char **argv) {
                 auto r = combined.back().bias();
                 if (r.max_error == 0.5 && r.bias == 0) {
                     combined.back().simplify(true);
-                    combined.back().dump();
-                    std::cout << r.bias << " " << r.min_error << " " << r.max_error << "\n";
+                    size_t ops = combined.back().ops.size();
+                    if (ops < best_op_count) {
+                        best_op_count = ops;
+                        combined.back().dump();
+                        std::cout << r.bias << " " << r.min_error << " " << r.max_error << "\n";
+                    }
                 }
             }
         }
