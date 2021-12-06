@@ -2470,7 +2470,7 @@ void CodeGen_C::visit(const Call *op) {
     } else if (op->is_intrinsic(Call::define_typed_struct)) {
         // Emit a declaration like:
         //
-        //    struct {const int f_0, const char f_1, const int f_2} foo;
+        //    struct foo {const int f_0, const char f_1, const int f_2};
         //
         // rhs is set to a nullptr of the new type.
 
