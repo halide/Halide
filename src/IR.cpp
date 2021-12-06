@@ -655,6 +655,12 @@ const char *const intrinsic_op_names[] = {
     "widening_shift_left",
     "widening_shift_right",
     "widening_sub",
+    "make_struct_type",
+    "make_typed_struct",
+    "load_struct_member",
+    "resolve_function_name",
+    "get_user_context",
+    "get_pointer_symbol_or_null",
 };
 
 static_assert(sizeof(intrinsic_op_names) / sizeof(intrinsic_op_names[0]) == Call::IntrinsicOpCount,

@@ -564,6 +564,12 @@ struct Call : public ExprNode<Call> {
         widening_shift_left,
         widening_shift_right,
         widening_sub,
+        make_struct_type,
+        make_typed_struct,
+        load_struct_member,
+        resolve_function_name,
+        get_user_context,
+        get_pointer_symbol_or_null,
         IntrinsicOpCount  // Sentinel: keep last.
     };
 

@@ -42,6 +42,7 @@
 #include "LICM.h"
 #include "LoopCarry.h"
 #include "LowerWarpShuffles.h"
+#include "LowerParallelTasks.h"
 #include "Memoization.h"
 #include "OffloadGPULoops.h"
 #include "PartitionLoops.h"
@@ -442,6 +443,16 @@ void lower_impl(const vector<Function> &output_funcs,
     } else {
         debug(1) << "Skipping GPU offload...\n";
     }
+
+    std::vector<LoweredFunc> closure_implementations;
+    debug(1) << "Lowering Parallel Tasks...\n";
+    s = lower_parallel_tasks(s, closure_implementations, pipeline_name);
+    for (auto& lowerd_func : closure_implementations) {
+        result_module.append(lowerd_func);
+    }
+    debug(2) << "Lowering after generating parallel tasks and closures:\n"
+             << s << "\n\n";
+    
 
     vector<Argument> public_args = args;
     for (const auto &out : outputs) {

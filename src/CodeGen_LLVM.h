@@ -262,24 +262,6 @@ protected:
     /** Codegen a block of asserts with pure conditions */
     void codegen_asserts(const std::vector<const AssertStmt *> &asserts);
 
-    /** Codegen a call to do_parallel_tasks */
-    struct ParallelTask {
-        Stmt body;
-        struct SemAcquire {
-            Expr semaphore;
-            Expr count;
-        };
-        std::vector<SemAcquire> semaphores;
-        std::string loop_var;
-        Expr min, extent;
-        Expr serial;
-        std::string name;
-    };
-    int task_depth;
-    void get_parallel_tasks(const Stmt &s, std::vector<ParallelTask> &tasks, std::pair<std::string, int> prefix);
-    void do_parallel_tasks(const std::vector<ParallelTask> &tasks);
-    void do_as_parallel_task(const Stmt &s);
-
     /** Return the the pipeline with the given error code. Will run
      * the destructor block. */
     void return_with_error_code(llvm::Value *error_code);
@@ -356,10 +338,8 @@ protected:
     void visit(const AssertStmt *) override;
     void visit(const ProducerConsumer *) override;
     void visit(const For *) override;
-    void visit(const Acquire *) override;
     void visit(const Store *) override;
     void visit(const Block *) override;
-    void visit(const Fork *) override;
     void visit(const IfThenElse *) override;
     void visit(const Evaluate *) override;
     void visit(const Shuffle *) override;

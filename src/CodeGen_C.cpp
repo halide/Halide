@@ -1820,7 +1820,7 @@ void CodeGen_C::compile(const LoweredFunc &f, const std::map<std::string, std::s
     set_name_mangling_mode(name_mangling);
 
     std::vector<std::string> namespaces;
-    std::string simple_name = extract_namespaces(f.name, namespaces);
+    std::string simple_name = c_print_name(extract_namespaces(f.name, namespaces), false);
     if (!is_c_plus_plus_interface()) {
         user_assert(namespaces.empty()) << "Namespace qualifiers not allowed on function name if not compiling with Target::CPlusPlusNameMangling.\n";
     }
@@ -2328,7 +2328,7 @@ void CodeGen_C::visit(const Call *op) {
         string arg1 = print_expr(op->args[1]);
         rhs << "return_second(" << arg0 << ", " << arg1 << ")";
     } else if (op->is_intrinsic(Call::if_then_else)) {
-        internal_assert(op->args.size() == 2 || op->args.size() == 3);
+        internal_assert(op->args.size() == 3);
 
         string result_id = unique_name('_');
 
@@ -2342,13 +2342,12 @@ void CodeGen_C::visit(const Call *op) {
         string true_case = print_expr(op->args[1]);
         stream << get_indent() << result_id << " = " << true_case << ";\n";
         close_scope("if " + cond_id);
-        if (op->args.size() == 3) {
-            stream << get_indent() << "else\n";
-            open_scope();
-            string false_case = print_expr(op->args[2]);
-            stream << get_indent() << result_id << " = " << false_case << ";\n";
-            close_scope("if " + cond_id + " else");
-        }
+        stream << get_indent() << "else\n";
+        open_scope();
+        string false_case = print_expr(op->args[2]);
+        stream << get_indent() << result_id << " = " << false_case << ";\n";
+        close_scope("if " + cond_id + " else");
+
         rhs << result_id;
     } else if (op->is_intrinsic(Call::require)) {
         internal_assert(op->args.size() == 3);
@@ -2460,6 +2459,117 @@ void CodeGen_C::visit(const Call *op) {
             }
             rhs << "(&" << struct_name << ")";
         }
+    } else if (op->is_intrinsic(Call::make_struct_type)) {
+        // Emit a declaration like:
+        // struct {const int f_0, const char f_1, const int f_2} foo;
+
+        // Declares a struct type. Returns a null pointer of the new type.
+        internal_assert(op->args.size() >= 1);
+
+        const StringImm *str_imm = op->args[0].as<StringImm>();
+        internal_assert(str_imm != nullptr);
+        std::string name = str_imm->value;
+
+        stream << get_indent() << "struct " << name;
+        if (op->args.size() > 1) {
+            stream << " {\n";
+            // List the types.
+            indent++;
+            for (size_t i = 1; i < op->args.size(); i++) {
+                stream << get_indent() << "const " << print_type(op->args[i].type()) << " f_" << i - 1 << ";\n";
+            }
+            indent--;
+            stream << get_indent() << "};\n";
+        } else {
+            stream << ";\n";
+        }
+        rhs << "((" << name << " *)nullptr)";
+    } else if (op->is_intrinsic(Call::make_typed_struct)) {
+        internal_assert(op->args.size() >= 2);
+
+        string type_carrier = print_expr(op->args[0]);
+        const int64_t *count_ptr = as_const_int(op->args[1]);
+        internal_assert(count_ptr != nullptr);
+        int64_t count = *count_ptr;
+
+        // Get the args
+        vector<string> values;
+        for (size_t i = 2; i < op->args.size(); i++) {
+            values.push_back(print_expr(op->args[i - 2]));
+        }
+        string struct_name = unique_name('s');
+        string array_specifier;
+        if (count > 0) {
+            array_specifier = "[]";
+        }
+        stream << get_indent() << "decltype(" << type_carrier << ") " << struct_name << array_specifier << " = {\n";
+        // List the values.
+        indent++;
+        int item = 0;
+        size_t initializer_count = values.size() / count;
+        internal_assert((values.size() % count) == 0);
+        do {
+            if (count > 0) {
+                stream << get_indent() << "{\n";
+                indent++;
+            }
+            for (size_t i = 0; i < initializer_count; i++) {
+                stream << get_indent() << values[i];
+                if (i < op->args.size() - 1) {
+                    stream << ",";
+                }
+                stream << "\n";
+            }
+            if (count > 0) {
+                stream << get_indent() << "},\n";
+                indent--;
+            }
+            item += 1;
+        } while (item < count);
+        indent--;
+        stream << get_indent() << "};\n";
+        // Return a pointer to it of the appropriate type
+
+        // TODO: This is dubious type-punning. We really need to
+        // find a better way to do this. We dodge the problem for
+        // the specific case of buffer shapes in the case above.
+        if (op->type.handle_type) {
+            rhs << "(" << print_type(op->type) << ")";
+        }
+        rhs << "(&" << struct_name << ")";
+    } else if (op->is_intrinsic(Call::load_struct_member)) {
+        internal_assert(op->args.size() == 3);
+        const uint64_t *index = as_const_uint(op->args[2]);
+        internal_assert(index != nullptr);
+        std::string struct_base = print_expr(op->args[0]);
+        std::string type_carrier = print_expr(op->args[1]);
+        rhs << "((decltype(" << type_carrier << "))" << struct_base << ")->" << "f_" << *index;
+    } else if (op->is_intrinsic(Call::resolve_function_name)) {
+        internal_assert(op->args.size() > 2);
+        const StringImm *name = op->args[0].as<StringImm>();
+        //        extern "C" ret_type name(type 1,ty2,);
+        //        &name
+        std::string c_name = c_print_name(name->value, false);
+        stream << get_indent() << print_type(op->args[1].type()) << " " << c_name << "(";
+        for (size_t i = 2; i < op->args.size(); i++) {
+            stream << print_type(op->args[i].type());
+            if (i != op->args.size() - 1) {
+                stream << ", ";
+            }
+        }
+        stream << ");\n";
+        rhs << "(&" << c_name << ")";
+    } else if (op->is_intrinsic(Call::get_user_context)) {
+        internal_assert(op->args.size() == 0);
+        if (have_user_context) {
+            rhs << "(__user_context)";
+        } else {
+            rhs << "(nullptr)";
+        }
+    } else if (op->is_intrinsic(Call::get_pointer_symbol_or_null)) {
+        internal_assert(op->args.size() == 2);
+        // TODO(zalman|abadams): Figure out how to get rid of the mayby foo.buffer exists, maybe it doesn't thing in closures.
+        rhs << "(nullptr)";
     } else if (op->is_intrinsic(Call::stringify)) {
         // Rewrite to an snprintf
         vector<string> printf_args;
@@ -2490,7 +2600,6 @@ void CodeGen_C::visit(const Call *op) {
         stream << get_indent() << "char " << buf_name << "[1024];\n";
         stream << get_indent() << "snprintf(" << buf_name << ", 1024, \"" << format_string << "\", " << with_commas(printf_args) << ");\n";
         rhs << buf_name;
-
     } else if (op->is_intrinsic(Call::register_destructor)) {
         internal_assert(op->args.size() == 2);
         const StringImm *fn = op->args[0].as<StringImm>();
@@ -2560,6 +2669,16 @@ void CodeGen_C::visit(const Call *op) {
         stream << get_indent() << rhs.str() << ";\n";
         // Make an innocuous assignment value for our caller (probably an Evaluate node) to ignore.
         print_assignment(op->type, "0");
+    } else if (op->is_intrinsic(Call::make_struct_type)) {
+        // print_assigment will get the type info wrong for this case.
+        std::string rhs_str = rhs.str();
+        auto cached = cache.find(rhs_str);
+        if (cached == cache.end()) {
+            id = unique_name('_');
+            stream << get_indent() << "auto " << id << " = " << rhs_str << ";\n";
+        } else {
+            id = cached->second;
+        }                                    
     } else {
         print_assignment(op->type, rhs.str());
     }
@@ -2800,7 +2919,14 @@ void CodeGen_C::visit(const VectorReduce *op) {
 void CodeGen_C::visit(const LetStmt *op) {
     string id_value = print_expr(op->value);
     Stmt body = op->body;
-    if (op->value.type().is_handle()) {
+    const Call *call = op->value.as<Call>();
+
+    if (call != nullptr && call->is_intrinsic(Call::make_struct_type)) {
+        // The body might contain a Load or Store that references this
+        // directly by name, so we can't rewrite the name.
+        stream << get_indent() << "auto " << print_name(op->name)
+               << " = " << id_value << ";\n";
+    } else if (op->value.type().is_handle()) {
         // The body might contain a Load or Store that references this
         // directly by name, so we can't rewrite the name.
         stream << get_indent() << print_type(op->value.type())
