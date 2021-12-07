@@ -1652,6 +1652,10 @@ wasm32_ptr_t hostbuf_to_wasmbuf(const Local<Context> &context, const halide_buff
     static_assert(sizeof(wasm_halide_buffer_t) == 40, "wasm_halide_buffer_t");
 
     wdebug(0) << "\nhostbuf_to_wasmbuf:\n";
+    if (!src) {
+        return 0;
+    }
+
     dump_hostbuf(context, src, "src");
 
     internal_assert(src->device == 0);
