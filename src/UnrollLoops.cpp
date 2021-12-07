@@ -1,6 +1,7 @@
 #include "UnrollLoops.h"
 #include "Bounds.h"
 #include "CSE.h"
+#include "ExprUsesVar.h"
 #include "IRMutator.h"
 #include "IROperator.h"
 #include "Simplify.h"
@@ -33,6 +34,7 @@ class UnrollLoops : public IRMutator {
 
     Stmt visit(const For *for_loop) override {
         if (for_loop->for_type == ForType::Unrolled) {
+
             // Give it one last chance to simplify to an int
             Expr extent = simplify(for_loop->extent);
             Stmt body = for_loop->body;
@@ -80,6 +82,75 @@ class UnrollLoops : public IRMutator {
                 user_warning << "Warning: Unrolling a for loop of extent 1: " << for_loop->name << "\n";
             }
 
+            // Peel lets that don't depend on the loop var to avoid needlessly
+            // duplicating them.
+            struct ContainingLet {
+                std::string name;
+                Expr value;
+                bool varying;
+                bool from_store;
+            };
+            std::vector<ContainingLet> lets;
+            Scope<> varying;
+            varying.push(for_loop->name);
+
+            auto peel_let = [&](const std::string &name, const Expr &value, bool from_store) {
+                bool v = expr_uses_vars(value, varying) || has_side_effect(value);
+                if (v) {
+                    varying.push(name);
+                }
+                lets.emplace_back(ContainingLet{name, value, v, from_store});
+            };
+
+            const LetStmt *let;
+            while ((let = body.as<LetStmt>())) {
+                peel_let(let->name, let->value, false);
+                body = let->body;
+            }
+
+            // If the body is now a single store, keep going on the value.
+            //
+            // TODO: We could also recurse on the index and predicate, but they
+            // may contain duplicated let names from the value and this would
+            // shadow them.
+            const Store *store = body.as<Store>();
+            Expr store_value;
+            if (store) {
+                store_value = store->value;
+                const Let *let;
+                while ((let = store_value.as<Let>())) {
+                    peel_let(let->name, let->value, true);
+                    store_value = let->body;
+                }
+                std::string value_name = unique_name('t');
+                peel_let(value_name, store_value, true);
+                store_value = Variable::make(store_value.type(), value_name);
+
+                // Rewrap the lets we got from the store
+                for (auto it = lets.rbegin(); it != lets.rend(); it++) {
+                    if (it->from_store) {
+                        if (it->varying) {
+                            store_value = Let::make(it->name, it->value, store_value);
+                        }
+                    } else {
+                        break;
+                    }
+                }
+
+                // Reconstruct the store node
+                body = Store::make(store->name, store_value, store->index,
+                                   store->param, store->predicate, store->alignment);
+            }
+
+            // Rewrap the lets from outside the store
+            for (auto it = lets.rbegin(); it != lets.rend(); it++) {
+                if (it->from_store) {
+                    continue;
+                } else if (it->varying) {
+                    body = LetStmt::make(it->name, it->value, body);
+                }
+            }
+
             Stmt iters;
             for (int i = e->value - 1; i >= 0; i--) {
                 Stmt iter = substitute(for_loop->name, for_loop->min + i, body);
@@ -95,6 +166,12 @@ class UnrollLoops : public IRMutator {
                 }
                 if (use_guard) {
                     iters = IfThenElse::make(likely_if_innermost(i < for_loop->extent), iters);
+                }
+            }
+
+            for (auto it = lets.rbegin(); it != lets.rend(); it++) {
+                if (!it->varying) {
+                    iters = LetStmt::make(it->name, it->value, iters);
                 }
             }
 
