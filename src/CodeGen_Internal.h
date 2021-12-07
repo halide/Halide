@@ -58,9 +58,6 @@ void unpack_closure(const Closure &closure,
                     llvm::Value *src,
                     llvm::IRBuilder<llvm::ConstantFolder, llvm::IRBuilderDefaultInserter> *builder);
 
-/** Get the llvm type equivalent to a given halide type */
-llvm::Type *zllvm_type_of(llvm::LLVMContext *context, Halide::Type t);
-
 /** Get the number of elements in an llvm vector type, or return 1 if
  * it's not a vector type. */
 int get_vector_num_elements(llvm::Type *);
