@@ -123,21 +123,11 @@ bool is_no_op(const Stmt &s) {
 
 namespace {
 
-class ExprIsPure : public IRGraphVisitor {
-    using IRVisitor::visit;
-
+class ExprHasNoSideEffect : public IRGraphVisitor {
+protected:
+    using IRGraphVisitor::visit;
     void visit(const Call *op) override {
         if (!op->is_pure()) {
-            result = false;
-        } else {
-            IRGraphVisitor::visit(op);
-        }
-    }
-
-    void visit(const Load *op) override {
-        if (!op->image.defined() && !op->param.defined()) {
-            // It's a load from an internal buffer, which could
-            // mutate.
             result = false;
         } else {
             IRGraphVisitor::visit(op);
@@ -148,12 +138,33 @@ public:
     bool result = true;
 };
 
+class ExprIsPure : public ExprHasNoSideEffect {
+protected:
+    using ExprHasNoSideEffect::visit;
+
+    void visit(const Load *op) override {
+        if (!op->image.defined() && !op->param.defined()) {
+            // It's a load from an internal buffer, which could
+            // mutate.
+            result = false;
+        } else {
+            IRGraphVisitor::visit(op);
+        }
+    }
+};
+
 }  // namespace
 
 bool is_pure(const Expr &e) {
     ExprIsPure pure;
     e.accept(&pure);
     return pure.result;
+}
+
+bool has_side_effect(const Expr &e) {
+    ExprHasNoSideEffect side_effect;
+    e.accept(&side_effect);
+    return !side_effect.result;
 }
 
 const int64_t *as_const_int(const Expr &e) {

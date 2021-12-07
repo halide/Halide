@@ -70,6 +70,9 @@ bool is_no_op(const Stmt &s);
  */
 bool is_pure(const Expr &e);
 
+/** Does evaluating the expression produce a side-effect. */
+bool has_side_effect(const Expr &e);
+
 /** Construct an immediate of the given type from any numeric C++ type. */
 // @{
 Expr make_const(Type t, int64_t val);
@@ -1034,21 +1037,21 @@ Expr round(Expr x);
 Expr trunc(Expr x);
 
 /** Returns true if the argument is a Not a Number (NaN). Requires a
-  * floating point argument.  Vectorizes cleanly.
-  * Note that the Expr passed in will be evaluated in strict_float mode,
-  * regardless of whether strict_float mode is enabled in the current Target. */
+ * floating point argument.  Vectorizes cleanly.
+ * Note that the Expr passed in will be evaluated in strict_float mode,
+ * regardless of whether strict_float mode is enabled in the current Target. */
 Expr is_nan(Expr x);
 
 /** Returns true if the argument is Inf or -Inf. Requires a
-  * floating point argument.  Vectorizes cleanly.
-  * Note that the Expr passed in will be evaluated in strict_float mode,
-  * regardless of whether strict_float mode is enabled in the current Target. */
+ * floating point argument.  Vectorizes cleanly.
+ * Note that the Expr passed in will be evaluated in strict_float mode,
+ * regardless of whether strict_float mode is enabled in the current Target. */
 Expr is_inf(Expr x);
 
 /** Returns true if the argument is a finite value (ie, neither NaN nor Inf).
-  * Requires a floating point argument.  Vectorizes cleanly.
-  * Note that the Expr passed in will be evaluated in strict_float mode,
-  * regardless of whether strict_float mode is enabled in the current Target. */
+ * Requires a floating point argument.  Vectorizes cleanly.
+ * Note that the Expr passed in will be evaluated in strict_float mode,
+ * regardless of whether strict_float mode is enabled in the current Target. */
 Expr is_finite(Expr x);
 
 /** Return the fractional part of a floating-point expression. If the argument

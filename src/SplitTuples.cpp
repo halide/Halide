@@ -151,10 +151,25 @@ class SplitTuples : public IRMutator {
         internal_assert(it != env.end());
         Function f = it->second;
 
+        // Do CSE on the values before we begin
+        vector<Expr> values = op->values;
+        vector<pair<string, Expr>> lets;
+        if (!atomic) {
+            Expr bundle = Call::make(Int(32), Call::bundle, values, Call::PureIntrinsic);
+            bundle = common_subexpression_elimination(bundle);
+            while (const Let *let = bundle.as<Let>()) {
+                lets.emplace_back(let->name, mutate(let->value));
+                bundle = let->body;
+            }
+            const Call *c = bundle.as<Call>();
+            internal_assert(c && c->is_intrinsic(Call::bundle));
+            values = c->args;
+        }
+
         // For the new value of each tuple component, what existing
         // tuple components does it already depend on?
-        vector<set<int>> dependencies(op->values.size());
-        for (int i = 0; i < (int)op->values.size(); i++) {
+        vector<set<int>> dependencies(values.size());
+        for (int i = 0; i < (int)values.size(); i++) {
             class Checker : public IRVisitor {
                 using IRVisitor::visit;
                 vector<pair<string, Expr>> lets;
@@ -200,7 +215,7 @@ class SplitTuples : public IRMutator {
                     : deps(deps), func_name(func_name), store_args(store_args) {
                 }
             } checker(dependencies[i], op->name, args);
-            op->values[i].accept(&checker);
+            values[i].accept(&checker);
         }
 
         // Build clusters of tuple components where two components
@@ -208,8 +223,8 @@ class SplitTuples : public IRMutator {
         // may alias
         vector<vector<int>> clusters;
         // Reserve space so that we can use pointers to clusters.
-        clusters.reserve(op->values.size());
-        for (int i = 0; i < (int)op->values.size(); i++) {
+        clusters.reserve(values.size());
+        for (int i = 0; i < (int)values.size(); i++) {
             // What clusters does it already belong to?
             vector<int> *owning_cluster = nullptr;
             for (auto &c : clusters) {
@@ -247,7 +262,7 @@ class SplitTuples : public IRMutator {
         // critical section.
         bool separate_atomic_nodes_per_store =
             ((atomic && atomic->mutex_name.empty()) ||
-             (clusters.size() == op->values.size()));
+             (clusters.size() == values.size()));
 
         // For each cluster, build a list of scalar provide
         // statements, and a list of lets to wrap them.
@@ -266,7 +281,7 @@ class SplitTuples : public IRMutator {
                 // Just make a provide node
                 int i = *c.begin();
                 string name = op->name + "." + std::to_string(i);
-                s = Provide::make(name, {mutate(op->values[i])}, args, op->predicate);
+                s = Provide::make(name, {mutate(values[i])}, args, op->predicate);
             } else {
                 // Make a list of let statements that compute the
                 // values (doing any loads), and then a block of
@@ -274,7 +289,7 @@ class SplitTuples : public IRMutator {
                 for (auto i : c) {
                     string name = op->name + "." + std::to_string(i);
                     string var_name = name + ".value";
-                    Expr val = mutate(op->values[i]);
+                    Expr val = mutate(values[i]);
                     if (!is_undef(val)) {
                         lets.emplace_back(var_name, val);
                         val = Variable::make(val.type(), var_name);
@@ -299,13 +314,14 @@ class SplitTuples : public IRMutator {
             result.push_back(s);
         }
 
-        {
-            Stmt s = Block::make(result);
-            if (atomic && !separate_atomic_nodes_per_store) {
-                s = Atomic::make(atomic->producer_name, atomic->mutex_name, s);
-            }
-            return s;
+        Stmt s = Block::make(result);
+        if (atomic && !separate_atomic_nodes_per_store) {
+            s = Atomic::make(atomic->producer_name, atomic->mutex_name, s);
         }
+        for (auto it = lets.rbegin(); it != lets.rend(); it++) {
+            s = LetStmt::make(it->first, it->second, s);
+        }
+        return s;
     }
 
     Stmt visit(const Provide *op) override {
