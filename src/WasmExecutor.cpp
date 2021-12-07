@@ -2246,7 +2246,10 @@ struct WasmModuleContents {
     std::map<std::string, Halide::JITExtern> jit_externs;
     std::vector<JITModule> extern_deps;
     JITModule trampolines;
+
+#if WITH_WABT || WITH_V8
     BDMalloc bdmalloc;
+#endif  // WITH_WABT || WITH_V8
 
 #if WITH_WABT
     wabt::interp::Store store;
@@ -2287,7 +2290,9 @@ WasmModuleContents::WasmModuleContents(
       extern_deps(extern_deps),
       trampolines(JITModule::make_trampolines_module(get_host_target(), jit_externs, kTrampolineSuffix, extern_deps)) {
 
+#if WITH_WABT || WITH_V8
     wdebug(1) << "Compiling wasm function " << fn_name << "\n";
+#endif  // WITH_WABT || WITH_V8
 
 #if WITH_WABT
     user_assert(!target.has_feature(Target::WasmThreads)) << "wasm_threads requires Emscripten (or a similar compiler); it will never be supported under JIT.";
