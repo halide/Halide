@@ -22,7 +22,7 @@ int main(int argc, char **argv) {
     // computed once in the Halide IR. LLVM will hoist them if we don't, but
     // compilation can be much faster if we do it earlier, especially if the
     // unrolled loop or tuple is large.
-    for (int use_tuple = 0; use_tuple < 2; use_tuple++) {
+    for (bool use_tuple : {false, true}) {
         Func f;
         Var x, y, c;
         ImageParam in(Float(32), 2);
