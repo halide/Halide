@@ -163,6 +163,12 @@ bool check_trace_correct(event *correct_trace, int correct_trace_length) {
                    "Trace encountered:\n");
             for (int j = 0; j < n_trace; j++) {
                 if (j == i) printf(" ===> ");
+                print_event(trace[j]);
+            }
+            printf("-------------------------------\n"
+                   "Trace encountered in raw form:\n");
+            for (int j = 0; j < n_trace; j++) {
+                if (j == i) printf(" ===> ");
                 print_event_source(trace[j]);
             }
             printf("-------------------------------\n");

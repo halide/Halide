@@ -683,6 +683,10 @@ class VectorSubs : public IRMutator {
                 for (size_t i = 1; i <= 2; i++) {
                     // Each struct should be a struct-of-vectors, not a
                     // vector of distinct structs.
+                    if (const Variable *var = new_args[i].as<Variable>()) {
+                        // May have been lifted into a let
+                        new_args[i] = vector_scope.get(var->name);
+                    }
                     const Call *make_struct = Call::as_intrinsic(new_args[i], {Call::make_struct});
                     internal_assert(make_struct);
                     // Widen the call args to have the same lanes as the max lanes found
