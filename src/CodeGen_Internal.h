@@ -95,7 +95,7 @@ std::pair<Expr, Expr> long_div_mod_round_to_zero(const Expr &a, const Expr &b,
  * Can introduce mulhi_shr and sorted_avg intrinsics as well as those from the
  * lower_euclidean_ operation -- div_round_to_zero or mod_round_to_zero. */
 ///@{
-Expr lower_int_uint_div(const Expr &a, const Expr &b);
+Expr lower_int_uint_div(const Expr &a, const Expr &b, bool round_to_zero = false);
 Expr lower_int_uint_mod(const Expr &a, const Expr &b);
 ///@}
 
