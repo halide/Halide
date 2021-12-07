@@ -1067,7 +1067,45 @@ llvm::Function *CodeGen_LLVM::embed_metadata_getter(const std::string &metadata_
 }
 
 llvm::Type *CodeGen_LLVM::llvm_type_of(const Type &t) const {
-    return Internal::llvm_type_of(context, t);
+    if (t.lanes() == 1) {
+        // TODO: it might be profitable to switch on t.as_u32() instead; see (e.g.) Param<>::set()
+        if (t.is_float() && !t.is_bfloat()) {
+            switch (t.bits()) {
+            case 16:
+                return llvm::Type::getHalfTy(*context);
+            case 32:
+                return llvm::Type::getFloatTy(*context);
+            case 64:
+                return llvm::Type::getDoubleTy(*context);
+            default:
+                internal_error << "There is no llvm type matching this floating-point bit width: " << t << "\n";
+                return nullptr;
+            }
+        } else if (t.is_handle()) {
+            return llvm::Type::getInt8PtrTy(*context);
+        } else {
+            return llvm::Type::getIntNTy(*context, t.bits());
+        }
+    } else {
+        llvm::Type *element_type = llvm_type_of(t.element_of());
+        return get_vector_type(element_type, t.lanes());
+    }
+}
+
+StructType *CodeGen_LLVM::build_closure_type(const Closure &closure,
+                                             llvm::StructType *halide_buffer_t_type) {
+    vector<llvm::Type *> res;
+    for (const auto &v : closure.vars) {
+        res.push_back(llvm_type_of(v.second));
+    }
+    for (const auto &b : closure.buffers) {
+        res.push_back(llvm_type_of(b.second.type)->getPointerTo());
+        res.push_back(halide_buffer_t_type->getPointerTo());
+    }
+
+    StructType *struct_t = StructType::create(*context, "closure_t");
+    struct_t->setBody(res, false);
+    return struct_t;
 }
 
 void CodeGen_LLVM::optimize_module() {
@@ -3584,7 +3622,7 @@ void CodeGen_LLVM::do_parallel_tasks(const vector<ParallelTask> &tasks) {
     }
 
     // Allocate a closure
-    StructType *closure_t = build_closure_type(closure, halide_buffer_t_type, context);
+    StructType *closure_t = build_closure_type(closure, halide_buffer_t_type);
     Value *closure_ptr = create_alloca_at_entry(closure_t, 1);
 
     // Fill in the closure

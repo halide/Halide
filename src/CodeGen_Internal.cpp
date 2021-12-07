@@ -17,30 +17,6 @@ using std::vector;
 
 using namespace llvm;
 
-namespace {
-
-vector<llvm::Type *> llvm_types(const Closure &closure, llvm::StructType *halide_buffer_t_type, LLVMContext &context) {
-    vector<llvm::Type *> res;
-    for (const auto &v : closure.vars) {
-        res.push_back(llvm_type_of(&context, v.second));
-    }
-    for (const auto &b : closure.buffers) {
-        res.push_back(llvm_type_of(&context, b.second.type)->getPointerTo());
-        res.push_back(halide_buffer_t_type->getPointerTo());
-    }
-    return res;
-}
-
-}  // namespace
-
-StructType *build_closure_type(const Closure &closure,
-                               llvm::StructType *halide_buffer_t_type,
-                               LLVMContext *context) {
-    StructType *struct_t = StructType::create(*context, "closure_t");
-    struct_t->setBody(llvm_types(closure, halide_buffer_t_type, *context), false);
-    return struct_t;
-}
-
 void pack_closure(llvm::StructType *type,
                   Value *dst,
                   const Closure &closure,
@@ -109,31 +85,6 @@ void unpack_closure(const Closure &closure,
             dst.push(b.first + ".buffer", load);
             load->setName(b.first + ".buffer");
         }
-    }
-}
-
-llvm::Type *llvm_type_of(LLVMContext *c, Halide::Type t) {
-    if (t.lanes() == 1) {
-        if (t.is_float() && !t.is_bfloat()) {
-            switch (t.bits()) {
-            case 16:
-                return llvm::Type::getHalfTy(*c);
-            case 32:
-                return llvm::Type::getFloatTy(*c);
-            case 64:
-                return llvm::Type::getDoubleTy(*c);
-            default:
-                internal_error << "There is no llvm type matching this floating-point bit width: " << t << "\n";
-                return nullptr;
-            }
-        } else if (t.is_handle()) {
-            return llvm::Type::getInt8PtrTy(*c);
-        } else {
-            return llvm::Type::getIntNTy(*c, t.bits());
-        }
-    } else {
-        llvm::Type *element_type = llvm_type_of(c, t.element_of());
-        return get_vector_type(element_type, t.lanes());
     }
 }
 

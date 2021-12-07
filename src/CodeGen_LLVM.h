@@ -48,6 +48,8 @@ struct ExternSignature;
 
 namespace Internal {
 
+class Closure;
+
 /** A code generator abstract base class. Actual code generators
  * (e.g. CodeGen_X86) inherit from this. This class is responsible
  * for taking a Halide Stmt and producing llvm bitcode, machine
@@ -393,6 +395,11 @@ protected:
     /** Get the llvm type equivalent to the given halide type in the
      * current context. */
     virtual llvm::Type *llvm_type_of(const Type &) const;
+
+    /** The llvm type of a struct containing all of the externally referenced state of a Closure.
+     *  TODO: temporary code motion to keep build unbroken; this will be removed in https://github.com/halide/Halide/pull/6195 */
+    llvm::StructType *build_closure_type(const Closure &closure,
+                                         llvm::StructType *halide_buffer_t_type);
 
     /** Perform an alloca at the function entrypoint. Will be cleaned
      * on function exit. */
