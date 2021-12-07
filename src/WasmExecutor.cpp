@@ -1165,94 +1165,6 @@ WABT_HOST_CALLBACK(strlen) {
 
 WABT_HOST_CALLBACK_UNIMPLEMENTED(write)
 
-using HostCallbackMap = std::unordered_map<std::string, wabt::interp::HostFunc::Callback>;
-
-// clang-format off
-const HostCallbackMap &get_host_callback_map() {
-
-    static HostCallbackMap m = {
-        // General runtime functions.
-
-        #define DEFINE_CALLBACK(f) { #f, wabt_jit_##f##_callback },
-
-        DEFINE_CALLBACK(__cxa_atexit)
-        DEFINE_CALLBACK(__extendhfsf2)
-        DEFINE_CALLBACK(__truncsfhf2)
-        DEFINE_CALLBACK(abort)
-        DEFINE_CALLBACK(fclose)
-        DEFINE_CALLBACK(fileno)
-        DEFINE_CALLBACK(fopen)
-        DEFINE_CALLBACK(free)
-        DEFINE_CALLBACK(fwrite)
-        DEFINE_CALLBACK(getenv)
-        DEFINE_CALLBACK(halide_error)
-        DEFINE_CALLBACK(halide_print)
-        DEFINE_CALLBACK(halide_trace_helper)
-        DEFINE_CALLBACK(malloc)
-        DEFINE_CALLBACK(memcmp)
-        DEFINE_CALLBACK(memcpy)
-        DEFINE_CALLBACK(memmove)
-        DEFINE_CALLBACK(memset)
-        DEFINE_CALLBACK(strlen)
-        DEFINE_CALLBACK(write)
-
-        #undef DEFINE_CALLBACK
-
-        // Posix math.
-        #define DEFINE_POSIX_MATH_CALLBACK(t, f) { #f, wabt_posix_math_1<t, ::f> },
-
-        DEFINE_POSIX_MATH_CALLBACK(double, acos)
-        DEFINE_POSIX_MATH_CALLBACK(double, acosh)
-        DEFINE_POSIX_MATH_CALLBACK(double, asin)
-        DEFINE_POSIX_MATH_CALLBACK(double, asinh)
-        DEFINE_POSIX_MATH_CALLBACK(double, atan)
-        DEFINE_POSIX_MATH_CALLBACK(double, atanh)
-        DEFINE_POSIX_MATH_CALLBACK(double, cos)
-        DEFINE_POSIX_MATH_CALLBACK(double, cosh)
-        DEFINE_POSIX_MATH_CALLBACK(double, exp)
-        DEFINE_POSIX_MATH_CALLBACK(double, log)
-        DEFINE_POSIX_MATH_CALLBACK(double, round)
-        DEFINE_POSIX_MATH_CALLBACK(double, sin)
-        DEFINE_POSIX_MATH_CALLBACK(double, sinh)
-        DEFINE_POSIX_MATH_CALLBACK(double, tan)
-        DEFINE_POSIX_MATH_CALLBACK(double, tanh)
-
-        DEFINE_POSIX_MATH_CALLBACK(float, acosf)
-        DEFINE_POSIX_MATH_CALLBACK(float, acoshf)
-        DEFINE_POSIX_MATH_CALLBACK(float, asinf)
-        DEFINE_POSIX_MATH_CALLBACK(float, asinhf)
-        DEFINE_POSIX_MATH_CALLBACK(float, atanf)
-        DEFINE_POSIX_MATH_CALLBACK(float, atanhf)
-        DEFINE_POSIX_MATH_CALLBACK(float, cosf)
-        DEFINE_POSIX_MATH_CALLBACK(float, coshf)
-        DEFINE_POSIX_MATH_CALLBACK(float, expf)
-        DEFINE_POSIX_MATH_CALLBACK(float, logf)
-        DEFINE_POSIX_MATH_CALLBACK(float, roundf)
-        DEFINE_POSIX_MATH_CALLBACK(float, sinf)
-        DEFINE_POSIX_MATH_CALLBACK(float, sinhf)
-        DEFINE_POSIX_MATH_CALLBACK(float, tanf)
-        DEFINE_POSIX_MATH_CALLBACK(float, tanhf)
-
-        #undef DEFINE_POSIX_MATH_CALLBACK
-
-        #define DEFINE_POSIX_MATH_CALLBACK2(t, f) { #f, wabt_posix_math_2<t, ::f> },
-
-        DEFINE_POSIX_MATH_CALLBACK2(float, atan2f)
-        DEFINE_POSIX_MATH_CALLBACK2(double, atan2)
-        DEFINE_POSIX_MATH_CALLBACK2(float, fminf)
-        DEFINE_POSIX_MATH_CALLBACK2(double, fmin)
-        DEFINE_POSIX_MATH_CALLBACK2(float, fmaxf)
-        DEFINE_POSIX_MATH_CALLBACK2(double, fmax)
-        DEFINE_POSIX_MATH_CALLBACK2(float, powf)
-        DEFINE_POSIX_MATH_CALLBACK2(double, pow)
-
-        #undef DEFINE_POSIX_MATH_CALLBACK2
-    };
-
-    return m;
-}
-// clang-format on
-
 // --------------------------------------------------
 // Host Callback Functions
 // --------------------------------------------------
@@ -1993,6 +1905,22 @@ void wasm_jit_memcpy_callback(const v8::FunctionCallbackInfo<v8::Value> &args) {
     args.GetReturnValue().Set(load_scalar(context, dst));
 }
 
+void wasm_jit_memmove_callback(const v8::FunctionCallbackInfo<v8::Value> &args) {
+    Isolate *isolate = args.GetIsolate();
+    Local<Context> context = isolate->GetCurrentContext();
+    HandleScope scope(isolate);
+
+    const int32_t dst = args[0]->Int32Value(context).ToChecked();
+    const int32_t src = args[1]->Int32Value(context).ToChecked();
+    const int32_t n = args[2]->Int32Value(context).ToChecked();
+
+    uint8_t *base = get_wasm_memory_base(context);
+
+    memmove(base + dst, base + src, n);
+
+    args.GetReturnValue().Set(load_scalar(context, dst));
+}
+
 void wasm_jit_fopen_callback(const v8::FunctionCallbackInfo<v8::Value> &args) {
     internal_error << "WebAssembly JIT does not yet support the fopen() call.";
 }
@@ -2211,6 +2139,103 @@ void add_extern_callbacks(const Local<Context> &context,
 
 }  // namespace
 
+// clang-format off
+
+#if WITH_WABT
+using HostCallbackMap = std::unordered_map<std::string, wabt::interp::HostFunc::Callback>;
+
+#define DEFINE_CALLBACK(f)                { #f, wabt_jit_##f##_callback },
+#define DEFINE_POSIX_MATH_CALLBACK(t, f)  { #f, wabt_posix_math_1<t, ::f> },
+#define DEFINE_POSIX_MATH_CALLBACK2(t, f) { #f, wabt_posix_math_2<t, ::f> },
+
+#endif
+
+#ifdef WITH_V8
+using HostCallbackMap = std::unordered_map<std::string, FunctionCallback>;
+
+#define DEFINE_CALLBACK(f)                { #f, wasm_jit_##f##_callback },
+#define DEFINE_POSIX_MATH_CALLBACK(t, f)  { #f, wasm_jit_posix_math_callback<t, ::f> },
+#define DEFINE_POSIX_MATH_CALLBACK2(t, f)  { #f, wasm_jit_posix_math2_callback<t, ::f> },
+#endif
+
+const HostCallbackMap &get_host_callback_map() {
+
+    static HostCallbackMap m = {
+        // General runtime functions.
+
+        DEFINE_CALLBACK(__cxa_atexit)
+        DEFINE_CALLBACK(__extendhfsf2)
+        DEFINE_CALLBACK(__truncsfhf2)
+        DEFINE_CALLBACK(abort)
+        DEFINE_CALLBACK(fclose)
+        DEFINE_CALLBACK(fileno)
+        DEFINE_CALLBACK(fopen)
+        DEFINE_CALLBACK(free)
+        DEFINE_CALLBACK(fwrite)
+        DEFINE_CALLBACK(getenv)
+        DEFINE_CALLBACK(halide_error)
+        DEFINE_CALLBACK(halide_print)
+        DEFINE_CALLBACK(halide_trace_helper)
+        DEFINE_CALLBACK(malloc)
+        DEFINE_CALLBACK(memcmp)
+        DEFINE_CALLBACK(memcpy)
+        DEFINE_CALLBACK(memmove)
+        DEFINE_CALLBACK(memset)
+        DEFINE_CALLBACK(strlen)
+        DEFINE_CALLBACK(write)
+
+        // Posix math.
+        DEFINE_POSIX_MATH_CALLBACK(double, acos)
+        DEFINE_POSIX_MATH_CALLBACK(double, acosh)
+        DEFINE_POSIX_MATH_CALLBACK(double, asin)
+        DEFINE_POSIX_MATH_CALLBACK(double, asinh)
+        DEFINE_POSIX_MATH_CALLBACK(double, atan)
+        DEFINE_POSIX_MATH_CALLBACK(double, atanh)
+        DEFINE_POSIX_MATH_CALLBACK(double, cos)
+        DEFINE_POSIX_MATH_CALLBACK(double, cosh)
+        DEFINE_POSIX_MATH_CALLBACK(double, exp)
+        DEFINE_POSIX_MATH_CALLBACK(double, log)
+        DEFINE_POSIX_MATH_CALLBACK(double, round)
+        DEFINE_POSIX_MATH_CALLBACK(double, sin)
+        DEFINE_POSIX_MATH_CALLBACK(double, sinh)
+        DEFINE_POSIX_MATH_CALLBACK(double, tan)
+        DEFINE_POSIX_MATH_CALLBACK(double, tanh)
+
+        DEFINE_POSIX_MATH_CALLBACK(float, acosf)
+        DEFINE_POSIX_MATH_CALLBACK(float, acoshf)
+        DEFINE_POSIX_MATH_CALLBACK(float, asinf)
+        DEFINE_POSIX_MATH_CALLBACK(float, asinhf)
+        DEFINE_POSIX_MATH_CALLBACK(float, atanf)
+        DEFINE_POSIX_MATH_CALLBACK(float, atanhf)
+        DEFINE_POSIX_MATH_CALLBACK(float, cosf)
+        DEFINE_POSIX_MATH_CALLBACK(float, coshf)
+        DEFINE_POSIX_MATH_CALLBACK(float, expf)
+        DEFINE_POSIX_MATH_CALLBACK(float, logf)
+        DEFINE_POSIX_MATH_CALLBACK(float, roundf)
+        DEFINE_POSIX_MATH_CALLBACK(float, sinf)
+        DEFINE_POSIX_MATH_CALLBACK(float, sinhf)
+        DEFINE_POSIX_MATH_CALLBACK(float, tanf)
+        DEFINE_POSIX_MATH_CALLBACK(float, tanhf)
+
+        DEFINE_POSIX_MATH_CALLBACK2(float, atan2f)
+        DEFINE_POSIX_MATH_CALLBACK2(double, atan2)
+        DEFINE_POSIX_MATH_CALLBACK2(float, fminf)
+        DEFINE_POSIX_MATH_CALLBACK2(double, fmin)
+        DEFINE_POSIX_MATH_CALLBACK2(float, fmaxf)
+        DEFINE_POSIX_MATH_CALLBACK2(double, fmax)
+        DEFINE_POSIX_MATH_CALLBACK2(float, powf)
+        DEFINE_POSIX_MATH_CALLBACK2(double, pow)
+    };
+
+    return m;
+}
+
+#undef DEFINE_CALLBACK
+#undef DEFINE_POSIX_MATH_CALLBACK
+#undef DEFINE_POSIX_MATH_CALLBACK2
+
+// clang-format on
+
 #endif  // WITH_WABT || WITH_V8
 
 struct WasmModuleContents {
@@ -2428,89 +2453,15 @@ WasmModuleContents::WasmModuleContents(
         }
     }
 
+    const HostCallbackMap &host_callback_map = get_host_callback_map();
     Local<Object> imports_dict = Object::New(isolate);
-
-    const auto add_callback = [&](const char *name, FunctionCallback f) {
-        // Skip any leading :: nonsense that we needed to add
-        // to disambiguate (say) ::sin() from Halide::sin()
-        while (*name == ':') {
-            name++;
-        }
-        Local<v8::String> key = NewLocalString(isolate, name);
+    for (const auto &it : host_callback_map) {
+        const std::string &name = it.first;
+        FunctionCallback f = it.second;
+        Local<v8::String> key = NewLocalString(isolate, name.c_str());
         Local<v8::Function> value = FunctionTemplate::New(isolate, f)->GetFunction(context).ToLocalChecked();
         (void)imports_dict->Set(context, key, value).ToChecked();
     };
-
-#define ADD_CALLBACK(x) add_callback(#x, wasm_jit_##x##_callback);
-
-    // Halide Runtime glue
-    ADD_CALLBACK(halide_error);
-    ADD_CALLBACK(halide_print);
-    ADD_CALLBACK(halide_trace_helper);
-
-    // libc-ish glue
-    ADD_CALLBACK(__cxa_atexit)
-    ADD_CALLBACK(abort)
-    ADD_CALLBACK(fclose)
-    ADD_CALLBACK(fileno)
-    ADD_CALLBACK(fopen)
-    ADD_CALLBACK(free)
-    ADD_CALLBACK(fwrite)
-    ADD_CALLBACK(getenv)
-    ADD_CALLBACK(malloc)
-    ADD_CALLBACK(memcmp)
-    ADD_CALLBACK(memcpy)
-    ADD_CALLBACK(memset)
-    ADD_CALLBACK(strlen)
-    ADD_CALLBACK(write)
-    ADD_CALLBACK(__extendhfsf2)
-    ADD_CALLBACK(__truncsfhf2)
-
-#undef ADD_CALLBACK
-
-#define ADD_POSIX_MATH(t, f) add_callback(#f, wasm_jit_posix_math_callback<t, f>);
-#define ADD_POSIX_MATH2(t, f) add_callback(#f, wasm_jit_posix_math2_callback<t, f>);
-
-    // math glue
-    ADD_POSIX_MATH(double, ::acos)
-    ADD_POSIX_MATH(double, ::acosh)
-    ADD_POSIX_MATH(double, ::asin)
-    ADD_POSIX_MATH(double, ::asinh)
-    ADD_POSIX_MATH(double, ::atan)
-    ADD_POSIX_MATH(double, ::atanh)
-    ADD_POSIX_MATH(double, ::cos)
-    ADD_POSIX_MATH(double, ::cosh)
-    ADD_POSIX_MATH(double, ::exp)
-    ADD_POSIX_MATH(double, ::log)
-    ADD_POSIX_MATH(double, ::round)
-    ADD_POSIX_MATH(double, ::sin)
-    ADD_POSIX_MATH(double, ::sinh)
-    ADD_POSIX_MATH(double, ::tan)
-    ADD_POSIX_MATH(double, ::tanh)
-
-    ADD_POSIX_MATH(float, ::acosf)
-    ADD_POSIX_MATH(float, ::acoshf)
-    ADD_POSIX_MATH(float, ::asinf)
-    ADD_POSIX_MATH(float, ::asinhf)
-    ADD_POSIX_MATH(float, ::atanf)
-    ADD_POSIX_MATH(float, ::atanhf)
-    ADD_POSIX_MATH(float, ::cosf)
-    ADD_POSIX_MATH(float, ::coshf)
-    ADD_POSIX_MATH(float, ::expf)
-    ADD_POSIX_MATH(float, ::logf)
-    ADD_POSIX_MATH(float, ::roundf)
-    ADD_POSIX_MATH(float, ::sinf)
-    ADD_POSIX_MATH(float, ::sinhf)
-    ADD_POSIX_MATH(float, ::tanf)
-    ADD_POSIX_MATH(float, ::tanhf)
-
-    ADD_POSIX_MATH2(float, ::atan2f)
-    ADD_POSIX_MATH2(double, ::atan2)
-    ADD_POSIX_MATH2(float, ::powf)
-    ADD_POSIX_MATH2(double, ::pow)
-
-#undef ADD_POSIX_MATH
-#undef ADD_POSIX_MATH2
 
     add_extern_callbacks(context, jit_externs, trampolines, imports_dict);
 
