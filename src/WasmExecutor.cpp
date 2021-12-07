@@ -425,6 +425,86 @@ auto dynamic_type_dispatch(const halide_type_t &type, Args &&... args) -> declty
 // clang-format on
 
 // -----------------------
+// extern callback helper code
+// -----------------------
+
+struct ExternArgType {
+    halide_type_t type;
+    bool is_void;
+    bool is_buffer;
+    bool is_ucon;
+};
+
+using TrampolineFn = void (*)(void **);
+
+bool build_extern_arg_types(const std::string &fn_name,
+                            const std::map<std::string, Halide::JITExtern> &jit_externs,
+                            const JITModule &trampolines,
+                            TrampolineFn &trampoline_fn_out,
+                            std::vector<ExternArgType> &arg_types_out) {
+    const auto it = jit_externs.find(fn_name);
+    if (it == jit_externs.end()) {
+        wdebug(1) << "Extern symbol not found in JIT Externs: " << fn_name << "\n";
+        return false;
+    }
+    const ExternSignature &sig = it->second.extern_c_function().signature();
+
+    const auto &tramp_it = trampolines.exports().find(fn_name + kTrampolineSuffix);
+    if (tramp_it == trampolines.exports().end()) {
+        wdebug(1) << "Extern symbol not found in trampolines: " << fn_name << "\n";
+        return false;
+    }
+
+    trampoline_fn_out = (TrampolineFn)tramp_it->second.address;
+
+    const size_t arg_count = sig.arg_types().size();
+    std::vector<ExternArgType> arg_types;
+    arg_types.reserve(arg_count + 1);
+
+    if (sig.is_void_return()) {
+        const bool is_void = true;
+        const bool is_buffer = false;
+        const bool is_ucon = false;
+        // Specifying a type here with bits == 0 should trigger a proper 'void' return type
+        arg_types.emplace_back(ExternArgType{{halide_type_int, 0, 0}, is_void, is_buffer, is_ucon});
+    } else {
+        const Type &t = sig.ret_type();
+        const bool is_void = false;
+        const bool is_buffer = (t == type_of<halide_buffer_t *>());
+        const bool is_ucon = false;
+        user_assert(t.lanes() == 1) << "Halide Extern functions cannot return vector values.";
+        user_assert(!is_buffer) << "Halide Extern functions cannot return halide_buffer_t.";
+
+        // TODO: the assertion below could be removed if we are ever able to marshal int64
+        // values across the barrier, but that may require wasm codegen changes that are tricky.
+        user_assert(!(t.is_handle() && !is_buffer)) << "Halide Extern functions cannot return arbitrary pointers as arguments.";
+        user_assert(!(t.is_int_or_uint() && t.bits() == 64)) << "Halide Extern functions cannot accept 64-bit values as arguments.";
+
+        arg_types.emplace_back(ExternArgType{t, is_void, is_buffer, is_ucon});
+    }
+
+    for (size_t i = 0; i < arg_count; ++i) {
+        const Type &t = sig.arg_types()[i];
+        const bool is_void = false;
+        const bool is_buffer = (t == type_of<halide_buffer_t *>());
+        // Since arbitrary pointer args aren't legal for extern calls,
+        // assume that anything that is a void* is a user context.
+        const bool is_ucon = (t == type_of<void *>());
+        user_assert(t.lanes() == 1) << "Halide Extern functions cannot accept vector values as arguments.";
+
+        // TODO: the assertion below could be removed if we are ever able to marshal int64
+        // values across the barrier, but that may require wasm codegen changes that are tricky.
+        user_assert(!(t.is_handle() && !is_buffer)) << "Halide Extern functions cannot accept arbitrary pointers as arguments.";
+        user_assert(!(t.is_int_or_uint() && t.bits() == 64)) << "Halide Extern functions cannot accept 64-bit values as arguments.";
+
+        arg_types.emplace_back(ExternArgType{t, is_void, is_buffer, is_ucon});
+    }
+
+    arg_types_out = std::move(arg_types);
+    return true;
+}
+
+// -----------------------
 // halide_buffer_t <-> wasm_halide_buffer_t helpers
 // -----------------------
 
@@ -515,10 +595,10 @@ void dump_hostbuf(WabtContext &wabt_context, const halide_buffer_t *buf, const s
     const halide_dimension_t *dim = buf->dim;
     const uint8_t *host = buf->host;
 
-    wdebug(1) << label << " = " << (void *)buf << " = {\n";
+    wdebug(1) << label << " = " << (const void *)buf << " = {\n";
     wdebug(1) << "  device = " << buf->device << "\n";
     wdebug(1) << "  device_interface = " << buf->device_interface << "\n";
-    wdebug(1) << "  host = " << (void *)host << " = {\n";
+    wdebug(1) << "  host = " << (const void *)host << " = {\n";
     if (host) {
         wdebug(1) << "    " << (int)host[0] << ", " << (int)host[1] << ", " << (int)host[2] << ", " << (int)host[3] << "...\n";
     }
@@ -1177,15 +1257,6 @@ const HostCallbackMap &get_host_callback_map() {
 // Host Callback Functions
 // --------------------------------------------------
 
-struct ExternArgType {
-    halide_type_t type;
-    bool is_void;
-    bool is_buffer;
-    bool is_ucon;
-};
-
-using TrampolineFn = void (*)(void **);
-
 wabt::Result extern_callback_wrapper(const std::vector<ExternArgType> &arg_types,
                                      TrampolineFn trampoline_fn,
                                      wabt::interp::Thread &thread,
@@ -1266,48 +1337,10 @@ wabt::interp::HostFunc::Ptr make_extern_callback(wabt::interp::Store &store,
         return wabt::interp::HostFunc::Ptr();
     }
 
-    const auto it = jit_externs.find(fn_name);
-    if (it == jit_externs.end()) {
-        wdebug(1) << "Extern symbol not found in JIT Externs: " << fn_name << "\n";
-        return wabt::interp::HostFunc::Ptr();
-    }
-    const ExternSignature &sig = it->second.extern_c_function().signature();
-
-    const auto &tramp_it = trampolines.exports().find(fn_name + kTrampolineSuffix);
-    if (tramp_it == trampolines.exports().end()) {
-        wdebug(1) << "Extern symbol not found in trampolines: " << fn_name << "\n";
-        return wabt::interp::HostFunc::Ptr();
-    }
-    TrampolineFn trampoline_fn = (TrampolineFn)tramp_it->second.address;
-
-    const size_t arg_count = sig.arg_types().size();
-
+    TrampolineFn trampoline_fn;
     std::vector<ExternArgType> arg_types;
-
-    if (sig.is_void_return()) {
-        const bool is_void = true;
-        const bool is_buffer = false;
-        const bool is_ucon = false;
-        // Specifying a type here with bits == 0 should trigger a proper 'void' return type
-        arg_types.push_back(ExternArgType{{halide_type_int, 0, 0}, is_void, is_buffer, is_ucon});
-    } else {
-        const Type &t = sig.ret_type();
-        const bool is_void = false;
-        const bool is_buffer = (t == type_of<halide_buffer_t *>());
-        const bool is_ucon = false;
-        user_assert(t.lanes() == 1) << "Halide Extern functions cannot return vector values.";
-        user_assert(!is_buffer) << "Halide Extern functions cannot return halide_buffer_t.";
-        arg_types.push_back(ExternArgType{t, is_void, is_buffer, is_ucon});
-    }
-    for (size_t i = 0; i < arg_count; ++i) {
-        const Type &t = sig.arg_types()[i];
-        const bool is_void = false;
-        const bool is_buffer = (t == type_of<halide_buffer_t *>());
-        // Since arbitrary pointer args aren't legal for extern calls,
-        // assume that anything that is a void* is a user context.
-        const bool is_ucon = (t == type_of<void *>());
-        user_assert(t.lanes() == 1) << "Halide Extern functions cannot accept vector values as arguments.";
-        arg_types.push_back(ExternArgType{t, is_void, is_buffer, is_ucon});
+    if (!build_extern_arg_types(fn_name, jit_externs, trampolines, trampoline_fn, arg_types)) {
+        return wabt::interp::HostFunc::Ptr();
     }
 
     const auto callback_wrapper =
@@ -1346,37 +1379,46 @@ v8::Local<v8::String> NewLocalString(v8::Isolate *isolate, const char *s) {
 // ------------------------------
 
 template<typename T>
-struct ExtractAndStoreScalar {
+struct StoreScalar {
     void operator()(const Local<Context> &context, const Local<Value> &val, void *slot) {
         *(T *)slot = (T)val->NumberValue(context).ToChecked();
     }
 };
 
 template<>
-inline void ExtractAndStoreScalar<float16_t>::operator()(const Local<Context> &context, const Local<Value> &val, void *slot) {
+inline void StoreScalar<float16_t>::operator()(const Local<Context> &context, const Local<Value> &val, void *slot) {
     float16_t f((double)val->NumberValue(context).ToChecked());
     *(uint16_t *)slot = f.to_bits();
 }
 
 template<>
-inline void ExtractAndStoreScalar<bfloat16_t>::operator()(const Local<Context> &context, const Local<Value> &val, void *slot) {
+inline void StoreScalar<bfloat16_t>::operator()(const Local<Context> &context, const Local<Value> &val, void *slot) {
     bfloat16_t b((double)val->NumberValue(context).ToChecked());
     *(uint16_t *)slot = b.to_bits();
 }
 
 template<>
-inline void ExtractAndStoreScalar<void *>::operator()(const Local<Context> &context, const Local<Value> &val, void *slot) {
+inline void StoreScalar<void *>::operator()(const Local<Context> &context, const Local<Value> &val, void *slot) {
     internal_error << "TODO: 64-bit slots aren't yet supported";
 }
 
 template<>
-inline void ExtractAndStoreScalar<uint64_t>::operator()(const Local<Context> &context, const Local<Value> &val, void *slot) {
+inline void StoreScalar<uint64_t>::operator()(const Local<Context> &context, const Local<Value> &val, void *slot) {
     internal_error << "TODO: 64-bit slots aren't yet supported";
 }
 
 template<>
-inline void ExtractAndStoreScalar<int64_t>::operator()(const Local<Context> &context, const Local<Value> &val, void *slot) {
+inline void StoreScalar<int64_t>::operator()(const Local<Context> &context, const Local<Value> &val, void *slot) {
     internal_error << "TODO: 64-bit slots aren't yet supported";
+}
+
+void store_scalar(const Local<Context> &context, const Type &t, const Local<Value> &val, void *slot) {
+    return dynamic_type_dispatch<StoreScalar>(t, context, val, slot);
+}
+
+template<typename T>
+void store_scalar(const Local<Context> &context, const Local<Value> &val, void *slot) {
+    return StoreScalar<T>()(context, val, slot);
 }
 
 // ------------------------------
@@ -1418,7 +1460,7 @@ inline void LoadAndReturnScalar<int64_t>::operator()(const Local<Context> &conte
 // ------------------------------
 
 template<typename T>
-struct WrapScalar {
+struct LoadScalar {
     Local<Value> operator()(const Local<Context> &context, const void *val_ptr) {
         double val = *(const T *)(val_ptr);
         Isolate *isolate = context->GetIsolate();
@@ -1427,46 +1469,46 @@ struct WrapScalar {
 };
 
 template<>
-inline Local<Value> WrapScalar<float16_t>::operator()(const Local<Context> &context, const void *val_ptr) {
+inline Local<Value> LoadScalar<float16_t>::operator()(const Local<Context> &context, const void *val_ptr) {
     double val = (double)*(const uint16_t *)val_ptr;
     Isolate *isolate = context->GetIsolate();
     return Number::New(isolate, val);
 }
 
 template<>
-inline Local<Value> WrapScalar<bfloat16_t>::operator()(const Local<Context> &context, const void *val_ptr) {
+inline Local<Value> LoadScalar<bfloat16_t>::operator()(const Local<Context> &context, const void *val_ptr) {
     double val = (double)*(const uint16_t *)val_ptr;
     Isolate *isolate = context->GetIsolate();
     return Number::New(isolate, val);
 }
 
 template<>
-inline Local<Value> WrapScalar<void *>::operator()(const Local<Context> &context, const void *val_ptr) {
+inline Local<Value> LoadScalar<void *>::operator()(const Local<Context> &context, const void *val_ptr) {
     internal_error << "TODO: 64-bit slots aren't yet supported";
     return Local<Value>();
 }
 
 template<>
-inline Local<Value> WrapScalar<uint64_t>::operator()(const Local<Context> &context, const void *val_ptr) {
+inline Local<Value> LoadScalar<uint64_t>::operator()(const Local<Context> &context, const void *val_ptr) {
     internal_error << "TODO: 64-bit slots aren't yet supported";
     return Local<Value>();
 }
 
 template<>
-inline Local<Value> WrapScalar<int64_t>::operator()(const Local<Context> &context, const void *val_ptr) {
+inline Local<Value> LoadScalar<int64_t>::operator()(const Local<Context> &context, const void *val_ptr) {
     internal_error << "TODO: 64-bit slots aren't yet supported";
     return Local<Value>();
 }
 
 // ------------------------------
 
-Local<Value> wrap_scalar(const Local<Context> &context, const Type &t, const void *val_ptr) {
-    return dynamic_type_dispatch<WrapScalar>(t, context, val_ptr);
+Local<Value> load_scalar(const Local<Context> &context, const Type &t, const void *val_ptr) {
+    return dynamic_type_dispatch<LoadScalar>(t, context, val_ptr);
 }
 
 template<typename T>
-Local<Value> wrap_scalar(const Local<Context> &context, const T &val) {
-    return WrapScalar<T>()(context, &val);
+Local<Value> load_scalar(const Local<Context> &context, const T &val) {
+    return LoadScalar<T>()(context, &val);
 }
 
 // ---------------------------------
@@ -1548,10 +1590,10 @@ void dump_hostbuf(const Local<Context> &context, const halide_buffer_t *buf, con
     const halide_dimension_t *dim = buf->dim;
     const uint8_t *host = buf->host;
 
-    wdebug(0) << label << " = " << (void *)buf << " = {\n";
+    wdebug(0) << label << " = " << (const void *)buf << " = {\n";
     wdebug(0) << "  device = " << buf->device << "\n";
     wdebug(0) << "  device_interface = " << buf->device_interface << "\n";
-    wdebug(0) << "  host = " << (void *)host << " = {\n";
+    wdebug(0) << "  host = " << (const void *)host << " = {\n";
     if (host) {
         wdebug(0) << "    " << (int)host[0] << ", " << (int)host[1] << ", " << (int)host[2] << ", " << (int)host[3] << "...\n";
     }
@@ -1867,7 +1909,7 @@ void wasm_jit_halide_trace_helper_callback(const v8::FunctionCallbackInfo<v8::Va
         debug(0) << "Dropping trace event due to lack of trace handler.\n";
     }
 
-    args.GetReturnValue().Set(wrap_scalar(context, result));
+    args.GetReturnValue().Set(load_scalar(context, result));
 }
 
 void wasm_jit_malloc_callback(const v8::FunctionCallbackInfo<v8::Value> &args) {
@@ -1878,7 +1920,7 @@ void wasm_jit_malloc_callback(const v8::FunctionCallbackInfo<v8::Value> &args) {
     size_t size = args[0]->Int32Value(context).ToChecked() + kExtraMallocSlop;
     wasm32_ptr_t p = v8_WasmMemoryObject_malloc(context, size);
     if (p) { p += kExtraMallocSlop; }
-    args.GetReturnValue().Set(wrap_scalar(context, p));
+    args.GetReturnValue().Set(load_scalar(context, p));
 }
 
 void wasm_jit_free_callback(const v8::FunctionCallbackInfo<v8::Value> &args) {
@@ -1904,7 +1946,7 @@ void wasm_jit_strlen_callback(const v8::FunctionCallbackInfo<v8::Value> &args) {
     uint8_t *base = get_wasm_memory_base(context);
     int32_t r = strlen((char *)base + s);
 
-    args.GetReturnValue().Set(wrap_scalar(context, r));
+    args.GetReturnValue().Set(load_scalar(context, r));
 }
 
 void wasm_jit_write_callback(const v8::FunctionCallbackInfo<v8::Value> &args) {
@@ -1925,9 +1967,9 @@ void wasm_jit_getenv_callback(const v8::FunctionCallbackInfo<v8::Value> &args) {
     if (e) {
         wasm32_ptr_t r = v8_WasmMemoryObject_malloc(context, strlen(e) + 1);
         strcpy((char *)base + r, e);
-        args.GetReturnValue().Set(wrap_scalar(context, r));
+        args.GetReturnValue().Set(load_scalar(context, r));
     } else {
-        args.GetReturnValue().Set(wrap_scalar<wasm32_ptr_t>(context, 0));
+        args.GetReturnValue().Set(load_scalar<wasm32_ptr_t>(context, 0));
     }
 }
 
@@ -1944,7 +1986,7 @@ void wasm_jit_memcpy_callback(const v8::FunctionCallbackInfo<v8::Value> &args) {
 
     memcpy(base + dst, base + src, n);
 
-    args.GetReturnValue().Set(wrap_scalar(context, dst));
+    args.GetReturnValue().Set(load_scalar(context, dst));
 }
 
 void wasm_jit_fopen_callback(const v8::FunctionCallbackInfo<v8::Value> &args) {
@@ -1975,7 +2017,7 @@ void wasm_jit_memset_callback(const v8::FunctionCallbackInfo<v8::Value> &args) {
     uint8_t *base = get_wasm_memory_base(context);
     memset(base + s, c, n);
 
-    args.GetReturnValue().Set(wrap_scalar(context, s));
+    args.GetReturnValue().Set(load_scalar(context, s));
 }
 
 void wasm_jit_memcmp_callback(const v8::FunctionCallbackInfo<v8::Value> &args) {
@@ -1991,7 +2033,7 @@ void wasm_jit_memcmp_callback(const v8::FunctionCallbackInfo<v8::Value> &args) {
 
     int r = memcmp(base + s1, base + s2, n);
 
-    args.GetReturnValue().Set(wrap_scalar(context, r));
+    args.GetReturnValue().Set(load_scalar(context, r));
 }
 
 void wasm_jit___cxa_atexit_callback(const v8::FunctionCallbackInfo<v8::Value> &args) {
@@ -2006,7 +2048,7 @@ void wasm_jit___extendhfsf2_callback(const v8::FunctionCallbackInfo<v8::Value> &
     const uint16_t in = args[0]->NumberValue(context).ToChecked();
     const float out = (float)float16_t::make_from_bits(in);
 
-    args.GetReturnValue().Set(wrap_scalar(context, out));
+    args.GetReturnValue().Set(load_scalar(context, out));
 }
 
 void wasm_jit___truncsfhf2_callback(const v8::FunctionCallbackInfo<v8::Value> &args) {
@@ -2017,7 +2059,7 @@ void wasm_jit___truncsfhf2_callback(const v8::FunctionCallbackInfo<v8::Value> &a
     const float in = args[0]->NumberValue(context).ToChecked();
     const uint16_t out = float16_t(in).to_bits();
 
-    args.GetReturnValue().Set(wrap_scalar(context, out));
+    args.GetReturnValue().Set(load_scalar(context, out));
 }
 
 template<typename T, T some_func(T)>
@@ -2029,7 +2071,7 @@ void wasm_jit_posix_math_callback(const v8::FunctionCallbackInfo<v8::Value> &arg
     const T in = args[0]->NumberValue(context).ToChecked();
     const T out = some_func(in);
 
-    args.GetReturnValue().Set(wrap_scalar(context, out));
+    args.GetReturnValue().Set(load_scalar(context, out));
 }
 
 template<typename T, T some_func(T, T)>
@@ -2042,20 +2084,12 @@ void wasm_jit_posix_math2_callback(const v8::FunctionCallbackInfo<v8::Value> &ar
     const T in2 = args[1]->NumberValue(context).ToChecked();
     const T out = some_func(in1, in2);
 
-    args.GetReturnValue().Set(wrap_scalar(context, out));
+    args.GetReturnValue().Set(load_scalar(context, out));
 }
 
 enum ExternWrapperFieldSlots {
     kTrampolineWrap,
     kArgTypesWrap
-};
-
-// Use a POD here so we can stuff it all into an ArrayBuffer to avoid having
-// to worry about lifetime management
-struct ExternArgType {
-    halide_type_t type;
-    bool is_void;
-    bool is_buffer;
 };
 
 void v8_extern_wrapper(const v8::FunctionCallbackInfo<v8::Value> &args) {
@@ -2067,7 +2101,6 @@ void v8_extern_wrapper(const v8::FunctionCallbackInfo<v8::Value> &args) {
     Local<External> trampoline_wrap = Local<External>::Cast(wrapper_data->GetInternalField(kTrampolineWrap));
     Local<ArrayBuffer> arg_types_wrap = Local<ArrayBuffer>::Cast(wrapper_data->GetInternalField(kArgTypesWrap));
 
-    using TrampolineFn = void (*)(void **);
     TrampolineFn trampoline = (TrampolineFn)trampoline_wrap->Value();
 
     size_t arg_types_len = (arg_types_wrap->ByteLength() / sizeof(ExternArgType)) - 1;
@@ -2082,12 +2115,20 @@ void v8_extern_wrapper(const v8::FunctionCallbackInfo<v8::Value> &args) {
     std::vector<void *> trampoline_args(arg_types_len);
 
     for (size_t i = 0; i < arg_types_len; ++i) {
-        if (arg_types[i].is_buffer) {
+        if (arg_types[i].is_ucon) {
+            // We have to special-case ucon because Halide considers it an int64 everywhere
+            // (even for wasm, where pointers are int32), and trying to extract it as an
+            // int64 from a Value that is int32 will assert-fail. In JIT mode the value
+            // doesn't even matter (except for guarding that it is our predicted constant).
+            wassert(args[i].Get<int32_t>() == 0 || args[i].Get<int32_t>() == kMagicJitUserContextValue);
+            store_scalar<int32_t>(context, args[i], &scalars[i]);
+            trampoline_args[i] = &scalars[i];
+        } else if (arg_types[i].is_buffer) {
             const wasm32_ptr_t buf_ptr = args[i]->Int32Value(context).ToChecked();
             wasmbuf_to_hostbuf(context, buf_ptr, buffers[i]);
             trampoline_args[i] = buffers[i].raw_buffer();
         } else {
-            dynamic_type_dispatch<ExtractAndStoreScalar>(arg_types[i].type, context, args[i], &scalars[i]);
+            store_scalar(context, arg_types[i].type, args[i], &scalars[i]);
             trampoline_args[i] = &scalars[i];
         }
     }
@@ -2131,53 +2172,29 @@ void add_extern_callbacks(const Local<Context> &context,
     Local<ObjectTemplate> extern_callback_template = ObjectTemplate::New(isolate);
     extern_callback_template->SetInternalFieldCount(4);
     for (const auto &it : jit_externs) {
-        const auto &name = it.first;
-        if (should_skip_extern_symbol(name)) {
+        const auto &fn_name = it.first;
+        if (should_skip_extern_symbol(fn_name)) {
             continue;
         }
 
-        const auto &jit_extern = it.second;
+        TrampolineFn trampoline_fn;
+        std::vector<ExternArgType> arg_types;
+        if (!build_extern_arg_types(fn_name, jit_externs, trampolines, trampoline_fn, arg_types)) {
+            internal_error << "Missing fn_name " << fn_name;
+        }
 
-        const auto &trampoline_symbol = trampolines.exports().find(name + kTrampolineSuffix);
-        internal_assert(trampoline_symbol != trampolines.exports().end());
-
-        const auto &sig = jit_extern.extern_c_function().signature();
-        size_t arg_count = sig.arg_types().size();
-        Local<ArrayBuffer> arg_types_wrap = ArrayBuffer::New(isolate, sizeof(ExternArgType) * (arg_count + 1));
-        /* ExternArgType *arg_types = (ExternArgType *)arg_types_wrap->GetContents().Data(); */
+        const size_t arg_types_bytes = sizeof(ExternArgType) * arg_types.size();
+        Local<ArrayBuffer> arg_types_wrap = ArrayBuffer::New(isolate, arg_types_bytes);
         std::shared_ptr<v8::BackingStore> backing = arg_types_wrap->GetBackingStore();
-        ExternArgType *arg_types = (ExternArgType *)backing->Data();
-        if (sig.is_void_return()) {
-            // Type specified here will be ignored
-            *arg_types++ = ExternArgType{{halide_type_int, 0, 0}, true, false};
-        } else {
-            const Type &t = sig.ret_type();
-            const bool is_buffer = (t == type_of<halide_buffer_t *>());
-            user_assert(t.lanes() == 1) << "Halide Extern functions cannot return vector values.";
-            user_assert(!is_buffer) << "Halide Extern functions cannot return halide_buffer_t.";
-            // TODO: the assertion below can be removed once we are able to marshal int64 values across the barrier
-            user_assert(!(t.is_handle() && !is_buffer)) << "Halide Extern functions cannot return arbitrary pointers as arguments.";
-            // TODO: the assertion below can be removed once we are able to marshal int64 values across the barrier
-            user_assert(!(t.is_int_or_uint() && t.bits() == 64)) << "Halide Extern functions cannot accept 64-bit values as arguments.";
-            *arg_types++ = ExternArgType{t, false, false};
-        }
-        for (size_t i = 0; i < arg_count; ++i) {
-            const Type &t = sig.arg_types()[i];
-            const bool is_buffer = (t == type_of<halide_buffer_t *>());
-            user_assert(t.lanes() == 1) << "Halide Extern functions cannot accept vector values as arguments.";
-            // TODO: the assertion below can be removed once we are able to marshal int64 values across the barrier
-            user_assert(!(t.is_handle() && !is_buffer)) << "Halide Extern functions cannot accept arbitrary pointers as arguments.";
-            // TODO: the assertion below can be removed once we are able to marshal int64 values across the barrier
-            user_assert(!(t.is_int_or_uint() && t.bits() == 64)) << "Halide Extern functions cannot accept 64-bit values as arguments.";
-            *arg_types++ = ExternArgType{t, false, is_buffer};
-        }
+        memcpy((ExternArgType *)backing->Data(), arg_types.data(), arg_types_bytes);
 
         Local<Object> wrapper_data = extern_callback_template->NewInstance(context).ToLocalChecked();
-        Local<External> trampoline_wrap(External::New(isolate, const_cast<void *>(trampoline_symbol->second.address)));
+        static_assert(sizeof(trampoline_fn) == sizeof(void *));
+        Local<External> trampoline_wrap(External::New(isolate, (void *)trampoline_fn));
         wrapper_data->SetInternalField(kTrampolineWrap, trampoline_wrap);
         wrapper_data->SetInternalField(kArgTypesWrap, arg_types_wrap);
 
-        Local<v8::String> key = NewLocalString(isolate, name.c_str());
+        Local<v8::String> key = NewLocalString(isolate, fn_name.c_str());
         Local<v8::Function> value = FunctionTemplate::New(isolate, v8_extern_wrapper, wrapper_data)
                                         ->GetFunction(context)
                                         .ToLocalChecked();
@@ -2241,10 +2258,10 @@ WasmModuleContents::WasmModuleContents(
       extern_deps(extern_deps),
       trampolines(JITModule::make_trampolines_module(get_host_target(), jit_externs, kTrampolineSuffix, extern_deps)) {
 
+    wdebug(1) << "Compiling wasm function " << fn_name << "\n";
+
 #if WITH_WABT
     user_assert(!target.has_feature(Target::WasmThreads)) << "wasm_threads requires Emscripten (or a similar compiler); it will never be supported under JIT.";
-
-    wdebug(1) << "Compiling wasm function " << fn_name << "\n";
 
     // Compile halide into wasm bytecode.
     std::vector<char> final_wasm = compile_to_wasm(halide_module, fn_name);
@@ -2645,17 +2662,17 @@ int WasmModuleContents::run(const void **args) {
         const void *arg_ptr = args[i];
         if (arg.is_buffer()) {
             halide_buffer_t *buf = (halide_buffer_t *)const_cast<void *>(arg_ptr);
-            internal_assert(buf);
+            // It's OK for this to be null (let Halide asserts handle it)
             wasm32_ptr_t wbuf = hostbuf_to_wasmbuf(context, buf);
             wbufs[i] = wbuf;
-            js_args.push_back(wrap_scalar(context, wbuf));
+            js_args.push_back(load_scalar(context, wbuf));
         } else {
             if (arg.name == "__user_context") {
-                js_args.push_back(wrap_scalar(context, kMagicJitUserContextValue));
+                js_args.push_back(load_scalar(context, kMagicJitUserContextValue));
                 JITUserContext *jit_user_context = check_jit_user_context(*(JITUserContext **)const_cast<void *>(arg_ptr));
                 context->SetAlignedPointerInEmbedderData(kJitUserContext, jit_user_context);
             } else {
-                js_args.push_back(wrap_scalar(context, arg.type, arg_ptr));
+                js_args.push_back(load_scalar(context, arg.type, arg_ptr));
             }
         }
     }
