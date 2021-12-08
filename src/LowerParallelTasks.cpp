@@ -10,6 +10,7 @@
 #include "IROperator.h"
 #include "Module.h"
 #include "Param.h"
+#include "Simplify.h"
 
 namespace Halide {
 namespace Internal {
@@ -27,40 +28,48 @@ LoweredFunc generate_closure_ir(const std::string &name, const Closure &closure,
     Expr closure_arg = Variable::make(type_of<void *>(), closure_arg_name);
 
     Stmt wrapped_body = body;
-    std::vector<Expr> type_args(closure.vars.size() + closure.buffers.size() * 2 + 1);
+    const size_t closure_entries_count = closure.vars.size() + closure.buffers.size();
+    std::vector<Expr> type_args(closure_entries_count + 1);
     std::string closure_type_name = unique_name("closure_struct_type");
     Expr struct_type = Variable::make(Handle(), closure_type_name);
     type_args[0] = StringImm::make(closure_type_name);
 
+    const auto make_load_typed_struct_member = [&closure_arg, &struct_type](const Type &t, int struct_index) -> Expr {
+        return Call::make(t, Call::load_typed_struct_member,
+                          {closure_arg, struct_type, make_const(UInt(32), struct_index)},
+                          Call::PureIntrinsic);
+    };
+
+    // Build the loads, then add them in reverse order, so that the final generated
+    // code is ascending by struct_index, which may provide marginally better code.
+    std::vector<std::pair<std::string, Expr>> load_lets;
+    load_lets.reserve(closure_entries_count);
+
     int struct_index = 0;
     for (const auto &v : closure.vars) {
-        type_args[struct_index + 1] = make_zero(v.second);
-        wrapped_body = LetStmt::make(v.first,
-                                     Call::make(v.second, Call::load_typed_struct_member,
-                                                {closure_arg, struct_type, make_const(UInt(32), struct_index)},
-                                                Call::PureIntrinsic),
-                                     wrapped_body);
+        const auto &name = v.first;
+        const auto &type = v.second;
+        type_args[struct_index + 1] = make_zero(type);
+        load_lets.emplace_back(name, make_load_typed_struct_member(type, struct_index));
         struct_index++;
     }
     for (const auto &b : closure.buffers) {
+        const auto &name = b.first;
         type_args[struct_index + 1] = make_zero(type_of<void *>());
-        type_args[struct_index + 2] = make_zero(type_of<halide_buffer_t *>());
-        wrapped_body = LetStmt::make(b.first,
-                                     Call::make(type_of<void *>(), Call::load_typed_struct_member,
-                                                {closure_arg, struct_type, make_const(UInt(32), struct_index)},
-                                                Call::PureIntrinsic),
-                                     wrapped_body);
-        wrapped_body = LetStmt::make(b.first + ".buffer",
-                                     Call::make(type_of<halide_buffer_t *>(), Call::load_typed_struct_member,
-                                                {closure_arg, struct_type, make_const(UInt(32), struct_index + 1)},
-                                                Call::PureIntrinsic),
-                                     wrapped_body);
-        struct_index += 2;
+        load_lets.emplace_back(name, make_load_typed_struct_member(type_of<void *>(), struct_index));
+        struct_index++;
+    }
+
+    for (auto it = load_lets.rbegin(); it != load_lets.rend(); ++it) {
+        wrapped_body = LetStmt::make(it->first, it->second, wrapped_body);
     }
 
     Expr struct_type_decl = Call::make(Handle(), Call::define_typed_struct, type_args, Call::PureIntrinsic);
     wrapped_body = Block::make(Evaluate::make(closure_arg), wrapped_body);
     wrapped_body = LetStmt::make(closure_type_name, struct_type_decl, wrapped_body);
+
+    // Call simplify() to remove any load_struct_member() calls we don't use.
+    wrapped_body = simplify(wrapped_body);
 
     // TODO(zvookin): Figure out how we want to handle name mangling of closures.
     // For now, the C++ backend makes them extern "C" so they have to be NameMangling::C.
@@ -72,15 +81,15 @@ LoweredFunc generate_closure_ir(const std::string &name, const Closure &closure,
 }
 
 Expr allocate_closure(const std::string &name, const Closure &closure) {
+    const size_t closure_entries_count = closure.vars.size() + closure.buffers.size();
+
     std::vector<Expr> closure_elements;
-    std::vector<Expr> closure_types;
-
-    std::string buffer_t_type_name = unique_name("buffer_t_type");
-    Expr buffer_t_type = Variable::make(Handle(), buffer_t_type_name);
-
-    // Place holder for closure struct type
-    closure_elements.emplace_back(Expr());
+    closure_elements.reserve(closure_entries_count + 2);
+    closure_elements.emplace_back(Expr());  // Place holder for closure struct type
     closure_elements.emplace_back(1);
+
+    std::vector<Expr> closure_types;
+    closure_elements.reserve(closure_entries_count + 1);
     closure_types.emplace_back(unique_name(name + "_type"));
 
     for (const auto &v : closure.vars) {
@@ -91,10 +100,7 @@ Expr allocate_closure(const std::string &name, const Closure &closure) {
     for (const auto &b : closure.buffers) {
         Expr ptr_var = Variable::make(type_of<void *>(), b.first);
         closure_elements.emplace_back(ptr_var);
-        closure_elements.emplace_back(Call::make(type_of<halide_buffer_t *>(), Call::get_pointer_symbol_or_null,
-                                                 {StringImm::make(b.first + ".buffer"), buffer_t_type}, Call::Intrinsic));
         closure_types.emplace_back(ptr_var);
-        closure_types.emplace_back(buffer_t_type);
     }
     Expr closure_struct_type = Call::make(Handle(), Call::define_typed_struct, closure_types, Call::PureIntrinsic);
     std::string closure_type_name = unique_name("closure_struct_type");
@@ -104,10 +110,6 @@ Expr allocate_closure(const std::string &name, const Closure &closure) {
 
     Expr result = Let::make(closure_type_name, closure_struct_type,
                             Call::make(type_of<void *>(), Call::make_typed_struct, closure_elements, Call::Intrinsic));
-    if (!closure.buffers.empty()) {
-        result = Let::make(buffer_t_type_name, Call::make(Handle(), Call::forward_declare_typed_struct, {StringImm::make("halide_buffer_t")}, Call::PureIntrinsic),
-                           result);
-    }
     return result;
 }
 
