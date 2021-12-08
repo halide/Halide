@@ -2872,6 +2872,8 @@ void CodeGen_Xtensa::visit(const Call *op) {
         } else {
             rhs << "floor_f32(" << a0 << ")";
         }
+    } else if (op->name.find("halide_xtensa_") == 0) {
+        rhs << print_xtensa_call(op);
     } else {
         CodeGen_C::visit(op);
         return;
