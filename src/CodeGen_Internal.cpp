@@ -49,37 +49,20 @@ void pack_closure(llvm::StructType *type,
                   IRBuilder<> *builder) {
     // type, type of dst should be a pointer to a struct of the type returned by build_type
     int idx = 0;
-    for (const auto &v : closure.vars) {
+
+    auto add_to_closure = [&](const std::string &name) {
         llvm::Type *t = type->elements()[idx];
         Value *ptr = builder->CreateConstInBoundsGEP2_32(type, dst, 0, idx++);
-        Value *val = src.get(v.first);
+        Value *val = src.get(name);
         val = builder->CreateBitCast(val, t);
         builder->CreateStore(val, ptr);
+    };
+
+    for (const auto &v : closure.vars) {
+        add_to_closure(v.first);
     }
     for (const auto &b : closure.buffers) {
-        // For buffers we pass through base address (the symbol with
-        // the same name as the buffer), and the .buffer symbol (GPU
-        // code might implicitly need it).
-        // FIXME: This dependence should be explicitly encoded in the IR.
-        {
-            llvm::Type *t = type->elements()[idx];
-            Value *ptr = builder->CreateConstInBoundsGEP2_32(type, dst, 0, idx++);
-            Value *val = src.get(b.first);
-            val = builder->CreateBitCast(val, t);
-            builder->CreateStore(val, ptr);
-        }
-        {
-            llvm::PointerType *t = halide_buffer_t_type->getPointerTo();
-            Value *ptr = builder->CreateConstInBoundsGEP2_32(type, dst, 0, idx++);
-            Value *val = nullptr;
-            if (src.contains(b.first + ".buffer")) {
-                val = src.get(b.first + ".buffer");
-                val = builder->CreateBitCast(val, t);
-            } else {
-                val = ConstantPointerNull::get(t);
-            }
-            builder->CreateStore(val, ptr);
-        }
+        add_to_closure(b.first);
     }
 }
 
@@ -90,25 +73,18 @@ void unpack_closure(const Closure &closure,
                     IRBuilder<> *builder) {
     // type, type of src should be a pointer to a struct of the type returned by build_type
     int idx = 0;
-    for (const auto &v : closure.vars) {
+
+    auto load_from_closure = [&](const std::string &name) {
         Value *ptr = builder->CreateConstInBoundsGEP2_32(type, src, 0, idx++);
         LoadInst *load = builder->CreateLoad(ptr->getType()->getPointerElementType(), ptr);
-        dst.push(v.first, load);
-        load->setName(v.first);
+        dst.push(name, load);
+        load->setName(name);
+    };
+    for (const auto &v : closure.vars) {
+        load_from_closure(v.first);
     }
     for (const auto &b : closure.buffers) {
-        {
-            Value *ptr = builder->CreateConstInBoundsGEP2_32(type, src, 0, idx++);
-            LoadInst *load = builder->CreateLoad(ptr->getType()->getPointerElementType(), ptr);
-            dst.push(b.first, load);
-            load->setName(b.first);
-        }
-        {
-            Value *ptr = builder->CreateConstInBoundsGEP2_32(type, src, 0, idx++);
-            LoadInst *load = builder->CreateLoad(ptr->getType()->getPointerElementType(), ptr);
-            dst.push(b.first + ".buffer", load);
-            load->setName(b.first + ".buffer");
-        }
+        load_from_closure(b.first);
     }
 }
 
