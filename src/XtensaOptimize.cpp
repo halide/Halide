@@ -767,8 +767,8 @@ private:
             static const std::vector<Pattern> divs = {
                 // TODO(vksnk): Before enabling it add a check for ExactLogOp
                 // {"halide_xtensa_div_i32_i16", wild_i32x / wild_i32x, Pattern::NarrowOp1}
-              {"halide_xtensa_narrow_i48_with_shift_i32", i32(wild_i48x) / wild_i32, Pattern::ExactLog2Op1},
-              {"halide_xtensa_narrow_i48_with_shift_u32", u32(wild_i48x) / wild_u32, Pattern::ExactLog2Op1},
+                {"halide_xtensa_narrow_i48_with_shift_i32", i32(wild_i48x) / wild_i32, Pattern::ExactLog2Op1},
+                {"halide_xtensa_narrow_i48_with_shift_u32", u32(wild_i48x) / wild_u32, Pattern::ExactLog2Op1},
             };
 
             Expr new_expr = apply_patterns(div, divs, this);
@@ -1017,13 +1017,12 @@ private:
             return Call::make(op->type, "halide_xtensa_absd_i16",
                               {mutate(op->args[0]), mutate(op->args[1])},
                               Call::PureExtern);
-        }
-        else if (op->is_intrinsic(Call::widening_shift_left)) {
+        } else if (op->is_intrinsic(Call::widening_shift_left)) {
             // Replace widening left shift with multiplication.
-            const uint64_t* c = as_const_uint(op->args[1]);
+            const uint64_t *c = as_const_uint(op->args[1]);
             if (c && op->args[1].type().can_represent((uint64_t)1 << *c)) {
 
-              return mutate(widening_mul(op->args[0], bc(UIntImm::make(op->args[1].type().with_lanes(1), (uint64_t)1 << *c), op->args[1].type().lanes())));
+                return mutate(widening_mul(op->args[0], bc(UIntImm::make(op->args[1].type().with_lanes(1), (uint64_t)1 << *c), op->args[1].type().lanes())));
             }
         }
 
@@ -1273,7 +1272,8 @@ private:
     }
 
 public:
-    MatchXtensaPatterns(const Target &target) : target(target) {
+    MatchXtensaPatterns(const Target &target)
+        : target(target) {
     }
 };
 

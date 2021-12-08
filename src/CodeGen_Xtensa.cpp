@@ -22,18 +22,17 @@ class UsesDmaCopy : public IRGraphVisitor {
 private:
     using IRGraphVisitor::visit;
 
-
 protected:
-   void visit(const Call *op) override {
-      if (op->name == "halide_xtensa_copy_1d") {
-          uses_dma = true;
-      }
+    void visit(const Call *op) override {
+        if (op->name == "halide_xtensa_copy_1d") {
+            uses_dma = true;
+        }
 
-      IRGraphVisitor::visit(op);
+        IRGraphVisitor::visit(op);
     }
 
 public:
-  bool uses_dma = false;
+    bool uses_dma = false;
 };
 
 void CodeGen_Xtensa::compile(const Module &module) {
@@ -2854,12 +2853,25 @@ void CodeGen_Xtensa::visit(const Call *op) {
         user_error << "Prefetch is not supported by Xtensa backend." << Expr(op) << "\n";
     } else if (op->name == "sqrt_f32") {
         string a0 = print_expr(op->args[0]);
-        rhs << "sqrtf(" << a0 << ")";
+        if (is_native_xtensa_vector<float>(op->type)) {
+            rhs << "IVP_FSQRTN_2XF32(" << a0 << ")";
+        } else {
+            rhs << "sqrtf(" << a0 << ")";
+        }
     } else if (op->name == "round_f32") {
         string a0 = print_expr(op->args[0]);
-        rhs << "nearbyint(" << a0 << ")";
-    } else if (op->name.find("halide_xtensa_") == 0) {
-        rhs << print_xtensa_call(op);
+        if (is_native_xtensa_vector<float>(op->type)) {
+            rhs << "IVP_FIRINTN_2XF32(" << a0 << ")";
+        } else {
+            rhs << "nearbyint(" << a0 << ")";
+        }
+    } else if (op->name == "floor_f32") {
+        string a0 = print_expr(op->args[0]);
+        if (is_native_xtensa_vector<float>(op->type)) {
+            rhs << "IVP_FIFLOORN_2XF32(" << a0 << ")";
+        } else {
+            rhs << "floor_f32(" << a0 << ")";
+        }
     } else {
         CodeGen_C::visit(op);
         return;
