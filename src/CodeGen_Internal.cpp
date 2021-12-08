@@ -49,37 +49,20 @@ void pack_closure(llvm::StructType *type,
                   IRBuilder<> *builder) {
     // type, type of dst should be a pointer to a struct of the type returned by build_type
     int idx = 0;
-    for (const auto &v : closure.vars) {
+
+    auto add_to_closure = [&](const std::string &name) {
         llvm::Type *t = type->elements()[idx];
         Value *ptr = builder->CreateConstInBoundsGEP2_32(type, dst, 0, idx++);
-        Value *val = src.get(v.first);
+        Value *val = src.get(name);
         val = builder->CreateBitCast(val, t);
         builder->CreateStore(val, ptr);
+    };
+
+    for (const auto &v : closure.vars) {
+        add_to_closure(v.first);
     }
     for (const auto &b : closure.buffers) {
-        // For buffers we pass through base address (the symbol with
-        // the same name as the buffer), and the .buffer symbol (GPU
-        // code might implicitly need it).
-        // FIXME: This dependence should be explicitly encoded in the IR.
-        {
-            llvm::Type *t = type->elements()[idx];
-            Value *ptr = builder->CreateConstInBoundsGEP2_32(type, dst, 0, idx++);
-            Value *val = src.get(b.first);
-            val = builder->CreateBitCast(val, t);
-            builder->CreateStore(val, ptr);
-        }
-        {
-            llvm::PointerType *t = halide_buffer_t_type->getPointerTo();
-            Value *ptr = builder->CreateConstInBoundsGEP2_32(type, dst, 0, idx++);
-            Value *val = nullptr;
-            if (src.contains(b.first + ".buffer")) {
-                val = src.get(b.first + ".buffer");
-                val = builder->CreateBitCast(val, t);
-            } else {
-                val = ConstantPointerNull::get(t);
-            }
-            builder->CreateStore(val, ptr);
-        }
+        add_to_closure(b.first);
     }
 }
 
@@ -90,25 +73,18 @@ void unpack_closure(const Closure &closure,
                     IRBuilder<> *builder) {
     // type, type of src should be a pointer to a struct of the type returned by build_type
     int idx = 0;
-    for (const auto &v : closure.vars) {
+
+    auto load_from_closure = [&](const std::string &name) {
         Value *ptr = builder->CreateConstInBoundsGEP2_32(type, src, 0, idx++);
         LoadInst *load = builder->CreateLoad(ptr->getType()->getPointerElementType(), ptr);
-        dst.push(v.first, load);
-        load->setName(v.first);
+        dst.push(name, load);
+        load->setName(name);
+    };
+    for (const auto &v : closure.vars) {
+        load_from_closure(v.first);
     }
     for (const auto &b : closure.buffers) {
-        {
-            Value *ptr = builder->CreateConstInBoundsGEP2_32(type, src, 0, idx++);
-            LoadInst *load = builder->CreateLoad(ptr->getType()->getPointerElementType(), ptr);
-            dst.push(b.first, load);
-            load->setName(b.first);
-        }
-        {
-            Value *ptr = builder->CreateConstInBoundsGEP2_32(type, src, 0, idx++);
-            LoadInst *load = builder->CreateLoad(ptr->getType()->getPointerElementType(), ptr);
-            dst.push(b.first + ".buffer", load);
-            load->setName(b.first + ".buffer");
-        }
+        load_from_closure(b.first);
     }
 }
 
@@ -248,7 +224,7 @@ bool can_allocation_fit_on_stack(int64_t size) {
     return (size <= (int64_t)Runtime::Internal::Constants::maximum_stack_allocation_bytes);
 }
 
-Expr lower_int_uint_div(const Expr &a, const Expr &b) {
+Expr lower_int_uint_div(const Expr &a, const Expr &b, bool round_to_zero) {
     // Detect if it's a small int division
     internal_assert(a.type() == b.type());
     const int64_t *const_int_divisor = as_const_int(b);
@@ -261,7 +237,16 @@ Expr lower_int_uint_div(const Expr &a, const Expr &b) {
     int shift_amount;
     if (is_const_power_of_two_integer(b, &shift_amount) &&
         (t.is_int() || t.is_uint())) {
-        return a >> make_const(UInt(a.type().bits()), shift_amount);
+        if (round_to_zero) {
+            Expr result = a;
+            // Normally a right-shift isn't right for division rounding to
+            // zero. It does the wrong thing for negative values. Add a fudge so
+            // that a right-shift becomes correct.
+            result += (result >> (t.bits() - 1)) & (b - 1);
+            return result >> shift_amount;
+        } else {
+            return a >> make_const(UInt(a.type().bits()), shift_amount);
+        }
     } else if (const_int_divisor &&
                t.is_int() &&
                (t.bits() == 8 || t.bits() == 16 || t.bits() == 32) &&
@@ -271,15 +256,30 @@ Expr lower_int_uint_div(const Expr &a, const Expr &b) {
         int64_t multiplier;
         int shift;
         if (t.bits() == 32) {
-            multiplier = IntegerDivision::table_s32[*const_int_divisor][2];
-            shift = IntegerDivision::table_s32[*const_int_divisor][3];
+            if (round_to_zero) {
+                multiplier = IntegerDivision::table_srz32[*const_int_divisor][2];
+                shift = IntegerDivision::table_srz32[*const_int_divisor][3];
+            } else {
+                multiplier = IntegerDivision::table_s32[*const_int_divisor][2];
+                shift = IntegerDivision::table_s32[*const_int_divisor][3];
+            }
         } else if (t.bits() == 16) {
-            multiplier = IntegerDivision::table_s16[*const_int_divisor][2];
-            shift = IntegerDivision::table_s16[*const_int_divisor][3];
+            if (round_to_zero) {
+                multiplier = IntegerDivision::table_srz16[*const_int_divisor][2];
+                shift = IntegerDivision::table_srz16[*const_int_divisor][3];
+            } else {
+                multiplier = IntegerDivision::table_s16[*const_int_divisor][2];
+                shift = IntegerDivision::table_s16[*const_int_divisor][3];
+            }
         } else {
             // 8 bit
-            multiplier = IntegerDivision::table_s8[*const_int_divisor][2];
-            shift = IntegerDivision::table_s8[*const_int_divisor][3];
+            if (round_to_zero) {
+                multiplier = IntegerDivision::table_srz8[*const_int_divisor][2];
+                shift = IntegerDivision::table_srz8[*const_int_divisor][3];
+            } else {
+                multiplier = IntegerDivision::table_s8[*const_int_divisor][2];
+                shift = IntegerDivision::table_s8[*const_int_divisor][3];
+            }
         }
         Expr num = a;
 
@@ -287,17 +287,24 @@ Expr lower_int_uint_div(const Expr &a, const Expr &b) {
         Type num_as_uint_t = num.type().with_code(Type::UInt);
         Expr sign = cast(num_as_uint_t, num >> make_const(UInt(t.bits()), t.bits() - 1));
 
-        // Flip the numerator bits if the mask is high.
-        num = cast(num_as_uint_t, num);
-        num = num ^ sign;
+        if (!round_to_zero) {
+            // Flip the numerator bits if the mask is high.
+            num = cast(num_as_uint_t, num);
+            num = num ^ sign;
+        }
 
         // Multiply and keep the high half of the
         // result, and then apply the shift.
         Expr mult = make_const(num.type(), multiplier);
         num = mul_shift_right(num, mult, shift + num.type().bits());
 
-        // Maybe flip the bits back again.
-        num = cast(a.type(), num ^ sign);
+        if (round_to_zero) {
+            // Add one if the numerator was negative
+            num -= sign;
+        } else {
+            // Maybe flip the bits back again.
+            num = cast(a.type(), num ^ sign);
+        }
 
         return num;
     } else if (const_uint_divisor &&
@@ -352,6 +359,9 @@ Expr lower_int_uint_div(const Expr &a, const Expr &b) {
         }
 
         return val;
+    } else if (round_to_zero) {
+        // Return the input division unchanged.
+        return Call::make(a.type(), Call::div_round_to_zero, {a, b}, Call::PureIntrinsic);
     } else {
         return lower_euclidean_div(a, b);
     }
