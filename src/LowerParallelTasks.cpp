@@ -89,7 +89,7 @@ Expr allocate_closure(const std::string &name, const Closure &closure) {
     closure_elements.emplace_back(1);
 
     std::vector<Expr> closure_types;
-    closure_elements.reserve(closure_entries_count + 1);
+    closure_types.reserve(closure_entries_count + 1);
     closure_types.emplace_back(unique_name(name + "_type"));
 
     for (const auto &v : closure.vars) {
