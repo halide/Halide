@@ -48,6 +48,7 @@ enum class Output {
 enum class LinkageType {
     External,              ///< Visible externally.
     ExternalPlusMetadata,  ///< Visible externally. Argument metadata and an argv wrapper are also generated.
+    ExternalPlusArgv,      ///< Visible externally. Argv wrapper is generated but *not* argument metadata.
     Internal,              ///< Not visible externally, similar to 'static' linkage in C.
 };
 

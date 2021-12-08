@@ -73,26 +73,6 @@
 #define HALIDE_D3D12_COMMAND_LIST_TYPE D3D12_COMMAND_LIST_TYPE_DIRECT
 #endif
 
-// A Printer that automatically reserves stack space for the printer buffer:
-// (the managed printers in 'printer.h' rely on malloc)
-template<uint64_t length = 1024, int type = BasicPrinter>
-class StackPrinter : public Printer<type, length> {
-public:
-    StackPrinter(void *ctx = nullptr)
-        : Printer<type, length>(ctx, buffer) {
-    }
-    StackPrinter &operator()(void *ctx = nullptr) {
-        this->user_context = ctx;
-        return *this;
-    }
-    uint64_t capacity() const {
-        return length;
-    }
-
-private:
-    char buffer[length];
-};
-
 static void d3d12_debug_dump(error &err);
 
 #define d3d12_panic(...)                               \

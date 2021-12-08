@@ -755,7 +755,8 @@ class InjectHexagonRpc : public IRMutator {
         // Build a closure for the device code.
         // TODO: Should this move the body of the loop to Hexagon,
         // or the loop itself? Currently, this moves the loop itself.
-        Closure c(body);
+        Closure c;
+        c.include(body);
 
         // A buffer parameter potentially generates 3 scalar parameters (min,
         // extent, stride) per dimension. Pipelines with many buffers may
@@ -846,7 +847,8 @@ class InjectHexagonRpc : public IRMutator {
             LoweredArgument arg(i.first, Argument::InputScalar, i.second, 0, ArgumentEstimates{});
             args.push_back(arg);
         }
-        device_code.append(LoweredFunc(hex_name, args, body, LinkageType::ExternalPlusMetadata));
+        // We need the _argv function but not the _metadata.
+        device_code.append(LoweredFunc(hex_name, args, body, LinkageType::ExternalPlusArgv));
 
         // Generate a call to hexagon_device_run.
         std::vector<Expr> arg_sizes;

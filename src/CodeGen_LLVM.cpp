@@ -168,6 +168,7 @@ llvm::GlobalValue::LinkageTypes llvm_linkage(LinkageType t) {
     return llvm::GlobalValue::ExternalLinkage;
 
     // switch (t) {
+    // case LinkageType::ExternalPlusArgv:
     // case LinkageType::ExternalPlusMetadata:
     // case LinkageType::External:
     //     return llvm::GlobalValue::ExternalLinkage;
@@ -523,13 +524,15 @@ std::unique_ptr<llvm::Module> CodeGen_LLVM::compile(const Module &input) {
 
         // If the Func is externally visible, also create the argv wrapper and metadata.
         // (useful for calling from JIT and other machine interfaces).
-        if (f.linkage == LinkageType::ExternalPlusMetadata) {
+        if (f.linkage == LinkageType::ExternalPlusArgv || f.linkage == LinkageType::ExternalPlusMetadata) {
             llvm::Function *wrapper = add_argv_wrapper(function, names.argv_name);
-            llvm::Function *metadata_getter = embed_metadata_getter(names.metadata_name,
-                                                                    names.simple_name, f.args, input.get_metadata_name_map());
+            if (f.linkage == LinkageType::ExternalPlusMetadata) {
+                llvm::Function *metadata_getter = embed_metadata_getter(names.metadata_name,
+                                                                        names.simple_name, f.args, input.get_metadata_name_map());
 
-            if (target.has_feature(Target::Matlab)) {
-                define_matlab_wrapper(module.get(), wrapper, metadata_getter);
+                if (target.has_feature(Target::Matlab)) {
+                    define_matlab_wrapper(module.get(), wrapper, metadata_getter);
+                }
             }
         }
     }
@@ -1054,8 +1057,8 @@ llvm::Function *CodeGen_LLVM::embed_metadata_getter(const std::string &metadata_
         /* version */ version,
         /* num_arguments */ ConstantInt::get(i32_t, num_args),
         /* arguments */ ConstantExpr::getInBoundsGetElementPtr(arguments_array, arguments_array_storage, zeros),
-        /* target */ create_string_constant(map_string(target.to_string())),
-        /* name */ create_string_constant(map_string(function_name))};
+        /* target */ create_string_constant(target.to_string()),
+        /* name */ create_string_constant(function_name)};
 
     GlobalVariable *metadata_storage = new GlobalVariable(
         *module,
@@ -2721,6 +2724,12 @@ void CodeGen_LLVM::visit(const Call *op) {
                           Let::make(b_name, op->args[1],
                                     Select::make(a_var < b_var, b_var - a_var, a_var - b_var))));
     } else if (op->is_intrinsic(Call::div_round_to_zero)) {
+        // See if we can rewrite it to something faster (e.g. a shift)
+        Expr e = lower_int_uint_div(op->args[0], op->args[1], /** round to zero */ true);
+        if (!e.as<Call>()) {
+            codegen(e);
+            return;
+        }
         internal_assert(op->args.size() == 2);
         Value *a = codegen(op->args[0]);
         Value *b = codegen(op->args[1]);
@@ -2751,7 +2760,8 @@ void CodeGen_LLVM::visit(const Call *op) {
         Type wt = upgrade_type_for_arithmetic(op->args[2].type());
         Expr e = lower_lerp(cast(t, op->args[0]),
                             cast(t, op->args[1]),
-                            cast(wt, op->args[2]));
+                            cast(wt, op->args[2]),
+                            target);
         e = cast(op->type, e);
         codegen(e);
     } else if (op->is_intrinsic(Call::popcount)) {
