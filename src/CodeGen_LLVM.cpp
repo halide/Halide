@@ -2970,16 +2970,6 @@ void CodeGen_LLVM::visit(const Call *op) {
     } else if (op->is_intrinsic(Call::get_user_context)) {
         internal_assert(op->args.empty());
         value = get_user_context();
-    } else if (op->is_intrinsic(Call::get_pointer_symbol_or_null)) {
-        internal_assert(op->args.size() == 2);
-        const StringImm *name = op->args[0].as<StringImm>();
-        internal_assert(name != nullptr);
-        value = sym_get(name->value, false);
-        if (value == nullptr) {
-            llvm::Value *typed_struct_definition = codegen(op->args[1]);
-            llvm::PointerType *expected_type = typed_struct_definition->getType()->getPointerElementType()->getPointerTo();
-            value = ConstantPointerNull::get(expected_type);
-        }
     } else if (op->is_intrinsic(Call::saturating_add) || op->is_intrinsic(Call::saturating_sub)) {
         internal_assert(op->args.size() == 2);
 

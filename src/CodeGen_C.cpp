@@ -2598,10 +2598,6 @@ void CodeGen_C::visit(const Call *op) {
     } else if (op->is_intrinsic(Call::get_user_context)) {
         internal_assert(op->args.empty());
         rhs << "_ucon";
-    } else if (op->is_intrinsic(Call::get_pointer_symbol_or_null)) {
-        internal_assert(op->args.size() == 2);
-        // TODO(zalman|abadams): Figure out how to get rid of the maybe foo.buffer exists, maybe it doesn't thing in closures.
-        rhs << "(nullptr)";
     } else if (op->is_intrinsic(Call::stringify)) {
         // Rewrite to an snprintf
         vector<string> printf_args;
