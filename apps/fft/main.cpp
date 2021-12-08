@@ -66,7 +66,9 @@ int main(int argc, char **argv) {
     }
 
     Target target = get_jit_target_from_environment();
+printf("fft test: target=%s w=%d h=%d\n", target.to_string().c_str(), W, H);
 
+printf("FFT: %d\n", __LINE__); fflush(stdout);
     Fft2dDesc fwd_desc;
     Fft2dDesc inv_desc;
     inv_desc.gain = 1.0f / (W * H);
@@ -74,8 +76,11 @@ int main(int argc, char **argv) {
     Func filtered_c2c;
     {
         // Compute the DFT of the input and the kernel.
+printf("FFT: %d\n", __LINE__); fflush(stdout);
         ComplexFunc dft_in = fft2d_c2c(make_complex(in), W, H, -1, target, fwd_desc);
+printf("FFT: %d\n", __LINE__); fflush(stdout);
         ComplexFunc dft_kernel = fft2d_c2c(make_complex(kernel), W, H, -1, target, fwd_desc);
+printf("FFT: %d\n", __LINE__); fflush(stdout);
         dft_in.compute_root();
         dft_kernel.compute_root();
 
@@ -94,8 +99,11 @@ int main(int argc, char **argv) {
     Func filtered_r2c;
     {
         // Compute the DFT of the input and the kernel.
+printf("FFT: %d\n", __LINE__); fflush(stdout);
         ComplexFunc dft_in = fft2d_r2c(make_real(in), W, H, target, fwd_desc);
+printf("FFT: %d\n", __LINE__); fflush(stdout);
         ComplexFunc dft_kernel = fft2d_r2c(make_real(kernel), W, H, target, fwd_desc);
+printf("FFT: %d\n", __LINE__); fflush(stdout);
         dft_in.compute_root();
         dft_kernel.compute_root();
 
@@ -107,8 +115,11 @@ int main(int argc, char **argv) {
         filtered_r2c = fft2d_c2r(dft_filtered, W, H, target, inv_desc);
     }
 
+printf("FFT: %d\n", __LINE__); fflush(stdout);
     Buffer<float> result_c2c = filtered_c2c.realize({W, H}, target);
+printf("FFT: %d\n", __LINE__); fflush(stdout);
     Buffer<float> result_r2c = filtered_r2c.realize({W, H}, target);
+printf("FFT: %d\n", __LINE__); fflush(stdout);
 
     for (int y = 0; y < H; y++) {
         for (int x = 0; x < W; x++) {
@@ -130,6 +141,7 @@ int main(int argc, char **argv) {
         }
     }
 
+printf("FFT: %d\n", __LINE__); fflush(stdout);
     // For a description of the methodology used here, see
     // http://www.fftw.org/speed/method.html
 
@@ -140,8 +152,11 @@ int main(int argc, char **argv) {
 
     Var rep("rep");
 
+printf("FFT: %d\n", __LINE__); fflush(stdout);
     Buffer<float> re_in = lambda(x, y, 0.0f).realize({W, H});
+printf("FFT: %d\n", __LINE__); fflush(stdout);
     Buffer<float> im_in = lambda(x, y, 0.0f).realize({W, H});
+printf("FFT: %d\n", __LINE__); fflush(stdout);
 
     printf("%12s %5s%11s%5s %5s%11s%5s\n", "", "", "Halide", "", "", "FFTW", "");
     printf("%12s %10s %10s %10s %10s %10s\n", "DFT type", "Time (us)", "MFLOP/s", "Time (us)", "MFLOP/s", "Ratio");
@@ -152,9 +167,13 @@ int main(int argc, char **argv) {
     // reasonable assumption for a well optimized program with good
     // locality.
     c2c_in(x, y, rep) = {re_in(x, y), im_in(x, y)};
+printf("FFT: %d\n", __LINE__); fflush(stdout);
     Func bench_c2c = fft2d_c2c(c2c_in, W, H, -1, target, fwd_desc);
+printf("FFT: %d\n", __LINE__); fflush(stdout);
     bench_c2c.compile_to_lowered_stmt(output_dir + "c2c.html", bench_c2c.infer_arguments(), HTML);
+printf("FFT: %d\n", __LINE__); fflush(stdout);
     Realization R_c2c = bench_c2c.realize({W, H, reps}, target);
+printf("FFT: %d\n", __LINE__); fflush(stdout);
     // Write all reps to the same place in memory. This means the
     // output appears to be cached on all but the first
     // iteration. This seems to match the behavior of FFTW's benchmark
@@ -163,12 +182,17 @@ int main(int argc, char **argv) {
     R_c2c[0].raw_buffer()->dim[2].stride = 0;
     R_c2c[1].raw_buffer()->dim[2].stride = 0;
 
+printf("FFT: %d\n", __LINE__); fflush(stdout);
     double halide_t = benchmark(samples, 1, [&]() { bench_c2c.realize(R_c2c); }) * 1e6 / reps;
+printf("FFT: %d\n", __LINE__); fflush(stdout);
 #ifdef WITH_FFTW
     std::vector<std::pair<float, float>> fftw_c1(W * H);
     std::vector<std::pair<float, float>> fftw_c2(W * H);
+printf("FFT: %d\n", __LINE__); fflush(stdout);
     fftwf_plan c2c_plan = fftwf_plan_dft_2d(W, H, (fftwf_complex *)&fftw_c1[0], (fftwf_complex *)&fftw_c2[0], FFTW_FORWARD, FFTW_EXHAUSTIVE);
+printf("FFT: %d\n", __LINE__); fflush(stdout);
     double fftw_t = benchmark(samples, reps, [&]() { fftwf_execute(c2c_plan); }) * 1e6;
+printf("FFT: %d\n", __LINE__); fflush(stdout);
 #else
     double fftw_t = 0;
 #endif
@@ -183,18 +207,26 @@ int main(int argc, char **argv) {
     Func r2c_in;
     // All reps read from the same input. See notes on c2c_in.
     r2c_in(x, y, rep) = re_in(x, y);
+printf("FFT: %d\n", __LINE__); fflush(stdout);
     Func bench_r2c = fft2d_r2c(r2c_in, W, H, target, fwd_desc);
+printf("FFT: %d\n", __LINE__); fflush(stdout);
     bench_r2c.compile_to_lowered_stmt(output_dir + "r2c.html", bench_r2c.infer_arguments(), HTML);
+printf("FFT: %d\n", __LINE__); fflush(stdout);
     Realization R_r2c = bench_r2c.realize({W, H / 2 + 1, reps}, target);
     // Write all reps to the same place in memory. See notes on R_c2c.
     R_r2c[0].raw_buffer()->dim[2].stride = 0;
     R_r2c[1].raw_buffer()->dim[2].stride = 0;
 
+printf("FFT: %d\n", __LINE__); fflush(stdout);
     halide_t = benchmark(samples, 1, [&]() { bench_r2c.realize(R_r2c); }) * 1e6 / reps;
+printf("FFT: %d\n", __LINE__); fflush(stdout);
 #ifdef WITH_FFTW
     std::vector<float> fftw_r(W * H);
+printf("FFT: %d\n", __LINE__); fflush(stdout);
     fftwf_plan r2c_plan = fftwf_plan_dft_r2c_2d(W, H, &fftw_r[0], (fftwf_complex *)&fftw_c1[0], FFTW_EXHAUSTIVE);
+printf("FFT: %d\n", __LINE__); fflush(stdout);
     fftw_t = benchmark(samples, reps, [&]() { fftwf_execute(r2c_plan); }) * 1e6;
+printf("FFT: %d\n", __LINE__); fflush(stdout);
 #else
     fftw_t = 0;
 #endif
@@ -209,16 +241,24 @@ int main(int argc, char **argv) {
     ComplexFunc c2r_in;
     // All reps read from the same input. See notes on c2c_in.
     c2r_in(x, y, rep) = {re_in(x, y), im_in(x, y)};
+printf("FFT: %d\n", __LINE__); fflush(stdout);
     Func bench_c2r = fft2d_c2r(c2r_in, W, H, target, inv_desc);
+printf("FFT: %d\n", __LINE__); fflush(stdout);
     bench_c2r.compile_to_lowered_stmt(output_dir + "c2r.html", bench_c2r.infer_arguments(), HTML);
+printf("FFT: %d\n", __LINE__); fflush(stdout);
     Realization R_c2r = bench_c2r.realize({W, H, reps}, target);
+printf("FFT: %d\n", __LINE__); fflush(stdout);
     // Write all reps to the same place in memory. See notes on R_c2c.
     R_c2r[0].raw_buffer()->dim[2].stride = 0;
 
+printf("FFT: %d\n", __LINE__); fflush(stdout);
     halide_t = benchmark(samples, 1, [&]() { bench_c2r.realize(R_c2r); }) * 1e6 / reps;
 #ifdef WITH_FFTW
+printf("FFT: %d\n", __LINE__); fflush(stdout);
     fftwf_plan c2r_plan = fftwf_plan_dft_c2r_2d(W, H, (fftwf_complex *)&fftw_c1[0], &fftw_r[0], FFTW_EXHAUSTIVE);
+printf("FFT: %d\n", __LINE__); fflush(stdout);
     fftw_t = benchmark(samples, reps, [&]() { fftwf_execute(c2r_plan); }) * 1e6;
+printf("FFT: %d\n", __LINE__); fflush(stdout);
 #else
     fftw_t = 0;
 #endif
@@ -229,12 +269,14 @@ int main(int argc, char **argv) {
            fftw_t,
            2.5 * W * H * (log2(W) + log2(H)) / fftw_t,
            fftw_t / halide_t);
+printf("FFT: %d\n", __LINE__); fflush(stdout);
 
 #ifdef WITH_FFTW
     fftwf_destroy_plan(c2c_plan);
     fftwf_destroy_plan(r2c_plan);
     fftwf_destroy_plan(c2r_plan);
 #endif
+printf("FFT: %d\n", __LINE__); fflush(stdout);
 
     return 0;
 }
