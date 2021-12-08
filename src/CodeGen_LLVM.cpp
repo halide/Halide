@@ -2671,6 +2671,12 @@ void CodeGen_LLVM::visit(const Call *op) {
                           Let::make(b_name, op->args[1],
                                     Select::make(a_var < b_var, b_var - a_var, a_var - b_var))));
     } else if (op->is_intrinsic(Call::div_round_to_zero)) {
+        // See if we can rewrite it to something faster (e.g. a shift)
+        Expr e = lower_int_uint_div(op->args[0], op->args[1], /** round to zero */ true);
+        if (!e.as<Call>()) {
+            codegen(e);
+            return;
+        }
         internal_assert(op->args.size() == 2);
         Value *a = codegen(op->args[0]);
         Value *b = codegen(op->args[1]);
