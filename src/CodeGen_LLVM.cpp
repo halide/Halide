@@ -586,7 +586,6 @@ void CodeGen_LLVM::begin_func(LinkageType linkage, const std::string &name,
     current_function_args = args;
     function = module->getFunction(extern_name);
     if (!function) {
-        module->dump();
         internal_assert(function) << "Could not func a function of name " << extern_name << " in module\n";
     }
 
