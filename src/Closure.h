@@ -90,7 +90,9 @@ public:
      **/
     void include(const Stmt &s, const std::string &loop_variable = "");
 
-    /** External variables referenced. */
+    /** External variables referenced. There's code that assumes iterating over
+     * this repeatedly gives a consistent order, so don't swap out the data type
+     * for something non-deterministic. */
     std::map<std::string, Type> vars;
 
     /** External allocations referenced. */

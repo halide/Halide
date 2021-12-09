@@ -300,10 +300,11 @@ struct LowerParallelTasks : public IRMutator {
                 std::vector<Expr> args(4);
                 // Codegen will add user_context for us
 
-                // Prefix the function name with "::" as we would in C to make
+                // Prefix the function name with "::" as we would in C++ to make
                 // it clear we're talking about something in global scope in
                 // case some joker names an intermediate Func or Var the same
-                // name as the pipeline.
+                // name as the pipeline. This prefix works transparently in the
+                // C++ backend.
                 args[0] = Variable::make(Handle(), "::" + new_function_name);
                 args[1] = t.min;
                 args[2] = t.extent;
@@ -333,10 +334,12 @@ struct LowerParallelTasks : public IRMutator {
                                 Call::Extern);
         }
 
-        result = Let::make(closure_name, closure_struct_allocation, result);
         std::string closure_result_name = unique_name("closure_result");
         Expr closure_result = Variable::make(Int(32), closure_result_name);
-        return LetStmt::make(closure_result_name, result, AssertStmt::make(closure_result == 0, closure_result));
+        Stmt stmt = AssertStmt::make(closure_result == 0, closure_result);
+        stmt = LetStmt::make(closure_result_name, result, stmt);
+        stmt = LetStmt::make(closure_name, closure_struct_allocation, stmt);
+        return stmt;
     }
 
     void get_parallel_tasks(const Stmt &s, std::vector<ParallelTask> &result, std::pair<std::string, int> prefix) {
