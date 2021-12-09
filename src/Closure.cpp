@@ -111,9 +111,6 @@ void Closure::visit(const Atomic *op) {
 
 Expr Closure::pack_into_struct() const {
     std::vector<Expr> elements;
-    std::vector<Type> types;
-
-    std::ostringstream name;
 
     for (const auto &b : buffers) {
         Expr ptr_var = Variable::make(type_of<void *>(), b.first);
@@ -130,11 +127,6 @@ Expr Closure::pack_into_struct() const {
                      [&](const Expr &a, const Expr &b) {
                          return a.type().bytes() > b.type().bytes();
                      });
-
-    for (Expr e : elements) {
-        types.push_back(e.type());
-        name << e.type() << "_";
-    }
 
     Expr result = Call::make(Handle(),
                              Call::make_struct, elements, Call::Intrinsic);
