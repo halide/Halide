@@ -586,7 +586,7 @@ void CodeGen_LLVM::begin_func(LinkageType linkage, const std::string &name,
     current_function_args = args;
     function = module->getFunction(extern_name);
     if (!function) {
-        internal_assert(function) << "Could not func a function of name " << extern_name << " in module\n";
+        internal_assert(function) << "Could not find a function of name " << extern_name << " in module\n";
     }
 
     debug(1) << "Generating llvm bitcode prolog for function " << name << "...\n";

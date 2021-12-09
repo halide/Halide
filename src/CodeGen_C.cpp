@@ -2026,7 +2026,7 @@ string CodeGen_C::print_assignment(Type t, const std::string &rhs) {
         const char *const_flag = output_kind == CPlusPlusImplementation ? "const " : "";
         if (t.is_handle()) {
             // Don't print void *, which might lose useful type information. just use auto.
-            stream << get_indent() << "auto ";
+            stream << get_indent() << "auto *";
         } else {
             stream << get_indent() << print_type(t, AppendSpace);
         }
@@ -2440,7 +2440,7 @@ void CodeGen_C::visit(const Call *op) {
             rhs << shape_name;
         } else {
             // Emit a declaration like:
-            // struct {int f_0, char f_1, int f_2} foo = {3, 'c', 4};
+            // struct {int f_0, int f_1, char f_2} foo = {3, 4, 'c'};
 
             // Get the args
             vector<string> values;
