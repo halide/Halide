@@ -306,6 +306,8 @@ struct LowerParallelTasks : public IRMutator {
         Expr closure_struct_allocation = allocate_closure(closure_name, closure);
         Expr closure_struct = Variable::make(Handle(), closure_name);
 
+        const bool has_task_parent = !task_parents.empty() && task_parents.top_ref().defined();
+
         Expr result;
         for (int i = 0; i < num_tasks; i++) {
             ParallelTask t = tasks[i];
@@ -316,10 +318,10 @@ struct LowerParallelTasks : public IRMutator {
             // do_parallel_tasks. halide_do_par_for is simpler, but
             // assumes a bunch of things. Programs that don't use async
             // can also enter the task system via do_par_for.
-            bool use_parallel_for = (num_tasks == 1 &&
-                                     min_threads == 0 &&
-                                     t.semaphores.empty() &&
-                                     !has_task_parent);
+            const bool use_parallel_for = (num_tasks == 1 &&
+                                           min_threads == 0 &&
+                                           t.semaphores.empty() &&
+                                           !has_task_parent);
 
             Expr semaphore_type = Call::make(type_of<halide_semaphore_acquire_t *>(), Call::forward_declare_typed_struct,
                                              {StringImm::make("halide_semaphore_acquire_t")}, Call::PureIntrinsic);
@@ -336,16 +338,20 @@ struct LowerParallelTasks : public IRMutator {
                 semaphores_array = Call::make(type_of<halide_semaphore_acquire_t *>(), Call::make_typed_struct, semaphore_args, Call::PureIntrinsic);
             }
 
+            Expr closure_task_parent;
             std::vector<LoweredArgument> closure_args(use_parallel_for ? 3 : 5);
             int closure_arg_index;
             closure_args[0] = LoweredArgument("__user_context", Argument::Kind::InputScalar,
                                               type_of<void *>(), 0, ArgumentEstimates());
             if (use_parallel_for) {
                 closure_arg_index = 2;
+                // closure_task_parent remains undefined here.
                 closure_args[1] = LoweredArgument(t.loop_var, Argument::Kind::InputScalar,
                                                   Int(32), 0, ArgumentEstimates());
             } else {
                 closure_arg_index = 3;
+                const std::string closure_task_parent_name = unique_name("__task_parent");
+                closure_task_parent = Variable::make(type_of<void *>(), closure_task_parent_name);
                 // We peeled off a loop. Wrap a new loop around the body
                 // that just does the slice given by the arguments.
                 std::string loop_min_name = unique_name('t');
@@ -364,17 +370,20 @@ struct LowerParallelTasks : public IRMutator {
                                                   Int(32), 0, ArgumentEstimates());
                 closure_args[2] = LoweredArgument(loop_extent_name, Argument::Kind::InputScalar,
                                                   Int(32), 0, ArgumentEstimates());
-                closure_args[4] = LoweredArgument("__task_parent", Argument::Kind::InputScalar,
+                closure_args[4] = LoweredArgument(closure_task_parent_name, Argument::Kind::InputScalar,
                                                   type_of<void *>(), 0, ArgumentEstimates());
             }
 
             {
                 ScopedValue<std::string> save_name(function_name, t.name);
-                ScopedValue<bool> save_has_task_parent(has_task_parent, !use_parallel_for);
+
+                task_parents.push(closure_task_parent);
                 t.body = mutate(t.body);
+                task_parents.pop();
             }
 
             std::string new_function_name = c_print_name(unique_name(t.name), false);
+            // Note that closure_args[closure_arg_index] will be filled in by the call to generate_closure_ir()
             closure_implementations.emplace_back(generate_closure_ir(new_function_name, closure, closure_args,
                                                                      closure_arg_index, t.body, target));
 
@@ -418,8 +427,7 @@ struct LowerParallelTasks : public IRMutator {
             // Allocate task list array
             Expr tasks_list = Call::make(Handle(), Call::make_typed_struct, tasks_array_args, Call::PureIntrinsic);
             Expr user_context = Call::make(type_of<void *>(), Call::get_user_context, {}, Call::PureIntrinsic);
-            Expr task_parent = Call::make(Handle(), Call::get_pointer_symbol_or_null,
-                                          {StringImm::make("_task_parent"), make_zero(Handle())}, Call::Intrinsic);
+            Expr task_parent = has_task_parent ? task_parents.top() : make_zero(Handle());
             result = Call::make(Int(32), "halide_do_parallel_tasks",
                                 {user_context, make_const(Int(32), num_tasks), tasks_list, task_parent},
                                 Call::Extern);
@@ -481,13 +489,13 @@ struct LowerParallelTasks : public IRMutator {
     }
 
     LowerParallelTasks(const std::string &name, const Target &t)
-        : function_name(name), target(t), has_task_parent(false) {
+        : function_name(name), target(t) {
     }
 
     std::string function_name;
     const Target &target;
     std::vector<LoweredFunc> closure_implementations;
-    bool has_task_parent;
+    SmallStack<Expr> task_parents;
 };
 
 }  // namespace

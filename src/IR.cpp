@@ -604,7 +604,6 @@ const char *const intrinsic_op_names[] = {
     "dynamic_shuffle",
     "extract_mask_element",
     "forward_declare_typed_struct",
-    "get_pointer_symbol_or_null",
     "get_user_context",
     "gpu_thread_barrier",
     "halving_add",
