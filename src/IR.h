@@ -511,7 +511,6 @@ struct Call : public ExprNode<Call> {
         div_round_to_zero,
         dynamic_shuffle,
         extract_mask_element,
-        get_pointer_symbol_or_null,
         get_user_context,
         gpu_thread_barrier,
         halving_add,

@@ -35,8 +35,9 @@ enum Schedule {
 };
 
 Func make(Schedule schedule) {
-    Var x, y, z;
-    Func both, f, g;
+    Var x("x"), y("y"), z("z");
+    std::string suffix = "_" + std::to_string((int)schedule);
+    Func both("both" + suffix), f("f" + suffix), g("g" + suffix);
 
     f(x, y) = halide_externs::five_ms(x + y);
     g(x, y) = halide_externs::five_ms(x - y);
