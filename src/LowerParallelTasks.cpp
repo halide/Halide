@@ -513,7 +513,10 @@ Stmt lower_parallel_tasks(const Stmt &s, std::vector<LoweredFunc> &closure_imple
         }
     }
 
-    closure_implementations = std::move(lowering_mutator.closure_implementations);
+    // Append to the end rather than replacing the list entirely.
+    closure_implementations.insert(closure_implementations.end(),
+                                   lowering_mutator.closure_implementations.begin(),
+                                   lowering_mutator.closure_implementations.end());
 
     return result;
 }

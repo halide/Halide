@@ -460,6 +460,7 @@ void lower_impl(const vector<Function> &output_funcs,
     // closure generating passes and instead all such passes will need to
     // be done at once.
     for (size_t i = initial_lowered_function_count; i < result_module.functions().size(); i++) {
+        // Note that lower_parallel_tasks() appends to the end of closure_implementations
         result_module.functions()[i].body =
             lower_parallel_tasks(result_module.functions()[i].body, closure_implementations,
                                  result_module.functions()[i].name, t);
