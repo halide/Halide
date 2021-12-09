@@ -28,7 +28,9 @@ int main(int argc, char **argv) {
                     weight = clamp(weight, 0.f, 1.f);
                 }
 
-                Expr lerped = lerp(f(x), f(x + 8), cast(t2, f(x + 16)));
+                Expr zero_val = f(x);
+                Expr one_val = f(x + 8);
+                Expr lerped = lerp(zero_val, one_val, weight);
 
                 Func cast_and_lerp, lerp_alone, cast_of_lerp;
                 cast_and_lerp(x) = cast(t3, lerped);
