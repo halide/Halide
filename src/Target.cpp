@@ -432,7 +432,7 @@ Target get_jit_target_from_environment() {
             << "HL_JIT_TARGET was " << target << ". "
             << "Host is " << host.to_string() << ".\n";
         user_assert(!t.has_feature(Target::NoBoundsQuery))
-            << "The Halide JIT requires the use of bounds query, but HL_JIT_TARGET was specified with no_bunds_query: " << target;
+            << "The Halide JIT requires the use of bounds query, but HL_JIT_TARGET was specified with no_bounds_query: " << target;
         return t;
     }
 }
