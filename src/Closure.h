@@ -95,6 +95,12 @@ public:
 
     /** External allocations referenced. */
     std::map<std::string, Buffer> buffers;
+
+    /** Pack a closure into a struct. */
+    Expr pack_into_struct() const;
+
+    /** Unpack a closure around a Stmt, putting all the names in scope. */
+    Stmt unpack_from_struct(const Expr &, const Stmt &) const;
 };
 
 }  // namespace Internal

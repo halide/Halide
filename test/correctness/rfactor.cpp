@@ -32,16 +32,16 @@ int simple_rfactor_test(bool compile_module) {
 
     if (compile_module) {
         // Check the call graphs.
-        Module m = g.compile_to_module({g.infer_arguments()});
-        CheckCalls checker;
-        checker.add_module(m);
+        CheckCalls c;
+        g.add_custom_lowering_pass(&c, nullptr);
+        g.compile_to_module(g.infer_arguments());
 
         CallGraphs expected = {
             {g.name(), {intm.name(), g.name()}},
             {intm.name(), {f.name(), intm.name()}},
             {f.name(), {}},
         };
-        if (check_call_graphs(checker.calls, expected) != 0) {
+        if (check_call_graphs(c.calls, expected) != 0) {
             return -1;
         }
     } else {
@@ -80,9 +80,9 @@ int reorder_split_rfactor_test(bool compile_module) {
 
     if (compile_module) {
         // Check the call graphs.
-        Module m = g.compile_to_module({g.infer_arguments()});
-        CheckCalls checker;
-        checker.add_module(m);
+        CheckCalls c;
+        g.add_custom_lowering_pass(&c, nullptr);
+        g.compile_to_module(g.infer_arguments());
 
         CallGraphs expected = {
             {g.name(), {intm2.name(), g.name()}},
@@ -90,7 +90,7 @@ int reorder_split_rfactor_test(bool compile_module) {
             {intm1.name(), {f.name(), intm1.name()}},
             {f.name(), {}},
         };
-        if (check_call_graphs(checker.calls, expected) != 0) {
+        if (check_call_graphs(c.calls, expected) != 0) {
             return -1;
         }
     } else {
@@ -132,9 +132,9 @@ int multi_split_rfactor_test(bool compile_module) {
 
     if (compile_module) {
         // Check the call graphs.
-        Module m = g.compile_to_module({g.infer_arguments()});
-        CheckCalls checker;
-        checker.add_module(m);
+        CheckCalls c;
+        g.add_custom_lowering_pass(&c, nullptr);
+        g.compile_to_module(g.infer_arguments());
 
         CallGraphs expected = {
             {g.name(), {intm2.name(), g.name()}},
@@ -142,7 +142,7 @@ int multi_split_rfactor_test(bool compile_module) {
             {intm1.name(), {f.name(), intm1.name()}},
             {f.name(), {}},
         };
-        if (check_call_graphs(checker.calls, expected) != 0) {
+        if (check_call_graphs(c.calls, expected) != 0) {
             return -1;
         }
     } else {
@@ -183,9 +183,9 @@ int reorder_fuse_wrapper_rfactor_test(bool compile_module) {
 
     if (compile_module) {
         // Check the call graphs.
-        Module m = g.compile_to_module({g.infer_arguments()});
-        CheckCalls checker;
-        checker.add_module(m);
+        CheckCalls c;
+        g.add_custom_lowering_pass(&c, nullptr);
+        g.compile_to_module(g.infer_arguments());
 
         CallGraphs expected = {
             {g.name(), {intm.name(), g.name()}},
@@ -193,7 +193,7 @@ int reorder_fuse_wrapper_rfactor_test(bool compile_module) {
             {intm.name(), {wrapper.name(), intm.name()}},
             {f.name(), {}},
         };
-        if (check_call_graphs(checker.calls, expected) != 0) {
+        if (check_call_graphs(c.calls, expected) != 0) {
             return -1;
         }
     } else {
@@ -257,9 +257,9 @@ int non_trivial_lhs_rfactor_test(bool compile_module) {
 
         if (compile_module) {
             // Check the call graphs.
-            Module m = g.compile_to_module({g.infer_arguments()});
             CheckCalls checker;
-            checker.add_module(m);
+            g.add_custom_lowering_pass(&checker, nullptr);
+            g.compile_to_module(g.infer_arguments());
 
             CallGraphs expected = {
                 {g.name(), {f.name()}},
@@ -306,16 +306,16 @@ int simple_rfactor_with_specialize_test(bool compile_module) {
     if (compile_module) {
         p.set(20);
         // Check the call graphs.
-        Module m = g.compile_to_module({g.infer_arguments()});
-        CheckCalls checker;
-        checker.add_module(m);
+        CheckCalls c;
+        g.add_custom_lowering_pass(&c, nullptr);
+        g.compile_to_module(g.infer_arguments());
 
         CallGraphs expected = {
             {g.name(), {f.name(), intm.name(), g.name()}},
             {intm.name(), {f.name(), intm.name()}},
             {f.name(), {}},
         };
-        if (check_call_graphs(checker.calls, expected) != 0) {
+        if (check_call_graphs(c.calls, expected) != 0) {
             return -1;
         }
     } else {
@@ -365,16 +365,16 @@ int rdom_with_predicate_rfactor_test(bool compile_module) {
 
     if (compile_module) {
         // Check the call graphs.
-        Module m = g.compile_to_module({g.infer_arguments()});
-        CheckCalls checker;
-        checker.add_module(m);
+        CheckCalls c;
+        g.add_custom_lowering_pass(&c, nullptr);
+        g.compile_to_module(g.infer_arguments());
 
         CallGraphs expected = {
             {g.name(), {intm.name(), g.name()}},
             {intm.name(), {f.name(), intm.name()}},
             {f.name(), {}},
         };
-        if (check_call_graphs(checker.calls, expected) != 0) {
+        if (check_call_graphs(c.calls, expected) != 0) {
             return -1;
         }
     } else {
@@ -426,9 +426,9 @@ int histogram_rfactor_test(bool compile_module) {
 
     if (compile_module) {
         // Check the call graphs.
-        Module m = g.compile_to_module({g.infer_arguments()});
-        CheckCalls checker;
-        checker.add_module(m);
+        CheckCalls c;
+        g.add_custom_lowering_pass(&c, nullptr);
+        g.compile_to_module(g.infer_arguments());
 
         CallGraphs expected = {
             {g.name(), {hist.name()}},
@@ -436,7 +436,7 @@ int histogram_rfactor_test(bool compile_module) {
             {intm.name(), {in.name(), intm.name()}},
 
         };
-        if (check_call_graphs(checker.calls, expected) != 0) {
+        if (check_call_graphs(c.calls, expected) != 0) {
             return -1;
         }
     } else {
@@ -493,9 +493,9 @@ int parallel_dot_product_rfactor_test(bool compile_module) {
 
     if (compile_module) {
         // Check the call graphs.
-        Module m = dot.compile_to_module({dot.infer_arguments()});
-        CheckCalls checker;
-        checker.add_module(m);
+        CheckCalls c;
+        dot.add_custom_lowering_pass(&c, nullptr);
+        dot.compile_to_module(dot.infer_arguments());
 
         CallGraphs expected = {
             {dot.name(), {intm1.name(), dot.name()}},
@@ -504,7 +504,7 @@ int parallel_dot_product_rfactor_test(bool compile_module) {
             {a.name(), {}},
             {b.name(), {}},
         };
-        if (check_call_graphs(checker.calls, expected) != 0) {
+        if (check_call_graphs(c.calls, expected) != 0) {
             return -1;
         }
     } else {
@@ -553,9 +553,9 @@ int tuple_rfactor_test(bool compile_module) {
 
     if (compile_module) {
         // Check the call graphs.
-        Module m = g.compile_to_module({g.infer_arguments()});
-        CheckCalls checker;
-        checker.add_module(m);
+        CheckCalls c;
+        g.add_custom_lowering_pass(&c, nullptr);
+        g.compile_to_module(g.infer_arguments());
 
         CallGraphs expected = {
             {g.name(), {intm1.name() + ".0", intm1.name() + ".1", g.name() + ".0", g.name() + ".1"}},
@@ -563,7 +563,7 @@ int tuple_rfactor_test(bool compile_module) {
             {intm2.name(), {f.name() + ".0", f.name() + ".1", intm2.name() + ".0", intm2.name() + ".1"}},
             {f.name(), {}},
         };
-        if (check_call_graphs(checker.calls, expected) != 0) {
+        if (check_call_graphs(c.calls, expected) != 0) {
             return -1;
         }
     } else {
@@ -629,9 +629,9 @@ int tuple_specialize_rdom_predicate_rfactor_test(bool compile_module) {
 
     if (compile_module) {
         // Check the call graphs.
-        Module m = g.compile_to_module({g.infer_arguments()});
-        CheckCalls checker;
-        checker.add_module(m);
+        CheckCalls c;
+        g.add_custom_lowering_pass(&c, nullptr);
+        g.compile_to_module(g.infer_arguments());
 
         CallGraphs expected = {
             {g.name(), {intm1.name() + ".0", intm1.name() + ".1", intm4.name() + ".0", intm4.name() + ".1", g.name() + ".0", g.name() + ".1"}},
@@ -641,7 +641,7 @@ int tuple_specialize_rdom_predicate_rfactor_test(bool compile_module) {
             {intm4.name(), {f.name() + ".0", f.name() + ".1", intm4.name() + ".0", intm4.name() + ".1"}},
             {f.name(), {}},
         };
-        if (check_call_graphs(checker.calls, expected) != 0) {
+        if (check_call_graphs(c.calls, expected) != 0) {
             return -1;
         }
     } else {
@@ -966,9 +966,9 @@ int tuple_partial_reduction_rfactor_test(bool compile_module) {
 
     if (compile_module) {
         // Check the call graphs.
-        Module m = g.compile_to_module({g.infer_arguments()});
-        CheckCalls checker;
-        checker.add_module(m);
+        CheckCalls c;
+        g.add_custom_lowering_pass(&c, nullptr);
+        g.compile_to_module(g.infer_arguments());
 
         CallGraphs expected = {
             {g.name(), {intm1.name() + ".0", g.name() + ".0"}},
@@ -976,7 +976,7 @@ int tuple_partial_reduction_rfactor_test(bool compile_module) {
             {intm2.name(), {f.name() + ".0", intm2.name() + ".0"}},
             {f.name(), {}},
         };
-        if (check_call_graphs(checker.calls, expected) != 0) {
+        if (check_call_graphs(c.calls, expected) != 0) {
             return -1;
         }
     } else {

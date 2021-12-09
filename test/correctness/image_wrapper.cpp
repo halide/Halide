@@ -82,9 +82,9 @@ int func_wrapper_test() {
 
     // Check the call graphs.
     // Expect 'g' to call 'wrapper', 'wrapper' to call 'img_f', 'img_f' to call 'img'
-    Module m = g.compile_to_module({g.infer_arguments()});
     CheckCalls c;
-    c.add_module(m);
+    g.add_custom_lowering_pass(&c, nullptr);
+    g.compile_to_module({g.infer_arguments()});
 
     CallGraphs expected = {
         {g.name(), {wrapper.name()}},
@@ -124,9 +124,9 @@ int multiple_funcs_sharing_wrapper_test() {
     // Expect 'g1' and 'g2' to call 'im_wrapper', 'g3' to call 'img_f',
     // im_wrapper' to call 'img_f', 'img_f' to call 'img'
     Pipeline p({g1, g2, g3});
-    Module m = p.compile_to_module({p.infer_arguments()}, "");
     CheckCalls c;
-    c.add_module(m);
+    p.add_custom_lowering_pass(&c, nullptr);
+    p.compile_to_module(p.infer_arguments(), "");
 
     CallGraphs expected = {
         {g1.name(), {im_wrapper.name()}},
@@ -179,9 +179,9 @@ int global_wrapper_test() {
     // Check the call graphs.
     // Expect 'g' to call 'wrapper', 'wrapper' to call 'img_f', 'img_f' to call 'img',
     // 'h' to call 'wrapper' and 'g'
-    Module m = h.compile_to_module({h.infer_arguments()});
     CheckCalls c;
-    c.add_module(m);
+    h.add_custom_lowering_pass(&c, nullptr);
+    h.compile_to_module(h.infer_arguments(), "");
 
     CallGraphs expected = {
         {h.name(), {g.name(), wrapper.name()}},
@@ -230,52 +230,24 @@ int update_defined_after_wrapper_test() {
     img_f.compute_root();
     wrapper.compute_root().vectorize(_0, 8).unroll(_0, 2).split(_0, _0, xi, 4).parallel(_0);
 
-    {
-        param.set(true);
+    // Check the call graphs.
+    // Expect initialization of 'g' to call 'wrapper' and its update to call
+    // 'wrapper' and 'g', wrapper' to call 'img_f', 'img_f' to call 'img'
+    CheckCalls c;
+    g.add_custom_lowering_pass(&c, nullptr);
+    g.compile_to_module(g.infer_arguments());
 
-        // Check the call graphs.
-        // Expect initialization of 'g' to call 'wrapper' and its update to call
-        // 'wrapper' and 'g', wrapper' to call 'img_f', 'img_f' to call 'img'
-        Module m = g.compile_to_module({g.infer_arguments()});
-        CheckCalls c;
-        c.add_module(m);
-
-        CallGraphs expected = {
-            {g.name(), {wrapper.name(), g.name()}},
-            {wrapper.name(), {img_f.name()}},
-            {img_f.name(), {img.name()}},
-        };
-        if (check_call_graphs(c.calls, expected) != 0) {
-            return -1;
-        }
-
-        Buffer<int> im = g.realize({200, 200});
-        auto func = [](int x, int y) {
-            return ((0 <= x && x <= 99) && (0 <= y && y <= 99) && (x < y)) ? 3 * (x + y) : (x + y);
-        };
-        if (check_image(im, func)) {
-            return -1;
-        }
+    CallGraphs expected = {
+        {g.name(), {wrapper.name(), g.name()}},
+        {wrapper.name(), {img_f.name()}},
+        {img_f.name(), {img.name()}},
+    };
+    if (check_call_graphs(c.calls, expected) != 0) {
+        return -1;
     }
 
-    {
-        param.set(false);
-
-        // Check the call graphs.
-        // Expect initialization of 'g' to call 'wrapper' and its update to call
-        // 'wrapper' and 'g', wrapper' to call 'img_f', 'img_f' to call 'img'
-        Module m = g.compile_to_module({g.infer_arguments()});
-        CheckCalls c;
-        c.add_module(m);
-
-        CallGraphs expected = {
-            {g.name(), {wrapper.name(), g.name()}},
-            {wrapper.name(), {img_f.name()}},
-            {img_f.name(), {img.name()}},
-        };
-        if (check_call_graphs(c.calls, expected) != 0) {
-            return -1;
-        }
+    for (bool param_value : {false, true}) {
+        param.set(param_value);
 
         Buffer<int> im = g.realize({200, 200});
         auto func = [](int x, int y) {
@@ -316,9 +288,9 @@ int rdom_wrapper_test() {
     // Check the call graphs.
     // Expect 'wrapper' to call 'g', initialization of 'g' to call nothing
     // and its update to call 'img_f' and 'g', 'img_f' to call 'img'
-    Module m = wrapper.compile_to_module({wrapper.infer_arguments()});
     CheckCalls c;
-    c.add_module(m);
+    wrapper.add_custom_lowering_pass(&c, nullptr);
+    wrapper.compile_to_module(wrapper.infer_arguments());
 
     CallGraphs expected = {
         {g.name(), {img_f.name(), g.name()}},
@@ -358,9 +330,9 @@ int global_and_custom_wrapper_test() {
     // Check the call graphs.
     // Expect 'result' to call 'g' and 'img_wrapper', 'g' to call 'img_in_g',
     // 'img_wrapper' to call 'f', img_in_g' to call 'img_f', 'f' to call 'img'
-    Module m = result.compile_to_module({result.infer_arguments()});
     CheckCalls c;
-    c.add_module(m);
+    result.add_custom_lowering_pass(&c, nullptr);
+    result.compile_to_module(result.infer_arguments());
 
     CallGraphs expected = {
         {result.name(), {g.name(), img_wrapper.name()}},
@@ -407,9 +379,9 @@ int wrapper_depend_on_mutated_func_test() {
     // Check the call graphs.
     // Expect 'h' to call 'g_in_h', 'g_in_h' to call 'g', 'g' to call 'f',
     // 'f' to call 'img_in_f', img_in_f' to call 'img_f', 'img_f' to call 'img'
-    Module m = h.compile_to_module({h.infer_arguments()});
     CheckCalls c;
-    c.add_module(m);
+    h.add_custom_lowering_pass(&c, nullptr);
+    h.compile_to_module(g.infer_arguments());
 
     CallGraphs expected = {
         {h.name(), {g_in_h.name()}},
@@ -452,9 +424,9 @@ int wrapper_on_wrapper_test() {
     Func g_in_h = g.in(h).compute_root();
 
     // Check the call graphs.
-    Module m = h.compile_to_module({h.infer_arguments()});
     CheckCalls c;
-    c.add_module(m);
+    h.add_custom_lowering_pass(&c, nullptr);
+    h.compile_to_module(g.infer_arguments());
 
     CallGraphs expected = {
         {h.name(), {img_in_h.name(), g_in_h.name(), img_in_img_in_g.name()}},
@@ -503,9 +475,9 @@ int wrapper_on_rdom_predicate_test() {
     // Expect 'g' to call nothing, update of 'g' to call 'g', img_in_g', and 'h_wrapper',
     // 'img_in_g' to call 'img_f', 'img_f' to call 'img', 'h_wrapper' to call 'h',
     // 'h' to call nothing
-    Module m = g.compile_to_module({g.infer_arguments()});
     CheckCalls c;
-    c.add_module(m);
+    g.add_custom_lowering_pass(&c, nullptr);
+    g.compile_to_module(g.infer_arguments());
 
     CallGraphs expected = {
         {g.name(), {g.name(), img_in_g.name(), h_wrapper.name()}},
@@ -549,9 +521,9 @@ int two_fold_wrapper_test() {
     img_in_output_in_output = img_in_output.in(output).compute_at(output, x).unroll(_0).unroll(_1);
 
     // Check the call graphs.
-    Module m = output.compile_to_module({output.infer_arguments()});
     CheckCalls c;
-    c.add_module(m);
+    output.add_custom_lowering_pass(&c, nullptr);
+    output.compile_to_module(output.infer_arguments());
 
     CallGraphs expected = {
         {output.name(), {img_in_output_in_output.name()}},
@@ -597,9 +569,9 @@ int multi_folds_wrapper_test() {
     h.compute_root().tile(x, y, xi, yi, 8, 8);
 
     Pipeline p({g, h});
-    Module m = p.compile_to_module({p.infer_arguments()}, "");
     CheckCalls c;
-    c.add_module(m);
+    p.add_custom_lowering_pass(&c, nullptr);
+    p.compile_to_module(p.infer_arguments(), "");
 
     CallGraphs expected = {
         {g.name(), {img_in_g_in_g.name()}},

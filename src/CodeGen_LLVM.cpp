@@ -504,12 +504,36 @@ std::unique_ptr<llvm::Module> CodeGen_LLVM::compile(const Module &input) {
     for (const auto &b : input.buffers()) {
         compile_buffer(b);
     }
+
+    vector<MangledNames> function_names;
+
+    // Declare all functions
     for (const auto &f : input.functions()) {
         const auto names = get_mangled_names(f, get_target());
+        function_names.push_back(names);
 
-        run_with_large_stack([&]() {
-            compile_func(f, names.simple_name, names.extern_name);
-        });
+        // Deduce the types of the arguments to our function
+        vector<llvm::Type *> arg_types(f.args.size());
+        for (size_t i = 0; i < f.args.size(); i++) {
+            if (f.args[i].is_buffer()) {
+                arg_types[i] = halide_buffer_t_type->getPointerTo();
+            } else {
+                arg_types[i] = llvm_type_of(upgrade_type_for_argument_passing(f.args[i].type));
+            }
+        }
+        FunctionType *func_t = FunctionType::get(i32_t, arg_types, false);
+        function = llvm::Function::Create(func_t, llvm_linkage(f.linkage), names.extern_name, module.get());
+        set_function_attributes_for_target(function, target);
+
+        // Mark the buffer args as no alias
+        for (size_t i = 0; i < f.args.size(); i++) {
+            if (f.args[i].is_buffer()) {
+                function->addParamAttr(i, Attribute::NoAlias);
+            }
+        }
+
+        // sym_push helpfully calls setName, which we don't want
+        symbol_table.push("::" + f.name, function);
 
         // If the Func is externally visible, also create the argv wrapper and metadata.
         // (useful for calling from JIT and other machine interfaces).
@@ -524,6 +548,15 @@ std::unique_ptr<llvm::Module> CodeGen_LLVM::compile(const Module &input) {
                 }
             }
         }
+    }
+    // Define all functions
+    int idx = 0;
+    for (const auto &f : input.functions()) {
+        const auto names = function_names[idx++];
+
+        run_with_large_stack([&]() {
+            compile_func(f, names.simple_name, names.extern_name);
+        });
     }
 
     debug(2) << "llvm::Module pointer: " << module.get() << "\n";
@@ -551,41 +584,10 @@ std::unique_ptr<llvm::Module> CodeGen_LLVM::finish_codegen() {
 void CodeGen_LLVM::begin_func(LinkageType linkage, const std::string &name,
                               const std::string &extern_name, const std::vector<LoweredArgument> &args) {
     current_function_args = args;
-
-    // Deduce the types of the arguments to our function
-    vector<llvm::Type *> arg_types(args.size());
-    for (size_t i = 0; i < args.size(); i++) {
-        if (args[i].is_buffer()) {
-            arg_types[i] = halide_buffer_t_type->getPointerTo();
-        } else {
-            arg_types[i] = llvm_type_of(upgrade_type_for_argument_passing(args[i].type));
-        }
-    }
-    FunctionType *func_t = FunctionType::get(i32_t, arg_types, false);
-
-    // Make our function. There may already be a declaration of it.
     function = module->getFunction(extern_name);
     if (!function) {
-        function = llvm::Function::Create(func_t, llvm_linkage(linkage), extern_name, module.get());
-    } else {
-        user_assert(function->isDeclaration())
-            << "Another function with the name " << extern_name
-            << " already exists in the same module\n";
-        if (func_t != function->getFunctionType()) {
-            std::cerr << "Desired function type for " << extern_name << ":\n";
-            func_t->print(dbgs(), true);
-            std::cerr << "Declared function type of " << extern_name << ":\n";
-            function->getFunctionType()->print(dbgs(), true);
-            user_error << "Cannot create a function with a declaration of mismatched type.\n";
-        }
-    }
-    set_function_attributes_for_target(function, target);
-
-    // Mark the buffer args as no alias
-    for (size_t i = 0; i < args.size(); i++) {
-        if (args[i].is_buffer()) {
-            function->addParamAttr(i, Attribute::NoAlias);
-        }
+        module->dump();
+        internal_assert(function) << "Could not func a function of name " << extern_name << " in module\n";
     }
 
     debug(1) << "Generating llvm bitcode prolog for function " << name << "...\n";
@@ -972,7 +974,7 @@ llvm::Function *CodeGen_LLVM::embed_metadata_getter(const std::string &metadata_
     vector<Constant *> arguments_array_entries;
     for (int arg = 0; arg < num_args; ++arg) {
 
-        StructType *type_t_type = get_llvm_struct_type_by_name(module.get(), "struct.halide_type_t");
+        llvm::StructType *type_t_type = get_llvm_struct_type_by_name(module.get(), "struct.halide_type_t");
         internal_assert(type_t_type) << "Did not find halide_type_t in module.\n";
 
         Constant *type_fields[] = {
@@ -2808,7 +2810,7 @@ void CodeGen_LLVM::visit(const Call *op) {
                 value = create_alloca_at_entry(types[0], 1);
                 builder->CreateStore(args[0], value);
             } else {
-                llvm::Type *aggregate_t = (all_same_type ? (llvm::Type *)ArrayType::get(types[0], types.size()) : (llvm::Type *)StructType::get(*context, types));
+                llvm::Type *aggregate_t = (all_same_type ? (llvm::Type *)ArrayType::get(types[0], types.size()) : (llvm::Type *)llvm::StructType::get(*context, types));
 
                 value = create_alloca_at_entry(aggregate_t, 1);
                 for (size_t i = 0; i < args.size(); i++) {
@@ -2817,156 +2819,35 @@ void CodeGen_LLVM::visit(const Call *op) {
                 }
             }
         }
-    } else if (op->is_intrinsic(Call::forward_declare_typed_struct)) {
-        // Forward-declare a struct type, which is assumed to have already been declared via `define_typed_struct`.
-        // Sets 'value' to a null pointer of the existing type.
-        internal_assert(op->args.size() == 1);
-
-        const StringImm *str_imm = op->args[0].as<StringImm>();
-        internal_assert(str_imm != nullptr);
-        std::string name = str_imm->value;
-
-        llvm::Type *struct_type = get_llvm_struct_type_by_name(module.get(), ("struct." + name).c_str());
-        internal_assert(struct_type != nullptr) << "Failed to find structure " << name << "\n";
-        value = llvm::ConstantPointerNull::get(struct_type->getPointerTo());
-    } else if (op->is_intrinsic(Call::define_typed_struct)) {
-        // Declares a new struct type. Sets 'value' to a null pointer of the new type.
-        const size_t args_size = op->args.size();
-        internal_assert(args_size >= 1);
-
-        const StringImm *str_imm = op->args[0].as<StringImm>();
-        internal_assert(str_imm != nullptr);
-        std::string name = str_imm->value;
-
-        vector<llvm::Type *> types(args_size - 1);
-        for (size_t i = 1; i < args_size; i++) {
-            types[i - 1] = codegen(op->args[i])->getType();
-        }
-        llvm::Type *struct_type = (llvm::Type *)llvm::StructType::create(*context, types, "struct." + name);
-        value = llvm::ConstantPointerNull::get(struct_type->getPointerTo());
-    } else if (op->is_intrinsic(Call::make_typed_struct)) {
-        internal_assert(op->args.size() >= 2);
-
-        llvm::Value *typed_struct_definition = codegen(op->args[0]);
-        const int64_t *count_ptr = as_const_int(op->args[1]);
-        internal_assert(count_ptr != nullptr);
-        int64_t count = *count_ptr;
-
-        // Codegen each element.
-        vector<llvm::Value *> args(op->args.size() - 2);
-        vector<llvm::Type *> types(op->args.size() - 2);
-        for (size_t i = 2; i < op->args.size(); i++) {
-            llvm::Value *value;
-            value = codegen(op->args[i]);
-            args[i - 2] = value;
-            types[i - 2] = value->getType();
-        }
-
-        llvm::Type *aggregate_t_ptr = typed_struct_definition->getType();
-        llvm::Type *aggregate_t;
-        aggregate_t = aggregate_t_ptr->getPointerElementType();
-        value = create_alloca_at_entry(aggregate_t, count);
-
-        int item = 0;
-        size_t initializer_count = args.size() / count;
-        internal_assert((args.size() % count) == 0);
-        do {
-            for (size_t i = 0; i < initializer_count; i++) {
-                Value *elem_ptr;
-                size_t indices_index = 0;
-                std::vector<Value *> indices(2);
-                indices[indices_index++] = ConstantInt::get(i32_t, item);
-                indices[indices_index++] = ConstantInt::get(i32_t, i);
-                elem_ptr = CreateInBoundsGEP(builder, value, indices);
-                Value *init_value = args[i + item * initializer_count];
-                // TODO(zalman): This is a bit of a hack. Halide IR is not strongly typed re: pointers,
-                // especially to structs. Specific case that is failing is halide_semaphore_t *.
-                //
-                // This first case converts an i8_t* (the representation of void * being used in LLVM) to
-                // the correct pointer type.
-                //
-                // The second case handles converting between bool and integer as i1_t and i8_t/u8_t are
-                // interchanged in some circumstances.
-                if (init_value->getType() != elem_ptr->getType()->getPointerElementType()) {
-                    if (init_value->getType() == i8_t->getPointerTo()) {
-                        internal_assert(elem_ptr->getType()->getPointerElementType()->isPointerTy());
-                        init_value = builder->CreatePointerCast(init_value, elem_ptr->getType()->getPointerElementType());
-                    } else if (init_value->getType() == i1_t) {
-                        init_value = builder->CreateZExtOrBitCast(init_value, elem_ptr->getType()->getPointerElementType());
-                    } else if (elem_ptr->getType()->getPointerElementType() == i1_t) {
-                        init_value = builder->CreateTruncOrBitCast(init_value, elem_ptr->getType()->getPointerElementType());
-                    }
-                }
-                builder->CreateStore(init_value, elem_ptr);
-            }
-            item += 1;
-        } while (item < count);
     } else if (op->is_intrinsic(Call::load_typed_struct_member)) {
-        // Given an instance of a typed_struct, a definition of a typed_struct,
-        // and the index of a slot, load the value of that slot.
+        // Given a void * instance of a typed struct, an in-scope prototype
+        // struct of the same type, and the index of a slot, load the value of
+        // that slot.
         //
-        // An instance of a typed_struct is an Expr of Handle() type that has been
-        // created by a call to make_typed_struct.
+        // It is assumed that the slot index is valid for the given typed struct.
         //
-        // A definiton of a typed_struct is an Expr of Handle() type that has been
-        // created by a call to define_typed_struct.
-        //
-        // Note that both the instance and definition are needed because the instance
-        // is often a void* by the time it is -- it will have been been passed through
-        // an API that takes an opaque pointer as a void*, and needs explicit casting
-        // back to the correct type for safe field access.
-        //
-        // It is assumed that the slot index is valid for the given typed_struct.
-        //
-        // TODO: this comment is replicated in CodeGen_C and should be updated there too.
+        // TODO: this comment is replicated in CodeGen_LLVM and should be updated there too.
         // TODO: https://github.com/halide/Halide/issues/6468
-
-        // TODO(zalman): Validate the Halide type of the result matches the LLVM type?
-        // TODO(zalman): Are struct types the right level of indirection.
         internal_assert(op->args.size() == 3);
-        llvm::Value *untyped_struct_instance = codegen(op->args[0]);
-        llvm::Value *typed_struct_definition = codegen(op->args[1]);
-        const uint64_t *index = as_const_uint(op->args[2]);
-        internal_assert(index != nullptr);
-        llvm::Type *struct_type = typed_struct_definition->getType();
-        llvm::Value *typed_struct_instance = builder->CreatePointerCast(untyped_struct_instance, struct_type);
-        llvm::Value *gep = CreateInBoundsGEP(builder, typed_struct_instance, {ConstantInt::get(i32_t, 0), ConstantInt::get(i32_t, (int)*index)});
-        value = builder->CreateLoad(gep->getType()->getPointerElementType(), gep);
-    } else if (op->is_intrinsic(Call::resolve_function_name)) {
-        internal_assert(op->args.size() == 1);
-        const Call *decl_call = op->args[0].as<Call>();
-        internal_assert(decl_call != nullptr);
-        std::string name;
-        if (decl_call->call_type == Call::ExternCPlusPlus) {
-            user_assert(get_target().has_feature(Target::CPlusPlusMangling)) << "Target must specify C++ name mangling (\"c_plus_plus_name_mangling\") in order to call C++ externs. (" << decl_call->name << ")\n";
+        llvm::Value *struct_instance = codegen(op->args[0]);
+        llvm::Value *struct_prototype = codegen(op->args[1]);
+        llvm::Value *typed_struct_instance = builder->CreatePointerCast(struct_instance, struct_prototype->getType());
+        const int64_t *index = as_const_int(op->args[2]);
 
-            std::vector<std::string> namespaces;
-            name = extract_namespaces(decl_call->name, namespaces);
-            std::vector<ExternFuncArgument> mangle_args;
-            for (const auto &arg : decl_call->args) {
-                mangle_args.emplace_back(arg);
-            }
-            name = cplusplus_function_mangled_name(name, namespaces, decl_call->type, mangle_args, get_target());
+        // make_struct can use a fixed-size struct, an array type, or a scalar
+        llvm::Type *pointee_type = struct_prototype->getType()->getPointerElementType();
+        llvm::Type *struct_type = llvm::dyn_cast<llvm::StructType>(pointee_type);
+        llvm::Type *array_type = llvm::dyn_cast<llvm::ArrayType>(pointee_type);
+        if (struct_type || array_type) {
+            internal_assert(index != nullptr);
+            llvm::Value *gep = CreateInBoundsGEP(builder, typed_struct_instance,
+                                                 {ConstantInt::get(i32_t, 0),
+                                                  ConstantInt::get(i32_t, (int)*index)});
+            value = builder->CreateLoad(gep->getType()->getPointerElementType(), gep);
         } else {
-            name = decl_call->name;
+            // The struct is actually just a scalar
+            value = builder->CreateLoad(pointee_type, typed_struct_instance);
         }
-
-        llvm::Function *function = module->getFunction(name);
-
-        // Codegen the args
-        if (function == nullptr) {
-            vector<llvm::Type *> arg_types(decl_call->args.size());
-            for (size_t i = 0; i < decl_call->args.size(); i++) {
-                arg_types[i] = codegen(decl_call->args[i])->getType();
-            }
-            llvm::Type *return_type = llvm_type_of(upgrade_type_for_argument_passing(decl_call->type));
-
-            FunctionType *function_t = FunctionType::get(return_type, arg_types, false);
-            // TODO(zalman): Need a way to control linkage here.
-            function = llvm::Function::Create(function_t, llvm::Function::ExternalLinkage,
-                                              name, module.get());
-        }
-        value = function;
     } else if (op->is_intrinsic(Call::get_user_context)) {
         internal_assert(op->args.empty());
         value = get_user_context();

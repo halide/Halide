@@ -64,9 +64,9 @@ int func_clone_test() {
     // Check the call graphs.
     // Expect 'g' to call 'clone', 'clone' to call nothing, and 'f' not
     // in the final IR.
-    Module m = g.compile_to_module({});
     CheckCalls c;
-    c.add_module(m);
+    g.add_custom_lowering_pass(&c, nullptr);
+    g.compile_to_module(g.infer_arguments());
 
     CallGraphs expected = {
         {g.name(), {clone.name()}},
@@ -100,9 +100,10 @@ int multiple_funcs_sharing_clone_test() {
     // Expect 'g1' and 'g2' to call 'f_clone', 'g3' to call 'f',
     // f_clone' to call nothing, 'f' to call nothing
     Pipeline p({g1, g2, g3});
-    Module m = p.compile_to_module({}, "");
+
     CheckCalls c;
-    c.add_module(m);
+    p.add_custom_lowering_pass(&c, nullptr);
+    p.compile_to_module(p.infer_arguments(), "");
 
     CallGraphs expected = {
         {g1.name(), {f_clone.name()}},
@@ -156,50 +157,31 @@ int update_defined_after_clone_test() {
     f.compute_root();
     clone.compute_root().vectorize(x, 8).unroll(x, 2).split(x, x, xi, 4).parallel(x);
 
-    {
-        param.set(true);
+    // Check the call graphs.
+    // Expect initialization of 'g' to call 'clone' and its update to call
+    // 'clone' and 'g', clone' to call nothing, and 'f' not in the final IR.
+    CheckCalls c;
+    g.add_custom_lowering_pass(&c, nullptr);
+    g.compile_to_module(g.infer_arguments());
 
-        // Check the call graphs.
-        // Expect initialization of 'g' to call 'clone' and its update to call
-        // 'clone' and 'g', clone' to call nothing, and 'f' not in the final IR.
-        Module m = g.compile_to_module({g.infer_arguments()});
-        CheckCalls c;
-        c.add_module(m);
-
-        CallGraphs expected = {
-            {g.name(), {clone.name(), g.name()}},
-            {clone.name(), {}},
-        };
-        if (check_call_graphs(c.calls, expected) != 0) {
-            return -1;
-        }
-
-        Buffer<int> im = g.realize({200, 200});
-        auto func = [](int x, int y) {
-            return ((0 <= x && x <= 99) && (0 <= y && y <= 99) && (x < y)) ? 3 * (x + y) : (x + y);
-        };
-        if (check_image(im, func)) {
-            return -1;
-        }
+    CallGraphs expected = {
+        {g.name(), {clone.name(), g.name()}},
+        {clone.name(), {}},
+    };
+    if (check_call_graphs(c.calls, expected) != 0) {
+        return -1;
     }
 
-    {
-        param.set(false);
+    Buffer<int> im = g.realize({200, 200});
+    auto func = [](int x, int y) {
+        return ((0 <= x && x <= 99) && (0 <= y && y <= 99) && (x < y)) ? 3 * (x + y) : (x + y);
+    };
+    if (check_image(im, func)) {
+        return -1;
+    }
 
-        // Check the call graphs.
-        // Expect initialization of 'g' to call 'clone' and its update to call
-        // 'clone' and 'g', clone' to call nothing, and 'f' not in the final IR.
-        Module m = g.compile_to_module({g.infer_arguments()});
-        CheckCalls c;
-        c.add_module(m);
-
-        CallGraphs expected = {
-            {g.name(), {clone.name(), g.name()}},
-            {clone.name(), {}},
-        };
-        if (check_call_graphs(c.calls, expected) != 0) {
-            return -1;
-        }
+    for (bool param_value : {false, true}) {
+        param.set(param_value);
 
         Buffer<int> im = g.realize({200, 200});
         auto func = [](int x, int y) {
@@ -236,9 +218,9 @@ int clone_depend_on_mutated_func_test() {
 
     // Check the call graphs.
     Pipeline p({d, e, f});
-    Module m = p.compile_to_module({}, "");
     CheckCalls check;
-    check.add_module(m);
+    p.add_custom_lowering_pass(&check, nullptr);
+    p.compile_to_module(p.infer_arguments(), "");
 
     CallGraphs expected = {
         {e.name(), {a.name()}},
@@ -298,9 +280,9 @@ int clone_on_clone_test() {
 
     // Check the call graphs.
     Pipeline p({c, d, e, f});
-    Module m = p.compile_to_module({}, "");
     CheckCalls check;
-    check.add_module(m);
+    p.add_custom_lowering_pass(&check, nullptr);
+    p.compile_to_module(p.infer_arguments(), "");
 
     CallGraphs expected = {
         {e.name(), {b.name(), a_clone_in_b_e_in_e.name()}},
