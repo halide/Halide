@@ -103,6 +103,7 @@ v8](https://v8.dev/docs/embed). The process for Halide is summarized below.
     ```
 - Create a build configuration: `tools/dev/v8gen.py x64.release.sample`
 - Turn off pointer compression: `echo 'v8_enable_pointer_compression = false' >> out.gn/x64.release.sample/args.gn`
+- Disable the GDB-JIT interface (conflicts with LLVM): `echo 'v8_enable_gdbjit = false' >> out.gn/x64.release.sample/args.gn`
 - Build the static library: `autoninja -C out.gn/x64.release.sample v8_monolith`
 
 With V8 built, we can pass the CMake options:

@@ -63,13 +63,9 @@ if (WITH_V8)
     endif()
 
     message(STATUS "Using V8")
-    add_library(Halide_v8 INTERFACE)
-    target_sources(Halide_v8 INTERFACE ${V8_LIB_PATH})
-    target_include_directories(Halide_v8
-        SYSTEM
-        INTERFACE
-        ${V8_INCLUDE_PATH})
-    set_target_properties(Halide_v8 PROPERTIES EXPORT_NAME v8)
+    add_library(Halide_V8 STATIC IMPORTED GLOBAL)
+    set_target_properties(Halide_V8 PROPERTIES IMPORTED_LOCATION "${V8_LIB_PATH}")
+    target_include_directories(Halide_V8 INTERFACE "${V8_INCLUDE_PATH}")
 endif()
 
 function(add_wasm_executable TARGET)
