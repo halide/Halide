@@ -49,7 +49,14 @@ private:
 };
 
 // These are declared "inline" to avoid "unused function" warnings
-inline int check_call_graphs(CallGraphs &result, CallGraphs &expected) {
+inline int check_call_graphs(Halide::Pipeline p, CallGraphs &expected) {
+    // Add a custom lowering pass that scrapes the call graph. We give ownership
+    // of it to the Pipeline, whose lifetime escapes this function.
+    CheckCalls *checker = new CheckCalls;
+    p.add_custom_lowering_pass(checker);
+    p.compile_to_module(p.infer_arguments(), "");
+    CallGraphs &result = checker->calls;
+
     if (result.size() != expected.size()) {
         printf("Expect %d callers instead of %d\n", (int)expected.size(), (int)result.size());
         return -1;
