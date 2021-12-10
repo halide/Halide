@@ -164,6 +164,13 @@ Expr lower_lerp(Type final_type, Expr zero_val, Expr one_val, const Expr &weight
             default:
                 break;
             }
+
+            if (weight.type().is_float()) {
+                // Insert an explicit cast to the computation type, even if
+                // we're going to widen, because out-of-range floats can produce
+                // out-of-range outputs.
+                result = Cast::make(computation_type, result);
+            }
         }
 
         if (!is_const_zero(bias_value)) {
