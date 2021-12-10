@@ -28,9 +28,14 @@ function(halide_define_aot_test NAME)
     endif ()
 
     if (TARGET_WEBASSEMBLY AND Halide_TARGET MATCHES "wasm")
+        if ("${Halide_TARGET}" MATCHES "webgpu")
+            set(OPTIONS "-DTEST_WEBGPU")
+        endif ()
+
         add_wasm_executable("${TARGET}"
                             SRCS "${NAME}_aottest.cpp"
                             DEPS "${DEPS}"
+                            OPTIONS "${OPTIONS}"
                             INCLUDES
                             "${Halide_BINARY_DIR}/include"
                             "${Halide_SOURCE_DIR}/test/common"

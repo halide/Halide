@@ -51,7 +51,7 @@ endif ()
 function(add_wasm_executable TARGET)
     set(options)
     set(oneValueArgs)
-    set(multiValueArgs SRCS DEPS INCLUDES ENABLE_IF)
+    set(multiValueArgs SRCS DEPS INCLUDES OPTIONS ENABLE_IF)
     cmake_parse_arguments(args "${options}" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
 
     if (args_ENABLE_IF AND NOT (${args_ENABLE_IF}))
@@ -92,7 +92,15 @@ function(add_wasm_executable TARGET)
         -s ASSERTIONS=1
         -s ALLOW_MEMORY_GROWTH=1
         -s ENVIRONMENT=node
+        -s USE_WEBGPU=1
+        -s ASYNCIFY
+        ${args_OPTIONS}
     )
+
+    # TODO: Remove this when Emscripten and Dawn implement the same APIs.
+    if (WEBGPU_NATIVE_LIB)
+        message(FATAL_ERROR "Cannot generate WASM executables when targeting native WebGPU implementations.")
+    endif ()
 
     set(SRCS)
     foreach (S IN LISTS args_SRCS)
@@ -129,9 +137,18 @@ function(add_wasm_halide_test TARGET)
         return()
     endif ()
 
+    set(script "require('./${TARGET}.js')")
+    if (WEBGPU_NODE_BINDINGS)
+        set(script "\
+            const provider = require('${WEBGPU_NODE_BINDINGS}')\n\
+            const gpu = provider.create([])\n\
+            const navigator = { gpu: gpu }\n
+            ${script}")
+    endif ()
+
     add_halide_test("${TARGET}"
                     GROUPS ${args_GROUPS}
-                    COMMAND ${NODE_JS_EXECUTABLE} "${TARGET}.js")
+                    COMMAND ${NODE_JS_EXECUTABLE} "-e" "${script}")
 endfunction()
 
 function(find_node_js)
