@@ -16,7 +16,8 @@ extern WEAK halide_device_interface_t webgpu_device_interface;
 
 WEAK int create_webgpu_context(void *user_context);
 
-// A WebGPU adapter/device defined in this module with weak linkage.
+// A WebGPU instance/adapter/device defined in this module with weak linkage.
+WGPUInstance WEAK global_instance = nullptr;
 WGPUAdapter WEAK global_adapter = nullptr;
 WGPUDevice WEAK global_device = nullptr;
 // Lock to synchronize access to the global WebGPU context.
@@ -36,22 +37,35 @@ using namespace Halide::Runtime::Internal;
 using namespace Halide::Runtime::Internal::WebGPU;
 
 extern "C" {
-
+// TODO: Remove all of this when wgpuInstanceProcessEvents() is supported.
+#ifdef WITH_DAWN_NATIVE
+// Defined by Dawn, and used to yield execution to asynchronous commands.
+void wgpuDeviceTick(WGPUDevice);
+// From <unistd.h>, used to spin-lock while waiting for device initialization.
+int usleep(uint32_t);
+#else
 // Defined by Emscripten, and used to yield execution to asynchronous Javascript
 // work in combination with Emscripten's "Asyncify" mechanism.
 void emscripten_sleep(unsigned int ms);
+// Wrap emscripten_sleep in wgpuDeviceTick() to unify usage with Dawn.
+void wgpuDeviceTick(WGPUDevice) {
+    emscripten_sleep(1);
+}
+#endif
 
 // The default implementation of halide_webgpu_acquire_context uses the global
 // pointers above, and serializes access with a spin lock.
 // Overriding implementations of acquire/release must implement the following
 // behavior:
-// - halide_webgpu_acquire_context should always store a valid adapter/device
-//   in adapter_ret/device_ret, or return an error code.
+// - halide_webgpu_acquire_context should always store a valid
+//   instance/adapter/device in instance_ret/adapter_ret/device_ret, or return
+//   an error code.
 // - A call to halide_webgpu_acquire_context is followed by a matching call to
 //   halide_webgpu_release_context. halide_webgpu_acquire_context should block
 //   while a previous call (if any) has not yet been released via
 //   halide_webgpu_release_context.
 WEAK int halide_webgpu_acquire_context(void *user_context,
+                                       WGPUInstance *instance_ret,
                                        WGPUAdapter *adapter_ret,
                                        WGPUDevice *device_ret,
                                        bool create = true) {
@@ -67,6 +81,7 @@ WEAK int halide_webgpu_acquire_context(void *user_context,
         }
     }
 
+    *instance_ret = global_instance;
     *adapter_ret = global_adapter;
     *device_ret = global_device;
 
@@ -90,6 +105,7 @@ class WgpuContext {
     void *user_context;
 
 public:
+    WGPUInstance instance = nullptr;
     WGPUAdapter adapter = nullptr;
     WGPUDevice device = nullptr;
     WGPUQueue queue = nullptr;
@@ -98,7 +114,7 @@ public:
     ALWAYS_INLINE WgpuContext(void *user_context)
         : user_context(user_context) {
         error_code = halide_webgpu_acquire_context(
-            user_context, &adapter, &device);
+            user_context, &instance, &adapter, &device);
         if (error_code == halide_error_code_success) {
             queue = wgpuDeviceGetQueue(device);
         }
@@ -145,7 +161,7 @@ public:
 
         // Wait for the error callbacks to fire.
         while (__atomic_load_n(&callbacks_remaining, __ATOMIC_ACQUIRE) > 0) {
-            emscripten_sleep(1);
+            wgpuDeviceTick(device);
         }
 
         return error_code;
@@ -224,20 +240,41 @@ void request_adapter_callback(WGPURequestAdapterStatus status,
     }
     global_adapter = adapter;
 
-    wgpuAdapterRequestDevice(adapter, nullptr, request_device_callback,
+    WGPUDeviceDescriptor desc = {
+        .nextInChain = nullptr,
+        .label = nullptr,
+        .requiredFeaturesCount = 0,
+        .requiredFeatures = nullptr,
+        .requiredLimits = nullptr,
+    };
+    wgpuAdapterRequestDevice(adapter, &desc, request_device_callback,
                              user_context);
 }
 
 }  // namespace
 
 WEAK int create_webgpu_context(void *user_context) {
-    WGPUInstance instance{};
+    // TODO: Unify this when Emscripten implements wgpuCreateInstance().
+#ifdef WITH_DAWN_NATIVE
+    WGPUInstanceDescriptor desc{
+        .nextInChain = nullptr,
+    };
+    global_instance = wgpuCreateInstance(&desc);
+#else
+    global_instance = nullptr;
+#endif
+
     wgpuInstanceRequestAdapter(
-        instance, nullptr, request_adapter_callback, user_context);
+        global_instance, nullptr, request_adapter_callback, user_context);
 
     // Wait for device initialization to complete.
     while (!global_device && init_error_code == halide_error_code_success) {
+        // TODO: Use wgpuInstanceProcessEvents() when it is supported.
+#ifndef WITH_DAWN_NATIVE
         emscripten_sleep(10);
+#else
+        usleep(1000);
+#endif
     }
 
     return init_error_code;
@@ -358,7 +395,7 @@ WEAK int halide_webgpu_device_sync(void *user_context, halide_buffer_t *) {
     }
 
     while (!__atomic_load_n(&result.complete, __ATOMIC_ACQUIRE)) {
-        emscripten_sleep(1);
+        wgpuDeviceTick(context.device);
     }
 
     return result.status == WGPUQueueWorkDoneStatus_Success ?
@@ -381,6 +418,10 @@ WEAK int halide_webgpu_device_release(void *user_context) {
     }
     wgpuDeviceRelease(context.device);
     wgpuAdapterRelease(context.adapter);
+    // TODO: Unify this when Emscripten implements wgpuInstanceRelease().
+#ifdef WITH_DAWN_NATIVE
+    wgpuInstanceRelease(context.instance);
+#endif
 
     return 1;
 }
@@ -435,7 +476,7 @@ WEAK int halide_webgpu_copy_to_host(void *user_context, halide_buffer_t *buf) {
             },
             &result);
         while (!__atomic_load_n(&result.map_complete, __ATOMIC_ACQUIRE)) {
-            emscripten_sleep(1);
+            wgpuDeviceTick(context.device);
         }
         if (result.map_status != WGPUBufferMapAsyncStatus_Success) {
             debug(user_context) << "wgpuBufferMapAsync failed: "

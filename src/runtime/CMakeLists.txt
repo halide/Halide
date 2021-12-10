@@ -225,6 +225,10 @@ foreach (i IN LISTS RUNTIME_CPP)
         set(SOURCE "${CMAKE_CURRENT_SOURCE_DIR}/${i}.cpp")
 
         set(RUNTIME_DEFINES -DCOMPILING_HALIDE_RUNTIME -DBITS_${j})
+        if (WEBGPU_NATIVE_LIB)
+            # TODO: Remove this once Emscripten and Dawn agree with each other.
+            set(RUNTIME_DEFINES -DWITH_DAWN_NATIVE ${RUNTIME_DEFINES})
+        endif ()
         set(RUNTIME_DEFINES_debug -g -DDEBUG_RUNTIME ${RUNTIME_DEFINES})
 
         foreach (SUFFIX IN ITEMS "" "_debug")
