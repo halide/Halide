@@ -2544,7 +2544,7 @@ void CodeGen_C::visit(const Call *op) {
                << "" << struct_name << "(void *ucon, void *a) : ucon(ucon), arg((void *)a) {} "
                << "~" << struct_name << "() { " << fn->value + "(ucon, arg); } "
                << "} " << instance_name << "(_ucon, " << arg << ");\n";
-        rhs << "nullptr";
+        rhs << "(void *)nullptr";
     } else if (op->is_intrinsic(Call::div_round_to_zero)) {
         rhs << print_expr(op->args[0]) << " / " << print_expr(op->args[1]);
     } else if (op->is_intrinsic(Call::mod_round_to_zero)) {
