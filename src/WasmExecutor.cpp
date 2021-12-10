@@ -1368,6 +1368,7 @@ WasmModuleContents::WasmModuleContents(
 
 #if WITH_WABT
     user_assert(!target.has_feature(Target::WasmThreads)) << "wasm_threads requires Emscripten (or a similar compiler); it will never be supported under JIT.";
+    user_assert(!target.has_feature(Target::WebGPU)) << "wasm_webgpu requires Emscripten (or a similar compiler); it will never be supported under JIT.";
 
     wdebug(1) << "Compiling wasm function " << fn_name << "\n";
 
