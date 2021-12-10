@@ -64,15 +64,11 @@ int func_clone_test() {
     // Check the call graphs.
     // Expect 'g' to call 'clone', 'clone' to call nothing, and 'f' not
     // in the final IR.
-    CheckCalls c;
-    g.add_custom_lowering_pass(&c, nullptr);
-    g.compile_to_module(g.infer_arguments());
-
     CallGraphs expected = {
         {g.name(), {clone.name()}},
         {clone.name(), {}},
     };
-    if (check_call_graphs(c.calls, expected) != 0) {
+    if (check_call_graphs(g, expected) != 0) {
         return -1;
     }
 
@@ -100,11 +96,6 @@ int multiple_funcs_sharing_clone_test() {
     // Expect 'g1' and 'g2' to call 'f_clone', 'g3' to call 'f',
     // f_clone' to call nothing, 'f' to call nothing
     Pipeline p({g1, g2, g3});
-
-    CheckCalls c;
-    p.add_custom_lowering_pass(&c, nullptr);
-    p.compile_to_module(p.infer_arguments(), "");
-
     CallGraphs expected = {
         {g1.name(), {f_clone.name()}},
         {g2.name(), {f_clone.name()}},
@@ -112,7 +103,7 @@ int multiple_funcs_sharing_clone_test() {
         {f_clone.name(), {}},
         {f.name(), {}},
     };
-    if (check_call_graphs(c.calls, expected) != 0) {
+    if (check_call_graphs(p, expected) != 0) {
         return -1;
     }
 
@@ -160,15 +151,11 @@ int update_defined_after_clone_test() {
     // Check the call graphs.
     // Expect initialization of 'g' to call 'clone' and its update to call
     // 'clone' and 'g', clone' to call nothing, and 'f' not in the final IR.
-    CheckCalls c;
-    g.add_custom_lowering_pass(&c, nullptr);
-    g.compile_to_module(g.infer_arguments());
-
     CallGraphs expected = {
         {g.name(), {clone.name(), g.name()}},
         {clone.name(), {}},
     };
-    if (check_call_graphs(c.calls, expected) != 0) {
+    if (check_call_graphs(g, expected) != 0) {
         return -1;
     }
 
@@ -218,10 +205,6 @@ int clone_depend_on_mutated_func_test() {
 
     // Check the call graphs.
     Pipeline p({d, e, f});
-    CheckCalls check;
-    p.add_custom_lowering_pass(&check, nullptr);
-    p.compile_to_module(p.infer_arguments(), "");
-
     CallGraphs expected = {
         {e.name(), {a.name()}},
         {a.name(), {}},
@@ -232,7 +215,7 @@ int clone_depend_on_mutated_func_test() {
         {b.name(), {a_clone_in_b.name()}},
         {a_clone_in_b.name(), {}},
     };
-    if (check_call_graphs(check.calls, expected) != 0) {
+    if (check_call_graphs(p, expected) != 0) {
         return -1;
     }
 
@@ -280,10 +263,6 @@ int clone_on_clone_test() {
 
     // Check the call graphs.
     Pipeline p({c, d, e, f});
-    CheckCalls check;
-    p.add_custom_lowering_pass(&check, nullptr);
-    p.compile_to_module(p.infer_arguments(), "");
-
     CallGraphs expected = {
         {e.name(), {b.name(), a_clone_in_b_e_in_e.name()}},
         {c.name(), {b.name()}},
@@ -295,7 +274,7 @@ int clone_on_clone_test() {
         {b_clone_in_d_f.name(), {a.name()}},
         {a.name(), {}},
     };
-    if (check_call_graphs(check.calls, expected) != 0) {
+    if (check_call_graphs(p, expected) != 0) {
         return -1;
     }
 
