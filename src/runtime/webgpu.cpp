@@ -17,14 +17,14 @@ extern WEAK halide_device_interface_t webgpu_device_interface;
 WEAK int create_webgpu_context(void *user_context);
 
 // A WebGPU instance/adapter/device defined in this module with weak linkage.
-WGPUInstance WEAK global_instance = nullptr;
-WGPUAdapter WEAK global_adapter = nullptr;
-WGPUDevice WEAK global_device = nullptr;
+WEAK WGPUInstance global_instance = nullptr;
+WEAK WGPUAdapter global_adapter = nullptr;
+WEAK WGPUDevice global_device = nullptr;
 // Lock to synchronize access to the global WebGPU context.
 volatile ScopedSpinLock::AtomicFlag WEAK context_lock = 0;
 
 // Size of the staging buffer used for host<->device copies.
-#define WEBGPU_STAGING_BUFFER_SIZE (4 * 1024 * 1024)
+constexpr int kWebGpuStagingBufferSize = 4 * 1024 * 1024;
 // A staging buffer used for host<->device copies.
 WGPUBuffer WEAK staging_buffer = nullptr;
 
@@ -325,7 +325,7 @@ WEAK int halide_webgpu_device_malloc(void *user_context, halide_buffer_t *buf) {
             .nextInChain = nullptr,
             .label = nullptr,
             .usage = WGPUBufferUsage_CopyDst | WGPUBufferUsage_MapRead,
-            .size = WEBGPU_STAGING_BUFFER_SIZE,
+            .size = kWebGpuStagingBufferSize,
             .mappedAtCreation = false,
         };
         staging_buffer = wgpuDeviceCreateBuffer(global_device, &desc);
@@ -444,9 +444,9 @@ WEAK int halide_webgpu_copy_to_host(void *user_context, halide_buffer_t *buf) {
 
     // Copy chunks via the staging buffer.
     for (size_t offset = 0; offset < buf->size_in_bytes();
-         offset += WEBGPU_STAGING_BUFFER_SIZE) {
+         offset += kWebGpuStagingBufferSize) {
 
-        size_t num_bytes = WEBGPU_STAGING_BUFFER_SIZE;
+        size_t num_bytes = kWebGpuStagingBufferSize;
         if (offset + num_bytes > buf->size_in_bytes()) {
             num_bytes = buf->size_in_bytes() - offset;
         }

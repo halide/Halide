@@ -159,7 +159,7 @@ string CodeGen_WebGPU_Dev::CodeGen_WGSL::print_type(Type type,
     if (type.is_float()) {
         user_assert(type.bits() == 32) << "WGSL only supports 32-bit floats";
         oss << "f32";
-    } else if (type.bits() == 1) {
+    } else if (type == Bool()) {
         oss << "bool";
     } else {
         user_assert(type.bits() == 32) << "WGSL only supports 32-bit integers";
@@ -303,9 +303,17 @@ void CodeGen_WebGPU_Dev::CodeGen_WGSL::visit(const IntImm *op) {
 }
 
 void CodeGen_WebGPU_Dev::CodeGen_WGSL::visit(const UIntImm *op) {
-    internal_assert(op->type.bits() == 32)
-        << "WGSL only supports 32-bit integers";
-    print_assignment(op->type, std::to_string(op->value) + "u");
+    if (op->type == Bool()) {
+        if (op->value == 1) {
+            id = "true";
+        } else {
+            id = "false";
+        }
+    } else {
+        internal_assert(op->type.bits() == 32)
+            << "WGSL only supports 32-bit integers";
+        print_assignment(op->type, std::to_string(op->value) + "u");
+    }
 }
 
 namespace {
