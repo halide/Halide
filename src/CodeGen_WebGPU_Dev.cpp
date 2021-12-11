@@ -279,6 +279,7 @@ void CodeGen_WebGPU_Dev::CodeGen_WGSL::add_kernel(
     for (size_t i = 0; i < args.size(); i++) {
         if (!args[i].is_buffer) {
             stream << get_indent() << "let " << print_name(args[i].name)
+                   << " : " << print_type(args[i].type)
                    << " = " << args_var << "."
                    << print_name(args[i].name) << ";\n";
         }
@@ -367,7 +368,8 @@ string CodeGen_WebGPU_Dev::CodeGen_WGSL::print_assignment(
     auto cached = cache.find(rhs);
     if (cached == cache.end()) {
         id = unique_name('_');
-        stream << get_indent() << "let " << id << " = " << rhs << ";\n";
+        stream << get_indent() << "let " << id << " : " << print_type(t)
+               << " = " << rhs << ";\n";
         cache[rhs] = id;
     } else {
         id = cached->second;
