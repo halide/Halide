@@ -75,6 +75,7 @@ function(add_wasm_executable TARGET)
 
     # TODO: this is currently hardcoded to settings that are sensible for most of Halide's
     # internal purposes. Consider adding ways to customize this as appropriate.
+    # Note: ASYNCIFY is required for the WebGPU backend.
     set(EMCC_FLAGS
         -O3
         -g
