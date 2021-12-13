@@ -165,7 +165,6 @@ set(RUNTIME_CXX_FLAGS
     -Wno-psabi
     -Wno-unknown-warning-option
     -Wno-unused-function
-    -Wno-atomic-alignment
     -Wsign-compare
 )
 

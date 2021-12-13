@@ -159,7 +159,7 @@ public:
         wgpuDevicePopErrorScope(device, error_callback, this);
 
         // Wait for the error callbacks to fire.
-        while (__atomic_load_n(&callbacks_remaining, __ATOMIC_ACQUIRE) > 0) {
+        while (__sync_fetch_and_or(&callbacks_remaining, 0) > 0) {
             wgpuDeviceTick(device);
         }
 
@@ -202,7 +202,7 @@ private:
             context->error_code = halide_error_code_generic_error;
         }
 
-        __atomic_sub_fetch(&context->callbacks_remaining, 1, __ATOMIC_RELEASE);
+        __sync_fetch_and_add(&context->callbacks_remaining, -1);
     }
 };
 
@@ -375,16 +375,18 @@ WEAK int halide_webgpu_device_sync(void *user_context, halide_buffer_t *) {
 
     // Wait for all work on the queue to finish.
     struct WorkDoneResult {
-        volatile bool complete = false;
+        volatile ScopedSpinLock::AtomicFlag complete = false;
         volatile WGPUQueueWorkDoneStatus status;
     };
     WorkDoneResult result;
+
+    __atomic_test_and_set(&result.complete, __ATOMIC_RELAXED);
     wgpuQueueOnSubmittedWorkDone(
         context.queue, 0,
         [](WGPUQueueWorkDoneStatus status, void *userdata) {
             WorkDoneResult *result = (WorkDoneResult *)userdata;
             result->status = status;
-            __atomic_store_n(&result->complete, true, __ATOMIC_RELEASE);
+            __atomic_clear(&result->complete, __ATOMIC_RELEASE);
         },
         &result);
 
@@ -393,7 +395,7 @@ WEAK int halide_webgpu_device_sync(void *user_context, halide_buffer_t *) {
         return error_code;
     }
 
-    while (!__atomic_load_n(&result.complete, __ATOMIC_ACQUIRE)) {
+    while (__atomic_test_and_set(&result.complete, __ATOMIC_ACQUIRE)) {
         wgpuDeviceTick(context.device);
     }
 
@@ -460,21 +462,23 @@ WEAK int halide_webgpu_copy_to_host(void *user_context, halide_buffer_t *buf) {
         wgpuQueueSubmit(context.queue, 1, &command_buffer);
 
         struct BufferMapResult {
-            volatile bool map_complete = false;
+            volatile ScopedSpinLock::AtomicFlag map_complete;
             volatile WGPUBufferMapAsyncStatus map_status;
         };
         BufferMapResult result;
 
         // Map the staging buffer for reading.
+        __atomic_test_and_set(&result.map_complete, __ATOMIC_RELAXED);
         wgpuBufferMapAsync(
             staging_buffer, WGPUMapMode_Read, 0, num_bytes,
             [](WGPUBufferMapAsyncStatus status, void *userdata) {
                 BufferMapResult *result = (BufferMapResult *)userdata;
                 result->map_status = status;
-                __atomic_store_n(&result->map_complete, true, __ATOMIC_RELEASE);
+                __atomic_clear(&result->map_complete, __ATOMIC_RELEASE);
             },
             &result);
-        while (!__atomic_load_n(&result.map_complete, __ATOMIC_ACQUIRE)) {
+
+        while (__atomic_test_and_set(&result.map_complete, __ATOMIC_ACQUIRE)) {
             wgpuDeviceTick(context.device);
         }
         if (result.map_status != WGPUBufferMapAsyncStatus_Success) {
