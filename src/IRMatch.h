@@ -1490,11 +1490,12 @@ struct Intrin {
         // Assuming the args have the same type as the intrinsic is incorrect in
         // general. But for the intrinsics we can fold (just shifts), the LHS
         // has the same type as the intrinsic, and we can always treat the RHS
-        // as a signed int, because we're using 64 bits for it. (TODO: Dillon,
-        // is this legit?)
+        // as a signed int, because we're using 64 bits for it.
         std::get<0>(args).make_folded_const(val, ty, state);
         halide_type_t signed_ty = ty;
         signed_ty.code = halide_type_int;
+        // We can just directly get the second arg here, because we only want to
+        // instantiate this method for shifts, which have two args.
         std::get<1>(args).make_folded_const(arg1, signed_ty, state);
 
         if (intrin == Call::shift_left) {

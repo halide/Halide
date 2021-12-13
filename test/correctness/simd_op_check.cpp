@@ -152,8 +152,6 @@ public:
             check("pavgw", 4 * w, u16((u32(u16_1) + u32(u16_2) + 1) >> 1));
 
             // Rounding right shifts should also use pavg
-            check("pavgb", 8 * w, u8((u16(u8_1) + 15) >> 4));
-            check("pavgw", 4 * w, u16((u32(u16_1) + 15) >> 4));
             check("pavgb", 8 * w, rounding_shift_right(u8_1, 2));
             check("pavgw", 4 * w, rounding_shift_right(u16_1, 2));
 
