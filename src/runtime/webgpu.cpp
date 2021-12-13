@@ -4,8 +4,7 @@
 #include "printer.h"
 #include "scoped_spin_lock.h"
 
-// TODO: Discover this with CMake, and upstream toggle for stdint.h.
-#include "webgpu/webgpu.h"
+#include "mini_webgpu.h"
 
 namespace Halide {
 namespace Runtime {
