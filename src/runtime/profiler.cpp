@@ -287,9 +287,7 @@ WEAK void halide_profiler_memory_free(void *user_context,
 }
 
 WEAK void halide_profiler_report_unlocked(void *user_context, halide_profiler_state *s) {
-
-    char line_buf[1024];
-    Printer<StringStreamPrinter, sizeof(line_buf)> sstr(user_context, line_buf);
+    StringStreamPrinter<1024> sstr(user_context);
 
     for (halide_profiler_pipeline_stats *p = s->pipelines; p;
          p = (halide_profiler_pipeline_stats *)(p->next)) {

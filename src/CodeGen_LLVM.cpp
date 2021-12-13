@@ -1392,6 +1392,20 @@ void CodeGen_LLVM::visit(const Cast *op) {
         return;
     }
 
+    if (const Call *c = Call::as_intrinsic(op->value, {Call::lerp})) {
+        // We want to codegen a cast of a lerp as a single thing, because it can
+        // be done more intelligently than a lerp followed by a cast.
+        Type t = upgrade_type_for_arithmetic(c->type);
+        Type wt = upgrade_type_for_arithmetic(c->args[2].type());
+        Expr e = lower_lerp(op->type,
+                            cast(t, c->args[0]),
+                            cast(t, c->args[1]),
+                            cast(wt, c->args[2]),
+                            target);
+        codegen(e);
+        return;
+    }
+
     value = codegen(op->value);
     llvm::Type *llvm_dst = llvm_type_of(dst);
 
@@ -2704,11 +2718,11 @@ void CodeGen_LLVM::visit(const Call *op) {
         // TODO: This might be surprising behavior?
         Type t = upgrade_type_for_arithmetic(op->type);
         Type wt = upgrade_type_for_arithmetic(op->args[2].type());
-        Expr e = lower_lerp(cast(t, op->args[0]),
+        Expr e = lower_lerp(op->type,
+                            cast(t, op->args[0]),
                             cast(t, op->args[1]),
                             cast(wt, op->args[2]),
                             target);
-        e = cast(op->type, e);
         codegen(e);
     } else if (op->is_intrinsic(Call::popcount)) {
         internal_assert(op->args.size() == 1);

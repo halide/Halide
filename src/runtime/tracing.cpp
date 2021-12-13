@@ -208,8 +208,7 @@ WEAK int32_t halide_default_trace(void *user_context, const halide_trace_event_t
         }
 
     } else {
-        uint8_t buffer[4096];
-        Printer<StringStreamPrinter, sizeof(buffer)> ss(user_context, (char *)buffer);
+        StringStreamPrinter<4096> ss(user_context);
 
         // Round up bits to 8, 16, 32, or 64
         int print_bits = 8;
@@ -307,11 +306,10 @@ WEAK int32_t halide_default_trace(void *user_context, const halide_trace_event_t
         }
 
         ss << "\n";
-        ss.msan_annotate_is_initialized();
 
         {
             ScopedSpinLock lock(&halide_trace_file_lock);
-            halide_print(user_context, (const char *)buffer);
+            halide_print(user_context, ss.str());
         }
     }
 
