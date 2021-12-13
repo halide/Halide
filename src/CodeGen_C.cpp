@@ -2024,7 +2024,13 @@ string CodeGen_C::print_assignment(Type t, const std::string &rhs) {
     if (cached == cache.end()) {
         id = unique_name('_');
         const char *const_flag = output_kind == CPlusPlusImplementation ? "const " : "";
-        stream << get_indent() << print_type(t, AppendSpace) << const_flag << id << " = " << rhs << ";\n";
+        if (t.is_handle()) {
+            // Don't print void *, which might lose useful type information. just use auto.
+            stream << get_indent() << "auto *";
+        } else {
+            stream << get_indent() << print_type(t, AppendSpace);
+        }
+        stream << const_flag << id << " = " << rhs << ";\n";
         cache[rhs] = id;
     } else {
         id = cached->second;
@@ -2051,7 +2057,12 @@ void CodeGen_C::close_scope(const std::string &comment) {
 }
 
 void CodeGen_C::visit(const Variable *op) {
-    id = print_name(op->name);
+    if (starts_with(op->name, "::")) {
+        // This is the name of a global, so we can't modify it.
+        id = op->name;
+    } else {
+        id = print_name(op->name);
+    }
 }
 
 void CodeGen_C::visit(const Cast *op) {
@@ -2429,7 +2440,7 @@ void CodeGen_C::visit(const Call *op) {
             rhs << shape_name;
         } else {
             // Emit a declaration like:
-            // struct {const int f_0, const char f_1, const int f_2} foo = {3, 'c', 4};
+            // struct {int f_0, int f_1, char f_2} foo = {3, 4, 'c'};
 
             // Get the args
             vector<string> values;
@@ -2440,7 +2451,7 @@ void CodeGen_C::visit(const Call *op) {
             // List the types.
             indent++;
             for (size_t i = 0; i < op->args.size(); i++) {
-                stream << get_indent() << "const " << print_type(op->args[i].type()) << " f_" << i << ";\n";
+                stream << get_indent() << print_type(op->args[i].type()) << " f_" << i << ";\n";
             }
             indent--;
             string struct_name = unique_name('s');
@@ -2467,134 +2478,23 @@ void CodeGen_C::visit(const Call *op) {
             }
             rhs << "(&" << struct_name << ")";
         }
-    } else if (op->is_intrinsic(Call::define_typed_struct)) {
-        // Emit a declaration like:
-        //
-        //    struct foo {const int f_0, const char f_1, const int f_2};
-        //
-        // rhs is set to a nullptr of the new type.
-
-        // Declares a struct type. Returns a null pointer of the new type.
-        const size_t args_size = op->args.size();
-        internal_assert(args_size >= 1);
-
-        const StringImm *str_imm = op->args[0].as<StringImm>();
-        internal_assert(str_imm != nullptr);
-        std::string name = c_print_name(str_imm->value, false);
-
-        stream << get_indent() << "struct " << name;
-        stream << " {\n";
-        // List the types.
-        indent++;
-        for (size_t i = 1; i < args_size; i++) {
-            stream << get_indent() << print_type(op->args[i].type(), AppendSpace) << "f_" << i - 1 << ";\n";
-        }
-        indent--;
-        stream << get_indent() << "};\n";
-        rhs << "((" << name << " *)nullptr)";
-    } else if (op->is_intrinsic(Call::forward_declare_typed_struct)) {
-        // Emit a declaration like:
-        //
-        //   struct foo;
-        //
-        // rhs is set to a nullptr of the given type.
-        internal_assert(op->args.size() == 1);
-
-        const StringImm *str_imm = op->args[0].as<StringImm>();
-        internal_assert(str_imm != nullptr);
-        std::string name = c_print_name(str_imm->value, false);
-
-        if (!starts_with(name, "halide_")) {
-            // Types beginning with halide_ don't need forward declaration (e.g. halide_buffer_t).
-            stream << get_indent() << "struct " << name << ";\n";
-        }
-        rhs << "((" << name << " *)nullptr)";
-    } else if (op->is_intrinsic(Call::make_typed_struct)) {
-        internal_assert(op->args.size() >= 2);
-
-        string type_carrier = print_expr(op->args[0]);
-        const int64_t *count_ptr = as_const_int(op->args[1]);
-        internal_assert(count_ptr != nullptr);
-        int64_t count = *count_ptr;
-
-        // Get the args
-        vector<string> values;
-        for (size_t i = 2; i < op->args.size(); i++) {
-            values.push_back(print_expr(op->args[i]));
-        }
-        string struct_name = unique_name('s');
-        string array_specifier;
-        if (count > 0) {
-            array_specifier = "[]";
-        }
-        stream << get_indent() << "std::remove_pointer<decltype(" << type_carrier << ")>::type " << struct_name << array_specifier << " = {\n";
-        // List the values.
-        indent++;
-        int item = 0;
-        size_t initializer_count = values.size() / count;
-        internal_assert((values.size() % count) == 0);
-        do {
-            if (count > 0) {
-                stream << get_indent() << "{\n";
-                indent++;
-            }
-            for (size_t i = 0; i < initializer_count; i++) {
-                stream << get_indent() << values[i + item * initializer_count];
-                if (i < op->args.size() - 1) {
-                    stream << ",";
-                }
-                stream << "\n";
-            }
-            if (count > 0) {
-                indent--;
-                stream << get_indent() << "},\n";
-            }
-            item += 1;
-        } while (item < count);
-        indent--;
-        stream << get_indent() << "};\n";
-        // Return a pointer to it of the appropriate type
-
-        // TODO: This is dubious type-punning. We really need to
-        // find a better way to do this. We dodge the problem for
-        // the specific case of buffer shapes in the case above.
-        if (op->type.handle_type) {
-            rhs << "(" << print_type(op->type) << ")";
-        }
-        rhs << "(&" << struct_name << ((count > 0) ? "[0])" : ")");
     } else if (op->is_intrinsic(Call::load_typed_struct_member)) {
-        // Given an instance of a typed_struct, a definition of a typed_struct,
-        // and the index of a slot, load the value of that slot.
+        // Given a void * instance of a typed struct, an in-scope prototype
+        // struct of the same type, and the index of a slot, load the value of
+        // that slot.
         //
-        // An instance of a typed_struct is an Expr of Handle() type that has been
-        // created by a call to make_typed_struct.
-        //
-        // A definiton of a typed_struct is an Expr of Handle() type that has been
-        // created by a call to define_typed_struct.
-        //
-        // Note that both the instance and definition are needed because the instance
-        // is often a void* by the time it is -- it will have been been passed through
-        // an API that takes an opaque pointer as a void*, and needs explicit casting
-        // back to the correct type for safe field access.
-        //
-        // It is assumed that the slot index is valid for the given typed_struct.
+        // It is assumed that the slot index is valid for the given typed struct.
         //
         // TODO: this comment is replicated in CodeGen_LLVM and should be updated there too.
         // TODO: https://github.com/halide/Halide/issues/6468
 
         internal_assert(op->args.size() == 3);
-        std::string typed_struct_instance = print_expr(op->args[0]);
-        std::string typed_struct_definition = print_expr(op->args[1]);
-        const uint64_t *index = as_const_uint(op->args[2]);
+        std::string struct_instance = print_expr(op->args[0]);
+        std::string struct_prototype = print_expr(op->args[1]);
+        const int64_t *index = as_const_int(op->args[2]);
         internal_assert(index != nullptr);
-        rhs << "((decltype(" << typed_struct_definition << "))" << typed_struct_instance << ")->"
-            << "f_" << *index;
-    } else if (op->is_intrinsic(Call::resolve_function_name)) {
-        internal_assert(op->args.size() == 1);
-        const Call *decl_call = op->args[0].as<Call>();
-        internal_assert(decl_call != nullptr);
-        std::string c_name = c_print_name(decl_call->name, false);
-        rhs << "(&" << c_name << ")";
+        rhs << "((decltype(" << struct_prototype << "))"
+            << struct_instance << ")->f_" << *index;
     } else if (op->is_intrinsic(Call::get_user_context)) {
         internal_assert(op->args.empty());
         rhs << "_ucon";
@@ -2644,7 +2544,7 @@ void CodeGen_C::visit(const Call *op) {
                << "" << struct_name << "(void *ucon, void *a) : ucon(ucon), arg((void *)a) {} "
                << "~" << struct_name << "() { " << fn->value + "(ucon, arg); } "
                << "} " << instance_name << "(_ucon, " << arg << ");\n";
-        rhs << print_expr(0);
+        rhs << "(void *)nullptr";
     } else if (op->is_intrinsic(Call::div_round_to_zero)) {
         rhs << print_expr(op->args[0]) << " / " << print_expr(op->args[1]);
     } else if (op->is_intrinsic(Call::mod_round_to_zero)) {
@@ -2697,21 +2597,6 @@ void CodeGen_C::visit(const Call *op) {
         stream << get_indent() << rhs.str() << ";\n";
         // Make an innocuous assignment value for our caller (probably an Evaluate node) to ignore.
         print_assignment(op->type, "0");
-    } else if (op->is_intrinsic(Call::define_typed_struct) ||
-               op->is_intrinsic(Call::make_typed_struct) ||
-               op->is_intrinsic(Call::load_typed_struct_member) ||
-               op->is_intrinsic(Call::resolve_function_name)) {
-        // print_assigment will get the type info wrong for this case.
-        std::string rhs_str = rhs.str();
-        auto cached = cache.find(rhs_str);
-        if (cached == cache.end()) {
-            id = unique_name('_');
-            stream << get_indent() << "auto " << id << " = " << rhs_str << ";\n";
-        } else {
-            id = cached->second;
-        }
-        // Avoid unused variable warnings.
-        stream << get_indent() << "halide_unused(" << id << ");\n";
     } else {
         print_assignment(op->type, rhs.str());
     }
@@ -3376,7 +3261,7 @@ extern "C" {
 HALIDE_FUNCTION_ATTRS
 int test1(struct halide_buffer_t *_buf_buffer, float _alpha, int32_t _beta, void const *__user_context) {
  void * const _ucon = const_cast<void *>(__user_context);
- void *_0 = _halide_buffer_get_host(_buf_buffer);
+ auto *_0 = _halide_buffer_get_host(_buf_buffer);
  auto _buf = _0;
  halide_unused(_buf);
  {
@@ -3404,7 +3289,7 @@ int test1(struct halide_buffer_t *_buf_buffer, float _alpha, int32_t _beta, void
    {
     char b0[1024];
     snprintf(b0, 1024, "%lld%s", (long long)(3), "\n");
-    char const *_8 = b0;
+    auto *_8 = b0;
     halide_print(_ucon, _8);
     int32_t _9 = 0;
     int32_t _10 = return_second(_9, 3);

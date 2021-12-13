@@ -21,55 +21,14 @@ namespace {
 LoweredFunc generate_closure_ir(const std::string &name, const Closure &closure,
                                 std::vector<LoweredArgument> &args, int closure_arg_index,
                                 const Stmt &body, const Target &t) {
-    // Figure out if user_context has to be dealt with here.
+
     std::string closure_arg_name = unique_name("closure_arg");
     args[closure_arg_index] = LoweredArgument(closure_arg_name, Argument::Kind::InputScalar,
                                               type_of<uint8_t *>(), 0, ArgumentEstimates());
-    Expr closure_arg = Variable::make(type_of<void *>(), closure_arg_name);
 
-    Stmt wrapped_body = body;
-    const size_t closure_entries_count = closure.vars.size() + closure.buffers.size();
-    std::vector<Expr> type_args(closure_entries_count + 1);
-    std::string closure_type_name = unique_name("closure_struct_type");
-    Expr struct_type = Variable::make(Handle(), closure_type_name);
-    type_args[0] = StringImm::make(closure_type_name);
+    Expr closure_arg = Variable::make(closure.pack_into_struct().type(), closure_arg_name);
 
-    const auto make_load_typed_struct_member = [&closure_arg, &struct_type](const Type &t, int struct_index) -> Expr {
-        return Call::make(t, Call::load_typed_struct_member,
-                          {closure_arg, struct_type, make_const(UInt(32), struct_index)},
-                          Call::PureIntrinsic);
-    };
-
-    // Build the loads, then add them in reverse order, so that the final generated
-    // code is ascending by struct_index, which may provide marginally better code.
-    std::vector<std::pair<std::string, Expr>> load_lets;
-    load_lets.reserve(closure_entries_count);
-
-    int struct_index = 0;
-    for (const auto &v : closure.vars) {
-        const auto &name = v.first;
-        const auto &type = v.second;
-        type_args[struct_index + 1] = make_zero(type);
-        load_lets.emplace_back(name, make_load_typed_struct_member(type, struct_index));
-        struct_index++;
-    }
-    for (const auto &b : closure.buffers) {
-        const auto &name = b.first;
-        type_args[struct_index + 1] = make_zero(type_of<void *>());
-        load_lets.emplace_back(name, make_load_typed_struct_member(type_of<void *>(), struct_index));
-        struct_index++;
-    }
-
-    for (auto it = load_lets.rbegin(); it != load_lets.rend(); ++it) {
-        wrapped_body = LetStmt::make(it->first, it->second, wrapped_body);
-    }
-
-    Expr struct_type_decl = Call::make(Handle(), Call::define_typed_struct, type_args, Call::PureIntrinsic);
-    wrapped_body = Block::make(Evaluate::make(closure_arg), wrapped_body);
-    wrapped_body = LetStmt::make(closure_type_name, struct_type_decl, wrapped_body);
-
-    // Call simplify() to remove any load_struct_member() calls we don't use.
-    wrapped_body = simplify(wrapped_body);
+    Stmt wrapped_body = closure.unpack_from_struct(closure_arg, body);
 
     // TODO(zvookin): Figure out how we want to handle name mangling of closures.
     // For now, the C++ backend makes them extern "C" so they have to be NameMangling::C.
@@ -77,39 +36,6 @@ LoweredFunc generate_closure_ir(const std::string &name, const Closure &closure,
     if (t.has_feature(Target::Debug)) {
         debug_arguments(&result, t);
     }
-    return result;
-}
-
-Expr allocate_closure(const std::string &name, const Closure &closure) {
-    const size_t closure_entries_count = closure.vars.size() + closure.buffers.size();
-
-    std::vector<Expr> closure_elements;
-    closure_elements.reserve(closure_entries_count + 2);
-    closure_elements.emplace_back(Expr());  // Place holder for closure struct type
-    closure_elements.emplace_back(1);
-
-    std::vector<Expr> closure_types;
-    closure_types.reserve(closure_entries_count + 1);
-    closure_types.emplace_back(unique_name(name + "_type"));
-
-    for (const auto &v : closure.vars) {
-        Expr var = Variable::make(v.second, v.first);
-        closure_elements.emplace_back(var);
-        closure_types.emplace_back(var);
-    }
-    for (const auto &b : closure.buffers) {
-        Expr ptr_var = Variable::make(type_of<void *>(), b.first);
-        closure_elements.emplace_back(ptr_var);
-        closure_types.emplace_back(ptr_var);
-    }
-    Expr closure_struct_type = Call::make(Handle(), Call::define_typed_struct, closure_types, Call::PureIntrinsic);
-    std::string closure_type_name = unique_name("closure_struct_type");
-    Expr struct_type = Variable::make(Handle(), closure_type_name);
-
-    closure_elements[0] = struct_type;
-
-    Expr result = Let::make(closure_type_name, closure_struct_type,
-                            Call::make(type_of<void *>(), Call::make_typed_struct, closure_elements, Call::Intrinsic));
     return result;
 }
 
@@ -298,12 +224,10 @@ struct LowerParallelTasks : public IRMutator {
         }
 
         int num_tasks = (int)(tasks.size());
-        std::vector<Expr> tasks_array_args(2);
-        tasks_array_args[0] = Call::make(type_of<halide_parallel_task_t *>(), Call::forward_declare_typed_struct, {StringImm::make("halide_parallel_task_t")}, Call::PureIntrinsic);
-        tasks_array_args[1] = num_tasks;
+        std::vector<Expr> tasks_array_args;
 
         std::string closure_name = unique_name("parallel_closure");
-        Expr closure_struct_allocation = allocate_closure(closure_name, closure);
+        Expr closure_struct_allocation = closure.pack_into_struct();
         Expr closure_struct = Variable::make(Handle(), closure_name);
 
         const bool has_task_parent = !task_parents.empty() && task_parents.top_ref().defined();
@@ -323,20 +247,14 @@ struct LowerParallelTasks : public IRMutator {
                                            t.semaphores.empty() &&
                                            !has_task_parent);
 
-            Expr semaphore_type = Call::make(type_of<halide_semaphore_acquire_t *>(), Call::forward_declare_typed_struct,
-                                             {StringImm::make("halide_semaphore_acquire_t")}, Call::PureIntrinsic);
             std::string semaphores_array_name = unique_name("task_semaphores");
             Expr semaphores_array;
-            if (!t.semaphores.empty()) {
-                std::vector<Expr> semaphore_args(2 + t.semaphores.size() * 2);
-                semaphore_args[0] = semaphore_type;
-                semaphore_args[1] = (int)t.semaphores.size();
-                for (int i = 0; i < (int)t.semaphores.size(); i++) {
-                    semaphore_args[2 + i * 2] = t.semaphores[i].semaphore;
-                    semaphore_args[2 + i * 2 + 1] = t.semaphores[i].count;
-                }
-                semaphores_array = Call::make(type_of<halide_semaphore_acquire_t *>(), Call::make_typed_struct, semaphore_args, Call::PureIntrinsic);
+            std::vector<Expr> semaphore_args(t.semaphores.size() * 2);
+            for (int i = 0; i < (int)t.semaphores.size(); i++) {
+                semaphore_args[i * 2] = t.semaphores[i].semaphore;
+                semaphore_args[i * 2 + 1] = t.semaphores[i].count;
             }
+            semaphores_array = Call::make(type_of<halide_semaphore_acquire_t *>(), Call::make_struct, semaphore_args, Call::PureIntrinsic);
 
             Expr closure_task_parent;
             std::vector<LoweredArgument> closure_args(use_parallel_for ? 3 : 5);
@@ -388,33 +306,24 @@ struct LowerParallelTasks : public IRMutator {
                                                                      closure_arg_index, t.body, target));
 
             if (use_parallel_for) {
-                std::vector<Expr> function_decl_args(3);
-                function_decl_args[0] = make_zero(type_of<void *>());
-                function_decl_args[1] = make_zero(Int(32));
-                function_decl_args[2] = make_zero(type_of<uint8_t *>());
-                Expr function_decl_call = Call::make(Int(32), new_function_name, function_decl_args, Call::Extern);
-
                 std::vector<Expr> args(4);
-                // CodeGen adds user_context for us apparently.
-                //                args[0] = Call::make(type_of<void *>(), Call::get_user_context, {}, Call::PureIntrinsic);
-                args[0] = Call::make(type_of<const void *>(), Call::resolve_function_name, {function_decl_call}, Call::PureIntrinsic);
+                // Codegen will add user_context for us
+
+                // Prefix the function name with "::" as we would in C++ to make
+                // it clear we're talking about something in global scope in
+                // case some joker names an intermediate Func or Var the same
+                // name as the pipeline. This prefix works transparently in the
+                // C++ backend.
+                args[0] = Variable::make(Handle(), "::" + new_function_name);
                 args[1] = t.min;
                 args[2] = t.extent;
                 args[3] = Cast::make(type_of<uint8_t *>(), closure_struct);
                 result = Call::make(Int(32), "halide_do_par_for", args, Call::Extern);
             } else {
-                std::vector<Expr> function_decl_args(5);
-                function_decl_args[0] = make_zero(type_of<void *>());
-                function_decl_args[1] = make_zero(Int(32));
-                function_decl_args[2] = make_zero(Int(32));
-                function_decl_args[3] = make_zero(type_of<uint8_t *>());
-                function_decl_args[4] = make_zero(type_of<void *>());
-                Expr function_decl_call = Call::make(Int(32), new_function_name, function_decl_args, Call::Extern);
-
-                tasks_array_args.emplace_back(Call::make(type_of<const void *>(), Call::resolve_function_name, {function_decl_call}, Call::PureIntrinsic));
+                tasks_array_args.emplace_back(Variable::make(Handle(), "::" + new_function_name));
                 tasks_array_args.emplace_back(Cast::make(type_of<uint8_t *>(), closure_struct));
                 tasks_array_args.emplace_back(StringImm::make(t.name));
-                tasks_array_args.emplace_back(semaphores_array.defined() ? semaphores_array : semaphore_type);
+                tasks_array_args.emplace_back(semaphores_array);
                 tasks_array_args.emplace_back((int)t.semaphores.size());
                 tasks_array_args.emplace_back(t.min);
                 tasks_array_args.emplace_back(t.extent);
@@ -423,9 +332,9 @@ struct LowerParallelTasks : public IRMutator {
             }
         }
 
-        if (tasks_array_args.size() > 2) {
+        if (!tasks_array_args.empty()) {
             // Allocate task list array
-            Expr tasks_list = Call::make(Handle(), Call::make_typed_struct, tasks_array_args, Call::PureIntrinsic);
+            Expr tasks_list = Call::make(Handle(), Call::make_struct, tasks_array_args, Call::PureIntrinsic);
             Expr user_context = Call::make(type_of<void *>(), Call::get_user_context, {}, Call::PureIntrinsic);
             Expr task_parent = has_task_parent ? task_parents.top() : make_zero(Handle());
             result = Call::make(Int(32), "halide_do_parallel_tasks",
@@ -433,10 +342,12 @@ struct LowerParallelTasks : public IRMutator {
                                 Call::Extern);
         }
 
-        result = Let::make(closure_name, closure_struct_allocation, result);
         std::string closure_result_name = unique_name("closure_result");
         Expr closure_result = Variable::make(Int(32), closure_result_name);
-        return LetStmt::make(closure_result_name, result, AssertStmt::make(closure_result == 0, closure_result));
+        Stmt stmt = AssertStmt::make(closure_result == 0, closure_result);
+        stmt = LetStmt::make(closure_result_name, result, stmt);
+        stmt = LetStmt::make(closure_name, closure_struct_allocation, stmt);
+        return stmt;
     }
 
     void get_parallel_tasks(const Stmt &s, std::vector<ParallelTask> &result, std::pair<std::string, int> prefix) {

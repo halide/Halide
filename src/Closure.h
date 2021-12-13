@@ -90,11 +90,19 @@ public:
      **/
     void include(const Stmt &s, const std::string &loop_variable = "");
 
-    /** External variables referenced. */
+    /** External variables referenced. There's code that assumes iterating over
+     * this repeatedly gives a consistent order, so don't swap out the data type
+     * for something non-deterministic. */
     std::map<std::string, Type> vars;
 
     /** External allocations referenced. */
     std::map<std::string, Buffer> buffers;
+
+    /** Pack a closure into a struct. */
+    Expr pack_into_struct() const;
+
+    /** Unpack a closure around a Stmt, putting all the names in scope. */
+    Stmt unpack_from_struct(const Expr &, const Stmt &) const;
 };
 
 }  // namespace Internal
