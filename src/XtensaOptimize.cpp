@@ -1011,7 +1011,7 @@ private:
             // We need to lower lerps now to optimize the arithmetic
             // that they generate.
             internal_assert(op->args.size() == 3);
-            return mutate(lower_lerp(op->args[0], op->args[1], op->args[2], target));
+            return mutate(lower_lerp(op->type, op->args[0], op->args[1], op->args[2], target));
         } else if (op->is_intrinsic(Call::absd) && op->type.is_vector() && op->type.is_uint() && (op->type.bits() == 16)) {
             internal_assert(op->args.size() == 2);
             return Call::make(op->type, "halide_xtensa_absd_i16",
