@@ -98,6 +98,7 @@ set(HEADER_FILES
     LLVM_Runtime_Linker.h
     LoopCarry.h
     Lower.h
+    LowerParallelTasks.h
     LowerWarpShuffles.h
     MainPage.h
     MatlabWrapper.h
@@ -258,6 +259,7 @@ set(SOURCE_FILES
     LLVM_Runtime_Linker.cpp
     LoopCarry.cpp
     Lower.cpp
+    LowerParallelTasks.cpp
     LowerWarpShuffles.cpp
     MatlabWrapper.cpp
     Memoization.cpp

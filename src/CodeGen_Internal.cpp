@@ -13,80 +13,8 @@ namespace Halide {
 namespace Internal {
 
 using std::string;
-using std::vector;
 
 using namespace llvm;
-
-namespace {
-
-vector<llvm::Type *> llvm_types(const Closure &closure, llvm::StructType *halide_buffer_t_type, LLVMContext &context) {
-    vector<llvm::Type *> res;
-    for (const auto &v : closure.vars) {
-        res.push_back(llvm_type_of(&context, v.second));
-    }
-    for (const auto &b : closure.buffers) {
-        res.push_back(llvm_type_of(&context, b.second.type)->getPointerTo());
-        res.push_back(halide_buffer_t_type->getPointerTo());
-    }
-    return res;
-}
-
-}  // namespace
-
-StructType *build_closure_type(const Closure &closure,
-                               llvm::StructType *halide_buffer_t_type,
-                               LLVMContext *context) {
-    StructType *struct_t = StructType::create(*context, "closure_t");
-    struct_t->setBody(llvm_types(closure, halide_buffer_t_type, *context), false);
-    return struct_t;
-}
-
-void pack_closure(llvm::StructType *type,
-                  Value *dst,
-                  const Closure &closure,
-                  const Scope<Value *> &src,
-                  llvm::StructType *halide_buffer_t_type,
-                  IRBuilder<> *builder) {
-    // type, type of dst should be a pointer to a struct of the type returned by build_type
-    int idx = 0;
-
-    auto add_to_closure = [&](const std::string &name) {
-        llvm::Type *t = type->elements()[idx];
-        Value *ptr = builder->CreateConstInBoundsGEP2_32(type, dst, 0, idx++);
-        Value *val = src.get(name);
-        val = builder->CreateBitCast(val, t);
-        builder->CreateStore(val, ptr);
-    };
-
-    for (const auto &v : closure.vars) {
-        add_to_closure(v.first);
-    }
-    for (const auto &b : closure.buffers) {
-        add_to_closure(b.first);
-    }
-}
-
-void unpack_closure(const Closure &closure,
-                    Scope<Value *> &dst,
-                    llvm::StructType *type,
-                    Value *src,
-                    IRBuilder<> *builder) {
-    // type, type of src should be a pointer to a struct of the type returned by build_type
-    int idx = 0;
-
-    auto load_from_closure = [&](const std::string &name) {
-        Value *ptr = builder->CreateConstInBoundsGEP2_32(type, src, 0, idx++);
-        LoadInst *load = builder->CreateLoad(ptr->getType()->getPointerElementType(), ptr);
-        dst.push(name, load);
-        load->setName(name);
-    };
-    for (const auto &v : closure.vars) {
-        load_from_closure(v.first);
-    }
-    for (const auto &b : closure.buffers) {
-        load_from_closure(b.first);
-    }
-}
 
 llvm::Type *llvm_type_of(LLVMContext *c, Halide::Type t) {
     if (t.lanes() == 1) {
@@ -209,6 +137,7 @@ bool function_takes_user_context(const std::string &name) {
         "_halide_buffer_crop",
         "_halide_buffer_retire_crop_after_extern_stage",
         "_halide_buffer_retire_crops_after_extern_stage",
+        "_halide_hexagon_do_par_for",
     };
     for (const char *user_context_runtime_func : user_context_runtime_funcs) {
         if (name == user_context_runtime_func) {

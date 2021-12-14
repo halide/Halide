@@ -24,14 +24,17 @@ int main(int argc, char **argv) {
         g.hexagon().vectorize(x, 32);
         f.vectorize(x, 32);
     }
+    printf("Using Target = %s\n", target.to_string().c_str());
 
-    Buffer<int> im = g.realize({64, 64, 64});
+    Buffer<int> im = g.realize({64, 64, 64}, target);
 
     for (int x = 0; x < 64; x++) {
         for (int y = 0; y < 64; y++) {
             for (int z = 0; z < 64; z++) {
-                if (im(x, y, z) != x * y + z * 3 + 3) {
-                    printf("im(%d, %d, %d) = %d\n", x, y, z, im(x, y, z));
+                const int expected = x * y + z * 3 + 3;
+                const int actual = im(x, y, z);
+                if (actual != expected) {
+                    fprintf(stderr, "im(%d, %d, %d) = %d, expected %d\n", x, y, z, actual, expected);
                     return -1;
                 }
             }
