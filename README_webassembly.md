@@ -80,6 +80,56 @@ environment and are disabled).
 In sum: don't plan on using Halide JIT mode with Wasm unless you are working on
 the Halide library itself.
 
+## Using V8 as the interpreter
+
+There is experimental support for using V8 as the interpreter in JIT mode, rather than WABT.
+This is enabled by the CMake command line options `-DWITH_V8=ON -DWITH_WABT=OFF` (only one of them can be used at a time).
+You must build V8 locally V8, then specify the path to the library and headers as CMake options.
+This is currently only tested on x86-64-Linux and requires v8 version 9.8.177 as a minimum.
+
+The canonical instructions to build V8 are at
+[v8.dev](https://v8.dev/docs/build), and [there are examples for embedding
+v8](https://v8.dev/docs/embed). The process for Halide is summarized below.
+
+- Install
+  [`depot_tools`](https://commondatastorage.googleapis.com/chrome-infra-docs/flat/depot_tools/docs/html/depot_tools_tutorial.html#_setting_up)
+- Fetch v8 source code (and install required dependencies):
+    ```
+    $ gclient
+    $ mkdir ~/v8 && cd ~/v8
+    $ fetch v8
+    $ cd ~/v8/v8
+    $ git checkout origin/9.8.177
+    ```
+- Create a build configuration: `tools/dev/v8gen.py x64.release.sample`
+- Turn off pointer compression: `echo 'v8_enable_pointer_compression = false' >> out.gn/x64.release.sample/args.gn`
+- Disable the GDB-JIT interface (conflicts with LLVM): `echo 'v8_enable_gdbjit = false' >> out.gn/x64.release.sample/args.gn`
+- Build the static library: `autoninja -C out.gn/x64.release.sample v8_monolith`
+
+With V8 built, we can pass the CMake options:
+
+- `V8_INCLUDE_PATH`, path to V8 includes, e.g. `$HOME/v8/v8/include`
+- `V8_LIB_PATH`, path to V8 static library, e.g. `$HOME/v8/v8/out.gn/x64.release.sample/obj/libv8_monolith.a`
+
+An example to configure Halide with V8 support, build and run an example test:
+
+```
+$ cd /path/to/halide
+$ export HL_TARGET=wasm-32-wasmrt-wasm_simd128
+$ export HL_JIT_TARGET=${HL_TARGET}
+$ cmake -G Ninja \
+      -DWITH_WABT=OFF \
+      -DWITH_V8=ON \
+      -DV8_INCLUDE_PATH=$HOME/v8/v8/include \
+      -DV8_LIB_PATH=$HOME/v8/v8/out.gn/x64.release.sample/obj/libv8_monolith.a \
+      -DHalide_TARGET=${HL_TARGET} \
+      /* other cmake settings here as appropriate */
+
+$ cmake --build .
+$ ctest -L "correctness|generator" -j
+```
+
+
 # To Use Halide For WebAssembly:
 
 -   Ensure WebAssembly is in LLVM_TARGETS_TO_BUILD; if you use the default

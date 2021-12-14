@@ -20,7 +20,7 @@
 
 // IWYU pragma: begin_exports
 
-#ifdef WITH_WABT
+#if WITH_WABT || WITH_V8
 #include <lld/Common/Driver.h>
 #endif
 #include <llvm/ADT/APFloat.h>
