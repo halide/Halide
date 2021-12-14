@@ -431,6 +431,8 @@ Target get_jit_target_from_environment() {
             << "HL_JIT_TARGET must match the host OS, architecture, and bit width.\n"
             << "HL_JIT_TARGET was " << target << ". "
             << "Host is " << host.to_string() << ".\n";
+        user_assert(!t.has_feature(Target::NoBoundsQuery))
+            << "The Halide JIT requires the use of bounds query, but HL_JIT_TARGET was specified with no_bounds_query: " << target;
         return t;
     }
 }
@@ -441,7 +443,7 @@ bool merge_string(Target &t, const std::string &target) {
     vector<string> tokens;
     size_t first_dash;
     while ((first_dash = rest.find('-')) != string::npos) {
-        //Internal::debug(0) << first_dash << ", " << rest << "\n";
+        // Internal::debug(0) << first_dash << ", " << rest << "\n";
         tokens.push_back(rest.substr(0, first_dash));
         rest = rest.substr(first_dash + 1);
     }

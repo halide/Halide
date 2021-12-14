@@ -18,14 +18,13 @@ int64_t sdiv(int64_t a, int64_t b) {
     return (a - ((a % b) + b) % b) / b;
 }
 
+int64_t srzdiv(int64_t a, int64_t b) {
+    return a / b;
+}
+
 bool u_method_0(int den, int sh_post, int bits) {
     uint64_t max = (1L << bits) - 1;
-    // for (int64_t num = 0; num <= max; num++) {
-    for (unsigned iter = 0; iter < 1000000UL; iter++) {
-        uint64_t num = r(0, max);
-        // Make sure we hit the extremes
-        if (iter == 0) num = 0;
-        if (iter == 1) num = max;
+    for (int64_t num = 0; num <= max; num++) {
         uint64_t result = num;
         result >>= sh_post;
         if (num / den != result) return false;
@@ -36,12 +35,7 @@ bool u_method_0(int den, int sh_post, int bits) {
 bool u_method_1(int den, int64_t mul, int sh_post, int bits) {
     uint64_t max = (1L << bits) - 1;
     if (mul > max) return false;
-    // for (uint64_t num = 0; num <= max; num++) {
-    for (unsigned iter = 0; iter < 1000000UL; iter++) {
-        uint64_t num = r(0, max);
-        // Make sure we hit the extremes
-        if (iter == 0) num = 0;
-        if (iter == 1) num = max;
+    for (uint64_t num = 0; num <= max; num++) {
         uint64_t result = num;
         result *= mul;
         result >>= bits;
@@ -55,12 +49,7 @@ bool u_method_1(int den, int64_t mul, int sh_post, int bits) {
 bool u_method_2(int den, int64_t mul, int sh_post, int bits) {
     uint64_t max = (1UL << bits) - 1;
     if (mul > max) return false;
-    // for (uint64_t num = 0; num <= max; num++) {
-    for (unsigned iter = 0; iter < 1000000UL; iter++) {
-        uint64_t num = r(0, max);
-        // Make sure we hit the extremes
-        if (iter == 0) num = 0;
-        if (iter == 1) num = max;
+    for (uint64_t num = 0; num <= max; num++) {
         uint64_t result = num;
         result *= mul;
         result >>= bits;
@@ -76,12 +65,7 @@ bool u_method_2(int den, int64_t mul, int sh_post, int bits) {
 bool u_method_3(int den, int64_t mul, int sh_post, int bits) {
     uint64_t max = (1UL << bits) - 1;
     if (mul > max) return false;
-    // for (uint64_t num = 0; num <= max; num++) {
-    for (unsigned iter = 0; iter < 1000000UL; iter++) {
-        uint64_t num = r(0, max);
-        // Make sure we hit the extremes
-        if (iter == 0) num = 0;
-        if (iter == 1) num = max;
+    for (uint64_t num = 0; num <= max; num++) {
         uint64_t result = num;
         result *= mul;
         result >>= bits;
@@ -96,12 +80,7 @@ bool u_method_3(int den, int64_t mul, int sh_post, int bits) {
 
 bool s_method_0(int den, int sh_post, int bits) {
     int64_t min = -(1L << (bits - 1)), max = (1L << (bits - 1)) - 1;
-    // for (int64_t num = min; num <= max; num++) {
-    for (int iter = 0; iter < 1000000L; iter++) {
-        int64_t num = r(min, max);
-        // Make sure we hit the extremes
-        if (iter == 0) num = min;
-        if (iter == 1) num = max;
+    for (int64_t num = min; num <= max; num++) {
         int64_t result = num;
         result >>= sh_post;
         if (sdiv(num, den) != result) return false;
@@ -112,17 +91,44 @@ bool s_method_0(int den, int sh_post, int bits) {
 bool s_method_1(int den, int64_t mul, int sh_post, int bits) {
     int64_t min = -(1 << (bits - 1)), max = (1 << (bits - 1)) - 1;
 
-    // for (int64_t num = min; num <= max; num++) {
-    for (int iter = 0; iter < 1000000L; iter++) {
-        int64_t num = r(min, max);
-        // Make sure we hit the extremes
-        if (iter == 0) num = min;
-        if (iter == 1) num = max;
+    for (int64_t num = min; num <= max; num++) {
         int64_t result = num;
         uint64_t xsign = result >> (bits - 1);
         uint64_t q0 = (mul * (xsign ^ result)) >> bits;
         result = xsign ^ (q0 >> sh_post);
         if (sdiv(num, den) != result) return false;
+    }
+    return true;
+}
+
+bool srz_method_0(int den, int sh_post, int bits) {
+    int64_t min = -(1L << (bits - 1)), max = (1L << (bits - 1)) - 1;
+    for (int64_t num = min; num <= max; num++) {
+        int64_t result = num;
+        result += (result >> (bits - 1)) & (den - 1);
+        result >>= sh_post;
+        if (srzdiv(num, den) != result) return false;
+    }
+    return true;
+}
+
+bool srz_method_1(int den, int64_t mul, int sh_post, int bits) {
+    int64_t min = -(1 << (bits - 1)), max = (1 << (bits - 1)) - 1;
+
+    for (int64_t num = min; num <= max; num++) {
+        int64_t result = num;
+        uint64_t xsign = result >> (bits - 1);
+        uint64_t q0 = (mul * result) >> bits;
+        result = (q0 >> sh_post);
+        uint64_t mask = (1ULL << bits) - 1;
+        result -= (xsign & mask);
+        // Fix-up the sign bits
+        result <<= (64 - bits);
+        result >>= (64 - bits);
+        if (srzdiv(num, den) != result) {
+            printf("Fail\n");
+            return false;
+        }
     }
     return true;
 }
@@ -182,6 +188,11 @@ int main(int argc, char **argv) {
                 fprintf(c_out, "const int64_t table_u%d[256][4] = {\n", bits);
             }
             for (int d = 0; d < 256; d++) {
+                if (runtime && d < 2) {
+                    fprintf(c_out, "    {0, 0, 0, 0}, // unused\n");
+                    continue;
+                }
+
                 int den = d;
                 if (den == 0) den = 256;
                 if (!runtime) {
@@ -214,7 +225,8 @@ int main(int argc, char **argv) {
                     goto next_unsigned;
                 }
 
-                for (int shift = 0; shift < 8; shift++) {
+                {
+                    int shift = 31 - __builtin_clz(den - 1);
                     int64_t mul = (1L << (bits + shift + 1)) / den - (1L << bits) + 1;
                     mul &= (1L << bits) - 1;
                     if (u_method_2(den, mul, shift, bits)) {
@@ -236,6 +248,10 @@ int main(int argc, char **argv) {
                 fprintf(c_out, "const int64_t table_s%d[256][4] = {\n", bits);
             }
             for (int d = 0; d < 256; d++) {
+                if (runtime && d < 2) {
+                    fprintf(c_out, "    {0, 0, 0, 0}, // unused\n");
+                    continue;
+                }
                 int den = d;
                 if (den == 0) den = 256;
                 if (!runtime) {
@@ -247,7 +263,8 @@ int main(int argc, char **argv) {
                     }
                 }
 
-                for (int shift = 0; shift < 8; shift++) {
+                {
+                    int shift = 31 - __builtin_clz(den - 1);
                     int64_t mul = (1L << (shift + bits)) / den + 1;
                     if (s_method_1(den, mul, shift, bits)) {
                         fprintf(c_out, "    {%d, 1, %lldLL, %d},\n", den, (long long)mul, shift);
@@ -256,6 +273,42 @@ int main(int argc, char **argv) {
                 }
                 fprintf(c_out, "ERROR! No solution found for signed %d\n", den);
             next_signed:;
+            }
+            fprintf(c_out, "};\n");
+            printf("Generating table%s_srz%d...\n", runtime ? "_runtime" : "", bits);
+            if (runtime) {
+                fprintf(h_out, "extern const int64_t table_runtime_srz%d[256][4];\n", bits);
+                fprintf(c_out, "const int64_t table_runtime_srz%d[256][4] = {\n", bits);
+            } else {
+                fprintf(h_out, "extern const int64_t table_srz%d[256][4];\n", bits);
+                fprintf(c_out, "const int64_t table_srz%d[256][4] = {\n", bits);
+            }
+            for (int d = 0; d < 256; d++) {
+                if (runtime && d < 2) {
+                    fprintf(c_out, "    {0, 0, 0, 0}, // unused\n");
+                    continue;
+                }
+                int den = d;
+                if (den == 0) den = 256;
+                if (!runtime) {
+                    for (int shift = 0; shift < 8; shift++) {
+                        if (srz_method_0(den, shift, bits)) {
+                            fprintf(c_out, "    {%d, 0, 0, %d},\n", den, shift);
+                            goto next_signedrz;
+                        }
+                    }
+                }
+
+                {
+                    int shift = 31 - __builtin_clz(den - 1);
+                    int64_t mul = (1L << (shift + bits)) / den + 1;
+                    if (srz_method_1(den, mul, shift, bits)) {
+                        fprintf(c_out, "    {%d, 1, %lldLL, %d},\n", den, (long long)mul, shift);
+                        goto next_signedrz;
+                    }
+                }
+                fprintf(c_out, "ERROR! No solution found for signed %d\n", den);
+            next_signedrz:;
             }
             fprintf(c_out, "};\n");
         }

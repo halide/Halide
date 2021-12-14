@@ -575,11 +575,12 @@ void halide_toc_impl(const char *file, int line) {
     debug(1) << t1.file << ":" << t1.line << " ... " << f << ":" << line << " : " << diff.count() * 1000 << " ms\n";
 }
 
-std::string c_print_name(const std::string &name) {
+std::string c_print_name(const std::string &name,
+                         bool prefix_underscore) {
     ostringstream oss;
 
     // Prefix an underscore to avoid reserved words (e.g. a variable named "while")
-    if (isalpha(name[0])) {
+    if (prefix_underscore && isalpha(name[0])) {
         oss << "_";
     }
 
@@ -782,6 +783,63 @@ void run_with_large_stack(const std::function<void()> &action) {
     }
 #endif
 
+#endif
+}
+
+// Portable bit-counting methods
+int popcount64(uint64_t x) {
+#ifdef _MSC_VER
+#if defined(_WIN64)
+    return __popcnt64(x);
+#else
+    return __popcnt((uint32_t)(x >> 32)) + __popcnt((uint32_t)(x & 0xffffffff));
+#endif
+#else
+    static_assert(sizeof(unsigned long long) >= sizeof(uint64_t), "");
+    return __builtin_popcountll(x);
+#endif
+}
+
+int clz64(uint64_t x) {
+    internal_assert(x != 0);
+#ifdef _MSC_VER
+    unsigned long r = 0;
+#if defined(_WIN64)
+    return _BitScanReverse64(&r, x) ? (63 - r) : 64;
+#else
+    if (_BitScanReverse(&r, (uint32_t)(x >> 32))) {
+        return (63 - (r + 32));
+    } else if (_BitScanReverse(&r, (uint32_t)(x & 0xffffffff))) {
+        return 63 - r;
+    } else {
+        return 64;
+    }
+#endif
+#else
+    static_assert(sizeof(unsigned long long) >= sizeof(uint64_t), "");
+    constexpr int offset = (sizeof(unsigned long long) - sizeof(uint64_t)) * 8;
+    return __builtin_clzll(x) + offset;
+#endif
+}
+
+int ctz64(uint64_t x) {
+    internal_assert(x != 0);
+#ifdef _MSC_VER
+    unsigned long r = 0;
+#if defined(_WIN64)
+    return _BitScanForward64(&r, x) ? r : 64;
+#else
+    if (_BitScanForward(&r, (uint32_t)(x & 0xffffffff))) {
+        return r;
+    } else if (_BitScanForward(&r, (uint32_t)(x >> 32))) {
+        return r + 32;
+    } else {
+        return 64;
+    }
+#endif
+#else
+    static_assert(sizeof(unsigned long long) >= sizeof(uint64_t), "");
+    return __builtin_ctzll(x);
 #endif
 }
 

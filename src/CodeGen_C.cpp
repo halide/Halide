@@ -1820,7 +1820,7 @@ void CodeGen_C::compile(const LoweredFunc &f, const std::map<std::string, std::s
     set_name_mangling_mode(name_mangling);
 
     std::vector<std::string> namespaces;
-    std::string simple_name = extract_namespaces(f.name, namespaces);
+    std::string simple_name = c_print_name(extract_namespaces(f.name, namespaces), false);
     if (!is_c_plus_plus_interface()) {
         user_assert(namespaces.empty()) << "Namespace qualifiers not allowed on function name if not compiling with Target::CPlusPlusNameMangling.\n";
     }
@@ -1888,11 +1888,13 @@ void CodeGen_C::compile(const LoweredFunc &f, const std::map<std::string, std::s
         stream << "}\n";
     }
 
-    if (f.linkage == LinkageType::ExternalPlusMetadata) {
+    if (f.linkage == LinkageType::ExternalPlusArgv || f.linkage == LinkageType::ExternalPlusMetadata) {
         // Emit the argv version
         emit_argv_wrapper(simple_name, args);
+    }
 
-        // And also the metadata.
+    if (f.linkage == LinkageType::ExternalPlusMetadata) {
+        // Emit the metadata.
         emit_metadata_getter(simple_name, args, metadata_name_map);
     }
 
@@ -1957,17 +1959,23 @@ void CodeGen_C::compile(const Buffer<> &buffer) {
         stream << "\n};\n";
     }
 
-    // Emit the shape (constant even for scalar buffers)
-    stream << "static const halide_dimension_t " << name << "_buffer_shape[] = {";
-    for (int i = 0; i < buffer.dimensions(); i++) {
-        stream << "halide_dimension_t(" << buffer.dim(i).min()
-               << ", " << buffer.dim(i).extent()
-               << ", " << buffer.dim(i).stride() << ")";
-        if (i < buffer.dimensions() - 1) {
-            stream << ", ";
+    std::string buffer_shape = "nullptr";
+    if (buffer.dimensions()) {
+        // Emit the shape -- note that we can't use this for scalar buffers because
+        // we'd emit a statement of the form "foo_buffer_shape[] = {}", and a zero-length
+        // array will make some compilers unhappy.
+        stream << "static const halide_dimension_t " << name << "_buffer_shape[] = {";
+        for (int i = 0; i < buffer.dimensions(); i++) {
+            stream << "halide_dimension_t(" << buffer.dim(i).min()
+                   << ", " << buffer.dim(i).extent()
+                   << ", " << buffer.dim(i).stride() << ")";
+            if (i < buffer.dimensions() - 1) {
+                stream << ", ";
+            }
         }
+        stream << "};\n";
+        buffer_shape = "const_cast<halide_dimension_t*>(" + name + "_buffer_shape)";
     }
-    stream << "};\n";
 
     Type t = buffer.type();
 
@@ -1983,7 +1991,7 @@ void CodeGen_C::compile(const Buffer<> &buffer) {
            << "0, "                                              // flags
            << "halide_type_t((halide_type_code_t)(" << (int)t.code() << "), " << t.bits() << ", " << t.lanes() << "), "
            << buffer.dimensions() << ", "
-           << "const_cast<halide_dimension_t*>(" << name << "_buffer_shape)};\n";
+           << buffer_shape << "};\n";
 
     // Make a global pointer to it.
     stream << "static halide_buffer_t * const " << name << "_buffer = &" << name << "_buffer_;\n";
@@ -2016,7 +2024,13 @@ string CodeGen_C::print_assignment(Type t, const std::string &rhs) {
     if (cached == cache.end()) {
         id = unique_name('_');
         const char *const_flag = output_kind == CPlusPlusImplementation ? "const " : "";
-        stream << get_indent() << print_type(t, AppendSpace) << const_flag << id << " = " << rhs << ";\n";
+        if (t.is_handle()) {
+            // Don't print void *, which might lose useful type information. just use auto.
+            stream << get_indent() << "auto *";
+        } else {
+            stream << get_indent() << print_type(t, AppendSpace);
+        }
+        stream << const_flag << id << " = " << rhs << ";\n";
         cache[rhs] = id;
     } else {
         id = cached->second;
@@ -2043,7 +2057,12 @@ void CodeGen_C::close_scope(const std::string &comment) {
 }
 
 void CodeGen_C::visit(const Variable *op) {
-    id = print_name(op->name);
+    if (starts_with(op->name, "::")) {
+        // This is the name of a global, so we can't modify it.
+        id = op->name;
+    } else {
+        id = print_name(op->name);
+    }
 }
 
 void CodeGen_C::visit(const Cast *op) {
@@ -2306,7 +2325,7 @@ void CodeGen_C::visit(const Call *op) {
         }
     } else if (op->is_intrinsic(Call::lerp)) {
         internal_assert(op->args.size() == 3);
-        Expr e = lower_lerp(op->args[0], op->args[1], op->args[2]);
+        Expr e = lower_lerp(op->type, op->args[0], op->args[1], op->args[2], target);
         rhs << print_expr(e);
     } else if (op->is_intrinsic(Call::absd)) {
         internal_assert(op->args.size() == 2);
@@ -2361,12 +2380,19 @@ void CodeGen_C::visit(const Call *op) {
     } else if (op->is_intrinsic(Call::alloca)) {
         internal_assert(op->args.size() == 1);
         internal_assert(op->type.is_handle());
+        const int64_t *sz = as_const_int(op->args[0]);
         if (op->type == type_of<struct halide_buffer_t *>() &&
             Call::as_intrinsic(op->args[0], {Call::size_of_halide_buffer_t})) {
             stream << get_indent();
             string buf_name = unique_name('b');
             stream << "halide_buffer_t " << buf_name << ";\n";
             rhs << "&" << buf_name;
+        } else if (op->type == type_of<struct halide_semaphore_t *>() &&
+                   sz && *sz == 16) {
+            stream << get_indent();
+            string semaphore_name = unique_name("sema");
+            stream << "halide_semaphore_t " << semaphore_name << ";\n";
+            rhs << "&" << semaphore_name;
         } else {
             // Make a stack of uint64_ts
             string size = print_expr(simplify((op->args[0] + 7) / 8));
@@ -2414,7 +2440,7 @@ void CodeGen_C::visit(const Call *op) {
             rhs << shape_name;
         } else {
             // Emit a declaration like:
-            // struct {const int f_0, const char f_1, const int f_2} foo = {3, 'c', 4};
+            // struct {int f_0, int f_1, char f_2} foo = {3, 4, 'c'};
 
             // Get the args
             vector<string> values;
@@ -2425,7 +2451,7 @@ void CodeGen_C::visit(const Call *op) {
             // List the types.
             indent++;
             for (size_t i = 0; i < op->args.size(); i++) {
-                stream << get_indent() << "const " << print_type(op->args[i].type()) << " f_" << i << ";\n";
+                stream << get_indent() << print_type(op->args[i].type()) << " f_" << i << ";\n";
             }
             indent--;
             string struct_name = unique_name('s');
@@ -2452,6 +2478,26 @@ void CodeGen_C::visit(const Call *op) {
             }
             rhs << "(&" << struct_name << ")";
         }
+    } else if (op->is_intrinsic(Call::load_typed_struct_member)) {
+        // Given a void * instance of a typed struct, an in-scope prototype
+        // struct of the same type, and the index of a slot, load the value of
+        // that slot.
+        //
+        // It is assumed that the slot index is valid for the given typed struct.
+        //
+        // TODO: this comment is replicated in CodeGen_LLVM and should be updated there too.
+        // TODO: https://github.com/halide/Halide/issues/6468
+
+        internal_assert(op->args.size() == 3);
+        std::string struct_instance = print_expr(op->args[0]);
+        std::string struct_prototype = print_expr(op->args[1]);
+        const int64_t *index = as_const_int(op->args[2]);
+        internal_assert(index != nullptr);
+        rhs << "((decltype(" << struct_prototype << "))"
+            << struct_instance << ")->f_" << *index;
+    } else if (op->is_intrinsic(Call::get_user_context)) {
+        internal_assert(op->args.empty());
+        rhs << "_ucon";
     } else if (op->is_intrinsic(Call::stringify)) {
         // Rewrite to an snprintf
         vector<string> printf_args;
@@ -2482,7 +2528,6 @@ void CodeGen_C::visit(const Call *op) {
         stream << get_indent() << "char " << buf_name << "[1024];\n";
         stream << get_indent() << "snprintf(" << buf_name << ", 1024, \"" << format_string << "\", " << with_commas(printf_args) << ");\n";
         rhs << buf_name;
-
     } else if (op->is_intrinsic(Call::register_destructor)) {
         internal_assert(op->args.size() == 2);
         const StringImm *fn = op->args[0].as<StringImm>();
@@ -2499,7 +2544,7 @@ void CodeGen_C::visit(const Call *op) {
                << "" << struct_name << "(void *ucon, void *a) : ucon(ucon), arg((void *)a) {} "
                << "~" << struct_name << "() { " << fn->value + "(ucon, arg); } "
                << "} " << instance_name << "(_ucon, " << arg << ");\n";
-        rhs << print_expr(0);
+        rhs << "(void *)nullptr";
     } else if (op->is_intrinsic(Call::div_round_to_zero)) {
         rhs << print_expr(op->args[0]) << " / " << print_expr(op->args[1]);
     } else if (op->is_intrinsic(Call::mod_round_to_zero)) {
@@ -2702,9 +2747,10 @@ void CodeGen_C::visit(const Let *op) {
     if (op->value.type().is_handle()) {
         // The body might contain a Load that references this directly
         // by name, so we can't rewrite the name.
-        stream << get_indent() << print_type(op->value.type())
-               << " " << print_name(op->name)
-               << " = " << id_value << ";\n";
+        std::string name = print_name(op->name);
+        stream << get_indent() << "auto "
+               << name << " = " << id_value << ";\n";
+        stream << get_indent() << "halide_unused(" << name << ");\n";
     } else {
         Expr new_var = Variable::make(op->value.type(), id_value);
         body = substitute(op->name, new_var, body);
@@ -2792,12 +2838,14 @@ void CodeGen_C::visit(const VectorReduce *op) {
 void CodeGen_C::visit(const LetStmt *op) {
     string id_value = print_expr(op->value);
     Stmt body = op->body;
+
     if (op->value.type().is_handle()) {
         // The body might contain a Load or Store that references this
         // directly by name, so we can't rewrite the name.
-        stream << get_indent() << print_type(op->value.type())
-               << " " << print_name(op->name)
-               << " = " << id_value << ";\n";
+        std::string name = print_name(op->name);
+        stream << get_indent() << "auto "
+               << name << " = " << id_value << ";\n";
+        stream << get_indent() << "halide_unused(" << name << ");\n";
     } else {
         Expr new_var = Variable::make(op->value.type(), id_value);
         body = substitute(op->name, new_var, body);
@@ -3213,8 +3261,9 @@ extern "C" {
 HALIDE_FUNCTION_ATTRS
 int test1(struct halide_buffer_t *_buf_buffer, float _alpha, int32_t _beta, void const *__user_context) {
  void * const _ucon = const_cast<void *>(__user_context);
- void *_0 = _halide_buffer_get_host(_buf_buffer);
- void * _buf = _0;
+ auto *_0 = _halide_buffer_get_host(_buf_buffer);
+ auto _buf = _0;
+ halide_unused(_buf);
  {
   int64_t _1 = 43;
   int64_t _2 = _1 * _beta;
@@ -3240,7 +3289,7 @@ int test1(struct halide_buffer_t *_buf_buffer, float _alpha, int32_t _beta, void
    {
     char b0[1024];
     snprintf(b0, 1024, "%lld%s", (long long)(3), "\n");
-    char const *_8 = b0;
+    auto *_8 = b0;
     halide_print(_ucon, _8);
     int32_t _9 = 0;
     int32_t _10 = return_second(_9, 3);
