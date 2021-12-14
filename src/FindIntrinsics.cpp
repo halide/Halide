@@ -174,6 +174,7 @@ protected:
     IRMatcher::Wild<1> y;
     IRMatcher::Wild<2> z;
     IRMatcher::WildConst<0> c0;
+    IRMatcher::WildConst<1> c1;
 
     Expr visit(const Add *op) override {
         if (!find_intrinsics_for_type(op->type)) {
@@ -383,43 +384,129 @@ protected:
             auto is_x_same_int = op->type.is_int() && is_int(x, bits);
             auto is_x_same_uint = op->type.is_uint() && is_uint(x, bits);
             auto is_x_same_int_or_uint = is_x_same_int || is_x_same_uint;
-            // clang-format off
-            if (rewrite(max(min(widening_add(x, y), upper), lower), saturating_add(x, y), is_x_same_int_or_uint) ||
-                rewrite(max(min(widening_sub(x, y), upper), lower), saturating_sub(x, y), is_x_same_int_or_uint) ||
-                rewrite(min(cast(signed_type_wide, widening_add(x, y)), upper), saturating_add(x, y), is_x_same_uint) ||
-                rewrite(min(widening_add(x, y), upper), saturating_add(x, y), op->type.is_uint() && is_x_same_uint) ||
-                rewrite(max(widening_sub(x, y), lower), saturating_sub(x, y), op->type.is_uint() && is_x_same_uint) ||
+            if (
+                // Saturating patterns
+                rewrite(max(min(widening_add(x, y), upper), lower),
+                        saturating_add(x, y),
+                        is_x_same_int_or_uint) ||
 
-                rewrite(shift_right(widening_add(x, y), 1), halving_add(x, y), is_x_same_int_or_uint) ||
-                rewrite(shift_right(widening_sub(x, y), 1), halving_sub(x, y), is_x_same_int_or_uint) ||
+                rewrite(max(min(widening_sub(x, y), upper), lower),
+                        saturating_sub(x, y),
+                        is_x_same_int_or_uint) ||
 
-                rewrite(halving_add(widening_add(x, y), 1), rounding_halving_add(x, y), is_x_same_int_or_uint) ||
-                rewrite(halving_add(widening_add(x, 1), y), rounding_halving_add(x, y), is_x_same_int_or_uint) ||
-                rewrite(halving_add(widening_sub(x, y), 1), rounding_halving_sub(x, y), is_x_same_int_or_uint) ||
-                rewrite(rounding_shift_right(widening_add(x, y), 1), rounding_halving_add(x, y), is_x_same_int_or_uint) ||
-                rewrite(rounding_shift_right(widening_sub(x, y), 1), rounding_halving_sub(x, y), is_x_same_int_or_uint) ||
+                rewrite(min(cast(signed_type_wide, widening_add(x, y)), upper),
+                        saturating_add(x, y),
+                        is_x_same_uint) ||
 
-                rewrite(max(min(shift_right(widening_mul(x, y), z), upper), lower), mul_shift_right(x, y, cast(unsigned_type, z)), is_x_same_int_or_uint && is_uint(z)) ||
-                rewrite(max(min(rounding_shift_right(widening_mul(x, y), z), upper), lower), rounding_mul_shift_right(x, y, cast(unsigned_type, z)), is_x_same_int_or_uint && is_uint(z)) ||
-                rewrite(min(shift_right(widening_mul(x, y), z), upper), mul_shift_right(x, y, cast(unsigned_type, z)), is_x_same_uint && is_uint(z)) ||
-                rewrite(min(rounding_shift_right(widening_mul(x, y), z), upper), rounding_mul_shift_right(x, y, cast(unsigned_type, z)), is_x_same_uint && is_uint(z)) ||
+                rewrite(min(widening_add(x, y), upper),
+                        saturating_add(x, y),
+                        op->type.is_uint() && is_x_same_uint) ||
+
+                rewrite(max(widening_sub(x, y), lower),
+                        saturating_sub(x, y),
+                        op->type.is_uint() && is_x_same_uint) ||
+
+                // Averaging patterns
+                //
+                // We have a slight preference for rounding_halving_add over
+                // using halving_add when unsigned, because x86 supports it.
+
+                rewrite(shift_right(widening_add(x, c0), 1),
+                        rounding_halving_add(x, c0 - 1),
+                        c0 > 0 && is_x_same_uint) ||
+
+                rewrite(shift_right(widening_add(x, y), 1),
+                        halving_add(x, y),
+                        is_x_same_int_or_uint) ||
+
+                rewrite(shift_right(widening_add(x, c0), c1),
+                        rounding_shift_right(x, cast(op->type, c1)),
+                        c0 == shift_left(1, c1 - 1) && is_x_same_int_or_uint) ||
+
+                rewrite(shift_right(widening_add(x, c0), c1),
+                        shift_right(rounding_halving_add(x, cast(op->type, fold(c0 - 1))), cast(op->type, fold(c1 - 1))),
+                        c0 > 0 && c1 > 0 && is_x_same_uint) ||
+
+                rewrite(shift_right(widening_add(x, y), c0),
+                        shift_right(halving_add(x, y), cast(op->type, fold(c0 - 1))),
+                        c0 > 0 && is_x_same_int_or_uint) ||
+
+                rewrite(shift_right(widening_sub(x, y), 1),
+                        halving_sub(x, y),
+                        is_x_same_int_or_uint) ||
+
+                rewrite(halving_add(widening_add(x, y), 1),
+                        rounding_halving_add(x, y),
+                        is_x_same_int_or_uint) ||
+
+                rewrite(halving_add(widening_add(x, 1), y),
+                        rounding_halving_add(x, y),
+                        is_x_same_int_or_uint) ||
+
+                rewrite(halving_add(widening_sub(x, y), 1),
+                        rounding_halving_sub(x, y),
+                        is_x_same_int_or_uint) ||
+
+                rewrite(rounding_shift_right(widening_add(x, y), 1),
+                        rounding_halving_add(x, y),
+                        is_x_same_int_or_uint) ||
+
+                rewrite(rounding_shift_right(widening_sub(x, y), 1),
+                        rounding_halving_sub(x, y),
+                        is_x_same_int_or_uint) ||
+
+                // Multiply-keep-high-bits patterns.
+
+                rewrite(max(min(shift_right(widening_mul(x, y), z), upper), lower),
+                        mul_shift_right(x, y, cast(unsigned_type, z)),
+                        is_x_same_int_or_uint && is_uint(z)) ||
+
+                rewrite(max(min(rounding_shift_right(widening_mul(x, y), z), upper), lower),
+                        rounding_mul_shift_right(x, y, cast(unsigned_type, z)),
+                        is_x_same_int_or_uint && is_uint(z)) ||
+
+                rewrite(min(shift_right(widening_mul(x, y), z), upper),
+                        mul_shift_right(x, y, cast(unsigned_type, z)),
+                        is_x_same_uint && is_uint(z)) ||
+
+                rewrite(min(rounding_shift_right(widening_mul(x, y), z), upper),
+                        rounding_mul_shift_right(x, y, cast(unsigned_type, z)),
+                        is_x_same_uint && is_uint(z)) ||
+
                 // We don't need saturation for the full upper half of a multiply.
                 // For signed integers, this is almost true, except for when x and y
                 // are both the most negative value. For these, we only need saturation
                 // at the upper bound.
-                rewrite(min(shift_right(widening_mul(x, y), c0), upper), mul_shift_right(x, y, cast(unsigned_type, c0)), is_x_same_int && c0 >= bits - 1) ||
-                rewrite(min(rounding_shift_right(widening_mul(x, y), c0), upper), rounding_mul_shift_right(x, y, cast(unsigned_type, c0)), is_x_same_int && c0 >= bits - 1) ||
-                rewrite(shift_right(widening_mul(x, y), c0), mul_shift_right(x, y, cast(unsigned_type, c0)), is_x_same_int_or_uint && c0 >= bits) ||
-                rewrite(rounding_shift_right(widening_mul(x, y), c0), rounding_mul_shift_right(x, y, cast(unsigned_type, c0)), is_x_same_int_or_uint && c0 >= bits) ||
+                rewrite(min(shift_right(widening_mul(x, y), c0), upper),
+                        mul_shift_right(x, y, cast(unsigned_type, c0)),
+                        is_x_same_int && c0 >= bits - 1) ||
 
-                // We can ignore the sign of the widening subtract for halving subtracts.
-                rewrite(shift_right(cast(op_type_wide, widening_sub(x, y)), 1), halving_sub(x, y), is_x_same_int_or_uint) ||
-                rewrite(rounding_shift_right(cast(op_type_wide, widening_sub(x, y)), 1), rounding_halving_sub(x, y), is_x_same_int_or_uint) ||
+                rewrite(min(rounding_shift_right(widening_mul(x, y), c0), upper),
+                        rounding_mul_shift_right(x, y, cast(unsigned_type, c0)),
+                        is_x_same_int && c0 >= bits - 1) ||
+
+                rewrite(shift_right(widening_mul(x, y), c0),
+                        mul_shift_right(x, y, cast(unsigned_type, c0)),
+                        is_x_same_int_or_uint && c0 >= bits) ||
+
+                rewrite(rounding_shift_right(widening_mul(x, y), c0),
+                        rounding_mul_shift_right(x, y, cast(unsigned_type, c0)),
+                        is_x_same_int_or_uint && c0 >= bits) ||
+
+                // Halving subtract patterns
+                rewrite(shift_right(cast(op_type_wide, widening_sub(x, y)), 1),
+                        halving_sub(x, y),
+                        is_x_same_int_or_uint) ||
+
+                rewrite(rounding_shift_right(cast(op_type_wide, widening_sub(x, y)), 1),
+                        rounding_halving_sub(x, y),
+                        is_x_same_int_or_uint) ||
 
                 false) {
+                internal_assert(rewrite.result.type() == op->type)
+                    << "Rewrite changed type: " << Expr(op) << " -> " << rewrite.result << "\n";
                 return mutate(rewrite.result);
             }
-            // clang-format on
 
             // When the argument is a widened rounding shift, we might not need the widening.
             // When there is saturation, we can only avoid the widening if we know the shift is
@@ -763,6 +850,14 @@ Expr lower_rounding_shift_left(const Expr &a, const Expr &b) {
 }
 
 Expr lower_rounding_shift_right(const Expr &a, const Expr &b) {
+    if (is_positive_const(b)) {
+        // We can handle the rounding with an averaging instruction. We prefer
+        // the rounding average instruction (we could use either), because the
+        // non-rounding one is missing on x86.
+        Expr shift = simplify(b - 1);
+        Expr round = simplify(cast(a.type(), (1 << shift) - 1));
+        return rounding_halving_add(a, round) >> shift;
+    }
     // Shift right, then add one to the result if bits were dropped
     // (because b > 0) and the most significant dropped bit was a one.
     Expr b_positive = select(b > 0, make_one(a.type()), make_zero(a.type()));

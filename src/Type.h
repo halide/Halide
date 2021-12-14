@@ -82,7 +82,7 @@ struct halide_handle_cplusplus_type {
     std::vector<halide_cplusplus_type_name> enclosing_types;
 
     /// One set of modifiers on a type.
-    /// The const/volatile/restrict propertises are "inside" the pointer property.
+    /// The const/volatile/restrict properties are "inside" the pointer property.
     enum Modifier : uint8_t {
         Const = 1 << 0,     ///< Bitmask flag for "const"
         Volatile = 1 << 1,  ///< Bitmask flag for "volatile"
@@ -170,6 +170,7 @@ HALIDE_DECLARE_EXTERN_STRUCT_TYPE(halide_dimension_t);
 HALIDE_DECLARE_EXTERN_STRUCT_TYPE(halide_device_interface_t);
 HALIDE_DECLARE_EXTERN_STRUCT_TYPE(halide_filter_metadata_t);
 HALIDE_DECLARE_EXTERN_STRUCT_TYPE(halide_semaphore_t);
+HALIDE_DECLARE_EXTERN_STRUCT_TYPE(halide_semaphore_acquire_t);
 HALIDE_DECLARE_EXTERN_STRUCT_TYPE(halide_parallel_task_t);
 
 // You can make arbitrary user-defined types be "Known" using the
