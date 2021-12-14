@@ -85,7 +85,7 @@ the Halide library itself.
 There is experimental support for using V8 as the interpreter in JIT mode, rather than WABT.
 This is enabled by the CMake command line options `-DWITH_V8=ON -DWITH_WABT=OFF` (only one of them can be used at a time).
 You must build V8 locally V8, then specify the path to the library and headers as CMake options.
-This is currently only tested on x86-64-Linux and requires v8 version 9.8.147 as a minimum.
+This is currently only tested on x86-64-Linux and requires v8 version 9.8.177 as a minimum.
 
 The canonical instructions to build V8 are at
 [v8.dev](https://v8.dev/docs/build), and [there are examples for embedding
@@ -99,7 +99,7 @@ v8](https://v8.dev/docs/embed). The process for Halide is summarized below.
     $ mkdir ~/v8 && cd ~/v8
     $ fetch v8
     $ cd ~/v8/v8
-    $ git checkout origin/9.8.147
+    $ git checkout origin/9.8.177
     ```
 - Create a build configuration: `tools/dev/v8gen.py x64.release.sample`
 - Turn off pointer compression: `echo 'v8_enable_pointer_compression = false' >> out.gn/x64.release.sample/args.gn`
