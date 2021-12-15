@@ -132,10 +132,10 @@ void load_webgpu() {
         "wgpu.dll",
     };
     string error;
-    for (int i = 0; i < sizeof(libnames) / sizeof(char *); i++) {
-        debug(1) << "Trying " << libnames[i] << "... ";
+    for (const char *libname : libnames) {
+        debug(1) << "Trying " << libname << "... ";
         error.clear();
-        llvm::sys::DynamicLibrary::LoadLibraryPermanently(libnames[i], &error);
+        llvm::sys::DynamicLibrary::LoadLibraryPermanently(libname, &error);
         if (error.empty()) {
             debug(1) << "found!\n";
             break;

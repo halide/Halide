@@ -50,7 +50,7 @@ protected:
         CodeGen_WGSL(std::ostream &s, Target t)
             : CodeGen_C(s, t) {
         }
-        void add_kernel(Stmt stmt,
+        void add_kernel(const Stmt &stmt,
                         const string &name,
                         const vector<DeviceArgument> &args);
 
@@ -177,35 +177,37 @@ string CodeGen_WebGPU_Dev::CodeGen_WGSL::print_type(Type type,
 }
 
 void CodeGen_WebGPU_Dev::CodeGen_WGSL::add_kernel(
-    Stmt s, const string &name, const vector<DeviceArgument> &args) {
+    const Stmt &s, const string &name, const vector<DeviceArgument> &args) {
     debug(2) << "Adding WGSL shader " << name << "\n";
 
     // The name of the variable that contains the non-buffer arguments.
     string args_var = "Args_" + name;
 
     std::ostringstream uniforms;
-    for (size_t i = 0; i < args.size(); i++) {
-        if (args[i].is_buffer) {
+    uint32_t next_binding = 0;
+    for (const DeviceArgument &arg : args) {
+        if (arg.is_buffer) {
             // Emit buffer arguments as read_write storage buffers.
             // TODO: Remove [[block]], struct, and .data.
-            string struct_name = "BufferStruct_" + args[i].name;
+            string struct_name = "BufferStruct_" + arg.name;
             stream << "[[block]]\n"
                    << "struct " << struct_name << " {\n"
-                   << "  data : array<" << print_type(args[i].type) << ">;\n"
+                   << "  data : array<" << print_type(arg.type) << ">;\n"
                    << "};\n";
-            stream << "[[group(0), binding(" << i << ")]]\n"
-                   << "var<storage, read_write> " << print_name(args[i].name)
+            stream << "[[group(0), binding(" << next_binding << ")]]\n"
+                   << "var<storage, read_write> " << print_name(arg.name)
                    << " : " << struct_name << ";\n\n";
             Allocation alloc;
-            alloc.type = args[i].type;
-            allocations.push(args[i].name, alloc);
+            alloc.type = arg.type;
+            allocations.push(arg.name, alloc);
+            next_binding++;
         } else {
             // Collect non-buffer arguments into a single uniform buffer.
             // TODO: Support non-buffer args with different sizes.
-            internal_assert(args[i].type.bytes() == 4)
+            internal_assert(arg.type.bytes() == 4)
                 << "unimplemented: non-buffer args assumed to be 32-bits";
-            uniforms << "  " << print_name(args[i].name) << " : "
-                     << print_type(args[i].type) << ";\n";
+            uniforms << "  " << print_name(arg.name) << " : "
+                     << print_type(arg.type) << ";\n";
         }
     }
     if (!uniforms.str().empty()) {
