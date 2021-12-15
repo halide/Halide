@@ -951,12 +951,21 @@ public:
             check(arm32 ? "vmovl.u32" : "ushll", 2 * w, i64(u32_1));
 
             // VMOVN    I       -       Move and Narrow
-            check(arm32 ? "vmovn.i16" : "xtn", 8 * w, i8(i16_1));
-            check(arm32 ? "vmovn.i16" : "xtn", 8 * w, u8(u16_1));
-            check(arm32 ? "vmovn.i32" : "xtn", 4 * w, i16(i32_1));
-            check(arm32 ? "vmovn.i32" : "xtn", 4 * w, u16(u32_1));
-            check(arm32 ? "vmovn.i64" : "xtn", 2 * w, i32(i64_1));
-            check(arm32 ? "vmovn.i64" : "xtn", 2 * w, u32(u64_1));
+            if (Halide::Internal::get_llvm_version() >= 140 && w > 1) {
+                check(arm32 ? "vmovn.i16" : "uzp1", 8 * w, i8(i16_1));
+                check(arm32 ? "vmovn.i16" : "uzp1", 8 * w, u8(u16_1));
+                check(arm32 ? "vmovn.i32" : "uzp1", 4 * w, i16(i32_1));
+                check(arm32 ? "vmovn.i32" : "uzp1", 4 * w, u16(u32_1));
+                check(arm32 ? "vmovn.i64" : "uzp1", 2 * w, i32(i64_1));
+                check(arm32 ? "vmovn.i64" : "uzp1", 2 * w, u32(u64_1));
+            } else {
+                check(arm32 ? "vmovn.i16" : "xtn", 8 * w, i8(i16_1));
+                check(arm32 ? "vmovn.i16" : "xtn", 8 * w, u8(u16_1));
+                check(arm32 ? "vmovn.i32" : "xtn", 4 * w, i16(i32_1));
+                check(arm32 ? "vmovn.i32" : "xtn", 4 * w, u16(u32_1));
+                check(arm32 ? "vmovn.i64" : "xtn", 2 * w, i32(i64_1));
+                check(arm32 ? "vmovn.i64" : "xtn", 2 * w, u32(u64_1));
+            }
 
             // VMRS     X       F, D    Move Advanced SIMD or VFP Register to ARM compute Engine
             // VMSR     X       F, D    Move ARM Core Register to Advanced SIMD or VFP
