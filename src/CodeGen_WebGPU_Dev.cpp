@@ -278,12 +278,11 @@ void CodeGen_WebGPU_Dev::CodeGen_WGSL::add_kernel(
     open_scope();
 
     // Redeclare non-buffer arguments at function scope.
-    for (size_t i = 0; i < args.size(); i++) {
-        if (!args[i].is_buffer) {
-            stream << get_indent() << "let " << print_name(args[i].name)
-                   << " : " << print_type(args[i].type)
-                   << " = " << args_var << "."
-                   << print_name(args[i].name) << ";\n";
+    for (const DeviceArgument &arg : args) {
+        if (!arg.is_buffer) {
+            stream << get_indent() << "let " << print_name(arg.name)
+                   << " : " << print_type(arg.type)
+                   << " = " << args_var << "." << print_name(arg.name) << ";\n";
         }
     }
 
