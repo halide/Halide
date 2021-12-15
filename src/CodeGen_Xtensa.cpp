@@ -1973,7 +1973,14 @@ string CodeGen_Xtensa::print_assignment(Type t, const std::string &rhs) {
     auto cached = cache.find(rhs);
     if (cached == cache.end()) {
         id = unique_name('_');
-        stream << get_indent() << print_type(t, AppendSpace) << (t.is_handle() ? " __restrict " : "") << (output_kind == CPlusPlusImplementation ? "const " : "") << id << " = " << rhs << ";\n";
+        const char *const_flag = output_kind == CPlusPlusImplementation ? "const " : "";
+        if (t.is_handle()) {
+            // Don't print void *, which might lose useful type information. just use auto.
+            stream << get_indent() << "auto * __restrict ";
+        } else {
+            stream << get_indent() << print_type(t, AppendSpace);
+        }
+        stream << const_flag << id << " = " << rhs << ";\n";
         cache[rhs] = id;
     } else {
         id = cached->second;
