@@ -95,7 +95,6 @@ function(add_wasm_executable TARGET)
 
     # TODO: this is currently hardcoded to settings that are sensible for most of Halide's
     # internal purposes. Consider adding ways to customize this as appropriate.
-    # Note: ASYNCIFY is required for the WebGPU backend.
     set(EMCC_FLAGS
         -O3
         -g
@@ -113,10 +112,16 @@ function(add_wasm_executable TARGET)
         -s ASSERTIONS=1
         -s ALLOW_MEMORY_GROWTH=1
         -s ENVIRONMENT=node
-        -s USE_WEBGPU=1
-        -s ASYNCIFY
         ${args_OPTIONS}
     )
+
+    if ("${Halide_TARGET}" MATCHES "webgpu")
+        set(EMCC_FLAGS
+            ${EMCC_FLAGS}
+            -s USE_WEBGPU=1
+            -s ASYNCIFY
+        )
+    endif ()
 
     # TODO: Remove this when Emscripten and Dawn implement the same APIs.
     if (WEBGPU_NATIVE_LIB)
