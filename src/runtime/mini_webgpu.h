@@ -1071,7 +1071,7 @@ typedef void (*WGPUQueueWorkDoneCallback)(WGPUQueueWorkDoneStatus status, void *
 typedef void (*WGPURequestAdapterCallback)(WGPURequestAdapterStatus status, WGPUAdapter adapter, char const *message, void *userdata);
 typedef void (*WGPURequestDeviceCallback)(WGPURequestDeviceStatus status, WGPUDevice device, char const *message, void *userdata);
 
-typedef void (*WGPUProc)(void);
+typedef void (*WGPUProc)();
 
 #if !defined(WGPU_SKIP_PROCS)
 
