@@ -73,26 +73,6 @@
 #define HALIDE_D3D12_COMMAND_LIST_TYPE D3D12_COMMAND_LIST_TYPE_DIRECT
 #endif
 
-// A Printer that automatically reserves stack space for the printer buffer:
-// (the managed printers in 'printer.h' rely on malloc)
-template<uint64_t length = 1024, int type = BasicPrinter>
-class StackPrinter : public Printer<type, length> {
-public:
-    StackPrinter(void *ctx = nullptr)
-        : Printer<type, length>(ctx, buffer) {
-    }
-    StackPrinter &operator()(void *ctx = nullptr) {
-        this->user_context = ctx;
-        return *this;
-    }
-    uint64_t capacity() const {
-        return length;
-    }
-
-private:
-    char buffer[length];
-};
-
 static void d3d12_debug_dump(error &err);
 
 #define d3d12_panic(...)                               \
@@ -114,13 +94,15 @@ static void *const user_context = nullptr;
 // Trace and logging utilities for debugging.
 #if HALIDE_D3D12_TRACE
 static volatile ScopedSpinLock::AtomicFlag trace_lock = 0;
-static char trace_buf[4096] = {};
+static constexpr uint64_t trace_buf_size = 4096;
+static char trace_buf[trace_buf_size] = {};
 static int trace_indent = 0;
 
-struct trace : public Printer<BasicPrinter, sizeof(trace_buf)> {
+struct trace : public BasicPrinter<trace_buf_size> {
     ScopedSpinLock lock;
+
     explicit trace(void *user_context = nullptr)
-        : Printer<BasicPrinter, sizeof(trace_buf)>(user_context, trace_buf),
+        : BasicPrinter<trace_buf_size>(user_context, trace_buf),
           lock(&trace_lock) {
         for (int i = 0; i < trace_indent; i++) {
             *this << "    ";
@@ -1855,7 +1837,7 @@ static void dump_shader(const char *source, ID3DBlob *compiler_msgs = nullptr) {
         message = (const char *)compiler_msgs->GetBufferPointer();
     }
 
-    Printer<BasicPrinter, 64 * 1024>(user_context)
+    BasicPrinter<64 * 1024>(user_context)
         << "D3DCompile(): " << message << "\n"
         << ">>> HLSL shader source dump <<<\n"
         << source << "\n";
@@ -1873,7 +1855,8 @@ static d3d12_function *d3d12_compile_shader(d3d12_device *device, d3d12_library 
 
     const char *source = library->source;
     int source_size = library->source_length;
-    Printer<StringStreamPrinter, 16> SS[4] = {nullptr, nullptr, nullptr, nullptr};
+    using SS16 = StackStringStreamPrinter<16>;
+    SS16 SS[4] = {SS16(nullptr), SS16(nullptr), SS16(nullptr), SS16(nullptr)};
     D3D_SHADER_MACRO pDefines[] = {
         {"__GROUPSHARED_SIZE_IN_BYTES", (SS[0] << shared_mem_bytes).str()},
         {"__NUM_TREADS_X", (SS[1] << threadsX).str()},
@@ -1893,11 +1876,11 @@ static d3d12_function *d3d12_compile_shader(d3d12_device *device, d3d12_library 
 #if HALIDE_D3D12_DEBUG_SHADERS
     flags1 |= D3DCOMPILE_DEBUG;
     flags1 |= D3DCOMPILE_SKIP_OPTIMIZATION;
-    //flags1 |= D3DCOMPILE_RESOURCES_MAY_ALIAS;
-    //flags1 |= D3DCOMPILE_ALL_RESOURCES_BOUND;
+    // flags1 |= D3DCOMPILE_RESOURCES_MAY_ALIAS;
+    // flags1 |= D3DCOMPILE_ALL_RESOURCES_BOUND;
 #endif
 
-    //dump_shader(source);
+    // dump_shader(source);
 
     HRESULT result = D3DCompile(source, source_size, shaderName, pDefines, includeHandler, entryPoint, target, flags1, flags2, &shaderBlob, &errorMsgs);
 
@@ -1939,7 +1922,7 @@ static d3d12_function *new_function_with_name(d3d12_device *device, d3d12_librar
 
     // consult the compiled function cache in the library first:
     d3d12_function *function = nullptr;
-    Printer<StringStreamPrinter, 256> key(nullptr);
+    StackStringStreamPrinter<256> key(nullptr);
     key << name << "_(" << threadsX << "," << threadsY << "," << threadsZ << ")_[" << shared_mem_bytes << "]";
     halide_abort_if_false(user_context, (key.size() < key.capacity() - 1));  // make sure key fits into the stream
     int not_found = library->cache.lookup(user_context, (const uint8_t *)key.str(), key.size(), &function);
@@ -2282,7 +2265,7 @@ static void d3d12compute_device_sync_internal(d3d12_device *device, d3d12_buffer
         // NOTE(marcos): a copy/dma command list would be ideal here, but it would
         // also require a dedicated copy command queue to submit it... for now just
         // use the main compute queue and issue copies via compute command lists.
-        //static const D3D12_COMMAND_LIST_TYPE Type = D3D12_COMMAND_LIST_TYPE_COPY;
+        // static const D3D12_COMMAND_LIST_TYPE Type = D3D12_COMMAND_LIST_TYPE_COPY;
         d3d12_frame *frame = acquire_frame(device);
         d3d12_compute_command_list *blitCmdList = frame->cmd_list;
         synchronize_host_and_device_buffer_contents(blitCmdList, dev_buffer);
@@ -2917,7 +2900,7 @@ WEAK int halide_d3d12compute_copy_to_device(void *user_context, halide_buffer_t 
     // such notion and can only write whole ranges... as such, untouched areas
     // of the upload staging buffer might leak-in and corrupt the device data;
     // for now, just use 'memcpy()' to keep things in sync
-    //copy_memory(c, user_context);
+    // copy_memory(c, user_context);
     memcpy(
         reinterpret_cast<void *>(c.dst),
         reinterpret_cast<void *>(c.src),
@@ -3188,7 +3171,7 @@ WEAK int halide_d3d12compute_run(void *user_context,
 
 #if HALIDE_D3D12_PROFILING
     uint64_t eps = (uint64_t)get_elapsed_time(profiler, ini, end);
-    Printer<BasicPrinter, 64>() << "kernel execution time: " << eps << "us.\n";
+    StackBasicPrinter<64>() << "kernel execution time: " << eps << "us.\n";
     // TODO: keep some live performance stats in the d3d12_function object
     // (accumulate stats based on dispatch similarities -- e.g., blocksX|Y|Z)
     release_object(profiler);
