@@ -2314,7 +2314,8 @@ WasmModuleContents::WasmModuleContents(
                                     kFailOnCustomSectionError);
     wabt::Errors errors;
     wabt::interp::ModuleDesc module_desc;
-    wabt::Result r = wabt::interp::ReadBinaryInterp(final_wasm.data(),
+    wabt::Result r = wabt::interp::ReadBinaryInterp("<internal>",
+                                                    final_wasm.data(),
                                                     final_wasm.size(),
                                                     options,
                                                     &errors,
