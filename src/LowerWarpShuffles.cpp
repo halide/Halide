@@ -562,6 +562,22 @@ class LowerWarpShuffles : public IRMutator {
 
         internal_assert(may_use_warp_shuffle) << name << ", " << idx << ", " << lane << "\n";
 
+        // Reference: https://docs.nvidia.com/cuda/volta-tuning-guide/index.html
+        // We must add .sync after volta architecture.
+        string sync_suffix = "";
+        Target t = get_jit_target_from_environment();
+        int cap = t.get_cuda_capability_lower_bound();
+        if (cap >= 70) {
+            sync_suffix = ".sync";
+        }
+
+        auto shfl_args = [&](const std::vector<Expr> &args) {
+            if (cap >= 70) {
+                return args;
+            }
+            return std::vector({args[1], args[2], args[3]});
+        };
+
         string intrin_suffix;
         if (shuffle_type.is_float()) {
             intrin_suffix = ".f32";
@@ -578,12 +594,13 @@ class LowerWarpShuffles : public IRMutator {
         lane = solve_expression(lane, this_lane_name).result;
 
         Expr shuffled;
-
+        // TODO(jin): consider warp size < 32.
+        Expr membermask = (int)0xffffffff;
         if (expr_match(this_lane + wild, lane, result)) {
             // We know that 0 <= lane + wild < warp_size by how we
             // constructed it, so we can just do a shuffle down.
-            Expr down = Call::make(shuffle_type, "llvm.nvvm.shfl.down" + intrin_suffix,
-                                   {base_val, result[0], 31}, Call::PureExtern);
+            Expr down = Call::make(shuffle_type, "llvm.nvvm.shfl" + sync_suffix + ".down" + intrin_suffix,
+                                   shfl_args({membermask, base_val, result[0], 31}), Call::PureExtern);
             shuffled = down;
         } else if (expr_match((this_lane + wild) % wild, lane, result) &&
                    is_const_power_of_two_integer(result[1], &bits) &&
@@ -593,10 +610,10 @@ class LowerWarpShuffles : public IRMutator {
             // intermediate registers than using a general gather for
             // this.
             Expr mask = (1 << bits) - 1;
-            Expr down = Call::make(shuffle_type, "llvm.nvvm.shfl.down" + intrin_suffix,
-                                   {base_val, result[0], mask}, Call::PureExtern);
-            Expr up = Call::make(shuffle_type, "llvm.nvvm.shfl.up" + intrin_suffix,
-                                 {base_val, (1 << bits) - result[0], 0}, Call::PureExtern);
+            Expr down = Call::make(shuffle_type, "llvm.nvvm.shfl" + sync_suffix + ".down" + intrin_suffix,
+                                   shfl_args({membermask, base_val, result[0], mask}), Call::PureExtern);
+            Expr up = Call::make(shuffle_type, "llvm.nvvm.shfl" + sync_suffix + ".up" + intrin_suffix,
+                                 shfl_args({membermask, base_val, (1 << bits) - result[0], 0}), Call::PureExtern);
             Expr cond = (this_lane >= (1 << bits) - result[0]);
             Expr equiv = select(cond, up, down);
             shuffled = simplify(equiv, true, bounds);
@@ -609,8 +626,8 @@ class LowerWarpShuffles : public IRMutator {
             // could hypothetically be used for boundary conditions.
             Expr mask = simplify(((31 & ~(warp_size - 1)) << 8) | 31);
             // The idx variant can do a general gather. Use it for all other cases.
-            shuffled = Call::make(shuffle_type, "llvm.nvvm.shfl.idx" + intrin_suffix,
-                                  {base_val, lane, mask}, Call::PureExtern);
+            shuffled = Call::make(shuffle_type, "llvm.nvvm.shfl" + sync_suffix + ".idx" + intrin_suffix,
+                                  shfl_args({membermask, base_val, lane, mask}), Call::PureExtern);
         }
         // TODO: There are other forms, like butterfly and clamp, that
         // don't need to use the general gather
