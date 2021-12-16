@@ -291,4 +291,14 @@ WEAK int halide_error_device_crop_failed(void *user_context) {
     return halide_error_code_device_crop_failed;
 }
 
+WEAK int halide_error_runtime_internal(void *user_context) {
+    error(user_context) << "Halide Runtime Error.\n";
+    return halide_error_code_runtime_internal;
+}
+
+WEAK int halide_error_runtime_internal_verbose(void *user_context, const char *msg) {
+    error(user_context) << "Halide Runtime Error: " << msg << ".\n";
+    return halide_error_code_runtime_internal;
+}
+
 }  // extern "C"

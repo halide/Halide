@@ -81,6 +81,8 @@ WEAK void halide_print(void *user_context, const char *msg);
 WEAK void halide_error(void *user_context, const char *msg);
 WEAK void (*halide_set_custom_print(void (*print)(void *, const char *)))(void *, const char *);
 WEAK void (*halide_set_error_handler(void (*handler)(void *, const char *)))(void *, const char *);
+WEAK int halide_error_runtime_internal(void *user_context);
+WEAK int halide_error_runtime_internal_verbose(void *user_context, const char *msg);
 
 char *getenv(const char *);
 void free(void *);

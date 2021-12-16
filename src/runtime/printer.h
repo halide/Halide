@@ -237,6 +237,22 @@ using StackErrorPrinter = StackPrinter<ErrorPrinterType, buffer_length>;
 template<uint64_t buffer_length = default_printer_buffer_length>
 using StackStringStreamPrinter = StackPrinter<StringStreamPrinterType, buffer_length>;
 
+#ifdef DEBUG_RUNTIME
+
+template<typename... Args>
+inline int _halide_runtime_error_impl(void *user_context, Args &&...args) {
+    stringstream s(user_context);
+    (s << ... << args);  // C++17 right fold
+    return halide_error_runtime_internal_verbose(user_context, s.str());
+}
+#define _halide_runtime_error(user_context, ...) (_halide_runtime_error_impl((user_context), __VA_ARGS__))
+
+#else
+
+#define _halide_runtime_error(user_context, ...) (halide_error_runtime_internal((user_context)))
+
+#endif
+
 }  // namespace Internal
 }  // namespace Runtime
 }  // namespace Halide
