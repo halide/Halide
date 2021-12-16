@@ -65,7 +65,7 @@ ALWAYS_INLINE T get_cuda_symbol(void *user_context, const char *name, bool optio
     T s = (T)halide_cuda_get_symbol(user_context, name);
     if (!optional && !s) {
         (void)_halide_runtime_error(user_context, "CUDA API not found: ", name);
-        return (T)0;
+        // fall thru and return s, which is nullptr
     }
     return s;
 }
@@ -367,7 +367,7 @@ WEAK CUresult create_cuda_context(void *user_context, CUcontext *ctx) {
         debug(user_context) << "      " << name << "\n";
 
         if (err != CUDA_SUCCESS) {
-            (void) _halide_runtime_error(user_context, "CUDA: cuDeviceGetName failed: ", get_error_name(err));
+            (void)_halide_runtime_error(user_context, "CUDA: cuDeviceGetName failed: ", get_error_name(err));
             return err;
         }
 
@@ -376,7 +376,7 @@ WEAK CUresult create_cuda_context(void *user_context, CUcontext *ctx) {
         debug(user_context) << "      total memory: " << (int)(memory >> 20) << " MB\n";
 
         if (err != CUDA_SUCCESS) {
-            (void) _halide_runtime_error(user_context, "CUDA: cuDeviceTotalMem failed: ", get_error_name(err));
+            (void)_halide_runtime_error(user_context, "CUDA: cuDeviceTotalMem failed: ", get_error_name(err));
             return err;
         }
 
@@ -774,6 +774,7 @@ WEAK int halide_cuda_device_malloc(void *user_context, halide_buffer_t *buf) {
     halide_abort_if_false(user_context, size != 0);
     if (buf->device) {
         // This buffer already has a device allocation
+        // TODO: should we really abort here? Can't we just return an error?
         halide_abort_if_false(user_context, validate_device_pointer(user_context, buf, size));
         return 0;
     }
