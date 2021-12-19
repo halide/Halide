@@ -594,7 +594,6 @@ class LowerWarpShuffles : public IRMutator {
         lane = solve_expression(lane, this_lane_name).result;
 
         Expr shuffled;
-        // TODO(jin): consider warp size < 32.
         Expr membermask = (int)0xffffffff;
         if (expr_match(this_lane + wild, lane, result)) {
             // We know that 0 <= lane + wild < warp_size by how we
