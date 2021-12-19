@@ -47,7 +47,6 @@ Expr Simplify::visit(const Shuffle *op, ExprInfo *bounds) {
         new_vectors.push_back(new_vector);
     }
 
-
     // If any of the args are narrowing casts, convert them to shuffles of
     // reinterpret casts so we can fold them into this shuffle. This all assumes
     // little-endianness, so if we ever support a big-endian backend we'll have
