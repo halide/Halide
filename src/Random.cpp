@@ -82,6 +82,10 @@ Expr random_int(const vector<Expr> &e) {
                                rng32(Variable::make(UInt(32), name)));
         }
     }
+    // The low bytes of this have a poor period, so mix in the high bytes for
+    // two additional instructions.
+    result = result ^ (result >> 16);
+
     return result;
 }
 
