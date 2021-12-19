@@ -78,7 +78,7 @@ Target calculate_host_target() {
     int bits = use_64_bits ? 64 : 32;
     std::vector<Target::Feature> initial_features;
 
-#if __riscv__
+#if __riscv
     Target::Arch arch = Target::RISCV;
 #else
 #if __mips__ || __mips || __MIPS__
