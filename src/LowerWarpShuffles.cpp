@@ -562,8 +562,8 @@ class LowerWarpShuffles : public IRMutator {
 
         internal_assert(may_use_warp_shuffle) << name << ", " << idx << ", " << lane << "\n";
 
-        // Reference: https://docs.nvidia.com/cuda/volta-tuning-guide/index.html
-        // We must add .sync after volta architecture.
+        // We must add .sync after volta architecture:
+        // https://docs.nvidia.com/cuda/volta-tuning-guide/index.html
         string sync_suffix = "";
         Target t = get_jit_target_from_environment();
         int cap = t.get_cuda_capability_lower_bound();

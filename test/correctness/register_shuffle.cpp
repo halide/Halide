@@ -184,53 +184,6 @@ int main(int argc, char **argv) {
     }
 
     {
-        // Using warp shuffle to do the reduction.
-        Func a, b, c;
-        Var x, y, yo, yi, ylane, u;
-        RVar ro, ri;
-
-        a(x, y) = x + y;
-        a.compute_root();
-
-        RDom r(0, 1024);
-        b(y) = 0;
-        b(y) += a(r, y);
-        c(y) = b(y);
-
-        int warp = 8;
-        c
-            .split(y, yo, yi, 1 * warp)
-            .split(yi, yi, ylane, 1)
-            .gpu_blocks(yo)
-            .gpu_threads(yi, ylane);
-        Func intm = b.update()
-            .split(r, ri, ro, warp)
-            .reorder(ri, ro)
-            .rfactor(ro, u);
-        intm
-            .compute_at(c, yi)
-            .update()
-            .gpu_lanes(u);
-        intm
-            .gpu_lanes(u);
-
-        Buffer<int> out = c.realize({256});
-        for (int y = 0; y < out.width(); y++) {
-            int correct = 0;
-            for (int x = 0; x < 1024; x++) {
-                correct += x + y;
-            }
-            int actual = out(y);
-            if (correct != actual) {
-                printf("out(%d) = %d instead of %d\n",
-                       y, actual, correct);
-                return -1;
-            }
-        }
-    }
-
-
-    {
         // Same as above, but in half-warps
         Func a, b, c, d;
         Var x, y;
@@ -536,6 +489,52 @@ int main(int argc, char **argv) {
                            x, y, actual, correct);
                     return -1;
                 }
+            }
+        }
+    }
+
+    {
+        // Use warp shuffle to do the reduction.
+        Func a, b, c;
+        Var x, y, yo, yi, ylane, u;
+        RVar ro, ri;
+
+        a(x, y) = x + y;
+        a.compute_root();
+
+        RDom r(0, 1024);
+        b(y) = 0;
+        b(y) += a(r, y);
+        c(y) = b(y);
+
+        int warp = 8;
+        c
+            .split(y, yo, yi, 1 * warp)
+            .split(yi, yi, ylane, 1)
+            .gpu_blocks(yo)
+            .gpu_threads(yi, ylane);
+        Func intm = b.update()
+            .split(r, ri, ro, warp)
+            .reorder(ri, ro)
+            .rfactor(ro, u);
+        intm
+            .compute_at(c, yi)
+            .update()
+            .gpu_lanes(u);
+        intm
+            .gpu_lanes(u);
+
+        Buffer<int> out = c.realize({256});
+        for (int y = 0; y < out.width(); y++) {
+            int correct = 0;
+            for (int x = 0; x < 1024; x++) {
+                correct += x + y;
+            }
+            int actual = out(y);
+            if (correct != actual) {
+                printf("out(%d) = %d instead of %d\n",
+                       y, actual, correct);
+                return -1;
             }
         }
     }
