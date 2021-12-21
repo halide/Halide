@@ -35,7 +35,8 @@ protected:
     }
 
     Expr visit(const Call *call) override {
-        if (call->call_type != Call::Halide) {
+        if (call->call_type != Call::Halide &&
+            call->call_type != Call::Image) {
             return IRMutator::visit(call);
         }
 
