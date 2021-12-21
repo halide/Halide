@@ -375,7 +375,7 @@ void lower_impl(const vector<Function> &output_funcs,
 
     if (t.has_feature(Target::CUDA)) {
         debug(1) << "Injecting warp shuffles...\n";
-        s = lower_warp_shuffles(s);
+        s = lower_warp_shuffles(s, t);
         log("Lowering after injecting warp shuffles:", s);
     }
 

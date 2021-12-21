@@ -368,6 +368,7 @@ class LowerWarpShuffles : public IRMutator {
     };
     Scope<AllocInfo> allocation_info;
     Scope<Interval> bounds;
+    int cuda_cap;
 
     Stmt visit(const For *op) override {
         ScopedBinding<Interval>
@@ -565,14 +566,12 @@ class LowerWarpShuffles : public IRMutator {
         // We must add .sync after volta architecture:
         // https://docs.nvidia.com/cuda/volta-tuning-guide/index.html
         string sync_suffix = "";
-        Target t = get_jit_target_from_environment();
-        int cap = t.get_cuda_capability_lower_bound();
-        if (cap >= 70) {
+        if (cuda_cap >= 70) {
             sync_suffix = ".sync";
         }
 
         auto shfl_args = [&](const std::vector<Expr> &args) {
-            if (cap >= 70) {
+            if (cuda_cap >= 70) {
                 return args;
             }
             return std::vector({args[1], args[2], args[3]});
@@ -667,7 +666,9 @@ class LowerWarpShuffles : public IRMutator {
     }
 
 public:
-    LowerWarpShuffles() = default;
+    LowerWarpShuffles(int cuda_cap)
+        : cuda_cap(cuda_cap) {
+    }
 };
 
 class HoistWarpShufflesFromSingleIfStmt : public IRMutator {
@@ -820,22 +821,29 @@ class LowerWarpShufflesInEachKernel : public IRMutator {
     Stmt visit(const For *op) override {
         if (op->device_api == DeviceAPI::CUDA && has_lane_loop(op)) {
             Stmt s = op;
-            s = LowerWarpShuffles().mutate(s);
+            s = LowerWarpShuffles(cuda_cap).mutate(s);
             s = HoistWarpShuffles().mutate(s);
             return simplify(s);
         } else {
             return IRMutator::visit(op);
         }
     }
+
+    int cuda_cap;
+
+public:
+    LowerWarpShufflesInEachKernel(int cuda_cap)
+        : cuda_cap(cuda_cap) {
+    }
 };
 
 }  // namespace
 
-Stmt lower_warp_shuffles(Stmt s) {
+Stmt lower_warp_shuffles(Stmt s, const Target &t) {
     s = hoist_loop_invariant_values(s);
     s = SubstituteInLaneVar().mutate(s);
     s = simplify(s);
-    s = LowerWarpShufflesInEachKernel().mutate(s);
+    s = LowerWarpShufflesInEachKernel(t.get_cuda_capability_lower_bound()).mutate(s);
     return s;
 };
 
