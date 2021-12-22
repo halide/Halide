@@ -514,9 +514,9 @@ int main(int argc, char **argv) {
             .gpu_blocks(yo)
             .gpu_threads(yi, ylane);
         Func intm = b.update()
-            .split(r, ri, ro, warp)
-            .reorder(ri, ro)
-            .rfactor(ro, u);
+                        .split(r, ri, ro, warp)
+                        .reorder(ri, ro)
+                        .rfactor(ro, u);
         intm
             .compute_at(c, yi)
             .update()
