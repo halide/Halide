@@ -83,17 +83,19 @@ class FlattenRamps : public IRMutator {
             if ((int)const_indices.size() == lanes) {
 
                 // Compute the stride for the underlying strided load
-                int stride = 0;
+                int stride = const_indices[0];
                 for (int c : const_indices) {
                     stride = (int)gcd(stride, c);
                 }
+                if (stride == 0)
+                    return IRMutator::visit(op);
+
                 for (int &c : const_indices) {
                     c /= stride;
                 }
 
                 // Compute the number of elements loaded
                 int extent = (int)((max_constant_offset / stride) + 1);
-
                 // If we're gathering from a very large range, it
                 // might be better to just do the gather rather than
                 // doing a big dense load and then shuffling. We
