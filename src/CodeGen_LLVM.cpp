@@ -1171,6 +1171,9 @@ void CodeGen_LLVM::optimize_module() {
         });
     }
 
+    // Target::MSAN handling is sprinkled throughout the codebase,
+    // there is no need to run MemorySanitizerPass here.
+
     if (get_target().has_feature(Target::TSAN)) {
         pb.registerOptimizerLastEPCallback(
             [](ModulePassManager &mpm, OptimizationLevel level) {
@@ -1182,6 +1185,9 @@ void CodeGen_LLVM::optimize_module() {
     for (auto &function : *module) {
         if (get_target().has_feature(Target::ASAN)) {
             function.addFnAttr(Attribute::SanitizeAddress);
+        }
+        if (get_target().has_feature(Target::MSAN)) {
+            function.addFnAttr(Attribute::SanitizeMemory);
         }
         if (get_target().has_feature(Target::TSAN)) {
             // Do not annotate any of Halide's low-level synchronization code as it has
