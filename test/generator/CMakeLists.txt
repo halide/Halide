@@ -370,6 +370,13 @@ add_halide_library(metadata_tester_ucon
 # msan_generator.cpp
 halide_define_aot_test(msan FEATURES msan)
 
+# (Doesn't build/link properly on windows / under wasm)
+if (NOT Halide_TARGET MATCHES "windows" AND NOT CMAKE_SYSTEM_NAME MATCHES "Windows" AND NOT Halide_TARGET MATCHES "wasm")
+  # sancov_aottest.cpp
+  # sancov_generator.cpp
+  halide_define_aot_test(sancov FEATURES sancov)
+endif()
+
 # multitarget_aottest.cpp
 # multitarget_generator.cpp
 halide_define_aot_test(multitarget
