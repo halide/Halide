@@ -98,7 +98,7 @@ add_library(Halide_LLVM INTERFACE)
 add_library(Halide::LLVM ALIAS Halide_LLVM)
 
 set_target_properties(Halide_LLVM PROPERTIES EXPORT_NAME LLVM)
-target_include_directories(Halide_LLVM INTERFACE $<BUILD_INTERFACE:${LLVM_INCLUDE_DIRS}>)
+target_include_directories(Halide_LLVM INTERFACE "$<BUILD_INTERFACE:${LLVM_INCLUDE_DIRS}>")
 target_compile_definitions(Halide_LLVM INTERFACE ${Halide_LLVM_DEFS})
 
 # Link LLVM libraries to Halide_LLVM, depending on shared, static, or bundled selection.
