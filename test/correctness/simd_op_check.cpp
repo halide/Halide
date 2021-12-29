@@ -669,8 +669,13 @@ public:
             check(arm32 ? "vaddhn.i16" : "addhn", 8 * w, u8((u16_1 + u16_2) / 256));
             check(arm32 ? "vaddhn.i32" : "addhn", 4 * w, i16((i32_1 + i32_2) / 65536));
             check(arm32 ? "vaddhn.i32" : "addhn", 4 * w, u16((u32_1 + u32_2) / 65536));
-            check(arm32 ? "vaddhn.i64" : "addhn", 4 * w, i32((i64_1 + i64_2) >> 32));
-            check(arm32 ? "vaddhn.i64" : "addhn", 4 * w, u32((u64_1 + u64_2) >> 32));
+            if (Halide::Internal::get_llvm_version() >= 140) {
+                check(arm32 ? "vaddhn.i64" : "uzp2", 4 * w, i32((i64_1 + i64_2) >> 32));
+                check(arm32 ? "vaddhn.i64" : "uzp2", 4 * w, u32((u64_1 + u64_2) >> 32));
+            } else {
+                check(arm32 ? "vaddhn.i64" : "addhn", 4 * w, i32((i64_1 + i64_2) >> 32));
+                check(arm32 ? "vaddhn.i64" : "addhn", 4 * w, u32((u64_1 + u64_2) >> 32));
+            }
 
             // VADDL    I       -       Add Long
             check(arm32 ? "vaddl.s8" : "saddl", 8 * w, i16(i8_1) + i16(i8_2));
