@@ -75,9 +75,7 @@ extern "C" void __sanitizer_cov_trace_pc_indir(uintptr_t Callee) {
 
 template<typename T>
 void clear_out(T &image) {
-    image.for_each_element([&](int x, int y, int c) {
-        image(x, y, c) = -42;
-    });
+    image.fill(-42);
 }
 
 template<typename T>
