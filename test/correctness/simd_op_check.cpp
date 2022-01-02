@@ -117,6 +117,13 @@ public:
 
             check("pmulhuw", 4 * w, i16_1 / 15);
 
+            // Shifts by amounts other than 16 can also use this instruction, by
+            // preshifting an arg (when there are bits of headroom), or
+            // postshifting the result.
+            check("pmulhuw", 4 * w, u16((u32(u16_1) * u32(u8_2)) >> 13));
+            check("pmulhw", 4 * w, i16((i32(i16_1) * i32(i16_2)) >> 17));
+            check("pmulhuw", 4 * w, u16((u32(u16_1) * u32(u16_2)) >> 18));
+
             if (w > 1) {  // LLVM does a lousy job at the comparisons for 64-bit types
                 check("pcmp*b", 8 * w, select(u8_1 == u8_2, u8(1), u8(2)));
                 check("pcmp*b", 8 * w, select(u8_1 > u8_2, u8(1), u8(2)));
