@@ -846,7 +846,7 @@ void compile_multitarget(const std::string &fn_name,
             Target::MSAN,
             Target::NoRuntime,
             Target::TSAN,
-            Target::SANCOV,
+            Target::SanitizerCoverage,
             Target::UserContext,
         }};
         for (auto f : must_match_features) {

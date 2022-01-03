@@ -1147,21 +1147,22 @@ void CodeGen_LLVM::optimize_module() {
 
     OptimizationLevel level = OptimizationLevel::O3;
 
-    if (get_target().has_feature(Target::SANCOV)) {
+    if (get_target().has_feature(Target::SanitizerCoverage)) {
         pb.registerOptimizerLastEPCallback(
             [&](ModulePassManager &mpm, OptimizationLevel level) {
-                SanitizerCoverageOptions sancov_options;
+                SanitizerCoverageOptions sanitizercoverage_options;
                 // Mirror what -fsanitize=fuzzer-no-link would enable.
-                sancov_options.CoverageType = SanitizerCoverageOptions::SCK_Edge;
-                sancov_options.IndirectCalls = true;
-                sancov_options.TraceCmp = true;
-                sancov_options.Inline8bitCounters = true;
-                sancov_options.PCTable = true;
+                // See https://github.com/halide/Halide/issues/6528
+                sanitizercoverage_options.CoverageType = SanitizerCoverageOptions::SCK_Edge;
+                sanitizercoverage_options.IndirectCalls = true;
+                sanitizercoverage_options.TraceCmp = true;
+                sanitizercoverage_options.Inline8bitCounters = true;
+                sanitizercoverage_options.PCTable = true;
                 // Due to TLS differences, stack depth tracking is only enabled on Linux
                 if (get_target().os == Target::OS::Linux) {
-                    sancov_options.StackDepth = true;
+                    sanitizercoverage_options.StackDepth = true;
                 }
-                mpm.addPass(ModuleSanitizerCoveragePass(sancov_options));
+                mpm.addPass(ModuleSanitizerCoveragePass(sanitizercoverage_options));
             });
     }
 

@@ -372,9 +372,9 @@ halide_define_aot_test(msan FEATURES msan)
 
 # (Doesn't build/link properly on windows / under wasm)
 if (NOT Halide_TARGET MATCHES "windows" AND NOT CMAKE_SYSTEM_NAME MATCHES "Windows" AND NOT Halide_TARGET MATCHES "wasm")
-  # sancov_aottest.cpp
-  # sancov_generator.cpp
-  halide_define_aot_test(sancov FEATURES sancov)
+  # sanitizercoverage_aottest.cpp
+  # sanitizercoverage_generator.cpp
+  halide_define_aot_test(sanitizercoverage FEATURES sanitizercoverage)
 endif()
 
 # multitarget_aottest.cpp

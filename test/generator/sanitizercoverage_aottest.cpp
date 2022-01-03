@@ -1,6 +1,6 @@
 #include "HalideBuffer.h"
 #include "HalideRuntime.h"
-#include "sancov.h"
+#include "sanitizercoverage.h"
 
 #include <iostream>
 #include <limits>
@@ -91,9 +91,9 @@ void verify_out(const Buffer<int8_t> &image) {
 
 //-----------------------------------------------------------------------------
 
-auto sancov_wrapper(struct halide_buffer_t *out) {
+auto sanitizercoverage_wrapper(struct halide_buffer_t *out) {
     enable_callbacks = true;
-    auto status = sancov(out);
+    auto status = sanitizercoverage(out);
     enable_callbacks = false;
     return status;
 }
@@ -104,7 +104,7 @@ int main() {
     fprintf(stderr, "Clearing output buffer.\n");
     clear_out(out);
     fprintf(stderr, "Performing the transformation.\n");
-    if (sancov_wrapper(out) != 0) {
+    if (sanitizercoverage_wrapper(out) != 0) {
         fprintf(stderr, "Failure!\n");
         exit(-1);
     }
