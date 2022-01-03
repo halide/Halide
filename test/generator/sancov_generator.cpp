@@ -4,11 +4,11 @@ namespace {
 
 class SANCOV : public Halide::Generator<SANCOV> {
 public:
-    Output<Buffer<uint8_t>> output{"output", 3};
+    Output<Buffer<int8_t>> output{"output", 3};
 
     void generate() {
         // Currently the test just exercises Target::SANCOV
-        output(x, y, c) = cast<uint8_t>(42 + c);
+        output(x, y, c) = cast<int8_t>(42 + c);
     }
 
     void schedule() {
