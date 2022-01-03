@@ -1478,7 +1478,7 @@ $(FILTERS_DIR)/msan.a: $(BIN_DIR)/msan.generator
 
 $(FILTERS_DIR)/sanitizercoverage.a: $(BIN_DIR)/sanitizercoverage.generator
 	@mkdir -p $(@D)
-	$(CURDIR)/$< -g sanitizercoverage -f sanitizer_coverage $(GEN_AOT_OUTPUTS) -o $(CURDIR)/$(FILTERS_DIR) target=$(TARGET)-sanitizer_coverage
+	$(CURDIR)/$< -g sanitizercoverage -f sanitizercoverage $(GEN_AOT_OUTPUTS) -o $(CURDIR)/$(FILTERS_DIR) target=$(TARGET)-sanitizer_coverage
 
 # user_context needs to be generated with user_context as the first argument to its calls
 $(FILTERS_DIR)/user_context.a: $(BIN_DIR)/user_context.generator
