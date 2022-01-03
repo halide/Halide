@@ -4,13 +4,14 @@
 
 find_package(Python3 REQUIRED COMPONENTS Interpreter Development)
 
-set(PYBIND11_VER 2.6.2)
-find_package(pybind11 ${PYBIND11_VER} QUIET)
+set(PYBIND11_MIN_SUPPORTED_VER 2.6.2)
+find_package(pybind11 ${PYBIND11_MIN_SUPPORTED_VER} QUIET)
 if (NOT pybind11_FOUND)
+    set(PYBIND11_BUNDLED_VER 2.9.0)
     include(FetchContent)
     FetchContent_Declare(pybind11
                          GIT_REPOSITORY https://github.com/pybind/pybind11.git
-                         GIT_TAG v${PYBIND11_VER})
+                         GIT_TAG v${PYBIND11_BUNDLED_VER})
     FetchContent_MakeAvailable(pybind11)
 endif ()
 
