@@ -23,6 +23,7 @@ int main(int argc, char **argv) {
         "arm-32-linux",
         "arm-64-android",
         "arm-64-ios",
+        "arm-64-ios-armv83a",
         "arm-64-linux",
         "arm-64-windows",
         "arm-64-windows-d3d12compute",
