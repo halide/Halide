@@ -2,12 +2,12 @@
 
 namespace {
 
-class SANITIZERCOVERAGE : public Halide::Generator<SANITIZERCOVERAGE> {
+class SanitizerCoverage : public Halide::Generator<SanitizerCoverage> {
 public:
     Output<Buffer<int8_t>> output{"output", 3};
 
     void generate() {
-        // Currently the test just exercises Target::SANITIZERCOVERAGE
+        // Currently the test just exercises Target::SanitizerCoverage
         output(x, y, c) = cast<int8_t>(42 + c);
     }
 
@@ -16,10 +16,10 @@ public:
     }
 
 private:
-    // Currently the test just exercises Target::SANITIZERCOVERAGE
+    // Currently the test just exercises Target::SanitizerCoverage
     Var x, y, c;
 };
 
 }  // namespace
 
-HALIDE_REGISTER_GENERATOR(SANITIZERCOVERAGE, sanitizercoverage)
+HALIDE_REGISTER_GENERATOR(SanitizerCoverage, sanitizercoverage)

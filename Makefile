@@ -1591,7 +1591,7 @@ $(BIN_DIR)/$(TARGET)/generator_aot_msan: $(ROOT_DIR)/test/generator/msan_aottest
 	@mkdir -p $(@D)
 	$(CXX) $(GEN_AOT_CXX_FLAGS) $(filter-out %.h,$^) $(GEN_AOT_INCLUDES) $(GEN_AOT_LD_FLAGS) -o $@
 
-# SANITIZERCOVERAGE test doesn't use the standard runtime
+# SanitizerCoverage test doesn't use the standard runtime
 $(BIN_DIR)/$(TARGET)/generator_aot_sanitizercoverage: $(ROOT_DIR)/test/generator/sanitizercoverage_aottest.cpp $(FILTERS_DIR)/sanitizercoverage.a $(FILTERS_DIR)/sanitizercoverage.h $(RUNTIME_EXPORTED_INCLUDES)
 	@mkdir -p $(@D)
 	$(CXX) $(GEN_AOT_CXX_FLAGS) $(filter-out %.h,$^) $(GEN_AOT_INCLUDES) $(GEN_AOT_LD_FLAGS) -o $@
