@@ -1344,12 +1344,23 @@ public:
             check(arm32 ? "vrshr.u32" : "urshr", 4 * w, u32((u64(u32_1) + 32) >> 6));
 
             // VRSHRN   I       -       Rounding Shift Right Narrow
-            check(arm32 ? "vrshrn.i16" : "rshrn", 8 * w, i8((i32(i16_1) + 128) >> 8));
-            check(arm32 ? "vrshrn.i32" : "rshrn", 4 * w, i16((i32_1 + 256) >> 9));
-            check(arm32 ? "vrshrn.i64" : "rshrn", 2 * w, i32((i64_1 + 8) >> 4));
-            check(arm32 ? "vrshrn.i16" : "rshrn", 8 * w, u8((u32(u16_1) + 128) >> 8));
-            check(arm32 ? "vrshrn.i32" : "rshrn", 4 * w, u16((u64(u32_1) + 1024) >> 11));
-            // check(arm32 ? "vrshrn.i64" : "rshrn", 2 * w, u32((u64_1 + 64) >> 7));
+            if (Halide::Internal::get_llvm_version() >= 140) {
+                // LLVM14 converts RSHRN/RSHRN2 to RADDHN/RADDHN2 when the shift amount is half the width of the vector element
+                // See https://reviews.llvm.org/D116166
+                check(arm32 ? "vrshrn.i16" : "raddhn", 8 * w, i8((i32(i16_1) + 128) >> 8));
+                check(arm32 ? "vrshrn.i32" : "rshrn", 4 * w, i16((i32_1 + 256) >> 9));
+                check(arm32 ? "vrshrn.i64" : "rshrn", 2 * w, i32((i64_1 + 8) >> 4));
+                check(arm32 ? "vrshrn.i16" : "raddhn", 8 * w, u8((u32(u16_1) + 128) >> 8));
+                check(arm32 ? "vrshrn.i32" : "rshrn", 4 * w, u16((u64(u32_1) + 1024) >> 11));
+                // check(arm32 ? "vrshrn.i64" : "raddhn", 2 * w, u32((u64_1 + 64) >> 7));
+            } else {
+                check(arm32 ? "vrshrn.i16" : "rshrn", 8 * w, i8((i32(i16_1) + 128) >> 8));
+                check(arm32 ? "vrshrn.i32" : "rshrn", 4 * w, i16((i32_1 + 256) >> 9));
+                check(arm32 ? "vrshrn.i64" : "rshrn", 2 * w, i32((i64_1 + 8) >> 4));
+                check(arm32 ? "vrshrn.i16" : "rshrn", 8 * w, u8((u32(u16_1) + 128) >> 8));
+                check(arm32 ? "vrshrn.i32" : "rshrn", 4 * w, u16((u64(u32_1) + 1024) >> 11));
+                // check(arm32 ? "vrshrn.i64" : "rshrn", 2 * w, u32((u64_1 + 64) >> 7));
+            }
 
             // VRSQRTE  I, F    -       Reciprocal Square Root Estimate
             check(arm32 ? "vrsqrte.f32" : "frsqrte", 4 * w, fast_inverse_sqrt(f32_1));
