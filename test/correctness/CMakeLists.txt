@@ -272,6 +272,7 @@ tests(GROUPS correctness
       reduction_non_rectangular.cpp
       reduction_schedule.cpp
       register_shuffle.cpp
+      reinterpret_vector.cpp
       reorder_rvars.cpp
       reorder_storage.cpp
       require.cpp

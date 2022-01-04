@@ -78,7 +78,7 @@ Target calculate_host_target() {
     int bits = use_64_bits ? 64 : 32;
     std::vector<Target::Feature> initial_features;
 
-#if __riscv__
+#if __riscv
     Target::Arch arch = Target::RISCV;
 #else
 #if __mips__ || __mips || __MIPS__
@@ -384,6 +384,7 @@ const std::map<std::string, Target::Feature> feature_name_map = {
     {"llvm_large_code_model", Target::LLVMLargeCodeModel},
     {"rvv", Target::RVV},
     {"armv81a", Target::ARMv81a},
+    {"sanitizer_coverage", Target::SanitizerCoverage},
     // NOTE: When adding features to this map, be sure to update PyEnums.cpp as well.
 };
 
@@ -419,6 +420,9 @@ Target get_jit_target_from_environment() {
 #endif
 #if __has_feature(thread_sanitizer)
     host.set_feature(Target::TSAN);
+#endif
+#if __has_feature(coverage_sanitizer)
+    host.set_feature(Target::SanitizerCoverage);
 #endif
 #endif
     string target = Internal::get_env_variable("HL_JIT_TARGET");
@@ -994,7 +998,7 @@ bool Target::get_runtime_compatible_target(const Target &other, Target &result) 
     // clang-format on
 
     // clang-format off
-    const std::array<Feature, 12> matching_features = {{
+    const std::array<Feature, 10> matching_features = {{
         ASAN,
         Debug,
         HexagonDma,
@@ -1004,6 +1008,7 @@ bool Target::get_runtime_compatible_target(const Target &other, Target &result) 
         SoftFloatABI,
         TSAN,
         WasmThreads,
+        SanitizerCoverage,
     }};
     // clang-format on
 
@@ -1032,7 +1037,7 @@ bool Target::get_runtime_compatible_target(const Target &other, Target &result) 
     }
 
     if ((features & matching_mask) != (other.features & matching_mask)) {
-        Internal::debug(1) << "runtime targets must agree on SoftFloatABI, Debug, TSAN, ASAN, MSAN, HVX, HexagonDma, and HVX_shared_object\n"
+        Internal::debug(1) << "runtime targets must agree on SoftFloatABI, Debug, TSAN, ASAN, MSAN, HVX, HexagonDma, HVX_shared_object, SanitizerCoverage\n"
                            << "  this:  " << *this << "\n"
                            << "  other: " << other << "\n";
         return false;

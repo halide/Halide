@@ -1346,6 +1346,7 @@ typedef enum halide_target_feature_t {
     halide_llvm_large_code_model,                 ///< Use the LLVM large code model to compile
     halide_target_feature_rvv,                    ///< Enable RISCV "V" Vector Extension
     halide_target_feature_armv81a,                ///< Enable ARMv8.1-a instructions
+    halide_target_feature_sanitizer_coverage,     ///< Enable hooks for SanitizerCoverage support.
     halide_target_feature_end                     ///< A sentinel. Every target is considered to have this feature, and setting this feature does nothing.
 } halide_target_feature_t;
 
