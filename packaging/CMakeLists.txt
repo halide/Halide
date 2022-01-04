@@ -140,6 +140,13 @@ if (WITH_TUTORIALS)
             PATTERN "*.jpg"
             PATTERN "*.mp4"
             PATTERN "*.png")
+
+    if (WITH_PYTHON_BINDINGS)
+      install(DIRECTORY ${Halide_SOURCE_DIR}/python_bindings/tutorial/
+              DESTINATION ${CMAKE_INSTALL_DOCDIR}/tutorial-python
+              COMPONENT Halide_Documentation
+              FILES_MATCHING PATTERN "*.py")
+    endif ()
 endif ()
 
 ##
