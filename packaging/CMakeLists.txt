@@ -46,6 +46,18 @@ foreach (dep IN ITEMS Halide_LLVM Halide_wabt)
 endforeach ()
 
 ##
+# Python bindings
+##
+
+if (WITH_PYTHON_BINDINGS)
+    set(Halide_INSTALL_PYTHONDIR "${CMAKE_INSTALL_LIBDIR}/python3/site-packages"
+        CACHE STRING "Path to Halide Python bindings folder")
+    install(TARGETS Halide_Python
+            LIBRARY DESTINATION ${Halide_INSTALL_PYTHONDIR} COMPONENT Halide_Python
+            NAMELINK_COMPONENT Halide_Python)
+endif ()
+
+##
 # Library-type-agnostic interface targets
 ##
 
