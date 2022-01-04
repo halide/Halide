@@ -146,8 +146,7 @@ if (WITH_TUTORIALS)
       install(DIRECTORY ${Halide_SOURCE_DIR}/python_bindings/tutorial/
               DESTINATION ${CMAKE_INSTALL_DOCDIR}/tutorial-python
               COMPONENT Halide_Documentation
-              FILES_MATCHING
-              PATTERN "*.py")
+              FILES_MATCHING PATTERN "*.py")
     endif ()
 endif ()
 
