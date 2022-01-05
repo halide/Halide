@@ -1865,7 +1865,8 @@ private:
                                               "halide_xtensa_reduce_add_x2_i32",
                                               "halide_xtensa_reduce_add_x4_i8",
                                               "halide_xtensa_reduce_add_x4_i16",
-                                              "halide_xtensa_reduce_add_x4_i32"};
+                                              "halide_xtensa_reduce_add_x4_i32", 
+                                              "reinterpret"};
         if (native_lanes > 0 && (skip_slicing.count(op->name) == 0)) {
             const int total_lanes = op->type.lanes();
             int split_to = op->type.lanes() / native_lanes;
