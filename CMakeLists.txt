@@ -49,6 +49,7 @@ endif()
 
 # Build Halide with ccache if the package is present
 option(Halide_CCACHE_BUILD "Set to ON for a ccache enabled build" OFF)
+mark_as_advanced(Halide_CCACHE_BUILD)
 if (Halide_CCACHE_BUILD)
     find_program(CCACHE_PROGRAM ccache)
     if (CCACHE_PROGRAM)
@@ -58,6 +59,7 @@ if (Halide_CCACHE_BUILD)
         # if issues occur (but we don't use any of the time macros so should be irrelevant).
         set(Halide_CCACHE_PARAMS CCACHE_CPP2=yes CCACHE_HASHDIR=yes CCACHE_SLOPPINESS=pch_defines
             CACHE STRING "Parameters to pass through to ccache")
+        mark_as_advanced(Halide_CCACHE_PARAMS)
         set(CMAKE_C_COMPILER_LAUNCHER ${CMAKE_COMMAND} -E env ${Halide_CCACHE_PARAMS} ${CCACHE_PROGRAM})
         set(CMAKE_CXX_COMPILER_LAUNCHER ${CMAKE_COMMAND} -E env ${Halide_CCACHE_PARAMS} ${CCACHE_PROGRAM})
         message(STATUS "Enabling ccache usage for building.")

@@ -137,7 +137,7 @@ void define_func(py::module &m) {
                     std::optional<Realization> r;
                     {
                         py::gil_scoped_release release;
-                        r = std::move(f.realize(sizes, target));
+                        r = f.realize(sizes, target);
                     }
                     return realization_to_object(*r);
                 },
