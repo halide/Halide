@@ -495,6 +495,31 @@ void CodeGen_X86::visit(const Call *op) {
         return;
     }
 
+    // A 16-bit mul-shift-right of less than 16 can sometimes be rounded up to a
+    // full 16 to use pmulh(u)w by left-shifting one of the operands. This is
+    // handled here instead of in the lowering of mul_shift_right because it's
+    // unlikely to be a good idea on platforms other than x86, as it adds an
+    // extra shift in the fully-lowered case.
+    if ((op->type.element_of() == UInt(16) ||
+         op->type.element_of() == Int(16)) &&
+        op->is_intrinsic(Call::mul_shift_right)) {
+        internal_assert(op->args.size() == 3);
+        const uint64_t *shift = as_const_uint(op->args[2]);
+        if (shift && *shift < 16 && *shift >= 8) {
+            Type narrow = op->type.with_bits(8);
+            Expr narrow_a = lossless_cast(narrow, op->args[0]);
+            Expr narrow_b = narrow_a.defined() ? Expr() : lossless_cast(narrow, op->args[1]);
+            int shift_left = 16 - (int)(*shift);
+            if (narrow_a.defined()) {
+                codegen(mul_shift_right(op->args[0] << shift_left, op->args[1], 16));
+                return;
+            } else if (narrow_b.defined()) {
+                codegen(mul_shift_right(op->args[0], op->args[1] << shift_left, 16));
+                return;
+            }
+        }
+    }
+
     struct Pattern {
         string intrin;
         Expr pattern;

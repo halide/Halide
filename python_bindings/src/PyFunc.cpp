@@ -117,6 +117,7 @@ void define_func(py::module &m) {
             .def(
                 "realize",
                 [](Func &f, Buffer<> buffer, const Target &target) -> void {
+                    py::gil_scoped_release release;
                     f.realize(buffer, target);
                 },
                 py::arg("dst"), py::arg("target") = Target())
@@ -125,6 +126,7 @@ void define_func(py::module &m) {
             .def(
                 "realize",
                 [](Func &f, std::vector<Buffer<>> buffers, const Target &t) -> void {
+                    py::gil_scoped_release release;
                     f.realize(Realization(buffers), t);
                 },
                 py::arg("dst"), py::arg("target") = Target())
@@ -132,7 +134,12 @@ void define_func(py::module &m) {
             .def(
                 "realize",
                 [](Func &f, const std::vector<int32_t> &sizes, const Target &target) -> py::object {
-                    return realization_to_object(f.realize(sizes, target));
+                    std::optional<Realization> r;
+                    {
+                        py::gil_scoped_release release;
+                        r = f.realize(sizes, target);
+                    }
+                    return realization_to_object(*r);
                 },
                 py::arg("sizes") = std::vector<int32_t>{}, py::arg("target") = Target())
 

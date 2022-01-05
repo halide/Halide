@@ -35,11 +35,7 @@ protected:
     }
 
     Expr visit(const Call *call) override {
-        if (call->call_type != Call::Halide) {
-            return IRMutator::visit(call);
-        }
-
-        if (is_inside_indexing) {
+        if (call->call_type == Call::Halide && is_inside_indexing) {
             auto bounds = func_bounds.at({call->name, call->value_index});
             if (bounds_smaller_than_type(bounds, call->type)) {
                 // TODO(#6297): check that the clamped function's allocation bounds might be wider than its compute bounds
@@ -50,7 +46,10 @@ protected:
             }
         }
 
-        ScopedValue<bool> s(is_inside_indexing, true);
+        ScopedValue<bool> s(is_inside_indexing,
+                            (is_inside_indexing ||
+                             call->call_type == Call::Halide ||
+                             call->call_type == Call::Image));
         return IRMutator::visit(call);
     }
 
