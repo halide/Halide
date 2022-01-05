@@ -1147,6 +1147,25 @@ void CodeGen_LLVM::optimize_module() {
 
     OptimizationLevel level = OptimizationLevel::O3;
 
+    if (get_target().has_feature(Target::SanitizerCoverage)) {
+        pb.registerOptimizerLastEPCallback(
+            [&](ModulePassManager &mpm, OptimizationLevel level) {
+                SanitizerCoverageOptions sanitizercoverage_options;
+                // Mirror what -fsanitize=fuzzer-no-link would enable.
+                // See https://github.com/halide/Halide/issues/6528
+                sanitizercoverage_options.CoverageType = SanitizerCoverageOptions::SCK_Edge;
+                sanitizercoverage_options.IndirectCalls = true;
+                sanitizercoverage_options.TraceCmp = true;
+                sanitizercoverage_options.Inline8bitCounters = true;
+                sanitizercoverage_options.PCTable = true;
+                // Due to TLS differences, stack depth tracking is only enabled on Linux
+                if (get_target().os == Target::OS::Linux) {
+                    sanitizercoverage_options.StackDepth = true;
+                }
+                mpm.addPass(ModuleSanitizerCoveragePass(sanitizercoverage_options));
+            });
+    }
+
     if (get_target().has_feature(Target::ASAN)) {
         pb.registerPipelineStartEPCallback([&](ModulePassManager &mpm, OptimizationLevel) {
             mpm.addPass(RequireAnalysisPass<ASanGlobalsMetadataAnalysis, llvm::Module>());
@@ -1171,6 +1190,9 @@ void CodeGen_LLVM::optimize_module() {
         });
     }
 
+    // Target::MSAN handling is sprinkled throughout the codebase,
+    // there is no need to run MemorySanitizerPass here.
+
     if (get_target().has_feature(Target::TSAN)) {
         pb.registerOptimizerLastEPCallback(
             [](ModulePassManager &mpm, OptimizationLevel level) {
@@ -1182,6 +1204,9 @@ void CodeGen_LLVM::optimize_module() {
     for (auto &function : *module) {
         if (get_target().has_feature(Target::ASAN)) {
             function.addFnAttr(Attribute::SanitizeAddress);
+        }
+        if (get_target().has_feature(Target::MSAN)) {
+            function.addFnAttr(Attribute::SanitizeMemory);
         }
         if (get_target().has_feature(Target::TSAN)) {
             // Do not annotate any of Halide's low-level synchronization code as it has

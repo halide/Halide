@@ -117,6 +117,13 @@ public:
 
             check("pmulhuw", 4 * w, i16_1 / 15);
 
+            // Shifts by amounts other than 16 can also use this instruction, by
+            // preshifting an arg (when there are bits of headroom), or
+            // postshifting the result.
+            check("pmulhuw", 4 * w, u16((u32(u16_1) * u32(u8_2)) >> 13));
+            check("pmulhw", 4 * w, i16((i32(i16_1) * i32(i16_2)) >> 17));
+            check("pmulhuw", 4 * w, u16((u32(u16_1) * u32(u16_2)) >> 18));
+
             if (w > 1) {  // LLVM does a lousy job at the comparisons for 64-bit types
                 check("pcmp*b", 8 * w, select(u8_1 == u8_2, u8(1), u8(2)));
                 check("pcmp*b", 8 * w, select(u8_1 > u8_2, u8(1), u8(2)));
@@ -951,12 +958,21 @@ public:
             check(arm32 ? "vmovl.u32" : "ushll", 2 * w, i64(u32_1));
 
             // VMOVN    I       -       Move and Narrow
-            check(arm32 ? "vmovn.i16" : "xtn", 8 * w, i8(i16_1));
-            check(arm32 ? "vmovn.i16" : "xtn", 8 * w, u8(u16_1));
-            check(arm32 ? "vmovn.i32" : "xtn", 4 * w, i16(i32_1));
-            check(arm32 ? "vmovn.i32" : "xtn", 4 * w, u16(u32_1));
-            check(arm32 ? "vmovn.i64" : "xtn", 2 * w, i32(i64_1));
-            check(arm32 ? "vmovn.i64" : "xtn", 2 * w, u32(u64_1));
+            if (Halide::Internal::get_llvm_version() >= 140 && w > 1) {
+                check(arm32 ? "vmovn.i16" : "uzp1", 8 * w, i8(i16_1));
+                check(arm32 ? "vmovn.i16" : "uzp1", 8 * w, u8(u16_1));
+                check(arm32 ? "vmovn.i32" : "uzp1", 4 * w, i16(i32_1));
+                check(arm32 ? "vmovn.i32" : "uzp1", 4 * w, u16(u32_1));
+                check(arm32 ? "vmovn.i64" : "uzp1", 2 * w, i32(i64_1));
+                check(arm32 ? "vmovn.i64" : "uzp1", 2 * w, u32(u64_1));
+            } else {
+                check(arm32 ? "vmovn.i16" : "xtn", 8 * w, i8(i16_1));
+                check(arm32 ? "vmovn.i16" : "xtn", 8 * w, u8(u16_1));
+                check(arm32 ? "vmovn.i32" : "xtn", 4 * w, i16(i32_1));
+                check(arm32 ? "vmovn.i32" : "xtn", 4 * w, u16(u32_1));
+                check(arm32 ? "vmovn.i64" : "xtn", 2 * w, i32(i64_1));
+                check(arm32 ? "vmovn.i64" : "xtn", 2 * w, u32(u64_1));
+            }
 
             // VMRS     X       F, D    Move Advanced SIMD or VFP Register to ARM compute Engine
             // VMSR     X       F, D    Move ARM Core Register to Advanced SIMD or VFP
@@ -1335,12 +1351,23 @@ public:
             check(arm32 ? "vrshr.u32" : "urshr", 4 * w, u32((u64(u32_1) + 32) >> 6));
 
             // VRSHRN   I       -       Rounding Shift Right Narrow
-            check(arm32 ? "vrshrn.i16" : "rshrn", 8 * w, i8((i32(i16_1) + 128) >> 8));
-            check(arm32 ? "vrshrn.i32" : "rshrn", 4 * w, i16((i32_1 + 256) >> 9));
-            check(arm32 ? "vrshrn.i64" : "rshrn", 2 * w, i32((i64_1 + 8) >> 4));
-            check(arm32 ? "vrshrn.i16" : "rshrn", 8 * w, u8((u32(u16_1) + 128) >> 8));
-            check(arm32 ? "vrshrn.i32" : "rshrn", 4 * w, u16((u64(u32_1) + 1024) >> 11));
-            // check(arm32 ? "vrshrn.i64" : "rshrn", 2 * w, u32((u64_1 + 64) >> 7));
+            if (Halide::Internal::get_llvm_version() >= 140) {
+                // LLVM14 converts RSHRN/RSHRN2 to RADDHN/RADDHN2 when the shift amount is half the width of the vector element
+                // See https://reviews.llvm.org/D116166
+                check(arm32 ? "vrshrn.i16" : "raddhn", 8 * w, i8((i32(i16_1) + 128) >> 8));
+                check(arm32 ? "vrshrn.i32" : "rshrn", 4 * w, i16((i32_1 + 256) >> 9));
+                check(arm32 ? "vrshrn.i64" : "rshrn", 2 * w, i32((i64_1 + 8) >> 4));
+                check(arm32 ? "vrshrn.i16" : "raddhn", 8 * w, u8((u32(u16_1) + 128) >> 8));
+                check(arm32 ? "vrshrn.i32" : "rshrn", 4 * w, u16((u64(u32_1) + 1024) >> 11));
+                // check(arm32 ? "vrshrn.i64" : "raddhn", 2 * w, u32((u64_1 + 64) >> 7));
+            } else {
+                check(arm32 ? "vrshrn.i16" : "rshrn", 8 * w, i8((i32(i16_1) + 128) >> 8));
+                check(arm32 ? "vrshrn.i32" : "rshrn", 4 * w, i16((i32_1 + 256) >> 9));
+                check(arm32 ? "vrshrn.i64" : "rshrn", 2 * w, i32((i64_1 + 8) >> 4));
+                check(arm32 ? "vrshrn.i16" : "rshrn", 8 * w, u8((u32(u16_1) + 128) >> 8));
+                check(arm32 ? "vrshrn.i32" : "rshrn", 4 * w, u16((u64(u32_1) + 1024) >> 11));
+                // check(arm32 ? "vrshrn.i64" : "rshrn", 2 * w, u32((u64_1 + 64) >> 7));
+            }
 
             // VRSQRTE  I, F    -       Reciprocal Square Root Estimate
             check(arm32 ? "vrsqrte.f32" : "frsqrte", 4 * w, fast_inverse_sqrt(f32_1));
