@@ -2558,11 +2558,12 @@ public:
         return this->funcs_.at(0).output_buffer();
     }
 
-    // 'perfect forwarding' won't work with initializer lists,
-    // so hand-roll our own forwarding method for set_estimates,
-    // rather than using HALIDE_FORWARD_METHOD.
+    // Forward set_estimates() to Func (rather than OutputImageParam) so that it can
+    // handle Tuple-valued outputs correctly.
     GeneratorOutput_Buffer<T> &set_estimates(const Region &estimates) {
-        this->as<OutputImageParam>().set_estimates(estimates);
+        user_assert(!this->is_array()) << "Cannot call set_estimates() on an array Output; use an explicit subscript operator: " << this->name();
+        internal_assert(this->exprs_.empty() && this->funcs_.size() == 1);
+        this->funcs_.at(0).set_estimates(estimates);
         return *this;
     }
 
