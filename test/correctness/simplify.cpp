@@ -130,7 +130,7 @@ void check_casts() {
 
     check(cast(Float(64), 0.5f), Expr(0.5));
     check((x - cast(Float(64), 0.5f)) * (x - cast(Float(64), 0.5f)),
-          (cast(Float(64), x) + Expr(-1.0)) * cast(Float(64), x) + Expr(0.25));
+          (x + Expr(-0.5)) * (x + Expr(-0.5)));
 
     check(cast(Int(64, 3), ramp(5.5f, 2.0f, 3)),
           cast(Int(64, 3), ramp(5.5f, 2.0f, 3)));
