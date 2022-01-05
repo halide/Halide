@@ -305,6 +305,8 @@ void define_func(py::module &m) {
 
             .def("infer_arguments", &Func::infer_arguments)
 
+            .def("dma", (Func & (Func::*)()) & Func::dma)
+
             .def("__repr__", [](const Func &func) -> std::string {
                 std::ostringstream o;
                 o << "<halide.Func '" << func.name() << "'>";

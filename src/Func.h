@@ -2300,7 +2300,9 @@ public:
      */
     Func &async();
 
+    /** TODO: document me */
     Func &dma();
+
     /** Bound the extent of a Func's storage, but not extent of its
      * compute. This can be useful for forcing a function's allocation 
      * to be a fixed size, which often means it can go on the stack. 
