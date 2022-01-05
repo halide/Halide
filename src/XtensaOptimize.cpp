@@ -58,6 +58,34 @@ bool is_native_xtensa_vector<float>(const Type &t) {
     return t.is_float() && (t.bits() == 32) && (t.lanes() == 16);
 }
 
+bool is_native_vector_type(const Type &t) {
+    if (t.is_int_or_uint() && (t.lanes() == 64) && (t.bits() == 8)) {
+        return true;
+    }
+
+    if (t.is_int_or_uint() && (t.lanes() == 64) && (t.bits() == 24)) {
+        return true;
+    }
+
+    if (t.is_int_or_uint() && (t.lanes() == 32) && (t.bits() == 16)) {
+        return true;
+    }
+
+    if (t.is_int_or_uint() && (t.lanes() == 32) && (t.bits() == 48)) {
+        return true;
+    }
+
+    if (t.is_int_or_uint() && (t.lanes() == 16) && (t.bits() == 32)) {
+        return true;
+    }
+
+    if (t.is_float() && (t.lanes() == 16) && (t.bits() == 32)) {
+        return true;
+    }
+
+    return false;
+}
+
 bool is_double_native_vector_type(const Type &t) {
     constexpr int double_vector_bitwidth = 512 * 2;
     return (t.bits() % 8 == 0) && (double_vector_bitwidth % t.bits() == 0) && (double_vector_bitwidth / t.bits() == t.lanes());
@@ -860,23 +888,27 @@ private:
             {"halide_xtensa_narrow_i48_with_shift_u16", u16(wild_i48x >> wild_u32)},
             {"halide_xtensa_narrow_i48_with_shift_u16", u16(wild_i48x / wild_u32), Pattern::ExactLog2Op1},
 
-            {"halide_xtensa_narrow_i48_with_shift_i16", i16(rounding_shift_right(i32(wild_i48x), wild_i32))},
-            {"halide_xtensa_narrow_i48_with_shift_u16", u16(rounding_shift_right(u32(wild_i48x), wild_u32))},
+            {"halide_xtensa_narrow_i48_with_rounding_shift_i16", i16(rounding_shift_right(i32(wild_i48x), wild_i32))},
+            {"halide_xtensa_narrow_i48_with_rounding_shift_u16", u16(rounding_shift_right(u32(wild_i48x), wild_u32))},
 
             {"halide_xtensa_narrow_with_shift_i16", i16(wild_i32x >> wild_i32)},
             {"halide_xtensa_narrow_with_shift_i16", i16(wild_i32x / wild_i32), Pattern::ExactLog2Op1},
             {"halide_xtensa_narrow_with_shift_u16", u16(wild_i32x >> wild_i32)},
             {"halide_xtensa_narrow_with_shift_u16", u16(wild_i32x / wild_i32), Pattern::ExactLog2Op1},
 
-            {"halide_xtensa_sat_narrow_with_shift_i8", i8_sat(rounding_shift_right(wild_i16x, wild_u16))},
-            {"halide_xtensa_sat_narrow_with_shift_u8", u8_sat(rounding_shift_right(wild_i16x, wild_u16))},
-            {"halide_xtensa_sat_narrow_with_shift_i16", i16_sat(rounding_shift_right(wild_i32x, wild_u32))},
-            {"halide_xtensa_sat_narrow_with_shift_i32", i32_sat(rounding_shift_right(wild_i64x, wild_u64))},
+            {"halide_xtensa_sat_narrow_with_rounding_shift_i8", i8_sat(rounding_shift_right(wild_i16x, wild_u16))},
+            {"halide_xtensa_sat_narrow_with_rounding_shift_u8", u8_sat(rounding_shift_right(wild_i16x, wild_u16))},
+            {"halide_xtensa_sat_narrow_with_rounding_shift_i16", i16_sat(rounding_shift_right(wild_i32x, wild_u32))},
+            {"halide_xtensa_sat_narrow_with_rounding_shift_i32", i32_sat(rounding_shift_right(wild_i64x, wild_u64))},
 
-            {"halide_xtensa_sat_narrow_with_signed_shift_i8", i8_sat(rounding_shift_right(wild_i16x, wild_i16))},
-            {"halide_xtensa_sat_narrow_with_signed_shift_u8", u8_sat(rounding_shift_right(wild_i16x, wild_i16))},
-            {"halide_xtensa_sat_narrow_with_signed_shift_i16", i16_sat(rounding_shift_right(wild_i32x, wild_i32))},
-            {"halide_xtensa_sat_narrow_with_signed_shift_i32", i32_sat(rounding_shift_right(wild_i64x, wild_i64))},
+            {"halide_xtensa_sat_narrow_with_signed_rounding_shift_i8", i8_sat(rounding_shift_right(wild_i16x, wild_i16))},
+            {"halide_xtensa_sat_narrow_with_signed_rounding_shift_u8", u8_sat(rounding_shift_right(wild_i16x, wild_i16))},
+            {"halide_xtensa_sat_narrow_with_signed_rounding_shift_i16", i16_sat(rounding_shift_right(wild_i32x, wild_i32))},
+            {"halide_xtensa_sat_narrow_with_signed_rounding_shift_i32", i32_sat(rounding_shift_right(wild_i64x, wild_i64))},
+
+            {"halide_xtensa_narrow_with_rounding_shift_i8", i8(rounding_shift_right(wild_i16x, bc(wild_u16)))},
+            {"halide_xtensa_narrow_with_rounding_shift_u8", u8(rounding_shift_right(wild_i16x, bc(wild_u16)))},
+            {"halide_xtensa_narrow_with_rounding_shift_i16", i16(rounding_shift_right(wild_i32x, bc(wild_u32)))},
 
             {"halide_xtensa_sat_left_shift_i16", i16_sat(widening_shift_left(wild_i16x, wild_i16x))},
             {"halide_xtensa_sat_left_shift_i16", i16_sat(widening_shift_left(wild_i16x, wild_u16x))},
@@ -885,7 +917,7 @@ private:
             {"halide_xtensa_sat_left_shift_i32", i32_sat(widening_shift_left(wild_i32x, wild_u32x))},
 
             // Looks like there is no such instruction.
-            // {"halide_xtensa_sat_narrow_with_shift_u16", u16_sat(rounding_shift_right(wild_i32x, wild_u32))},
+            // {"halide_xtensa_sat_narrow_with_rounding_shift_u16", u16_sat(rounding_shift_right(wild_i32x, wild_u32))},
 
             {"halide_xtensa_narrow_i24_with_shift_i16", i16(wild_i24x >> wild_i24)},
             {"halide_xtensa_narrow_i24_with_shift_i16", i16(wild_i24x / wild_i24), Pattern::ExactLog2Op1},
@@ -1033,11 +1065,17 @@ private:
             {"halide_xtensa_avg_u16", halving_add(wild_u16x, wild_u16x)},
             {"halide_xtensa_avg_i16", halving_add(wild_i16x, wild_i16x)},
 
+            // {"halide_xtensa_avg_u32", halving_add(wild_u32x, wild_u32x)},
+            // {"halide_xtensa_avg_i32", halving_add(wild_i32x, wild_i32x)},
+
             {"halide_xtensa_avg_round_u8", rounding_halving_add(wild_u8x, wild_u8x)},
             {"halide_xtensa_avg_round_i8", rounding_halving_add(wild_i8x, wild_i8x)},
 
             {"halide_xtensa_avg_round_u16", rounding_halving_add(wild_u16x, wild_u16x)},
             {"halide_xtensa_avg_round_i16", rounding_halving_add(wild_i16x, wild_i16x)},
+
+            // {"halide_xtensa_avg_round_u32", rounding_halving_add(wild_u32x, wild_u32x)},
+            // {"halide_xtensa_avg_round_i32", rounding_halving_add(wild_i32x, wild_i32x)},
 
             {"halide_xtensa_sat_add_i16", saturating_add(wild_i16x, wild_i16x)},
             {"halide_xtensa_sat_add_i32", saturating_add(wild_i32x, wild_i32x)},
@@ -1056,6 +1094,13 @@ private:
             {"halide_xtensa_widen_zzzzz", halide_xtensa_widen_mul_u24(wild_u8x256, wild_u8)},
             {"halide_xtensa_widen_zzzzz", halide_xtensa_widen_mul_u24(concat({wild_u8x64, wild_u8x64, wild_u8x64, wild_u8x64}), repeat_each_element(wild_u8x4, 64))},
             {"halide_xtensa_widen_zzzzz", halide_xtensa_widen_mul_u24(repeat_each_element(wild_u8x4, 64), wild_u8x256), Pattern::SwapOps01},
+
+            // {"halide_xtensa_rounding_shift_right_i8", rounding_shift_right(wild_i8x, bc(wild_u8))},
+            // {"halide_xtensa_rounding_shift_right_u8", rounding_shift_right(wild_u8x, bc(wild_u8))},
+            // {"halide_xtensa_rounding_shift_right_i16", rounding_shift_right(wild_i16x, bc(wild_u16))},
+            // {"halide_xtensa_rounding_shift_right_u16", rounding_shift_right(wild_u16x, bc(wild_u16))},
+            // {"halide_xtensa_rounding_shift_right_i32", rounding_shift_right(wild_i32x, bc(wild_u32))},
+            // {"halide_xtensa_rounding_shift_right_u32", rounding_shift_right(wild_u32x, bc(wild_u32))},
 
             {"halide_xtensa_widen_pair_mul_add_u24",
              call("halide_xtensa_yyyy", wild_i24x, {wild_i24x, halide_xtensa_concat_from_native_i24(halide_xtensa_widen_mul_u24(wild_u8x, wild_u8x), halide_xtensa_widen_mul_u24(wild_u8x, wild_u8x))})},
@@ -1084,7 +1129,7 @@ private:
              call("halide_xtensa_widen_mul_add_i48", wild_i48x,
                   {call("halide_xtensa_widen_mul_add_i48", wild_i48x, {wild_i48x, wild_i16x, wild_i16x}), wild_i16x, wild_i16x})},
 
-            {"halide_xtensa_sat_narrow_i48_with_shift_i16", call("halide_xtensa_sat_narrow_with_shift_i16", wild_i16x, {i32(wild_i48x), wild_u32})},
+            {"halide_xtensa_sat_narrow_i48_with_shift_i16", call("halide_xtensa_sat_narrow_with_rounding_shift_i16", wild_i16x, {i32(wild_i48x), wild_u32})},
             // NOTE(vksnk): looked like a good idea, but seems to be slower. Need to double-check.
             // {"halide_xtensa_i48x_clz_i16", halide_xtensa_narrow_clz_i16(i32(wild_i48x))},
             // {"halide_xtensa_i48x_clz_i16", halide_xtensa_narrow_clz_i16(u32(wild_i48x))},
@@ -1157,9 +1202,35 @@ private:
     }
 
     Expr visit(const VectorReduce *op) override {
+        if (op->value.type().lanes() == op->type.lanes() * 2) {
+            static const std::vector<Pattern> reduces_2x = {
+                {"halide_xtensa_reduce_add_x2_i8", vector_reduce(VectorReduce::Add, wild_i16x), Pattern::NarrowOps},
+                {"halide_xtensa_reduce_add_x2_i16", vector_reduce(VectorReduce::Add, wild_i32x), Pattern::NarrowOps},
+                {"halide_xtensa_reduce_add_x2_i32", vector_reduce(VectorReduce::Add, wild_i32x)},
+            };
+
+            Expr new_expr = apply_patterns(op, reduces_2x, this);
+            if (!new_expr.same_as(op)) {
+                return new_expr;
+            }
+        }
+
+        if (op->value.type().lanes() == op->type.lanes() * 4) {
+            static const std::vector<Pattern> reduces_4x = {
+                {"halide_xtensa_reduce_add_x4_i8", vector_reduce(VectorReduce::Add, wild_i16x), Pattern::NarrowOps},
+                {"halide_xtensa_reduce_add_x4_i16", vector_reduce(VectorReduce::Add, wild_i32x), Pattern::NarrowOps},
+                {"halide_xtensa_reduce_add_x4_i32", vector_reduce(VectorReduce::Add, wild_i32x)},
+            };
+
+            Expr new_expr = apply_patterns(op, reduces_4x, this);
+            if (!new_expr.same_as(op)) {
+                return new_expr;
+            }
+        }
+
         // Full reduction.
         if (op->type.is_scalar()) {
-            static const std::vector<Pattern> reduces = {
+            static const std::vector<Pattern> full_reduces = {
                 // TODO(vksnk): should be a better way to do the cast in the end.
                 {"halide_xtensa_full_reduce_add_u8_to_i32", vector_reduce(VectorReduce::Add, i32(wild_u8x))},
 
@@ -1184,7 +1255,7 @@ private:
                 {"halide_xtensa_full_reduce_max_i32", vector_reduce(VectorReduce::Max, wild_i32x)},
             };
 
-            Expr new_expr = apply_patterns(op, reduces, this);
+            Expr new_expr = apply_patterns(op, full_reduces, this);
             if (!new_expr.same_as(op)) {
                 return new_expr;
             }
@@ -1787,7 +1858,14 @@ private:
         int native_lanes = get_native_vector_lanes_num(op->type);
         std::set<std::string> skip_slicing = {"halide_xtensa_widening_load", "halide_xtensa_interleave_i16",
                                               "halide_xtensa_narrow_i24_with_shift_i16", "halide_xtensa_narrow_i48_with_shift_i32",
-                                              "halide_xtensa_narrow_i48_with_shift_u32"};
+                                              "halide_xtensa_narrow_i48_with_shift_u32",
+                                              // TODO(vksnk): ugly to list them all.
+                                              "halide_xtensa_reduce_add_x2_i8",
+                                              "halide_xtensa_reduce_add_x2_i16",
+                                              "halide_xtensa_reduce_add_x2_i32",
+                                              "halide_xtensa_reduce_add_x4_i8",
+                                              "halide_xtensa_reduce_add_x4_i16",
+                                              "halide_xtensa_reduce_add_x4_i32"};
         if (native_lanes > 0 && (skip_slicing.count(op->name) == 0)) {
             const int total_lanes = op->type.lanes();
             int split_to = op->type.lanes() / native_lanes;

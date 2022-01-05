@@ -35,6 +35,7 @@ bool is_native_xtensa_vector<uint32_t>(const Type &t);
 template<>
 bool is_native_xtensa_vector<float>(const Type &t);
 
+bool is_native_vector_type(const Type &t);
 bool is_double_native_vector_type(const Type &t);
 
 Type get_native_xtensa_vector(const Type &t);
