@@ -7,7 +7,7 @@ namespace Internal {
 
 static const char *const kAllocationError = "Printer buffer allocation failed.\n";
 
-WEAK PrinterBase::PrinterBase(void *ctx, char *mem, uint64_t length)
+PrinterBase::PrinterBase(void *ctx, char *mem, uint64_t length)
     : user_context(ctx), length(length) {
 
     if (mem == nullptr) {
@@ -26,68 +26,68 @@ WEAK PrinterBase::PrinterBase(void *ctx, char *mem, uint64_t length)
     }
 }
 
-WEAK PrinterBase::PrinterBase(void *ctx)
+PrinterBase::PrinterBase(void *ctx)
     : PrinterBase(ctx, nullptr, default_printer_buffer_length) {
 }
 
-WEAK PrinterBase &PrinterBase::operator<<(const char *arg) {
+PrinterBase &PrinterBase::operator<<(const char *arg) {
     dst = halide_string_to_string(dst, end, arg);
     return *this;
 }
 
-WEAK PrinterBase &PrinterBase::operator<<(int64_t arg) {
+PrinterBase &PrinterBase::operator<<(int64_t arg) {
     dst = halide_int64_to_string(dst, end, arg, 1);
     return *this;
 }
 
-WEAK PrinterBase &PrinterBase::operator<<(int32_t arg) {
+PrinterBase &PrinterBase::operator<<(int32_t arg) {
     dst = halide_int64_to_string(dst, end, arg, 1);
     return *this;
 }
 
-WEAK PrinterBase &PrinterBase::operator<<(uint64_t arg) {
+PrinterBase &PrinterBase::operator<<(uint64_t arg) {
     dst = halide_uint64_to_string(dst, end, arg, 1);
     return *this;
 }
 
-WEAK PrinterBase &PrinterBase::operator<<(uint32_t arg) {
+PrinterBase &PrinterBase::operator<<(uint32_t arg) {
     dst = halide_uint64_to_string(dst, end, arg, 1);
     return *this;
 }
 
-WEAK PrinterBase &PrinterBase::operator<<(double arg) {
+PrinterBase &PrinterBase::operator<<(double arg) {
     dst = halide_double_to_string(dst, end, arg, 1);
     return *this;
 }
 
-WEAK PrinterBase &PrinterBase::operator<<(float arg) {
+PrinterBase &PrinterBase::operator<<(float arg) {
     dst = halide_double_to_string(dst, end, arg, 0);
     return *this;
 }
 
-WEAK PrinterBase &PrinterBase::operator<<(const void *arg) {
+PrinterBase &PrinterBase::operator<<(const void *arg) {
     dst = halide_pointer_to_string(dst, end, arg);
     return *this;
 }
 
-WEAK PrinterBase &PrinterBase::write_float16_from_bits(const uint16_t arg) {
+PrinterBase &PrinterBase::write_float16_from_bits(const uint16_t arg) {
     double value = halide_float16_bits_to_double(arg);
     dst = halide_double_to_string(dst, end, value, 1);
     return *this;
 }
 
-WEAK PrinterBase &PrinterBase::operator<<(const halide_type_t &t) {
+PrinterBase &PrinterBase::operator<<(const halide_type_t &t) {
     dst = halide_type_to_string(dst, end, &t);
     return *this;
 }
 
-WEAK PrinterBase &PrinterBase::operator<<(const halide_buffer_t &buf) {
+PrinterBase &PrinterBase::operator<<(const halide_buffer_t &buf) {
     dst = halide_buffer_to_string(dst, end, &buf);
     return *this;
 }
 
 // Use it like a stringstream.
-WEAK const char *PrinterBase::str() {
+const char *PrinterBase::str() {
     if (!buf) {
         return kAllocationError;
     }
@@ -98,7 +98,7 @@ WEAK const char *PrinterBase::str() {
 }
 
 // Clear it. Useful for reusing a stringstream.
-WEAK void PrinterBase::clear() {
+void PrinterBase::clear() {
     dst = buf;
     if (dst) {
         dst[0] = 0;
@@ -106,7 +106,7 @@ WEAK void PrinterBase::clear() {
 }
 
 // Delete the last N characters
-WEAK void PrinterBase::erase(int n) {
+void PrinterBase::erase(int n) {
     if (dst) {
         dst -= n;
         if (dst < buf) {
@@ -116,16 +116,16 @@ WEAK void PrinterBase::erase(int n) {
     }
 }
 
-WEAK PrinterBase::~PrinterBase() {
+PrinterBase::~PrinterBase() {
     // free() is fine to call on a nullptr
     free(mem_to_free);
 }
 
-WEAK void PrinterBase::finish_error() {
+void PrinterBase::finish_error() {
     halide_error(user_context, str());
 }
 
-WEAK void PrinterBase::finish_print() {
+void PrinterBase::finish_print() {
     halide_print(user_context, str());
 }
 
