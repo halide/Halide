@@ -792,7 +792,7 @@ The following targets are not guaranteed to be available:
 
 ### Functions
 
-Currently, only two function is defined:
+Currently, only two functions are defined:
 
 #### `add_halide_library`
 
