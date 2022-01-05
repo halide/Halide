@@ -165,6 +165,9 @@ set(RUNTIME_CXX_FLAGS
     -Wsign-compare
 )
 
+option(Halide_CLANG_TIDY_BUILD "Generate fake compile jobs for runtime files when running clang-tidy." OFF)
+mark_as_advanced(Halide_CLANG_TIDY_BUILD)
+
 foreach (i IN LISTS RUNTIME_CPP)
     foreach (j IN ITEMS 32 64)
         # -fpic needs special treatment; see below on windows 64bits
