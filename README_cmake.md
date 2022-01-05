@@ -30,6 +30,7 @@ The following sections cover each in detail.
     - [Imported targets](#imported-targets)
     - [Functions](#functions)
       - [`add_halide_library`](#add_halide_library)
+      - [`add_halide_generator`](#add_halide_generator)
 - [Contributing CMake code to Halide](#contributing-cmake-code-to-halide)
   - [General guidelines and best practices](#general-guidelines-and-best-practices)
     - [Prohibited commands list](#prohibited-commands-list)
