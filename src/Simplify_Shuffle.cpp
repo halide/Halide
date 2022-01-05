@@ -47,72 +47,6 @@ Expr Simplify::visit(const Shuffle *op, ExprInfo *bounds) {
         new_vectors.push_back(new_vector);
     }
 
-    // If any of the args are narrowing casts, convert them to shuffles of
-    // reinterpret casts so we can fold them into this shuffle. This all assumes
-    // little-endianness, so if we ever support a big-endian backend we'll have
-    // to switch on the target here.
-    for (Expr &v : new_vectors) {
-        if (!(v.type().is_int() || v.type().is_uint()) || !v.as<Cast>()) {
-            continue;
-        }
-
-        auto x_is_16_bit = is_int(x, 16) || is_uint(x, 16);
-        auto x_is_32_bit = is_int(x, 32) || is_uint(x, 32);
-        auto x_is_64_bit = is_int(x, 64) || is_uint(x, 64);
-
-        auto rewrite = IRMatcher::rewriter(v, op->type);
-
-        auto t8 = v.type().with_bits(8);
-        auto t16 = v.type().with_bits(16);
-        auto t32 = v.type().with_bits(32);
-
-        // Shifts have been canonicalized to divisions provided they are less
-        // than 32 bit, so the patterns below switch from division to shifting
-        // at 32-bits.
-        int stride = 0, start = 0;
-
-        if (rewrite(cast(t8, x / (1 << 8)), x, x_is_16_bit) ||
-            rewrite(cast(t16, x / (1 << 16)), x, x_is_32_bit) ||
-            rewrite(cast(t32, shift_right(x, 32)), x, x_is_64_bit)) {
-            // Extract high half
-            stride = 2;
-            start = 1;
-        } else if (rewrite(cast(t8, x), x, x_is_16_bit) ||
-                   rewrite(cast(t16, x), x, x_is_32_bit) ||
-                   rewrite(cast(t32, x), x, x_is_64_bit)) {
-            // Extract low half
-            stride = 2;
-            start = 0;
-        } else if (rewrite(cast(t8, x / (1 << 24)), x, x_is_32_bit) ||
-                   rewrite(cast(t16, shift_right(x, 48)), x, x_is_64_bit)) {
-            // Extract 4th quarter
-            stride = 4;
-            start = 3;
-        } else if (rewrite(cast(t8, x / (1 << 16)), x, x_is_32_bit) ||
-                   rewrite(cast(t16, shift_right(x, 32)), x, x_is_64_bit)) {
-            // Extract 3rd quarter
-            stride = 4;
-            start = 2;
-        } else if (rewrite(cast(t8, x / (1 << 8)), x, x_is_32_bit) ||
-                   rewrite(cast(t16, x / (1 << 16)), x, x_is_64_bit)) {
-            // Extract 2nd quarter
-            stride = 4;
-            start = 1;
-        } else if (rewrite(cast(t8, x), x, x_is_32_bit) ||
-                   rewrite(cast(t16, x), x, x_is_64_bit)) {
-            // Extract low quarter
-            stride = 4;
-            start = 0;
-        } else {
-            continue;
-        }
-
-        int lanes = v.type().lanes();
-        v = reinterpret(v.type().with_lanes(lanes * stride), rewrite.result);
-        v = Shuffle::make_slice(v, start, stride, lanes);
-        changed = true;
-    }
-
     // Try to convert a load with shuffled indices into a
     // shuffle of a dense load.
     if (const Load *first_load = new_vectors[0].as<Load>()) {
@@ -257,7 +191,6 @@ Expr Simplify::visit(const Shuffle *op, ExprInfo *bounds) {
                 }
             }
         }
-
     } else if (op->is_concat()) {
         // Try to collapse a concat of ramps into a single ramp.
         const Ramp *r = new_vectors[0].as<Ramp>();
