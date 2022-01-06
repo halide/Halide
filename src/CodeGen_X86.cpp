@@ -519,13 +519,17 @@ void CodeGen_X86::visit(const Call *op) {
             }
         }
     } else if (op->is_intrinsic(Call::absd)) {
+        internal_assert(op->args.size() == 2);
         if (op->args[0].type().is_uint()) {
             // On x86, there are many 3-instruction sequences to compute absd of
             // unsigned integers. This one consists solely of instructions with
             // throughput of 3 ops per cycle on Cannon Lake.
+            //
+            // Solution due to Wolciech Mula:
+            // http://0x80.pl/notesen/2018-03-11-sse-abs-unsigned.html
             codegen(saturating_sub(op->args[0], op->args[1]) | saturating_sub(op->args[1], op->args[0]));
             return;
-        } else if (op->type.is_int()) {
+        } else if (op->args[0].type().is_int()) {
             codegen(Max::make(op->args[0], op->args[1]) - Min::make(op->args[0], op->args[1]));
             return;
         }
