@@ -519,14 +519,15 @@ void CodeGen_X86::visit(const Call *op) {
             }
         }
     } else if (op->is_intrinsic(Call::absd)) {
-        if (op->type.is_uint()) {
+        if (op->args[0].type().is_uint()) {
             // On x86, there are many 3-instruction sequences to compute absd of
             // unsigned integers. This one consists solely of instructions with
             // throughput of 3 ops per cycle on Cannon Lake.
-            codegen(saturating_sub(op->args[0], op->args[1]) | saturating_sub(op->args[0], op->args[1]));
+            codegen(saturating_sub(op->args[0], op->args[1]) | saturating_sub(op->args[1], op->args[0]));
             return;
         } else if (op->type.is_int()) {
             codegen(Max::make(op->args[0], op->args[1]) - Min::make(op->args[0], op->args[1]));
+            return;
         }
     }
 
