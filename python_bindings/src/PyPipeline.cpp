@@ -114,7 +114,7 @@ void define_pipeline(py::module &m) {
                     std::optional<Realization> r;
                     {
                         py::gil_scoped_release release;
-                        r = std::move(p.realize(std::move(sizes), target));
+                        r = p.realize(std::move(sizes), target);
                     }
                     return realization_to_object(*r);
                 },

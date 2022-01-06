@@ -82,10 +82,6 @@ Expr random_int(const vector<Expr> &e) {
                                rng32(Variable::make(UInt(32), name)));
         }
     }
-    // The low bytes of this have a poor period, so mix in the high bytes for
-    // two additional instructions.
-    result = result ^ (result >> 16);
-
     return result;
 }
 
@@ -105,9 +101,7 @@ class LowerRandom : public IRMutator {
     Expr visit(const Call *op) override {
         if (op->is_intrinsic(Call::random)) {
             vector<Expr> args = op->args;
-            // Insert the free vars in reverse, so innermost vars typically end
-            // up last.
-            args.insert(args.end(), extra_args.rbegin(), extra_args.rend());
+            args.insert(args.end(), extra_args.begin(), extra_args.end());
             if (op->type == Float(32)) {
                 return random_float(args);
             } else if (op->type == Int(32)) {
@@ -127,6 +121,7 @@ class LowerRandom : public IRMutator {
 
 public:
     LowerRandom(const vector<VarOrRVar> &free_vars, int tag) {
+        extra_args.emplace_back(tag);
         for (const VarOrRVar &v : free_vars) {
             if (v.is_rvar) {
                 extra_args.push_back(v.rvar);
@@ -134,7 +129,6 @@ public:
                 extra_args.push_back(v.var);
             }
         }
-        extra_args.emplace_back(tag);
     }
 };
 
