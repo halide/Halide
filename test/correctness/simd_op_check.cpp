@@ -1649,6 +1649,9 @@ public:
             check("vsububs", 16 * w, u8(max(i16(u8_1) - i16(u8_2), 0)));
             check("vsubuhs", 8 * w, u16(max(i32(u16_1) - i32(u16_2), 0)));
             check("vsubuws", 4 * w, u32(max(i64(u32_1) - i64(u32_2), 0)));
+            check("vsububs", 16 * w, absd(i8_1, i8_2));
+            check("vsubuhs", 16 * w, absd(i16_1, i16_2));
+            check("vsubuws", 16 * w, absd(i32_1, i32_2));
 
             // Vector Integer Average Instructions.
             check("vavgsb", 16 * w, i8((i16(i8_1) + i16(i8_2) + 1) / 2));
