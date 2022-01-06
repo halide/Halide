@@ -1886,9 +1886,10 @@ extern int halide_release_dma();
 #endif
 
 class ScopedDmaInitializer {
-  public:
+  int status_;
+ public:
   ScopedDmaInitializer() {
-    int status = halide_init_dma();
+    status_ = halide_init_dma();
   }
 
   ~ScopedDmaInitializer() {
