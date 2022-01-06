@@ -525,7 +525,7 @@ void CodeGen_X86::visit(const Call *op) {
             // unsigned integers. This one consists solely of instructions with
             // throughput of 3 ops per cycle on Cannon Lake.
             //
-            // Solution due to Wolciech Mula:
+            // Solution due to Wojciech Mula:
             // http://0x80.pl/notesen/2018-03-11-sse-abs-unsigned.html
             codegen(saturating_sub(op->args[0], op->args[1]) | saturating_sub(op->args[1], op->args[0]));
             return;
