@@ -127,7 +127,10 @@ public:
     // this buffer.
     Input<Buffer<int16_t>> program_{"program", 2};
 
-    Func build() {
+    // Type is determined by the GeneratorParams specified.
+    Output<Buffer<>> output_{"output", 2};
+
+    void generate() {
         Var x("x"), y("y"), u("u");
 
         Type intermediate_type = intermediate_type_;
@@ -175,7 +178,6 @@ public:
         r.where(r.x == op);
         scratch(x, y, slot) = mux(r.x, instructions);
 
-        Func output("output");
         std::vector<Type> output_types;
         if (((Type)output1_type_).bits() > 0) {
             output_types.push_back(output1_type_);
@@ -195,10 +197,10 @@ public:
             output_i = saturating_cast(output_types[i], output_i);
             outputs.push_back(output_i);
         }
-        output(x, y) = Tuple(outputs);
+        output_(x, y) = Tuple(outputs);
 
         // Schedule.
-        output.compute_root()
+        output_.compute_root()
             .vectorize(x, natural_vector_size<uint8_t>(), TailStrategy::Predicate);
 
         // Only allow this many instructions per input, so we can store scratch
@@ -222,8 +224,6 @@ public:
 
         program_.dim(0).set_min(0).set_extent(ElementwiseAssembler::InstructionSize).set_stride(1);
         program_.dim(1).set_min(0).set_stride(ElementwiseAssembler::InstructionSize);
-
-        return output;
     }
 };
 
