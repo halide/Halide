@@ -1909,19 +1909,19 @@ class ScopedDmaInitializer {
         stream << std::flush;
 
         std::set<Type> native_vector_types = {
-            Type(Type::Int, 8, 64),
-            Type(Type::UInt, 8, 64),
-            Type(Type::Int, 16, 32),
-            Type(Type::UInt, 16, 32),
-            Type(Type::Int, 32, 16),
-            Type(Type::UInt, 32, 16),
-            Type(Type::Int, 24, 64),
-            Type(Type::UInt, 24, 64),
-            Type(Type::Int, 48, 32),
-            Type(Type::UInt, 48, 32),
-            Type(Type::Int, 64, 16),
-            Type(Type::Float, 16, 32),
-            Type(Type::Float, 32, 16),
+            Int(8, 64),
+            UInt(8, 64),
+            Int(16, 32),
+            UInt(16, 32),
+            Int(32, 16),
+            UInt(32, 16),
+            Int(24, 64),
+            UInt(24, 64),
+            Int(48, 32),
+            UInt(48, 32),
+            Int(64, 16),
+            Float(16, 32),
+            Float(32, 16),
         };
 
         std::set<Type> predefined_vectors = {

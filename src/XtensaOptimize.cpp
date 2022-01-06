@@ -23,67 +23,24 @@ using std::vector;
 
 using namespace Halide::ConciseCasts;
 
-template<>
-bool is_native_xtensa_vector<int8_t>(const Type &t) {
-    return t.is_int() && (t.bits() == 8) && (t.lanes() == 64);
-}
-
-template<>
-bool is_native_xtensa_vector<uint8_t>(const Type &t) {
-    return t.is_uint() && (t.bits() == 8) && (t.lanes() == 64);
-}
-
-template<>
-bool is_native_xtensa_vector<int16_t>(const Type &t) {
-    return t.is_int() && (t.bits() == 16) && (t.lanes() == 32);
-}
-
-template<>
-bool is_native_xtensa_vector<uint16_t>(const Type &t) {
-    return t.is_uint() && (t.bits() == 16) && (t.lanes() == 32);
-}
-
-template<>
-bool is_native_xtensa_vector<int32_t>(const Type &t) {
-    return t.is_int() && (t.bits() == 32) && (t.lanes() == 16);
-}
-
-template<>
-bool is_native_xtensa_vector<uint32_t>(const Type &t) {
-    return t.is_uint() && (t.bits() == 32) && (t.lanes() == 16);
-}
-
-template<>
-bool is_native_xtensa_vector<float>(const Type &t) {
-    return t.is_float() && (t.bits() == 32) && (t.lanes() == 16);
-}
-
 bool is_native_vector_type(const Type &t) {
-    if (t.is_int_or_uint() && (t.lanes() == 64) && (t.bits() == 8)) {
+    switch (((halide_type_t)t).as_u32()) {
+    case halide_type_t(halide_type_int, 8, 64).as_u32():
+    case halide_type_t(halide_type_uint, 8, 64).as_u32():
+    case halide_type_t(halide_type_int, 16, 32).as_u32():
+    case halide_type_t(halide_type_uint, 16, 32).as_u32():
+    case halide_type_t(halide_type_int, 32, 16).as_u32():
+    case halide_type_t(halide_type_uint, 32, 16).as_u32():
+    case halide_type_t(halide_type_float, 32, 16).as_u32():
+    // 24 and 48-bit integers?
+    case halide_type_t(halide_type_int, 24, 64).as_u32():
+    case halide_type_t(halide_type_uint, 24, 64).as_u32():
+    case halide_type_t(halide_type_int, 48, 32).as_u32():
+    case halide_type_t(halide_type_uint, 48, 32).as_u32():
         return true;
+    default:
+        return false;
     }
-
-    if (t.is_int_or_uint() && (t.lanes() == 64) && (t.bits() == 24)) {
-        return true;
-    }
-
-    if (t.is_int_or_uint() && (t.lanes() == 32) && (t.bits() == 16)) {
-        return true;
-    }
-
-    if (t.is_int_or_uint() && (t.lanes() == 32) && (t.bits() == 48)) {
-        return true;
-    }
-
-    if (t.is_int_or_uint() && (t.lanes() == 16) && (t.bits() == 32)) {
-        return true;
-    }
-
-    if (t.is_float() && (t.lanes() == 16) && (t.bits() == 32)) {
-        return true;
-    }
-
-    return false;
 }
 
 bool is_double_native_vector_type(const Type &t) {
@@ -99,27 +56,28 @@ Type get_native_xtensa_vector(const Type &t) {
 }
 
 std::string suffix_for_type(Type t) {
-    if (t.is_bool()) {
+    switch (((halide_type_t)t).element_of().as_u32()) {
+    case halide_type_t(halide_type_uint, 1).as_u32():
         return "_u1";
-    } else if (t.is_int() && (t.bits() == 8)) {
+    case halide_type_t(halide_type_int, 8).as_u32():
         return "_i8";
-    } else if (t.is_uint() && (t.bits() == 8)) {
+    case halide_type_t(halide_type_uint, 8).as_u32():
         return "_u8";
-    } else if (t.is_int() && (t.bits() == 16)) {
+    case halide_type_t(halide_type_int, 16).as_u32():
         return "_i16";
-    } else if (t.is_uint() && (t.bits() == 16)) {
+    case halide_type_t(halide_type_uint, 16).as_u32():
         return "_u16";
-    } else if (t.is_int() && (t.bits() == 32)) {
+    case halide_type_t(halide_type_int, 32).as_u32():
         return "_i32";
-    } else if (t.is_uint() && (t.bits() == 32)) {
+    case halide_type_t(halide_type_uint, 32).as_u32():
         return "_u32";
-    } else if (t.is_float() && (t.bits() == 32)) {
-        return "_f32";
-    } else if (t.is_float() && (t.bits() == 16)) {
+    case halide_type_t(halide_type_float, 16).as_u32():
         return "_f16";
+    case halide_type_t(halide_type_float, 32).as_u32():
+        return "_f32";
+    default:
+        return "";
     }
-
-    return "";
 }
 
 struct Pattern {
