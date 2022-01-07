@@ -51,9 +51,9 @@ void CodeGen_Xtensa::compile(const LoweredFunc &f, const std::map<std::string, s
     const std::vector<LoweredArgument> &args = f.args;
 
     have_user_context = false;
-    for (size_t i = 0; i < args.size(); i++) {
+    for (const auto &arg : args) {
         // TODO: check that its type is void *?
-        have_user_context |= (args[i].name == "__user_context");
+        have_user_context |= (arg.name == "__user_context");
     }
 
     NameMangling name_mangling = f.name_mangling;
@@ -96,7 +96,9 @@ void CodeGen_Xtensa::compile(const LoweredFunc &f, const std::map<std::string, s
                    << print_name(args[i].name);
         }
 
-        if (i < args.size() - 1) stream << ", ";
+        if (i < args.size() - 1) {
+            stream << ", ";
+        }
     }
 
     if (is_header_or_extern_decl()) {
@@ -3029,7 +3031,7 @@ void CodeGen_Xtensa::visit(const Shuffle *op) {
     }
 
     std::vector<string> vecs;
-    for (Expr v : op->vectors) {
+    for (const Expr &v : op->vectors) {
         vecs.push_back(print_expr(v));
     }
     string src = vecs[0];
