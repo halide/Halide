@@ -51,9 +51,9 @@ void CodeGen_Xtensa::compile(const LoweredFunc &f, const std::map<std::string, s
     const std::vector<LoweredArgument> &args = f.args;
 
     have_user_context = false;
-    for (size_t i = 0; i < args.size(); i++) {
+    for (const auto &arg : args) {
         // TODO: check that its type is void *?
-        have_user_context |= (args[i].name == "__user_context");
+        have_user_context |= (arg.name == "__user_context");
     }
 
     NameMangling name_mangling = f.name_mangling;
@@ -96,7 +96,9 @@ void CodeGen_Xtensa::compile(const LoweredFunc &f, const std::map<std::string, s
                    << print_name(args[i].name);
         }
 
-        if (i < args.size() - 1) stream << ", ";
+        if (i < args.size() - 1) {
+            stream << ", ";
+        }
     }
 
     if (is_header_or_extern_decl()) {
@@ -1752,9 +1754,11 @@ HALIDE_ALWAYS_INLINE uint8x64_t halide_xtensa_sat_narrow_with_rounding_shift_u8(
 HALIDE_ALWAYS_INLINE int16x32_t halide_xtensa_narrow_with_rounding_shift_i16(const int32x32_t& a, uint32_t shift) {
   xb_vecNx48 wide = convert_to_int48x32_t_from_int32x32_t(a);
   // Add rounding factor.
-  int32_t half_shift_1 = (shift - 1) >> 1;
-  int32_t half_shift_2 = (shift - 1) - half_shift_1;
-  IVP_MULANX16(wide, int16x32_t(1 << half_shift_1), int16x32_t(1 << half_shift_2));
+  const uint16_t half_shift_1 = (shift - 1) >> 1;
+  const uint16_t half_shift_2 = (shift - 1) - half_shift_1;
+  uint16x32_t v1 = IVP_SLLNX16U(1, half_shift_1);
+  uint16x32_t v2 = IVP_SLLNX16U(1, half_shift_2);
+  IVP_MULUUANX16(wide, v1, v2);
   return IVP_PACKVRNRNX48(wide, shift);
 }
 
@@ -3027,7 +3031,7 @@ void CodeGen_Xtensa::visit(const Shuffle *op) {
     }
 
     std::vector<string> vecs;
-    for (Expr v : op->vectors) {
+    for (const Expr &v : op->vectors) {
         vecs.push_back(print_expr(v));
     }
     string src = vecs[0];
