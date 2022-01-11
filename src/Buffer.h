@@ -137,7 +137,7 @@ class Buffer {
                               std::is_void<T>::value ||
                               std::is_void<T2>::value,
                           "type mismatch constructing Buffer");
-            static_assert(Dims == DynamicDims || Dims == D2,
+            static_assert(Dims == DynamicDims || D2 == DynamicDims || Dims == D2,
                           "Can't convert from a Buffer with static dimensionality to a Buffer with different static dimensionality");
         } else {
             // Don't delegate to

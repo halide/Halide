@@ -136,7 +136,6 @@ template<typename T = void,
 class Buffer {
     static constexpr int DynamicDims = -1;
     static_assert(Dims == DynamicDims || Dims >= 0);
-    static_assert(Dims == -1);
 
     /** The underlying halide_buffer_t */
     halide_buffer_t buf = {};
@@ -297,8 +296,8 @@ private:
     }
 
     void make_shape_storage(const int dimensions) {
-        if (Dims != DynamicDims) {
-            assert(dimensions == Dims);
+        if (Dims != DynamicDims && Dims != dimensions) {
+            assert(false && "Number of arguments to Buffer() does not match static dimensionality");
         }
         // This should usually be inlined, so if dimensions is statically known,
         // we can skip the call to new
@@ -609,7 +608,7 @@ private:
                                    typename std::remove_const<T2>::type>::value ||
                           T_is_void || Buffer<T2, D2, S2>::T_is_void,
                       "type mismatch constructing Buffer");
-        static_assert(Dims == DynamicDims || Dims == D2,
+        static_assert(Dims == DynamicDims || D2 == DynamicDims || Dims == D2,
                       "Can't convert from a Buffer with static dimensionality to a Buffer with different static dimensionality");
     }
 
@@ -621,9 +620,15 @@ public:
     static bool can_convert_from(const Buffer<T2, D2, S2> &other) {
         static_assert_can_convert_from<T2, D2, S2>();
         if (Buffer<T2, D2, S2>::T_is_void && !T_is_void) {
-            return other.type() == static_halide_type();
+            if (other.type() != static_halide_type()) {
+                return false;
+            }
         }
-        // TODO: do we need dim check?
+        if (Dims != DynamicDims) {
+            if  (other.dimensions() != Dims) {
+                return false;
+            }
+        }
         return true;
     }
 

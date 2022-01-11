@@ -137,6 +137,17 @@ int main(int argc, char **argv) {
     }
 
     {
+        // Check Buffers with static dimensionality
+        Buffer<float, 2> a(100, 80);
+        Buffer<float, 2> b(a);                              // statically safe
+        // Buffer<float, 3> c(a);                           // will not compile (static_assert failure)
+        Buffer<float> d(a);                                 // checks at runtime (and succeeds)
+        Buffer<float> d1(a, Buffer<float>::DynamicDims);    // same as previous, just explicit syntax
+        // Buffer<float, 3> e(d);                           // checks at runtime (and fails because d.dims = 2)
+        Buffer<float, 2> f(d);                              // checks at runtime (and succeeds because d.dims = 2)
+    }
+
+    {
         // Check moving a buffer around
         Buffer<float> a(100, 80, 3);
         a.for_each_element([&](int x, int y, int c) {
