@@ -166,6 +166,9 @@ set(RUNTIME_CXX_FLAGS
     -Wsign-compare
 )
 
+option(Halide_CLANG_TIDY_BUILD "Generate fake compile jobs for runtime files when running clang-tidy." OFF)
+mark_as_advanced(Halide_CLANG_TIDY_BUILD)
+
 foreach (i IN LISTS RUNTIME_CPP)
     foreach (j IN ITEMS 32 64)
         # -fpic needs special treatment; see below on windows 64bits
@@ -290,9 +293,32 @@ foreach (i IN LISTS RUNTIME_LL)
     set(BC "initmod.${i}.bc")
     set(INITMOD "_initmod_${i}.cpp")
 
+    # For LLVM14+, we must add elementtype() annotations to some of our LLVM IR;
+    # earlier versions either don't understand that keyword at all, or don't support
+    # the uses we have for it. Rather than forking these sources, for now we'll just
+    # edit the files at build time to remove the offending uses. Note that `sed` and friends aren't
+    # an option for CMake builds (since they must support Windows environments without
+    # such tooling).
+    #
+    # (This may well need attention in the future, depending on how the LLVM opaque-pointers work proceeeds;
+    # see https://llvm.org/docs/OpaquePointers.html)
+
+    set(LL_TRANSFORMED "${LL}.transformed.ll")
+    if (Halide_LLVM_VERSION VERSION_LESS 14.0)
+        add_custom_command(OUTPUT "${LL_TRANSFORMED}"
+                           COMMAND regexp_replace "elementtype\\(i[0-9]+\\)" "" < "$<SHELL_PATH:${CMAKE_CURRENT_SOURCE_DIR}/${LL}>" > "${LL_TRANSFORMED}"
+                           DEPENDS "${LL}" regexp_replace
+                           VERBATIM)
+    else ()
+        add_custom_command(OUTPUT "${LL_TRANSFORMED}"
+                           COMMAND ${CMAKE_COMMAND} -E copy "$<SHELL_PATH:${CMAKE_CURRENT_SOURCE_DIR}/${LL}>" "${LL_TRANSFORMED}"
+                           DEPENDS "${LL}"
+                           VERBATIM)
+    endif ()
+
     add_custom_command(OUTPUT "${BC}"
-                       COMMAND llvm-as "$<SHELL_PATH:${CMAKE_CURRENT_SOURCE_DIR}/${LL}>" -o "${BC}"
-                       DEPENDS "${LL}"
+                       COMMAND llvm-as "${LL_TRANSFORMED}" -o "${BC}"
+                       DEPENDS "${LL_TRANSFORMED}"
                        VERBATIM)
     add_custom_command(OUTPUT "${INITMOD}"
                        COMMAND binary2cpp "halide_internal_initmod_${i}_ll" < "${BC}" > "${INITMOD}"

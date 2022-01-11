@@ -131,6 +131,7 @@ struct Target {
         LLVMLargeCodeModel = halide_llvm_large_code_model,
         RVV = halide_target_feature_rvv,
         ARMv81a = halide_target_feature_armv81a,
+        SanitizerCoverage = halide_target_feature_sanitizer_coverage,
         FeatureEnd = halide_target_feature_end
     };
     Target() = default;

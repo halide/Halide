@@ -130,7 +130,7 @@ struct DeviceRefCount {
 template<typename T = void, int D = 4>
 class Buffer {
     /** The underlying halide_buffer_t */
-    halide_buffer_t buf = {0};
+    halide_buffer_t buf = {};
 
     /** Some in-class storage for shape of the dimensions. */
     halide_dimension_t shape[D];
@@ -995,8 +995,8 @@ public:
      * this is the last reference to it. Will assert fail if there are
      * weak references to this Buffer outstanding. */
     ~Buffer() {
-        free_shape_storage();
         decref();
+        free_shape_storage();
     }
 
     /** Get a pointer to the raw halide_buffer_t this wraps. */

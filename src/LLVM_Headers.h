@@ -20,7 +20,7 @@
 
 // IWYU pragma: begin_exports
 
-#ifdef WITH_WABT
+#if WITH_WABT || WITH_V8
 #include <lld/Common/Driver.h>
 #endif
 #include <llvm/ADT/APFloat.h>
@@ -90,6 +90,7 @@
 #include <llvm/Transforms/IPO/PassManagerBuilder.h>
 #include <llvm/Transforms/Instrumentation.h>
 #include <llvm/Transforms/Instrumentation/AddressSanitizer.h>
+#include <llvm/Transforms/Instrumentation/SanitizerCoverage.h>
 #include <llvm/Transforms/Instrumentation/ThreadSanitizer.h>
 #include <llvm/Transforms/Scalar/GVN.h>
 #include <llvm/Transforms/Utils/ModuleUtils.h>

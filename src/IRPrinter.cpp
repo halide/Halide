@@ -5,9 +5,11 @@
 
 #include "AssociativeOpsTable.h"
 #include "Associativity.h"
+#include "Closure.h"
 #include "IROperator.h"
 #include "Module.h"
 #include "Target.h"
+#include "Util.h"
 
 namespace Halide {
 
@@ -58,7 +60,17 @@ ostream &operator<<(ostream &stream, const Expr &ir) {
 }
 
 ostream &operator<<(ostream &stream, const Buffer<> &buffer) {
-    return stream << "buffer " << buffer.name() << " = {...}\n";
+    bool include_data = Internal::ends_with(buffer.name(), "_gpu_source_kernels");
+    stream << "buffer " << buffer.name() << " = {";
+    if (include_data) {
+        std::string str((const char *)buffer.data(), buffer.size_in_bytes());
+        stream << "\n"
+               << str << "\n";
+    } else {
+        stream << "...";
+    }
+    stream << "}\n";
+    return stream;
 }
 
 ostream &operator<<(ostream &stream, const Module &m) {
@@ -354,6 +366,9 @@ ostream &operator<<(ostream &stream, const LoweredFunc &function) {
 
 std::ostream &operator<<(std::ostream &stream, const LinkageType &type) {
     switch (type) {
+    case LinkageType::ExternalPlusArgv:
+        stream << "external_plus_argv";
+        break;
     case LinkageType::ExternalPlusMetadata:
         stream << "external_plus_metadata";
         break;
@@ -385,6 +400,27 @@ std::ostream &operator<<(std::ostream &out, const DimType &t) {
     case DimType::ImpureRVar:
         out << "ImpureRVar";
         break;
+    }
+    return out;
+}
+
+std::ostream &operator<<(std::ostream &out, const Closure &c) {
+    for (const auto &v : c.vars) {
+        out << "var: " << v.first << "\n";
+    }
+    for (const auto &b : c.buffers) {
+        out << "buffer: " << b.first << " " << b.second.size;
+        if (b.second.read) {
+            out << " (read)";
+        }
+        if (b.second.write) {
+            out << " (write)";
+        }
+        if (b.second.memory_type == MemoryType::GPUTexture) {
+            out << " <texture>";
+        }
+        out << " dims=" << (int)b.second.dimensions;
+        out << "\n";
     }
     return out;
 }

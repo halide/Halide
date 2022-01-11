@@ -10,6 +10,7 @@ void halide_python_error(JITUserContext *, const char *msg) {
 }
 
 void halide_python_print(JITUserContext *, const char *msg) {
+    py::gil_scoped_acquire acquire;
     py::print(msg, py::arg("end") = "");
 }
 

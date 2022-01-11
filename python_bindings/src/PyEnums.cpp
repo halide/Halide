@@ -22,6 +22,7 @@ void define_enums(py::module &m) {
     py::enum_<LinkageType>(m, "LinkageType")
         .value("External", LinkageType::External)
         .value("ExternalPlusMetadata", LinkageType::ExternalPlusMetadata)
+        .value("ExternalPlusArgv", LinkageType::ExternalPlusArgv)
         .value("Internal", LinkageType::Internal);
 
     py::enum_<LoopAlignStrategy>(m, "LoopAlignStrategy")
@@ -153,6 +154,7 @@ void define_enums(py::module &m) {
         .value("LLVMLargeCodeModel", Target::Feature::LLVMLargeCodeModel)
         .value("RVV", Target::Feature::RVV)
         .value("ARMv81a", Target::Feature::ARMv81a)
+        .value("SanitizerCoverage", Target::Feature::SanitizerCoverage)
         .value("FeatureEnd", Target::Feature::FeatureEnd);
 
     py::enum_<halide_type_code_t>(m, "TypeCode")

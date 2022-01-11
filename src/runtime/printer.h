@@ -4,9 +4,11 @@ namespace Halide {
 namespace Runtime {
 namespace Internal {
 
-enum PrinterType { BasicPrinter = 0,
-                   ErrorPrinter = 1,
-                   StringStreamPrinter = 2 };
+enum PrinterType { BasicPrinterType = 0,
+                   ErrorPrinterType = 1,
+                   StringStreamPrinterType = 2 };
+
+constexpr uint64_t default_printer_buffer_length = 1024;
 
 // A class for constructing debug messages from the runtime. Dumps
 // items into a stack array, then prints them when the object leaves
@@ -26,27 +28,24 @@ enum PrinterType { BasicPrinter = 0,
 // scope, which may print at a confusing time.
 
 namespace {
-template<int type, uint64_t length = 1024>
+template<PrinterType printer_type, uint64_t buffer_length = default_printer_buffer_length>
 class Printer {
-public:
     char *buf, *dst, *end;
     void *user_context;
     bool own_mem;
-    char scratch[length <= 256 ? length : 1];
 
-    Printer(void *ctx, char *mem = nullptr)
+public:
+    explicit Printer(void *ctx, char *mem = nullptr)
         : user_context(ctx), own_mem(mem == nullptr) {
         if (mem != nullptr) {
             buf = mem;
-        } else if (length <= sizeof(scratch)) {
-            buf = scratch;
         } else {
-            buf = (char *)malloc(length);
+            buf = (char *)malloc(buffer_length);
         }
 
         dst = buf;
         if (dst) {
-            end = buf + (length - 1);
+            end = buf + (buffer_length - 1);
             *end = 0;
         } else {
             // Pointers equal ensures no writes to buffer via formatting code
@@ -54,13 +53,14 @@ public:
         }
     }
 
+    // Not movable, not copyable
+    Printer(const Printer &copy) = delete;
+    Printer &operator=(const Printer &) = delete;
+    Printer(Printer &&) = delete;
+    Printer &operator=(Printer &&) = delete;
+
     Printer &operator<<(const char *arg) {
-        // Crashing on nullptr here is a big debugging time sink.
-        if (arg == nullptr) {
-            dst = halide_string_to_string(dst, end, "<nullptr>");
-        } else {
-            dst = halide_string_to_string(dst, end, arg);
-        }
+        dst = halide_string_to_string(dst, end, arg);
         return *this;
     }
 
@@ -118,7 +118,7 @@ public:
     // Use it like a stringstream.
     const char *str() {
         if (buf) {
-            if (type == StringStreamPrinter) {
+            if (printer_type == StringStreamPrinterType) {
                 msan_annotate_is_initialized();
             }
             return buf;
@@ -141,7 +141,7 @@ public:
     }
 
     uint64_t capacity() const {
-        return length;
+        return buffer_length;
     }
 
     // Delete the last N characters
@@ -168,16 +168,16 @@ public:
             halide_error(user_context, allocation_error());
         } else {
             msan_annotate_is_initialized();
-            if (type == ErrorPrinter) {
+            if (printer_type == ErrorPrinterType) {
                 halide_error(user_context, buf);
-            } else if (type == BasicPrinter) {
+            } else if (printer_type == BasicPrinterType) {
                 halide_print(user_context, buf);
             } else {
                 // It's a stringstream. Do nothing.
             }
         }
 
-        if (own_mem && buf != scratch) {
+        if (own_mem) {
             free(buf);
         }
     }
@@ -187,7 +187,7 @@ public:
 // does nothing and should compile to a no-op.
 class SinkPrinter {
 public:
-    SinkPrinter(void *user_context) {
+    explicit SinkPrinter(void *user_context) {
     }
 };
 template<typename T>
@@ -195,16 +195,47 @@ SinkPrinter operator<<(const SinkPrinter &s, T) {
     return s;
 }
 
-typedef Printer<BasicPrinter> print;
-typedef Printer<ErrorPrinter> error;
-typedef Printer<StringStreamPrinter> stringstream;
+template<uint64_t buffer_length = default_printer_buffer_length>
+using BasicPrinter = Printer<BasicPrinterType, buffer_length>;
+
+template<uint64_t buffer_length = default_printer_buffer_length>
+using ErrorPrinter = Printer<ErrorPrinterType, buffer_length>;
+
+template<uint64_t buffer_length = default_printer_buffer_length>
+using StringStreamPrinter = Printer<StringStreamPrinterType, buffer_length>;
+
+using print = BasicPrinter<>;
+using error = ErrorPrinter<>;
+using stringstream = StringStreamPrinter<>;
 
 #ifdef DEBUG_RUNTIME
-typedef Printer<BasicPrinter> debug;
+using debug = BasicPrinter<>;
 #else
-typedef SinkPrinter debug;
+using debug = SinkPrinter;
 #endif
 }  // namespace
+
+// A Printer that automatically reserves stack space for the printer buffer, rather than malloc.
+// Note that this requires an explicit buffer_length, and it (generally) should be <= 256.
+template<PrinterType printer_type, uint64_t buffer_length>
+class StackPrinter : public Printer<printer_type, buffer_length> {
+    char scratch[buffer_length];
+
+public:
+    explicit StackPrinter(void *ctx)
+        : Printer<printer_type, buffer_length>(ctx, scratch) {
+        static_assert(buffer_length <= 256, "StackPrinter is meant only for small buffer sizes; you are probably making a mistake.");
+    }
+};
+
+template<uint64_t buffer_length = default_printer_buffer_length>
+using StackBasicPrinter = StackPrinter<BasicPrinterType, buffer_length>;
+
+template<uint64_t buffer_length = default_printer_buffer_length>
+using StackErrorPrinter = StackPrinter<ErrorPrinterType, buffer_length>;
+
+template<uint64_t buffer_length = default_printer_buffer_length>
+using StackStringStreamPrinter = StackPrinter<StringStreamPrinterType, buffer_length>;
 
 }  // namespace Internal
 }  // namespace Runtime
