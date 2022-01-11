@@ -128,12 +128,12 @@ int main(int argc, char **argv) {
 
     {
         // Check make a Buffer from a Buffer of a different type
-        Buffer<float, 2> a(100, 80);
-        Buffer<const float, 3> b(a);  // statically safe
-        Buffer<const void, 4> c(b);   // statically safe
-        Buffer<const float, 3> d(c);  // does runtime check of actual type.
-        Buffer<void, 3> e(a);         // statically safe
-        Buffer<float, 2> f(e);        // runtime checks
+        Buffer<float> a(100, 80);
+        Buffer<const float> b(a);  // statically safe
+        Buffer<const void> c(b);   // statically safe
+        Buffer<const float> d(c);  // does runtime check of actual type.
+        Buffer<void> e(a);         // statically safe
+        Buffer<float> f(e);        // runtime checks
     }
 
     {

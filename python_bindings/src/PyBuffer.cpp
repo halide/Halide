@@ -393,7 +393,7 @@ void define_buffer(py::module &m) {
                 py::arg("dirty") = true)
 
             .def("copy", &Buffer<>::copy)
-            .def("copy_from", &Buffer<>::copy_from<void>)
+            .def("copy_from", &Buffer<>::copy_from<void, -1>)
 
             .def("add_dimension", (void (Buffer<>::*)()) & Buffer<>::add_dimension)
 

@@ -283,10 +283,6 @@
 #endif
 
 namespace Halide {
-
-template<typename T>
-class Buffer;
-
 namespace Internal {
 
 void generator_test();

@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <vector>
 
+#include "Buffer.h"
 #include "Util.h"  // for all_are_convertible
 
 /** \file
@@ -12,9 +13,6 @@
  */
 
 namespace Halide {
-
-template<typename T>
-class Buffer;
 
 /** A Realization is a vector of references to existing Buffer objects.
  *  A pipeline with multiple outputs realize to a Realization.  */
