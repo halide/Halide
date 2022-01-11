@@ -134,6 +134,18 @@ int main(int argc, char **argv) {
         Buffer<const float> d(c);  // does runtime check of actual type.
         Buffer<void> e(a);         // statically safe
         Buffer<float> f(e);        // runtime checks
+
+        static_assert(a.has_static_halide_type);
+        static_assert(b.has_static_halide_type);
+        static_assert(!c.has_static_halide_type);
+        static_assert(d.has_static_halide_type);
+        static_assert(!e.has_static_halide_type);
+        static_assert(f.has_static_halide_type);
+
+        static_assert(a.static_halide_type() == halide_type_of<float>());
+        static_assert(b.static_halide_type() == halide_type_of<float>());
+        static_assert(d.static_halide_type() == halide_type_of<float>());
+        static_assert(f.static_halide_type() == halide_type_of<float>());
     }
 
     {
@@ -142,9 +154,59 @@ int main(int argc, char **argv) {
         Buffer<float, 2> b(a);                              // statically safe
         // Buffer<float, 3> c(a);                           // will not compile (static_assert failure)
         Buffer<float> d(a);                                 // checks at runtime (and succeeds)
-        Buffer<float> d1(a, Buffer<float>::DynamicDims);    // same as previous, just explicit syntax
-        // Buffer<float, 3> e(d);                           // checks at runtime (and fails because d.dims = 2)
-        Buffer<float, 2> f(d);                              // checks at runtime (and succeeds because d.dims = 2)
+        Buffer<float, Buffer<>::DynamicDims> e(a);          // same as previous, just explicit syntax
+        // Buffer<float, 3> f(d);                           // checks at runtime (and fails because d.dims = 2)
+        Buffer<float, 2> g(d);                              // checks at runtime (and succeeds because d.dims = 2)
+
+        static_assert(a.has_static_dimensions);
+        static_assert(b.has_static_dimensions);
+        static_assert(!d.has_static_dimensions);
+        static_assert(!e.has_static_dimensions);
+        static_assert(g.has_static_dimensions);
+
+        static_assert(a.static_dimensions() == 2);
+        static_assert(b.static_dimensions() == 2);
+        static_assert(g.static_dimensions() == 2);
+
+        Buffer<float> s1 = a.sliced(0);
+        assert(s1.dimensions() == 1);
+        assert(s1.dim(0).extent() == 80);
+
+        Buffer<float, 1> s2 = a.sliced(1);
+        assert(s2.dimensions() == 1);
+        assert(s2.dim(0).extent() == 100);
+
+        Buffer<float, 0> s3 = s2.sliced(0);
+        static_assert(a.has_static_dimensions && s3.static_dimensions() == 0);
+        assert(s3.dimensions() == 0);
+
+        // auto s4 = s3.sliced(0);  // won't compile: can't call sliced() on a zero-dim buffer
+        // Buffer<float, 2> s3 = a.sliced(0);  // won't compile, return type has incompatible dimensionality
+        // a.slice(0);  // won't compile, can't call embed() on static-dimensioned buffer
+
+        Buffer<float> s4 = a.sliced(0);  // assign to dynamic-dimensioned result
+        static_assert(!s4.has_static_dimensions);
+        assert(s4.dimensions() == 1);
+
+        s4.slice(0);  // ok to call on dynamic-dimensioned
+        assert(s4.dimensions() == 0);
+
+        Buffer<float, 0> e0 = Buffer<float, 0>::make_scalar();
+
+        auto e1 = e0.embedded(0);
+        static_assert(e1.has_static_dimensions && e1.static_dimensions() == 1);
+        assert(e1.dimensions() == 1);
+
+        // Buffer<float, 0> e2 = a.embedded(0);  // won't compile, return type has incompatible dimensionality
+
+       // e1.embed(0);  // won't compile, can't call embed() on static-dimensioned buffer
+
+        Buffer<float> e3 = e0.embedded(0);  // assign to dynamic-dimensioned result
+        static_assert(!e3.has_static_dimensions);
+        assert(e3.dimensions() == 1);
+
+        e3.embed(0);  // ok to call on dynamic-dimensioned
+        assert(e3.dimensions() == 2);
     }
 
     {

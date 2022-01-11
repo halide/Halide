@@ -134,9 +134,6 @@ template<typename T = void,
          int Dims = -1,
          int InClassDimStorage = (Dims == -1 ? 4 : std::max(Dims, 1))>
 class Buffer {
-    static constexpr int DynamicDims = -1;
-    static_assert(Dims == DynamicDims || Dims >= 0);
-
     /** The underlying halide_buffer_t */
     halide_buffer_t buf = {};
 
@@ -179,7 +176,7 @@ public:
 
     /** Get the Halide type of T. Callers should not use the result if
      * has_static_halide_type is false. */
-    static halide_type_t static_halide_type() {
+    constexpr static halide_type_t static_halide_type() {
         return halide_type_of<typename std::remove_cv<not_void_T>::type>();
     }
 
@@ -187,6 +184,18 @@ public:
     bool owns_host_memory() const {
         return alloc != nullptr;
     }
+
+    static constexpr int DynamicDims = -1;
+
+    static constexpr bool has_static_dimensions = (Dims != DynamicDims);
+
+    /** Callers should not use the result if
+     * has_static_dimensions is false. */
+    constexpr static int static_dimensions() {
+        return Dims;
+    }
+
+    static_assert(!has_static_dimensions || static_dimensions() >= 0);
 
 private:
     /** Increment the reference count of any owned allocation */
@@ -431,6 +440,7 @@ private:
     /** slice a single dimension without handling device allocation. */
     void slice_host(int d, int pos) {
         static_assert(Dims == DynamicDims);
+        assert(dimensions() > 0);
         assert(d >= 0 && d < dimensions());
         assert(pos >= dim(d).min() && pos <= dim(d).max());
         buf.dimensions--;
@@ -1465,6 +1475,8 @@ public:
      * this buffer. */
     Buffer<T, (Dims == DynamicDims ? DynamicDims : Dims - 1), InClassDimStorage> sliced(int d, int pos) const {
         static_assert(Dims == DynamicDims || Dims > 0, "Cannot slice a 0-dimensional buffer");
+        assert(dimensions() > 0);
+
         Buffer<T, DynamicDims, InClassDimStorage> im = *this;
 
         // This guarantees the prexisting device ref is dropped if the
@@ -1482,6 +1494,9 @@ public:
     /** Make a lower-dimensional buffer that refers to one slice of this
      * buffer at the dimension's minimum. */
     inline Buffer<T, (Dims == DynamicDims ? DynamicDims : Dims - 1), InClassDimStorage> sliced(int d) const {
+        static_assert(Dims == DynamicDims || Dims > 0, "Cannot slice a 0-dimensional buffer");
+        assert(dimensions() > 0);
+
         return sliced(d, dim(d).min());
     }
 
@@ -1492,6 +1507,8 @@ public:
      * only be called on a Buffer with dynamic dimensionality. */
     void slice(int d, int pos) {
         static_assert(Dims == DynamicDims, "Cannot call slice() on a Buffer with static dimensionality.");
+        assert(dimensions() > 0);
+
         // An optimization for non-device buffers. For the device case,
         // a temp buffer is required, so reuse the not-in-place version.
         // TODO(zalman|abadams): Are nop slices common enough to special
