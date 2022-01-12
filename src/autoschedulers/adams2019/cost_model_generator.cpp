@@ -15,13 +15,13 @@ using Halide::Derivative;
 // A model weight is either just an input, or an input and an output
 // (the updated weights and the ADAM state) depending on whether we're
 // doing inference or training.
-template<int dims, bool training>
+template<int D, bool training>
 struct ModelWeight;
 
-template<int dims>
-struct ModelWeight<dims, false> : public GeneratorInput<Buffer<float, dims>> {
+template<int D>
+struct ModelWeight<D, false> : public GeneratorInput<Buffer<float, D>> {
     explicit ModelWeight(const std::string &name)
-        : GeneratorInput<Buffer<float, dims>>(name) {
+        : GeneratorInput<Buffer<float, D>>(name) {
     }
     void backprop(const Derivative &d, const Expr &learning_rate, const Expr &timestep) {
     }
@@ -38,12 +38,12 @@ struct ModelWeight<dims, false> : public GeneratorInput<Buffer<float, dims>> {
     }
 };
 
-template<int dims>
-struct ModelWeight<dims, true> : public GeneratorInput<Buffer<float, dims>> {
-    GeneratorOutput<Buffer<float, dims + 1>> grad;
+template<int D>
+struct ModelWeight<D, true> : public GeneratorInput<Buffer<float, D>> {
+    GeneratorOutput<Buffer<float, D + 1>> grad;
 
     explicit ModelWeight(const std::string &name)
-        : GeneratorInput<Buffer<float, dims>>(name), grad("updated_" + name) {
+        : GeneratorInput<Buffer<float, D>>(name), grad("updated_" + name) {
     }
     void backprop(const Derivative &d, const Expr &learning_rate, const Expr &timestep) {
         std::vector<Expr> args(this->dimensions() + 1);
@@ -145,8 +145,8 @@ public:
     // Network weights. We use some template-fu so that they are
     // inputs in inference mode, and inputs and outputs in training
     // mode.
-    template<int dims>
-    using Weight = ModelWeight<dims, training>;
+    template<int D>
+    using Weight = ModelWeight<D, training>;
 
     Weight<3> head1_filter{"head1_filter"};
     Weight<1> head1_bias{"head1_bias"};
