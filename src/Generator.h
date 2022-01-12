@@ -1468,7 +1468,7 @@ protected:
     friend class GeneratorParamInfo;
 
     mutable int array_size_;  // always 1 if is_array() == false.
-        // -1 if is_array() == true but unspecified.
+                              // -1 if is_array() == true but unspecified.
 
     const std::string name_;
     const IOKind kind_;
@@ -2210,7 +2210,7 @@ public:
     }
 
     // Avoid ambiguity between Func-with-dim and int-with-default
-    //template <typename T2 = T, typename std::enable_if<std::is_same<TBase, Func>::value>::type * = nullptr>
+    // template <typename T2 = T, typename std::enable_if<std::is_same<TBase, Func>::value>::type * = nullptr>
     GeneratorInput(size_t array_size, const std::string &name, IntIfNonScalar d)
         : Super(array_size, name, d) {
     }
@@ -3803,7 +3803,8 @@ struct halide_global_ns;
     namespace GEN_REGISTRY_NAME##_ns {                                                                                              \
         std::unique_ptr<Halide::Internal::GeneratorBase> factory(const Halide::GeneratorContext &context);                          \
         std::unique_ptr<Halide::Internal::GeneratorBase> factory(const Halide::GeneratorContext &context) {                         \
-            return GEN_CLASS_NAME::create(context, #GEN_REGISTRY_NAME, #FULLY_QUALIFIED_STUB_NAME);                                 \
+            using GenType = decltype(GEN_CLASS_NAME{});                                                                             \
+            return GenType::create(context, #GEN_REGISTRY_NAME, #FULLY_QUALIFIED_STUB_NAME);                                        \
         }                                                                                                                           \
     }                                                                                                                               \
     static auto reg_##GEN_REGISTRY_NAME = Halide::Internal::RegisterGenerator(#GEN_REGISTRY_NAME, GEN_REGISTRY_NAME##_ns::factory); \
