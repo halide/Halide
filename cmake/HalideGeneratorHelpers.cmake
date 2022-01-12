@@ -18,7 +18,7 @@ define_property(TARGET PROPERTY Halide_GENERATOR_HAS_POST_BUILD
 function(add_halide_generator TARGET)
     set(options "")
     set(oneValueArgs PACKAGE_NAME PACKAGE_NAMESPACE EXPORT_FILE)
-    set(multiValueArgs SOURCES)
+    set(multiValueArgs SOURCES LINK_LIBRARIES)
     cmake_parse_arguments(ARG "${options}" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
 
     if (NOT ARG_PACKAGE_NAME)
@@ -55,7 +55,7 @@ function(add_halide_generator TARGET)
 
         add_executable(${TARGET} ${ARG_SOURCES})
         add_executable(${gen} ALIAS ${TARGET})
-        target_link_libraries(${TARGET} PRIVATE Halide::Generator)
+        target_link_libraries(${TARGET} PRIVATE Halide::Generator ${ARG_LINK_LIBRARIES})
 
         add_dependencies("${ARG_PACKAGE_NAME}" ${TARGET})
         export(TARGETS ${TARGET}
