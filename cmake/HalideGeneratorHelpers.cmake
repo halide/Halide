@@ -153,7 +153,7 @@ function(add_halide_library TARGET)
         # fully-qualified name, so add the default package name and retry
         set(FQ_ARG_FROM "${PROJECT_NAME}::halide_generators::${ARG_FROM}")
         if (NOT TARGET ${FQ_ARG_FROM})
-            message(FATAL_ERROR "Unable to local FROM as either ${ARG_FROM} or ${FQ_ARG_FROM}")
+            message(FATAL_ERROR "Unable to locate FROM as either ${ARG_FROM} or ${FQ_ARG_FROM}")
         endif ()
         set(ARG_FROM "${FQ_ARG_FROM}")
     endif ()
