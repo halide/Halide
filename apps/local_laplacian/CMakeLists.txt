@@ -13,6 +13,7 @@ find_package(Halide REQUIRED)
 
 # Generator
 add_halide_generator(local_laplacian.generator SOURCES local_laplacian_generator.cpp)
+target_link_libraries(local_laplacian.generator PRIVATE Halide::Tools)
 
 # Filters
 add_halide_library(local_laplacian FROM local_laplacian.generator)
