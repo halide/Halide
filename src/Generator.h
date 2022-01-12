@@ -1468,7 +1468,7 @@ protected:
     friend class GeneratorParamInfo;
 
     mutable int array_size_;  // always 1 if is_array() == false.
-        // -1 if is_array() == true but unspecified.
+                              // -1 if is_array() == true but unspecified.
 
     const std::string name_;
     const IOKind kind_;
@@ -2203,12 +2203,12 @@ public:
     }
 
     explicit GeneratorInput(const std::string &name,
-                   const TBase &def, const TBase &min, const TBase &max)
+                            const TBase &def, const TBase &min, const TBase &max)
         : Super(name, def, min, max) {
     }
 
     explicit GeneratorInput(size_t array_size, const std::string &name,
-                   const TBase &def, const TBase &min, const TBase &max)
+                            const TBase &def, const TBase &min, const TBase &max)
         : Super(array_size, name, def, min, max) {
     }
 
@@ -2234,7 +2234,7 @@ public:
     }
 
     // Avoid ambiguity between Func-with-dim and int-with-default
-    //template <typename T2 = T, typename std::enable_if<std::is_same<TBase, Func>::value>::type * = nullptr>
+    // template <typename T2 = T, typename std::enable_if<std::is_same<TBase, Func>::value>::type * = nullptr>
     explicit GeneratorInput(size_t array_size, const std::string &name, IntIfNonScalar d)
         : Super(array_size, name, d) {
     }
