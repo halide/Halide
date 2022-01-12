@@ -635,7 +635,7 @@ public:
             }
         }
         if (Dims != DynamicDims) {
-            if  (other.dimensions() != Dims) {
+            if (other.dimensions() != Dims) {
                 return false;
             }
         }

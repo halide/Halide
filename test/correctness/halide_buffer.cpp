@@ -151,12 +151,12 @@ int main(int argc, char **argv) {
     {
         // Check Buffers with static dimensionality
         Buffer<float, 2> a(100, 80);
-        Buffer<float, 2> b(a);                              // statically safe
+        Buffer<float, 2> b(a);  // statically safe
         // Buffer<float, 3> c(a);                           // will not compile (static_assert failure)
-        Buffer<float> d(a);                                 // checks at runtime (and succeeds)
-        Buffer<float, Buffer<>::DynamicDims> e(a);          // same as previous, just explicit syntax
+        Buffer<float> d(a);                         // checks at runtime (and succeeds)
+        Buffer<float, Buffer<>::DynamicDims> e(a);  // same as previous, just explicit syntax
         // Buffer<float, 3> f(d);                           // checks at runtime (and fails because d.dims = 2)
-        Buffer<float, 2> g(d);                              // checks at runtime (and succeeds because d.dims = 2)
+        Buffer<float, 2> g(d);  // checks at runtime (and succeeds because d.dims = 2)
 
         static_assert(a.has_static_dimensions);
         static_assert(b.has_static_dimensions);
@@ -199,7 +199,7 @@ int main(int argc, char **argv) {
 
         // Buffer<float, 0> e2 = a.embedded(0);  // won't compile, return type has incompatible dimensionality
 
-       // e1.embed(0);  // won't compile, can't call embed() on static-dimensioned buffer
+        // e1.embed(0);  // won't compile, can't call embed() on static-dimensioned buffer
 
         Buffer<float> e3 = e0.embedded(0);  // assign to dynamic-dimensioned result
         static_assert(!e3.has_static_dimensions);

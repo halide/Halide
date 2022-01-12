@@ -4,8 +4,8 @@ namespace {
 
 using Halide::float16_t;
 
-enum class SomeEnum{Foo,
-                      Bar};
+enum class SomeEnum { Foo,
+                      Bar };
 
 class MetadataTester : public Halide::Generator<MetadataTester> {
 public:
@@ -39,17 +39,17 @@ public:
     Input<int16_t[2]> array2_i16{"array2_i16", 16};
     Input<int32_t[]> array_i32{"array_i32", 32, -32, 127};  // must be overridden to size=2
     Input<int32_t[2]> array2_i32{"array2_i32", 32, -32, 127};
-    Input<void *[]> array_h{"array_h", nullptr};  // must be overridden to size=2
+    Input<void *[]> array_h { "array_h", nullptr };  // must be overridden to size=2
 
-    Input<Buffer<float, 3>[2]> buffer_array_input1{"buffer_array_input1"};
-    Input<Buffer<float>[2]> buffer_array_input2{"buffer_array_input2"};  // buffer_array_input2.dim must be set
-    Input<Buffer<void, 3>[2]> buffer_array_input3{"buffer_array_input3"};    // buffer_array_input2.type must be set
-    Input<Buffer<>[2]> buffer_array_input4{"buffer_array_input4"};       // dim and type must be set
+    Input<Buffer<float, 3>[2]> buffer_array_input1 { "buffer_array_input1" };
+    Input<Buffer<float>[2]> buffer_array_input2 { "buffer_array_input2" };    // buffer_array_input2.dim must be set
+    Input<Buffer<void, 3>[2]> buffer_array_input3 { "buffer_array_input3" };  // buffer_array_input2.type must be set
+    Input<Buffer<>[2]> buffer_array_input4 { "buffer_array_input4" };         // dim and type must be set
     // .size must be specified for all of these
-    Input<Buffer<float, 3>[]> buffer_array_input5{"buffer_array_input5"};
-    Input<Buffer<float>[]> buffer_array_input6{"buffer_array_input6"};  // buffer_array_input2.dim must be set
-    Input<Buffer<void, 3>[]> buffer_array_input7{"buffer_array_input7"};    // buffer_array_input2.type must be set
-    Input<Buffer<>[]> buffer_array_input8{"buffer_array_input8"};       // dim and type must be set
+    Input<Buffer<float, 3>[]> buffer_array_input5 { "buffer_array_input5" };
+    Input<Buffer<float>[]> buffer_array_input6 { "buffer_array_input6" };    // buffer_array_input2.dim must be set
+    Input<Buffer<void, 3>[]> buffer_array_input7 { "buffer_array_input7" };  // buffer_array_input2.type must be set
+    Input<Buffer<>[]> buffer_array_input8 { "buffer_array_input8" };         // dim and type must be set
 
     Input<Buffer<float16_t, 1>> buffer_f16_typed{"buffer_f16_typed"};
     Input<Buffer<void, 1>> buffer_f16_untyped{"buffer_f16_untyped"};
@@ -59,7 +59,7 @@ public:
     Output<Func> output{"output"};  // must be overridden to {{Float(32), Float(32)}, 3}
     Output<Buffer<float, 3>> typed_output_buffer{"typed_output_buffer"};
     Output<Buffer<float>> type_only_output_buffer{"type_only_output_buffer"};  // untyped outputs can have type and/or dimensions inferred
-    Output<Buffer<void, 3>> dim_only_output_buffer{"dim_only_output_buffer"};      // untyped outputs can have type and/or dimensions inferred
+    Output<Buffer<void, 3>> dim_only_output_buffer{"dim_only_output_buffer"};  // untyped outputs can have type and/or dimensions inferred
     Output<Buffer<>> untyped_output_buffer{"untyped_output_buffer"};           // untyped outputs can have type and/or dimensions inferred
     Output<Buffer<void, 3>> tupled_output_buffer{"tupled_output_buffer", {Float(32), Int(32)}};
     Output<float> output_scalar{"output_scalar"};
@@ -67,14 +67,14 @@ public:
     Output<Func[2]> array_outputs2{"array_outputs2", {Float(32), Float(32)}, 3};
     Output<float[2]> array_outputs3{"array_outputs3"};
 
-    Output<Buffer<float, 3>[2]> array_outputs4{"array_outputs4"};
-    Output<Buffer<float>[2]> array_outputs5{"array_outputs5"};  // dimensions will be inferred by usage
-    Output<Buffer<>[2]> array_outputs6{"array_outputs6"};       // dimensions and type will be inferred by usage
+    Output<Buffer<float, 3>[2]> array_outputs4 { "array_outputs4" };
+    Output<Buffer<float>[2]> array_outputs5 { "array_outputs5" };  // dimensions will be inferred by usage
+    Output<Buffer<>[2]> array_outputs6 { "array_outputs6" };       // dimensions and type will be inferred by usage
 
     // .size must be specified for all of these
-    Output<Buffer<float, 3>[]> array_outputs7{"array_outputs7"};
-    Output<Buffer<float>[]> array_outputs8{"array_outputs8"};
-    Output<Buffer<>[]> array_outputs9{"array_outputs9"};
+    Output<Buffer<float, 3>[]> array_outputs7 { "array_outputs7" };
+    Output<Buffer<float>[]> array_outputs8 { "array_outputs8" };
+    Output<Buffer<>[]> array_outputs9 { "array_outputs9" };
 
     void generate() {
         Var x("x"), y("y"), c("c");

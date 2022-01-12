@@ -2244,7 +2244,6 @@ public:
     GeneratorInput(Internal::ConfigureCtor c, const std::string &name, const Type &t, int d)
         : Super(c, name, t, d) {
     }
-
 };
 
 namespace Internal {
@@ -2516,7 +2515,7 @@ protected:
                 my_types(t),
                 TBase::has_static_dimensions ? TBase::static_dimensions() : -1) {
         static_assert(!TBase::has_static_halide_type, "You can only specify a Type argument for Output<Buffer<T, D>> if T is void or omitted.");
-        user_assert(t.size() > 1)  << "You may only use the vector-of-types for Output<Buffer<>> for multiple types (i.e., for Tuple outputs).";
+        user_assert(t.size() > 1) << "You may only use the vector-of-types for Output<Buffer<>> for multiple types (i.e., for Tuple outputs).";
     }
 
     HALIDE_ATTRIBUTE_DEPRECATED("Prefer to specify static Buffer dimensions with Output<Buffer<void, D>> instead.")
