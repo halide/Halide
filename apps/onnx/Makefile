@@ -84,7 +84,7 @@ ifeq ($(UNAME), Darwin)
 endif
 PY_EXT = $(shell $(PYTHON)-config --extension-suffix)
 PY_MODEL_EXT = model_cpp$(PY_EXT)
-PYCXXFLAGS =  $(CXXFLAGS) $(PYBIND11_CFLAGS) -Wno-deprecated-register -Wno-deprecated-declarations
+PYCXXFLAGS =  $(CXXFLAGS) $(PYBIND11_CFLAGS) -Wno-deprecated-register
 
 # Python extension for HalideModel
 $(BIN)/%/$(PY_MODEL_EXT): model.cpp $(BIN)/%/oclib.a

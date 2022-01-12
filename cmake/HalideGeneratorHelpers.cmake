@@ -56,6 +56,8 @@ function(add_halide_generator TARGET)
         add_executable(${TARGET} ${ARG_SOURCES})
         add_executable(${gen} ALIAS ${TARGET})
         target_link_libraries(${TARGET} PRIVATE Halide::Generator)
+        target_compile_options(${TARGET} PRIVATE
+            $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wdeprecated-declarations>)
 
         add_dependencies("${ARG_PACKAGE_NAME}" ${TARGET})
         export(TARGETS ${TARGET}

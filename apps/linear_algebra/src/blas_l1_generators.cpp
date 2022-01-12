@@ -87,10 +87,11 @@ public:
     GeneratorParam<int> block_size_{"block_size", 1024};
 
     Input<Buffer<T, 1>> x_{"x"};
-    Input<Buffer<T, 1>> y_{"y"};
+    Input<Buffer<T>> y_{"y", 1};  // <-- THIS should be flagged as deprecated
 
-    Output<Buffer<T, 0>> result_{"result"};
+    Output<Buffer<T, 0>> result_{"result"};  // equivalent to Output<T>
 
+__attribute__((deprecated("hey")))
     void generate() {
         assert(get_target().has_feature(Target::NoBoundsQuery));
 
@@ -142,7 +143,7 @@ public:
 
     Input<Buffer<T, 1>> x_{"x"};
 
-    Output<Buffer<T, 0>> result_{"result"};
+    Output<Buffer<T, 0>> result_{"result"};  // equivalent to Output<T>
 
     void generate() {
         assert(get_target().has_feature(Target::NoBoundsQuery));

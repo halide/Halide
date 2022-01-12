@@ -430,7 +430,6 @@ target_compile_options(
         $<$<CXX_COMPILER_ID:Clang,AppleClang>:-Winconsistent-missing-destructor-override>
         $<$<CXX_COMPILER_ID:Clang,AppleClang>:-Winconsistent-missing-override>
 
-        $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wno-deprecated-declarations>
         $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wno-double-promotion>
         $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wno-float-conversion>
         $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wno-float-equal>

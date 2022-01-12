@@ -114,3 +114,5 @@ else ()
         Halide_load_targets(shared)
     endif ()
 endif ()
+
+set_target_properties(Halide::Halide Halide::Generator PROPERTIES NO_SYSTEM_FROM_IMPORTED YES)
