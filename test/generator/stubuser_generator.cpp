@@ -24,16 +24,16 @@ class StubUser : public Halide::Generator<StubUser> {
 public:
     GeneratorParam<int32_t> int_arg{"int_arg", 33};
 
-    Input<Buffer<uint8_t>> input{"input", 3};
+    Input<Buffer<uint8_t, 3>> input{"input"};
     Output<Buffer<uint8_t>> calculated_output{"calculated_output"};
     Output<Buffer<float>> float32_buffer_output{"float32_buffer_output"};
     Output<Buffer<int32_t>> int32_buffer_output{"int32_buffer_output"};
     Output<Buffer<uint8_t>> array_test_output{"array_test_output"};
     // We can infer the tupled-output-type from the Stub
-    Output<Buffer<>> tupled_output{"tupled_output", 3};
-    Output<Buffer<int>> int_output{"int_output", 3};
-    Output<Buffer<Halide::float16_t>> float16_output{"float16_output", 3};
-    Output<Buffer<Halide::bfloat16_t>> bfloat16_output{"bfloat16_output", 3};
+    Output<Buffer<void, 3>> tupled_output{"tupled_output"};
+    Output<Buffer<int, 3>> int_output{"int_output"};
+    Output<Buffer<Halide::float16_t, 3>> float16_output{"float16_output"};
+    Output<Buffer<Halide::bfloat16_t, 3>> bfloat16_output{"bfloat16_output"};
 
     void generate() {
         Var x{"x"}, y{"y"}, c{"c"};

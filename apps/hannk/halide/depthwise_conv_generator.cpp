@@ -20,15 +20,15 @@ public:
     GeneratorParam<bool> shallow_{"shallow", false};
 
     // Unsigned 8-bit input tensor, indexed by ci, x, y, b.
-    Input<Buffer<uint8_t>> input_{"input", 4};
+    Input<Buffer<uint8_t, 4>> input_{"input"};
     Input<uint8_t> input_zero_{"input_zero"};
 
     // A 3D array of 8-bit filter coefficients indexed by co, x, y.
-    Input<Buffer<uint8_t>> filter_{"filter", 3};
+    Input<Buffer<uint8_t, 3>> filter_{"filter"};
     Input<uint8_t> filter_zero_{"filter_zero"};
 
     // A 1D array of 32-bit biases indexed by co.
-    Input<Buffer<int32_t>> bias_{"bias", 1};
+    Input<Buffer<int32_t, 1>> bias_{"bias"};
 
     // The stride specifies how the input [x, y] are sub-subsampled. For every
     // spatial location [x, y] in the output buffer, the input buffer is sampled
@@ -51,7 +51,7 @@ public:
     Input<uint8_t> output_min_{"output_min"};
     Input<uint8_t> output_max_{"output_max"};
 
-    Output<Buffer<uint8_t>> output_{"output", 4};
+    Output<Buffer<uint8_t, 4>> output_{"output"};
 
     void generate() {
         // The algorithm.
@@ -244,13 +244,13 @@ public:
 class UpsampleChannels : public Generator<UpsampleChannels> {
 public:
     // Unsigned 8-bit input tensor, indexed by ci, x, y, b.
-    Input<Buffer<uint8_t>> input_{"input", 4};
+    Input<Buffer<uint8_t, 4>> input_{"input"};
 
     // The depth multiplier specifies the ratio between co and ci.
     Input<int> factor_{"factor"};
 
     // Unsigned 8-bit output tensor, indexed by co, x, y, b.
-    Output<Buffer<uint8_t>> output_{"output", 4};
+    Output<Buffer<uint8_t, 4>> output_{"output"};
 
     void generate() {
         Var x("x"), y("y"), c("c"), b("b");

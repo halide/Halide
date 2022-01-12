@@ -21,7 +21,7 @@ public:
     GeneratorParam<bool> vectorize{"vectorize", true};
     GeneratorParam<LoopLevel> intermediate_level{"intermediate_level", LoopLevel::root()};
 
-    Input<Buffer<uint8_t>> typed_buffer_input{"typed_buffer_input", 3};
+    Input<Buffer<uint8_t, 3>> typed_buffer_input{"typed_buffer_input"};
     Input<Buffer<>> untyped_buffer_input{"untyped_buffer_input"};
     Input<Func> simple_input{"simple_input", 3};  // require a 3-dimensional Func but leave Type unspecified
     Input<Func[]> array_input{"array_input", 3};  // require a 3-dimensional Func but leave Type and ArraySize unspecified
@@ -34,7 +34,7 @@ public:
     Output<Func[]> array_output{"array_output", Int(16), 2};  // leave ArraySize unspecified
     Output<Buffer<float>> typed_buffer_output{"typed_buffer_output"};
     Output<Buffer<>> untyped_buffer_output{"untyped_buffer_output"};
-    Output<Buffer<uint8_t>> static_compiled_buffer_output{"static_compiled_buffer_output", 3};
+    Output<Buffer<uint8_t, 3>> static_compiled_buffer_output{"static_compiled_buffer_output"};
 
     void configure() {
         // Pointers returned by add_input() are managed by the Generator;

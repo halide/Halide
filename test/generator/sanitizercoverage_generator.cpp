@@ -4,7 +4,7 @@ namespace {
 
 class SanitizerCoverage : public Halide::Generator<SanitizerCoverage> {
 public:
-    Output<Buffer<int8_t>> output{"output", 3};
+    Output<Buffer<int8_t, 3>> output{"output"};
 
     void generate() {
         // Currently the test just exercises Target::SanitizerCoverage

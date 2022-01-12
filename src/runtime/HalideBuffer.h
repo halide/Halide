@@ -176,7 +176,7 @@ public:
 
     /** Get the Halide type of T. Callers should not use the result if
      * has_static_halide_type is false. */
-    constexpr static halide_type_t static_halide_type() {
+    static constexpr halide_type_t static_halide_type() {
         return halide_type_of<typename std::remove_cv<not_void_T>::type>();
     }
 
@@ -191,7 +191,7 @@ public:
 
     /** Callers should not use the result if
      * has_static_dimensions is false. */
-    constexpr static int static_dimensions() {
+    static constexpr int static_dimensions() {
         return Dims;
     }
 
@@ -1914,6 +1914,8 @@ public:
     HALIDE_ALWAYS_INLINE const not_void_T &operator()(int first, Args... rest) const {
         static_assert(!T_is_void,
                       "Cannot use operator() on Buffer<void> types");
+        constexpr int expected_dims = 1 + (int)(sizeof...(rest));
+        static_assert(Dims == DynamicDims || Dims == expected_dims, "Buffer with static dimensions was accessed with the wrong number of coordinates in operator()");
         assert(!device_dirty());
         return *((const not_void_T *)(address_of(first, rest...)));
     }
@@ -1923,6 +1925,8 @@ public:
     operator()() const {
         static_assert(!T_is_void,
                       "Cannot use operator() on Buffer<void> types");
+        constexpr int expected_dims = 0;
+        static_assert(Dims == DynamicDims || Dims == expected_dims, "Buffer with static dimensions was accessed with the wrong number of coordinates in operator()");
         assert(!device_dirty());
         return *((const not_void_T *)(data()));
     }
@@ -1943,6 +1947,8 @@ public:
         operator()(int first, Args... rest) {
         static_assert(!T_is_void,
                       "Cannot use operator() on Buffer<void> types");
+        constexpr int expected_dims = 1 + (int)(sizeof...(rest));
+        static_assert(Dims == DynamicDims || Dims == expected_dims, "Buffer with static dimensions was accessed with the wrong number of coordinates in operator()");
         set_host_dirty();
         return *((not_void_T *)(address_of(first, rest...)));
     }
@@ -1952,6 +1958,8 @@ public:
     operator()() {
         static_assert(!T_is_void,
                       "Cannot use operator() on Buffer<void> types");
+        constexpr int expected_dims = 0;
+        static_assert(Dims == DynamicDims || Dims == expected_dims, "Buffer with static dimensions was accessed with the wrong number of coordinates in operator()");
         set_host_dirty();
         return *((not_void_T *)(data()));
     }

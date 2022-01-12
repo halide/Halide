@@ -18,19 +18,19 @@ public:
     template<typename T2>
     using Output = typename Base::template Output<T2>;
 
-    GeneratorParam<bool> vectorize_ = {"vectorize", true};
-    GeneratorParam<bool> parallel_ = {"parallel", true};
-    GeneratorParam<int> block_size_ = {"block_size", 1 << 8};
-    GeneratorParam<bool> transpose_ = {"transpose", false};
+    GeneratorParam<bool> vectorize_{"vectorize", true};
+    GeneratorParam<bool> parallel_{"parallel", true};
+    GeneratorParam<int> block_size_{"block_size", 1 << 8};
+    GeneratorParam<bool> transpose_{"transpose", false};
 
     // Standard ordering of parameters in GEMV functions.
-    Input<T> a_ = {"a", 1};
-    Input<Buffer<T>> A_ = {"A", 2};
-    Input<Buffer<T>> x_ = {"x", 1};
-    Input<T> b_ = {"b", 1};
-    Input<Buffer<T>> y_ = {"y", 1};
+    Input<T> a_{"a", 1};
+    Input<Buffer<T, 2>> A_{"A"};
+    Input<Buffer<T, 1>> x_{"x"};
+    Input<T> b_{"b", 1};
+    Input<Buffer<T, 1>> y_{"y"};
 
-    Output<Buffer<T>> output_ = {"output", 1};
+    Output<Buffer<T, 1>> output_{"output"};
 
     void generate() {
         assert(get_target().has_feature(Target::NoBoundsQuery));
@@ -209,16 +209,16 @@ public:
     template<typename T2>
     using Output = typename Base::template Output<T2>;
 
-    GeneratorParam<bool> vectorize_ = {"vectorize", true};
-    GeneratorParam<bool> parallel_ = {"parallel", true};
-    GeneratorParam<int> block_size_ = {"block_size", 1 << 5};
+    GeneratorParam<bool> vectorize_{"vectorize", true};
+    GeneratorParam<bool> parallel_{"parallel", true};
+    GeneratorParam<int> block_size_{"block_size", 1 << 5};
 
     // Standard ordering of parameters in GEMV functions.
-    Input<T> a_ = {"a", 1};
-    Input<Buffer<T>> x_ = {"x", 1};
-    Input<Buffer<T>> y_ = {"y", 1};
+    Input<T> a_{"a", 1};
+    Input<Buffer<T, 1>> x_{"x"};
+    Input<Buffer<T, 1>> y_{"y"};
 
-    Output<Buffer<T>> result_ = {"result", 2};
+    Output<Buffer<T, 2>> result_{"result"};
 
     void generate() {
         const int vec_size = vectorize_ ? natural_vector_size(type_of<T>()) : 1;

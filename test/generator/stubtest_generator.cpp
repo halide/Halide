@@ -30,9 +30,9 @@ public:
     GeneratorParam<bool> vectorize{"vectorize", true};
     GeneratorParam<LoopLevel> intermediate_level{"intermediate_level", LoopLevel::root()};
 
-    Input<Buffer<uint8_t>> typed_buffer_input{"typed_buffer_input", 3};
+    Input<Buffer<uint8_t, 3>> typed_buffer_input{"typed_buffer_input"};
     Input<Buffer<>> untyped_buffer_input{"untyped_buffer_input"};
-    Input<Buffer<uint8_t>[2]> array_buffer_input { "array_buffer_input", 3 };
+    Input<Buffer<uint8_t, 3>[2]> array_buffer_input { "array_buffer_input" };
     Input<Func> simple_input{"simple_input", 3};  // require a 3-dimensional Func but leave Type unspecified
     Input<Func[]> array_input{"array_input", 3};  // require a 3-dimensional Func but leave Type and ArraySize unspecified
     // Note that Input<Func> does not (yet) support Tuples
@@ -45,10 +45,10 @@ public:
     Output<Buffer<float>> typed_buffer_output{"typed_buffer_output"};
     Output<Buffer<>> untyped_buffer_output{"untyped_buffer_output"};
     Output<Buffer<>> tupled_output{"tupled_output", {Float(32), Int(32)}, 3};
-    Output<Buffer<uint8_t>> static_compiled_buffer_output{"static_compiled_buffer_output", 3};
-    Output<Buffer<uint8_t>[2]> array_buffer_output { "array_buffer_output", 3 };
-    Output<Buffer<Halide::float16_t>> float16_output{"float16_output", 3};
-    Output<Buffer<Halide::bfloat16_t>> bfloat16_output{"bfloat16_output", 3};
+    Output<Buffer<uint8_t, 3>> static_compiled_buffer_output{"static_compiled_buffer_output"};
+    Output<Buffer<uint8_t, 3>[2]> array_buffer_output { "array_buffer_output" };
+    Output<Buffer<Halide::float16_t, 3>> float16_output{"float16_output"};
+    Output<Buffer<Halide::bfloat16_t, 3>> bfloat16_output{"bfloat16_output"};
 
     void generate() {
         simple_output(x, y, c) = cast<float>(simple_input(x, y, c));

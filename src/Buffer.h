@@ -513,6 +513,12 @@ public:
         return Runtime::Buffer<T, Dims>::static_halide_type();
     }
 
+    static constexpr bool has_static_dimensions = Runtime::Buffer<T, Dims>::has_static_dimensions;
+
+    static int static_dimensions() {
+        return Runtime::Buffer<T, Dims>::static_dimensions();
+    }
+
     template<typename T2, int D2>
     static bool can_convert_from(const Buffer<T2, D2> &other) {
         return Halide::Runtime::Buffer<T, Dims>::can_convert_from(*other.get());
