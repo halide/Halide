@@ -14,19 +14,19 @@ find_package(Halide REQUIRED)
 # Generator(s)
 add_halide_generator(pipeline.generator SOURCES pipeline_generator.cpp)
 
-add_halide_library(pipeline_c FROM pipeline.generator
+add_halide_library(pipeline_c FROM c_backend::halide_generators::pipeline.generator
                    C_BACKEND
                    GENERATOR pipeline)
-add_halide_library(pipeline_native FROM pipeline.generator
+add_halide_library(pipeline_native FROM c_backend::halide_generators::pipeline.generator
                    GENERATOR pipeline)
 
 add_halide_generator(pipeline_cpp.generator SOURCES pipeline_cpp_generator.cpp)
 
-add_halide_library(pipeline_cpp_cpp FROM pipeline_cpp.generator
+add_halide_library(pipeline_cpp_cpp FROM c_backend::halide_generators::pipeline_cpp.generator
                    C_BACKEND
                    GENERATOR pipeline_cpp
                    FEATURES c_plus_plus_name_mangling)
-add_halide_library(pipeline_cpp_native FROM pipeline_cpp.generator
+add_halide_library(pipeline_cpp_native FROM c_backend::halide_generators::pipeline_cpp.generator
                    GENERATOR pipeline_cpp
                    FEATURES c_plus_plus_name_mangling)
 

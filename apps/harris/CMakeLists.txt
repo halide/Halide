@@ -15,8 +15,8 @@ find_package(Halide REQUIRED)
 add_halide_generator(harris.generator SOURCES harris_generator.cpp)
 
 # Filters
-add_halide_library(harris FROM harris.generator)
-add_halide_library(harris_auto_schedule FROM harris.generator
+add_halide_library(harris FROM harris::halide_generators::harris.generator)
+add_halide_library(harris_auto_schedule FROM harris::halide_generators::harris.generator
                    GENERATOR harris
                    AUTOSCHEDULER Halide::Mullapudi2016)
 

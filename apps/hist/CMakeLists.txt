@@ -15,8 +15,8 @@ find_package(Halide REQUIRED)
 add_halide_generator(hist.generator SOURCES hist_generator.cpp)
 
 # Filters
-add_halide_library(hist FROM hist.generator)
-add_halide_library(hist_auto_schedule FROM hist.generator
+add_halide_library(hist FROM hist::halide_generators::hist.generator)
+add_halide_library(hist_auto_schedule FROM hist::halide_generators::hist.generator
                    GENERATOR hist
                    AUTOSCHEDULER Halide::Mullapudi2016)
 

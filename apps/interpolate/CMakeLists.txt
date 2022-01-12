@@ -15,8 +15,8 @@ find_package(Halide REQUIRED)
 add_halide_generator(interpolate.generator SOURCES interpolate_generator.cpp)
 
 # Filters
-add_halide_library(interpolate FROM interpolate.generator)
-add_halide_library(interpolate_auto_schedule FROM interpolate.generator
+add_halide_library(interpolate FROM interpolate::halide_generators::interpolate.generator)
+add_halide_library(interpolate_auto_schedule FROM interpolate::halide_generators::interpolate.generator
                    GENERATOR interpolate
                    AUTOSCHEDULER Halide::Mullapudi2016)
 

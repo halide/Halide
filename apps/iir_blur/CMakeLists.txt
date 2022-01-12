@@ -15,8 +15,8 @@ find_package(Halide REQUIRED)
 add_halide_generator(iir_blur.generator SOURCES iir_blur_generator.cpp)
 
 # Filters
-add_halide_library(iir_blur FROM iir_blur.generator)
-add_halide_library(iir_blur_auto_schedule FROM iir_blur.generator
+add_halide_library(iir_blur FROM iir_blur::halide_generators::iir_blur.generator)
+add_halide_library(iir_blur_auto_schedule FROM iir_blur::halide_generators::iir_blur.generator
                    GENERATOR iir_blur
                    AUTOSCHEDULER Halide::Mullapudi2016)
 

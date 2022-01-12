@@ -20,10 +20,10 @@ add_halide_generator(wavelet.generator
                      inverse_haar_x_generator.cpp)
 
 # Filters
-add_halide_library(daubechies_x FROM wavelet.generator)
-add_halide_library(inverse_daubechies_x FROM wavelet.generator)
-add_halide_library(haar_x FROM wavelet.generator)
-add_halide_library(inverse_haar_x FROM wavelet.generator)
+add_halide_library(daubechies_x FROM wavelet::halide_generators::wavelet.generator)
+add_halide_library(inverse_daubechies_x FROM wavelet::halide_generators::wavelet.generator)
+add_halide_library(haar_x FROM wavelet::halide_generators::wavelet.generator)
+add_halide_library(inverse_haar_x FROM wavelet::halide_generators::wavelet.generator)
 
 # Main executable
 add_executable(wavelet wavelet.cpp)

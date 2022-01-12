@@ -15,8 +15,8 @@ find_package(Halide REQUIRED)
 add_halide_generator(nl_means.generator SOURCES nl_means_generator.cpp)
 
 # Filters
-add_halide_library(nl_means FROM nl_means.generator)
-add_halide_library(nl_means_auto_schedule FROM nl_means.generator
+add_halide_library(nl_means FROM nl_means::halide_generators::nl_means.generator)
+add_halide_library(nl_means_auto_schedule FROM nl_means::halide_generators::nl_means.generator
                    GENERATOR nl_means
                    AUTOSCHEDULER Halide::Mullapudi2016)
 

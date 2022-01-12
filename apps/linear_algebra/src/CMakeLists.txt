@@ -10,7 +10,7 @@ function(add_halide_blas_library)
     set(oneValueArgs TARGET NAME)
     set(multiValueArgs GENERATOR_ARGS FEATURES)
     cmake_parse_arguments(args "" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
-    add_halide_library(${args_TARGET} FROM blas.generator
+    add_halide_library(${args_TARGET} FROM linear_algebra::halide_generators::blas.generator
                        GENERATOR ${args_NAME}
                        FEATURES no_bounds_query ${args_FEATURES}
                        PARAMS ${args_GENERATOR_ARGS})

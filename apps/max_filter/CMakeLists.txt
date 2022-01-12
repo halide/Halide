@@ -15,8 +15,8 @@ find_package(Halide REQUIRED)
 add_halide_generator(max_filter.generator SOURCES max_filter_generator.cpp)
 
 # Filters
-add_halide_library(max_filter FROM max_filter.generator)
-add_halide_library(max_filter_auto_schedule FROM max_filter.generator
+add_halide_library(max_filter FROM max_filter::halide_generators::max_filter.generator)
+add_halide_library(max_filter_auto_schedule FROM max_filter::halide_generators::max_filter.generator
                    GENERATOR max_filter
                    AUTOSCHEDULER Halide::Mullapudi2016)
 

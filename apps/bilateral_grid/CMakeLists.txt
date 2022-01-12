@@ -16,11 +16,11 @@ add_halide_generator(bilateral_grid.generator SOURCES bilateral_grid_generator.c
 target_link_libraries(bilateral_grid.generator PRIVATE Halide::Tools)
 
 # Filters
-add_halide_library(bilateral_grid FROM bilateral_grid.generator
+add_halide_library(bilateral_grid FROM bilateral_grid::halide_generators::bilateral_grid.generator
                    STMT bilateral_grid_STMT
                    SCHEDULE bilateral_grid_SCHEDULE)
 
-add_halide_library(bilateral_grid_auto_schedule FROM bilateral_grid.generator
+add_halide_library(bilateral_grid_auto_schedule FROM bilateral_grid::halide_generators::bilateral_grid.generator
                    GENERATOR bilateral_grid
                    STMT bilateral_grid_auto_schedule_STMT
                    SCHEDULE bilateral_grid_auto_schedule_SCHEDULE

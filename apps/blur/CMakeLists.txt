@@ -16,7 +16,7 @@ find_package(OpenMP)
 add_halide_generator(blur.generator SOURCES halide_blur_generator.cpp)
 
 # Filters
-add_halide_library(halide_blur FROM blur.generator)
+add_halide_library(halide_blur FROM blur::halide_generators::blur.generator)
 
 # Main executable
 add_executable(blur_test test.cpp)
