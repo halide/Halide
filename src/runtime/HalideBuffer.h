@@ -1796,7 +1796,7 @@ public:
     /** Make a zero-dimensional Buffer that points to non-owned, existing data */
     static Buffer<T, Dims, InClassDimStorage> make_scalar(T *data) {
         static_assert(Dims == DynamicDims || Dims == 0, "make_scalar() must be called on a Buffer that can represent 0 dimensions.");
-        Buffer<T, DynamicDims, InClassDimStorage> buf(1);
+        Buffer<T, DynamicDims, InClassDimStorage> buf(data, 1);
         buf.slice(0, 0);
         return buf;
     }

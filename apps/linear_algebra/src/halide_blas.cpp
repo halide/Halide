@@ -5,10 +5,12 @@
 
 using Halide::Runtime::Buffer;
 
-#define assert_no_error(func)                                           \
-    if (func != 0) {                                                    \
-        std::cerr << "ERROR! Halide kernel returned non-zero value.\n"; \
-    }
+#define assert_no_error(func)                                               \
+    do {                                                                    \
+        if (func != 0) {                                                    \
+            std::cerr << "ERROR! Halide kernel returned non-zero value.\n"; \
+        }                                                                   \
+    } while (0)
 
 namespace {
 
@@ -91,7 +93,7 @@ void hblas_daxpy(const int N, const double a, const double *x, const int incx,
 
 float hblas_sdot(const int N, const float *x, const int incx,
                  const float *y, const int incy) {
-    float result = 0.f;
+    float result;
     auto buff_x = init_vector_buffer(N, const_cast<float *>(x), incx);
     auto buff_y = init_vector_buffer(N, const_cast<float *>(y), incy);
     auto buff_dot = init_scalar_buffer(&result);
@@ -101,7 +103,7 @@ float hblas_sdot(const int N, const float *x, const int incx,
 
 double hblas_ddot(const int N, const double *x, const int incx,
                   const double *y, const int incy) {
-    double result = 0.;
+    double result;
     auto buff_x = init_vector_buffer(N, const_cast<double *>(x), incx);
     auto buff_y = init_vector_buffer(N, const_cast<double *>(y), incy);
     auto buff_dot = init_scalar_buffer(&result);
@@ -114,7 +116,7 @@ double hblas_ddot(const int N, const double *x, const int incx,
 //////////
 
 float hblas_snrm2(const int N, const float *x, const int incx) {
-    float result = 0.f;
+    float result;
     auto buff_x = init_vector_buffer(N, const_cast<float *>(x), incx);
     auto buff_nrm = init_scalar_buffer(&result);
     assert_no_error(halide_sdot(buff_x, buff_x, buff_nrm));
@@ -122,7 +124,7 @@ float hblas_snrm2(const int N, const float *x, const int incx) {
 }
 
 double hblas_dnrm2(const int N, const double *x, const int incx) {
-    double result = 0.;
+    double result;
     auto buff_x = init_vector_buffer(N, const_cast<double *>(x), incx);
     auto buff_nrm = init_scalar_buffer(&result);
     assert_no_error(halide_ddot(buff_x, buff_x, buff_nrm));
@@ -134,7 +136,7 @@ double hblas_dnrm2(const int N, const double *x, const int incx) {
 //////////
 
 float hblas_sasum(const int N, const float *x, const int incx) {
-    float result = 0.f;
+    float result;
     auto buff_x = init_vector_buffer(N, const_cast<float *>(x), incx);
     auto buff_sum = init_scalar_buffer(&result);
     assert_no_error(halide_sasum(buff_x, buff_sum));
