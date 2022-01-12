@@ -12,11 +12,7 @@ set(CMAKE_CXX_EXTENSIONS NO)
 find_package(Halide REQUIRED)
 
 # Generator
-add_executable(camera_pipe.generator camera_pipe_generator.cpp)
-target_link_libraries(camera_pipe.generator
-                      PRIVATE
-                      Halide::Generator
-                      Halide::Tools)
+add_halide_generator(camera_pipe.generator SOURCES camera_pipe_generator.cpp)
 
 # Filters
 add_halide_library(camera_pipe FROM camera_pipe.generator)

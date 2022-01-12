@@ -12,8 +12,7 @@ set(CMAKE_CXX_EXTENSIONS NO)
 find_package(Halide REQUIRED)
 
 # Generator
-add_executable(lens_blur.generator lens_blur_generator.cpp)
-target_link_libraries(lens_blur.generator PRIVATE Halide::Generator Halide::Tools)
+add_halide_generator(lens_blur.generator SOURCES lens_blur_generator.cpp)
 
 # Filters
 add_halide_library(lens_blur FROM lens_blur.generator)

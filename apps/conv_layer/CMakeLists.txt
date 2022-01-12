@@ -12,10 +12,7 @@ set(CMAKE_CXX_EXTENSIONS NO)
 find_package(Halide REQUIRED)
 
 # Generator
-add_executable(conv_layer.generator conv_layer_generator.cpp)
-target_link_libraries(conv_layer.generator
-                      PRIVATE
-                      Halide::Generator)
+add_halide_generator(conv_layer.generator SOURCES conv_layer_generator.cpp)
 
 # Filters
 add_halide_library(conv_layer FROM conv_layer.generator)

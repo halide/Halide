@@ -2,8 +2,7 @@ add_library(halide_blas halide_blas.cpp)
 target_include_directories(halide_blas PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 
 # Define all our generators
-add_executable(blas.generator blas_l1_generators.cpp blas_l2_generators.cpp blas_l3_generators.cpp)
-target_link_libraries(blas.generator PRIVATE Halide::Generator)
+add_halide_generator(blas.generator SOURCES blas_l1_generators.cpp blas_l2_generators.cpp blas_l3_generators.cpp)
 
 # Function to reduce boilerplate
 function(add_halide_blas_library)
