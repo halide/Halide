@@ -31,35 +31,35 @@ public:
     Input<Buffer<float, 3>> input{"input"};
     /** parameter values for scaling layers **/
     Input<Buffer<float, 1>> conv1_gamma{"conv1_gamma"};
-    Input<Buffer<float, 1>[4]> br1_gamma{"br1_gamma"};
-    Input<Buffer<float, 1>[16]> br2a_gamma{"br2a_gamma"};
-    Input<Buffer<float, 1>[16]> br2b_gamma{"br2b_gamma"};
-    Input<Buffer<float, 1>[16]> br2c_gamma{"br2c_gamma"};
+    Input<Buffer<float, 1>[4]> br1_gamma { "br1_gamma" };
+    Input<Buffer<float, 1>[16]> br2a_gamma { "br2a_gamma" };
+    Input<Buffer<float, 1>[16]> br2b_gamma { "br2b_gamma" };
+    Input<Buffer<float, 1>[16]> br2c_gamma { "br2c_gamma" };
 
     Input<Buffer<float, 1>> conv1_beta{"conv1_beta"};
-    Input<Buffer<float, 1>[4]> br1_beta{"br1_beta"};
-    Input<Buffer<float, 1>[16]> br2a_beta{"br2a_beta"};
-    Input<Buffer<float, 1>[16]> br2b_beta{"br2b_beta"};
-    Input<Buffer<float, 1>[16]> br2c_beta{"br2c_beta"};
+    Input<Buffer<float, 1>[4]> br1_beta { "br1_beta" };
+    Input<Buffer<float, 1>[16]> br2a_beta { "br2a_beta" };
+    Input<Buffer<float, 1>[16]> br2b_beta { "br2b_beta" };
+    Input<Buffer<float, 1>[16]> br2c_beta { "br2c_beta" };
 
     Input<Buffer<float, 1>> conv1_mu{"conv1_mu"};
-    Input<Buffer<float, 1>[4]> br1_mu{"br1_mu"};
-    Input<Buffer<float, 1>[16]> br2a_mu{"br2a_mu"};
-    Input<Buffer<float, 1>[16]> br2b_mu{"br2b_mu"};
-    Input<Buffer<float, 1>[16]> br2c_mu{"br2c_mu"};
+    Input<Buffer<float, 1>[4]> br1_mu { "br1_mu" };
+    Input<Buffer<float, 1>[16]> br2a_mu { "br2a_mu" };
+    Input<Buffer<float, 1>[16]> br2b_mu { "br2b_mu" };
+    Input<Buffer<float, 1>[16]> br2c_mu { "br2c_mu" };
 
     Input<Buffer<float, 1>> conv1_sig{"conv1_sig"};
-    Input<Buffer<float, 1>[4]> br1_sig{"br1_sig"};
-    Input<Buffer<float, 1>[16]> br2a_sig{"br2a_sig"};
-    Input<Buffer<float, 1>[16]> br2b_sig{"br2b_sig"};
-    Input<Buffer<float, 1>[16]> br2c_sig{"br2c_sig"};
+    Input<Buffer<float, 1>[4]> br1_sig { "br1_sig" };
+    Input<Buffer<float, 1>[16]> br2a_sig { "br2a_sig" };
+    Input<Buffer<float, 1>[16]> br2b_sig { "br2b_sig" };
+    Input<Buffer<float, 1>[16]> br2c_sig { "br2c_sig" };
 
     /** weights and biases for convolutions **/
     Input<Buffer<float, 4>> conv1_weights{"conv1_weights"};
-    Input<Buffer<float, 4>[4]> br1_conv_weights{"br1_conv_weights"};
-    Input<Buffer<float, 4>[16]> br2a_conv_weights{"br2a_conv_weights"};
-    Input<Buffer<float, 4>[16]> br2b_conv_weights{"br2b_conv_weights"};
-    Input<Buffer<float, 4>[16]> br2c_conv_weights{"br2c_conv_weights"};
+    Input<Buffer<float, 4>[4]> br1_conv_weights { "br1_conv_weights" };
+    Input<Buffer<float, 4>[16]> br2a_conv_weights { "br2a_conv_weights" };
+    Input<Buffer<float, 4>[16]> br2b_conv_weights { "br2b_conv_weights" };
+    Input<Buffer<float, 4>[16]> br2c_conv_weights { "br2c_conv_weights" };
 
     Input<Buffer<float, 2>> fc1000_weights{"fc1000_weights"};
     Input<Buffer<float, 1>> fc1000_bias{"fc1000_bias"};
@@ -378,6 +378,6 @@ private:
         return output;
     }
 };
-}  //namespace
+}  // namespace
 
 HALIDE_REGISTER_GENERATOR(Resnet50Generator, resnet50)
