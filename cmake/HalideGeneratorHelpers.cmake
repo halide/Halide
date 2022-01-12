@@ -148,6 +148,16 @@ function(add_halide_library TARGET)
         message(FATAL_ERROR "Missing FROM argument specifying a Halide generator target")
     endif ()
 
+    if (NOT TARGET ${ARG_FROM})
+        # FROM is usually an unqualified name; if we are crosscompiling, we might need a
+        # fully-qualified name, so add the default package name and retry
+        set(FQ_ARG_FROM "${PROJECT_NAME}::halide_generators::${ARG_FROM}")
+        if (NOT TARGET ${FQ_ARG_FROM})
+            message(FATAL_ERROR "Unable to local FROM as either ${ARG_FROM} or ${FQ_ARG_FROM}")
+        endif ()
+        set(ARG_FROM "${FQ_ARG_FROM}")
+    endif ()
+
     _Halide_place_dll(${ARG_FROM})
 
     if (ARG_C_BACKEND)

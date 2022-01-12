@@ -15,16 +15,16 @@ find_package(Halide REQUIRED)
 add_halide_generator(fft.generator SOURCES fft_generator.cpp fft.cpp)
 
 # Filters
-add_halide_library(fft_forward_r2c FROM fft::halide_generators::fft.generator
+add_halide_library(fft_forward_r2c FROM fft.generator
                    GENERATOR fft
                    PARAMS direction=samples_to_frequency size0=16 size1=16 gain=0.00390625 input_number_type=real output_number_type=complex)
-add_halide_library(fft_inverse_c2r FROM fft::halide_generators::fft.generator
+add_halide_library(fft_inverse_c2r FROM fft.generator
                    GENERATOR fft
                    PARAMS direction=frequency_to_samples size0=16 size1=16 input_number_type=complex output_number_type=real)
-add_halide_library(fft_forward_c2c FROM fft::halide_generators::fft.generator
+add_halide_library(fft_forward_c2c FROM fft.generator
                    GENERATOR fft
                    PARAMS direction=samples_to_frequency size0=16 size1=16 gain=0.00390625 input_number_type=complex output_number_type=complex)
-add_halide_library(fft_inverse_c2c FROM fft::halide_generators::fft.generator
+add_halide_library(fft_inverse_c2c FROM fft.generator
                    GENERATOR fft
                    PARAMS direction=frequency_to_samples size0=16 size1=16 input_number_type=complex output_number_type=complex)
 

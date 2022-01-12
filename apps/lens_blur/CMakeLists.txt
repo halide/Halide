@@ -15,8 +15,8 @@ find_package(Halide REQUIRED)
 add_halide_generator(lens_blur.generator SOURCES lens_blur_generator.cpp)
 
 # Filters
-add_halide_library(lens_blur FROM lens_blur::halide_generators::lens_blur.generator)
-add_halide_library(lens_blur_auto_schedule FROM lens_blur::halide_generators::lens_blur.generator
+add_halide_library(lens_blur FROM lens_blur.generator)
+add_halide_library(lens_blur_auto_schedule FROM lens_blur.generator
                    GENERATOR lens_blur
                    AUTOSCHEDULER Halide::Mullapudi2016)
 

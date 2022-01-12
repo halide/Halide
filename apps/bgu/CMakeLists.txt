@@ -15,8 +15,8 @@ find_package(Halide REQUIRED)
 add_halide_generator(bgu.generator SOURCES bgu_generator.cpp)
 
 # Filters
-add_halide_library(bgu FROM bgu::halide_generators::bgu.generator)
-add_halide_library(bgu_auto_schedule FROM bgu::halide_generators::bgu.generator
+add_halide_library(bgu FROM bgu.generator)
+add_halide_library(bgu_auto_schedule FROM bgu.generator
                    GENERATOR bgu
                    AUTOSCHEDULER Halide::Mullapudi2016)
 

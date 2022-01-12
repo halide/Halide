@@ -15,8 +15,8 @@ find_package(Halide REQUIRED)
 add_halide_generator(depthwise_separable_conv.generator SOURCES depthwise_separable_conv_generator.cpp)
 
 # Filters
-add_halide_library(depthwise_separable_conv FROM depthwise_separable_conv::halide_generators::depthwise_separable_conv.generator)
-add_halide_library(depthwise_separable_conv_auto_schedule FROM depthwise_separable_conv::halide_generators::depthwise_separable_conv.generator
+add_halide_library(depthwise_separable_conv FROM depthwise_separable_conv.generator)
+add_halide_library(depthwise_separable_conv_auto_schedule FROM depthwise_separable_conv.generator
                    GENERATOR depthwise_separable_conv
                    AUTOSCHEDULER Halide::Mullapudi2016)
 

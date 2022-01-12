@@ -34,7 +34,7 @@ foreach (simd IN ITEMS "" "_simd")
         set(target "wasm-32-wasmrt${features${simd}}${features${threads}}")
 
         foreach (gen IN ITEMS init update render)
-            add_halide_library(${config}_${gen} FROM HelloWasm::halide_generators::reaction_diffusion_generator
+            add_halide_library(${config}_${gen} FROM reaction_diffusion_generator
                                GENERATOR reaction_diffusion_${gen}
                                FUNCTION_NAME reaction_diffusion_${gen}
                                PARAMS ${params${threads}}
@@ -63,7 +63,7 @@ foreach (simd IN ITEMS "" "_simd")
 endforeach ()
 
 foreach (gen IN ITEMS init update render)
-    add_halide_library(reaction_diffusion_${gen} FROM HelloWasm::halide_generators::reaction_diffusion_generator
+    add_halide_library(reaction_diffusion_${gen} FROM reaction_diffusion_generator
                        REGISTRATION ${gen}_cpp
                        PARAMS threads=true)
 endforeach ()

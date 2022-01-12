@@ -48,7 +48,7 @@ foreach (VARIANT IN LISTS VARIANTS)
     list(GET VLIST 2 DIR)
     string(REPLACE "up" "true" DIR ${DIR})
     string(REPLACE "down" "false" DIR ${DIR})
-    add_halide_library(resize_${VARIANT} FROM resize::halide_generators::resize.generator
+    add_halide_library(resize_${VARIANT} FROM resize.generator
                        GENERATOR resize
                        PARAMS interpolation_type=${INTERP} input.type=${TYPE} upsample=${DIR})
 endforeach ()

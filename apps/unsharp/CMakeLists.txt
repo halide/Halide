@@ -15,8 +15,8 @@ find_package(Halide REQUIRED)
 add_halide_generator(unsharp.generator SOURCES unsharp_generator.cpp)
 
 # Filters
-add_halide_library(unsharp FROM unsharp::halide_generators::unsharp.generator)
-add_halide_library(unsharp_auto_schedule FROM unsharp::halide_generators::unsharp.generator
+add_halide_library(unsharp FROM unsharp.generator)
+add_halide_library(unsharp_auto_schedule FROM unsharp.generator
                    GENERATOR unsharp
                    AUTOSCHEDULER Halide::Mullapudi2016)
 

@@ -15,8 +15,8 @@ find_package(Halide REQUIRED)
 add_halide_generator(stencil_chain.generator SOURCES stencil_chain_generator.cpp)
 
 # Filters
-add_halide_library(stencil_chain FROM stencil_chain::halide_generators::stencil_chain.generator)
-add_halide_library(stencil_chain_auto_schedule FROM stencil_chain::halide_generators::stencil_chain.generator
+add_halide_library(stencil_chain FROM stencil_chain.generator)
+add_halide_library(stencil_chain_auto_schedule FROM stencil_chain.generator
                    GENERATOR stencil_chain
                    AUTOSCHEDULER Halide::Mullapudi2016)
 
