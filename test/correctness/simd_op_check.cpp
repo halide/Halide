@@ -2235,7 +2235,6 @@ public:
                 }
 
                 // Integer to integer widening
-                // TODO(https://github.com/halide/Halide/issues/5130): NOT BEING GENERATED AT TRUNK
                 check("i16x8.extend_low_i8x16_s", 16*w, i16(i8_1));
                 check("i16x8.extend_high_i8x16_s", 16*w, i16(i8_1));
                 check("i16x8.extend_low_i8x16_u", 16*w, u16(u8_1));
