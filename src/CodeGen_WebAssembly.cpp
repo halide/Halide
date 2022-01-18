@@ -108,6 +108,13 @@ const WasmIntrinsic intrinsic_defs[] = {
     {"saturating_narrow_i32x8_to_u16x8", UInt(16, 8), "saturating_narrow", {Int(32, 8)}, Target::WasmSimd128},
 
     {"llvm.wasm.dot", Int(32, 4), "dot_product", {Int(16, 8), Int(16, 8)}, Target::WasmSimd128},
+
+    {"extend_i8x16_to_i16x8", Int(16, 16), "widen_integer", {Int(8, 16)}, Target::WasmSimd128},
+    {"extend_u8x16_to_u16x8", UInt(16, 16), "widen_integer", {UInt(8, 16)}, Target::WasmSimd128},
+    {"extend_i16x8_to_i32x8", Int(32, 8), "widen_integer", {Int(16, 8)}, Target::WasmSimd128},
+    {"extend_u16x8_to_u32x8", UInt(32, 8), "widen_integer", {UInt(16, 8)}, Target::WasmSimd128},
+    {"extend_i32x4_to_i64x4", Int(64, 4), "widen_integer", {Int(32, 4)}, Target::WasmSimd128},
+    {"extend_u32x4_to_u64x4", UInt(64, 4), "widen_integer", {UInt(32, 4)}, Target::WasmSimd128},
 #endif
 };
 // clang-format on
@@ -156,6 +163,12 @@ void CodeGen_WebAssembly::visit(const Cast *op) {
 #if LLVM_VERSION == 130
         {"float_to_double", f64(wild_f32x_), Target::WasmSimd128},
 #endif
+        {"widen_integer", i16(wild_i8x_), Target::WasmSimd128},
+        {"widen_integer", u16(wild_u8x_), Target::WasmSimd128},
+        {"widen_integer", i32(wild_i16x_), Target::WasmSimd128},
+        {"widen_integer", u32(wild_u16x_), Target::WasmSimd128},
+        {"widen_integer", i64(wild_i32x_), Target::WasmSimd128},
+        {"widen_integer", u64(wild_u32x_), Target::WasmSimd128},
     };
     // clang-format on
 
