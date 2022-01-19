@@ -34,27 +34,27 @@ std::string output_name(const string &filename, const Module &m, const string &e
     return output_name(filename, m.name(), ext);
 }
 
-std::map<OutputFile, std::string> single_output(const string &filename, const Module &m, OutputFile output_type) {
+std::map<OutputType, std::string> single_output(const string &filename, const Module &m, OutputType output_type) {
     auto ext = get_output_info(m.target());
-    std::map<OutputFile, std::string> outputs = {
+    std::map<OutputType, std::string> outputs = {
         {output_type, output_name(filename, m, ext.at(output_type).extension)}};
     return outputs;
 }
 
-std::map<OutputFile, std::string> static_library_outputs(const string &filename_prefix, const Target &target) {
+std::map<OutputType, std::string> static_library_outputs(const string &filename_prefix, const Target &target) {
     auto ext = get_output_info(target);
-    std::map<OutputFile, std::string> outputs = {
-        {OutputFile::c_header, filename_prefix + ext.at(OutputFile::c_header).extension},
-        {OutputFile::static_library, filename_prefix + ext.at(OutputFile::static_library).extension},
+    std::map<OutputType, std::string> outputs = {
+        {OutputType::c_header, filename_prefix + ext.at(OutputType::c_header).extension},
+        {OutputType::static_library, filename_prefix + ext.at(OutputType::static_library).extension},
     };
     return outputs;
 }
 
-std::map<OutputFile, std::string> object_file_outputs(const string &filename_prefix, const Target &target) {
+std::map<OutputType, std::string> object_file_outputs(const string &filename_prefix, const Target &target) {
     auto ext = get_output_info(target);
-    std::map<OutputFile, std::string> outputs = {
-        {OutputFile::c_header, filename_prefix + ext.at(OutputFile::c_header).extension},
-        {OutputFile::object, filename_prefix + ext.at(OutputFile::object).extension},
+    std::map<OutputType, std::string> outputs = {
+        {OutputType::c_header, filename_prefix + ext.at(OutputType::c_header).extension},
+        {OutputType::object, filename_prefix + ext.at(OutputType::object).extension},
     };
     return outputs;
 }
@@ -255,7 +255,7 @@ Func Pipeline::get_func(size_t index) {
     return Func(env.find(order[index])->second);
 }
 
-void Pipeline::compile_to(const std::map<OutputFile, std::string> &output_files,
+void Pipeline::compile_to(const std::map<OutputType, std::string> &output_files,
                           const vector<Argument> &args,
                           const string &fn_name,
                           const Target &target) {
@@ -267,7 +267,7 @@ void Pipeline::compile_to_bitcode(const string &filename,
                                   const string &fn_name,
                                   const Target &target) {
     Module m = compile_to_module(args, fn_name, target);
-    m.compile(single_output(filename, m, OutputFile::bitcode));
+    m.compile(single_output(filename, m, OutputType::bitcode));
 }
 
 void Pipeline::compile_to_llvm_assembly(const string &filename,
@@ -275,7 +275,7 @@ void Pipeline::compile_to_llvm_assembly(const string &filename,
                                         const string &fn_name,
                                         const Target &target) {
     Module m = compile_to_module(args, fn_name, target);
-    m.compile(single_output(filename, m, OutputFile::llvm_assembly));
+    m.compile(single_output(filename, m, OutputType::llvm_assembly));
 }
 
 void Pipeline::compile_to_object(const string &filename,
@@ -284,7 +284,7 @@ void Pipeline::compile_to_object(const string &filename,
                                  const Target &target) {
     Module m = compile_to_module(args, fn_name, target);
     auto ext = get_output_info(target);
-    m.compile({{OutputFile::object, output_name(filename, m, ext.at(OutputFile::object).extension)}});
+    m.compile({{OutputType::object, output_name(filename, m, ext.at(OutputType::object).extension)}});
 }
 
 void Pipeline::compile_to_header(const string &filename,
@@ -292,7 +292,7 @@ void Pipeline::compile_to_header(const string &filename,
                                  const string &fn_name,
                                  const Target &target) {
     Module m = compile_to_module(args, fn_name, target);
-    m.compile(single_output(filename, m, OutputFile::c_header));
+    m.compile(single_output(filename, m, OutputType::c_header));
 }
 
 void Pipeline::compile_to_assembly(const string &filename,
@@ -300,7 +300,7 @@ void Pipeline::compile_to_assembly(const string &filename,
                                    const string &fn_name,
                                    const Target &target) {
     Module m = compile_to_module(args, fn_name, target);
-    m.compile(single_output(filename, m, OutputFile::assembly));
+    m.compile(single_output(filename, m, OutputType::assembly));
 }
 
 void Pipeline::compile_to_c(const string &filename,
@@ -308,7 +308,7 @@ void Pipeline::compile_to_c(const string &filename,
                             const string &fn_name,
                             const Target &target) {
     Module m = compile_to_module(args, fn_name, target);
-    m.compile(single_output(filename, m, OutputFile::c_source));
+    m.compile(single_output(filename, m, OutputType::c_source));
 }
 
 void Pipeline::print_loop_nest() {
@@ -321,7 +321,7 @@ void Pipeline::compile_to_lowered_stmt(const string &filename,
                                        StmtOutputFormat fmt,
                                        const Target &target) {
     Module m = compile_to_module(args, "", target);
-    m.compile(single_output(filename, m, fmt == HTML ? OutputFile::stmt_html : OutputFile::stmt));
+    m.compile(single_output(filename, m, fmt == HTML ? OutputType::stmt_html : OutputType::stmt));
 }
 
 void Pipeline::compile_to_static_library(const string &filename_prefix,
@@ -359,9 +359,9 @@ void Pipeline::compile_to_file(const string &filename_prefix,
                                const Target &target) {
     Module m = compile_to_module(args, fn_name, target);
     auto ext = get_output_info(target);
-    std::map<OutputFile, std::string> outputs = {
-        {OutputFile::c_header, filename_prefix + ext.at(OutputFile::c_header).extension},
-        {OutputFile::object, filename_prefix + ext.at(OutputFile::object).extension},
+    std::map<OutputType, std::string> outputs = {
+        {OutputType::c_header, filename_prefix + ext.at(OutputType::c_header).extension},
+        {OutputType::object, filename_prefix + ext.at(OutputType::object).extension},
     };
     m.compile(outputs);
 }
@@ -634,7 +634,7 @@ void Pipeline::compile_jit(const Target &target_arg) {
         }
         string file_name = program_name + "_" + name + "_" + unique_name('g').substr(1) + ".bc";
         debug(4) << "Saving bitcode to: " << file_name << "\n";
-        module.compile({{OutputFile::bitcode, file_name}});
+        module.compile({{OutputType::bitcode, file_name}});
     }
 
     contents->jit_module = jit_module;

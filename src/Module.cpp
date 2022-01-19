@@ -37,27 +37,27 @@ namespace Internal {
 // We really don't want to vary the file extensions based on target flags,
 // and in practice, it's extremely unlikely that anyone needs to rely on this
 // being pure C output (vs possibly C++).
-std::map<OutputFile, const OutputInfo> get_output_info(const Target &target) {
+std::map<OutputType, const OutputInfo> get_output_info(const Target &target) {
     constexpr bool IsMulti = true;
     constexpr bool IsSingle = false;
     const bool is_windows_coff = target.os == Target::Windows;
-    std::map<OutputFile, const OutputInfo> ext = {
-        {OutputFile::assembly, {"assembly", ".s", IsMulti}},
-        {OutputFile::bitcode, {"bitcode", ".bc", IsMulti}},
-        {OutputFile::c_header, {"c_header", ".h", IsSingle}},
-        {OutputFile::c_source, {"c_source", ".halide_generated.cpp", IsSingle}},
-        {OutputFile::compiler_log, {"compiler_log", ".halide_compiler_log", IsSingle}},
-        {OutputFile::cpp_stub, {"cpp_stub", ".stub.h", IsSingle}},
-        {OutputFile::featurization, {"featurization", ".featurization", IsMulti}},
-        {OutputFile::llvm_assembly, {"llvm_assembly", ".ll", IsMulti}},
-        {OutputFile::object, {"object", is_windows_coff ? ".obj" : ".o", IsMulti}},
-        {OutputFile::python_extension, {"python_extension", ".py.cpp", IsSingle}},
-        {OutputFile::pytorch_wrapper, {"pytorch_wrapper", ".pytorch.h", IsSingle}},
-        {OutputFile::registration, {"registration", ".registration.cpp", IsSingle}},
-        {OutputFile::schedule, {"schedule", ".schedule.h", IsSingle}},
-        {OutputFile::static_library, {"static_library", is_windows_coff ? ".lib" : ".a", IsSingle}},
-        {OutputFile::stmt, {"stmt", ".stmt", IsMulti}},
-        {OutputFile::stmt_html, {"stmt_html", ".stmt.html", IsMulti}},
+    std::map<OutputType, const OutputInfo> ext = {
+        {OutputType::assembly, {"assembly", ".s", IsMulti}},
+        {OutputType::bitcode, {"bitcode", ".bc", IsMulti}},
+        {OutputType::c_header, {"c_header", ".h", IsSingle}},
+        {OutputType::c_source, {"c_source", ".halide_generated.cpp", IsSingle}},
+        {OutputType::compiler_log, {"compiler_log", ".halide_compiler_log", IsSingle}},
+        {OutputType::cpp_stub, {"cpp_stub", ".stub.h", IsSingle}},
+        {OutputType::featurization, {"featurization", ".featurization", IsMulti}},
+        {OutputType::llvm_assembly, {"llvm_assembly", ".ll", IsMulti}},
+        {OutputType::object, {"object", is_windows_coff ? ".obj" : ".o", IsMulti}},
+        {OutputType::python_extension, {"python_extension", ".py.cpp", IsSingle}},
+        {OutputType::pytorch_wrapper, {"pytorch_wrapper", ".pytorch.h", IsSingle}},
+        {OutputType::registration, {"registration", ".registration.cpp", IsSingle}},
+        {OutputType::schedule, {"schedule", ".schedule.h", IsSingle}},
+        {OutputType::static_library, {"static_library", is_windows_coff ? ".lib" : ".a", IsSingle}},
+        {OutputType::stmt, {"stmt", ".stmt", IsMulti}},
+        {OutputType::stmt_html, {"stmt_html", ".stmt.html", IsMulti}},
     };
     return ext;
 }
@@ -141,7 +141,7 @@ std::string add_suffix(const std::string &path, const std::string &suffix) {
     }
 }
 
-void validate_outputs(const std::map<OutputFile, std::string> &in) {
+void validate_outputs(const std::map<OutputType, std::string> &in) {
     // We don't care about the extensions, so any Target will do
     auto known = get_output_info(Target());
     for (const auto &it : in) {
@@ -149,7 +149,7 @@ void validate_outputs(const std::map<OutputFile, std::string> &in) {
     }
 }
 
-bool contains(const std::map<OutputFile, std::string> &in, const OutputFile &key) {
+bool contains(const std::map<OutputType, std::string> &in, const OutputType &key) {
     return in.find(key) != in.end();
 }
 
@@ -552,42 +552,42 @@ std::map<std::string, std::string> Module::get_metadata_name_map() const {
     return contents->metadata_name_map;
 }
 
-void Module::compile(const std::map<OutputFile, std::string> &output_files) const {
+void Module::compile(const std::map<OutputType, std::string> &output_files) const {
     validate_outputs(output_files);
 
     // output stmt and html prior to resolving submodules. We need to
     // clear the output after writing it, otherwise the output will
     // be overwritten by recursive calls after submodules are resolved.
-    if (contains(output_files, OutputFile::stmt)) {
-        debug(1) << "Module.compile(): stmt " << output_files.at(OutputFile::stmt) << "\n";
-        std::ofstream file(output_files.at(OutputFile::stmt));
+    if (contains(output_files, OutputType::stmt)) {
+        debug(1) << "Module.compile(): stmt " << output_files.at(OutputType::stmt) << "\n";
+        std::ofstream file(output_files.at(OutputType::stmt));
         file << *this;
     }
-    if (contains(output_files, OutputFile::stmt_html)) {
-        debug(1) << "Module.compile(): stmt_html " << output_files.at(OutputFile::stmt_html) << "\n";
-        Internal::print_to_html(output_files.at(OutputFile::stmt_html), *this);
+    if (contains(output_files, OutputType::stmt_html)) {
+        debug(1) << "Module.compile(): stmt_html " << output_files.at(OutputType::stmt_html) << "\n";
+        Internal::print_to_html(output_files.at(OutputType::stmt_html), *this);
     }
 
     // If there are submodules, recursively lower submodules to
     // buffers on a copy of the module being compiled, then compile
     // the copied module.
     if (!submodules().empty()) {
-        std::map<OutputFile, std::string> output_files_copy = output_files;
-        output_files_copy.erase(OutputFile::stmt);
-        output_files_copy.erase(OutputFile::stmt_html);
+        std::map<OutputType, std::string> output_files_copy = output_files;
+        output_files_copy.erase(OutputType::stmt);
+        output_files_copy.erase(OutputType::stmt_html);
         resolve_submodules().compile(output_files_copy);
         return;
     }
 
     auto *logger = get_compiler_logger();
-    if (contains(output_files, OutputFile::object) || contains(output_files, OutputFile::assembly) ||
-        contains(output_files, OutputFile::bitcode) || contains(output_files, OutputFile::llvm_assembly) ||
-        contains(output_files, OutputFile::static_library)) {
+    if (contains(output_files, OutputType::object) || contains(output_files, OutputType::assembly) ||
+        contains(output_files, OutputType::bitcode) || contains(output_files, OutputType::llvm_assembly) ||
+        contains(output_files, OutputType::static_library)) {
         llvm::LLVMContext context;
         std::unique_ptr<llvm::Module> llvm_module(compile_module_to_llvm_module(*this, context));
 
-        if (contains(output_files, OutputFile::object)) {
-            const auto &f = output_files.at(OutputFile::object);
+        if (contains(output_files, OutputType::object)) {
+            const auto &f = output_files.at(OutputType::object);
             debug(1) << "Module.compile(): object " << f << "\n";
             auto out = make_raw_fd_ostream(f);
             compile_llvm_module_to_object(*llvm_module, *out);
@@ -596,105 +596,105 @@ void Module::compile(const std::map<OutputFile, std::string> &output_files) cons
                 logger->record_object_code_size(file_stat(f).file_size);
             }
         }
-        if (contains(output_files, OutputFile::static_library)) {
+        if (contains(output_files, OutputType::static_library)) {
             // To simplify the code, we always create a temporary object output
-            // here, even if output_files.at(OutputFile::object) was also set: in practice,
+            // here, even if output_files.at(OutputType::object) was also set: in practice,
             // no real-world code ever sets both object and static_library
             // at the same time, so there is no meaningful performance advantage
             // to be had.
             TemporaryObjectFileDir temp_dir;
             {
-                std::string object = temp_dir.add_temp_object_file(output_files.at(OutputFile::static_library), "", target());
+                std::string object = temp_dir.add_temp_object_file(output_files.at(OutputType::static_library), "", target());
                 debug(1) << "Module.compile(): temporary object " << object << "\n";
                 auto out = make_raw_fd_ostream(object);
                 compile_llvm_module_to_object(*llvm_module, *out);
                 out->flush();  // create_static_library() is happier if we do this
-                if (logger && !contains(output_files, OutputFile::object)) {
+                if (logger && !contains(output_files, OutputType::object)) {
                     // Don't double-record object-code size if we already recorded it for object
                     logger->record_object_code_size(file_stat(object).file_size);
                 }
             }
-            debug(1) << "Module.compile(): static_library " << output_files.at(OutputFile::static_library) << "\n";
+            debug(1) << "Module.compile(): static_library " << output_files.at(OutputType::static_library) << "\n";
             Target base_target(target().os, target().arch, target().bits);
-            create_static_library(temp_dir.files(), base_target, output_files.at(OutputFile::static_library));
+            create_static_library(temp_dir.files(), base_target, output_files.at(OutputType::static_library));
         }
-        if (contains(output_files, OutputFile::assembly)) {
-            debug(1) << "Module.compile(): assembly " << output_files.at(OutputFile::assembly) << "\n";
-            auto out = make_raw_fd_ostream(output_files.at(OutputFile::assembly));
+        if (contains(output_files, OutputType::assembly)) {
+            debug(1) << "Module.compile(): assembly " << output_files.at(OutputType::assembly) << "\n";
+            auto out = make_raw_fd_ostream(output_files.at(OutputType::assembly));
             compile_llvm_module_to_assembly(*llvm_module, *out);
         }
-        if (contains(output_files, OutputFile::bitcode)) {
-            debug(1) << "Module.compile(): bitcode " << output_files.at(OutputFile::bitcode) << "\n";
-            auto out = make_raw_fd_ostream(output_files.at(OutputFile::bitcode));
+        if (contains(output_files, OutputType::bitcode)) {
+            debug(1) << "Module.compile(): bitcode " << output_files.at(OutputType::bitcode) << "\n";
+            auto out = make_raw_fd_ostream(output_files.at(OutputType::bitcode));
             compile_llvm_module_to_llvm_bitcode(*llvm_module, *out);
         }
-        if (contains(output_files, OutputFile::llvm_assembly)) {
-            debug(1) << "Module.compile(): llvm_assembly " << output_files.at(OutputFile::llvm_assembly) << "\n";
-            auto out = make_raw_fd_ostream(output_files.at(OutputFile::llvm_assembly));
+        if (contains(output_files, OutputType::llvm_assembly)) {
+            debug(1) << "Module.compile(): llvm_assembly " << output_files.at(OutputType::llvm_assembly) << "\n";
+            auto out = make_raw_fd_ostream(output_files.at(OutputType::llvm_assembly));
             compile_llvm_module_to_llvm_assembly(*llvm_module, *out);
         }
     }
-    if (contains(output_files, OutputFile::c_header)) {
-        debug(1) << "Module.compile(): c_header " << output_files.at(OutputFile::c_header) << "\n";
-        std::ofstream file(output_files.at(OutputFile::c_header));
+    if (contains(output_files, OutputType::c_header)) {
+        debug(1) << "Module.compile(): c_header " << output_files.at(OutputType::c_header) << "\n";
+        std::ofstream file(output_files.at(OutputType::c_header));
         Internal::CodeGen_C cg(file,
                                target(),
                                target().has_feature(Target::CPlusPlusMangling) ? Internal::CodeGen_C::CPlusPlusHeader : Internal::CodeGen_C::CHeader,
-                               output_files.at(OutputFile::c_header));
+                               output_files.at(OutputType::c_header));
         cg.compile(*this);
     }
-    if (contains(output_files, OutputFile::c_source)) {
-        debug(1) << "Module.compile(): c_source " << output_files.at(OutputFile::c_source) << "\n";
-        std::ofstream file(output_files.at(OutputFile::c_source));
+    if (contains(output_files, OutputType::c_source)) {
+        debug(1) << "Module.compile(): c_source " << output_files.at(OutputType::c_source) << "\n";
+        std::ofstream file(output_files.at(OutputType::c_source));
         Internal::CodeGen_C cg(file,
                                target(),
                                target().has_feature(Target::CPlusPlusMangling) ? Internal::CodeGen_C::CPlusPlusImplementation : Internal::CodeGen_C::CImplementation);
         cg.compile(*this);
     }
-    if (contains(output_files, OutputFile::python_extension)) {
-        debug(1) << "Module.compile(): python_extension " << output_files.at(OutputFile::python_extension) << "\n";
-        std::ofstream file(output_files.at(OutputFile::python_extension));
+    if (contains(output_files, OutputType::python_extension)) {
+        debug(1) << "Module.compile(): python_extension " << output_files.at(OutputType::python_extension) << "\n";
+        std::ofstream file(output_files.at(OutputType::python_extension));
         Internal::PythonExtensionGen python_extension_gen(file);
         python_extension_gen.compile(*this);
     }
-    if (contains(output_files, OutputFile::schedule)) {
-        debug(1) << "Module.compile(): schedule " << output_files.at(OutputFile::schedule) << "\n";
-        std::ofstream file(output_files.at(OutputFile::schedule));
+    if (contains(output_files, OutputType::schedule)) {
+        debug(1) << "Module.compile(): schedule " << output_files.at(OutputType::schedule) << "\n";
+        std::ofstream file(output_files.at(OutputType::schedule));
         auto *r = contents->auto_scheduler_results.get();
         std::string scheduler = r ? r->scheduler_name : "(None)";
         std::string machine_params = r ? r->machine_params_string : "(None)";
         std::string body = r && !r->schedule_source.empty() ? r->schedule_source : "// No autoscheduler has been run for this Generator.\n";
         emit_schedule_file(name(), {target()}, scheduler, machine_params, body, file);
     }
-    if (contains(output_files, OutputFile::featurization)) {
-        debug(1) << "Module.compile(): featurization " << output_files.at(OutputFile::featurization) << "\n";
+    if (contains(output_files, OutputType::featurization)) {
+        debug(1) << "Module.compile(): featurization " << output_files.at(OutputType::featurization) << "\n";
         // If the featurization data is empty, just write an empty file
-        std::ofstream binfile(output_files.at(OutputFile::featurization), std::ios::binary | std::ios_base::trunc);
+        std::ofstream binfile(output_files.at(OutputType::featurization), std::ios::binary | std::ios_base::trunc);
         auto *r = contents->auto_scheduler_results.get();
         if (r) {
             binfile.write((const char *)r->featurization.data(), r->featurization.size());
         }
         binfile.close();
     }
-    if (contains(output_files, OutputFile::registration)) {
-        debug(1) << "Module.compile(): registration " << output_files.at(OutputFile::registration) << "\n";
-        std::ofstream file(output_files.at(OutputFile::registration));
+    if (contains(output_files, OutputType::registration)) {
+        debug(1) << "Module.compile(): registration " << output_files.at(OutputType::registration) << "\n";
+        std::ofstream file(output_files.at(OutputType::registration));
         emit_registration(*this, file);
         file.close();
         internal_assert(!file.fail());
     }
-    if (contains(output_files, OutputFile::pytorch_wrapper)) {
-        debug(1) << "Module.compile(): pytorch_wrapper " << output_files.at(OutputFile::pytorch_wrapper) << "\n";
+    if (contains(output_files, OutputType::pytorch_wrapper)) {
+        debug(1) << "Module.compile(): pytorch_wrapper " << output_files.at(OutputType::pytorch_wrapper) << "\n";
 
-        std::ofstream file(output_files.at(OutputFile::pytorch_wrapper));
+        std::ofstream file(output_files.at(OutputType::pytorch_wrapper));
         Internal::CodeGen_PyTorch cg(file);
         cg.compile(*this);
         file.close();
         internal_assert(!file.fail());
     }
-    if (contains(output_files, OutputFile::compiler_log)) {
-        debug(1) << "Module.compile(): compiler_log " << output_files.at(OutputFile::compiler_log) << "\n";
-        std::ofstream file(output_files.at(OutputFile::compiler_log));
+    if (contains(output_files, OutputType::compiler_log)) {
+        debug(1) << "Module.compile(): compiler_log " << output_files.at(OutputType::compiler_log) << "\n";
+        std::ofstream file(output_files.at(OutputType::compiler_log));
         internal_assert(get_compiler_logger() != nullptr);
         get_compiler_logger()->emit_to_stream(file);
         file.close();
@@ -706,14 +706,14 @@ void Module::compile(const std::map<OutputFile, std::string> &output_files) cons
     }
 }
 
-std::map<OutputFile, std::string> compile_standalone_runtime(const std::map<OutputFile, std::string> &output_files, const Target &t) {
+std::map<OutputType, std::string> compile_standalone_runtime(const std::map<OutputType, std::string> &output_files, const Target &t) {
     validate_outputs(output_files);
 
     Module empty("standalone_runtime", t.without_feature(Target::NoRuntime).without_feature(Target::JIT));
     // For runtime, it only makes sense to output object files or static_library, so ignore
     // everything else.
-    std::map<OutputFile, std::string> actual_outputs;
-    for (auto key : {OutputFile::object, OutputFile::static_library}) {
+    std::map<OutputType, std::string> actual_outputs;
+    for (auto key : {OutputType::object, OutputType::static_library}) {
         auto it = output_files.find(key);
         if (it != output_files.end()) {
             actual_outputs[key] = it->second;
@@ -724,7 +724,7 @@ std::map<OutputFile, std::string> compile_standalone_runtime(const std::map<Outp
 }
 
 void compile_standalone_runtime(const std::string &object_filename, const Target &t) {
-    compile_standalone_runtime({{OutputFile::object, object_filename}}, t);
+    compile_standalone_runtime({{OutputType::object, object_filename}}, t);
 }
 
 namespace {
@@ -748,7 +748,7 @@ public:
 }  // namespace
 
 void compile_multitarget(const std::string &fn_name,
-                         const std::map<OutputFile, std::string> &output_files,
+                         const std::map<OutputType, std::string> &output_files,
                          const std::vector<Target> &targets,
                          const std::vector<std::string> &suffixes,
                          const ModuleFactory &module_factory,
@@ -772,10 +772,10 @@ void compile_multitarget(const std::string &fn_name,
         return "-" + (suffixes.empty() ? targets[i].to_string() : suffixes[i]);
     };
 
-    const auto add_suffixes = [&](const std::map<OutputFile, std::string> &in, const std::string &suffix) -> std::map<OutputFile, std::string> {
+    const auto add_suffixes = [&](const std::map<OutputType, std::string> &in, const std::string &suffix) -> std::map<OutputType, std::string> {
         // is_multi doesn't vary by Target, so we can pass an empty target here safely
         auto output_info = get_output_info(Target());
-        std::map<OutputFile, std::string> out = in;
+        std::map<OutputType, std::string> out = in;
         for (auto &it : out) {
             if (output_info[it.first].is_multi) {
                 out[it.first] = add_suffix(it.second, suffix);
@@ -803,7 +803,7 @@ void compile_multitarget(const std::string &fn_name,
         return;
     }
 
-    user_assert(((int)contains(output_files, OutputFile::object) + (int)contains(output_files, OutputFile::static_library)) == 1)
+    user_assert(((int)contains(output_files, OutputType::object) + (int)contains(output_files, OutputType::static_library)) == 1)
         << "compile_multitarget() expects exactly one of 'object' and 'static_library' to be specified when multiple targets are specified.\n";
 
     // For safety, the runtime must be built only with features common to all
@@ -875,17 +875,17 @@ void compile_multitarget(const std::string &fn_name,
             base_target_args = sub_module.get_function_by_name(sub_fn_name).args;
 
             auto sub_out = add_suffixes(output_files, suffix);
-            if (contains(output_files, OutputFile::static_library)) {
-                sub_out[OutputFile::object] = temp_obj_dir.add_temp_object_file(output_files.at(OutputFile::static_library), suffix, target);
-                sub_out.erase(OutputFile::static_library);
+            if (contains(output_files, OutputType::static_library)) {
+                sub_out[OutputType::object] = temp_obj_dir.add_temp_object_file(output_files.at(OutputType::static_library), suffix, target);
+                sub_out.erase(OutputType::static_library);
             }
-            sub_out.erase(OutputFile::registration);
-            sub_out.erase(OutputFile::schedule);
-            sub_out.erase(OutputFile::c_header);
-            if (contains(sub_out, OutputFile::compiler_log)) {
-                sub_out[OutputFile::compiler_log] = temp_compiler_log_dir.add_temp_file(output_files.at(OutputFile::compiler_log), suffix, target);
+            sub_out.erase(OutputType::registration);
+            sub_out.erase(OutputType::schedule);
+            sub_out.erase(OutputType::c_header);
+            if (contains(sub_out, OutputType::compiler_log)) {
+                sub_out[OutputType::compiler_log] = temp_compiler_log_dir.add_temp_file(output_files.at(OutputType::compiler_log), suffix, target);
             }
-            debug(1) << "compile_multitarget: compile_sub_target " << sub_out[OutputFile::object] << "\n";
+            debug(1) << "compile_multitarget: compile_sub_target " << sub_out[OutputType::object] << "\n";
             sub_module.compile(sub_out);
             const auto *r = sub_module.get_auto_scheduler_results();
             auto_scheduler_results.push_back(r ? *r : AutoSchedulerResults());
@@ -935,13 +935,13 @@ void compile_multitarget(const std::string &fn_name,
                 runtime_target.set_feature((Target::Feature)i);
             }
         }
-        std::string runtime_path = contains(output_files, OutputFile::static_library) ?
-                                       temp_obj_dir.add_temp_object_file(output_files.at(OutputFile::static_library), "_runtime", runtime_target) :
-                                       add_suffix(output_files.at(OutputFile::object), "_runtime");
+        std::string runtime_path = contains(output_files, OutputType::static_library) ?
+                                       temp_obj_dir.add_temp_object_file(output_files.at(OutputType::static_library), "_runtime", runtime_target) :
+                                       add_suffix(output_files.at(OutputType::object), "_runtime");
 
-        std::map<OutputFile, std::string> runtime_out =
-            {{OutputFile::object, runtime_path}};
-        debug(1) << "compile_multitarget: compile_standalone_runtime " << runtime_out.at(OutputFile::object) << "\n";
+        std::map<OutputType, std::string> runtime_out =
+            {{OutputType::object, runtime_path}};
+        debug(1) << "compile_multitarget: compile_standalone_runtime " << runtime_out.at(OutputType::object) << "\n";
         compile_standalone_runtime(runtime_out, runtime_target);
     }
 
@@ -972,34 +972,34 @@ void compile_multitarget(const std::string &fn_name,
         Module wrapper_module(fn_name, wrapper_target);
         wrapper_module.append(LoweredFunc(fn_name, base_target_args, wrapper_body, LinkageType::ExternalPlusMetadata));
 
-        std::string wrapper_path = contains(output_files, OutputFile::static_library) ?
-                                       temp_obj_dir.add_temp_object_file(output_files.at(OutputFile::static_library), "_wrapper", base_target, /* in_front*/ true) :
-                                       add_suffix(output_files.at(OutputFile::object), "_wrapper");
+        std::string wrapper_path = contains(output_files, OutputType::static_library) ?
+                                       temp_obj_dir.add_temp_object_file(output_files.at(OutputType::static_library), "_wrapper", base_target, /* in_front*/ true) :
+                                       add_suffix(output_files.at(OutputType::object), "_wrapper");
 
-        std::map<OutputFile, std::string> wrapper_out = {{OutputFile::object, wrapper_path}};
-        debug(1) << "compile_multitarget: wrapper " << wrapper_out.at(OutputFile::object) << "\n";
+        std::map<OutputType, std::string> wrapper_out = {{OutputType::object, wrapper_path}};
+        debug(1) << "compile_multitarget: wrapper " << wrapper_out.at(OutputType::object) << "\n";
         wrapper_module.compile(wrapper_out);
     }
 
-    if (contains(output_files, OutputFile::c_header)) {
+    if (contains(output_files, OutputType::c_header)) {
         Module header_module(fn_name, base_target);
         header_module.append(LoweredFunc(fn_name, base_target_args, {}, LinkageType::ExternalPlusMetadata));
-        std::map<OutputFile, std::string> header_out = {{OutputFile::c_header, output_files.at(OutputFile::c_header)}};
-        debug(1) << "compile_multitarget: c_header " << header_out.at(OutputFile::c_header) << "\n";
+        std::map<OutputType, std::string> header_out = {{OutputType::c_header, output_files.at(OutputType::c_header)}};
+        debug(1) << "compile_multitarget: c_header " << header_out.at(OutputType::c_header) << "\n";
         header_module.compile(header_out);
     }
 
-    if (contains(output_files, OutputFile::registration)) {
-        debug(1) << "compile_multitarget: registration " << output_files.at(OutputFile::registration) << "\n";
+    if (contains(output_files, OutputType::registration)) {
+        debug(1) << "compile_multitarget: registration " << output_files.at(OutputType::registration) << "\n";
         Module registration_module(fn_name, base_target);
         registration_module.append(LoweredFunc(fn_name, base_target_args, {}, LinkageType::ExternalPlusMetadata));
-        std::map<OutputFile, std::string> registration_out = {{OutputFile::registration, output_files.at(OutputFile::registration)}};
-        debug(1) << "compile_multitarget: registration " << registration_out.at(OutputFile::registration) << "\n";
+        std::map<OutputType, std::string> registration_out = {{OutputType::registration, output_files.at(OutputType::registration)}};
+        debug(1) << "compile_multitarget: registration " << registration_out.at(OutputType::registration) << "\n";
         registration_module.compile(registration_out);
     }
 
-    if (contains(output_files, OutputFile::schedule)) {
-        debug(1) << "compile_multitarget: schedule " << output_files.at(OutputFile::schedule) << "\n";
+    if (contains(output_files, OutputType::schedule)) {
+        debug(1) << "compile_multitarget: schedule " << output_files.at(OutputType::schedule) << "\n";
         std::string scheduler = auto_scheduler_results.front().scheduler_name;
         if (scheduler.empty()) {
             scheduler = "(None)";
@@ -1048,21 +1048,21 @@ void compile_multitarget(const std::string &fn_name,
             }
         }
 
-        std::ofstream file(output_files.at(OutputFile::schedule));
+        std::ofstream file(output_files.at(OutputType::schedule));
         emit_schedule_file(fn_name, targets, scheduler, machine_params, body.str(), file);
     }
 
-    if (contains(output_files, OutputFile::static_library)) {
+    if (contains(output_files, OutputType::static_library)) {
         debug(1) << "compile_multitarget: static_library "
-                 << output_files.at(OutputFile::static_library) << "\n";
-        create_static_library(temp_obj_dir.files(), base_target, output_files.at(OutputFile::static_library));
+                 << output_files.at(OutputType::static_library) << "\n";
+        create_static_library(temp_obj_dir.files(), base_target, output_files.at(OutputType::static_library));
     }
 
-    if (contains(output_files, OutputFile::compiler_log)) {
+    if (contains(output_files, OutputType::compiler_log)) {
         debug(1) << "compile_multitarget: compiler_log "
-                 << output_files.at(OutputFile::compiler_log) << "\n";
+                 << output_files.at(OutputType::compiler_log) << "\n";
 
-        std::ofstream compiler_log_file(output_files.at(OutputFile::compiler_log));
+        std::ofstream compiler_log_file(output_files.at(OutputType::compiler_log));
         compiler_log_file << "[\n";
         const auto &f = temp_compiler_log_dir.files();
         for (size_t i = 0; i < f.size(); i++) {
