@@ -2280,6 +2280,7 @@ public:
     HALIDE_FORWARD_METHOD(Func, copy_to_host)
     HALIDE_FORWARD_METHOD(Func, define_extern)
     HALIDE_FORWARD_METHOD_CONST(Func, defined)
+    HALIDE_FORWARD_METHOD(Func, dma)
     HALIDE_FORWARD_METHOD(Func, fold_storage)
     HALIDE_FORWARD_METHOD(Func, fuse)
     HALIDE_FORWARD_METHOD(Func, gpu)
@@ -2523,9 +2524,14 @@ protected:
 
     HALIDE_ATTRIBUTE_DEPRECATED("Prefer to specify static Buffer dimensions with Output<Buffer<void, D>> instead.")
     GeneratorOutput_Buffer(const std::string &name, int d)
-        : Super(name, IOKind::Buffer,
-                my_types({}),
-                d) {
+        : Super(name, IOKind::Buffer, my_types({}), d) {
+        static_assert(!TBase::has_static_dimensions, "You can only specify a dimension argument for Output<Buffer<T, D>> if D is -1 or omitted.");
+    }
+
+    // Only for internal use by subclasses, to dodge misleading static-assert messages during deprecation time periods.
+    HALIDE_ATTRIBUTE_DEPRECATED("Prefer to specify static Buffer dimensions with Output<Buffer<void, D>> instead.")
+    GeneratorOutput_Buffer(ConfigureCtor c, const std::string &name, int d)
+        : Super(name, IOKind::Buffer, my_types({}), d) {
         static_assert(!TBase::has_static_dimensions, "You can only specify a dimension argument for Output<Buffer<T, D>> if D is -1 or omitted.");
     }
 
@@ -2692,6 +2698,11 @@ protected:
         : Super(array_size, name, IOKind::Function, t, d) {
     }
 
+    // Only for internal use by subclasses, to dodge the deprecation warnings.
+    GeneratorOutput_Func(ConfigureCtor c, const std::string &name, int d)
+        : Super(name, IOKind::Function, std::vector<Type>{}, d) {
+    }
+
 public:
     // Allow Output<Func> = Func
     template<typename T2 = T, typename std::enable_if<!std::is_array<T2>::value>::type * = nullptr>
@@ -2754,6 +2765,12 @@ protected:
     GeneratorOutput_Arithmetic(size_t array_size, const std::string &name)
         : Super(array_size, name, IOKind::Function, {type_of<TBase>()}, 0) {
     }
+
+    // Only for internal use by subclasses, to dodge the deprecation warnings.
+    GeneratorOutput_Arithmetic(ConfigureCtor c, const std::string &name, int d)
+        : Super(name, IOKind::Function, {type_of<TBase>()}, 0) {
+        internal_assert(d == 0);
+    }
 };
 
 template<typename T, typename TBase = typename std::remove_all_extents<T>::type>
@@ -2790,7 +2807,7 @@ public:
     }
 
     explicit GeneratorOutput(const std::string &name, int d)
-        : Super(name, {}, d) {
+        : Super(Internal::ConfigureCtor::Value, name, d) {
     }
 
     explicit GeneratorOutput(const std::string &name, const Type &t)
