@@ -182,7 +182,7 @@ void CodeGen_WebGPU_Dev::CodeGen_WGSL::add_kernel(
     for (const DeviceArgument &arg : args) {
         if (arg.is_buffer) {
             // Emit buffer arguments as read_write storage buffers.
-            stream << "[[group(0), binding(" << next_binding << ")]]\n"
+            stream << "@group(0) @binding(" << next_binding << ")\n"
                    << "var<storage, read_write> " << print_name(arg.name)
                    << " : array<" << print_type(arg.type) << ">;\n\n";
             Allocation alloc;
@@ -203,7 +203,7 @@ void CodeGen_WebGPU_Dev::CodeGen_WGSL::add_kernel(
         stream << "struct " << struct_name << " {\n"
                << uniforms.str()
                << "}\n";
-        stream << "[[group(1), binding(0)]]\n"
+        stream << "@group(1) @binding(0)\n"
                << "var<uniform> "
                << args_var << " : " << struct_name << " ;\n\n";
     }
@@ -252,13 +252,13 @@ void CodeGen_WebGPU_Dev::CodeGen_WGSL::add_kernel(
     s.accept(&wgsize);
 
     // Emit the function prototype.
-    stream << "[[stage(compute), workgroup_size("
+    stream << "@stage(compute) @workgroup_size("
            << wgsize.values[0] << ", "
            << wgsize.values[1] << ", "
-           << wgsize.values[2] << ")]]\n";
+           << wgsize.values[2] << ")\n";
     stream << "fn " << name << "(\n"
-           << "  [[builtin(local_invocation_id)]] local_id : vec3<u32>,\n"
-           << "  [[builtin(workgroup_id)]] group_id : vec3<u32>,\n"
+           << "  @builtin(local_invocation_id) local_id : vec3<u32>,\n"
+           << "  @builtin(workgroup_id) group_id : vec3<u32>,\n"
            << ")\n";
 
     open_scope();
