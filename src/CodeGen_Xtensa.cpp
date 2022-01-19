@@ -51,9 +51,9 @@ void CodeGen_Xtensa::compile(const LoweredFunc &f, const std::map<std::string, s
     const std::vector<LoweredArgument> &args = f.args;
 
     have_user_context = false;
-    for (size_t i = 0; i < args.size(); i++) {
+    for (const auto &arg : args) {
         // TODO: check that its type is void *?
-        have_user_context |= (args[i].name == "__user_context");
+        have_user_context |= (arg.name == "__user_context");
     }
 
     NameMangling name_mangling = f.name_mangling;
@@ -96,7 +96,9 @@ void CodeGen_Xtensa::compile(const LoweredFunc &f, const std::map<std::string, s
                    << print_name(args[i].name);
         }
 
-        if (i < args.size() - 1) stream << ", ";
+        if (i < args.size() - 1) {
+            stream << ", ";
+        }
     }
 
     if (is_header_or_extern_decl()) {
@@ -982,6 +984,20 @@ HALIDE_ALWAYS_INLINE int16x32_t halide_xtensa_deinterleave_odd_i16(const int16x6
   return  IVP_SELNX16I(a.native_vector[1], a.native_vector[0], IVP_SELI_16B_EXTRACT_1_OF_2_OFF_1);
 }
 
+HALIDE_ALWAYS_INLINE int16x64_t halide_xtensa_deinterleave_even_i16(const int16x128_t& a) {
+  return int16x64_t(
+      int16x64_t::from_native_vector,
+      halide_xtensa_deinterleave_even_i16(int16x64_t(int16x64_t::from_native_vector, a.native_vector[0], a.native_vector[1])),
+      halide_xtensa_deinterleave_even_i16(int16x64_t(int16x64_t::from_native_vector, a.native_vector[2], a.native_vector[3])));
+}
+
+HALIDE_ALWAYS_INLINE int16x64_t halide_xtensa_deinterleave_odd_i16(const int16x128_t& a) {
+  return int16x64_t(
+      int16x64_t::from_native_vector,
+      halide_xtensa_deinterleave_odd_i16(int16x64_t(int16x64_t::from_native_vector, a.native_vector[0], a.native_vector[1])),
+      halide_xtensa_deinterleave_odd_i16(int16x64_t(int16x64_t::from_native_vector, a.native_vector[2], a.native_vector[3])));
+}
+
 HALIDE_ALWAYS_INLINE uint16x32_t halide_xtensa_deinterleave_even_u16(const uint16x64_t& a) {
   return  IVP_SELNX16UI(a.native_vector[1], a.native_vector[0], IVP_SELI_16B_EXTRACT_1_OF_2_OFF_0);
 }
@@ -1752,9 +1768,11 @@ HALIDE_ALWAYS_INLINE uint8x64_t halide_xtensa_sat_narrow_with_rounding_shift_u8(
 HALIDE_ALWAYS_INLINE int16x32_t halide_xtensa_narrow_with_rounding_shift_i16(const int32x32_t& a, uint32_t shift) {
   xb_vecNx48 wide = convert_to_int48x32_t_from_int32x32_t(a);
   // Add rounding factor.
-  int32_t half_shift_1 = (shift - 1) >> 1;
-  int32_t half_shift_2 = (shift - 1) - half_shift_1;
-  IVP_MULANX16(wide, int16x32_t(1 << half_shift_1), int16x32_t(1 << half_shift_2));
+  const uint16_t half_shift_1 = (shift - 1) >> 1;
+  const uint16_t half_shift_2 = (shift - 1) - half_shift_1;
+  uint16x32_t v1 = IVP_SLLNX16U(1, half_shift_1);
+  uint16x32_t v2 = IVP_SLLNX16U(1, half_shift_2);
+  IVP_MULUUANX16(wide, v1, v2);
   return IVP_PACKVRNRNX48(wide, shift);
 }
 
@@ -1777,6 +1795,21 @@ HALIDE_ALWAYS_INLINE int16x32_t halide_xtensa_sat_narrow_with_signed_rounding_sh
 
 HALIDE_ALWAYS_INLINE int32x16_t halide_xtensa_sat_narrow_with_rounding_shift_i32(const int64x16_t& a, uint32_t shift) {
   return IVP_PACKVRN_2X64W(a, shift);
+}
+
+HALIDE_ALWAYS_INLINE int16x32_t halide_xtensa_rounding_mul_shift_right_i16(const int16x32_t& a, const int16x32_t& b, uint16_t shift) {
+  xb_vecNx48 wide = a * b;
+  return IVP_PACKVRNRNX48(wide, shift);
+}
+
+HALIDE_ALWAYS_INLINE int32x16_t halide_xtensa_rounding_shift_right_i32(const int32x16_t& a, uint32_t shift) {
+  xb_vecN_2x64w wide = a * (int32x16_t)1;
+  return IVP_PACKVRN_2X64W(wide, shift);
+}
+
+HALIDE_ALWAYS_INLINE uint32x16_t halide_xtensa_rounding_shift_right_u32(const uint32x16_t& a, uint32_t shift) {
+  xb_vecN_2x64w wide = IVP_MULUUN_2X16X32_0((uint16x32_t)1, a);
+  return IVP_PACKVRN_2X64W(wide, shift);
 }
 
 HALIDE_ALWAYS_INLINE uint8x64_t halide_xtensa_convert_concat_i16_to_u8(const int16x32_t& a, const int16x32_t& b) {
@@ -3009,7 +3042,7 @@ void CodeGen_Xtensa::visit(const Shuffle *op) {
         return;
     }
 
-    if (op->vectors.size() == 1 && is_double_native_vector_type(op->vectors[0].type())) {
+    if (op->vectors.size() == 1) {
         if (op->is_slice() && (op->slice_begin() < 2) && (op->slice_stride() == 2) && ((int)op->indices.size() == op->vectors[0].type().lanes() / 2)) {
             string type_suffix = suffix_for_type(op->type);
             string function_name = std::string("halide_xtensa_deinterleave") + ((op->slice_begin() == 0) ? "_even" : "_odd");
@@ -3027,7 +3060,7 @@ void CodeGen_Xtensa::visit(const Shuffle *op) {
     }
 
     std::vector<string> vecs;
-    for (Expr v : op->vectors) {
+    for (const Expr &v : op->vectors) {
         vecs.push_back(print_expr(v));
     }
     string src = vecs[0];
@@ -3128,18 +3161,6 @@ void CodeGen_Xtensa::visit(const Allocate *op) {
                 }
                 size_id = print_assignment(Int(64), new_size_id_rhs);
             }
-            stream << get_indent() << "if (("
-                   << size_id << " > ((int64_t(1) << 31) - 1)) || (("
-                   << size_id << " * sizeof("
-                   << op_type << ")) > ((int64_t(1) << 31) - 1)))\n";
-            open_scope();
-            stream << get_indent();
-            // TODO: call halide_error_buffer_allocation_too_large() here instead
-            // TODO: call create_assertion() so that NoAssertions works
-            stream << "halide_error(_ucon, "
-                   << "\"32-bit signed overflow computing size of allocation " << op->name << "\\n\");\n";
-            stream << get_indent() << "return -1;\n";
-            close_scope("overflow test " + op->name);
         }
 
         // Check the condition to see if this allocation should actually be created.

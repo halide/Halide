@@ -150,9 +150,9 @@ class InjectDmaTransferIntoProducer : public IRMutator {
         // Only 1D, 2D and 3D DMA transfers are supported
         debug(3) << "[begin] InjectDmaTransfer::store\n";
         const Load *maybe_load = op->value.as<Load>();
-        if (const Call* maybe_call = op->value.as<Call>()) {
+        if (const Call *maybe_call = op->value.as<Call>()) {
             if (maybe_call->is_intrinsic(Call::IntrinsicOp::strict_float)) {
-              maybe_load = maybe_call->args[0].as<Load>();
+                maybe_load = maybe_call->args[0].as<Load>();
             }
         }
         // Has to be direct load-to-store for now.

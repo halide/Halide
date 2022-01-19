@@ -1,4 +1,5 @@
 #include "XtensaOptimize.h"
+
 #include "AlignLoads.h"
 #include "Bounds.h"
 #include "CSE.h"
@@ -14,6 +15,7 @@
 #include "LoopCarry.h"
 #include "Simplify.h"
 #include "Substitute.h"
+#include <utility>
 
 namespace Halide {
 namespace Internal {
@@ -230,12 +232,12 @@ Expr vector_reduce(VectorReduce::Operator op, Expr x) {
     return VectorReduce::make(op, std::move(x), 0);
 }
 
-Expr call(const string &name, Expr return_type, vector<Expr> args) {
-    return Call::make(return_type.type(), name, move(args), Call::PureExtern);
+Expr call(const string &name, const Expr &return_type, const vector<Expr> &args) {
+    return Call::make(return_type.type(), name, args, Call::PureExtern);
 }
 
-Expr concat(vector<Expr> x) {
-    return Shuffle::make_concat(std::move(x));
+Expr concat(const vector<Expr> &x) {
+    return Shuffle::make_concat(x);
 }
 
 Expr repeat_each_element(Expr x, int times) {
@@ -253,7 +255,7 @@ Expr slice(Expr x, int begin, int stride, int size) {
 }
 
 Expr load(const Type &type, const string &name, Expr index, ModulusRemainder alignment) {
-    return Load::make(type, name, index, Buffer<>(), Parameter(), const_true(), alignment);
+    return Load::make(type, name, std::move(index), Buffer<>(), Parameter(), const_true(), alignment);
 }
 
 // Check if the matches satisfy the given pattern flags, and mutate the matches
@@ -270,7 +272,9 @@ bool process_match_flags(vector<Expr> &matches, int flags) {
         } else if (flags & (Pattern::NarrowUnsignedOp0 << i)) {
             matches[i] = lossless_cast(target_t.with_code(Type::UInt), matches[i]);
         }
-        if (!matches[i].defined()) return false;
+        if (!matches[i].defined()) {
+            return false;
+        }
     }
 
     for (size_t i = Pattern::BeginExactLog2Op; i < Pattern::EndExactLog2Op; i++) {
@@ -341,7 +345,7 @@ Expr apply_patterns(Expr x, const vector<Pattern> &patterns, IRMutator *op_mutat
             debug(3) << "matched " << p.pattern << "\n";
             debug(3) << "to " << x << "\n";
             debug(3) << "matches:\n";
-            for (Expr i : matches) {
+            for (const Expr &i : matches) {
                 debug(3) << i << "\n";
             }
 
@@ -377,12 +381,16 @@ Expr apply_patterns(Expr x, const vector<Pattern> &patterns, IRMutator *op_mutat
 template<typename T>
 Expr apply_commutative_patterns(const T *op, const vector<Pattern> &patterns, IRMutator *mutator) {
     Expr ret = apply_patterns(op, patterns, mutator);
-    if (!ret.same_as(op)) return ret;
+    if (!ret.same_as(op)) {
+        return ret;
+    }
 
     // Try commuting the op
     Expr commuted = T::make(op->b, op->a);
     ret = apply_patterns(commuted, patterns, mutator);
-    if (!ret.same_as(commuted)) return ret;
+    if (!ret.same_as(commuted)) {
+        return ret;
+    }
 
     return op;
 }
@@ -437,9 +445,9 @@ private:
         vector<Stmt> stmts = block_to_vector(op);
         int quad_mul_expr_count = 0;
         // Check if all statements in the block are stores of quad-muls.
-        for (int i = 0; i < (int)stmts.size(); ++i) {
+        for (auto &stmt : stmts) {
             // quad_mul is a call contained in store
-            const Store *store1 = stmts[i].as<Store>();
+            const Store *store1 = stmt.as<Store>();
             const Call *call1 = store1 ? store1->value.as<Call>() : nullptr;
             if (!call1 || call1->name != "halide_xtensa_widen_quad_mul_add_u24") {
                 break;
@@ -908,7 +916,7 @@ private:
 
             {"halide_xtensa_narrow_with_rounding_shift_i8", i8(rounding_shift_right(wild_i16x, bc(wild_u16)))},
             {"halide_xtensa_narrow_with_rounding_shift_u8", u8(rounding_shift_right(wild_i16x, bc(wild_u16)))},
-            // {"halide_xtensa_narrow_with_rounding_shift_i16", i16(rounding_shift_right(wild_i32x, bc(wild_u32)))},
+            {"halide_xtensa_narrow_with_rounding_shift_i16", i16(rounding_shift_right(wild_i32x, bc(wild_u32)))},
 
             {"halide_xtensa_sat_left_shift_i16", i16_sat(widening_shift_left(wild_i16x, wild_i16x))},
             {"halide_xtensa_sat_left_shift_i16", i16_sat(widening_shift_left(wild_i16x, wild_u16x))},
@@ -1095,11 +1103,15 @@ private:
             {"halide_xtensa_widen_zzzzz", halide_xtensa_widen_mul_u24(concat({wild_u8x64, wild_u8x64, wild_u8x64, wild_u8x64}), repeat_each_element(wild_u8x4, 64))},
             {"halide_xtensa_widen_zzzzz", halide_xtensa_widen_mul_u24(repeat_each_element(wild_u8x4, 64), wild_u8x256), Pattern::SwapOps01},
 
-            // {"halide_xtensa_rounding_shift_right_i8", rounding_shift_right(wild_i8x, bc(wild_u8))},
+            // {"halide_xtensa_rounding_mul_shift_right_i8", rounding_mul_shift_right(wild_i8x, wild_i8x, bc(wild_u8))},
+            // {"halide_xtensa_rounding_mul_shift_right_i16", rounding_mul_shift_right(wild_i16x, wild_i16x, bc(wild_u16))},
+            // {"halide_xtensa_rounding_mul_shift_right_i32", rounding_mul_shift_right(wild_i32x, wild_i32x, bc(wild_u32))},
+
+            {"halide_xtensa_rounding_shift_right_i8", rounding_shift_right(wild_i8x, bc(wild_u8))},
             // {"halide_xtensa_rounding_shift_right_u8", rounding_shift_right(wild_u8x, bc(wild_u8))},
-            // {"halide_xtensa_rounding_shift_right_i16", rounding_shift_right(wild_i16x, bc(wild_u16))},
+            {"halide_xtensa_rounding_shift_right_i16", rounding_shift_right(wild_i16x, bc(wild_u16))},
             // {"halide_xtensa_rounding_shift_right_u16", rounding_shift_right(wild_u16x, bc(wild_u16))},
-            // {"halide_xtensa_rounding_shift_right_i32", rounding_shift_right(wild_i32x, bc(wild_u32))},
+            {"halide_xtensa_rounding_shift_right_i32", rounding_shift_right(wild_i32x, bc(wild_u32))},
             // {"halide_xtensa_rounding_shift_right_u32", rounding_shift_right(wild_u32x, bc(wild_u32))},
 
             {"halide_xtensa_widen_pair_mul_add_u24",
@@ -1290,7 +1302,7 @@ private:
         return mutate(body);
     }
 
-    Expr match_clamped_dense_ramp(Expr index, Expr pred) {
+    Expr match_clamped_dense_ramp(const Expr &index, const Expr &pred) {
         Expr dense_ramp_base = strided_ramp_base(index, 1);
         if (!dense_ramp_base.defined()) {
             return Expr();
@@ -1303,8 +1315,8 @@ private:
         Expr new_pred;
         for (const Expr &p : patterns) {
             if (expr_match(p, pred, matches)) {
-                for (int ix = 0; ix < (int)matches.size(); ix++) {
-                    matches[ix] = mutate(matches[ix]);
+                for (auto &m : matches) {
+                    m = mutate(m);
                 }
                 new_pred = Call::make(pred.type(), "clamped_dense_ramp", matches, Call::PureExtern);
                 break;
@@ -1430,7 +1442,7 @@ class OptimizeShuffles : public IRMutator {
                 ((unaligned_index_bounds.max + align) / align) * align - 1};
             ModulusRemainder alignment(align, 0);
 
-            for (Interval index_bounds : {aligned_index_bounds, unaligned_index_bounds}) {
+            for (const Interval &index_bounds : {aligned_index_bounds, unaligned_index_bounds}) {
                 Expr index_span = span_of_bounds(index_bounds);
                 index_span = common_subexpression_elimination(index_span);
                 index_span = simplify(index_span);
@@ -1510,7 +1522,7 @@ private:
         return 0;
     }
 
-    Expr pad(Expr e, int old_lanes, int new_lanes) {
+    Expr pad(const Expr &e, int old_lanes, int new_lanes) {
         return Call::make(e.type().with_lanes(new_lanes),
                           "halide_xtensa_pad_to_native",
                           {e, old_lanes},
@@ -1522,7 +1534,7 @@ private:
 
     Expr slice(Expr e, Type t, int lanes) {
         return Call::make(t, "halide_xtensa_slice_from_padded",
-                          {e, lanes}, Call::PureExtern);
+                          {std::move(e), lanes}, Call::PureExtern);
         // return Shuffle::make_slice(e, 0, 1, lanes);
     }
 
@@ -1871,8 +1883,8 @@ private:
             const int total_lanes = op->type.lanes();
             int split_to = op->type.lanes() / native_lanes;
             vector<Expr> args;
-            for (size_t arg_index = 0; arg_index < op->args.size(); arg_index++) {
-                args.push_back(mutate(op->args[arg_index]));
+            for (const auto &arg : op->args) {
+                args.push_back(mutate(arg));
             }
 
             std::vector<Expr> concat_args;
