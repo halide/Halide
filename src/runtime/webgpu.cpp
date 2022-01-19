@@ -624,8 +624,8 @@ WEAK int halide_webgpu_initialize_kernels(void *user_context, void **state_ptr, 
 
 WEAK void halide_webgpu_finalize_kernels(void *user_context, void *state_ptr) {
     debug(user_context)
-        << "CL: halide_webgpu_finalize_kernels (user_context: " << user_context
-        << ", state_ptr: " << state_ptr << "\n";
+        << "WGPU: halide_webgpu_finalize_kernels (user_context: "
+        << user_context << ", state_ptr: " << state_ptr << "\n";
 
     WgpuContext context(user_context);
     if (context.error_code == halide_error_code_success) {
