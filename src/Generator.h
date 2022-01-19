@@ -2503,7 +2503,8 @@ protected:
             user_assert(t.empty()) << "Cannot pass a Type argument for an Output<Buffer> with a non-void static type\n";
             return std::vector<Type>{TBase::static_halide_type()};
         }
-        user_assert(t.size() > 1) << "You may only use the vector-of-types for Output<Buffer<>> for multiple types.";
+        // Deliberately allow zero-sized vectors here
+        user_assert(t.size() != 1) << "You may only use the vector-of-types for Output<Buffer<>> for multiple types.";
         return t;
     }
 
@@ -2535,7 +2536,7 @@ protected:
     }
 
     // Note that we can't deprecate this (yet) because it's the only way to declare
-    // an Ouput<Buffer<>> that has a Tuple-valued function (and thus multiple output buffers).
+    // an Output<Buffer<>> that has a Tuple-valued function (and thus multiple output buffers).
     GeneratorOutput_Buffer(const std::string &name, const std::vector<Type> &t, int d)
         : Super(name, IOKind::Buffer, my_types(t), d) {
         static_assert(!TBase::has_static_halide_type, "You can only specify a Type argument for Output<Buffer<T>> if T is void or omitted.");
