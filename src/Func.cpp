@@ -3179,7 +3179,7 @@ Module Func::compile_to_module(const vector<Argument> &args, const std::string &
     return pipeline().compile_to_module(args, fn_name, target);
 }
 
-void Func::compile_to(const map<Output, string> &output_files,
+void Func::compile_to(const map<OutputFile, string> &output_files,
                       const vector<Argument> &args,
                       const string &fn_name,
                       const Target &target) {

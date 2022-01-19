@@ -101,10 +101,10 @@ public:
         std::string file_name = output_directory + fn_name;
 
         auto ext = Internal::get_output_info(target);
-        std::map<Output, std::string> outputs = {
-            {Output::c_header, file_name + ext.at(Output::c_header).extension},
-            {Output::object, file_name + ext.at(Output::object).extension},
-            {Output::assembly, file_name + ".s"},
+        std::map<OutputFile, std::string> outputs = {
+            {OutputFile::c_header, file_name + ext.at(OutputFile::c_header).extension},
+            {OutputFile::object, file_name + ext.at(OutputFile::object).extension},
+            {OutputFile::assembly, file_name + ".s"},
         };
         error.compile_to(outputs, arg_types, fn_name, target);
 

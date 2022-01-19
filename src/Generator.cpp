@@ -82,12 +82,12 @@ std::string compute_base_path(const std::string &output_dir,
     return base_path;
 }
 
-std::map<Output, std::string> compute_output_files(const Target &target,
-                                                   const std::string &base_path,
-                                                   const std::set<Output> &outputs) {
-    std::map<Output, const OutputInfo> output_info = get_output_info(target);
+std::map<OutputFile, std::string> compute_output_files(const Target &target,
+                                                       const std::string &base_path,
+                                                       const std::set<OutputFile> &outputs) {
+    std::map<OutputFile, const OutputInfo> output_info = get_output_info(target);
 
-    std::map<Output, std::string> output_files;
+    std::map<OutputFile, std::string> output_files;
     for (auto o : outputs) {
         output_files[o] = base_path + output_info.at(o).extension;
     }
@@ -912,23 +912,23 @@ int generate_filter_main_inner(int argc, char **argv, std::ostream &error_output
     }
 
     // extensions won't vary across multitarget output
-    std::map<Output, const OutputInfo> output_info = get_output_info(targets[0]);
+    std::map<OutputFile, const OutputInfo> output_info = get_output_info(targets[0]);
 
-    std::set<Output> outputs;
+    std::set<OutputFile> outputs;
     if (emit_flags.empty() || (emit_flags.size() == 1 && emit_flags[0].empty())) {
         // If omitted or empty, assume .a and .h and registration.cpp
-        outputs.insert(Output::c_header);
-        outputs.insert(Output::registration);
-        outputs.insert(Output::static_library);
+        outputs.insert(OutputFile::c_header);
+        outputs.insert(OutputFile::registration);
+        outputs.insert(OutputFile::static_library);
     } else {
         // Build a reverse lookup table. Allow some legacy aliases on the command line,
         // to allow legacy build systems to work more easily.
-        std::map<std::string, Output> output_name_to_enum = {
-            {"cpp", Output::c_source},
-            {"h", Output::c_header},
-            {"html", Output::stmt_html},
-            {"o", Output::object},
-            {"py.c", Output::python_extension},
+        std::map<std::string, OutputFile> output_name_to_enum = {
+            {"cpp", OutputFile::c_source},
+            {"h", OutputFile::c_header},
+            {"html", OutputFile::stmt_html},
+            {"o", OutputFile::object},
+            {"py.c", OutputFile::python_extension},
         };
         for (const auto &it : output_info) {
             output_name_to_enum[it.second.name] = it.first;
@@ -955,7 +955,7 @@ int generate_filter_main_inner(int argc, char **argv, std::ostream &error_output
     }
 
     // Allow quick-n-dirty use of compiler logging via HL_DEBUG_COMPILER_LOGGER env var
-    const bool do_compiler_logging = outputs.count(Output::compiler_log) ||
+    const bool do_compiler_logging = outputs.count(OutputFile::compiler_log) ||
                                      (get_env_variable("HL_DEBUG_COMPILER_LOGGER") == "1");
 
     const bool obfuscate_compiler_logging = get_env_variable("HL_OBFUSCATE_COMPILER_LOGGER") == "1";
@@ -1055,11 +1055,11 @@ int generate_filter_main_inner(int argc, char **argv, std::ostream &error_output
     if (!generator_name.empty()) {
         std::string base_path = compute_base_path(output_dir, function_name, file_base_name);
         debug(1) << "Generator " << generator_name << " has base_path " << base_path << "\n";
-        if (outputs.count(Output::cpp_stub)) {
+        if (outputs.count(OutputFile::cpp_stub)) {
             // When generating cpp_stub, we ignore all generator args passed in, and supply a fake Target.
             // (CompilerLogger is never enabled for cpp_stub, for now anyway.)
             auto gen = GeneratorRegistry::create(generator_name, GeneratorContext(Target()));
-            auto stub_file_path = base_path + output_info[Output::cpp_stub].extension;
+            auto stub_file_path = base_path + output_info[OutputFile::cpp_stub].extension;
             gen->emit_cpp_stub(stub_file_path);
         }
 

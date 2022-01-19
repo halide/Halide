@@ -174,30 +174,30 @@ void test_compile_to_everything(Func j, bool do_object) {
     auto module_producer = [&j, &args](const std::string &name, const Target &target) -> Module {
         return j.compile_to_module(args, name, target);
     };
-    std::map<Output, std::string> outputs = {
-        {Output::assembly, fname + ".s"},                        // IsMulti
-        {Output::bitcode, fname + ".bc"},                        // IsMulti
-        {Output::c_header, fname + ".h"},                        // IsSingle
-        {Output::c_source, fname + ".halide_generated.cpp"},     // IsSingle
-        {Output::compiler_log, fname + ".halide_compiler_log"},  // IsSingle
+    std::map<OutputFile, std::string> outputs = {
+        {OutputFile::assembly, fname + ".s"},                        // IsMulti
+        {OutputFile::bitcode, fname + ".bc"},                        // IsMulti
+        {OutputFile::c_header, fname + ".h"},                        // IsSingle
+        {OutputFile::c_source, fname + ".halide_generated.cpp"},     // IsSingle
+        {OutputFile::compiler_log, fname + ".halide_compiler_log"},  // IsSingle
         // Note: compile_multitarget() doesn't produce cpp_stub output,
         // even if you pass this in.
-        // {Output::cpp_stub, fname + ".stub.h"},  // IsSingle
-        {Output::featurization, fname + ".featurization"},    // IsMulti
-        {Output::llvm_assembly, fname + ".ll"},               // IsMulti
-        {Output::object, fname + o},                          // IsMulti
-        {Output::python_extension, fname + ".py.cpp"},        // IsSingle
-        {Output::pytorch_wrapper, fname + ".pytorch.h"},      // IsSingle
-        {Output::registration, fname + ".registration.cpp"},  // IsSingle
-        {Output::schedule, fname + ".schedule.h"},            // IsSingle
-        {Output::static_library, fname + a},                  // IsSingle
-        {Output::stmt, fname + ".stmt"},                      // IsMulti
-        {Output::stmt_html, fname + ".stmt.html"},            // IsMulti
+        // {OutputFile::cpp_stub, fname + ".stub.h"},  // IsSingle
+        {OutputFile::featurization, fname + ".featurization"},    // IsMulti
+        {OutputFile::llvm_assembly, fname + ".ll"},               // IsMulti
+        {OutputFile::object, fname + o},                          // IsMulti
+        {OutputFile::python_extension, fname + ".py.cpp"},        // IsSingle
+        {OutputFile::pytorch_wrapper, fname + ".pytorch.h"},      // IsSingle
+        {OutputFile::registration, fname + ".registration.cpp"},  // IsSingle
+        {OutputFile::schedule, fname + ".schedule.h"},            // IsSingle
+        {OutputFile::static_library, fname + a},                  // IsSingle
+        {OutputFile::stmt, fname + ".stmt"},                      // IsMulti
+        {OutputFile::stmt_html, fname + ".stmt.html"},            // IsMulti
     };
     if (do_object) {
-        outputs.erase(Output::static_library);
+        outputs.erase(OutputFile::static_library);
     } else {
-        outputs.erase(Output::object);
+        outputs.erase(OutputFile::object);
     }
     const CompilerLoggerFactory compiler_logger_factory =
         [](const std::string &, const Target &) -> std::unique_ptr<Internal::CompilerLogger> {
