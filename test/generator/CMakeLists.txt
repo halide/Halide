@@ -435,6 +435,10 @@ halide_define_aot_test(string_param PARAMS "rpn_expr=5 y * x +")
 # shuffler_generator.cpp
 halide_define_aot_test(shuffler)
 
+# templated_aottest.cpp
+# templated_generator.cpp
+halide_define_aot_test(templated)
+
 # tiled_blur_aottest.cpp
 # tiled_blur_generator.cpp
 halide_define_aot_test(tiled_blur EXTRA_LIBS blur2x2)

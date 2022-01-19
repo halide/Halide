@@ -2023,13 +2023,8 @@ public:
                 check("v128.bitselect", 2 * w, select(bool_1, f64_1, f64_2));
 
                 // Lane-wise Population Count
-                // TODO(https://github.com/halide/Halide/issues/5130): NOT BEING GENERATED AT TRUNK
-                // check("i8x16.popcnt", 8 * w, popcount(i8_1));
-                // check("i8x16.popcnt", 8 * w, popcount(u8_1));
-                // check("i8x16.popcnt", 8 * w, popcount(i16_1));
-                // check("i8x16.popcnt", 8 * w, popcount(u16_1));
-                // check("i8x16.popcnt", 8 * w, popcount(i32_1));
-                // check("i8x16.popcnt", 8 * w, popcount(u32_1));
+                check("i8x16.popcnt", 8 * w, popcount(i8_1));
+                check("i8x16.popcnt", 8 * w, popcount(u8_1));
 
                 // Any lane true -- for VectorReduce::Or on 8-bit data
                 // All lanes true  -- for VectorReduce::And on 8-bit data
