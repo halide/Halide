@@ -57,7 +57,6 @@ protected:
     void visit(const Let *op) override;
     void visit(const LetStmt *op) override;
 
-protected:
     int current_loop_level = 0;
     std::vector<std::string> global_static_allocations;
 

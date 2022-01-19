@@ -518,6 +518,21 @@ void CodeGen_X86::visit(const Call *op) {
                 return;
             }
         }
+    } else if (op->is_intrinsic(Call::absd)) {
+        internal_assert(op->args.size() == 2);
+        if (op->args[0].type().is_uint()) {
+            // On x86, there are many 3-instruction sequences to compute absd of
+            // unsigned integers. This one consists solely of instructions with
+            // throughput of 3 ops per cycle on Cannon Lake.
+            //
+            // Solution due to Wojciech Mula:
+            // http://0x80.pl/notesen/2018-03-11-sse-abs-unsigned.html
+            codegen(saturating_sub(op->args[0], op->args[1]) | saturating_sub(op->args[1], op->args[0]));
+            return;
+        } else if (op->args[0].type().is_int()) {
+            codegen(Max::make(op->args[0], op->args[1]) - Min::make(op->args[0], op->args[1]));
+            return;
+        }
     }
 
     struct Pattern {
@@ -612,11 +627,15 @@ void CodeGen_X86::codegen_vector_reduce(const VectorReduce *op, const Expr &init
                 a = lossless_cast(p.narrow_type.with_lanes(a.type().lanes()), a);
                 b = lossless_cast(p.narrow_type.with_lanes(b.type().lanes()), b);
             }
-            if (!a.defined() || !b.defined()) { continue; }
+            if (!a.defined() || !b.defined()) {
+                continue;
+            }
 
             if (init.defined() && (p.flags & Pattern::CombineInit)) {
                 value = call_overloaded_intrin(op->type, p.intrin, {init, a, b});
-                if (value) { return; }
+                if (value) {
+                    return;
+                }
             } else {
                 value = call_overloaded_intrin(op->type, p.intrin, {a, b});
                 if (value) {
