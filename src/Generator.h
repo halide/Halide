@@ -3957,7 +3957,8 @@ struct halide_global_ns;
     namespace GEN_REGISTRY_NAME##_ns {                                                                                              \
         std::unique_ptr<Halide::Internal::GeneratorBase> factory(const Halide::GeneratorContext &context);                          \
         std::unique_ptr<Halide::Internal::GeneratorBase> factory(const Halide::GeneratorContext &context) {                         \
-            return GEN_CLASS_NAME::create(context, #GEN_REGISTRY_NAME, #FULLY_QUALIFIED_STUB_NAME);                                 \
+            using GenType = std::remove_pointer<decltype(new GEN_CLASS_NAME)>::type; /* NOLINT(bugprone-macro-parentheses) */       \
+            return GenType::create(context, #GEN_REGISTRY_NAME, #FULLY_QUALIFIED_STUB_NAME);                                        \
         }                                                                                                                           \
     }                                                                                                                               \
     static auto reg_##GEN_REGISTRY_NAME = Halide::Internal::RegisterGenerator(#GEN_REGISTRY_NAME, GEN_REGISTRY_NAME##_ns::factory); \

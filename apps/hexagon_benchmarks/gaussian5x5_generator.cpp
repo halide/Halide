@@ -52,7 +52,7 @@ public:
                 .vectorize(xi)
                 .unroll(yi);
             if (use_prefetch_sched) {
-                output.prefetch(input, y, 2);
+                output.prefetch(input, y, y, 2);
             }
             if (use_parallel_sched) {
                 Var yo;
