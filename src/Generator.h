@@ -2789,7 +2789,7 @@ public:
     }
 
     explicit GeneratorOutput(const std::string &name, int d)
-        : Super(name, d) {
+        : Super(name, {}, d) {
     }
 
     explicit GeneratorOutput(const std::string &name, const Type &t)
