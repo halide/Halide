@@ -131,12 +131,6 @@ string CodeGen_WebGPU_Dev::CodeGen_WGSL::print_name(const string &name) {
     if (new_name.length() > 1 && new_name[0] == '_' && new_name[1] == '_') {
         new_name = "v" + new_name;
     }
-
-    // TODO: Remove this when WGSL no longer requires buffers to be structures.
-    if (allocations.contains(name)) {
-        return new_name + ".data";
-    }
-
     return new_name;
 }
 
@@ -188,15 +182,9 @@ void CodeGen_WebGPU_Dev::CodeGen_WGSL::add_kernel(
     for (const DeviceArgument &arg : args) {
         if (arg.is_buffer) {
             // Emit buffer arguments as read_write storage buffers.
-            // TODO: Remove [[block]], struct, and .data.
-            string struct_name = "BufferStruct_" + arg.name;
-            stream << "[[block]]\n"
-                   << "struct " << struct_name << " {\n"
-                   << "  data : array<" << print_type(arg.type) << ">;\n"
-                   << "};\n";
             stream << "[[group(0), binding(" << next_binding << ")]]\n"
                    << "var<storage, read_write> " << print_name(arg.name)
-                   << " : " << struct_name << ";\n\n";
+                   << " : array<" << print_type(arg.type) << ">;\n\n";
             Allocation alloc;
             alloc.type = arg.type;
             allocations.push(arg.name, alloc);
@@ -211,12 +199,10 @@ void CodeGen_WebGPU_Dev::CodeGen_WGSL::add_kernel(
         }
     }
     if (!uniforms.str().empty()) {
-        // TODO: Remove [[block]] when WGSL no longer uses it.
         string struct_name = "ArgsStruct_" + name;
-        stream << "[[block]]\n"
-               << "struct " << struct_name << " {\n"
+        stream << "struct " << struct_name << " {\n"
                << uniforms.str()
-               << "};\n";
+               << "}\n";
         stream << "[[group(1), binding(0)]]\n"
                << "var<uniform> "
                << args_var << " : " << struct_name << " ;\n\n";
