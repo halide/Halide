@@ -2477,58 +2477,58 @@ private:
 protected:
     using TBase = typename Super::TBase;
 
-    static std::vector<Type> my_types(const std::vector<Type> &t) {
-        if (TBase::has_static_halide_type) {
-            user_assert(t.empty()) << "Cannot pass a Type argument for an Output<Buffer> with a non-void static type\n";
-            return std::vector<Type>{TBase::static_halide_type()};
-        }
-        return t;
-    }
-
     explicit GeneratorOutput_Buffer(const std::string &name)
-        : Super(name, IOKind::Buffer, my_types({}), -1) {
+        : Super(name, IOKind::Buffer,
+                TBase::has_static_halide_type ? std::vector<Type>{TBase::static_halide_type()} : std::vector<Type>{},
+                TBase::has_static_dimensions ? TBase::static_dimensions() : -1) {
     }
 
     GeneratorOutput_Buffer(const std::string &name, const std::vector<Type> &t, int d)
-        : Super(name, IOKind::Buffer, my_types(t), d) {
+        : Super(name, IOKind::Buffer, t, d) {
         internal_assert(!t.empty());
         internal_assert(d != -1);
-        static_assert(!TBase::has_static_halide_type, "You can only specify a Type argument for Output<Buffer<T>> if T is void or omitted.");
+        static_assert(!TBase::has_static_halide_type, "You can only specify a Type argument for Output<Buffer<T, D>> if T is void or omitted.");
         static_assert(!TBase::has_static_dimensions, "You can only specify a dimension argument for Output<Buffer<T, D>> if D is -1 or omitted.");
     }
 
     GeneratorOutput_Buffer(const std::string &name, const std::vector<Type> &t)
-        : Super(name, IOKind::Buffer, my_types(t), -1) {
+        : Super(name, IOKind::Buffer, t, -1) {
         internal_assert(!t.empty());
-        static_assert(!TBase::has_static_halide_type, "You can only specify a Type argument for Output<Buffer<T>> if T is void or omitted.");
+        static_assert(!TBase::has_static_halide_type, "You can only specify a Type argument for Output<Buffer<T, D>> if T is void or omitted.");
     }
 
     GeneratorOutput_Buffer(const std::string &name, int d)
-        : Super(name, IOKind::Buffer, my_types({}), d) {
+        : Super(name, IOKind::Buffer,
+                TBase::has_static_halide_type ? std::vector<Type>{TBase::static_halide_type()} : std::vector<Type>{},
+                d) {
         internal_assert(d != -1);
         static_assert(!TBase::has_static_dimensions, "You can only specify a dimension argument for Output<Buffer<T, D>> if D is -1 or omitted.");
     }
 
     GeneratorOutput_Buffer(size_t array_size, const std::string &name)
-        : Super(array_size, name, IOKind::Buffer, my_types({}), -1) {
+        : Super(array_size, name, IOKind::Buffer,
+                TBase::has_static_halide_type ? std::vector<Type>{TBase::static_halide_type()} : std::vector<Type>{},
+                TBase::has_static_dimensions ? TBase::static_dimensions() : -1) {
     }
 
     GeneratorOutput_Buffer(size_t array_size, const std::string &name, const std::vector<Type> &t, int d)
-        : Super(array_size, name, IOKind::Buffer, my_types(t), d) {
+        : Super(array_size, name, IOKind::Buffer, t, d) {
         internal_assert(!t.empty());
         internal_assert(d != -1);
-        static_assert(!TBase::has_static_halide_type, "You can only specify a Type argument for Output<Buffer<T>> if T is void or omitted.");
+        static_assert(!TBase::has_static_halide_type, "You can only specify a Type argument for Output<Buffer<T, D>> if T is void or omitted.");
         static_assert(!TBase::has_static_dimensions, "You can only specify a dimension argument for Output<Buffer<T, D>> if D is -1 or omitted.");
     }
 
     GeneratorOutput_Buffer(size_t array_size, const std::string &name, const std::vector<Type> &t)
-        : Super(array_size, name, IOKind::Buffer, my_types(t), -1) {
+        : Super(array_size, name, IOKind::Buffer, t, -1) {
         internal_assert(!t.empty());
-        static_assert(!TBase::has_static_halide_type, "You can only specify a Type argument for Output<Buffer<T>> if T is void or omitted.");
+        static_assert(!TBase::has_static_halide_type, "You can only specify a Type argument for Output<Buffer<T, D>> if T is void or omitted.");
     }
 
     GeneratorOutput_Buffer(size_t array_size, const std::string &name, int d)
-        : Super(array_size, name, IOKind::Buffer, my_types({}), d) {
+        : Super(array_size, name, IOKind::Buffer,
+                TBase::has_static_halide_type ? std::vector<Type>{TBase::static_halide_type()} : std::vector<Type>{},
+                d) {
         internal_assert(d != -1);
         static_assert(!TBase::has_static_dimensions, "You can only specify a dimension argument for Output<Buffer<T, D>> if D is -1 or omitted.");
     }
