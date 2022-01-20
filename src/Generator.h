@@ -1678,10 +1678,15 @@ public:
                 TBase::has_static_dimensions ? TBase::static_dimensions() : -1) {
     }
 
-    GeneratorInput_Buffer(const std::string &name, const Type &t, int d = -1)
+    GeneratorInput_Buffer(const std::string &name, const Type &t, int d)
         : Super(name, IOKind::Buffer, {t}, d) {
         static_assert(!TBase::has_static_halide_type, "You can only specify a Type argument for Input<Buffer<T>> if T is void or omitted.");
         static_assert(!TBase::has_static_dimensions, "You can only specify a dimension argument for Input<Buffer<T, D>> if D is -1 or omitted.");
+    }
+
+    GeneratorInput_Buffer(const std::string &name, const Type &t)
+        : Super(name, IOKind::Buffer, {t}, -1) {
+        static_assert(!TBase::has_static_halide_type, "You can only specify a Type argument for Input<Buffer<T>> if T is void or omitted.");
     }
 
     GeneratorInput_Buffer(const std::string &name, int d)
