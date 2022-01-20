@@ -26,9 +26,9 @@ public:
     Input<float> f32{"f32", 32.1234f, -3200.1234f, 3200.1234f};
     Input<double> f64{"f64", 64.25f, -6400.25f, 6400.25f};
     Input<void *> h{"h", nullptr};
-    Input<Func> input_not_nod{"input_not_nod"};   // must be overridden to type=uint8 dim=3
-    Input<Func> input_nod{"input_nod", UInt(8)};  // must be overridden to type=uint8 dim=3
-    Input<Func> input_not{"input_not", 3};        // must be overridden to type=uint8
+    Input<Func> input_not_nod{"input_not_nod"};            // must be overridden to type=uint8 dim=3
+    Input<Func> input_nod{"input_nod", UInt(8)};           // must be overridden to type=uint8 dim=3
+    Input<Func> input_not{"input_not", 3};                 // must be overridden to type=uint8
     Input<Func[]> array_input{"array_input", UInt(8), 3};  // must be overridden to size=2
     Input<Func[2]> array2_input{"array2_input", UInt(8), 3};
     Input<int8_t[]> array_i8{"array_i8"};  // must be overridden to size=2
