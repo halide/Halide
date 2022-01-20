@@ -140,7 +140,7 @@ public:
     GeneratorParam<bool> parallel_{"parallel", true};
     GeneratorParam<int> block_size_{"block_size", 1024};
 
-    Input<Buffer<T, 1>> x_{"x"};
+Input<Buffer<T, 1>> x_{"x"};
 
     Output<Buffer<T, 0>> result_{"result"};
 
