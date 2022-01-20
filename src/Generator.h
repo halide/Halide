@@ -283,10 +283,6 @@
 #endif
 
 namespace Halide {
-
-template<typename T>
-class Buffer;
-
 namespace Internal {
 
 void generator_test();
@@ -1679,16 +1675,20 @@ public:
     explicit GeneratorInput_Buffer(const std::string &name)
         : Super(name, IOKind::Buffer,
                 TBase::has_static_halide_type ? std::vector<Type>{TBase::static_halide_type()} : std::vector<Type>{},
-                -1) {
+                TBase::has_static_dimensions ? TBase::static_dimensions() : -1) {
     }
 
     GeneratorInput_Buffer(const std::string &name, const Type &t, int d = -1)
         : Super(name, IOKind::Buffer, {t}, d) {
         static_assert(!TBase::has_static_halide_type, "You can only specify a Type argument for Input<Buffer<T>> if T is void or omitted.");
+        static_assert(!TBase::has_static_dimensions, "You can only specify a dimension argument for Input<Buffer<T, D>> if D is -1 or omitted.");
     }
 
     GeneratorInput_Buffer(const std::string &name, int d)
-        : Super(name, IOKind::Buffer, TBase::has_static_halide_type ? std::vector<Type>{TBase::static_halide_type()} : std::vector<Type>{}, d) {
+        : Super(name, IOKind::Buffer,
+                TBase::has_static_halide_type ? std::vector<Type>{TBase::static_halide_type()} : std::vector<Type>{},
+                d) {
+        static_assert(!TBase::has_static_dimensions, "You can only specify a dimension argument for Input<Buffer<T, D>> if D is -1 or omitted.");
     }
 
     template<typename... Args>
@@ -2480,12 +2480,52 @@ protected:
         return t;
     }
 
-    GeneratorOutput_Buffer(const std::string &name, const std::vector<Type> &t = {}, int d = -1)
-        : Super(name, IOKind::Buffer, my_types(t), d) {
+    explicit GeneratorOutput_Buffer(const std::string &name)
+        : Super(name, IOKind::Buffer, my_types({}), -1) {
     }
 
-    GeneratorOutput_Buffer(size_t array_size, const std::string &name, const std::vector<Type> &t = {}, int d = -1)
+    GeneratorOutput_Buffer(const std::string &name, const std::vector<Type> &t, int d)
+        : Super(name, IOKind::Buffer, my_types(t), d) {
+        internal_assert(!t.empty());
+        internal_assert(d != -1);
+        static_assert(!TBase::has_static_halide_type, "You can only specify a Type argument for Output<Buffer<T>> if T is void or omitted.");
+        static_assert(!TBase::has_static_dimensions, "You can only specify a dimension argument for Output<Buffer<T, D>> if D is -1 or omitted.");
+    }
+
+    GeneratorOutput_Buffer(const std::string &name, const std::vector<Type> &t)
+        : Super(name, IOKind::Buffer, my_types(t), -1) {
+        internal_assert(!t.empty());
+        static_assert(!TBase::has_static_halide_type, "You can only specify a Type argument for Output<Buffer<T>> if T is void or omitted.");
+    }
+
+    GeneratorOutput_Buffer(const std::string &name, int d)
+        : Super(name, IOKind::Buffer, my_types({}), d) {
+        internal_assert(d != -1);
+        static_assert(!TBase::has_static_dimensions, "You can only specify a dimension argument for Output<Buffer<T, D>> if D is -1 or omitted.");
+    }
+
+    GeneratorOutput_Buffer(size_t array_size, const std::string &name)
+        : Super(array_size, name, IOKind::Buffer, my_types({}), -1) {
+    }
+
+    GeneratorOutput_Buffer(size_t array_size, const std::string &name, const std::vector<Type> &t, int d)
         : Super(array_size, name, IOKind::Buffer, my_types(t), d) {
+        internal_assert(!t.empty());
+        internal_assert(d != -1);
+        static_assert(!TBase::has_static_halide_type, "You can only specify a Type argument for Output<Buffer<T>> if T is void or omitted.");
+        static_assert(!TBase::has_static_dimensions, "You can only specify a dimension argument for Output<Buffer<T, D>> if D is -1 or omitted.");
+    }
+
+    GeneratorOutput_Buffer(size_t array_size, const std::string &name, const std::vector<Type> &t)
+        : Super(array_size, name, IOKind::Buffer, my_types(t), -1) {
+        internal_assert(!t.empty());
+        static_assert(!TBase::has_static_halide_type, "You can only specify a Type argument for Output<Buffer<T>> if T is void or omitted.");
+    }
+
+    GeneratorOutput_Buffer(size_t array_size, const std::string &name, int d)
+        : Super(array_size, name, IOKind::Buffer, my_types({}), d) {
+        internal_assert(d != -1);
+        static_assert(!TBase::has_static_dimensions, "You can only specify a dimension argument for Output<Buffer<T, D>> if D is -1 or omitted.");
     }
 
     HALIDE_NO_USER_CODE_INLINE std::string get_c_type() const override {
@@ -2605,8 +2645,16 @@ protected:
         : Super(name, IOKind::Function, std::vector<Type>{}, -1) {
     }
 
-    GeneratorOutput_Func(const std::string &name, const std::vector<Type> &t, int d = -1)
+    GeneratorOutput_Func(const std::string &name, const std::vector<Type> &t, int d)
         : Super(name, IOKind::Function, t, d) {
+    }
+
+    GeneratorOutput_Func(const std::string &name, const std::vector<Type> &t)
+        : Super(name, IOKind::Function, t, -1) {
+    }
+
+    GeneratorOutput_Func(const std::string &name, int d)
+        : Super(name, IOKind::Function, {}, d) {
     }
 
     GeneratorOutput_Func(size_t array_size, const std::string &name, const std::vector<Type> &t, int d)
@@ -2711,7 +2759,7 @@ public:
     }
 
     explicit GeneratorOutput(const std::string &name, int d)
-        : Super(name, {}, d) {
+        : Super(name, d) {
     }
 
     explicit GeneratorOutput(const std::string &name, const Type &t)
@@ -2731,7 +2779,7 @@ public:
     }
 
     explicit GeneratorOutput(size_t array_size, const std::string &name, int d)
-        : Super(array_size, name, {}, d) {
+        : Super(array_size, name, d) {
     }
 
     explicit GeneratorOutput(size_t array_size, const std::string &name, const Type &t)
@@ -3007,8 +3055,8 @@ protected:
     }
     template<typename T>
     using GeneratorParam = Halide::GeneratorParam<T>;
-    template<typename T = void>
-    using Buffer = Halide::Buffer<T>;
+    template<typename T = void, int D = -1>
+    using Buffer = Halide::Buffer<T, D>;
     template<typename T>
     using Param = Halide::Param<T>;
     static inline Type Bool(int lanes = 1) {
