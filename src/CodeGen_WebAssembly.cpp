@@ -109,6 +109,9 @@ const WasmIntrinsic intrinsic_defs[] = {
 
     {"llvm.wasm.dot", Int(32, 4), "dot_product", {Int(16, 8), Int(16, 8)}, Target::WasmSimd128},
 
+    // TODO: LLVM should be able to handle this on its own, but doesn't at top-of-tree as of Jan 2022;
+    // if/when https://github.com/llvm/llvm-project/issues/53278 gets addressed, it may be possible to remove
+    // these.
     {"extend_i8x16_to_i16x8", Int(16, 16), "widen_integer", {Int(8, 16)}, Target::WasmSimd128},
     {"extend_u8x16_to_u16x8", UInt(16, 16), "widen_integer", {UInt(8, 16)}, Target::WasmSimd128},
     {"extend_i16x8_to_i32x8", Int(32, 8), "widen_integer", {Int(16, 8)}, Target::WasmSimd128},
