@@ -1468,7 +1468,7 @@ protected:
     friend class GeneratorParamInfo;
 
     mutable int array_size_;  // always 1 if is_array() == false.
-        // -1 if is_array() == true but unspecified.
+                              // -1 if is_array() == true but unspecified.
 
     const std::string name_;
     const IOKind kind_;
@@ -1676,7 +1676,7 @@ protected:
     }
 
 public:
-    GeneratorInput_Buffer(const std::string &name)
+    explicit GeneratorInput_Buffer(const std::string &name)
         : Super(name, IOKind::Buffer,
                 TBase::has_static_halide_type ? std::vector<Type>{TBase::static_halide_type()} : std::vector<Type>{},
                 -1) {
@@ -1834,7 +1834,7 @@ public:
     }
 
     // unspecified type & dimension
-    GeneratorInput_Func(const std::string &name)
+    explicit GeneratorInput_Func(const std::string &name)
         : Super(name, IOKind::Function, {}, -1) {
     }
 
@@ -2166,56 +2166,59 @@ protected:
             Internal::cond<true, Unused>>::type;
 
 public:
+    // Mark all of these explicit (not just single-arg versions) so that
+    // we disallow copy-list-initialization form (i.e., Input foo{"foo"} is ok,
+    // but Input foo = {"foo"} is not).
     explicit GeneratorInput(const std::string &name)
         : Super(name) {
     }
 
-    GeneratorInput(const std::string &name, const TBase &def)
+    explicit GeneratorInput(const std::string &name, const TBase &def)
         : Super(name, def) {
     }
 
-    GeneratorInput(size_t array_size, const std::string &name, const TBase &def)
+    explicit GeneratorInput(size_t array_size, const std::string &name, const TBase &def)
         : Super(array_size, name, def) {
     }
 
-    GeneratorInput(const std::string &name,
-                   const TBase &def, const TBase &min, const TBase &max)
+    explicit GeneratorInput(const std::string &name,
+                            const TBase &def, const TBase &min, const TBase &max)
         : Super(name, def, min, max) {
     }
 
-    GeneratorInput(size_t array_size, const std::string &name,
-                   const TBase &def, const TBase &min, const TBase &max)
+    explicit GeneratorInput(size_t array_size, const std::string &name,
+                            const TBase &def, const TBase &min, const TBase &max)
         : Super(array_size, name, def, min, max) {
     }
 
-    GeneratorInput(const std::string &name, const Type &t, int d)
+    explicit GeneratorInput(const std::string &name, const Type &t, int d)
         : Super(name, t, d) {
     }
 
-    GeneratorInput(const std::string &name, const Type &t)
+    explicit GeneratorInput(const std::string &name, const Type &t)
         : Super(name, t) {
     }
 
     // Avoid ambiguity between Func-with-dim and int-with-default
-    GeneratorInput(const std::string &name, IntIfNonScalar d)
+    explicit GeneratorInput(const std::string &name, IntIfNonScalar d)
         : Super(name, d) {
     }
 
-    GeneratorInput(size_t array_size, const std::string &name, const Type &t, int d)
+    explicit GeneratorInput(size_t array_size, const std::string &name, const Type &t, int d)
         : Super(array_size, name, t, d) {
     }
 
-    GeneratorInput(size_t array_size, const std::string &name, const Type &t)
+    explicit GeneratorInput(size_t array_size, const std::string &name, const Type &t)
         : Super(array_size, name, t) {
     }
 
     // Avoid ambiguity between Func-with-dim and int-with-default
-    //template <typename T2 = T, typename std::enable_if<std::is_same<TBase, Func>::value>::type * = nullptr>
-    GeneratorInput(size_t array_size, const std::string &name, IntIfNonScalar d)
+    // template <typename T2 = T, typename std::enable_if<std::is_same<TBase, Func>::value>::type * = nullptr>
+    explicit GeneratorInput(size_t array_size, const std::string &name, IntIfNonScalar d)
         : Super(array_size, name, d) {
     }
 
-    GeneratorInput(size_t array_size, const std::string &name)
+    explicit GeneratorInput(size_t array_size, const std::string &name)
         : Super(array_size, name) {
     }
 };
@@ -2558,11 +2561,12 @@ public:
         return this->funcs_.at(0).output_buffer();
     }
 
-    // 'perfect forwarding' won't work with initializer lists,
-    // so hand-roll our own forwarding method for set_estimates,
-    // rather than using HALIDE_FORWARD_METHOD.
+    // Forward set_estimates() to Func (rather than OutputImageParam) so that it can
+    // handle Tuple-valued outputs correctly.
     GeneratorOutput_Buffer<T> &set_estimates(const Region &estimates) {
-        this->as<OutputImageParam>().set_estimates(estimates);
+        user_assert(!this->is_array()) << "Cannot call set_estimates() on an array Output; use an explicit subscript operator: " << this->name();
+        internal_assert(this->exprs_.empty() && this->funcs_.size() == 1);
+        this->funcs_.at(0).set_estimates(estimates);
         return *this;
     }
 
@@ -2597,7 +2601,7 @@ private:
 protected:
     using TBase = typename Super::TBase;
 
-    GeneratorOutput_Func(const std::string &name)
+    explicit GeneratorOutput_Func(const std::string &name)
         : Super(name, IOKind::Function, std::vector<Type>{}, -1) {
     }
 
@@ -2691,6 +2695,9 @@ protected:
     using TBase = typename Super::TBase;
 
 public:
+    // Mark all of these explicit (not just single-arg versions) so that
+    // we disallow copy-list-initialization form (i.e., Output foo{"foo"} is ok,
+    // but Output foo = {"foo"} is not).
     explicit GeneratorOutput(const std::string &name)
         : Super(name) {
     }
@@ -2699,31 +2706,47 @@ public:
         : GeneratorOutput(std::string(name)) {
     }
 
-    GeneratorOutput(size_t array_size, const std::string &name)
+    explicit GeneratorOutput(size_t array_size, const std::string &name)
         : Super(array_size, name) {
     }
 
-    GeneratorOutput(const std::string &name, int d)
+    explicit GeneratorOutput(const std::string &name, int d)
         : Super(name, {}, d) {
     }
 
-    GeneratorOutput(const std::string &name, const Type &t, int d)
+    explicit GeneratorOutput(const std::string &name, const Type &t)
+        : Super(name, {t}) {
+    }
+
+    explicit GeneratorOutput(const std::string &name, const std::vector<Type> &t)
+        : Super(name, t) {
+    }
+
+    explicit GeneratorOutput(const std::string &name, const Type &t, int d)
         : Super(name, {t}, d) {
     }
 
-    GeneratorOutput(const std::string &name, const std::vector<Type> &t, int d)
+    explicit GeneratorOutput(const std::string &name, const std::vector<Type> &t, int d)
         : Super(name, t, d) {
     }
 
-    GeneratorOutput(size_t array_size, const std::string &name, int d)
+    explicit GeneratorOutput(size_t array_size, const std::string &name, int d)
         : Super(array_size, name, {}, d) {
     }
 
-    GeneratorOutput(size_t array_size, const std::string &name, const Type &t, int d)
+    explicit GeneratorOutput(size_t array_size, const std::string &name, const Type &t)
+        : Super(array_size, name, {t}) {
+    }
+
+    explicit GeneratorOutput(size_t array_size, const std::string &name, const std::vector<Type> &t)
+        : Super(array_size, name, t) {
+    }
+
+    explicit GeneratorOutput(size_t array_size, const std::string &name, const Type &t, int d)
         : Super(array_size, name, {t}, d) {
     }
 
-    GeneratorOutput(size_t array_size, const std::string &name, const std::vector<Type> &t, int d)
+    explicit GeneratorOutput(size_t array_size, const std::string &name, const std::vector<Type> &t, int d)
         : Super(array_size, name, t, d) {
     }
 
@@ -3802,7 +3825,8 @@ struct halide_global_ns;
     namespace GEN_REGISTRY_NAME##_ns {                                                                                              \
         std::unique_ptr<Halide::Internal::GeneratorBase> factory(const Halide::GeneratorContext &context);                          \
         std::unique_ptr<Halide::Internal::GeneratorBase> factory(const Halide::GeneratorContext &context) {                         \
-            return GEN_CLASS_NAME::create(context, #GEN_REGISTRY_NAME, #FULLY_QUALIFIED_STUB_NAME);                                 \
+            using GenType = std::remove_pointer<decltype(new GEN_CLASS_NAME)>::type; /* NOLINT(bugprone-macro-parentheses) */       \
+            return GenType::create(context, #GEN_REGISTRY_NAME, #FULLY_QUALIFIED_STUB_NAME);                                        \
         }                                                                                                                           \
     }                                                                                                                               \
     static auto reg_##GEN_REGISTRY_NAME = Halide::Internal::RegisterGenerator(#GEN_REGISTRY_NAME, GEN_REGISTRY_NAME##_ns::factory); \

@@ -384,6 +384,7 @@ protected:
             auto is_x_same_int = op->type.is_int() && is_int(x, bits);
             auto is_x_same_uint = op->type.is_uint() && is_uint(x, bits);
             auto is_x_same_int_or_uint = is_x_same_int || is_x_same_uint;
+            auto is_y_narrow_uint = op->type.is_uint() && is_uint(y, bits / 2);
             if (
                 // Saturating patterns
                 rewrite(max(min(widening_add(x, y), upper), lower),
@@ -492,6 +493,25 @@ protected:
                 rewrite(rounding_shift_right(widening_mul(x, y), c0),
                         rounding_mul_shift_right(x, y, cast(unsigned_type, c0)),
                         is_x_same_int_or_uint && c0 >= bits) ||
+
+                // We can also match on smaller shifts if one of the args is
+                // narrow. We don't do this for signed (yet), because the
+                // saturation issue is tricky.
+                rewrite(shift_right(widening_mul(x, cast(op->type, y)), c0),
+                        mul_shift_right(x, cast(op->type, y), cast(unsigned_type, c0)),
+                        is_x_same_int_or_uint && is_y_narrow_uint && c0 >= bits / 2) ||
+
+                rewrite(rounding_shift_right(widening_mul(x, cast(op->type, y)), c0),
+                        rounding_mul_shift_right(x, cast(op->type, y), cast(unsigned_type, c0)),
+                        is_x_same_int_or_uint && is_y_narrow_uint && c0 >= bits / 2) ||
+
+                rewrite(shift_right(widening_mul(cast(op->type, y), x), c0),
+                        mul_shift_right(cast(op->type, y), x, cast(unsigned_type, c0)),
+                        is_x_same_int_or_uint && is_y_narrow_uint && c0 >= bits / 2) ||
+
+                rewrite(rounding_shift_right(widening_mul(cast(op->type, y), x), c0),
+                        rounding_mul_shift_right(cast(op->type, y), x, cast(unsigned_type, c0)),
+                        is_x_same_int_or_uint && is_y_narrow_uint && c0 >= bits / 2) ||
 
                 // Halving subtract patterns
                 rewrite(shift_right(cast(op_type_wide, widening_sub(x, y)), 1),

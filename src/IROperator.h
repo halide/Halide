@@ -355,12 +355,12 @@ Expr widening_shift_left(Expr a, int b);
 Expr widening_shift_right(Expr a, Expr b);
 Expr widening_shift_right(Expr a, int b);
 
-/** Compute saturating_add(a, (1 >> min(b, 0)) / 2) << b. When b is positive
- * indicating a left shift, the rounding term is zero. */
+/** Compute saturating_narrow(widening_add(a, (1 >> min(b, 0)) / 2) << b).
+ * When b is positive indicating a left shift, the rounding term is zero. */
 Expr rounding_shift_left(Expr a, Expr b);
 Expr rounding_shift_left(Expr a, int b);
-/** Compute saturating_add(a, (1 << max(b, 0)) / 2) >> b. When b is negative
- * indicating a left shift, the rounding term is zero. */
+/** Compute saturating_narrow(widening_add(a, (1 << max(b, 0)) / 2) >> b).
+ * When b is negative indicating a left shift, the rounding term is zero. */
 Expr rounding_shift_right(Expr a, Expr b);
 Expr rounding_shift_right(Expr a, int b);
 

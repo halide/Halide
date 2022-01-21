@@ -837,7 +837,7 @@ void compile_multitarget(const std::string &fn_name,
             user_error << "All Targets must have matching arch-bits-os for compile_multitarget.\n";
         }
         // Some features must match across all targets.
-        static const std::array<Target::Feature, 9> must_match_features = {{
+        static const std::array<Target::Feature, 10> must_match_features = {{
             Target::ASAN,
             Target::CPlusPlusMangling,
             Target::Debug,
@@ -846,6 +846,7 @@ void compile_multitarget(const std::string &fn_name,
             Target::MSAN,
             Target::NoRuntime,
             Target::TSAN,
+            Target::SanitizerCoverage,
             Target::UserContext,
         }};
         for (auto f : must_match_features) {

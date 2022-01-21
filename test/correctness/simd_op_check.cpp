@@ -117,6 +117,13 @@ public:
 
             check("pmulhuw", 4 * w, i16_1 / 15);
 
+            // Shifts by amounts other than 16 can also use this instruction, by
+            // preshifting an arg (when there are bits of headroom), or
+            // postshifting the result.
+            check("pmulhuw", 4 * w, u16((u32(u16_1) * u32(u8_2)) >> 13));
+            check("pmulhw", 4 * w, i16((i32(i16_1) * i32(i16_2)) >> 17));
+            check("pmulhuw", 4 * w, u16((u32(u16_1) * u32(u16_2)) >> 18));
+
             if (w > 1) {  // LLVM does a lousy job at the comparisons for 64-bit types
                 check("pcmp*b", 8 * w, select(u8_1 == u8_2, u8(1), u8(2)));
                 check("pcmp*b", 8 * w, select(u8_1 > u8_2, u8(1), u8(2)));
@@ -1344,12 +1351,23 @@ public:
             check(arm32 ? "vrshr.u32" : "urshr", 4 * w, u32((u64(u32_1) + 32) >> 6));
 
             // VRSHRN   I       -       Rounding Shift Right Narrow
-            check(arm32 ? "vrshrn.i16" : "rshrn", 8 * w, i8((i32(i16_1) + 128) >> 8));
-            check(arm32 ? "vrshrn.i32" : "rshrn", 4 * w, i16((i32_1 + 256) >> 9));
-            check(arm32 ? "vrshrn.i64" : "rshrn", 2 * w, i32((i64_1 + 8) >> 4));
-            check(arm32 ? "vrshrn.i16" : "rshrn", 8 * w, u8((u32(u16_1) + 128) >> 8));
-            check(arm32 ? "vrshrn.i32" : "rshrn", 4 * w, u16((u64(u32_1) + 1024) >> 11));
-            // check(arm32 ? "vrshrn.i64" : "rshrn", 2 * w, u32((u64_1 + 64) >> 7));
+            if (Halide::Internal::get_llvm_version() >= 140) {
+                // LLVM14 converts RSHRN/RSHRN2 to RADDHN/RADDHN2 when the shift amount is half the width of the vector element
+                // See https://reviews.llvm.org/D116166
+                check(arm32 ? "vrshrn.i16" : "raddhn", 8 * w, i8((i32(i16_1) + 128) >> 8));
+                check(arm32 ? "vrshrn.i32" : "rshrn", 4 * w, i16((i32_1 + 256) >> 9));
+                check(arm32 ? "vrshrn.i64" : "rshrn", 2 * w, i32((i64_1 + 8) >> 4));
+                check(arm32 ? "vrshrn.i16" : "raddhn", 8 * w, u8((u32(u16_1) + 128) >> 8));
+                check(arm32 ? "vrshrn.i32" : "rshrn", 4 * w, u16((u64(u32_1) + 1024) >> 11));
+                // check(arm32 ? "vrshrn.i64" : "raddhn", 2 * w, u32((u64_1 + 64) >> 7));
+            } else {
+                check(arm32 ? "vrshrn.i16" : "rshrn", 8 * w, i8((i32(i16_1) + 128) >> 8));
+                check(arm32 ? "vrshrn.i32" : "rshrn", 4 * w, i16((i32_1 + 256) >> 9));
+                check(arm32 ? "vrshrn.i64" : "rshrn", 2 * w, i32((i64_1 + 8) >> 4));
+                check(arm32 ? "vrshrn.i16" : "rshrn", 8 * w, u8((u32(u16_1) + 128) >> 8));
+                check(arm32 ? "vrshrn.i32" : "rshrn", 4 * w, u16((u64(u32_1) + 1024) >> 11));
+                // check(arm32 ? "vrshrn.i64" : "rshrn", 2 * w, u32((u64_1 + 64) >> 7));
+            }
 
             // VRSQRTE  I, F    -       Reciprocal Square Root Estimate
             check(arm32 ? "vrsqrte.f32" : "frsqrte", 4 * w, fast_inverse_sqrt(f32_1));
@@ -1631,6 +1649,9 @@ public:
             check("vsububs", 16 * w, u8(max(i16(u8_1) - i16(u8_2), 0)));
             check("vsubuhs", 8 * w, u16(max(i32(u16_1) - i32(u16_2), 0)));
             check("vsubuws", 4 * w, u32(max(i64(u32_1) - i64(u32_2), 0)));
+            check("vsububs", 16 * w, absd(i8_1, i8_2));
+            check("vsubuhs", 16 * w, absd(i16_1, i16_2));
+            check("vsubuws", 16 * w, absd(i32_1, i32_2));
 
             // Vector Integer Average Instructions.
             check("vavgsb", 16 * w, i8((i16(i8_1) + i16(i8_2) + 1) / 2));
@@ -2002,13 +2023,8 @@ public:
                 check("v128.bitselect", 2 * w, select(bool_1, f64_1, f64_2));
 
                 // Lane-wise Population Count
-                // TODO(https://github.com/halide/Halide/issues/5130): NOT BEING GENERATED AT TRUNK
-                // check("i8x16.popcnt", 8 * w, popcount(i8_1));
-                // check("i8x16.popcnt", 8 * w, popcount(u8_1));
-                // check("i8x16.popcnt", 8 * w, popcount(i16_1));
-                // check("i8x16.popcnt", 8 * w, popcount(u16_1));
-                // check("i8x16.popcnt", 8 * w, popcount(i32_1));
-                // check("i8x16.popcnt", 8 * w, popcount(u32_1));
+                check("i8x16.popcnt", 8 * w, popcount(i8_1));
+                check("i8x16.popcnt", 8 * w, popcount(u8_1));
 
                 // Any lane true -- for VectorReduce::Or on 8-bit data
                 // All lanes true  -- for VectorReduce::And on 8-bit data
