@@ -8,7 +8,7 @@
 
 namespace Halide {
 
-template<typename T = void, int Dims = -1>
+template<typename T = void, int Dims = Halide::Runtime::BufferDimsUnconstrained>
 class Buffer;
 
 struct JITUserContext;
@@ -114,7 +114,7 @@ std::string buffer_type_name() {
  * template parameter is T = void.
  *
  * A Buffer<T, D1> can refer to a Buffer<T, D2> if D1 == D2,
- * or if D1 is -1 (meaning "dimensionality is checked at runtime, not compiletime").
+ * or if D1 is BufferDimsUnconstrained (meaning "dimensionality is checked at runtime, not compiletime").
  */
 template<typename T, int Dims>
 class Buffer {
@@ -134,7 +134,7 @@ class Buffer {
                               std::is_void<T>::value ||
                               std::is_void<T2>::value,
                           "type mismatch constructing Buffer");
-            static_assert(Dims == DynamicDims || D2 == DynamicDims || Dims == D2,
+            static_assert(Dims == BufferDimsUnconstrained || D2 == BufferDimsUnconstrained || Dims == D2,
                           "Can't convert from a Buffer with static dimensionality to a Buffer with different static dimensionality");
         } else {
             // Don't delegate to
@@ -153,8 +153,8 @@ class Buffer {
     }
 
 public:
-    static constexpr int DynamicDims = -1;
-    static_assert(Dims == DynamicDims || Dims >= 0);
+    static constexpr int BufferDimsUnconstrained = Halide::Runtime::BufferDimsUnconstrained;
+    static_assert(Dims == BufferDimsUnconstrained || Dims >= 0);
 
     typedef T ElemType;
 
