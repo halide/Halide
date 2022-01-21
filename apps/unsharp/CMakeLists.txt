@@ -12,8 +12,7 @@ set(CMAKE_CXX_EXTENSIONS NO)
 find_package(Halide REQUIRED)
 
 # Generator
-add_executable(unsharp.generator unsharp_generator.cpp)
-target_link_libraries(unsharp.generator PRIVATE Halide::Generator Halide::Tools)
+add_halide_generator(unsharp.generator SOURCES unsharp_generator.cpp)
 
 # Filters
 add_halide_library(unsharp FROM unsharp.generator)
