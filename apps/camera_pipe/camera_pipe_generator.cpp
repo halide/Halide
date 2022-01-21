@@ -216,17 +216,16 @@ public:
     // currently allow 8-bit computations
     GeneratorParam<Type> result_type{"result_type", UInt(8)};
 
-    Input<Buffer<uint16_t>> input{"input", 2};
-    Input<Buffer<float>> matrix_3200{"matrix_3200", 2};
-    Input<Buffer<float>> matrix_7000{"matrix_7000", 2};
+    Input<Buffer<uint16_t, 2>> input{"input"};
+    Input<Buffer<float, 2>> matrix_3200{"matrix_3200"};
+    Input<Buffer<float, 2>> matrix_7000{"matrix_7000"};
     Input<float> color_temp{"color_temp"};
     Input<float> gamma{"gamma"};
     Input<float> contrast{"contrast"};
     Input<float> sharpen_strength{"sharpen_strength"};
     Input<int> blackLevel{"blackLevel"};
     Input<int> whiteLevel{"whiteLevel"};
-
-    Output<Buffer<uint8_t>> processed{"processed", 3};
+    Output<Buffer<uint8_t, 3>> processed{"processed"};
 
     void generate();
 

@@ -5,10 +5,12 @@
 
 using Halide::Runtime::Buffer;
 
-#define assert_no_error(func)                                           \
-    if (func != 0) {                                                    \
-        std::cerr << "ERROR! Halide kernel returned non-zero value.\n"; \
-    }
+#define assert_no_error(func)                                               \
+    do {                                                                    \
+        if (func != 0) {                                                    \
+            std::cerr << "ERROR! Halide kernel returned non-zero value.\n"; \
+        }                                                                   \
+    } while (0)
 
 namespace {
 

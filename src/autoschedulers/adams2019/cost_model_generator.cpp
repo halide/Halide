@@ -15,38 +15,38 @@ using Halide::Derivative;
 // A model weight is either just an input, or an input and an output
 // (the updated weights and the ADAM state) depending on whether we're
 // doing inference or training.
-template<bool training>
+template<int D, bool training>
 struct ModelWeight;
 
-template<>
-struct ModelWeight<false> : public GeneratorInput<Buffer<float>> {
-    ModelWeight(const std::string &name, int dim)
-        : GeneratorInput<Buffer<float>>(name, dim) {
+template<int D>
+struct ModelWeight<D, false> : public GeneratorInput<Buffer<float, D>> {
+    explicit ModelWeight(const std::string &name)
+        : GeneratorInput<Buffer<float, D>>(name) {
     }
     void backprop(const Derivative &d, const Expr &learning_rate, const Expr &timestep) {
     }
     void set_shape(int s0 = 0, int s1 = 0, int s2 = 0) {
         if (s0) {
-            dim(0).set_bounds(0, s0);
+            this->dim(0).set_bounds(0, s0);
         }
         if (s1) {
-            dim(1).set_bounds(0, s1);
+            this->dim(1).set_bounds(0, s1);
         }
         if (s2) {
-            dim(2).set_bounds(0, s2);
+            this->dim(2).set_bounds(0, s2);
         }
     }
 };
 
-template<>
-struct ModelWeight<true> : public GeneratorInput<Buffer<float>> {
-    GeneratorOutput<Buffer<float>> grad;
+template<int D>
+struct ModelWeight<D, true> : public GeneratorInput<Buffer<float, D>> {
+    GeneratorOutput<Buffer<float, D + 1>> grad;
 
-    ModelWeight(const std::string &name, int dim)
-        : GeneratorInput<Buffer<float>>(name, dim), grad("updated_" + name, dim + 1) {
+    explicit ModelWeight(const std::string &name)
+        : GeneratorInput<Buffer<float, D>>(name), grad("updated_" + name) {
     }
     void backprop(const Derivative &d, const Expr &learning_rate, const Expr &timestep) {
-        std::vector<Expr> args(dimensions() + 1);
+        std::vector<Expr> args(this->dimensions() + 1);
         for (auto &e : args) {
             e = Var();
         }
@@ -88,31 +88,31 @@ struct ModelWeight<true> : public GeneratorInput<Buffer<float>> {
 
     void set_shape(int s0 = 0, int s1 = 0, int s2 = 0) {
         if (s0) {
-            dim(0).set_bounds(0, s0);
-            dim(0).set_estimate(0, s0);
+            this->dim(0).set_bounds(0, s0);
+            this->dim(0).set_estimate(0, s0);
             grad.dim(0).set_bounds(0, s0);
             grad.dim(0).set_estimate(0, s0);
             grad.bound(grad.args()[0], 0, s0);
             grad.set_estimate(grad.args()[0], 0, s0);
         }
         if (s1) {
-            dim(1).set_bounds(0, s1);
-            dim(1).set_estimate(0, s1);
+            this->dim(1).set_bounds(0, s1);
+            this->dim(1).set_estimate(0, s1);
             grad.dim(1).set_bounds(0, s1);
             grad.dim(1).set_estimate(0, s1);
             grad.bound(grad.args()[1], 0, s1);
             grad.set_estimate(grad.args()[1], 0, s1);
         }
         if (s2) {
-            dim(2).set_bounds(0, s2);
-            dim(2).set_estimate(0, s2);
+            this->dim(2).set_bounds(0, s2);
+            this->dim(2).set_estimate(0, s2);
             grad.dim(2).set_bounds(0, s2);
             grad.dim(2).set_estimate(0, s2);
             grad.bound(grad.args()[2], 0, s2);
             grad.set_estimate(grad.args()[2], 0, s2);
         }
-        grad.dim(dimensions()).set_bounds(0, 4);
-        grad.dim(dimensions()).set_estimate(0, 4);
+        grad.dim(this->dimensions()).set_bounds(0, 4);
+        grad.dim(this->dimensions()).set_estimate(0, 4);
     }
 };
 
@@ -127,48 +127,50 @@ public:
     using Generator<CostModel<training>>::get_pipeline;
 
     // Number of pipeline stages
-    Input<int> num_stages{"num_stages", 1};
+    Input<int> num_stages{"num_stages"};
 
     // Batch size. Every item in the batch is a different schedule for
     // the same algorithm.
-    Input<int> batch_size{"batch_size", 1};
+    Input<int> batch_size{"batch_size"};
 
     // Number of cores on the target machine. Used to reason about idle cores.
-    Input<int> num_cores{"num_cores", 1};
+    Input<int> num_cores{"num_cores"};
 
     // Algorithm-specific features
-    Input<Buffer<float>> pipeline_features{"pipeline_features", 3};
+    Input<Buffer<float, 3>> pipeline_features{"pipeline_features"};
 
     // Schedule-specific features
-    Input<Buffer<float>> schedule_features{"schedule_features", 3};
+    Input<Buffer<float, 3>> schedule_features{"schedule_features"};
 
     // Network weights. We use some template-fu so that they are
     // inputs in inference mode, and inputs and outputs in training
     // mode.
-    using Weight = ModelWeight<training>;
-    Weight head1_filter{"head1_filter", 3};
-    Weight head1_bias{"head1_bias", 1};
-    Weight head2_filter{"head2_filter", 2};
-    Weight head2_bias{"head2_bias", 1};
-    Weight filter1{"filter1", 2};
-    Weight bias1{"bias1", 1};
+    template<int D>
+    using Weight = ModelWeight<D, training>;
+
+    Weight<3> head1_filter{"head1_filter"};
+    Weight<1> head1_bias{"head1_bias"};
+    Weight<2> head2_filter{"head2_filter"};
+    Weight<1> head2_bias{"head2_bias"};
+    Weight<2> filter1{"filter1"};
+    Weight<1> bias1{"bias1"};
 
     // Some extra inputs for training mode.
-    Input<float> learning_rate{"learning_rate", 1.0f};
-    Input<int> timestep{"timestep", 0};  // Needed by ADAM
+    Input<float> learning_rate{"learning_rate"};
+    Input<int> timestep{"timestep"};  // Needed by ADAM
 
     // The index of the fastest schedule in the batch. Used as a
     // reference point for computing relative throughput.
-    Input<int> reference{"reference", 0};
+    Input<int> reference{"reference"};
 
     // The true runtimes obtained by benchmarking.
-    Input<Buffer<float>> true_runtime{"true_runtime", 1};
+    Input<Buffer<float, 1>> true_runtime{"true_runtime"};
 
     // The predicted runtimes
-    Output<Buffer<float>> prediction_output{"prediction_output", 1};
+    Output<Buffer<float, 1>> prediction_output{"prediction_output"};
 
     // The loss. L2 on relative throughput.
-    Output<Buffer<float>> loss_output{"loss_output", 0};
+    Output<Buffer<float, 0>> loss_output{"loss_output"};
 
     // Zero pad alone the last dimension of a Func
     Func pad_stages(const Func &f, const Expr &stages) {
@@ -448,13 +450,12 @@ public:
             // to the model weights.
             Derivative d_loss_d = propagate_adjoints(loss_output);
 
-            Weight *weights[] = {&head1_filter, &head1_bias,
-                                 &head2_filter, &head2_bias,
-                                 &filter1, &bias1};
-
-            for (Weight *w : weights) {
-                w->backprop(d_loss_d, learning_rate, timestep);
-            }
+            head1_filter.backprop(d_loss_d, learning_rate, timestep);
+            head1_bias.backprop(d_loss_d, learning_rate, timestep);
+            head2_filter.backprop(d_loss_d, learning_rate, timestep);
+            head2_bias.backprop(d_loss_d, learning_rate, timestep);
+            filter1.backprop(d_loss_d, learning_rate, timestep);
+            bias1.backprop(d_loss_d, learning_rate, timestep);
         }
 
         // All the model weight shapes are statically known, so we

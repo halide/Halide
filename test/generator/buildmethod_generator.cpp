@@ -10,7 +10,7 @@ class BuildMethod : public Halide::Generator<BuildMethod> {
 public:
     GeneratorParam<float> compiletime_factor{"compiletime_factor", 1, 0, 100};
 
-    Input<Buffer<float>> input{"input", 3};
+    Input<Buffer<float, 3>> input{"input"};
     Input<float> runtime_factor{"runtime_factor", 1.0};
 
     Func build() {
