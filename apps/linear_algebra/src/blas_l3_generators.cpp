@@ -18,17 +18,17 @@ public:
     template<typename T2>
     using Output = typename Base::template Output<T2>;
 
-    GeneratorParam<bool> transpose_A_ = {"transpose_A", false};
-    GeneratorParam<bool> transpose_B_ = {"transpose_B", false};
+    GeneratorParam<bool> transpose_A_{"transpose_A", false};
+    GeneratorParam<bool> transpose_B_{"transpose_B", false};
 
     // Standard ordering of parameters in GEMM functions.
-    Input<T> a_ = {"a_", 1};
-    Input<Buffer<T>> A_ = {"A_", 2};
-    Input<Buffer<T>> B_ = {"B_", 2};
-    Input<T> b_ = {"b_", 1};
-    Input<Buffer<T>> C_ = {"C_", 2};
+    Input<T> a_{"a_", 1};
+    Input<Buffer<T>> A_{"A_", 2};
+    Input<Buffer<T>> B_{"B_", 2};
+    Input<T> b_{"b_", 1};
+    Input<Buffer<T>> C_{"C_", 2};
 
-    Output<Buffer<T>> result_ = {"result", 2};
+    Output<Buffer<T>> result_{"result", 2};
 
     void generate() {
         // Matrices are interpreted as column-major by default. The

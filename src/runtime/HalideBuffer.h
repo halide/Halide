@@ -584,7 +584,7 @@ private:
     }
 
 public:
-    /** Determine if if an Buffer<T, D> can be constructed from some other Buffer type.
+    /** Determine if a Buffer<T, D> can be constructed from some other Buffer type.
      * If this can be determined at compile time, fail with a static assert; otherwise
      * return a boolean based on runtime typing. */
     template<typename T2, int D2>
