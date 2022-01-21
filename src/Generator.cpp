@@ -2338,7 +2338,7 @@ void generator_test() {
         static_assert(std::is_same<decltype(tester_instance.func_array_output[0]), Func &>::value, "type mismatch");
 
         static_assert(std::is_same<decltype(tester_instance.buffer_array_input[0]), ImageParam>::value, "type mismatch");
-        static_assert(std::is_same<decltype(tester_instance.buffer_array_output[0]), const Func &>::value, "type mismatch");
+        static_assert(std::is_same<decltype(tester_instance.buffer_array_output[0]), Func>::value, "type mismatch");
     }
 
     class GPTester : public Generator<GPTester> {
