@@ -1256,6 +1256,10 @@ auto operator!(const GeneratorParam<T> &a) -> decltype(!(T)a) {
 
 namespace Internal {
 
+// An enum used solely to overload ctors for internal use by configure() methods
+// that need to call otherwise-deprecated methods internally.
+enum class ConfigureCtor { Value = 0 };
+
 template<typename T2>
 class GeneratorInput_Buffer;
 
@@ -1678,18 +1682,36 @@ public:
                 TBase::has_static_dimensions ? TBase::static_dimensions() : -1) {
     }
 
+    HALIDE_ATTRIBUTE_DEPRECATED("Prefer to specify static Buffer type-and-dimensions with Input<Buffer<T, D>> instead.")
     GeneratorInput_Buffer(const std::string &name, const Type &t, int d)
         : Super(name, IOKind::Buffer, {t}, d) {
-        static_assert(!TBase::has_static_halide_type, "You can only specify a Type argument for Input<Buffer<T>> if T is void or omitted.");
+        static_assert(!TBase::has_static_halide_type, "You can only specify a Type argument for Input<Buffer<T, D>> if T is void or omitted.");
         static_assert(!TBase::has_static_dimensions, "You can only specify a dimension argument for Input<Buffer<T, D>> if D is -1 or omitted.");
     }
 
+    HALIDE_ATTRIBUTE_DEPRECATED("Prefer to specify static Buffer type with Input<Buffer<T, -1>> instead.")
     GeneratorInput_Buffer(const std::string &name, const Type &t)
         : Super(name, IOKind::Buffer, {t}, -1) {
-        static_assert(!TBase::has_static_halide_type, "You can only specify a Type argument for Input<Buffer<T>> if T is void or omitted.");
+        static_assert(!TBase::has_static_halide_type, "You can only specify a Type argument for Input<Buffer<T, D>> if T is void or omitted.");
     }
 
+    HALIDE_ATTRIBUTE_DEPRECATED("Prefer to specify static Buffer dimensions with Input<Buffer<void, D>> instead.")
     GeneratorInput_Buffer(const std::string &name, int d)
+        : Super(name, IOKind::Buffer,
+                TBase::has_static_halide_type ? std::vector<Type>{TBase::static_halide_type()} : std::vector<Type>{},
+                d) {
+        static_assert(!TBase::has_static_dimensions, "You can only specify a dimension argument for Input<Buffer<T, D>> if D is -1 or omitted.");
+    }
+
+    // Only for internal use by add_input(), to dodge the deprecation warnings.
+    GeneratorInput_Buffer(ConfigureCtor c, const std::string &name, const Type &t, int d)
+        : Super(name, IOKind::Buffer, {t}, d) {
+        static_assert(!TBase::has_static_halide_type, "You can only specify a Type argument for Input<Buffer<T, D>> if T is void or omitted.");
+        static_assert(!TBase::has_static_dimensions, "You can only specify a dimension argument for Input<Buffer<T, D>> if D is -1 or omitted.");
+    }
+
+    // Only for internal use by add_input(), to dodge the deprecation warnings.
+    GeneratorInput_Buffer(ConfigureCtor c, const std::string &name, int d)
         : Super(name, IOKind::Buffer,
                 TBase::has_static_halide_type ? std::vector<Type>{TBase::static_halide_type()} : std::vector<Type>{},
                 d) {
@@ -1861,6 +1883,11 @@ public:
     GeneratorInput_Func(size_t array_size, const std::string &name)
         : Super(array_size, name, IOKind::Function, {}, -1) {
     }
+
+    // Only for internal use by add_input(), to dodge the deprecation warnings.
+    // GeneratorInput_Func(Internal::ConfigureCtor c, const std::string &name, const Type &t, int d)
+    //     : Super(name, IOKind::Function, {t}, d) {
+    // }
 
     template<typename... Args>
     Expr operator()(Args &&...args) const {
@@ -2226,6 +2253,16 @@ public:
     explicit GeneratorInput(size_t array_size, const std::string &name)
         : Super(array_size, name) {
     }
+
+    // Only for internal use by add_input(), to dodge the deprecation warnings.
+    explicit GeneratorInput(Internal::ConfigureCtor c, const std::string &name, const Type &t, int d)
+        : Super(c, name, t, d) {
+    }
+
+    // Only for internal use by add_input(), to dodge the deprecation warnings.
+    explicit GeneratorInput(Internal::ConfigureCtor c, const std::string &name, int d)
+        : Super(c, name, d) {
+    }
 };
 
 namespace Internal {
@@ -2483,6 +2520,7 @@ protected:
                 TBase::has_static_dimensions ? TBase::static_dimensions() : -1) {
     }
 
+    HALIDE_ATTRIBUTE_DEPRECATED("Prefer to specify static Buffer type-and-dimensions with Output<Buffer<T, D>> instead.")
     GeneratorOutput_Buffer(const std::string &name, const std::vector<Type> &t, int d)
         : Super(name, IOKind::Buffer, t, d) {
         internal_assert(!t.empty());
@@ -2491,12 +2529,20 @@ protected:
         static_assert(!TBase::has_static_dimensions, "You can only specify a dimension argument for Output<Buffer<T, D>> if D is -1 or omitted.");
     }
 
+    // TODO(srj): we can't deprecate this one yet, because it's the only way to specify a Tupled output.
+    // Make it a runtime check instead for now.
+    // HALIDE_ATTRIBUTE_DEPRECATED("Prefer to specify static Buffer type with Output<Buffer<T, -1>> instead.")
     GeneratorOutput_Buffer(const std::string &name, const std::vector<Type> &t)
         : Super(name, IOKind::Buffer, t, -1) {
         internal_assert(!t.empty());
-        static_assert(!TBase::has_static_halide_type, "You can only specify a Type argument for Output<Buffer<T, D>> if T is void or omitted.");
+        if (t.size() < 2) {
+            user_warning << "Deprecated: Prefer to specify static Buffer type with Output<Buffer<T, -1>> instead.";
+        }
+        // TODO: see above, has to be a runtime check for now.
+        user_assert(!TBase::has_static_halide_type) << "You can only specify a Type argument for Output<Buffer<T, D>> if T is void or omitted.";
     }
 
+    HALIDE_ATTRIBUTE_DEPRECATED("Prefer to specify static Buffer dimensions with Output<Buffer<void, D>> instead.")
     GeneratorOutput_Buffer(const std::string &name, int d)
         : Super(name, IOKind::Buffer,
                 TBase::has_static_halide_type ? std::vector<Type>{TBase::static_halide_type()} : std::vector<Type>{},
@@ -2511,6 +2557,7 @@ protected:
                 TBase::has_static_dimensions ? TBase::static_dimensions() : -1) {
     }
 
+    HALIDE_ATTRIBUTE_DEPRECATED("Prefer to specify static Buffer type-and-dimensions with Output<Buffer<T, D>> instead.")
     GeneratorOutput_Buffer(size_t array_size, const std::string &name, const std::vector<Type> &t, int d)
         : Super(array_size, name, IOKind::Buffer, t, d) {
         internal_assert(!t.empty());
@@ -2519,18 +2566,27 @@ protected:
         static_assert(!TBase::has_static_dimensions, "You can only specify a dimension argument for Output<Buffer<T, D>> if D is -1 or omitted.");
     }
 
+    HALIDE_ATTRIBUTE_DEPRECATED("Prefer to specify static Buffer type with Output<Buffer<T, -1>> instead.")
     GeneratorOutput_Buffer(size_t array_size, const std::string &name, const std::vector<Type> &t)
         : Super(array_size, name, IOKind::Buffer, t, -1) {
         internal_assert(!t.empty());
         static_assert(!TBase::has_static_halide_type, "You can only specify a Type argument for Output<Buffer<T, D>> if T is void or omitted.");
     }
 
+    HALIDE_ATTRIBUTE_DEPRECATED("Prefer to specify static Buffer dimensions with Output<Buffer<void, D>> instead.")
     GeneratorOutput_Buffer(size_t array_size, const std::string &name, int d)
         : Super(array_size, name, IOKind::Buffer,
                 TBase::has_static_halide_type ? std::vector<Type>{TBase::static_halide_type()} : std::vector<Type>{},
                 d) {
         internal_assert(d != -1);
         static_assert(!TBase::has_static_dimensions, "You can only specify a dimension argument for Output<Buffer<T, D>> if D is -1 or omitted.");
+    }
+
+    // Only for internal use by add_input(), to dodge the deprecation warnings.
+    GeneratorOutput_Buffer(ConfigureCtor c, const std::string &name, const std::vector<Type> &t, int d)
+        : Super(name, IOKind::Buffer, {t}, d) {
+        static_assert(!TBase::has_static_halide_type, "You can only specify a Type argument for Input<Buffer<T>> if T is void or omitted.");
+        static_assert(!TBase::has_static_dimensions, "You can only specify a dimension argument for Input<Buffer<T, D>> if D is -1 or omitted.");
     }
 
     HALIDE_NO_USER_CODE_INLINE std::string get_c_type() const override {
@@ -2801,6 +2857,16 @@ public:
 
     explicit GeneratorOutput(size_t array_size, const std::string &name, const std::vector<Type> &t, int d)
         : Super(array_size, name, t, d) {
+    }
+
+    // Only for internal use by add_output(), to dodge the deprecation warnings.
+    explicit GeneratorOutput(Internal::ConfigureCtor c, const std::string &name, const Type &t, int d)
+        : Super(c, name, {t}, d) {
+    }
+
+    // Only for internal use by add_input(), to dodge the deprecation warnings.
+    explicit GeneratorOutput(Internal::ConfigureCtor c, const std::string &name, int d)
+        : Super(c, name, d) {
     }
 
     // TODO: This used to take the buffer as a const ref. This no longer works as
@@ -3238,9 +3304,9 @@ public:
     // calling from generate() as long as all Outputs have been defined.)
     Pipeline get_pipeline();
 
-    // Create Input<Buffer> or Input<Func> with dynamic type
+    // Create Input<Func> with dynamic type & dimensions
     template<typename T,
-             typename std::enable_if<!std::is_arithmetic<T>::value>::type * = nullptr>
+             typename std::enable_if<std::is_same<T, Halide::Func>::value>::type * = nullptr>
     GeneratorInput<T> *add_input(const std::string &name, const Type &t, int dimensions) {
         check_exact_phase(GeneratorBase::ConfigureCalled);
         auto *p = new GeneratorInput<T>(name, t, dimensions);
@@ -3250,12 +3316,42 @@ public:
         return p;
     }
 
-    // Create a Input<Buffer> or Input<Func> with compile-time type
+    // Create Input<Buffer> with dynamic type & dimensions
     template<typename T,
-             typename std::enable_if<T::has_static_halide_type>::type * = nullptr>
-    GeneratorInput<T> *add_input(const std::string &name, int dimensions) {
+             typename std::enable_if<!std::is_arithmetic<T>::value && !std::is_same<T, Halide::Func>::value>::type * = nullptr>
+    GeneratorInput<T> *add_input(const std::string &name, const Type &t, int dimensions) {
+        static_assert(!T::has_static_dimensions, "You can only call this version of add_input() for a Buffer<T, D> where T is void or omitted .");
+        static_assert(!T::has_static_dimensions, "You can only call this version of add_input() for a Buffer<T, D> where D is -1 or omitted.");
         check_exact_phase(GeneratorBase::ConfigureCalled);
-        auto *p = new GeneratorInput<T>(name, dimensions);
+        auto *p = new GeneratorInput<T>(ConfigureCtor::Value, name, t, dimensions);
+        p->generator = this;
+        param_info_ptr->owned_extras.push_back(std::unique_ptr<Internal::GIOBase>(p));
+        param_info_ptr->filter_inputs.push_back(p);
+        return p;
+    }
+
+    // Create Input<Buffer> with compile-time type
+    template<typename T,
+             typename std::enable_if<!std::is_arithmetic<T>::value && !std::is_same<T, Halide::Func>::value>::type * = nullptr>
+    GeneratorInput<T> *add_input(const std::string &name, int dimensions) {
+        static_assert(T::has_static_halide_type, "You can only call this version of add_input() for a Buffer<T, D> where T is not void.");
+        static_assert(!T::has_static_dimensions, "You can only call this version of add_input() for a Buffer<T, D> where D is -1 or omitted.");
+        check_exact_phase(GeneratorBase::ConfigureCalled);
+        auto *p = new GeneratorInput<T>(ConfigureCtor::Value, name, dimensions);
+        p->generator = this;
+        param_info_ptr->owned_extras.push_back(std::unique_ptr<Internal::GIOBase>(p));
+        param_info_ptr->filter_inputs.push_back(p);
+        return p;
+    }
+
+    // Create Input<Buffer> with compile-time type & dimensions
+    template<typename T,
+             typename std::enable_if<!std::is_arithmetic<T>::value && !std::is_same<T, Halide::Func>::value>::type * = nullptr>
+    GeneratorInput<T> *add_input(const std::string &name) {
+        static_assert(T::has_static_dimensions, "You can only call this version of add_input() for a Buffer<T, D> where T is not void.");
+        static_assert(T::has_static_dimensions, "You can only call this version of add_input() for a Buffer<T, D> where D is not -1.");
+        check_exact_phase(GeneratorBase::ConfigureCalled);
+        auto *p = new GeneratorInput<T>(name);
         p->generator = this;
         param_info_ptr->owned_extras.push_back(std::unique_ptr<Internal::GIOBase>(p));
         param_info_ptr->filter_inputs.push_back(p);
@@ -3273,7 +3369,6 @@ public:
         param_info_ptr->filter_inputs.push_back(p);
         return p;
     }
-
     // Create Input<Expr> with dynamic type
     template<typename T,
              typename std::enable_if<std::is_same<T, Expr>::value>::type * = nullptr>
@@ -3287,9 +3382,9 @@ public:
         return p;
     }
 
-    // Create Output<Buffer> or Output<Func> with dynamic type
+    // Create Output<Func> with dynamic type & dimensions
     template<typename T,
-             typename std::enable_if<!std::is_arithmetic<T>::value>::type * = nullptr>
+             typename std::enable_if<std::is_same<T, Halide::Func>::value>::type * = nullptr>
     GeneratorOutput<T> *add_output(const std::string &name, const Type &t, int dimensions) {
         check_exact_phase(GeneratorBase::ConfigureCalled);
         auto *p = new GeneratorOutput<T>(name, t, dimensions);
@@ -3299,12 +3394,42 @@ public:
         return p;
     }
 
-    // Create a Output<Buffer> or Output<Func> with compile-time type
+    // Create Output<Buffer> with dynamic type & dimensions
     template<typename T,
-             typename std::enable_if<T::has_static_halide_type>::type * = nullptr>
-    GeneratorOutput<T> *add_output(const std::string &name, int dimensions) {
+             typename std::enable_if<!std::is_arithmetic<T>::value && !std::is_same<T, Halide::Func>::value>::type * = nullptr>
+    GeneratorOutput<T> *add_output(const std::string &name, const Type &t, int dimensions) {
+        static_assert(!T::has_static_dimensions, "You can only call this version of add_output() for a Buffer<T, D> where T is void or omitted .");
+        static_assert(!T::has_static_dimensions, "You can only call this version of add_output() for a Buffer<T, D> where D is -1 or omitted.");
         check_exact_phase(GeneratorBase::ConfigureCalled);
-        auto *p = new GeneratorOutput<T>(name, dimensions);
+        auto *p = new GeneratorOutput<T>(ConfigureCtor::Value, name, t, dimensions);
+        p->generator = this;
+        param_info_ptr->owned_extras.push_back(std::unique_ptr<Internal::GIOBase>(p));
+        param_info_ptr->filter_outputs.push_back(p);
+        return p;
+    }
+
+    // Create Output<Buffer> with compile-time type
+    template<typename T,
+             typename std::enable_if<!std::is_arithmetic<T>::value && !std::is_same<T, Halide::Func>::value>::type * = nullptr>
+    GeneratorOutput<T> *add_output(const std::string &name, int dimensions) {
+        static_assert(T::has_static_halide_type, "You can only call this version of add_output() for a Buffer<T, D> where T is not void.");
+        static_assert(!T::has_static_dimensions, "You can only call this version of add_output() for a Buffer<T, D> where D is -1 or omitted.");
+        check_exact_phase(GeneratorBase::ConfigureCalled);
+        auto *p = new GeneratorOutput<T>(ConfigureCtor::Value, name, dimensions);
+        p->generator = this;
+        param_info_ptr->owned_extras.push_back(std::unique_ptr<Internal::GIOBase>(p));
+        param_info_ptr->filter_outputs.push_back(p);
+        return p;
+    }
+
+    // Create Output<Buffer> with compile-time type & dimensions
+    template<typename T,
+             typename std::enable_if<!std::is_arithmetic<T>::value && !std::is_same<T, Halide::Func>::value>::type * = nullptr>
+    GeneratorOutput<T> *add_output(const std::string &name) {
+        static_assert(T::has_static_dimensions, "You can only call this version of add_output() for a Buffer<T, D> where T is not void.");
+        static_assert(T::has_static_dimensions, "You can only call this version of add_output() for a Buffer<T, D> where D is not -1.");
+        check_exact_phase(GeneratorBase::ConfigureCalled);
+        auto *p = new GeneratorOutput<T>(name);
         p->generator = this;
         param_info_ptr->owned_extras.push_back(std::unique_ptr<Internal::GIOBase>(p));
         param_info_ptr->filter_outputs.push_back(p);
