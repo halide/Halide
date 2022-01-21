@@ -163,23 +163,23 @@ void define_enums(py::module &m) {
         .value("Float", Type::Float)
         .value("Handle", Type::Handle);
 
-    py::enum_<OutputType>(m, "OutputType")
-        .value("assembly", OutputType::assembly)
-        .value("bitcode", OutputType::bitcode)
-        .value("c_header", OutputType::c_header)
-        .value("c_source", OutputType::c_source)
-        .value("cpp_stub", OutputType::cpp_stub)
-        .value("featurization", OutputType::featurization)
-        .value("llvm_assembly", OutputType::llvm_assembly)
-        .value("object", OutputType::object)
-        .value("python_extension", OutputType::python_extension)
-        .value("pytorch_wrapper", OutputType::pytorch_wrapper)
-        .value("registration", OutputType::registration)
-        .value("schedule", OutputType::schedule)
-        .value("static_library", OutputType::static_library)
-        .value("stmt", OutputType::stmt)
-        .value("stmt_html", OutputType::stmt_html)
-        .value("compiler_log", OutputType::compiler_log);
+    py::enum_<OutputFileType>(m, "OutputFileType")
+        .value("assembly", OutputFileType::assembly)
+        .value("bitcode", OutputFileType::bitcode)
+        .value("c_header", OutputFileType::c_header)
+        .value("c_source", OutputFileType::c_source)
+        .value("cpp_stub", OutputFileType::cpp_stub)
+        .value("featurization", OutputFileType::featurization)
+        .value("llvm_assembly", OutputFileType::llvm_assembly)
+        .value("object", OutputFileType::object)
+        .value("python_extension", OutputFileType::python_extension)
+        .value("pytorch_wrapper", OutputFileType::pytorch_wrapper)
+        .value("registration", OutputFileType::registration)
+        .value("schedule", OutputFileType::schedule)
+        .value("static_library", OutputFileType::static_library)
+        .value("stmt", OutputFileType::stmt)
+        .value("stmt_html", OutputFileType::stmt_html)
+        .value("compiler_log", OutputFileType::compiler_log);
 }
 
 }  // namespace PythonBindings

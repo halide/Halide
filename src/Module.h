@@ -24,7 +24,7 @@ class Buffer;
 struct Target;
 
 /** Enums specifying various kinds of outputs that can be produced from a Halide Pipeline. */
-enum class OutputType {
+enum class OutputFileType {
     assembly,
     bitcode,
     c_header,
@@ -43,40 +43,40 @@ enum class OutputType {
     stmt_html,
 };
 
-class HALIDE_ATTRIBUTE_DEPRECATED("Use OutputType instead of Output") Output {
+class HALIDE_ATTRIBUTE_DEPRECATED("Use OutputFileType instead of Output") Output {
 public:
-    HALIDE_ATTRIBUTE_DEPRECATED("Use OutputType instead of Output")
-    static constexpr OutputType assembly = OutputType::assembly;
-    HALIDE_ATTRIBUTE_DEPRECATED("Use OutputType instead of Output")
-    static constexpr OutputType bitcode = OutputType::bitcode;
-    HALIDE_ATTRIBUTE_DEPRECATED("Use OutputType instead of Output")
-    static constexpr OutputType c_header = OutputType::c_header;
-    HALIDE_ATTRIBUTE_DEPRECATED("Use OutputType instead of Output")
-    static constexpr OutputType c_source = OutputType::c_source;
-    HALIDE_ATTRIBUTE_DEPRECATED("Use OutputType instead of Output")
-    static constexpr OutputType compiler_log = OutputType::compiler_log;
-    HALIDE_ATTRIBUTE_DEPRECATED("Use OutputType instead of Output")
-    static constexpr OutputType cpp_stub = OutputType::cpp_stub;
-    HALIDE_ATTRIBUTE_DEPRECATED("Use OutputType instead of Output")
-    static constexpr OutputType featurization = OutputType::featurization;
-    HALIDE_ATTRIBUTE_DEPRECATED("Use OutputType instead of Output")
-    static constexpr OutputType llvm_assembly = OutputType::llvm_assembly;
-    HALIDE_ATTRIBUTE_DEPRECATED("Use OutputType instead of Output")
-    static constexpr OutputType object = OutputType::object;
-    HALIDE_ATTRIBUTE_DEPRECATED("Use OutputType instead of Output")
-    static constexpr OutputType python_extension = OutputType::python_extension;
-    HALIDE_ATTRIBUTE_DEPRECATED("Use OutputType instead of Output")
-    static constexpr OutputType pytorch_wrapper = OutputType::pytorch_wrapper;
-    HALIDE_ATTRIBUTE_DEPRECATED("Use OutputType instead of Output")
-    static constexpr OutputType registration = OutputType::registration;
-    HALIDE_ATTRIBUTE_DEPRECATED("Use OutputType instead of Output")
-    static constexpr OutputType schedule = OutputType::schedule;
-    HALIDE_ATTRIBUTE_DEPRECATED("Use OutputType instead of Output")
-    static constexpr OutputType static_library = OutputType::static_library;
-    HALIDE_ATTRIBUTE_DEPRECATED("Use OutputType instead of Output")
-    static constexpr OutputType stmt = OutputType::stmt;
-    HALIDE_ATTRIBUTE_DEPRECATED("Use OutputType instead of Output")
-    static constexpr OutputType stmt_html = OutputType::stmt_html;
+    HALIDE_ATTRIBUTE_DEPRECATED("Use OutputFileType instead of Output")
+    static constexpr OutputFileType assembly = OutputFileType::assembly;
+    HALIDE_ATTRIBUTE_DEPRECATED("Use OutputFileType instead of Output")
+    static constexpr OutputFileType bitcode = OutputFileType::bitcode;
+    HALIDE_ATTRIBUTE_DEPRECATED("Use OutputFileType instead of Output")
+    static constexpr OutputFileType c_header = OutputFileType::c_header;
+    HALIDE_ATTRIBUTE_DEPRECATED("Use OutputFileType instead of Output")
+    static constexpr OutputFileType c_source = OutputFileType::c_source;
+    HALIDE_ATTRIBUTE_DEPRECATED("Use OutputFileType instead of Output")
+    static constexpr OutputFileType compiler_log = OutputFileType::compiler_log;
+    HALIDE_ATTRIBUTE_DEPRECATED("Use OutputFileType instead of Output")
+    static constexpr OutputFileType cpp_stub = OutputFileType::cpp_stub;
+    HALIDE_ATTRIBUTE_DEPRECATED("Use OutputFileType instead of Output")
+    static constexpr OutputFileType featurization = OutputFileType::featurization;
+    HALIDE_ATTRIBUTE_DEPRECATED("Use OutputFileType instead of Output")
+    static constexpr OutputFileType llvm_assembly = OutputFileType::llvm_assembly;
+    HALIDE_ATTRIBUTE_DEPRECATED("Use OutputFileType instead of Output")
+    static constexpr OutputFileType object = OutputFileType::object;
+    HALIDE_ATTRIBUTE_DEPRECATED("Use OutputFileType instead of Output")
+    static constexpr OutputFileType python_extension = OutputFileType::python_extension;
+    HALIDE_ATTRIBUTE_DEPRECATED("Use OutputFileType instead of Output")
+    static constexpr OutputFileType pytorch_wrapper = OutputFileType::pytorch_wrapper;
+    HALIDE_ATTRIBUTE_DEPRECATED("Use OutputFileType instead of Output")
+    static constexpr OutputFileType registration = OutputFileType::registration;
+    HALIDE_ATTRIBUTE_DEPRECATED("Use OutputFileType instead of Output")
+    static constexpr OutputFileType schedule = OutputFileType::schedule;
+    HALIDE_ATTRIBUTE_DEPRECATED("Use OutputFileType instead of Output")
+    static constexpr OutputFileType static_library = OutputFileType::static_library;
+    HALIDE_ATTRIBUTE_DEPRECATED("Use OutputFileType instead of Output")
+    static constexpr OutputFileType stmt = OutputFileType::stmt;
+    HALIDE_ATTRIBUTE_DEPRECATED("Use OutputFileType instead of Output")
+    static constexpr OutputFileType stmt_html = OutputFileType::stmt_html;
 };  // namespace Output
 
 /** Type of linkage a function in a lowered Halide module can have.
@@ -108,7 +108,7 @@ struct OutputInfo {
     //
     bool is_multi{false};
 };
-std::map<OutputType, const OutputInfo> get_output_info(const Target &target);
+std::map<OutputFileType, const OutputInfo> get_output_info(const Target &target);
 
 /** Definition of an argument to a LoweredFunc. This is similar to
  * Argument, except it enables passing extra information useful to
@@ -212,7 +212,7 @@ public:
 
     /** Compile a halide Module to variety of outputs, depending on
      * the fields set in output_files. */
-    void compile(const std::map<OutputType, std::string> &output_files) const;
+    void compile(const std::map<OutputFileType, std::string> &output_files) const;
 
     /** Compile a halide Module to in-memory object code. Currently
      * only supports LLVM based compilation, but should be extended to
@@ -250,15 +250,15 @@ void compile_standalone_runtime(const std::string &object_filename, const Target
  * for a given target. For use with Target::NoRuntime. Standalone runtimes are
  * only compatible with pipelines compiled by the same build of Halide used to
  * call this function. Return a map with just the actual outputs filled in
- * (typically, OutputType::object and/or OutputType::static_library).
+ * (typically, OutputFileType::object and/or OutputFileType::static_library).
  */
-std::map<OutputType, std::string> compile_standalone_runtime(const std::map<OutputType, std::string> &output_files, const Target &t);
+std::map<OutputFileType, std::string> compile_standalone_runtime(const std::map<OutputFileType, std::string> &output_files, const Target &t);
 
 using ModuleFactory = std::function<Module(const std::string &fn_name, const Target &target)>;
 using CompilerLoggerFactory = std::function<std::unique_ptr<Internal::CompilerLogger>(const std::string &fn_name, const Target &target)>;
 
 void compile_multitarget(const std::string &fn_name,
-                         const std::map<OutputType, std::string> &output_files,
+                         const std::map<OutputFileType, std::string> &output_files,
                          const std::vector<Target> &targets,
                          const std::vector<std::string> &suffixes,
                          const ModuleFactory &module_factory,

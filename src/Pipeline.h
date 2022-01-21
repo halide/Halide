@@ -214,7 +214,7 @@ public:
      * Deduces target files based on filenames specified in
      * output_files map.
      */
-    void compile_to(const std::map<OutputType, std::string> &output_files,
+    void compile_to(const std::map<OutputFileType, std::string> &output_files,
                     const std::vector<Argument> &args,
                     const std::string &fn_name,
                     const Target &target);
