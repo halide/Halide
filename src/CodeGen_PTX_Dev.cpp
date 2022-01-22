@@ -16,6 +16,7 @@
 #include "Simplify.h"
 #include "Solve.h"
 #include "Target.h"
+#include "UnrollLoops.h"
 
 #include <fstream>
 
@@ -65,6 +66,10 @@ public:
         return "cuda";
     }
 
+    /** Map from simt variable names (e.g. foo.__block_id_x) to the llvm
+     * ptx intrinsic functions to call to get them. */
+    static std::string simt_intrinsic(const std::string &name);
+
 protected:
     using CodeGen_LLVM::visit;
 
@@ -103,10 +108,6 @@ protected:
         return t;
     }
     Type upgrade_type_for_storage(const Type &t) const override;
-
-    /** Map from simt variable names (e.g. foo.__block_id_x) to the llvm
-     * ptx intrinsic functions to call to get them. */
-    std::string simt_intrinsic(const std::string &name);
 
     bool supports_atomic_add(const Type &t) const override;
 };
@@ -244,7 +245,11 @@ void CodeGen_PTX_Dev::init_module() {
         {"dp2a", Int(32), "dp2a_s32_u32", {Int(16, 4), UInt(8, 4), Int(32)}},
         {"dp2a", Int(32), "dp2a_u32_s32", {UInt(16, 4), Int(8, 4), Int(32)}},
         {"dp2a", UInt(32), "dp2a_u32_u32", {UInt(16, 4), UInt(8, 4), UInt(32)}},
-    };
+        {"wmma.m16n16k16.load.a.row", Float(16, 16), "wmma.m16n16k16.load.a.row.f16.p0i8", {Handle(), Int(32), Int(32)}},
+        {"wmma.m16n16k16.load.b.row", Float(16, 16), "wmma.m16n16k16.load.b.row.f16.p0i8", {Handle(), Int(32), Int(32)}},
+        {"wmma.m16n16k16.load.c.row", Float(32, 8), "wmma.m16n16k16.load.c.row.f32.p0i8", {Handle(), Int(32), Int(32)}},
+        {"wmma.m16n16k16.mma.row.row", Float(32, 8), "wmma.m16n16k16.mma.row.row.f32.f32", {Float(16, 16), Float(16, 16), Float(32, 8)}},
+        {"wmma.m16n16k16.store.d.row", Handle(), "wmma.m16n16k16.store.d.row.f32", {Handle(), Int(32), Int(32), Float(32, 8)}}};
 
     for (auto &&i : ptx_intrins) {
         auto *fn = declare_intrin_overload(i.name, i.ret_type, i.intrin_name, std::move(i.arg_types));
@@ -268,7 +273,7 @@ void CodeGen_PTX_Dev::visit(const Call *op) {
         internal_assert(barrier0) << "Could not find PTX barrier intrinsic (llvm.nvvm.barrier0)\n";
         builder->CreateCall(barrier0);
         value = ConstantInt::get(i32_t, 0);
-    } else if (op->name == "dp2a" || op->name == "dp4a") {
+    } else if (op->name == "dp2a" || op->name == "dp4a" || starts_with(op->name, "wmma.")) {
         // TODO: It would be better if CodeGen_LLVM could handle overloaded intrin calls by default.
         value = call_overloaded_intrin(op->type, op->name, op->args);
         internal_assert(value) << Expr(op) << "\n";
@@ -294,6 +299,10 @@ string CodeGen_PTX_Dev::simt_intrinsic(const string &name) {
         return "llvm.nvvm.read.ptx.sreg.ctaid.z";
     } else if (ends_with(name, ".__block_id_w")) {
         return "llvm.nvvm.read.ptx.sreg.ctaid.w";
+    } else if (ends_with(name, ".__block_dim_x")) {
+        return "llvm.nvvm.read.ptx.sreg.ntid.x";
+    } else if (ends_with(name, ".__block_dim_y")) {
+        return "llvm.nvvm.read.ptx.sreg.ntid.y";
     }
     internal_error << "simt_intrinsic called on bad variable name\n";
     return "";
@@ -726,10 +735,23 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
     }
     debug(2) << "Done with CodeGen_PTX_Dev::compile_to_src";
 
-    debug(1) << "PTX kernel:\n"
-             << outstr.c_str() << "\n";
+    std::vector<char> buffer;
 
-    vector<char> buffer(outstr.begin(), outstr.end());
+    if (target.has_feature(Target::Debug)) {
+        // This allows the PTX to be debugged with nsight
+        debug(2) << "Adding debug information to the generated PTX";
+        std::string ptx_src(outstr.begin(), outstr.end());
+        ptx_src = replace_all(ptx_src, ".target sm_70", ".target sm_70, debug");
+        ptx_src = replace_all(ptx_src, ".target sm_75", ".target sm_75, debug");
+        ptx_src = replace_all(ptx_src, ".target sm_80", ".target sm_80, debug");
+        ptx_src.append("\n.section  .debug_abbrev\n{\n\n}\n\n");
+        buffer = std::vector<char>(ptx_src.begin(), ptx_src.end());
+    } else {
+        buffer = std::vector<char>(outstr.begin(), outstr.end());
+    }
+
+    debug(1) << "PTX kernel:\n"
+             << buffer.data() << "\n";
 
     // Dump the SASS too if the cuda SDK is in the path
     if (debug::debug_level() >= 2) {
@@ -806,6 +828,364 @@ bool CodeGen_PTX_Dev::supports_atomic_add(const Type &t) const {
 }
 
 }  // namespace
+
+struct MatrixMultiplyInfo {
+    Expr A;
+    Expr B;
+    Expr C;
+
+    bool is_valid() const {
+        return A.defined() && B.defined() && C.defined();
+    }
+};
+
+MatrixMultiplyInfo is_matrix_multiply(const For *loop) {
+    if ((loop->for_type != ForType::Serial) || !is_const_zero(loop->min) || !is_const(loop->extent)) {
+        return MatrixMultiplyInfo{};
+    }
+
+    // The body of the loop can be a LetStmt or a Store
+    const LetStmt *let = loop->body.as<LetStmt>();
+    const Store *store = loop->body.as<Store>();
+
+    // If it is a let and the body is a store, use it
+    if (let && let->body.as<Store>()) {
+        store = let->body.as<Store>();
+    }
+
+    if (!store) {
+        return MatrixMultiplyInfo{};
+    }
+
+    //  matmul$1[t26] = (float32)matmul$1[t26]
+    //      + (float32((float16)A[((A.stride.1*t34) - t33) + matmul$1.s1.k$x])
+    //      * *float32((float16)B[(B.stride.1*matmul$1.s1.k$x) + t35]))
+    const Expr wild_f32x = Variable::make(Float(32), "*");
+    const Expr wild_f16x = Variable::make(Float(16), "*");
+    const Expr acc_pattern = wild_f32x + f32(wild_f16x) * f32(wild_f16x);
+    vector<Expr> matches;
+    if (!expr_match(acc_pattern, store->value, matches)) {
+        return MatrixMultiplyInfo{};
+    }
+
+    // (float32)matmul$1[t26]
+    const Load *load_c = matches[0].as<Load>();
+    // (float16) A[((A.stride.1 * t34) - t33) + matmul$1.s1.k$x]
+    const Load *load_a = matches[1].as<Load>();
+    // (float16)B[(B.stride.1*matmul$1.s1.k$x) + t35]
+    const Load *load_b = matches[2].as<Load>();
+
+    if (!load_a || !load_b || !load_c) {
+        return MatrixMultiplyInfo{};
+    }
+
+    // Check if the load is loading from the same place where the store is storing
+    // i.e. if this is an update operation
+    if (load_c->name != store->name || !equal(load_c->index, store->index)) {
+        return MatrixMultiplyInfo{};
+    }
+
+    // Yes, this is an update operation, now let's check cast to see if it is a matmul that can be converted
+    // to wmma intrinsic
+    const Expr wild_i32x = Variable::make(Int(32), "*");
+    // Check if the reduction domain is being used in both A and B to
+    // validate the matrix multiply
+    const Expr load_a_pattern = wild_i32x + wild_i32x;
+    const Expr load_b_pattern = wild_i32x * wild_i32x + wild_i32x;
+
+    // Try again with the patterns swaped
+    vector<Expr> matches_a, matches_b;
+    bool match_a = expr_match(load_a_pattern, load_a->index, matches_a);
+    bool match_b = expr_match(load_b_pattern, load_b->index, matches_b);
+    if (!match_a || !match_b) {
+        // Try again with the patterns swapped
+        match_a = expr_match(load_b_pattern, load_a->index, matches_a);
+        match_b = expr_match(load_a_pattern, load_b->index, matches_b);
+
+        if (!match_a || !match_b) {
+            // If it fails now, is not a matrix multiply
+            return MatrixMultiplyInfo{};
+        }
+
+        // If the swapped pattern works, swap load_a and load_b as matrix multiplies are non-commutative
+        std::swap(load_a, load_b);
+    }
+
+    const std::string &k_var_name = loop->name;
+
+    // Visitor that finds if a variable is used in an expression
+    class FindVarByName : public IRVisitor {
+        using IRVisitor::visit;
+
+        void visit(const Variable *var) override {
+            if (var->name == var_name) {
+                found = true;
+            }
+        }
+
+        const std::string &var_name;
+
+    public:
+        bool found = false;
+        FindVarByName(const std::string &name)
+            : var_name{name} {
+        }
+    };
+
+    // Check if the k_var_name is present in the expressions for load_a and load_b
+    bool load_a_ok = false;
+    for (const Expr &load_a_expr : matches_a) {
+        FindVarByName find_var_by_name{k_var_name};
+        load_a_expr.accept(&find_var_by_name);
+        if (find_var_by_name.found) {
+            load_a_ok = true;
+            break;
+        }
+    }
+
+    bool load_b_ok = false;
+    for (const Expr &load_b_expr : matches_b) {
+        FindVarByName find_var_by_name{k_var_name};
+        load_b_expr.accept(&find_var_by_name);
+        if (find_var_by_name.found) {
+            load_b_ok = true;
+            break;
+        }
+    }
+
+    if (!load_a_ok || !load_b_ok) {
+        return MatrixMultiplyInfo{};
+    }
+
+    // This matches A(k, y) * B(x, k) where both A and B
+    MatrixMultiplyInfo matMulInfo;
+    matMulInfo.A = load_a;
+    matMulInfo.B = load_b;
+    matMulInfo.C = load_c;
+    return matMulInfo;
+}
+
+ExtractTensorCoreOperations::ExtractTensorCoreOperations() {
+    thread_id_y = Call::make(Int(32), CodeGen_PTX_Dev::simt_intrinsic(".__thread_id_y"), std::vector<Expr>(), Call::Extern);
+    thread_id_x = Call::make(Int(32), CodeGen_PTX_Dev::simt_intrinsic(".__thread_id_x"), std::vector<Expr>(), Call::Extern);
+    block_id_y = Call::make(Int(32), CodeGen_PTX_Dev::simt_intrinsic(".__block_id_y"), std::vector<Expr>(), Call::Extern);
+    block_id_x = Call::make(Int(32), CodeGen_PTX_Dev::simt_intrinsic(".__block_id_x"), std::vector<Expr>(), Call::Extern);
+    block_dim_y = Call::make(Int(32), CodeGen_PTX_Dev::simt_intrinsic(".__block_dim_y"), std::vector<Expr>(), Call::Extern);
+    block_dim_x = Call::make(Int(32), CodeGen_PTX_Dev::simt_intrinsic(".__block_dim_x"), std::vector<Expr>(), Call::Extern);
+    block_size = block_dim_x * block_dim_y;
+}
+
+Stmt ExtractTensorCoreOperations::visit(const For *loop) {
+    const bool is_gpu_thread_var = CodeGen_GPU_Dev::is_gpu_thread_var(loop->name);
+    if (is_const_zero(loop->min) && is_const(loop->extent)) {
+        const int32_t loop_extent_value = loop->extent.as<IntImm>()->value;
+
+        if (is_gpu_thread_var) {
+            if (ends_with(loop->name, ".__thread_id_y")) {
+                wmma_M = loop_extent_value;
+            } else if (ends_with(loop->name, ".__thread_id_x")) {
+                wmma_N = loop_extent_value;
+            }
+        } else {
+            wmma_K = loop_extent_value;
+
+            // Shape m16n16k16
+            // TODO: Note this won't work unless the extent of the inner loop is constant
+            //       How can the shape be detected if the k is not constant, i.e, if k
+            //       is based on the dimentions of matrix A for example?
+            if (wmma_M == 16 && wmma_N == 16 && wmma_K % 16 == 0) {
+                const int32_t num_tiles_k = wmma_K / 16;
+                wmma_K = 16;
+
+                // Now check the loop body to confirm this is a matrix multiply expression
+                MatrixMultiplyInfo matMulInfo = is_matrix_multiply(loop);
+                if (matMulInfo.is_valid()) {
+                    const Load *load_a = matMulInfo.A.as<Load>();
+                    const Load *load_b = matMulInfo.B.as<Load>();
+                    const Load *load_c = matMulInfo.C.as<Load>();
+
+                    // Check the possible types for A, B and C
+                    if (load_c->type == Float(32) && load_a->type == Float(16) && load_b->type == Float(16)) {
+                        // Variables to access the extents of the matrix C
+                        global_M = Variable::make(Int(32), load_c->name + ".extent.1");
+                        global_N = Variable::make(Int(32), load_c->name + ".extent.0");
+                        global_K = num_tiles_k * wmma_K;
+
+                        Expr stride_a = global_K;
+                        Expr stride_b = global_N;
+                        Expr stride_c = global_N;
+
+                        // Variables with the pointers to the beginning of each matrix
+                        Expr var_a = Variable::make(Handle(), load_a->name);
+                        Expr var_b = Variable::make(Handle(), load_b->name);
+                        Expr var_c = Variable::make(Handle(), load_c->name);
+
+                        // Calculates the global warp indices used to iterate over the k
+                        // tiles of the matrices
+                        Expr warp_x = (block_id_x * block_dim_x + thread_id_x) / warp_size;
+                        Expr warp_y = block_id_y * block_dim_y + thread_id_y;
+
+                        // Creates a for to loop over the k tiles to perform the matrix multiply accumulate
+                        Expr tile_k = Variable::make(Int(32), "tile_k");
+
+                        // Expressions with the values of row/col indices of each matrix
+                        Expr col_a_value = i32(wmma_K * tile_k);
+                        Expr row_a_value = i32(wmma_M * warp_y);
+
+                        Expr col_b_value = i32(wmma_N * warp_x);
+                        Expr row_b_value = i32(wmma_K * tile_k);
+
+                        Expr col_c_value = i32(wmma_N * warp_x);
+                        Expr row_c_value = i32(wmma_M * warp_y);
+
+                        // Variables to access the row/col index of each matrix
+                        Expr col_a_var = Variable::make(Int(32), "col_a");
+                        Expr row_a_var = Variable::make(Int(32), "row_a");
+                        Expr col_b_var = Variable::make(Int(32), "col_b");
+                        Expr row_b_var = Variable::make(Int(32), "row_b");
+                        Expr col_c_var = Variable::make(Int(32), "col_c");
+                        Expr row_c_var = Variable::make(Int(32), "row_c");
+
+                        // Calculates the offsets to access tiles of matrices A, B and C
+                        // Note that the offsets are based on the global warp indices
+                        Expr offset_a_value = i32(global_K * row_a_var + col_a_var);
+                        Expr offset_b_value = i32(global_N * row_b_var + col_b_var);
+                        Expr offset_c_value = i32(global_N * row_c_var + col_c_var);
+
+                        // Variables to access each offset
+                        Expr offset_a_var = Variable::make(Int(32), "offset_a");
+                        Expr offset_b_var = Variable::make(Int(32), "offset_b");
+                        Expr offset_c_var = Variable::make(Int(32), "offset_c");
+
+                        // Calls to the wmma load instrinsics
+                        Expr load_frag_a_call = Call::make(Float(16, 16), "wmma.m16n16k16.load.a.row", {var_a, offset_a_var, stride_a}, Call::Intrinsic);
+                        Expr load_frag_b_call = Call::make(Float(16, 16), "wmma.m16n16k16.load.b.row", {var_b, offset_b_var, stride_b}, Call::Intrinsic);
+                        Expr load_frag_c_call = Call::make(Float(32, 8), "wmma.m16n16k16.load.c.row", {var_c, offset_c_var, stride_c}, Call::Intrinsic);
+
+                        // Variables used to access each wmma fragment
+                        Expr var_frag_a = Variable::make(Float(16, 16), "frag_a");
+                        Expr var_frag_b = Variable::make(Float(16, 16), "frag_b");
+                        Expr var_frag_c = Variable::make(Float(32, 8), "frag_c");
+
+                        // The fragment C needs to be passed to the wmma.mma intrinsic so we use this ramp to pass the whole vector around
+                        Expr frac_c_index = Ramp::make(make_zero(Int(32)), 1, 8);
+                        Expr load_frag_c = Load::make(Float(32, 8), "frag_c", frac_c_index, Buffer<>(), Parameter(), const_true(8), ModulusRemainder{});
+
+                        Expr mma = Call::make(Float(32, 8), "wmma.m16n16k16.mma.row.row", {var_frag_a, var_frag_b, load_frag_c}, Call::Intrinsic);
+                        Expr store_frag_c = Call::make(Handle(), "wmma.m16n16k16.store.d.row", {var_c, offset_c_var, stride_c, load_frag_c}, Call::Intrinsic);
+
+                        // Expression to check if the row/col are within the bounds of the input matrices
+                        Expr bounds_checking_tile = row_a_var < global_M &&
+                                                    col_a_var < global_K &&
+                                                    row_b_var < global_K &&
+                                                    col_b_var < global_N;
+
+                        // clang-format off
+                        // Creates a Stmt with the loop over the k tiles
+                        Stmt mma_for =
+                            For::make("tile_k", 0, num_tiles_k, ForType::Unrolled, loop->device_api,
+                                LetStmt::make("row_a", row_a_value,
+                                    LetStmt::make("col_a", col_a_value,
+                                        LetStmt::make("row_b", row_b_value,
+                                            LetStmt::make("col_b", col_b_value,
+                                                IfThenElse::make(bounds_checking_tile,
+                                                    LetStmt::make("offset_a", offset_a_value,
+                                                        LetStmt::make("offset_b", offset_b_value,
+                                                            LetStmt::make("frag_a", load_frag_a_call,
+                                                                LetStmt::make("frag_b", load_frag_b_call,
+                                                                    Store::make("frag_c", mma, frac_c_index, Parameter{}, const_true(8), ModulusRemainder{})
+                                                                )
+                                                            )
+                                                        )
+                                                    )
+                                               )
+                                            )
+                                       )
+                                   )
+                                )
+                            );
+                        // clang-format on
+
+                        // Expression to check if the row/col index of the C var are within the bounds of the output matrix
+                        Expr bounds_checking_store = col_c_var < global_N &&
+                                                     row_c_var < global_M;
+
+                        // clang-format off
+                        // Creates a Stmt with the whole wmma operation. Note that the frag_c is loaded only once before the loop
+                        // and stored only once after the loop
+                        Stmt wmma_op =
+                            LetStmt::make("row_c", row_c_value,
+                                LetStmt::make("col_c", col_c_value,
+                                    LetStmt::make("offset_c", offset_c_value,
+                                        Allocate::make("frag_c", Float(32, 8), MemoryType::Stack, {make_one(Int(32))}, const_true(8),
+                                            Block::make({
+                                                Store::make("frag_c", load_frag_c_call, frac_c_index, Parameter{}, const_true(8), ModulusRemainder{}),
+                                                mma_for,
+                                                IfThenElse::make(bounds_checking_store,
+                                                    Evaluate::make(store_frag_c)
+                                                )
+                                            })
+                                        )
+                                    )
+                                )
+                            );
+                        // clang-format on
+
+                        // Unrolls the wmma loop for better performance
+                        // If printing wmma_op, it is better to do it before the unroll_loops pass
+                        Stmt tiled_for = unroll_loops(wmma_op);
+
+                        tensorcore_op_found = true;
+
+                        return tiled_for;
+                    }
+                }
+            }
+        }
+    }
+
+    Stmt s = IRMutator::visit(loop);
+
+    if (tensorcore_op_found) {
+        // We have a tensorcore loop, now calculate the correct number of blocks/threads
+        // required to perform the tiled matrix multiplies
+
+        if (CodeGen_GPU_Dev::is_gpu_var(loop->name)) {
+            Expr num_tiles_x = global_N / wmma_N;
+            Expr num_tiles_y = global_M / wmma_M;
+
+            // This will effectively launch 1 block of 32 threads for each 16x16 tile of the input matrix.
+            // Increasing this number brings little to no performance benefits as the currently implementation
+            // doesn't use shared memory so each iteration needs to load tiles from global memory. These numbers
+            // should probably be changed when shared memory is used.
+            Expr max_threads_x = i32(1);
+            Expr max_threads_y = i32(1);
+
+            Expr num_threads_x = min(max_threads_x, num_tiles_x) * warp_size;
+            Expr num_threads_y = min(max_threads_y, num_tiles_y);
+
+            Expr num_blocks_x = (global_N + (wmma_N * num_threads_x / warp_size - 1)) / (wmma_N * num_threads_x / warp_size);
+            Expr num_blocks_y = (global_M + wmma_M * num_threads_y - 1) / (wmma_N * num_threads_y);
+
+            const For *for_loop = s.as<For>();
+
+            Expr new_extent;
+            if (ends_with(for_loop->name, ".__block_id_y")) {
+                new_extent = num_blocks_y;
+            } else if (ends_with(for_loop->name, ".__block_id_x")) {
+                new_extent = num_blocks_x;
+            } else if (ends_with(for_loop->name, ".__thread_id_y")) {
+                new_extent = num_threads_y;
+            } else if (ends_with(for_loop->name, ".__thread_id_x")) {
+                new_extent = num_threads_x;
+            }
+
+            s = For::make(for_loop->name, for_loop->min, new_extent, for_loop->for_type, for_loop->device_api, for_loop->body);
+        }
+    }
+
+    return s;
+}
 
 std::unique_ptr<CodeGen_GPU_Dev> new_CodeGen_PTX_Dev(const Target &target) {
     return std::make_unique<CodeGen_PTX_Dev>(target);
