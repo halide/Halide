@@ -39,6 +39,18 @@ Type amx_op_type_result_type(AMXOpType op_ty) {
     }
 }
 
+int amx_op_type_size(AMXOpType op_ty) {
+    switch (op_ty) {
+    case AMXOpType::Int8:
+        return 1;
+    case AMXOpType::Bfloat16:
+        return 2;
+    default:
+        internal_error << "Unexpected";
+        return -1;
+    }
+}
+
 const auto wild_i32 = Variable::make(Int(32), "*");
 const auto wild_i32x = Variable::make(Int(32, 0), "*");
 
@@ -143,6 +155,103 @@ Tile<3> get_3d_tile_index(const Expr &e) {
     return {true, base, {x_stride, 0, r_stride}, {x_tile, y_tile, r_tile}};
 }
 
+Tile<3> get_3d_rhs_tile_index(const Expr &e, int element_width) {
+    const auto *sub = e.as<Sub>();
+    const Add *add_lhs = nullptr;
+
+    // there's not always a sub pattern
+    if (!sub) {
+        add_lhs = e.as<Add>();
+    } else {
+        add_lhs = sub->a.as<Add>();
+    }
+
+    if (!add_lhs) {
+        return {};
+    }
+
+    // (([x*y](ramp(0, 1, r) / [x*y*r](4)) + [x*y*r](rro*4)) * [x*y*r](rhs.stride.2)
+    const Mul *mul = add_lhs->a.as<Mul>();
+
+    if (!mul) {
+        return {};
+    }
+
+    // obtain the x, y, r dimensions
+    const Add *dim_expr = add_lhs->b.as<Add>();
+
+    const Broadcast *y_bc = dim_expr->b.as<Broadcast>();
+
+    int tile_y = y_bc->lanes;
+
+    const Mod *mod = dim_expr->a.as<Mod>();
+
+    const Broadcast *bc_ramp = mod->a.as<Broadcast>();
+
+    if (!bc_ramp) {
+        return {};
+    }
+
+    int tile_xy = bc_ramp->lanes;
+    int tile_x = tile_xy / tile_y;
+
+    const Ramp *r_ramp = bc_ramp->value.as<Ramp>();
+
+    if (!r_ramp) {
+        return {};
+    }
+
+    int tile_r = r_ramp->lanes;
+
+    // [x*y*r](rhs.stride.2)
+    const Broadcast *stride_bc = mul->b.as<Broadcast>();
+
+    if (!stride_bc) {
+        return {};
+    }
+
+    // get the base and stride
+    const Broadcast *base_stride_bc = add_lhs->b.as<Add>()->b.as<Broadcast>();
+
+    if (!base_stride_bc) {
+        return {};
+    }
+
+    const Ramp *base_stride_ramp = base_stride_bc->value.as<Ramp>();
+
+    if (!base_stride_ramp) {
+        return {};
+    }
+
+    Expr base = base_stride_ramp->base.as<Broadcast>()->value;
+    Expr stride;
+
+    bool found_stride = false;
+
+    // this stride pattern can occur if `tile_r` is the same size as `acc`
+    auto stride_pattern = Broadcast::make(Ramp::make(0, 1, tile_r), tile_x * tile_y) / Broadcast::make((4 / element_width), tile_x * tile_y * tile_r) * Broadcast::make(wild_i32, tile_x * tile_y * tile_r);
+
+    std::vector<Expr> results{};
+    if (expr_match(stride_pattern, add_lhs->a, results)) {
+        found_stride = true;
+        stride = std::move(results[0]);
+    }
+
+    if (!found_stride) {
+        stride_pattern = (Broadcast::make(Ramp::make(0, 1, tile_r), tile_x * tile_y) / Broadcast::make((4/ element_width), tile_x * tile_y * tile_r) + wild_i32) * Broadcast::make(wild_i32, tile_x * tile_y * tile_r);
+        if (expr_match(stride_pattern, add_lhs->a, results)) {
+            found_stride = true;
+            stride = std::move(results[1]);
+            base = std::move(results[0]) * stride + base;
+        }
+    }
+
+    if (!found_stride) {
+        return {};
+    }
+
+    return {true, base, {stride, 0, 0}, {tile_x, tile_y, tile_r}};
+}
 struct Matmul {
     bool result = false;
     Stmt stmt;
