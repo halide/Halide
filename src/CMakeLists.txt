@@ -404,6 +404,15 @@ if (Halide_WITH_INTROSPECTION)
     target_compile_definitions(Halide PRIVATE WITH_INTROSPECTION)
 endif ()
 
+if (TARGET Halide_SPIRV)
+    # Linkage doesn't seem to work for header only interface lib ...
+    # target_link_libraries(Halide PRIVATE spirv)
+    # Use global property and add the include path
+    get_property(HALIDE_SPIRV_INCLUDE_DIR GLOBAL PROPERTY SPIRV_INCLUDE_DIR)    
+    target_include_directories(Halide PRIVATE "${HALIDE_SPIRV_INCLUDE_DIR}")
+    target_compile_definitions(Halide PRIVATE WITH_SPIRV)
+endif ()
+
 if (TARGET Halide_wabt)
     target_link_libraries(Halide PRIVATE Halide_wabt)
     target_compile_definitions(Halide PRIVATE WITH_WABT)

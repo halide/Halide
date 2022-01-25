@@ -11,7 +11,7 @@
 #include "Scope.h"
 #include "Target.h"
 
-#include "spirv/spirv.h"
+#include "spirv/unified1/spirv.h"
 
 // Temporary:
 #include <fstream>
@@ -1289,7 +1289,7 @@ std::vector<char> CodeGen_Vulkan_Dev::compile_to_src() {
     final_module.insert(final_module.end(), (const char *)emitter.spir_v_types.data(), (const char *)(emitter.spir_v_types.data() + emitter.spir_v_types.size()));
     final_module.insert(final_module.end(), (const char *)emitter.spir_v_kernels.data(), (const char *)(emitter.spir_v_kernels.data() + emitter.spir_v_kernels.size()));
     assert(final_module.size() == total_size);
-    std::ofstream f("/home/skamil/out.spv", std::ios::out | std::ios::binary);
+    std::ofstream f("out.spv", std::ios::out | std::ios::binary);
     f.write((char*)(final_module.data()), final_module.size());
     f.close();
 
