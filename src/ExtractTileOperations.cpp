@@ -261,6 +261,43 @@ Tile<3> get_3d_rhs_tile_index(const Expr &e, int element_width) {
 
     return {true, base, {stride, 0, 0}, {tile_x, tile_y, tile_r}};
 }
+
+struct BaseStride {
+    bool result{false};
+    Expr base{};
+    Expr stride{};
+};
+
+BaseStride get_rhs_tile_index(const Expr &index, int element_width, int tile_x, int tile_y, int tile_r) {
+    const auto rhs_tile2 = get_2d_tile_index(index);
+
+    if (!rhs_tile2.result) {
+        const auto rhs_tile1 = get_1d_tile_index(index);
+
+        if (!rhs_tile1.result) {
+            auto rhs_tile3 = get_3d_rhs_tile_index(index, element_width);
+            if (rhs_tile3.extent[0] != tile_x || rhs_tile3.extent[1] != tile_y || rhs_tile3.extent[2] != tile_r) {
+                return {};
+            }
+
+            return {true, rhs_tile3.base, rhs_tile3.stride[0] * element_width};
+        } else {
+            if (rhs_tile1.extent[0] != tile_y * tile_r) {
+                return {};
+            }
+
+            // times 4 because of the rhs layout
+            return {true, rhs_tile1.base, rhs_tile1.stride[0] * (4 / element_width)};
+        }
+    } else {
+        if (tile_y != rhs_tile2.extent[0] || tile_r != rhs_tile2.extent[1]) {
+            return {};
+        }
+
+        return {true, rhs_tile2.base, rhs_tile2.stride[0]};
+    }
+}
+
 struct Matmul {
     bool result = false;
     Stmt stmt;
@@ -315,14 +352,24 @@ Matmul convert_to_matmul(const Store *op, const string &new_name, AMXOpType op_t
 
     const auto *lhs_load = matches[0].as<Load>();
     const auto *rhs_broadcast = matches[1].as<Broadcast>();
-    if (!lhs_load || !rhs_broadcast) {
+
+    const Cast *rhs_cast = nullptr;
+
+    if (lhs_load && !rhs_broadcast) {
+        // now working on a larger k dimension
+        rhs_cast = matches[1].as<Cast>();
+    } else {
+        rhs_cast = rhs_broadcast->value.as<Cast>();
+    }
+
+    if (!lhs_load || !rhs_cast) {
         return {};
     }
-    const auto *rhs_cast = rhs_broadcast->value.as<Cast>();
+
     if (rhs_cast) {
         if (op_type == AMXOpType::Int8) {
             if (!(rhs_cast->value.type().element_of() == Int(8) || rhs_cast->value.type().element_of() == UInt(8))) {
-                user_assert(false) << "Expected rhs cast of i8/u8";
+                user_error << "Expected rhs cast of i8/u8, got " << rhs_cast->value.type();
             }
         } else {  // AMXOpType::Bfloat16
             user_assert(rhs_cast->value.type().element_of() == BFloat(16)) << "Expected rhs cast of bf16";
@@ -350,28 +397,14 @@ Matmul convert_to_matmul(const Store *op, const string &new_name, AMXOpType op_t
     Expr rhs_base;
     Expr rhs_stride;
 
-    const auto rhs_tile2 = get_2d_tile_index(rhs_load->index);
-    if (!rhs_tile2.result) {
-        const auto rhs_tile1 = get_1d_tile_index(rhs_load->index);
+    auto opt_base_stride = get_rhs_tile_index(rhs_load->index, amx_op_type_size(op_type), tile_x, tile_y, tile_r);
 
-        if (!rhs_tile1.result) {
-            return {};
-        }
-
-        if (rhs_tile1.extent[0] != tile_y * tile_r) {
-            return {};
-        }
-
-        rhs_base = rhs_tile1.base;
-        rhs_stride = rhs_tile1.stride[0];
-    } else {
-        if (tile_y != rhs_tile2.extent[0] || tile_r != rhs_tile2.extent[1]) {
-            return {};
-        }
-
-        rhs_base = rhs_tile2.base;
-        rhs_stride = rhs_tile2.stride[0];
+    if (!opt_base_stride.result) {
+        return {};
     }
+
+    rhs_base = opt_base_stride.base;
+    rhs_stride = opt_base_stride.stride;
 
     if (op->index.type().lanes() != tile_x * tile_y ||
         factor != tile_r) {
@@ -388,7 +421,8 @@ Matmul convert_to_matmul(const Store *op, const string &new_name, AMXOpType op_t
     auto rhs_var = Variable::make(Handle(), rhs_load->name);
     const auto &rhs_load_type = rhs_load->type;
     auto rhs_type = rhs_load_type.with_lanes(1024 / element_width);
-    auto rhs = Call::make(rhs_type, "tile_load", {1, tile_y * tile_r * element_width, rhs_var, rhs_base * element_width, rhs_stride * tile_y * element_width}, Call::Intrinsic);
+
+    auto rhs = Call::make(rhs_type, "tile_load", {tile_r / (4 / element_width), tile_y * 4, rhs_var, rhs_base * element_width, rhs_stride}, Call::Intrinsic);
     auto res_type = amx_op_type_result_type(op_type);
 
     // {rows, colbytes, acc, out, lhs, rhs}
@@ -528,6 +562,7 @@ class ExtractTileOperations : public IRMutator {
             found_tile_x = matmul.tile_x;
             found_tile_y = matmul.tile_y;
             found_tile_r = matmul.tile_r;
+
             return matmul.stmt;
         }
 
@@ -542,7 +577,7 @@ class ExtractTileOperations : public IRMutator {
         }
 
         // Otherwise there is some other operation using the allocation, so we cannot use the AMX instructions
-        user_assert(false) << "Found non-tile operations for AMX tile allocation";
+        user_error << "Found non-tile operations for AMX tile allocation";
         return op;
     }
 };
