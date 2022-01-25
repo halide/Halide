@@ -12,7 +12,7 @@ void testCompileToOutput(Func j) {
     Internal::ensure_no_file_exists(fn_object);
 
     std::vector<Argument> empty_args;
-    j.compile_to({{Output::object, fn_object}}, empty_args, "");
+    j.compile_to({{OutputFileType::object, fn_object}}, empty_args, "");
 
     Internal::assert_file_exists(fn_object);
 }
@@ -25,7 +25,7 @@ void testCompileToOutputAndAssembly(Func j) {
     Internal::ensure_no_file_exists(fn_assembly);
 
     std::vector<Argument> empty_args;
-    j.compile_to({{Output::object, fn_object}, {Output::assembly, fn_assembly}}, empty_args, "");
+    j.compile_to({{OutputFileType::object, fn_object}, {OutputFileType::assembly, fn_assembly}}, empty_args, "");
 
     Internal::assert_file_exists(fn_object);
     Internal::assert_file_exists(fn_assembly);
