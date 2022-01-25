@@ -1676,7 +1676,7 @@ protected:
     }
 
 public:
-    GeneratorInput_Buffer(const std::string &name)
+    explicit GeneratorInput_Buffer(const std::string &name)
         : Super(name, IOKind::Buffer,
                 TBase::has_static_halide_type ? std::vector<Type>{TBase::static_halide_type()} : std::vector<Type>{},
                 -1) {
@@ -1834,7 +1834,7 @@ public:
     }
 
     // unspecified type & dimension
-    GeneratorInput_Func(const std::string &name)
+    explicit GeneratorInput_Func(const std::string &name)
         : Super(name, IOKind::Function, {}, -1) {
     }
 
@@ -2166,56 +2166,59 @@ protected:
             Internal::cond<true, Unused>>::type;
 
 public:
+    // Mark all of these explicit (not just single-arg versions) so that
+    // we disallow copy-list-initialization form (i.e., Input foo{"foo"} is ok,
+    // but Input foo = {"foo"} is not).
     explicit GeneratorInput(const std::string &name)
         : Super(name) {
     }
 
-    GeneratorInput(const std::string &name, const TBase &def)
+    explicit GeneratorInput(const std::string &name, const TBase &def)
         : Super(name, def) {
     }
 
-    GeneratorInput(size_t array_size, const std::string &name, const TBase &def)
+    explicit GeneratorInput(size_t array_size, const std::string &name, const TBase &def)
         : Super(array_size, name, def) {
     }
 
-    GeneratorInput(const std::string &name,
-                   const TBase &def, const TBase &min, const TBase &max)
+    explicit GeneratorInput(const std::string &name,
+                            const TBase &def, const TBase &min, const TBase &max)
         : Super(name, def, min, max) {
     }
 
-    GeneratorInput(size_t array_size, const std::string &name,
-                   const TBase &def, const TBase &min, const TBase &max)
+    explicit GeneratorInput(size_t array_size, const std::string &name,
+                            const TBase &def, const TBase &min, const TBase &max)
         : Super(array_size, name, def, min, max) {
     }
 
-    GeneratorInput(const std::string &name, const Type &t, int d)
+    explicit GeneratorInput(const std::string &name, const Type &t, int d)
         : Super(name, t, d) {
     }
 
-    GeneratorInput(const std::string &name, const Type &t)
+    explicit GeneratorInput(const std::string &name, const Type &t)
         : Super(name, t) {
     }
 
     // Avoid ambiguity between Func-with-dim and int-with-default
-    GeneratorInput(const std::string &name, IntIfNonScalar d)
+    explicit GeneratorInput(const std::string &name, IntIfNonScalar d)
         : Super(name, d) {
     }
 
-    GeneratorInput(size_t array_size, const std::string &name, const Type &t, int d)
+    explicit GeneratorInput(size_t array_size, const std::string &name, const Type &t, int d)
         : Super(array_size, name, t, d) {
     }
 
-    GeneratorInput(size_t array_size, const std::string &name, const Type &t)
+    explicit GeneratorInput(size_t array_size, const std::string &name, const Type &t)
         : Super(array_size, name, t) {
     }
 
     // Avoid ambiguity between Func-with-dim and int-with-default
     // template <typename T2 = T, typename std::enable_if<std::is_same<TBase, Func>::value>::type * = nullptr>
-    GeneratorInput(size_t array_size, const std::string &name, IntIfNonScalar d)
+    explicit GeneratorInput(size_t array_size, const std::string &name, IntIfNonScalar d)
         : Super(array_size, name, d) {
     }
 
-    GeneratorInput(size_t array_size, const std::string &name)
+    explicit GeneratorInput(size_t array_size, const std::string &name)
         : Super(array_size, name) {
     }
 };
@@ -2567,6 +2570,19 @@ public:
         return *this;
     }
 
+    template<typename T2 = T, typename std::enable_if<std::is_array<T2>::value>::type * = nullptr>
+    const Func &operator[](size_t i) const {
+        this->check_gio_access();
+        return this->template get_values<Func>()[i];
+    }
+
+    // Allow Output<Buffer[]>.compute_root() (or other scheduling directive that requires nonconst)
+    template<typename T2 = T, typename std::enable_if<std::is_array<T2>::value>::type * = nullptr>
+    Func operator[](size_t i) {
+        this->check_gio_access();
+        return this->template get_values<Func>()[i];
+    }
+
     /** Forward methods to the OutputImageParam. */
     // @{
     HALIDE_FORWARD_METHOD(OutputImageParam, dim)
@@ -2598,7 +2614,7 @@ private:
 protected:
     using TBase = typename Super::TBase;
 
-    GeneratorOutput_Func(const std::string &name)
+    explicit GeneratorOutput_Func(const std::string &name)
         : Super(name, IOKind::Function, std::vector<Type>{}, -1) {
     }
 
@@ -2692,6 +2708,9 @@ protected:
     using TBase = typename Super::TBase;
 
 public:
+    // Mark all of these explicit (not just single-arg versions) so that
+    // we disallow copy-list-initialization form (i.e., Output foo{"foo"} is ok,
+    // but Output foo = {"foo"} is not).
     explicit GeneratorOutput(const std::string &name)
         : Super(name) {
     }
@@ -2700,31 +2719,47 @@ public:
         : GeneratorOutput(std::string(name)) {
     }
 
-    GeneratorOutput(size_t array_size, const std::string &name)
+    explicit GeneratorOutput(size_t array_size, const std::string &name)
         : Super(array_size, name) {
     }
 
-    GeneratorOutput(const std::string &name, int d)
+    explicit GeneratorOutput(const std::string &name, int d)
         : Super(name, {}, d) {
     }
 
-    GeneratorOutput(const std::string &name, const Type &t, int d)
+    explicit GeneratorOutput(const std::string &name, const Type &t)
+        : Super(name, {t}) {
+    }
+
+    explicit GeneratorOutput(const std::string &name, const std::vector<Type> &t)
+        : Super(name, t) {
+    }
+
+    explicit GeneratorOutput(const std::string &name, const Type &t, int d)
         : Super(name, {t}, d) {
     }
 
-    GeneratorOutput(const std::string &name, const std::vector<Type> &t, int d)
+    explicit GeneratorOutput(const std::string &name, const std::vector<Type> &t, int d)
         : Super(name, t, d) {
     }
 
-    GeneratorOutput(size_t array_size, const std::string &name, int d)
+    explicit GeneratorOutput(size_t array_size, const std::string &name, int d)
         : Super(array_size, name, {}, d) {
     }
 
-    GeneratorOutput(size_t array_size, const std::string &name, const Type &t, int d)
+    explicit GeneratorOutput(size_t array_size, const std::string &name, const Type &t)
+        : Super(array_size, name, {t}) {
+    }
+
+    explicit GeneratorOutput(size_t array_size, const std::string &name, const std::vector<Type> &t)
+        : Super(array_size, name, t) {
+    }
+
+    explicit GeneratorOutput(size_t array_size, const std::string &name, const Type &t, int d)
         : Super(array_size, name, {t}, d) {
     }
 
-    GeneratorOutput(size_t array_size, const std::string &name, const std::vector<Type> &t, int d)
+    explicit GeneratorOutput(size_t array_size, const std::string &name, const std::vector<Type> &t, int d)
         : Super(array_size, name, t, d) {
     }
 
