@@ -1,38 +1,29 @@
 #include "HalideRuntimeVulkan.h"
-#include "scoped_spin_lock.h"
+#include "vulkan_support.h"
 #include "device_buffer_utils.h"
 #include "device_interface.h"
+#include "gpu_context_common.h"
+#include "scoped_spin_lock.h"
 #include "printer.h"
 
-#define VK_NO_PROTOTYPES
-#include "mini_vulkan.h"
-
-#define INLINE inline __attribute__((always_inline))
-
-namespace Halide { namespace Runtime { namespace Internal { namespace Vulkan {
-
-#define VULKAN_FN(fn) WEAK PFN_##fn fn;
-#include "vulkan_functions.h"
-#undef VULKAN_FN
-
-void WEAK load_vulkan_functions(VkInstance instance) {
-    #define VULKAN_FN(fn) fn = (PFN_##fn)vkGetInstanceProcAddr(instance, #fn);
-    #include "vulkan_functions.h"
-    #undef VULKAN_FN
-}
+namespace Halide { 
+namespace Runtime { 
+namespace Internal { 
+namespace Vulkan {
 
 extern WEAK halide_device_interface_t vulkan_device_interface;
 
 WEAK const char *get_vulkan_error_name(VkResult error);
+WEAK int create_vulkan_context(void *user_context, VkInstance *instance, VkDevice *device, VkQueue *queue, VkPhysicalDevice *physical_device, uint32_t* queue_family_index);
 
-// An Vulkan context/queue/synchronization lock defined in
-// this module with weak linkage
+// An Vulkan context/queue/synchronization lock defined in this module with weak linkage
 VkInstance WEAK cached_instance = 0;
 VkDevice WEAK cached_device = 0;
 VkQueue WEAK cached_queue = 0;
 VkPhysicalDevice WEAK cached_physical_device;
 uint32_t WEAK cached_queue_family_index = 0;
-volatile int WEAK thread_lock = 0;
+
+volatile ScopedSpinLock::AtomicFlag WEAK thread_lock = 0;
 
 }}}} // namespace Halide::Runtime::Internal::Vulkan
 
@@ -53,130 +44,26 @@ extern "C" {
 //   should block while a previous call (if any) has not yet been
 //   released via halide_release_vulkan_context.
 WEAK int halide_vulkan_acquire_context(void *user_context, VkInstance *instance,
-                                       VkDevice *device, VkQueue *queue, VkPhysicalDevice *physical_device, uint32_t* queue_family_index, bool create) {
+                                       VkDevice *device, VkQueue *queue, VkPhysicalDevice *physical_device, 
+                                       uint32_t* queue_family_index, bool create) {
 
     halide_abort_if_false(user_context, instance != nullptr);
     halide_abort_if_false(user_context, device != nullptr);
     halide_abort_if_false(user_context, queue != nullptr);
+    halide_abort_if_false(user_context, &thread_lock != nullptr);
+    while (__atomic_test_and_set(&thread_lock, __ATOMIC_ACQUIRE)) { }
 
-
-#define VK_MAKE_API_VERSION(variant, major, minor, patch) \
-    ((((uint32_t)(variant)) << 29) | (((uint32_t)(major)) << 22) | (((uint32_t)(minor)) << 12) | ((uint32_t)(patch)))
-
-// Vulkan 1.0 version number
-#define VK_API_VERSION_1_0 VK_MAKE_API_VERSION(0, 1, 0, 0)// Patch version should always be set to 0
-
-    // TODO: make validation optional in debug
-#if defined(DEBUG_RUNTIME) 
-    const int num_layers = 1;
-    const char* val_layers[] = {"VK_LAYER_KHRONOS_validation"};
-#else
-    const int num_layers = 0;
-    const char* const * val_layers = nullptr;
-#endif
-
-    if (cached_instance == nullptr && create) {
-        VkApplicationInfo app_info = {
-            VK_STRUCTURE_TYPE_APPLICATION_INFO, // struct type
-            nullptr, // Next
-            "Runtime", // application name
-            VK_MAKE_API_VERSION(0, 1, 0, 0), // app version
-            "Halide", // engine name
-            VK_MAKE_API_VERSION(0, HALIDE_VERSION_MAJOR, HALIDE_VERSION_MINOR, HALIDE_VERSION_PATCH), // engine version
-            VK_API_VERSION_1_0
-        };
-
-        VkInstanceCreateInfo create_info = {
-            VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,
-            nullptr,    // Next
-            0,       // Flags
-            &app_info,    // ApplicationInfo
-            num_layers, val_layers,
-            0, nullptr  // Extensions
-        };
-        VkResult ret_code = vkCreateInstance(&create_info, nullptr, &cached_instance);
-        if (ret_code != VK_SUCCESS) {
-            // TODO: Get info on error and return approriate code.
-            return -1;
+    // If the context has not been initialized, initialize it now.
+    halide_abort_if_false(user_context, &cached_instance != nullptr);
+    halide_abort_if_false(user_context, &cached_device != nullptr);
+    halide_abort_if_false(user_context, &cached_queue != nullptr);
+    halide_abort_if_false(user_context, &cached_physical_device != nullptr);
+    if ((cached_instance == nullptr) && create) {
+        int result = create_vulkan_context(user_context, &cached_instance, &cached_device, &cached_queue, &cached_physical_device, &cached_queue_family_index);
+        if (result != halide_error_code_success) {
+            __atomic_clear(&thread_lock, __ATOMIC_RELEASE);
+            return result;
         }
-
-        if (vkCreateDevice == nullptr) {
-            load_vulkan_functions(cached_instance);
-        }
-        
-        VkPhysicalDevice chosen_device = nullptr;
-        VkPhysicalDevice devices[16];
-        uint32_t queue_family;
-        uint32_t device_count = sizeof(devices) / sizeof(devices[0]);
-        ret_code = vkEnumeratePhysicalDevices(cached_instance, &device_count, devices);
-        // For now handle more than 16 devices by just looking at the first 16.
-        halide_debug_assert(user_context, ret_code == VK_SUCCESS || ret_code == VK_INCOMPLETE);
-
-        if (device_count == 0) {
-            debug(user_context) << "Vulkan: No devices found.\n";
-            return -1;
-        }
-        // Try to find a device that supports compute.
-        for (uint32_t i = 0; chosen_device == nullptr && i < device_count; i++) {
-            VkPhysicalDeviceProperties properties;
-            vkGetPhysicalDeviceProperties(devices[i], &properties);
-
-            if (properties.deviceType == VK_PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU || 
-                properties.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU) {
-                VkQueueFamilyProperties queue_properties[16];
-                uint32_t queue_properties_count = sizeof(queue_properties) / sizeof(queue_properties[0]);
-                vkGetPhysicalDeviceQueueFamilyProperties(devices[i], &queue_properties_count, queue_properties);
-                halide_debug_assert(user_context, ret_code == VK_SUCCESS || ret_code == VK_INCOMPLETE);
-                for (uint32_t j = 0; chosen_device == nullptr && j < queue_properties_count; j++) {
-                    if (queue_properties[j].queueCount > 0 &&
-                        queue_properties[j].queueFlags & VK_QUEUE_COMPUTE_BIT) {
-                        chosen_device = devices[i];
-                        queue_family = j;
-                    }
-                }
-            }
-        }
-        // If nothing, just try the first one for now.
-        if (chosen_device == nullptr) {
-            queue_family = 0;
-            chosen_device = devices[0];
-        }
-
-        cached_physical_device = chosen_device;
-
-        float queue_priority = 1.0f;
-        VkDeviceQueueCreateInfo device_queue_create_info = {
-            VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
-            nullptr, // Next
-            0,    // Flags
-            queue_family,
-            1,
-            &queue_priority,
-        };
-
-        VkDeviceCreateInfo device_create_info = {
-            VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
-            nullptr, // Next
-            0,    // Flags
-            1,    // Count of queues to create
-            &device_queue_create_info,
-            0,    // Enabled layers
-            nullptr, // layer names
-            0,    // Enabled extensions
-            nullptr, // Enabled extension names
-            nullptr, // VkPhysicalDeviceFeatures
-        };
-
-        ret_code = vkCreateDevice(chosen_device, &device_create_info, nullptr, &cached_device);
-        if (ret_code != VK_SUCCESS) {
-          debug(user_context) << "Vulkan: vkCreateDevice failed with return code: " << get_vulkan_error_name(ret_code) << "\n";
-          return -1;
-        }
-
-        vkGetDeviceQueue(cached_device, queue_family, 0, &cached_queue);
-
-        cached_queue_family_index = queue_family;
-
     }
 
     *instance = cached_instance;
@@ -184,17 +71,20 @@ WEAK int halide_vulkan_acquire_context(void *user_context, VkInstance *instance,
     *queue = cached_queue;
     *physical_device = cached_physical_device;
     *queue_family_index = cached_queue_family_index;
-
     return 0;
 }
 
 WEAK int halide_vulkan_release_context(void *user_context, VkInstance instance, VkDevice device, VkQueue queue) {
+    __atomic_clear(&thread_lock, __ATOMIC_RELEASE);
     return 0;
 }
 
 } // extern "C"
 
-namespace Halide { namespace Runtime { namespace Internal { namespace Vulkan {
+namespace Halide { 
+namespace Runtime { 
+namespace Internal { 
+namespace Vulkan {
 
 // Helper object to acquire and release the Vulkan context.
 class VulkanContext {
@@ -208,26 +98,24 @@ public:
     VkPhysicalDevice physical_device;
     uint32_t queue_family_index; // used for operations requiring queue family
 
-    INLINE VulkanContext(void *user_context) : user_context(user_context),
-                                             instance(nullptr), device(nullptr), queue(nullptr),
-                                             error(VK_SUCCESS), physical_device(nullptr),
-                                             queue_family_index(0) {
-        
-        while (__sync_lock_test_and_set(&thread_lock, 1)) { }
-
-        int err_halide = halide_vulkan_acquire_context(user_context, &instance, &device, &queue, &physical_device, &queue_family_index);
-        halide_abort_if_false(user_context, err_halide == 0);
-        halide_abort_if_false(user_context, device != nullptr && queue != nullptr);
-
-        __sync_lock_release(&thread_lock);
+    HALIDE_ALWAYS_INLINE VulkanContext(void *user_context) : user_context(user_context),
+                                                             instance(nullptr), device(nullptr), queue(nullptr),
+                                                             error(VK_SUCCESS), physical_device(nullptr),
+                                                             queue_family_index(0) {
+                        
+        int result = halide_vulkan_acquire_context(user_context, &instance, &device, &queue, &physical_device, &queue_family_index);
+        halide_abort_if_false(user_context, result == 0);
+        halide_abort_if_false(user_context, device != nullptr);
+        halide_abort_if_false(user_context, queue != nullptr);
+        halide_abort_if_false(user_context, physical_device != nullptr);
     }
 
-    INLINE ~VulkanContext() {
+    HALIDE_ALWAYS_INLINE ~VulkanContext() {
         halide_vulkan_release_context(user_context, instance, device, queue);
     }
 
     // For now, this is always nullptr
-    INLINE const VkAllocationCallbacks *allocation_callbacks() { return nullptr; }
+    HALIDE_ALWAYS_INLINE const VkAllocationCallbacks *allocation_callbacks() { return nullptr; }
 };
 
 // Structure to hold the state of a module attached to the context.
@@ -245,6 +133,184 @@ struct module_state {
     module_state *next;
 };
 WEAK module_state *state_list = nullptr;
+
+
+WEAK Halide::Internal::GPUCompilationCache<VkDevice, VkShaderModule> compilation_cache;
+
+
+// Initializes the context used by the default implementation
+// of halide_acquire_context.
+WEAK int create_vulkan_context(void *user_context, VkInstance *instance, VkDevice *device, VkQueue *queue, 
+                               VkPhysicalDevice *physical_device, uint32_t* queue_family_index) {
+
+    debug(user_context) << "    create_vulkan_context (user_context: " << user_context << ")\n";
+
+    StringTable required_instance_extensions;
+    halide_vulkan_get_required_instance_extensions(user_context, required_instance_extensions);
+
+    StringTable supported_instance_extensions;
+    halide_vulkan_get_supported_instance_extensions(user_context, supported_instance_extensions);
+
+    bool valid_instance = validate_required_extension_support(user_context, required_instance_extensions, supported_instance_extensions);
+    halide_abort_if_false(user_context, valid_instance);
+
+    debug(user_context) << "Vulkan: Found " << (uint32_t)required_instance_extensions.size() << " required extensions for instance!\n";
+    for( int n = 0; n < (int)required_instance_extensions.size(); ++n ) {
+        debug(user_context) << "    extension: " << required_instance_extensions[n] << "\n";
+    }
+
+    StringTable requested_layers;
+    uint32_t requested_layer_count = halide_vulkan_get_requested_layers(user_context, requested_layers);
+    debug(user_context) << "Vulkan: Requested " << requested_layer_count << " layers for instance!\n";
+    for( int n = 0; n < (int)requested_layer_count; ++n ) {
+        debug(user_context) << "    layer: " << requested_layers[n] << "\n";
+    }
+
+    VkApplicationInfo app_info = {
+        VK_STRUCTURE_TYPE_APPLICATION_INFO, // struct type
+        nullptr, // Next
+        "Runtime", // application name
+        VK_MAKE_API_VERSION(0, 1, 0, 0), // app version
+        "Halide", // engine name
+        VK_MAKE_API_VERSION(0, HALIDE_VERSION_MAJOR, HALIDE_VERSION_MINOR, HALIDE_VERSION_PATCH), // engine version
+        VK_API_VERSION_1_0
+    };
+
+    VkInstanceCreateInfo create_info = {
+        VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,
+        nullptr,    // Next
+        0,          // Flags
+        &app_info,  // ApplicationInfo
+        (uint32_t)requested_layers.size(), requested_layers.data(),  // Layers
+        (uint32_t)required_instance_extensions.size(), required_instance_extensions.data()  // Extensions
+    };
+
+    VkResult result = vkCreateInstance(&create_info, nullptr, instance);
+    if (result != VK_SUCCESS) {
+        debug(user_context) << "Vulkan: vkCreateInstance failed with return code: " << get_vulkan_error_name(result) << "\n";
+        return halide_error_code_incompatible_device_interface;
+    }
+
+    if (vkCreateDevice == nullptr) {
+        load_vulkan_functions(*instance);
+    }
+    
+    // For now handle more than 16 devices by just looking at the first 16.
+    VkPhysicalDevice chosen_device = nullptr;
+    VkPhysicalDevice avail_devices[16];
+    uint32_t device_count = sizeof(avail_devices) / sizeof(avail_devices[0]);
+    result = vkEnumeratePhysicalDevices(*instance, &device_count, avail_devices);
+
+    if ((result != VK_SUCCESS) && (result != VK_INCOMPLETE)) {
+        debug(user_context) << "Vulkan: vkEnumeratePhysicalDevices failed with return code: " << get_vulkan_error_name(result) << "\n";
+        return halide_error_code_incompatible_device_interface;
+    }
+
+    if (device_count == 0) {
+        debug(user_context) << "Vulkan: No devices found.\n";
+        return halide_error_code_incompatible_device_interface;
+    }
+
+    const char *dev_type = halide_vulkan_get_device_type(user_context);
+
+    // Try to find a device that supports compute.
+    uint32_t queue_family = 0;
+    for (uint32_t i = 0; (chosen_device == nullptr) && (i < device_count); i++) {
+        VkPhysicalDeviceProperties properties;
+        vkGetPhysicalDeviceProperties(avail_devices[i], &properties);
+    
+        int matching_device = 0;
+        if ((dev_type != nullptr) && (*dev_type != '\0')) {
+            if (strstr(dev_type, "cpu") && (properties.deviceType == VK_PHYSICAL_DEVICE_TYPE_CPU)) {
+                matching_device = 1;
+            } else if (strstr(dev_type, "integrated-gpu") && ((properties.deviceType == VK_PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU))) {
+                matching_device = 1;
+            } else if (strstr(dev_type, "discrete-gpu") && ((properties.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU))) {
+                matching_device = 1;
+            } else if (strstr(dev_type, "virtual-gpu") && (properties.deviceType == VK_PHYSICAL_DEVICE_TYPE_VIRTUAL_GPU)) {
+                matching_device = 1;
+            } else if (strstr(dev_type, "gpu") && ((properties.deviceType == VK_PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU) || (properties.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU))) {
+                matching_device = 1;
+            }
+        } else {
+            // use a non-virtual gpu device by default 
+            if ((properties.deviceType == VK_PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU) || 
+                (properties.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU)) {
+                matching_device = 1;
+            }
+        }
+
+        if (matching_device) {
+            VkQueueFamilyProperties queue_properties[16];
+            uint32_t queue_properties_count = sizeof(queue_properties) / sizeof(queue_properties[0]);
+            vkGetPhysicalDeviceQueueFamilyProperties(avail_devices[i], &queue_properties_count, queue_properties);
+            for (uint32_t j = 0; (chosen_device == nullptr) && (j < queue_properties_count); j++) {
+                if (queue_properties[j].queueCount > 0 &&
+                    queue_properties[j].queueFlags & VK_QUEUE_COMPUTE_BIT) {
+                    chosen_device = avail_devices[i];
+                    queue_family = j;
+
+                    debug(user_context) << "Vulkan: Found matching compute device '" << properties.deviceName << "'\n";
+                }
+            }
+        }
+    }
+    // If nothing, just try the first one for now.
+    if (chosen_device == nullptr) {
+        queue_family = 0;
+        chosen_device = avail_devices[0];
+        VkPhysicalDeviceProperties properties;
+        vkGetPhysicalDeviceProperties(chosen_device, &properties);
+        debug(user_context) << "Vulkan: Defaulting to first compute device '" << properties.deviceName << "'\n";
+    }
+
+    *physical_device = chosen_device;
+
+    StringTable required_device_extensions;
+    halide_vulkan_get_required_device_extensions(user_context, required_device_extensions);
+
+    StringTable supported_device_extensions;
+    halide_vulkan_get_supported_device_extensions(user_context, chosen_device, supported_device_extensions);
+
+    bool valid_device = validate_required_extension_support(user_context, required_device_extensions, supported_device_extensions);
+    halide_abort_if_false(user_context, valid_device);
+
+    debug(user_context) << "Vulkan: Found " << (uint32_t)required_device_extensions.size() << " required extensions for device!\n";
+    for( int n = 0; n < (int)required_device_extensions.size(); ++n ) {
+        debug(user_context) << "    extension: " << required_device_extensions[n] << "\n";
+    }
+
+    float queue_priority = 1.0f;
+    VkDeviceQueueCreateInfo device_queue_create_info = {
+        VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
+        nullptr, // Next
+        0,    // Flags
+        queue_family,
+        1,
+        &queue_priority,
+    };
+
+    VkDeviceCreateInfo device_create_info = {
+        VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
+        nullptr, // Next
+        0,    // Flags
+        1,    // Count of queues to create
+        &device_queue_create_info,
+        (uint32_t)requested_layers.size(), requested_layers.data(),  // Layers
+        (uint32_t)required_device_extensions.size(), required_device_extensions.data(), // Enabled extensions
+        nullptr, // VkPhysicalDeviceFeatures
+    };
+
+    result = vkCreateDevice(chosen_device, &device_create_info, nullptr, device);
+    if (result != VK_SUCCESS) {
+        debug(user_context) << "Vulkan: vkCreateDevice failed with return code: " << get_vulkan_error_name(result) << "\n";
+        return halide_error_code_incompatible_device_interface;
+    }
+
+    vkGetDeviceQueue(cached_device, queue_family, 0, queue);
+    *queue_family_index = queue_family;
+    return halide_error_code_success;
+}
 
 }}}} // namespace Halide::Runtime::Internal::Vulkan
 
@@ -295,6 +361,16 @@ WEAK int halide_vulkan_initialize_kernels(void *user_context, void **state_ptr, 
     #ifdef DEBUG_RUNTIME
     uint64_t t_before = halide_current_time_ns(user_context);
     #endif
+
+#if 0
+    debug(user_context) << "halide_vulkan_initialize_kernels got compilation_cache mutex.\n";
+    cl_program program;
+    if (!compilation_cache.kernel_state_setup(user_context, state_ptr, ctx.context, program,
+                                              compile_kernel, user_context, ctx.context, src, size)) {
+        return halide_error_code_generic_error;
+    }
+    halide_abort_if_false(user_context, program != nullptr);
+#endif 
 
     // Create the state object if necessary. This only happens once, regardless
     // of how many times halide_init_kernels/halide_release is called.
@@ -428,7 +504,7 @@ VkResult allocate_device_memory(VkPhysicalDevice physical_device, VkDevice devic
     }
 
     if (memory_type_index == VK_MAX_MEMORY_TYPES) {
-        debug(nullptr) << "Vulkan: failed to find appropriate memory type";
+        debug(0) << "Vulkan: failed to find appropriate memory type";
         return VK_ERROR_OUT_OF_DEVICE_MEMORY;
     }
 
@@ -447,7 +523,7 @@ VkResult allocate_device_memory(VkPhysicalDevice physical_device, VkDevice devic
     auto ret_code = vkAllocateMemory(device, &alloc_info, allocator, device_memory);
 
     if (ret_code != VK_SUCCESS) {
-        debug(nullptr) << "Vulkan: vkAllocateMemory returned: " << get_vulkan_error_name(ret_code) << "\n";
+        debug(0) << "Vulkan: vkAllocateMemory returned: " << get_vulkan_error_name(ret_code) << "\n";
         return VK_ERROR_OUT_OF_DEVICE_MEMORY;
     }
 
