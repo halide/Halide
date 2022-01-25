@@ -114,6 +114,7 @@ RegionAllocator::RegionAllocator(void* user_context, MemoryBlock* mb, const Allo
     alloc(fns) {
     
     block->allocator = this;
+    block->regions = create_region(user_context, 0, block->size);
 }
 
 RegionAllocator::~RegionAllocator() {
@@ -130,26 +131,30 @@ void RegionAllocator::initialize(void* user_context, MemoryBlock* mb, const Allo
         {fns.alloc_memory, fns.free_memory}
     );
     block->allocator = this;
+    block->regions = create_region(user_context, 0, block->size);
 }
 
 MemoryRegion* RegionAllocator::reserve(void *user_context, size_t size, size_t alignment) {
     size_t remaining = block->size - block->reserved;
     if(remaining < size) { 
         debug(user_context) << "RegionAllocator: Unable to reserve more memory from block " 
-                            << " -- requested size (" << (int32_t)(size) << " bytes) "
+                            << "-- requested size (" << (int32_t)(size) << " bytes) "
                             << "greater than available (" << (int32_t)(remaining) << " bytes)!\n";    
         return nullptr; 
     }
 
     MemoryRegion* region = find_region(user_context, size, alignment);
     if(region == nullptr) {
-        debug(user_context) << "RegionAllocator: Unable to reserve more memory from block " 
-                            << " -- could not find a suitable region for requested size (" 
+        debug(user_context) << "RegionAllocator: Falied to locate region for requested size (" 
                             << (int32_t)(size) << " bytes)!\n";
-        return nullptr; 
-    }
 
+        return nullptr;
+    }
+    
     if(can_split(region, size)) {
+        debug(user_context) << "RegionAllocator: Splitting region of size ( " << (int32_t)(region->size) << ") "
+                            << "to accomodate requested size (" << (int32_t)(size) << " bytes)!\n";
+
         split_region(user_context, region, size, alignment);
     }
 
@@ -205,6 +210,11 @@ MemoryRegion* RegionAllocator::coalesce_region(void* user_context, MemoryRegion*
 
     if(region->prev_ptr && (region->prev_ptr->usage == MemoryUsage::Available)) {
         MemoryRegion* prev_region = region->prev_ptr;
+
+        debug(user_context) << "RegionAllocator: Coalescing "
+                            << "previous region (offset=" << prev_region->offset << " size=" << (int32_t)(prev_region->size) << " bytes) " 
+                            << "into current region (offset=" << region->offset << " size=" << (int32_t)(region->size) << " bytes)\n!";
+
         prev_region->next_ptr = region->next_ptr;
         if(region->next_ptr) {
             region->next_ptr->prev_ptr = prev_region;
@@ -216,6 +226,11 @@ MemoryRegion* RegionAllocator::coalesce_region(void* user_context, MemoryRegion*
 
     if(region->next_ptr && (region->next_ptr->usage == MemoryUsage::Available)) {
         MemoryRegion* next_region = region->next_ptr;
+
+        debug(user_context) << "RegionAllocator: Coalescing "
+                            << "next region (offset=" << next_region->offset << " size=" << (int32_t)(next_region->size) << " bytes) " 
+                            << "into current region (offset=" << region->offset << " size=" << (int32_t)(region->size) << " bytes)!\n";
+
         if(next_region->next_ptr) {
             next_region->next_ptr->prev_ptr = region;
         }
@@ -238,6 +253,11 @@ MemoryRegion* RegionAllocator::split_region(void* user_context, MemoryRegion* re
 
     size_t empty_offset = adjusted_offset + size;
     size_t empty_size = region->size - adjusted_size;
+
+    debug(user_context) << "RegionAllocator: Splitting "
+                        << "current region (offset=" << region->offset << " size=" << (int32_t)(region->size) << " bytes) " 
+                        << "to create empty region (offset=" << empty_offset << " size=" << (int32_t)(empty_size) << " bytes)!\n";
+
 
     MemoryRegion* next_region = region->next_ptr;
     MemoryRegion* empty_region = create_region(user_context, empty_offset, empty_size);
@@ -264,6 +284,7 @@ void RegionAllocator::destroy_region(void* user_context, MemoryRegion* region) {
     arena.reclaim(user_context, region);
 }
 void RegionAllocator::alloc_region(void* user_context, MemoryRegion* region) {
+    debug(user_context) << "RegionAllocator: Allocating region of size ( " << (int32_t)(region->size) << ") bytes)!\n";
     halide_abort_if_false(user_context, region->usage == MemoryUsage::Available);
     alloc.alloc_region(user_context, region);
     region->usage = MemoryUsage::InUse;
@@ -272,6 +293,7 @@ void RegionAllocator::alloc_region(void* user_context, MemoryRegion* region) {
 
 void RegionAllocator::free_region(void* user_context, MemoryRegion* region) {
     if(region->usage == MemoryUsage::InUse) {
+        debug(user_context) << "RegionAllocator: Freeing region of size ( " << (int32_t)(region->size) << ") bytes)!\n";
         alloc.free_region(user_context, region);
         block->reserved -= region->size;
     }
@@ -349,6 +371,10 @@ public:
 
 private:
 
+    AllocatorList::EntryType* find_allocator_entry(void* user_context, MemoryBlock* block);
+    AllocatorList::EntryType* create_allocator_entry(void* user_context, MemoryBlock* block);
+    void destroy_allocator_entry(void* user_context, AllocatorList::EntryType* alloc_entry);
+
     BlockList::EntryType* find_block_entry(void* user_context, MemoryAccess access, size_t size);
     BlockList::EntryType* create_block_entry(void* user_context, MemoryAccess access, size_t size);
     void destroy_block_entry(void* user_context, BlockList::EntryType* block_entry);
@@ -416,22 +442,22 @@ MemoryRegion* BlockAllocator::reserve(void *user_context, MemoryAccess access, s
 
     if(block_entry == nullptr) {
         debug(user_context) << "BlockAllocator: Failed to allocate new empty block of size (" 
-                    << (int32_t)(block_size) << " bytes)!\n";
+                            << (int32_t)(block_size) << " bytes)!\n";
         return nullptr; 
     }
 
     MemoryBlock* block = &(block_entry->value);
-    RegionAllocator* region_allocator = block->allocator;
-    if(region_allocator == nullptr) {
-        AllocatorList::EntryType* allocator_entry = allocator_list.append(user_context);
-        region_allocator = &(allocator_entry->value);
-        region_allocator->initialize(user_context, block, 
-            {alloc.alloc_memory, alloc.free_memory, alloc.alloc_region, alloc.free_region}
-        );
-        block->allocator = region_allocator;
+    if(block->allocator == nullptr) {
+        create_allocator_entry(user_context, block);
     }
 
-    region = region_allocator->reserve(user_context, size, alignment);
+    halide_abort_if_false(user_context, block->allocator != nullptr);
+    region = block->allocator->reserve(user_context, size, alignment);
+    if(region == nullptr) {
+        debug(user_context) << "BlockAllocator: Failed to allocate region of size (" 
+                            << (int32_t)(size) << " bytes)!\n";
+        return nullptr; 
+    }
     return region;
 }
 
@@ -475,6 +501,34 @@ void BlockAllocator::destroy(void *user_context) {
     }    
 }
 
+BlockAllocator::AllocatorList::EntryType*
+BlockAllocator::find_allocator_entry(void* user_context, MemoryBlock* block) {
+    AllocatorList::EntryType* allocator_entry = allocator_list.front();
+    while(allocator_entry != nullptr) {
+        if(&(allocator_entry->value) == block->allocator ) {
+            break;
+        }
+        allocator_entry = allocator_entry->next_ptr;
+    }
+    return allocator_entry;
+}
+
+BlockAllocator::AllocatorList::EntryType*
+BlockAllocator::create_allocator_entry(void* user_context, MemoryBlock* block) {
+    AllocatorList::EntryType* allocator_entry = allocator_list.append(user_context);
+    RegionAllocator* allocator = &(allocator_entry->value);
+    memset(allocator, 0, sizeof(RegionAllocator));
+    allocator->initialize(user_context, block, 
+        {alloc.alloc_memory, alloc.free_memory, alloc.alloc_region, alloc.free_region}
+    );
+    block->allocator = allocator;
+    return allocator_entry;
+}
+
+void BlockAllocator::destroy_allocator_entry(void* user_context, BlockAllocator::AllocatorList::EntryType* allocator_entry) {
+    allocator_list.remove(user_context, allocator_entry);
+}
+
 BlockAllocator::BlockList::EntryType* 
 BlockAllocator::create_block_entry(void* user_context, MemoryAccess access, size_t size) {
     BlockList::EntryType* block_entry = block_list.append(user_context);
@@ -487,11 +541,13 @@ BlockAllocator::create_block_entry(void* user_context, MemoryAccess access, size
     alloc_block(user_context, block);
     return block_entry;
 }
+
 void BlockAllocator::destroy_block_entry(void* user_context, BlockAllocator::BlockList::EntryType* block_entry) {
     MemoryBlock* block = &(block_entry->value);
     free_block(user_context, block);
     block_list.remove(user_context, block_entry);
 }
+
 void BlockAllocator::alloc_block(void* user_context, MemoryBlock* block) {
     alloc.alloc_block(user_context, block);
     block->reserved = 0;
@@ -500,14 +556,10 @@ void BlockAllocator::alloc_block(void* user_context, MemoryBlock* block) {
 void BlockAllocator::free_block(void* user_context, MemoryBlock* block) {
     if(block->allocator) {
         block->allocator->destroy(user_context);
-        AllocatorList::EntryType* allocator_entry = allocator_list.front();
-        while(allocator_entry != nullptr) {
-            if(&(allocator_entry->value) == block->allocator ) {
-                allocator_list.remove(user_context, allocator_entry);
-                block->allocator = nullptr;
-                break;
-            }
-            allocator_entry = allocator_entry->next_ptr;
+        AllocatorList::EntryType* allocator_entry = find_allocator_entry(user_context, block);
+        if(allocator_entry != nullptr) {
+            destroy_allocator_entry(user_context, allocator_entry);
+            block->allocator = nullptr;
         }
     }
     alloc.free_block(user_context, block);
