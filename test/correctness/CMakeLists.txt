@@ -310,8 +310,8 @@ tests(GROUPS correctness
       storage_folding.cpp
       store_in.cpp
       stream_compaction.cpp
-      strict_float.cpp
-      strict_float_bounds.cpp
+#      strict_float.cpp
+#      strict_float_bounds.cpp
       strided_load.cpp
       target.cpp
       thread_safety.cpp

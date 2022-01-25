@@ -68,7 +68,7 @@ function(add_halide_test TARGET)
 endfunction()
 
 function(tests)
-    set(options EXPECT_FAILURE)
+    set(options EXPECT_FAILURE RUNTIME_ONLY)
     set(oneValueArgs)
     set(multiValueArgs SOURCES GROUPS ARGS)
     cmake_parse_arguments(args "${options}" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})

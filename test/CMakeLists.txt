@@ -38,3 +38,8 @@ option(WITH_TEST_GENERATOR "Build generator tests" ON)
 if (WITH_TEST_GENERATOR)
     add_subdirectory(generator)
 endif ()
+
+option(WITH_TEST_RUNTIME "Build runtime tests" ON)
+if (WITH_TEST_RUNTIME)
+    add_subdirectory(runtime)
+endif ()
