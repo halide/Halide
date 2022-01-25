@@ -159,7 +159,7 @@ bool matmul(int row, int col, int acc, int tile_x, int tile_y, int tile_r) {
         }
     }
 
-    std::cout << "Success\n";
+    std::cout << "Success!\n";
     return true;
 }
 
