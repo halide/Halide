@@ -66,6 +66,36 @@ int main(int argc, char **argv) {
         halide_abort_if_false(user_context, allocated_region_memory == 0);
     }
 
+    // stress test
+    {
+        static const size_t block_size = 1024;
+        BlockAllocator::AllocBlockRegionFns functions = {
+            allocate_system_memory, free_system_memory,
+            allocate_block_memory, free_block_memory,
+            allocate_region_memory, free_region_memory
+        };
+
+        BlockAllocator allocator(user_context, block_size, functions);
+
+        static size_t test_allocations = 1000;
+        BlockStorage<MemoryRegion*> regions(user_context, test_allocations, {allocate_system_memory, free_system_memory});
+        for(size_t n = 0; n < test_allocations; ++n) {
+            size_t count = n % 32;
+            count = count > 1 ? count : 1;
+            size_t size = count * sizeof(int); 
+            MemoryRegion* region = allocator.reserve(user_context, MemoryAccess::HostOnly, size, sizeof(int));
+            regions.append(user_context, region);            
+        }
+
+        for(size_t n = 0; n < regions.size(); ++n) {
+            allocator.reclaim(user_context, regions[n]);
+        }
+        halide_abort_if_false(user_context, allocated_region_memory == 0);
+
+        allocator.destroy(user_context);
+        halide_abort_if_false(user_context, allocated_block_memory == 0);
+    }
+
     print(user_context) << "Success!\n";
     return 0;
 }

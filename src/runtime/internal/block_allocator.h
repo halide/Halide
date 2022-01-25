@@ -135,6 +135,7 @@ void RegionAllocator::initialize(void* user_context, MemoryBlock* mb, const Allo
 }
 
 MemoryRegion* RegionAllocator::reserve(void *user_context, size_t size, size_t alignment) {
+    halide_abort_if_false(user_context, size > 0);
     size_t remaining = block->size - block->reserved;
     if(remaining < size) { 
         debug(user_context) << "RegionAllocator: Unable to reserve more memory from block " 
@@ -145,7 +146,7 @@ MemoryRegion* RegionAllocator::reserve(void *user_context, size_t size, size_t a
 
     MemoryRegion* region = find_region(user_context, size, alignment);
     if(region == nullptr) {
-        debug(user_context) << "RegionAllocator: Falied to locate region for requested size (" 
+        debug(user_context) << "RegionAllocator: Failed to locate region for requested size (" 
                             << (int32_t)(size) << " bytes)!\n";
 
         return nullptr;
@@ -371,10 +372,13 @@ public:
 
 private:
 
+    MemoryRegion* reserve_region(void* user_context, RegionAllocator* allocator, size_t size, size_t alignment);
+
     AllocatorList::EntryType* find_allocator_entry(void* user_context, MemoryBlock* block);
     AllocatorList::EntryType* create_allocator_entry(void* user_context, MemoryBlock* block);
     void destroy_allocator_entry(void* user_context, AllocatorList::EntryType* alloc_entry);
 
+    BlockList::EntryType* reserve_block_entry(void* user_context, MemoryAccess access, size_t size);
     BlockList::EntryType* find_block_entry(void* user_context, MemoryAccess access, size_t size);
     BlockList::EntryType* create_block_entry(void* user_context, MemoryAccess access, size_t size);
     void destroy_block_entry(void* user_context, BlockList::EntryType* block_entry);
@@ -408,38 +412,9 @@ void BlockAllocator::initialize(void* user_context, size_t bs, const AllocBlockR
     allocator_list.initialize(user_context, AllocatorList::default_capacity, {alloc.alloc_memory, alloc.free_memory}); 
 }
 
-BlockAllocator::BlockList::EntryType* 
-BlockAllocator::find_block_entry(void* user_context, MemoryAccess access, size_t size) {
-    BlockList::EntryType* block_entry = block_list.front();
-    while(block_entry != nullptr) {
-        
-        const MemoryBlock* block = &(block_entry->value);
-        if(block->access != access) {
-            continue;
-        }
-
-        size_t available = (block->size - block->reserved);
-        if(available >= size) {
-            break;
-        }
-
-        block_entry = block_entry->next_ptr;
-    }
-    return block_entry;
-}
-
 MemoryRegion* BlockAllocator::reserve(void *user_context, MemoryAccess access, size_t size, size_t alignment) {
 
-    MemoryRegion* region = nullptr;
-    BlockList::EntryType* block_entry = find_block_entry(user_context, access, size);
-    if(block_entry == nullptr) {
-        size_t actual_size = (size > block_size) ? size : block_size;
-        debug(user_context) << "BlockAllocator: No free blocks found! Allocating new empty block of size (" 
-                            << (int32_t)(actual_size) << " bytes)!\n";
-
-        block_entry = create_block_entry(user_context, access, actual_size);
-    }
-
+    BlockList::EntryType* block_entry = reserve_block_entry(user_context, access, size);
     if(block_entry == nullptr) {
         debug(user_context) << "BlockAllocator: Failed to allocate new empty block of size (" 
                             << (int32_t)(block_size) << " bytes)!\n";
@@ -447,16 +422,29 @@ MemoryRegion* BlockAllocator::reserve(void *user_context, MemoryAccess access, s
     }
 
     MemoryBlock* block = &(block_entry->value);
-    if(block->allocator == nullptr) {
-        create_allocator_entry(user_context, block);
-    }
-
+    halide_abort_if_false(user_context, block != nullptr);
     halide_abort_if_false(user_context, block->allocator != nullptr);
-    region = block->allocator->reserve(user_context, size, alignment);
+
+    MemoryRegion* region = reserve_region(user_context, block->allocator, size, alignment);
     if(region == nullptr) {
-        debug(user_context) << "BlockAllocator: Failed to allocate region of size (" 
-                            << (int32_t)(size) << " bytes)!\n";
-        return nullptr; 
+        
+        size_t actual_size = (size > block_size) ? size : block_size;
+        debug(user_context) << "BlockAllocator: No free blocks found! Allocating new empty block of size (" 
+                            << (int32_t)(actual_size) << " bytes)!\n";
+
+        // Unable to reserve region in an existing block ... create a new block and try again.
+        block_entry = create_block_entry(user_context, access, actual_size);
+        if(block_entry == nullptr) {
+            debug(user_context) << "BlockAllocator: Out of memory! Failed to allocate empty block of size (" 
+                                << (int32_t)(actual_size) << " bytes)!\n";
+        }
+
+        block = &(block_entry->value);
+        if(block->allocator == nullptr) {
+            create_allocator_entry(user_context, block);
+        }
+
+        region = reserve_region(user_context, block->allocator, size, alignment);
     }
     return region;
 }
@@ -501,6 +489,62 @@ void BlockAllocator::destroy(void *user_context) {
     }    
 }
 
+MemoryRegion* BlockAllocator::reserve_region(void* user_context, RegionAllocator* allocator, size_t size, size_t alignment) {
+    MemoryRegion* region = allocator->reserve(user_context, size, alignment);
+    if(region == nullptr) {
+        debug(user_context) << "BlockAllocator: Failed to allocate region of size (" 
+                            << (int32_t)(size) << " bytes)!\n";
+
+        // allocator has enough free space, but not enough contiguous space
+        // -- collect and try to reallocate
+        if(allocator->collect(user_context)) {
+            region = allocator->reserve(user_context, size, alignment);
+        }
+    }
+    return region;
+}
+
+BlockAllocator::BlockList::EntryType* 
+BlockAllocator::find_block_entry(void* user_context, MemoryAccess access, size_t size) {
+    BlockList::EntryType* block_entry = block_list.front();
+    while(block_entry != nullptr) {
+        
+        const MemoryBlock* block = &(block_entry->value);
+        if(block->access != access) {
+            continue;
+        }
+
+        size_t available = (block->size - block->reserved);
+        if(available >= size) {
+            break;
+        }
+
+        block_entry = block_entry->next_ptr;
+    }
+    return block_entry;
+}
+
+BlockAllocator::BlockList::EntryType* 
+BlockAllocator::reserve_block_entry(void *user_context, MemoryAccess access, size_t size) {
+
+    BlockList::EntryType* block_entry = find_block_entry(user_context, access, size);
+    if(block_entry == nullptr) {
+        size_t actual_size = (size > block_size) ? size : block_size;
+        debug(user_context) << "BlockAllocator: No free blocks found! Allocating new empty block of size (" 
+                            << (int32_t)(actual_size) << " bytes)!\n";
+
+        block_entry = create_block_entry(user_context, access, actual_size);
+    }
+
+    if(block_entry) {
+        MemoryBlock* block = &(block_entry->value);
+        if(block->allocator == nullptr) {
+            create_allocator_entry(user_context, block);
+        }
+    }
+    return block_entry;
+}
+ 
 BlockAllocator::AllocatorList::EntryType*
 BlockAllocator::find_allocator_entry(void* user_context, MemoryBlock* block) {
     AllocatorList::EntryType* allocator_entry = allocator_list.front();
