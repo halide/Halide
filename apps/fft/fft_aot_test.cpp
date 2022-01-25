@@ -61,7 +61,7 @@ int main(int argc, char **argv) {
         auto in = real_buffer();
         for (int j = 0; j < kSize; j++) {
             for (int i = 0; i < kSize; i++) {
-                in(i, j) = signal_1d[i] + signal_1d[j];
+                in(i, j, 0) = signal_1d[i] + signal_1d[j];
             }
         }
 
@@ -155,7 +155,7 @@ int main(int argc, char **argv) {
 
         for (size_t j = 0; j < kSize; j++) {
             for (size_t i = 0; i < kSize; i++) {
-                float sample = out(i, j);
+                float sample = out(i, j, 0);
                 float expected = cos(2 * kPi * (i / 16.0f + .125f));
                 if (fabs(sample - expected) > .001) {
                     std::cerr << "fft_inverse_c2r mismatch at (" << i << ", " << j << ") " << sample << " vs. " << expected << "\n";

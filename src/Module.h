@@ -19,7 +19,7 @@
 
 namespace Halide {
 
-template<typename T>
+template<typename T, int Dims>
 class Buffer;
 struct Target;
 

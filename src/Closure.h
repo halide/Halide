@@ -8,14 +8,12 @@
 #include <map>
 #include <string>
 
+#include "Buffer.h"
 #include "IR.h"
 #include "IRVisitor.h"
 #include "Scope.h"
 
 namespace Halide {
-
-template<typename T>
-class Buffer;
 
 namespace Internal {
 
@@ -66,7 +64,7 @@ public:
 
 protected:
     void found_buffer_ref(const std::string &name, Type type,
-                          bool read, bool written, const Halide::Buffer<void> &image);
+                          bool read, bool written, const Halide::Buffer<> &image);
 
 public:
     Closure() = default;
