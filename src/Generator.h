@@ -2671,6 +2671,19 @@ public:
         return *this;
     }
 
+    template<typename T2 = T, typename std::enable_if<std::is_array<T2>::value>::type * = nullptr>
+    const Func &operator[](size_t i) const {
+        this->check_gio_access();
+        return this->template get_values<Func>()[i];
+    }
+
+    // Allow Output<Buffer[]>.compute_root() (or other scheduling directive that requires nonconst)
+    template<typename T2 = T, typename std::enable_if<std::is_array<T2>::value>::type * = nullptr>
+    Func operator[](size_t i) {
+        this->check_gio_access();
+        return this->template get_values<Func>()[i];
+    }
+
     /** Forward methods to the OutputImageParam. */
     // @{
     HALIDE_FORWARD_METHOD(OutputImageParam, dim)

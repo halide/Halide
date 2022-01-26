@@ -19,8 +19,11 @@ const int32_t kSize = 16;
 
 using Halide::Runtime::Buffer;
 
-Buffer<float> real_buffer(int32_t y_size = kSize) {
-    return Buffer<float>::make_interleaved(kSize, y_size, 1);
+// Note that real_buffer() is 3D (with the 3rd dimension having extent 0)
+// because the fft is written generically to require 3D inputs, even when they are real.
+// Hence, the resulting buffer must be accessed with buf(i, j, 0).
+Buffer<float, 3> real_buffer(int32_t y_size = kSize) {
+    return Buffer<float, 3>::make_interleaved(kSize, y_size, 1);
 }
 
 Buffer<float> complex_buffer(int32_t y_size = kSize) {

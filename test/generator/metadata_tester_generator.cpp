@@ -167,6 +167,11 @@ public:
         // Note that calling set_bounds()/bound() implicitly calls set_estimate()/estimate() as well.
         type_only_output_buffer.dim(1).set_bounds(0, 32);
         type_only_output_buffer.bound(c, 0, 3);
+
+        // Verify that we can call schedule methods on arrays-of-Buffer
+        for (int i = 0; i < 2; i++) {
+            array_outputs4[i].compute_root();
+        }
     }
 
     void schedule() {
