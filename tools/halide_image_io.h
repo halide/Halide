@@ -1919,14 +1919,14 @@ bool save_tiff(ImageType &im, const std::string &filename) {
     }
 
     // Otherwise, write it out via manual traversal.
-#define HANDLE_CASE(CODE, BITS, TYPE)                    \
-    case halide_type_t(CODE, BITS).as_u32(): {           \
-        ElemWriter<TYPE> ew(&f);                         \
+#define HANDLE_CASE(CODE, BITS, TYPE)                                       \
+    case halide_type_t(CODE, BITS).as_u32(): {                              \
+        ElemWriter<TYPE> ew(&f);                                            \
         im.template as<const TYPE, DimsUnconstrained>().for_each_value(ew); \
-        if (!check(ew.ok, "TIFF write failed")) {        \
-            return false;                                \
-        }                                                \
-        break;                                           \
+        if (!check(ew.ok, "TIFF write failed")) {                           \
+            return false;                                                   \
+        }                                                                   \
+        break;                                                              \
     }
 
     switch (im_type.element_of().as_u32()) {
