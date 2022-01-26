@@ -65,7 +65,7 @@ Tile<1> get_1d_tile_index(const Expr &e) {
 
         auto stride = std::move(results[1]);
 
-        return {true, std::move(r1->base), {std::move(stride)}, {r1->lanes}};
+        return {true, r1->base, {std::move(stride)}, {r1->lanes}};
     }
 
     return {};
@@ -233,7 +233,7 @@ Tile<3> get_3d_rhs_tile_index(const Expr &e, int element_width) {
     }
 
     if (!found_stride) {
-        stride_pattern = (Broadcast::make(Ramp::make(0, 1, tile_r), tile_x * tile_y) / Broadcast::make((4/ element_width), tile_x * tile_y * tile_r) + wild_i32) * Broadcast::make(wild_i32, tile_x * tile_y * tile_r);
+        stride_pattern = (Broadcast::make(Ramp::make(0, 1, tile_r), tile_x * tile_y) / Broadcast::make((4 / element_width), tile_x * tile_y * tile_r) + wild_i32) * Broadcast::make(wild_i32, tile_x * tile_y * tile_r);
         if (expr_match(stride_pattern, add_lhs->a, results)) {
             found_stride = true;
             stride = std::move(results[1]);
