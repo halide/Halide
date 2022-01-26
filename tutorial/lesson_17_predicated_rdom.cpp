@@ -60,7 +60,7 @@ int main(int argc, char **argv) {
         // After defining the predicate, we then define the update.
         circle(r.x, r.y) *= 2;
 
-        Buffer<int> halide_result = circle.realize({7, 7});
+        Buffer<int, 2> halide_result = circle.realize({7, 7});
 
         // See figures/lesson_17_rdom_circular.mp4 for a visualization of
         // what this did.
@@ -116,7 +116,7 @@ int main(int argc, char **argv) {
         // Then define the update.
         triangle(r.x, r.y) *= 2;
 
-        Buffer<int> halide_result = triangle.realize({10, 10});
+        Buffer<int, 2> halide_result = triangle.realize({10, 10});
 
         // See figures/lesson_17_rdom_triangular.mp4 for a
         // visualization of what this did.
@@ -172,7 +172,7 @@ int main(int argc, char **argv) {
         r2.where(f(r2.x, r2.y) < 1);
         g(r2.x, r2.y) += 17;
 
-        Buffer<int> halide_result_g = g.realize({5, 5});
+        Buffer<int, 2> halide_result_g = g.realize({5, 5});
 
         // See figures/lesson_17_rdom_calls_in_predicate.mp4 for a
         // visualization of what this did.

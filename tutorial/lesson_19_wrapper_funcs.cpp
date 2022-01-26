@@ -306,7 +306,7 @@ int main(int argc, char **argv) {
         }
 
         // Create an interesting input image to use.
-        Buffer<int> input(258, 258);
+        Buffer<int, 2> input(258, 258);
         input.set_min(-1, -1);
         for (int y = input.top(); y <= input.bottom(); y++) {
             for (int x = input.left(); x <= input.right(); x++) {
@@ -316,7 +316,7 @@ int main(int argc, char **argv) {
 
         img.set(input);
         blur.compile_jit(target);
-        Buffer<int> out = blur.realize({256, 256});
+        Buffer<int, 2> out = blur.realize({256, 256});
 
         // Check the output is what we expected
         for (int y = out.top(); y <= out.bottom(); y++) {

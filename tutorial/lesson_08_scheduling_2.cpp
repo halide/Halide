@@ -586,7 +586,7 @@ int main(int argc, char **argv) {
         // consumer.trace_stores();
         // producer.trace_stores();
 
-        Buffer<float> halide_result = consumer.realize({160, 160});
+        Buffer<float, 2> halide_result = consumer.realize({160, 160});
 
         // See figures/lesson_08_mixed.mp4 for a visualization.
 

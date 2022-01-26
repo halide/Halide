@@ -75,7 +75,7 @@ int main(int argc, char **argv) {
     // resolution of the output image. Halide.h also provides a basic
     // templatized image type we can use. We'll make an 800 x 600
     // image.
-    Halide::Buffer<int32_t> output = gradient.realize({800, 600});
+    Halide::Buffer<int32_t, 2> output = gradient.realize({800, 600});
 
     // Halide does type inference for you. Var objects represent
     // 32-bit integers, so the Expr object 'x + y' also represents a

@@ -33,12 +33,12 @@ int main(int argc, char **argv) {
 
     // Let's make some images stored with interleaved and planar
     // memory. Halide::Runtime::Buffer is planar by default.
-    Halide::Runtime::Buffer<uint8_t> planar_input(1024, 768, 3);
-    Halide::Runtime::Buffer<uint8_t> planar_output(1024, 768, 3);
-    Halide::Runtime::Buffer<uint8_t> interleaved_input =
-        Halide::Runtime::Buffer<uint8_t>::make_interleaved(1024, 768, 3);
-    Halide::Runtime::Buffer<uint8_t> interleaved_output =
-        Halide::Runtime::Buffer<uint8_t>::make_interleaved(1024, 768, 3);
+    Halide::Runtime::Buffer<uint8_t, 3> planar_input(1024, 768, 3);
+    Halide::Runtime::Buffer<uint8_t, 3> planar_output(1024, 768, 3);
+    Halide::Runtime::Buffer<uint8_t, 3> interleaved_input =
+        Halide::Runtime::Buffer<uint8_t, 3>::make_interleaved(1024, 768, 3);
+    Halide::Runtime::Buffer<uint8_t, 3> interleaved_output =
+        Halide::Runtime::Buffer<uint8_t, 3>::make_interleaved(1024, 768, 3);
 
     // Let's check the strides are what we expect, given the
     // constraints we set up in the generator.

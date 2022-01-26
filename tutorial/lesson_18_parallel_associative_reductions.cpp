@@ -27,7 +27,7 @@ int main(int argc, char **argv) {
     Var x("x"), y("y"), i("i"), u("u"), v("v");
 
     // Create an input with random values.
-    Buffer<uint8_t> input(8, 8, "input");
+    Buffer<uint8_t, 2> input(8, 8, "input");
     for (int y = 0; y < 8; ++y) {
         for (int x = 0; x < 8; ++x) {
             input(x, y) = (rand() % 256);
@@ -156,7 +156,7 @@ int main(int argc, char **argv) {
         // can't prove the associativity of a reduction, it will throw
         // an error.
 
-        Buffer<int> halide_result = histogram.realize({8});
+        Buffer<int, 1> halide_result = histogram.realize({8});
 
         // See figures/lesson_18_hist_rfactor_par.mp4 for a
         // visualization of what this does.
@@ -223,7 +223,7 @@ int main(int argc, char **argv) {
         intermediate.vectorize(x, 8);
         histogram.vectorize(x, 8);
 
-        Buffer<int> halide_result = histogram.realize({8});
+        Buffer<int, 1> halide_result = histogram.realize({8});
 
         // See figures/lesson_18_hist_rfactor_vec.mp4 for a
         // visualization of what this does.
@@ -294,7 +294,7 @@ int main(int argc, char **argv) {
         intermediate.vectorize(x, 8);
         histogram.vectorize(x, 8);
 
-        Buffer<int> halide_result = histogram.realize({8});
+        Buffer<int, 1> halide_result = histogram.realize({8});
 
         // See figures/lesson_18_hist_rfactor_tile.mp4 for a visualization of
         // what this does.

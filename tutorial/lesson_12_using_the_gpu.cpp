@@ -40,9 +40,9 @@ Var x, y, c, i, ii, xo, yo, xi, yi;
 class MyPipeline {
 public:
     Func lut, padded, padded16, sharpen, curved;
-    Buffer<uint8_t> input;
+    Buffer<uint8_t, 3> input;
 
-    MyPipeline(Buffer<uint8_t> in)
+    MyPipeline(Buffer<uint8_t, 3> in)
         : input(in) {
         // For this lesson, we'll use a two-stage pipeline that sharpens
         // and then applies a look-up-table (LUT).
@@ -196,7 +196,7 @@ public:
     void test_performance() {
         // Test the performance of the scheduled MyPipeline.
 
-        Buffer<uint8_t> output(input.width(), input.height(), input.channels());
+        Buffer<uint8_t, 3> output(input.width(), input.height(), input.channels());
 
         // Run the filter once to initialize any GPU runtime state.
         curved.realize(output);
@@ -226,8 +226,8 @@ public:
         printf("%1.4f milliseconds\n", best_time);
     }
 
-    void test_correctness(Buffer<uint8_t> reference_output) {
-        Buffer<uint8_t> output =
+    void test_correctness(Buffer<uint8_t, 3> reference_output) {
+        Buffer<uint8_t, 3> output =
             curved.realize({input.width(), input.height(), input.channels()});
 
         // Check against the reference output.
@@ -250,10 +250,10 @@ public:
 
 int main(int argc, char **argv) {
     // Load an input image.
-    Buffer<uint8_t> input = load_image("images/rgb.png");
+    Buffer<uint8_t, 3> input = load_image("images/rgb.png");
 
     // Allocated an image that will store the correct output
-    Buffer<uint8_t> reference_output(input.width(), input.height(), input.channels());
+    Buffer<uint8_t, 3> reference_output(input.width(), input.height(), input.channels());
 
     printf("Running pipeline on CPU:\n");
     MyPipeline p1(input);

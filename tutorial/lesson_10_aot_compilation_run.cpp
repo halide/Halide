@@ -40,7 +40,7 @@ int main(int argc, char **argv) {
     // zero on success.
 
     // Let's make a buffer for our input and output.
-    Halide::Runtime::Buffer<uint8_t> input(640, 480), output(640, 480);
+    Halide::Runtime::Buffer<uint8_t, 2> input(640, 480), output(640, 480);
 
     // Halide::Runtime::Buffer also has constructors that wrap
     // existing data instead of allocating new memory. Use these if

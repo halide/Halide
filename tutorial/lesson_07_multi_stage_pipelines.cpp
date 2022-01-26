@@ -32,7 +32,7 @@ int main(int argc, char **argv) {
     // first horizontally, and then vertically.
     {
         // Take a color 8-bit input
-        Buffer<uint8_t> input = load_image("images/rgb.png");
+        Buffer<uint8_t, 3> input = load_image("images/rgb.png");
 
         // Upgrade it to 16-bit, so we can do math without it overflowing.
         Func input_16("input_16");
@@ -63,7 +63,7 @@ int main(int argc, char **argv) {
 
         // Now let's realize it...
 
-        // Buffer<uint8_t> result = output.realize({input.width(), input.height(), 3});
+        // Buffer<uint8_t, 3> result = output.realize({input.width(), input.height(), 3});
 
         // Except that the line above is not going to work. Uncomment
         // it to see what happens.
@@ -83,7 +83,7 @@ int main(int argc, char **argv) {
         // over a domain shifted inwards by one pixel, we won't be
         // asking the Halide routine to read out of bounds. We saw how
         // to do this in the previous lesson:
-        Buffer<uint8_t> result(input.width() - 2, input.height() - 2, 3);
+        Buffer<uint8_t, 3> result(input.width() - 2, input.height() - 2, 3);
         result.set_min(1, 1);
         output.realize(result);
 
@@ -100,7 +100,7 @@ int main(int argc, char **argv) {
     // The same pipeline, with a boundary condition on the input.
     {
         // Take a color 8-bit input
-        Buffer<uint8_t> input = load_image("images/rgb.png");
+        Buffer<uint8_t, 3> input = load_image("images/rgb.png");
 
         // This time, we'll wrap the input in a Func that prevents
         // reading out of bounds:
@@ -158,7 +158,7 @@ int main(int argc, char **argv) {
 
         // This time it's safe to evaluate the output over the same
         // domain as the input, because we have a boundary condition.
-        Buffer<uint8_t> result = output.realize({input.width(), input.height(), 3});
+        Buffer<uint8_t, 3> result = output.realize({input.width(), input.height(), 3});
 
         // Save the result. It should look like a slightly blurry
         // parrot, but this time it will be the same size as the

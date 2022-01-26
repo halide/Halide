@@ -36,7 +36,7 @@ int main(int argc, char **argv) {
 
         // Realize the function over an 8x8 region.
         printf("Evaluating gradient\n");
-        Buffer<int> output = gradient.realize({8, 8});
+        Buffer<int, 2> output = gradient.realize({8, 8});
 
         // This will print out all the times gradient(x, y) gets
         // evaluated.

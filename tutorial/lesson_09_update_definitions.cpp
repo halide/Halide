@@ -36,7 +36,7 @@ int main(int argc, char **argv) {
     Var x("x"), y("y");
 
     // Load a grayscale image to use as an input.
-    Buffer<uint8_t> input = load_image("images/gray.png");
+    Buffer<uint8_t, 2> input = load_image("images/gray.png");
 
     // You can define a Func in multiple passes. Let's see a toy
     // example first.
@@ -151,7 +151,7 @@ int main(int argc, char **argv) {
         // domain" and using it inside an update definition:
         RDom r(0, 50);
         f(x, r) = f(x, r) * f(x, r);
-        Buffer<float> halide_result = f.realize({100, 100});
+        Buffer<float, 2> halide_result = f.realize({100, 100});
 
         // See figures/lesson_09_update_rdom.mp4 for a visualization.
 
@@ -205,7 +205,7 @@ int main(int argc, char **argv) {
         // input image at that point.
         histogram(input(r.x, r.y)) += 1;
 
-        Buffer<int> halide_result = histogram.realize({256});
+        Buffer<int, 1> halide_result = histogram.realize({256});
 
         // The equivalent C is:
         int c_result[256];
@@ -263,7 +263,7 @@ int main(int argc, char **argv) {
         Var yo, yi;
         f.update(1).split(y, yo, yi, 4).parallel(yo);
 
-        Buffer<int> halide_result = f.realize({16, 16});
+        Buffer<int, 2> halide_result = f.realize({16, 16});
 
         // See figures/lesson_09_update_schedule.mp4 for a visualization.
 
@@ -324,7 +324,7 @@ int main(int argc, char **argv) {
         producer(x) = x * 2;
         producer(x) += 10;
         consumer(x) = 2 * producer(x);
-        Buffer<int> halide_result = consumer.realize({10});
+        Buffer<int, 1> halide_result = consumer.realize({10});
 
         // See figures/lesson_09_inline_reduction.gif for a visualization.
 
@@ -383,7 +383,7 @@ int main(int argc, char **argv) {
 
         producer.compute_at(consumer, x);
 
-        Buffer<int> halide_result = consumer.realize({10});
+        Buffer<int, 1> halide_result = consumer.realize({10});
 
         // See figures/lesson_09_compute_at_pure.gif for a visualization.
 
@@ -435,7 +435,7 @@ int main(int argc, char **argv) {
         // the Vars of a Func are shared across the pure and
         // update steps.
 
-        Buffer<int> halide_result = consumer.realize({10});
+        Buffer<int, 1> halide_result = consumer.realize({10});
 
         // See figures/lesson_09_compute_at_update.gif for a visualization.
 
@@ -478,7 +478,7 @@ int main(int argc, char **argv) {
         // redundant work occurs.
         producer.compute_at(consumer, x);
 
-        Buffer<int> halide_result = consumer.realize({10});
+        Buffer<int, 1> halide_result = consumer.realize({10});
 
         // See figures/lesson_09_compute_at_pure_and_update.gif for a visualization.
 
@@ -545,7 +545,7 @@ int main(int argc, char **argv) {
         producer_1.compute_at(consumer_2, x);
         producer_2.compute_at(consumer_2, y);
 
-        Buffer<int> halide_result = consumer_2.realize({10, 10});
+        Buffer<int, 2> halide_result = consumer_2.realize({10, 10});
 
         // See figures/lesson_09_compute_at_multiple_updates.mp4 for a visualization.
 
@@ -601,7 +601,7 @@ int main(int argc, char **argv) {
 
         producer.compute_at(consumer, r);
 
-        Buffer<int> halide_result = consumer.realize({10});
+        Buffer<int, 1> halide_result = consumer.realize({10});
 
         // See figures/lesson_09_compute_at_rvar.gif for a visualization.
 
@@ -658,7 +658,7 @@ int main(int argc, char **argv) {
         Func blurry;
         blurry(x, y) = cast<uint8_t>(local_sum(x, y) / 25);
 
-        Buffer<uint8_t> halide_result = blurry.realize({input.width(), input.height()});
+        Buffer<uint8_t, 2> halide_result = blurry.realize({input.width(), input.height()});
 
         // The default schedule will inline 'clamped' into the update
         // step of 'local_sum', because clamped only has a pure
@@ -667,7 +667,7 @@ int main(int argc, char **argv) {
         // because the default schedule for reductions is
         // compute-innermost. Here's the equivalent C:
 
-        Buffer<uint8_t> c_result(input.width(), input.height());
+        Buffer<uint8_t, 2> c_result(input.width(), input.height());
         for (int y = 0; y < input.height(); y++) {
             for (int x = 0; x < input.width(); x++) {
                 int local_sum[1];
@@ -720,8 +720,8 @@ int main(int argc, char **argv) {
         // pure function. The reduction domain has been swallowed to
         // define the inner anonymous reduction.
 
-        Buffer<int> halide_result_1 = f1.realize({10});
-        Buffer<int> halide_result_2 = f2.realize({10});
+        Buffer<int, 1> halide_result_1 = f1.realize({10});
+        Buffer<int, 1> halide_result_2 = f2.realize({10});
 
         // The equivalent C is:
         int c_result[10];
@@ -783,7 +783,7 @@ int main(int argc, char **argv) {
         // as we need it in a circular buffer (see lesson 08).
         clamped.store_at(spread, yo).compute_at(spread, yi);
 
-        Buffer<uint8_t> halide_result = spread.realize({input.width(), input.height()});
+        Buffer<uint8_t, 2> halide_result = spread.realize({input.width(), input.height()});
 
 // The C equivalent is almost too horrible to contemplate (and
 // took me a long time to debug). This time I want to time
@@ -793,7 +793,7 @@ int main(int argc, char **argv) {
 // similar to get correct timing).
 #ifdef __SSE2__
         // Don't include the time required to allocate the output buffer.
-        Buffer<uint8_t> c_result(input.width(), input.height());
+        Buffer<uint8_t, 2> c_result(input.width(), input.height());
 
 #ifdef _OPENMP
         double t1 = current_time();
