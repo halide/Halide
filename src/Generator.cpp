@@ -674,6 +674,7 @@ std::vector<std::vector<Func>> GeneratorStub::generate(const GeneratorParamsMap 
 
     std::vector<std::vector<Func>> v;
     GeneratorParamInfo &pi = generator->param_info();
+#ifdef HALIDE_ALLOW_GENERATOR_BUILD_METHOD
     if (!pi.outputs().empty()) {
         for (auto *output : pi.outputs()) {
             v.push_back(get_outputs(output->name()));
@@ -684,6 +685,12 @@ std::vector<std::vector<Func>> GeneratorStub::generate(const GeneratorParamsMap 
             v.push_back(std::vector<Func>{output});
         }
     }
+#else
+    internal_assert(!pi.outputs().empty());
+    for (auto *output : pi.outputs()) {
+        v.push_back(get_outputs(output->name()));
+    }
+#endif
     return v;
 }
 
@@ -1113,8 +1120,13 @@ void GeneratorParamBase::check_value_readable() const {
         name() == "machine_params") {
         return;
     }
+#ifdef HALIDE_ALLOW_GENERATOR_BUILD_METHOD
     user_assert(generator && generator->phase >= GeneratorBase::ConfigureCalled)
         << "The GeneratorParam \"" << name() << "\" cannot be read before build() or configure()/generate() is called.\n";
+#else
+    user_assert(generator && generator->phase >= GeneratorBase::ConfigureCalled)
+        << "The GeneratorParam \"" << name() << "\" cannot be read before configure()/generate() is called.\n";
+#endif
 }
 
 void GeneratorParamBase::check_value_writable() const {
@@ -1122,7 +1134,13 @@ void GeneratorParamBase::check_value_writable() const {
     if (!generator) {
         return;
     }
-    user_assert(generator->phase < GeneratorBase::GenerateCalled) << "The GeneratorParam \"" << name() << "\" cannot be written after build() or generate() is called.\n";
+#ifdef HALIDE_ALLOW_GENERATOR_BUILD_METHOD
+    user_assert(generator->phase < GeneratorBase::GenerateCalled)
+        << "The GeneratorParam \"" << name() << "\" cannot be written after build() or generate() is called.\n";
+#else
+    user_assert(generator->phase < GeneratorBase::GenerateCalled)
+        << "The GeneratorParam \"" << name() << "\" cannot be written after generate() is called.\n";
+#endif
 }
 
 void GeneratorParamBase::fail_wrong_type(const char *type) {
@@ -1449,6 +1467,7 @@ void GeneratorBase::post_schedule() {
     track_parameter_values(true);
 }
 
+#ifdef HALIDE_ALLOW_GENERATOR_BUILD_METHOD
 void GeneratorBase::pre_build() {
     advance_phase(GenerateCalled);
     advance_phase(ScheduleCalled);
@@ -1466,6 +1485,7 @@ void GeneratorBase::pre_build() {
 void GeneratorBase::post_build() {
     track_parameter_values(true);
 }
+#endif
 
 Pipeline GeneratorBase::get_pipeline() {
     check_min_phase(GenerateCalled);
@@ -1900,8 +1920,13 @@ void GIOBase::check_gio_access() const {
     if (!generator) {
         return;
     }
+#ifdef HALIDE_ALLOW_GENERATOR_BUILD_METHOD
     user_assert(generator->phase > GeneratorBase::InputsSet)
         << "The " << input_or_output() << " \"" << name() << "\" cannot be examined before build() or generate() is called.\n";
+#else
+    user_assert(generator->phase > GeneratorBase::InputsSet)
+        << "The " << input_or_output() << " \"" << name() << "\" cannot be examined before generate() is called.\n";
+#endif
 }
 
 // If our dims are defined, ensure it matches the one passed in, asserting if not.
@@ -2181,6 +2206,7 @@ void generator_test() {
         // tester.sp2.set(202);  // This will assert-fail.
     }
 
+#ifdef HALIDE_ALLOW_GENERATOR_BUILD_METHOD
     // Verify that the Generator's internal phase actually prevents unsupported
     // order of operations (with old-style Generator)
     {
@@ -2247,6 +2273,7 @@ void generator_test() {
         // tester.gp2.set(2);  // This will assert-fail.
         // tester.sp2.set(202);  // This will assert-fail.
     }
+#endif
 
     // Verify that set_inputs() works properly, even if the specific subtype of Generator is not known.
     {
@@ -2259,7 +2286,7 @@ void generator_test() {
             Input<Func> input_func_typed{"input_func_typed", Int(16), 1};
             Input<Func> input_func_untyped{"input_func_untyped", 1};
             Input<Func[]> input_func_array{"input_func_array", 1};
-            Input<Buffer<uint8_t>> input_buffer_typed{"input_buffer_typed", 3};
+            Input<Buffer<uint8_t, 3>> input_buffer_typed{"input_buffer_typed"};
             Input<Buffer<>> input_buffer_untyped{"input_buffer_untyped"};
             Output<Func> output{"output", Float(32), 1};
 

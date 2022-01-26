@@ -17,7 +17,7 @@
 
 namespace Halide {
 
-template<typename T>
+template<typename T, int Dims>
 class Buffer;
 class OutputImageParam;
 
@@ -227,11 +227,11 @@ public:
      * a given Buffer or ImageParam. Has the same dimensionality as
      * the argument. */
     // @{
-    RDom(const Buffer<void> &);
+    RDom(const Buffer<void, -1> &);
     RDom(const OutputImageParam &);
-    template<typename T>
-    HALIDE_NO_USER_CODE_INLINE RDom(const Buffer<T> &im)
-        : RDom(Buffer<void>(im)) {
+    template<typename T, int Dims>
+    HALIDE_NO_USER_CODE_INLINE RDom(const Buffer<T, Dims> &im)
+        : RDom(Buffer<void, -1>(im)) {
     }
     // @}
 
