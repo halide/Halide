@@ -532,13 +532,13 @@ public:
         return contents->buf.type();
     }
 
-    template<typename T2>
+    template<typename T2, int D2 = Dims>
     Buffer<T2, Dims> as() const {
-        return Buffer<T2, Dims>(*this);
+        return Buffer<T2, D2>(*this);
     }
 
     Buffer<T, Dims> copy() const {
-        return Buffer<T, Dims>(std::move(contents->buf.as<T>().copy()));
+        return Buffer<T, Dims>(std::move(contents->buf.as<T, Dims>().copy()));
     }
 
     template<typename T2, int D2>
