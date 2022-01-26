@@ -4,7 +4,7 @@ namespace {
 
 class ReactionDiffusionInit : public Halide::Generator<ReactionDiffusionInit> {
 public:
-    Output<Buffer<float>> output{"output", 3};
+    Output<Buffer<float, 3>> output{"output"};
     GeneratorParam<bool> threads{"threads", true};
 
     void generate() {
@@ -24,11 +24,11 @@ private:
 
 class ReactionDiffusionUpdate : public Halide::Generator<ReactionDiffusionUpdate> {
 public:
-    Input<Buffer<float>> state{"state", 3};
+    Input<Buffer<float, 3>> state{"state"};
     Input<int> mouse_x{"mouse_x"};
     Input<int> mouse_y{"mouse_y"};
     Input<int> frame{"frame"};
-    Output<Buffer<float>> new_state{"new_state", 3};
+    Output<Buffer<float, 3>> new_state{"new_state"};
     GeneratorParam<bool> threads{"threads", false};
 
     void generate() {
@@ -139,8 +139,8 @@ private:
 
 class ReactionDiffusionRender : public Halide::Generator<ReactionDiffusionRender> {
 public:
-    Input<Buffer<float>> state{"state", 3};
-    Output<Buffer<uint32_t>> render{"render", 2};
+    Input<Buffer<float, 3>> state{"state"};
+    Output<Buffer<uint32_t, 2>> render{"render"};
     GeneratorParam<bool> threads{"threads", false};
 
     void generate() {

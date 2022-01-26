@@ -335,7 +335,7 @@ class PadForOps : public OpMutator {
         TensorPtr padded = std::make_shared<Tensor>(input->name() + ".padded",
                                                     input->type(), required, input->quantization());
 
-        HalideBuffer<int32_t> padding_data(2, input->rank());
+        HalideBuffer<int32_t, 2> padding_data(2, input->rank());
         // Center the crop, except for the channel dimension.
         // TODO: Is this always correct?
         const int r = input->rank();
