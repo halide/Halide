@@ -476,7 +476,7 @@ template <>
 HALIDE_ALWAYS_INLINE uint8x64_t load_predicated<uint8x64_t, int32x64_t, uint1x64_t, uint8_t, 64>(const void *base, const int32x64_t& offset, const uint1x64_t& predicate) {
     int __attribute__((aligned(64))) offsets[64];
     aligned_store<int32x64_t, int32_t, 64>(offset, &offsets[0], 0);
-    uint8x64_t vmask = IVP_MOV2NX8T(uint8x64_t(1), uint8x64_t(1), predicate);
+    uint8x64_t vmask = IVP_MOV2NX8T(uint8x64_t(1), uint8x64_t(0), predicate);
     uint8_t __attribute__((aligned(64))) mask[64];
     aligned_store<uint8x64_t, uint8_t, 64>(vmask, &mask[0], 0);
 
@@ -496,14 +496,14 @@ template <>
 HALIDE_ALWAYS_INLINE int16x32_t load_predicated<int16x32_t, int32x32_t, uint1x32_t, int16_t, 32>(const void *base, const int32x32_t& offset, const uint1x32_t& predicate) {
     int __attribute__((aligned(64))) offsets[32];
     aligned_store<int32x32_t, int32_t, 32>(offset, &offsets[0], 0);
-    int16x32_t vmask = IVP_MOVNX16T(int16x32_t(1), int16x32_t(1), predicate);
-    uint8_t __attribute__((aligned(64))) mask[32];
-    aligned_store<int16x32_t, uint8_t, 32>(vmask, &mask[0], 0);
+    int16x32_t vmask = IVP_MOVNX16T(int16x32_t(1), int16x32_t(0), predicate);
+    int16_t __attribute__((aligned(64))) mask[32];
+    aligned_store<int16x32_t, int16_t, 32>(vmask, &mask[0], 0);
 
-    uint8_t __attribute__((aligned(64))) output[32];
+    int16_t __attribute__((aligned(64))) output[32];
     for (int i = 0; i < 32; i++) {
         if (mask[i] == 1) {
-            output[i] = ((const uint8_t*)base)[offsets[i]];
+            output[i] = ((const uint16_t*)base)[offsets[i]];
         } else {
             output[i] = 0;
         }
@@ -513,10 +513,30 @@ HALIDE_ALWAYS_INLINE int16x32_t load_predicated<int16x32_t, int32x32_t, uint1x32
 }
 
 template <>
+HALIDE_ALWAYS_INLINE int32x32_t load_predicated<int32x32_t, int32x32_t, uint1x32_t, int32_t, 32>(const void *base, const int32x32_t& offset, const uint1x32_t& predicate) {
+    int __attribute__((aligned(64))) offsets[32];
+    aligned_store<int32x32_t, int32_t, 32>(offset, &offsets[0], 0);
+    int16x32_t vmask = IVP_MOVNX16T(int16x32_t(1), int16x32_t(0), predicate);
+    int16_t __attribute__((aligned(64))) mask[32];
+    aligned_store<int16x32_t, int16_t, 32>(vmask, &mask[0], 0);
+
+    int32_t __attribute__((aligned(64))) output[32];
+    for (int i = 0; i < 32; i++) {
+        if (mask[i] == 1) {
+            output[i] = ((const int32_t*)base)[offsets[i]];
+        } else {
+            output[i] = 0;
+        }
+    }
+
+    return *((int32x32_t *)output);
+}
+
+template <>
 HALIDE_ALWAYS_INLINE int32x64_t load_predicated<int32x64_t, int32x64_t, uint1x64_t, int32_t, 64>(const void *base, const int32x64_t& offset, const uint1x64_t& predicate) {
     int __attribute__((aligned(64))) offsets[64];
     aligned_store<int32x64_t, int32_t, 64>(offset, &offsets[0], 0);
-    uint8x64_t vmask = IVP_MOV2NX8T(uint8x64_t(1), uint8x64_t(1), predicate);
+    uint8x64_t vmask = IVP_MOV2NX8T(uint8x64_t(1), uint8x64_t(0), predicate);
     uint8_t __attribute__((aligned(64))) mask[64];
     aligned_store<uint8x64_t, uint8_t, 64>(vmask, &mask[0], 0);
 
@@ -543,7 +563,7 @@ HALIDE_ALWAYS_INLINE void store_predicated<uint8x64_t, int32x64_t, uint1x64_t, u
     int __attribute__((aligned(64))) offsets[64];
     aligned_store<int32x64_t, int32_t, 64>(offset, &offsets[0], 0);
 
-    uint8x64_t vmask = IVP_MOV2NX8T(uint8x64_t(1), uint8x64_t(1), predicate);
+    uint8x64_t vmask = IVP_MOV2NX8T(uint8x64_t(1), uint8x64_t(0), predicate);
     uint8_t __attribute__((aligned(64))) mask[64];
     aligned_store<uint8x64_t, uint8_t, 64>(vmask, &mask[0], 0);
 
@@ -562,10 +582,10 @@ HALIDE_ALWAYS_INLINE void store_predicated<uint8x256_t, int32x256_t, uint1x256_t
     int __attribute__((aligned(64))) offsets[256];
     aligned_store<int32x256_t, int32_t, 256>(offset, &offsets[0], 0);
 
-    uint8x64_t vmask0 = IVP_MOV2NX8T(uint8x64_t(1), uint8x64_t(1), predicate.native_vector[0]);
-    uint8x64_t vmask1 = IVP_MOV2NX8T(uint8x64_t(1), uint8x64_t(1), predicate.native_vector[1]);
-    uint8x64_t vmask2 = IVP_MOV2NX8T(uint8x64_t(1), uint8x64_t(1), predicate.native_vector[2]);
-    uint8x64_t vmask3 = IVP_MOV2NX8T(uint8x64_t(1), uint8x64_t(1), predicate.native_vector[3]);
+    uint8x64_t vmask0 = IVP_MOV2NX8T(uint8x64_t(1), uint8x64_t(0), predicate.native_vector[0]);
+    uint8x64_t vmask1 = IVP_MOV2NX8T(uint8x64_t(1), uint8x64_t(0), predicate.native_vector[1]);
+    uint8x64_t vmask2 = IVP_MOV2NX8T(uint8x64_t(1), uint8x64_t(0), predicate.native_vector[2]);
+    uint8x64_t vmask3 = IVP_MOV2NX8T(uint8x64_t(1), uint8x64_t(0), predicate.native_vector[3]);
 
     uint8_t __attribute__((aligned(64))) mask[256];
     aligned_store<uint8x256_t, uint8_t, 256>(
@@ -574,6 +594,25 @@ HALIDE_ALWAYS_INLINE void store_predicated<uint8x256_t, int32x256_t, uint1x256_t
     for (int i = 0; i < 256; i++) {
         if (mask[i]) {
             ((uint8_t*)base)[offsets[i]] = tmp[i];
+        }
+    }
+}
+
+template <>
+HALIDE_ALWAYS_INLINE void store_predicated<int32x32_t, int32x32_t, uint1x32_t, int32_t, 32>(const int32x32_t& a, void *base, const int32x32_t& offset, const uint1x32_t& predicate) {
+    int32_t __attribute__((aligned(64))) tmp[32];
+    aligned_store<int32x32_t, int32_t, 32>(a, &tmp[0], 0);
+
+    int __attribute__((aligned(64))) offsets[32];
+    aligned_store<int32x32_t, int32_t, 32>(offset, &offsets[0], 0);
+
+    int16x32_t vmask = IVP_MOVNX16T(int16x32_t(1), int16x32_t(0), predicate);
+    int16_t __attribute__((aligned(64))) mask[32];
+    aligned_store<int16x32_t, int16_t, 32>(vmask, &mask[0], 0);
+
+    for (int i = 0; i < 32; i++) {
+        if (mask[i]) {
+            ((int32_t*)base)[offsets[i]] = tmp[i];
         }
     }
 }
