@@ -14,7 +14,7 @@ namespace hannk {
 // Using a Buffer with space for max_rank dimensions is a meaningful
 // win for some corner cases (when adding dimensions to > 4).
 template<typename T>
-using HalideBuffer = Halide::Runtime::Buffer<T, max_rank>;
+using HalideBuffer = Halide::Runtime::Buffer<T, Halide::Runtime::BufferDimsUnconstrained, max_rank>;
 
 // dynamic_type_dispatch is a utility for functors that want to be able
 // to dynamically dispatch a halide_type_t to type-specialized code.

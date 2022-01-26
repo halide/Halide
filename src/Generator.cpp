@@ -2286,7 +2286,7 @@ void generator_test() {
             Input<Func> input_func_typed{"input_func_typed", Int(16), 1};
             Input<Func> input_func_untyped{"input_func_untyped", 1};
             Input<Func[]> input_func_array{"input_func_array", 1};
-            Input<Buffer<uint8_t>> input_buffer_typed{"input_buffer_typed", 3};
+            Input<Buffer<uint8_t, 3>> input_buffer_typed{"input_buffer_typed"};
             Input<Buffer<>> input_buffer_untyped{"input_buffer_untyped"};
             Output<Func> output{"output", Float(32), 1};
 
