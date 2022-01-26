@@ -179,13 +179,6 @@ Tile<3> get_3d_rhs_tile_index(const Expr &e, int element_width) {
         return {};
     }
 
-    // (([x*y](ramp(0, 1, r) / [x*y*r](4)) + [x*y*r](rro*4)) * [x*y*r](rhs.stride.2)
-    const Mul *mul = add_lhs->a.as<Mul>();
-
-    if (!mul) {
-        return {};
-    }
-
     // obtain the x, y, r dimensions
     const Add *dim_expr = add_lhs->b.as<Add>();
 
@@ -211,13 +204,6 @@ Tile<3> get_3d_rhs_tile_index(const Expr &e, int element_width) {
     }
 
     int tile_r = r_ramp->lanes;
-
-    // [x*y*r](rhs.stride.2)
-    const Broadcast *stride_bc = mul->b.as<Broadcast>();
-
-    if (!stride_bc) {
-        return {};
-    }
 
     // get the base and stride
     const Broadcast *base_stride_bc = add_lhs->b.as<Add>()->b.as<Broadcast>();
