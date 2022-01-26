@@ -139,7 +139,7 @@ class Buffer {
         } else {
             // Don't delegate to
             // Runtime::Buffer<T>::assert_can_convert_from. It might
-            // not assert is NDEBUG is defined. user_assert is
+            // not assert if NDEBUG is defined. user_assert is
             // friendlier anyway because it reports line numbers when
             // debugging symbols are found, it throws an exception
             // when exceptions are enabled, and we can print the
@@ -147,8 +147,8 @@ class Buffer {
             using BufType = Runtime::Buffer<T, Dims>;  // alias because commas in user_assert() macro confuses compiler
             user_assert(BufType::can_convert_from(*(other.get())))
                 << "Type mismatch constructing Buffer. Can't construct Buffer<"
-                << Internal::buffer_type_name<T>() << "> from Buffer<"
-                << type_to_c_type(other.type(), false) << ">\n";
+                << Internal::buffer_type_name<T>() << ", " << Dims << "> from Buffer<"
+                << type_to_c_type(other.type(), false) << ", " << D2 << ">, dimensions() = " << other.dimensions() << "\n";
         }
     }
 
@@ -509,13 +509,13 @@ public:
 
     static constexpr bool has_static_halide_type = Runtime::Buffer<T, Dims>::has_static_halide_type;
 
-    static halide_type_t static_halide_type() {
+    static constexpr halide_type_t static_halide_type() {
         return Runtime::Buffer<T, Dims>::static_halide_type();
     }
 
     static constexpr bool has_static_dimensions = Runtime::Buffer<T, Dims>::has_static_dimensions;
 
-    static int static_dimensions() {
+    static constexpr int static_dimensions() {
         return Runtime::Buffer<T, Dims>::static_dimensions();
     }
 
@@ -533,7 +533,7 @@ public:
     }
 
     template<typename T2, int D2 = Dims>
-    Buffer<T2, Dims> as() const {
+    Buffer<T2, D2> as() const {
         return Buffer<T2, D2>(*this);
     }
 

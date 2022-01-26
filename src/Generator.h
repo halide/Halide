@@ -1272,7 +1272,7 @@ enum class IOKind { Scalar,
  * -- Assignment of a Buffer<>, with compatible type and dimensions,
  * causing the Input<Buffer<>> to become a precompiled buffer in the generated code.
  */
-template<typename T = void>
+template<typename T = void, int Dims = Buffer<>::BufferDimsUnconstrained>
 class StubInputBuffer {
     friend class StubInput;
     template<typename T2>
@@ -1286,13 +1286,13 @@ class StubInputBuffer {
         // which we'll use only to pass to can_convert_from() to verify this
         // Parameter is compatible with our constraints.
         Buffer<> other(p.type(), nullptr, std::vector<int>(p.dimensions(), 1));
-        internal_assert((Buffer<T>::can_convert_from(other)));
+        internal_assert((Buffer<T, Dims>::can_convert_from(other)));
     }
 
-    template<typename T2>
-    HALIDE_NO_USER_CODE_INLINE static Parameter parameter_from_buffer(const Buffer<T2> &b) {
+    template<typename T2, int D2>
+    HALIDE_NO_USER_CODE_INLINE static Parameter parameter_from_buffer(const Buffer<T2, D2> &b) {
         internal_assert(b.defined());
-        user_assert((Buffer<T>::can_convert_from(b)));
+        user_assert((Buffer<T, Dims>::can_convert_from(b)));
         Parameter p(b.type(), true, b.dimensions());
         p.set_buffer(b);
         return p;
@@ -1305,8 +1305,8 @@ public:
     // to pass a literal Buffer<> for a Stub Input; this Buffer<> will be
     // compiled into the Generator's product, rather than becoming
     // a runtime Parameter.
-    template<typename T2>
-    StubInputBuffer(const Buffer<T2> &b)
+    template<typename T2, int D2>
+    StubInputBuffer(const Buffer<T2, D2> &b)
         : parameter_(parameter_from_buffer(b)) {
     }
 };
@@ -2555,8 +2555,8 @@ public:
     // TODO: This used to take the buffer as a const ref. This no longer works as
     // using it in a Pipeline might change the dev field so it is currently
     // not considered const. We should consider how this really ought to work.
-    template<typename T2>
-    HALIDE_NO_USER_CODE_INLINE GeneratorOutput_Buffer<T> &operator=(Buffer<T2> &buffer) {
+    template<typename T2, int D2>
+    HALIDE_NO_USER_CODE_INLINE GeneratorOutput_Buffer<T> &operator=(Buffer<T2, D2> &buffer) {
         this->check_gio_access();
         this->check_value_writable();
 
@@ -2819,8 +2819,8 @@ public:
     // TODO: This used to take the buffer as a const ref. This no longer works as
     // using it in a Pipeline might change the dev field so it is currently
     // not considered const. We should consider how this really ought to work.
-    template<typename T2>
-    GeneratorOutput<T> &operator=(Buffer<T2> &buffer) {
+    template<typename T2, int D2>
+    GeneratorOutput<T> &operator=(Buffer<T2, D2> &buffer) {
         Super::operator=(buffer);
         return *this;
     }
@@ -3459,8 +3459,8 @@ private:
     // -- we are assigning it to an Input<Buffer<>> (with compatible type and dimensions),
     // causing the Input<Buffer<>> to become a precompiled buffer in the generated code.
     // -- we are assigningit to an Input<Func>, in which case we just Func-wrap the Buffer<>.
-    template<typename T>
-    std::vector<StubInput> build_input(size_t i, const Buffer<T> &arg) {
+    template<typename T, int Dims>
+    std::vector<StubInput> build_input(size_t i, const Buffer<T, Dims> &arg) {
         auto *in = param_info().inputs().at(i);
         check_input_is_singular(in);
         const auto k = in->kind();
@@ -3484,8 +3484,8 @@ private:
     // -- we are assigning it to another Input<Buffer<>> (with compatible type and dimensions),
     // allowing us to simply pipe a parameter from an enclosing Generator to the Invoker.
     // -- we are assigningit to an Input<Func>, in which case we just Func-wrap the Input<Buffer<>>.
-    template<typename T>
-    std::vector<StubInput> build_input(size_t i, const GeneratorInput<Buffer<T>> &arg) {
+    template<typename T, int Dims>
+    std::vector<StubInput> build_input(size_t i, const GeneratorInput<Buffer<T, Dims>> &arg) {
         auto *in = param_info().inputs().at(i);
         check_input_is_singular(in);
         const auto k = in->kind();
