@@ -260,6 +260,7 @@ def test_complexstub():
             actual = b[x, y]
             assert expected == actual, "Expected %s Actual %s" % (expected, actual)
 
+# disabled because HALIDE_ALLOW_GENERATOR_BUILD_METHOD is off by default
 def test_partialbuildmethod():
     x, y, c = hl.Var(), hl.Var(), hl.Var()
     target = hl.get_jit_target_from_environment()
@@ -270,7 +271,7 @@ def test_partialbuildmethod():
     b_out = hl.Buffer(hl.Int(32), [2, 2])
 
     try:
-        f = partialbuildmethod.generate(target, b_in, 1)
+        f = partialbuildmethod.generate(target, b_in, 1.0)
     except RuntimeError as e:
         assert "Generators that use build() (instead of generate()+Output<>) are not supported in the Python bindings." in str(e)
     else:
@@ -294,5 +295,6 @@ if __name__ == "__main__":
     test_simplestub()
     test_looplevel()
     test_complexstub()
-    test_partialbuildmethod()
+    # disabled because HALIDE_ALLOW_GENERATOR_BUILD_METHOD is off by default
+    # test_partialbuildmethod()
     test_nobuildmethod()
