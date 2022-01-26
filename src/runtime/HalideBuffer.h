@@ -556,10 +556,13 @@ public:
     }
 
     /** Get the dimensionality of the buffer. */
-    // TODO: make constexpr, optimize for const case
     int dimensions() const {
-        assert(Dims == BufferDimsUnconstrained || Dims == buf.dimensions);
-        return buf.dimensions;
+        if constexpr (has_static_dimensions) {
+            return Dims;
+        } else {
+            assert(Dims == BufferDimsUnconstrained || Dims == buf.dimensions);
+            return buf.dimensions;
+        }
     }
 
     /** Get the type of the elements. */
@@ -932,7 +935,6 @@ public:
      * take ownership of the data, and does not set the host_dirty flag. */
     template<typename Array, size_t N>
     explicit Buffer(Array (&vals)[N]) {
-        // TODO: this could probably be made constexpr
         const int buf_dimensions = dimensionality_of_array(vals);
         buf.type = scalar_type_of_array(vals);
         buf.host = (uint8_t *)vals;
