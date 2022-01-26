@@ -560,7 +560,6 @@ public:
         if constexpr (has_static_dimensions) {
             return Dims;
         } else {
-            assert(Dims == BufferDimsUnconstrained || Dims == buf.dimensions);
             return buf.dimensions;
         }
     }
