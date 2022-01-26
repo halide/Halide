@@ -260,7 +260,8 @@ struct LoopNest {
                double num_cores,
                int depth,
                const LoopNest *parent,
-               const LoopNest *compute_site) const;
+               const LoopNest *compute_site,
+               std::mt19937 &rng) const;
 
     // The below are two feature caches.
     // hash of producers -> StageMap

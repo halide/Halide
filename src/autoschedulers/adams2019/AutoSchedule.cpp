@@ -576,9 +576,9 @@ void generate_schedule(const std::vector<Function> &outputs,
 
     // Analyse the Halide algorithm and construct our abstract representation of it
     FunctionDAG dag(outputs, params, target);
-    if (aslog::aslog_level() > 0) {
-        dag.dump();
-    }
+    // if (aslog::aslog_level() > 0) {
+    //     dag.dump();
+    // }
 
     // Construct a cost model to use to evaluate states. Currently we
     // just have the one, but it's an abstract interface, so others
@@ -605,7 +605,7 @@ void generate_schedule(const std::vector<Function> &outputs,
     optimal->calculate_cost(dag, params, cost_model.get(), cache_options, memory_limit, aslog::aslog_level() > 0);
 
     // Apply the schedules to the pipeline
-    optimal->apply_schedule(dag, params);
+    optimal->apply_schedule(dag, params, rng);
 
     // Print out the schedule
     if (aslog::aslog_level() > 0) {
@@ -673,7 +673,7 @@ void find_and_apply_schedule(FunctionDAG &dag,
     IntrusivePtr<State> optimal = optimal_schedule(dag, outputs, params, cost_model, rng, beam_size, memory_limit, cache_options);
 
     // Apply the schedules
-    optimal->apply_schedule(dag, params);
+    optimal->apply_schedule(dag, params, rng);
 
     if (schedule_features) {
         optimal->compute_featurization(dag, params, schedule_features, cache_options);
