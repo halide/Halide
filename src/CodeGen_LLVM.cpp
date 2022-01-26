@@ -1081,6 +1081,8 @@ void CodeGen_LLVM::optimize_module() {
         module->print(dbgs(), nullptr, false, true);
     }
 
+    HALIDE_TIC;
+
     std::unique_ptr<TargetMachine> tm = make_target_machine(*module);
 
     // At present, we default to *enabling* LLVM loop optimization,
@@ -1240,6 +1242,8 @@ void CodeGen_LLVM::optimize_module() {
     if (llvm::verifyModule(*module, &errs())) {
         report_fatal_error("Transformation resulted in an invalid module\n");
     }
+
+    HALIDE_TOC;
 
     debug(3) << "After LLVM optimizations:\n";
     if (debug::debug_level() >= 2) {

@@ -110,7 +110,7 @@ void lower_impl(const vector<Function> &output_funcs,
                 const vector<IRMutator *> &custom_passes,
                 Module &result_module) {
     auto time_start = std::chrono::high_resolution_clock::now();
-
+    HALIDE_TIC;
     size_t initial_lowered_function_count = result_module.functions().size();
 
     // Create a deep-copy of the entire graph of Funcs.
@@ -552,7 +552,7 @@ void lower_impl(const vector<Function> &output_funcs,
     }
 
     result_module.append(main_func);
-
+    HALIDE_TOC;
     auto *logger = get_compiler_logger();
     if (logger) {
         auto time_end = std::chrono::high_resolution_clock::now();
