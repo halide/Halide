@@ -297,7 +297,12 @@ private:
                       "Number of arguments to Buffer() does not match static dimensionality");
         buf.dimensions = DimsSpecified;
         if constexpr (Dims == BufferDimsUnconstrained) {
-            buf.dim = (DimsSpecified <= InClassDimStorage) ? shape : new halide_dimension_t[DimsSpecified];
+            if constexpr (DimsSpecified <= InClassDimStorage) {
+                buf.dim = shape;
+            } else {
+                static_assert(DimsSpecified >= 1);
+                buf.dim = new halide_dimension_t[DimsSpecified];
+            }
         } else {
             static_assert(InClassDimStorage >= Dims);
             buf.dim = shape;
@@ -597,7 +602,10 @@ public:
     Buffer()
         : shape() {
         buf.type = static_halide_type();
-        make_static_shape_storage<0>();
+        // If Dims are statically known, must create storage that many.
+        // otherwise, make a zero-dimensional buffer.
+        constexpr int buf_dimensions = (Dims == BufferDimsUnconstrained) ? 0 : Dims;
+        make_static_shape_storage<buf_dimensions>();
     }
 
     /** Make a Buffer from a halide_buffer_t */
@@ -1068,29 +1076,40 @@ public:
     /** Return a typed reference to this Buffer. Useful for converting
      * a reference to a Buffer<void> to a reference to, for example, a
      * Buffer<const uint8_t>, or converting a Buffer<T>& to Buffer<const T>&.
-     * Does a runtime assert if the source buffer type is void. */
-    template<typename T2>
-    HALIDE_ALWAYS_INLINE Buffer<T2, Dims, InClassDimStorage> &as() & {
-        Buffer<T2, Dims, InClassDimStorage>::assert_can_convert_from(*this);
-        return *((Buffer<T2, Dims, InClassDimStorage> *)this);
+     * You can also optionally sspecify a new value for Dims; this is useful
+     * mainly for removing the dimensionality constraint on a Buffer with
+     * explicit dimensionality. Does a runtime assert if the source buffer type
+     * is void or the new dimensionality is incompatible. */
+    template<typename T2, int D2 = Dims>
+    HALIDE_ALWAYS_INLINE Buffer<T2, D2, InClassDimStorage> &as() & {
+        Buffer<T2, D2, InClassDimStorage>::assert_can_convert_from(*this);
+        return *((Buffer<T2, D2, InClassDimStorage> *)this);
     }
 
-    /** Return a const typed reference to this Buffer. Useful for
-     * converting a conference reference to one Buffer type to a const
-     * reference to another Buffer type. Does a runtime assert if the
-     * source buffer type is void. */
-    template<typename T2>
-    HALIDE_ALWAYS_INLINE const Buffer<T2, Dims, InClassDimStorage> &as() const & {
-        Buffer<T2, Dims, InClassDimStorage>::assert_can_convert_from(*this);
-        return *((const Buffer<T2, Dims, InClassDimStorage> *)this);
+    /** Return a const typed reference to this Buffer. Useful for converting
+     * a reference to a Buffer<void> to a reference to, for example, a
+     * Buffer<const uint8_t>, or converting a Buffer<T>& to Buffer<const T>&.
+     * You can also optionally sspecify a new value for Dims; this is useful
+     * mainly for removing the dimensionality constraint on a Buffer with
+     * explicit dimensionality. Does a runtime assert if the source buffer type
+     * is void or the new dimensionality is incompatible. */
+    template<typename T2, int D2 = Dims>
+    HALIDE_ALWAYS_INLINE const Buffer<T2, D2, InClassDimStorage> &as() const & {
+        Buffer<T2, D2, InClassDimStorage>::assert_can_convert_from(*this);
+        return *((const Buffer<T2, D2, InClassDimStorage> *)this);
     }
 
-    /** Returns this rval Buffer with a different type attached. Does
-     * a dynamic type check if the source type is void. */
-    template<typename T2>
-    HALIDE_ALWAYS_INLINE Buffer<T2, Dims, InClassDimStorage> as() && {
-        Buffer<T2, Dims, InClassDimStorage>::assert_can_convert_from(*this);
-        return *((Buffer<T2, Dims, InClassDimStorage> *)this);
+    /** Return an rval reference to this Buffer. Useful for converting
+     * a reference to a Buffer<void> to a reference to, for example, a
+     * Buffer<const uint8_t>, or converting a Buffer<T>& to Buffer<const T>&.
+     * You can also optionally sspecify a new value for Dims; this is useful
+     * mainly for removing the dimensionality constraint on a Buffer with
+     * explicit dimensionality. Does a runtime assert if the source buffer type
+     * is void or the new dimensionality is incompatible. */
+    template<typename T2, int D2 = Dims>
+    HALIDE_ALWAYS_INLINE Buffer<T2, D2, InClassDimStorage> as() && {
+        Buffer<T2, D2, InClassDimStorage>::assert_can_convert_from(*this);
+        return *((Buffer<T2, D2, InClassDimStorage> *)this);
     }
 
     /** as_const() is syntactic sugar for .as<const T>(), to avoid the need
