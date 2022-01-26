@@ -1,6 +1,7 @@
 #include "UnrollLoops.h"
 #include "Bounds.h"
 #include "CSE.h"
+#include "ConstantBounds.h"
 #include "IRMutator.h"
 #include "IROperator.h"
 #include "Simplify.h"

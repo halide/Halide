@@ -1,6 +1,7 @@
 #include "BoundSmallAllocations.h"
 #include "Bounds.h"
 #include "CodeGen_Internal.h"
+#include "ConstantBounds.h"
 #include "IRMutator.h"
 #include "IROperator.h"
 #include "Simplify.h"

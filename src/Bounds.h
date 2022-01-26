@@ -35,19 +35,6 @@ Interval bounds_of_expr_in_scope(const Expr &expr,
                                  const FuncValueBounds &func_bounds = empty_func_value_bounds(),
                                  bool const_bound = false);
 
-/** Given a varying expression, try to find a constant that is either:
- * An upper bound (always greater than or equal to the expression), or
- * A lower bound (always less than or equal to the expression)
- * If it fails, returns an undefined Expr. */
-enum class Direction { Upper,
-                       Lower };
-Expr find_constant_bound(const Expr &e, Direction d,
-                         const Scope<Interval> &scope = Scope<Interval>::empty_scope());
-
-/** Find bounds for a varying expression that are either constants or
- * +/-inf. */
-Interval find_constant_bounds(const Expr &e, const Scope<Interval> &scope);
-
 /** Represents the bounds of a region of arbitrary dimension. Zero
  * dimensions corresponds to a scalar region. */
 struct Box {

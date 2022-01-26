@@ -1,5 +1,6 @@
 #include "LowerWarpShuffles.h"
 
+#include "ConstantBounds.h"
 #include "ExprUsesVar.h"
 #include "IREquality.h"
 #include "IRMatch.h"
