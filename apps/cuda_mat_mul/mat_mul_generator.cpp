@@ -15,10 +15,10 @@ void set_alignment_and_bounds(OutputImageParam p, int size) {
 class MatMul : public Halide::Generator<MatMul> {
 public:
     GeneratorParam<int> size{"size", 1024};
-    Input<Buffer<float>> A{"A", 2};
-    Input<Buffer<float>> B{"B", 2};
+    Input<Buffer<float, 2>> A{"A"};
+    Input<Buffer<float, 2>> B{"B"};
 
-    Output<Buffer<float>> out{"out", 2};
+    Output<Buffer<float, 2>> out{"out"};
 
     void generate() {
         // 688 us on an RTX 2060

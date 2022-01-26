@@ -28,7 +28,7 @@ struct timing {
     int best_rep = 0;
 
     template<typename T>
-    timing(filter_t filter, Buffer<T> *input, Buffer<T> *output)
+    timing(filter_t filter, Buffer<T, 3> *input, Buffer<T, 3> *output)
         : filter(filter), input(&input->template as<void>()), output(&output->template as<void>()) {
     }
 
@@ -66,17 +66,17 @@ class Tester;
 
 template<class T>
 bool doBlur(Tester<T> *tester,
-            Buffer<T> bt_input,
-            Buffer<T> bt_output,
-            Buffer<T> bt_output_arm) {
+            Buffer<T, 3> bt_input,
+            Buffer<T, 3> bt_output,
+            Buffer<T, 3> bt_output_arm) {
     return false;  // This abstract implementation should never be called
 }
 
 template<class T>
 bool doCopy(Tester<T> *tester,
-            Buffer<T> bt_input,
-            Buffer<T> bt_output,
-            Buffer<T> bt_output_arm) {
+            Buffer<T, 3> bt_input,
+            Buffer<T, 3> bt_output,
+            Buffer<T, 3> bt_output_arm) {
     return false;  // This abstract implementation should never be called
 }
 
@@ -90,7 +90,7 @@ public:
     }
 
 private:
-    bool validate(Buffer<T> actual, Buffer<T> expected) {
+    bool validate(Buffer<T, 3> actual, Buffer<T, 3> expected) {
         int count_mismatches = 0;
         actual.for_each_element([&](int x, int y, int c) {
             T actual_value = actual(x, y, c);
@@ -112,7 +112,7 @@ private:
         return count_mismatches == 0;
     }
 
-    void print(Buffer<T> buf) {
+    void print(Buffer<T, 3> buf) {
         for (int j = 0; j < std::min(buf.height(), 10); j++) {
             std::stringstream oss;
             for (int i = 0; i < std::min(buf.width(), 10); i++) {
@@ -131,9 +131,9 @@ private:
     }
 
 public:
-    bool test(Buffer<T> input,
-              Buffer<T> output,
-              Buffer<T> output_arm,
+    bool test(Buffer<T, 3> input,
+              Buffer<T, 3> output,
+              Buffer<T, 3> output_arm,
               filter_t avg_filter,
               filter_t avg_filter_arm) {
 
@@ -191,7 +191,7 @@ public:
         int height = 2048;
         int channels = 4;
 
-        auto input = Buffer<T>::make_interleaved(width, height, channels);
+        auto input = Buffer<T, 3>::make_interleaved(width, height, channels);
         LOGI("Allocated memory for %dx%dx%d image", width, height, channels);
 
         input.for_each_element([&](int i, int j, int k) {
@@ -201,8 +201,8 @@ public:
         LOGI("Input :\n");
         print(input);
 
-        auto output = Buffer<T>::make_interleaved(width, height, channels);
-        auto output_arm = Buffer<T>::make_interleaved(width, height, channels);
+        auto output = Buffer<T, 3>::make_interleaved(width, height, channels);
+        auto output_arm = Buffer<T, 3>::make_interleaved(width, height, channels);
 
         doBlur(this, input, output, output_arm);
     }
@@ -210,9 +210,9 @@ public:
 
 template<>
 bool doBlur<float>(Tester<float> *tester,
-                   Buffer<float> bt_input,
-                   Buffer<float> bt_output,
-                   Buffer<float> bt_output_arm) {
+                   Buffer<float, 3> bt_input,
+                   Buffer<float, 3> bt_output,
+                   Buffer<float, 3> bt_output_arm) {
     return tester->test(bt_input,
                         bt_output, bt_output_arm,
                         avg_filter_float,
@@ -221,9 +221,9 @@ bool doBlur<float>(Tester<float> *tester,
 
 template<>
 bool doBlur<uint32_t>(Tester<uint32_t> *tester,
-                      Buffer<uint32_t> bt_input,
-                      Buffer<uint32_t> bt_output,
-                      Buffer<uint32_t> bt_output_arm) {
+                      Buffer<uint32_t, 3> bt_input,
+                      Buffer<uint32_t, 3> bt_output,
+                      Buffer<uint32_t, 3> bt_output_arm) {
     return tester->test(bt_input,
                         bt_output, bt_output_arm,
                         avg_filter_uint32t,

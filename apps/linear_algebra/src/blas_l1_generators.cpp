@@ -25,10 +25,10 @@ public:
 
     // Standard ordering of parameters in AXPY functions.
     Input<T> a_{"a", 1};
-    Input<Buffer<T>> x_{"x", 1};
-    Input<Buffer<T>> y_{"y", 1};
+    Input<Buffer<T, 1>> x_{"x"};
+    Input<Buffer<T, 1>> y_{"y"};
 
-    Output<Buffer<T>> result_{"result", 1};
+    Output<Buffer<T, 1>> result_{"result"};
 
     template<class Arg>
     Expr calc(Arg i) {
@@ -86,10 +86,10 @@ public:
     GeneratorParam<bool> parallel_{"parallel", true};
     GeneratorParam<int> block_size_{"block_size", 1024};
 
-    Input<Buffer<T>> x_{"x", 1};
-    Input<Buffer<T>> y_{"y", 1};
+    Input<Buffer<T, 1>> x_{"x"};
+    Input<Buffer<T, 1>> y_{"y"};
 
-    Output<Buffer<T>> result_{"result", 0};
+    Output<Buffer<T, 0>> result_{"result"};
 
     void generate() {
         assert(get_target().has_feature(Target::NoBoundsQuery));
@@ -140,9 +140,9 @@ public:
     GeneratorParam<bool> parallel_{"parallel", true};
     GeneratorParam<int> block_size_{"block_size", 1024};
 
-    Input<Buffer<T>> x_{"x", 1};
+    Input<Buffer<T, 1>> x_{"x"};
 
-    Output<Buffer<T>> result_{"result", 0};
+    Output<Buffer<T, 0>> result_{"result"};
 
     void generate() {
         assert(get_target().has_feature(Target::NoBoundsQuery));

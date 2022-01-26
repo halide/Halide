@@ -31,14 +31,14 @@ T clamp(T x, T min, T max) {
 }
 
 template<typename T>
-void save_untransformed(Buffer<T> t, const std::string &filename) {
+void save_untransformed(Buffer<T, 2> t, const std::string &filename) {
     convert_and_save_image(t, filename);
     printf("Saved %s\n", filename.c_str());
 }
 
 template<typename T>
-void save_transformed(Buffer<T> t, const std::string &filename) {
-    Buffer<T> rearranged(t.width() * 2, t.height(), 1);
+void save_transformed(Buffer<T, 3> t, const std::string &filename) {
+    Buffer<T, 3> rearranged(t.width() * 2, t.height(), 1);
     for (int y = 0; y < t.height(); y++) {
         for (int x = 0; x < t.width(); x++) {
             rearranged(x, y, 0) = clamp(t(x, y, 0), 0.0f, 1.0f);
@@ -57,9 +57,9 @@ int main(int argc, char **argv) {
     const std::string src_image = argv[1];
     const std::string dirname = argv[2];
 
-    Buffer<float> input = load_and_convert_image(src_image);
-    Buffer<float> transformed(input.width() / 2, input.height(), 2);
-    Buffer<float> inverse_transformed(input.width(), input.height());
+    Buffer<float, 2> input = load_and_convert_image(src_image);
+    Buffer<float, 3> transformed(input.width() / 2, input.height(), 2);
+    Buffer<float, 2> inverse_transformed(input.width(), input.height());
 
     _assert(haar_x(input, transformed) == 0, "haar_x failed");
     save_transformed(transformed, dirname + "/haar_x.png");
