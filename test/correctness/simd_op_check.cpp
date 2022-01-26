@@ -2235,19 +2235,18 @@ public:
                 }
 
                 // Integer to integer widening
-                // TODO(https://github.com/halide/Halide/issues/5130): NOT BEING GENERATED AT TRUNK
-                // check("i16x8.extend_low_i8x16_s", 8*w, i8(x) * 2);
-                // check("i16x8.extend_high_i8x16_s", 8*w, i16(i8_1));
-                // check("i16x8.extend_low_i8x16_u", 8*w, u8(x) * 2);
-                // check("i16x8.extend_high_i8x16_u", 8*w, u16(u8_1));
-                // check("i32x4.extend_low_i16x8_s", 4*w, i32(i16_1));
-                // check("i32x4.extend_high_i16x8_s", 4*w, i32(i16_1));
-                // check("i32x4.extend_low_i16x8_u", 4*w, u32(u16_1));
-                // check("i32x4.extend_high_i16x8_u", 4*w, u32(u16_1));
-                // check("i64x2.extend_low_i32x4_s", 2*w, i64(i32_1));
-                // check("i64x2.extend_high_i32x4_s", 2*w, i64(i32_1));
-                // check("i64x2.extend_low_i32x4_u", 2*w, u64(u32_1));
-                // check("i64x2.extend_high_i32x4_u", 2*w, u64(u32_1));
+                check("i16x8.extend_low_i8x16_s", 16 * w, i16(i8_1));
+                check("i16x8.extend_high_i8x16_s", 16 * w, i16(i8_1));
+                check("i16x8.extend_low_i8x16_u", 16 * w, u16(u8_1));
+                check("i16x8.extend_high_i8x16_u", 16 * w, u16(u8_1));
+                check("i32x4.extend_low_i16x8_s", 8 * w, i32(i16_1));
+                check("i32x4.extend_high_i16x8_s", 8 * w, i32(i16_1));
+                check("i32x4.extend_low_i16x8_u", 8 * w, u32(u16_1));
+                check("i32x4.extend_high_i16x8_u", 8 * w, u32(u16_1));
+                check("i64x2.extend_low_i32x4_s", 4 * w, i64(i32_1));
+                check("i64x2.extend_high_i32x4_s", 4 * w, i64(i32_1));
+                check("i64x2.extend_low_i32x4_u", 4 * w, u64(u32_1));
+                check("i64x2.extend_high_i32x4_u", 4 * w, u64(u32_1));
             }
         }
     }

@@ -300,7 +300,7 @@ void generator_test();
  * vectorization being unavailable.
  *
  * We do this by tracking the active values at entrance and exit to all user-provided
- * Generator methods (build()/generate()/schedule()); if we ever find more than two unique
+ * Generator methods (generate()/schedule()); if we ever find more than two unique
  * values active, we know we have a potential conflict. ("two" here because the first
  * value is the default value for a given constraint.)
  *
@@ -3185,7 +3185,7 @@ public:
 
     void emit_cpp_stub(const std::string &stub_file_path);
 
-    // Call build() and produce a Module for the result.
+    // Call generate() and produce a Module for the result.
     // If function_name is empty, generator_name() will be used for the function.
     Module build_module(const std::string &function_name = "",
                         LinkageType linkage_type = LinkageType::ExternalPlusMetadata);
@@ -3244,12 +3244,20 @@ public:
         get_pipeline().realize(r, get_target());
     }
 
+#ifdef HALIDE_ALLOW_GENERATOR_BUILD_METHOD
     // Return the Pipeline that has been built by the generate() method.
     // This method can only be used from a Generator that has a generate()
     // method (vs a build() method), and currently can only be called from
     // the schedule() method. (This may be relaxed in the future to allow
     // calling from generate() as long as all Outputs have been defined.)
     Pipeline get_pipeline();
+#else
+    // Return the Pipeline that has been built by the generate() method.
+    // This method can only be called from the schedule() method.
+    // (This may be relaxed in the future to allow calling from generate() as
+    // long as all Outputs have been defined.)
+    Pipeline get_pipeline();
+#endif
 
     // Create Input<Buffer> or Input<Func> with dynamic type
     template<typename T,
@@ -3377,10 +3385,15 @@ protected:
         // in AOT mode, this can be skipped, going Created->GenerateCalled directly.)
         InputsSet,
 
+#ifdef HALIDE_ALLOW_GENERATOR_BUILD_METHOD
         // Generator has had its generate() method called. (For Generators with
         // a build() method instead of generate(), this phase will be skipped
         // and will advance directly to ScheduleCalled.)
         GenerateCalled,
+#else
+        // Generator has had its generate() method called.
+        GenerateCalled,
+#endif
 
         // Generator has had its schedule() method (if any) called.
         ScheduleCalled,
@@ -3621,7 +3634,7 @@ public:
     static std::unique_ptr<T> create(const Halide::GeneratorContext &context) {
         // We must have an object of type T (not merely GeneratorBase) to call a protected method,
         // because CRTP is a weird beast.
-        auto g = std::unique_ptr<T>(new T());
+        auto g = std::make_unique<T>();
         g->init_from_context(context);
         return g;
     }
@@ -3640,11 +3653,13 @@ public:
 
     template<typename... Args>
     void apply(const Args &...args) {
+#ifdef HALIDE_ALLOW_GENERATOR_BUILD_METHOD
 #ifndef _MSC_VER
         // VS2015 apparently has some SFINAE issues, so this can inappropriately
         // trigger there. (We'll still fail when generate() is called, just
         // with a less-helpful error message.)
         static_assert(has_generate_method<T>::value, "apply() is not supported for old-style Generators.");
+#endif
 #endif
         call_configure();
         set_inputs(args...);
@@ -3676,9 +3691,7 @@ private:
     template<typename T2>
     struct has_schedule_method<T2, typename type_sink<decltype(std::declval<T2>().schedule())>::type> : std::true_type {};
 
-    template<typename T2 = T,
-             typename std::enable_if<!has_generate_method<T2>::value>::type * = nullptr>
-
+#ifdef HALIDE_ALLOW_GENERATOR_BUILD_METHOD
     // Implementations for build_pipeline_impl(), specialized on whether we
     // have build() or generate()/schedule() methods.
 
@@ -3688,9 +3701,16 @@ private:
     // many overloads as we can exist, and then use C++'s preference
     // for treating a 0 as an int rather than a double to choose one
     // of them.
+    template<typename T2 = T,
+             typename std::enable_if<!has_generate_method<T2>::value>::type * = nullptr>
+    HALIDE_ATTRIBUTE_DEPRECATED("The build() method is deprecated for Halide Generators and will be removed entirely in future versions of Halide. Please use a generate() method with Output<> members instead.")
     Pipeline build_pipeline_impl(double) {
         static_assert(!has_configure_method<T2>::value, "The configure() method is ignored if you define a build() method; use generate() instead.");
         static_assert(!has_schedule_method<T2>::value, "The schedule() method is ignored if you define a build() method; use generate() instead.");
+
+        user_warning << "The build() method is deprecated for Halide Generators and will be removed entirely in future versions of Halide. "
+                     << "Please use a generate() method with Output<> members instead.\n";
+
         pre_build();
         Pipeline p = ((T *)this)->build();
         post_build();
@@ -3782,8 +3802,51 @@ private:
         t->schedule();
         post_schedule();
     }
+#else
+    Pipeline build_pipeline_impl() {
+        T *t = (T *)this;
+        // No: configure() must be called prior to this
+        // (and in fact, prior to calling set_inputs).
+        //
+        // t->call_configure_impl();
+
+        t->call_generate_impl();
+        t->call_schedule_impl();
+        return get_pipeline();
+    }
+
+    void call_configure_impl() {
+        pre_configure();
+        if constexpr (has_configure_method<T>::value) {
+            T *t = (T *)this;
+            static_assert(std::is_void<decltype(t->configure())>::value, "configure() must return void");
+            t->configure();
+        }
+        post_configure();
+    }
+
+    void call_generate_impl() {
+        pre_generate();
+        static_assert(has_generate_method<T>::value, "Expected a generate() method here.");
+        T *t = (T *)this;
+        static_assert(std::is_void<decltype(t->generate())>::value, "generate() must return void");
+        t->generate();
+        post_generate();
+    }
+
+    void call_schedule_impl() {
+        pre_schedule();
+        if constexpr (has_schedule_method<T>::value) {
+            T *t = (T *)this;
+            static_assert(std::is_void<decltype(t->schedule())>::value, "schedule() must return void");
+            t->schedule();
+        }
+        post_schedule();
+    }
+#endif
 
 protected:
+#ifdef HALIDE_ALLOW_GENERATOR_BUILD_METHOD
     Pipeline build_pipeline() override {
         return this->build_pipeline_impl(0);
     }
@@ -3799,7 +3862,23 @@ protected:
     void call_schedule() override {
         this->call_schedule_impl(0, 0);
     }
+#else
+    Pipeline build_pipeline() override {
+        return this->build_pipeline_impl();
+    }
 
+    void call_configure() override {
+        this->call_configure_impl();
+    }
+
+    void call_generate() override {
+        this->call_generate_impl();
+    }
+
+    void call_schedule() override {
+        this->call_schedule_impl();
+    }
+#endif
 private:
     friend void ::Halide::Internal::generator_test();
     friend void ::Halide::Internal::generator_test();
