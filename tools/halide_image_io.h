@@ -1949,16 +1949,22 @@ bool save_tiff(ImageType &im, const std::string &filename) {
     return true;
 }
 
-// Given something like ImageType<Foo>, produce typedef ImageType<Bar>
-template<typename ImageType, typename ElemType>
-struct ImageTypeWithElemType {
-    using type = decltype(std::declval<ImageType>().template as<ElemType>());
+// Given something like ImageType<Foo, 2>, produce typedef ImageType<Foo, -1>
+template<typename ImageType>
+struct ImageTypeWithDynamicDims {
+    using type = decltype(std::declval<ImageType>().template as<typename ImageType::ElemType, -1>());
 };
 
-// Given something like ImageType<Foo>, produce typedef ImageType<const Bar>
+// Given something like ImageType<Foo>, produce typedef ImageType<Bar, -1>
+template<typename ImageType, typename ElemType = void>
+struct ImageTypeWithElemType {
+    using type = decltype(std::declval<ImageType>().template as<ElemType, -1>());
+};
+
+// Given something like ImageType<Foo>, produce typedef ImageType<const Bar, -1>
 template<typename ImageType, typename ElemType>
 struct ImageTypeWithConstElemType {
-    using type = decltype(std::declval<ImageType>().template as<typename std::add_const<ElemType>::type>());
+    using type = decltype(std::declval<ImageType>().template as<typename std::add_const<ElemType>::type, -1>());
 };
 
 template<typename ImageType, Internal::CheckFunc check>
@@ -2154,7 +2160,8 @@ struct ImageTypeConversion {
             return convert_image<uint64_t>(src);
         default:
             assert(false && "Unsupported type");
-            return ImageType();
+            using RetImageType = typename Internal::ImageTypeWithDynamicDims<ImageType>::type;
+            return RetImageType();
         }
     }
 
@@ -2201,7 +2208,8 @@ struct ImageTypeConversion {
             return convert_image(src.template as<uint64_t>(), dst_type);
         default:
             assert(false && "Unsupported type");
-            return ImageType();
+            using RetImageType = typename Internal::ImageTypeWithDynamicDims<ImageType>::type;
+            return RetImageType();
         }
     }
 };
@@ -2335,7 +2343,7 @@ private:
 // a runtime error will occur.
 template<typename ImageType, Internal::CheckFunc check = Internal::CheckFail>
 void save_image(ImageType &im, const std::string &filename) {
-    (void)save<ImageType, check>(im, filename);
+    (void)save<typename Internal::ImageTypeWithDynamicDims<ImageType>::type, check>(im, filename);
 }
 
 // Like save_image, but quietly convert the saved image to a type that the
@@ -2347,11 +2355,12 @@ void convert_and_save_image(ImageType &im, const std::string &filename) {
     im.copy_to_host();
 
     std::set<FormatInfo> info;
-    (void)save_query<ImageType, check>(filename, &info);
+    (void)save_query<typename Internal::ImageTypeWithDynamicDims<ImageType>::type, check>(filename, &info);
     const FormatInfo best = Internal::best_save_format(im, info);
     if (best.type == im.type() && best.dimensions == im.dimensions()) {
         // It's an exact match, we can save as-is.
-        (void)save<ImageType, check>(im, filename);
+        using DynamicImageDims = typename Internal::ImageTypeWithDynamicDims<ImageType>::type;
+        (void)save<DynamicImageDims, check>(im.template as<typename ImageType::ElemType, -1>(), filename);
     } else {
         using DynamicImageType = typename Internal::ImageTypeWithElemType<ImageType, void>::type;
         DynamicImageType im_converted = ImageTypeConversion::convert_image(im, best.type);
