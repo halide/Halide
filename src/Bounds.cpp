@@ -1503,8 +1503,8 @@ private:
         // them in as variables and add an outer let (to avoid
         // combinatorial explosion).
         Interval var;
-        string min_name = op->name + ".min";
-        string max_name = op->name + ".max";
+        const string min_name = unique_name(op->name + ".min");
+        const string max_name = unique_name(op->name + ".max");
 
         if (val.has_lower_bound()) {
             if (is_const(val.min)) {
