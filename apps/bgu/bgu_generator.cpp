@@ -265,11 +265,11 @@ public:
     // Size of each spatial bin in the grid. Typically 16.
     Input<int> s_sigma{"s_sigma"};
 
-    Input<Buffer<float>> splat_loc{"splat_loc", 3};
-    Input<Buffer<float>> values{"values", 3};
-    Input<Buffer<float>> slice_loc{"slice_loc", 3};
+    Input<Buffer<float, 3>> splat_loc{"splat_loc"};
+    Input<Buffer<float, 3>> values{"values"};
+    Input<Buffer<float, 3>> slice_loc{"slice_loc"};
 
-    Output<Buffer<float>> output{"output", 3};
+    Output<Buffer<float, 3>> output{"output"};
 
     void generate() {
         // Algorithm

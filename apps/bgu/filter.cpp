@@ -31,14 +31,14 @@ int main(int argc, char **argv) {
     // BGU will be good at capturing the contrast enhancement and
     // vignette, and bad at capturing the high-frequency sharpening.
 
-    Halide::Runtime::Buffer<float> high_res_in = load_and_convert_image(argv[1]);
+    Halide::Runtime::Buffer<float, 3> high_res_in = load_and_convert_image(argv[1]);
     const int W = high_res_in.width();
     const int H = high_res_in.height();
     const int C = high_res_in.channels();
 
-    Halide::Runtime::Buffer<float> high_res_out(W, H, C);
-    Halide::Runtime::Buffer<float> low_res_in(W / 8, H / 8, C);
-    Halide::Runtime::Buffer<float> low_res_out(W / 8, H / 8, C);
+    Halide::Runtime::Buffer<float, 3> high_res_out(W, H, C);
+    Halide::Runtime::Buffer<float, 3> low_res_in(W / 8, H / 8, C);
+    Halide::Runtime::Buffer<float, 3> low_res_out(W / 8, H / 8, C);
 
     // Downsample the input with a box filter
     low_res_in.fill(0.0f);
