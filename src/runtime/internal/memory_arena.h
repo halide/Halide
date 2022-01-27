@@ -42,14 +42,14 @@ public:
     };
 
     MemoryArena(void* user_context, uint32_t initial_capacity=default_capacity, 
-                const InitializerFns& initializer = default_initializer(),
-                const AllocatorFns& allocator = default_allocator());
+                const AllocatorFns& allocator = default_allocator(),
+                const InitializerFns& initializer = default_initializer());
 
     ~MemoryArena();
 
     void initialize(void* user_context, uint32_t initial_capacity=default_capacity, 
-                    const InitializerFns& initializer = default_initializer(),
-                    const AllocatorFns& allocator = default_allocator());
+                    const AllocatorFns& allocator = default_allocator(),
+                    const InitializerFns& initializer = default_initializer());
 
     T* reserve(void *user_context);
     void reclaim(void *user_context, T* ptr);
@@ -105,8 +105,8 @@ private:
 template<typename T>
 MemoryArena<T>::MemoryArena(void* user_context, 
                             uint32_t initial_capacity, 
-                            const InitializerFns& init_fns,
-                            const AllocatorFns& alloc_fns) : 
+                            const AllocatorFns& alloc_fns,
+                            const InitializerFns& init_fns) : 
     capacity(initial_capacity),
     initializer(init_fns),
     blocks({alloc_fns.alloc_memory, alloc_fns.free_memory}) {
@@ -122,8 +122,8 @@ MemoryArena<T>::~MemoryArena() {
 template<typename T>
 void MemoryArena<T>::initialize(void* user_context, 
                                 uint32_t initial_capacity, 
-                                const InitializerFns& init_fns,
-                                const AllocatorFns& alloc_fns) {
+                                const AllocatorFns& alloc_fns,
+                                const InitializerFns& init_fns) {
     capacity = initial_capacity;
     initializer = init_fns;
     blocks.initialize(user_context, {alloc_fns.alloc_memory, alloc_fns.free_memory});
@@ -293,8 +293,7 @@ template<typename T>
 const typename MemoryArena<T>::InitializerFns& 
 MemoryArena<T>::default_initializer() {
     static InitializerFns empty = {
-        nullptr,
-        nullptr
+        nullptr, nullptr
     };
     return empty;
 }

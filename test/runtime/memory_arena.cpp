@@ -42,8 +42,9 @@ int main(int argc, char **argv) {
 
     // test class interface
     {
+        MemoryArena<int>::AllocatorFns alloc = MemoryArena<int>::default_allocator();
         MemoryArena<int>::InitializerFns initializer = { construct_int, destruct_int };
-        MemoryArena<int> arena(user_context, 32, initializer);
+        MemoryArena<int> arena(user_context, 32, alloc, initializer);
         int* p1 = arena.reserve(user_context);
         halide_abort_if_false(user_context, counter == 1);
         halide_abort_if_false(user_context, p1 != nullptr);
@@ -63,8 +64,9 @@ int main(int argc, char **argv) {
 
     // test struct allocations
     {
+        MemoryArena<TestStruct>::AllocatorFns alloc = MemoryArena<TestStruct>::default_allocator();
         MemoryArena<TestStruct>::InitializerFns initializer = { construct_struct, destruct_struct };
-        MemoryArena<TestStruct> arena(user_context, 32, initializer);
+        MemoryArena<TestStruct> arena(user_context, 32, alloc, initializer);
         TestStruct* s1 = arena.reserve(user_context);
         halide_abort_if_false(user_context, counter == 1);
         halide_abort_if_false(user_context, s1->i8 == 8);

@@ -27,10 +27,12 @@ static void free_block_memory(void* user_context, MemoryBlock* block) {
 }
 
 static void allocate_region_memory(void* user_context, MemoryRegion* region) {
+    region->handle = (void*)1;
     allocated_region_memory += region->size;
 }
 
 static void free_region_memory(void* user_context, MemoryRegion* region) {
+    region->handle = (void*)0;
     allocated_region_memory -= region->size;
 }
 
@@ -46,24 +48,26 @@ int main(int argc, char **argv) {
             allocate_region_memory, free_region_memory
         };
 
-        BlockAllocator allocator(user_context, block_size, functions);
+        BlockAllocator* allocator = BlockAllocator::create(user_context, block_size, functions);
 
-        MemoryRegion* r1 = allocator.reserve(user_context, MemoryAccess::HostOnly, sizeof(int), sizeof(int));
+        MemoryRegion* r1 = allocator->reserve(user_context, MemoryBusAccess::HostOnly, sizeof(int), sizeof(int));
         halide_abort_if_false(user_context, r1 != nullptr);
         halide_abort_if_false(user_context, allocated_block_memory == block_size);
         halide_abort_if_false(user_context, allocated_region_memory == sizeof(int));
 
-        MemoryRegion* r2 = allocator.reserve(user_context, MemoryAccess::HostOnly, sizeof(int), sizeof(int));
+        MemoryRegion* r2 = allocator->reserve(user_context, MemoryBusAccess::HostOnly, sizeof(int), sizeof(int));
         halide_abort_if_false(user_context, r2 != nullptr);
         halide_abort_if_false(user_context, allocated_block_memory == block_size);
         halide_abort_if_false(user_context, allocated_region_memory == (2 * sizeof(int)));
 
-        allocator.reclaim(user_context, r1);
+        allocator->reclaim(user_context, r1);
         halide_abort_if_false(user_context, allocated_region_memory == (1 * sizeof(int)));
 
-        allocator.destroy(user_context);
+        allocator->destroy(user_context);
         halide_abort_if_false(user_context, allocated_block_memory == 0);
         halide_abort_if_false(user_context, allocated_region_memory == 0);
+
+        BlockAllocator::destroy(user_context, allocator);
     }
 
     // stress test
@@ -75,7 +79,7 @@ int main(int argc, char **argv) {
             allocate_region_memory, free_region_memory
         };
 
-        BlockAllocator allocator(user_context, block_size, functions);
+        BlockAllocator* allocator = BlockAllocator::create(user_context, block_size, functions);
 
         static size_t test_allocations = 1000;
         BlockStorage<MemoryRegion*> regions(user_context, test_allocations, {allocate_system_memory, free_system_memory});
@@ -83,17 +87,19 @@ int main(int argc, char **argv) {
             size_t count = n % 32;
             count = count > 1 ? count : 1;
             size_t size = count * sizeof(int); 
-            MemoryRegion* region = allocator.reserve(user_context, MemoryAccess::HostOnly, size, sizeof(int));
+            MemoryRegion* region = allocator->reserve(user_context, MemoryBusAccess::HostOnly, size, sizeof(int));
             regions.append(user_context, region);            
         }
 
         for(size_t n = 0; n < regions.size(); ++n) {
-            allocator.reclaim(user_context, regions[n]);
+            allocator->reclaim(user_context, regions[n]);
         }
         halide_abort_if_false(user_context, allocated_region_memory == 0);
 
-        allocator.destroy(user_context);
+        allocator->destroy(user_context);
         halide_abort_if_false(user_context, allocated_block_memory == 0);
+
+        BlockAllocator::destroy(user_context, allocator);
     }
 
     print(user_context) << "Success!\n";
