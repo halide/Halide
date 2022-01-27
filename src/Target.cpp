@@ -794,11 +794,13 @@ bool Target::supports_type(const Type &t) const {
             return !has_feature(Metal) &&
                    !has_feature(OpenGLCompute) &&
                    !has_feature(D3D12Compute) &&
+                   !has_feature(WebGPU) &&
                    (!has_feature(Target::OpenCL) || has_feature(Target::CLDoubles));
         } else {
             return (!has_feature(Metal) &&
                     !has_feature(OpenGLCompute) &&
-                    !has_feature(D3D12Compute));
+                    !has_feature(D3D12Compute) &&
+                    !has_feature(WebGPU));
         }
     }
     return true;
@@ -828,6 +830,8 @@ bool Target::supports_type(const Type &t, DeviceAPI device) const {
         // types are not supported.
         return t.bits() < 64;
     } else if (device == DeviceAPI::OpenGLCompute) {
+        return t.bits() < 64;
+    } else if (device == DeviceAPI::WebGPU) {
         return t.bits() < 64;
     }
 
