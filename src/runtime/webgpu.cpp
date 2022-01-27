@@ -518,16 +518,16 @@ WEAK int halide_webgpu_copy_to_device(void *user_context, halide_buffer_t *buf) 
     return error_scope.wait();
 }
 
-WEAK int halide_webgpu_device_and_host_malloc(void *user_context, struct halide_buffer_t *buf) {
-    // TODO: Implement this.
-    halide_debug_assert(user_context, false && "unimplemented");
-    return 1;
+WEAK int halide_webgpu_device_and_host_malloc(void *user_context,
+                                              struct halide_buffer_t *buf) {
+    return halide_default_device_and_host_malloc(user_context, buf,
+                                                 &webgpu_device_interface);
 }
 
-WEAK int halide_webgpu_device_and_host_free(void *user_context, struct halide_buffer_t *buf) {
-    // TODO: Implement this.
-    halide_debug_assert(user_context, false && "unimplemented");
-    return 1;
+WEAK int halide_webgpu_device_and_host_free(void *user_context,
+                                            struct halide_buffer_t *buf) {
+    return halide_default_device_and_host_free(user_context, buf,
+                                               &webgpu_device_interface);
 }
 
 WEAK int halide_webgpu_buffer_copy(void *user_context, struct halide_buffer_t *src,
