@@ -115,6 +115,8 @@ void CodeGen_WebGPU_Dev::init_module() {
         << "fn cosh_f32(x : f32) -> f32 {return cosh(x);}\n"
         << "fn exp_f32(x : f32) -> f32 {return exp(x);}\n"
         << "fn floor_f32(x : f32) -> f32 {return floor(x);}\n"
+        << "fn fast_inverse_f32(x : f32) -> f32 {return 1.0 / x;}\n"
+        << "fn fast_inverse_sqrt_f32(x : f32) -> f32 {return inverseSqrt(x);}\n"
         << "fn log_f32(x : f32) -> f32 {return log(x);}\n"
         << "fn pow_f32(x : f32, y : f32) -> f32 {return pow(x, y);}\n"
         << "fn round_f32(x : f32) -> f32 {return round(x);}\n"
