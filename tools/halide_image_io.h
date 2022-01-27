@@ -694,11 +694,13 @@ struct FileOpener {
     FILE *const f;
 };
 
+constexpr int DimsUnconstrained = -1;
+
 // Read a row of ElemTypes from a byte buffer and copy them into a specific image row.
 // Multibyte elements are assumed to be big-endian.
 template<typename ElemType, typename ImageType>
 void read_big_endian_row(const uint8_t *src, int y, ImageType *im) {
-    auto im_typed = im->template as<ElemType>();
+    auto im_typed = im->template as<ElemType, DimsUnconstrained>();
     const int xmin = im_typed.dim(0).min();
     const int xmax = im_typed.dim(0).max();
     if (im_typed.dimensions() > 2) {
@@ -722,7 +724,7 @@ void read_big_endian_row(const uint8_t *src, int y, ImageType *im) {
 // Multibyte elements are written in big-endian layout.
 template<typename ElemType, typename ImageType>
 void write_big_endian_row(const ImageType &im, int y, uint8_t *dst) {
-    auto im_typed = im.template as<typename std::add_const<ElemType>::type>();
+    auto im_typed = im.template as<typename std::add_const<ElemType>::type, DimsUnconstrained>();
     const int xmin = im_typed.dim(0).min();
     const int xmax = im_typed.dim(0).max();
     if (im_typed.dimensions() > 2) {
@@ -1917,14 +1919,14 @@ bool save_tiff(ImageType &im, const std::string &filename) {
     }
 
     // Otherwise, write it out via manual traversal.
-#define HANDLE_CASE(CODE, BITS, TYPE)                    \
-    case halide_type_t(CODE, BITS).as_u32(): {           \
-        ElemWriter<TYPE> ew(&f);                         \
-        im.template as<const TYPE>().for_each_value(ew); \
-        if (!check(ew.ok, "TIFF write failed")) {        \
-            return false;                                \
-        }                                                \
-        break;                                           \
+#define HANDLE_CASE(CODE, BITS, TYPE)                                       \
+    case halide_type_t(CODE, BITS).as_u32(): {                              \
+        ElemWriter<TYPE> ew(&f);                                            \
+        im.template as<const TYPE, DimsUnconstrained>().for_each_value(ew); \
+        if (!check(ew.ok, "TIFF write failed")) {                           \
+            return false;                                                   \
+        }                                                                   \
+        break;                                                              \
     }
 
     switch (im_type.element_of().as_u32()) {
@@ -1949,22 +1951,22 @@ bool save_tiff(ImageType &im, const std::string &filename) {
     return true;
 }
 
-// Given something like ImageType<Foo, 2>, produce typedef ImageType<Foo, -1>
+// Given something like ImageType<Foo, 2>, produce typedef ImageType<Foo, DimsUnconstrained>
 template<typename ImageType>
 struct ImageTypeWithDynamicDims {
-    using type = decltype(std::declval<ImageType>().template as<typename ImageType::ElemType, -1>());
+    using type = decltype(std::declval<ImageType>().template as<typename ImageType::ElemType, DimsUnconstrained>());
 };
 
-// Given something like ImageType<Foo>, produce typedef ImageType<Bar, -1>
-template<typename ImageType, typename ElemType = void>
+// Given something like ImageType<Foo>, produce typedef ImageType<Bar, DimsUnconstrained>
+template<typename ImageType, typename ElemType>
 struct ImageTypeWithElemType {
-    using type = decltype(std::declval<ImageType>().template as<ElemType, -1>());
+    using type = decltype(std::declval<ImageType>().template as<ElemType, DimsUnconstrained>());
 };
 
-// Given something like ImageType<Foo>, produce typedef ImageType<const Bar, -1>
+// Given something like ImageType<Foo>, produce typedef ImageType<const Bar, DimsUnconstrained>
 template<typename ImageType, typename ElemType>
 struct ImageTypeWithConstElemType {
-    using type = decltype(std::declval<ImageType>().template as<typename std::add_const<ElemType>::type, -1>());
+    using type = decltype(std::declval<ImageType>().template as<typename std::add_const<ElemType>::type, DimsUnconstrained>());
 };
 
 template<typename ImageType, Internal::CheckFunc check>
@@ -2088,31 +2090,32 @@ struct ImageTypeConversion {
         // as documentation and a backstop against breakage.
         static_assert(!ImageType::has_static_halide_type,
                       "This variant of convert_image() requires a dynamically-typed image");
+        constexpr int DimsUnconstrained = Internal::DimsUnconstrained;
 
         const halide_type_t src_type = src.type();
         switch (src_type.element_of().as_u32()) {
         case halide_type_t(halide_type_float, 32).as_u32():
-            return convert_image<DstElemType>(src.template as<float>());
+            return convert_image<DstElemType>(src.template as<float, DimsUnconstrained>());
         case halide_type_t(halide_type_float, 64).as_u32():
-            return convert_image<DstElemType>(src.template as<double>());
+            return convert_image<DstElemType>(src.template as<double, DimsUnconstrained>());
         case halide_type_t(halide_type_int, 8).as_u32():
-            return convert_image<DstElemType>(src.template as<int8_t>());
+            return convert_image<DstElemType>(src.template as<int8_t, DimsUnconstrained>());
         case halide_type_t(halide_type_int, 16).as_u32():
-            return convert_image<DstElemType>(src.template as<int16_t>());
+            return convert_image<DstElemType>(src.template as<int16_t, DimsUnconstrained>());
         case halide_type_t(halide_type_int, 32).as_u32():
-            return convert_image<DstElemType>(src.template as<int32_t>());
+            return convert_image<DstElemType>(src.template as<int32_t, DimsUnconstrained>());
         case halide_type_t(halide_type_int, 64).as_u32():
-            return convert_image<DstElemType>(src.template as<int64_t>());
+            return convert_image<DstElemType>(src.template as<int64_t, DimsUnconstrained>());
         case halide_type_t(halide_type_uint, 1).as_u32():
-            return convert_image<DstElemType>(src.template as<bool>());
+            return convert_image<DstElemType>(src.template as<bool, DimsUnconstrained>());
         case halide_type_t(halide_type_uint, 8).as_u32():
-            return convert_image<DstElemType>(src.template as<uint8_t>());
+            return convert_image<DstElemType>(src.template as<uint8_t, DimsUnconstrained>());
         case halide_type_t(halide_type_uint, 16).as_u32():
-            return convert_image<DstElemType>(src.template as<uint16_t>());
+            return convert_image<DstElemType>(src.template as<uint16_t, DimsUnconstrained>());
         case halide_type_t(halide_type_uint, 32).as_u32():
-            return convert_image<DstElemType>(src.template as<uint32_t>());
+            return convert_image<DstElemType>(src.template as<uint32_t, DimsUnconstrained>());
         case halide_type_t(halide_type_uint, 64).as_u32():
-            return convert_image<DstElemType>(src.template as<uint64_t>());
+            return convert_image<DstElemType>(src.template as<uint64_t, DimsUnconstrained>());
         default:
             assert(false && "Unsupported type");
             using DstImageType = typename Internal::ImageTypeWithElemType<ImageType, DstElemType>::type;
@@ -2177,6 +2180,7 @@ struct ImageTypeConversion {
         // as documentation and a backstop against breakage.
         static_assert(!ImageType::has_static_halide_type,
                       "This variant of convert_image() requires a dynamically-typed image");
+        constexpr int DimsUnconstrained = Internal::DimsUnconstrained;
 
         // Sniff the runtime type of src, coerce it to that type using as<>(),
         // and call the static-to-dynamic variant of this method. (Note that
@@ -2185,27 +2189,27 @@ struct ImageTypeConversion {
         const halide_type_t src_type = src.type();
         switch (src_type.element_of().as_u32()) {
         case halide_type_t(halide_type_float, 32).as_u32():
-            return convert_image(src.template as<float>(), dst_type);
+            return convert_image(src.template as<float, DimsUnconstrained>(), dst_type);
         case halide_type_t(halide_type_float, 64).as_u32():
-            return convert_image(src.template as<double>(), dst_type);
+            return convert_image(src.template as<double, DimsUnconstrained>(), dst_type);
         case halide_type_t(halide_type_int, 8).as_u32():
-            return convert_image(src.template as<int8_t>(), dst_type);
+            return convert_image(src.template as<int8_t, DimsUnconstrained>(), dst_type);
         case halide_type_t(halide_type_int, 16).as_u32():
-            return convert_image(src.template as<int16_t>(), dst_type);
+            return convert_image(src.template as<int16_t, DimsUnconstrained>(), dst_type);
         case halide_type_t(halide_type_int, 32).as_u32():
-            return convert_image(src.template as<int32_t>(), dst_type);
+            return convert_image(src.template as<int32_t, DimsUnconstrained>(), dst_type);
         case halide_type_t(halide_type_int, 64).as_u32():
-            return convert_image(src.template as<int64_t>(), dst_type);
+            return convert_image(src.template as<int64_t, DimsUnconstrained>(), dst_type);
         case halide_type_t(halide_type_uint, 1).as_u32():
-            return convert_image(src.template as<bool>(), dst_type);
+            return convert_image(src.template as<bool, DimsUnconstrained>(), dst_type);
         case halide_type_t(halide_type_uint, 8).as_u32():
-            return convert_image(src.template as<uint8_t>(), dst_type);
+            return convert_image(src.template as<uint8_t, DimsUnconstrained>(), dst_type);
         case halide_type_t(halide_type_uint, 16).as_u32():
-            return convert_image(src.template as<uint16_t>(), dst_type);
+            return convert_image(src.template as<uint16_t, DimsUnconstrained>(), dst_type);
         case halide_type_t(halide_type_uint, 32).as_u32():
-            return convert_image(src.template as<uint32_t>(), dst_type);
+            return convert_image(src.template as<uint32_t, DimsUnconstrained>(), dst_type);
         case halide_type_t(halide_type_uint, 64).as_u32():
-            return convert_image(src.template as<uint64_t>(), dst_type);
+            return convert_image(src.template as<uint64_t, DimsUnconstrained>(), dst_type);
         default:
             assert(false && "Unsupported type");
             using RetImageType = typename Internal::ImageTypeWithDynamicDims<ImageType>::type;
@@ -2238,7 +2242,7 @@ bool load(const std::string &filename, ImageType *im) {
             return false;
         }
     }
-    *im = im_d.template as<typename ImageType::ElemType>();
+    *im = im_d.template as<typename ImageType::ElemType, Internal::DimsUnconstrained>();
     im->set_host_dirty();
     return true;
 }
@@ -2259,7 +2263,7 @@ bool save(ImageType &im, const std::string &filename) {
 
     // Allow statically-typed images to be passed in, but quietly pass them on
     // as dynamically-typed images.
-    auto im_d = im.template as<const void>();
+    auto im_d = im.template as<const void, Internal::DimsUnconstrained>();
     return imageio.save(im_d, filename);
 }
 
@@ -2300,7 +2304,7 @@ public:
         Internal::CheckFail(ImageType::can_convert_from(im_d),
                             "Type mismatch assigning the result of load_image. "
                             "Did you mean to use load_and_convert_image?");
-        return im_d.template as<typename ImageType::ElemType>();
+        return im_d.template as<typename ImageType::ElemType, Internal::DimsUnconstrained>();
     }
 
 private:
@@ -2322,7 +2326,7 @@ public:
         (void)load<DynamicImageType, Internal::CheckFail>(filename, &im_d);
         const halide_type_t expected_type = ImageType::static_halide_type();
         if (im_d.type() == expected_type) {
-            return im_d.template as<typename ImageType::ElemType>();
+            return im_d.template as<typename ImageType::ElemType, Internal::DimsUnconstrained>();
         } else {
             return ImageTypeConversion::convert_image<typename ImageType::ElemType>(im_d);
         }
@@ -2343,7 +2347,8 @@ private:
 // a runtime error will occur.
 template<typename ImageType, Internal::CheckFunc check = Internal::CheckFail>
 void save_image(ImageType &im, const std::string &filename) {
-    (void)save<typename Internal::ImageTypeWithDynamicDims<ImageType>::type, check>(im, filename);
+    auto im_d = im.template as<void, Internal::DimsUnconstrained>();
+    (void)save<decltype(im_d), check>(im_d, filename);
 }
 
 // Like save_image, but quietly convert the saved image to a type that the
@@ -2360,7 +2365,7 @@ void convert_and_save_image(ImageType &im, const std::string &filename) {
     if (best.type == im.type() && best.dimensions == im.dimensions()) {
         // It's an exact match, we can save as-is.
         using DynamicImageDims = typename Internal::ImageTypeWithDynamicDims<ImageType>::type;
-        (void)save<DynamicImageDims, check>(im.template as<typename ImageType::ElemType, -1>(), filename);
+        (void)save<DynamicImageDims, check>(im.template as<typename ImageType::ElemType, Internal::DimsUnconstrained>(), filename);
     } else {
         using DynamicImageType = typename Internal::ImageTypeWithElemType<ImageType, void>::type;
         DynamicImageType im_converted = ImageTypeConversion::convert_image(im, best.type);
