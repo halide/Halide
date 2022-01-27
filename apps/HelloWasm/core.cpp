@@ -24,9 +24,9 @@ struct Context {
     double smoothed_blit_time = 0;
     double last_frame_time = 0;
 
-    Halide::Runtime::Buffer<float> buf1;
-    Halide::Runtime::Buffer<float> buf2;
-    Halide::Runtime::Buffer<uint32_t> pixel_buf;
+    Halide::Runtime::Buffer<float, 3> buf1;
+    Halide::Runtime::Buffer<float, 3> buf2;
+    Halide::Runtime::Buffer<uint32_t, 2> pixel_buf;
 };
 
 void mainloop(void *arg) {
@@ -102,9 +102,9 @@ int main() {
 
     Context ctx;
     ctx.renderer = renderer;
-    ctx.buf1 = Halide::Runtime::Buffer<float>(W, H, 3);
-    ctx.buf2 = Halide::Runtime::Buffer<float>(W, H, 3);
-    ctx.pixel_buf = Halide::Runtime::Buffer<uint32_t>(W, H);
+    ctx.buf1 = Halide::Runtime::Buffer<float, 3>(W, H, 3);
+    ctx.buf2 = Halide::Runtime::Buffer<float, 3>(W, H, 3);
+    ctx.pixel_buf = Halide::Runtime::Buffer<uint32_t, 2>(W, H);
 
     ctx.tex = SDL_CreateTexture(renderer,
                                 SDL_PIXELFORMAT_ARGB8888,

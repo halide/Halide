@@ -274,7 +274,7 @@ public:
             shape_tensor = tensors_[op->inputs()->Get(1)];
         } else if (options) {
             size_t size = options->new_shape()->size();
-            HalideBuffer<int32_t> shape_data(size);
+            HalideBuffer<int32_t, 1> shape_data(size);
             for (size_t i = 0; i < size; i++) {
                 shape_data(i) = options->new_shape()->Get(i);
             }
