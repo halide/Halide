@@ -92,7 +92,6 @@ inline Buffer<scalar_t> wrap(at::Tensor &tensor) {
     return Buffer<scalar_t>(pData, dims);
 }
 
-
 template<class scalar_t>
 inline Buffer<scalar_t> wrap_cuda(at::Tensor &tensor) {
     check_type<scalar_t>(tensor);
