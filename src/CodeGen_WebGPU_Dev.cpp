@@ -306,8 +306,7 @@ void CodeGen_WebGPU_Dev::CodeGen_WGSL::add_kernel(
 void CodeGen_WebGPU_Dev::CodeGen_WGSL::visit(const Allocate *op) {
     if (op->memory_type == MemoryType::GPUShared) {
         // TODO: Implement.
-        internal_assert(false)
-            << "GPU shared memory is not yet implemented for WebGPU";
+        internal_error << "GPU shared memory is not yet implemented for WebGPU";
     } else {
         open_scope();
 
@@ -405,7 +404,7 @@ void CodeGen_WebGPU_Dev::CodeGen_WGSL::visit(const For *loop) {
 
     } else {
         user_assert(loop->for_type == ForType::Serial)
-            << "Cannot only use serial loops inside WebGPU shaders\n";
+            << "Can only use serial loops inside WebGPU shaders\n";
 
         string id_min = print_expr(loop->min);
         string id_extent = print_expr(loop->extent);
