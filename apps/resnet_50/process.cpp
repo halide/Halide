@@ -53,13 +53,15 @@ std::vector<int> load_shape(const std::string &shapefile) {
     return dims;
 }
 
-void write_buffer_to_file(const Buffer<float> &buf, const std::string &filename) {
+void write_buffer_to_file(const Buffer<float, 1> &buf, const std::string &filename) {
     std::ofstream o(filename, std::ios_base::trunc | std::ios_base::binary);
     o.write((const char *)(buf.data()), buf.size_in_bytes());
     o.close();
     assert(!o.fail());
 }
 
+// Deliberately unconstrained dims here; caller will
+// convert with an implicit runtime check
 Buffer<float> load_buffer_from_file(const std::string &filename, std::vector<int> &shape) {
     Buffer<float> buffer(shape);
     std::ifstream infile(filename, std::ios::binary);
@@ -69,25 +71,25 @@ Buffer<float> load_buffer_from_file(const std::string &filename, std::vector<int
     return buffer;
 }
 
-Buffer<float> load_conv_params(std::string shapefile, std::string datafile) {
+Buffer<float, 4> load_conv_params(std::string shapefile, std::string datafile) {
     std::vector<int> shape = load_shape(shapefile);
     assert(shape.size() == 4);
     return load_buffer_from_file(datafile, shape);
 }
 
-Buffer<float> load_batch_norm_params(std::string shapefile, std::string datafile) {
+Buffer<float, 1> load_batch_norm_params(std::string shapefile, std::string datafile) {
     std::vector<int> shape = load_shape(shapefile);
     assert(shape.size());
     return load_buffer_from_file(datafile, shape);
 }
 
-Buffer<float> load_fc_weight(std::string shapefile, std::string datafile) {
+Buffer<float, 2> load_fc_weight(std::string shapefile, std::string datafile) {
     std::vector<int> shape = load_shape(shapefile);
     assert(shape.size() == 2);
     return load_buffer_from_file(datafile, shape);
 }
 
-Buffer<float> load_fc_bias(std::string shapefile, std::string datafile) {
+Buffer<float, 1> load_fc_bias(std::string shapefile, std::string datafile) {
     std::vector<int> shape = load_shape(shapefile);
     assert(shape.size() == 1);
     return load_buffer_from_file(datafile, shape);
@@ -103,39 +105,39 @@ int main(int argc, char **argv) {
     int seed = atoi(argv[3]);
     std::string output_file = argv[4];
 
-    Buffer<float> input(3, 224, 224);
-    Buffer<float> output(1000);
+    Buffer<float, 3> input(3, 224, 224);
+    Buffer<float, 1> output(1000);
 
-    Buffer<float> conv1_weights;
-    Buffer<float> conv1_mu;
-    Buffer<float> conv1_sig;
-    Buffer<float> conv1_gamma;
-    Buffer<float> conv1_beta;
+    Buffer<float, 4> conv1_weights;
+    Buffer<float, 1> conv1_mu;
+    Buffer<float, 1> conv1_sig;
+    Buffer<float, 1> conv1_gamma;
+    Buffer<float, 1> conv1_beta;
 
-    Buffer<float> br2a_conv_weights[16];
-    Buffer<float> br2b_conv_weights[16];
-    Buffer<float> br2c_conv_weights[16];
-    Buffer<float> br1_conv_weights[4];
+    Buffer<float, 4> br2a_conv_weights[16];
+    Buffer<float, 4> br2b_conv_weights[16];
+    Buffer<float, 4> br2c_conv_weights[16];
+    Buffer<float, 4> br1_conv_weights[4];
 
-    Buffer<float> br2a_gamma[16];
-    Buffer<float> br2b_gamma[16];
-    Buffer<float> br2c_gamma[16];
-    Buffer<float> br1_gamma[4];
+    Buffer<float, 1> br2a_gamma[16];
+    Buffer<float, 1> br2b_gamma[16];
+    Buffer<float, 1> br2c_gamma[16];
+    Buffer<float, 1> br1_gamma[4];
 
-    Buffer<float> br2a_beta[16];
-    Buffer<float> br2b_beta[16];
-    Buffer<float> br2c_beta[16];
-    Buffer<float> br1_beta[4];
+    Buffer<float, 1> br2a_beta[16];
+    Buffer<float, 1> br2b_beta[16];
+    Buffer<float, 1> br2c_beta[16];
+    Buffer<float, 1> br1_beta[4];
 
-    Buffer<float> br2a_mu[16];
-    Buffer<float> br2b_mu[16];
-    Buffer<float> br2c_mu[16];
-    Buffer<float> br1_mu[4];
+    Buffer<float, 1> br2a_mu[16];
+    Buffer<float, 1> br2b_mu[16];
+    Buffer<float, 1> br2c_mu[16];
+    Buffer<float, 1> br1_mu[4];
 
-    Buffer<float> br2a_sig[16];
-    Buffer<float> br2b_sig[16];
-    Buffer<float> br2c_sig[16];
-    Buffer<float> br1_sig[4];
+    Buffer<float, 1> br2a_sig[16];
+    Buffer<float, 1> br2b_sig[16];
+    Buffer<float, 1> br2c_sig[16];
+    Buffer<float, 1> br1_sig[4];
 
     /** load parameters for first section **/
     std::string conv1_w_shapefile = weight_dir + "conv1_weight_shape.data";
@@ -236,7 +238,7 @@ int main(int argc, char **argv) {
     std::string bias_shapefile = weight_dir + "fc_bias_shape.data";
     std::string bias_datafile = weight_dir + "fc_bias.data";
 
-    Buffer<float> fc1000_weights = load_fc_weight(weight_shapefile, weight_datafile);
+    Buffer<float, 2> fc1000_weights = load_fc_weight(weight_shapefile, weight_datafile);
     Buffer<float> fc1000_bias = load_fc_bias(bias_shapefile, bias_datafile);
 
     std::mt19937 e2(seed);

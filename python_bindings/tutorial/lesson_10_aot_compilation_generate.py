@@ -64,8 +64,8 @@ def main():
     # arguments to the routine. This routine takes two. Arguments are
     # usually Params or ImageParams.
     fname = "lesson_10_halide"
-    brighter.compile_to({hl.Output.object: "lesson_10_halide.o",
-                         hl.Output.python_extension: "lesson_10_halide.py.cpp"},
+    brighter.compile_to({hl.OutputFileType.object: "lesson_10_halide.o",
+                         hl.OutputFileType.python_extension: "lesson_10_halide.py.cpp"},
                         [input, offset], "lesson_10_halide")
 
     print("Halide pipeline compiled, but not yet run.")

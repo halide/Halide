@@ -5,9 +5,9 @@ using namespace Halide;
 class Dilate3x3 : public Generator<Dilate3x3> {
 public:
     // Takes an 8 bit image; one channel.
-    Input<Buffer<uint8_t>> input{"input", 2};
+    Input<Buffer<uint8_t, 2>> input{"input"};
     // Outputs an 8 bit image; one channel.
-    Output<Buffer<uint8_t>> output{"output", 2};
+    Output<Buffer<uint8_t, 2>> output{"output"};
 
     GeneratorParam<bool> use_parallel_sched{"use_parallel_sched", true};
     GeneratorParam<bool> use_prefetch_sched{"use_prefetch_sched", true};

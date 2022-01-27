@@ -596,12 +596,8 @@ int main(int argc, char **argv) {
 
         // For every strip of 16 scanlines (this loop is parallel in
         // the Halide version)
-        for (int yo = 0; yo < 160 / 16 + 1; yo++) {
-
-            // 16 doesn't divide 160, so push the last slice upwards
-            // to fit within [0, 159] (see lesson 05).
+        for (int yo = 0; yo < 160 / 16; yo++) {
             int y_base = yo * 16;
-            if (y_base > 160 - 16) y_base = 160 - 16;
 
             // Allocate a two-scanline circular buffer for the producer
             float producer_storage[2][161];

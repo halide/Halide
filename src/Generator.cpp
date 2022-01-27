@@ -82,12 +82,12 @@ std::string compute_base_path(const std::string &output_dir,
     return base_path;
 }
 
-std::map<Output, std::string> compute_output_files(const Target &target,
-                                                   const std::string &base_path,
-                                                   const std::set<Output> &outputs) {
-    std::map<Output, const OutputInfo> output_info = get_output_info(target);
+std::map<OutputFileType, std::string> compute_output_files(const Target &target,
+                                                           const std::string &base_path,
+                                                           const std::set<OutputFileType> &outputs) {
+    std::map<OutputFileType, const OutputInfo> output_info = get_output_info(target);
 
-    std::map<Output, std::string> output_files;
+    std::map<OutputFileType, std::string> output_files;
     for (auto o : outputs) {
         output_files[o] = base_path + output_info.at(o).extension;
     }
@@ -674,6 +674,7 @@ std::vector<std::vector<Func>> GeneratorStub::generate(const GeneratorParamsMap 
 
     std::vector<std::vector<Func>> v;
     GeneratorParamInfo &pi = generator->param_info();
+#ifdef HALIDE_ALLOW_GENERATOR_BUILD_METHOD
     if (!pi.outputs().empty()) {
         for (auto *output : pi.outputs()) {
             v.push_back(get_outputs(output->name()));
@@ -684,6 +685,12 @@ std::vector<std::vector<Func>> GeneratorStub::generate(const GeneratorParamsMap 
             v.push_back(std::vector<Func>{output});
         }
     }
+#else
+    internal_assert(!pi.outputs().empty());
+    for (auto *output : pi.outputs()) {
+        v.push_back(get_outputs(output->name()));
+    }
+#endif
     return v;
 }
 
@@ -912,23 +919,23 @@ int generate_filter_main_inner(int argc, char **argv, std::ostream &error_output
     }
 
     // extensions won't vary across multitarget output
-    std::map<Output, const OutputInfo> output_info = get_output_info(targets[0]);
+    std::map<OutputFileType, const OutputInfo> output_info = get_output_info(targets[0]);
 
-    std::set<Output> outputs;
+    std::set<OutputFileType> outputs;
     if (emit_flags.empty() || (emit_flags.size() == 1 && emit_flags[0].empty())) {
         // If omitted or empty, assume .a and .h and registration.cpp
-        outputs.insert(Output::c_header);
-        outputs.insert(Output::registration);
-        outputs.insert(Output::static_library);
+        outputs.insert(OutputFileType::c_header);
+        outputs.insert(OutputFileType::registration);
+        outputs.insert(OutputFileType::static_library);
     } else {
         // Build a reverse lookup table. Allow some legacy aliases on the command line,
         // to allow legacy build systems to work more easily.
-        std::map<std::string, Output> output_name_to_enum = {
-            {"cpp", Output::c_source},
-            {"h", Output::c_header},
-            {"html", Output::stmt_html},
-            {"o", Output::object},
-            {"py.c", Output::python_extension},
+        std::map<std::string, OutputFileType> output_name_to_enum = {
+            {"cpp", OutputFileType::c_source},
+            {"h", OutputFileType::c_header},
+            {"html", OutputFileType::stmt_html},
+            {"o", OutputFileType::object},
+            {"py.c", OutputFileType::python_extension},
         };
         for (const auto &it : output_info) {
             output_name_to_enum[it.second.name] = it.first;
@@ -955,7 +962,7 @@ int generate_filter_main_inner(int argc, char **argv, std::ostream &error_output
     }
 
     // Allow quick-n-dirty use of compiler logging via HL_DEBUG_COMPILER_LOGGER env var
-    const bool do_compiler_logging = outputs.count(Output::compiler_log) ||
+    const bool do_compiler_logging = outputs.count(OutputFileType::compiler_log) ||
                                      (get_env_variable("HL_DEBUG_COMPILER_LOGGER") == "1");
 
     const bool obfuscate_compiler_logging = get_env_variable("HL_OBFUSCATE_COMPILER_LOGGER") == "1";
@@ -1055,11 +1062,11 @@ int generate_filter_main_inner(int argc, char **argv, std::ostream &error_output
     if (!generator_name.empty()) {
         std::string base_path = compute_base_path(output_dir, function_name, file_base_name);
         debug(1) << "Generator " << generator_name << " has base_path " << base_path << "\n";
-        if (outputs.count(Output::cpp_stub)) {
+        if (outputs.count(OutputFileType::cpp_stub)) {
             // When generating cpp_stub, we ignore all generator args passed in, and supply a fake Target.
             // (CompilerLogger is never enabled for cpp_stub, for now anyway.)
             auto gen = GeneratorRegistry::create(generator_name, GeneratorContext(Target()));
-            auto stub_file_path = base_path + output_info[Output::cpp_stub].extension;
+            auto stub_file_path = base_path + output_info[OutputFileType::cpp_stub].extension;
             gen->emit_cpp_stub(stub_file_path);
         }
 
@@ -1113,8 +1120,13 @@ void GeneratorParamBase::check_value_readable() const {
         name() == "machine_params") {
         return;
     }
+#ifdef HALIDE_ALLOW_GENERATOR_BUILD_METHOD
     user_assert(generator && generator->phase >= GeneratorBase::ConfigureCalled)
         << "The GeneratorParam \"" << name() << "\" cannot be read before build() or configure()/generate() is called.\n";
+#else
+    user_assert(generator && generator->phase >= GeneratorBase::ConfigureCalled)
+        << "The GeneratorParam \"" << name() << "\" cannot be read before configure()/generate() is called.\n";
+#endif
 }
 
 void GeneratorParamBase::check_value_writable() const {
@@ -1122,7 +1134,13 @@ void GeneratorParamBase::check_value_writable() const {
     if (!generator) {
         return;
     }
-    user_assert(generator->phase < GeneratorBase::GenerateCalled) << "The GeneratorParam \"" << name() << "\" cannot be written after build() or generate() is called.\n";
+#ifdef HALIDE_ALLOW_GENERATOR_BUILD_METHOD
+    user_assert(generator->phase < GeneratorBase::GenerateCalled)
+        << "The GeneratorParam \"" << name() << "\" cannot be written after build() or generate() is called.\n";
+#else
+    user_assert(generator->phase < GeneratorBase::GenerateCalled)
+        << "The GeneratorParam \"" << name() << "\" cannot be written after generate() is called.\n";
+#endif
 }
 
 void GeneratorParamBase::fail_wrong_type(const char *type) {
@@ -1449,6 +1467,7 @@ void GeneratorBase::post_schedule() {
     track_parameter_values(true);
 }
 
+#ifdef HALIDE_ALLOW_GENERATOR_BUILD_METHOD
 void GeneratorBase::pre_build() {
     advance_phase(GenerateCalled);
     advance_phase(ScheduleCalled);
@@ -1466,6 +1485,7 @@ void GeneratorBase::pre_build() {
 void GeneratorBase::post_build() {
     track_parameter_values(true);
 }
+#endif
 
 Pipeline GeneratorBase::get_pipeline() {
     check_min_phase(GenerateCalled);
@@ -1900,8 +1920,13 @@ void GIOBase::check_gio_access() const {
     if (!generator) {
         return;
     }
+#ifdef HALIDE_ALLOW_GENERATOR_BUILD_METHOD
     user_assert(generator->phase > GeneratorBase::InputsSet)
         << "The " << input_or_output() << " \"" << name() << "\" cannot be examined before build() or generate() is called.\n";
+#else
+    user_assert(generator->phase > GeneratorBase::InputsSet)
+        << "The " << input_or_output() << " \"" << name() << "\" cannot be examined before generate() is called.\n";
+#endif
 }
 
 // If our dims are defined, ensure it matches the one passed in, asserting if not.
@@ -2181,6 +2206,7 @@ void generator_test() {
         // tester.sp2.set(202);  // This will assert-fail.
     }
 
+#ifdef HALIDE_ALLOW_GENERATOR_BUILD_METHOD
     // Verify that the Generator's internal phase actually prevents unsupported
     // order of operations (with old-style Generator)
     {
@@ -2247,6 +2273,7 @@ void generator_test() {
         // tester.gp2.set(2);  // This will assert-fail.
         // tester.sp2.set(202);  // This will assert-fail.
     }
+#endif
 
     // Verify that set_inputs() works properly, even if the specific subtype of Generator is not known.
     {
@@ -2259,7 +2286,7 @@ void generator_test() {
             Input<Func> input_func_typed{"input_func_typed", Int(16), 1};
             Input<Func> input_func_untyped{"input_func_untyped", 1};
             Input<Func[]> input_func_array{"input_func_array", 1};
-            Input<Buffer<uint8_t>> input_buffer_typed{"input_buffer_typed", 3};
+            Input<Buffer<uint8_t, 3>> input_buffer_typed{"input_buffer_typed"};
             Input<Buffer<>> input_buffer_untyped{"input_buffer_untyped"};
             Output<Func> output{"output", Float(32), 1};
 
@@ -2338,7 +2365,7 @@ void generator_test() {
         static_assert(std::is_same<decltype(tester_instance.func_array_output[0]), Func &>::value, "type mismatch");
 
         static_assert(std::is_same<decltype(tester_instance.buffer_array_input[0]), ImageParam>::value, "type mismatch");
-        static_assert(std::is_same<decltype(tester_instance.buffer_array_output[0]), const Func &>::value, "type mismatch");
+        static_assert(std::is_same<decltype(tester_instance.buffer_array_output[0]), Func>::value, "type mismatch");
     }
 
     class GPTester : public Generator<GPTester> {

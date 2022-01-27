@@ -21,14 +21,14 @@ using namespace Halide::Tools;
 Var x("x"), y("y");
 
 template<typename T>
-Func make_real(const Buffer<T> &re) {
+Func make_real(const Buffer<T, 2> &re) {
     Func ret;
     ret(x, y) = re(x, y);
     return ret;
 }
 
 template<typename T>
-ComplexFunc make_complex(const Buffer<T> &re) {
+ComplexFunc make_complex(const Buffer<T, 2> &re) {
     ComplexFunc ret;
     ret(x, y) = re(x, y);
     return ret;
@@ -47,7 +47,7 @@ int main(int argc, char **argv) {
     }
 
     // Generate a random image to convolve with.
-    Buffer<float> in(W, H);
+    Buffer<float, 2> in(W, H);
     for (int y = 0; y < H; y++) {
         for (int x = 0; x < W; x++) {
             in(x, y) = (float)rand() / (float)RAND_MAX;
@@ -56,7 +56,7 @@ int main(int argc, char **argv) {
 
     // Construct a box filter kernel centered on the origin.
     const int box = 3;
-    Buffer<float> kernel(W, H);
+    Buffer<float, 2> kernel(W, H);
     for (int y = 0; y < H; y++) {
         for (int x = 0; x < W; x++) {
             int u = x < (W - x) ? x : (W - x);
@@ -107,8 +107,8 @@ int main(int argc, char **argv) {
         filtered_r2c = fft2d_c2r(dft_filtered, W, H, target, inv_desc);
     }
 
-    Buffer<float> result_c2c = filtered_c2c.realize({W, H}, target);
-    Buffer<float> result_r2c = filtered_r2c.realize({W, H}, target);
+    Buffer<float, 2> result_c2c = filtered_c2c.realize({W, H}, target);
+    Buffer<float, 2> result_r2c = filtered_r2c.realize({W, H}, target);
 
     for (int y = 0; y < H; y++) {
         for (int x = 0; x < W; x++) {
@@ -140,8 +140,8 @@ int main(int argc, char **argv) {
 
     Var rep("rep");
 
-    Buffer<float> re_in = lambda(x, y, 0.0f).realize({W, H});
-    Buffer<float> im_in = lambda(x, y, 0.0f).realize({W, H});
+    Buffer<float, 2> re_in = lambda(x, y, 0.0f).realize({W, H});
+    Buffer<float, 2> im_in = lambda(x, y, 0.0f).realize({W, H});
 
     printf("%12s %5s%11s%5s %5s%11s%5s\n", "", "", "Halide", "", "", "FFTW", "");
     printf("%12s %10s %10s %10s %10s %10s\n", "DFT type", "Time (us)", "MFLOP/s", "Time (us)", "MFLOP/s", "Ratio");
