@@ -89,11 +89,7 @@ inline Buffer<scalar_t> wrap(at::Tensor &tensor) {
 #else
     scalar_t *pData = tensor.data<scalar_t>();
 #endif
-    Buffer<scalar_t> buffer;
-
-    buffer = Buffer<scalar_t>(pData, dims);
-
-    return buffer;
+    return Buffer<scalar_t>(pData, dims);
 }
 
 
@@ -106,13 +102,14 @@ inline Buffer<scalar_t> wrap_cuda(at::Tensor &tensor) {
 #else
     scalar_t *pData = tensor.data<scalar_t>();
 #endif
-    Buffer<scalar_t> buffer;
-
     AT_ASSERTM(tensor.is_cuda(), "expected input tensor to be on a CUDA device.");
-    buffer = Buffer<scalar_t>(dims);
+
+    Buffer<scalar_t> buffer(dims);
+
     const halide_device_interface_t *cuda_interface = halide_cuda_device_interface();
     int err = buffer.device_wrap_native(cuda_interface, (uint64_t)pData);
     AT_ASSERTM(err == 0, "(CUDA) halide_device_wrap failed");
+
     buffer.set_device_dirty();
 
     return buffer;
