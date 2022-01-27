@@ -155,7 +155,7 @@ string CodeGen_WebGPU_Dev::CodeGen_WGSL::print_type(Type type,
     if (type.is_float()) {
         user_assert(type.bits() == 32) << "WGSL only supports 32-bit floats";
         oss << "f32";
-    } else if (type == Bool()) {
+    } else if (type.element_of() == UInt(1)) {
         oss << "bool";
     } else {
         user_assert(type.bits() == 32) << "WGSL only supports 32-bit integers";
