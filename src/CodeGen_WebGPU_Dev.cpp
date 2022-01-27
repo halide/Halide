@@ -63,6 +63,7 @@ protected:
                                    DoNotAppendSpace) override;
         std::string print_assignment(Type t, const std::string &rhs) override;
 
+        void visit(const Allocate *op) override;
         void visit(const Cast *) override;
         void visit(const IntImm *) override;
         void visit(const UIntImm *) override;
@@ -276,6 +277,41 @@ void CodeGen_WebGPU_Dev::CodeGen_WGSL::add_kernel(
     print(s);
 
     close_scope("shader " + name);
+}
+
+void CodeGen_WebGPU_Dev::CodeGen_WGSL::visit(const Allocate *op) {
+    if (op->memory_type == MemoryType::GPUShared) {
+        // TODO: Implement.
+        internal_assert(false)
+            << "GPU shared memory is not yet implemented for WebGPU";
+    } else {
+        open_scope();
+
+        debug(2) << "Allocate " << op->name << " on device\n";
+
+        // Allocation is not a shared memory allocation, just make a local
+        // declaration.
+        // It must have a constant size.
+        int32_t size = op->constant_allocation_size();
+        user_assert(size > 0)
+            << "Allocation " << op->name << " has a dynamic size. "
+            << "Only fixed-size allocations are supported on the gpu. "
+            << "Try storing into shared memory instead.";
+
+        stream << get_indent() << "var " << print_name(op->name)
+               << " : array<" << print_type(op->type) << ", " << size << ">;\n";
+
+        Allocation alloc;
+        alloc.type = op->type;
+        allocations.push(op->name, alloc);
+
+        op->body.accept(this);
+
+        // Should have been freed internally
+        internal_assert(!allocations.contains(op->name));
+
+        close_scope("alloc " + print_name(op->name));
+    }
 }
 
 void CodeGen_WebGPU_Dev::CodeGen_WGSL::visit(const Cast *op) {
