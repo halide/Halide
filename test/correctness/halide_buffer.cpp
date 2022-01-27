@@ -151,12 +151,12 @@ int main(int argc, char **argv) {
     {
         // Check Buffers with static dimensionality
         Buffer<float, 2> a(100, 80);
-        Buffer<float, 2> b(a);                        // statically safe
-        Buffer<float> c(a);                           // checks at runtime (and succeeds)
-        Buffer<float, BufferDimsUnconstrained> d(a);  // same as previous, just explicit syntax
-        Buffer<float, 2> e(d);                        // checks at runtime (and succeeds because d.dims = 2)
-        // Buffer<float, 3> f(a);                     // won't compile: static_assert failure
-        // Buffer<float, 3> g(c);                     // fails at runtime: c.dims = 2
+        Buffer<float, 2> b(a);        // statically safe
+        Buffer<float> c(a);           // checks at runtime (and succeeds)
+        Buffer<float, AnyDims> d(a);  // same as previous, just explicit syntax
+        Buffer<float, 2> e(d);        // checks at runtime (and succeeds because d.dims = 2)
+        // Buffer<float, 3> f(a);     // won't compile: static_assert failure
+        // Buffer<float, 3> g(c);     // fails at runtime: c.dims = 2
 
         static_assert(a.has_static_dimensions);
         static_assert(b.has_static_dimensions);
@@ -182,7 +182,7 @@ int main(int argc, char **argv) {
 
         // auto s3a = s3.sliced(0);              // won't compile: can't call sliced() on a zero-dim buffer
         // Buffer<float, 2> s3b = a.sliced(0);   // won't compile: return type has incompatible dimensionality
-        // a.slice(0);                          // won't compile: can't call slice() on static-dimensioned buffer
+        // a.slice(0);                           // won't compile: can't call slice() on static-dimensioned buffer
 
         Buffer<float> s4 = a.sliced(0);  // assign to dynamic-dimensioned result
         static_assert(!s4.has_static_dimensions);
