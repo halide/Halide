@@ -344,9 +344,20 @@ void CodeGen_WebGPU_Dev::CodeGen_WGSL::visit(const For *loop) {
         loop->body.accept(this);
 
     } else {
-        user_assert(loop->for_type != ForType::Parallel)
-            << "Cannot use parallel loops inside WebGPU shaders\n";
-        CodeGen_C::visit(loop);
+        user_assert(loop->for_type == ForType::Serial)
+            << "Cannot only use serial loops inside WebGPU shaders\n";
+
+        string id_min = print_expr(loop->min);
+        string id_extent = print_expr(loop->extent);
+        string id_counter = print_name(loop->name);
+        stream << get_indent() << "for (var "
+               << id_counter << " = " << id_min << "; "
+               << id_counter << " < " << id_min << " + " << id_extent << "; "
+               // TODO: Use increment statement when supported by Chromium.
+               << id_counter << " = " << id_counter << " + 1)\n";
+        open_scope();
+        loop->body.accept(this);
+        close_scope("for " + print_name(loop->name));
     }
 }
 
