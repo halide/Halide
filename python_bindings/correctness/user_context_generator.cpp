@@ -5,7 +5,7 @@ using namespace Halide;
 class UserContextGenerator : public Halide::Generator<UserContextGenerator> {
 public:
     Input<uint8_t> constant{"constant"};
-    Output<Buffer<uint8_t>> output{"output", 1};
+    Output<Buffer<uint8_t, 1>> output{"output"};
 
     Var x;
 
