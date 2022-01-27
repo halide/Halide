@@ -1493,7 +1493,7 @@ public:
 
     /** Make a lower-dimensional buffer that refers to one slice of
      * this buffer. */
-    Buffer<T, (Dims == BufferDimsUnconstrained ? BufferDimsUnconstrained : Dims - 1), InClassDimStorage>
+    Buffer<T, (Dims == BufferDimsUnconstrained ? BufferDimsUnconstrained : Dims - 1)>
     sliced(int d, int pos) const {
         static_assert(Dims == BufferDimsUnconstrained || Dims > 0, "Cannot slice a 0-dimensional buffer");
         assert(dimensions() > 0);
@@ -1514,7 +1514,7 @@ public:
 
     /** Make a lower-dimensional buffer that refers to one slice of this
      * buffer at the dimension's minimum. */
-    Buffer<T, (Dims == BufferDimsUnconstrained ? BufferDimsUnconstrained : Dims - 1), InClassDimStorage>
+    Buffer<T, (Dims == BufferDimsUnconstrained ? BufferDimsUnconstrained : Dims - 1)>
     sliced(int d) const {
         static_assert(Dims == BufferDimsUnconstrained || Dims > 0, "Cannot slice a 0-dimensional buffer");
         assert(dimensions() > 0);
@@ -1557,7 +1557,7 @@ public:
      &im(x, y, c) == &im2(x, 17, y, c);
      \endcode
      */
-    Buffer<T, (Dims == BufferDimsUnconstrained ? BufferDimsUnconstrained : Dims + 1), InClassDimStorage>
+    Buffer<T, (Dims == BufferDimsUnconstrained ? BufferDimsUnconstrained : Dims + 1)>
     embedded(int d, int pos = 0) const {
         Buffer<T, BufferDimsUnconstrained, InClassDimStorage> im(*this);
         im.embed(d, pos);
