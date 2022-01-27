@@ -106,7 +106,7 @@ struct DeviceRefCount {
     BufferDeviceOwnership ownership{BufferDeviceOwnership::Allocated};
 };
 
-constexpr int BufferDimsUnconstrained = -1;
+constexpr int AnyDims = -1;
 
 /** A templated Buffer class that wraps halide_buffer_t and adds
  * functionality. When using Halide from C++, this is the preferred
@@ -119,7 +119,7 @@ constexpr int BufferDimsUnconstrained = -1;
  * element type is unknown, or may vary, use void or const void.
  *
  * The template parameter Dims is the number of dimensions. For buffers where
- * the dimensionality type is unknown at, or may vary, use BufferDimsUnconstrained.
+ * the dimensionality type is unknown at, or may vary, use AnyDims.
  *
  * InClassDimStorage is the maximum number of dimensions that can be represented
  * using space inside the class itself. Set it to the maximum dimensionality
@@ -133,8 +133,8 @@ constexpr int BufferDimsUnconstrained = -1;
  * considered as owned if and only if the host-side allocation is
  * owned. */
 template<typename T = void,
-         int Dims = BufferDimsUnconstrained,
-         int InClassDimStorage = (Dims == BufferDimsUnconstrained ? 4 : std::max(Dims, 1))>
+         int Dims = AnyDims,
+         int InClassDimStorage = (Dims == AnyDims ? 4 : std::max(Dims, 1))>
 class Buffer {
     /** The underlying halide_buffer_t */
     halide_buffer_t buf = {};
@@ -187,7 +187,7 @@ public:
         return alloc != nullptr;
     }
 
-    static constexpr bool has_static_dimensions = (Dims != BufferDimsUnconstrained);
+    static constexpr bool has_static_dimensions = (Dims != AnyDims);
 
     /** Callers should not use the result if
      * has_static_dimensions is false. */
@@ -293,10 +293,10 @@ private:
 
     template<int DimsSpecified>
     void make_static_shape_storage() {
-        static_assert(Dims == BufferDimsUnconstrained || Dims == DimsSpecified,
+        static_assert(Dims == AnyDims || Dims == DimsSpecified,
                       "Number of arguments to Buffer() does not match static dimensionality");
         buf.dimensions = DimsSpecified;
-        if constexpr (Dims == BufferDimsUnconstrained) {
+        if constexpr (Dims == AnyDims) {
             if constexpr (DimsSpecified <= InClassDimStorage) {
                 buf.dim = shape;
             } else {
@@ -310,7 +310,7 @@ private:
     }
 
     void make_shape_storage(const int dimensions) {
-        if (Dims != BufferDimsUnconstrained && Dims != dimensions) {
+        if (Dims != AnyDims && Dims != dimensions) {
             assert(false && "Number of arguments to Buffer() does not match static dimensionality");
         }
         // This should usually be inlined, so if dimensions is statically known,
@@ -444,7 +444,7 @@ private:
 
     /** slice a single dimension without handling device allocation. */
     void slice_host(int d, int pos) {
-        static_assert(Dims == BufferDimsUnconstrained);
+        static_assert(Dims == AnyDims);
         assert(dimensions() > 0);
         assert(d >= 0 && d < dimensions());
         assert(pos >= dim(d).min() && pos <= dim(d).max());
@@ -459,7 +459,7 @@ private:
         buf.dim[buf.dimensions] = {0, 0, 0};
     }
 
-    void complete_device_slice(Buffer<T, BufferDimsUnconstrained, InClassDimStorage> &result_host_sliced, int d, int pos) const {
+    void complete_device_slice(Buffer<T, AnyDims, InClassDimStorage> &result_host_sliced, int d, int pos) const {
         assert(buf.device_interface != nullptr);
         if (buf.device_interface->device_slice(nullptr, &this->buf, d, pos, &result_host_sliced.buf) == 0) {
             const Buffer<T, Dims, InClassDimStorage> *sliced_from = this;
@@ -604,7 +604,7 @@ public:
         buf.type = static_halide_type();
         // If Dims are statically known, must create storage that many.
         // otherwise, make a zero-dimensional buffer.
-        constexpr int buf_dimensions = (Dims == BufferDimsUnconstrained) ? 0 : Dims;
+        constexpr int buf_dimensions = (Dims == AnyDims) ? 0 : Dims;
         make_static_shape_storage<buf_dimensions>();
     }
 
@@ -628,7 +628,7 @@ private:
                                    typename std::remove_const<T2>::type>::value ||
                           T_is_void || Buffer<T2, D2, S2>::T_is_void,
                       "type mismatch constructing Buffer");
-        static_assert(Dims == BufferDimsUnconstrained || D2 == BufferDimsUnconstrained || Dims == D2,
+        static_assert(Dims == AnyDims || D2 == AnyDims || Dims == D2,
                       "Can't convert from a Buffer with static dimensionality to a Buffer with different static dimensionality");
     }
 
@@ -644,7 +644,7 @@ public:
                 return false;
             }
         }
-        if (Dims != BufferDimsUnconstrained) {
+        if (Dims != AnyDims) {
             if (other.dimensions() != Dims) {
                 return false;
             }
@@ -1190,7 +1190,7 @@ public:
      */
     Buffer<not_const_T, Dims, InClassDimStorage> copy_to_interleaved(void *(*allocate_fn)(size_t) = nullptr,
                                                                      void (*deallocate_fn)(void *) = nullptr) const {
-        static_assert(Dims == BufferDimsUnconstrained || Dims == 3);
+        static_assert(Dims == AnyDims || Dims == 3);
         assert(dimensions() == 3);
         Buffer<not_const_T, Dims, InClassDimStorage> dst = Buffer<not_const_T, Dims, InClassDimStorage>::make_interleaved(nullptr, width(), height(), channels());
         dst.set_min(min(0), min(1), min(2));
@@ -1249,7 +1249,7 @@ public:
 
         Buffer<T, Dims, InClassDimStorage> dst(*this);
 
-        static_assert(Dims == BufferDimsUnconstrained || D2 == BufferDimsUnconstrained || Dims == D2);
+        static_assert(Dims == AnyDims || D2 == AnyDims || Dims == D2);
         assert(src.dimensions() == dst.dimensions());
 
         // Trim the copy to the region in common
@@ -1493,12 +1493,12 @@ public:
 
     /** Make a lower-dimensional buffer that refers to one slice of
      * this buffer. */
-    Buffer<T, (Dims == BufferDimsUnconstrained ? BufferDimsUnconstrained : Dims - 1)>
+    Buffer<T, (Dims == AnyDims ? AnyDims : Dims - 1)>
     sliced(int d, int pos) const {
-        static_assert(Dims == BufferDimsUnconstrained || Dims > 0, "Cannot slice a 0-dimensional buffer");
+        static_assert(Dims == AnyDims || Dims > 0, "Cannot slice a 0-dimensional buffer");
         assert(dimensions() > 0);
 
-        Buffer<T, BufferDimsUnconstrained, InClassDimStorage> im = *this;
+        Buffer<T, AnyDims, InClassDimStorage> im = *this;
 
         // This guarantees the prexisting device ref is dropped if the
         // device_slice call fails and maintains the buffer in a consistent
@@ -1514,9 +1514,9 @@ public:
 
     /** Make a lower-dimensional buffer that refers to one slice of this
      * buffer at the dimension's minimum. */
-    Buffer<T, (Dims == BufferDimsUnconstrained ? BufferDimsUnconstrained : Dims - 1)>
+    Buffer<T, (Dims == AnyDims ? AnyDims : Dims - 1)>
     sliced(int d) const {
-        static_assert(Dims == BufferDimsUnconstrained || Dims > 0, "Cannot slice a 0-dimensional buffer");
+        static_assert(Dims == AnyDims || Dims > 0, "Cannot slice a 0-dimensional buffer");
         assert(dimensions() > 0);
 
         return sliced(d, dim(d).min());
@@ -1528,7 +1528,7 @@ public:
      * memory, so other views of the same data are unaffected. Can
      * only be called on a Buffer with dynamic dimensionality. */
     void slice(int d, int pos) {
-        static_assert(Dims == BufferDimsUnconstrained, "Cannot call slice() on a Buffer with static dimensionality.");
+        static_assert(Dims == AnyDims, "Cannot call slice() on a Buffer with static dimensionality.");
         assert(dimensions() > 0);
 
         // An optimization for non-device buffers. For the device case,
@@ -1557,9 +1557,9 @@ public:
      &im(x, y, c) == &im2(x, 17, y, c);
      \endcode
      */
-    Buffer<T, (Dims == BufferDimsUnconstrained ? BufferDimsUnconstrained : Dims + 1)>
+    Buffer<T, (Dims == AnyDims ? AnyDims : Dims + 1)>
     embedded(int d, int pos = 0) const {
-        Buffer<T, BufferDimsUnconstrained, InClassDimStorage> im(*this);
+        Buffer<T, AnyDims, InClassDimStorage> im(*this);
         im.embed(d, pos);
         return im;
     }
@@ -1567,7 +1567,7 @@ public:
     /** Embed a buffer in-place, increasing the
      * dimensionality. */
     void embed(int d, int pos = 0) {
-        static_assert(Dims == BufferDimsUnconstrained, "Cannot call embed() on a Buffer with static dimensionality.");
+        static_assert(Dims == AnyDims, "Cannot call embed() on a Buffer with static dimensionality.");
         assert(d >= 0 && d <= dimensions());
         add_dimension();
         translate(dimensions() - 1, pos);
@@ -1581,7 +1581,7 @@ public:
      * its stride. The new dimension is the last dimension. This is a
      * special case of embed. */
     void add_dimension() {
-        static_assert(Dims == BufferDimsUnconstrained, "Cannot call add_dimension() on a Buffer with static dimensionality.");
+        static_assert(Dims == AnyDims, "Cannot call add_dimension() on a Buffer with static dimensionality.");
         const int dims = buf.dimensions;
         buf.dimensions++;
         if (buf.dim != shape) {
@@ -1766,7 +1766,7 @@ public:
      * generator has been compiled with support for interleaved (also
      * known as packed or chunky) memory layouts. */
     static Buffer<void, Dims, InClassDimStorage> make_interleaved(halide_type_t t, int width, int height, int channels) {
-        static_assert(Dims == BufferDimsUnconstrained || Dims == 3, "make_interleaved() must be called on a Buffer that can represent 3 dimensions.");
+        static_assert(Dims == AnyDims || Dims == 3, "make_interleaved() must be called on a Buffer that can represent 3 dimensions.");
         Buffer<void, Dims, InClassDimStorage> im(t, channels, width, height);
         // Note that this is equivalent to calling transpose({2, 0, 1}),
         // but slightly more efficient.
@@ -1788,7 +1788,7 @@ public:
     /** Wrap an existing interleaved image. */
     static Buffer<add_const_if_T_is_const<void>, Dims, InClassDimStorage>
     make_interleaved(halide_type_t t, T *data, int width, int height, int channels) {
-        static_assert(Dims == BufferDimsUnconstrained || Dims == 3, "make_interleaved() must be called on a Buffer that can represent 3 dimensions.");
+        static_assert(Dims == AnyDims || Dims == 3, "make_interleaved() must be called on a Buffer that can represent 3 dimensions.");
         Buffer<add_const_if_T_is_const<void>, Dims, InClassDimStorage> im(t, data, channels, width, height);
         im.transpose(0, 1);
         im.transpose(1, 2);
@@ -1802,24 +1802,24 @@ public:
 
     /** Make a zero-dimensional Buffer */
     static Buffer<add_const_if_T_is_const<void>, Dims, InClassDimStorage> make_scalar(halide_type_t t) {
-        static_assert(Dims == BufferDimsUnconstrained || Dims == 0, "make_scalar() must be called on a Buffer that can represent 0 dimensions.");
-        Buffer<add_const_if_T_is_const<void>, BufferDimsUnconstrained, InClassDimStorage> buf(t, 1);
+        static_assert(Dims == AnyDims || Dims == 0, "make_scalar() must be called on a Buffer that can represent 0 dimensions.");
+        Buffer<add_const_if_T_is_const<void>, AnyDims, InClassDimStorage> buf(t, 1);
         buf.slice(0, 0);
         return buf;
     }
 
     /** Make a zero-dimensional Buffer */
     static Buffer<T, Dims, InClassDimStorage> make_scalar() {
-        static_assert(Dims == BufferDimsUnconstrained || Dims == 0, "make_scalar() must be called on a Buffer that can represent 0 dimensions.");
-        Buffer<T, BufferDimsUnconstrained, InClassDimStorage> buf(1);
+        static_assert(Dims == AnyDims || Dims == 0, "make_scalar() must be called on a Buffer that can represent 0 dimensions.");
+        Buffer<T, AnyDims, InClassDimStorage> buf(1);
         buf.slice(0, 0);
         return buf;
     }
 
     /** Make a zero-dimensional Buffer that points to non-owned, existing data */
     static Buffer<T, Dims, InClassDimStorage> make_scalar(T *data) {
-        static_assert(Dims == BufferDimsUnconstrained || Dims == 0, "make_scalar() must be called on a Buffer that can represent 0 dimensions.");
-        Buffer<T, BufferDimsUnconstrained, InClassDimStorage> buf(data, 1);
+        static_assert(Dims == AnyDims || Dims == 0, "make_scalar() must be called on a Buffer that can represent 0 dimensions.");
+        Buffer<T, AnyDims, InClassDimStorage> buf(data, 1);
         buf.slice(0, 0);
         return buf;
     }
@@ -1830,7 +1830,7 @@ public:
     static Buffer<T, Dims, InClassDimStorage> make_with_shape_of(Buffer<T2, D2, S2> src,
                                                                  void *(*allocate_fn)(size_t) = nullptr,
                                                                  void (*deallocate_fn)(void *) = nullptr) {
-        static_assert(Dims == D2 || Dims == BufferDimsUnconstrained);
+        static_assert(Dims == D2 || Dims == AnyDims);
         const halide_type_t dst_type = T_is_void ? src.type() : halide_type_of<typename std::remove_cv<not_void_T>::type>();
         return Buffer<>::make_with_shape_of_helper(dst_type, src.dimensions(), src.buf.dim,
                                                    allocate_fn, deallocate_fn);
@@ -1938,7 +1938,7 @@ public:
         static_assert(!T_is_void,
                       "Cannot use operator() on Buffer<void> types");
         constexpr int expected_dims = 1 + (int)(sizeof...(rest));
-        static_assert(Dims == BufferDimsUnconstrained || Dims == expected_dims, "Buffer with static dimensions was accessed with the wrong number of coordinates in operator()");
+        static_assert(Dims == AnyDims || Dims == expected_dims, "Buffer with static dimensions was accessed with the wrong number of coordinates in operator()");
         assert(!device_dirty());
         return *((const not_void_T *)(address_of(first, rest...)));
     }
@@ -1949,7 +1949,7 @@ public:
         static_assert(!T_is_void,
                       "Cannot use operator() on Buffer<void> types");
         constexpr int expected_dims = 0;
-        static_assert(Dims == BufferDimsUnconstrained || Dims == expected_dims, "Buffer with static dimensions was accessed with the wrong number of coordinates in operator()");
+        static_assert(Dims == AnyDims || Dims == expected_dims, "Buffer with static dimensions was accessed with the wrong number of coordinates in operator()");
         assert(!device_dirty());
         return *((const not_void_T *)(data()));
     }
@@ -1971,7 +1971,7 @@ public:
         static_assert(!T_is_void,
                       "Cannot use operator() on Buffer<void> types");
         constexpr int expected_dims = 1 + (int)(sizeof...(rest));
-        static_assert(Dims == BufferDimsUnconstrained || Dims == expected_dims, "Buffer with static dimensions was accessed with the wrong number of coordinates in operator()");
+        static_assert(Dims == AnyDims || Dims == expected_dims, "Buffer with static dimensions was accessed with the wrong number of coordinates in operator()");
         set_host_dirty();
         return *((not_void_T *)(address_of(first, rest...)));
     }
@@ -1982,7 +1982,7 @@ public:
         static_assert(!T_is_void,
                       "Cannot use operator() on Buffer<void> types");
         constexpr int expected_dims = 0;
-        static_assert(Dims == BufferDimsUnconstrained || Dims == expected_dims, "Buffer with static dimensions was accessed with the wrong number of coordinates in operator()");
+        static_assert(Dims == AnyDims || Dims == expected_dims, "Buffer with static dimensions was accessed with the wrong number of coordinates in operator()");
         set_host_dirty();
         return *((not_void_T *)(data()));
     }

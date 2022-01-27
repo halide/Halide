@@ -1272,7 +1272,7 @@ enum class IOKind { Scalar,
  * -- Assignment of a Buffer<>, with compatible type and dimensions,
  * causing the Input<Buffer<>> to become a precompiled buffer in the generated code.
  */
-template<typename T = void, int Dims = Buffer<>::BufferDimsUnconstrained>
+template<typename T = void, int Dims = Buffer<>::AnyDims>
 class StubInputBuffer {
     friend class StubInput;
     template<typename T2>
