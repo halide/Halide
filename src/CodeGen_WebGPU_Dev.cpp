@@ -70,6 +70,7 @@ protected:
         void visit(const For *) override;
         void visit(const Min *op) override;
         void visit(const Max *op) override;
+        void visit(const Select *op) override;
     };
 
     std::ostringstream src_stream;
@@ -403,6 +404,14 @@ void CodeGen_WebGPU_Dev::CodeGen_WGSL::visit(const Max *op) {
 
 void CodeGen_WebGPU_Dev::CodeGen_WGSL::visit(const Min *op) {
     print_expr(Call::make(op->type, "min", {op->a, op->b}, Call::Extern));
+}
+
+void CodeGen_WebGPU_Dev::CodeGen_WGSL::visit(const Select *op) {
+    string true_val = print_expr(op->true_value);
+    string false_val = print_expr(op->false_value);
+    string cond = print_expr(op->condition);
+    string select = "select(" + false_val + ", " + true_val + ", " + cond + ")";
+    print_assignment(op->type, select);
 }
 
 string CodeGen_WebGPU_Dev::CodeGen_WGSL::print_assignment(
