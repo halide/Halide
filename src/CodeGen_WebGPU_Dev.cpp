@@ -102,7 +102,28 @@ void CodeGen_WebGPU_Dev::init_module() {
 
     // Write out the Halide math functions.
     src_stream
-        << "fn float_from_bits(x : i32) -> f32 {return bitcast<f32>(x);}\n";
+        << "fn float_from_bits(x : i32) -> f32 {return bitcast<f32>(x);}\n"
+        << "fn acos_f32(x : f32) -> f32 {return acos(x);}\n"
+        << "fn acosh_f32(x : f32) -> f32 {return log(x + sqrt(x*x - 1.0));}\n"
+        << "fn asin_f32(x : f32) -> f32 {return asin(x);}\n"
+        << "fn asinh_f32(x : f32) -> f32 {return log(x + sqrt(x*x + 1.0));}\n"
+        << "fn atan_f32(x : f32) -> f32 {return atan(x);}\n"
+        << "fn atan2_f32(y : f32, x : f32) -> f32 {return atan2(y, x);}\n"
+        << "fn atanh_f32(x : f32) -> f32 {return log((1.0+x)/(1.0-x))/2.0;}\n"
+        << "fn ceil_f32(x : f32) -> f32 {return ceil(x);}\n"
+        << "fn cos_f32(x : f32) -> f32 {return cos(x);}\n"
+        << "fn cosh_f32(x : f32) -> f32 {return cosh(x);}\n"
+        << "fn exp_f32(x : f32) -> f32 {return exp(x);}\n"
+        << "fn floor_f32(x : f32) -> f32 {return floor(x);}\n"
+        << "fn log_f32(x : f32) -> f32 {return log(x);}\n"
+        << "fn pow_f32(x : f32, y : f32) -> f32 {return pow(x, y);}\n"
+        << "fn round_f32(x : f32) -> f32 {return round(x);}\n"
+        << "fn sin_f32(x : f32) -> f32 {return sin(x);}\n"
+        << "fn sinh_f32(x : f32) -> f32 {return sinh(x);}\n"
+        << "fn sqrt_f32(x : f32) -> f32 {return sqrt(x);}\n"
+        << "fn tan_f32(x : f32) -> f32 {return tan(x);}\n"
+        << "fn tanh_f32(x : f32) -> f32 {return tanh(x);}\n"
+        << "fn trunc_f32(x : f32) -> f32 {return trunc(x);}\n";
 }
 
 vector<char> CodeGen_WebGPU_Dev::compile_to_src() {
