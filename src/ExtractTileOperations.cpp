@@ -182,11 +182,23 @@ Tile<3> get_3d_rhs_tile_index(const Expr &e, int element_width) {
     // obtain the x, y, r dimensions
     const Add *dim_expr = add_lhs->b.as<Add>();
 
-    const Broadcast *y_bc = dim_expr->b.as<Broadcast>();
+    if (!dim_expr) {
+        return {};
+    }
 
-    int tile_y = y_bc->lanes;
+    const Broadcast *base_stride_bc = dim_expr->b.as<Broadcast>();
+
+    if (!base_stride_bc) {
+        return {};
+    }
+
+    int tile_y = base_stride_bc->lanes;
 
     const Mod *mod = dim_expr->a.as<Mod>();
+
+    if (!mod) {
+        return {};
+    }
 
     const Broadcast *bc_ramp = mod->a.as<Broadcast>();
 
@@ -206,12 +218,6 @@ Tile<3> get_3d_rhs_tile_index(const Expr &e, int element_width) {
     int tile_r = r_ramp->lanes;
 
     // get the base and stride
-    const Broadcast *base_stride_bc = add_lhs->b.as<Add>()->b.as<Broadcast>();
-
-    if (!base_stride_bc) {
-        return {};
-    }
-
     const Ramp *base_stride_ramp = base_stride_bc->value.as<Ramp>();
 
     if (!base_stride_ramp) {
