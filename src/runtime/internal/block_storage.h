@@ -1,6 +1,8 @@
 #ifndef HALIDE_RUNTIME_BLOCK_STORAGE_H
 #define HALIDE_RUNTIME_BLOCK_STORAGE_H
 
+#include "memory_resources.h"
+
 namespace Halide {
 namespace Runtime {
 namespace Internal {
@@ -8,27 +10,19 @@ namespace Internal {
 // Dynamically resizable array for block storage (eg plain old data)
 // -- No usage of constructors/destructors for value type (T)
 // -- Implementation uses memcpy/memmove for copying
-// -- Customizable allocator ... default uses halide_malloc/free
+// -- Customizable allocator ... default uses HalideSystemAllocator
 template<typename T>
 class BlockStorage {
 public:
     static const size_t min_capacity = 8;  // smallish
 
-    typedef void* (*AllocMemoryFn)(void* user_context, size_t bytes);
-    typedef void (*FreeMemoryFn)(void* user_context, void* ptr);
-
-    struct AllocatorFns {
-        AllocMemoryFn alloc_memory;
-        FreeMemoryFn free_memory;
-    };
-
-    BlockStorage(const AllocatorFns& allocator = default_allocator());
+    BlockStorage(SystemMemoryAllocator* allocator = default_allocator());
     BlockStorage(const BlockStorage<T> &other);
-    BlockStorage(void* user_context, const T* array, size_t array_size, const AllocatorFns& allocator = default_allocator());
-    BlockStorage(void *user_context, size_t capacity, const AllocatorFns& allocator = default_allocator());
+    BlockStorage(void* user_context, const T* array, size_t array_size, SystemMemoryAllocator* allocator = default_allocator());
+    BlockStorage(void *user_context, size_t capacity, SystemMemoryAllocator* allocator = default_allocator());
     ~BlockStorage();
 
-    void initialize(void* user_context, const AllocatorFns& allocator = default_allocator());
+    void initialize(void* user_context, SystemMemoryAllocator* allocator = default_allocator());
 
     BlockStorage &operator=(const BlockStorage &other);
     bool operator==(const BlockStorage &other) const;
@@ -67,8 +61,8 @@ public:
     const T& front() const;
     const T& back() const;
 
-    const AllocatorFns& current_allocator() const;
-    static const AllocatorFns& default_allocator();
+    SystemMemoryAllocator* current_allocator() const;
+    static SystemMemoryAllocator* default_allocator();
 
 private:
     void allocate(void *user_context, size_t new_capacity);
@@ -76,23 +70,22 @@ private:
     T *ptr;
     size_t count;
     size_t capacity;
-    AllocatorFns allocator;
+    SystemMemoryAllocator* allocator;
 };
 
 template<typename T>
-BlockStorage<T>::BlockStorage(const AllocatorFns& fns)
+BlockStorage<T>::BlockStorage(SystemMemoryAllocator* sma)
     : ptr(nullptr),
       count(0),
       capacity(0),
-      allocator(fns) {
-    // EMPTY!
+      allocator(sma) {
+    halide_abort_if_false(nullptr, allocator != nullptr);
 }
 
 template<typename T>
 BlockStorage<T>::BlockStorage(const BlockStorage &other)
     : BlockStorage(other.allocator) {
-
-    ptr = (other.count ? (T*)allocator.alloc_memory(nullptr, other.count * sizeof(T)) : nullptr);
+    ptr = (other.count ? (T*)allocator->allocate(nullptr, other.count * sizeof(T)) : nullptr);
     count = other.count;
     capacity = other.count;
     if (count != 0) {
@@ -101,14 +94,14 @@ BlockStorage<T>::BlockStorage(const BlockStorage &other)
 }
 
 template<typename T>
-BlockStorage<T>::BlockStorage(void *user_context, const T* array, size_t array_size, const AllocatorFns& fns)
-    : BlockStorage(fns) {
+BlockStorage<T>::BlockStorage(void *user_context, const T* array, size_t array_size, SystemMemoryAllocator* sma)
+    : BlockStorage(sma) {
     assign(user_context, array, array_size);
 }
 
 template<typename T>
-BlockStorage<T>::BlockStorage(void *user_context, size_t capacity, const AllocatorFns& fns)
-    : BlockStorage(fns) {
+BlockStorage<T>::BlockStorage(void *user_context, size_t capacity, SystemMemoryAllocator* sma)
+    : BlockStorage(sma) {
     reserve(user_context, capacity);
 }
 
@@ -119,16 +112,17 @@ BlockStorage<T>::~BlockStorage() {
 
 template<typename T>
 void BlockStorage<T>::destroy(void *user_context) {
+    halide_abort_if_false(user_context, allocator != nullptr);
     if (ptr != nullptr) {
-        allocator.free_memory(user_context, ptr);
+        allocator->deallocate(user_context, ptr);
     }
     capacity = count = 0;
     ptr = nullptr;
 }
 
 template<typename T>
-void BlockStorage<T>::initialize(void *user_context, const AllocatorFns& fns) {
-    allocator = fns;
+void BlockStorage<T>::initialize(void *user_context, SystemMemoryAllocator* sma) {
+    allocator = sma;
     capacity = count = 0;
     ptr = nullptr;
 }
@@ -226,10 +220,10 @@ void BlockStorage<T>::shrink_to_fit(void *user_context) {
         T *new_ptr = nullptr;
         if (count > 0) {
             size_t bytes = count * sizeof(T);
-            new_ptr = allocator.alloc_memory(user_context, bytes);
+            new_ptr = allocator->allocate(user_context, bytes);
             memcpy(new_ptr, ptr, bytes);
         }
-        allocator.free_memory(user_context, ptr);
+        allocator->deallocate(user_context, ptr);
         capacity = count;
         ptr = new_ptr;
     }
@@ -340,15 +334,14 @@ const T& BlockStorage<T>::back() const {
 
 template<typename T>
 void BlockStorage<T>::allocate(void *user_context, size_t new_capacity) {
-    halide_abort_if_false(user_context, allocator.alloc_memory != nullptr);
-    halide_abort_if_false(user_context, allocator.free_memory != nullptr);
+    halide_abort_if_false(user_context, allocator != nullptr);
     if (new_capacity != capacity) {
-        T* new_ptr = new_capacity ? (T*)allocator.alloc_memory(user_context, new_capacity * sizeof(T)) : nullptr;
+        T* new_ptr = new_capacity ? (T*)allocator->allocate(user_context, new_capacity * sizeof(T)) : nullptr;
         if (count != 0 && ptr != nullptr && new_ptr != nullptr) {
             memcpy((void*)new_ptr, (void*)ptr, count * sizeof(T));
         }
         if(ptr != nullptr) {
-            allocator.free_memory(user_context, ptr);
+            allocator->deallocate(user_context, ptr);
         }
         capacity = new_capacity;
         ptr = new_ptr;
@@ -356,19 +349,16 @@ void BlockStorage<T>::allocate(void *user_context, size_t new_capacity) {
 }
 
 template<typename T>
-const typename BlockStorage<T>::AllocatorFns& 
+SystemMemoryAllocator* 
 BlockStorage<T>::current_allocator() const {
     return this->allocator;
 }
 
 template<typename T>
-const typename BlockStorage<T>::AllocatorFns& 
+SystemMemoryAllocator* 
 BlockStorage<T>::default_allocator() {
-    static AllocatorFns halide_allocator = {
-        halide_malloc,
-        halide_free
-    };
-    return halide_allocator;
+    static HalideSystemAllocator halide_allocator;
+    return &halide_allocator;
 }
 
 // --

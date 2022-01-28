@@ -29,27 +29,20 @@ public:
     static const uint32_t InvalidEntry = uint32_t(-1);
     typedef MemoryArena<BlockRegion> BlockRegionArena;
 
-    typedef void (*AllocRegionFn)(void*, MemoryRegion*);
-    typedef void (*FreeRegionFn)(void*, MemoryRegion*);
-    typedef void* (*AllocMemoryFn)(void*, size_t bytes);
-    typedef void (*FreeMemoryFn)(void*, void* ptr);
-
-    struct AllocRegionFns {
-        AllocMemoryFn alloc_memory;
-        FreeMemoryFn free_memory;
-        AllocRegionFn alloc_region;
-        FreeRegionFn free_region;
+    struct MemoryAllocators {
+        SystemMemoryAllocator* system = nullptr;
+        MemoryRegionAllocator* region = nullptr;
     };
 
     RegionAllocator();
-    RegionAllocator(void* user_context, BlockResource* block, const AllocRegionFns& allocator_fns);
+    RegionAllocator(void* user_context, BlockResource* block, const MemoryAllocators& ma);
     ~RegionAllocator();
 
     // Initializes a new instance     
-    void initialize(void* user_context, BlockResource* block, const AllocRegionFns& allocator_fns);
+    void initialize(void* user_context, BlockResource* block, const MemoryAllocators& ma);
 
     // Factory methods for creation / destruction
-    static RegionAllocator* create(void* user_context, BlockResource* block, const AllocRegionFns& allocator_fns);
+    static RegionAllocator* create(void* user_context, BlockResource* block, const MemoryAllocators& ma);
     static void destroy(void* user_context, RegionAllocator* region_allocator);
 
     // Returns the allocator class instance for the given allocation (or nullptr)
@@ -96,13 +89,13 @@ private:
 private:
     BlockResource* block;
     BlockRegionArena arena;
-    AllocRegionFns alloc;
+    MemoryAllocators allocators;
 };
 
-RegionAllocator* RegionAllocator::create(void* user_context, BlockResource* block_resource, const AllocRegionFns& alloc_fns) {
-
+RegionAllocator* RegionAllocator::create(void* user_context, BlockResource* block_resource, const MemoryAllocators& allocators) {
+    halide_abort_if_false(user_context, allocators.system != nullptr);
     RegionAllocator* result = reinterpret_cast<RegionAllocator*>(
-        alloc_fns.alloc_memory(user_context, sizeof(RegionAllocator))
+        allocators.system->allocate(user_context, sizeof(RegionAllocator))
     );
 
     if(result == nullptr) {
@@ -110,35 +103,32 @@ RegionAllocator* RegionAllocator::create(void* user_context, BlockResource* bloc
         return nullptr; 
     }
 
-    result->initialize(user_context, block_resource, alloc_fns);
+    result->initialize(user_context, block_resource, allocators);
     return result;
 }
 
 void RegionAllocator::destroy(void* user_context, RegionAllocator* instance) {
     halide_abort_if_false(user_context, instance != nullptr);
-    const AllocRegionFns& alloc = instance->alloc;
+    const MemoryAllocators& allocators = instance->allocators;
     instance->destroy(user_context);
-    alloc.free_memory(user_context, instance);
+    halide_abort_if_false(user_context, allocators.system != nullptr);
+    allocators.system->deallocate(user_context, instance);
 }
 
 RegionAllocator::RegionAllocator() :
     block(nullptr),
     arena(nullptr),
-    alloc({0}) {
+    allocators() {
 }
 
 RegionAllocator::~RegionAllocator() {
     destroy(nullptr);
 }
 
-void RegionAllocator::initialize(void* user_context, BlockResource* mb, const AllocRegionFns& fns) {
+void RegionAllocator::initialize(void* user_context, BlockResource* mb, const MemoryAllocators& ma) {
     block = mb;
-    alloc = fns;
-    arena.initialize(
-        user_context, 
-        BlockRegionArena::default_capacity, 
-        {fns.alloc_memory, fns.free_memory}
-    );
+    allocators = ma;
+    arena.initialize(user_context, BlockRegionArena::default_capacity, allocators.system);
     block->allocator = this;
     block->regions = create_block_region(user_context, 0, block->size);
 }
@@ -306,9 +296,10 @@ void RegionAllocator::destroy_block_region(void* user_context, BlockRegion* bloc
 
 void RegionAllocator::alloc_block_region(void* user_context, BlockRegion* block_region) {
     debug(user_context) << "RegionAllocator: Allocating region of size ( " << (int32_t)(block_region->size) << ") bytes)!\n";
+    halide_abort_if_false(user_context, allocators.region != nullptr);
     halide_abort_if_false(user_context, block_region->status == AllocationStatus::Available);
     MemoryRegion* memory_region = reinterpret_cast<MemoryRegion*>(block_region);
-    alloc.alloc_region(user_context, memory_region);
+    allocators.region->allocate(user_context, memory_region);
     block_region->status = AllocationStatus::InUse;
     block->reserved += block_region->size;
 }
@@ -316,8 +307,9 @@ void RegionAllocator::alloc_block_region(void* user_context, BlockRegion* block_
 void RegionAllocator::free_block_region(void* user_context, BlockRegion* block_region) {
     if(block_region->status == AllocationStatus::InUse) {
         debug(user_context) << "RegionAllocator: Freeing region of size ( " << (int32_t)(block_region->size) << ") bytes)!\n";
+        halide_abort_if_false(user_context, allocators.region != nullptr);
         MemoryRegion* memory_region = reinterpret_cast<MemoryRegion*>(block_region);
-        alloc.free_region(user_context, memory_region);
+        allocators.region->deallocate(user_context, memory_region);
         block->reserved -= block_region->size;
     }
     block_region->status = AllocationStatus::Available;

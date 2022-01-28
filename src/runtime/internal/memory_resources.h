@@ -84,6 +84,49 @@ inline size_t aligned_size(size_t offset, size_t size, size_t alignment) {
 }
 
 // --
+
+class SystemMemoryAllocator {
+public:
+    SystemMemoryAllocator() = default;
+    ~SystemMemoryAllocator() = default;
+    
+    virtual void* allocate(void* user_context, size_t bytes) = 0;
+    virtual void deallocate(void* user_context, void* ptr) = 0;
+};
+
+class HalideSystemAllocator : public SystemMemoryAllocator {
+public:
+    HalideSystemAllocator() = default;
+    ~HalideSystemAllocator() = default;
+
+    void* allocate(void* user_context, size_t bytes) override {
+        return halide_malloc(user_context, bytes);
+    }
+
+    void deallocate(void* user_context, void* ptr) override {
+        halide_free(user_context, ptr);
+    }
+};
+
+class MemoryRegionAllocator {
+public:
+    MemoryRegionAllocator() = default;
+    ~MemoryRegionAllocator() = default;
+    
+    virtual void allocate(void* user_context, MemoryRegion* region) = 0;
+    virtual void deallocate(void* user_context, MemoryRegion* region) = 0;
+};
+
+class MemoryBlockAllocator {
+public:
+    MemoryBlockAllocator() = default;
+    ~MemoryBlockAllocator() = default;
+    
+    virtual void allocate(void* user_context, MemoryBlock* block) = 0;
+    virtual void deallocate(void* user_context, MemoryBlock* block) = 0;
+};
+
+// --
     
 }  // namespace Internal
 }  // namespace Runtime

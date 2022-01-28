@@ -40,15 +40,14 @@ class StringStorage
 {
 public:
     typedef BlockStorage<char> CharStorage;
-    typedef CharStorage::AllocatorFns AllocatorFns;
 
-    StringStorage(const AllocatorFns& allocator = default_allocator());
+    StringStorage(SystemMemoryAllocator* allocator = default_allocator());
     StringStorage(const StringStorage& other);
-    StringStorage(void* user_context, char ch, const AllocatorFns& allocator = default_allocator());
-    StringStorage(void* user_context, const char* str, size_t length=0, const AllocatorFns& allocator = default_allocator()); // if length is zero, strlen is used
+    StringStorage(void* user_context, char ch, SystemMemoryAllocator* allocator = default_allocator());
+    StringStorage(void* user_context, const char* str, size_t length=0, SystemMemoryAllocator* allocator = default_allocator()); // if length is zero, strlen is used
     ~StringStorage() = default;
 
-    void initialize(void* user_context, const AllocatorFns& allocator = default_allocator());
+    void initialize(void* user_context, SystemMemoryAllocator* allocator = default_allocator());
 
     StringStorage &operator=(const StringStorage &other);
     bool operator==(const StringStorage &other) const;
@@ -68,15 +67,15 @@ public:
     size_t length() const;
     const char* data() const;
     
-    const AllocatorFns& current_allocator() const;
-    static const AllocatorFns& default_allocator();
+    SystemMemoryAllocator* current_allocator() const;
+    static SystemMemoryAllocator* default_allocator();
 
 private:
     CharStorage contents;
 };
 
-StringStorage::StringStorage(const AllocatorFns& alloc_fns) : 
-                             contents(alloc_fns) {
+StringStorage::StringStorage(SystemMemoryAllocator* sma) : 
+                             contents(sma) {
     // EMPTY    
 } 
 
@@ -86,14 +85,14 @@ StringStorage::StringStorage(const StringStorage& other) :
 } 
 
 StringStorage::StringStorage(void* user_context, char ch, 
-                             const AllocatorFns& alloc_fns) : 
-                             contents(alloc_fns) { 
+                             SystemMemoryAllocator* sma) : 
+                             contents(sma) { 
     assign(user_context, ch); 
 }
 
 StringStorage::StringStorage(void* user_context, const char* str, size_t length, 
-                             const AllocatorFns& alloc_fns) : 
-                             contents(alloc_fns) { 
+                             SystemMemoryAllocator* sma) : 
+                             contents(sma) { 
     assign(user_context, str, length); 
 }
 
@@ -170,8 +169,8 @@ void StringStorage::clear(void* user_context) {
     contents.clear(user_context); 
 }
 
-void StringStorage::initialize(void* user_context, const AllocatorFns& alloc_fns) { 
-    contents.initialize(user_context, alloc_fns); 
+void StringStorage::initialize(void* user_context, SystemMemoryAllocator* sma) { 
+    contents.initialize(user_context, sma); 
 }
 
 size_t StringStorage::length() const { 
@@ -182,12 +181,12 @@ const char* StringStorage::data() const {
     return contents.data(); 
 }
 
-const StringStorage::AllocatorFns& 
+SystemMemoryAllocator* 
 StringStorage::current_allocator() const {
     return contents.current_allocator();
 }
 
-const StringStorage::AllocatorFns& 
+SystemMemoryAllocator* 
 StringStorage::default_allocator() {
     return CharStorage::default_allocator();
 }

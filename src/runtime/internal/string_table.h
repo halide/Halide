@@ -18,11 +18,9 @@ class StringTable {
 
 public:
 
-    typedef StringStorage::AllocatorFns AllocatorFns;
-
-    StringTable(const AllocatorFns& allocator = StringStorage::default_allocator());
-    StringTable(void *user_context, size_t capacity, const AllocatorFns& allocator = StringStorage::default_allocator());
-    StringTable(void *user_context, const char** array, size_t count, const AllocatorFns& allocator = StringStorage::default_allocator());
+    StringTable(SystemMemoryAllocator* allocator = StringStorage::default_allocator());
+    StringTable(void *user_context, size_t capacity, SystemMemoryAllocator* allocator = StringStorage::default_allocator());
+    StringTable(void *user_context, const char** array, size_t count, SystemMemoryAllocator* allocator = StringStorage::default_allocator());
     ~StringTable();
 
     void reserve(void *user_context, size_t capacity);
@@ -57,22 +55,22 @@ private:
     BlockStorage<const char*> pointers;     //< points to contents  
 };
 
-StringTable::StringTable(const AllocatorFns& alloc_fns) : 
-    contents({alloc_fns.alloc_memory, alloc_fns.free_memory}), 
-    pointers({alloc_fns.alloc_memory, alloc_fns.free_memory}) {
+StringTable::StringTable(SystemMemoryAllocator* sma) : 
+    contents(sma), 
+    pointers(sma) {
     // EMPTY!
 }
 
-StringTable::StringTable(void *user_context, size_t capacity, const AllocatorFns& alloc_fns) :
-    contents({alloc_fns.alloc_memory, alloc_fns.free_memory}), 
-    pointers({alloc_fns.alloc_memory, alloc_fns.free_memory}) {
+StringTable::StringTable(void *user_context, size_t capacity, SystemMemoryAllocator* sma) :
+    contents(sma), 
+    pointers(sma) {
 
     reserve(user_context, capacity);
 }
 
-StringTable::StringTable(void *user_context, const char** array, size_t count, const AllocatorFns& alloc_fns) :
-    contents({alloc_fns.alloc_memory, alloc_fns.free_memory}), 
-    pointers({alloc_fns.alloc_memory, alloc_fns.free_memory}) {
+StringTable::StringTable(void *user_context, const char** array, size_t count, SystemMemoryAllocator* sma) :
+    contents(sma), 
+    pointers(sma) {
     fill(user_context, array, count);
 }
 
@@ -84,7 +82,7 @@ void StringTable::reserve(void *user_context, size_t capacity) {
 
     for(size_t n = contents.size(); n < capacity; ++n) {
         LinkedList<StringStorage>::EntryType* entry = contents.append(user_context);
-        entry->value.initialize(user_context, { contents.current_allocator().alloc_memory, contents.current_allocator().free_memory });
+        entry->value.initialize(user_context, contents.current_allocator());
     }
     pointers.reserve(user_context, capacity);
 }

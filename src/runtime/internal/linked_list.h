@@ -7,14 +7,6 @@ namespace Halide {
 namespace Runtime {
 namespace Internal {
 
-// Linked list entry type
-template<typename T>
-struct LinkedListEntry {
-    LinkedListEntry *prev_ptr;
-    LinkedListEntry *next_ptr;
-    T value;
-};
-
 // Doubly linked list container
 // -- Implemented using MemoryArena<T> for allocation
 template<typename T>
@@ -27,61 +19,62 @@ class LinkedList {
 public:
     static const size_t default_capacity = 8;  // smallish
 
-    typedef LinkedListEntry<T> EntryType;
-   
-    typedef typename MemoryArena<T>::AllocatorFns AllocatorFns;
+    struct EntryType {
+        T value;
+        EntryType* prev_ptr;
+        EntryType* next_ptr;
+    };
 
-    LinkedList(const AllocatorFns& allocator = default_allocator());
+public:
+    LinkedList(SystemMemoryAllocator* allocator = default_allocator());
     LinkedList(void* user_context, size_t capacity = default_capacity, 
-               const AllocatorFns& allocator = default_allocator());
+               SystemMemoryAllocator* allocator = default_allocator());
     ~LinkedList();
 
     void initialize(void* user_context, size_t capacity = default_capacity, 
-                    const AllocatorFns& allocator = default_allocator());
+                    SystemMemoryAllocator* allocator = default_allocator());
 
-    EntryType *front();
-    EntryType *back();
+    EntryType* front();
+    EntryType* back();
 
-    const EntryType *front() const;
-    const EntryType *back() const;
+    const EntryType* front() const;
+    const EntryType* back() const;
 
-    EntryType *prepend(void *user_context);
-    EntryType *prepend(void *user_context, const T &value);
+    EntryType* prepend(void *user_context);
+    EntryType* prepend(void *user_context, const T &value);
 
-    EntryType *append(void *user_context);
-    EntryType *append(void *user_context, const T &value);
+    EntryType* append(void *user_context);
+    EntryType* append(void *user_context, const T &value);
 
     void pop_front(void *user_context);
     void pop_back(void *user_context);
 
-    EntryType *insert_before(void *user_context, EntryType *entry_ptr);
-    EntryType *insert_before(void *user_context, EntryType *entry_ptr, const T &value);
+    EntryType* insert_before(void *user_context, EntryType* entry_ptr);
+    EntryType* insert_before(void *user_context, EntryType* entry_ptr, const T &value);
 
-    EntryType *insert_after(void *user_context, EntryType *entry_ptr);
-    EntryType *insert_after(void *user_context, EntryType *entry_ptr, const T &value);
+    EntryType* insert_after(void *user_context, EntryType* entry_ptr);
+    EntryType* insert_after(void *user_context, EntryType* entry_ptr, const T &value);
 
-    void remove(void *user_context, EntryType *entry_ptr);
+    void remove(void *user_context, EntryType* entry_ptr);
     void clear(void *user_context);
 
     size_t size() const;
     bool empty() const;
 
-    const AllocatorFns& current_allocator() const;
-    static const AllocatorFns& default_allocator();    
+    SystemMemoryAllocator* current_allocator() const;
+    static SystemMemoryAllocator* default_allocator();    
 
 private:
 
     MemoryArena<EntryType> arena;
-    EntryType *front_ptr;
-    EntryType *back_ptr;
+    EntryType* front_ptr;
+    EntryType* back_ptr;
     size_t entry_count;
 };
 
 template<typename T>
-LinkedList<T>::LinkedList(const AllocatorFns& alloc_fns)
-    : arena(nullptr, default_capacity, 
-            {nullptr, nullptr}, 
-            {alloc_fns.alloc_memory, alloc_fns.free_memory}),
+LinkedList<T>::LinkedList(SystemMemoryAllocator* sma)
+    : arena(nullptr, default_capacity, sma), 
       front_ptr(nullptr),
       back_ptr(nullptr),
       entry_count(0) {
@@ -90,10 +83,8 @@ LinkedList<T>::LinkedList(const AllocatorFns& alloc_fns)
 
 template<typename T>
 LinkedList<T>::LinkedList(void* user_context, size_t capacity, 
-                          const AllocatorFns& alloc_fns)
-    : arena(user_context, capacity, 
-            {nullptr, nullptr}, 
-            {alloc_fns.alloc_memory, alloc_fns.free_memory}),
+                          SystemMemoryAllocator* sma)
+    : arena(user_context, capacity, sma),
       front_ptr(nullptr),
       back_ptr(nullptr),
       entry_count(0) {
@@ -107,34 +98,31 @@ LinkedList<T>::~LinkedList() {
 
 template<typename T>
 void LinkedList<T>::initialize(void* user_context, size_t capacity, 
-                               const AllocatorFns& alloc_fns) {
+                               SystemMemoryAllocator* sma) {
 
-    arena.initialize(user_context, capacity, 
-                    {nullptr, nullptr}, 
-                    {alloc_fns.alloc_memory, alloc_fns.free_memory});
-
+    arena.initialize(user_context, capacity, sma);
     front_ptr = nullptr;
     back_ptr = nullptr;
     entry_count = 0;
 }
 
 template<typename T>
-typename LinkedList<T>::EntryType *LinkedList<T>::front() {
+typename LinkedList<T>::EntryType* LinkedList<T>::front() {
     return front_ptr;
 }
 
 template<typename T>
-typename LinkedList<T>::EntryType *LinkedList<T>::back() {
+typename LinkedList<T>::EntryType* LinkedList<T>::back() {
     return back_ptr;
 }
 
 template<typename T>
-const typename LinkedList<T>::EntryType *LinkedList<T>::front() const {
+const typename LinkedList<T>::EntryType* LinkedList<T>::front() const {
     return front_ptr;
 }
 
 template<typename T>
-const typename LinkedList<T>::EntryType *LinkedList<T>::back() const {
+const typename LinkedList<T>::EntryType* LinkedList<T>::back() const {
     return back_ptr;
 }
 
@@ -187,7 +175,7 @@ LinkedList<T>::prepend(void *user_context, const T &value) {
 template<typename T>
 typename LinkedList<T>::EntryType*
 LinkedList<T>::append(void *user_context, const T &value) {
-    EntryType *entry_ptr = append(user_context);
+    EntryType* entry_ptr = append(user_context);
     entry_ptr->value = value;
     return entry_ptr;
 }
@@ -234,7 +222,7 @@ void LinkedList<T>::clear(void *user_context) {
 }
 
 template<typename T>
-void LinkedList<T>::remove(void *user_context, EntryType *entry_ptr) {
+void LinkedList<T>::remove(void *user_context, EntryType* entry_ptr) {
     halide_abort_if_false(user_context, (entry_ptr != nullptr));
     halide_abort_if_false(user_context, (entry_count > 0));
 
@@ -258,7 +246,7 @@ void LinkedList<T>::remove(void *user_context, EntryType *entry_ptr) {
 
 template<typename T>
 typename LinkedList<T>::EntryType*
-LinkedList<T>::insert_before(void *user_context, EntryType *entry_ptr) {
+LinkedList<T>::insert_before(void *user_context, EntryType* entry_ptr) {
     if (entry_ptr != nullptr) {
         EntryType* prev_ptr = entry_ptr->prev_ptr;
         EntryType* new_ptr = arena.reserve(user_context);
@@ -280,7 +268,7 @@ LinkedList<T>::insert_before(void *user_context, EntryType *entry_ptr) {
 
 template<typename T>
 typename LinkedList<T>::EntryType*
-LinkedList<T>::insert_after(void *user_context, EntryType *entry_ptr) {
+LinkedList<T>::insert_after(void *user_context, EntryType* entry_ptr) {
     if (entry_ptr != nullptr) {
         EntryType* next_ptr = entry_ptr->next_ptr;
         EntryType* new_ptr = arena.reserve();
@@ -302,7 +290,7 @@ LinkedList<T>::insert_after(void *user_context, EntryType *entry_ptr) {
 
 template<typename T>
 typename LinkedList<T>::EntryType*
-LinkedList<T>::insert_before(void *user_context, EntryType *entry_ptr, const T &value) {
+LinkedList<T>::insert_before(void *user_context, EntryType* entry_ptr, const T &value) {
     EntryType* new_ptr = insert_before(user_context, entry_ptr);
     new_ptr->value = value;
     return new_ptr;
@@ -310,7 +298,7 @@ LinkedList<T>::insert_before(void *user_context, EntryType *entry_ptr, const T &
 
 template<typename T>
 typename LinkedList<T>::EntryType*
-LinkedList<T>::insert_after(void *user_context, EntryType *entry_ptr, const T &value) {
+LinkedList<T>::insert_after(void *user_context, EntryType* entry_ptr, const T &value) {
     EntryType* new_ptr = insert_after(user_context, entry_ptr);
     new_ptr->value = value;
     return new_ptr;
@@ -327,19 +315,15 @@ bool LinkedList<T>::empty() const {
 }
 
 template<typename T>
-const typename LinkedList<T>::AllocatorFns& 
+SystemMemoryAllocator* 
 LinkedList<T>::current_allocator() const {
-    return reinterpret_cast<const typename LinkedList<T>::AllocatorFns&>(
-        arena.current_allocator()
-    );
+    return arena.current_allocator();
 }
 
 template<typename T>
-const typename LinkedList<T>::AllocatorFns& 
+SystemMemoryAllocator* 
 LinkedList<T>::default_allocator() {
-    return reinterpret_cast<const typename LinkedList<T>::AllocatorFns&>(
-        MemoryArena<T>::default_allocator()
-    );
+    return MemoryArena<T>::default_allocator();
 }
 
 // --
