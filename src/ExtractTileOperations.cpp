@@ -224,7 +224,13 @@ Tile<3> get_3d_rhs_tile_index(const Expr &e, int element_width) {
         return {};
     }
 
-    Expr base = base_stride_ramp->base.as<Broadcast>()->value;
+    const Broadcast *base_bc = base_stride_ramp->base.as<Broadcast>();
+
+    if (!base_bc) {
+        return {};
+    }
+
+    Expr base = base_bc->value;
     Expr stride;
 
     bool found_stride = false;
