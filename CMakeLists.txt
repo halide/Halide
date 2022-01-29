@@ -101,16 +101,39 @@ if (Halide_CCACHE_BUILD)
 endif ()
 
 ##
+# Settings for finding dependencies
+##
+
+option(THREADS_PREFER_PTHREAD_FLAG "Enable to use the -pthreads flag when available." ON)
+
+if (APPLE)
+    # This changes how find_xxx() commands work; the default is to find frameworks before
+    # standard libraries or headers, but this can be a problem on systems that have Mono
+    # installed, as it has a framework with the libjpeg and libpng  headers present -- so
+    # CMake finds the headers from Mono but the libraries from Homebrew, and hilarity ensues.
+    # Setting this to "last" means we always try the standard libraries before the frameworks.
+    set(CMAKE_FIND_FRAMEWORK "LAST"
+        CACHE STRING "Whether to search for macOS Frameworks FIRST, LAST, ONLY, or NEVER.")
+endif ()
+
+##
 # Import dependencies
 ##
 
 # Make our custom helpers available throughout the project via include().
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_LIST_DIR}/cmake")
 
-include(HalideGeneratorHelpers)
-include(MakeShellPath)
+find_package(Threads REQUIRED)
+find_package(OpenGL)
+find_package(OpenMP)
+find_package(JPEG)
+find_package(PNG)
 
 add_subdirectory(dependencies)
+
+# Include our own CMake helpers
+include(HalideGeneratorHelpers)
+include(MakeShellPath)
 
 ##
 # Add source directories
