@@ -128,7 +128,7 @@ RegionAllocator::~RegionAllocator() {
 void RegionAllocator::initialize(void* user_context, BlockResource* mb, const MemoryAllocators& ma) {
     block = mb;
     allocators = ma;
-    arena.initialize(user_context, BlockRegionArena::default_capacity, allocators.system);
+    arena.initialize(user_context, { BlockRegionArena::default_capacity, 0 }, allocators.system);
     block->allocator = this;
     block->regions = create_block_region(user_context, 0, block->size);
 }

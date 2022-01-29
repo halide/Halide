@@ -34,7 +34,8 @@ int main(int argc, char **argv) {
     {
         TestAllocator test_allocator;
 
-        MemoryArena<int> arena(user_context, 32, &test_allocator);
+        MemoryArena<int>::Config config = { 32, 0 };
+        MemoryArena<int> arena(user_context, config, &test_allocator);
         int* p1 = arena.reserve(user_context);
         halide_abort_if_false(user_context, test_allocator.counter > 1);
         halide_abort_if_false(user_context, p1 != nullptr);
@@ -50,7 +51,8 @@ int main(int argc, char **argv) {
     // test struct allocations
     {
         TestAllocator test_allocator;
-        MemoryArena<TestStruct> arena(user_context, 32, &test_allocator);
+        MemoryArena<TestStruct>::Config config = { 32, 0 };
+        MemoryArena<TestStruct> arena(user_context, config, &test_allocator);
         TestStruct* s1 = arena.reserve(user_context);
         halide_abort_if_false(user_context, s1 != nullptr);
         halide_abort_if_false(user_context, test_allocator.counter > 1);

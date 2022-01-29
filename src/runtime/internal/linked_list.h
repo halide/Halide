@@ -17,7 +17,7 @@ class LinkedList {
     LinkedList &operator=(const LinkedList &) = delete;
 
 public:
-    static const size_t default_capacity = 8;  // smallish
+    static const uint32_t default_capacity = 8;  // smallish
 
     struct EntryType {
         T value;
@@ -74,7 +74,7 @@ private:
 
 template<typename T>
 LinkedList<T>::LinkedList(SystemMemoryAllocator* sma)
-    : arena(nullptr, default_capacity, sma), 
+    : arena(nullptr, { default_capacity, 0 }, sma), 
       front_ptr(nullptr),
       back_ptr(nullptr),
       entry_count(0) {
@@ -84,7 +84,7 @@ LinkedList<T>::LinkedList(SystemMemoryAllocator* sma)
 template<typename T>
 LinkedList<T>::LinkedList(void* user_context, size_t capacity, 
                           SystemMemoryAllocator* sma)
-    : arena(user_context, capacity, sma),
+    : arena(user_context, { default_capacity, 0 }, sma),
       front_ptr(nullptr),
       back_ptr(nullptr),
       entry_count(0) {
@@ -100,7 +100,7 @@ template<typename T>
 void LinkedList<T>::initialize(void* user_context, size_t capacity, 
                                SystemMemoryAllocator* sma) {
 
-    arena.initialize(user_context, capacity, sma);
+    arena.initialize(user_context, { default_capacity, 0 }, sma);
     front_ptr = nullptr;
     back_ptr = nullptr;
     entry_count = 0;
