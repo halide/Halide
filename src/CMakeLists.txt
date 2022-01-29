@@ -397,7 +397,6 @@ set_target_properties(Halide PROPERTIES
 target_include_directories(Halide INTERFACE "$<BUILD_INTERFACE:${Halide_BINARY_DIR}/include>")
 add_dependencies(Halide HalideIncludes)
 
-option(Halide_WITH_INTROSPECTION "Enable use of debugging symbols for default Func, Var, etc. names" ON)
 if (Halide_WITH_INTROSPECTION)
     target_compile_definitions(Halide PRIVATE WITH_INTROSPECTION)
 endif ()
@@ -499,22 +498,18 @@ target_compile_definitions(Halide
 # Set up additional backend options for Halide
 ##
 
-option(TARGET_OPENCL "Include OpenCL-C target" ON)
 if (TARGET_OPENCL)
     target_compile_definitions(Halide PRIVATE WITH_OPENCL)
 endif ()
 
-option(TARGET_METAL "Include Metal target" ON)
 if (TARGET_METAL)
     target_compile_definitions(Halide PRIVATE WITH_METAL)
 endif ()
 
-option(TARGET_D3D12COMPUTE "Include Direct3D 12 Compute target" ON)
 if (TARGET_D3D12COMPUTE)
     target_compile_definitions(Halide PRIVATE WITH_D3D12)
 endif ()
 
-option(TARGET_OPENGLCOMPUTE "Include OpenGLCompute target" ON)
 if (TARGET_OPENGLCOMPUTE)
     target_compile_definitions(Halide PRIVATE WITH_OPENGLCOMPUTE)
 endif ()
