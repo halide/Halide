@@ -167,17 +167,17 @@ else ()
     set(type static)
 endif ()
 
-# If Halide explicitly links against shared LLVM or if it is a static library
-# and we are not bundling our static dependencies, then end-users must have
-# the relevant system libraries installed.
-if (Halide_SHARED_LLVM OR (NOT BUILD_SHARED_LIBS AND NOT Halide_BUNDLE_LLVM))
+# If Halide is a static library and we are not bundling our static dependencies,
+# then end-users must have the relevant system libraries installed.
+if (NOT BUILD_SHARED_LIBS AND NOT Halide_BUNDLE_LLVM)
     set(depFile "${CMAKE_CURRENT_BINARY_DIR}/Halide-${type}-deps.cmake")
     file(WRITE "${depFile}" "include(CMakeFindDependencyMacro)\n\n")
     file(APPEND "${depFile}" "list(APPEND CMAKE_MODULE_PATH \${CMAKE_CURRENT_LIST_DIR})\n\n")
+    file(APPEND "${depFile}" "set(Halide_SHARED_LLVM \"${Halide_SHARED_LLVM}\")\n")
     file(APPEND "${depFile}" "set(HalideLLVM_TARGETS \"${HalideLLVM_TARGETS}\")\n")
     file(APPEND "${depFile}" "find_dependency(HalideLLVM ${HalideLLVM_VERSION} COMPONENTS \${HalideLLVM_TARGETS})\n\n")
 
-    install(FILES "${depFile}" "${Halide_PROJECT_DIR}/cmake/FindHalideLLVM.cmake"
+    install(FILES "${depFile}" "${Halide_SOURCE_DIR}/cmake/FindHalideLLVM.cmake"
             DESTINATION ${Halide_INSTALL_CMAKEDIR}
             COMPONENT Halide_Development)
 endif ()
