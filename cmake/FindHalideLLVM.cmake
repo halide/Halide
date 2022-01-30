@@ -230,6 +230,7 @@ function(_HalideLLVM_impl)
 
     if (HalideLLVM_FOUND AND NOT TARGET Halide::LLVM)
         add_library(Halide::LLVM INTERFACE IMPORTED)
+        target_include_directories(Halide::LLVM INTERFACE "${LLVM_INCLUDE_DIRS}")
         target_compile_definitions(Halide::LLVM
                                    INTERFACE
                                    ${LLVM_DEFINITIONS}
