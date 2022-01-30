@@ -53,6 +53,11 @@ if (APPLE)
         CACHE STRING "Whether to search for macOS Frameworks FIRST, LAST, ONLY, or NEVER.")
 endif ()
 
+# LLVM link modes
+option(Halide_SHARED_LLVM "Enable to link to shared LLVM (Linux only)" OFF)
+cmake_dependent_option(Halide_BUNDLE_LLVM "Enable with BUILD_SHARED_LIBS=OFF to bundle LLVM libs with static Halide" OFF
+                       "NOT BUILD_SHARED_LIBS" OFF)
+
 # LLVM target dependencies
 set(known_llvm_targets AArch64 AMDGPU ARM Hexagon Mips NVPTX PowerPC RISCV WebAssembly X86)
 set(required_llvm_targets "")

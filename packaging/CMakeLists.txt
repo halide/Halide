@@ -173,6 +173,13 @@ if (NOT BUILD_SHARED_LIBS AND NOT Halide_BUNDLE_LLVM)
     set(depFile "${CMAKE_CURRENT_BINARY_DIR}/Halide-${type}-deps.cmake")
     file(WRITE "${depFile}" "include(CMakeFindDependencyMacro)\n\n")
     file(APPEND "${depFile}" "list(APPEND CMAKE_MODULE_PATH \${CMAKE_CURRENT_LIST_DIR})\n\n")
+
+    if (TARGET Halide::WABT)
+        file(APPEND "${depFile}" "if (NOT TARGET Halide::WABT)\n")
+        file(APPEND "${depFile}" "    add_library(Halide::WABT INTERFACE IMPORTED)\n")
+        file(APPEND "${depFile}" "endif ()\n\n")
+    endif ()
+
     file(APPEND "${depFile}" "set(Halide_SHARED_LLVM \"${Halide_SHARED_LLVM}\")\n")
     file(APPEND "${depFile}" "set(HalideLLVM_TARGETS \"${HalideLLVM_TARGETS}\")\n")
     file(APPEND "${depFile}" "find_dependency(HalideLLVM ${HalideLLVM_VERSION} COMPONENTS \${HalideLLVM_TARGETS})\n\n")

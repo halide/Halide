@@ -29,12 +29,8 @@ function(_WABT_chainload)
     target_compile_options(wabt PRIVATE $<$<CXX_COMPILER_ID:GNU>:-Wno-alloca-larger-than>)
 
     add_library(Halide::WABT INTERFACE IMPORTED)
-    target_sources(Halide::WABT INTERFACE $<BUILD_INTERFACE:$<TARGET_OBJECTS:wabt>>)
-    target_include_directories(Halide::WABT
-                               INTERFACE
-                               $<BUILD_INTERFACE:${wabt_SOURCE_DIR}>
-                               $<BUILD_INTERFACE:${wabt_BINARY_DIR}>
-                               $<BUILD_INTERFACE:${CMAKE_BINARY_DIR}/_deps>)
+    target_sources(Halide::WABT INTERFACE $<TARGET_OBJECTS:wabt>)
+    target_include_directories(Halide::WABT INTERFACE ${wabt_SOURCE_DIR} ${wabt_BINARY_DIR} ${CMAKE_BINARY_DIR}/_deps)
 
     set(WABT_DIR "${wabt_BINARY_DIR}" PARENT_SCOPE)
     set(WABT_CONFIG "${wabt_SOURCE_DIR}/CMakeLists.txt" PARENT_SCOPE)
