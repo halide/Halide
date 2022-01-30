@@ -23,7 +23,7 @@ set(Halide_INSTALL_TOOLSDIR "${CMAKE_INSTALL_DATADIR}/tools"
 
 target_sources(Halide_Generator INTERFACE $<INSTALL_INTERFACE:${Halide_INSTALL_TOOLSDIR}/GenGen.cpp>)
 
-install(TARGETS Halide Halide_Generator Halide_LanguageOptions
+install(TARGETS Halide Halide_Generator
         EXPORT Halide_Targets
         RUNTIME COMPONENT Halide_Runtime
         LIBRARY COMPONENT Halide_Runtime
@@ -31,19 +31,19 @@ install(TARGETS Halide Halide_Generator Halide_LanguageOptions
         ARCHIVE COMPONENT Halide_Development
         INCLUDES DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
 
-if (TARGET Halide_Adams2019)
-    install(TARGETS Halide_Adams2019 Halide_Li2018 Halide_Mullapudi2016
-            EXPORT Halide_Targets
-            LIBRARY DESTINATION ${Halide_INSTALL_PLUGINDIR} COMPONENT Halide_Runtime
-            NAMELINK_COMPONENT Halide_Development)
-endif ()
-
-# Halide_LLVM
-foreach (dep IN ITEMS Halide_LLVM Halide_wabt)
-    if (TARGET ${dep})
-        install(TARGETS ${dep} EXPORT Halide_Targets)
+foreach (autoscheduler IN ITEMS Halide_Adams2019 Halide_Li2018 Halide_Mullapudi2016)
+    if (TARGET ${autoscheduler})
+        install(TARGETS ${autoscheduler}
+                EXPORT Halide_Targets
+                LIBRARY DESTINATION ${Halide_INSTALL_PLUGINDIR} COMPONENT Halide_Runtime
+                NAMELINK_COMPONENT Halide_Development)
     endif ()
 endforeach ()
+
+# WABT
+if (TARGET Halide_wabt)
+    install(TARGETS Halide_wabt EXPORT Halide_Targets)
+endif ()
 
 ##
 # Python bindings
@@ -155,10 +155,10 @@ if (WITH_TUTORIALS)
             PATTERN "*.png")
 
     if (WITH_PYTHON_BINDINGS)
-      install(DIRECTORY ${Halide_SOURCE_DIR}/python_bindings/tutorial/
-              DESTINATION ${CMAKE_INSTALL_DOCDIR}/tutorial-python
-              COMPONENT Halide_Documentation
-              FILES_MATCHING PATTERN "*.py")
+        install(DIRECTORY ${Halide_SOURCE_DIR}/python_bindings/tutorial/
+                DESTINATION ${CMAKE_INSTALL_DOCDIR}/tutorial-python
+                COMPONENT Halide_Documentation
+                FILES_MATCHING PATTERN "*.py")
     endif ()
 endif ()
 
@@ -177,13 +177,12 @@ endif ()
 # the relevant system libraries installed.
 if (Halide_SHARED_LLVM OR (NOT BUILD_SHARED_LIBS AND NOT Halide_BUNDLE_LLVM))
     set(depFile "${CMAKE_CURRENT_BINARY_DIR}/Halide-${type}-deps.cmake")
-    file(WRITE "${depFile}" "find_dependency(LLVM ${LLVM_PACKAGE_VERSION})\n")
+    file(WRITE "${depFile}" "include(CMakeFindDependencyMacro)\n\n")
+    file(APPEND "${depFile}" "list(APPEND CMAKE_MODULE_PATH \${CMAKE_CURRENT_LIST_DIR})\n\n")
+    file(APPEND "${depFile}" "set(HalideLLVM_TARGETS \"${HalideLLVM_TARGETS}\")\n")
+    file(APPEND "${depFile}" "find_dependency(HalideLLVM ${HalideLLVM_VERSION} COMPONENTS \${HalideLLVM_TARGETS})\n\n")
 
-    if (TARGET_WEBASSEMBLY)
-        file(APPEND "${depFile}" [[find_dependency(LLD HINTS "${LLVM_DIR}/../lld" "${LLVM_DIR}/../lib/cmake/lld")]])
-    endif ()
-
-    install(FILES "${depFile}"
+    install(FILES "${depFile}" "${Halide_PROJECT_DIR}/cmake/FindHalideLLVM.cmake"
             DESTINATION ${Halide_INSTALL_CMAKEDIR}
             COMPONENT Halide_Development)
 endif ()

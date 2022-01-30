@@ -38,13 +38,96 @@ if (CMAKE_SYSTEM_NAME MATCHES "Windows")
 endif ()
 
 ##
+# Settings for finding dependencies
+##
+
+option(THREADS_PREFER_PTHREAD_FLAG "Enable to use the -pthreads flag when available." ON)
+
+if (APPLE)
+    # This changes how find_xxx() commands work; the default is to find frameworks before
+    # standard libraries or headers, but this can be a problem on systems that have Mono
+    # installed, as it has a framework with the libjpeg and libpng  headers present -- so
+    # CMake finds the headers from Mono but the libraries from Homebrew, and hilarity ensues.
+    # Setting this to "last" means we always try the standard libraries before the frameworks.
+    set(CMAKE_FIND_FRAMEWORK "LAST"
+        CACHE STRING "Whether to search for macOS Frameworks FIRST, LAST, ONLY, or NEVER.")
+endif ()
+
+# LLVM target dependencies
+set(known_llvm_targets AArch64 AMDGPU ARM Hexagon Mips NVPTX PowerPC RISCV WebAssembly X86)
+set(required_llvm_targets "")
+set(optional_llvm_targets "")
+foreach (target IN LISTS known_llvm_targets)
+    string(TOUPPER "TARGET_${target}" OPTION)
+
+    set("${OPTION}" "OPTIONAL"
+        CACHE STRING "Enable ${target} target. Set to 'OPTIONAL' to include if available (the default), or to a true value to require it.")
+
+    if (${OPTION} STREQUAL "OPTIONAL")
+        list(APPEND optional_llvm_targets "${target}")
+    elseif (${OPTION})
+        list(APPEND required_llvm_targets "${target}")
+    endif ()
+endforeach ()
+
+# WASM dependency options
+
+cmake_dependent_option(WITH_WABT "Include WABT Interpreter for WASM testing" ON
+                       "TARGET_WEBASSEMBLY" OFF)
+
+cmake_dependent_option(WITH_V8 "Include V8 for WASM testing" OFF
+                       "TARGET_WEBASSEMBLY" OFF)
+
+##
+# Find dependencies
+##
+
+## Make our custom helpers available throughout the project via include().
+list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_LIST_DIR}/cmake")
+
+## Find standard CMake packages
+find_package(Threads REQUIRED)
+find_package(OpenGL)
+find_package(OpenMP)
+find_package(JPEG)
+find_package(PNG)
+
+## Find LLVM
+find_package(HalideLLVM ${Halide_REQUIRE_LLVM_VERSION} REQUIRED
+             COMPONENTS Clang ${required_llvm_targets}
+             OPTIONAL_COMPONENTS ${optional_llvm_targets})
+
+# Set TARGET_<target> to ON if it was actually found and to OFF otherwise.
+# Does NOT touch the cache; if it was marked "optional" before, it will
+# still be marked optional afterwards.
+# TODO: replace this with checks for HalideLLVM_<target>_FOUND or
+#       <target> IN_LIST HalideLLVM_TARGETS
+foreach (target IN LISTS known_llvm_targets)
+    string(TOUPPER "TARGET_${target}" OPTION)
+    if (${target} IN_LIST HalideLLVM_TARGETS)
+        set("${OPTION}" ON)
+    else ()
+        set("${OPTION}" OFF)
+    endif ()
+endforeach ()
+
+## WebAssembly target requires wasm
+if (TARGET_WEBASSEMBLY)
+    add_subdirectory(dependencies/wasm)
+endif ()
+
+##
 # Define project-wide options
 ##
 
-## Language standard selection
+## C++ standard selection
 set(CMAKE_CXX_STANDARD "17" CACHE STRING "Select which C++ standard to use (>=C++17 required)")
 option(CMAKE_CXX_STANDARD_REQUIRED "Enable strict C++ standard selection" ON)
 option(CMAKE_CXX_EXTENSIONS "Enable compiler-specific C++ extensions" OFF)
+
+## C++ feature selection
+option(Halide_ENABLE_RTTI "Enable RTTI" "${LLVM_ENABLE_RTTI}")
+option(Halide_ENABLE_EXCEPTIONS "Enable exceptions" ON)
 
 ## Library type selection (shared by default)
 option(BUILD_SHARED_LIBS "Build shared libraries" ON)
@@ -71,6 +154,10 @@ mark_as_advanced(Halide_CCACHE_BUILD)
 option(Halide_CLANG_TIDY_BUILD "Generate fake compile jobs for runtime files when running clang-tidy." OFF)
 mark_as_advanced(Halide_CLANG_TIDY_BUILD)
 
+set(Halide_SOVERSION_OVERRIDE "${Halide_VERSION_MAJOR}"
+    CACHE STRING "SOVERSION to set for custom Halide packaging")
+mark_as_advanced(Halide_SOVERSION_OVERRIDE)
+
 ##
 # Apply project-wide options
 ##
@@ -78,6 +165,11 @@ mark_as_advanced(Halide_CLANG_TIDY_BUILD)
 # Require standard C++17
 if (CMAKE_CXX_STANDARD LESS 17)
     message(FATAL_ERROR "Halide requires C++17 or newer")
+endif ()
+
+# Validate RTTI compatibility with LLVM
+if (Halide_ENABLE_RTTI AND NOT LLVM_ENABLE_RTTI)
+    message(FATAL_ERROR "Can't enable RTTI. LLVM was compiled without it")
 endif ()
 
 # Configure CCache build when requested
@@ -99,37 +191,6 @@ if (Halide_CCACHE_BUILD)
         message(FATAL_ERROR "Unable to find the program ccache. Set Halide_CCACHE_BUILD to OFF")
     endif ()
 endif ()
-
-##
-# Settings for finding dependencies
-##
-
-option(THREADS_PREFER_PTHREAD_FLAG "Enable to use the -pthreads flag when available." ON)
-
-if (APPLE)
-    # This changes how find_xxx() commands work; the default is to find frameworks before
-    # standard libraries or headers, but this can be a problem on systems that have Mono
-    # installed, as it has a framework with the libjpeg and libpng  headers present -- so
-    # CMake finds the headers from Mono but the libraries from Homebrew, and hilarity ensues.
-    # Setting this to "last" means we always try the standard libraries before the frameworks.
-    set(CMAKE_FIND_FRAMEWORK "LAST"
-        CACHE STRING "Whether to search for macOS Frameworks FIRST, LAST, ONLY, or NEVER.")
-endif ()
-
-##
-# Import dependencies
-##
-
-# Make our custom helpers available throughout the project via include().
-list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_LIST_DIR}/cmake")
-
-find_package(Threads REQUIRED)
-find_package(OpenGL)
-find_package(OpenMP)
-find_package(JPEG)
-find_package(PNG)
-
-add_subdirectory(dependencies)
 
 # Include our own CMake helpers
 include(HalideGeneratorHelpers)

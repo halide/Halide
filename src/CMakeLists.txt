@@ -372,9 +372,7 @@ add_library(Halide
             $<TARGET_OBJECTS:Halide_initmod>)
 add_library(Halide::Halide ALIAS Halide)
 
-target_link_libraries(Halide PUBLIC Threads::Threads)
-target_link_libraries(Halide PRIVATE Halide::LLVM)
-target_link_libraries(Halide PUBLIC Halide::LanguageOptions)
+target_link_libraries(Halide PUBLIC Threads::Threads PRIVATE Halide::LLVM)
 target_compile_definitions(Halide PRIVATE $<$<STREQUAL:$<TARGET_PROPERTY:TYPE>,STATIC_LIBRARY>:Halide_STATIC_DEFINE>)
 target_compile_features(Halide PUBLIC cxx_std_17)
 
@@ -385,20 +383,45 @@ target_export_script(Halide
                      APPLE_LD "${CMAKE_CURRENT_LIST_DIR}/exported_symbols.osx"
                      GNU_LD "${CMAKE_CURRENT_LIST_DIR}/exported_symbols.ldscript")
 
-set(Halide_SOVERSION_OVERRIDE "${Halide_VERSION_MAJOR}"
-    CACHE STRING "SOVERSION to set for custom Halide packaging")
-mark_as_advanced(Halide_SOVERSION_OVERRIDE)
-
 set_target_properties(Halide PROPERTIES
                       POSITION_INDEPENDENT_CODE ON
                       VERSION ${Halide_VERSION}
-                      SOVERSION ${Halide_SOVERSION_OVERRIDE})
+                      SOVERSION ${Halide_SOVERSION_OVERRIDE}
+                      WINDOWS_EXPORT_ALL_SYMBOLS YES)
 
 target_include_directories(Halide INTERFACE "$<BUILD_INTERFACE:${Halide_BINARY_DIR}/include>")
 add_dependencies(Halide HalideIncludes)
 
 if (Halide_WITH_INTROSPECTION)
     target_compile_definitions(Halide PRIVATE WITH_INTROSPECTION)
+endif ()
+
+if (Halide_ENABLE_RTTI)
+    message(STATUS "Compiling Halide WITH RTTI.")
+    target_compile_definitions(Halide PUBLIC HALIDE_ENABLE_RTTI)
+else ()
+    message(STATUS "Compiling Halide WITHOUT RTTI.")
+    target_compile_options(Halide PUBLIC
+                           $<$<COMPILE_LANG_AND_ID:CXX,MSVC>:/GR->
+                           $<$<COMPILE_LANG_AND_ID:CXX,GNU,Clang,AppleClang>:-fno-rtti>)
+endif ()
+
+option(Halide_ENABLE_EXCEPTIONS "Enable exceptions" ON)
+if (Halide_ENABLE_EXCEPTIONS)
+    message(STATUS "Compiling Halide WITH exceptions.")
+    target_compile_definitions(Halide PUBLIC HALIDE_WITH_EXCEPTIONS)
+else ()
+    message(STATUS "Compiling Halide WITHOUT exceptions.")
+    target_compile_options(Halide PUBLIC
+                           $<$<COMPILE_LANG_AND_ID:CXX,MSVC>:/EHs-c->
+                           $<$<COMPILE_LANG_AND_ID:CXX,GNU,Clang,AppleClang>:-fno-exceptions>)
+    target_compile_definitions(Halide PUBLIC $<$<COMPILE_LANG_AND_ID:CXX,MSVC>:_HAS_EXCEPTIONS=0>)
+endif ()
+
+if (LLVM_LIBCXX GREATER -1)
+    message(STATUS "LLVM linked to libc++. Adding to Halide's interface requirements.")
+    target_compile_options(Halide PUBLIC $<$<STREQUAL:$<TARGET_PROPERTY:LINKER_LANGUAGE>,CXX>:-stdlib=libc++>)
+    target_link_options(Halide PUBLIC $<$<STREQUAL:$<TARGET_PROPERTY:LINKER_LANGUAGE>,CXX>:-stdlib=libc++>)
 endif ()
 
 if (TARGET Halide_wabt)
