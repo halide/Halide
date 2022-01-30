@@ -83,6 +83,12 @@ inline size_t aligned_size(size_t offset, size_t size, size_t alignment) {
     return actual_size;
 }
 
+// Clamps the given value to be within the [min_value, max_value] range
+inline size_t clamped_size(size_t value, size_t min_value, size_t max_value) {
+    size_t result = (value < min_value) ? min_value : value;
+    return (result > max_value) ? max_value : result;
+}
+
 // --
 
 class SystemMemoryAllocator {

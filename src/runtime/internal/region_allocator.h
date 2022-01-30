@@ -25,21 +25,19 @@ class RegionAllocator {
     RegionAllocator(const RegionAllocator &) = delete;
     RegionAllocator &operator=(const RegionAllocator &) = delete;
 
-public:
-    static const uint32_t InvalidEntry = uint32_t(-1);
-    typedef MemoryArena<BlockRegion> BlockRegionArena;
+    // disable non-factory based construction
+    RegionAllocator() = delete;
+    ~RegionAllocator() = delete;
 
+public:
+    
+    // Allocators for the different types of memory we need to allocate
     struct MemoryAllocators {
         SystemMemoryAllocator* system = nullptr;
         MemoryRegionAllocator* region = nullptr;
     };
 
-    RegionAllocator();
-    RegionAllocator(void* user_context, BlockResource* block, const MemoryAllocators& ma);
-    ~RegionAllocator();
-
-    // Initializes a new instance     
-    void initialize(void* user_context, BlockResource* block, const MemoryAllocators& ma);
+public:
 
     // Factory methods for creation / destruction
     static RegionAllocator* create(void* user_context, BlockResource* block, const MemoryAllocators& ma);
@@ -58,6 +56,11 @@ public:
     BlockResource* block_resource() const;
 
 private:
+    // Arena type for the block regions
+    typedef MemoryArena<BlockRegion> BlockRegionArena;
+
+    // Initializes a new instance     
+    void initialize(void* user_context, BlockResource* block, const MemoryAllocators& ma);
 
     // Search through allocated block regions (Best-Fit)    
     BlockRegion* find_block_region(void* user_context, size_t size, size_t alignment);
@@ -87,8 +90,9 @@ private:
     void free_block_region(void* user_context, BlockRegion* region);
 
 private:
+
     BlockResource* block;
-    BlockRegionArena arena;
+    BlockRegionArena* arena;
     MemoryAllocators allocators;
 };
 
@@ -99,7 +103,7 @@ RegionAllocator* RegionAllocator::create(void* user_context, BlockResource* bloc
     );
 
     if(result == nullptr) {
-        error(user_context) << "RegionAllocator: Failed to create instance! Out of memory!\n";
+        halide_error(user_context, "RegionAllocator: Failed to create instance! Out of memory!\n");
         return nullptr; 
     }
 
@@ -115,20 +119,12 @@ void RegionAllocator::destroy(void* user_context, RegionAllocator* instance) {
     allocators.system->deallocate(user_context, instance);
 }
 
-RegionAllocator::RegionAllocator() :
-    block(nullptr),
-    arena(nullptr),
-    allocators() {
-}
-
-RegionAllocator::~RegionAllocator() {
-    destroy(nullptr);
-}
-
 void RegionAllocator::initialize(void* user_context, BlockResource* mb, const MemoryAllocators& ma) {
     block = mb;
     allocators = ma;
-    arena.initialize(user_context, { BlockRegionArena::default_capacity, 0 }, allocators.system);
+    arena = BlockRegionArena::create(user_context, { BlockRegionArena::default_capacity, 0 }, allocators.system);
+    halide_abort_if_false(user_context, arena != nullptr);
+
     block->allocator = this;
     block->regions = create_block_region(user_context, 0, block->size);
 }
@@ -280,7 +276,7 @@ BlockRegion* RegionAllocator::split_block_region(void* user_context, BlockRegion
 }
 
 BlockRegion* RegionAllocator::create_block_region(void* user_context, size_t offset, size_t size) {
-    BlockRegion* block_region = arena.reserve(user_context);
+    BlockRegion* block_region = arena->reserve(user_context);
     memset(block_region, 0, sizeof(BlockRegion));
     block_region->offset = offset;
     block_region->size = size;
@@ -291,7 +287,7 @@ BlockRegion* RegionAllocator::create_block_region(void* user_context, size_t off
 
 void RegionAllocator::destroy_block_region(void* user_context, BlockRegion* block_region) {
     free_block_region(user_context, block_region);
-    arena.reclaim(user_context, block_region);
+    arena->reclaim(user_context, block_region);
 }
 
 void RegionAllocator::alloc_block_region(void* user_context, BlockRegion* block_region) {
@@ -342,7 +338,7 @@ void RegionAllocator::destroy(void* user_context) {
     }
     block->regions = nullptr;
     block->reserved = 0;
-    arena.destroy(user_context);
+    arena->destroy(user_context);
 }
 
 BlockResource* RegionAllocator::block_resource() const {

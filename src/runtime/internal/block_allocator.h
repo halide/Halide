@@ -26,20 +26,20 @@ class BlockAllocator {
     BlockAllocator(const BlockAllocator &) = delete;
     BlockAllocator &operator=(const BlockAllocator &) = delete;
 
+    // disable non-factory based construction
+    BlockAllocator() = delete;
+    ~BlockAllocator() = delete;
+
 public:
 
-    typedef LinkedList<BlockResource> BlockResourceList;
-    typedef BlockResourceList::EntryType BlockEntry;
-
-    typedef LinkedList<RegionAllocator> AllocatorList;
-    typedef AllocatorList::EntryType AllocatorEntry;
-
+    // Allocators for the different types of memory we need to allocate
     struct MemoryAllocators {
         SystemMemoryAllocator* system = nullptr;
         MemoryBlockAllocator* block = nullptr;
         MemoryRegionAllocator* region = nullptr;
     };
 
+    // Runtime configuration parameters to adjust the behaviour of the block allocator
     struct Config {
         size_t minimum_block_size = 0;
         size_t maximum_block_size = 0;
@@ -65,32 +65,47 @@ public:
 
 private:
 
-    BlockAllocator() = default;
-    ~BlockAllocator() = default;
+    // Linked-list for storing the block resources
+    typedef LinkedList<BlockResource> BlockResourceList;
+    typedef BlockResourceList::EntryType BlockEntry;
 
+    // Initializes a new instance     
     void initialize(void* user_context, const Config& config, const MemoryAllocators& allocators);
 
+    // Reserves a region of memory using the given allocator for the given block resource, returns nullptr on failure
     MemoryRegion* reserve_memory_region(void* user_context, RegionAllocator* allocator, size_t size, size_t alignment);
 
-    AllocatorEntry* find_region_allocator(void* user_context, BlockResource* block);
-    AllocatorEntry* create_region_allocator(void* user_context, BlockResource* block);
-    void destroy_region_allocator(void* user_context, AllocatorEntry* alloc_entry);
+    // Creates a new region allocator for the given block resource
+    RegionAllocator* create_region_allocator(void* user_context, BlockResource* block);
 
+    // Destroys the given region allocator and all associated memory regions
+    void destroy_region_allocator(void* user_context, RegionAllocator* region_allocator);
+
+    // Reserves a block of memory for the requested size and returns the corresponding block entry, or nullptr on failure
     BlockEntry* reserve_block_entry(void* user_context, MemoryBusAccess access, size_t size);
+
+    // Locates the "best-fit" block entry for the requested size, or nullptr if none was found
     BlockEntry* find_block_entry(void* user_context, MemoryBusAccess access, size_t size);
+
+    // Creates a new block entry and int the list
     BlockEntry* create_block_entry(void* user_context, MemoryBusAccess access, size_t size);
+
+    // Destroys the block entry and removes it from the list
     void destroy_block_entry(void* user_context, BlockEntry* block_entry);
 
+    // Invokes the allocation callback to allocate memory for the block region
     void alloc_memory_block(void* user_context, BlockResource* block);
+
+    // Invokes the deallocation callback to free memory for the memory block
     void free_memory_block(void* user_context, BlockResource* block);
 
+    // Returns a constrained size for the requested size based on config parameters
     size_t constrain_requested_size(size_t size) const;
 
 private:
 
     Config config;
     BlockResourceList block_list;
-    AllocatorList allocator_list;
     MemoryAllocators allocators;
 };
 
@@ -122,7 +137,6 @@ void BlockAllocator::initialize(void* user_context, const Config& cfg, const Mem
     config = cfg;
     allocators = ma;
     block_list.initialize(user_context, BlockResourceList::default_capacity, allocators.system);
-    allocator_list.initialize(user_context, AllocatorList::default_capacity, allocators.system); 
 }
 
 MemoryRegion* BlockAllocator::reserve(void *user_context, MemoryBusAccess access, size_t size, size_t alignment) {
@@ -155,7 +169,7 @@ MemoryRegion* BlockAllocator::reserve(void *user_context, MemoryBusAccess access
 
         block = &(block_entry->value);
         if(block->allocator == nullptr) {
-            create_region_allocator(user_context, block);
+            block->allocator = create_region_allocator(user_context, block);
         }
 
         result = reserve_memory_region(user_context, block->allocator, size, alignment);
@@ -194,8 +208,9 @@ bool BlockAllocator::collect(void* user_context) {
 void BlockAllocator::destroy(void *user_context) {
     BlockEntry* block_entry = block_list.front();
     while(block_entry != nullptr) {
+        BlockEntry* prev_entry = block_entry;
         destroy_block_entry(user_context, block_entry);
-        block_entry = block_entry->next_ptr;
+        block_entry = prev_entry->next_ptr;
     }    
 }
 
@@ -248,36 +263,25 @@ BlockAllocator::reserve_block_entry(void *user_context, MemoryBusAccess access, 
     if(block_entry) {
         BlockResource* block = &(block_entry->value);
         if(block->allocator == nullptr) {
-            create_region_allocator(user_context, block);
+            block->allocator = create_region_allocator(user_context, block);
         }
     }
     return block_entry;
 }
  
-BlockAllocator::AllocatorEntry*
-BlockAllocator::find_region_allocator(void* user_context, BlockResource* block) {
-    AllocatorEntry* region_allocator = allocator_list.front();
-    while(region_allocator != nullptr) {
-        if(&(region_allocator->value) == block->allocator ) {
-            break;
-        }
-        region_allocator = region_allocator->next_ptr;
-    }
-    return region_allocator;
-}
-
-BlockAllocator::AllocatorEntry*
+RegionAllocator*
 BlockAllocator::create_region_allocator(void* user_context, BlockResource* block) {
-    AllocatorEntry* region_allocator = allocator_list.append(user_context);
-    RegionAllocator* allocator = &(region_allocator->value);
-    memset(allocator, 0, sizeof(RegionAllocator));
-    allocator->initialize(user_context, block, {allocators.system, allocators.region});
-    block->allocator = allocator;
+    halide_abort_if_false(user_context, block != nullptr);
+    RegionAllocator* region_allocator = RegionAllocator::create(
+        user_context, block, {allocators.system, allocators.region}
+    );        
     return region_allocator;
 }
 
-void BlockAllocator::destroy_region_allocator(void* user_context, BlockAllocator::AllocatorEntry* region_allocator) {
-    allocator_list.remove(user_context, region_allocator);
+void BlockAllocator::destroy_region_allocator(void* user_context, RegionAllocator* region_allocator) {
+    if(region_allocator == nullptr) { return; }
+    region_allocator->destroy(user_context);
+    RegionAllocator::destroy(user_context, region_allocator);
 }
 
 BlockAllocator::BlockEntry* 
@@ -302,6 +306,10 @@ BlockAllocator::create_block_entry(void* user_context, MemoryBusAccess access, s
 
 void BlockAllocator::destroy_block_entry(void* user_context, BlockAllocator::BlockEntry* block_entry) {
     BlockResource* block = &(block_entry->value);
+    if(block->allocator) {
+        destroy_region_allocator(user_context, block->allocator);
+        block->allocator = nullptr;
+    }
     free_memory_block(user_context, block);
     block_list.remove(user_context, block_entry);
 }
@@ -314,15 +322,6 @@ void BlockAllocator::alloc_memory_block(void* user_context, BlockResource* block
 }
 
 void BlockAllocator::free_memory_block(void* user_context, BlockResource* block) {
-    if(block->allocator) {
-        block->allocator->destroy(user_context);
-        AllocatorEntry* region_allocator = find_region_allocator(user_context, block);
-        if(region_allocator != nullptr) {
-            destroy_region_allocator(user_context, region_allocator);
-            block->allocator = nullptr;
-        }
-    }
-
     // Cast into client-facing memory block struct for deallocation request
     MemoryBlock* memory_block = reinterpret_cast<MemoryBlock*>(block);
     allocators.block->deallocate(user_context, memory_block);
@@ -333,10 +332,12 @@ void BlockAllocator::free_memory_block(void* user_context, BlockResource* block)
 size_t BlockAllocator::constrain_requested_size(size_t size) const {
     size_t actual_size = size;
     if(config.minimum_block_size) {
-        actual_size = (actual_size > config.minimum_block_size) ? actual_size : config.minimum_block_size;
+        actual_size = ((actual_size < config.minimum_block_size) ? 
+                        config.minimum_block_size : actual_size);
     }
     if(config.maximum_block_size) {
-        actual_size = (actual_size < config.maximum_block_size) ? actual_size : config.maximum_block_size;
+        actual_size = ((actual_size > config.maximum_block_size) ? 
+                        config.maximum_block_size : actual_size);
     }
     return actual_size;
 }
