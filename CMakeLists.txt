@@ -73,10 +73,14 @@ endforeach ()
 # WASM dependency options
 
 cmake_dependent_option(WITH_WABT "Include WABT Interpreter for WASM testing" ON
-                       "TARGET_WEBASSEMBLY AND NOT WIN32" OFF)
+                       "NOT WIN32" OFF)
 
-cmake_dependent_option(WITH_V8 "Include V8 for WASM testing" OFF
-                       "TARGET_WEBASSEMBLY" OFF)
+option(WITH_V8 "Include V8 for WASM testing" OFF)
+
+# Validate dependency options
+if (WITH_WABT AND WITH_V8)
+    message(FATAL_ERROR "Cannot use both WABT and V8 at the same time, disable one of them.")
+endif ()
 
 ##
 # Find dependencies
@@ -113,7 +117,13 @@ endforeach ()
 
 ## WebAssembly target requires wasm
 if (TARGET_WEBASSEMBLY)
-    add_subdirectory(dependencies/wasm)
+    if (WITH_WABT)
+        find_package(WABT REQUIRED)
+    endif ()
+
+    if (WITH_V8)
+        find_package(V8 REQUIRED)
+    endif ()
 endif ()
 
 ##

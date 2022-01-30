@@ -424,13 +424,13 @@ if (LLVM_LIBCXX GREATER -1)
     target_link_options(Halide PUBLIC $<$<STREQUAL:$<TARGET_PROPERTY:LINKER_LANGUAGE>,CXX>:-stdlib=libc++>)
 endif ()
 
-if (TARGET Halide_wabt)
-    target_link_libraries(Halide PRIVATE Halide_wabt)
+if (TARGET Halide::WABT)
+    target_link_libraries(Halide PRIVATE Halide::WABT)
     target_compile_definitions(Halide PRIVATE WITH_WABT)
 endif ()
 
-if (TARGET Halide_V8)
-    target_link_libraries(Halide PRIVATE Halide_V8)
+if (TARGET Halide::V8)
+    target_link_libraries(Halide PRIVATE Halide::V8)
     target_compile_definitions(Halide PRIVATE WITH_V8)
 endif ()
 

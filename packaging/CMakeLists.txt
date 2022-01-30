@@ -40,11 +40,6 @@ foreach (autoscheduler IN ITEMS Halide_Adams2019 Halide_Li2018 Halide_Mullapudi2
     endif ()
 endforeach ()
 
-# WABT
-if (TARGET Halide_wabt)
-    install(TARGETS Halide_wabt EXPORT Halide_Targets)
-endif ()
-
 ##
 # Python bindings
 ##
