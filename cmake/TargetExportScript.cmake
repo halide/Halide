@@ -1,8 +1,7 @@
-if (CMAKE_VERSION VERSION_LESS 3.18)
-    include(CheckCXXSourceCompiles)
-else ()
-    include(CheckLinkerFlag)
-endif ()
+# Note: in CMake 3.18+ there is a CheckLinkerFlags module that should be used to replace this.
+# Sadly, CMake does not attempt to detect the underlying linker and people can try to use, eg.
+# gold or lld via CMAKE_CXX_FLAGS.
+include(CheckCXXSourceCompiles)
 
 function(target_export_script TARGET)
     set(options)
@@ -30,12 +29,8 @@ function(target_export_script TARGET)
     ## More linkers support the GNU syntax (ld, lld, gold), so try it first.
     set(version_script "LINKER:--version-script=${ARG_GNU_LD}")
 
-    if (CMAKE_VERSION VERSION_LESS 3.18)
-        set(CMAKE_REQUIRED_LINK_OPTIONS "${version_script}")
-        check_cxx_source_compiles("${dummy_source}" LINKER_HAS_FLAG_VERSION_SCRIPT ${extra_errors})
-    else ()
-        check_linker_flag(CXX "${version_script}" LINKER_HAS_FLAG_VERSION_SCRIPT)
-    endif ()
+    set(CMAKE_REQUIRED_LINK_OPTIONS "${version_script}")
+    check_cxx_source_compiles("${dummy_source}" LINKER_HAS_FLAG_VERSION_SCRIPT ${extra_errors})
 
     if (LINKER_HAS_FLAG_VERSION_SCRIPT)
         target_link_options(${TARGET} PRIVATE "${version_script}")
@@ -46,12 +41,8 @@ function(target_export_script TARGET)
     ## The Apple linker expects a different flag.
     set(exported_symbols_list "LINKER:-exported_symbols_list,${ARG_APPLE_LD}")
 
-    if (CMAKE_VERSION VERSION_LESS 3.18)
-        set(CMAKE_REQUIRED_LINK_OPTIONS "${exported_symbols_list}")
-        check_cxx_source_compiles("${dummy_source}" LINKER_HAS_FLAG_EXPORTED_SYMBOLS_LIST ${extra_errors})
-    else ()
-        check_linker_flag(CXX "${exported_symbols_list}" LINKER_HAS_FLAG_EXPORTED_SYMBOLS_LIST)
-    endif ()
+    set(CMAKE_REQUIRED_LINK_OPTIONS "${exported_symbols_list}")
+    check_cxx_source_compiles("${dummy_source}" LINKER_HAS_FLAG_EXPORTED_SYMBOLS_LIST ${extra_errors})
 
     if (LINKER_HAS_FLAG_EXPORTED_SYMBOLS_LIST)
         target_link_options(${TARGET} PRIVATE "${exported_symbols_list}")
