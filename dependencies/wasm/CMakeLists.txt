@@ -54,18 +54,7 @@ if (WITH_WABT)
 endif ()
 
 if (WITH_V8)
-    # Instructions to build V8 can be found in README_webassembly.md.
-    if (NOT V8_INCLUDE_PATH)
-        message(FATAL_ERROR "Please set V8_INCLUDE_PATH on the CMake command line.")
-    endif()
-    if (NOT V8_LIB_PATH)
-        message(FATAL_ERROR "Please set V8_LIB_PATH on the CMake command line.")
-    endif()
-
-    message(STATUS "Using V8")
-    add_library(Halide_V8 STATIC IMPORTED GLOBAL)
-    set_target_properties(Halide_V8 PROPERTIES IMPORTED_LOCATION "${V8_LIB_PATH}")
-    target_include_directories(Halide_V8 INTERFACE "${V8_INCLUDE_PATH}")
+    find_package(V8 REQUIRED)
 endif()
 
 function(add_wasm_executable TARGET)
