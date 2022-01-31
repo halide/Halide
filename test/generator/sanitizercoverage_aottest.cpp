@@ -78,7 +78,7 @@ void clear_out(T &image) {
     image.fill(-42);
 }
 
-void verify_out(const Buffer<int8_t> &image) {
+void verify_out(const Buffer<int8_t, 3> &image) {
     image.for_each_element([&](int x, int y, int c) {
         int expected = 42 + c;
         int actual = image(x, y, c);
@@ -100,7 +100,7 @@ auto sanitizercoverage_wrapper(struct halide_buffer_t *out) {
 
 int main() {
     fprintf(stderr, "Entering main().\n");
-    auto out = Buffer<int8_t>(4, 4, 3);
+    auto out = Buffer<int8_t, 3>(4, 4, 3);
     fprintf(stderr, "Clearing output buffer.\n");
     clear_out(out);
     fprintf(stderr, "Performing the transformation.\n");

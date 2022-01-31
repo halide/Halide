@@ -30,7 +30,7 @@ int main(int argc, char **argv) {
     }
 
     const int W = 32, H = 32;
-    Buffer<int> input(W, H);
+    Buffer<int, 2> input(W, H);
     for (int y = 0; y < input.height(); y++) {
         for (int x = 0; x < input.width(); x++) {
             input(x, y) = x + y;
@@ -40,7 +40,7 @@ int main(int argc, char **argv) {
     // Explicitly copy data to the GPU.
     input.set_host_dirty();
 
-    Buffer<int> output(W, H);
+    Buffer<int, 2> output(W, H);
 
     gpu_texture(input, output);
 

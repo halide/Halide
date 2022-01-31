@@ -16,8 +16,8 @@ public:
     // A major downside of templated generators is that because we use CRTP, you
     // must manually import names of types from the base class. For Input and
     // Output you can also just use these equivalent globally-scoped names:
-    GeneratorInput<Buffer<T1>> input{"input", 2};
-    GeneratorOutput<Buffer<T2>> output{"output", 2};
+    GeneratorInput<Buffer<T1, 2>> input{"input"};
+    GeneratorOutput<Buffer<T2, 2>> output{"output"};
 
     void generate() {
         Var x, y;

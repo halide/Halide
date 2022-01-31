@@ -25,7 +25,7 @@ public:
             extra_buffer_inputs.push_back(extra);
         }
 
-        typed_extra_buffer_input = add_input<Buffer<int16_t>>("typed_extra_buffer_input", 2);
+        typed_extra_buffer_input = add_input<Buffer<int16_t, 2>>("typed_extra_buffer_input");
 
         extra_func_input = add_input<Func>("extra_func_input", UInt(16), 3);
 
@@ -95,7 +95,7 @@ private:
     int configure_calls = 0;
 
     std::vector<Input<Buffer<>> *> extra_buffer_inputs;
-    Input<Buffer<int16_t>> *typed_extra_buffer_input;
+    Input<Buffer<int16_t, 2>> *typed_extra_buffer_input;
     Input<Func> *extra_func_input;
     Input<int> *extra_scalar_input;
     Input<Expr> *extra_dynamic_scalar_input;
