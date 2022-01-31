@@ -7,10 +7,9 @@ class BilateralGrid : public Halide::Generator<BilateralGrid> {
 public:
     GeneratorParam<int> s_sigma{"s_sigma", 8};
 
-    Input<Buffer<float>> input{"input", 2};
+    Input<Buffer<float, 2>> input{"input"};
     Input<float> r_sigma{"r_sigma"};
-
-    Output<Buffer<float>> bilateral_grid{"bilateral_grid", 2};
+    Output<Buffer<float, 2>> bilateral_grid{"bilateral_grid"};
 
     void generate() {
         Var x("x"), y("y"), z("z"), c("c");

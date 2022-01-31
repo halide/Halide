@@ -10,8 +10,7 @@ class Fill : public Generator<Fill> {
 public:
     // Value to fill the output with.
     Input<uint8_t> value_{"value"};
-
-    Output<Buffer<uint8_t>> output_{"output", 4};
+    Output<Buffer<uint8_t, 4>> output_{"output"};
 
     void generate() {
         Var c("c"), x("x"), y("y"), b("b");

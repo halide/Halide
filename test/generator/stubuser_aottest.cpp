@@ -10,8 +10,8 @@ using namespace Halide::Runtime;
 const int kSize = 32;
 
 template<typename Type>
-Buffer<Type> make_image() {
-    Buffer<Type> im(kSize, kSize, 3);
+Buffer<Type, 3> make_image() {
+    Buffer<Type, 3> im(kSize, kSize, 3);
     for (int x = 0; x < kSize; x++) {
         for (int y = 0; y < kSize; y++) {
             for (int c = 0; c < 3; c++) {
@@ -27,7 +27,7 @@ const int kIntArg = 33;
 const float kOffset = 2.f;
 
 template<typename InputType, typename OutputType>
-void verify(const Buffer<InputType> &input, float float_arg, int int_arg, float offset, const Buffer<OutputType> &output) {
+void verify(const Buffer<InputType, 3> &input, float float_arg, int int_arg, float offset, const Buffer<OutputType, 3> &output) {
     if (input.width() != output.width() ||
         input.height() != output.height()) {
         fprintf(stderr, "size mismatch\n");
@@ -50,17 +50,17 @@ void verify(const Buffer<InputType> &input, float float_arg, int int_arg, float 
 
 int main(int argc, char **argv) {
 
-    Buffer<uint8_t> input = make_image<uint8_t>();
-    Buffer<uint8_t> calculated_output(kSize, kSize, 3);
-    Buffer<float> float32_buffer_output(kSize, kSize, 3);
-    Buffer<> int32_buffer_output(halide_type_t(halide_type_int, 32), kSize, kSize, 3);
-    Buffer<uint8_t> array_test_output(kSize, kSize, 3);
-    Buffer<float> tupled_output0(kSize, kSize, 3);
-    Buffer<int32_t> tupled_output1(kSize, kSize, 3);
-    Buffer<int> int_output(kSize, kSize, 3);
+    Buffer<uint8_t, 3> input = make_image<uint8_t>();
+    Buffer<uint8_t, 3> calculated_output(kSize, kSize, 3);
+    Buffer<float, 3> float32_buffer_output(kSize, kSize, 3);
+    Buffer<void, 3> int32_buffer_output(halide_type_t(halide_type_int, 32), kSize, kSize, 3);
+    Buffer<uint8_t, 3> array_test_output(kSize, kSize, 3);
+    Buffer<float, 3> tupled_output0(kSize, kSize, 3);
+    Buffer<int32_t, 3> tupled_output1(kSize, kSize, 3);
+    Buffer<int, 3> int_output(kSize, kSize, 3);
     // TODO: see Issues #3709, #3967
-    Buffer<> float16_output(halide_type_t(halide_type_float, 16), kSize, kSize, 3);
-    Buffer<> bfloat16_output(halide_type_t(halide_type_bfloat, 16), kSize, kSize, 3);
+    Buffer<void, 3> float16_output(halide_type_t(halide_type_float, 16), kSize, kSize, 3);
+    Buffer<void, 3> bfloat16_output(halide_type_t(halide_type_bfloat, 16), kSize, kSize, 3);
 
     stubuser(input, calculated_output, float32_buffer_output, int32_buffer_output,
              array_test_output, tupled_output0, tupled_output1, int_output,

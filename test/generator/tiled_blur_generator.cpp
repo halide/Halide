@@ -16,8 +16,8 @@ Halide::Expr is_planar(const T &p, int channels = 3) {
 
 class TiledBlur : public Halide::Generator<TiledBlur> {
 public:
-    Input<Buffer<uint8_t>> input{"input", 3};
-    Output<Buffer<uint8_t>> output{"output", 3};
+    Input<Buffer<uint8_t, 3>> input{"input"};
+    Output<Buffer<uint8_t, 3>> output{"output"};
 
     void generate() {
         Expr input_float = cast<float>(input(x, y, c)) / 255.f;

@@ -4,8 +4,8 @@ namespace {
 
 class MSAN : public Halide::Generator<MSAN> {
 public:
-    Input<Buffer<uint8_t>> input{"input", 3};
-    Output<Buffer<uint8_t>> output{"output", 3};
+    Input<Buffer<uint8_t, 3>> input{"input"};
+    Output<Buffer<uint8_t, 3>> output{"output"};
 
     void generate() {
         // Currently the test just exercises Target::MSAN

@@ -8,7 +8,7 @@
 
 namespace Halide {
 
-template<typename T = void, int Dims = Halide::Runtime::BufferDimsUnconstrained>
+template<typename T = void, int Dims = Halide::Runtime::AnyDims>
 class Buffer;
 
 struct JITUserContext;
@@ -114,7 +114,7 @@ std::string buffer_type_name() {
  * template parameter is T = void.
  *
  * A Buffer<T, D1> can refer to a Buffer<T, D2> if D1 == D2,
- * or if D1 is BufferDimsUnconstrained (meaning "dimensionality is checked at runtime, not compiletime").
+ * or if D1 is AnyDims (meaning "dimensionality is checked at runtime, not compiletime").
  */
 template<typename T, int Dims>
 class Buffer {
@@ -134,12 +134,12 @@ class Buffer {
                               std::is_void<T>::value ||
                               std::is_void<T2>::value,
                           "type mismatch constructing Buffer");
-            static_assert(Dims == BufferDimsUnconstrained || D2 == BufferDimsUnconstrained || Dims == D2,
+            static_assert(Dims == AnyDims || D2 == AnyDims || Dims == D2,
                           "Can't convert from a Buffer with static dimensionality to a Buffer with different static dimensionality");
         } else {
             // Don't delegate to
             // Runtime::Buffer<T>::assert_can_convert_from. It might
-            // not assert is NDEBUG is defined. user_assert is
+            // not assert if NDEBUG is defined. user_assert is
             // friendlier anyway because it reports line numbers when
             // debugging symbols are found, it throws an exception
             // when exceptions are enabled, and we can print the
@@ -147,14 +147,14 @@ class Buffer {
             using BufType = Runtime::Buffer<T, Dims>;  // alias because commas in user_assert() macro confuses compiler
             user_assert(BufType::can_convert_from(*(other.get())))
                 << "Type mismatch constructing Buffer. Can't construct Buffer<"
-                << Internal::buffer_type_name<T>() << "> from Buffer<"
-                << type_to_c_type(other.type(), false) << ">\n";
+                << Internal::buffer_type_name<T>() << ", " << Dims << "> from Buffer<"
+                << type_to_c_type(other.type(), false) << ", " << D2 << ">, dimensions() = " << other.dimensions() << "\n";
         }
     }
 
 public:
-    static constexpr int BufferDimsUnconstrained = Halide::Runtime::BufferDimsUnconstrained;
-    static_assert(Dims == BufferDimsUnconstrained || Dims >= 0);
+    static constexpr int AnyDims = Halide::Runtime::AnyDims;
+    static_assert(Dims == AnyDims || Dims >= 0);
 
     typedef T ElemType;
 
@@ -509,13 +509,13 @@ public:
 
     static constexpr bool has_static_halide_type = Runtime::Buffer<T, Dims>::has_static_halide_type;
 
-    static halide_type_t static_halide_type() {
+    static constexpr halide_type_t static_halide_type() {
         return Runtime::Buffer<T, Dims>::static_halide_type();
     }
 
     static constexpr bool has_static_dimensions = Runtime::Buffer<T, Dims>::has_static_dimensions;
 
-    static int static_dimensions() {
+    static constexpr int static_dimensions() {
         return Runtime::Buffer<T, Dims>::static_dimensions();
     }
 
@@ -533,7 +533,7 @@ public:
     }
 
     template<typename T2, int D2 = Dims>
-    Buffer<T2, Dims> as() const {
+    Buffer<T2, D2> as() const {
         return Buffer<T2, D2>(*this);
     }
 

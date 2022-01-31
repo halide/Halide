@@ -8,7 +8,7 @@ int main() {
     Func test{"test"};
 
     test(x, y) = x + y;
-    Buffer<int> output = test.realize({4, 4});
+    Buffer<int, 2> output = test.realize({4, 4});
 
     for (int i = 0; i < 4; ++i) {
         for (int j = 0; j < 4; ++j) {
