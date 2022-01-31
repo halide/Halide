@@ -3,8 +3,8 @@
 namespace {
 
 template<typename Type, int size = 4, int dim = 1>
-Halide::Buffer<Type> make_image(int extra) {
-    Halide::Buffer<Type> im(size, size, dim);
+Halide::Buffer<Type, 3> make_image(int extra) {
+    Halide::Buffer<Type, 3> im(size, size, dim);
     for (int x = 0; x < size; x++) {
         for (int y = 0; y < size; y++) {
             for (int c = 0; c < dim; c++) {
@@ -21,8 +21,8 @@ public:
     GeneratorParam<bool> vectorize{"vectorize", true};
     GeneratorParam<LoopLevel> intermediate_level{"intermediate_level", LoopLevel::root()};
 
-    Input<Buffer<uint8_t>> typed_buffer_input{"typed_buffer_input", 3};
-    Input<Buffer<>> untyped_buffer_input{"untyped_buffer_input"};
+    Input<Buffer<uint8_t, 3>> typed_buffer_input{"typed_buffer_input"};
+    Input<Buffer<void, 3>> untyped_buffer_input{"untyped_buffer_input"};
     Input<Func> simple_input{"simple_input", 3};  // require a 3-dimensional Func but leave Type unspecified
     Input<Func[]> array_input{"array_input", 3};  // require a 3-dimensional Func but leave Type and ArraySize unspecified
     // Note that Input<Func> does not (yet) support Tuples
@@ -32,9 +32,9 @@ public:
     Output<Func> simple_output{"simple_output", Float(32), 3};
     Output<Func> tuple_output{"tuple_output", 3};             // require a 3-dimensional Func but leave Type(s) unspecified
     Output<Func[]> array_output{"array_output", Int(16), 2};  // leave ArraySize unspecified
-    Output<Buffer<float>> typed_buffer_output{"typed_buffer_output"};
-    Output<Buffer<>> untyped_buffer_output{"untyped_buffer_output"};
-    Output<Buffer<uint8_t>> static_compiled_buffer_output{"static_compiled_buffer_output", 3};
+    Output<Buffer<float, 3>> typed_buffer_output{"typed_buffer_output"};
+    Output<Buffer<void, 3>> untyped_buffer_output{"untyped_buffer_output"};
+    Output<Buffer<uint8_t, 3>> static_compiled_buffer_output{"static_compiled_buffer_output"};
 
     void configure() {
         // Pointers returned by add_input() are managed by the Generator;
@@ -68,7 +68,7 @@ public:
 
         // This should be compiled into the Generator product itself,
         // and not produce another input for the Stub or AOT filter.
-        Buffer<uint8_t> static_compiled_buffer = make_image<uint8_t>(42);
+        Buffer<uint8_t, 3> static_compiled_buffer = make_image<uint8_t>(42);
         static_compiled_buffer_output = static_compiled_buffer;
 
         (*extra_func_output)(x, y) = cast<double>((*extra_func_input)(x, y, 0) + 1);

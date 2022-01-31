@@ -13,7 +13,7 @@ class PartialBuildMethod : public Halide::Generator<PartialBuildMethod> {
 public:
     GeneratorParam<float> compiletime_factor{"compiletime_factor", 1, 0, 100};
 
-    Input<Buffer<float>> input{"input", 2};
+    Input<Buffer<float, 2>> input{"input"};
     Input<float> runtime_factor{"runtime_factor", 1.0};
 
     Func build() {
@@ -32,9 +32,9 @@ class PartialBuildMethod : public Halide::Generator<PartialBuildMethod> {
 public:
     GeneratorParam<float> compiletime_factor{"compiletime_factor", 1, 0, 100};
 
-    Input<Buffer<float>> input{"input", 2};
+    Input<Buffer<float, 2>> input{"input"};
     Input<float> runtime_factor{"runtime_factor", 1.0};
-    Output<Buffer<int32_t>> output{"output", 2};
+    Output<Buffer<int32_t, 2>> output{"output"};
 
     void generate() {
         Var x, y;
