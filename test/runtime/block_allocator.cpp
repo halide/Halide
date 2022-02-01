@@ -52,18 +52,25 @@ int main(int argc, char **argv) {
         BlockAllocator::MemoryAllocators allocators = { &system_allocator, &block_allocator, &region_allocator };
         BlockAllocator* instance = BlockAllocator::create(user_context, config, allocators);
 
-        MemoryRegion* r1 = instance->reserve(user_context, MemoryBusAccess::HostOnly, sizeof(int), sizeof(int));
+        MemoryRequest request = {0};
+        request.size = sizeof(int);
+        request.alignment = sizeof(int);
+        request.properties.visibility = MemoryVisibility::UnknownVisibility;
+        request.properties.caching = MemoryCaching::UnknownCaching;
+        request.properties.mutability = MemoryMutability::UnknownMutability;
+        
+        MemoryRegion* r1 = instance->reserve(user_context, request);
         halide_abort_if_false(user_context, r1 != nullptr);
         halide_abort_if_false(user_context, block_allocator.allocated_block_memory == config.minimum_block_size);
-        halide_abort_if_false(user_context, region_allocator.allocated_region_memory == sizeof(int));
+        halide_abort_if_false(user_context, region_allocator.allocated_region_memory == request.size);
 
-        MemoryRegion* r2 = instance->reserve(user_context, MemoryBusAccess::HostOnly, sizeof(int), sizeof(int));
+        MemoryRegion* r2 = instance->reserve(user_context, request);
         halide_abort_if_false(user_context, r2 != nullptr);
         halide_abort_if_false(user_context, block_allocator.allocated_block_memory == config.minimum_block_size);
-        halide_abort_if_false(user_context, region_allocator.allocated_region_memory == (2 * sizeof(int)));
+        halide_abort_if_false(user_context, region_allocator.allocated_region_memory == (2 * request.size));
 
         instance->reclaim(user_context, r1);
-        halide_abort_if_false(user_context, region_allocator.allocated_region_memory == (1 * sizeof(int)));
+        halide_abort_if_false(user_context, region_allocator.allocated_region_memory == (1 * request.size));
 
         instance->destroy(user_context);
         halide_abort_if_false(user_context, block_allocator.allocated_block_memory == 0);
@@ -84,13 +91,20 @@ int main(int argc, char **argv) {
         BlockAllocator::MemoryAllocators allocators = { &system_allocator, &block_allocator, &region_allocator };
         BlockAllocator* instance = BlockAllocator::create(user_context, config, allocators);
 
+        MemoryRequest request = {0};
+        request.size = sizeof(int);
+        request.alignment = sizeof(int);
+        request.properties.visibility = MemoryVisibility::UnknownVisibility;
+        request.properties.caching = MemoryCaching::UnknownCaching;
+        request.properties.mutability = MemoryMutability::UnknownMutability;
+
         static size_t test_allocations = 1000;
         BlockStorage<MemoryRegion*> regions(user_context, test_allocations, &system_allocator);
         for(size_t n = 0; n < test_allocations; ++n) {
             size_t count = n % 32;
             count = count > 1 ? count : 1;
-            size_t size = count * sizeof(int); 
-            MemoryRegion* region = instance->reserve(user_context, MemoryBusAccess::HostOnly, size, sizeof(int));
+            request.size = count * sizeof(int); 
+            MemoryRegion* region = instance->reserve(user_context, request);
             regions.append(user_context, region);            
         }
 

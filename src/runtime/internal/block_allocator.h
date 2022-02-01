@@ -53,12 +53,13 @@ public:
     static void destroy(void* user_context, BlockAllocator* block_allocator);
 
     // Public interface methods
-    MemoryRegion* reserve(void *user_context, MemoryBusAccess access, size_t size, size_t alignment);
+    MemoryRegion* reserve(void *user_context, const MemoryRequest& request);
     void reclaim(void *user_context, MemoryRegion* region);
     bool collect(void* user_context); //< returns true if any blocks were removed
     void destroy(void *user_context);    
 
     // Access methods 
+    const MemoryAllocators& current_allocators() const;
     const Config& current_config() const;
     const Config& default_config() const;
     size_t block_count() const;
@@ -73,7 +74,7 @@ private:
     void initialize(void* user_context, const Config& config, const MemoryAllocators& allocators);
 
     // Reserves a region of memory using the given allocator for the given block resource, returns nullptr on failure
-    MemoryRegion* reserve_memory_region(void* user_context, RegionAllocator* allocator, size_t size, size_t alignment);
+    MemoryRegion* reserve_memory_region(void* user_context, RegionAllocator* allocator, const MemoryRequest& request);
 
     // Creates a new region allocator for the given block resource
     RegionAllocator* create_region_allocator(void* user_context, BlockResource* block);
@@ -82,13 +83,13 @@ private:
     void destroy_region_allocator(void* user_context, RegionAllocator* region_allocator);
 
     // Reserves a block of memory for the requested size and returns the corresponding block entry, or nullptr on failure
-    BlockEntry* reserve_block_entry(void* user_context, MemoryBusAccess access, size_t size);
+    BlockEntry* reserve_block_entry(void* user_context, const MemoryProperties& properties, size_t size, bool dedicated);
 
     // Locates the "best-fit" block entry for the requested size, or nullptr if none was found
-    BlockEntry* find_block_entry(void* user_context, MemoryBusAccess access, size_t size);
+    BlockEntry* find_block_entry(void* user_context, const MemoryProperties& properties, size_t size, bool dedicated);
 
     // Creates a new block entry and int the list
-    BlockEntry* create_block_entry(void* user_context, MemoryBusAccess access, size_t size);
+    BlockEntry* create_block_entry(void* user_context, const MemoryProperties& properties, size_t size, bool dedicated);
 
     // Destroys the block entry and removes it from the list
     void destroy_block_entry(void* user_context, BlockEntry* block_entry);
@@ -101,6 +102,9 @@ private:
 
     // Returns a constrained size for the requested size based on config parameters
     size_t constrain_requested_size(size_t size) const;
+
+    // Returns true if the given block is compatible with the given properties
+    bool is_compatible_block(const BlockResource* block, const MemoryProperties& properties) const;
 
 private:
 
@@ -139,12 +143,12 @@ void BlockAllocator::initialize(void* user_context, const Config& cfg, const Mem
     block_list.initialize(user_context, BlockResourceList::default_capacity, allocators.system);
 }
 
-MemoryRegion* BlockAllocator::reserve(void *user_context, MemoryBusAccess access, size_t size, size_t alignment) {
+MemoryRegion* BlockAllocator::reserve(void *user_context, const MemoryRequest& request) {
 
-    BlockEntry* block_entry = reserve_block_entry(user_context, access, size);
+    BlockEntry* block_entry = reserve_block_entry(user_context, request.properties, request.size, request.dedicated);
     if(block_entry == nullptr) {
         debug(user_context) << "BlockAllocator: Failed to allocate new empty block of requested size (" 
-                            << (int32_t)(size) << " bytes)!\n";
+                            << (int32_t)(request.size) << " bytes)!\n";
         return nullptr; 
     }
 
@@ -152,15 +156,15 @@ MemoryRegion* BlockAllocator::reserve(void *user_context, MemoryBusAccess access
     halide_abort_if_false(user_context, block != nullptr);
     halide_abort_if_false(user_context, block->allocator != nullptr);
 
-    MemoryRegion* result = reserve_memory_region(user_context, block->allocator, size, alignment);
+    MemoryRegion* result = reserve_memory_region(user_context, block->allocator, request);
     if(result == nullptr) {
         
-        size_t actual_size = constrain_requested_size(size);
+        size_t actual_size = constrain_requested_size(request.size);
         debug(user_context) << "BlockAllocator: No free blocks found! Allocating new empty block of size (" 
                             << (int32_t)(actual_size) << " bytes)!\n";
 
         // Unable to reserve region in an existing block ... create a new block and try again.
-        block_entry = create_block_entry(user_context, access, actual_size);
+        block_entry = create_block_entry(user_context, request.properties, actual_size, request.dedicated);
         if(block_entry == nullptr) {
             debug(user_context) << "BlockAllocator: Out of memory! Failed to allocate empty block of size (" 
                                 << (int32_t)(actual_size) << " bytes)!\n";
@@ -172,7 +176,7 @@ MemoryRegion* BlockAllocator::reserve(void *user_context, MemoryBusAccess access
             block->allocator = create_region_allocator(user_context, block);
         }
 
-        result = reserve_memory_region(user_context, block->allocator, size, alignment);
+        result = reserve_memory_region(user_context, block->allocator, request);
     }
     return result;
 }
@@ -214,32 +218,42 @@ void BlockAllocator::destroy(void *user_context) {
     }    
 }
 
-MemoryRegion* BlockAllocator::reserve_memory_region(void* user_context, RegionAllocator* allocator, size_t size, size_t alignment) {
-    MemoryRegion* result = allocator->reserve(user_context, size, alignment);
+MemoryRegion* BlockAllocator::reserve_memory_region(void* user_context, RegionAllocator* allocator, const MemoryRequest& request) {
+    MemoryRegion* result = allocator->reserve(user_context, request);
     if(result == nullptr) {
         debug(user_context) << "BlockAllocator: Failed to allocate region of size (" 
-                            << (int32_t)(size) << " bytes)!\n";
+                            << (int32_t)(request.size) << " bytes)!\n";
 
         // allocator has enough free space, but not enough contiguous space
         // -- collect and try to reallocate
         if(allocator->collect(user_context)) {
-            result = allocator->reserve(user_context, size, alignment);
+            result = allocator->reserve(user_context, request);
         }
     }
     return result;
 }
 
 BlockAllocator::BlockEntry* 
-BlockAllocator::find_block_entry(void* user_context, MemoryBusAccess access, size_t size) {
+BlockAllocator::find_block_entry(void* user_context, const MemoryProperties& properties, size_t size, bool dedicated) {
     BlockEntry* block_entry = block_list.front();
     while(block_entry != nullptr) {
         
         const BlockResource* block = &(block_entry->value);
-        if(block->access != access) {
+        if(!is_compatible_block(block, properties)) {
             continue;
         }
 
-        size_t available = (block->size - block->reserved);
+        // skip blocks that can't be dedicated to a single allocation
+        if(dedicated && (block->reserved > 0)) {
+            continue;
+        }
+
+        // skip dedicated blocks that are already allocated
+        if(block->memory.dedicated && (block->reserved > 0)) {
+            continue;
+        }
+
+        size_t available = (block->memory.size - block->reserved);
         if(available >= size) {
             break;
         }
@@ -250,14 +264,14 @@ BlockAllocator::find_block_entry(void* user_context, MemoryBusAccess access, siz
 }
 
 BlockAllocator::BlockEntry* 
-BlockAllocator::reserve_block_entry(void *user_context, MemoryBusAccess access, size_t size) {
-    BlockEntry* block_entry = find_block_entry(user_context, access, size);
+BlockAllocator::reserve_block_entry(void *user_context, const MemoryProperties& properties, size_t size, bool dedicated) {
+    BlockEntry* block_entry = find_block_entry(user_context, properties, size, dedicated);
     if(block_entry == nullptr) {
         size_t actual_size = constrain_requested_size(size);
         debug(user_context) << "BlockAllocator: No free blocks found! Allocating new empty block of size (" 
                             << (int32_t)(actual_size) << " bytes)!\n";
 
-        block_entry = create_block_entry(user_context, access, actual_size);
+        block_entry = create_block_entry(user_context, properties, actual_size, dedicated);
     }
 
     if(block_entry) {
@@ -285,7 +299,7 @@ void BlockAllocator::destroy_region_allocator(void* user_context, RegionAllocato
 }
 
 BlockAllocator::BlockEntry* 
-BlockAllocator::create_block_entry(void* user_context, MemoryBusAccess access, size_t size) {
+BlockAllocator::create_block_entry(void* user_context, const MemoryProperties& properties, size_t size, bool dedicated) {
     
     if(config.maximum_block_count && (block_count() >= config.maximum_block_count)) {
         error(user_context) << "BlockAllocator: No free blocks found! Maximum block count reached (" 
@@ -296,10 +310,11 @@ BlockAllocator::create_block_entry(void* user_context, MemoryBusAccess access, s
     BlockEntry* block_entry = block_list.append(user_context);
     BlockResource* block = &(block_entry->value);
     memset(block, 0, sizeof(BlockResource));
-    block->size = size;
+    block->memory.size = size;
+    block->memory.properties = properties;
+    block->memory.dedicated = dedicated;
     block->reserved = 0;
     block->allocator = nullptr;
-    block->access = access;
     alloc_memory_block(user_context, block);
     return block_entry;
 }
@@ -326,7 +341,7 @@ void BlockAllocator::free_memory_block(void* user_context, BlockResource* block)
     MemoryBlock* memory_block = reinterpret_cast<MemoryBlock*>(block);
     allocators.block->deallocate(user_context, memory_block);
     block->reserved = 0;
-    block->size = 0;
+    block->memory.size = 0;
 }
 
 size_t BlockAllocator::constrain_requested_size(size_t size) const {
@@ -340,6 +355,34 @@ size_t BlockAllocator::constrain_requested_size(size_t size) const {
                         config.maximum_block_size : actual_size);
     }
     return actual_size;
+}
+
+bool BlockAllocator::is_compatible_block(
+    const BlockResource* block, const MemoryProperties& properties) const {
+    
+    if(properties.caching != MemoryCaching::UnknownCaching) {
+        if(properties.caching != block->memory.properties.caching) {
+            return false;
+        }
+    }
+
+    if(properties.visibility != MemoryVisibility::UnknownVisibility) {
+        if(properties.visibility != block->memory.properties.visibility) {
+            return false;
+        }
+    }
+
+    if(properties.mutability != MemoryMutability::UnknownMutability) {
+        if(properties.mutability != block->memory.properties.mutability) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+const BlockAllocator::MemoryAllocators& BlockAllocator::current_allocators() const {
+    return allocators;
 }
 
 const BlockAllocator::Config& BlockAllocator::current_config() const {

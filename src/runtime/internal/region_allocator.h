@@ -47,7 +47,7 @@ public:
     static RegionAllocator* find_allocator(void* user_context, MemoryRegion* memory_region);
 
     // Public interface methods
-    MemoryRegion* reserve(void *user_context, size_t size, size_t alignment);
+    MemoryRegion* reserve(void *user_context, const MemoryRequest& request);
     void reclaim(void *user_context, MemoryRegion* memory_region);
     bool collect(void* user_context); //< returns true if any blocks were removed
     void destroy(void *user_context);
@@ -63,7 +63,7 @@ private:
     void initialize(void* user_context, BlockResource* block, const MemoryAllocators& ma);
 
     // Search through allocated block regions (Best-Fit)    
-    BlockRegion* find_block_region(void* user_context, size_t size, size_t alignment);
+    BlockRegion* find_block_region(void* user_context, const MemoryRequest& request);
 
     // Returns true if neighbouring block regions to the given region can be coalesced into one
     bool can_coalesce(BlockRegion* region);
@@ -78,7 +78,7 @@ private:
     BlockRegion* split_block_region(void* user_context, BlockRegion* region, size_t size, size_t alignment);
 
     // Creates a new block region and adds it to the region list 
-    BlockRegion* create_block_region(void* user_context, size_t offset, size_t size);
+    BlockRegion* create_block_region(void* user_context, const MemoryProperties& properties, size_t offset, size_t size, bool dedicated);
 
     // Creates a new block region and adds it to the region list 
     void destroy_block_region(void* user_context, BlockRegion* region);
@@ -88,6 +88,9 @@ private:
 
     // Invokes the deallocation callback to free memory for the block region
     void free_block_region(void* user_context, BlockRegion* region);
+
+    // Returns true if the given block region is compatible with the given properties
+    bool is_compatible_block_region(const BlockRegion* region, const MemoryProperties& properties) const;
 
 private:
 
@@ -124,34 +127,38 @@ void RegionAllocator::initialize(void* user_context, BlockResource* mb, const Me
     allocators = ma;
     arena = BlockRegionArena::create(user_context, { BlockRegionArena::default_capacity, 0 }, allocators.system);
     halide_abort_if_false(user_context, arena != nullptr);
-
     block->allocator = this;
-    block->regions = create_block_region(user_context, 0, block->size);
+    block->regions = create_block_region(
+        user_context, 
+        block->memory.properties, 
+        0, block->memory.size, 
+        block->memory.dedicated
+    );
 }
 
-MemoryRegion* RegionAllocator::reserve(void *user_context, size_t size, size_t alignment) {
-    halide_abort_if_false(user_context, size > 0);
-    size_t remaining = block->size - block->reserved;
-    if(remaining < size) { 
+MemoryRegion* RegionAllocator::reserve(void *user_context, const MemoryRequest& request) {
+    halide_abort_if_false(user_context, request.size > 0);
+    size_t remaining = block->memory.size - block->reserved;
+    if(remaining < request.size) { 
         debug(user_context) << "RegionAllocator: Unable to reserve more memory from block " 
-                            << "-- requested size (" << (int32_t)(size) << " bytes) "
+                            << "-- requested size (" << (int32_t)(request.size) << " bytes) "
                             << "greater than available (" << (int32_t)(remaining) << " bytes)!\n";    
         return nullptr; 
     }
 
-    BlockRegion* block_region = find_block_region(user_context, size, alignment);
+    BlockRegion* block_region = find_block_region(user_context, request);
     if(block_region == nullptr) {
         debug(user_context) << "RegionAllocator: Failed to locate region for requested size (" 
-                            << (int32_t)(size) << " bytes)!\n";
+                            << (int32_t)(request.size) << " bytes)!\n";
 
         return nullptr; 
     }
     
-    if(can_split(block_region, size)) {
-        debug(user_context) << "RegionAllocator: Splitting region of size ( " << (int32_t)(block_region->size) << ") "
-                            << "to accomodate requested size (" << (int32_t)(size) << " bytes)!\n";
+    if(can_split(block_region, request.size)) {
+        debug(user_context) << "RegionAllocator: Splitting region of size ( " << (int32_t)(block_region->memory.size) << ") "
+                            << "to accomodate requested size (" << (int32_t)(request.size) << " bytes)!\n";
 
-        split_block_region(user_context, block_region, size, alignment);
+        split_block_region(user_context, block_region, request.size, request.alignment);
     }
 
     alloc_block_region(user_context, block_region);    
@@ -175,7 +182,7 @@ RegionAllocator* RegionAllocator::find_allocator(void* user_context, MemoryRegio
     return block_region->block_ptr->allocator;
 }
 
-BlockRegion* RegionAllocator::find_block_region(void* user_context, size_t size, size_t alignment) {
+BlockRegion* RegionAllocator::find_block_region(void* user_context, const MemoryRequest& request) {
     BlockRegion* result = nullptr;
     for(BlockRegion* block_region = block->regions; block_region != nullptr; block_region = block_region->next_ptr) {
 
@@ -183,16 +190,25 @@ BlockRegion* RegionAllocator::find_block_region(void* user_context, size_t size,
             continue;
         }
 
-        if(size > block_region->size) {
+        // skip incompatible block regions for this request
+        if(!is_compatible_block_region(block_region, request.properties)) {
             continue;
         }
 
-        size_t actual_size = aligned_size(block_region->offset, size, alignment);
-        if(actual_size > block_region->size) {
+        // is the requested size larger than the current region?
+        if(request.size > block_region->memory.size) {
             continue;
         }
 
-        if((actual_size + block->reserved) < block->size) {
+        size_t actual_size = aligned_size(block_region->memory.offset, request.size, request.alignment);
+
+        // is the adjusted size larger than the current region?
+        if(actual_size > block_region->memory.size) {
+            continue;
+        }
+
+        // will the adjusted size fit within the remaining unallocated space?
+        if((actual_size + block->reserved) < block->memory.size) {
             result = block_region; // best-fit!
             break;
         }
@@ -217,14 +233,14 @@ BlockRegion* RegionAllocator::coalesce_block_regions(void* user_context, BlockRe
         BlockRegion* prev_region = block_region->prev_ptr;
 
         debug(user_context) << "RegionAllocator: Coalescing "
-                            << "previous region (offset=" << prev_region->offset << " size=" << (int32_t)(prev_region->size) << " bytes) " 
-                            << "into current region (offset=" << block_region->offset << " size=" << (int32_t)(block_region->size) << " bytes)\n!";
+                            << "previous region (offset=" << prev_region->memory.offset << " size=" << (int32_t)(prev_region->memory.size) << " bytes) " 
+                            << "into current region (offset=" << block_region->memory.offset << " size=" << (int32_t)(block_region->memory.size) << " bytes)\n!";
 
         prev_region->next_ptr = block_region->next_ptr;
         if(block_region->next_ptr) {
             block_region->next_ptr->prev_ptr = prev_region;
         }
-        prev_region->size += block_region->size;
+        prev_region->memory.size += block_region->memory.size;
         destroy_block_region(user_context, block_region);
         block_region = prev_region;
     }
@@ -233,14 +249,14 @@ BlockRegion* RegionAllocator::coalesce_block_regions(void* user_context, BlockRe
         BlockRegion* next_region = block_region->next_ptr;
 
         debug(user_context) << "RegionAllocator: Coalescing "
-                            << "next region (offset=" << next_region->offset << " size=" << (int32_t)(next_region->size) << " bytes) " 
-                            << "into current region (offset=" << block_region->offset << " size=" << (int32_t)(block_region->size) << " bytes)!\n";
+                            << "next region (offset=" << next_region->memory.offset << " size=" << (int32_t)(next_region->memory.size) << " bytes) " 
+                            << "into current region (offset=" << block_region->memory.offset << " size=" << (int32_t)(block_region->memory.size) << " bytes)!\n";
 
         if(next_region->next_ptr) {
             next_region->next_ptr->prev_ptr = block_region;
         }
         block_region->next_ptr = next_region->next_ptr;
-        block_region->size += next_region->size;
+        block_region->memory.size += next_region->memory.size;
         destroy_block_region(user_context, next_region);
     }
 
@@ -248,38 +264,45 @@ BlockRegion* RegionAllocator::coalesce_block_regions(void* user_context, BlockRe
 }
 
 bool RegionAllocator::can_split(BlockRegion* block_region, size_t size) {
-    return (block_region && (block_region->size > size));
+    return (block_region && (block_region->memory.size > size));
 }
 
 BlockRegion* RegionAllocator::split_block_region(void* user_context, BlockRegion* block_region, size_t size, size_t alignment){
 
-    size_t adjusted_size = aligned_size(block_region->offset, size, alignment);
-    size_t adjusted_offset = aligned_offset(block_region->offset, alignment);
+    size_t adjusted_size = aligned_size(block_region->memory.offset, size, alignment);
+    size_t adjusted_offset = aligned_offset(block_region->memory.offset, alignment);
 
     size_t empty_offset = adjusted_offset + size;
-    size_t empty_size = block_region->size - adjusted_size;
+    size_t empty_size = block_region->memory.size - adjusted_size;
 
     debug(user_context) << "RegionAllocator: Splitting "
-                        << "current region (offset=" << block_region->offset << " size=" << (int32_t)(block_region->size) << " bytes) " 
+                        << "current region (offset=" << block_region->memory.offset << " size=" << (int32_t)(block_region->memory.size) << " bytes) " 
                         << "to create empty region (offset=" << empty_offset << " size=" << (int32_t)(empty_size) << " bytes)!\n";
 
-
     BlockRegion* next_region = block_region->next_ptr;
-    BlockRegion* empty_region = create_block_region(user_context, empty_offset, empty_size);
+    BlockRegion* empty_region = create_block_region(user_context, 
+        block_region->memory.properties, 
+        empty_offset, empty_size, 
+        block_region->memory.dedicated
+    );
+    halide_abort_if_false(user_context, empty_region != nullptr);
+
     empty_region->next_ptr = next_region;
     if(next_region) { 
         next_region->prev_ptr = empty_region;
     }
     block_region->next_ptr = empty_region;
-    block_region->size = size;
+    block_region->memory.size = size;
     return empty_region;
 }
 
-BlockRegion* RegionAllocator::create_block_region(void* user_context, size_t offset, size_t size) {
+BlockRegion* RegionAllocator::create_block_region(void* user_context, const MemoryProperties& properties, size_t offset, size_t size, bool dedicated) {
     BlockRegion* block_region = arena->reserve(user_context);
     memset(block_region, 0, sizeof(BlockRegion));
-    block_region->offset = offset;
-    block_region->size = size;
+    block_region->memory.offset = offset;
+    block_region->memory.size = size;
+    block_region->memory.properties = properties;
+    block_region->memory.dedicated = dedicated;
     block_region->status = AllocationStatus::Available;
     block_region->block_ptr = block;
     return block_region;
@@ -291,22 +314,23 @@ void RegionAllocator::destroy_block_region(void* user_context, BlockRegion* bloc
 }
 
 void RegionAllocator::alloc_block_region(void* user_context, BlockRegion* block_region) {
-    debug(user_context) << "RegionAllocator: Allocating region of size ( " << (int32_t)(block_region->size) << ") bytes)!\n";
+    debug(user_context) << "RegionAllocator: Allocating region of size ( " << (int32_t)(block_region->memory.size) << ") bytes)!\n";
     halide_abort_if_false(user_context, allocators.region != nullptr);
     halide_abort_if_false(user_context, block_region->status == AllocationStatus::Available);
     MemoryRegion* memory_region = reinterpret_cast<MemoryRegion*>(block_region);
     allocators.region->allocate(user_context, memory_region);
-    block_region->status = AllocationStatus::InUse;
-    block->reserved += block_region->size;
+    block_region->status = block_region->memory.dedicated ? AllocationStatus::Dedicated : AllocationStatus::InUse;
+    block->reserved += block_region->memory.size;
 }
 
 void RegionAllocator::free_block_region(void* user_context, BlockRegion* block_region) {
-    if(block_region->status == AllocationStatus::InUse) {
-        debug(user_context) << "RegionAllocator: Freeing region of size ( " << (int32_t)(block_region->size) << ") bytes)!\n";
+    if((block_region->status == AllocationStatus::InUse) ||
+       (block_region->status == AllocationStatus::Dedicated)) {
+        debug(user_context) << "RegionAllocator: Freeing region of size ( " << (int32_t)(block_region->memory.size) << ") bytes)!\n";
         halide_abort_if_false(user_context, allocators.region != nullptr);
         MemoryRegion* memory_region = reinterpret_cast<MemoryRegion*>(block_region);
         allocators.region->deallocate(user_context, memory_region);
-        block->reserved -= block_region->size;
+        block->reserved -= block_region->memory.size;
     }
     block_region->status = AllocationStatus::Available;
 }
@@ -339,6 +363,30 @@ void RegionAllocator::destroy(void* user_context) {
     block->regions = nullptr;
     block->reserved = 0;
     arena->destroy(user_context);
+}
+
+bool RegionAllocator::is_compatible_block_region(
+    const BlockRegion* block_region, const MemoryProperties& properties) const {
+        
+    if(properties.caching != MemoryCaching::UnknownCaching) {
+        if(properties.caching != block_region->memory.properties.caching) {
+            return false;
+        }
+    }
+
+    if(properties.visibility != MemoryVisibility::UnknownVisibility) {
+        if(properties.visibility != block_region->memory.properties.visibility) {
+            return false;
+        }
+    }
+
+    if(properties.mutability != MemoryMutability::UnknownMutability) {
+        if(properties.mutability != block_region->memory.properties.mutability) {
+            return false;
+        }
+    }
+
+    return true;
 }
 
 BlockResource* RegionAllocator::block_resource() const {

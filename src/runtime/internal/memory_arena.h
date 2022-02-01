@@ -56,7 +56,7 @@ public:
     static SystemMemoryAllocator* default_allocator();
 
 private:
-    static const uint32_t InvalidEntry = uint32_t(-1);
+    static const uint32_t invalid_entry = uint32_t(-1);
 
     // Entry is stored as a union (without padding) ...
     // - stores contents of value (when in use)
@@ -67,7 +67,7 @@ private:
     };
 
     // Each block contains an array of entries with usage info
-    // - free index points to next available entry (or InvalidEntry if block is full)
+    // - free index points to next available entry (or invalid_entry if block is full)
     struct Block {
         Entry* entries;
         AllocationStatus* status;
@@ -166,7 +166,7 @@ T* MemoryArena<T>::reserve(void *user_context) {
     // Scan blocks for a free entry
     for (size_t i = blocks.size(); i--;) {
         Block &block = blocks[i];
-        if (block.free_index != InvalidEntry) {
+        if (block.free_index != invalid_entry) {
             Entry* entry_ptr = create_entry(user_context, block, block.free_index);
             return construct_value(user_context, entry_ptr);
         }
@@ -223,7 +223,7 @@ typename MemoryArena<T>::Block &MemoryArena<T>::create_block(void *user_context)
         blocks.back().status[i] = AllocationStatus::Available; // usage status
     }
 
-    blocks.back().entries[new_capacity - 1].free_index = InvalidEntry;
+    blocks.back().entries[new_capacity - 1].free_index = invalid_entry;
     blocks.back().status[new_capacity - 1] = AllocationStatus::InvalidStatus;
     return blocks.back();
 }
