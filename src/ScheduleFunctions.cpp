@@ -2078,10 +2078,10 @@ bool validate_schedule(Function f, const Stmt &s, const Target &target, bool is_
             const Definition &r = f.update((int)i);
             if (!r.schedule().touched()) {
                 user_warning
-                    << "Warning: Update step " << i
+                    << "Update definition " << i
                     << " of function " << f.name()
                     << " has not been scheduled, even though some other"
-                    << " steps have been. You may have forgotten to"
+                    << " definitions have been. You may have forgotten to"
                     << " schedule it. If this was intentional, call "
                     << f.name() << ".update(" << i << ") to suppress"
                     << " this warning.\n";

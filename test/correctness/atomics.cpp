@@ -325,14 +325,15 @@ void test_predicated_hist(const Backend &backend) {
     hist(im(r2)) = min(hist(im(r2)) + cast<T>(1), cast<T>(100));  // cas loop
 
     hist.compute_root();
-    for (int update_id = 0; update_id < 3; update_id++) {
+    for (int update_id = 0; update_id < hist.num_update_definitions(); update_id++) {
+        RVar rv = update_id < 3 ? r : r2;
         switch (backend) {
         case Backend::CPU: {
             // Can't prove associativity.
             // Set override_associativity_test to true to remove the check.
             hist.update(update_id)
                 .atomic(true /*override_associativity_test*/)
-                .parallel(r);
+                .parallel(rv);
         } break;
         case Backend::CPUVectorize: {
             // Doesn't support predicated store yet.
@@ -344,7 +345,7 @@ void test_predicated_hist(const Backend &backend) {
             RVar ro, ri;
             hist.update(update_id)
                 .atomic(true /*override_associativity_test*/)
-                .split(r, ro, ri, 32)
+                .split(rv, ro, ri, 32)
                 .gpu_blocks(ro, DeviceAPI::OpenCL)
                 .gpu_threads(ri, DeviceAPI::OpenCL);
         } break;
@@ -354,7 +355,7 @@ void test_predicated_hist(const Backend &backend) {
             RVar ro, ri;
             hist.update(update_id)
                 .atomic(true /*override_associativity_test*/)
-                .split(r, ro, ri, 32)
+                .split(rv, ro, ri, 32)
                 .gpu_blocks(ro, DeviceAPI::CUDA)
                 .gpu_threads(ri, DeviceAPI::CUDA);
         } break;
@@ -363,7 +364,7 @@ void test_predicated_hist(const Backend &backend) {
             RVar rio, rii;
             hist.update(update_id)
                 .atomic(true /*override_assciativity_test*/)
-                .split(r, ro, ri, 32)
+                .split(rv, ro, ri, 32)
                 .split(ri, rio, rii, 4)
                 .gpu_blocks(ro, DeviceAPI::CUDA)
                 .gpu_threads(rio, DeviceAPI::CUDA)
@@ -531,7 +532,7 @@ void test_nested_atomics(const Backend &backend) {
     Expr new_max = max(im(r), old_max);
     arg_max() = {new_index, new_max};
 
-    im.compute_inline().atomic();
+    im.compute_inline().atomic().update().atomic();
     arg_max.compute_root();
     switch (backend) {
     case Backend::CPU: {
