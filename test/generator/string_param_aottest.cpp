@@ -4,7 +4,7 @@
 #include <iostream>
 
 int main(int argc, char **argv) {
-    Halide::Runtime::Buffer<int> output(3, 3);
+    Halide::Runtime::Buffer<int, 2> output(3, 3);
     string_param(output);
 
     for (int x = 0; x < 3; ++x) {

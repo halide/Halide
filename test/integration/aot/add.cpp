@@ -2,7 +2,7 @@
 using namespace Halide;
 
 struct Add : Generator<Add> {
-    Output<Buffer<int32_t>> output{"output", 2};
+    Output<Buffer<int32_t, 2>> output{"output"};
 
     void generate() {
         Var x, y;

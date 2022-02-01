@@ -49,10 +49,10 @@ void parse_commandline(int argc, char **argv) {
 int main(int argc, char **argv) {
     parse_commandline(argc, argv);
 
-    Halide::Runtime::Buffer<float> in = Halide::Tools::load_and_convert_image(infile);
+    Halide::Runtime::Buffer<float, 3> in = Halide::Tools::load_and_convert_image(infile);
     int out_width = in.width() * scale_factor;
     int out_height = in.height() * scale_factor;
-    Halide::Runtime::Buffer<float> out(out_width, out_height, 3);
+    Halide::Runtime::Buffer<float, 3> out(out_width, out_height, 3);
 
     decltype(&auto_viz_demo_naive_up) variants[2][3] =
         {
