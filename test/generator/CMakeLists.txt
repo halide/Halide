@@ -1,70 +1,4 @@
 ##
-# Convenience method for defining test cases in this directory.
-##
-
-function(halide_define_aot_test NAME)
-    set(options OMIT_DEFAULT_GENERATOR)
-    set(oneValueArgs FUNCTION_NAME)
-    set(multiValueArgs GEN_DEPS EXTRA_LIBS ENABLE_IF FEATURES PARAMS GEN_TARGET)
-    cmake_parse_arguments(args "${options}" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
-
-    if (args_ENABLE_IF AND NOT (${args_ENABLE_IF}))
-        return()
-    endif ()
-
-    add_executable("${NAME}.generator" "${NAME}_generator.cpp")
-    target_link_libraries("${NAME}.generator" PRIVATE Halide::Generator ${args_GEN_DEPS})
-
-    set(TARGET "generator_aot_${NAME}")
-    set(DEPS ${args_EXTRA_LIBS})
-    if (NOT args_OMIT_DEFAULT_GENERATOR)
-        add_halide_library(${NAME}
-                           FROM "${NAME}.generator"
-                           PARAMS "${args_PARAMS}"
-                           TARGETS "${args_GEN_TARGET}"
-                           FUNCTION_NAME "${args_FUNCTION_NAME}"
-                           FEATURES "${args_FEATURES}")
-        list(APPEND DEPS ${NAME} ${NAME}.runtime)
-    endif ()
-
-    if (TARGET_WEBASSEMBLY AND Halide_TARGET MATCHES "wasm")
-        add_wasm_executable("${TARGET}"
-                            SRCS "${NAME}_aottest.cpp"
-                            DEPS "${DEPS}"
-                            INCLUDES
-                            "${Halide_BINARY_DIR}/include"
-                            "${Halide_SOURCE_DIR}/test/common"
-                            "${Halide_SOURCE_DIR}/tools"
-                            "${CMAKE_CURRENT_BINARY_DIR}")
-
-        add_wasm_halide_test("${TARGET}" GROUPS generator)
-    else ()
-        add_executable("${TARGET}" "${NAME}_aottest.cpp")
-        target_include_directories("${TARGET}" PRIVATE
-            "${Halide_SOURCE_DIR}/test/common"
-            "${Halide_SOURCE_DIR}/tools")
-        if (NOT args_OMIT_DEFAULT_GENERATOR)
-            target_link_libraries(${TARGET} PRIVATE ${NAME})
-        endif ()
-        if (args_EXTRA_LIBS)
-            target_link_libraries(${TARGET} PRIVATE ${args_EXTRA_LIBS})
-        endif ()
-
-        # TODO(#4938): remove need for these definitions
-        if ("${Halide_TARGET}" MATCHES "opencl")
-            target_compile_definitions("${TARGET}" PRIVATE TEST_OPENCL)
-        endif ()
-        if ("${Halide_TARGET}" MATCHES "metal")
-            target_compile_definitions("${TARGET}" PRIVATE TEST_METAL)
-        endif ()
-        if ("${Halide_TARGET}" MATCHES "cuda")
-            target_compile_definitions("${TARGET}" PRIVATE TEST_CUDA)
-        endif ()
-        add_halide_test("${TARGET}" GROUPS generator)
-    endif ()
-endfunction()
-
-##
 # Define a nontrivial dependency for external_code.generator
 ##
 
@@ -128,7 +62,7 @@ endif ()
 # acquire_release_aottest.cpp
 # acquire_release_generator.cpp
 # acquire_release_generator.cpp
-halide_define_aot_test(acquire_release)
+halide_define_aot_test(acquire_release GROUP generator)
 if (TARGET_NVPTX AND Halide_TARGET MATCHES "cuda")
     add_cuda_to_target(generator_aot_acquire_release PRIVATE)
 endif ()
@@ -144,24 +78,27 @@ endif ()
 
 # alias_aottest.cpp
 # alias_generator.cpp
-halide_define_aot_test(alias EXTRA_LIBS alias_with_offset_42)
+halide_define_aot_test(alias EXTRA_LIBS alias_with_offset_42 GROUP generator)
 add_halide_library(alias_with_offset_42
                    FROM alias.generator
                    GENERATOR alias_with_offset_42)
 
 # argvcall_aottest.cpp
 # argvcall_generator.cpp
-halide_define_aot_test(argvcall)
+halide_define_aot_test(argvcall GROUP generator)
 
 # async_parallel_aottest.cpp
 # async_parallel_generator.cpp
 halide_define_aot_test(async_parallel
                        # Requires threading support, not yet available for wasm tests
-                       ENABLE_IF NOT ${USING_WASM})
+                       ENABLE_IF NOT ${USING_WASM}
+                       GROUP generator)
 
 # autograd_aottest.cpp
 # autograd_generator.cpp
-halide_define_aot_test(autograd ENABLE_IF TARGET Halide::Mullapudi2016 AND NOT ${USING_WASM})
+halide_define_aot_test(autograd
+                       ENABLE_IF TARGET Halide::Mullapudi2016 AND NOT ${USING_WASM}
+                       GROUP generator)
 if (TARGET generator_aot_autograd)
     add_halide_library(autograd_grad
                        GRADIENT_DESCENT
@@ -173,32 +110,32 @@ endif ()
 
 # bit_operations_aottest.cpp
 # bit_operations_generator.cpp
-halide_define_aot_test(bit_operations)
+halide_define_aot_test(bit_operations GROUP generator)
 
 # blur2x2_aottest.cpp
 # blur2x2_generator.cpp
-halide_define_aot_test(blur2x2)
+halide_define_aot_test(blur2x2 GROUP generator)
 
 # buffer_copy_aottest.cpp
 # buffer_copy_generator.cpp
-halide_define_aot_test(buffer_copy)
+halide_define_aot_test(buffer_copy GROUP generator)
 
 # buildmethod_aottest.cpp
 # buildmethod_generator.cpp
-halide_define_aot_test(buildmethod)
+halide_define_aot_test(buildmethod GROUP generator)
 
 # can_use_target_aottest.cpp
 # can_use_target_generator.cpp
-halide_define_aot_test(can_use_target)
+halide_define_aot_test(can_use_target GROUP generator)
 
 # cleanup_on_error_aottest.cpp
 # cleanup_on_error_generator.cpp
 # TODO: requires access to internal header runtime/device_interface.h
-# halide_define_aot_test(cleanup_on_error)
+# halide_define_aot_test(cleanup_on_error GROUP generator)
 
 # configure_aottest.cpp
 # configure_generator.cpp
-halide_define_aot_test(configure)
+halide_define_aot_test(configure GROUP generator)
 
 # cxx_mangling_define_extern_aottest.cpp
 # cxx_mangling_define_extern_generator.cpp
@@ -206,7 +143,8 @@ halide_define_aot_test(cxx_mangling_define_extern
                        # Needs extra deps / build rules
                        ENABLE_IF NOT ${USING_WASM}
                        FUNCTION_NAME "HalideTest::cxx_mangling_define_extern"
-                       FEATURES c_plus_plus_name_mangling user_context)
+                       FEATURES c_plus_plus_name_mangling user_context
+                       GROUP generator)
 if (TARGET cxx_mangling_define_extern)
     target_link_libraries(cxx_mangling_define_extern INTERFACE cxx_mangling_externs cxx_mangling_define_extern_externs)
     target_link_libraries(cxx_mangling_define_extern_externs PRIVATE cxx_mangling_externs cxx_mangling)
@@ -218,7 +156,8 @@ halide_define_aot_test(cxx_mangling
                        # Needs extra deps / build rules
                        ENABLE_IF NOT ${USING_WASM}
                        FUNCTION_NAME HalideTest::AnotherNamespace::cxx_mangling
-                       FEATURES c_plus_plus_name_mangling)
+                       FEATURES c_plus_plus_name_mangling
+                       GROUP generator)
 if (TARGET cxx_mangling)
     target_link_libraries(cxx_mangling INTERFACE cxx_mangling_externs)
     if (TARGET_NVPTX AND Halide_TARGET MATCHES "cuda")
@@ -233,7 +172,7 @@ endif ()
 
 # define_extern_opencl_aottest.cpp
 # define_extern_opencl_generator.cpp
-halide_define_aot_test(define_extern_opencl)
+halide_define_aot_test(define_extern_opencl GROUP generator)
 if (TARGET_NVPTX AND Halide_TARGET MATCHES "opencl")
     find_package(OpenCL REQUIRED)
     target_link_libraries(generator_aot_define_extern_opencl PRIVATE OpenCL::OpenCL)
@@ -241,27 +180,27 @@ endif ()
 
 # embed_image_aottest.cpp
 # embed_image_generator.cpp
-halide_define_aot_test(embed_image)
+halide_define_aot_test(embed_image GROUP generator)
 
 # error_codes_aottest.cpp
 # error_codes_generator.cpp
-halide_define_aot_test(error_codes)
+halide_define_aot_test(error_codes GROUP generator)
 
 # example_aottest.cpp
 # example_generator.cpp
-halide_define_aot_test(example)
+halide_define_aot_test(example GROUP generator)
 
 # extern_output_aottest.cpp
 # extern_output_generator.cpp
-halide_define_aot_test(extern_output)
+halide_define_aot_test(extern_output GROUP generator)
 
 # external_code_aottest.cpp
 # external_code_generator.cpp
-halide_define_aot_test(external_code GEN_DEPS external_code_generator_deps)
+halide_define_aot_test(external_code GEN_DEPS external_code_generator_deps GROUP generator)
 
 # float16_t_aottest.cpp
 # float16_t_generator.cpp
-halide_define_aot_test(float16_t)
+halide_define_aot_test(float16_t GROUP generator)
 
 # gpu_multi_context_threaded_aottest.cpp
 # gpu_multi_context_threaded_generator.cpp
@@ -269,6 +208,7 @@ halide_define_aot_test(float16_t)
 if (NOT Halide_TARGET MATCHES "wasm")
   halide_define_aot_test(gpu_multi_context_threaded
                          OMIT_DEFAULT_GENERATOR
+                         GROUP generator
                          EXTRA_LIBS
                          gpu_multi_context_threaded_add
                          gpu_multi_context_threaded_mul)
@@ -288,30 +228,31 @@ endif ()
 
 # gpu_object_lifetime_aottest.cpp
 # gpu_object_lifetime_generator.cpp
-halide_define_aot_test(gpu_object_lifetime FEATURES debug)
+halide_define_aot_test(gpu_object_lifetime FEATURES debug GROUP generator)
 
 # gpu_only_aottest.cpp
 # gpu_only_generator.cpp
-halide_define_aot_test(gpu_only)
+halide_define_aot_test(gpu_only GROUP generator)
 
 # gpu_texture_aottest.cpp
 # gpu_texture_generator.cpp
-halide_define_aot_test(gpu_texture)
+halide_define_aot_test(gpu_texture GROUP generator)
 
 # image_from_array_aottest.cpp
 # image_from_array_generator.cpp
-halide_define_aot_test(image_from_array)
+halide_define_aot_test(image_from_array GROUP generator)
 
 # mandelbrot_aottest.cpp
 # mandelbrot_generator.cpp
-halide_define_aot_test(mandelbrot)
+halide_define_aot_test(mandelbrot GROUP generator)
 
 # matlab_aottest.cpp
 # matlab_generator.cpp
 halide_define_aot_test(matlab
                        # Needs matlab support. See https://github.com/halide/Halide/issues/2082
                        ENABLE_IF NOT ${USING_WASM}
-                       FEATURES matlab)
+                       FEATURES matlab
+                       GROUP generator)
 if (TARGET generator_aot_matlab)
     set_target_properties(generator_aot_matlab PROPERTIES ENABLE_EXPORTS TRUE)
 endif ()
@@ -321,7 +262,8 @@ endif ()
 halide_define_aot_test(memory_profiler_mandelbrot
                        # Requires profiler support (which requires threading), not yet available for wasm tests
                        ENABLE_IF NOT ${USING_WASM}
-                       FEATURES profile)
+                       FEATURES profile
+                       GROUP generator)
 
 # metadata_tester_aottest.cpp
 # metadata_tester_generator.cpp
@@ -359,7 +301,8 @@ set(metadata_tester_params
 
 halide_define_aot_test(metadata_tester
                        EXTRA_LIBS metadata_tester_ucon
-                       PARAMS ${metadata_tester_params})
+                       PARAMS ${metadata_tester_params}
+                       GROUP generator)
 add_halide_library(metadata_tester_ucon
                    FROM metadata_tester.generator
                    GENERATOR metadata_tester
@@ -368,13 +311,14 @@ add_halide_library(metadata_tester_ucon
 
 # msan_aottest.cpp
 # msan_generator.cpp
-halide_define_aot_test(msan FEATURES msan)
+halide_define_aot_test(msan FEATURES msan
+                       GROUP generator)
 
 # (Doesn't build/link properly on windows / under wasm)
 if (NOT Halide_TARGET MATCHES "windows" AND NOT CMAKE_SYSTEM_NAME MATCHES "Windows" AND NOT Halide_TARGET MATCHES "wasm")
   # sanitizercoverage_aottest.cpp
   # sanitizercoverage_generator.cpp
-  halide_define_aot_test(sanitizercoverage FEATURES sanitizer_coverage)
+  halide_define_aot_test(sanitizercoverage FEATURES sanitizer_coverage GROUP generator)
 endif()
 
 # multitarget_aottest.cpp
@@ -384,12 +328,14 @@ halide_define_aot_test(multitarget
                        ENABLE_IF NOT ${USING_WASM}
                        GEN_TARGET cmake-no_bounds_query cmake
                        FEATURES c_plus_plus_name_mangling
-                       FUNCTION_NAME HalideTest::multitarget)
+                       FUNCTION_NAME HalideTest::multitarget
+                       GROUP generator)
 
 # nested_externs_aottest.cpp
 # nested_externs_generator.cpp
 halide_define_aot_test(nested_externs
                        OMIT_DEFAULT_GENERATOR
+                       GROUP generator
                        EXTRA_LIBS
                        nested_externs_root
                        nested_externs_inner
@@ -404,23 +350,23 @@ add_halide_library(nested_externs_leaf FROM nested_externs.generator)
 
 # opencl_runtime_aottest.cpp
 # opencl_runtime_generator.cpp
-halide_define_aot_test(opencl_runtime)
+halide_define_aot_test(opencl_runtime GROUP generator)
 
 # output_assign_aottest.cpp
 # output_assign_generator.cpp
-halide_define_aot_test(output_assign)
+halide_define_aot_test(output_assign GROUP generator)
 
 # pyramid_aottest.cpp
 # pyramid_generator.cpp
-halide_define_aot_test(pyramid PARAMS levels=10)
+halide_define_aot_test(pyramid PARAMS levels=10 GROUP generator)
 
 # rdom_input_aottest.cpp
 # rdom_input_generator.cpp
-halide_define_aot_test(rdom_input)
+halide_define_aot_test(rdom_input GROUP generator)
 
 # string_param_aottest.cpp
 # string_param_generator.cpp
-halide_define_aot_test(string_param PARAMS "rpn_expr=5 y * x +")
+halide_define_aot_test(string_param PARAMS "rpn_expr=5 y * x +" GROUP generator)
 
 # stubtest_aottest.cpp
 # stubtest_generator.cpp
@@ -433,27 +379,28 @@ halide_define_aot_test(string_param PARAMS "rpn_expr=5 y * x +")
 
 # shuffler_aottest.cpp
 # shuffler_generator.cpp
-halide_define_aot_test(shuffler)
+halide_define_aot_test(shuffler GROUP generator)
 
 # templated_aottest.cpp
 # templated_generator.cpp
-halide_define_aot_test(templated)
+halide_define_aot_test(templated GROUP generator)
 
 # tiled_blur_aottest.cpp
 # tiled_blur_generator.cpp
-halide_define_aot_test(tiled_blur EXTRA_LIBS blur2x2)
+halide_define_aot_test(tiled_blur EXTRA_LIBS blur2x2 GROUP generator)
 
 # user_context_aottest.cpp
 # user_context_generator.cpp
-halide_define_aot_test(user_context FEATURES user_context)
+halide_define_aot_test(user_context FEATURES user_context GROUP generator)
 
 # user_context_insanity_aottest.cpp
 # user_context_insanity_generator.cpp
-halide_define_aot_test(user_context_insanity FEATURES user_context)
+halide_define_aot_test(user_context_insanity FEATURES user_context GROUP generator)
 
 # variable_num_threads_aottest.cpp
 # variable_num_threads_generator.cpp
 halide_define_aot_test(variable_num_threads
                        # Requires threading support, not yet available for wasm tests
-                       ENABLE_IF NOT ${USING_WASM})
+                       ENABLE_IF NOT ${USING_WASM}
+                       GROUP generator)
 
