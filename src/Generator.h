@@ -1274,8 +1274,6 @@ class StubInputBuffer {
     friend class StubInput;
     template<typename T2>
     friend class GeneratorInput_Buffer;
-    template<typename T2>
-    friend class StubInputBuffer;
 
     Parameter parameter_;
 
