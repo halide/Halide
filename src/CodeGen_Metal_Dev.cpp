@@ -93,6 +93,8 @@ protected:
         void visit(const Free *op) override;
         void visit(const Cast *op) override;
         void visit(const Atomic *op) override;
+        void visit(const IfThenElse *op) override;
+        void visit(const Shuffle *op) override;
     };
 
     std::ostringstream src_stream;
@@ -542,6 +544,43 @@ void CodeGen_Metal_Dev::CodeGen_Metal_C::visit(const Atomic *op) {
     // It might be possible to support atomic but this is not trivial.
     // Metal requires atomic data types to be wrapped in an atomic integer data type.
     user_assert(false) << "Atomic updates are not supported inside Metal kernels";
+}
+
+void CodeGen_Metal_Dev::CodeGen_Metal_C::visit(const Shuffle *op) {
+    if (op->type.is_scalar()) {
+        CodeGen_C::visit(op);
+    } else {
+        internal_assert(!op->vectors.empty());
+        for (size_t i = 1; i < op->vectors.size(); i++) {
+            internal_assert(op->vectors[0].type() == op->vectors[i].type());
+        }
+        internal_assert(op->type.lanes() == (int)op->indices.size());
+        const int max_index = (int)(op->vectors[0].type().lanes() * op->vectors.size());
+        for (int i : op->indices) {
+            internal_assert(i >= -1 && i < max_index);
+        }
+
+        std::vector<string> vecs;
+        for (const Expr &v : op->vectors) {
+            vecs.push_back(print_expr(v));
+        }
+
+        string src = vecs[0];
+        ostringstream rhs;
+        // This code has always assumed/required that all the vectors
+        // have identical types, so let's verify
+        const Type t0 = op->vectors[0].type();
+        for (const auto &v : op->vectors) {
+            internal_assert(t0 == v.type());
+        }
+        string storage_name = unique_name('_');
+        rhs << "{";
+        for (int i : op->indices) {
+            rhs << vecs[i] << ",";
+        }
+        rhs << "}";
+        print_assignment(op->type, rhs.str());
+    }
 }
 
 void CodeGen_Metal_Dev::add_kernel(Stmt s,

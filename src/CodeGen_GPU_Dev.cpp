@@ -127,12 +127,24 @@ protected:
 
     Expr visit(const Load *op) override {
         if (!is_const_one(op->predicate)) {
-            Expr load_expr = Load::make(op->type, op->name, op->index, op->image,
-                                        op->param, const_true(op->type.lanes()), op->alignment);
-            Expr pred_load = Call::make(load_expr.type(),
-                                        Call::if_then_else,
-                                        {op->predicate, load_expr},
-                                        Internal::Call::PureIntrinsic);
+            std::vector<Expr> lane_values;
+            for (int ln = 0; ln < op->type.lanes(); ln++) {
+                Expr load_expr = Load::make(op->type.element_of(),
+                                            op->name,
+                                            extract_lane(op->index, ln),
+                                            op->image,
+                                            op->param,
+                                            const_true(),
+                                            // TODO: alignment needs to be changed
+                                            op->alignment);
+                lane_values.push_back(Call::make(load_expr.type(),
+                                                 Call::if_then_else,
+                                                 {extract_lane(op->predicate, ln),
+                                                  load_expr,
+                                                  make_zero(op->type.element_of())},
+                                                 Internal::Call::PureIntrinsic));
+            }
+            Expr pred_load = Shuffle::make_concat(lane_values);
             return pred_load;
         } else {
             return op;
