@@ -320,20 +320,21 @@ void test_predicated_hist(const Backend &backend) {
     hist(im(r)) = min(hist(im(r)) + cast<T>(1), cast<T>(100));  // cas loop
 
     RDom r2(0, img_size);
+    // This predicate means that the update definitions below can't actually be
+    // atomic, because the if isn't included in the atomic block.
     r2.where(hist(im(r2)) > cast<T>(0) && hist(im(r2)) < cast<T>(90));
-    hist(im(r2)) -= cast<T>(1);                                   // atomic add
-    hist(im(r2)) = min(hist(im(r2)) + cast<T>(1), cast<T>(100));  // cas loop
+    hist(im(r2)) -= cast<T>(1);
+    hist(im(r2)) = min(hist(im(r2)) + cast<T>(1), cast<T>(100));
 
     hist.compute_root();
-    for (int update_id = 0; update_id < hist.num_update_definitions(); update_id++) {
-        RVar rv = update_id < 3 ? r : r2;
+    for (int update_id = 0; update_id < 3; update_id++) {
         switch (backend) {
         case Backend::CPU: {
             // Can't prove associativity.
             // Set override_associativity_test to true to remove the check.
             hist.update(update_id)
                 .atomic(true /*override_associativity_test*/)
-                .parallel(rv);
+                .parallel(r);
         } break;
         case Backend::CPUVectorize: {
             // Doesn't support predicated store yet.
@@ -345,7 +346,7 @@ void test_predicated_hist(const Backend &backend) {
             RVar ro, ri;
             hist.update(update_id)
                 .atomic(true /*override_associativity_test*/)
-                .split(rv, ro, ri, 32)
+                .split(r, ro, ri, 32)
                 .gpu_blocks(ro, DeviceAPI::OpenCL)
                 .gpu_threads(ri, DeviceAPI::OpenCL);
         } break;
@@ -355,7 +356,7 @@ void test_predicated_hist(const Backend &backend) {
             RVar ro, ri;
             hist.update(update_id)
                 .atomic(true /*override_associativity_test*/)
-                .split(rv, ro, ri, 32)
+                .split(r, ro, ri, 32)
                 .gpu_blocks(ro, DeviceAPI::CUDA)
                 .gpu_threads(ri, DeviceAPI::CUDA);
         } break;
@@ -364,7 +365,7 @@ void test_predicated_hist(const Backend &backend) {
             RVar rio, rii;
             hist.update(update_id)
                 .atomic(true /*override_assciativity_test*/)
-                .split(rv, ro, ri, 32)
+                .split(r, ro, ri, 32)
                 .split(ri, rio, rii, 4)
                 .gpu_blocks(ro, DeviceAPI::CUDA)
                 .gpu_threads(rio, DeviceAPI::CUDA)
