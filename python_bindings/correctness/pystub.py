@@ -112,7 +112,7 @@ def test_simplestub():
         # Bad input name
         f = simplestub.generate(target, buffer_input=b_in, float_arg=3.5, offset=k, funk_input=f_in)
     except RuntimeError as e:
-        assert "Expected exactly 3 keyword args for inputs, but saw 2." in str(e)
+        assert "Generator simplestub has no GeneratorParam named: funk_input" in str(e)
     else:
         assert False, 'Did not see expected exception!'
 
@@ -298,3 +298,4 @@ if __name__ == "__main__":
     # disabled because HALIDE_ALLOW_GENERATOR_BUILD_METHOD is off by default
     # test_partialbuildmethod()
     test_nobuildmethod()
+

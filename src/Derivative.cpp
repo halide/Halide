@@ -1940,6 +1940,15 @@ Func Derivative::operator()(const Param<> &param) const {
     return it->second;
 }
 
+Func Derivative::operator()(const std::string &name) const {
+    auto it = adjoints.find(FuncKey{name, -1});
+    if (it == adjoints.end()) {
+        Internal::debug(1) << "Could not find name: " << name << "\n";
+        return Func();
+    }
+    return it->second;
+}
+
 Derivative propagate_adjoints(const Func &output,
                               const Func &adjoint,
                               const Region &output_bounds) {
