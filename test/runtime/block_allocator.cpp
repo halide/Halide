@@ -55,9 +55,9 @@ int main(int argc, char **argv) {
         MemoryRequest request = {0};
         request.size = sizeof(int);
         request.alignment = sizeof(int);
-        request.properties.visibility = MemoryVisibility::UnknownVisibility;
-        request.properties.caching = MemoryCaching::UnknownCaching;
-        request.properties.mutability = MemoryMutability::UnknownMutability;
+        request.properties.visibility = MemoryVisibility::DefaultVisibility;
+        request.properties.caching = MemoryCaching::DefaultCaching;
+        request.properties.usage = MemoryUsage::DefaultUsage;
         
         MemoryRegion* r1 = instance->reserve(user_context, request);
         halide_abort_if_false(user_context, r1 != nullptr);
@@ -94,9 +94,9 @@ int main(int argc, char **argv) {
         MemoryRequest request = {0};
         request.size = sizeof(int);
         request.alignment = sizeof(int);
-        request.properties.visibility = MemoryVisibility::UnknownVisibility;
-        request.properties.caching = MemoryCaching::UnknownCaching;
-        request.properties.mutability = MemoryMutability::UnknownMutability;
+        request.properties.visibility = MemoryVisibility::DefaultVisibility;
+        request.properties.caching = MemoryCaching::DefaultCaching;
+        request.properties.usage = MemoryUsage::DefaultUsage;
 
         static size_t test_allocations = 1000;
         BlockStorage<MemoryRegion*> regions(user_context, test_allocations, &system_allocator);

@@ -360,20 +360,20 @@ size_t BlockAllocator::constrain_requested_size(size_t size) const {
 bool BlockAllocator::is_compatible_block(
     const BlockResource* block, const MemoryProperties& properties) const {
     
-    if(properties.caching != MemoryCaching::UnknownCaching) {
+    if(properties.caching != MemoryCaching::DefaultCaching) {
         if(properties.caching != block->memory.properties.caching) {
             return false;
         }
     }
 
-    if(properties.visibility != MemoryVisibility::UnknownVisibility) {
+    if(properties.visibility != MemoryVisibility::DefaultVisibility) {
         if(properties.visibility != block->memory.properties.visibility) {
             return false;
         }
     }
 
-    if(properties.mutability != MemoryMutability::UnknownMutability) {
-        if(properties.mutability != block->memory.properties.mutability) {
+    if(properties.usage != MemoryUsage::DefaultUsage) {
+        if(properties.usage != block->memory.properties.usage) {
             return false;
         }
     }

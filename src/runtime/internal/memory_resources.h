@@ -19,37 +19,39 @@ enum AllocationStatus {
 // Hint for allocation requests indicating intended usage 
 // required between host and device address space mappings 
 enum MemoryVisibility {
-    InvalidVisibility, //< invalid enum value
-    HostOnly,          //< host local
-    DeviceOnly,        //< device local
-    DeviceToHost,      //< transfer from device to host
-    HostToDevice,      //< transfer from host to device
-    UnknownVisibility  //< unable to determine prior to usage
+    InvalidVisibility,     //< invalid enum value
+    HostOnly,              //< host local
+    DeviceOnly,            //< device local
+    DeviceToHost,          //< transfer from device to host
+    HostToDevice,          //< transfer from host to device
+    DefaultVisibility,     //< default visibility (use any valid visibility -- unable to determine prior to usage)
 };
 
 // Hint for allocation requests indicating intended update 
 // frequency for modifying the contents of the allocation 
-enum MemoryMutability {
-    InvalidMutability,  //< invalid enum value
-    Static,             //< intended for static storage, whereby the contents will be set once and remain unchanged
-    Dynamic,            //< intended for dyanmic storage, whereby the contents will be set frequently and change constantly
-    Transfer,           //< intended for staging storage updates, whereby the contents will be set and used once and then discarded
-    UnknownMutability   //< unable to determine prior to usage
+enum MemoryUsage {
+    InvalidUsage,           //< invalid enum value
+    StaticStorage,          //< intended for static storage, whereby the contents will be set once and remain unchanged
+    DynamicStorage,         //< intended for dyanmic storage, whereby the contents will be set frequently and change constantly
+    TransferSrc,            //< intended for staging storage updates, whereby the contents will be used as the source of a transfer
+    TransferDst,            //< intended for staging storage updates, whereby the contents will be used as the destination of a transfer
+    TransferSrcDst,         //< intended for staging storage updates, whereby the contents will be used either as a source or destination of a transfer
+    DefaultUsage            //< default usage (use any valid usage -- unable to determine prior to usage)
 };
 
 // Hint for allocation requests indicating ideal caching support (if available) 
 enum MemoryCaching {
-    InvalidCaching,     //< invalid enum value
-    Cached,             //< cached
-    Uncached,           //< uncached 
-    CachedCoherent,     //< cached and coherent
-    UncachedCoherent,   //< uncached but still coherent 
-    UnknownCaching      //< unable to determine prior to usage
+    InvalidCaching,         //< invalid enum value
+    Cached,                 //< cached
+    Uncached,               //< uncached 
+    CachedCoherent,         //< cached and coherent
+    UncachedCoherent,       //< uncached but still coherent 
+    DefaultCaching          //< default caching (use any valid caching behaviour -- unable to determine prior to usage)
 };
 
 struct MemoryProperties {
     MemoryVisibility visibility = MemoryVisibility::InvalidVisibility;
-    MemoryMutability mutability = MemoryMutability::InvalidMutability;
+    MemoryUsage usage = MemoryUsage::InvalidUsage;
     MemoryCaching caching = MemoryCaching::InvalidCaching;
 };
 
@@ -83,7 +85,7 @@ class RegionAllocator;
 struct BlockRegion;
 
 // Internal struct for block resource state 
-// -- Note: must header fields must be identical to MemoryBlock 
+// -- Note: first field must MemoryBlock 
 struct BlockResource {
     MemoryBlock memory = {0};                                  //< memory info for the allocated block
     RegionAllocator* allocator = nullptr;                      //< designated allocator for the block
@@ -92,7 +94,7 @@ struct BlockResource {
 };
 
 // Internal struct for block region state 
-// -- Note: must header fields must be identical to MemoryRegion 
+// -- Note: first field must MemoryRegion
 struct BlockRegion {
     MemoryRegion memory = {0};                                 //< memory info for the allocated region
     AllocationStatus status = AllocationStatus::InvalidStatus; //< allocation status indicator
@@ -103,13 +105,13 @@ struct BlockRegion {
 
 // Returns an aligned byte offset to adjust the given offset based on alignment constraints
 // -- Alignment must be power of two!
-inline size_t aligned_offset(size_t offset, size_t alignment) {
+HALIDE_ALWAYS_INLINE size_t aligned_offset(size_t offset, size_t alignment) {
     return (offset + (alignment - 1)) & ~(alignment - 1);
 }
 
 // Returns a padded size to accomodate an adjusted offset due to alignment constraints
 // -- Alignment must be power of two!
-inline size_t aligned_size(size_t offset, size_t size, size_t alignment) {
+HALIDE_ALWAYS_INLINE size_t aligned_size(size_t offset, size_t size, size_t alignment) {
     size_t actual_offset = aligned_offset(offset, alignment);
     size_t padding = actual_offset - offset;
     size_t actual_size = padding + size;
@@ -117,7 +119,7 @@ inline size_t aligned_size(size_t offset, size_t size, size_t alignment) {
 }
 
 // Clamps the given value to be within the [min_value, max_value] range
-inline size_t clamped_size(size_t value, size_t min_value, size_t max_value) {
+HALIDE_ALWAYS_INLINE size_t clamped_size(size_t value, size_t min_value, size_t max_value) {
     size_t result = (value < min_value) ? min_value : value;
     return (result > max_value) ? max_value : result;
 }
@@ -170,5 +172,53 @@ public:
 }  // namespace Internal
 }  // namespace Runtime
 }  // namespace Halide
+
+// --
+
+extern "C" {
+
+WEAK const char* halide_memory_visibility_name(MemoryVisibility value) {
+    switch(value) {
+        case MemoryVisibility::InvalidVisibility: { return "InvalidVisibility"; }
+        case MemoryVisibility::DefaultVisibility: { return "DefaultVisibility"; }
+        case MemoryVisibility::HostOnly: { return "HostOnly"; }
+        case MemoryVisibility::DeviceOnly: { return "DeviceOnly"; }
+        case MemoryVisibility::HostToDevice: { return "HostToDevice"; }
+        case MemoryVisibility::DeviceToHost: { return "DeviceToHost"; }
+        default: { return "<unknown memory visibility value>"; }
+    };
+    return "<unknown memory visibility value>";
+}
+
+WEAK const char* halide_memory_usage_name(MemoryUsage value) {
+    switch(value) {
+        case MemoryUsage::InvalidUsage: { return "InvalidUsage"; }
+        case MemoryUsage::DefaultUsage: { return "DefaultUsage"; }
+        case MemoryUsage::StaticStorage: { return "StaticStorage"; }
+        case MemoryUsage::DynamicStorage: { return "DynamicStorage"; }
+        case MemoryUsage::TransferSrc: { return "TransferSrc"; }
+        case MemoryUsage::TransferDst: { return "TransferDst"; }
+        case MemoryUsage::TransferSrcDst: { return "TransferSrcDst"; }
+        default: { return "<unknown memory usage value>"; }
+    };
+    return "<unknown memory usage value>";
+}
+
+WEAK const char* halide_memory_caching_name(MemoryCaching value) {
+    switch(value) {
+        case MemoryCaching::InvalidCaching: { return "InvalidCaching"; }
+        case MemoryCaching::DefaultCaching: { return "DefaultCaching"; }
+        case MemoryCaching::Cached: { return "Cached"; }
+        case MemoryCaching::Uncached: { return "Uncached"; }
+        case MemoryCaching::CachedCoherent: { return "CachedCoherent"; }
+        case MemoryCaching::UncachedCoherent: { return "UncachedCoherent"; }
+        default: { return "<unknown memory visibility value>"; }
+    };
+    return "<unknown memory visibility value>";
+}
+
+} // extern "C"
+
+// --
 
 #endif  // HALIDE_RUNTIME_MEMORY_RESOURCES_H

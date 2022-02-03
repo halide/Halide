@@ -1,45 +1,16 @@
-#ifndef HALIDE_RUNTIME_VULKAN_SUPPORT_H
-#define HALIDE_RUNTIME_VULKAN_SUPPORT_H
+#ifndef HALIDE_RUNTIME_VULKAN_EXTENSIONS_H
+#define HALIDE_RUNTIME_VULKAN_EXTENSIONS_H
 
-#include "runtime_internal.h"
-#include "printer.h"
-#include "scoped_spin_lock.h"
-#include "internal/block_storage.h"
-#include "internal/string_storage.h"
-#include "internal/string_table.h"
-#include "internal/memory_arena.h"
-#include "internal/linked_list.h"
+#include "vulkan_internal.h"
 
-#define VK_MAKE_API_VERSION(variant, major, minor, patch) \
-    ((((uint32_t)(variant)) << 29) | (((uint32_t)(major)) << 22) | (((uint32_t)(minor)) << 12) | ((uint32_t)(patch)))
-
-#define VK_API_VERSION_1_0 VK_MAKE_API_VERSION(0, 1, 0, 0)// Patch version should always be set to 0
-
-#ifdef WINDOWS
-    #define HL_VK_ENV_DELIM ";"
-#else
-    #define HL_VK_ENV_DELIM ":"
-#endif
-
-#define VK_NO_PROTOTYPES
-#include "mini_vulkan.h"
+// --
 
 namespace Halide { 
 namespace Runtime { 
 namespace Internal { 
 namespace Vulkan {
 
-// clang-format off
-#define VULKAN_FN(fn) WEAK PFN_##fn fn; 
-#include "vulkan_functions.h"
-#undef VULKAN_FN
-// clang-format on
-
-void WEAK load_vulkan_functions(VkInstance instance) {
-    #define VULKAN_FN(fn) fn = (PFN_##fn)vkGetInstanceProcAddr(instance, #fn);
-    #include "vulkan_functions.h"
-    #undef VULKAN_FN
-}
+// --
 
 WEAK char layer_names[1024];
 WEAK ScopedSpinLock::AtomicFlag layer_names_lock = 0;
@@ -57,13 +28,9 @@ WEAK char build_options[1024];
 WEAK ScopedSpinLock::AtomicFlag build_options_lock = 0;
 WEAK bool build_options_initialized = false;
 
-}}}} // namespace Halide::Runtime::Internal::Vulkan
+// --
 
-using namespace Halide::Runtime::Internal::Vulkan;
-
-namespace {
-
-void halide_vulkan_set_layer_names_internal(const char *n) {
+WEAK void vk_set_layer_names_internal(const char *n) {
     if (n) {
         size_t buffer_size = sizeof(layer_names) / sizeof(layer_names[0]);
         strncpy(layer_names, n, buffer_size);
@@ -74,16 +41,16 @@ void halide_vulkan_set_layer_names_internal(const char *n) {
     layer_names_initialized = true;
 }
 
-const char *halide_vulkan_get_layer_names_internal(void *user_context) {
+WEAK const char *vk_get_layer_names_internal(void *user_context) {
     if (!layer_names_initialized) {
         const char *value = getenv("HL_VK_LAYERS");
         if(value == nullptr) { value = getenv("VK_INSTANCE_LAYERS"); }
-        halide_vulkan_set_layer_names_internal(value);
+        vk_set_layer_names_internal(value);
     }
     return layer_names;
 }
 
-void halide_vulkan_set_extension_names_internal(const char *n) {
+WEAK void vk_set_extension_names_internal(const char *n) {
     if (n) {
         size_t buffer_size = sizeof(extension_names) / sizeof(extension_names[0]);
         strncpy(extension_names, n, buffer_size);
@@ -94,15 +61,15 @@ void halide_vulkan_set_extension_names_internal(const char *n) {
     extension_names_initialized = true;
 }
 
-const char *halide_vulkan_get_extension_names_internal(void *user_context) {
+WEAK const char *vk_get_extension_names_internal(void *user_context) {
     if (!extension_names_initialized) {
         const char *name = getenv("HL_VK_EXTENSIONS");
-        halide_vulkan_set_extension_names_internal(name);
+        vk_set_extension_names_internal(name);
     }
     return extension_names;
 }
 
-void halide_vulkan_set_device_type_internal(const char *n) {
+WEAK void vk_set_device_type_internal(const char *n) {
     if (n) {
         size_t buffer_size = sizeof(device_type) / sizeof(device_type[0]);
         strncpy(device_type, n, buffer_size);
@@ -113,15 +80,15 @@ void halide_vulkan_set_device_type_internal(const char *n) {
     device_type_initialized = true;
 }
 
-const char *halide_vulkan_get_device_type_internal(void *user_context) {
+WEAK const char *vk_get_device_type_internal(void *user_context) {
     if (!device_type_initialized) {
         const char *name = getenv("HL_VK_DEVICE_TYPE");
-        halide_vulkan_set_device_type_internal(name);
+        vk_set_device_type_internal(name);
     }
     return device_type;
 }
 
-void halide_vulkan_set_build_options_internal(const char *n) {
+WEAK void vk_set_build_options_internal(const char *n) {
     if (n) {
         size_t buffer_size = sizeof(build_options) / sizeof(build_options[0]);
         strncpy(build_options, n, buffer_size);
@@ -132,64 +99,21 @@ void halide_vulkan_set_build_options_internal(const char *n) {
     build_options_initialized = true;
 }
 
-const char *halide_vulkan_get_build_options_internal(void *user_context) {
+WEAK const char *vk_get_build_options_internal(void *user_context) {
     if (!build_options_initialized) {
         const char *name = getenv("HL_VK_BUILD_OPTIONS");
-        halide_vulkan_set_build_options_internal(name);
+        vk_set_build_options_internal(name);
     }
     return build_options;
 }
 
-}  // namespace (Anonymous)
-
-extern "C" {
-
-WEAK void halide_vulkan_set_layer_names(const char *n) {
+WEAK uint32_t vk_get_requested_layers(void *user_context, StringTable& layer_table) {
     ScopedSpinLock lock(&layer_names_lock);
-    halide_vulkan_set_layer_names_internal(n);
-}
-
-WEAK const char *halide_vulkan_get_layer_names(void *user_context) {
-    ScopedSpinLock lock(&layer_names_lock);
-    return halide_vulkan_get_layer_names_internal(user_context);
-}
-
-WEAK void halide_vulkan_set_extension_names(const char *n) {
-    ScopedSpinLock lock(&extension_names_lock);
-    halide_vulkan_set_extension_names_internal(n);
-}
-
-WEAK const char *halide_vulkan_get_extension_names(void *user_context) {
-    ScopedSpinLock lock(&extension_names_lock);
-    return halide_vulkan_get_extension_names_internal(user_context);
-}
-
-WEAK void halide_vulkan_set_device_type(const char *n) {
-    ScopedSpinLock lock(&device_type_lock);
-    halide_vulkan_set_device_type_internal(n);
-}
-
-WEAK const char *halide_vulkan_get_device_type(void *user_context) {
-    ScopedSpinLock lock(&device_type_lock);
-    return halide_vulkan_get_device_type_internal(user_context);
-}
-
-WEAK void halide_vulkan_set_build_options(const char *n) {
-    ScopedSpinLock lock(&build_options_lock);
-    halide_vulkan_set_build_options_internal(n);
-}
-
-WEAK const char *halide_vulkan_get_build_options(void *user_context) {
-    ScopedSpinLock lock(&build_options_lock);
-    return halide_vulkan_get_build_options_internal(user_context);
-}
-
-WEAK uint32_t halide_vulkan_get_requested_layers(void *user_context, StringTable& layer_table) {
-    const char *layer_names = halide_vulkan_get_layer_names(user_context);
+    const char *layer_names = vk_get_layer_names_internal(user_context);
     return layer_table.parse(user_context, layer_names, HL_VK_ENV_DELIM);
 }
 
-WEAK uint32_t halide_vulkan_get_required_instance_extensions(void* user_context, StringTable& ext_table) {
+WEAK uint32_t vk_get_required_instance_extensions(void* user_context, StringTable& ext_table) {
     const uint32_t required_ext_count = 1;
     const char* required_ext_table[] = {"VK_KHR_get_physical_device_properties2"};
 
@@ -201,7 +125,7 @@ WEAK uint32_t halide_vulkan_get_required_instance_extensions(void* user_context,
     return required_ext_count;
 }
 
-WEAK uint32_t halide_vulkan_get_supported_instance_extensions(void* user_context, StringTable& ext_table) {
+WEAK uint32_t vk_get_supported_instance_extensions(void* user_context, StringTable& ext_table) {
 
     PFN_vkEnumerateInstanceExtensionProperties vkEnumerateInstanceExtensionProperties = (PFN_vkEnumerateInstanceExtensionProperties)
         vkGetInstanceProcAddr(nullptr, "vkEnumerateInstanceExtensionProperties");
@@ -235,7 +159,7 @@ WEAK uint32_t halide_vulkan_get_supported_instance_extensions(void* user_context
     return avail_ext_count;
 }
 
-WEAK uint32_t halide_vulkan_get_required_device_extensions(void* user_context, StringTable& ext_table) {
+WEAK uint32_t vk_get_required_device_extensions(void* user_context, StringTable& ext_table) {
     const uint32_t required_ext_count = 0;
     const char* required_ext_table[] = {0};
 
@@ -247,7 +171,7 @@ WEAK uint32_t halide_vulkan_get_required_device_extensions(void* user_context, S
     return required_ext_count;
 }
 
-WEAK uint32_t halide_vulkan_get_supported_device_extensions(void* user_context, VkPhysicalDevice physical_device, StringTable& ext_table) {
+WEAK uint32_t vk_get_supported_device_extensions(void* user_context, VkPhysicalDevice physical_device, StringTable& ext_table) {
 
     if(vkEnumerateDeviceExtensionProperties == nullptr) {
         debug(user_context) << "Vulkan: Missing vkEnumerateDeviceExtensionProperties proc address! Invalid loader?!\n";
@@ -278,9 +202,9 @@ WEAK uint32_t halide_vulkan_get_supported_device_extensions(void* user_context, 
     return avail_ext_count;
 }
 
-bool validate_required_extension_support(void* user_context, 
-                                         const StringTable& required_extensions, 
-                                         const StringTable& supported_extensions) {    
+WEAK bool vk_validate_required_extension_support(void* user_context, 
+                                                const StringTable& required_extensions, 
+                                                const StringTable& supported_extensions) {    
     bool validated = true;
     for(uint32_t n = 0; n < required_extensions.size(); ++n) {
         const char* extension = required_extensions[n];
@@ -292,6 +216,52 @@ bool validate_required_extension_support(void* user_context,
     return validated;
 }
 
+}}}} // namespace Halide::Runtime::Internal::Vulkan
+
+using namespace Halide::Runtime::Internal::Vulkan;
+
+extern "C" {
+
+WEAK void halide_vulkan_set_layer_names(const char *n) {
+    ScopedSpinLock lock(&layer_names_lock);
+    vk_set_layer_names_internal(n);
+}
+
+WEAK const char *halide_vulkan_get_layer_names(void *user_context) {
+    ScopedSpinLock lock(&layer_names_lock);
+    return vk_get_layer_names_internal(user_context);
+}
+
+WEAK void halide_vulkan_set_extension_names(const char *n) {
+    ScopedSpinLock lock(&extension_names_lock);
+    vk_set_extension_names_internal(n);
+}
+
+WEAK const char *halide_vulkan_get_extension_names(void *user_context) {
+    ScopedSpinLock lock(&extension_names_lock);
+    return vk_get_extension_names_internal(user_context);
+}
+
+WEAK void halide_vulkan_set_device_type(const char *n) {
+    ScopedSpinLock lock(&device_type_lock);
+    vk_set_device_type_internal(n);
+}
+
+WEAK const char *halide_vulkan_get_device_type(void *user_context) {
+    ScopedSpinLock lock(&device_type_lock);
+    return vk_get_device_type_internal(user_context);
+}
+
+WEAK void halide_vulkan_set_build_options(const char *n) {
+    ScopedSpinLock lock(&build_options_lock);
+    vk_set_build_options_internal(n);
+}
+
+WEAK const char *halide_vulkan_get_build_options(void *user_context) {
+    ScopedSpinLock lock(&build_options_lock);
+    return vk_get_build_options_internal(user_context);
+}
+
 } // extern "C"
 
-#endif  // HALIDE_RUNTIME_VULKAN_SUPPORT_H
+#endif  // HALIDE_RUNTIME_VULKAN_EXTENSIONS_H
