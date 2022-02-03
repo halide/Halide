@@ -155,6 +155,7 @@ bool run_test() {
     output.device_free();
 
     if (interface != nullptr) {
+        printf("Device interface is %p.\n", interface);
         halide_device_release(nullptr, interface);
 
         // Free the context we created.
