@@ -63,7 +63,7 @@ struct State {
     void save_featurization(const FunctionDAG &dag,
                             const MachineParams &params,
                             const CachingOptions &cache_options,
-                            std::ostream &out
+                            std::ostream &out,
                             std::ostream &index_out);
 
     // Performs some pruning to decide if this state is worth queuing in

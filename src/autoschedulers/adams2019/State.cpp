@@ -103,10 +103,10 @@ void State::save_featurization(const FunctionDAG &dag, const MachineParams &para
         if (n.is_input) {
             continue;
         }
-        index_out << n.func.name() << " " << n.id << endl;
+        index_out << n.func.name() << " " << n.id << std::endl;
         for (size_t stage_idx = n.stages.size(); stage_idx > 0; stage_idx--) {
             const auto &s = n.stages[stage_idx - 1];
-            index_out << "  " << s.name() << " " << s.id << " " << offset << endl;
+            index_out << "  " << s.name << " " << s.id << " " << offset << std::endl;
             const size_t num_schedule_features = ScheduleFeatures::num_features();
             const size_t num_pipeline_features = PipelineFeatures::num_features();
             const auto &sched_feat = features.get(&s);
