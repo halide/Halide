@@ -88,6 +88,7 @@ struct AutoSchedulerResults {
     std::string schedule_source;         // The C++ source code of the generated schedule
     std::string python_schedule_source;  // The Python source code of the generated schedule
     std::vector<uint8_t> featurization;  // The featurization of the pipeline (if any)
+    std::string featurization_index;     // Index into featurization file
     std::string path_featurization;  // The path_featurization of the pipeline (if any)
 };
 

@@ -94,16 +94,19 @@ void State::compute_featurization(const FunctionDAG &dag, const MachineParams &p
 }
 
 void State::save_featurization(const FunctionDAG &dag, const MachineParams &params,
-                               const CachingOptions &cache_options, std::ostream &out) {
+                               const CachingOptions &cache_options, std::ostream &out, std::ostream &index_out) {
     StageMap<ScheduleFeatures> features;
     compute_featurization(dag, params, &features, cache_options);
 
+    int offset = 0;
     for (const auto &n : dag.nodes) {
         if (n.is_input) {
             continue;
         }
+        index_out << n.func.name() << " " << n.id << endl;
         for (size_t stage_idx = n.stages.size(); stage_idx > 0; stage_idx--) {
             const auto &s = n.stages[stage_idx - 1];
+            index_out << "  " << s.name() << " " << s.id << " " << offset << endl;
             const size_t num_schedule_features = ScheduleFeatures::num_features();
             const size_t num_pipeline_features = PipelineFeatures::num_features();
             const auto &sched_feat = features.get(&s);
@@ -119,6 +122,7 @@ void State::save_featurization(const FunctionDAG &dag, const MachineParams &para
             }
 
             out.write((const char *)buf, sizeof(buf));
+            offset += (num_schedule_features + num_pipeline_features);
         }
     }
 }

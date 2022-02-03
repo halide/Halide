@@ -649,8 +649,10 @@ void generate_schedule(const std::vector<Function> &outputs,
     if (!feature_file.empty()) {
         user_warning << "HL_FEATURE_FILE is deprecated; use the featurization output from Generator instead\n";
         std::ofstream binfile(feature_file, std::ios::binary | std::ios_base::trunc);
-        optimal->save_featurization(dag, params, cache_options, binfile);
+        std::ofstream feature_file_index(feature_file + ".index");
+        optimal->save_featurization(dag, params, cache_options, binfile, feature_file_index);
         binfile.close();
+        feature_file_index.close();
         internal_assert(!binfile.fail()) << "Failed to write " << feature_file;
     }
 
@@ -660,10 +662,11 @@ void generate_schedule(const std::vector<Function> &outputs,
         auto_scheduler_results->python_schedule_source = optimal->python_schedule_source;
         auto_scheduler_results->path_featurization = optimal->dump(true);
         {
-            std::ostringstream out;
-            optimal->save_featurization(dag, params, cache_options, out);
+            std::ostringstream out, index_out;
+            optimal->save_featurization(dag, params, cache_options, out, index_out);
             auto_scheduler_results->featurization.resize(out.str().size());
             memcpy(auto_scheduler_results->featurization.data(), out.str().data(), out.str().size());
+            auto_scheduler_results->featurization_index = index_out.str();
         }
     }
 }

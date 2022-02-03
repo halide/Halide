@@ -756,6 +756,11 @@ void Module::compile(const std::map<Output, std::string> &output_files) const {
             binfile.write((const char *)r->featurization.data(), r->featurization.size());
         }
         binfile.close();
+        std::ofstream featurization_index(output_files.at(Output::featurization) + ".index", std::ios::binary | std::ios_base::trunc);
+        if (r) {
+            featurization_index.write((const char *)r->featurization_index.data(), r->featurization_index.size());
+        }
+        featurization_index.close();
     }
     if (contains(output_files, Output::path_featurization)) {
         debug(1) << "Module.compile(): path_featurization " << output_files.at(Output::path_featurization) << "\n";
