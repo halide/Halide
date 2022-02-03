@@ -51,7 +51,14 @@ void WEAK vk_load_vulkan_functions(VkInstance instance) {
     #undef VULKAN_FN
 }
 
+// --
+
 extern WEAK halide_device_interface_t vulkan_device_interface;
+
+// --
+
+WEAK int vk_create_memory_allocator(void* user_context);
+WEAK int vk_destroy_memory_allocator(void* user_context);
 
 // --
 

@@ -217,6 +217,7 @@ WEAK int halide_vulkan_device_release(void *user_context) {
             state = state->next;
         }
         
+        vk_destroy_memory_allocator(user_context);
         halide_vulkan_release_context(user_context, instance, device, queue);
         vkDestroyDevice(device, nullptr);
         if (instance == cached_instance) {
@@ -230,10 +231,26 @@ WEAK int halide_vulkan_device_release(void *user_context) {
 
 namespace {
 
-VkResult allocate_device_memory(VkPhysicalDevice physical_device, VkDevice device, VkDeviceSize size, VkMemoryPropertyFlags flags, 
+VkResult vk_allocate_device_memory(VkPhysicalDevice physical_device, VkDevice device, VkDeviceSize size, VkMemoryPropertyFlags flags, 
                                 const VkAllocationCallbacks* allocator,
                                 // returned in device_memory
                                 VkDeviceMemory *device_memory) {
+
+#if 0
+    MemoryRequest request = {0};
+    request.size = halide_buffer->size_in_bytes();
+    request.properties.usage = MemoryUsage::TransferSrc;
+    request.properties.caching = MemoryCaching::DefaultCaching;
+    request.properties.visibility = MemoryVisibility::HostToDevice;
+
+    // allocate a new region -- acquires the context
+    MemoryRegion* region = memory_allocator->reserve(user_context, request);
+    if((region == nullptr) || (region->handle == nullptr)) {
+        error(user_context) << "Vulkan: Failed to allocate device memory!\n";
+        return halide_error_out_of_memory;
+    }
+#endif
+
     // Find an appropriate memory type given the flags
     auto memory_type_index  = VK_MAX_MEMORY_TYPES;
     VkPhysicalDeviceMemoryProperties device_mem_properties;
@@ -275,7 +292,7 @@ VkResult allocate_device_memory(VkPhysicalDevice physical_device, VkDevice devic
 
 }
 
-VkResult create_command_pool(VkDevice device, uint32_t queue_index, const VkAllocationCallbacks *callbacks, VkCommandPool *command_pool) {
+VkResult vk_create_command_pool(VkDevice device, uint32_t queue_index, const VkAllocationCallbacks *callbacks, VkCommandPool *command_pool) {
 
    VkCommandPoolCreateInfo command_pool_info =
         {VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,    // struct type
@@ -286,7 +303,7 @@ VkResult create_command_pool(VkDevice device, uint32_t queue_index, const VkAllo
     return vkCreateCommandPool(device, &command_pool_info, callbacks, command_pool);
 }
 
-VkResult create_command_buffer(VkDevice device, VkCommandPool pool, VkCommandBuffer *command_buffer) {
+VkResult vk_create_command_buffer(VkDevice device, VkCommandPool pool, VkCommandBuffer *command_buffer) {
 
     VkCommandBufferAllocateInfo command_buffer_info =
         {VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,    // struct type
@@ -337,7 +354,7 @@ WEAK int halide_vulkan_device_malloc(void *user_context, halide_buffer_t* buf) {
     // Allocate memory
     // TODO: This really needs an allocation cache
     VkDeviceMemory device_memory;
-    auto ret_code = allocate_device_memory(context.physical_device, context.device,
+    auto ret_code = vk_allocate_device_memory(context.physical_device, context.device,
                                            size,
                                            VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
                                            context.allocation_callbacks(),
@@ -443,7 +460,7 @@ WEAK int halide_vulkan_copy_to_device(void *user_context, halide_buffer_t* buf) 
 
     // Construct the staging buffer
     VkDeviceMemory staging_mem;
-    VkResult ret_code = allocate_device_memory(ctx.physical_device, ctx.device, buf->size_in_bytes(),
+    VkResult ret_code = vk_allocate_device_memory(ctx.physical_device, ctx.device, buf->size_in_bytes(),
                             VK_MEMORY_PROPERTY_HOST_COHERENT_BIT | VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT,
                             ctx.allocation_callbacks(),
                             &staging_mem);
@@ -506,14 +523,14 @@ WEAK int halide_vulkan_copy_to_device(void *user_context, halide_buffer_t* buf) 
     // create a command buffer
     VkCommandPool command_pool;
     VkCommandBuffer command_buffer;
-    ret_code = create_command_pool(ctx.device, ctx.queue_family_index, ctx.allocation_callbacks(), &command_pool);
+    ret_code = vk_create_command_pool(ctx.device, ctx.queue_family_index, ctx.allocation_callbacks(), &command_pool);
 
     if (ret_code != VK_SUCCESS) {
         debug(user_context) << "Vulkan: vkCreateCommandPool returned: " << get_vulkan_error_name(ret_code) << "\n";
         return -1;
     }
 
-    ret_code = create_command_buffer(ctx.device, command_pool, &command_buffer);
+    ret_code = vk_create_command_buffer(ctx.device, command_pool, &command_buffer);
 
     // begin the command buffer
     VkCommandBufferBeginInfo command_buffer_begin_info =
@@ -609,7 +626,7 @@ WEAK int halide_vulkan_copy_to_host(void *user_context, halide_buffer_t* buf) {
 
    // Construct the staging buffer
     VkDeviceMemory staging_mem;
-    VkResult ret_code = allocate_device_memory(ctx.physical_device, ctx.device, buf->size_in_bytes(),
+    VkResult ret_code = vk_allocate_device_memory(ctx.physical_device, ctx.device, buf->size_in_bytes(),
                             VK_MEMORY_PROPERTY_HOST_COHERENT_BIT | VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT,
                             ctx.allocation_callbacks(),
                             &staging_mem);
@@ -658,14 +675,14 @@ WEAK int halide_vulkan_copy_to_host(void *user_context, halide_buffer_t* buf) {
     // create a command buffer
     VkCommandPool command_pool;
     VkCommandBuffer command_buffer;
-    ret_code = create_command_pool(ctx.device, ctx.queue_family_index, ctx.allocation_callbacks(), &command_pool);
+    ret_code = vk_create_command_pool(ctx.device, ctx.queue_family_index, ctx.allocation_callbacks(), &command_pool);
 
     if (ret_code != VK_SUCCESS) {
         debug(user_context) << "Vulkan: vkCreateCommandPool returned: " << get_vulkan_error_name(ret_code) << "\n";
         return -1;
     }
 
-    ret_code = create_command_buffer(ctx.device, command_pool, &command_buffer);
+    ret_code = vk_create_command_buffer(ctx.device, command_pool, &command_buffer);
 
     // begin the command buffer
     VkCommandBufferBeginInfo command_buffer_begin_info =
@@ -853,11 +870,11 @@ WEAK int halide_vulkan_run(void *user_context,
     //     };
     VkDeviceMemory scalar_alloc;
     //result = vkAllocateMemory(ctx.device, &scalar_alloc_info, 0, &scalar_alloc); 
-    result = allocate_device_memory(ctx.physical_device, ctx.device, scalar_buffer_size,
+    result = vk_allocate_device_memory(ctx.physical_device, ctx.device, scalar_buffer_size,
         VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
         ctx.allocation_callbacks(), &scalar_alloc);
     if (result != VK_SUCCESS) {
-        debug(user_context) << "Vulkan: allocate_device_memory() failed "  << "\n";
+        debug(user_context) << "Vulkan: vk_allocate_device_memory() failed "  << "\n";
         return result;
     }
 
@@ -1064,7 +1081,7 @@ WEAK int halide_vulkan_run(void *user_context,
     //     };
     VkCommandPool command_pool;
     // result = vkCreateCommandPool(ctx.device, &command_pool_info, ctx.allocation_callbacks(), &command_pool);
-    result = create_command_pool(ctx.device, ctx.queue_family_index, ctx.allocation_callbacks(), &command_pool);
+    result = vk_create_command_pool(ctx.device, ctx.queue_family_index, ctx.allocation_callbacks(), &command_pool);
 
     if (result != VK_SUCCESS) {
         debug(user_context) << "vkCreateCommandPool returned " << get_vulkan_error_name(result) << "\n";
@@ -1082,7 +1099,7 @@ WEAK int halide_vulkan_run(void *user_context,
     
     VkCommandBuffer command_buffer;
     //result = vkAllocateCommandBuffers(ctx.device, &command_buffer_info, &command_buffer);
-    result = create_command_buffer(ctx.device, command_pool, &command_buffer);
+    result = vk_create_command_buffer(ctx.device, command_pool, &command_buffer);
 
     if (result != VK_SUCCESS) {
         debug(user_context) << "vkAllocateCommandBuffer returned " << get_vulkan_error_name(result) << "\n";

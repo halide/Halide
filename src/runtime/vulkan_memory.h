@@ -10,6 +10,17 @@ namespace Runtime {
 namespace Internal { 
 namespace Vulkan {
 
+// --
+
+// Halide System allocator for host allocations
+WEAK HalideSystemAllocator system_allocator; 
+
+// Vulkand allocator for host-device allocations
+class VulkanMemoryAllocator;
+WEAK VulkanMemoryAllocator* memory_allocator = nullptr;
+
+// --
+
 class VulkanBlockAllocator : public MemoryBlockAllocator {
 public:
     size_t allocated_block_memory = 0;
@@ -97,6 +108,32 @@ private:
             default:
                 error(user_context) << "VulkanBlockAllocator: Unable to convert type! Invalid memory visibility request!\n\t"
                                     << "visibility=" << halide_memory_visibility_name(properties.visibility) << "\n";
+                return invalid_flags;
+        };
+        
+        switch(properties.caching) {
+            case MemoryCaching::CachedCoherent:
+                if(need_flags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT) {
+                    want_flags |= VK_MEMORY_PROPERTY_HOST_CACHED_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
+                }
+                break;
+            case MemoryCaching::UncachedCoherent:
+                if(need_flags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT) {
+                    want_flags |= VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
+                }
+                break;
+            case MemoryCaching::Cached:
+                if(need_flags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT) {
+                    want_flags |= VK_MEMORY_PROPERTY_HOST_CACHED_BIT;
+                }
+                break;
+            case MemoryCaching::Uncached:
+            case MemoryCaching::DefaultCaching:
+                break;
+            case MemoryCaching::InvalidCaching:
+            default:
+                error(user_context) << "VulkanBlockAllocator: Unable to convert type! Invalid memory caching request!\n\t"
+                                    << "caching=" << halide_memory_caching_name(properties.caching) << "\n";
                 return invalid_flags;
         };
 
@@ -289,6 +326,9 @@ public:
     bool collect(void* user_context); //< returns true if any blocks were removed
     void destroy(void *user_context);
 
+    void* map(void* user_context, MemoryRegion* region);
+    void unmap(void* user_context, MemoryRegion* region);
+
 private:
 
     // Initializes a new instance     
@@ -341,6 +381,30 @@ MemoryRegion* VulkanMemoryAllocator::reserve(void* user_context, MemoryRequest& 
     return block_allocator->reserve(user_context, request);
 }
 
+void* VulkanMemoryAllocator::map(void* user_context, MemoryRegion* region) {
+    VulkanContext context(user_context);
+    RegionAllocator* region_allocator = RegionAllocator::find_allocator(user_context, region);
+    BlockResource* block_resource = region_allocator->block_resource();
+    VkDeviceMemory device_memory = reinterpret_cast<VkDeviceMemory>(block_resource->memory.handle);
+
+    uint8_t* mapped_ptr = nullptr;
+    VkResult result = vkMapMemory(context.device, device_memory, region->offset, region->size, 0, (void**)(&mapped_ptr));
+    if (result != VK_SUCCESS) {
+        error(user_context) << "VulkanMemoryAllocator: Mapping region failed! vkMapMemory returned error code: " << get_vulkan_error_name(result) << "\n";
+        return nullptr;
+    }
+
+    return mapped_ptr;
+}
+
+void VulkanMemoryAllocator::unmap(void* user_context, MemoryRegion* region) {
+    VulkanContext context(user_context);
+    RegionAllocator* region_allocator = RegionAllocator::find_allocator(user_context, region);
+    BlockResource* block_resource = region_allocator->block_resource();
+    VkDeviceMemory device_memory = reinterpret_cast<VkDeviceMemory>(block_resource->memory.handle);
+    vkUnmapMemory(context.device, device_memory);
+}
+
 void VulkanMemoryAllocator::reclaim(void* user_context, MemoryRegion* region) {
     return block_allocator->reclaim(user_context, region);
 }
@@ -353,6 +417,34 @@ void VulkanMemoryAllocator::destroy(void* user_context) {
     block_allocator->destroy(user_context);
 }
 
+// --
+
+WEAK int vk_create_memory_allocator(void* user_context) {
+    if(memory_allocator != nullptr) {
+        return halide_error_code_success;
+    }
+
+    // TODO: hook up environment vars to config
+    VulkanMemoryAllocator::Config config; // use default config for now
+    memory_allocator = VulkanMemoryAllocator::create(user_context, config, &system_allocator);
+    if(memory_allocator == nullptr) {
+        return halide_error_code_out_of_memory;
+    }
+    return halide_error_code_success;
+}
+
+WEAK int vk_destroy_memory_allocator(void* user_context) {
+    if(memory_allocator == nullptr) {
+        return halide_error_code_success;
+    }
+
+    VulkanMemoryAllocator::destroy(user_context, memory_allocator);
+    memory_allocator = nullptr;
+    return halide_error_code_success;
+}
+
+
+// --
 
 }}}} // Halide::Runtime::Internal::Vulkan
 

@@ -267,6 +267,11 @@ WEAK int vk_create_context(void *user_context, VkInstance *instance, VkDevice *d
         return status;
     }
 
+    status = vk_create_memory_allocator(user_context);
+    if (status != halide_error_code_success) {
+        return status;
+    }
+    
     return halide_error_code_success;
 }
 
