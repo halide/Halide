@@ -73,6 +73,7 @@ protected:
         void visit(const Min *op) override;
         void visit(const Max *op) override;
         void visit(const Or *op) override;
+        void visit(const Ramp *op) override;
         void visit(const Select *op) override;
     };
 
@@ -475,6 +476,21 @@ void CodeGen_WebGPU_Dev::CodeGen_WGSL::visit(const Or *op) {
         rhs += ")";
         print_assignment(t, rhs);
     }
+}
+
+void CodeGen_WebGPU_Dev::CodeGen_WGSL::visit(const Ramp *op) {
+    string id_base = print_expr(op->base);
+    string id_stride = print_expr(op->stride);
+
+    ostringstream rhs;
+    rhs << id_base << " + " << id_stride << " * "
+        << print_type(op->type.with_lanes(op->lanes)) << "(0";
+    // Note 0 written above.
+    for (int i = 1; i < op->lanes; ++i) {
+        rhs << ", " << i;
+    }
+    rhs << ")";
+    print_assignment(op->type.with_lanes(op->lanes), rhs.str());
 }
 
 void CodeGen_WebGPU_Dev::CodeGen_WGSL::visit(const Select *op) {
