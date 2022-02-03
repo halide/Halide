@@ -81,7 +81,7 @@ int main(int argc, char **argv) {
         Internal::ensure_no_file_exists(pytorch_out);
 
         std::vector<Argument> args{alpha, beta};
-        buf.compile_to({{Output::pytorch_wrapper, pytorch_out}}, args, "test1", t);
+        buf.compile_to({{OutputFileType::pytorch_wrapper, pytorch_out}}, args, "test1", t);
 
         Internal::assert_file_exists(pytorch_out);
         std::string actual = read_entire_file(pytorch_out);
@@ -132,6 +132,8 @@ const struct halide_filter_metadata_t *test1_metadata();
 
 HALIDE_FUNCTION_ATTRS
 inline int test1_th_(float _alpha, int32_t _beta, at::Tensor &_buf) {
+    void* __user_context = nullptr;
+
     // Check tensors have contiguous memory and are on the correct device
     HLPT_CHECK_CONTIGUOUS(_buf);
 
@@ -160,7 +162,7 @@ inline int test1_th_(float _alpha, int32_t _beta, at::Tensor &_buf) {
         Internal::ensure_no_file_exists(pytorch_out);
 
         std::vector<Argument> args{alpha, beta};
-        buf.compile_to({{Output::pytorch_wrapper, pytorch_out}}, args, "test2", t);
+        buf.compile_to({{OutputFileType::pytorch_wrapper, pytorch_out}}, args, "test2", t);
 
         Internal::assert_file_exists(pytorch_out);
         std::string actual = read_entire_file(pytorch_out);
@@ -229,7 +231,7 @@ inline int test2_th_(float _alpha, int32_t _beta, at::Tensor &_buf) {
     HLPT_CHECK_DEVICE(_buf, device_id);
 
     // Wrap tensors in Halide buffers
-    Halide::Runtime::Buffer<int32_t> _buf_buffer = Halide::PyTorch::wrap<int32_t>(_buf);
+    Halide::Runtime::Buffer<int32_t> _buf_buffer = Halide::PyTorch::wrap_cuda<int32_t>(_buf);
 
     // Run Halide pipeline
     int err = test2(__user_context, _alpha, _beta, _buf_buffer);

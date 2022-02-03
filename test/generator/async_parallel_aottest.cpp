@@ -138,7 +138,7 @@ int main(int argc, char **argv) {
 
     while (count-- > 0) {
         sleeps = start++;
-        Halide::Runtime::Buffer<int> out(8, 8, 8);
+        Halide::Runtime::Buffer<int, 3> out(8, 8, 8);
 
         async_parallel(out);
     }

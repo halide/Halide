@@ -101,6 +101,8 @@ void CodeGen_PyTorch::compile(const LoweredFunc &f, bool is_cuda) {
         stream << get_indent() << "user_ctx.cuda_context = &ctx;\n";
         stream << get_indent() << "user_ctx.stream = &stream;\n";
         stream << get_indent() << "void* __user_context = (void*) &user_ctx;\n\n";
+    } else {
+        stream << get_indent() << "void* __user_context = nullptr;\n\n";
     }
 
     stream << get_indent() << "// Check tensors have contiguous memory and are on the correct device\n";
@@ -131,8 +133,15 @@ void CodeGen_PyTorch::compile(const LoweredFunc &f, bool is_cuda) {
         std::string tp = type_to_c_type(buffer_arg.type, false);
         stream
             << "Halide::Runtime::Buffer<" << tp << "> "
-            << c_print_name(buffer_arg.name)
-            << "_buffer = Halide::PyTorch::wrap<" << tp << ">("
+            << c_print_name(buffer_arg.name);
+        if (is_cuda) {
+            stream
+                << "_buffer = Halide::PyTorch::wrap_cuda<" << tp << ">(";
+        } else {
+            stream
+                << "_buffer = Halide::PyTorch::wrap<" << tp << ">(";
+        }
+        stream
             << c_print_name(buffer_arg.name)
             << ");\n";
     }

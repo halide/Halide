@@ -7,7 +7,7 @@ using namespace Halide;
 
 const int kSize = 32;
 
-void verify(const Buffer<int32_t> &img, float compiletime_factor, float runtime_factor, int channels) {
+void verify(const Buffer<int32_t, 3> &img, float compiletime_factor, float runtime_factor, int channels) {
     img.for_each_element([=](int x, int y, int c) {
         int expected = (int32_t)(compiletime_factor * runtime_factor * c * (x > y ? x : y));
         int actual = img(x, y, c);
@@ -26,7 +26,7 @@ int main(int argc, char **argv) {
         // The Generator's Input<>s are specified via a struct that is initialized
         // via an {initializer-list}, in the order the Input<>s are declared in the Generator.
         Func f = example::generate(context, {runtime_factor});
-        Buffer<int32_t> img = f.realize({kSize, kSize, 3});
+        Buffer<int32_t, 3> img = f.realize({kSize, kSize, 3});
         verify(img, 1.f, runtime_factor, 3);
     }
 
@@ -36,7 +36,7 @@ int main(int argc, char **argv) {
         inputs.runtime_factor = runtime_factor;
 
         Func f = example::generate(context, inputs);
-        Buffer<int32_t> img = f.realize({kSize, kSize, 3});
+        Buffer<int32_t, 3> img = f.realize({kSize, kSize, 3});
         verify(img, 1.f, runtime_factor, 3);
     }
 
@@ -49,7 +49,7 @@ int main(int argc, char **argv) {
         gp.compiletime_factor = 2.5f;
 
         Func f = example::generate(context, {runtime_factor}, gp);
-        Buffer<int32_t> img = f.realize({kSize, kSize, 3});
+        Buffer<int32_t, 3> img = f.realize({kSize, kSize, 3});
         verify(img, gp.compiletime_factor, runtime_factor, 3);
     }
 
@@ -61,7 +61,7 @@ int main(int argc, char **argv) {
         // In this case, we'll save it to a temporary to make the typing explicit.
         example::Outputs result = example::generate(context, {runtime_factor});
 
-        Buffer<int32_t> img = result.realize({kSize, kSize, 3});
+        Buffer<int32_t, 3> img = result.realize({kSize, kSize, 3});
         verify(img, 1.f, runtime_factor, 3);
     }
 

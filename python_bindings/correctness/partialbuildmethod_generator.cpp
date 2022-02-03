@@ -2,6 +2,7 @@
 
 namespace {
 
+#ifdef HALIDE_ALLOW_GENERATOR_BUILD_METHOD
 // This Generator exists solely to test converted old-style
 // generators -- which use Input<> rather than Param/ImageParam, but *don't* use
 // Output<>/generate().
@@ -12,7 +13,7 @@ class PartialBuildMethod : public Halide::Generator<PartialBuildMethod> {
 public:
     GeneratorParam<float> compiletime_factor{"compiletime_factor", 1, 0, 100};
 
-    Input<Buffer<float>> input{"input", 2};
+    Input<Buffer<float, 2>> input{"input"};
     Input<float> runtime_factor{"runtime_factor", 1.0};
 
     Func build() {
@@ -24,6 +25,24 @@ public:
         return g;
     }
 };
+#else
+// Provide a placeholder here that uses generate(), just to allow this test to
+// succeed even if build() is disabled.
+class PartialBuildMethod : public Halide::Generator<PartialBuildMethod> {
+public:
+    GeneratorParam<float> compiletime_factor{"compiletime_factor", 1, 0, 100};
+
+    Input<Buffer<float, 2>> input{"input"};
+    Input<float> runtime_factor{"runtime_factor", 1.0};
+    Output<Buffer<int32_t, 2>> output{"output"};
+
+    void generate() {
+        Var x, y;
+
+        output(x, y) = cast<int32_t>(input(x, y) * compiletime_factor * runtime_factor);
+    }
+};
+#endif
 
 }  // namespace
 

@@ -24,9 +24,9 @@ public:
     // resample in x and in y).
     GeneratorParam<bool> upsample{"upsample", false};
 
-    Input<Buffer<float>> input{"input", 3};
+    Input<Buffer<float, 3>> input{"input"};
     Input<float> scale_factor{"scale_factor"};
-    Output<Buffer<float>> output{"output", 3};
+    Output<Buffer<float, 3>> output{"output"};
 
     // Common Vars
     Var x, y, c, k;
