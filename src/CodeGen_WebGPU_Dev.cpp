@@ -65,6 +65,7 @@ protected:
 
         void visit(const Allocate *op) override;
         void visit(const And *op) override;
+        void visit(const Broadcast *op) override;
         void visit(const Cast *) override;
         void visit(const IntImm *) override;
         void visit(const UIntImm *) override;
@@ -357,6 +358,12 @@ void CodeGen_WebGPU_Dev::CodeGen_WGSL::visit(const And *op) {
         rhs += ")";
         print_assignment(t, rhs);
     }
+}
+
+void CodeGen_WebGPU_Dev::CodeGen_WGSL::visit(const Broadcast *op) {
+    const string id_value = print_expr(op->value);
+    const Type type = op->type.with_lanes(op->lanes);
+    print_assignment(type, print_type(type) + "(" + id_value + ")");
 }
 
 void CodeGen_WebGPU_Dev::CodeGen_WGSL::visit(const Cast *op) {
