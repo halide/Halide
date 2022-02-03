@@ -64,12 +64,14 @@ protected:
         std::string print_assignment(Type t, const std::string &rhs) override;
 
         void visit(const Allocate *op) override;
+        void visit(const And *op) override;
         void visit(const Cast *) override;
         void visit(const IntImm *) override;
         void visit(const UIntImm *) override;
         void visit(const For *) override;
         void visit(const Min *op) override;
         void visit(const Max *op) override;
+        void visit(const Or *op) override;
         void visit(const Select *op) override;
     };
 
@@ -337,6 +339,26 @@ void CodeGen_WebGPU_Dev::CodeGen_WGSL::visit(const Allocate *op) {
     }
 }
 
+void CodeGen_WebGPU_Dev::CodeGen_WGSL::visit(const And *op) {
+    const Expr &a = op->a;
+    const Expr &b = op->b;
+    const Type &t = op->type;
+    if (t.is_scalar()) {
+        visit_binop(t, a, b, "&&");
+    } else {
+        internal_assert(a.type() == b.type());
+        string sa = print_expr(a);
+        string sb = print_expr(b);
+        string rhs = print_type(t) + "(";
+        for (int i = 0; i < t.lanes(); i++) {
+            const string si = std::to_string(i);
+            rhs += sa + "[" + si + "] && " + sb + "[" + si + "], ";
+        }
+        rhs += ")";
+        print_assignment(t, rhs);
+    }
+}
+
 void CodeGen_WebGPU_Dev::CodeGen_WGSL::visit(const Cast *op) {
     print_assignment(op->type,
                      print_type(op->type) + "(" + print_expr(op->value) + ")");
@@ -426,6 +448,26 @@ void CodeGen_WebGPU_Dev::CodeGen_WGSL::visit(const Max *op) {
 
 void CodeGen_WebGPU_Dev::CodeGen_WGSL::visit(const Min *op) {
     print_expr(Call::make(op->type, "min", {op->a, op->b}, Call::Extern));
+}
+
+void CodeGen_WebGPU_Dev::CodeGen_WGSL::visit(const Or *op) {
+    const Expr &a = op->a;
+    const Expr &b = op->b;
+    const Type &t = op->type;
+    if (t.is_scalar()) {
+        visit_binop(t, a, b, "||");
+    } else {
+        internal_assert(a.type() == b.type());
+        string sa = print_expr(a);
+        string sb = print_expr(b);
+        string rhs = print_type(t) + "(";
+        for (int i = 0; i < t.lanes(); i++) {
+            const string si = std::to_string(i);
+            rhs += sa + "[" + si + "] || " + sb + "[" + si + "], ";
+        }
+        rhs += ")";
+        print_assignment(t, rhs);
+    }
 }
 
 void CodeGen_WebGPU_Dev::CodeGen_WGSL::visit(const Select *op) {
