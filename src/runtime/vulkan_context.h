@@ -1,14 +1,14 @@
 #ifndef HALIDE_RUNTIME_VULKAN_CONTEXT_H
 #define HALIDE_RUNTIME_VULKAN_CONTEXT_H
 
-#include "runtime_internal.h"
 #include "printer.h"
+#include "runtime_internal.h"
 #include "scoped_spin_lock.h"
 #include "vulkan_internal.h"
 
-namespace Halide { 
-namespace Runtime { 
-namespace Internal { 
+namespace Halide {
+namespace Runtime {
+namespace Internal {
 namespace Vulkan {
 
 // An Vulkan context/queue/synchronization lock defined in this module with weak linkage
@@ -23,11 +23,11 @@ volatile ScopedSpinLock::AtomicFlag WEAK thread_lock = 0;
 
 // Prototype for helper function for creating a new vulkan context (returns the instance, device, queue, etc)
 WEAK int vk_create_context(
-    void *user_context, 
-    VkInstance *instance, 
-    VkDevice *device, VkQueue *queue, 
-    VkPhysicalDevice *physical_device, 
-    uint32_t* queue_family_index);
+    void *user_context,
+    VkInstance *instance,
+    VkDevice *device, VkQueue *queue,
+    VkPhysicalDevice *physical_device,
+    uint32_t *queue_family_index);
 
 // --
 
@@ -41,13 +41,14 @@ public:
     VkQueue queue;
     VkResult error;
     VkPhysicalDevice physical_device;
-    uint32_t queue_family_index; // used for operations requiring queue family
+    uint32_t queue_family_index;  // used for operations requiring queue family
 
-    HALIDE_ALWAYS_INLINE VulkanContext(void *user_context) : user_context(user_context),
-                                                             instance(nullptr), device(nullptr), queue(nullptr),
-                                                             error(VK_SUCCESS), physical_device(nullptr),
-                                                             queue_family_index(0) {
-                        
+    HALIDE_ALWAYS_INLINE VulkanContext(void *user_context)
+        : user_context(user_context),
+          instance(nullptr), device(nullptr), queue(nullptr),
+          error(VK_SUCCESS), physical_device(nullptr),
+          queue_family_index(0) {
+
         int result = halide_vulkan_acquire_context(user_context, &instance, &device, &queue, &physical_device, &queue_family_index);
         halide_abort_if_false(user_context, result == 0);
         halide_abort_if_false(user_context, device != nullptr);
@@ -60,11 +61,13 @@ public:
     }
 
     // For now, this is always nullptr
-    HALIDE_ALWAYS_INLINE const VkAllocationCallbacks *allocation_callbacks() { return nullptr; }
+    HALIDE_ALWAYS_INLINE const VkAllocationCallbacks *allocation_callbacks() {
+        return nullptr;
+    }
 };
 
 // Initializes the instance (used by the default vk_create_context)
-WEAK int vk_create_instance(void* user_context, const StringTable& requested_layers, VkInstance *instance) {
+WEAK int vk_create_instance(void *user_context, const StringTable &requested_layers, VkInstance *instance) {
     debug(user_context) << "    vk_create_instance (user_context: " << user_context << ")\n";
 
     StringTable required_instance_extensions;
@@ -77,26 +80,25 @@ WEAK int vk_create_instance(void* user_context, const StringTable& requested_lay
     halide_abort_if_false(user_context, valid_instance);
 
     debug(user_context) << "Vulkan: Found " << (uint32_t)required_instance_extensions.size() << " required extensions for instance!\n";
-    for( int n = 0; n < (int)required_instance_extensions.size(); ++n ) {
+    for (int n = 0; n < (int)required_instance_extensions.size(); ++n) {
         debug(user_context) << "    extension: " << required_instance_extensions[n] << "\n";
     }
 
     VkApplicationInfo app_info = {
-        VK_STRUCTURE_TYPE_APPLICATION_INFO, // struct type
-        nullptr, // Next
-        "Runtime", // application name
-        VK_MAKE_API_VERSION(0, 1, 0, 0), // app version
-        "Halide", // engine name
-        VK_MAKE_API_VERSION(0, HALIDE_VERSION_MAJOR, HALIDE_VERSION_MINOR, HALIDE_VERSION_PATCH), // engine version
-        VK_API_VERSION_1_0
-    };
+        VK_STRUCTURE_TYPE_APPLICATION_INFO,                                                        // struct type
+        nullptr,                                                                                   // Next
+        "Runtime",                                                                                 // application name
+        VK_MAKE_API_VERSION(0, 1, 0, 0),                                                           // app version
+        "Halide",                                                                                  // engine name
+        VK_MAKE_API_VERSION(0, HALIDE_VERSION_MAJOR, HALIDE_VERSION_MINOR, HALIDE_VERSION_PATCH),  // engine version
+        VK_API_VERSION_1_0};
 
     VkInstanceCreateInfo create_info = {
         VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,
-        nullptr,    // Next
-        0,          // Flags
-        &app_info,  // ApplicationInfo
-        (uint32_t)requested_layers.size(), requested_layers.data(),  // Layers
+        nullptr,                                                                            // Next
+        0,                                                                                  // Flags
+        &app_info,                                                                          // ApplicationInfo
+        (uint32_t)requested_layers.size(), requested_layers.data(),                         // Layers
         (uint32_t)required_instance_extensions.size(), required_instance_extensions.data()  // Extensions
     };
 
@@ -109,11 +111,11 @@ WEAK int vk_create_instance(void* user_context, const StringTable& requested_lay
     return halide_error_code_success;
 }
 
-WEAK int vk_select_device_for_context(void* user_context, 
-                                      VkInstance *instance, VkDevice *device, 
+WEAK int vk_select_device_for_context(void *user_context,
+                                      VkInstance *instance, VkDevice *device,
                                       VkPhysicalDevice *physical_device,
-                                      uint32_t* queue_family_index) {
-    
+                                      uint32_t *queue_family_index) {
+
     // For now handle more than 16 devices by just looking at the first 16.
     VkPhysicalDevice chosen_device = nullptr;
     VkPhysicalDevice avail_devices[16];
@@ -136,7 +138,7 @@ WEAK int vk_select_device_for_context(void* user_context,
     for (uint32_t i = 0; (chosen_device == nullptr) && (i < device_count); i++) {
         VkPhysicalDeviceProperties properties;
         vkGetPhysicalDeviceProperties(avail_devices[i], &properties);
-    
+
         int matching_device = 0;
         if ((dev_type != nullptr) && (*dev_type != '\0')) {
             if (strstr(dev_type, "cpu") && (properties.deviceType == VK_PHYSICAL_DEVICE_TYPE_CPU)) {
@@ -151,8 +153,8 @@ WEAK int vk_select_device_for_context(void* user_context,
                 matching_device = 1;
             }
         } else {
-            // use a non-virtual gpu device by default 
-            if ((properties.deviceType == VK_PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU) || 
+            // use a non-virtual gpu device by default
+            if ((properties.deviceType == VK_PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU) ||
                 (properties.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU)) {
                 matching_device = 1;
             }
@@ -187,8 +189,8 @@ WEAK int vk_select_device_for_context(void* user_context,
     return halide_error_code_success;
 }
 
-WEAK int vk_create_device(void *user_context, const StringTable& requested_layers, VkInstance *instance, VkDevice *device, VkQueue *queue, 
-                          VkPhysicalDevice *physical_device, uint32_t* queue_family_index) {
+WEAK int vk_create_device(void *user_context, const StringTable &requested_layers, VkInstance *instance, VkDevice *device, VkQueue *queue,
+                          VkPhysicalDevice *physical_device, uint32_t *queue_family_index) {
 
     StringTable required_device_extensions;
     vk_get_required_device_extensions(user_context, required_device_extensions);
@@ -200,15 +202,15 @@ WEAK int vk_create_device(void *user_context, const StringTable& requested_layer
     halide_abort_if_false(user_context, valid_device);
 
     debug(user_context) << "Vulkan: Found " << (uint32_t)required_device_extensions.size() << " required extensions for device!\n";
-    for( int n = 0; n < (int)required_device_extensions.size(); ++n ) {
+    for (int n = 0; n < (int)required_device_extensions.size(); ++n) {
         debug(user_context) << "    extension: " << required_device_extensions[n] << "\n";
     }
 
     float queue_priority = 1.0f;
     VkDeviceQueueCreateInfo device_queue_create_info = {
         VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
-        nullptr, // Next
-        0,       // Flags
+        nullptr,  // Next
+        0,        // Flags
         *queue_family_index,
         1,
         &queue_priority,
@@ -216,13 +218,13 @@ WEAK int vk_create_device(void *user_context, const StringTable& requested_layer
 
     VkDeviceCreateInfo device_create_info = {
         VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
-        nullptr, // Next
-        0,       // Flags
-        1,       // Count of queues to create
+        nullptr,  // Next
+        0,        // Flags
+        1,        // Count of queues to create
         &device_queue_create_info,
-        (uint32_t)requested_layers.size(), requested_layers.data(),  // Layers
-        (uint32_t)required_device_extensions.size(), required_device_extensions.data(), // Enabled extensions
-        nullptr, // VkPhysicalDeviceFeatures
+        (uint32_t)requested_layers.size(), requested_layers.data(),                      // Layers
+        (uint32_t)required_device_extensions.size(), required_device_extensions.data(),  // Enabled extensions
+        nullptr,                                                                         // VkPhysicalDeviceFeatures
     };
 
     VkResult result = vkCreateDevice(*physical_device, &device_create_info, nullptr, device);
@@ -236,15 +238,15 @@ WEAK int vk_create_device(void *user_context, const StringTable& requested_layer
 }
 
 // Initializes the context (used by the default implementation of halide_acquire_context)
-WEAK int vk_create_context(void *user_context, VkInstance *instance, VkDevice *device, VkQueue *queue, 
-                           VkPhysicalDevice *physical_device, uint32_t* queue_family_index) {
+WEAK int vk_create_context(void *user_context, VkInstance *instance, VkDevice *device, VkQueue *queue,
+                           VkPhysicalDevice *physical_device, uint32_t *queue_family_index) {
 
     debug(user_context) << "    vk_create_context (user_context: " << user_context << ")\n";
 
     StringTable requested_layers;
     uint32_t requested_layer_count = vk_get_requested_layers(user_context, requested_layers);
     debug(user_context) << "Vulkan: Requested " << requested_layer_count << " layers for instance!\n";
-    for( int n = 0; n < (int)requested_layer_count; ++n ) {
+    for (int n = 0; n < (int)requested_layer_count; ++n) {
         debug(user_context) << "    layer: " << requested_layers[n] << "\n";
     }
 
@@ -256,7 +258,7 @@ WEAK int vk_create_context(void *user_context, VkInstance *instance, VkDevice *d
     if (vkCreateDevice == nullptr) {
         vk_load_vulkan_functions(*instance);
     }
-    
+
     status = vk_select_device_for_context(user_context, instance, device, physical_device, queue_family_index);
     if (status != halide_error_code_success) {
         return status;
@@ -275,6 +277,9 @@ WEAK int vk_create_context(void *user_context, VkInstance *instance, VkDevice *d
     return halide_error_code_success;
 }
 
-}}}} // namespace: Halide::Runtime::Internal::Vulkan
+}  // namespace Vulkan
+}  // namespace Internal
+}  // namespace Runtime
+}  // namespace Halide
 
-#endif /// HALIDE_RUNTIME_VULKAN_CONTEXT_H
+#endif  /// HALIDE_RUNTIME_VULKAN_CONTEXT_H

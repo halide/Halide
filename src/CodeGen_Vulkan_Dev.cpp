@@ -1,11 +1,11 @@
 #include <algorithm>
 #include <sstream>
 
-#include "CodeGen_Vulkan_Dev.h"
-#include "CodeGen_Internal.h"
 #include "CodeGen_GPU_Dev.h"
-#include "Deinterleave.h"
+#include "CodeGen_Internal.h"
+#include "CodeGen_Vulkan_Dev.h"
 #include "Debug.h"
+#include "Deinterleave.h"
 #include "IROperator.h"
 #include "IRPrinter.h"
 #include "Scope.h"
@@ -21,12 +21,12 @@ namespace Internal {
 
 class CodeGen_LLVM;
 
-namespace { // anonymous 
+namespace {  // anonymous
 
-template <typename CodeGenT, typename ValueT>
+template<typename CodeGenT, typename ValueT>
 ValueT lower_int_uint_div(CodeGenT *cg, Expr a, Expr b);
 
-template <typename CodeGenT, typename ValueT>
+template<typename CodeGenT, typename ValueT>
 ValueT lower_int_uint_mod(CodeGenT *cg, Expr a, Expr b);
 
 class CodeGen_Vulkan_Dev : public CodeGen_GPU_Dev {
@@ -53,14 +53,16 @@ public:
 
     std::string print_gpu_name(const std::string &name) override;
 
-    std::string api_unique_name() override { return "vulkan"; }
+    std::string api_unique_name() override {
+        return "vulkan";
+    }
 
 protected:
-
     class SPIRVEmitter : public IRVisitor {
-        
+
     public:
-        SPIRVEmitter() { }
+        SPIRVEmitter() {
+        }
 
         using IRVisitor::visit;
 
@@ -142,7 +144,7 @@ protected:
 
         // Function for allocating variables in function scope, with optional initializer.
         // These will appear at the beginning of the function, as required by SPIR-V
-        void add_allocation(uint32_t result_type_id, uint32_t result_id, uint32_t storage_class, uint32_t initializer=0);
+        void add_allocation(uint32_t result_type_id, uint32_t result_id, uint32_t storage_class, uint32_t initializer = 0);
 
         std::map<Type, uint32_t> type_map;
         std::map<std::pair<Type, uint32_t>, uint32_t> pointer_type_map;
@@ -153,7 +155,7 @@ protected:
                              std::initializer_list<uint32_t> words);
         void add_instruction(uint32_t opcode, std::initializer_list<uint32_t> words);
         void add_instruction(std::vector<uint32_t> &region, uint32_t opcode,
-                            std::vector<uint32_t> words);
+                             std::vector<uint32_t> words);
         void add_instruction(uint32_t opcode, std::vector<uint32_t> words);
         uint32_t map_type(const Type &type);
         uint32_t map_pointer_type(const Type &type, const uint32_t storage_class);
@@ -171,7 +173,7 @@ protected:
             uint32_t ids[4];
         };
         // Returns Phi node inputs.
-        template <typename StmtOrExpr>
+        template<typename StmtOrExpr>
         PhiNodeInputs emit_if_then_else(Expr condition, StmtOrExpr then_case, StmtOrExpr else_case);
     } emitter;
 
@@ -191,14 +193,14 @@ void CodeGen_Vulkan_Dev::SPIRVEmitter::add_instruction(uint32_t opcode, std::ini
     spir_v_kernels.insert(spir_v_kernels.end(), words.begin(), words.end());
 }
 void CodeGen_Vulkan_Dev::SPIRVEmitter::add_instruction(std::vector<uint32_t> &region, uint32_t opcode,
-                                                        std::vector<uint32_t> words) {
-  region.push_back(((1 + words.size()) << 16) | opcode);
-  region.insert(region.end(), words.begin(), words.end());
+                                                       std::vector<uint32_t> words) {
+    region.push_back(((1 + words.size()) << 16) | opcode);
+    region.insert(region.end(), words.begin(), words.end());
 }
 
 void CodeGen_Vulkan_Dev::SPIRVEmitter::add_instruction(uint32_t opcode, std::vector<uint32_t> words) {
-  spir_v_kernels.push_back(((1 + words.size()) << 16) | opcode);
-  spir_v_kernels.insert(spir_v_kernels.end(), words.begin(), words.end());
+    spir_v_kernels.push_back(((1 + words.size()) << 16) | opcode);
+    spir_v_kernels.insert(spir_v_kernels.end(), words.begin(), words.end());
 }
 
 uint32_t CodeGen_Vulkan_Dev::SPIRVEmitter::emit_constant(const Type &t, const void *data) {
@@ -215,7 +217,7 @@ uint32_t CodeGen_Vulkan_Dev::SPIRVEmitter::emit_constant(const Type &t, const vo
 
     debug(3) << "emit_constant for type " << t << "\n";
     auto item = constant_map.find(key);
-    if  (item == constant_map.end()) {
+    if (item == constant_map.end()) {
         uint32_t type_id = map_type(t);
         uint32_t extra_words = (t.bytes() + 3) / 4;
         uint32_t constant_id = next_id++;
@@ -244,12 +246,12 @@ void CodeGen_Vulkan_Dev::SPIRVEmitter::scalarize(Expr e) {
     uint32_t type_id = map_type(e.type());
 
     uint32_t result_id = next_id++;
-    add_instruction(SpvOpConstantNull, { type_id, result_id } );
+    add_instruction(SpvOpConstantNull, {type_id, result_id});
 
     for (int i = 0; i < e.type().lanes(); i++) {
         extract_lane(e, i).accept(this);
         uint32_t composite_vec = next_id++;
-        add_instruction(SpvOpVectorInsertDynamic, { type_id, composite_vec, (uint32_t)i, result_id, id });
+        add_instruction(SpvOpVectorInsertDynamic, {type_id, composite_vec, (uint32_t)i, result_id, id});
         result_id = composite_vec;
     }
     id = result_id;
@@ -261,24 +263,24 @@ uint32_t CodeGen_Vulkan_Dev::SPIRVEmitter::map_type(const Type &t) {
     Type t_key(key_typecode, t.bits(), t.lanes());
 
     auto item = type_map.find(t_key);
-    if  (item == type_map.end()) {
+    if (item == type_map.end()) {
         // TODO, handle arrays, pointers, halide_buffer_t
         uint32_t type_id = 0;
         if (t.lanes() != 1) {
             uint32_t base_id = map_type(t.with_lanes(1));
             type_id = next_id++;
-            add_instruction(spir_v_types, SpvOpTypeVector, { type_id, base_id, (uint32_t)t.lanes() });
+            add_instruction(spir_v_types, SpvOpTypeVector, {type_id, base_id, (uint32_t)t.lanes()});
         } else {
             if (t.is_float()) {
                 type_id = next_id++;
-                add_instruction(spir_v_types, SpvOpTypeFloat, { type_id, (uint32_t)t.bits() });
+                add_instruction(spir_v_types, SpvOpTypeFloat, {type_id, (uint32_t)t.bits()});
             } else if (t.is_bool()) {
                 type_id = next_id++;
-                add_instruction(spir_v_types, SpvOpTypeBool, { type_id });
+                add_instruction(spir_v_types, SpvOpTypeBool, {type_id});
             } else if (t.is_int_or_uint()) {
                 type_id = next_id++;
                 uint32_t signedness = t.is_uint() ? 0 : 1;
-                add_instruction(spir_v_types, SpvOpTypeInt, { type_id, (uint32_t)t.bits(), signedness });
+                add_instruction(spir_v_types, SpvOpTypeInt, {type_id, (uint32_t)t.bits(), signedness});
             } else {
                 internal_error << "Unsupported type in Vulkan backend " << t << "\n";
             }
@@ -293,12 +295,12 @@ uint32_t CodeGen_Vulkan_Dev::SPIRVEmitter::map_type(const Type &t) {
 uint32_t CodeGen_Vulkan_Dev::SPIRVEmitter::map_type_to_pair(const Type &t) {
     uint32_t &ref = pair_type_map[t];
 
-    if  (ref == 0) {
+    if (ref == 0) {
         uint32_t base_type = map_type(t);
 
         uint32_t type_id = next_id++;
 
-        add_instruction(spir_v_types, SpvOpTypeStruct, { type_id, base_type, base_type });
+        add_instruction(spir_v_types, SpvOpTypeStruct, {type_id, base_type, base_type});
         ref = type_id;
     }
     return ref;
@@ -310,7 +312,7 @@ uint32_t CodeGen_Vulkan_Dev::SPIRVEmitter::map_pointer_type(const Type &type, co
     if (ref == 0) {
         uint32_t base_type_id = map_type(type);
         ref = next_id++;
-        add_instruction(spir_v_types, SpvOpTypePointer, { ref, storage_class, base_type_id });
+        add_instruction(spir_v_types, SpvOpTypePointer, {ref, storage_class, base_type_id});
         pointer_type_map[key] = ref;
     }
 
@@ -330,20 +332,19 @@ void CodeGen_Vulkan_Dev::SPIRVEmitter::visit(const UIntImm *imm) {
 }
 
 namespace {
-void encode_string(std::vector<uint32_t>& section, const uint32_t words,
-                   const size_t str_size, const char* str) {
+void encode_string(std::vector<uint32_t> &section, const uint32_t words,
+                   const size_t str_size, const char *str) {
     size_t bytes_copied = 0;
     for (uint32_t i = 0; i < words; i++) {
-      uint32_t word;
-      size_t to_copy = std::min(str_size + 1 - bytes_copied, (size_t)4);
-      memcpy(&word, str, to_copy);
-      bytes_copied += to_copy;
-      section.push_back(word);
-      str += 4;
+        uint32_t word;
+        size_t to_copy = std::min(str_size + 1 - bytes_copied, (size_t)4);
+        memcpy(&word, str, to_copy);
+        bytes_copied += to_copy;
+        section.push_back(word);
+        str += 4;
     }
-
 }
-}
+}  // namespace
 void CodeGen_Vulkan_Dev::SPIRVEmitter::visit(const StringImm *imm) {
     uint32_t extra_words = (imm->value.size() + 1 + 3) / 4;
     id = next_id++;
@@ -401,7 +402,7 @@ void CodeGen_Vulkan_Dev::SPIRVEmitter::visit(const Cast *op) {
     op->value.accept(this);
     uint32_t src_id = id;
     id = next_id++;
-    add_instruction(opcode, { type_id, id, src_id });
+    add_instruction(opcode, {type_id, id, src_id});
 }
 
 void CodeGen_Vulkan_Dev::SPIRVEmitter::visit(const Add *op) {
@@ -534,7 +535,7 @@ void CodeGen_Vulkan_Dev::SPIRVEmitter::visit(const Not *op) {
     op->a.accept(this);
     uint32_t a_id = id;
     id = next_id++;
-    add_instruction(SpvOpLogicalNot, { type_id, id, a_id });
+    add_instruction(SpvOpLogicalNot, {type_id, id, a_id});
 }
 
 void CodeGen_Vulkan_Dev::SPIRVEmitter::visit(const Call *op) {
@@ -542,8 +543,8 @@ void CodeGen_Vulkan_Dev::SPIRVEmitter::visit(const Call *op) {
         // TODO: Check the scopes here and figure out if this is the
         // right memory barrier. Might be able to use
         // SpvMemorySemanticsMaskNone instead.
-        add_instruction(SpvOpControlBarrier, { current_function_id, current_function_id,
-                                               SpvMemorySemanticsAcquireReleaseMask });
+        add_instruction(SpvOpControlBarrier, {current_function_id, current_function_id,
+                                              SpvMemorySemanticsAcquireReleaseMask});
     } else if (op->is_intrinsic(Call::bitwise_and)) {
         internal_assert(op->args.size() == 2);
         visit_binop(op->type, op->args[0], op->args[1], SpvOpBitwiseAnd);
@@ -559,7 +560,7 @@ void CodeGen_Vulkan_Dev::SPIRVEmitter::visit(const Call *op) {
         op->args[0]->accept(this);
         uint32_t arg_id = id;
         id = next_id++;
-        add_instruction(SpvOpNot, { type_id, id, arg_id });
+        add_instruction(SpvOpNot, {type_id, id, arg_id});
     } else if (op->is_intrinsic(Call::reinterpret)) {
     } else if (op->is_intrinsic(Call::if_then_else)) {
         if (op->type.is_vector()) {
@@ -575,7 +576,7 @@ void CodeGen_Vulkan_Dev::SPIRVEmitter::visit(const Call *op) {
             spir_v_kernels.push_back(type_id);
             spir_v_kernels.push_back(id);
             spir_v_kernels.insert(spir_v_kernels.end(), phi_inputs.ids, phi_inputs.ids + 4);
-      }
+        }
     } else if (op->is_intrinsic(Call::IntrinsicOp::div_round_to_zero)) {
         internal_assert(op->args.size() == 2);
         uint32_t opcode = 0;
@@ -659,7 +660,7 @@ void CodeGen_Vulkan_Dev::SPIRVEmitter::visit(const Select *op) {
     op->false_value.accept(this);
     uint32_t false_id = id;
     id = next_id++;
-    add_instruction(SpvOpSelect, { type_id, id, cond_id, true_id, false_id });
+    add_instruction(SpvOpSelect, {type_id, id, cond_id, true_id, false_id});
 }
 
 void CodeGen_Vulkan_Dev::SPIRVEmitter::visit(const Load *op) {
@@ -718,7 +719,6 @@ void CodeGen_Vulkan_Dev::SPIRVEmitter::visit(const Store *op) {
                                                emit_constant(UInt(32), &zero), index_id});
 
     add_instruction(SpvOpStore, {access_chain_id, value_id});
-
 }
 
 void CodeGen_Vulkan_Dev::SPIRVEmitter::visit(const Let *let) {
@@ -758,19 +758,19 @@ void CodeGen_Vulkan_Dev::SPIRVEmitter::visit(const ProducerConsumer *) {
 namespace {
 std::pair<std::string, uint32_t> simt_intrinsic(const std::string &name) {
     if (ends_with(name, ".__thread_id_x")) {
-      return {"LocalInvocationId", 0};
+        return {"LocalInvocationId", 0};
     } else if (ends_with(name, ".__thread_id_y")) {
-      return {"LocalInvocationId", 1};
+        return {"LocalInvocationId", 1};
     } else if (ends_with(name, ".__thread_id_z")) {
-      return {"LocalInvocationId", 2};
+        return {"LocalInvocationId", 2};
     } else if (ends_with(name, ".__block_id_x")) {
-      return {"WorkgroupId", 0};
+        return {"WorkgroupId", 0};
     } else if (ends_with(name, ".__block_id_y")) {
-      return {"WorkgroupId", 1};
+        return {"WorkgroupId", 1};
     } else if (ends_with(name, ".__block_id_z")) {
-      return {"WorkgroupId", 2};
+        return {"WorkgroupId", 2};
     } else if (ends_with(name, "id_w")) {
-      user_error << "Vulkan only supports <=3 dimensions for gpu blocks";
+        user_error << "Vulkan only supports <=3 dimensions for gpu blocks";
     }
     internal_error << "simt_intrinsic called on bad variable name: " << name << "\n";
     return {"", -1};
@@ -784,7 +784,7 @@ int thread_loop_workgroup_index(const std::string &name) {
     }
     return -1;
 }
-} // anonymous namespace
+}  // anonymous namespace
 
 void CodeGen_Vulkan_Dev::SPIRVEmitter::visit(const For *op) {
 
@@ -801,15 +801,13 @@ void CodeGen_Vulkan_Dev::SPIRVEmitter::visit(const For *op) {
             const IntImm *wsize = op->extent.as<IntImm>();
             user_assert(wsize != nullptr) << "Vulkan requires statically-known workgroup size.\n";
             uint32_t new_wsize = wsize->value;
-            user_assert(workgroup_size[idx] == 0 || workgroup_size[idx] == new_wsize) <<
-              "Vulkan requires all kernels have the same workgroup size, but two different ones "
-              "were encountered " << workgroup_size[idx] << " and " << new_wsize <<
-              " in dimension " << idx << "\n";
+            user_assert(workgroup_size[idx] == 0 || workgroup_size[idx] == new_wsize) << "Vulkan requires all kernels have the same workgroup size, but two different ones "
+                                                                                         "were encountered "
+                                                                                      << workgroup_size[idx] << " and " << new_wsize << " in dimension " << idx << "\n";
             workgroup_size[idx] = new_wsize;
         }
 
         auto intrinsic = simt_intrinsic(op->name);
-
 
         // Intrinsics are inserted when adding the kernel
         internal_assert(symbol_table.contains(intrinsic.first));
@@ -832,7 +830,7 @@ void CodeGen_Vulkan_Dev::SPIRVEmitter::visit(const For *op) {
 
         // TODO: Loop vars are alway int32_t right?
         uint32_t index_type_id = map_type(Int(32));
-        uint32_t index_var_type_id = map_pointer_type(Int(32), SpvStorageClassFunction); 
+        uint32_t index_var_type_id = map_pointer_type(Int(32), SpvStorageClassFunction);
 
         op->min.accept(this);
         uint32_t min_id = id;
@@ -841,7 +839,7 @@ void CodeGen_Vulkan_Dev::SPIRVEmitter::visit(const For *op) {
 
         // Compute max.
         uint32_t max_id = next_id++;
-        add_instruction(SpvOpIAdd, { index_type_id, max_id, min_id, extent_id });
+        add_instruction(SpvOpIAdd, {index_type_id, max_id, min_id, extent_id});
 
         // Declare loop var
         // TODO: Can we use the phi node for this?
@@ -853,20 +851,20 @@ void CodeGen_Vulkan_Dev::SPIRVEmitter::visit(const For *op) {
         uint32_t body_label_id = next_id++;
         uint32_t continue_label_id = next_id++;
         uint32_t merge_label_id = next_id++;
-        add_instruction(SpvOpLabel, { header_label_id });
-        add_instruction(SpvOpLoopMerge, { merge_label_id, continue_label_id, SpvLoopControlMaskNone });
-        add_instruction(SpvOpBranch, { loop_top_label_id });
-        add_instruction(SpvOpLabel, { loop_top_label_id });
+        add_instruction(SpvOpLabel, {header_label_id});
+        add_instruction(SpvOpLoopMerge, {merge_label_id, continue_label_id, SpvLoopControlMaskNone});
+        add_instruction(SpvOpBranch, {loop_top_label_id});
+        add_instruction(SpvOpLabel, {loop_top_label_id});
 
         // loop test.
         uint32_t cur_index_id = next_id++;
-        add_instruction(SpvOpLoad, { index_type_id, cur_index_id, loop_var_id });
+        add_instruction(SpvOpLoad, {index_type_id, cur_index_id, loop_var_id});
 
         uint32_t loop_test_id = next_id++;
-        add_instruction(SpvOpSLessThanEqual, { loop_test_id, cur_index_id, max_id });
-        add_instruction(SpvOpBranchConditional, { loop_test_id, body_label_id, merge_label_id });
+        add_instruction(SpvOpSLessThanEqual, {loop_test_id, cur_index_id, max_id});
+        add_instruction(SpvOpBranchConditional, {loop_test_id, body_label_id, merge_label_id});
 
-        add_instruction(SpvOpLabel, { body_label_id });
+        add_instruction(SpvOpLabel, {body_label_id});
 
         {
             ScopedBinding<std::pair<uint32_t, uint32_t>> binding(symbol_table, op->name, {cur_index_id, SpvStorageClassFunction});
@@ -874,17 +872,17 @@ void CodeGen_Vulkan_Dev::SPIRVEmitter::visit(const For *op) {
             op->body.accept(this);
         }
 
-        add_instruction(SpvOpBranch, { continue_label_id });
-        add_instruction(SpvOpLabel, { continue_label_id });
+        add_instruction(SpvOpBranch, {continue_label_id});
+        add_instruction(SpvOpLabel, {continue_label_id});
 
         // Loop var update?
         uint32_t next_index_id = next_id++;
         int32_t one = 1;
         uint32_t constant_one_id = emit_constant(Int(32), &one);
-        add_instruction(SpvOpIAdd, { index_type_id, next_index_id, cur_index_id, constant_one_id});
-        add_instruction(SpvOpStore, { index_type_id, next_index_id, loop_var_id });
-        add_instruction(SpvOpBranch, { header_label_id });
-        add_instruction(SpvOpLabel, { merge_label_id });
+        add_instruction(SpvOpIAdd, {index_type_id, next_index_id, cur_index_id, constant_one_id});
+        add_instruction(SpvOpStore, {index_type_id, next_index_id, loop_var_id});
+        add_instruction(SpvOpBranch, {header_label_id});
+        add_instruction(SpvOpLabel, {merge_label_id});
     }
 }
 
@@ -902,10 +900,10 @@ void CodeGen_Vulkan_Dev::SPIRVEmitter::visit(const Ramp *op) {
     uint32_t first_id = next_id;
     for (int i = 1; i < op->lanes; i++) {
         uint32_t this_id = next_id++;
-        add_instruction(add_opcode, { base_type_id, this_id, prev_id, stride_id });
+        add_instruction(add_opcode, {base_type_id, this_id, prev_id, stride_id});
         prev_id = this_id;
     }
-    
+
     id = next_id++;
     spir_v_kernels.push_back(((op->lanes + 3) << 16) | SpvOpCompositeConstruct);
     spir_v_kernels.push_back(type_id);
@@ -942,7 +940,7 @@ void CodeGen_Vulkan_Dev::SPIRVEmitter::visit(const Realize *) {
     internal_error << "CodeGen_Vulkan_Dev::SPIRVEmitter::visit(const Realize *): Realize encountered during codegen\n";
 }
 
-template <typename StmtOrExpr>
+template<typename StmtOrExpr>
 CodeGen_Vulkan_Dev::SPIRVEmitter::PhiNodeInputs
 CodeGen_Vulkan_Dev::SPIRVEmitter::emit_if_then_else(Expr condition,
                                                     StmtOrExpr then_case, StmtOrExpr else_case) {
@@ -953,14 +951,14 @@ CodeGen_Vulkan_Dev::SPIRVEmitter::emit_if_then_else(Expr condition,
     uint32_t merge_label_id = next_id++;
 
     add_instruction(SpvOpSelectionMerge, {merge_label_id, SpvSelectionControlMaskNone});
-    add_instruction(SpvOpBranchConditional, { cond_id, then_label_id, else_label_id });
-    add_instruction(SpvOpLabel, { then_label_id });
+    add_instruction(SpvOpBranchConditional, {cond_id, then_label_id, else_label_id});
+    add_instruction(SpvOpLabel, {then_label_id});
 
     then_case.accept(this);
     uint32_t then_id = id;
 
-    add_instruction(SpvOpBranch, { merge_label_id });
-    add_instruction(SpvOpLabel, { else_label_id });
+    add_instruction(SpvOpBranch, {merge_label_id});
+    add_instruction(SpvOpLabel, {else_label_id});
 
     else_case.accept(this);
     uint32_t else_id = id;
@@ -968,9 +966,9 @@ CodeGen_Vulkan_Dev::SPIRVEmitter::emit_if_then_else(Expr condition,
     // Every basic block must end with a branch instruction
     add_instruction(SpvOpBranch, {merge_label_id});
 
-    add_instruction(SpvOpLabel, { merge_label_id });
+    add_instruction(SpvOpLabel, {merge_label_id});
 
-    return {{ then_id, then_label_id, else_id, else_label_id }};
+    return {{then_id, then_label_id, else_id, else_label_id}};
 }
 
 void CodeGen_Vulkan_Dev::SPIRVEmitter::visit(const IfThenElse *op) {
@@ -1018,23 +1016,17 @@ void CodeGen_Vulkan_Dev::SPIRVEmitter::visit_binop(Type t, Expr a, Expr b, uint3
     b.accept(this);
     uint32_t b_id = id;
     id = next_id++;
-    add_instruction(opcode, { type_id, id, a_id, b_id });
+    add_instruction(opcode, {type_id, id, a_id, b_id});
 }
-
 
 void CodeGen_Vulkan_Dev::SPIRVEmitter::add_allocation(uint32_t result_type_id,
                                                       uint32_t result_id,
                                                       uint32_t storage_class,
                                                       uint32_t initializer) {
     if (initializer) {
-        add_instruction(spir_v_kernel_allocations, SpvOpVariable, {result_type_id,
-                                                                  result_id,
-                                                                  storage_class,
-                                                                  initializer});
+        add_instruction(spir_v_kernel_allocations, SpvOpVariable, {result_type_id, result_id, storage_class, initializer});
     } else {
-        add_instruction(spir_v_kernel_allocations, SpvOpVariable, {result_type_id,
-                                                                  result_id,
-                                                                  storage_class});
+        add_instruction(spir_v_kernel_allocations, SpvOpVariable, {result_type_id, result_id, storage_class});
     }
 }
 
@@ -1071,13 +1063,11 @@ void CodeGen_Vulkan_Dev::SPIRVEmitter::add_kernel(Stmt s,
     entry_point_interface.push_back(SpvExecutionModelGLCompute);
     entry_point_interface.push_back(current_function_id);
     // Add the string name of the function
-    encode_string(entry_point_interface, (name.size() + 1 + 3)/4, name.size(), name.c_str());
-
-
+    encode_string(entry_point_interface, (name.size() + 1 + 3) / 4, name.size(), name.c_str());
 
     // TODO: only add the SIMT intrinsics used
     auto intrinsics = {"WorkgroupId", "LocalInvocationId"};
-    for (auto intrinsic: intrinsics) {
+    for (auto intrinsic : intrinsics) {
         uint32_t intrinsic_id = next_id++;
         uint32_t intrinsic_loaded_id = next_id++;
         // The builtins are pointers to vec3
@@ -1094,7 +1084,6 @@ void CodeGen_Vulkan_Dev::SPIRVEmitter::add_kernel(Stmt s,
         // Add the builtin to the interface
         entry_point_interface.push_back(intrinsic_id);
     }
-
 
     // Add the entry point and exection mode
     add_instruction(spir_v_entrypoints,
@@ -1115,10 +1104,7 @@ void CodeGen_Vulkan_Dev::SPIRVEmitter::add_kernel(Stmt s,
             scalar_types.push_back(map_type(args[i].type));
 
             // Add a decoration describing the offset
-            add_instruction(spir_v_annotations, SpvOpMemberDecorate, {param_pack_type_id, 
-                                                                      (uint32_t)(scalar_types.size()-2), 
-                                                                      SpvDecorationOffset,
-                                                                      offset});
+            add_instruction(spir_v_annotations, SpvOpMemberDecorate, {param_pack_type_id, (uint32_t)(scalar_types.size() - 2), SpvDecorationOffset, offset});
             offset += args[i].type.bytes();
         }
     }
@@ -1135,7 +1121,6 @@ void CodeGen_Vulkan_Dev::SPIRVEmitter::add_kernel(Stmt s,
     // Add a variable for the parameter pack
     add_instruction(spir_v_types, SpvOpVariable, {param_pack_ptr_type_id, param_pack_id, SpvStorageClassUniform});
 
-
     uint32_t binding_counter = 1;
     uint32_t scalar_index = 0;
     for (size_t i = 0; i < args.size(); i++) {
@@ -1147,15 +1132,11 @@ void CodeGen_Vulkan_Dev::SPIRVEmitter::add_kernel(Stmt s,
             uint32_t ptr_struct_type = next_id++;
             add_instruction(spir_v_types, SpvOpTypeRuntimeArray, {runtime_arr_type, element_type});
             add_instruction(spir_v_types, SpvOpTypeStruct, {struct_type, runtime_arr_type});
-            add_instruction(spir_v_types, SpvOpTypePointer, {ptr_struct_type,
-                                                             SpvStorageClassUniform,
-                                                             struct_type});
+            add_instruction(spir_v_types, SpvOpTypePointer, {ptr_struct_type, SpvStorageClassUniform, struct_type});
             // Annotate the struct to indicate it's passed in a GLSL-style buffer block
             add_instruction(spir_v_annotations, SpvOpDecorate, {struct_type, SpvDecorationBufferBlock});
             // Annotate the array with its stride
-            add_instruction(spir_v_annotations, SpvOpDecorate, {runtime_arr_type,
-                                                                SpvDecorationArrayStride,
-                                                                (uint32_t)(args[i].type.bytes())});
+            add_instruction(spir_v_annotations, SpvOpDecorate, {runtime_arr_type, SpvDecorationArrayStride, (uint32_t)(args[i].type.bytes())});
             // Annotate the offset for the array
             add_instruction(spir_v_annotations, SpvOpMemberDecorate, {struct_type, 0, SpvDecorationOffset, (uint32_t)0});
 
@@ -1166,8 +1147,8 @@ void CodeGen_Vulkan_Dev::SPIRVEmitter::add_kernel(Stmt s,
             add_instruction(spir_v_types, SpvOpVariable, {ptr_struct_type, param_id, SpvStorageClassUniform});
         } else {
             uint32_t access_chain_id = next_id++;
-            add_instruction(SpvOpInBoundsAccessChain, {map_pointer_type(args[i].type, SpvStorageClassUniform), 
-                                                       access_chain_id, 
+            add_instruction(SpvOpInBoundsAccessChain, {map_pointer_type(args[i].type, SpvStorageClassUniform),
+                                                       access_chain_id,
                                                        param_pack_id,
                                                        emit_constant(UInt(32), &scalar_index)});
             scalar_index++;
@@ -1175,7 +1156,6 @@ void CodeGen_Vulkan_Dev::SPIRVEmitter::add_kernel(Stmt s,
         }
         symbol_table.push(args[i].name, {param_id, SpvStorageClassUniform});
     }
-
 
     s.accept(this);
 
@@ -1197,7 +1177,7 @@ void CodeGen_Vulkan_Dev::SPIRVEmitter::add_kernel(Stmt s,
                      workgroup_size[0], workgroup_size[1], workgroup_size[2]});
 
     // Pop scope
-    for (auto arg: args) {
+    for (auto arg : args) {
         symbol_table.pop(arg.name);
     }
 
@@ -1217,7 +1197,7 @@ void add_extension(const std::string &extension_name, std::vector<uint32_t> &sec
     const size_t data_size = extension_name.size();
     encode_string(section, extra_words, data_size, data_temp);
 }
-}
+}  // namespace
 void CodeGen_Vulkan_Dev::init_module() {
     debug(2) << "Vulkan device codegen init_module\n";
 
@@ -1225,11 +1205,11 @@ void CodeGen_Vulkan_Dev::init_module() {
     emitter.spir_v_header.push_back(SpvMagicNumber);
     emitter.spir_v_header.push_back(SpvVersion);
     emitter.spir_v_header.push_back(SpvSourceLanguageUnknown);
-    emitter.spir_v_header.push_back(0); // Bound placeholder
-    emitter.spir_v_header.push_back(0); // Reserved for schema.
+    emitter.spir_v_header.push_back(0);  // Bound placeholder
+    emitter.spir_v_header.push_back(0);  // Reserved for schema.
 
     // the unique void type
-    emitter.next_id++; // 0 is not a valid id
+    emitter.next_id++;  // 0 is not a valid id
     emitter.void_id = emitter.next_id++;
     emitter.add_instruction(emitter.spir_v_types, SpvOpTypeVoid, {emitter.void_id});
 
@@ -1248,7 +1228,6 @@ void CodeGen_Vulkan_Dev::init_module() {
     // TODO: Which memory model?
     emitter.add_instruction(emitter.spir_v_header, SpvOpMemoryModel,
                             {SpvAddressingModelLogical, SpvMemoryModelGLSL450});
-
 
     // OpCapability instructions
     //    Enumerate type maps and add subwidth integer types if used
@@ -1290,7 +1269,7 @@ std::vector<char> CodeGen_Vulkan_Dev::compile_to_src() {
     final_module.insert(final_module.end(), (const char *)emitter.spir_v_kernels.data(), (const char *)(emitter.spir_v_kernels.data() + emitter.spir_v_kernels.size()));
     assert(final_module.size() == total_size);
     std::ofstream f("out.spv", std::ios::out | std::ios::binary);
-    f.write((char*)(final_module.data()), final_module.size());
+    f.write((char *)(final_module.data()), final_module.size());
     f.close();
 
     return final_module;
@@ -1311,11 +1290,11 @@ void CodeGen_Vulkan_Dev::dump() {
     // For now: dump to file so source can be consumed by validator
     auto module = compile_to_src();
     std::ofstream f("out.spv", std::ios::out | std::ios::binary);
-    f.write((char*)(module.data()), module.size());
+    f.write((char *)(module.data()), module.size());
     f.close();
 }
 
-} // namespace 
+}  // namespace
 
 std::unique_ptr<CodeGen_GPU_Dev> new_CodeGen_Vulkan_Dev(const Target &target) {
     return std::make_unique<CodeGen_Vulkan_Dev>(target);

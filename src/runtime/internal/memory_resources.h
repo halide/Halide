@@ -8,7 +8,7 @@ namespace Internal {
 // --
 
 // Hint for allocation usage indicating whether or not the resource
-// is in use, available, or dedicated (and can't be split or shared) 
+// is in use, available, or dedicated (and can't be split or shared)
 enum AllocationStatus {
     InvalidStatus,
     InUse,
@@ -16,37 +16,37 @@ enum AllocationStatus {
     Dedicated
 };
 
-// Hint for allocation requests indicating intended usage 
-// required between host and device address space mappings 
+// Hint for allocation requests indicating intended usage
+// required between host and device address space mappings
 enum MemoryVisibility {
-    InvalidVisibility,     //< invalid enum value
-    HostOnly,              //< host local
-    DeviceOnly,            //< device local
-    DeviceToHost,          //< transfer from device to host
-    HostToDevice,          //< transfer from host to device
-    DefaultVisibility,     //< default visibility (use any valid visibility -- unable to determine prior to usage)
+    InvalidVisibility,  //< invalid enum value
+    HostOnly,           //< host local
+    DeviceOnly,         //< device local
+    DeviceToHost,       //< transfer from device to host
+    HostToDevice,       //< transfer from host to device
+    DefaultVisibility,  //< default visibility (use any valid visibility -- unable to determine prior to usage)
 };
 
-// Hint for allocation requests indicating intended update 
-// frequency for modifying the contents of the allocation 
+// Hint for allocation requests indicating intended update
+// frequency for modifying the contents of the allocation
 enum MemoryUsage {
-    InvalidUsage,           //< invalid enum value
-    StaticStorage,          //< intended for static storage, whereby the contents will be set once and remain unchanged
-    DynamicStorage,         //< intended for dyanmic storage, whereby the contents will be set frequently and change constantly
-    TransferSrc,            //< intended for staging storage updates, whereby the contents will be used as the source of a transfer
-    TransferDst,            //< intended for staging storage updates, whereby the contents will be used as the destination of a transfer
-    TransferSrcDst,         //< intended for staging storage updates, whereby the contents will be used either as a source or destination of a transfer
-    DefaultUsage            //< default usage (use any valid usage -- unable to determine prior to usage)
+    InvalidUsage,    //< invalid enum value
+    StaticStorage,   //< intended for static storage, whereby the contents will be set once and remain unchanged
+    DynamicStorage,  //< intended for dyanmic storage, whereby the contents will be set frequently and change constantly
+    TransferSrc,     //< intended for staging storage updates, whereby the contents will be used as the source of a transfer
+    TransferDst,     //< intended for staging storage updates, whereby the contents will be used as the destination of a transfer
+    TransferSrcDst,  //< intended for staging storage updates, whereby the contents will be used either as a source or destination of a transfer
+    DefaultUsage     //< default usage (use any valid usage -- unable to determine prior to usage)
 };
 
-// Hint for allocation requests indicating ideal caching support (if available) 
+// Hint for allocation requests indicating ideal caching support (if available)
 enum MemoryCaching {
-    InvalidCaching,         //< invalid enum value
-    Cached,                 //< cached
-    Uncached,               //< uncached 
-    CachedCoherent,         //< cached and coherent
-    UncachedCoherent,       //< uncached but still coherent 
-    DefaultCaching          //< default caching (use any valid caching behaviour -- unable to determine prior to usage)
+    InvalidCaching,    //< invalid enum value
+    Cached,            //< cached
+    Uncached,          //< uncached
+    CachedCoherent,    //< cached and coherent
+    UncachedCoherent,  //< uncached but still coherent
+    DefaultCaching     //< default caching (use any valid caching behaviour -- unable to determine prior to usage)
 };
 
 struct MemoryProperties {
@@ -55,52 +55,52 @@ struct MemoryProperties {
     MemoryCaching caching = MemoryCaching::InvalidCaching;
 };
 
-// Client-facing struct for exchanging memory block allocation requests 
+// Client-facing struct for exchanging memory block allocation requests
 struct MemoryBlock {
-    void* handle = nullptr;             //< client data storing native handle (managed by alloc_block_region/free_block_region)
-    size_t size = 0;                    //< allocated size (in bytes)
-    bool dedicated = false;             //< flag indicating whether allocation is one dedicated resource (or split/shared into other resources)
-    MemoryProperties properties;        //< properties for the allocated block 
+    void *handle = nullptr;       //< client data storing native handle (managed by alloc_block_region/free_block_region)
+    size_t size = 0;              //< allocated size (in bytes)
+    bool dedicated = false;       //< flag indicating whether allocation is one dedicated resource (or split/shared into other resources)
+    MemoryProperties properties;  //< properties for the allocated block
 };
 
-// Client-facing struct for exchanging memory region allocation requests 
+// Client-facing struct for exchanging memory region allocation requests
 struct MemoryRegion {
-    void* handle = nullptr;             //< client data storing native handle (managed by alloc_block_region/free_block_region)
-    size_t offset = 0;                  //< offset from base address in block (in bytes)
-    size_t size = 0;                    //< allocated size (in bytes)
-    bool dedicated = false;             //< flag indicating whether allocation is one dedicated resource (or split/shared into other resources)
-    MemoryProperties properties;        //< properties for the allocated region 
+    void *handle = nullptr;       //< client data storing native handle (managed by alloc_block_region/free_block_region)
+    size_t offset = 0;            //< offset from base address in block (in bytes)
+    size_t size = 0;              //< allocated size (in bytes)
+    bool dedicated = false;       //< flag indicating whether allocation is one dedicated resource (or split/shared into other resources)
+    MemoryProperties properties;  //< properties for the allocated region
 };
 
-// Client-facing struct for issuing memory allocation requests  
+// Client-facing struct for issuing memory allocation requests
 struct MemoryRequest {
-    size_t offset = 0;                  //< offset from base address in block (in bytes)
-    size_t size = 0;                    //< allocated size (in bytes)
-    size_t alignment = 0;               //< alignment constraint for address
-    bool dedicated = false;             //< flag indicating whether allocation is one dedicated resource (or split/shared into other resources)
-    MemoryProperties properties;        //< properties for the allocated region 
+    size_t offset = 0;            //< offset from base address in block (in bytes)
+    size_t size = 0;              //< allocated size (in bytes)
+    size_t alignment = 0;         //< alignment constraint for address
+    bool dedicated = false;       //< flag indicating whether allocation is one dedicated resource (or split/shared into other resources)
+    MemoryProperties properties;  //< properties for the allocated region
 };
 
 class RegionAllocator;
 struct BlockRegion;
 
-// Internal struct for block resource state 
-// -- Note: first field must MemoryBlock 
+// Internal struct for block resource state
+// -- Note: first field must MemoryBlock
 struct BlockResource {
-    MemoryBlock memory = {0};                                  //< memory info for the allocated block
-    RegionAllocator* allocator = nullptr;                      //< designated allocator for the block
-    BlockRegion* regions = nullptr;                            //< head of linked list of memory regions
-    size_t reserved = 0;                                       //< number of bytes already reserved to regions
+    MemoryBlock memory = {0};              //< memory info for the allocated block
+    RegionAllocator *allocator = nullptr;  //< designated allocator for the block
+    BlockRegion *regions = nullptr;        //< head of linked list of memory regions
+    size_t reserved = 0;                   //< number of bytes already reserved to regions
 };
 
-// Internal struct for block region state 
+// Internal struct for block region state
 // -- Note: first field must MemoryRegion
 struct BlockRegion {
-    MemoryRegion memory = {0};                                 //< memory info for the allocated region
-    AllocationStatus status = AllocationStatus::InvalidStatus; //< allocation status indicator
-    BlockRegion* next_ptr = nullptr;                           //< pointer to next block region in linked list
-    BlockRegion* prev_ptr = nullptr;                           //< pointer to prev block region in linked list
-    BlockResource* block_ptr = nullptr;                        //< pointer to parent block resource
+    MemoryRegion memory = {0};                                  //< memory info for the allocated region
+    AllocationStatus status = AllocationStatus::InvalidStatus;  //< allocation status indicator
+    BlockRegion *next_ptr = nullptr;                            //< pointer to next block region in linked list
+    BlockRegion *prev_ptr = nullptr;                            //< pointer to prev block region in linked list
+    BlockResource *block_ptr = nullptr;                         //< pointer to parent block resource
 };
 
 // Returns an aligned byte offset to adjust the given offset based on alignment constraints
@@ -130,9 +130,9 @@ class SystemMemoryAllocator {
 public:
     SystemMemoryAllocator() = default;
     ~SystemMemoryAllocator() = default;
-    
-    virtual void* allocate(void* user_context, size_t bytes) = 0;
-    virtual void deallocate(void* user_context, void* ptr) = 0;
+
+    virtual void *allocate(void *user_context, size_t bytes) = 0;
+    virtual void deallocate(void *user_context, void *ptr) = 0;
 };
 
 class HalideSystemAllocator : public SystemMemoryAllocator {
@@ -140,11 +140,11 @@ public:
     HalideSystemAllocator() = default;
     ~HalideSystemAllocator() = default;
 
-    void* allocate(void* user_context, size_t bytes) override {
+    void *allocate(void *user_context, size_t bytes) override {
         return halide_malloc(user_context, bytes);
     }
 
-    void deallocate(void* user_context, void* ptr) override {
+    void deallocate(void *user_context, void *ptr) override {
         halide_free(user_context, ptr);
     }
 };
@@ -153,22 +153,22 @@ class MemoryRegionAllocator {
 public:
     MemoryRegionAllocator() = default;
     ~MemoryRegionAllocator() = default;
-    
-    virtual void allocate(void* user_context, MemoryRegion* region) = 0;
-    virtual void deallocate(void* user_context, MemoryRegion* region) = 0;
+
+    virtual void allocate(void *user_context, MemoryRegion *region) = 0;
+    virtual void deallocate(void *user_context, MemoryRegion *region) = 0;
 };
 
 class MemoryBlockAllocator {
 public:
     MemoryBlockAllocator() = default;
     ~MemoryBlockAllocator() = default;
-    
-    virtual void allocate(void* user_context, MemoryBlock* block) = 0;
-    virtual void deallocate(void* user_context, MemoryBlock* block) = 0;
+
+    virtual void allocate(void *user_context, MemoryBlock *block) = 0;
+    virtual void deallocate(void *user_context, MemoryBlock *block) = 0;
 };
 
 // --
-    
+
 }  // namespace Internal
 }  // namespace Runtime
 }  // namespace Halide
@@ -177,47 +177,91 @@ public:
 
 extern "C" {
 
-WEAK const char* halide_memory_visibility_name(MemoryVisibility value) {
-    switch(value) {
-        case MemoryVisibility::InvalidVisibility: { return "InvalidVisibility"; }
-        case MemoryVisibility::DefaultVisibility: { return "DefaultVisibility"; }
-        case MemoryVisibility::HostOnly: { return "HostOnly"; }
-        case MemoryVisibility::DeviceOnly: { return "DeviceOnly"; }
-        case MemoryVisibility::HostToDevice: { return "HostToDevice"; }
-        case MemoryVisibility::DeviceToHost: { return "DeviceToHost"; }
-        default: { return "<unknown memory visibility value>"; }
+WEAK const char *halide_memory_visibility_name(MemoryVisibility value) {
+    switch (value) {
+    case MemoryVisibility::InvalidVisibility: {
+        return "InvalidVisibility";
+    }
+    case MemoryVisibility::DefaultVisibility: {
+        return "DefaultVisibility";
+    }
+    case MemoryVisibility::HostOnly: {
+        return "HostOnly";
+    }
+    case MemoryVisibility::DeviceOnly: {
+        return "DeviceOnly";
+    }
+    case MemoryVisibility::HostToDevice: {
+        return "HostToDevice";
+    }
+    case MemoryVisibility::DeviceToHost: {
+        return "DeviceToHost";
+    }
+    default: {
+        return "<unknown memory visibility value>";
+    }
     };
     return "<unknown memory visibility value>";
 }
 
-WEAK const char* halide_memory_usage_name(MemoryUsage value) {
-    switch(value) {
-        case MemoryUsage::InvalidUsage: { return "InvalidUsage"; }
-        case MemoryUsage::DefaultUsage: { return "DefaultUsage"; }
-        case MemoryUsage::StaticStorage: { return "StaticStorage"; }
-        case MemoryUsage::DynamicStorage: { return "DynamicStorage"; }
-        case MemoryUsage::TransferSrc: { return "TransferSrc"; }
-        case MemoryUsage::TransferDst: { return "TransferDst"; }
-        case MemoryUsage::TransferSrcDst: { return "TransferSrcDst"; }
-        default: { return "<unknown memory usage value>"; }
+WEAK const char *halide_memory_usage_name(MemoryUsage value) {
+    switch (value) {
+    case MemoryUsage::InvalidUsage: {
+        return "InvalidUsage";
+    }
+    case MemoryUsage::DefaultUsage: {
+        return "DefaultUsage";
+    }
+    case MemoryUsage::StaticStorage: {
+        return "StaticStorage";
+    }
+    case MemoryUsage::DynamicStorage: {
+        return "DynamicStorage";
+    }
+    case MemoryUsage::TransferSrc: {
+        return "TransferSrc";
+    }
+    case MemoryUsage::TransferDst: {
+        return "TransferDst";
+    }
+    case MemoryUsage::TransferSrcDst: {
+        return "TransferSrcDst";
+    }
+    default: {
+        return "<unknown memory usage value>";
+    }
     };
     return "<unknown memory usage value>";
 }
 
-WEAK const char* halide_memory_caching_name(MemoryCaching value) {
-    switch(value) {
-        case MemoryCaching::InvalidCaching: { return "InvalidCaching"; }
-        case MemoryCaching::DefaultCaching: { return "DefaultCaching"; }
-        case MemoryCaching::Cached: { return "Cached"; }
-        case MemoryCaching::Uncached: { return "Uncached"; }
-        case MemoryCaching::CachedCoherent: { return "CachedCoherent"; }
-        case MemoryCaching::UncachedCoherent: { return "UncachedCoherent"; }
-        default: { return "<unknown memory visibility value>"; }
+WEAK const char *halide_memory_caching_name(MemoryCaching value) {
+    switch (value) {
+    case MemoryCaching::InvalidCaching: {
+        return "InvalidCaching";
+    }
+    case MemoryCaching::DefaultCaching: {
+        return "DefaultCaching";
+    }
+    case MemoryCaching::Cached: {
+        return "Cached";
+    }
+    case MemoryCaching::Uncached: {
+        return "Uncached";
+    }
+    case MemoryCaching::CachedCoherent: {
+        return "CachedCoherent";
+    }
+    case MemoryCaching::UncachedCoherent: {
+        return "UncachedCoherent";
+    }
+    default: {
+        return "<unknown memory visibility value>";
+    }
     };
     return "<unknown memory visibility value>";
 }
 
-} // extern "C"
+}  // extern "C"
 
 // --
 

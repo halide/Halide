@@ -1,13 +1,13 @@
 #include <memory>
 
 #include "Closure.h"
-#include "CodeGen_Vulkan_Dev.h"
 #include "CodeGen_D3D12Compute_Dev.h"
 #include "CodeGen_GPU_Dev.h"
 #include "CodeGen_Metal_Dev.h"
 #include "CodeGen_OpenCL_Dev.h"
 #include "CodeGen_OpenGLCompute_Dev.h"
 #include "CodeGen_PTX_Dev.h"
+#include "CodeGen_Vulkan_Dev.h"
 #include "ExprUsesVar.h"
 #include "IRMutator.h"
 #include "IROperator.h"

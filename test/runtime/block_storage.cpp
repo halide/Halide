@@ -1,7 +1,7 @@
-#include "HalideRuntime.h"
-#include "runtime_internal.h"
-#include "printer.h"
 #include "internal/block_storage.h"
+#include "HalideRuntime.h"
+#include "printer.h"
+#include "runtime_internal.h"
 
 using namespace Halide::Runtime::Internal;
 
@@ -12,7 +12,7 @@ struct TestStruct {
 };
 
 int main(int argc, char **argv) {
-    void* user_context = (void*)1;
+    void *user_context = (void *)1;
 
     // test class interface
     {
@@ -37,7 +37,7 @@ int main(int argc, char **argv) {
         halide_abort_if_false(user_context, bs.size() == 4);
         halide_abort_if_false(user_context, bs[0] == 78);
 
-        int a1[] = { 98, 76, 54, 32, 10 };
+        int a1[] = {98, 76, 54, 32, 10};
         size_t a1_size = 5;
         bs.assign(user_context, a1, a1_size);
         halide_abort_if_false(user_context, bs.size() == a1_size);
@@ -47,7 +47,7 @@ int main(int argc, char **argv) {
         halide_abort_if_false(user_context, bs[3] == a1[3]);
         halide_abort_if_false(user_context, bs[4] == a1[4]);
 
-        int a2[] = { 77, 66, 55 };
+        int a2[] = {77, 66, 55};
         size_t a2_size = 3;
         bs.insert(user_context, 2, a2, a2_size);
         halide_abort_if_false(user_context, bs.size() == (a1_size + a2_size));
@@ -78,10 +78,10 @@ int main(int argc, char **argv) {
 
     // test copy and equality
     {
-        int a1[] = { 98, 76, 54, 32, 10 };
+        int a1[] = {98, 76, 54, 32, 10};
         size_t a1_size = 5;
 
-        int a2[] = { 77, 66, 55 };
+        int a2[] = {77, 66, 55};
         size_t a2_size = 3;
 
         BlockStorage<int> bs1(user_context, a1, a1_size);
@@ -108,7 +108,7 @@ int main(int argc, char **argv) {
         bs.append(user_context, s1);
         halide_abort_if_false(user_context, bs.size() == 1);
 
-        const TestStruct& e1 = bs[0];
+        const TestStruct &e1 = bs[0];
         halide_abort_if_false(user_context, e1.i8 == s1.i8);
         halide_abort_if_false(user_context, e1.ui16 == s1.ui16);
         halide_abort_if_false(user_context, e1.f32 == s1.f32);
@@ -117,7 +117,7 @@ int main(int argc, char **argv) {
         bs.prepend(user_context, s2);
         halide_abort_if_false(user_context, bs.size() == 2);
 
-        const TestStruct& e2 = bs[0];
+        const TestStruct &e2 = bs[0];
         halide_abort_if_false(user_context, e2.i8 == s2.i8);
         halide_abort_if_false(user_context, e2.ui16 == s2.ui16);
         halide_abort_if_false(user_context, e2.f32 == s2.f32);

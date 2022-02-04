@@ -5,9 +5,9 @@
 
 // --
 
-namespace Halide { 
-namespace Runtime { 
-namespace Internal { 
+namespace Halide {
+namespace Runtime {
+namespace Internal {
 namespace Vulkan {
 
 // --
@@ -44,7 +44,7 @@ WEAK void vk_set_layer_names_internal(const char *n) {
 WEAK const char *vk_get_layer_names_internal(void *user_context) {
     if (!layer_names_initialized) {
         const char *value = getenv("HL_VK_LAYERS");
-        if(value == nullptr) { value = getenv("VK_INSTANCE_LAYERS"); }
+        if (value == nullptr) { value = getenv("VK_INSTANCE_LAYERS"); }
         vk_set_layer_names_internal(value);
     }
     return layer_names;
@@ -107,30 +107,29 @@ WEAK const char *vk_get_build_options_internal(void *user_context) {
     return build_options;
 }
 
-WEAK uint32_t vk_get_requested_layers(void *user_context, StringTable& layer_table) {
+WEAK uint32_t vk_get_requested_layers(void *user_context, StringTable &layer_table) {
     ScopedSpinLock lock(&layer_names_lock);
     const char *layer_names = vk_get_layer_names_internal(user_context);
     return layer_table.parse(user_context, layer_names, HL_VK_ENV_DELIM);
 }
 
-WEAK uint32_t vk_get_required_instance_extensions(void* user_context, StringTable& ext_table) {
+WEAK uint32_t vk_get_required_instance_extensions(void *user_context, StringTable &ext_table) {
     const uint32_t required_ext_count = 1;
-    const char* required_ext_table[] = {"VK_KHR_get_physical_device_properties2"};
+    const char *required_ext_table[] = {"VK_KHR_get_physical_device_properties2"};
 
     ext_table.reserve(user_context, required_ext_count);
-    for(uint32_t n = 0; n < required_ext_count; ++n)
-    {
+    for (uint32_t n = 0; n < required_ext_count; ++n) {
         ext_table.assign(user_context, n, required_ext_table[n]);
     }
     return required_ext_count;
 }
 
-WEAK uint32_t vk_get_supported_instance_extensions(void* user_context, StringTable& ext_table) {
+WEAK uint32_t vk_get_supported_instance_extensions(void *user_context, StringTable &ext_table) {
 
     PFN_vkEnumerateInstanceExtensionProperties vkEnumerateInstanceExtensionProperties = (PFN_vkEnumerateInstanceExtensionProperties)
         vkGetInstanceProcAddr(nullptr, "vkEnumerateInstanceExtensionProperties");
 
-    if(vkEnumerateInstanceExtensionProperties == nullptr) {
+    if (vkEnumerateInstanceExtensionProperties == nullptr) {
         debug(user_context) << "Vulkan: Missing vkEnumerateInstanceExtensionProperties proc address! Invalid loader?!\n";
         return 0;
     }
@@ -139,41 +138,40 @@ WEAK uint32_t vk_get_supported_instance_extensions(void* user_context, StringTab
     VkExtensionProperties *avail_ext_properties = nullptr;
     vkEnumerateInstanceExtensionProperties(nullptr, &avail_ext_count, nullptr);
     debug(user_context) << "Vulkan: vkEnumerateInstanceExtensionProperties found  " << avail_ext_count << " extensions ...\n";
-    
-    if(avail_ext_count) {
+
+    if (avail_ext_count) {
         avail_ext_properties = (VkExtensionProperties *)malloc(avail_ext_count * sizeof(VkExtensionProperties));
         vkEnumerateInstanceExtensionProperties(nullptr, &avail_ext_count, avail_ext_properties);
-        for(uint32_t n = 0; n < avail_ext_count; ++n) {
+        for (uint32_t n = 0; n < avail_ext_count; ++n) {
             debug(user_context) << "    extension: " << avail_ext_properties[n].extensionName << "\n";
         }
 
         ext_table.reserve(user_context, avail_ext_count);
-        for(uint32_t n = 0; n < avail_ext_count; ++n) {
+        for (uint32_t n = 0; n < avail_ext_count; ++n) {
             ext_table.assign(user_context, n, avail_ext_properties[n].extensionName);
         }
 
         free(avail_ext_properties);
         avail_ext_properties = nullptr;
-    }        
+    }
 
     return avail_ext_count;
 }
 
-WEAK uint32_t vk_get_required_device_extensions(void* user_context, StringTable& ext_table) {
+WEAK uint32_t vk_get_required_device_extensions(void *user_context, StringTable &ext_table) {
     const uint32_t required_ext_count = 0;
-    const char* required_ext_table[] = {0};
+    const char *required_ext_table[] = {0};
 
     ext_table.reserve(user_context, required_ext_count);
-    for(uint32_t n = 0; n < required_ext_count; ++n)
-    {
+    for (uint32_t n = 0; n < required_ext_count; ++n) {
         ext_table.assign(user_context, n, required_ext_table[n]);
     }
     return required_ext_count;
 }
 
-WEAK uint32_t vk_get_supported_device_extensions(void* user_context, VkPhysicalDevice physical_device, StringTable& ext_table) {
+WEAK uint32_t vk_get_supported_device_extensions(void *user_context, VkPhysicalDevice physical_device, StringTable &ext_table) {
 
-    if(vkEnumerateDeviceExtensionProperties == nullptr) {
+    if (vkEnumerateDeviceExtensionProperties == nullptr) {
         debug(user_context) << "Vulkan: Missing vkEnumerateDeviceExtensionProperties proc address! Invalid loader?!\n";
         return 0;
     }
@@ -182,41 +180,44 @@ WEAK uint32_t vk_get_supported_device_extensions(void* user_context, VkPhysicalD
     VkExtensionProperties *avail_ext_properties = nullptr;
     vkEnumerateDeviceExtensionProperties(physical_device, nullptr, &avail_ext_count, nullptr);
     debug(user_context) << "Vulkan: vkEnumerateDeviceExtensionProperties found  " << avail_ext_count << " extensions ...\n";
-    
-    if(avail_ext_count) {
+
+    if (avail_ext_count) {
         avail_ext_properties = (VkExtensionProperties *)malloc(avail_ext_count * sizeof(VkExtensionProperties));
         vkEnumerateDeviceExtensionProperties(physical_device, nullptr, &avail_ext_count, avail_ext_properties);
-        for(uint32_t n = 0; n < avail_ext_count; ++n) {
+        for (uint32_t n = 0; n < avail_ext_count; ++n) {
             debug(user_context) << "    extension: " << avail_ext_properties[n].extensionName << "\n";
         }
 
         ext_table.reserve(user_context, avail_ext_count);
-        for(uint32_t n = 0; n < avail_ext_count; ++n) {
+        for (uint32_t n = 0; n < avail_ext_count; ++n) {
             ext_table.assign(user_context, n, avail_ext_properties[n].extensionName);
         }
 
         free(avail_ext_properties);
         avail_ext_properties = nullptr;
-    }        
+    }
 
     return avail_ext_count;
 }
 
-WEAK bool vk_validate_required_extension_support(void* user_context, 
-                                                const StringTable& required_extensions, 
-                                                const StringTable& supported_extensions) {    
+WEAK bool vk_validate_required_extension_support(void *user_context,
+                                                 const StringTable &required_extensions,
+                                                 const StringTable &supported_extensions) {
     bool validated = true;
-    for(uint32_t n = 0; n < required_extensions.size(); ++n) {
-        const char* extension = required_extensions[n];
-        if(!supported_extensions.contains(extension)) {
-            debug(user_context) << "Vulkan: Missing required extension: '" << extension << "'! \n"; 
+    for (uint32_t n = 0; n < required_extensions.size(); ++n) {
+        const char *extension = required_extensions[n];
+        if (!supported_extensions.contains(extension)) {
+            debug(user_context) << "Vulkan: Missing required extension: '" << extension << "'! \n";
             validated = false;
         }
     }
     return validated;
 }
 
-}}}} // namespace Halide::Runtime::Internal::Vulkan
+}  // namespace Vulkan
+}  // namespace Internal
+}  // namespace Runtime
+}  // namespace Halide
 
 using namespace Halide::Runtime::Internal::Vulkan;
 
@@ -262,6 +263,6 @@ WEAK const char *halide_vulkan_get_build_options(void *user_context) {
     return vk_get_build_options_internal(user_context);
 }
 
-} // extern "C"
+}  // extern "C"
 
 #endif  // HALIDE_RUNTIME_VULKAN_EXTENSIONS_H

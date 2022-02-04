@@ -289,7 +289,7 @@ DECLARE_NO_INITMOD(riscv_cpu_features)
 DECLARE_CPP_INITMOD(vulkan)
 #else
 DECLARE_NO_INITMOD(vulkan)
-#endif // WITH_VULKAN
+#endif  // WITH_VULKAN
 
 llvm::DataLayout get_data_layout_for_target(Target target) {
     if (target.arch == Target::X86) {

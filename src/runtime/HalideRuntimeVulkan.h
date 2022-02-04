@@ -23,7 +23,7 @@ extern const struct halide_device_interface_t *halide_vulkan_device_interface();
  *  Halide Vulkan runtime. Do not call them. */
 // @{
 extern int halide_vulkan_initialize_kernels(void *user_context, void **state_ptr,
-                                           const char *src, int size);
+                                            const char *src, int size);
 
 extern int halide_vulkan_run(void *user_context,
                              void *state_ptr,
@@ -54,13 +54,12 @@ extern void halide_vulkan_finalize_kernels(void *user_context, void *state_ptr);
 // TODO: describe memory type index
 // TODO: describe queue family index
 extern int halide_vulkan_acquire_context(void *user_context, struct VkInstance_T **instance,
-                                       struct VkDevice_T **device, struct VkQueue_T **queue, 
-                                       struct VkPhysicalDevice_T **physical_device, uint32_t* queue_family_index, bool create = true);
-
+                                         struct VkDevice_T **device, struct VkQueue_T **queue,
+                                         struct VkPhysicalDevice_T **physical_device, uint32_t *queue_family_index, bool create = true);
 
 extern int halide_vulkan_release_context(void *user_context, struct VkInstance_T *instance, struct VkDevice_T *device, struct VkQueue_T *queue);
 #ifdef __cplusplus
-} // End extern "C"
+}  // End extern "C"
 #endif
 
-#endif // HALIDE_HALIDERUNTIMEVULKAN_H
+#endif  // HALIDE_HALIDERUNTIMEVULKAN_H

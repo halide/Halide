@@ -1293,7 +1293,7 @@ typedef enum halide_target_feature_t {
 
     halide_target_feature_openglcompute,  ///< Enable OpenGL Compute runtime.
 
-    halide_target_feature_vulkan,   ///< Enable Vulkan runtime.
+    halide_target_feature_vulkan,  ///< Enable Vulkan runtime.
 
     halide_target_feature_user_context,  ///< Generated code takes a user_context pointer as first argument
 
