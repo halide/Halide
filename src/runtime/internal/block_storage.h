@@ -67,18 +67,15 @@ public:
 private:
     void allocate(void *user_context, size_t new_capacity);
 
-    T *ptr;
-    size_t count;
-    size_t capacity;
-    SystemMemoryAllocator *allocator;
+    T *ptr = nullptr;
+    size_t count = 0;
+    size_t capacity = 0;
+    SystemMemoryAllocator *allocator = nullptr;
 };
 
 template<typename T>
 BlockStorage<T>::BlockStorage(SystemMemoryAllocator *sma)
-    : ptr(nullptr),
-      count(0),
-      capacity(0),
-      allocator(sma) {
+    : allocator(sma) {
     halide_abort_if_false(nullptr, allocator != nullptr);
 }
 

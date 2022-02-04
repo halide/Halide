@@ -37,8 +37,8 @@ public:
     VulkanBlockAllocator() = default;
     ~VulkanBlockAllocator() = default;
 
-    virtual void allocate(void *user_context, MemoryBlock *block) override;
-    virtual void deallocate(void *user_context, MemoryBlock *block) override;
+    void allocate(void *user_context, MemoryBlock *block) override;
+    void deallocate(void *user_context, MemoryBlock *block) override;
 
     void bind(void *user_context, VkDevice device, VkPhysicalDevice physical_device);
     void unbind(void *user_context);
@@ -248,8 +248,8 @@ public:
     VulkanRegionAllocator() = default;
     ~VulkanRegionAllocator() = default;
 
-    virtual void allocate(void *user_context, MemoryRegion *region) override;
-    virtual void deallocate(void *user_context, MemoryRegion *region) override;
+    void allocate(void *user_context, MemoryRegion *region) override;
+    void deallocate(void *user_context, MemoryRegion *region) override;
 
     void bind(void *user_context, VkDevice device, VkPhysicalDevice physical_device);
     void unbind(void *user_context);
@@ -403,7 +403,7 @@ uint32_t VulkanRegionAllocator::select_memory_usage(void *user_context, MemoryPr
  * number of available allocation calls through the API. 
 */
 class VulkanMemoryAllocator {
-
+public:
     // disable copy constructors and assignment
     VulkanMemoryAllocator(const VulkanMemoryAllocator &) = delete;
     VulkanMemoryAllocator &operator=(const VulkanMemoryAllocator &) = delete;
@@ -412,7 +412,6 @@ class VulkanMemoryAllocator {
     VulkanMemoryAllocator() = delete;
     ~VulkanMemoryAllocator() = delete;
 
-public:
     // Factory methods for creation / destruction
     static VulkanMemoryAllocator *create(void *user_context, const VulkanMemoryConfig &config, SystemMemoryAllocator *system_allocator);
     static void destroy(void *user_context, VulkanMemoryAllocator *allocator);
@@ -435,7 +434,6 @@ private:
     // Initializes a new instance
     void initialize(void *user_context, const VulkanMemoryConfig &config, SystemMemoryAllocator *system_allocator);
 
-private:
     VulkanMemoryConfig config;
     VkDevice device = nullptr;
     VkPhysicalDevice physical_device = nullptr;

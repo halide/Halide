@@ -41,7 +41,7 @@ public:
     typedef BlockStorage<char> CharStorage;
 
     StringStorage(SystemMemoryAllocator *allocator = default_allocator());
-    StringStorage(const StringStorage &other);
+    StringStorage(const StringStorage &other) = default;
     StringStorage(void *user_context, char ch, SystemMemoryAllocator *allocator = default_allocator());
     StringStorage(void *user_context, const char *str, size_t length = 0, SystemMemoryAllocator *allocator = default_allocator());  // if length is zero, strlen is used
     ~StringStorage() = default;
@@ -75,11 +75,6 @@ private:
 
 StringStorage::StringStorage(SystemMemoryAllocator *sma)
     : contents(sma) {
-    // EMPTY
-}
-
-StringStorage::StringStorage(const StringStorage &other)
-    : contents(other.contents) {
     // EMPTY
 }
 

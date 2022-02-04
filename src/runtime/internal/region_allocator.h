@@ -20,7 +20,7 @@ namespace Internal {
  * integration for a specific runtime API (eg Vulkan, OpenCL, etc) 
 */
 class RegionAllocator {
-
+public:
     // disable copy constructors and assignment
     RegionAllocator(const RegionAllocator &) = delete;
     RegionAllocator &operator=(const RegionAllocator &) = delete;
@@ -29,14 +29,12 @@ class RegionAllocator {
     RegionAllocator() = delete;
     ~RegionAllocator() = delete;
 
-public:
     // Allocators for the different types of memory we need to allocate
     struct MemoryAllocators {
         SystemMemoryAllocator *system = nullptr;
         MemoryRegionAllocator *region = nullptr;
     };
 
-public:
     // Factory methods for creation / destruction
     static RegionAllocator *create(void *user_context, BlockResource *block, const MemoryAllocators &ma);
     static void destroy(void *user_context, RegionAllocator *region_allocator);
@@ -90,9 +88,8 @@ private:
     // Returns true if the given block region is compatible with the given properties
     bool is_compatible_block_region(const BlockRegion *region, const MemoryProperties &properties) const;
 
-private:
-    BlockResource *block;
-    BlockRegionArena *arena;
+    BlockResource *block = nullptr;
+    BlockRegionArena *arena = nullptr;
     MemoryAllocators allocators;
 };
 

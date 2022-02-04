@@ -11,21 +11,21 @@ namespace Internal {
 // -- Implemented using MemoryArena<T> for allocation
 template<typename T>
 class LinkedList {
-
+public:
     // Disable copy support
     LinkedList(const LinkedList &) = delete;
     LinkedList &operator=(const LinkedList &) = delete;
 
-public:
-    static const uint32_t default_capacity = 8;  // smallish
+    // Default initial capacity
+    static const uint32_t default_capacity = 8;
 
+    // List entry
     struct EntryType {
         T value;
         EntryType *prev_ptr;
         EntryType *next_ptr;
     };
 
-public:
     LinkedList(SystemMemoryAllocator *allocator = default_allocator());
     LinkedList(void *user_context, size_t capacity = default_capacity,
                SystemMemoryAllocator *allocator = default_allocator());
@@ -66,17 +66,16 @@ public:
 
 private:
     MemoryArena<EntryType> arena;
-    EntryType *front_ptr;
-    EntryType *back_ptr;
-    size_t entry_count;
+    EntryType *front_ptr = nullptr;
+    EntryType *back_ptr = nullptr;
+    size_t entry_count = 0;
 };
 
 template<typename T>
 LinkedList<T>::LinkedList(SystemMemoryAllocator *sma)
     : arena(nullptr, {default_capacity, 0}, sma),
       front_ptr(nullptr),
-      back_ptr(nullptr),
-      entry_count(0) {
+      back_ptr(nullptr) {
     // EMPTY!
 }
 
@@ -85,8 +84,7 @@ LinkedList<T>::LinkedList(void *user_context, size_t capacity,
                           SystemMemoryAllocator *sma)
     : arena(user_context, {default_capacity, 0}, sma),
       front_ptr(nullptr),
-      back_ptr(nullptr),
-      entry_count(0) {
+      back_ptr(nullptr) {
     // EMPTY!
 }
 

@@ -1,6 +1,7 @@
 #include "HalideRuntimeVulkan.h"
 #include "device_buffer_utils.h"
 #include "device_interface.h"
+#include "runtime_internal.h"
 #include "vulkan_context.h"
 #include "vulkan_extensions.h"
 #include "vulkan_internal.h"
@@ -267,7 +268,7 @@ VkResult vk_allocate_device_memory(VkPhysicalDevice physical_device,
     }
 
     if (memory_type_index == VK_MAX_MEMORY_TYPES) {
-        debug(0) << "Vulkan: failed to find appropriate memory type";
+        debug(nullptr) << "Vulkan: failed to find appropriate memory type";
         return VK_ERROR_OUT_OF_DEVICE_MEMORY;
     }
 
@@ -287,7 +288,7 @@ VkResult vk_allocate_device_memory(VkPhysicalDevice physical_device,
     auto ret_code = vkAllocateMemory(device, &alloc_info, allocator, device_memory);
 
     if (ret_code != VK_SUCCESS) {
-        debug(0) << "Vulkan: vkAllocateMemory returned: " << get_vulkan_error_name(ret_code) << "\n";
+        debug(nullptr) << "Vulkan: vkAllocateMemory returned: " << get_vulkan_error_name(ret_code) << "\n";
         return VK_ERROR_OUT_OF_DEVICE_MEMORY;
     }
 
@@ -789,7 +790,7 @@ WEAK int halide_vulkan_run(void *user_context,
                  VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,  // descriptor type
                  1,                                  // descriptor count
                  VK_SHADER_STAGE_COMPUTE_BIT,        // stage flags
-                 0};                                 // immutable samplers
+                 nullptr};                           // immutable samplers
             num_bindings++;
         } else {
             scalar_buffer_size += arg_sizes[i];

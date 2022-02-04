@@ -12,11 +12,11 @@ namespace Internal {
 // Storage class for an array of strings (based on block storage)
 // -- Intended for building and maintaining tables of strings
 class StringTable {
-
+public:
+    // Disable copy constructors
     StringTable(const StringTable &) = delete;
     StringTable &operator=(const StringTable &) = delete;
 
-public:
     StringTable(SystemMemoryAllocator *allocator = StringStorage::default_allocator());
     StringTable(void *user_context, size_t capacity, SystemMemoryAllocator *allocator = StringStorage::default_allocator());
     StringTable(void *user_context, const char **array, size_t count, SystemMemoryAllocator *allocator = StringStorage::default_allocator());
@@ -53,6 +53,8 @@ private:
     LinkedList<StringStorage> contents;   //< owns string data
     BlockStorage<const char *> pointers;  //< points to contents
 };
+
+// --
 
 StringTable::StringTable(SystemMemoryAllocator *sma)
     : contents(sma),

@@ -4,6 +4,7 @@
 #include "printer.h"
 #include "runtime_internal.h"
 #include "scoped_spin_lock.h"
+#include "vulkan_extensions.h"
 #include "vulkan_internal.h"
 
 namespace Halide {
@@ -12,10 +13,10 @@ namespace Internal {
 namespace Vulkan {
 
 // An Vulkan context/queue/synchronization lock defined in this module with weak linkage
-VkInstance WEAK cached_instance = 0;
-VkDevice WEAK cached_device = 0;
-VkQueue WEAK cached_queue = 0;
-VkPhysicalDevice WEAK cached_physical_device;
+VkInstance WEAK cached_instance = nullptr;
+VkDevice WEAK cached_device = nullptr;
+VkQueue WEAK cached_queue = nullptr;
+VkPhysicalDevice WEAK cached_physical_device = nullptr;
 uint32_t WEAK cached_queue_family_index = 0;
 volatile ScopedSpinLock::AtomicFlag WEAK thread_lock = 0;
 

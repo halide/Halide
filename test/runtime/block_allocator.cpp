@@ -1,7 +1,8 @@
-#include "internal/block_allocator.h"
 #include "HalideRuntime.h"
 #include "printer.h"
 #include "runtime_internal.h"
+
+#include "internal/block_allocator.h"
 
 using namespace Halide::Runtime::Internal;
 

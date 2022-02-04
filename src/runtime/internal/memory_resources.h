@@ -87,7 +87,7 @@ struct BlockRegion;
 // Internal struct for block resource state
 // -- Note: first field must MemoryBlock
 struct BlockResource {
-    MemoryBlock memory = {0};              //< memory info for the allocated block
+    MemoryBlock memory;                    //< memory info for the allocated block
     RegionAllocator *allocator = nullptr;  //< designated allocator for the block
     BlockRegion *regions = nullptr;        //< head of linked list of memory regions
     size_t reserved = 0;                   //< number of bytes already reserved to regions
@@ -96,7 +96,7 @@ struct BlockResource {
 // Internal struct for block region state
 // -- Note: first field must MemoryRegion
 struct BlockRegion {
-    MemoryRegion memory = {0};                                  //< memory info for the allocated region
+    MemoryRegion memory;                                        //< memory info for the allocated region
     AllocationStatus status = AllocationStatus::InvalidStatus;  //< allocation status indicator
     BlockRegion *next_ptr = nullptr;                            //< pointer to next block region in linked list
     BlockRegion *prev_ptr = nullptr;                            //< pointer to prev block region in linked list
@@ -105,13 +105,13 @@ struct BlockRegion {
 
 // Returns an aligned byte offset to adjust the given offset based on alignment constraints
 // -- Alignment must be power of two!
-HALIDE_ALWAYS_INLINE size_t aligned_offset(size_t offset, size_t alignment) {
+ALWAYS_INLINE size_t aligned_offset(size_t offset, size_t alignment) {
     return (offset + (alignment - 1)) & ~(alignment - 1);
 }
 
 // Returns a padded size to accomodate an adjusted offset due to alignment constraints
 // -- Alignment must be power of two!
-HALIDE_ALWAYS_INLINE size_t aligned_size(size_t offset, size_t size, size_t alignment) {
+ALWAYS_INLINE size_t aligned_size(size_t offset, size_t size, size_t alignment) {
     size_t actual_offset = aligned_offset(offset, alignment);
     size_t padding = actual_offset - offset;
     size_t actual_size = padding + size;
@@ -119,7 +119,7 @@ HALIDE_ALWAYS_INLINE size_t aligned_size(size_t offset, size_t size, size_t alig
 }
 
 // Clamps the given value to be within the [min_value, max_value] range
-HALIDE_ALWAYS_INLINE size_t clamped_size(size_t value, size_t min_value, size_t max_value) {
+ALWAYS_INLINE size_t clamped_size(size_t value, size_t min_value, size_t max_value) {
     size_t result = (value < min_value) ? min_value : value;
     return (result > max_value) ? max_value : result;
 }

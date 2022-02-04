@@ -61,8 +61,7 @@ protected:
     class SPIRVEmitter : public IRVisitor {
 
     public:
-        SPIRVEmitter() {
-        }
+        SPIRVEmitter() = default;
 
         using IRVisitor::visit;
 
@@ -110,7 +109,7 @@ protected:
         void visit(const Fork *) override;
         void visit(const Acquire *) override;
 
-        void visit_binop(Type t, Expr a, Expr b, uint32_t opcode);
+        void visit_binop(Type t, const Expr &a, const Expr &b, uint32_t opcode);
 
         // ID of last generated Expr.
         uint32_t id;
@@ -158,10 +157,10 @@ protected:
                              std::vector<uint32_t> words);
         void add_instruction(uint32_t opcode, std::vector<uint32_t> words);
         uint32_t map_type(const Type &type);
-        uint32_t map_pointer_type(const Type &type, const uint32_t storage_class);
+        uint32_t map_pointer_type(const Type &type, uint32_t storage_class);
         uint32_t map_type_to_pair(const Type &t);
         uint32_t emit_constant(const Type &t, const void *data);
-        void scalarize(Expr e);
+        void scalarize(const Expr &e);
 
         // The scope contains both the symbol and its storage class
         Scope<std::pair<uint32_t, uint32_t>> symbol_table;
@@ -174,7 +173,7 @@ protected:
         };
         // Returns Phi node inputs.
         template<typename StmtOrExpr>
-        PhiNodeInputs emit_if_then_else(Expr condition, StmtOrExpr then_case, StmtOrExpr else_case);
+        PhiNodeInputs emit_if_then_else(const Expr &condition, StmtOrExpr then_case, StmtOrExpr else_case);
     } emitter;
 
     std::string current_kernel_name;
@@ -241,7 +240,7 @@ uint32_t CodeGen_Vulkan_Dev::SPIRVEmitter::emit_constant(const Type &t, const vo
     }
 }
 
-void CodeGen_Vulkan_Dev::SPIRVEmitter::scalarize(Expr e) {
+void CodeGen_Vulkan_Dev::SPIRVEmitter::scalarize(const Expr &e) {
     internal_assert(e.type().is_vector()) << "CodeGen_Vulkan_Dev::SPIRVEmitter::scalarize must be called with an expression of vector type.\n";
     uint32_t type_id = map_type(e.type());
 
@@ -942,7 +941,7 @@ void CodeGen_Vulkan_Dev::SPIRVEmitter::visit(const Realize *) {
 
 template<typename StmtOrExpr>
 CodeGen_Vulkan_Dev::SPIRVEmitter::PhiNodeInputs
-CodeGen_Vulkan_Dev::SPIRVEmitter::emit_if_then_else(Expr condition,
+CodeGen_Vulkan_Dev::SPIRVEmitter::emit_if_then_else(const Expr &condition,
                                                     StmtOrExpr then_case, StmtOrExpr else_case) {
     condition.accept(this);
     uint32_t cond_id = id;
@@ -1009,7 +1008,7 @@ void CodeGen_Vulkan_Dev::SPIRVEmitter::visit(const Acquire *) {
 }
 
 // TODO: fast math decorations.
-void CodeGen_Vulkan_Dev::SPIRVEmitter::visit_binop(Type t, Expr a, Expr b, uint32_t opcode) {
+void CodeGen_Vulkan_Dev::SPIRVEmitter::visit_binop(Type t, const Expr &a, const Expr &b, uint32_t opcode) {
     uint32_t type_id = map_type(t);
     a.accept(this);
     uint32_t a_id = id;

@@ -15,20 +15,20 @@ namespace Internal {
 //
 template<typename T>
 class MemoryArena {
-
-    // disable copy constructors and assignment
+public:
+    // Disable copy constructors and assignment
     MemoryArena(const MemoryArena &) = delete;
     MemoryArena &operator=(const MemoryArena &) = delete;
 
-public:
+    // Default initial capacity
     static const uint32_t default_capacity = uint32_t(32);
 
+    // Configurable parameters
     struct Config {
         uint32_t minimum_block_capacity = default_capacity;
         uint32_t maximum_block_count = 0;
     };
 
-public:
     MemoryArena(void *user_context, const Config &config = default_config(),
                 SystemMemoryAllocator *allocator = default_allocator());
 
@@ -56,6 +56,7 @@ public:
     static SystemMemoryAllocator *default_allocator();
 
 private:
+    // Sentinal invalid entry value
     static const uint32_t invalid_entry = uint32_t(-1);
 
     // Entry is stored as a union (without padding) ...
@@ -85,7 +86,6 @@ private:
     T *construct_value(void *user_context, Entry *entry_ptr);
     void destruct_value(void *user_context, Entry *entry_ptr);
 
-private:
     Config config;
     BlockStorage<Block> blocks;
 };

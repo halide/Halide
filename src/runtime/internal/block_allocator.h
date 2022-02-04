@@ -21,7 +21,7 @@ namespace Internal {
  * integration for a specific runtime API (eg Vulkan, OpenCL, etc) 
 */
 class BlockAllocator {
-
+public:
     // disable copy constructors and assignment
     BlockAllocator(const BlockAllocator &) = delete;
     BlockAllocator &operator=(const BlockAllocator &) = delete;
@@ -30,7 +30,6 @@ class BlockAllocator {
     BlockAllocator() = delete;
     ~BlockAllocator() = delete;
 
-public:
     // Allocators for the different types of memory we need to allocate
     struct MemoryAllocators {
         SystemMemoryAllocator *system = nullptr;
@@ -45,7 +44,6 @@ public:
         size_t maximum_block_count = 0;
     };
 
-public:
     // Factory methods for creation / destruction
     static BlockAllocator *create(void *user_context, const Config &config, const MemoryAllocators &allocators);
     static void destroy(void *user_context, BlockAllocator *block_allocator);
@@ -103,7 +101,6 @@ private:
     // Returns true if the given block is compatible with the given properties
     bool is_compatible_block(const BlockResource *block, const MemoryProperties &properties) const;
 
-private:
     Config config;
     BlockResourceList block_list;
     MemoryAllocators allocators;

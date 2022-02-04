@@ -30,6 +30,7 @@
 
 // Prototypes for the subset of the Vulkan API we need
 #define VK_NO_PROTOTYPES
+// NOLINTNEXTLINE
 #include "mini_vulkan.h"
 
 // --
