@@ -271,7 +271,7 @@ WEAK int vk_create_context(void *user_context, VkInstance *instance, VkDevice *d
     if (status != halide_error_code_success) {
         return status;
     }
-    
+
     return halide_error_code_success;
 }
 
