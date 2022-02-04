@@ -63,6 +63,9 @@ protected:
                                    DoNotAppendSpace) override;
         std::string print_assignment(Type t, const std::string &rhs) override;
 
+        // Print the WGSL type used for storing elements of `type` in a buffer.
+        std::string print_buffer_type(Type type);
+
         void visit(const Allocate *op) override;
         void visit(const And *op) override;
         void visit(const Broadcast *op) override;
@@ -70,11 +73,13 @@ protected:
         void visit(const IntImm *) override;
         void visit(const UIntImm *) override;
         void visit(const For *) override;
+        void visit(const Load *op) override;
         void visit(const Min *op) override;
         void visit(const Max *op) override;
         void visit(const Or *op) override;
         void visit(const Ramp *op) override;
         void visit(const Select *op) override;
+        void visit(const Store *op) override;
     };
 
     std::ostringstream src_stream;
@@ -182,11 +187,20 @@ string CodeGen_WebGPU_Dev::CodeGen_WGSL::print_type(Type type,
     if (type.is_float()) {
         user_assert(type.bits() == 32) << "WGSL only supports 32-bit floats";
         oss << "f32";
-    } else if (type.element_of() == UInt(1)) {
-        oss << "bool";
     } else {
-        user_assert(type.bits() == 32) << "WGSL only supports 32-bit integers";
-        oss << (type.is_uint() ? "u" : "i") << "32";
+        switch (type.bits()) {
+        case 1:
+            oss << "bool";
+            break;
+        case 8:
+        case 16:
+        case 32:
+            oss << (type.is_uint() ? "u" : "i") << "32";
+            break;
+        default:
+            user_error << "Invalid integer bitwidth for WGSL";
+            break;
+        }
     }
 
     if (type.lanes() != 1) {
@@ -197,6 +211,16 @@ string CodeGen_WebGPU_Dev::CodeGen_WGSL::print_type(Type type,
         oss << " ";
     }
     return oss.str();
+}
+
+string CodeGen_WebGPU_Dev::CodeGen_WGSL::print_buffer_type(Type type) {
+    if (type.bits() != 32) {
+        internal_assert(type.bits() == 8 || type.bits() == 16);
+        internal_assert(!type.is_float());
+        // Types that are not 32-bits are emulated using atomics.
+        return "atomic<u32>";
+    }
+    return print_type(type);
 }
 
 void CodeGen_WebGPU_Dev::CodeGen_WGSL::add_kernel(
@@ -213,7 +237,7 @@ void CodeGen_WebGPU_Dev::CodeGen_WGSL::add_kernel(
             // Emit buffer arguments as read_write storage buffers.
             stream << "@group(0) @binding(" << next_binding << ")\n"
                    << "var<storage, read_write> " << print_name(arg.name)
-                   << " : array<" << print_type(arg.type) << ">;\n\n";
+                   << " : array<" << print_buffer_type(arg.type) << ">;\n\n";
             Allocation alloc;
             alloc.type = arg.type;
             allocations.push(arg.name, alloc);
@@ -373,8 +397,6 @@ void CodeGen_WebGPU_Dev::CodeGen_WGSL::visit(const Cast *op) {
 }
 
 void CodeGen_WebGPU_Dev::CodeGen_WGSL::visit(const IntImm *op) {
-    internal_assert(op->type.bits() == 32)
-        << "WGSL only supports 32-bit integers";
     print_assignment(op->type, std::to_string(op->value));
 }
 
@@ -386,8 +408,6 @@ void CodeGen_WebGPU_Dev::CodeGen_WGSL::visit(const UIntImm *op) {
             id = "false";
         }
     } else {
-        internal_assert(op->type.bits() == 32)
-            << "WGSL only supports 32-bit integers";
         print_assignment(op->type, std::to_string(op->value) + "u");
     }
 }
@@ -450,6 +470,68 @@ void CodeGen_WebGPU_Dev::CodeGen_WGSL::visit(const For *loop) {
     }
 }
 
+void CodeGen_WebGPU_Dev::CodeGen_WGSL::visit(const Load *op) {
+    user_assert(is_const_one(op->predicate))
+        << "Predicated loads are not supported for WebGPU.\n";
+
+    const int bits = op->type.bits();
+    const string name = print_name(op->name);
+    const string bits_str = std::to_string(bits);
+    const string elements = std::to_string(32 / bits);
+
+    // Load an 8- or 16-bit value from an array<atomic<u32>>.
+    auto emulate_narrow_load = [&](const string &idx) {
+        internal_assert(bits == 8 || bits == 16);
+        internal_assert(!op->type.is_float());
+        // Generated code (16-bit):
+        //  (atomicLoad(&in.data[i/2]) >> u32((i%2)*16)) & 0xFFFFu;
+        string load;
+        load = "atomicLoad(&" + name + "[" + idx + " / " + elements + "])";
+        load += " >> u32((" + idx + " % " + elements + ") * " + bits_str + ")";
+        load = "(" + load + ") & " + std::to_string((1 << bits) - 1) + "u";
+        if (op->type.is_int()) {
+            // Convert to i32 and sign-extend.
+            const string shift = std::to_string(32 - bits);
+            load = "i32((" + load + ") << " + shift + "u) >> " + shift + "u";
+        }
+        return load;
+    };
+
+    // TODO: Use cache to avoid re-loading same value multiple times.
+
+    const string idx = print_expr(op->index);
+    if (op->type.is_scalar()) {
+        string rhs;
+        if (bits == 32 || !buffers.count(op->name)) {
+            rhs = name + "[" + idx + "]";
+        } else {
+            rhs = emulate_narrow_load(idx);
+        }
+        print_assignment(op->type, rhs);
+        return;
+    } else if (op->type.is_vector()) {
+        id = "_" + unique_name('V');
+        // cache[array_indexing] = id;
+
+        // TODO: Could be smarter about this for a dense ramp.
+        stream << get_indent()
+               << "var " << id << " : " << print_type(op->type) << ";\n";
+        for (int i = 0; i < op->type.lanes(); ++i) {
+            stream << get_indent() << id << "[" << i << "] = ";
+            const string idx_i = idx + "[" + std::to_string(i) + "]";
+            if (bits == 32 || !buffers.count(op->name)) {
+                stream << name + "[" + idx_i + "]";
+            } else {
+                stream << emulate_narrow_load(idx_i);
+            }
+            stream << ";\n";
+        }
+        return;
+    }
+
+    internal_error << "unhandled type of load for WGSL";
+}
+
 void CodeGen_WebGPU_Dev::CodeGen_WGSL::visit(const Max *op) {
     print_expr(Call::make(op->type, "max", {op->a, op->b}, Call::Extern));
 }
@@ -499,6 +581,70 @@ void CodeGen_WebGPU_Dev::CodeGen_WGSL::visit(const Select *op) {
     string cond = print_expr(op->condition);
     string select = "select(" + false_val + ", " + true_val + ", " + cond + ")";
     print_assignment(op->type, select);
+}
+
+void CodeGen_WebGPU_Dev::CodeGen_WGSL::visit(const Store *op) {
+    user_assert(is_const_one(op->predicate))
+        << "Predicated stores are not supported for WebGPU.\n";
+
+    const int bits = op->value.type().bits();
+    const string name = print_name(op->name);
+    const string bits_str = std::to_string(bits);
+    const string elements = std::to_string(32 / bits);
+
+    // Store an 8- or 16-bit value to an array<atomic<u32>>.
+    auto emulate_narrow_store = [&](const string &idx, const string &value) {
+        internal_assert(bits == 8 || bits == 16);
+        internal_assert(!op->value.type().is_float());
+        // Generated code (16-bits):
+        //  let prev = atomicLoad(&out.data[i / 2]);
+        //  let shift = u32(i % 2) * 16u;
+        //  let mask = (prev ^ (bitcast<u32>(value)<<shift)) & (0xFFFFu<<shift);
+        //  atomicXor(&out.data[i / 2u], mask);
+        const string prev = "_" + unique_name('P');
+        const string shift = "_" + unique_name('S');
+        const string mask = "_" + unique_name('M');
+        stream << get_indent() << "let " << prev << " = atomicLoad(&"
+               << name << "[" << idx << " / " << elements << "]);\n";
+        stream << get_indent() << "let " << shift << " = u32(" << idx << " % "
+               << elements << ") * " << bits_str << "u;\n";
+        stream << get_indent() << "let " << mask << " = ("
+               << prev << " ^ (bitcast<u32>(" << value << ") << " << shift
+               << ")) & ("
+               << std::to_string((1 << bits) - 1) << "u << " << shift << ");\n";
+        stream << get_indent()
+               << "atomicXor(&"
+               << name << "[" << idx << " / " << elements << "], "
+               << mask << ");\n";
+    };
+
+    const string idx = print_expr(op->index);
+    const string value = print_expr(op->value);
+
+    if (op->value.type().is_scalar()) {
+        if (bits == 32 || !buffers.count(op->name)) {
+            stream << get_indent() << name << "[" << idx << "] = ";
+            stream << value << ";\n";
+        } else {
+            emulate_narrow_store(idx, value);
+        }
+    } else if (op->value.type().is_vector()) {
+        // TODO: Could be smarter about this for a dense ramp.
+        for (int i = 0; i < op->value.type().lanes(); ++i) {
+            const string idx_i = idx + "[" + std::to_string(i) + "]";
+            const string value_i = value + "[" + std::to_string(i) + "]";
+            if (bits == 32 || !buffers.count(op->name)) {
+                stream << get_indent() << name << "[" << idx_i << "] = ";
+                stream << value_i << ";\n";
+            } else {
+                emulate_narrow_store(idx_i, value_i);
+            }
+        }
+    }
+
+    // Need a cache clear on stores to avoid reusing stale loaded
+    // values from before the store.
+    cache.clear();
 }
 
 string CodeGen_WebGPU_Dev::CodeGen_WGSL::print_assignment(
