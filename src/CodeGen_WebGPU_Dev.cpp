@@ -1,4 +1,5 @@
 #include <sstream>
+#include <unordered_set>
 #include <utility>
 
 #include "CodeGen_C.h"
@@ -80,6 +81,9 @@ protected:
         void visit(const Ramp *op) override;
         void visit(const Select *op) override;
         void visit(const Store *op) override;
+
+        string kernel_name;
+        std::unordered_set<string> buffers;
     };
 
     std::ostringstream src_stream;
@@ -165,6 +169,12 @@ string CodeGen_WebGPU_Dev::CodeGen_WGSL::print_name(const string &name) {
     if (new_name.length() > 1 && new_name[0] == '_' && new_name[1] == '_') {
         new_name = "v" + new_name;
     }
+
+    // Prefix buffer names with the kernel name to avoid collisions.
+    if (buffers.count(name)) {
+        new_name = kernel_name + new_name;
+    }
+
     return new_name;
 }
 
@@ -227,6 +237,8 @@ void CodeGen_WebGPU_Dev::CodeGen_WGSL::add_kernel(
     const Stmt &s, const string &name, const vector<DeviceArgument> &args) {
     debug(2) << "Adding WGSL shader " << name << "\n";
 
+    kernel_name = name;
+
     // The name of the variable that contains the non-buffer arguments.
     string args_var = "Args_" + name;
 
@@ -235,6 +247,7 @@ void CodeGen_WebGPU_Dev::CodeGen_WGSL::add_kernel(
     for (const DeviceArgument &arg : args) {
         if (arg.is_buffer) {
             // Emit buffer arguments as read_write storage buffers.
+            buffers.insert(arg.name);
             stream << "@group(0) @binding(" << next_binding << ")\n"
                    << "var<storage, read_write> " << print_name(arg.name)
                    << " : array<" << print_buffer_type(arg.type) << ">;\n\n";
@@ -329,6 +342,14 @@ void CodeGen_WebGPU_Dev::CodeGen_WGSL::add_kernel(
     print(s);
 
     close_scope("shader " + name);
+
+    for (const auto &arg : args) {
+        // Remove buffer arguments from allocation scope and the buffer list.
+        if (arg.is_buffer) {
+            buffers.erase(arg.name);
+            allocations.pop(arg.name);
+        }
+    }
 }
 
 void CodeGen_WebGPU_Dev::CodeGen_WGSL::visit(const Allocate *op) {
