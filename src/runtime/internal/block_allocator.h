@@ -308,13 +308,18 @@ BlockAllocator::create_block_entry(void* user_context, const MemoryProperties& p
     }
 
     BlockEntry* block_entry = block_list.append(user_context);
+    if(block_entry == nullptr) {
+        error(user_context) << "BlockAllocator: Failed to allocate new block entry!\n";
+        return nullptr;
+    }    
+
     BlockResource* block = &(block_entry->value);
     memset(block, 0, sizeof(BlockResource));
     block->memory.size = size;
     block->memory.properties = properties;
     block->memory.dedicated = dedicated;
     block->reserved = 0;
-    block->allocator = nullptr;
+    block->allocator = create_region_allocator(user_context, block);
     alloc_memory_block(user_context, block);
     return block_entry;
 }
@@ -330,15 +335,17 @@ void BlockAllocator::destroy_block_entry(void* user_context, BlockAllocator::Blo
 }
 
 void BlockAllocator::alloc_memory_block(void* user_context, BlockResource* block) {
-    // Cast into client-facing memory block struct for allocation request
-    MemoryBlock* memory_block = reinterpret_cast<MemoryBlock*>(block);
+    debug(user_context) << "BlockAllocator: Allocating block (ptr=" << (void*)block << " allocator=" << (void*)allocators.block << ")...\n";
+    halide_abort_if_false(user_context, allocators.block != nullptr);
+    MemoryBlock* memory_block = &block->memory;
     allocators.block->allocate(user_context, memory_block);
     block->reserved = 0;
 }
 
 void BlockAllocator::free_memory_block(void* user_context, BlockResource* block) {
-    // Cast into client-facing memory block struct for deallocation request
-    MemoryBlock* memory_block = reinterpret_cast<MemoryBlock*>(block);
+    debug(user_context) << "BlockAllocator: Deallocating block (ptr=" << (void*)block << " allocator=" << (void*)allocators.block << ")...\n";
+    halide_abort_if_false(user_context, allocators.block != nullptr);
+    MemoryBlock* memory_block = &block->memory;
     allocators.block->deallocate(user_context, memory_block);
     block->reserved = 0;
     block->memory.size = 0;

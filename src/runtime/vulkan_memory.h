@@ -37,8 +37,8 @@ public:
     VulkanBlockAllocator() = default;
     ~VulkanBlockAllocator() = default;
 
-    void allocate(void* user_context, MemoryBlock* block) override;
-    void deallocate(void* user_context, MemoryBlock* block) override;
+    virtual void allocate(void* user_context, MemoryBlock* block) override;
+    virtual void deallocate(void* user_context, MemoryBlock* block) override;
 
     void bind(void* user_context, VkDevice device, VkPhysicalDevice physical_device);
     void unbind(void* user_context);
@@ -64,7 +64,7 @@ private:
 
 // --
 
-WEAK void VulkanBlockAllocator::allocate(void* user_context, MemoryBlock* block) {
+void VulkanBlockAllocator::allocate(void* user_context, MemoryBlock* block) {
     halide_abort_if_false(user_context, device != nullptr);
     halide_abort_if_false(user_context, physical_device != nullptr);
     halide_abort_if_false(user_context, block != nullptr);
@@ -103,7 +103,7 @@ WEAK void VulkanBlockAllocator::allocate(void* user_context, MemoryBlock* block)
     block_count++;
 }
 
-WEAK void VulkanBlockAllocator::deallocate(void* user_context, MemoryBlock* block) {
+void VulkanBlockAllocator::deallocate(void* user_context, MemoryBlock* block) {
     halide_abort_if_false(user_context, device != nullptr);
     halide_abort_if_false(user_context, physical_device != nullptr);
     halide_abort_if_false(user_context, block != nullptr);
@@ -125,25 +125,25 @@ WEAK void VulkanBlockAllocator::deallocate(void* user_context, MemoryBlock* bloc
     block_count--;
 }
 
-WEAK void VulkanBlockAllocator::bind(void* context, VkDevice dev, VkPhysicalDevice physical_dev) {
+void VulkanBlockAllocator::bind(void* context, VkDevice dev, VkPhysicalDevice physical_dev) {
     device = dev;
     physical_device = physical_dev;
 }
 
-WEAK void VulkanBlockAllocator::unbind(void* context) {
+void VulkanBlockAllocator::unbind(void* context) {
     device = nullptr;
     physical_device = nullptr;
 }
 
-WEAK size_t VulkanBlockAllocator::blocks_allocated() const {
+size_t VulkanBlockAllocator::blocks_allocated() const {
     return block_count;
 }
 
-WEAK size_t VulkanBlockAllocator::bytes_allocated() const {
+size_t VulkanBlockAllocator::bytes_allocated() const {
     return byte_count;
 }
 
-WEAK uint32_t VulkanBlockAllocator::select_memory_type(void* user_context, 
+uint32_t VulkanBlockAllocator::select_memory_type(void* user_context, 
                                                        VkPhysicalDevice physical_device, 
                                                        MemoryProperties properties, 
                                                        uint32_t required_flags) const {
@@ -152,10 +152,10 @@ WEAK uint32_t VulkanBlockAllocator::select_memory_type(void* user_context,
     uint32_t need_flags = 0; //< must have in order to enable requested access 
     switch(properties.visibility) {
         case MemoryVisibility::HostOnly:
-            want_flags |= VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
+            want_flags |= VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT;
             break;
         case MemoryVisibility::DeviceOnly:
-            need_flags |= VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
+            need_flags |= VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
             break;
         case MemoryVisibility::DeviceToHost:
             need_flags |= VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT;
@@ -163,7 +163,6 @@ WEAK uint32_t VulkanBlockAllocator::select_memory_type(void* user_context,
             break;
         case MemoryVisibility::HostToDevice:
             need_flags |= VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT;
-            want_flags |= VK_MEMORY_PROPERTY_HOST_COHERENT_BIT | VK_MEMORY_PROPERTY_HOST_CACHED_BIT;
             break;    
         case MemoryVisibility::DefaultVisibility:
         case MemoryVisibility::InvalidVisibility:
@@ -250,8 +249,8 @@ public:
     VulkanRegionAllocator() = default;
     ~VulkanRegionAllocator() = default;
 
-    void allocate(void* user_context, MemoryRegion* region) override;
-    void deallocate(void* user_context, MemoryRegion* region) override;
+    virtual void allocate(void* user_context, MemoryRegion* region) override;
+    virtual void deallocate(void* user_context, MemoryRegion* region) override;
 
     void bind(void* user_context, VkDevice device, VkPhysicalDevice physical_device);
     void unbind(void* user_context);
@@ -272,7 +271,7 @@ private:
 
 // --
 
-WEAK void VulkanRegionAllocator::allocate(void* user_context, MemoryRegion* region) {
+void VulkanRegionAllocator::allocate(void* user_context, MemoryRegion* region) {
     halide_abort_if_false(user_context, device != nullptr);
     halide_abort_if_false(user_context, physical_device != nullptr);
     halide_abort_if_false(user_context, region != nullptr);
@@ -308,8 +307,8 @@ WEAK void VulkanRegionAllocator::allocate(void* user_context, MemoryRegion* regi
     BlockResource* block_resource = region_allocator->block_resource();
     VkDeviceMemory device_memory = reinterpret_cast<VkDeviceMemory>(block_resource->memory.handle);
 
-    // Finally, bind buffer
-    result = vkBindBufferMemory(device, buffer, device_memory, 0);
+    // Finally, bind buffer to the device memory
+    result = vkBindBufferMemory(device, buffer, device_memory, region->offset);
     if (result != VK_SUCCESS) {
         error(user_context) << "VulkanRegionAllocator: Failed to bind buffer!\n\t"
                             << "vkBindBufferMemory returned: " << get_vulkan_error_name(result) << "\n";
@@ -321,7 +320,7 @@ WEAK void VulkanRegionAllocator::allocate(void* user_context, MemoryRegion* regi
     region_count++;
 }
 
-WEAK void VulkanRegionAllocator::deallocate(void* user_context, MemoryRegion* region) {
+void VulkanRegionAllocator::deallocate(void* user_context, MemoryRegion* region) {
     halide_abort_if_false(user_context, device != nullptr);
     halide_abort_if_false(user_context, physical_device != nullptr);
     halide_abort_if_false(user_context, region != nullptr);
@@ -346,25 +345,25 @@ WEAK void VulkanRegionAllocator::deallocate(void* user_context, MemoryRegion* re
     region_count--;
 }
 
-WEAK void VulkanRegionAllocator::bind(void* user_context, VkDevice dev, VkPhysicalDevice physical_dev) {
+void VulkanRegionAllocator::bind(void* user_context, VkDevice dev, VkPhysicalDevice physical_dev) {
     device = dev;
     physical_device = physical_dev;
 }
 
-WEAK void VulkanRegionAllocator::unbind(void* user_context) {
+void VulkanRegionAllocator::unbind(void* user_context) {
     device = nullptr;
     physical_device = nullptr;
 }
 
-WEAK size_t VulkanRegionAllocator::regions_allocated() const {
+size_t VulkanRegionAllocator::regions_allocated() const {
     return region_count;
 }
 
-WEAK size_t VulkanRegionAllocator::bytes_allocated() const {
+size_t VulkanRegionAllocator::bytes_allocated() const {
     return byte_count;
 }
 
-WEAK uint32_t VulkanRegionAllocator::select_memory_usage(void* user_context, MemoryProperties properties) const {
+uint32_t VulkanRegionAllocator::select_memory_usage(void* user_context, MemoryProperties properties) const {
     uint32_t result = 0; 
     switch(properties.usage) {
         case MemoryUsage::DynamicStorage: 
@@ -479,7 +478,10 @@ void VulkanMemoryAllocator::initialize(void* user_context, const VulkanMemoryCon
     config = cfg;
     device = nullptr;
     physical_device = nullptr;
-    BlockAllocator::MemoryAllocators allocators = { system_allocator, &memory_block_allocator, &memory_region_allocator };
+    BlockAllocator::MemoryAllocators allocators = {0};
+    allocators.system = system_allocator;
+    allocators.block = &memory_block_allocator;
+    allocators.region = &memory_region_allocator;
     BlockAllocator::Config block_allocator_config = {0};
     block_allocator_config.maximum_block_count = cfg.maximum_block_count;
     block_allocator_config.maximum_block_size = cfg.maximum_block_size;
