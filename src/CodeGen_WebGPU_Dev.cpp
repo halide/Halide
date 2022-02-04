@@ -71,6 +71,7 @@ protected:
         void visit(const And *op) override;
         void visit(const Broadcast *op) override;
         void visit(const Cast *) override;
+        void visit(const Div *op) override;
         void visit(const IntImm *) override;
         void visit(const UIntImm *) override;
         void visit(const For *) override;
@@ -415,6 +416,17 @@ void CodeGen_WebGPU_Dev::CodeGen_WGSL::visit(const Broadcast *op) {
 void CodeGen_WebGPU_Dev::CodeGen_WGSL::visit(const Cast *op) {
     print_assignment(op->type,
                      print_type(op->type) + "(" + print_expr(op->value) + ")");
+}
+
+void CodeGen_WebGPU_Dev::CodeGen_WGSL::visit(const Div *op) {
+    int bits;
+    if (is_const_power_of_two_integer(op->b, &bits)) {
+        // WGSL requires the RHS of a shift to be unsigned.
+        Type uint_type = op->a.type().with_code(halide_type_uint);
+        visit_binop(op->type, op->a, make_const(uint_type, bits), ">>");
+    } else {
+        CodeGen_C::visit(op);
+    }
 }
 
 void CodeGen_WebGPU_Dev::CodeGen_WGSL::visit(const IntImm *op) {
