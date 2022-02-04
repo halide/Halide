@@ -98,15 +98,40 @@ void State::save_featurization(const FunctionDAG &dag, const MachineParams &para
     StageMap<ScheduleFeatures> features;
     compute_featurization(dag, params, &features, cache_options);
 
+    index_out << "{ \"feature_stage_index\":\n[\n";
     int offset = 0;
+    
+    int last_node_id = 0, last_stage_id = 0;
     for (const auto &n : dag.nodes) {
         if (n.is_input) {
             continue;
         }
-        index_out << n.func.name() << " " << n.id << std::endl;
+
         for (size_t stage_idx = n.stages.size(); stage_idx > 0; stage_idx--) {
             const auto &s = n.stages[stage_idx - 1];
-            index_out << "  " << s.name << " " << s.id << " " << offset << std::endl;
+            last_node_id = n.id;
+            last_stage_id = s.id;
+        }
+    }
+
+    for (const auto &n : dag.nodes) {
+        if (n.is_input) {
+            continue;
+        }
+
+        for (size_t stage_idx = n.stages.size(); stage_idx > 0; stage_idx--) {
+            const auto &s = n.stages[stage_idx - 1];
+            index_out << "  {\n";
+            index_out << "    \"node_id\": " << n.id << ",\n";
+            index_out << "    \"node_name\": \"" << n.func.name() << "\",\n";
+            index_out << "    \"stage_id\": " << s.id << ",\n";
+            index_out << "    \"stage_name\": \"" << s.name << "\",\n";
+            index_out << "    \"stage_offset\": " << offset << "\n";
+            if (last_node_id == n.id && last_stage_id == s.id) {
+                index_out << "  }\n";
+            } else {
+                index_out << "  },\n";
+            }
             const size_t num_schedule_features = ScheduleFeatures::num_features();
             const size_t num_pipeline_features = PipelineFeatures::num_features();
             const auto &sched_feat = features.get(&s);
@@ -125,6 +150,7 @@ void State::save_featurization(const FunctionDAG &dag, const MachineParams &para
             offset += (num_schedule_features + num_pipeline_features);
         }
     }
+    index_out << "]}\n";
 }
 
 bool State::calculate_cost(const FunctionDAG &dag, const MachineParams &params,
