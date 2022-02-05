@@ -30,13 +30,13 @@ union my_union {
 };
 
 int main(int argc, char **argv) {
-    Buffer<uint8_t> input(100);
+    Buffer<uint8_t, 1> input(100);
 
     for (int32_t i = 0; i < 100; i++) {
         input(i) = i;
     }
 
-    Buffer<double> result(100);
+    Buffer<double, 1> result(100);
 
     const halide_filter_metadata_t *m = HalideTest::AnotherNamespace::cxx_mangling_metadata();
     assert(m != nullptr);

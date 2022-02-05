@@ -11,8 +11,8 @@ using namespace Halide::Runtime;
 int main(int argc, char **argv) {
     const int kSize = 1024;
 
-    Buffer<double> output(kSize, kSize);
-    Buffer<float> input(kSize, kSize);
+    Buffer<double, 2> output(kSize, kSize);
+    Buffer<float, 2> input(kSize, kSize);
 
     input.fill(17.0f);
 

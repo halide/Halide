@@ -11,8 +11,8 @@ const int kSize = 32;
 Var x, y, c;
 
 template<typename Type>
-Buffer<Type> make_image(int extra) {
-    Buffer<Type> im(kSize, kSize, 3);
+Buffer<Type, 3> make_image(int extra) {
+    Buffer<Type, 3> im(kSize, kSize, 3);
     for (int x = 0; x < kSize; x++) {
         for (int y = 0; y < kSize; y++) {
             for (int c = 0; c < 3; c++) {
@@ -24,7 +24,7 @@ Buffer<Type> make_image(int extra) {
 }
 
 template<typename InputType, typename OutputType>
-void verify(const Buffer<InputType> &input, float float_arg, int int_arg, const Buffer<OutputType> &output) {
+void verify(const Buffer<InputType, 3> &input, float float_arg, int int_arg, const Buffer<OutputType, 3> &output) {
     if (input.width() != output.width() ||
         input.height() != output.height()) {
         fprintf(stderr, "size mismatch\n");
@@ -38,6 +38,7 @@ void verify(const Buffer<InputType> &input, float float_arg, int int_arg, const 
                 const OutputType actual = output(x, y, c);
                 if (expected != actual) {
                     fprintf(stderr, "img[%d, %d, %d] = %f, expected %f\n", x, y, c, (double)actual, (double)expected);
+                    abort();
                     exit(-1);
                 }
             }
@@ -48,9 +49,9 @@ void verify(const Buffer<InputType> &input, float float_arg, int int_arg, const 
 int main(int argc, char **argv) {
     constexpr int kArrayCount = 2;
 
-    Buffer<uint8_t> buffer_input = make_image<uint8_t>(0);
-    Buffer<float> simple_input = make_image<float>(0);
-    Buffer<float> array_input[kArrayCount] = {
+    Buffer<uint8_t, 3> buffer_input = make_image<uint8_t>(0);
+    Buffer<float, 3> simple_input = make_image<float>(0);
+    Buffer<float, 3> array_input[kArrayCount] = {
         make_image<float>(0),
         make_image<float>(1)};
 
@@ -78,36 +79,36 @@ int main(int argc, char **argv) {
     gp.intermediate_level.set(LoopLevel(gen.tuple_output, gen.tuple_output.args().at(1)));
 
     Realization simple_output_realized = gen.simple_output.realize({kSize, kSize, 3});
-    Buffer<float> s0 = simple_output_realized;
+    Buffer<float, 3> s0 = simple_output_realized;
     verify(array_input[0], 1.f, 0, s0);
 
     Realization tuple_output_realized = gen.tuple_output.realize({kSize, kSize, 3});
-    Buffer<float> f0 = tuple_output_realized[0];
-    Buffer<float> f1 = tuple_output_realized[1];
+    Buffer<float, 3> f0 = tuple_output_realized[0];
+    Buffer<float, 3> f1 = tuple_output_realized[1];
     verify(array_input[0], 1.25f, 0, f0);
     verify(array_input[0], 1.25f, 33, f1);
 
     for (int i = 0; i < kArrayCount; ++i) {
-        Realization array_output_realized = gen.array_output[i].realize({kSize, kSize}, gen.target);
-        Buffer<int16_t> g0 = array_output_realized;
+        Realization array_output_realized = gen.array_output[i].realize({kSize, kSize, 3}, gen.target);
+        Buffer<int16_t, 3> g0 = array_output_realized;
         verify(array_input[i], 1.0f, int_args[i], g0);
     }
 
     Realization typed_buffer_output_realized = gen.typed_buffer_output.realize({kSize, kSize, 3});
-    Buffer<float> b0 = typed_buffer_output_realized;
+    Buffer<float, 3> b0 = typed_buffer_output_realized;
     verify(buffer_input, 1.f, 0, b0);
 
     Realization untyped_buffer_output_realized = gen.untyped_buffer_output.realize({kSize, kSize, 3});
-    Buffer<float> b1 = untyped_buffer_output_realized;
+    Buffer<float, 3> b1 = untyped_buffer_output_realized;
     verify(buffer_input, 1.f, 0, b1);
 
     Realization static_compiled_buffer_output_realized = gen.static_compiled_buffer_output.realize({kSize, kSize, 3});
-    Buffer<uint8_t> b2 = static_compiled_buffer_output_realized;
+    Buffer<uint8_t, 3> b2 = static_compiled_buffer_output_realized;
     verify(buffer_input, 1.f, 42, b2);
 
     for (int i = 0; i < 2; ++i) {
         Realization array_buffer_output_realized = gen.array_buffer_output[i].realize({kSize, kSize, 3});
-        Buffer<uint8_t> b2 = array_buffer_output_realized;
+        Buffer<uint8_t, 3> b2 = array_buffer_output_realized;
         verify(buffer_input, 1.f, 1 + i, b2);
     }
 

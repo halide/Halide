@@ -9,7 +9,7 @@ using std::vector;
 using namespace Halide::Runtime;
 
 int main(int argc, char **argv) {
-    Buffer<float> input(1024, 1024);
+    Buffer<float, 2> input(1024, 1024);
 
     // Put some junk in the input. Keep it to small integers so the float averaging stays exact.
     for (int y = 0; y < input.height(); y++) {
@@ -18,10 +18,10 @@ int main(int argc, char **argv) {
         }
     }
 
-    vector<Buffer<float>> levels(10);
+    vector<Buffer<float, 2>> levels(10);
 
     for (int l = 0; l < 10; l++) {
-        levels[l] = Buffer<float>(1024 >> l, 1024 >> l);
+        levels[l] = Buffer<float, 2>(1024 >> l, 1024 >> l);
     }
 
     // Will throw a compiler error if we didn't compile the generator with 10 levels.

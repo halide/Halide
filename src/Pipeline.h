@@ -113,17 +113,17 @@ public:
         RealizationArg(halide_buffer_t *buf)
             : buf(buf) {
         }
-        template<typename T, int D>
-        RealizationArg(Runtime::Buffer<T, D> &dst)
+        template<typename T, int Dims>
+        RealizationArg(Runtime::Buffer<T, Dims> &dst)
             : buf(dst.raw_buffer()) {
         }
-        template<typename T>
-        HALIDE_NO_USER_CODE_INLINE RealizationArg(Buffer<T> &dst)
+        template<typename T, int Dims>
+        HALIDE_NO_USER_CODE_INLINE RealizationArg(Buffer<T, Dims> &dst)
             : buf(dst.raw_buffer()) {
         }
-        template<typename T, typename... Args,
+        template<typename T, int Dims, typename... Args,
                  typename = typename std::enable_if<Internal::all_are_convertible<Buffer<>, Args...>::value>::type>
-        RealizationArg(Buffer<T> &a, Args &&...args)
+        RealizationArg(Buffer<T, Dims> &a, Args &&...args)
             : buffer_list(std::make_unique<std::vector<Buffer<>>>(std::initializer_list<Buffer<>>{a, std::forward<Args>(args)...})) {
         }
         RealizationArg(RealizationArg &&from) = default;

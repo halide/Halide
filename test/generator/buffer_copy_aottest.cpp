@@ -16,9 +16,9 @@ int main(int argc, char **argv) {
     // (but testing to verify that is part of a good test).
 
     {
-        Buffer<int> input(128, 128);
+        Buffer<int, 2> input(128, 128);
         input.fill([&](int x, int y) { return x + 10 * y; });
-        Buffer<int> out(64, 64);
+        Buffer<int, 2> out(64, 64);
         out.set_min(32, 32);
 
         int result = halide_buffer_copy(nullptr, input, nullptr, out);
@@ -27,7 +27,7 @@ int main(int argc, char **argv) {
             exit(-1);
         }
 
-        Buffer<int> in_crop = input.cropped(0, 32, 64).cropped(1, 32, 64);
+        Buffer<int, 2> in_crop = input.cropped(0, 32, 64).cropped(1, 32, 64);
         out.for_each_value([&](int a, int b) {
             if (a != b) {
                 printf("Copying a crop failed\n");
@@ -47,11 +47,11 @@ int main(int argc, char **argv) {
 
     // Test a buffer-copy to a device buffer from a cropped host buffer.
     {
-        Buffer<int> input(128, 128);
+        Buffer<int, 2> input(128, 128);
         input.fill([&](int x, int y) { return x + 10 * y; });
-        Buffer<int> out(64, 64);
+        Buffer<int, 2> out(64, 64);
         out.set_min(32, 32);
-        Buffer<int> in_crop = input.cropped(0, 32, 64).cropped(1, 32, 64);
+        Buffer<int, 2> in_crop = input.cropped(0, 32, 64).cropped(1, 32, 64);
 
         int result = halide_buffer_copy(nullptr, in_crop, dev, out);
         if (result != 0) {
@@ -72,11 +72,11 @@ int main(int argc, char **argv) {
 
     // Test a buffer-copy to a host buffer from a device buffer.
     {
-        Buffer<int> input(128, 128);
+        Buffer<int, 2> input(128, 128);
         input.fill([&](int x, int y) { return x + 10 * y; });
-        Buffer<int> out(64, 64);
+        Buffer<int, 2> out(64, 64);
         out.set_min(32, 32);
-        Buffer<int> in_crop = input.cropped(0, 32, 64).cropped(1, 32, 64);
+        Buffer<int, 2> in_crop = input.cropped(0, 32, 64).cropped(1, 32, 64);
 
         // Move the crop to the device, and damage the host data.
         in_crop.set_host_dirty();
@@ -104,8 +104,8 @@ int main(int argc, char **argv) {
 
     // Then a test of the pipeline that uses it in complicated ways
     {
-        Buffer<float> input(128, 128);
-        Buffer<float> output(128, 128);
+        Buffer<float, 2> input(128, 128);
+        Buffer<float, 2> output(128, 128);
         input.fill([&](int x, int y) { return (float)(x + y); });
 
         int result = buffer_copy(input, output);
