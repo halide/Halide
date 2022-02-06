@@ -2937,8 +2937,7 @@ void CodeGen_LLVM::visit(const Call *op) {
                                                   ConstantInt::get(i32_t, (int)*index)});
             // TODO(zvookin|abadams): Two ways to go here: traverse the LLVM type
             // or just assume op-type is correct. Going ahead and traversing the type.
-            llvm::Type *result_type = struct_type ? struct_type->getElementType(*index)
-                                                  : array_type->getArrayElementType();
+            llvm::Type *result_type = struct_type ? struct_type->getElementType(*index) : array_type->getArrayElementType();
             value = builder->CreateLoad(result_type, gep);
         } else {
             // The struct is actually just a scalar
