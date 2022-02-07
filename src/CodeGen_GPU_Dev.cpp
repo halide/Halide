@@ -116,8 +116,7 @@ protected:
                                 mutate(extract_lane(s->index, ln)),
                                 s->param,
                                 const_true(),
-                                // TODO: alignment needs to be changed
-                                s->alignment)));
+                                s->alignment + ln)));
             }
             return Block::make(scalar_stmts);
         } else {
@@ -135,8 +134,7 @@ protected:
                                             op->image,
                                             op->param,
                                             const_true(),
-                                            // TODO: alignment needs to be changed
-                                            op->alignment);
+                                            op->alignment + ln);
                 lane_values.push_back(Call::make(load_expr.type(),
                                                  Call::if_then_else,
                                                  {extract_lane(op->predicate, ln),
