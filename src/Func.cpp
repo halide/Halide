@@ -368,9 +368,9 @@ void Stage::set_dim_type(const VarOrRVar &var, ForType t) {
                             // its identity for each value in the definition if it is a Tuple
                             const auto &prover_result = prove_associativity(func_name, args, values);
 
-                            user_assert(prover_result.associative())
+                            user_assert(prover_result.associative() && prover_result.commutative())
                                 << "Failed to call atomic() on " << name()
-                                << " since it can't prove associativity of the operator.\n";
+                                << " since it can't prove associativity or commutativity of the operator.\n";
                             internal_assert(prover_result.size() == values.size());
                         }
                     }
