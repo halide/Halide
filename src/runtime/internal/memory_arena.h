@@ -30,17 +30,17 @@ public:
     };
 
     MemoryArena(void *user_context, const Config &config = default_config(),
-                SystemMemoryAllocator *allocator = default_allocator());
+                const SystemMemoryAllocatorFns& allocator = default_allocator());
 
     ~MemoryArena();
 
     // Factory methods for creation / destruction
-    static MemoryArena<T> *create(void *user_context, const Config &config, SystemMemoryAllocator *allocator = default_allocator());
+    static MemoryArena<T> *create(void *user_context, const Config &config, const SystemMemoryAllocatorFns& allocator = default_allocator());
     static void destroy(void *user_context, MemoryArena<T> *arena);
 
     // Initialize a newly created instance
     void initialize(void *user_context, const Config &config,
-                    SystemMemoryAllocator *allocator = default_allocator());
+                    const SystemMemoryAllocatorFns& allocator = default_allocator());
 
     // Public interface methods
     T *reserve(void *user_context);
@@ -52,39 +52,32 @@ public:
     const Config &current_config() const;
     static const Config &default_config();
 
-    SystemMemoryAllocator *current_allocator() const;
-    static SystemMemoryAllocator *default_allocator();
+    const SystemMemoryAllocatorFns& current_allocator() const;
+    static const SystemMemoryAllocatorFns& default_allocator();
 
 private:
     // Sentinal invalid entry value
     static const uint32_t invalid_entry = uint32_t(-1);
 
-    // Entry is stored as a union (without padding) ...
-    // - stores contents of value (when in use)
-    // - stores next free index for block (when not in use)
-    union Entry {
-        uint32_t free_index;
-        alignas(T) char value[sizeof(T)];
-    };
-
-    // Each block contains an array of entries with usage info
-    // - free index points to next available entry (or invalid_entry if block is full)
+    // Each block contains:
+    // - an array of entries 
+    // - an array of indices (for the free list)
+    // - an array of status flags (indicating usage)
+    // - free index points to next available entry for the block (or invalid_entry if block is full)
     struct Block {
-        Entry *entries;
-        AllocationStatus *status;
-        uint32_t capacity;
-        uint32_t free_index;
+        T *entries = nullptr;
+        uint32_t* indices = nullptr;
+        AllocationStatus* status = nullptr;
+        uint32_t capacity = 0;
+        uint32_t free_index = 0;
     };
 
     Block &create_block(void *user_context);
     bool collect_block(void *user_context, Block &block);  //< returns true if any blocks were removed
     void destroy_block(void *user_context, Block &block);
 
-    Entry *create_entry(void *user_context, Block &block, uint32_t index);
+    T *create_entry(void *user_context, Block &block, uint32_t index);
     void destroy_entry(void *user_context, Block &block, uint32_t index);
-
-    T *construct_value(void *user_context, Entry *entry_ptr);
-    void destruct_value(void *user_context, Entry *entry_ptr);
 
     Config config;
     BlockStorage<Block> blocks;
@@ -93,9 +86,9 @@ private:
 template<typename T>
 MemoryArena<T>::MemoryArena(void *user_context,
                             const Config &cfg,
-                            SystemMemoryAllocator *sma)
+                            const SystemMemoryAllocatorFns& alloc)
     : config(cfg),
-      blocks(sma) {
+      blocks(alloc) {
     halide_debug_assert(user_context, config.minimum_block_capacity > 1);
 }
 
@@ -105,35 +98,35 @@ MemoryArena<T>::~MemoryArena() {
 }
 
 template<typename T>
-MemoryArena<T> *MemoryArena<T>::create(void *user_context, const Config &cfg, SystemMemoryAllocator *allocator) {
-    halide_abort_if_false(user_context, allocator != nullptr);
+MemoryArena<T> *MemoryArena<T>::create(void *user_context, const Config &cfg, const SystemMemoryAllocatorFns& system_allocator) {
+    halide_abort_if_false(user_context, system_allocator.allocate != nullptr);
     MemoryArena<T> *result = reinterpret_cast<MemoryArena<T> *>(
-        allocator->allocate(user_context, sizeof(MemoryArena<T>)));
+        system_allocator.allocate(user_context, sizeof(MemoryArena<T>)));
 
     if (result == nullptr) {
         halide_error(user_context, "MemoryArena: Failed to create instance! Out of memory!\n");
         return nullptr;
     }
 
-    result->initialize(user_context, cfg, allocator);
+    result->initialize(user_context, cfg, system_allocator);
     return result;
 }
 
 template<typename T>
 void MemoryArena<T>::destroy(void *user_context, MemoryArena<T> *instance) {
     halide_abort_if_false(user_context, instance != nullptr);
-    SystemMemoryAllocator *allocator = instance->blocks->current_allocator();
+    const SystemMemoryAllocatorFns& system_allocator = instance->blocks.current_allocator();
     instance->destroy(user_context);
-    halide_abort_if_false(user_context, allocator != nullptr);
-    allocator->deallocate(user_context, instance);
+    halide_abort_if_false(user_context, system_allocator.deallocate != nullptr);
+    system_allocator.deallocate(user_context, instance);
 }
 
 template<typename T>
 void MemoryArena<T>::initialize(void *user_context,
                                 const Config &cfg,
-                                SystemMemoryAllocator *sma) {
+                                const SystemMemoryAllocatorFns& system_allocator) {
     config = cfg;
-    blocks.initialize(user_context, sma);
+    blocks.initialize(user_context, system_allocator);
     halide_debug_assert(user_context, config.minimum_block_capacity > 1);
 }
 
@@ -164,8 +157,7 @@ T *MemoryArena<T>::reserve(void *user_context) {
     for (size_t i = blocks.size(); i--;) {
         Block &block = blocks[i];
         if (block.free_index != invalid_entry) {
-            Entry *entry_ptr = create_entry(user_context, block, block.free_index);
-            return construct_value(user_context, entry_ptr);
+            return create_entry(user_context, block, block.free_index);
         }
     }
 
@@ -177,18 +169,13 @@ T *MemoryArena<T>::reserve(void *user_context) {
     // All blocks full ... create a new one
     uint32_t index = 0;
     Block &block = create_block(user_context);
-    Entry *entry_ptr = create_entry(user_context, block, index);
-    return construct_value(user_context, entry_ptr);
+    return create_entry(user_context, block, index);
 }
 
 template<typename T>
-void MemoryArena<T>::reclaim(void *user_context, T *ptr) {
+void MemoryArena<T>::reclaim(void *user_context, T *entry_ptr) {
     for (size_t i = blocks.size(); i--;) {
         Block &block = blocks[i];
-
-        // safely cast ptr as entry type
-        Entry *entry_ptr;
-        memcpy(&entry_ptr, &ptr, sizeof(entry_ptr));
 
         // is entry_ptr in the address range of this block.
         if ((entry_ptr >= block.entries) && (entry_ptr < block.entries + block.capacity)) {
@@ -209,35 +196,34 @@ typename MemoryArena<T>::Block &MemoryArena<T>::create_block(void *user_context)
                                       config.minimum_block_capacity :
                                       (blocks.back().capacity * 3 / 2);
 
-    halide_abort_if_false(user_context, current_allocator() != nullptr);
-    AllocationStatus *new_status = (AllocationStatus *)current_allocator()->allocate(user_context, sizeof(AllocationStatus) * new_capacity);
-    Entry *new_entries = (Entry *)current_allocator()->allocate(user_context, sizeof(T) * new_capacity);
-    const Block new_block = {new_entries, new_status, new_capacity, 0};
-    blocks.append(user_context, new_block);
+    halide_abort_if_false(user_context, current_allocator().allocate != nullptr);
+    T *new_entries = (T *)current_allocator().allocate(user_context, sizeof(T) * new_capacity);
+    uint32_t *new_indices = (uint32_t *)current_allocator().allocate(user_context, sizeof(uint32_t) * new_capacity);
+    AllocationStatus* new_status = (AllocationStatus *)current_allocator().allocate(user_context, sizeof(AllocationStatus) * new_capacity);
 
     for (uint32_t i = 0; i < new_capacity - 1; ++i) {
-        blocks.back().entries[i].free_index = i + 1;            // singly-linked list of all free entries in the block
-        blocks.back().status[i] = AllocationStatus::Available;  // usage status
+        new_indices[i] = i + 1;                       // singly-linked list of all free entries in the block
+        new_status[i] = AllocationStatus::Available;  // usage status
     }
 
-    blocks.back().entries[new_capacity - 1].free_index = invalid_entry;
-    blocks.back().status[new_capacity - 1] = AllocationStatus::InvalidStatus;
+    new_indices[new_capacity - 1] = invalid_entry;
+    new_status[new_capacity - 1] = AllocationStatus::InvalidStatus;
+
+    const Block new_block = {new_entries, new_indices, new_status, new_capacity, 0};
+    blocks.append(user_context, new_block);
     return blocks.back();
 }
 
 template<typename T>
 void MemoryArena<T>::destroy_block(void *user_context, Block &block) {
     if (block.entries != nullptr) {
-        for (size_t i = block.capacity; i--;) {
-            if (block.status[i] == AllocationStatus::InUse) {
-                destruct_value(user_context, &block.entries[i]);
-            }
-            block.status[i] = AllocationStatus::InvalidStatus;
-        }
-        current_allocator()->deallocate(user_context, block.entries);
-        current_allocator()->deallocate(user_context, block.status);
-        block.status = nullptr;
+        halide_abort_if_false(user_context, current_allocator().deallocate != nullptr);
+        current_allocator().deallocate(user_context, block.entries);
+        current_allocator().deallocate(user_context, block.indices);
+        current_allocator().deallocate(user_context, block.status);
         block.entries = nullptr;
+        block.indices = nullptr;
+        block.status = nullptr;
     }
 }
 
@@ -260,36 +246,21 @@ bool MemoryArena<T>::collect_block(void *user_context, Block &block) {
 }
 
 template<typename T>
-typename MemoryArena<T>::Entry *MemoryArena<T>::create_entry(void *user_context, Block &block, uint32_t index) {
+T *MemoryArena<T>::create_entry(void *user_context, Block &block, uint32_t index) {
+    T *entry_ptr = &block.entries[index];
+    block.free_index = block.indices[index];
     block.status[index] = AllocationStatus::InUse;
-    Entry *entry_ptr = &block.entries[index];
-    block.free_index = entry_ptr->free_index;
+#if DEBUG_RUNTIME
+    memset(entry_ptr, 0, sizeof(T));
+#endif
     return entry_ptr;
 }
 
 template<typename T>
 void MemoryArena<T>::destroy_entry(void *user_context, Block &block, uint32_t index) {
-    Entry *entry_ptr = &block.entries[index];
-    if (block.status[index] == AllocationStatus::InUse) {
-        destruct_value(user_context, entry_ptr);
-    }
     block.status[index] = AllocationStatus::Available;
-    entry_ptr->free_index = block.free_index;
+    block.indices[index] = block.free_index;
     block.free_index = index;
-}
-
-template<typename T>
-T *MemoryArena<T>::construct_value(void *user_context, Entry *entry_ptr) {
-    T *ptr = (T *)&entry_ptr->value;
-#if DEBUG_RUNTIME
-    memset(ptr, 0, sizeof(T));
-#endif
-    return ptr;
-}
-
-template<typename T>
-void MemoryArena<T>::destruct_value(void *user_context, Entry *entry_ptr) {
-    // EMPTY
 }
 
 template<typename T>
@@ -306,13 +277,13 @@ MemoryArena<T>::default_config() {
 }
 
 template<typename T>
-SystemMemoryAllocator *
+const SystemMemoryAllocatorFns&
 MemoryArena<T>::current_allocator() const {
     return blocks.current_allocator();
 }
 
 template<typename T>
-SystemMemoryAllocator *
+const SystemMemoryAllocatorFns&
 MemoryArena<T>::default_allocator() {
     return BlockStorage<Block>::default_allocator();
 }

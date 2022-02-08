@@ -1,7 +1,8 @@
-#include "internal/linked_list.h"
 #include "HalideRuntime.h"
 #include "printer.h"
 #include "runtime_internal.h"
+
+#include "internal/linked_list.h"
 
 using namespace Halide::Runtime::Internal;
 

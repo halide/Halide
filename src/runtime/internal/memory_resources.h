@@ -126,46 +126,43 @@ ALWAYS_INLINE size_t clamped_size(size_t value, size_t min_value, size_t max_val
 
 // --
 
-class SystemMemoryAllocator {
-public:
-    SystemMemoryAllocator() = default;
-    ~SystemMemoryAllocator() = default;
+typedef void* (*AllocateSystemFn)(void*, size_t);
+typedef void (*DeallocateSystemFn)(void*, void*);
 
-    virtual void *allocate(void *user_context, size_t bytes) = 0;
-    virtual void deallocate(void *user_context, void *ptr) = 0;
+ALWAYS_INLINE void* native_system_malloc(void* user_context, size_t bytes) {
+    return malloc(bytes);
+}
+
+ALWAYS_INLINE void native_system_free(void* user_context, void* ptr) {
+    free(ptr);
+}
+
+struct SystemMemoryAllocatorFns {
+    AllocateSystemFn allocate = nullptr;
+    DeallocateSystemFn deallocate = nullptr;
 };
 
-class HalideSystemAllocator : public SystemMemoryAllocator {
-public:
-    HalideSystemAllocator() = default;
-    ~HalideSystemAllocator() = default;
-
-    void *allocate(void *user_context, size_t bytes) override {
-        return halide_malloc(user_context, bytes);
-    }
-
-    void deallocate(void *user_context, void *ptr) override {
-        halide_free(user_context, ptr);
-    }
+struct HalideSystemAllocatorFns {
+    AllocateSystemFn allocate = halide_malloc;
+    DeallocateSystemFn deallocate = halide_free;
 };
 
-class MemoryRegionAllocator {
-public:
-    MemoryRegionAllocator() = default;
-    ~MemoryRegionAllocator() = default;
+typedef void (*AllocateBlockFn)(void*, MemoryBlock*);
+typedef void (*DeallocateBlockFn)(void*, MemoryBlock*);
 
-    virtual void allocate(void *user_context, MemoryRegion *region) = 0;
-    virtual void deallocate(void *user_context, MemoryRegion *region) = 0;
+struct MemoryBlockAllocatorFns {
+    AllocateBlockFn allocate = nullptr;
+    DeallocateBlockFn deallocate = nullptr;
 };
 
-class MemoryBlockAllocator {
-public:
-    MemoryBlockAllocator() = default;
-    ~MemoryBlockAllocator() = default;
+typedef void (*AllocateRegionFn)(void*, MemoryRegion*);
+typedef void (*DeallocateRegionFn)(void*, MemoryRegion*);
 
-    virtual void allocate(void *user_context, MemoryBlock *block) = 0;
-    virtual void deallocate(void *user_context, MemoryBlock *block) = 0;
+struct MemoryRegionAllocatorFns {
+    AllocateRegionFn allocate = nullptr;
+    DeallocateRegionFn deallocate= nullptr;
 };
+
 
 // --
 

@@ -159,7 +159,7 @@ WEAK int halide_vulkan_initialize_kernels(void *user_context, void **state_ptr, 
 
 WEAK void halide_vulkan_finalize_kernels(void *user_context, void *state_ptr) {
     debug(user_context)
-        << "CL: halide_vulkan_finalize_kernels (user_context: " << user_context
+        << "Vulkan: halide_vulkan_finalize_kernels (user_context: " << user_context
         << ", state_ptr: " << state_ptr << "\n";
     VulkanContext ctx(user_context);
     if (ctx.error == VK_SUCCESS) {
@@ -219,12 +219,19 @@ WEAK int halide_vulkan_device_release(void *user_context) {
         }
 
         vk_destroy_memory_allocator(user_context);
-        halide_vulkan_release_context(user_context, instance, device, queue);
+        
+        if(device == cached_device) {
+            cached_device = nullptr;
+            cached_physical_device = nullptr;
+            cached_queue = nullptr;
+        }
         vkDestroyDevice(device, nullptr);
+
         if (instance == cached_instance) {
             cached_instance = nullptr;
         }
         vkDestroyInstance(instance, nullptr);
+        halide_vulkan_release_context(user_context, instance, device, queue);
     }
 
     return 0;

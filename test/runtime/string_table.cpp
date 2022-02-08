@@ -1,7 +1,8 @@
-#include "internal/string_table.h"
 #include "HalideRuntime.h"
 #include "printer.h"
 #include "runtime_internal.h"
+
+#include "internal/string_table.h"
 
 using namespace Halide::Runtime::Internal;
 

@@ -135,24 +135,21 @@ WEAK uint32_t vk_get_supported_instance_extensions(void *user_context, StringTab
     }
 
     uint32_t avail_ext_count = 0;
-    VkExtensionProperties *avail_ext_properties = nullptr;
     vkEnumerateInstanceExtensionProperties(nullptr, &avail_ext_count, nullptr);
     debug(user_context) << "Vulkan: vkEnumerateInstanceExtensionProperties found  " << avail_ext_count << " extensions ...\n";
 
     if (avail_ext_count) {
-        avail_ext_properties = (VkExtensionProperties *)malloc(avail_ext_count * sizeof(VkExtensionProperties));
-        vkEnumerateInstanceExtensionProperties(nullptr, &avail_ext_count, avail_ext_properties);
+        BlockStorage<VkExtensionProperties> extension_properties(user_context, avail_ext_count);
+        extension_properties.resize(user_context, avail_ext_count);
+        vkEnumerateInstanceExtensionProperties(nullptr, &avail_ext_count, extension_properties.data());
         for (uint32_t n = 0; n < avail_ext_count; ++n) {
-            debug(user_context) << "    extension: " << avail_ext_properties[n].extensionName << "\n";
+            debug(user_context) << "    extension: " << extension_properties[n].extensionName << "\n";
         }
 
         ext_table.reserve(user_context, avail_ext_count);
         for (uint32_t n = 0; n < avail_ext_count; ++n) {
-            ext_table.assign(user_context, n, avail_ext_properties[n].extensionName);
+            ext_table.assign(user_context, n, extension_properties[n].extensionName);
         }
-
-        free(avail_ext_properties);
-        avail_ext_properties = nullptr;
     }
 
     return avail_ext_count;
@@ -177,24 +174,21 @@ WEAK uint32_t vk_get_supported_device_extensions(void *user_context, VkPhysicalD
     }
 
     uint32_t avail_ext_count = 0;
-    VkExtensionProperties *avail_ext_properties = nullptr;
     vkEnumerateDeviceExtensionProperties(physical_device, nullptr, &avail_ext_count, nullptr);
     debug(user_context) << "Vulkan: vkEnumerateDeviceExtensionProperties found  " << avail_ext_count << " extensions ...\n";
 
     if (avail_ext_count) {
-        avail_ext_properties = (VkExtensionProperties *)malloc(avail_ext_count * sizeof(VkExtensionProperties));
-        vkEnumerateDeviceExtensionProperties(physical_device, nullptr, &avail_ext_count, avail_ext_properties);
+        BlockStorage<VkExtensionProperties> extension_properties(user_context, avail_ext_count);
+        extension_properties.resize(user_context, avail_ext_count);
+        vkEnumerateDeviceExtensionProperties(physical_device, nullptr, &avail_ext_count, extension_properties.data());
         for (uint32_t n = 0; n < avail_ext_count; ++n) {
-            debug(user_context) << "    extension: " << avail_ext_properties[n].extensionName << "\n";
+            debug(user_context) << "    extension: " << extension_properties[n].extensionName << "\n";
         }
 
         ext_table.reserve(user_context, avail_ext_count);
         for (uint32_t n = 0; n < avail_ext_count; ++n) {
-            ext_table.assign(user_context, n, avail_ext_properties[n].extensionName);
+            ext_table.assign(user_context, n, extension_properties[n].extensionName);
         }
-
-        free(avail_ext_properties);
-        avail_ext_properties = nullptr;
     }
 
     return avail_ext_count;

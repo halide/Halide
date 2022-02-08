@@ -139,6 +139,7 @@ WEAK int vk_select_device_for_context(void *user_context,
     for (uint32_t i = 0; (chosen_device == nullptr) && (i < device_count); i++) {
         VkPhysicalDeviceProperties properties;
         vkGetPhysicalDeviceProperties(avail_devices[i], &properties);
+        debug(user_context) << "Vulkan: Checking device #" << i << "='" << properties.deviceName << "'\n";
 
         int matching_device = 0;
         if ((dev_type != nullptr) && (*dev_type != '\0')) {
