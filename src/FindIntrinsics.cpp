@@ -380,6 +380,8 @@ protected:
             Type signed_type_wide = op_type_wide.with_code(halide_type_int);
             Type unsigned_type = op->type.with_code(halide_type_uint);
 
+            // Give concise names to various predicates we want to use in
+            // rewrite rules below.
             int bits = op->type.bits();
             auto is_x_same_int = op->type.is_int() && is_int(x, bits);
             auto is_x_same_uint = op->type.is_uint() && is_uint(x, bits);
