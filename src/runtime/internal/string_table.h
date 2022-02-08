@@ -17,9 +17,9 @@ public:
     StringTable(const StringTable &) = delete;
     StringTable &operator=(const StringTable &) = delete;
 
-    StringTable(const SystemMemoryAllocatorFns& allocator = StringStorage::default_allocator());
-    StringTable(void *user_context, size_t capacity, const SystemMemoryAllocatorFns& allocator = StringStorage::default_allocator());
-    StringTable(void *user_context, const char **array, size_t count, const SystemMemoryAllocatorFns& allocator = StringStorage::default_allocator());
+    StringTable(const SystemMemoryAllocatorFns &allocator = StringStorage::default_allocator());
+    StringTable(void *user_context, size_t capacity, const SystemMemoryAllocatorFns &allocator = StringStorage::default_allocator());
+    StringTable(void *user_context, const char **array, size_t count, const SystemMemoryAllocatorFns &allocator = StringStorage::default_allocator());
     ~StringTable();
 
     void reserve(void *user_context, size_t capacity);
@@ -56,20 +56,20 @@ private:
 
 // --
 
-StringTable::StringTable(const SystemMemoryAllocatorFns& sma)
+StringTable::StringTable(const SystemMemoryAllocatorFns &sma)
     : contents(sma),
       pointers(sma) {
     // EMPTY!
 }
 
-StringTable::StringTable(void *user_context, size_t capacity, const SystemMemoryAllocatorFns& sma)
+StringTable::StringTable(void *user_context, size_t capacity, const SystemMemoryAllocatorFns &sma)
     : contents(sma),
       pointers(sma) {
 
     reserve(user_context, capacity);
 }
 
-StringTable::StringTable(void *user_context, const char **array, size_t count, const SystemMemoryAllocatorFns& sma)
+StringTable::StringTable(void *user_context, const char **array, size_t count, const SystemMemoryAllocatorFns &sma)
     : contents(sma),
       pointers(sma) {
     fill(user_context, array, count);

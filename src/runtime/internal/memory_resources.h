@@ -126,14 +126,14 @@ ALWAYS_INLINE size_t clamped_size(size_t value, size_t min_value, size_t max_val
 
 // --
 
-typedef void* (*AllocateSystemFn)(void*, size_t);
-typedef void (*DeallocateSystemFn)(void*, void*);
+typedef void *(*AllocateSystemFn)(void *, size_t);
+typedef void (*DeallocateSystemFn)(void *, void *);
 
-ALWAYS_INLINE void* native_system_malloc(void* user_context, size_t bytes) {
+ALWAYS_INLINE void *native_system_malloc(void *user_context, size_t bytes) {
     return malloc(bytes);
 }
 
-ALWAYS_INLINE void native_system_free(void* user_context, void* ptr) {
+ALWAYS_INLINE void native_system_free(void *user_context, void *ptr) {
     free(ptr);
 }
 
@@ -147,22 +147,21 @@ struct HalideSystemAllocatorFns {
     DeallocateSystemFn deallocate = halide_free;
 };
 
-typedef void (*AllocateBlockFn)(void*, MemoryBlock*);
-typedef void (*DeallocateBlockFn)(void*, MemoryBlock*);
+typedef void (*AllocateBlockFn)(void *, MemoryBlock *);
+typedef void (*DeallocateBlockFn)(void *, MemoryBlock *);
 
 struct MemoryBlockAllocatorFns {
     AllocateBlockFn allocate = nullptr;
     DeallocateBlockFn deallocate = nullptr;
 };
 
-typedef void (*AllocateRegionFn)(void*, MemoryRegion*);
-typedef void (*DeallocateRegionFn)(void*, MemoryRegion*);
+typedef void (*AllocateRegionFn)(void *, MemoryRegion *);
+typedef void (*DeallocateRegionFn)(void *, MemoryRegion *);
 
 struct MemoryRegionAllocatorFns {
     AllocateRegionFn allocate = nullptr;
-    DeallocateRegionFn deallocate= nullptr;
+    DeallocateRegionFn deallocate = nullptr;
 };
-
 
 // --
 

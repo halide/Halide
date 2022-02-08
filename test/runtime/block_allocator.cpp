@@ -11,41 +11,41 @@ namespace {
 size_t allocated_block_memory = 0;
 size_t allocated_region_memory = 0;
 
-void allocate_block(void *user_context, MemoryBlock *block){
+void allocate_block(void *user_context, MemoryBlock *block) {
     block->handle = halide_malloc(user_context, block->size);
     allocated_block_memory += block->size;
 }
 
-void deallocate_block(void *user_context, MemoryBlock *block){
+void deallocate_block(void *user_context, MemoryBlock *block) {
     halide_free(user_context, block->handle);
     allocated_block_memory -= block->size;
 }
 
-void allocate_region(void *user_context, MemoryRegion *region){
+void allocate_region(void *user_context, MemoryRegion *region) {
     region->handle = (void *)1;
     allocated_region_memory += region->size;
 }
 
-void deallocate_region(void *user_context, MemoryRegion *region){
+void deallocate_region(void *user_context, MemoryRegion *region) {
     region->handle = (void *)0;
     allocated_region_memory -= region->size;
 }
 
-} // end namespace
+}  // end namespace
 
 int main(int argc, char **argv) {
     void *user_context = (void *)1;
 
     // test class interface
     {
-        SystemMemoryAllocatorFns system_allocator = { halide_malloc, halide_free };
-        MemoryBlockAllocatorFns block_allocator = { allocate_block, deallocate_block };
-        MemoryRegionAllocatorFns region_allocator = { allocate_region, deallocate_region };
+        SystemMemoryAllocatorFns system_allocator = {halide_malloc, halide_free};
+        MemoryBlockAllocatorFns block_allocator = {allocate_block, deallocate_block};
+        MemoryRegionAllocatorFns region_allocator = {allocate_region, deallocate_region};
 
         BlockAllocator::Config config = {0};
         config.minimum_block_size = 1024;
 
-        BlockAllocator::MemoryAllocators allocators = { system_allocator, block_allocator, region_allocator };
+        BlockAllocator::MemoryAllocators allocators = {system_allocator, block_allocator, region_allocator};
         BlockAllocator *instance = BlockAllocator::create(user_context, config, allocators);
 
         MemoryRequest request = {0};
@@ -77,14 +77,14 @@ int main(int argc, char **argv) {
 
     // stress test
     {
-        SystemMemoryAllocatorFns system_allocator = { halide_malloc, halide_free };
-        MemoryBlockAllocatorFns block_allocator = { allocate_block, deallocate_block };
-        MemoryRegionAllocatorFns region_allocator = { allocate_region, deallocate_region };
+        SystemMemoryAllocatorFns system_allocator = {halide_malloc, halide_free};
+        MemoryBlockAllocatorFns block_allocator = {allocate_block, deallocate_block};
+        MemoryRegionAllocatorFns region_allocator = {allocate_region, deallocate_region};
 
         BlockAllocator::Config config = {0};
         config.minimum_block_size = 1024;
 
-        BlockAllocator::MemoryAllocators allocators = { system_allocator, block_allocator, region_allocator };
+        BlockAllocator::MemoryAllocators allocators = {system_allocator, block_allocator, region_allocator};
         BlockAllocator *instance = BlockAllocator::create(user_context, config, allocators);
 
         MemoryRequest request = {0};

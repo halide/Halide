@@ -26,13 +26,13 @@ public:
         EntryType *next_ptr;
     };
 
-    LinkedList(const SystemMemoryAllocatorFns& allocator = default_allocator());
+    LinkedList(const SystemMemoryAllocatorFns &allocator = default_allocator());
     LinkedList(void *user_context, uint32_t capacity = default_capacity,
-               const SystemMemoryAllocatorFns& allocator = default_allocator());
+               const SystemMemoryAllocatorFns &allocator = default_allocator());
     ~LinkedList();
 
     void initialize(void *user_context, uint32_t capacity = default_capacity,
-                    const SystemMemoryAllocatorFns& allocator = default_allocator());
+                    const SystemMemoryAllocatorFns &allocator = default_allocator());
 
     EntryType *front();
     EntryType *back();
@@ -57,29 +57,29 @@ public:
 
     void remove(void *user_context, EntryType *entry_ptr);
     void clear(void *user_context);
-    void destroy(void* user_context);
+    void destroy(void *user_context);
 
     size_t size() const;
     bool empty() const;
 
-    const SystemMemoryAllocatorFns& current_allocator() const;
-    static const SystemMemoryAllocatorFns& default_allocator();
+    const SystemMemoryAllocatorFns &current_allocator() const;
+    static const SystemMemoryAllocatorFns &default_allocator();
 
 private:
-    MemoryArena<EntryType>* arena = nullptr;
+    MemoryArena<EntryType> *arena = nullptr;
     EntryType *front_ptr = nullptr;
     EntryType *back_ptr = nullptr;
     size_t entry_count = 0;
 };
 
 template<typename T>
-LinkedList<T>::LinkedList(const SystemMemoryAllocatorFns& sma) {
+LinkedList<T>::LinkedList(const SystemMemoryAllocatorFns &sma) {
     arena = MemoryArena<EntryType>::create(nullptr, {default_capacity, 0}, sma);
 }
 
 template<typename T>
 LinkedList<T>::LinkedList(void *user_context, uint32_t capacity,
-                          const SystemMemoryAllocatorFns& sma) {
+                          const SystemMemoryAllocatorFns &sma) {
     arena = MemoryArena<EntryType>::create(user_context, {capacity, 0}, sma);
 }
 
@@ -90,7 +90,7 @@ LinkedList<T>::~LinkedList() {
 
 template<typename T>
 void LinkedList<T>::initialize(void *user_context, uint32_t capacity,
-                               const SystemMemoryAllocatorFns& sma) {
+                               const SystemMemoryAllocatorFns &sma) {
 
     arena = MemoryArena<EntryType>::create(user_context, {capacity, 0}, sma);
     front_ptr = nullptr;
@@ -99,7 +99,7 @@ void LinkedList<T>::initialize(void *user_context, uint32_t capacity,
 }
 
 template<typename T>
-void LinkedList<T>::destroy(void* user_context) {
+void LinkedList<T>::destroy(void *user_context) {
     clear(nullptr);
     MemoryArena<EntryType>::destroy(nullptr, arena);
     arena = nullptr;
@@ -314,13 +314,13 @@ bool LinkedList<T>::empty() const {
 }
 
 template<typename T>
-const SystemMemoryAllocatorFns& 
+const SystemMemoryAllocatorFns &
 LinkedList<T>::current_allocator() const {
     return arena->current_allocator();
 }
 
 template<typename T>
-const SystemMemoryAllocatorFns& 
+const SystemMemoryAllocatorFns &
 LinkedList<T>::default_allocator() {
     return MemoryArena<T>::default_allocator();
 }

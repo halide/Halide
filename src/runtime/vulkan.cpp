@@ -219,8 +219,8 @@ WEAK int halide_vulkan_device_release(void *user_context) {
         }
 
         vk_destroy_memory_allocator(user_context);
-        
-        if(device == cached_device) {
+
+        if (device == cached_device) {
             cached_device = nullptr;
             cached_physical_device = nullptr;
             cached_queue = nullptr;

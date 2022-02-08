@@ -10,17 +10,17 @@ namespace {
 
 size_t counter = 0;
 
-void *allocate_system(void *user_context, size_t bytes){
+void *allocate_system(void *user_context, size_t bytes) {
     ++counter;
     return halide_malloc(user_context, bytes);
 }
 
-void deallocate_system(void *user_context, void *ptr){
+void deallocate_system(void *user_context, void *ptr) {
     halide_free(user_context, ptr);
     --counter;
 }
 
-}
+}  // namespace
 
 struct TestStruct {
     int8_t i8;
@@ -33,7 +33,7 @@ int main(int argc, char **argv) {
 
     // test class interface
     {
-        SystemMemoryAllocatorFns test_allocator = { allocate_system, deallocate_system };
+        SystemMemoryAllocatorFns test_allocator = {allocate_system, deallocate_system};
 
         MemoryArena<int>::Config config = {32, 0};
         MemoryArena<int> arena(user_context, config, test_allocator);
@@ -51,7 +51,7 @@ int main(int argc, char **argv) {
 
     // test struct allocations
     {
-        SystemMemoryAllocatorFns test_allocator = { allocate_system, deallocate_system };
+        SystemMemoryAllocatorFns test_allocator = {allocate_system, deallocate_system};
         MemoryArena<TestStruct>::Config config = {32, 0};
         MemoryArena<TestStruct> arena(user_context, config, test_allocator);
         TestStruct *s1 = arena.reserve(user_context);
