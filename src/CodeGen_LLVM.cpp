@@ -295,6 +295,8 @@ void CodeGen_LLVM::initialize_llvm() {
             for (const std::string &s : arg_vec) {
                 c_arg_vec.push_back(s.c_str());
             }
+            // TODO: Remove after opaque pointers become the default in LLVM.
+            // This is here to document how to turn on opaque pointers, for testing, in LLVM 15
             //            c_arg_vec.push_back("-opaque-pointers");
             cl::ParseCommandLineOptions((int)(c_arg_vec.size()), &c_arg_vec[0], "Halide compiler\n");
         }
@@ -1877,16 +1879,9 @@ Value *CodeGen_LLVM::codegen_buffer_pointer(Value *base_address, Halide::Type ty
     unsigned address_space = base_address->getType()->getPointerAddressSpace();
     llvm::Type *pointer_load_type = load_type->getPointerTo(address_space);
 
-#if LLVM_VERSION <= 150
-    llvm::Type *base_address_type = base_address->getType();
-
-    // If the type doesn't match the expected type, we need to pointer cast
-    if (pointer_load_type != base_address_type) {
-        base_address = builder->CreatePointerCast(base_address, pointer_load_type);
-    }
-#else
+    // TODO: This can likely be removed once aopaque pointers are default
+    // in all supported LLVM versions.
     base_address = builder->CreatePointerCast(base_address, pointer_load_type);
-#endif
 
     llvm::Constant *constant_index = dyn_cast<llvm::Constant>(index);
     if (constant_index && constant_index->isZeroValue()) {
