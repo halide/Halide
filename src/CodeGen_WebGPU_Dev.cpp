@@ -70,6 +70,7 @@ protected:
         void visit(const Allocate *op) override;
         void visit(const And *op) override;
         void visit(const Broadcast *op) override;
+        void visit(const Call *op) override;
         void visit(const Cast *) override;
         void visit(const Div *op) override;
         void visit(const IntImm *) override;
@@ -411,6 +412,31 @@ void CodeGen_WebGPU_Dev::CodeGen_WGSL::visit(const Broadcast *op) {
     const string id_value = print_expr(op->value);
     const Type type = op->type.with_lanes(op->lanes);
     print_assignment(type, print_type(type) + "(" + id_value + ")");
+}
+
+void CodeGen_WebGPU_Dev::CodeGen_WGSL::visit(const Call *op) {
+    if (op->is_intrinsic(Call::gpu_thread_barrier)) {
+        internal_assert(op->args.size() == 1)
+            << "gpu_thread_barrier() intrinsic must specify fence type.\n";
+
+        const auto *fence_type_ptr = as_const_int(op->args[0]);
+        internal_assert(fence_type_ptr)
+            << "gpu_thread_barrier() parameter is not a constant integer.\n";
+        auto fence_type = *fence_type_ptr;
+
+        stream << get_indent();
+        if (fence_type & CodeGen_GPU_Dev::MemoryFenceType::Device) {
+            stream << "storageBarrier();";
+        }
+        if (fence_type & CodeGen_GPU_Dev::MemoryFenceType::Shared ||
+            fence_type == CodeGen_GPU_Dev::MemoryFenceType::None) {
+            stream << "workgroupBarrier();";
+        }
+        stream << "\n";
+        print_assignment(op->type, "0");
+    } else {
+        CodeGen_C::visit(op);
+    }
 }
 
 void CodeGen_WebGPU_Dev::CodeGen_WGSL::visit(const Cast *op) {
