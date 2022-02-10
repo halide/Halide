@@ -660,9 +660,9 @@ WEAK int halide_webgpu_run(void *user_context,
     bool found = shader_cache.lookup(context.device, state_ptr, shader_module);
     halide_abort_if_false(user_context, found && shader_module != nullptr);
 
-    // TODO: Add support for workgroup memory via a pipeline-overridable
-    // workgroup storage array.
-    halide_abort_if_false(user_context, workgroup_mem_bytes == 0);
+    // TODO: Add support for dynamically-sized shared memory via a
+    // pipeline-overridable workgroup array.
+    // halide_abort_if_false(user_context, workgroup_mem_bytes == 0);
 
     // Create the compute pipeline.
     WGPUProgrammableStageDescriptor stage_desc = {

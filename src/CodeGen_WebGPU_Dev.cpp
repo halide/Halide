@@ -76,6 +76,7 @@ protected:
         void visit(const Evaluate *op) override;
         void visit(const IntImm *) override;
         void visit(const UIntImm *) override;
+        void visit(const Free *op) override;
         void visit(const For *) override;
         void visit(const Load *op) override;
         void visit(const Min *op) override;
@@ -87,6 +88,7 @@ protected:
 
         string kernel_name;
         std::unordered_set<string> buffers;
+        const Allocate *workgroup_array = nullptr;
     };
 
     std::ostringstream src_stream;
@@ -173,8 +175,10 @@ string CodeGen_WebGPU_Dev::CodeGen_WGSL::print_name(const string &name) {
         new_name = "v" + new_name;
     }
 
-    // Prefix buffer names with the kernel name to avoid collisions.
-    if (buffers.count(name)) {
+    // Prefix storage buffer and workgroup variable names with the kernel name
+    // to avoid collisions.
+    if (buffers.count(name) ||
+        (workgroup_array && workgroup_array->name == name)) {
         new_name = kernel_name + new_name;
     }
 
@@ -346,6 +350,23 @@ void CodeGen_WebGPU_Dev::CodeGen_WGSL::add_kernel(
 
     close_scope("shader " + name);
 
+    if (workgroup_array) {
+        if (is_const(workgroup_array->extents[0])) {
+            std::stringstream ss;
+            ss << workgroup_array->extents[0];
+            size_t elements = 0;
+            ss >> elements;
+            stream << "var<workgroup> " << print_name(workgroup_array->name)
+                   << " : array<" << print_type(workgroup_array->type) << ", "
+                   << elements << ">;\n";
+        } else {
+            // TODO: Implement.
+            internal_error
+                << "dynamically sized GPU shared memory is not yet implemented";
+        }
+    }
+    workgroup_array = nullptr;
+
     for (const auto &arg : args) {
         // Remove buffer arguments from allocation scope and the buffer list.
         if (arg.is_buffer) {
@@ -357,8 +378,9 @@ void CodeGen_WebGPU_Dev::CodeGen_WGSL::add_kernel(
 
 void CodeGen_WebGPU_Dev::CodeGen_WGSL::visit(const Allocate *op) {
     if (op->memory_type == MemoryType::GPUShared) {
-        // TODO: Implement.
-        internal_error << "GPU shared memory is not yet implemented for WebGPU";
+        internal_assert(workgroup_array == nullptr);
+        workgroup_array = op;
+        op->body.accept(this);
     } else {
         open_scope();
 
@@ -501,6 +523,16 @@ void CodeGen_WebGPU_Dev::CodeGen_WGSL::visit(const Evaluate *op) {
         return;
     }
     print_expr(op->value);
+}
+
+void CodeGen_WebGPU_Dev::CodeGen_WGSL::visit(const Free *op) {
+    if (workgroup_array && workgroup_array->name == op->name) {
+        return;
+    } else {
+        // Should have been freed internally
+        internal_assert(allocations.contains(op->name));
+        allocations.pop(op->name);
+    }
 }
 
 void CodeGen_WebGPU_Dev::CodeGen_WGSL::visit(const For *loop) {
