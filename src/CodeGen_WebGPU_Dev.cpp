@@ -73,6 +73,7 @@ protected:
         void visit(const Call *op) override;
         void visit(const Cast *) override;
         void visit(const Div *op) override;
+        void visit(const Evaluate *op) override;
         void visit(const IntImm *) override;
         void visit(const UIntImm *) override;
         void visit(const For *) override;
@@ -494,6 +495,13 @@ string simt_intrinsic(const string &name) {
     return "";
 }
 }  // namespace
+
+void CodeGen_WebGPU_Dev::CodeGen_WGSL::visit(const Evaluate *op) {
+    if (is_const(op->value)) {
+        return;
+    }
+    print_expr(op->value);
+}
 
 void CodeGen_WebGPU_Dev::CodeGen_WGSL::visit(const For *loop) {
     user_assert(loop->for_type != ForType::GPULane)
