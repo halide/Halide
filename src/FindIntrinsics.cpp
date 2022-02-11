@@ -380,10 +380,13 @@ protected:
             Type signed_type_wide = op_type_wide.with_code(halide_type_int);
             Type unsigned_type = op->type.with_code(halide_type_uint);
 
+            // Give concise names to various predicates we want to use in
+            // rewrite rules below.
             int bits = op->type.bits();
             auto is_x_same_int = op->type.is_int() && is_int(x, bits);
             auto is_x_same_uint = op->type.is_uint() && is_uint(x, bits);
             auto is_x_same_int_or_uint = is_x_same_int || is_x_same_uint;
+            auto x_y_same_sign = (is_int(x) && is_int(y)) || (is_uint(x) && is_uint(y));
             auto is_y_narrow_uint = op->type.is_uint() && is_uint(y, bits / 2);
             if (
                 // Saturating patterns
@@ -457,42 +460,42 @@ protected:
                         is_x_same_int_or_uint) ||
 
                 // Multiply-keep-high-bits patterns.
-
                 rewrite(max(min(shift_right(widening_mul(x, y), z), upper), lower),
                         mul_shift_right(x, y, cast(unsigned_type, z)),
-                        is_x_same_int_or_uint && is_uint(z)) ||
+                        is_x_same_int_or_uint && x_y_same_sign && is_uint(z)) ||
 
                 rewrite(max(min(rounding_shift_right(widening_mul(x, y), z), upper), lower),
                         rounding_mul_shift_right(x, y, cast(unsigned_type, z)),
-                        is_x_same_int_or_uint && is_uint(z)) ||
+                        is_x_same_int_or_uint && x_y_same_sign && is_uint(z)) ||
 
                 rewrite(min(shift_right(widening_mul(x, y), z), upper),
                         mul_shift_right(x, y, cast(unsigned_type, z)),
-                        is_x_same_uint && is_uint(z)) ||
+                        is_x_same_uint && x_y_same_sign && is_uint(z)) ||
 
                 rewrite(min(rounding_shift_right(widening_mul(x, y), z), upper),
                         rounding_mul_shift_right(x, y, cast(unsigned_type, z)),
-                        is_x_same_uint && is_uint(z)) ||
+                        is_x_same_uint && x_y_same_sign && is_uint(z)) ||
 
                 // We don't need saturation for the full upper half of a multiply.
                 // For signed integers, this is almost true, except for when x and y
                 // are both the most negative value. For these, we only need saturation
                 // at the upper bound.
+
                 rewrite(min(shift_right(widening_mul(x, y), c0), upper),
                         mul_shift_right(x, y, cast(unsigned_type, c0)),
-                        is_x_same_int && c0 >= bits - 1) ||
+                        is_x_same_int && x_y_same_sign && c0 >= bits - 1) ||
 
                 rewrite(min(rounding_shift_right(widening_mul(x, y), c0), upper),
                         rounding_mul_shift_right(x, y, cast(unsigned_type, c0)),
-                        is_x_same_int && c0 >= bits - 1) ||
+                        is_x_same_int && x_y_same_sign && c0 >= bits - 1) ||
 
                 rewrite(shift_right(widening_mul(x, y), c0),
                         mul_shift_right(x, y, cast(unsigned_type, c0)),
-                        is_x_same_int_or_uint && c0 >= bits) ||
+                        is_x_same_int_or_uint && x_y_same_sign && c0 >= bits) ||
 
                 rewrite(rounding_shift_right(widening_mul(x, y), c0),
                         rounding_mul_shift_right(x, y, cast(unsigned_type, c0)),
-                        is_x_same_int_or_uint && c0 >= bits) ||
+                        is_x_same_int_or_uint && x_y_same_sign && c0 >= bits) ||
 
                 // We can also match on smaller shifts if one of the args is
                 // narrow. We don't do this for signed (yet), because the
