@@ -94,7 +94,6 @@ public:
     Stage(Internal::Function f, Internal::Definition d, size_t stage_index)
         : function(std::move(f)), definition(std::move(d)), stage_index(stage_index) {
         internal_assert(definition.defined());
-        definition.schedule().touched() = true;
 
         dim_vars.reserve(function.args().size());
         for (const auto &arg : function.args()) {
