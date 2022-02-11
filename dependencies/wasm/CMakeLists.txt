@@ -16,7 +16,9 @@ if ("${CMAKE_HOST_SYSTEM_NAME}" STREQUAL "Windows")
 endif ()
 
 if (WITH_WABT)
-    set(WABT_VER 1.0.25)
+    # TODO: this commit hash is temporary until WABT produces
+    # a new release tag with revised API
+    set(WABT_VER 09c40635207d42dd30ffaca22477fd3491dd9e7d)
 
     message(STATUS "Fetching WABT ${WABT_VER}...")
     FetchContent_Declare(wabt
