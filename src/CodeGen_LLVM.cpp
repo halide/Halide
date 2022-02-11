@@ -1857,7 +1857,7 @@ Value *CodeGen_LLVM::codegen_buffer_pointer(Value *base_address, Halide::Type ty
     unsigned address_space = base_address->getType()->getPointerAddressSpace();
     llvm::Type *pointer_load_type = load_type->getPointerTo(address_space);
 
-    // TODO: This can likely be removed once aopaque pointers are default
+    // TODO: This can likely be removed once opaque pointers are default
     // in all supported LLVM versions.
     base_address = builder->CreatePointerCast(base_address, pointer_load_type);
 
