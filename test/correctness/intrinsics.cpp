@@ -311,6 +311,9 @@ int main(int argc, char **argv) {
     // Multiplication of mixed-width integers
     check(u16(u32(u16x) * u32(u8y) >> 8), mul_shift_right(u16x, u16(u8y), 8));
 
+    // Multiplication of mixed-sign integers shouldn't use mul_shift_right
+    check(i32(i64(u32x) * i64(i32y) >> 32), i32(widening_mul(u32x, i32y) >> 32));
+
     check(i8_sat(rounding_shift_right(i16(i8x) * i16(i8y), 7)), rounding_mul_shift_right(i8x, i8y, 7));
     check(i8(min(rounding_shift_right(i16(i8x) * i16(i8y), 7), 127)), rounding_mul_shift_right(i8x, i8y, 7));
     check(i8_sat(rounding_shift_right(i16(i8x) * i16(i8y), 8)), rounding_mul_shift_right(i8x, i8y, 8));

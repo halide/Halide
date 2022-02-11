@@ -530,7 +530,8 @@ private:
     llvm::Constant *embed_constant_expr(Expr e, llvm::Type *t);
     llvm::Constant *embed_constant_scalar_value_t(const Expr &e);
 
-    llvm::Function *add_argv_wrapper(llvm::Function *fn, const std::string &name, bool result_in_argv = false);
+    llvm::Function *add_argv_wrapper(llvm::Function *fn, const std::string &name,
+                                     bool result_in_argv, std::vector<bool> &arg_is_buffer);
 
     llvm::Value *codegen_dense_vector_load(const Type &type, const std::string &name, const Expr &base,
                                            const Buffer<> &image, const Parameter &param, const ModulusRemainder &alignment,
@@ -548,6 +549,13 @@ private:
     /** A helper routine for generating folded vector reductions. */
     template<typename Op>
     bool try_to_fold_vector_reduce(const Expr &a, Expr b);
+
+    /** Records the StructType for pointer values returned from
+     * make_struct intrinsic. Required for opaque pointer support.
+     * This map should never grow without bound as each entry
+     * represents a unique struct type created by a closure or similar.
+     */
+    std::map<llvm::Value *, llvm::Type *> struct_type_recovery;
 };
 
 }  // namespace Internal
