@@ -145,24 +145,9 @@ using std::vector;
 
 namespace {
 
-void print_type_pair(const char *label, llvm::Type *a, llvm::Type *b) {
-    debug(0) << label;
-    a->print(llvm::dbgs(), true);
-    debug(0) << " ptr type: ";
-    b->print(dbgs(), true);
-    debug(0) << "\n";
-}
-
 llvm::Value *CreateConstGEP1_32(IRBuilderBase *builder, llvm::Type *gep_type,
                                 Value *ptr, unsigned index) {
 #if LLVM_VERSION >= 130
-    // TODO(zvookin): To be removed before merging. Code is here to get debugging info
-    // during CI test runs if the assert below fails. Assert also must be removed
-    // as it relies on non-opaque pointers.
-    if (gep_type != ptr->getType()->getScalarType()->getPointerElementType()) {
-        print_type_pair("CreateConstGEP1_32 type mismatch. gep_type: ", gep_type, ptr->getType()->getScalarType()->getPointerElementType());
-    }
-    internal_assert(gep_type == ptr->getType()->getScalarType()->getPointerElementType());
     return builder->CreateConstGEP1_32(gep_type, ptr, index);
 #else
     (void)gep_type;
@@ -173,13 +158,6 @@ llvm::Value *CreateConstGEP1_32(IRBuilderBase *builder, llvm::Type *gep_type,
 llvm::Value *CreateInBoundsGEP(IRBuilderBase *builder, llvm::Type *gep_type,
                                Value *ptr, ArrayRef<Value *> index_list) {
 #if LLVM_VERSION >= 130
-    // TODO(zvookin): To be removed before merging. Code is here to get debugging info
-    // during CI test runs if the assert below fails. Assert also must be removed
-    // as it relies on non-opaque pointers.
-    if (gep_type != ptr->getType()->getScalarType()->getPointerElementType()) {
-        print_type_pair("CreateInBoundsGEP type mismatch. gep_type: ", gep_type, ptr->getType()->getScalarType()->getPointerElementType());
-    }
-    internal_assert(gep_type == ptr->getType()->getScalarType()->getPointerElementType());
     return builder->CreateInBoundsGEP(gep_type, ptr, index_list);
 #else
     return builder->CreateInBoundsGEP(ptr, index_list);
@@ -2930,13 +2908,10 @@ void CodeGen_LLVM::visit(const Call *op) {
             llvm::Value *gep = CreateInBoundsGEP(builder, pointee_type, typed_struct_instance,
                                                  {ConstantInt::get(i32_t, 0),
                                                   ConstantInt::get(i32_t, (int)*index)});
-            // TODO(zvookin|abadams): Two ways to go here: traverse the LLVM type
-            // or just assume op-type is correct. Going ahead and traversing the type.
             llvm::Type *result_type = struct_type ? struct_type->getElementType(*index) : array_type->getArrayElementType();
             value = builder->CreateLoad(result_type, gep);
         } else {
             // The struct is actually just a scalar
-            // TODO(zvookin|abadams): Is adding this assert sensible?
             internal_assert(index == nullptr || *index == 0);
             value = builder->CreateLoad(pointee_type, typed_struct_instance);
         }
