@@ -573,10 +573,29 @@ void CodeGen_WebGPU_Dev::CodeGen_WGSL::visit(const Load *op) {
     user_assert(is_const_one(op->predicate))
         << "Predicated loads are not supported for WebGPU.\n";
 
-    const int bits = op->type.bits();
+    Type result_type = op->type.element_of();
+
+    // Get the allocation type, which may be different from the result type.
+    Type alloc_type = result_type;
+    if (allocations.contains(op->name)) {
+        alloc_type = allocations.get(op->name).type;
+    } else if (workgroup_array && workgroup_array->name == op->name) {
+        alloc_type = workgroup_array->type;
+    }
+
+    const int bits = alloc_type.bits();
     const string name = print_name(op->name);
     const string bits_str = std::to_string(bits);
     const string elements = std::to_string(32 / bits);
+
+    // Cast a loaded value to the result type if necessary,
+    auto cast_if_needed = [&](const string &value) {
+        if (result_type != alloc_type) {
+            return print_type(result_type) + "(" + value + ")";
+        } else {
+            return value;
+        }
+    };
 
     // Load an 8- or 16-bit value from an array<atomic<u32>>.
     auto emulate_narrow_load = [&](const string &idx) {
@@ -606,11 +625,10 @@ void CodeGen_WebGPU_Dev::CodeGen_WGSL::visit(const Load *op) {
         } else {
             rhs = emulate_narrow_load(idx);
         }
-        print_assignment(op->type, rhs);
+        print_assignment(op->type, cast_if_needed(rhs));
         return;
     } else if (op->type.is_vector()) {
         id = "_" + unique_name('V');
-        // cache[array_indexing] = id;
 
         // TODO: Could be smarter about this for a dense ramp.
         stream << get_indent()
@@ -618,12 +636,13 @@ void CodeGen_WebGPU_Dev::CodeGen_WGSL::visit(const Load *op) {
         for (int i = 0; i < op->type.lanes(); ++i) {
             stream << get_indent() << id << "[" << i << "] = ";
             const string idx_i = idx + "[" + std::to_string(i) + "]";
+            string rhs;
             if (bits == 32 || !buffers.count(op->name)) {
-                stream << name + "[" + idx_i + "]";
+                rhs = name + "[" + idx_i + "]";
             } else {
-                stream << emulate_narrow_load(idx_i);
+                rhs = emulate_narrow_load(idx_i);
             }
-            stream << ";\n";
+            stream << cast_if_needed(rhs) << ";\n";
         }
         return;
     }
@@ -686,7 +705,26 @@ void CodeGen_WebGPU_Dev::CodeGen_WGSL::visit(const Store *op) {
     user_assert(is_const_one(op->predicate))
         << "Predicated stores are not supported for WebGPU.\n";
 
-    const int bits = op->value.type().bits();
+    Type value_type = op->value.type().element_of();
+
+    // Get the allocation type, which may be different from the value type.
+    Type alloc_type = value_type;
+    if (allocations.contains(op->name)) {
+        alloc_type = allocations.get(op->name).type;
+    } else if (workgroup_array && workgroup_array->name == op->name) {
+        alloc_type = workgroup_array->type;
+    }
+
+    // Cast a value to the store type if necessary,
+    auto cast_if_needed = [&](const string &value) {
+        if (alloc_type != value_type) {
+            return print_type(alloc_type) + "(" + value + ")";
+        } else {
+            return value;
+        }
+    };
+
+    const int bits = alloc_type.bits();
     const string name = print_name(op->name);
     const string bits_str = std::to_string(bits);
     const string elements = std::to_string(32 / bits);
@@ -718,9 +756,10 @@ void CodeGen_WebGPU_Dev::CodeGen_WGSL::visit(const Store *op) {
     };
 
     const string idx = print_expr(op->index);
-    const string value = print_expr(op->value);
+    const string rhs = print_expr(op->value);
 
     if (op->value.type().is_scalar()) {
+        const string value = cast_if_needed(rhs);
         if (bits == 32 || !buffers.count(op->name)) {
             stream << get_indent() << name << "[" << idx << "] = ";
             stream << value << ";\n";
@@ -731,7 +770,8 @@ void CodeGen_WebGPU_Dev::CodeGen_WGSL::visit(const Store *op) {
         // TODO: Could be smarter about this for a dense ramp.
         for (int i = 0; i < op->value.type().lanes(); ++i) {
             const string idx_i = idx + "[" + std::to_string(i) + "]";
-            const string value_i = value + "[" + std::to_string(i) + "]";
+            string value_i = rhs + "[" + std::to_string(i) + "]";
+            value_i = cast_if_needed(value_i);
             if (bits == 32 || !buffers.count(op->name)) {
                 stream << get_indent() << name << "[" << idx_i << "] = ";
                 stream << value_i << ";\n";
