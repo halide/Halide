@@ -1073,9 +1073,9 @@ Expr find_constant_bound(const Expr &e, Direction d, const Scope<Interval> &scop
         // Take the interesection of the previous method and the aggresive method.
         if (sol.defined()) {
             if (d == Direction::Upper) {
-                sol = Interval::make_max(sol, approx);
-            } else {
                 sol = Interval::make_min(sol, approx);
+            } else {
+                sol = Interval::make_max(sol, approx);
             }
         } else {
             sol = approx;
