@@ -409,20 +409,44 @@ WEAK int halide_webgpu_device_release(void *user_context) {
         << "WGPU: halide_webgpu_device_release (user_context: " << user_context
         << ")\n";
 
-    WgpuContext context(user_context);
-    if (context.error_code) {
-        return context.error_code;
+    // The WgpuContext object does not allow the context storage to be modified,
+    // so we use halide_acquire_context directly.
+    int err;
+    WGPUInstance instance;
+    WGPUAdapter adapter;
+    WGPUDevice device;
+    err = halide_webgpu_acquire_context(user_context,
+                                        &instance, &adapter, &device, false);
+    if (err != halide_error_code_success) {
+        return err;
     }
 
-    if (staging_buffer) {
-        wgpuBufferRelease(staging_buffer);
-    }
-    wgpuDeviceRelease(context.device);
-    wgpuAdapterRelease(context.adapter);
-    // TODO: Unify this when Emscripten implements wgpuInstanceRelease().
+    if (device) {
+        shader_cache.delete_context(user_context, device,
+                                    wgpuShaderModuleRelease);
+
+        if (staging_buffer) {
+            wgpuBufferRelease(staging_buffer);
+            staging_buffer = nullptr;
+        }
+
+        // Release the device/adapter/instance, if we created them.
+        if (device == global_device) {
+            wgpuDeviceRelease(device);
+            global_device = nullptr;
+
+            wgpuAdapterRelease(adapter);
+            global_adapter = nullptr;
+
+            // TODO: Unify this when Emscripten supports wgpuInstanceRelease().
 #ifdef WITH_DAWN_NATIVE
-    wgpuInstanceRelease(context.instance);
+            wgpuInstanceRelease(instance);
+            global_instance = nullptr;
 #endif
+        }
+    }
+
+    halide_webgpu_release_context(user_context);
 
     return 1;
 }
@@ -813,6 +837,7 @@ WEAK const struct halide_device_interface_t *halide_webgpu_device_interface() {
 
 namespace {
 WEAK __attribute__((destructor)) void halide_webgpu_cleanup() {
+    shader_cache.release_all(nullptr, wgpuShaderModuleRelease);
     halide_webgpu_device_release(nullptr);
 }
 }  // namespace
