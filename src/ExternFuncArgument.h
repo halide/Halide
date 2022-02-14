@@ -30,8 +30,8 @@ struct ExternFuncArgument {
         : arg_type(FuncArg), func(std::move(f)) {
     }
 
-    template<typename T>
-    ExternFuncArgument(Buffer<T> b)
+    template<typename T, int Dims>
+    ExternFuncArgument(Buffer<T, Dims> b)
         : arg_type(BufferArg), buffer(b) {
     }
     ExternFuncArgument(Expr e)

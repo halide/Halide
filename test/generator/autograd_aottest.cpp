@@ -21,18 +21,18 @@ int main(int argc, char **argv) {
                1.f;
     };
 
-    Buffer<float> a(kSize);
-    Buffer<float> b(kSize);
-    Buffer<float> c(kSize);
-    Buffer<float> out(kSize);
+    Buffer<float, 1> a(kSize);
+    Buffer<float, 1> b(kSize);
+    Buffer<float, 1> c(kSize);
+    Buffer<float, 1> out(kSize);
 
     a.for_each_element([&](int x) { a(x) = (float)x; });
     b.for_each_element([&](int x) { b(x) = (float)x; });
     c.for_each_element([&](int x) { c(x) = (float)x; });
 
-    Buffer<uint8_t> lut(256);
-    Buffer<uint8_t> lut_indices(kSize);
-    Buffer<uint8_t> out_lut(kSize);
+    Buffer<uint8_t, 1> lut(256);
+    Buffer<uint8_t, 1> lut_indices(kSize);
+    Buffer<uint8_t, 1> out_lut(kSize);
     lut.for_each_element([&](int x) { lut(x) = (uint8_t)(x ^ 0xAA); });
     lut_indices.for_each_element([&](int x) { lut_indices(x) = x * 2; });
 
@@ -51,7 +51,7 @@ int main(int argc, char **argv) {
         assert(expected == actual);
     });
 
-    Buffer<float> L(kSize);
+    Buffer<float, 1> L(kSize);
     L.for_each_element([&](int x) { L(x) = (float)(x - kSize / 2); });
 
     /*
@@ -83,16 +83,16 @@ int main(int argc, char **argv) {
         is always mechanically predictable from the list of inputs and outputs.
     */
 
-    Buffer<float> grad_loss_out_wrt_a(kSize);
-    Buffer<float> grad_loss_out_wrt_b(kSize);
-    Buffer<float> grad_loss_out_wrt_c(kSize);
-    Buffer<float> dummy_grad_loss_output_wrt_lut(kSize);
-    Buffer<float> dummy_grad_loss_output_wrt_lut_indices(kSize);
-    Buffer<float> dummy_grad_loss_output_lut_wrt_input_a(kSize);
-    Buffer<float> dummy_grad_loss_output_lut_wrt_input_b(kSize);
-    Buffer<float> dummy_grad_loss_output_lut_wrt_input_c(kSize);
-    Buffer<uint8_t> grad_loss_output_lut_wrt_lut(kSize);
-    Buffer<uint8_t> grad_loss_output_lut_wrt_lut_indices(kSize);
+    Buffer<float, 1> grad_loss_out_wrt_a(kSize);
+    Buffer<float, 1> grad_loss_out_wrt_b(kSize);
+    Buffer<float, 1> grad_loss_out_wrt_c(kSize);
+    Buffer<float, 1> dummy_grad_loss_output_wrt_lut(kSize);
+    Buffer<float, 1> dummy_grad_loss_output_wrt_lut_indices(kSize);
+    Buffer<float, 1> dummy_grad_loss_output_lut_wrt_input_a(kSize);
+    Buffer<float, 1> dummy_grad_loss_output_lut_wrt_input_b(kSize);
+    Buffer<float, 1> dummy_grad_loss_output_lut_wrt_input_c(kSize);
+    Buffer<uint8_t, 1> grad_loss_output_lut_wrt_lut(kSize);
+    Buffer<uint8_t, 1> grad_loss_output_lut_wrt_lut_indices(kSize);
 
     result = autograd_grad(/*inputs*/ a, b, c, lut, lut_indices, L, L,
                            /*outputs*/

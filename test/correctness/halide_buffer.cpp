@@ -128,12 +128,84 @@ int main(int argc, char **argv) {
 
     {
         // Check make a Buffer from a Buffer of a different type
+        Buffer<float> a(100, 80);
+        Buffer<const float> b(a);  // statically safe
+        Buffer<const void> c(b);   // statically safe
+        Buffer<const float> d(c);  // does runtime check of actual type.
+        Buffer<void> e(a);         // statically safe
+        Buffer<float> f(e);        // runtime checks
+
+        static_assert(a.has_static_halide_type);
+        static_assert(b.has_static_halide_type);
+        static_assert(!c.has_static_halide_type);
+        static_assert(d.has_static_halide_type);
+        static_assert(!e.has_static_halide_type);
+        static_assert(f.has_static_halide_type);
+
+        static_assert(a.static_halide_type() == halide_type_of<float>());
+        static_assert(b.static_halide_type() == halide_type_of<float>());
+        static_assert(d.static_halide_type() == halide_type_of<float>());
+        static_assert(f.static_halide_type() == halide_type_of<float>());
+    }
+
+    {
+        // Check Buffers with static dimensionality
         Buffer<float, 2> a(100, 80);
-        Buffer<const float, 3> b(a);  // statically safe
-        Buffer<const void, 4> c(b);   // statically safe
-        Buffer<const float, 3> d(c);  // does runtime check of actual type.
-        Buffer<void, 3> e(a);         // statically safe
-        Buffer<float, 2> f(e);        // runtime checks
+        Buffer<float, 2> b(a);        // statically safe
+        Buffer<float> c(a);           // checks at runtime (and succeeds)
+        Buffer<float, AnyDims> d(a);  // same as previous, just explicit syntax
+        Buffer<float, 2> e(d);        // checks at runtime (and succeeds because d.dims = 2)
+        // Buffer<float, 3> f(a);     // won't compile: static_assert failure
+        // Buffer<float, 3> g(c);     // fails at runtime: c.dims = 2
+
+        static_assert(a.has_static_dimensions);
+        static_assert(b.has_static_dimensions);
+        static_assert(!c.has_static_dimensions);
+        static_assert(!d.has_static_dimensions);
+        static_assert(e.has_static_dimensions);
+
+        static_assert(a.static_dimensions() == 2);
+        static_assert(b.static_dimensions() == 2);
+        static_assert(e.static_dimensions() == 2);
+
+        Buffer<float> s1 = a.sliced(0);
+        assert(s1.dimensions() == 1);
+        assert(s1.dim(0).extent() == 80);
+
+        Buffer<float, 1> s2 = a.sliced(1);
+        assert(s2.dimensions() == 1);
+        assert(s2.dim(0).extent() == 100);
+
+        Buffer<float, 0> s3 = s2.sliced(0);
+        static_assert(a.has_static_dimensions && s3.static_dimensions() == 0);
+        assert(s3.dimensions() == 0);
+
+        // auto s3a = s3.sliced(0);              // won't compile: can't call sliced() on a zero-dim buffer
+        // Buffer<float, 2> s3b = a.sliced(0);   // won't compile: return type has incompatible dimensionality
+        // a.slice(0);                           // won't compile: can't call slice() on static-dimensioned buffer
+
+        Buffer<float> s4 = a.sliced(0);  // assign to dynamic-dimensioned result
+        static_assert(!s4.has_static_dimensions);
+        assert(s4.dimensions() == 1);
+
+        s4.slice(0);  // ok to call on dynamic-dimensioned
+        assert(s4.dimensions() == 0);
+
+        Buffer<float, 0> e0 = Buffer<float, 0>::make_scalar();
+
+        auto e1 = e0.embedded(0);
+        static_assert(e1.has_static_dimensions && e1.static_dimensions() == 1);
+        assert(e1.dimensions() == 1);
+
+        // Buffer<float, 0> e2 = a.embedded(0);  // won't compile: return type has incompatible dimensionality
+        // e1.embed(0);                          // won't compile: can't call embed() on static-dimensioned buffer
+
+        Buffer<float> e3 = e0.embedded(0);  // assign to dynamic-dimensioned result
+        static_assert(!e3.has_static_dimensions);
+        assert(e3.dimensions() == 1);
+
+        e3.embed(0);  // ok to call on dynamic-dimensioned
+        assert(e3.dimensions() == 2);
     }
 
     {

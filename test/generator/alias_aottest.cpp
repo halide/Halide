@@ -12,7 +12,7 @@ using namespace Halide::Runtime;
 const int kSize = 32;
 
 int main(int argc, char **argv) {
-    Buffer<int32_t> input(kSize), output(kSize);
+    Buffer<int32_t, 1> input(kSize), output(kSize);
 
     input.for_each_element([&](int x) {
         input(x) = x;
