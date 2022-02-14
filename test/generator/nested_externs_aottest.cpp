@@ -7,7 +7,7 @@
 using namespace Halide::Runtime;
 
 int main(int argc, char **argv) {
-    auto buf = Buffer<float>::make_interleaved(100, 200, 3);
+    auto buf = Buffer<float, 3>::make_interleaved(100, 200, 3);
 
     nested_externs_root(38.5f, buf);
 

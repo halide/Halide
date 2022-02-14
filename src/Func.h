@@ -740,8 +740,8 @@ public:
     explicit Func(Internal::Function f);
 
     /** Construct a new Func to wrap a Buffer. */
-    template<typename T>
-    HALIDE_NO_USER_CODE_INLINE explicit Func(Buffer<T> &im)
+    template<typename T, int Dims>
+    HALIDE_NO_USER_CODE_INLINE explicit Func(Buffer<T, Dims> &im)
         : Func() {
         (*this)(_) = im(_);
     }
@@ -2560,7 +2560,7 @@ HALIDE_NO_USER_CODE_INLINE T evaluate(JITUserContext *ctx, const Expr &e) {
         << " as a scalar of type " << type_of<T>() << "\n";
     Func f;
     f() = e;
-    Buffer<T> im = f.realize(ctx);
+    Buffer<T, 0> im = f.realize(ctx);
     return im();
 }
 
@@ -2615,7 +2615,7 @@ HALIDE_NO_USER_CODE_INLINE T evaluate_may_gpu(const Expr &e) {
     Func f;
     f() = e;
     Internal::schedule_scalar(f);
-    Buffer<T> im = f.realize();
+    Buffer<T, 0> im = f.realize();
     return im();
 }
 

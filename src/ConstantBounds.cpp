@@ -15,6 +15,10 @@
 namespace Halide {
 namespace Internal {
 
+static bool disable_approximate_methods() {
+    return get_env_variable("HL_DISABLE_APPROX_CBOUNDS") == "1";
+}
+
 // For debugging purposes.
 std::ostream &operator<<(std::ostream &s, const Direction &d) {
     if (d == Direction::Lower) {
@@ -987,15 +991,22 @@ Expr substitute_some_lets(const Expr &expr, size_t count = 100) {
 }
 
 Expr approximate_optimizations(const Expr &expr, Direction direction, const Scope<Interval> &scope) {
-    Expr simpl = substitute_some_lets(expr);
-    simpl = simplify(simpl);
-    simpl = reorder_terms(simpl);
+    // TODO: try smart substitutions and/or an early-out mechanism.
+    Expr subs = substitute_some_lets(expr);
+    if (!subs.same_as(expr)) {
+      subs = simplify(subs);
+    }
+    subs = reorder_terms(subs);
     // TODO: only do push_rationals if correlated divisions exist.
-    simpl = push_rationals(simpl, direction);
-    simpl = simplify(simpl);
-    simpl = strip_unbounded_terms(simpl, direction, scope);
-    simpl = simplify(simpl);
-    return simpl;
+    Expr pushed = push_rationals(subs, direction);
+    if (!pushed.same_as(subs)) {
+        pushed = simplify(pushed);
+    }
+    Expr stripped = strip_unbounded_terms(pushed, direction, scope);
+    if (!stripped.same_as(pushed)) {
+        stripped = simplify(stripped);
+    }
+    return stripped;
 }
 
 bool possibly_correlated(const Expr &expr) {
@@ -1025,19 +1036,58 @@ Interval approximate_constant_bounds(const Expr &expr, const Scope<Interval> &sc
     return interval;
 }
 
-Expr find_constant_bound(const Expr &e, Direction d, const Scope<Interval> &scope) {
-    Interval interval = find_constant_bounds(e, scope);
-    Expr bound;
-    if (interval.has_lower_bound() && (d == Direction::Lower)) {
-        bound = interval.min;
-    } else if (interval.has_upper_bound() && (d == Direction::Upper)) {
-        bound = interval.max;
+// The same as the above, but uni-directional.
+Expr approximate_constant_bound(const Expr &expr, const Direction d, const Scope<Interval> &scope) {
+    if (!is_const(expr) && expr.type() == Int(32) && possibly_correlated(expr)) {
+        Expr opt = approximate_optimizations(expr, d, scope);
+        Interval bounds = bounds_of_expr_in_scope(opt, scope, FuncValueBounds(), true);
+
+        Expr sol = (d == Direction::Upper) ? bounds.max : bounds.min;
+        sol = simplify(sol);
+
+        if (is_const(sol)) {
+            return sol;
+        }
     }
-    return bound;
+
+    // Either failed to find a const bound, or was not a good Expr for approximate opts.
+    if (d == Direction::Upper) {
+        return Interval::pos_inf();
+    } else {
+        return Interval::neg_inf();
+    }
 }
 
-static bool disable_approximate_methods() {
-    return get_env_variable("HL_DISABLE_APPROX_CBOUNDS") == "1";
+Expr find_constant_bound(const Expr &e, Direction d, const Scope<Interval> &scope) {
+    Expr expr = bound_correlated_differences(simplify(remove_likelies(e)));
+    Interval interval = bounds_of_expr_in_scope(expr, scope, FuncValueBounds(), true);
+    Expr sol;
+    if (interval.has_upper_bound() && (d == Direction::Upper)) {
+        sol = simplify(interval.max);
+    } else if (interval.has_lower_bound() && (d == Direction::Lower)) {
+        sol = simplify(interval.min);
+    }
+
+    if (!disable_approximate_methods()) {
+        Expr approx = approximate_constant_bound(expr, d, scope);
+        // Take the interesection of the previous method and the aggresive method.
+        if (sol.defined()) {
+            if (d == Direction::Upper) {
+                sol = Interval::make_max(sol, approx);
+            } else {
+                sol = Interval::make_min(sol, approx);
+            }
+        } else {
+            sol = approx;
+        }
+    }
+
+    if (!is_const(sol)) {
+        // The original method returns an undefined Expr, so we do too.
+        return Expr();
+    } else {
+        return sol;
+    }
 }
 
 Interval find_constant_bounds(const Expr &e, const Scope<Interval> &scope) {

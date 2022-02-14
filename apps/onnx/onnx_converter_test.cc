@@ -21,7 +21,7 @@ static void test_abs() {
     std::vector<Tensor> node_inputs;
     node_inputs.resize(1);
     node_inputs[0].shape = {200};
-    Halide::Buffer<float> input(200);
+    Halide::Buffer<float, 1> input(200);
     std::uniform_real_distribution<float> dis(-1.0, 1.0);
     std::mt19937 rnd;
     input.for_each_value([&](float &f) { f = dis(rnd); });
@@ -31,7 +31,7 @@ static void test_abs() {
     Node converted = convert_node(abs_node, node_inputs);
 
     GOOGLE_CHECK_EQ(1, converted.outputs.size());
-    Halide::Buffer<float> output = converted.outputs[0].rep.realize({200});
+    Halide::Buffer<float, 1> output = converted.outputs[0].rep.realize({200});
     for (int i = 0; i < 200; ++i) {
         EXPECT_EQ(output(i), std::abs(input(i)));
     }
@@ -47,7 +47,7 @@ static void test_activation_function() {
     std::vector<Tensor> node_inputs;
     node_inputs.resize(1);
     node_inputs[0].shape = {200};
-    Halide::Buffer<float> input(200);
+    Halide::Buffer<float, 1> input(200);
     std::mt19937 rnd;
     std::uniform_real_distribution<float> dis(-1.0, 1.0);
     input.for_each_value([&](float &f) { f = dis(rnd); });
@@ -57,7 +57,7 @@ static void test_activation_function() {
     Node converted = convert_node(relu_node, node_inputs);
 
     GOOGLE_CHECK_EQ(1, converted.outputs.size());
-    Halide::Buffer<float> output = converted.outputs[0].rep.realize({200});
+    Halide::Buffer<float, 1> output = converted.outputs[0].rep.realize({200});
     for (int i = 0; i < 200; ++i) {
         EXPECT_EQ(output(i), std::max(input(i), 0.0f));
     }
@@ -76,7 +76,7 @@ static void test_cast() {
     attr->set_i(onnx::TensorProto_DataType_FLOAT);
     node_inputs.resize(1);
     node_inputs[0].shape = {200};
-    Halide::Buffer<int> input(200);
+    Halide::Buffer<int, 1> input(200);
     std::mt19937 rnd;
     std::uniform_int_distribution<int> dis(-100, 100);
     input.for_each_value([&](int &f) { f = dis(rnd); });
@@ -86,7 +86,7 @@ static void test_cast() {
     Node converted = convert_node(cast_node, node_inputs);
 
     GOOGLE_CHECK_EQ(1, converted.outputs.size());
-    Halide::Buffer<float> output = converted.outputs[0].rep.realize({200});
+    Halide::Buffer<float, 1> output = converted.outputs[0].rep.realize({200});
     for (int i = 0; i < 200; ++i) {
         EXPECT_EQ(output(i), static_cast<float>(input(i)));
     }
@@ -104,12 +104,12 @@ static void test_add() {
     node_inputs.resize(2);
     node_inputs[0].shape = {200};
     node_inputs[1].shape = node_inputs[0].shape;
-    Halide::Buffer<float> in1(200);
+    Halide::Buffer<float, 1> in1(200);
     std::mt19937 rnd;
     std::uniform_real_distribution<float> dis(-1.0, 1.0);
     std::uniform_real_distribution<float> dis10(-10.0, 10.0);
     in1.for_each_value([&](float &f) { f = dis(rnd); });
-    Halide::Buffer<float> in2(200);
+    Halide::Buffer<float, 1> in2(200);
     in2.for_each_value([&](float &f) { f = dis10(rnd); });
     Halide::Var index;
     node_inputs[0].rep(index) = in1(index);
@@ -118,7 +118,7 @@ static void test_add() {
     Node converted = convert_node(add_node, node_inputs);
 
     GOOGLE_CHECK_EQ(1, converted.outputs.size());
-    Halide::Buffer<float> output = converted.outputs[0].rep.realize({200});
+    Halide::Buffer<float, 1> output = converted.outputs[0].rep.realize({200});
     for (int i = 0; i < 200; ++i) {
         EXPECT_NEAR(output(i), in1(i) + in2(i), 1e-6);
     }
@@ -145,7 +145,7 @@ static void test_constant() {
     Node converted = convert_node(add_node, {});
 
     GOOGLE_CHECK_EQ(1, converted.outputs.size());
-    Halide::Buffer<float> output = converted.outputs[0].rep.realize({3, 7});
+    Halide::Buffer<float, 2> output = converted.outputs[0].rep.realize({3, 7});
     for (int i = 0; i < 3; ++i) {
         for (int j = 0; j < 7; ++j) {
             EXPECT_EQ(output(i, j), value.float_data(j + 7 * i));
@@ -172,11 +172,11 @@ static void test_gemm() {
     std::uniform_real_distribution<float> dis10(-10.0, 10.0);
 
     std::mt19937 rnd;
-    Halide::Buffer<float> in1(32, 100);
+    Halide::Buffer<float, 2> in1(32, 100);
     in1.for_each_value([&](float &f) { f = dis(rnd); });
-    Halide::Buffer<float> in2(100, 64);
+    Halide::Buffer<float, 2> in2(100, 64);
     in2.for_each_value([&](float &f) { f = dis10(rnd); });
-    Halide::Buffer<float> in3(32, 64);
+    Halide::Buffer<float, 2> in3(32, 64);
     in3.for_each_value([&](float &f) { f = dis(rnd); });
     Halide::Var i1, j1;
     node_inputs[0].rep(i1, j1) = in1(i1, j1);
@@ -187,7 +187,7 @@ static void test_gemm() {
     Node converted = convert_node(add_node, node_inputs);
 
     GOOGLE_CHECK_EQ(1, converted.outputs.size());
-    Halide::Buffer<float> output = converted.outputs[0].rep.realize({32, 64});
+    Halide::Buffer<float, 2> output = converted.outputs[0].rep.realize({32, 64});
 
     for (int i = 0; i < 32; ++i) {
         for (int j = 0; j < 64; ++j) {
@@ -217,7 +217,7 @@ static void test_conv() {
     std::uniform_real_distribution<float> dis10(-10.0, 10.0);
 
     std::mt19937 rnd;
-    Halide::Buffer<float> weights(7, 5, 3, 3);
+    Halide::Buffer<float, 4> weights(7, 5, 3, 3);
     weights.for_each_value([&](float &f) { f = dis10(rnd); });
     Halide::Var i2, j2, k2, l2;
     node_inputs[1].rep(i2, j2, k2, l2) = weights(i2, j2, k2, l2);
@@ -231,7 +231,7 @@ static void test_conv() {
             node_inputs[0].shape[dim] = in_shape[trial][dim];
         }
 
-        Halide::Buffer<float> in(in_shape[trial]);
+        Halide::Buffer<float, 4> in(in_shape[trial]);
         in.for_each_value([&](float &f) { f = dis(rnd); });
         Halide::Var i1, j1, k1, l1;
         node_inputs[0].rep = Halide::Func();
@@ -240,7 +240,7 @@ static void test_conv() {
         Node converted = convert_node(add_node, node_inputs);
 
         GOOGLE_CHECK_EQ(1, converted.outputs.size());
-        Halide::Buffer<float> output =
+        Halide::Buffer<float, 4> output =
             converted.outputs[0].rep.realize(out_shape[trial]);
 
         for (int i = 0; i < 3; ++i) {
@@ -278,7 +278,7 @@ static void test_sum() {
     std::vector<Tensor> node_inputs;
     node_inputs.resize(1);
     node_inputs[0].shape = {7, 3, 5, 11};
-    Halide::Buffer<float> in1(7, 3, 5, 11);
+    Halide::Buffer<float, 4> in1(7, 3, 5, 11);
     std::uniform_real_distribution<float> dis(-1.0, 1.0);
     std::mt19937 rnd;
     in1.for_each_value([&](float &f) { f = dis(rnd); });
@@ -288,7 +288,7 @@ static void test_sum() {
     Node converted = convert_node(sum_node, node_inputs);
 
     GOOGLE_CHECK_EQ(1, converted.outputs.size());
-    Halide::Buffer<float> output = converted.outputs[0].rep.realize({1, 3, 1, 11});
+    Halide::Buffer<float, 4> output = converted.outputs[0].rep.realize({1, 3, 1, 11});
     for (int i = 0; i < 3; ++i) {
         for (int j = 0; j < 11; ++j) {
             float expected = 0.0f;
@@ -316,11 +316,11 @@ static void test_where_broadcast() {
     node_inputs[0].shape = {2, 2, 2};
     node_inputs[1].shape = {2};
     node_inputs[2].shape = {2, 2};
-    Halide::Buffer<bool> in_c(2, 2, 2);
+    Halide::Buffer<bool, 3> in_c(2, 2, 2);
     in_c.for_each_element(
         [&](int x, int y, int z) { in_c(x, y, z) = (x == y && x == z); });
-    Halide::Buffer<float> in_x(2);
-    Halide::Buffer<float> in_y(2, 2);
+    Halide::Buffer<float, 1> in_x(2);
+    Halide::Buffer<float, 2> in_y(2, 2);
     std::uniform_real_distribution<float> dis(-1.0, 1.0);
     std::mt19937 rnd;
     in_x.for_each_value([&](float &f) { f = dis(rnd); });
@@ -332,7 +332,7 @@ static void test_where_broadcast() {
 
     Node converted = convert_node(where_node, node_inputs);
     GOOGLE_CHECK_EQ(1, converted.outputs.size());
-    Halide::Buffer<float> output = converted.outputs[0].rep.realize({2, 2, 2});
+    Halide::Buffer<float, 3> output = converted.outputs[0].rep.realize({2, 2, 2});
 
     for (int i = 0; i < 2; ++i) {
         for (int j = 0; j < 2; ++j) {
@@ -361,7 +361,7 @@ static void test_concat() {
     std::vector<Tensor> node_inputs;
     node_inputs.resize(2);
     node_inputs[0].shape = {7, 3};
-    Halide::Buffer<float> in1(7, 3);
+    Halide::Buffer<float, 2> in1(7, 3);
     std::uniform_real_distribution<float> dis(-1.0, 1.0);
     std::mt19937 rnd;
     in1.for_each_value([&](float &f) { f = dis(rnd); });
@@ -369,14 +369,14 @@ static void test_concat() {
     node_inputs[0].rep(i, j) = in1(i, j);
 
     node_inputs[1].shape = {5, 3};
-    Halide::Buffer<float> in2(5, 3);
+    Halide::Buffer<float, 2> in2(5, 3);
     in2.for_each_value([&](float &f) { f = dis(rnd); });
     node_inputs[1].rep(i, j) = in2(i, j);
 
     Node converted = convert_node(concat_node, node_inputs);
 
     GOOGLE_CHECK_EQ(1, converted.outputs.size());
-    Halide::Buffer<float> output = converted.outputs[0].rep.realize({7 + 5, 3});
+    Halide::Buffer<float, 2> output = converted.outputs[0].rep.realize({7 + 5, 3});
     for (int i = 0; i < 3; ++i) {
         for (int j = 0; j < 7; ++j) {
             EXPECT_EQ(in1(j, i), output(j, i));
@@ -406,7 +406,7 @@ static void test_constant_fill() {
 
     Node converted = convert_node(concat_node, {});
     GOOGLE_CHECK_EQ(1, converted.outputs.size());
-    Halide::Buffer<uint16_t> output = converted.outputs[0].rep.realize({3, 4});
+    Halide::Buffer<uint16_t, 2> output = converted.outputs[0].rep.realize({3, 4});
     for (int i = 0; i < 3; ++i) {
         for (int j = 0; j < 4; ++j) {
             EXPECT_EQ(2u, output(i, j));
@@ -469,7 +469,7 @@ static void test_model() {
     std::unordered_map<std::string, int> dummy;
     Model converted = convert_model(model, dummy, IOLayout::Native);
 
-    Halide::Buffer<float> input_values(3, 7);
+    Halide::Buffer<float, 2> input_values(3, 7);
     std::uniform_real_distribution<float> dis(-1.0, 1.0);
     std::mt19937 rnd;
     input_values.for_each_value([&](float &f) { f = dis(rnd); });
@@ -477,7 +477,7 @@ static void test_model() {
     Halide::ImageParam &input = converted.inputs.at("model_input");
     input.set(input_values);
     Tensor node = converted.outputs.at("model_output");
-    Halide::Buffer<float> output_values = node.rep.realize({3, 7});
+    Halide::Buffer<float, 2> output_values = node.rep.realize({3, 7});
 
     for (int i = 0; i < 3; ++i) {
         for (int j = 0; j < 7; ++j) {
@@ -489,11 +489,11 @@ static void test_model() {
     }
 
     Tensor size = converted.outputs.at("output_size");
-    Halide::Buffer<int64_t> output_size = size.rep.realize();
+    Halide::Buffer<int64_t, 0> output_size = size.rep.realize();
     EXPECT_EQ(21, output_size());
 
     Tensor shape = converted.outputs.at("output_shape");
-    Halide::Buffer<int64_t> output_shape = shape.rep.realize({2});
+    Halide::Buffer<int64_t, 1> output_shape = shape.rep.realize({2});
     EXPECT_EQ(3, output_shape(0));
     EXPECT_EQ(7, output_shape(1));
 }

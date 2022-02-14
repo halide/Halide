@@ -123,7 +123,7 @@ bool run_test() {
     // Everything else is a normal Halide program. The GPU runtime will call
     // the above acquire/release functions to get the context instead of using
     // its own internal context.
-    Buffer<float> input(W, H);
+    Buffer<float, 2> input(W, H);
     for (int y = 0; y < input.height(); y++) {
         for (int x = 0; x < input.width(); x++) {
             input(x, y) = (float)(x * y);
@@ -132,7 +132,7 @@ bool run_test() {
 
     input.set_host_dirty(true);
 
-    Buffer<float> output(W, H);
+    Buffer<float, 2> output(W, H);
 
     acquire_release(input, output);
 

@@ -8,7 +8,7 @@ namespace hannk {
 
 class Mean : public Generator<Mean> {
 public:
-    Input<Buffer<uint8_t>> input_{"input", 4};
+    Input<Buffer<uint8_t, 4>> input_{"input"};
 
     // The bounds of the region to reduce. This pipeline is
     // implemented as a stencil over this reach at each output.
@@ -23,7 +23,7 @@ public:
     Input<int> b_min_{"b_min"};
     Input<int> b_extent_{"b_extent"};
 
-    Output<Buffer<uint8_t>> output_{"output", 4};
+    Output<Buffer<uint8_t, 4>> output_{"output"};
 
     void generate() {
         // The algorithm.

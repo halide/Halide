@@ -145,17 +145,20 @@ using std::vector;
 
 namespace {
 
-llvm::Value *CreateConstGEP1_32(IRBuilderBase *builder, Value *ptr, unsigned index) {
+llvm::Value *CreateConstGEP1_32(IRBuilderBase *builder, llvm::Type *gep_type,
+                                Value *ptr, unsigned index) {
 #if LLVM_VERSION >= 130
-    return builder->CreateConstGEP1_32(ptr->getType()->getScalarType()->getPointerElementType(), ptr, index);
+    return builder->CreateConstGEP1_32(gep_type, ptr, index);
 #else
+    (void)gep_type;
     return builder->CreateConstGEP1_32(ptr, index);
 #endif
 }
 
-llvm::Value *CreateInBoundsGEP(IRBuilderBase *builder, Value *ptr, ArrayRef<Value *> index_list) {
+llvm::Value *CreateInBoundsGEP(IRBuilderBase *builder, llvm::Type *gep_type,
+                               Value *ptr, ArrayRef<Value *> index_list) {
 #if LLVM_VERSION >= 130
-    return builder->CreateInBoundsGEP(ptr->getType()->getScalarType()->getPointerElementType(), ptr, index_list);
+    return builder->CreateInBoundsGEP(gep_type, ptr, index_list);
 #else
     return builder->CreateInBoundsGEP(ptr, index_list);
 #endif
@@ -270,6 +273,9 @@ void CodeGen_LLVM::initialize_llvm() {
             for (const std::string &s : arg_vec) {
                 c_arg_vec.push_back(s.c_str());
             }
+            // TODO: Remove after opaque pointers become the default in LLVM.
+            // This is here to document how to turn on opaque pointers, for testing, in LLVM 15
+            //            c_arg_vec.push_back("-opaque-pointers");
             cl::ParseCommandLineOptions((int)(c_arg_vec.size()), &c_arg_vec[0], "Halide compiler\n");
         }
 
@@ -329,6 +335,9 @@ void CodeGen_LLVM::init_context() {
     f16_t = llvm::Type::getHalfTy(*context);
     f32_t = llvm::Type::getFloatTy(*context);
     f64_t = llvm::Type::getDoubleTy(*context);
+
+    // Ensure no Value pointers carry over from previous context.
+    struct_type_recovery.clear();
 }
 
 void CodeGen_LLVM::init_module() {
@@ -427,13 +436,20 @@ std::unique_ptr<llvm::Module> CodeGen_LLVM::compile_trampolines(
     for (const std::pair<std::string, ExternSignature> &e : externs) {
         const std::string &callee_name = e.first;
         const std::string wrapper_name = callee_name + suffix;
+
         llvm::FunctionType *fn_type = codegen->signature_to_type(e.second);
         // callee might already be present for builtins, e.g. halide_print
         llvm::Function *callee = codegen->module->getFunction(callee_name);
         if (!callee) {
             callee = llvm::Function::Create(fn_type, llvm::Function::ExternalLinkage, callee_name, codegen->module.get());
         }
-        codegen->add_argv_wrapper(callee, wrapper_name, /*result_in_argv*/ true);
+
+        std::vector<bool> buffer_args(e.second.arg_types().size());
+        size_t index = 0;
+        for (const Type &t : e.second.arg_types()) {
+            buffer_args[index++] = (t == type_of<struct halide_buffer_t *>());
+        }
+        codegen->add_argv_wrapper(callee, wrapper_name, /*result_in_argv*/ true, buffer_args);
     }
     return codegen->finish_codegen();
 }
@@ -525,9 +541,12 @@ std::unique_ptr<llvm::Module> CodeGen_LLVM::compile(const Module &input) {
         function = llvm::Function::Create(func_t, llvm_linkage(f.linkage), names.extern_name, module.get());
         set_function_attributes_for_target(function, target);
 
-        // Mark the buffer args as no alias
+        // Mark the buffer args as no alias and save indication for add_argv_wrapper if needed
+        std::vector<bool> buffer_args(f.args.size());
         for (size_t i = 0; i < f.args.size(); i++) {
-            if (f.args[i].is_buffer()) {
+            bool is_buffer = f.args[i].is_buffer();
+            buffer_args[i] = is_buffer;
+            if (is_buffer) {
                 function->addParamAttr(i, Attribute::NoAlias);
             }
         }
@@ -538,7 +557,7 @@ std::unique_ptr<llvm::Module> CodeGen_LLVM::compile(const Module &input) {
         // If the Func is externally visible, also create the argv wrapper and metadata.
         // (useful for calling from JIT and other machine interfaces).
         if (f.linkage == LinkageType::ExternalPlusArgv || f.linkage == LinkageType::ExternalPlusMetadata) {
-            llvm::Function *wrapper = add_argv_wrapper(function, names.argv_name);
+            llvm::Function *wrapper = add_argv_wrapper(function, names.argv_name, false, buffer_args);
             if (f.linkage == LinkageType::ExternalPlusMetadata) {
                 llvm::Function *metadata_getter = embed_metadata_getter(names.metadata_name,
                                                                         names.simple_name, f.args, input.get_metadata_name_map());
@@ -911,7 +930,8 @@ Constant *CodeGen_LLVM::embed_constant_expr(Expr e, llvm::Type *t) {
 // return type is always 'void'.
 llvm::Function *CodeGen_LLVM::add_argv_wrapper(llvm::Function *fn,
                                                const std::string &name,
-                                               bool result_in_argv) {
+                                               bool result_in_argv,
+                                               std::vector<bool> &arg_is_buffer) {
     llvm::Type *wrapper_result_type = result_in_argv ? void_t : i32_t;
     llvm::Type *wrapper_args_t[] = {i8_t->getPointerTo()->getPointerTo()};
     llvm::FunctionType *wrapper_func_t = llvm::FunctionType::get(wrapper_result_type, wrapper_args_t, false);
@@ -923,15 +943,16 @@ llvm::Function *CodeGen_LLVM::add_argv_wrapper(llvm::Function *fn,
     std::vector<llvm::Value *> wrapper_args;
     for (llvm::Function::arg_iterator i = fn->arg_begin(); i != fn->arg_end(); i++) {
         // Get the address of the nth argument
-        llvm::Value *ptr = CreateConstGEP1_32(builder, arg_array, wrapper_args.size());
-        ptr = builder->CreateLoad(ptr->getType()->getPointerElementType(), ptr);
-        if (i->getType() == halide_buffer_t_type->getPointerTo()) {
+        llvm::Value *ptr = CreateConstGEP1_32(builder, i8_t->getPointerTo(),
+                                              arg_array, wrapper_args.size());
+        ptr = builder->CreateLoad(i8_t->getPointerTo(), ptr);
+        if (arg_is_buffer[i->getArgNo()]) {
             // Cast the argument to a halide_buffer_t *
             wrapper_args.push_back(builder->CreatePointerCast(ptr, halide_buffer_t_type->getPointerTo()));
         } else {
             // Cast to the appropriate type and load
             ptr = builder->CreatePointerCast(ptr, i->getType()->getPointerTo());
-            wrapper_args.push_back(builder->CreateLoad(ptr->getType()->getPointerElementType(), ptr));
+            wrapper_args.push_back(builder->CreateLoad(i->getType(), ptr));
         }
     }
     debug(4) << "Creating call from wrapper to actual function\n";
@@ -940,9 +961,10 @@ llvm::Function *CodeGen_LLVM::add_argv_wrapper(llvm::Function *fn,
     result->setIsNoInline();
 
     if (result_in_argv) {
-        llvm::Value *result_in_argv_ptr = CreateConstGEP1_32(builder, arg_array, wrapper_args.size());
+        llvm::Value *result_in_argv_ptr = CreateConstGEP1_32(builder, i8_t->getPointerTo(),
+                                                             arg_array, wrapper_args.size());
         if (fn->getReturnType() != void_t) {
-            result_in_argv_ptr = builder->CreateLoad(result_in_argv_ptr->getType()->getPointerElementType(), result_in_argv_ptr);
+            result_in_argv_ptr = builder->CreateLoad(i8_t->getPointerTo(), result_in_argv_ptr);
             // Cast to the appropriate type and store
             result_in_argv_ptr = builder->CreatePointerCast(result_in_argv_ptr, fn->getReturnType()->getPointerTo());
             builder->CreateStore(result, result_in_argv_ptr);
@@ -1820,7 +1842,7 @@ Value *CodeGen_LLVM::codegen_buffer_pointer(Value *base_address, Halide::Type ty
         if (const int64_t *offset = as_const_int(add->b)) {
             Value *base = codegen_buffer_pointer(base_address, type, add->a);
             Value *off = codegen(make_const(Int(8 * d.getPointerSize()), *offset));
-            return CreateInBoundsGEP(builder, base, off);
+            return CreateInBoundsGEP(builder, llvm_type_of(type), base, off);
         }
     }
 
@@ -1834,17 +1856,14 @@ Value *CodeGen_LLVM::codegen_buffer_pointer(const string &buffer, Halide::Type t
 }
 
 Value *CodeGen_LLVM::codegen_buffer_pointer(Value *base_address, Halide::Type type, Value *index) {
-    llvm::Type *base_address_type = base_address->getType();
-    unsigned address_space = base_address_type->getPointerAddressSpace();
-
     type = upgrade_type_for_storage(type);
+    llvm::Type *load_type = llvm_type_of(type);
+    unsigned address_space = base_address->getType()->getPointerAddressSpace();
+    llvm::Type *pointer_load_type = load_type->getPointerTo(address_space);
 
-    llvm::Type *load_type = llvm_type_of(type)->getPointerTo(address_space);
-
-    // If the type doesn't match the expected type, we need to pointer cast
-    if (load_type != base_address_type) {
-        base_address = builder->CreatePointerCast(base_address, load_type);
-    }
+    // TODO: This can likely be removed once opaque pointers are default
+    // in all supported LLVM versions.
+    base_address = builder->CreatePointerCast(base_address, pointer_load_type);
 
     llvm::Constant *constant_index = dyn_cast<llvm::Constant>(index);
     if (constant_index && constant_index->isZeroValue()) {
@@ -1857,7 +1876,7 @@ Value *CodeGen_LLVM::codegen_buffer_pointer(Value *base_address, Halide::Type ty
         index = builder->CreateIntCast(index, i64_t, true);
     }
 
-    return CreateInBoundsGEP(builder, base_address, index);
+    return CreateInBoundsGEP(builder, load_type, base_address, index);
 }
 
 void CodeGen_LLVM::add_tbaa_metadata(llvm::Instruction *inst, string buffer, const Expr &index) {
@@ -1944,13 +1963,14 @@ void CodeGen_LLVM::visit(const Load *op) {
     if (op->type.is_scalar()) {
         // Scalar loads
         Value *ptr = codegen_buffer_pointer(op->name, op->type, op->index);
-        LoadInst *load = builder->CreateAlignedLoad(ptr->getType()->getPointerElementType(), ptr, llvm::Align(op->type.bytes()));
+        LoadInst *load = builder->CreateAlignedLoad(llvm_type_of(op->type), ptr, llvm::Align(op->type.bytes()));
         add_tbaa_metadata(load, op->name, op->index);
         value = load;
     } else {
         const Ramp *ramp = op->index.as<Ramp>();
         const IntImm *stride = ramp ? ramp->stride.as<IntImm>() : nullptr;
 
+        llvm::Type *load_type = llvm_type_of(op->type.element_of());
         if (ramp && stride && stride->value == 1) {
             value = codegen_dense_vector_load(op);
         } else if (ramp && stride && 2 <= stride->value && stride->value <= 4) {
@@ -2048,10 +2068,10 @@ void CodeGen_LLVM::visit(const Load *op) {
             value = UndefValue::get(llvm_type_of(op->type));
             for (int i = 0; i < ramp->lanes; i++) {
                 Value *lane = ConstantInt::get(i32_t, i);
-                LoadInst *val = builder->CreateLoad(ptr->getType()->getPointerElementType(), ptr);
+                LoadInst *val = builder->CreateLoad(load_type, ptr);
                 add_tbaa_metadata(val, op->name, op->index);
                 value = builder->CreateInsertElement(value, val, lane);
-                ptr = CreateInBoundsGEP(builder, ptr, stride);
+                ptr = CreateInBoundsGEP(builder, load_type, ptr, stride);
             }
         } else if ((false)) { /* should_scalarize(op->index) */
             // TODO: put something sensible in for
@@ -2063,7 +2083,7 @@ void CodeGen_LLVM::visit(const Load *op) {
             for (int i = 0; i < op->type.lanes(); i++) {
                 Expr idx = extract_lane(op->index, i);
                 Value *ptr = codegen_buffer_pointer(op->name, op->type.element_of(), idx);
-                LoadInst *val = builder->CreateLoad(ptr->getType()->getPointerElementType(), ptr);
+                LoadInst *val = builder->CreateLoad(load_type, ptr);
                 add_tbaa_metadata(val, op->name, op->index);
                 vec = builder->CreateInsertElement(vec, val, ConstantInt::get(i32_t, i));
             }
@@ -2075,7 +2095,7 @@ void CodeGen_LLVM::visit(const Load *op) {
             for (int i = 0; i < op->type.lanes(); i++) {
                 Value *idx = builder->CreateExtractElement(index, ConstantInt::get(i32_t, i));
                 Value *ptr = codegen_buffer_pointer(op->name, op->type.element_of(), idx);
-                LoadInst *val = builder->CreateLoad(ptr->getType()->getPointerElementType(), ptr);
+                LoadInst *val = builder->CreateLoad(load_type, ptr);
                 add_tbaa_metadata(val, op->name, op->index);
                 vec = builder->CreateInsertElement(vec, val, ConstantInt::get(i32_t, i));
             }
@@ -2366,7 +2386,7 @@ llvm::Value *CodeGen_LLVM::codegen_dense_vector_load(const Type &type, const std
             load_inst = builder->CreateMaskedLoad(vec_ptr, llvm::Align(align_bytes), slice_mask);
 #endif
         } else {
-            load_inst = builder->CreateAlignedLoad(vec_ptr->getType()->getPointerElementType(), vec_ptr, llvm::Align(align_bytes));
+            load_inst = builder->CreateAlignedLoad(slice_type, vec_ptr, llvm::Align(align_bytes));
         }
         add_tbaa_metadata(load_inst, name, slice_index);
         slices.push_back(load_inst);
@@ -2521,7 +2541,8 @@ void CodeGen_LLVM::codegen_atomic_rmw(const Store *op) {
                 Value *idx = builder->CreateExtractElement(vec_index, ConstantInt::get(i32_t, lane_id));
                 ptr = codegen_buffer_pointer(op->name, value_type.element_of(), idx);
             }
-            LoadInst *orig = builder->CreateAlignedLoad(ptr->getType()->getPointerElementType(), ptr, llvm::Align(value_type.bytes()));
+            llvm::Type *load_type = llvm_type_of(value_type.element_of());
+            LoadInst *orig = builder->CreateAlignedLoad(load_type, ptr, llvm::Align(value_type.bytes()));
             orig->setOrdering(AtomicOrdering::Monotonic);
             add_tbaa_metadata(orig, op->name, op->index);
             // Explicit fall through from the current block to the cas loop body.
@@ -2529,8 +2550,7 @@ void CodeGen_LLVM::codegen_atomic_rmw(const Store *op) {
 
             // CAS loop body:
             builder->SetInsertPoint(loop_bb);
-            llvm::Type *ptr_type = ptr->getType();
-            PHINode *cmp = builder->CreatePHI(ptr_type->getPointerElementType(), 2, "loaded");
+            PHINode *cmp = builder->CreatePHI(load_type, 2, "loaded");
             Value *cmp_val = cmp;
             cmp->addIncoming(orig, bb);
             Value *val = nullptr;
@@ -2543,7 +2563,7 @@ void CodeGen_LLVM::codegen_atomic_rmw(const Store *op) {
             bool need_bit_cast = val_type->isFloatingPointTy();
             if (need_bit_cast) {
                 IntegerType *int_type = builder->getIntNTy(val_type->getPrimitiveSizeInBits());
-                unsigned int addr_space = ptr_type->getPointerAddressSpace();
+                unsigned int addr_space = ptr->getType()->getPointerAddressSpace();
                 ptr = builder->CreateBitCast(ptr, int_type->getPointerTo(addr_space));
                 val = builder->CreateBitCast(val, int_type);
                 cmp_val = builder->CreateBitCast(cmp_val, int_type);
@@ -2855,6 +2875,7 @@ void CodeGen_LLVM::visit(const Call *op) {
                 llvm::Type *aggregate_t = (all_same_type ? (llvm::Type *)ArrayType::get(types[0], types.size()) : (llvm::Type *)llvm::StructType::get(*context, types));
 
                 value = create_alloca_at_entry(aggregate_t, 1);
+                struct_type_recovery[value] = aggregate_t;
                 for (size_t i = 0; i < args.size(); i++) {
                     Value *elem_ptr = builder->CreateConstInBoundsGEP2_32(aggregate_t, value, 0, i);
                     builder->CreateStore(args[i], elem_ptr);
@@ -2877,17 +2898,25 @@ void CodeGen_LLVM::visit(const Call *op) {
         const int64_t *index = as_const_int(op->args[2]);
 
         // make_struct can use a fixed-size struct, an array type, or a scalar
-        llvm::Type *pointee_type = struct_prototype->getType()->getPointerElementType();
-        llvm::Type *struct_type = llvm::dyn_cast<llvm::StructType>(pointee_type);
+        llvm::Type *pointee_type;
+        auto iter = struct_type_recovery.find(struct_prototype);
+        if (iter != struct_type_recovery.end()) {
+            pointee_type = iter->second;
+        } else {
+            pointee_type = llvm_type_of(op->type);
+        }
+        llvm::StructType *struct_type = llvm::dyn_cast<llvm::StructType>(pointee_type);
         llvm::Type *array_type = llvm::dyn_cast<llvm::ArrayType>(pointee_type);
         if (struct_type || array_type) {
             internal_assert(index != nullptr);
-            llvm::Value *gep = CreateInBoundsGEP(builder, typed_struct_instance,
+            llvm::Value *gep = CreateInBoundsGEP(builder, pointee_type, typed_struct_instance,
                                                  {ConstantInt::get(i32_t, 0),
                                                   ConstantInt::get(i32_t, (int)*index)});
-            value = builder->CreateLoad(gep->getType()->getPointerElementType(), gep);
+            llvm::Type *result_type = struct_type ? struct_type->getElementType(*index) : array_type->getArrayElementType();
+            value = builder->CreateLoad(result_type, gep);
         } else {
             // The struct is actually just a scalar
+            internal_assert(index == nullptr || *index == 0);
             value = builder->CreateLoad(pointee_type, typed_struct_instance);
         }
     } else if (op->is_intrinsic(Call::get_user_context)) {
@@ -2958,7 +2987,7 @@ void CodeGen_LLVM::visit(const Call *op) {
             llvm::Value *buf = create_alloca_at_entry(i8_t, buf_size);
 
             llvm::Value *dst = buf;
-            llvm::Value *buf_end = CreateConstGEP1_32(builder, buf, buf_size);
+            llvm::Value *buf_end = CreateConstGEP1_32(builder, i8_t, buf, buf_size);
 
             llvm::Function *append_string = module->getFunction("halide_string_to_string");
             llvm::Function *append_int64 = module->getFunction("halide_int64_to_string");
@@ -3169,7 +3198,7 @@ void CodeGen_LLVM::visit(const Call *op) {
             GlobalValue::PrivateLinkage,
             ConstantPointerNull::get(base_fn->getType()),
             global_name);
-        LoadInst *loaded_value = builder->CreateLoad(global->getType()->getPointerElementType(), global);
+        LoadInst *loaded_value = builder->CreateLoad(base_fn->getType(), global);
 
         BasicBlock *global_inited_bb = BasicBlock::Create(*context, "global_inited_bb", function);
         BasicBlock *global_not_inited_bb = BasicBlock::Create(*context, "global_not_inited_bb", function);
@@ -3767,6 +3796,7 @@ void CodeGen_LLVM::visit(const Store *op) {
             Value *ptr = codegen_buffer_pointer(op->name, ptr_type, ramp->base);
             const IntImm *const_stride = ramp->stride.as<IntImm>();
             Value *stride = codegen(ramp->stride);
+            llvm::Type *load_type = llvm_type_of(ptr_type);
             // Scatter without generating the indices as a vector
             for (int i = 0; i < ramp->lanes; i++) {
                 Constant *lane = ConstantInt::get(i32_t, i);
@@ -3775,8 +3805,7 @@ void CodeGen_LLVM::visit(const Store *op) {
                     // Use a constant offset from the base pointer
                     Value *p =
                         builder->CreateConstInBoundsGEP1_32(
-                            llvm_type_of(ptr_type),
-                            ptr,
+                            load_type, ptr,
                             const_stride->value * i);
                     StoreInst *store = builder->CreateStore(v, p);
                     annotate_store(store, op->index);
@@ -3784,7 +3813,7 @@ void CodeGen_LLVM::visit(const Store *op) {
                     // Increment the pointer by the stride for each element
                     StoreInst *store = builder->CreateStore(v, ptr);
                     annotate_store(store, op->index);
-                    ptr = CreateInBoundsGEP(builder, ptr, stride);
+                    ptr = CreateInBoundsGEP(builder, load_type, ptr, stride);
                 }
             }
         } else {

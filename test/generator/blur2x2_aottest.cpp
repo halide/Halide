@@ -15,16 +15,16 @@ using namespace Halide::Runtime;
 
 const int W = 80, H = 80;
 
-Buffer<float> buffer_factory_planar(int w, int h, int c) {
-    return Buffer<float>(w, h, c);
+Buffer<float, 3> buffer_factory_planar(int w, int h, int c) {
+    return Buffer<float, 3>(w, h, c);
 }
 
-Buffer<float> buffer_factory_interleaved(int w, int h, int c) {
-    return Buffer<float>::make_interleaved(w, h, c);
+Buffer<float, 3> buffer_factory_interleaved(int w, int h, int c) {
+    return Buffer<float, 3>::make_interleaved(w, h, c);
 }
 
-void test(Buffer<float> (*factory)(int w, int h, int c)) {
-    Buffer<float> input = factory(W, H, 3);
+void test(Buffer<float, 3> (*factory)(int w, int h, int c)) {
+    Buffer<float, 3> input = factory(W, H, 3);
     input.for_each_element([&](int x, int y, int c) {
         // Just an arbitrary color pattern with enough variation to notice the blur
         if (c == 0) {
@@ -35,7 +35,7 @@ void test(Buffer<float> (*factory)(int w, int h, int c)) {
             input(x, y, c) = ((x * 5) + (y * 2)) / 255.f;
         }
     });
-    Buffer<float> output = factory(W, H, 3);
+    Buffer<float, 3> output = factory(W, H, 3);
 
     printf("Evaluating output over %d x %d\n", W, H);
     blur2x2(input, W, H, output);

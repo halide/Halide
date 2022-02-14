@@ -9,12 +9,11 @@ class LocalLaplacian : public Halide::Generator<LocalLaplacian> {
 public:
     GeneratorParam<int> pyramid_levels{"pyramid_levels", 8, 1, maxJ};
 
-    Input<Buffer<uint16_t>> input{"input", 3};
+    Input<Buffer<uint16_t, 3>> input{"input"};
     Input<int> levels{"levels"};
     Input<float> alpha{"alpha"};
     Input<float> beta{"beta"};
-
-    Output<Buffer<uint16_t>> output{"output", 3};
+    Output<Buffer<uint16_t, 3>> output{"output"};
 
     void generate() {
         /* THE ALGORITHM */

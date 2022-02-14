@@ -4,7 +4,7 @@ namespace {
 
 class DefineExternOpenCLOutput : public Halide::Generator<DefineExternOpenCLOutput> {
 public:
-    Input<Buffer<int32_t>> input{"input", 1};
+    Input<Buffer<int32_t, 1>> input{"input"};
     Output<Func> output{"output", Int(32), 1};
 
     Var x{"x"};
