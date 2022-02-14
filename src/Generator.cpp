@@ -704,6 +704,8 @@ std::string halide_type_to_c_type(const Type &t) {
     return m.at(encode(t));
 }
 
+namespace {
+
 Module build_module(AbstractGenerator &g, const std::string &function_name) {
     const LinkageType linkage_type = LinkageType::ExternalPlusMetadata;
 
@@ -913,37 +915,44 @@ Module build_gradient_module(Halide::Internal::AbstractGenerator &g, const std::
 }
 
 int generate_filter_main_inner(int argc, char **argv, std::ostream &error_output) {
-    const char kUsage[] =
-        "gengen\n"
-        "  [-g GENERATOR_NAME] [-f FUNCTION_NAME] [-o OUTPUT_DIR] [-r RUNTIME_NAME] [-d 1|0]\n"
-        "  [-e EMIT_OPTIONS] [-n FILE_BASE_NAME] [-p PLUGIN_NAME] [-s AUTOSCHEDULER_NAME] [-t TIMEOUT]\n"
-        "       target=target-string[,target-string...] [generator_arg=value [...]]\n"
-        "\n"
-        " -d  Build a module that is suitable for using for gradient descent calculationn\n"
-        "     in TensorFlow or PyTorch. See Generator::build_gradient_module() documentation.\n"
-        "\n"
-        " -e  A comma separated list of files to emit. Accepted values are:\n"
-        "     [assembly, bitcode, c_header, c_source, cpp_stub, featurization,\n"
-        "      llvm_assembly, object, python_extension, pytorch_wrapper, registration,\n"
-        "      schedule, static_library, stmt, stmt_html, compiler_log].\n"
-        "     If omitted, default value is [c_header, static_library, registration].\n"
-        "\n"
-        " -p  A comma-separated list of shared libraries that will be loaded before the\n"
-        "     generator is run. Useful for custom auto-schedulers. The generator must\n"
-        "     either be linked against a shared libHalide or compiled with -rdynamic\n"
-        "     so that references in the shared library to libHalide can resolve.\n"
-        "     (Note that this does not change the default autoscheduler; use the -s flag\n"
-        "     to set that value.)"
-        "\n"
-        " -r   The name of a standalone runtime to generate. Only honors EMIT_OPTIONS 'o'\n"
-        "     and 'static_library'. When multiple targets are specified, it picks a\n"
-        "     runtime that is compatible with all of the targets, or fails if it cannot\n"
-        "     find one. Flags across all of the targets that do not affect runtime code\n"
-        "     generation, such as `no_asserts` and `no_runtime`, are ignored.\n"
-        "\n"
-        " -s  The name of an autoscheduler to set as the default.\n"
-        " -t  Timeout for the Generator to run, in seconds; mainly useful to ensure that bugs and/or degenerate"
-        "     cases don't stall build systems. Defaults to 900 (=15 minutes). Specify 0 to allow ~infinite time.\n";
+    static const char kUsage[] = R"INLINE_CODE(
+gengen
+  [-g GENERATOR_NAME] [-f FUNCTION_NAME] [-o OUTPUT_DIR] [-r RUNTIME_NAME]
+  [-d 1|0] [-e EMIT_OPTIONS] [-n FILE_BASE_NAME] [-p PLUGIN_NAME]
+  [-s AUTOSCHEDULER_NAME] [-t TIMEOUT]
+  target=target-string[,target-string...]
+  [generator_arg=value [...]]
+
+ -d  Build a module that is suitable for using for gradient descent calculation
+     in TensorFlow or PyTorch. See Generator::build_gradient_module()
+     documentation.
+
+ -e  A comma separated list of files to emit. Accepted values are:
+     [assembly, bitcode, c_header, c_source, cpp_stub, featurization,
+      llvm_assembly, object, python_extension, pytorch_wrapper, registration,
+      schedule, static_library, stmt, stmt_html, compiler_log].
+     If omitted, default value is [c_header, static_library, registration].
+
+ -p  A comma-separated list of shared libraries that will be loaded before the
+     generator is run. Useful for custom auto-schedulers. The generator must
+     either be linked against a shared libHalide or compiled with -rdynamic
+     so that references in the shared library to libHalide can resolve.
+     (Note that this does not change the default autoscheduler; use the -s flag
+     to set that value.)"
+
+ -r   The name of a standalone runtime to generate. Only honors EMIT_OPTIONS 'o'
+     and 'static_library'. When multiple targets are specified, it picks a
+     runtime that is compatible with all of the targets, or fails if it cannot
+     find one. Flags across all of the targets that do not affect runtime code
+     generation, such as `no_asserts` and `no_runtime`, are ignored.
+
+ -s  The name of an autoscheduler to set as the default.
+
+ -t  Timeout for the Generator to run, in seconds; mainly useful to ensure that
+     bugs and/or degenerate cases don't stall build systems. Defaults to 900
+     (=15 minutes). Specify 0 to allow ~infinite time.
+
+)INLINE_CODE";
 
     std::map<std::string, std::string> flags_info = {
         {"-d", "0"},
@@ -1253,6 +1262,8 @@ int generate_filter_main_inner(int argc, char **argv, std::ostream &error_output
 
     return 0;
 }
+
+}  // namespace
 
 #ifdef HALIDE_WITH_EXCEPTIONS
 int generate_filter_main(int argc, char **argv, std::ostream &error_output) {
