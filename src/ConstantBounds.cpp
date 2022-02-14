@@ -987,15 +987,22 @@ Expr substitute_some_lets(const Expr &expr, size_t count = 100) {
 }
 
 Expr approximate_optimizations(const Expr &expr, Direction direction, const Scope<Interval> &scope) {
-    Expr simpl = substitute_some_lets(expr);
-    simpl = simplify(simpl);
-    simpl = reorder_terms(simpl);
+    // TODO: try smart substitutions and/or an early-out mechanism.
+    Expr subs = substitute_some_lets(expr);
+    if (!subs.same_as(expr)) {
+      subs = simplify(subs);
+    }
+    subs = reorder_terms(subs);
     // TODO: only do push_rationals if correlated divisions exist.
-    simpl = push_rationals(simpl, direction);
-    simpl = simplify(simpl);
-    simpl = strip_unbounded_terms(simpl, direction, scope);
-    simpl = simplify(simpl);
-    return simpl;
+    Expr pushed = push_rationals(subs, direction);
+    if (!pushed.same_as(subs)) {
+        pushed = simplify(pushed);
+    }
+    Expr stripped = strip_unbounded_terms(pushed, direction, scope);
+    if (!stripped.same_as(pushed)) {
+        stripped = simplify(stripped);
+    }
+    return stripped;
 }
 
 bool possibly_correlated(const Expr &expr) {
