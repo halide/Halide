@@ -27,9 +27,17 @@ Expr Simplify::visit(const Cast *op, ExprInfo *bounds) {
     }
 
     if (may_simplify(op->type) && may_simplify(op->value.type())) {
+        const bool integer_narrowing = 
+            (op->type.is_int() || op->type.is_uint()) &&
+            (value.type().is_int() || value.type().is_uint()) &&
+            op->type.bits() < value.type().bits();
+            
         const Cast *cast = value.as<Cast>();
         const Broadcast *broadcast_value = value.as<Broadcast>();
         const Ramp *ramp_value = value.as<Ramp>();
+        const Add *add = value.as<Add>();
+        const Sub *sub = value.as<Sub>();
+        const Mul *mul = value.as<Mul>();
         double f = 0.0;
         int64_t i = 0;
         uint64_t u = 0;
@@ -108,6 +116,20 @@ Expr Simplify::visit(const Cast *op, ExprInfo *bounds) {
             // eliminated. The inner cast is either a sign extend
             // or a zero extend, and the outer cast truncates the extended bits
             return mutate(Cast::make(op->type, cast->value), bounds);
+        } else if (integer_narrowing && add) {
+            // Integer narrowing can be pushed inside any ring operations (add,
+            // sub, mul) because narrowing is a ring homomorphism on the
+            // integers modulo 2^n. Put another way, for add, sub, and mul, low
+            // bits can influence high bits but not vice versa. So if you only
+            // want the low bits of the result, you only need the low bits of
+            // the inputs. Pushing the casts inside doubles the throughput of
+            // the arithmetic op, and undoes any pointless widening done by
+            // sloppily-written code.
+            return mutate(Add::make(Cast::make(op->type, add->a), Cast::make(op->type, add->b)), bounds);
+        } else if (integer_narrowing && sub) {
+            return mutate(Sub::make(Cast::make(op->type, sub->a), Cast::make(op->type, sub->b)), bounds);
+        } else if (integer_narrowing && mul) {
+            return mutate(Mul::make(Cast::make(op->type, mul->a), Cast::make(op->type, mul->b)), bounds);            
         } else if (broadcast_value) {
             // cast(broadcast(x)) -> broadcast(cast(x))
             return mutate(Broadcast::make(Cast::make(op->type.with_lanes(broadcast_value->value.type().lanes()), broadcast_value->value), broadcast_value->lanes), bounds);
