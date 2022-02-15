@@ -284,6 +284,9 @@
 #endif
 
 namespace Halide {
+
+class GeneratorContext;
+
 namespace Internal {
 
 void generator_test();
@@ -359,10 +362,25 @@ std::string halide_type_to_c_source(const Type &t);
 // e.g., Int(32) -> "int32_t"
 std::string halide_type_to_c_type(const Type &t);
 
+class GeneratorsForMain {
+public:
+    GeneratorsForMain() = default;
+    virtual ~GeneratorsForMain() = default;
+
+    virtual std::vector<std::string> enumerate() const;
+    virtual AbstractGeneratorPtr create(const std::string &name,
+                                        const Halide::GeneratorContext &context) const;
+
+    GeneratorsForMain(const GeneratorsForMain &) = delete;
+    GeneratorsForMain &operator=(const GeneratorsForMain &) = delete;
+    GeneratorsForMain(GeneratorsForMain &&) = delete;
+    GeneratorsForMain &operator=(GeneratorsForMain &&) = delete;
+};
+
 /** generate_filter_main() is a convenient wrapper for GeneratorRegistry::create() +
  * compile_to_files(); it can be trivially wrapped by a "real" main() to produce a
  * command-line utility for ahead-of-time filter compilation. */
-int generate_filter_main(int argc, char **argv, std::ostream &cerr);
+int generate_filter_main(int argc, char **argv, std::ostream &cerr, const GeneratorsForMain &generators_for_main = GeneratorsForMain());
 
 // select_type<> is to std::conditional as switch is to if:
 // it allows a multiway compile-time type definition via the form
