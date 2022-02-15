@@ -293,6 +293,10 @@ WEAK int halide_webgpu_device_malloc(void *user_context, halide_buffer_t *buf) {
         << "WGPU: halide_webgpu_device_malloc (user_context: " << user_context
         << ", buf: " << buf << ")\n";
 
+    if (buf->device) {
+        return halide_error_code_success;
+    }
+
     WgpuContext context(user_context);
     if (context.error_code) {
         return context.error_code;
