@@ -25,8 +25,8 @@ GeneratorContext::GeneratorContext(const Target &target,
     : target_(target),
       auto_schedule_(auto_schedule),
       machine_params_(machine_params),
-      externs_map_(externs_map),
-      value_tracker_(value_tracker) {
+      externs_map_(std::move(externs_map)),
+      value_tracker_(std::move(value_tracker)) {
 }
 
 GeneratorContext::GeneratorContext(const Target &target,
