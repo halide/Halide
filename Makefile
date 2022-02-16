@@ -2295,7 +2295,6 @@ $(DISTRIB_DIR)/lib/libHalide.$(SHARED_EXT): \
                            $(INCLUDE_DIR)/Halide.h \
                            $(RUNTIME_EXPORTED_INCLUDES) \
                            $(ROOT_DIR)/README*.md \
-                           $(BUILD_DIR)/halide_config.cmake \
                            $(BUILD_DIR)/halide_config.make
 	rm -rf $(DISTRIB_DIR)
 	mkdir -p $(DISTRIB_DIR)/include \
