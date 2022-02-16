@@ -76,6 +76,7 @@ protected:
         void visit(const Evaluate *op) override;
         void visit(const IntImm *) override;
         void visit(const UIntImm *) override;
+        void visit(const FloatImm *) override;
         void visit(const Free *op) override;
         void visit(const For *) override;
         void visit(const Load *op) override;
@@ -120,7 +121,7 @@ void CodeGen_WebGPU_Dev::init_module() {
 
     // Write out the Halide math functions.
     src_stream
-        << "fn float_from_bits(x : i32) -> f32 {return bitcast<f32>(x);}\n"
+        << "fn float_from_bits(x : u32) -> f32 {return bitcast<f32>(x);}\n"
         << "fn acos_f32(x : f32) -> f32 {return acos(x);}\n"
         << "fn acosh_f32(x : f32) -> f32 {return log(x + sqrt(x*x - 1.0));}\n"
         << "fn asin_f32(x : f32) -> f32 {return asin(x);}\n"
@@ -492,6 +493,33 @@ void CodeGen_WebGPU_Dev::CodeGen_WGSL::visit(const UIntImm *op) {
     } else {
         print_assignment(op->type, std::to_string(op->value) + "u");
     }
+}
+
+void CodeGen_WebGPU_Dev::CodeGen_WGSL::visit(const FloatImm *op) {
+    string rhs;
+    if (isnan(op->value)) {
+        rhs = "0x7FFFFFFF";
+    } else if (isinf(op->value)) {
+        if (op->value > 0) {
+            rhs = "0x7F800000";
+        } else {
+            rhs = "0xFF800000";
+        }
+    } else {
+        // Write the constant as reinterpreted uint to avoid any bits lost in
+        // conversion.
+        union {
+            uint32_t as_uint;
+            float as_float;
+        } u;
+        u.as_float = op->value;
+
+        ostringstream oss;
+        oss << "float_from_bits("
+            << u.as_uint << "u /* " << u.as_float << " */)";
+        rhs = oss.str();
+    }
+    print_assignment(op->type, rhs);
 }
 
 namespace {
