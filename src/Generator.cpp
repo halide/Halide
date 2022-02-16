@@ -17,21 +17,26 @@
 
 namespace Halide {
 
-GeneratorContext::GeneratorContext(const Target &t, bool auto_schedule,
-                                   const MachineParams &machine_params)
-    : target("target", t),
-      auto_schedule("auto_schedule", auto_schedule),
-      machine_params("machine_params", machine_params),
-      externs_map(std::make_shared<ExternsMap>()),
-      value_tracker(std::make_shared<Internal::ValueTracker>()) {
+GeneratorContext::GeneratorContext(const Target &target,
+                                   bool auto_schedule,
+                                   const MachineParams &machine_params,
+                                   std::shared_ptr<ExternsMap> externs_map,
+                                   std::shared_ptr<Internal::ValueTracker> value_tracker)
+    : target_(target),
+      auto_schedule_(auto_schedule),
+      machine_params_(machine_params),
+      externs_map_(externs_map),
+      value_tracker_(value_tracker) {
 }
 
-void GeneratorContext::init_from_context(const Halide::GeneratorContext &context) {
-    target.set(context.get_target());
-    auto_schedule.set(context.get_auto_schedule());
-    machine_params.set(context.get_machine_params());
-    value_tracker = context.get_value_tracker();
-    externs_map = context.get_externs_map();
+GeneratorContext::GeneratorContext(const Target &target,
+                                   bool auto_schedule,
+                                   const MachineParams &machine_params)
+    : GeneratorContext(target,
+                       auto_schedule,
+                       machine_params,
+                       std::make_shared<ExternsMap>(),
+                       std::make_shared<Internal::ValueTracker>()) {
 }
 
 namespace Internal {
@@ -134,6 +139,44 @@ std::vector<Type> parse_halide_type_list(const std::string &types) {
     }
     return result;
 }
+
+/**
+ * ValueTracker is an internal utility class that attempts to track and flag certain
+ * obvious Stub-related errors at Halide compile time: it tracks the constraints set
+ * on any Parameter-based argument (i.e., Input<Buffer> and Output<Buffer>) to
+ * ensure that incompatible values aren't set.
+ *
+ * e.g.: if a Generator A requires stride[0] == 1,
+ * and Generator B uses Generator A via stub, but requires stride[0] == 4,
+ * we should be able to detect this at Halide compilation time, and fail immediately,
+ * rather than producing code that fails at runtime and/or runs slowly due to
+ * vectorization being unavailable.
+ *
+ * We do this by tracking the active values at entrance and exit to all user-provided
+ * Generator methods (generate()/schedule()); if we ever find more than two unique
+ * values active, we know we have a potential conflict. ("two" here because the first
+ * value is the default value for a given constraint.)
+ *
+ * Note that this won't catch all cases:
+ * -- JIT compilation has no way to check for conflicts at the top-level
+ * -- constraints that match the default value (e.g. if dim(0).set_stride(1) is the
+ * first value seen by the tracker) will be ignored, so an explicit requirement set
+ * this way can be missed
+ *
+ * Nevertheless, this is likely to be much better than nothing when composing multiple
+ * layers of Stubs in a single fused result.
+ */
+class ValueTracker {
+private:
+    std::map<std::string, std::vector<std::vector<Expr>>> values_history;
+    const size_t max_unique_values;
+
+public:
+    explicit ValueTracker(size_t max_unique_values = 2)
+        : max_unique_values(max_unique_values) {
+    }
+    void track_values(const std::string &name, const std::vector<Expr> &values);
+};
 
 void ValueTracker::track_values(const std::string &name, const std::vector<Expr> &values) {
     std::vector<std::vector<Expr>> &history = values_history[name];
@@ -1289,7 +1332,7 @@ AbstractGeneratorPtr GeneratorsForMain::create(const std::string &name, const Ha
 }
 
 #ifdef HALIDE_WITH_EXCEPTIONS
-int generate_filter_main(int argc, char **argv, std::ostream &error_output, const GeneratorsForMain &generators_for_main {
+int generate_filter_main(int argc, char **argv, std::ostream &error_output, const GeneratorsForMain &generators_for_main) {
     try {
         return generate_filter_main_inner(argc, argv, error_output, generators_for_main);
     } catch (std::runtime_error &err) {
@@ -1519,10 +1562,20 @@ void GeneratorBase::set_generator_param_values(const GeneratorParamsMap &params)
     }
 }
 
+GeneratorContext GeneratorBase::context() const {
+    return GeneratorContext(target, auto_schedule, machine_params, externs_map, value_tracker);
+}
+
 void GeneratorBase::init_from_context(const Halide::GeneratorContext &context) {
-    Halide::GeneratorContext::init_from_context(context);
-    internal_assert(param_info_ptr == nullptr);
+    target.set(context.target_);
+    auto_schedule.set(context.auto_schedule_);
+    machine_params.set(context.machine_params_);
+
+    externs_map = context.externs_map_;
+    value_tracker = context.value_tracker_;
+
     // pre-emptively build our param_info now
+    internal_assert(param_info_ptr == nullptr);
     param_info_ptr = std::make_unique<GeneratorParamInfo>(this, size);
 }
 
@@ -1553,7 +1606,7 @@ void GeneratorBase::track_parameter_values(bool include_outputs) {
             internal_assert(!input->parameters_.empty());
             for (auto &p : input->parameters_) {
                 // This must use p.name(), *not* input->name()
-                get_value_tracker()->track_values(p.name(), parameter_constraints(p));
+                value_tracker->track_values(p.name(), parameter_constraints(p));
             }
         }
     }
@@ -1567,7 +1620,7 @@ void GeneratorBase::track_parameter_values(bool include_outputs) {
                     for (auto &o : output_buffers) {
                         Parameter p = o.parameter();
                         // This must use p.name(), *not* output->name()
-                        get_value_tracker()->track_values(p.name(), parameter_constraints(p));
+                        value_tracker->track_values(p.name(), parameter_constraints(p));
                     }
                 }
             }
