@@ -105,7 +105,11 @@ void CodeGen_WebGPU_Dev::add_kernel(Stmt s,
                                     const string &name,
                                     const vector<DeviceArgument> &args) {
     debug(2) << "CodeGen_WebGPU_Dev::add_kernel " << name << "\n";
-    debug(2) << "CodeGen_WebGPU_Dev:\n"
+
+    // We need to scalarize/de-predicate any loads/stores, since WGSL does not
+    // support predication.
+    s = scalarize_predicated_loads_stores(s);
+    debug(2) << "CodeGen_WebGPU_Dev: after removing predication: \n"
              << s;
 
     cur_kernel_name = name;
