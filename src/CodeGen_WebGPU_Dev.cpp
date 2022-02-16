@@ -462,6 +462,29 @@ void CodeGen_WebGPU_Dev::CodeGen_WGSL::visit(const Call *op) {
         }
         stream << "\n";
         print_assignment(op->type, "0");
+    } else if (op->is_intrinsic(Call::if_then_else)) {
+        internal_assert(op->args.size() == 2 || op->args.size() == 3);
+
+        string result_id = unique_name('_');
+        stream << get_indent() << "var " << result_id
+               << " : " << print_type(op->args[1].type()) << ";\n";
+
+        // TODO: The rest of this is just copied from the C backend, so maybe
+        // just introduce an overloadable `print_var_decl` instead.
+        string cond_id = print_expr(op->args[0]);
+        stream << get_indent() << "if (" << cond_id << ")\n";
+        open_scope();
+        string true_case = print_expr(op->args[1]);
+        stream << get_indent() << result_id << " = " << true_case << ";\n";
+        close_scope("if " + cond_id);
+        if (op->args.size() == 3) {
+            stream << get_indent() << "else\n";
+            open_scope();
+            string false_case = print_expr(op->args[2]);
+            stream << get_indent() << result_id << " = " << false_case << ";\n";
+            close_scope("if " + cond_id + " else");
+        }
+        print_assignment(op->type, result_id);
     } else {
         CodeGen_C::visit(op);
     }
