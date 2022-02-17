@@ -473,6 +473,12 @@ public:
      * empty string if no debug symbols were found or the debug
      * symbols were not understood. Works on OS X and Linux only. */
     std::string source_location() const;
+
+    /** Assert that this stage has intentionally been given no schedule, and
+     * suppress the warning about unscheduled update definitions that would
+     * otherwise fire. This counts as a schedule, so calling this twice on the
+     * same Stage will fail the assertion. */
+    void unscheduled();
 };
 
 // For backwards compatibility, keep the ScheduleHandle name.
