@@ -647,17 +647,17 @@ void StubEmitter::emit() {
     stream << get_indent() << "}\n";
     stream << "\n";
 
-    stream << get_indent() << "// overload to allow GeneratorContext-pointer\n";
+    stream << get_indent() << "// overload to allow GeneratorBase-pointer\n";
     stream << get_indent() << "inline static Outputs generate(\n";
     indent_level++;
-    stream << get_indent() << "const GeneratorContext* context,\n";
+    stream << get_indent() << "const Halide::Internal::GeneratorBase* generator,\n";
     stream << get_indent() << "const Inputs& inputs,\n";
     stream << get_indent() << "const GeneratorParams& generator_params = GeneratorParams()\n";
     indent_level--;
     stream << get_indent() << ")\n";
     stream << get_indent() << "{\n";
     indent_level++;
-    stream << get_indent() << "return generate(*context, inputs, generator_params);\n";
+    stream << get_indent() << "return generate(generator->context(), inputs, generator_params);\n";
     indent_level--;
     stream << get_indent() << "}\n";
     stream << "\n";
