@@ -326,6 +326,9 @@ void test_predicated_hist(const Backend &backend) {
     hist(im(r2)) -= cast<T>(1);
     hist(im(r2)) = min(hist(im(r2)) + cast<T>(1), cast<T>(100));
 
+    hist.update(3).unscheduled();
+    hist.update(4).unscheduled();
+
     hist.compute_root();
     for (int update_id = 0; update_id < 3; update_id++) {
         switch (backend) {

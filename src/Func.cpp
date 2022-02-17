@@ -1928,6 +1928,11 @@ std::string Stage::source_location() const {
     return definition.source_location();
 }
 
+void Stage::unscheduled() {
+    user_assert(!definition.schedule().touched()) << "Stage::unscheduled called on an update definition with a schedule\n";
+    definition.schedule().touched() = true;
+}
+
 void Func::invalidate_cache() {
     if (pipeline_.defined()) {
         pipeline_.invalidate_cache();
@@ -2760,9 +2765,7 @@ void Func::debug_to_file(const string &filename) {
 Stage Func::update(int idx) {
     user_assert(idx < num_update_definitions()) << "Call to update with index larger than last defined update stage for Func \"" << name() << "\".\n";
     invalidate_cache();
-    Definition d = func.update(idx);
-    d.schedule().touched() = true;
-    return Stage(func, d, idx + 1);
+    return Stage(func, func.update(idx), idx + 1);
 }
 
 Func::operator Stage() const {

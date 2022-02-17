@@ -242,9 +242,9 @@ int multiple_fuse_group_test() {
         p.fuse(x, y, t).parallel(t);
         h.fuse(x, y, t).parallel(t);
         h.compute_with(p, t);
-        h.update(0);  // unfused
-        h.update(1);  // unfused
-        h.update(2);  // unfused
+        h.update(0).unscheduled();
+        h.update(1).unscheduled();
+        h.update(2).unscheduled();
 
         f.update(0).compute_with(g, y, LoopAlignStrategy::AlignEnd);
         f.compute_with(g, x);
@@ -1280,9 +1280,8 @@ int update_stage_test() {
         g.compute_root();
         f.compute_root();
 
+        f.update(0).unscheduled();
         f.update(1).compute_with(g.update(0), y);
-        f.update(0);  // unfused
-        g.update(1);  // unfused
 
         g.bound(x, 0, g_size).bound(y, 0, g_size);
         f.bound(x, 0, f_size).bound(y, 0, f_size);
@@ -1356,7 +1355,6 @@ int update_stage2_test() {
 
         f.update(0).compute_with(g.update(0), y);
         f.update(1).compute_with(g.update(0), y);
-        g.update(1);  // unfused
 
         g.bound(x, 0, g_size).bound(y, 0, g_size);
         f.bound(x, 0, f_size).bound(y, 0, f_size);
@@ -1665,8 +1663,8 @@ int update_stage_diagonal_test() {
 
         f.update(1).compute_with(g.update(0), y);
         g.update(0).compute_with(h, y);
-        f.update(0);
-        g.update(1);
+        f.update(0).unscheduled();
+        g.update(1).unscheduled();
 
         g.bound(x, 0, g_size).bound(y, 0, g_size);
         f.bound(x, 0, f_size).bound(y, 0, f_size);

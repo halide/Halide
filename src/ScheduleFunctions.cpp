@@ -2083,7 +2083,7 @@ bool validate_schedule(Function f, const Stmt &s, const Target &target, bool is_
                     << " has not been scheduled, even though some other"
                     << " definitions have been. You may have forgotten to"
                     << " schedule it. If this was intentional, call "
-                    << f.name() << ".update(" << i << ") to suppress"
+                    << f.name() << ".update(" << i << ").unscheduled() to suppress"
                     << " this warning.\n";
             }
         }

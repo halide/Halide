@@ -61,7 +61,7 @@ int main(int argc, char **argv) {
             f.hexagon(y).vectorize(x, 32);
         }
         for (int i = 0; i < 10; i++) {
-            f.update(i);
+            f.update(i).unscheduled();
             if (i & 1) {
                 if (target.has_gpu_feature()) {
                     f.update(i).gpu_tile(x, y, xo, yo, xi, yi, 16, 16);
@@ -102,7 +102,7 @@ int main(int argc, char **argv) {
 
         // Schedule the even update steps on the gpu
         for (int i = 0; i < 10; i++) {
-            f.update(i);
+            f.update(i).unscheduled();
             if (i & 1) {
                 if (target.has_gpu_feature()) {
                     f.update(i).gpu_tile(x, y, xo, yo, xi, yi, 16, 16);
@@ -144,7 +144,7 @@ int main(int argc, char **argv) {
 
         // Schedule the even update steps on the gpu
         for (int i = 0; i < 10; i++) {
-            f.update(i);
+            f.update(i).unscheduled();
             if ((i & 1) == 0) {
                 if (target.has_gpu_feature()) {
                     f.update(i).gpu_tile(x, y, xo, yo, xi, yi, 16, 16);

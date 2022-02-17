@@ -60,7 +60,7 @@ public:
             Var ii("ii");
             result_.update().vectorize(vecs, vec_size);
         }
-        result_.update(1);  // Leave the tail unvectorized
+        result_.update(1).unscheduled();  // Leave the tail unvectorized
 
         result_.bound(i, 0, x_.width());
         result_.dim(0).set_bounds(0, x_.width());
