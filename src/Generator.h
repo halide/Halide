@@ -287,43 +287,7 @@ namespace Internal {
 
 void generator_test();
 
-/**
- * ValueTracker is an internal utility class that attempts to track and flag certain
- * obvious Stub-related errors at Halide compile time: it tracks the constraints set
- * on any Parameter-based argument (i.e., Input<Buffer> and Output<Buffer>) to
- * ensure that incompatible values aren't set.
- *
- * e.g.: if a Generator A requires stride[0] == 1,
- * and Generator B uses Generator A via stub, but requires stride[0] == 4,
- * we should be able to detect this at Halide compilation time, and fail immediately,
- * rather than producing code that fails at runtime and/or runs slowly due to
- * vectorization being unavailable.
- *
- * We do this by tracking the active values at entrance and exit to all user-provided
- * Generator methods (generate()/schedule()); if we ever find more than two unique
- * values active, we know we have a potential conflict. ("two" here because the first
- * value is the default value for a given constraint.)
- *
- * Note that this won't catch all cases:
- * -- JIT compilation has no way to check for conflicts at the top-level
- * -- constraints that match the default value (e.g. if dim(0).set_stride(1) is the
- * first value seen by the tracker) will be ignored, so an explicit requirement set
- * this way can be missed
- *
- * Nevertheless, this is likely to be much better than nothing when composing multiple
- * layers of Stubs in a single fused result.
- */
-class ValueTracker {
-private:
-    std::map<std::string, std::vector<std::vector<Expr>>> values_history;
-    const size_t max_unique_values;
-
-public:
-    explicit ValueTracker(size_t max_unique_values = 2)
-        : max_unique_values(max_unique_values) {
-    }
-    void track_values(const std::string &name, const std::vector<Expr> &values);
-};
+class ValueTracker;
 
 std::vector<Expr> parameter_constraints(const Parameter &p);
 
@@ -2932,7 +2896,7 @@ class GeneratorStub;
 
 }  // namespace Internal
 
-/** GeneratorContext is a base class that is used when using Generators (or Stubs) directly;
+/** GeneratorContext is a class that is used when using Generators (or Stubs) directly;
  * it is used to allow the outer context (typically, either a Generator or "top-level" code)
  * to specify certain information to the inner context to ensure that inner and outer
  * Generators are compiled in a compatible way.
@@ -2949,14 +2913,14 @@ class GeneratorStub;
  *   );
  * \endcode
  *
- * Note that all Generators inherit from GeneratorContext, so if you are using a Stub
- * from within a Generator, you can just pass 'this' for the GeneratorContext:
+ * Note that all Generators embed a GeneratorContext, so if you are using a Stub
+ * from within a Generator, you can just pass 'contex()' for the GeneratorContext:
  * \code
  *  struct SomeGen : Generator<SomeGen> {
  *   void generate() {
  *     ...
  *     auto my_stub = MyStub(
- *       this,  // GeneratorContext
+ *       context(),  // GeneratorContext
  *       // inputs
  *       { ... },
  *       // generator params
@@ -2969,47 +2933,34 @@ class GeneratorStub;
  */
 class GeneratorContext {
 public:
+    friend class Internal::GeneratorBase;
+
     using ExternsMap = std::map<std::string, ExternalCode>;
 
     explicit GeneratorContext(const Target &t,
                               bool auto_schedule = false,
                               const MachineParams &machine_params = MachineParams::generic());
-    virtual ~GeneratorContext() = default;
 
-    inline Target get_target() const {
-        return target;
-    }
-    inline bool get_auto_schedule() const {
-        return auto_schedule;
-    }
-    inline MachineParams get_machine_params() const {
-        return machine_params;
-    }
+    GeneratorContext() = default;
+    GeneratorContext(const GeneratorContext &) = default;
+    GeneratorContext &operator=(const GeneratorContext &) = default;
+    GeneratorContext(GeneratorContext &&) = default;
+    GeneratorContext &operator=(GeneratorContext &&) = default;
 
-    /** Generators can register ExternalCode objects onto
-     * themselves. The Generator infrastructure will arrange to have
-     * this ExternalCode appended to the Module that is finally
-     * compiled using the Generator. This allows encapsulating
-     * functionality that depends on external libraries or handwritten
-     * code for various targets. The name argument should match the
-     * name of the ExternalCode block and is used to ensure the same
-     * code block is not duplicated in the output. Halide does not do
-     * anything other than to compare names for equality. To guarantee
-     * uniqueness in public code, we suggest using a Java style
-     * inverted domain name followed by organization specific
-     * naming. E.g.:
-     *     com.yoyodyne.overthruster.0719acd19b66df2a9d8d628a8fefba911a0ab2b7
-     *
-     * See test/generator/external_code_generator.cpp for example use. */
-    inline std::shared_ptr<ExternsMap> get_externs_map() const {
-        return externs_map;
+    const Target &get_target() const {
+        return target_;
+    }
+    bool get_auto_schedule() const {
+        return auto_schedule_;
+    }
+    const MachineParams &get_machine_params() const {
+        return machine_params_;
     }
 
     template<typename T>
     inline std::unique_ptr<T> create() const {
         return T::create(*this);
     }
-
     template<typename T, typename... Args>
     inline std::unique_ptr<T> apply(const Args &...args) const {
         auto t = this->create<T>();
@@ -3017,28 +2968,18 @@ public:
         return t;
     }
 
-protected:
-    GeneratorParam<Target> target;
-    GeneratorParam<bool> auto_schedule;
-    GeneratorParam<MachineParams> machine_params;
-    std::shared_ptr<ExternsMap> externs_map;
-    std::shared_ptr<Internal::ValueTracker> value_tracker;
+private:
+    Target target_;
+    bool auto_schedule_ = false;
+    MachineParams machine_params_ = MachineParams::generic();
+    std::shared_ptr<ExternsMap> externs_map_;
+    std::shared_ptr<Internal::ValueTracker> value_tracker_;
 
-    GeneratorContext()
-        : GeneratorContext(Target()) {
-    }
-
-    virtual void init_from_context(const Halide::GeneratorContext &context);
-
-    inline std::shared_ptr<Internal::ValueTracker> get_value_tracker() const {
-        return value_tracker;
-    }
-
-public:
-    GeneratorContext(const GeneratorContext &) = delete;
-    GeneratorContext &operator=(const GeneratorContext &) = delete;
-    GeneratorContext(GeneratorContext &&) = delete;
-    GeneratorContext &operator=(GeneratorContext &&) = delete;
+    GeneratorContext(const Target &target,
+                     bool auto_schedule,
+                     const MachineParams &machine_params,
+                     std::shared_ptr<ExternsMap> externs_map,
+                     std::shared_ptr<Internal::ValueTracker> value_tracker);
 };
 
 class NamesInterface {
@@ -3164,9 +3105,9 @@ public:
     }
 };
 
-class GeneratorBase : public NamesInterface, public GeneratorContext {
+class GeneratorBase : public NamesInterface {
 public:
-    ~GeneratorBase() override;
+    virtual ~GeneratorBase();
 
     void set_generator_param_values(const GeneratorParamsMap &params);
 
@@ -3399,11 +3340,13 @@ public:
         get_pipeline().trace_pipeline();
     }
 
+    GeneratorContext context() const;
+
 protected:
     GeneratorBase(size_t size, const void *introspection_helper);
     void set_generator_names(const std::string &registered_name, const std::string &stub_name);
 
-    void init_from_context(const Halide::GeneratorContext &context) override;
+    void init_from_context(const Halide::GeneratorContext &context);
 
     virtual Pipeline build_pipeline() = 0;
     virtual void call_configure() = 0;
@@ -3463,6 +3406,39 @@ protected:
 
     void ensure_configure_has_been_called();
 
+    Target get_target() const {
+        return target;
+    }
+    bool get_auto_schedule() const {
+        return auto_schedule;
+    }
+    MachineParams get_machine_params() const {
+        return machine_params;
+    }
+    /** Generators can register ExternalCode objects onto
+     * themselves. The Generator infrastructure will arrange to have
+     * this ExternalCode appended to the Module that is finally
+     * compiled using the Generator. This allows encapsulating
+     * functionality that depends on external libraries or handwritten
+     * code for various targets. The name argument should match the
+     * name of the ExternalCode block and is used to ensure the same
+     * code block is not duplicated in the output. Halide does not do
+     * anything other than to compare names for equality. To guarantee
+     * uniqueness in public code, we suggest using a Java style
+     * inverted domain name followed by organization specific
+     * naming. E.g.:
+     *     com.yoyodyne.overthruster.0719acd19b66df2a9d8d628a8fefba911a0ab2b7
+     *
+     * See test/generator/external_code_generator.cpp for example use. */
+    std::shared_ptr<GeneratorContext::ExternsMap> get_externs_map() const {
+        return externs_map;
+    }
+
+    // These must remain here for legacy code that access the fields directly.
+    GeneratorParam<Target> target{"target", Target()};
+    GeneratorParam<bool> auto_schedule{"auto_schedule", false};
+    GeneratorParam<MachineParams> machine_params{"machine_params", MachineParams::generic()};
+
 private:
     friend void ::Halide::Internal::generator_test();
     friend class GeneratorParamBase;
@@ -3474,12 +3450,12 @@ private:
     friend class StubOutputBufferBase;
 
     const size_t size;
+    std::shared_ptr<GeneratorContext::ExternsMap> externs_map;
+    std::shared_ptr<Internal::ValueTracker> value_tracker;
 
     // Lazily-allocated-and-inited struct with info about our various Params.
     // Do not access directly: use the param_info() getter.
     std::unique_ptr<GeneratorParamInfo> param_info_ptr;
-
-    mutable std::shared_ptr<ExternsMap> externs_map;
 
     bool inputs_set{false};
     std::string generator_registered_name, generator_stub_name;
@@ -3706,9 +3682,6 @@ public:
         return g;
     }
 
-    using Internal::GeneratorBase::apply;
-    using Internal::GeneratorBase::create;
-
     template<typename... Args>
     void apply(const Args &...args) {
 #ifdef HALIDE_ALLOW_GENERATOR_BUILD_METHOD
@@ -3723,6 +3696,18 @@ public:
         set_inputs(args...);
         call_generate();
         call_schedule();
+    }
+
+    template<typename T2>
+    std::unique_ptr<T2> create() const {
+        return T2::create(context());
+    }
+
+    template<typename T2, typename... Args>
+    inline std::unique_ptr<T2> apply(const Args &...args) const {
+        auto t = this->create<T2>();
+        t->apply(args...);
+        return t;
     }
 
 private:
