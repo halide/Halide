@@ -25,8 +25,8 @@ GeneratorContext::GeneratorContext(const Target &target,
     : target_(target),
       auto_schedule_(auto_schedule),
       machine_params_(machine_params),
-      externs_map_(externs_map),
-      value_tracker_(value_tracker) {
+      externs_map_(std::move(externs_map)),
+      value_tracker_(std::move(value_tracker)) {
 }
 
 GeneratorContext::GeneratorContext(const Target &target,
@@ -647,7 +647,6 @@ void StubEmitter::emit() {
     for (const auto &out : out_info) {
         stream << get_indent() << out.getter << ",\n";
     }
-    //    stream << get_indent() << "generator->get_target()\n";
     stream << get_indent() << "generator->get_target_info().target\n";
     indent_level--;
     stream << get_indent() << "};\n";
@@ -655,17 +654,17 @@ void StubEmitter::emit() {
     stream << get_indent() << "}\n";
     stream << "\n";
 
-    stream << get_indent() << "// overload to allow GeneratorContext-pointer\n";
+    stream << get_indent() << "// overload to allow GeneratorBase-pointer\n";
     stream << get_indent() << "inline static Outputs generate(\n";
     indent_level++;
-    stream << get_indent() << "const GeneratorContext* context,\n";
+    stream << get_indent() << "const Halide::Internal::GeneratorBase* generator,\n";
     stream << get_indent() << "const Inputs& inputs,\n";
     stream << get_indent() << "const GeneratorParams& generator_params = GeneratorParams()\n";
     indent_level--;
     stream << get_indent() << ")\n";
     stream << get_indent() << "{\n";
     indent_level++;
-    stream << get_indent() << "return generate(*context, inputs, generator_params);\n";
+    stream << get_indent() << "return generate(generator->context(), inputs, generator_params);\n";
     indent_level--;
     stream << get_indent() << "}\n";
     stream << "\n";

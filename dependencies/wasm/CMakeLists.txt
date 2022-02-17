@@ -16,9 +16,7 @@ if ("${CMAKE_HOST_SYSTEM_NAME}" STREQUAL "Windows")
 endif ()
 
 if (WITH_WABT)
-    # TODO: using main is temporary until WABT produces
-    # a new release tag with revised API
-    set(WABT_VER main)
+    set(WABT_VER 1.0.27)
 
     message(STATUS "Fetching WABT ${WABT_VER}...")
     FetchContent_Declare(wabt

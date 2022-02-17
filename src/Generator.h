@@ -3143,7 +3143,7 @@ public:
 
 class GeneratorBase : public NamesInterface, public AbstractGenerator {
 public:
-    ~GeneratorBase() override;
+    virtual ~GeneratorBase();
 
     void set_generator_param_values(const GeneratorParamsMap &params);
 
