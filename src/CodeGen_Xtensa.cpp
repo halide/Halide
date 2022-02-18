@@ -307,6 +307,8 @@ using int32x32_t = MultipleOfNativeVector<int32x16_t, 2>;
 using uint32x32_t = MultipleOfNativeVector<uint32x16_t, 2>;
 using int32x64_t = MultipleOfNativeVector<int32x16_t, 4>;
 using uint32x64_t = MultipleOfNativeVector<uint32x16_t, 4>;
+using int32x128_t = MultipleOfNativeVector<int32x16_t, 8>;
+using uint32x128_t = MultipleOfNativeVector<uint32x16_t, 8>;
 // TODO(vksnk): this one should be generated automatically, but isn't.
 using int32x192_t = MultipleOfNativeVector<int32x16_t, 12>;
 using int32x256_t = MultipleOfNativeVector<int32x16_t, 16>;
@@ -365,6 +367,30 @@ HALIDE_ALWAYS_INLINE int32x64_t dense_ramp<int32x64_t>(int32_t base) {
                         IVP_ADDN_2X32(base_w, lanes_2),
                         IVP_ADDN_2X32(base_w, lanes_3),
                         IVP_ADDN_2X32(base_w, lanes_4));
+}
+
+template<>
+HALIDE_ALWAYS_INLINE int32x128_t ramp<int32x128_t>(int32_t base, int32_t stride) {
+    int32x16_t one_to_n = IVP_SEQN_2X32();
+    int32x16_t base_w = base;
+    int32x16_t stride_w = stride;
+    int32x16_t lanes_2 = 16;
+    int32x16_t lanes_3 = 32;
+    int32x16_t lanes_4 = 48;
+    int32x16_t lanes_5 = 64;
+    int32x16_t lanes_6 = 80;
+    int32x16_t lanes_7 = 96;
+    int32x16_t lanes_8 = 112;
+
+    return int32x128_t(int32x128_t::from_native_vector,
+                IVP_ADDN_2X32(base_w, IVP_PACKLN_2X64W(IVP_MULN_2X32(one_to_n, stride_w))),
+                IVP_ADDN_2X32(base_w, IVP_PACKLN_2X64W(IVP_MULN_2X32(lanes_2 + one_to_n, stride_w))),
+                IVP_ADDN_2X32(base_w, IVP_PACKLN_2X64W(IVP_MULN_2X32(lanes_3 + one_to_n, stride_w))),
+                IVP_ADDN_2X32(base_w, IVP_PACKLN_2X64W(IVP_MULN_2X32(lanes_4 + one_to_n, stride_w))),
+                IVP_ADDN_2X32(base_w, IVP_PACKLN_2X64W(IVP_MULN_2X32(lanes_5 + one_to_n, stride_w))),
+                IVP_ADDN_2X32(base_w, IVP_PACKLN_2X64W(IVP_MULN_2X32(lanes_6 + one_to_n, stride_w))),
+                IVP_ADDN_2X32(base_w, IVP_PACKLN_2X64W(IVP_MULN_2X32(lanes_7 + one_to_n, stride_w))),
+                IVP_ADDN_2X32(base_w, IVP_PACKLN_2X64W(IVP_MULN_2X32(lanes_8 + one_to_n, stride_w))));
 }
 
 template <typename ResultType, typename BaseType>
@@ -943,11 +969,27 @@ HALIDE_ALWAYS_INLINE int16x64_t halide_xtensa_interleave_i16(const int16x32_t& a
                                 );
 }
 
+HALIDE_ALWAYS_INLINE int16x128_t halide_xtensa_interleave_i16(const int16x64_t& a, const int16x64_t& b) {
+  return int16x128_t(int16x128_t::from_native_vector,
+                                IVP_SELNX16I(b.native_vector[0], a.native_vector[0], IVP_SELI_16B_INTERLEAVE_1_LO),
+                                IVP_SELNX16I(b.native_vector[0], a.native_vector[0], IVP_SELI_16B_INTERLEAVE_1_HI),
+                                IVP_SELNX16I(b.native_vector[1], a.native_vector[1], IVP_SELI_16B_INTERLEAVE_1_LO),
+                                IVP_SELNX16I(b.native_vector[1], a.native_vector[1], IVP_SELI_16B_INTERLEAVE_1_HI));
+}
+
 HALIDE_ALWAYS_INLINE uint16x64_t halide_xtensa_interleave_u16(const uint16x32_t& a, const uint16x32_t& b) {
   return uint16x64_t(uint16x64_t::from_native_vector,
                                 IVP_SELNX16UI(b, a, IVP_SELI_16B_INTERLEAVE_1_LO),
                                 IVP_SELNX16UI(b, a, IVP_SELI_16B_INTERLEAVE_1_HI)
                                 );
+}
+
+HALIDE_ALWAYS_INLINE uint16x128_t halide_xtensa_interleave_u16(const uint16x64_t& a, const uint16x64_t& b) {
+  return uint16x128_t(uint16x128_t::from_native_vector,
+                                IVP_SELNX16UI(b.native_vector[0], a.native_vector[0], IVP_SELI_16B_INTERLEAVE_1_LO),
+                                IVP_SELNX16UI(b.native_vector[0], a.native_vector[0], IVP_SELI_16B_INTERLEAVE_1_HI),
+                                IVP_SELNX16UI(b.native_vector[1], a.native_vector[1], IVP_SELI_16B_INTERLEAVE_1_LO),
+                                IVP_SELNX16UI(b.native_vector[1], a.native_vector[1], IVP_SELI_16B_INTERLEAVE_1_HI));
 }
 
 HALIDE_ALWAYS_INLINE uint16x128_t halide_xtensa_interleave_u16(const uint16x32_t& a, const uint16x32_t& b, const uint16x32_t& c, const uint16x32_t& d) {
@@ -1043,6 +1085,13 @@ HALIDE_ALWAYS_INLINE uint16x32_t halide_xtensa_deinterleave_even_u16(const uint1
 
 HALIDE_ALWAYS_INLINE uint16x32_t halide_xtensa_deinterleave_odd_u16(const uint16x64_t& a) {
   return  IVP_SELNX16UI(a.native_vector[1], a.native_vector[0], IVP_SELI_16B_EXTRACT_1_OF_2_OFF_1);
+}
+
+HALIDE_ALWAYS_INLINE uint16x64_t halide_xtensa_deinterleave_even_u16(const uint16x128_t& a) {
+  return uint16x64_t(
+      uint16x64_t::from_native_vector,
+      halide_xtensa_deinterleave_even_u16(uint16x64_t(uint16x64_t::from_native_vector, a.native_vector[0], a.native_vector[1])),
+      halide_xtensa_deinterleave_even_u16(uint16x64_t(uint16x64_t::from_native_vector, a.native_vector[2], a.native_vector[3])));
 }
 
 HALIDE_ALWAYS_INLINE int16x32_t halide_xtensa_slice_i16(const int16x64_t& a, int start) {
@@ -2441,7 +2490,7 @@ void CodeGen_Xtensa::visit(const Ramp *op) {
     } else {
         if (is_native_xtensa_vector<int32_t>(op->type)) {
             print_assignment(vector_type, "/* ramp */ int32x16_t(" + id_base + ") + IVP_PACKLN_2X64W(IVP_SEQN_2X32() * int32x16_t(" + id_stride + "))");
-        } else if ((op->type.lanes() == 32 || op->type.lanes() == 64) && op->type.is_int_or_uint() && op->type.bits() == 32) {
+        } else if ((op->type.lanes() == 32 || op->type.lanes() == 64 || op->type.lanes() == 128) && op->type.is_int_or_uint() && op->type.bits() == 32) {
             print_assignment(vector_type, "ramp<" + print_type(vector_type) + ">(" + id_base + ", " + id_stride + ")");
         } else {
             print_assignment(vector_type, print_type(vector_type) + "_ops::ramp(" + id_base + ", " + id_stride + ")");
@@ -3055,7 +3104,9 @@ void CodeGen_Xtensa::visit(const Shuffle *op) {
     }
 
     // Generate intrinsics for the interleave op.
-    if (op->is_interleave() && (is_native_vector_type(op->vectors[0].type()) || (op->vectors[0].type().is_bool() && op->vectors[0].type().lanes() == 64))) {
+    if (op->is_interleave() && (is_native_vector_type(op->vectors[0].type())
+              || is_double_native_vector_type(op->vectors[0].type())
+              || (op->vectors[0].type().is_bool() && op->vectors[0].type().lanes() == 64))) {
         string type_suffix = suffix_for_type(op->type);
 
         Expr call = Call::make(op->type, "halide_xtensa_interleave" + type_suffix,
