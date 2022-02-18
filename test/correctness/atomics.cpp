@@ -320,9 +320,14 @@ void test_predicated_hist(const Backend &backend) {
     hist(im(r)) = min(hist(im(r)) + cast<T>(1), cast<T>(100));  // cas loop
 
     RDom r2(0, img_size);
+    // This predicate means that the update definitions below can't actually be
+    // atomic, because the if isn't included in the atomic block.
     r2.where(hist(im(r2)) > cast<T>(0) && hist(im(r2)) < cast<T>(90));
-    hist(im(r2)) -= cast<T>(1);                                   // atomic add
-    hist(im(r2)) = min(hist(im(r2)) + cast<T>(1), cast<T>(100));  // cas loop
+    hist(im(r2)) -= cast<T>(1);
+    hist(im(r2)) = min(hist(im(r2)) + cast<T>(1), cast<T>(100));
+
+    hist.update(3).unscheduled();
+    hist.update(4).unscheduled();
 
     hist.compute_root();
     for (int update_id = 0; update_id < 3; update_id++) {
@@ -531,7 +536,7 @@ void test_nested_atomics(const Backend &backend) {
     Expr new_max = max(im(r), old_max);
     arg_max() = {new_index, new_max};
 
-    im.compute_inline().atomic();
+    im.compute_inline().atomic().update().atomic();
     arg_max.compute_root();
     switch (backend) {
     case Backend::CPU: {
