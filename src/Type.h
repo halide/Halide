@@ -353,7 +353,7 @@ public:
         return Type(code(), bits(), new_lanes, handle_type);
     }
 
-    /** Return Type with the same type code and number of lanes, but with least twice as many bits. */
+    /** Return Type with the same type code and number of lanes, but with at least twice as many bits. */
     Type widen() const {
         if (bits() == 1) {
             // Widening a 1-bit type should produce an 8-bit type.
