@@ -365,6 +365,7 @@ public:
 
     /** Return Type with the same type code and number of lanes, but with at most half as many bits. */
     Type narrow() const {
+        internal_assert(bits() != 1) << "Attempting to narrow a 1-bit type\n";
         if (bits() == 8) {
             // Narrowing an 8-bit type should produce a 1-bit type.
             return with_bits(1);
