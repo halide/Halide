@@ -28,9 +28,11 @@ int main() {
     nan_or_one.realize({false_result}, t);
 
     if (std::isnan(true_result(0, 0)) && false_result(0, 0) == 1.0f) {
-        puts("Success!");
+        printf("Success!\n");
+        return 0;
     } else {
         fprintf(stderr, "ERROR: T = %f ; TR = %f ; F = %f ; FR = %f\n",
                 true_buf(0, 0, 0), true_result(0, 0), false_buf(0, 0, 0), false_result(0, 0));
+        return 1;
     }
 }
