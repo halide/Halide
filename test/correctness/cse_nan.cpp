@@ -6,8 +6,7 @@ using namespace Halide;
 
 int main() {
     ImageParam xyz{Float(32), 3, "xyz"};
-    Target t = get_host_target();
-    t.set_feature(Target::StrictFloat);
+    Target t = get_jit_target_from_environment().with_feature(Target::StrictFloat);
 
     Var col{"col"}, row{"row"};
     Func nan_or_one{"nan_or_one"};
@@ -23,10 +22,10 @@ int main() {
     Buffer<float> false_result{1, 1};
 
     xyz.set(true_buf);
-    nan_or_one.realize({true_result});
+    nan_or_one.realize({true_result}, t);
 
     xyz.set(false_buf);
-    nan_or_one.realize({false_result});
+    nan_or_one.realize({false_result}, t);
 
     if (std::isnan(true_result(0, 0)) && false_result(0, 0) == 1.0f) {
         puts("Success!");
