@@ -118,6 +118,7 @@ int main(int argc, char **argv) {
         f1.compute_at(g, y);
         f2.compute_at(g, x);
         g.reorder(y, x).vectorize(y, 4);
+        g.update().unscheduled();
 
         g.infer_input_bounds({W, H});
 
