@@ -12,6 +12,12 @@
 using namespace Halide;
 using Halide::Derivative;
 
+struct ModelWeightBase {
+    virtual ~ModelWeightBase() = default;
+    virtual void backprop(const Derivative &d, const Expr &learning_rate, const Expr &timestep) = 0;
+    virtual void set_shape(int s0 = 0, int s1 = 0, int s2 = 0) = 0;
+};
+
 // A model weight is either just an input, or an input and an output
 // (the updated weights and the ADAM state) depending on whether we're
 // doing inference or training.
@@ -19,13 +25,13 @@ template<int D, bool training>
 struct ModelWeight;
 
 template<int D>
-struct ModelWeight<D, false> : public GeneratorInput<Buffer<float, D>> {
+struct ModelWeight<D, false> : public GeneratorInput<Buffer<float, D>>, public ModelWeightBase {
     explicit ModelWeight(const std::string &name)
         : GeneratorInput<Buffer<float, D>>(name) {
     }
-    void backprop(const Derivative &d, const Expr &learning_rate, const Expr &timestep) {
+    void backprop(const Derivative &d, const Expr &learning_rate, const Expr &timestep) override {
     }
-    void set_shape(int s0 = 0, int s1 = 0, int s2 = 0) {
+    void set_shape(int s0 = 0, int s1 = 0, int s2 = 0) override {
         if (s0) {
             this->dim(0).set_bounds(0, s0);
         }
@@ -39,13 +45,13 @@ struct ModelWeight<D, false> : public GeneratorInput<Buffer<float, D>> {
 };
 
 template<int D>
-struct ModelWeight<D, true> : public GeneratorInput<Buffer<float, D>> {
+struct ModelWeight<D, true> : public GeneratorInput<Buffer<float, D>>, public ModelWeightBase {
     GeneratorOutput<Buffer<float, D + 1>> grad;
 
     explicit ModelWeight(const std::string &name)
         : GeneratorInput<Buffer<float, D>>(name), grad("updated_" + name) {
     }
-    void backprop(const Derivative &d, const Expr &learning_rate, const Expr &timestep) {
+    void backprop(const Derivative &d, const Expr &learning_rate, const Expr &timestep) override {
         std::vector<Expr> args(this->dimensions() + 1);
         for (auto &e : args) {
             e = Var();
@@ -86,7 +92,7 @@ struct ModelWeight<D, true> : public GeneratorInput<Buffer<float, D>> {
         new_weight = current_weight - step;
     }
 
-    void set_shape(int s0 = 0, int s1 = 0, int s2 = 0) {
+    void set_shape(int s0 = 0, int s1 = 0, int s2 = 0) override {
         if (s0) {
             this->dim(0).set_bounds(0, s0);
             this->dim(0).set_estimate(0, s0);
@@ -450,12 +456,12 @@ public:
             // to the model weights.
             Derivative d_loss_d = propagate_adjoints(loss_output);
 
-            head1_filter.backprop(d_loss_d, learning_rate, timestep);
-            head1_bias.backprop(d_loss_d, learning_rate, timestep);
-            head2_filter.backprop(d_loss_d, learning_rate, timestep);
-            head2_bias.backprop(d_loss_d, learning_rate, timestep);
-            filter1.backprop(d_loss_d, learning_rate, timestep);
-            bias1.backprop(d_loss_d, learning_rate, timestep);
+            ModelWeightBase *weights[] = {&head1_filter, &head1_bias,
+                                          &head2_filter, &head2_bias,
+                                          &filter1, &bias1};
+            for (auto *w : weights) {
+                w->backprop(d_loss_d, learning_rate, timestep);
+            }
         }
 
         // All the model weight shapes are statically known, so we
