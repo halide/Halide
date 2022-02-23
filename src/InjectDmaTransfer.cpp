@@ -205,10 +205,9 @@ class InjectDmaTransferIntoProducer : public IRMutator {
                                      Variable::make(type_of<void *>(), maybe_load->name), value_base,
                                      v.extent, op->value.type().bytes()},
                                     Call::Intrinsic);
-        Expr wait_result = Call::make(Int(32), "halide_xtensa_wait_for_copy", {copy_call}, Call::Intrinsic);
-        Stmt wait_is_done = AssertStmt::make(wait_result == 0, -1);
+        Stmt call_result_assert = AssertStmt::make(copy_call > 0, -1);
 
-        return wait_is_done;
+        return call_result_assert;
     }
 
 public:
@@ -229,6 +228,11 @@ class InjectDmaTransfer : public IRMutator {
                 if (f.schedule().dma()) {
                     Stmt body = mutate(op->body);
                     body = InjectDmaTransferIntoProducer(op->name).mutate(body);
+                    // Add a wait in the end of the producer node for the case
+                    // when there any outstanding DMA transactions.
+                    Expr wait_result = Call::make(Int(32), "halide_xtensa_wait_for_copy", {0}, Call::Intrinsic);
+                    Stmt wait_is_done = AssertStmt::make(wait_result == 0, -1);
+                    body = Block::make(body, wait_is_done);
                     return ProducerConsumer::make_produce(op->name, body);
                 }
             }
