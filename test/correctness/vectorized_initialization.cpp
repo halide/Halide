@@ -19,7 +19,7 @@ int main(int argc, char **argv) {
     f(x) = x;
     f(r) = f(r - 1) + f(r + 1);
     f.compute_root().vectorize(x, 4);
-    f.update();
+    f.update().unscheduled();
 
     g(x) = f(x);
     Buffer<int> result = g.realize({4});
