@@ -755,8 +755,8 @@ Module build_module(AbstractGenerator &g, const std::string &function_name) {
 
     AutoSchedulerResults auto_schedule_results;
     const auto context = g.context();
-    if (context.auto_schedule) {
-        auto_schedule_results = pipeline.auto_schedule(context.target, context.machine_params);
+    if (context.get_auto_schedule()) {
+        auto_schedule_results = pipeline.auto_schedule(context.get_target(), context.get_machine_params());
     }
 
     std::vector<Argument> filter_arguments;
@@ -766,7 +766,7 @@ Module build_module(AbstractGenerator &g, const std::string &function_name) {
         }
     }
 
-    Module result = pipeline.compile_to_module(filter_arguments, function_name, context.target, linkage_type);
+    Module result = pipeline.compile_to_module(filter_arguments, function_name, context.get_target(), linkage_type);
     for (const auto &map_entry : g.get_external_code_map()) {
         result.append(map_entry.second);
     }
@@ -941,14 +941,14 @@ Module build_gradient_module(Halide::Internal::AbstractGenerator &g, const std::
 
     AutoSchedulerResults auto_schedule_results;
     const auto context = g.context();
-    if (context.auto_schedule) {
-        auto_schedule_results = grad_pipeline.auto_schedule(context.target, context.machine_params);
+    if (context.get_auto_schedule()) {
+        auto_schedule_results = grad_pipeline.auto_schedule(context.get_target(), context.get_machine_params());
     } else {
         user_warning << "Autoscheduling is not enabled in build_gradient_module(), so the resulting "
                         "gradient module will be unscheduled; this is very unlikely to be what you want.\n";
     }
 
-    Module result = grad_pipeline.compile_to_module(gradient_inputs, function_name, context.target, linkage_type);
+    Module result = grad_pipeline.compile_to_module(gradient_inputs, function_name, context.get_target(), linkage_type);
     user_assert(g.get_external_code_map().empty())
         << "Building a gradient-descent module for a Generator with ExternalCode is not supported.\n";
 
@@ -2325,7 +2325,7 @@ Realization StubOutputBufferBase::realize(std::vector<int32_t> sizes) {
 }
 
 Target StubOutputBufferBase::get_target() const {
-    return generator->context().target;
+    return generator->context().get_target();
 }
 
 RegisterGenerator::RegisterGenerator(const char *registered_name, GeneratorFactory generator_factory) {
