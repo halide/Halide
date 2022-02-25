@@ -647,7 +647,7 @@ void StubEmitter::emit() {
     for (const auto &out : out_info) {
         stream << get_indent() << out.getter << ",\n";
     }
-    stream << get_indent() << "generator->get_target_info().target\n";
+    stream << get_indent() << "generator->context().target\n";
     indent_level--;
     stream << get_indent() << "};\n";
     indent_level--;
@@ -754,9 +754,9 @@ Module build_module(AbstractGenerator &g, const std::string &function_name) {
     Pipeline pipeline = g.build_pipeline();
 
     AutoSchedulerResults auto_schedule_results;
-    const auto target_info = g.get_target_info();
-    if (target_info.auto_schedule) {
-        auto_schedule_results = pipeline.auto_schedule(target_info.target, target_info.machine_params);
+    const auto context = g.context();
+    if (context.auto_schedule) {
+        auto_schedule_results = pipeline.auto_schedule(context.target, context.machine_params);
     }
 
     std::vector<Argument> filter_arguments;
@@ -766,7 +766,7 @@ Module build_module(AbstractGenerator &g, const std::string &function_name) {
         }
     }
 
-    Module result = pipeline.compile_to_module(filter_arguments, function_name, target_info.target, linkage_type);
+    Module result = pipeline.compile_to_module(filter_arguments, function_name, context.target, linkage_type);
     for (const auto &map_entry : g.get_external_code_map()) {
         result.append(map_entry.second);
     }
@@ -940,15 +940,15 @@ Module build_gradient_module(Halide::Internal::AbstractGenerator &g, const std::
     Pipeline grad_pipeline = Pipeline(gradient_outputs);
 
     AutoSchedulerResults auto_schedule_results;
-    const auto target_info = g.get_target_info();
-    if (target_info.auto_schedule) {
-        auto_schedule_results = grad_pipeline.auto_schedule(target_info.target, target_info.machine_params);
+    const auto context = g.context();
+    if (context.auto_schedule) {
+        auto_schedule_results = grad_pipeline.auto_schedule(context.target, context.machine_params);
     } else {
         user_warning << "Autoscheduling is not enabled in build_gradient_module(), so the resulting "
                         "gradient module will be unscheduled; this is very unlikely to be what you want.\n";
     }
 
-    Module result = grad_pipeline.compile_to_module(gradient_inputs, function_name, target_info.target, linkage_type);
+    Module result = grad_pipeline.compile_to_module(gradient_inputs, function_name, context.target, linkage_type);
     user_assert(g.get_external_code_map().empty())
         << "Building a gradient-descent module for a Generator with ExternalCode is not supported.\n";
 
@@ -1826,14 +1826,6 @@ std::string GeneratorBase::get_name() {
     return generator_registered_name;
 }
 
-AbstractGenerator::TargetInfo GeneratorBase::get_target_info() {
-    return {
-        get_target(),
-        get_auto_schedule(),
-        get_machine_params(),
-    };
-}
-
 namespace {
     // Note that this deliberately ignores inputs/outputs with multiple array values
     // (ie, one name per input or output, regardless of array_size())
@@ -2333,7 +2325,7 @@ Realization StubOutputBufferBase::realize(std::vector<int32_t> sizes) {
 }
 
 Target StubOutputBufferBase::get_target() const {
-    return generator->get_target_info().target;
+    return generator->context().target;
 }
 
 RegisterGenerator::RegisterGenerator(const char *registered_name, GeneratorFactory generator_factory) {

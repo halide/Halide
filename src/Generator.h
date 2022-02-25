@@ -3353,8 +3353,6 @@ public:
         get_pipeline().trace_pipeline();
     }
 
-    GeneratorContext context() const;
-
 protected:
     GeneratorBase(size_t size, const void *introspection_helper);
     void set_generator_names(const std::string &registered_name, const std::string &stub_name);
@@ -3628,7 +3626,7 @@ private:
 public:
     // AbstractGenerator methods
     std::string get_name() override;
-    TargetInfo get_target_info() override;
+    GeneratorContext context() const override;
     std::vector<ArgInfo> get_input_arginfos() override;
     std::vector<ArgInfo> get_output_arginfos() override;
     std::vector<std::string> get_generatorparam_names() override;

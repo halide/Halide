@@ -31,7 +31,7 @@ int string_to_int(const std::string &s) {
 
 class AbstractGeneratorTest : public AbstractGenerator {
     // Boilerplate
-    const TargetInfo target_info_;
+    const GeneratorContext context_;
 
     // Constants (aka GeneratorParams)
     std::map<std::string, std::string> constants_ = {
@@ -50,17 +50,15 @@ class AbstractGeneratorTest : public AbstractGenerator {
 
 public:
     explicit AbstractGeneratorTest(const GeneratorContext &context)
-        : target_info_{context.get_target(),
-                       context.get_auto_schedule(),
-                       context.get_machine_params()} {
+        : context_(context) {
     }
 
     std::string get_name() override {
         return AbstractGeneratorTestName;
     }
 
-    TargetInfo get_target_info() override {
-        return target_info_;
+    GeneratorContext context() const override {
+        return context_;
     }
 
     std::vector<ArgInfo> get_input_arginfos() override {

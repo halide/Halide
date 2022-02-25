@@ -15,6 +15,9 @@
 #include "Type.h"
 
 namespace Halide {
+
+class GeneratorContext;
+
 namespace Internal {
 
 enum class IOKind { Scalar,
@@ -50,18 +53,6 @@ class AbstractGenerator {
 public:
     virtual ~AbstractGenerator() = default;
 
-    /** TargetInfo is a struct that contains the immutable properties of an AbstractGenerator instance.
-     * All instances will be created with specific values for these, and those will never
-     * change for a given instance.
-     *
-     * TODO: name is suboptimal. Is there a better one?
-     */
-    struct TargetInfo {
-        Target target;
-        bool auto_schedule;
-        MachineParams machine_params;
-    };
-
     /** ArgInfo is a struct to contain name-and-type information for the inputs and outputs to
      * the Pipeline that build_pipeline() will return.
      *
@@ -94,7 +85,7 @@ public:
      * CALL-AFTER: any
      * CALL-BEFORE: any
      */
-    virtual TargetInfo get_target_info() = 0;
+    virtual GeneratorContext context() const = 0;
 
     /** Return a list of the names for inputs, in the correct order.
      * All input and output names will be unique within a given Generator instance.
