@@ -7,6 +7,15 @@ void define_argument(py::module &m) {
     auto argument_class =
         py::class_<Argument>(m, "Argument")
             .def(py::init<>())
+            // TODO: add ArgumentEstimates here?
+            .def(py::init([](const std::string &name, Argument::Kind kind, const Type &type, int dimensions) -> Argument {
+                     return Argument(name, kind, type, dimensions, ArgumentEstimates{});
+                 }),
+                 py::arg("name"), py::arg("kind"), py::arg("type"), py::arg("dimensions"))
+            // .def(py::init([](const std::string &name, Argument::Kind kind, const Type &type, int dimensions, const ArgumentEstimates &argument_estimates) -> Argument {
+            //          return Argument(name, kind, type, dimensions, argument_estimates);
+            //      }),
+            //      py::arg("name"), py::arg("kind"), py::arg("type"), py::arg("dimensions"), py::arg("argument_estimates"))
             .def(py::init([](const OutputImageParam &im) -> Argument {
                      return im;
                  }),

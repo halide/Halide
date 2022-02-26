@@ -10,6 +10,7 @@ set(SOURCES
     PyExternFuncArgument.cpp
     PyFunc.cpp
     PyFuncRef.cpp
+    PyGenerator.cpp
     PyHalide.cpp
     PyImageParam.cpp
     PyInlineReductions.cpp
