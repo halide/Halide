@@ -334,11 +334,7 @@ private:
             // can just deinterleave the args.
 
             // Beware of intrinsics for which this is not true!
-            std::vector<Expr> args(op->args.size());
-            for (size_t i = 0; i < args.size(); i++) {
-                args[i] = mutate(op->args[i]);
-            }
-
+            auto args = mutate(op->args);
             return Call::make(t, op->name, args, op->call_type,
                               op->func, op->value_index, op->image, op->param);
         }
@@ -367,6 +363,21 @@ private:
             int idx = i * lane_stride + starting_lane;
             indices.push_back(op->indices[idx]);
         }
+
+        // If this is extracting a single lane, try to recursively deinterleave rather
+        // than leaving behind a shuffle.
+        if (indices.size() == 1) {
+            int index = indices.front();
+            for (const auto &i : op->vectors) {
+                if (index < i.type().lanes()) {
+                    ScopedValue<int> lane(starting_lane, index);
+                    return mutate(i);
+                }
+                index -= i.type().lanes();
+            }
+            internal_error << "extract_lane index out of bounds: " << Expr(op) << " " << index << "\n";
+        }
+
         return Shuffle::make(op->vectors, indices);
     }
 };
@@ -655,6 +666,16 @@ class Interleaver : public IRMutator {
 
         // Not enough stores collected.
         if (stores.size() != (size_t)expected_stores) {
+            return Stmt();
+        }
+
+        // Too many stores and lanes to represent in a single vector
+        // type.
+        int max_bits = sizeof(halide_type_t::lanes) * 8;
+        // mul_would_overflow is for signed types, but vector lanes
+        // are unsigned, so add a bit.
+        max_bits++;
+        if (mul_would_overflow(max_bits, stores.size(), lanes)) {
             return Stmt();
         }
 

@@ -275,11 +275,11 @@ std::string type_to_c_type(Type type, bool include_space, bool c_plus_plus) {
             if (!type.handle_type->namespaces.empty() ||
                 !type.handle_type->enclosing_types.empty()) {
                 oss << "::";
-                for (size_t i = 0; i < type.handle_type->namespaces.size(); i++) {
-                    oss << type.handle_type->namespaces[i] << "::";
+                for (const auto &ns : type.handle_type->namespaces) {
+                    oss << ns << "::";
                 }
-                for (size_t i = 0; i < type.handle_type->enclosing_types.size(); i++) {
-                    oss << type.handle_type->enclosing_types[i].name << "::";
+                for (const auto &enclosing_type : type.handle_type->enclosing_types) {
+                    oss << enclosing_type.name << "::";
                 }
             }
             oss << type.handle_type->inner_name.name;

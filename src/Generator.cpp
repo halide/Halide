@@ -1,5 +1,9 @@
+#include <atomic>
 #include <cmath>
+#include <condition_variable>
 #include <fstream>
+#include <memory>
+#include <thread>
 #include <unordered_map>
 #include <utility>
 
@@ -134,8 +138,8 @@ std::vector<Type> parse_halide_type_list(const std::string &types) {
 void ValueTracker::track_values(const std::string &name, const std::vector<Expr> &values) {
     std::vector<std::vector<Expr>> &history = values_history[name];
     if (history.empty()) {
-        for (size_t i = 0; i < values.size(); ++i) {
-            history.push_back({values[i]});
+        for (const auto &value : values) {
+            history.push_back({value});
         }
         return;
     }
@@ -579,8 +583,8 @@ void StubEmitter::emit() {
     stream << get_indent() << "generator_params.to_generator_params_map(),\n";
     stream << get_indent() << "{\n";
     indent_level++;
-    for (size_t i = 0; i < inputs.size(); ++i) {
-        stream << get_indent() << "Stub::to_stub_input_vector(inputs." << inputs[i]->name() << ")";
+    for (auto *input : inputs) {
+        stream << get_indent() << "Stub::to_stub_input_vector(inputs." << input->name() << ")";
         stream << ",\n";
     }
     indent_level--;
@@ -751,7 +755,7 @@ int generate_filter_main_inner(int argc, char **argv, std::ostream &error_output
     const char kUsage[] =
         "gengen\n"
         "  [-g GENERATOR_NAME] [-f FUNCTION_NAME] [-o OUTPUT_DIR] [-r RUNTIME_NAME] [-d 1|0]\n"
-        "  [-e EMIT_OPTIONS] [-n FILE_BASE_NAME] [-p PLUGIN_NAME] [-s AUTOSCHEDULER_NAME]\n"
+        "  [-e EMIT_OPTIONS] [-n FILE_BASE_NAME] [-p PLUGIN_NAME] [-s AUTOSCHEDULER_NAME] [-t TIMEOUT]\n"
         "       target=target-string[,target-string...] [generator_arg=value [...]]\n"
         "\n"
         " -d  Build a module that is suitable for using for gradient descent calculationn\n"
@@ -776,7 +780,9 @@ int generate_filter_main_inner(int argc, char **argv, std::ostream &error_output
         "     find one. Flags across all of the targets that do not affect runtime code\n"
         "     generation, such as `no_asserts` and `no_runtime`, are ignored.\n"
         "\n"
-        " -s  The name of an autoscheduler to set as the default.\n";
+        " -s  The name of an autoscheduler to set as the default.\n"
+        " -t  Timeout for the Generator to run, in seconds; mainly useful to ensure that bugs and/or degenerate"
+        "     cases don't stall build systems. Defaults to 900 (=15 minutes). Specify 0 to allow ~infinite time.\n";
 
     std::map<std::string, std::string> flags_info = {
         {"-d", "0"},
@@ -788,6 +794,7 @@ int generate_filter_main_inner(int argc, char **argv, std::ostream &error_output
         {"-p", ""},
         {"-r", ""},
         {"-s", ""},
+        {"-t", "900"},  // 15 minutes
     };
     GeneratorParamsMap generator_args;
 
@@ -985,6 +992,43 @@ int generate_filter_main_inner(int argc, char **argv, std::ostream &error_output
                                                               json_compiler_logger_factory :
                                                               no_compiler_logger_factory;
 
+    struct TimeoutMonitor {
+        std::atomic<bool> generator_finished = false;
+        std::thread thread;
+        std::condition_variable cond_var;
+        std::mutex mutex;
+
+        // Kill the timeout monitor as a destructor to ensure the thread
+        // gets joined in the event of an exception
+        ~TimeoutMonitor() {
+            generator_finished = true;
+            cond_var.notify_all();
+            thread.join();
+        }
+    } monitor;
+
+    const int timeout_in_seconds = std::stoi(flags_info["-t"]);
+    const auto timeout_time = std::chrono::steady_clock::now() + std::chrono::seconds(timeout_in_seconds);
+    monitor.thread = std::thread([timeout_time, timeout_in_seconds, &monitor]() {
+        std::unique_lock<std::mutex> lock(monitor.mutex);
+
+        if (timeout_in_seconds <= 0) {
+            // No watchdog timer, just let it run as long as it likes.
+            return;
+        }
+        while (!monitor.generator_finished) {
+            auto now = std::chrono::steady_clock::now();
+            if (now > timeout_time) {
+                fprintf(stderr, "Timed out waiting for Generator to complete (%d seconds)!\n", timeout_in_seconds);
+                fflush(stdout);
+                fflush(stderr);
+                exit(1);
+            } else {
+                monitor.cond_var.wait_for(lock, timeout_time - now);
+            }
+        }
+    });
+
     if (!runtime_name.empty()) {
         std::string base_path = compute_base_path(output_dir, runtime_name, "");
 
@@ -1161,10 +1205,10 @@ GeneratorParamInfo::GeneratorParamInfo(GeneratorBase *generator, const size_t si
         const std::string &n = gio->name();
         const std::string &gn = generator->generator_registered_name;
 
-        if (gio->kind() != IOKind::Scalar) {
-            owned_synthetic_params.push_back(GeneratorParam_Synthetic<Type>::make(generator, gn, n + ".type", *gio, SyntheticParamType::Type, gio->types_defined()));
-            filter_generator_params.push_back(owned_synthetic_params.back().get());
+        owned_synthetic_params.push_back(GeneratorParam_Synthetic<Type>::make(generator, gn, n + ".type", *gio, SyntheticParamType::Type, gio->types_defined()));
+        filter_generator_params.push_back(owned_synthetic_params.back().get());
 
+        if (gio->kind() != IOKind::Scalar) {
             owned_synthetic_params.push_back(GeneratorParam_Synthetic<int>::make(generator, gn, n + ".dim", *gio, SyntheticParamType::Dim, gio->dims_defined()));
             filter_generator_params.push_back(owned_synthetic_params.back().get());
         }
@@ -1277,7 +1321,7 @@ void GeneratorBase::init_from_context(const Halide::GeneratorContext &context) {
     Halide::GeneratorContext::init_from_context(context);
     internal_assert(param_info_ptr == nullptr);
     // pre-emptively build our param_info now
-    param_info_ptr.reset(new GeneratorParamInfo(this, size));
+    param_info_ptr = std::make_unique<GeneratorParamInfo>(this, size);
 }
 
 void GeneratorBase::set_generator_names(const std::string &registered_name, const std::string &stub_name) {
@@ -1542,8 +1586,11 @@ Module GeneratorBase::build_gradient_module(const std::string &function_name) {
     // First: the original inputs. Note that scalar inputs remain scalar,
     // rather being promoted into zero-dimensional buffers.
     for (const auto *input : pi.inputs()) {
-        // There can be multiple Funcs/Parameters per input if the input is an Array
-        internal_assert(input->parameters_.size() == input->funcs_.size());
+        // There can be multiple Funcs/Parameters per input if the
+        // input is an Array.
+        if (input->is_array()) {
+            internal_assert(input->parameters_.size() == input->funcs_.size());
+        }
         for (const auto &p : input->parameters_) {
             gradient_inputs.push_back(to_argument(p));
             debug(DBG) << "    gradient copied input is: " << gradient_inputs.back().name << "\n";

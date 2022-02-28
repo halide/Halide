@@ -125,16 +125,15 @@ void IRVisitor::visit(const Broadcast *op) {
 }
 
 void IRVisitor::visit(const Call *op) {
-    for (size_t i = 0; i < op->args.size(); i++) {
-        op->args[i].accept(this);
+    for (const auto &arg : op->args) {
+        arg.accept(this);
     }
 
     // Consider extern call args
     if (op->func.defined()) {
         Function f(op->func);
         if (op->call_type == Call::Halide && f.has_extern_definition()) {
-            for (size_t i = 0; i < f.extern_arguments().size(); i++) {
-                ExternFuncArgument arg = f.extern_arguments()[i];
+            for (const auto &arg : f.extern_arguments()) {
                 if (arg.is_expr()) {
                     arg.expr.accept(this);
                 }
@@ -181,17 +180,18 @@ void IRVisitor::visit(const Store *op) {
 }
 
 void IRVisitor::visit(const Provide *op) {
-    for (size_t i = 0; i < op->values.size(); i++) {
-        op->values[i].accept(this);
+    op->predicate.accept(this);
+    for (const auto &value : op->values) {
+        value.accept(this);
     }
-    for (size_t i = 0; i < op->args.size(); i++) {
-        op->args[i].accept(this);
+    for (const auto &arg : op->args) {
+        arg.accept(this);
     }
 }
 
 void IRVisitor::visit(const Allocate *op) {
-    for (size_t i = 0; i < op->extents.size(); i++) {
-        op->extents[i].accept(this);
+    for (const auto &extent : op->extents) {
+        extent.accept(this);
     }
     op->condition.accept(this);
     if (op->new_expr.defined()) {
@@ -204,18 +204,18 @@ void IRVisitor::visit(const Free *op) {
 }
 
 void IRVisitor::visit(const Realize *op) {
-    for (size_t i = 0; i < op->bounds.size(); i++) {
-        op->bounds[i].min.accept(this);
-        op->bounds[i].extent.accept(this);
+    for (const auto &bound : op->bounds) {
+        bound.min.accept(this);
+        bound.extent.accept(this);
     }
     op->condition.accept(this);
     op->body.accept(this);
 }
 
 void IRVisitor::visit(const Prefetch *op) {
-    for (size_t i = 0; i < op->bounds.size(); i++) {
-        op->bounds[i].min.accept(this);
-        op->bounds[i].extent.accept(this);
+    for (const auto &bound : op->bounds) {
+        bound.min.accept(this);
+        bound.extent.accept(this);
     }
     op->condition.accept(this);
     op->body.accept(this);
@@ -396,8 +396,8 @@ void IRGraphVisitor::visit(const Broadcast *op) {
 }
 
 void IRGraphVisitor::visit(const Call *op) {
-    for (size_t i = 0; i < op->args.size(); i++) {
-        include(op->args[i]);
+    for (const auto &arg : op->args) {
+        include(arg);
     }
 }
 
@@ -439,17 +439,17 @@ void IRGraphVisitor::visit(const Store *op) {
 }
 
 void IRGraphVisitor::visit(const Provide *op) {
-    for (size_t i = 0; i < op->values.size(); i++) {
-        include(op->values[i]);
+    for (const auto &value : op->values) {
+        include(value);
     }
-    for (size_t i = 0; i < op->args.size(); i++) {
-        include(op->args[i]);
+    for (const auto &arg : op->args) {
+        include(arg);
     }
 }
 
 void IRGraphVisitor::visit(const Allocate *op) {
-    for (size_t i = 0; i < op->extents.size(); i++) {
-        include(op->extents[i]);
+    for (const auto &extent : op->extents) {
+        include(extent);
     }
     include(op->condition);
     if (op->new_expr.defined()) {
@@ -462,18 +462,18 @@ void IRGraphVisitor::visit(const Free *op) {
 }
 
 void IRGraphVisitor::visit(const Realize *op) {
-    for (size_t i = 0; i < op->bounds.size(); i++) {
-        include(op->bounds[i].min);
-        include(op->bounds[i].extent);
+    for (const auto &bound : op->bounds) {
+        include(bound.min);
+        include(bound.extent);
     }
     include(op->condition);
     include(op->body);
 }
 
 void IRGraphVisitor::visit(const Prefetch *op) {
-    for (size_t i = 0; i < op->bounds.size(); i++) {
-        include(op->bounds[i].min);
-        include(op->bounds[i].extent);
+    for (const auto &bound : op->bounds) {
+        include(bound.min);
+        include(bound.extent);
     }
     include(op->condition);
     include(op->body);

@@ -107,6 +107,9 @@ inline Expr make_const(Type t, float16_t val) {
 /** Construct a unique signed_integer_overflow Expr */
 Expr make_signed_integer_overflow(Type type);
 
+/** Check if an expression is a signed_integer_overflow */
+bool is_signed_integer_overflow(const Expr &expr);
+
 /** Check if a constant value can be correctly represented as the given type. */
 void check_representable(Type t, int64_t val);
 
@@ -307,15 +310,17 @@ Expr remove_likelies(const Expr &e);
  * all calls to likely() and likely_if_innermost() removed. */
 Stmt remove_likelies(const Stmt &s);
 
+/** Return an Expr that is identical to the input Expr, but with
+ * all calls to promise_clamped() and unsafe_promise_clamped() removed. */
+Expr remove_promises(const Expr &e);
+
+/** Return a Stmt that is identical to the input Stmt, but with
+ * all calls to promise_clamped() and unsafe_promise_clamped() removed. */
+Stmt remove_promises(const Stmt &s);
+
 /** If the expression is a tag helper call, remove it and return
  * the tagged expression. If not, returns the expression. */
 Expr unwrap_tags(const Expr &e);
-
-/** Expressions tagged with this intrinsic are suggestions that
- * vectorization of loops with guard ifs should be implemented with
- * non-faulting predicated loads and stores, instead of scalarizing
- * an if statement. */
-Expr predicate(Expr e);
 
 // Secondary args to print can be Exprs or const char *
 inline HALIDE_NO_USER_CODE_INLINE void collect_print_args(std::vector<Expr> &args) {
@@ -345,15 +350,19 @@ Expr widening_mul(Expr a, Expr b);
 Expr widening_sub(Expr a, Expr b);
 /** Compute widen(a) << b. */
 Expr widening_shift_left(Expr a, Expr b);
+Expr widening_shift_left(Expr a, int b);
 /** Compute widen(a) >> b. */
 Expr widening_shift_right(Expr a, Expr b);
+Expr widening_shift_right(Expr a, int b);
 
 /** Compute saturating_add(a, (1 >> min(b, 0)) / 2) << b. When b is positive
  * indicating a left shift, the rounding term is zero. */
 Expr rounding_shift_left(Expr a, Expr b);
+Expr rounding_shift_left(Expr a, int b);
 /** Compute saturating_add(a, (1 << max(b, 0)) / 2) >> b. When b is negative
  * indicating a left shift, the rounding term is zero. */
 Expr rounding_shift_right(Expr a, Expr b);
+Expr rounding_shift_right(Expr a, int b);
 
 /** Compute saturating_narrow(widen(a) + widen(b)) */
 Expr saturating_add(Expr a, Expr b);
@@ -368,6 +377,13 @@ Expr rounding_halving_add(Expr a, Expr b);
 Expr halving_sub(Expr a, Expr b);
 /** Compute narrow((widen(a) - widen(b) + 1) / 2) */
 Expr rounding_halving_sub(Expr a, Expr b);
+
+/** Compute saturating_narrow(shift_right(widening_mul(a, b), q)) */
+Expr mul_shift_right(Expr a, Expr b, Expr q);
+Expr mul_shift_right(Expr a, Expr b, int q);
+/** Compute saturating_narrow(rounding_shift_right(widening_mul(a, b), q)) */
+Expr rounding_mul_shift_right(Expr a, Expr b, Expr q);
+Expr rounding_mul_shift_right(Expr a, Expr b, int q);
 
 }  // namespace Internal
 
@@ -1332,6 +1348,21 @@ inline Expr undef() {
     return undef(type_of<T>());
 }
 
+namespace Internal {
+
+/** Return an expression that should never be evaluated. Expressions
+ * that depend on unreachabale values are also unreachable, and
+ * statements that execute unreachable expressions are also considered
+ * unreachable. */
+Expr unreachable(Type t = Int(32));
+
+template<typename T>
+inline Expr unreachable() {
+    return unreachable(type_of<T>());
+}
+
+}  // namespace Internal
+
 /** Control the values used in the memoization cache key for memoize.
  * Normally parameters and other external dependencies are
  * automatically inferred and added to the cache key. The memoize_tag
@@ -1439,6 +1470,16 @@ namespace Internal {
  * context-dependent, because 'value' might be statically bounded at
  * some point in the IR (e.g. due to a containing if statement), but
  * not elsewhere.
+ *
+ * This intrinsic always evaluates to its first argument. If this value is
+ * used by a side-effecting operation and it is outside the range specified
+ * by its second and third arguments, behavior is undefined. The compiler can
+ * therefore assume that the value is within the range given and optimize
+ * accordingly. Note that this permits promise_clamped to evaluate to
+ * something outside of the range, provided that this value is not used.
+ *
+ * Note that this produces an intrinsic that is marked as 'pure' and thus is
+ * allowed to be hoisted, etc.; thus, extra care must be taken with its use.
  **/
 Expr promise_clamped(const Expr &value, const Expr &min, const Expr &max);
 }  // namespace Internal

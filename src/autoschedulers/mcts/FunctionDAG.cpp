@@ -550,10 +550,7 @@ void FunctionDAG::Edge::expand_footprint(const Span *consumer_loop, Span *produc
 }
 
 FunctionDAG::FunctionDAG(const vector<Function> &outputs, const MachineParams &params, const Target &target) {
-    map<string, Function> env;
-    for (const Function &o : outputs) {
-        populate_environment(o, env);
-    }
+    map<string, Function> env = build_environment(outputs);
 
     // A mutator to apply parameter estimates to the expressions
     // we encounter while constructing the graph.

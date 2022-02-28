@@ -1,3 +1,4 @@
+#include "Deinterleave.h"
 #include "Simplify_Internal.h"
 
 namespace Halide {
@@ -6,17 +7,20 @@ namespace Internal {
 using std::vector;
 
 Expr Simplify::visit(const Shuffle *op, ExprInfo *bounds) {
-    if (op->is_extract_element() &&
-        (op->vectors[0].as<Ramp>() ||
-         op->vectors[0].as<Broadcast>())) {
-        // Extracting a single lane of a ramp or broadcast
-        if (const Ramp *r = op->vectors[0].as<Ramp>()) {
-            return mutate(r->base + op->indices[0] * r->stride, bounds);
-        } else if (const Broadcast *b = op->vectors[0].as<Broadcast>()) {
-            return mutate(b->value, bounds);
-        } else {
-            internal_error << "Unreachable";
-            return Expr();
+    if (op->is_extract_element()) {
+        int index = op->indices[0];
+        internal_assert(index >= 0);
+        for (const Expr &vector : op->vectors) {
+            if (index < vector.type().lanes()) {
+                if (vector.as<Variable>()) {
+                    // If we try to extract_lane of a variable, we'll just get
+                    // the same shuffle back.
+                    break;
+                } else {
+                    return extract_lane(mutate(vector, bounds), index);
+                }
+            }
+            index -= vector.type().lanes();
         }
     }
 

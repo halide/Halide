@@ -267,25 +267,24 @@ Stmt add_image_checks_inner(Stmt s,
         if (param.defined()) {
             // Find the extern users.
             vector<string> extern_users;
-            for (size_t i = 0; i < order.size(); i++) {
-                Function f = env.find(order[i])->second;
+            for (const auto &func_name : order) {
+                Function f = env.find(func_name)->second;
                 if (f.has_extern_definition() &&
                     !f.extern_definition_proxy_expr().defined()) {
                     const vector<ExternFuncArgument> &args = f.extern_arguments();
-                    for (size_t j = 0; j < args.size(); j++) {
-                        if ((args[j].image_param.defined() &&
-                             args[j].image_param.name() == param.name()) ||
-                            (args[j].buffer.defined() &&
-                             args[j].buffer.name() == param.name())) {
-                            extern_users.push_back(order[i]);
+                    for (const auto &arg : args) {
+                        if ((arg.image_param.defined() &&
+                             arg.image_param.name() == param.name()) ||
+                            (arg.buffer.defined() &&
+                             arg.buffer.name() == param.name())) {
+                            extern_users.push_back(func_name);
                         }
                     }
                 }
             }
 
             // Expand the box by the result of the bounds query from each.
-            for (size_t i = 0; i < extern_users.size(); i++) {
-                const string &extern_user = extern_users[i];
+            for (auto &extern_user : extern_users) {
                 Box query_box;
                 Expr query_buf = Variable::make(type_of<struct halide_buffer_t *>(),
                                                 param.name() + ".bounds_query." + extern_user);
@@ -351,7 +350,15 @@ Stmt add_image_checks_inner(Stmt s,
         }
 
         // Check that the region passed in (after applying constraints) is within the region used
-        debug(3) << "In image " << name << " region touched is:\n";
+        if (debug::debug_level() >= 3) {
+            debug(3) << "In image " << name << " region touched is:\n";
+            for (int j = 0; j < dimensions; j++) {
+                debug(3) << "  " << j << ": " << (touched.empty() ? Expr() : touched[j].min)
+                         << " .. "
+                         << (touched.empty() ? Expr() : touched[j].max)
+                         << "\n";
+            }
+        }
 
         for (int j = 0; j < dimensions; j++) {
             string dim = std::to_string(j);
@@ -584,18 +591,22 @@ Stmt add_image_checks_inner(Stmt s,
         }
 
         // Assert all the conditions, and set the new values
-        for (size_t i = 0; i < constraints.size(); i++) {
-            Expr var = constraints[i].first;
+        for (const auto &constraint : constraints) {
+            Expr var = constraint.first;
             const string &name = var.as<Variable>()->name;
             Expr constrained_var = Variable::make(Int(32), name + ".constrained");
 
             std::ostringstream ss;
-            ss << constraints[i].second;
+            ss << constraint.second;
             string constrained_var_str = ss.str();
 
-            replace_with_constrained[name] = constrained_var;
+            lets_constrained.emplace_back(name + ".constrained", constraint.second);
 
-            lets_constrained.emplace_back(name + ".constrained", constraints[i].second);
+            // Substituting in complex expressions is not typically a good idea
+            if (constraint.second.as<Variable>() ||
+                is_const(constraint.second)) {
+                replace_with_constrained[name] = constrained_var;
+            }
 
             Expr error = 0;
             if (!no_asserts) {

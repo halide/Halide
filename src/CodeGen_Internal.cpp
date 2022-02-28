@@ -7,6 +7,7 @@
 #include "LLVM_Headers.h"
 #include "Simplify.h"
 #include "Simplify_Internal.h"
+#include "runtime/constants.h"
 
 namespace Halide {
 namespace Internal {
@@ -249,10 +250,8 @@ bool function_takes_user_context(const std::string &name) {
         "_halide_buffer_retire_crop_after_extern_stage",
         "_halide_buffer_retire_crops_after_extern_stage",
     };
-    const int num_funcs = sizeof(user_context_runtime_funcs) /
-                          sizeof(user_context_runtime_funcs[0]);
-    for (int i = 0; i < num_funcs; ++i) {
-        if (name == user_context_runtime_funcs[i]) {
+    for (const char *user_context_runtime_func : user_context_runtime_funcs) {
+        if (name == user_context_runtime_func) {
             return true;
         }
     }
@@ -262,7 +261,7 @@ bool function_takes_user_context(const std::string &name) {
 
 bool can_allocation_fit_on_stack(int64_t size) {
     user_assert(size > 0) << "Allocation size should be a positive number\n";
-    return (size <= 1024 * 16);
+    return (size <= (int64_t)Runtime::Internal::Constants::maximum_stack_allocation_bytes);
 }
 
 Expr lower_int_uint_div(const Expr &a, const Expr &b) {
@@ -285,7 +284,8 @@ Expr lower_int_uint_div(const Expr &a, const Expr &b) {
                *const_int_divisor > 1 &&
                ((t.bits() > 8 && *const_int_divisor < 256) || *const_int_divisor < 128)) {
 
-        int64_t multiplier, shift;
+        int64_t multiplier;
+        int shift;
         if (t.bits() == 32) {
             multiplier = IntegerDivision::table_s32[*const_int_divisor][2];
             shift = IntegerDivision::table_s32[*const_int_divisor][3];
@@ -310,8 +310,7 @@ Expr lower_int_uint_div(const Expr &a, const Expr &b) {
         // Multiply and keep the high half of the
         // result, and then apply the shift.
         Expr mult = make_const(num.type(), multiplier);
-        num = Call::make(num.type(), Call::mulhi_shr, {num, mult, make_const(UInt(num.type().bits()), shift)},
-                         Call::PureIntrinsic);
+        num = mul_shift_right(num, mult, shift + num.type().bits());
 
         // Maybe flip the bits back again.
         num = cast(a.type(), num ^ sign);
@@ -343,18 +342,29 @@ Expr lower_int_uint_div(const Expr &a, const Expr &b) {
 
         // Widen, multiply, narrow
         Expr mult = make_const(num.type(), multiplier);
-        Expr val = Call::make(num.type(), Call::mulhi_shr,
-                              {num, mult, make_const(UInt(num.type().bits()), method == 1 ? (int)shift : 0)},
-                              Call::PureIntrinsic);
+        Expr val = mul_shift_right(num, mult, (method == 1 ? shift : 0) + num.type().bits());
 
         if (method == 2) {
             // Average with original numerator.
             val = Call::make(val.type(), Call::sorted_avg, {val, num}, Call::PureIntrinsic);
+        } else if (method == 3) {
+            // Average with original numerator, rounding up. This
+            // method exists because this is cheaper than averaging
+            // with the original numerator on x86, where there's an
+            // average-round-up instruction (pavg), but no
+            // average-round-down instruction. Using method 2,
+            // sorted_avg lowers to three instructions on x86.
+            //
+            // On ARM and other architectures with both
+            // average-round-up and average-round-down instructions
+            // there's no reason to prefer either method 2 or method 3
+            // over the other.
+            val = rounding_halving_add(val, num);
+        }
 
-            // Do the final shift
-            if (shift) {
-                val = val >> make_const(UInt(t.bits()), shift);
-            }
+        // Do the final shift
+        if (shift && (method == 2 || method == 3)) {
+            val = val >> make_const(UInt(t.bits()), shift);
         }
 
         return val;
@@ -466,7 +476,7 @@ Expr lower_euclidean_div(Expr a, Expr b) {
         if (!can_prove(!b_is_const_zero)) {
             b = b | cast(a.type(), b_is_const_zero);
         }
-        q = Call::make(a.type(), Call::div_round_to_zero, {a, b}, Call::Intrinsic);
+        q = Call::make(a.type(), Call::div_round_to_zero, {a, b}, Call::PureIntrinsic);
         q = select(b_is_const_zero, 0, q);
     } else {
         internal_assert(a.type().is_int());
@@ -508,7 +518,7 @@ Expr lower_euclidean_div(Expr a, Expr b) {
         // If a is negative, add one to it to get the rounding to work out.
         a -= a_neg;
         // Do the C-style division
-        q = Call::make(a.type(), Call::div_round_to_zero, {a, b}, Call::Intrinsic);
+        q = Call::make(a.type(), Call::div_round_to_zero, {a, b}, Call::PureIntrinsic);
         // If a is negative, either add or subtract one, depending on
         // the sign of b, to fix the rounding. This can't overflow,
         // because we move the result towards zero in either case (we
@@ -532,7 +542,7 @@ Expr lower_euclidean_mod(Expr a, Expr b) {
         if (!can_prove(!b_is_const_zero)) {
             b = b | cast(a.type(), b_is_const_zero);
         }
-        q = Call::make(a.type(), Call::mod_round_to_zero, {a, b}, Call::Intrinsic);
+        q = Call::make(a.type(), Call::mod_round_to_zero, {a, b}, Call::PureIntrinsic);
         q = select(b_is_const_zero, make_zero(a.type()), q);
     } else {
         internal_assert(a.type().is_int());
@@ -562,7 +572,7 @@ Expr lower_euclidean_mod(Expr a, Expr b) {
         // If a is negative, add one to get the rounding to work out
         a -= a_neg;
         // Do the mod, avoiding taking mod by zero
-        q = Call::make(a.type(), Call::mod_round_to_zero, {a, (b | b_zero)}, Call::Intrinsic);
+        q = Call::make(a.type(), Call::mod_round_to_zero, {a, (b | b_zero)}, Call::PureIntrinsic);
         // If a is negative, we either need to add b - 1 to the
         // result, or -b - 1, depending on the sign of b.
         q += (a_neg & ((b ^ b_neg) + ~b_neg));
@@ -678,7 +688,11 @@ void get_target_options(const llvm::Module &module, llvm::TargetOptions &options
     options.HonorSignDependentRoundingFPMathOption = !per_instruction_fast_math_flags;
     options.NoZerosInBSS = false;
     options.GuaranteedTailCallOpt = false;
+#if LLVM_VERSION >= 130
+    // nothing
+#else
     options.StackAlignmentOverride = 0;
+#endif
     options.FunctionSections = true;
     options.UseInitArray = true;
     options.FloatABIType =

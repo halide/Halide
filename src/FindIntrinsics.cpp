@@ -1,4 +1,5 @@
 #include "FindIntrinsics.h"
+#include "CSE.h"
 #include "CodeGen_Internal.h"
 #include "ConciseCasts.h"
 #include "IRMatch.h"
@@ -43,18 +44,6 @@ Expr strip_widening_cast(const Expr &x) {
 Expr saturating_narrow(const Expr &a) {
     Type narrow = a.type().narrow();
     return saturating_cast(narrow, a);
-}
-
-Expr make_shift_right(const Expr &a, int const_b) {
-    internal_assert(const_b > 0);
-    Expr b = make_const(a.type().with_code(halide_type_uint), const_b);
-    return Call::make(a.type(), Call::shift_right, {a, b}, Call::PureIntrinsic);
-}
-
-Expr make_rounding_shift_right(const Expr &a, int const_b) {
-    internal_assert(const_b > 0);
-    Expr b = make_const(a.type().with_code(halide_type_uint), const_b);
-    return Call::make(a.type(), Call::rounding_shift_right, {a, b}, Call::PureIntrinsic);
 }
 
 // Returns true iff t is an integral type where overflow is undefined
@@ -183,6 +172,7 @@ protected:
 
     IRMatcher::Wild<0> x;
     IRMatcher::Wild<1> y;
+    IRMatcher::Wild<2> z;
     IRMatcher::WildConst<0> c0;
 
     Expr visit(const Add *op) override {
@@ -387,6 +377,7 @@ protected:
 
             Type op_type_wide = op->type.widen();
             Type signed_type_wide = op_type_wide.with_code(halide_type_int);
+            Type unsigned_type = op->type.with_code(halide_type_uint);
 
             int bits = op->type.bits();
             auto is_x_same_int = op->type.is_int() && is_int(x, bits);
@@ -408,6 +399,19 @@ protected:
                 rewrite(rounding_shift_right(widening_add(x, y), 1), rounding_halving_add(x, y), is_x_same_int_or_uint) ||
                 rewrite(rounding_shift_right(widening_sub(x, y), 1), rounding_halving_sub(x, y), is_x_same_int_or_uint) ||
 
+                rewrite(max(min(shift_right(widening_mul(x, y), z), upper), lower), mul_shift_right(x, y, cast(unsigned_type, z)), is_x_same_int_or_uint && is_uint(z)) ||
+                rewrite(max(min(rounding_shift_right(widening_mul(x, y), z), upper), lower), rounding_mul_shift_right(x, y, cast(unsigned_type, z)), is_x_same_int_or_uint && is_uint(z)) ||
+                rewrite(min(shift_right(widening_mul(x, y), z), upper), mul_shift_right(x, y, cast(unsigned_type, z)), is_x_same_uint && is_uint(z)) ||
+                rewrite(min(rounding_shift_right(widening_mul(x, y), z), upper), rounding_mul_shift_right(x, y, cast(unsigned_type, z)), is_x_same_uint && is_uint(z)) ||
+                // We don't need saturation for the full upper half of a multiply.
+                // For signed integers, this is almost true, except for when x and y
+                // are both the most negative value. For these, we only need saturation
+                // at the upper bound.
+                rewrite(min(shift_right(widening_mul(x, y), c0), upper), mul_shift_right(x, y, cast(unsigned_type, c0)), is_x_same_int && c0 >= bits - 1) ||
+                rewrite(min(rounding_shift_right(widening_mul(x, y), c0), upper), rounding_mul_shift_right(x, y, cast(unsigned_type, c0)), is_x_same_int && c0 >= bits - 1) ||
+                rewrite(shift_right(widening_mul(x, y), c0), mul_shift_right(x, y, cast(unsigned_type, c0)), is_x_same_int_or_uint && c0 >= bits) ||
+                rewrite(rounding_shift_right(widening_mul(x, y), c0), rounding_mul_shift_right(x, y, cast(unsigned_type, c0)), is_x_same_int_or_uint && c0 >= bits) ||
+
                 // We can ignore the sign of the widening subtract for halving subtracts.
                 rewrite(shift_right(cast(op_type_wide, widening_sub(x, y)), 1), halving_sub(x, y), is_x_same_int_or_uint) ||
                 rewrite(rounding_shift_right(cast(op_type_wide, widening_sub(x, y)), 1), rounding_halving_sub(x, y), is_x_same_int_or_uint) ||
@@ -425,7 +429,7 @@ protected:
             auto is_x_wide_int_or_uint = is_x_wide_int || is_x_wide_uint;
             // We can't do everything we want here with rewrite rules alone. So, we rewrite them
             // to rounding_shifts with the widening still in place, and narrow it after the rewrite
-            // scuceeds.
+            // succeeds.
             // clang-format off
             if (rewrite(max(min(rounding_shift_right(x, y), upper), lower), rounding_shift_right(x, y), is_x_wide_int_or_uint) ||
                 rewrite(rounding_shift_right(x, y), rounding_shift_right(x, y), is_x_wide_int_or_uint) ||
@@ -566,14 +570,165 @@ protected:
     }
 };
 
+// Substitute in let values than have an output vector
+// type wider than all the types of other variables
+// referenced. This can't cause combinatorial explosion,
+// because each let in a chain has a wider value than the
+// ones it refers to.
+class SubstituteInWideningLets : public IRMutator {
+    using IRMutator::visit;
+
+    bool widens(const Expr &e) {
+        class AllInputsNarrowerThan : public IRVisitor {
+            int bits;
+
+            using IRVisitor::visit;
+
+            void visit(const Variable *op) override {
+                result &= op->type.bits() < bits;
+            }
+
+            void visit(const Load *op) override {
+                result &= op->type.bits() < bits;
+            }
+
+            void visit(const Call *op) override {
+                if (op->is_pure() && op->is_intrinsic()) {
+                    IRVisitor::visit(op);
+                } else {
+                    result &= op->type.bits() < bits;
+                }
+            }
+
+        public:
+            AllInputsNarrowerThan(Type t)
+                : bits(t.bits()) {
+            }
+            bool result = true;
+        } widens(e.type());
+        e.accept(&widens);
+        return widens.result;
+    }
+
+    Scope<Expr> replacements;
+    Expr visit(const Variable *op) override {
+        if (replacements.contains(op->name)) {
+            return replacements.get(op->name);
+        } else {
+            return op;
+        }
+    }
+
+    template<typename T>
+    auto visit_let(const T *op) -> decltype(op->body) {
+        struct Frame {
+            std::string name;
+            Expr new_value;
+            ScopedBinding<Expr> bind;
+            Frame(const std::string &name, const Expr &new_value, ScopedBinding<Expr> &&bind)
+                : name(name), new_value(new_value), bind(std::move(bind)) {
+            }
+        };
+        std::vector<Frame> frames;
+        decltype(op->body) body;
+        do {
+            body = op->body;
+            Expr value = op->value;
+            bool should_replace = find_intrinsics_for_type(value.type()) && widens(value);
+
+            // We can only substitute in pure stuff. Isolate all
+            // impure subexpressions and leave them behind here as
+            // lets.
+            class LeaveBehindSubexpressions : public IRMutator {
+                using IRMutator::visit;
+
+                Expr visit(const Call *op) override {
+                    if (!op->is_pure() || !op->is_intrinsic()) {
+                        // Only enter pure intrinsics (e.g. existing uses of widening_add)
+                        std::string name = unique_name('t');
+                        frames.emplace_back(name, op, ScopedBinding<Expr>{});
+                        return Variable::make(op->type, name);
+                    } else {
+                        return IRMutator::visit(op);
+                    }
+                }
+
+                Expr visit(const Load *op) override {
+                    // Never enter loads. They can be impure and none
+                    // of our patterns match them.
+                    std::string name = unique_name('t');
+                    frames.emplace_back(name, op, ScopedBinding<Expr>{});
+                    return Variable::make(op->type, name);
+                }
+
+                std::vector<Frame> &frames;
+
+            public:
+                LeaveBehindSubexpressions(std::vector<Frame> &frames)
+                    : frames(frames) {
+                }
+            } extractor(frames);
+
+            if (should_replace) {
+                size_t start_of_new_lets = frames.size();
+                value = extractor.mutate(value);
+                // Mutate any subexpressions the extractor decided to
+                // leave behind, in case they in turn depend on lets
+                // we've decided to substitute in.
+                for (size_t i = start_of_new_lets; i < frames.size(); i++) {
+                    frames[i].new_value = mutate(frames[i].new_value);
+                }
+
+                // Check it wasn't lifted entirely
+                should_replace = !value.as<Variable>();
+            }
+
+            // TODO: If it's an int32/64 vector, it may be
+            // implicitly widening because overflow is UB. Hard to
+            // see how to handle this without worrying about
+            // combinatorial explosion of substitutions.
+            value = mutate(value);
+            ScopedBinding<Expr> bind(should_replace, replacements, op->name, value);
+            frames.emplace_back(op->name, value, std::move(bind));
+            op = body.template as<T>();
+        } while (op);
+
+        body = mutate(body);
+
+        while (!frames.empty()) {
+            if (!frames.back().bind.bound()) {
+                body = T::make(frames.back().name, frames.back().new_value, body);
+            }
+            frames.pop_back();
+        }
+
+        return body;
+    }
+
+    Expr visit(const Let *op) override {
+        return visit_let(op);
+    }
+
+    Stmt visit(const LetStmt *op) override {
+        return visit_let(op);
+    }
+};
+
 }  // namespace
 
 Stmt find_intrinsics(const Stmt &s) {
-    return FindIntrinsics().mutate(s);
+    Stmt stmt = SubstituteInWideningLets().mutate(s);
+    stmt = FindIntrinsics().mutate(stmt);
+    // In case we want to hoist widening ops back out
+    stmt = common_subexpression_elimination(stmt);
+    return stmt;
 }
 
 Expr find_intrinsics(const Expr &e) {
-    return FindIntrinsics().mutate(e);
+    Expr expr = SubstituteInWideningLets().mutate(e);
+    expr = FindIntrinsics().mutate(expr);
+    expr = common_subexpression_elimination(expr);
+    return expr;
 }
 
 Expr lower_widening_add(const Expr &a, const Expr &b) {
@@ -601,25 +756,17 @@ Expr lower_widening_shift_right(const Expr &a, const Expr &b) {
 }
 
 Expr lower_rounding_shift_left(const Expr &a, const Expr &b) {
-    Expr round = simplify(make_shift_right(make_one(a.type()) >> min(b, 0), 1));
-    if ((a.type().is_uint() && a.type().bits() <= 32) || a.type().bits() < 32) {
-        return narrow(widening_add(a, round) << b);
-    } else {
-        // Avoid widening arithmetic when signed integer overflow is undefined,
-        // or when the intermediate would be 128 bits.
-        return (a + round) << b;
-    }
+    // Shift left, then add one to the result if bits were dropped
+    // (because b < 0) and the most significant dropped bit was a one.
+    Expr b_negative = select(b < 0, make_one(a.type()), make_zero(a.type()));
+    return simplify((a << b) + (b_negative & (a << (b + 1))));
 }
 
 Expr lower_rounding_shift_right(const Expr &a, const Expr &b) {
-    Expr round = simplify(make_shift_right(make_one(a.type()) << max(b, 0), 1));
-    if ((a.type().is_uint() && a.type().bits() <= 32) || a.type().bits() < 32) {
-        return narrow(widening_add(a, round) >> b);
-    } else {
-        // Avoid widening arithmetic when signed integer overflow is undefined,
-        // or when the intermediate would be 128 bits.
-        return (a + round) >> b;
-    }
+    // Shift right, then add one to the result if bits were dropped
+    // (because b > 0) and the most significant dropped bit was a one.
+    Expr b_positive = select(b > 0, make_one(a.type()), make_zero(a.type()));
+    return simplify((a >> b) + (b_positive & (a >> (b - 1))));
 }
 
 Expr lower_saturating_add(const Expr &a, const Expr &b) {
@@ -639,33 +786,103 @@ Expr lower_saturating_sub(const Expr &a, const Expr &b) {
 Expr lower_halving_add(const Expr &a, const Expr &b) {
     internal_assert(a.type() == b.type());
     // Borrowed from http://aggregate.org/MAGIC/#Average%20of%20Integers
-    return (a & b) + make_shift_right((a ^ b), 1);
+    return (a & b) + ((a ^ b) >> 1);
 }
 
 Expr lower_halving_sub(const Expr &a, const Expr &b) {
     internal_assert(a.type() == b.type());
-    return make_shift_right(a, 1) - make_shift_right(b, 1) - make_shift_right((b & 1) - (a & 1) + 1, 1);
+    return (a >> 1) - (b >> 1) - (((b & 1) - (a & 1) + 1) >> 1);
 }
 
 // TODO: These should using rounding_shift_right, but lowering that
 // results in double widening and the simplifier doesn't fix it.
 Expr lower_rounding_halving_add(const Expr &a, const Expr &b) {
     internal_assert(a.type() == b.type());
-    return make_shift_right(a, 1) + make_shift_right(b, 1) + make_shift_right((a & 1) + (b & 1) + 1, 1);
+    return (a >> 1) + (b >> 1) + (((a & 1) + (b & 1) + 1) >> 1);
 }
 
 Expr lower_rounding_halving_sub(const Expr &a, const Expr &b) {
     internal_assert(a.type() == b.type());
-    return make_shift_right(a, 1) - make_shift_right(b, 1) + make_shift_right((a & 1) - (b & 1) + 1, 1);
-}
-
-Expr lower_mulhi_shr(const Type &result_type, const Expr &a, const Expr &b, const Expr &shift) {
-    return cast(result_type, widening_mul(a, b) >> simplify(shift + result_type.bits()));
+    return (a >> 1) - (b >> 1) + (((a & 1) - (b & 1) + 1) >> 1);
 }
 
 Expr lower_sorted_avg(const Expr &a, const Expr &b) {
     // b > a, so the following works without widening.
-    return a + (b - a) / 2;
+    return a + ((b - a) >> 1);
+}
+
+Expr lower_mul_shift_right(const Expr &a, const Expr &b, const Expr &q) {
+    internal_assert(a.type() == b.type());
+    int full_q = a.type().bits();
+    if (a.type().is_int()) {
+        full_q -= 1;
+    }
+    if (can_prove(q < full_q)) {
+        // Try to rewrite this to a "full precision" multiply by multiplying
+        // one of the operands and the denominator by a constant. We only do this
+        // if it isn't already full precision. This avoids infinite loops despite
+        // "lowering" this to another mul_shift_right operation.
+        Expr missing_q = full_q - q;
+        internal_assert(missing_q.type().bits() == b.type().bits());
+        Expr new_b = simplify(b << missing_q);
+        if (is_const(new_b) && can_prove(new_b >> missing_q == b)) {
+            return mul_shift_right(a, new_b, full_q);
+        }
+        Expr new_a = simplify(a << missing_q);
+        if (is_const(new_a) && can_prove(new_a >> missing_q == a)) {
+            return mul_shift_right(new_a, b, full_q);
+        }
+    }
+
+    if (can_prove(q > a.type().bits())) {
+        // If q is bigger than the narrow type, write it as an exact upper
+        // half multiply, followed by an extra shift.
+        Expr result = mul_shift_right(a, b, a.type().bits());
+        result = result >> simplify(q - a.type().bits());
+        return result;
+    }
+
+    // If all else fails, just widen, shift, and narrow.
+    Expr result = widening_mul(a, b) >> q;
+    if (!can_prove(q >= a.type().bits())) {
+        result = saturating_narrow(result);
+    } else {
+        result = narrow(result);
+    }
+    return result;
+}
+
+Expr lower_rounding_mul_shift_right(const Expr &a, const Expr &b, const Expr &q) {
+    internal_assert(a.type() == b.type());
+    int full_q = a.type().bits();
+    if (a.type().is_int()) {
+        full_q -= 1;
+    }
+    // Try to rewrite this to a "full precision" multiply by multiplying
+    // one of the operands and the denominator by a constant. We only do this
+    // if it isn't already full precision. This avoids infinite loops despite
+    // "lowering" this to another mul_shift_right operation.
+    if (can_prove(q < full_q)) {
+        Expr missing_q = full_q - q;
+        internal_assert(missing_q.type().bits() == b.type().bits());
+        Expr new_b = simplify(b << missing_q);
+        if (is_const(new_b) && can_prove(new_b >> missing_q == b)) {
+            return rounding_mul_shift_right(a, new_b, full_q);
+        }
+        Expr new_a = simplify(a << missing_q);
+        if (is_const(new_a) && can_prove(new_a >> missing_q == a)) {
+            return rounding_mul_shift_right(new_a, b, full_q);
+        }
+    }
+
+    // If all else fails, just widen, shift, and narrow.
+    Expr result = rounding_shift_right(widening_mul(a, b), q);
+    if (!can_prove(q >= a.type().bits())) {
+        result = saturating_narrow(result);
+    } else {
+        result = narrow(result);
+    }
+    return result;
 }
 
 Expr lower_intrinsic(const Call *op) {
@@ -708,9 +925,12 @@ Expr lower_intrinsic(const Call *op) {
     } else if (op->is_intrinsic(Call::rounding_halving_sub)) {
         internal_assert(op->args.size() == 2);
         return lower_rounding_halving_sub(op->args[0], op->args[1]);
-    } else if (op->is_intrinsic(Call::mulhi_shr)) {
+    } else if (op->is_intrinsic(Call::rounding_mul_shift_right)) {
         internal_assert(op->args.size() == 3);
-        return lower_mulhi_shr(op->type, op->args[0], op->args[1], op->args[2]);
+        return lower_rounding_mul_shift_right(op->args[0], op->args[1], op->args[2]);
+    } else if (op->is_intrinsic(Call::mul_shift_right)) {
+        internal_assert(op->args.size() == 3);
+        return lower_mul_shift_right(op->args[0], op->args[1], op->args[2]);
     } else if (op->is_intrinsic(Call::sorted_avg)) {
         internal_assert(op->args.size() == 2);
         return lower_sorted_avg(op->args[0], op->args[1]);

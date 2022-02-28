@@ -402,6 +402,7 @@ struct FunctionDAG {
             // The min and max in their full symbolic glory. We use
             // these in the general case.
             Interval in;
+            bool depends_on_estimate = false;
 
             // Analysis used to accelerate common cases
             bool equals_required = false, equals_union_of_required_with_constants = false;
@@ -531,9 +532,9 @@ struct FunctionDAG {
             // used to evaluate this bound more quickly.
             int64_t coeff, constant;
             int64_t consumer_dim;
-            bool affine, uses_max;
+            bool affine, uses_max, depends_on_estimate;
 
-            BoundInfo(const Expr &e, const Node::Stage &consumer);
+            BoundInfo(const Expr &e, const Node::Stage &consumer, bool dependent);
         };
 
         // Memory footprint on producer required by consumer.

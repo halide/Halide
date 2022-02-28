@@ -71,13 +71,11 @@ set(RUNTIME_CPP
     qurt_allocator
     qurt_hvx
     qurt_hvx_vtcm
-    qurt_init_fini
     qurt_threads
     qurt_threads_tsan
     qurt_yield
     riscv_cpu_features
     runtime_api
-    ssp
     to_string
     trace_helper
     tracing
@@ -146,6 +144,7 @@ add_library(Halide_initmod OBJECT)
 # Note: this always uses Clang-from-LLVM for compilation, so none of these flags should need conditionalization.
 set(RUNTIME_CXX_FLAGS
     -O3
+    -std=c++17
     -ffreestanding
     -fno-blocks
     -fno-exceptions
@@ -153,6 +152,8 @@ set(RUNTIME_CXX_FLAGS
     -fno-vectorize
     # Note: we don't want static locals to get thread synchronization stuff.
     -fno-threadsafe-statics
+    # Necessary for using virtual functions in the runtime code.
+    -fno-rtti
     -Wall
     -Wcast-qual
     -Werror
@@ -163,6 +164,9 @@ set(RUNTIME_CXX_FLAGS
     -Wno-unused-function
     -Wsign-compare
 )
+
+option(Halide_CLANG_TIDY_BUILD "Generate fake compile jobs for runtime files when running clang-tidy." OFF)
+mark_as_advanced(Halide_CLANG_TIDY_BUILD)
 
 foreach (i IN LISTS RUNTIME_CPP)
     foreach (j IN ITEMS 32 64)

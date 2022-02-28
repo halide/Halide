@@ -150,9 +150,9 @@ public:
         internal_assert(size <= kMaxAllocSize);
         bddebug(2) << "size -> " << size << "\n";
 
-        for (auto it = regions.begin(); it != regions.end(); it++) {
-            const uint32_t start = it->first;
-            Region &r = it->second;
+        for (auto &region : regions) {
+            const uint32_t start = region.first;
+            Region &r = region.second;
             if (!r.used && r.size >= size) {
                 bddebug(2) << "alloc @ " << start << "," << (uint32_t)r.size << "\n";
                 if (r.size > size + kAlignment) {
@@ -1011,6 +1011,21 @@ WABT_HOST_CALLBACK(memcpy) {
     return wabt::Result::Ok;
 }
 
+WABT_HOST_CALLBACK(memmove) {
+    WabtContext &wabt_context = get_wabt_context(thread);
+
+    const int32_t dst = args[0].Get<int32_t>();
+    const int32_t src = args[1].Get<int32_t>();
+    const int32_t n = args[2].Get<int32_t>();
+
+    uint8_t *base = get_wasm_memory_base(wabt_context);
+
+    memmove(base + dst, base + src, n);
+
+    results[0] = wabt::interp::Value::Make(dst);
+    return wabt::Result::Ok;
+}
+
 WABT_HOST_CALLBACK(memset) {
     WabtContext &wabt_context = get_wabt_context(thread);
 
@@ -1079,6 +1094,7 @@ const HostCallbackMap &get_host_callback_map() {
         DEFINE_CALLBACK(malloc)
         DEFINE_CALLBACK(memcmp)
         DEFINE_CALLBACK(memcpy)
+        DEFINE_CALLBACK(memmove)
         DEFINE_CALLBACK(memset)
         DEFINE_CALLBACK(strlen)
         DEFINE_CALLBACK(write)
@@ -1352,9 +1368,6 @@ WasmModuleContents::WasmModuleContents(
       trampolines(JITModule::make_trampolines_module(get_host_target(), jit_externs, kTrampolineSuffix, extern_deps)) {
 
 #if WITH_WABT
-    // TODO: we should probably move this to LLVM 12 or 13, since LLVM11 won't support SIMD usefully enough for Halide
-    user_assert(LLVM_VERSION >= 110) << "Using the WebAssembly JIT is only supported under LLVM 11+.";
-
     user_assert(!target.has_feature(Target::WasmThreads)) << "wasm_threads requires Emscripten (or a similar compiler); it will never be supported under JIT.";
 
     wdebug(1) << "Compiling wasm function " << fn_name << "\n";

@@ -25,15 +25,9 @@ void CodeGen_PyTorch::compile(const Module &module) {
                           "Please add \"-user_context\" to the generator's target options.\n";
         }
         stream << "#include \"ATen/cuda/CUDAContext.h\"\n";
-        stream << "#include \"HalideBuffer.h\"\n";
-        stream << "#include \"HalidePyTorchCudaHelpers.h\"\n";
-        stream << "#include \"HalidePyTorchHelpers.h\"\n";
-        stream << "#include \"torch/extension.h\"\n";
-    } else {
-        stream << "#include \"HalideBuffer.h\"\n";
-        stream << "#include \"HalidePyTorchHelpers.h\"\n";
-        stream << "#include \"torch/extension.h\"\n";
     }
+    stream << "#include \"HalideBuffer.h\"\n";
+    stream << "#include \"HalidePyTorchHelpers.h\"\n";
 
     stream << "\n";
 
@@ -102,41 +96,44 @@ void CodeGen_PyTorch::compile(const LoweredFunc &f, bool is_cuda) {
         stream << get_indent() << "CUresult res = cuCtxGetCurrent(&ctx);\n";
         stream << get_indent() << "AT_ASSERTM(res == 0, \"Could not acquire CUDA context\");\n";
         stream << get_indent() << "cudaStream_t stream = at::cuda::getCurrentCUDAStream(device_id);\n";
-        stream << get_indent() << "Halide::PyTorch::UserContext user_ctx(device_id, &ctx, &stream);\n";
+        stream << get_indent() << "struct UserContext { int device_id; CUcontext *cuda_context; cudaStream_t *stream; } user_ctx;\n";
+        stream << get_indent() << "user_ctx.device_id = device_id;\n";
+        stream << get_indent() << "user_ctx.cuda_context = &ctx;\n";
+        stream << get_indent() << "user_ctx.stream = &stream;\n";
         stream << get_indent() << "void* __user_context = (void*) &user_ctx;\n\n";
     }
 
     stream << get_indent() << "// Check tensors have contiguous memory and are on the correct device\n";
-    for (size_t i = 0; i < buffer_args.size(); i++) {
+    for (auto &buffer_arg : buffer_args) {
         stream << get_indent();
         stream
             << "HLPT_CHECK_CONTIGUOUS("
-            << c_print_name(buffer_args[i].name)
+            << c_print_name(buffer_arg.name)
             << ");\n";
 
         if (is_cuda) {
             stream << get_indent();
             stream
                 << "HLPT_CHECK_DEVICE("
-                << c_print_name(buffer_args[i].name)
+                << c_print_name(buffer_arg.name)
                 << ", device_id);\n";
         }
     }
     stream << "\n";
 
     stream << get_indent() << "// Wrap tensors in Halide buffers\n";
-    for (size_t i = 0; i < buffer_args.size(); i++) {
-        if (!buffer_args[i].is_buffer()) {
+    for (auto &buffer_arg : buffer_args) {
+        if (!buffer_arg.is_buffer()) {
             continue;
         }
 
         stream << get_indent();
-        std::string tp = type_to_c_type(buffer_args[i].type, false);
+        std::string tp = type_to_c_type(buffer_arg.type, false);
         stream
             << "Halide::Runtime::Buffer<" << tp << "> "
-            << c_print_name(buffer_args[i].name)
+            << c_print_name(buffer_arg.name)
             << "_buffer = Halide::PyTorch::wrap<" << tp << ">("
-            << c_print_name(buffer_args[i].name)
+            << c_print_name(buffer_arg.name)
             << ");\n";
     }
     stream << "\n";
@@ -164,19 +161,19 @@ void CodeGen_PyTorch::compile(const LoweredFunc &f, bool is_cuda) {
 
     if (is_cuda) {
         stream << get_indent() << "// Make sure data is on device\n";
-        for (size_t i = 0; i < buffer_args.size(); i++) {
-            if (buffer_args[i].is_buffer()) {
+        for (auto &buffer_arg : buffer_args) {
+            if (buffer_arg.is_buffer()) {
                 stream << get_indent();
                 stream
                     << "AT_ASSERTM(!"
-                    << c_print_name(buffer_args[i].name) << "_buffer.host_dirty(),"
+                    << c_print_name(buffer_arg.name) << "_buffer.host_dirty(),"
                     << "\"device not synchronized for buffer "
-                    << c_print_name(buffer_args[i].name)
+                    << c_print_name(buffer_arg.name)
                     << ", make sure all update stages are explicitly computed on GPU."
                     << "\");\n";
                 stream << get_indent();
                 stream
-                    << c_print_name(buffer_args[i].name) << "_buffer"
+                    << c_print_name(buffer_arg.name) << "_buffer"
                     << ".device_detach_native();\n";
             }
         }
@@ -259,7 +256,6 @@ void CodeGen_PyTorch::test() {
         std::string correct_src =
             R"GOLDEN_CODE(#include "HalideBuffer.h"
 #include "HalidePyTorchHelpers.h"
-#include "torch/extension.h"
 
 struct halide_buffer_t;
 struct halide_filter_metadata_t;
@@ -325,9 +321,7 @@ inline int test1_th_(at::Tensor &_buf, float _alpha, int32_t _beta) {
         std::string correct_src =
             R"GOLDEN_CODE(#include "ATen/cuda/CUDAContext.h"
 #include "HalideBuffer.h"
-#include "HalidePyTorchCudaHelpers.h"
 #include "HalidePyTorchHelpers.h"
-#include "torch/extension.h"
 
 struct halide_buffer_t;
 struct halide_filter_metadata_t;
@@ -371,7 +365,10 @@ inline int test1_th_(at::Tensor &_buf, float _alpha, int32_t _beta) {
     CUresult res = cuCtxGetCurrent(&ctx);
     AT_ASSERTM(res == 0, "Could not acquire CUDA context");
     cudaStream_t stream = at::cuda::getCurrentCUDAStream(device_id);
-    Halide::PyTorch::UserContext user_ctx(device_id, &ctx, &stream);
+    struct UserContext { int device_id; CUcontext *cuda_context; cudaStream_t *stream; } user_ctx;
+    user_ctx.device_id = device_id;
+    user_ctx.cuda_context = &ctx;
+    user_ctx.stream = &stream;
     void* __user_context = (void*) &user_ctx;
 
     // Check tensors have contiguous memory and are on the correct device

@@ -120,6 +120,7 @@ void define_func(py::module &m) {
             .def(
                 "realize",
                 [](Func &f, Buffer<> buffer, const Target &target) -> void {
+                    py::gil_scoped_release release;
                     f.realize(buffer, target);
                 },
                 py::arg("dst"), py::arg("target") = Target())
@@ -128,6 +129,7 @@ void define_func(py::module &m) {
             .def(
                 "realize",
                 [](Func &f, std::vector<Buffer<>> buffers, const Target &t) -> void {
+                    py::gil_scoped_release release;
                     f.realize(Realization(buffers), t);
                 },
                 py::arg("dst"), py::arg("target") = Target())
@@ -135,49 +137,14 @@ void define_func(py::module &m) {
             .def(
                 "realize",
                 [](Func &f, const std::vector<int32_t> &sizes, const Target &target) -> py::object {
-                    return realization_to_object(f.realize(sizes, target));
+                    std::optional<Realization> r;
+                    {
+                        py::gil_scoped_release release;
+                        r = f.realize(sizes, target);
+                    }
+                    return realization_to_object(*r);
                 },
                 py::arg("sizes") = std::vector<int32_t>{}, py::arg("target") = Target())
-
-            .def(
-                "realize",
-                [](Func &f, int x_size, const Target &target) -> py::object {
-                    PyErr_WarnEx(PyExc_DeprecationWarning,
-                                 "Call realize() with an explicit list of ints instead.",
-                                 1);
-                    return realization_to_object(f.realize(std::vector<int32_t>{x_size}, target));
-                },
-                py::arg("x_size"), py::arg("target") = Target())
-
-            .def(
-                "realize",
-                [](Func &f, int x_size, int y_size, const Target &target) -> py::object {
-                    PyErr_WarnEx(PyExc_DeprecationWarning,
-                                 "Call realize() with an explicit list of ints instead.",
-                                 1);
-                    return realization_to_object(f.realize({x_size, y_size}, target));
-                },
-                py::arg("x_size"), py::arg("y_size"), py::arg("target") = Target())
-
-            .def(
-                "realize",
-                [](Func &f, int x_size, int y_size, int z_size, const Target &target) -> py::object {
-                    PyErr_WarnEx(PyExc_DeprecationWarning,
-                                 "Call realize() with an explicit list of ints instead.",
-                                 1);
-                    return realization_to_object(f.realize({x_size, y_size, z_size}, target));
-                },
-                py::arg("x_size"), py::arg("y_size"), py::arg("z_size"), py::arg("target") = Target())
-
-            .def(
-                "realize",
-                [](Func &f, int x_size, int y_size, int z_size, int w_size, const Target &target) -> py::object {
-                    PyErr_WarnEx(PyExc_DeprecationWarning,
-                                 "Call realize() with an explicit list of ints instead.",
-                                 1);
-                    return realization_to_object(f.realize({x_size, y_size, z_size, w_size}, target));
-                },
-                py::arg("x_size"), py::arg("y_size"), py::arg("z_size"), py::arg("w_size"), py::arg("target") = Target())
 
             .def("defined", &Func::defined)
             .def("name", &Func::name)

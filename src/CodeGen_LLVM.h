@@ -414,10 +414,6 @@ protected:
      */
     size_t requested_alloca_total = 0;
 
-    /** Which buffers came in from the outside world (and so we can't
-     * guarantee their alignment) */
-    std::set<std::string> external_buffer;
-
     /** The user_context argument. May be a constant null if the
      * function is being compiled without a user context. */
     llvm::Value *get_user_context() const;
@@ -517,6 +513,10 @@ protected:
     /** Emit atomic store instructions? */
     bool emit_atomic_stores;
 
+    /** Can we call this operation with float16 type?
+        This is used to avoid "emulated" equivalent code-gen in case target has FP16 feature **/
+    virtual bool supports_call_as_float16(const Call *op) const;
+
 private:
     /** All the values in scope at the current code location during
      * codegen. Use sym_push and sym_pop to access. */
@@ -557,10 +557,10 @@ private:
                                            llvm::Value *vpred = nullptr, bool slice_to_native = true);
     llvm::Value *codegen_dense_vector_load(const Load *load, llvm::Value *vpred = nullptr, bool slice_to_native = true);
 
-    virtual void codegen_predicated_vector_load(const Load *op);
-    virtual void codegen_predicated_vector_store(const Store *op);
+    virtual void codegen_predicated_load(const Load *op);
+    virtual void codegen_predicated_store(const Store *op);
 
-    void codegen_atomic_store(const Store *op);
+    void codegen_atomic_rmw(const Store *op);
 
     void init_codegen(const std::string &name, bool any_strict_float = false);
     std::unique_ptr<llvm::Module> finish_codegen();

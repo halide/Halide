@@ -87,7 +87,7 @@ public:
 
             blur_y.compute_root()
                 .hexagon()
-                .prefetch(input, y, 2)
+                .prefetch(input, y, y, 2)
                 .split(y, y, yi, 128)
                 .parallel(y)
                 .vectorize(x, vector_size * 2);

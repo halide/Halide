@@ -293,9 +293,7 @@ pair<vector<string>, vector<vector<string>>> realization_order(
     // Determine groups of functions which loops are to be fused together.
     // 'fused_groups' maps a fused group to its members.
     // 'group_name' maps a function to the name of the fused group it belongs to.
-    map<string, vector<string>> fused_groups;
-    map<string, string> group_name;
-    std::tie(fused_groups, group_name) = find_fused_groups(env, fuse_adjacency_list);
+    auto [fused_groups, group_name] = find_fused_groups(env, fuse_adjacency_list);
 
     // Compute the DAG representing the pipeline
     for (const pair<const string, Function> &caller : env) {

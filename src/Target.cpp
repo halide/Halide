@@ -78,7 +78,7 @@ Target calculate_host_target() {
     int bits = use_64_bits ? 64 : 32;
     std::vector<Target::Feature> initial_features;
 
-#if __riscv__
+#if __riscv
     Target::Arch arch = Target::RISCV;
 #else
 #if __mips__ || __mips || __MIPS__
@@ -380,6 +380,7 @@ const std::map<std::string, Target::Feature> feature_name_map = {
     {"sve", Target::SVE},
     {"sve2", Target::SVE2},
     {"arm_dot_prod", Target::ARMDotProd},
+    {"arm_fp16", Target::ARMFp16},
     {"llvm_large_code_model", Target::LLVMLargeCodeModel},
     {"rvv", Target::RVV},
     {"armv81a", Target::ARMv81a},

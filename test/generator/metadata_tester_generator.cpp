@@ -54,6 +54,8 @@ public:
     Input<Buffer<float16_t>> buffer_f16_typed{"buffer_f16_typed", 1};
     Input<Buffer<>> buffer_f16_untyped{"buffer_f16_untyped", 1};
 
+    Input<Expr> untyped_scalar_input{"untyped_scalar_input"};  // untyped_scalar_input.type must be set to uint8
+
     Output<Func> output{"output"};  // must be overridden to {{Float(32), Float(32)}, 3}
     Output<Buffer<float>> typed_output_buffer{"typed_output_buffer", 3};
     Output<Buffer<float>> type_only_output_buffer{"type_only_output_buffer"};  // untyped outputs can have type and/or dimensions inferred
@@ -74,10 +76,13 @@ public:
     Output<Buffer<float>[]> array_outputs8 { "array_outputs8" };
     Output<Buffer<>[]> array_outputs9 { "array_outputs9" };
 
+    // Output<void> untyped_scalar_output{"untyped_scalar_output"};  // untyped_scalar_output.type must be set
+
     void generate() {
         Var x("x"), y("y"), c("c");
 
         assert(buffer_f16_untyped.type() == Float(16));
+        assert(untyped_scalar_input.type() == UInt(8));
 
         // These should all be zero; they are here to exercise the operator[] overloads
         Expr zero1 = array_input[1](x, y, c) - array_input[0](x, y, c);
@@ -98,7 +103,7 @@ public:
         Type output_type = output.types().at(0);
 
         Func f1("f1"), f2("f2");
-        f1(x, y, c) = cast(output_type, input(x, y, c) + zero);
+        f1(x, y, c) = cast(output_type, input(x, y, c) + zero + untyped_scalar_input);
         f2(x, y, c) = cast<float>(f1(x, y, c) + 1);
 
         Func t1("t1");

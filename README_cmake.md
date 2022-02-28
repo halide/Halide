@@ -43,6 +43,7 @@ The following sections cover each in detail.
     - [Imported targets](#imported-targets)
     - [Functions](#functions)
       - [`add_halide_library`](#add_halide_library)
+      - [`add_halide_generator`](#add_halide_generator)
   - [Cross compiling](#cross-compiling)
     - [Use a super-build](#use-a-super-build)
     - [Use `ExternalProject` directly](#use-externalproject-directly)
@@ -376,35 +377,42 @@ following are the most consequential and control how Halide is actually
 compiled.
 
 | Option                                   | Default               | Description                                                                                                      |
-| ---------------------------------------- | --------------------- | ---------------------------------------------------------------------------------------------------------------- |
+|------------------------------------------|-----------------------|------------------------------------------------------------------------------------------------------------------|
 | [`BUILD_SHARED_LIBS`][build_shared_libs] | `ON`                  | Standard CMake variable that chooses whether to build as a static or shared library.                             |
 | `Halide_BUNDLE_LLVM`                     | `OFF`                 | When building Halide as a static library, unpack the LLVM static libraries and add those objects to libHalide.a. |
 | `Halide_SHARED_LLVM`                     | `OFF`                 | Link to the shared version of LLVM. Not available on Windows.                                                    |
 | `Halide_ENABLE_RTTI`                     | _inherited from LLVM_ | Enable RTTI when building Halide. Recommended to be set to `ON`                                                  |
-| `Halide_CLANG_TIDY_BUILD`                | `OFF`                 | Used internally to generate fake compile jobs for runtime files when running clang-tidy.                         |
 | `Halide_ENABLE_EXCEPTIONS`               | `ON`                  | Enable exceptions when building Halide                                                                           |
-| `Halide_USE_CODEMODEL_LARGE`             | `OFF`                 | Use the Large LLVM codemodel                                                                                     |
 | `Halide_TARGET`                          | _empty_               | The default target triple to use for `add_halide_library` (and the generator tests, by extension)                |
-| `Halide_CCACHE_BUILD`                    | `OFF`                 | Use ccache to accelerate rebuilds.                                                                               |
+
+The following options are _advanced_ and should not be required in typical workflows. Generally, these are used by
+Halide's own CI infrastructure, or as escape hatches for third-party packagers.
+
+| Option                      | Default                                                            | Description                                                                              |
+|-----------------------------|--------------------------------------------------------------------|------------------------------------------------------------------------------------------|
+| `Halide_CLANG_TIDY_BUILD`   | `OFF`                                                              | Used internally to generate fake compile jobs for runtime files when running clang-tidy. |
+| `Halide_CCACHE_BUILD`       | `OFF`                                                              | Use ccache with Halide-recommended settings to accelerate rebuilds.                      |
+| `Halide_CCACHE_PARAMS`      | `CCACHE_CPP2=yes CCACHE_HASHDIR=yes CCACHE_SLOPPINESS=pch_defines` | Options to pass to `ccache` when using `Halide_CCACHE_BUILD`.                            | 
+| `Halide_SOVERSION_OVERRIDE` | `${Halide_VERSION_MAJOR}`                                          | Override the SOVERSION for libHalide. Expects a positive integer (i.e. not a version).   |
 
 The following options are only available when building Halide directly, ie. not
 through the [`add_subdirectory`][add_subdirectory] or
 [`FetchContent`][fetchcontent] mechanisms. They control whether non-essential
 targets (like tests and documentation) are built.
 
-| Option                 | Default              | Description                                                                              |
-| ---------------------- | -------------------- | ---------------------------------------------------------------------------------------- |
-| `WITH_TESTS`           | `ON`                 | Enable building unit and integration tests                                               |
-| `WITH_PYTHON_BINDINGS` | `ON` if Python found | Enable building Python 3.x bindings                                                      |
-| `WITH_DOCS`            | `OFF`                | Enable building the documentation via Doxygen                                            |
-| `WITH_UTILS`           | `ON`                 | Enable building various utilities including the trace visualizer                         |
-| `WITH_TUTORIALS`       | `ON`                 | Enable building the tutorials                                                            |
+| Option                 | Default              | Description                                                      |
+|------------------------|----------------------|------------------------------------------------------------------|
+| `WITH_TESTS`           | `ON`                 | Enable building unit and integration tests                       |
+| `WITH_PYTHON_BINDINGS` | `ON` if Python found | Enable building Python 3.x bindings                              |
+| `WITH_DOCS`            | `OFF`                | Enable building the documentation via Doxygen                    |
+| `WITH_UTILS`           | `ON`                 | Enable building various utilities including the trace visualizer |
+| `WITH_TUTORIALS`       | `ON`                 | Enable building the tutorials                                    |
 
 The following options control whether to build certain test subsets. They only
 apply when `WITH_TESTS=ON`:
 
 | Option                    | Default | Description                       |
-| ------------------------- | ------- | --------------------------------- |
+|---------------------------|---------|-----------------------------------|
 | `WITH_TEST_AUTO_SCHEDULE` | `ON`    | enable the auto-scheduling tests  |
 | `WITH_TEST_CORRECTNESS`   | `ON`    | enable the correctness tests      |
 | `WITH_TEST_ERROR`         | `ON`    | enable the expected-error tests   |
@@ -415,23 +423,23 @@ apply when `WITH_TESTS=ON`:
 The following options enable/disable various LLVM backends (they correspond to
 LLVM component names):
 
-| Option               | Default              | Description                                              |
-| -------------------- | -------------------- | -------------------------------------------------------- |
-| `TARGET_AARCH64`     | `ON`, _if available_ | Enable the AArch64 backend                               |
-| `TARGET_AMDGPU`      | `ON`, _if available_ | Enable the AMD GPU backend                               |
-| `TARGET_ARM`         | `ON`, _if available_ | Enable the ARM backend                                   |
-| `TARGET_HEXAGON`     | `ON`, _if available_ | Enable the Hexagon backend                               |
-| `TARGET_MIPS`        | `ON`, _if available_ | Enable the MIPS backend                                  |
-| `TARGET_NVPTX`       | `ON`, _if available_ | Enable the NVidia PTX backend                            |
-| `TARGET_POWERPC`     | `ON`, _if available_ | Enable the PowerPC backend                               |
-| `TARGET_RISCV`       | `ON`, _if available_ | Enable the RISC V backend                                |
-| `TARGET_WEBASSEMBLY` | `ON`, _if available_ | Enable the WebAssembly backend. Only valid for LLVM 11+. |
-| `TARGET_X86`         | `ON`, _if available_ | Enable the x86 (and x86_64) backend                      |
+| Option               | Default              | Description                         |
+|----------------------|----------------------|-------------------------------------|
+| `TARGET_AARCH64`     | `ON`, _if available_ | Enable the AArch64 backend          |
+| `TARGET_AMDGPU`      | `ON`, _if available_ | Enable the AMD GPU backend          |
+| `TARGET_ARM`         | `ON`, _if available_ | Enable the ARM backend              |
+| `TARGET_HEXAGON`     | `ON`, _if available_ | Enable the Hexagon backend          |
+| `TARGET_MIPS`        | `ON`, _if available_ | Enable the MIPS backend             |
+| `TARGET_NVPTX`       | `ON`, _if available_ | Enable the NVidia PTX backend       |
+| `TARGET_POWERPC`     | `ON`, _if available_ | Enable the PowerPC backend          |
+| `TARGET_RISCV`       | `ON`, _if available_ | Enable the RISC V backend           |
+| `TARGET_WEBASSEMBLY` | `ON`, _if available_ | Enable the WebAssembly backend.     |
+| `TARGET_X86`         | `ON`, _if available_ | Enable the x86 (and x86_64) backend |
 
 The following options enable/disable various Halide-specific backends:
 
 | Option                | Default | Description                            |
-| --------------------- | ------- | -------------------------------------- |
+|-----------------------|---------|----------------------------------------|
 | `TARGET_OPENCL`       | `ON`    | Enable the OpenCL-C backend            |
 | `TARGET_METAL`        | `ON`    | Enable the Metal backend               |
 | `TARGET_D3D12COMPUTE` | `ON`    | Enable the Direct3D 12 Compute backend |
@@ -440,7 +448,7 @@ The following options are WebAssembly-specific. They only apply when
 `TARGET_WEBASSEMBLY=ON`:
 
 | Option            | Default | Description                                                |
-| ----------------- | ------- | ---------------------------------------------------------- |
+|-------------------|---------|------------------------------------------------------------|
 | `WITH_WABT`       | `ON`    | Include WABT Interpreter for WASM testing                  |
 | `WITH_WASM_SHELL` | `ON`    | Download a wasm shell (e.g. d8) for testing AOT wasm code. |
 
@@ -459,7 +467,7 @@ First, Halide expects to find LLVM and Clang through the `CONFIG` mode of
 the corresponding `_DIR` variables:
 
 | Variable    | Description                                    |
-| ----------- | ---------------------------------------------- |
+|-------------|------------------------------------------------|
 | `LLVM_DIR`  | `$LLVM_ROOT/lib/cmake/LLVM/LLVMConfig.cmake`   |
 | `Clang_DIR` | `$LLVM_ROOT/lib/cmake/Clang/ClangConfig.cmake` |
 
@@ -474,7 +482,7 @@ using the [`FindCUDAToolkit`][findcudatoolkit] module. If it doesn't find your
 CUDA installation automatically, you can point it to it by setting:
 
 | Variable           | Description                                       |
-| ------------------ | ------------------------------------------------- |
+|--------------------|---------------------------------------------------|
 | `CUDAToolkit_ROOT` | Path to the directory containing `bin/nvcc[.exe]` |
 | `CUDA_PATH`        | _Environment_ variable, same as above.            |
 
@@ -489,7 +497,7 @@ modules will be used to link AOT generated binaries. These modules can be
 overridden by setting the following variables:
 
 | Variable                | Description                      |
-| ----------------------- | -------------------------------- |
+|-------------------------|----------------------------------|
 | `OPENGL_egl_LIBRARY`    | Path to the EGL library.         |
 | `OPENGL_glu_LIBRARY`    | Path to the GLU library.         |
 | `OPENGL_glx_LIBRARY`    | Path to the GLVND GLX library.   |
@@ -504,7 +512,7 @@ Halide also searches for `libpng` and `libjpeg-turbo` through the
 be overridden by setting the following variables.
 
 | Variable            | Description                                        |
-| ------------------- | -------------------------------------------------- |
+|---------------------|----------------------------------------------------|
 | `PNG_LIBRARIES`     | Paths to the libraries to link against to use PNG. |
 | `PNG_INCLUDE_DIRS`  | Path to `png.h`, etc.                              |
 | `JPEG_LIBRARIES`    | Paths to the libraries needed to use JPEG.         |
@@ -515,7 +523,7 @@ When `WITH_DOCS` is set to `ON`, Halide searches for Doxygen using the
 following variable.
 
 | Variable             | Description                     |
-| -------------------- | ------------------------------- |
+|----------------------|---------------------------------|
 | `DOXYGEN_EXECUTABLE` | Path to the Doxygen executable. |
 
 When compiling for an OpenCL target, Halide uses the [`FindOpenCL`][findopencl]
@@ -523,7 +531,7 @@ target to locate the libraries and include paths. These can be overridden by
 setting the following variables:
 
 | Variable              | Description                                           |
-| --------------------- | ----------------------------------------------------- |
+|-----------------------|-------------------------------------------------------|
 | `OpenCL_LIBRARIES`    | Paths to the libraries to link against to use OpenCL. |
 | `OpenCL_INCLUDE_DIRS` | Include directories for OpenCL.                       |
 
@@ -533,7 +541,7 @@ like other projects you might have encountered. You can select which Python
 installation to use by setting the following variable.
 
 | Variable           | Description                                           |
-| ------------------ | ----------------------------------------------------- |
+|--------------------|-------------------------------------------------------|
 | `Python3_ROOT_DIR` | Define the root directory of a Python 3 installation. |
 
 # Using Halide from your CMake build
@@ -560,7 +568,7 @@ boilerplate.
 cmake_minimum_required(VERSION 3.16)
 project(HalideExample)
 
-set(CMAKE_CXX_STANDARD 11)  # or newer
+set(CMAKE_CXX_STANDARD 17)  # or newer
 set(CMAKE_CXX_STANDARD_REQUIRED YES)
 set(CMAKE_CXX_EXTENSIONS NO)
 
@@ -576,7 +584,7 @@ immediately after setting the minimum version.
 
 The next three variables set the project-wide C++ standard. The first,
 [`CMAKE_CXX_STANDARD`][cmake_cxx_standard], simply sets the standard version.
-Halide requires at least C++11. The second,
+Halide requires at least C++17. The second,
 [`CMAKE_CXX_STANDARD_REQUIRED`][cmake_cxx_standard_required], tells CMake to
 fail if the compiler cannot provide the requested standard version. Lastly,
 [`CMAKE_CXX_EXTENSIONS`][cmake_cxx_extensions] tells CMake to disable
@@ -763,28 +771,29 @@ try the static libs first then fall back to the shared libs.
 Variables that control package loading:
 
 | Variable             | Description                                                                                                                                                                   |
-| -------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+|----------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | `Halide_SHARED_LIBS` | override `BUILD_SHARED_LIBS` when loading the Halide package via `find_package`. Has no effect when using Halide via `add_subdirectory` as a Git or `FetchContent` submodule. |
 
 Variables set by the package:
 
-| Variable                   | Description                                                      |
-| -------------------------- | ---------------------------------------------------------------- |
-| `Halide_VERSION`           | The full version string of the loaded Halide package             |
-| `Halide_VERSION_MAJOR`     | The major version of the loaded Halide package                   |
-| `Halide_VERSION_MINOR`     | The minor version of the loaded Halide package                   |
-| `Halide_VERSION_PATCH`     | The patch version of the loaded Halide package                   |
-| `Halide_VERSION_TWEAK`     | The tweak version of the loaded Halide package                   |
-| `Halide_HOST_TARGET`       | The Halide target triple corresponding to "host" for this build. |
-| `Halide_ENABLE_EXCEPTIONS` | Whether Halide was compiled with exception support               |
-| `Halide_ENABLE_RTTI`       | Whether Halide was compiled with RTTI                            |
+| Variable                   | Description                                                        |
+|----------------------------|--------------------------------------------------------------------|
+| `Halide_VERSION`           | The full version string of the loaded Halide package               |
+| `Halide_VERSION_MAJOR`     | The major version of the loaded Halide package                     |
+| `Halide_VERSION_MINOR`     | The minor version of the loaded Halide package                     |
+| `Halide_VERSION_PATCH`     | The patch version of the loaded Halide package                     |
+| `Halide_VERSION_TWEAK`     | The tweak version of the loaded Halide package                     |
+| `Halide_HOST_TARGET`       | The Halide target triple corresponding to "host" for this build.   |
+| `Halide_CMAKE_TARGET`      | The Halide target triple corresponding to the active CMake target. |
+| `Halide_ENABLE_EXCEPTIONS` | Whether Halide was compiled with exception support                 |
+| `Halide_ENABLE_RTTI`       | Whether Halide was compiled with RTTI                              |
 
 ### Imported targets
 
 Halide defines the following targets that are available to users:
 
 | Imported target      | Description                                                                                                                          |
-| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+|----------------------|--------------------------------------------------------------------------------------------------------------------------------------|
 | `Halide::Halide`     | this is the JIT-mode library to use when using Halide from C++.                                                                      |
 | `Halide::Generator`  | this is the target to use when defining a generator executable. It supplies a `main()` function.                                     |
 | `Halide::Runtime`    | adds include paths to the Halide runtime headers                                                                                     |
@@ -794,15 +803,16 @@ Halide defines the following targets that are available to users:
 
 The following targets are not guaranteed to be available:
 
-| Imported target   | Description                                                                                                                              |
-| ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
-| `Halide::Python`  | this is a Python 3 module that can be referenced as `$<TARGET_FILE:Halide::Python>` when setting up Python tests or the like from CMake. |
-| `Halide::Adams19` | the Adams et.al. 2019 autoscheduler (no GPU support)                                                                                     |
-| `Halide::Li18`    | the Li et.al. 2018 gradient autoscheduler (limited GPU support)                                                                          |
+| Imported target         | Description                                                                                                                              |
+|-------------------------|------------------------------------------------------------------------------------------------------------------------------------------|
+| `Halide::Python`        | this is a Python 3 module that can be referenced as `$<TARGET_FILE:Halide::Python>` when setting up Python tests or the like from CMake. |
+| `Halide::Adams19`       | the Adams et.al. 2019 autoscheduler (no GPU support)                                                                                     |
+| `Halide::Li18`          | the Li et.al. 2018 gradient autoscheduler (limited GPU support)                                                                          |
+| `Halide::Mullapudi2016` | the Mullapudi et.al. 2016 autoscheduler (no GPU support)                                                                                 |
 
 ### Functions
 
-Currently, only one function is defined:
+Currently, only two functions are defined:
 
 #### `add_halide_library`
 
@@ -823,6 +833,7 @@ add_halide_library(<target> FROM <generator-target>
                    [GRADIENT_DESCENT]
                    [C_BACKEND]
                    [REGISTRATION OUTVAR]
+                   [HEADER OUTVAR]
                    [<extra-output> OUTVAR])
 
 extra-output = ASSEMBLY | BITCODE | COMPILER_LOG | CPP_STUB
@@ -887,16 +898,58 @@ compiler on a generated source. Note that a `<target>.runtime` target is _not_
 created in this case, and the `USE_RUNTIME` option is ignored. Other options
 work as expected.
 
-If `REGISTRATION` is set, the path to the generated `.registration.cpp` file
-will be set in `OUTVAR`. This can be used to generate a runner for a Halide
-library that is useful for benchmarking and testing, as documented above. This
-is equivalent to setting `-e registration` at the generator command line.
+If `REGISTRATION` is set, the path (relative to `CMAKE_CURRENT_BINARY_DIR`)
+to the generated `.registration.cpp` file will be set in `OUTVAR`. This can be
+used to generate a runner for a Halide library that is useful for benchmarking
+and testing, as documented above. This is equivalent to setting
+`-e registration` at the generator command line.
+
+If `HEADER` is set, the path (relative to `CMAKE_CURRENT_BINARY_DIR`) to the
+generated `.h` header file will be set in `OUTVAR`. This can be used with
+`install(FILES)` to conveniently deploy the generated header along with your
+library.
 
 Lastly, each of the `extra-output` arguments directly correspond to an extra
 output (via `-e`) from the generator. The value `OUTVAR` names a variable into
 which a path (relative to
 [`CMAKE_CURRENT_BINARY_DIR`][cmake_current_binary_dir]) to the extra file will
 be written.
+
+#### `add_halide_generator`
+
+This function aids in creating cross-compilable builds that use Halide generators.
+
+```
+add_halide_generator(
+    target
+    [PACKAGE_NAME package-name]
+    [PACKAGE_NAMESPACE namespace]
+    [EXPORT_FILE export-file]
+    [[SOURCES] source1 ...]
+)
+```
+
+Every named argument is optional, and the function uses the following default arguments:
+
+* If `PACKAGE_NAME` is not provided, it defaults to `${PROJECT_NAME}-halide_generators`.
+* If `PACKAGE_NAMESPACE` is not provided, it defaults to `${PROJECT_NAME}::halide_generators::`.
+* If `EXPORT_FILE` is not provided, it defaults to `${PROJECT_BINARY_DIR}/cmake/${ARG_PACKAGE_NAME}-config.cmake`
+
+The `SOURCES` keyword marks the beginning of sources to be used to build `<target>`, if it is not loaded. All unparsed
+arguments will be interpreted as sources.
+
+This function guarantees that a Halide generator target named `<namespace><target>` is available. It will first search
+for a package named `<package-name>` using `find_package`; if it is found, it is assumed that it provides the target.
+Otherwise, it will create an executable target named `target` and an `ALIAS` target `<namespace><target>`. This function
+also creates a custom target named `<package-name>` if it does not exist and `<target>` would exist. In this case,
+`<package-name>` will depend on `<target>`, this enables easy building of _just_ the Halide generators managed by this
+function.
+
+After the call, `<PACKAGE_NAME>_FOUND` will be set to true if the host generators were imported (and hence won't be
+built). Otherwise, it will be set to false. This variable may be used to conditionally set properties on `<target>`.
+
+Please see [test/integration/xc](https://github.com/halide/Halide/tree/master/test/integration/xc) for a simple example
+and [apps/hannk](https://github.com/halide/Halide/tree/master/apps/hannk) for a complete app that uses it extensively.
 
 ## Cross compiling
 
@@ -906,6 +959,28 @@ build. Unfortunately, Halide generator executables are just about always
 designed to run on the host platform. Each project will be set up differently
 and have different requirements, but here are some suggestions for effective use
 of CMake in these scenarios.
+
+### Use `add_halide_generator`
+
+If you are writing new programs that use Halide, you might wish to use our
+helper, `add_halide_generator`. When using this helper, you are expected to
+build your project twice: once for your build host and again for your intended
+target.
+
+When building the host build, you can use the `<package-name>` (see the
+documentation above) target to build _just_ the generators. Then, in the
+target build, set `<package-name>_ROOT` to the host build directory.
+
+For example:
+
+```
+$ cmake -G Ninja -S . -B build-host -DCMAKE_BUILD_TYPE=Release
+$ cmake --build build-host --target <package-name>
+$ cmake -G Ninja -S . -B build-target -DCMAKE_BUILD_TYPE=Release \
+    -DCMAKE_TOOLCHAIN_FILE=/path/to/target-tc.cmake \
+    -D<package-name>_ROOT:FILEPATH=$PWD/build-host
+$ cmake --build build-target
+```
 
 ### Use a super-build
 
@@ -920,6 +995,8 @@ project would be configured with the target [toolchain][cmake-toolchains] and
 would call `add_halide_library` with no `TARGETS` option and set `FROM` equal to
 the name of the imported generator executable. Obviously, this is a significant
 increase in complexity over a typical CMake project.
+
+This is very compatible with the `add_halide_generator` strategy above. 
 
 ### Use `ExternalProject` directly
 
@@ -1007,7 +1084,7 @@ As mentioned above, using directory properties is brittle and they are therefore
 _not allowed_. The following functions may not appear in any new CMake code.
 
 | Command                             | Alternative                                                                                        |
-| ----------------------------------- | -------------------------------------------------------------------------------------------------- |
+|-------------------------------------|----------------------------------------------------------------------------------------------------|
 | `add_compile_definitions`           | Use [`target_compile_definitions`][target_compile_definitions]                                     |
 | `add_compile_options`               | Use [`target_compile_options`][target_compile_options]                                             |
 | `add_definitions`                   | Use [`target_compile_definitions`][target_compile_definitions]                                     |
@@ -1054,7 +1131,7 @@ If common properties need to be grouped together, use an INTERFACE target
 disallowed for other reasons:
 
 | Command                         | Reason                                                                            | Alternative                                                                            |
-| ------------------------------- | --------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
+|---------------------------------|-----------------------------------------------------------------------------------|----------------------------------------------------------------------------------------|
 | `aux_source_directory`          | Interacts poorly with incremental builds and Git                                  | List source files explicitly                                                           |
 | `build_command`                 | CTest internal function                                                           | Use CTest build-and-test mode via [`CMAKE_CTEST_COMMAND`][cmake_ctest_command]         |
 | `cmake_host_system_information` | Usually misleading information.                                                   | Inspect [toolchain][cmake-toolchains] variables and use generator expressions.         |
@@ -1083,7 +1160,7 @@ or should not be overridden for our end-users. The following (non-exhaustive)
 list of variables shall not be used in code merged into master.
 
 | Variable                        | Reason                                        | Alternative                                                                                             |
-| ------------------------------- | --------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
+|---------------------------------|-----------------------------------------------|---------------------------------------------------------------------------------------------------------|
 | `CMAKE_ROOT`                    | Code smell                                    | Rely on `find_package` search options; include `HINTS` if necessary                                     |
 | `CMAKE_DEBUG_TARGET_PROPERTIES` | Debugging helper                              | None                                                                                                    |
 | `CMAKE_FIND_DEBUG_MODE`         | Debugging helper                              | None                                                                                                    |
@@ -1108,7 +1185,7 @@ remove them before review. Finally, the following variables are allowed, but
 their use must be motivated:
 
 | Variable                                       | Reason                                              | Alternative                                                                                  |
-| ---------------------------------------------- | --------------------------------------------------- | -------------------------------------------------------------------------------------------- |
+|------------------------------------------------|-----------------------------------------------------|----------------------------------------------------------------------------------------------|
 | [`CMAKE_SOURCE_DIR`][cmake_source_dir]         | Points to global source root, not Halide's.         | [`Halide_SOURCE_DIR`][project-name_source_dir] or [`PROJECT_SOURCE_DIR`][project_source_dir] |
 | [`CMAKE_BINARY_DIR`][cmake_binary_dir]         | Points to global build root, not Halide's           | [`Halide_BINARY_DIR`][project-name_binary_dir] or [`PROJECT_BINARY_DIR`][project_binary_dir] |
 | [`CMAKE_MAKE_PROGRAM`][cmake_make_program]     | CMake abstracts over differences in the build tool. | Prefer CTest's build and test mode or CMake's `--build` mode                                 |

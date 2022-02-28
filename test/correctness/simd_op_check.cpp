@@ -232,6 +232,7 @@ public:
         if (use_ssse3) {
             for (int w = 2; w <= 4; w++) {
                 check("pmulhrsw", 4 * w, i16((i32(i16_1) * i32(i16_2) + 16384) >> 15));
+                check("pmulhrsw", 4 * w, i16_sat((i32(i16_1) * i32(i16_2) + 16384) >> 15));
                 check("pabsb", 8 * w, abs(i8_1));
                 check("pabsw", 4 * w, abs(i16_1));
                 check("pabsd", 2 * w, abs(i32_1));
@@ -282,6 +283,15 @@ public:
             check("phminposuw", 1, maximum(in_u8(RDom(0, 16) + 16 * x)));
             check("phminposuw", 1, minimum(in_i8(RDom(0, 16) + 16 * x)));
             check("phminposuw", 1, maximum(in_i8(RDom(0, 16) + 16 * x)));
+
+            for (int w = 2; w <= 8; w++) {
+                const char *check_pmaddubsw =
+                    (use_avx2 && w >= 4) ? "vpmaddubsw" : "pmaddubsw";
+
+                RDom r2(0, 2);
+                check(check_pmaddubsw, 4 * w, saturating_sum(i16(in_u8(2 * x + r2)) * in_i8(2 * x + r2 + 32)));
+                check(check_pmaddubsw, 4 * w, saturating_sum(i16(in_i8(2 * x + r2)) * in_u8(2 * x + r2 + 32)));
+            }
         }
 
         // SSE 4.1
@@ -294,8 +304,8 @@ public:
             check(check_pmaddwd, 2 * w, i32(i16_1) * 3 - i32(i16_2) * 4);
 
             // And also for dot-products
-            RDom r(0, 4);
-            check(check_pmaddwd, 2 * w, sum(i32(in_i16(x * 4 + r)) * in_i16(x * 4 + r + 32)));
+            RDom r4(0, 4);
+            check(check_pmaddwd, 2 * w, sum(i32(in_i16(x * 4 + r4)) * in_i16(x * 4 + r4 + 32)));
         }
 
         // llvm doesn't distinguish between signed and unsigned multiplies
@@ -422,6 +432,7 @@ public:
             check("vpmullw*ymm", 16, i16_1 * i16_2);
 
             check("vpmulhrsw*ymm", 16, i16((((i32(i16_1) * i32(i16_2)) + 16384)) / 32768));
+            check("vpmulhrsw*ymm", 16, i16_sat((((i32(i16_1) * i32(i16_2)) + 16384)) / 32768));
 
             check("vpcmp*b*ymm", 32, select(u8_1 == u8_2, u8(1), u8(2)));
             check("vpcmp*b*ymm", 32, select(u8_1 > u8_2, u8(1), u8(2)));
@@ -1024,11 +1035,11 @@ public:
                     check(arm32 ? "vpadd.i16" : "addp", 8, sum_(in_u16(f * x + r)));
                     check(arm32 ? "vpadd.i32" : "addp", 4, sum_(in_i32(f * x + r)));
                     check(arm32 ? "vpadd.i32" : "addp", 4, sum_(in_u32(f * x + r)));
-                    check(arm32 ? "vpadd.f32" : "addp", 4, sum_(in_f32(f * x + r)));
+                    check(arm32 ? "vpadd.f32" : "faddp", 4, sum_(in_f32(f * x + r)));
                     // In 32-bit, we don't have a pairwise op for doubles,
                     // and expect to just get vadd instructions on d
                     // registers.
-                    check(arm32 ? "vadd.f64" : "addp", 4, sum_(in_f64(f * x + r)));
+                    check(arm32 ? "vadd.f64" : "faddp", 4, sum_(in_f64(f * x + r)));
 
                     if (f == 2) {
                         // VPADAL   I       -       Pairwise Add and Accumulate Long
@@ -1108,6 +1119,14 @@ public:
                         for (int v : {2, 4}) {
                             check("udot", v, sum(u32(in_u8(f * x + r)) * in_u8(f * x + r + 32)));
                             check("sdot", v, sum(i32(in_i8(f * x + r)) * in_i8(f * x + r + 32)));
+                            if (f == 4) {
+                                // This doesn't generate for higher reduction factors because the
+                                // intermediate is 16-bit instead of 32-bit. It seems like it would
+                                // be slower to fix this (because the intermediate sum would be
+                                // 32-bit instead of 16-bit).
+                                check("udot", v, sum(u32(in_u8(f * x + r))));
+                                check("sdot", v, sum(i32(in_i8(f * x + r))));
+                            }
                         }
                     }
                 }
@@ -1166,6 +1185,10 @@ public:
             check(arm32 ? "vqmovn.u32" : "uqxtn", 4 * w, u16(min(u32_1, max_u16)));
             check(arm32 ? "vqmovn.u32" : "uqxtn", 4 * w, u16(min(u64_1, max_u16)));
             check(arm32 ? "vqmovn.u64" : "uqxtn", 2 * w, u32(min(u64_1, max_u32)));
+            // Double/Triple saturating narrow from float
+            check(arm32 ? "vqmovn.s16" : "sqxtn", 8 * w, i8_sat(f32_1));
+            check(arm32 ? "vqmovn.s16" : "sqxtn", 8 * w, i8_sat(f64_1));
+            check(arm32 ? "vqmovn.s32" : "sqxtn", 4 * w, i16_sat(f64_1));
 
             // VQMOVUN  I       -       Saturating Move and Unsigned Narrow
             check(arm32 ? "vqmovun.s16" : "sqxtun", 8 * w, u8_sat(i16_1));
@@ -1174,6 +1197,10 @@ public:
             check(arm32 ? "vqmovun.s32" : "sqxtun", 4 * w, u16_sat(i32_1));
             check(arm32 ? "vqmovun.s32" : "sqxtun", 4 * w, u16_sat(i64_1));
             check(arm32 ? "vqmovun.s64" : "sqxtun", 2 * w, u32_sat(i64_1));
+            // Double/Triple saturating narrow from float
+            check(arm32 ? "vqmovun.s16" : "sqxtun", 8 * w, u8_sat(f32_1));
+            check(arm32 ? "vqmovun.s16" : "sqxtun", 8 * w, u8_sat(f64_1));
+            check(arm32 ? "vqmovun.s32" : "sqxtun", 4 * w, u16_sat(f64_1));
 
             // VQNEG    I       -       Saturating Negate
             check(arm32 ? "vqneg.s8" : "sqneg", 8 * w, -max(i8_1, -max_i8));
@@ -1796,14 +1823,14 @@ public:
                     // At present, we only attempt to generate these for LLVM >= 13.
 
                     // Extended (widening) integer multiplication
-                    check("i16x8.extmul_low_i8x16_s", 8 * w, i16(i8_1) * i8_2);
-                    check("i32x4.extmul_low_i16x8_s", 4 * w, i32(i16_1) * i16_2);
-                    check("i64x2.extmul_low_i32x4_s", 2 * w, i64(i32_1) * i32_2);
-                    check("i16x8.extmul_low_i8x16_u", 8 * w, u16(u8_1) * u8_2);
-                    check("i32x4.extmul_low_i16x8_u", 4 * w, u32(u16_1) * u16_2);
-                    check("i64x2.extmul_low_i32x4_u", 2 * w, u64(u32_1) * u32_2);
                     if (w > 1) {
                         // Need a register wider than 128 bits for us to generate these
+                        check("i16x8.extmul_low_i8x16_s", 8 * w, i16(i8_1) * i8_2);
+                        check("i32x4.extmul_low_i16x8_s", 4 * w, i32(i16_1) * i16_2);
+                        check("i64x2.extmul_low_i32x4_s", 2 * w, i64(i32_1) * i32_2);
+                        check("i16x8.extmul_low_i8x16_u", 8 * w, u16(u8_1) * u8_2);
+                        check("i32x4.extmul_low_i16x8_u", 4 * w, u32(u16_1) * u16_2);
+                        check("i64x2.extmul_low_i32x4_u", 2 * w, u64(u32_1) * u32_2);
                         check("i16x8.extmul_high_i8x16_s", 8 * w, i16(i8_1) * i8_2);
                         check("i32x4.extmul_high_i16x8_s", 4 * w, i32(i16_1) * i16_2);
                         check("i64x2.extmul_high_i32x4_s", 2 * w, i64(i32_1) * i32_2);
@@ -1885,8 +1912,9 @@ public:
                 check("i8x16.abs", 16 * w, abs(i8_1));
                 check("i16x8.abs", 8 * w, abs(i16_1));
                 check("i32x4.abs", 4 * w, abs(i32_1));
-                // TODO(https://github.com/halide/Halide/issues/5130): NOT BEING GENERATED AT TRUNK
-                // check("i64x2.abs", 2 * w, abs(i64_1));
+                if (Halide::Internal::get_llvm_version() >= 130) {
+                    check("i64x2.abs", 2 * w, abs(i64_1));
+                }
 
                 // Left shift by constant scalar
                 check("i8x16.shl", 16 * w, i8_1 << i8(7));
@@ -2162,12 +2190,9 @@ public:
                 check("f32x4.convert_i32x4_u", 8 * w, cast<float>(u32_1));
 
                 // Integer to double-precision floating point
-                if (Halide::Internal::get_llvm_version() >= 130) {
-                    // TODO: we can't directly generate these instructions at LLVM top of tree,
-                    // but LLVM isn't generating the f64x2.convert_low_i32x4_s/u instructions;
-                    // investigation needed.
-                    // check("f64x2.convert_low_i32x4_s", 2 * w, cast<double>(i32_1));
-                    // check("f64x2.convert_low_i32x4_u", 2 * w, cast<double>(u32_1));
+                if (Halide::Internal::get_llvm_version() >= 140) {
+                    check("f64x2.convert_low_i32x4_s", 2 * w, cast<double>(i32_1));
+                    check("f64x2.convert_low_i32x4_u", 2 * w, cast<double>(u32_1));
                 }
 
                 // Single-precision floating point to integer with saturation
@@ -2184,7 +2209,12 @@ public:
                 // check("f32x4.demote_f64x2_zero", 4 * w, ???);
 
                 // Single-precision floating point to double-precision
-                if (Halide::Internal::get_llvm_version() >= 130) {
+                if (Halide::Internal::get_llvm_version() >= 140) {
+                    // TODO(https://github.com/halide/Halide/issues/5130): broken for > 128bit vector widths
+                    if (w < 2) {
+                        check("f64x2.promote_low_f32x4", 2 * w, cast<double>(f32_1));
+                    }
+                } else if (Halide::Internal::get_llvm_version() >= 130) {
                     check("f64x2.promote_low_f32x4", 2 * w, cast<double>(f32_1));
                 }
 
@@ -2235,12 +2265,6 @@ int main(int argc, char **argv) {
     Target hl_target = get_target_from_environment();
     printf("host is:      %s\n", host.to_string().c_str());
     printf("HL_TARGET is: %s\n", hl_target.to_string().c_str());
-
-    if (Halide::Internal::get_llvm_version() < 110 &&
-        hl_target.arch == Target::WebAssembly) {
-        printf("[SKIP] WebAssembly simd code is only supported with LLVM 11+ (saw %d).\n", Halide::Internal::get_llvm_version());
-        return 0;
-    }
 
     SimdOpCheck test(hl_target);
 

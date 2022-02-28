@@ -41,7 +41,8 @@ int main(int argc, char **argv) {
     extra_value += 5;
 
     const int extra_scalar = 7;
-    extra_value += extra_scalar;
+    const int8_t extra_dynamic_scalar = 13;
+    extra_value += extra_scalar + extra_dynamic_scalar;
 
     const int bias = 1;
     auto result = configure::generate(context, configure::Inputs{
@@ -50,7 +51,8 @@ int main(int argc, char **argv) {
                                                    extras[0], extras[1], extras[2],
                                                    typed_extra,
                                                    func_extra,
-                                                   extra_scalar});
+                                                   extra_scalar,
+                                                   cast<int8_t>(extra_dynamic_scalar)});
 
     Buffer<int32_t> output = result.output.realize({kSize, kSize, 3});
     Buffer<float> extra_buffer_output = result.extra_buffer_output.realize({kSize, kSize, 3});

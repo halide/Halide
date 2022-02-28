@@ -112,9 +112,9 @@ class Add(th.nn.Module):
     def __init__(self, backward_op):
         super(Add, self).__init__()
         if backward_op == "add_grad":
-          self._adder = AddFunction_Grad()
+          self._adder = AddFunction_Grad
         elif backward_op == "add_halidegrad":
-          self._adder = AddFunction_HalideGrad()
+          self._adder = AddFunction_HalideGrad
         else:
           assert False
 

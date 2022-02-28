@@ -27,14 +27,14 @@ public:
         if (function.has_extern_definition()) {
             const std::vector<ExternFuncArgument> &extern_args =
                 function.extern_arguments();
-            for (size_t i = 0; i < extern_args.size(); i++) {
-                if (extern_args[i].is_buffer()) {
+            for (const auto &extern_arg : extern_args) {
+                if (extern_arg.is_buffer()) {
                     // Function with an extern definition
-                    record(Halide::Internal::Parameter(extern_args[i].buffer.type(), true,
-                                                       extern_args[i].buffer.dimensions(),
-                                                       extern_args[i].buffer.name()));
-                } else if (extern_args[i].is_image_param()) {
-                    record(extern_args[i].image_param);
+                    record(Halide::Internal::Parameter(extern_arg.buffer.type(), true,
+                                                       extern_arg.buffer.dimensions(),
+                                                       extern_arg.buffer.name()));
+                } else if (extern_arg.is_image_param()) {
+                    record(extern_arg.image_param);
                 }
             }
         }

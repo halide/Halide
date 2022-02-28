@@ -31,6 +31,7 @@ tests(GROUPS correctness
       bounds_of_func.cpp
       bounds_of_monotonic_math.cpp
       bounds_of_multiply.cpp
+      bounds_of_split.cpp
       bounds_query.cpp
       buffer_t.cpp
       c_function.cpp
@@ -104,6 +105,7 @@ tests(GROUPS correctness
       float16_t_comparison.cpp
       float16_t_constants.cpp
       float16_t_image_type.cpp
+      float16_t_neon_op_check.cpp
       for_each_element.cpp
       force_onto_stack.cpp
       func_clone.cpp
@@ -149,7 +151,9 @@ tests(GROUPS correctness
       gpu_texture.cpp
       gpu_thread_barrier.cpp
       gpu_transpose.cpp
+      gpu_vectorize.cpp
       gpu_vectorized_shared_memory.cpp
+      growing_stack.cpp
       half_native_interleave.cpp
       halide_buffer.cpp
       handle.cpp
@@ -166,6 +170,7 @@ tests(GROUPS correctness
       implicit_args.cpp
       implicit_args_tests.cpp
       in_place.cpp
+      indexing_access_undef.cpp
       infer_arguments.cpp
       inline_reduction.cpp
       inlined_generator.cpp
@@ -235,6 +240,7 @@ tests(GROUPS correctness
       parallel_gpu_nested.cpp
       parallel_nested.cpp
       parallel_nested_1.cpp
+      parallel_scatter.cpp
       parallel_reductions.cpp
       parallel_rvar.cpp
       param.cpp
@@ -323,6 +329,7 @@ tests(GROUPS correctness
       uninitialized_read.cpp
       unique_func_image.cpp
       unroll_dynamic_loop.cpp
+      unroll_huge_mux.cpp
       unrolled_reduction.cpp
       unsafe_dedup_lets.cpp
       unsafe_promises.cpp

@@ -144,7 +144,7 @@ class FoldStorageOfFunction : public IRMutator {
         if (op->name == func) {
             vector<Expr> args = op->args;
             args[dim] = is_const_one(factor) ? 0 : (args[dim] % factor);
-            stmt = Provide::make(op->name, op->values, args);
+            stmt = Provide::make(op->name, op->values, args, op->predicate);
         }
         return stmt;
     }
@@ -961,9 +961,9 @@ class StorageFolding : public IRMutator {
             Region bounds = op->bounds;
 
             // Collapse down the extent in the folded dimension
-            for (size_t i = 0; i < folder.dims_folded.size(); i++) {
-                int d = folder.dims_folded[i].dim;
-                Expr f = folder.dims_folded[i].factor;
+            for (const auto &dim : folder.dims_folded) {
+                int d = dim.dim;
+                Expr f = dim.factor;
                 internal_assert(d >= 0 &&
                                 d < (int)bounds.size());
                 bounds[d] = Range(0, f);

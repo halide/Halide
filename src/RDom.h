@@ -311,7 +311,7 @@ public:
      *
      \code
      for (int r.y = 14; r.y < 20; r.y++) {
-       f[r.x, r.y] += 1;
+       f[10, r.y] += 1;
      }
      \endcode
      *

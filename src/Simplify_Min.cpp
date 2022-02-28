@@ -97,6 +97,11 @@ Expr Simplify::visit(const Min *op, ExprInfo *bounds) {
              rewrite(min(max(x, y), min(z, x)), b) ||
              rewrite(min(max(x, y), min(z, y)), b) ||
 
+             rewrite(min(select(x, min(z, y), w), y), min(select(x, z, w), y)) ||
+             rewrite(min(select(x, min(z, y), w), z), min(select(x, y, w), z)) ||
+             rewrite(min(select(x, w, min(z, y)), y), min(select(x, w, z), y)) ||
+             rewrite(min(select(x, w, min(z, y)), z), min(select(x, w, y), z)) ||
+
              rewrite(min(intrin(Call::likely, x), x), b) ||
              rewrite(min(x, intrin(Call::likely, x)), a) ||
              rewrite(min(intrin(Call::likely_if_innermost, x), x), b) ||
@@ -127,6 +132,7 @@ Expr Simplify::visit(const Min *op, ExprInfo *bounds) {
                rewrite(min(x, max(y, x) + c0), a, 0 <= c0) ||
                rewrite(min(max(x, y) + c0, x), b, 0 <= c0) ||
                rewrite(min(max(x, y) + c0, y), b, 0 <= c0) ||
+               rewrite(min(max(x, y + c0), y), y, c0 > 0) ||
 
                (no_overflow_int(op->type) &&
                 (rewrite(min(max(c0 - x, x), c1), b, 2*c1 <= c0 + 1) ||
@@ -289,6 +295,14 @@ Expr Simplify::visit(const Min *op, ExprInfo *bounds) {
                // Required for nested GuardWithIf tilings
                rewrite(min((min(((y + c0)/c1), x)*c1), y + c2), min(x * c1, y + c2), c1 > 0 && c1 + c2 <= c0 + 1) ||
                rewrite(min((min(((y + c0)/c1), x)*c1) + c2, y), min(x * c1 + c2, y), c1 > 0 && c1 <= c0 + c2 + 1) ||
+
+               rewrite(min((x + c0)/c1, ((x + c2)/c3)*c4), (x + c0)/c1, c0 + c3 - c1 <= c2 && c1 > 0 && c3 > 0 && c1 * c4 == c3) ||
+               rewrite(min((x + c0)/c1, ((x + c2)/c3)*c4), ((x + c2)/c3)*c4, c2 <= c0 && c1 > 0 && c3 > 0 && c1 * c4 == c3) ||
+               rewrite(min(x/c1, ((x + c2)/c3)*c4), x/c1, c3 - c1 <= c2 && c1 > 0 && c3 > 0 && c1 * c4 == c3) ||
+               rewrite(min(x/c1, ((x + c2)/c3)*c4), ((x + c2)/c3)*c4, c2 <= 0 && c1 > 0 && c3 > 0 && c1 * c4 == c3) ||
+               rewrite(min((x + c0)/c1, (x/c3)*c4), (x + c0)/c1, c0 + c3 - c1 <= 0 && c1 > 0 && c3 > 0 && c1 * c4 == c3) ||
+               rewrite(min((x + c0)/c1, (x/c3)*c4), (x/c3)*c4, 0 <= c0 && c1 > 0 && c3 > 0 && c1 * c4 == c3) ||
+               rewrite(min(x/c1, (x/c3)*c4), (x/c3)*c4, c1 > 0 && c3 > 0 && c1 * c4 == c3) ||
 
                false )))) {
 

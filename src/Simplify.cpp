@@ -20,7 +20,7 @@ int Simplify::debug_indent = 0;
 #endif
 
 Simplify::Simplify(bool r, const Scope<Interval> *bi, const Scope<ModulusRemainder> *ai)
-    : remove_dead_lets(r), no_float_simplify(false) {
+    : remove_dead_code(r), no_float_simplify(false) {
 
     // Only respect the constant bounds from the containing scope.
     for (auto iter = bi->cbegin(); iter != bi->cend(); ++iter) {
@@ -52,6 +52,23 @@ Simplify::Simplify(bool r, const Scope<Interval> *bi, const Scope<ModulusRemaind
         bounds.alignment = iter.value();
         bounds_and_alignment_info.push(iter.name(), bounds);
     }
+}
+
+std::pair<std::vector<Expr>, bool> Simplify::mutate_with_changes(const std::vector<Expr> &old_exprs, ExprInfo *bounds) {
+    vector<Expr> new_exprs(old_exprs.size());
+    bool changed = false;
+
+    // Mutate the args
+    for (size_t i = 0; i < old_exprs.size(); i++) {
+        const Expr &old_e = old_exprs[i];
+        Expr new_e = mutate(old_e, bounds);
+        if (!new_e.same_as(old_e)) {
+            changed = true;
+        }
+        new_exprs[i] = std::move(new_e);
+    }
+
+    return {std::move(new_exprs), changed};
 }
 
 void Simplify::found_buffer_reference(const string &name, size_t dimensions) {
@@ -339,13 +356,23 @@ Simplify::ScopedFact::~ScopedFact() {
 Expr simplify(const Expr &e, bool remove_dead_let_stmts,
               const Scope<Interval> &bounds,
               const Scope<ModulusRemainder> &alignment) {
-    return Simplify(remove_dead_let_stmts, &bounds, &alignment).mutate(e, nullptr);
+    Simplify m(remove_dead_let_stmts, &bounds, &alignment);
+    Expr result = m.mutate(e, nullptr);
+    if (m.in_unreachable) {
+        return unreachable(e.type());
+    }
+    return result;
 }
 
 Stmt simplify(const Stmt &s, bool remove_dead_let_stmts,
               const Scope<Interval> &bounds,
               const Scope<ModulusRemainder> &alignment) {
-    return Simplify(remove_dead_let_stmts, &bounds, &alignment).mutate(s);
+    Simplify m(remove_dead_let_stmts, &bounds, &alignment);
+    Stmt result = m.mutate(s);
+    if (m.in_unreachable) {
+        return Evaluate::make(unreachable());
+    }
+    return result;
 }
 
 class SimplifyExprs : public IRMutator {

@@ -1,3 +1,4 @@
+#include <set>
 #include <sstream>
 
 #include "CSE.h"
@@ -29,11 +30,6 @@ using namespace llvm;
 
 namespace {
 
-// Broadcast to an unknown number of lanes, for making patterns.
-Expr bc(Expr x) {
-    return Broadcast::make(std::move(x), 0);
-}
-
 /** A code generator that emits ARM code from a given Halide stmt. */
 class CodeGen_ARM : public CodeGen_Posix {
 public:
@@ -52,7 +48,6 @@ protected:
     // @{
     void visit(const Cast *) override;
     void visit(const Sub *) override;
-    void visit(const Mul *) override;
     void visit(const Min *) override;
     void visit(const Max *) override;
     void visit(const Store *) override;
@@ -62,6 +57,9 @@ protected:
     void visit(const LE *) override;
     void codegen_vector_reduce(const VectorReduce *, const Expr &) override;
     // @}
+    Type upgrade_type_for_arithmetic(const Type &t) const override;
+    Type upgrade_type_for_argument_passing(const Type &t) const override;
+    Type upgrade_type_for_storage(const Type &t) const override;
 
     /** Various patterns to peephole match against */
     struct Pattern {
@@ -72,7 +70,7 @@ protected:
             : intrin(intrin), pattern(std::move(p)) {
         }
     };
-    vector<Pattern> casts, averagings, negations;
+    vector<Pattern> casts, calls, averagings, negations;
 
     string mcpu() const override;
     string mattrs() const override;
@@ -83,6 +81,12 @@ protected:
     bool neon_intrinsics_disabled() {
         return target.has_feature(Target::NoNEON);
     }
+
+    bool is_float16_and_has_feature(const Type &t) const {
+        // NOTE : t.is_float() returns true even in case of BFloat16. We don't include it for now.
+        return t.code() == Type::Float && t.bits() == 16 && target.has_feature(Target::ARMFp16);
+    }
+    bool supports_call_as_float16(const Call *op) const override;
 };
 
 CodeGen_ARM::CodeGen_ARM(const Target &target)
@@ -90,62 +94,62 @@ CodeGen_ARM::CodeGen_ARM(const Target &target)
 
     // RADDHN - Add and narrow with rounding
     // These must come before other narrowing rounding shift patterns
-    casts.emplace_back("rounding_add_narrow", i8(rounding_shift_right(wild_i16x_ + wild_i16x_, u16(8))));
-    casts.emplace_back("rounding_add_narrow", u8(rounding_shift_right(wild_u16x_ + wild_u16x_, u16(8))));
-    casts.emplace_back("rounding_add_narrow", i16(rounding_shift_right(wild_i32x_ + wild_i32x_, u32(16))));
-    casts.emplace_back("rounding_add_narrow", u16(rounding_shift_right(wild_u32x_ + wild_u32x_, u32(16))));
-    casts.emplace_back("rounding_add_narrow", i32(rounding_shift_right(wild_i64x_ + wild_i64x_, u64(32))));
-    casts.emplace_back("rounding_add_narrow", u32(rounding_shift_right(wild_u64x_ + wild_u64x_, u64(32))));
+    casts.emplace_back("rounding_add_narrow", i8(rounding_shift_right(wild_i16x_ + wild_i16x_, 8)));
+    casts.emplace_back("rounding_add_narrow", u8(rounding_shift_right(wild_u16x_ + wild_u16x_, 8)));
+    casts.emplace_back("rounding_add_narrow", i16(rounding_shift_right(wild_i32x_ + wild_i32x_, 16)));
+    casts.emplace_back("rounding_add_narrow", u16(rounding_shift_right(wild_u32x_ + wild_u32x_, 16)));
+    casts.emplace_back("rounding_add_narrow", i32(rounding_shift_right(wild_i64x_ + wild_i64x_, 32)));
+    casts.emplace_back("rounding_add_narrow", u32(rounding_shift_right(wild_u64x_ + wild_u64x_, 32)));
 
     // RSUBHN - Add and narrow with rounding
     // These must come before other narrowing rounding shift patterns
-    casts.emplace_back("rounding_sub_narrow", i8(rounding_shift_right(wild_i16x_ - wild_i16x_, u16(8))));
-    casts.emplace_back("rounding_sub_narrow", u8(rounding_shift_right(wild_u16x_ - wild_u16x_, u16(8))));
-    casts.emplace_back("rounding_sub_narrow", i16(rounding_shift_right(wild_i32x_ - wild_i32x_, u32(16))));
-    casts.emplace_back("rounding_sub_narrow", u16(rounding_shift_right(wild_u32x_ - wild_u32x_, u32(16))));
-    casts.emplace_back("rounding_sub_narrow", i32(rounding_shift_right(wild_i64x_ - wild_i64x_, u64(32))));
-    casts.emplace_back("rounding_sub_narrow", u32(rounding_shift_right(wild_u64x_ - wild_u64x_, u64(32))));
+    casts.emplace_back("rounding_sub_narrow", i8(rounding_shift_right(wild_i16x_ - wild_i16x_, 8)));
+    casts.emplace_back("rounding_sub_narrow", u8(rounding_shift_right(wild_u16x_ - wild_u16x_, 8)));
+    casts.emplace_back("rounding_sub_narrow", i16(rounding_shift_right(wild_i32x_ - wild_i32x_, 16)));
+    casts.emplace_back("rounding_sub_narrow", u16(rounding_shift_right(wild_u32x_ - wild_u32x_, 16)));
+    casts.emplace_back("rounding_sub_narrow", i32(rounding_shift_right(wild_i64x_ - wild_i64x_, 32)));
+    casts.emplace_back("rounding_sub_narrow", u32(rounding_shift_right(wild_u64x_ - wild_u64x_, 32)));
 
     // QDMULH - Saturating doubling multiply keep high half
-    casts.emplace_back("qdmulh", i16_sat(widening_mul(wild_i16x_, wild_i16x_) >> u16(15)));
-    casts.emplace_back("qdmulh", i32_sat(widening_mul(wild_i32x_, wild_i32x_) >> u32(31)));
+    calls.emplace_back("qdmulh", mul_shift_right(wild_i16x_, wild_i16x_, 15));
+    calls.emplace_back("qdmulh", mul_shift_right(wild_i32x_, wild_i32x_, 31));
 
     // QRDMULH - Saturating doubling multiply keep high half with rounding
-    casts.emplace_back("qrdmulh", i16_sat(rounding_shift_right(widening_mul(wild_i16x_, wild_i16x_), u16(15))));
-    casts.emplace_back("qrdmulh", i32_sat(rounding_shift_right(widening_mul(wild_i32x_, wild_i32x_), u32(31))));
+    calls.emplace_back("qrdmulh", rounding_mul_shift_right(wild_i16x_, wild_i16x_, 15));
+    calls.emplace_back("qrdmulh", rounding_mul_shift_right(wild_i32x_, wild_i32x_, 31));
 
     // RSHRN - Rounding shift right narrow (by immediate in [1, output bits])
-    casts.emplace_back("rounding_shift_right_narrow", i8(rounding_shift_right(wild_i16x_, bc(wild_u16_))));
-    casts.emplace_back("rounding_shift_right_narrow", u8(rounding_shift_right(wild_u16x_, bc(wild_u16_))));
-    casts.emplace_back("rounding_shift_right_narrow", u8(rounding_shift_right(wild_i16x_, bc(wild_u16_))));
-    casts.emplace_back("rounding_shift_right_narrow", i16(rounding_shift_right(wild_i32x_, bc(wild_u32_))));
-    casts.emplace_back("rounding_shift_right_narrow", u16(rounding_shift_right(wild_u32x_, bc(wild_u32_))));
-    casts.emplace_back("rounding_shift_right_narrow", u16(rounding_shift_right(wild_i32x_, bc(wild_u32_))));
-    casts.emplace_back("rounding_shift_right_narrow", i32(rounding_shift_right(wild_i64x_, bc(wild_u64_))));
-    casts.emplace_back("rounding_shift_right_narrow", u32(rounding_shift_right(wild_u64x_, bc(wild_u64_))));
-    casts.emplace_back("rounding_shift_right_narrow", u32(rounding_shift_right(wild_i64x_, bc(wild_u64_))));
+    casts.emplace_back("rounding_shift_right_narrow", i8(rounding_shift_right(wild_i16x_, wild_u16_)));
+    casts.emplace_back("rounding_shift_right_narrow", u8(rounding_shift_right(wild_u16x_, wild_u16_)));
+    casts.emplace_back("rounding_shift_right_narrow", u8(rounding_shift_right(wild_i16x_, wild_u16_)));
+    casts.emplace_back("rounding_shift_right_narrow", i16(rounding_shift_right(wild_i32x_, wild_u32_)));
+    casts.emplace_back("rounding_shift_right_narrow", u16(rounding_shift_right(wild_u32x_, wild_u32_)));
+    casts.emplace_back("rounding_shift_right_narrow", u16(rounding_shift_right(wild_i32x_, wild_u32_)));
+    casts.emplace_back("rounding_shift_right_narrow", i32(rounding_shift_right(wild_i64x_, wild_u64_)));
+    casts.emplace_back("rounding_shift_right_narrow", u32(rounding_shift_right(wild_u64x_, wild_u64_)));
+    casts.emplace_back("rounding_shift_right_narrow", u32(rounding_shift_right(wild_i64x_, wild_u64_)));
 
     // SHRN - Shift right narrow (by immediate in [1, output bits])
-    casts.emplace_back("shift_right_narrow", i8(wild_i16x_ >> bc(wild_u16_)));
-    casts.emplace_back("shift_right_narrow", u8(wild_u16x_ >> bc(wild_u16_)));
-    casts.emplace_back("shift_right_narrow", i16(wild_i32x_ >> bc(wild_u32_)));
-    casts.emplace_back("shift_right_narrow", u16(wild_u32x_ >> bc(wild_u32_)));
-    casts.emplace_back("shift_right_narrow", i32(wild_i64x_ >> bc(wild_u64_)));
-    casts.emplace_back("shift_right_narrow", u32(wild_u64x_ >> bc(wild_u64_)));
+    casts.emplace_back("shift_right_narrow", i8(wild_i16x_ >> wild_u16_));
+    casts.emplace_back("shift_right_narrow", u8(wild_u16x_ >> wild_u16_));
+    casts.emplace_back("shift_right_narrow", i16(wild_i32x_ >> wild_u32_));
+    casts.emplace_back("shift_right_narrow", u16(wild_u32x_ >> wild_u32_));
+    casts.emplace_back("shift_right_narrow", i32(wild_i64x_ >> wild_u64_));
+    casts.emplace_back("shift_right_narrow", u32(wild_u64x_ >> wild_u64_));
 
     // SQRSHL, UQRSHL - Saturating rounding shift left (by signed vector)
     // TODO: We need to match rounding shift right, and negate the RHS.
 
     // SQRSHRN, SQRSHRUN, UQRSHRN - Saturating rounding narrowing shift right narrow (by immediate in [1, output bits])
-    casts.emplace_back("saturating_rounding_shift_right_narrow", i8_sat(rounding_shift_right(wild_i16x_, bc(wild_u16_))));
-    casts.emplace_back("saturating_rounding_shift_right_narrow", u8_sat(rounding_shift_right(wild_u16x_, bc(wild_u16_))));
-    casts.emplace_back("saturating_rounding_shift_right_narrow", u8_sat(rounding_shift_right(wild_i16x_, bc(wild_u16_))));
-    casts.emplace_back("saturating_rounding_shift_right_narrow", i16_sat(rounding_shift_right(wild_i32x_, bc(wild_u32_))));
-    casts.emplace_back("saturating_rounding_shift_right_narrow", u16_sat(rounding_shift_right(wild_u32x_, bc(wild_u32_))));
-    casts.emplace_back("saturating_rounding_shift_right_narrow", u16_sat(rounding_shift_right(wild_i32x_, bc(wild_u32_))));
-    casts.emplace_back("saturating_rounding_shift_right_narrow", i32_sat(rounding_shift_right(wild_i64x_, bc(wild_u64_))));
-    casts.emplace_back("saturating_rounding_shift_right_narrow", u32_sat(rounding_shift_right(wild_u64x_, bc(wild_u64_))));
-    casts.emplace_back("saturating_rounding_shift_right_narrow", u32_sat(rounding_shift_right(wild_i64x_, bc(wild_u64_))));
+    casts.emplace_back("saturating_rounding_shift_right_narrow", i8_sat(rounding_shift_right(wild_i16x_, wild_u16_)));
+    casts.emplace_back("saturating_rounding_shift_right_narrow", u8_sat(rounding_shift_right(wild_u16x_, wild_u16_)));
+    casts.emplace_back("saturating_rounding_shift_right_narrow", u8_sat(rounding_shift_right(wild_i16x_, wild_u16_)));
+    casts.emplace_back("saturating_rounding_shift_right_narrow", i16_sat(rounding_shift_right(wild_i32x_, wild_u32_)));
+    casts.emplace_back("saturating_rounding_shift_right_narrow", u16_sat(rounding_shift_right(wild_u32x_, wild_u32_)));
+    casts.emplace_back("saturating_rounding_shift_right_narrow", u16_sat(rounding_shift_right(wild_i32x_, wild_u32_)));
+    casts.emplace_back("saturating_rounding_shift_right_narrow", i32_sat(rounding_shift_right(wild_i64x_, wild_u64_)));
+    casts.emplace_back("saturating_rounding_shift_right_narrow", u32_sat(rounding_shift_right(wild_u64x_, wild_u64_)));
+    casts.emplace_back("saturating_rounding_shift_right_narrow", u32_sat(rounding_shift_right(wild_i64x_, wild_u64_)));
 
     // SQSHL, UQSHL, SQSHLU - Saturating shift left by signed register.
     for (const Expr &rhs : {wild_i8x_, wild_u8x_}) {
@@ -165,15 +169,15 @@ CodeGen_ARM::CodeGen_ARM(const Target &target)
     }
 
     // SQSHRN, UQSHRN, SQRSHRUN Saturating narrowing shift right by an (by immediate in [1, output bits])
-    casts.emplace_back("saturating_shift_right_narrow", i8_sat(wild_i16x_ >> bc(wild_u16_)));
-    casts.emplace_back("saturating_shift_right_narrow", u8_sat(wild_u16x_ >> bc(wild_u16_)));
-    casts.emplace_back("saturating_shift_right_narrow", u8_sat(wild_i16x_ >> bc(wild_u16_)));
-    casts.emplace_back("saturating_shift_right_narrow", i16_sat(wild_i32x_ >> bc(wild_u32_)));
-    casts.emplace_back("saturating_shift_right_narrow", u16_sat(wild_u32x_ >> bc(wild_u32_)));
-    casts.emplace_back("saturating_shift_right_narrow", u16_sat(wild_i32x_ >> bc(wild_u32_)));
-    casts.emplace_back("saturating_shift_right_narrow", i32_sat(wild_i64x_ >> bc(wild_u64_)));
-    casts.emplace_back("saturating_shift_right_narrow", u32_sat(wild_u64x_ >> bc(wild_u64_)));
-    casts.emplace_back("saturating_shift_right_narrow", u32_sat(wild_i64x_ >> bc(wild_u64_)));
+    casts.emplace_back("saturating_shift_right_narrow", i8_sat(wild_i16x_ >> wild_u16_));
+    casts.emplace_back("saturating_shift_right_narrow", u8_sat(wild_u16x_ >> wild_u16_));
+    casts.emplace_back("saturating_shift_right_narrow", u8_sat(wild_i16x_ >> wild_u16_));
+    casts.emplace_back("saturating_shift_right_narrow", i16_sat(wild_i32x_ >> wild_u32_));
+    casts.emplace_back("saturating_shift_right_narrow", u16_sat(wild_u32x_ >> wild_u32_));
+    casts.emplace_back("saturating_shift_right_narrow", u16_sat(wild_i32x_ >> wild_u32_));
+    casts.emplace_back("saturating_shift_right_narrow", i32_sat(wild_i64x_ >> wild_u64_));
+    casts.emplace_back("saturating_shift_right_narrow", u32_sat(wild_u64x_ >> wild_u64_));
+    casts.emplace_back("saturating_shift_right_narrow", u32_sat(wild_i64x_ >> wild_u64_));
 
     // SRSHL, URSHL - Rounding shift left (by signed vector)
     // These are already written as rounding_shift_left
@@ -220,6 +224,7 @@ struct ArmIntrinsic {
         ScalarsAreVectors = 1 << 5,  // Some intrinsics have scalar arguments that are vector parameters :(
         SplitArg0 = 1 << 6,          // This intrinsic requires splitting the argument into the low and high halves.
         NoPrefix = 1 << 7,           // Don't prefix the intrinsic with llvm.*
+        RequireFp16 = 1 << 8,        // Available only if Target has ARMFp16 feature
     };
 };
 
@@ -229,8 +234,9 @@ const ArmIntrinsic intrinsic_defs[] = {
     {"vabs", "abs", UInt(16, 4), "abs", {Int(16, 4)}, ArmIntrinsic::HalfWidth},
     {"vabs", "abs", UInt(32, 2), "abs", {Int(32, 2)}, ArmIntrinsic::HalfWidth},
     {"llvm.fabs", "llvm.fabs", Float(32, 2), "abs", {Float(32, 2)}, ArmIntrinsic::HalfWidth},
+    {"llvm.fabs", "llvm.fabs", Float(16, 4), "abs", {Float(16, 4)}, ArmIntrinsic::HalfWidth | ArmIntrinsic::RequireFp16},
 
-    {"llvm.sqrt", "llvm.sqrt", Float(32, 4), "sqrt_f32", {Float(32, 4)}},
+    {"llvm.sqrt", "llvm.sqrt", Float(32, 2), "sqrt_f32", {Float(32, 2)}, ArmIntrinsic::HalfWidth},
     {"llvm.sqrt", "llvm.sqrt", Float(64, 2), "sqrt_f64", {Float(64, 2)}},
 
     // SABD, UABD - Absolute difference
@@ -307,6 +313,11 @@ const ArmIntrinsic intrinsic_defs[] = {
     {"vmins", "smin", Int(32, 2), "min", {Int(32, 2), Int(32, 2)}, ArmIntrinsic::HalfWidth},
     {"vminu", "umin", UInt(32, 2), "min", {UInt(32, 2), UInt(32, 2)}, ArmIntrinsic::HalfWidth},
     {"vmins", "fmin", Float(32, 2), "min", {Float(32, 2), Float(32, 2)}, ArmIntrinsic::HalfWidth},
+    {"vmins", "fmin", Float(16, 4), "min", {Float(16, 4), Float(16, 4)}, ArmIntrinsic::HalfWidth | ArmIntrinsic::RequireFp16},
+
+    // FCVTZS, FCVTZU
+    {nullptr, "fcvtzs", Int(16, 4), "fp_to_int", {Float(16, 4)}, ArmIntrinsic::HalfWidth | ArmIntrinsic::MangleRetArgs | ArmIntrinsic::RequireFp16},
+    {nullptr, "fcvtzu", UInt(16, 4), "fp_to_int", {Float(16, 4)}, ArmIntrinsic::HalfWidth | ArmIntrinsic::MangleRetArgs | ArmIntrinsic::RequireFp16},
 
     // SMAX, UMAX, FMAX - Max
     {"vmaxs", "smax", Int(8, 8), "max", {Int(8, 8), Int(8, 8)}, ArmIntrinsic::HalfWidth},
@@ -316,6 +327,7 @@ const ArmIntrinsic intrinsic_defs[] = {
     {"vmaxs", "smax", Int(32, 2), "max", {Int(32, 2), Int(32, 2)}, ArmIntrinsic::HalfWidth},
     {"vmaxu", "umax", UInt(32, 2), "max", {UInt(32, 2), UInt(32, 2)}, ArmIntrinsic::HalfWidth},
     {"vmaxs", "fmax", Float(32, 2), "max", {Float(32, 2), Float(32, 2)}, ArmIntrinsic::HalfWidth},
+    {"vmaxs", "fmax", Float(16, 4), "max", {Float(16, 4), Float(16, 4)}, ArmIntrinsic::HalfWidth | ArmIntrinsic::RequireFp16},
 
     // SQNEG, UQNEG - Saturating negation
     {"vqneg", "sqneg", Int(8, 8), "saturating_negate", {Int(8, 8)}, ArmIntrinsic::HalfWidth},
@@ -484,6 +496,7 @@ const ArmIntrinsic intrinsic_defs[] = {
     {"vpadd", nullptr, Int(32, 2), "pairwise_add", {Int(32, 4)}, ArmIntrinsic::SplitArg0},
     {"vpadd", nullptr, UInt(32, 2), "pairwise_add", {UInt(32, 4)}, ArmIntrinsic::SplitArg0},
     {"vpadd", nullptr, Float(32, 2), "pairwise_add", {Float(32, 4)}, ArmIntrinsic::SplitArg0},
+    {"vpadd", nullptr, Float(16, 4), "pairwise_add", {Float(16, 8)}, ArmIntrinsic::SplitArg0 | ArmIntrinsic::RequireFp16},
 
     {nullptr, "addp", Int(8, 8), "pairwise_add", {Int(8, 16)}, ArmIntrinsic::SplitArg0 | ArmIntrinsic::HalfWidth},
     {nullptr, "addp", UInt(8, 8), "pairwise_add", {UInt(8, 16)}, ArmIntrinsic::SplitArg0 | ArmIntrinsic::HalfWidth},
@@ -493,6 +506,7 @@ const ArmIntrinsic intrinsic_defs[] = {
     {nullptr, "addp", UInt(32, 2), "pairwise_add", {UInt(32, 4)}, ArmIntrinsic::SplitArg0 | ArmIntrinsic::HalfWidth},
     {nullptr, "faddp", Float(32, 2), "pairwise_add", {Float(32, 4)}, ArmIntrinsic::SplitArg0 | ArmIntrinsic::HalfWidth},
     {nullptr, "faddp", Float(64, 2), "pairwise_add", {Float(64, 4)}, ArmIntrinsic::SplitArg0},
+    {nullptr, "faddp", Float(16, 4), "pairwise_add", {Float(16, 8)}, ArmIntrinsic::SplitArg0 | ArmIntrinsic::HalfWidth | ArmIntrinsic::RequireFp16},
 
     // SADDLP, UADDLP - Pairwise add long.
     {"vpaddls", "saddlp", Int(16, 4), "pairwise_widening_add", {Int(8, 8)}, ArmIntrinsic::HalfWidth | ArmIntrinsic::MangleRetArgs},
@@ -524,6 +538,7 @@ const ArmIntrinsic intrinsic_defs[] = {
     {nullptr, "smaxp", Int(32, 2), "pairwise_max", {Int(32, 4)}, ArmIntrinsic::SplitArg0 | ArmIntrinsic::HalfWidth},
     {nullptr, "umaxp", UInt(32, 2), "pairwise_max", {UInt(32, 4)}, ArmIntrinsic::SplitArg0 | ArmIntrinsic::HalfWidth},
     {nullptr, "fmaxp", Float(32, 2), "pairwise_max", {Float(32, 4)}, ArmIntrinsic::SplitArg0 | ArmIntrinsic::HalfWidth},
+    {nullptr, "fmaxp", Float(16, 4), "pairwise_max", {Float(16, 8)}, ArmIntrinsic::SplitArg0 | ArmIntrinsic::HalfWidth | ArmIntrinsic::RequireFp16},
 
     // On arm32, we only have half-width versions of these.
     {"vpmaxs", nullptr, Int(8, 8), "pairwise_max", {Int(8, 16)}, ArmIntrinsic::SplitArg0},
@@ -533,6 +548,7 @@ const ArmIntrinsic intrinsic_defs[] = {
     {"vpmaxs", nullptr, Int(32, 2), "pairwise_max", {Int(32, 4)}, ArmIntrinsic::SplitArg0},
     {"vpmaxu", nullptr, UInt(32, 2), "pairwise_max", {UInt(32, 4)}, ArmIntrinsic::SplitArg0},
     {"vpmaxs", nullptr, Float(32, 2), "pairwise_max", {Float(32, 4)}, ArmIntrinsic::SplitArg0},
+    {"vpmaxs", nullptr, Float(16, 4), "pairwise_max", {Float(16, 8)}, ArmIntrinsic::SplitArg0 | ArmIntrinsic::RequireFp16},
 
     // SMINP, UMINP, FMINP - Pairwise min.
     {nullptr, "sminp", Int(8, 8), "pairwise_min", {Int(8, 16)}, ArmIntrinsic::SplitArg0 | ArmIntrinsic::HalfWidth},
@@ -542,6 +558,7 @@ const ArmIntrinsic intrinsic_defs[] = {
     {nullptr, "sminp", Int(32, 2), "pairwise_min", {Int(32, 4)}, ArmIntrinsic::SplitArg0 | ArmIntrinsic::HalfWidth},
     {nullptr, "uminp", UInt(32, 2), "pairwise_min", {UInt(32, 4)}, ArmIntrinsic::SplitArg0 | ArmIntrinsic::HalfWidth},
     {nullptr, "fminp", Float(32, 2), "pairwise_min", {Float(32, 4)}, ArmIntrinsic::SplitArg0 | ArmIntrinsic::HalfWidth},
+    {nullptr, "fminp", Float(16, 4), "pairwise_min", {Float(16, 8)}, ArmIntrinsic::SplitArg0 | ArmIntrinsic::HalfWidth | ArmIntrinsic::RequireFp16},
 
     // On arm32, we only have half-width versions of these.
     {"vpmins", nullptr, Int(8, 8), "pairwise_min", {Int(8, 16)}, ArmIntrinsic::SplitArg0},
@@ -551,6 +568,7 @@ const ArmIntrinsic intrinsic_defs[] = {
     {"vpmins", nullptr, Int(32, 2), "pairwise_min", {Int(32, 4)}, ArmIntrinsic::SplitArg0},
     {"vpminu", nullptr, UInt(32, 2), "pairwise_min", {UInt(32, 4)}, ArmIntrinsic::SplitArg0},
     {"vpmins", nullptr, Float(32, 2), "pairwise_min", {Float(32, 4)}, ArmIntrinsic::SplitArg0},
+    {"vpmins", nullptr, Float(16, 4), "pairwise_min", {Float(16, 8)}, ArmIntrinsic::SplitArg0 | ArmIntrinsic::RequireFp16},
 
     // SDOT, UDOT - Dot products.
     // Mangle this one manually, there aren't that many and it is a special case.
@@ -572,6 +590,43 @@ const ArmIntrinsic intrinsic_defs[] = {
     {"vabdl_i32x2", "vabdl_i32x2", Int(64, 2), "widening_absd", {Int(32, 2), Int(32, 2)}, ArmIntrinsic::NoMangle | ArmIntrinsic::NoPrefix},
     {"vabdl_i32x2", "vabdl_i32x2", UInt(64, 2), "widening_absd", {Int(32, 2), Int(32, 2)}, ArmIntrinsic::NoMangle | ArmIntrinsic::NoPrefix},
     {"vabdl_u32x2", "vabdl_u32x2", UInt(64, 2), "widening_absd", {UInt(32, 2), UInt(32, 2)}, ArmIntrinsic::NoMangle | ArmIntrinsic::NoPrefix},
+};
+
+// List of fp16 math functions which we can avoid "emulated" equivalent code generation.
+// Only possible if the target has ARMFp16 feature.
+
+// These can be vectorized as fp16 SIMD instruction
+const std::set<string> float16_native_funcs = {
+    "ceil_f16",
+    "floor_f16",
+    "is_finite_f16",
+    "is_inf_f16",
+    "is_nan_f16",
+    "round_f16",
+    "sqrt_f16",
+    "trunc_f16",
+};
+
+// These end up with fp32 math function call.
+// However, data type conversion of fp16 <-> fp32 is performed natively rather than emulation.
+// SIMD instruction is not available, so scalar based instruction is generated.
+const std::map<string, string> float16_transcendental_remapping = {
+    {"acos_f16", "acos_f32"},
+    {"acosh_f16", "acosh_f32"},
+    {"asin_f16", "asin_f32"},
+    {"asinh_f16", "asinh_f32"},
+    {"atan_f16", "atan_f32"},
+    {"atan2_f16", "atan2_f32"},
+    {"atanh_f16", "atanh_f32"},
+    {"cos_f16", "cos_f32"},
+    {"cosh_f16", "cosh_f32"},
+    {"exp_f16", "exp_f32"},
+    {"log_f16", "log_f32"},
+    {"pow_f16", "pow_f32"},
+    {"sin_f16", "sin_f32"},
+    {"sinh_f16", "sinh_f32"},
+    {"tan_f16", "tan_f32"},
+    {"tanh_f16", "tanh_f32"},
 };
 // clang-format on
 
@@ -621,6 +676,9 @@ void CodeGen_ARM::init_module() {
 
     string prefix = target.bits == 32 ? "llvm.arm.neon." : "llvm.aarch64.neon.";
     for (const ArmIntrinsic &intrin : intrinsic_defs) {
+        if (intrin.flags & ArmIntrinsic::RequireFp16 && !target.has_feature(Target::ARMFp16)) {
+            continue;
+        }
         // Get the name of the intrinsic with the appropriate prefix.
         const char *intrin_name = nullptr;
         if (target.bits == 32) {
@@ -750,16 +808,22 @@ void CodeGen_ARM::visit(const Cast *op) {
             // regular narrowing casts.
             {u8_sat(wild_u32x_), u8_sat(u16_sat(wild_u32x_))},
             {u8_sat(wild_i32x_), u8_sat(i16_sat(wild_i32x_))},
+            {u8_sat(wild_f32x_), u8_sat(i16_sat(wild_f32x_))},
             {i8_sat(wild_u32x_), i8_sat(u16_sat(wild_u32x_))},
             {i8_sat(wild_i32x_), i8_sat(i16_sat(wild_i32x_))},
+            {i8_sat(wild_f32x_), i8_sat(i16_sat(wild_f32x_))},
             {u16_sat(wild_u64x_), u16_sat(u32_sat(wild_u64x_))},
             {u16_sat(wild_i64x_), u16_sat(i32_sat(wild_i64x_))},
+            {u16_sat(wild_f64x_), u16_sat(i32_sat(wild_f64x_))},
             {i16_sat(wild_u64x_), i16_sat(u32_sat(wild_u64x_))},
             {i16_sat(wild_i64x_), i16_sat(i32_sat(wild_i64x_))},
+            {i16_sat(wild_f64x_), i16_sat(i32_sat(wild_f64x_))},
             {u8_sat(wild_u64x_), u8_sat(u16_sat(u32_sat(wild_u64x_)))},
             {u8_sat(wild_i64x_), u8_sat(i16_sat(i32_sat(wild_i64x_)))},
+            {u8_sat(wild_f64x_), u8_sat(i16_sat(i32_sat(wild_f64x_)))},
             {i8_sat(wild_u64x_), i8_sat(u16_sat(u32_sat(wild_u64x_)))},
             {i8_sat(wild_i64x_), i8_sat(i16_sat(i32_sat(wild_i64x_)))},
+            {i8_sat(wild_f64x_), i8_sat(i16_sat(i32_sat(wild_f64x_)))},
         };
         for (const auto &i : cast_rewrites) {
             if (expr_match(i.first, op, matches)) {
@@ -771,46 +835,15 @@ void CodeGen_ARM::visit(const Cast *op) {
         }
     }
 
-    CodeGen_Posix::visit(op);
-}
-
-void CodeGen_ARM::visit(const Mul *op) {
-    if (neon_intrinsics_disabled()) {
-        CodeGen_Posix::visit(op);
-        return;
-    }
-
-    // We only have peephole optimizations for int vectors for now
-    if (op->type.is_scalar() || op->type.is_float()) {
-        CodeGen_Posix::visit(op);
-        return;
-    }
-
-    vector<Expr> matches;
-
-    int shift_amount = 0;
-    if (is_const_power_of_two_integer(op->b, &shift_amount)) {
-        // Let LLVM handle these.
-        CodeGen_Posix::visit(op);
-        return;
-    }
-
-    // Vector multiplies by 3, 5, 7, 9 should do shift-and-add or
-    // shift-and-sub instead to reduce register pressure (the
-    // shift is an immediate)
-    // TODO: Verify this is still good codegen.
-    if (is_const(op->b, 3)) {
-        value = codegen((op->a << 1) + op->a);
-        return;
-    } else if (is_const(op->b, 5)) {
-        value = codegen((op->a << 2) + op->a);
-        return;
-    } else if (is_const(op->b, 7)) {
-        value = codegen((op->a << 3) - op->a);
-        return;
-    } else if (is_const(op->b, 9)) {
-        value = codegen((op->a << 3) + op->a);
-        return;
+    // LLVM fptoui generates fcvtzs if src is fp16 scalar else fcvtzu.
+    // To avoid that, we use neon intrinsic explicitly.
+    if (is_float16_and_has_feature(op->value.type())) {
+        if (op->type.is_int_or_uint() && op->type.bits() == 16) {
+            value = call_overloaded_intrin(op->type, "fp_to_int", {op->value});
+            if (value) {
+                return;
+            }
+        }
     }
 
     CodeGen_Posix::visit(op);
@@ -824,9 +857,9 @@ void CodeGen_ARM::visit(const Sub *op) {
 
     if (op->type.is_vector()) {
         vector<Expr> matches;
-        for (size_t i = 0; i < negations.size(); i++) {
-            if (expr_match(negations[i].pattern, op, matches)) {
-                value = call_overloaded_intrin(op->type, negations[i].intrin, matches);
+        for (const auto &i : negations) {
+            if (expr_match(i.pattern, op, matches)) {
+                value = call_overloaded_intrin(op->type, i.intrin, matches);
                 return;
             }
         }
@@ -834,10 +867,12 @@ void CodeGen_ARM::visit(const Sub *op) {
 
     // llvm will generate floating point negate instructions if we ask for (-0.0f)-x
     if (op->type.is_float() &&
-        op->type.bits() >= 32 &&
+        (op->type.bits() >= 32 || is_float16_and_has_feature(op->type)) &&
         is_const_zero(op->a)) {
         Constant *a;
-        if (op->type.bits() == 32) {
+        if (op->type.bits() == 16) {
+            a = ConstantFP::getNegativeZero(f16_t);
+        } else if (op->type.bits() == 32) {
             a = ConstantFP::getNegativeZero(f32_t);
         } else if (op->type.bits() == 64) {
             a = ConstantFP::getNegativeZero(f64_t);
@@ -921,6 +956,7 @@ void CodeGen_ARM::visit(const Store *op) {
         Type elt = t.element_of();
         int vec_bits = t.bits() * t.lanes();
         if (elt == Float(32) ||
+            is_float16_and_has_feature(elt) ||
             elt == Int(8) || elt == Int(16) || elt == Int(32) ||
             elt == UInt(8) || elt == UInt(16) || elt == UInt(32)) {
             if (vec_bits % 128 == 0) {
@@ -947,8 +983,8 @@ void CodeGen_ARM::visit(const Store *op) {
         int alignment = t.bytes();
 
         // Codegen the lets
-        for (size_t i = 0; i < lets.size(); i++) {
-            sym_push(lets[i].first, codegen(lets[i].second));
+        for (auto &let : lets) {
+            sym_push(let.first, codegen(let.second));
         }
 
         // Codegen all the vector args.
@@ -1019,8 +1055,8 @@ void CodeGen_ARM::visit(const Store *op) {
         }
 
         // pop the lets from the symbol table
-        for (size_t i = 0; i < lets.size(); i++) {
-            sym_pop(lets[i].first);
+        for (auto &let : lets) {
+            sym_pop(let.first);
         }
 
         return;
@@ -1133,6 +1169,36 @@ void CodeGen_ARM::visit(const Call *op) {
         return;
     }
 
+    if (op->type.is_vector()) {
+        vector<Expr> matches;
+        for (const Pattern &pattern : calls) {
+            if (expr_match(pattern.pattern, op, matches)) {
+                value = call_overloaded_intrin(op->type, pattern.intrin, matches);
+                if (value) {
+                    return;
+                }
+            }
+        }
+    }
+
+    if (target.has_feature(Target::ARMFp16)) {
+        auto it = float16_transcendental_remapping.find(op->name);
+        if (it != float16_transcendental_remapping.end()) {
+            // This op doesn't have float16 native function.
+            // So we call float32 equivalent func with native type conversion between fp16 and fp32
+            // instead of emulated equivalent code as in EmulatedFloat16Math.cpp
+            std::vector<Expr> new_args(op->args.size());
+            for (size_t i = 0; i < op->args.size(); i++) {
+                new_args[i] = cast(Float(32, op->args[i].type().lanes()), op->args[i]);
+            }
+            const auto &fp32_func_name = it->second;
+            Expr e = Call::make(Float(32, op->type.lanes()), fp32_func_name, new_args, op->call_type,
+                                op->func, op->value_index, op->image, op->param);
+            value = codegen(cast(Float(16, e.type().lanes()), e));
+            return;
+        }
+    }
+
     CodeGen_Posix::visit(op);
 }
 
@@ -1179,12 +1245,18 @@ void CodeGen_ARM::codegen_vector_reduce(const VectorReduce *op, const Expr &init
         Expr pattern;
         const char *intrin;
         Target::Feature required_feature;
+        std::vector<int> extra_operands;
     };
     // clang-format off
     static const Pattern patterns[] = {
         {VectorReduce::Add, 4, i32(widening_mul(wild_i8x_, wild_i8x_)), "dot_product", Target::ARMDotProd},
         {VectorReduce::Add, 4, i32(widening_mul(wild_u8x_, wild_u8x_)), "dot_product", Target::ARMDotProd},
         {VectorReduce::Add, 4, u32(widening_mul(wild_u8x_, wild_u8x_)), "dot_product", Target::ARMDotProd},
+        // A sum is the same as a dot product with a vector of ones, and this appears to
+        // be a bit faster.
+        {VectorReduce::Add, 4, i32(wild_i8x_), "dot_product", Target::ARMDotProd, {1}},
+        {VectorReduce::Add, 4, i32(wild_u8x_), "dot_product", Target::ARMDotProd, {1}},
+        {VectorReduce::Add, 4, u32(wild_u8x_), "dot_product", Target::ARMDotProd, {1}},
     };
     // clang-format on
 
@@ -1198,11 +1270,15 @@ void CodeGen_ARM::codegen_vector_reduce(const VectorReduce *op, const Expr &init
             continue;
         }
         if (expr_match(p.pattern, op->value, matches)) {
-            if (factor != 4) {
-                Expr equiv = VectorReduce::make(op->op, op->value, op->value.type().lanes() / 4);
+            if (factor != p.factor) {
+                Expr equiv = VectorReduce::make(op->op, op->value, op->value.type().lanes() / p.factor);
                 equiv = VectorReduce::make(op->op, equiv, op->type.lanes());
                 codegen_vector_reduce(equiv.as<VectorReduce>(), init);
                 return;
+            }
+
+            for (int i : p.extra_operands) {
+                matches.push_back(make_const(matches[0].type(), i));
             }
 
             Expr i = init;
@@ -1292,6 +1368,27 @@ void CodeGen_ARM::codegen_vector_reduce(const VectorReduce *op, const Expr &init
     CodeGen_Posix::codegen_vector_reduce(op, init);
 }
 
+Type CodeGen_ARM::upgrade_type_for_arithmetic(const Type &t) const {
+    if (is_float16_and_has_feature(t)) {
+        return t;
+    }
+    return CodeGen_Posix::upgrade_type_for_arithmetic(t);
+}
+
+Type CodeGen_ARM::upgrade_type_for_argument_passing(const Type &t) const {
+    if (is_float16_and_has_feature(t)) {
+        return t;
+    }
+    return CodeGen_Posix::upgrade_type_for_argument_passing(t);
+}
+
+Type CodeGen_ARM::upgrade_type_for_storage(const Type &t) const {
+    if (is_float16_and_has_feature(t)) {
+        return t;
+    }
+    return CodeGen_Posix::upgrade_type_for_storage(t);
+}
+
 string CodeGen_ARM::mcpu() const {
     if (target.bits == 32) {
         if (target.has_feature(Target::ARMv7s)) {
@@ -1342,6 +1439,11 @@ string CodeGen_ARM::mattrs() const {
             separator = ",";
         }
 
+        if (target.has_feature(Target::ARMFp16)) {
+            arch_flags += separator + "+fullfp16";
+            separator = ",";
+        }
+
         if (target.os == Target::IOS || target.os == Target::OSX) {
             return arch_flags + separator + "+reserve-x18";
         } else {
@@ -1361,6 +1463,12 @@ bool CodeGen_ARM::use_soft_float_abi() const {
 
 int CodeGen_ARM::native_vector_bits() const {
     return 128;
+}
+
+bool CodeGen_ARM::supports_call_as_float16(const Call *op) const {
+    bool is_fp16_native = float16_native_funcs.find(op->name) != float16_native_funcs.end();
+    bool is_fp16_transcendental = float16_transcendental_remapping.find(op->name) != float16_transcendental_remapping.end();
+    return target.has_feature(Target::ARMFp16) && (is_fp16_native || is_fp16_transcendental);
 }
 
 }  // namespace
