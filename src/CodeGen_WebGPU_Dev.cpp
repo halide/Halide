@@ -1,3 +1,4 @@
+#include <cmath>
 #include <sstream>
 #include <unordered_set>
 #include <utility>
@@ -545,9 +546,9 @@ void CodeGen_WebGPU_Dev::CodeGen_WGSL::visit(const UIntImm *op) {
 
 void CodeGen_WebGPU_Dev::CodeGen_WGSL::visit(const FloatImm *op) {
     string rhs;
-    if (isnan(op->value)) {
+    if (std::isnan(op->value)) {
         rhs = "0x7FFFFFFF";
-    } else if (isinf(op->value)) {
+    } else if (std::isinf(op->value)) {
         if (op->value > 0) {
             rhs = "0x7F800000";
         } else {
