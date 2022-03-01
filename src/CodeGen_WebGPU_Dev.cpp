@@ -63,6 +63,7 @@ protected:
                                AppendSpaceIfNeeded append_space =
                                    DoNotAppendSpace) override;
         std::string print_reinterpret(Type type, const Expr &e) override;
+        std::string print_extern_call(const Call *op) override;
         std::string print_assignment(Type t, const std::string &rhs) override;
 
         // Print the WGSL type used for storing elements of `type` in a buffer.
@@ -251,6 +252,18 @@ string CodeGen_WebGPU_Dev::CodeGen_WGSL::print_reinterpret(Type type,
     ostringstream oss;
     oss << "bitcast<" << print_type(type) << ">(" << print_expr(e) << ")";
     return oss.str();
+}
+
+string CodeGen_WebGPU_Dev::CodeGen_WGSL::print_extern_call(const Call *op) {
+    internal_assert(!function_takes_user_context(op->name));
+
+    vector<string> args(op->args.size());
+    for (size_t i = 0; i < op->args.size(); i++) {
+        args[i] = print_expr(op->args[i]);
+    }
+    ostringstream rhs;
+    rhs << op->name << "(" << with_commas(args) << ")";
+    return rhs.str();
 }
 
 void CodeGen_WebGPU_Dev::CodeGen_WGSL::add_kernel(
