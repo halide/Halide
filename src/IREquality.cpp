@@ -106,6 +106,22 @@ IRComparer::CmpResult IRComparer::compare_scalar(T a, T b) {
         return result;
     }
 
+    if constexpr (std::is_floating_point_v<T>) {
+        // NaNs are equal to each other and less than non-nans
+        if (std::isnan(a) && std::isnan(b)) {
+            result = Equal;
+            return result;
+        }
+        if (std::isnan(a)) {
+            result = LessThan;
+            return result;
+        }
+        if (std::isnan(b)) {
+            result = GreaterThan;
+            return result;
+        }
+    }
+
     if (a < b) {
         result = LessThan;
     } else if (a > b) {
@@ -125,6 +141,7 @@ IRComparer::CmpResult IRComparer::compare_expr(const Expr &a, const Expr &b) {
         return result;
     }
 
+    // Undefined values are equal to each other and less than defined values
     if (!a.defined() && !b.defined()) {
         result = Equal;
         return result;

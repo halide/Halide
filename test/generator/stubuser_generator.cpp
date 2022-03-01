@@ -62,7 +62,7 @@ public:
         // can really only be assigned to another Output<Buffer>; this is
         // nevertheless useful, as we can still set stride (etc) constraints
         // on the Output.
-        StubTest::Outputs out = StubTest::generate(this, inputs, gp);
+        StubTest::Outputs out = StubTest::generate(context(), inputs, gp);
 
         float32_buffer_output = out.typed_buffer_output;
         int32_buffer_output = out.untyped_buffer_output;
@@ -84,15 +84,15 @@ public:
         extra_func(x, y, c) = cast<uint16_t>(3);
         const int extra_scalar = 0;
         const int8_t extra_dynamic_scalar = 0;
-        int_output = configure::generate(this, {configure_input,
-                                                bias,
-                                                extra_u8,
-                                                extra_u8,
-                                                extra_u8,
-                                                extra_i16,
-                                                extra_func,
-                                                extra_scalar,
-                                                cast<int8_t>(extra_dynamic_scalar)})
+        int_output = configure::generate(context(), {configure_input,
+                                                     bias,
+                                                     extra_u8,
+                                                     extra_u8,
+                                                     extra_u8,
+                                                     extra_i16,
+                                                     extra_func,
+                                                     extra_scalar,
+                                                     cast<int8_t>(extra_dynamic_scalar)})
                          .output;
     }
 };

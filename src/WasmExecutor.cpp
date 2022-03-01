@@ -552,7 +552,7 @@ struct WabtContext {
 };
 
 WabtContext &get_wabt_context(wabt::interp::Thread &thread) {
-    void *host_info = thread.host_info();
+    void *host_info = thread.GetCallerInstance()->host_info();
     wassert(host_info);
     return *(WabtContext *)host_info;
 }
@@ -2543,6 +2543,8 @@ int WasmModuleContents::run(const void **args) {
     }
 
     WabtContext wabt_context(jit_user_context, *memory, bdmalloc);
+    internal_assert(instance->host_info() == nullptr);
+    instance->set_host_info(&wabt_context);
 
     wabt::interp::Values wabt_args;
     wabt::interp::Values wabt_results;
@@ -2568,11 +2570,9 @@ int WasmModuleContents::run(const void **args) {
         }
     }
 
-    wabt::interp::Thread::Options options;
-    wabt::interp::Thread::Ptr thread = wabt::interp::Thread::New(store, options);
-    thread->set_host_info(&wabt_context);
+    wabt::interp::Thread thread(store);
 
-    auto r = func->Call(*thread, wabt_args, wabt_results, &trap);
+    auto r = func->Call(thread, wabt_args, wabt_results, &trap);
     if (WASM_DEBUG_LEVEL >= 2) {
         wabt::MemoryStream call_stream;
         WriteCall(&call_stream, func_name, *func_type, wabt_args, wabt_results, trap);
@@ -2604,6 +2604,7 @@ int WasmModuleContents::run(const void **args) {
     // between multiple invocations of the same function.
     // bdmalloc.reset();
 
+    instance->set_host_info(nullptr);
     return result;
 
 #endif
