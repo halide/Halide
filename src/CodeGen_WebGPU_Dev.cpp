@@ -62,6 +62,7 @@ protected:
         std::string print_type(Type type,
                                AppendSpaceIfNeeded append_space =
                                    DoNotAppendSpace) override;
+        std::string print_reinterpret(Type type, const Expr &e) override;
         std::string print_assignment(Type t, const std::string &rhs) override;
 
         // Print the WGSL type used for storing elements of `type` in a buffer.
@@ -243,6 +244,13 @@ string CodeGen_WebGPU_Dev::CodeGen_WGSL::print_buffer_type(Type type) {
         return "atomic<u32>";
     }
     return print_type(type);
+}
+
+string CodeGen_WebGPU_Dev::CodeGen_WGSL::print_reinterpret(Type type,
+                                                           const Expr &e) {
+    ostringstream oss;
+    oss << "bitcast<" << print_type(type) << ">(" << print_expr(e) << ")";
+    return oss.str();
 }
 
 void CodeGen_WebGPU_Dev::CodeGen_WGSL::add_kernel(
