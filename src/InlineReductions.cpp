@@ -276,7 +276,7 @@ Tuple argmax(const RDom &r, Expr e, const Func &f) {
     f(v.free_vars) = initial_tup;
 
     Expr better;
-    if (f.name() == "argmax_last_index")
+    if (Internal::starts_with(f.name(), "argmax_last_index"))
         better = e >= f(v.free_vars)[value_index];
     else
         better = e > f(v.free_vars)[value_index];
@@ -321,7 +321,7 @@ Tuple argmin(const RDom &r, Expr e, const Func &f) {
     f(v.free_vars) = initial_tup;
 
     Expr better;
-    if (f.name() == "argmin_last_index")
+    if (Internal::starts_with(f.name(), "argmin_last_index"))
         better = e <= f(v.free_vars)[value_index];
     else
         better = e < f(v.free_vars)[value_index];
