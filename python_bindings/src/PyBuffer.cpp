@@ -599,9 +599,6 @@ void define_buffer(py::module &m) {
             .def("__getitem__", [](Buffer<> &buf, const std::vector<int> &pos) -> py::object {
                 return buffer_getitem_operator(buf, pos);
             })
-            .def("__getitem__", [](Buffer<> &buf, const py::none &) -> py::object {
-                return buffer_getitem_operator(buf, {});
-            })
 
             .def("__getitem__", [](Buffer<> &buf, const Expr &pos) -> Expr {
                 return buf(std::vector<Expr>{pos});
@@ -615,9 +612,6 @@ void define_buffer(py::module &m) {
             })
             .def("__setitem__", [](Buffer<> &buf, const std::vector<int> &pos, const py::object &value) -> py::object {
                 return buffer_setitem_operator(buf, pos, value);
-            })
-            .def("__setitem__", [](Buffer<> &buf, const py::none &, const py::object &value) -> py::object {
-                return buffer_setitem_operator(buf, {}, value);
             })
 
             .def("__repr__", [](const Buffer<> &b) -> std::string {

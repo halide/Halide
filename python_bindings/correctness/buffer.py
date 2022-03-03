@@ -264,12 +264,12 @@ def test_scalar_buffers():
     assert buf.dimensions() == 0
 
     buf.fill(0)
-    buf[None] = 2.5
+    buf[()] = 2.5
 
-    assert buf[None] == 2.5
+    assert buf[()] == 2.5
 
     buf.fill(32)
-    assert buf[None] == 32
+    assert buf[()] == 32
 
 if __name__ == "__main__":
     test_make_interleaved()

@@ -290,14 +290,14 @@ def test_scalar_funcs():
     f = hl.Func('f')
     g = hl.Func('g')
 
-    input[None]
+    input[()]
 
-    (input[None]+input[None]) / 2
-    f[None]
-    g[None]
+    (input[()]+input[()]) / 2
+    f[()]
+    g[()]
 
-    f[None] = (input[None]+input[None]+input[None])/3
-    g[None] = (f[None]+f[None]+f[None])/3
+    f[()] = (input[()]+input[()]+input[()])/3
+    g[()] = (f[()]+f[()]+f[()])/3
 
     g.compile_jit()
 
