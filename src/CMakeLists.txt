@@ -5,6 +5,7 @@
 # The externally-visible header files that go into making Halide.h.
 # Don't include anything here that includes llvm headers.
 set(HEADER_FILES
+    AbstractGenerator.h
     AddAtomicMutex.h
     AddImageChecks.h
     AddParameterChecks.h
