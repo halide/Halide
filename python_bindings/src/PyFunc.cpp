@@ -18,24 +18,40 @@ namespace {
 
 template<typename LHS>
 void define_get(py::class_<Func> &func_class) {
-    func_class
-        .def("__getitem__",
-             [](Func &func, const LHS &args) -> FuncRef {
-                 return func(args);
-             });
+    if constexpr (std::is_same<LHS, py::none>::value) {
+        func_class
+            .def("__getitem__",
+                 [](Func &func, const LHS &args) -> FuncRef {
+                     return func();
+                 });
+    } else {
+        func_class
+            .def("__getitem__",
+                 [](Func &func, const LHS &args) -> FuncRef {
+                     return func(args);
+                 });
+    }
 }
 
 template<typename LHS, typename RHS>
 void define_set(py::class_<Func> &func_class) {
-    func_class
-        .def("__setitem__",
-             [](Func &func, const LHS &lhs, const RHS &rhs) -> Stage {
-                 return func(lhs) = rhs;
-             })
-        .def("__setitem__",
-             [](Func &func, const std::vector<LHS> &lhs, const RHS &rhs) -> Stage {
-                 return func(lhs) = rhs;
-             });
+    if constexpr (std::is_same<LHS, py::none>::value) {
+        func_class
+            .def("__setitem__",
+                 [](Func &func, const LHS &lhs, const RHS &rhs) -> Stage {
+                     return func() = rhs;
+                 });
+    } else {
+        func_class
+            .def("__setitem__",
+                 [](Func &func, const LHS &lhs, const RHS &rhs) -> Stage {
+                     return func(lhs) = rhs;
+                 })
+            .def("__setitem__",
+                 [](Func &func, const std::vector<LHS> &lhs, const RHS &rhs) -> Stage {
+                     return func(lhs) = rhs;
+                 });
+    }
 }
 
 // See the usages below this function to see why we are specializing this function.
@@ -324,6 +340,7 @@ void define_func(py::module &m) {
     define_get<std::vector<Expr>>(func_class);
     define_get<Var>(func_class);
     define_get<std::vector<Var>>(func_class);
+    define_get<py::none>(func_class);
 
     // Special cases of f[g[...]] = ...
     // We need to capture this case here since otherwise
@@ -350,6 +367,10 @@ void define_func(py::module &m) {
     define_set<Expr, FuncRef>(func_class);
     define_set<Expr, Expr>(func_class);
     define_set<Expr, Tuple>(func_class);
+
+    define_set<py::none, FuncRef>(func_class);
+    define_set<py::none, Expr>(func_class);
+    define_set<py::none, Tuple>(func_class);
 
     add_schedule_methods(func_class);
 

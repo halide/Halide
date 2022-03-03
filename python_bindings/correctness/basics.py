@@ -284,6 +284,22 @@ def test_vector_tile():
     p = hl.Pipeline([f, g])
     p.compile_jit()
 
+def test_scalar_funcs():
+    input = hl.ImageParam(hl.UInt(16), 0, 'input')
+
+    f = hl.Func('f')
+    g = hl.Func('g')
+
+    input[None]
+
+    (input[None]+input[None]) / 2
+    f[None]
+    g[None]
+
+    f[None] = (input[None]+input[None]+input[None])/3
+    g[None] = (f[None]+f[None]+f[None])/3
+
+    g.compile_jit()
 
 
 if __name__ == "__main__":
@@ -300,3 +316,4 @@ if __name__ == "__main__":
     test_basics3()
     test_basics4()
     test_basics5()
+    test_scalar_funcs()
