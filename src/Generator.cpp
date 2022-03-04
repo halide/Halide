@@ -1513,15 +1513,15 @@ GeneratorParamInfo &GeneratorBase::param_info() {
 }
 
 namespace {
-    template<typename T>
-    T *find_by_name(const std::string &name, const std::vector<T *> &v) {
-        for (T *t : v) {
-            if (t->name() == name) {
-                return t;
-            }
+template<typename T>
+T *find_by_name(const std::string &name, const std::vector<T *> &v) {
+    for (T *t : v) {
+        if (t->name() == name) {
+            return t;
         }
-        return nullptr;
     }
+    return nullptr;
+}
 
 }  // namespace
 
@@ -1827,20 +1827,20 @@ std::string GeneratorBase::get_name() {
 }
 
 namespace {
-    // Note that this deliberately ignores inputs/outputs with multiple array values
-    // (ie, one name per input or output, regardless of array_size())
-    template<typename T>
-    std::vector<AbstractGenerator::ArgInfo> get_arguments(const T &t) {
-        std::vector<AbstractGenerator::ArgInfo> args;
-        args.reserve(t.size());
-        for (auto *e : t) {
-            args.push_back({e->name(),
-                            e->kind(),
-                            e->types_defined() ? e->types() : std::vector<Type>{},
-                            e->dims_defined() ? e->dims() : 0});
-        }
-        return args;
+// Note that this deliberately ignores inputs/outputs with multiple array values
+// (ie, one name per input or output, regardless of array_size())
+template<typename T>
+std::vector<AbstractGenerator::ArgInfo> get_arguments(const T &t) {
+    std::vector<AbstractGenerator::ArgInfo> args;
+    args.reserve(t.size());
+    for (auto *e : t) {
+        args.push_back({e->name(),
+                        e->kind(),
+                        e->types_defined() ? e->types() : std::vector<Type>{},
+                        e->dims_defined() ? e->dims() : 0});
     }
+    return args;
+}
 
 }  // namespace
 
