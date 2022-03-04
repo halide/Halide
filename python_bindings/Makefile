@@ -163,7 +163,7 @@ test_correctness: $(CORRECTNESS:$(ROOT_DIR)/correctness/%.py=test_correctness_%)
 test_correctness_%: $(ROOT_DIR)/correctness/%.py $(MODULE)
 	@echo Testing $*...
 	@mkdir -p $(TEST_TMP)
-	@cd $(TEST_TMP); PYTHONPATH="$(BIN)/ext:$(BIN)/generators:$$PYTHONPATH" $(PYTHON) $<
+	@cd $(TEST_TMP); PYTHONPATH="$(BIN)/ext:$(BIN)/generators:$(BIN):$$PYTHONPATH" $(PYTHON) $<
 
 .PHONY: test_tutorial
 test_tutorial: $(TUTORIAL:$(ROOT_DIR)/tutorial/%.py=test_tutorial_%)
