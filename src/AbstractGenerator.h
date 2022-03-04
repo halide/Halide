@@ -109,7 +109,7 @@ public:
      */
     virtual std::vector<ArgInfo> get_output_arginfos() = 0;
 
-    /** Return the names for all known Constants (aka GeneratorParams) in this Generator.
+    /** Return the names for all known GeneratorParams in this Generator.
      * (Synthetic params are excluded and will never be returned here.)
      * Always legal to call on any AbstractGenerator instance, regardless of what other methods
      * have been called. Note that while the results are returned in a vector, the order of
@@ -180,9 +180,6 @@ public:
      * This call is infrequently used, and is only useful in JIT or Stub situations;
      * this allows you to bind the inputs to be Funcs, Buffers, etc from another Halide code
      * fragment, allowing inlining of multiple fragments together.
-     *
-     * Note that there is no way to rebind individual inputs. (This could be added but
-     * is unlikely to be useful, as all existing usage is all-or-none.)
      *
      * CALL-AFTER: n/a
      * CALL-BEFORE: build_pipeline
