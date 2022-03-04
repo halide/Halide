@@ -97,7 +97,7 @@ $(BIN)/generators/%.so: $(BIN)/%_PyStub.o $(BIN)/PyStubImpl.o $(BIN)/%_generator
 	@$(CXX) $^ $(LDFLAGS) -shared -o $@
 
 # Compile the generators:
-$(BIN)/%.gen: $(HALIDE_DISTRIB_PATH)/tools/GenGen.cpp correctness/%_generator.cpp $(LIBHALIDE)
+$(BIN)/%.gen: $(HALIDE_DISTRIB_PATH)/tools/GenGen.cpp $(BIN)/%_generator.o $(LIBHALIDE)
 	@echo Building $@...
 	@mkdir -p $(@D)
 	@$(CXX) $(CCFLAGS) $(LDFLAGS) $^ -o $@
@@ -122,7 +122,8 @@ target_features_user_context=-user_context-no_runtime
 # Make the generator generate a Python extension:
 $(BIN)/%.py.cpp $(BIN)/%.a $(BIN)/%.h: $(BIN)/%.gen
 	@echo Building $@...
-	@LD_LIBRARY_PATH=$(HALIDE_DISTRIB_PATH)/bin $< -e static_library,c_header,python_extension \
+	@LD_LIBRARY_PATH=$(HALIDE_DISTRIB_PATH)/bin $< \
+	    -e static_library,c_header,python_extension \
 	    -g $(notdir $(basename $<)) -o $(BIN) \
 	    target=host$(target_features_$(notdir $(basename $<)))
 
@@ -131,13 +132,34 @@ $(BIN)/%.py.o: $(BIN)/%.py.cpp
 	@echo Building $@...
 	@$(CXX) -c $(FPIC) $(CCFLAGS) $^ -o $@
 
+# Fake up a linker script that will export *just* the PyInit entry
+# point we want. (If we don't do this we can have interesting failures
+# when loading multiple of these Python extensions in the same space.)
+ifeq ($(UNAME), Darwin)
+$(BIN)/ext/%.ldscript:
+	@echo Building $@...
+	@mkdir -p $(@D)
+	@echo _PyInit_$* > $@
+
+PYEXT_LDSCRIPT_FLAG = -Wl,-exported_symbols_list %LDSCRIPT%
+else
+# Assume Desktop Linux
+$(BIN)/ext/%.ldscript:
+	@echo Building $@...
+	@mkdir -p $(@D)
+	@echo "{" > $@
+	@echo "  global: PyInit_$*;" >> $@
+	@echo "  local: *;" >> $@
+	@echo "};" >> $@
+PYEXT_LDSCRIPT_FLAG = -Wl,--version-script=%LDSCRIPT%
+endif
+
 # The Python extension of the generator is already in $(BIN), and is named
 # the same, so put the Python extension of the function into ext/.
-# TODO: Python extensions of generators should have a _generator suffix.
-$(BIN)/ext/%.so: $(BIN)/%.py.o $(BIN)/%.a $(BIN)/runtime.a
+$(BIN)/ext/%.so: $(BIN)/%.py.o $(BIN)/%.a $(BIN)/runtime.a $(BIN)/ext/%.ldscript
 	@echo Building $@...
-	@mkdir -p $(BIN)/ext
-	@$(CXX) $(LDFLAGS) $^ -shared -o $@
+	@mkdir -p $(@D)
+	@$(CXX) $(LDFLAGS) $(filter-out $(BIN)/ext/$*.ldscript,$^) -shared $(subst %LDSCRIPT%,$(BIN)/ext/$*.ldscript,$(PYEXT_LDSCRIPT_FLAG)) -o $@
 
 test_correctness_addconstant_test: $(BIN)/ext/addconstant.so
 test_correctness_bit_test: $(BIN)/ext/bit.so
