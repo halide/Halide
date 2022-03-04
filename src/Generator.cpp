@@ -647,7 +647,7 @@ void StubEmitter::emit() {
     for (const auto &out : out_info) {
         stream << get_indent() << out.getter << ",\n";
     }
-    stream << get_indent() << "generator->context().target\n";
+    stream << get_indent() << "generator->context().get_target()\n";
     indent_level--;
     stream << get_indent() << "};\n";
     indent_level--;
