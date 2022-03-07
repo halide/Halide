@@ -7,15 +7,20 @@ Expr Simplify::visit(const Cast *op, ExprInfo *bounds) {
     Expr value = mutate(op->value, bounds);
 
     if (bounds) {
-        if (bounds->min_defined && !op->type.can_represent(bounds->min)) {
+        // If either the min value or the max value can't be represented
+        // in the destination type, or the min/max value is undefined,
+        // the bounds need to be cleared (one-sided for no_overflow,
+        // both sides for overflow types).
+        if ((bounds->min_defined && !op->type.can_represent(bounds->min)) || !bounds->min_defined) {
             bounds->min_defined = false;
             if (!no_overflow(op->type)) {
                 // If the type overflows, this invalidates the max too.
                 bounds->max_defined = false;
             }
         }
-        if (bounds->max_defined && !op->type.can_represent(bounds->max)) {
+        if ((bounds->max_defined && !op->type.can_represent(bounds->max)) || !bounds->max_defined) {
             if (!no_overflow(op->type)) {
+                // If the type overflows, this invalidates the min too.
                 bounds->min_defined = false;
             }
             bounds->max_defined = false;
