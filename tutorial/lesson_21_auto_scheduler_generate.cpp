@@ -29,11 +29,11 @@ using namespace Halide;
 // We will define a generator to auto-schedule.
 class AutoScheduled : public Halide::Generator<AutoScheduled> {
 public:
-    Input<Buffer<float>> input{"input", 3};
+    Input<Buffer<float, 3>> input{"input"};
     Input<float> factor{"factor"};
 
-    Output<Buffer<float>> output1{"output1", 2};
-    Output<Buffer<float>> output2{"output2", 2};
+    Output<Buffer<float, 2>> output1{"output1"};
+    Output<Buffer<float, 2>> output2{"output2"};
 
     Expr sum3x3(Func f, Var x, Var y) {
         return f(x - 1, y - 1) + f(x - 1, y) + f(x - 1, y + 1) +
