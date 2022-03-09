@@ -30,17 +30,14 @@ class LockProfiler {
 public:
     LockProfiler(halide_profiler_state *s) : state(s) {
 #if TIMER_PROFILING
-        (void)state;
         halide_disable_timer_interrupt();
-#else
-        halide_mutex_lock(&state->lock);
 #endif
+        halide_mutex_lock(&state->lock);
     }
     ~LockProfiler() {
+        halide_mutex_unlock(&state->lock);
 #if TIMER_PROFILING
         halide_enable_timer_interrupt();
-#else
-        halide_mutex_unlock(&state->lock);
 #endif
     }
 };
