@@ -27,8 +27,10 @@ namespace Internal {
 
 class LockProfiler {
     halide_profiler_state *state;
+
 public:
-    LockProfiler(halide_profiler_state *s) : state(s) {
+    LockProfiler(halide_profiler_state *s)
+        : state(s) {
 #if TIMER_PROFILING
         halide_disable_timer_interrupt();
 #endif
@@ -120,8 +122,7 @@ WEAK void bill_func(halide_profiler_state *s, int func_id, uint64_t time, int ac
     // Someone must have called reset_state while a kernel was running. Do nothing.
 }
 
-extern "C"
-WEAK int halide_profiler_sample(struct halide_profiler_state *s, uint64_t *prev_t) {
+extern "C" WEAK int halide_profiler_sample(struct halide_profiler_state *s, uint64_t *prev_t) {
     int func, active_threads;
     if (s->get_remote_profiler_state) {
         // Execution has disappeared into remote code running

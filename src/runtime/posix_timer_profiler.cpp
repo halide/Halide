@@ -43,7 +43,7 @@ void profiler_handler(int sig) {
     }
 }
 
-}
+}  // namespace
 
 WEAK extern "C" void halide_start_timer_chain() {
     if (!inited) {
@@ -52,7 +52,7 @@ WEAK extern "C" void halide_start_timer_chain() {
         timer_state.it_interval.tv_sec = 0;
         timer_state.it_interval.tv_usec = s->sleep_time * 1000.0;
         timer_state.it_value = timer_state.it_interval;
-        
+
         signal(SIGPROF, &profiler_handler);
         setitimer(2 /*ITIMER_PROF*/, &timer_state, nullptr);
         halide_enable_timer_interrupt();
@@ -69,4 +69,3 @@ WEAK extern "C" void halide_enable_timer_interrupt() {
     sigset_t mask = 1 << SIGPROF;
     sigprocmask(SIG_UNBLOCK, &mask, nullptr);
 }
-
