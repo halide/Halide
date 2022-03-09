@@ -429,20 +429,33 @@ __attribute__((destructor))
 WEAK void
 halide_profiler_shutdown() {
     halide_profiler_state *s = halide_profiler_get_state();
-    if (!s->sampling_thread) {
-        return;
+    {
+        // Acquiring the mutex here is essential, as the sampling thread
+        // could be contending for current_func.
+        ScopedMutexLock lock(&s->lock);
+        if (!s->sampling_thread) {
+            return;
+        }
+        s->current_func = halide_profiler_please_stop;
     }
 
-    s->current_func = halide_profiler_please_stop;
     halide_join_thread(s->sampling_thread);
-    s->sampling_thread = nullptr;
-    s->current_func = halide_profiler_outside_of_halide;
 
-    // Print results. No need to lock anything because we just shut
-    // down the thread.
-    halide_profiler_report_unlocked(nullptr, s);
+    {
+        // Note that locking here may not be essential (since we just shut
+        // down the thread), but it's good practice and I don't know of
+        // a good reason not to.
+        ScopedMutexLock lock(&s->lock);
 
-    halide_profiler_reset_unlocked(s);
+        s->sampling_thread = nullptr;
+        s->current_func = halide_profiler_outside_of_halide;
+
+        // Print results. No need to lock anything because we just shut
+        // down the thread.
+        halide_profiler_report_unlocked(nullptr, s);
+
+        halide_profiler_reset_unlocked(s);
+    }
 }
 
 namespace {
@@ -457,7 +470,7 @@ WEAK void halide_windows_profiler_shutdown() {
     // sections in a static destructor as it may run after threads
     // have been killed by the OS. Furthermore, may calls, even things
     // like EnterCriticalSection may be set to kill the process if
-    // called during process shutdown. Hence kthis routine doesn't attmept
+    // called during process shutdown. Hence this routine doesn't attempt
     // to clean up state as the destructor does on other platforms.
 
     // Print results. Avoid locking as it will cause problems and
@@ -468,7 +481,12 @@ WEAK void halide_windows_profiler_shutdown() {
 }  // namespace
 
 WEAK void halide_profiler_pipeline_end(void *user_context, void *state) {
-    ((halide_profiler_state *)state)->current_func = halide_profiler_outside_of_halide;
+    halide_profiler_state *s = (halide_profiler_state *)state;
+
+    // Acquiring the mutex here is essential, as the sampling thread
+    // could be contending for current_func.
+    ScopedMutexLock lock(&s->lock);
+    s->current_func = halide_profiler_outside_of_halide;
 }
 
 }  // extern "C"
