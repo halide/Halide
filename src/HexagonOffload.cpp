@@ -9,6 +9,7 @@
 #include "InjectHostDevBufferCopies.h"
 #include "LLVM_Headers.h"
 #include "LLVM_Output.h"
+#include "LowerParallelTasks.h"
 #include "Module.h"
 #include "Param.h"
 #include "Substitute.h"
@@ -753,9 +754,19 @@ class InjectHexagonRpc : public IRMutator {
         }
 
         // Build a closure for the device code.
+        // Note that we must do this *before* calling lower_parallel_tasks();
+        // otherwise the Closure may fail to find buffers that are referenced
+        // only in the closure.
         // TODO: Should this move the body of the loop to Hexagon,
         // or the loop itself? Currently, this moves the loop itself.
-        Closure c(body);
+        Closure c;
+        c.include(body);
+
+        std::vector<LoweredFunc> closure_implementations;
+        body = lower_parallel_tasks(body, closure_implementations, hex_name, device_code.target());
+        for (auto &lowered_func : closure_implementations) {
+            device_code.append(lowered_func);
+        }
 
         // A buffer parameter potentially generates 3 scalar parameters (min,
         // extent, stride) per dimension. Pipelines with many buffers may
@@ -846,7 +857,8 @@ class InjectHexagonRpc : public IRMutator {
             LoweredArgument arg(i.first, Argument::InputScalar, i.second, 0, ArgumentEstimates{});
             args.push_back(arg);
         }
-        device_code.append(LoweredFunc(hex_name, args, body, LinkageType::ExternalPlusMetadata));
+        // We need the _argv function but not the _metadata.
+        device_code.append(LoweredFunc(hex_name, args, body, LinkageType::ExternalPlusArgv));
 
         // Generate a call to hexagon_device_run.
         std::vector<Expr> arg_sizes;

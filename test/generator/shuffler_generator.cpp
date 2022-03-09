@@ -4,8 +4,8 @@ namespace {
 
 class Shuffler : public Halide::Generator<Shuffler> {
 public:
-    Input<Buffer<int32_t>> input{"input", 1};
-    Output<Buffer<int32_t>> output{"output", 1};
+    Input<Buffer<int32_t, 1>> input{"input"};
+    Output<Buffer<int32_t, 1>> output{"output"};
 
     void generate() {
         // The +1 is just to get a Broadcast node

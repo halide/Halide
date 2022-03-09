@@ -347,7 +347,9 @@ void PythonExtensionGen::compile(const LoweredFunc &f) {
             // Python already converted this.
         }
     }
-    dest << "    int result = " << f.name << "(";
+    dest << "    int result;\n";
+    dest << "    Py_BEGIN_ALLOW_THREADS\n";
+    dest << "    result = " << f.name << "(";
     for (size_t i = 0; i < args.size(); i++) {
         if (i > 0) {
             dest << ", ";
@@ -359,6 +361,7 @@ void PythonExtensionGen::compile(const LoweredFunc &f) {
         }
     }
     dest << ");\n";
+    dest << "    Py_END_ALLOW_THREADS\n";
     release_buffers();
     dest << R"INLINE_CODE(
     if (result != 0) {

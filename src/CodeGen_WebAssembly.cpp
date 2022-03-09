@@ -76,6 +76,10 @@ const WasmIntrinsic intrinsic_defs[] = {
     {"llvm.wasm.avgr.unsigned.v16i8", UInt(8, 16), "rounding_halving_add", {UInt(8, 16), UInt(8, 16)}, Target::WasmSimd128},
     {"llvm.wasm.avgr.unsigned.v8i16", UInt(16, 8), "rounding_halving_add", {UInt(16, 8), UInt(16, 8)}, Target::WasmSimd128},
 
+#if LLVM_VERSION == 130
+    {"float_to_double", Float(64, 4), "float_to_double", {Float(32, 4)}, Target::WasmSimd128},
+#endif
+
 #if LLVM_VERSION >= 130
     // With some work, some of these could possibly be adapted to work under earlier versions of LLVM.
     {"widening_mul_i8x16", Int(16, 16), "widening_mul", {Int(8, 16), Int(8, 16)}, Target::WasmSimd128},
@@ -94,14 +98,6 @@ const WasmIntrinsic intrinsic_defs[] = {
     {"llvm.wasm.extadd.pairwise.unsigned.v8i16", Int(16, 8), "pairwise_widening_add", {UInt(8, 16)}, Target::WasmSimd128},
     {"llvm.wasm.extadd.pairwise.unsigned.v4i32", Int(32, 4), "pairwise_widening_add", {UInt(16, 8)}, Target::WasmSimd128},
 
-    // TODO: these instructions are no longer available at LLVM top of tree,
-    // but LLVM isn't generating the f64x2.convert_low_i32x4_s/u instructions;
-    // investigation needed.
-    // {"i32_to_double_s", Float(64, 4), "int_to_double", {Int(32, 4)}, Target::WasmSimd128},
-    // {"i32_to_double_u", Float(64, 4), "int_to_double", {UInt(32, 4)}, Target::WasmSimd128},
-
-    {"float_to_double", Float(64, 4), "float_to_double", {Float(32, 4)}, Target::WasmSimd128},
-
     // Basically like ARM's SQRDMULH
     {"llvm.wasm.q15mulr.sat.signed", Int(16, 8), "q15mulr_sat_s", {Int(16, 8), Int(16, 8)}, Target::WasmSimd128},
 
@@ -112,6 +108,16 @@ const WasmIntrinsic intrinsic_defs[] = {
     {"saturating_narrow_i32x8_to_u16x8", UInt(16, 8), "saturating_narrow", {Int(32, 8)}, Target::WasmSimd128},
 
     {"llvm.wasm.dot", Int(32, 4), "dot_product", {Int(16, 8), Int(16, 8)}, Target::WasmSimd128},
+
+    // TODO: LLVM should be able to handle this on its own, but doesn't at top-of-tree as of Jan 2022;
+    // if/when https://github.com/llvm/llvm-project/issues/53278 gets addressed, it may be possible to remove
+    // these.
+    {"extend_i8x16_to_i16x8", Int(16, 16), "widen_integer", {Int(8, 16)}, Target::WasmSimd128},
+    {"extend_u8x16_to_u16x8", UInt(16, 16), "widen_integer", {UInt(8, 16)}, Target::WasmSimd128},
+    {"extend_i16x8_to_i32x8", Int(32, 8), "widen_integer", {Int(16, 8)}, Target::WasmSimd128},
+    {"extend_u16x8_to_u32x8", UInt(32, 8), "widen_integer", {UInt(16, 8)}, Target::WasmSimd128},
+    {"extend_i32x4_to_i64x4", Int(64, 4), "widen_integer", {Int(32, 4)}, Target::WasmSimd128},
+    {"extend_u32x4_to_u64x4", UInt(64, 4), "widen_integer", {UInt(32, 4)}, Target::WasmSimd128},
 #endif
 };
 // clang-format on
@@ -157,7 +163,15 @@ void CodeGen_WebAssembly::visit(const Cast *op) {
         {"saturating_narrow", u16_sat(wild_i32x_), Target::WasmSimd128},
         {"int_to_double", f64(wild_i32x_), Target::WasmSimd128},
         {"int_to_double", f64(wild_u32x_), Target::WasmSimd128},
+#if LLVM_VERSION == 130
         {"float_to_double", f64(wild_f32x_), Target::WasmSimd128},
+#endif
+        {"widen_integer", i16(wild_i8x_), Target::WasmSimd128},
+        {"widen_integer", u16(wild_u8x_), Target::WasmSimd128},
+        {"widen_integer", i32(wild_i16x_), Target::WasmSimd128},
+        {"widen_integer", u32(wild_u16x_), Target::WasmSimd128},
+        {"widen_integer", i64(wild_i32x_), Target::WasmSimd128},
+        {"widen_integer", u64(wild_u32x_), Target::WasmSimd128},
     };
     // clang-format on
 

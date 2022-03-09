@@ -12,8 +12,7 @@ set(CMAKE_CXX_EXTENSIONS NO)
 find_package(Halide REQUIRED)
 
 # Generator(s)
-add_executable(pipeline.generator pipeline_generator.cpp)
-target_link_libraries(pipeline.generator PRIVATE Halide::Generator)
+add_halide_generator(pipeline.generator SOURCES pipeline_generator.cpp)
 
 add_halide_library(pipeline_c FROM pipeline.generator
                    C_BACKEND
@@ -21,8 +20,7 @@ add_halide_library(pipeline_c FROM pipeline.generator
 add_halide_library(pipeline_native FROM pipeline.generator
                    GENERATOR pipeline)
 
-add_executable(pipeline_cpp.generator pipeline_cpp_generator.cpp)
-target_link_libraries(pipeline_cpp.generator PRIVATE Halide::Generator)
+add_halide_generator(pipeline_cpp.generator SOURCES pipeline_cpp_generator.cpp)
 
 add_halide_library(pipeline_cpp_cpp FROM pipeline_cpp.generator
                    C_BACKEND

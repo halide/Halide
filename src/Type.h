@@ -82,7 +82,7 @@ struct halide_handle_cplusplus_type {
     std::vector<halide_cplusplus_type_name> enclosing_types;
 
     /// One set of modifiers on a type.
-    /// The const/volatile/restrict propertises are "inside" the pointer property.
+    /// The const/volatile/restrict properties are "inside" the pointer property.
     enum Modifier : uint8_t {
         Const = 1 << 0,     ///< Bitmask flag for "const"
         Volatile = 1 << 1,  ///< Bitmask flag for "volatile"
@@ -170,6 +170,7 @@ HALIDE_DECLARE_EXTERN_STRUCT_TYPE(halide_dimension_t);
 HALIDE_DECLARE_EXTERN_STRUCT_TYPE(halide_device_interface_t);
 HALIDE_DECLARE_EXTERN_STRUCT_TYPE(halide_filter_metadata_t);
 HALIDE_DECLARE_EXTERN_STRUCT_TYPE(halide_semaphore_t);
+HALIDE_DECLARE_EXTERN_STRUCT_TYPE(halide_semaphore_acquire_t);
 HALIDE_DECLARE_EXTERN_STRUCT_TYPE(halide_parallel_task_t);
 
 // You can make arbitrary user-defined types be "Known" using the
@@ -352,14 +353,25 @@ public:
         return Type(code(), bits(), new_lanes, handle_type);
     }
 
-    /** Return Type with the same type code and number of lanes, but with twice as many bits. */
+    /** Return Type with the same type code and number of lanes, but with at least twice as many bits. */
     Type widen() const {
-        return with_bits(bits() * 2);
+        if (bits() == 1) {
+            // Widening a 1-bit type should produce an 8-bit type.
+            return with_bits(8);
+        } else {
+            return with_bits(bits() * 2);
+        }
     }
 
-    /** Return Type with the same type code and number of lanes, but with half as many bits. */
+    /** Return Type with the same type code and number of lanes, but with at most half as many bits. */
     Type narrow() const {
-        return with_bits(bits() / 2);
+        internal_assert(bits() != 1) << "Attempting to narrow a 1-bit type\n";
+        if (bits() == 8) {
+            // Narrowing an 8-bit type should produce a 1-bit type.
+            return with_bits(1);
+        } else {
+            return with_bits(bits() / 2);
+        }
     }
 
     /** Type to be printed when declaring handles of this type. */

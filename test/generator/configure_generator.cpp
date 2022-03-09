@@ -21,11 +21,11 @@ public:
         // user code must not free them. We can stash them in member variables
         // as-is or in containers, like so:
         for (int i = 0; i < num_extra_buffer_inputs; ++i) {
-            auto *extra = add_input<Buffer<>>("extra_" + std::to_string(i), UInt(8), 2);
+            auto *extra = add_input<Buffer<uint8_t, 2>>("extra_" + std::to_string(i));
             extra_buffer_inputs.push_back(extra);
         }
 
-        typed_extra_buffer_input = add_input<Buffer<int16_t>>("typed_extra_buffer_input", 2);
+        typed_extra_buffer_input = add_input<Buffer<int16_t, 2>>("typed_extra_buffer_input");
 
         extra_func_input = add_input<Func>("extra_func_input", UInt(16), 3);
 
@@ -33,7 +33,7 @@ public:
 
         extra_dynamic_scalar_input = add_input<Expr>("extra_dynamic_scalar_input", Int(8));
 
-        extra_buffer_output = add_output<Buffer<>>("extra_buffer_output", Float(32), 3);
+        extra_buffer_output = add_output<Buffer<float, 3>>("extra_buffer_output");
 
         extra_func_output = add_output<Func>("extra_func_output", Float(64), 2);
 
@@ -94,13 +94,13 @@ public:
 private:
     int configure_calls = 0;
 
-    std::vector<Input<Buffer<>> *> extra_buffer_inputs;
-    Input<Buffer<int16_t>> *typed_extra_buffer_input;
+    std::vector<Input<Buffer<uint8_t, 2>> *> extra_buffer_inputs;
+    Input<Buffer<int16_t, 2>> *typed_extra_buffer_input;
     Input<Func> *extra_func_input;
     Input<int> *extra_scalar_input;
     Input<Expr> *extra_dynamic_scalar_input;
 
-    Output<Buffer<>> *extra_buffer_output;
+    Output<Buffer<float, 3>> *extra_buffer_output;
     Output<Func> *extra_func_output;
 };
 

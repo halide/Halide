@@ -17,21 +17,26 @@
 
 namespace Halide {
 
-GeneratorContext::GeneratorContext(const Target &t, bool auto_schedule,
-                                   const MachineParams &machine_params)
-    : target("target", t),
-      auto_schedule("auto_schedule", auto_schedule),
-      machine_params("machine_params", machine_params),
-      externs_map(std::make_shared<ExternsMap>()),
-      value_tracker(std::make_shared<Internal::ValueTracker>()) {
+GeneratorContext::GeneratorContext(const Target &target,
+                                   bool auto_schedule,
+                                   const MachineParams &machine_params,
+                                   std::shared_ptr<ExternsMap> externs_map,
+                                   std::shared_ptr<Internal::ValueTracker> value_tracker)
+    : target_(target),
+      auto_schedule_(auto_schedule),
+      machine_params_(machine_params),
+      externs_map_(std::move(externs_map)),
+      value_tracker_(std::move(value_tracker)) {
 }
 
-void GeneratorContext::init_from_context(const Halide::GeneratorContext &context) {
-    target.set(context.get_target());
-    auto_schedule.set(context.get_auto_schedule());
-    machine_params.set(context.get_machine_params());
-    value_tracker = context.get_value_tracker();
-    externs_map = context.get_externs_map();
+GeneratorContext::GeneratorContext(const Target &target,
+                                   bool auto_schedule,
+                                   const MachineParams &machine_params)
+    : GeneratorContext(target,
+                       auto_schedule,
+                       machine_params,
+                       std::make_shared<ExternsMap>(),
+                       std::make_shared<Internal::ValueTracker>()) {
 }
 
 namespace Internal {
@@ -82,12 +87,12 @@ std::string compute_base_path(const std::string &output_dir,
     return base_path;
 }
 
-std::map<Output, std::string> compute_output_files(const Target &target,
-                                                   const std::string &base_path,
-                                                   const std::set<Output> &outputs) {
-    std::map<Output, const OutputInfo> output_info = get_output_info(target);
+std::map<OutputFileType, std::string> compute_output_files(const Target &target,
+                                                           const std::string &base_path,
+                                                           const std::set<OutputFileType> &outputs) {
+    std::map<OutputFileType, const OutputInfo> output_info = get_output_info(target);
 
-    std::map<Output, std::string> output_files;
+    std::map<OutputFileType, std::string> output_files;
     for (auto o : outputs) {
         output_files[o] = base_path + output_info.at(o).extension;
     }
@@ -134,6 +139,44 @@ std::vector<Type> parse_halide_type_list(const std::string &types) {
     }
     return result;
 }
+
+/**
+ * ValueTracker is an internal utility class that attempts to track and flag certain
+ * obvious Stub-related errors at Halide compile time: it tracks the constraints set
+ * on any Parameter-based argument (i.e., Input<Buffer> and Output<Buffer>) to
+ * ensure that incompatible values aren't set.
+ *
+ * e.g.: if a Generator A requires stride[0] == 1,
+ * and Generator B uses Generator A via stub, but requires stride[0] == 4,
+ * we should be able to detect this at Halide compilation time, and fail immediately,
+ * rather than producing code that fails at runtime and/or runs slowly due to
+ * vectorization being unavailable.
+ *
+ * We do this by tracking the active values at entrance and exit to all user-provided
+ * Generator methods (generate()/schedule()); if we ever find more than two unique
+ * values active, we know we have a potential conflict. ("two" here because the first
+ * value is the default value for a given constraint.)
+ *
+ * Note that this won't catch all cases:
+ * -- JIT compilation has no way to check for conflicts at the top-level
+ * -- constraints that match the default value (e.g. if dim(0).set_stride(1) is the
+ * first value seen by the tracker) will be ignored, so an explicit requirement set
+ * this way can be missed
+ *
+ * Nevertheless, this is likely to be much better than nothing when composing multiple
+ * layers of Stubs in a single fused result.
+ */
+class ValueTracker {
+private:
+    std::map<std::string, std::vector<std::vector<Expr>>> values_history;
+    const size_t max_unique_values;
+
+public:
+    explicit ValueTracker(size_t max_unique_values = 2)
+        : max_unique_values(max_unique_values) {
+    }
+    void track_values(const std::string &name, const std::vector<Expr> &values);
+};
 
 void ValueTracker::track_values(const std::string &name, const std::vector<Expr> &values) {
     std::vector<std::vector<Expr>> &history = values_history[name];
@@ -597,24 +640,24 @@ void StubEmitter::emit() {
     for (const auto &out : out_info) {
         stream << get_indent() << "stub." << out.getter << ",\n";
     }
-    stream << get_indent() << "stub.generator->get_target()\n";
+    stream << get_indent() << "stub.generator->context().get_target()\n";
     indent_level--;
     stream << get_indent() << "};\n";
     indent_level--;
     stream << get_indent() << "}\n";
     stream << "\n";
 
-    stream << get_indent() << "// overload to allow GeneratorContext-pointer\n";
+    stream << get_indent() << "// overload to allow GeneratorBase-pointer\n";
     stream << get_indent() << "inline static Outputs generate(\n";
     indent_level++;
-    stream << get_indent() << "const GeneratorContext* context,\n";
+    stream << get_indent() << "const Halide::Internal::GeneratorBase* generator,\n";
     stream << get_indent() << "const Inputs& inputs,\n";
     stream << get_indent() << "const GeneratorParams& generator_params = GeneratorParams()\n";
     indent_level--;
     stream << get_indent() << ")\n";
     stream << get_indent() << "{\n";
     indent_level++;
-    stream << get_indent() << "return generate(*context, inputs, generator_params);\n";
+    stream << get_indent() << "return generate(generator->context(), inputs, generator_params);\n";
     indent_level--;
     stream << get_indent() << "}\n";
     stream << "\n";
@@ -674,6 +717,7 @@ std::vector<std::vector<Func>> GeneratorStub::generate(const GeneratorParamsMap 
 
     std::vector<std::vector<Func>> v;
     GeneratorParamInfo &pi = generator->param_info();
+#ifdef HALIDE_ALLOW_GENERATOR_BUILD_METHOD
     if (!pi.outputs().empty()) {
         for (auto *output : pi.outputs()) {
             v.push_back(get_outputs(output->name()));
@@ -684,6 +728,12 @@ std::vector<std::vector<Func>> GeneratorStub::generate(const GeneratorParamsMap 
             v.push_back(std::vector<Func>{output});
         }
     }
+#else
+    internal_assert(!pi.outputs().empty());
+    for (auto *output : pi.outputs()) {
+        v.push_back(get_outputs(output->name()));
+    }
+#endif
     return v;
 }
 
@@ -751,38 +801,47 @@ std::string halide_type_to_c_type(const Type &t) {
     return m.at(encode(t));
 }
 
+namespace {
+
 int generate_filter_main_inner(int argc, char **argv, std::ostream &error_output) {
-    const char kUsage[] =
-        "gengen\n"
-        "  [-g GENERATOR_NAME] [-f FUNCTION_NAME] [-o OUTPUT_DIR] [-r RUNTIME_NAME] [-d 1|0]\n"
-        "  [-e EMIT_OPTIONS] [-n FILE_BASE_NAME] [-p PLUGIN_NAME] [-s AUTOSCHEDULER_NAME] [-t TIMEOUT]\n"
-        "       target=target-string[,target-string...] [generator_arg=value [...]]\n"
-        "\n"
-        " -d  Build a module that is suitable for using for gradient descent calculationn\n"
-        "     in TensorFlow or PyTorch. See Generator::build_gradient_module() documentation.\n"
-        "\n"
-        " -e  A comma separated list of files to emit. Accepted values are:\n"
-        "     [assembly, bitcode, c_header, c_source, cpp_stub, featurization,\n"
-        "      llvm_assembly, object, python_extension, pytorch_wrapper, registration,\n"
-        "      schedule, static_library, stmt, stmt_html, compiler_log].\n"
-        "     If omitted, default value is [c_header, static_library, registration].\n"
-        "\n"
-        " -p  A comma-separated list of shared libraries that will be loaded before the\n"
-        "     generator is run. Useful for custom auto-schedulers. The generator must\n"
-        "     either be linked against a shared libHalide or compiled with -rdynamic\n"
-        "     so that references in the shared library to libHalide can resolve.\n"
-        "     (Note that this does not change the default autoscheduler; use the -s flag\n"
-        "     to set that value.)"
-        "\n"
-        " -r   The name of a standalone runtime to generate. Only honors EMIT_OPTIONS 'o'\n"
-        "     and 'static_library'. When multiple targets are specified, it picks a\n"
-        "     runtime that is compatible with all of the targets, or fails if it cannot\n"
-        "     find one. Flags across all of the targets that do not affect runtime code\n"
-        "     generation, such as `no_asserts` and `no_runtime`, are ignored.\n"
-        "\n"
-        " -s  The name of an autoscheduler to set as the default.\n"
-        " -t  Timeout for the Generator to run, in seconds; mainly useful to ensure that bugs and/or degenerate"
-        "     cases don't stall build systems. Defaults to 900 (=15 minutes). Specify 0 to allow ~infinite time.\n";
+    static const char kUsage[] = R"INLINE_CODE(
+gengen
+  [-g GENERATOR_NAME] [-f FUNCTION_NAME] [-o OUTPUT_DIR] [-r RUNTIME_NAME]
+  [-d 1|0] [-e EMIT_OPTIONS] [-n FILE_BASE_NAME] [-p PLUGIN_NAME]
+  [-s AUTOSCHEDULER_NAME] [-t TIMEOUT]
+  target=target-string[,target-string...]
+  [generator_arg=value [...]]
+
+ -d  Build a module that is suitable for using for gradient descent calculation
+     in TensorFlow or PyTorch. See Generator::build_gradient_module()
+     documentation.
+
+ -e  A comma separated list of files to emit. Accepted values are:
+     [assembly, bitcode, c_header, c_source, cpp_stub, featurization,
+      llvm_assembly, object, python_extension, pytorch_wrapper, registration,
+      schedule, static_library, stmt, stmt_html, compiler_log].
+     If omitted, default value is [c_header, static_library, registration].
+
+ -p  A comma-separated list of shared libraries that will be loaded before the
+     generator is run. Useful for custom auto-schedulers. The generator must
+     either be linked against a shared libHalide or compiled with -rdynamic
+     so that references in the shared library to libHalide can resolve.
+     (Note that this does not change the default autoscheduler; use the -s flag
+     to set that value.)"
+
+ -r   The name of a standalone runtime to generate. Only honors EMIT_OPTIONS 'o'
+     and 'static_library'. When multiple targets are specified, it picks a
+     runtime that is compatible with all of the targets, or fails if it cannot
+     find one. Flags across all of the targets that do not affect runtime code
+     generation, such as `no_asserts` and `no_runtime`, are ignored.
+
+ -s  The name of an autoscheduler to set as the default.
+
+ -t  Timeout for the Generator to run, in seconds; mainly useful to ensure that
+     bugs and/or degenerate cases don't stall build systems. Defaults to 900
+     (=15 minutes). Specify 0 to allow ~infinite time.
+
+)INLINE_CODE";
 
     std::map<std::string, std::string> flags_info = {
         {"-d", "0"},
@@ -912,23 +971,23 @@ int generate_filter_main_inner(int argc, char **argv, std::ostream &error_output
     }
 
     // extensions won't vary across multitarget output
-    std::map<Output, const OutputInfo> output_info = get_output_info(targets[0]);
+    std::map<OutputFileType, const OutputInfo> output_info = get_output_info(targets[0]);
 
-    std::set<Output> outputs;
+    std::set<OutputFileType> outputs;
     if (emit_flags.empty() || (emit_flags.size() == 1 && emit_flags[0].empty())) {
         // If omitted or empty, assume .a and .h and registration.cpp
-        outputs.insert(Output::c_header);
-        outputs.insert(Output::registration);
-        outputs.insert(Output::static_library);
+        outputs.insert(OutputFileType::c_header);
+        outputs.insert(OutputFileType::registration);
+        outputs.insert(OutputFileType::static_library);
     } else {
         // Build a reverse lookup table. Allow some legacy aliases on the command line,
         // to allow legacy build systems to work more easily.
-        std::map<std::string, Output> output_name_to_enum = {
-            {"cpp", Output::c_source},
-            {"h", Output::c_header},
-            {"html", Output::stmt_html},
-            {"o", Output::object},
-            {"py.c", Output::python_extension},
+        std::map<std::string, OutputFileType> output_name_to_enum = {
+            {"cpp", OutputFileType::c_source},
+            {"h", OutputFileType::c_header},
+            {"html", OutputFileType::stmt_html},
+            {"o", OutputFileType::object},
+            {"py.c", OutputFileType::python_extension},
         };
         for (const auto &it : output_info) {
             output_name_to_enum[it.second.name] = it.first;
@@ -955,7 +1014,7 @@ int generate_filter_main_inner(int argc, char **argv, std::ostream &error_output
     }
 
     // Allow quick-n-dirty use of compiler logging via HL_DEBUG_COMPILER_LOGGER env var
-    const bool do_compiler_logging = outputs.count(Output::compiler_log) ||
+    const bool do_compiler_logging = outputs.count(OutputFileType::compiler_log) ||
                                      (get_env_variable("HL_DEBUG_COMPILER_LOGGER") == "1");
 
     const bool obfuscate_compiler_logging = get_env_variable("HL_OBFUSCATE_COMPILER_LOGGER") == "1";
@@ -1055,11 +1114,11 @@ int generate_filter_main_inner(int argc, char **argv, std::ostream &error_output
     if (!generator_name.empty()) {
         std::string base_path = compute_base_path(output_dir, function_name, file_base_name);
         debug(1) << "Generator " << generator_name << " has base_path " << base_path << "\n";
-        if (outputs.count(Output::cpp_stub)) {
+        if (outputs.count(OutputFileType::cpp_stub)) {
             // When generating cpp_stub, we ignore all generator args passed in, and supply a fake Target.
             // (CompilerLogger is never enabled for cpp_stub, for now anyway.)
             auto gen = GeneratorRegistry::create(generator_name, GeneratorContext(Target()));
-            auto stub_file_path = base_path + output_info[Output::cpp_stub].extension;
+            auto stub_file_path = base_path + output_info[OutputFileType::cpp_stub].extension;
             gen->emit_cpp_stub(stub_file_path);
         }
 
@@ -1081,18 +1140,20 @@ int generate_filter_main_inner(int argc, char **argv, std::ostream &error_output
     return 0;
 }
 
+}  // namespace
+
 #ifdef HALIDE_WITH_EXCEPTIONS
-int generate_filter_main(int argc, char **argv, std::ostream &cerr) {
+int generate_filter_main(int argc, char **argv, std::ostream &error_output) {
     try {
-        return generate_filter_main_inner(argc, argv, cerr);
+        return generate_filter_main_inner(argc, argv, error_output);
     } catch (std::runtime_error &err) {
-        cerr << "Unhandled exception: " << err.what() << "\n";
+        error_output << "Unhandled exception: " << err.what() << "\n";
         return -1;
     }
 }
 #else
-int generate_filter_main(int argc, char **argv, std::ostream &cerr) {
-    return generate_filter_main_inner(argc, argv, cerr);
+int generate_filter_main(int argc, char **argv, std::ostream &error_output) {
+    return generate_filter_main_inner(argc, argv, error_output);
 }
 #endif
 
@@ -1113,8 +1174,13 @@ void GeneratorParamBase::check_value_readable() const {
         name() == "machine_params") {
         return;
     }
+#ifdef HALIDE_ALLOW_GENERATOR_BUILD_METHOD
     user_assert(generator && generator->phase >= GeneratorBase::ConfigureCalled)
         << "The GeneratorParam \"" << name() << "\" cannot be read before build() or configure()/generate() is called.\n";
+#else
+    user_assert(generator && generator->phase >= GeneratorBase::ConfigureCalled)
+        << "The GeneratorParam \"" << name() << "\" cannot be read before configure()/generate() is called.\n";
+#endif
 }
 
 void GeneratorParamBase::check_value_writable() const {
@@ -1122,7 +1188,13 @@ void GeneratorParamBase::check_value_writable() const {
     if (!generator) {
         return;
     }
-    user_assert(generator->phase < GeneratorBase::GenerateCalled) << "The GeneratorParam \"" << name() << "\" cannot be written after build() or generate() is called.\n";
+#ifdef HALIDE_ALLOW_GENERATOR_BUILD_METHOD
+    user_assert(generator->phase < GeneratorBase::GenerateCalled)
+        << "The GeneratorParam \"" << name() << "\" cannot be written after build() or generate() is called.\n";
+#else
+    user_assert(generator->phase < GeneratorBase::GenerateCalled)
+        << "The GeneratorParam \"" << name() << "\" cannot be written after generate() is called.\n";
+#endif
 }
 
 void GeneratorParamBase::fail_wrong_type(const char *type) {
@@ -1317,10 +1389,20 @@ void GeneratorBase::set_generator_param_values(const GeneratorParamsMap &params)
     }
 }
 
+GeneratorContext GeneratorBase::context() const {
+    return GeneratorContext(target, auto_schedule, machine_params, externs_map, value_tracker);
+}
+
 void GeneratorBase::init_from_context(const Halide::GeneratorContext &context) {
-    Halide::GeneratorContext::init_from_context(context);
-    internal_assert(param_info_ptr == nullptr);
+    target.set(context.target_);
+    auto_schedule.set(context.auto_schedule_);
+    machine_params.set(context.machine_params_);
+
+    externs_map = context.externs_map_;
+    value_tracker = context.value_tracker_;
+
     // pre-emptively build our param_info now
+    internal_assert(param_info_ptr == nullptr);
     param_info_ptr = std::make_unique<GeneratorParamInfo>(this, size);
 }
 
@@ -1352,7 +1434,7 @@ void GeneratorBase::track_parameter_values(bool include_outputs) {
             internal_assert(!input->parameters_.empty());
             for (auto &p : input->parameters_) {
                 // This must use p.name(), *not* input->name()
-                get_value_tracker()->track_values(p.name(), parameter_constraints(p));
+                value_tracker->track_values(p.name(), parameter_constraints(p));
             }
         }
     }
@@ -1366,7 +1448,7 @@ void GeneratorBase::track_parameter_values(bool include_outputs) {
                     for (auto &o : output_buffers) {
                         Parameter p = o.parameter();
                         // This must use p.name(), *not* output->name()
-                        get_value_tracker()->track_values(p.name(), parameter_constraints(p));
+                        value_tracker->track_values(p.name(), parameter_constraints(p));
                     }
                 }
             }
@@ -1449,6 +1531,7 @@ void GeneratorBase::post_schedule() {
     track_parameter_values(true);
 }
 
+#ifdef HALIDE_ALLOW_GENERATOR_BUILD_METHOD
 void GeneratorBase::pre_build() {
     advance_phase(GenerateCalled);
     advance_phase(ScheduleCalled);
@@ -1466,6 +1549,7 @@ void GeneratorBase::pre_build() {
 void GeneratorBase::post_build() {
     track_parameter_values(true);
 }
+#endif
 
 Pipeline GeneratorBase::get_pipeline() {
     check_min_phase(GenerateCalled);
@@ -1519,7 +1603,7 @@ Module GeneratorBase::build_module(const std::string &function_name,
     }
 
     Module result = pipeline.compile_to_module(filter_arguments, function_name, get_target(), linkage_type);
-    std::shared_ptr<ExternsMap> externs_map = get_externs_map();
+    std::shared_ptr<GeneratorContext::ExternsMap> externs_map = get_externs_map();
     for (const auto &map_entry : *externs_map) {
         result.append(map_entry.second);
     }
@@ -1900,8 +1984,13 @@ void GIOBase::check_gio_access() const {
     if (!generator) {
         return;
     }
+#ifdef HALIDE_ALLOW_GENERATOR_BUILD_METHOD
     user_assert(generator->phase > GeneratorBase::InputsSet)
         << "The " << input_or_output() << " \"" << name() << "\" cannot be examined before build() or generate() is called.\n";
+#else
+    user_assert(generator->phase > GeneratorBase::InputsSet)
+        << "The " << input_or_output() << " \"" << name() << "\" cannot be examined before generate() is called.\n";
+#endif
 }
 
 // If our dims are defined, ensure it matches the one passed in, asserting if not.
@@ -2181,6 +2270,7 @@ void generator_test() {
         // tester.sp2.set(202);  // This will assert-fail.
     }
 
+#ifdef HALIDE_ALLOW_GENERATOR_BUILD_METHOD
     // Verify that the Generator's internal phase actually prevents unsupported
     // order of operations (with old-style Generator)
     {
@@ -2247,6 +2337,7 @@ void generator_test() {
         // tester.gp2.set(2);  // This will assert-fail.
         // tester.sp2.set(202);  // This will assert-fail.
     }
+#endif
 
     // Verify that set_inputs() works properly, even if the specific subtype of Generator is not known.
     {
@@ -2259,7 +2350,7 @@ void generator_test() {
             Input<Func> input_func_typed{"input_func_typed", Int(16), 1};
             Input<Func> input_func_untyped{"input_func_untyped", 1};
             Input<Func[]> input_func_array{"input_func_array", 1};
-            Input<Buffer<uint8_t>> input_buffer_typed{"input_buffer_typed", 3};
+            Input<Buffer<uint8_t, 3>> input_buffer_typed{"input_buffer_typed"};
             Input<Buffer<>> input_buffer_untyped{"input_buffer_untyped"};
             Output<Func> output{"output", Float(32), 1};
 
@@ -2338,7 +2429,7 @@ void generator_test() {
         static_assert(std::is_same<decltype(tester_instance.func_array_output[0]), Func &>::value, "type mismatch");
 
         static_assert(std::is_same<decltype(tester_instance.buffer_array_input[0]), ImageParam>::value, "type mismatch");
-        static_assert(std::is_same<decltype(tester_instance.buffer_array_output[0]), const Func &>::value, "type mismatch");
+        static_assert(std::is_same<decltype(tester_instance.buffer_array_output[0]), Func>::value, "type mismatch");
     }
 
     class GPTester : public Generator<GPTester> {

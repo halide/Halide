@@ -1,36 +1,20 @@
 #include "DeviceArgument.h"
 #include "CodeGen_GPU_Dev.h"
+#include "IRPrinter.h"
 
 namespace Halide {
 namespace Internal {
 
-HostClosure::HostClosure(const Stmt &s, const std::string &loop_variable) {
-    if (!loop_variable.empty()) {
-        ignore.push(loop_variable);
-    }
-    s.accept(this);
-}
-
 std::vector<DeviceArgument> HostClosure::arguments() {
+    if (debug::debug_level() >= 2) {
+        debug(2) << *this;
+    }
+
     std::vector<DeviceArgument> res;
     for (const auto &v : vars) {
-        debug(2) << "var: " << v.first << "\n";
         res.emplace_back(v.first, false, MemoryType::Auto, v.second, 0);
     }
     for (const auto &b : buffers) {
-        debug(2) << "buffer: " << b.first << " " << b.second.size;
-        if (b.second.read) {
-            debug(2) << " (read)";
-        }
-        if (b.second.write) {
-            debug(2) << " (write)";
-        }
-        if (b.second.memory_type == MemoryType::GPUTexture) {
-            debug(2) << " <texture>";
-        }
-        debug(2) << " dims=" << (int)b.second.dimensions;
-        debug(2) << "\n";
-
         DeviceArgument arg(b.first, true, b.second.memory_type, b.second.type, b.second.dimensions, b.second.size);
         arg.read = b.second.read;
         arg.write = b.second.write;

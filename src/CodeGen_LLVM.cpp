@@ -22,6 +22,7 @@
 #include "LLVM_Headers.h"
 #include "LLVM_Runtime_Linker.h"
 #include "Lerp.h"
+#include "LowerParallelTasks.h"
 #include "MatlabWrapper.h"
 #include "Pipeline.h"
 #include "Simplify.h"
@@ -144,17 +145,20 @@ using std::vector;
 
 namespace {
 
-llvm::Value *CreateConstGEP1_32(IRBuilderBase *builder, Value *ptr, unsigned index) {
+llvm::Value *CreateConstGEP1_32(IRBuilderBase *builder, llvm::Type *gep_type,
+                                Value *ptr, unsigned index) {
 #if LLVM_VERSION >= 130
-    return builder->CreateConstGEP1_32(ptr->getType()->getScalarType()->getPointerElementType(), ptr, index);
+    return builder->CreateConstGEP1_32(gep_type, ptr, index);
 #else
+    (void)gep_type;
     return builder->CreateConstGEP1_32(ptr, index);
 #endif
 }
 
-llvm::Value *CreateInBoundsGEP(IRBuilderBase *builder, Value *ptr, ArrayRef<Value *> index_list) {
+llvm::Value *CreateInBoundsGEP(IRBuilderBase *builder, llvm::Type *gep_type,
+                               Value *ptr, ArrayRef<Value *> index_list) {
 #if LLVM_VERSION >= 130
-    return builder->CreateInBoundsGEP(ptr->getType()->getScalarType()->getPointerElementType(), ptr, index_list);
+    return builder->CreateInBoundsGEP(gep_type, ptr, index_list);
 #else
     return builder->CreateInBoundsGEP(ptr, index_list);
 #endif
@@ -168,6 +172,7 @@ llvm::GlobalValue::LinkageTypes llvm_linkage(LinkageType t) {
     return llvm::GlobalValue::ExternalLinkage;
 
     // switch (t) {
+    // case LinkageType::ExternalPlusArgv:
     // case LinkageType::ExternalPlusMetadata:
     // case LinkageType::External:
     //     return llvm::GlobalValue::ExternalLinkage;
@@ -268,6 +273,9 @@ void CodeGen_LLVM::initialize_llvm() {
             for (const std::string &s : arg_vec) {
                 c_arg_vec.push_back(s.c_str());
             }
+            // TODO: Remove after opaque pointers become the default in LLVM.
+            // This is here to document how to turn on opaque pointers, for testing, in LLVM 15
+            //            c_arg_vec.push_back("-opaque-pointers");
             cl::ParseCommandLineOptions((int)(c_arg_vec.size()), &c_arg_vec[0], "Halide compiler\n");
         }
 
@@ -327,6 +335,9 @@ void CodeGen_LLVM::init_context() {
     f16_t = llvm::Type::getHalfTy(*context);
     f32_t = llvm::Type::getFloatTy(*context);
     f64_t = llvm::Type::getDoubleTy(*context);
+
+    // Ensure no Value pointers carry over from previous context.
+    struct_type_recovery.clear();
 }
 
 void CodeGen_LLVM::init_module() {
@@ -425,13 +436,20 @@ std::unique_ptr<llvm::Module> CodeGen_LLVM::compile_trampolines(
     for (const std::pair<std::string, ExternSignature> &e : externs) {
         const std::string &callee_name = e.first;
         const std::string wrapper_name = callee_name + suffix;
+
         llvm::FunctionType *fn_type = codegen->signature_to_type(e.second);
         // callee might already be present for builtins, e.g. halide_print
         llvm::Function *callee = codegen->module->getFunction(callee_name);
         if (!callee) {
             callee = llvm::Function::Create(fn_type, llvm::Function::ExternalLinkage, callee_name, codegen->module.get());
         }
-        codegen->add_argv_wrapper(callee, wrapper_name, /*result_in_argv*/ true);
+
+        std::vector<bool> buffer_args(e.second.arg_types().size());
+        size_t index = 0;
+        for (const Type &t : e.second.arg_types()) {
+            buffer_args[index++] = (t == type_of<struct halide_buffer_t *>());
+        }
+        codegen->add_argv_wrapper(callee, wrapper_name, /*result_in_argv*/ true, buffer_args);
     }
     return codegen->finish_codegen();
 }
@@ -502,27 +520,65 @@ std::unique_ptr<llvm::Module> CodeGen_LLVM::compile(const Module &input) {
     for (const auto &b : input.buffers()) {
         compile_buffer(b);
     }
+
+    vector<MangledNames> function_names;
+
+    // Declare all functions
     for (const auto &f : input.functions()) {
         const auto names = get_mangled_names(f, get_target());
+        function_names.push_back(names);
+
+        // Deduce the types of the arguments to our function
+        vector<llvm::Type *> arg_types(f.args.size());
+        for (size_t i = 0; i < f.args.size(); i++) {
+            if (f.args[i].is_buffer()) {
+                arg_types[i] = halide_buffer_t_type->getPointerTo();
+            } else {
+                arg_types[i] = llvm_type_of(upgrade_type_for_argument_passing(f.args[i].type));
+            }
+        }
+        FunctionType *func_t = FunctionType::get(i32_t, arg_types, false);
+        function = llvm::Function::Create(func_t, llvm_linkage(f.linkage), names.extern_name, module.get());
+        set_function_attributes_for_target(function, target);
+
+        // Mark the buffer args as no alias and save indication for add_argv_wrapper if needed
+        std::vector<bool> buffer_args(f.args.size());
+        for (size_t i = 0; i < f.args.size(); i++) {
+            bool is_buffer = f.args[i].is_buffer();
+            buffer_args[i] = is_buffer;
+            if (is_buffer) {
+                function->addParamAttr(i, Attribute::NoAlias);
+            }
+        }
+
+        // sym_push helpfully calls setName, which we don't want
+        symbol_table.push("::" + f.name, function);
+
+        // If the Func is externally visible, also create the argv wrapper and metadata.
+        // (useful for calling from JIT and other machine interfaces).
+        if (f.linkage == LinkageType::ExternalPlusArgv || f.linkage == LinkageType::ExternalPlusMetadata) {
+            llvm::Function *wrapper = add_argv_wrapper(function, names.argv_name, false, buffer_args);
+            if (f.linkage == LinkageType::ExternalPlusMetadata) {
+                llvm::Function *metadata_getter = embed_metadata_getter(names.metadata_name,
+                                                                        names.simple_name, f.args, input.get_metadata_name_map());
+
+                if (target.has_feature(Target::Matlab)) {
+                    define_matlab_wrapper(module.get(), wrapper, metadata_getter);
+                }
+            }
+        }
+    }
+    // Define all functions
+    int idx = 0;
+    for (const auto &f : input.functions()) {
+        const auto names = function_names[idx++];
 
         run_with_large_stack([&]() {
             compile_func(f, names.simple_name, names.extern_name);
         });
-
-        // If the Func is externally visible, also create the argv wrapper and metadata.
-        // (useful for calling from JIT and other machine interfaces).
-        if (f.linkage == LinkageType::ExternalPlusMetadata) {
-            llvm::Function *wrapper = add_argv_wrapper(function, names.argv_name);
-            llvm::Function *metadata_getter = embed_metadata_getter(names.metadata_name,
-                                                                    names.simple_name, f.args, input.get_metadata_name_map());
-
-            if (target.has_feature(Target::Matlab)) {
-                define_matlab_wrapper(module.get(), wrapper, metadata_getter);
-            }
-        }
     }
 
-    debug(2) << module.get() << "\n";
+    debug(2) << "llvm::Module pointer: " << module.get() << "\n";
 
     return finish_codegen();
 }
@@ -547,41 +603,9 @@ std::unique_ptr<llvm::Module> CodeGen_LLVM::finish_codegen() {
 void CodeGen_LLVM::begin_func(LinkageType linkage, const std::string &name,
                               const std::string &extern_name, const std::vector<LoweredArgument> &args) {
     current_function_args = args;
-
-    // Deduce the types of the arguments to our function
-    vector<llvm::Type *> arg_types(args.size());
-    for (size_t i = 0; i < args.size(); i++) {
-        if (args[i].is_buffer()) {
-            arg_types[i] = halide_buffer_t_type->getPointerTo();
-        } else {
-            arg_types[i] = llvm_type_of(upgrade_type_for_argument_passing(args[i].type));
-        }
-    }
-    FunctionType *func_t = FunctionType::get(i32_t, arg_types, false);
-
-    // Make our function. There may already be a declaration of it.
     function = module->getFunction(extern_name);
     if (!function) {
-        function = llvm::Function::Create(func_t, llvm_linkage(linkage), extern_name, module.get());
-    } else {
-        user_assert(function->isDeclaration())
-            << "Another function with the name " << extern_name
-            << " already exists in the same module\n";
-        if (func_t != function->getFunctionType()) {
-            std::cerr << "Desired function type for " << extern_name << ":\n";
-            func_t->print(dbgs(), true);
-            std::cerr << "Declared function type of " << extern_name << ":\n";
-            function->getFunctionType()->print(dbgs(), true);
-            user_error << "Cannot create a function with a declaration of mismatched type.\n";
-        }
-    }
-    set_function_attributes_for_target(function, target);
-
-    // Mark the buffer args as no alias
-    for (size_t i = 0; i < args.size(); i++) {
-        if (args[i].is_buffer()) {
-            function->addParamAttr(i, Attribute::NoAlias);
-        }
+        internal_assert(function) << "Could not find a function of name " << extern_name << " in module\n";
     }
 
     debug(1) << "Generating llvm bitcode prolog for function " << name << "...\n";
@@ -906,7 +930,8 @@ Constant *CodeGen_LLVM::embed_constant_expr(Expr e, llvm::Type *t) {
 // return type is always 'void'.
 llvm::Function *CodeGen_LLVM::add_argv_wrapper(llvm::Function *fn,
                                                const std::string &name,
-                                               bool result_in_argv) {
+                                               bool result_in_argv,
+                                               std::vector<bool> &arg_is_buffer) {
     llvm::Type *wrapper_result_type = result_in_argv ? void_t : i32_t;
     llvm::Type *wrapper_args_t[] = {i8_t->getPointerTo()->getPointerTo()};
     llvm::FunctionType *wrapper_func_t = llvm::FunctionType::get(wrapper_result_type, wrapper_args_t, false);
@@ -918,15 +943,16 @@ llvm::Function *CodeGen_LLVM::add_argv_wrapper(llvm::Function *fn,
     std::vector<llvm::Value *> wrapper_args;
     for (llvm::Function::arg_iterator i = fn->arg_begin(); i != fn->arg_end(); i++) {
         // Get the address of the nth argument
-        llvm::Value *ptr = CreateConstGEP1_32(builder, arg_array, wrapper_args.size());
-        ptr = builder->CreateLoad(ptr->getType()->getPointerElementType(), ptr);
-        if (i->getType() == halide_buffer_t_type->getPointerTo()) {
+        llvm::Value *ptr = CreateConstGEP1_32(builder, i8_t->getPointerTo(),
+                                              arg_array, wrapper_args.size());
+        ptr = builder->CreateLoad(i8_t->getPointerTo(), ptr);
+        if (arg_is_buffer[i->getArgNo()]) {
             // Cast the argument to a halide_buffer_t *
             wrapper_args.push_back(builder->CreatePointerCast(ptr, halide_buffer_t_type->getPointerTo()));
         } else {
             // Cast to the appropriate type and load
             ptr = builder->CreatePointerCast(ptr, i->getType()->getPointerTo());
-            wrapper_args.push_back(builder->CreateLoad(ptr->getType()->getPointerElementType(), ptr));
+            wrapper_args.push_back(builder->CreateLoad(i->getType(), ptr));
         }
     }
     debug(4) << "Creating call from wrapper to actual function\n";
@@ -935,9 +961,10 @@ llvm::Function *CodeGen_LLVM::add_argv_wrapper(llvm::Function *fn,
     result->setIsNoInline();
 
     if (result_in_argv) {
-        llvm::Value *result_in_argv_ptr = CreateConstGEP1_32(builder, arg_array, wrapper_args.size());
+        llvm::Value *result_in_argv_ptr = CreateConstGEP1_32(builder, i8_t->getPointerTo(),
+                                                             arg_array, wrapper_args.size());
         if (fn->getReturnType() != void_t) {
-            result_in_argv_ptr = builder->CreateLoad(result_in_argv_ptr->getType()->getPointerElementType(), result_in_argv_ptr);
+            result_in_argv_ptr = builder->CreateLoad(i8_t->getPointerTo(), result_in_argv_ptr);
             // Cast to the appropriate type and store
             result_in_argv_ptr = builder->CreatePointerCast(result_in_argv_ptr, fn->getReturnType()->getPointerTo());
             builder->CreateStore(result, result_in_argv_ptr);
@@ -968,7 +995,7 @@ llvm::Function *CodeGen_LLVM::embed_metadata_getter(const std::string &metadata_
     vector<Constant *> arguments_array_entries;
     for (int arg = 0; arg < num_args; ++arg) {
 
-        StructType *type_t_type = get_llvm_struct_type_by_name(module.get(), "struct.halide_type_t");
+        llvm::StructType *type_t_type = get_llvm_struct_type_by_name(module.get(), "struct.halide_type_t");
         internal_assert(type_t_type) << "Did not find halide_type_t in module.\n";
 
         Constant *type_fields[] = {
@@ -1142,6 +1169,25 @@ void CodeGen_LLVM::optimize_module() {
 
     OptimizationLevel level = OptimizationLevel::O3;
 
+    if (get_target().has_feature(Target::SanitizerCoverage)) {
+        pb.registerOptimizerLastEPCallback(
+            [&](ModulePassManager &mpm, OptimizationLevel level) {
+                SanitizerCoverageOptions sanitizercoverage_options;
+                // Mirror what -fsanitize=fuzzer-no-link would enable.
+                // See https://github.com/halide/Halide/issues/6528
+                sanitizercoverage_options.CoverageType = SanitizerCoverageOptions::SCK_Edge;
+                sanitizercoverage_options.IndirectCalls = true;
+                sanitizercoverage_options.TraceCmp = true;
+                sanitizercoverage_options.Inline8bitCounters = true;
+                sanitizercoverage_options.PCTable = true;
+                // Due to TLS differences, stack depth tracking is only enabled on Linux
+                if (get_target().os == Target::OS::Linux) {
+                    sanitizercoverage_options.StackDepth = true;
+                }
+                mpm.addPass(ModuleSanitizerCoveragePass(sanitizercoverage_options));
+            });
+    }
+
     if (get_target().has_feature(Target::ASAN)) {
         pb.registerPipelineStartEPCallback([&](ModulePassManager &mpm, OptimizationLevel) {
             mpm.addPass(RequireAnalysisPass<ASanGlobalsMetadataAnalysis, llvm::Module>());
@@ -1166,6 +1212,9 @@ void CodeGen_LLVM::optimize_module() {
         });
     }
 
+    // Target::MSAN handling is sprinkled throughout the codebase,
+    // there is no need to run MemorySanitizerPass here.
+
     if (get_target().has_feature(Target::TSAN)) {
         pb.registerOptimizerLastEPCallback(
             [](ModulePassManager &mpm, OptimizationLevel level) {
@@ -1177,6 +1226,9 @@ void CodeGen_LLVM::optimize_module() {
     for (auto &function : *module) {
         if (get_target().has_feature(Target::ASAN)) {
             function.addFnAttr(Attribute::SanitizeAddress);
+        }
+        if (get_target().has_feature(Target::MSAN)) {
+            function.addFnAttr(Attribute::SanitizeMemory);
         }
         if (get_target().has_feature(Target::TSAN)) {
             // Do not annotate any of Halide's low-level synchronization code as it has
@@ -1386,6 +1438,20 @@ void CodeGen_LLVM::visit(const Cast *op) {
                            << " to " << dst
                            << " unimplemented\n";
         }
+        return;
+    }
+
+    if (const Call *c = Call::as_intrinsic(op->value, {Call::lerp})) {
+        // We want to codegen a cast of a lerp as a single thing, because it can
+        // be done more intelligently than a lerp followed by a cast.
+        Type t = upgrade_type_for_arithmetic(c->type);
+        Type wt = upgrade_type_for_arithmetic(c->args[2].type());
+        Expr e = lower_lerp(op->type,
+                            cast(t, c->args[0]),
+                            cast(t, c->args[1]),
+                            cast(wt, c->args[2]),
+                            target);
+        codegen(e);
         return;
     }
 
@@ -1772,7 +1838,7 @@ Value *CodeGen_LLVM::codegen_buffer_pointer(Value *base_address, Halide::Type ty
         if (const int64_t *offset = as_const_int(add->b)) {
             Value *base = codegen_buffer_pointer(base_address, type, add->a);
             Value *off = codegen(make_const(Int(8 * d.getPointerSize()), *offset));
-            return CreateInBoundsGEP(builder, base, off);
+            return CreateInBoundsGEP(builder, llvm_type_of(type), base, off);
         }
     }
 
@@ -1786,17 +1852,14 @@ Value *CodeGen_LLVM::codegen_buffer_pointer(const string &buffer, Halide::Type t
 }
 
 Value *CodeGen_LLVM::codegen_buffer_pointer(Value *base_address, Halide::Type type, Value *index) {
-    llvm::Type *base_address_type = base_address->getType();
-    unsigned address_space = base_address_type->getPointerAddressSpace();
-
     type = upgrade_type_for_storage(type);
+    llvm::Type *load_type = llvm_type_of(type);
+    unsigned address_space = base_address->getType()->getPointerAddressSpace();
+    llvm::Type *pointer_load_type = load_type->getPointerTo(address_space);
 
-    llvm::Type *load_type = llvm_type_of(type)->getPointerTo(address_space);
-
-    // If the type doesn't match the expected type, we need to pointer cast
-    if (load_type != base_address_type) {
-        base_address = builder->CreatePointerCast(base_address, load_type);
-    }
+    // TODO: This can likely be removed once opaque pointers are default
+    // in all supported LLVM versions.
+    base_address = builder->CreatePointerCast(base_address, pointer_load_type);
 
     llvm::Constant *constant_index = dyn_cast<llvm::Constant>(index);
     if (constant_index && constant_index->isZeroValue()) {
@@ -1809,7 +1872,7 @@ Value *CodeGen_LLVM::codegen_buffer_pointer(Value *base_address, Halide::Type ty
         index = builder->CreateIntCast(index, i64_t, true);
     }
 
-    return CreateInBoundsGEP(builder, base_address, index);
+    return CreateInBoundsGEP(builder, load_type, base_address, index);
 }
 
 void CodeGen_LLVM::add_tbaa_metadata(llvm::Instruction *inst, string buffer, const Expr &index) {
@@ -1896,13 +1959,14 @@ void CodeGen_LLVM::visit(const Load *op) {
     if (op->type.is_scalar()) {
         // Scalar loads
         Value *ptr = codegen_buffer_pointer(op->name, op->type, op->index);
-        LoadInst *load = builder->CreateAlignedLoad(ptr->getType()->getPointerElementType(), ptr, llvm::Align(op->type.bytes()));
+        LoadInst *load = builder->CreateAlignedLoad(llvm_type_of(op->type), ptr, llvm::Align(op->type.bytes()));
         add_tbaa_metadata(load, op->name, op->index);
         value = load;
     } else {
         const Ramp *ramp = op->index.as<Ramp>();
         const IntImm *stride = ramp ? ramp->stride.as<IntImm>() : nullptr;
 
+        llvm::Type *load_type = llvm_type_of(op->type.element_of());
         if (ramp && stride && stride->value == 1) {
             value = codegen_dense_vector_load(op);
         } else if (ramp && stride && 2 <= stride->value && stride->value <= 4) {
@@ -2000,10 +2064,10 @@ void CodeGen_LLVM::visit(const Load *op) {
             value = UndefValue::get(llvm_type_of(op->type));
             for (int i = 0; i < ramp->lanes; i++) {
                 Value *lane = ConstantInt::get(i32_t, i);
-                LoadInst *val = builder->CreateLoad(ptr->getType()->getPointerElementType(), ptr);
+                LoadInst *val = builder->CreateLoad(load_type, ptr);
                 add_tbaa_metadata(val, op->name, op->index);
                 value = builder->CreateInsertElement(value, val, lane);
-                ptr = CreateInBoundsGEP(builder, ptr, stride);
+                ptr = CreateInBoundsGEP(builder, load_type, ptr, stride);
             }
         } else if ((false)) { /* should_scalarize(op->index) */
             // TODO: put something sensible in for
@@ -2015,7 +2079,7 @@ void CodeGen_LLVM::visit(const Load *op) {
             for (int i = 0; i < op->type.lanes(); i++) {
                 Expr idx = extract_lane(op->index, i);
                 Value *ptr = codegen_buffer_pointer(op->name, op->type.element_of(), idx);
-                LoadInst *val = builder->CreateLoad(ptr->getType()->getPointerElementType(), ptr);
+                LoadInst *val = builder->CreateLoad(load_type, ptr);
                 add_tbaa_metadata(val, op->name, op->index);
                 vec = builder->CreateInsertElement(vec, val, ConstantInt::get(i32_t, i));
             }
@@ -2027,7 +2091,7 @@ void CodeGen_LLVM::visit(const Load *op) {
             for (int i = 0; i < op->type.lanes(); i++) {
                 Value *idx = builder->CreateExtractElement(index, ConstantInt::get(i32_t, i));
                 Value *ptr = codegen_buffer_pointer(op->name, op->type.element_of(), idx);
-                LoadInst *val = builder->CreateLoad(ptr->getType()->getPointerElementType(), ptr);
+                LoadInst *val = builder->CreateLoad(load_type, ptr);
                 add_tbaa_metadata(val, op->name, op->index);
                 vec = builder->CreateInsertElement(vec, val, ConstantInt::get(i32_t, i));
             }
@@ -2318,7 +2382,7 @@ llvm::Value *CodeGen_LLVM::codegen_dense_vector_load(const Type &type, const std
             load_inst = builder->CreateMaskedLoad(vec_ptr, llvm::Align(align_bytes), slice_mask);
 #endif
         } else {
-            load_inst = builder->CreateAlignedLoad(vec_ptr->getType()->getPointerElementType(), vec_ptr, llvm::Align(align_bytes));
+            load_inst = builder->CreateAlignedLoad(slice_type, vec_ptr, llvm::Align(align_bytes));
         }
         add_tbaa_metadata(load_inst, name, slice_index);
         slices.push_back(load_inst);
@@ -2473,7 +2537,8 @@ void CodeGen_LLVM::codegen_atomic_rmw(const Store *op) {
                 Value *idx = builder->CreateExtractElement(vec_index, ConstantInt::get(i32_t, lane_id));
                 ptr = codegen_buffer_pointer(op->name, value_type.element_of(), idx);
             }
-            LoadInst *orig = builder->CreateAlignedLoad(ptr->getType()->getPointerElementType(), ptr, llvm::Align(value_type.bytes()));
+            llvm::Type *load_type = llvm_type_of(value_type.element_of());
+            LoadInst *orig = builder->CreateAlignedLoad(load_type, ptr, llvm::Align(value_type.bytes()));
             orig->setOrdering(AtomicOrdering::Monotonic);
             add_tbaa_metadata(orig, op->name, op->index);
             // Explicit fall through from the current block to the cas loop body.
@@ -2481,8 +2546,7 @@ void CodeGen_LLVM::codegen_atomic_rmw(const Store *op) {
 
             // CAS loop body:
             builder->SetInsertPoint(loop_bb);
-            llvm::Type *ptr_type = ptr->getType();
-            PHINode *cmp = builder->CreatePHI(ptr_type->getPointerElementType(), 2, "loaded");
+            PHINode *cmp = builder->CreatePHI(load_type, 2, "loaded");
             Value *cmp_val = cmp;
             cmp->addIncoming(orig, bb);
             Value *val = nullptr;
@@ -2495,7 +2559,7 @@ void CodeGen_LLVM::codegen_atomic_rmw(const Store *op) {
             bool need_bit_cast = val_type->isFloatingPointTy();
             if (need_bit_cast) {
                 IntegerType *int_type = builder->getIntNTy(val_type->getPrimitiveSizeInBits());
-                unsigned int addr_space = ptr_type->getPointerAddressSpace();
+                unsigned int addr_space = ptr->getType()->getPointerAddressSpace();
                 ptr = builder->CreateBitCast(ptr, int_type->getPointerTo(addr_space));
                 val = builder->CreateBitCast(val, int_type);
                 cmp_val = builder->CreateBitCast(cmp_val, int_type);
@@ -2667,6 +2731,12 @@ void CodeGen_LLVM::visit(const Call *op) {
                           Let::make(b_name, op->args[1],
                                     Select::make(a_var < b_var, b_var - a_var, a_var - b_var))));
     } else if (op->is_intrinsic(Call::div_round_to_zero)) {
+        // See if we can rewrite it to something faster (e.g. a shift)
+        Expr e = lower_int_uint_div(op->args[0], op->args[1], /** round to zero */ true);
+        if (!e.as<Call>()) {
+            codegen(e);
+            return;
+        }
         internal_assert(op->args.size() == 2);
         Value *a = codegen(op->args[0]);
         Value *b = codegen(op->args[1]);
@@ -2695,11 +2765,11 @@ void CodeGen_LLVM::visit(const Call *op) {
         // TODO: This might be surprising behavior?
         Type t = upgrade_type_for_arithmetic(op->type);
         Type wt = upgrade_type_for_arithmetic(op->args[2].type());
-        Expr e = lower_lerp(cast(t, op->args[0]),
+        Expr e = lower_lerp(op->type,
+                            cast(t, op->args[0]),
                             cast(t, op->args[1]),
                             cast(wt, op->args[2]),
                             target);
-        e = cast(op->type, e);
         codegen(e);
     } else if (op->is_intrinsic(Call::popcount)) {
         internal_assert(op->args.size() == 1);
@@ -2798,15 +2868,56 @@ void CodeGen_LLVM::visit(const Call *op) {
                 value = create_alloca_at_entry(types[0], 1);
                 builder->CreateStore(args[0], value);
             } else {
-                llvm::Type *aggregate_t = (all_same_type ? (llvm::Type *)ArrayType::get(types[0], types.size()) : (llvm::Type *)StructType::get(*context, types));
+                llvm::Type *aggregate_t = (all_same_type ? (llvm::Type *)ArrayType::get(types[0], types.size()) : (llvm::Type *)llvm::StructType::get(*context, types));
 
                 value = create_alloca_at_entry(aggregate_t, 1);
+                struct_type_recovery[value] = aggregate_t;
                 for (size_t i = 0; i < args.size(); i++) {
                     Value *elem_ptr = builder->CreateConstInBoundsGEP2_32(aggregate_t, value, 0, i);
                     builder->CreateStore(args[i], elem_ptr);
                 }
             }
         }
+    } else if (op->is_intrinsic(Call::load_typed_struct_member)) {
+        // Given a void * instance of a typed struct, an in-scope prototype
+        // struct of the same type, and the index of a slot, load the value of
+        // that slot.
+        //
+        // It is assumed that the slot index is valid for the given typed struct.
+        //
+        // TODO: this comment is replicated in CodeGen_LLVM and should be updated there too.
+        // TODO: https://github.com/halide/Halide/issues/6468
+        internal_assert(op->args.size() == 3);
+        llvm::Value *struct_instance = codegen(op->args[0]);
+        llvm::Value *struct_prototype = codegen(op->args[1]);
+        llvm::Value *typed_struct_instance = builder->CreatePointerCast(struct_instance, struct_prototype->getType());
+        const int64_t *index = as_const_int(op->args[2]);
+
+        // make_struct can use a fixed-size struct, an array type, or a scalar
+        llvm::Type *pointee_type;
+        auto iter = struct_type_recovery.find(struct_prototype);
+        if (iter != struct_type_recovery.end()) {
+            pointee_type = iter->second;
+        } else {
+            pointee_type = llvm_type_of(op->type);
+        }
+        llvm::StructType *struct_type = llvm::dyn_cast<llvm::StructType>(pointee_type);
+        llvm::Type *array_type = llvm::dyn_cast<llvm::ArrayType>(pointee_type);
+        if (struct_type || array_type) {
+            internal_assert(index != nullptr);
+            llvm::Value *gep = CreateInBoundsGEP(builder, pointee_type, typed_struct_instance,
+                                                 {ConstantInt::get(i32_t, 0),
+                                                  ConstantInt::get(i32_t, (int)*index)});
+            llvm::Type *result_type = struct_type ? struct_type->getElementType(*index) : array_type->getArrayElementType();
+            value = builder->CreateLoad(result_type, gep);
+        } else {
+            // The struct is actually just a scalar
+            internal_assert(index == nullptr || *index == 0);
+            value = builder->CreateLoad(pointee_type, typed_struct_instance);
+        }
+    } else if (op->is_intrinsic(Call::get_user_context)) {
+        internal_assert(op->args.empty());
+        value = get_user_context();
     } else if (op->is_intrinsic(Call::saturating_add) || op->is_intrinsic(Call::saturating_sub)) {
         internal_assert(op->args.size() == 2);
 
@@ -2872,7 +2983,7 @@ void CodeGen_LLVM::visit(const Call *op) {
             llvm::Value *buf = create_alloca_at_entry(i8_t, buf_size);
 
             llvm::Value *dst = buf;
-            llvm::Value *buf_end = CreateConstGEP1_32(builder, buf, buf_size);
+            llvm::Value *buf_end = CreateConstGEP1_32(builder, i8_t, buf, buf_size);
 
             llvm::Function *append_string = module->getFunction("halide_string_to_string");
             llvm::Function *append_int64 = module->getFunction("halide_int64_to_string");
@@ -2925,7 +3036,9 @@ void CodeGen_LLVM::visit(const Call *op) {
                     dst = builder->CreateCall(append_buffer, call_args);
                 } else {
                     internal_assert(t.is_handle());
-                    call_args.push_back(codegen(arg));
+                    Value *ptr = codegen(arg);
+                    ptr = builder->CreatePointerCast(ptr, i8_t->getPointerTo());
+                    call_args.push_back(ptr);
                     dst = builder->CreateCall(append_pointer, call_args);
                 }
             }
@@ -2956,11 +3069,15 @@ void CodeGen_LLVM::visit(const Call *op) {
         // restrictions if we recognize the most common types we
         // expect to get alloca'd.
         const Call *call = op->args[0].as<Call>();
+        const int64_t *sz = as_const_int(op->args[0]);
         if (op->type == type_of<struct halide_buffer_t *>() &&
             call && call->is_intrinsic(Call::size_of_halide_buffer_t)) {
             value = create_alloca_at_entry(halide_buffer_t_type, 1);
+        } else if (op->type == type_of<struct halide_semaphore_t *>() &&
+                   semaphore_t_type != nullptr &&
+                   sz && *sz == 16) {
+            value = create_alloca_at_entry(semaphore_t_type, 1);
         } else {
-            const int64_t *sz = as_const_int(op->args[0]);
             internal_assert(sz != nullptr);
             if (op->type == type_of<struct halide_dimension_t *>()) {
                 value = create_alloca_at_entry(dimension_t_type, *sz / sizeof(halide_dimension_t));
@@ -3077,7 +3194,7 @@ void CodeGen_LLVM::visit(const Call *op) {
             GlobalValue::PrivateLinkage,
             ConstantPointerNull::get(base_fn->getType()),
             global_name);
-        LoadInst *loaded_value = builder->CreateLoad(global->getType()->getPointerElementType(), global);
+        LoadInst *loaded_value = builder->CreateLoad(base_fn->getType(), global);
 
         BasicBlock *global_inited_bb = BasicBlock::Create(*context, "global_inited_bb", function);
         BasicBlock *global_not_inited_bb = BasicBlock::Create(*context, "global_not_inited_bb", function);
@@ -3520,12 +3637,13 @@ void CodeGen_LLVM::visit(const For *op) {
     Value *extent = codegen(op->extent);
     const Acquire *acquire = op->body.as<Acquire>();
 
-    if (op->for_type == ForType::Parallel ||
-        (op->for_type == ForType::Serial &&
-         acquire &&
-         !expr_uses_var(acquire->count, op->name))) {
-        do_as_parallel_task(op);
-    } else if (op->for_type == ForType::Serial) {
+    // TODO(zalman): remove this after validating it doesn't happen
+    internal_assert(!(op->for_type == ForType::Parallel ||
+                      (op->for_type == ForType::Serial &&
+                       acquire &&
+                       !expr_uses_var(acquire->count, op->name))));
+
+    if (op->for_type == ForType::Serial) {
 
         Value *max = builder->CreateNSWAdd(min, extent);
 
@@ -3568,412 +3686,6 @@ void CodeGen_LLVM::visit(const For *op) {
     } else {
         internal_error << "Unknown type of For node. Only Serial and Parallel For nodes should survive down to codegen.\n";
     }
-}
-
-void CodeGen_LLVM::do_parallel_tasks(const vector<ParallelTask> &tasks) {
-    Closure closure;
-    for (const auto &t : tasks) {
-        Stmt s = t.body;
-        if (!t.loop_var.empty()) {
-            s = LetStmt::make(t.loop_var, 0, s);
-        }
-        s.accept(&closure);
-    }
-
-    // Allocate a closure
-    StructType *closure_t = build_closure_type(closure, halide_buffer_t_type, context);
-    Value *closure_ptr = create_alloca_at_entry(closure_t, 1);
-
-    // Fill in the closure
-    pack_closure(closure_t, closure_ptr, closure, symbol_table, halide_buffer_t_type, builder);
-
-    closure_ptr = builder->CreatePointerCast(closure_ptr, i8_t->getPointerTo());
-
-    int num_tasks = (int)tasks.size();
-
-    // Make space on the stack for the tasks
-    llvm::Value *task_stack_ptr = create_alloca_at_entry(parallel_task_t_type, num_tasks);
-
-    llvm::Type *args_t[] = {i8_t->getPointerTo(), i32_t, i8_t->getPointerTo()};
-    FunctionType *task_t = FunctionType::get(i32_t, args_t, false);
-    llvm::Type *loop_args_t[] = {i8_t->getPointerTo(), i32_t, i32_t, i8_t->getPointerTo(), i8_t->getPointerTo()};
-    FunctionType *loop_task_t = FunctionType::get(i32_t, loop_args_t, false);
-
-    Value *result = nullptr;
-
-    for (int i = 0; i < num_tasks; i++) {
-        ParallelTask t = tasks[i];
-
-        // Analyze the task body
-        class MayBlock : public IRVisitor {
-            using IRVisitor::visit;
-            void visit(const Acquire *op) override {
-                result = true;
-            }
-
-        public:
-            bool result = false;
-        };
-
-        // TODO(zvookin|abadams): This makes multiple passes over the
-        // IR to cover each node. (One tree walk produces the min
-        // thread count for all nodes, but we redo each subtree when
-        // compiling a given node.) Ideally we'd move to a lowering pass
-        // that converts our parallelism constructs to Call nodes, or
-        // direct hardware operations in some cases.
-        // Also, this code has to exactly mirror the logic in get_parallel_tasks.
-        // It would be better to do one pass on the tree and centralize the task
-        // deduction logic in one place.
-        class MinThreads : public IRVisitor {
-            using IRVisitor::visit;
-
-            std::pair<Stmt, int> skip_acquires(Stmt first) {
-                int count = 0;
-                while (first.defined()) {
-                    const Acquire *acq = first.as<Acquire>();
-                    if (acq == nullptr) {
-                        break;
-                    }
-                    count++;
-                    first = acq->body;
-                }
-                return {first, count};
-            }
-
-            void visit(const Fork *op) override {
-                int total_threads = 0;
-                int direct_acquires = 0;
-                // Take the sum of min threads across all
-                // cascaded Fork nodes.
-                const Fork *node = op;
-                while (node != nullptr) {
-                    result = 0;
-                    auto after_acquires = skip_acquires(node->first);
-                    direct_acquires += after_acquires.second;
-
-                    after_acquires.first.accept(this);
-                    total_threads += result;
-
-                    const Fork *continued_branches = node->rest.as<Fork>();
-                    if (continued_branches == nullptr) {
-                        result = 0;
-                        after_acquires = skip_acquires(node->rest);
-                        direct_acquires += after_acquires.second;
-                        after_acquires.first.accept(this);
-                        total_threads += result;
-                    }
-                    node = continued_branches;
-                }
-                if (direct_acquires == 0 && total_threads == 0) {
-                    result = 0;
-                } else {
-                    result = total_threads + 1;
-                }
-            }
-
-            void visit(const For *op) override {
-                result = 0;
-
-                if (op->for_type == ForType::Parallel) {
-                    IRVisitor::visit(op);
-                    if (result > 0) {
-                        result += 1;
-                    }
-                } else if (op->for_type == ForType::Serial) {
-                    auto after_acquires = skip_acquires(op->body);
-                    if (after_acquires.second > 0 &&
-                        !expr_uses_var(op->body.as<Acquire>()->count, op->name)) {
-                        after_acquires.first.accept(this);
-                        result++;
-                    } else {
-                        IRVisitor::visit(op);
-                    }
-                } else {
-                    IRVisitor::visit(op);
-                }
-            }
-
-            // This is a "standalone" Acquire and will result in its own task.
-            // Treat it requiring one more thread than its body.
-            void visit(const Acquire *op) override {
-                result = 0;
-                auto after_inner_acquires = skip_acquires(op);
-                after_inner_acquires.first.accept(this);
-                result = result + 1;
-            }
-
-            void visit(const Block *op) override {
-                result = 0;
-                op->first.accept(this);
-                int result_first = result;
-                result = 0;
-                op->rest.accept(this);
-                result = std::max(result, result_first);
-            }
-
-        public:
-            int result = 0;
-        };
-        MinThreads min_threads;
-        t.body.accept(&min_threads);
-
-        // Decide if we're going to call do_par_for or
-        // do_parallel_tasks. halide_do_par_for is simpler, but
-        // assumes a bunch of things. Programs that don't use async
-        // can also enter the task system via do_par_for.
-        Value *task_parent = sym_get("__task_parent", false);
-        bool use_do_par_for = (num_tasks == 1 &&
-                               min_threads.result == 0 &&
-                               t.semaphores.empty() &&
-                               !task_parent);
-
-        // Make the array of semaphore acquisitions this task needs to do before it runs.
-        Value *semaphores;
-        Value *num_semaphores = ConstantInt::get(i32_t, (int)t.semaphores.size());
-        if (!t.semaphores.empty()) {
-            semaphores = create_alloca_at_entry(semaphore_acquire_t_type, (int)t.semaphores.size());
-            for (int i = 0; i < (int)t.semaphores.size(); i++) {
-                Value *semaphore = codegen(t.semaphores[i].semaphore);
-                semaphore = builder->CreatePointerCast(semaphore, semaphore_t_type->getPointerTo());
-                Value *count = codegen(t.semaphores[i].count);
-                Value *slot_ptr = builder->CreateConstGEP2_32(semaphore_acquire_t_type, semaphores, i, 0);
-                builder->CreateStore(semaphore, slot_ptr);
-                slot_ptr = builder->CreateConstGEP2_32(semaphore_acquire_t_type, semaphores, i, 1);
-                builder->CreateStore(count, slot_ptr);
-            }
-        } else {
-            semaphores = ConstantPointerNull::get(semaphore_acquire_t_type->getPointerTo());
-        }
-
-        FunctionType *fn_type = use_do_par_for ? task_t : loop_task_t;
-        int closure_arg_idx = use_do_par_for ? 2 : 3;
-
-        // Make a new function that does the body
-        llvm::Function *containing_function = function;
-        function = llvm::Function::Create(fn_type, llvm::Function::InternalLinkage,
-                                          t.name, module.get());
-
-        llvm::Value *task_ptr = builder->CreatePointerCast(function, fn_type->getPointerTo());
-
-        function->addParamAttr(closure_arg_idx, Attribute::NoAlias);
-
-        set_function_attributes_for_target(function, target);
-
-        // Make the initial basic block and jump the builder into the new function
-        IRBuilderBase::InsertPoint call_site = builder->saveIP();
-        BasicBlock *block = BasicBlock::Create(*context, "entry", function);
-        builder->SetInsertPoint(block);
-
-        // Save the destructor block
-        BasicBlock *parent_destructor_block = destructor_block;
-        destructor_block = nullptr;
-
-        // Make a new scope to use
-        Scope<Value *> saved_symbol_table;
-        symbol_table.swap(saved_symbol_table);
-
-        // Get the function arguments
-
-        // The user context is first argument of the function; it's
-        // important that we override the name to be "__user_context",
-        // since the LLVM function has a random auto-generated name for
-        // this argument.
-        llvm::Function::arg_iterator iter = function->arg_begin();
-        sym_push("__user_context", iterator_to_pointer(iter));
-
-        if (use_do_par_for) {
-            // Next is the loop variable.
-            ++iter;
-            sym_push(t.loop_var, iterator_to_pointer(iter));
-        } else if (!t.loop_var.empty()) {
-            // We peeled off a loop. Wrap a new loop around the body
-            // that just does the slice given by the arguments.
-            string loop_min_name = unique_name('t');
-            string loop_extent_name = unique_name('t');
-            t.body = For::make(t.loop_var,
-                               Variable::make(Int(32), loop_min_name),
-                               Variable::make(Int(32), loop_extent_name),
-                               ForType::Serial,
-                               DeviceAPI::None,
-                               t.body);
-            ++iter;
-            sym_push(loop_min_name, iterator_to_pointer(iter));
-            ++iter;
-            sym_push(loop_extent_name, iterator_to_pointer(iter));
-        } else {
-            // This task is not any kind of loop, so skip these args.
-            ++iter;
-            ++iter;
-        }
-
-        // The closure pointer is either the last (for halide_do_par_for) or
-        // second to last argument (for halide_do_parallel_tasks).
-        ++iter;
-        iter->setName("closure");
-        Value *closure_handle = builder->CreatePointerCast(iterator_to_pointer(iter),
-                                                           closure_t->getPointerTo());
-
-        // Load everything from the closure into the new scope
-        unpack_closure(closure, symbol_table, closure_t, closure_handle, builder);
-
-        if (!use_do_par_for) {
-            // For halide_do_parallel_tasks the threading runtime task parent
-            // is the last argument.
-            ++iter;
-            iter->setName("task_parent");
-            sym_push("__task_parent", iterator_to_pointer(iter));
-        }
-
-        // Generate the new function body
-        codegen(t.body);
-
-        // Return success
-        return_with_error_code(ConstantInt::get(i32_t, 0));
-
-        // Move the builder back to the main function.
-        builder->restoreIP(call_site);
-
-        // Now restore the scope
-        symbol_table.swap(saved_symbol_table);
-        function = containing_function;
-
-        // Restore the destructor block
-        destructor_block = parent_destructor_block;
-
-        Value *min = codegen(t.min);
-        Value *extent = codegen(t.extent);
-        Value *serial = codegen(cast(UInt(8), t.serial));
-
-        if (use_do_par_for) {
-            llvm::Function *do_par_for = module->getFunction("halide_do_par_for");
-            internal_assert(do_par_for) << "Could not find halide_do_par_for in initial module\n";
-            do_par_for->addParamAttr(4, Attribute::NoAlias);
-            Value *args[] = {get_user_context(), task_ptr, min, extent, closure_ptr};
-            debug(4) << "Creating call to do_par_for\n";
-            result = builder->CreateCall(do_par_for, args);
-        } else {
-            // Populate the task struct
-            Value *slot_ptr = builder->CreateConstGEP2_32(parallel_task_t_type, task_stack_ptr, i, 0);
-            builder->CreateStore(task_ptr, slot_ptr);
-            slot_ptr = builder->CreateConstGEP2_32(parallel_task_t_type, task_stack_ptr, i, 1);
-            builder->CreateStore(closure_ptr, slot_ptr);
-            slot_ptr = builder->CreateConstGEP2_32(parallel_task_t_type, task_stack_ptr, i, 2);
-            builder->CreateStore(create_string_constant(t.name), slot_ptr);
-            slot_ptr = builder->CreateConstGEP2_32(parallel_task_t_type, task_stack_ptr, i, 3);
-            builder->CreateStore(semaphores, slot_ptr);
-            slot_ptr = builder->CreateConstGEP2_32(parallel_task_t_type, task_stack_ptr, i, 4);
-            builder->CreateStore(num_semaphores, slot_ptr);
-            slot_ptr = builder->CreateConstGEP2_32(parallel_task_t_type, task_stack_ptr, i, 5);
-            builder->CreateStore(min, slot_ptr);
-            slot_ptr = builder->CreateConstGEP2_32(parallel_task_t_type, task_stack_ptr, i, 6);
-            builder->CreateStore(extent, slot_ptr);
-            slot_ptr = builder->CreateConstGEP2_32(parallel_task_t_type, task_stack_ptr, i, 7);
-            builder->CreateStore(ConstantInt::get(i32_t, min_threads.result), slot_ptr);
-            slot_ptr = builder->CreateConstGEP2_32(parallel_task_t_type, task_stack_ptr, i, 8);
-            builder->CreateStore(serial, slot_ptr);
-        }
-    }
-
-    if (!result) {
-        llvm::Function *do_parallel_tasks = module->getFunction("halide_do_parallel_tasks");
-        internal_assert(do_parallel_tasks) << "Could not find halide_do_parallel_tasks in initial module\n";
-        do_parallel_tasks->addParamAttr(2, Attribute::NoAlias);
-        Value *task_parent = sym_get("__task_parent", false);
-        if (!task_parent) {
-            task_parent = ConstantPointerNull::get(i8_t->getPointerTo());  // void*
-        }
-        Value *args[] = {get_user_context(),
-                         ConstantInt::get(i32_t, num_tasks),
-                         task_stack_ptr,
-                         task_parent};
-        result = builder->CreateCall(do_parallel_tasks, args);
-    }
-
-    // Check for success
-    Value *did_succeed = builder->CreateICmpEQ(result, ConstantInt::get(i32_t, 0));
-    create_assertion(did_succeed, Expr(), result);
-}
-
-namespace {
-
-string task_debug_name(const std::pair<string, int> &prefix) {
-    if (prefix.second <= 1) {
-        return prefix.first;
-    } else {
-        return prefix.first + "_" + std::to_string(prefix.second - 1);
-    }
-}
-
-void add_fork(std::pair<string, int> &prefix) {
-    if (prefix.second == 0) {
-        prefix.first += ".fork";
-    }
-    prefix.second++;
-}
-
-void add_suffix(std::pair<string, int> &prefix, const string &suffix) {
-    if (prefix.second > 1) {
-        prefix.first += "_" + std::to_string(prefix.second - 1);
-        prefix.second = 0;
-    }
-    prefix.first += suffix;
-}
-
-}  // namespace
-
-void CodeGen_LLVM::get_parallel_tasks(const Stmt &s, vector<ParallelTask> &result, std::pair<string, int> prefix) {
-    const For *loop = s.as<For>();
-    const Acquire *acquire = loop ? loop->body.as<Acquire>() : s.as<Acquire>();
-    if (const Fork *f = s.as<Fork>()) {
-        add_fork(prefix);
-        get_parallel_tasks(f->first, result, prefix);
-        get_parallel_tasks(f->rest, result, prefix);
-    } else if (!loop && acquire) {
-        const Variable *v = acquire->semaphore.as<Variable>();
-        internal_assert(v);
-        add_suffix(prefix, "." + v->name);
-        ParallelTask t{s, {}, "", 0, 1, const_false(), task_debug_name(prefix)};
-        while (acquire) {
-            t.semaphores.push_back({acquire->semaphore, acquire->count});
-            t.body = acquire->body;
-            acquire = t.body.as<Acquire>();
-        }
-        result.push_back(t);
-    } else if (loop && loop->for_type == ForType::Parallel) {
-        add_suffix(prefix, ".par_for." + loop->name);
-        result.push_back(ParallelTask{loop->body, {}, loop->name, loop->min, loop->extent, const_false(), task_debug_name(prefix)});
-    } else if (loop &&
-               loop->for_type == ForType::Serial &&
-               acquire &&
-               !expr_uses_var(acquire->count, loop->name)) {
-        const Variable *v = acquire->semaphore.as<Variable>();
-        internal_assert(v);
-        add_suffix(prefix, ".for." + v->name);
-        ParallelTask t{loop->body, {}, loop->name, loop->min, loop->extent, const_true(), task_debug_name(prefix)};
-        while (acquire) {
-            t.semaphores.push_back({acquire->semaphore, acquire->count});
-            t.body = acquire->body;
-            acquire = t.body.as<Acquire>();
-        }
-        result.push_back(t);
-    } else {
-        add_suffix(prefix, "." + std::to_string(result.size()));
-        result.push_back(ParallelTask{s, {}, "", 0, 1, const_false(), task_debug_name(prefix)});
-    }
-}
-
-void CodeGen_LLVM::do_as_parallel_task(const Stmt &s) {
-    vector<ParallelTask> tasks;
-    get_parallel_tasks(s, tasks, {function->getName().str(), 0});
-    do_parallel_tasks(tasks);
-}
-
-void CodeGen_LLVM::visit(const Acquire *op) {
-    do_as_parallel_task(op);
-}
-
-void CodeGen_LLVM::visit(const Fork *op) {
-    do_as_parallel_task(op);
 }
 
 void CodeGen_LLVM::visit(const Store *op) {
@@ -4080,6 +3792,7 @@ void CodeGen_LLVM::visit(const Store *op) {
             Value *ptr = codegen_buffer_pointer(op->name, ptr_type, ramp->base);
             const IntImm *const_stride = ramp->stride.as<IntImm>();
             Value *stride = codegen(ramp->stride);
+            llvm::Type *load_type = llvm_type_of(ptr_type);
             // Scatter without generating the indices as a vector
             for (int i = 0; i < ramp->lanes; i++) {
                 Constant *lane = ConstantInt::get(i32_t, i);
@@ -4088,8 +3801,7 @@ void CodeGen_LLVM::visit(const Store *op) {
                     // Use a constant offset from the base pointer
                     Value *p =
                         builder->CreateConstInBoundsGEP1_32(
-                            llvm_type_of(ptr_type),
-                            ptr,
+                            load_type, ptr,
                             const_stride->value * i);
                     StoreInst *store = builder->CreateStore(v, p);
                     annotate_store(store, op->index);
@@ -4097,7 +3809,7 @@ void CodeGen_LLVM::visit(const Store *op) {
                     // Increment the pointer by the stride for each element
                     StoreInst *store = builder->CreateStore(v, ptr);
                     annotate_store(store, op->index);
-                    ptr = CreateInBoundsGEP(builder, ptr, stride);
+                    ptr = CreateInBoundsGEP(builder, load_type, ptr, stride);
                 }
             }
         } else {

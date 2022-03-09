@@ -431,6 +431,30 @@ private:
     }
     Expr visit(const Call *op) override {
         uses_hvx = uses_hvx || op->type.is_vector();
+
+        if (op->name == "halide_do_par_for") {
+            // If we see a call to halide_do_par_for() at this point, it should mean that
+            // this statement was produced via HexagonOffload calling lower_parallel_tasks()
+            // explicitly; in this case, we won't see any parallel For statements, since they've
+            // all been transformed into closures already. To mirror the pattern above,
+            // we need to wrap the halide_do_par_for() call with an unlock/lock pair, but
+            // that's hard to do in Halide IR (we'd need to produce a Stmt to enforce the ordering,
+            // and the resulting Stmt can't easily be substituted for the Expr here). Rather than
+            // make fragile assumptions about the structure of the IR produced by lower_parallel_tasks(),
+            // we'll use a trick: we'll define a WEAK_INLINE function, _halide_hexagon_do_par_for,
+            // which simply encapsulates the unlock()/do_par_for()/lock() sequences, and swap out
+            // the call here. Since it is inlined, and since uses_hvx_var gets substituted at the end,
+            // we end up with LLVM IR that properly includes (or omits) the unlock/lock pair depending
+            // on the final value of uses_hvx_var in this scope.
+
+            internal_assert(op->call_type == Call::Extern);
+            internal_assert(op->args.size() == 4);
+
+            std::vector<Expr> args = op->args;
+            args.push_back(cast<int>(uses_hvx_var));
+
+            return Call::make(Int(32), "_halide_hexagon_do_par_for", args, Call::Extern);
+        }
         return op;
     }
 
@@ -455,50 +479,55 @@ void CodeGen_Hexagon::compile_func(const LoweredFunc &f,
 
     Stmt body = f.body;
 
-    debug(1) << "Unpredicating loads and stores...\n";
+    debug(1) << "Hexagon: Unpredicating loads and stores...\n";
     // Replace dense vector predicated loads with sloppy scalarized
     // predicates, and scalarize predicated stores
     body = sloppy_unpredicate_loads_and_stores(body);
-
-    debug(2) << "Lowering after unpredicating loads/stores:\n"
+    debug(2) << "Hexagon: Lowering after unpredicating loads/stores:\n"
              << body << "\n\n";
 
     if (is_hvx_v65_or_later()) {
         // Generate vscatter-vgathers before optimize_hexagon_shuffles.
-        debug(1) << "Looking for vscatter-vgather...\n";
+        debug(1) << "Hexagon: Looking for vscatter-vgather...\n";
         body = scatter_gather_generator(body);
+        debug(2) << "Hexagon: Lowering after vscatter-vgather:\n"
+                 << body << "\n\n";
     }
 
-    debug(1) << "Optimizing shuffles...\n";
+    debug(1) << "Hexagon: Optimizing shuffles...\n";
     // vlut always indexes 64 bytes of the LUT at a time, even in 128 byte mode.
     const int lut_alignment = 64;
     body = optimize_hexagon_shuffles(body, lut_alignment);
-    debug(2) << "Lowering after optimizing shuffles:\n"
+    debug(2) << "Hexagon: Lowering after optimizing shuffles:\n"
              << body << "\n\n";
 
-    debug(1) << "Aligning loads for HVX....\n";
+    debug(1) << "Hexagon: Aligning loads for HVX....\n";
     body = align_loads(body, target.natural_vector_size(Int(8)), 8);
     body = common_subexpression_elimination(body);
     // Don't simplify here, otherwise it will re-collapse the loads we
     // want to carry across loop iterations.
-    debug(2) << "Lowering after aligning loads:\n"
+    debug(2) << "Hexagon: Lowering after aligning loads:\n"
              << body << "\n\n";
 
-    debug(1) << "Carrying values across loop iterations...\n";
+    debug(1) << "Hexagon: Carrying values across loop iterations...\n";
     // Use at most 16 vector registers for carrying values.
     body = loop_carry(body, 16);
     body = simplify(body);
-    debug(2) << "Lowering after forwarding stores:\n"
+    debug(2) << "Hexagon: Lowering after forwarding stores:\n"
              << body << "\n\n";
 
     // Optimize the IR for Hexagon.
-    debug(1) << "Optimizing Hexagon instructions...\n";
+    debug(1) << "Hexagon: Optimizing Hexagon instructions...\n";
     body = optimize_hexagon_instructions(body, target);
+    debug(2) << "Hexagon: Lowering after optimizing Hexagon instructions:\n"
+             << body << "\n\n";
 
-    debug(1) << "Adding calls to qurt_hvx_lock, if necessary...\n";
+    debug(1) << "Hexagon: Adding calls to qurt_hvx_lock, if necessary...\n";
     body = inject_hvx_lock_unlock(body, target);
+    debug(2) << "Hexagon: Lowering after adding calls to qurt_hvx_lock:\n"
+             << body << "\n\n";
 
-    debug(1) << "Hexagon function body:\n";
+    debug(1) << "Hexagon: function body for " << simple_name << " :\n";
     debug(1) << body << "\n";
 
     body.accept(this);

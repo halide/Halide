@@ -78,16 +78,12 @@ int func_wrapper_test() {
 
     // Check the call graphs.
     // Expect 'g' to call 'wrapper', 'wrapper' to call 'f', 'f' to call nothing
-    Module m = g.compile_to_module({});
-    CheckCalls c;
-    m.functions().front().body.accept(&c);
-
     CallGraphs expected = {
         {g.name(), {wrapper.name()}},
         {wrapper.name(), {f.name()}},
         {f.name(), {}},
     };
-    if (check_call_graphs(c.calls, expected) != 0) {
+    if (check_call_graphs(g, expected) != 0) {
         return -1;
     }
 
@@ -115,10 +111,6 @@ int multiple_funcs_sharing_wrapper_test() {
     // Expect 'g1' and 'g2' to call 'f_wrapper', 'g3' to call 'f',
     // f_wrapper' to call 'f', 'f' to call nothing
     Pipeline p({g1, g2, g3});
-    Module m = p.compile_to_module({}, "");
-    CheckCalls c;
-    m.functions().front().body.accept(&c);
-
     CallGraphs expected = {
         {g1.name(), {f_wrapper.name()}},
         {g2.name(), {f_wrapper.name()}},
@@ -126,7 +118,7 @@ int multiple_funcs_sharing_wrapper_test() {
         {f_wrapper.name(), {f.name()}},
         {f.name(), {}},
     };
-    if (check_call_graphs(c.calls, expected) != 0) {
+    if (check_call_graphs(p, expected) != 0) {
         return -1;
     }
 
@@ -165,17 +157,13 @@ int global_wrapper_test() {
     // Check the call graphs.
     // Expect 'g' to call 'wrapper', 'wrapper' to call 'f', 'f' to call nothing,
     // 'h' to call 'wrapper' and 'g'
-    Module m = h.compile_to_module({});
-    CheckCalls c;
-    m.functions().front().body.accept(&c);
-
     CallGraphs expected = {
         {h.name(), {g.name(), wrapper.name()}},
         {g.name(), {wrapper.name()}},
         {wrapper.name(), {f.name()}},
         {f.name(), {}},
     };
-    if (check_call_graphs(c.calls, expected) != 0) {
+    if (check_call_graphs(h, expected) != 0) {
         return -1;
     }
 
@@ -211,52 +199,17 @@ int update_defined_after_wrapper_test() {
     f.compute_root();
     wrapper.compute_root().vectorize(x, 8).unroll(x, 2).split(x, x, xi, 4).parallel(x);
 
-    {
-        param.set(true);
-
-        // Check the call graphs.
-        // Expect initialization of 'g' to call 'wrapper' and its update to call
-        // 'wrapper' and 'g', wrapper' to call 'f', 'f' to call nothing
-        Module m = g.compile_to_module({g.infer_arguments()});
-        CheckCalls c;
-        m.functions().front().body.accept(&c);
-
-        CallGraphs expected = {
-            {g.name(), {wrapper.name(), g.name()}},
-            {wrapper.name(), {f.name()}},
-            {f.name(), {}},
-        };
-        if (check_call_graphs(c.calls, expected) != 0) {
-            return -1;
-        }
-
-        Buffer<int> im = g.realize({200, 200});
-        auto func = [](int x, int y) {
-            return ((0 <= x && x <= 99) && (0 <= y && y <= 99) && (x < y)) ? 3 * (x + y) : (x + y);
-        };
-        if (check_image(im, func)) {
-            return -1;
-        }
+    CallGraphs expected = {
+        {g.name(), {wrapper.name(), g.name()}},
+        {wrapper.name(), {f.name()}},
+        {f.name(), {}},
+    };
+    if (check_call_graphs(g, expected) != 0) {
+        return -1;
     }
 
-    {
-        param.set(false);
-
-        // Check the call graphs.
-        // Expect initialization of 'g' to call 'wrapper' and its update to call
-        // 'wrapper' and 'g', wrapper' to call 'f', 'f' to call nothing
-        Module m = g.compile_to_module({g.infer_arguments()});
-        CheckCalls c;
-        m.functions().front().body.accept(&c);
-
-        CallGraphs expected = {
-            {g.name(), {wrapper.name(), g.name()}},
-            {wrapper.name(), {f.name()}},
-            {f.name(), {}},
-        };
-        if (check_call_graphs(c.calls, expected) != 0) {
-            return -1;
-        }
+    for (bool param_value : {false, true}) {
+        param.set(param_value);
 
         Buffer<int> im = g.realize({200, 200});
         auto func = [](int x, int y) {
@@ -292,16 +245,12 @@ int rdom_wrapper_test() {
     // Check the call graphs.
     // Expect 'wrapper' to call 'g', initialization of 'g' to call nothing
     // and its update to call 'f' and 'g', 'f' to call nothing
-    Module m = wrapper.compile_to_module({});
-    CheckCalls c;
-    m.functions().front().body.accept(&c);
-
     CallGraphs expected = {
         {g.name(), {f.name(), g.name()}},
         {wrapper.name(), {g.name()}},
         {f.name(), {}},
     };
-    if (check_call_graphs(c.calls, expected) != 0) {
+    if (check_call_graphs(wrapper, expected) != 0) {
         return -1;
     }
 
@@ -329,9 +278,6 @@ int global_and_custom_wrapper_test() {
     // Check the call graphs.
     // Expect 'result' to call 'g' and 'f_wrapper', 'g' to call 'f_in_g',
     // 'f_wrapper' to call 'f', f_in_g' to call 'f', 'f' to call nothing
-    Module m = result.compile_to_module({});
-    CheckCalls c;
-    m.functions().front().body.accept(&c);
 
     CallGraphs expected = {
         {result.name(), {g.name(), f_wrapper.name()}},
@@ -340,7 +286,7 @@ int global_and_custom_wrapper_test() {
         {f_in_g.name(), {f.name()}},
         {f.name(), {}},
     };
-    if (check_call_graphs(c.calls, expected) != 0) {
+    if (check_call_graphs(result, expected) != 0) {
         return -1;
     }
 
@@ -373,10 +319,6 @@ int wrapper_depend_on_mutated_func_test() {
     // Check the call graphs.
     // Expect 'h' to call 'g_in_h', 'g_in_h' to call 'g', 'g' to call 'f',
     // 'f' to call 'e_in_f', e_in_f' to call 'e', 'e' to call nothing
-    Module m = h.compile_to_module({});
-    CheckCalls c;
-    m.functions().front().body.accept(&c);
-
     CallGraphs expected = {
         {h.name(), {g_in_h.name()}},
         {g_in_h.name(), {g.name()}},
@@ -385,7 +327,7 @@ int wrapper_depend_on_mutated_func_test() {
         {e_in_f.name(), {e.name()}},
         {e.name(), {}},
     };
-    if (check_call_graphs(c.calls, expected) != 0) {
+    if (check_call_graphs(h, expected) != 0) {
         return -1;
     }
 
@@ -415,10 +357,6 @@ int wrapper_on_wrapper_test() {
     Func g_in_h = g.in(h).compute_root();
 
     // Check the call graphs.
-    Module m = h.compile_to_module({});
-    CheckCalls c;
-    m.functions().front().body.accept(&c);
-
     CallGraphs expected = {
         {h.name(), {f_in_h.name(), g_in_h.name(), f_in_f_in_g.name()}},
         {f_in_h.name(), {f.name()}},
@@ -429,7 +367,7 @@ int wrapper_on_wrapper_test() {
         {f.name(), {e.name()}},
         {e.name(), {}},
     };
-    if (check_call_graphs(c.calls, expected) != 0) {
+    if (check_call_graphs(h, expected) != 0) {
         return -1;
     }
 
@@ -461,10 +399,6 @@ int wrapper_on_rdom_predicate_test() {
     // Check the call graphs.
     // Expect 'g' to call nothing, update of 'g' to call 'g', f_in_g', and 'h_wrapper',
     // 'f_in_g' to call 'f', 'f' to call nothing, 'h_wrapper' to call 'h', 'h' to call nothing
-    Module m = g.compile_to_module({});
-    CheckCalls c;
-    m.functions().front().body.accept(&c);
-
     CallGraphs expected = {
         {g.name(), {g.name(), f_in_g.name(), h_wrapper.name()}},
         {f_in_g.name(), {f.name()}},
@@ -472,7 +406,7 @@ int wrapper_on_rdom_predicate_test() {
         {h_wrapper.name(), {h.name()}},
         {h.name(), {}},
     };
-    if (check_call_graphs(c.calls, expected) != 0) {
+    if (check_call_graphs(g, expected) != 0) {
         return -1;
     }
 
@@ -502,17 +436,13 @@ int two_fold_wrapper_test() {
     input_in_output_in_output = input_in_output.in(output).compute_at(output, x).unroll(x).unroll(y);
 
     // Check the call graphs.
-    Module m = output.compile_to_module({});
-    CheckCalls c;
-    m.functions().front().body.accept(&c);
-
     CallGraphs expected = {
         {output.name(), {input_in_output_in_output.name()}},
         {input_in_output_in_output.name(), {input_in_output.name()}},
         {input_in_output.name(), {input.name()}},
         {input.name(), {}},
     };
-    if (check_call_graphs(c.calls, expected) != 0) {
+    if (check_call_graphs(output, expected) != 0) {
         return -1;
     }
 
@@ -545,10 +475,6 @@ int multi_folds_wrapper_test() {
     h.compute_root().tile(x, y, xi, yi, 8, 8);
 
     Pipeline p({g, h});
-    Module m = p.compile_to_module({}, "");
-    CheckCalls c;
-    m.functions().front().body.accept(&c);
-
     CallGraphs expected = {
         {g.name(), {f_in_g_in_g.name()}},
         {f_in_g_in_g.name(), {f_in_g.name()}},
@@ -558,7 +484,7 @@ int multi_folds_wrapper_test() {
         {f_in_g_in_g_in_h_in_h.name(), {f_in_g_in_g_in_h.name()}},
         {f_in_g_in_g_in_h.name(), {f_in_g_in_g.name()}},
     };
-    if (check_call_graphs(c.calls, expected) != 0) {
+    if (check_call_graphs(p, expected) != 0) {
         return -1;
     }
 

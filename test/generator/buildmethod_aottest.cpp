@@ -11,8 +11,8 @@ using namespace Halide::Runtime;
 const int kSize = 32;
 
 int main(int argc, char **argv) {
-    Buffer<float> input(kSize, kSize, 3);
-    Buffer<int32_t> output(kSize, kSize, 3);
+    Buffer<float, 3> input(kSize, kSize, 3);
+    Buffer<int32_t, 3> output(kSize, kSize, 3);
 
     const float compiletime_factor = 1.0f;
     const float runtime_factor = 3.25f;

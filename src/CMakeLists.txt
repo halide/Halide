@@ -98,6 +98,7 @@ set(HEADER_FILES
     LLVM_Runtime_Linker.h
     LoopCarry.h
     Lower.h
+    LowerParallelTasks.h
     LowerWarpShuffles.h
     MainPage.h
     MatlabWrapper.h
@@ -259,6 +260,7 @@ set(SOURCE_FILES
     LLVM_Runtime_Linker.cpp
     LoopCarry.cpp
     Lower.cpp
+    LowerParallelTasks.cpp
     LowerWarpShuffles.cpp
     MatlabWrapper.cpp
     Memoization.cpp
@@ -384,10 +386,14 @@ target_export_script(Halide
                      APPLE_LD "${CMAKE_CURRENT_LIST_DIR}/exported_symbols.osx"
                      GNU_LD "${CMAKE_CURRENT_LIST_DIR}/exported_symbols.ldscript")
 
+set(Halide_SOVERSION_OVERRIDE "${Halide_VERSION_MAJOR}"
+    CACHE STRING "SOVERSION to set for custom Halide packaging")
+mark_as_advanced(Halide_SOVERSION_OVERRIDE)
+
 set_target_properties(Halide PROPERTIES
                       POSITION_INDEPENDENT_CODE ON
                       VERSION ${Halide_VERSION}
-                      SOVERSION ${Halide_VERSION_MAJOR})
+                      SOVERSION ${Halide_SOVERSION_OVERRIDE})
 
 target_compile_definitions(Halide PUBLIC 
                            HALIDE_VERSION=${Halide_VERSION} 
@@ -416,6 +422,11 @@ endif ()
 if (TARGET Halide_wabt)
     target_link_libraries(Halide PRIVATE Halide_wabt)
     target_compile_definitions(Halide PRIVATE WITH_WABT)
+endif ()
+
+if (TARGET Halide_V8)
+    target_link_libraries(Halide PRIVATE Halide_V8)
+    target_compile_definitions(Halide PRIVATE WITH_V8)
 endif ()
 
 ##

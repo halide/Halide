@@ -117,6 +117,13 @@ public:
 
             check("pmulhuw", 4 * w, i16_1 / 15);
 
+            // Shifts by amounts other than 16 can also use this instruction, by
+            // preshifting an arg (when there are bits of headroom), or
+            // postshifting the result.
+            check("pmulhuw", 4 * w, u16((u32(u16_1) * u32(u8_2)) >> 13));
+            check("pmulhw", 4 * w, i16((i32(i16_1) * i32(i16_2)) >> 17));
+            check("pmulhuw", 4 * w, u16((u32(u16_1) * u32(u16_2)) >> 18));
+
             if (w > 1) {  // LLVM does a lousy job at the comparisons for 64-bit types
                 check("pcmp*b", 8 * w, select(u8_1 == u8_2, u8(1), u8(2)));
                 check("pcmp*b", 8 * w, select(u8_1 > u8_2, u8(1), u8(2)));
@@ -138,7 +145,7 @@ public:
                 // fast-math on (instead it uses the approximate
                 // reciprocal, a newtown rhapson step, and a
                 // multiplication by the numerator).
-                //check("divps", 2*w, f32_1 / f32_2);
+                // check("divps", 2*w, f32_1 / f32_2);
             }
 
             check(use_avx512 ? "vrsqrt*ps" : "rsqrtps", 2 * w, fast_inverse_sqrt(f32_1));
@@ -150,6 +157,11 @@ public:
             check("pavgb", 8 * w, u8((u16(u8_1) + u16(u8_2) + 1) >> 1));
             check("pavgw", 4 * w, u16((u32(u16_1) + u32(u16_2) + 1) / 2));
             check("pavgw", 4 * w, u16((u32(u16_1) + u32(u16_2) + 1) >> 1));
+
+            // Rounding right shifts should also use pavg
+            check("pavgb", 8 * w, rounding_shift_right(u8_1, 2));
+            check("pavgw", 4 * w, rounding_shift_right(u16_1, 2));
+
             check("pmaxsw", 4 * w, max(i16_1, i16_2));
             check("pminsw", 4 * w, min(i16_1, i16_2));
             check("pmaxub", 8 * w, max(u8_1, u8_2));
@@ -166,8 +178,8 @@ public:
             check("cmpltps", 2 * w, select(f32_1 < f32_2, 1.0f, 2.0f));
 
             // These get normalized to not of eq, and not of lt with the args flipped
-            //check("cmpneqps", 2*w, cast<int32_t>(f32_1 != f32_2));
-            //check("cmpleps", 2*w, cast<int32_t>(f32_1 <= f32_2));
+            // check("cmpneqps", 2*w, cast<int32_t>(f32_1 != f32_2));
+            // check("cmpleps", 2*w, cast<int32_t>(f32_1 <= f32_2));
         }
 
         // These guys get normalized to the integer versions for widths
@@ -182,8 +194,8 @@ public:
         }
 
         // These ones are not necessary, because we just flip the args and cmpltps or cmpleps
-        //check("cmpnleps", 4, select(f32_1 > f32_2, 1.0f, 2.0f));
-        //check("cmpnltps", 4, select(f32_1 >= f32_2, 1.0f, 2.0f));
+        // check("cmpnleps", 4, select(f32_1 > f32_2, 1.0f, 2.0f));
+        // check("cmpnltps", 4, select(f32_1 >= f32_2, 1.0f, 2.0f));
 
         check("shufps", 4, in_f32(2 * x));
 
@@ -199,20 +211,20 @@ public:
             check("minpd", w, min(f64_1, f64_2));
 
             check("cmpeqpd", w, select(f64_1 == f64_2, 1.0f, 2.0f));
-            //check("cmpneqpd", w, select(f64_1 != f64_2, 1.0f, 2.0f));
-            //check("cmplepd", w, select(f64_1 <= f64_2, 1.0f, 2.0f));
+            // check("cmpneqpd", w, select(f64_1 != f64_2, 1.0f, 2.0f));
+            // check("cmplepd", w, select(f64_1 <= f64_2, 1.0f, 2.0f));
             check("cmpltpd", w, select(f64_1 < f64_2, 1.0f, 2.0f));
 
             // llvm is pretty inconsistent about which ops get generated
             // for casts. We don't intend to catch these for now, so skip
             // them.
 
-            //check("cvttpd2dq", 4, i32(f64_1));
-            //check("cvtdq2pd", 4, f64(i32_1));
-            //check("cvttps2dq", 4, i32(f32_1));
-            //check("cvtdq2ps", 4, f32(i32_1));
-            //check("cvtps2pd", 4, f64(f32_1));
-            //check("cvtpd2ps", 4, f32(f64_1));
+            // check("cvttpd2dq", 4, i32(f64_1));
+            // check("cvtdq2pd", 4, f64(i32_1));
+            // check("cvttps2dq", 4, i32(f32_1));
+            // check("cvtdq2ps", 4, f32(i32_1));
+            // check("cvtps2pd", 4, f64(f32_1));
+            // check("cvtpd2ps", 4, f32(f64_1));
 
             check("paddq", w, i64_1 + i64_2);
             check("psubq", w, i64_1 - i64_2);
@@ -309,7 +321,7 @@ public:
         }
 
         // llvm doesn't distinguish between signed and unsigned multiplies
-        //check("pmuldq", 4, i64(i32_1) * i64(i32_2));
+        // check("pmuldq", 4, i64(i32_1) * i64(i32_2));
 
         if (use_sse41) {
             for (int w = 2; w <= 4; w++) {
@@ -375,8 +387,8 @@ public:
             check("vsubps*ymm", 8, f32_1 - f32_2);
             check("vsubpd*ymm", 4, f64_1 - f64_2);
             // LLVM no longer generates division instruction when fast-math is on
-            //check("vdivps", 8, f32_1 / f32_2);
-            //check("vdivpd", 4, f64_1 / f64_2);
+            // check("vdivps", 8, f32_1 / f32_2);
+            // check("vdivpd", 4, f64_1 / f64_2);
             check("vminps*ymm", 8, min(f32_1, f32_2));
             check("vminpd*ymm", 4, min(f64_1, f64_2));
             check("vmaxps*ymm", 8, max(f32_1, f32_2));
@@ -385,12 +397,12 @@ public:
             check("vroundpd*ymm", 4, round(f64_1));
 
             check("vcmpeqpd*ymm", 4, select(f64_1 == f64_2, 1.0f, 2.0f));
-            //check("vcmpneqpd", 4, select(f64_1 != f64_2, 1.0f, 2.0f));
-            //check("vcmplepd", 4, select(f64_1 <= f64_2, 1.0f, 2.0f));
+            // check("vcmpneqpd", 4, select(f64_1 != f64_2, 1.0f, 2.0f));
+            // check("vcmplepd", 4, select(f64_1 <= f64_2, 1.0f, 2.0f));
             check("vcmpltpd*ymm", 4, select(f64_1 < f64_2, 1.0f, 2.0f));
             check("vcmpeqps*ymm", 8, select(f32_1 == f32_2, 1.0f, 2.0f));
-            //check("vcmpneqps", 8, select(f32_1 != f32_2, 1.0f, 2.0f));
-            //check("vcmpleps", 8, select(f32_1 <= f32_2, 1.0f, 2.0f));
+            // check("vcmpneqps", 8, select(f32_1 != f32_2, 1.0f, 2.0f));
+            // check("vcmpleps", 8, select(f32_1 <= f32_2, 1.0f, 2.0f));
             check("vcmpltps*ymm", 8, select(f32_1 < f32_2, 1.0f, 2.0f));
 
             // avx512 can do predicated mov ops instead of blends
@@ -946,12 +958,21 @@ public:
             check(arm32 ? "vmovl.u32" : "ushll", 2 * w, i64(u32_1));
 
             // VMOVN    I       -       Move and Narrow
-            check(arm32 ? "vmovn.i16" : "xtn", 8 * w, i8(i16_1));
-            check(arm32 ? "vmovn.i16" : "xtn", 8 * w, u8(u16_1));
-            check(arm32 ? "vmovn.i32" : "xtn", 4 * w, i16(i32_1));
-            check(arm32 ? "vmovn.i32" : "xtn", 4 * w, u16(u32_1));
-            check(arm32 ? "vmovn.i64" : "xtn", 2 * w, i32(i64_1));
-            check(arm32 ? "vmovn.i64" : "xtn", 2 * w, u32(u64_1));
+            if (Halide::Internal::get_llvm_version() >= 140 && w > 1) {
+                check(arm32 ? "vmovn.i16" : "uzp1", 8 * w, i8(i16_1));
+                check(arm32 ? "vmovn.i16" : "uzp1", 8 * w, u8(u16_1));
+                check(arm32 ? "vmovn.i32" : "uzp1", 4 * w, i16(i32_1));
+                check(arm32 ? "vmovn.i32" : "uzp1", 4 * w, u16(u32_1));
+                check(arm32 ? "vmovn.i64" : "uzp1", 2 * w, i32(i64_1));
+                check(arm32 ? "vmovn.i64" : "uzp1", 2 * w, u32(u64_1));
+            } else {
+                check(arm32 ? "vmovn.i16" : "xtn", 8 * w, i8(i16_1));
+                check(arm32 ? "vmovn.i16" : "xtn", 8 * w, u8(u16_1));
+                check(arm32 ? "vmovn.i32" : "xtn", 4 * w, i16(i32_1));
+                check(arm32 ? "vmovn.i32" : "xtn", 4 * w, u16(u32_1));
+                check(arm32 ? "vmovn.i64" : "xtn", 2 * w, i32(i64_1));
+                check(arm32 ? "vmovn.i64" : "xtn", 2 * w, u32(u64_1));
+            }
 
             // VMRS     X       F, D    Move Advanced SIMD or VFP Register to ARM compute Engine
             // VMSR     X       F, D    Move ARM Core Register to Advanced SIMD or VFP
@@ -1223,7 +1244,7 @@ public:
             check(arm32 ? "vqrshrun.s64" : "sqrshrun", 2 * w, u32_sat((i64_1 + 8) / 16));
             check(arm32 ? "vqrshrn.u16" : "uqrshrn", 8 * w, u8(min((u32(u16_1) + 8) / 16, max_u8)));
             check(arm32 ? "vqrshrn.u32" : "uqrshrn", 4 * w, u16(min((u64(u32_1) + 8) / 16, max_u16)));
-            //check(arm32 ? "vqrshrn.u64" : "uqrshrn", 2 * w, u32(min((u64_1 + 8) / 16, max_u32)));
+            // check(arm32 ? "vqrshrn.u64" : "uqrshrn", 2 * w, u32(min((u64_1 + 8) / 16, max_u32)));
 
             // VQSHL    I       -       Saturating Shift Left
             check(arm32 ? "vqshl.s8" : "sqshl", 8 * w, i8_sat(i16(i8_1) * 16));
@@ -1266,7 +1287,7 @@ public:
             check(arm32 ? "vraddhn.i32" : "raddhn", 4 * w, i16((i32_1 + i32_2 + 32768) >> 16));
             check(arm32 ? "vraddhn.i32" : "raddhn", 4 * w, u16((u64(u32_1 + u32_2) + 32768) >> 16));
             check(arm32 ? "vraddhn.i64" : "raddhn", 2 * w, i32((i64_1 + i64_2 + (Expr(int64_t(1)) << 31)) >> 32));
-            //check(arm32 ? "vraddhn.i64" : "raddhn", 2 * w, u32((u128(u64_1) + u64_2 + (Expr(uint64_t(1)) << 31)) >> 32));
+            // check(arm32 ? "vraddhn.i64" : "raddhn", 2 * w, u32((u128(u64_1) + u64_2 + (Expr(uint64_t(1)) << 31)) >> 32));
 
             // VRECPE   I, F    -       Reciprocal Estimate
             check(arm32 ? "vrecpe.f32" : "frecpe", 2 * w, fast_inverse(f32_1));
@@ -1330,12 +1351,23 @@ public:
             check(arm32 ? "vrshr.u32" : "urshr", 4 * w, u32((u64(u32_1) + 32) >> 6));
 
             // VRSHRN   I       -       Rounding Shift Right Narrow
-            check(arm32 ? "vrshrn.i16" : "rshrn", 8 * w, i8((i32(i16_1) + 128) >> 8));
-            check(arm32 ? "vrshrn.i32" : "rshrn", 4 * w, i16((i32_1 + 256) >> 9));
-            check(arm32 ? "vrshrn.i64" : "rshrn", 2 * w, i32((i64_1 + 8) >> 4));
-            check(arm32 ? "vrshrn.i16" : "rshrn", 8 * w, u8((u32(u16_1) + 128) >> 8));
-            check(arm32 ? "vrshrn.i32" : "rshrn", 4 * w, u16((u64(u32_1) + 1024) >> 11));
-            //check(arm32 ? "vrshrn.i64" : "rshrn", 2 * w, u32((u64_1 + 64) >> 7));
+            if (Halide::Internal::get_llvm_version() >= 140) {
+                // LLVM14 converts RSHRN/RSHRN2 to RADDHN/RADDHN2 when the shift amount is half the width of the vector element
+                // See https://reviews.llvm.org/D116166
+                check(arm32 ? "vrshrn.i16" : "raddhn", 8 * w, i8((i32(i16_1) + 128) >> 8));
+                check(arm32 ? "vrshrn.i32" : "rshrn", 4 * w, i16((i32_1 + 256) >> 9));
+                check(arm32 ? "vrshrn.i64" : "rshrn", 2 * w, i32((i64_1 + 8) >> 4));
+                check(arm32 ? "vrshrn.i16" : "raddhn", 8 * w, u8((u32(u16_1) + 128) >> 8));
+                check(arm32 ? "vrshrn.i32" : "rshrn", 4 * w, u16((u64(u32_1) + 1024) >> 11));
+                // check(arm32 ? "vrshrn.i64" : "raddhn", 2 * w, u32((u64_1 + 64) >> 7));
+            } else {
+                check(arm32 ? "vrshrn.i16" : "rshrn", 8 * w, i8((i32(i16_1) + 128) >> 8));
+                check(arm32 ? "vrshrn.i32" : "rshrn", 4 * w, i16((i32_1 + 256) >> 9));
+                check(arm32 ? "vrshrn.i64" : "rshrn", 2 * w, i32((i64_1 + 8) >> 4));
+                check(arm32 ? "vrshrn.i16" : "rshrn", 8 * w, u8((u32(u16_1) + 128) >> 8));
+                check(arm32 ? "vrshrn.i32" : "rshrn", 4 * w, u16((u64(u32_1) + 1024) >> 11));
+                // check(arm32 ? "vrshrn.i64" : "rshrn", 2 * w, u32((u64_1 + 64) >> 7));
+            }
 
             // VRSQRTE  I, F    -       Reciprocal Square Root Estimate
             check(arm32 ? "vrsqrte.f32" : "frsqrte", 4 * w, fast_inverse_sqrt(f32_1));
@@ -1357,7 +1389,7 @@ public:
             check(arm32 ? "vrsubhn.i32" : "rsubhn", 4 * w, i16((i32_1 - i32_2 + 32768) >> 16));
             check(arm32 ? "vrsubhn.i32" : "rsubhn", 4 * w, u16((u64(u32_1 - u32_2) + 32768) >> 16));
             check(arm32 ? "vrsubhn.i64" : "rsubhn", 2 * w, i32((i64_1 - i64_2 + (Expr(int64_t(1)) << 31)) >> 32));
-            //check(arm32 ? "vrsubhn.i64" : "rsubhn", 2 * w, u32((u64_1 - u64_2 + (Expr(uint64_t(1)) << 31)) >> 32));
+            // check(arm32 ? "vrsubhn.i64" : "rsubhn", 2 * w, u32((u64_1 - u64_2 + (Expr(uint64_t(1)) << 31)) >> 32));
 
             // VSHL     I       -       Shift Left
             check(arm32 ? "vshl.i8" : "shl", 8 * w, i8_1 * 16);
@@ -1592,7 +1624,7 @@ public:
         Expr u32_1 = in_u32(x), u32_2 = in_u32(x + 16), u32_3 = in_u32(x + 32);
         Expr i64_1 = in_i64(x), i64_2 = in_i64(x + 16), i64_3 = in_i64(x + 32);
         Expr u64_1 = in_u64(x), u64_2 = in_u64(x + 16), u64_3 = in_u64(x + 32);
-        //Expr bool_1 = (f32_1 > 0.3f), bool_2 = (f32_1 < -0.3f), bool_3 = (f32_1 != -0.34f);
+        // Expr bool_1 = (f32_1 > 0.3f), bool_2 = (f32_1 < -0.3f), bool_3 = (f32_1 != -0.34f);
 
         // Basic AltiVec SIMD instructions.
         for (int w = 1; w <= 4; w++) {
@@ -1617,6 +1649,9 @@ public:
             check("vsububs", 16 * w, u8(max(i16(u8_1) - i16(u8_2), 0)));
             check("vsubuhs", 8 * w, u16(max(i32(u16_1) - i32(u16_2), 0)));
             check("vsubuws", 4 * w, u32(max(i64(u32_1) - i64(u32_2), 0)));
+            check("vsububs", 16 * w, absd(i8_1, i8_2));
+            check("vsubuhs", 16 * w, absd(i16_1, i16_2));
+            check("vsubuws", 16 * w, absd(i32_1, i32_2));
 
             // Vector Integer Average Instructions.
             check("vavgsb", 16 * w, i8((i16(i8_1) + i16(i8_2) + 1) / 2));
@@ -1988,13 +2023,8 @@ public:
                 check("v128.bitselect", 2 * w, select(bool_1, f64_1, f64_2));
 
                 // Lane-wise Population Count
-                // TODO(https://github.com/halide/Halide/issues/5130): NOT BEING GENERATED AT TRUNK
-                // check("i8x16.popcnt", 8 * w, popcount(i8_1));
-                // check("i8x16.popcnt", 8 * w, popcount(u8_1));
-                // check("i8x16.popcnt", 8 * w, popcount(i16_1));
-                // check("i8x16.popcnt", 8 * w, popcount(u16_1));
-                // check("i8x16.popcnt", 8 * w, popcount(i32_1));
-                // check("i8x16.popcnt", 8 * w, popcount(u32_1));
+                check("i8x16.popcnt", 8 * w, popcount(i8_1));
+                check("i8x16.popcnt", 8 * w, popcount(u8_1));
 
                 // Any lane true -- for VectorReduce::Or on 8-bit data
                 // All lanes true  -- for VectorReduce::And on 8-bit data
@@ -2205,19 +2235,18 @@ public:
                 }
 
                 // Integer to integer widening
-                // TODO(https://github.com/halide/Halide/issues/5130): NOT BEING GENERATED AT TRUNK
-                // check("i16x8.extend_low_i8x16_s", 8*w, i8(x) * 2);
-                // check("i16x8.extend_high_i8x16_s", 8*w, i16(i8_1));
-                // check("i16x8.extend_low_i8x16_u", 8*w, u8(x) * 2);
-                // check("i16x8.extend_high_i8x16_u", 8*w, u16(u8_1));
-                // check("i32x4.extend_low_i16x8_s", 4*w, i32(i16_1));
-                // check("i32x4.extend_high_i16x8_s", 4*w, i32(i16_1));
-                // check("i32x4.extend_low_i16x8_u", 4*w, u32(u16_1));
-                // check("i32x4.extend_high_i16x8_u", 4*w, u32(u16_1));
-                // check("i64x2.extend_low_i32x4_s", 2*w, i64(i32_1));
-                // check("i64x2.extend_high_i32x4_s", 2*w, i64(i32_1));
-                // check("i64x2.extend_low_i32x4_u", 2*w, u64(u32_1));
-                // check("i64x2.extend_high_i32x4_u", 2*w, u64(u32_1));
+                check("i16x8.extend_low_i8x16_s", 16 * w, i16(i8_1));
+                check("i16x8.extend_high_i8x16_s", 16 * w, i16(i8_1));
+                check("i16x8.extend_low_i8x16_u", 16 * w, u16(u8_1));
+                check("i16x8.extend_high_i8x16_u", 16 * w, u16(u8_1));
+                check("i32x4.extend_low_i16x8_s", 8 * w, i32(i16_1));
+                check("i32x4.extend_high_i16x8_s", 8 * w, i32(i16_1));
+                check("i32x4.extend_low_i16x8_u", 8 * w, u32(u16_1));
+                check("i32x4.extend_high_i16x8_u", 8 * w, u32(u16_1));
+                check("i64x2.extend_low_i32x4_s", 4 * w, i64(i32_1));
+                check("i64x2.extend_high_i32x4_s", 4 * w, i64(i32_1));
+                check("i64x2.extend_low_i32x4_u", 4 * w, u64(u32_1));
+                check("i64x2.extend_high_i32x4_u", 4 * w, u64(u32_1));
             }
         }
     }

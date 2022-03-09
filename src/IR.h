@@ -506,11 +506,12 @@ struct Call : public ExprNode<Call> {
         cast_mask,
         count_leading_zeros,
         count_trailing_zeros,
-        declare_box_touched,
         debug_to_file,
+        declare_box_touched,
         div_round_to_zero,
         dynamic_shuffle,
         extract_mask_element,
+        get_user_context,
         gpu_thread_barrier,
         halving_add,
         halving_sub,
@@ -525,6 +526,7 @@ struct Call : public ExprNode<Call> {
         lerp,
         likely,
         likely_if_innermost,
+        load_typed_struct_member,
         make_struct,
         memoize_expr,
         mod_round_to_zero,
@@ -564,6 +566,7 @@ struct Call : public ExprNode<Call> {
         widening_shift_left,
         widening_shift_right,
         widening_sub,
+
         IntrinsicOpCount  // Sentinel: keep last.
     };
 

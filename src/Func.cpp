@@ -344,6 +344,7 @@ bool is_const_assignment(const string &func_name, const vector<Expr> &args, cons
 }  // namespace
 
 void Stage::set_dim_type(const VarOrRVar &var, ForType t) {
+    definition.schedule().touched() = true;
     bool found = false;
     vector<Dim> &dims = definition.schedule().dims();
     for (auto &dim : dims) {
@@ -368,9 +369,9 @@ void Stage::set_dim_type(const VarOrRVar &var, ForType t) {
                             // its identity for each value in the definition if it is a Tuple
                             const auto &prover_result = prove_associativity(func_name, args, values);
 
-                            user_assert(prover_result.associative())
+                            user_assert(prover_result.associative() && prover_result.commutative())
                                 << "Failed to call atomic() on " << name()
-                                << " since it can't prove associativity of the operator.\n";
+                                << " since it can't prove associativity or commutativity of the operator.\n";
                             internal_assert(prover_result.size() == values.size());
                         }
                     }
@@ -407,6 +408,7 @@ void Stage::set_dim_type(const VarOrRVar &var, ForType t) {
 }
 
 void Stage::set_dim_device_api(const VarOrRVar &var, DeviceAPI device_api) {
+    definition.schedule().touched() = true;
     bool found = false;
     vector<Dim> &dims = definition.schedule().dims();
     for (auto &dim : dims) {
@@ -662,11 +664,14 @@ bool apply_split_directive(const Split &s, vector<ReductionVariable> &rvars,
 }  // anonymous namespace
 
 Func Stage::rfactor(const RVar &r, const Var &v) {
+    definition.schedule().touched() = true;
     return rfactor({{r, v}});
 }
 
 Func Stage::rfactor(vector<pair<RVar, Var>> preserved) {
     user_assert(!definition.is_init()) << "rfactor() must be called on an update definition\n";
+
+    definition.schedule().touched() = true;
 
     const string &func_name = function.name();
     vector<Expr> &args = definition.args();
@@ -969,6 +974,8 @@ void Stage::split(const string &old, const string &outer, const string &inner, c
              << outer << " and " << inner << " with factor of " << factor << "\n";
     vector<Dim> &dims = definition.schedule().dims();
 
+    definition.schedule().touched() = true;
+
     // Check that the new names aren't already in the dims list.
     for (auto &dim : dims) {
         string new_names[2] = {inner, outer};
@@ -1116,6 +1123,7 @@ void Stage::split(const string &old, const string &outer, const string &inner, c
 }
 
 Stage &Stage::split(const VarOrRVar &old, const VarOrRVar &outer, const VarOrRVar &inner, const Expr &factor, TailStrategy tail) {
+    definition.schedule().touched() = true;
     if (old.is_rvar) {
         user_assert(outer.is_rvar) << "Can't split RVar " << old.name() << " into Var " << outer.name() << "\n";
         user_assert(inner.is_rvar) << "Can't split RVar " << old.name() << " into Var " << inner.name() << "\n";
@@ -1128,6 +1136,7 @@ Stage &Stage::split(const VarOrRVar &old, const VarOrRVar &outer, const VarOrRVa
 }
 
 Stage &Stage::fuse(const VarOrRVar &inner, const VarOrRVar &outer, const VarOrRVar &fused) {
+    definition.schedule().touched() = true;
     if (!fused.is_rvar) {
         user_assert(!outer.is_rvar) << "Can't fuse Var " << fused.name()
                                     << " from RVar " << outer.name() << "\n";
@@ -1211,6 +1220,8 @@ protected:
 Stage Stage::specialize(const Expr &condition) {
     user_assert(condition.type().is_bool()) << "Argument passed to specialize must be of type bool\n";
 
+    definition.schedule().touched() = true;
+
     // The condition may not depend on Vars or RVars
     Internal::CheckForFreeVars check;
     condition.accept(&check);
@@ -1242,6 +1253,9 @@ void Stage::specialize_fail(const std::string &message) {
     const vector<Specialization> &specializations = definition.specializations();
     user_assert(specializations.empty() || specializations.back().failure_message.empty())
         << "Only one specialize_fail() may be defined per Stage.";
+
+    definition.schedule().touched() = true;
+
     (void)definition.add_specialization(const_true());
     Specialization &s = definition.specializations().back();
     s.failure_message = message;
@@ -1383,6 +1397,8 @@ void Stage::remove(const string &var) {
 }
 
 Stage &Stage::rename(const VarOrRVar &old_var, const VarOrRVar &new_var) {
+    definition.schedule().touched() = true;
+
     if (old_var.is_rvar) {
         user_assert(new_var.is_rvar)
             << "In schedule for " << name()
@@ -1472,11 +1488,13 @@ Stage &Stage::rename(const VarOrRVar &old_var, const VarOrRVar &new_var) {
 }
 
 Stage &Stage::allow_race_conditions() {
+    definition.schedule().touched() = true;
     definition.schedule().allow_race_conditions() = true;
     return *this;
 }
 
 Stage &Stage::atomic(bool override_associativity_test) {
+    definition.schedule().touched() = true;
     definition.schedule().atomic() = true;
     definition.schedule().override_atomic_associativity_test() = override_associativity_test;
     return *this;
@@ -1600,6 +1618,7 @@ Stage &Stage::tile(const std::vector<VarOrRVar> &previous,
 }
 
 Stage &Stage::reorder(const std::vector<VarOrRVar> &vars) {
+    definition.schedule().touched() = true;
     const string &func_name = function.name();
     vector<Expr> &args = definition.args();
     vector<Expr> &values = definition.values();
@@ -1839,18 +1858,21 @@ Stage &Stage::hexagon(const VarOrRVar &x) {
 }
 
 Stage &Stage::prefetch(const Func &f, const VarOrRVar &at, const VarOrRVar &from, Expr offset, PrefetchBoundStrategy strategy) {
+    definition.schedule().touched() = true;
     PrefetchDirective prefetch = {f.name(), at.name(), from.name(), std::move(offset), strategy, Parameter()};
     definition.schedule().prefetches().push_back(prefetch);
     return *this;
 }
 
 Stage &Stage::prefetch(const Internal::Parameter &param, const VarOrRVar &at, const VarOrRVar &from, Expr offset, PrefetchBoundStrategy strategy) {
+    definition.schedule().touched() = true;
     PrefetchDirective prefetch = {param.name(), at.name(), from.name(), std::move(offset), strategy, param};
     definition.schedule().prefetches().push_back(prefetch);
     return *this;
 }
 
 Stage &Stage::compute_with(LoopLevel loop_level, const map<string, LoopAlignStrategy> &align) {
+    definition.schedule().touched() = true;
     loop_level.lock();
     user_assert(!loop_level.is_inlined() && !loop_level.is_root())
         << "Undefined loop level to compute with\n";
@@ -1904,6 +1926,11 @@ Stage &Stage::compute_with(const Stage &s, const VarOrRVar &var, LoopAlignStrate
  * symbols were not understood. Works on OS X and Linux only. */
 std::string Stage::source_location() const {
     return definition.source_location();
+}
+
+void Stage::unscheduled() {
+    user_assert(!definition.schedule().touched()) << "Stage::unscheduled called on an update definition with a schedule\n";
+    definition.schedule().touched() = true;
 }
 
 void Func::invalidate_cache() {
@@ -3179,7 +3206,7 @@ Module Func::compile_to_module(const vector<Argument> &args, const std::string &
     return pipeline().compile_to_module(args, fn_name, target);
 }
 
-void Func::compile_to(const map<Output, string> &output_files,
+void Func::compile_to(const map<OutputFileType, string> &output_files,
                       const vector<Argument> &args,
                       const string &fn_name,
                       const Target &target) {

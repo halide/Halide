@@ -45,6 +45,8 @@ Func blur_cols_transpose(Func input, Expr height, Expr alpha) {
     blur.compute_at(transpose, yo);
 
     // Vectorize computations within the strips.
+    blur.update(0)
+        .vectorize(x);
     blur.update(1)
         .reorder(x, ry)
         .vectorize(x);
@@ -59,12 +61,12 @@ class IirBlur : public Generator<IirBlur> {
 public:
     // This is the input image: a 3D (color) image with 32 bit float
     // pixels.
-    Input<Buffer<float>> input{"input", 3};
+    Input<Buffer<float, 3>> input{"input"};
     // The filter coefficient, alpha is the weight of the input to the
     // filter.
     Input<float> alpha{"alpha"};
 
-    Output<Buffer<float>> output{"output", 3};
+    Output<Buffer<float, 3>> output{"output"};
 
     void generate() {
         Expr width = input.width();

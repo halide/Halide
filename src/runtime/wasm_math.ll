@@ -234,32 +234,79 @@ define weak_odr <8 x i16> @saturating_narrow_i32x8_to_u16x8(<8 x i32> %x) nounwi
   ret <8 x i16> %3
 }
 
-; Integer to double-precision floating point
-
-; COMMENTED OUT AT TOP OF TREE; llvm.wasm.convert.low.[un]signed is no longer
-; available, but LLVM isn't generating the f64x2.convert_low_i32x4_s/u instructions
-; that we'd expect, so investigation needs to be done.
-;   declare <2 x double> @llvm.wasm.convert.low.signed(<4 x i32>)
-;   declare <2 x double> @llvm.wasm.convert.low.unsigned(<4 x i32>)
-;
-;   define weak_odr <4 x double> @i32_to_double_s(<4 x i32> %x) nounwind alwaysinline {
-;     %1 = shufflevector <4 x i32> %x, <4 x i32> undef, <4 x i32> <i32 2, i32 3, i32 undef, i32 undef>
-;     %2 = tail call <2 x double> @llvm.wasm.convert.low.signed(<4 x i32> %x)
-;     %3 = tail call <2 x double> @llvm.wasm.convert.low.signed(<4 x i32> %1)
-;     %4 = shufflevector <2 x double> %2, <2 x double> %3, <4 x i32> <i32 0, i32 1, i32 2, i32 3>
-;     ret <4 x double> %4
-;   }
-;
-;   define weak_odr <4 x double> @i32_to_double_u(<4 x i32> %x) nounwind alwaysinline {
-;     %1 = shufflevector <4 x i32> %x, <4 x i32> undef, <4 x i32> <i32 2, i32 3, i32 undef, i32 undef>
-;     %2 = tail call <2 x double> @llvm.wasm.convert.low.unsigned(<4 x i32> %x)
-;     %3 = tail call <2 x double> @llvm.wasm.convert.low.unsigned(<4 x i32> %1)
-;     %4 = shufflevector <2 x double> %2, <2 x double> %3, <4 x i32> <i32 0, i32 1, i32 2, i32 3>
-;     ret <4 x double> %4
-;   }
-
-; single to double-precision floating point
+; single to double-precision floating point (only needed for LLVM_VERSION == 13)
 define weak_odr <4 x double> @float_to_double(<4 x float> %x) nounwind alwaysinline {
   %1 = fpext <4 x float> %x to <4 x double>
   ret <4 x double> %1
 }
+
+; Integer to integer extension
+
+; i8 -> i16
+
+define weak_odr <16 x i16> @extend_i8x16_to_i16x8(<16 x i8> %x) nounwind alwaysinline {
+  %1 = shufflevector <16 x i8> %x, <16 x i8> undef, <8 x i32> <i32 0, i32 1, i32 2, i32 3, i32 4, i32 5, i32 6, i32 7>
+  %2 = shufflevector <16 x i8> %x, <16 x i8> undef, <8 x i32> <i32 8, i32 9, i32 10, i32 11, i32 12, i32 13, i32 14, i32 15>
+  %3 = sext <8 x i8> %1 to <8 x i16>
+  %4 = sext <8 x i8> %2 to <8 x i16>
+  %5 = shufflevector <8 x i16> %3, <8 x i16> %4, <16 x i32> <i32 0, i32 1, i32 2, i32 3, i32 4, i32 5, i32 6, i32 7, i32 8, i32 9, i32 10, i32 11, i32 12, i32 13, i32 14, i32 15>
+  ret <16 x i16> %5
+}
+
+; u8 -> u16
+
+define weak_odr <16 x i16> @extend_u8x16_to_u16x8(<16 x i8> %x) nounwind alwaysinline {
+  %1 = shufflevector <16 x i8> %x, <16 x i8> undef, <8 x i32> <i32 0, i32 1, i32 2, i32 3, i32 4, i32 5, i32 6, i32 7>
+  %2 = shufflevector <16 x i8> %x, <16 x i8> undef, <8 x i32> <i32 8, i32 9, i32 10, i32 11, i32 12, i32 13, i32 14, i32 15>
+  %3 = zext <8 x i8> %1 to <8 x i16>
+  %4 = zext <8 x i8> %2 to <8 x i16>
+  %5 = shufflevector <8 x i16> %3, <8 x i16> %4, <16 x i32> <i32 0, i32 1, i32 2, i32 3, i32 4, i32 5, i32 6, i32 7, i32 8, i32 9, i32 10, i32 11, i32 12, i32 13, i32 14, i32 15>
+  ret <16 x i16> %5
+}
+
+; i16 -> i32
+
+define weak_odr <8 x i32> @extend_i16x8_to_i32x8(<8 x i16> %x) nounwind alwaysinline {
+  %1 = shufflevector <8 x i16> %x, <8 x i16> undef, <4 x i32> <i32 0, i32 1, i32 2, i32 3>
+  %2 = shufflevector <8 x i16> %x, <8 x i16> undef, <4 x i32> <i32 4, i32 5, i32 6, i32 7>
+  %3 = sext <4 x i16> %1 to <4 x i32>
+  %4 = sext <4 x i16> %2 to <4 x i32>
+  %5 = shufflevector <4 x i32> %3, <4 x i32> %4, <8 x i32> <i32 0, i32 1, i32 2, i32 3, i32 4, i32 5, i32 6, i32 7>
+  ret <8 x i32> %5
+}
+
+; u16 -> u32
+
+define weak_odr <8 x i32> @extend_u16x8_to_u32x8(<8 x i16> %x) nounwind alwaysinline {
+  %1 = shufflevector <8 x i16> %x, <8 x i16> undef, <4 x i32> <i32 0, i32 1, i32 2, i32 3>
+  %2 = shufflevector <8 x i16> %x, <8 x i16> undef, <4 x i32> <i32 4, i32 5, i32 6, i32 7>
+  %3 = zext <4 x i16> %1 to <4 x i32>
+  %4 = zext <4 x i16> %2 to <4 x i32>
+  %5 = shufflevector <4 x i32> %3, <4 x i32> %4, <8 x i32> <i32 0, i32 1, i32 2, i32 3, i32 4, i32 5, i32 6, i32 7>
+  ret <8 x i32> %5
+}
+
+; i32 -> i64
+
+define weak_odr <4 x i64> @extend_i32x4_to_i64x4(<4 x i32> %x) nounwind alwaysinline {
+  %1 = shufflevector <4 x i32> %x, <4 x i32> undef, <2 x i32> <i32 0, i32 1>
+  %2 = shufflevector <4 x i32> %x, <4 x i32> undef, <2 x i32> <i32 2, i32 3>
+  %3 = sext <2 x i32> %1 to <2 x i64>
+  %4 = sext <2 x i32> %2 to <2 x i64>
+  %5 = shufflevector <2 x i64> %3, <2 x i64> %4, <4 x i32> <i32 0, i32 1, i32 2, i32 3>
+  ret <4 x i64> %5
+}
+
+; u32 -> u64
+
+define weak_odr <4 x i64> @extend_u32x4_to_u64x4(<4 x i32> %x) nounwind alwaysinline {
+  %1 = shufflevector <4 x i32> %x, <4 x i32> undef, <2 x i32> <i32 0, i32 1>
+  %2 = shufflevector <4 x i32> %x, <4 x i32> undef, <2 x i32> <i32 2, i32 3>
+  %3 = zext <2 x i32> %1 to <2 x i64>
+  %4 = zext <2 x i32> %2 to <2 x i64>
+  %5 = shufflevector <2 x i64> %3, <2 x i64> %4, <4 x i32> <i32 0, i32 1, i32 2, i32 3>
+  ret <4 x i64> %5
+}
+
+
+

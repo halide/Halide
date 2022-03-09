@@ -2,6 +2,11 @@ include(FetchContent)
 include(CMakeDependentOption)
 
 cmake_dependent_option(WITH_WABT "Include WABT Interpreter for WASM testing" ON "TARGET_WEBASSEMBLY" OFF)
+cmake_dependent_option(WITH_V8 "Include V8 for WASM testing" OFF "TARGET_WEBASSEMBLY" OFF)
+
+if (WITH_WABT AND WITH_V8)
+    message(FATAL_ERROR "Cannot use both WABT and V8 at the same time, disable one of them.")
+endif()
 
 if ("${CMAKE_HOST_SYSTEM_NAME}" STREQUAL "Windows")
     if (WITH_WABT)
@@ -11,7 +16,7 @@ if ("${CMAKE_HOST_SYSTEM_NAME}" STREQUAL "Windows")
 endif ()
 
 if (WITH_WABT)
-    set(WABT_VER 1.0.24)
+    set(WABT_VER 1.0.27)
 
     message(STATUS "Fetching WABT ${WABT_VER}...")
     FetchContent_Declare(wabt
@@ -47,6 +52,21 @@ if (WITH_WABT)
                                $<BUILD_INTERFACE:${CMAKE_BINARY_DIR}/_deps>)
     set_target_properties(Halide_wabt PROPERTIES EXPORT_NAME wabt)
 endif ()
+
+if (WITH_V8)
+    # Instructions to build V8 can be found in README_webassembly.md.
+    if (NOT V8_INCLUDE_PATH)
+        message(FATAL_ERROR "Please set V8_INCLUDE_PATH on the CMake command line.")
+    endif()
+    if (NOT V8_LIB_PATH)
+        message(FATAL_ERROR "Please set V8_LIB_PATH on the CMake command line.")
+    endif()
+
+    message(STATUS "Using V8")
+    add_library(Halide_V8 STATIC IMPORTED GLOBAL)
+    set_target_properties(Halide_V8 PROPERTIES IMPORTED_LOCATION "${V8_LIB_PATH}")
+    target_include_directories(Halide_V8 INTERFACE "${V8_INCLUDE_PATH}")
+endif()
 
 function(add_wasm_executable TARGET)
     set(options)

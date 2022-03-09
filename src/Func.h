@@ -94,7 +94,6 @@ public:
     Stage(Internal::Function f, Internal::Definition d, size_t stage_index)
         : function(std::move(f)), definition(std::move(d)), stage_index(stage_index) {
         internal_assert(definition.defined());
-        definition.schedule().touched() = true;
 
         dim_vars.reserve(function.args().size());
         for (const auto &arg : function.args()) {
@@ -474,6 +473,12 @@ public:
      * empty string if no debug symbols were found or the debug
      * symbols were not understood. Works on OS X and Linux only. */
     std::string source_location() const;
+
+    /** Assert that this stage has intentionally been given no schedule, and
+     * suppress the warning about unscheduled update definitions that would
+     * otherwise fire. This counts as a schedule, so calling this twice on the
+     * same Stage will fail the assertion. */
+    void unscheduled();
 };
 
 // For backwards compatibility, keep the ScheduleHandle name.
@@ -740,8 +745,8 @@ public:
     explicit Func(Internal::Function f);
 
     /** Construct a new Func to wrap a Buffer. */
-    template<typename T>
-    HALIDE_NO_USER_CODE_INLINE explicit Func(Buffer<T> &im)
+    template<typename T, int Dims>
+    HALIDE_NO_USER_CODE_INLINE explicit Func(Buffer<T, Dims> &im)
         : Func() {
         (*this)(_) = im(_);
     }
@@ -1034,7 +1039,7 @@ public:
      * Deduces target files based on filenames specified in
      * output_files map.
      */
-    void compile_to(const std::map<Output, std::string> &output_files,
+    void compile_to(const std::map<OutputFileType, std::string> &output_files,
                     const std::vector<Argument> &args,
                     const std::string &fn_name,
                     const Target &target = get_target_from_environment());
@@ -2301,9 +2306,9 @@ public:
     Func &async();
 
     /** Bound the extent of a Func's storage, but not extent of its
-     * compute. This can be useful for forcing a function's allocation 
-     * to be a fixed size, which often means it can go on the stack. 
-     * If bounds inference decides that it requires more storage for 
+     * compute. This can be useful for forcing a function's allocation
+     * to be a fixed size, which often means it can go on the stack.
+     * If bounds inference decides that it requires more storage for
      * this function than the allocation size you have stated, a runtime
      * error will occur when you try to run the pipeline. */
     Func &bound_storage(const Var &dim, const Expr &bound);
@@ -2560,7 +2565,7 @@ HALIDE_NO_USER_CODE_INLINE T evaluate(JITUserContext *ctx, const Expr &e) {
         << " as a scalar of type " << type_of<T>() << "\n";
     Func f;
     f() = e;
-    Buffer<T> im = f.realize(ctx);
+    Buffer<T, 0> im = f.realize(ctx);
     return im();
 }
 
@@ -2615,7 +2620,7 @@ HALIDE_NO_USER_CODE_INLINE T evaluate_may_gpu(const Expr &e) {
     Func f;
     f() = e;
     Internal::schedule_scalar(f);
-    Buffer<T> im = f.realize();
+    Buffer<T, 0> im = f.realize();
     return im();
 }
 

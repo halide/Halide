@@ -96,6 +96,7 @@ void define_pipeline(py::module &m) {
 
             .def(
                 "realize", [](Pipeline &p, Buffer<> buffer, const Target &target) -> void {
+                    py::gil_scoped_release release;
                     p.realize(Realization(buffer), target);
                 },
                 py::arg("dst"), py::arg("target") = Target())
@@ -103,13 +104,19 @@ void define_pipeline(py::module &m) {
             // This will actually allow a list-of-buffers as well as a tuple-of-buffers, but that's OK.
             .def(
                 "realize", [](Pipeline &p, std::vector<Buffer<>> buffers, const Target &t) -> void {
+                    py::gil_scoped_release release;
                     p.realize(Realization(buffers), t);
                 },
                 py::arg("dst"), py::arg("target") = Target())
 
             .def(
                 "realize", [](Pipeline &p, std::vector<int32_t> sizes, const Target &target) -> py::object {
-                    return realization_to_object(p.realize(std::move(sizes), target));
+                    std::optional<Realization> r;
+                    {
+                        py::gil_scoped_release release;
+                        r = p.realize(std::move(sizes), target);
+                    }
+                    return realization_to_object(*r);
                 },
                 py::arg("sizes") = std::vector<int32_t>{}, py::arg("target") = Target())
 

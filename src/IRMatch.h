@@ -486,30 +486,7 @@ struct Wild {
         return state.get_binding(i);
     }
 
-    constexpr static bool foldable = true;
-    HALIDE_ALWAYS_INLINE
-    void make_folded_const(halide_scalar_value_t &val, halide_type_t &ty, MatcherState &state) const noexcept {
-        const auto *e = state.get_binding(i);
-        ty = e->type;
-        switch (e->node_type) {
-        case IRNodeType::UIntImm:
-            val.u.u64 = ((const UIntImm *)e)->value;
-            return;
-        case IRNodeType::IntImm:
-            val.u.i64 = ((const IntImm *)e)->value;
-            return;
-        case IRNodeType::FloatImm:
-            val.u.f64 = ((const FloatImm *)e)->value;
-            return;
-        default:
-            // The function is noexcept, so silent failure. You
-            // shouldn't be calling this if you haven't already
-            // checked it's going to be a constant (e.g. with
-            // is_const, or because you manually bound a constant Expr
-            // to the state).
-            val.u.u64 = 0;
-        }
-    }
+    constexpr static bool foldable = false;
 };
 
 template<int i>
@@ -1483,7 +1460,49 @@ struct Intrin {
         return Expr();
     }
 
-    constexpr static bool foldable = false;
+    constexpr static bool foldable = true;
+
+    HALIDE_ALWAYS_INLINE void make_folded_const(halide_scalar_value_t &val, halide_type_t &ty, MatcherState &state) const noexcept {
+        halide_scalar_value_t arg1;
+        // Assuming the args have the same type as the intrinsic is incorrect in
+        // general. But for the intrinsics we can fold (just shifts), the LHS
+        // has the same type as the intrinsic, and we can always treat the RHS
+        // as a signed int, because we're using 64 bits for it.
+        std::get<0>(args).make_folded_const(val, ty, state);
+        halide_type_t signed_ty = ty;
+        signed_ty.code = halide_type_int;
+        // We can just directly get the second arg here, because we only want to
+        // instantiate this method for shifts, which have two args.
+        std::get<1>(args).make_folded_const(arg1, signed_ty, state);
+
+        if (intrin == Call::shift_left) {
+            if (arg1.u.i64 < 0) {
+                if (ty.code == halide_type_int) {
+                    // Arithmetic shift
+                    val.u.i64 >>= -arg1.u.i64;
+                } else {
+                    // Logical shift
+                    val.u.u64 >>= -arg1.u.i64;
+                }
+            } else {
+                val.u.u64 <<= arg1.u.i64;
+            }
+        } else if (intrin == Call::shift_right) {
+            if (arg1.u.i64 > 0) {
+                if (ty.code == halide_type_int) {
+                    // Arithmetic shift
+                    val.u.i64 >>= arg1.u.i64;
+                } else {
+                    // Logical shift
+                    val.u.u64 >>= arg1.u.i64;
+                }
+            } else {
+                val.u.u64 <<= -arg1.u.i64;
+            }
+        } else {
+            internal_error << "Folding not implemented for intrinsic: " << intrin;
+        }
+    }
 
     HALIDE_ALWAYS_INLINE
     Intrin(Call::IntrinsicOp intrin, Args... args) noexcept

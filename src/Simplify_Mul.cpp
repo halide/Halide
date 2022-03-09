@@ -69,6 +69,11 @@ Expr Simplify::visit(const Mul *op, ExprInfo *bounds) {
         }
 
         if (rewrite(c0 * c1, fold(c0 * c1)) ||
+            (!no_overflow(op->type) &&  // Intentionally-overflowing quadratics used in random number generation
+             (rewrite((x + c0) * (x + c1), x * (x + fold(c0 + c1)) + fold(c0 * c1)) ||
+              rewrite((x * c0 + c1) * (x + c2), x * (x * c0 + fold(c1 + c0 * c2)) + fold(c1 * c2)) ||
+              rewrite((x + c2) * (x * c0 + c1), x * (x * c0 + fold(c1 + c0 * c2)) + fold(c1 * c2)) ||
+              rewrite((x * c0 + c1) * (x * c2 + c3), x * (x * fold(c0 * c2) + fold(c0 * c3 + c1 * c2)) + fold(c1 * c3)))) ||
             rewrite((x + c0) * c1, x * c1 + fold(c0 * c1), !overflows(c0 * c1)) ||
             rewrite((c0 - x) * c1, x * fold(-c1) + fold(c0 * c1), !overflows(c0 * c1)) ||
             rewrite((0 - x) * y, 0 - x * y) ||

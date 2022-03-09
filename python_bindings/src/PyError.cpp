@@ -10,13 +10,14 @@ void halide_python_error(JITUserContext *, const char *msg) {
 }
 
 void halide_python_print(JITUserContext *, const char *msg) {
+    py::gil_scoped_acquire acquire;
     py::print(msg, py::arg("end") = "");
 }
 
 class HalidePythonCompileTimeErrorReporter : public CompileTimeErrorReporter {
 public:
     void warning(const char *msg) override {
-        py::print(msg, py::arg("end") = "");
+        halide_python_print(nullptr, msg);
     }
 
     void error(const char *msg) override {
