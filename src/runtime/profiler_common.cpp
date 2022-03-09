@@ -18,7 +18,6 @@ extern "C" void halide_start_timer_chain();
 extern "C" void halide_disable_timer_interrupt();
 extern "C" void halide_enable_timer_interrupt();
 #endif
-
 }
 
 namespace Halide {
