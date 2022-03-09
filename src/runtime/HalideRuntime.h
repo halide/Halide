@@ -1843,6 +1843,13 @@ extern struct halide_profiler_state *halide_profiler_get_state();
  * This function grabs the global profiler state's lock on entry. */
 extern struct halide_profiler_pipeline_stats *halide_profiler_get_pipeline_state(const char *pipeline_name);
 
+/** Collects profiling information. Intended to be called from a timer
+ * interrupt handler if timer based profiling is being used.
+ *  State argument is acquired via halide_profiler_get_pipeline_state.
+ * prev_t argument is the previous time and can be used to set a more
+ * accurate time interval if desired. */
+extern int halide_profiler_sample(struct halide_profiler_state *s, uint64_t *prev_t);
+
 /** Reset profiler state cheaply. May leave threads running or some
  * memory allocated but all accumluated statistics are reset.
  * WARNING: Do NOT call this method while any halide pipeline is
@@ -1861,6 +1868,17 @@ void halide_profiler_shutdown();
 /** Print out timing statistics for everything run since the last
  * reset. Also happens at process exit. */
 extern void halide_profiler_report(void *user_context);
+
+/** For timer based profiling, this routine starts the timer chain running.
+ * halide_get_profiler_state can be called to get the current timer interval.
+ */
+extern void halide_start_timer_chain();
+/** These routines are called to temporarily disable and then reenable
+ * timer interuppts for profiling */
+//@{
+extern void halide_disable_timer_interrupt();
+extern void halide_enable_timer_interrupt();
+//@}
 
 /// \name "Float16" functions
 /// These functions operate of bits (``uint16_t``) representing a half
