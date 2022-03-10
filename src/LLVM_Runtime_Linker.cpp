@@ -1081,7 +1081,10 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
                 modules.push_back(get_initmod_x86_amx_ll(c));
             }
             if (t.has_feature(Target::Profile)) {
-                user_assert(t.os != Target::WebAssemblyRuntime) << "The profiler cannot be used in a threadless environment.";
+                if (t.os == Target::WebAssemblyRuntime) {
+                    user_assert(t.has_feature(Target::WasmThreads))
+                        << "The profiler requires threads to operate; enable wasm_threads to use this under WebAssembly.";
+                }
                 modules.push_back(get_initmod_profiler_inlined(c, bits_64, debug));
             }
             if (t.arch == Target::WebAssembly) {

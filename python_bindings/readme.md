@@ -8,7 +8,9 @@ with some differences where the C++ idiom is either inappropriate or impossible:
   offers variadic and list versions:
   `Buffer<>(Type t, int extent_dim_0, int extent_dim_1, ...., extent_dim_N, string name = "") Buffer<>(Type t, vector<int> extents, string name = "")`
   in Python, only the second variant is provided.
-- `Func` and `Buffer` access is done using `[]` rather than `()`
+- `Func` and `Buffer` access is done using `[]` rather than `()`.
+  - For zero-dimensional `Func` and `Buffer`, you must explicitly specify `[()]` -- that is, use an empty tuple as the index" --
+    as `[]` is not syntactically acceptable in Python.
 - Some classes in the Halide API aren't provided because they are 'wrapped' with
   standard Python idioms:
   - `Halide::Tuple` doesn't exist in the Python bindings; an ordinary Python
