@@ -18,7 +18,10 @@ include(GNUInstallDirs)
 ##
 
 get_property(is_multi_config GLOBAL PROPERTY GENERATOR_IS_MULTI_CONFIG)
-string(COMPARE EQUAL "${CMAKE_SOURCE_DIR}" "${CMAKE_CURRENT_SOURCE_DIR}" is_top_level)
+
+if (CMAKE_VERSION VERSION_LESS 3.21)
+    string(COMPARE EQUAL "${CMAKE_SOURCE_DIR}" "${CMAKE_CURRENT_SOURCE_DIR}" PROJECT_IS_TOP_LEVEL)
+endif ()
 
 ## Warn if the user is using the wrong kind of build type selection for their generator
 if (CMAKE_BUILD_TYPE AND is_multi_config)
@@ -155,12 +158,12 @@ option(TARGET_D3D12COMPUTE "Enable Direct3D 12 Compute target" ON)
 option(TARGET_OPENGLCOMPUTE "Enable OpenGLCompute target" ON)
 
 ## Optional extra subprojects
-option(WITH_TESTS "Build tests" "${is_top_level}")
-option(WITH_PYTHON_BINDINGS "Build Python bindings" "${is_top_level}")
-option(WITH_TUTORIALS "Build tutorials" "${is_top_level}")
+option(WITH_TESTS "Build tests" "${PROJECT_IS_TOP_LEVEL}")
+option(WITH_PYTHON_BINDINGS "Build Python bindings" "${PROJECT_IS_TOP_LEVEL}")
+option(WITH_TUTORIALS "Build tutorials" "${PROJECT_IS_TOP_LEVEL}")
 option(WITH_DOCS "Build documentation" OFF)
-option(WITH_UTILS "Build utils" "${is_top_level}")
-option(WITH_PACKAGING "Include Halide's packaging rules" "${is_top_level}")
+option(WITH_UTILS "Build utils" "${PROJECT_IS_TOP_LEVEL}")
+option(WITH_PACKAGING "Include Halide's packaging rules" "${PROJECT_IS_TOP_LEVEL}")
 
 ## Advanced options for special/internal build scenarios
 option(Halide_CCACHE_BUILD "Build Halide with ccache and preferred settings" OFF)
