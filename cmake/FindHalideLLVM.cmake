@@ -3,8 +3,8 @@ FindHalideLLVM
 --------------
 
 This find module locates LLVM, Clang, and LLD the way Halide intends to
-use it. LLVM and its associated components have many idiosyncrasies in
-their CMake packages. This module attempts to paper over them.
+use it. LLVM and its associated components' CMake packages have many
+idiosyncrasies; this module attempts to paper over them.
 
 Optional components
 ^^^^^^^^^^^^^^^^^^^
@@ -63,8 +63,8 @@ This module defines the IMPORTED targets:
   and as many of the OPTIONAL targets as possible are included. Defines
   the preprocessor directive ``WITH_<TARGET>`` (uppercase) when
   ``<target>`` is included.
-* ``Halide::clang`` -- the main clang executable (when ``Clang``
-  component is found).
+* ``Halide::clang`` -- the main clang executable (when ``Clang`` component is
+  found).
 * ``Halide::llvm-as`` -- the ``llvm-as`` executable.
 
 #]=======================================================================]
@@ -128,11 +128,22 @@ function(_HalideLLVM_impl)
     # Run the actual search for LLVM
     find_package(LLVM ${${CMAKE_FIND_PACKAGE_NAME}_FIND_VERSION} ${quiet} ${required})
 
-    # We didn't find LLVM if version is too old.
-    set(llvm_min_ver 12.0.0)
-    if (LLVM_FOUND AND LLVM_PACKAGE_VERSION VERSION_LESS llvm_min_ver)
-        set(LLVM_FOUND 0)
-        list(APPEND errors "LLVM version must be ${llvm_min_ver} or newer.")
+    # All LLVM-related packages (incorrectly) report their version numbers via LLVM_PACKAGE_VERSION.
+    # Store the LLVM version privately to validate subsequent searches for Clang and/or LLD.
+    set(llvm_found_version "${LLVM_PACKAGE_VERSION}")
+    unset(LLVM_PACKAGE_VERSION)
+
+    # Check the LLVM version
+    if (LLVM_FOUND)
+        set(llvm_min_ver 12.0.0)
+        set(llvm_max_ver 15.0)
+        if (llvm_found_version VERSION_LESS llvm_min_ver)
+            # We didn't find LLVM if version is too old.
+            set(LLVM_FOUND 0)
+            list(APPEND errors "LLVM version must be ${llvm_min_ver} or newer.")
+        elseif (llvm_found_version VERSION_GREATER llvm_max_ver AND NOT quiet)
+            message(WARNING "Halide is not tested on LLVM versions beyond ${llvm_max_ver}")
+        endif ()
     endif ()
 
     # We didn't find LLVM if shared version was requested, but not not present
@@ -145,11 +156,21 @@ function(_HalideLLVM_impl)
     # Look for Clang, LLD, and target components. Check for internal inconsistencies.
     ##
 
+    set(HalideLLVM_CONFIG "")
     if (LLVM_FOUND)
         set(HalideLLVM_CONFIG "${LLVM_CONFIG}")
 
         if (Clang IN_LIST "${CMAKE_FIND_PACKAGE_NAME}_FIND_COMPONENTS")
             find_package(Clang ${quiet} HINTS "${LLVM_DIR}/../clang" "${LLVM_DIR}/../lib/cmake/clang")
+
+            # Validate Clang version
+            if (Clang_FOUND AND NOT LLVM_PACKAGE_VERSION VERSION_EQUAL llvm_found_version)
+                set(Clang_FOUND 0)
+                list(APPEND errors "LLVM ${llvm_found_version} and Clang ${LLVM_PACKAGE_VERSION} are incompatible.")
+            endif ()
+            unset(LLVM_PACKAGE_VERSION)
+
+            # Set the component-specific FOUND-variable
             set(HalideLLVM_Clang_FOUND "${Clang_FOUND}")
             if (HalideLLVM_Clang_FOUND)
                 list(APPEND HalideLLVM_CONFIG "${Clang_CONFIG}")
@@ -158,6 +179,13 @@ function(_HalideLLVM_impl)
 
         if (LLD IN_LIST "${CMAKE_FIND_PACKAGE_NAME}_FIND_COMPONENTS")
             find_package(LLD ${quiet} HINTS "${LLVM_DIR}/../lld" "${LLVM_DIR}/../lib/cmake/lld")
+
+            # Validate LLD version
+            if (LLD_FOUND AND NOT LLVM_PACKAGE_VERSION VERSION_EQUAL llvm_found_version)
+                set(LLD_FOUND 0)
+                list(APPEND errors "LLVM ${llvm_found_version} and LLD ${LLVM_PACKAGE_VERSION} are incompatible.")
+            endif ()
+            unset(LLVM_PACKAGE_VERSION)
 
             # LLD cannot be considered "found" if shared LLVM was requested and LLVM_LINK_LLVM_DYLIB is not set.
             # LLVM has a mis-feature that allows it to build and export both static and shared libraries at the
@@ -180,6 +208,7 @@ function(_HalideLLVM_impl)
                 endif ()
             endif ()
 
+            # Set the component-specific FOUND-variable
             set(HalideLLVM_LLD_FOUND "${LLD_FOUND}")
             if (HalideLLVM_LLD_FOUND)
                 list(APPEND HalideLLVM_CONFIG "${LLD_CONFIG}")
@@ -204,15 +233,15 @@ function(_HalideLLVM_impl)
     # Check for consistency and report errors
     list(JOIN errors "\n" error_msg)
     find_package_handle_standard_args(
-            HalideLLVM
-            HANDLE_COMPONENTS
-            REQUIRED_VARS HalideLLVM_CONFIG
-            VERSION_VAR LLVM_PACKAGE_VERSION
-            REASON_FAILURE_MESSAGE "\n${error_msg}"
+        HalideLLVM
+        HANDLE_COMPONENTS
+        REQUIRED_VARS HalideLLVM_CONFIG  # TODO: when upgrading to CMake 3.18, remove this argument/variable.
+        VERSION_VAR llvm_found_version
+        REASON_FAILURE_MESSAGE "\n${error_msg}"
     )
 
     ##
-    # Create Halide::LLVM target if FPHSA succeeded
+    # Create Halide::LLVM target if find_package_handle_standard_args succeeded
     ##
 
     set(HalideLLVM_TARGETS "")
@@ -231,10 +260,12 @@ function(_HalideLLVM_impl)
     if (HalideLLVM_FOUND AND NOT TARGET Halide::LLVM)
         add_library(Halide::LLVM INTERFACE IMPORTED)
         target_include_directories(Halide::LLVM INTERFACE "${LLVM_INCLUDE_DIRS}")
-        target_compile_definitions(Halide::LLVM
-                                   INTERFACE
-                                   ${LLVM_DEFINITIONS}
-                                   "LLVM_VERSION=${LLVM_VERSION_MAJOR}${LLVM_VERSION_MINOR}")
+        target_compile_definitions(
+            Halide::LLVM
+            INTERFACE
+            ${LLVM_DEFINITIONS}
+            "LLVM_VERSION=${LLVM_VERSION_MAJOR}${LLVM_VERSION_MINOR}"
+        )
         foreach (target IN LISTS HalideLLVM_TARGETS)
             string(TOUPPER "WITH_${target}" target_def)
             target_compile_definitions(Halide::LLVM INTERFACE "${target_def}")
@@ -257,10 +288,8 @@ function(_HalideLLVM_impl)
         add_executable(Halide::llvm-as ALIAS llvm-as)
     endif ()
 
-    if (HalideLLVM_FOUND AND HalideLLVM_Clang_FOUND)
-        if (NOT TARGET Halide::clang)
-            add_executable(Halide::clang ALIAS clang)
-        endif ()
+    if (HalideLLVM_FOUND AND HalideLLVM_Clang_FOUND AND NOT TARGET Halide::clang)
+        add_executable(Halide::clang ALIAS clang)
     endif ()
 
     ##
@@ -273,7 +302,7 @@ function(_HalideLLVM_impl)
         set(HalideLLVM_${comp}_FOUND "${HalideLLVM_${comp}_FOUND}" PARENT_SCOPE)
     endforeach ()
 
-    set(HalideLLVM_VERSION "${LLVM_PACKAGE_VERSION}" PARENT_SCOPE)
+    set(HalideLLVM_VERSION "${llvm_found_version}" PARENT_SCOPE)
     set(HalideLLVM_TARGETS "${HalideLLVM_TARGETS}" PARENT_SCOPE)
 
     set(LLVM_LIBCXX "${LLVM_LIBCXX}" PARENT_SCOPE)
@@ -281,3 +310,13 @@ function(_HalideLLVM_impl)
 endfunction()
 
 _HalideLLVM_impl()
+
+# Delete the function to prevent it from being improperly called outside this
+# module. After the first redefinition, the original function is still present
+# as __HalideLLVM_impl. The second redefinition overwrites __HalideLLVM_impl
+# so that calling either one is a no-op.
+function(_HalideLLVM_impl)
+endfunction()
+
+function(_HalideLLVM_impl)
+endfunction()
