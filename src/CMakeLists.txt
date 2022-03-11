@@ -430,8 +430,8 @@ if (TARGET Halide::WABT)
     target_compile_definitions(Halide PRIVATE WITH_WABT)
 endif ()
 
-if (TARGET Halide::V8)
-    target_link_libraries(Halide PRIVATE Halide::V8)
+if (TARGET V8::V8)
+    target_link_libraries(Halide PRIVATE V8::V8)
     target_compile_definitions(Halide PRIVATE WITH_V8)
 endif ()
 

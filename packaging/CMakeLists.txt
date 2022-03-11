@@ -181,7 +181,7 @@ if (NOT BUILD_SHARED_LIBS AND NOT Halide_BUNDLE_LLVM)
         file(APPEND "${depFile}" "endif ()\n\n")
     endif ()
 
-    if (TARGET Halide::V8)
+    if (TARGET V8::V8)
         # TODO: figure out what to do here.
     endif ()
 
