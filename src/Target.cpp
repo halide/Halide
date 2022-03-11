@@ -625,7 +625,7 @@ std::string Target::to_string() const {
     for (const auto &os_entry : os_name_map) {
         if (os_entry.second == os) {
             result += "-" + os_entry.first;
-           break;
+            break;
         }
     }
     for (const auto &feature_entry : feature_name_map) {
