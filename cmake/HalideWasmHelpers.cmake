@@ -79,7 +79,11 @@ function(add_wasm_halide_test TARGET)
         return()
     endif ()
 
+    if (NOT TARGET NodeJS::Interpreter)
+        find_package(NodeJS 16.13 REQUIRED)
+    endif ()
+
     add_halide_test("${TARGET}"
                     GROUPS ${args_GROUPS}
-                    COMMAND ${NODE_JS_EXECUTABLE} "${TARGET}.js")
+                    COMMAND NodeJS::Interpreter "${TARGET}.js")
 endfunction()
