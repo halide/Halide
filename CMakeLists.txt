@@ -23,16 +23,16 @@ if (CMAKE_VERSION VERSION_LESS 3.21)
     string(COMPARE EQUAL "${CMAKE_SOURCE_DIR}" "${CMAKE_CURRENT_SOURCE_DIR}" PROJECT_IS_TOP_LEVEL)
 endif ()
 
-## Warn if the user is using the wrong kind of build type selection for their generator
+# Warn if the user is using the wrong kind of build type selection for their generator
 if (CMAKE_BUILD_TYPE AND is_multi_config)
     message(WARNING "Multi-config generators do not honor CMAKE_BUILD_TYPE.")
 elseif (NOT CMAKE_BUILD_TYPE AND NOT is_multi_config)
     message(WARNING "Single-config generators require CMAKE_BUILD_TYPE.")
 endif ()
 
-## Windows has file name length restrictions and lacks an RPATH mechanism.
-## We work around this by setting a path max and putting all exes / dlls in
-## the same output directory.
+# Windows has file name length restrictions and lacks an RPATH mechanism.
+# We work around this by setting a path max and putting all exes / dlls in
+# the same output directory.
 if (CMAKE_SYSTEM_NAME MATCHES "Windows")
     set(CMAKE_OBJECT_PATH_MAX 260)
     set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/bin")
@@ -66,14 +66,14 @@ set(known_llvm_targets AArch64 AMDGPU ARM Hexagon Mips NVPTX PowerPC RISCV WebAs
 set(required_llvm_targets "")
 set(optional_llvm_targets "")
 foreach (target IN LISTS known_llvm_targets)
-    string(TOUPPER "TARGET_${target}" OPTION)
+    string(TOUPPER "TARGET_${target}" target_opt)
 
-    set("${OPTION}" "OPTIONAL"
+    set("${target_opt}" "OPTIONAL"
         CACHE STRING "Enable ${target} target. Set to 'OPTIONAL' to include if available (the default), or to a true value to require it.")
 
-    if (${OPTION} STREQUAL "OPTIONAL")
+    if (${target_opt} STREQUAL "OPTIONAL")
         list(APPEND optional_llvm_targets "${target}")
-    elseif (${OPTION})
+    elseif (${target_opt})
         list(APPEND required_llvm_targets "${target}")
     endif ()
 endforeach ()
@@ -94,7 +94,7 @@ endif ()
 # Find dependencies
 ##
 
-## Make our custom helpers available throughout the project via include().
+## Make our custom helpers available via include() and find_package().
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_LIST_DIR}/cmake")
 
 ## Find standard CMake packages
@@ -112,14 +112,12 @@ find_package(HalideLLVM ${Halide_REQUIRE_LLVM_VERSION} REQUIRED
 # Set TARGET_<target> to ON if it was actually found and to OFF otherwise.
 # Does NOT touch the cache; if it was marked "optional" before, it will
 # still be marked optional afterwards.
-# TODO: replace this with checks for HalideLLVM_<target>_FOUND or
-#       <target> IN_LIST HalideLLVM_TARGETS
 foreach (target IN LISTS known_llvm_targets)
-    string(TOUPPER "TARGET_${target}" OPTION)
+    string(TOUPPER "TARGET_${target}" target_opt)
     if (${target} IN_LIST HalideLLVM_TARGETS)
-        set("${OPTION}" ON)
+        set("${target_opt}" ON)
     else ()
-        set("${OPTION}" OFF)
+        set("${target_opt}" OFF)
     endif ()
 endforeach ()
 

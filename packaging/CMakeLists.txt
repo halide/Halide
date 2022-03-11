@@ -174,10 +174,15 @@ if (NOT BUILD_SHARED_LIBS AND NOT Halide_BUNDLE_LLVM)
     file(WRITE "${depFile}" "include(CMakeFindDependencyMacro)\n\n")
     file(APPEND "${depFile}" "list(APPEND CMAKE_MODULE_PATH \${CMAKE_CURRENT_LIST_DIR})\n\n")
 
+    # We use a dummy target since Halide::WABT is (a) private and (b) a collection of objects.
     if (TARGET Halide::WABT)
         file(APPEND "${depFile}" "if (NOT TARGET Halide::WABT)\n")
         file(APPEND "${depFile}" "    add_library(Halide::WABT INTERFACE IMPORTED)\n")
         file(APPEND "${depFile}" "endif ()\n\n")
+    endif ()
+
+    if (TARGET Halide::V8)
+        # TODO: figure out what to do here.
     endif ()
 
     file(APPEND "${depFile}" "set(Halide_SHARED_LLVM \"${Halide_SHARED_LLVM}\")\n")
