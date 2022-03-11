@@ -799,6 +799,7 @@ RUNTIME_CPP_COMPONENTS = \
   posix_print \
   posix_threads \
   posix_threads_tsan \
+  posix_timer_profiler \
   powerpc_cpu_features \
   prefetch \
   profiler \
@@ -812,6 +813,7 @@ RUNTIME_CPP_COMPONENTS = \
   qurt_yield \
   riscv_cpu_features \
   runtime_api \
+  timer_profiler \
   to_string \
   trace_helper \
   tracing \

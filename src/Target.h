@@ -132,6 +132,7 @@ struct Target {
         RVV = halide_target_feature_rvv,
         ARMv81a = halide_target_feature_armv81a,
         SanitizerCoverage = halide_target_feature_sanitizer_coverage,
+        ProfileByTimer = halide_target_feature_profile_by_timer,
         FeatureEnd = halide_target_feature_end
     };
     Target() = default;

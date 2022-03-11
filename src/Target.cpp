@@ -385,6 +385,7 @@ const std::map<std::string, Target::Feature> feature_name_map = {
     {"rvv", Target::RVV},
     {"armv81a", Target::ARMv81a},
     {"sanitizer_coverage", Target::SanitizerCoverage},
+    {"profile_by_timer", Target::ProfileByTimer},
     // NOTE: When adding features to this map, be sure to update PyEnums.cpp as well.
 };
 
@@ -624,7 +625,7 @@ std::string Target::to_string() const {
     for (const auto &os_entry : os_name_map) {
         if (os_entry.second == os) {
             result += "-" + os_entry.first;
-            break;
+           break;
         }
     }
     for (const auto &feature_entry : feature_name_map) {
