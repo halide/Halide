@@ -52,7 +52,7 @@ int run_test(bool use_timer_profiler) {
     }
 
     Target t = get_jit_target_from_environment()
-                  .with_feature(use_timer_profiler ? Target::ProfileByTimer : Target::Profile);
+                   .with_feature(use_timer_profiler ? Target::ProfileByTimer : Target::Profile);
     Buffer<float> im = out.realize({10, 1000}, t);
 
     // out.compile_to_assembly("/dev/stdout", {}, t.with_feature(Target::JIT));
