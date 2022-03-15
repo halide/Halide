@@ -2285,17 +2285,23 @@ struct WasmModuleContents {
     ~WasmModuleContents() = default;
 };
 
+// clang-format off
 WasmModuleContents::WasmModuleContents(
     const Module &halide_module,
     const std::vector<Argument> &arguments,
     const std::string &fn_name,
     const std::map<std::string, Halide::JITExtern> &jit_externs,
     const std::vector<JITModule> &extern_deps)
-    : target(halide_module.target()),
-      arguments(arguments),
-      jit_externs(jit_externs),
-      extern_deps(extern_deps),
-      trampolines(JITModule::make_trampolines_module(get_host_target(), jit_externs, kTrampolineSuffix, extern_deps)) {
+    : target(halide_module.target())
+      , arguments(arguments)
+      , jit_externs(jit_externs)
+      , extern_deps(extern_deps)
+      , trampolines(JITModule::make_trampolines_module(get_host_target(), jit_externs, kTrampolineSuffix, extern_deps))
+#if WITH_WABT
+      , store(wabt::interp::Store(calc_features(halide_module.target())))
+#endif
+// clang-format on
+{
 
 #if WITH_WABT || WITH_V8
     wdebug(1) << "Compiling wasm function " << fn_name << "\n";
@@ -2306,8 +2312,6 @@ WasmModuleContents::WasmModuleContents(
 
     // Compile halide into wasm bytecode.
     std::vector<char> final_wasm = compile_to_wasm(halide_module, fn_name);
-
-    store = wabt::interp::Store(calc_features(halide_module.target()));
 
     // Create a wabt Module for it.
     wabt::MemoryStream log_stream;
