@@ -1348,6 +1348,18 @@ typedef enum halide_target_feature_t {
     halide_target_feature_armv81a,                ///< Enable ARMv8.1-a instructions
     halide_target_feature_sanitizer_coverage,     ///< Enable hooks for SanitizerCoverage support.
     halide_target_feature_profile_by_timer,       ///< Alternative to halide_target_feature_profile using timer interrupt for systems without threads or applicartions that need to avoid them.
+    halide_target_feature_tune_k8,                ///< Tune specifically for the AMD K8 CPU.
+    halide_target_feature_tune_k8_sse3,           ///< Tune specifically for the AMD K8 w/SSE3 CPU.
+    halide_target_feature_tune_amdfam10,          ///< Tune specifically for the AMD FAM10 CPU.
+    halide_target_feature_tune_btver1,            ///< Tune specifically for the AMD BtVer1 CPU.
+    halide_target_feature_tune_bdver1,            ///< Tune specifically for the AMD BdVer1 CPU.
+    halide_target_feature_tune_bdver2,            ///< Tune specifically for the AMD BdVer2 CPU.
+    halide_target_feature_tune_bdver3,            ///< Tune specifically for the AMD BdVer3 CPU.
+    halide_target_feature_tune_bdver4,            ///< Tune specifically for the AMD BdVer4 CPU.
+    halide_target_feature_tune_btver2,            ///< Tune specifically for the AMD BtVer2 CPU.
+    halide_target_feature_tune_znver1,            ///< Tune specifically for the AMD ZnVer1 CPU.
+    halide_target_feature_tune_znver2,            ///< Tune specifically for the AMD ZnVer2 CPU.
+    halide_target_feature_tune_znver3,            ///< Tune specifically for the AMD ZnVer3 CPU.
     halide_target_feature_end                     ///< A sentinel. Every target is considered to have this feature, and setting this feature does nothing.
 } halide_target_feature_t;
 

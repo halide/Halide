@@ -133,6 +133,18 @@ struct Target {
         ARMv81a = halide_target_feature_armv81a,
         SanitizerCoverage = halide_target_feature_sanitizer_coverage,
         ProfileByTimer = halide_target_feature_profile_by_timer,
+        TuneK8 = halide_target_feature_tune_k8,
+        TuneK8_SSE3 = halide_target_feature_tune_k8_sse3,
+        TuneAMDFam10 = halide_target_feature_tune_amdfam10,
+        TuneBtVer1 = halide_target_feature_tune_btver1,
+        TuneBdVer1 = halide_target_feature_tune_bdver1,
+        TuneBdVer2 = halide_target_feature_tune_bdver2,
+        TuneBdVer3 = halide_target_feature_tune_bdver3,
+        TuneBdVer4 = halide_target_feature_tune_bdver4,
+        TuneBtVer2 = halide_target_feature_tune_btver2,
+        TuneZnVer1 = halide_target_feature_tune_znver1,
+        TuneZnVer2 = halide_target_feature_tune_znver2,
+        TuneZnVer3 = halide_target_feature_tune_znver3,
         FeatureEnd = halide_target_feature_end
     };
     Target() = default;

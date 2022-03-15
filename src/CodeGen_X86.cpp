@@ -686,6 +686,34 @@ void CodeGen_X86::visit(const Store *op) {
 }
 
 string CodeGen_X86::mcpu() const {
+    // First, check if any explicit request for tuning exists.
+    if (target.has_feature(Target::TuneK8)) {
+        return "k8";
+    } else if (target.has_feature(Target::TuneK8_SSE3)) {
+        return "k8-sse3";
+    } else if (target.has_feature(Target::TuneAMDFam10)) {
+        return "amdfam10";
+    } else if (target.has_feature(Target::TuneBtVer1)) {
+        return "btver1";
+    } else if (target.has_feature(Target::TuneBdVer1)) {
+        return "bdver1";
+    } else if (target.has_feature(Target::TuneBdVer2)) {
+        return "bdver2";
+    } else if (target.has_feature(Target::TuneBdVer3)) {
+        return "bdver3";
+    } else if (target.has_feature(Target::TuneBdVer4)) {
+        return "bdver4";
+    } else if (target.has_feature(Target::TuneBtVer2)) {
+        return "btver2";
+    } else if (target.has_feature(Target::TuneZnVer1)) {
+        return "znver1";
+    } else if (target.has_feature(Target::TuneZnVer2)) {
+        return "znver2";
+    } else if (target.has_feature(Target::TuneZnVer3)) {
+        return "znver3";
+    }
+
+    // And only after that, perform an ad-hoc guess for the tune given features.
     if (target.has_feature(Target::AVX512_SapphireRapids)) {
         return "sapphirerapids";
     } else if (target.has_feature(Target::AVX512_Cannonlake)) {

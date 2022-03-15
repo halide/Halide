@@ -386,6 +386,18 @@ const std::map<std::string, Target::Feature> feature_name_map = {
     {"armv81a", Target::ARMv81a},
     {"sanitizer_coverage", Target::SanitizerCoverage},
     {"profile_by_timer", Target::ProfileByTimer},
+    {"tune_k8", Target::TuneK8},
+    {"tune_k8_sse3", Target::TuneK8_SSE3},
+    {"tune_amdfam10", Target::TuneAMDFam10},
+    {"tune_btver1", Target::TuneBtVer1},
+    {"tune_bdver1", Target::TuneBdVer1},
+    {"tune_bdver2", Target::TuneBdVer2},
+    {"tune_bdver3", Target::TuneBdVer3},
+    {"tune_bdver4", Target::TuneBdVer4},
+    {"tune_btver2", Target::TuneBtVer2},
+    {"tune_znver1", Target::TuneZnVer1},
+    {"tune_znver2", Target::TuneZnVer2},
+    {"tune_znver3", Target::TuneZnVer3},
     // NOTE: When adding features to this map, be sure to update PyEnums.cpp as well.
 };
 
@@ -454,7 +466,7 @@ bool merge_string(Target &t, const std::string &target) {
     }
     tokens.push_back(rest);
 
-    bool os_specified = false, arch_specified = false, bits_specified = false, features_specified = false;
+    bool os_specified = false, arch_specified = false, bits_specified = false, tune_specified = false, features_specified = false;
     bool is_host = false;
 
     for (size_t i = 0; i < tokens.size(); i++) {
@@ -485,6 +497,13 @@ bool merge_string(Target &t, const std::string &target) {
             }
             os_specified = true;
         } else if (lookup_feature(tok, feature)) {
+            if (tok.substr(0, std::strlen("tune_")) == "tune_") {
+                if (tune_specified) {
+                    // Only a single tune makes sense.
+                    return false;
+                }
+                tune_specified = true;
+            }
             t.set_feature(feature);
             features_specified = true;
         } else if (tok == "trace_all") {
@@ -980,7 +999,7 @@ bool Target::get_runtime_compatible_target(const Target &other, Target &result) 
     // clang-format on
 
     // clang-format off
-    const std::array<Feature, 14> intersection_features = {{
+    const std::array<Feature, 15> intersection_features = {{
         ARMv7s,
         ARMv81a,
         AVX,

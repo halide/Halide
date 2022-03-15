@@ -156,6 +156,18 @@ void define_enums(py::module &m) {
         .value("ARMv81a", Target::Feature::ARMv81a)
         .value("SanitizerCoverage", Target::Feature::SanitizerCoverage)
         .value("ProfileByTimer", Target::Feature::ProfileByTimer)
+        .value("TuneK8", Target::Feature::TuneK8)
+        .value("TuneK8_SSE3", Target::Feature::TuneK8_SSE3)
+        .value("TuneAMDFam10", Target::Feature::TuneAMDFam10)
+        .value("TuneBtVer1", Target::Feature::TuneBtVer1)
+        .value("TuneBdVer1", Target::Feature::TuneBdVer1)
+        .value("TuneBdVer2", Target::Feature::TuneBdVer2)
+        .value("TuneBdVer3", Target::Feature::TuneBdVer3)
+        .value("TuneBdVer4", Target::Feature::TuneBdVer4)
+        .value("TuneBtVer2", Target::Feature::TuneBtVer2)
+        .value("TuneZnVer1", Target::Feature::TuneZnVer1)
+        .value("TuneZnVer2", Target::Feature::TuneZnVer2)
+        .value("TuneZnVer3", Target::Feature::TuneZnVer3)
         .value("FeatureEnd", Target::Feature::FeatureEnd);
 
     py::enum_<halide_type_code_t>(m, "TypeCode")
