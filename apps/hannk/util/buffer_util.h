@@ -3,6 +3,7 @@
 
 #include <iostream>
 #include <random>
+#include <type_traits>
 
 #include "HalideBuffer.h"
 #include "HalideRuntime.h"
@@ -191,11 +192,13 @@ struct FillWithRandom {
 
 private:
     inline static void fill_with_random_impl(HalideBuffer<T> &b, std::mt19937 &rng) {
-        std::uniform_int_distribution<T> dis(std::numeric_limits<T>::min(),
-                                             std::numeric_limits<T>::max());
-        b.for_each_value([&rng, &dis](T &value) {
-            value = dis(rng);
-        });
+        // std::uniform_int_distribution<T> is undefined behaviour when T is not
+        // one of [short, int, long, long long], or their respective unsigned variants.
+        // (https://en.cppreference.com/w/cpp/numeric/random/uniform_int_distribution)
+        typedef typename std::conditional<sizeof(T) >= sizeof(int16_t), T, std::int16_t>::type rand_type;
+        std::uniform_int_distribution<rand_type> dis(std::numeric_limits<T>::min(),
+                                                     std::numeric_limits<T>::max());
+        b.for_each_value([&rng, &dis](T &value) { value = dis(rng); });
     }
 };
 
