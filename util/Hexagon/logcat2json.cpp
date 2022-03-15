@@ -605,11 +605,18 @@ int main(int argc, const char **argv) {
   };
   auto emit = [&](const Profile &profile) -> void {
     if (args.count("output")) {
+      static std::size_t n_emitted = 0;
       std::stringstream filename;
+      std::stringstream time_format;
+
       const auto now = std::chrono::system_clock::to_time_t(
           std::chrono::system_clock::now());
+
+      time_format << "-%FT%T%z-" << (n_emitted++);
+
       filename << args["output"].as<std::string>()
-               << std::put_time(std::localtime(&now), "-%FT%T%z") << ".json";
+               << std::put_time(std::localtime(&now), time_format.str().c_str()) << ".json";
+
       std::ofstream output(filename.str());
       output << json(ProfilePrinter{profile});
     } else {

@@ -401,7 +401,7 @@ void print_report() {
       for (auto i = 0; i < height; ++i) {
         output[i] = '>';
       }
-      sprintf(output + height, "%s %u %llu %lu", loop.label, loop.thread_id,
+      sprintf(output + height, "%s %u %llu %lu %llu", loop.label, loop.thread_id,
               loop.accumulated_microseconds(), loop.times_called(), loop.overhead_microseconds());
       println("%s", output);
     });
