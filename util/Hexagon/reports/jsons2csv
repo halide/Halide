@@ -1,0 +1,61 @@
+#!/usr/bin/python
+
+import sys
+from jsonpath import JSONPath
+import json
+import argparse
+
+files = []
+x_expr = None
+y_expr = None
+
+parser = argparse.ArgumentParser(
+        description='Extract columnated data from a collection of Hexagon profiling JSON files using XPATH expressions.'
+        )
+parser.add_argument('-x', '--independent_var'
+        , help='XPATH expression for the independent variable'
+        , metavar="XPATH"
+        , type=str , required=True)
+parser.add_argument('-y', '--dependent_var'
+        , help='XPATH expression for the dependent variable'
+        , metavar="XPATH"
+        , type=str , required=True)
+parser.add_argument('files'
+        , help='Files from which to extract data'
+        , type=str 
+        , nargs='+')
+args = parser.parse_args()
+
+for opt, arg in opts:
+    if opt == "-x":
+        x_expr = arg
+    elif opt == "-y":
+        y_expr = arg
+    elif opt == "--files":
+        files = arg.split(",")
+
+if x_expr is None or y_expr is None or files == []:
+    print(f'usage: {sys.argv[0]} -x <INDEPENDENT_VAR_EXPR> -y <DEPENDENT_VAR_EXPR> --files <PATH>[,PATH]*')
+    exit(2)
+
+x_var = []
+y_var = []
+
+for file in files:
+    data = json.load(open(file, "r"))
+    x_data = JSONPath(x_expr).parse(data)
+    y_data = JSONPath(y_expr).parse(data)
+    if x_data == []:
+        print(f'{file} does not contain "{x_expr}"');
+        exit(2)
+    if y_data == []:
+        print(f'{file} does not contain "{y_expr}"');
+        exit(2)
+    x_var.append(sum(x_data))
+    y_var.append(sum(y_data))
+
+points = list(zip(x_var, y_var))
+points.sort()
+
+for x,y in points:
+    print(f'{x},{y}')
