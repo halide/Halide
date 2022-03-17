@@ -8,38 +8,47 @@ namespace Runtime {
 namespace Internal {
 
 // Dynamically resizable array for block storage (eg plain old data)
-// -- No usage of constructors/destructors for value type (T)
+// -- No usage of constructors/destructors for value type 
+// -- Assumes all elements stored are uniformly the same fixed size
+// -- Allocations are done in blocks of a fixed size
 // -- Implementation uses memcpy/memmove for copying
-// -- Customizable allocator ... default uses HalideSystemAllocator
-template<typename T>
+// -- Customizable allocator ... default uses NativeSystemAllocator
 class BlockStorage {
 public:
-    static const size_t min_capacity = 8;  // smallish
+    static const size_t default_capacity = 32;  // smallish
 
-    BlockStorage(const SystemMemoryAllocatorFns &sma = default_allocator());
-    BlockStorage(const BlockStorage<T> &other);
-    BlockStorage(void *user_context, const T *array, size_t array_size, const SystemMemoryAllocatorFns &sma = default_allocator());
-    BlockStorage(void *user_context, size_t capacity, const SystemMemoryAllocatorFns &sma = default_allocator());
+    // Configurable parameters
+    struct Config {
+        uint32_t entry_size = 1;  // bytes per entry
+        uint32_t block_size = 32; // bytes per each allocation block
+        uint32_t minimum_capacity = default_capacity;
+    };
+
+    BlockStorage(void *user_context, const Config& cfg, const SystemMemoryAllocatorFns &sma = default_allocator());
+    BlockStorage(const BlockStorage &other);
     ~BlockStorage();
 
-    void initialize(void *user_context, const SystemMemoryAllocatorFns &sma = default_allocator());
+    void initialize(void *user_context, const Config& cfg, const SystemMemoryAllocatorFns &sma = default_allocator());
 
     BlockStorage &operator=(const BlockStorage &other);
     bool operator==(const BlockStorage &other) const;
     bool operator!=(const BlockStorage &other) const;
 
     void reserve(void *user_context, size_t capacity, bool free_existing = false);
-    void resize(void *user_context, size_t size, bool realloc = true);
+    void resize(void *user_context, size_t entry_count, bool realloc = true);
 
-    void insert(void *user_context, size_t index, const T &entry);
+    void assign(void *user_context, size_t index, const void* entry_ptr);
+    void insert(void *user_context, size_t index, const void* entry_ptr);
+    void prepend(void *user_context, const void *entry_ptr);
+    void append(void *user_context, const void *entry_ptr);
     void remove(void *user_context, size_t index);
-    void prepend(void *user_context, const T &entry);
-    void append(void *user_context, const T &entry);
 
-    void assign(void *user_context, const T *array, size_t array_size);
-    void insert(void *user_context, size_t index, const T *array, size_t array_size);
-    void prepend(void *user_context, const T *array, size_t array_size);
-    void append(void *user_context, const T *array, size_t array_size);
+    void fill(void *user_context, const void *array, size_t array_size);
+    void insert(void *user_context, size_t index, const void *array, size_t array_size);
+    void replace(void* user_context, size_t index, const void *array, size_t array_size);
+    void prepend(void *user_context, const void *array, size_t array_size);
+    void append(void *user_context, const void *array, size_t array_size);
+    void remove(void *user_context, size_t index, size_t entry_count);
 
     void pop_front(void *user_context);
     void pop_back(void *user_context);
@@ -48,68 +57,59 @@ public:
     void destroy(void *user_context);
 
     bool empty() const;
+    size_t stride() const;
     size_t size() const;
 
-    T &operator[](size_t index);
-    const T &operator[](size_t index) const;
+    void* operator[](size_t index); ///< logical entry index (returns ptr = data() + (index * stride())
+    const void* operator[](size_t index) const;
 
-    T *data();
-    T &front();
-    T &back();
+    void* data();
+    void* front();
+    void* back();
 
-    const T *data() const;
-    const T &front() const;
-    const T &back() const;
+    const void* data() const;
+    const void* front() const;
+    const void* back() const;
+
+    const Config &current_config() const;
+    static const Config &default_config();
 
     const SystemMemoryAllocatorFns &current_allocator() const;
     static const SystemMemoryAllocatorFns &default_allocator();
 
 private:
-    void allocate(void *user_context, size_t new_capacity);
+    void allocate(void *user_context, size_t capacity);
 
-    T *ptr = nullptr;
+    void* ptr = nullptr;
     size_t count = 0;
     size_t capacity = 0;
+    Config config;
     SystemMemoryAllocatorFns allocator;
 };
 
-template<typename T>
-BlockStorage<T>::BlockStorage(const SystemMemoryAllocatorFns &sma)
-    : allocator(sma) {
-    halide_abort_if_false(nullptr, allocator.allocate != nullptr);
-    halide_abort_if_false(nullptr, allocator.deallocate != nullptr);
-}
-
-template<typename T>
-BlockStorage<T>::BlockStorage(const BlockStorage &other)
-    : BlockStorage(other.allocator) {
-    ptr = (other.count ? (T *)allocator.allocate(nullptr, other.count * sizeof(T)) : nullptr);
-    count = other.count;
-    capacity = other.count;
-    if (count != 0) {
-        memcpy(this->ptr, other.ptr, count * sizeof(T));
+BlockStorage::BlockStorage(void *user_context, const Config& cfg, const SystemMemoryAllocatorFns &sma)
+    : ptr(nullptr), count(0), capacity(0), config(cfg), allocator(sma) {
+    halide_abort_if_false(user_context, config.entry_size != 0);
+    halide_abort_if_false(user_context, allocator.allocate != nullptr);
+    halide_abort_if_false(user_context, allocator.deallocate != nullptr);
+    if(config.minimum_capacity) {
+        reserve(user_context, config.minimum_capacity);
     }
 }
 
-template<typename T>
-BlockStorage<T>::BlockStorage(void *user_context, const T *array, size_t array_size, const SystemMemoryAllocatorFns &sma)
-    : BlockStorage(sma) {
-    assign(user_context, array, array_size);
+BlockStorage::BlockStorage(const BlockStorage &other)
+    : BlockStorage(nullptr, other.config, other.allocator) {
+    if(other.count) {
+        resize(nullptr, other.count);
+        memcpy(this->ptr, other.ptr, count * config.entry_size);
+    }
 }
 
-template<typename T>
-BlockStorage<T>::BlockStorage(void *user_context, size_t capacity, const SystemMemoryAllocatorFns &sma)
-    : BlockStorage(sma) {
-    reserve(user_context, capacity);
-}
-
-template<typename T>
-BlockStorage<T>::~BlockStorage() {
+BlockStorage::~BlockStorage() {
     destroy(nullptr);
 }
 
-template<typename T>
-void BlockStorage<T>::destroy(void *user_context) {
+void BlockStorage::destroy(void *user_context) {
     halide_abort_if_false(user_context, allocator.deallocate != nullptr);
     if (ptr != nullptr) {
         allocator.deallocate(user_context, ptr);
@@ -118,75 +118,72 @@ void BlockStorage<T>::destroy(void *user_context) {
     ptr = nullptr;
 }
 
-template<typename T>
-void BlockStorage<T>::initialize(void *user_context, const SystemMemoryAllocatorFns &sma) {
+void BlockStorage::initialize(void *user_context, const Config& cfg, const SystemMemoryAllocatorFns &sma) {
     allocator = sma;
+    config = cfg;
     capacity = count = 0;
     ptr = nullptr;
+    if(config.minimum_capacity) {
+        reserve(user_context, config.minimum_capacity);
+    }
 }
 
-template<typename T>
-BlockStorage<T> &BlockStorage<T>::operator=(const BlockStorage &other) {
+BlockStorage &BlockStorage::operator=(const BlockStorage &other) {
     if (&other != this) {
+        config = other.config;
         resize(nullptr, other.count);
         if (count != 0 && other.ptr != nullptr) {
-            memcpy(ptr, other.ptr, count * sizeof(T));
+            memcpy(ptr, other.ptr, count * config.entry_size);
         }
     }
     return *this;
 }
 
-template<typename T>
-bool BlockStorage<T>::operator==(const BlockStorage &other) const {
+bool BlockStorage::operator==(const BlockStorage &other) const {
+    if (config.entry_size != other.config.entry_size) { return false; }
     if (count != other.count) { return false; }
-    return memcmp(this->ptr, other.ptr, this->size()) == 0;
+    return memcmp(this->ptr, other.ptr, this->size() * config.entry_size) == 0;
 }
 
-template<typename T>
-bool BlockStorage<T>::operator!=(const BlockStorage &other) const {
+bool BlockStorage::operator!=(const BlockStorage &other) const {
     return !(*this == other);
 }
 
-template<typename T>
-void BlockStorage<T>::assign(void *user_context, const T *array, size_t array_size) {
+void BlockStorage::fill(void *user_context, const void *array, size_t array_size) {
     if (array_size != 0) {
         resize(user_context, array_size);
-        memcpy(this->ptr, array, array_size * sizeof(T));
+        memcpy(this->ptr, array, array_size * config.entry_size);
         count = array_size;
     }
 }
 
-template<typename T>
-void BlockStorage<T>::prepend(void *user_context, const T &entry) {
-    insert(user_context, 0, entry);
+void BlockStorage::assign(void *user_context, size_t index, const void *entry_ptr){
+    replace(user_context, index, entry_ptr, 1);
 }
 
-template<typename T>
-void BlockStorage<T>::append(void *user_context, const T &value) {
-    const size_t last_index = size();
-    resize(user_context, last_index + 1);
-    ptr[last_index] = value;
+void BlockStorage::prepend(void *user_context, const void *entry_ptr) {
+    insert(user_context, 0, entry_ptr, 1);
 }
 
-template<typename T>
-void BlockStorage<T>::pop_front(void *user_context) {
+void BlockStorage::append(void *user_context, const void *entry_ptr) {
+    append(user_context, entry_ptr, 1);
+}
+
+void BlockStorage::pop_front(void *user_context) {
     halide_debug_assert(user_context, count > 0);
     remove(user_context, 0);
 }
 
-template<typename T>
-void BlockStorage<T>::pop_back(void *user_context) {
+void BlockStorage::pop_back(void *user_context) {
     halide_debug_assert(user_context, count > 0);
     resize(user_context, size() - 1);
 }
 
-template<typename T>
-void BlockStorage<T>::clear(void *user_context) {
+void BlockStorage::clear(void *user_context) {
     resize(user_context, 0);
 }
 
-template<typename T>
-void BlockStorage<T>::reserve(void *user_context, size_t new_capacity, bool free_existing) {
+void BlockStorage::reserve(void *user_context, size_t new_capacity, bool free_existing) {
     new_capacity = max(new_capacity, count);
 
     if ((new_capacity < capacity) && !free_existing) {
@@ -196,29 +193,38 @@ void BlockStorage<T>::reserve(void *user_context, size_t new_capacity, bool free
     allocate(user_context, new_capacity);
 }
 
-template<typename T>
-void BlockStorage<T>::resize(void *user_context, size_t size, bool realloc) {
-    size_t new_capacity = capacity;
-    if (size > capacity) {
-        // request upto 1.5x existing capacity (or at least min_capacity)
-        new_capacity = max(size, max(capacity * 3 / 2, min_capacity));
+void BlockStorage::resize(void *user_context, size_t entry_count, bool realloc) {
+    size_t current_size = capacity;
+    size_t requested_size = entry_count;
+    size_t minimum_size = config.minimum_capacity;
+    size_t actual_size = current_size;
+
+    debug(0) << "BlockStorage: Resize (" <<
+            "requested_size=" << (int32_t)requested_size << " " <<
+            "current_size=" << (int32_t)current_size << " " <<
+            "minimum_size=" << (int32_t)minimum_size << " " <<
+            "entry_size=" << (int32_t)config.entry_size << " " <<
+            "realloc=" << (realloc ? "true" : "false") << ")...\n";
+
+    count = requested_size;
+
+    // increase capacity upto 1.5x existing (or at least min_capacity)
+    if (requested_size > current_size) {
+        actual_size = max(requested_size, max(current_size * 3 / 2, minimum_size));
     } else if (!realloc) {
-        count = size;
         return;
     }
 
-    allocate(user_context, new_capacity);
-    count = size;
+    allocate(user_context, actual_size);
 }
 
-template<typename T>
-void BlockStorage<T>::shrink_to_fit(void *user_context) {
+void BlockStorage::shrink_to_fit(void *user_context) {
     if (capacity > count) {
-        T *new_ptr = nullptr;
+        void *new_ptr = nullptr;
         if (count > 0) {
-            size_t bytes = count * sizeof(T);
-            new_ptr = allocator.allocate(user_context, bytes);
-            memcpy(new_ptr, ptr, bytes);
+            size_t actual_bytes = count * config.entry_size;
+            new_ptr = allocator.allocate(user_context, actual_bytes);
+            memcpy(new_ptr, ptr, actual_bytes);
         }
         allocator.deallocate(user_context, ptr);
         capacity = count;
@@ -226,116 +232,152 @@ void BlockStorage<T>::shrink_to_fit(void *user_context) {
     }
 }
 
-template<typename T>
-void BlockStorage<T>::insert(void *user_context, size_t index, const T &value) {
-    halide_debug_assert(user_context, index <= count);
-    const size_t last_index = size();
-    resize(user_context, last_index + 1);
-    if (index < last_index) {
-        size_t bytes = (last_index - index) * sizeof(T);
-        memmove(ptr + (index + 1), ptr + index, bytes);
-    }
-    ptr[index] = value;
+void BlockStorage::insert(void *user_context, size_t index, const void *entry_ptr) {
+    insert(user_context, index, entry_ptr, 1);
 }
 
-template<typename T>
-void BlockStorage<T>::remove(void *user_context, size_t index) {
+void BlockStorage::remove(void *user_context, size_t index) {
+    remove(user_context, index, 1);
+}
+
+void BlockStorage::remove(void *user_context, size_t index, size_t entry_count) {
     halide_debug_assert(user_context, index < count);
     const size_t last_index = size();
-    if (index < last_index - 1) {
-        size_t bytes = (last_index - index - 1) * sizeof(T);
-        memmove(ptr + index, ptr + (index + 1), bytes);
+    if (index < (last_index - entry_count)) {
+        size_t dst_offset = index * config.entry_size;
+        size_t src_offset = (index + entry_count) * config.entry_size;
+        size_t bytes = (last_index - index - entry_count) * config.entry_size;
+
+        debug(0) << "BlockStorage: Remove (" <<
+                "index=" << (int32_t)index << " " <<
+                "entry_count=" << (int32_t)entry_count << " " <<
+                "entry_size=" << (int32_t)config.entry_size << " " <<
+                "last_index=" << (int32_t)last_index << " " <<
+                "src_offset=" << (int32_t)src_offset << " " <<
+                "dst_offset=" << (int32_t)dst_offset << " " <<
+                "bytes=" << (int32_t)bytes << ")...\n";
+
+        void* dst_ptr = offset_address(ptr, dst_offset);
+        void* src_ptr = offset_address(ptr, src_offset);
+        memmove(dst_ptr, src_ptr, bytes);
     }
-    resize(user_context, last_index - 1);
+    resize(user_context, last_index - entry_count);
 }
 
-template<typename T>
-void BlockStorage<T>::insert(void *user_context, size_t index, const T *array, size_t array_size) {
+void BlockStorage::replace(void* user_context, size_t index, const void *array, size_t array_size){
+    halide_debug_assert(user_context, index < count);
+    size_t offset = index * config.entry_size;
+    size_t remaining = count - index;
+
+    debug(0) << "BlockStorage: Replace (" <<
+            "index=" << (int32_t)index << " " <<
+            "array_size=" << (int32_t)array_size << " " <<
+            "entry_size=" << (int32_t)config.entry_size << " " <<
+            "offset=" << (int32_t)offset << " " <<
+            "remaining=" << (int32_t)remaining << " " <<
+            "capacity=" << (int32_t)capacity << ")...\n";
+            
+    halide_debug_assert(user_context, remaining > 0);
+    size_t copy_count = min(remaining, array_size);
+    void* dst_ptr = offset_address(ptr, offset);
+    memcpy(dst_ptr, array, copy_count * config.entry_size);
+    count = max(count, index + copy_count);
+}
+
+void BlockStorage::insert(void *user_context, size_t index, const void *array, size_t array_size) {
     halide_debug_assert(user_context, index <= count);
     const size_t last_index = size();
     resize(user_context, last_index + array_size);
     if (index < last_index) {
-        size_t bytes = (last_index - index) * sizeof(T);
-        memmove(ptr + (index + array_size), ptr + index, bytes);
+        size_t src_offset = index * config.entry_size;
+        size_t dst_offset = (index + array_size) * config.entry_size;
+        size_t bytes = (last_index - index) * config.entry_size;
+        void* src_ptr = offset_address(ptr, src_offset);
+        void* dst_ptr = offset_address(ptr, dst_offset);
+        memmove(dst_ptr, src_ptr, bytes);
     }
-    memcpy(ptr + index, array, array_size * sizeof(T));
+    replace(user_context, index, array, array_size);
 }
 
-template<typename T>
-void BlockStorage<T>::prepend(void *user_context, const T *array, size_t array_size) {
+void BlockStorage::prepend(void *user_context, const void *array, size_t array_size) {
     insert(user_context, 0, array, array_size);
 }
 
-template<typename T>
-void BlockStorage<T>::append(void *user_context, const T *array, size_t array_size) {
+void BlockStorage::append(void *user_context, const void *array, size_t array_size) {
     const size_t last_index = size();
-    resize(user_context, last_index + array_size);
-    memcpy(ptr + last_index, array, array_size * sizeof(T));
+    insert(user_context, last_index, array, array_size);
 }
 
-template<typename T>
-bool BlockStorage<T>::empty() const {
+bool BlockStorage::empty() const {
     return count == 0;
 }
 
-template<typename T>
-size_t BlockStorage<T>::size() const {
+size_t BlockStorage::size() const {
     return count;
 }
 
-template<typename T>
-T &BlockStorage<T>::operator[](size_t index) {
-    halide_debug_assert(nullptr, index < capacity);
-    return ptr[index];
+size_t BlockStorage::stride() const {
+    return config.entry_size;
 }
 
-template<typename T>
-const T &BlockStorage<T>::operator[](size_t index) const {
+void* BlockStorage::operator[](size_t index) {
     halide_debug_assert(nullptr, index < capacity);
-    return ptr[index];
+    return offset_address(ptr, index * config.entry_size);
 }
 
-template<typename T>
-T *BlockStorage<T>::data() {
+const void *BlockStorage::operator[](size_t index) const {
+    halide_debug_assert(nullptr, index < capacity);
+    return offset_address(ptr, index * config.entry_size);
+}
+
+void *BlockStorage::data() {
     return ptr;
 }
 
-template<typename T>
-T &BlockStorage<T>::front() {
+void* BlockStorage::front() {
     halide_debug_assert(nullptr, count > 0);
-    return ptr[0];
-}
-
-template<typename T>
-T &BlockStorage<T>::back() {
-    halide_debug_assert(nullptr, count > 0);
-    return ptr[count - 1];
-}
-
-template<typename T>
-const T *BlockStorage<T>::data() const {
     return ptr;
 }
 
-template<typename T>
-const T &BlockStorage<T>::front() const {
+void* BlockStorage::back() {
     halide_debug_assert(nullptr, count > 0);
-    return ptr[0];
+    size_t index = count - 1;
+    return offset_address(ptr, index * config.entry_size);
 }
 
-template<typename T>
-const T &BlockStorage<T>::back() const {
-    halide_debug_assert(nullptr, count > 0);
-    return ptr[count - 1];
+const void *BlockStorage::data() const {
+    return ptr;
 }
 
-template<typename T>
-void BlockStorage<T>::allocate(void *user_context, size_t new_capacity) {
+const void *BlockStorage::front() const {
+    halide_debug_assert(nullptr, count > 0);
+    return ptr;
+}
+
+const void *BlockStorage::back() const {
+    halide_debug_assert(nullptr, count > 0);
+    size_t index = count - 1;
+    return offset_address(ptr, index * config.entry_size);
+}
+
+void BlockStorage::allocate(void *user_context, size_t new_capacity) {
     if (new_capacity != capacity) {
         halide_abort_if_false(user_context, allocator.allocate != nullptr);
-        T *new_ptr = new_capacity ? (T *)allocator.allocate(user_context, new_capacity * sizeof(T)) : nullptr;
+        size_t requested_bytes = new_capacity * config.entry_size;
+        size_t block_size = max(config.block_size, config.entry_size);
+        size_t block_count = (requested_bytes / block_size);
+        block_count += (requested_bytes % block_size) ? 1 : 0;
+        size_t alloc_size = block_count * block_size;
+
+        debug(0) << "BlockStorage: Allocating (" <<
+                "requested_bytes=" << (int32_t)requested_bytes << " " <<
+                "block_size=" << (int32_t)block_size << " " <<
+                "block_count=" << (int32_t)block_count << " " <<
+                "alloc_size=" << (int32_t)alloc_size << ") ...\n";
+
+        void *new_ptr = alloc_size ? allocator.allocate(user_context, alloc_size) : nullptr;
         if (count != 0 && ptr != nullptr && new_ptr != nullptr) {
-            memcpy((void *)new_ptr, (void *)ptr, count * sizeof(T));
+            memcpy(new_ptr, ptr, count * config.entry_size);
         }
         if (ptr != nullptr) {
             halide_abort_if_false(user_context, allocator.deallocate != nullptr);
@@ -346,18 +388,27 @@ void BlockStorage<T>::allocate(void *user_context, size_t new_capacity) {
     }
 }
 
-template<typename T>
 const SystemMemoryAllocatorFns &
-BlockStorage<T>::current_allocator() const {
+BlockStorage::current_allocator() const {
     return this->allocator;
 }
 
-template<typename T>
+const BlockStorage::Config &
+BlockStorage::default_config() {
+    static Config default_cfg;
+    return default_cfg;
+}
+
+const BlockStorage::Config &
+BlockStorage::current_config() const {
+    return this->config;
+}
+
 const SystemMemoryAllocatorFns &
-BlockStorage<T>::default_allocator() {
-    static SystemMemoryAllocatorFns halide_allocator = {
+BlockStorage::default_allocator() {
+    static SystemMemoryAllocatorFns native_allocator = {
         native_system_malloc, native_system_free};
-    return halide_allocator;
+    return native_allocator;
 }
 
 // --

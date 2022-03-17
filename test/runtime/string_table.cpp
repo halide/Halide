@@ -13,7 +13,8 @@ int main(int argc, char **argv) {
     {
         size_t data_size = 4;
         const char *data[] = {
-            "one", "two", "three", "four"};
+            "one", "two", "three", "four"
+        };
 
         StringTable st1;
         halide_abort_if_false(user_context, st1.size() == 0);

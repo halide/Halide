@@ -1,7 +1,7 @@
 #ifndef HALIDE_RUNTIME_STRING_TABLE_H
 #define HALIDE_RUNTIME_STRING_TABLE_H
 
-#include "block_storage.h"
+#include "pointer_table.h"
 #include "linked_list.h"
 #include "string_storage.h"
 
@@ -23,6 +23,7 @@ public:
     ~StringTable();
 
     void reserve(void *user_context, size_t capacity);
+    void destroy(void *user_context);
     void clear(void *user_context);
 
     // fills the contents of the table (copies strings from given array)
@@ -37,92 +38,113 @@ public:
     // index-based access operator
     const char *operator[](size_t index) const;
 
+    // returns the raw string table pointer
+    const char** data() const;
+
     // scans the table for existance of the given string within any entry (linear scan w/string compare!)
     bool contains(const char *str) const;
 
-    // raw ptr access
-    const char **data() const {
-        return const_cast<const char **>(pointers.data());
-    }
-
     size_t size() const {
-        return pointers.size();
+        return contents.size();
     }
 
 private:
-    LinkedList<StringStorage> contents;   //< owns string data
-    BlockStorage<const char *> pointers;  //< points to contents
+    LinkedList contents;    //< owns string data
+    PointerTable pointers;  //< stores pointers 
 };
 
 // --
 
 StringTable::StringTable(const SystemMemoryAllocatorFns &sma)
-    : contents(sma),
-      pointers(sma) {
+    : contents(nullptr, sizeof(StringStorage), 0, sma),
+      pointers(nullptr, 0, sma) {
     // EMPTY!
 }
 
 StringTable::StringTable(void *user_context, size_t capacity, const SystemMemoryAllocatorFns &sma)
-    : contents(sma),
-      pointers(sma) {
-
-    reserve(user_context, capacity);
+    : contents(user_context, sizeof(StringStorage), capacity, sma),
+      pointers(user_context, capacity, sma) {
+    if(capacity) { reserve(user_context, capacity); }
 }
 
 StringTable::StringTable(void *user_context, const char **array, size_t count, const SystemMemoryAllocatorFns &sma)
-    : contents(sma),
-      pointers(sma) {
+    : contents(user_context, sizeof(StringStorage), count, sma),
+      pointers(user_context, count, sma) {
     fill(user_context, array, count);
 }
 
 StringTable::~StringTable() {
-    clear(nullptr);
+    destroy(nullptr);
 }
 
 void StringTable::reserve(void *user_context, size_t capacity) {
-
     for (size_t n = contents.size(); n < capacity; ++n) {
-        LinkedList<StringStorage>::EntryType *entry = contents.append(user_context);
-        entry->value.initialize(user_context, contents.current_allocator());
+        LinkedList::EntryType *entry_ptr = contents.append(user_context);
+        StringStorage* storage_ptr = static_cast<StringStorage*>(entry_ptr->value);
+        storage_ptr->initialize(user_context, 0, contents.current_allocator());
     }
-    pointers.reserve(user_context, capacity);
+    pointers.resize(user_context, capacity);
 }
 
 void StringTable::clear(void *user_context) {
     for (size_t n = 0; n < contents.size(); ++n) {
-        LinkedList<StringStorage>::EntryType *entry = contents.front();
-        entry->value.clear(user_context);
+        LinkedList::EntryType *entry_ptr = contents.front();
+        StringStorage* storage_ptr = static_cast<StringStorage*>(entry_ptr->value);
+        storage_ptr->clear(user_context);
         contents.pop_front(user_context);
     }
     contents.clear(user_context);
     pointers.clear(user_context);
 }
 
+void StringTable::destroy(void *user_context) {
+    for (size_t n = 0; n < contents.size(); ++n) {
+        LinkedList::EntryType *entry_ptr = contents.front();
+        StringStorage* storage_ptr = static_cast<StringStorage*>(entry_ptr->value);
+        storage_ptr->destroy(user_context);
+        contents.pop_front(user_context);
+    }
+    contents.destroy(user_context);
+    pointers.destroy(user_context);
+}
+
 const char *StringTable::operator[](size_t index) const {
-    return pointers[index];
+    return static_cast<const char*>(pointers[index]);
+#if 0
+    const LinkedList::EntryType *entry_ptr = contents.front();
+    for (size_t n = 0; n < contents.size() && entry_ptr != nullptr; ++n) {
+        if (n == index) {
+            StringStorage* storage_ptr = static_cast<StringStorage*>(entry_ptr->value);
+            return storage_ptr->data();
+        }
+        entry_ptr = entry_ptr->next_ptr;
+    }
+    return nullptr;
+#endif
 }
 
 void StringTable::fill(void *user_context, const char **array, size_t count) {
     reserve(user_context, count);
-    pointers.resize(user_context, count);
-    LinkedList<StringStorage>::EntryType *entry = contents.front();
-    for (size_t n = 0; n < count && n < contents.size() && entry != nullptr; ++n) {
-        entry->value.assign(user_context, array[n]);
-        pointers[n] = entry->value.data();
-        entry = entry->next_ptr;
+    LinkedList::EntryType *entry_ptr = contents.front();
+    for (size_t n = 0; n < count && n < contents.size() && entry_ptr != nullptr; ++n) {
+        StringStorage* storage_ptr = static_cast<StringStorage*>(entry_ptr->value);
+        storage_ptr->assign(user_context, array[n]);
+        pointers.assign(user_context, n, storage_ptr->data());
+        entry_ptr = entry_ptr->next_ptr;
     }
 }
 
 void StringTable::assign(void *user_context, size_t index, const char *str, size_t length) {
     if (length == 0) { length = strlen(str); }
-    LinkedList<StringStorage>::EntryType *entry = contents.front();
-    for (size_t n = 0; n < contents.size() && entry != nullptr; ++n) {
+    LinkedList::EntryType *entry_ptr = contents.front();
+    for (size_t n = 0; n < contents.size() && entry_ptr != nullptr; ++n) {
         if (n == index) {
-            entry->value.assign(user_context, str, length);
-            pointers[n] = entry->value.data();
+            StringStorage* storage_ptr = static_cast<StringStorage*>(entry_ptr->value);
+            storage_ptr->assign(user_context, str, length);
+            pointers.assign(user_context, n, storage_ptr->data());
             break;
         }
-        entry = entry->next_ptr;
+        entry_ptr = entry_ptr->next_ptr;
     }
 }
 
@@ -135,20 +157,20 @@ size_t StringTable::parse(void *user_context, const char *str, const char *delim
     if (entry_count < 1) { return 0; }
 
     reserve(user_context, entry_count);
-    pointers.resize(user_context, entry_count);
 
     // save each entry into the table
     size_t index = 0;
     const char *ptr = str;
-    LinkedList<StringStorage>::EntryType *entry = contents.front();
+    LinkedList::EntryType *entry_ptr = contents.front();
     while (!StringUtils::is_empty(ptr) && (index < entry_count)) {
         size_t ptr_offset = ptr - str;
         const char *next_delim = strstr(ptr, delim);
         size_t token_length = (next_delim == nullptr) ? (total_length - ptr_offset) : (next_delim - ptr);
-        if (token_length > 0 && entry != nullptr) {
-            entry->value.assign(user_context, ptr, token_length);
-            pointers[index] = entry->value.data();
-            entry = entry->next_ptr;
+        if (token_length > 0 && entry_ptr != nullptr) {
+            StringStorage* storage_ptr = static_cast<StringStorage*>(entry_ptr->value);
+            storage_ptr->assign(user_context, ptr, token_length);
+            pointers.assign(user_context, index, storage_ptr->data());
+            entry_ptr = entry_ptr->next_ptr;
             ++index;
         }
         ptr = (next_delim != nullptr) ? (next_delim + delim_length) : nullptr;
@@ -159,14 +181,28 @@ size_t StringTable::parse(void *user_context, const char *str, const char *delim
 bool StringTable::contains(const char *str) const {
     if (StringUtils::is_empty(str)) { return false; }
 
-    const LinkedList<StringStorage>::EntryType *entry = contents.front();
-    for (size_t n = 0; n < contents.size() && entry != nullptr; ++n) {
-        if (entry->value.contains(str)) {
+    const LinkedList::EntryType *entry_ptr = contents.front();
+    for (size_t n = 0; n < contents.size() && entry_ptr != nullptr; ++n) {
+
+        StringStorage* storage_ptr = static_cast<StringStorage*>(entry_ptr->value);
+
+        debug(0) << "StringTable: Contains [" << (int32_t)n << "] (" <<
+            "str=" << str << " " <<
+            "entry=" << storage_ptr->data() << " " 
+            "contains=" << (storage_ptr->contains(str) ? "true" : "false") << ")...\n";
+
+
+        if (storage_ptr->contains(str)) {
             return true;
         }
-        entry = entry->next_ptr;
+        entry_ptr = entry_ptr->next_ptr;
     }
+
     return false;
+}
+
+const char** StringTable::data() const {
+    return reinterpret_cast<const char**>(pointers.data());
 }
 
 // --

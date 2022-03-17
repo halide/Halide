@@ -8,9 +8,9 @@ set(RUNTIME_SOURCE_DIR ${Halide_SOURCE_DIR}/src/runtime)
 set(RUNTIME_TESTS_CPP 
     block_allocator.cpp
     block_storage.cpp
-    linked_list.cpp
     memory_arena.cpp
     string_storage.cpp
+    linked_list.cpp
     string_table.cpp
 )
 

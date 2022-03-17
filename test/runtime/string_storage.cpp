@@ -42,8 +42,12 @@ int main(int argc, char **argv) {
         const char *ts2 = "Test Two!";
         const size_t ts2_length = strlen(ts2);
 
-        StringStorage ss1(user_context, ts1);
-        StringStorage ss2(user_context, ts2);
+        StringStorage ss1;
+        ss1.assign(user_context, ts1, ts1_length);
+
+        StringStorage ss2;
+        ss2.assign(user_context, ts2, ts2_length);
+        
         StringStorage ss3(ss1);
 
         halide_abort_if_false(user_context, ss1.length() == (ts1_length));

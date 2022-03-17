@@ -39,6 +39,7 @@ public:
 
     // Runtime configuration parameters to adjust the behaviour of the block allocator
     struct Config {
+        size_t initial_capacity = 0;
         size_t minimum_block_size = 0;
         size_t maximum_block_size = 0;
         size_t maximum_block_count = 0;
@@ -62,8 +63,7 @@ public:
 
 private:
     // Linked-list for storing the block resources
-    typedef LinkedList<BlockResource> BlockResourceList;
-    typedef BlockResourceList::EntryType BlockEntry;
+    typedef LinkedList::EntryType BlockEntry;
 
     // Initializes a new instance
     void initialize(void *user_context, const Config &config, const MemoryAllocators &allocators);
@@ -102,7 +102,7 @@ private:
     bool is_compatible_block(const BlockResource *block, const MemoryProperties &properties) const;
 
     Config config;
-    BlockResourceList block_list;
+    LinkedList block_list;
     MemoryAllocators allocators;
 };
 
@@ -131,7 +131,11 @@ void BlockAllocator::destroy(void *user_context, BlockAllocator *instance) {
 void BlockAllocator::initialize(void *user_context, const Config &cfg, const MemoryAllocators &ma) {
     config = cfg;
     allocators = ma;
-    block_list.initialize(user_context, BlockResourceList::default_capacity, allocators.system);
+    block_list.initialize(user_context, 
+        sizeof(BlockResource), 
+        config.initial_capacity, 
+        allocators.system
+    );
 }
 
 MemoryRegion *BlockAllocator::reserve(void *user_context, const MemoryRequest &request) {
@@ -143,7 +147,7 @@ MemoryRegion *BlockAllocator::reserve(void *user_context, const MemoryRequest &r
         return nullptr;
     }
 
-    BlockResource *block = &(block_entry->value);
+    BlockResource *block = static_cast<BlockResource*>(block_entry->value);
     halide_abort_if_false(user_context, block != nullptr);
     halide_abort_if_false(user_context, block->allocator != nullptr);
 
@@ -162,7 +166,7 @@ MemoryRegion *BlockAllocator::reserve(void *user_context, const MemoryRequest &r
             return nullptr;
         }
 
-        block = &(block_entry->value);
+        block = static_cast<BlockResource*>(block_entry->value);
         if (block->allocator == nullptr) {
             block->allocator = create_region_allocator(user_context, block);
         }
@@ -181,11 +185,13 @@ void BlockAllocator::reclaim(void *user_context, MemoryRegion *memory_region) {
 
 bool BlockAllocator::collect(void *user_context) {
     bool result = false;
-    BlockEntry *block_entry = block_list.front();
+    BlockEntry *block_entry = block_list.back();
     while (block_entry != nullptr) {
+        BlockEntry *prev_entry = block_entry->prev_ptr;
 
-        const BlockResource *block = &(block_entry->value);
+        const BlockResource *block = static_cast<BlockResource*>(block_entry->value);
         if (block->allocator == nullptr) {
+            block_entry = prev_entry;
             continue;
         }
 
@@ -195,17 +201,17 @@ bool BlockAllocator::collect(void *user_context) {
             result = true;
         }
 
-        block_entry = block_entry->next_ptr;
+        block_entry = prev_entry;
     }
     return result;
 }
 
 void BlockAllocator::destroy(void *user_context) {
-    BlockEntry *block_entry = block_list.front();
+    BlockEntry *block_entry = block_list.back();
     while (block_entry != nullptr) {
-        BlockEntry *prev_entry = block_entry;
+        BlockEntry *prev_entry = block_entry->prev_ptr;
         destroy_block_entry(user_context, block_entry);
-        block_entry = prev_entry->next_ptr;
+        block_entry = prev_entry;
     }
 }
 
@@ -229,7 +235,7 @@ BlockAllocator::find_block_entry(void *user_context, const MemoryProperties &pro
     BlockEntry *block_entry = block_list.front();
     while (block_entry != nullptr) {
 
-        const BlockResource *block = &(block_entry->value);
+        const BlockResource *block = static_cast<BlockResource*>(block_entry->value);
         if (!is_compatible_block(block, properties)) {
             continue;
         }
@@ -266,7 +272,7 @@ BlockAllocator::reserve_block_entry(void *user_context, const MemoryProperties &
     }
 
     if (block_entry) {
-        BlockResource *block = &(block_entry->value);
+        BlockResource *block = static_cast<BlockResource*>(block_entry->value);
         if (block->allocator == nullptr) {
             block->allocator = create_region_allocator(user_context, block);
         }
@@ -319,10 +325,10 @@ BlockAllocator::create_block_entry(void *user_context, const MemoryProperties &p
 
     debug(0) << "BlockAllocator: Creating block entry ("
              << "block_entry=" << (void *)(block_entry) << " "
-             << "block=" << (void *)(&block_entry->value) << " "
+             << "block=" << (void *)(block_entry->value) << " "
              << "allocator=" << (void *)(allocators.block.allocate) << ")...\n";
 
-    BlockResource *block = &(block_entry->value);
+    BlockResource *block = static_cast<BlockResource*>(block_entry->value);
     block->memory.size = size;
     block->memory.properties = properties;
     block->memory.dedicated = dedicated;
@@ -335,10 +341,10 @@ BlockAllocator::create_block_entry(void *user_context, const MemoryProperties &p
 void BlockAllocator::destroy_block_entry(void *user_context, BlockAllocator::BlockEntry *block_entry) {
     debug(0) << "BlockAllocator: Destroying block entry ("
              << "block_entry=" << (void *)(block_entry) << " "
-             << "block=" << (void *)(&block_entry->value) << " "
+             << "block=" << (void *)(block_entry->value) << " "
              << "deallocator=" << (void *)(allocators.block.deallocate) << ")...\n";
 
-    BlockResource *block = &(block_entry->value);
+    BlockResource *block = static_cast<BlockResource*>(block_entry->value);
     if (block->allocator) {
         destroy_region_allocator(user_context, block->allocator);
         block->allocator = nullptr;

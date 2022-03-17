@@ -1,7 +1,7 @@
 #ifndef HALIDE_RUNTIME_REGION_ALLOCATOR_H
 #define HALIDE_RUNTIME_REGION_ALLOCATOR_H
 
-#include "linked_list.h"
+#include "memory_arena.h"
 #include "memory_resources.h"
 
 namespace Halide {
@@ -52,8 +52,6 @@ public:
     BlockResource *block_resource() const;
 
 private:
-    // Arena type for the block regions
-    typedef MemoryArena<BlockRegion> BlockRegionArena;
 
     // Initializes a new instance
     void initialize(void *user_context, BlockResource *block, const MemoryAllocators &ma);
@@ -89,7 +87,7 @@ private:
     bool is_compatible_block_region(const BlockRegion *region, const MemoryProperties &properties) const;
 
     BlockResource *block = nullptr;
-    BlockRegionArena *arena = nullptr;
+    MemoryArena *arena = nullptr;
     MemoryAllocators allocators;
 };
 
@@ -118,7 +116,7 @@ void RegionAllocator::destroy(void *user_context, RegionAllocator *instance) {
 void RegionAllocator::initialize(void *user_context, BlockResource *mb, const MemoryAllocators &ma) {
     block = mb;
     allocators = ma;
-    arena = BlockRegionArena::create(user_context, {BlockRegionArena::default_capacity, 0}, allocators.system);
+    arena = MemoryArena::create(user_context, {sizeof(BlockRegion), MemoryArena::default_capacity, 0}, allocators.system);
     halide_abort_if_false(user_context, arena != nullptr);
     block->allocator = this;
     block->regions = create_block_region(
@@ -298,7 +296,7 @@ BlockRegion *RegionAllocator::create_block_region(void *user_context, const Memo
              << "caching=" << halide_memory_caching_name(properties.caching) << " "
              << "visibility=" << halide_memory_visibility_name(properties.visibility) << ") ...\n";
 
-    BlockRegion *block_region = arena->reserve(user_context);
+    BlockRegion *block_region = static_cast<BlockRegion*>(arena->reserve(user_context));
 
     if (block_region == nullptr) {
         error(user_context) << "RegionAllocator: Failed to allocate new block region!\n";

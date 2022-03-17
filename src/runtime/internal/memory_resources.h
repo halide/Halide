@@ -124,6 +124,18 @@ ALWAYS_INLINE size_t clamped_size(size_t value, size_t min_value, size_t max_val
     return (result > max_value) ? max_value : result;
 }
 
+// Offset the untyped pointer by the given number of bytes
+ALWAYS_INLINE const void* offset_address(const void* address, size_t byte_offset) {
+    const uint8_t* base = static_cast<const uint8_t *>(address);
+    return static_cast<const void*>(base + byte_offset);
+}
+
+// Offset the untyped pointer by the given number of bytes
+ALWAYS_INLINE void* offset_address(void* address, size_t byte_offset) {
+    uint8_t* base = static_cast<uint8_t *>(address);
+    return static_cast<void*>(base + byte_offset);
+}
+
 // --
 
 typedef void *(*AllocateSystemFn)(void *, size_t);
