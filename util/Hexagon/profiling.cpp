@@ -383,7 +383,8 @@ void loop_end() {
 }
 extern "C" { // reporting
 void print_report() {
-  println("--------------------");
+  std::size_t i = 0;
+  println("-------------------- begin");
   metadata->print_signature();
   println("--------------------");
   metadata->print_schedule();
@@ -406,6 +407,6 @@ void print_report() {
       println("%s", output);
     });
   });
-  println("--------------------");
+  println("-------------------- end");
 }
 }
