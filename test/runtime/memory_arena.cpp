@@ -1,7 +1,4 @@
-#include "HalideRuntime.h"
-#include "printer.h"
-#include "runtime_internal.h"
-
+#include "common.h"
 #include "internal/memory_arena.h"
 
 using namespace Halide::Runtime::Internal;
@@ -12,11 +9,11 @@ size_t counter = 0;
 
 void *allocate_system(void *user_context, size_t bytes) {
     ++counter;
-    return halide_malloc(user_context, bytes);
+    return native_system_malloc(user_context, bytes);
 }
 
 void deallocate_system(void *user_context, void *ptr) {
-    halide_free(user_context, ptr);
+    native_system_free(user_context, ptr);
     --counter;
 }
 

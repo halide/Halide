@@ -1,7 +1,4 @@
-#include "HalideRuntime.h"
-#include "printer.h"
-#include "runtime_internal.h"
-
+#include "common.h"
 #include "internal/pointer_table.h"
 #include "internal/block_allocator.h"
 

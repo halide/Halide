@@ -1,7 +1,4 @@
-#include "HalideRuntime.h"
-#include "printer.h"
-#include "runtime_internal.h"
-
+#include "common.h"
 #include "internal/block_storage.h"
 
 using namespace Halide::Runtime::Internal;
