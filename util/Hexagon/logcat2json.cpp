@@ -97,13 +97,9 @@ struct Node {
   }
   auto root() const -> const Node & { return const_cast<Node &>(*this).root(); }
   auto parent() -> Backlink & { return _parent; }
-  auto parent() const -> const Backlink & {
-    return const_cast<Node &>(*this).parent();
-  }
+  auto parent() const -> const Backlink & { return _parent; }
   auto children() -> Links & { return _children; }
-  auto children() const -> const Links & {
-    return const_cast<Node &>(*this).children();
-  }
+  auto children() const -> const Links & { return _children; }
 
   auto insert(std::unique_ptr<Node> child) -> Node & {
     child->_parent = *this;
