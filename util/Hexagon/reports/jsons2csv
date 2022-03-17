@@ -10,7 +10,7 @@ x_expr = None
 y_expr = None
 
 parser = argparse.ArgumentParser(
-        description='Extract columnated data from a collection of Hexagon profiling JSON files using XPATH expressions.'
+        description='Extract columnated data from a collection of JSON files using XPATH expressions.'
         )
 parser.add_argument('-x', '--independent_var'
         , help='XPATH expression for the independent variable'
