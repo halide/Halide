@@ -26,17 +26,9 @@ parser.add_argument('files'
         , nargs='+')
 args = parser.parse_args()
 
-for opt, arg in opts:
-    if opt == "-x":
-        x_expr = arg
-    elif opt == "-y":
-        y_expr = arg
-    elif opt == "--files":
-        files = arg.split(",")
-
-if x_expr is None or y_expr is None or files == []:
-    print(f'usage: {sys.argv[0]} -x <INDEPENDENT_VAR_EXPR> -y <DEPENDENT_VAR_EXPR> --files <PATH>[,PATH]*')
-    exit(2)
+x_expr = args.independent_var
+y_expr = args.dependent_var
+files = args.files
 
 x_var = []
 y_var = []
@@ -51,8 +43,8 @@ for file in files:
     if y_data == []:
         print(f'{file} does not contain "{y_expr}"');
         exit(2)
-    x_var.append(sum(x_data))
-    y_var.append(sum(y_data))
+    x_var.append(sum(map(float, x_data)))
+    y_var.append(sum(map(float, y_data)))
 
 points = list(zip(x_var, y_var))
 points.sort()
