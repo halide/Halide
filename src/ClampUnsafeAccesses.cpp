@@ -27,7 +27,7 @@ protected:
 
     Stmt visit(const ProducerConsumer *op) override {
         if (op->is_producer) {
-            ScopedValue r(realizes_inside_current_producer, {});
+            ScopedValue<std::vector<std::string>> r(realizes_inside_current_producer, {});
             return IRMutator::visit(op);
         } else {
             return IRMutator::visit(op);
