@@ -18,7 +18,8 @@ struct ClampUnsafeAccesses : IRMutator {
     }
 
     bool is_realize_inside_current_producer(const std::string &n) const {
-        return std::find(realizes_inside_current_producer.begin(), realizes_inside_current_producer.end(), n) != realizes_inside_current_producer.end();
+        return std::find(realizes_inside_current_producer.begin(),
+            realizes_inside_current_producer.end(), n) != realizes_inside_current_producer.end();
     }
 
 protected:
