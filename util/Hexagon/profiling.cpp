@@ -1,5 +1,7 @@
 /** \file
- * TODO
+ * Hexagon DSP profiling library.
+ * This file defines classes for tracking the metadata, program structure, and
+ * execution times of a Halide program compiled for Hexagon DSP.
  */
 
 #include "HAP_farf.h"
@@ -253,7 +255,8 @@ struct ControlFlow {
 };
 
 static std::optional<Metadata> metadata;
-static Atomic<std::map<qurt_thread_t, std::vector<char>>> thread_table; // thread names for pretty-printing
+static Atomic<std::map<qurt_thread_t, std::vector<char>>>
+    thread_table; // thread names for pretty-printing
 static Atomic<ControlFlow> ctrl_flow;
 thread_local std::optional<std::reference_wrapper<Thread>> this_thread;
 
