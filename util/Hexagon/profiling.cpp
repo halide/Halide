@@ -1,3 +1,7 @@
+/** \file
+ * TODO
+ */
+
 #include "HAP_farf.h"
 #include "HAP_perf.h"
 
@@ -47,6 +51,8 @@
     exit(-1);                                                                  \
   }
 
+// Wrapper class which automatically guards the contained structure with a mutex
+// lock
 template <class X> struct Atomic {
   template <class... Args>
   Atomic(Args &&...args) : x(std::forward<Args>(args)...) {}
@@ -61,6 +67,8 @@ private:
   X x;
 };
 
+// Tracks timing data for a Halide Loop
+// Owns its sub-loops
 struct Loop {
   using Id = uint32_t;
   Loop(Id id, const char *label)
@@ -75,6 +83,7 @@ struct Loop {
            std::tuple(that.loop_id, that.thread_id);
   }
 
+  // construction/retrieval
   auto emplace(Id loop_id, const char *label) -> Loop & {
     // comparison keys are const even if instance is mutable,
     // so this cast is safe
@@ -92,18 +101,27 @@ struct Loop {
     return emplace(loop_id, label);
   }
 
+  // timing
   void start_timer() { _last_qtimer_count = HAP_perf_get_qtimer_count(); }
   void stop_timer() {
     _accumulated_qtimer_count +=
         HAP_perf_get_qtimer_count() - _last_qtimer_count;
     ++_invocation_count;
   }
+  void record_overhead(uint64_t qtimer_count) {
+    _overhead_qtimer_count += qtimer_count;
+  }
 
+  // reporting
   auto accumulated_microseconds() const -> uint64_t {
     return HAP_perf_qtimer_count_to_us(_accumulated_qtimer_count);
   }
   auto times_called() const -> uint32_t { return _invocation_count; }
+  auto overhead_microseconds() const -> uint64_t {
+    return HAP_perf_qtimer_count_to_us(_overhead_qtimer_count);
+  }
 
+  // visitors
   void for_each_height(std::function<void(const Loop &, uint32_t)> body,
                        uint32_t height = 0) const {
     body(*this, height);
@@ -115,13 +133,6 @@ struct Loop {
     for_each_height([&](auto &g, auto) { body(g); });
   }
 
-  void record_overhead(uint64_t qtimer_count) {
-    _overhead_qtimer_count += qtimer_count;
-  }
-  auto overhead_microseconds() const -> uint64_t {
-    return HAP_perf_qtimer_count_to_us(_overhead_qtimer_count);
-  }
-
 private:
   uint32_t _invocation_count = 0;
   uint64_t _accumulated_qtimer_count = 0;
@@ -130,6 +141,8 @@ private:
 
   std::set<Loop> _children;
 };
+// Per-thread stack of Loops, tracks current state of control flow and push/pop
+// time of Loops. Does not own its loops
 struct Thread {
   void push(Loop &loop) {
     _stack.emplace_back(loop);
@@ -154,9 +167,9 @@ struct Thread {
   }
 
 private:
-  uint64_t _overhead_qtimer_count = 0;
   std::vector<std::reference_wrapper<Loop>> _stack;
 };
+// Container for program metadata, recorded at the entry point
 struct Metadata {
   Metadata(const char *name) : name(name) {}
 
@@ -226,18 +239,25 @@ private:
   std::vector<const char *> _sched;
 };
 
+// Main profiling state class
+// Data structures expected to be accessed together have been grouped here in
+// order to stay behind a single mutex
 struct ControlFlow {
+  // Profiling statistics tree
   std::unique_ptr<Loop> root;
+  // Per-thread stack tracking
   std::map<qurt_thread_t, Thread> threads;
+  // Per-thread stack of thread launch points
   std::map<qurt_thread_t, std::vector<std::reference_wrapper<Loop>>>
       fork_points;
 };
 
 static std::optional<Metadata> metadata;
-static Atomic<std::map<qurt_thread_t, std::vector<char>>> thread_table;
+static Atomic<std::map<qurt_thread_t, std::vector<char>>> thread_table; // thread names for pretty-printing
 static Atomic<ControlFlow> ctrl_flow;
 thread_local std::optional<std::reference_wrapper<Thread>> this_thread;
 
+// Register a thread with the global thread_table.
 auto register_thread() -> qurt_thread_t {
   const auto tid = qurt_thread_get_id();
 
@@ -257,6 +277,7 @@ auto register_thread() -> qurt_thread_t {
   return tid;
 }
 
+// Halide-accessible API
 extern "C" { // metadata
 void declare_generator(const char *name) { metadata.emplace(Metadata{name}); }
 void describe_schedule(const char *schedule) {
@@ -341,12 +362,14 @@ void pre_fork(uint32_t loop_id, const char *label) {
   ctrl_flow([](auto &ctrl) {
     ctrl.fork_points[get_thread_id()].push_back(this_thread->get().top());
   });
-  this_thread->get().top().record_overhead(HAP_perf_get_qtimer_count() - start_time);
+  this_thread->get().top().record_overhead(HAP_perf_get_qtimer_count() -
+                                           start_time);
 }
 void post_fork() {
   const auto start_time = HAP_perf_get_qtimer_count();
   ctrl_flow([](auto &ctrl) { ctrl.fork_points[get_thread_id()].pop_back(); });
-  this_thread->get().top().record_overhead(HAP_perf_get_qtimer_count() - start_time);
+  this_thread->get().top().record_overhead(HAP_perf_get_qtimer_count() -
+                                           start_time);
   this_thread->get().pop();
 }
 void fork_start(uint32_t parent_thread, uint32_t loop_id, const char *label) {
@@ -365,7 +388,8 @@ void fork_start(uint32_t parent_thread, uint32_t loop_id, const char *label) {
   });
   this_thread.emplace(forked_thread.get());
   forked_thread.get().push(forked_loop.get());
-  this_thread->get().top().record_overhead(HAP_perf_get_qtimer_count() - start_time);
+  this_thread->get().top().record_overhead(HAP_perf_get_qtimer_count() -
+                                           start_time);
 }
 void fork_end() {
   debug(VERBOSE) { println(__FUNCTION__); }
@@ -402,8 +426,9 @@ void print_report() {
       for (auto i = 0; i < height; ++i) {
         output[i] = '>';
       }
-      sprintf(output + height, "%s %u %llu %lu %llu", loop.label, loop.thread_id,
-              loop.accumulated_microseconds(), loop.times_called(), loop.overhead_microseconds());
+      sprintf(output + height, "%s %u %llu %lu %llu", loop.label,
+              loop.thread_id, loop.accumulated_microseconds(),
+              loop.times_called(), loop.overhead_microseconds());
       println("%s", output);
     });
   });

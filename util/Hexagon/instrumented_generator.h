@@ -1,4 +1,10 @@
 #pragma once
+
+/** \file
+ * Defines a Generator interface which injects timing code around loops and
+ * emits a report to logcat via adsprpc (Hexagon only).
+ */
+
 #include "Halide.h"
 #include <iostream>
 #include <iso646.h>
@@ -13,6 +19,7 @@ namespace {
 using namespace Halide;
 using namespace Halide::Internal;
 
+// Profiling code injection
 struct HexagonInstrumentation : IRMutator {
   HexagonInstrumentation(const std::string &generator_name,
                          std::vector<Argument> &&program_arguments,
@@ -23,6 +30,7 @@ struct HexagonInstrumentation : IRMutator {
         program_outputs(std::move(program_outputs)),
         schedule_desc(schedule_desc) {}
 
+  // Inject metadata collection and reporting at program entry and exit
   auto visit(const Block *block) -> Stmt override {
     bool is_root = false;
     if (not passed_entry_point) {
@@ -87,10 +95,13 @@ struct HexagonInstrumentation : IRMutator {
       return IRMutator::visit(block);
     }
   }
+  // Inject time measurement at loop entry and exit
   auto visit(const For *loop) -> Stmt override {
     auto id = node_id_generator++;
 
     if (loop->is_parallel()) {
+      // Sets up the fork point and timing start/stop for this loop, and thread
+      // tracking for the child loops.
       return Block::make(
           {pre_fork_stmt(id, loop->name),
            with_parent_thread_id_stmt(IRMutator::visit(
@@ -101,20 +112,23 @@ struct HexagonInstrumentation : IRMutator {
                    .as<For>())),
            post_fork_stmt()});
     } else {
+      // Sets up the timing start/stop for this loop
       return Block::make({loop_start_stmt(id, loop->name),
                           IRMutator::visit(loop), loop_end_stmt()});
     }
   }
 
-  bool passed_entry_point = false;
-  uint32_t node_id_generator = 0;
+  bool passed_entry_point = false; // used to identify the entry block
+  uint32_t node_id_generator = 0;  // used to generate unique identifiers for
+                                   // nodes in the control flow graph
 
+  // metadata
   const std::string generator_name;
   const std::vector<Argument> program_arguments;
   const std::vector<Func> program_outputs;
   const std::vector<std::string> schedule_desc;
 
-private:
+private: // Halide statements for accessing profiling library on DSP
   static auto program_start_stmt(uint32_t root_loop_id,
                                  const std::string &label) -> Stmt {
     return Evaluate::make(Call::make(Handle(), "program_start",
@@ -165,11 +179,9 @@ private:
 };
 } // namespace
 
+// Main class for profiling generated code
 template <class Gen> class InstrumentedGenerator : public Generator<Gen> {
-  virtual auto regex_patterns() const -> std::vector<std::string> {
-    return {"$\b"};
-  }
-
+  // Gather metadata and perform code injection at generation-time
   auto build_pipeline() -> Pipeline override {
     auto pipeline = Generator<Gen>::build_pipeline();
 

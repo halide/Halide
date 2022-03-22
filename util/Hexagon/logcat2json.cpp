@@ -1,3 +1,8 @@
+/** \file
+ * Utility for converting InstrumentedGenerator logcat output into structure
+ * JSON on stdin
+ */
+
 #include <nlohmann/json.hpp>
 using json = nlohmann::json;
 #include <cctype>
@@ -14,6 +19,7 @@ using json = nlohmann::json;
 #include <string>
 #include <variant>
 
+// Remove leading and trailing whitespace
 auto strip_inplace(std::string &s) -> std::string & {
   auto isgraph = [](unsigned char c) { return std::isgraph(c); };
   s.erase(s.begin(), std::find_if(s.begin(), s.end(), isgraph));
@@ -23,6 +29,7 @@ auto strip_inplace(std::string &s) -> std::string & {
   return s;
 }
 
+// Overloaded visitor for std::variant
 template <class... Fs> struct match : Fs... { using Fs::operator()...; };
 template <class... Fs> match(Fs...) -> match<Fs...>;
 
@@ -34,6 +41,8 @@ struct Thread {
   Id id;
   std::string name;
 };
+// Tree of profiling statistics
+// This is a path-preserving subgraph of the control flow graph
 struct Node {
   using Backlink = std::optional<std::reference_wrapper<Node>>;
   using Links =
@@ -46,6 +55,24 @@ struct Node {
   Node(const Node &) = delete;
   Node(Node &&) = delete;
 
+  auto insert(std::unique_ptr<Node> child) -> Node & {
+    child->_parent = *this;
+    const auto name = child->name();
+    const auto tid = child->thread_id();
+    return *std::get<1>(*std::get<0>(
+        _children.emplace(std::make_pair(name, tid), std::move(child))));
+  }
+
+  auto is_parallel() const -> bool {
+    for (const auto &[_, child] : _children) {
+      if (child->thread_id() != this->thread_id()) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  // Profiling statistics
   auto name() const -> std::string { return _name; }
   auto thread_id() const -> Thread::Id { return _thread_id; }
 
@@ -101,23 +128,6 @@ struct Node {
   auto children() -> Links & { return _children; }
   auto children() const -> const Links & { return _children; }
 
-  auto insert(std::unique_ptr<Node> child) -> Node & {
-    child->_parent = *this;
-    const auto name = child->name();
-    const auto tid = child->thread_id();
-    return *std::get<1>(*std::get<0>(
-        _children.emplace(std::make_pair(name, tid), std::move(child))));
-  }
-
-  auto is_parallel() const -> bool {
-    for (const auto &[_, child] : _children) {
-      if (child->thread_id() != this->thread_id()) {
-        return true;
-      }
-    }
-    return false;
-  }
-
 private:
   std::string _name;
   Thread::Id _thread_id;
@@ -128,6 +138,7 @@ private:
   Links _children;
 };
 
+// Create a forest (one tree per thread) from a profiling tree
 struct split_by_thread_fn {
   using result_t = std::map<Thread::Id, std::unique_ptr<Node>>;
   auto operator()(const Node &root) const -> result_t {
@@ -154,7 +165,9 @@ private:
 };
 const auto split_by_thread = split_by_thread_fn{};
 
+// A complete profiling report
 struct Profile {
+  // Program parameter metadata
   struct Parameter {
     std::string name;
     std::string type;
@@ -165,10 +178,12 @@ struct Profile {
   std::string function_name;
   std::vector<Parameter> inputs;
   std::vector<Parameter> outputs;
-  std::string schedule;
+  std::string schedule; // description of the Halide schedule
   std::map<Thread::Id, Thread> thread_table;
   std::unique_ptr<Node> root;
 };
+// Reads a raw profiling report line-by-line
+// Stop when a profile has been parsed or an error has occurred
 auto parse_profile(std::function<std::optional<std::string>()> get_next_line)
     -> Profile {
   using Depth = std::size_t;
@@ -476,6 +491,7 @@ auto parse_profile(std::function<std::optional<std::string>()> get_next_line)
           describe.schedule(),      describe.thread_table(), build()};
 }
 
+// Wrapper classes for rendering profile elements as JSON
 struct NodePrinter {
   const std::map<Thread::Id, Thread> &thread_table;
   const Node &node;
@@ -589,9 +605,9 @@ int main(int argc, const char **argv) {
 
   auto args = options.parse(argc, argv);
 
-  if(args.count("help")) {
-      std::cout << options.help() << std::endl;
-      exit(0);
+  if (args.count("help")) {
+    std::cout << options.help() << std::endl;
+    exit(0);
   }
 
   auto read_stdin = [] {
@@ -611,7 +627,8 @@ int main(int argc, const char **argv) {
       time_format << "-%FT%T%z-" << (n_emitted++);
 
       filename << args["output"].as<std::string>()
-               << std::put_time(std::localtime(&now), time_format.str().c_str()) << ".json";
+               << std::put_time(std::localtime(&now), time_format.str().c_str())
+               << ".json";
 
       std::ofstream output(filename.str());
       output << json(ProfilePrinter{profile});
