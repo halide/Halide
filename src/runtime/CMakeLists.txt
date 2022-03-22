@@ -304,7 +304,7 @@ foreach (i IN LISTS RUNTIME_LL)
     # see https://llvm.org/docs/OpaquePointers.html)
 
     set(LL_TRANSFORMED "${LL}.transformed.ll")
-    if (Halide_LLVM_VERSION VERSION_LESS 14.0)
+    if (LLVM_PACKAGE_VERSION VERSION_LESS 14.0.0)
         add_custom_command(OUTPUT "${LL_TRANSFORMED}"
                            COMMAND regexp_replace "elementtype\\(i[0-9]+\\)" "" < "$<SHELL_PATH:${CMAKE_CURRENT_SOURCE_DIR}/${LL}>" > "${LL_TRANSFORMED}"
                            DEPENDS "${LL}" regexp_replace
