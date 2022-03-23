@@ -20,9 +20,9 @@ class GeneratorContext;
 
 namespace Internal {
 
-enum class IOKind { Scalar,
-                    Function,
-                    Buffer };
+enum class ArgInfoKind { Scalar,
+                         Function,
+                         Buffer };
 
 using ExternsMap = std::map<std::string, ExternalCode>;
 
@@ -66,7 +66,7 @@ public:
      */
     struct ArgInfo {
         std::string name;
-        IOKind kind = IOKind::Scalar;
+        ArgInfoKind kind = ArgInfoKind::Scalar;
         // Note that this can have multiple entries for Tuple-valued Inputs or Outputs
         std::vector<Type> types;
         int dimensions = 0;

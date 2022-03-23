@@ -626,7 +626,7 @@ void StubEmitter::emit() {
     for (auto *p : inputs) {
         stream << get_indent() << "generator->bind_input("
                << "\"" << p->name() << "\", ";
-        if (p->kind() == IOKind::Buffer) {
+        if (p->kind() == ArgInfoKind::Buffer) {
             stream << "Halide::Internal::StubInputBuffer<>::to_parameter_vector(inputs." << p->name() << ")";
         } else {
             // Func or Expr
@@ -1451,7 +1451,7 @@ GeneratorParamInfo::GeneratorParamInfo(GeneratorBase *generator, const size_t si
         owned_synthetic_params.push_back(GeneratorParam_Synthetic<Type>::make(generator, gn, n + ".type", *gio, SyntheticParamType::Type, gio->types_defined()));
         filter_generator_params.push_back(owned_synthetic_params.back().get());
 
-        if (gio->kind() != IOKind::Scalar) {
+        if (gio->kind() != ArgInfoKind::Scalar) {
             owned_synthetic_params.push_back(GeneratorParam_Synthetic<int>::make(generator, gn, n + ".dim", *gio, SyntheticParamType::Dim, gio->dims_defined()));
             filter_generator_params.push_back(owned_synthetic_params.back().get());
         }
@@ -1601,7 +1601,7 @@ void GeneratorBase::set_inputs_vector(const std::vector<std::vector<StubInput>> 
 void GeneratorBase::track_parameter_values(bool include_outputs) {
     GeneratorParamInfo &pi = param_info();
     for (auto *input : pi.inputs()) {
-        if (input->kind() == IOKind::Buffer) {
+        if (input->kind() == ArgInfoKind::Buffer) {
             internal_assert(!input->parameters_.empty());
             for (auto &p : input->parameters_) {
                 // This must use p.name(), *not* input->name()
@@ -1611,7 +1611,7 @@ void GeneratorBase::track_parameter_values(bool include_outputs) {
     }
     if (include_outputs) {
         for (auto *output : pi.outputs()) {
-            if (output->kind() == IOKind::Buffer) {
+            if (output->kind() == ArgInfoKind::Buffer) {
                 internal_assert(!output->funcs().empty());
                 for (const auto &f : output->funcs()) {
                     user_assert(f.defined()) << "Output " << output->name() << " is not fully defined.";
@@ -1764,7 +1764,7 @@ void GeneratorBase::check_input_is_array(Internal::GeneratorInputBase *in) {
         << "Input " << in->name() << " is not an array, and must not be set with a vector type.";
 }
 
-void GeneratorBase::check_input_kind(Internal::GeneratorInputBase *in, Internal::IOKind kind) {
+void GeneratorBase::check_input_kind(Internal::GeneratorInputBase *in, Internal::ArgInfoKind kind) {
     user_assert(in->kind() == kind)
         << "Input " << in->name() << " cannot be set with the type specified.";
 }
@@ -1859,7 +1859,7 @@ std::vector<Parameter> GeneratorBase::get_parameters_for_input(const std::string
 
     std::vector<Parameter> params;
     // TODO: replicated code, yuck
-    if (input->kind() == IOKind::Scalar) {
+    if (input->kind() == ArgInfoKind::Scalar) {
         internal_assert(input->funcs_.empty() && input->exprs_.size() == input->parameters_.size());
         for (size_t i = 0; i < input->exprs_.size(); ++i) {
             const auto &p = input->parameters_[i];
@@ -1940,7 +1940,7 @@ bool GeneratorBase::emit_cpp_stub(const std::string &stub_file_path) {
 
 GIOBase::GIOBase(size_t array_size,
                  const std::string &name,
-                 IOKind kind,
+                 ArgInfoKind kind,
                  const std::vector<Type> &types,
                  int dims)
     : array_size_(array_size), name_(name), kind_(kind), types_(types), dims_(dims) {
@@ -1965,7 +1965,7 @@ const std::string &GIOBase::name() const {
     return name_;
 }
 
-IOKind GIOBase::kind() const {
+ArgInfoKind GIOBase::kind() const {
     return kind_;
 }
 
@@ -2044,7 +2044,7 @@ const std::vector<Expr> &GIOBase::exprs() const {
 void GIOBase::verify_internals() {
     user_assert(dims_ >= 0) << "Generator Input/Output Dimensions must have positive values";
 
-    if (kind() != IOKind::Scalar) {
+    if (kind() != ArgInfoKind::Scalar) {
         for (const Func &f : funcs()) {
             user_assert(f.defined()) << "Input/Output " << name() << " is not defined.\n";
             user_assert(f.dimensions() == dims())
@@ -2131,14 +2131,14 @@ void GIOBase::check_matching_array_size(size_t size) const {
 
 GeneratorInputBase::GeneratorInputBase(size_t array_size,
                                        const std::string &name,
-                                       IOKind kind,
+                                       ArgInfoKind kind,
                                        const std::vector<Type> &t,
                                        int d)
     : GIOBase(array_size, name, kind, t, d) {
     ObjectInstanceRegistry::register_instance(this, 0, ObjectInstanceRegistry::GeneratorInput, this, nullptr);
 }
 
-GeneratorInputBase::GeneratorInputBase(const std::string &name, IOKind kind, const std::vector<Type> &t, int d)
+GeneratorInputBase::GeneratorInputBase(const std::string &name, ArgInfoKind kind, const std::vector<Type> &t, int d)
     : GeneratorInputBase(1, name, kind, t, d) {
     // nothing
 }
@@ -2164,7 +2164,7 @@ Parameter GeneratorInputBase::parameter() const {
 void GeneratorInputBase::verify_internals() {
     GIOBase::verify_internals();
 
-    const size_t expected = (kind() != IOKind::Scalar) ? funcs().size() : exprs().size();
+    const size_t expected = (kind() != ArgInfoKind::Scalar) ? funcs().size() : exprs().size();
     user_assert(parameters_.size() == expected) << "Expected parameters_.size() == "
                                                 << expected << ", saw " << parameters_.size() << " for " << name() << "\n";
 }
@@ -2184,9 +2184,9 @@ void GeneratorInputBase::init_internals() {
     funcs_.clear();
     for (size_t i = 0; i < array_size(); ++i) {
         auto name = array_name(i);
-        parameters_.emplace_back(type(), kind() != IOKind::Scalar, dims(), name);
+        parameters_.emplace_back(type(), kind() != ArgInfoKind::Scalar, dims(), name);
         auto &p = parameters_[i];
-        if (kind() != IOKind::Scalar) {
+        if (kind() != ArgInfoKind::Scalar) {
             internal_assert(dims() == p.dimensions());
             funcs_.push_back(make_param_func(p, name));
         } else {
@@ -2208,14 +2208,14 @@ void GeneratorInputBase::set_inputs(const std::vector<StubInput> &inputs) {
     for (size_t i = 0; i < inputs.size(); ++i) {
         const StubInput &in = inputs.at(i);
         user_assert(in.kind() == kind()) << "An input for " << name() << " is not of the expected kind.\n";
-        if (kind() == IOKind::Function) {
+        if (kind() == ArgInfoKind::Function) {
             auto f = in.func();
             user_assert(f.defined()) << "The input for " << name() << " is an undefined Func. Please define it.\n";
             check_matching_types(f.output_types());
             check_matching_dims(f.dimensions());
             funcs_.push_back(f);
             parameters_.emplace_back(f.output_types().at(0), true, f.dimensions(), array_name(i));
-        } else if (kind() == IOKind::Buffer) {
+        } else if (kind() == ArgInfoKind::Buffer) {
             auto p = in.parameter();
             user_assert(p.defined()) << "The input for " << name() << " is an undefined Buffer. Please define it.\n";
             check_matching_types({p.type()});
@@ -2275,14 +2275,14 @@ void GeneratorInputBase::set_estimates_impl(const Region &estimates) {
     }
 }
 
-GeneratorOutputBase::GeneratorOutputBase(size_t array_size, const std::string &name, IOKind kind, const std::vector<Type> &t, int d)
+GeneratorOutputBase::GeneratorOutputBase(size_t array_size, const std::string &name, ArgInfoKind kind, const std::vector<Type> &t, int d)
     : GIOBase(array_size, name, kind, t, d) {
-    internal_assert(kind != IOKind::Scalar);
+    internal_assert(kind != ArgInfoKind::Scalar);
     ObjectInstanceRegistry::register_instance(this, 0, ObjectInstanceRegistry::GeneratorOutput,
                                               this, nullptr);
 }
 
-GeneratorOutputBase::GeneratorOutputBase(const std::string &name, IOKind kind, const std::vector<Type> &t, int d)
+GeneratorOutputBase::GeneratorOutputBase(const std::string &name, ArgInfoKind kind, const std::vector<Type> &t, int d)
     : GeneratorOutputBase(1, name, kind, t, d) {
     // nothing
 }

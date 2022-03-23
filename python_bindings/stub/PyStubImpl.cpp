@@ -25,7 +25,7 @@ namespace Halide {
 namespace PythonBindings {
 
 using Parameter = Internal::Parameter;
-using IOKind = Internal::IOKind;
+using ArgInfoKind = Internal::ArgInfoKind;
 using ArgInfo = Internal::AbstractGenerator::ArgInfo;
 using GeneratorFactory = Internal::GeneratorFactory;
 using StubInput = Internal::StubInput;
@@ -134,9 +134,9 @@ py::object generate_impl(const GeneratorFactory &factory,
         if (it != input_arguments_map.end()) {
             const auto &a = it->second;
             auto o = py::cast<py::object>(value);
-            if (a.kind == IOKind::Buffer) {
+            if (a.kind == ArgInfoKind::Buffer) {
                 generator->bind_input(name, to_input_vector<Parameter>(o));
-            } else if (a.kind == IOKind::Function) {
+            } else if (a.kind == ArgInfoKind::Function) {
                 generator->bind_input(name, to_input_vector<Func>(o));
             } else {
                 generator->bind_input(name, to_input_vector<Expr>(o));
@@ -164,9 +164,9 @@ py::object generate_impl(const GeneratorFactory &factory,
         for (size_t i = 0; i < args.size(); i++) {
             const auto &a = input_arguments[i];
             auto o = py::cast<py::object>(args[i]);
-            if (a.kind == IOKind::Buffer) {
+            if (a.kind == ArgInfoKind::Buffer) {
                 generator->bind_input(a.name, to_input_vector<Parameter>(o));
-            } else if (a.kind == IOKind::Function) {
+            } else if (a.kind == ArgInfoKind::Function) {
                 generator->bind_input(a.name, to_input_vector<Func>(o));
             } else {
                 generator->bind_input(a.name, to_input_vector<Expr>(o));

@@ -1371,7 +1371,7 @@ public:
 // downstream consumer will be able to explicitly check that each value is
 // of the expected/required kind.
 class StubInput {
-    const IOKind kind_;
+    const ArgInfoKind kind_;
     // Exactly one of the following fields should be defined:
     const Parameter parameter_;
     const Func func_;
@@ -1381,34 +1381,34 @@ public:
     // *not* explicit.
     template<typename T2>
     StubInput(const StubInputBuffer<T2> &b)
-        : kind_(IOKind::Buffer), parameter_(b.parameter_), func_(), expr_() {
+        : kind_(ArgInfoKind::Buffer), parameter_(b.parameter_), func_(), expr_() {
     }
     StubInput(const Parameter &p)
-        : kind_(IOKind::Buffer), parameter_(p), func_(), expr_() {
+        : kind_(ArgInfoKind::Buffer), parameter_(p), func_(), expr_() {
     }
     StubInput(const Func &f)
-        : kind_(IOKind::Function), parameter_(), func_(f), expr_() {
+        : kind_(ArgInfoKind::Function), parameter_(), func_(f), expr_() {
     }
     StubInput(const Expr &e)
-        : kind_(IOKind::Scalar), parameter_(), func_(), expr_(e) {
+        : kind_(ArgInfoKind::Scalar), parameter_(), func_(), expr_(e) {
     }
 
-    IOKind kind() const {
+    ArgInfoKind kind() const {
         return kind_;
     }
 
     Parameter parameter() const {
-        internal_assert(kind_ == IOKind::Buffer);
+        internal_assert(kind_ == ArgInfoKind::Buffer);
         return parameter_;
     }
 
     Func func() const {
-        internal_assert(kind_ == IOKind::Function);
+        internal_assert(kind_ == ArgInfoKind::Function);
         return func_;
     }
 
     Expr expr() const {
-        internal_assert(kind_ == IOKind::Scalar);
+        internal_assert(kind_ == ArgInfoKind::Scalar);
         return expr_;
     }
 };
@@ -1438,7 +1438,7 @@ public:
     virtual bool is_array() const;
 
     const std::string &name() const;
-    IOKind kind() const;
+    ArgInfoKind kind() const;
 
     bool types_defined() const;
     const std::vector<Type> &types() const;
@@ -1459,7 +1459,7 @@ public:
 protected:
     GIOBase(size_t array_size,
             const std::string &name,
-            IOKind kind,
+            ArgInfoKind kind,
             const std::vector<Type> &types,
             int dims);
 
@@ -1470,7 +1470,7 @@ protected:
                               // -1 if is_array() == true but unspecified.
 
     const std::string name_;
-    const IOKind kind_;
+    const ArgInfoKind kind_;
     mutable std::vector<Type> types_;  // empty if type is unspecified
     mutable int dims_;                 // -1 if dim is unspecified
 
@@ -1527,11 +1527,11 @@ class GeneratorInputBase : public GIOBase {
 protected:
     GeneratorInputBase(size_t array_size,
                        const std::string &name,
-                       IOKind kind,
+                       ArgInfoKind kind,
                        const std::vector<Type> &t,
                        int d);
 
-    GeneratorInputBase(const std::string &name, IOKind kind, const std::vector<Type> &t, int d);
+    GeneratorInputBase(const std::string &name, ArgInfoKind kind, const std::vector<Type> &t, int d);
 
     friend class GeneratorBase;
     friend class GeneratorParamInfo;
@@ -1577,21 +1577,21 @@ protected:
     template<typename T2 = T, typename std::enable_if<
                                   // Only allow T2 not-an-array
                                   !std::is_array<T2>::value>::type * = nullptr>
-    GeneratorInputImpl(const std::string &name, IOKind kind, const std::vector<Type> &t, int d)
+    GeneratorInputImpl(const std::string &name, ArgInfoKind kind, const std::vector<Type> &t, int d)
         : GeneratorInputBase(name, kind, t, d) {
     }
 
     template<typename T2 = T, typename std::enable_if<
                                   // Only allow T2[kSomeConst]
                                   std::is_array<T2>::value && std::rank<T2>::value == 1 && (std::extent<T2, 0>::value > 0)>::type * = nullptr>
-    GeneratorInputImpl(const std::string &name, IOKind kind, const std::vector<Type> &t, int d)
+    GeneratorInputImpl(const std::string &name, ArgInfoKind kind, const std::vector<Type> &t, int d)
         : GeneratorInputBase(std::extent<T2, 0>::value, name, kind, t, d) {
     }
 
     template<typename T2 = T, typename std::enable_if<
                                   // Only allow T2[]
                                   std::is_array<T2>::value && std::rank<T2>::value == 1 && std::extent<T2, 0>::value == 0>::type * = nullptr>
-    GeneratorInputImpl(const std::string &name, IOKind kind, const std::vector<Type> &t, int d)
+    GeneratorInputImpl(const std::string &name, ArgInfoKind kind, const std::vector<Type> &t, int d)
         : GeneratorInputBase(-1, name, kind, t, d) {
     }
 
@@ -1677,24 +1677,24 @@ protected:
 
 public:
     explicit GeneratorInput_Buffer(const std::string &name)
-        : Super(name, IOKind::Buffer,
+        : Super(name, ArgInfoKind::Buffer,
                 TBase::has_static_halide_type ? std::vector<Type>{TBase::static_halide_type()} : std::vector<Type>{},
                 TBase::has_static_dimensions ? TBase::static_dimensions() : -1) {
     }
 
     GeneratorInput_Buffer(const std::string &name, const Type &t, int d)
-        : Super(name, IOKind::Buffer, {t}, d) {
+        : Super(name, ArgInfoKind::Buffer, {t}, d) {
         static_assert(!TBase::has_static_halide_type, "You can only specify a Type argument for Input<Buffer<T>> if T is void or omitted.");
         static_assert(!TBase::has_static_dimensions, "You can only specify a dimension argument for Input<Buffer<T, D>> if D is -1 or omitted.");
     }
 
     GeneratorInput_Buffer(const std::string &name, const Type &t)
-        : Super(name, IOKind::Buffer, {t}, -1) {
+        : Super(name, ArgInfoKind::Buffer, {t}, -1) {
         static_assert(!TBase::has_static_halide_type, "You can only specify a Type argument for Input<Buffer<T>> if T is void or omitted.");
     }
 
     GeneratorInput_Buffer(const std::string &name, int d)
-        : Super(name, IOKind::Buffer,
+        : Super(name, ArgInfoKind::Buffer,
                 TBase::has_static_halide_type ? std::vector<Type>{TBase::static_halide_type()} : std::vector<Type>{},
                 d) {
         static_assert(!TBase::has_static_dimensions, "You can only specify a dimension argument for Input<Buffer<T, D>> if D is -1 or omitted.");
@@ -1829,41 +1829,41 @@ protected:
 
 public:
     GeneratorInput_Func(const std::string &name, const Type &t, int d)
-        : Super(name, IOKind::Function, {t}, d) {
+        : Super(name, ArgInfoKind::Function, {t}, d) {
     }
 
     // unspecified type
     GeneratorInput_Func(const std::string &name, int d)
-        : Super(name, IOKind::Function, {}, d) {
+        : Super(name, ArgInfoKind::Function, {}, d) {
     }
 
     // unspecified dimension
     GeneratorInput_Func(const std::string &name, const Type &t)
-        : Super(name, IOKind::Function, {t}, -1) {
+        : Super(name, ArgInfoKind::Function, {t}, -1) {
     }
 
     // unspecified type & dimension
     explicit GeneratorInput_Func(const std::string &name)
-        : Super(name, IOKind::Function, {}, -1) {
+        : Super(name, ArgInfoKind::Function, {}, -1) {
     }
 
     GeneratorInput_Func(size_t array_size, const std::string &name, const Type &t, int d)
-        : Super(array_size, name, IOKind::Function, {t}, d) {
+        : Super(array_size, name, ArgInfoKind::Function, {t}, d) {
     }
 
     // unspecified type
     GeneratorInput_Func(size_t array_size, const std::string &name, int d)
-        : Super(array_size, name, IOKind::Function, {}, d) {
+        : Super(array_size, name, ArgInfoKind::Function, {}, d) {
     }
 
     // unspecified dimension
     GeneratorInput_Func(size_t array_size, const std::string &name, const Type &t)
-        : Super(array_size, name, IOKind::Function, {t}, -1) {
+        : Super(array_size, name, ArgInfoKind::Function, {t}, -1) {
     }
 
     // unspecified type & dimension
     GeneratorInput_Func(size_t array_size, const std::string &name)
-        : Super(array_size, name, IOKind::Function, {}, -1) {
+        : Super(array_size, name, ArgInfoKind::Function, {}, -1) {
     }
 
     template<typename... Args>
@@ -1946,7 +1946,7 @@ protected:
 
 public:
     explicit GeneratorInput_DynamicScalar(const std::string &name)
-        : Super(name, IOKind::Scalar, {}, 0) {
+        : Super(name, ArgInfoKind::Scalar, {}, 0) {
         user_assert(!std::is_array<T>::value) << "Input<Expr[]> is not allowed";
     }
 
@@ -2009,22 +2009,22 @@ protected:
 
 public:
     explicit GeneratorInput_Scalar(const std::string &name)
-        : Super(name, IOKind::Scalar, {type_of<TBase>()}, 0), def_(static_cast<TBase>(0)), def_expr_(Expr()) {
+        : Super(name, ArgInfoKind::Scalar, {type_of<TBase>()}, 0), def_(static_cast<TBase>(0)), def_expr_(Expr()) {
     }
 
     GeneratorInput_Scalar(const std::string &name, const TBase &def)
-        : Super(name, IOKind::Scalar, {type_of<TBase>()}, 0), def_(def), def_expr_(TBaseToExpr(def)) {
+        : Super(name, ArgInfoKind::Scalar, {type_of<TBase>()}, 0), def_(def), def_expr_(TBaseToExpr(def)) {
     }
 
     GeneratorInput_Scalar(size_t array_size,
                           const std::string &name)
-        : Super(array_size, name, IOKind::Scalar, {type_of<TBase>()}, 0), def_(static_cast<TBase>(0)), def_expr_(Expr()) {
+        : Super(array_size, name, ArgInfoKind::Scalar, {type_of<TBase>()}, 0), def_(static_cast<TBase>(0)), def_expr_(Expr()) {
     }
 
     GeneratorInput_Scalar(size_t array_size,
                           const std::string &name,
                           const TBase &def)
-        : Super(array_size, name, IOKind::Scalar, {type_of<TBase>()}, 0), def_(def), def_expr_(TBaseToExpr(def)) {
+        : Super(array_size, name, ArgInfoKind::Scalar, {type_of<TBase>()}, 0), def_(def), def_expr_(TBaseToExpr(def)) {
     }
 
     /** You can use this Input as an expression in a halide
@@ -2239,7 +2239,7 @@ protected:
     template<typename T2, typename std::enable_if<std::is_same<T2, Func>::value>::type * = nullptr>
     HALIDE_NO_USER_CODE_INLINE T2 as() const {
         static_assert(std::is_same<T2, Func>::value, "Only Func allowed here");
-        internal_assert(kind() != IOKind::Scalar);
+        internal_assert(kind() != ArgInfoKind::Scalar);
         internal_assert(exprs_.empty());
         user_assert(funcs_.size() == 1) << "Use [] to access individual Funcs in Output<Func[]>";
         return funcs_[0];
@@ -2309,12 +2309,12 @@ public:
 protected:
     GeneratorOutputBase(size_t array_size,
                         const std::string &name,
-                        IOKind kind,
+                        ArgInfoKind kind,
                         const std::vector<Type> &t,
                         int d);
 
     GeneratorOutputBase(const std::string &name,
-                        IOKind kind,
+                        ArgInfoKind kind,
                         const std::vector<Type> &t,
                         int d);
 
@@ -2351,21 +2351,21 @@ protected:
     template<typename T2 = T, typename std::enable_if<
                                   // Only allow T2 not-an-array
                                   !std::is_array<T2>::value>::type * = nullptr>
-    GeneratorOutputImpl(const std::string &name, IOKind kind, const std::vector<Type> &t, int d)
+    GeneratorOutputImpl(const std::string &name, ArgInfoKind kind, const std::vector<Type> &t, int d)
         : GeneratorOutputBase(name, kind, t, d) {
     }
 
     template<typename T2 = T, typename std::enable_if<
                                   // Only allow T2[kSomeConst]
                                   std::is_array<T2>::value && std::rank<T2>::value == 1 && (std::extent<T2, 0>::value > 0)>::type * = nullptr>
-    GeneratorOutputImpl(const std::string &name, IOKind kind, const std::vector<Type> &t, int d)
+    GeneratorOutputImpl(const std::string &name, ArgInfoKind kind, const std::vector<Type> &t, int d)
         : GeneratorOutputBase(std::extent<T2, 0>::value, name, kind, t, d) {
     }
 
     template<typename T2 = T, typename std::enable_if<
                                   // Only allow T2[]
                                   std::is_array<T2>::value && std::rank<T2>::value == 1 && std::extent<T2, 0>::value == 0>::type * = nullptr>
-    GeneratorOutputImpl(const std::string &name, IOKind kind, const std::vector<Type> &t, int d)
+    GeneratorOutputImpl(const std::string &name, ArgInfoKind kind, const std::vector<Type> &t, int d)
         : GeneratorOutputBase(-1, name, kind, t, d) {
     }
 
@@ -2482,13 +2482,13 @@ protected:
     using TBase = typename Super::TBase;
 
     explicit GeneratorOutput_Buffer(const std::string &name)
-        : Super(name, IOKind::Buffer,
+        : Super(name, ArgInfoKind::Buffer,
                 TBase::has_static_halide_type ? std::vector<Type>{TBase::static_halide_type()} : std::vector<Type>{},
                 TBase::has_static_dimensions ? TBase::static_dimensions() : -1) {
     }
 
     GeneratorOutput_Buffer(const std::string &name, const std::vector<Type> &t, int d)
-        : Super(name, IOKind::Buffer, t, d) {
+        : Super(name, ArgInfoKind::Buffer, t, d) {
         internal_assert(!t.empty());
         internal_assert(d != -1);
         static_assert(!TBase::has_static_halide_type, "You can only specify a Type argument for Output<Buffer<T, D>> if T is void or omitted.");
@@ -2496,13 +2496,13 @@ protected:
     }
 
     GeneratorOutput_Buffer(const std::string &name, const std::vector<Type> &t)
-        : Super(name, IOKind::Buffer, t, -1) {
+        : Super(name, ArgInfoKind::Buffer, t, -1) {
         internal_assert(!t.empty());
         static_assert(!TBase::has_static_halide_type, "You can only specify a Type argument for Output<Buffer<T, D>> if T is void or omitted.");
     }
 
     GeneratorOutput_Buffer(const std::string &name, int d)
-        : Super(name, IOKind::Buffer,
+        : Super(name, ArgInfoKind::Buffer,
                 TBase::has_static_halide_type ? std::vector<Type>{TBase::static_halide_type()} : std::vector<Type>{},
                 d) {
         internal_assert(d != -1);
@@ -2510,13 +2510,13 @@ protected:
     }
 
     GeneratorOutput_Buffer(size_t array_size, const std::string &name)
-        : Super(array_size, name, IOKind::Buffer,
+        : Super(array_size, name, ArgInfoKind::Buffer,
                 TBase::has_static_halide_type ? std::vector<Type>{TBase::static_halide_type()} : std::vector<Type>{},
                 TBase::has_static_dimensions ? TBase::static_dimensions() : -1) {
     }
 
     GeneratorOutput_Buffer(size_t array_size, const std::string &name, const std::vector<Type> &t, int d)
-        : Super(array_size, name, IOKind::Buffer, t, d) {
+        : Super(array_size, name, ArgInfoKind::Buffer, t, d) {
         internal_assert(!t.empty());
         internal_assert(d != -1);
         static_assert(!TBase::has_static_halide_type, "You can only specify a Type argument for Output<Buffer<T, D>> if T is void or omitted.");
@@ -2524,13 +2524,13 @@ protected:
     }
 
     GeneratorOutput_Buffer(size_t array_size, const std::string &name, const std::vector<Type> &t)
-        : Super(array_size, name, IOKind::Buffer, t, -1) {
+        : Super(array_size, name, ArgInfoKind::Buffer, t, -1) {
         internal_assert(!t.empty());
         static_assert(!TBase::has_static_halide_type, "You can only specify a Type argument for Output<Buffer<T, D>> if T is void or omitted.");
     }
 
     GeneratorOutput_Buffer(size_t array_size, const std::string &name, int d)
-        : Super(array_size, name, IOKind::Buffer,
+        : Super(array_size, name, ArgInfoKind::Buffer,
                 TBase::has_static_halide_type ? std::vector<Type>{TBase::static_halide_type()} : std::vector<Type>{},
                 d) {
         internal_assert(d != -1);
@@ -2664,23 +2664,23 @@ protected:
     using TBase = typename Super::TBase;
 
     explicit GeneratorOutput_Func(const std::string &name)
-        : Super(name, IOKind::Function, std::vector<Type>{}, -1) {
+        : Super(name, ArgInfoKind::Function, std::vector<Type>{}, -1) {
     }
 
     GeneratorOutput_Func(const std::string &name, const std::vector<Type> &t, int d)
-        : Super(name, IOKind::Function, t, d) {
+        : Super(name, ArgInfoKind::Function, t, d) {
     }
 
     GeneratorOutput_Func(const std::string &name, const std::vector<Type> &t)
-        : Super(name, IOKind::Function, t, -1) {
+        : Super(name, ArgInfoKind::Function, t, -1) {
     }
 
     GeneratorOutput_Func(const std::string &name, int d)
-        : Super(name, IOKind::Function, {}, d) {
+        : Super(name, ArgInfoKind::Function, {}, d) {
     }
 
     GeneratorOutput_Func(size_t array_size, const std::string &name, const std::vector<Type> &t, int d)
-        : Super(array_size, name, IOKind::Function, t, d) {
+        : Super(array_size, name, ArgInfoKind::Function, t, d) {
     }
 
 public:
@@ -2739,11 +2739,11 @@ protected:
     using TBase = typename Super::TBase;
 
     explicit GeneratorOutput_Arithmetic(const std::string &name)
-        : Super(name, IOKind::Function, {type_of<TBase>()}, 0) {
+        : Super(name, ArgInfoKind::Function, {type_of<TBase>()}, 0) {
     }
 
     GeneratorOutput_Arithmetic(size_t array_size, const std::string &name)
-        : Super(array_size, name, IOKind::Function, {type_of<TBase>()}, 0) {
+        : Super(array_size, name, ArgInfoKind::Function, {type_of<TBase>()}, 0) {
     }
 };
 
@@ -3490,7 +3490,7 @@ private:
 
     static void check_input_is_singular(Internal::GeneratorInputBase *in);
     static void check_input_is_array(Internal::GeneratorInputBase *in);
-    static void check_input_kind(Internal::GeneratorInputBase *in, Internal::IOKind kind);
+    static void check_input_kind(Internal::GeneratorInputBase *in, Internal::ArgInfoKind kind);
 
     // Allow Buffer<> if:
     // -- we are assigning it to an Input<Buffer<>> (with compatible type and dimensions),
@@ -3501,18 +3501,18 @@ private:
         auto *in = param_info().inputs().at(i);
         check_input_is_singular(in);
         const auto k = in->kind();
-        if (k == Internal::IOKind::Buffer) {
+        if (k == Internal::ArgInfoKind::Buffer) {
             Halide::Buffer<> b = arg;
             StubInputBuffer<> sib(b);
             StubInput si(sib);
             return {si};
-        } else if (k == Internal::IOKind::Function) {
+        } else if (k == Internal::ArgInfoKind::Function) {
             Halide::Func f(arg.name() + "_im");
             f(Halide::_) = arg(Halide::_);
             StubInput si(f);
             return {si};
         } else {
-            check_input_kind(in, Internal::IOKind::Buffer);  // just to trigger assertion
+            check_input_kind(in, Internal::ArgInfoKind::Buffer);  // just to trigger assertion
             return {};
         }
     }
@@ -3526,16 +3526,16 @@ private:
         auto *in = param_info().inputs().at(i);
         check_input_is_singular(in);
         const auto k = in->kind();
-        if (k == Internal::IOKind::Buffer) {
+        if (k == Internal::ArgInfoKind::Buffer) {
             StubInputBuffer<> sib = arg;
             StubInput si(sib);
             return {si};
-        } else if (k == Internal::IOKind::Function) {
+        } else if (k == Internal::ArgInfoKind::Function) {
             Halide::Func f = arg.funcs().at(0);
             StubInput si(f);
             return {si};
         } else {
-            check_input_kind(in, Internal::IOKind::Buffer);  // just to trigger assertion
+            check_input_kind(in, Internal::ArgInfoKind::Buffer);  // just to trigger assertion
             return {};
         }
     }
@@ -3543,7 +3543,7 @@ private:
     // Allow Func iff we are assigning it to an Input<Func> (with compatible type and dimensions).
     std::vector<StubInput> build_input(size_t i, const Func &arg) {
         auto *in = param_info().inputs().at(i);
-        check_input_kind(in, Internal::IOKind::Function);
+        check_input_kind(in, Internal::ArgInfoKind::Function);
         check_input_is_singular(in);
         const Halide::Func &f = arg;
         StubInput si(f);
@@ -3553,7 +3553,7 @@ private:
     // Allow vector<Func> iff we are assigning it to an Input<Func[]> (with compatible type and dimensions).
     std::vector<StubInput> build_input(size_t i, const std::vector<Func> &arg) {
         auto *in = param_info().inputs().at(i);
-        check_input_kind(in, Internal::IOKind::Function);
+        check_input_kind(in, Internal::ArgInfoKind::Function);
         check_input_is_array(in);
         // My kingdom for a list comprehension...
         std::vector<StubInput> siv;
@@ -3567,7 +3567,7 @@ private:
     // Expr must be Input<Scalar>.
     std::vector<StubInput> build_input(size_t i, const Expr &arg) {
         auto *in = param_info().inputs().at(i);
-        check_input_kind(in, Internal::IOKind::Scalar);
+        check_input_kind(in, Internal::ArgInfoKind::Scalar);
         check_input_is_singular(in);
         StubInput si(arg);
         return {si};
@@ -3576,7 +3576,7 @@ private:
     // (Array form)
     std::vector<StubInput> build_input(size_t i, const std::vector<Expr> &arg) {
         auto *in = param_info().inputs().at(i);
-        check_input_kind(in, Internal::IOKind::Scalar);
+        check_input_kind(in, Internal::ArgInfoKind::Scalar);
         check_input_is_array(in);
         std::vector<StubInput> siv;
         siv.reserve(arg.size());
@@ -3592,7 +3592,7 @@ private:
              typename std::enable_if<std::is_arithmetic<T>::value>::type * = nullptr>
     std::vector<StubInput> build_input(size_t i, const T &arg) {
         auto *in = param_info().inputs().at(i);
-        check_input_kind(in, Internal::IOKind::Scalar);
+        check_input_kind(in, Internal::ArgInfoKind::Scalar);
         check_input_is_singular(in);
         // We must use an explicit Expr() ctor to preserve the type
         Expr e(arg);
@@ -3605,7 +3605,7 @@ private:
              typename std::enable_if<std::is_arithmetic<T>::value>::type * = nullptr>
     std::vector<StubInput> build_input(size_t i, const std::vector<T> &arg) {
         auto *in = param_info().inputs().at(i);
-        check_input_kind(in, Internal::IOKind::Scalar);
+        check_input_kind(in, Internal::ArgInfoKind::Scalar);
         check_input_is_array(in);
         std::vector<StubInput> siv;
         siv.reserve(arg.size());
