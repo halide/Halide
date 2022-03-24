@@ -53,7 +53,9 @@ extern void halide_vulkan_finalize_kernels(void *user_context, void *state_ptr);
 //   released via halide_release_vulkan_context.
 // TODO: describe memory type index
 // TODO: describe queue family index
-extern int halide_vulkan_acquire_context(void *user_context, struct VkInstance_T **instance,
+extern int halide_vulkan_acquire_context(void *user_context, 
+                                         struct VkAllocationCallbacks_T** alloc, 
+                                         struct VkInstance_T **instance,
                                          struct VkDevice_T **device, struct VkQueue_T **queue,
                                          struct VkPhysicalDevice_T **physical_device, uint32_t *queue_family_index, bool create = true);
 

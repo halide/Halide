@@ -60,27 +60,50 @@ extern WEAK halide_device_interface_t vulkan_device_interface;
 
 WEAK int vk_create_memory_allocator(void *user_context);
 WEAK int vk_destroy_memory_allocator(void *user_context);
+WEAK VkShaderModule vk_compile_shader_module(void *user_context, VkDevice device, const VkAllocationCallbacks* allocation_callbacks, const char *src, int size);
+WEAK int vk_destroy_kernel(void* user_context, VkDevice device, VkShaderModule shader_module);
+WEAK const char *get_vulkan_error_name(VkResult error);
 
 // --
 
-// Structure to hold the state of a module attached to the context.
-// Also used as a linked-list to keep track of all the different
-// modules that are attached to a context in order to release them all
-// when then context is released.
-struct module_state {
-    // TODO: Could also be a VkPipeline, but in that case we need to
-    // pass information required to construct the VkDescriptorSetLayout
-    // to halide_vulkan_initialize_kernels().  This will require modifying
-    // Vulkan GPU codegen to pass in the required info
-    // So, for now, we'll use a VKShaderModule here and do the boilerplate
-    // of creating a pipeline in the run function.
-    VkShaderModule shader_module;
-    module_state *next;
-};
-WEAK module_state *state_list = nullptr;
-
 // Compilation cache for compiled shader modules
 WEAK Halide::Internal::GPUCompilationCache<VkDevice, VkShaderModule> compilation_cache;
+
+// --
+
+WEAK VkShaderModule vk_compile_shader_module(void *user_context, VkDevice device, const VkAllocationCallbacks* allocation_callbacks, const char *src, int size) {
+    debug(user_context)
+        << "Vulkan: vk_compile_shader_module (user_context: " << user_context
+        << ", device: " << (void*)device
+        << ", allocation_callbacks: " << (void*)allocation_callbacks
+        << ", source: " << (void *)src
+        << ", size: " << size << "\n";
+
+#ifdef DEBUG_RUNTIME
+    uint64_t t_before = halide_current_time_ns(user_context);
+#endif
+
+    VkShaderModuleCreateInfo shader_info = {
+        VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+        nullptr,               // pointer to structure extending this
+        0,                     // flags (curently unused)
+        (size_t)size,          // code size in bytes
+        (const uint32_t *)src  // source
+    };
+
+    VkShaderModule shader_module;
+    VkResult result = vkCreateShaderModule(device, &shader_info, allocation_callbacks, &shader_module);
+    if (result != VK_SUCCESS) {
+        error(user_context) << "Vulkan: vkCreateShaderModule Failed! Error returned: " << get_vulkan_error_name(result) << "\n";
+    }
+
+#ifdef DEBUG_RUNTIME
+    uint64_t t_after = halide_current_time_ns(user_context);
+    debug(user_context) << "    Time: " << (t_after - t_before) / 1.0e6 << " ms\n";
+#endif
+
+    return shader_module;
+}
 
 // --
 

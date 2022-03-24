@@ -13,6 +13,7 @@ namespace Internal {
 namespace Vulkan {
 
 // An Vulkan context/queue/synchronization lock defined in this module with weak linkage
+VkAllocationCallbacks* WEAK cached_allocation_callbacks = nullptr;
 VkInstance WEAK cached_instance = nullptr;
 VkDevice WEAK cached_device = nullptr;
 VkQueue WEAK cached_queue = nullptr;
@@ -25,6 +26,7 @@ volatile ScopedSpinLock::AtomicFlag WEAK thread_lock = 0;
 // Prototype for helper function for creating a new vulkan context (returns the instance, device, queue, etc)
 WEAK int vk_create_context(
     void *user_context,
+    VkAllocationCallbacks** alloc,
     VkInstance *instance,
     VkDevice *device, VkQueue *queue,
     VkPhysicalDevice *physical_device,
@@ -37,20 +39,25 @@ class VulkanContext {
     void *user_context;
 
 public:
+    VkAllocationCallbacks alloc;
     VkInstance instance;
     VkDevice device;
-    VkQueue queue;
-    VkResult error;
     VkPhysicalDevice physical_device;
+    VkQueue queue;
     uint32_t queue_family_index;  // used for operations requiring queue family
-
+    VkResult error;
+    
     HALIDE_ALWAYS_INLINE VulkanContext(void *user_context)
         : user_context(user_context),
-          instance(nullptr), device(nullptr), queue(nullptr),
-          error(VK_SUCCESS), physical_device(nullptr),
-          queue_family_index(0) {
+          alloc(),
+          instance(nullptr), 
+          device(nullptr), 
+          physical_device(nullptr),
+          queue(nullptr),
+          queue_family_index(0),
+          error(VK_SUCCESS) {
 
-        int result = halide_vulkan_acquire_context(user_context, &instance, &device, &queue, &physical_device, &queue_family_index);
+        int result = halide_vulkan_acquire_context(user_context, &alloc, &instance, &device, &queue, &physical_device, &queue_family_index);
         halide_abort_if_false(user_context, result == 0);
         halide_abort_if_false(user_context, device != nullptr);
         halide_abort_if_false(user_context, queue != nullptr);
@@ -63,7 +70,7 @@ public:
 
     // For now, this is always nullptr
     HALIDE_ALWAYS_INLINE const VkAllocationCallbacks *allocation_callbacks() {
-        return nullptr;
+        return alloc;
     }
 };
 

@@ -198,14 +198,6 @@ void BlockStorage::resize(void *user_context, size_t entry_count, bool realloc) 
     size_t requested_size = entry_count;
     size_t minimum_size = config.minimum_capacity;
     size_t actual_size = current_size;
-
-    debug(0) << "BlockStorage: Resize (" <<
-            "requested_size=" << (int32_t)requested_size << " " <<
-            "current_size=" << (int32_t)current_size << " " <<
-            "minimum_size=" << (int32_t)minimum_size << " " <<
-            "entry_size=" << (int32_t)config.entry_size << " " <<
-            "realloc=" << (realloc ? "true" : "false") << ")...\n";
-
     count = requested_size;
 
     // increase capacity upto 1.5x existing (or at least min_capacity)
@@ -214,6 +206,14 @@ void BlockStorage::resize(void *user_context, size_t entry_count, bool realloc) 
     } else if (!realloc) {
         return;
     }
+
+    debug(0) << "BlockStorage: Resize (" <<
+            "requested_size=" << (int32_t)requested_size << " " <<
+            "current_size=" << (int32_t)current_size << " " <<
+            "minimum_size=" << (int32_t)minimum_size << " " <<
+            "actual_size=" << (int32_t)actual_size << " " <<
+            "entry_size=" << (int32_t)config.entry_size << " " <<
+            "realloc=" << (realloc ? "true" : "false") << ")...\n";
 
     allocate(user_context, actual_size);
 }

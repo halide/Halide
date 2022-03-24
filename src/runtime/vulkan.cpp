@@ -26,7 +26,9 @@ extern "C" {
 //   call to halide_release_vulkan_context. halide_acquire_vulkan_context
 //   should block while a previous call (if any) has not yet been
 //   released via halide_release_vulkan_context.
-WEAK int halide_vulkan_acquire_context(void *user_context, VkInstance *instance,
+WEAK int halide_vulkan_acquire_context(void *user_context, 
+                                       VkAllocationCallbacks* allocation_callbacks,
+                                       VkInstance *instance,
                                        VkDevice *device, VkQueue *queue, VkPhysicalDevice *physical_device,
                                        uint32_t *queue_family_index, bool create) {
 
@@ -42,13 +44,14 @@ WEAK int halide_vulkan_acquire_context(void *user_context, VkInstance *instance,
     halide_abort_if_false(user_context, &cached_queue != nullptr);
     halide_abort_if_false(user_context, &cached_physical_device != nullptr);
     if ((cached_instance == nullptr) && create) {
-        int result = vk_create_context(user_context, &cached_instance, &cached_device, &cached_queue, &cached_physical_device, &cached_queue_family_index);
+        int result = vk_create_context(user_context, &cached_allocation_callbacks, &cached_instance, &cached_device, &cached_queue, &cached_physical_device, &cached_queue_family_index);
         if (result != halide_error_code_success) {
             __atomic_clear(&thread_lock, __ATOMIC_RELEASE);
             return result;
         }
     }
 
+    *allocation_callbacks = cached_allocation_callbacks;
     *instance = cached_instance;
     *device = cached_device;
     *queue = cached_queue;
@@ -107,47 +110,11 @@ WEAK int halide_vulkan_initialize_kernels(void *user_context, void **state_ptr, 
     uint64_t t_before = halide_current_time_ns(user_context);
 #endif
 
-#if 0
     debug(user_context) << "halide_vulkan_initialize_kernels got compilation_cache mutex.\n";
-    cl_program program;
-    if (!compilation_cache.kernel_state_setup(user_context, state_ptr, ctx.context, program,
-                                              compile_kernel, user_context, ctx.context, src, size)) {
+    VkShaderModule shader_module;
+    if (!compilation_cache.kernel_state_setup(user_context, state_ptr, ctx.device, shader_module,
+                                              Halide::Runtime::Internal::Vulkan::vk_compile_shader_module, user_context, ctx.device, ctx.allocation_callbacks(), src, size)) {
         return halide_error_code_generic_error;
-    }
-    halide_abort_if_false(user_context, program != nullptr);
-#endif
-
-    // Create the state object if necessary. This only happens once, regardless
-    // of how many times halide_init_kernels/halide_release is called.
-    // halide_release traverses this list and releases the program objects, but
-    // it does not modify the list nodes created/inserted here.
-    module_state **state = (module_state **)state_ptr;
-    if (!(*state)) {
-        *state = (module_state *)malloc(sizeof(module_state));
-        (*state)->shader_module = 0;
-        (*state)->next = state_list;
-        state_list = *state;
-    }
-
-    // Create the program if necessary. TODO: The program object needs to not
-    // only already exist, but be created for the same context/device as the
-    // calling context/device.
-    if (!(*state && (*state)->shader_module) && size > 1) {
-        VkShaderModuleCreateInfo shader_info = {
-            VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
-            nullptr,               // pointer to structure extending this
-            0,                     // flags (curently unused)
-            (size_t)size,          // code size in bytes
-            (const uint32_t *)src  // source
-        };
-
-        debug(user_context) << "    vkCreateShaderModule src: " << (const uint32_t *)src << "\n";
-
-        VkResult ret_code = vkCreateShaderModule(ctx.device, &shader_info, ctx.allocation_callbacks(), &((*state)->shader_module));
-        if (ret_code != VK_SUCCESS) {
-            debug(user_context) << "Vulkan: vkCreateShaderModule returned: " << get_vulkan_error_name(ret_code) << "\n";
-            return -1;
-        }
     }
 
 #ifdef DEBUG_RUNTIME
@@ -164,8 +131,7 @@ WEAK void halide_vulkan_finalize_kernels(void *user_context, void *state_ptr) {
         << ", state_ptr: " << state_ptr << "\n";
     VulkanContext ctx(user_context);
     if (ctx.error == VK_SUCCESS) {
-        // TODO: FIXME
-        //        compilation_cache.release_hold(user_context, ctx.context, state_ptr);
+        compilation_cache.release_hold(user_context, ctx.device, state_ptr);
     }
 }
 
@@ -192,32 +158,33 @@ WEAK int halide_vulkan_device_release(void *user_context) {
     debug(user_context)
         << "Vulkan: halide_vulkan_device_release (user_context: " << user_context << ")\n";
 
+    VkAllocationCallbacks alloc;
     VkInstance instance;
     VkDevice device;
     VkQueue queue;
     VkPhysicalDevice physical_device;
     uint32_t _throwaway;
-    int acquire_status = halide_vulkan_acquire_context(user_context, &instance, &device, &queue, &physical_device, &_throwaway, false);
+    int acquire_status = halide_vulkan_acquire_context(user_context, &alloc, &instance, &device, &queue, &physical_device, &_throwaway, false);
     halide_debug_assert(user_context, acquire_status == VK_SUCCESS);
     (void)acquire_status;
     if (instance != nullptr) {
-        // SYNC
+        struct DestroyShaderModule {
+            VkDevice device;
+            VkAllocationCallbacks allocation_callbacks;
 
-        // Unload the modules attached to this context. Note that the list
-        // nodes themselves are not freed, only the program objects are
-        // released. Subsequent calls to halide_init_kernels might re-create
-        // the program object using the same list node to store the program
-        // object.
-        module_state *state = state_list;
-        while (state) {
-            if (state->shader_module) {
+            DestroyShaderModule(VkDevice dev, VkAllocationCallbacks callbacks) :
+                device(dev), allocation_callbacks(callbacks) {}
 
-                debug(user_context) << "    vkDestroyShaderModule " << state->shader_module << "\n";
-                vkDestroyShaderModule(device, state->shader_module, nullptr /* TODO: alloc callbacks. */);
-                state->shader_module = 0;
+            void destroy(VkShaderModule shader_module) {
+                vkDestroyShaderModule(device, shader_module, &allocation_callbacks);
             }
-            state = state->next;
-        }
+        };
+
+        vkQueueWaitIdle(queue);
+        
+        shader_module_destructor(device, alloc);
+        compilation_cache.delete_context(user_context, device, shader_module_destructor::destroy);
+    
 
         vk_destroy_memory_allocator(user_context);
 
@@ -719,8 +686,6 @@ WEAK int halide_vulkan_copy_to_host(void *user_context, halide_buffer_t *halide_
     memory_allocator->reclaim(user_context, region);
     memory_allocator->unbind(user_context);
 
-    // TODO: sync
-
 #ifdef DEBUG_RUNTIME
     uint64_t t_after = halide_current_time_ns(user_context);
     debug(user_context) << "    Time: " << (t_after - t_before) / 1.0e6 << " ms\n";
@@ -915,9 +880,10 @@ WEAK int halide_vulkan_run(void *user_context,
 
     //// 3. Create a compute pipeline
     // Get the shader module
-    halide_abort_if_false(user_context, state_ptr != nullptr);
-    module_state *state = (module_state *)state_ptr;
 
+    VkShaderModule shader_module{};
+    bool found = compilation_cache.lookup(ctx.context, state_ptr, shader_module);
+    halide_abort_if_false(user_context, found && shader_module != nullptr);
     VkComputePipelineCreateInfo compute_pipeline_info =
         {
             VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO,  // structure type
@@ -929,7 +895,7 @@ WEAK int halide_vulkan_run(void *user_context,
                 nullptr,                                              //pointer to a structure extending this
                 0,                                                    // flags
                 VK_SHADER_STAGE_COMPUTE_BIT,                          // compute stage shader
-                state->shader_module,                                 // shader module
+                shader_module,                                        // shader module
                 entry_name,                                           // entry point name
                 nullptr                                               // pointer to VkSpecializationInfo struct
             },
