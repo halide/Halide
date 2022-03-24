@@ -80,7 +80,6 @@ public:
                                   Target::AVX2, Target::AVX512,
                                   Target::FMA, Target::FMA4, Target::F16C,
                                   Target::VSX, Target::POWER_ARCH_2_07,
-                                  Target::ARMv7s, Target::NoNEON,
                                   Target::WasmSimd128}) {
             if (target.has_feature(f) != host_target.has_feature(f)) {
                 can_run_the_code = false;
@@ -286,13 +285,7 @@ public:
     }
 
     void check(std::string op, int vector_width, Expr e) {
-        // Make a name for the test by uniquing then sanitizing the op name
-        std::string name = "op_" + op;
-        for (size_t i = 0; i < name.size(); i++) {
-            if (!isalnum(name[i])) name[i] = '_';
-        }
-
-        name += "_" + std::to_string(tasks.size());
+        std::string name = get_unique_test_name(op, tasks.size());
 
         // Bail out after generating the unique_name, so that names are
         // unique across different processes and don't depend on filter
@@ -301,6 +294,18 @@ public:
 
         tasks.emplace_back(Task{op, name, vector_width, e});
     }
+
+    std::string get_unique_test_name(const std::string &op, int id) {
+        // Make a name for the test by uniquing then sanitizing the op name
+        std::string name = "op_" + op;
+        for (size_t i = 0; i < name.size(); i++) {
+            if (!isalnum(name[i])) name[i] = '_';
+        }
+
+        name += "_" + std::to_string(id);
+        return name;
+    }
+
     virtual void add_tests() = 0;
     virtual void setup_images() {
         for (auto p : image_params) {
