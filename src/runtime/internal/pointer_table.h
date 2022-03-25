@@ -12,7 +12,7 @@ namespace Internal {
 // -- Customizable allocator ... default uses NativeSystemAllocator
 class PointerTable {
 public:
-    static const size_t default_capacity = 32;  // smallish
+    static constexpr size_t default_capacity = 32;  // smallish
 
     PointerTable(void *user_context, size_t initial_capacity=0, const SystemMemoryAllocatorFns &sma = default_allocator());
     PointerTable(const PointerTable &other);

@@ -13,12 +13,29 @@ namespace Vulkan {
 // --
 
 // Halide System allocator for host allocations
-WEAK void *vk_system_malloc(void *user_context, size_t bytes) {
-    return malloc(bytes);
+WEAK void *vk_system_malloc(void *user_context, size_t size) {
+    return malloc(size);
 }
 
 WEAK void vk_system_free(void *user_context, void *ptr) {
     free(ptr);
+}
+
+// Vulkan host-side allocation 
+WEAK void* vk_host_malloc(void *user_context, size_t size, size_t alignment, VkSystemAllocationScope scope, const VkAllocationCallbacks* callbacks) {
+    if(callbacks) {
+        return callbacks->pfnAllocation(user_context, size, alignment, scope);
+    } else {
+        return vk_system_malloc(user_context, size);
+    }
+}
+
+WEAK void vk_host_free(void *user_context, void *ptr, const VkAllocationCallbacks* callbacks) {
+    if(callbacks) {
+        return callbacks->pfnFree(user_context, ptr);
+    } else {
+        return vk_system_free(user_context, ptr);
+    }
 }
 
 WEAK SystemMemoryAllocatorFns system_allocator = {vk_system_malloc, vk_system_free};
@@ -577,9 +594,13 @@ uint32_t VulkanMemoryAllocator::select_memory_usage(void *user_context, MemoryPr
 
 // --
 
-WEAK int vk_create_memory_allocator(void *user_context) {
+WEAK int vk_create_memory_allocator(void *user_context, const VkAllocationCallbacks* callbacks) {
     if (memory_allocator != nullptr) {
         return halide_error_code_success;
+    }
+
+    if(callbacks) {
+        // TODO
     }
 
     memory_allocator = VulkanMemoryAllocator::create(user_context, memory_allocator_config, system_allocator);
@@ -589,9 +610,13 @@ WEAK int vk_create_memory_allocator(void *user_context) {
     return halide_error_code_success;
 }
 
-WEAK int vk_destroy_memory_allocator(void *user_context) {
+WEAK int vk_destroy_memory_allocator(void *user_context, const VkAllocationCallbacks* callbacks) {
     if (memory_allocator == nullptr) {
         return halide_error_code_success;
+    }
+
+    if(callbacks) {
+        // TODO
     }
 
     VulkanMemoryAllocator::destroy(user_context, memory_allocator);

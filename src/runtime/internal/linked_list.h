@@ -16,7 +16,7 @@ public:
     LinkedList &operator=(const LinkedList &) = delete;
 
     // Default initial capacity
-    static const uint32_t default_capacity = 32; // smallish
+    static constexpr uint32_t default_capacity = uint32_t(32); // smallish
 
     // List entry
     struct EntryType {

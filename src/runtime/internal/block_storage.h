@@ -15,7 +15,7 @@ namespace Internal {
 // -- Customizable allocator ... default uses NativeSystemAllocator
 class BlockStorage {
 public:
-    static const size_t default_capacity = 32;  // smallish
+    static constexpr size_t default_capacity = 32;  // smallish
 
     // Configurable parameters
     struct Config {

@@ -22,15 +22,19 @@ uint32_t WEAK cached_queue_family_index = 0;
 volatile ScopedSpinLock::AtomicFlag WEAK thread_lock = 0;
 
 // --
+// Default allocation callbacks to be used with the API (override if necessary)
+static constexpr VkAllocationCallbacks* default_allocation_callbacks = nullptr; // nullptr => use Vulkan runtime implementation
+
+// --
 
 // Prototype for helper function for creating a new vulkan context (returns the instance, device, queue, etc)
 WEAK int vk_create_context(
     void *user_context,
-    VkAllocationCallbacks** alloc,
     VkInstance *instance,
     VkDevice *device, VkQueue *queue,
     VkPhysicalDevice *physical_device,
-    uint32_t *queue_family_index);
+    uint32_t *queue_family_index,
+    VkAllocationCallbacks **alloc=nullptr);
 
 // --
 
@@ -39,7 +43,7 @@ class VulkanContext {
     void *user_context;
 
 public:
-    VkAllocationCallbacks alloc;
+    VkAllocationCallbacks* alloc;
     VkInstance instance;
     VkDevice device;
     VkPhysicalDevice physical_device;
@@ -49,7 +53,7 @@ public:
     
     HALIDE_ALWAYS_INLINE VulkanContext(void *user_context)
         : user_context(user_context),
-          alloc(),
+          alloc(nullptr),
           instance(nullptr), 
           device(nullptr), 
           physical_device(nullptr),
@@ -57,7 +61,7 @@ public:
           queue_family_index(0),
           error(VK_SUCCESS) {
 
-        int result = halide_vulkan_acquire_context(user_context, &alloc, &instance, &device, &queue, &physical_device, &queue_family_index);
+        int result = halide_vulkan_acquire_context(user_context, &instance, &device, &queue, &physical_device, &queue_family_index, &alloc);
         halide_abort_if_false(user_context, result == 0);
         halide_abort_if_false(user_context, device != nullptr);
         halide_abort_if_false(user_context, queue != nullptr);
@@ -248,7 +252,7 @@ WEAK int vk_create_device(void *user_context, const StringTable &requested_layer
 
 // Initializes the context (used by the default implementation of halide_acquire_context)
 WEAK int vk_create_context(void *user_context, VkInstance *instance, VkDevice *device, VkQueue *queue,
-                           VkPhysicalDevice *physical_device, uint32_t *queue_family_index) {
+                           VkPhysicalDevice *physical_device, uint32_t *queue_family_index, VkAllocationCallbacks **alloc) {
 
     debug(user_context) << "    vk_create_context (user_context: " << user_context << ")\n";
 
@@ -278,7 +282,8 @@ WEAK int vk_create_context(void *user_context, VkInstance *instance, VkDevice *d
         return status;
     }
 
-    status = vk_create_memory_allocator(user_context);
+    *alloc = default_allocation_callbacks;
+    status = vk_create_memory_allocator(user_context, *alloc);
     if (status != halide_error_code_success) {
         return status;
     }
