@@ -381,14 +381,12 @@ WEAK void word_lock::unlock_full() {
         word_lock_queue_data *head = (word_lock_queue_data *)(expected & ~(uintptr_t)(queue_lock_bit | lock_bit));
         word_lock_queue_data *current = head;
         word_lock_queue_data *tail = current->tail;
-        int times_through = 0;
         while (tail == nullptr) {
             word_lock_queue_data *next = current->next;
             halide_abort_if_false(nullptr, next != nullptr);
             next->prev = current;
             current = next;
             tail = current->tail;
-            times_through++;
         }
         head->tail = tail;
 
