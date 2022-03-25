@@ -1,6 +1,5 @@
 import halide as hl
 import numpy as np
-import random
 
 def test_compiletime_error():
     x = hl.Var('x')
