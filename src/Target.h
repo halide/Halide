@@ -50,6 +50,24 @@ struct Target {
     /** The bit-width of the target machine. Must be 0 for unknown, or 32 or 64. */
     int bits = 0;
 
+    /** The specific processor to be targeted, tuned for.
+     * Corresponds to processor_name_map in Target.cpp. */
+    enum Processor {
+        ProcessorGeneric = 0,
+        K8,
+        K8_SSE3,
+        AMDFam10,
+        BtVer1,
+        BdVer1,
+        BdVer2,
+        BdVer3,
+        BdVer4,
+        BtVer2,
+        ZnVer1,
+        ZnVer2,
+        ZnVer3,
+    } processor = ProcessorGeneric;
+
     /** Optional features a target can have.
      * Corresponds to feature_name_map in Target.cpp.
      * See definitions in HalideRuntime.h for full information.
@@ -133,23 +151,11 @@ struct Target {
         ARMv81a = halide_target_feature_armv81a,
         SanitizerCoverage = halide_target_feature_sanitizer_coverage,
         ProfileByTimer = halide_target_feature_profile_by_timer,
-        TuneK8 = halide_target_feature_tune_k8,
-        TuneK8_SSE3 = halide_target_feature_tune_k8_sse3,
-        TuneAMDFam10 = halide_target_feature_tune_amdfam10,
-        TuneBtVer1 = halide_target_feature_tune_btver1,
-        TuneBdVer1 = halide_target_feature_tune_bdver1,
-        TuneBdVer2 = halide_target_feature_tune_bdver2,
-        TuneBdVer3 = halide_target_feature_tune_bdver3,
-        TuneBdVer4 = halide_target_feature_tune_bdver4,
-        TuneBtVer2 = halide_target_feature_tune_btver2,
-        TuneZnVer1 = halide_target_feature_tune_znver1,
-        TuneZnVer2 = halide_target_feature_tune_znver2,
-        TuneZnVer3 = halide_target_feature_tune_znver3,
         FeatureEnd = halide_target_feature_end
     };
     Target() = default;
-    Target(OS o, Arch a, int b, const std::vector<Feature> &initial_features = std::vector<Feature>())
-        : os(o), arch(a), bits(b) {
+    Target(OS o, Arch a, int b, Processor p, const std::vector<Feature> &initial_features = std::vector<Feature>())
+        : os(o), arch(a), bits(b), processor(p) {
         for (const auto &f : initial_features) {
             set_feature(f);
         }
@@ -238,6 +244,7 @@ struct Target {
         return os == other.os &&
                arch == other.arch &&
                bits == other.bits &&
+               processor == other.processor &&
                features == other.features;
     }
 
@@ -259,7 +266,7 @@ struct Target {
     /** Convert the Target into a string form that can be reconstituted
      * by merge_string(), which will always be of the form
      *
-     *   arch-bits-os-feature1-feature2...featureN.
+     *   arch-bits-os-processor-feature1-feature2...featureN.
      *
      * Note that is guaranteed that Target(t1.to_string()) == t1,
      * but not that Target(s).to_string() == s (since there can be

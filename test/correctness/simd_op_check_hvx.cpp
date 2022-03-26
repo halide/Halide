@@ -708,7 +708,7 @@ int main(int argc, char **argv) {
     printf("host is:      %s\n", host.to_string().c_str());
     printf("HL_TARGET is: %s\n", hl_target.to_string().c_str());
 
-    Target t(Target::NoOS, Target::Hexagon, 32);
+    Target t(Target::NoOS, Target::Hexagon, 32, Target::ProcessorGeneric);
     for (const auto &f : {Target::HVX,
                           Target::HVX_v62,
                           Target::HVX_v65,

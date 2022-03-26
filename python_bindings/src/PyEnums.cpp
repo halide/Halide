@@ -82,6 +82,21 @@ void define_enums(py::module &m) {
         .value("RISCV", Target::Arch::RISCV)
         .value("WebAssembly", Target::Arch::WebAssembly);
 
+    py::enum_<Target::Processor>(m, "TargetProcessor")
+        .value("TuneGeneric", Target::Processor::ProcessorGeneric)
+        .value("TuneK8", Target::Processor::K8)
+        .value("TuneK8_SSE3", Target::Processor::K8_SSE3)
+        .value("TuneAMDFam10", Target::Processor::AMDFam10)
+        .value("TuneBtVer1", Target::Processor::BtVer1)
+        .value("TuneBdVer1", Target::Processor::BdVer1)
+        .value("TuneBdVer2", Target::Processor::BdVer2)
+        .value("TuneBdVer3", Target::Processor::BdVer3)
+        .value("TuneBdVer4", Target::Processor::BdVer4)
+        .value("TuneBtVer2", Target::Processor::BtVer2)
+        .value("TuneZnVer1", Target::Processor::ZnVer1)
+        .value("TuneZnVer2", Target::Processor::ZnVer2)
+        .value("TuneZnVer3", Target::Processor::ZnVer3);
+
     py::enum_<Target::Feature>(m, "TargetFeature")
         .value("JIT", Target::Feature::JIT)
         .value("Debug", Target::Feature::Debug)
@@ -156,18 +171,6 @@ void define_enums(py::module &m) {
         .value("ARMv81a", Target::Feature::ARMv81a)
         .value("SanitizerCoverage", Target::Feature::SanitizerCoverage)
         .value("ProfileByTimer", Target::Feature::ProfileByTimer)
-        .value("TuneK8", Target::Feature::TuneK8)
-        .value("TuneK8_SSE3", Target::Feature::TuneK8_SSE3)
-        .value("TuneAMDFam10", Target::Feature::TuneAMDFam10)
-        .value("TuneBtVer1", Target::Feature::TuneBtVer1)
-        .value("TuneBdVer1", Target::Feature::TuneBdVer1)
-        .value("TuneBdVer2", Target::Feature::TuneBdVer2)
-        .value("TuneBdVer3", Target::Feature::TuneBdVer3)
-        .value("TuneBdVer4", Target::Feature::TuneBdVer4)
-        .value("TuneBtVer2", Target::Feature::TuneBtVer2)
-        .value("TuneZnVer1", Target::Feature::TuneZnVer1)
-        .value("TuneZnVer2", Target::Feature::TuneZnVer2)
-        .value("TuneZnVer3", Target::Feature::TuneZnVer3)
         .value("FeatureEnd", Target::Feature::FeatureEnd);
 
     py::enum_<halide_type_code_t>(m, "TypeCode")

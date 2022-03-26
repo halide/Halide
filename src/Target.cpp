@@ -76,6 +76,7 @@ Target calculate_host_target() {
 
     bool use_64_bits = (sizeof(size_t) == 8);
     int bits = use_64_bits ? 64 : 32;
+    Target::Processor processor = Target::Processor::ProcessorGeneric;
     std::vector<Target::Feature> initial_features;
 
 #if __riscv
@@ -189,7 +190,7 @@ Target calculate_host_target() {
 #endif
 #endif
 
-    return {os, arch, bits, initial_features};
+    return {os, arch, bits, processor, initial_features};
 }
 
 bool is_using_hexagon(const Target &t) {
@@ -307,6 +308,31 @@ bool lookup_arch(const std::string &tok, Target::Arch &result) {
     return false;
 }
 
+const std::map<std::string, Target::Processor> processor_name_map = {
+    {"tune_generic", Target::Processor::ProcessorGeneric},
+    {"tune_k8", Target::Processor::K8},
+    {"tune_k8_sse3", Target::Processor::K8_SSE3},
+    {"tune_amdfam10", Target::Processor::AMDFam10},
+    {"tune_btver1", Target::Processor::BtVer1},
+    {"tune_bdver1", Target::Processor::BdVer1},
+    {"tune_bdver2", Target::Processor::BdVer2},
+    {"tune_bdver3", Target::Processor::BdVer3},
+    {"tune_bdver4", Target::Processor::BdVer4},
+    {"tune_btver2", Target::Processor::BtVer2},
+    {"tune_znver1", Target::Processor::ZnVer1},
+    {"tune_znver2", Target::Processor::ZnVer2},
+    {"tune_znver3", Target::Processor::ZnVer3},
+};
+
+bool lookup_processor(const std::string &tok, Target::Processor &result) {
+    auto processor_iter = processor_name_map.find(tok);
+    if (processor_iter != processor_name_map.end()) {
+        result = processor_iter->second;
+        return true;
+    }
+    return false;
+}
+
 const std::map<std::string, Target::Feature> feature_name_map = {
     {"jit", Target::JIT},
     {"debug", Target::Debug},
@@ -386,18 +412,6 @@ const std::map<std::string, Target::Feature> feature_name_map = {
     {"armv81a", Target::ARMv81a},
     {"sanitizer_coverage", Target::SanitizerCoverage},
     {"profile_by_timer", Target::ProfileByTimer},
-    {"tune_k8", Target::TuneK8},
-    {"tune_k8_sse3", Target::TuneK8_SSE3},
-    {"tune_amdfam10", Target::TuneAMDFam10},
-    {"tune_btver1", Target::TuneBtVer1},
-    {"tune_bdver1", Target::TuneBdVer1},
-    {"tune_bdver2", Target::TuneBdVer2},
-    {"tune_bdver3", Target::TuneBdVer3},
-    {"tune_bdver4", Target::TuneBdVer4},
-    {"tune_btver2", Target::TuneBtVer2},
-    {"tune_znver1", Target::TuneZnVer1},
-    {"tune_znver2", Target::TuneZnVer2},
-    {"tune_znver3", Target::TuneZnVer3},
     // NOTE: When adding features to this map, be sure to update PyEnums.cpp as well.
 };
 
@@ -466,7 +480,7 @@ bool merge_string(Target &t, const std::string &target) {
     }
     tokens.push_back(rest);
 
-    bool os_specified = false, arch_specified = false, bits_specified = false, tune_specified = false, features_specified = false;
+    bool os_specified = false, arch_specified = false, bits_specified = false, processor_specified = false, features_specified = false;
     bool is_host = false;
 
     for (size_t i = 0; i < tokens.size(); i++) {
@@ -496,13 +510,18 @@ bool merge_string(Target &t, const std::string &target) {
                 return false;
             }
             os_specified = true;
+        } else if (lookup_processor(tok, t.processor)) {
+            if (processor_specified) {
+                return false;
+            }
+            processor_specified = true;
         } else if (lookup_feature(tok, feature)) {
             if (tok.substr(0, std::strlen("tune_")) == "tune_") {
-                if (tune_specified) {
+                if (processor_specified) {
                     // Only a single tune makes sense.
                     return false;
                 }
-                tune_specified = true;
+                processor_specified = true;
             }
             t.set_feature(feature);
             features_specified = true;
@@ -560,6 +579,12 @@ void bad_target_string(const std::string &target) {
         separator = ", ";
     }
     separator = "";
+    std::string processors;
+    for (const auto &processor_entry : processor_name_map) {
+        processors += separator + processor_entry.first;
+        separator = ", ";
+    }
+    separator = "";
     // Format the features to go one feature over 70 characters per line,
     // assume the first line starts with "Features are ".
     int line_char_start = -(int)sizeof("Features are");
@@ -574,10 +599,11 @@ void bad_target_string(const std::string &target) {
         }
     }
     user_error << "Did not understand Halide target " << target << "\n"
-               << "Expected format is arch-bits-os-feature1-feature2-...\n"
+               << "Expected format is arch-bits-os-processor-feature1-feature2-...\n"
                << "Where arch is: " << architectures << ".\n"
                << "bits is either 32 or 64.\n"
                << "os is: " << oses << ".\n"
+               << "processor is: " << processors << ".\n"
                << "\n"
                << "If arch, bits, or os are omitted, they default to the host.\n"
                << "\n"
@@ -644,6 +670,12 @@ std::string Target::to_string() const {
     for (const auto &os_entry : os_name_map) {
         if (os_entry.second == os) {
             result += "-" + os_entry.first;
+            break;
+        }
+    }
+    for (const auto &processor_entry : processor_name_map) {
+        if (processor_entry.second == processor) {
+            result += "-" + processor_entry.first;
             break;
         }
     }
@@ -1066,7 +1098,7 @@ bool Target::get_runtime_compatible_target(const Target &other, Target &result) 
     // Union of features is computed through bitwise-or, and masked away by the features we care about
     // Intersection of features is computed through bitwise-and and masked away, too.
     // We merge the bits via bitwise or.
-    Target output = Target{os, arch, bits};
+    Target output = Target{os, arch, bits, processor};
     output.features = ((features | other.features) & union_mask) | ((features | other.features) & matching_mask) | ((features & other.features) & intersection_mask);
 
     // Pick tight lower bound for CUDA capability. Use fall-through to clear redundant features

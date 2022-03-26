@@ -967,7 +967,7 @@ public:
 Stmt inject_hexagon_rpc(Stmt s, const Target &host_target,
                         Module &containing_module) {
     // Make a new target for the device module.
-    Target target(Target::NoOS, Target::Hexagon, 32);
+    Target target(Target::NoOS, Target::Hexagon, 32, Target::ProcessorGeneric);
     // There are two ways of offloading, on device and on host.
     // In the former we have true QuRT available, while on the
     // latter we simulate the Hexagon side code with a barebones

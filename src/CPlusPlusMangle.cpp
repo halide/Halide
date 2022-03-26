@@ -942,14 +942,14 @@ void main_tests(const MangleResult *expecteds, const Target &target) {
 
 void cplusplus_mangle_test() {
     Target targets[kTestTargetCount]{
-        Target(Target::Linux, Target::X86, 32),
-        Target(Target::Linux, Target::X86, 64),
-        Target(Target::OSX, Target::X86, 32),
-        Target(Target::OSX, Target::X86, 64),
-        Target(Target::IOS, Target::ARM, 32),
-        Target(Target::IOS, Target::ARM, 64),
-        Target(Target::Windows, Target::X86, 32),
-        Target(Target::Windows, Target::X86, 64)};
+        Target(Target::Linux, Target::X86, 32, Target::Processor::ProcessorGeneric),
+        Target(Target::Linux, Target::X86, 64, Target::Processor::ProcessorGeneric),
+        Target(Target::OSX, Target::X86, 32, Target::Processor::ProcessorGeneric),
+        Target(Target::OSX, Target::X86, 64, Target::Processor::ProcessorGeneric),
+        Target(Target::IOS, Target::ARM, 32, Target::Processor::ProcessorGeneric),
+        Target(Target::IOS, Target::ARM, 64, Target::Processor::ProcessorGeneric),
+        Target(Target::Windows, Target::X86, 32, Target::Processor::ProcessorGeneric),
+        Target(Target::Windows, Target::X86, 64, Target::Processor::ProcessorGeneric)};
     MangleResult *expecteds[kTestTargetCount]{
         ItaniumABIMangling_main, ItaniumABIMangling_main,
         ItaniumABIMangling_main, ItaniumABIMangling_main,

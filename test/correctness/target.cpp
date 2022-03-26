@@ -38,7 +38,7 @@ int main(int argc, char **argv) {
     // }
 
     // Full specification round-trip:
-    t1 = Target(Target::Linux, Target::X86, 32, {Target::SSE41});
+    t1 = Target(Target::Linux, Target::X86, 32, Target::ProcessorGeneric, {Target::SSE41});
     ts = t1.to_string();
     if (ts != "x86-32-linux-sse41") {
         printf("to_string failure: %s\n", ts.c_str());
@@ -50,7 +50,7 @@ int main(int argc, char **argv) {
     }
 
     // Full specification round-trip, crazy features
-    t1 = Target(Target::Android, Target::ARM, 32,
+    t1 = Target(Target::Android, Target::ARM, 32, Target::ProcessorGeneric,
                 {Target::JIT, Target::SSE41, Target::AVX, Target::AVX2,
                  Target::CUDA, Target::OpenCL, Target::OpenGLCompute,
                  Target::Debug});
@@ -99,7 +99,7 @@ int main(int argc, char **argv) {
     }
 
     // with_feature
-    t1 = Target(Target::Linux, Target::X86, 32, {Target::SSE41});
+    t1 = Target(Target::Linux, Target::X86, 32, Target::ProcessorGeneric, {Target::SSE41});
     t2 = t1.with_feature(Target::NoAsserts).with_feature(Target::NoBoundsQuery);
     ts = t2.to_string();
     if (ts != "x86-32-linux-no_asserts-no_bounds_query-sse41") {
@@ -108,7 +108,7 @@ int main(int argc, char **argv) {
     }
 
     // without_feature
-    t1 = Target(Target::Linux, Target::X86, 32, {Target::SSE41, Target::NoAsserts});
+    t1 = Target(Target::Linux, Target::X86, 32, Target::ProcessorGeneric, {Target::SSE41, Target::NoAsserts});
     // Note that NoBoundsQuery wasn't set here, so 'without' is a no-op
     t2 = t1.without_feature(Target::NoAsserts).without_feature(Target::NoBoundsQuery);
     ts = t2.to_string();
@@ -119,7 +119,7 @@ int main(int argc, char **argv) {
 
     // natural_vector_size
     // SSE4.1 is 16 bytes wide
-    t1 = Target(Target::Linux, Target::X86, 32, {Target::SSE41});
+    t1 = Target(Target::Linux, Target::X86, 32, Target::ProcessorGeneric, {Target::SSE41});
     if (t1.natural_vector_size<uint8_t>() != 16) {
         printf("natural_vector_size failure\n");
         return -1;
@@ -139,7 +139,7 @@ int main(int argc, char **argv) {
 
     // AVX is 32 bytes wide for float, but we treat as only 16 for integral types,
     // due to suboptimal integer instructions
-    t1 = Target(Target::Linux, Target::X86, 32, {Target::SSE41, Target::AVX});
+    t1 = Target(Target::Linux, Target::X86, 32, Target::ProcessorGeneric, {Target::SSE41, Target::AVX});
     if (t1.natural_vector_size<uint8_t>() != 16) {
         printf("natural_vector_size failure\n");
         return -1;
@@ -158,7 +158,7 @@ int main(int argc, char **argv) {
     }
 
     // AVX2 is 32 bytes wide
-    t1 = Target(Target::Linux, Target::X86, 32, {Target::SSE41, Target::AVX, Target::AVX2});
+    t1 = Target(Target::Linux, Target::X86, 32, Target::ProcessorGeneric, {Target::SSE41, Target::AVX, Target::AVX2});
     if (t1.natural_vector_size<uint8_t>() != 32) {
         printf("natural_vector_size failure\n");
         return -1;
@@ -177,7 +177,7 @@ int main(int argc, char **argv) {
     }
 
     // NEON is 16 bytes wide
-    t1 = Target(Target::Linux, Target::ARM, 32);
+    t1 = Target(Target::Linux, Target::ARM, 32, Target::ProcessorGeneric);
     if (t1.natural_vector_size<uint8_t>() != 16) {
         printf("natural_vector_size failure\n");
         return -1;
