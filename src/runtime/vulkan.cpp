@@ -51,8 +51,7 @@ WEAK int halide_vulkan_acquire_context(void *user_context,
             &cached_device, 
             &cached_queue, 
             &cached_physical_device, 
-            &cached_queue_family_index, 
-            &cached_allocation_callbacks
+            &cached_queue_family_index
         );
         if (result != halide_error_code_success) {
             __atomic_clear(&thread_lock, __ATOMIC_RELEASE);
@@ -60,7 +59,7 @@ WEAK int halide_vulkan_acquire_context(void *user_context,
         }
     }
 
-    *allocation_callbacks = cached_allocation_callbacks;
+    *allocation_callbacks = const_cast<VkAllocationCallbacks *>(halide_vulkan_get_allocation_callbacks(user_context));
     *instance = cached_instance;
     *device = cached_device;
     *queue = cached_queue;
@@ -553,9 +552,12 @@ WEAK int halide_vulkan_copy_to_device(void *user_context, halide_buffer_t *halid
 }
 
 WEAK int halide_vulkan_copy_to_host(void *user_context, halide_buffer_t *halide_buffer) {
+
+#ifdef DEBUG_RUNTIME
     debug(user_context)
         << "Vulkan: halide_copy_to_host (user_context: " << user_context
         << ", halide_buffer: " << halide_buffer << ")\n";
+#endif
 
     // Acquire the context so we can use the command queue. This also avoids multiple
     // redundant calls to clEnqueueReadBuffer when multiple threads are trying to copy
@@ -607,7 +609,7 @@ WEAK int halide_vulkan_copy_to_host(void *user_context, halide_buffer_t *halide_
     VkCommandBuffer command_buffer;
     VkResult result = vk_create_command_pool(ctx.device, ctx.queue_family_index, ctx.allocation_callbacks(), &command_pool);
     if (result != VK_SUCCESS) {
-        debug(user_context) << "Vulkan: vkCreateCommandPool returned: " << get_vulkan_error_name(result) << "\n";
+        error(user_context) << "Vulkan: vkCreateCommandPool returned: " << get_vulkan_error_name(result) << "\n";
         return -1;
     }
 
@@ -624,7 +626,7 @@ WEAK int halide_vulkan_copy_to_host(void *user_context, halide_buffer_t *halide_
 
     result = vkBeginCommandBuffer(command_buffer, &command_buffer_begin_info);
     if (result != VK_SUCCESS) {
-        debug(user_context) << "vkBeginCommandBuffer returned " << get_vulkan_error_name(result) << "\n";
+        error(user_context) << "vkBeginCommandBuffer returned " << get_vulkan_error_name(result) << "\n";
         return result;
     }
 
@@ -634,7 +636,7 @@ WEAK int halide_vulkan_copy_to_host(void *user_context, halide_buffer_t *halide_
     // end the command buffer
     result = vkEndCommandBuffer(command_buffer);
     if (result != VK_SUCCESS) {
-        debug(user_context) << "vkEndCommandBuffer returned " << get_vulkan_error_name(result) << "\n";
+        error(user_context) << "vkEndCommandBuffer returned " << get_vulkan_error_name(result) << "\n";
         return result;
     }
 
@@ -654,14 +656,14 @@ WEAK int halide_vulkan_copy_to_host(void *user_context, halide_buffer_t *halide_
 
     result = vkQueueSubmit(ctx.queue, 1, &submit_info, 0);
     if (result != VK_SUCCESS) {
-        debug(user_context) << "vkQueueSubmit returned " << get_vulkan_error_name(result) << "\n";
+        error(user_context) << "vkQueueSubmit returned " << get_vulkan_error_name(result) << "\n";
         return result;
     }
 
     //// 14. Wait until the queue is done with the command buffer
     result = vkQueueWaitIdle(ctx.queue);
     if (result != VK_SUCCESS) {
-        debug(user_context) << "vkQueueWaitIdle returned " << get_vulkan_error_name(result) << "\n";
+        error(user_context) << "vkQueueWaitIdle returned " << get_vulkan_error_name(result) << "\n";
         return result;
     }
 
@@ -687,6 +689,200 @@ WEAK int halide_vulkan_copy_to_host(void *user_context, halide_buffer_t *halide_
 #endif
 
     return 0;
+}
+
+WEAK uint32_t vk_count_bindings_for_descriptor_set(void* user_context,                                          
+                                                   size_t arg_sizes[],
+                                                   void *args[],
+                                                   int8_t arg_is_buffer[]){
+    int i = 0;
+    uint32_t num_bindings = 1; // first binding is for passing scalar parameters in a buffer
+    while (arg_sizes[i] > 0) {
+        if (arg_is_buffer[i]) {
+            num_bindings++;
+        }
+        i++;
+    }
+    return num_bindings;
+}
+
+WEAK size_t vk_estimate_scalar_uniform_buffer_size(void* user_context,                                          
+                                                   size_t arg_sizes[],
+                                                   void *args[],
+                                                   int8_t arg_is_buffer[]){
+    int i = 0;
+    int scalar_uniform_buffer_size = 0;
+    while (arg_sizes[i] > 0) {
+        if (!arg_is_buffer[i]) {
+            scalar_uniform_buffer_size += arg_sizes[i];
+        }
+        i++;
+    }
+    return scalar_uniform_buffer_size;
+}
+
+WEAK VkResult vk_create_scalar_uniform_buffer(void* user_context, 
+                                              VkDevice device,
+                                              VkPhysicalDevice physical_device,
+                                              size_t arg_sizes[],
+                                              void *args[],
+                                              int8_t arg_is_buffer[],
+                                              const VkAllocationCallbacks* alloc_callbacks,
+                                              VkDeviceMemory* scalar_alloc,
+                                              VkBuffer* scalar_args_buffer){
+
+    size_t scalar_buffer_size = vk_estimate_scalar_uniform_buffer_size(user_context, arg_sizes, args, arg_is_buffer);
+
+    VkResult result = vk_allocate_device_memory(physical_device, device, scalar_buffer_size,
+                                       VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+                                       alloc_callbacks, scalar_alloc);
+    if (result != VK_SUCCESS) {
+        debug(user_context) << "Vulkan: vk_allocate_device_memory() failed "
+                            << "\n";
+        return result;
+    }
+
+    uint8_t *scalar_ptr;
+    result = vkMapMemory(device, *scalar_alloc, 0, scalar_buffer_size, 0, (void **)&scalar_ptr);
+    if (result != VK_SUCCESS) {
+        debug(user_context) << "vkMapMemory returned " << get_vulkan_error_name(result) << "\n";
+        return result;
+    }
+
+    size_t scalar_arg_offset = 0;
+    debug(user_context) << "Parameter: (passed in vs value after copy)\n";
+    for (size_t i = 0; arg_sizes[i] > 0; i++) {
+        if (!arg_is_buffer[i]) {
+            memcpy(scalar_ptr + scalar_arg_offset, args[i], arg_sizes[i]);
+            debug(user_context) << *((int32_t *)(scalar_ptr + scalar_arg_offset));
+            debug(user_context) << "   " << *((int32_t *)(args[i])) << "\n";
+            scalar_arg_offset += arg_sizes[i];
+        }
+    }
+    vkUnmapMemory(device, *scalar_alloc);
+
+    VkBufferCreateInfo scalar_buffer_info = {
+        VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,  // struct type
+        nullptr,                               // point to struct extending this
+        0,                                     // flags
+        (VkDeviceSize)scalar_buffer_size,      // size
+        VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,    // usages
+        VK_SHARING_MODE_EXCLUSIVE,             // sharing across queues
+        0,                                     // irrelevant here
+        nullptr                                // irrelevant
+    };
+
+    result = vkCreateBuffer(device, &scalar_buffer_info, alloc_callbacks, scalar_args_buffer);
+    if (result != VK_SUCCESS) {
+        debug(user_context) << "vkCreateBuffer returned " << get_vulkan_error_name(result) << "\n";
+        return result;
+    }
+
+    result = vkBindBufferMemory(device, *scalar_args_buffer, *scalar_alloc, 0);
+    if (result != VK_SUCCESS) {
+        debug(user_context) << "vkBindBufferMemory returned " << get_vulkan_error_name(result) << "\n";
+        return result;
+    }
+
+    return VK_SUCCESS;
+}
+
+WEAK void vk_destory_scalar_uniform_buffer(void* user_context, VkDevice device, 
+                                           const VkAllocationCallbacks* alloc_callbacks,
+                                           VkDeviceMemory* scalar_alloc,
+                                           VkBuffer* scalar_args_buffer){
+    if(scalar_args_buffer) {
+        vkDestroyBuffer(device, *scalar_args_buffer, alloc_callbacks);
+    }
+    if(scalar_alloc) {
+        vkFreeMemory(device, *scalar_alloc, alloc_callbacks);
+    }
+}
+
+WEAK VkResult vk_create_descriptor_set_layout(void* user_context, 
+                                         VkDevice device,
+                                         size_t arg_sizes[],
+                                         void *args[],
+                                         int8_t arg_is_buffer[],
+                                         VkDescriptorSetLayout* layout) {
+
+    // The first binding is used for scalar parameters
+    uint32_t num_bindings = vk_count_bindings_for_descriptor_set(user_context, arg_sizes, args, arg_is_buffer);
+    
+    BlockStorage::Config layout_config;
+    layout_config.entry_size = sizeof(VkDescriptorSetLayoutBinding);
+    layout_config.minimum_capacity = num_bindings;
+
+    BlockStorage layout_bindings(user_context, layout_config);
+
+    // First binding is reserved for passing scalar parameters as a uniform buffer
+    VkDescriptorSetLayoutBinding scalar_uniform_layout = {
+        0,                                  // binding index
+        VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,  // descriptor type
+        1,                                  // descriptor count
+        VK_SHADER_STAGE_COMPUTE_BIT,        // stage flags
+        0                                   // immutable samplers
+    };
+    layout_bindings.append(user_context, &scalar_uniform_layout);
+
+    // Add all other bindings for buffer data
+    int i = 0;
+    while (arg_sizes[i] > 0) {
+        if (arg_is_buffer[i]) {
+            // TODO: I don't quite understand why STORAGE_BUFFER is valid
+            // here, but examples all across the docs seem to do this
+            VkDescriptorSetLayoutBinding storage_buffer_layout = {
+                 (uint32_t)layout_bindings.size(),   // binding index
+                 VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,  // descriptor type
+                 1,                                  // descriptor count
+                 VK_SHADER_STAGE_COMPUTE_BIT,        // stage flags
+                 nullptr                             // immutable samplers
+            };
+            layout_bindings.append(user_context, &storage_buffer_layout);
+        }
+        i++;
+    }
+    // Create the LayoutInfo struct
+    VkDescriptorSetLayoutCreateInfo layout_info = {
+        VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,  // structure type
+        nullptr,                                              // pointer to a struct extending this info
+        0,                                                    // flags
+        (uint32_t)layout_bindings.size(),                     // binding count
+        (VkDescriptorSetLayoutBinding*)layout_bindings.data() // pointer to layout bindings array
+    };
+
+    // Create the descriptor set layout
+    VkResult result = vkCreateDescriptorSetLayout(device, &layout_info, 0, layout);
+    if (result != VK_SUCCESS) {
+        debug(user_context) << "vkCreateDescriptorSetLayout returned " << get_vulkan_error_name(result) << "\n";
+        return result;
+    }
+
+    return VK_SUCCESS;
+}
+
+WEAK VkResult vk_create_pipeline_layout(void* user_context, 
+                                        VkDevice device,
+                                        const VkAllocationCallbacks* alloc_callbacks,
+                                        VkDescriptorSetLayout* descriptor_set_layout,
+                                        VkPipelineLayout* pipeline_layout){
+
+    VkPipelineLayoutCreateInfo pipeline_layout_info = {
+        VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,  // structure type
+        nullptr,                                        // pointer to a structure extending this
+        0,                                              // flags
+        1,                                              // number of descriptor sets
+        descriptor_set_layout,                          // pointer to the descriptor sets
+        0,                                              // number of push constant ranges
+        nullptr                                         // pointer to push constant range structs
+    };
+
+    VkResult result = vkCreatePipelineLayout(device, &pipeline_layout_info, alloc_callbacks, pipeline_layout);
+    if (result != VK_SUCCESS) {
+        debug(user_context) << "vkCreatePipelineLayout returned " << get_vulkan_error_name(result) << "\n";
+        return result;
+    }
+    return VK_SUCCESS;
 }
 
 WEAK int halide_vulkan_run(void *user_context,
@@ -735,141 +931,35 @@ WEAK int halide_vulkan_run(void *user_context,
     //     with what we do in Metal etc. ---
     // 14. Wait until the queue is done with the command buffer
 
+    uint32_t num_bindings = vk_count_bindings_for_descriptor_set(user_context, arg_sizes, args, arg_is_buffer);
+
     //// 1. Create a descriptor set layout
-    const size_t HALIDE_MAX_VK_BINDINGS = 64;
-    VkDescriptorSetLayoutBinding layout_bindings[HALIDE_MAX_VK_BINDINGS];
-
-    // The first binding is used for scalar parameters
-    uint32_t num_bindings = 1;
-    layout_bindings[0] = {0,                                  // binding
-                          VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,  // descriptor type
-                          1,                                  // descriptor count
-                          VK_SHADER_STAGE_COMPUTE_BIT,        // stage flags
-                          0};                                 // immutable samplers
-
-    int i = 0;
-    int scalar_buffer_size = 0;
-    while (arg_sizes[i] > 0) {
-        if (arg_is_buffer[i]) {
-            // TODO: I don't quite understand why STORAGE_BUFFER is valid
-            // here, but examples all across the docs seem to do this
-            layout_bindings[num_bindings] =
-                {num_bindings,                       // binding
-                 VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,  // descriptor type
-                 1,                                  // descriptor count
-                 VK_SHADER_STAGE_COMPUTE_BIT,        // stage flags
-                 nullptr};                           // immutable samplers
-            num_bindings++;
-        } else {
-            scalar_buffer_size += arg_sizes[i];
-        }
-        i++;
-    }
-    // Create the LayoutInfo struct
-    VkDescriptorSetLayoutCreateInfo layout_info =
-        {
-            VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,  // structure type
-            nullptr,                                              // pointer to a struct extending this info
-            0,                                                    // flags
-            num_bindings,                                         // binding count
-            layout_bindings                                       // pointer to layout bindings array
-        };
-
-    // Create the descriptor set layout
     VkDescriptorSetLayout descriptor_set_layout;
-    auto result = vkCreateDescriptorSetLayout(ctx.device, &layout_info, 0, &descriptor_set_layout);
-
+    VkResult result = vk_create_descriptor_set_layout(user_context, ctx.device, arg_sizes, args, arg_is_buffer, &descriptor_set_layout);
     if (result != VK_SUCCESS) {
-        debug(user_context) << "vkCreateDescriptorSetLayout returned " << get_vulkan_error_name(result) << "\n";
+        error(user_context) << "Vulkan: vk_create_descriptor_set_layout() failed! Unable to create shader module!\n";
         return result;
     }
 
     //// 1a. Create a buffer for the scalar parameters
     // First allocate memory, then map it and copy params, then create a buffer
     // and bind the allocation
-    // VkMemoryAllocateInfo scalar_alloc_info =
-    //     {VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,    // struct type
-    //      nullptr,   // point to struct extending this
-    //      (uint32_t)scalar_buffer_size,    // allocation size
-    //      ctx.memory_type_index  // memory type
-    //     };
-    VkDeviceMemory scalar_alloc;
-    //result = vkAllocateMemory(ctx.device, &scalar_alloc_info, 0, &scalar_alloc);
-    result = vk_allocate_device_memory(ctx.physical_device, ctx.device, scalar_buffer_size,
-                                       VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-                                       ctx.allocation_callbacks(), &scalar_alloc);
-    if (result != VK_SUCCESS) {
-        debug(user_context) << "Vulkan: vk_allocate_device_memory() failed "
-                            << "\n";
-        return result;
-    }
+    VkDeviceMemory scalar_alloc{};
+    VkBuffer scalar_args_buffer{};
+    result = vk_create_scalar_uniform_buffer(user_context, ctx.device, ctx.physical_device,
+                                             arg_sizes, args, arg_is_buffer, ctx.allocation_callbacks(),
+                                             &scalar_alloc, &scalar_args_buffer);
 
-    uint8_t *scalar_ptr;
-    result = vkMapMemory(ctx.device, scalar_alloc, 0, scalar_buffer_size, 0, (void **)&scalar_ptr);
-
-    if (result != VK_SUCCESS) {
-        debug(user_context) << "vkMapMemory returned " << get_vulkan_error_name(result) << "\n";
-        return result;
-    }
-
-    size_t scalar_arg_offset = 0;
-    debug(user_context) << "Parameter: (passed in vs value after copy)"
-                        << "\n";
-    for (size_t i = 0; arg_sizes[i] > 0; i++) {
-        if (!arg_is_buffer[i]) {
-            //int one = 1;
-            memcpy(scalar_ptr + scalar_arg_offset, args[i], arg_sizes[i]);
-            debug(user_context) << *((int32_t *)(scalar_ptr + scalar_arg_offset));
-            debug(user_context) << "   " << *((int32_t *)(args[i])) << "\n";
-            scalar_arg_offset += arg_sizes[i];
-        }
-    }
-    vkUnmapMemory(ctx.device, scalar_alloc);
-
-    VkBufferCreateInfo scalar_buffer_info =
-        {
-            VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,  // struct type
-            nullptr,                               // point to struct extending this
-            0,                                     // flags
-            (VkDeviceSize)scalar_buffer_size,      // size
-            VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,    // usages
-            VK_SHARING_MODE_EXCLUSIVE,             // sharing across queues
-            0,                                     // irrelevant here
-            nullptr                                // irrelevant
-        };
-
-    VkBuffer scalar_args_buffer;
-    result = vkCreateBuffer(ctx.device, &scalar_buffer_info, ctx.allocation_callbacks(), &scalar_args_buffer);
-
-    if (result != VK_SUCCESS) {
-        debug(user_context) << "vkCreateBuffer returned " << get_vulkan_error_name(result) << "\n";
-        return result;
-    }
-
-    result = vkBindBufferMemory(ctx.device, scalar_args_buffer, scalar_alloc, 0);
-
-    if (result != VK_SUCCESS) {
-        debug(user_context) << "vkBindBufferMemory returned " << get_vulkan_error_name(result) << "\n";
+   if (result != VK_SUCCESS) {
+        error(user_context) << "Vulkan: vk_create_scalar_uniform_buffer() failed! Unable to create shader module!\n";
         return result;
     }
 
     ///// 2. Create a pipeline layout
-    VkPipelineLayoutCreateInfo pipeline_layout_info =
-        {
-            VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,  // structure type
-            nullptr,                                        // pointer to a structure extending this
-            0,                                              // flags
-            1,                                              // number of descriptor sets
-            &descriptor_set_layout,                         // pointer to the descriptor sets
-            0,                                              // number of push constant ranges
-            nullptr                                         // pointer to push constant range structs
-        };
-
     VkPipelineLayout pipeline_layout;
-    result = vkCreatePipelineLayout(ctx.device, &pipeline_layout_info, 0, &pipeline_layout);
-
+    result = vk_create_pipeline_layout(user_context, ctx.device, ctx.allocation_callbacks(), &descriptor_set_layout, &pipeline_layout);
     if (result != VK_SUCCESS) {
-        debug(user_context) << "vkCreatePipelineLayout returned " << get_vulkan_error_name(result) << "\n";
+        error(user_context) << "Vulkan: vk_create_pipeline_layout() failed! Unable to create shader module!\n";
         return result;
     }
 
@@ -955,6 +1045,7 @@ WEAK int halide_vulkan_run(void *user_context,
     }
 
     //// 5. Set bindings for buffers in the descriptor set
+    const size_t HALIDE_MAX_VK_BINDINGS = 64;
     VkDescriptorBufferInfo descriptor_buffer_info[HALIDE_MAX_VK_BINDINGS];
     VkWriteDescriptorSet write_descriptor_set[HALIDE_MAX_VK_BINDINGS];
 
@@ -1107,6 +1198,11 @@ WEAK int halide_vulkan_run(void *user_context,
         debug(user_context) << "vkQueueWaitIdle returned " << get_vulkan_error_name(result) << "\n";
         return result;
     }
+
+    // Free the scalar uniform args
+    vk_destory_scalar_uniform_buffer(user_context, ctx.device, ctx.allocation_callbacks(),
+                                     &scalar_alloc, &scalar_args_buffer);
+
 
 #ifdef DEBUG_RUNTIME
     uint64_t t_after = halide_current_time_ns(user_context);

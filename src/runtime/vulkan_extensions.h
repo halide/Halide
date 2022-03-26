@@ -114,13 +114,9 @@ WEAK uint32_t vk_get_requested_layers(void *user_context, StringTable &layer_tab
 }
 
 WEAK uint32_t vk_get_required_instance_extensions(void *user_context, StringTable &ext_table) {
-    const uint32_t required_ext_count = 1;
     const char *required_ext_table[] = {"VK_KHR_get_physical_device_properties2"};
-
-    ext_table.reserve(user_context, required_ext_count);
-    for (uint32_t n = 0; n < required_ext_count; ++n) {
-        ext_table.assign(user_context, n, required_ext_table[n]);
-    }
+    const uint32_t required_ext_count = sizeof(required_ext_table) / sizeof(required_ext_table[0]);
+    ext_table.fill(user_context, (const char **)required_ext_table, required_ext_count);
     return required_ext_count;
 }
 
@@ -155,7 +151,7 @@ WEAK uint32_t vk_get_supported_instance_extensions(void *user_context, StringTab
             debug(user_context) << "    extension: " << properties->extensionName << "\n";
         }
 
-        ext_table.reserve(user_context, avail_ext_count);
+        ext_table.resize(user_context, avail_ext_count);
         for (uint32_t n = 0; n < avail_ext_count; ++n) {
             const VkExtensionProperties *properties = static_cast<const VkExtensionProperties*>(extension_properties[n]);
             ext_table.assign(user_context, n, properties->extensionName);
@@ -166,16 +162,22 @@ WEAK uint32_t vk_get_supported_instance_extensions(void *user_context, StringTab
 }
 
 WEAK uint32_t vk_get_required_device_extensions(void *user_context, StringTable &ext_table) {
-    const uint32_t required_ext_count = 1;
-    const char *required_ext_table[] = {"VK_KHR_8bit_storage"};
-
-    ext_table.reserve(user_context, required_ext_count);
-    for (uint32_t n = 0; n < required_ext_count; ++n) {
-        ext_table.assign(user_context, n, required_ext_table[n]);
-    }
+    const char *required_ext_table[] = {"VK_KHR_8bit_storage", "VK_KHR_storage_buffer_storage_class"};
+    const uint32_t required_ext_count = sizeof(required_ext_table) / sizeof(required_ext_table[0]);
+    ext_table.fill(user_context, (const char **)required_ext_table, required_ext_count);
     return required_ext_count;
 }
 
+WEAK uint32_t vk_get_optional_device_extensions(void *user_context, StringTable &ext_table) {
+    const uint32_t optional_ext_count = 1;
+    const char *optional_ext_table[] = {"VK_KHR_portability_subset"};
+
+    ext_table.resize(user_context, optional_ext_count);
+    for (uint32_t n = 0; n < optional_ext_count; ++n) {
+        ext_table.assign(user_context, n, optional_ext_table[n]);
+    }
+    return optional_ext_count;
+}
 WEAK uint32_t vk_get_supported_device_extensions(void *user_context, VkPhysicalDevice physical_device, StringTable &ext_table) {
 
     if (vkEnumerateDeviceExtensionProperties == nullptr) {
@@ -204,7 +206,7 @@ WEAK uint32_t vk_get_supported_device_extensions(void *user_context, VkPhysicalD
             debug(user_context) << "    extension: " << properties->extensionName << "\n";
         }
 
-        ext_table.reserve(user_context, avail_ext_count);
+        ext_table.resize(user_context, avail_ext_count);
         for (uint32_t n = 0; n < avail_ext_count; ++n) {
             const VkExtensionProperties *properties = static_cast<const VkExtensionProperties*>(extension_properties[n]);
             ext_table.assign(user_context, n, properties->extensionName);

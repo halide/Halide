@@ -179,15 +179,16 @@ void PointerTable::resize(void *user_context, size_t entry_count, bool realloc) 
     size_t requested_size = entry_count;
     size_t minimum_size = default_capacity;
     size_t actual_size = current_size;
+    count = requested_size;
 
+#if DEBUG
     debug(0) << "PointerTable: Resize (" <<
             "requested_size=" << (int32_t)requested_size << " " <<
             "current_size=" << (int32_t)current_size << " " <<
             "minimum_size=" << (int32_t)minimum_size << " " <<
             "sizeof(void*)=" << (int32_t)sizeof(void*) << " " <<
             "realloc=" << (realloc ? "true" : "false") << ")...\n";
-
-    count = requested_size;
+#endif
 
     // increase capacity upto 1.5x existing (or at least min_capacity)
     if (requested_size > current_size) {
@@ -230,6 +231,7 @@ void PointerTable::remove(void *user_context, size_t index, size_t entry_count) 
         size_t src_offset = (index + entry_count) * sizeof(void*);
         size_t bytes = (last_index - index - entry_count) * sizeof(void*);
 
+#if DEBUG
         debug(0) << "PointerTable: Remove (" <<
                 "index=" << (int32_t)index << " " <<
                 "entry_count=" << (int32_t)entry_count << " " <<
@@ -237,7 +239,7 @@ void PointerTable::remove(void *user_context, size_t index, size_t entry_count) 
                 "src_offset=" << (int32_t)src_offset << " " <<
                 "dst_offset=" << (int32_t)dst_offset << " " <<
                 "bytes=" << (int32_t)bytes << ")...\n";
-
+#endif
         memmove(ptr + dst_offset, ptr + src_offset, bytes);
     }
     resize(user_context, last_index - entry_count);
@@ -248,13 +250,15 @@ void PointerTable::replace(void* user_context, size_t index, const void** array,
     size_t remaining = count - index;
     size_t copy_count = min(remaining, array_size);
 
+#if DEBUG
     debug(0) << "PointerTable: Replace (" <<
             "index=" << (int32_t)index << " " <<
             "array_size=" << (int32_t)array_size << " " <<
             "remaining=" << (int32_t)remaining << " " <<
             "copy_count=" << (int32_t)copy_count << " " <<
             "capacity=" << (int32_t)capacity << ")...\n";
-            
+#endif
+
     halide_debug_assert(user_context, remaining > 0);
     memcpy(ptr + index, array, copy_count * sizeof(void*));
     count = max(count, index + copy_count);
@@ -323,7 +327,11 @@ void PointerTable::allocate(void *user_context, size_t new_capacity) {
     if (new_capacity != capacity) {
         halide_abort_if_false(user_context, allocator.allocate != nullptr);
         size_t bytes = new_capacity * sizeof(void*);
+
+#if DEBUG
         debug(0) << "PointerTable: Allocating (bytes=" << (int32_t)bytes << " allocator=" << (void *)allocator.allocate << ")...\n";
+#endif
+
         void *new_ptr = bytes ? allocator.allocate(user_context, bytes) : nullptr;
         if (count != 0 && ptr != nullptr && new_ptr != nullptr) {
             memcpy(new_ptr, ptr, count * sizeof(void*));

@@ -10,6 +10,10 @@ namespace Runtime {
 namespace Internal {
 namespace Vulkan {
 
+// Enable external client to override Vulkan allocation callbacks (if they so desire)
+WEAK ScopedSpinLock::AtomicFlag custom_allocation_callbacks_lock = 0;
+static const VkAllocationCallbacks* custom_allocation_callbacks = nullptr; // nullptr => use Vulkan runtime implementation
+
 // --
 
 // Halide System allocator for host allocations
@@ -594,12 +598,12 @@ uint32_t VulkanMemoryAllocator::select_memory_usage(void *user_context, MemoryPr
 
 // --
 
-WEAK int vk_create_memory_allocator(void *user_context, const VkAllocationCallbacks* callbacks) {
+WEAK int vk_create_memory_allocator(void *user_context, const VkAllocationCallbacks* alloc_callbacks) {
     if (memory_allocator != nullptr) {
         return halide_error_code_success;
     }
 
-    if(callbacks) {
+    if(alloc_callbacks) {
         // TODO
     }
 
@@ -630,5 +634,20 @@ WEAK int vk_destroy_memory_allocator(void *user_context, const VkAllocationCallb
 }  // namespace Internal
 }  // namespace Runtime
 }  // namespace Halide
+
+
+extern "C" {
+
+WEAK void halide_vulkan_set_allocation_callbacks(const VkAllocationCallbacks* callbacks) {
+    ScopedSpinLock lock(&custom_allocation_callbacks_lock);
+    custom_allocation_callbacks = callbacks;
+}
+
+WEAK const VkAllocationCallbacks* halide_vulkan_get_allocation_callbacks(void *user_context) {
+    ScopedSpinLock lock(&custom_allocation_callbacks_lock);
+    return custom_allocation_callbacks;
+}
+
+}
 
 #endif  // HALIDE_RUNTIME_VULKAN_MEMORY_H

@@ -62,6 +62,32 @@ extern int halide_vulkan_acquire_context(void *user_context,
                                          bool create = true);
 
 extern int halide_vulkan_release_context(void *user_context, struct VkInstance_T *instance, struct VkDevice_T *device, struct VkQueue_T *queue);
+
+// --
+
+// Override the default allocation callbacks (default uses Vulkan runtime implementation)
+extern void halide_vulkan_set_allocation_callbacks(const struct VkAllocationCallbacks* callbacks);
+
+// Access the current allocation callbacks 
+// -- may return nullptr ... which indicates the default Vulkan runtime implementation is being used)
+extern const struct VkAllocationCallbacks* halide_vulkan_get_allocation_callbacks(void *user_context);
+
+// Access methods to assign/retrieve required layer names for the context
+extern void halide_vulkan_set_layer_names(const char *n);
+extern const char *halide_vulkan_get_layer_names(void *user_context);
+
+// Access methods to assign/retrieve required externsion names for the context
+extern void halide_vulkan_set_extension_names(const char *n);
+extern const char *halide_vulkan_get_extension_names(void *user_context);
+
+// Access methods to assign/retrieve required device type names for the context (either "cpu", "gpu" (any), "discrete-gpu" (only), "virtual-gpu" (sw))
+extern void halide_vulkan_set_device_type(const char *n);
+extern const char *halide_vulkan_get_device_type(void *user_context);
+
+// Access methods to assign/retrieve specific build options to the Vulkan runtime compiler
+extern void halide_vulkan_set_build_options(const char *n);
+extern const char *halide_vulkan_get_build_options(void *user_context);
+
 #ifdef __cplusplus
 }  // End extern "C"
 #endif

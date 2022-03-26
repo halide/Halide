@@ -207,6 +207,7 @@ void BlockStorage::resize(void *user_context, size_t entry_count, bool realloc) 
         return;
     }
 
+#if DEBUG
     debug(0) << "BlockStorage: Resize (" <<
             "requested_size=" << (int32_t)requested_size << " " <<
             "current_size=" << (int32_t)current_size << " " <<
@@ -214,6 +215,7 @@ void BlockStorage::resize(void *user_context, size_t entry_count, bool realloc) 
             "actual_size=" << (int32_t)actual_size << " " <<
             "entry_size=" << (int32_t)config.entry_size << " " <<
             "realloc=" << (realloc ? "true" : "false") << ")...\n";
+#endif
 
     allocate(user_context, actual_size);
 }
@@ -248,6 +250,7 @@ void BlockStorage::remove(void *user_context, size_t index, size_t entry_count) 
         size_t src_offset = (index + entry_count) * config.entry_size;
         size_t bytes = (last_index - index - entry_count) * config.entry_size;
 
+#if DEBUG
         debug(0) << "BlockStorage: Remove (" <<
                 "index=" << (int32_t)index << " " <<
                 "entry_count=" << (int32_t)entry_count << " " <<
@@ -256,7 +259,7 @@ void BlockStorage::remove(void *user_context, size_t index, size_t entry_count) 
                 "src_offset=" << (int32_t)src_offset << " " <<
                 "dst_offset=" << (int32_t)dst_offset << " " <<
                 "bytes=" << (int32_t)bytes << ")...\n";
-
+#endif
         void* dst_ptr = offset_address(ptr, dst_offset);
         void* src_ptr = offset_address(ptr, src_offset);
         memmove(dst_ptr, src_ptr, bytes);
@@ -269,6 +272,7 @@ void BlockStorage::replace(void* user_context, size_t index, const void *array, 
     size_t offset = index * config.entry_size;
     size_t remaining = count - index;
 
+#if DEBUG
     debug(0) << "BlockStorage: Replace (" <<
             "index=" << (int32_t)index << " " <<
             "array_size=" << (int32_t)array_size << " " <<
@@ -276,7 +280,8 @@ void BlockStorage::replace(void* user_context, size_t index, const void *array, 
             "offset=" << (int32_t)offset << " " <<
             "remaining=" << (int32_t)remaining << " " <<
             "capacity=" << (int32_t)capacity << ")...\n";
-            
+#endif 
+
     halide_debug_assert(user_context, remaining > 0);
     size_t copy_count = min(remaining, array_size);
     void* dst_ptr = offset_address(ptr, offset);
@@ -368,13 +373,13 @@ void BlockStorage::allocate(void *user_context, size_t new_capacity) {
         size_t block_count = (requested_bytes / block_size);
         block_count += (requested_bytes % block_size) ? 1 : 0;
         size_t alloc_size = block_count * block_size;
-
+#if DEBUG
         debug(0) << "BlockStorage: Allocating (" <<
                 "requested_bytes=" << (int32_t)requested_bytes << " " <<
                 "block_size=" << (int32_t)block_size << " " <<
                 "block_count=" << (int32_t)block_count << " " <<
                 "alloc_size=" << (int32_t)alloc_size << ") ...\n";
-
+#endif
         void *new_ptr = alloc_size ? allocator.allocate(user_context, alloc_size) : nullptr;
         if (count != 0 && ptr != nullptr && new_ptr != nullptr) {
             memcpy(new_ptr, ptr, count * config.entry_size);

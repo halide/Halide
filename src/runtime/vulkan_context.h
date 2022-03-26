@@ -22,10 +22,6 @@ uint32_t WEAK cached_queue_family_index = 0;
 volatile ScopedSpinLock::AtomicFlag WEAK thread_lock = 0;
 
 // --
-// Default allocation callbacks to be used with the API (override if necessary)
-static constexpr VkAllocationCallbacks* default_allocation_callbacks = nullptr; // nullptr => use Vulkan runtime implementation
-
-// --
 
 // Prototype for helper function for creating a new vulkan context (returns the instance, device, queue, etc)
 WEAK int vk_create_context(
@@ -33,8 +29,7 @@ WEAK int vk_create_context(
     VkInstance *instance,
     VkDevice *device, VkQueue *queue,
     VkPhysicalDevice *physical_device,
-    uint32_t *queue_family_index,
-    VkAllocationCallbacks **alloc=nullptr);
+    uint32_t *queue_family_index);
 
 // --
 
@@ -79,7 +74,7 @@ public:
 };
 
 // Initializes the instance (used by the default vk_create_context)
-WEAK int vk_create_instance(void *user_context, const StringTable &requested_layers, VkInstance *instance) {
+WEAK int vk_create_instance(void *user_context, const StringTable &requested_layers, VkInstance *instance, const VkAllocationCallbacks* alloc_callbacks) {
     debug(user_context) << "    vk_create_instance (user_context: " << user_context << ")\n";
 
     StringTable required_instance_extensions;
@@ -114,7 +109,7 @@ WEAK int vk_create_instance(void *user_context, const StringTable &requested_lay
         (uint32_t)required_instance_extensions.size(), required_instance_extensions.data()  // Extensions
     };
 
-    VkResult result = vkCreateInstance(&create_info, nullptr, instance);
+    VkResult result = vkCreateInstance(&create_info, alloc_callbacks, instance);
     if (result != VK_SUCCESS) {
         debug(user_context) << "Vulkan: vkCreateInstance failed with return code: " << get_vulkan_error_name(result) << "\n";
         return halide_error_code_incompatible_device_interface;
@@ -203,10 +198,13 @@ WEAK int vk_select_device_for_context(void *user_context,
 }
 
 WEAK int vk_create_device(void *user_context, const StringTable &requested_layers, VkInstance *instance, VkDevice *device, VkQueue *queue,
-                          VkPhysicalDevice *physical_device, uint32_t *queue_family_index) {
+                          VkPhysicalDevice *physical_device, uint32_t *queue_family_index, const VkAllocationCallbacks* alloc_callbacks) {
 
     StringTable required_device_extensions;
     vk_get_required_device_extensions(user_context, required_device_extensions);
+
+    StringTable optional_device_extensions;
+    vk_get_optional_device_extensions(user_context, optional_device_extensions);
 
     StringTable supported_device_extensions;
     vk_get_supported_device_extensions(user_context, *physical_device, supported_device_extensions);
@@ -216,7 +214,16 @@ WEAK int vk_create_device(void *user_context, const StringTable &requested_layer
 
     debug(user_context) << "Vulkan: Found " << (uint32_t)required_device_extensions.size() << " required extensions for device!\n";
     for (int n = 0; n < (int)required_device_extensions.size(); ++n) {
-        debug(user_context) << "    extension: " << required_device_extensions[n] << "\n";
+        debug(user_context) << "    required extension: " << required_device_extensions[n] << "\n";
+    }
+
+    // enable all available optional extensions
+    debug(user_context) << "Vulkan: Found " << (uint32_t)optional_device_extensions.size() << " optional extensions for device!\n";
+    for (int n = 0; n < (int)optional_device_extensions.size(); ++n) {
+        if(supported_device_extensions.contains(optional_device_extensions[n])) {
+            debug(user_context) << "    optional extension: " << optional_device_extensions[n] << "\n";
+            required_device_extensions.append(user_context, optional_device_extensions[n]);
+        }
     }
 
     float queue_priority = 1.0f;
@@ -240,7 +247,7 @@ WEAK int vk_create_device(void *user_context, const StringTable &requested_layer
         nullptr,                                                                         // VkPhysicalDeviceFeatures
     };
 
-    VkResult result = vkCreateDevice(*physical_device, &device_create_info, nullptr, device);
+    VkResult result = vkCreateDevice(*physical_device, &device_create_info, alloc_callbacks, device);
     if (result != VK_SUCCESS) {
         debug(user_context) << "Vulkan: vkCreateDevice failed with return code: " << get_vulkan_error_name(result) << "\n";
         return halide_error_code_incompatible_device_interface;
@@ -252,7 +259,7 @@ WEAK int vk_create_device(void *user_context, const StringTable &requested_layer
 
 // Initializes the context (used by the default implementation of halide_acquire_context)
 WEAK int vk_create_context(void *user_context, VkInstance *instance, VkDevice *device, VkQueue *queue,
-                           VkPhysicalDevice *physical_device, uint32_t *queue_family_index, VkAllocationCallbacks **alloc) {
+                           VkPhysicalDevice *physical_device, uint32_t *queue_family_index) {
 
     debug(user_context) << "    vk_create_context (user_context: " << user_context << ")\n";
 
@@ -263,7 +270,8 @@ WEAK int vk_create_context(void *user_context, VkInstance *instance, VkDevice *d
         debug(user_context) << "    layer: " << requested_layers[n] << "\n";
     }
 
-    int status = vk_create_instance(user_context, requested_layers, instance);
+    const VkAllocationCallbacks* alloc_callbacks = halide_vulkan_get_allocation_callbacks(user_context);
+    int status = vk_create_instance(user_context, requested_layers, instance, alloc_callbacks);
     if (status != halide_error_code_success) {
         return status;
     }
@@ -277,13 +285,12 @@ WEAK int vk_create_context(void *user_context, VkInstance *instance, VkDevice *d
         return status;
     }
 
-    status = vk_create_device(user_context, requested_layers, instance, device, queue, physical_device, queue_family_index);
+    status = vk_create_device(user_context, requested_layers, instance, device, queue, physical_device, queue_family_index, alloc_callbacks);
     if (status != halide_error_code_success) {
         return status;
     }
 
-    *alloc = default_allocation_callbacks;
-    status = vk_create_memory_allocator(user_context, *alloc);
+    status = vk_create_memory_allocator(user_context, alloc_callbacks);
     if (status != halide_error_code_success) {
         return status;
     }
