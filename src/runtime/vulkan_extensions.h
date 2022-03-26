@@ -166,8 +166,8 @@ WEAK uint32_t vk_get_supported_instance_extensions(void *user_context, StringTab
 }
 
 WEAK uint32_t vk_get_required_device_extensions(void *user_context, StringTable &ext_table) {
-    const uint32_t required_ext_count = 0;
-    const char *required_ext_table[] = {0};
+    const uint32_t required_ext_count = 1;
+    const char *required_ext_table[] = {"VK_KHR_8bit_storage"};
 
     ext_table.reserve(user_context, required_ext_count);
     for (uint32_t n = 0; n < required_ext_count; ++n) {

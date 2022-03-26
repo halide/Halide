@@ -11,7 +11,7 @@
 #include "Scope.h"
 #include "Target.h"
 
-#include "spirv/unified1/spirv.h"
+#include "spirv/1.0/spirv.h"
 
 // Temporary:
 #include <fstream>
