@@ -3,14 +3,14 @@
 
 #include "vulkan_internal.h"
 
-// --
+// --------------------------------------------------------------------------
 
 namespace Halide {
 namespace Runtime {
 namespace Internal {
 namespace Vulkan {
 
-// --
+// --------------------------------------------------------------------------
 
 WEAK char layer_names[1024];
 WEAK ScopedSpinLock::AtomicFlag layer_names_lock = 0;
@@ -28,7 +28,7 @@ WEAK char build_options[1024];
 WEAK ScopedSpinLock::AtomicFlag build_options_lock = 0;
 WEAK bool build_options_initialized = false;
 
-// --
+// --------------------------------------------------------------------------
 
 WEAK void vk_set_layer_names_internal(const char *n) {
     if (n) {
@@ -106,6 +106,8 @@ WEAK const char *vk_get_build_options_internal(void *user_context) {
     }
     return build_options;
 }
+
+// --------------------------------------------------------------------------
 
 WEAK uint32_t vk_get_requested_layers(void *user_context, StringTable &layer_table) {
     ScopedSpinLock lock(&layer_names_lock);
@@ -230,14 +232,22 @@ WEAK bool vk_validate_required_extension_support(void *user_context,
     return validated;
 }
 
+// --------------------------------------------------------------------------
+
 }  // namespace Vulkan
 }  // namespace Internal
 }  // namespace Runtime
 }  // namespace Halide
 
+// --------------------------------------------------------------------------
+
 using namespace Halide::Runtime::Internal::Vulkan;
 
+// --------------------------------------------------------------------------
+
 extern "C" {
+
+// --------------------------------------------------------------------------
 
 WEAK void halide_vulkan_set_layer_names(const char *n) {
     ScopedSpinLock lock(&layer_names_lock);
@@ -278,6 +288,8 @@ WEAK const char *halide_vulkan_get_build_options(void *user_context) {
     ScopedSpinLock lock(&build_options_lock);
     return vk_get_build_options_internal(user_context);
 }
+
+// --------------------------------------------------------------------------
 
 }  // extern "C"
 

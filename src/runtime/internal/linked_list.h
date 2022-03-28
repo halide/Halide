@@ -20,9 +20,9 @@ public:
 
     // List entry
     struct EntryType {
-        void* value;
-        EntryType *prev_ptr;
-        EntryType *next_ptr;
+        void* value = nullptr;
+        EntryType *prev_ptr= nullptr;
+        EntryType *next_ptr= nullptr;
     };
 
     LinkedList(void *user_context, uint32_t entry_size, uint32_t capacity = default_capacity,
@@ -310,7 +310,7 @@ LinkedList::reserve(void* user_context) {
     EntryType *entry_ptr = static_cast<EntryType*>(
         link_arena->reserve(user_context)
     );
-    entry_ptr->value = data_arena->reserve(user_context);
+    entry_ptr->value = data_arena->reserve(user_context, true);
     entry_ptr->next_ptr = nullptr;
     entry_ptr->prev_ptr = nullptr;
     return entry_ptr;

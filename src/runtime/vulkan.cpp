@@ -7,12 +7,15 @@
 #include "vulkan_extensions.h"
 #include "vulkan_internal.h"
 #include "vulkan_memory.h"
+#include "vulkan_compiler.h"
 
 using namespace Halide::Runtime::Internal::Vulkan;
 
-// --
+// --------------------------------------------------------------------------
 
 extern "C" {
+
+// --------------------------------------------------------------------------
 
 // The default implementation of halide_acquire_vulkan_context uses
 // the global pointers above, and serializes access with a spin lock.
@@ -73,11 +76,11 @@ WEAK int halide_vulkan_release_context(void *user_context, VkInstance instance, 
     return 0;
 }
 
-WEAK int halide_vulkan_device_free(void *user_context, halide_buffer_t *buf) {
+WEAK int halide_vulkan_device_free(void *user_context, halide_buffer_t *halide_buffer) {
     // halide_vulkan_device_free, at present, can be exposed to clients and they
     // should be allowed to call halide_vulkan_device_free on any halide_buffer_t
     // including ones that have never been used with a GPU.
-    if (buf->device == 0) {
+    if (halide_buffer->device == 0) {
         return 0;
     }
 
@@ -87,12 +90,14 @@ WEAK int halide_vulkan_device_free(void *user_context, halide_buffer_t *buf) {
     uint64_t t_before = halide_current_time_ns(user_context);
 #endif
 
-    VkBuffer vk_buffer = (VkBuffer)buf->device;
-    vkDestroyBuffer(context.device, vk_buffer, context.allocation_callbacks());
+    VkBuffer* device_buffer = reinterpret_cast<VkBuffer*>(halide_buffer->device);
+    vkDestroyBuffer(context.device, *device_buffer, context.allocation_callbacks());
+    vk_host_free(user_context, device_buffer, context.allocation_callbacks());
 
-    buf->device = 0;
-    buf->device_interface->impl->release_module();
-    buf->device_interface = nullptr;
+    device_buffer = nullptr;
+    halide_buffer->device = 0;
+    halide_buffer->device_interface->impl->release_module();
+    halide_buffer->device_interface = nullptr;
 
 #ifdef DEBUG_RUNTIME
     uint64_t t_after = halide_current_time_ns(user_context);
@@ -201,69 +206,6 @@ WEAK int halide_vulkan_device_release(void *user_context) {
 
 namespace {
 
-VkResult vk_allocate_device_memory(VkPhysicalDevice physical_device,
-                                   VkDevice device, VkDeviceSize size,
-                                   VkMemoryPropertyFlags flags,
-                                   const VkAllocationCallbacks *allocator,
-                                   // returned in device_memory
-                                   VkDeviceMemory *device_memory) {
-
-#if 0
-    MemoryRequest request = {0};
-    request.size = halide_buffer->size_in_bytes();
-    request.properties.usage = MemoryUsage::TransferSrc;
-    request.properties.caching = MemoryCaching::DefaultCaching;
-    request.properties.visibility = MemoryVisibility::HostToDevice;
-
-    // allocate a new region -- acquires the context
-    MemoryRegion* region = memory_allocator->reserve(user_context, request);
-    if((region == nullptr) || (region->handle == nullptr)) {
-        error(user_context) << "Vulkan: Failed to allocate device memory!\n";
-        return halide_error_out_of_memory;
-    }
-#endif
-
-    // Find an appropriate memory type given the flags
-    auto memory_type_index = VK_MAX_MEMORY_TYPES;
-    VkPhysicalDeviceMemoryProperties device_mem_properties;
-    vkGetPhysicalDeviceMemoryProperties(physical_device, &device_mem_properties);
-
-    // TODO: should this be host coherent or cached or something else?
-    for (uint32_t i = 0; i < device_mem_properties.memoryTypeCount; i++) {
-        if (device_mem_properties.memoryTypes[i].propertyFlags & flags) {
-            memory_type_index = i;
-            break;
-        }
-    }
-
-    if (memory_type_index == VK_MAX_MEMORY_TYPES) {
-        debug(nullptr) << "Vulkan: failed to find appropriate memory type";
-        return VK_ERROR_OUT_OF_DEVICE_MEMORY;
-    }
-
-    // TODO: This can greatly benefit from, and is designed for, an
-    // allocation cache.  We should consider allocating larger chunks
-    // of memory and using the larger allocation (with appropriate size/offsets)
-    // to back buffers created here
-
-    VkMemoryAllocateInfo alloc_info =
-        {
-            VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,  // struct type
-            nullptr,                                 // struct extending this
-            size,                                    // size of allocation in bytes
-            (uint32_t)memory_type_index              // memory type index from physical device
-        };
-
-    auto ret_code = vkAllocateMemory(device, &alloc_info, allocator, device_memory);
-
-    if (ret_code != VK_SUCCESS) {
-        debug(nullptr) << "Vulkan: vkAllocateMemory returned: " << get_vulkan_error_name(ret_code) << "\n";
-        return VK_ERROR_OUT_OF_DEVICE_MEMORY;
-    }
-
-    return ret_code;
-}
-
 VkResult vk_create_command_pool(VkDevice device, uint32_t queue_index, const VkAllocationCallbacks *callbacks, VkCommandPool *command_pool) {
 
     VkCommandPoolCreateInfo command_pool_info =
@@ -342,22 +284,23 @@ WEAK int halide_vulkan_device_malloc(void *user_context, halide_buffer_t *buf) {
         VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
         VK_SHARING_MODE_EXCLUSIVE,
         0, nullptr};
-    VkBuffer result;
-    ret_code = vkCreateBuffer(context.device, &args_info, nullptr, &result);
+
+    VkBuffer* device_buffer = (VkBuffer*)vk_host_malloc(user_context, sizeof(VkBuffer), 0, VK_SYSTEM_ALLOCATION_SCOPE_OBJECT, context.allocation_callbacks());
+    ret_code = vkCreateBuffer(context.device, &args_info, nullptr, device_buffer);
     if (ret_code != VK_SUCCESS) {
-        debug(user_context) << "Vulkan: vkCreateBuffer returned: " << get_vulkan_error_name(ret_code) << "\n";
+        debug(user_context) << "Vulkan: vkCreateBuffer returned: " << vk_get_error_name(ret_code) << "\n";
         return -1;
     }
 
     // Finally, bind buffer
-    ret_code = vkBindBufferMemory(context.device, result, device_memory, 0);
+    ret_code = vkBindBufferMemory(context.device, *device_buffer, device_memory, 0);
 
     if (ret_code != VK_SUCCESS) {
-        debug(user_context) << "Vulkan: vkBindBufferMemory returned: " << get_vulkan_error_name(ret_code) << "\n";
+        debug(user_context) << "Vulkan: vkBindBufferMemory returned: " << vk_get_error_name(ret_code) << "\n";
         return -1;
     }
 
-    buf->device = (uint64_t)result;
+    buf->device = (uint64_t)device_buffer;
     buf->device_interface = &vulkan_device_interface;
     buf->device_interface->impl->use_module();
 
@@ -444,9 +387,6 @@ WEAK int halide_vulkan_copy_to_device(void *user_context, halide_buffer_t *halid
         return -1;
     }
 
-    // retrieve the buffer from the region
-    VkBuffer staging_buffer = reinterpret_cast<VkBuffer>(region->handle);
-
     // map the region to a host ptr
     uint8_t *stage_host_ptr = (uint8_t *)memory_allocator->map(user_context, region);
     if (stage_host_ptr == nullptr) {
@@ -458,6 +398,13 @@ WEAK int halide_vulkan_copy_to_device(void *user_context, halide_buffer_t *halid
     copy_helper.dst = (uint64_t)(stage_host_ptr);
     copy_memory(copy_helper, user_context);
 
+   // retrieve the buffer from the region
+    VkBuffer* staging_buffer = reinterpret_cast<VkBuffer*>(region->handle);
+    if (staging_buffer == nullptr) {
+        error(user_context) << "Vulkan: Failed to retrieve staging buffer for device memory!\n";
+        return halide_error_code_internal_error;
+    }
+    
     // unmap the pointer
     memory_allocator->unmap(user_context, region);
     memory_allocator->unbind(user_context);
@@ -474,13 +421,13 @@ WEAK int halide_vulkan_copy_to_device(void *user_context, halide_buffer_t *halid
     VkCommandBuffer command_buffer;
     VkResult result = vk_create_command_pool(ctx.device, ctx.queue_family_index, ctx.allocation_callbacks(), &command_pool);
     if (result != VK_SUCCESS) {
-        debug(user_context) << "Vulkan: vkCreateCommandPool returned: " << get_vulkan_error_name(result) << "\n";
+        debug(user_context) << "Vulkan: vkCreateCommandPool returned: " << vk_get_error_name(result) << "\n";
         return result;
     }
 
     result = vk_create_command_buffer(ctx.device, command_pool, &command_buffer);
     if (result != VK_SUCCESS) {
-        debug(user_context) << "Vulkan: vkCreateCommandBuffer returned: " << get_vulkan_error_name(result) << "\n";
+        debug(user_context) << "Vulkan: vkCreateCommandBuffer returned: " << vk_get_error_name(result) << "\n";
         return result;
     }
 
@@ -495,17 +442,18 @@ WEAK int halide_vulkan_copy_to_device(void *user_context, halide_buffer_t *halid
 
     result = vkBeginCommandBuffer(command_buffer, &command_buffer_begin_info);
     if (result != VK_SUCCESS) {
-        debug(user_context) << "vkBeginCommandBuffer returned " << get_vulkan_error_name(result) << "\n";
+        debug(user_context) << "vkBeginCommandBuffer returned " << vk_get_error_name(result) << "\n";
         return result;
     }
 
     // enqueue the copy operation
-    vkCmdCopyBuffer(command_buffer, staging_buffer, (VkBuffer)(halide_buffer->device), 1, &staging_copy);
+    VkBuffer* device_buffer = reinterpret_cast<VkBuffer*>(halide_buffer->device);
+    vkCmdCopyBuffer(command_buffer, *staging_buffer, *device_buffer, 1, &staging_copy);
 
     // end the command buffer
     result = vkEndCommandBuffer(command_buffer);
     if (result != VK_SUCCESS) {
-        debug(user_context) << "vkEndCommandBuffer returned " << get_vulkan_error_name(result) << "\n";
+        debug(user_context) << "vkEndCommandBuffer returned " << vk_get_error_name(result) << "\n";
         return result;
     }
 
@@ -525,14 +473,14 @@ WEAK int halide_vulkan_copy_to_device(void *user_context, halide_buffer_t *halid
 
     result = vkQueueSubmit(ctx.queue, 1, &submit_info, 0);
     if (result != VK_SUCCESS) {
-        debug(user_context) << "vkQueueSubmit returned " << get_vulkan_error_name(result) << "\n";
+        debug(user_context) << "vkQueueSubmit returned " << vk_get_error_name(result) << "\n";
         return result;
     }
 
     //// 14. Wait until the queue is done with the command buffer
     result = vkQueueWaitIdle(ctx.queue);
     if (result != VK_SUCCESS) {
-        debug(user_context) << "vkQueueWaitIdle returned " << get_vulkan_error_name(result) << "\n";
+        debug(user_context) << "vkQueueWaitIdle returned " << vk_get_error_name(result) << "\n";
         return result;
     }
 
@@ -584,7 +532,7 @@ WEAK int halide_vulkan_copy_to_host(void *user_context, halide_buffer_t *halide_
     request.size = halide_buffer->size_in_bytes();
     request.properties.usage = MemoryUsage::TransferDst;
     request.properties.caching = MemoryCaching::UncachedCoherent;
-    request.properties.visibility = MemoryVisibility::HostToDevice;
+    request.properties.visibility = MemoryVisibility::DeviceToHost;
 
     // allocate a new region
     memory_allocator->bind(user_context, ctx.device, ctx.physical_device);
@@ -595,7 +543,7 @@ WEAK int halide_vulkan_copy_to_host(void *user_context, halide_buffer_t *halide_
     }
 
     // retrieve the buffer from the region
-    VkBuffer staging_buffer = reinterpret_cast<VkBuffer>(region->handle);
+    VkBuffer* staging_buffer = reinterpret_cast<VkBuffer*>(region->handle);
 
     // TODO: only copy the regions that should be copied
     VkBufferCopy staging_copy = {
@@ -609,7 +557,7 @@ WEAK int halide_vulkan_copy_to_host(void *user_context, halide_buffer_t *halide_
     VkCommandBuffer command_buffer;
     VkResult result = vk_create_command_pool(ctx.device, ctx.queue_family_index, ctx.allocation_callbacks(), &command_pool);
     if (result != VK_SUCCESS) {
-        error(user_context) << "Vulkan: vkCreateCommandPool returned: " << get_vulkan_error_name(result) << "\n";
+        error(user_context) << "Vulkan: vkCreateCommandPool returned: " << vk_get_error_name(result) << "\n";
         return -1;
     }
 
@@ -626,17 +574,18 @@ WEAK int halide_vulkan_copy_to_host(void *user_context, halide_buffer_t *halide_
 
     result = vkBeginCommandBuffer(command_buffer, &command_buffer_begin_info);
     if (result != VK_SUCCESS) {
-        error(user_context) << "vkBeginCommandBuffer returned " << get_vulkan_error_name(result) << "\n";
+        error(user_context) << "vkBeginCommandBuffer returned " << vk_get_error_name(result) << "\n";
         return result;
     }
 
     // enqueue the copy operation
-    vkCmdCopyBuffer(command_buffer, (VkBuffer)(halide_buffer->device), staging_buffer, 1, &staging_copy);
+    VkBuffer* device_buffer = reinterpret_cast<VkBuffer*>(halide_buffer->device);
+    vkCmdCopyBuffer(command_buffer, *device_buffer, *staging_buffer, 1, &staging_copy);
 
     // end the command buffer
     result = vkEndCommandBuffer(command_buffer);
     if (result != VK_SUCCESS) {
-        error(user_context) << "vkEndCommandBuffer returned " << get_vulkan_error_name(result) << "\n";
+        error(user_context) << "vkEndCommandBuffer returned " << vk_get_error_name(result) << "\n";
         return result;
     }
 
@@ -656,14 +605,14 @@ WEAK int halide_vulkan_copy_to_host(void *user_context, halide_buffer_t *halide_
 
     result = vkQueueSubmit(ctx.queue, 1, &submit_info, 0);
     if (result != VK_SUCCESS) {
-        error(user_context) << "vkQueueSubmit returned " << get_vulkan_error_name(result) << "\n";
+        error(user_context) << "vkQueueSubmit returned " << vk_get_error_name(result) << "\n";
         return result;
     }
 
     //// 14. Wait until the queue is done with the command buffer
     result = vkQueueWaitIdle(ctx.queue);
     if (result != VK_SUCCESS) {
-        error(user_context) << "vkQueueWaitIdle returned " << get_vulkan_error_name(result) << "\n";
+        error(user_context) << "vkQueueWaitIdle returned " << vk_get_error_name(result) << "\n";
         return result;
     }
 
@@ -721,82 +670,76 @@ WEAK size_t vk_estimate_scalar_uniform_buffer_size(void* user_context,
     return scalar_uniform_buffer_size;
 }
 
-WEAK VkResult vk_create_scalar_uniform_buffer(void* user_context, 
+WEAK MemoryRegion* vk_create_scalar_uniform_buffer(void* user_context, 
                                               VkDevice device,
                                               VkPhysicalDevice physical_device,
                                               size_t arg_sizes[],
                                               void *args[],
-                                              int8_t arg_is_buffer[],
-                                              const VkAllocationCallbacks* alloc_callbacks,
-                                              VkDeviceMemory* scalar_alloc,
-                                              VkBuffer* scalar_args_buffer){
+                                              int8_t arg_is_buffer[]){
 
-    size_t scalar_buffer_size = vk_estimate_scalar_uniform_buffer_size(user_context, arg_sizes, args, arg_is_buffer);
+    debug(user_context)
+        << "Vulkan: vk_create_scalar_uniform_buffer (user_context: " << user_context << ", "
+        << "device: " << (void*)device << ", "
+        << "physical_device: " << (void*)physical_device << "\n";
 
-    VkResult result = vk_allocate_device_memory(physical_device, device, scalar_buffer_size,
-                                       VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-                                       alloc_callbacks, scalar_alloc);
-    if (result != VK_SUCCESS) {
-        debug(user_context) << "Vulkan: vk_allocate_device_memory() failed "
-                            << "\n";
-        return result;
+    size_t scalar_buffer_size = vk_estimate_scalar_uniform_buffer_size(user_context, 
+        arg_sizes, args, arg_is_buffer);
+
+    MemoryRequest request = {0};
+    request.size = scalar_buffer_size;
+    request.properties.usage = MemoryUsage::UniformStorage;
+    request.properties.caching = MemoryCaching::UncachedCoherent;
+    request.properties.visibility = MemoryVisibility::HostToDevice;
+
+    // allocate a new region
+    memory_allocator->bind(user_context, device, physical_device);
+    MemoryRegion *region = memory_allocator->reserve(user_context, request);
+    if ((region == nullptr) || (region->handle == nullptr)) {
+        error(user_context) << "Vulkan: Failed to allocate device memory!\n";
+        return nullptr;
     }
 
-    uint8_t *scalar_ptr;
-    result = vkMapMemory(device, *scalar_alloc, 0, scalar_buffer_size, 0, (void **)&scalar_ptr);
-    if (result != VK_SUCCESS) {
-        debug(user_context) << "vkMapMemory returned " << get_vulkan_error_name(result) << "\n";
-        return result;
+    // map the region to a host ptr
+    uint8_t * scalar_buffer_host_ptr = (uint8_t *)memory_allocator->map(user_context, region);
+    if (scalar_buffer_host_ptr == nullptr) {
+        error(user_context) << "Vulkan: Failed to map host pointer to device memory!\n";
+        return nullptr;
     }
 
+    // copy to the (host-visible/coherent) scalar uniform buffer
     size_t scalar_arg_offset = 0;
     debug(user_context) << "Parameter: (passed in vs value after copy)\n";
     for (size_t i = 0; arg_sizes[i] > 0; i++) {
         if (!arg_is_buffer[i]) {
-            memcpy(scalar_ptr + scalar_arg_offset, args[i], arg_sizes[i]);
-            debug(user_context) << *((int32_t *)(scalar_ptr + scalar_arg_offset));
+            memcpy(scalar_buffer_host_ptr + scalar_arg_offset, args[i], arg_sizes[i]);
+            debug(user_context) << *((int32_t *)(scalar_buffer_host_ptr + scalar_arg_offset));
             debug(user_context) << "   " << *((int32_t *)(args[i])) << "\n";
             scalar_arg_offset += arg_sizes[i];
         }
     }
-    vkUnmapMemory(device, *scalar_alloc);
 
-    VkBufferCreateInfo scalar_buffer_info = {
-        VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,  // struct type
-        nullptr,                               // point to struct extending this
-        0,                                     // flags
-        (VkDeviceSize)scalar_buffer_size,      // size
-        VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,    // usages
-        VK_SHARING_MODE_EXCLUSIVE,             // sharing across queues
-        0,                                     // irrelevant here
-        nullptr                                // irrelevant
-    };
+    // unmap the pointer to the buffer for the region
+    memory_allocator->unmap(user_context, region);
+    memory_allocator->unbind(user_context);
 
-    result = vkCreateBuffer(device, &scalar_buffer_info, alloc_callbacks, scalar_args_buffer);
-    if (result != VK_SUCCESS) {
-        debug(user_context) << "vkCreateBuffer returned " << get_vulkan_error_name(result) << "\n";
-        return result;
-    }
-
-    result = vkBindBufferMemory(device, *scalar_args_buffer, *scalar_alloc, 0);
-    if (result != VK_SUCCESS) {
-        debug(user_context) << "vkBindBufferMemory returned " << get_vulkan_error_name(result) << "\n";
-        return result;
-    }
-
-    return VK_SUCCESS;
+    // return the allocated region for the uniform buffer
+    return region;
 }
 
-WEAK void vk_destory_scalar_uniform_buffer(void* user_context, VkDevice device, 
-                                           const VkAllocationCallbacks* alloc_callbacks,
-                                           VkDeviceMemory* scalar_alloc,
-                                           VkBuffer* scalar_args_buffer){
-    if(scalar_args_buffer) {
-        vkDestroyBuffer(device, *scalar_args_buffer, alloc_callbacks);
-    }
-    if(scalar_alloc) {
-        vkFreeMemory(device, *scalar_alloc, alloc_callbacks);
-    }
+WEAK void vk_destroy_scalar_uniform_buffer(void* user_context, VkDevice device, 
+                                           VkPhysicalDevice physical_device,
+                                           MemoryRegion* scalar_args_region){
+
+    debug(user_context)
+        << "Vulkan: vk_destroy_scalar_uniform_buffer (user_context: " << user_context << ", "
+        << "device: " << (void*)device << ", "
+        << "physical_device: " << (void*)physical_device << ", "
+        << "scalar_args_region: " << (void*)scalar_args_region << "\n";
+
+    if(!scalar_args_region) { return; }
+    memory_allocator->bind(user_context, device, physical_device);
+    memory_allocator->reclaim(user_context, scalar_args_region);
+    memory_allocator->unbind(user_context);
 }
 
 WEAK VkResult vk_create_descriptor_set_layout(void* user_context, 
@@ -805,6 +748,11 @@ WEAK VkResult vk_create_descriptor_set_layout(void* user_context,
                                          void *args[],
                                          int8_t arg_is_buffer[],
                                          VkDescriptorSetLayout* layout) {
+
+    debug(user_context)
+        << "Vulkan: vk_create_descriptor_set_layout (user_context: " << user_context << ", "
+        << "device: " << (void*)device << ", "
+        << "layout: " << (void*)layout << "\n";
 
     // The first binding is used for scalar parameters
     uint32_t num_bindings = vk_count_bindings_for_descriptor_set(user_context, arg_sizes, args, arg_is_buffer);
@@ -854,7 +802,7 @@ WEAK VkResult vk_create_descriptor_set_layout(void* user_context,
     // Create the descriptor set layout
     VkResult result = vkCreateDescriptorSetLayout(device, &layout_info, 0, layout);
     if (result != VK_SUCCESS) {
-        debug(user_context) << "vkCreateDescriptorSetLayout returned " << get_vulkan_error_name(result) << "\n";
+        debug(user_context) << "vkCreateDescriptorSetLayout returned " << vk_get_error_name(result) << "\n";
         return result;
     }
 
@@ -866,6 +814,13 @@ WEAK VkResult vk_create_pipeline_layout(void* user_context,
                                         const VkAllocationCallbacks* alloc_callbacks,
                                         VkDescriptorSetLayout* descriptor_set_layout,
                                         VkPipelineLayout* pipeline_layout){
+
+    debug(user_context)
+        << "Vulkan: vk_create_pipeline_layout (user_context: " << user_context << ", "
+        << "device: " << (void*)device << ", "
+        << "descriptor_set_layout: " << (void*)descriptor_set_layout << ", "
+        << "pipeline_layout: " << (void*)pipeline_layout << ")\n";
+
 
     VkPipelineLayoutCreateInfo pipeline_layout_info = {
         VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,  // structure type
@@ -879,7 +834,7 @@ WEAK VkResult vk_create_pipeline_layout(void* user_context,
 
     VkResult result = vkCreatePipelineLayout(device, &pipeline_layout_info, alloc_callbacks, pipeline_layout);
     if (result != VK_SUCCESS) {
-        debug(user_context) << "vkCreatePipelineLayout returned " << get_vulkan_error_name(result) << "\n";
+        debug(user_context) << "vkCreatePipelineLayout returned " << vk_get_error_name(result) << "\n";
         return result;
     }
     return VK_SUCCESS;
@@ -944,16 +899,14 @@ WEAK int halide_vulkan_run(void *user_context,
     //// 1a. Create a buffer for the scalar parameters
     // First allocate memory, then map it and copy params, then create a buffer
     // and bind the allocation
-    VkDeviceMemory scalar_alloc{};
-    VkBuffer scalar_args_buffer{};
-    result = vk_create_scalar_uniform_buffer(user_context, ctx.device, ctx.physical_device,
-                                             arg_sizes, args, arg_is_buffer, ctx.allocation_callbacks(),
-                                             &scalar_alloc, &scalar_args_buffer);
+    MemoryRegion* scalar_args_region = vk_create_scalar_uniform_buffer(user_context, ctx.device, ctx.physical_device,
+                                                                       arg_sizes, args, arg_is_buffer);
 
-   if (result != VK_SUCCESS) {
+    if (scalar_args_region == nullptr) {
         error(user_context) << "Vulkan: vk_create_scalar_uniform_buffer() failed! Unable to create shader module!\n";
         return result;
     }
+    VkBuffer* scalar_args_buffer = reinterpret_cast<VkBuffer*>(scalar_args_region->handle);
 
     ///// 2. Create a pipeline layout
     VkPipelineLayout pipeline_layout;
@@ -994,7 +947,7 @@ WEAK int halide_vulkan_run(void *user_context,
     result = vkCreateComputePipelines(ctx.device, 0, 1, &compute_pipeline_info, 0, &pipeline);
 
     if (result != VK_SUCCESS) {
-        debug(user_context) << "vkCreateComputePipelines returned " << get_vulkan_error_name(result) << "\n";
+        debug(user_context) << "vkCreateComputePipelines returned " << vk_get_error_name(result) << "\n";
         return result;
     }
 
@@ -1023,7 +976,7 @@ WEAK int halide_vulkan_run(void *user_context,
     result = vkCreateDescriptorPool(ctx.device, &descriptor_pool_info, 0, &descriptor_pool);
 
     if (result != VK_SUCCESS) {
-        debug(user_context) << "vkCreateDescriptorPool returned " << get_vulkan_error_name(result) << "\n";
+        debug(user_context) << "vkCreateDescriptorPool returned " << vk_get_error_name(result) << "\n";
         return result;
     }
 
@@ -1040,7 +993,7 @@ WEAK int halide_vulkan_run(void *user_context,
     result = vkAllocateDescriptorSets(ctx.device, &descriptor_set_info, &descriptor_set);
 
     if (result != VK_SUCCESS) {
-        debug(user_context) << "vkAllocateDescriptorSets returned " << get_vulkan_error_name(result) << "\n";
+        debug(user_context) << "vkAllocateDescriptorSets returned " << vk_get_error_name(result) << "\n";
         return result;
     }
 
@@ -1052,9 +1005,9 @@ WEAK int halide_vulkan_run(void *user_context,
     // First binding will be the scalar params buffer
     descriptor_buffer_info[0] =
         {
-            scalar_args_buffer,  // the buffer
-            0,                   // offset
-            VK_WHOLE_SIZE        // range
+            *scalar_args_buffer,  // the buffer
+            0,                    // offset
+            VK_WHOLE_SIZE         // range
         };
     write_descriptor_set[0] =
         {
@@ -1073,12 +1026,12 @@ WEAK int halide_vulkan_run(void *user_context,
     for (size_t i = 0; arg_sizes[i] > 0; i++) {
         if (arg_is_buffer[i]) {
             halide_debug_assert(user_context, num_bound < HALIDE_MAX_VK_BINDINGS);
-            auto buf = (VkBuffer)(((halide_buffer_t *)args[i])->device);
+            VkBuffer* device_buffer = reinterpret_cast<VkBuffer*>(((halide_buffer_t *)args[i])->device);
             descriptor_buffer_info[num_bound] =
                 {
-                    buf,           // the buffer
-                    0,             // offset
-                    VK_WHOLE_SIZE  // range
+                    *device_buffer, // the buffer
+                    0,              // offset
+                    VK_WHOLE_SIZE   // range
                 };
             write_descriptor_set[num_bound] =
                 {
@@ -1113,7 +1066,7 @@ WEAK int halide_vulkan_run(void *user_context,
     result = vk_create_command_pool(ctx.device, ctx.queue_family_index, ctx.allocation_callbacks(), &command_pool);
 
     if (result != VK_SUCCESS) {
-        debug(user_context) << "vkCreateCommandPool returned " << get_vulkan_error_name(result) << "\n";
+        debug(user_context) << "vkCreateCommandPool returned " << vk_get_error_name(result) << "\n";
         return result;
     }
 
@@ -1131,7 +1084,7 @@ WEAK int halide_vulkan_run(void *user_context,
     result = vk_create_command_buffer(ctx.device, command_pool, &command_buffer);
 
     if (result != VK_SUCCESS) {
-        debug(user_context) << "vkAllocateCommandBuffer returned " << get_vulkan_error_name(result) << "\n";
+        debug(user_context) << "vkAllocateCommandBuffer returned " << vk_get_error_name(result) << "\n";
         return result;
     }
 
@@ -1147,7 +1100,7 @@ WEAK int halide_vulkan_run(void *user_context,
     result = vkBeginCommandBuffer(command_buffer, &command_buffer_begin_info);
 
     if (result != VK_SUCCESS) {
-        debug(user_context) << "vkBeginCommandBuffer returned " << get_vulkan_error_name(result) << "\n";
+        debug(user_context) << "vkBeginCommandBuffer returned " << vk_get_error_name(result) << "\n";
         return result;
     }
 
@@ -1166,7 +1119,7 @@ WEAK int halide_vulkan_run(void *user_context,
     result = vkEndCommandBuffer(command_buffer);
 
     if (result != VK_SUCCESS) {
-        debug(user_context) << "vkEndCommandBuffer returned " << get_vulkan_error_name(result) << "\n";
+        debug(user_context) << "vkEndCommandBuffer returned " << vk_get_error_name(result) << "\n";
         return result;
     }
 
@@ -1187,22 +1140,19 @@ WEAK int halide_vulkan_run(void *user_context,
     result = vkQueueSubmit(ctx.queue, 1, &submit_info, 0);
 
     if (result != VK_SUCCESS) {
-        debug(user_context) << "vkQueueSubmit returned " << get_vulkan_error_name(result) << "\n";
+        debug(user_context) << "vkQueueSubmit returned " << vk_get_error_name(result) << "\n";
         return result;
     }
 
     //// 14. Wait until the queue is done with the command buffer
     result = vkQueueWaitIdle(ctx.queue);
-
     if (result != VK_SUCCESS) {
-        debug(user_context) << "vkQueueWaitIdle returned " << get_vulkan_error_name(result) << "\n";
+        debug(user_context) << "vkQueueWaitIdle returned " << vk_get_error_name(result) << "\n";
         return result;
     }
 
-    // Free the scalar uniform args
-    vk_destory_scalar_uniform_buffer(user_context, ctx.device, ctx.allocation_callbacks(),
-                                     &scalar_alloc, &scalar_args_buffer);
-
+    // Release the uniform buffer for the scalar args
+    vk_destroy_scalar_uniform_buffer(user_context, ctx.device, ctx.physical_device, scalar_args_region);
 
 #ifdef DEBUG_RUNTIME
     uint64_t t_after = halide_current_time_ns(user_context);
@@ -1255,19 +1205,29 @@ WEAK const struct halide_device_interface_t *halide_vulkan_device_interface() {
 }
 
 namespace {
+
 __attribute__((destructor))
 WEAK void
 halide_vulkan_cleanup() {
     halide_vulkan_device_release(nullptr);
 }
+
+// --------------------------------------------------------------------------
+
 }  // namespace
 
+// --------------------------------------------------------------------------
+
 }  // extern "C" linkage
+
+// --------------------------------------------------------------------------
 
 namespace Halide {
 namespace Runtime {
 namespace Internal {
 namespace Vulkan {
+
+// --------------------------------------------------------------------------
 
 WEAK halide_device_interface_impl_t vulkan_device_interface_impl = {
     halide_use_jit_module,
@@ -1306,7 +1266,10 @@ WEAK halide_device_interface_t vulkan_device_interface = {
     nullptr,  // target capabilities.
     &vulkan_device_interface_impl};
 
+// --------------------------------------------------------------------------
+
 }  // namespace Vulkan
 }  // namespace Internal
 }  // namespace Runtime
 }  // namespace Halide
+

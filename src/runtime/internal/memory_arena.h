@@ -43,7 +43,7 @@ public:
                     const SystemMemoryAllocatorFns &allocator = default_allocator());
 
     // Public interface methods
-    void *reserve(void *user_context);
+    void *reserve(void *user_context, bool initialize=false);
     void reclaim(void *user_context, void *ptr);
     bool collect(void *user_context);  //< returns true if any blocks were removed
     void destroy(void *user_context);
@@ -149,7 +149,7 @@ bool MemoryArena::collect(void *user_context) {
     return result;
 }
 
-void *MemoryArena::reserve(void *user_context) {
+void *MemoryArena::reserve(void *user_context, bool initialize) {
 
     // Scan blocks for a free entry
     for (size_t i = blocks.size(); i--;) {
@@ -168,7 +168,13 @@ void *MemoryArena::reserve(void *user_context) {
     // All blocks full ... create a new one
     uint32_t index = 0;
     Block* block = create_block(user_context);
-    return create_entry(user_context, block, index);
+    void* entry_ptr = create_entry(user_context, block, index);
+
+    // Optionally clear the allocation if requested
+    if(initialize) {
+        memset(entry_ptr, 0, config.entry_size);
+    }
+    return entry_ptr;
 }
 
 void MemoryArena::reclaim(void *user_context, void *entry_ptr) {

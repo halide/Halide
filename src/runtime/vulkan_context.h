@@ -7,10 +7,14 @@
 #include "vulkan_extensions.h"
 #include "vulkan_internal.h"
 
+// --------------------------------------------------------------------------
+
 namespace Halide {
 namespace Runtime {
 namespace Internal {
 namespace Vulkan {
+
+// --------------------------------------------------------------------------
 
 // An Vulkan context/queue/synchronization lock defined in this module with weak linkage
 VkAllocationCallbacks* WEAK cached_allocation_callbacks = nullptr;
@@ -21,17 +25,7 @@ VkPhysicalDevice WEAK cached_physical_device = nullptr;
 uint32_t WEAK cached_queue_family_index = 0;
 volatile ScopedSpinLock::AtomicFlag WEAK thread_lock = 0;
 
-// --
-
-// Prototype for helper function for creating a new vulkan context (returns the instance, device, queue, etc)
-WEAK int vk_create_context(
-    void *user_context,
-    VkInstance *instance,
-    VkDevice *device, VkQueue *queue,
-    VkPhysicalDevice *physical_device,
-    uint32_t *queue_family_index);
-
-// --
+// --------------------------------------------------------------------------
 
 // Helper object to acquire and release the Vulkan context.
 class VulkanContext {
@@ -73,6 +67,8 @@ public:
     }
 };
 
+// --------------------------------------------------------------------------
+
 // Initializes the instance (used by the default vk_create_context)
 WEAK int vk_create_instance(void *user_context, const StringTable &requested_layers, VkInstance *instance, const VkAllocationCallbacks* alloc_callbacks) {
     debug(user_context) << "    vk_create_instance (user_context: " << user_context << ")\n";
@@ -111,7 +107,7 @@ WEAK int vk_create_instance(void *user_context, const StringTable &requested_lay
 
     VkResult result = vkCreateInstance(&create_info, alloc_callbacks, instance);
     if (result != VK_SUCCESS) {
-        debug(user_context) << "Vulkan: vkCreateInstance failed with return code: " << get_vulkan_error_name(result) << "\n";
+        debug(user_context) << "Vulkan: vkCreateInstance failed with return code: " << vk_get_error_name(result) << "\n";
         return halide_error_code_incompatible_device_interface;
     }
 
@@ -129,7 +125,7 @@ WEAK int vk_select_device_for_context(void *user_context,
     uint32_t device_count = sizeof(avail_devices) / sizeof(avail_devices[0]);
     VkResult result = vkEnumeratePhysicalDevices(*instance, &device_count, avail_devices);
     if ((result != VK_SUCCESS) && (result != VK_INCOMPLETE)) {
-        debug(user_context) << "Vulkan: vkEnumeratePhysicalDevices failed with return code: " << get_vulkan_error_name(result) << "\n";
+        debug(user_context) << "Vulkan: vkEnumeratePhysicalDevices failed with return code: " << vk_get_error_name(result) << "\n";
         return halide_error_code_incompatible_device_interface;
     }
 
@@ -249,7 +245,7 @@ WEAK int vk_create_device(void *user_context, const StringTable &requested_layer
 
     VkResult result = vkCreateDevice(*physical_device, &device_create_info, alloc_callbacks, device);
     if (result != VK_SUCCESS) {
-        debug(user_context) << "Vulkan: vkCreateDevice failed with return code: " << get_vulkan_error_name(result) << "\n";
+        debug(user_context) << "Vulkan: vkCreateDevice failed with return code: " << vk_get_error_name(result) << "\n";
         return halide_error_code_incompatible_device_interface;
     }
 
@@ -297,6 +293,8 @@ WEAK int vk_create_context(void *user_context, VkInstance *instance, VkDevice *d
 
     return halide_error_code_success;
 }
+
+// --------------------------------------------------------------------------
 
 }  // namespace Vulkan
 }  // namespace Internal

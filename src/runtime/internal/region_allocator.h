@@ -296,7 +296,7 @@ BlockRegion *RegionAllocator::create_block_region(void *user_context, const Memo
              << "caching=" << halide_memory_caching_name(properties.caching) << " "
              << "visibility=" << halide_memory_visibility_name(properties.visibility) << ") ...\n";
 
-    BlockRegion *block_region = static_cast<BlockRegion*>(arena->reserve(user_context));
+    BlockRegion *block_region = static_cast<BlockRegion*>(arena->reserve(user_context, true));
 
     if (block_region == nullptr) {
         error(user_context) << "RegionAllocator: Failed to allocate new block region!\n";

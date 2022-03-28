@@ -10,11 +10,13 @@ namespace Runtime {
 namespace Internal {
 namespace Vulkan {
 
+// --------------------------------------------------------------------------
+
 // Enable external client to override Vulkan allocation callbacks (if they so desire)
 WEAK ScopedSpinLock::AtomicFlag custom_allocation_callbacks_lock = 0;
 static const VkAllocationCallbacks* custom_allocation_callbacks = nullptr; // nullptr => use Vulkan runtime implementation
 
-// --
+// --------------------------------------------------------------------------
 
 // Halide System allocator for host allocations
 WEAK void *vk_system_malloc(void *user_context, size_t size) {
@@ -56,7 +58,7 @@ struct VulkanMemoryConfig {
 };
 WEAK VulkanMemoryConfig memory_allocator_config;
 
-// --
+// --------------------------------------------------------------------------
 
 /** Vulkan Memory Allocator class interface for managing large 
  * memory requests stored as contiguous blocks of memory, which 
@@ -75,7 +77,10 @@ public:
     ~VulkanMemoryAllocator() = delete;
 
     // Factory methods for creation / destruction
-    static VulkanMemoryAllocator *create(void *user_context, const VulkanMemoryConfig &config, const SystemMemoryAllocatorFns &system_allocator);
+    static VulkanMemoryAllocator *create(void *user_context, const VulkanMemoryConfig &config, 
+                                         const SystemMemoryAllocatorFns &system_allocator,
+                                         const VkAllocationCallbacks *alloc_callbacks = nullptr);
+
     static void destroy(void *user_context, VulkanMemoryAllocator *allocator);
 
     // Public interface methods
@@ -109,7 +114,9 @@ private:
     static const uint32_t invalid_memory_type = uint32_t(VK_MAX_MEMORY_TYPES);
 
     // Initializes a new instance
-    void initialize(void *user_context, const VulkanMemoryConfig &config, const SystemMemoryAllocatorFns &system_allocator);
+    void initialize(void *user_context, const VulkanMemoryConfig &config, 
+                    const SystemMemoryAllocatorFns &system_allocator,
+                    const VkAllocationCallbacks *alloc_callbacks=nullptr);
 
     uint32_t select_memory_usage(void *user_context, MemoryProperties properties) const;
 
@@ -126,11 +133,15 @@ private:
     VulkanMemoryConfig config;
     VkDevice device = nullptr;
     VkPhysicalDevice physical_device = nullptr;
+    const VkAllocationCallbacks* alloc_callbacks = nullptr;
     BlockAllocator *block_allocator = nullptr;
     ScopedSpinLock::AtomicFlag spin_lock = 0;
 };
 
-VulkanMemoryAllocator *VulkanMemoryAllocator::create(void *user_context, const VulkanMemoryConfig &cfg, const SystemMemoryAllocatorFns &system_allocator) {
+VulkanMemoryAllocator *VulkanMemoryAllocator::create(void *user_context, 
+    const VulkanMemoryConfig &cfg, const SystemMemoryAllocatorFns &system_allocator,
+    const VkAllocationCallbacks *alloc_callbacks) {
+
     halide_abort_if_false(user_context, system_allocator.allocate != nullptr);
     VulkanMemoryAllocator *result = reinterpret_cast<VulkanMemoryAllocator *>(
         system_allocator.allocate(user_context, sizeof(VulkanMemoryAllocator)));
@@ -140,7 +151,7 @@ VulkanMemoryAllocator *VulkanMemoryAllocator::create(void *user_context, const V
         return nullptr;
     }
 
-    result->initialize(user_context, cfg, system_allocator);
+    result->initialize(user_context, cfg, system_allocator, alloc_callbacks);
     return result;
 }
 
@@ -153,11 +164,15 @@ void VulkanMemoryAllocator::destroy(void *user_context, VulkanMemoryAllocator *i
     allocators.system.deallocate(user_context, instance);
 }
 
-void VulkanMemoryAllocator::initialize(void *user_context, const VulkanMemoryConfig &cfg, const SystemMemoryAllocatorFns &system_allocator) {
+void VulkanMemoryAllocator::initialize(void *user_context, 
+    const VulkanMemoryConfig &cfg, const SystemMemoryAllocatorFns &system_allocator,
+    const VkAllocationCallbacks *callbacks) {
+
     spin_lock = 0;
     config = cfg;
     device = nullptr;
     physical_device = nullptr;
+    alloc_callbacks = callbacks;
     BlockAllocator::MemoryAllocators allocators;
     allocators.system = system_allocator;
     allocators.block = {VulkanMemoryAllocator::allocate_block, VulkanMemoryAllocator::deallocate_block};
@@ -174,7 +189,7 @@ MemoryRegion *VulkanMemoryAllocator::reserve(void *user_context, MemoryRequest &
     debug(0) << "VulkanMemoryAllocator: Reserving memory ("
              << "user_context=" << user_context << " "
              << "block_allocator=" << (void *)(block_allocator) << " "
-             << "request.size=" << (uint32_t)(request.size) << " "
+             << "request_size=" << (uint32_t)(request.size) << " "
              << "device=" << (void *)(device) << " "
              << "physical_device=" << (void *)(physical_device) << ") ...\n";
 
@@ -197,13 +212,27 @@ void *VulkanMemoryAllocator::map(void *user_context, MemoryRegion *region) {
     halide_abort_if_false(user_context, block_allocator != nullptr);
     //    ScopedSpinLock lock(&spin_lock);
     RegionAllocator *region_allocator = RegionAllocator::find_allocator(user_context, region);
+    if (region_allocator == nullptr) {
+        error(0) << "VulkanMemoryAllocator: Unable to map region! Invalid region allocator handle!\n";
+        return nullptr;
+    }
+
     BlockResource *block_resource = region_allocator->block_resource();
-    VkDeviceMemory device_memory = reinterpret_cast<VkDeviceMemory>(block_resource->memory.handle);
+    if (block_resource == nullptr) {
+        error(0) << "VulkanMemoryAllocator: Unable to map region! Invalid block resource handle!\n";
+        return nullptr;
+    }
+
+    VkDeviceMemory *device_memory = reinterpret_cast<VkDeviceMemory*>(block_resource->memory.handle);
+    if (device_memory == nullptr) {
+        error(0) << "VulkanMemoryAllocator: Unable to map region! Invalid device memory handle!\n";
+        return nullptr;
+    }
 
     uint8_t *mapped_ptr = nullptr;
-    VkResult result = vkMapMemory(device, device_memory, region->offset, region->size, 0, (void **)(&mapped_ptr));
+    VkResult result = vkMapMemory(device, *device_memory, region->offset, region->size, 0, (void **)(&mapped_ptr));
     if (result != VK_SUCCESS) {
-        error(user_context) << "VulkanMemoryAllocator: Mapping region failed! vkMapMemory returned error code: " << get_vulkan_error_name(result) << "\n";
+        error(user_context) << "VulkanMemoryAllocator: Mapping region failed! vkMapMemory returned error code: " << vk_get_error_name(result) << "\n";
         return nullptr;
     }
 
@@ -221,9 +250,24 @@ void VulkanMemoryAllocator::unmap(void *user_context, MemoryRegion *region) {
     halide_abort_if_false(user_context, physical_device != nullptr);
     //    ScopedSpinLock lock(&spin_lock);
     RegionAllocator *region_allocator = RegionAllocator::find_allocator(user_context, region);
+    if (region_allocator == nullptr) {
+        error(0) << "VulkanMemoryAllocator: Unable to unmap region! Invalid region allocator handle!\n";
+        return;
+    }
+
     BlockResource *block_resource = region_allocator->block_resource();
-    VkDeviceMemory device_memory = reinterpret_cast<VkDeviceMemory>(block_resource->memory.handle);
-    vkUnmapMemory(device, device_memory);
+    if (block_resource == nullptr) {
+        error(0) << "VulkanMemoryAllocator: Unable to unmap region! Invalid block resource handle!\n";
+        return;
+    }
+
+    VkDeviceMemory *device_memory = reinterpret_cast<VkDeviceMemory*>(block_resource->memory.handle);
+    if (device_memory == nullptr) {
+        error(0) << "VulkanMemoryAllocator: Unable to unmap region! Invalid device memory handle!\n";
+        return;
+    }
+
+    vkUnmapMemory(device, *device_memory);
 }
 
 WEAK void VulkanMemoryAllocator::bind(void *user_context, VkDevice dev, VkPhysicalDevice physical_dev) {
@@ -320,10 +364,15 @@ void VulkanMemoryAllocator::allocate_block(void *user_context, MemoryBlock *bloc
         memory_type                              // memory type index from physical device
     };
 
-    VkDeviceMemory device_memory = {0};
-    VkResult result = vkAllocateMemory(instance->device, &alloc_info, nullptr, &device_memory);
+    VkDeviceMemory* device_memory = (VkDeviceMemory*)vk_host_malloc(nullptr, sizeof(VkDeviceMemory), 0, VK_SYSTEM_ALLOCATION_SCOPE_OBJECT, instance->alloc_callbacks);
+    if (device_memory == nullptr) {
+        error(0) << "VulkanBlockAllocator: Unable to allocate block! Failed to allocate device memory handle!\n";
+        return;
+    }
+
+    VkResult result = vkAllocateMemory(instance->device, &alloc_info, instance->alloc_callbacks, device_memory);
     if (result != VK_SUCCESS) {
-        debug(0) << "VulkanMemoryAllocator: Allocation failed! vkAllocateMemory returned: " << get_vulkan_error_name(result) << "\n";
+        error(0) << "VulkanMemoryAllocator: Allocation failed! vkAllocateMemory returned: " << vk_get_error_name(result) << "\n";
         return;
     }
 
@@ -355,10 +404,18 @@ void VulkanMemoryAllocator::deallocate_block(void *user_context, MemoryBlock *bl
         return;
     }
 
-    VkDeviceMemory device_memory = reinterpret_cast<VkDeviceMemory>(block->handle);
-    vkFreeMemory(instance->device, device_memory, nullptr);
+    VkDeviceMemory* device_memory = reinterpret_cast<VkDeviceMemory*>(block->handle);
+    if (device_memory == nullptr) {
+        debug(0) << "VulkanBlockAllocator: Unable to deallocate block! Invalid device memory handle!\n";
+        return;
+    }
+
+    vkFreeMemory(instance->device, *device_memory, instance->alloc_callbacks);
     instance->block_byte_count -= block->size;
     instance->block_count--;
+
+    vk_host_free(nullptr, device_memory, instance->alloc_callbacks);
+    device_memory = nullptr;
 }
 
 size_t VulkanMemoryAllocator::blocks_allocated() const {
@@ -497,23 +554,37 @@ void VulkanMemoryAllocator::allocate_region(void *user_context, MemoryRegion *re
         VK_SHARING_MODE_EXCLUSIVE,             // sharing mode
         0, nullptr};
 
-    VkBuffer buffer = {0};
-    VkResult result = vkCreateBuffer(instance->device, &create_info, nullptr, &buffer);
+    VkBuffer* buffer = (VkBuffer*)vk_host_malloc(nullptr, sizeof(VkBuffer), 0, VK_SYSTEM_ALLOCATION_SCOPE_OBJECT, instance->alloc_callbacks);
+    if (buffer == nullptr) {
+        error(0) << "VulkanRegionAllocator: Unable to allocate region! Failed to allocate buffer handle!\n";
+        return;
+    }
+
+    VkResult result = vkCreateBuffer(instance->device, &create_info, instance->alloc_callbacks, buffer);
     if (result != VK_SUCCESS) {
-        error(user_context) << "VulkanRegionAllocator: Failed to create buffer!\n\t"
-                            << "vkCreateBuffer returned: " << get_vulkan_error_name(result) << "\n";
+        error(0) << "VulkanRegionAllocator: Failed to create buffer!\n\t"
+                 << "vkCreateBuffer returned: " << vk_get_error_name(result) << "\n";
         return;
     }
 
     RegionAllocator *region_allocator = RegionAllocator::find_allocator(user_context, region);
     BlockResource *block_resource = region_allocator->block_resource();
-    VkDeviceMemory device_memory = reinterpret_cast<VkDeviceMemory>(block_resource->memory.handle);
+    if (block_resource == nullptr) {
+        error(0) << "VulkanBlockAllocator: Unable to allocate region! Invalid block resource handle!\n";
+        return;
+    }
+
+    VkDeviceMemory *device_memory = reinterpret_cast<VkDeviceMemory*>(block_resource->memory.handle);
+    if (device_memory == nullptr) {
+        error(0) << "VulkanBlockAllocator: Unable to allocate region! Invalid device memory handle!\n";
+        return;
+    }
 
     // Finally, bind buffer to the device memory
-    result = vkBindBufferMemory(instance->device, buffer, device_memory, region->offset);
+    result = vkBindBufferMemory(instance->device, *buffer, *device_memory, region->offset);
     if (result != VK_SUCCESS) {
-        error(user_context) << "VulkanRegionAllocator: Failed to bind buffer!\n\t"
-                            << "vkBindBufferMemory returned: " << get_vulkan_error_name(result) << "\n";
+        error(0) << "VulkanRegionAllocator: Failed to bind buffer!\n\t"
+                 << "vkBindBufferMemory returned: " << vk_get_error_name(result) << "\n";
         return;
     }
 
@@ -545,12 +616,19 @@ void VulkanMemoryAllocator::deallocate_region(void *user_context, MemoryRegion *
         return;
     }
 
-    VkBuffer buffer = (VkBuffer)region->handle;
-    vkDestroyBuffer(instance->device, buffer, nullptr);
+    VkBuffer *buffer = reinterpret_cast<VkBuffer*>(region->handle);
+    if (buffer == nullptr) {
+        error(0) << "VulkanRegionAllocator: Unable to deallocate region! Invalid buffer handle!\n";
+        return;
+    }
 
+    vkDestroyBuffer(instance->device, *buffer, instance->alloc_callbacks);
     region->handle = nullptr;
     instance->region_byte_count -= region->size;
     instance->region_count--;
+
+    vk_host_free(nullptr, buffer, instance->alloc_callbacks);
+    buffer = nullptr;
 }
 
 size_t VulkanMemoryAllocator::regions_allocated() const {
@@ -564,6 +642,9 @@ size_t VulkanMemoryAllocator::bytes_allocated_for_regions() const {
 uint32_t VulkanMemoryAllocator::select_memory_usage(void *user_context, MemoryProperties properties) const {
     uint32_t result = 0;
     switch (properties.usage) {
+    case MemoryUsage::UniformStorage:
+        result |= VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT;
+        break;
     case MemoryUsage::DynamicStorage:
     case MemoryUsage::StaticStorage:
         result |= VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
@@ -596,31 +677,27 @@ uint32_t VulkanMemoryAllocator::select_memory_usage(void *user_context, MemoryPr
     return result;
 }
 
-// --
+// --------------------------------------------------------------------------
 
 WEAK int vk_create_memory_allocator(void *user_context, const VkAllocationCallbacks* alloc_callbacks) {
     if (memory_allocator != nullptr) {
         return halide_error_code_success;
     }
 
-    if(alloc_callbacks) {
-        // TODO
-    }
-
-    memory_allocator = VulkanMemoryAllocator::create(user_context, memory_allocator_config, system_allocator);
+    memory_allocator = VulkanMemoryAllocator::create(user_context, 
+        memory_allocator_config, system_allocator, alloc_callbacks
+    );
+    
     if (memory_allocator == nullptr) {
         return halide_error_code_out_of_memory;
     }
+    
     return halide_error_code_success;
 }
 
-WEAK int vk_destroy_memory_allocator(void *user_context, const VkAllocationCallbacks* callbacks) {
+WEAK int vk_destroy_memory_allocator(void *user_context) {
     if (memory_allocator == nullptr) {
         return halide_error_code_success;
-    }
-
-    if(callbacks) {
-        // TODO
     }
 
     VulkanMemoryAllocator::destroy(user_context, memory_allocator);
@@ -630,13 +707,80 @@ WEAK int vk_destroy_memory_allocator(void *user_context, const VkAllocationCallb
 
 // --
 
+WEAK VkResult vk_allocate_device_memory(VkPhysicalDevice physical_device,
+                                        VkDevice device, VkDeviceSize size,
+                                        VkMemoryPropertyFlags flags,
+                                        const VkAllocationCallbacks *allocator,
+                                        VkDeviceMemory *device_memory) {
+
+#if 0
+    MemoryRequest request = {0};
+    request.size = halide_buffer->size_in_bytes();
+    request.properties.usage = MemoryUsage::TransferSrc;
+    request.properties.caching = MemoryCaching::DefaultCaching;
+    request.properties.visibility = MemoryVisibility::HostToDevice;
+
+    // allocate a new region -- acquires the context
+    MemoryRegion* region = memory_allocator->reserve(user_context, request);
+    if((region == nullptr) || (region->handle == nullptr)) {
+        error(user_context) << "Vulkan: Failed to allocate device memory!\n";
+        return halide_error_out_of_memory;
+    }
+#endif
+
+    // Find an appropriate memory type given the flags
+    auto memory_type_index = VK_MAX_MEMORY_TYPES;
+    VkPhysicalDeviceMemoryProperties device_mem_properties;
+    vkGetPhysicalDeviceMemoryProperties(physical_device, &device_mem_properties);
+
+    // TODO: should this be host coherent or cached or something else?
+    for (uint32_t i = 0; i < device_mem_properties.memoryTypeCount; i++) {
+        if (device_mem_properties.memoryTypes[i].propertyFlags & flags) {
+            memory_type_index = i;
+            break;
+        }
+    }
+
+    if (memory_type_index == VK_MAX_MEMORY_TYPES) {
+        debug(nullptr) << "Vulkan: failed to find appropriate memory type";
+        return VK_ERROR_OUT_OF_DEVICE_MEMORY;
+    }
+
+    // TODO: This can greatly benefit from, and is designed for, an
+    // allocation cache.  We should consider allocating larger chunks
+    // of memory and using the larger allocation (with appropriate size/offsets)
+    // to back buffers created here
+
+    VkMemoryAllocateInfo alloc_info =
+        {
+            VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,  // struct type
+            nullptr,                                 // struct extending this
+            size,                                    // size of allocation in bytes
+            (uint32_t)memory_type_index              // memory type index from physical device
+        };
+
+    auto ret_code = vkAllocateMemory(device, &alloc_info, allocator, device_memory);
+
+    if (ret_code != VK_SUCCESS) {
+        debug(nullptr) << "Vulkan: vkAllocateMemory returned: " << vk_get_error_name(ret_code) << "\n";
+        return VK_ERROR_OUT_OF_DEVICE_MEMORY;
+    }
+
+    return ret_code;
+}
+
+// --------------------------------------------------------------------------
+
 }  // namespace Vulkan
 }  // namespace Internal
 }  // namespace Runtime
 }  // namespace Halide
 
+// --------------------------------------------------------------------------
 
 extern "C" {
+
+// --------------------------------------------------------------------------
 
 WEAK void halide_vulkan_set_allocation_callbacks(const VkAllocationCallbacks* callbacks) {
     ScopedSpinLock lock(&custom_allocation_callbacks_lock);
@@ -648,6 +792,8 @@ WEAK const VkAllocationCallbacks* halide_vulkan_get_allocation_callbacks(void *u
     return custom_allocation_callbacks;
 }
 
-}
+// --------------------------------------------------------------------------
+
+} // extern "C"
 
 #endif  // HALIDE_RUNTIME_VULKAN_MEMORY_H

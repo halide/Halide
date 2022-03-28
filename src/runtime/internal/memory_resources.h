@@ -33,6 +33,7 @@ enum MemoryUsage {
     InvalidUsage,    //< invalid enum value
     StaticStorage,   //< intended for static storage, whereby the contents will be set once and remain unchanged
     DynamicStorage,  //< intended for dyanmic storage, whereby the contents will be set frequently and change constantly
+    UniformStorage,  //< intended for fast & small fixed read-only uniform storage (intended for passing shader parameters), whereby the contents will be set once and remain unchanged
     TransferSrc,     //< intended for staging storage updates, whereby the contents will be used as the source of a transfer
     TransferDst,     //< intended for staging storage updates, whereby the contents will be used as the destination of a transfer
     TransferSrcDst,  //< intended for staging storage updates, whereby the contents will be used either as a source or destination of a transfer
@@ -126,14 +127,14 @@ ALWAYS_INLINE size_t clamped_size(size_t value, size_t min_value, size_t max_val
 
 // Offset the untyped pointer by the given number of bytes
 ALWAYS_INLINE const void* offset_address(const void* address, size_t byte_offset) {
-    const uint8_t* base = static_cast<const uint8_t *>(address);
-    return static_cast<const void*>(base + byte_offset);
+    const uintptr_t base = reinterpret_cast<uintptr_t>(address);
+    return reinterpret_cast<const void*>(base + byte_offset);
 }
 
 // Offset the untyped pointer by the given number of bytes
 ALWAYS_INLINE void* offset_address(void* address, size_t byte_offset) {
-    uint8_t* base = static_cast<uint8_t *>(address);
-    return static_cast<void*>(base + byte_offset);
+    const uintptr_t base = reinterpret_cast<uintptr_t>(address);
+    return reinterpret_cast<void*>(base + byte_offset);
 }
 
 // --
@@ -225,6 +226,9 @@ WEAK const char *halide_memory_usage_name(MemoryUsage value) {
     }
     case MemoryUsage::DynamicStorage: {
         return "DynamicStorage";
+    }
+    case MemoryUsage::UniformStorage: {
+        return "UniformStorage";
     }
     case MemoryUsage::TransferSrc: {
         return "TransferSrc";

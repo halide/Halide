@@ -140,6 +140,15 @@ void BlockAllocator::initialize(void *user_context, const Config &cfg, const Mem
 
 MemoryRegion *BlockAllocator::reserve(void *user_context, const MemoryRequest &request) {
 
+    debug(0) << "BlockAllocator: Reserve ("
+             << "user_context=" << (void *)(user_context) << " "
+             << "offset=" << (uint32_t)request.offset << " "
+             << "size=" << (uint32_t)request.size << " "
+             << "dedicated=" << (request.dedicated ? "true" : "false") << " "
+             << "usage=" << halide_memory_usage_name(request.properties.usage) << " "
+             << "caching=" << halide_memory_caching_name(request.properties.caching) << " "
+             << "visibility=" << halide_memory_visibility_name(request.properties.visibility) << ") ...\n";
+
     BlockEntry *block_entry = reserve_block_entry(user_context, request.properties, request.size, request.dedicated);
     if (block_entry == nullptr) {
         debug(0) << "BlockAllocator: Failed to allocate new empty block of requested size ("
@@ -232,8 +241,9 @@ MemoryRegion *BlockAllocator::reserve_memory_region(void *user_context, RegionAl
 
 BlockAllocator::BlockEntry *
 BlockAllocator::find_block_entry(void *user_context, const MemoryProperties &properties, size_t size, bool dedicated) {
-    BlockEntry *block_entry = block_list.front();
-    while (block_entry != nullptr) {
+
+    BlockEntry *block_entry = nullptr;
+    for(block_entry = block_list.front(); block_entry != nullptr;  block_entry = block_entry->next_ptr) {
 
         const BlockResource *block = static_cast<BlockResource*>(block_entry->value);
         if (!is_compatible_block(block, properties)) {
@@ -252,11 +262,20 @@ BlockAllocator::find_block_entry(void *user_context, const MemoryProperties &pro
 
         size_t available = (block->memory.size - block->reserved);
         if (available >= size) {
+#ifdef DEBUG_RUNTIME
+            debug(0) << "BlockAllocator: find_block_entry (FOUND) ("
+                    << "user_context=" << (void *)(user_context) << " "
+                    << "block_entry=" << (void *)(block_entry) << " "
+                    << "size=" << (uint32_t)size << " "
+                    << "dedicated=" << (dedicated ? "true" : "false") << " "
+                    << "usage=" << halide_memory_usage_name(properties.usage) << " "
+                    << "caching=" << halide_memory_caching_name(properties.caching) << " "
+                    << "visibility=" << halide_memory_visibility_name(properties.visibility) << ") ...\n";
+#endif
             break;
         }
-
-        block_entry = block_entry->next_ptr;
     }
+    
     return block_entry;
 }
 
