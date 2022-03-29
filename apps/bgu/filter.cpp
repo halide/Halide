@@ -57,7 +57,7 @@ int main(int argc, char **argv) {
     low_res_in.for_each_element([&](int x, int y, int c) {
         float val;
         // Sharpen, ignoring edges
-        if (x == 0 || x == W - 1 || y == 0 || y == H - 1) {
+        if (x == 0 || x == low_res_in.width() - 1 || y == 0 || y == low_res_in.height() - 1) {
             val = low_res_in(x, y, c);
         } else {
             val =

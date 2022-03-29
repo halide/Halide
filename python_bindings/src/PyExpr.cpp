@@ -23,6 +23,9 @@ void define_expr(py::module &m) {
     auto expr_class =
         py::class_<Expr>(m, "Expr")
             .def(py::init<>())
+            .def(py::init([](bool b) {
+                return Internal::make_bool(b);
+            }))
             // PyBind11 searches in declared order,
             // int should be tried before float conversion
             .def(py::init<int>())
@@ -55,6 +58,7 @@ void define_expr(py::module &m) {
 
     // implicitly_convertible declaration order matters,
     // int should be tried before float conversion
+    py::implicitly_convertible<bool, Expr>();
     py::implicitly_convertible<int, Expr>();
     py::implicitly_convertible<float, Expr>();
     py::implicitly_convertible<double, Expr>();
