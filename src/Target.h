@@ -56,30 +56,18 @@ struct Target {
         /// Do not tune for any specific CPU. In practice, this means that
         /// halide will decide the tune CPU based on the enabled features.
         ProcessorGeneric = 0,
-        /// Tune for AMD K8 Hammer CPU (AMD Family 0Fh, launched 2003).
-        K8,
-        /// Tune for later versions of AMD K8 CPU, with SSE3 support.
-        K8_SSE3,
-        /// Tune for AMD K10 "Barcelona" CPU (AMD Family 10h, launched 2007).
-        AMDFam10,
-        /// Tune for AMD Bobcat CPU (AMD Family 14h, launched 2011).
-        BtVer1,
-        /// Tune for AMD Bulldozer CPU (AMD Family 15h, launched 2011).
-        BdVer1,
-        /// Tune for AMD Piledriver CPU (AMD Family 15h (2nd-gen), launched 2012).
-        BdVer2,
-        /// Tune for AMD Steamroller CPU (AMD Family 15h (3nd-gen), launched 2014).
-        BdVer3,
-        /// Tune for AMD Steamroller CPU (AMD Family 15h (4th-gen), launched 2015).
-        BdVer4,
-        /// Tune for AMD Jaguar CPU (AMD Family 16h, launched 2011).
-        BtVer2,
-        /// Tune for AMD Zen   CPU (AMD Family 17h, launched 2017).
-        ZnVer1,
-        /// Tune for AMD Zen 2 CPU (AMD Family 17h, launched 2019).
-        ZnVer2,
-        /// Tune for AMD Zen 3 CPU (AMD Family 19h, launched 2020).
-        ZnVer3,
+        K8,        /// Tune for AMD K8 Hammer CPU (AMD Family 0Fh, launched 2003).
+        K8_SSE3,   /// Tune for later versions of AMD K8 CPU, with SSE3 support.
+        AMDFam10,  /// Tune for AMD K10 "Barcelona" CPU (AMD Family 10h, launched 2007).
+        BtVer1,    /// Tune for AMD Bobcat CPU (AMD Family 14h, launched 2011).
+        BdVer1,    /// Tune for AMD Bulldozer CPU (AMD Family 15h, launched 2011).
+        BdVer2,    /// Tune for AMD Piledriver CPU (AMD Family 15h (2nd-gen), launched 2012).
+        BdVer3,    /// Tune for AMD Steamroller CPU (AMD Family 15h (3nd-gen), launched 2014).
+        BdVer4,    /// Tune for AMD Excavator CPU (AMD Family 15h (4th-gen), launched 2015).
+        BtVer2,    /// Tune for AMD Jaguar CPU (AMD Family 16h, launched 2011).
+        ZnVer1,    /// Tune for AMD Zen   CPU (AMD Family 17h, launched 2017).
+        ZnVer2,    /// Tune for AMD Zen 2 CPU (AMD Family 17h, launched 2019).
+        ZnVer3,    /// Tune for AMD Zen 3 CPU (AMD Family 19h, launched 2020).
     } processor = ProcessorGeneric;
 
     /** Optional features a target can have.
