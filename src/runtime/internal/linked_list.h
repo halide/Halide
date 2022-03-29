@@ -308,7 +308,7 @@ LinkedList::default_allocator() {
 typename LinkedList::EntryType * 
 LinkedList::reserve(void* user_context) {
     EntryType *entry_ptr = static_cast<EntryType*>(
-        link_arena->reserve(user_context)
+        link_arena->reserve(user_context, true)
     );
     entry_ptr->value = data_arena->reserve(user_context, true);
     entry_ptr->next_ptr = nullptr;

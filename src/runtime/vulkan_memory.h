@@ -46,10 +46,6 @@ WEAK void vk_host_free(void *user_context, void *ptr, const VkAllocationCallback
 
 WEAK SystemMemoryAllocatorFns system_allocator = {vk_system_malloc, vk_system_free};
 
-// Vulkan Memory allocator for host-device allocations
-class VulkanMemoryAllocator;
-WEAK VulkanMemoryAllocator *memory_allocator = nullptr;
-
 // Runtime configuration parameters to adjust the behaviour of the block allocator
 struct VulkanMemoryConfig {
     size_t minimum_block_size = 32 * 1024 * 1024;  // 32MB
@@ -78,6 +74,7 @@ public:
 
     // Factory methods for creation / destruction
     static VulkanMemoryAllocator *create(void *user_context, const VulkanMemoryConfig &config, 
+                                         VkDevice dev, VkPhysicalDevice phys_dev,
                                          const SystemMemoryAllocatorFns &system_allocator,
                                          const VkAllocationCallbacks *alloc_callbacks = nullptr);
 
@@ -93,8 +90,9 @@ public:
     void *map(void *user_context, MemoryRegion *region);
     void unmap(void *user_context, MemoryRegion *region);
 
-    void bind(void *user_context, VkDevice device, VkPhysicalDevice physical_device);
-    void unbind(void *user_context);
+    VkDevice current_device() const { return this->device; }
+    VkPhysicalDevice current_physical_device() const { return this->physical_device; }
+    const VkAllocationCallbacks* callbacks() const { return this->alloc_callbacks; }
 
     static const VulkanMemoryConfig &default_config();
 
@@ -116,6 +114,7 @@ private:
 
     // Initializes a new instance
     void initialize(void *user_context, const VulkanMemoryConfig &config, 
+                    VkDevice dev, VkPhysicalDevice phys_dev,
                     const SystemMemoryAllocatorFns &system_allocator,
                     const VkAllocationCallbacks *alloc_callbacks=nullptr);
 
@@ -139,7 +138,8 @@ private:
 };
 
 VulkanMemoryAllocator *VulkanMemoryAllocator::create(void *user_context, 
-    const VulkanMemoryConfig &cfg, const SystemMemoryAllocatorFns &system_allocator,
+    const VulkanMemoryConfig &cfg, VkDevice dev, VkPhysicalDevice phys_dev,
+    const SystemMemoryAllocatorFns &system_allocator,
     const VkAllocationCallbacks *alloc_callbacks) {
 
     halide_abort_if_false(user_context, system_allocator.allocate != nullptr);
@@ -151,7 +151,7 @@ VulkanMemoryAllocator *VulkanMemoryAllocator::create(void *user_context,
         return nullptr;
     }
 
-    result->initialize(user_context, cfg, system_allocator, alloc_callbacks);
+    result->initialize(user_context, cfg, dev, phys_dev, system_allocator, alloc_callbacks);
     return result;
 }
 
@@ -165,12 +165,13 @@ void VulkanMemoryAllocator::destroy(void *user_context, VulkanMemoryAllocator *i
 }
 
 void VulkanMemoryAllocator::initialize(void *user_context, 
-    const VulkanMemoryConfig &cfg, const SystemMemoryAllocatorFns &system_allocator,
+    const VulkanMemoryConfig &cfg, VkDevice dev, VkPhysicalDevice phys_dev,
+    const SystemMemoryAllocatorFns &system_allocator,
     const VkAllocationCallbacks *callbacks) {
 
     config = cfg;
-    device = nullptr;
-    physical_device = nullptr;
+    device = dev;
+    physical_device = phys_dev;
     alloc_callbacks = callbacks;
     BlockAllocator::MemoryAllocators allocators;
     allocators.system = system_allocator;
@@ -266,26 +267,6 @@ void VulkanMemoryAllocator::unmap(void *user_context, MemoryRegion *region) {
     }
 
     vkUnmapMemory(device, *device_memory);
-}
-
-WEAK void VulkanMemoryAllocator::bind(void *user_context, VkDevice dev, VkPhysicalDevice physical_dev) {
-    debug(0) << "VulkanMemoryAllocator: Binding context ("
-             << "user_context=" << user_context << " "
-             << "device=" << (void *)(dev) << " "
-             << "physical_device=" << (void *)(physical_dev) << ") ...\n";
-
-    device = dev;
-    physical_device = physical_dev;
-}
-
-WEAK void VulkanMemoryAllocator::unbind(void *user_context) {
-    debug(0) << "VulkanMemoryAllocator: Unbinding context ("
-             << "user_context=" << user_context << " "
-             << "device=" << (void *)(device) << " "
-             << "physical_device=" << (void *)(physical_device) << ") ...\n";
-
-    device = nullptr;
-    physical_device = nullptr;
 }
 
 void VulkanMemoryAllocator::reclaim(void *user_context, MemoryRegion *region) {
@@ -682,30 +663,22 @@ uint32_t VulkanMemoryAllocator::select_memory_usage(void *user_context, MemoryPr
 
 // --------------------------------------------------------------------------
 
-WEAK int vk_create_memory_allocator(void *user_context, VkDevice device, VkPhysicalDevice physical_device, 
-                                    const VkAllocationCallbacks* alloc_callbacks) {
-    if (memory_allocator != nullptr) {
-        return halide_error_code_success;
-    }
+WEAK VulkanMemoryAllocator* vk_create_memory_allocator(void *user_context, 
+                                                       VkDevice device, 
+                                                       VkPhysicalDevice physical_device, 
+                                                       const VkAllocationCallbacks* alloc_callbacks) {
 
-    memory_allocator = VulkanMemoryAllocator::create(user_context, 
-        memory_allocator_config, system_allocator, alloc_callbacks
+    return VulkanMemoryAllocator::create(user_context, 
+        memory_allocator_config, device, physical_device, 
+        system_allocator, alloc_callbacks
     );
-    
-    if (memory_allocator == nullptr) {
-        return halide_error_code_out_of_memory;
-    }
-    
-    return halide_error_code_success;
 }
 
-WEAK int vk_destroy_memory_allocator(void *user_context, VkDevice device, VkPhysicalDevice physical_device) {
-    if (memory_allocator == nullptr) {
-        return halide_error_code_success;
+WEAK int vk_destroy_memory_allocator(void *user_context, VulkanMemoryAllocator *allocator) {
+    if (allocator != nullptr) {
+        VulkanMemoryAllocator::destroy(user_context, allocator);
+        allocator = nullptr;
     }
-    memory_allocator->bind(user_context, device, physical_device);
-    VulkanMemoryAllocator::destroy(user_context, memory_allocator);
-    memory_allocator = nullptr;
     return halide_error_code_success;
 }
 

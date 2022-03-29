@@ -207,6 +207,8 @@ typename MemoryArena::Block* MemoryArena::create_block(void *user_context) {
 
     halide_abort_if_false(user_context, current_allocator().allocate != nullptr);
     void *new_entries = current_allocator().allocate(user_context, config.entry_size * new_capacity);
+    memset(new_entries, 0, config.entry_size * new_capacity);
+
     uint32_t *new_indices = (uint32_t *)current_allocator().allocate(user_context, sizeof(uint32_t) * new_capacity);
     AllocationStatus *new_status = (AllocationStatus *)current_allocator().allocate(user_context, sizeof(AllocationStatus) * new_capacity);
 

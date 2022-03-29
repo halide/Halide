@@ -24,10 +24,13 @@ namespace Vulkan {
 // --------------------------------------------------------------------------
 // Memory 
 // --------------------------------------------------------------------------
+typedef halide_vulkan_memory_allocator vk_allocator;
+class VulkanMemoryAllocator;
 WEAK void* vk_host_malloc(void *user_context, size_t size, size_t alignment, VkSystemAllocationScope scope, const VkAllocationCallbacks* callbacks=nullptr);
 WEAK void vk_host_free(void *user_context, void *ptr, const VkAllocationCallbacks* callbacks=nullptr);
-WEAK int vk_create_memory_allocator(void *user_context, VkDevice device, VkPhysicalDevice physical_device, const VkAllocationCallbacks* callbacks=nullptr);
-WEAK int vk_destroy_memory_allocator(void *user_context, VkDevice device, VkPhysicalDevice physical_device);
+WEAK VulkanMemoryAllocator *vk_create_memory_allocator(void *user_context, VkDevice device, VkPhysicalDevice physical_device, 
+                                                       const VkAllocationCallbacks* alloc_callbacks);
+WEAK int vk_destroy_memory_allocator(void *user_context, VulkanMemoryAllocator *allocator);
 WEAK VkResult vk_allocate_device_memory(VkPhysicalDevice physical_device,
                                         VkDevice device, VkDeviceSize size,
                                         VkMemoryPropertyFlags flags,
@@ -39,6 +42,7 @@ WEAK VkResult vk_allocate_device_memory(VkPhysicalDevice physical_device,
 // --------------------------------------------------------------------------
 WEAK int vk_create_context(
     void *user_context,
+    VulkanMemoryAllocator **allocator,
     VkInstance *instance,
     VkDevice *device, VkQueue *queue,
     VkPhysicalDevice *physical_device,
@@ -53,9 +57,6 @@ WEAK int vk_select_device_for_context(void *user_context,
 
 WEAK int vk_create_device(void *user_context, const StringTable &requested_layers, VkInstance *instance, VkDevice *device, VkQueue *queue,
                           VkPhysicalDevice *physical_device, uint32_t *queue_family_index, const VkAllocationCallbacks* alloc_callbacks);
-
-WEAK int vk_create_context(void *user_context, VkInstance *instance, VkDevice *device, VkQueue *queue,
-                           VkPhysicalDevice *physical_device, uint32_t *queue_family_index);
 
 
 // --------------------------------------------------------------------------
@@ -74,13 +75,11 @@ WEAK bool vk_validate_required_extension_support(void *user_context,
 // --------------------------------------------------------------------------
 // Shader Module 
 // --------------------------------------------------------------------------
-WEAK VkShaderModule* vk_compile_shader_module(
-    void *user_context, VkDevice device, const char *src, int size,
-    const VkAllocationCallbacks* allocation_callbacks);
 
-WEAK int vk_destroy_shader_modules(
-    void* user_context, VkDevice device, 
-    const VkAllocationCallbacks* callbacks);
+WEAK VkShaderModule* vk_compile_shader_module(void *user_context, VulkanMemoryAllocator* allocator, 
+                                              const char *src, int size);
+
+WEAK int vk_destroy_shader_modules(void* user_context, VulkanMemoryAllocator* allocator);
     
 // --------------------------------------------------------------------------
 // Errors

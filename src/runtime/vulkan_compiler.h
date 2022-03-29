@@ -17,12 +17,11 @@ WEAK Halide::Internal::GPUCompilationCache<VkDevice, VkShaderModule*> compilatio
 
 // --------------------------------------------------------------------------
 
-WEAK VkShaderModule* vk_compile_shader_module(void *user_context, VkDevice device, const char *src, int size,
-                                              const VkAllocationCallbacks* allocation_callbacks) {
+WEAK VkShaderModule* vk_compile_shader_module(void *user_context, VulkanMemoryAllocator* allocator, 
+                                              const char *src, int size) {
     debug(user_context)
         << "Vulkan: vk_compile_shader_module (user_context: " << user_context
-        << ", device: " << (void*)device
-        << ", allocation_callbacks: " << (void*)allocation_callbacks
+        << ", allocator: " << (void*)allocator
         << ", source: " << (void *)src
         << ", size: " << size << "\n";
 
@@ -39,14 +38,12 @@ WEAK VkShaderModule* vk_compile_shader_module(void *user_context, VkDevice devic
     };
 
     VkSystemAllocationScope alloc_scope = VkSystemAllocationScope::VK_SYSTEM_ALLOCATION_SCOPE_OBJECT;
-    VkShaderModule* shader_module = (VkShaderModule*)vk_host_malloc(user_context, sizeof(VkShaderModule), 0, alloc_scope, allocation_callbacks);
+    VkShaderModule* shader_module = (VkShaderModule*)vk_host_malloc(user_context, sizeof(VkShaderModule), 0, alloc_scope, allocator->callbacks());
 
-    VkResult result = vkCreateShaderModule(device, &shader_info, allocation_callbacks, shader_module);
+    VkResult result = vkCreateShaderModule(allocator->current_device(), &shader_info, allocator->callbacks(), shader_module);
     if ((result != VK_SUCCESS) || (shader_module == nullptr)) {
         error(user_context) << "Vulkan: vkCreateShaderModule Failed! Error returned: " << vk_get_error_name(result) << "\n";
-        if(!allocation_callbacks) {
-            vk_host_free(user_context, shader_module, allocation_callbacks);
-        }
+        vk_host_free(user_context, shader_module, allocator->callbacks());
         return nullptr;
     }
 
@@ -58,7 +55,7 @@ WEAK VkShaderModule* vk_compile_shader_module(void *user_context, VkDevice devic
     return shader_module;
 }
 
-WEAK int vk_destroy_shader_modules(void* user_context, VkDevice device, const VkAllocationCallbacks* callbacks){
+WEAK int vk_destroy_shader_modules(void* user_context, VulkanMemoryAllocator* allocator){
     struct DestroyShaderModule {
         void* user_context = nullptr;
         VkDevice device = nullptr;
@@ -75,8 +72,8 @@ WEAK int vk_destroy_shader_modules(void* user_context, VkDevice device, const Vk
         }
     };
     
-    DestroyShaderModule module_destructor(user_context, device, callbacks);
-    compilation_cache.delete_context(user_context, device, module_destructor);
+    DestroyShaderModule module_destructor(user_context, allocator->current_device(), allocator->callbacks());
+    compilation_cache.delete_context(user_context, allocator->current_device(), module_destructor);
     return VK_SUCCESS;
 }
     
