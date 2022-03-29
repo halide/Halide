@@ -762,7 +762,9 @@ Module build_module(AbstractGenerator &g, const std::string &function_name) {
     std::vector<Argument> filter_arguments;
     const auto arg_infos = g.get_arginfos();
     for (const auto &a : arg_infos) {
-        if (a.dir != ArgInfoDir::Input) continue;
+        if (a.dir != ArgInfoDir::Input) {
+            continue;
+        }
         for (const auto &p : g.get_parameters_for_input(a.name)) {
             filter_arguments.push_back(to_argument(p));
         }
@@ -774,7 +776,9 @@ Module build_module(AbstractGenerator &g, const std::string &function_name) {
     }
 
     for (const auto &a : arg_infos) {
-        if (a.dir != ArgInfoDir::Output) continue;
+        if (a.dir != ArgInfoDir::Output) {
+            continue;
+        }
         const std::vector<Func> output_funcs = g.get_funcs_for_output(a.name);
         for (size_t i = 0; i < output_funcs.size(); ++i) {
             const Func &f = output_funcs[i];
@@ -836,7 +840,9 @@ Module build_gradient_module(Halide::Internal::AbstractGenerator &g, const std::
     std::vector<Argument> gradient_inputs;
     const auto arg_infos = g.get_arginfos();
     for (const auto &a : arg_infos) {
-        if (a.dir != ArgInfoDir::Input) continue;
+        if (a.dir != ArgInfoDir::Input) {
+            continue;
+        }
         for (const auto &p : g.get_parameters_for_input(a.name)) {
             gradient_inputs.push_back(to_argument(p));
             debug(DBG) << "    gradient copied input is: " << gradient_inputs.back().name << "\n";
@@ -850,7 +856,9 @@ Module build_gradient_module(Halide::Internal::AbstractGenerator &g, const std::
 
     std::vector<ImageParam> d_output_imageparams;
     for (const auto &a : arg_infos) {
-        if (a.dir != ArgInfoDir::Output) continue;
+        if (a.dir != ArgInfoDir::Output) {
+            continue;
+        }
         for (const auto &f : g.get_funcs_for_output(a.name)) {
             const Parameter &p = f.output_buffer().parameter();
             const std::string &output_name = p.name();
@@ -891,7 +899,9 @@ Module build_gradient_module(Halide::Internal::AbstractGenerator &g, const std::
 
         const std::string &output_name = original_output.name();
         for (const auto &a : arg_infos) {
-            if (a.dir != ArgInfoDir::Input) continue;
+            if (a.dir != ArgInfoDir::Input) {
+                continue;
+            }
             for (const auto &p : g.get_parameters_for_input(a.name)) {
                 const std::string &input_name = p.name();
 
