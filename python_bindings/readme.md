@@ -44,6 +44,13 @@ with some differences where the C++ idiom is either inappropriate or impossible:
   converted to and from other compatible objects (e.g., NumPy's `ndarray`), with
   storage being shared.
 
+## Generators in Python
+
+Experimental support for Generators in Python. Real documentation needed, these
+are notes for this work-in-progress branch:
+
+-
+
 ## Prerequisites
 
 The bindings (and demonstration applications) should work well for Python 3.4
