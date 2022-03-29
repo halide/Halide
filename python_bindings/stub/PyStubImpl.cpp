@@ -130,6 +130,9 @@ py::object generate_impl(const GeneratorFactory &factory,
         // vector. If not, stick it in the constants (if it's invalid,
         // an error will be reported further downstream).
         std::string name = kw.first.cast<std::string>();
+        // Allow synthetic params to be specified as __type or __dim
+        name = Internal::replace_all(name, "__type", ".type");
+        name = Internal::replace_all(name, "__dim", ".dim");
         py::handle value = kw.second;
         auto it = input_arguments_map.find(name);
         if (it != input_arguments_map.end()) {
@@ -146,6 +149,16 @@ py::object generate_impl(const GeneratorFactory &factory,
         } else {
             if (py::isinstance<LoopLevel>(value)) {
                 generator->set_generatorparam_value(name, value.cast<LoopLevel>());
+            } else if (py::isinstance<py::list>(value)) {
+                // Convert [hl.UInt(8), hl.Int(16)] -> uint8,int16
+                std::string v;
+                for (auto t : value) {
+                    if (!v.empty()) {
+                        v += ",";
+                    }
+                    v += py::str(t).cast<std::string>();
+                }
+                generator->set_generatorparam_value(name, v);
             } else {
                 generator->set_generatorparam_value(name, py::str(value).cast<std::string>());
             }

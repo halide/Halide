@@ -10,6 +10,7 @@
 #include "PyExpr.h"
 #include "PyExternFuncArgument.h"
 #include "PyFunc.h"
+#include "PyGenerator.h"
 #include "PyIROperator.h"
 #include "PyImageParam.h"
 #include "PyInlineReductions.h"
@@ -63,6 +64,7 @@ PYBIND11_MODULE(HALIDE_PYBIND_MODULE_NAME, m) {
     define_image_param(m);
     define_type(m);
     define_derivative(m);
+    define_generator(m);
 
     // There is no PyUtil yet, so just put this here
     m.def("load_plugin", &Halide::load_plugin, py::arg("lib_name"));

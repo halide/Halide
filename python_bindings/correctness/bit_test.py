@@ -1,5 +1,5 @@
 import array
-import bit
+import bit, bitpy
 import sys
 
 
@@ -10,6 +10,16 @@ def test():
 
     try:
         bit.bit(
+            input_u1, bool_constant, output_u1
+        )
+    except NotImplementedError:
+        pass  # OK - that's what we expected.
+    else:
+        print("Expected Exception not raised.", file=sys.stderr)
+        exit(1)
+
+    try:
+        bitpy.bitpy(
             input_u1, bool_constant, output_u1
         )
     except NotImplementedError:

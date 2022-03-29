@@ -8,6 +8,9 @@ from complexstub import generate as complexstub
 import partialbuildmethod
 import nobuildmethod
 
+from simplepy_generator import SimplePy
+from complexpy_generator import ComplexPy
+
 def _realize_and_check(f, offset = 0):
     b = hl.Buffer(hl.Float(32), [2, 2])
     f.realize(b)
@@ -18,7 +21,7 @@ def _realize_and_check(f, offset = 0):
     assert b[1, 1] == 5.5 + offset + 123
 
 
-def test_simplestub():
+def test_simplestub(callee):
     x, y = hl.Var(), hl.Var()
     target = hl.get_jit_target_from_environment()
 
@@ -29,40 +32,40 @@ def test_simplestub():
     f_in[x, y] = x + y
 
     # ----------- Inputs by-position
-    f = simplestub.generate(target, b_in, f_in, 3.5)
+    f = callee(target, b_in, f_in, 3.5)
     _realize_and_check(f)
 
     # ----------- Inputs by-name
-    f = simplestub.generate(target, buffer_input=b_in, func_input=f_in, float_arg=3.5)
+    f = callee(target, buffer_input=b_in, func_input=f_in, float_arg=3.5)
     _realize_and_check(f)
 
-    f = simplestub.generate(target, float_arg=3.5, buffer_input=b_in, func_input=f_in)
+    f = callee(target, float_arg=3.5, buffer_input=b_in, func_input=f_in)
     _realize_and_check(f)
 
     # ----------- Above set again, w/ GeneratorParam mixed in
     k = 42
 
     # (positional)
-    f = simplestub.generate(target, b_in, f_in, 3.5, offset=k)
+    f = callee(target, b_in, f_in, 3.5, offset=k)
     _realize_and_check(f, k)
 
     # (keyword)
-    f = simplestub.generate(target, offset=k, buffer_input=b_in, func_input=f_in, float_arg=3.5)
+    f = callee(target, offset=k, buffer_input=b_in, func_input=f_in, float_arg=3.5)
     _realize_and_check(f, k)
 
-    f = simplestub.generate(target, buffer_input=b_in, offset=k, func_input=f_in, float_arg=3.5)
+    f = callee(target, buffer_input=b_in, offset=k, func_input=f_in, float_arg=3.5)
     _realize_and_check(f, k)
 
-    f = simplestub.generate(target, buffer_input=b_in, func_input=f_in, offset=k, float_arg=3.5)
+    f = callee(target, buffer_input=b_in, func_input=f_in, offset=k, float_arg=3.5)
     _realize_and_check(f, k)
 
-    f = simplestub.generate(target, buffer_input=b_in, float_arg=3.5, func_input=f_in, offset=k)
+    f = callee(target, buffer_input=b_in, float_arg=3.5, func_input=f_in, offset=k)
     _realize_and_check(f, k)
 
     # ----------- Test various failure modes
     try:
         # Inputs w/ mixed by-position and by-name
-        f = simplestub.generate(target, b_in, f_in, float_arg=3.5)
+        f = callee(target, b_in, f_in, float_arg=3.5)
     except RuntimeError as e:
         assert 'Cannot use both positional and keyword arguments for inputs.' in str(e)
     else:
@@ -70,7 +73,7 @@ def test_simplestub():
 
     try:
         # too many positional args
-        f = simplestub.generate(target, b_in, f_in, 3.5, 4)
+        f = callee(target, b_in, f_in, 3.5, 4)
     except RuntimeError as e:
         assert 'Expected exactly 3 positional args for inputs, but saw 4.' in str(e)
     else:
@@ -78,7 +81,7 @@ def test_simplestub():
 
     try:
         # too few positional args
-        f = simplestub.generate(target, b_in, f_in)
+        f = callee(target, b_in, f_in)
     except RuntimeError as e:
         assert 'Expected exactly 3 positional args for inputs, but saw 2.' in str(e)
     else:
@@ -86,23 +89,25 @@ def test_simplestub():
 
     try:
         # Inputs that can't be converted to what the receiver needs (positional)
-        f = simplestub.generate(target, hl.f32(3.141592), "happy", k)
+        f = callee(target, hl.f32(3.141592), "happy", k)
     except RuntimeError as e:
-        assert 'Unable to cast Python instance' in str(e)
+        assert 'Unable to cast Python instance' in str(e) or \
+               'requires an ImageParam or Buffer' in str(e)
     else:
         assert False, 'Did not see expected exception!'
 
     try:
         # Inputs that can't be converted to what the receiver needs (named)
-        f = simplestub.generate(target, b_in, f_in, float_arg="bogus")
+        f = callee(target, b_in, f_in, float_arg="bogus")
     except RuntimeError as e:
-        assert 'Unable to cast Python instance' in str(e)
+        assert 'Unable to cast Python instance' in str(e) or \
+               'InputScalar requires a Param' in str(e)
     else:
         assert False, 'Did not see expected exception!'
 
     try:
         # Input specified by both pos and kwarg
-        f = simplestub.generate(target, b_in, f_in, 3.5, float_arg=4.5)
+        f = callee(target, b_in, f_in, 3.5, float_arg=4.5)
     except RuntimeError as e:
         assert "Cannot use both positional and keyword arguments for inputs." in str(e)
     else:
@@ -110,21 +115,21 @@ def test_simplestub():
 
     try:
         # Bad input name
-        f = simplestub.generate(target, buffer_input=b_in, float_arg=3.5, offset=k, funk_input=f_in)
+        f = callee(target, buffer_input=b_in, float_arg=3.5, offset=k, funk_input=f_in)
     except RuntimeError as e:
-        assert "Generator simplestub has no GeneratorParam named: funk_input" in str(e)
+        assert "has no GeneratorParam named: funk_input" in str(e)
     else:
         assert False, 'Did not see expected exception!'
 
     try:
         # Bad gp name
-        f = simplestub.generate(target, buffer_input=b_in, float_arg=3.5, offset=k, func_input=f_in, nonexistent_generator_param="wat")
+        f = callee(target, buffer_input=b_in, float_arg=3.5, offset=k, func_input=f_in, nonexistent_generator_param="wat")
     except RuntimeError as e:
-        assert "Generator simplestub has no GeneratorParam named: nonexistent_generator_param" in str(e)
+        assert "has no GeneratorParam named: nonexistent_generator_param" in str(e)
     else:
         assert False, 'Did not see expected exception!'
 
-def test_looplevel():
+def test_looplevel(callee):
     x, y = hl.Var('x'), hl.Var('y')
     target = hl.get_jit_target_from_environment()
 
@@ -135,7 +140,7 @@ def test_looplevel():
     func_input[x, y] = x + y
 
     simple_compute_at = hl.LoopLevel()
-    simple = simplestub.generate(target, buffer_input, func_input, 3.5,
+    simple = callee(target, buffer_input, func_input, 3.5,
         compute_level=simple_compute_at)
 
     computed_output = hl.Func('computed_output')
@@ -154,7 +159,7 @@ def _make_constant_image():
                 constant_image[x, y, c] = x + y + c
     return constant_image
 
-def test_complexstub():
+def test_complexstub(callee):
     constant_image = _make_constant_image()
     input = hl.ImageParam(hl.UInt(8), 3, 'input')
     input.set(constant_image)
@@ -168,22 +173,32 @@ def test_complexstub():
     func_input = hl.Func("func_input")
     func_input[x, y, c] = hl.u16(x + y + c)
 
-    r = complexstub(target,
+    r = callee(target,
                     typed_buffer_input=constant_image,
                     untyped_buffer_input=constant_image,
                     simple_input=input,
-                    array_input=[ input, input ],
                     float_arg=float_arg,
-                    int_arg=[ int_arg, int_arg ],
-                    untyped_buffer_output_type="uint8",
+                    int_arg=int_arg,
                     extra_func_input=func_input,
-                    vectorize=True)
+                    vectorize=True,
+                    # We can put GeneratorParams anywhere in the list we want --
+                    # they will be examined and applied before anything else --
+                    # but it's usually better form to put them all at the end.
+                    #
+                    # We can specify a halide Type via string or object here
+                    simple_input__type=hl.UInt(8),
+                    untyped_buffer_input__type="uint8",
+                    untyped_buffer_output__type="uint8",
+                    # Can specify a list-of-types for Tuple output
+                    tuple_output__type=[hl.Float(32), hl.Float(32)],
+                    # Alternately, we could specify comma-delimited string:
+                    # tuple_output__type="float32,float32",
+                )
 
     # return value is a tuple; unpack separately to avoid
     # making the callsite above unreadable
     (simple_output,
         tuple_output,
-        array_output,
         typed_buffer_output,
         untyped_buffer_output,
         static_compiled_buffer_output,
@@ -210,16 +225,6 @@ def test_complexstub():
                 actual1, actual2 = b[0][x, y, c], b[1][x, y, c]
                 assert expected1 == actual1, "Expected1 %s Actual1 %s" % (expected1, actual1)
                 assert expected2 == actual2, "Expected2 %s Actual1 %s" % (expected2, actual2)
-
-    assert len(array_output) == 2
-    for a in array_output:
-        b = a.realize([32, 32], target)
-        assert b.type() == hl.Int(16)
-        for x in range(32):
-            for y in range(32):
-                expected = constant_image[x, y, 0] + int_arg
-                actual = b[x, y]
-                assert expected == actual, "Expected %s Actual %s" % (expected, actual)
 
     # TODO: Output<Buffer<>> has additional behaviors useful when a Stub
     # is used within another Generator; this isn't yet implemented since there
@@ -292,9 +297,14 @@ def test_nobuildmethod():
     assert b_out.all_equal(123)
 
 if __name__ == "__main__":
-    test_simplestub()
-    test_looplevel()
-    test_complexstub()
+    test_simplestub(simplestub.generate)
+    test_looplevel(simplestub.generate)
+    test_complexstub(complexstub)
+
+    test_simplestub(SimplePy.apply)
+    test_looplevel(SimplePy.apply)
+    test_complexstub(ComplexPy.apply)
+
     # disabled because HALIDE_ALLOW_GENERATOR_BUILD_METHOD is off by default
     # test_partialbuildmethod()
     test_nobuildmethod()
