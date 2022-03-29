@@ -516,13 +516,6 @@ bool merge_string(Target &t, const std::string &target) {
             }
             processor_specified = true;
         } else if (lookup_feature(tok, feature)) {
-            if (tok.substr(0, std::strlen("tune_")) == "tune_") {
-                if (processor_specified) {
-                    // Only a single tune makes sense.
-                    return false;
-                }
-                processor_specified = true;
-            }
             t.set_feature(feature);
             features_specified = true;
         } else if (tok == "trace_all") {
@@ -1031,7 +1024,7 @@ bool Target::get_runtime_compatible_target(const Target &other, Target &result) 
     // clang-format on
 
     // clang-format off
-    const std::array<Feature, 15> intersection_features = {{
+    const std::array<Feature, 14> intersection_features = {{
         ARMv7s,
         ARMv81a,
         AVX,
