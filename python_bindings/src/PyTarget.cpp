@@ -23,7 +23,9 @@ void define_target(py::module &m) {
         py::class_<Target>(m, "Target")
             .def(py::init<>())
             .def(py::init<const std::string &>())
+            .def(py::init<Target::OS, Target::Arch, int>())
             .def(py::init<Target::OS, Target::Arch, int, Target::Processor>())
+            .def(py::init<Target::OS, Target::Arch, int, std::vector<Target::Feature>>())
             .def(py::init<Target::OS, Target::Arch, int, Target::Processor, std::vector<Target::Feature>>())
 
             .def("__eq__", [](const Target &value, Target *value2) { return value2 && value == *value2; })

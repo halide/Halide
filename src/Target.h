@@ -154,7 +154,7 @@ struct Target {
         FeatureEnd = halide_target_feature_end
     };
     Target() = default;
-    Target(OS o, Arch a, int b, Processor p, const std::vector<Feature> &initial_features = std::vector<Feature>())
+    Target(OS o, Arch a, int b, Processor p = ProcessorGeneric, const std::vector<Feature> &initial_features = std::vector<Feature>())
         : os(o), arch(a), bits(b), processor(p) {
         for (const auto &f : initial_features) {
             set_feature(f);
