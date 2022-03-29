@@ -25,14 +25,10 @@ foreach (GEN IN ITEMS addconstant bit user_context)
     #
     # TODO: How to do this for Windows as well?
     if (APPLE)
-        file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/${GEN}.ldscript"
-             "_PyInit_${GEN}\n"
-        )
+        configure_file(ext.ldscript.apple.in "${CMAKE_CURRENT_BINARY_DIR}/${GEN}.ldscript")
         target_link_options(py_${GEN} PRIVATE "-Wl,-exported_symbols_list,${CMAKE_CURRENT_BINARY_DIR}/${GEN}.ldscript")
     elseif (UNIX)
-        file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/${GEN}.ldscript"
-             "{\nglobal: PyInit_${GEN};\nlocal: *;\n};\n"
-        )
+        configure_file(ext.ldscript.linux.in "${CMAKE_CURRENT_BINARY_DIR}/${GEN}.ldscript")
         target_link_options(py_${GEN} PRIVATE "-Wl,--version-script,${CMAKE_CURRENT_BINARY_DIR}/${GEN}.ldscript")
     endif()
 
