@@ -63,6 +63,7 @@ int main(int argc, char **argv) {
     // Pass in a set of GeneratorParams: even though we aren't customizing
     // the values, we can set the LoopLevel values after-the-fact.
     StubTest::GeneratorParams gp;
+    gp.untyped_buffer_output__type = Float(32);
     auto gen = StubTest::generate(
         GeneratorContext(get_jit_target_from_environment()),
         // Use aggregate-initialization syntax to fill in an Inputs struct.
