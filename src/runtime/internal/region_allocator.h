@@ -46,6 +46,7 @@ public:
     MemoryRegion *reserve(void *user_context, const MemoryRequest &request);
     void reclaim(void *user_context, MemoryRegion *memory_region);
     bool collect(void *user_context);  //< returns true if any blocks were removed
+    void release(void *user_context);
     void destroy(void *user_context);
 
     // Returns the currently managed block resource
@@ -79,6 +80,9 @@ private:
 
     // Invokes the allocation callback to allocate memory for the block region
     void alloc_block_region(void *user_context, BlockRegion *region);
+
+    // Releases a block region and leaves it in the list for further allocations
+    void release_block_region(void *user_context, BlockRegion *region);
 
     // Invokes the deallocation callback to free memory for the block region
     void free_block_region(void *user_context, BlockRegion *region);
@@ -316,6 +320,14 @@ BlockRegion *RegionAllocator::create_block_region(void *user_context, const Memo
     return block_region;
 }
 
+void RegionAllocator::release_block_region(void *user_context, BlockRegion *block_region) {
+    debug(0) << "RegionAllocator: Releasing block region ("
+             << "user_context=" << (void *)(user_context) << " "
+             << "block_region=" << (void *)(block_region) << ") ...\n";
+
+    free_block_region(user_context, block_region);
+}
+
 void RegionAllocator::destroy_block_region(void *user_context, BlockRegion *block_region) {
     debug(0) << "RegionAllocator: Destroying block region ("
              << "user_context=" << (void *)(user_context) << " "
@@ -349,6 +361,15 @@ void RegionAllocator::free_block_region(void *user_context, BlockRegion *block_r
         block->reserved -= block_region->memory.size;
     }
     block_region->status = AllocationStatus::Available;
+}
+
+void RegionAllocator::release(void *user_context) {
+    debug(0) << "RegionAllocator: Releasing all regions ("
+             << "user_context=" << (void *)(user_context) << ") ...\n";
+
+    for (BlockRegion *block_region = block->regions; block_region != nullptr; block_region = block_region->next_ptr) {
+        release_block_region(user_context, block_region);
+    }
 }
 
 bool RegionAllocator::collect(void *user_context) {

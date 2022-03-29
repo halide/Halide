@@ -87,6 +87,7 @@ public:
     MemoryRegion *reserve(void *user_context, MemoryRequest &request);
     void reclaim(void *user_context, MemoryRegion *region);
     bool collect(void *user_context);  //< returns true if any blocks were removed
+    void release(void *user_context);
     void destroy(void *user_context);
 
     void *map(void *user_context, MemoryRegion *region);
@@ -135,7 +136,6 @@ private:
     VkPhysicalDevice physical_device = nullptr;
     const VkAllocationCallbacks* alloc_callbacks = nullptr;
     BlockAllocator *block_allocator = nullptr;
-    ScopedSpinLock::AtomicFlag spin_lock = 0;
 };
 
 VulkanMemoryAllocator *VulkanMemoryAllocator::create(void *user_context, 
@@ -168,7 +168,6 @@ void VulkanMemoryAllocator::initialize(void *user_context,
     const VulkanMemoryConfig &cfg, const SystemMemoryAllocatorFns &system_allocator,
     const VkAllocationCallbacks *callbacks) {
 
-    spin_lock = 0;
     config = cfg;
     device = nullptr;
     physical_device = nullptr;
@@ -196,7 +195,6 @@ MemoryRegion *VulkanMemoryAllocator::reserve(void *user_context, MemoryRequest &
     halide_abort_if_false(user_context, device != nullptr);
     halide_abort_if_false(user_context, physical_device != nullptr);
     halide_abort_if_false(user_context, block_allocator != nullptr);
-    //    ScopedSpinLock lock(&spin_lock);
     return block_allocator->reserve(this, request);
 }
 
@@ -210,7 +208,7 @@ void *VulkanMemoryAllocator::map(void *user_context, MemoryRegion *region) {
     halide_abort_if_false(user_context, device != nullptr);
     halide_abort_if_false(user_context, physical_device != nullptr);
     halide_abort_if_false(user_context, block_allocator != nullptr);
-    //    ScopedSpinLock lock(&spin_lock);
+
     RegionAllocator *region_allocator = RegionAllocator::find_allocator(user_context, region);
     if (region_allocator == nullptr) {
         error(0) << "VulkanMemoryAllocator: Unable to map region! Invalid region allocator handle!\n";
@@ -248,7 +246,7 @@ void VulkanMemoryAllocator::unmap(void *user_context, MemoryRegion *region) {
 
     halide_abort_if_false(user_context, device != nullptr);
     halide_abort_if_false(user_context, physical_device != nullptr);
-    //    ScopedSpinLock lock(&spin_lock);
+
     RegionAllocator *region_allocator = RegionAllocator::find_allocator(user_context, region);
     if (region_allocator == nullptr) {
         error(0) << "VulkanMemoryAllocator: Unable to unmap region! Invalid region allocator handle!\n";
@@ -276,7 +274,6 @@ WEAK void VulkanMemoryAllocator::bind(void *user_context, VkDevice dev, VkPhysic
              << "device=" << (void *)(dev) << " "
              << "physical_device=" << (void *)(physical_dev) << ") ...\n";
 
-    //    ScopedSpinLock lock(&spin_lock);
     device = dev;
     physical_device = physical_dev;
 }
@@ -287,7 +284,6 @@ WEAK void VulkanMemoryAllocator::unbind(void *user_context) {
              << "device=" << (void *)(device) << " "
              << "physical_device=" << (void *)(physical_device) << ") ...\n";
 
-    //    ScopedSpinLock lock(&spin_lock);
     device = nullptr;
     physical_device = nullptr;
 }
@@ -299,7 +295,7 @@ void VulkanMemoryAllocator::reclaim(void *user_context, MemoryRegion *region) {
 
     halide_abort_if_false(user_context, device != nullptr);
     halide_abort_if_false(user_context, physical_device != nullptr);
-    //    ScopedSpinLock lock(&spin_lock);
+
     return block_allocator->reclaim(this, region);
 }
 
@@ -309,17 +305,24 @@ bool VulkanMemoryAllocator::collect(void *user_context) {
 
     halide_abort_if_false(user_context, device != nullptr);
     halide_abort_if_false(user_context, physical_device != nullptr);
-    //    ScopedSpinLock lock(&spin_lock);
+
     return block_allocator->collect(this);
+}
+
+void VulkanMemoryAllocator::release(void *user_context) {
+    debug(0) << "VulkanMemoryAllocator: Releasing ("
+             << "user_context=" << user_context << ") ... \n";
+
+    halide_abort_if_false(user_context, device != nullptr);
+    halide_abort_if_false(user_context, physical_device != nullptr);
+
+    block_allocator->release(this);
 }
 
 void VulkanMemoryAllocator::destroy(void *user_context) {
     debug(0) << "VulkanMemoryAllocator: Destroying allocator ("
              << "user_context=" << user_context << ") ... \n";
 
-    halide_abort_if_false(user_context, device != nullptr);
-    halide_abort_if_false(user_context, physical_device != nullptr);
-    //    ScopedSpinLock lock(&spin_lock);
     block_allocator->destroy(this);
 }
 
@@ -679,7 +682,8 @@ uint32_t VulkanMemoryAllocator::select_memory_usage(void *user_context, MemoryPr
 
 // --------------------------------------------------------------------------
 
-WEAK int vk_create_memory_allocator(void *user_context, const VkAllocationCallbacks* alloc_callbacks) {
+WEAK int vk_create_memory_allocator(void *user_context, VkDevice device, VkPhysicalDevice physical_device, 
+                                    const VkAllocationCallbacks* alloc_callbacks) {
     if (memory_allocator != nullptr) {
         return halide_error_code_success;
     }
@@ -695,11 +699,11 @@ WEAK int vk_create_memory_allocator(void *user_context, const VkAllocationCallba
     return halide_error_code_success;
 }
 
-WEAK int vk_destroy_memory_allocator(void *user_context) {
+WEAK int vk_destroy_memory_allocator(void *user_context, VkDevice device, VkPhysicalDevice physical_device) {
     if (memory_allocator == nullptr) {
         return halide_error_code_success;
     }
-
+    memory_allocator->bind(user_context, device, physical_device);
     VulkanMemoryAllocator::destroy(user_context, memory_allocator);
     memory_allocator = nullptr;
     return halide_error_code_success;

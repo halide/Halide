@@ -184,8 +184,8 @@ WEAK int halide_vulkan_device_release(void *user_context) {
     if (instance != nullptr) {
 
         vkQueueWaitIdle(queue);
-        vk_destroy_shader_modules(user_context, device, alloc);
-        vk_destroy_memory_allocator(user_context);
+        vk_destroy_shader_modules(user_context, device, alloc);      
+        vk_destroy_memory_allocator(user_context, device, physical_device);
 
         if (device == cached_device) {
             cached_device = nullptr;

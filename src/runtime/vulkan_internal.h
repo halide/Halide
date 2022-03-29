@@ -26,8 +26,8 @@ namespace Vulkan {
 // --------------------------------------------------------------------------
 WEAK void* vk_host_malloc(void *user_context, size_t size, size_t alignment, VkSystemAllocationScope scope, const VkAllocationCallbacks* callbacks=nullptr);
 WEAK void vk_host_free(void *user_context, void *ptr, const VkAllocationCallbacks* callbacks=nullptr);
-WEAK int vk_create_memory_allocator(void *user_context, const VkAllocationCallbacks* callbacks=nullptr);
-WEAK int vk_destroy_memory_allocator(void *user_context);
+WEAK int vk_create_memory_allocator(void *user_context, VkDevice device, VkPhysicalDevice physical_device, const VkAllocationCallbacks* callbacks=nullptr);
+WEAK int vk_destroy_memory_allocator(void *user_context, VkDevice device, VkPhysicalDevice physical_device);
 WEAK VkResult vk_allocate_device_memory(VkPhysicalDevice physical_device,
                                         VkDevice device, VkDeviceSize size,
                                         VkMemoryPropertyFlags flags,
