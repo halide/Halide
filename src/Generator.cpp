@@ -280,17 +280,21 @@ private:
 
     std::vector<Internal::GeneratorParamBase *> select_generator_params(const std::vector<Internal::GeneratorParamBase *> &in) {
         std::vector<Internal::GeneratorParamBase *> out;
-        for (auto *p : in) {
-            // These are always propagated specially.
-            if (p->name() == "target" ||
-                p->name() == "auto_schedule" ||
-                p->name() == "machine_params") {
-                continue;
+        for (bool want_synthetic : {false, true}) {
+            for (auto *p : in) {
+                // These are always propagated specially.
+                if (p->name() == "target" ||
+                    p->name() == "auto_schedule" ||
+                    p->name() == "machine_params") {
+                    continue;
+                }
+                bool is_unsettable_synthetic_param = false;
+                bool is_synthetic = p->is_synthetic_param(&is_unsettable_synthetic_param);
+                if (is_synthetic != want_synthetic || is_unsettable_synthetic_param) {
+                    continue;
+                }
+                out.push_back(p);
             }
-            if (p->is_synthetic_param()) {
-                continue;
-            }
-            out.push_back(p);
         }
         return out;
     }
@@ -304,14 +308,26 @@ private:
     void emit_generator_params_struct();
 };
 
+// Allow Synthetic GeneratorParams to appear here via replace '.' with '__'
+// (this will always be unique, since '__' is never allowed in any user-specified
+// GP name).
+std::string legalize_synthetic_names(Internal::GeneratorParamBase *p) {
+    return replace_all(p->name(), ".", "__");
+}
+
 void StubEmitter::emit_generator_params_struct() {
     const auto &v = generator_params;
     std::string name = "GeneratorParams";
     stream << get_indent() << "struct " << name << " final {\n";
     indent_level++;
     if (!v.empty()) {
+        bool syn = false;
         for (auto *p : v) {
-            stream << get_indent() << p->get_c_type() << " " << p->name() << "{ " << p->get_default_value() << " };\n";
+            if (p->is_synthetic_param() && !syn) {
+                stream << get_indent() << "// Synthetic GeneratorParams\n";
+                syn = true;
+            }
+            stream << get_indent() << p->get_c_type() << " " << legalize_synthetic_names(p) << "{ " << p->get_default_value() << " };\n";
         }
         stream << "\n";
     }
@@ -324,6 +340,10 @@ void StubEmitter::emit_generator_params_struct() {
         indent_level++;
         std::string comma = "";
         for (auto *p : v) {
+            if (p->is_synthetic_param()) {
+                // Synthetic params are left out of the ctor arguments; they must be set explicitly
+                continue;
+            }
             stream << get_indent() << comma << p->get_c_type() << " " << p->name() << "\n";
             comma = ", ";
         }
@@ -332,6 +352,10 @@ void StubEmitter::emit_generator_params_struct() {
         indent_level++;
         comma = "";
         for (auto *p : v) {
+            if (p->is_synthetic_param()) {
+                // Synthetic params are left out of the ctor arguments; they must be set explicitly
+                continue;
+            }
             stream << get_indent() << comma << p->name() << "(" << p->name() << ")\n";
             comma = ", ";
         }
@@ -343,10 +367,14 @@ void StubEmitter::emit_generator_params_struct() {
 
     stream << get_indent() << "inline HALIDE_NO_USER_CODE_INLINE Halide::Internal::GeneratorParamsMap to_generator_params_map() const {\n";
     indent_level++;
-    stream << get_indent() << "return {\n";
+    stream << get_indent() << "Halide::Internal::GeneratorParamsMap __gp_map = {\n";
     indent_level++;
     std::string comma = "";
     for (auto *p : v) {
+        if (p->is_synthetic_param()) {
+            // Handle these below
+            continue;
+        }
         stream << get_indent() << comma << "{\"" << p->name() << "\", ";
         if (p->is_looplevel_param()) {
             stream << p->name() << "}\n";
@@ -357,6 +385,21 @@ void StubEmitter::emit_generator_params_struct() {
     }
     indent_level--;
     stream << get_indent() << "};\n";
+
+    for (auto *p : v) {
+        if (!p->is_synthetic_param()) {
+            continue;
+        }
+        std::string n = legalize_synthetic_names(p);
+        stream << get_indent() << "if (" << n << " != " << p->get_default_value() << ") {\n";
+        indent_level++;
+        stream << get_indent() << "__gp_map[\"" << p->name() << "\"] = " << p->call_to_string(n) << ";\n";
+        indent_level--;
+        stream << get_indent() << "}\n";
+    }
+
+    stream << get_indent() << "return __gp_map;\n";
+
     indent_level--;
     stream << get_indent() << "}\n";
 
@@ -764,7 +807,8 @@ const std::map<std::string, Type> &get_halide_type_enum_map() {
         {"uint32", UInt(32)},
         {"float16", Float(16)},
         {"float32", Float(32)},
-        {"float64", Float(64)}};
+        {"float64", Float(64)},
+        {"__none", Type()}};
     return halide_type_enum_map;
 }
 
@@ -1275,17 +1319,16 @@ GeneratorParamInfo::GeneratorParamInfo(GeneratorBase *generator, const size_t si
 
     const auto add_synthetic_params = [this, generator](GIOBase *gio) {
         const std::string &n = gio->name();
-        const std::string &gn = generator->generator_registered_name;
 
-        owned_synthetic_params.push_back(GeneratorParam_Synthetic<Type>::make(generator, gn, n + ".type", *gio, SyntheticParamType::Type, gio->types_defined()));
+        owned_synthetic_params.push_back(GeneratorParam_Synthetic<Type>::make(generator, n + ".type", *gio, SyntheticParamType::Type, gio->types_defined()));
         filter_generator_params.push_back(owned_synthetic_params.back().get());
 
         if (gio->kind() != IOKind::Scalar) {
-            owned_synthetic_params.push_back(GeneratorParam_Synthetic<int>::make(generator, gn, n + ".dim", *gio, SyntheticParamType::Dim, gio->dims_defined()));
+            owned_synthetic_params.push_back(GeneratorParam_Synthetic<int>::make(generator, n + ".dim", *gio, SyntheticParamType::Dim, gio->dims_defined()));
             filter_generator_params.push_back(owned_synthetic_params.back().get());
         }
         if (gio->is_array()) {
-            owned_synthetic_params.push_back(GeneratorParam_Synthetic<size_t>::make(generator, gn, n + ".size", *gio, SyntheticParamType::ArraySize, gio->array_size_defined()));
+            owned_synthetic_params.push_back(GeneratorParam_Synthetic<size_t>::make(generator, n + ".size", *gio, SyntheticParamType::ArraySize, gio->array_size_defined()));
             filter_generator_params.push_back(owned_synthetic_params.back().get());
         }
     };

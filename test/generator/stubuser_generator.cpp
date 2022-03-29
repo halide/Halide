@@ -53,7 +53,10 @@ public:
         inputs.int_arg = {int_arg};
 
         StubTest::GeneratorParams gp;
-        gp.untyped_buffer_output_type = int32_buffer_output.type();
+        // In GeneratorParams structs, synthetic params replace the "."
+        // with "__" in order to make a legal identifier, thus this
+        // is actually setting untyped_buffer_output.type
+        gp.untyped_buffer_output__type = int32_buffer_output.type();
         gp.intermediate_level.set(LoopLevel(calculated_output, Var("y")));
         gp.vectorize = true;
         gp.str_param = "2 x * y +";

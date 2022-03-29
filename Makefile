@@ -1549,6 +1549,7 @@ STUBTEST_GENERATOR_ARGS=\
 	array_input.type=float32 array_input.size=2 \
 	int_arg.size=2 \
 	tuple_output.type=float32,float32 \
+	untyped_buffer_output.type=float32 \
 	vectorize=true
 
 $(FILTERS_DIR)/stubtest.a: $(BIN_DIR)/stubtest.generator

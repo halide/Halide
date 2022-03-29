@@ -422,7 +422,7 @@ protected:
 
     virtual std::string get_default_value() const = 0;
 
-    virtual bool is_synthetic_param() const {
+    virtual bool is_synthetic_param(bool *is_unsettable_synthetic_param = nullptr) const {
         return false;
     }
 
@@ -2833,21 +2833,48 @@ public:
     }
 
     std::string get_default_value() const override {
-        internal_error;
-        return std::string();
+        switch (which) {
+        case SyntheticParamType::Type:
+            return "Type()";
+        case SyntheticParamType::Dim:
+        case SyntheticParamType::ArraySize:
+            return "-1";
+        default:
+            internal_error;
+            return "";
+        }
     }
 
     std::string call_to_string(const std::string &v) const override {
-        internal_error;
-        return std::string();
+        switch (which) {
+        case SyntheticParamType::Type:
+            return "Halide::Internal::halide_type_to_enum_string(" + v + ")";
+        case SyntheticParamType::Dim:
+        case SyntheticParamType::ArraySize:
+            return "std::to_string(" + v + ")";
+        default:
+            internal_error;
+            return "";
+        }
     }
 
     std::string get_c_type() const override {
-        internal_error;
-        return std::string();
+        switch (which) {
+        case SyntheticParamType::Type:
+            return "Type";
+        case SyntheticParamType::Dim:
+        case SyntheticParamType::ArraySize:
+            return "int32_t";
+        default:
+            internal_error;
+            return "";
+        }
     }
 
-    bool is_synthetic_param() const override {
+    bool is_synthetic_param(bool *is_unsettable_synthetic_param = nullptr) const override {
+        if (is_unsettable_synthetic_param != nullptr) {
+            *is_unsettable_synthetic_param = !error_msg.empty();
+        }
         return true;
     }
 
@@ -2856,12 +2883,11 @@ private:
 
     static std::unique_ptr<Internal::GeneratorParamBase> make(
         GeneratorBase *generator,
-        const std::string &generator_name,
         const std::string &gpname,
         GIOBase &gio,
         SyntheticParamType which,
         bool defined) {
-        std::string error_msg = defined ? "Cannot set the GeneratorParam " + gpname + " for " + generator_name + " because the value is explicitly specified in the C++ source." : "";
+        std::string error_msg = defined ? "Cannot set the GeneratorParam " + gpname + " because the value is explicitly specified in the C++ source." : "";
         return std::unique_ptr<GeneratorParam_Synthetic<T>>(
             new GeneratorParam_Synthetic<T>(gpname, gio, which, error_msg));
     }
