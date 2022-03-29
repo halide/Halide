@@ -125,26 +125,54 @@ py::object generate_impl(const GeneratorFactory &factory, const GeneratorContext
 
     GeneratorParamsMap generator_params;
 
-    // Process the kwargs first.
+    // Process the GeneratorParams first, regardless of order;
+    // this allows us to rely on type/dim/etc constraints being in place
+    // before inputs are set.
     for (auto kw : kwargs) {
-        // If the kwarg is the name of a known input, stick it in the input
-        // vector. If not, stick it in the GeneratorParamsMap (if it's invalid,
-        // an error will be reported further downstream).
         std::string name = kw.first.cast<std::string>();
         py::handle value = kw.second;
         auto it = kw_inputs.find(name);
         if (it != kw_inputs.end()) {
-            _halide_user_assert(it->second.empty())
-                << "Generator Input named '" << it->first << "' was specified more than once.";
-            it->second = to_stub_inputs(py::cast<py::object>(value));
-            kw_inputs_specified++;
-        } else {
-            if (py::isinstance<LoopLevel>(value)) {
-                generator_params[name] = value.cast<LoopLevel>();
-            } else {
-                generator_params[name] = py::str(value).cast<std::string>();
-            }
+            continue;
         }
+
+        // In Python, synthetic params (eg "buffer.type") are specified
+        // by replacing the . with __ (this always works because user-specified
+        // names for GeneratorParams can never contain a double underscore).
+        // Translate those names back into the canonical dot form before doing the
+        // lookup!
+        name = Internal::replace_all(name, "__type", ".type");
+        name = Internal::replace_all(name, "__dim", ".dim");
+        name = Internal::replace_all(name, "__size", ".size");
+        if (py::isinstance<LoopLevel>(value)) {
+            generator_params[name] = value.cast<LoopLevel>();
+        } else if (py::isinstance<py::list>(value)) {
+            // Convert [hl.UInt(8), hl.Int(16)] -> uint8,int16
+            std::string v;
+            for (auto t : value) {
+                if (!v.empty()) {
+                    v += ",";
+                }
+                v += py::str(t).cast<std::string>();
+            }
+            generator_params[name] = v;
+        } else {
+            generator_params[name] = py::str(value).cast<std::string>();
+        }
+    }
+
+    // Now the inputs via kwargs.
+    for (auto kw : kwargs) {
+        std::string name = kw.first.cast<std::string>();
+        py::handle value = kw.second;
+        auto it = kw_inputs.find(name);
+        if (it == kw_inputs.end()) {
+            continue;
+        }
+        _halide_user_assert(it->second.empty())
+            << "Generator Input named '" << it->first << "' was specified more than once.";
+        it->second = to_stub_inputs(py::cast<py::object>(value));
+        kw_inputs_specified++;
     }
 
     std::vector<std::vector<StubInput>> inputs;

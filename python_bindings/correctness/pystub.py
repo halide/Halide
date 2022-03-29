@@ -174,10 +174,27 @@ def test_complexstub():
                     simple_input=input,
                     array_input=[ input, input ],
                     float_arg=float_arg,
-                    int_arg=[ int_arg, int_arg ],
-                    untyped_buffer_output_type="uint8",
+                    int_arg=[int_arg, int_arg],
+                    # We can put GeneratorParams anywhere in the list we want;
+                    # they will be examined and applied before any inputs are
+                    # processed, and thus, any type/dimension constraints will be
+                    # enforced on inputs.
+                    #
+                    # Note that in Python, synthetic GeneratorParams
+                    # replace the '.' with a double underscore ('__'), so setting
+                    # untyped_buffer_output.type is accomplished like so:
+                    untyped_buffer_output__type="uint8",
                     extra_func_input=func_input,
-                    vectorize=True)
+                    vectorize=True,
+                    # Let's set some others, even though we don't need to here:
+                    # We can specify a halide Type via string or object here:
+                    simple_input__type=hl.UInt(8),
+                    untyped_buffer_input__type="uint8",
+                    # Can specify a list-of-types for Tuple output
+                    # tuple_output__type=[hl.Float(32), hl.Float(32)],
+                    # Alternately, we could specify comma-delimited string:
+                    tuple_output__type="float32,float32",
+                 )
 
     # return value is a tuple; unpack separately to avoid
     # making the callsite above unreadable

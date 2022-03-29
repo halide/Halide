@@ -17,7 +17,6 @@ Halide::Buffer<Type, 3> make_image(int extra) {
 
 class ComplexStub : public Halide::Generator<ComplexStub> {
 public:
-    GeneratorParam<Type> untyped_buffer_output_type{"untyped_buffer_output_type", Float(32)};
     GeneratorParam<bool> vectorize{"vectorize", true};
     GeneratorParam<LoopLevel> intermediate_level{"intermediate_level", LoopLevel::root()};
 
@@ -47,11 +46,7 @@ public:
     void generate() {
         simple_output(x, y, c) = cast<float>(simple_input(x, y, c));
         typed_buffer_output(x, y, c) = cast<float>(typed_buffer_input(x, y, c));
-        // Note that if we are being invoked via a Stub, "untyped_buffer_output.type()" will
-        // assert-fail, because there is no type constraint set: the type
-        // will end up as whatever we infer from the values put into it. We'll use an
-        // explicit GeneratorParam to allow us to set it.
-        untyped_buffer_output(x, y, c) = cast(untyped_buffer_output_type, untyped_buffer_input(x, y, c));
+        untyped_buffer_output(x, y, c) = cast(untyped_buffer_output.type(), untyped_buffer_input(x, y, c));
 
         // Gratuitous intermediate for the purpose of exercising
         // GeneratorParam<LoopLevel>
