@@ -600,6 +600,8 @@ void bad_target_string(const std::string &target) {
                << "\n"
                << "If arch, bits, or os are omitted, they default to the host.\n"
                << "\n"
+               << "If processor is omitted, it default to the tune_generic.\n"
+               << "\n"
                << "Features are: " << features << ".\n"
                << "\n"
                << "The target can also begin with \"host\", which sets the "
@@ -666,10 +668,12 @@ std::string Target::to_string() const {
             break;
         }
     }
-    for (const auto &processor_entry : processor_name_map) {
-        if (processor_entry.second == processor) {
-            result += "-" + processor_entry.first;
-            break;
+    if (processor != ProcessorGeneric) {
+        for (const auto &processor_entry : processor_name_map) {
+            if (processor_entry.second == processor) {
+                result += "-" + processor_entry.first;
+                break;
+            }
         }
     }
     for (const auto &feature_entry : feature_name_map) {
