@@ -1,3 +1,5 @@
+include(TargetExportScript)
+
 set(FEATURES_user_context user_context)
 
 foreach (GEN IN ITEMS addconstant bit user_context)
@@ -18,4 +20,18 @@ foreach (GEN IN ITEMS addconstant bit user_context)
     Python3_add_library(py_${GEN} MODULE ${${GEN}_py_cpp})
     target_link_libraries(py_${GEN} PRIVATE ext_${GEN})
     set_target_properties(py_${GEN} PROPERTIES OUTPUT_NAME ${GEN}) # Python3_add_library adds target info to name.
+
+    # Fake up a linker script that will export *just* the PyInit entry
+    # point we want. (If we don't do this we can have interesting failures
+    # when loading multiple of these Python extensions in the same space.)
+    #
+    # TODO: How to do this for Windows as well?
+    configure_file(ext.ldscript.apple.in "${CMAKE_CURRENT_BINARY_DIR}/${GEN}.ldscript.apple")
+    configure_file(ext.ldscript.linux.in "${CMAKE_CURRENT_BINARY_DIR}/${GEN}.ldscript")
+    target_export_script(
+        py_${GEN}
+        APPLE_LD "${CMAKE_CURRENT_BINARY_DIR}/${GEN}.ldscript.apple"
+        GNU_LD "${CMAKE_CURRENT_BINARY_DIR}/${GEN}.ldscript"
+    )
+
 endforeach ()
