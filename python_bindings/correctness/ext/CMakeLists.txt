@@ -1,3 +1,5 @@
+include(TargetExportScript)
+
 set(FEATURES_user_context user_context)
 
 foreach (GEN IN ITEMS addconstant bit user_context)
@@ -24,12 +26,12 @@ foreach (GEN IN ITEMS addconstant bit user_context)
     # when loading multiple of these Python extensions in the same space.)
     #
     # TODO: How to do this for Windows as well?
-    if (APPLE)
-        configure_file(ext.ldscript.apple.in "${CMAKE_CURRENT_BINARY_DIR}/${GEN}.ldscript")
-        target_link_options(py_${GEN} PRIVATE "-Wl,-exported_symbols_list,${CMAKE_CURRENT_BINARY_DIR}/${GEN}.ldscript")
-    elseif (UNIX)
-        configure_file(ext.ldscript.linux.in "${CMAKE_CURRENT_BINARY_DIR}/${GEN}.ldscript")
-        target_link_options(py_${GEN} PRIVATE "-Wl,--version-script,${CMAKE_CURRENT_BINARY_DIR}/${GEN}.ldscript")
-    endif()
+    configure_file(ext.ldscript.apple.in "${CMAKE_CURRENT_BINARY_DIR}/${GEN}.ldscript.apple")
+    configure_file(ext.ldscript.linux.in "${CMAKE_CURRENT_BINARY_DIR}/${GEN}.ldscript")
+    target_export_script(
+        py_${GEN}
+        APPLE_LD "${CMAKE_CURRENT_BINARY_DIR}/${GEN}.ldscript.apple"
+        GNU_LD "${CMAKE_CURRENT_BINARY_DIR}/${GEN}.ldscript"
+    )
 
 endforeach ()
