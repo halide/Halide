@@ -24,6 +24,9 @@ enum class ArgInfoKind { Scalar,
                          Function,
                          Buffer };
 
+enum class ArgInfoDir { Input,
+                        Output };
+
 using ExternsMap = std::map<std::string, ExternalCode>;
 
 /**
@@ -56,16 +59,15 @@ public:
     /** ArgInfo is a struct to contain name-and-type information for the inputs and outputs to
      * the Pipeline that build_pipeline() will return.
      *
-     * Note that this looks quite similar to Halide::Argument, but unfortunately
+     * Note that this looks rather similar to Halide::Argument, but unfortunately
      * that is not a good fit here, as it cannot represent Func inputs (only
-     * Buffer and Scalar). Rather than extend Argument to handle that (and risk
-     * confusing the public API), we'll create this (which is only for internal
-     * use).
+     * Buffer and Scalar), nor can it really handle Outputs.
      *
      * TODO: name is suboptimal. Is there a better one?
      */
     struct ArgInfo {
         std::string name;
+        ArgInfoDir dir = ArgInfoDir::Input;
         ArgInfoKind kind = ArgInfoKind::Scalar;
         // Note that this can have multiple entries for Tuple-valued Inputs or Outputs
         std::vector<Type> types;
@@ -85,44 +87,22 @@ public:
      * CALL-AFTER: any
      * CALL-BEFORE: any
      */
-    virtual GeneratorContext context() const = 0;
+    virtual GeneratorContext get_context() const = 0;
 
-    /** Return a list of the names for inputs, in the correct order.
+    /** Return a list of all the ArgInfos for this generator. The list will be in the order
+     * that the input and outputs are declared (possibly interleaved).
+     * Any inputs or outputs added by a configure() method will be in the list,
+     * at the end, in the order added.
      * All input and output names will be unique within a given Generator instance.
-     * If this is called after add_input(), the added inputs will be returned.
-     * Always legal to call on any AbstractGenerator instance, regardless of what other methods
-     * have been called.
      *
-     * CALL-AFTER: any
+     * CALL-AFTER: configure()
      * CALL-BEFORE: any
      */
-    virtual std::vector<ArgInfo> get_input_arginfos() = 0;
-
-    /** Return a list of the names for outputs, in the correct order.
-     * All input and output names will be unique within a given Generator instance.
-     * If this is called after add_output(), the added outputs will be returned.
-     * Always legal to call on any AbstractGenerator instance, regardless of what other methods
-     * have been called.
-     *
-     * CALL-AFTER: any
-     * CALL-BEFORE: any
-     */
-    virtual std::vector<ArgInfo> get_output_arginfos() = 0;
-
-    /** Return the names for all known GeneratorParams in this Generator.
-     * (Synthetic params are excluded and will never be returned here.)
-     * Always legal to call on any AbstractGenerator instance, regardless of what other methods
-     * have been called. Note that while the results are returned in a vector, the order of
-     * names in the result aren't important (unlike for inputs and outputs, where order matters).
-     *
-     * CALL-AFTER: any
-     * CALL-BEFORE: any
-     */
-    virtual std::vector<std::string> get_generatorparam_names() = 0;
+    virtual std::vector<ArgInfo> get_arginfos() = 0;
 
     /** Set the value for a specific GeneratorParam for an AbstractGenerator instance.
      *
-     * Names that aren't in the list returned by get_generatorparam_names() will assert-fail.
+     * Names that aren't known generator names should assert-fail.
      *
      * Values that can't be parsed for the specific GeneratorParam (e.g. passing "foo" where
      * an integer is expected) should assert-fail at some point (either immediately, or when

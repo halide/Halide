@@ -104,15 +104,16 @@ py::object generate_impl(const GeneratorFactory &factory,
                          const py::kwargs &kwargs) {
     auto generator = factory(context);
 
-    std::vector<ArgInfo> input_arguments = generator->get_input_arginfos();
-    std::vector<ArgInfo> output_arguments = generator->get_output_arginfos();
-    _halide_user_assert(!output_arguments.empty())
-        << "Generators that use build() (instead of generate()+Output<>) "
-           "are not supported in the Python bindings.";
-
+    const auto arg_infos = generator->get_arginfos();
+    std::vector<ArgInfo> input_arguments, output_arguments;
     std::map<std::string, ArgInfo> input_arguments_map;
-    for (const auto &a : input_arguments) {
-        input_arguments_map[a.name] = a;
+    for (const auto &a : arg_infos) {
+        if (a.dir == Internal::ArgInfoDir::Input) {
+            input_arguments.push_back(a);
+            input_arguments_map[a.name] = a;
+        } else {
+            output_arguments.push_back(a);
+        }
     }
     size_t kw_inputs_specified = 0;
 

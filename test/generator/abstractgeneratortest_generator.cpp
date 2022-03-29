@@ -57,29 +57,16 @@ public:
         return AbstractGeneratorTestName;
     }
 
-    GeneratorContext context() const override {
+    GeneratorContext get_context() const override {
         return context_;
     }
 
-    std::vector<ArgInfo> get_input_arginfos() override {
+    std::vector<ArgInfo> get_arginfos() override {
         return {
-            {"input", ArgInfoKind::Buffer, {Int(32)}, 2},
-            {"offset", ArgInfoKind::Scalar, {Int(32)}, 0},
+            {"input", ArgInfoDir::Input, ArgInfoKind::Buffer, {Int(32)}, 2},
+            {"offset", ArgInfoDir::Input, ArgInfoKind::Scalar, {Int(32)}, 0},
+            {"output", ArgInfoDir::Output, ArgInfoKind::Buffer, {Int(32)}, 2},
         };
-    }
-
-    std::vector<ArgInfo> get_output_arginfos() override {
-        return {
-            {"output", ArgInfoKind::Buffer, {Int(32)}, 2},
-        };
-    }
-
-    std::vector<std::string> get_generatorparam_names() override {
-        std::vector<std::string> v;
-        for (const auto &c : constants_) {
-            v.push_back(c.first);
-        }
-        return v;
     }
 
     void set_generatorparam_value(const std::string &name, const std::string &value) override {

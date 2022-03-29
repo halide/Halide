@@ -3624,12 +3624,15 @@ private:
     }
 
 public:
+    // For backwards compatibility
+    inline GeneratorContext context() const {
+        return this->get_context();
+    }
+
     // AbstractGenerator methods
     std::string get_name() override;
-    GeneratorContext context() const override;
-    std::vector<ArgInfo> get_input_arginfos() override;
-    std::vector<ArgInfo> get_output_arginfos() override;
-    std::vector<std::string> get_generatorparam_names() override;
+    GeneratorContext get_context() const override;
+    std::vector<ArgInfo> get_arginfos() override;
 
     void set_generatorparam_value(const std::string &name, const std::string &value) override;
     void set_generatorparam_value(const std::string &name, const LoopLevel &loop_level) override;
