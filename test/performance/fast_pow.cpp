@@ -69,22 +69,22 @@ int main(int argc, char **argv) {
 
     int timing_N = timing_scratch.width() * timing_scratch.height() * 10;
     int correctness_N = fast_result.width() * fast_result.height();
-    fast_err(0) = sqrt(fast_err(0) / correctness_N);
-    faster_err(0) = sqrt(faster_err(0) / correctness_N);
+    fast_err() = sqrt(fast_err() / correctness_N);
+    faster_err() = sqrt(faster_err() / correctness_N);
 
     printf("powf: %f ns per pixel\n"
            "Halide's pow: %f ns per pixel (rms error = %0.10f)\n"
            "Halide's fast_pow: %f ns per pixel (rms error = %0.10f)\n",
            1000000 * t1 / timing_N,
-           1000000 * t2 / timing_N, fast_err(0),
-           1000000 * t3 / timing_N, faster_err(0));
+           1000000 * t2 / timing_N, fast_err(),
+           1000000 * t3 / timing_N, faster_err());
 
-    if (fast_err(0) > 0.000001) {
+    if (fast_err() > 0.000001) {
         printf("Error for pow too large\n");
         return -1;
     }
 
-    if (faster_err(0) > 0.0001) {
+    if (faster_err() > 0.0001) {
         printf("Error for fast_pow too large\n");
         return -1;
     }
