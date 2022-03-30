@@ -116,7 +116,7 @@ def test_simple(gen):
         # Bad gp name
         f = gen(target, buffer_input=b_in, float_arg=3.5, offset=k, func_input=f_in, nonexistent_generator_param="wat")
     except RuntimeError as e:
-        assert "Generator simplestub has no GeneratorParam named: nonexistent_generator_param" in str(e)
+        assert "has no GeneratorParam named: nonexistent_generator_param" in str(e)
     else:
         assert False, 'Did not see expected exception!'
 
@@ -150,7 +150,7 @@ def _make_constant_image():
                 constant_image[x, y, c] = x + y + c
     return constant_image
 
-def test_complexs(gen):
+def test_complex(gen):
     constant_image = _make_constant_image()
     input = hl.ImageParam(hl.UInt(8), 3, 'input')
     input.set(constant_image)
