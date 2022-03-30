@@ -17,7 +17,7 @@ void halide_python_print(JITUserContext *, const char *msg) {
 class HalidePythonCompileTimeErrorReporter : public CompileTimeErrorReporter {
 public:
     void warning(const char *msg) override {
-        py::print(msg, py::arg("end") = "");
+        halide_python_print(nullptr, msg);
     }
 
     void error(const char *msg) override {

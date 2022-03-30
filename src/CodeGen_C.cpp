@@ -2023,7 +2023,7 @@ string CodeGen_C::print_assignment(Type t, const std::string &rhs) {
     auto cached = cache.find(rhs);
     if (cached == cache.end()) {
         id = unique_name('_');
-        const char *const_flag = output_kind == CPlusPlusImplementation ? "const " : "";
+        const char *const_flag = output_kind == CPlusPlusImplementation ? " const " : "";
         if (t.is_handle()) {
             // Don't print void *, which might lose useful type information. just use auto.
             stream << get_indent() << "auto *";
@@ -2541,7 +2541,7 @@ void CodeGen_C::visit(const Call *op) {
         stream << "struct " << struct_name << " { "
                << "void * const ucon; "
                << "void * const arg; "
-               << "" << struct_name << "(void *ucon, void *a) : ucon(ucon), arg((void *)a) {} "
+               << "" << struct_name << "(void *ucon, void *a) : ucon(ucon), arg(a) {} "
                << "~" << struct_name << "() { " << fn->value + "(ucon, arg); } "
                << "} " << instance_name << "(_ucon, " << arg << ");\n";
         rhs << "(void *)nullptr";
@@ -2670,8 +2670,8 @@ void CodeGen_C::visit(const Load *op) {
         bool type_cast_needed = !(allocations.contains(op->name) &&
                                   allocations.get(op->name).type.element_of() == t.element_of());
         if (type_cast_needed) {
-            const char *const_flag = output_kind == CPlusPlusImplementation ? "const " : "";
-            rhs << "((" << const_flag << print_type(t.element_of()) << " *)" << name << ")";
+            const char *const_flag = output_kind == CPlusPlusImplementation ? " const" : "";
+            rhs << "((" << print_type(t.element_of()) << const_flag << " *)" << name << ")";
         } else {
             rhs << name;
         }

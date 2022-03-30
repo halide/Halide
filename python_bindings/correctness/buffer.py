@@ -258,6 +258,19 @@ def test_buffer_to_str():
     b = hl.Buffer(hl.Int(32), [128, 256])
     assert str(b) == '<halide.Buffer of type int32 shape:[[0,128,1],[0,256,128]]>'
 
+def test_scalar_buffers():
+    buf = hl.Buffer.make_scalar(hl.Float(32))
+
+    assert buf.dimensions() == 0
+
+    buf.fill(0)
+    buf[()] = 2.5
+
+    assert buf[()] == 2.5
+
+    buf.fill(32)
+    assert buf[()] == 32
+
 if __name__ == "__main__":
     test_make_interleaved()
     test_interleaved_ndarray()
@@ -271,3 +284,4 @@ if __name__ == "__main__":
     test_reorder()
     test_overflow()
     test_buffer_to_str()
+    test_scalar_buffers()

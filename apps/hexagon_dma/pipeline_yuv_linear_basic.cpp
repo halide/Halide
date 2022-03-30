@@ -7,10 +7,10 @@ using namespace Halide;
 class DmaPipeline : public Generator<DmaPipeline> {
 public:
     // The type must be specified when building the generator, to be either uint8 or uint16.
-    Input<Buffer<>> input_y{"input_y", 2};
-    Input<Buffer<>> input_uv{"input_uv", 3};
-    Output<Buffer<>> output_y{"output_y", 2};
-    Output<Buffer<>> output_uv{"output_uv", 3};
+    Input<Buffer<void, 2>> input_y{"input_y"};
+    Input<Buffer<void, 3>> input_uv{"input_uv"};
+    Output<Buffer<void, 2>> output_y{"output_y"};
+    Output<Buffer<void, 3>> output_uv{"output_uv"};
 
     enum class Schedule { Basic,
                           Fold,

@@ -353,14 +353,25 @@ public:
         return Type(code(), bits(), new_lanes, handle_type);
     }
 
-    /** Return Type with the same type code and number of lanes, but with twice as many bits. */
+    /** Return Type with the same type code and number of lanes, but with at least twice as many bits. */
     Type widen() const {
-        return with_bits(bits() * 2);
+        if (bits() == 1) {
+            // Widening a 1-bit type should produce an 8-bit type.
+            return with_bits(8);
+        } else {
+            return with_bits(bits() * 2);
+        }
     }
 
-    /** Return Type with the same type code and number of lanes, but with half as many bits. */
+    /** Return Type with the same type code and number of lanes, but with at most half as many bits. */
     Type narrow() const {
-        return with_bits(bits() / 2);
+        internal_assert(bits() != 1) << "Attempting to narrow a 1-bit type\n";
+        if (bits() == 8) {
+            // Narrowing an 8-bit type should produce a 1-bit type.
+            return with_bits(1);
+        } else {
+            return with_bits(bits() / 2);
+        }
     }
 
     /** Type to be printed when declaring handles of this type. */

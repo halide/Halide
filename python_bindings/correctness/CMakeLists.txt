@@ -32,6 +32,7 @@ set(TESTS
     multipass_constraints.py
     pystub.py
     rdom.py
+    realize_warnings.py
     target.py
     tuple_select.py
     type.py

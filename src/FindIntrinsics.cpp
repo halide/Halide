@@ -614,7 +614,7 @@ protected:
             if (narrow_a.defined() && narrow_b.defined()) {
                 return mutate(Cast::make(op->type, widening_mul(narrow_a, narrow_b)));
             }
-        } else if (op->is_intrinsic(Call::widening_add)) {
+        } else if (op->is_intrinsic(Call::widening_add) && (op->type.bits() >= 16)) {
             internal_assert(op->args.size() == 2);
             for (halide_type_code_t t : {op->type.code(), halide_type_uint}) {
                 Type narrow_t = op->type.narrow().narrow().with_code(t);
@@ -624,7 +624,7 @@ protected:
                     return mutate(Cast::make(op->type, widening_add(narrow_a, narrow_b)));
                 }
             }
-        } else if (op->is_intrinsic(Call::widening_sub)) {
+        } else if (op->is_intrinsic(Call::widening_sub) && (op->type.bits() >= 16)) {
             internal_assert(op->args.size() == 2);
             for (halide_type_code_t t : {op->type.code(), halide_type_uint}) {
                 Type narrow_t = op->type.narrow().narrow().with_code(t);
