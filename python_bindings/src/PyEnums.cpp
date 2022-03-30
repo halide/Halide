@@ -82,17 +82,18 @@ void define_enums(py::module &m) {
         .value("RISCV", Target::Arch::RISCV)
         .value("WebAssembly", Target::Arch::WebAssembly);
 
+    // Please keep sorted.
     py::enum_<Target::Processor>(m, "TargetProcessor")
-        .value("TuneGeneric", Target::Processor::ProcessorGeneric)
-        .value("TuneK8", Target::Processor::K8)
-        .value("TuneK8_SSE3", Target::Processor::K8_SSE3)
         .value("TuneAMDFam10", Target::Processor::AMDFam10)
-        .value("TuneBtVer1", Target::Processor::BtVer1)
         .value("TuneBdVer1", Target::Processor::BdVer1)
         .value("TuneBdVer2", Target::Processor::BdVer2)
         .value("TuneBdVer3", Target::Processor::BdVer3)
         .value("TuneBdVer4", Target::Processor::BdVer4)
+        .value("TuneBtVer1", Target::Processor::BtVer1)
         .value("TuneBtVer2", Target::Processor::BtVer2)
+        .value("TuneGeneric", Target::Processor::ProcessorGeneric)
+        .value("TuneK8", Target::Processor::K8)
+        .value("TuneK8_SSE3", Target::Processor::K8_SSE3)
         .value("TuneZnVer1", Target::Processor::ZnVer1)
         .value("TuneZnVer2", Target::Processor::ZnVer2)
         .value("TuneZnVer3", Target::Processor::ZnVer3);
