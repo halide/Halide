@@ -65,7 +65,7 @@ struct Target {
         BdVer2,    /// Tune for AMD Piledriver CPU (AMD Family 15h (2nd-gen), launched 2012).
         BdVer3,    /// Tune for AMD Steamroller CPU (AMD Family 15h (3nd-gen), launched 2014).
         BdVer4,    /// Tune for AMD Excavator CPU (AMD Family 15h (4th-gen), launched 2015).
-        BtVer2,    /// Tune for AMD Jaguar CPU (AMD Family 16h, launched 2011).
+        BtVer2,    /// Tune for AMD Jaguar CPU (AMD Family 16h, launched 2013).
         ZnVer1,    /// Tune for AMD Zen   CPU (AMD Family 17h, launched 2017).
         ZnVer2,    /// Tune for AMD Zen 2 CPU (AMD Family 17h, launched 2019).
         ZnVer3,    /// Tune for AMD Zen 3 CPU (AMD Family 19h, launched 2020).
