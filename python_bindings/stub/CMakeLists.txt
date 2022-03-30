@@ -10,4 +10,4 @@ if (NOT TARGET Halide::PyStubs)
                           POSITION_INDEPENDENT_CODE ON)
 endif ()
 
-include(${CMAKE_CURRENT_LIST_DIR}/AddHalideGeneratorPython.cmake)
+include(${CMAKE_CURRENT_LIST_DIR}/AddPythonStubExtension.cmake)
