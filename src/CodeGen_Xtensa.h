@@ -14,6 +14,7 @@ class CodeGen_Xtensa : public CodeGen_C {
 public:
     CodeGen_Xtensa(std::ostream &s, Target t, OutputKind kind = CImplementation)
         : CodeGen_C(s, t, kind) {
+        stack_is_core_private = true;
     }
 
     /** Emit the declarations contained in the module as C code. */
