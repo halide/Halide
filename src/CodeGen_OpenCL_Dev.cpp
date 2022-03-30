@@ -858,8 +858,50 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Shuffle *op) {
             }
             stream << ");\n";
         }
+    } else if (op->is_extract_element()) {
+        // OpenCL requires using .s<n> format for extracting an element
+      ostringstream rhs;
+      rhs << print_expr(op->vectors[0]);
+      rhs << ".s" << op->indices[0];
+      print_assignment(op->type, rhs.str());
+    } else if (op->type.is_scalar()) {
+        CodeGen_C::visit(op);
     } else {
-        internal_error << "Shuffle not implemented.\n";
+        internal_assert(!op->vectors.empty());
+        for (size_t i = 1; i < op->vectors.size(); i++) {
+            internal_assert(op->vectors[0].type() == op->vectors[i].type());
+        }
+        internal_assert(op->type.lanes() == (int)op->indices.size());
+        const int max_index = (int)(op->vectors[0].type().lanes() * op->vectors.size());
+        for (int i : op->indices) {
+            internal_assert(i >= -1 && i < max_index);
+        }
+
+        std::vector<string> vecs;
+        for (const Expr &v : op->vectors) {
+            vecs.push_back(print_expr(v));
+        }
+
+        string src = vecs[0];
+        ostringstream rhs;
+        // This code has always assumed/required that all the vectors
+        // have identical types, so let's verify
+        const Type t0 = op->vectors[0].type();
+        for (const auto &v : op->vectors) {
+            internal_assert(t0 == v.type());
+        }
+        string storage_name = unique_name('_');
+        rhs << "(" << print_type(op->type) << ")";
+        rhs << "(";
+        for (int i : op->indices) {
+            rhs << vecs[i];
+            if (i < op->indices.size() - 1) {
+                rhs << ", ";
+            }
+        }
+        rhs << ")";
+        print_assignment(op->type, rhs.str());
+
     }
 }
 
@@ -925,6 +967,13 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::add_kernel(Stmt s,
     s = eliminate_bool_vectors(s);
     debug(2) << "After eliminating bool vectors:\n"
              << s << "\n";
+
+    // We need to scalarize/de-predicate any loads/stores, since OpenCL does not
+    // support predication.
+    s = scalarize_predicated_loads_stores(s);
+
+    debug(2) << "After removing predication: \n"
+             << s;
 
     // Figure out which arguments should be passed in __constant.
     // Such arguments should be:
