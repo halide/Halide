@@ -301,6 +301,13 @@ def test_scalar_funcs():
 
     g.compile_jit()
 
+def test_bool_conversion():
+    x = hl.Var('x')
+    f = hl.Func('f')
+    f[x] = x
+    s = bool(True)
+    # Verify that this doesn't fail with 'Argument passed to specialize must be of type bool'
+    f.compute_root().specialize(True)
 
 if __name__ == "__main__":
     test_compiletime_error()
@@ -317,3 +324,4 @@ if __name__ == "__main__":
     test_basics4()
     test_basics5()
     test_scalar_funcs()
+    test_bool_conversion()

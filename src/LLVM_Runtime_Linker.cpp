@@ -126,6 +126,8 @@ DECLARE_CPP_INITMOD(posix_threads)
 DECLARE_CPP_INITMOD(posix_threads_tsan)
 DECLARE_CPP_INITMOD(prefetch)
 DECLARE_CPP_INITMOD(profiler)
+DECLARE_CPP_INITMOD(timer_profiler)
+DECLARE_CPP_INITMOD(posix_timer_profiler)
 DECLARE_CPP_INITMOD(profiler_inlined)
 DECLARE_CPP_INITMOD(pseudostack)
 DECLARE_CPP_INITMOD(qurt_allocator)
@@ -1018,10 +1020,19 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
 
             // Some environments don't support the atomics the profiler requires.
             if (t.arch != Target::MIPS && t.os != Target::NoOS && t.os != Target::QuRT) {
-                if (t.os == Target::Windows) {
-                    modules.push_back(get_initmod_windows_profiler(c, bits_64, debug));
+                if (t.has_feature(Target::ProfileByTimer)) {
+                    user_assert(!t.has_feature(Target::Profile)) << "Can only use one of Target::Profile and Target::ProfileByTimer.";
+                    // TODO(zvookin): This should work on all Posix like systems, but needs to be tested.
+                    user_assert(t.os == Target::Linux) << "The timer based profiler currently can only be used on Linux.";
+                    modules.push_back(get_initmod_profiler_inlined(c, bits_64, debug));
+                    modules.push_back(get_initmod_timer_profiler(c, bits_64, debug));
+                    modules.push_back(get_initmod_posix_timer_profiler(c, bits_64, debug));
                 } else {
-                    modules.push_back(get_initmod_profiler(c, bits_64, debug));
+                    if (t.os == Target::Windows) {
+                        modules.push_back(get_initmod_windows_profiler(c, bits_64, debug));
+                    } else {
+                        modules.push_back(get_initmod_profiler(c, bits_64, debug));
+                    }
                 }
             }
 
@@ -1085,6 +1096,12 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
                     user_assert(t.has_feature(Target::WasmThreads))
                         << "The profiler requires threads to operate; enable wasm_threads to use this under WebAssembly.";
                 }
+                modules.push_back(get_initmod_profiler_inlined(c, bits_64, debug));
+            }
+            if (t.has_feature(Target::ProfileByTimer)) {
+                user_assert(!t.has_feature(Target::Profile)) << "Can only use one of Target::Profile and Target::ProfileByTimer.";
+                // TODO(zvookin): This should work on all Posix like systems, but needs to be tested.
+                user_assert(t.os == Target::Linux) << "The timer based profiler currently can only be used on Linux.";
                 modules.push_back(get_initmod_profiler_inlined(c, bits_64, debug));
             }
             if (t.arch == Target::WebAssembly) {

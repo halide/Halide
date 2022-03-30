@@ -805,6 +805,7 @@ RUNTIME_CPP_COMPONENTS = \
   posix_print \
   posix_threads \
   posix_threads_tsan \
+  posix_timer_profiler \
   powerpc_cpu_features \
   prefetch \
   profiler \
@@ -818,6 +819,7 @@ RUNTIME_CPP_COMPONENTS = \
   qurt_yield \
   riscv_cpu_features \
   runtime_api \
+  timer_profiler \
   to_string \
   trace_helper \
   tracing \
@@ -2091,7 +2093,7 @@ build_python_bindings: distrib $(BIN_DIR)/host/runtime.a
 		HALIDE_DISTRIB_PATH=$(CURDIR)/$(DISTRIB_DIR) \
 		BIN=$(CURDIR)/$(BIN_DIR)/python3_bindings \
 		PYTHON=$(PYTHON) \
-		OPTIMIZE=$(OPTIMIZE)
+		OPTIMIZE="$(OPTIMIZE)"
 
 .PHONY: test_python
 test_python: distrib $(BIN_DIR)/host/runtime.a build_python_bindings
@@ -2101,7 +2103,7 @@ test_python: distrib $(BIN_DIR)/host/runtime.a build_python_bindings
 		HALIDE_DISTRIB_PATH=$(CURDIR)/$(DISTRIB_DIR) \
 		BIN=$(CURDIR)/$(BIN_DIR)/python3_bindings \
 		PYTHON=$(PYTHON) \
-		OPTIMIZE=$(OPTIMIZE)
+		OPTIMIZE="$(OPTIMIZE)"
 
 # It's just for compiling the runtime, so earlier clangs *might* work,
 # but best to peg it to the minimum llvm version.

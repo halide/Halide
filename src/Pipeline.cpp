@@ -1161,7 +1161,7 @@ void Pipeline::realize(JITUserContext *context,
     debug(2) << "Back from jitted function. Exit status was " << exit_status << "\n";
 
     // If we're profiling, report runtimes and reset profiler stats.
-    if (target.has_feature(Target::Profile)) {
+    if (target.has_feature(Target::Profile) || target.has_feature(Target::ProfileByTimer)) {
         JITModule::Symbol report_sym =
             contents->jit_module.find_symbol_by_name("halide_profiler_report");
         JITModule::Symbol reset_sym =
