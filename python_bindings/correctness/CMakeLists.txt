@@ -34,8 +34,6 @@ make_shell_path(PYTHONPATH
                 "$<TARGET_FILE_DIR:Halide::Python>"
                 )
 
-message(STATUS "PYTHONPATH=${PYTHONPATH}")
-
 foreach (TEST IN LISTS TESTS)
     get_filename_component(TEST_NAME ${TEST} NAME_WE)
     add_test(NAME python_correctness_${TEST_NAME}

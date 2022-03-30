@@ -110,8 +110,8 @@ foreach (GEN IN LISTS GENERATORS)
     )
 
     # OK, now we want to produce a Stub Extension for the same Generator:
-    # Compiling PyStub.cpp, then linking with the generator's .o file, PyStubImpl.o, plus the same libHalide
-    # being used by halide.so.
+    # Compiling PyStub.cpp, then linking with the generator's .o file, PyStubImpl.o,
+    # plus the same libHalide being used by halide.so.
     #
     # Note that we set HALIDE_PYSTUB_MODULE_NAME to $*_stub (e.g. foo_stub) but
     # set HALIDE_PYSTUB_GENERATOR_NAME to the unadorned name of the Generator.
