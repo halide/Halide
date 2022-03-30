@@ -895,7 +895,7 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Shuffle *op) {
         rhs << "(";
         for (int i : op->indices) {
             rhs << vecs[i];
-            if (i < op->indices.size() - 1) {
+            if (i < (int)(op->indices.size() - 1)) {
                 rhs << ", ";
             }
         }
