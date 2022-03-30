@@ -53,21 +53,22 @@ struct Target {
     /** The specific processor to be targeted, tuned for.
      * Corresponds to processor_name_map in Target.cpp.
      *
-     * Please keep sorted. */
+     * New entries should be added to the end. */
     enum Processor {
-        AMDFam10 = halide_target_processor_amdfam10,         /// Tune for AMD K10 "Barcelona" CPU (AMD Family 10h, launched 2007).
-        BdVer1 = halide_target_processor_bdver1,             /// Tune for AMD Bulldozer CPU (AMD Family 15h, launched 2011).
-        BdVer2 = halide_target_processor_bdver2,             /// Tune for AMD Piledriver CPU (AMD Family 15h (2nd-gen), launched 2012).
-        BdVer3 = halide_target_processor_bdver3,             /// Tune for AMD Steamroller CPU (AMD Family 15h (3nd-gen), launched 2014).
-        BdVer4 = halide_target_processor_bdver4,             /// Tune for AMD Excavator CPU (AMD Family 15h (4th-gen), launched 2015).
-        BtVer1 = halide_target_processor_btver1,             /// Tune for AMD Bobcat CPU (AMD Family 14h, launched 2011).
-        BtVer2 = halide_target_processor_btver2,             /// Tune for AMD Jaguar CPU (AMD Family 16h, launched 2011).
-        K8 = halide_target_processor_k8,                     /// Tune for AMD K8 Hammer CPU (AMD Family 0Fh, launched 2003).
-        K8_SSE3 = halide_target_processor_k8_sse3,           /// Tune for later versions of AMD K8 CPU, with SSE3 support.
-        ProcessorGeneric = halide_target_processor_generic,  /// Do not tune for any specific CPU. In practice, this means that halide will decide the tune CPU based on the enabled features.
-        ZnVer1 = halide_target_processor_znver1,             /// Tune for AMD Zen   CPU (AMD Family 17h, launched 2017).
-        ZnVer2 = halide_target_processor_znver2,             /// Tune for AMD Zen 2 CPU (AMD Family 17h, launched 2019).
-        ZnVer3 = halide_target_processor_znver3,             /// Tune for AMD Zen 3 CPU (AMD Family 19h, launched 2020).
+        /// Do not tune for any specific CPU. In practice, this means that halide will decide the tune CPU based on the enabled features.
+        ProcessorGeneric = 0,
+        K8,        /// Tune for AMD K8 Hammer CPU (AMD Family 0Fh, launched 2003).
+        K8_SSE3,   /// Tune for later versions of AMD K8 CPU, with SSE3 support.
+        AMDFam10,  /// Tune for AMD K10 "Barcelona" CPU (AMD Family 10h, launched 2007).
+        BtVer1,    /// Tune for AMD Bobcat CPU (AMD Family 14h, launched 2011).
+        BdVer1,    /// Tune for AMD Bulldozer CPU (AMD Family 15h, launched 2011).
+        BdVer2,    /// Tune for AMD Piledriver CPU (AMD Family 15h (2nd-gen), launched 2012).
+        BdVer3,    /// Tune for AMD Steamroller CPU (AMD Family 15h (3nd-gen), launched 2014).
+        BdVer4,    /// Tune for AMD Excavator CPU (AMD Family 15h (4th-gen), launched 2015).
+        BtVer2,    /// Tune for AMD Jaguar CPU (AMD Family 16h, launched 2011).
+        ZnVer1,    /// Tune for AMD Zen   CPU (AMD Family 17h, launched 2017).
+        ZnVer2,    /// Tune for AMD Zen 2 CPU (AMD Family 17h, launched 2019).
+        ZnVer3,    /// Tune for AMD Zen 3 CPU (AMD Family 19h, launched 2020).
     } processor = ProcessorGeneric;
 
     /** Optional features a target can have.

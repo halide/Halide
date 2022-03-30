@@ -1253,27 +1253,6 @@ extern int halide_error_storage_bound_too_small(void *user_context, const char *
 extern int halide_error_device_crop_failed(void *user_context);
 // @}
 
-/** The specific processor to be targeted, tuned for.
- * Be sure to keep this in sync with the Processor enum in Target.h
- *
- * New entries should be added to the end, before halide_target_processor_end. */
-typedef enum halide_target_processor_t {
-    halide_target_processor_generic = 0,  ///< Do not tune for any specific CPU. In practice, this means that halide will decide the tune CPU based on the enabled features.
-    halide_target_processor_k8,           ///< Tune for AMD K8 Hammer CPU (AMD Family 0Fh, launched 2003).
-    halide_target_processor_k8_sse3,      ///< Tune for later versions of AMD K8 CPU, with SSE3 support.
-    halide_target_processor_amdfam10,     ///< Tune for AMD K10 "Barcelona" CPU (AMD Family 10h, launched 2007).
-    halide_target_processor_btver1,       ///< Tune for AMD Bobcat CPU (AMD Family 14h, launched 2011).
-    halide_target_processor_bdver1,       ///< Tune for AMD Bulldozer CPU (AMD Family 15h, launched 2011).
-    halide_target_processor_bdver2,       ///< Tune for AMD Piledriver CPU (AMD Family 15h (2nd-gen), launched 2012).
-    halide_target_processor_bdver3,       ///< Tune for AMD Steamroller CPU (AMD Family 15h (3nd-gen), launched 2014).
-    halide_target_processor_bdver4,       ///< Tune for AMD Excavator CPU (AMD Family 15h (4th-gen), launched 2015).
-    halide_target_processor_btver2,       ///< Tune for AMD Jaguar CPU (AMD Family 16h, launched 2011).
-    halide_target_processor_znver1,       ///< Tune for AMD Zen   CPU (AMD Family 17h, launched 2017).
-    halide_target_processor_znver2,       ///< Tune for AMD Zen 2 CPU (AMD Family 17h, launched 2019).
-    halide_target_processor_znver3,       ///< Tune for AMD Zen 3 CPU (AMD Family 19h, launched 2020).
-    halide_target_processor_end,          ///< A sentinel.
-} halide_target_processor_t;
-
 /** Optional features a compilation Target can have.
  * Be sure to keep this in sync with the Feature enum in Target.h and the implementation of
  * get_runtime_compatible_target in Target.cpp if you add a new feature.
