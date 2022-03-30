@@ -1,7 +1,5 @@
 set(GENERATORS
     complexstub_generator.cpp
-    nobuildmethod_generator.cpp
-    partialbuildmethod_generator.cpp
     simplestub_generator.cpp
     )
 
