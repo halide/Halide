@@ -864,7 +864,7 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Shuffle *op) {
         rhs << print_expr(op->vectors[0]);
         rhs << ".s" << op->indices[0];
         print_assignment(op->type, rhs.str());
-    } else  {
+    } else {
         CodeGen_GPU_C::visit(op);
     }
 }
