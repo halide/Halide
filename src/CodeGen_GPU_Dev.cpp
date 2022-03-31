@@ -157,5 +157,47 @@ Stmt CodeGen_GPU_Dev::scalarize_predicated_loads_stores(Stmt &s) {
     return sps.mutate(s);
 }
 
+void CodeGen_GPU_C::visit(const Shuffle *op) {
+    if (op->type.is_scalar()) {
+        CodeGen_C::visit(op);
+    } else {
+        internal_assert(!op->vectors.empty());
+        for (size_t i = 1; i < op->vectors.size(); i++) {
+            internal_assert(op->vectors[0].type() == op->vectors[i].type());
+        }
+        internal_assert(op->type.lanes() == (int)op->indices.size());
+        const int max_index = (int)(op->vectors[0].type().lanes() * op->vectors.size());
+        for (int i : op->indices) {
+            internal_assert(i >= 0 && i < max_index);
+        }
+
+        std::vector<std::string> vecs;
+        for (const Expr &v : op->vectors) {
+            vecs.push_back(print_expr(v));
+        }
+
+        std::string src = vecs[0];
+        std::ostringstream rhs;
+        std::string storage_name = unique_name('_');
+        if (vector_declaration_style == VectorDeclarationStyle::OpenCLSyntax) {
+            rhs << "(" << print_type(op->type) << ")(";
+        } else {
+            rhs << "{";
+        }
+        for (int i : op->indices) {
+            rhs << vecs[i];
+            if (i < (int)(op->indices.size() - 1)) {
+                rhs << ", ";
+            }
+        }
+        if (vector_declaration_style == VectorDeclarationStyle::OpenCLSyntax) {
+            rhs << ")";
+        } else {
+            rhs << "}";
+        }
+        print_assignment(op->type, rhs.str());
+    }
+}
+
 }  // namespace Internal
 }  // namespace Halide

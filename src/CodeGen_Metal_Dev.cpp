@@ -2,7 +2,6 @@
 #include <sstream>
 #include <utility>
 
-#include "CodeGen_C.h"
 #include "CodeGen_GPU_Dev.h"
 #include "CodeGen_Internal.h"
 #include "CodeGen_Metal_Dev.h"
@@ -50,17 +49,17 @@ public:
     }
 
 protected:
-    class CodeGen_Metal_C : public CodeGen_C {
+    class CodeGen_Metal_C : public CodeGen_GPU_C {
     public:
         CodeGen_Metal_C(std::ostream &s, const Target &t)
-            : CodeGen_C(s, t) {
+            : CodeGen_GPU_C(s, t) {
         }
         void add_kernel(const Stmt &stmt,
                         const std::string &name,
                         const std::vector<DeviceArgument> &args);
 
     protected:
-        using CodeGen_C::visit;
+        using CodeGen_GPU_C::visit;
         std::string print_type(Type type, AppendSpaceIfNeeded space_option = DoNotAppendSpace) override;
         // Vectors in Metal come in two varieties, regular and packed.
         // For storage allocations and pointers used in address arithmetic,
@@ -93,7 +92,6 @@ protected:
         void visit(const Free *op) override;
         void visit(const Cast *op) override;
         void visit(const Atomic *op) override;
-        void visit(const Shuffle *op) override;
     };
 
     std::ostringstream src_stream;
@@ -268,7 +266,7 @@ void CodeGen_Metal_Dev::CodeGen_Metal_C::visit(const For *loop) {
 
     } else {
         user_assert(loop->for_type != ForType::Parallel) << "Cannot use parallel loops inside Metal kernel\n";
-        CodeGen_C::visit(loop);
+        CodeGen_GPU_C::visit(loop);
     }
 }
 
@@ -322,7 +320,7 @@ void CodeGen_Metal_Dev::CodeGen_Metal_C::visit(const Call *op) {
         stream << ");\n";
         print_assignment(op->type, "0");
     } else {
-        CodeGen_C::visit(op);
+        CodeGen_GPU_C::visit(op);
     }
 }
 
@@ -543,46 +541,6 @@ void CodeGen_Metal_Dev::CodeGen_Metal_C::visit(const Atomic *op) {
     // It might be possible to support atomic but this is not trivial.
     // Metal requires atomic data types to be wrapped in an atomic integer data type.
     user_assert(false) << "Atomic updates are not supported inside Metal kernels";
-}
-
-void CodeGen_Metal_Dev::CodeGen_Metal_C::visit(const Shuffle *op) {
-    if (op->type.is_scalar()) {
-        CodeGen_C::visit(op);
-    } else {
-        internal_assert(!op->vectors.empty());
-        for (size_t i = 1; i < op->vectors.size(); i++) {
-            internal_assert(op->vectors[0].type() == op->vectors[i].type());
-        }
-        internal_assert(op->type.lanes() == (int)op->indices.size());
-        const int max_index = (int)(op->vectors[0].type().lanes() * op->vectors.size());
-        for (int i : op->indices) {
-            internal_assert(i >= 0 && i < max_index);
-        }
-
-        std::vector<string> vecs;
-        for (const Expr &v : op->vectors) {
-            vecs.push_back(print_expr(v));
-        }
-
-        string src = vecs[0];
-        ostringstream rhs;
-        // This code has always assumed/required that all the vectors
-        // have identical types, so let's verify
-        const Type t0 = op->vectors[0].type();
-        for (const auto &v : op->vectors) {
-            internal_assert(t0 == v.type());
-        }
-        string storage_name = unique_name('_');
-        rhs << "{";
-        for (int i : op->indices) {
-            rhs << vecs[i];
-            if (i < (int)(op->indices.size() - 1)) {
-                rhs << ", ";
-            }
-        }
-        rhs << "}";
-        print_assignment(op->type, rhs.str());
-    }
 }
 
 void CodeGen_Metal_Dev::add_kernel(Stmt s,
