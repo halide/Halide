@@ -78,6 +78,11 @@ foreach (GEN IN LISTS GENERATORS)
     add_executable(Py_${GEN}.generator ${GEN}_generator.cpp)
     target_link_libraries(Py_${GEN}.generator PRIVATE Halide::Generator)
 
+    # TODO: this should work (and would be preferred to the code above)
+    # but CMake fails with "targets not yet defined"; investigate.
+    # add_halide_generator(Py_${GEN}.generator
+    #                      SOURCES ${GEN}_generator.cpp)
+
     # Run the Generator to produce a static library of AOT code,
     # plus the 'python_extension' code necessary to produce a useful
     # AOT Extention for Python:
@@ -116,6 +121,7 @@ foreach (GEN IN LISTS GENERATORS)
     # Note that we set HALIDE_PYSTUB_MODULE_NAME to $*_stub (e.g. foo_stub) but
     # set HALIDE_PYSTUB_GENERATOR_NAME to the unadorned name of the Generator.
     add_python_stub_extension(py_stub_${GEN}
+                              SOURCES ${GEN}_generator.cpp
                               GENERATOR ${GEN}
                               MODULE ${GEN}_stub)
 
