@@ -1632,6 +1632,12 @@ HALIDE_ALWAYS_INLINE int16x32_t convert_to_int16x32_t_from_uint1x32_t(const uint
   return IVP_MOVNX16T(int16x32_t(1), int16x32_t(0), src);
 }
 
+HALIDE_ALWAYS_INLINE int16x64_t convert_to_int16x64_t_from_uint1x64_t(const uint1x64_t& src) {
+  return int16x64_t(int16x64_t::from_native_vector,
+            convert_to_int16x32_t_from_uint1x32_t(IVP_EXTRACTBL2N(src)),
+            convert_to_int16x32_t_from_uint1x32_t(IVP_EXTRACTBH2N(src)));
+}
+
 HALIDE_ALWAYS_INLINE int16x32_t convert_to_int16x32_t_from_int32x32_t(const int32x32_t& src) {
   return IVP_SELNX16I(IVP_MOVNX16_FROMN_2X32(src.native_vector[1]),
                       IVP_MOVNX16_FROMN_2X32(src.native_vector[0]),
@@ -1668,6 +1674,12 @@ HALIDE_ALWAYS_INLINE uint16x32_t convert_to_uint16x32_t_from_int32x32_t(const in
 
 HALIDE_ALWAYS_INLINE uint16x32_t convert_to_uint16x32_t_from_uint1x32_t(const uint1x32_t& src) {
   return IVP_MOVNX16UT(uint16x32_t(1), uint16x32_t(0), src);
+}
+
+HALIDE_ALWAYS_INLINE uint16x64_t convert_to_uint16x64_t_from_uint1x64_t(const uint1x64_t& src) {
+  return uint16x64_t(uint16x64_t::from_native_vector,
+            convert_to_uint16x32_t_from_uint1x32_t(IVP_EXTRACTBL2N(src)),
+            convert_to_uint16x32_t_from_uint1x32_t(IVP_EXTRACTBH2N(src)));
 }
 
 HALIDE_ALWAYS_INLINE uint16x32_t convert_to_uint16x32_t_from_uint32x32_t(const uint32x32_t& src) {
@@ -3104,9 +3116,7 @@ void CodeGen_Xtensa::visit(const Shuffle *op) {
     }
 
     // Generate intrinsics for the interleave op.
-    if (op->is_interleave() && (is_native_vector_type(op->vectors[0].type())
-              || is_double_native_vector_type(op->vectors[0].type())
-              || (op->vectors[0].type().is_bool() && op->vectors[0].type().lanes() == 64))) {
+    if (op->is_interleave() && (is_native_vector_type(op->vectors[0].type()) || is_double_native_vector_type(op->vectors[0].type()) || (op->vectors[0].type().is_bool() && op->vectors[0].type().lanes() == 64))) {
         string type_suffix = suffix_for_type(op->type);
 
         Expr call = Call::make(op->type, "halide_xtensa_interleave" + type_suffix,
