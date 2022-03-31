@@ -860,10 +860,10 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Shuffle *op) {
         }
     } else if (op->is_extract_element()) {
         // OpenCL requires using .s<n> format for extracting an element
-      ostringstream rhs;
-      rhs << print_expr(op->vectors[0]);
-      rhs << ".s" << op->indices[0];
-      print_assignment(op->type, rhs.str());
+        ostringstream rhs;
+        rhs << print_expr(op->vectors[0]);
+        rhs << ".s" << op->indices[0];
+        print_assignment(op->type, rhs.str());
     } else if (op->type.is_scalar()) {
         CodeGen_C::visit(op);
     } else {
@@ -901,7 +901,6 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Shuffle *op) {
         }
         rhs << ")";
         print_assignment(op->type, rhs.str());
-
     }
 }
 
