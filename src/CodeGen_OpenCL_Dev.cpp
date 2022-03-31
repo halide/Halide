@@ -874,7 +874,7 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Shuffle *op) {
         internal_assert(op->type.lanes() == (int)op->indices.size());
         const int max_index = (int)(op->vectors[0].type().lanes() * op->vectors.size());
         for (int i : op->indices) {
-            internal_assert(i >= -1 && i < max_index);
+            internal_assert(i >= 0 && i < max_index);
         }
 
         std::vector<string> vecs;

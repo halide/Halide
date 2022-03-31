@@ -969,7 +969,7 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Shuffle *op) 
         internal_assert(op->type.lanes() == (int)op->indices.size());
         const int max_index = (int)(op->vectors[0].type().lanes() * op->vectors.size());
         for (int i : op->indices) {
-            internal_assert(i >= -1 && i < max_index);
+            internal_assert(i >= 0 && i < max_index);
         }
 
         std::vector<string> vecs;
@@ -988,7 +988,10 @@ void CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C::visit(const Shuffle *op) 
         string storage_name = unique_name('_');
         rhs << "{";
         for (int i : op->indices) {
-            rhs << vecs[i] << ",";
+            rhs << vecs[i];
+            if (i < (int)(op->indices.size() - 1)) {
+                rhs << ", ";
+            }
         }
         rhs << "}";
         print_assignment(op->type, rhs.str());
