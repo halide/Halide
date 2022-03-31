@@ -125,17 +125,17 @@ $(BIN)/runtime.a: $(BIN)/runtime.generator
 # point we want. (If we don't do this we can have interesting failures
 # when loading multiple of these Python extensions in the same space.)
 ifeq ($(UNAME), Darwin)
-$(BIN)/%.ldscript: correctness/generators/ext.ldscript.apple.in
+$(BIN)/%.ldscript: $(ROOT_DIR)/stub/ext.ldscript.apple.in
 	@echo Building $@...
 	@mkdir -p $(@D)
-	@cat $< | sed 's/$${GEN}/$*/' > $@
+	@cat $< | sed 's/$${SYMBOL}/$*/' > $@
 PYEXT_LDSCRIPT_FLAG = -Wl,-exported_symbols_list %LDSCRIPT%
 else
 # Assume Desktop Linux
-$(BIN)/%.ldscript: correctness/generators/ext.ldscript.linux.in
+$(BIN)/%.ldscript: $(ROOT_DIR)/stub/ext.ldscript.linux.in
 	@echo Building $@...
 	@mkdir -p $(@D)
-	@cat $< | sed 's/$${GEN}/$*/' > $@
+	@cat $< | sed 's/$${SYMBOL}/$*/' > $@
 PYEXT_LDSCRIPT_FLAG = -Wl,--version-script=%LDSCRIPT%
 endif
 

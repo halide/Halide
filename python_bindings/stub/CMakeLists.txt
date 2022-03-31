@@ -10,5 +10,3 @@ if (NOT TARGET Halide::PyStubs)
                           VISIBILITY_INLINES_HIDDEN TRUE
                           POSITION_INDEPENDENT_CODE ON)
 endif ()
-
-include(${CMAKE_CURRENT_LIST_DIR}/AddPythonStubExtension.cmake)
