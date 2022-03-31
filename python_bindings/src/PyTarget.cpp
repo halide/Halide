@@ -24,7 +24,9 @@ void define_target(py::module &m) {
             .def(py::init<>())
             .def(py::init<const std::string &>())
             .def(py::init<Target::OS, Target::Arch, int>())
+            .def(py::init<Target::OS, Target::Arch, int, Target::Processor>())
             .def(py::init<Target::OS, Target::Arch, int, std::vector<Target::Feature>>())
+            .def(py::init<Target::OS, Target::Arch, int, Target::Processor, std::vector<Target::Feature>>())
 
             .def("__eq__", [](const Target &value, Target *value2) { return value2 && value == *value2; })
             .def("__ne__", [](const Target &value, Target *value2) { return !value2 || value != *value2; })
@@ -32,6 +34,7 @@ void define_target(py::module &m) {
             .def_readwrite("os", &Target::os)
             .def_readwrite("arch", &Target::arch)
             .def_readwrite("bits", &Target::bits)
+            .def_readwrite("processor", &Target::processor)
 
             .def("__repr__", &target_repr)
             .def("__str__", &Target::to_string)

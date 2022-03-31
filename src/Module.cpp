@@ -615,7 +615,7 @@ void Module::compile(const std::map<OutputFileType, std::string> &output_files) 
                 }
             }
             debug(1) << "Module.compile(): static_library " << output_files.at(OutputFileType::static_library) << "\n";
-            Target base_target(target().os, target().arch, target().bits);
+            Target base_target(target().os, target().arch, target().bits, target().processor);
             create_static_library(temp_dir.files(), base_target, output_files.at(OutputFileType::static_library));
         }
         if (contains(output_files, OutputFileType::assembly)) {
@@ -923,7 +923,7 @@ void compile_multitarget(const std::string &fn_name,
     // and add that to the result.
     if (!base_target.has_feature(Target::NoRuntime)) {
         // Start with a bare Target, set only the features we know are common to all.
-        Target runtime_target(base_target.os, base_target.arch, base_target.bits);
+        Target runtime_target(base_target.os, base_target.arch, base_target.bits, base_target.processor);
         for (int i = 0; i < Target::FeatureEnd; ++i) {
             // We never want NoRuntime set here.
             if (i == Target::NoRuntime) {

@@ -686,6 +686,38 @@ void CodeGen_X86::visit(const Store *op) {
 }
 
 string CodeGen_X86::mcpu() const {
+    // First, check if any explicit request for tuning exists.
+    switch (target.processor) {  // Please keep sorted.
+    case Target::Processor::AMDFam10:
+        return "amdfam10";
+    case Target::Processor::BdVer1:
+        return "bdver1";
+    case Target::Processor::BdVer2:
+        return "bdver2";
+    case Target::Processor::BdVer3:
+        return "bdver3";
+    case Target::Processor::BdVer4:
+        return "bdver4";
+    case Target::Processor::BtVer1:
+        return "btver1";
+    case Target::Processor::BtVer2:
+        return "btver2";
+    case Target::Processor::K8:
+        return "k8";
+    case Target::Processor::K8_SSE3:
+        return "k8-sse3";
+    case Target::Processor::ZnVer1:
+        return "znver1";
+    case Target::Processor::ZnVer2:
+        return "znver2";
+    case Target::Processor::ZnVer3:
+        return "znver3";
+
+    case Target::Processor::ProcessorGeneric:
+        break;  // Detect "best" CPU from the enabled ISA's.
+    }
+
+    // And only after that, perform an ad-hoc guess for the tune given features.
     if (target.has_feature(Target::AVX512_SapphireRapids)) {
         return "sapphirerapids";
     } else if (target.has_feature(Target::AVX512_Cannonlake)) {
