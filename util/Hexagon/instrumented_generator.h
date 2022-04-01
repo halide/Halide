@@ -20,195 +20,227 @@ using namespace Halide;
 using namespace Halide::Internal;
 
 // Profiling code injection
+// Injects calls to:
+// 1. Record metadata (generator name, arguments, output dimensions, schedule) at program start
+// 2. Record timer value before and after a loop.
+// 3. Record self-induced overhead of thread launches
+// 4. Report collected data and program end
+// To rephrase in psuedocode, take a filter such as:
+//    my_filter(in, args) -> out {
+//      for x parallel:
+//        for y:
+//          out = do_work(in)
+//    }
+// it will be rewritten to
+//    my_filter(in, args) -> out {
+//      record_signature("my_filter", args, in.dims, out.dims)
+//      record_loop_start("x")
+//      record_fork_overhead_start("x")
+//      for x parallel:
+//        record_fork_overhead_end("x")
+//        record_loop_start("y")
+//        for y:
+//          out = do_work(in)
+//        record_loop_end("y")
+//      record_loop_end("x")
+//      report_recorded_data()
+//    }
 struct HexagonInstrumentation : IRMutator {
-  HexagonInstrumentation(const std::string &generator_name,
-                         std::vector<Argument> &&program_arguments,
-                         std::vector<Func> &&program_outputs,
-                         const std::vector<std::string> &schedule_desc)
-      : generator_name(generator_name),
-        program_arguments(std::move(program_arguments)),
-        program_outputs(std::move(program_outputs)),
-        schedule_desc(schedule_desc) {}
-
-  // Inject metadata collection and reporting at program entry and exit
-  auto visit(const Block *block) -> Stmt override {
-    bool is_root = false;
-    if (not passed_entry_point) {
-      is_root = true;
-      passed_entry_point = true;
+    HexagonInstrumentation(const std::string &generator_name,
+                           std::vector<Argument> &&program_arguments,
+                           std::vector<Func> &&program_outputs,
+                           const std::vector<std::string> &schedule_desc)
+        : generator_name(generator_name),
+          program_arguments(std::move(program_arguments)),
+          program_outputs(std::move(program_outputs)),
+          schedule_desc(schedule_desc) {
     }
 
-    if (is_root) {
-      std::vector<Stmt> stmts;
+    // Inject metadata collection and reporting at program entry and exit
+    auto visit(const Block *block) -> Stmt override {
+        bool is_root = false;
+        if (not passed_entry_point) {
+            is_root = true;
+            passed_entry_point = true;
+        }
 
-      stmts.push_back(
-          Evaluate::make(Call::make(Handle(), "declare_generator",
-                                    {Expr{generator_name}}, Call::Extern)));
-      for (auto &arg : program_arguments) {
-        if (arg.is_scalar()) {
-          std::stringstream type;
-          type << arg.type;
+        if (is_root) {
+            std::vector<Stmt> stmts;
 
-          if (arg.type.is_float()) {
-            stmts.push_back(Evaluate::make(
-                Call::make(Handle(), "trace_parameter_float",
-                           {Expr{arg.name}, Variable::make(arg.type, arg.name),
-                            Expr{type.str()}, Expr{false}},
-                           Call::Extern)));
-          } else {
-            stmts.push_back(Evaluate::make(Call::make(
-                Handle(), "trace_parameter_int",
-                {Expr{arg.name},
-                 Cast::make(Int(32), Variable::make(arg.type, arg.name)),
-                 Expr{type.str()}, Expr{false}},
-                Call::Extern)));
-          }
+            stmts.push_back(
+                Evaluate::make(Call::make(Handle(), "declare_generator",
+                                          {Expr{generator_name}}, Call::Extern)));
+            for (auto &arg : program_arguments) {
+                auto [trace_call, variable, type_string] = [&]() -> std::tuple<std::string, Expr, std::string> {
+                    if (arg.is_scalar()) {
+                        auto base_var = Variable::make(arg.type, arg.name);
+                        std::stringstream type;
+                        type << arg.type;
+
+                        if (arg.type.is_float()) {
+                            return {"trace_parameter_float", base_var, type.str()};
+                        } else if (arg.type.is_int()) {
+                            return {"trace_parameter_int", Cast::make(Int(64), base_var), type.str()};
+                        } else if (arg.type.is_uint()) {
+                            return {"trace_parameter_uint", Cast::make(UInt(64), base_var), type.str()};
+                        } else {
+                            throw std::runtime_error("unexpected arg type");
+                        }
+                    } else {
+                        return {"trace_parameter_buffer", Variable::make(Handle(), arg.name + ".buffer"), "buffer"};
+                    }
+                }();
+
+                stmts.push_back(Evaluate::make(Call::make(
+                    Handle(), trace_call, {Expr{arg.name}, variable, Expr{type_string}, Expr{false}}, Call::Extern)));
+            }
+            for (auto &output : program_outputs) {
+                stmts.push_back(Evaluate::make(Call::make(
+                    Handle(), "trace_parameter_buffer",
+                    {Expr{output.name()},
+                     Variable::make(Handle(), output.name() + ".buffer"), Expr{"buffer"}, Expr{true}},
+                    Call::Extern)));
+            }
+            for (auto &line : schedule_desc) {
+                if (not line.empty()) {
+                    stmts.push_back(Evaluate::make(Call::make(
+                        Handle(), "describe_schedule", {Expr{line}}, Call::Extern)));
+                }
+            }
+
+            stmts.push_back(program_start_stmt(node_id_generator++, generator_name));
+            stmts.push_back(IRMutator::visit(block));
+            stmts.push_back(program_end_stmt());
+            stmts.push_back(print_report_stmt());
+
+            return Block::make(stmts);
         } else {
-          stmts.push_back(Evaluate::make(Call::make(
-              Handle(), "trace_parameter_buffer",
-              {Expr{arg.name}, Variable::make(Handle(), arg.name + ".buffer"),
-               Expr{false}},
-              Call::Extern)));
+            return IRMutator::visit(block);
         }
-      }
-      for (auto &output : program_outputs) {
-        stmts.push_back(Evaluate::make(Call::make(
-            Handle(), "trace_parameter_buffer",
-            {Expr{output.name()},
-             Variable::make(Handle(), output.name() + ".buffer"), Expr{true}},
-            Call::Extern)));
-      }
-      for (auto &line : schedule_desc) {
-        if (not line.empty()) {
-          stmts.push_back(Evaluate::make(Call::make(
-              Handle(), "describe_schedule", {Expr{line}}, Call::Extern)));
+    }
+    // Inject time measurement at loop entry and exit
+    auto visit(const For *loop) -> Stmt override {
+        auto id = node_id_generator++;
+
+        if (loop->is_parallel()) {
+            // Sets up the fork point and timing start/stop for this loop, and thread
+            // tracking for the child loops.
+            return Block::make(
+                {pre_fork_stmt(id, loop->name),
+                 with_parent_thread_id_stmt(IRMutator::visit(
+                     For::make(loop->name, loop->min, loop->extent, loop->for_type,
+                               loop->device_api,
+                               Block::make({fork_start_stmt(id, loop->name),
+                                            loop->body, fork_end_stmt()}))
+                         .as<For>())),
+                 post_fork_stmt()});
+        } else {
+            // Sets up the timing start/stop for this loop
+            return Block::make({loop_start_stmt(id, loop->name),
+                                IRMutator::visit(loop), loop_end_stmt()});
         }
-      }
-
-      stmts.push_back(program_start_stmt(node_id_generator++, generator_name));
-      stmts.push_back(IRMutator::visit(block));
-      stmts.push_back(program_end_stmt());
-      stmts.push_back(print_report_stmt());
-
-      return Block::make(stmts);
-    } else {
-      return IRMutator::visit(block);
     }
-  }
-  // Inject time measurement at loop entry and exit
-  auto visit(const For *loop) -> Stmt override {
-    auto id = node_id_generator++;
 
-    if (loop->is_parallel()) {
-      // Sets up the fork point and timing start/stop for this loop, and thread
-      // tracking for the child loops.
-      return Block::make(
-          {pre_fork_stmt(id, loop->name),
-           with_parent_thread_id_stmt(IRMutator::visit(
-               For::make(loop->name, loop->min, loop->extent, loop->for_type,
-                         loop->device_api,
-                         Block::make({fork_start_stmt(id, loop->name),
-                                      loop->body, fork_end_stmt()}))
-                   .as<For>())),
-           post_fork_stmt()});
-    } else {
-      // Sets up the timing start/stop for this loop
-      return Block::make({loop_start_stmt(id, loop->name),
-                          IRMutator::visit(loop), loop_end_stmt()});
+    bool passed_entry_point = false;  // used to identify the entry block
+    uint32_t node_id_generator = 0;   // used to generate unique identifiers for
+                                      // nodes in the control flow graph
+
+    // metadata
+    const std::string generator_name;
+    const std::vector<Argument> program_arguments;
+    const std::vector<Func> program_outputs;
+    const std::vector<std::string> schedule_desc;
+
+private:  // Halide statements for accessing profiling library on DSP
+    static auto program_start_stmt(uint32_t root_node_id,
+                                   const std::string &label) -> Stmt {
+        return Evaluate::make(Call::make(Handle(), "program_start",
+                                         {Expr{root_node_id}, Expr{label}},
+                                         Call::Extern));
     }
-  }
-
-  bool passed_entry_point = false; // used to identify the entry block
-  uint32_t node_id_generator = 0;  // used to generate unique identifiers for
-                                   // nodes in the control flow graph
-
-  // metadata
-  const std::string generator_name;
-  const std::vector<Argument> program_arguments;
-  const std::vector<Func> program_outputs;
-  const std::vector<std::string> schedule_desc;
-
-private: // Halide statements for accessing profiling library on DSP
-  static auto program_start_stmt(uint32_t root_loop_id,
-                                 const std::string &label) -> Stmt {
-    return Evaluate::make(Call::make(Handle(), "program_start",
-                                     {Expr{root_loop_id}, Expr{label}},
-                                     Call::Extern));
-  }
-  static auto program_end_stmt() -> Stmt {
-    return Evaluate::make(
-        Call::make(Handle(), "program_end", {}, Call::Extern));
-  }
-  static auto with_parent_thread_id_stmt(Stmt body) -> Stmt {
-    return LetStmt::make(
-        "parent_thread_id",
-        Call::make(UInt(32), "get_thread_id", {}, Call::Extern), body);
-  }
-  static auto pre_fork_stmt(uint32_t loop_id, const std::string &label)
-      -> Stmt {
-    return Evaluate::make(Call::make(Handle(), "pre_fork",
-                                     {Expr{loop_id}, Expr{label + ".fork"}},
-                                     Call::Extern));
-  }
-  static auto post_fork_stmt() -> Stmt {
-    return Evaluate::make(Call::make(Handle(), "post_fork", {}, Call::Extern));
-  }
-  static auto fork_start_stmt(uint32_t loop_id, const std::string &label)
-      -> Stmt {
-    return Evaluate::make(
-        Call::make(Handle(), "fork_start",
-                   {Variable::make(UInt(32), "parent_thread_id"), Expr{loop_id},
-                    Expr{label}},
-                   Call::Extern));
-  }
-  static auto fork_end_stmt() -> Stmt {
-    return Evaluate::make(Call::make(Handle(), "fork_end", {}, Call::Extern));
-  }
-  static auto loop_start_stmt(uint32_t loop_id, const std::string &label)
-      -> Stmt {
-    return Evaluate::make(Call::make(
-        Handle(), "loop_start", {Expr{loop_id}, Expr{label}}, Call::Extern));
-  }
-  static auto loop_end_stmt() -> Stmt {
-    return Evaluate::make(Call::make(Handle(), "loop_end", {}, Call::Extern));
-  }
-  static auto print_report_stmt() -> Stmt {
-    return Evaluate::make(
-        Call::make(Handle(), "print_report", {}, Call::Extern));
-  }
+    static auto program_end_stmt() -> Stmt {
+        return Evaluate::make(
+            Call::make(Handle(), "program_end", {}, Call::Extern));
+    }
+    static auto with_parent_thread_id_stmt(Stmt body) -> Stmt {
+        return LetStmt::make(
+            "parent_thread_id",
+            Call::make(UInt(32), "get_thread_id", {}, Call::Extern), body);
+    }
+    static auto pre_fork_stmt(uint32_t loop_id, const std::string &label)
+        -> Stmt {
+        return Evaluate::make(Call::make(Handle(), "pre_fork",
+                                         {Expr{loop_id}, Expr{label + ".fork"}},
+                                         Call::Extern));
+    }
+    static auto post_fork_stmt() -> Stmt {
+        return Evaluate::make(Call::make(Handle(), "post_fork", {}, Call::Extern));
+    }
+    static auto fork_start_stmt(uint32_t loop_id, const std::string &label)
+        -> Stmt {
+        return Evaluate::make(
+            Call::make(Handle(), "fork_start",
+                       {Variable::make(UInt(32), "parent_thread_id"), Expr{loop_id},
+                        Expr{label}},
+                       Call::Extern));
+    }
+    static auto fork_end_stmt() -> Stmt {
+        return Evaluate::make(Call::make(Handle(), "fork_end", {}, Call::Extern));
+    }
+    static auto loop_start_stmt(uint32_t loop_id, const std::string &label)
+        -> Stmt {
+        return Evaluate::make(Call::make(
+            Handle(), "loop_start", {Expr{loop_id}, Expr{label}}, Call::Extern));
+    }
+    static auto loop_end_stmt() -> Stmt {
+        return Evaluate::make(Call::make(Handle(), "loop_end", {}, Call::Extern));
+    }
+    static auto print_report_stmt() -> Stmt {
+        return Evaluate::make(
+            Call::make(Handle(), "print_report", {}, Call::Extern));
+    }
 };
-} // namespace
+}  // namespace
 
 // Main class for profiling generated code
-template <class Gen> class InstrumentedGenerator : public Generator<Gen> {
-  // Gather metadata and perform code injection at generation-time
-  auto build_pipeline() -> Pipeline override {
-    auto pipeline = Generator<Gen>::build_pipeline();
+template<class Gen>
+class InstrumentedGenerator : public Generator<Gen> {
+    // Gather metadata and perform code injection at generation-time
+    auto build_pipeline() -> Pipeline override {
+        // Intercept the base pipeline
+        auto pipeline = Generator<Gen>::build_pipeline();
 
-    auto generator_name = std::regex_replace(
-        std::regex_replace(__PRETTY_FUNCTION__,
-                           std::regex(">::build_pipeline.*"), ""),
-        std::regex("virtual Halide::Pipeline InstrumentedGenerator<"), "");
-    auto schedule_desc = [&] {
-      std::vector<std::string> lines;
+        // We obtain the generator name from the template argument of this class by extracting it from the _PRETTY_FUNCTION__ preprocessor directive
+        auto generator_name = std::regex_replace(
+            std::regex_replace(__PRETTY_FUNCTION__,
+                               std::regex(">::build_pipeline.*"), ""),
+            std::regex("virtual Halide::Pipeline InstrumentedGenerator<"), "");
 
-      std::stringstream buffer;
-      std::streambuf *old = std::cerr.rdbuf(buffer.rdbuf());
-      auto dtor =
-          std::shared_ptr<void>{nullptr, [&](auto) { std::cerr.rdbuf(old); }};
-      pipeline.print_loop_nest();
+        // We leverage the `print_loop_nest` functionality to display the schedule by redirecting stderr into a stringstream
+        auto schedule_desc = [&] {
+            std::vector<std::string> lines;
 
-      for (std::string line; std::getline(buffer, line);) {
-        lines.emplace_back(std::move(line));
-      }
+            std::stringstream buffer;
 
-      return lines;
-    }();
+            auto old_buffer =
+                std::shared_ptr<std::streambuf>{
+                    std::cerr.rdbuf(buffer.rdbuf()),           // redirect stderr into our stringstream
+                    [&](auto old) { std::cerr.rdbuf(old); }};  // restore original stderr on function exit
 
-    pipeline.add_custom_lowering_pass(
-        new HexagonInstrumentation(generator_name, pipeline.infer_arguments(),
-                                   pipeline.outputs(), schedule_desc));
+            pipeline.print_loop_nest();  // now outputs to buffer instead of stderr
 
-    return pipeline;
-  }
+            // copy captured output line-by-line
+            for (std::string line; std::getline(buffer, line);) {
+                lines.emplace_back(std::move(line));
+            }
+
+            return lines;
+        }();
+
+        pipeline.add_custom_lowering_pass(
+            new HexagonInstrumentation(generator_name, pipeline.infer_arguments(),
+                                       pipeline.outputs(), schedule_desc));
+
+        return pipeline;
+    }
 };

@@ -290,11 +290,15 @@ void trace_parameter_float(const char *name, float value, const char *type,
                            bool is_output) {
   metadata->append_arg(name, value, type, is_output);
 }
-void trace_parameter_int(const char *name, int value, const char *type,
+void trace_parameter_int(const char *name, int64_t value, const char *type,
                          bool is_output) {
   metadata->append_arg(name, value, type, is_output);
 }
-void trace_parameter_buffer(const char *name, halide_buffer_t *buf,
+void trace_parameter_uint(const char *name, uint64_t value, const char *type,
+                         bool is_output) {
+  metadata->append_arg(name, value, type, is_output);
+}
+void trace_parameter_buffer(const char *name, halide_buffer_t *buf, const char*,
                             bool is_output) {
   static std::list<std::vector<char>> strings;
   strings.emplace_back();
