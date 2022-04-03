@@ -687,7 +687,7 @@ void CodeGen_X86::visit(const Store *op) {
 
 string CodeGen_X86::mcpu() const {
     // First, check if any explicit request for tuning exists.
-    switch (target.processor) {  // Please keep sorted.
+    switch (target.processor_tune) {  // Please keep sorted.
     case Target::Processor::AMDFam10:
         return "amdfam10";
     case Target::Processor::BdVer1:

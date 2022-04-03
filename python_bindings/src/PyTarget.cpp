@@ -34,7 +34,7 @@ void define_target(py::module &m) {
             .def_readwrite("os", &Target::os)
             .def_readwrite("arch", &Target::arch)
             .def_readwrite("bits", &Target::bits)
-            .def_readwrite("processor", &Target::processor)
+            .def_readwrite("processor_tune", &Target::processor_tune)
 
             .def("__repr__", &target_repr)
             .def("__str__", &Target::to_string)
