@@ -232,10 +232,17 @@ function(_HalideLLVM_impl)
 
     # Check for consistency and report errors
     list(JOIN errors "\n" error_msg)
+
+    if (CMAKE_VERSION VERSION_LESS 3.18)
+        set(fphsa_required_vars REQUIRED_VARS HalideLLVM_CONFIG)
+    else ()
+        set(fphsa_required_vars "")
+    endif ()
+
     find_package_handle_standard_args(
         HalideLLVM
         HANDLE_COMPONENTS
-        REQUIRED_VARS HalideLLVM_CONFIG  # TODO: when upgrading to CMake 3.18, remove this argument/variable.
+        ${fphsa_required_vars}
         VERSION_VAR llvm_found_version
         REASON_FAILURE_MESSAGE "\n${error_msg}"
     )
