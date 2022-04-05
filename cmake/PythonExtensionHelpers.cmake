@@ -75,9 +75,17 @@ function(add_python_aot_extension TARGET)
 
     # Take the native-code output of the Generator, add the Python-Extension
     # code (to make it callable from Python), and build it into the AOT Extension we need.
-    Python3_add_library(${TARGET} MODULE ${${TARGET}.py.cpp})
+    if (CMAKE_VERSION VERSION_GREATER_EQUAL 3.17)
+        # Add soabi info (like cpython-310-x86_64-linux-gnu)
+        # when CMake is new enough to know how to do it.
+        set(abi_flags WITH_SOABI)
+    else ()
+        set(abi_flags "")
+    endif ()
+
+    Python3_add_library(${TARGET} MODULE ${abi_flags} ${${TARGET}.py.cpp})
     target_link_libraries(${TARGET} PRIVATE aot_${TARGET})
-    set_target_properties(${TARGET} PROPERTIES OUTPUT_NAME ${ARG_GENERATOR}) # Python3_add_library adds target info to name.
+    set_target_properties(${TARGET} PROPERTIES OUTPUT_NAME ${ARG_GENERATOR})
     target_export_single_symbol(${TARGET} ${ARG_FUNCTION_NAME})
 endfunction()
 
