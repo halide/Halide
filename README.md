@@ -31,10 +31,12 @@ If you've acquired a full source distribution and want to build Halide, see the
 
 ## Binary tarballs
 
-The latest version of Halide is **Halide 13.0.0**. We provide binary releases
-for many popular platforms and architectures, including 32/64-bit x86 Windows,
-64-bit macOS, and 32/64-bit x86/ARM Ubuntu Linux. See the releases tab on the
-right (or click [here](https://github.com/halide/Halide/releases)).
+The latest version of Halide can always be found on GitHub
+at https://github.com/halide/Halide/releases
+
+We provide binary releases for many popular platforms and architectures, 
+including 32/64-bit x86 Windows, 64-bit macOS, and 32/64-bit x86/ARM
+Ubuntu Linux.
 
 ## Vcpkg
 
@@ -80,7 +82,7 @@ These are the **tested** host toolchain and platform combinations for building
 and running the Halide compiler library.
 
 | Compiler   | Version      | OS                     | Architectures   |
-| ---------- | ------------ | ---------------------- | --------------- |
+|------------|--------------|------------------------|-----------------|
 | GCC        | 7.5          | Ubuntu Linux 20.04 LTS | x86, x64, ARM32 |
 | GCC        | 7.5          | Ubuntu Linux 18.04 LTS | ARM32, ARM64    |
 | MSVC       | 2019 (19.28) | Windows 10 (20H2)      | x86, x64        |
