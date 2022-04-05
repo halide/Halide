@@ -83,7 +83,7 @@ void define_enums(py::module &m) {
         .value("WebAssembly", Target::Arch::WebAssembly);
 
     // Please keep sorted.
-    py::enum_<Target::Processor>(m, "TargetProcessor")
+    py::enum_<Target::Processor>(m, "TargetProcessorTune")
         .value("TuneAMDFam10", Target::Processor::AMDFam10)
         .value("TuneBdVer1", Target::Processor::BdVer1)
         .value("TuneBdVer2", Target::Processor::BdVer2)

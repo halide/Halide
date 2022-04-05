@@ -69,7 +69,7 @@ struct Target {
         ZnVer1,    /// Tune for AMD Zen   CPU (AMD Family 17h, launched 2017).
         ZnVer2,    /// Tune for AMD Zen 2 CPU (AMD Family 17h, launched 2019).
         ZnVer3,    /// Tune for AMD Zen 3 CPU (AMD Family 19h, launched 2020).
-    } processor = ProcessorGeneric;
+    } processor_tune = ProcessorGeneric;
 
     /** Optional features a target can have.
      * Corresponds to feature_name_map in Target.cpp.
@@ -157,8 +157,8 @@ struct Target {
         FeatureEnd = halide_target_feature_end
     };
     Target() = default;
-    Target(OS o, Arch a, int b, Processor p, const std::vector<Feature> &initial_features = std::vector<Feature>())
-        : os(o), arch(a), bits(b), processor(p) {
+    Target(OS o, Arch a, int b, Processor pt, const std::vector<Feature> &initial_features = std::vector<Feature>())
+        : os(o), arch(a), bits(b), processor_tune(pt) {
         for (const auto &f : initial_features) {
             set_feature(f);
         }
@@ -251,7 +251,7 @@ struct Target {
         return os == other.os &&
                arch == other.arch &&
                bits == other.bits &&
-               processor == other.processor &&
+               processor_tune == other.processor_tune &&
                features == other.features;
     }
 

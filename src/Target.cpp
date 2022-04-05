@@ -517,7 +517,7 @@ bool merge_string(Target &t, const std::string &target) {
                 return false;
             }
             os_specified = true;
-        } else if (lookup_processor(tok, t.processor)) {
+        } else if (lookup_processor(tok, t.processor_tune)) {
             if (processor_specified) {
                 return false;
             }
@@ -675,9 +675,9 @@ std::string Target::to_string() const {
             break;
         }
     }
-    if (processor != ProcessorGeneric) {
+    if (processor_tune != ProcessorGeneric) {
         for (const auto &processor_entry : processor_name_map) {
-            if (processor_entry.second == processor) {
+            if (processor_entry.second == processor_tune) {
                 result += "-" + processor_entry.first;
                 break;
             }
@@ -1102,7 +1102,7 @@ bool Target::get_runtime_compatible_target(const Target &other, Target &result) 
     // Union of features is computed through bitwise-or, and masked away by the features we care about
     // Intersection of features is computed through bitwise-and and masked away, too.
     // We merge the bits via bitwise or.
-    Target output = Target{os, arch, bits, processor};
+    Target output = Target{os, arch, bits, processor_tune};
     output.features = ((features | other.features) & union_mask) | ((features | other.features) & matching_mask) | ((features & other.features) & intersection_mask);
 
     // Pick tight lower bound for CUDA capability. Use fall-through to clear redundant features
