@@ -32,7 +32,7 @@ using std::vector;
 namespace {
 
 #ifdef _MSC_VER
-static void cpuid(int info[4], int infoType, int extra) {
+static void cpuid(unsigned info[4], unsigned infoType, unsigned extra) {
     __cpuidex(info, infoType, extra);
 }
 #else
@@ -42,14 +42,14 @@ static void cpuid(int info[4], int infoType, int extra) {
 // (https://github.com/ispc/ispc/blob/master/builtins/dispatch.ll)
 
 #ifdef _LP64
-void cpuid(int info[4], int infoType, int extra) {
+void cpuid(unsigned info[4], unsigned infoType, unsigned extra) {
     __asm__ __volatile__(
         "cpuid                 \n\t"
         : "=a"(info[0]), "=b"(info[1]), "=c"(info[2]), "=d"(info[3])
         : "0"(infoType), "2"(extra));
 }
 #else
-static void cpuid(int info[4], int infoType, int extra) {
+static void cpuid(unsigned info[4], unsigned infoType, unsigned extra) {
     // We save %ebx in case it's the PIC register
     __asm__ __volatile__(
         "mov{l}\t{%%}ebx, %1  \n\t"
@@ -65,30 +65,30 @@ static void cpuid(int info[4], int infoType, int extra) {
 #if defined(__x86_64__) || defined(__i386__) || defined(_MSC_VER)
 
 enum class VendorSignatures {
-    UNKNOWN,
-    GENUINE_INTEL,
-    AUTHENTIC_AMD,
+    Unknown,
+    GenuineIntel,
+    AuthenticAMD,
 };
 
 VendorSignatures get_vendor_signature() {
-    int info[4];
+    unsigned info[4];
     cpuid(info, 0, 0);
 
     if (info[0] < 1) {
-        return VendorSignatures::UNKNOWN;
+        return VendorSignatures::Unknown;
     }
 
     // "Genu ineI ntel"
     if (info[1] == 0x756e6547 && info[3] == 0x49656e69 && info[2] == 0x6c65746e) {
-        return VendorSignatures::GENUINE_INTEL;
+        return VendorSignatures::GenuineIntel;
     }
 
     // "Auth enti cAMD"
     if (info[1] == 0x68747541 && info[3] == 0x69746e65 && info[2] == 0x444d4163) {
-        return VendorSignatures::AUTHENTIC_AMD;
+        return VendorSignatures::AuthenticAMD;
     }
 
-    return VendorSignatures::UNKNOWN;
+    return VendorSignatures::Unknown;
 }
 
 void detect_family_and_model(unsigned info0, unsigned &family,
@@ -107,9 +107,10 @@ void detect_family_and_model(unsigned info0, unsigned &family,
 
 Target::Processor get_amd_processor(unsigned family, unsigned model) {
     switch (family) {
-    case 0x19:
-        // FIXME: do we need to check model number?
-        return Target::Processor::ZnVer3;
+    case 0x19:  // AMD Family 19h
+        if (model <= 0x0f || model == 0x21) {
+            return Target::Processor::ZnVer3;  // 00h-0Fh, 21h: Zen3
+        }
     default:
         break;  // Unknown AMD CPU.
     }
@@ -170,13 +171,13 @@ Target calculate_host_target() {
 
     VendorSignatures vendor_signature = get_vendor_signature();
 
-    int info[4];
+    unsigned info[4];
     cpuid(info, 1, 0);
 
     unsigned family = 0, model = 0;
     detect_family_and_model(info[0], family, model);
 
-    if (vendor_signature == VendorSignatures::AUTHENTIC_AMD) {
+    if (vendor_signature == VendorSignatures::AuthenticAMD) {
         processor = get_amd_processor(family, model);
     }
 
@@ -212,7 +213,7 @@ Target calculate_host_target() {
     if (use_64_bits && have_avx && have_f16c && have_rdrand) {
         // So far, so good.  AVX2/512?
         // Call cpuid with eax=7, ecx=0
-        int info2[4];
+        unsigned info2[4];
         cpuid(info2, 7, 0);
         const uint32_t avx2 = 1U << 5;
         const uint32_t avx512f = 1U << 16;
@@ -232,23 +233,23 @@ Target calculate_host_target() {
         }
         if ((info2[1] & avx512) == avx512) {
             initial_features.push_back(Target::AVX512);
-            // FIXME: port to family/model -based detection.
+            // TODO: port to family/model -based detection.
             if ((info2[1] & avx512_knl) == avx512_knl) {
                 initial_features.push_back(Target::AVX512_KNL);
             }
-            // FIXME: port to family/model -based detection.
+            // TODO: port to family/model -based detection.
             if ((info2[1] & avx512_skylake) == avx512_skylake) {
                 initial_features.push_back(Target::AVX512_Skylake);
             }
-            // FIXME: port to family/model -based detection.
+            // TODO: port to family/model -based detection.
             if ((info2[1] & avx512_cannonlake) == avx512_cannonlake) {
                 initial_features.push_back(Target::AVX512_Cannonlake);
 
                 const uint32_t avx512vnni = 1U << 11;  // vnni result in ecx
                 const uint32_t avx512bf16 = 1U << 5;   // bf16 result in eax, with cpuid(eax=7, ecx=1)
-                int info3[4];
+                unsigned info3[4];
                 cpuid(info3, 7, 1);
-                // FIXME: port to family/model -based detection.
+                // TODO: port to family/model -based detection.
                 if ((info2[2] & avx512vnni) == avx512vnni &&
                     (info3[0] & avx512bf16) == avx512bf16) {
                     initial_features.push_back(Target::AVX512_SapphireRapids);
