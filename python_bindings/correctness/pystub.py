@@ -202,6 +202,7 @@ def test_complexstub(callee):
         typed_buffer_output,
         untyped_buffer_output,
         static_compiled_buffer_output,
+        scalar_output,
         extra_func_output) = r
 
     b = simple_output.realize([32, 32, 3], target)
@@ -256,6 +257,13 @@ def test_complexstub(callee):
                 expected = constant_image[x, y, c] + 42
                 actual = b[x, y, c]
                 assert expected == actual, "Expected %s Actual %s" % (expected, actual)
+
+    # TODO: this is a bug in existing Pipeline.realize(); it should allow an
+    # empty list iff realizing a 0-dimensional Func (and create a single-element Buffer),
+    # but doesn't. Fix.
+    b = scalar_output.realize([1], target)
+    assert b.type() == hl.Float(32)
+    assert b[()] == 34.25
 
     b = extra_func_output.realize([32, 32], target)
     assert b.type() == hl.Float(64)

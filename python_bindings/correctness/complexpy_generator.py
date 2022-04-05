@@ -20,6 +20,7 @@ class ComplexPy:
     typed_buffer_output = hl.OutputBuffer(hl.Float(32), 3)
     untyped_buffer_output = hl.OutputBuffer(None, 3)
     static_compiled_buffer_output = hl.OutputBuffer(hl.UInt(8), 3)
+    scalar_output = hl.OutputScalar(hl.Float(32))
 
     # Just an intermediate Func we need to share between generate() and schedule()
     intermediate = hl.Func()
@@ -52,6 +53,8 @@ class ComplexPy:
 
         self.static_compiled_buffer_output = static_compiled_buffer
         self.extra_func_output[x, y] = hl.f64(self.extra_func_input[x, y, 0] + 1)
+
+        self.scalar_output = self.float_arg + self.int_arg
 
     def schedule(self):
         self.intermediate.compute_at(self.intermediate_level.value());

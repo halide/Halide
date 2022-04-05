@@ -238,14 +238,20 @@ class GIOBase(Proxy):
         # -- two underscores in a row is also forbidden
         if not name:
             return False
-        if "__" in name:
+        # TODO: use regex instead?
+        s = str(name)
+        if "__" in s:
             return False
-        if not name[0].isalpha():
+        if not s[0].isalpha():
             return False
-        for c in name[1:]:
+        for c in s[1:]:
             if not (c.isalnum() or c == '_'):
                 return False
         return True
+
+    @staticmethod
+    def _check_valid_name(name:str):
+        _check(GIOBase._is_valid_name(name), "The name '%s' is not valid for a Generator member." % name)
 
 _type_string_map = {
     "bool": Bool(),
@@ -549,6 +555,24 @@ class OutputBuffer(OutputBase):
     def _arg_info_kind(self):
         return ArgInfoKind.Buffer
 
+# OutputScalar is just like OutputBuffer, except it is always dimensions = 0
+class OutputScalar(OutputBase):
+    def __init__(self, type:Type, name:str = ""):
+        OutputBase.__init__(self, name, type, 0)
+
+    def _arg_info_kind(self):
+        return ArgInfoKind.Buffer
+
+    def _clone_with_default_name(self, name:str):
+        if self._name:
+            name = self._name
+        return OutputScalar(self._required_types, name)
+
+    def _set_value(self, value:object):
+        _check(isinstance(value, Expr), "Output %s requires an Expr argument when calling apply(), but saw %s" % (self._name, str(value)))
+        _check(value.defined(), "Cannot set the value for %s to an undefined value." % self._name)
+        self._check_required_types(value.type())
+        self._wrapped[()] = value
 
 def _items_with_gio_names(d):
     return [(k, v) for k, v in d.items() if isinstance(v, GIOBase)]
@@ -676,7 +700,7 @@ class Generator(ABC):
 
         # Note that we create these for all relevant Inputs and Outputs, even though
         # some will be guaranteed to fail if you attempt to set them: that's the point,
-        # we *want* things to fail if you try to set them inappopriately.
+        # we *want* things to fail if you try to set them inappropriately.
         type_sp = SyntheticGeneratorParam("%s.type" % linked_gio._name, self._get_name(), linked_gio, SyntheticGeneratorParamKind.Type)
         dim_sp = SyntheticGeneratorParam("%s.dim" % linked_gio._name, self._get_name(), linked_gio, SyntheticGeneratorParamKind.Dimensions)
         return [type_sp, dim_sp]
@@ -688,7 +712,7 @@ class Generator(ABC):
                 if isinstance(v, GIOBase):
                     g =  v._clone_with_default_name(k)
                     pi[k] = g
-                    _check(GIOBase._is_valid_name(g._name), "The name '%s' is not valid for a Generator member." % g._name)
+                    GIOBase._check_valid_name(g._name)
 
             # Re-set all of these in the instance itself, since
             # (1) they will be different objects due to _clone_with_default_name
