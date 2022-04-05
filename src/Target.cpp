@@ -33,7 +33,9 @@ namespace {
 
 #ifdef _MSC_VER
 static void cpuid(unsigned info[4], unsigned infoType, unsigned extra) {
-    __cpuidex(info, infoType, extra);
+    int info_signed[4];
+    __cpuidex(info_signed, infoType, extra);
+    std::copy_n(info_signed, 4, info);
 }
 #else
 
