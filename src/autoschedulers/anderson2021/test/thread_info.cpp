@@ -1,0 +1,108 @@
+#include "test.h"
+#include "ThreadInfo.h"
+#include "LoopNest.h"
+
+using namespace Halide;
+using namespace Halide::Internal;
+using namespace Halide::Internal::Autoscheduler;
+
+void test_thread_info() {
+    MachineParams params(80, 16000000, 40);
+    Target target("host-cuda");
+
+    Var x("x"), y("y");
+    {
+        int vectorized_loop_index = 0;
+        std::vector<int64_t> size;
+        std::vector<FunctionDAG::Node::Loop> loop;
+        std::vector<int64_t> loop_extents;
+        std::vector<int64_t> max_thread_counts;
+
+        loop.push_back({});
+        loop.push_back({});
+
+        // 16x8
+        size.push_back(16);
+        size.push_back(8);
+
+        loop_extents.push_back(16);
+        loop_extents.push_back(8);
+
+        // 16x8
+        max_thread_counts.push_back(16);
+        max_thread_counts.push_back(8);
+
+        {
+            ThreadInfo info{vectorized_loop_index, size, loop, loop_extents, max_thread_counts};
+
+            EXPECT_EQ(128, info.num_threads);
+            EXPECT_EQ(1.0, info.max_theoretical_warp_lane_utilization);
+            EXPECT_EQ(1.0, info.warp_lane_utilization());
+            EXPECT_EQ(1.0, info.warp_lane_utilization_at_block_x());
+            EXPECT_EQ(1.0, info.warp_lane_utilization_at_block_y());
+        }
+
+        // Smaller stage: test that its max_theoretical_warp_lane_utilization is
+        // penalized because its 'size' is smaller than its loop_extents,
+        // indicating that it has been split: it could achieve better utilization if it had not been split
+        size.clear();
+        size.push_back(8);
+        size.push_back(8);
+
+        {
+            ThreadInfo info{vectorized_loop_index, size, loop, loop_extents, max_thread_counts};
+            EXPECT_EQ(64, info.num_threads);
+            EXPECT_EQ(0.5, info.max_theoretical_warp_lane_utilization);
+            EXPECT_EQ(0.5, info.warp_lane_utilization());
+            EXPECT_EQ(0.5, info.warp_lane_utilization_at_block_x());
+            EXPECT_EQ(1.0, info.warp_lane_utilization_at_block_y());
+        }
+
+        // Smaller stage: test that its max_theoretical_warp_lane_utilization is not
+        // penalized because its loop is smaller than the max thread loop and
+        // cannot possibly achieve better utilization
+        loop_extents.clear();
+        loop_extents.push_back(8);
+        loop_extents.push_back(8);
+
+        {
+            ThreadInfo info{vectorized_loop_index, size, loop, loop_extents, max_thread_counts};
+            EXPECT_EQ(64, info.num_threads);
+            EXPECT_EQ(1.0, info.max_theoretical_warp_lane_utilization);
+            EXPECT_EQ(0.5, info.warp_lane_utilization());
+            EXPECT_EQ(0.5, info.warp_lane_utilization_at_block_x());
+            EXPECT_EQ(1.0, info.warp_lane_utilization_at_block_y());
+        }
+
+        size.clear();
+        size.push_back(11);
+        size.push_back(11);
+        size.push_back(2);
+        loop_extents.clear();
+        loop_extents.push_back(11);
+        loop_extents.push_back(11);
+        loop_extents.push_back(2);
+        max_thread_counts.clear();
+        max_thread_counts.push_back(16);
+        max_thread_counts.push_back(16);
+        max_thread_counts.push_back(2);
+        loop.push_back({});
+
+        {
+            ThreadInfo info{vectorized_loop_index, size, loop, loop_extents, max_thread_counts};
+            EXPECT_EQ(242, info.num_threads);
+            EXPECT_EQ(1.0, info.max_theoretical_warp_lane_utilization);
+            EXPECT_EQ(0.472656, info.warp_lane_utilization());
+            EXPECT_EQ(0.6875, info.warp_lane_utilization_at_block_x());
+            EXPECT_EQ(0.6875, info.warp_lane_utilization_at_block_y());
+            EXPECT_EQ(1, info.warp_lane_utilization_at_block_z());
+        }
+    }
+}
+
+
+int main(int argc, char **argv) {
+    test_thread_info();
+    printf("All tests passed.\n");
+    return 0;
+}
