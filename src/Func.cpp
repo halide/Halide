@@ -3157,7 +3157,7 @@ void Func::infer_input_bounds(JITUserContext *context,
         Buffer<> im(func.output_types()[i], nullptr, sizes);
         outputs[i] = std::move(im);
     }
-    Realization r(outputs);
+    Realization r(std::move(outputs));
     infer_input_bounds(context, r, target, param_map);
 }
 

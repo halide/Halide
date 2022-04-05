@@ -127,7 +127,7 @@ void define_func(py::module &m) {
                 "realize",
                 [](Func &f, std::vector<Buffer<>> buffers, const Target &t) -> void {
                     py::gil_scoped_release release;
-                    f.realize(Realization(buffers), t);
+                    f.realize(Realization(std::move(buffers)), t);
                 },
                 py::arg("dst"), py::arg("target") = Target())
 
@@ -260,7 +260,7 @@ void define_func(py::module &m) {
 
                     try {
                         std::vector<Buffer<>> v = dst.cast<std::vector<Buffer<>>>();
-                        f.infer_input_bounds(Realization(v), target);
+                        f.infer_input_bounds(Realization(std::move(v)), target);
                         return;
                     } catch (...) {
                         // fall thru

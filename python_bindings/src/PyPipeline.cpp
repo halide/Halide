@@ -105,7 +105,7 @@ void define_pipeline(py::module &m) {
             .def(
                 "realize", [](Pipeline &p, std::vector<Buffer<>> buffers, const Target &t) -> void {
                     py::gil_scoped_release release;
-                    p.realize(Realization(buffers), t);
+                    p.realize(Realization(std::move(buffers)), t);
                 },
                 py::arg("dst"), py::arg("target") = Target())
 
@@ -133,7 +133,7 @@ void define_pipeline(py::module &m) {
 
                     try {
                         std::vector<Buffer<>> v = dst.cast<std::vector<Buffer<>>>();
-                        p.infer_input_bounds(Realization(v), target);
+                        p.infer_input_bounds(Realization(std::move(v)), target);
                         return;
                     } catch (...) {
                         // fall thru
