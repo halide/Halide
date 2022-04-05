@@ -475,6 +475,7 @@ public:
                 check("vpmuludq*ymm", 8, u64(u32_1) * u64(u32_2));
             }
             check("vpmulld*ymm", 8, i32_1 * i32_2);
+            check("vpmaddwd*ymm", 8, i32(i16_1) * i32(i16_2));
 
             if (use_avx512) {
                 // avx512 does vector blends with a mov + predicate register
