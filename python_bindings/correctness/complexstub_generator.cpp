@@ -35,6 +35,7 @@ public:
     Output<Buffer<float, 3>> typed_buffer_output{"typed_buffer_output"};
     Output<Buffer<void, 3>> untyped_buffer_output{"untyped_buffer_output"};
     Output<Buffer<uint8_t, 3>> static_compiled_buffer_output{"static_compiled_buffer_output"};
+    Output<float> scalar_output{"scalar_output"};
 
     void configure() {
         // Pointers returned by add_input() are managed by the Generator;
@@ -72,6 +73,8 @@ public:
         static_compiled_buffer_output = static_compiled_buffer;
 
         (*extra_func_output)(x, y) = cast<double>((*extra_func_input)(x, y, 0) + 1);
+
+        scalar_output() = float_arg + int_arg;
     }
 
     void schedule() {
