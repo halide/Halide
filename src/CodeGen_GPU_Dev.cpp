@@ -116,8 +116,7 @@ protected:
                                 mutate(extract_lane(s->index, ln)),
                                 s->param,
                                 const_true(),
-                                // TODO: alignment needs to be changed
-                                s->alignment)));
+                                s->alignment + ln)));
             }
             return Block::make(scalar_stmts);
         } else {
@@ -127,12 +126,23 @@ protected:
 
     Expr visit(const Load *op) override {
         if (!is_const_one(op->predicate)) {
-            Expr load_expr = Load::make(op->type, op->name, op->index, op->image,
-                                        op->param, const_true(op->type.lanes()), op->alignment);
-            Expr pred_load = Call::make(load_expr.type(),
-                                        Call::if_then_else,
-                                        {op->predicate, load_expr},
-                                        Internal::Call::PureIntrinsic);
+            std::vector<Expr> lane_values;
+            for (int ln = 0; ln < op->type.lanes(); ln++) {
+                Expr load_expr = Load::make(op->type.element_of(),
+                                            op->name,
+                                            extract_lane(op->index, ln),
+                                            op->image,
+                                            op->param,
+                                            const_true(),
+                                            op->alignment + ln);
+                lane_values.push_back(Call::make(load_expr.type(),
+                                                 Call::if_then_else,
+                                                 {extract_lane(op->predicate, ln),
+                                                  load_expr,
+                                                  make_zero(op->type.element_of())},
+                                                 Internal::Call::PureIntrinsic));
+            }
+            Expr pred_load = Shuffle::make_concat(lane_values);
             return pred_load;
         } else {
             return op;
@@ -145,6 +155,48 @@ protected:
 Stmt CodeGen_GPU_Dev::scalarize_predicated_loads_stores(Stmt &s) {
     ScalarizePredicatedLoadStore sps;
     return sps.mutate(s);
+}
+
+void CodeGen_GPU_C::visit(const Shuffle *op) {
+    if (op->type.is_scalar()) {
+        CodeGen_C::visit(op);
+    } else {
+        internal_assert(!op->vectors.empty());
+        for (size_t i = 1; i < op->vectors.size(); i++) {
+            internal_assert(op->vectors[0].type() == op->vectors[i].type());
+        }
+        internal_assert(op->type.lanes() == (int)op->indices.size());
+        const int max_index = (int)(op->vectors[0].type().lanes() * op->vectors.size());
+        for (int i : op->indices) {
+            internal_assert(i >= 0 && i < max_index);
+        }
+
+        std::vector<std::string> vecs;
+        for (const Expr &v : op->vectors) {
+            vecs.push_back(print_expr(v));
+        }
+
+        std::string src = vecs[0];
+        std::ostringstream rhs;
+        std::string storage_name = unique_name('_');
+        if (vector_declaration_style == VectorDeclarationStyle::OpenCLSyntax) {
+            rhs << "(" << print_type(op->type) << ")(";
+        } else {
+            rhs << "{";
+        }
+        for (int i : op->indices) {
+            rhs << vecs[i];
+            if (i < (int)(op->indices.size() - 1)) {
+                rhs << ", ";
+            }
+        }
+        if (vector_declaration_style == VectorDeclarationStyle::OpenCLSyntax) {
+            rhs << ")";
+        } else {
+            rhs << "}";
+        }
+        print_assignment(op->type, rhs.str());
+    }
 }
 
 }  // namespace Internal
