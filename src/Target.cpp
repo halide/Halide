@@ -32,10 +32,8 @@ using std::vector;
 namespace {
 
 #ifdef _MSC_VER
-static void cpuid(unsigned info[4], unsigned infoType, unsigned extra) {
-    int info_signed[4];
-    __cpuidex(info_signed, infoType, extra);
-    std::copy_n(info_signed, 4, info);
+static void cpuid(int info[4], int infoType, int extra) {
+    __cpuidex(info, infoType, extra);
 }
 #else
 
@@ -44,14 +42,14 @@ static void cpuid(unsigned info[4], unsigned infoType, unsigned extra) {
 // (https://github.com/ispc/ispc/blob/master/builtins/dispatch.ll)
 
 #ifdef _LP64
-void cpuid(unsigned info[4], unsigned infoType, unsigned extra) {
+void cpuid(int info[4], int infoType, int extra) {
     __asm__ __volatile__(
         "cpuid                 \n\t"
         : "=a"(info[0]), "=b"(info[1]), "=c"(info[2]), "=d"(info[3])
         : "0"(infoType), "2"(extra));
 }
 #else
-static void cpuid(unsigned info[4], unsigned infoType, unsigned extra) {
+static void cpuid(int info[4], int infoType, int extra) {
     // We save %ebx in case it's the PIC register
     __asm__ __volatile__(
         "mov{l}\t{%%}ebx, %1  \n\t"
@@ -73,7 +71,7 @@ enum class VendorSignatures {
 };
 
 VendorSignatures get_vendor_signature() {
-    unsigned info[4];
+    int info[4];
     cpuid(info, 0, 0);
 
     if (info[0] < 1) {
@@ -93,8 +91,7 @@ VendorSignatures get_vendor_signature() {
     return VendorSignatures::Unknown;
 }
 
-void detect_family_and_model(unsigned info0, unsigned &family,
-                             unsigned &model) {
+void detect_family_and_model(int info0, unsigned &family, unsigned &model) {
     family = (info0 >> 8) & 0xF;  // Bits 8..11
     model = (info0 >> 4) & 0xF;   // Bits 4..7
     if (family == 0x6 || family == 0xF) {
@@ -173,7 +170,7 @@ Target calculate_host_target() {
 
     VendorSignatures vendor_signature = get_vendor_signature();
 
-    unsigned info[4];
+    int info[4];
     cpuid(info, 1, 0);
 
     unsigned family = 0, model = 0;
@@ -215,7 +212,7 @@ Target calculate_host_target() {
     if (use_64_bits && have_avx && have_f16c && have_rdrand) {
         // So far, so good.  AVX2/512?
         // Call cpuid with eax=7, ecx=0
-        unsigned info2[4];
+        int info2[4];
         cpuid(info2, 7, 0);
         const uint32_t avx2 = 1U << 5;
         const uint32_t avx512f = 1U << 16;
@@ -249,7 +246,7 @@ Target calculate_host_target() {
 
                 const uint32_t avx512vnni = 1U << 11;  // vnni result in ecx
                 const uint32_t avx512bf16 = 1U << 5;   // bf16 result in eax, with cpuid(eax=7, ecx=1)
-                unsigned info3[4];
+                int info3[4];
                 cpuid(info3, 7, 1);
                 // TODO: port to family/model -based detection.
                 if ((info2[2] & avx512vnni) == avx512vnni &&
