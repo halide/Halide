@@ -62,6 +62,63 @@ static void cpuid(int info[4], int infoType, int extra) {
 #endif
 #endif
 
+#if defined(__x86_64__) || defined(__i386__) || defined(_MSC_VER)
+
+enum class VendorSignatures {
+    Unknown,
+    GenuineIntel,
+    AuthenticAMD,
+};
+
+VendorSignatures get_vendor_signature() {
+    int info[4];
+    cpuid(info, 0, 0);
+
+    if (info[0] < 1) {
+        return VendorSignatures::Unknown;
+    }
+
+    // "Genu ineI ntel"
+    if (info[1] == 0x756e6547 && info[3] == 0x49656e69 && info[2] == 0x6c65746e) {
+        return VendorSignatures::GenuineIntel;
+    }
+
+    // "Auth enti cAMD"
+    if (info[1] == 0x68747541 && info[3] == 0x69746e65 && info[2] == 0x444d4163) {
+        return VendorSignatures::AuthenticAMD;
+    }
+
+    return VendorSignatures::Unknown;
+}
+
+void detect_family_and_model(int info0, unsigned &family, unsigned &model) {
+    family = (info0 >> 8) & 0xF;  // Bits 8..11
+    model = (info0 >> 4) & 0xF;   // Bits 4..7
+    if (family == 0x6 || family == 0xF) {
+        if (family == 0xF) {
+            // Examine extended family ID if family ID is 0xF.
+            family += (info0 >> 20) & 0xFf;  // Bits 20..27
+        }
+        // Examine extended model ID if family ID is 0x6 or 0xF.
+        model += ((info0 >> 16) & 0xF) << 4;  // Bits 16..19
+    }
+}
+
+Target::Processor get_amd_processor(unsigned family, unsigned model) {
+    switch (family) {
+    case 0x19:  // AMD Family 19h
+        if (model <= 0x0f || model == 0x21) {
+            return Target::Processor::ZnVer3;  // 00h-0Fh, 21h: Zen3
+        }
+    default:
+        break;  // Unknown AMD CPU.
+    }
+
+    return Target::Processor::ProcessorGeneric;
+}
+
+#endif  // defined(__x86_64__) || defined(__i386__) || defined(_MSC_VER)
+
 Target calculate_host_target() {
     Target::OS os = Target::OSUnknown;
 #ifdef __linux__
@@ -111,8 +168,18 @@ Target calculate_host_target() {
 #else
     Target::Arch arch = Target::X86;
 
+    VendorSignatures vendor_signature = get_vendor_signature();
+
     int info[4];
     cpuid(info, 1, 0);
+
+    unsigned family = 0, model = 0;
+    detect_family_and_model(info[0], family, model);
+
+    if (vendor_signature == VendorSignatures::AuthenticAMD) {
+        processor = get_amd_processor(family, model);
+    }
+
     bool have_sse41 = (info[2] & (1 << 19)) != 0;
     bool have_sse2 = (info[3] & (1 << 26)) != 0;
     bool have_avx = (info[2] & (1 << 28)) != 0;
@@ -165,12 +232,15 @@ Target calculate_host_target() {
         }
         if ((info2[1] & avx512) == avx512) {
             initial_features.push_back(Target::AVX512);
+            // TODO: port to family/model -based detection.
             if ((info2[1] & avx512_knl) == avx512_knl) {
                 initial_features.push_back(Target::AVX512_KNL);
             }
+            // TODO: port to family/model -based detection.
             if ((info2[1] & avx512_skylake) == avx512_skylake) {
                 initial_features.push_back(Target::AVX512_Skylake);
             }
+            // TODO: port to family/model -based detection.
             if ((info2[1] & avx512_cannonlake) == avx512_cannonlake) {
                 initial_features.push_back(Target::AVX512_Cannonlake);
 
@@ -178,6 +248,7 @@ Target calculate_host_target() {
                 const uint32_t avx512bf16 = 1U << 5;   // bf16 result in eax, with cpuid(eax=7, ecx=1)
                 int info3[4];
                 cpuid(info3, 7, 1);
+                // TODO: port to family/model -based detection.
                 if ((info2[2] & avx512vnni) == avx512vnni &&
                     (info3[0] & avx512bf16) == avx512bf16) {
                     initial_features.push_back(Target::AVX512_SapphireRapids);
