@@ -679,20 +679,17 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
         }
     }
 
-    // At present, we default to *enabling* LLVM loop optimization,
-    // unless DisableLLVMLoopOpt is set; we're going to flip this to defaulting
-    // to *not* enabling these optimizations (and removing the DisableLLVMLoopOpt feature).
-    // See https://github.com/halide/Halide/issues/4113 for more info.
-    // (Note that setting EnableLLVMLoopOpt always enables loop opt, regardless
-    // of the setting of DisableLLVMLoopOpt.)
-    const bool do_loop_opt = !target.has_feature(Target::DisableLLVMLoopOpt) ||
-                             target.has_feature(Target::EnableLLVMLoopOpt);
+    const bool do_loop_opt = target.has_feature(Target::EnableLLVMLoopOpt);
 
     PassManagerBuilder b;
     b.OptLevel = 3;
     b.Inliner = createFunctionInliningPass(b.OptLevel, 0, false);
     b.LoopVectorize = do_loop_opt;
     b.SLPVectorize = true;
+    // Setting DisableUnrollLoops = true can occasionally generate PTX code that
+    // will fail at runtime under some conditions (e.g. correctness_gpu_dynamic_shared
+    // using NVidia driver 460.x).
+    // b.DisableUnrollLoops = false;  // !do_loop_opt;
     b.DisableUnrollLoops = !do_loop_opt;
 
     target_machine->adjustPassManager(b);

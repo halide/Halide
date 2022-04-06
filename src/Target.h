@@ -139,7 +139,6 @@ struct Target {
         CheckUnsafePromises = halide_target_feature_check_unsafe_promises,
         EmbedBitcode = halide_target_feature_embed_bitcode,
         EnableLLVMLoopOpt = halide_target_feature_enable_llvm_loop_opt,
-        DisableLLVMLoopOpt = halide_target_feature_disable_llvm_loop_opt,
         WasmSimd128 = halide_target_feature_wasm_simd128,
         WasmSignExt = halide_target_feature_wasm_signext,
         WasmSatFloatToInt = halide_target_feature_wasm_sat_float_to_int,
