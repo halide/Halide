@@ -1,9 +1,8 @@
 
 import halide as hl
 
-import simplestub
-# test alternate-but-legal syntax
-from complexstub import generate as complexstub
+import simple_stub
+import complex_stub
 
 def _realize_and_check(f, offset = 0):
     b = hl.Buffer(hl.Float(32), [2, 2])
@@ -15,7 +14,7 @@ def _realize_and_check(f, offset = 0):
     assert b[1, 1] == 5.5 + offset + 123
 
 
-def test_simplestub():
+def test_simple(gen):
     x, y = hl.Var(), hl.Var()
     target = hl.get_jit_target_from_environment()
 
@@ -26,40 +25,40 @@ def test_simplestub():
     f_in[x, y] = x + y
 
     # ----------- Inputs by-position
-    f = simplestub.generate(target, b_in, f_in, 3.5)
+    f = gen(target, b_in, f_in, 3.5)
     _realize_and_check(f)
 
     # ----------- Inputs by-name
-    f = simplestub.generate(target, buffer_input=b_in, func_input=f_in, float_arg=3.5)
+    f = gen(target, buffer_input=b_in, func_input=f_in, float_arg=3.5)
     _realize_and_check(f)
 
-    f = simplestub.generate(target, float_arg=3.5, buffer_input=b_in, func_input=f_in)
+    f = gen(target, float_arg=3.5, buffer_input=b_in, func_input=f_in)
     _realize_and_check(f)
 
     # ----------- Above set again, w/ GeneratorParam mixed in
     k = 42
 
     # (positional)
-    f = simplestub.generate(target, b_in, f_in, 3.5, offset=k)
+    f = gen(target, b_in, f_in, 3.5, offset=k)
     _realize_and_check(f, k)
 
     # (keyword)
-    f = simplestub.generate(target, offset=k, buffer_input=b_in, func_input=f_in, float_arg=3.5)
+    f = gen(target, offset=k, buffer_input=b_in, func_input=f_in, float_arg=3.5)
     _realize_and_check(f, k)
 
-    f = simplestub.generate(target, buffer_input=b_in, offset=k, func_input=f_in, float_arg=3.5)
+    f = gen(target, buffer_input=b_in, offset=k, func_input=f_in, float_arg=3.5)
     _realize_and_check(f, k)
 
-    f = simplestub.generate(target, buffer_input=b_in, func_input=f_in, offset=k, float_arg=3.5)
+    f = gen(target, buffer_input=b_in, func_input=f_in, offset=k, float_arg=3.5)
     _realize_and_check(f, k)
 
-    f = simplestub.generate(target, buffer_input=b_in, float_arg=3.5, func_input=f_in, offset=k)
+    f = gen(target, buffer_input=b_in, float_arg=3.5, func_input=f_in, offset=k)
     _realize_and_check(f, k)
 
     # ----------- Test various failure modes
     try:
         # Inputs w/ mixed by-position and by-name
-        f = simplestub.generate(target, b_in, f_in, float_arg=3.5)
+        f = gen(target, b_in, f_in, float_arg=3.5)
     except RuntimeError as e:
         assert 'Cannot use both positional and keyword arguments for inputs.' in str(e)
     else:
@@ -67,7 +66,7 @@ def test_simplestub():
 
     try:
         # too many positional args
-        f = simplestub.generate(target, b_in, f_in, 3.5, 4)
+        f = gen(target, b_in, f_in, 3.5, 4)
     except RuntimeError as e:
         assert 'Expected exactly 3 positional args for inputs, but saw 4.' in str(e)
     else:
@@ -75,7 +74,7 @@ def test_simplestub():
 
     try:
         # too few positional args
-        f = simplestub.generate(target, b_in, f_in)
+        f = gen(target, b_in, f_in)
     except RuntimeError as e:
         assert 'Expected exactly 3 positional args for inputs, but saw 2.' in str(e)
     else:
@@ -83,7 +82,7 @@ def test_simplestub():
 
     try:
         # Inputs that can't be converted to what the receiver needs (positional)
-        f = simplestub.generate(target, hl.f32(3.141592), "happy", k)
+        f = gen(target, hl.f32(3.141592), "happy", k)
     except RuntimeError as e:
         assert 'Unable to cast Python instance' in str(e)
     else:
@@ -91,7 +90,7 @@ def test_simplestub():
 
     try:
         # Inputs that can't be converted to what the receiver needs (named)
-        f = simplestub.generate(target, b_in, f_in, float_arg="bogus")
+        f = gen(target, b_in, f_in, float_arg="bogus")
     except RuntimeError as e:
         assert 'Unable to cast Python instance' in str(e)
     else:
@@ -99,7 +98,7 @@ def test_simplestub():
 
     try:
         # Input specified by both pos and kwarg
-        f = simplestub.generate(target, b_in, f_in, 3.5, float_arg=4.5)
+        f = gen(target, b_in, f_in, 3.5, float_arg=4.5)
     except RuntimeError as e:
         assert "Cannot use both positional and keyword arguments for inputs." in str(e)
     else:
@@ -107,7 +106,7 @@ def test_simplestub():
 
     try:
         # Bad input name
-        f = simplestub.generate(target, buffer_input=b_in, float_arg=3.5, offset=k, funk_input=f_in)
+        f = gen(target, buffer_input=b_in, float_arg=3.5, offset=k, funk_input=f_in)
     except RuntimeError as e:
         assert "Expected exactly 3 keyword args for inputs, but saw 2." in str(e)
     else:
@@ -115,13 +114,13 @@ def test_simplestub():
 
     try:
         # Bad gp name
-        f = simplestub.generate(target, buffer_input=b_in, float_arg=3.5, offset=k, func_input=f_in, nonexistent_generator_param="wat")
+        f = gen(target, buffer_input=b_in, float_arg=3.5, offset=k, func_input=f_in, nonexistent_generator_param="wat")
     except RuntimeError as e:
-        assert "Generator simplestub has no GeneratorParam named: nonexistent_generator_param" in str(e)
+        assert "has no GeneratorParam named: nonexistent_generator_param" in str(e)
     else:
         assert False, 'Did not see expected exception!'
 
-def test_looplevel():
+def test_looplevel(gen):
     x, y = hl.Var('x'), hl.Var('y')
     target = hl.get_jit_target_from_environment()
 
@@ -132,7 +131,7 @@ def test_looplevel():
     func_input[x, y] = x + y
 
     simple_compute_at = hl.LoopLevel()
-    simple = simplestub.generate(target, buffer_input, func_input, 3.5,
+    simple = gen(target, buffer_input, func_input, 3.5,
         compute_level=simple_compute_at)
 
     computed_output = hl.Func('computed_output')
@@ -151,7 +150,7 @@ def _make_constant_image():
                 constant_image[x, y, c] = x + y + c
     return constant_image
 
-def test_complexstub():
+def test_complex(gen):
     constant_image = _make_constant_image()
     input = hl.ImageParam(hl.UInt(8), 3, 'input')
     input.set(constant_image)
@@ -165,16 +164,16 @@ def test_complexstub():
     func_input = hl.Func("func_input")
     func_input[x, y, c] = hl.u16(x + y + c)
 
-    r = complexstub(target,
-                    typed_buffer_input=constant_image,
-                    untyped_buffer_input=constant_image,
-                    simple_input=input,
-                    array_input=[ input, input ],
-                    float_arg=float_arg,
-                    int_arg=[ int_arg, int_arg ],
-                    untyped_buffer_output_type="uint8",
-                    extra_func_input=func_input,
-                    vectorize=True)
+    r = gen(target,
+            typed_buffer_input=constant_image,
+            untyped_buffer_input=constant_image,
+            simple_input=input,
+            array_input=[ input, input ],
+            float_arg=float_arg,
+            int_arg=[ int_arg, int_arg ],
+            untyped_buffer_output_type="uint8",
+            extra_func_input=func_input,
+            vectorize=True)
 
     # return value is a tuple; unpack separately to avoid
     # making the callsite above unreadable
@@ -263,6 +262,6 @@ def test_complexstub():
             assert expected == actual, "Expected %s Actual %s" % (expected, actual)
 
 if __name__ == "__main__":
-    test_simplestub()
-    test_looplevel()
-    test_complexstub()
+    test_simple(simple_stub.generate)
+    test_looplevel(simple_stub.generate)
+    test_complex(complex_stub.generate)

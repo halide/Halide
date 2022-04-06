@@ -15,7 +15,7 @@ Halide::Buffer<Type, 3> make_image(int extra) {
     return im;
 }
 
-class ComplexStub : public Halide::Generator<ComplexStub> {
+class Complex : public Halide::Generator<Complex> {
 public:
     GeneratorParam<Type> untyped_buffer_output_type{"untyped_buffer_output_type", Float(32)};
     GeneratorParam<bool> vectorize{"vectorize", true};
@@ -93,4 +93,4 @@ private:
 
 }  // namespace
 
-HALIDE_REGISTER_GENERATOR(ComplexStub, complexstub)
+HALIDE_REGISTER_GENERATOR(Complex, complex)
