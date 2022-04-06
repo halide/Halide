@@ -163,8 +163,9 @@ const x86Intrinsic intrinsic_defs[] = {
     {"packuswbx32", UInt(8, 32), "saturating_narrow", {Int(16, 32)}, Target::AVX2},
     {"packuswbx16", UInt(8, 16), "saturating_narrow", {Int(16, 16)}},
 
-    // Widening multiply that uses vpmovzxwd + vpmaddwd
-    {"wmul_pmaddwd", Int(32, 8), "widening_mul", {Int(16, 8), Int(16, 8)}, Target::AVX2},
+    // Widening multiplies that use (v)pmaddwd
+    {"wmul_pmaddwd_avx2", Int(32, 8), "widening_mul", {Int(16, 8), Int(16, 8)}, Target::AVX2},
+    {"wmul_pmaddwd_sse2", Int(32, 4), "widening_mul", {Int(16, 4), Int(16, 4)}},
 
     // Multiply keep high half
     {"llvm.x86.avx2.pmulh.w", Int(16, 16), "pmulh", {Int(16, 16), Int(16, 16)}, Target::AVX2},
