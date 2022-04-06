@@ -7,7 +7,7 @@ extern "C" int builtin_helpers_src_length;
 
 // Temporary, for development: slurp the Python source directly from disk.
 // Don't check in with this defined. Duh.
-#define LOAD_PY_FROM_FILE 1
+#define LOAD_PY_FROM_FILE 0
 
 namespace Halide {
 namespace PythonBindings {
