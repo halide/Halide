@@ -1167,13 +1167,26 @@ void CodeGen_LLVM::optimize_module() {
                 // Not sure if it's ideal for Halide.
                 constexpr AsanDetectStackUseAfterReturnMode use_after_return = AsanDetectStackUseAfterReturnMode::Runtime;
                 mpm.addPass(createModuleToFunctionPassAdaptor(AddressSanitizerPass(
-                    AddressSanitizerOptions(compile_kernel, recover, use_after_scope, use_after_return))));
+                    AddressSanitizerOptions{compile_kernel, recover, use_after_scope, use_after_return})));
 #else
                 mpm.addPass(createModuleToFunctionPassAdaptor(AddressSanitizerPass(
                     compile_kernel, recover, use_after_scope)));
 #endif
             });
-#if LLVM_VERSION >= 120
+#if LLVM_VERSION >= 140
+        pb.registerPipelineStartEPCallback(
+            [](ModulePassManager &mpm, OptimizationLevel) {
+                constexpr bool compile_kernel = false;
+                constexpr bool recover = false;
+                constexpr bool module_use_after_scope = false;
+                constexpr bool use_global_gc = true;
+                constexpr bool use_odr_indicator = true;
+                mpm.addPass(ModuleAddressSanitizerPass(
+                    AddressSanitizerOptions{compile_kernel, recover, module_use_after_scope},
+                    use_global_gc,
+                    use_odr_indicator));
+            });
+#elif LLVM_VERSION >= 120
         pb.registerPipelineStartEPCallback(
             [](ModulePassManager &mpm, OptimizationLevel) {
                 constexpr bool compile_kernel = false;
