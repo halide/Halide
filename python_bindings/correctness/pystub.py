@@ -108,7 +108,7 @@ def test_simple(gen):
         # Bad input name
         f = gen(target, buffer_input=b_in, float_arg=3.5, offset=k, funk_input=f_in)
     except RuntimeError as e:
-        assert "Generator simplestub has no GeneratorParam named: funk_input" in str(e)
+        assert "has no GeneratorParam named: funk_input" in str(e)
     else:
         assert False, 'Did not see expected exception!'
 
