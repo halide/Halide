@@ -31,14 +31,12 @@ jobs:
           sudo apt-key adv --keyserver keyserver.ubuntu.com --recv-keys 15CF4D18AF4F7421
           sudo apt-add-repository 'deb http://apt.llvm.org/focal/ llvm-toolchain-focal-13 main'
           sudo apt-get update
-          # Note that we need a minimum of llvm13/clang13 to build Halide, but (for now) we still use clang-tidy 12 for tidiness
-          sudo apt-get install llvm-13 clang-13 liblld-13-dev libclang-13-dev ninja-build \
-                               clang-tidy-12 libclang-12-dev
+          sudo apt-get install llvm-13 clang-13 liblld-13-dev libclang-13-dev ninja-build
       - name: Run clang-tidy
         run: |
           export CC=clang-13
           export CXX=clang++-13
-          export CLANG_TIDY_LLVM_INSTALL_DIR=/usr/lib/llvm-12
+          export CLANG_TIDY_LLVM_INSTALL_DIR=/usr/lib/llvm-13
           ./run-clang-tidy.sh
   check_cmake_file_lists:
     name: Check CMake file lists
