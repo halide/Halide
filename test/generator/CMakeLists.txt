@@ -183,10 +183,6 @@ halide_define_aot_test(blur2x2)
 # buffer_copy_generator.cpp
 halide_define_aot_test(buffer_copy)
 
-# buildmethod_aottest.cpp
-# buildmethod_generator.cpp
-halide_define_aot_test(buildmethod)
-
 # can_use_target_aottest.cpp
 # can_use_target_generator.cpp
 halide_define_aot_test(can_use_target)
