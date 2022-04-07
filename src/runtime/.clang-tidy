@@ -6,4 +6,7 @@ Checks: >
     -bugprone-sizeof-expression,
     -bugprone-suspicious-include,
     -misc-definitions-in-headers,
+    # TODO: new stuff in clang-tidy-13 that we are disabling (for now)
+    -bugprone-easily-swappable-parameters,
+    -bugprone-implicit-widening-of-multiplication-result,
 ...
