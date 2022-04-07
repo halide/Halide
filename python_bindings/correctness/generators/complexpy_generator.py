@@ -4,7 +4,7 @@ x = hl.Var('x')
 y = hl.Var('y')
 c = hl.Var('c')
 
-@hl.generator("simplepy")
+@hl.generator("complexpy")
 class ComplexPy:
     vectorize = hl.GeneratorParam(True)
     intermediate_level = hl.GeneratorParam(hl.LoopLevel.root())

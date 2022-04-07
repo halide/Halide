@@ -269,7 +269,7 @@ def test_complex(gen):
 if __name__ == "__main__":
     test_simple(simple_stub.generate)
     test_looplevel(simple_stub.generate)
-    test_complex(complex_stub)
+    test_complex(complex_stub.generate)
 
     test_simple(SimplePy.apply)
     test_looplevel(SimplePy.apply)

@@ -173,6 +173,7 @@ void define_generator(py::module &m) {
     #pragma message "WARNING, compiling with LOAD_PY_FROM_FILE enabled"
     std::string src = Internal::get_env_variable("HL_DEV_PATH_TO_PYTHON_SRC");
     _halide_user_assert(!src.empty()) << "You must define HL_DEV_PATH_TO_PYTHON_SRC as the absolute path to builtin_helpers_src.py";
+    Internal::debug(0) << "LOADING file " << src << " ... \n";
     py::eval_file(src, scope);
 #else
     py::exec(py::str((const char *)builtin_helpers_src, builtin_helpers_src_length), scope);

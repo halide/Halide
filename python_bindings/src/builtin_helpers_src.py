@@ -1,7 +1,18 @@
 from abc import ABC, abstractmethod
 from collections import OrderedDict
 from enum import Enum
-import sys
+
+# 'print()' is consumed by `halide.print()` which is implicitly present;
+# here's our quick-n-dirty wrapper for debugging:
+# import sys
+# def _print(*args):
+#     def write(data):
+#         sys.stdout.write(str(data))
+#     for i, arg in enumerate(args):
+#         if i:
+#             write(" ")
+#         write(arg)
+#     write('\n')
 
 # Everything below here is implicitly in the `halide` package
 
@@ -178,7 +189,7 @@ class GIOBase(Proxy):
         _check_internal(len(types) > 0)
         _check(len(types) == len(self._required_types), "Type mismatch for %s: expected %d types but saw %d" % (self._name, len(self._required_types), len(types)))
         for i in range(0, len(types)):
-            _check(self._required_types[i] == types[i], "Type mismatch for %s: expected %s saw %s" % (self._name, self._required_types[i], types[i]))
+            _check(self._required_types[i] == types[i], "Type mismatch for %s:%d: expected %s saw %s" % (self._name, i, self._required_types[i], types[i]))
 
 
     def _check_required_dimensions(self, dims:int):
@@ -363,7 +374,6 @@ class SyntheticGeneratorParam(GeneratorParam):
                     "Cannot set the GeneratorParam %s for %s because the value is explicitly specified in the Python source." % (self._name, self._generator_name))
             g._set_required_dimensions(value)
 
-
 class InputBase(GIOBase):
     def __init__(self, name:str, type:Type, dimensions:int):
         GIOBase.__init__(self, name, self._build_wrapped(name, type, dimensions), type, dimensions)
@@ -448,22 +458,29 @@ class InputScalar(InputBase):
             self._wrapped = value
 
 
-# InputFunc looks like a Func, but requires type and dimension
+# InputFunc looks like a Func, but requires type and dimension.
+# When used with AOT code, it is essentially identical to InputBuffer.
 class InputFunc(InputBase):
     def __init__(self, type:Type, dimensions:int, name:str = ""):
         InputBase.__init__(self, name, type, dimensions)
 
     def type(self) -> Type:
-        _check(len(self._required_types) == 1, "InputFunc %s must have exactly one type specified in order to call the .type() method." % self._name)
+        # This looks wrong, but is what we want: we want to return the *required* type (not the actual type)
+        _check(len(self._required_types) > 0, "Type is not defined for Input '%s'; you may need to specify '%s.type' as a GeneratorParam, or call set_type() from the configure() method.\n" % (self._name, self._name))
+        _check(len(self._required_types) == 1, "Input %s must have exactly one type defined, but saw %s." % (self._name, self._required_types))
         return self._required_types[0]
 
     @staticmethod
     def _build_wrapped(name:str, types:object, dimensions:int):
-        # types = _normalize_type_list(types)  -- unnecessary here
-        if name:
-            return Func(name)
+        types = _normalize_type_list(types)
+        # if name:
+        #     return Func(name)
+        # else:
+        #     return Func()
+        if name and len(types) == 1 and dimensions >= 0:
+            return ImageParam(types[0], dimensions, name).func()
         else:
-            return Func()
+            return ImageParam().func()
 
     def _clone_with_default_name(self, name:str):
         if self._name:
@@ -494,7 +511,10 @@ class OutputBase(GIOBase):
         GIOBase.__init__(self, name, self._build_wrapped(name, type, dimensions), type, dimensions)
 
     def type(self) -> Type:
-        _check(len(self._required_types) == 1, "Output %s must have exactly one type specified in order to call the .type() method." % self._name)
+        # This looks wrong, but is what we want: we want to return the *required* type (not the actual type)
+        # of the Output, so we can reference it before the output Func is defined.
+        _check(len(self._required_types) > 0, "Type is not defined for Output '%s'; you may need to specify '%s.type' as a GeneratorParam, or call set_type() from the configure() method.\n" % (self._name, self._name))
+        _check(len(self._required_types) == 1, "Output %s must have exactly one type defined, but saw %s." % (self._name, self._required_types))
         return self._required_types[0]
 
     def _is_output(self):

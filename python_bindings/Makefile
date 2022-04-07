@@ -59,6 +59,10 @@ $(BIN)/src/builtin_helpers_src.cpp: $(ROOT_DIR)/src/builtin_helpers_src.py $(BIN
 	@echo Building $@...
 	@$(BIN)/binary2cpp builtin_helpers_src < $< > $@
 
+$(BIN)/src/builtin_helpers_src.o: $(BIN)/src/builtin_helpers_src.cpp
+	@echo Building $@...
+	@$(CXX) $(CCFLAGS) -c $< -o $@
+
 PY_SRCS=$(shell ls $(ROOT_DIR)/src/*.cpp)
 PY_OBJS=$(PY_SRCS:$(ROOT_DIR)/src/%.cpp=$(BIN)/src/%.o)
 
@@ -152,19 +156,17 @@ endif
 # Some Generators require extra Halide Target Features to be set.
 FEATURES_user_context=-user_context
 
-# Some Generators have undefined types, sizes, etc that are useful for Stubs extensions,
+# Some Generators have undefined types, sizes, etc that are useful for Stub extensions,
 # but unacceptable for AOT Extensions; ensure that all of those are explicitly
 # specified for AOT. (We currently don't use or test these in AOT form, so the settings
 # are somewhat arbitrary.)
 GENPARAMS_complex=\
-	array_input.size=2 \
-	array_input.type=uint8 \
-	int_arg.size=2 \
 	simple_input.type=uint8 \
-	untyped_buffer_input.type=uint8
+	tuple_output.type=float32,float32 \
+	untyped_buffer_input.type=uint8 \
+	untyped_buffer_output.type=uint8
 
-GENPARAMS_simple=\
-	func_input.type=uint8
+GENPARAMS_complexpy=$(GENPARAMS_complex)
 
 # Run the Generator to produce a static library of AOT code,
 # plus the 'python_extension' code necessary to produce a useful
@@ -176,15 +178,16 @@ $(BIN)/%.py.cpp $(BIN)/%.a $(BIN)/%.h: $(BIN)/%.generator
 	    -g $(notdir $(basename $<)) \
 	    -o $(BIN) \
 	    target=host-no_runtime$(FEATURES_$(notdir $(basename $<))) \
-	    $(GENPARAMS_$(notdir $(basename $<)))
+	    $(GENPARAMS_$*)
 
 # Make each Python generator generate a Python extension:
-$(BIN)/%.py.cpp $(BIN)/%.a $(BIN)/%.h: $(ROOT_DIR)/correctness/%_generator.py $(MODULE)
+$(BIN)/%.py.cpp $(BIN)/%.a $(BIN)/%.h: $(ROOT_DIR)/correctness/generators/%_generator.py $(MODULE)
 	@echo Building $@...
 	@PYTHONPATH="$(BIN):$$PYTHONPATH" $(PYTHON) $< \
 	    -e static_library,c_header,python_extension \
 	    -g $(subst _generator,,$(notdir $(basename $<))) -o $(BIN) \
-	    target=host$(target_features_$(subst _generator,,$(notdir $(basename $<))))
+	    target=host$(target_features_$(subst _generator,,$(notdir $(basename $<)))) \
+	    $(GENPARAMS_$*)
 
 # Compile the generated Python extension(s):
 $(BIN)/%.py.o: $(BIN)/%.py.cpp
@@ -215,9 +218,12 @@ $(BIN)/stub/%_stub.so: $(BIN)/%_PyStub.o $(BIN)/PyStubImpl.o $(BIN)/%_generator.
 	@mkdir -p $(@D)
 	@$(CXX) $(LDFLAGS) $(filter-out %.ldscript,$^) -shared $(subst %LDSCRIPT%,$(BIN)/$*_stub.ldscript,$(PYEXT_LDSCRIPT_FLAG)) -o $@
 
-GENERATOR_SRCS=$(shell ls $(ROOT_DIR)/correctness/generators/*_generator.cpp)
-GENERATOR_AOT_EXTENSIONS=$(GENERATOR_SRCS:$(ROOT_DIR)/correctness/generators/%_generator.cpp=$(BIN)/aot/%.so)
-GENERATOR_STUB_EXTENSIONS=$(GENERATOR_SRCS:$(ROOT_DIR)/correctness/generators/%_generator.cpp=$(BIN)/stub/%_stub.so)
+GENERATOR_SRCS_CPP=$(patsubst $(ROOT_DIR)/correctness/generators/%_generator.cpp,%,$(shell ls $(ROOT_DIR)/correctness/generators/*_generator.cpp))
+GENERATOR_SRCS_PY=$(patsubst $(ROOT_DIR)/correctness/generators/%_generator.py,%,$(shell ls $(ROOT_DIR)/correctness/generators/*_generator.py))
+GENERATOR_SRCS_ALL=$(GENERATOR_SRCS_CPP) $(GENERATOR_SRCS_PY)
+GENERATOR_AOT_EXTENSIONS=$(GENERATOR_SRCS_ALL:%=$(BIN)/aot/%.so)
+# Only CPP Generators get Stub extensions (Python Generators can be imported directly)
+GENERATOR_STUB_EXTENSIONS=$(GENERATOR_SRCS_CPP:%=$(BIN)/stub/%_stub.so)
 
 APPS = $(shell ls $(ROOT_DIR)/apps/*.py)
 CORRECTNESS = $(shell ls $(ROOT_DIR)/correctness/*.py)
@@ -241,7 +247,7 @@ test_correctness: $(CORRECTNESS:$(ROOT_DIR)/correctness/%.py=test_correctness_%)
 test_correctness_%: $(ROOT_DIR)/correctness/%.py $(MODULE) $(GENERATOR_AOT_EXTENSIONS) $(GENERATOR_STUB_EXTENSIONS)
 	@echo Testing $*...
 	@mkdir -p $(TEST_TMP)
-	@cd $(TEST_TMP); PYTHONPATH="$(BIN)/aot:$(BIN)/stub:$(BIN):$$PYTHONPATH" $(PYTHON) $<
+	cd $(TEST_TMP); PYTHONPATH="$(ROOT_DIR)/correctness/generators:$(BIN)/aot:$(BIN)/stub:$(BIN):$$PYTHONPATH" $(PYTHON) $<
 
 .PHONY: test_tutorial
 test_tutorial: $(TUTORIAL:$(ROOT_DIR)/tutorial/%.py=test_tutorial_%)
