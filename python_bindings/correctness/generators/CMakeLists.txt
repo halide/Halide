@@ -20,8 +20,7 @@ set(GENPARAMS_complex
     untyped_buffer_input.type=uint8
     untyped_buffer_output.type=uint8)
 
-set(GENPARAMS_simple
-    func_input.type=uint8)
+set(GENPARAMS_complexpy ${GENPARAMS_complex})
 
 foreach (GEN IN LISTS GENERATORS)
     add_python_aot_extension(py_aot_${GEN}
