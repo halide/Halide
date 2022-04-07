@@ -49,7 +49,7 @@ cmake -DCMAKE_BUILD_TYPE=Debug \
 # We must populate the includes directory to check things outside of src/
 cmake --build ${CLANG_TIDY_BUILD_DIR} --target HalideIncludes
 
-RUN_CLANG_TIDY=${CLANG_TIDY_LLVM_INSTALL_DIR}/share/clang/run-clang-tidy.py
+RUN_CLANG_TIDY=${CLANG_TIDY_LLVM_INSTALL_DIR}/bin/run-clang-tidy.py
 
 # We deliberately skip apps/ and test/ for now, as the compile commands won't include
 # generated headers files from Generators.
