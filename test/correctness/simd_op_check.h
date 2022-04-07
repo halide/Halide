@@ -195,6 +195,7 @@ public:
         // Include a scalar version
         Halide::Func f_scalar("scalar_" + name);
         f_scalar(x, y) = e;
+        f_scalar.compute_root();
 
         if (has_inline_reduction.result) {
             // If there's an inline reduction, we want to vectorize it
