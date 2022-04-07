@@ -594,7 +594,6 @@ void State::apply_schedule(const FunctionDAG &dag, const MachineParams &params) 
         // Do all the reorders and pick which vars to
         // parallelize.
         vector<VarOrRVar> vars;
-        int64_t parallel_tasks = 1;
         vector<VarOrRVar> parallel_vars;
         bool any_parallel_vars = false, any_parallel_rvars = false;
         for (auto it = p.second->vars.rbegin(); it != p.second->vars.rend(); it++) {
@@ -606,7 +605,6 @@ void State::apply_schedule(const FunctionDAG &dag, const MachineParams &params) 
             }
             any_parallel_rvars |= it->var.is_rvar;
             any_parallel_vars |= !it->var.is_rvar;
-            parallel_tasks *= it->extent;
             parallel_vars.push_back(it->var);
         }
 
