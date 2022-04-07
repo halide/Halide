@@ -260,12 +260,6 @@ Matmul convert_to_matmul(const Store *op, const string &new_name, AMXOpType op_t
         return {};
     }
 
-#if LLVM_VERSION < 130
-    user_assert(op_type != AMXOpType::Bfloat16 &&
-                lhs_load->type.is_int() && rhs_cast->value.type().is_int())
-        << "LLVM 13 or above is required for unsigned or float AMX instructions";
-#endif
-
     // {rows, colbytes, var, index}
     auto lhs_var = Variable::make(Handle(), lhs_load->name);
     const auto &lhs_load_type = lhs_load->type;
