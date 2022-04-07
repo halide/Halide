@@ -11,6 +11,9 @@ Checks: >
     -bugprone-narrowing-conversions,
     -bugprone-reserved-identifier,
     -bugprone-signed-char-misuse,
+    # TODO: new stuff in clang-tidy-13 that we are disabling (for now)
+    -bugprone-easily-swappable-parameters,
+    -bugprone-implicit-widening-of-multiplication-result,
     misc-*,
     -misc-no-recursion,
     -misc-non-private-member-variables-in-classes,
