@@ -15,8 +15,8 @@ jobs:
             | gpg --dearmor - | sudo tee /etc/apt/trusted.gpg.d/kitware.gpg >/dev/null
           sudo apt-add-repository 'deb https://apt.kitware.com/ubuntu/ focal main'
           # from apt.llvm.org
-          sudo apt-add-repository "deb https://apt.llvm.org/$(lsb_release -sc)/ llvm-toolchain-$(lsb_release -sc)-13 main"
           wget -O - https://apt.llvm.org/llvm-snapshot.gpg.key | apt-key add -
+          sudo apt-add-repository "deb https://apt.llvm.org/$(lsb_release -sc)/ llvm-toolchain-$(lsb_release -sc)-13 main"
           sudo apt update
           sudo apt install cmake ninja-build doxygen ccache
           sudo apt install llvm-13-dev liblld-13-dev clang-13 libclang-13-dev libjpeg-dev libpng-dev
