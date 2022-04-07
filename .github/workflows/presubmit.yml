@@ -27,6 +27,8 @@ jobs:
       - uses: actions/checkout@v2
       - name: Install clang-tidy
         run: |
+          # from apt.llvm.org
+          sudo apt-add-repository 'deb http://apt.llvm.org/focal/ llvm-toolchain-focal-13 main'
           sudo apt-get update
           # Note that we need a minimum of llvm13/clang13 to build Halide, but (for now) we still use clang-tidy 12 for tidiness
           sudo apt-get install llvm-13 clang-13 liblld-13-dev libclang-13-dev clang-tidy-12 ninja-build
