@@ -313,10 +313,10 @@ void define_buffer(py::module &m) {
 
                 const int d = b.dimensions();
                 const int bytes = b.type().bytes();
-                std::vector<ssize_t> shape, strides;
+                std::vector<Py_ssize_t> shape, strides;
                 for (int i = 0; i < d; i++) {
-                    shape.push_back((ssize_t)b.raw_buffer()->dim[i].extent);
-                    strides.push_back((ssize_t)(b.raw_buffer()->dim[i].stride * bytes));
+                    shape.push_back((Py_ssize_t)b.raw_buffer()->dim[i].extent);
+                    strides.push_back((Py_ssize_t)(b.raw_buffer()->dim[i].stride * bytes));
                 }
 
                 return py::buffer_info(

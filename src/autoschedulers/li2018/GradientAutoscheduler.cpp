@@ -606,10 +606,6 @@ void apply_schedule(const MachineParams &params,
         for (const ReductionVariable &r : reduction_vars) {
             rvars.emplace_back(r.var);
         }
-        int rdomain_size = 1;
-        for (int b : rvar_bounds) {
-            rdomain_size *= b;
-        }
         // Define the thresholds for the pure domain.
         // For CPU we want at least params.parallelism number of elements
         // to launch threads. For GPU we want to launch at least 64 GPU blocks.
