@@ -31,7 +31,7 @@ int main(int argc, char **argv) {
     }
 
     if (target.has_feature(Target::OpenGLCompute)) {
-        printf("Skipping test for OpenGLCompute, as it does not support device crops, slices, or copies\n");
+        printf("[SKIP] OpenGLCompute does not support device crops, slices, or copies\n");
         return 0;
     }
 
