@@ -15,6 +15,7 @@ jobs:
             | gpg --dearmor - | sudo tee /etc/apt/trusted.gpg.d/kitware.gpg >/dev/null
           sudo apt-add-repository 'deb https://apt.kitware.com/ubuntu/ focal main'
           # from apt.llvm.org
+          sudo apt-key adv --keyserver keyserver.ubuntu.com --recv-keys 15CF4D18AF4F7421
           sudo apt-add-repository 'deb http://apt.llvm.org/focal/ llvm-toolchain-focal-13 main'
           sudo apt update
           sudo apt install cmake ninja-build doxygen ccache
