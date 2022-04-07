@@ -2347,7 +2347,7 @@ private:
 // a runtime error will occur.
 template<typename ImageType, Internal::CheckFunc check = Internal::CheckFail>
 void save_image(ImageType &im, const std::string &filename) {
-    auto im_d = im.template as<void, Internal::AnyDims>();
+    auto im_d = im.template as<const void, Internal::AnyDims>();
     (void)save<decltype(im_d), check>(im_d, filename);
 }
 
