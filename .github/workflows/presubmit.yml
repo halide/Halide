@@ -31,7 +31,7 @@ jobs:
           sudo apt-key adv --keyserver keyserver.ubuntu.com --recv-keys 15CF4D18AF4F7421
           sudo apt-add-repository 'deb http://apt.llvm.org/focal/ llvm-toolchain-focal-13 main'
           sudo apt-get update
-          sudo apt-get install llvm-13 clang-13 liblld-13-dev libclang-13-dev ninja-build
+          sudo apt-get install llvm-13 clang-13 liblld-13-dev libclang-13-dev clang-tidy-13 ninja-build
       - name: Run clang-tidy
         run: |
           export CC=clang-13
