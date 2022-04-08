@@ -1875,7 +1875,7 @@ void CodeGen_C::compile(const LoweredFunc &f, const std::map<std::string, std::s
 
             // Always declare it unused, since this could be a generated closure that doesn't
             // use _ucon at all, regardless of NoAsserts.
-            stream << get_indent() << "halide_maybe_unused(_ucon);";
+            stream << get_indent() << "halide_maybe_unused(_ucon);\n";
 
             // Emit the body
             print(f.body);
@@ -3261,6 +3261,7 @@ extern "C" {
 HALIDE_FUNCTION_ATTRS
 int test1(struct halide_buffer_t *_buf_buffer, float _alpha, int32_t _beta, void const *__user_context) {
  void * const _ucon = const_cast<void *>(__user_context);
+ halide_maybe_unused(_ucon);
  auto *_0 = _halide_buffer_get_host(_buf_buffer);
  auto _buf = _0;
  halide_maybe_unused(_buf);
