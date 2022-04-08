@@ -48,7 +48,7 @@ namespace Autoscheduler {
     Computes a structural hash for use in feature caching in a LoopNest.
 
   - LoopNest::collect_producers
-    Collects all producers for a LoopNest for use in calculating the structural hash in 
+    Collects all producers for a LoopNest for use in calculating the structural hash in
     LoopNest::compute_hash_of_producers_stored_at_root.
 
   - LoopNest::collect_stages

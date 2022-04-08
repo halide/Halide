@@ -76,7 +76,7 @@ void test_coeff_wise(const MachineParams &params, const Target &target) {
     }
 
     // Disabled for now: there is still work to do to populate the jacobian
-    //assert(with_extern.str() == without_extern.str());
+    // assert(with_extern.str() == without_extern.str());
 }
 
 extern "C" int matmul(

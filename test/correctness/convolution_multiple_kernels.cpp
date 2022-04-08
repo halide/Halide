@@ -5,7 +5,7 @@ using namespace Halide;
 
 int main(int argc, char **argv) {
 
-    //int W = 64*3, H = 64*3;
+    // int W = 64*3, H = 64*3;
     const int W = 64, H = 16;
 
     Buffer<uint16_t> in(W, H);
