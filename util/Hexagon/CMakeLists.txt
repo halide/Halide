@@ -1,27 +1,19 @@
-cmake_minimum_required(VERSION 3.16)
-project(hexagon-instrument
-    VERSION 0.1
-    LANGUAGES CXX)
+find_package(nlohmann_json)
+find_package(cxxopts)
 
-include(FetchContent)
+if (nlohmann_json_FOUND)
+if (cxxopts_FOUND)
+  add_executable(logcat2json logcat2json.cpp)
 
-add_executable(logcat2json logcat2json.cpp)
-set_target_properties(logcat2json PROPERTIES
-    CXX_STANDARD 17
+  target_compile_features(logcat2json PRIVATE cxx_std_17)
+
+  target_link_libraries(logcat2json PRIVATE 
+    nlohmann_json::nlohmann_json
+    cxxopts::cxxopts
   )
-FetchContent_Declare(
-  json
-  URL https://github.com/nlohmann/json/releases/download/v3.10.5/json.tar.xz
-)
-FetchContent_MakeAvailable(json)
+endif()
+endif()
 
-FetchContent_Declare(
-  cxxopts
-  URL https://github.com/jarro2783/cxxopts/archive/refs/tags/v3.0.0.tar.gz
-)
-FetchContent_MakeAvailable(cxxopts)
-
-target_link_libraries(logcat2json PRIVATE 
-  nlohmann_json::nlohmann_json
-  cxxopts
-  )
+add_library(instrumented_generator INTERFACE)
+target_link_libraries(instrumented_generator INTERFACE Halide::Halide)
+target_include_directories(instrumented_generator INTERFACE include)
