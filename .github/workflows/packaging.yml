@@ -7,16 +7,20 @@ jobs:
     env:
       CMAKE_CXX_COMPILER_LAUNCHER: ccache
       CMAKE_C_COMPILER_LAUNCHER: ccache
-      LLVM_ROOT: /usr/lib/llvm-12
+      LLVM_ROOT: /usr/lib/llvm-13
     steps:
       - name: Install dependencies
         run: |
           wget -O - https://apt.kitware.com/keys/kitware-archive-latest.asc 2>/dev/null \
             | gpg --dearmor - | sudo tee /etc/apt/trusted.gpg.d/kitware.gpg >/dev/null
           sudo apt-add-repository 'deb https://apt.kitware.com/ubuntu/ focal main'
+          # from apt.llvm.org
+          # wget -O - https://apt.llvm.org/llvm-snapshot.gpg.key | apt-key add -
+          sudo apt-key adv --keyserver keyserver.ubuntu.com --recv-keys 15CF4D18AF4F7421
+          sudo apt-add-repository "deb https://apt.llvm.org/$(lsb_release -sc)/ llvm-toolchain-$(lsb_release -sc)-13 main"
           sudo apt update
           sudo apt install cmake ninja-build doxygen ccache
-          sudo apt install llvm-12-dev liblld-12-dev clang-12 libclang-12-dev libjpeg-dev libpng-dev
+          sudo apt install llvm-13-dev liblld-13-dev clang-13 libclang-13-dev libjpeg-dev libpng-dev
           sudo apt install lintian dpkg-dev
       - name: Check out sources
         uses: actions/checkout@v2
@@ -37,6 +41,10 @@ jobs:
       # Specifically use the CMake version that comes with Ubuntu.
       - name: Install dependencies
         run: |
+          # from apt.llvm.org
+          # wget -O - https://apt.llvm.org/llvm-snapshot.gpg.key | apt-key add -
+          sudo apt-key adv --keyserver keyserver.ubuntu.com --recv-keys 15CF4D18AF4F7421
+          sudo apt-add-repository "deb https://apt.llvm.org/$(lsb_release -sc)/ llvm-toolchain-$(lsb_release -sc)-13 main"
           sudo apt update
           sudo apt install cmake ninja-build libc6-dev-arm64-cross gcc-aarch64-linux-gnu g++-aarch64-linux-gnu qemu-user
       - name: Check out sources

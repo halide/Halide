@@ -15,6 +15,10 @@
 #include "Module.h"
 #include "Simplify.h"
 
+#ifdef HALIDE_ALLOW_GENERATOR_BUILD_METHOD
+#pragma message "Support for Generator build() methods has been removed in Halide version 15."
+#endif
+
 namespace Halide {
 
 GeneratorContext::GeneratorContext(const Target &target,
@@ -717,23 +721,10 @@ std::vector<std::vector<Func>> GeneratorStub::generate(const GeneratorParamsMap 
 
     std::vector<std::vector<Func>> v;
     GeneratorParamInfo &pi = generator->param_info();
-#ifdef HALIDE_ALLOW_GENERATOR_BUILD_METHOD
-    if (!pi.outputs().empty()) {
-        for (auto *output : pi.outputs()) {
-            v.push_back(get_outputs(output->name()));
-        }
-    } else {
-        // Generators with build() method can't have Output<>, hence can't have array outputs
-        for (const auto &output : p.outputs()) {
-            v.push_back(std::vector<Func>{output});
-        }
-    }
-#else
     internal_assert(!pi.outputs().empty());
     for (auto *output : pi.outputs()) {
         v.push_back(get_outputs(output->name()));
     }
-#endif
     return v;
 }
 
@@ -1174,13 +1165,8 @@ void GeneratorParamBase::check_value_readable() const {
         name() == "machine_params") {
         return;
     }
-#ifdef HALIDE_ALLOW_GENERATOR_BUILD_METHOD
-    user_assert(generator && generator->phase >= GeneratorBase::ConfigureCalled)
-        << "The GeneratorParam \"" << name() << "\" cannot be read before build() or configure()/generate() is called.\n";
-#else
     user_assert(generator && generator->phase >= GeneratorBase::ConfigureCalled)
         << "The GeneratorParam \"" << name() << "\" cannot be read before configure()/generate() is called.\n";
-#endif
 }
 
 void GeneratorParamBase::check_value_writable() const {
@@ -1188,13 +1174,8 @@ void GeneratorParamBase::check_value_writable() const {
     if (!generator) {
         return;
     }
-#ifdef HALIDE_ALLOW_GENERATOR_BUILD_METHOD
-    user_assert(generator->phase < GeneratorBase::GenerateCalled)
-        << "The GeneratorParam \"" << name() << "\" cannot be written after build() or generate() is called.\n";
-#else
     user_assert(generator->phase < GeneratorBase::GenerateCalled)
         << "The GeneratorParam \"" << name() << "\" cannot be written after generate() is called.\n";
-#endif
 }
 
 void GeneratorParamBase::fail_wrong_type(const char *type) {
@@ -1530,26 +1511,6 @@ void GeneratorBase::pre_schedule() {
 void GeneratorBase::post_schedule() {
     track_parameter_values(true);
 }
-
-#ifdef HALIDE_ALLOW_GENERATOR_BUILD_METHOD
-void GeneratorBase::pre_build() {
-    advance_phase(GenerateCalled);
-    advance_phase(ScheduleCalled);
-    GeneratorParamInfo &pi = param_info();
-    user_assert(pi.outputs().empty()) << "May not use build() method with Output<>.";
-    if (!inputs_set) {
-        for (auto *input : pi.inputs()) {
-            input->init_internals();
-        }
-        inputs_set = true;
-    }
-    track_parameter_values(false);
-}
-
-void GeneratorBase::post_build() {
-    track_parameter_values(true);
-}
-#endif
 
 Pipeline GeneratorBase::get_pipeline() {
     check_min_phase(GenerateCalled);
@@ -1984,13 +1945,8 @@ void GIOBase::check_gio_access() const {
     if (!generator) {
         return;
     }
-#ifdef HALIDE_ALLOW_GENERATOR_BUILD_METHOD
-    user_assert(generator->phase > GeneratorBase::InputsSet)
-        << "The " << input_or_output() << " \"" << name() << "\" cannot be examined before build() or generate() is called.\n";
-#else
     user_assert(generator->phase > GeneratorBase::InputsSet)
         << "The " << input_or_output() << " \"" << name() << "\" cannot be examined before generate() is called.\n";
-#endif
 }
 
 // If our dims are defined, ensure it matches the one passed in, asserting if not.
@@ -2269,75 +2225,6 @@ void generator_test() {
         // tester.gp2.set(2);  // This will assert-fail.
         // tester.sp2.set(202);  // This will assert-fail.
     }
-
-#ifdef HALIDE_ALLOW_GENERATOR_BUILD_METHOD
-    // Verify that the Generator's internal phase actually prevents unsupported
-    // order of operations (with old-style Generator)
-    {
-        class Tester : public Generator<Tester> {
-        public:
-            GeneratorParam<int> gp0{"gp0", 0};
-            GeneratorParam<float> gp1{"gp1", 1.f};
-            GeneratorParam<uint64_t> gp2{"gp2", 2};
-            GeneratorParam<uint8_t> gp_uint8{"gp_uint8", 65};
-            GeneratorParam<int8_t> gp_int8{"gp_int8", 66};
-            GeneratorParam<char> gp_char{"gp_char", 97};
-            GeneratorParam<signed char> gp_schar{"gp_schar", 98};
-            GeneratorParam<unsigned char> gp_uchar{"gp_uchar", 99};
-            GeneratorParam<bool> gp_bool{"gp_bool", true};
-
-            Input<int> input{"input"};
-
-            Func build() {
-                internal_assert(gp0 == 1);
-                internal_assert(gp1 == 2.f);
-                internal_assert(gp2 == (uint64_t)2);  // unchanged
-                internal_assert(gp_uint8 == 67);
-                internal_assert(gp_int8 == 68);
-                internal_assert(gp_bool == false);
-                internal_assert(gp_char == 107);
-                internal_assert(gp_schar == 108);
-                internal_assert(gp_uchar == 109);
-                Var x;
-                Func output;
-                output(x) = input + gp0;
-                return output;
-            }
-        };
-
-        Tester tester;
-        tester.init_from_context(context);
-        internal_assert(tester.phase == GeneratorBase::Created);
-
-        // Verify that calling GeneratorParam::set() works.
-        tester.gp0.set(1);
-
-        // set_inputs_vector() can't be called on an old-style Generator;
-        // that's OK, since we can skip from Created -> GenerateCalled anyway
-        // tester.set_inputs_vector({{StubInput(42)}});
-        // internal_assert(tester.phase == GeneratorBase::InputsSet);
-
-        // tester.set_inputs_vector({{StubInput(43)}});  // This will assert-fail.
-
-        // Also ok to call in this phase.
-        tester.gp1.set(2.f);
-
-        // Verify that 8-bit non-boolean GP values are parsed as integers, not chars.
-        tester.gp_int8.set_from_string("68");
-        tester.gp_uint8.set_from_string("67");
-        tester.gp_char.set_from_string("107");
-        tester.gp_schar.set_from_string("108");
-        tester.gp_uchar.set_from_string("109");
-        tester.gp_bool.set_from_string("false");
-
-        tester.build_pipeline();
-        internal_assert(tester.phase == GeneratorBase::ScheduleCalled);
-
-        // tester.set_inputs_vector({{StubInput(45)}});  // This will assert-fail.
-        // tester.gp2.set(2);  // This will assert-fail.
-        // tester.sp2.set(202);  // This will assert-fail.
-    }
-#endif
 
     // Verify that set_inputs() works properly, even if the specific subtype of Generator is not known.
     {

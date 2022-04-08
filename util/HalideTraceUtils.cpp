@@ -40,7 +40,7 @@ bool Packet::read(void *d, size_t size, FILE *fdesc) {
             perror("Failed during read");
             exit(-1);
         }
-        return false;  //EOF
+        return false;  // EOF
     }
 
     return true;

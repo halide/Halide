@@ -280,10 +280,10 @@ DECLARE_NO_INITMOD(wasm_math)
 #endif  // WITH_WEBASSEMBLY
 
 #ifdef WITH_RISCV
-//DECLARE_LL_INITMOD(riscv)
+// DECLARE_LL_INITMOD(riscv)
 DECLARE_CPP_INITMOD(riscv_cpu_features)
 #else
-//DECLARE_NO_INITMOD(riscv)
+// DECLARE_NO_INITMOD(riscv)
 DECLARE_NO_INITMOD(riscv_cpu_features)
 #endif  // WITH_RISCV
 

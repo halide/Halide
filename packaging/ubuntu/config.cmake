@@ -62,8 +62,8 @@ set(CPACK_DEBIAN_HALIDE_DOCUMENTATION_PACKAGE_ARCHITECTURE all)
 
 # Package dependencies.
 # TODO: figure out how to get LLVM major version piped in here.
-set(CPACK_DEBIAN_HALIDE_RUNTIME_PACKAGE_DEPENDS "llvm-12 (>= 12.0.0)")
-set(CPACK_DEBIAN_HALIDE_DEVELOPMENT_PACKAGE_DEPENDS "llvm-12-dev (>= 12.0.0), liblld-12-dev (>= 12.0.0)")
+set(CPACK_DEBIAN_HALIDE_RUNTIME_PACKAGE_DEPENDS "llvm-13 (>= 13.0.0)")
+set(CPACK_DEBIAN_HALIDE_DEVELOPMENT_PACKAGE_DEPENDS "llvm-13-dev (>= 13.0.0), liblld-13-dev (>= 13.0.0)")
 set(CPACK_DEBIAN_HALIDE_DOCUMENTATION_PACKAGE_DEPENDS "")
 
 # Sets up package dependencies based on CPack component dependencies

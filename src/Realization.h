@@ -49,7 +49,10 @@ public:
 
     /** Construct a Realization that refers to the buffers in an
      * existing vector of Buffer<> */
-    explicit Realization(std::vector<Buffer<void>> &e);
+    // @{
+    explicit Realization(const std::vector<Buffer<void>> &e);
+    explicit Realization(std::vector<Buffer<void>> &&e);
+    // @}
 
     /** Call device_sync() for all Buffers in the Realization.
      * If one of the calls returns an error, subsequent Buffers won't have

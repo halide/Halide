@@ -729,7 +729,7 @@ Realization Pipeline::realize(JITUserContext *context,
             bufs.emplace_back(t, nullptr, sizes);
         }
     }
-    Realization r(bufs);
+    Realization r(std::move(bufs));
     // Do an output bounds query if we can. Otherwise just assume the
     // output size is good.
     if (!target.has_feature(Target::NoBoundsQuery)) {
@@ -1308,7 +1308,7 @@ void Pipeline::infer_input_bounds(JITUserContext *context,
     for (Type t : contents->outputs[0].output_types()) {
         bufs.emplace_back(t, sizes);
     }
-    Realization r(bufs);
+    Realization r(std::move(bufs));
     infer_input_bounds(context, r, target, param_map);
 }
 

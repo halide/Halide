@@ -2,7 +2,7 @@
 
 namespace {
 
-class SimpleStub : public Halide::Generator<SimpleStub> {
+class Simple : public Halide::Generator<Simple> {
 public:
     GeneratorParam<int> offset{"offset", 0};
     GeneratorParam<LoopLevel> compute_level{"compute_level", LoopLevel::root()};
@@ -27,4 +27,4 @@ private:
 
 }  // namespace
 
-HALIDE_REGISTER_GENERATOR(SimpleStub, simplestub)
+HALIDE_REGISTER_GENERATOR(Simple, simple)
