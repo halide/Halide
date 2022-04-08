@@ -1066,7 +1066,7 @@ $(BUILD_DIR)/initmod.%_32_debug.ll: $(SRC_DIR)/runtime/%.cpp $(BUILD_DIR)/clang_
 	@mkdir -p $(@D)
 	$(CLANG) $(CXX_WARNING_FLAGS) -g -DDEBUG_RUNTIME -O3 $(RUNTIME_CXX_FLAGS) -fpic -m32 -target $(RUNTIME_TRIPLE_32) -DCOMPILING_HALIDE_RUNTIME -DBITS_32 -emit-llvm -S $(SRC_DIR)/runtime/$*.cpp -o $@ -MMD -MP -MF $(BUILD_DIR)/initmod.$*_32_debug.d
 
-ifneq (,$(findstring $(LLVM_VERSION_TIMES_10), 120 130))
+ifneq (,$(findstring $(LLVM_VERSION_TIMES_10), 130))
 # For LLVM14+, we must add elementtype() annotations to some of our LLVM IR;
 # earlier versions either don't understand that keyword at all, or don't support
 # the uses we have for it. Rather than forking these sources, for now we'll just
@@ -2185,7 +2185,7 @@ $(BUILD_DIR)/clang_ok:
 	@exit 1
 endif
 
-ifneq (,$(findstring $(LLVM_VERSION_TIMES_10), 120 130 140, 150))
+ifneq (,$(findstring $(LLVM_VERSION_TIMES_10), 130 140, 150))
 LLVM_OK=yes
 endif
 

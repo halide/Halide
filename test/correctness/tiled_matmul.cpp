@@ -231,35 +231,32 @@ int main(int argc, char **argv) {
         printf("Success!\n");
     }
 
-    // llvm >= 13.0 is required for unsigned and float AMX instructions
-    if (Halide::Internal::get_llvm_version() >= 130) {
-        printf("Running AMX matmul (signed/unsigned)\n");
-        if (!matmul_su()) {
-            return -1;
-        } else {
-            printf("Success!\n");
-        }
+    printf("Running AMX matmul (signed/unsigned)\n");
+    if (!matmul_su()) {
+        return -1;
+    } else {
+        printf("Success!\n");
+    }
 
-        printf("Running AMX matmul (unsigned/signed)\n");
-        if (!matmul_us()) {
-            return -1;
-        } else {
-            printf("Success!\n");
-        }
+    printf("Running AMX matmul (unsigned/signed)\n");
+    if (!matmul_us()) {
+        return -1;
+    } else {
+        printf("Success!\n");
+    }
 
-        printf("Running AMX matmul (unsigned/unsigned)\n");
-        if (!matmul_uu()) {
-            return -1;
-        } else {
-            printf("Success!\n");
-        }
+    printf("Running AMX matmul (unsigned/unsigned)\n");
+    if (!matmul_uu()) {
+        return -1;
+    } else {
+        printf("Success!\n");
+    }
 
-        printf("Running AMX matmul (bf16)\n");
-        if (!matmul_bf16()) {
-            return -1;
-        } else {
-            printf("Success!\n");
-        }
+    printf("Running AMX matmul (bf16)\n");
+    if (!matmul_bf16()) {
+        return -1;
+    } else {
+        printf("Success!\n");
     }
     return 0;
 }
