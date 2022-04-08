@@ -50,16 +50,16 @@ int main(int argc, char **argv) {
     // Inspect the results for correctness
     for (int i = 0; i < 100; i++) {
         std::list<int> *list = result(i);
-        //printf("Factors of %d: ", i);
+        // printf("Factors of %d: ", i);
         for (std::list<int>::iterator iter = list->begin(); iter != list->end(); iter++) {
             int factor = *iter;
             if (i % factor) {
                 printf("Error: %d is not a factor of %d\n", factor, i);
                 return -1;
             }
-            //printf("%d ", factor);
+            // printf("%d ", factor);
         }
-        //printf("\n");
+        // printf("\n");
         delete list;
     }
 

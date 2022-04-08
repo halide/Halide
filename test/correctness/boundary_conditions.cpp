@@ -31,7 +31,7 @@ void schedule_test(Func f, int vector_width, const Target &t) {
         f.gpu_tile(x, y, xo, yo, xi, yi, 2, 2);
     } else if (t.has_feature(Target::HVX)) {
         // TODO: Non-native vector widths hang the compiler here.
-        //f.hexagon();
+        // f.hexagon();
     }
 }
 

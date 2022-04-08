@@ -286,7 +286,7 @@ void do_reloc(char *addr, uint32_t mask, uintptr_t val, bool is_signed, bool ver
             // Pull out the subinstructions. They're the low 13
             // bits of each half-word.
             uint32_t hi = (inst >> 16) & ((1 << 13) - 1);
-            //uint32_t lo = inst & ((1 << 13) - 1);
+            // uint32_t lo = inst & ((1 << 13) - 1);
 
             // We only understand the ones where hi starts with 010
             internal_assert((hi >> 10) == 2);

@@ -105,7 +105,7 @@ public:
     }
 
     /** Construct a scalar parameter of type T with an initial value of 'val'
-    * and a given min and max. */
+     * and a given min and max. */
     Param(not_void_T val, const Expr &min, const Expr &max)
         : param(type_of<T>(), false, 0, Internal::make_entity_name(this, "Halide:.*:Param<.*>", 'p')) {
         static_assert(has_static_type, "Cannot use this ctor without an explicit type.");
