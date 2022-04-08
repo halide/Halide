@@ -31,8 +31,8 @@ void define_module(py::module &m) {
             .def("buffers", &Module::buffers)
             .def("submodules", &Module::submodules)
 
-            .def("append", (void (Module::*)(const Buffer<> &)) & Module::append, py::arg("buffer"))
-            .def("append", (void (Module::*)(const Module &)) & Module::append, py::arg("module"))
+            .def("append", (void(Module::*)(const Buffer<> &)) & Module::append, py::arg("buffer"))
+            .def("append", (void(Module::*)(const Module &)) & Module::append, py::arg("module"))
 
             .def("compile", &Module::compile, py::arg("outputs"))
 

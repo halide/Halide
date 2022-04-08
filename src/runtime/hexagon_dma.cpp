@@ -163,7 +163,7 @@ void desc_pool_free(void *user_context) {
 
 // User ptovided Image format to DMA format conversion.
 inline t_eDmaFmt halide_hexagon_get_dma_format(void *user_context, const halide_hexagon_image_fmt_t format) {
-    //A giant switch case to match image formats to dma formats
+    // A giant switch case to match image formats to dma formats
     switch (format) {
     case halide_hexagon_fmt_NV12:
         return eDmaFmt_NV12;
@@ -486,7 +486,7 @@ WEAK int halide_hexagon_dma_unprepare(void *user_context, struct halide_buffer_t
     debug(user_context)
         << "Hexagon: halide_hexagon_dma_unprepare (user_context: " << user_context
         << ", buf: " << *buf << ")\n";
-    //TODO Now that FinishFrame is called by Hexagon DMA Pool Module, need to check if this function is redundant
+    // TODO Now that FinishFrame is called by Hexagon DMA Pool Module, need to check if this function is redundant
     return halide_error_code_success;
 }
 

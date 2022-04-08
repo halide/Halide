@@ -186,19 +186,19 @@ void define_func(py::module &m) {
 
             .def("compile_to", &Func::compile_to, py::arg("outputs"), py::arg("arguments"), py::arg("fn_name"), py::arg("target") = get_target_from_environment())
 
-            .def("compile_to_bitcode", (void (Func::*)(const std::string &, const std::vector<Argument> &, const std::string &, const Target &target)) & Func::compile_to_bitcode, py::arg("filename"), py::arg("arguments"), py::arg("fn_name"), py::arg("target") = get_target_from_environment())
-            .def("compile_to_bitcode", (void (Func::*)(const std::string &, const std::vector<Argument> &, const Target &target)) & Func::compile_to_bitcode, py::arg("filename"), py::arg("arguments"), py::arg("target") = get_target_from_environment())
+            .def("compile_to_bitcode", (void(Func::*)(const std::string &, const std::vector<Argument> &, const std::string &, const Target &target)) & Func::compile_to_bitcode, py::arg("filename"), py::arg("arguments"), py::arg("fn_name"), py::arg("target") = get_target_from_environment())
+            .def("compile_to_bitcode", (void(Func::*)(const std::string &, const std::vector<Argument> &, const Target &target)) & Func::compile_to_bitcode, py::arg("filename"), py::arg("arguments"), py::arg("target") = get_target_from_environment())
 
-            .def("compile_to_llvm_assembly", (void (Func::*)(const std::string &, const std::vector<Argument> &, const std::string &, const Target &target)) & Func::compile_to_llvm_assembly, py::arg("filename"), py::arg("arguments"), py::arg("fn_name"), py::arg("target") = get_target_from_environment())
-            .def("compile_to_llvm_assembly", (void (Func::*)(const std::string &, const std::vector<Argument> &, const Target &target)) & Func::compile_to_llvm_assembly, py::arg("filename"), py::arg("arguments"), py::arg("target") = get_target_from_environment())
+            .def("compile_to_llvm_assembly", (void(Func::*)(const std::string &, const std::vector<Argument> &, const std::string &, const Target &target)) & Func::compile_to_llvm_assembly, py::arg("filename"), py::arg("arguments"), py::arg("fn_name"), py::arg("target") = get_target_from_environment())
+            .def("compile_to_llvm_assembly", (void(Func::*)(const std::string &, const std::vector<Argument> &, const Target &target)) & Func::compile_to_llvm_assembly, py::arg("filename"), py::arg("arguments"), py::arg("target") = get_target_from_environment())
 
-            .def("compile_to_object", (void (Func::*)(const std::string &, const std::vector<Argument> &, const std::string &, const Target &target)) & Func::compile_to_object, py::arg("filename"), py::arg("arguments"), py::arg("fn_name"), py::arg("target") = get_target_from_environment())
-            .def("compile_to_object", (void (Func::*)(const std::string &, const std::vector<Argument> &, const Target &target)) & Func::compile_to_object, py::arg("filename"), py::arg("arguments"), py::arg("target") = get_target_from_environment())
+            .def("compile_to_object", (void(Func::*)(const std::string &, const std::vector<Argument> &, const std::string &, const Target &target)) & Func::compile_to_object, py::arg("filename"), py::arg("arguments"), py::arg("fn_name"), py::arg("target") = get_target_from_environment())
+            .def("compile_to_object", (void(Func::*)(const std::string &, const std::vector<Argument> &, const Target &target)) & Func::compile_to_object, py::arg("filename"), py::arg("arguments"), py::arg("target") = get_target_from_environment())
 
             .def("compile_to_header", &Func::compile_to_header, py::arg("filename"), py::arg("arguments"), py::arg("fn_name") = "", py::arg("target") = get_target_from_environment())
 
-            .def("compile_to_assembly", (void (Func::*)(const std::string &, const std::vector<Argument> &, const std::string &, const Target &target)) & Func::compile_to_assembly, py::arg("filename"), py::arg("arguments"), py::arg("fn_name"), py::arg("target") = get_target_from_environment())
-            .def("compile_to_assembly", (void (Func::*)(const std::string &, const std::vector<Argument> &, const Target &target)) & Func::compile_to_assembly, py::arg("filename"), py::arg("arguments"), py::arg("target") = get_target_from_environment())
+            .def("compile_to_assembly", (void(Func::*)(const std::string &, const std::vector<Argument> &, const std::string &, const Target &target)) & Func::compile_to_assembly, py::arg("filename"), py::arg("arguments"), py::arg("fn_name"), py::arg("target") = get_target_from_environment())
+            .def("compile_to_assembly", (void(Func::*)(const std::string &, const std::vector<Argument> &, const Target &target)) & Func::compile_to_assembly, py::arg("filename"), py::arg("arguments"), py::arg("target") = get_target_from_environment())
 
             .def("compile_to_c", &Func::compile_to_c, py::arg("filename"), py::arg("arguments"), py::arg("fn_name") = "", py::arg("target") = get_target_from_environment())
 
@@ -242,13 +242,13 @@ void define_func(py::module &m) {
             .def("is_extern", &Func::is_extern)
             .def("extern_function_name", &Func::extern_function_name)
 
-            .def("define_extern", (void (Func::*)(const std::string &, const std::vector<ExternFuncArgument> &, const std::vector<Type> &, const std::vector<Var> &, NameMangling, DeviceAPI)) & Func::define_extern, py::arg("function_name"), py::arg("params"), py::arg("types"), py::arg("arguments"), py::arg("mangling") = NameMangling::Default, py::arg("device_api") = DeviceAPI::Host)
+            .def("define_extern", (void(Func::*)(const std::string &, const std::vector<ExternFuncArgument> &, const std::vector<Type> &, const std::vector<Var> &, NameMangling, DeviceAPI)) & Func::define_extern, py::arg("function_name"), py::arg("params"), py::arg("types"), py::arg("arguments"), py::arg("mangling") = NameMangling::Default, py::arg("device_api") = DeviceAPI::Host)
 
-            .def("define_extern", (void (Func::*)(const std::string &, const std::vector<ExternFuncArgument> &, Type, int, NameMangling, DeviceAPI)) & Func::define_extern, py::arg("function_name"), py::arg("params"), py::arg("type"), py::arg("dimensionality"), py::arg("mangling") = NameMangling::Default, py::arg("device_api") = DeviceAPI::Host)
+            .def("define_extern", (void(Func::*)(const std::string &, const std::vector<ExternFuncArgument> &, Type, int, NameMangling, DeviceAPI)) & Func::define_extern, py::arg("function_name"), py::arg("params"), py::arg("type"), py::arg("dimensionality"), py::arg("mangling") = NameMangling::Default, py::arg("device_api") = DeviceAPI::Host)
 
-            .def("define_extern", (void (Func::*)(const std::string &, const std::vector<ExternFuncArgument> &, const std::vector<Type> &, int, NameMangling, DeviceAPI)) & Func::define_extern, py::arg("function_name"), py::arg("params"), py::arg("types"), py::arg("dimensionality"), py::arg("mangling") = NameMangling::Default, py::arg("device_api") = DeviceAPI::Host)
+            .def("define_extern", (void(Func::*)(const std::string &, const std::vector<ExternFuncArgument> &, const std::vector<Type> &, int, NameMangling, DeviceAPI)) & Func::define_extern, py::arg("function_name"), py::arg("params"), py::arg("types"), py::arg("dimensionality"), py::arg("mangling") = NameMangling::Default, py::arg("device_api") = DeviceAPI::Host)
 
-            .def("define_extern", (void (Func::*)(const std::string &, const std::vector<ExternFuncArgument> &, Type, const std::vector<Var> &, NameMangling, DeviceAPI)) & Func::define_extern, py::arg("function_name"), py::arg("params"), py::arg("type"), py::arg("arguments"), py::arg("mangling") = NameMangling::Default, py::arg("device_api") = DeviceAPI::Host)
+            .def("define_extern", (void(Func::*)(const std::string &, const std::vector<ExternFuncArgument> &, Type, const std::vector<Var> &, NameMangling, DeviceAPI)) & Func::define_extern, py::arg("function_name"), py::arg("params"), py::arg("type"), py::arg("arguments"), py::arg("mangling") = NameMangling::Default, py::arg("device_api") = DeviceAPI::Host)
 
             .def("output_buffer", &Func::output_buffer)
             .def("output_buffers", &Func::output_buffers)
@@ -350,7 +350,7 @@ void define_func(py::module &m) {
     define_set<Var, FuncRef>(func_class);
     define_set<Var, Expr>(func_class);
     define_set<Var, Tuple>(func_class);
-    //define_set<Var, std::vector<Var>>(func_class);
+    // define_set<Var, std::vector<Var>>(func_class);
 
     // LHS(Expr, ...Expr) can only be LHS of an update definition.
     define_set<Expr, FuncRef>(func_class);
