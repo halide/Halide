@@ -77,7 +77,7 @@ vector<vector<int64_t>> generate_tilings(const vector<int64_t> &s, int d, int fa
                         continue;
                     }
                     // Stop when we hit inner sizes that would do too much recompute
-                    if (inner > 1 && inner * outer * 7 > s[d] * 8) {
+                    if (inner > 1 && (int64_t)inner * outer * 7 > s[d] * 8) {
                         break;
                     }
                     max_inner = inner;
@@ -97,7 +97,7 @@ vector<vector<int64_t>> generate_tilings(const vector<int64_t> &s, int d, int fa
                         break;
                     }
                     // Or when the wasted compute gets too bad.
-                    if (inner * outer * 7 > s[d] * 8) {
+                    if ((int64_t)inner * outer * 7 > s[d] * 8) {
                         break;
                     }
                     t.back() = outer;
@@ -108,8 +108,8 @@ vector<vector<int64_t>> generate_tilings(const vector<int64_t> &s, int d, int fa
                 // goes 1 2 4 8 16 ...  but 3 is an important inner
                 // tiling factor for matrix multiply/gemm-type loops
                 // which try to use 12 vector registers.
-                int inner3 = 3;
-                int outer3 = (s[d] + inner3 - 1) / inner3;
+                const int64_t inner3 = 3;
+                const int64_t outer3 = (s[d] + inner3 - 1) / inner3;
                 if (factor == 2 && inner3 < s[d] && outer3 < s[d] && outer3 > 1) {
                     if (inner3 * outer3 * 7 <= s[d] * 8) {
                         t.back() = outer3;
@@ -255,9 +255,9 @@ void LoopNest::compute_features(const FunctionDAG &dag,
                 // If we haven't picked out parallel tiling yet,
                 // assume that we'll target 8*cores when we do,
                 // which is a common rule of thumb.
-                if (!parallel && parallel_tasks > params.parallelism * 8) {
+                if (!parallel && parallel_tasks > (int64_t)params.parallelism * 8) {
                     // We would split this loop
-                    parallel_tasks = params.parallelism * 8;
+                    parallel_tasks = (int64_t)params.parallelism * 8;
                 }
             }
         } else if (i != 1) {

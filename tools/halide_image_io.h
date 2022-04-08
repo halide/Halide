@@ -956,7 +956,7 @@ bool load_pnm(const std::string &filename, int channels, ImageType *im) {
                              Internal::read_big_endian_row<uint8_t, ImageType> :
                              Internal::read_big_endian_row<uint16_t, ImageType>;
 
-    std::vector<uint8_t> row(width * channels * (bit_depth / 8));
+    std::vector<uint8_t> row((size_t)width * (size_t)channels * (size_t)(bit_depth / 8));
     const int ymin = im->dim(1).min();
     const int ymax = im->dim(1).max();
     for (int y = ymin; y <= ymax; ++y) {
@@ -995,7 +995,7 @@ bool save_pnm(ImageType &im, const int channels, const std::string &filename) {
                                Internal::write_big_endian_row<uint8_t, ImageType> :
                                Internal::write_big_endian_row<uint16_t, ImageType>;
 
-    std::vector<uint8_t> row(width * channels * (bit_depth / 8));
+    std::vector<uint8_t> row((size_t)width * (size_t)channels * (size_t)(bit_depth / 8));
     const int ymin = im.dim(1).min();
     const int ymax = im.dim(1).max();
     for (int y = ymin; y <= ymax; ++y) {
@@ -1076,7 +1076,7 @@ bool load_jpg(const std::string &filename, ImageType *im) {
 
     auto copy_to_image = Internal::read_big_endian_row<uint8_t, ImageType>;
 
-    std::vector<uint8_t> row(width * channels);
+    std::vector<uint8_t> row((size_t)width * (size_t)channels);
     const int ymin = im->dim(1).min();
     const int ymax = im->dim(1).max();
     for (int y = ymin; y <= ymax; ++y) {
@@ -1135,7 +1135,7 @@ bool save_jpg(ImageType &im, const std::string &filename) {
 
     auto copy_from_image = Internal::write_big_endian_row<uint8_t, ImageType>;
 
-    std::vector<uint8_t> row(width * channels);
+    std::vector<uint8_t> row((size_t)width * (size_t)channels);
     const int ymin = im.dim(1).min();
     const int ymax = im.dim(1).max();
     for (int y = ymin; y <= ymax; ++y) {

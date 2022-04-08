@@ -723,7 +723,7 @@ static d3d12_frame *acquire_frame(d3d12_device *device) {
         (*frame.cmd_list)->Reset((*cmd_allocator_main), nullptr);
 
         d3d12_binder *binder = frame.desc_binder;
-        UINT descriptorSize = binder->descriptorSize;
+        size_t descriptorSize = binder->descriptorSize;
         D3D12_CPU_DESCRIPTOR_HANDLE baseCPU = binder->baseCPU;
         binder->CPU[UAV].ptr = (baseCPU.ptr += descriptorSize * 0);
         binder->CPU[CBV].ptr = (baseCPU.ptr += descriptorSize * ResourceBindingLimits[UAV]);
@@ -1748,12 +1748,12 @@ static d3d12_binder *new_descriptor_binder(d3d12_device *device) {
         return nullptr;
     }
 
-    UINT descriptorSize = (*device)->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+    size_t descriptorSize = (*device)->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
     TRACEPRINT("descriptor handle increment size: " << descriptorSize << "\n");
 
     d3d12_binder *binder = malloct<d3d12_binder>();
     binder->descriptorHeap = descriptorHeap;
-    binder->descriptorSize = descriptorSize;
+    binder->descriptorSize = (UINT)descriptorSize;
 
     D3D12_CPU_DESCRIPTOR_HANDLE baseCPU = binder->baseCPU = descriptorHeap->GetCPUDescriptorHandleForHeapStart();
     TRACEPRINT("descriptor heap base for CPU: " << baseCPU.ptr << " (" << (void *)baseCPU.ptr << ")\n");
@@ -1768,7 +1768,7 @@ static d3d12_binder *new_descriptor_binder(d3d12_device *device) {
     binder->GPU[SRV].ptr = (baseGPU.ptr += descriptorSize * ResourceBindingLimits[CBV]);
 
     // initialize everything with null descriptors...
-    for (uint32_t i = 0; i < ResourceBindingLimits[UAV]; ++i) {
+    for (size_t i = 0; i < ResourceBindingLimits[UAV]; ++i) {
         D3D12_UNORDERED_ACCESS_VIEW_DESC NullDescUAV = {};
         {
             NullDescUAV.Format = DXGI_FORMAT_R8G8B8A8_UNORM;  // don't care, but can't be unknown...
@@ -1783,7 +1783,7 @@ static d3d12_binder *new_descriptor_binder(d3d12_device *device) {
         hCPU.ptr += i * descriptorSize;
         (*device)->CreateUnorderedAccessView(nullptr, nullptr, &NullDescUAV, hCPU);
     }
-    for (uint32_t i = 0; i < ResourceBindingLimits[CBV]; ++i) {
+    for (size_t i = 0; i < ResourceBindingLimits[CBV]; ++i) {
         D3D12_CONSTANT_BUFFER_VIEW_DESC NullDescCBV = {};
         {
             NullDescCBV.BufferLocation = 0;
@@ -1793,7 +1793,7 @@ static d3d12_binder *new_descriptor_binder(d3d12_device *device) {
         hCPU.ptr += i * descriptorSize;
         (*device)->CreateConstantBufferView(&NullDescCBV, hCPU);
     }
-    for (uint32_t i = 0; i < ResourceBindingLimits[SRV]; ++i) {
+    for (size_t i = 0; i < ResourceBindingLimits[SRV]; ++i) {
         D3D12_SHADER_RESOURCE_VIEW_DESC NullDescSRV = {};
         {
             NullDescSRV.Format = DXGI_FORMAT_R8G8B8A8_UNORM;  // don't care, but can't be unknown...
@@ -1837,7 +1837,7 @@ static void dump_shader(const char *source, ID3DBlob *compiler_msgs = nullptr) {
         message = (const char *)compiler_msgs->GetBufferPointer();
     }
 
-    BasicPrinter<64 * 1024>(user_context)
+    BasicPrinter<(size_t)(64 * 1024)>(user_context)
         << "D3DCompile(): " << message << "\n"
         << ">>> HLSL shader source dump <<<\n"
         << source << "\n";
@@ -2476,7 +2476,7 @@ static int d3d12_create_context(void *user_context) {
         // sufficient to get started as suballocations will grow them as needed
         halide_abort_if_false(user_context, (upload == 0));
         halide_abort_if_false(user_context, (readback == 0));
-        size_t heap_size = 4 * 1024 * 1024;
+        const size_t heap_size = (size_t)(4 * 1024 * 1024);
         upload = new_upload_buffer(device, heap_size);
         readback = new_readback_buffer(device, heap_size);
     }
@@ -2568,7 +2568,7 @@ static void d3d12_debug_dump(error &err) {
 
     // NOTE(marcos): this printer will leak, but that's fine since debug dump
     // is a panic mechanism that precedes an operational "halt":
-    void *dump_buffer = d3d12_malloc(64 * 1024);
+    void *dump_buffer = d3d12_malloc((size_t)(64 * 1024));
     if (!dump_buffer) {
         err << "Unable to allocate memory for the debug dump.\n";
         return;

@@ -2133,7 +2133,7 @@ Value *CodeGen_LLVM::interleave_vectors(const std::vector<Value *> &vecs) {
     } else if (vecs.size() == 2) {
         Value *a = vecs[0];
         Value *b = vecs[1];
-        vector<int> indices(vec_elements * 2);
+        vector<int> indices((size_t)vec_elements * 2);
         for (int i = 0; i < vec_elements * 2; i++) {
             indices[i] = i % 2 == 0 ? i / 2 : i / 2 + vec_elements;
         }

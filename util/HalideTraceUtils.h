@@ -73,7 +73,7 @@ struct Packet : public halide_trace_packet_t {
 
     template<typename T>
     T get_value_as(int idx) const {
-        const uint8_t *val = (const uint8_t *)(value()) + idx * type.bytes();
+        const uint8_t *val = (const uint8_t *)(value()) + (ptrdiff_t)idx * type.bytes();
         // 'val' may not be aligned: memcpy it to an aligned local
         // so that value_as<>() won't complain under sanitizers.
         halide_scalar_value_t aligned_value;

@@ -19,8 +19,8 @@ extern "C" int mul_by_two(
     // Actual computation: return 2 times x as an example. The first dimension is
     // the innermost, so iterate over it last to avoid inefficient memory access
     // patterns.
-    for (int j = 0; j < input->dim[1].extent; ++j) {
-        for (int i = 0; i < input->dim[0].extent; ++i) {
+    for (ptrdiff_t j = 0; j < (ptrdiff_t)input->dim[1].extent; ++j) {
+        for (ptrdiff_t i = 0; i < (ptrdiff_t)input->dim[0].extent; ++i) {
             float *out = (float *)output->host + i * output->dim[0].stride +
                          j * output->dim[1].stride;
             float *in = (float *)input->host + i * input->dim[0].stride +

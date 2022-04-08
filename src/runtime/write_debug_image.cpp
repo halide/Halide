@@ -304,7 +304,7 @@ WEAK extern "C" int32_t halide_debug_to_file(void *user_context, const char *fil
         }
 
         int extents[] = {shape[0].extent, shape[1].extent, shape[2].extent, shape[3].extent};
-        if (!f.write(&extents, padded_dimensions * 4)) {
+        if (!f.write(&extents, (size_t)padded_dimensions * 4)) {
             return -8;
         }
 
@@ -336,10 +336,10 @@ WEAK extern "C" int32_t halide_debug_to_file(void *user_context, const char *fil
     }
 
     // Reorder the data according to the strides.
-    const int TEMP_SIZE = 4 * 1024;
+    const size_t TEMP_SIZE = (size_t)(4 * 1024);
     uint8_t temp[TEMP_SIZE];
-    int max_elts = TEMP_SIZE / bytes_per_element;
-    int counter = 0;
+    const size_t max_elts = TEMP_SIZE / bytes_per_element;
+    size_t counter = 0;
 
     for (int32_t dim3 = shape[3].min; dim3 < shape[3].extent + shape[3].min; ++dim3) {
         for (int32_t dim2 = shape[2].min; dim2 < shape[2].extent + shape[2].min; ++dim2) {

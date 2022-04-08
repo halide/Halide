@@ -138,7 +138,7 @@ T value_as(const halide_type_t &type, const halide_scalar_value_t &value) {
 
 template<typename T>
 T get_value_as(const halide_trace_packet_t &p, int idx) {
-    const uint8_t *val = (const uint8_t *)(p.value()) + idx * p.type.bytes();
+    const uint8_t *val = (const uint8_t *)(p.value()) + (ptrdiff_t)idx * p.type.bytes();
     // 'val' may not be aligned: memcpy it to an aligned local
     // so that value_as<>() won't complain under sanitizers.
     halide_scalar_value_t aligned_value;
@@ -981,7 +981,7 @@ public:
     void operator=(const Surface &) = delete;
 
     size_t frame_elems() const {
-        return frame_size.x * frame_size.y;
+        return (size_t)frame_size.x * (size_t)frame_size.y;
     }
 
     const uint32_t *frame_data() const {
@@ -1008,7 +1008,8 @@ public:
             }
             chr -= 32;
 
-            const uint8_t *font_ptr = inconsolata_raw + chr * (inconsolata_char_width * inconsolata_char_height);
+            const size_t inconsolata_char_size = (size_t)inconsolata_char_width * (size_t)inconsolata_char_height;
+            const uint8_t *font_ptr = inconsolata_raw + (ptrdiff_t)chr * inconsolata_char_size;
             const int h_scale_numerator = std::ceil(std::min(1.f, h_scale) * 256);
             for (int fy = 0; fy < inconsolata_char_height; fy++) {
                 for (int fx = 0; fx < inconsolata_char_width; fx++) {
@@ -1317,10 +1318,10 @@ int run(bool ignore_trace_tags, FlagProcessor flag_processor) {
             if (p.event == halide_trace_store) {
                 // Stores take time proportional to the number of
                 // items stored times the cost of the func.
-                halide_clock += fi.config.store_cost * p.type.lanes;
+                halide_clock += (size_t)fi.config.store_cost * p.type.lanes;
                 fi.stats.observe_store(p);
             } else {
-                halide_clock += fi.config.load_cost * p.type.lanes;
+                halide_clock += (size_t)fi.config.load_cost * p.type.lanes;
                 fi.stats.observe_load(p);
             }
 

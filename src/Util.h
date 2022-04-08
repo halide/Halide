@@ -445,7 +445,7 @@ void set_compiler_stack_size(size_t);
 
 /** The default amount of stack used for lowering and codegen. 32 MB
  * ought to be enough for anyone. */
-constexpr size_t default_compiler_stack_size = 32 * 1024 * 1024;
+constexpr size_t default_compiler_stack_size = (size_t)(32 * 1024 * 1024);
 
 /** Return how much stack size the compiler should use for calls that
  * go through run_with_large_stack below. Currently that's lowering

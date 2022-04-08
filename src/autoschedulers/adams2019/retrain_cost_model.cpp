@@ -162,7 +162,7 @@ string leaf(const string &path) {
 // Load all the samples, reading filenames from stdin
 map<int, PipelineSample> load_samples(const Flags &flags) {
     map<int, PipelineSample> result;
-    vector<float> scratch(10 * 1024 * 1024);
+    vector<float> scratch((size_t)(10 * 1024 * 1024));
 
     int best = -1;
     float best_runtime = 1e20f;
@@ -225,8 +225,8 @@ map<int, PipelineSample> load_samples(const Flags &flags) {
             ps.pipeline_features = Buffer<float>(head1_w, head1_h, num_stages);
             ps.fastest_runtime = 1e30f;
             for (size_t i = 0; i < num_stages; i++) {
-                for (int x = 0; x < head1_w; x++) {
-                    for (int y = 0; y < head1_h; y++) {
+                for (size_t x = 0; x < (size_t)head1_w; x++) {
+                    for (size_t y = 0; y < (size_t)head1_h; y++) {
                         float f = scratch[i * features_per_stage + (x + 1) * 7 + y + head2_w];
                         if (f < 0 || std::isnan(f)) {
                             std::cout << "Negative or NaN pipeline feature: " << x << " " << y << " " << i << " " << f << "\n";

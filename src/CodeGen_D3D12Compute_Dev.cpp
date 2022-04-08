@@ -413,7 +413,7 @@ struct StoragePackUnpack {
     using CodeGen = CodeGen_D3D12Compute_Dev::CodeGen_D3D12Compute_C;
 
     // Shader Model 5.1: threadgroup shared memory is limited 32KB
-    static const size_t ThreadGroupSharedStorageLimit = 32 * 1024;
+    static const size_t ThreadGroupSharedStorageLimit = (size_t)(32 * 1024);
 
     void pack_storage(const Allocate *op, size_t elements, size_t size_in_bytes) {
         // we could try to compact things for smaller types:

@@ -31,6 +31,6 @@ WEAK int64_t halide_current_time_ns(void *user_context) {
 }
 
 WEAK void halide_sleep_ms(void *user_context, int ms) {
-    zx_nanosleep(zx_deadline_after(ms * 1000));
+    zx_nanosleep(zx_deadline_after((zx_duration_t)(ms)*1000));
 }
 }

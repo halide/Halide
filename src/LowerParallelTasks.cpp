@@ -212,7 +212,7 @@ struct LowerParallelTasks : public IRMutator {
 
         int num_tasks = (int)(tasks.size());
         std::vector<Expr> tasks_array_args;
-        tasks_array_args.reserve(num_tasks * 9);
+        tasks_array_args.reserve((size_t)num_tasks * 9);
 
         std::string closure_name = unique_name("parallel_closure");
         Expr closure_struct_allocation = closure.pack_into_struct();
@@ -316,9 +316,9 @@ struct LowerParallelTasks : public IRMutator {
                     std::move(closure_struct_arg)};
                 result = Call::make(Int(32), "halide_do_par_for", args, Call::Extern);
             } else {
-                const int semaphores_size = (int)t.semaphores.size();
+                const size_t semaphores_size = t.semaphores.size();
                 std::vector<Expr> semaphore_args(semaphores_size * 2);
-                for (int i = 0; i < semaphores_size; i++) {
+                for (size_t i = 0; i < semaphores_size; i++) {
                     semaphore_args[i * 2] = t.semaphores[i].semaphore;
                     semaphore_args[i * 2 + 1] = t.semaphores[i].count;
                 }

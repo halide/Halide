@@ -1333,7 +1333,7 @@ JITExtern::JITExtern(const ExternCFunction &extern_c_function)
 MachineParams MachineParams::generic() {
     std::string params = Internal::get_env_variable("HL_MACHINE_PARAMS");
     if (params.empty()) {
-        return MachineParams(16, 16 * 1024 * 1024, 40);
+        return MachineParams(16, (uint64_t)(16 * 1024 * 1024), 40);
     } else {
         return MachineParams(params);
     }

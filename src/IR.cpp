@@ -786,8 +786,8 @@ Expr Shuffle::make_concat(const std::vector<Expr> &vectors) {
 }
 
 Expr Shuffle::make_broadcast(Expr vector, int factor) {
-    std::vector<int> indices(factor * vector.type().lanes());
-    for (int ix = 0; ix < factor; ix++) {
+    std::vector<int> indices((size_t)factor * vector.type().lanes());
+    for (size_t ix = 0; ix < (size_t)factor; ix++) {
         std::iota(indices.begin() + ix * vector.type().lanes(),
                   indices.begin() + (ix + 1) * vector.type().lanes(), 0);
     }

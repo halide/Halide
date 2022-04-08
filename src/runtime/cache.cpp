@@ -164,7 +164,7 @@ WEAK bool CacheEntry::init(const uint8_t *cache_key, size_t cache_key_size,
     }
 
     // Copy over the tuple buffers and the shapes of the allocated regions
-    for (uint32_t i = 0; i < tuple_count; i++) {
+    for (size_t i = 0; i < (size_t)tuple_count; i++) {
         buf[i] = *tuple_buffers[i];
         buf[i].dim = computed_bounds + (i + 1) * dimensions;
         for (int j = 0; j < dimensions; j++) {

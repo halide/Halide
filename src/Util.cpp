@@ -751,7 +751,7 @@ void run_with_large_stack(const std::function<void()> &action) {
     // as opposed to having them cause silent corruption. We pick an
     // amount of memory that should be comfortably larger than most
     // stack frames - 64k.
-    const size_t guard_band = 64 * 1024;
+    const size_t guard_band = (size_t)(64 * 1024);
 
     void *stack = mmap(nullptr, stack_size.size + guard_band, PROT_READ | PROT_WRITE, MAP_ANONYMOUS | MAP_PRIVATE, -1, 0);
     internal_assert(stack) << "mmap failed with error " << strerror(errno);

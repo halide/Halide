@@ -450,7 +450,7 @@ void State::generate_children(const FunctionDAG &dag,
                 // Filter out the less useful options
                 bool ok =
                     ((o.entire || min_total >= params.parallelism) &&
-                     (max_total <= params.parallelism * 16));
+                     (max_total <= (int64_t)params.parallelism * 16));
 
                 if (!ok) {
                     continue;
@@ -498,7 +498,7 @@ void State::generate_children(const FunctionDAG &dag,
                                     tiling[i - 1] = 1;
                                 }
                                 while (tiling[i - 1] > 1 &&
-                                       total * tiling[i - 1] > params.parallelism * 8) {
+                                       total * tiling[i - 1] > (int64_t)params.parallelism * 8) {
                                     tiling[i - 1] /= 2;
                                 }
                                 total *= tiling[i - 1];

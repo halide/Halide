@@ -647,11 +647,11 @@ struct halide_trace_packet_t {
     /** Get the func name, assuming this packet is laid out in memory
      * as it was written. It comes after the value. */
     HALIDE_ALWAYS_INLINE const char *func() const {
-        return (const char *)value() + type.lanes * type.bytes();
+        return (const char *)value() + (ptrdiff_t)(type.lanes) * type.bytes();
     }
 
     HALIDE_ALWAYS_INLINE char *func() {
-        return (char *)value() + type.lanes * type.bytes();
+        return (char *)value() + (ptrdiff_t)(type.lanes) * type.bytes();
     }
 
     /** Get the trace_tag (if any), assuming this packet is laid out in memory

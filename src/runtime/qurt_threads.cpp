@@ -31,7 +31,7 @@ int halide_host_cpu_count() {
     return 4;
 }
 
-#define STACK_SIZE (256 * 1024)
+constexpr int STACK_SIZE = (256 * 1024);
 
 WEAK uint16_t halide_qurt_default_thread_priority = 100;
 
