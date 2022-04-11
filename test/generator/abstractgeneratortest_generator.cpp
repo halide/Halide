@@ -124,10 +124,6 @@ public:
         _halide_user_assert(false) << "OOPS";
     }
 
-    // void bind_input(const std::string &name, const std::vector<Buffer<void>> &v) override {
-    //     _halide_user_assert(false) << "OOPS";
-    // }
-
     void bind_input(const std::string &name, const std::vector<Func> &v) override {
         _halide_user_assert(false) << "OOPS";
     }
