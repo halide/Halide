@@ -22,6 +22,7 @@ set(RUNTIME_CPP
     fake_get_symbol
     fake_thread_pool
     float16_t
+    force_include_types
     fuchsia_clock
     fuchsia_host_cpu_count
     fuchsia_yield
@@ -37,7 +38,6 @@ set(RUNTIME_CPP
     linux_host_cpu_count
     linux_yield
     matlab
-    metadata
     metal
     metal_objc_arm
     metal_objc_x86
