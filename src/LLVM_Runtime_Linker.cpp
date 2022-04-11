@@ -91,6 +91,7 @@ DECLARE_CPP_INITMOD(errors)
 DECLARE_CPP_INITMOD(fake_get_symbol)
 DECLARE_CPP_INITMOD(fake_thread_pool)
 DECLARE_CPP_INITMOD(float16_t)
+DECLARE_CPP_INITMOD(force_include_types)
 DECLARE_CPP_INITMOD(fuchsia_clock)
 DECLARE_CPP_INITMOD(fuchsia_host_cpu_count)
 DECLARE_CPP_INITMOD(fuchsia_yield)
@@ -102,7 +103,6 @@ DECLARE_CPP_INITMOD(linux_clock)
 DECLARE_CPP_INITMOD(linux_host_cpu_count)
 DECLARE_CPP_INITMOD(linux_yield)
 DECLARE_CPP_INITMOD(matlab)
-DECLARE_CPP_INITMOD(metadata)
 DECLARE_CPP_INITMOD(module_aot_ref_count)
 DECLARE_CPP_INITMOD(module_jit_ref_count)
 DECLARE_CPP_INITMOD(msan)
@@ -783,7 +783,7 @@ std::unique_ptr<llvm::Module> link_with_wasm_jit_runtime(llvm::LLVMContext *c, c
     modules.push_back(get_initmod_to_string(c, bits_64, debug));
     modules.push_back(get_initmod_alignment_32(c, bits_64, debug));
     modules.push_back(get_initmod_device_interface(c, bits_64, debug));
-    modules.push_back(get_initmod_metadata(c, bits_64, debug));
+    modules.push_back(get_initmod_force_include_types(c, bits_64, debug));
     modules.push_back(get_initmod_float16_t(c, bits_64, debug));
     modules.push_back(get_initmod_errors(c, bits_64, debug));
     modules.push_back(get_initmod_msan_stubs(c, bits_64, debug));
@@ -1014,7 +1014,6 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
 
             modules.push_back(get_initmod_allocation_cache(c, bits_64, debug));
             modules.push_back(get_initmod_device_interface(c, bits_64, debug));
-            modules.push_back(get_initmod_metadata(c, bits_64, debug));
             modules.push_back(get_initmod_float16_t(c, bits_64, debug));
             modules.push_back(get_initmod_errors(c, bits_64, debug));
 
@@ -1219,6 +1218,8 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
         t.os == Target::NoOS) {
         modules.push_back(get_initmod_runtime_api(c, bits_64, debug));
     }
+
+    modules.push_back(get_initmod_force_include_types(c, bits_64, debug));
 
     link_modules(modules, t);
 

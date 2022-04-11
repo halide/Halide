@@ -18,6 +18,8 @@
 // Can be generated via the following:
 // cat src/runtime/runtime_internal.h src/runtime/HalideRuntime*.h | grep "^[^ ][^(]*halide_[^ ]*(" | grep -v '#define' | sed "s/[^(]*halide/halide/" | sed "s/(.*//" | sed "s/^h/    \(void *)\&h/" | sed "s/$/,/" | sort | uniq
 
+extern "C" void halide_unused_force_include_types();
+
 extern "C" __attribute__((used)) void *halide_runtime_api_functions[] = {
     (void *)&halide_buffer_copy,
     (void *)&halide_buffer_to_string,
@@ -210,4 +212,5 @@ extern "C" __attribute__((used)) void *halide_runtime_api_functions[] = {
     (void *)&halide_d3d12compute_finalize_kernels,
     (void *)&halide_d3d12compute_release_context,
     (void *)&halide_d3d12compute_run,
+    (void *)&halide_unused_force_include_types,
 };
