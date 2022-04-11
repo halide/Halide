@@ -36,7 +36,6 @@ set(RUNTIME_CPP
     linux_clock
     linux_host_cpu_count
     linux_yield
-    matlab
     metadata
     metal
     metal_objc_arm
