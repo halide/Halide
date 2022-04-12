@@ -459,13 +459,15 @@ target_compile_options(
         $<$<CXX_COMPILER_ID:Clang,AppleClang>:-Wno-missing-prototypes>
         $<$<CXX_COMPILER_ID:Clang,AppleClang>:-Wno-nonportable-system-include-path>
         $<$<CXX_COMPILER_ID:Clang,AppleClang>:-Wno-reserved-id-macro>
-        $<$<CXX_COMPILER_ID:Clang,AppleClang>:-Wno-return-std-move-in-c++11>
         $<$<CXX_COMPILER_ID:Clang,AppleClang>:-Wno-shadow-field-in-constructor>
         $<$<CXX_COMPILER_ID:Clang,AppleClang>:-Wno-shadow-field>
         $<$<CXX_COMPILER_ID:Clang,AppleClang>:-Wno-shorten-64-to-32>
         $<$<CXX_COMPILER_ID:Clang,AppleClang>:-Wno-undefined-func-template>
         $<$<CXX_COMPILER_ID:Clang,AppleClang>:-Wno-unused-member-function>
         $<$<CXX_COMPILER_ID:Clang,AppleClang>:-Wno-unused-template>
+
+        # This warning was removed in Clang 13
+        $<$<AND:$<CXX_COMPILER_ID:Clang,AppleClang>,$<VERSION_LESS:$<CXX_COMPILER_VERSION>,13.0>>:-Wno-return-std-move-in-c++11>
 
         $<$<CXX_COMPILER_ID:MSVC>:/W3>
         $<$<CXX_COMPILER_ID:MSVC>:/wd4018>  # 4018: disable "signed/unsigned mismatch"

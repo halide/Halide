@@ -191,11 +191,11 @@ template<typename T>
 inline T halide_cpp_min(const T &a, const T &b) {return (a < b) ? a : b;}
 
 template<typename T>
-inline void halide_unused(const T&) {}
+inline void halide_maybe_unused(const T&) {}
 
 template<typename A, typename B>
 const B &return_second(const A &a, const B &b) {
-    halide_unused(a);
+    halide_maybe_unused(a);
     return b;
 }
 
@@ -1873,9 +1873,9 @@ void CodeGen_C::compile(const LoweredFunc &f, const std::map<std::string, std::s
                    << (have_user_context ? "const_cast<void *>(__user_context)" : "nullptr")
                    << ";\n";
 
-            if (target.has_feature(Target::NoAsserts)) {
-                stream << get_indent() << "halide_unused(_ucon);";
-            }
+            // Always declare it unused, since this could be a generated closure that doesn't
+            // use _ucon at all, regardless of NoAsserts.
+            stream << get_indent() << "halide_maybe_unused(_ucon);\n";
 
             // Emit the body
             print(f.body);
@@ -2750,7 +2750,7 @@ void CodeGen_C::visit(const Let *op) {
         std::string name = print_name(op->name);
         stream << get_indent() << "auto "
                << name << " = " << id_value << ";\n";
-        stream << get_indent() << "halide_unused(" << name << ");\n";
+        stream << get_indent() << "halide_maybe_unused(" << name << ");\n";
     } else {
         Expr new_var = Variable::make(op->value.type(), id_value);
         body = substitute(op->name, new_var, body);
@@ -2845,7 +2845,7 @@ void CodeGen_C::visit(const LetStmt *op) {
         std::string name = print_name(op->name);
         stream << get_indent() << "auto "
                << name << " = " << id_value << ";\n";
-        stream << get_indent() << "halide_unused(" << name << ");\n";
+        stream << get_indent() << "halide_maybe_unused(" << name << ");\n";
     } else {
         Expr new_var = Variable::make(op->value.type(), id_value);
         body = substitute(op->name, new_var, body);
@@ -2862,7 +2862,7 @@ void CodeGen_C::create_assertion(const string &id_cond, const Expr &message) {
         << "Assertion result is not an int: " << message;
 
     if (target.has_feature(Target::NoAsserts)) {
-        stream << get_indent() << "halide_unused(" << id_cond << ");\n";
+        stream << get_indent() << "halide_maybe_unused(" << id_cond << ");\n";
         return;
     }
 
@@ -3152,7 +3152,7 @@ void CodeGen_C::visit(const Evaluate *op) {
         return;
     }
     string id = print_expr(op->value);
-    stream << get_indent() << "halide_unused(" << id << ");\n";
+    stream << get_indent() << "halide_maybe_unused(" << id << ");\n";
 }
 
 void CodeGen_C::visit(const Shuffle *op) {
@@ -3261,9 +3261,10 @@ extern "C" {
 HALIDE_FUNCTION_ATTRS
 int test1(struct halide_buffer_t *_buf_buffer, float _alpha, int32_t _beta, void const *__user_context) {
  void * const _ucon = const_cast<void *>(__user_context);
+ halide_maybe_unused(_ucon);
  auto *_0 = _halide_buffer_get_host(_buf_buffer);
  auto _buf = _0;
- halide_unused(_buf);
+ halide_maybe_unused(_buf);
  {
   int64_t _1 = 43;
   int64_t _2 = _1 * _beta;

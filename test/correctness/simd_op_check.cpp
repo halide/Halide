@@ -318,6 +318,9 @@ public:
             // And also for dot-products
             RDom r4(0, 4);
             check(check_pmaddwd, 2 * w, sum(i32(in_i16(x * 4 + r4)) * in_i16(x * 4 + r4 + 32)));
+
+            // Also generate for widening_mul
+            check(check_pmaddwd, 2 * w, i32(i16_1) * i32(i16_2));
         }
 
         // llvm doesn't distinguish between signed and unsigned multiplies

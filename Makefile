@@ -758,6 +758,7 @@ RUNTIME_CPP_COMPONENTS = \
   fake_get_symbol \
   fake_thread_pool \
   float16_t \
+  force_include_types \
   fuchsia_clock \
   fuchsia_host_cpu_count \
   fuchsia_yield \
@@ -773,7 +774,6 @@ RUNTIME_CPP_COMPONENTS = \
   linux_host_cpu_count \
   linux_yield \
   matlab \
-  metadata \
   metal \
   metal_objc_arm \
   metal_objc_x86 \
@@ -978,6 +978,8 @@ $(BIN_DIR)/build_halide_h: $(ROOT_DIR)/tools/build_halide_h.cpp
 -include $(OBJECTS:.o=.d)
 -include $(INITIAL_MODULES:.o=.d)
 
+.SECONDARY:
+
 # Compile generic 32- or 64-bit code
 # (The 'nacl' is a red herring. This is just a generic 32-bit little-endian target.)
 RUNTIME_TRIPLE_32 = "le32-unknown-nacl-unknown"
@@ -1135,8 +1137,6 @@ clean:
 	rm -rf $(SHARE_DIR)
 	rm -rf $(DISTRIB_DIR)
 	rm -rf $(ROOT_DIR)/apps/*/bin
-
-.SECONDARY:
 
 CORRECTNESS_TESTS = $(shell ls $(ROOT_DIR)/test/correctness/*.cpp) $(shell ls $(ROOT_DIR)/test/correctness/*.c)
 PERFORMANCE_TESTS = $(shell ls $(ROOT_DIR)/test/performance/*.cpp)

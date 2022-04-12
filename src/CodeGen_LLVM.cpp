@@ -490,12 +490,6 @@ void CodeGen_LLVM::init_codegen(const std::string &name, bool any_strict_float) 
 
     semaphore_t_type = get_llvm_struct_type_by_name(module.get(), "struct.halide_semaphore_t");
     internal_assert(semaphore_t_type) << "Did not find halide_semaphore_t in initial module";
-
-    semaphore_acquire_t_type = get_llvm_struct_type_by_name(module.get(), "struct.halide_semaphore_acquire_t");
-    internal_assert(semaphore_acquire_t_type) << "Did not find halide_semaphore_acquire_t in initial module";
-
-    parallel_task_t_type = get_llvm_struct_type_by_name(module.get(), "struct.halide_parallel_task_t");
-    internal_assert(parallel_task_t_type) << "Did not find halide_parallel_task_t in initial module";
 }
 
 std::unique_ptr<llvm::Module> CodeGen_LLVM::compile(const Module &input) {

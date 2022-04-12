@@ -788,7 +788,7 @@ void CodeGen_Metal_Dev::init_module() {
                << "#endif\n"
                << "}\n";  // close namespace
 
-    src_stream << "#define halide_unused(x) (void)(x)\n";
+    src_stream << "#define halide_maybe_unused(x) (void)(x)\n";
 
     src_stream << "\n";
 
