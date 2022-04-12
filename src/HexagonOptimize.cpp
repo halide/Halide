@@ -1254,9 +1254,9 @@ class VectorReducePatterns : public IRMutator {
                 // may not recognize.
                 if (const Shuffle *shuff = a.as<Shuffle>()) {
                     vector<int> a0_indices(out_lanes), a1_indices(out_lanes);
-                    for (size_t i = 0; i < (size_t)out_lanes; i++) {
-                        a0_indices[i] = shuff->indices[i * factor];
-                        a1_indices[i] = shuff->indices[(i + 1) * factor - 1];
+                    for (int i = 0; i < out_lanes; i++) {
+                        a0_indices[i] = shuff->indices[(intptr_t)i * factor];
+                        a1_indices[i] = shuff->indices[(intptr_t)(i + 1) * factor - 1];
                     }
                     a0 = Shuffle::make(shuff->vectors, a0_indices);
                     a1 = Shuffle::make(shuff->vectors, a1_indices);
