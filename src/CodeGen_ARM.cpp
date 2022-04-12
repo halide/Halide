@@ -1021,8 +1021,8 @@ void CodeGen_ARM::visit(const Store *op) {
                   << t.bits()
                   << ".p0";
             if (LLVM_VERSION < 150) {
-                  << (t.is_float() ? 'f' : 'i')
-                  << t.bits();
+                instr << (t.is_float() ? 'f' : 'i')
+                      << t.bits();
             }
             arg_types = vector<llvm::Type *>(num_vecs + 1, llvm_type_of(intrin_type));
             arg_types.back() = llvm_type_of(intrin_type.element_of())->getPointerTo();
