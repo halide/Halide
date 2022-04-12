@@ -110,6 +110,7 @@ Target::Processor get_amd_processor(unsigned family, unsigned model) {
         if (model <= 0x0f || model == 0x21) {
             return Target::Processor::ZnVer3;  // 00h-0Fh, 21h: Zen3
         }
+        break;
     default:
         break;  // Unknown AMD CPU.
     }
