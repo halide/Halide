@@ -441,22 +441,6 @@ public:
 
     Stage &hexagon(const VarOrRVar &x = Var::outermost());
 
-    HALIDE_ATTRIBUTE_DEPRECATED("Call prefetch() with the two-var form instead.")
-    Stage &prefetch(const Func &f, const VarOrRVar &var, int offset = 1,
-                    PrefetchBoundStrategy strategy = PrefetchBoundStrategy::GuardWithIf) {
-        return prefetch(f, var, var, offset, strategy);
-    }
-    HALIDE_ATTRIBUTE_DEPRECATED("Call prefetch() with the two-var form instead.")
-    Stage &prefetch(const Internal::Parameter &param, const VarOrRVar &var, int offset = 1,
-                    PrefetchBoundStrategy strategy = PrefetchBoundStrategy::GuardWithIf) {
-        return prefetch(param, var, var, offset, strategy);
-    }
-    template<typename T>
-    HALIDE_ATTRIBUTE_DEPRECATED("Call prefetch() with the two-var form instead.")
-    Stage &prefetch(const T &image, VarOrRVar var, int offset = 1,
-                    PrefetchBoundStrategy strategy = PrefetchBoundStrategy::GuardWithIf) {
-        return prefetch(image.parameter(), var, var, offset, strategy);
-    }
     Stage &prefetch(const Func &f, const VarOrRVar &at, const VarOrRVar &from, Expr offset = 1,
                     PrefetchBoundStrategy strategy = PrefetchBoundStrategy::GuardWithIf);
     Stage &prefetch(const Internal::Parameter &param, const VarOrRVar &at, const VarOrRVar &from, Expr offset = 1,
@@ -1941,55 +1925,7 @@ public:
     Func &hexagon(const VarOrRVar &x = Var::outermost());
 
     /** Prefetch data written to or read from a Func or an ImageParam by a
-     * subsequent loop iteration, at an optionally specified iteration offset.
-     * 'var' specifies at which loop level the prefetch calls should be inserted.
-     * The final argument specifies how prefetch of region outside bounds
-     * should be handled.
-     *
-     * For example, consider this pipeline:
-     \code
-     Func f, g;
-     Var x, y;
-     f(x, y) = x + y;
-     g(x, y) = 2 * f(x, y);
-     \endcode
-     *
-     * The following schedule:
-     \code
-     f.compute_root();
-     g.prefetch(f, x, 2, PrefetchBoundStrategy::NonFaulting);
-     \endcode
-     *
-     * will inject prefetch call at the innermost loop of 'g' and generate
-     * the following loop nest:
-     * for y = ...
-     *   for x = ...
-     *     f(x, y) = x + y
-     * for y = ..
-     *   for x = ...
-     *     prefetch(&f[x + 2, y], 1, 16);
-     *     g(x, y) = 2 * f(x, y)
-     */
-    // @{
-    HALIDE_ATTRIBUTE_DEPRECATED("Call prefetch() with the two-var form instead.")
-    Func &prefetch(const Func &f, const VarOrRVar &var, int offset = 1,
-                   PrefetchBoundStrategy strategy = PrefetchBoundStrategy::GuardWithIf) {
-        return prefetch(f, var, var, offset, strategy);
-    }
-    HALIDE_ATTRIBUTE_DEPRECATED("Call prefetch() with the two-var form instead.")
-    Func &prefetch(const Internal::Parameter &param, const VarOrRVar &var, int offset = 1,
-                   PrefetchBoundStrategy strategy = PrefetchBoundStrategy::GuardWithIf) {
-        return prefetch(param, var, var, offset, strategy);
-    }
-    template<typename T>
-    HALIDE_ATTRIBUTE_DEPRECATED("Call prefetch() with the two-var form instead.")
-    Func &prefetch(const T &image, VarOrRVar var, int offset = 1,
-                   PrefetchBoundStrategy strategy = PrefetchBoundStrategy::GuardWithIf) {
-        return prefetch<T>(image, var, var, offset, strategy);
-    }
-    // @}
-
-    /** prefetch() is a more fine-grained version of prefetch(), which allows
+     * subsequent loop iteration, at an optionally specified iteration offset. You may specify
      * specification of different vars for the location of the prefetch() instruction
      * vs. the location that is being prefetched:
      *
@@ -1999,6 +1935,9 @@ public:
      *
      * If 'at' and 'from' are distinct vars, then 'from' must be at a nesting level outside 'at.'
      * Note that the value for 'offset' applies only to 'from', not 'at'.
+     *
+     * The final argument specifies how prefetch of region outside bounds
+     * should be handled.
      *
      * For example, consider this pipeline:
      \code
