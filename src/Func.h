@@ -1037,29 +1037,6 @@ public:
      */
     void compile_jit(const Target &target = get_jit_target_from_environment());
 
-    /** Deprecated variants of the above that use a void pointer
-     * instead of a JITUserContext pointer. */
-    // @{
-    HALIDE_ATTRIBUTE_DEPRECATED("Custom handlers should by set by modifying the struct returned by jit_handlers()")
-    void set_error_handler(void (*handler)(void *, const char *));
-    HALIDE_ATTRIBUTE_DEPRECATED("Custom handlers should by set by modifying the struct returned by jit_handlers()")
-    void set_custom_allocator(void *(*malloc)(void *, size_t),
-                              void (*free)(void *, void *));
-    HALIDE_ATTRIBUTE_DEPRECATED("Custom handlers should by set by modifying the struct returned by jit_handlers()")
-    void set_custom_do_task(
-        int (*custom_do_task)(void *, int (*)(void *, int, uint8_t *),
-                              int, uint8_t *));
-    HALIDE_ATTRIBUTE_DEPRECATED("Custom handlers should by set by modifying the struct returned by jit_handlers()")
-    void set_custom_do_par_for(
-        int (*custom_do_par_for)(void *, int (*)(void *, int, uint8_t *), int,
-                                 int, uint8_t *));
-    HALIDE_ATTRIBUTE_DEPRECATED("Custom handlers should by set by modifying the struct returned by jit_handlers()")
-    void set_custom_trace(int (*trace_fn)(void *, const halide_trace_event_t *));
-
-    HALIDE_ATTRIBUTE_DEPRECATED("Custom handlers should by set by modifying the struct returned by jit_handlers()")
-    void set_custom_print(void (*handler)(void *, const char *));
-    // @}
-
     /** Get a struct containing the currently set custom functions
      * used by JIT. This can be mutated. Changes will take effect the
      * next time this Func is realized. */
