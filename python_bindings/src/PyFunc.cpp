@@ -306,9 +306,6 @@ void define_func(py::module &m) {
 
             .def("fold_storage", &Func::fold_storage, py::arg("dim"), py::arg("extent"), py::arg("fold_forward") = true)
 
-            .def("compute_with", (Func & (Func::*)(LoopLevel, const std::vector<std::pair<VarOrRVar, LoopAlignStrategy>> &)) & Func::compute_with, py::arg("loop_level"), py::arg("align"))
-            .def("compute_with", (Func & (Func::*)(LoopLevel, LoopAlignStrategy)) & Func::compute_with, py::arg("loop_level"), py::arg("align") = LoopAlignStrategy::Auto)
-
             .def("infer_arguments", &Func::infer_arguments)
 
             .def("__repr__", [](const Func &func) -> std::string {
@@ -358,8 +355,6 @@ void define_func(py::module &m) {
     define_set<Expr, Tuple>(func_class);
 
     add_schedule_methods(func_class);
-
-    py::implicitly_convertible<ImageParam, Func>();
 
     define_stage(m);
 }
