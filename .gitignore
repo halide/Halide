@@ -4,3 +4,5 @@
 /src/gens/iir_blur.registration.cpp
 /src/gens/libiir_blur.a
 /src/rs/iir_blur.rs
+/Cargo.lock
+/.idea
