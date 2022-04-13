@@ -1,22 +1,17 @@
 
+pub mod halide_build {
 
-
-pub mod Halide_Build{
-    use std::ffi::OsString;
     use std::path::PathBuf;
-    use std::io;
-    use std::io::prelude::*;
-    use std::ops::Add;
     use std::process::{Command, Output};
 
     pub struct Halide{
         pub halide_path: PathBuf,
         pub gen_path: PathBuf,
         pub rs_out_path: PathBuf,
-        pub generators: Vec<Halide_Gen>,
+        pub generators: Vec<HalideGen>,
     }
 
-    pub struct Halide_Gen{
+    pub struct HalideGen {
         pub halide_path: PathBuf,
         pub gen_name: String,
         pub gen_path: PathBuf,
@@ -25,7 +20,7 @@ pub mod Halide_Build{
     impl Halide{
 
     }
-    impl Halide_Gen {
+    impl HalideGen {
         pub fn compile_gen(&mut self) -> Output {
             let mut out = Command::new("g++");
 
@@ -59,7 +54,7 @@ pub mod Halide_Build{
 
             out.args(["-lHalide","-ldl","-lpthread","-lz"]);
 
-            out.output().expect("Building the gererator failed")
+            out.output().expect("Building the generator failed")
         }
     pub fn run_gen(&self) -> Output {
 
@@ -76,31 +71,31 @@ pub mod Halide_Build{
 
 #[cfg(test)]
 mod tests {
-    use std::path::{Path, PathBuf};
-    use crate::Halide_Build::*;
+    use std::path::PathBuf;
+    use crate::halide_build::*;
     use std::io;
     use std::io::prelude::*;
     #[test]
     fn it_works() {
-        let mut Hs= Halide{
+        let mut hs = Halide{
             halide_path: PathBuf::from("/home/rootbutcher2/CLionProjects/Halide-Rusts-tests/Halide"),
             gen_path: PathBuf::from("/home/rootbutcher2/CLionProjects/Halide_Build/Halide_gens"),
             rs_out_path: PathBuf::from("/home/rootbutcher2/CLionProjects/Halide_Build/rs_out"),
             generators: vec![]
         };
-        Hs.generators.push(Halide_Gen{
-            halide_path: Hs.halide_path,
+        hs.generators.push(HalideGen {
+            halide_path: hs.halide_path,
             gen_name: "iir_blur".to_string(),
-            gen_path: Hs.gen_path,
-            rs_out_path: Hs.rs_out_path
+            gen_path: hs.gen_path,
+            rs_out_path: hs.rs_out_path
         });
-        let out1 = Hs.generators[0].compile_gen();
+        let out1 = hs.generators[0].compile_gen();
         println!("status: {}", out1.status);
         io::stdout().write_all(&out1.stdout).unwrap();
         io::stderr().write_all(&out1.stderr).unwrap();
-        //assert!(output.status.success());
+        assert!(out1.status.success());
 
-        let out2 = Hs.generators[0].run_gen();
+        let out2 = hs.generators[0].run_gen();
         println!("status: {}", out2.status);
         io::stdout().write_all(&out2.stdout).unwrap();
         io::stderr().write_all(&out2.stderr).unwrap();
