@@ -57,15 +57,12 @@ pub mod halide_build {
 
             out.output().expect("Building the generator failed")
         }
-        pub fn run_gen(&self) -> Output {
+        pub fn run_gen(&mut self) -> Output {
             let mut out = Command::new(self.gen_path.to_str().unwrap());
             out.args(["-g", self.gen_name.as_str()]);
             out.args(["-f", self.gen_name.as_str()]);
-
-            out.args([
-                "-o",
-                "/home/rootbutcher2/CLionProjects/halide_build/Halide_gens",
-            ]);
+            self.gen_path.pop();
+            out.args(["-o", self.gen_path.to_str().unwrap()]);
             out.arg("target=host-no_runtime");
             out.output().expect("failed to run gen")
         }
