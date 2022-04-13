@@ -87,6 +87,7 @@ pub mod halide_build {
             let bindings = bindgen::Builder::default()
                 .header(self.gen_path.to_str().unwrap().to_string())
                 .allowlist_function(self.gen_name.as_str())
+                .blocklist_item("halide_buffer_t")
                 .generate().expect("unable to generate");
             bindings.write_to_file(self.rs_out_path.as_path())
         }
