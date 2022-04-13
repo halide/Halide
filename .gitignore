@@ -2,3 +2,6 @@
 /Cargo.lock
 /.idea
 /Halide_gens/iir_blur.gen
+/Halide_gens/iir_blur.h
+/Halide_gens/iir_blur.a
+/Halide_gens/iir_blur.registration.cpp
