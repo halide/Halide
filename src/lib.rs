@@ -1,6 +1,6 @@
 pub mod halide_build {
 
-    use std::path::{Path, PathBuf};
+    use std::path::PathBuf;
     use std::process::{Command, Output};
 
     pub struct Halide {
