@@ -17,6 +17,10 @@ HALIDE_NEVER_INLINE void add_schedule_methods(PythonClass &class_instance) {
              py::arg("stage"), py::arg("var"), py::arg("align"))
         .def("compute_with", (T & (T::*)(const Stage &, const VarOrRVar &, LoopAlignStrategy)) & T::compute_with,
              py::arg("stage"), py::arg("var"), py::arg("align") = LoopAlignStrategy::Auto)
+        .def("compute_with", (T & (T::*)(LoopLevel, const std::vector<std::pair<VarOrRVar, LoopAlignStrategy>> &)) & T::compute_with,
+             py::arg("loop_level"), py::arg("align"))
+        .def("compute_with", (T & (T::*)(LoopLevel, LoopAlignStrategy)) & T::compute_with,
+             py::arg("loop_level"), py::arg("align") = LoopAlignStrategy::Auto)
 
         .def("unroll", (T & (T::*)(const VarOrRVar &)) & T::unroll,
              py::arg("var"))
