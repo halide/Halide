@@ -3,7 +3,7 @@ import halide as hl
 x = hl.Var('x')
 y = hl.Var('y')
 
-@hl.generator("bitpy")
+@hl.generator(name = "bitpy")
 class BitGenerator:
     bit_input = hl.InputBuffer(hl.Bool(), 1)
     bit_constant = hl.InputScalar(hl.Bool())

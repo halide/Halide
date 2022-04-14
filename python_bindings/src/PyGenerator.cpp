@@ -52,8 +52,8 @@ public:
     explicit PyGeneratorBase(const GeneratorContext &context, const std::string name)
         : context_(context),
           name_(name),
-          class_(py::module_::import("halide").attr("_find_python_generator")(name)),  // could be None!
-          generator_(class_.is(py::none()) ? py::none() : class_(context_)) {          // could be None!
+          class_(py::module_::import("halide").attr("_find_python_generator_class")(name)),  // could be None!
+          generator_(class_.is(py::none()) ? py::none() : class_(context_)) {                // could be None!
     }
 
     bool is_valid() const {
@@ -170,7 +170,7 @@ void define_generator(py::module &m) {
 
     py::object scope = m.attr("__dict__");
 #if LOAD_PY_FROM_FILE
-    #pragma message "WARNING, compiling with LOAD_PY_FROM_FILE enabled"
+#pragma message "WARNING, compiling with LOAD_PY_FROM_FILE enabled"
     std::string src = Internal::get_env_variable("HL_DEV_PATH_TO_PYTHON_SRC");
     _halide_user_assert(!src.empty()) << "You must define HL_DEV_PATH_TO_PYTHON_SRC as the absolute path to builtin_helpers_src.py";
     Internal::debug(0) << "LOADING file " << src << " ... \n";

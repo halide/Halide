@@ -1,5 +1,6 @@
 from abc import ABC, abstractmethod
 from collections import OrderedDict
+from inspect import isclass, isfunction, getmodule
 from enum import Enum
 
 # 'print()' is consumed by `halide.print()` which is implicitly present;
@@ -821,20 +822,33 @@ class Generator(ABC):
 
 _python_generators:dict = {}
 
-def _get_python_generator_names():
+def _get_python_generator_names() -> list[str]:
     return _python_generators.keys()
 
-def _find_python_generator(name):
-    if not name in _python_generators:
-        return None
-    return _python_generators[name]["class"]
+def _fqname(o):
+    k = o
+    m = k.__module__
+    q = k.__qualname__
+    if m == '__main__' or k == 'builtins':
+        return q
+    return m + '.' + q
 
-def generator(name, other = []):
-    def real_decorator(cls):
+def _find_python_generator_class(name:str):
+    cls = _python_generators.get(name, None)
+    if not isclass(cls):
+        cls = None
+    return cls
+
+def generator(name = ""):
+    def generator_impl(cls):
+        nonlocal name
+        if not name:
+            name = _fqname(cls)
+        _check(isclass(cls), "@generator_fn can only be used on functions.")
         _check(not issubclass(cls, Generator), "Please use the @hl.generator decorator instead of inheriting from hl.Generator")
         new_cls = type(cls.__name__, (cls, Generator), {})
         new_cls._registered_name = name
-        _python_generators[name] = { "class": new_cls, "other": other }
+        _python_generators[name] = new_cls
         return new_cls
 
-    return real_decorator
+    return generator_impl

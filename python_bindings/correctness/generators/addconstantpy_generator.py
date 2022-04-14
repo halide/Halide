@@ -4,7 +4,7 @@ x = hl.Var('x')
 y = hl.Var('y')
 z = hl.Var('z')
 
-@hl.generator("addconstantpy")
+@hl.generator(name = "addconstantpy")
 class AddConstantGenerator:
     extra_int = hl.GeneratorParam(0)
 

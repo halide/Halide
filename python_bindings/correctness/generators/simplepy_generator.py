@@ -3,7 +3,7 @@ import halide as hl
 x = hl.Var('x')
 y = hl.Var('y')
 
-@hl.generator("simplepy")
+@hl.generator(name = "simplepy")
 class SimplePy:
     offset = hl.GeneratorParam(0)
     compute_level = hl.GeneratorParam(hl.LoopLevel.root())
