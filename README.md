@@ -31,7 +31,7 @@ If you've acquired a full source distribution and want to build Halide, see the
 
 ## Binary tarballs
 
-The latest version of Halide is **Halide 13.0.0**. We provide binary releases
+The latest version of Halide is **Halide 14.0.1**. We provide binary releases
 for many popular platforms and architectures, including 32/64-bit x86 Windows,
 64-bit macOS, and 32/64-bit x86/ARM Ubuntu Linux. See the releases tab on the
 right (or click [here](https://github.com/halide/Halide/releases)).
@@ -114,7 +114,7 @@ the repository (where this README is).
 
 At any point in time, building Halide requires either the latest stable version
 of LLVM, the previous stable version of LLVM, and trunk. At the time of writing,
-this means versions 13.0 and 12.0 are supported, but 11.0 is not. The commands
+this means versions 14.0 and 13.0 are supported, but 12.0 is not. The commands
 `llvm-config` and `clang` must be somewhere in the path.
 
 If your OS does not have packages for LLVM, you can find binaries for it at
@@ -125,7 +125,7 @@ works well on OS X and Ubuntu.)
 If you want to build it yourself, first check it out from GitHub:
 
 ```
-% git clone --depth 1 --branch llvmorg-13.0.0 https://github.com/llvm/llvm-project.git
+% git clone --depth 1 --branch llvmorg-14.0.1 https://github.com/llvm/llvm-project.git
 ```
 
 (If you want to build LLVM 12.x, use branch `release/12.x`; for current trunk,
@@ -286,7 +286,7 @@ Follow these steps if you want to build LLVM yourself. First, download LLVM's
 sources (these instructions use the latest 12.0 release)
 
 ```
-D:\> git clone --depth 1 --branch llvmorg-13.0.0 https://github.com/llvm/llvm-project.git
+D:\> git clone --depth 1 --branch llvmorg-14.0.1 https://github.com/llvm/llvm-project.git
 ```
 
 For a 64-bit build, run:
