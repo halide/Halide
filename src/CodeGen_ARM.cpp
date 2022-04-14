@@ -1000,9 +1000,10 @@ void CodeGen_ARM::visit(const Store *op) {
         std::ostringstream instr;
         vector<llvm::Type *> arg_types;
         if (target.bits == 32) {
+            const char *type_annotation = (LLVM_VERSION < 150) ? ".p0i8" : ".p0";
             instr << "llvm.arm.neon.vst"
                   << num_vecs
-                  << ".p0i8"
+                  << type_annotation
                   << ".v"
                   << intrin_type.lanes()
                   << (t.is_float() ? 'f' : 'i')
