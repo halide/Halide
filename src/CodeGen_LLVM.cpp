@@ -23,7 +23,6 @@
 #include "LLVM_Runtime_Linker.h"
 #include "Lerp.h"
 #include "LowerParallelTasks.h"
-#include "MatlabWrapper.h"
 #include "Pipeline.h"
 #include "Simplify.h"
 #include "Util.h"
@@ -490,12 +489,6 @@ void CodeGen_LLVM::init_codegen(const std::string &name, bool any_strict_float) 
 
     semaphore_t_type = get_llvm_struct_type_by_name(module.get(), "struct.halide_semaphore_t");
     internal_assert(semaphore_t_type) << "Did not find halide_semaphore_t in initial module";
-
-    semaphore_acquire_t_type = get_llvm_struct_type_by_name(module.get(), "struct.halide_semaphore_acquire_t");
-    internal_assert(semaphore_acquire_t_type) << "Did not find halide_semaphore_acquire_t in initial module";
-
-    parallel_task_t_type = get_llvm_struct_type_by_name(module.get(), "struct.halide_parallel_task_t");
-    internal_assert(parallel_task_t_type) << "Did not find halide_parallel_task_t in initial module";
 }
 
 std::unique_ptr<llvm::Module> CodeGen_LLVM::compile(const Module &input) {
@@ -548,14 +541,10 @@ std::unique_ptr<llvm::Module> CodeGen_LLVM::compile(const Module &input) {
         // If the Func is externally visible, also create the argv wrapper and metadata.
         // (useful for calling from JIT and other machine interfaces).
         if (f.linkage == LinkageType::ExternalPlusArgv || f.linkage == LinkageType::ExternalPlusMetadata) {
-            llvm::Function *wrapper = add_argv_wrapper(function, names.argv_name, false, buffer_args);
+            add_argv_wrapper(function, names.argv_name, false, buffer_args);
             if (f.linkage == LinkageType::ExternalPlusMetadata) {
-                llvm::Function *metadata_getter = embed_metadata_getter(names.metadata_name,
-                                                                        names.simple_name, f.args, input.get_metadata_name_map());
-
-                if (target.has_feature(Target::Matlab)) {
-                    define_matlab_wrapper(module.get(), wrapper, metadata_getter);
-                }
+                embed_metadata_getter(names.metadata_name,
+                                      names.simple_name, f.args, input.get_metadata_name_map());
             }
         }
     }

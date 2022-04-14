@@ -164,11 +164,6 @@ WEAK int halide_device_and_host_free(void *user_context, struct halide_buffer_t 
 
 struct halide_filter_metadata_t;
 
-struct mxArray;
-WEAK int halide_matlab_call_pipeline(void *user_context,
-                                     int (*pipeline)(void **args), const halide_filter_metadata_t *metadata,
-                                     int nlhs, mxArray **plhs, int nrhs, const mxArray **prhs);
-
 WEAK int halide_trace_helper(void *user_context,
                              const char *func,
                              void *value, int *coords,

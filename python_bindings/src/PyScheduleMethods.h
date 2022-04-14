@@ -17,6 +17,10 @@ HALIDE_NEVER_INLINE void add_schedule_methods(PythonClass &class_instance) {
              py::arg("stage"), py::arg("var"), py::arg("align"))
         .def("compute_with", (T & (T::*)(const Stage &, const VarOrRVar &, LoopAlignStrategy)) & T::compute_with,
              py::arg("stage"), py::arg("var"), py::arg("align") = LoopAlignStrategy::Auto)
+        .def("compute_with", (T & (T::*)(LoopLevel, const std::vector<std::pair<VarOrRVar, LoopAlignStrategy>> &)) & T::compute_with,
+             py::arg("loop_level"), py::arg("align"))
+        .def("compute_with", (T & (T::*)(LoopLevel, LoopAlignStrategy)) & T::compute_with,
+             py::arg("loop_level"), py::arg("align") = LoopAlignStrategy::Auto)
 
         .def("unroll", (T & (T::*)(const VarOrRVar &)) & T::unroll,
              py::arg("var"))
@@ -87,26 +91,6 @@ HALIDE_NEVER_INLINE void add_schedule_methods(PythonClass &class_instance) {
         .def("atomic", &T::atomic, py::arg("override_associativity_test") = false)
 
         .def("hexagon", &T::hexagon, py::arg("x") = Var::outermost())
-
-        .def(
-            "prefetch", [](T &t, const Func &f, const VarOrRVar &var, int offset, PrefetchBoundStrategy strategy) -> T & {
-                // HALIDE_ATTRIBUTE_DEPRECATED("Call prefetch() with the two-var form instead.")
-                PyErr_WarnEx(PyExc_DeprecationWarning,
-                             "Call prefetch() with the two-var form instead.",
-                             1);
-                return t.prefetch(f, var, var, offset, strategy);
-            },
-            py::arg("image"), py::arg("var"), py::arg("offset") = 1, py::arg("strategy") = PrefetchBoundStrategy::GuardWithIf)
-        .def(
-            "prefetch", [](T &t, const ImageParam &image, const VarOrRVar &var, int offset, PrefetchBoundStrategy strategy) -> T & {
-                // HALIDE_ATTRIBUTE_DEPRECATED("Call prefetch() with the two-var form instead.")
-                PyErr_WarnEx(PyExc_DeprecationWarning,
-                             "Call prefetch() with the two-var form instead.",
-                             1);
-                // Templated function; specializing only on ImageParam for now
-                return t.template prefetch<ImageParam>(image, var, var, offset, strategy);
-            },
-            py::arg("image"), py::arg("var"), py::arg("offset") = 1, py::arg("strategy") = PrefetchBoundStrategy::GuardWithIf)
 
         .def("prefetch", (T & (T::*)(const Func &, const VarOrRVar &, const VarOrRVar &, Expr, PrefetchBoundStrategy)) & T::prefetch, py::arg("func"), py::arg("at"), py::arg("from"), py::arg("offset") = 1, py::arg("strategy") = PrefetchBoundStrategy::GuardWithIf)
         .def(
