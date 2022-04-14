@@ -43,42 +43,6 @@ enum class OutputFileType {
     stmt_html,
 };
 
-class HALIDE_ATTRIBUTE_DEPRECATED("Use OutputFileType instead of Output") Output {
-public:
-    HALIDE_ATTRIBUTE_DEPRECATED("Use OutputFileType instead of Output")
-    static constexpr OutputFileType assembly = OutputFileType::assembly;
-    HALIDE_ATTRIBUTE_DEPRECATED("Use OutputFileType instead of Output")
-    static constexpr OutputFileType bitcode = OutputFileType::bitcode;
-    HALIDE_ATTRIBUTE_DEPRECATED("Use OutputFileType instead of Output")
-    static constexpr OutputFileType c_header = OutputFileType::c_header;
-    HALIDE_ATTRIBUTE_DEPRECATED("Use OutputFileType instead of Output")
-    static constexpr OutputFileType c_source = OutputFileType::c_source;
-    HALIDE_ATTRIBUTE_DEPRECATED("Use OutputFileType instead of Output")
-    static constexpr OutputFileType compiler_log = OutputFileType::compiler_log;
-    HALIDE_ATTRIBUTE_DEPRECATED("Use OutputFileType instead of Output")
-    static constexpr OutputFileType cpp_stub = OutputFileType::cpp_stub;
-    HALIDE_ATTRIBUTE_DEPRECATED("Use OutputFileType instead of Output")
-    static constexpr OutputFileType featurization = OutputFileType::featurization;
-    HALIDE_ATTRIBUTE_DEPRECATED("Use OutputFileType instead of Output")
-    static constexpr OutputFileType llvm_assembly = OutputFileType::llvm_assembly;
-    HALIDE_ATTRIBUTE_DEPRECATED("Use OutputFileType instead of Output")
-    static constexpr OutputFileType object = OutputFileType::object;
-    HALIDE_ATTRIBUTE_DEPRECATED("Use OutputFileType instead of Output")
-    static constexpr OutputFileType python_extension = OutputFileType::python_extension;
-    HALIDE_ATTRIBUTE_DEPRECATED("Use OutputFileType instead of Output")
-    static constexpr OutputFileType pytorch_wrapper = OutputFileType::pytorch_wrapper;
-    HALIDE_ATTRIBUTE_DEPRECATED("Use OutputFileType instead of Output")
-    static constexpr OutputFileType registration = OutputFileType::registration;
-    HALIDE_ATTRIBUTE_DEPRECATED("Use OutputFileType instead of Output")
-    static constexpr OutputFileType schedule = OutputFileType::schedule;
-    HALIDE_ATTRIBUTE_DEPRECATED("Use OutputFileType instead of Output")
-    static constexpr OutputFileType static_library = OutputFileType::static_library;
-    HALIDE_ATTRIBUTE_DEPRECATED("Use OutputFileType instead of Output")
-    static constexpr OutputFileType stmt = OutputFileType::stmt;
-    HALIDE_ATTRIBUTE_DEPRECATED("Use OutputFileType instead of Output")
-    static constexpr OutputFileType stmt_html = OutputFileType::stmt_html;
-};  // namespace Output
-
 /** Type of linkage a function in a lowered Halide module can have.
     Also controls whether auxiliary functions and metadata are generated. */
 enum class LinkageType {

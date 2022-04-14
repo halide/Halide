@@ -42,7 +42,7 @@ bool can_convert(const LoweredArgument *arg) {
     if (arg->type.is_handle()) {
         if (arg->name == "__user_context") {
             /* __user_context is a void* pointer to a user supplied memory region.
-           * We allow the Python callee to pass PyObject* pointers to that. */
+             * We allow the Python callee to pass PyObject* pointers to that. */
             return true;
         } else {
             return false;

@@ -426,4 +426,4 @@ struct THashMap : public HashMap {
 }  // namespace Runtime
 }  // namespace Halide
 
-#endif  //HALIDE_RUNTIME_HASHMAP_H
+#endif  // HALIDE_RUNTIME_HASHMAP_H

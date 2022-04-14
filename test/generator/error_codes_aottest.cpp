@@ -7,7 +7,7 @@
 
 void my_halide_error(void *user_context, const char *msg) {
     // Silently drop the error
-    //printf("%s\n", msg);
+    // printf("%s\n", msg);
 }
 
 void check(int result, int correct) {

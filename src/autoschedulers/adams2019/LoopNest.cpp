@@ -729,7 +729,6 @@ void LoopNest::compute_features(const FunctionDAG &dag,
                 int64_t footprint = e->producer->bytes_per_point;
                 int64_t compute_footprint = footprint;
                 int64_t store_footprint = footprint;
-                int64_t task_footprint = footprint;
                 int64_t line_footprint = 1;
                 int64_t compute_line_footprint = 1;
                 int64_t store_line_footprint = 1;
@@ -890,7 +889,6 @@ void LoopNest::compute_features(const FunctionDAG &dag,
                     footprint *= extent;
                     compute_footprint *= compute_extent;
                     store_footprint *= store_extent;
-                    task_footprint *= task_extent;
 
                     bool dense = ((e->producer->is_input && i == 0) ||
                                   (site.produce != nullptr && i == site.produce->vector_dim));
@@ -1295,13 +1293,11 @@ void LoopNest::compute_here(const FunctionDAG::Node *f, bool tileable, int v) {
         size_t loop_dim = f->stages[s].loop.size();
         node->size.resize(loop_dim);
 
-        int64_t total_extent = 1;
         int64_t vector_size = 1;
         for (size_t i = 0; i < loop_dim; i++) {
             const auto &l = bounds->loops(s, i);
             // Initialize the loop nest
             node->size[i] = l.extent();
-            total_extent *= node->size[i];
 
             // Use the first loop iteration to represent the inner
             // loop. We'll shift it to a later one once we decide

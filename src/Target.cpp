@@ -110,6 +110,7 @@ Target::Processor get_amd_processor(unsigned family, unsigned model) {
         if (model <= 0x0f || model == 0x21) {
             return Target::Processor::ZnVer3;  // 00h-0Fh, 21h: Zen3
         }
+        break;
     default:
         break;  // Unknown AMD CPU.
     }
@@ -326,7 +327,7 @@ Target::Feature calculate_host_cuda_capability(Target t) {
         return Target::CUDACapability70;
     } else if (ver < 80) {
         return Target::CUDACapability75;
-    } else if (ver < 86 || LLVM_VERSION < 130) {
+    } else if (ver < 86) {
         return Target::CUDACapability80;
     } else {
         return Target::CUDACapability86;
@@ -443,7 +444,6 @@ const std::map<std::string, Target::Feature> feature_name_map = {
     {"openglcompute", Target::OpenGLCompute},
     {"egl", Target::EGL},
     {"user_context", Target::UserContext},
-    {"matlab", Target::Matlab},
     {"profile", Target::Profile},
     {"no_runtime", Target::NoRuntime},
     {"metal", Target::Metal},

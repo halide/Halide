@@ -11,4 +11,4 @@
         }                                                             \
     } register_##NAME;
 
-#endif  //HALIDE_HALIDEPLUGIN_H
+#endif  // HALIDE_HALIDEPLUGIN_H
