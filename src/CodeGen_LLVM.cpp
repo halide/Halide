@@ -23,7 +23,6 @@
 #include "LLVM_Runtime_Linker.h"
 #include "Lerp.h"
 #include "LowerParallelTasks.h"
-#include "MatlabWrapper.h"
 #include "Pipeline.h"
 #include "Simplify.h"
 #include "Util.h"
@@ -542,14 +541,10 @@ std::unique_ptr<llvm::Module> CodeGen_LLVM::compile(const Module &input) {
         // If the Func is externally visible, also create the argv wrapper and metadata.
         // (useful for calling from JIT and other machine interfaces).
         if (f.linkage == LinkageType::ExternalPlusArgv || f.linkage == LinkageType::ExternalPlusMetadata) {
-            llvm::Function *wrapper = add_argv_wrapper(function, names.argv_name, false, buffer_args);
+            add_argv_wrapper(function, names.argv_name, false, buffer_args);
             if (f.linkage == LinkageType::ExternalPlusMetadata) {
-                llvm::Function *metadata_getter = embed_metadata_getter(names.metadata_name,
-                                                                        names.simple_name, f.args, input.get_metadata_name_map());
-
-                if (target.has_feature(Target::Matlab)) {
-                    define_matlab_wrapper(module.get(), wrapper, metadata_getter);
-                }
+                embed_metadata_getter(names.metadata_name,
+                                      names.simple_name, f.args, input.get_metadata_name_map());
             }
         }
     }

@@ -126,7 +126,6 @@ void define_enums(py::module &m) {
         .value("OpenGLCompute", Target::Feature::OpenGLCompute)
         .value("EGL", Target::Feature::EGL)
         .value("UserContext", Target::Feature::UserContext)
-        .value("Matlab", Target::Feature::Matlab)
         .value("Profile", Target::Feature::Profile)
         .value("NoRuntime", Target::Feature::NoRuntime)
         .value("Metal", Target::Feature::Metal)
