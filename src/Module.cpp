@@ -842,7 +842,6 @@ void compile_multitarget(const std::string &fn_name,
             Target::CPlusPlusMangling,
             Target::Debug,
             Target::JIT,
-            Target::Matlab,
             Target::MSAN,
             Target::NoRuntime,
             Target::TSAN,
@@ -861,11 +860,7 @@ void compile_multitarget(const std::string &fn_name,
         std::string sub_fn_name = needs_wrapper ? (fn_name + suffix) : fn_name;
 
         // We always produce the runtime separately, so add NoRuntime explicitly.
-        // Matlab should be added to the wrapper pipeline below, instead of each sub-pipeline.
         Target sub_fn_target = target.with_feature(Target::NoRuntime);
-        if (needs_wrapper) {
-            sub_fn_target = sub_fn_target.without_feature(Target::Matlab);
-        }
 
         {
             ScopedCompilerLogger activate(compiler_logger_factory, sub_fn_name, sub_fn_target);
@@ -962,12 +957,6 @@ void compile_multitarget(const std::string &fn_name,
                                     .with_feature(Target::NoRuntime)
                                     .with_feature(Target::NoBoundsQuery)
                                     .without_feature(Target::NoAsserts);
-
-        // If the base target specified the Matlab target, we want the Matlab target
-        // on the wrapper instead.
-        if (base_target.has_feature(Target::Matlab)) {
-            wrapper_target = wrapper_target.with_feature(Target::Matlab);
-        }
 
         Module wrapper_module(fn_name, wrapper_target);
         wrapper_module.append(LoweredFunc(fn_name, base_target_args, wrapper_body, LinkageType::ExternalPlusMetadata));
