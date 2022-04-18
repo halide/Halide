@@ -64,6 +64,7 @@ const string headers = R"INLINE_CODE(
 #include <float.h>
 #include <limits.h>
 #include <math.h>
+#include <stdarg.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
@@ -217,6 +218,27 @@ public:
         }
     }
 };
+
+void halide_checked_snprintf(char *s, size_t n, const char *format, ...) {
+    va_list argptr;
+    va_start(argptr, format);
+    int result = vsnprintf(s, n, format, argptr);
+    va_end(argptr);
+    // Errors from snprintf here should be extremely rare, but just in case:
+    // - If the result is positive and >= n, the result was only partially written,
+    //   with the excess discarded. That's ok for our purposes, we'll just ignore it.
+    // - If the result is negative, there's an encoding error and the string may
+    //   not have been fully written. In that case, let's just ensure it's a legal
+    //   empty string and quietly return -- don't bother trying to propagate the
+    //   error back to the caller.
+    // The reason for these assumptions is that printing in Halide is almost always
+    // for debugging or other noncritical functions. If these patterns change, we
+    // may need to upgrade this code.
+    if (result < 0 && n > 0) {
+        s[0] = 0;
+    }
+}
+
 } // namespace
 )INLINE_CODE";
 
@@ -2524,9 +2546,10 @@ void CodeGen_C::visit(const Call *op) {
                 format_string += "%p";
             }
         }
+        constexpr int buf_size = 1024;
         string buf_name = unique_name('b');
-        stream << get_indent() << "char " << buf_name << "[1024];\n";
-        stream << get_indent() << "snprintf(" << buf_name << ", 1024, \"" << format_string << "\", " << with_commas(printf_args) << ");\n";
+        stream << get_indent() << "char " << buf_name << "[" << buf_size << "];\n";
+        stream << get_indent() << "halide_checked_snprintf(" << buf_name << ", " << buf_size << ", \"" << format_string << "\", " << with_commas(printf_args) << ");\n";
         rhs << buf_name;
     } else if (op->is_intrinsic(Call::register_destructor)) {
         internal_assert(op->args.size() == 2);
@@ -3289,7 +3312,7 @@ int test1(struct halide_buffer_t *_buf_buffer, float _alpha, int32_t _beta, void
    if (_7)
    {
     char b0[1024];
-    snprintf(b0, 1024, "%lld%s", (long long)(3), "\n");
+    halide_checked_snprintf(b0, 1024, "%lld%s", (long long)(3), "\n");
     auto *_8 = b0;
     halide_print(_ucon, _8);
     int32_t _9 = 0;
