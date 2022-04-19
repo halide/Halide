@@ -1983,7 +1983,6 @@ GeneratorInputBase::GeneratorInputBase(size_t array_size,
             user_assert(t0 != Float(16) && t0 != BFloat(16)) << t0 << " is not supported as a scalar Generator input. Use float instead.";
         }
     }
-
 }
 
 GeneratorInputBase::GeneratorInputBase(const std::string &name, IOKind kind, const std::vector<Type> &t, int d)
