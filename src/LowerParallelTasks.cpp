@@ -240,6 +240,8 @@ struct LowerParallelTasks : public IRMutator {
             const std::string closure_arg_name = unique_name("closure_arg");
             auto closure_arg = make_scalar_arg<uint8_t *>(closure_arg_name);
 
+            Type closure_function_type;
+
             std::vector<LoweredArgument> closure_args(use_parallel_for ? 3 : 5);
             closure_args[0] = make_scalar_arg<void *>("__user_context");
             if (use_parallel_for) {
@@ -250,6 +252,7 @@ struct LowerParallelTasks : public IRMutator {
                 closure_args[1] = make_scalar_arg<int32_t>(t.loop_var);
                 closure_args[2] = closure_arg;
                 // closure_task_parent remains undefined here.
+                closure_function_type = type_of<halide_task_t>();
             } else {
                 // The closure will be a halide_loop_task_t, with arguments like:
                 //
@@ -275,6 +278,8 @@ struct LowerParallelTasks : public IRMutator {
                 closure_args[2] = make_scalar_arg<int32_t>(loop_extent_name);
                 closure_args[3] = closure_arg;
                 closure_args[4] = make_scalar_arg<void *>(closure_task_parent_name);
+
+                closure_function_type = type_of<halide_loop_task_t>();
             }
 
             {
@@ -305,7 +310,7 @@ struct LowerParallelTasks : public IRMutator {
             // case some joker names an intermediate Func or Var the same
             // name as the pipeline. This prefix works transparently in the
             // C++ backend.
-            Expr new_function_name_arg = Variable::make(Handle(), "::" + new_function_name);
+            Expr new_function_name_arg = Variable::make(closure_function_type, "::" + new_function_name);
             Expr closure_struct_arg = Cast::make(type_of<uint8_t *>(), closure_struct);
 
             if (use_parallel_for) {
@@ -338,7 +343,7 @@ struct LowerParallelTasks : public IRMutator {
 
         if (!tasks_array_args.empty()) {
             // Allocate task list array
-            Expr tasks_list = Call::make(Handle(), Call::make_struct, tasks_array_args, Call::PureIntrinsic);
+            Expr tasks_list = Call::make(type_of<halide_parallel_task_t *>(), Call::make_struct, tasks_array_args, Call::PureIntrinsic);
             Expr user_context = Call::make(type_of<void *>(), Call::get_user_context, {}, Call::PureIntrinsic);
             Expr task_parent = has_task_parent ? task_parents.top() : make_zero(Handle());
             result = Call::make(Int(32), "halide_do_parallel_tasks",
