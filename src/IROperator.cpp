@@ -73,6 +73,20 @@ Expr combine_strings(const std::vector<Expr> &args) {
         }
     }
 
+    // Now combine all adjacent string literals, which is
+    // useful to reduce emitted code size when printing
+    size_t i = 0;
+    while (i < strings.size() - 1) {
+        const auto *cur_str = strings[i].as<Internal::StringImm>();
+        const auto *next_str = strings[i + 1].as<Internal::StringImm>();
+        if (cur_str && next_str) {
+            strings[i] = Internal::StringImm::make(cur_str->value + next_str->value);
+            strings.erase(strings.begin() + i + 1);
+            continue;
+        }
+        i++;
+    }
+
     return stringify(strings);
 }
 
