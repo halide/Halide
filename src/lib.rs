@@ -14,7 +14,7 @@ pub mod halide_build {
     use std::process::{Command, Output};
 
 
-    pub struct Halide {
+    pub struct Gen_Builder {
         halide_path: PathBuf,
         gen_path: PathBuf,
 
@@ -38,13 +38,13 @@ pub mod halide_build {
         target:String
     }
     //Todo add runtime maker
-    impl Halide {
+    impl Gen_Builder {
         pub fn new<T: Into<PathBuf>>(
             halide_path: T,
             gen_path: T,
             //rs_output:T
-        ) -> Halide {
-            Halide {
+        ) -> Gen_Builder {
+            Gen_Builder {
                 halide_path: halide_path.into().join("distrib"),
                 gen_path:gen_path.into(),
                 rs_output:PathBuf::from(env::var("OUT_DIR").unwrap_or("target".to_string())),
@@ -153,11 +153,11 @@ pub mod halide_build {
         use std::env;
         use std::io;
         use std::io::prelude::*;
-        use crate::halide_build::Halide;
+        use crate::halide_build::Gen_Builder;
 
         #[test]
         fn it_works() {
-            let mut H = Halide::new(
+            let mut H = Gen_Builder::new(
                 "/home/rootbutcher2/CLionProjects/Halide-Rusts-tests/Halide",
                 "/home/rootbutcher2/CLionProjects/halide_build/Halide_gens"
             );
