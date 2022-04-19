@@ -1,20 +1,14 @@
-use std::env;
-use std::fs::{remove_file,rename};
-use std::io;
-use std::path::PathBuf;
-use std::process::Command;
 
 pub mod halide_build {
-    use std::{default, fs};
+    use std::fs;
     use std::env;
-    use std::fs::{remove_file,rename};
     use std::io::Result;
     use std::ops::Add;
-    use std::path::{Path,PathBuf};
+    use std::path::PathBuf;
     use std::process::{Command, Output};
 
 
-    pub struct Gen_Builder {
+    pub struct GenBuilder {
         halide_path: PathBuf,
         gen_path: PathBuf,
 
@@ -38,13 +32,13 @@ pub mod halide_build {
         target:String
     }
     //Todo add runtime maker
-    impl Gen_Builder {
+    impl GenBuilder {
         pub fn new<T: Into<PathBuf>>(
             halide_path: T,
             gen_path: T,
             //rs_output:T
-        ) -> Gen_Builder {
-            Gen_Builder {
+        ) -> GenBuilder {
+            GenBuilder {
                 halide_path: halide_path.into().join("distrib"),
                 gen_path:gen_path.into(),
                 rs_output:PathBuf::from(env::var("OUT_DIR").unwrap_or("target".to_string())),
@@ -59,7 +53,7 @@ pub mod halide_build {
             self
         }
         //Todo template all strings
-        pub fn newGen(self, gen_name:String) ->Generator<'static>{
+        pub fn new_gen(self, gen_name:String) ->Generator<'static>{
             println!("cargo:rerun-if-changed={}",self.gen_path.join(gen_name.as_str()).with_extension("cpp").to_str().unwrap());
             //self.Generators.push(
             Generator {
@@ -69,14 +63,14 @@ pub mod halide_build {
                     gen_path: self.gen_path.join(gen_name).with_extension("cpp"),
                     rs_output: self.rs_output.clone(),
                     gcc_flags: vec!["-lHalide","-ldl","-lpthread","-lz"], //Todo add adders
-                    debug: self.debug, //Todo add funtionality
+                    debug: self.debug, //Todo add functionality
                     target: self.target //todo add setter
             }
             //);self
         }
 
         pub fn make_runtime(self){
-            let g =self.newGen("".to_string());
+            //let g =self.new_gen("".to_string());
 
         }
 
@@ -94,7 +88,7 @@ pub mod halide_build {
 
             compile.args(["-o", self.gen_exe.to_str().unwrap()]);
 
-            let mut temp = self.halide_path.join("tools").join("GenGen").with_extension("cpp");
+            let temp = self.halide_path.join("tools").join("GenGen").with_extension("cpp");
             compile.args(["-g",self.gen_path.to_str().unwrap(),temp.to_str().unwrap()]);
             compile.args(self.gcc_flags.clone());
             //compile.args(["-Wl,-rpath","-Wl,/home/rootbutcher2/CLionProjects/Halide-Rusts-tests/Halide/distrib/lib/"]);
@@ -115,7 +109,7 @@ pub mod halide_build {
             gen.env("LD_LIBRARY_PATH", self.halide_path.join("lib"));
 
             //Todo add debug
-            if (!self.debug) {
+            if !self.debug {
                 gen.arg(self.target.as_str());
             }else {
                 //temp =
@@ -153,33 +147,33 @@ pub mod halide_build {
         use std::env;
         use std::io;
         use std::io::prelude::*;
-        use crate::halide_build::Gen_Builder;
+        use crate::halide_build::GenBuilder;
 
         #[test]
         fn it_works() {
-            let mut H = Gen_Builder::new(
+            let mut h = GenBuilder::new(
                 "/home/rootbutcher2/CLionProjects/Halide-Rusts-tests/Halide",
                 "/home/rootbutcher2/CLionProjects/halide_build/Halide_gens"
             );
-            let G = H.newGen("iir_blur".to_string());
+            let g = h.new_gen("iir_blur".to_string());
 
-            let out = G.make();
+            let out = g.make();
             println!("Gen Creation Status: {}", out.status);
             io::stdout().write_all(&out.stdout).unwrap();
             io::stderr().write_all(&out.stderr).unwrap();
             assert!(out.status.success());
 
-            let out2 = G.run_gen();
+            let out2 = g.run_gen();
             println!("Gen Run Status: {}", out2.status);
             io::stdout().write_all(&out2.stdout).unwrap();
             io::stderr().write_all(&out2.stderr).unwrap();
             assert!(out2.status.success());
 
-            let out3 = G.rename_move();
+            let out3 = g.rename_move();
             println!("move results: {:?}", out3);
             assert!(out3.is_ok());
 
-            let out4 = G.bind();
+            let out4 = g.bind();
             println!("bind results: {:?}", out4);
             assert!(out4.is_ok());
         }
