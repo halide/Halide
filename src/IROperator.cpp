@@ -62,6 +62,10 @@ Expr stringify(const std::vector<Expr> &args) {
 }
 
 Expr combine_strings(const std::vector<Expr> &args) {
+    if (args.empty()) {
+        return Expr("");
+    }
+
     // Insert spaces between each expr.
     std::vector<Expr> strings(args.size() * 2);
     for (size_t i = 0; i < args.size(); i++) {
