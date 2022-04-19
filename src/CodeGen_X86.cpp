@@ -667,7 +667,7 @@ void CodeGen_X86::visit(const Load *op) {
         const Ramp *ramp = op->index.as<Ramp>();
         internal_assert(ramp) << "Expected AMXTile to have index ramp\n";
         Value *ptr = codegen_buffer_pointer(op->name, op->type, ramp->base);
-        LoadInst *load = builder->CreateAlignedLoad(ptr->getType()->getPointerElementType(), ptr, llvm::Align(op->type.bytes()));
+        LoadInst *load = builder->CreateAlignedLoad(llvm_type_of(upgrade_type_for_storage(op->type)), ptr, llvm::Align(op->type.bytes()));
         add_tbaa_metadata(load, op->name, op->index);
         value = load;
         return;
