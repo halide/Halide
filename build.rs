@@ -1,9 +1,9 @@
 
-use halide_build::halide_build::{Generator,Halide};
+use halide_build::halide_build::{Generator,Gen_Builder};
 
 fn main() {
 
-    let Hal = Halide::new(
+    let Hal = Gen_Builder::new(
         "/home/rootbutcher2/CLionProjects/Halide-Rusts-tests/Halide",
         "src/gens"
     );
