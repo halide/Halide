@@ -56,9 +56,8 @@ int main(int argc, char **argv) {
     Buffer<uint8_t, 3> array_buffer_input0 = make_image<uint8_t>(0);
     Buffer<uint8_t, 3> array_buffer_input1 = make_image<uint8_t>(1);
     Buffer<float, 3> simple_output(kSize, kSize, 3);
-    // TODO: see Issues #3709, #3967
-    Buffer<void, 3> float16_output(halide_type_t(halide_type_float, 16), kSize, kSize, 3);
-    Buffer<void, 3> bfloat16_output(halide_type_t(halide_type_bfloat, 16), kSize, kSize, 3);
+    Buffer<halide_float16_t, 3> float16_output(kSize, kSize, 3);
+    Buffer<halide_bfloat16_t, 3> bfloat16_output(kSize, kSize, 3);
     Buffer<float, 3> tuple_output0(kSize, kSize, 3), tuple_output1(kSize, kSize, 3);
     Buffer<int16_t, 3> array_output0(kSize, kSize, 3), array_output1(kSize, kSize, 3);
     Buffer<uint8_t, 3> static_compiled_buffer_output(kSize, kSize, 3);

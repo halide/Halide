@@ -315,6 +315,29 @@ public:
     std::set<Type> vector_types_used;
 };
 
+std::string stringify_if_constant(const Expr &e) {
+    const IntImm *int_imm = e.as<IntImm>();
+    const UIntImm *uint_imm = e.as<UIntImm>();
+    const FloatImm *float_imm = e.as<FloatImm>();
+    std::string value;
+    if (int_imm) {
+        value = std::to_string(int_imm->value);
+    } else if (uint_imm) {
+        value = std::to_string(uint_imm->value);
+    } else if (float_imm) {
+        if (e.type() == BFloat(16)) {
+            value = "halide_bfloat16_t(" + std::to_string(bfloat16_t(float_imm->value).to_bits()) + ")";
+        } else if (e.type() == Float(16)) {
+            value = "halide_float16_t(" + std::to_string(float16_t(float_imm->value).to_bits()) + ")";
+        } else {
+            value = std::to_string(float_imm->value);
+        }
+    }
+
+    // else fall thru and return empty string
+    return value;
+}
+
 }  // namespace
 
 CodeGen_C::CodeGen_C(ostream &s, const Target &t, OutputKind output_kind, const std::string &guard)
@@ -1587,18 +1610,8 @@ void CodeGen_C::emit_metadata_getter(const std::string &function_name,
             internal_assert(is_const(e)) << "Should only see constant values here.";
         }
 
-        const IntImm *int_imm = e.as<IntImm>();
-        const UIntImm *uint_imm = e.as<UIntImm>();
-        const FloatImm *float_imm = e.as<FloatImm>();
-        internal_assert(int_imm || uint_imm || float_imm);
-        std::string value;
-        if (int_imm) {
-            value = std::to_string(int_imm->value);
-        } else if (uint_imm) {
-            value = std::to_string(uint_imm->value);
-        } else if (float_imm) {
-            value = std::to_string(float_imm->value);
-        }
+        std::string value = stringify_if_constant(e);
+        internal_assert(!value.empty());
 
         std::string c_type = type_to_c_type(e.type(), false);
         std::string id = "halide_scalar_value_" + std::to_string(next_scalar_value_id++);
@@ -1618,9 +1631,18 @@ void CodeGen_C::emit_metadata_getter(const std::string &function_name,
         const size_t array_size = sizeof(halide_scalar_value_t) / value_size;
         internal_assert(array_size * value_size == sizeof(halide_scalar_value_t));
 
+        std::string zero;
+        if (e.type() == BFloat(16)) {
+            zero = "halide_bfloat16_t(0)";
+        } else if (e.type() == Float(16)) {
+            zero = "halide_float16_t(0)";
+        } else {
+            zero = "0";
+        }
+
         stream << get_indent() << "alignas(alignof(halide_scalar_value_t)) static const " << c_type << " " << id << "[" << array_size << "] = {" << value;
         for (size_t i = 1; i < array_size; i++) {
-            stream << ", 0";
+            stream << ", " << zero;
         }
         stream << "};\n";
 
@@ -2512,10 +2534,30 @@ void CodeGen_C::visit(const Call *op) {
                 format_string += "%llu";
                 printf_args[i] = "(long long unsigned)(" + printf_args[i] + ")";
             } else if (t.is_float()) {
-                if (t.bits() == 32) {
-                    format_string += "%f";
-                } else {
+                switch (t.bits()) {
+                case 16: {
+                    // Could be float16 or bfloat16, since is_float() returns true for either
+                    std::string constant_str = stringify_if_constant(op->args[i]);
+                    if (!constant_str.empty()) {
+                        // Emit as a float32 literal
+                        printf_args[i] = constant_str;
+                        format_string += "%fh";
+                    } else {
+                        // Emit in float16-as-uint16 format, which is adequate for debugging,
+                        // which is usually what we use this for anyway.
+                        printf_args[i] = "((int)(" + printf_args[i] + ").value)";
+                        format_string += t.is_bfloat() ? "halide_bfloat16_t(%d)" : "halide_float16_t(%d)";
+                    }
+                    break;
+                }
+                case 32:
+                    format_string += "%ff";
+                    break;
+                case 64:
                     format_string += "%e";
+                    break;
+                default:
+                    internal_error;
                 }
             } else if (op->args[i].as<StringImm>()) {
                 format_string += "%s";

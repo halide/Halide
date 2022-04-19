@@ -2,6 +2,7 @@
 
 namespace {
 
+using Halide::bfloat16_t;
 using Halide::float16_t;
 
 enum class SomeEnum { Foo,
@@ -52,6 +53,9 @@ public:
     Input<Buffer<float16_t, 1>> buffer_f16_typed{"buffer_f16_typed"};
     Input<Buffer<void, 1>> buffer_f16_untyped{"buffer_f16_untyped"};
 
+    Input<Buffer<bfloat16_t, 1>> buffer_bf16_typed{"buffer_bf16_typed"};
+    Input<Buffer<void, 1>> buffer_bf16_untyped{"buffer_bf16_untyped"};
+
     Input<Expr> untyped_scalar_input{"untyped_scalar_input"};  // untyped_scalar_input.type must be set to uint8
 
     Output<Func> output{"output"};  // must be overridden to {{Float(32), Float(32)}, 3}
@@ -80,6 +84,7 @@ public:
         Var x("x"), y("y"), c("c");
 
         assert(buffer_f16_untyped.type() == Float(16));
+        assert(buffer_bf16_untyped.type() == BFloat(16));
         assert(untyped_scalar_input.type() == UInt(8));
 
         // These should all be zero; they are here to exercise the operator[] overloads

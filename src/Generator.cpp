@@ -753,6 +753,7 @@ const std::map<std::string, Type> &get_halide_type_enum_map() {
         {"uint8", UInt(8)},
         {"uint16", UInt(16)},
         {"uint32", UInt(32)},
+        {"bfloat16", BFloat(16)},
         {"float16", Float(16)},
         {"float32", Float(32)},
         {"float64", Float(64)}};
@@ -764,6 +765,7 @@ std::string halide_type_to_c_source(const Type &t) {
         {halide_type_int, "Int"},
         {halide_type_uint, "UInt"},
         {halide_type_float, "Float"},
+        {halide_type_bfloat, "BFloat"},
         {halide_type_handle, "Handle"},
     };
     std::ostringstream oss;
@@ -783,8 +785,8 @@ std::string halide_type_to_c_type(const Type &t) {
         {encode(UInt(16)), "uint16_t"},
         {encode(UInt(32)), "uint32_t"},
         {encode(UInt(64)), "uint64_t"},
-        {encode(BFloat(16)), "uint16_t"},  // TODO: see Issues #3709, #3967
-        {encode(Float(16)), "uint16_t"},   // TODO: see Issues #3709, #3967
+        {encode(BFloat(16)), "halide_float16_t"},
+        {encode(Float(16)), "halide_bfloat16_t"},
         {encode(Float(32)), "float"},
         {encode(Float(64)), "double"},
         {encode(Handle(64)), "void*"}};
@@ -1975,6 +1977,13 @@ GeneratorInputBase::GeneratorInputBase(size_t array_size,
                                        int d)
     : GIOBase(array_size, name, kind, t, d) {
     ObjectInstanceRegistry::register_instance(this, 0, ObjectInstanceRegistry::GeneratorInput, this, nullptr);
+
+    if (kind == IOKind::Scalar) {
+        for (const auto t0 : t) {
+            user_assert(t0 != Float(16) && t0 != BFloat(16)) << t0 << " is not supported as a scalar Generator input. Use float instead.";
+        }
+    }
+
 }
 
 GeneratorInputBase::GeneratorInputBase(const std::string &name, IOKind kind, const std::vector<Type> &t, int d)
