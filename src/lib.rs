@@ -22,6 +22,7 @@ pub mod halide_build {
 
         //Generators: Vec<Generator<'static>>,
         debug: bool,
+        target: String
     }
     //#[derive(Clone)]
     pub struct Generator<'a> {
@@ -34,8 +35,9 @@ pub mod halide_build {
 
         gcc_flags: Vec<&'a str>,
         debug: bool,
+        target:String
     }
-
+    //Todo add runtime maker
     impl Halide {
         pub fn new<T: Into<PathBuf>>(
             halide_path: T,
@@ -45,9 +47,10 @@ pub mod halide_build {
             Halide {
                 halide_path: halide_path.into().join("distrib"),
                 gen_path:gen_path.into(),
-                rs_output:PathBuf::from(env::var("OUT_DIR").unwrap()),
+                rs_output:PathBuf::from(env::var("OUT_DIR").unwrap_or("target".to_string())),
                 //Generators: Vec!{},
-                debug: false
+                debug: false,
+                target: "target=host-no_runtime".to_string()
             }
         }
 
@@ -65,10 +68,16 @@ pub mod halide_build {
                     halide_path: self.halide_path.clone(),
                     gen_path: self.gen_path.join(gen_name).with_extension("cpp"),
                     rs_output: self.rs_output.clone(),
-                    gcc_flags: vec!["-lHalide","-ldl","-lpthread","-lz"],
-                    debug: self.debug
+                    gcc_flags: vec!["-lHalide","-ldl","-lpthread","-lz"], //Todo add adders
+                    debug: self.debug, //Todo add funtionality
+                    target: self.target //todo add setter
             }
             //);self
+        }
+
+        pub fn make_runtime(self){
+            let g =self.newGen("".to_string());
+
         }
 
 
@@ -106,8 +115,12 @@ pub mod halide_build {
             gen.env("LD_LIBRARY_PATH", self.halide_path.join("lib"));
 
             //Todo add debug
-            gen.args(["target=host-no_runtime"]);
-
+            if (!self.debug) {
+                gen.arg(self.target.as_str());
+            }else {
+                //temp =
+                //gen.arg(concat!(self.target,""));
+            }
             gen.output().expect("failed to run")
 
         }
@@ -131,6 +144,8 @@ pub mod halide_build {
             println!("cargo:rustc-link-lib=static={}", self.gen_name);
             bindings
         }
+
+
     }
 }
     #[cfg(test)]
