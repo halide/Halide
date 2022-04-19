@@ -6,4 +6,8 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [build-dependencies]
-halide_build = {git = "https://github.com/RootButcher/Halide_Build.git"}
+halide_build = {path = "/home/rootbutcher2/CLionProjects/halide_build"}
+
+[dependencies]
+halide_runtime = {git = "https://github.com/RootButcher/halide_runtime.git"}
+image = "0.24.1"
