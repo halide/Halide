@@ -176,7 +176,7 @@ pub mod build {
         fn it_works() {
             let mut h = GenBuilder::new(
                 "/home/rootbutcher2/CLionProjects/Halide-Rusts-tests/Halide",
-                "/home/rootbutcher2/CLionProjects/halide_build/Halide_gens"
+                "/home/rootbutcher2/CLionProjects/halide/Halide_gens"
             );
             let g = h.new_gen("iir_blur".to_string());
 
