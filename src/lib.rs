@@ -1,137 +1,125 @@
-pub mod halide_build {
+use std::env;
+use std::fs::{remove_file,rename};
+use std::io;
+use std::path::PathBuf;
+use std::process::Command;
 
-    use std::path::PathBuf;
+pub mod halide_build {
+    use std::default;
+    use std::env;
+    use std::fs::{remove_file,rename};
+    use std::io::Result;
+    use std::path::{Path,PathBuf};
     use std::process::{Command, Output};
 
+
     pub struct Halide {
-        pub halide_path: PathBuf,
-        pub gen_path: PathBuf,
-        pub rs_out_path: PathBuf,
-        pub generators: Vec<HalideGen>,
+        halide_path: PathBuf,
+        gen_path: PathBuf,
+
+        rs_output: PathBuf,
+
+        debug: bool,
+    }
+    //#[derive(Clone)]
+    pub struct Generator {
+        gen_name: String,
+        gen_exe: PathBuf,
+        halide_path: PathBuf,
+        gen_path: PathBuf,
+
+        rs_output: PathBuf,
+
+        gcc_flags: Option<Vec<String>>,
+        debug: bool,
     }
 
-    pub struct HalideGen {
-        pub halide_path: PathBuf,
-        pub gen_name: String,
-        pub gen_path: PathBuf,
-        pub rs_out_path: PathBuf,
+    impl Halide {
+        pub fn new<T: Into<PathBuf>>(
+            halide_path: T,
+            gen_path: T,
+            rs_output:T
+        ) -> Halide {
+            Halide {
+                halide_path: halide_path.into().join("distrib"),
+                gen_path:gen_path.into(),
+                rs_output:rs_output.into(),
+                debug: false
+            }
+        }
+
+        pub fn newGen(self,gen_name:String)->Generator{
+            Generator {
+                gen_name: gen_name.to_string(),
+                gen_exe: PathBuf::new().join("target").join(gen_name.to_string()).with_extension("generator"),
+                halide_path: self.halide_path,
+                gen_path: self.gen_path.join(gen_name).with_extension("cpp"),
+                rs_output: self.rs_output,
+                gcc_flags: None,
+                debug: false
+            }
+        }
     }
-    impl Halide {}
-    impl HalideGen {
-        pub fn compile_gen(&mut self) -> Output {
-            let mut out = Command::new("g++");
 
-            out.args(["-O3", "-O3", "-std=c++17"]);
+    impl Generator {
+        pub fn make(&self) -> Output {
+            let mut compile = Command::new("g++");
+            compile.args(["-std=c++17",]);
 
-            self.halide_path.push("distrib");
-            self.halide_path.push("include");
+            compile.args(["-I",self.halide_path.join("include").to_str().unwrap()]);
+            compile.args(["-I", self.halide_path.join("tools").to_str().unwrap()]);
+            compile.args(["-L",self.halide_path.join("lib").to_str().unwrap()]);
 
-            out.args(["-I", self.halide_path.to_str().unwrap()]);
+            compile.args(["-o", self.gen_exe.to_str().unwrap()]);
 
-            self.halide_path.pop();
-            self.halide_path.push("tools");
-            out.args(["-I", self.halide_path.to_str().unwrap()]);
+            let mut temp = self.halide_path.join("tools").join("GenGen").with_extension("cpp");
+            compile.args(["-g",self.gen_path.to_str().unwrap(),temp.to_str().unwrap()]);
+            compile.args(["-lHalide","-ldl","-lpthread","-lz"]);
+            //compile.args(["-Wl,-rpath","-Wl,/home/rootbutcher2/CLionProjects/Halide-Rusts-tests/Halide/distrib/lib/"]);
+            compile.output().expect("Make generator failed")
 
-            self.gen_path.push(self.gen_name.as_str());
-            self.gen_path.set_extension("cpp");
-            self.halide_path.push("GenGen.cpp");
-            out.args(["-g",
-                self.gen_path.to_str().unwrap(),
-                self.halide_path.to_str().unwrap(),
-            ]);
-
-            self.gen_path.set_extension("gen");
-            out.args(["-o", self.gen_path.to_str().unwrap()]);
-
-            self.halide_path.pop();
-            self.halide_path.pop();
-            self.halide_path.push("lib");
-            out.args(["-L", self.halide_path.to_str().unwrap()]);
-
-            let mut temp: String = "-Wl,-rpath,".to_string();
-            temp.push_str(self.halide_path.to_str().unwrap());
-            out.arg(temp);
-
-            out.args(["-lHalide", "-ldl", "-lpthread", "-lz"]);
-
-            out.output().expect("Building the generator failed")
         }
-        pub fn run_gen(&mut self) -> Output {
-            let mut out = Command::new(self.gen_path.to_str().unwrap());
-            out.args(["-g", self.gen_name.as_str()]);
-            out.args(["-f", self.gen_name.as_str()]);
-            self.gen_path.pop();
-            out.args(["-o", self.gen_path.to_str().unwrap()]);
-            out.arg("target=host-no_runtime");
-            out.output().expect("failed to run gen")
-        }
+        pub fn run_gen(mut self) -> Output {
+            //assert!(!self.gen_exe.is_none());
 
-        pub fn rename_files(&mut self) -> std::io::Result<()> {
-            self.gen_path.push(self.gen_name.as_str());
-            self.gen_path.set_extension("a");
-            let mut temp = self.gen_path.clone();
-            temp.pop();
-            let mut temp2 ="lib".to_string();
-            temp2.push_str(self.gen_name.as_str());
-            temp.push(temp2);
-            temp.set_extension("a");
-            println!("gen_path: {:?}", self.gen_path);
-            println!("gen_path 2: {:?}",temp);
-            std::fs::rename(self.gen_path.to_str().unwrap(),temp.to_str().unwrap())
-        }
+            let mut gen = Command::new(self.gen_exe.to_str().unwrap());
+            gen.args(["-g",self.gen_name.as_str()]);
+            gen.args(["-f", self.gen_name.as_str()]);
+            gen.args(["-o",self.rs_output.to_str().unwrap()]);
+            gen.env("LD_LIBRARY_PATH", self.halide_path.join("lib"));
 
-        pub fn bind(&mut self) -> std::io::Result<()> {
-            self.gen_path.set_extension("h");
-            self.rs_out_path.push(self.gen_name.as_str());
-            self.rs_out_path.set_extension("rs");
-            let bindings = bindgen::Builder::default()
-                .header(self.gen_path.to_str().unwrap().to_string())
-                .allowlist_function(self.gen_name.as_str())
-                .blocklist_item("halide_buffer_t")
-                .generate().expect("unable to generate");
-            bindings.write_to_file(self.rs_out_path.as_path())
+            gen.args(["target=host-no_runtime"]);
+
+            gen.output().expect("failed to run")
+
         }
     }
 }
+    #[cfg(test)]
+    mod tests {
+        use std::env;
+        use std::io;
+        use std::io::prelude::*;
+        use crate::halide_build::Halide;
 
-#[cfg(test)]
-mod tests {
-    use crate::halide_build::*;
-    use std::io;
-    use std::io::prelude::*;
-    use std::path::PathBuf;
-    #[test]
-    fn it_works() {
-        let mut hs = Halide {
-            halide_path: PathBuf::from("/home/rootbutcher2/CLionProjects/Halide-Rusts-tests/Halide"),
-            gen_path: PathBuf::from("/home/rootbutcher2/CLionProjects/halide_build/Halide_gens"),
-            rs_out_path: PathBuf::from("/home/rootbutcher2/CLionProjects/halide_build/rs_out"),
-            generators: vec![],
-        };
-        hs.generators.push(HalideGen {
-            halide_path: hs.halide_path,
-            gen_name: "iir_blur".to_string(),
-            gen_path: hs.gen_path,
-            rs_out_path: hs.rs_out_path,
-        });
-        let out1 = hs.generators[0].compile_gen();
-        println!("status gen: {}", out1.status);
-        io::stdout().write_all(&out1.stdout).unwrap();
-        //io::stderr().write_all(&out1.stderr).unwrap();
-        assert!(out1.status.success());
+        #[test]
+        fn it_works() {
+            let H = Halide::new(
+                "/home/rootbutcher2/CLionProjects/Halide-Rusts-tests/Halide",
+                "/home/rootbutcher2/CLionProjects/halide_build/Halide_gens",
+                "/home/rootbutcher2/CLionProjects/halide_build/rs_out"
+            );
+            let G= H.newGen("iir_blur".to_string());
+            let out = G.make();
+            println!("Gen Creation Status: {}", out.status);
+            io::stdout().write_all(&out.stdout).unwrap();
+            io::stderr().write_all(&out.stderr).unwrap();
+            assert!(out.status.success());
 
-        let out2 = hs.generators[0].run_gen();
-        println!("status run gen: {}", out2.status);
-        io::stdout().write_all(&out2.stdout).unwrap();
-        //io::stderr().write_all(&out2.stderr).unwrap();
-        assert!(out2.status.success());
-
-        let out3 = hs.generators[0].rename_files();
-        println!("status run rename: {:?}", out3);
-        assert!(out3.is_ok());
-
-        let out4 = hs.generators[0].bind();
-        println!("status run rename: {:?}", out4);
-        assert!(out4.is_ok());
+            let out2 = G.run_gen();
+            println!("Gen Run Status: {}", out2.status);
+            io::stdout().write_all(&out2.stdout).unwrap();
+            io::stderr().write_all(&out2.stderr).unwrap();
+            assert!(out2.status.success());
+        }
     }
-}
