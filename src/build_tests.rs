@@ -1,5 +1,5 @@
-#[cfg(test)]
-mod tests {
+
+//mod tests {
     use crate::build::GenBuilder;
     use std::io;
     use std::io::prelude::*;
@@ -33,4 +33,4 @@ mod tests {
         println!("bind results: {:?}", out4);
         assert!(out4.is_ok());
     }
-}
+//}

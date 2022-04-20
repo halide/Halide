@@ -1,4 +1,4 @@
-#![warn(missing_docs)]
+//#![warn(missing_docs)]
 //#![warn(missing_doc_code_examples)]
 //!Crate level docs
 //!
@@ -10,7 +10,8 @@
 pub mod build;
 
 ///tests for build
+#[cfg(test)]
 mod build_tests;
 
-///module docs
+//module docs
 pub mod runtime;
