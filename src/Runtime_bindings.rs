@@ -1,6 +1,6 @@
 
 
-mod runtime_bindings {
+pub mod runtime_bindings {
     #![allow(dead_code)]
 
     #![allow(non_camel_case_types)]
