@@ -1,5 +1,6 @@
-
-use halide::build::{Generator,GenBuilder};
+use std::io;
+use std::io::Write;
+use halide::build::{Generator, GenBuilder};
 
 fn main() {
 
@@ -12,7 +13,11 @@ fn main() {
 
     let gen = Hal.new_gen("iir_blur".to_string());
 
-    assert!(gen.make().status.success());
+    let out = gen.make();
+    println!("compile Status: {}", out.status.success());
+    io::stdout().write_all(&out.stdout);
+    io::stderr().write_all(&out.stderr);
+    assert!(out.status.success());
 
     assert!(gen.run_gen().status.success());
 
