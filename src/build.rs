@@ -17,7 +17,7 @@ pub struct GenBuilder {
 
     rs_output: PathBuf,
 
-    Generators: Vec<Generator<'static>>,
+    generators: Vec<Generator<'static>>,
     debug: bool,
     target: String,
 }
@@ -51,7 +51,7 @@ impl GenBuilder {
             halide_path: halide_path.into().join("distrib"),
             gen_path: gen_path.into(),
             rs_output: PathBuf::from(env::var("OUT_DIR").unwrap_or("target".to_string())),
-            Generators: vec![],
+            generators: vec![],
             debug: false,
             target: "target=host-no_runtime".to_string(),
         }
@@ -61,8 +61,9 @@ impl GenBuilder {
         self.rs_output = out.into();
         self
     }
-    pub fn push_gen(mut self, gen: Generator){
-
+    pub fn push_gen(mut self, gen: Generator<'static>)->Self{
+        self.generators.push(gen);
+        self
     }
     //Todo template all strings
     pub fn new_gen(self, gen_name: String) -> Generator<'static> {
@@ -74,7 +75,7 @@ impl GenBuilder {
                 .to_str()
                 .unwrap()
         );
-        //self.Generators.push(
+        //self.generators.push(
         Generator {
             gen_name: gen_name.to_string(),
             gen_exe: PathBuf::new()
@@ -95,10 +96,22 @@ impl GenBuilder {
         self
     }
     pub fn make_runtime(self) {
-        //let g =self.new_gen("".to_string());
+        if(self.generators.is_empty()){
+            //todo make gengen
+        }
+        else {
+           let gen = self.generators[0].make_runtime();
+        }
     }
 }
-
+///This is a generator
+///
+/// more stuff
+///
+/// ```no_run
+///     ExampleCode
+/// ```
+///
 impl Generator<'static> {
     pub fn make(&self) -> Output {
         let mut compile = Command::new("g++");
@@ -151,7 +164,16 @@ impl Generator<'static> {
         gen.output().expect("failed to run")
     }
 
-    pub fn rename_move(&self) -> Result<()> {
+    pub fn make_runtime(&self) -> Output {
+        println!("Cmd to runt: {:?}", self.gen_exe.to_str().unwrap());
+        let mut cmd = Command::new(self.gen_exe.to_str().unwrap());
+        cmd.args(["-r", "runtime", "-o", self.rs_output.to_str().unwrap(),"target=host"]);
+        cmd.env("LD_LIBRARY_PATH", self.halide_path.join("lib"));
+        cmd.output().expect("failed to make runtime")
+        //-r runtime -o taget=host
+    }
+
+    pub fn rename(&self) -> Result<()> {
         println!(
             "file name: {:?}",
             self.rs_output

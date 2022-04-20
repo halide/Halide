@@ -24,12 +24,18 @@
         io::stderr().write_all(&out2.stderr).unwrap();
         assert!(out2.status.success());
 
-        let out3 = g.rename_move();
+        let out3 = g.rename();
         println!("move results: {:?}", out3);
         assert!(out3.is_ok());
 
         let out4 = g.bind();
         println!("bind results: {:?}", out4);
         assert!(out4.is_ok());
+
+        let outrun = g.make_runtime();
+        println!("Runtime cmd: {}", outrun.status);
+        io::stdout().write_all(&outrun.stdout).unwrap();
+        io::stdout().write_all(&outrun.stderr).unwrap();
+        assert!(outrun.status.success());
     }
 //}
