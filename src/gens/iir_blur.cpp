@@ -133,12 +133,12 @@ class IirBlur : public Generator<IirBlur> {
 public:
     // This is the input image: a 3D (color) image with 32 bit float
     // pixels.
-    Input<Buffer<float, 3>> input{"input"};
+    Input<Buffer<float>> input{"input", 3};
     // The filter coefficient, alpha is the weight of the input to the
     // filter.
     Input<float> alpha{"alpha"};
 
-    Output<Buffer<float, 3>> output{"output"};
+    Output<Buffer<float>> output{"output", 3};
 
     void generate() {
 

@@ -4,7 +4,7 @@ use halide::build::{Generator,GenBuilder};
 fn main() {
 
     let Hal = GenBuilder::new(
-        "/home/rootbutcher2/CLionProjects/Halide-Rusts-tests/Halide",
+        "/home/jacob/Desktop/Halide",
         "src/gens"
     );
        // .out_dir("src/rs");
@@ -12,7 +12,7 @@ fn main() {
 
     let gen = Hal.new_gen("iir_blur".to_string());
 
-    assert!(gen.make().status.success());
+    assert!(gen.compile().status.success());
 
     assert!(gen.run_gen().status.success());
 
