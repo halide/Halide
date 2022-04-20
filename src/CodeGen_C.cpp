@@ -3077,7 +3077,7 @@ void CodeGen_C::visit(const Allocate *op) {
             stream << op_name
                    << "[" << size_id << "];\n";
         } else {
-            stream << "*"
+            stream << "* const "
                    << op_name
                    << " = ("
                    << op_type
@@ -3260,48 +3260,48 @@ HALIDE_FUNCTION_ATTRS
 int test1(struct halide_buffer_t *_buf_buffer, float _alpha, int32_t _beta, void const *__user_context) {
  void * const _ucon = const_cast<void *>(__user_context);
  halide_maybe_unused(_ucon);
- auto *_0 = _halide_buffer_get_host(_buf_buffer);
+ auto * const _0 = _halide_buffer_get_host(_buf_buffer);
  auto _buf = _0;
  halide_maybe_unused(_buf);
  {
-  int64_t _1 = 43;
-  int64_t _2 = _1 * _beta;
+  int64_t const _1 = 43;
+  int64_t const _2 = _1 * _beta;
   if ((_2 > ((int64_t(1) << 31) - 1)) || ((_2 * sizeof(int32_t )) > ((int64_t(1) << 31) - 1)))
   {
    halide_error(_ucon, "32-bit signed overflow computing size of allocation tmp.heap\n");
    return -1;
   } // overflow test tmp.heap
-  int64_t _3 = _2;
-  int32_t *_tmp_heap = (int32_t  *)halide_malloc(_ucon, sizeof(int32_t )*_3);
+  int64_t const _3 = _2;
+  int32_t * const _tmp_heap = (int32_t  *)halide_malloc(_ucon, sizeof(int32_t )*_3);
   if (!_tmp_heap)
   {
-   int32_t _4 = halide_error_out_of_memory(_ucon);
+   int32_t const _4 = halide_error_out_of_memory(_ucon);
    return _4;
   }
   HalideFreeHelper _tmp_heap_free(_ucon, _tmp_heap, halide_free);
   {
    int32_t _tmp_stack[127];
-   int32_t _5 = _beta + 1;
+   int32_t const _5 = _beta + 1;
    int32_t _6;
-   bool _7 = _5 < 1;
+   bool const _7 = _5 < 1;
    if (_7)
    {
     char b0[1024];
     snprintf(b0, 1024, "%lld%s", (long long)(3), "\n");
-    auto *_8 = b0;
+    auto * const _8 = b0;
     halide_print(_ucon, _8);
-    int32_t _9 = 0;
-    int32_t _10 = return_second(_9, 3);
+    int32_t const _9 = 0;
+    int32_t const _10 = return_second(_9, 3);
     _6 = _10;
    } // if _7
    else
    {
     _6 = 3;
    } // if _7 else
-   int32_t _11 = _6;
-   float _12 = float_from_bits(1082130432 /* 4 */);
-   bool _13 = _alpha > _12;
-   int32_t _14 = (int32_t)(_13 ? _11 : 2);
+   int32_t const _11 = _6;
+   float const _12 = float_from_bits(1082130432 /* 4 */);
+   bool const _13 = _alpha > _12;
+   int32_t const _14 = (int32_t)(_13 ? _11 : 2);
    ((int32_t *)_buf)[_5] = _14;
   } // alloc _tmp_stack
   _tmp_heap_free.free();
