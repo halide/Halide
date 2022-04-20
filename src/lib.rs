@@ -69,7 +69,7 @@ pub mod build {
             GenBuilder {
                 halide_path: halide_path.into().join("distrib"),
                 gen_path: gen_path.into(),
-                rs_output: PathBuf::from(env::var("OUT_DIR").unwrap_or("".to_string())),
+                rs_output: PathBuf::from(env::var("OUT_DIR").unwrap_or("target".to_string())),
                 //Generators: Vec!{},
                 debug: false,
                 target: "target=host-no_runtime".to_string()
