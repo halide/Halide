@@ -7,7 +7,9 @@ edition = "2021"
 
 [build-dependencies]
 halide = {path = "/home/rootbutcher2/CLionProjects/halide"}
-
+#halide = {git ="https://github.com/RootButcher/halide.git", branch = "main"}
 [dependencies]
-halide_runtime = {git = "https://github.com/RootButcher/halide_runtime.git"}
+halide = {path = "/home/rootbutcher2/CLionProjects/halide"}
+#halide = {git ="https://github.com/RootButcher/halide.git", branch = "main"}
+#halide_runtime = {git = "https://github.com/RootButcher/halide_runtime.git", branch = "main"}
 image = "0.24.1"

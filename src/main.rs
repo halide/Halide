@@ -1,5 +1,5 @@
 use std::env;
-use halide_runtime::halide_runtime::*;
+use halide::runtime::*;
 include!(concat!(env!("OUT_DIR"), "/iir_blur.rs"));
 
 use std::ffi::c_void;
