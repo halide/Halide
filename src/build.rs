@@ -90,7 +90,10 @@ impl GenBuilder {
         }
         //);self
     }
-
+    pub fn debug(mut self, b:bool) ->Self{
+        self.debug=b;
+        self
+    }
     pub fn make_runtime(self) {
         //let g =self.new_gen("".to_string());
     }
@@ -141,8 +144,9 @@ impl Generator<'static> {
         if !self.debug {
             gen.arg(self.target.as_str());
         } else {
-            //temp =
-            //gen.arg(concat!(self.target,""));
+            let mut temp = String::from(self.target.as_str());
+            temp.push_str("-debug");
+            gen.arg(temp);
         }
         gen.output().expect("failed to run")
     }
