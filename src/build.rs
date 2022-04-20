@@ -94,29 +94,29 @@ impl GenBuilder {
 }
 
 impl Generator<'static> {
-    pub fn make(&self) -> Output {
-        let mut compile = Command::new("g++");
-        compile.args(["-std=c++17"]);
+    pub fn compile(&self) -> Output {
+        let mut compileCommand = Command::new("g++");
+        compileCommand.args(["-std=c++17"]);
 
-        compile.args(["-I", self.halide_path.join("include").to_str().unwrap()]);
-        compile.args(["-I", self.halide_path.join("tools").to_str().unwrap()]);
-        compile.args(["-L", self.halide_path.join("lib").to_str().unwrap()]);
+        compileCommand.args(["-I", self.halide_path.join("include").to_str().unwrap()]);
+        compileCommand.args(["-I", self.halide_path.join("tools").to_str().unwrap()]);
+        compileCommand.args(["-L", self.halide_path.join("lib").to_str().unwrap()]);
 
-        compile.args(["-o", self.gen_exe.to_str().unwrap()]);
+        compileCommand.args(["-o", self.gen_exe.to_str().unwrap()]);
 
         let temp = self
             .halide_path
             .join("tools")
             .join("GenGen")
             .with_extension("cpp");
-        compile.args([
+        compileCommand.args([
             "-g",
             self.gen_path.to_str().unwrap(),
             temp.to_str().unwrap(),
         ]);
-        compile.args(self.gcc_flags.clone());
-        //compile.args(["-Wl,-rpath","-Wl,/home/rootbutcher2/CLionProjects/Halide-Rusts-tests/Halide/distrib/lib/"]);
-        compile.output().expect("Make generator failed")
+        compileCommand.args(self.gcc_flags.clone());
+        //compileCommand.args(["-Wl,-rpath","-Wl,/home/rootbutcher2/CLionProjects/Halide-Rusts-tests/Halide/distrib/lib/"]);
+        compileCommand.output().expect("Make generator failed")
     }
     pub fn run_gen(&self) -> Output {
         //assert!(!self.gen_exe.is_none());

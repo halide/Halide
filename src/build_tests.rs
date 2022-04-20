@@ -13,7 +13,7 @@
         .out_dir("test_files/");
         let g = h.new_gen("iir_blur".to_string());
 
-        let out = g.make();
+        let out = g.compile();
         println!("Gen Creation Status: {}", out.status);
         io::stdout().write_all(&out.stdout).unwrap();
         io::stderr().write_all(&out.stderr).unwrap();
