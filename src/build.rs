@@ -1,12 +1,11 @@
-
-use std::env;
+use std::{env, io};
 use std::fs;
-use std::io::Result;
+use std::io::{ErrorKind, Result};
 use std::ops::Add;
 use std::path::PathBuf;
 use std::process::{Command, Output};
 
-/// this builder must have a path to a complied Halide folder it is used to build multipal generators quickly
+/// this builder must have a path to a complied Halide folder it is used to build multiple generators quickly
 ///
 /// more stuff
 ///
@@ -22,7 +21,7 @@ pub struct GenBuilder {
     target: String,
 }
 
-///This represents halide generator it is built useing [GenBuilder]
+///This represents halide generator it is built using [GenBuilder]
 ///
 /// more stuff
 ///
@@ -97,7 +96,7 @@ impl GenBuilder {
     }
     pub fn make_runtime(self) {
         if(self.generators.is_empty()){
-            //todo make gengen
+            //todo make gen-gen
         }
         else {
            let gen = self.generators[0].make_runtime();
@@ -108,34 +107,34 @@ impl GenBuilder {
 ///
 /// more stuff
 ///
-/// ```no_run
-///     ExampleCode
+/// ```ignore
+///     let a = 5;
 /// ```
 ///
 impl Generator<'static> {
-    pub fn make(&self) -> Output {
-        let mut compile = Command::new("g++");
-        compile.args(["-std=c++17"]);
+    pub fn compile(&self) -> Output {
+        let mut cmd_compile = Command::new("g++");
+        cmd_compile.args(["-std=c++17"]);
 
-        compile.args(["-I", self.halide_path.join("include").to_str().unwrap()]);
-        compile.args(["-I", self.halide_path.join("tools").to_str().unwrap()]);
-        compile.args(["-L", self.halide_path.join("lib").to_str().unwrap()]);
+        cmd_compile.args(["-I", self.halide_path.join("include").to_str().unwrap()]);
+        cmd_compile.args(["-I", self.halide_path.join("tools").to_str().unwrap()]);
+        cmd_compile.args(["-L", self.halide_path.join("lib").to_str().unwrap()]);
 
-        compile.args(["-o", self.gen_exe.to_str().unwrap()]);
+        cmd_compile.args(["-o", self.gen_exe.to_str().unwrap()]);
 
         let temp = self
             .halide_path
             .join("tools")
             .join("GenGen")
             .with_extension("cpp");
-        compile.args([
+        cmd_compile.args([
             "-g",
             self.gen_path.to_str().unwrap(),
             temp.to_str().unwrap(),
         ]);
-        compile.args(self.gcc_flags.clone());
+        cmd_compile.args(self.gcc_flags.clone());
         //compile.args(["-Wl,-rpath","-Wl,/home/rootbutcher2/CLionProjects/Halide-Rusts-tests/Halide/distrib/lib/"]);
-        compile.output().expect("Make generator failed")
+        cmd_compile.output().expect("Make generator failed")
     }
     pub fn run_gen(&self) -> Output {
         //assert!(!self.gen_exe.is_none());
@@ -164,13 +163,55 @@ impl Generator<'static> {
         gen.output().expect("failed to run")
     }
 
-    pub fn make_runtime(&self) -> Output {
+    pub fn make_runtime(&self) -> Result<()> {
         println!("Cmd to runt: {:?}", self.gen_exe.to_str().unwrap());
         let mut cmd = Command::new(self.gen_exe.to_str().unwrap());
         cmd.args(["-r", "runtime", "-o", self.rs_output.to_str().unwrap(),"target=host"]);
         cmd.env("LD_LIBRARY_PATH", self.halide_path.join("lib"));
-        cmd.output().expect("failed to make runtime")
-        //-r runtime -o taget=host
+        let output = cmd.output().expect("failed to make runtime");
+        let mut result;
+        if(output.status.success()) {
+            result = self.rename_runtime();
+            if result.is_ok(){
+                println!("cargo:rustc-link-lib=static={}", "runtime");
+            }
+        }
+        else {
+            let errors = String::from("failed to make runtime with gen: ").add(self.gen_name.as_str());
+            result = Err(io::Error::new(ErrorKind::Other, errors.as_str()));
+        }
+        result
+    }
+
+    fn rename_runtime(&self)->Result<()>{
+        println!(
+            "file name: {:?}",
+            self.rs_output
+                .join("runtime")
+                .with_extension("a")
+                .to_str()
+                .unwrap()
+        );
+        println!(
+            "file out: {:?}",
+            self.rs_output
+                .join(String::from("lib").add("runtime"))
+                .with_extension("a")
+                .to_str()
+                .unwrap()
+        );
+        fs::rename(
+            self.rs_output
+                .join("runtime")
+                .with_extension("a")
+                .to_str()
+                .unwrap(),
+            self.rs_output
+                .join(String::from("lib").add("runtime"))
+                .with_extension("a")
+                .to_str()
+                .unwrap(),
+        )
     }
 
     pub fn rename(&self) -> Result<()> {

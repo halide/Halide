@@ -12,7 +12,7 @@
         ).out_dir("test_files/").debug(true);
         let g = h.new_gen("iir_blur".to_string());
 
-        let out = g.make();
+        let out = g.compile();
         println!("Gen Creation Status: {}", out.status);
         io::stdout().write_all(&out.stdout).unwrap();
         io::stderr().write_all(&out.stderr).unwrap();
@@ -33,9 +33,8 @@
         assert!(out4.is_ok());
 
         let outrun = g.make_runtime();
-        println!("Runtime cmd: {}", outrun.status);
-        io::stdout().write_all(&outrun.stdout).unwrap();
-        io::stdout().write_all(&outrun.stderr).unwrap();
-        assert!(outrun.status.success());
+        println!("runtime results: {:?}", outrun);
+        assert!(outrun.is_ok());
+
     }
 //}
