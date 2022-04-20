@@ -17,7 +17,7 @@ pub struct GenBuilder {
 
     rs_output: PathBuf,
 
-    //Generators: Vec<Generator<'static>>,
+    Generators: Vec<Generator<'static>>,
     debug: bool,
     target: String,
 }
@@ -51,7 +51,7 @@ impl GenBuilder {
             halide_path: halide_path.into().join("distrib"),
             gen_path: gen_path.into(),
             rs_output: PathBuf::from(env::var("OUT_DIR").unwrap_or("target".to_string())),
-            //Generators: Vec!{},
+            Generators: vec![],
             debug: false,
             target: "target=host-no_runtime".to_string(),
         }
@@ -60,6 +60,9 @@ impl GenBuilder {
     pub fn out_dir<T: Into<PathBuf>>(mut self, out: T) -> Self {
         self.rs_output = out.into();
         self
+    }
+    pub fn push_gen(mut self, gen: Generator){
+
     }
     //Todo template all strings
     pub fn new_gen(self, gen_name: String) -> Generator<'static> {
