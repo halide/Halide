@@ -999,16 +999,21 @@ void CodeGen_ARM::visit(const Store *op) {
         // Declare the function
         std::ostringstream instr;
         vector<llvm::Type *> arg_types;
+        llvm::Type *intrin_llvm_type = llvm_type_of(intrin_type);
+#if LLVM_VERSION >= 150
+        const bool is_opaque = llvm::PointerType::get(intrin_llvm_type, 0)->isOpaque();
+#else
+        const bool is_opaque = false;
+#endif
         if (target.bits == 32) {
-            const char *type_annotation = (LLVM_VERSION < 150) ? ".p0i8" : ".p0";
             instr << "llvm.arm.neon.vst"
                   << num_vecs
-                  << type_annotation
+                  << (is_opaque ? ".p0" : ".p0i8")
                   << ".v"
                   << intrin_type.lanes()
                   << (t.is_float() ? 'f' : 'i')
                   << t.bits();
-            arg_types = vector<llvm::Type *>(num_vecs + 2, llvm_type_of(intrin_type));
+            arg_types = vector<llvm::Type *>(num_vecs + 2, intrin_llvm_type);
             arg_types.front() = i8_t->getPointerTo();
             arg_types.back() = i32_t;
         } else {
@@ -1019,11 +1024,10 @@ void CodeGen_ARM::visit(const Store *op) {
                   << (t.is_float() ? 'f' : 'i')
                   << t.bits()
                   << ".p0";
-            if (LLVM_VERSION < 150) {
-                instr << (t.is_float() ? 'f' : 'i')
-                      << t.bits();
+            if (!is_opaque) {
+                instr << (t.is_float() ? 'f' : 'i') << t.bits();
             }
-            arg_types = vector<llvm::Type *>(num_vecs + 1, llvm_type_of(intrin_type));
+            arg_types = vector<llvm::Type *>(num_vecs + 1, intrin_llvm_type);
             arg_types.back() = llvm_type_of(intrin_type.element_of())->getPointerTo();
         }
         llvm::FunctionType *fn_type = FunctionType::get(llvm::Type::getVoidTy(*context), arg_types, false);
