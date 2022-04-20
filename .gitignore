@@ -3,4 +3,3 @@
 /.idea
 /test_files/*
 !/test_files/iir_blur.cpp
-/rs_out/iir_blur.rs
