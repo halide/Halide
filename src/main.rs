@@ -1,13 +1,8 @@
 include!("rs/iir_blur.rs");
 
-use halide_runtime::halide_runtime::{halide_buffer, halide_type_t, halide_buffer_t};
-
-use std::ffi::c_void;
-use std::ffi::*;
-use std::os::raw::c_int;
-use std::sync::mpsc::channel;
+use halide::runtime::{HalideBuffer};
+use halide::runtime::runtime_bindings::{halide_buffer_t, halide_type_t};
 use image::io::Reader;
-use image::save_buffer_with_format;
 
 fn main(){
 
@@ -33,7 +28,7 @@ fn main(){
     let mut output_raw: Vec<f32> = vec![0.0; img_raw.len()];
 
     // Create the input buffer
-    let mut inbuf = halide_buffer{
+    let mut inbuf = HalideBuffer{
         width: width as i32,
         height: height as i32,
         channels: channels as i32,
@@ -47,7 +42,7 @@ fn main(){
     }.create_buffer();
     
     // Create the output buffer
-    let mut outbuf = halide_buffer{
+    let mut outbuf = HalideBuffer{
         width: width as i32,
         height: height as i32,
         channels: channels as i32,
