@@ -249,15 +249,18 @@ struct LowerParallelTasks : public IRMutator {
                 //
                 //   typedef int (*halide_task_t)(void *user_context, int task_number, uint8_t *closure);
                 //
+                closure_function_type = type_of<halide_task_t>();
+
                 closure_args[1] = make_scalar_arg<int32_t>(t.loop_var);
                 closure_args[2] = closure_arg;
                 // closure_task_parent remains undefined here.
-                closure_function_type = type_of<halide_task_t>();
             } else {
                 // The closure will be a halide_loop_task_t, with arguments like:
                 //
                 //   typedef int (*halide_loop_task_t)(void *user_context, int min, int extent, uint8_t *closure, void *task_parent);
                 //
+                closure_function_type = type_of<halide_loop_task_t>();
+
                 const std::string closure_task_parent_name = unique_name("__task_parent");
                 closure_task_parent = Variable::make(type_of<void *>(), closure_task_parent_name);
                 // We peeled off a loop. Wrap a new loop around the body
@@ -278,8 +281,6 @@ struct LowerParallelTasks : public IRMutator {
                 closure_args[2] = make_scalar_arg<int32_t>(loop_extent_name);
                 closure_args[3] = closure_arg;
                 closure_args[4] = make_scalar_arg<void *>(closure_task_parent_name);
-
-                closure_function_type = type_of<halide_loop_task_t>();
             }
 
             {
