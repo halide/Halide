@@ -631,22 +631,6 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
     raw_svector_ostream ostream(outstr);
     ostream.SetUnbuffered();
 
-    // NOTE: use of the "legacy" PassManager here is still required; it is deprecated
-    // for optimization, but is still the only complete API for codegen as of work-in-progress
-    // LLVM14. At the time of this comment (Dec 2021), there is no firm plan as to when codegen will
-    // be fully available in the new PassManager, so don't worry about this 'legacy'
-    // tag until there's any indication that the old APIs start breaking.
-    //
-    // See:
-    // https://lists.llvm.org/pipermail/llvm-dev/2021-April/150100.html
-    // https://releases.llvm.org/13.0.0/docs/ReleaseNotes.html#changes-to-the-llvm-ir
-    // https://groups.google.com/g/llvm-dev/c/HoS07gXx0p8
-    legacy::FunctionPassManager function_pass_manager(module.get());
-    legacy::PassManager module_pass_manager;
-
-    module_pass_manager.add(createTargetTransformInfoWrapperPass(target_machine->getTargetIRAnalysis()));
-    function_pass_manager.add(createTargetTransformInfoWrapperPass(target_machine->getTargetIRAnalysis()));
-
     // NVidia's libdevice library uses a __nvvm_reflect to choose
     // how to handle denormalized numbers. (The pass replaces calls
     // to __nvvm_reflect with a constant via a map lookup. The inliner
@@ -682,17 +666,65 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
     const bool do_loop_opt = !target.has_feature(Target::DisableLLVMLoopOpt) ||
                              target.has_feature(Target::EnableLLVMLoopOpt);
 
-    PassManagerBuilder b;
-    b.OptLevel = 3;
-    b.Inliner = createFunctionInliningPass(b.OptLevel, 0, false);
-    b.LoopVectorize = do_loop_opt;
-    b.SLPVectorize = true;
-    b.DisableUnrollLoops = !do_loop_opt;
+    // Define and run optimization pipeline with new pass manager
+    PipelineTuningOptions pto;
+    pto.LoopInterleaving = do_loop_opt;
+    pto.LoopVectorization = do_loop_opt;
+    pto.SLPVectorization = true;  // Note: SLP vectorization has no analogue in the Halide scheduling model
+    pto.LoopUnrolling = do_loop_opt;
+    pto.ForgetAllSCEVInLoopUnroll = true;
 
-    target_machine->adjustPassManager(b);
+    llvm::PassBuilder pb(target_machine.get(), pto);
 
-    b.populateFunctionPassManager(function_pass_manager);
-    b.populateModulePassManager(module_pass_manager);
+    bool debug_pass_manager = false;
+    // These analysis managers have to be declared in this order.
+    llvm::LoopAnalysisManager lam;
+    llvm::FunctionAnalysisManager fam;
+    llvm::CGSCCAnalysisManager cgam;
+    llvm::ModuleAnalysisManager mam;
+
+    // Register all the basic analyses with the managers.
+    pb.registerModuleAnalyses(mam);
+    pb.registerCGSCCAnalyses(cgam);
+    pb.registerFunctionAnalyses(fam);
+    pb.registerLoopAnalyses(lam);
+    pb.crossRegisterProxies(lam, fam, cgam, mam);
+    ModulePassManager mpm;
+
+#if LLVM_VERSION >= 140
+    using OptimizationLevel = llvm::OptimizationLevel;
+#else
+    using OptimizationLevel = PassBuilder::OptimizationLevel;
+#endif
+
+    OptimizationLevel level = OptimizationLevel::O3;
+
+    target_machine->registerPassBuilderCallbacks(pb);
+
+    mpm = pb.buildPerModuleDefaultPipeline(level, debug_pass_manager);
+    mpm.run(*module, mam);
+
+    if (llvm::verifyModule(*module, &errs())) {
+        report_fatal_error("Transformation resulted in an invalid module\n");
+    }
+
+    // Optimization pipeline completed; run codegen pipeline
+
+    // NOTE: use of the "legacy" PassManager here is still required; it is deprecated
+    // for optimization, but is still the only complete API for codegen as of work-in-progress
+    // LLVM14. At the time of this comment (Dec 2021), there is no firm plan as to when codegen will
+    // be fully available in the new PassManager, so don't worry about this 'legacy'
+    // tag until there's any indication that the old APIs start breaking.
+    //
+    // See:
+    // https://lists.llvm.org/pipermail/llvm-dev/2021-April/150100.html
+    // https://releases.llvm.org/13.0.0/docs/ReleaseNotes.html#changes-to-the-llvm-ir
+    // https://groups.google.com/g/llvm-dev/c/HoS07gXx0p8
+    legacy::FunctionPassManager function_pass_manager(module.get());
+    legacy::PassManager module_pass_manager;
+
+    module_pass_manager.add(createTargetTransformInfoWrapperPass(target_machine->getTargetIRAnalysis()));
+    function_pass_manager.add(createTargetTransformInfoWrapperPass(target_machine->getTargetIRAnalysis()));
 
     // Override default to generate verbose assembly.
     target_machine->Options.MCOptions.AsmVerbose = true;
@@ -707,13 +739,14 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
         internal_error << "Failed to set up passes to emit PTX source\n";
     }
 
-    // Run optimization passes
     function_pass_manager.doInitialization();
     for (auto &function : *module) {
         function_pass_manager.run(function);
     }
     function_pass_manager.doFinalization();
     module_pass_manager.run(*module);
+
+    // Codegen pipeline completed.
 
     if (debug::debug_level() >= 2) {
         dump();
