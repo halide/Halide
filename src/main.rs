@@ -1,5 +1,10 @@
 use std::env;
+
+
 use halide::runtime::*;
+//todo abstract this
+use halide::runtime::runtime_bindings::*;
+
 include!(concat!(env!("OUT_DIR"), "/iir_blur.rs"));
 
 use std::ffi::c_void;
@@ -10,7 +15,7 @@ use image::io::Reader;
 use image::save_buffer_with_format;
 
 fn main(){
-
+//todo recode to use runtime
     println!("halide mainish thing");
 
     let img = Reader::open("images/cat.png")
@@ -32,7 +37,7 @@ fn main(){
 
     let mut output_raw: Vec<f32> = vec![0.0; img_raw.len()];
 
-    let mut inbuf: halide_buffer_t = halide_buffer(
+    let mut inbuf: halide_buffer_t = HalideBuffer(
         width as i32,
         height as i32,
         channels as i32,
@@ -44,7 +49,7 @@ fn main(){
         input.as_mut_ptr(),
         1,
     );
-    let mut outbuf: halide_buffer_t = halide_buffer(
+    let mut outbuf: halide_buffer_t = HalideBuffer(
         width as i32,
         height as i32,
         channels as i32,
@@ -78,7 +83,7 @@ fn main(){
 }
 
 
-fn halide_buffer(
+fn HalideBuffer(
     width: i32,
     height: i32,
     channels: i32,
