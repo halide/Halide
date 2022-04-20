@@ -20,13 +20,4 @@ fn main() {
 
     assert!(gen.rename_move().is_ok());
 
-    //todo move & generate in halide::build
-    println!(
-        "cargo:rustc-link-search=native={}",
-        "/home/rootbutcher2/CLionProjects/halide_test_app/"
-    );
-    println!(
-        "cargo:rustc-link-lib=static={}",
-        "runtime"
-    );
 }
