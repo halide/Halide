@@ -639,7 +639,7 @@ void Module::compile(const std::map<OutputFileType, std::string> &output_files) 
         std::ofstream file(output_files.at(OutputFileType::c_header));
         Internal::CodeGen_C cg(file,
                                target(),
-                               target().has_feature(Target::CPlusPlusMangling) ? Internal::CodeGen_C::CPlusPlusHeader : Internal::CodeGen_C::CHeader,
+                               Internal::CodeGen_C::CPlusPlusHeader,
                                output_files.at(OutputFileType::c_header));
         cg.compile(*this);
     }
@@ -648,7 +648,7 @@ void Module::compile(const std::map<OutputFileType, std::string> &output_files) 
         std::ofstream file(output_files.at(OutputFileType::c_source));
         Internal::CodeGen_C cg(file,
                                target(),
-                               target().has_feature(Target::CPlusPlusMangling) ? Internal::CodeGen_C::CPlusPlusImplementation : Internal::CodeGen_C::CImplementation);
+                               Internal::CodeGen_C::CPlusPlusImplementation);
         cg.compile(*this);
     }
     if (contains(output_files, OutputFileType::python_extension)) {

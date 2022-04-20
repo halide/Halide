@@ -1821,7 +1821,7 @@ void CodeGen_C::compile(const LoweredFunc &f, const std::map<std::string, std::s
 
     std::vector<std::string> namespaces;
     std::string simple_name = c_print_name(extract_namespaces(f.name, namespaces), false);
-    if (!is_c_plus_plus_interface()) {
+    if (name_mangling != NameMangling::CPlusPlus) {
         user_assert(namespaces.empty()) << "Namespace qualifiers not allowed on function name if not compiling with Target::CPlusPlusNameMangling.\n";
     }
 
@@ -2023,14 +2023,12 @@ string CodeGen_C::print_assignment(Type t, const std::string &rhs) {
     auto cached = cache.find(rhs);
     if (cached == cache.end()) {
         id = unique_name('_');
-        const char *const_flag = output_kind == CPlusPlusImplementation ? " const " : "";
         if (t.is_handle()) {
             // Don't print void *, which might lose useful type information. just use auto.
-            stream << get_indent() << "auto *";
         } else {
-            stream << get_indent() << print_type(t, AppendSpace);
+            stream << get_indent() << print_type(t, AppendSpace) << "const ";
         }
-        stream << const_flag << id << " = " << rhs << ";\n";
+        stream << id << " = " << rhs << ";\n";
         cache[rhs] = id;
     } else {
         id = cached->second;
@@ -2670,8 +2668,7 @@ void CodeGen_C::visit(const Load *op) {
         bool type_cast_needed = !(allocations.contains(op->name) &&
                                   allocations.get(op->name).type.element_of() == t.element_of());
         if (type_cast_needed) {
-            const char *const_flag = output_kind == CPlusPlusImplementation ? " const" : "";
-            rhs << "((" << print_type(t.element_of()) << const_flag << " *)" << name << ")";
+            rhs << "((" << print_type(t.element_of(), AppendSpace) << "const *)" << name << ")";
         } else {
             rhs << name;
         }
@@ -3237,7 +3234,7 @@ void CodeGen_C::test() {
     ostringstream source;
     ostringstream macros;
     {
-        CodeGen_C cg(source, Target("host"), CodeGen_C::CImplementation);
+        CodeGen_C cg(source, Target("host"), CodeGen_C::CPlusPlusImplementation);
         cg.compile(m);
     }
 

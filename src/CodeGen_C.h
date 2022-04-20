@@ -27,11 +27,8 @@ struct LoweredFunc;
 class CodeGen_C : public IRPrinter {
 public:
     enum OutputKind {
-        CHeader,
         CPlusPlusHeader,
-        CImplementation,
         CPlusPlusImplementation,
-        CExternDecl,
         CPlusPlusExternDecl,
     };
 
@@ -39,7 +36,7 @@ public:
      * stream (e.g. a file, or std::cout) */
     CodeGen_C(std::ostream &dest,
               const Target &target,
-              OutputKind output_kind = CImplementation,
+              OutputKind output_kind = CPlusPlusImplementation,
               const std::string &include_guard = "");
     ~CodeGen_C() override;
 
@@ -132,26 +129,17 @@ protected:
 
     /** Return true if only generating an interface, which may be extern "C" or C++ */
     bool is_header() {
-        return output_kind == CHeader ||
-               output_kind == CPlusPlusHeader;
+        return output_kind == CPlusPlusHeader;
     }
 
     /** Return true if only generating an interface, which may be extern "C" or C++ */
     bool is_extern_decl() {
-        return output_kind == CExternDecl ||
-               output_kind == CPlusPlusExternDecl;
+        return output_kind == CPlusPlusExternDecl;
     }
 
     /** Return true if only generating an interface, which may be extern "C" or C++ */
     bool is_header_or_extern_decl() {
         return is_header() || is_extern_decl();
-    }
-
-    /** Return true if generating C++ linkage. */
-    bool is_c_plus_plus_interface() {
-        return output_kind == CPlusPlusHeader ||
-               output_kind == CPlusPlusImplementation ||
-               output_kind == CPlusPlusExternDecl;
     }
 
     /** Open a new C scope (i.e. throw in a brace, increase the indent) */
