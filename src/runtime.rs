@@ -1,7 +1,9 @@
+
 include!("Runtime_bindings.rs");
-//mod Runtime_bindings;
-use std::process::Output;
-pub struct halide_buffer {
+use crate::runtime::runtime_bindings::*;
+
+///Need doc
+pub struct HalideBuffer {
     pub width: i32,
     pub height: i32,
     pub channels: i32,
@@ -10,7 +12,7 @@ pub struct halide_buffer {
     pub flags: u64,
 }
 
-impl halide_buffer {
+impl HalideBuffer {
     pub fn create_buffer(&mut self) -> halide_buffer_t {
         let mut dim = Vec::new();
 

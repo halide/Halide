@@ -5,13 +5,20 @@
 //! need more stuff
 //!
 
-
 ///module documents
+///
+/// more stuff
 pub mod build;
 
 ///tests for build
 #[cfg(test)]
 mod build_tests;
 
-//module docs
+///module docs
+///
+/// more stuff
 pub mod runtime;
+
+///tests for build
+#[cfg(test)]
+mod runtime_tests;
