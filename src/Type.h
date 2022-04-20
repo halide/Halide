@@ -88,7 +88,7 @@ struct halide_handle_cplusplus_type {
         Volatile = 1 << 1,         ///< Bitmask flag for "volatile"
         Restrict = 1 << 2,         ///< Bitmask flag for "restrict"
         Pointer = 1 << 3,          ///< Bitmask flag for a pointer "*"
-        FunctionPointer = 1 << 4,  ///< Bitmask flag for a function pointer (if set, Pointer will also be set)
+        FunctionTypedef = 1 << 4,  ///< Bitmask flag for a function typedef; when this is set, Pointer should also always be set
     };
 
     /// Qualifiers and indirections on type. 0 is innermost.
@@ -210,7 +210,7 @@ template<typename T>
     constexpr bool is_volatile = std::is_volatile<TBase>::value;
 
     constexpr uint8_t modifiers = static_cast<uint8_t>(
-        (is_function_pointer ? halide_handle_cplusplus_type::FunctionPointer : 0) |
+        (is_function_pointer ? halide_handle_cplusplus_type::FunctionTypedef : 0) |
         (is_ptr ? halide_handle_cplusplus_type::Pointer : 0) |
         (is_const ? halide_handle_cplusplus_type::Const : 0) |
         (is_volatile ? halide_handle_cplusplus_type::Volatile : 0));

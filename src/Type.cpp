@@ -299,7 +299,7 @@ std::string type_to_c_type(Type type, bool include_space, bool c_plus_plus) {
                     oss << " restrict";
                 }
                 if ((modifier & halide_handle_cplusplus_type::Pointer) &&
-                    !(modifier & halide_handle_cplusplus_type::FunctionPointer)) {
+                    !(modifier & halide_handle_cplusplus_type::FunctionTypedef)) {
                     oss << " *";
                 }
             }
