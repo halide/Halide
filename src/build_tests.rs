@@ -1,13 +1,12 @@
 #[cfg(test)]
 mod tests {
     use crate::build::GenBuilder;
-    use std::env;
     use std::io;
     use std::io::prelude::*;
 
     #[test]
     fn it_works() {
-        let mut h = GenBuilder::new(
+        let h = GenBuilder::new(
             "/home/rootbutcher2/CLionProjects/Halide-Rusts-tests/Halide",
             "test_files/",
         )

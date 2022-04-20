@@ -1,7 +1,10 @@
+#![warn(missing_docs)]
+//#![warn(missing_doc_code_examples)]
 //!Crate level docs
 //!
 //! need more stuff
-#![warn(missing_docs)]
+//!
+
 
 ///module documents
 pub mod build;
