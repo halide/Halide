@@ -1,9 +1,6 @@
 /target
 /Cargo.lock
 /.idea
-/Halide_gens/iir_blur.gen
-/Halide_gens/iir_blur.h
-/Halide_gens/iir_blur.a
-/Halide_gens/iir_blur.registration.cpp
-/Halide_gens/libiir_blur.a
+/test_files/*
+!/test_files/iir_blur.cpp
 /rs_out/iir_blur.rs

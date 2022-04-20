@@ -1,10 +1,10 @@
 //!Crate level docs
 //!
 //! need more stuff
-
+#![warn(missing_docs)]
 ///maybe?
 pub mod runtime{
-    //todo is this a good approche
+    //todo is this a good approche?
 }
 ///module documents
 pub mod build {
@@ -15,9 +15,8 @@ pub mod build {
     //!example of usage
     //!'''no_run
     //! Put code here
-    //! '''
+    //!'''
     //!
-    #![warn(missing_docs)]
 
     use std::fs;
     use std::env;
@@ -70,7 +69,7 @@ pub mod build {
             GenBuilder {
                 halide_path: halide_path.into().join("distrib"),
                 gen_path: gen_path.into(),
-                rs_output: PathBuf::from(env::var("OUT_DIR").unwrap_or("target".to_string())),
+                rs_output: PathBuf::from(env::var("OUT_DIR").unwrap_or("".to_string())),
                 //Generators: Vec!{},
                 debug: false,
                 target: "target=host-no_runtime".to_string()
@@ -176,8 +175,8 @@ pub mod build {
         fn it_works() {
             let mut h = GenBuilder::new(
                 "/home/rootbutcher2/CLionProjects/Halide-Rusts-tests/Halide",
-                "/home/rootbutcher2/CLionProjects/halide/Halide_gens"
-            );
+                "test_files/"
+            ).out_dir("test_files/");
             let g = h.new_gen("iir_blur".to_string());
 
             let out = g.make();
