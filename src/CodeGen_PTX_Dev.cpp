@@ -720,11 +720,8 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
     // https://lists.llvm.org/pipermail/llvm-dev/2021-April/150100.html
     // https://releases.llvm.org/13.0.0/docs/ReleaseNotes.html#changes-to-the-llvm-ir
     // https://groups.google.com/g/llvm-dev/c/HoS07gXx0p8
-    legacy::FunctionPassManager function_pass_manager(module.get());
     legacy::PassManager module_pass_manager;
-
     module_pass_manager.add(createTargetTransformInfoWrapperPass(target_machine->getTargetIRAnalysis()));
-    function_pass_manager.add(createTargetTransformInfoWrapperPass(target_machine->getTargetIRAnalysis()));
 
     // Override default to generate verbose assembly.
     target_machine->Options.MCOptions.AsmVerbose = true;
@@ -735,19 +732,10 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
     bool fail = target_machine->addPassesToEmitFile(module_pass_manager, ostream, nullptr,
                                                     ::llvm::CGFT_AssemblyFile,
                                                     true);
-    if (fail) {
-        internal_error << "Failed to set up passes to emit PTX source\n";
-    }
-
-    function_pass_manager.doInitialization();
-    for (auto &function : *module) {
-        function_pass_manager.run(function);
-    }
-    function_pass_manager.doFinalization();
+    internal_assert(!fail) << "Failed to set up passes to emit PTX source\n";
     module_pass_manager.run(*module);
 
     // Codegen pipeline completed.
-
     if (debug::debug_level() >= 2) {
         dump();
     }
