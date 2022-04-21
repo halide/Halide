@@ -141,6 +141,16 @@ py::object generate_impl(const GeneratorFactory &factory, const GeneratorContext
         } else {
             if (py::isinstance<LoopLevel>(value)) {
                 generator_params[name] = value.cast<LoopLevel>();
+            } else if (py::isinstance<py::list>(value)) {
+                // Convert [hl.UInt(8), hl.Int(16)] -> uint8,int16
+                std::string v;
+                for (auto t : value) {
+                    if (!v.empty()) {
+                        v += ",";
+                    }
+                    v += py::str(t).cast<std::string>();
+                }
+                generator_params[name] = v;
             } else {
                 generator_params[name] = py::str(value).cast<std::string>();
             }
