@@ -159,6 +159,7 @@ void define_func(py::module &m) {
             })
             .def("defined", &Func::defined)
             .def("outputs", &Func::outputs)
+            .def("output_type", &Func::output_type)
             .def("output_types", &Func::output_types)
 
             .def("bound", &Func::bound, py::arg("var"), py::arg("min"), py::arg("extent"))
