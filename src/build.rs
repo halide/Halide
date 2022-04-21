@@ -113,6 +113,7 @@ impl GenBuilder {
 ///
 impl Generator<'static> {
     pub fn compile(&self) -> Output {
+
         let mut cmd_compile = Command::new("g++");
         cmd_compile.args(["-std=c++17"]);
 
@@ -127,14 +128,17 @@ impl Generator<'static> {
             .join("tools")
             .join("GenGen")
             .with_extension("cpp");
+
         cmd_compile.args([
             "-g",
             self.gen_path.to_str().unwrap(),
             temp.to_str().unwrap(),
         ]);
+
         cmd_compile.args(self.gcc_flags.clone());
         //compile.args(["-Wl,-rpath","-Wl,/home/rootbutcher2/CLionProjects/Halide-Rusts-tests/Halide/distrib/lib/"]);
         cmd_compile.output().expect("Make generator failed")
+
     }
     pub fn run_gen(&self) -> Output {
         //assert!(!self.gen_exe.is_none());

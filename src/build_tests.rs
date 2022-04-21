@@ -7,7 +7,7 @@
     #[test]
     fn it_works() {
         let h = GenBuilder::new(
-            "/home/rootbutcher2/CLionProjects/Halide-Rusts-tests/Halide",
+            "/home/jacob/Desktop/Halide",
             "test_files/",
         ).out_dir("test_files/").debug(true);
         let g = h.new_gen("iir_blur".to_string());

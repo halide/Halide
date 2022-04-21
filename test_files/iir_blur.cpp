@@ -31,7 +31,7 @@ Func blur_cols_transpose(Func input, Expr height, Expr alpha, bool skip_schedule
     // Transpose the blur.
     Func transpose("transpose");
     transpose(x, y, c) = blur(y, x, c);
-
+    
     // Schedule
     if (!skip_schedule) {
         if (!target.has_gpu_feature()) {
@@ -133,12 +133,15 @@ class IirBlur : public Generator<IirBlur> {
 public:
     // This is the input image: a 3D (color) image with 32 bit float
     // pixels.
-    Input<Buffer<float>> input{"input",3};
+
+    Input<Buffer<float>> input{"input", 3};
+
     // The filter coefficient, alpha is the weight of the input to the
     // filter.
     Input<float> alpha{"alpha"};
 
-    Output<Buffer<float>> output{"output",3};
+    Output<Buffer<float>> output{"output", 3};
+
 
     void generate() {
 
