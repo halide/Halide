@@ -6,3 +6,5 @@
 /src/rs/iir_blur.rs
 /Cargo.lock
 /.idea
+
+images/outBlurred.png

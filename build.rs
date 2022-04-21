@@ -5,13 +5,14 @@ use halide::build::{Generator, GenBuilder};
 fn main() {
 
     let Hal = GenBuilder::new(
-        "/home/rootbutcher2/CLionProjects/Halide-Rusts-tests/Halide",
+        "/home/jacob/Desktop/Halide",
         "src/gens"
     ).debug(true);
        // .out_dir("src/rs");
 
 
     let gen = Hal.new_gen("iir_blur".to_string());
+
 
     let out = gen.compile();
     println!("compile Status: {}", out.status.success());
