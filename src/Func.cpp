@@ -188,7 +188,18 @@ void Func::define_extern(const std::string &function_name,
 }
 
 /** Get the types of the buffers returned by an extern definition. */
+const Type &Func::output_type() const {
+    user_assert(defined())
+        << "Can't access output buffer of undefined Func.\n";
+    user_assert(func.output_types().size() == 1)
+        << "Can't call Func::output_type on Func \"" << name()
+        << "\" because it returns a Tuple.\n";
+    return func.output_types()[0];
+}
+
 const std::vector<Type> &Func::output_types() const {
+    user_assert(defined())
+        << "Can't access output buffer of undefined Func.\n";
     return func.output_types();
 }
 
