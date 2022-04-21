@@ -1551,30 +1551,6 @@ GeneratorOutputBase *GeneratorBase::find_output_by_name(const std::string &name)
     return t;
 }
 
-void GeneratorBase::set_generator_param_values(const GeneratorParamsMap &params) {
-    GeneratorParamInfo &pi = param_info();
-
-    std::unordered_map<std::string, Internal::GeneratorParamBase *> generator_params_by_name;
-    for (auto *g : pi.generator_params()) {
-        generator_params_by_name[g->name()] = g;
-    }
-
-    for (const auto &key_value : params) {
-        auto gp = generator_params_by_name.find(key_value.first);
-        user_assert(gp != generator_params_by_name.end())
-            << "Generator " << generator_registered_name << " has no GeneratorParam named: " << key_value.first << "\n";
-        if (gp->second->is_looplevel_param()) {
-            if (!key_value.second.string_value.empty()) {
-                gp->second->set_from_string(key_value.second.string_value);
-            } else {
-                gp->second->set(key_value.second.loop_level);
-            }
-        } else {
-            gp->second->set_from_string(key_value.second.string_value);
-        }
-    }
-}
-
 GeneratorContext GeneratorBase::get_context() const {
     return GeneratorContext(target, auto_schedule, machine_params, externs_map, value_tracker);
 }

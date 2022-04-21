@@ -3102,7 +3102,6 @@ struct StringOrLoopLevel {
         : loop_level(loop_level) {
     }
 };
-using GeneratorParamsMap = std::map<std::string, StringOrLoopLevel>;
 
 class GeneratorParamInfo {
     // names used across all params, inputs, and outputs.
@@ -3144,8 +3143,6 @@ public:
 class GeneratorBase : public NamesInterface, public AbstractGenerator {
 public:
     ~GeneratorBase() override;
-
-    void set_generator_param_values(const GeneratorParamsMap &params);
 
     /** Given a data type, return an estimate of the "natural" vector size
      * for that data type when compiling for the current target. */
