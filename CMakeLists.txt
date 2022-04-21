@@ -136,6 +136,14 @@ if (CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
         message(STATUS "Building utils disabled")
     endif ()
 
+    option(WITH_HEXAGON_PROFILER "Build Hexagon profiler" OFF)
+    if (WITH_HEXAGON_PROFILER)
+        message(STATUS "Building Hexagon profiler enabled")
+        add_subdirectory(util/Hexagon)
+    else ()
+        message(STATUS "Building Hexagon profiler disabled")
+    endif ()
+
     add_subdirectory(packaging)
 
     add_custom_target(distrib
