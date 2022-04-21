@@ -5,7 +5,7 @@ use halide::build::{Generator, GenBuilder};
 fn main() {
 
     let Hal = GenBuilder::new(
-        "/home/jacob/Desktop/Halide",
+        "../../../../",
         "src/gens"
     ).debug(true);
        // .out_dir("src/rs");

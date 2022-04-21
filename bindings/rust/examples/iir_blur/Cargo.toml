@@ -1,16 +1,12 @@
 [package]
-name = "halide_test_app"
+name = "iir_blur"
 version = "0.1.0"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [build-dependencies]
-#halide = {path = "/home/rootbutcher2/CLionProjects/halide"}
-#halide = {git ="https://github.com/RootButcher/halide", branch = "refactoringMakeIntoCompile"}
-halide = {path = "../Halide"}
+halide = {path = "../../"}
 [dependencies]
-#halide = {path = "/home/rootbutcher2/CLionProjects/halide"}
-#halide = {git ="https://github.com/RootButcher/halide", branch = "refactoringMakeIntoCompile"}
-halide = {path = "../Halide"}
+halide = {path = "../../"}
 image = "0.24.1"
