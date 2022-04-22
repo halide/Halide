@@ -1,12 +1,12 @@
 [package]
 name = "halide"
 version = "0.1.0"
-edition = "2021" #this is rust
+edition = "2021" #this is rust cargo edition
 
-authors = ["James <james4oreilly@gmail.com>","Jacob <>","Ravinder <>","Malhet <>"]
-
+authors = ["Halide <>","MNSU","James <james4oreilly@gmail.com>","Jacob <>","Ravinder <>","Malhet <>"]
 exclude = ["/examples"]
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-bindgen = "*"
+bindgen = "0.59.2"
+
