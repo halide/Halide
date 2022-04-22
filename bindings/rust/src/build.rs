@@ -5,6 +5,7 @@ use std::ops::Add;
 use std::path::PathBuf;
 use std::process::{Command, Output};
 
+
 /// this builder must have a path to a complied Halide folder it is used to build multiple generators quickly
 ///
 /// more stuff
@@ -20,6 +21,7 @@ pub struct GenBuilder {
     debug: bool,
     target: String,
 }
+
 
 ///This represents halide generator it is built using [GenBuilder]
 ///
@@ -39,8 +41,9 @@ pub struct Generator<'a> {
     target: String,
 }
 
-//Todo add runtime maker
+//Todo add build&bind all
 impl GenBuilder {
+
     pub fn new<T: Into<PathBuf>>(
         halide_path: T,
         gen_path: T,
@@ -103,15 +106,24 @@ impl GenBuilder {
         }
     }
 }
-///This is a generator
-///
-/// more stuff
-///
-/// ```ignore
-///     let a = 5;
-/// ```
-///
+
+//todo add build&bind
 impl Generator<'static> {
+    ///builds a builder
+    ///
+    /// more detail
+    ///
+    /// ```ignore
+    /// example
+    /// ```
+    pub fn builder<T: Into<PathBuf>>(
+        halide_path: T,
+        gen_path: T,
+        //rs_output:T
+    ) -> GenBuilder {
+        GenBuilder::new(halide_path,gen_path)
+    }
+
     pub fn compile(&self) -> Output {
 
         let mut cmd_compile = Command::new("g++");

@@ -5,7 +5,7 @@
 include!(concat!(env!("OUT_DIR"), "/iir_blur.rs"));
 
 use halide::runtime::{HalideBuffer};
-use halide::runtime::runtime_bindings::{halide_buffer_t, halide_type_t};
+use halide::runtime::runtime_bindings::{halide_buffer_t, halide_type_t};//todo rust enum type to runtime mod and possibly escape from useing buffer_t
 use image::io::Reader;
 
 fn main(){
