@@ -163,6 +163,17 @@ if (WITH_TUTORIALS)
 endif ()
 
 ##
+# Hexagon Profiler
+##
+
+if (WITH_HEXAGON_PROFILER)
+  install(DIRECTORY ${Halide_SOURCE_DIR}/util/Hexagon
+            COMPONENT Halide_Development
+            FILES_MATCHING
+            PATTERN "reports/*.py")
+endif ()
+
+##
 # CMake scripts
 ##
 
