@@ -1,15 +1,16 @@
 [package]
 name = "halide"
+description ="todo"#todo
 version = "0.1.0"
 edition = "2021" #this is rust cargo edition
 readme = "Readme.md"
 authors = ["Halide <>","MNSU","James <james4oreilly@gmail.com>","Jacob <>","Ravinder <>","Malhet <>"]
 exclude = ["/examples"]
-categories =["development-tools-ffi","external-ffi-bindings","multimedia::images"]
+categories =["development-tools-ffi","external-ffi-bindings","multimedia::images",""]
 repository ="https://github.com/halide/Halide"
 keywords = ["halide","image","build script"]
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-
+autoexamples =false
 [dependencies]
 bindgen = "0.59.2"
 
