@@ -5,7 +5,6 @@ use std::ops::Add;
 use std::path::PathBuf;
 use std::process::{Command, Output};
 
-
 /// this builder must have a path to a complied Halide folder it is used to build multiple generators quickly
 ///
 /// more stuff
@@ -21,7 +20,6 @@ pub struct GenBuilder {
     debug: bool,
     target: String,
 }
-
 
 ///This represents halide generator it is built using [GenBuilder]
 ///
@@ -41,9 +39,8 @@ pub struct Generator<'a> {
     target: String,
 }
 
-//Todo add build&bind all
+//Todo add runtime maker
 impl GenBuilder {
-
     pub fn new<T: Into<PathBuf>>(
         halide_path: T,
         gen_path: T,
@@ -106,24 +103,15 @@ impl GenBuilder {
         }
     }
 }
-
-//todo add build&bind
+///This is a generator
+///
+/// more stuff
+///
+/// ```ignore
+///     let a = 5;
+/// ```
+///
 impl Generator<'static> {
-    ///builds a builder
-    ///
-    /// more detail
-    ///
-    /// ```ignore
-    /// example
-    /// ```
-    pub fn builder<T: Into<PathBuf>>(
-        halide_path: T,
-        gen_path: T,
-        //rs_output:T
-    ) -> GenBuilder {
-        GenBuilder::new(halide_path,gen_path)
-    }
-
     pub fn compile(&self) -> Output {
 
         let mut cmd_compile = Command::new("g++");
@@ -283,4 +271,18 @@ impl Generator<'static> {
         println!("cargo:rustc-link-lib=static={}", self.gen_name);
         bindings
     }
+
+
+    pub fn doEverything(&self){
+
+        assert!(self.compile().status.success());
+    
+        assert!(self.run_gen().status.success());
+    
+        assert!(self.bind().is_ok());
+    
+        assert!(self.rename().is_ok());
+        assert!(self.make_runtime().is_ok());
+    }
+
 }
