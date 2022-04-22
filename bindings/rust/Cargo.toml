@@ -1,7 +1,8 @@
 [package]
 name = "halide"
 version = "0.1.0"
-#edition = "2022"
+edition = "2021" #this is rust
+
 authors = ["James <james4oreilly@gmail.com>","Jacob <>","Ravinder <>","Malhet <>"]
 
 exclude = ["/examples"]

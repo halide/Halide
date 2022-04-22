@@ -95,11 +95,11 @@ impl GenBuilder {
         self
     }
     pub fn make_runtime(self) {
-        if(self.generators.is_empty()){
+        if self.generators.is_empty() {
             //todo make gen-gen
         }
         else {
-           let gen = self.generators[0].make_runtime();
+           let _gen = self.generators[0].make_runtime();
         }
     }
 }
@@ -173,8 +173,8 @@ impl Generator<'static> {
         cmd.args(["-r", "runtime", "-o", self.rs_output.to_str().unwrap(),"target=host"]);
         cmd.env("LD_LIBRARY_PATH", self.halide_path.join("lib"));
         let output = cmd.output().expect("failed to make runtime");
-        let mut result;
-        if(output.status.success()) {
+        let result;
+        if output.status.success() {
             result = self.rename_runtime();
             if result.is_ok(){
                 println!("cargo:rustc-link-lib=static={}", "runtime");
