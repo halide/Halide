@@ -14,8 +14,9 @@ fn main() {
     let gen = Hal.new_gen("iir_blur".to_string());
 
 
-    gen.doEverything();
+    gen.build_bind();
 
+    //Some useful debug calls
     /*
     let out = gen.compile();
     println!("compile Status: {}", out.status.success());

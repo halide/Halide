@@ -142,7 +142,6 @@ impl Generator<'static> {
     }
     pub fn run_gen(&self) -> Output {
         //assert!(!self.gen_exe.is_none());
-        //todo change to build target
         println!(
             "cargo:rustc-link-search=native={}",
             self.rs_output.to_str().unwrap()
@@ -273,7 +272,7 @@ impl Generator<'static> {
     }
 
 
-    pub fn doEverything(&self){
+    pub fn build_bind(&self){
 
         assert!(self.compile().status.success());
     
