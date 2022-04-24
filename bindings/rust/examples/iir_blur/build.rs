@@ -14,6 +14,9 @@ fn main() {
     let gen = Hal.new_gen("iir_blur".to_string());
 
 
+    gen.doEverything();
+
+    /*
     let out = gen.compile();
     println!("compile Status: {}", out.status.success());
     io::stdout().write_all(&out.stdout);
@@ -26,5 +29,5 @@ fn main() {
 
     assert!(gen.rename().is_ok());
     assert!(gen.make_runtime().is_ok());
-
+    */
 }
