@@ -16,7 +16,7 @@ pub struct GenBuilder {
 
     rs_output: PathBuf,
 
-    generators: Vec<Generator<'static>>,
+    //generators: Vec<Generator<'static>>,
     debug: bool,
     target: String,
 }
@@ -41,6 +41,14 @@ pub struct Generator<'a> {
 
 //Todo add runtime maker
 impl GenBuilder {
+    ///instantiate a GenBuilder
+    ///
+    /// ```ignore
+    /// let Hal = GenBuilder::new(
+    ///       "Path/to/Halide",
+    ///        "Path/to/your/generators"
+    ///    )
+    /// ```
     pub fn new<T: Into<PathBuf>>(
         halide_path: T,
         gen_path: T,
@@ -50,21 +58,36 @@ impl GenBuilder {
             halide_path: halide_path.into().join("distrib"),
             gen_path: gen_path.into(),
             rs_output: PathBuf::from(env::var("OUT_DIR").unwrap_or("target".to_string())),
-            generators: vec![],
+            //generators: vec![],
             debug: false,
             target: "target=host-no_runtime".to_string(),
         }
     }
-
+    ///Override the output directory.
+    ///
+    /// by default this is the ENV "out_dir" but can be anywere
+    /// useful to place .rs and headers in a folder in the src of your project but means cargo does not clean these artifacts
     pub fn out_dir<T: Into<PathBuf>>(mut self, out: T) -> Self {
         self.rs_output = out.into();
         self
     }
+    /*
     pub fn push_gen(mut self, gen: Generator<'static>)->Self{
         self.generators.push(gen);
         self
     }
+
+     */
     //Todo template all strings
+    ///Create a generator based on its name
+    ///
+    /// We have strict naming conventions
+    ///     The generator source must be GenName.cpp
+    ///     The internal cpp class must also be GenName
+    ///
+    ///```ignore
+    /// let gen = genBuilder.new_gen(iir_blur);
+    /// ```
     pub fn new_gen(self, gen_name: String) -> Generator<'static> {
         println!(
             "cargo:rerun-if-changed={}",
@@ -90,10 +113,12 @@ impl GenBuilder {
         }
         //);self
     }
+    ///Sets the console debug for Halide generators by default this is false
     pub fn debug(mut self, b:bool) ->Self{
         self.debug=b;
         self
     }
+    /*
     pub fn make_runtime(self) {
         if self.generators.is_empty() {
             //todo make gen-gen
@@ -102,6 +127,8 @@ impl GenBuilder {
            let _gen = self.generators[0].make_runtime();
         }
     }
+
+     */
 }
 ///This is a generator
 ///
@@ -112,6 +139,7 @@ impl GenBuilder {
 /// ```
 ///
 impl Generator<'static> {
+    ///Make the generator executable useing halide gengen and g++
     pub fn compile(&self) -> Output {
 
         let mut cmd_compile = Command::new("g++");
@@ -140,6 +168,9 @@ impl Generator<'static> {
         cmd_compile.output().expect("Make generator failed")
 
     }
+    /// runs the previously made executable
+    ///
+    /// panics if unable to find or run the executable
     pub fn run_gen(&self) -> Output {
         //assert!(!self.gen_exe.is_none());
         println!(
@@ -165,7 +196,9 @@ impl Generator<'static> {
         }
         gen.output().expect("failed to run")
     }
-
+    /// Make the Halide runtime
+    ///
+    /// The Halide runtime is required for useing halide and contains the buffer_t and other useful functions
     pub fn make_runtime(&self) -> Result<()> {
         println!("Cmd to runt: {:?}", self.gen_exe.to_str().unwrap());
         let mut cmd = Command::new(self.gen_exe.to_str().unwrap());
@@ -216,7 +249,9 @@ impl Generator<'static> {
                 .unwrap(),
         )
     }
-
+    ///rename the gen outputs to be what rust and bindgen expect on linex distros
+    ///
+    /// IE halide.a -> libhalide.a
     pub fn rename(&self) -> Result<()> {
         println!(
             "file name: {:?}",
@@ -247,7 +282,9 @@ impl Generator<'static> {
                 .unwrap(),
         )
     }
-
+    /// run bindgen on a generator
+    ///
+    /// This bind only creates the genname funtion binding and specificly blocklists the buffer_t
     pub fn bind(&self) -> Result<()> {
         let bindings = bindgen::Builder::default()
             .header(
@@ -271,7 +308,9 @@ impl Generator<'static> {
         bindings
     }
 
-
+    ///This complies-> runs-> renames-> binds the generator
+    ///
+    /// panics if any step fails if it panics it is useful to call the functions separately and print there results or outputs
     pub fn build_bind(&self){
 
         assert!(self.compile().status.success());
