@@ -1,4 +1,4 @@
-# halide
+# halide rust bindings
 
 
 These instructions also assume a fresh install of Ubntu LTS 21.04.
