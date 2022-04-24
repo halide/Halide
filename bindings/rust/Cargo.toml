@@ -1,12 +1,12 @@
 [package]
 name = "halide"
-description ="todo"#todo
+description ="Rust build script and runtime libaries for conviently useing Halide code in rust projects"
 version = "0.1.0"
 edition = "2021" #this is rust cargo edition
 readme = "README.md"
-authors = ["James <james4oreilly@gmail.com>","Jacob <>","Ravinder <>","Malhet <>"]
+authors = ["James <james4oreilly@gmail.com>","Jacob <jacob@howton.com>","Ravinder <r7shekhawat@gmail.com>","Malhet <mahi1924zola@gmail.com>"]
 exclude = ["/examples","test_files"]
-categories =["development-tools-ffi","external-ffi-bindings","multimedia::images",""]
+categories =["development-tools-ffi","external-ffi-bindings","multimedia::images"]
 repository ="https://github.com/halide/Halide"
 keywords = ["halide","image","build script"]
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
