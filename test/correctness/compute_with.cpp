@@ -801,7 +801,7 @@ int multiple_outputs_on_gpu_test() {
 
         g.compute_with(f, x, LoopAlignStrategy::AlignEnd);
 
-        Realization r(f_im, g_im);
+        Realization r({f_im, g_im});
         Pipeline({f, g}).realize(r);
         r[0].copy_to_host();
         r[1].copy_to_host();
