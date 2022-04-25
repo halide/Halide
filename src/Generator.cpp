@@ -955,11 +955,33 @@ gengen
     // it's OK for file_base_name to be empty: filename will be based on function name
     std::string file_base_name = flags_info["-n"];
 
-    auto target_strings = split_string(generator_args["target"].string_value, ",");
+    // target, auto_schedule, and machine_params are specified like GeneratorParams,
+    // but need special casing here.
+    const auto pop = [&generator_args](const std::string &key) -> std::string {
+        auto it = generator_args.find(key);
+        if (it != generator_args.end()) {
+            std::string value = std::move(it->second.string_value);
+            generator_args.erase(key);
+            return value;
+        }
+        return std::string();
+    };
+    std::string target_string = pop("target");
+    std::string auto_schedule_string = pop("auto_schedule");
+    std::string machine_params_string = pop("machine_params");
+
+    auto target_strings = split_string(target_string, ",");
     std::vector<Target> targets;
     for (const auto &s : target_strings) {
         targets.emplace_back(s);
     }
+
+    const bool auto_schedule = auto_schedule_string == "true" ||
+                               auto_schedule_string == "True";
+
+    const MachineParams machine_params = machine_params_string.empty() ?
+                                             MachineParams::generic() :
+                                             MachineParams(machine_params_string);
 
     // extensions won't vary across multitarget output
     std::map<OutputFileType, const OutputInfo> output_info = get_output_info(targets[0]);
@@ -1021,9 +1043,6 @@ gengen
         std::string generator_args_string;
         std::string sep;
         for (const auto &it : generator_args) {
-            if (it.first == "target") {
-                continue;
-            }
             std::string quote = it.second.string_value.find(' ') != std::string::npos ? "\\\"" : "";
             generator_args_string += sep + it.first + "=" + quote + it.second.string_value + quote;
             sep = " ";
@@ -1116,12 +1135,14 @@ gengen
         // Don't bother with this if we're just emitting a cpp_stub.
         if (!stub_only) {
             auto output_files = compute_output_files(targets[0], base_path, outputs);
-            auto module_factory = [&generator_name, &generator_args, build_gradient_module](const std::string &name, const Target &target) -> Module {
-                auto sub_generator_args = generator_args;
-                sub_generator_args.erase("target");
+            auto module_factory = [&generator_name,
+                                   &generator_args,
+                                   &auto_schedule,
+                                   &machine_params,
+                                   build_gradient_module](const std::string &name, const Target &target) -> Module {
                 // Must re-create each time since each instance will have a different Target.
-                auto gen = GeneratorRegistry::create(generator_name, GeneratorContext(target));
-                gen->set_generator_param_values(sub_generator_args);
+                auto gen = GeneratorRegistry::create(generator_name, GeneratorContext(target, auto_schedule, machine_params));
+                gen->set_generator_param_values(generator_args);
                 return build_gradient_module ? gen->build_gradient_module(name) : gen->build_module(name);
             };
             compile_multitarget(function_name, output_files, targets, target_strings, module_factory, compiler_logger_factory);
@@ -1370,17 +1391,23 @@ void GeneratorBase::set_generator_param_values(const GeneratorParamsMap &params)
     }
 }
 
+#ifdef HALIDE_ALLOW_LEGACY_GENERATOR_PARAMS
 GeneratorContext GeneratorBase::context() const {
     return GeneratorContext(target, auto_schedule, machine_params, externs_map, value_tracker);
 }
+#endif
 
 void GeneratorBase::init_from_context(const Halide::GeneratorContext &context) {
+#ifdef HALIDE_ALLOW_LEGACY_GENERATOR_PARAMS
     target.set(context.target_);
     auto_schedule.set(context.auto_schedule_);
     machine_params.set(context.machine_params_);
 
     externs_map = context.externs_map_;
     value_tracker = context.value_tracker_;
+#else
+    context_ = context;
+#endif
 
     // pre-emptively build our param_info now
     internal_assert(param_info_ptr == nullptr);
@@ -1410,12 +1437,17 @@ void GeneratorBase::set_inputs_vector(const std::vector<std::vector<StubInput>> 
 
 void GeneratorBase::track_parameter_values(bool include_outputs) {
     GeneratorParamInfo &pi = param_info();
+#ifdef HALIDE_ALLOW_LEGACY_GENERATOR_PARAMS
+    auto vt = value_tracker;
+#else
+    auto vt = context().value_tracker_;
+#endif
     for (auto *input : pi.inputs()) {
         if (input->kind() == IOKind::Buffer) {
             internal_assert(!input->parameters_.empty());
             for (auto &p : input->parameters_) {
                 // This must use p.name(), *not* input->name()
-                value_tracker->track_values(p.name(), parameter_constraints(p));
+                vt->track_values(p.name(), parameter_constraints(p));
             }
         }
     }
@@ -1429,7 +1461,7 @@ void GeneratorBase::track_parameter_values(bool include_outputs) {
                     for (auto &o : output_buffers) {
                         Parameter p = o.parameter();
                         // This must use p.name(), *not* output->name()
-                        value_tracker->track_values(p.name(), parameter_constraints(p));
+                        vt->track_values(p.name(), parameter_constraints(p));
                     }
                 }
             }

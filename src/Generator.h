@@ -387,8 +387,10 @@ public:
     HALIDE_GENERATOR_PARAM_TYPED_SETTER(uint64_t)
     HALIDE_GENERATOR_PARAM_TYPED_SETTER(float)
     HALIDE_GENERATOR_PARAM_TYPED_SETTER(double)
+#ifdef HALIDE_ALLOW_LEGACY_GENERATOR_PARAMS
     HALIDE_GENERATOR_PARAM_TYPED_SETTER(Target)
     HALIDE_GENERATOR_PARAM_TYPED_SETTER(MachineParams)
+#endif
     HALIDE_GENERATOR_PARAM_TYPED_SETTER(Type)
     HALIDE_GENERATOR_PARAM_TYPED_SETTER(LoopLevel)
 
@@ -501,8 +503,10 @@ public:
     HALIDE_GENERATOR_PARAM_TYPED_SETTER(uint64_t)
     HALIDE_GENERATOR_PARAM_TYPED_SETTER(float)
     HALIDE_GENERATOR_PARAM_TYPED_SETTER(double)
+#ifdef HALIDE_ALLOW_LEGACY_GENERATOR_PARAMS
     HALIDE_GENERATOR_PARAM_TYPED_SETTER(Target)
     HALIDE_GENERATOR_PARAM_TYPED_SETTER(MachineParams)
+#endif
     HALIDE_GENERATOR_PARAM_TYPED_SETTER(Type)
     HALIDE_GENERATOR_PARAM_TYPED_SETTER(LoopLevel)
 
@@ -567,9 +571,8 @@ private:
 
 // Stubs for type-specific implementations of GeneratorParam, to avoid
 // many complex enable_if<> statements that were formerly spread through the
-// implementation. Note that not all of these need to be templated classes,
-// (e.g. for GeneratorParam_Target, T == Target always), but are declared
-// that way for symmetry of declaration.
+// implementation.
+#ifdef HALIDE_ALLOW_LEGACY_GENERATOR_PARAMS
 template<typename T>
 class GeneratorParam_Target : public GeneratorParamImpl<T> {
 public:
@@ -621,6 +624,7 @@ public:
         return "MachineParams";
     }
 };
+#endif  // #ifdef HALIDE_ALLOW_LEGACY_GENERATOR_PARAMS
 
 class GeneratorParam_LoopLevel : public GeneratorParamImpl<LoopLevel> {
 public:
@@ -915,8 +919,10 @@ public:
 template<typename T>
 using GeneratorParamImplBase =
     typename select_type<
+#ifdef HALIDE_ALLOW_LEGACY_GENERATOR_PARAMS
         cond<std::is_same<T, Target>::value, GeneratorParam_Target<T>>,
         cond<std::is_same<T, MachineParams>::value, GeneratorParam_MachineParams<T>>,
+#endif
         cond<std::is_same<T, LoopLevel>::value, GeneratorParam_LoopLevel>,
         cond<std::is_same<T, std::string>::value, GeneratorParam_String<T>>,
         cond<std::is_same<T, Type>::value, GeneratorParam_Type<T>>,
@@ -3331,7 +3337,13 @@ public:
         get_pipeline().trace_pipeline();
     }
 
+#ifdef HALIDE_ALLOW_LEGACY_GENERATOR_PARAMS
     GeneratorContext context() const;
+#else
+    const GeneratorContext &context() const {
+        return context_;
+    }
+#endif
 
 protected:
     GeneratorBase(size_t size, const void *introspection_helper);
@@ -3390,6 +3402,7 @@ protected:
 
     void ensure_configure_has_been_called();
 
+#ifdef HALIDE_ALLOW_LEGACY_GENERATOR_PARAMS
     Target get_target() const {
         return target;
     }
@@ -3399,6 +3412,18 @@ protected:
     MachineParams get_machine_params() const {
         return machine_params;
     }
+#else
+    Target get_target() const {
+        return context().get_target();
+    }
+    bool get_auto_schedule() const {
+        return context().get_auto_schedule();
+    }
+    MachineParams get_machine_params() const {
+        return context().get_machine_params();
+    }
+#endif
+
     /** Generators can register ExternalCode objects onto
      * themselves. The Generator infrastructure will arrange to have
      * this ExternalCode appended to the Module that is finally
@@ -3415,13 +3440,19 @@ protected:
      *
      * See test/generator/external_code_generator.cpp for example use. */
     std::shared_ptr<GeneratorContext::ExternsMap> get_externs_map() const {
+#ifdef HALIDE_ALLOW_LEGACY_GENERATOR_PARAMS
         return externs_map;
+#else
+        return context().externs_map_;
+#endif
     }
 
+#ifdef HALIDE_ALLOW_LEGACY_GENERATOR_PARAMS
     // These must remain here for legacy code that access the fields directly.
     GeneratorParam<Target> target{"target", Target()};
     GeneratorParam<bool> auto_schedule{"auto_schedule", false};
     GeneratorParam<MachineParams> machine_params{"machine_params", MachineParams::generic()};
+#endif
 
 private:
     friend void ::Halide::Internal::generator_test();
@@ -3434,8 +3465,12 @@ private:
     friend class StubOutputBufferBase;
 
     const size_t size;
+#ifdef HALIDE_ALLOW_LEGACY_GENERATOR_PARAMS
     std::shared_ptr<GeneratorContext::ExternsMap> externs_map;
     std::shared_ptr<Internal::ValueTracker> value_tracker;
+#else
+    GeneratorContext context_;
+#endif
 
     // Lazily-allocated-and-inited struct with info about our various Params.
     // Do not access directly: use the param_info() getter.
