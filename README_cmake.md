@@ -44,11 +44,14 @@ The following sections cover each in detail.
     - [Functions](#functions)
       - [`add_halide_library`](#add_halide_library)
       - [`add_halide_generator`](#add_halide_generator)
+<<<<<<< HEAD
   - [Cross compiling](#cross-compiling)
     - [Use a super-build](#use-a-super-build)
     - [Use `ExternalProject` directly](#use-externalproject-directly)
     - [Use an emulator or run on device](#use-an-emulator-or-run-on-device)
     - [Bypass CMake](#bypass-cmake)
+=======
+>>>>>>> v14.0.0
 - [Contributing CMake code to Halide](#contributing-cmake-code-to-halide)
   - [General guidelines and best practices](#general-guidelines-and-best-practices)
     - [Prohibited commands list](#prohibited-commands-list)
@@ -447,10 +450,9 @@ The following options enable/disable various Halide-specific backends:
 The following options are WebAssembly-specific. They only apply when
 `TARGET_WEBASSEMBLY=ON`:
 
-| Option            | Default | Description                                                |
-|-------------------|---------|------------------------------------------------------------|
-| `WITH_WABT`       | `ON`    | Include WABT Interpreter for WASM testing                  |
-| `WITH_WASM_SHELL` | `ON`    | Download a wasm shell (e.g. d8) for testing AOT wasm code. |
+| Option      | Default | Description                               |
+|-------------|---------|-------------------------------------------|
+| `WITH_WABT` | `ON`    | Include WABT Interpreter for WASM testing |
 
 ### Find module options
 

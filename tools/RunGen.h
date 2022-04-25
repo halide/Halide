@@ -182,11 +182,6 @@ inline std::vector<std::string> split_string(const std::string &source,
     return elements;
 }
 
-// Must be constexpr to allow use in case clauses.
-inline constexpr int halide_type_code(halide_type_code_t code, int bits) {
-    return (((int)code) << 8) | bits;
-}
-
 // dynamic_type_dispatch is a utility for functors that want to be able
 // to dynamically dispatch a halide_type_t to type-specialized code.
 // To use it, a functor must be a *templated* class, e.g.
@@ -205,10 +200,11 @@ inline constexpr int halide_type_code(halide_type_code_t code, int bits) {
 template<template<typename> class Functor, typename... Args>
 auto dynamic_type_dispatch(const halide_type_t &type, Args &&...args) -> decltype(std::declval<Functor<uint8_t>>()(std::forward<Args>(args)...)) {
 
-#define HANDLE_CASE(CODE, BITS, TYPE)  \
-    case halide_type_code(CODE, BITS): \
+#define HANDLE_CASE(CODE, BITS, TYPE)        \
+    case halide_type_t(CODE, BITS).as_u32(): \
         return Functor<TYPE>()(std::forward<Args>(args)...);
-    switch (halide_type_code((halide_type_code_t)type.code, type.bits)) {
+
+    switch (type.element_of().as_u32()) {
         HANDLE_CASE(halide_type_float, 32, float)
         HANDLE_CASE(halide_type_float, 64, double)
         HANDLE_CASE(halide_type_int, 8, int8_t)
@@ -226,6 +222,7 @@ auto dynamic_type_dispatch(const halide_type_t &type, Args &&...args) -> decltyp
         using ReturnType = decltype(std::declval<Functor<uint8_t>>()(std::forward<Args>(args)...));
         return ReturnType();
     }
+
 #undef HANDLE_CASE
 }
 
@@ -584,29 +581,29 @@ private:
     // about casting from (e.g.) int8 to void*
     template<typename T2 = T, typename std::enable_if<!std::is_pointer<T2>::value>::type * = nullptr>
     T as_T(const halide_scalar_value_t &value) {
-        const halide_type_t type = halide_type_of<T>();
-        switch (halide_type_code((halide_type_code_t)type.code, type.bits)) {
-        case halide_type_code(halide_type_int, 8):
+        constexpr halide_type_t type = halide_type_of<T>();
+        switch (type.element_of().as_u32()) {
+        case halide_type_t(halide_type_int, 8).as_u32():
             return (T)value.u.i8;
-        case halide_type_code(halide_type_int, 16):
+        case halide_type_t(halide_type_int, 16).as_u32():
             return (T)value.u.i16;
-        case halide_type_code(halide_type_int, 32):
+        case halide_type_t(halide_type_int, 32).as_u32():
             return (T)value.u.i32;
-        case halide_type_code(halide_type_int, 64):
+        case halide_type_t(halide_type_int, 64).as_u32():
             return (T)value.u.i64;
-        case halide_type_code(halide_type_uint, 1):
+        case halide_type_t(halide_type_uint, 1).as_u32():
             return (T)value.u.b;
-        case halide_type_code(halide_type_uint, 8):
+        case halide_type_t(halide_type_uint, 8).as_u32():
             return (T)value.u.u8;
-        case halide_type_code(halide_type_uint, 16):
+        case halide_type_t(halide_type_uint, 16).as_u32():
             return (T)value.u.u16;
-        case halide_type_code(halide_type_uint, 32):
+        case halide_type_t(halide_type_uint, 32).as_u32():
             return (T)value.u.u32;
-        case halide_type_code(halide_type_uint, 64):
+        case halide_type_t(halide_type_uint, 64).as_u32():
             return (T)value.u.u64;
-        case halide_type_code(halide_type_float, 32):
+        case halide_type_t(halide_type_float, 32).as_u32():
             return (T)value.u.f32;
-        case halide_type_code(halide_type_float, 64):
+        case halide_type_t(halide_type_float, 64).as_u32():
             return (T)value.u.f64;
         default:
             fail() << "Can't convert value with type: " << (int)type.code << "bits: " << type.bits;
@@ -616,9 +613,9 @@ private:
 
     template<typename T2 = T, typename std::enable_if<std::is_pointer<T2>::value>::type * = nullptr>
     T as_T(const halide_scalar_value_t &value) {
-        const halide_type_t type = halide_type_of<T>();
-        switch (halide_type_code((halide_type_code_t)type.code, type.bits)) {
-        case halide_type_code(halide_type_handle, 64):
+        constexpr halide_type_t type = halide_type_of<T>();
+        switch (type.element_of().as_u32()) {
+        case halide_type_t(halide_type_handle, 64).as_u32():
             return (T)value.u.handle;
         default:
             fail() << "Can't convert value with type: " << (int)type.code << "bits: " << type.bits;
@@ -657,41 +654,41 @@ inline Halide::Tools::FormatInfo best_save_format(const Buffer<> &b, const std::
 inline std::string scalar_to_string(const halide_type_t &type,
                                     const halide_scalar_value_t &value) {
     std::ostringstream o;
-    switch (halide_type_code((halide_type_code_t)type.code, type.bits)) {
-    case halide_type_code(halide_type_float, 32):
+    switch (type.element_of().as_u32()) {
+    case halide_type_t(halide_type_float, 32).as_u32():
         o << value.u.f32;
         break;
-    case halide_type_code(halide_type_float, 64):
+    case halide_type_t(halide_type_float, 64).as_u32():
         o << value.u.f64;
         break;
-    case halide_type_code(halide_type_int, 8):
+    case halide_type_t(halide_type_int, 8).as_u32():
         o << (int)value.u.i8;
         break;
-    case halide_type_code(halide_type_int, 16):
+    case halide_type_t(halide_type_int, 16).as_u32():
         o << value.u.i16;
         break;
-    case halide_type_code(halide_type_int, 32):
+    case halide_type_t(halide_type_int, 32).as_u32():
         o << value.u.i32;
         break;
-    case halide_type_code(halide_type_int, 64):
+    case halide_type_t(halide_type_int, 64).as_u32():
         o << value.u.i64;
         break;
-    case halide_type_code(halide_type_uint, 1):
+    case halide_type_t(halide_type_uint, 1).as_u32():
         o << (value.u.b ? "true" : "false");
         break;
-    case halide_type_code(halide_type_uint, 8):
+    case halide_type_t(halide_type_uint, 8).as_u32():
         o << (int)value.u.u8;
         break;
-    case halide_type_code(halide_type_uint, 16):
+    case halide_type_t(halide_type_uint, 16).as_u32():
         o << value.u.u16;
         break;
-    case halide_type_code(halide_type_uint, 32):
+    case halide_type_t(halide_type_uint, 32).as_u32():
         o << value.u.u32;
         break;
-    case halide_type_code(halide_type_uint, 64):
+    case halide_type_t(halide_type_uint, 64).as_u32():
         o << value.u.u64;
         break;
-    case halide_type_code(halide_type_handle, 64):
+    case halide_type_t(halide_type_handle, 64).as_u32():
         o << (uint64_t)value.u.handle;
         break;
     default:

@@ -9,9 +9,9 @@ Expr expensive_zero(Expr x, Expr y, Expr t, int n) {
     RDom r(0, n);
     Func a, b, c;
     Var z;
-    a(x, y, t, z) = random_int() % 1024;
-    b(x, y, t, z) = random_int() % 1024;
-    c(x, y, t, z) = random_int() % 1024;
+    a(x, y, t, z) = random_int() % 1024 + 5;
+    b(x, y, t, z) = random_int() % 1024 + 5;
+    c(x, y, t, z) = random_int() % 1024 + 5;
     return sum(select(pow(a(x, y, t, r), 3) + pow(b(x, y, t, r), 3) == pow(c(x, y, t, r), 3), 1, 0));
 }
 

@@ -102,7 +102,7 @@ def main():
 
         # Reading the log, we see that each pass is applied in turn. The
         # equivalent Python is:
-        result = np.empty((4, 4), dtype=np.int)
+        result = np.empty((4, 4), dtype=np.int32)
         # Pure definition
         for yy in range(4):
             for xx in range(4):
@@ -143,7 +143,7 @@ def main():
         halide_result = f.realize([100, 100])
 
         # The equivalent Python is:
-        py_result = np.empty((100, 100), dtype=np.int)
+        py_result = np.empty((100, 100), dtype=np.int32)
         for yy in range(100):
             for xx in range(100):
                 py_result[yy][xx] = xx + yy
@@ -187,7 +187,7 @@ def main():
         halide_result = histogram.realize([256])
 
         # The equivalent Python is:
-        py_result = np.empty((256), dtype=np.int)
+        py_result = np.empty((256), dtype=np.int32)
         for xx in range(256):
             py_result[xx] = 0
 
@@ -238,7 +238,7 @@ def main():
         halide_result = f.realize([16, 16])
 
         # Here's the equivalent (serial) C:
-        py_result = np.empty((16, 16), dtype=np.int)
+        py_result = np.empty((16, 16), dtype=np.int32)
 
         # Pure step. Vectorized in x and parallelized in y.
         for yy in range(16):  # Should be a parallel for loop
@@ -287,9 +287,9 @@ def main():
         halide_result = consumer.realize([10])
 
         # The equivalent Python is:
-        py_result = np.empty((10), dtype=np.int)
+        py_result = np.empty((10), dtype=np.int32)
         for xx in range(10):
-            producer_storage = np.empty((1), dtype=np.int)
+            producer_storage = np.empty((1), dtype=np.int32)
             # Pure step for producer
             producer_storage[0] = xx * 17
             # Update step for producer
@@ -339,12 +339,12 @@ def main():
             halide_result = consumer.realize([10])
 
             # The equivalent Python is:
-            py_result = np.empty((10), dtype=np.int)
+            py_result = np.empty((10), dtype=np.int32)
 
             # Pure step for the consumer
             for xx in range(10):
                 # Pure step for producer
-                producer_storage = np.empty((1), dtype=np.int)
+                producer_storage = np.empty((1), dtype=np.int32)
                 producer_storage[0] = xx * 17
                 py_result[xx] = 2 * producer_storage[0]
 
@@ -385,7 +385,7 @@ def main():
             halide_result = consumer.realize([10])
 
             # The equivalent Python is:
-            py_result = np.empty((10), dtype=np.int)
+            py_result = np.empty((10), dtype=np.int32)
             # Pure step for the consumer
             for xx in range(10):
                 py_result[xx] = xx
@@ -393,7 +393,7 @@ def main():
             # Update step for the consumer
             for xx in range(10):
                 # Pure step for producer
-                producer_storage = np.empty((1), dtype=np.int)
+                producer_storage = np.empty((1), dtype=np.int32)
                 producer_storage[0] = xx * 17
                 py_result[xx] += producer_storage[0]
 
@@ -420,18 +420,18 @@ def main():
             halide_result = consumer.realize([10])
 
             # The equivalent Python is:
-            py_result = np.empty((10), dtype=np.int)
+            py_result = np.empty((10), dtype=np.int32)
             # Pure step for the consumer
             for xx in range(10):
                 # Pure step for producer
-                producer_storage = np.empty((1), dtype=np.int)
+                producer_storage = np.empty((1), dtype=np.int32)
                 producer_storage[0] = xx * 17
                 py_result[xx] = producer_storage[0] * xx
 
             # Update step for the consumer
             for xx in range(10):
                 # Another copy of the pure step for producer
-                producer_storage = np.empty((1), dtype=np.int)
+                producer_storage = np.empty((1), dtype=np.int32)
                 producer_storage[0] = xx * 17
                 py_result[xx] += producer_storage[0]
 
@@ -479,7 +479,7 @@ def main():
             halide_result = consumer_2.realize([10, 10])
 
             # The equivalent Python is:
-            py_result = np.empty((10, 10), dtype=np.int)
+            py_result = np.empty((10, 10), dtype=np.int32)
 
             # Pure step for the consumer
             for yy in range(10):
@@ -488,13 +488,13 @@ def main():
 
             # First update step for consumer
             for xx in range(10):
-                producer_wrapper_1_storage = np.empty((1), dtype=np.int)
+                producer_wrapper_1_storage = np.empty((1), dtype=np.int32)
                 producer_wrapper_1_storage[0] = xx * (xx - 1)
                 py_result[0][xx] += producer_wrapper_1_storage[0]
 
             # Second update step for consumer
             for yy in range(10):
-                producer_wrapper_2_storage = np.empty((1), dtype=np.int)
+                producer_wrapper_2_storage = np.empty((1), dtype=np.int32)
                 producer_wrapper_2_storage[0] = yy * (yy - 1)
                 py_result[yy][0] += producer_wrapper_2_storage[0]
 
@@ -527,7 +527,7 @@ def main():
             halide_result = consumer.realize([10])
 
             # The equivalent Python is:
-            py_result = np.empty((10), dtype=np.int)
+            py_result = np.empty((10), dtype=np.int32)
             # Pure step for the consumer.
             for xx in range(10):
                 py_result[xx] = xx + 10
@@ -538,7 +538,7 @@ def main():
                 for rr in range(5):
                     # We've schedule the storage and computation of
                     # the producer here. We just need a single value.
-                    producer_storage = np.empty((1), dtype=np.int)
+                    producer_storage = np.empty((1), dtype=np.int32)
                     # Pure step of the producer.
                     producer_storage[0] = (xx + rr) * 17
 
@@ -635,9 +635,9 @@ def main():
         halide_result_2 = f2.realize([10])
 
         # The equivalent Python is:
-        py_result = np.empty((10), dtype=np.int)
+        py_result = np.empty((10), dtype=np.int32)
         for xx in range(10):
-            anon = np.empty((1), dtype=np.int)
+            anon = np.empty((1), dtype=np.int32)
             anon[0] = 0
             for rr in range(100):
                 anon[0] += rr + xx

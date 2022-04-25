@@ -154,8 +154,8 @@ void destroy_context(int &context) {
 void run_kernels_on_thread(gpu_context context1, bool destroy_when_done) {
     gpu_context context2;
 
-    Buffer<int32_t> buf1_in(W, H);
-    Buffer<int32_t> buf1_result(W, H);
+    Buffer<int32_t, 2> buf1_in(W, H);
+    Buffer<int32_t, 2> buf1_result(W, H);
     buf1_in.fill(0);
 
     const halide_device_interface_t *device_interface;
@@ -164,8 +164,8 @@ void run_kernels_on_thread(gpu_context context1, bool destroy_when_done) {
     for (int i = 0; i < 10; i++) {
         init_context(context2);
 
-        Buffer<int32_t> buf2_in(W, H);
-        Buffer<int32_t> buf2_result(W, H);
+        Buffer<int32_t, 2> buf2_in(W, H);
+        Buffer<int32_t, 2> buf2_result(W, H);
         buf2_in.fill(0);
 
         gpu_multi_context_threaded_add(&context1, buf1_in, buf1_result);

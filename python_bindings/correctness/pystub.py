@@ -5,9 +5,6 @@ import simplestub
 # test alternate-but-legal syntax
 from complexstub import generate as complexstub
 
-import partialbuildmethod
-import nobuildmethod
-
 def _realize_and_check(f, offset = 0):
     b = hl.Buffer(hl.Float(32), [2, 2])
     f.realize(b)
@@ -260,39 +257,7 @@ def test_complexstub():
             actual = b[x, y]
             assert expected == actual, "Expected %s Actual %s" % (expected, actual)
 
-def test_partialbuildmethod():
-    x, y, c = hl.Var(), hl.Var(), hl.Var()
-    target = hl.get_jit_target_from_environment()
-
-    b_in = hl.Buffer(hl.Float(32), [2, 2])
-    b_in.fill(123)
-
-    b_out = hl.Buffer(hl.Int(32), [2, 2])
-
-    try:
-        f = partialbuildmethod.generate(target, b_in, 1)
-    except RuntimeError as e:
-        assert "Generators that use build() (instead of generate()+Output<>) are not supported in the Python bindings." in str(e)
-    else:
-        assert False, 'Did not see expected exception!'
-
-def test_nobuildmethod():
-    x, y, c = hl.Var(), hl.Var(), hl.Var()
-    target = hl.get_jit_target_from_environment()
-
-    b_in = hl.Buffer(hl.Float(32), [2, 2])
-    b_in.fill(123)
-
-    b_out = hl.Buffer(hl.Int(32), [2, 2])
-
-    f = nobuildmethod.generate(target, b_in, 1.0)
-    f.realize(b_out)
-
-    assert b_out.all_equal(123)
-
 if __name__ == "__main__":
     test_simplestub()
     test_looplevel()
     test_complexstub()
-    test_partialbuildmethod()
-    test_nobuildmethod()

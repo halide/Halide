@@ -13,7 +13,7 @@ namespace Internal {
 
 /** Rewrite access to things stored outside the loop over GPU lanes to
  * use nvidia's warp shuffle instructions. */
-Stmt lower_warp_shuffles(Stmt s);
+Stmt lower_warp_shuffles(Stmt s, const Target &t);
 
 }  // namespace Internal
 }  // namespace Halide

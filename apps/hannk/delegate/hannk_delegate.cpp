@@ -388,6 +388,10 @@ public:
         InterpreterOptions options;
         options.verbosity = options_.verbosity;
         interpreter_ = std::unique_ptr<Interpreter>(new Interpreter(std::move(model_), std::move(options)));
+        if (!interpreter_->prepare()) {
+            TF_LITE_KERNEL_LOG(context, "hannk::Interpreter::prepare() failed");
+            return kTfLiteDelegateError;
+        }
 
         for (int tensor_id : TfLiteIntArrayView(node->outputs)) {
             if (tensor_id == kTfLiteOptionalTensor) {
@@ -749,7 +753,8 @@ private:
         auto input = GetTensorById(context, node->inputs->data[0]);
         auto output = GetTensorById(context, node->outputs->data[0]);
         const TfLiteSoftmaxParams *params = (const TfLiteSoftmaxParams *)(node->builtin_data);
-        return make_op<SoftmaxOp>(input, output, params->beta);
+        const int axis = 0;  // In TFLite, normalization is always against the first axis.
+        return make_op<SoftmaxOp>(input, output, params->beta, axis);
     }
 
     OpPtr BuildL2Normalization(TfLiteContext *context, TfLiteNode *node) {
@@ -793,7 +798,14 @@ private:
         auto input = GetTensorById(context, node->inputs->data[0]);
         auto indices = GetTensorById(context, node->inputs->data[1]);
         auto output = GetTensorById(context, node->outputs->data[0]);
-        return make_op<ReductionOp>(input, indices, output, ReductionOp::Mean);
+#ifndef NDEBUG
+        const TfLiteReducerParams *params = (const TfLiteReducerParams *)(node->builtin_data);
+        const bool keep_dims = params ? params->keep_dims : false;
+        // TODO: I have yet to find any examples of keep_dims == false in the wild.
+        // If/when we do, handle it appropriately.
+        assert(keep_dims == true);
+#endif
+        return make_op<ReductionOp>(ReductionOp::Mean, input, indices, output);
     }
 
     OpPtr BuildSpaceToDepth(TfLiteContext *context, TfLiteNode *node) {

@@ -62,6 +62,14 @@ public:
 };
 using TensorStoragePtr = std::shared_ptr<TensorStorage>;
 
+enum class AliasType {
+    None,
+    Offset,    // The aliased Tensors are translated/cropped views of the same buffer.
+               // External tensors cannot be in an offset-alias group.
+    Reshaped,  // The aliased Tensors share the same host pointer and have identical elem_count but different shapes
+               // At most one External tensor can be in a reshape-alias group.
+};
+
 class Tensor {
     std::string name_;
     HalideBuffer<void> buffer_;
@@ -78,12 +86,27 @@ class Tensor {
     // for a Tensor to be dynamic if it is also constant or external.
     // Currently only used in conjunction with the TFLite delegate.
     bool is_dynamic_ = false;
-    // If true, this Tensor shares its TensorStorage with at least one other Tensor.
-    bool is_alias_ = false;
-    // If true, this Tensor is aliased to another via reshape (rather than cropping),
-    // and may have a different rank from the underlying storage.
-    // Only used if is_alias_ = true.
-    bool is_reshape_alias_ = false;
+
+    struct AliasInfo {
+        // All the Tensors in this list share their TensorStorage with each other.
+        // An arbitrary number of Tensors can alias each other, but at most *one* may be external.
+        //
+        // Note that this list should never have size() of 0 or 1 (the pointer should simply be null).
+        std::vector<std::weak_ptr<Tensor>> aliases;
+        AliasType alias_type = AliasType::None;
+
+        AliasInfo() = default;
+
+        explicit AliasInfo(const TensorPtr &t, AliasType a)
+            : aliases(1, t), alias_type(a) {
+        }
+
+        AliasInfo(const AliasInfo &) = delete;
+        AliasInfo &operator=(const AliasInfo &) = delete;
+        AliasInfo(AliasInfo &&) = delete;
+        AliasInfo &operator=(AliasInfo &&) = delete;
+    };
+    std::shared_ptr<AliasInfo> alias_info_;
 
     // Possibly shared storage for this tensor.
     TensorStoragePtr storage_;
@@ -97,6 +120,8 @@ class Tensor {
     std::list<Op *> consumers_;
 
     void finish_buffer_allocation();
+
+    bool has_external_alias() const;
 
 public:
     Tensor() = delete;
@@ -167,6 +192,7 @@ public:
 
     void set_external(bool external = true) {
         assert(!(external && is_dynamic()));
+        assert(!(external && alias_type() != AliasType::None));
         is_external_ = external;
     }
 
@@ -207,10 +233,16 @@ public:
 
     void resize_dynamic(const Box &new_shape);
 
-    bool is_alias() const {
-        return is_alias_;
+    AliasType alias_type() const {
+        return alias_info_ != nullptr ? alias_info_->alias_type : AliasType::None;
     }
-    void set_alias_of(const TensorPtr &t, const TensorOffset &offset = {}, bool is_reshape = false);
+
+    // Return true iff 'this' can be an alias of 'source' of the given type.
+    bool can_alias(const TensorPtr &source, AliasType alias_type) const;
+
+    // Needs to be static so we can pass via shared_ptr (necessary for weak_ptr usage internally)
+    static void make_offset_alias(TensorPtr alias, TensorPtr source, const TensorOffset &offset);
+    static void make_reshape_alias(TensorPtr alias, TensorPtr source);
 
     bool is_dense() const;
 

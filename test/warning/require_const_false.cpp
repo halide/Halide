@@ -4,7 +4,7 @@
 
 using namespace Halide;
 
-void halide_error(void *ctx, const char *msg) {
+void my_error(JITUserContext *ctx, const char *msg) {
     // Emitting "error.*:" to stdout or stderr will cause CMake to report the
     // test as a failure on Windows, regardless of error code returned,
     // hence the abbreviation to "err".
@@ -24,7 +24,7 @@ int main(int argc, char **argv) {
     f(x) = require((p1 + p2) == kPrime1,
                    (p1 + p2) * kPrime2,
                    "The parameters should add to exactly", kPrime1, "but were", p1, p2);
-    f.set_error_handler(&halide_error);
+    f.jit_handlers().custom_error = my_error;
     result = f.realize({1});
 
     return 0;

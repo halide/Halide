@@ -7,7 +7,7 @@ int buffer_index = 0;
 bool set_toggle1 = false;
 bool set_toggle2 = false;
 
-int single_toggle_trace(void *user_context, const halide_trace_event_t *e) {
+int single_toggle_trace(JITUserContext *user_context, const halide_trace_event_t *e) {
     if (!set_toggle1) {
         std::string buffer_name = "f1_" + std::to_string(buffer_index);
         if ((e->event == halide_trace_store) && (std::string(e->func) == buffer_name)) {
@@ -19,7 +19,7 @@ int single_toggle_trace(void *user_context, const halide_trace_event_t *e) {
     return 0;
 }
 
-int double_toggle_trace(void *user_context, const halide_trace_event_t *e) {
+int double_toggle_trace(JITUserContext *user_context, const halide_trace_event_t *e) {
     if (!set_toggle1) {
         std::string buffer_name = "f1_" + std::to_string(buffer_index);
         if ((e->event == halide_trace_store) && (std::string(e->func) == buffer_name)) {
@@ -86,7 +86,7 @@ int single_memoize_test(int index) {
 
     f1.compute_root().memoize();
 
-    f2.set_custom_trace(&single_toggle_trace);
+    f2.jit_handlers().custom_trace = &single_toggle_trace;
     f1.trace_stores();
 
     f2.compile_jit();
@@ -115,7 +115,7 @@ int tuple_memoize_test(int index) {
 
     f1.compute_root().memoize();
 
-    f2.set_custom_trace(&single_toggle_trace);
+    f2.jit_handlers().custom_trace = &single_toggle_trace;
     f1.trace_stores();
 
     f2.compile_jit();
@@ -153,7 +153,7 @@ int non_trivial_allocate_predicate_test(int index) {
     f1.compute_root().memoize();
     f2.compute_root().memoize();
 
-    f3.set_custom_trace(&double_toggle_trace);
+    f3.jit_handlers().custom_trace = &double_toggle_trace;
     f1.trace_stores();
     f2.trace_stores();
 
@@ -186,7 +186,7 @@ int double_memoize_test(int index) {
     f1.compute_root().memoize();
     f2.compute_root().memoize();
 
-    f3.set_custom_trace(&double_toggle_trace);
+    f3.jit_handlers().custom_trace = &double_toggle_trace;
     f1.trace_stores();
     f2.trace_stores();
 

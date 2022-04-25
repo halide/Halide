@@ -274,7 +274,7 @@ public:
             shape_tensor = tensors_[op->inputs()->Get(1)];
         } else if (options) {
             size_t size = options->new_shape()->size();
-            HalideBuffer<int32_t> shape_data(size);
+            HalideBuffer<int32_t, 1> shape_data(size);
             for (size_t i = 0; i < size; i++) {
                 shape_data(i) = options->new_shape()->Get(i);
             }
@@ -359,7 +359,8 @@ public:
         float beta = options->beta();
         TensorPtr input = tensors_[op->inputs()->Get(0)];
         TensorPtr output = tensors_[op->outputs()->Get(0)];
-        return make_op<SoftmaxOp>(input, output, beta);
+        const int axis = 0;  // In TFLite, normalization is always against the first axis.
+        return make_op<SoftmaxOp>(input, output, beta, axis);
     }
 
     OpPtr parse_l2_normalization(const tflite::Operator *op) {
@@ -373,7 +374,14 @@ public:
         TensorPtr input = tensors_[op->inputs()->Get(0)];
         TensorPtr indices = tensors_[op->inputs()->Get(1)];
         TensorPtr output = tensors_[op->outputs()->Get(0)];
-        return make_op<ReductionOp>(input, indices, output, reduction_op);
+#ifndef NDEBUG
+        const tflite::ReducerOptions *options = op->builtin_options_as_ReducerOptions();
+        const bool keep_dims = options ? options->keep_dims() : false;
+        // TODO: I have yet to find any examples of keep_dims == false in the wild.
+        // If/when we do, handle it appropriately.
+        assert(keep_dims == true);
+#endif
+        return make_op<ReductionOp>(reduction_op, input, indices, output);
     }
 
     OpPtr parse_unary(const tflite::Operator *op, UnaryOp::Operator type) {

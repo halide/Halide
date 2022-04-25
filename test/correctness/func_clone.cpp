@@ -64,15 +64,11 @@ int func_clone_test() {
     // Check the call graphs.
     // Expect 'g' to call 'clone', 'clone' to call nothing, and 'f' not
     // in the final IR.
-    Module m = g.compile_to_module({});
-    CheckCalls c;
-    m.functions().front().body.accept(&c);
-
     CallGraphs expected = {
         {g.name(), {clone.name()}},
         {clone.name(), {}},
     };
-    if (check_call_graphs(c.calls, expected) != 0) {
+    if (check_call_graphs(g, expected) != 0) {
         return -1;
     }
 
@@ -100,10 +96,6 @@ int multiple_funcs_sharing_clone_test() {
     // Expect 'g1' and 'g2' to call 'f_clone', 'g3' to call 'f',
     // f_clone' to call nothing, 'f' to call nothing
     Pipeline p({g1, g2, g3});
-    Module m = p.compile_to_module({}, "");
-    CheckCalls c;
-    m.functions().front().body.accept(&c);
-
     CallGraphs expected = {
         {g1.name(), {f_clone.name()}},
         {g2.name(), {f_clone.name()}},
@@ -111,7 +103,7 @@ int multiple_funcs_sharing_clone_test() {
         {f_clone.name(), {}},
         {f.name(), {}},
     };
-    if (check_call_graphs(c.calls, expected) != 0) {
+    if (check_call_graphs(p, expected) != 0) {
         return -1;
     }
 
@@ -156,50 +148,27 @@ int update_defined_after_clone_test() {
     f.compute_root();
     clone.compute_root().vectorize(x, 8).unroll(x, 2).split(x, x, xi, 4).parallel(x);
 
-    {
-        param.set(true);
-
-        // Check the call graphs.
-        // Expect initialization of 'g' to call 'clone' and its update to call
-        // 'clone' and 'g', clone' to call nothing, and 'f' not in the final IR.
-        Module m = g.compile_to_module({g.infer_arguments()});
-        CheckCalls c;
-        m.functions().front().body.accept(&c);
-
-        CallGraphs expected = {
-            {g.name(), {clone.name(), g.name()}},
-            {clone.name(), {}},
-        };
-        if (check_call_graphs(c.calls, expected) != 0) {
-            return -1;
-        }
-
-        Buffer<int> im = g.realize({200, 200});
-        auto func = [](int x, int y) {
-            return ((0 <= x && x <= 99) && (0 <= y && y <= 99) && (x < y)) ? 3 * (x + y) : (x + y);
-        };
-        if (check_image(im, func)) {
-            return -1;
-        }
+    // Check the call graphs.
+    // Expect initialization of 'g' to call 'clone' and its update to call
+    // 'clone' and 'g', clone' to call nothing, and 'f' not in the final IR.
+    CallGraphs expected = {
+        {g.name(), {clone.name(), g.name()}},
+        {clone.name(), {}},
+    };
+    if (check_call_graphs(g, expected) != 0) {
+        return -1;
     }
 
-    {
-        param.set(false);
+    Buffer<int> im = g.realize({200, 200});
+    auto func = [](int x, int y) {
+        return ((0 <= x && x <= 99) && (0 <= y && y <= 99) && (x < y)) ? 3 * (x + y) : (x + y);
+    };
+    if (check_image(im, func)) {
+        return -1;
+    }
 
-        // Check the call graphs.
-        // Expect initialization of 'g' to call 'clone' and its update to call
-        // 'clone' and 'g', clone' to call nothing, and 'f' not in the final IR.
-        Module m = g.compile_to_module({g.infer_arguments()});
-        CheckCalls c;
-        m.functions().front().body.accept(&c);
-
-        CallGraphs expected = {
-            {g.name(), {clone.name(), g.name()}},
-            {clone.name(), {}},
-        };
-        if (check_call_graphs(c.calls, expected) != 0) {
-            return -1;
-        }
+    for (bool param_value : {false, true}) {
+        param.set(param_value);
 
         Buffer<int> im = g.realize({200, 200});
         auto func = [](int x, int y) {
@@ -236,10 +205,6 @@ int clone_depend_on_mutated_func_test() {
 
     // Check the call graphs.
     Pipeline p({d, e, f});
-    Module m = p.compile_to_module({}, "");
-    CheckCalls check;
-    m.functions().front().body.accept(&check);
-
     CallGraphs expected = {
         {e.name(), {a.name()}},
         {a.name(), {}},
@@ -250,7 +215,7 @@ int clone_depend_on_mutated_func_test() {
         {b.name(), {a_clone_in_b.name()}},
         {a_clone_in_b.name(), {}},
     };
-    if (check_call_graphs(check.calls, expected) != 0) {
+    if (check_call_graphs(p, expected) != 0) {
         return -1;
     }
 
@@ -298,10 +263,6 @@ int clone_on_clone_test() {
 
     // Check the call graphs.
     Pipeline p({c, d, e, f});
-    Module m = p.compile_to_module({}, "");
-    CheckCalls check;
-    m.functions().front().body.accept(&check);
-
     CallGraphs expected = {
         {e.name(), {b.name(), a_clone_in_b_e_in_e.name()}},
         {c.name(), {b.name()}},
@@ -313,7 +274,7 @@ int clone_on_clone_test() {
         {b_clone_in_d_f.name(), {a.name()}},
         {a.name(), {}},
     };
-    if (check_call_graphs(check.calls, expected) != 0) {
+    if (check_call_graphs(p, expected) != 0) {
         return -1;
     }
 

@@ -19,6 +19,7 @@ tests(GROUPS correctness
       bitwise_ops.cpp
       bool_compute_root_vectorize.cpp
       bound.cpp
+      bound_storage.cpp
       bound_small_allocations.cpp
       boundary_conditions.cpp
       bounds.cpp
@@ -62,10 +63,13 @@ tests(GROUPS correctness
       convolution.cpp
       convolution_multiple_kernels.cpp
       cross_compilation.cpp
+      cse_nan.cpp
       cuda_8_bit_dot_product.cpp
       custom_allocator.cpp
       custom_auto_scheduler.cpp
+      custom_cuda_context.cpp
       custom_error_reporter.cpp
+      custom_jit_context.cpp
       custom_lowering_pass.cpp
       dead_realization_in_specialization.cpp
       debug_to_file.cpp
@@ -261,6 +265,7 @@ tests(GROUPS correctness
       process_some_tiles.cpp
       pseudostack_shares_slots.cpp
       python_extension_gen.cpp
+      pytorch.cpp
       random.cpp
       realize_larger_than_two_gigs.cpp
       realize_over_shifted_domain.cpp
@@ -311,6 +316,7 @@ tests(GROUPS correctness
       strided_load.cpp
       target.cpp
       thread_safety.cpp
+      tiled_matmul.cpp
       tracing.cpp
       tracing_bounds.cpp
       tracing_broadcast.cpp
@@ -350,6 +356,7 @@ tests(GROUPS correctness
       vectorized_initialization.cpp
       vectorized_load_from_vectorized_allocation.cpp
       vectorized_reduction_bug.cpp
+      widening_lerp.cpp
       widening_reduction.cpp
       )
 

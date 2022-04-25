@@ -4,8 +4,8 @@ namespace {
 
 class UserContext : public Halide::Generator<UserContext> {
 public:
-    Input<Buffer<float>> input{"input", 2};
-    Output<Buffer<float>> output{"output", 2};
+    Input<Buffer<float, 2>> input{"input"};
+    Output<Buffer<float, 2>> output{"output"};
 
     void generate() {
         Var x, y;

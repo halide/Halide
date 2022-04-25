@@ -179,7 +179,10 @@ WEAK bool CacheEntry::init(const uint8_t *cache_key, size_t cache_key_size,
 
 WEAK void CacheEntry::destroy() {
     for (uint32_t i = 0; i < tuple_count; i++) {
-        halide_device_free(nullptr, &buf[i]);
+        if (halide_device_free(nullptr, &buf[i]) != 0) {
+            // Just log a debug message, there's not much we can do in response here
+            debug(nullptr) << "CacheEntry::destroy: halide_device_free failed\n";
+        }
         halide_free(nullptr, get_pointer_to_header(buf[i].host));
     }
     halide_free(nullptr, metadata_storage);
@@ -278,7 +281,7 @@ WEAK void prune_cache() {
                 while (prev_hash_entry != nullptr && prev_hash_entry->next != prune_candidate) {
                     prev_hash_entry = prev_hash_entry->next;
                 }
-                halide_assert(nullptr, prev_hash_entry != nullptr);
+                halide_abort_if_false(nullptr, prev_hash_entry != nullptr);
                 prev_hash_entry->next = prune_candidate->next;
             }
 
@@ -367,14 +370,14 @@ WEAK int halide_memoization_cache_lookup(void *user_context, const uint8_t *cach
 
             if (all_bounds_equal) {
                 if (entry != most_recently_used) {
-                    halide_assert(user_context, entry->more_recent != nullptr);
+                    halide_abort_if_false(user_context, entry->more_recent != nullptr);
                     if (entry->less_recent != nullptr) {
                         entry->less_recent->more_recent = entry->more_recent;
                     } else {
-                        halide_assert(user_context, least_recently_used == entry);
+                        halide_abort_if_false(user_context, least_recently_used == entry);
                         least_recently_used = entry->more_recent;
                     }
-                    halide_assert(user_context, entry->more_recent != nullptr);
+                    halide_abort_if_false(user_context, entry->more_recent != nullptr);
                     entry->more_recent->less_recent = entry->less_recent;
 
                     entry->more_recent = nullptr;
@@ -466,7 +469,7 @@ WEAK int halide_memoization_cache_store(void *user_context, const uint8_t *cache
                 }
             }
             if (all_bounds_equal) {
-                halide_assert(user_context, no_host_pointers_equal);
+                halide_abort_if_false(user_context, no_host_pointers_equal);
                 // This entry is still in use by the caller. Mark it as having no cache entry
                 // so halide_memoization_cache_release can free the buffer.
                 for (int32_t i = 0; i < tuple_count; i++) {
@@ -544,7 +547,7 @@ WEAK void halide_memoization_cache_release(void *user_context, void *host) {
     } else {
         ScopedMutexLock lock(&memoization_lock);
 
-        halide_assert(user_context, entry->in_use_count > 0);
+        halide_abort_if_false(user_context, entry->in_use_count > 0);
         entry->in_use_count--;
 #if CACHE_DEBUGGING
         validate_cache();

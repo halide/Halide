@@ -262,24 +262,6 @@ protected:
     /** Codegen a block of asserts with pure conditions */
     void codegen_asserts(const std::vector<const AssertStmt *> &asserts);
 
-    /** Codegen a call to do_parallel_tasks */
-    struct ParallelTask {
-        Stmt body;
-        struct SemAcquire {
-            Expr semaphore;
-            Expr count;
-        };
-        std::vector<SemAcquire> semaphores;
-        std::string loop_var;
-        Expr min, extent;
-        Expr serial;
-        std::string name;
-    };
-    int task_depth;
-    void get_parallel_tasks(const Stmt &s, std::vector<ParallelTask> &tasks, std::pair<std::string, int> prefix);
-    void do_parallel_tasks(const std::vector<ParallelTask> &tasks);
-    void do_as_parallel_task(const Stmt &s);
-
     /** Return the the pipeline with the given error code. Will run
      * the destructor block. */
     void return_with_error_code(llvm::Value *error_code);
@@ -356,10 +338,8 @@ protected:
     void visit(const AssertStmt *) override;
     void visit(const ProducerConsumer *) override;
     void visit(const For *) override;
-    void visit(const Acquire *) override;
     void visit(const Store *) override;
     void visit(const Block *) override;
-    void visit(const Fork *) override;
     void visit(const IfThenElse *) override;
     void visit(const Evaluate *) override;
     void visit(const Shuffle *) override;
@@ -550,7 +530,8 @@ private:
     llvm::Constant *embed_constant_expr(Expr e, llvm::Type *t);
     llvm::Constant *embed_constant_scalar_value_t(const Expr &e);
 
-    llvm::Function *add_argv_wrapper(llvm::Function *fn, const std::string &name, bool result_in_argv = false);
+    llvm::Function *add_argv_wrapper(llvm::Function *fn, const std::string &name,
+                                     bool result_in_argv, std::vector<bool> &arg_is_buffer);
 
     llvm::Value *codegen_dense_vector_load(const Type &type, const std::string &name, const Expr &base,
                                            const Buffer<> &image, const Parameter &param, const ModulusRemainder &alignment,
@@ -568,6 +549,13 @@ private:
     /** A helper routine for generating folded vector reductions. */
     template<typename Op>
     bool try_to_fold_vector_reduce(const Expr &a, Expr b);
+
+    /** Records the StructType for pointer values returned from
+     * make_struct intrinsic. Required for opaque pointer support.
+     * This map should never grow without bound as each entry
+     * represents a unique struct type created by a closure or similar.
+     */
+    std::map<llvm::Value *, llvm::Type *> struct_type_recovery;
 };
 
 }  // namespace Internal

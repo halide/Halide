@@ -4,10 +4,9 @@ using namespace Halide;
 
 class BitGenerator : public Halide::Generator<BitGenerator> {
 public:
-    Input<Buffer<bool>> bit_input{"input_uint1", 1};
+    Input<Buffer<bool, 1>> bit_input{"input_uint1"};
     Input<bool> bit_constant{"constant_uint1"};
-
-    Output<Buffer<bool>> bit_output{"output_uint1", 1};
+    Output<Buffer<bool, 1>> bit_output{"output_uint1"};
 
     Var x, y, z;
 

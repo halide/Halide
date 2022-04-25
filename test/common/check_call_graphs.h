@@ -14,29 +14,29 @@
 typedef std::map<std::string, std::vector<std::string>> CallGraphs;
 
 // For each producer node, find all functions that it calls.
-class CheckCalls : public Halide::Internal::IRVisitor {
+class CheckCalls : public Halide::Internal::IRMutator {
 public:
     CallGraphs calls;  // Caller -> vector of callees
     std::string producer = "";
 
 private:
-    using Halide::Internal::IRVisitor::visit;
+    using Halide::Internal::IRMutator::visit;
 
-    void visit(const Halide::Internal::ProducerConsumer *op) override {
+    Halide::Internal::Stmt visit(const Halide::Internal::ProducerConsumer *op) override {
         if (op->is_producer) {
             std::string old_producer = producer;
             producer = op->name;
             calls[producer];  // Make sure each producer is allocated a slot
             // Group the callees of the 'produce' and 'update' together
-            op->body.accept(this);
+            auto new_stmt = mutate(op->body);
             producer = old_producer;
+            return new_stmt;
         } else {
-            Halide::Internal::IRVisitor::visit(op);
+            return Halide::Internal::IRMutator::visit(op);
         }
     }
 
-    void visit(const Halide::Internal::Load *op) override {
-        Halide::Internal::IRVisitor::visit(op);
+    Halide::Expr visit(const Halide::Internal::Load *op) override {
         if (!producer.empty()) {
             assert(calls.count(producer) > 0);
             std::vector<std::string> &callees = calls[producer];
@@ -44,11 +44,19 @@ private:
                 callees.push_back(op->name);
             }
         }
+        return Halide::Internal::IRMutator::visit(op);
     }
 };
 
 // These are declared "inline" to avoid "unused function" warnings
-inline int check_call_graphs(CallGraphs &result, CallGraphs &expected) {
+inline int check_call_graphs(Halide::Pipeline p, CallGraphs &expected) {
+    // Add a custom lowering pass that scrapes the call graph. We give ownership
+    // of it to the Pipeline, whose lifetime escapes this function.
+    CheckCalls *checker = new CheckCalls;
+    p.add_custom_lowering_pass(checker);
+    p.compile_to_module(p.infer_arguments(), "");
+    CallGraphs &result = checker->calls;
+
     if (result.size() != expected.size()) {
         printf("Expect %d callers instead of %d\n", (int)expected.size(), (int)result.size());
         return -1;
@@ -74,7 +82,7 @@ inline int check_call_graphs(CallGraphs &result, CallGraphs &expected) {
                     return a.empty() ? b : a + ", " + b;
                 });
 
-            printf("Expect calless of %s to be (%s); got (%s) instead\n",
+            printf("Expect callees of %s to be (%s); got (%s) instead\n",
                    iter.first.c_str(), expected_str.c_str(), result_str.c_str());
             return -1;
         }

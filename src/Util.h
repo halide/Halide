@@ -402,8 +402,11 @@ struct IsRoundtrippable {
     }
 };
 
-/** Emit a version of a string that is a valid identifier in C (. is replaced with _) */
-std::string c_print_name(const std::string &name);
+/** Emit a version of a string that is a valid identifier in C (. is replaced with _)
+ * If prefix_underscore is true (the default), an underscore will be prepended if the
+ * input starts with an alphabetic character to avoid reserved word clashes.
+ */
+std::string c_print_name(const std::string &name, bool prefix_underscore = true);
 
 /** Return the LLVM_VERSION against which this libHalide is compiled. This is provided
  * only for internal tests which need to verify behavior; please don't use this outside
@@ -460,6 +463,14 @@ namespace Internal {
  * function on the calling thread. Otherwise on Windows this
  * uses a Fiber, and on other platforms it uses swapcontext. */
 void run_with_large_stack(const std::function<void()> &action);
+
+/** Portable versions of popcount, count-leading-zeros, and
+    count-trailing-zeros. */
+// @{
+int popcount64(uint64_t x);
+int clz64(uint64_t x);
+int ctz64(uint64_t x);
+// @}
 
 }  // namespace Internal
 }  // namespace Halide

@@ -12,8 +12,7 @@ set(CMAKE_CXX_EXTENSIONS NO)
 find_package(Halide REQUIRED)
 
 # Generator
-add_executable(fft.generator fft_generator.cpp fft.cpp)
-target_link_libraries(fft.generator PRIVATE Halide::Generator)
+add_halide_generator(fft.generator SOURCES fft_generator.cpp fft.cpp)
 
 # Filters
 add_halide_library(fft_forward_r2c FROM fft.generator

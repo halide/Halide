@@ -6,9 +6,9 @@
 
 int main(int argc, char **argv) {
     std::cout << "Running onnx_converter_generator_test...\n";
-    Halide::Runtime::Buffer<float> A(3, 4);
-    Halide::Runtime::Buffer<float> B(3, 4);
-    Halide::Runtime::Buffer<float> C(3, 4);
+    Halide::Runtime::Buffer<float, 2> A(3, 4);
+    Halide::Runtime::Buffer<float, 2> B(3, 4);
+    Halide::Runtime::Buffer<float, 2> C(3, 4);
 
     std::mt19937 rnd(123);
     A.for_each_value([&](float &v) {

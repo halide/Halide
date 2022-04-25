@@ -60,6 +60,7 @@ set(HEADER_FILES
     ExprUsesVar.h
     Extern.h
     ExternFuncArgument.h
+    ExtractTileOperations.h
     FastIntegerDivide.h
     FindCalls.h
     FindIntrinsics.h
@@ -97,6 +98,7 @@ set(HEADER_FILES
     LLVM_Runtime_Linker.h
     LoopCarry.h
     Lower.h
+    LowerParallelTasks.h
     LowerWarpShuffles.h
     MainPage.h
     MatlabWrapper.h
@@ -221,6 +223,7 @@ set(SOURCE_FILES
     EmulateFloat16Math.cpp
     Error.cpp
     Expr.cpp
+    ExtractTileOperations.cpp
     FastIntegerDivide.cpp
     FindCalls.cpp
     FindIntrinsics.cpp
@@ -256,6 +259,7 @@ set(SOURCE_FILES
     LLVM_Runtime_Linker.cpp
     LoopCarry.cpp
     Lower.cpp
+    LowerParallelTasks.cpp
     LowerWarpShuffles.cpp
     MatlabWrapper.cpp
     Memoization.cpp
@@ -401,6 +405,11 @@ endif ()
 if (TARGET Halide_wabt)
     target_link_libraries(Halide PRIVATE Halide_wabt)
     target_compile_definitions(Halide PRIVATE WITH_WABT)
+endif ()
+
+if (TARGET Halide_V8)
+    target_link_libraries(Halide PRIVATE Halide_V8)
+    target_compile_definitions(Halide PRIVATE WITH_V8)
 endif ()
 
 ##

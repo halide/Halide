@@ -3,6 +3,7 @@
 #include "IRVisitor.h"
 #include "Module.h"
 #include "Scope.h"
+#include "Util.h"
 
 #include <cstdio>
 #include <fstream>
@@ -761,9 +762,197 @@ public:
         scope.pop(op.name);
     }
 
+    void print_cuda_gpu_source_kernels(const std::string &str) {
+        std::istringstream ss(str);
+        int current_id = -1;
+        stream << "<code class='ptx'>";
+        bool in_braces = false;
+        bool in_func_signature = false;
+        std::string current_kernel;
+        for (std::string line; std::getline(ss, line);) {
+            if (line.empty()) {
+                stream << "\n";
+                continue;
+            }
+            line = replace_all(line, "&", "&amp;");
+            line = replace_all(line, "<", "&lt;");
+            line = replace_all(line, ">", "&gt;");
+            line = replace_all(line, "\"", "&quot;");
+            line = replace_all(line, "/", "&#x2F;");
+            line = replace_all(line, "'", "&#39;");
+
+            if (starts_with(line, ".visible .entry")) {
+                std::vector<std::string> parts = split_string(line, " ");
+                if (parts.size() == 3) {
+                    in_func_signature = true;
+                    current_id = unique_id();
+                    stream << open_expand_button(current_id);
+
+                    std::string kernel_name = parts[2].substr(0, parts[2].length() - 1);
+                    line = keyword(".visible") + " " + keyword(".entry") + " ";
+                    line += var(kernel_name) + " " + matched("(");
+                    current_kernel = kernel_name;
+                }
+            } else if (starts_with(line, ")") && in_func_signature) {
+                stream << close_expand_button();
+                in_func_signature = false;
+                line = matched(")") + line.substr(1);
+            } else if (starts_with(line, "{") && !in_braces) {
+                in_braces = true;
+                stream << matched("{");
+                stream << close_expand_button();
+                internal_assert(current_id != -1);
+                stream << open_div("Indent", current_id);
+                current_id = -1;
+                line = line.substr(1);
+                scope.push(current_kernel, unique_id());
+            } else if (starts_with(line, "}") && in_braces) {
+                stream << close_div();
+                line = matched("}") + line.substr(1);
+                in_braces = false;
+                scope.pop(current_kernel);
+            }
+
+            bool indent = false;
+
+            if (line[0] == '\t') {
+                // Replace first tab with four spaces.
+                line = line.substr(1);
+                indent = true;
+            }
+
+            line = replace_all(line, ".f32", ".<span class='OpF32'>f32</span>");
+            line = replace_all(line, ".f64", ".<span class='OpF64'>f64</span>");
+
+            line = replace_all(line, ".s8", ".<span class='OpI8'>s8</span>");
+            line = replace_all(line, ".s16", ".<span class='OpI16'>s16</span>");
+            line = replace_all(line, ".s32", ".<span class='OpI32'>s32</span>");
+            line = replace_all(line, ".s64", ".<span class='OpI64'>s64</span>");
+
+            line = replace_all(line, ".u8", ".<span class='OpI8'>u8</span>");
+            line = replace_all(line, ".u16", ".<span class='OpI16'>u16</span>");
+            line = replace_all(line, ".u32", ".<span class='OpI32'>u32</span>");
+            line = replace_all(line, ".u64", ".<span class='OpI64'>u64</span>");
+
+            line = replace_all(line, ".b8", ".<span class='OpB8'>b8</span>");
+            line = replace_all(line, ".b16", ".<span class='OpB16'>b16</span>");
+            line = replace_all(line, ".b32", ".<span class='OpB32'>b32</span>");
+            line = replace_all(line, ".b64", ".<span class='OpB64'>b64</span>");
+
+            line = replace_all(line, ".v2", ".<span class='OpVec2'>v2</span>");
+            line = replace_all(line, ".v4", ".<span class='OpVec4'>v4</span>");
+
+            line = replace_all(line, "ld.", "<span class='Memory'>ld</span>.");
+            line = replace_all(line, "st.", "<span class='Memory'>st</span>.");
+
+            size_t idx;
+            if ((idx = line.find("&#x2F;&#x2F")) != std::string::npos) {
+                line.insert(idx, "<span class='Comment'>");
+                line += "</span>";
+            }
+
+            // Predicated instructions
+            if (line.front() == '@' && indent) {
+                idx = line.find(' ');
+                std::string pred = line.substr(1, idx - 1);
+                line = "<span class='Pred'>@" + var(pred) + "</span>" + line.substr(idx);
+            }
+
+            // Labels
+            if (line.front() == 'L' && !indent && (idx = line.find(':')) != std::string::npos) {
+                std::string label = line.substr(0, idx);
+                line = "<span class='Label'>" + var(label) + "</span>:" + line.substr(idx + 1);
+            }
+
+            // Highlight operands
+            if ((idx = line.find(" \t")) != std::string::npos && line.back() == ';') {
+                std::string operands_str = line.substr(idx + 2);
+                operands_str = operands_str.substr(0, operands_str.length() - 1);
+                std::vector<std::string> operands = split_string(operands_str, ", ");
+                operands_str = "";
+                for (size_t opidx = 0; opidx < operands.size(); ++opidx) {
+                    std::string op = operands[opidx];
+                    internal_assert(!op.empty());
+                    if (opidx != 0) {
+                        operands_str += ", ";
+                    }
+                    if (op.back() == '}') {
+                        std::string reg = op.substr(0, op.size() - 1);
+                        operands_str += var(reg) + '}';
+                    } else if (op.front() == '%') {
+                        operands_str += var(op);
+                    } else if (op.find_first_not_of("-0123456789") == string::npos) {
+                        operands_str += open_span("IntImm Imm");
+                        operands_str += op;
+                        operands_str += close_span();
+                    } else if (starts_with(op, "0f") &&
+                               op.find_first_not_of("0123456789ABCDEF", 2) == string::npos) {
+                        operands_str += open_span("FloatImm Imm");
+                        operands_str += op;
+                        operands_str += close_span();
+                    } else if (op.front() == '[' && op.back() == ']') {
+                        size_t idx = op.find('+');
+                        if (idx == std::string::npos) {
+                            std::string reg = op.substr(1, op.size() - 2);
+                            operands_str += '[' + var(reg) + ']';
+                        } else {
+                            std::string reg = op.substr(1, idx - 1);
+                            std::string offset = op.substr(idx + 1);
+                            offset = offset.substr(0, offset.size() - 1);
+                            operands_str += '[' + var(reg) + "+";
+                            operands_str += open_span("IntImm Imm");
+                            operands_str += offset;
+                            operands_str += close_span();
+                            operands_str += ']';
+                        }
+                    } else if (op.front() == '{') {
+                        std::string reg = op.substr(1);
+                        operands_str += '{' + var(reg);
+                    } else if (op.front() == 'L') {
+                        // Labels
+                        operands_str += "<span class='Label'>" + var(op) + "</span>";
+                    } else {
+                        operands_str += op;
+                    }
+                }
+                operands_str += ";";
+                line = line.substr(0, idx + 2) + operands_str;
+            }
+
+            if (indent) {
+                stream << "    ";
+            }
+            stream << line << "\n";
+        }
+        stream << "</code>";
+    }
+
     void print(const Buffer<> &op) {
+        bool include_data = ends_with(op.name(), "_gpu_source_kernels");
+        int id = 0;
+        if (include_data) {
+            id = unique_id();
+            stream << open_expand_button(id);
+        }
         stream << open_div("Buffer<>");
         stream << keyword("buffer ") << var(op.name());
+        if (include_data) {
+            stream << " = ";
+            stream << matched("{");
+            stream << close_expand_button();
+            stream << open_div("BufferData Indent", id);
+            std::string str((const char *)op.data(), op.size_in_bytes());
+            if (starts_with(op.name(), "cuda_")) {
+                print_cuda_gpu_source_kernels(str);
+            } else {
+                stream << "<pre>\n";
+                stream << str;
+                stream << "</pre>\n";
+            }
+            stream << close_div();
+
+            stream << " " << matched("}");
+        }
         stream << close_div();
     }
 
@@ -803,8 +992,6 @@ public:
         stream << "<head>";
         stream << "<style type='text/css'>" << css << "</style>\n";
         stream << "<script language='javascript' type='text/javascript'>" + js + "</script>\n";
-        stream << "<link rel='stylesheet' type='text/css' href='my.css'>\n";
-        stream << "<script language='javascript' type='text/javascript' src='my.js'></script>\n";
         stream << "<link href='http://maxcdn.bootstrapcdn.com/font-awesome/4.1.0/css/font-awesome.min.css' rel='stylesheet'>\n";
         stream << "<script src='http://code.jquery.com/jquery-1.10.2.js'></script>\n";
         stream << "</head>\n <body>\n";
@@ -839,6 +1026,22 @@ span.IntImm { color: #099; }\n \
 span.FloatImm { color: #099; }\n \
 b.Highlight { font-weight: bold; background-color: #DDD; }\n \
 span.Highlight { font-weight: bold; background-color: #FF0; }\n \
+span.OpF32 { color: hsl(106deg 100% 40%); font-weight: bold; }\n \
+span.OpF64 { color: hsl(106deg 100% 30%); font-weight: bold; }\n \
+span.OpB8  { color: hsl(208deg 100% 80%); font-weight: bold; }\n \
+span.OpB16 { color: hsl(208deg 100% 70%); font-weight: bold; }\n \
+span.OpB32 { color: hsl(208deg 100% 60%); font-weight: bold; }\n \
+span.OpB64 { color: hsl(208deg 100% 50%); font-weight: bold; }\n \
+span.OpI8  { color: hsl( 46deg 100% 45%); font-weight: bold; }\n \
+span.OpI16 { color: hsl( 46deg 100% 40%); font-weight: bold; }\n \
+span.OpI32 { color: hsl( 46deg 100% 34%); font-weight: bold; }\n \
+span.OpI64 { color: hsl( 46deg 100% 27%); font-weight: bold; }\n \
+span.OpVec2 { background-color: hsl(100deg 100% 90%); font-weight: bold; }\n \
+span.OpVec4 { background-color: hsl(100deg 100% 80%); font-weight: bold; }\n \
+span.Memory { color: #d22; font-weight: bold; }\n \
+span.Pred { background-color: #ffe8bd; font-weight: bold; }\n \
+span.Label { background-color: #bde4ff; font-weight: bold; }\n \
+code.ptx { tab-size: 26; white-space: pre; }\n \
 ";
 
 const std::string StmtToHtml::js = "\n \

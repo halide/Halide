@@ -8,19 +8,19 @@ using namespace Halide::BoundaryConditions;
 class DepthwiseSeparableConvolution : public Generator<DepthwiseSeparableConvolution> {
 public:
     // [in_channels, width, height, batch_size]
-    Input<Buffer<float>> input{"input", 4};
+    Input<Buffer<float, 4>> input{"input"};
 
     // [channel_multiplier, in_channels, filter_width, filter_height]
-    Input<Buffer<float>> depthwise_filter{"depthwise_filter", 4};
+    Input<Buffer<float, 4>> depthwise_filter{"depthwise_filter"};
 
     // [out_channels, channel_multiplier * in_channels]
-    Input<Buffer<float>> pointwise_filter{"pointwise_filter", 2};
+    Input<Buffer<float, 2>> pointwise_filter{"pointwise_filter"};
 
     // [out_channels]
-    Input<Buffer<float>> bias{"bias", 1};
+    Input<Buffer<float, 1>> bias{"bias"};
 
     // [out_channels, width, height, batch_size]
-    Output<Buffer<float>> output{"output", 4};
+    Output<Buffer<float, 4>> output{"output"};
 
     void generate() {
         // The algorithm. It will be a generic depthwise convolution,

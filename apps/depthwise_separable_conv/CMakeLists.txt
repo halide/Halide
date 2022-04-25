@@ -12,10 +12,7 @@ set(CMAKE_CXX_EXTENSIONS NO)
 find_package(Halide REQUIRED)
 
 # Generator
-add_executable(depthwise_separable_conv.generator depthwise_separable_conv_generator.cpp)
-target_link_libraries(depthwise_separable_conv.generator
-                      PRIVATE
-                      Halide::Generator)
+add_halide_generator(depthwise_separable_conv.generator SOURCES depthwise_separable_conv_generator.cpp)
 
 # Filters
 add_halide_library(depthwise_separable_conv FROM depthwise_separable_conv.generator)

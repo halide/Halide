@@ -108,11 +108,17 @@ OpPtr lower_tflite_fullyconnected(const TensorPtr &input, const TensorPtr &filte
             assert(i.min == 0);
         }
 #endif
-        int c_extent = 1;
-        int b_extent = bounds.back().extent();
-        for (size_t i = 0; i + 1 < bounds.size(); i++) {
-            c_extent *= bounds[i].extent();
+        // It's important that we preserve the invariants:
+        //      input_reshaped[0] == filter[0]
+        //      input_reshaped[1] = input->number_of_elements()/input_reshaped[0]
+        int c_extent = filter->bounds()[0].extent();
+        int num_elems = 1;
+        for (size_t i = 0; i < bounds.size(); i++) {
+            num_elems *= bounds[i].extent();
         }
+        const int b_extent = num_elems / c_extent;
+        HCHECK(c_extent * b_extent == num_elems);
+
         Box reshaped_bounds = {{0, c_extent - 1}, {0, b_extent - 1}};
         TensorPtr input_reshaped =
             std::make_shared<Tensor>(input->name() + ".reshaped", input->type(), std::move(reshaped_bounds), input->quantization());

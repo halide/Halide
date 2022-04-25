@@ -33,7 +33,7 @@ public:
     // We declare a three-dimensional input image. The first two
     // dimensions will be x, and y, and the third dimension will be
     // the color channel.
-    Input<Buffer<uint8_t>> input{"input", 3};
+    Input<Buffer<uint8_t, 3>> input{"input"};
 
     // We will compile this generator in several ways to accept
     // several different memory layouts for the input and output. This
@@ -56,7 +56,7 @@ public:
     Input<uint8_t> offset{"offset"};
 
     // Declare our outputs
-    Output<Buffer<uint8_t>> brighter{"brighter", 3};
+    Output<Buffer<uint8_t, 3>> brighter{"brighter"};
 
     // Declare our Vars
     Var x, y, c;

@@ -7,7 +7,7 @@ using namespace Halide;
 
 const int kSize = 32;
 
-void verify(const Buffer<int32_t> &img, float compiletime_factor, float runtime_factor, int channels) {
+void verify(const Buffer<int32_t, 3> &img, float compiletime_factor, float runtime_factor, int channels) {
     img.for_each_element([=](int x, int y, int c) {
         int expected = (int32_t)(compiletime_factor * runtime_factor * c * (x > y ? x : y));
         int actual = img(x, y, c);
@@ -18,20 +18,20 @@ void verify(const Buffer<int32_t> &img, float compiletime_factor, float runtime_
 int main(int argc, char **argv) {
     GeneratorContext context(get_jit_target_from_environment());
 
-    Buffer<int> input(kSize, kSize, 3);
+    Buffer<int, 3> input(kSize, kSize, 3);
     input.for_each_element([&](int x, int y, int c) {
         input(x, y, c) = (x * 3 + y * 5 + c * 7);
     });
 
-    std::vector<Buffer<uint8_t>> extras;
+    std::vector<Buffer<uint8_t, 2>> extras;
     int extra_value = 0;
     for (int i = 0; i < 3; ++i) {
-        extras.push_back(Buffer<uint8_t>(kSize, kSize));
+        extras.push_back(Buffer<uint8_t, 2>(kSize, kSize));
         extras.back().fill((uint8_t)i);
         extra_value += i;
     }
 
-    Buffer<int16_t> typed_extra(kSize, kSize);
+    Buffer<int16_t, 2> typed_extra(kSize, kSize);
     typed_extra.fill(4);
     extra_value += 4;
 
@@ -54,9 +54,9 @@ int main(int argc, char **argv) {
                                                    extra_scalar,
                                                    cast<int8_t>(extra_dynamic_scalar)});
 
-    Buffer<int32_t> output = result.output.realize({kSize, kSize, 3});
-    Buffer<float> extra_buffer_output = result.extra_buffer_output.realize({kSize, kSize, 3});
-    Buffer<double> extra_func_output = result.extra_func_output.realize({kSize, kSize});
+    Buffer<int32_t, 3> output = result.output.realize({kSize, kSize, 3});
+    Buffer<float, 3> extra_buffer_output = result.extra_buffer_output.realize({kSize, kSize, 3});
+    Buffer<double, 2> extra_func_output = result.extra_func_output.realize({kSize, kSize});
 
     output.for_each_element([&](int x, int y, int c) {
         assert(output(x, y, c) == input(x, y, c) + bias + extra_value);

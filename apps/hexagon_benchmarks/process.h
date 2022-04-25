@@ -46,8 +46,8 @@ struct PipelineDescriptorBase {
 };
 
 class Conv3x3a16Descriptor : public PipelineDescriptorBase {
-    Halide::Runtime::Buffer<uint8_t> u8_in, u8_out;
-    Halide::Runtime::Buffer<int8_t> i8_mask;
+    Halide::Runtime::Buffer<uint8_t, 2> u8_in, u8_out;
+    Halide::Runtime::Buffer<int8_t, 2> i8_mask;
 
 public:
     Conv3x3a16Descriptor(int W, int H)
@@ -131,7 +131,7 @@ public:
 };
 
 class Dilate3x3Descriptor : public PipelineDescriptorBase {
-    Halide::Runtime::Buffer<uint8_t> u8_in, u8_out;
+    Halide::Runtime::Buffer<uint8_t, 2> u8_in, u8_out;
 
 private:
     static uint8_t max3(uint8_t a, uint8_t b, uint8_t c) {
@@ -207,7 +207,7 @@ public:
 };
 
 class Median3x3Descriptor : public PipelineDescriptorBase {
-    Halide::Runtime::Buffer<uint8_t> u8_in, u8_out;
+    Halide::Runtime::Buffer<uint8_t, 2> u8_in, u8_out;
 
 public:
     Median3x3Descriptor(int W, int H)
@@ -276,7 +276,7 @@ public:
 };
 
 class Gaussian5x5Descriptor : public PipelineDescriptorBase {
-    Halide::Runtime::Buffer<uint8_t> u8_in, u8_out;
+    Halide::Runtime::Buffer<uint8_t, 2> u8_in, u8_out;
 
 public:
     Gaussian5x5Descriptor(int W, int H)
@@ -347,7 +347,7 @@ public:
 };
 
 class SobelDescriptor : public PipelineDescriptorBase {
-    Halide::Runtime::Buffer<uint8_t> u8_in, u8_out;
+    Halide::Runtime::Buffer<uint8_t, 2> u8_in, u8_out;
 
 public:
     SobelDescriptor(int W, int H)
@@ -423,8 +423,8 @@ public:
 };
 
 class Conv3x3a32Descriptor : public PipelineDescriptorBase {
-    Halide::Runtime::Buffer<uint8_t> u8_in, u8_out;
-    Halide::Runtime::Buffer<int8_t> i8_mask;
+    Halide::Runtime::Buffer<uint8_t, 2> u8_in, u8_out;
+    Halide::Runtime::Buffer<int8_t, 2> i8_mask;
 
 public:
     Conv3x3a32Descriptor(int W, int H)

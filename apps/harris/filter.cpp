@@ -19,10 +19,10 @@ int main(int argc, char **argv) {
         return 1;
     }
 
-    Halide::Runtime::Buffer<float> input = load_and_convert_image(argv[1]);
+    Halide::Runtime::Buffer<float, 3> input = load_and_convert_image(argv[1]);
 
     // The harris app doesn't use a boundary condition
-    Halide::Runtime::Buffer<float> output(input.width() - 6, input.height() - 6);
+    Halide::Runtime::Buffer<float, 2> output(input.width() - 6, input.height() - 6);
     output.set_min(3, 3);
 
     double best_manual = benchmark([&]() {

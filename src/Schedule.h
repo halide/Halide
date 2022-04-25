@@ -479,6 +479,9 @@ struct StorageDim {
      * "alignment". Set by Func::align_storage. */
     Expr alignment;
 
+    /** The bounds allocated (not computed). Set by Func::bound_storage. */
+    Expr bound;
+
     /** If the Func is explicitly folded along this axis (with
      * Func::fold_storage) this gives the extent of the circular
      * buffer used, and whether it is used in increasing order

@@ -128,6 +128,7 @@ int main(int argc, char **argv) {
     Expr u8y = make_leaf(UInt(8, 4), "u8y");
     Expr u8z = make_leaf(UInt(8, 4), "u8w");
     Expr u8w = make_leaf(UInt(8, 4), "u8z");
+    Expr u16x = make_leaf(UInt(16, 4), "u16x");
     Expr u32x = make_leaf(UInt(32, 4), "u32x");
     Expr u32y = make_leaf(UInt(32, 4), "u32y");
     Expr i32x = make_leaf(Int(32, 4), "i32x");
@@ -244,6 +245,13 @@ int main(int argc, char **argv) {
     check((i8x + i8(32)) / 64, (i8x + i8(32)) >> 6);  // Not a rounding_shift_right due to overflow.
     check((i32x + 16) / 32, rounding_shift_right(i32x, 5));
 
+    // rounding_right_shift of a widening add can be strength-reduced
+    check(narrow((u16(u8x) + 15) >> 4), rounding_halving_add(u8x, u8(14)) >> u8(3));
+    check(narrow((u32(u16x) + 15) >> 4), rounding_halving_add(u16x, u16(14)) >> u16(3));
+
+    // But not if the constant can't fit in the narrower type
+    check(narrow((u16(u8x) + 500) >> 4), narrow((u16(u8x) + 500) >> 4));
+
     check((u64(u32x) + 8) / 16, u64(rounding_shift_right(u32x, 4)));
     check(u16(min((u64(u32x) + 8) / 16, 65535)), u16(min(rounding_shift_right(u32x, 4), 65535)));
 
@@ -299,6 +307,12 @@ int main(int argc, char **argv) {
     check(u8_sat(u16(u8x) * u16(u8y) >> 8), mul_shift_right(u8x, u8y, 8));
     check(i8(i16(i8x) * i16(i8y) >> 8), mul_shift_right(i8x, i8y, 8));
     check(u8(u16(u8x) * u16(u8y) >> 8), mul_shift_right(u8x, u8y, 8));
+
+    // Multiplication of mixed-width integers
+    check(u16(u32(u16x) * u32(u8y) >> 8), mul_shift_right(u16x, u16(u8y), 8));
+
+    // Multiplication of mixed-sign integers shouldn't use mul_shift_right
+    check(i32(i64(u32x) * i64(i32y) >> 32), i32(widening_mul(u32x, i32y) >> 32));
 
     check(i8_sat(rounding_shift_right(i16(i8x) * i16(i8y), 7)), rounding_mul_shift_right(i8x, i8y, 7));
     check(i8(min(rounding_shift_right(i16(i8x) * i16(i8y), 7), 127)), rounding_mul_shift_right(i8x, i8y, 7));

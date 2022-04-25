@@ -78,6 +78,7 @@ struct Target {
         CUDACapability70 = halide_target_feature_cuda_capability70,
         CUDACapability75 = halide_target_feature_cuda_capability75,
         CUDACapability80 = halide_target_feature_cuda_capability80,
+        CUDACapability86 = halide_target_feature_cuda_capability86,
         OpenCL = halide_target_feature_opencl,
         CLDoubles = halide_target_feature_cl_doubles,
         CLHalf = halide_target_feature_cl_half,
@@ -130,6 +131,8 @@ struct Target {
         LLVMLargeCodeModel = halide_llvm_large_code_model,
         RVV = halide_target_feature_rvv,
         ARMv81a = halide_target_feature_armv81a,
+        SanitizerCoverage = halide_target_feature_sanitizer_coverage,
+        ProfileByTimer = halide_target_feature_profile_by_timer,
         FeatureEnd = halide_target_feature_end
     };
     Target() = default;

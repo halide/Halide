@@ -12,8 +12,8 @@ namespace {
 class ExternalCode : public Halide::Generator<ExternalCode> {
 public:
     GeneratorParam<bool> external_code_is_bitcode{"external_code_is_bitcode", true};
-    Input<Buffer<int32_t>> input{"input", 2};
-    Output<Buffer<float>> output{"output", 2};
+    Input<Buffer<int32_t, 2>> input{"input"};
+    Output<Buffer<float, 2>> output{"output"};
     HalidePureExtern_1(float, gen_extern_tester, float);
 
     void generate() {

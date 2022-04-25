@@ -4,6 +4,11 @@
 using namespace Halide;
 
 int main(int argc, char **argv) {
+    Target target = get_jit_target_from_environment();
+    if (target.arch == Target::WebAssembly) {
+        printf("[SKIP] Performance tests are meaningless and/or misleading under WebAssembly interpreter.\n");
+        return 0;
+    }
 
     double times[3] = {0.f, 0.f, 0.f};
     for (int i = 0; i < 3; i++) {

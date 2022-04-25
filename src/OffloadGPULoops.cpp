@@ -149,7 +149,8 @@ class InjectGpuOffload : public IRMutator {
                  << bounds.num_blocks[3] << ") blocks\n";
 
         // compute a closure over the state passed into the kernel
-        HostClosure c(loop->body, loop->name);
+        HostClosure c;
+        c.include(loop->body, loop->name);
 
         // Determine the arguments that must be passed into the halide function
         vector<DeviceArgument> closure_args = c.arguments();

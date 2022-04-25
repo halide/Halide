@@ -149,7 +149,7 @@ struct HashMap {
 
 inline bool HashMap::init(void *user_context, copy_value_func _copy_value, destroy_value_func _destroy_value) {
     memset(&memoization_lock, 0, sizeof(halide_mutex));
-    halide_assert(nullptr, !inited);
+    halide_debug_assert(nullptr, !inited);
     most_recently_used = nullptr;
     least_recently_used = nullptr;
     kDefaultCacheSize = 1 << 20;
@@ -158,8 +158,8 @@ inline bool HashMap::init(void *user_context, copy_value_func _copy_value, destr
     for (auto &cache_entry_ref : cache_entries) {
         cache_entry_ref = nullptr;
     }
-    halide_assert(nullptr, _copy_value);
-    halide_assert(nullptr, _destroy_value);
+    halide_debug_assert(nullptr, _copy_value);
+    halide_debug_assert(nullptr, _destroy_value);
     this->copy_value = _copy_value;
     this->destroy_value = _destroy_value;
     inited = true;
@@ -188,7 +188,7 @@ inline void HashMap::prune() {
                 while (prev_hash_entry != nullptr && prev_hash_entry->next != prune_candidate) {
                     prev_hash_entry = prev_hash_entry->next;
                 }
-                halide_assert(nullptr, prev_hash_entry != nullptr);
+                halide_debug_assert(nullptr, prev_hash_entry != nullptr);
                 prev_hash_entry->next = prune_candidate->next;
             }
 
@@ -261,14 +261,14 @@ inline int HashMap::lookup(void *user_context,
             keys_equal(entry->key, cache_key, size)) {
 
             if (entry != most_recently_used) {
-                halide_assert(user_context, entry->more_recent != nullptr);
+                halide_debug_assert(user_context, entry->more_recent != nullptr);
                 if (entry->less_recent != nullptr) {
                     entry->less_recent->more_recent = entry->more_recent;
                 } else {
-                    halide_assert(user_context, least_recently_used == entry);
+                    halide_debug_assert(user_context, least_recently_used == entry);
                     least_recently_used = entry->more_recent;
                 }
-                halide_assert(user_context, entry->more_recent != nullptr);
+                halide_debug_assert(user_context, entry->more_recent != nullptr);
                 entry->more_recent->less_recent = entry->less_recent;
 
                 entry->more_recent = nullptr;
@@ -279,7 +279,7 @@ inline int HashMap::lookup(void *user_context,
                 most_recently_used = entry;
             }
 
-            halide_assert(user_context, (cache_value_size == entry->value_size));
+            halide_debug_assert(user_context, (cache_value_size == entry->value_size));
             copy_value(cache_value, entry->value, entry->value_size);
 
             entry->in_use_count += 1;
@@ -325,7 +325,7 @@ inline int HashMap::store(void *user_context,
          entry = entry->next) {
         if (entry->hash == h && entry->key_size == (size_t)size &&
             keys_equal(entry->key, cache_key, size)) {
-            halide_assert(user_context, (cache_value_size == entry->value_size));
+            halide_debug_assert(user_context, (cache_value_size == entry->value_size));
             destroy_value(entry->value, entry->value_size);
             copy_value(entry->value, cache_value, entry->value_size);
             return (0);
@@ -335,7 +335,8 @@ inline int HashMap::store(void *user_context,
     // key not found: create new entry
     CacheEntry *new_entry = (CacheEntry *)hashmap_malloc(user_context, sizeof(CacheEntry));
     bool inited = new_entry->init(user_context, cache_key, size, h, cache_value, cache_value_size, copy_value);
-    halide_assert(user_context, inited);
+    halide_debug_assert(user_context, inited);
+    (void)inited;
 
     uint64_t added_size = cache_value_size;
     current_cache_size += added_size;
@@ -365,7 +366,7 @@ inline int HashMap::store(void *user_context,
 inline void HashMap::release(void *user_context, void *host) {
     debug(user_context) << "halide_memoization_cache_release\n";
     // TODO(marcos): this method does not make sense on a generic hashmap... remove it?
-    halide_assert(user_context, false);
+    halide_debug_assert(user_context, false);
     debug(user_context) << "Exited halide_memoization_cache_release.\n";
 }
 
@@ -396,14 +397,14 @@ struct THashMap : public HashMap {
     // member functions below...
 
     static void copy_value_func(uint8_t *dst, const uint8_t *src, size_t size) {
-        halide_assert(nullptr, sizeof(ValueType) == size);
+        halide_debug_assert(nullptr, sizeof(ValueType) == size);
         ValueType *D = reinterpret_cast<ValueType *>(dst);
         const ValueType *S = reinterpret_cast<const ValueType *>(src);
         *D = *S;
     }
 
     static void destroy_value_func(uint8_t *value, size_t size) {
-        halide_assert(nullptr, sizeof(ValueType) == size);
+        halide_debug_assert(nullptr, sizeof(ValueType) == size);
         ValueType *V = reinterpret_cast<ValueType *>(value);
         V->~ValueType();
     }

@@ -393,7 +393,7 @@ void define_buffer(py::module &m) {
                 py::arg("dirty") = true)
 
             .def("copy", &Buffer<>::copy)
-            .def("copy_from", &Buffer<>::copy_from<void>)
+            .def("copy_from", &Buffer<>::copy_from<void, Buffer<>::AnyDims>)
 
             .def("add_dimension", (void (Buffer<>::*)()) & Buffer<>::add_dimension)
 
@@ -552,11 +552,28 @@ void define_buffer(py::module &m) {
                 return b.device_sync(nullptr);
             })
 
-            .def("copy_to_device", (int (Buffer<>::*)(const Target &)) & Buffer<>::copy_to_device, py::arg("target") = get_jit_target_from_environment())
-            .def("copy_to_device", (int (Buffer<>::*)(const DeviceAPI &, const Target &)) & Buffer<>::copy_to_device, py::arg("device_api"), py::arg("target") = get_jit_target_from_environment())
+            .def(
+                "copy_to_device", [](Buffer<> &b, const Target &t) -> int {
+                    return b.copy_to_device(t);
+                },
+                py::arg("target") = get_jit_target_from_environment())
 
-            .def("device_malloc", (int (Buffer<>::*)(const Target &)) & Buffer<>::device_malloc, py::arg("target") = get_jit_target_from_environment())
-            .def("device_malloc", (int (Buffer<>::*)(const DeviceAPI &, const Target &)) & Buffer<>::device_malloc, py::arg("device_api"), py::arg("target") = get_jit_target_from_environment())
+            .def(
+                "copy_to_device", [](Buffer<> &b, const DeviceAPI &d, const Target &t) -> int {
+                    return b.copy_to_device(d, t);
+                },
+                py::arg("device_api"), py::arg("target") = get_jit_target_from_environment())
+            .def(
+                "device_malloc", [](Buffer<> &b, const Target &t) -> int {
+                    return b.device_malloc(t);
+                },
+                py::arg("target") = get_jit_target_from_environment())
+
+            .def(
+                "device_malloc", [](Buffer<> &b, const DeviceAPI &d, const Target &t) -> int {
+                    return b.device_malloc(d, t);
+                },
+                py::arg("device_api"), py::arg("target") = get_jit_target_from_environment())
 
             .def(
                 "set_min", [](Buffer<> &b, const std::vector<int> &mins) -> void {

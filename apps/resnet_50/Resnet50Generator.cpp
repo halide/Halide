@@ -28,42 +28,42 @@ int find_index(int value, std::vector<int> vec) {
 
 class Resnet50Generator : public Halide::Generator<Resnet50Generator> {
 public:
-    Input<Buffer<float>> input{"input", 3};
+    Input<Buffer<float, 3>> input{"input"};
     /** parameter values for scaling layers **/
-    Input<Buffer<float>> conv1_gamma{"conv1_gamma", 1};
-    Input<Buffer<float>[4]> br1_gamma { "br1_gamma", 1 };
-    Input<Buffer<float>[16]> br2a_gamma { "br2a_gamma", 1 };
-    Input<Buffer<float>[16]> br2b_gamma { "br2b_gamma", 1 };
-    Input<Buffer<float>[16]> br2c_gamma { "br2c_gamma", 1 };
+    Input<Buffer<float, 1>> conv1_gamma{"conv1_gamma"};
+    Input<Buffer<float, 1>[4]> br1_gamma { "br1_gamma" };
+    Input<Buffer<float, 1>[16]> br2a_gamma { "br2a_gamma" };
+    Input<Buffer<float, 1>[16]> br2b_gamma { "br2b_gamma" };
+    Input<Buffer<float, 1>[16]> br2c_gamma { "br2c_gamma" };
 
-    Input<Buffer<float>> conv1_beta{"conv1_beta", 1};
-    Input<Buffer<float>[4]> br1_beta { "br1_beta", 1 };
-    Input<Buffer<float>[16]> br2a_beta { "br2a_beta", 1 };
-    Input<Buffer<float>[16]> br2b_beta { "br2b_beta", 1 };
-    Input<Buffer<float>[16]> br2c_beta { "br2c_beta", 1 };
+    Input<Buffer<float, 1>> conv1_beta{"conv1_beta"};
+    Input<Buffer<float, 1>[4]> br1_beta { "br1_beta" };
+    Input<Buffer<float, 1>[16]> br2a_beta { "br2a_beta" };
+    Input<Buffer<float, 1>[16]> br2b_beta { "br2b_beta" };
+    Input<Buffer<float, 1>[16]> br2c_beta { "br2c_beta" };
 
-    Input<Buffer<float>> conv1_mu{"conv1_mu", 1};
-    Input<Buffer<float>[4]> br1_mu { "br1_mu", 1 };
-    Input<Buffer<float>[16]> br2a_mu { "br2a_mu", 1 };
-    Input<Buffer<float>[16]> br2b_mu { "br2b_mu", 1 };
-    Input<Buffer<float>[16]> br2c_mu { "br2c_mu", 1 };
+    Input<Buffer<float, 1>> conv1_mu{"conv1_mu"};
+    Input<Buffer<float, 1>[4]> br1_mu { "br1_mu" };
+    Input<Buffer<float, 1>[16]> br2a_mu { "br2a_mu" };
+    Input<Buffer<float, 1>[16]> br2b_mu { "br2b_mu" };
+    Input<Buffer<float, 1>[16]> br2c_mu { "br2c_mu" };
 
-    Input<Buffer<float>> conv1_sig{"conv1_sig", 1};
-    Input<Buffer<float>[4]> br1_sig { "br1_sig", 1 };
-    Input<Buffer<float>[16]> br2a_sig { "br2a_sig", 1 };
-    Input<Buffer<float>[16]> br2b_sig { "br2b_sig", 1 };
-    Input<Buffer<float>[16]> br2c_sig { "br2c_sig", 1 };
+    Input<Buffer<float, 1>> conv1_sig{"conv1_sig"};
+    Input<Buffer<float, 1>[4]> br1_sig { "br1_sig" };
+    Input<Buffer<float, 1>[16]> br2a_sig { "br2a_sig" };
+    Input<Buffer<float, 1>[16]> br2b_sig { "br2b_sig" };
+    Input<Buffer<float, 1>[16]> br2c_sig { "br2c_sig" };
 
     /** weights and biases for convolutions **/
-    Input<Buffer<float>> conv1_weights{"conv1_weights", 4};
-    Input<Buffer<float>[4]> br1_conv_weights { "br1_conv_weights", 4 };
-    Input<Buffer<float>[16]> br2a_conv_weights { "br2a_conv_weights", 4 };
-    Input<Buffer<float>[16]> br2b_conv_weights { "br2b_conv_weights", 4 };
-    Input<Buffer<float>[16]> br2c_conv_weights { "br2c_conv_weights", 4 };
+    Input<Buffer<float, 4>> conv1_weights{"conv1_weights"};
+    Input<Buffer<float, 4>[4]> br1_conv_weights { "br1_conv_weights" };
+    Input<Buffer<float, 4>[16]> br2a_conv_weights { "br2a_conv_weights" };
+    Input<Buffer<float, 4>[16]> br2b_conv_weights { "br2b_conv_weights" };
+    Input<Buffer<float, 4>[16]> br2c_conv_weights { "br2c_conv_weights" };
 
-    Input<Buffer<float>> fc1000_weights{"fc1000_weights", 2};
-    Input<Buffer<float>> fc1000_bias{"fc1000_bias", 1};
-    Output<Buffer<float>> final_output{"final_output", 1};
+    Input<Buffer<float, 2>> fc1000_weights{"fc1000_weights"};
+    Input<Buffer<float, 1>> fc1000_bias{"fc1000_bias"};
+    Output<Buffer<float, 1>> final_output{"final_output"};
 
     /** list out shapes of each layers weights **/
     // weight shapes: out channels, kernel_w, kernel_h, pad, stride. In channels infered by input tensor shape
@@ -378,6 +378,6 @@ private:
         return output;
     }
 };
-}  //namespace
+}  // namespace
 
 HALIDE_REGISTER_GENERATOR(Resnet50Generator, resnet50)

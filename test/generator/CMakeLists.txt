@@ -370,6 +370,13 @@ add_halide_library(metadata_tester_ucon
 # msan_generator.cpp
 halide_define_aot_test(msan FEATURES msan)
 
+# (Doesn't build/link properly on windows / under wasm)
+if (NOT Halide_TARGET MATCHES "windows" AND NOT CMAKE_SYSTEM_NAME MATCHES "Windows" AND NOT Halide_TARGET MATCHES "wasm")
+  # sanitizercoverage_aottest.cpp
+  # sanitizercoverage_generator.cpp
+  halide_define_aot_test(sanitizercoverage FEATURES sanitizer_coverage)
+endif()
+
 # multitarget_aottest.cpp
 # multitarget_generator.cpp
 halide_define_aot_test(multitarget
@@ -427,6 +434,10 @@ halide_define_aot_test(string_param PARAMS "rpn_expr=5 y * x +")
 # shuffler_aottest.cpp
 # shuffler_generator.cpp
 halide_define_aot_test(shuffler)
+
+# templated_aottest.cpp
+# templated_generator.cpp
+halide_define_aot_test(templated)
 
 # tiled_blur_aottest.cpp
 # tiled_blur_generator.cpp

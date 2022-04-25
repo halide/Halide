@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <vector>
 
+#include "Buffer.h"
 #include "Util.h"  // for all_are_convertible
 
 /** \file
@@ -12,9 +13,6 @@
  */
 
 namespace Halide {
-
-template<typename T>
-class Buffer;
 
 /** A Realization is a vector of references to existing Buffer objects.
  *  A pipeline with multiple outputs realize to a Realization.  */
@@ -33,18 +31,19 @@ public:
     Buffer<void> &operator[](size_t x);
 
     /** Single-element realizations are implicitly castable to Buffers. */
-    template<typename T>
-    operator Buffer<T>() const {
-        return images[0];
+    template<typename T, int Dims>
+    operator Buffer<T, Dims>() const {
+        return images[0].as<T, Dims>();
     }
 
     /** Construct a Realization that acts as a reference to some
      * existing Buffers. The element type of the Buffers may not be
      * const. */
     template<typename T,
+             int Dims,
              typename... Args,
              typename = typename std::enable_if<Internal::all_are_convertible<Buffer<void>, Args...>::value>::type>
-    Realization(Buffer<T> &a, Args &&...args) {
+    Realization(Buffer<T, Dims> &a, Args &&...args) {
         images = std::vector<Buffer<void>>({a, args...});
     }
 

@@ -39,10 +39,10 @@ extern "C" DLLEXPORT int extern_stage(halide_buffer_t *input, int addend, halide
 int main(int argc, char **argv) {
     const int width = 100;
     const int height = 200;
-    Buffer<int> input(width, height);
+    Buffer<int, 2> input(width, height);
     input.fill([](int x, int y) { return rand() % 256; });
     int addend = 20;
-    Buffer<int> output(width, height);
+    Buffer<int, 2> output(width, height);
 
     extern_output(input, addend, output);
 

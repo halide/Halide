@@ -7,7 +7,7 @@ jobs:
     env:
       CMAKE_CXX_COMPILER_LAUNCHER: ccache
       CMAKE_C_COMPILER_LAUNCHER: ccache
-      LLVM_ROOT: /usr/lib/llvm-11
+      LLVM_ROOT: /usr/lib/llvm-12
     steps:
       - name: Install dependencies
         run: |
@@ -16,7 +16,7 @@ jobs:
           sudo apt-add-repository 'deb https://apt.kitware.com/ubuntu/ focal main'
           sudo apt update
           sudo apt install cmake ninja-build doxygen ccache
-          sudo apt install llvm-11-dev liblld-11-dev clang-11 libclang-11-dev libjpeg-dev libpng-dev
+          sudo apt install llvm-12-dev liblld-12-dev clang-12 libclang-12-dev libjpeg-dev libpng-dev
           sudo apt install lintian dpkg-dev
       - name: Check out sources
         uses: actions/checkout@v2

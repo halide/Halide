@@ -16,31 +16,31 @@ public:
     Input<float> constant_float{"constant_float"};
     Input<double> constant_double{"constant_double"};
 
-    Input<Buffer<uint8_t>> input_uint8{"input_uint8", 1};
-    Input<Buffer<uint16_t>> input_uint16{"input_uint16", 1};
-    Input<Buffer<uint32_t>> input_uint32{"input_uint32", 1};
-    Input<Buffer<uint64_t>> input_uint64{"input_uint64", 1};
-    Input<Buffer<int8_t>> input_int8{"input_int8", 1};
-    Input<Buffer<int16_t>> input_int16{"input_int16", 1};
-    Input<Buffer<int32_t>> input_int32{"input_int32", 1};
-    Input<Buffer<int64_t>> input_int64{"input_int64", 1};
-    Input<Buffer<float>> input_float{"input_float", 1};
-    Input<Buffer<double>> input_double{"input_double", 1};
-    Input<Buffer<int8_t>> input_2d{"input_2d", 2};
-    Input<Buffer<int8_t>> input_3d{"input_3d", 3};
+    Input<Buffer<uint8_t, 1>> input_uint8{"input_uint8"};
+    Input<Buffer<uint16_t, 1>> input_uint16{"input_uint16"};
+    Input<Buffer<uint32_t, 1>> input_uint32{"input_uint32"};
+    Input<Buffer<uint64_t, 1>> input_uint64{"input_uint64"};
+    Input<Buffer<int8_t, 1>> input_int8{"input_int8"};
+    Input<Buffer<int16_t, 1>> input_int16{"input_int16"};
+    Input<Buffer<int32_t, 1>> input_int32{"input_int32"};
+    Input<Buffer<int64_t, 1>> input_int64{"input_int64"};
+    Input<Buffer<float, 1>> input_float{"input_float"};
+    Input<Buffer<double, 1>> input_double{"input_double"};
+    Input<Buffer<int8_t, 2>> input_2d{"input_2d"};
+    Input<Buffer<int8_t, 3>> input_3d{"input_3d"};
 
-    Output<Buffer<uint8_t>> output_uint8{"output_uint8", 1};
-    Output<Buffer<uint16_t>> output_uint16{"output_uint16", 1};
-    Output<Buffer<uint32_t>> output_uint32{"output_uint32", 1};
-    Output<Buffer<uint64_t>> output_uint64{"output_uint64", 1};
-    Output<Buffer<int8_t>> output_int8{"output_int8", 1};
-    Output<Buffer<int16_t>> output_int16{"output_int16", 1};
-    Output<Buffer<int32_t>> output_int32{"output_int32", 1};
-    Output<Buffer<int64_t>> output_int64{"output_int64", 1};
-    Output<Buffer<float>> output_float{"output_float", 1};
-    Output<Buffer<double>> output_double{"output_double", 1};
-    Output<Buffer<int8_t>> output_2d{"buffer_2d", 2};
-    Output<Buffer<int8_t>> output_3d{"buffer_3d", 3};
+    Output<Buffer<uint8_t, 1>> output_uint8{"output_uint8"};
+    Output<Buffer<uint16_t, 1>> output_uint16{"output_uint16"};
+    Output<Buffer<uint32_t, 1>> output_uint32{"output_uint32"};
+    Output<Buffer<uint64_t, 1>> output_uint64{"output_uint64"};
+    Output<Buffer<int8_t, 1>> output_int8{"output_int8"};
+    Output<Buffer<int16_t, 1>> output_int16{"output_int16"};
+    Output<Buffer<int32_t, 1>> output_int32{"output_int32"};
+    Output<Buffer<int64_t, 1>> output_int64{"output_int64"};
+    Output<Buffer<float, 1>> output_float{"output_float"};
+    Output<Buffer<double, 1>> output_double{"output_double"};
+    Output<Buffer<int8_t, 2>> output_2d{"buffer_2d"};
+    Output<Buffer<int8_t, 3>> output_3d{"buffer_3d"};
 
     Var x, y, z;
 

@@ -42,8 +42,8 @@ int main(int argc, char **argv) {
     std::string function_name = "org::halide::halide_python::f";
 
     f.compile_to(
-        {{Output::c_source, c_filename},
-         {Output::python_extension, pyext_filename}},
+        {{OutputFileType::c_source, c_filename},
+         {OutputFileType::python_extension, pyext_filename}},
         params,
         function_name,
         target);

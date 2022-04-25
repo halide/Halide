@@ -12,7 +12,7 @@
 #define LOGE(...) __android_log_print(ANDROID_LOG_ERROR, "oglc_run", __VA_ARGS__)
 
 template<typename T>
-void print(Halide::Runtime::Buffer<T> buf) {
+void print(Halide::Runtime::Buffer<T, 3> buf) {
     for (int j = 0; j < std::min(buf.height(), 10); j++) {
         std::stringstream oss;
         for (int i = 0; i < std::min(buf.width(), 10); i++) {
@@ -37,7 +37,7 @@ int main(int argc, char **argv) {
     int height = 128;
     int channels = 4;
 
-    auto input = Halide::Runtime::Buffer<int>::make_interleaved(width, height, channels);
+    auto input = Halide::Runtime::Buffer<int, 3>::make_interleaved(width, height, channels);
     LOGI("Allocated memory for %dx%dx%d image", width, height, channels);
 
     input.for_each_element([&](int i, int j, int k) {
@@ -47,7 +47,7 @@ int main(int argc, char **argv) {
     LOGI("Input :\n");
     print(input);
 
-    auto output = Halide::Runtime::Buffer<int>::make_interleaved(width, height, channels);
+    auto output = Halide::Runtime::Buffer<int, 3>::make_interleaved(width, height, channels);
 
     two_kernels_filter(input, output);
     LOGI("Filter is done.");
