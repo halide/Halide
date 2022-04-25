@@ -123,7 +123,7 @@ public:
     using Input = GeneratorInput<T>;
     template<typename T>
     using Output = GeneratorOutput<T>;
-    using Generator<CostModel<training>>::auto_schedule;
+    using Generator<CostModel<training>>::get_auto_schedule;
     using Generator<CostModel<training>>::get_pipeline;
 
     // Number of pipeline stages
@@ -482,9 +482,9 @@ public:
         true_runtime.set_estimates({{0, 80}});
 
         // SCHEDULE
-        if (training && !auto_schedule) {
+        if (training && !get_auto_schedule()) {
             do_cost_model_schedule(get_pipeline());
-        } else if (auto_schedule) {
+        } else if (get_auto_schedule()) {
             // Do nothing.
         } else {
             // We just write down a good schedule for

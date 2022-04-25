@@ -64,7 +64,7 @@ public:
         }
 
         // Schedule
-        if (!auto_schedule) {
+        if (!get_auto_schedule()) {
             cdf.bound(x, 0, 256);
 
             Var xi("xi"), yi("yi");

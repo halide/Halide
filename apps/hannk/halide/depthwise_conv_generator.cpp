@@ -58,7 +58,7 @@ public:
 
         // For the shallow case, we need to know the vector size in the algorithm.
         int vector_size = natural_vector_size<uint8_t>();
-        if (get_register_count(target) < 32) {
+        if (get_register_count(get_target()) < 32) {
             vector_size = natural_vector_size<int16_t>();
         }
 
@@ -132,7 +132,7 @@ public:
 
         output_(c, x, y, b) =
             quantize_and_relu_u8(convolved(c, x, y, b), output_multiplier_, output_shift_,
-                                 output_zero_, output_min_, output_max_, target);
+                                 output_zero_, output_min_, output_max_, get_target());
 
         // Schedule.
         interpret_as_tensor(input_);

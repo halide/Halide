@@ -108,21 +108,21 @@ public:
                 Func in;
                 in(x, y) = input(x, y, 0);
 
-                complex_result = fft2d_r2c(in, size0, size1, target, desc);
+                complex_result = fft2d_r2c(in, size0, size1, get_target(), desc);
             } else {
                 ComplexFunc in;
                 in(x, y) = ComplexExpr(input(x, y, 0), 0);
 
-                complex_result = fft2d_c2c(in, size0, size1, sign, target, desc);
+                complex_result = fft2d_c2c(in, size0, size1, sign, get_target(), desc);
             }
         } else {
             ComplexFunc in;
             in(x, y) = ComplexExpr(input(x, y, 0), input(x, y, 1));
             if (output_number_type == FFTNumberType::Real &&
                 direction == FFTDirection::FrequencyToSamples) {
-                real_result = fft2d_c2r(in, size0, size1, target, desc);
+                real_result = fft2d_c2r(in, size0, size1, get_target(), desc);
             } else {
-                complex_result = fft2d_c2c(in, size0, size1, sign, target, desc);
+                complex_result = fft2d_c2c(in, size0, size1, sign, get_target(), desc);
             }
         }
 

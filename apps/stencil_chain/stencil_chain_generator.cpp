@@ -45,7 +45,7 @@ public:
             output.set_estimates({{0, width}, {0, height}});
         }
 
-        if (auto_schedule) {
+        if (get_auto_schedule()) {
             // nothing
         } else if (get_target().has_gpu_feature()) {
             // GPU schedule

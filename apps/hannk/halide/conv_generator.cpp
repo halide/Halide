@@ -73,7 +73,7 @@ public:
     Output<Buffer<void, 4>> output_{"output"};
 
     void configure() {
-        if (use_8bit_multiply(target)) {
+        if (use_8bit_multiply(get_target())) {
             filter_.set_type(UInt(8));
         } else {
             filter_.set_type(Int(16));
@@ -84,13 +84,13 @@ public:
         // The algorithm.
         Func input("input_wrapper");
         Expr input_cxyb = input_(c, x, y, b);
-        if (!use_8bit_multiply(target)) {
+        if (!use_8bit_multiply(get_target())) {
             input_cxyb = i16(input_cxyb) - i16(input_zero_);
         }
         input(c, x, y, b) = input_cxyb;
 
         // Align the reduction loop of filter.
-        const int vector_reduction = get_vector_reduction_factor(target, UInt(8));
+        const int vector_reduction = get_vector_reduction_factor(get_target(), UInt(8));
         const int unroll_reduction = std::max<int>(vector_reduction, unroll_reduction_);
         const int accum_vector_size = natural_vector_size<int32_t>();
 
@@ -109,7 +109,7 @@ public:
         Func offset_c("offset_c");
         Func sum_input("sum_input");
         Func convolved("convolved");
-        if (use_8bit_multiply(target)) {
+        if (use_8bit_multiply(get_target())) {
             // We want to compute the reduction:
             // convolved(c, x, y, b) = bias_(c)
             // convolved(c, x, y, b) +=
@@ -152,9 +152,9 @@ public:
         Expr output;
         if (output_.type() == halide_type_of<uint8_t>()) {
             output = quantize_and_relu_u8(convolved(c, x, y, b), output_multiplier_, output_shift_, output_zero_,
-                                          output_min_, output_max_, target);
+                                          output_min_, output_max_, get_target());
         } else {
-            output = quantize_i16(convolved(c, x, y, b), output_multiplier_, output_shift_, target);
+            output = quantize_i16(convolved(c, x, y, b), output_multiplier_, output_shift_, get_target());
         }
         output_(c, x, y, b) = output;
 
@@ -186,7 +186,7 @@ public:
         // Figure out how big the tiles we should optimize for should be by getting
         // the total number of accumulators best for this target and figuring out
         // tile sizes.
-        const int accumulators = get_accumulator_count(target);
+        const int accumulators = get_accumulator_count(get_target());
         std::vector<std::pair<int, int>> tile_sizes;
         const int min_tile_c = 1;
         const int max_tile_c = 4;
@@ -232,7 +232,7 @@ public:
             .unroll(c, max_tile_c, TailStrategy::GuardWithIf)
             .unroll(x);
 
-        if (use_8bit_multiply(target)) {
+        if (use_8bit_multiply(get_target())) {
             // Specialize this to avoid computing sum_input when it isn't needed.
             convolved.specialize(filter_zero_ == 0);
         }
@@ -254,7 +254,7 @@ public:
             convolved.update().specialize(filter_depth == vector_reduction);
         }
 
-        if (!use_8bit_multiply(target) && get_target().arch == Target::X86) {
+        if (!use_8bit_multiply(get_target()) && get_target().arch == Target::X86) {
             // On x86, widening subtracts eat up a lot of the already scarce
             // registers, so precomputing this outside the inner loop helps
             // a lot.
@@ -283,7 +283,7 @@ public:
                 .vectorize(c);
         }
 
-        if (use_8bit_multiply(target)) {
+        if (use_8bit_multiply(get_target())) {
             // Precompute the channel offset at root.
             // TODO: This gets recomputed often when the op is split up into small
             // pieces.
@@ -330,7 +330,7 @@ public:
     Output<Buffer<void, 6>> output_{"output"};
 
     void configure() {
-        if (use_8bit_multiply(target)) {
+        if (use_8bit_multiply(get_target())) {
             output_.set_type(UInt(8));
         } else {
             output_.set_type(Int(16));
@@ -340,7 +340,7 @@ public:
     void generate() {
         Func input_bounded = constant_exterior(input_, input_zero_);
 
-        const int vector_reduction = get_vector_reduction_factor(target, UInt(8));
+        const int vector_reduction = get_vector_reduction_factor(get_target(), UInt(8));
         const int vector_tile = natural_vector_size<int32_t>();
 
         Var bi("bi"), bo("bo");

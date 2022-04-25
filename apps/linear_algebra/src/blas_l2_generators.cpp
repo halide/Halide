@@ -12,7 +12,6 @@ public:
     typedef Generator<GEMVGenerator<T>> Base;
     using Base::get_target;
     using Base::natural_vector_size;
-    using Base::target;
     template<typename T2>
     using Input = typename Base::template Input<T2>;
     template<typename T2>
@@ -203,7 +202,6 @@ public:
     typedef Generator<GERGenerator<T>> Base;
     using Base::get_target;
     using Base::natural_vector_size;
-    using Base::target;
     template<typename T2>
     using Input = typename Base::template Input<T2>;
     template<typename T2>

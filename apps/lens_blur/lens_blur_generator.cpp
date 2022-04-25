@@ -166,7 +166,7 @@ public:
         final.set_estimates({{0, 192}, {0, 320}, {0, 3}});
 
         /* THE SCHEDULE */
-        if (auto_schedule) {
+        if (get_auto_schedule()) {
             // nothing
         } else if (get_target().has_gpu_feature()) {
             // Manual GPU schedule

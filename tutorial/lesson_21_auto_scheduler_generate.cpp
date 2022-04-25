@@ -69,7 +69,7 @@ public:
     }
 
     void schedule() {
-        if (auto_schedule) {
+        if (get_auto_schedule()) {
             // The auto-scheduler requires estimates on all the input/output
             // sizes and parameter values in order to compare different
             // alternatives and decide on a good schedule.
