@@ -167,10 +167,13 @@ endif ()
 ##
 
 if (WITH_HEXAGON_PROFILER)
-  install(DIRECTORY ${Halide_SOURCE_DIR}/util/Hexagon
-            COMPONENT Halide_Development
-            FILES_MATCHING
-            PATTERN "reports/*.py")
+    install(DIRECTORY ${Halide_SOURCE_DIR}/util/Hexagon/reports
+            DESTINATION ${Halide_INSTALL_TOOLSDIR}/HexagonProfiling)
+    install(FILES 
+        ${Halide_BINARY_DIR}/util/Hexagon/logcat2json
+        ${Halide_BINARY_DIR}/util/Hexagon/dsp/libhexagon-profiling.so
+        COMPONENT Halide_Development
+        DESTINATION ${Halide_INSTALL_TOOLSDIR}/HexagonProfiling)
 endif ()
 
 ##

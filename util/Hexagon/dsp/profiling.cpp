@@ -9,7 +9,6 @@
 
 #include "AEEStdErr.h"
 
-#include "hexagon-dsp.h"
 #include "hexagon_protos.h"
 #include "hexagon_types.h"
 
