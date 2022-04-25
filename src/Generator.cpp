@@ -1261,6 +1261,19 @@ std::vector<std::string> GeneratorRegistry::enumerate() {
     return result;
 }
 
+#ifdef HALIDE_ALLOW_LEGACY_GENERATOR_PARAMS
+
+#ifdef __GNUC__
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+#endif
+#ifdef __clang__
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
+#endif
+
+#endif  // HALIDE_ALLOW_LEGACY_GENERATOR_PARAMS
+
 GeneratorBase::GeneratorBase(size_t size, const void *introspection_helper)
     : size(size) {
     ObjectInstanceRegistry::register_instance(this, size, ObjectInstanceRegistry::Generator, this, introspection_helper);
@@ -1269,6 +1282,17 @@ GeneratorBase::GeneratorBase(size_t size, const void *introspection_helper)
 GeneratorBase::~GeneratorBase() {
     ObjectInstanceRegistry::unregister_instance(this);
 }
+
+#ifdef HALIDE_ALLOW_LEGACY_GENERATOR_PARAMS
+
+#ifdef __clang__
+#pragma clang diagnostic pop
+#endif
+#ifdef __GNUC__
+#pragma GCC diagnostic pop
+#endif
+
+#endif  // HALIDE_ALLOW_LEGACY_GENERATOR_PARAMS
 
 GeneratorParamInfo::GeneratorParamInfo(GeneratorBase *generator, const size_t size) {
     std::vector<void *> vf = ObjectInstanceRegistry::instances_in_range(
@@ -1393,18 +1417,52 @@ void GeneratorBase::set_generator_param_values(const GeneratorParamsMap &params)
 
 #ifdef HALIDE_ALLOW_LEGACY_GENERATOR_PARAMS
 GeneratorContext GeneratorBase::context() const {
+#ifdef __GNUC__
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+#endif
+#ifdef __clang__
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
+#endif
+
     return GeneratorContext(target, auto_schedule, machine_params, externs_map, value_tracker);
+
+#ifdef __clang__
+#pragma clang diagnostic pop
+#endif
+#ifdef __GNUC__
+#pragma GCC diagnostic pop
+#endif
 }
 #endif
 
 void GeneratorBase::init_from_context(const Halide::GeneratorContext &context) {
 #ifdef HALIDE_ALLOW_LEGACY_GENERATOR_PARAMS
+
+#ifdef __GNUC__
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+#endif
+#ifdef __clang__
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
+#endif
+
     target.set(context.target_);
     auto_schedule.set(context.auto_schedule_);
     machine_params.set(context.machine_params_);
 
     externs_map = context.externs_map_;
     value_tracker = context.value_tracker_;
+
+#ifdef __clang__
+#pragma clang diagnostic pop
+#endif
+#ifdef __GNUC__
+#pragma GCC diagnostic pop
+#endif
+
 #else
     context_ = context;
 #endif

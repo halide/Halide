@@ -351,7 +351,9 @@ template<typename First, typename... Rest>
 struct select_type : std::conditional<First::value, typename First::type, typename select_type<Rest...>::type> {};
 
 template<typename First>
-struct select_type<First> { using type = typename std::conditional<First::value, typename First::type, void>::type; };
+struct select_type<First> {
+    using type = typename std::conditional<First::value, typename First::type, void>::type;
+};
 
 class GeneratorBase;
 class GeneratorParamInfo;
@@ -2103,7 +2105,9 @@ public:
 };
 
 template<typename>
-struct type_sink { typedef void type; };
+struct type_sink {
+    typedef void type;
+};
 
 template<typename T2, typename = void>
 struct has_static_halide_type_method : std::false_type {};
@@ -3403,6 +3407,16 @@ protected:
     void ensure_configure_has_been_called();
 
 #ifdef HALIDE_ALLOW_LEGACY_GENERATOR_PARAMS
+
+#ifdef __GNUC__
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+#endif
+#ifdef __clang__
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
+#endif
+
     Target get_target() const {
         return target;
     }
@@ -3412,6 +3426,14 @@ protected:
     MachineParams get_machine_params() const {
         return machine_params;
     }
+
+#ifdef __clang__
+#pragma clang diagnostic pop
+#endif
+#ifdef __GNUC__
+#pragma GCC diagnostic pop
+#endif
+
 #else
     Target get_target() const {
         return context().get_target();
@@ -3449,8 +3471,11 @@ protected:
 
 #ifdef HALIDE_ALLOW_LEGACY_GENERATOR_PARAMS
     // These must remain here for legacy code that access the fields directly.
+    HALIDE_ATTRIBUTE_DEPRECATED("The `target` GeneratorParam is deprecated for Halide Generators and will be removed entirely in future versions of Halide. Please use get_target() instead.")
     GeneratorParam<Target> target{"target", Target()};
+    HALIDE_ATTRIBUTE_DEPRECATED("The `auto_schedule` GeneratorParam is deprecated for Halide Generators and will be removed entirely in future versions of Halide. Please use get_auto_schedule() instead.")
     GeneratorParam<bool> auto_schedule{"auto_schedule", false};
+    HALIDE_ATTRIBUTE_DEPRECATED("The `machine_params` GeneratorParam is deprecated for Halide Generators and will be removed entirely in future versions of Halide. Please use get_machine_params() instead.")
     GeneratorParam<MachineParams> machine_params{"machine_params", MachineParams::generic()};
 #endif
 
@@ -3725,7 +3750,9 @@ private:
     // std::is_member_function_pointer will fail if there is no member of that name,
     // so we use a little SFINAE to detect if there are method-shaped members.
     template<typename>
-    struct type_sink { typedef void type; };
+    struct type_sink {
+        typedef void type;
+    };
 
     template<typename T2, typename = void>
     struct has_configure_method : std::false_type {};
