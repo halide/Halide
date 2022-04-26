@@ -31,7 +31,7 @@ Func blur_cols_transpose(Func input, Expr height, Expr alpha, bool skip_schedule
     // Transpose the blur.
     Func transpose("transpose");
     transpose(x, y, c) = blur(y, x, c);
-    
+
     // Schedule
     if (!skip_schedule) {
         if (!target.has_gpu_feature()) {
@@ -141,7 +141,6 @@ public:
     Input<float> alpha{"alpha"};
 
     Output<Buffer<float>> output{"output", 3};
-
 
     void generate() {
 
