@@ -1,6 +1,6 @@
 use std::io;
 use std::io::Write;
-use halide::build::{Generator, GenBuilder};
+use halide_build::{GenBuilder,Generator};
 
 fn main() {
 

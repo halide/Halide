@@ -1,6 +1,6 @@
 
 //mod tests {
-    use crate::build::GenBuilder;
+    use crate::GenBuilder;
     use std::io;
     use std::io::prelude::*;
 

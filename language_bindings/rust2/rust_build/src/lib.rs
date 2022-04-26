@@ -1,3 +1,17 @@
+#![warn(missing_docs)]
+//#![warn(missing_doc_code_examples)]
+
+//!This crate is an example of calling Halide generated code from Rust.
+//!This crate also has an example of IIR-blur halide app that get called from rust.
+//! IIR blur takes a image input, goes through the full halide pipeline, and outputs a blurred image all using rust.
+//!
+
+///Required module for use in build.rs scripts
+///
+/// This Module will compile and bind a generator and create a Halide runtime.
+///
+//TODO update rust docs
+
 use std::{env, io};
 use std::fs;
 use std::io::{ErrorKind, Result};
@@ -322,5 +336,6 @@ impl Generator<'static> {
         assert!(self.rename().is_ok());
         assert!(self.make_runtime().is_ok());
     }
-
 }
+
+mod build_tests;
