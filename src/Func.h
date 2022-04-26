@@ -1191,7 +1191,10 @@ public:
     // @}
 
     /** Get the types of the outputs of this Func. */
+    // @{
+    const Type &output_type() const;
     const std::vector<Type> &output_types() const;
+    // @}
 
     /** Get the number of outputs of this Func. Corresponds to the
      * size of the Tuple this Func was defined to return. */

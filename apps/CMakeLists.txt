@@ -15,7 +15,6 @@ enable_testing()
 
 # add_subdirectory(HelloAndroid)  # TODO(#5374): missing CMake build
 # add_subdirectory(HelloAndroidCamera2)  # TODO(#5374): missing CMake build
-# add_subdirectory(HelloMatlab)  # TODO(#5374): missing CMake build
 # add_subdirectory(HelloPyTorch)  # TODO(#5374): missing CMake build
 # add_subdirectory(HelloWasm)  # TODO(#5374): missing CMake build
 # add_subdirectory(HelloiOS)  # TODO(#5374): missing CMake build

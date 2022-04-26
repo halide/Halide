@@ -102,7 +102,6 @@ DECLARE_CPP_INITMOD(ios_io)
 DECLARE_CPP_INITMOD(linux_clock)
 DECLARE_CPP_INITMOD(linux_host_cpu_count)
 DECLARE_CPP_INITMOD(linux_yield)
-DECLARE_CPP_INITMOD(matlab)
 DECLARE_CPP_INITMOD(module_aot_ref_count)
 DECLARE_CPP_INITMOD(module_jit_ref_count)
 DECLARE_CPP_INITMOD(msan)
@@ -1207,10 +1206,6 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
             modules.push_back(get_initmod_hexagon_dma(c, bits_64, debug));
             modules.push_back(get_initmod_hexagon_dma_pool(c, bits_64, debug));
         }
-    }
-
-    if (module_type == ModuleAOT && t.has_feature(Target::Matlab)) {
-        modules.push_back(get_initmod_matlab(c, bits_64, debug));
     }
 
     if (module_type == ModuleAOTNoRuntime ||

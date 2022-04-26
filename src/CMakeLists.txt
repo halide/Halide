@@ -101,7 +101,6 @@ set(HEADER_FILES
     LowerParallelTasks.h
     LowerWarpShuffles.h
     MainPage.h
-    MatlabWrapper.h
     Memoization.h
     Module.h
     ModulusRemainder.h
@@ -261,7 +260,6 @@ set(SOURCE_FILES
     Lower.cpp
     LowerParallelTasks.cpp
     LowerWarpShuffles.cpp
-    MatlabWrapper.cpp
     Memoization.cpp
     Module.cpp
     ModulusRemainder.cpp
