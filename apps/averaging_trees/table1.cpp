@@ -94,7 +94,7 @@ Expr k11446(Expr v0, Expr v4, Expr v1, Expr v3, Expr v2) {
     return v15;
 }
 
-const int SZ = 1024 * 1024;
+const int SZ = 1024 * 128;
 
 void show(const Expr &e, const std::string &name) {
     Target target;
@@ -119,9 +119,11 @@ void show(const Expr &e, const std::string &name) {
     f.compile_jit(target);
     Buffer<uint16_t> output(SZ);
     // output.raw_buffer()->dim[1].stride = 0;
-    double t = Halide::Tools::benchmark(10, 100, [&]() {
-        f.realize(output);
+    double t = Halide::Tools::benchmark(100, 100, [&]() {
+        f.realize(output, target);
     });
+    t /= SZ;
+    t *= 1000 * 1000;
     std::cout << "Runtime: " << (t * processor_mhz * vec) << " cycles per output vector\n";
 }
 
