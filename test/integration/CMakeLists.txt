@@ -129,7 +129,7 @@ if (CMAKE_HOST_SYSTEM_NAME MATCHES "Linux")
              --build-options
              -DCMAKE_TOOLCHAIN_FILE=${CMAKE_CURRENT_LIST_DIR}/../../cmake/toolchain.linux-aarch64.cmake
              -DCMAKE_BUILD_TYPE=Release
-             "-Dxc-generators_ROOT=${CMAKE_CURRENT_BINARY_DIR}/xc-host"
+             "-Dxc-halide_generators_ROOT=${CMAKE_CURRENT_BINARY_DIR}/xc-host"
              --test-command ${CMAKE_CTEST_COMMAND} --output-on-failure)
 
     set_tests_properties(cross_compile_host PROPERTIES FIXTURES_SETUP xc-host)

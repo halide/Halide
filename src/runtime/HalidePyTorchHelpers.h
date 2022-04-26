@@ -15,7 +15,8 @@
 
 #include "HalideBuffer.h"
 
-#include "HalideRuntimeCuda.h"
+// Forward declare the cuda_device_interface, for tensor wrapper.
+const halide_device_interface_t *halide_cuda_device_interface();
 
 #define HLPT_CHECK_CONTIGUOUS(x) AT_ASSERTM(x.is_contiguous(), #x " must be contiguous")
 #define HLPT_CHECK_CUDA(x) AT_ASSERTM(x.type().is_cuda(), #x " must be a CUDA tensor")
@@ -88,18 +89,27 @@ inline Buffer<scalar_t> wrap(at::Tensor &tensor) {
 #else
     scalar_t *pData = tensor.data<scalar_t>();
 #endif
-    Buffer<scalar_t> buffer;
+    return Buffer<scalar_t>(pData, dims);
+}
 
-    // TODO(mgharbi): force Halide to put input/output on GPU?
-    if (tensor.is_cuda()) {
-        buffer = Buffer<scalar_t>(dims);
-        const halide_device_interface_t *cuda_interface = halide_cuda_device_interface();
-        int err = buffer.device_wrap_native(cuda_interface, (uint64_t)pData);
-        AT_ASSERTM(err == 0, "(CUDA) halide_device_wrap failed");
-        buffer.set_device_dirty();
-    } else {
-        buffer = Buffer<scalar_t>(pData, dims);
-    }
+template<class scalar_t>
+inline Buffer<scalar_t> wrap_cuda(at::Tensor &tensor) {
+    check_type<scalar_t>(tensor);
+    std::vector<int> dims = get_dims(tensor);
+#if HL_PYTORCH_API_VERSION >= 13
+    scalar_t *pData = tensor.data_ptr<scalar_t>();
+#else
+    scalar_t *pData = tensor.data<scalar_t>();
+#endif
+    AT_ASSERTM(tensor.is_cuda(), "expected input tensor to be on a CUDA device.");
+
+    Buffer<scalar_t> buffer(dims);
+
+    const halide_device_interface_t *cuda_interface = halide_cuda_device_interface();
+    int err = buffer.device_wrap_native(cuda_interface, (uint64_t)pData);
+    AT_ASSERTM(err == 0, "(CUDA) halide_device_wrap failed");
+
+    buffer.set_device_dirty();
 
     return buffer;
 }

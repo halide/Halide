@@ -2,7 +2,7 @@ include ../support/Makefile.inc
 
 # The emscripten compiler
 EMCC ?= emcc
-EMCC_FLAGS ?= -s WASM=1 -s USE_SDL=2 -s TOTAL_MEMORY=512MB -O3 -I $(HALIDE_DISTRIB_PATH)/include
+EMCC_FLAGS ?= -std=c++17 -s WASM=1 -s USE_SDL=2 -s TOTAL_MEMORY=512MB -O3 -I $(HALIDE_DISTRIB_PATH)/include
 EMCC_THREADS_FLAGS ?= $(EMCC_FLAGS) -pthread -matomics
 
 # the output dir for the .js products must be fixed, because that's what index.html looks for
@@ -75,7 +75,7 @@ clean:
 
 $(BIN)/$(HL_TARGET)/run: $(BIN)/$(HL_TARGET)/reaction_diffusion_init.a $(BIN)/$(HL_TARGET)/reaction_diffusion_update.a $(BIN)/$(HL_TARGET)/reaction_diffusion_render.a $(BIN)/$(HL_TARGET)/runtime.a
 	mkdir -p $(@D)
-	$(CXX) $(HALIDE_DISTRIB_PATH)/tools/RunGenMain.cpp $(BIN)/$(HL_TARGET)/reaction_diffusion_*.registration.cpp $^ -o $@ -I $(HALIDE_DISTRIB_PATH)/include $(IMAGE_IO_FLAGS) $(LDFLAGS)
+	$(CXX) $(CXXFLAGS) $(HALIDE_DISTRIB_PATH)/tools/RunGenMain.cpp $(BIN)/$(HL_TARGET)/reaction_diffusion_*.registration.cpp $^ -o $@ -I $(HALIDE_DISTRIB_PATH)/include $(IMAGE_IO_FLAGS) $(LDFLAGS)
 
 benchmark_native: $(BIN)/$(HL_TARGET)/run
 	$(BIN)/$(HL_TARGET)/run --benchmarks=all --benchmark_min_time=1 --name=reaction_diffusion_init --output_extents=[1024,1024] --parsable_output

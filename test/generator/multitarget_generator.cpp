@@ -4,7 +4,7 @@ namespace {
 
 class Multitarget : public Halide::Generator<Multitarget> {
 public:
-    Output<Buffer<uint32_t>> output{"output", 2};
+    Output<Buffer<uint32_t, 2>> output{"output"};
 
     void generate() {
         Var x, y;

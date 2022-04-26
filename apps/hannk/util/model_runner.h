@@ -10,10 +10,12 @@
 
 #include "util/buffer_util.h"
 
+#if HANNK_BUILD_TFLITE
 struct TfLiteDelegate;
 struct TfLiteInterpreter;
 struct TfLiteInterpreterOptions;
 struct TfLiteModel;
+#endif
 
 namespace hannk {
 
@@ -60,6 +62,7 @@ private:
     SeedTracker &operator=(SeedTracker &&) = delete;
 };
 
+#if HANNK_BUILD_TFLITE
 class TfLiteModelRunner {
     TfLiteModel *tf_model_ = nullptr;
     TfLiteInterpreterOptions *tf_options_ = nullptr;
@@ -84,6 +87,7 @@ public:
     TfLiteModelRunner(TfLiteModelRunner &&) = delete;
     TfLiteModelRunner &operator=(TfLiteModelRunner &&) = delete;
 };
+#endif
 
 // TODO: add a way to bottleneck stdout/stdout, or just errors/warnings in general
 struct ModelRunner {
@@ -130,7 +134,9 @@ private:
         std::chrono::duration<double> time{0};
     };
     RunResult run_in_hannk(const std::vector<char> &buffer);
+#if HANNK_BUILD_TFLITE
     RunResult run_in_tflite(const std::vector<char> &buffer, TfLiteDelegate *delegate = nullptr);
+#endif
     bool compare_results(const std::string &name_a, const std::string &name_b, const RunResult &a, const RunResult &b);
 };
 

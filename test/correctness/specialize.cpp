@@ -13,7 +13,7 @@ void reset_trace() {
 }
 
 // A trace that checks for vector and scalar stores
-int my_trace(void *user_context, const halide_trace_event_t *ev) {
+int my_trace(JITUserContext *user_context, const halide_trace_event_t *ev) {
 
     if (ev->event == halide_trace_store) {
         if (ev->type.lanes > 1) {
@@ -33,7 +33,7 @@ void reset_alloc_counts() {
     empty_allocs = nonempty_allocs = frees = 0;
 }
 
-void *my_malloc(void *ctx, size_t sz) {
+void *my_malloc(JITUserContext *ctx, size_t sz) {
     // Don't worry about alignment because we'll just test this with scalar code
     if (sz == 0) {
         empty_allocs++;
@@ -43,7 +43,7 @@ void *my_malloc(void *ctx, size_t sz) {
     return malloc(sz);
 }
 
-void my_free(void *ctx, void *ptr) {
+void my_free(JITUserContext *ctx, void *ptr) {
     frees++;
     free(ptr);
 }
@@ -77,7 +77,7 @@ public:
 
 int main(int argc, char **argv) {
     if (get_jit_target_from_environment().arch == Target::WebAssembly) {
-        printf("[SKIP] WebAssembly JIT does not support set_custom_allocator().\n");
+        printf("[SKIP] WebAssembly JIT does not support custom allocators.\n");
         return 0;
     }
 
@@ -102,7 +102,7 @@ int main(int argc, char **argv) {
         // Now specialize the narrow case on param as well
         f.specialize(param);
 
-        f.set_custom_trace(&my_trace);
+        f.jit_handlers().custom_trace = my_trace;
         f.trace_stores();
 
         Buffer<int> out(100);
@@ -190,7 +190,8 @@ int main(int argc, char **argv) {
         out.specialize(param);
 
         // Count allocations.
-        out.set_custom_allocator(&my_malloc, &my_free);
+        out.jit_handlers().custom_malloc = my_malloc;
+        out.jit_handlers().custom_free = my_free;
 
         reset_alloc_counts();
         param.set(true);
@@ -229,7 +230,7 @@ int main(int argc, char **argv) {
         f.specialize(im.dim(0).stride() == 1 && im.width() >= 8).vectorize(x, 8);
 
         f.trace_stores();
-        f.set_custom_trace(&my_trace);
+        f.jit_handlers().custom_trace = &my_trace;
 
         // Check bounds inference is still cool with widths < 8
         f.infer_input_bounds({5});
@@ -272,7 +273,7 @@ int main(int argc, char **argv) {
         f.specialize(im.dim(0).stride() == 1).vectorize(x, 8);
 
         f.trace_stores();
-        f.set_custom_trace(&my_trace);
+        f.jit_handlers().custom_trace = &my_trace;
 
         Buffer<int> strided_image(4, 100);
         strided_image.slice(0, 0);
@@ -589,7 +590,7 @@ int main(int argc, char **argv) {
         // should be (something) == 0
         _halide_user_assert(s[0].condition.as<Internal::EQ>() && is_const_zero(s[0].condition.as<Internal::EQ>()->b));
 
-        f.set_custom_trace(&my_trace);
+        f.jit_handlers().custom_trace = &my_trace;
         f.trace_stores();
 
         vector_store_lanes = 0;
@@ -637,7 +638,7 @@ int main(int argc, char **argv) {
         // should be (something) == 0
         _halide_user_assert(s[0].condition.as<Internal::EQ>() && is_const_zero(s[0].condition.as<Internal::EQ>()->b));
 
-        f.set_custom_trace(&my_trace);
+        f.jit_handlers().custom_trace = &my_trace;
         f.trace_stores();
 
         vector_store_lanes = 0;
@@ -664,7 +665,7 @@ int main(int argc, char **argv) {
         f.specialize(p == 0).vectorize(x, 32);  // will *not* be pruned
         f.specialize(const_true).vectorize(x, 16);
 
-        f.set_custom_trace(&my_trace);
+        f.jit_handlers().custom_trace = &my_trace;
         f.trace_stores();
 
         vector_store_lanes = 0;
@@ -694,7 +695,7 @@ int main(int argc, char **argv) {
         // Also not ok to have duplicate specialize_fail() calls.
         // f.specialize_fail("This is bad.");  -- would fail
 
-        f.set_custom_trace(&my_trace);
+        f.jit_handlers().custom_trace = &my_trace;
         f.trace_stores();
 
         vector_store_lanes = 0;

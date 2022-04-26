@@ -12,7 +12,7 @@
 
 namespace Halide {
 
-template<typename T>
+template<typename T, int Dims>
 class Buffer;
 
 struct ArgumentEstimates {
@@ -78,8 +78,8 @@ struct Argument {
     // Not explicit, so that you can put Buffer in an argument list,
     // to indicate that it shouldn't be baked into the object file,
     // but instead received as an argument at runtime
-    template<typename T>
-    Argument(Buffer<T> im)
+    template<typename T, int Dims>
+    Argument(Buffer<T, Dims> im)
         : name(im.name()),
           kind(InputBuffer),
           dimensions(im.dimensions()),

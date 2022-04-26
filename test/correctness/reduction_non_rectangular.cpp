@@ -9,7 +9,7 @@ bool run_tracer = false;
 int niters_expected = 0;
 int niters = 0;
 
-int intermediate_bound_depend_on_output_trace(void *user_context, const halide_trace_event_t *e) {
+int intermediate_bound_depend_on_output_trace(JITUserContext *user_context, const halide_trace_event_t *e) {
     std::string buffer_name = "g_" + std::to_string(buffer_index);
     if (std::string(e->func) == buffer_name) {
         if (e->event == halide_trace_produce) {
@@ -33,7 +33,7 @@ int intermediate_bound_depend_on_output_trace(void *user_context, const halide_t
     return 0;
 }
 
-int func_call_bound_trace(void *user_context, const halide_trace_event_t *e) {
+int func_call_bound_trace(JITUserContext *user_context, const halide_trace_event_t *e) {
     std::string buffer_name = "g_" + std::to_string(buffer_index);
     if (std::string(e->func) == buffer_name) {
         if (e->event == halide_trace_produce) {
@@ -55,7 +55,7 @@ int func_call_bound_trace(void *user_context, const halide_trace_event_t *e) {
     return 0;
 }
 
-int box_bound_trace(void *user_context, const halide_trace_event_t *e) {
+int box_bound_trace(JITUserContext *user_context, const halide_trace_event_t *e) {
     std::string buffer_name = "g_" + std::to_string(buffer_index);
     if (std::string(e->func) == buffer_name) {
         if (e->event == halide_trace_produce) {
@@ -187,7 +187,7 @@ int func_call_inside_bound_test(int index) {
     // Expect g to be computed over x=[10, 109].
     g.compute_root();
 
-    f.set_custom_trace(&func_call_bound_trace);
+    f.jit_handlers().custom_trace = &func_call_bound_trace;
     g.trace_stores();
     g.trace_realizations();
 
@@ -268,7 +268,7 @@ int two_linear_bounds_test(int index) {
     // Expect g to be computed over x=[0,99] and y=[1,99].
     g.compute_root();
 
-    f.set_custom_trace(&box_bound_trace);
+    f.jit_handlers().custom_trace = &box_bound_trace;
     g.trace_stores();
     g.trace_realizations();
 
@@ -322,7 +322,7 @@ int circle_bound_test(int index) {
     // i.e. f loop will still iterate over x=[0,99] and y=[0,99].
     g.compute_at(f, r.y);
 
-    f.set_custom_trace(&box_bound_trace);
+    f.jit_handlers().custom_trace = &box_bound_trace;
     g.trace_stores();
     g.trace_realizations();
 
@@ -364,7 +364,7 @@ int intermediate_computed_if_param_test(int index) {
     // than 3.
     g.compute_root();
 
-    f.set_custom_trace(&box_bound_trace);
+    f.jit_handlers().custom_trace = &box_bound_trace;
     g.trace_stores();
     g.trace_realizations();
 
@@ -438,7 +438,7 @@ int intermediate_bound_depend_on_output_test(int index) {
     // bound of f on r.x, which should have been r.x = [0, r.y) in this case
     g.compute_at(f, r.y);
 
-    f.set_custom_trace(&intermediate_bound_depend_on_output_trace);
+    f.jit_handlers().custom_trace = &intermediate_bound_depend_on_output_trace;
     g.trace_stores();
     g.trace_realizations();
 
@@ -492,7 +492,7 @@ int tile_intermediate_bound_depend_on_output_test(int index) {
     // bound of f on r.x, which should have been r.x = [0, r.y) in this case
     g.compute_at(f, ryi);
 
-    f.set_custom_trace(&intermediate_bound_depend_on_output_trace);
+    f.jit_handlers().custom_trace = &intermediate_bound_depend_on_output_trace;
     g.trace_stores();
     g.trace_realizations();
 

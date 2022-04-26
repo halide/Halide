@@ -35,11 +35,15 @@
 #pragma GCC diagnostic ignored "-Warray-bounds"
 #endif
 
+#ifndef HALIDE_RUNTIME_BUFFER_CHECK_INDICES
+#define HALIDE_RUNTIME_BUFFER_CHECK_INDICES 0
+#endif
+
 namespace Halide {
 namespace Runtime {
 
 // Forward-declare our Buffer class
-template<typename T, int D>
+template<typename T, int Dims, int InClassDimStorage>
 class Buffer;
 
 // A helper to check if a parameter pack is entirely implicitly
@@ -106,6 +110,8 @@ struct DeviceRefCount {
     BufferDeviceOwnership ownership{BufferDeviceOwnership::Allocated};
 };
 
+constexpr int AnyDims = -1;
+
 /** A templated Buffer class that wraps halide_buffer_t and adds
  * functionality. When using Halide from C++, this is the preferred
  * way to create input and output buffers. The overhead of using this
@@ -116,24 +122,29 @@ struct DeviceRefCount {
  * The template parameter T is the element type. For buffers where the
  * element type is unknown, or may vary, use void or const void.
  *
- * D is the maximum number of dimensions that can be represented using
- * space inside the class itself. Set it to the maximum dimensionality
+ * The template parameter Dims is the number of dimensions. For buffers where
+ * the dimensionality type is unknown at, or may vary, use AnyDims.
+ *
+ * InClassDimStorage is the maximum number of dimensions that can be represented
+ * using space inside the class itself. Set it to the maximum dimensionality
  * you expect this buffer to be. If the actual dimensionality exceeds
- * this, heap storage is allocated to track the shape of the buffer. D
- * defaults to 4, which should cover nearly all usage.
+ * this, heap storage is allocated to track the shape of the buffer.
+ * InClassDimStorage defaults to 4, which should cover nearly all usage.
  *
  * The class optionally allocates and owns memory for the image using
  * a shared pointer allocated with the provided allocator. If they are
  * null, malloc and free are used.  Any device-side allocation is
  * considered as owned if and only if the host-side allocation is
  * owned. */
-template<typename T = void, int D = 4>
+template<typename T = void,
+         int Dims = AnyDims,
+         int InClassDimStorage = (Dims == AnyDims ? 4 : std::max(Dims, 1))>
 class Buffer {
     /** The underlying halide_buffer_t */
-    halide_buffer_t buf = {0};
+    halide_buffer_t buf = {};
 
     /** Some in-class storage for shape of the dimensions. */
-    halide_dimension_t shape[D];
+    halide_dimension_t shape[InClassDimStorage];
 
     /** The allocation owned by this Buffer. NULL if the Buffer does not
      * own the memory. */
@@ -171,7 +182,7 @@ public:
 
     /** Get the Halide type of T. Callers should not use the result if
      * has_static_halide_type is false. */
-    static halide_type_t static_halide_type() {
+    static constexpr halide_type_t static_halide_type() {
         return halide_type_of<typename std::remove_cv<not_void_T>::type>();
     }
 
@@ -179,6 +190,16 @@ public:
     bool owns_host_memory() const {
         return alloc != nullptr;
     }
+
+    static constexpr bool has_static_dimensions = (Dims != AnyDims);
+
+    /** Callers should not use the result if
+     * has_static_dimensions is false. */
+    static constexpr int static_dimensions() {
+        return Dims;
+    }
+
+    static_assert(!has_static_dimensions || static_dimensions() >= 0);
 
 private:
     /** Increment the reference count of any owned allocation */
@@ -202,15 +223,15 @@ private:
     // Note that this is called "cropped" but can also encompass a slice/embed
     // operation as well.
     struct DevRefCountCropped : DeviceRefCount {
-        Buffer<T, D> cropped_from;
-        DevRefCountCropped(const Buffer<T, D> &cropped_from)
+        Buffer<T, Dims, InClassDimStorage> cropped_from;
+        DevRefCountCropped(const Buffer<T, Dims, InClassDimStorage> &cropped_from)
             : cropped_from(cropped_from) {
             ownership = BufferDeviceOwnership::Cropped;
         }
     };
 
     /** Setup the device ref count for a buffer to indicate it is a crop (or slice, embed, etc) of cropped_from */
-    void crop_from(const Buffer<T, D> &cropped_from) {
+    void crop_from(const Buffer<T, Dims, InClassDimStorage> &cropped_from) {
         assert(dev_ref_count == nullptr);
         dev_ref_count = new DevRefCountCropped(cropped_from);
     }
@@ -240,15 +261,19 @@ private:
                        "Call device_free explicitly if you want to drop dirty device-side data. "
                        "Call copy_to_host explicitly if you want the data copied to the host allocation "
                        "before the device allocation is freed.");
+                int result = 0;
                 if (dev_ref_count && dev_ref_count->ownership == BufferDeviceOwnership::WrappedNative) {
-                    buf.device_interface->detach_native(nullptr, &buf);
+                    result = buf.device_interface->detach_native(nullptr, &buf);
                 } else if (dev_ref_count && dev_ref_count->ownership == BufferDeviceOwnership::AllocatedDeviceAndHost) {
-                    buf.device_interface->device_and_host_free(nullptr, &buf);
+                    result = buf.device_interface->device_and_host_free(nullptr, &buf);
                 } else if (dev_ref_count && dev_ref_count->ownership == BufferDeviceOwnership::Cropped) {
-                    buf.device_interface->device_release_crop(nullptr, &buf);
+                    result = buf.device_interface->device_release_crop(nullptr, &buf);
                 } else if (dev_ref_count == nullptr || dev_ref_count->ownership == BufferDeviceOwnership::Allocated) {
-                    buf.device_interface->device_free(nullptr, &buf);
+                    result = buf.device_interface->device_free(nullptr, &buf);
                 }
+                // No reasonable way to return the error, but we can at least assert-fail in debug builds.
+                assert((result == 0) && "device_interface call returned a nonzero result in Buffer::decref()");
+                (void)result;
             }
             if (dev_ref_count) {
                 if (dev_ref_count->ownership == BufferDeviceOwnership::Cropped) {
@@ -270,11 +295,32 @@ private:
         }
     }
 
+    template<int DimsSpecified>
+    void make_static_shape_storage() {
+        static_assert(Dims == AnyDims || Dims == DimsSpecified,
+                      "Number of arguments to Buffer() does not match static dimensionality");
+        buf.dimensions = DimsSpecified;
+        if constexpr (Dims == AnyDims) {
+            if constexpr (DimsSpecified <= InClassDimStorage) {
+                buf.dim = shape;
+            } else {
+                static_assert(DimsSpecified >= 1);
+                buf.dim = new halide_dimension_t[DimsSpecified];
+            }
+        } else {
+            static_assert(InClassDimStorage >= Dims);
+            buf.dim = shape;
+        }
+    }
+
     void make_shape_storage(const int dimensions) {
+        if (Dims != AnyDims && Dims != dimensions) {
+            assert(false && "Number of arguments to Buffer() does not match static dimensionality");
+        }
         // This should usually be inlined, so if dimensions is statically known,
         // we can skip the call to new
         buf.dimensions = dimensions;
-        buf.dim = (dimensions <= D) ? shape : new halide_dimension_t[dimensions];
+        buf.dim = (dimensions <= InClassDimStorage) ? shape : new halide_dimension_t[dimensions];
     }
 
     void copy_shape_from(const halide_buffer_t &other) {
@@ -283,8 +329,8 @@ private:
         std::copy(other.dim, other.dim + other.dimensions, buf.dim);
     }
 
-    template<typename T2, int D2>
-    void move_shape_from(Buffer<T2, D2> &&other) {
+    template<typename T2, int D2, int S2>
+    void move_shape_from(Buffer<T2, D2, S2> &&other) {
         if (other.shape == other.buf.dim) {
             copy_shape_from(other.buf);
         } else {
@@ -385,10 +431,10 @@ private:
         }
     }
 
-    void complete_device_crop(Buffer<T, D> &result_host_cropped) const {
+    void complete_device_crop(Buffer<T, Dims, InClassDimStorage> &result_host_cropped) const {
         assert(buf.device_interface != nullptr);
         if (buf.device_interface->device_crop(nullptr, &this->buf, &result_host_cropped.buf) == 0) {
-            const Buffer<T, D> *cropped_from = this;
+            const Buffer<T, Dims, InClassDimStorage> *cropped_from = this;
             // TODO: Figure out what to do if dev_ref_count is nullptr. Should incref logic run here?
             // is it possible to get to this point without incref having run at least once since
             // the device field was set? (I.e. in the internal logic of crop. incref might have been
@@ -402,6 +448,8 @@ private:
 
     /** slice a single dimension without handling device allocation. */
     void slice_host(int d, int pos) {
+        static_assert(Dims == AnyDims);
+        assert(dimensions() > 0);
         assert(d >= 0 && d < dimensions());
         assert(pos >= dim(d).min() && pos <= dim(d).max());
         buf.dimensions--;
@@ -415,10 +463,10 @@ private:
         buf.dim[buf.dimensions] = {0, 0, 0};
     }
 
-    void complete_device_slice(Buffer<T, D> &result_host_sliced, int d, int pos) const {
+    void complete_device_slice(Buffer<T, AnyDims, InClassDimStorage> &result_host_sliced, int d, int pos) const {
         assert(buf.device_interface != nullptr);
         if (buf.device_interface->device_slice(nullptr, &this->buf, d, pos, &result_host_sliced.buf) == 0) {
-            const Buffer<T, D> *sliced_from = this;
+            const Buffer<T, Dims, InClassDimStorage> *sliced_from = this;
             // TODO: Figure out what to do if dev_ref_count is nullptr. Should incref logic run here?
             // is it possible to get to this point without incref having run at least once since
             // the device field was set? (I.e. in the internal logic of slice. incref might have been
@@ -518,7 +566,11 @@ public:
 
     /** Get the dimensionality of the buffer. */
     int dimensions() const {
-        return buf.dimensions;
+        if constexpr (has_static_dimensions) {
+            return Dims;
+        } else {
+            return buf.dimensions;
+        }
     }
 
     /** Get the type of the elements. */
@@ -554,7 +606,10 @@ public:
     Buffer()
         : shape() {
         buf.type = static_halide_type();
-        make_shape_storage(0);
+        // If Dims are statically known, must create storage that many.
+        // otherwise, make a zero-dimensional buffer.
+        constexpr int buf_dimensions = (Dims == AnyDims) ? 0 : Dims;
+        make_static_shape_storage<buf_dimensions>();
     }
 
     /** Make a Buffer from a halide_buffer_t */
@@ -565,46 +620,55 @@ public:
     }
 
     /** Give Buffers access to the members of Buffers of different dimensionalities and types. */
-    template<typename T2, int D2>
+    template<typename T2, int D2, int S2>
     friend class Buffer;
 
 private:
-    template<typename T2, int D2>
+    template<typename T2, int D2, int S2>
     static void static_assert_can_convert_from() {
         static_assert((!std::is_const<T2>::value || std::is_const<T>::value),
                       "Can't convert from a Buffer<const T> to a Buffer<T>");
         static_assert(std::is_same<typename std::remove_const<T>::type,
                                    typename std::remove_const<T2>::type>::value ||
-                          T_is_void || Buffer<T2, D2>::T_is_void,
+                          T_is_void || Buffer<T2, D2, S2>::T_is_void,
                       "type mismatch constructing Buffer");
+        static_assert(Dims == AnyDims || D2 == AnyDims || Dims == D2,
+                      "Can't convert from a Buffer with static dimensionality to a Buffer with different static dimensionality");
     }
 
 public:
-    /** Determine if if an Buffer<T, D> can be constructed from some other Buffer type.
+    /** Determine if a Buffer<T, Dims, InClassDimStorage> can be constructed from some other Buffer type.
      * If this can be determined at compile time, fail with a static assert; otherwise
      * return a boolean based on runtime typing. */
-    template<typename T2, int D2>
-    static bool can_convert_from(const Buffer<T2, D2> &other) {
-        static_assert_can_convert_from<T2, D2>();
-        if (Buffer<T2, D2>::T_is_void && !T_is_void) {
-            return other.type() == static_halide_type();
+    template<typename T2, int D2, int S2>
+    static bool can_convert_from(const Buffer<T2, D2, S2> &other) {
+        static_assert_can_convert_from<T2, D2, S2>();
+        if (Buffer<T2, D2, S2>::T_is_void && !T_is_void) {
+            if (other.type() != static_halide_type()) {
+                return false;
+            }
+        }
+        if (Dims != AnyDims) {
+            if (other.dimensions() != Dims) {
+                return false;
+            }
         }
         return true;
     }
 
-    /** Fail an assertion at runtime or compile-time if an Buffer<T, D>
+    /** Fail an assertion at runtime or compile-time if an Buffer<T, Dims, InClassDimStorage>
      * cannot be constructed from some other Buffer type. */
-    template<typename T2, int D2>
-    static void assert_can_convert_from(const Buffer<T2, D2> &other) {
+    template<typename T2, int D2, int S2>
+    static void assert_can_convert_from(const Buffer<T2, D2, S2> &other) {
         // Explicitly call static_assert_can_convert_from() here so
         // that we always get compile-time checking, even if compiling with
         // assertions disabled.
-        static_assert_can_convert_from<T2, D2>();
+        static_assert_can_convert_from<T2, D2, S2>();
         assert(can_convert_from(other));
     }
 
     /** Copy constructor. Does not copy underlying data. */
-    Buffer(const Buffer<T, D> &other)
+    Buffer(const Buffer<T, Dims, InClassDimStorage> &other)
         : buf(other.buf),
           alloc(other.alloc) {
         other.incref();
@@ -613,13 +677,13 @@ public:
     }
 
     /** Construct a Buffer from a Buffer of different dimensionality
-     * and type. Asserts that the type matches (at runtime, if one of
-     * the types is void). Note that this constructor is
+     * and type. Asserts that the type and dimensionality matches (at runtime,
+     * if one of the types is void). Note that this constructor is
      * implicit. This, for example, lets you pass things like
      * Buffer<T> or Buffer<const void> to functions expected
      * Buffer<const T>. */
-    template<typename T2, int D2>
-    Buffer(const Buffer<T2, D2> &other)
+    template<typename T2, int D2, int S2>
+    Buffer(const Buffer<T2, D2, S2> &other)
         : buf(other.buf),
           alloc(other.alloc) {
         assert_can_convert_from(other);
@@ -629,36 +693,36 @@ public:
     }
 
     /** Move constructor */
-    Buffer(Buffer<T, D> &&other) noexcept
+    Buffer(Buffer<T, Dims, InClassDimStorage> &&other) noexcept
         : buf(other.buf),
           alloc(other.alloc),
           dev_ref_count(other.dev_ref_count) {
         other.dev_ref_count = nullptr;
         other.alloc = nullptr;
-        move_shape_from(std::forward<Buffer<T, D>>(other));
+        move_shape_from(std::forward<Buffer<T, Dims, InClassDimStorage>>(other));
         other.buf = halide_buffer_t();
     }
 
     /** Move-construct a Buffer from a Buffer of different
      * dimensionality and type. Asserts that the types match (at
      * runtime if one of the types is void). */
-    template<typename T2, int D2>
-    Buffer(Buffer<T2, D2> &&other)
+    template<typename T2, int D2, int S2>
+    Buffer(Buffer<T2, D2, S2> &&other)
         : buf(other.buf),
           alloc(other.alloc),
           dev_ref_count(other.dev_ref_count) {
         assert_can_convert_from(other);
         other.dev_ref_count = nullptr;
         other.alloc = nullptr;
-        move_shape_from(std::forward<Buffer<T2, D2>>(other));
+        move_shape_from(std::forward<Buffer<T2, D2, S2>>(other));
         other.buf = halide_buffer_t();
     }
 
     /** Assign from another Buffer of possibly-different
      * dimensionality and type. Asserts that the types match (at
      * runtime if one of the types is void). */
-    template<typename T2, int D2>
-    Buffer<T, D> &operator=(const Buffer<T2, D2> &other) {
+    template<typename T2, int D2, int S2>
+    Buffer<T, Dims, InClassDimStorage> &operator=(const Buffer<T2, D2, S2> &other) {
         if ((const void *)this == (const void *)&other) {
             return *this;
         }
@@ -674,7 +738,7 @@ public:
     }
 
     /** Standard assignment operator */
-    Buffer<T, D> &operator=(const Buffer<T, D> &other) {
+    Buffer<T, Dims, InClassDimStorage> &operator=(const Buffer<T, Dims, InClassDimStorage> &other) {
         // The cast to void* here is just to satisfy clang-tidy
         if ((const void *)this == (const void *)&other) {
             return *this;
@@ -692,8 +756,8 @@ public:
     /** Move from another Buffer of possibly-different
      * dimensionality and type. Asserts that the types match (at
      * runtime if one of the types is void). */
-    template<typename T2, int D2>
-    Buffer<T, D> &operator=(Buffer<T2, D2> &&other) {
+    template<typename T2, int D2, int S2>
+    Buffer<T, Dims, InClassDimStorage> &operator=(Buffer<T2, D2, S2> &&other) {
         assert_can_convert_from(other);
         decref();
         alloc = other.alloc;
@@ -702,13 +766,13 @@ public:
         other.dev_ref_count = nullptr;
         free_shape_storage();
         buf = other.buf;
-        move_shape_from(std::forward<Buffer<T2, D2>>(other));
+        move_shape_from(std::forward<Buffer<T2, D2, S2>>(other));
         other.buf = halide_buffer_t();
         return *this;
     }
 
     /** Standard move-assignment operator */
-    Buffer<T, D> &operator=(Buffer<T, D> &&other) noexcept {
+    Buffer<T, Dims, InClassDimStorage> &operator=(Buffer<T, Dims, InClassDimStorage> &&other) noexcept {
         decref();
         alloc = other.alloc;
         other.alloc = nullptr;
@@ -716,7 +780,7 @@ public:
         other.dev_ref_count = nullptr;
         free_shape_storage();
         buf = other.buf;
-        move_shape_from(std::forward<Buffer<T, D>>(other));
+        move_shape_from(std::forward<Buffer<T, Dims, InClassDimStorage>>(other));
         other.buf = halide_buffer_t();
         return *this;
     }
@@ -788,7 +852,7 @@ public:
         int extents[] = {first, (int)rest...};
         buf.type = t;
         constexpr int buf_dimensions = 1 + (int)(sizeof...(rest));
-        make_shape_storage(buf_dimensions);
+        make_static_shape_storage<buf_dimensions>();
         initialize_shape(extents);
         if (!Internal::any_zero(extents)) {
             check_overflow();
@@ -808,7 +872,7 @@ public:
         int extents[] = {first};
         buf.type = static_halide_type();
         constexpr int buf_dimensions = 1;
-        make_shape_storage(buf_dimensions);
+        make_static_shape_storage<buf_dimensions>();
         initialize_shape(extents);
         if (first != 0) {
             check_overflow();
@@ -824,7 +888,7 @@ public:
         int extents[] = {first, second, (int)rest...};
         buf.type = static_halide_type();
         constexpr int buf_dimensions = 2 + (int)(sizeof...(rest));
-        make_shape_storage(buf_dimensions);
+        make_static_shape_storage<buf_dimensions>();
         initialize_shape(extents);
         if (!Internal::any_zero(extents)) {
             check_overflow();
@@ -839,6 +903,7 @@ public:
             assert(static_halide_type() == t);
         }
         buf.type = t;
+        // make_shape_storage() will do a runtime check that dimensionality matches.
         make_shape_storage((int)sizes.size());
         initialize_shape(sizes);
         if (!Internal::any_zero(sizes)) {
@@ -900,9 +965,9 @@ public:
         }
         int extents[] = {first, (int)rest...};
         buf.type = t;
-        constexpr int buf_dimensions = 1 + (int)(sizeof...(rest));
         buf.host = (uint8_t *)const_cast<void *>(data);
-        make_shape_storage(buf_dimensions);
+        constexpr int buf_dimensions = 1 + (int)(sizeof...(rest));
+        make_static_shape_storage<buf_dimensions>();
         initialize_shape(extents);
     }
 
@@ -914,9 +979,9 @@ public:
     explicit Buffer(T *data, int first, Args &&...rest) {
         int extents[] = {first, (int)rest...};
         buf.type = static_halide_type();
-        constexpr int buf_dimensions = 1 + (int)(sizeof...(rest));
         buf.host = (uint8_t *)const_cast<typename std::remove_const<T>::type *>(data);
-        make_shape_storage(buf_dimensions);
+        constexpr int buf_dimensions = 1 + (int)(sizeof...(rest));
+        make_static_shape_storage<buf_dimensions>();
         initialize_shape(extents);
     }
 
@@ -991,8 +1056,8 @@ public:
      * this is the last reference to it. Will assert fail if there are
      * weak references to this Buffer outstanding. */
     ~Buffer() {
-        free_shape_storage();
         decref();
+        free_shape_storage();
     }
 
     /** Get a pointer to the raw halide_buffer_t this wraps. */
@@ -1015,49 +1080,60 @@ public:
     /** Return a typed reference to this Buffer. Useful for converting
      * a reference to a Buffer<void> to a reference to, for example, a
      * Buffer<const uint8_t>, or converting a Buffer<T>& to Buffer<const T>&.
-     * Does a runtime assert if the source buffer type is void. */
-    template<typename T2>
-    HALIDE_ALWAYS_INLINE Buffer<T2, D> &as() & {
-        Buffer<T2, D>::assert_can_convert_from(*this);
-        return *((Buffer<T2, D> *)this);
+     * You can also optionally sspecify a new value for Dims; this is useful
+     * mainly for removing the dimensionality constraint on a Buffer with
+     * explicit dimensionality. Does a runtime assert if the source buffer type
+     * is void or the new dimensionality is incompatible. */
+    template<typename T2, int D2 = Dims>
+    HALIDE_ALWAYS_INLINE Buffer<T2, D2, InClassDimStorage> &as() & {
+        Buffer<T2, D2, InClassDimStorage>::assert_can_convert_from(*this);
+        return *((Buffer<T2, D2, InClassDimStorage> *)this);
     }
 
-    /** Return a const typed reference to this Buffer. Useful for
-     * converting a conference reference to one Buffer type to a const
-     * reference to another Buffer type. Does a runtime assert if the
-     * source buffer type is void. */
-    template<typename T2>
-    HALIDE_ALWAYS_INLINE const Buffer<T2, D> &as() const & {
-        Buffer<T2, D>::assert_can_convert_from(*this);
-        return *((const Buffer<T2, D> *)this);
+    /** Return a const typed reference to this Buffer. Useful for converting
+     * a reference to a Buffer<void> to a reference to, for example, a
+     * Buffer<const uint8_t>, or converting a Buffer<T>& to Buffer<const T>&.
+     * You can also optionally sspecify a new value for Dims; this is useful
+     * mainly for removing the dimensionality constraint on a Buffer with
+     * explicit dimensionality. Does a runtime assert if the source buffer type
+     * is void or the new dimensionality is incompatible. */
+    template<typename T2, int D2 = Dims>
+    HALIDE_ALWAYS_INLINE const Buffer<T2, D2, InClassDimStorage> &as() const & {
+        Buffer<T2, D2, InClassDimStorage>::assert_can_convert_from(*this);
+        return *((const Buffer<T2, D2, InClassDimStorage> *)this);
     }
 
-    /** Returns this rval Buffer with a different type attached. Does
-     * a dynamic type check if the source type is void. */
-    template<typename T2>
-    HALIDE_ALWAYS_INLINE Buffer<T2, D> as() && {
-        Buffer<T2, D>::assert_can_convert_from(*this);
-        return *((Buffer<T2, D> *)this);
+    /** Return an rval reference to this Buffer. Useful for converting
+     * a reference to a Buffer<void> to a reference to, for example, a
+     * Buffer<const uint8_t>, or converting a Buffer<T>& to Buffer<const T>&.
+     * You can also optionally sspecify a new value for Dims; this is useful
+     * mainly for removing the dimensionality constraint on a Buffer with
+     * explicit dimensionality. Does a runtime assert if the source buffer type
+     * is void or the new dimensionality is incompatible. */
+    template<typename T2, int D2 = Dims>
+    HALIDE_ALWAYS_INLINE Buffer<T2, D2, InClassDimStorage> as() && {
+        Buffer<T2, D2, InClassDimStorage>::assert_can_convert_from(*this);
+        return *((Buffer<T2, D2, InClassDimStorage> *)this);
     }
 
     /** as_const() is syntactic sugar for .as<const T>(), to avoid the need
      * to recapitulate the type argument. */
     // @{
     HALIDE_ALWAYS_INLINE
-    Buffer<typename std::add_const<T>::type, D> &as_const() & {
+    Buffer<typename std::add_const<T>::type, Dims, InClassDimStorage> &as_const() & {
         // Note that we can skip the assert_can_convert_from(), since T -> const T
         // conversion is always legal.
-        return *((Buffer<typename std::add_const<T>::type, D> *)this);
+        return *((Buffer<typename std::add_const<T>::type, Dims, InClassDimStorage> *)this);
     }
 
     HALIDE_ALWAYS_INLINE
-    const Buffer<typename std::add_const<T>::type, D> &as_const() const & {
-        return *((const Buffer<typename std::add_const<T>::type, D> *)this);
+    const Buffer<typename std::add_const<T>::type, Dims, InClassDimStorage> &as_const() const & {
+        return *((const Buffer<typename std::add_const<T>::type, Dims, InClassDimStorage> *)this);
     }
 
     HALIDE_ALWAYS_INLINE
-    Buffer<typename std::add_const<T>::type, D> as_const() && {
-        return *((Buffer<typename std::add_const<T>::type, D> *)this);
+    Buffer<typename std::add_const<T>::type, Dims, InClassDimStorage> as_const() && {
+        return *((Buffer<typename std::add_const<T>::type, Dims, InClassDimStorage> *)this);
     }
     // @}
 
@@ -1105,9 +1181,9 @@ public:
      * can easily cast it back to Buffer<const T> if desired, which is
      * always safe and free.)
      */
-    Buffer<not_const_T, D> copy(void *(*allocate_fn)(size_t) = nullptr,
-                                void (*deallocate_fn)(void *) = nullptr) const {
-        Buffer<not_const_T, D> dst = Buffer<not_const_T, D>::make_with_shape_of(*this, allocate_fn, deallocate_fn);
+    Buffer<not_const_T, Dims, InClassDimStorage> copy(void *(*allocate_fn)(size_t) = nullptr,
+                                                      void (*deallocate_fn)(void *) = nullptr) const {
+        Buffer<not_const_T, Dims, InClassDimStorage> dst = Buffer<not_const_T, Dims, InClassDimStorage>::make_with_shape_of(*this, allocate_fn, deallocate_fn);
         dst.copy_from(*this);
         return dst;
     }
@@ -1116,10 +1192,11 @@ public:
      * (vs. keeping the same memory layout as the original). Requires that 'this'
      * has exactly 3 dimensions.
      */
-    Buffer<not_const_T, D> copy_to_interleaved(void *(*allocate_fn)(size_t) = nullptr,
-                                               void (*deallocate_fn)(void *) = nullptr) const {
+    Buffer<not_const_T, Dims, InClassDimStorage> copy_to_interleaved(void *(*allocate_fn)(size_t) = nullptr,
+                                                                     void (*deallocate_fn)(void *) = nullptr) const {
+        static_assert(Dims == AnyDims || Dims == 3);
         assert(dimensions() == 3);
-        Buffer<not_const_T, D> dst = Buffer<not_const_T, D>::make_interleaved(nullptr, width(), height(), channels());
+        Buffer<not_const_T, Dims, InClassDimStorage> dst = Buffer<not_const_T, Dims, InClassDimStorage>::make_interleaved(nullptr, width(), height(), channels());
         dst.set_min(min(0), min(1), min(2));
         dst.allocate(allocate_fn, deallocate_fn);
         dst.copy_from(*this);
@@ -1129,8 +1206,8 @@ public:
     /** Like copy(), but the copy is created in planar memory layout
      * (vs. keeping the same memory layout as the original).
      */
-    Buffer<not_const_T, D> copy_to_planar(void *(*allocate_fn)(size_t) = nullptr,
-                                          void (*deallocate_fn)(void *) = nullptr) const {
+    Buffer<not_const_T, Dims, InClassDimStorage> copy_to_planar(void *(*allocate_fn)(size_t) = nullptr,
+                                                                void (*deallocate_fn)(void *) = nullptr) const {
         std::vector<int> mins, extents;
         const int dims = dimensions();
         mins.reserve(dims);
@@ -1139,7 +1216,7 @@ public:
             mins.push_back(dim(d).min());
             extents.push_back(dim(d).extent());
         }
-        Buffer<not_const_T, D> dst = Buffer<not_const_T, D>(nullptr, extents);
+        Buffer<not_const_T, Dims, InClassDimStorage> dst = Buffer<not_const_T, Dims, InClassDimStorage>(nullptr, extents);
         dst.set_min(mins);
         dst.allocate(allocate_fn, deallocate_fn);
         dst.copy_from(*this);
@@ -1155,7 +1232,7 @@ public:
      *     my_func(input.alias(), output);
      * }\endcode
      */
-    inline Buffer<T, D> alias() const {
+    inline Buffer<T, Dims, InClassDimStorage> alias() const {
         return *this;
     }
 
@@ -1168,18 +1245,20 @@ public:
      * to the correct location first like so: \code
      * framebuffer.copy_from(sprite.translated({x, y})); \endcode
      */
-    template<typename T2, int D2>
-    void copy_from(Buffer<T2, D2> src) {
+    template<typename T2, int D2, int S2>
+    void copy_from(Buffer<T2, D2, S2> src) {
         static_assert(!std::is_const<T>::value, "Cannot call copy_from() on a Buffer<const T>");
         assert(!device_dirty() && "Cannot call Halide::Runtime::Buffer::copy_from on a device dirty destination.");
         assert(!src.device_dirty() && "Cannot call Halide::Runtime::Buffer::copy_from on a device dirty source.");
 
-        Buffer<T, D> dst(*this);
+        Buffer<T, Dims, InClassDimStorage> dst(*this);
 
+        static_assert(Dims == AnyDims || D2 == AnyDims || Dims == D2);
         assert(src.dimensions() == dst.dimensions());
 
         // Trim the copy to the region in common
-        for (int i = 0; i < dimensions(); i++) {
+        const int d = dimensions();
+        for (int i = 0; i < d; i++) {
             int min_coord = std::max(dst.dim(i).min(), src.dim(i).min());
             int max_coord = std::min(dst.dim(i).max(), src.dim(i).max());
             if (max_coord < min_coord) {
@@ -1196,23 +1275,23 @@ public:
         // into a static dispatch to the right-sized copy.)
         if (T_is_void ? (type().bytes() == 1) : (sizeof(not_void_T) == 1)) {
             using MemType = uint8_t;
-            auto &typed_dst = (Buffer<MemType, D> &)dst;
-            auto &typed_src = (Buffer<const MemType, D> &)src;
+            auto &typed_dst = (Buffer<MemType, Dims, InClassDimStorage> &)dst;
+            auto &typed_src = (Buffer<const MemType, D2, S2> &)src;
             typed_dst.for_each_value([&](MemType &dst, MemType src) { dst = src; }, typed_src);
         } else if (T_is_void ? (type().bytes() == 2) : (sizeof(not_void_T) == 2)) {
             using MemType = uint16_t;
-            auto &typed_dst = (Buffer<MemType, D> &)dst;
-            auto &typed_src = (Buffer<const MemType, D> &)src;
+            auto &typed_dst = (Buffer<MemType, Dims, InClassDimStorage> &)dst;
+            auto &typed_src = (Buffer<const MemType, D2, S2> &)src;
             typed_dst.for_each_value([&](MemType &dst, MemType src) { dst = src; }, typed_src);
         } else if (T_is_void ? (type().bytes() == 4) : (sizeof(not_void_T) == 4)) {
             using MemType = uint32_t;
-            auto &typed_dst = (Buffer<MemType, D> &)dst;
-            auto &typed_src = (Buffer<const MemType, D> &)src;
+            auto &typed_dst = (Buffer<MemType, Dims, InClassDimStorage> &)dst;
+            auto &typed_src = (Buffer<const MemType, D2, S2> &)src;
             typed_dst.for_each_value([&](MemType &dst, MemType src) { dst = src; }, typed_src);
         } else if (T_is_void ? (type().bytes() == 8) : (sizeof(not_void_T) == 8)) {
             using MemType = uint64_t;
-            auto &typed_dst = (Buffer<MemType, D> &)dst;
-            auto &typed_src = (Buffer<const MemType, D> &)src;
+            auto &typed_dst = (Buffer<MemType, Dims, InClassDimStorage> &)dst;
+            auto &typed_src = (Buffer<const MemType, D2, S2> &)src;
             typed_dst.for_each_value([&](MemType &dst, MemType src) { dst = src; }, typed_src);
         } else {
             assert(false && "type().bytes() must be 1, 2, 4, or 8");
@@ -1224,10 +1303,10 @@ public:
      * the given dimension. Asserts that the crop region is within
      * the existing bounds: you cannot "crop outwards", even if you know there
      * is valid Buffer storage (e.g. because you already cropped inwards). */
-    Buffer<T, D> cropped(int d, int min, int extent) const {
+    Buffer<T, Dims, InClassDimStorage> cropped(int d, int min, int extent) const {
         // Make a fresh copy of the underlying buffer (but not a fresh
         // copy of the allocation, if there is one).
-        Buffer<T, D> im = *this;
+        Buffer<T, Dims, InClassDimStorage> im = *this;
 
         // This guarantees the prexisting device ref is dropped if the
         // device_crop call fails and maintains the buffer in a consistent
@@ -1260,10 +1339,10 @@ public:
      * the first N dimensions. Asserts that the crop region is within
      * the existing bounds. The cropped image may drop any device handle
      * if the device_interface cannot accomplish the crop in-place. */
-    Buffer<T, D> cropped(const std::vector<std::pair<int, int>> &rect) const {
+    Buffer<T, Dims, InClassDimStorage> cropped(const std::vector<std::pair<int, int>> &rect) const {
         // Make a fresh copy of the underlying buffer (but not a fresh
         // copy of the allocation, if there is one).
-        Buffer<T, D> im = *this;
+        Buffer<T, Dims, InClassDimStorage> im = *this;
 
         // This guarantees the prexisting device ref is dropped if the
         // device_crop call fails and maintains the buffer in a consistent
@@ -1297,8 +1376,8 @@ public:
      * translated coordinates in the given dimension. Positive values
      * move the image data to the right or down relative to the
      * coordinate system. Drops any device handle. */
-    Buffer<T, D> translated(int d, int dx) const {
-        Buffer<T, D> im = *this;
+    Buffer<T, Dims, InClassDimStorage> translated(int d, int dx) const {
+        Buffer<T, Dims, InClassDimStorage> im = *this;
         im.translate(d, dx);
         return im;
     }
@@ -1313,8 +1392,8 @@ public:
 
     /** Make an image which refers to the same data translated along
      * the first N dimensions. */
-    Buffer<T, D> translated(const std::vector<int> &delta) const {
-        Buffer<T, D> im = *this;
+    Buffer<T, Dims, InClassDimStorage> translated(const std::vector<int> &delta) const {
+        Buffer<T, Dims, InClassDimStorage> im = *this;
         im.translate(delta);
         return im;
     }
@@ -1369,8 +1448,8 @@ public:
      * using a swapped indexing order for the dimensions given. So
      * A = B.transposed(0, 1) means that A(i, j) == B(j, i), and more
      * strongly that A.address_of(i, j) == B.address_of(j, i). */
-    Buffer<T, D> transposed(int d1, int d2) const {
-        Buffer<T, D> im = *this;
+    Buffer<T, Dims, InClassDimStorage> transposed(int d1, int d2) const {
+        Buffer<T, Dims, InClassDimStorage> im = *this;
         im.transpose(d1, d2);
         return im;
     }
@@ -1410,16 +1489,20 @@ public:
 
     /** Make a buffer which refers to the same data in the same
      * layout using a different ordering of the dimensions. */
-    Buffer<T, D> transposed(const std::vector<int> &order) const {
-        Buffer<T, D> im = *this;
+    Buffer<T, Dims, InClassDimStorage> transposed(const std::vector<int> &order) const {
+        Buffer<T, Dims, InClassDimStorage> im = *this;
         im.transpose(order);
         return im;
     }
 
     /** Make a lower-dimensional buffer that refers to one slice of
      * this buffer. */
-    Buffer<T, D> sliced(int d, int pos) const {
-        Buffer<T, D> im = *this;
+    Buffer<T, (Dims == AnyDims ? AnyDims : Dims - 1)>
+    sliced(int d, int pos) const {
+        static_assert(Dims == AnyDims || Dims > 0, "Cannot slice a 0-dimensional buffer");
+        assert(dimensions() > 0);
+
+        Buffer<T, AnyDims, InClassDimStorage> im = *this;
 
         // This guarantees the prexisting device ref is dropped if the
         // device_slice call fails and maintains the buffer in a consistent
@@ -1435,15 +1518,23 @@ public:
 
     /** Make a lower-dimensional buffer that refers to one slice of this
      * buffer at the dimension's minimum. */
-    inline Buffer<T, D> sliced(int d) const {
+    Buffer<T, (Dims == AnyDims ? AnyDims : Dims - 1)>
+    sliced(int d) const {
+        static_assert(Dims == AnyDims || Dims > 0, "Cannot slice a 0-dimensional buffer");
+        assert(dimensions() > 0);
+
         return sliced(d, dim(d).min());
     }
 
     /** Rewrite the buffer to refer to a single lower-dimensional
      * slice of itself along the given dimension at the given
      * coordinate. Does not move any data around or free the original
-     * memory, so other views of the same data are unaffected. */
+     * memory, so other views of the same data are unaffected. Can
+     * only be called on a Buffer with dynamic dimensionality. */
     void slice(int d, int pos) {
+        static_assert(Dims == AnyDims, "Cannot call slice() on a Buffer with static dimensionality.");
+        assert(dimensions() > 0);
+
         // An optimization for non-device buffers. For the device case,
         // a temp buffer is required, so reuse the not-in-place version.
         // TODO(zalman|abadams): Are nop slices common enough to special
@@ -1470,8 +1561,9 @@ public:
      &im(x, y, c) == &im2(x, 17, y, c);
      \endcode
      */
-    Buffer<T, D> embedded(int d, int pos = 0) const {
-        Buffer<T, D> im(*this);
+    Buffer<T, (Dims == AnyDims ? AnyDims : Dims + 1)>
+    embedded(int d, int pos = 0) const {
+        Buffer<T, AnyDims, InClassDimStorage> im(*this);
         im.embed(d, pos);
         return im;
     }
@@ -1479,6 +1571,7 @@ public:
     /** Embed a buffer in-place, increasing the
      * dimensionality. */
     void embed(int d, int pos = 0) {
+        static_assert(Dims == AnyDims, "Cannot call embed() on a Buffer with static dimensionality.");
         assert(d >= 0 && d <= dimensions());
         add_dimension();
         translate(dimensions() - 1, pos);
@@ -1492,6 +1585,7 @@ public:
      * its stride. The new dimension is the last dimension. This is a
      * special case of embed. */
     void add_dimension() {
+        static_assert(Dims == AnyDims, "Cannot call add_dimension() on a Buffer with static dimensionality.");
         const int dims = buf.dimensions;
         buf.dimensions++;
         if (buf.dim != shape) {
@@ -1502,7 +1596,7 @@ public:
             }
             delete[] buf.dim;
             buf.dim = new_shape;
-        } else if (dims == D) {
+        } else if (dims == InClassDimStorage) {
             // Transition from the in-class storage to the heap
             make_shape_storage(buf.dimensions);
             for (int i = 0; i < dims; i++) {
@@ -1675,8 +1769,9 @@ public:
      * using (x, y, c). Passing it to a generator requires that the
      * generator has been compiled with support for interleaved (also
      * known as packed or chunky) memory layouts. */
-    static Buffer<void, D> make_interleaved(halide_type_t t, int width, int height, int channels) {
-        Buffer<void, D> im(t, channels, width, height);
+    static Buffer<void, Dims, InClassDimStorage> make_interleaved(halide_type_t t, int width, int height, int channels) {
+        static_assert(Dims == AnyDims || Dims == 3, "make_interleaved() must be called on a Buffer that can represent 3 dimensions.");
+        Buffer<void, Dims, InClassDimStorage> im(t, channels, width, height);
         // Note that this is equivalent to calling transpose({2, 0, 1}),
         // but slightly more efficient.
         im.transpose(0, 1);
@@ -1690,52 +1785,56 @@ public:
      * using (x, y, c). Passing it to a generator requires that the
      * generator has been compiled with support for interleaved (also
      * known as packed or chunky) memory layouts. */
-    static Buffer<T, D> make_interleaved(int width, int height, int channels) {
+    static Buffer<T, Dims, InClassDimStorage> make_interleaved(int width, int height, int channels) {
         return make_interleaved(static_halide_type(), width, height, channels);
     }
 
     /** Wrap an existing interleaved image. */
-    static Buffer<add_const_if_T_is_const<void>, D>
+    static Buffer<add_const_if_T_is_const<void>, Dims, InClassDimStorage>
     make_interleaved(halide_type_t t, T *data, int width, int height, int channels) {
-        Buffer<add_const_if_T_is_const<void>, D> im(t, data, channels, width, height);
+        static_assert(Dims == AnyDims || Dims == 3, "make_interleaved() must be called on a Buffer that can represent 3 dimensions.");
+        Buffer<add_const_if_T_is_const<void>, Dims, InClassDimStorage> im(t, data, channels, width, height);
         im.transpose(0, 1);
         im.transpose(1, 2);
         return im;
     }
 
     /** Wrap an existing interleaved image. */
-    static Buffer<T, D> make_interleaved(T *data, int width, int height, int channels) {
+    static Buffer<T, Dims, InClassDimStorage> make_interleaved(T *data, int width, int height, int channels) {
         return make_interleaved(static_halide_type(), data, width, height, channels);
     }
 
     /** Make a zero-dimensional Buffer */
-    static Buffer<add_const_if_T_is_const<void>, D> make_scalar(halide_type_t t) {
-        Buffer<add_const_if_T_is_const<void>, 1> buf(t, 1);
+    static Buffer<add_const_if_T_is_const<void>, Dims, InClassDimStorage> make_scalar(halide_type_t t) {
+        static_assert(Dims == AnyDims || Dims == 0, "make_scalar() must be called on a Buffer that can represent 0 dimensions.");
+        Buffer<add_const_if_T_is_const<void>, AnyDims, InClassDimStorage> buf(t, 1);
         buf.slice(0, 0);
         return buf;
     }
 
     /** Make a zero-dimensional Buffer */
-    static Buffer<T, D> make_scalar() {
-        Buffer<T, 1> buf(1);
+    static Buffer<T, Dims, InClassDimStorage> make_scalar() {
+        static_assert(Dims == AnyDims || Dims == 0, "make_scalar() must be called on a Buffer that can represent 0 dimensions.");
+        Buffer<T, AnyDims, InClassDimStorage> buf(1);
         buf.slice(0, 0);
         return buf;
     }
 
     /** Make a zero-dimensional Buffer that points to non-owned, existing data */
-    static Buffer<T, D> make_scalar(T *data) {
-        Buffer<T, 1> buf(data, 1);
+    static Buffer<T, Dims, InClassDimStorage> make_scalar(T *data) {
+        static_assert(Dims == AnyDims || Dims == 0, "make_scalar() must be called on a Buffer that can represent 0 dimensions.");
+        Buffer<T, AnyDims, InClassDimStorage> buf(data, 1);
         buf.slice(0, 0);
         return buf;
     }
 
     /** Make a buffer with the same shape and memory nesting order as
      * another buffer. It may have a different type. */
-    template<typename T2, int D2>
-    static Buffer<T, D> make_with_shape_of(Buffer<T2, D2> src,
-                                           void *(*allocate_fn)(size_t) = nullptr,
-                                           void (*deallocate_fn)(void *) = nullptr) {
-
+    template<typename T2, int D2, int S2>
+    static Buffer<T, Dims, InClassDimStorage> make_with_shape_of(Buffer<T2, D2, S2> src,
+                                                                 void *(*allocate_fn)(size_t) = nullptr,
+                                                                 void (*deallocate_fn)(void *) = nullptr) {
+        static_assert(Dims == D2 || Dims == AnyDims);
         const halide_type_t dst_type = T_is_void ? src.type() : halide_type_of<typename std::remove_cv<not_void_T>::type>();
         return Buffer<>::make_with_shape_of_helper(dst_type, src.dimensions(), src.buf.dim,
                                                    allocate_fn, deallocate_fn);
@@ -1787,6 +1886,10 @@ private:
     HALIDE_ALWAYS_INLINE
         ptrdiff_t
         offset_of(int d, int first, Args... rest) const {
+#if HALIDE_RUNTIME_BUFFER_CHECK_INDICES
+        assert(first >= this->buf.dim[d].min);
+        assert(first < this->buf.dim[d].min + this->buf.dim[d].extent);
+#endif
         return offset_of(d + 1, rest...) + (ptrdiff_t)this->buf.dim[d].stride * (first - this->buf.dim[d].min);
     }
 
@@ -1810,6 +1913,10 @@ private:
     ptrdiff_t offset_of(const int *pos) const {
         ptrdiff_t offset = 0;
         for (int i = this->dimensions() - 1; i >= 0; i--) {
+#if HALIDE_RUNTIME_BUFFER_CHECK_INDICES
+            assert(pos[i] >= this->buf.dim[i].min);
+            assert(pos[i] < this->buf.dim[i].min + this->buf.dim[i].extent);
+#endif
             offset += (ptrdiff_t)this->buf.dim[i].stride * (pos[i] - this->buf.dim[i].min);
         }
         return offset;
@@ -1842,6 +1949,8 @@ public:
     HALIDE_ALWAYS_INLINE const not_void_T &operator()(int first, Args... rest) const {
         static_assert(!T_is_void,
                       "Cannot use operator() on Buffer<void> types");
+        constexpr int expected_dims = 1 + (int)(sizeof...(rest));
+        static_assert(Dims == AnyDims || Dims == expected_dims, "Buffer with static dimensions was accessed with the wrong number of coordinates in operator()");
         assert(!device_dirty());
         return *((const not_void_T *)(address_of(first, rest...)));
     }
@@ -1851,6 +1960,8 @@ public:
     operator()() const {
         static_assert(!T_is_void,
                       "Cannot use operator() on Buffer<void> types");
+        constexpr int expected_dims = 0;
+        static_assert(Dims == AnyDims || Dims == expected_dims, "Buffer with static dimensions was accessed with the wrong number of coordinates in operator()");
         assert(!device_dirty());
         return *((const not_void_T *)(data()));
     }
@@ -1871,6 +1982,8 @@ public:
         operator()(int first, Args... rest) {
         static_assert(!T_is_void,
                       "Cannot use operator() on Buffer<void> types");
+        constexpr int expected_dims = 1 + (int)(sizeof...(rest));
+        static_assert(Dims == AnyDims || Dims == expected_dims, "Buffer with static dimensions was accessed with the wrong number of coordinates in operator()");
         set_host_dirty();
         return *((not_void_T *)(address_of(first, rest...)));
     }
@@ -1880,6 +1993,8 @@ public:
     operator()() {
         static_assert(!T_is_void,
                       "Cannot use operator() on Buffer<void> types");
+        constexpr int expected_dims = 0;
+        static_assert(Dims == AnyDims || Dims == expected_dims, "Buffer with static dimensions was accessed with the wrong number of coordinates in operator()");
         set_host_dirty();
         return *((not_void_T *)(data()));
     }
@@ -1901,7 +2016,7 @@ public:
         return all_equal;
     }
 
-    Buffer<T, D> &fill(not_void_T val) {
+    Buffer<T, Dims, InClassDimStorage> &fill(not_void_T val) {
         set_host_dirty();
         for_each_value([=](T &v) { v = val; });
         return *this;
@@ -2055,14 +2170,14 @@ public:
      * will result in a compilation error. */
     // @{
     template<typename Fn, typename... Args, int N = sizeof...(Args) + 1>
-    HALIDE_ALWAYS_INLINE const Buffer<T, D> &for_each_value(Fn &&f, Args &&...other_buffers) const {
+    HALIDE_ALWAYS_INLINE const Buffer<T, Dims, InClassDimStorage> &for_each_value(Fn &&f, Args &&...other_buffers) const {
         for_each_value_impl(f, std::forward<Args>(other_buffers)...);
         return *this;
     }
 
     template<typename Fn, typename... Args, int N = sizeof...(Args) + 1>
     HALIDE_ALWAYS_INLINE
-        Buffer<T, D> &
+        Buffer<T, Dims, InClassDimStorage> &
         for_each_value(Fn &&f, Args &&...other_buffers) {
         for_each_value_impl(f, std::forward<Args>(other_buffers)...);
         return *this;
@@ -2254,14 +2369,14 @@ public:
     */
     // @{
     template<typename Fn>
-    HALIDE_ALWAYS_INLINE const Buffer<T, D> &for_each_element(Fn &&f) const {
+    HALIDE_ALWAYS_INLINE const Buffer<T, Dims, InClassDimStorage> &for_each_element(Fn &&f) const {
         for_each_element_impl(f);
         return *this;
     }
 
     template<typename Fn>
     HALIDE_ALWAYS_INLINE
-        Buffer<T, D> &
+        Buffer<T, Dims, InClassDimStorage> &
         for_each_element(Fn &&f) {
         for_each_element_impl(f);
         return *this;
@@ -2272,7 +2387,7 @@ private:
     template<typename Fn>
     struct FillHelper {
         Fn f;
-        Buffer<T, D> *buf;
+        Buffer<T, Dims, InClassDimStorage> *buf;
 
         template<typename... Args,
                  typename = decltype(std::declval<Fn>()(std::declval<Args>()...))>
@@ -2280,7 +2395,7 @@ private:
             (*buf)(args...) = f(args...);
         }
 
-        FillHelper(Fn &&f, Buffer<T, D> *buf)
+        FillHelper(Fn &&f, Buffer<T, Dims, InClassDimStorage> *buf)
             : f(std::forward<Fn>(f)), buf(buf) {
         }
     };
@@ -2292,7 +2407,7 @@ public:
      * stored to the coordinate corresponding to the arguments. */
     template<typename Fn,
              typename = typename std::enable_if<!std::is_arithmetic<typename std::decay<Fn>::type>::value>::type>
-    Buffer<T, D> &fill(Fn &&f) {
+    Buffer<T, Dims, InClassDimStorage> &fill(Fn &&f) {
         // We'll go via for_each_element. We need a variadic wrapper lambda.
         FillHelper<Fn> wrapper(std::forward<Fn>(f), this);
         return for_each_element(wrapper);

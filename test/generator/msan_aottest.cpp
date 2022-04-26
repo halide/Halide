@@ -17,6 +17,7 @@ int main(int argc, char **argv) {
 
 using namespace std;
 using namespace Halide::Runtime;
+using MsanBuffer = Halide::Runtime::Buffer<uint8_t, 3>;
 
 enum {
     AnnotateBoundsInferenceBuffer,
@@ -49,7 +50,7 @@ uint64_t externresult_contents_checked = 0;
 uint64_t externresult_contents_uninitialized = 0;
 uint64_t output_contents_annotated = 0;
 
-void reset_state(const Buffer<uint8_t> &in, const Buffer<uint8_t> &out) {
+void reset_state(const MsanBuffer &in, const MsanBuffer &out) {
     annotate_stage = AnnotateBoundsInferenceBuffer;
     check_stage = CheckInputBuffer;
     output_base = out.data();
@@ -96,9 +97,9 @@ extern "C" int msan_extern_stage(halide_buffer_t *in, halide_buffer_t *out) {
     }
     if (skip_extern_copy) {
         // Fill it with zero to mimic msan "poison".
-        Buffer<uint8_t>(*out).fill(0);
+        MsanBuffer(*out).fill(0);
     } else {
-        Buffer<uint8_t>(*out).copy_from(Buffer<uint8_t>(*in));
+        MsanBuffer(*out).copy_from(MsanBuffer(*in));
     }
     out->set_host_dirty();
     return 0;
@@ -264,8 +265,8 @@ void verify(const T &image) {
     });
 }
 
-Buffer<uint8_t> make_input_for(const Buffer<uint8_t> &output) {
-    auto input = Buffer<uint8_t>::make_with_shape_of(output);
+MsanBuffer make_input_for(const MsanBuffer &output) {
+    auto input = MsanBuffer::make_with_shape_of(output);
     // Ensure that no 'valid' inputs are all-zero
     input.for_each_element([&](int x, int y, int c) { input(x, y, c) = (uint8_t)(x + y + c) | 0x01; });
     return input;
@@ -276,7 +277,7 @@ Buffer<uint8_t> make_input_for(const Buffer<uint8_t> &output) {
 int main() {
     printf("Testing interleaved...\n");
     {
-        auto out = Buffer<uint8_t>::make_interleaved(4, 4, 3);
+        auto out = MsanBuffer::make_interleaved(4, 4, 3);
         auto in = make_input_for(out);
         reset_state(in, out);
         if (msan(in, out) != 0) {
@@ -311,7 +312,7 @@ int main() {
             {0, 3, 1},
         };
         std::vector<uint8_t> data(((4 * 3) + kPad) * 4);
-        auto out = Buffer<uint8_t>(data.data(), 3, shape);
+        auto out = MsanBuffer(data.data(), 3, shape);
         auto in = make_input_for(out);
         reset_state(in, out);
         if (msan(in, out) != 0) {
@@ -346,7 +347,7 @@ int main() {
 
     printf("Testing planar...\n");
     {
-        auto out = Buffer<uint8_t>(4, 4, 3);
+        auto out = MsanBuffer(4, 4, 3);
         auto in = make_input_for(out);
         reset_state(in, out);
         if (msan(in, out) != 0) {
@@ -388,7 +389,7 @@ int main() {
             {0, 3, (4 + kPad) * 4},
         };
         std::vector<uint8_t> data((4 + kPad) * 4 * 3);
-        auto out = Buffer<uint8_t>(data.data(), 3, shape);
+        auto out = MsanBuffer(data.data(), 3, shape);
         auto in = make_input_for(out);
         reset_state(in, out);
         if (msan(in, out) != 0) {
@@ -424,7 +425,7 @@ int main() {
     // Buffers should not be marked as "initialized" if the filter fails with an error.
     printf("Verifying that output is not marked when error occurs...\n");
     {
-        auto out = Buffer<uint8_t>(1, 1, 1);
+        auto out = MsanBuffer(1, 1, 1);
         auto in = make_input_for(out);
         reset_state(in, out);
         expect_intermediate_buffer_error = true;
@@ -463,7 +464,7 @@ int main() {
     // only nonzero elements, and then checking for those.
     printf("Verifying that input is checked for initialization...\n");
     {
-        auto out = Buffer<uint8_t>::make_interleaved(4, 4, 3);
+        auto out = MsanBuffer::make_interleaved(4, 4, 3);
         auto in = make_input_for(out);
         // Make exactly one element "uninitialized"
         in(3, 2, 1) = 0;
@@ -497,7 +498,7 @@ int main() {
 
     printf("Verifying that result of define_extern is checked for initialization...\n");
     {
-        auto out = Buffer<uint8_t>::make_interleaved(4, 4, 3);
+        auto out = MsanBuffer::make_interleaved(4, 4, 3);
         auto in = make_input_for(out);
         // Make exactly one element "uninitialized"
         in(3, 2, 1) = 0;

@@ -333,7 +333,7 @@ class ForkAsyncProducers : public IRMutator {
             vector<Expr> sema_vars;
             for (int i = 0; i < consumes.count; i++) {
                 sema_names.push_back(op->name + ".semaphore_" + std::to_string(i));
-                sema_vars.push_back(Variable::make(Handle(), sema_names.back()));
+                sema_vars.push_back(Variable::make(type_of<halide_semaphore_t *>(), sema_names.back()));
             }
 
             Stmt producer = GenerateProducerBody(op->name, sema_vars, cloned_acquires).mutate(body);

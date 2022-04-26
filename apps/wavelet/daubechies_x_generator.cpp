@@ -8,8 +8,8 @@ Halide::Var x("x"), y("y"), c("c");
 
 class daubechies_x : public Halide::Generator<daubechies_x> {
 public:
-    Input<Buffer<float>> in_{"in", 2};
-    Output<Buffer<float>> out_{"out", 3};
+    Input<Buffer<float, 2>> in_{"in"};
+    Output<Buffer<float, 3>> out_{"out"};
 
     void generate() {
         Func in = Halide::BoundaryConditions::repeat_edge(in_);

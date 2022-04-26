@@ -10,7 +10,7 @@ namespace hannk {
 class AveragePool : public Generator<AveragePool> {
 public:
     // Unsigned 8-bit input tensor, indexed by c, x, y, b.
-    Input<Buffer<uint8_t>> input_{"input", 4};
+    Input<Buffer<uint8_t, 4>> input_{"input"};
 
     // The stride specifies how the input [x, y] are sub-subsampled. For every
     // spatial location [x, y] in the output buffer, the input buffer is sampled
@@ -23,7 +23,7 @@ public:
     Input<uint8_t> output_min_{"output_min"};
     Input<uint8_t> output_max_{"output_max"};
 
-    Output<Buffer<uint8_t>> output_{"output", 4};
+    Output<Buffer<uint8_t, 4>> output_{"output"};
 
     void generate() {
         // The algorithm.
@@ -96,7 +96,7 @@ public:
 class MaxPool : public Generator<MaxPool> {
 public:
     // Unsigned 8-bit input tensor, indexed by c, x, y, b.
-    Input<Buffer<uint8_t>> input_{"input", 4};
+    Input<Buffer<uint8_t, 4>> input_{"input"};
 
     // The stride specifies how the input [x, y] are sub-subsampled. For every
     // spatial location [x, y] in the output buffer, the input buffer is sampled
@@ -109,7 +109,7 @@ public:
     Input<uint8_t> output_min_{"output_min"};
     Input<uint8_t> output_max_{"output_max"};
 
-    Output<Buffer<uint8_t>> output_{"output", 4};
+    Output<Buffer<uint8_t, 4>> output_{"output"};
 
     void generate() {
         // The algorithm.

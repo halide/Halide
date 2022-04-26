@@ -32,16 +32,12 @@ int simple_rfactor_test(bool compile_module) {
 
     if (compile_module) {
         // Check the call graphs.
-        Module m = g.compile_to_module({g.infer_arguments()});
-        CheckCalls checker;
-        m.functions().front().body.accept(&checker);
-
         CallGraphs expected = {
             {g.name(), {intm.name(), g.name()}},
             {intm.name(), {f.name(), intm.name()}},
             {f.name(), {}},
         };
-        if (check_call_graphs(checker.calls, expected) != 0) {
+        if (check_call_graphs(g, expected) != 0) {
             return -1;
         }
     } else {
@@ -80,17 +76,13 @@ int reorder_split_rfactor_test(bool compile_module) {
 
     if (compile_module) {
         // Check the call graphs.
-        Module m = g.compile_to_module({g.infer_arguments()});
-        CheckCalls checker;
-        m.functions().front().body.accept(&checker);
-
         CallGraphs expected = {
             {g.name(), {intm2.name(), g.name()}},
             {intm2.name(), {intm1.name(), intm2.name()}},
             {intm1.name(), {f.name(), intm1.name()}},
             {f.name(), {}},
         };
-        if (check_call_graphs(checker.calls, expected) != 0) {
+        if (check_call_graphs(g, expected) != 0) {
             return -1;
         }
     } else {
@@ -132,17 +124,13 @@ int multi_split_rfactor_test(bool compile_module) {
 
     if (compile_module) {
         // Check the call graphs.
-        Module m = g.compile_to_module({g.infer_arguments()});
-        CheckCalls checker;
-        m.functions().front().body.accept(&checker);
-
         CallGraphs expected = {
             {g.name(), {intm2.name(), g.name()}},
             {intm2.name(), {intm1.name(), intm2.name()}},
             {intm1.name(), {f.name(), intm1.name()}},
             {f.name(), {}},
         };
-        if (check_call_graphs(checker.calls, expected) != 0) {
+        if (check_call_graphs(g, expected) != 0) {
             return -1;
         }
     } else {
@@ -183,17 +171,13 @@ int reorder_fuse_wrapper_rfactor_test(bool compile_module) {
 
     if (compile_module) {
         // Check the call graphs.
-        Module m = g.compile_to_module({g.infer_arguments()});
-        CheckCalls checker;
-        m.functions().front().body.accept(&checker);
-
         CallGraphs expected = {
             {g.name(), {intm.name(), g.name()}},
             {wrapper.name(), {f.name()}},
             {intm.name(), {wrapper.name(), intm.name()}},
             {f.name(), {}},
         };
-        if (check_call_graphs(checker.calls, expected) != 0) {
+        if (check_call_graphs(g, expected) != 0) {
             return -1;
         }
     } else {
@@ -257,10 +241,6 @@ int non_trivial_lhs_rfactor_test(bool compile_module) {
 
         if (compile_module) {
             // Check the call graphs.
-            Module m = g.compile_to_module({g.infer_arguments()});
-            CheckCalls checker;
-            m.functions().front().body.accept(&checker);
-
             CallGraphs expected = {
                 {g.name(), {f.name()}},
                 {f.name(), {f.name(), intm.name()}},
@@ -269,7 +249,7 @@ int non_trivial_lhs_rfactor_test(bool compile_module) {
                 {b.name(), {}},
                 {c.name(), {}},
             };
-            if (check_call_graphs(checker.calls, expected) != 0) {
+            if (check_call_graphs(g, expected) != 0) {
                 return -1;
             }
         } else {
@@ -306,16 +286,12 @@ int simple_rfactor_with_specialize_test(bool compile_module) {
     if (compile_module) {
         p.set(20);
         // Check the call graphs.
-        Module m = g.compile_to_module({g.infer_arguments()});
-        CheckCalls checker;
-        m.functions().front().body.accept(&checker);
-
         CallGraphs expected = {
             {g.name(), {f.name(), intm.name(), g.name()}},
             {intm.name(), {f.name(), intm.name()}},
             {f.name(), {}},
         };
-        if (check_call_graphs(checker.calls, expected) != 0) {
+        if (check_call_graphs(g, expected) != 0) {
             return -1;
         }
     } else {
@@ -365,16 +341,12 @@ int rdom_with_predicate_rfactor_test(bool compile_module) {
 
     if (compile_module) {
         // Check the call graphs.
-        Module m = g.compile_to_module({g.infer_arguments()});
-        CheckCalls checker;
-        m.functions().front().body.accept(&checker);
-
         CallGraphs expected = {
             {g.name(), {intm.name(), g.name()}},
             {intm.name(), {f.name(), intm.name()}},
             {f.name(), {}},
         };
-        if (check_call_graphs(checker.calls, expected) != 0) {
+        if (check_call_graphs(g, expected) != 0) {
             return -1;
         }
     } else {
@@ -426,17 +398,13 @@ int histogram_rfactor_test(bool compile_module) {
 
     if (compile_module) {
         // Check the call graphs.
-        Module m = g.compile_to_module({g.infer_arguments()});
-        CheckCalls checker;
-        m.functions().front().body.accept(&checker);
-
         CallGraphs expected = {
             {g.name(), {hist.name()}},
             {hist.name(), {intm.name(), hist.name()}},
             {intm.name(), {in.name(), intm.name()}},
 
         };
-        if (check_call_graphs(checker.calls, expected) != 0) {
+        if (check_call_graphs(g, expected) != 0) {
             return -1;
         }
     } else {
@@ -493,9 +461,6 @@ int parallel_dot_product_rfactor_test(bool compile_module) {
 
     if (compile_module) {
         // Check the call graphs.
-        Module m = dot.compile_to_module({dot.infer_arguments()});
-        CheckCalls checker;
-        m.functions().front().body.accept(&checker);
 
         CallGraphs expected = {
             {dot.name(), {intm1.name(), dot.name()}},
@@ -504,7 +469,7 @@ int parallel_dot_product_rfactor_test(bool compile_module) {
             {a.name(), {}},
             {b.name(), {}},
         };
-        if (check_call_graphs(checker.calls, expected) != 0) {
+        if (check_call_graphs(dot, expected) != 0) {
             return -1;
         }
     } else {
@@ -553,17 +518,13 @@ int tuple_rfactor_test(bool compile_module) {
 
     if (compile_module) {
         // Check the call graphs.
-        Module m = g.compile_to_module({g.infer_arguments()});
-        CheckCalls checker;
-        m.functions().front().body.accept(&checker);
-
         CallGraphs expected = {
             {g.name(), {intm1.name() + ".0", intm1.name() + ".1", g.name() + ".0", g.name() + ".1"}},
             {intm1.name(), {intm2.name() + ".0", intm2.name() + ".1", intm1.name() + ".0", intm1.name() + ".1"}},
             {intm2.name(), {f.name() + ".0", f.name() + ".1", intm2.name() + ".0", intm2.name() + ".1"}},
             {f.name(), {}},
         };
-        if (check_call_graphs(checker.calls, expected) != 0) {
+        if (check_call_graphs(g, expected) != 0) {
             return -1;
         }
     } else {
@@ -629,10 +590,6 @@ int tuple_specialize_rdom_predicate_rfactor_test(bool compile_module) {
 
     if (compile_module) {
         // Check the call graphs.
-        Module m = g.compile_to_module({g.infer_arguments()});
-        CheckCalls checker;
-        m.functions().front().body.accept(&checker);
-
         CallGraphs expected = {
             {g.name(), {intm1.name() + ".0", intm1.name() + ".1", intm4.name() + ".0", intm4.name() + ".1", g.name() + ".0", g.name() + ".1"}},
             {intm1.name(), {intm2.name() + ".0", intm2.name() + ".1", intm3.name() + ".0", intm3.name() + ".1", intm1.name() + ".0", intm1.name() + ".1"}},
@@ -641,7 +598,7 @@ int tuple_specialize_rdom_predicate_rfactor_test(bool compile_module) {
             {intm4.name(), {f.name() + ".0", f.name() + ".1", intm4.name() + ".0", intm4.name() + ".1"}},
             {f.name(), {}},
         };
-        if (check_call_graphs(checker.calls, expected) != 0) {
+        if (check_call_graphs(g, expected) != 0) {
             return -1;
         }
     } else {
@@ -856,7 +813,7 @@ int argmin_rfactor_test() {
     return 0;
 }
 
-int allocation_bound_test_trace(void *user_context, const halide_trace_event_t *e) {
+int allocation_bound_test_trace(JITUserContext *user_context, const halide_trace_event_t *e) {
     // The schedule implies that f will be stored from 0 to 1
     if (e->event == 2 && std::string(e->func) == "f") {
         if (e->coordinates[1] != 2) {
@@ -884,7 +841,7 @@ int check_allocation_bound_test() {
     g.update(0).rfactor({{rxo, u}}).compute_at(g, rxo);
 
     f.trace_realizations();
-    g.set_custom_trace(allocation_bound_test_trace);
+    g.jit_handlers().custom_trace = allocation_bound_test_trace;
     g.realize({23});
 
     return 0;
@@ -966,17 +923,13 @@ int tuple_partial_reduction_rfactor_test(bool compile_module) {
 
     if (compile_module) {
         // Check the call graphs.
-        Module m = g.compile_to_module({g.infer_arguments()});
-        CheckCalls checker;
-        m.functions().front().body.accept(&checker);
-
         CallGraphs expected = {
             {g.name(), {intm1.name() + ".0", g.name() + ".0"}},
             {intm1.name(), {intm2.name() + ".0", intm1.name() + ".0"}},
             {intm2.name(), {f.name() + ".0", intm2.name() + ".0"}},
             {f.name(), {}},
         };
-        if (check_call_graphs(checker.calls, expected) != 0) {
+        if (check_call_graphs(g, expected) != 0) {
             return -1;
         }
     } else {

@@ -1,16 +1,16 @@
 #include "halide_benchmark.h"
 
 #ifdef ENABLE_FTZ_DAZ
-#if defined(__i386__) || defined(__x86_64__)
+#if (defined(__i386__) || defined(__x86_64__)) && defined(__SSE__)
 #include <pmmintrin.h>
 #include <xmmintrin.h>
-#endif  // defined(__i386__) || defined(__x86_64__)
+#endif  // (defined(__i386__) || defined(__x86_64__)) && defined(__SSE__)
 #endif
 
 inline void set_math_flags() {
 #ifdef ENABLE_FTZ_DAZ
 
-#if defined(__i386__) || defined(__x86_64__)
+#if (defined(__i386__) || defined(__x86_64__)) && defined(__SSE__)
     // Flush denormals to zero (the FTZ flag).
     _MM_SET_FLUSH_ZERO_MODE(_MM_FLUSH_ZERO_ON);
     // Interpret denormal inputs as zero (the DAZ flag).

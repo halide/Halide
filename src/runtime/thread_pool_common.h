@@ -152,7 +152,7 @@ struct work_queue_t {
         while (bytes < limit && *bytes == 0) {
             bytes++;
         }
-        halide_assert(nullptr, bytes == limit && "Logic error in thread pool work queue initialization.\n");
+        halide_abort_if_false(nullptr, bytes == limit && "Logic error in thread pool work queue initialization.\n");
     }
 
     // Return the work queue to initial state. Must be called while locked
@@ -522,9 +522,9 @@ WEAK void enqueue_work_already_locked(int num_jobs, work *jobs, work *task_paren
         }
     } else {
         log_message("enqueue_work_already_locked job " << jobs[0].task.name << " with min_threads " << min_threads << " task_parent " << task_parent->task.name << " task_parent->task.min_threads " << task_parent->task.min_threads << " task_parent->threads_reserved " << task_parent->threads_reserved);
-        halide_assert(nullptr, (min_threads <= ((task_parent->task.min_threads * task_parent->active_workers) -
-                                                task_parent->threads_reserved)) &&
-                                   "Logic error: thread over commit.\n");
+        halide_abort_if_false(nullptr, (min_threads <= ((task_parent->task.min_threads * task_parent->active_workers) -
+                                                        task_parent->threads_reserved)) &&
+                                           "Logic error: thread over commit.\n");
         if (job_has_acquires || job_may_block) {
             task_parent->threads_reserved++;
         }

@@ -21,14 +21,14 @@ uint8_t _count_leading_zeros(T v) {
 }
 
 int main(int argc, char **argv) {
-    Buffer<uint8_t> input8(kSize);
-    Buffer<uint16_t> input16(kSize);
-    Buffer<uint32_t> input32(kSize);
-    Buffer<uint64_t> input64(kSize);
-    Buffer<uint8_t> output8(kSize);
-    Buffer<uint8_t> output16(kSize);
-    Buffer<uint8_t> output32(kSize);
-    Buffer<uint8_t> output64(kSize);
+    Buffer<uint8_t, 1> input8(kSize);
+    Buffer<uint16_t, 1> input16(kSize);
+    Buffer<uint32_t, 1> input32(kSize);
+    Buffer<uint64_t, 1> input64(kSize);
+    Buffer<uint8_t, 1> output8(kSize);
+    Buffer<uint8_t, 1> output16(kSize);
+    Buffer<uint8_t, 1> output32(kSize);
+    Buffer<uint8_t, 1> output64(kSize);
 
     for (int i = 0; i < kSize; i++) {
         input8(i) = i;

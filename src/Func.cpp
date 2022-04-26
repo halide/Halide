@@ -188,7 +188,18 @@ void Func::define_extern(const std::string &function_name,
 }
 
 /** Get the types of the buffers returned by an extern definition. */
+const Type &Func::output_type() const {
+    user_assert(defined())
+        << "Can't access output buffer of undefined Func.\n";
+    user_assert(func.output_types().size() == 1)
+        << "Can't call Func::output_type on Func \"" << name()
+        << "\" because it returns a Tuple.\n";
+    return func.output_types()[0];
+}
+
 const std::vector<Type> &Func::output_types() const {
+    user_assert(defined())
+        << "Can't access output buffer of undefined Func.\n";
     return func.output_types();
 }
 
@@ -344,6 +355,7 @@ bool is_const_assignment(const string &func_name, const vector<Expr> &args, cons
 }  // namespace
 
 void Stage::set_dim_type(const VarOrRVar &var, ForType t) {
+    definition.schedule().touched() = true;
     bool found = false;
     vector<Dim> &dims = definition.schedule().dims();
     for (auto &dim : dims) {
@@ -368,9 +380,9 @@ void Stage::set_dim_type(const VarOrRVar &var, ForType t) {
                             // its identity for each value in the definition if it is a Tuple
                             const auto &prover_result = prove_associativity(func_name, args, values);
 
-                            user_assert(prover_result.associative())
+                            user_assert(prover_result.associative() && prover_result.commutative())
                                 << "Failed to call atomic() on " << name()
-                                << " since it can't prove associativity of the operator.\n";
+                                << " since it can't prove associativity or commutativity of the operator.\n";
                             internal_assert(prover_result.size() == values.size());
                         }
                     }
@@ -407,6 +419,7 @@ void Stage::set_dim_type(const VarOrRVar &var, ForType t) {
 }
 
 void Stage::set_dim_device_api(const VarOrRVar &var, DeviceAPI device_api) {
+    definition.schedule().touched() = true;
     bool found = false;
     vector<Dim> &dims = definition.schedule().dims();
     for (auto &dim : dims) {
@@ -662,11 +675,14 @@ bool apply_split_directive(const Split &s, vector<ReductionVariable> &rvars,
 }  // anonymous namespace
 
 Func Stage::rfactor(const RVar &r, const Var &v) {
+    definition.schedule().touched() = true;
     return rfactor({{r, v}});
 }
 
 Func Stage::rfactor(vector<pair<RVar, Var>> preserved) {
     user_assert(!definition.is_init()) << "rfactor() must be called on an update definition\n";
+
+    definition.schedule().touched() = true;
 
     const string &func_name = function.name();
     vector<Expr> &args = definition.args();
@@ -969,6 +985,8 @@ void Stage::split(const string &old, const string &outer, const string &inner, c
              << outer << " and " << inner << " with factor of " << factor << "\n";
     vector<Dim> &dims = definition.schedule().dims();
 
+    definition.schedule().touched() = true;
+
     // Check that the new names aren't already in the dims list.
     for (auto &dim : dims) {
         string new_names[2] = {inner, outer};
@@ -1116,6 +1134,7 @@ void Stage::split(const string &old, const string &outer, const string &inner, c
 }
 
 Stage &Stage::split(const VarOrRVar &old, const VarOrRVar &outer, const VarOrRVar &inner, const Expr &factor, TailStrategy tail) {
+    definition.schedule().touched() = true;
     if (old.is_rvar) {
         user_assert(outer.is_rvar) << "Can't split RVar " << old.name() << " into Var " << outer.name() << "\n";
         user_assert(inner.is_rvar) << "Can't split RVar " << old.name() << " into Var " << inner.name() << "\n";
@@ -1128,6 +1147,7 @@ Stage &Stage::split(const VarOrRVar &old, const VarOrRVar &outer, const VarOrRVa
 }
 
 Stage &Stage::fuse(const VarOrRVar &inner, const VarOrRVar &outer, const VarOrRVar &fused) {
+    definition.schedule().touched() = true;
     if (!fused.is_rvar) {
         user_assert(!outer.is_rvar) << "Can't fuse Var " << fused.name()
                                     << " from RVar " << outer.name() << "\n";
@@ -1211,6 +1231,8 @@ protected:
 Stage Stage::specialize(const Expr &condition) {
     user_assert(condition.type().is_bool()) << "Argument passed to specialize must be of type bool\n";
 
+    definition.schedule().touched() = true;
+
     // The condition may not depend on Vars or RVars
     Internal::CheckForFreeVars check;
     condition.accept(&check);
@@ -1242,6 +1264,9 @@ void Stage::specialize_fail(const std::string &message) {
     const vector<Specialization> &specializations = definition.specializations();
     user_assert(specializations.empty() || specializations.back().failure_message.empty())
         << "Only one specialize_fail() may be defined per Stage.";
+
+    definition.schedule().touched() = true;
+
     (void)definition.add_specialization(const_true());
     Specialization &s = definition.specializations().back();
     s.failure_message = message;
@@ -1383,6 +1408,8 @@ void Stage::remove(const string &var) {
 }
 
 Stage &Stage::rename(const VarOrRVar &old_var, const VarOrRVar &new_var) {
+    definition.schedule().touched() = true;
+
     if (old_var.is_rvar) {
         user_assert(new_var.is_rvar)
             << "In schedule for " << name()
@@ -1472,11 +1499,13 @@ Stage &Stage::rename(const VarOrRVar &old_var, const VarOrRVar &new_var) {
 }
 
 Stage &Stage::allow_race_conditions() {
+    definition.schedule().touched() = true;
     definition.schedule().allow_race_conditions() = true;
     return *this;
 }
 
 Stage &Stage::atomic(bool override_associativity_test) {
+    definition.schedule().touched() = true;
     definition.schedule().atomic() = true;
     definition.schedule().override_atomic_associativity_test() = override_associativity_test;
     return *this;
@@ -1600,6 +1629,7 @@ Stage &Stage::tile(const std::vector<VarOrRVar> &previous,
 }
 
 Stage &Stage::reorder(const std::vector<VarOrRVar> &vars) {
+    definition.schedule().touched() = true;
     const string &func_name = function.name();
     vector<Expr> &args = definition.args();
     vector<Expr> &values = definition.values();
@@ -1839,18 +1869,21 @@ Stage &Stage::hexagon(const VarOrRVar &x) {
 }
 
 Stage &Stage::prefetch(const Func &f, const VarOrRVar &at, const VarOrRVar &from, Expr offset, PrefetchBoundStrategy strategy) {
+    definition.schedule().touched() = true;
     PrefetchDirective prefetch = {f.name(), at.name(), from.name(), std::move(offset), strategy, Parameter()};
     definition.schedule().prefetches().push_back(prefetch);
     return *this;
 }
 
 Stage &Stage::prefetch(const Internal::Parameter &param, const VarOrRVar &at, const VarOrRVar &from, Expr offset, PrefetchBoundStrategy strategy) {
+    definition.schedule().touched() = true;
     PrefetchDirective prefetch = {param.name(), at.name(), from.name(), std::move(offset), strategy, param};
     definition.schedule().prefetches().push_back(prefetch);
     return *this;
 }
 
 Stage &Stage::compute_with(LoopLevel loop_level, const map<string, LoopAlignStrategy> &align) {
+    definition.schedule().touched() = true;
     loop_level.lock();
     user_assert(!loop_level.is_inlined() && !loop_level.is_root())
         << "Undefined loop level to compute with\n";
@@ -1904,6 +1937,11 @@ Stage &Stage::compute_with(const Stage &s, const VarOrRVar &var, LoopAlignStrate
  * symbols were not understood. Works on OS X and Linux only. */
 std::string Stage::source_location() const {
     return definition.source_location();
+}
+
+void Stage::unscheduled() {
+    user_assert(!definition.schedule().touched()) << "Stage::unscheduled called on an update definition with a schedule\n";
+    definition.schedule().touched() = true;
 }
 
 void Func::invalidate_cache() {
@@ -2602,6 +2640,23 @@ Func &Func::align_storage(const Var &dim, const Expr &alignment) {
     return *this;
 }
 
+Func &Func::bound_storage(const Var &dim, const Expr &bound) {
+    invalidate_cache();
+
+    vector<StorageDim> &dims = func.schedule().storage_dims();
+    for (auto &d : dims) {
+        if (var_name_match(d.var, dim.name())) {
+            d.bound = bound;
+            return *this;
+        }
+    }
+    user_error << "In schedule for " << name()
+               << ", could not find var " << dim.name()
+               << " to bound the storage of.\n"
+               << dump_dim_list(func.schedule().storage_dims());
+    return *this;
+}
+
 Func &Func::fold_storage(const Var &dim, const Expr &factor, bool fold_forward) {
     invalidate_cache();
 
@@ -3089,7 +3144,22 @@ Realization Func::realize(std::vector<int32_t> sizes, const Target &target,
     return pipeline().realize(std::move(sizes), target, param_map);
 }
 
+Realization Func::realize(JITUserContext *context,
+                          std::vector<int32_t> sizes,
+                          const Target &target,
+                          const ParamMap &param_map) {
+    user_assert(defined()) << "Can't realize undefined Func.\n";
+    return pipeline().realize(context, std::move(sizes), target, param_map);
+}
+
 void Func::infer_input_bounds(const std::vector<int32_t> &sizes,
+                              const Target &target,
+                              const ParamMap &param_map) {
+    infer_input_bounds(nullptr, sizes, target, param_map);
+}
+
+void Func::infer_input_bounds(JITUserContext *context,
+                              const std::vector<int32_t> &sizes,
                               const Target &target,
                               const ParamMap &param_map) {
     user_assert(defined()) << "Can't infer input bounds on an undefined Func.\n";
@@ -3098,8 +3168,8 @@ void Func::infer_input_bounds(const std::vector<int32_t> &sizes,
         Buffer<> im(func.output_types()[i], nullptr, sizes);
         outputs[i] = std::move(im);
     }
-    Realization r(outputs);
-    infer_input_bounds(r, target, param_map);
+    Realization r(std::move(outputs));
+    infer_input_bounds(context, r, target, param_map);
 }
 
 OutputImageParam Func::output_buffer() const {
@@ -3147,7 +3217,7 @@ Module Func::compile_to_module(const vector<Argument> &args, const std::string &
     return pipeline().compile_to_module(args, fn_name, target);
 }
 
-void Func::compile_to(const map<Output, string> &output_files,
+void Func::compile_to(const map<OutputFileType, string> &output_files,
                       const vector<Argument> &args,
                       const string &fn_name,
                       const Target &target) {
@@ -3243,30 +3313,12 @@ void Func::compile_to_assembly(const string &filename, const vector<Argument> &a
 
 // JIT-related code
 
-void Func::set_error_handler(void (*handler)(void *, const char *)) {
-    pipeline().set_error_handler(handler);
+namespace {
+template<typename A, typename B>
+void set_handler(A &a, B b) {
+    a = (A)b;
 }
-
-void Func::set_custom_allocator(void *(*cust_malloc)(void *, size_t),
-                                void (*cust_free)(void *, void *)) {
-    pipeline().set_custom_allocator(cust_malloc, cust_free);
-}
-
-void Func::set_custom_do_par_for(int (*cust_do_par_for)(void *, int (*)(void *, int, uint8_t *), int, int, uint8_t *)) {
-    pipeline().set_custom_do_par_for(cust_do_par_for);
-}
-
-void Func::set_custom_do_task(int (*cust_do_task)(void *, int (*)(void *, int, uint8_t *), int, uint8_t *)) {
-    pipeline().set_custom_do_task(cust_do_task);
-}
-
-void Func::set_custom_trace(int (*trace_fn)(void *, const halide_trace_event_t *)) {
-    pipeline().set_custom_trace(trace_fn);
-}
-
-void Func::set_custom_print(void (*cust_print)(void *, const char *)) {
-    pipeline().set_custom_print(cust_print);
-}
+}  // namespace
 
 void Func::add_custom_lowering_pass(IRMutator *pass, std::function<void()> deleter) {
     pipeline().add_custom_lowering_pass(pass, std::move(deleter));
@@ -3280,18 +3332,34 @@ const vector<CustomLoweringPass> &Func::custom_lowering_passes() {
     return pipeline().custom_lowering_passes();
 }
 
-const Internal::JITHandlers &Func::jit_handlers() {
+JITHandlers &Func::jit_handlers() {
     return pipeline().jit_handlers();
 }
 
-void Func::realize(Pipeline::RealizationArg outputs, const Target &target,
+void Func::realize(Pipeline::RealizationArg outputs,
+                   const Target &target,
                    const ParamMap &param_map) {
     pipeline().realize(std::move(outputs), target, param_map);
 }
 
-void Func::infer_input_bounds(Pipeline::RealizationArg outputs, const Target &target,
+void Func::realize(JITUserContext *context,
+                   Pipeline::RealizationArg outputs,
+                   const Target &target,
+                   const ParamMap &param_map) {
+    pipeline().realize(context, std::move(outputs), target, param_map);
+}
+
+void Func::infer_input_bounds(Pipeline::RealizationArg outputs,
+                              const Target &target,
                               const ParamMap &param_map) {
     pipeline().infer_input_bounds(std::move(outputs), target, param_map);
+}
+
+void Func::infer_input_bounds(JITUserContext *context,
+                              Pipeline::RealizationArg outputs,
+                              const Target &target,
+                              const ParamMap &param_map) {
+    pipeline().infer_input_bounds(context, std::move(outputs), target, param_map);
 }
 
 void Func::compile_jit(const Target &target) {

@@ -197,8 +197,9 @@ class RollFunc : public IRMutator {
         if (loops_to_rebase.count(op->name)) {
             string new_name = op->name + ".rebased";
             Stmt body = substitute(op->name, Variable::make(Int(32), new_name) + op->min, op->body);
-            result = For::make(new_name, 0, op->extent, op->for_type, op->device_api, body);
+            // use op->name *before* the re-assignment of result, which will clobber it
             loops_to_rebase.erase(op->name);
+            result = For::make(new_name, 0, op->extent, op->for_type, op->device_api, body);
         }
         return result;
     }

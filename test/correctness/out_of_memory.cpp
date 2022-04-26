@@ -12,7 +12,7 @@ size_t total_allocated = 0;
 // and bug behaviors, etc. Cheap enough to be good in testing.
 std::map<void *, size_t> allocation_sizes;
 
-extern "C" void *test_malloc(void *user_context, size_t x) {
+extern "C" void *test_malloc(JITUserContext *user_context, size_t x) {
     if (total_allocated + x > mem_limit)
         return nullptr;
 
@@ -25,21 +25,21 @@ extern "C" void *test_malloc(void *user_context, size_t x) {
     return result;
 }
 
-extern "C" void test_free(void *user_context, void *ptr) {
+extern "C" void test_free(JITUserContext *user_context, void *ptr) {
     total_allocated -= allocation_sizes[ptr];
     allocation_sizes.erase(ptr);
     free(ptr);
 }
 
 bool error_occurred = false;
-extern "C" void handler(void *user_context, const char *msg) {
+extern "C" void handler(JITUserContext *user_context, const char *msg) {
     printf("%s\n", msg);
     error_occurred = true;
 }
 
 int main(int argc, char **argv) {
     if (get_jit_target_from_environment().arch == Target::WebAssembly) {
-        printf("[SKIP] WebAssembly JIT does not support set_custom_allocator().\n");
+        printf("[SKIP] WebAssembly JIT does not support custom allocators.\n");
         return 0;
     }
 
@@ -57,8 +57,9 @@ int main(int argc, char **argv) {
     // Limit ourselves to two stages worth of address space
     mem_limit = big << 1;
 
-    funcs[funcs.size() - 1].set_custom_allocator(&test_malloc, &test_free);
-    funcs[funcs.size() - 1].set_error_handler(&handler);
+    funcs[funcs.size() - 1].jit_handlers().custom_malloc = test_malloc;
+    funcs[funcs.size() - 1].jit_handlers().custom_free = test_free;
+    funcs[funcs.size() - 1].jit_handlers().custom_error = handler;
     funcs[funcs.size() - 1].realize({1});
 
     if (!error_occurred) {

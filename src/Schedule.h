@@ -282,8 +282,8 @@ struct Split {
     std::string old_var, outer, inner;
     Expr factor;
     bool exact;  // Is it required that the factor divides the extent
-        // of the old var. True for splits of RVars. Forces
-        // tail strategy to be GuardWithIf.
+                 // of the old var. True for splits of RVars. Forces
+                 // tail strategy to be GuardWithIf.
     TailStrategy tail;
 
     enum SplitType { SplitVar = 0,
@@ -478,6 +478,9 @@ struct StorageDim {
     /** The bounds allocated (not computed) must be a multiple of
      * "alignment". Set by Func::align_storage. */
     Expr alignment;
+
+    /** The bounds allocated (not computed). Set by Func::bound_storage. */
+    Expr bound;
 
     /** If the Func is explicitly folded along this axis (with
      * Func::fold_storage) this gives the extent of the circular

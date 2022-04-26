@@ -12,8 +12,9 @@ set(CMAKE_CXX_EXTENSIONS NO)
 find_package(Halide REQUIRED)
 
 # Generator
-add_executable(bilateral_grid.generator bilateral_grid_generator.cpp)
-target_link_libraries(bilateral_grid.generator PRIVATE Halide::Generator Halide::Tools)
+add_halide_generator(bilateral_grid.generator
+                     SOURCES bilateral_grid_generator.cpp
+                     LINK_LIBRARIES Halide::Tools)
 
 # Filters
 add_halide_library(bilateral_grid FROM bilateral_grid.generator

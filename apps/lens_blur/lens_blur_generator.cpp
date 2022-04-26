@@ -8,8 +8,8 @@ using namespace Halide;
 
 class LensBlur : public Halide::Generator<LensBlur> {
 public:
-    Input<Buffer<uint8_t>> left_im{"left_im", 3};
-    Input<Buffer<uint8_t>> right_im{"right_im", 3};
+    Input<Buffer<uint8_t, 3>> left_im{"left_im"};
+    Input<Buffer<uint8_t, 3>> right_im{"right_im"};
     // The number of displacements to consider
     Input<int> slices{"slices", 32, 1, 64};
     // The depth to focus on
@@ -19,7 +19,7 @@ public:
     // The number of samples of the aperture to use
     Input<int> aperture_samples{"aperture_samples", 32, 1, 64};
 
-    Output<Buffer<float>> final{"final", 3};
+    Output<Buffer<float, 3>> final{"final"};
 
     void generate() {
         /* THE ALGORITHM */

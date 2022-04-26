@@ -96,22 +96,35 @@ void define_pipeline(py::module &m) {
 
             .def(
                 "realize", [](Pipeline &p, Buffer<> buffer, const Target &target) -> void {
-                    p.realize(Realization(buffer), target);
+                    py::gil_scoped_release release;
+                    p.realize(Realization(std::move(buffer)), target);
                 },
                 py::arg("dst"), py::arg("target") = Target())
+
+            // It's important to have this overload of realize() go first:
+            // passing an empty list [] is ambiguous in Python, and could match to
+            // either list-of-sizes or list-of-buffers... but the former is useful
+            // (it allows realizing a 0-dimensional/scalar buffer) and the former is
+            // not (it will always assert-fail). Putting this one first allows it to
+            // be the first one chosen by the bindings in this case.
+            .def(
+                "realize", [](Pipeline &p, std::vector<int32_t> sizes, const Target &target) -> py::object {
+                    std::optional<Realization> r;
+                    {
+                        py::gil_scoped_release release;
+                        r = p.realize(std::move(sizes), target);
+                    }
+                    return realization_to_object(*r);
+                },
+                py::arg("sizes") = std::vector<int32_t>{}, py::arg("target") = Target())
 
             // This will actually allow a list-of-buffers as well as a tuple-of-buffers, but that's OK.
             .def(
                 "realize", [](Pipeline &p, std::vector<Buffer<>> buffers, const Target &t) -> void {
-                    p.realize(Realization(buffers), t);
+                    py::gil_scoped_release release;
+                    p.realize(Realization(std::move(buffers)), t);
                 },
                 py::arg("dst"), py::arg("target") = Target())
-
-            .def(
-                "realize", [](Pipeline &p, std::vector<int32_t> sizes, const Target &target) -> py::object {
-                    return realization_to_object(p.realize(std::move(sizes), target));
-                },
-                py::arg("sizes") = std::vector<int32_t>{}, py::arg("target") = Target())
 
             .def(
                 "infer_input_bounds", [](Pipeline &p, const py::object &dst, const Target &target) -> void {
@@ -126,7 +139,7 @@ void define_pipeline(py::module &m) {
 
                     try {
                         std::vector<Buffer<>> v = dst.cast<std::vector<Buffer<>>>();
-                        p.infer_input_bounds(Realization(v), target);
+                        p.infer_input_bounds(Realization(std::move(v)), target);
                         return;
                     } catch (...) {
                         // fall thru

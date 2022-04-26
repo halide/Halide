@@ -3,7 +3,7 @@
 using namespace Halide;
 
 bool errored = false;
-void my_error(void *, const char *msg) {
+void my_error(JITUserContext *, const char *msg) {
     // Emitting "error.*:" to stdout or stderr will cause CMake to report the
     // test as a failure on Windows, regardless of error code returned,
     // hence the abbreviation to "err".
@@ -11,7 +11,7 @@ void my_error(void *, const char *msg) {
     errored = true;
 }
 
-void my_print(void *, const char *msg) {
+void my_print(JITUserContext *, const char *msg) {
     // Empty to neuter debug message spew
 }
 
@@ -39,8 +39,8 @@ int main(int argc, char **argv) {
     g.gpu_tile(x, xi, 8);
     f.compute_at(g, x).gpu_threads(x);
 
-    g.set_error_handler(&my_error);
-    g.set_custom_print(&my_print);
+    g.jit_handlers().custom_error = my_error;
+    g.jit_handlers().custom_print = my_print;
 
     // Should succeed
     g.realize({3, 100}, t);

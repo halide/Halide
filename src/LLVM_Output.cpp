@@ -360,6 +360,17 @@ void emit_file(const llvm::Module &module_in, Internal::LLVMOStream &out,
     }
 
     // Build up all of the passes that we want to do to the module.
+
+    // NOTE: use of the "legacy" PassManager here is still required; it is deprecated
+    // for optimization, but is still the only complete API for codegen as of work-in-progress
+    // LLVM14. At the time of this comment (Dec 2021), there is no firm plan as to when codegen will
+    // be fully available in the new PassManager, so don't worry about this 'legacy'
+    // tag until there's any indication that the old APIs start breaking.
+    //
+    // See:
+    // https://lists.llvm.org/pipermail/llvm-dev/2021-April/150100.html
+    // https://releases.llvm.org/13.0.0/docs/ReleaseNotes.html#changes-to-the-llvm-ir
+    // https://groups.google.com/g/llvm-dev/c/HoS07gXx0p8
     llvm::legacy::PassManager pass_manager;
 
     pass_manager.add(new llvm::TargetLibraryInfoWrapperPass(llvm::Triple(module->getTargetTriple())));

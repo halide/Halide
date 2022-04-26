@@ -39,11 +39,6 @@ class Param {
             << "or add Target::UserContext to the Target feature set when compiling ahead of time.";
     }
 
-    // Must be constexpr to allow use in case clauses.
-    inline static constexpr int halide_type_code(halide_type_code_t code, int bits) {
-        return (((int)code) << 8) | bits;
-    }
-
     // Allow all Param<> variants friend access to each other
     template<typename OTHER_TYPE>
     friend class Param;
@@ -110,7 +105,7 @@ public:
     }
 
     /** Construct a scalar parameter of type T with an initial value of 'val'
-    * and a given min and max. */
+     * and a given min and max. */
     Param(not_void_T val, const Expr &min, const Expr &max)
         : param(type_of<T>(), false, 0, Internal::make_entity_name(this, "Halide:.*:Param<.*>", 'p')) {
         static_assert(has_static_type, "Cannot use this ctor without an explicit type.");
@@ -189,14 +184,14 @@ public:
     template<typename SOME_TYPE, typename T2 = T, typename std::enable_if<std::is_void<T2>::value>::type * = nullptr>
     HALIDE_NO_USER_CODE_INLINE void set(const SOME_TYPE &val) {
 #define HALIDE_HANDLE_TYPE_DISPATCH(CODE, BITS, TYPE)                                     \
-    case halide_type_code(CODE, BITS):                                                    \
+    case halide_type_t(CODE, BITS).as_u32():                                              \
         user_assert(Internal::IsRoundtrippable<TYPE>::value(val))                         \
             << "The value " << val << " cannot be losslessly converted to type " << type; \
         param.set_scalar<TYPE>(Internal::StaticCast<TYPE>::value(val));                   \
         break;
 
         const Type type = param.type();
-        switch (halide_type_code(type.code(), type.bits())) {
+        switch (((halide_type_t)type).element_of().as_u32()) {
             HALIDE_HANDLE_TYPE_DISPATCH(halide_type_float, 32, float)
             HALIDE_HANDLE_TYPE_DISPATCH(halide_type_float, 64, double)
             HALIDE_HANDLE_TYPE_DISPATCH(halide_type_int, 8, int8_t)

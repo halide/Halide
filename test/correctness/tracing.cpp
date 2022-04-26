@@ -86,7 +86,7 @@ bool events_match(const event &a, const event &b) {
             !strcmp(a.trace_tag, b.trace_tag));
 }
 
-int my_trace(void *user_context, const halide_trace_event_t *ev) {
+int my_trace(JITUserContext *user_context, const halide_trace_event_t *ev) {
     assert(ev->dimensions <= 4 && ev->type.lanes <= 4);
 
     // Record this event in the trace array
@@ -194,7 +194,7 @@ int main(int argc, char **argv) {
     g.store_root().compute_at(f, x);
     g.vectorize(x, 4);
 
-    f.set_custom_trace(&my_trace);
+    f.jit_handlers().custom_trace = &my_trace;
 
     // Check that Target::TracePipeline works.
     f.realize({10}, get_jit_target_from_environment().with_feature(Target::TracePipeline));

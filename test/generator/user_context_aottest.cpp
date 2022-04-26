@@ -47,13 +47,13 @@ int main(int argc, char **argv) {
 
     int result;
 
-    Buffer<float> input(10, 10);
+    Buffer<float, 2> input(10, 10);
     for (int y = 0; y < 10; y++) {
         for (int x = 0; x < 10; x++) {
             input(x, y) = 1;
         }
     }
-    Buffer<float> output(10, 10);
+    Buffer<float, 2> output(10, 10);
 
     called_error = false;
     called_trace = false;
@@ -83,7 +83,7 @@ int main(int argc, char **argv) {
     assert(called_malloc && called_free);
     assert(called_trace && !called_error);
 
-    Buffer<float> big_output(11, 11);
+    Buffer<float, 2> big_output(11, 11);
     called_error = false;
     called_trace = false;
     called_malloc = false;

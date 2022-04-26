@@ -871,6 +871,10 @@ ComplexFunc fft2d_r2c(Func r,
     dft.update(4).allow_race_conditions().vectorize(n0z1, vector_size);
     dft.update(5).allow_race_conditions().vectorize(n0z2, vector_size);
 
+    // Intentionally serial
+    dft.update(0).unscheduled();
+    dft.update(3).unscheduled();
+
     // Our result is undefined outside these bounds.
     dft.bound(n0, 0, N0);
     dft.bound(n1, 0, (N1 + 1) / 2 + 1);

@@ -4,7 +4,7 @@
 using namespace Halide;
 
 int count = 0;
-int my_trace(void *user_context, const halide_trace_event_t *ev) {
+int my_trace(JITUserContext *user_context, const halide_trace_event_t *ev) {
     if (ev->event == halide_trace_load) {
         count++;
     }
@@ -28,7 +28,7 @@ int main(int argc, char **argv) {
     f(x, y) += select(x > -t && x < t, in(x, y), 0);
 
     in.trace_loads();
-    f.set_custom_trace(my_trace);
+    f.jit_handlers().custom_trace = my_trace;
     f.realize({20, 20});
 
     int c = 0;

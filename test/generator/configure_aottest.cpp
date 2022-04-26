@@ -12,25 +12,25 @@ const int kSize = 32;
 
 int main(int argc, char **argv) {
 
-    Buffer<int> input(kSize, kSize, 3);
+    Buffer<int, 3> input(kSize, kSize, 3);
     input.for_each_element([&](int x, int y, int c) {
         input(x, y, c) = (x * 3 + y * 5 + c * 7);
     });
 
-    std::vector<Buffer<uint8_t>> extras;
+    std::vector<Buffer<uint8_t, 2>> extras;
     int extra_value = 0;
     for (int i = 0; i < 3; ++i) {
-        extras.push_back(Buffer<uint8_t>(kSize, kSize));
+        extras.push_back(Buffer<uint8_t, 2>(kSize, kSize));
         extras.back().fill((uint8_t)i);
         extra_value += i;
     }
 
-    Buffer<int16_t> typed_extra(kSize, kSize);
+    Buffer<int16_t, 2> typed_extra(kSize, kSize);
     typed_extra.fill(4);
     extra_value += 4;
 
     // Funcs are aot-compiled as buffers.
-    Buffer<uint16_t> func_extra(kSize, kSize, 3);
+    Buffer<uint16_t, 3> func_extra(kSize, kSize, 3);
     func_extra.fill(5);
     extra_value += 5;
 
@@ -38,9 +38,9 @@ int main(int argc, char **argv) {
     const int8_t extra_dynamic_scalar = 13;
     extra_value += extra_scalar + extra_dynamic_scalar;
 
-    Buffer<int> output(kSize, kSize, 3);
-    Buffer<float> extra_buffer_output(kSize, kSize, 3);
-    Buffer<double> extra_func_output(kSize, kSize);
+    Buffer<int, 3> output(kSize, kSize, 3);
+    Buffer<float, 3> extra_buffer_output(kSize, kSize, 3);
+    Buffer<double, 2> extra_func_output(kSize, kSize);
 
     const int bias = 1;
     int result = configure(input, bias,
