@@ -108,6 +108,8 @@ void define_func(py::module &m) {
         py::class_<Func>(m, "Func")
             .def(py::init<>())
             .def(py::init<std::string>())
+            .def(py::init<Type, int, std::string>(), py::arg("required_type"), py::arg("required_dimensions"), py::arg("name"))
+            .def(py::init<std::vector<Type>, int, std::string>(), py::arg("required_types"), py::arg("required_dimensions"), py::arg("name"))
             .def(py::init<Expr>())
             .def(py::init([](Buffer<> &b) -> Func { return Func(b); }))
 
