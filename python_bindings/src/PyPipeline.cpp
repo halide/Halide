@@ -97,7 +97,7 @@ void define_pipeline(py::module &m) {
             .def(
                 "realize", [](Pipeline &p, Buffer<> buffer, const Target &target) -> void {
                     py::gil_scoped_release release;
-                    p.realize(Realization(buffer), target);
+                    p.realize(Realization(std::move(buffer)), target);
                 },
                 py::arg("dst"), py::arg("target") = Target())
 
