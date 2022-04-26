@@ -19,11 +19,9 @@ use std::ops::Add;
 use std::path::PathBuf;
 use std::process::{Command, Output};
 
-/// this builder must have a path to a complied Halide folder it is used to build multiple generators quickly
+/// This builder must have a path to a complied Halide folder. It is used to build multiple generators quickly
 ///
-/// more stuff
 ///
-/// examples?
 pub struct GenBuilder {
     halide_path: PathBuf,
     gen_path: PathBuf,
@@ -35,11 +33,10 @@ pub struct GenBuilder {
     target: String,
 }
 
-///This represents halide generator it is built using [GenBuilder]
+/// This represents a halide generator that is built using [GenBuilder]
 ///
-/// more stuff
 ///
-/// Examples?
+
 pub struct Generator<'a> {
     gen_name: String,
     gen_exe: PathBuf,
@@ -55,7 +52,7 @@ pub struct Generator<'a> {
 
 //Todo add runtime maker
 impl GenBuilder {
-    ///instantiate a GenBuilder
+    /// Instantiate a GenBuilder
     ///
     /// ```ignore
     /// let Hal = GenBuilder::new(
@@ -63,6 +60,7 @@ impl GenBuilder {
     ///        "Path/to/your/generators"
     ///    )
     /// ```
+    ///
     pub fn new<T: Into<PathBuf>>(
         halide_path: T,
         gen_path: T,
@@ -77,10 +75,11 @@ impl GenBuilder {
             target: "target=host-no_runtime".to_string(),
         }
     }
-    ///Override the output directory.
+    /// Override the output directory.
     ///
     /// by default this is the ENV "out_dir" but can be anywere
-    /// useful to place .rs and headers in a folder in the src of your project but means cargo does not clean these artifacts
+    /// useful to place .rs and headers in a folder in the src of your project but doing that 
+    /// means cargo does not clean these artifacts
     pub fn out_dir<T: Into<PathBuf>>(mut self, out: T) -> Self {
         self.rs_output = out.into();
         self
@@ -93,11 +92,12 @@ impl GenBuilder {
 
      */
     //Todo template all strings
-    ///Create a generator based on its name
+
+    /// Create a generator based on its name
     ///
-    /// We have strict naming conventions
-    ///     The generator source must be GenName.cpp
-    ///     The internal cpp class must also be GenName
+    /// We have strict naming conventions:   
+    ///    - The generator source must be gen_name.cpp   
+    ///    - The internal cpp class must also be gen_name
     ///
     ///```ignore
     /// let gen = genBuilder.new_gen(iir_blur);
@@ -127,7 +127,7 @@ impl GenBuilder {
         }
         //);self
     }
-    ///Sets the console debug for Halide generators by default this is false
+    /// Sets the console debug for Halide generators by default this is false
     pub fn debug(mut self, b:bool) ->Self{
         self.debug=b;
         self
@@ -144,25 +144,23 @@ impl GenBuilder {
 
      */
 }
-///This is a generator
-///
-/// more stuff
-///
-/// ```ignore
-///     let a = 5;
-/// ```
+///This is a generator built using [GenBuilder].new_gen()
 ///
 impl Generator<'static> {
-    ///Make the generator executable useing halide gengen and g++
+    ///Make the generator executable using halide gengen and g++
     pub fn compile(&self) -> Output {
 
         let mut cmd_compile = Command::new("g++");
         cmd_compile.args(["-std=c++17"]);
 
+        // Inlcude flags
         cmd_compile.args(["-I", self.halide_path.join("include").to_str().unwrap()]);
         cmd_compile.args(["-I", self.halide_path.join("tools").to_str().unwrap()]);
+
+        // Linker flag
         cmd_compile.args(["-L", self.halide_path.join("lib").to_str().unwrap()]);
 
+        // Output flag
         cmd_compile.args(["-o", self.gen_exe.to_str().unwrap()]);
 
         let temp = self
@@ -182,9 +180,12 @@ impl Generator<'static> {
         cmd_compile.output().expect("Make generator failed")
 
     }
-    /// runs the previously made executable
+    /// Runs the previously made executable
     ///
-    /// panics if unable to find or run the executable
+    /// Panics if unable to find or run the executable
+    ///```ignore
+    ///     gen.run_gen()
+    ///```
     pub fn run_gen(&self) -> Output {
         //assert!(!self.gen_exe.is_none());
         println!(
@@ -210,9 +211,10 @@ impl Generator<'static> {
         }
         gen.output().expect("failed to run")
     }
+
     /// Make the Halide runtime
     ///
-    /// The Halide runtime is required for useing halide and contains the buffer_t and other useful functions
+    /// The Halide runtime is required for using halide and contains the buffer_t and other useful functions
     pub fn make_runtime(&self) -> Result<()> {
         println!("Cmd to runt: {:?}", self.gen_exe.to_str().unwrap());
         let mut cmd = Command::new(self.gen_exe.to_str().unwrap());
@@ -232,7 +234,7 @@ impl Generator<'static> {
         }
         result
     }
-
+    
     fn rename_runtime(&self)->Result<()>{
         println!(
             "file name: {:?}",
@@ -263,7 +265,8 @@ impl Generator<'static> {
                 .unwrap(),
         )
     }
-    ///rename the gen outputs to be what rust and bindgen expect on linex distros
+
+    /// Renames the gen outputs to be what rust and bindgen expect on linux distros
     ///
     /// IE halide.a -> libhalide.a
     pub fn rename(&self) -> Result<()> {
@@ -296,7 +299,8 @@ impl Generator<'static> {
                 .unwrap(),
         )
     }
-    /// run bindgen on a generator
+
+    /// Run bindgen on a generator
     ///
     /// This bind only creates the genname funtion binding and specificly blocklists the buffer_t
     pub fn bind(&self) -> Result<()> {
@@ -322,7 +326,7 @@ impl Generator<'static> {
         bindings
     }
 
-    ///This complies-> runs-> renames-> binds the generator
+    /// This complies-> runs-> renames-> binds the generator
     ///
     /// panics if any step fails if it panics it is useful to call the functions separately and print there results or outputs
     pub fn build_bind(&self){
