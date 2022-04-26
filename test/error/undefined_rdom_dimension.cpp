@@ -2,13 +2,13 @@
 #include <assert.h>
 #include <stdio.h>
 
+using namespace Halide;
+
 int error_occurred = false;
-void halide_error(void *ctx, const char *msg) {
+void my_error(JITUserContext *ctx, const char *msg) {
     printf("Expected: %s\n", msg);
     error_occurred = true;
 }
-
-using namespace Halide;
 
 int main(int argc, char **argv) {
     Func f("f"), g("g"), h("h");
@@ -20,7 +20,7 @@ int main(int argc, char **argv) {
     f(x, y, c) = g(x, y, c);
     f(r.x, r.y, c) = f(r.x - 1, r.y, c) + h(r.x, r.y, c);
 
-    f.set_error_handler(&halide_error);
+    f.jit_handlers().custom_error = my_error;
     Buffer<int32_t> result = f.realize({100, 5, 3});
 
     assert(error_occurred);

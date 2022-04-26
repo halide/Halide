@@ -21,11 +21,11 @@ int main(int argc, char **argv) {
     }
 
     // Input may be a PNG8
-    Buffer<uint16_t> input = load_and_convert_image(argv[1]);
+    Buffer<uint16_t, 3> input = load_and_convert_image(argv[1]);
 
     int levels = atoi(argv[2]);
     float alpha = atof(argv[3]), beta = atof(argv[4]);
-    Buffer<uint16_t> output(input.width(), input.height(), 3);
+    Buffer<uint16_t, 3> output(input.width(), input.height(), 3);
     int timing = atoi(argv[5]);
 
     local_laplacian(input, levels, alpha / (levels - 1), beta, output);

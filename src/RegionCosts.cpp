@@ -371,7 +371,7 @@ Expr get_func_value_size(const Function &f) {
 
 Cost compute_expr_cost(Expr expr) {
     // TODO: Handle likely
-    //expr = LikelyExpression().mutate(expr);
+    // expr = LikelyExpression().mutate(expr);
     expr = simplify(expr);
     ExprCost cost_visitor;
     expr.accept(&cost_visitor);
@@ -380,7 +380,7 @@ Cost compute_expr_cost(Expr expr) {
 
 map<string, Expr> compute_expr_detailed_byte_loads(Expr expr) {
     // TODO: Handle likely
-    //expr = LikelyExpression().mutate(expr);
+    // expr = LikelyExpression().mutate(expr);
     expr = simplify(expr);
     ExprCost cost_visitor;
     expr.accept(&cost_visitor);
@@ -508,7 +508,7 @@ RegionCosts::stage_detailed_load_costs(const string &func, int stage,
 
     if (curr_f.has_extern_definition()) {
         // TODO(psuriana): We need a better cost for extern function
-        //load_costs.emplace(func, Int(64).max());
+        // load_costs.emplace(func, Int(64).max());
         load_costs.emplace(func, Expr());
     } else {
         Definition def = get_stage_definition(curr_f, stage);

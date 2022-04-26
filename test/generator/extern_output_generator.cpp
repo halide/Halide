@@ -5,9 +5,9 @@ using namespace Halide;
 namespace {
 
 class ExternOutput : public Generator<ExternOutput> {
-    Input<Buffer<int>> input{"input", 2};
+    Input<Buffer<int, 2>> input{"input"};
     Input<int> addend{"addend"};
-    Output<Buffer<int>> output{"output", 2};
+    Output<Buffer<int, 2>> output{"output"};
 
     Func work;
     Var x, y;

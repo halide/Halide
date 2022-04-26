@@ -117,6 +117,13 @@ public:
 
             check("pmulhuw", 4 * w, i16_1 / 15);
 
+            // Shifts by amounts other than 16 can also use this instruction, by
+            // preshifting an arg (when there are bits of headroom), or
+            // postshifting the result.
+            check("pmulhuw", 4 * w, u16((u32(u16_1) * u32(u8_2)) >> 13));
+            check("pmulhw", 4 * w, i16((i32(i16_1) * i32(i16_2)) >> 17));
+            check("pmulhuw", 4 * w, u16((u32(u16_1) * u32(u16_2)) >> 18));
+
             if (w > 1) {  // LLVM does a lousy job at the comparisons for 64-bit types
                 check("pcmp*b", 8 * w, select(u8_1 == u8_2, u8(1), u8(2)));
                 check("pcmp*b", 8 * w, select(u8_1 > u8_2, u8(1), u8(2)));
@@ -138,7 +145,7 @@ public:
                 // fast-math on (instead it uses the approximate
                 // reciprocal, a newtown rhapson step, and a
                 // multiplication by the numerator).
-                //check("divps", 2*w, f32_1 / f32_2);
+                // check("divps", 2*w, f32_1 / f32_2);
             }
 
             check(use_avx512 ? "vrsqrt*ps" : "rsqrtps", 2 * w, fast_inverse_sqrt(f32_1));
@@ -150,6 +157,11 @@ public:
             check("pavgb", 8 * w, u8((u16(u8_1) + u16(u8_2) + 1) >> 1));
             check("pavgw", 4 * w, u16((u32(u16_1) + u32(u16_2) + 1) / 2));
             check("pavgw", 4 * w, u16((u32(u16_1) + u32(u16_2) + 1) >> 1));
+
+            // Rounding right shifts should also use pavg
+            check("pavgb", 8 * w, rounding_shift_right(u8_1, 2));
+            check("pavgw", 4 * w, rounding_shift_right(u16_1, 2));
+
             check("pmaxsw", 4 * w, max(i16_1, i16_2));
             check("pminsw", 4 * w, min(i16_1, i16_2));
             check("pmaxub", 8 * w, max(u8_1, u8_2));
@@ -166,8 +178,8 @@ public:
             check("cmpltps", 2 * w, select(f32_1 < f32_2, 1.0f, 2.0f));
 
             // These get normalized to not of eq, and not of lt with the args flipped
-            //check("cmpneqps", 2*w, cast<int32_t>(f32_1 != f32_2));
-            //check("cmpleps", 2*w, cast<int32_t>(f32_1 <= f32_2));
+            // check("cmpneqps", 2*w, cast<int32_t>(f32_1 != f32_2));
+            // check("cmpleps", 2*w, cast<int32_t>(f32_1 <= f32_2));
         }
 
         // These guys get normalized to the integer versions for widths
@@ -182,8 +194,8 @@ public:
         }
 
         // These ones are not necessary, because we just flip the args and cmpltps or cmpleps
-        //check("cmpnleps", 4, select(f32_1 > f32_2, 1.0f, 2.0f));
-        //check("cmpnltps", 4, select(f32_1 >= f32_2, 1.0f, 2.0f));
+        // check("cmpnleps", 4, select(f32_1 > f32_2, 1.0f, 2.0f));
+        // check("cmpnltps", 4, select(f32_1 >= f32_2, 1.0f, 2.0f));
 
         check("shufps", 4, in_f32(2 * x));
 
@@ -199,20 +211,20 @@ public:
             check("minpd", w, min(f64_1, f64_2));
 
             check("cmpeqpd", w, select(f64_1 == f64_2, 1.0f, 2.0f));
-            //check("cmpneqpd", w, select(f64_1 != f64_2, 1.0f, 2.0f));
-            //check("cmplepd", w, select(f64_1 <= f64_2, 1.0f, 2.0f));
+            // check("cmpneqpd", w, select(f64_1 != f64_2, 1.0f, 2.0f));
+            // check("cmplepd", w, select(f64_1 <= f64_2, 1.0f, 2.0f));
             check("cmpltpd", w, select(f64_1 < f64_2, 1.0f, 2.0f));
 
             // llvm is pretty inconsistent about which ops get generated
             // for casts. We don't intend to catch these for now, so skip
             // them.
 
-            //check("cvttpd2dq", 4, i32(f64_1));
-            //check("cvtdq2pd", 4, f64(i32_1));
-            //check("cvttps2dq", 4, i32(f32_1));
-            //check("cvtdq2ps", 4, f32(i32_1));
-            //check("cvtps2pd", 4, f64(f32_1));
-            //check("cvtpd2ps", 4, f32(f64_1));
+            // check("cvttpd2dq", 4, i32(f64_1));
+            // check("cvtdq2pd", 4, f64(i32_1));
+            // check("cvttps2dq", 4, i32(f32_1));
+            // check("cvtdq2ps", 4, f32(i32_1));
+            // check("cvtps2pd", 4, f64(f32_1));
+            // check("cvtpd2ps", 4, f32(f64_1));
 
             check("paddq", w, i64_1 + i64_2);
             check("psubq", w, i64_1 - i64_2);
@@ -306,10 +318,13 @@ public:
             // And also for dot-products
             RDom r4(0, 4);
             check(check_pmaddwd, 2 * w, sum(i32(in_i16(x * 4 + r4)) * in_i16(x * 4 + r4 + 32)));
+
+            // Also generate for widening_mul
+            check(check_pmaddwd, 2 * w, i32(i16_1) * i32(i16_2));
         }
 
         // llvm doesn't distinguish between signed and unsigned multiplies
-        //check("pmuldq", 4, i64(i32_1) * i64(i32_2));
+        // check("pmuldq", 4, i64(i32_1) * i64(i32_2));
 
         if (use_sse41) {
             for (int w = 2; w <= 4; w++) {
@@ -375,8 +390,8 @@ public:
             check("vsubps*ymm", 8, f32_1 - f32_2);
             check("vsubpd*ymm", 4, f64_1 - f64_2);
             // LLVM no longer generates division instruction when fast-math is on
-            //check("vdivps", 8, f32_1 / f32_2);
-            //check("vdivpd", 4, f64_1 / f64_2);
+            // check("vdivps", 8, f32_1 / f32_2);
+            // check("vdivpd", 4, f64_1 / f64_2);
             check("vminps*ymm", 8, min(f32_1, f32_2));
             check("vminpd*ymm", 4, min(f64_1, f64_2));
             check("vmaxps*ymm", 8, max(f32_1, f32_2));
@@ -385,12 +400,12 @@ public:
             check("vroundpd*ymm", 4, round(f64_1));
 
             check("vcmpeqpd*ymm", 4, select(f64_1 == f64_2, 1.0f, 2.0f));
-            //check("vcmpneqpd", 4, select(f64_1 != f64_2, 1.0f, 2.0f));
-            //check("vcmplepd", 4, select(f64_1 <= f64_2, 1.0f, 2.0f));
+            // check("vcmpneqpd", 4, select(f64_1 != f64_2, 1.0f, 2.0f));
+            // check("vcmplepd", 4, select(f64_1 <= f64_2, 1.0f, 2.0f));
             check("vcmpltpd*ymm", 4, select(f64_1 < f64_2, 1.0f, 2.0f));
             check("vcmpeqps*ymm", 8, select(f32_1 == f32_2, 1.0f, 2.0f));
-            //check("vcmpneqps", 8, select(f32_1 != f32_2, 1.0f, 2.0f));
-            //check("vcmpleps", 8, select(f32_1 <= f32_2, 1.0f, 2.0f));
+            // check("vcmpneqps", 8, select(f32_1 != f32_2, 1.0f, 2.0f));
+            // check("vcmpleps", 8, select(f32_1 <= f32_2, 1.0f, 2.0f));
             check("vcmpltps*ymm", 8, select(f32_1 < f32_2, 1.0f, 2.0f));
 
             // avx512 can do predicated mov ops instead of blends
@@ -946,12 +961,21 @@ public:
             check(arm32 ? "vmovl.u32" : "ushll", 2 * w, i64(u32_1));
 
             // VMOVN    I       -       Move and Narrow
-            check(arm32 ? "vmovn.i16" : "xtn", 8 * w, i8(i16_1));
-            check(arm32 ? "vmovn.i16" : "xtn", 8 * w, u8(u16_1));
-            check(arm32 ? "vmovn.i32" : "xtn", 4 * w, i16(i32_1));
-            check(arm32 ? "vmovn.i32" : "xtn", 4 * w, u16(u32_1));
-            check(arm32 ? "vmovn.i64" : "xtn", 2 * w, i32(i64_1));
-            check(arm32 ? "vmovn.i64" : "xtn", 2 * w, u32(u64_1));
+            if (Halide::Internal::get_llvm_version() >= 140 && w > 1) {
+                check(arm32 ? "vmovn.i16" : "uzp1", 8 * w, i8(i16_1));
+                check(arm32 ? "vmovn.i16" : "uzp1", 8 * w, u8(u16_1));
+                check(arm32 ? "vmovn.i32" : "uzp1", 4 * w, i16(i32_1));
+                check(arm32 ? "vmovn.i32" : "uzp1", 4 * w, u16(u32_1));
+                check(arm32 ? "vmovn.i64" : "uzp1", 2 * w, i32(i64_1));
+                check(arm32 ? "vmovn.i64" : "uzp1", 2 * w, u32(u64_1));
+            } else {
+                check(arm32 ? "vmovn.i16" : "xtn", 8 * w, i8(i16_1));
+                check(arm32 ? "vmovn.i16" : "xtn", 8 * w, u8(u16_1));
+                check(arm32 ? "vmovn.i32" : "xtn", 4 * w, i16(i32_1));
+                check(arm32 ? "vmovn.i32" : "xtn", 4 * w, u16(u32_1));
+                check(arm32 ? "vmovn.i64" : "xtn", 2 * w, i32(i64_1));
+                check(arm32 ? "vmovn.i64" : "xtn", 2 * w, u32(u64_1));
+            }
 
             // VMRS     X       F, D    Move Advanced SIMD or VFP Register to ARM compute Engine
             // VMSR     X       F, D    Move ARM Core Register to Advanced SIMD or VFP
@@ -1185,6 +1209,10 @@ public:
             check(arm32 ? "vqmovn.u32" : "uqxtn", 4 * w, u16(min(u32_1, max_u16)));
             check(arm32 ? "vqmovn.u32" : "uqxtn", 4 * w, u16(min(u64_1, max_u16)));
             check(arm32 ? "vqmovn.u64" : "uqxtn", 2 * w, u32(min(u64_1, max_u32)));
+            // Double/Triple saturating narrow from float
+            check(arm32 ? "vqmovn.s16" : "sqxtn", 8 * w, i8_sat(f32_1));
+            check(arm32 ? "vqmovn.s16" : "sqxtn", 8 * w, i8_sat(f64_1));
+            check(arm32 ? "vqmovn.s32" : "sqxtn", 4 * w, i16_sat(f64_1));
 
             // VQMOVUN  I       -       Saturating Move and Unsigned Narrow
             check(arm32 ? "vqmovun.s16" : "sqxtun", 8 * w, u8_sat(i16_1));
@@ -1193,6 +1221,10 @@ public:
             check(arm32 ? "vqmovun.s32" : "sqxtun", 4 * w, u16_sat(i32_1));
             check(arm32 ? "vqmovun.s32" : "sqxtun", 4 * w, u16_sat(i64_1));
             check(arm32 ? "vqmovun.s64" : "sqxtun", 2 * w, u32_sat(i64_1));
+            // Double/Triple saturating narrow from float
+            check(arm32 ? "vqmovun.s16" : "sqxtun", 8 * w, u8_sat(f32_1));
+            check(arm32 ? "vqmovun.s16" : "sqxtun", 8 * w, u8_sat(f64_1));
+            check(arm32 ? "vqmovun.s32" : "sqxtun", 4 * w, u16_sat(f64_1));
 
             // VQNEG    I       -       Saturating Negate
             check(arm32 ? "vqneg.s8" : "sqneg", 8 * w, -max(i8_1, -max_i8));
@@ -1215,7 +1247,7 @@ public:
             check(arm32 ? "vqrshrun.s64" : "sqrshrun", 2 * w, u32_sat((i64_1 + 8) / 16));
             check(arm32 ? "vqrshrn.u16" : "uqrshrn", 8 * w, u8(min((u32(u16_1) + 8) / 16, max_u8)));
             check(arm32 ? "vqrshrn.u32" : "uqrshrn", 4 * w, u16(min((u64(u32_1) + 8) / 16, max_u16)));
-            //check(arm32 ? "vqrshrn.u64" : "uqrshrn", 2 * w, u32(min((u64_1 + 8) / 16, max_u32)));
+            // check(arm32 ? "vqrshrn.u64" : "uqrshrn", 2 * w, u32(min((u64_1 + 8) / 16, max_u32)));
 
             // VQSHL    I       -       Saturating Shift Left
             check(arm32 ? "vqshl.s8" : "sqshl", 8 * w, i8_sat(i16(i8_1) * 16));
@@ -1258,7 +1290,7 @@ public:
             check(arm32 ? "vraddhn.i32" : "raddhn", 4 * w, i16((i32_1 + i32_2 + 32768) >> 16));
             check(arm32 ? "vraddhn.i32" : "raddhn", 4 * w, u16((u64(u32_1 + u32_2) + 32768) >> 16));
             check(arm32 ? "vraddhn.i64" : "raddhn", 2 * w, i32((i64_1 + i64_2 + (Expr(int64_t(1)) << 31)) >> 32));
-            //check(arm32 ? "vraddhn.i64" : "raddhn", 2 * w, u32((u128(u64_1) + u64_2 + (Expr(uint64_t(1)) << 31)) >> 32));
+            // check(arm32 ? "vraddhn.i64" : "raddhn", 2 * w, u32((u128(u64_1) + u64_2 + (Expr(uint64_t(1)) << 31)) >> 32));
 
             // VRECPE   I, F    -       Reciprocal Estimate
             check(arm32 ? "vrecpe.f32" : "frecpe", 2 * w, fast_inverse(f32_1));
@@ -1322,12 +1354,23 @@ public:
             check(arm32 ? "vrshr.u32" : "urshr", 4 * w, u32((u64(u32_1) + 32) >> 6));
 
             // VRSHRN   I       -       Rounding Shift Right Narrow
-            check(arm32 ? "vrshrn.i16" : "rshrn", 8 * w, i8((i32(i16_1) + 128) >> 8));
-            check(arm32 ? "vrshrn.i32" : "rshrn", 4 * w, i16((i32_1 + 256) >> 9));
-            check(arm32 ? "vrshrn.i64" : "rshrn", 2 * w, i32((i64_1 + 8) >> 4));
-            check(arm32 ? "vrshrn.i16" : "rshrn", 8 * w, u8((u32(u16_1) + 128) >> 8));
-            check(arm32 ? "vrshrn.i32" : "rshrn", 4 * w, u16((u64(u32_1) + 1024) >> 11));
-            //check(arm32 ? "vrshrn.i64" : "rshrn", 2 * w, u32((u64_1 + 64) >> 7));
+            if (Halide::Internal::get_llvm_version() >= 140) {
+                // LLVM14 converts RSHRN/RSHRN2 to RADDHN/RADDHN2 when the shift amount is half the width of the vector element
+                // See https://reviews.llvm.org/D116166
+                check(arm32 ? "vrshrn.i16" : "raddhn", 8 * w, i8((i32(i16_1) + 128) >> 8));
+                check(arm32 ? "vrshrn.i32" : "rshrn", 4 * w, i16((i32_1 + 256) >> 9));
+                check(arm32 ? "vrshrn.i64" : "rshrn", 2 * w, i32((i64_1 + 8) >> 4));
+                check(arm32 ? "vrshrn.i16" : "raddhn", 8 * w, u8((u32(u16_1) + 128) >> 8));
+                check(arm32 ? "vrshrn.i32" : "rshrn", 4 * w, u16((u64(u32_1) + 1024) >> 11));
+                // check(arm32 ? "vrshrn.i64" : "raddhn", 2 * w, u32((u64_1 + 64) >> 7));
+            } else {
+                check(arm32 ? "vrshrn.i16" : "rshrn", 8 * w, i8((i32(i16_1) + 128) >> 8));
+                check(arm32 ? "vrshrn.i32" : "rshrn", 4 * w, i16((i32_1 + 256) >> 9));
+                check(arm32 ? "vrshrn.i64" : "rshrn", 2 * w, i32((i64_1 + 8) >> 4));
+                check(arm32 ? "vrshrn.i16" : "rshrn", 8 * w, u8((u32(u16_1) + 128) >> 8));
+                check(arm32 ? "vrshrn.i32" : "rshrn", 4 * w, u16((u64(u32_1) + 1024) >> 11));
+                // check(arm32 ? "vrshrn.i64" : "rshrn", 2 * w, u32((u64_1 + 64) >> 7));
+            }
 
             // VRSQRTE  I, F    -       Reciprocal Square Root Estimate
             check(arm32 ? "vrsqrte.f32" : "frsqrte", 4 * w, fast_inverse_sqrt(f32_1));
@@ -1349,7 +1392,7 @@ public:
             check(arm32 ? "vrsubhn.i32" : "rsubhn", 4 * w, i16((i32_1 - i32_2 + 32768) >> 16));
             check(arm32 ? "vrsubhn.i32" : "rsubhn", 4 * w, u16((u64(u32_1 - u32_2) + 32768) >> 16));
             check(arm32 ? "vrsubhn.i64" : "rsubhn", 2 * w, i32((i64_1 - i64_2 + (Expr(int64_t(1)) << 31)) >> 32));
-            //check(arm32 ? "vrsubhn.i64" : "rsubhn", 2 * w, u32((u64_1 - u64_2 + (Expr(uint64_t(1)) << 31)) >> 32));
+            // check(arm32 ? "vrsubhn.i64" : "rsubhn", 2 * w, u32((u64_1 - u64_2 + (Expr(uint64_t(1)) << 31)) >> 32));
 
             // VSHL     I       -       Shift Left
             check(arm32 ? "vshl.i8" : "shl", 8 * w, i8_1 * 16);
@@ -1584,7 +1627,7 @@ public:
         Expr u32_1 = in_u32(x), u32_2 = in_u32(x + 16), u32_3 = in_u32(x + 32);
         Expr i64_1 = in_i64(x), i64_2 = in_i64(x + 16), i64_3 = in_i64(x + 32);
         Expr u64_1 = in_u64(x), u64_2 = in_u64(x + 16), u64_3 = in_u64(x + 32);
-        //Expr bool_1 = (f32_1 > 0.3f), bool_2 = (f32_1 < -0.3f), bool_3 = (f32_1 != -0.34f);
+        // Expr bool_1 = (f32_1 > 0.3f), bool_2 = (f32_1 < -0.3f), bool_3 = (f32_1 != -0.34f);
 
         // Basic AltiVec SIMD instructions.
         for (int w = 1; w <= 4; w++) {
@@ -1609,6 +1652,9 @@ public:
             check("vsububs", 16 * w, u8(max(i16(u8_1) - i16(u8_2), 0)));
             check("vsubuhs", 8 * w, u16(max(i32(u16_1) - i32(u16_2), 0)));
             check("vsubuws", 4 * w, u32(max(i64(u32_1) - i64(u32_2), 0)));
+            check("vsububs", 16 * w, absd(i8_1, i8_2));
+            check("vsubuhs", 16 * w, absd(i16_1, i16_2));
+            check("vsubuws", 16 * w, absd(i32_1, i32_2));
 
             // Vector Integer Average Instructions.
             check("vavgsb", 16 * w, i8((i16(i8_1) + i16(i8_2) + 1) / 2));
@@ -1723,32 +1769,17 @@ public:
         if (use_wasm_simd128) {
             for (int w = 1; w <= 4; w <<= 1) {
                 // create arbitrary 16-byte constant
-                if (Halide::Internal::get_llvm_version() >= 130) {
-                    check("v128.const", 16 * w, u8_1 * u8(42 + x));
-                }
+                check("v128.const", 16 * w, u8_1 * u8(42 + x));
 
                 // Create vector with identical lanes
                 // (Note that later LLVMs will use 64-bit constants for some smaller splats)
                 check("i8x16.splat", 16 * w, u8_1 * u8(42));
-                if (Halide::Internal::get_llvm_version() >= 130) {
-                    // LLVM13 likes to emit all of these as v128.const
-                    check("v128.const", 8 * w, u16_1 * u16(42));
-                    check("v128.const", 4 * w, u32_1 * u32(42));
-                    check("v128.const", 2 * w, u64_1 * u64(42));
-                    check("v128.const", 8 * w, f32_1 * f32(42));
-                    check("v128.const", 4 * w, f64_1 * f64(42));
-                } else {
-                    if (Halide::Internal::get_llvm_version() == 120) {
-                        check("i64x2.splat", 8 * w, u16_1 * u16(42));
-                        check("i64x2.splat", 4 * w, u32_1 * u32(42));
-                    } else {
-                        check("i16x8.splat", 8 * w, u16_1 * u16(42));
-                        check("i32x4.splat", 4 * w, u32_1 * u32(42));
-                    }
-                    check("i64x2.splat", 2 * w, u64_1 * u64(42));
-                    check("f32x4.splat", 8 * w, f32_1 * f32(42));
-                    check("f64x2.splat", 4 * w, f64_1 * f64(42));
-                }
+                // LLVM13 likes to emit all of these as v128.const
+                check("v128.const", 8 * w, u16_1 * u16(42));
+                check("v128.const", 4 * w, u32_1 * u32(42));
+                check("v128.const", 2 * w, u64_1 * u64(42));
+                check("v128.const", 8 * w, f32_1 * f32(42));
+                check("v128.const", 4 * w, f64_1 * f64(42));
 
                 // Extract lane as a scalar (extract_lane)
                 // Replace lane value (replace_lane)
@@ -1756,16 +1787,9 @@ public:
                 // to be used explicitly
 
                 // Shuffling using immediate indices
-                if (Halide::Internal::get_llvm_version() >= 120) {
-                    check("i8x16.shuffle", 16 * w, in_u8(2 * x));
-                    check("i8x16.shuffle", 8 * w, in_u16(2 * x));
-                    check("i8x16.shuffle", 4 * w, in_u32(2 * x));
-                } else {
-                    // older mnemonics
-                    check("v8x16.shuffle", 16 * w, in_u8(2 * x));
-                    check("v8x16.shuffle", 8 * w, in_u16(2 * x));
-                    check("v8x16.shuffle", 4 * w, in_u32(2 * x));
-                }
+                check("i8x16.shuffle", 16 * w, in_u8(2 * x));
+                check("i8x16.shuffle", 8 * w, in_u16(2 * x));
+                check("i8x16.shuffle", 4 * w, in_u32(2 * x));
 
                 // Swizzling using variable indices
                 // (This fails to generate, but that's not entirely surprising -- I don't
@@ -1795,13 +1819,11 @@ public:
                 check("i32x4.mul", 4 * w, i32_1 * i32_2);
                 check("i64x2.mul", 2 * w, i64_1 * i64_2);
 
-                if (Halide::Internal::get_llvm_version() >= 130) {
-                    // Integer dot product (16 -> 32)
-                    for (int f : {2, 4, 8}) {
-                        RDom r(0, f);
-                        for (int v : {1, 2, 4}) {
-                            check("i32x4.dot_i16x8_s", w * v, sum(i32(in_i16(f * x + r)) * in_i16(f * x + r + 32)));
-                        }
+                // Integer dot product (16 -> 32)
+                for (int f : {2, 4, 8}) {
+                    RDom r(0, f);
+                    for (int v : {1, 2, 4}) {
+                        check("i32x4.dot_i16x8_s", w * v, sum(i32(in_i16(f * x + r)) * in_i16(f * x + r + 32)));
                     }
                 }
 
@@ -1811,72 +1833,65 @@ public:
                 check("i32x4.neg", 4 * w, -i32_1);
                 check("i64x2.neg", 2 * w, -i64_1);
 
-                if (Halide::Internal::get_llvm_version() >= 130) {
-                    // At present, we only attempt to generate these for LLVM >= 13.
+                // Extended (widening) integer multiplication
+                if (w > 1) {
+                    // Need a register wider than 128 bits for us to generate these
+                    check("i16x8.extmul_low_i8x16_s", 8 * w, i16(i8_1) * i8_2);
+                    check("i32x4.extmul_low_i16x8_s", 4 * w, i32(i16_1) * i16_2);
+                    check("i64x2.extmul_low_i32x4_s", 2 * w, i64(i32_1) * i32_2);
+                    check("i16x8.extmul_low_i8x16_u", 8 * w, u16(u8_1) * u8_2);
+                    check("i32x4.extmul_low_i16x8_u", 4 * w, u32(u16_1) * u16_2);
+                    check("i64x2.extmul_low_i32x4_u", 2 * w, u64(u32_1) * u32_2);
+                    check("i16x8.extmul_high_i8x16_s", 8 * w, i16(i8_1) * i8_2);
+                    check("i32x4.extmul_high_i16x8_s", 4 * w, i32(i16_1) * i16_2);
+                    check("i64x2.extmul_high_i32x4_s", 2 * w, i64(i32_1) * i32_2);
+                    check("i16x8.extmul_high_i8x16_u", 8 * w, u16(u8_1) * u8_2);
+                    check("i32x4.extmul_high_i16x8_u", 4 * w, u32(u16_1) * u16_2);
+                    check("i64x2.extmul_high_i32x4_u", 2 * w, u64(u32_1) * u32_2);
+                }
 
-                    // Extended (widening) integer multiplication
-                    if (w > 1) {
-                        // Need a register wider than 128 bits for us to generate these
-                        check("i16x8.extmul_low_i8x16_s", 8 * w, i16(i8_1) * i8_2);
-                        check("i32x4.extmul_low_i16x8_s", 4 * w, i32(i16_1) * i16_2);
-                        check("i64x2.extmul_low_i32x4_s", 2 * w, i64(i32_1) * i32_2);
-                        check("i16x8.extmul_low_i8x16_u", 8 * w, u16(u8_1) * u8_2);
-                        check("i32x4.extmul_low_i16x8_u", 4 * w, u32(u16_1) * u16_2);
-                        check("i64x2.extmul_low_i32x4_u", 2 * w, u64(u32_1) * u32_2);
-                        check("i16x8.extmul_high_i8x16_s", 8 * w, i16(i8_1) * i8_2);
-                        check("i32x4.extmul_high_i16x8_s", 4 * w, i32(i16_1) * i16_2);
-                        check("i64x2.extmul_high_i32x4_s", 2 * w, i64(i32_1) * i32_2);
-                        check("i16x8.extmul_high_i8x16_u", 8 * w, u16(u8_1) * u8_2);
-                        check("i32x4.extmul_high_i16x8_u", 4 * w, u32(u16_1) * u16_2);
-                        check("i64x2.extmul_high_i32x4_u", 2 * w, u64(u32_1) * u32_2);
-                    }
+                // Extended pairwise integer addition
+                for (int f : {2, 4}) {
+                    RDom r(0, f);
 
-                    // Extended pairwise integer addition
-                    for (int f : {2, 4}) {
-                        RDom r(0, f);
+                    // A summation reduction that starts at something
+                    // non-trivial, to avoid llvm simplifying accumulating
+                    // widening summations into just widening summations.
+                    auto sum_ = [&](Expr e) {
+                        Func f;
+                        f(x) = cast(e.type(), 123);
+                        f(x) += e;
+                        return f(x);
+                    };
 
-                        // A summation reduction that starts at something
-                        // non-trivial, to avoid llvm simplifying accumulating
-                        // widening summations into just widening summations.
-                        auto sum_ = [&](Expr e) {
-                            Func f;
-                            f(x) = cast(e.type(), 123);
-                            f(x) += e;
-                            return f(x);
-                        };
+                    check("i16x8.extadd_pairwise_i8x16_s", 8 * w, sum_(i16(in_i8(f * x + r))));
+                    check("i16x8.extadd_pairwise_i8x16_u", 8 * w, sum_(u16(in_u8(f * x + r))));
+                    // The u8->i16 op uses the unsigned variant
+                    check("i16x8.extadd_pairwise_i8x16_u", 8 * w, sum_(i16(in_u8(f * x + r))));
 
-                        check("i16x8.extadd_pairwise_i8x16_s", 8 * w, sum_(i16(in_i8(f * x + r))));
-                        check("i16x8.extadd_pairwise_i8x16_u", 8 * w, sum_(u16(in_u8(f * x + r))));
-                        // The u8->i16 op uses the unsigned variant
-                        check("i16x8.extadd_pairwise_i8x16_u", 8 * w, sum_(i16(in_u8(f * x + r))));
-
-                        check("i32x4.extadd_pairwise_i16x8_s", 8 * w, sum_(i32(in_i16(f * x + r))));
-                        check("i32x4.extadd_pairwise_i16x8_u", 8 * w, sum_(u32(in_u16(f * x + r))));
-                        // The u16->i32 op uses the unsigned variant
-                        check("i32x4.extadd_pairwise_i16x8_u", 8 * w, sum_(i32(in_u16(f * x + r))));
-                    }
+                    check("i32x4.extadd_pairwise_i16x8_s", 8 * w, sum_(i32(in_i16(f * x + r))));
+                    check("i32x4.extadd_pairwise_i16x8_u", 8 * w, sum_(u32(in_u16(f * x + r))));
+                    // The u16->i32 op uses the unsigned variant
+                    check("i32x4.extadd_pairwise_i16x8_u", 8 * w, sum_(i32(in_u16(f * x + r))));
                 }
 
                 // Saturating integer addition
-                std::string sat = Halide::Internal::get_llvm_version() >= 130 ? "sat" : "saturate";
-                check("i8x16.add_" + sat + "_s", 16 * w, i8_sat(i16(i8_1) + i16(i8_2)));
-                check("i8x16.add_" + sat + "_u", 16 * w, u8_sat(u16(u8_1) + u16(u8_2)));
-                check("i16x8.add_" + sat + "_s", 8 * w, i16_sat(i32(i16_1) + i32(i16_2)));
-                check("i16x8.add_" + sat + "_u", 8 * w, u16_sat(u32(u16_1) + u32(u16_2)));
+                check("i8x16.add_sat_s", 16 * w, i8_sat(i16(i8_1) + i16(i8_2)));
+                check("i8x16.add_sat_u", 16 * w, u8_sat(u16(u8_1) + u16(u8_2)));
+                check("i16x8.add_sat_s", 8 * w, i16_sat(i32(i16_1) + i32(i16_2)));
+                check("i16x8.add_sat_u", 8 * w, u16_sat(u32(u16_1) + u32(u16_2)));
 
                 // Saturating integer subtraction
-                check("i8x16.sub_" + sat + "_s", 16 * w, i8_sat(i16(i8_1) - i16(i8_2)));
-                check("i16x8.sub_" + sat + "_s", 8 * w, i16_sat(i32(i16_1) - i32(i16_2)));
+                check("i8x16.sub_sat_s", 16 * w, i8_sat(i16(i8_1) - i16(i8_2)));
+                check("i16x8.sub_sat_s", 8 * w, i16_sat(i32(i16_1) - i32(i16_2)));
                 // N.B. Saturating subtracts are expressed by widening to a *signed* type
-                check("i8x16.sub_" + sat + "_u", 16 * w, u8_sat(i16(u8_1) - i16(u8_2)));
-                check("i16x8.sub_" + sat + "_u", 8 * w, u16_sat(i32(u16_1) - i32(u16_2)));
+                check("i8x16.sub_sat_u", 16 * w, u8_sat(i16(u8_1) - i16(u8_2)));
+                check("i16x8.sub_sat_u", 8 * w, u16_sat(i32(u16_1) - i32(u16_2)));
 
-                if (Halide::Internal::get_llvm_version() >= 130) {
-                    // Saturating integer Q-format rounding multiplication
-                    // Note: division in Halide always rounds down (not towards
-                    // zero). Otherwise these patterns would be more complicated.
-                    check("i16x8.q15mulr_sat_s", 8 * w, i16_sat((i32(i16_1) * i32(i16_2) + (1 << 14)) / (1 << 15)));
-                }
+                // Saturating integer Q-format rounding multiplication
+                // Note: division in Halide always rounds down (not towards
+                // zero). Otherwise these patterns would be more complicated.
+                check("i16x8.q15mulr_sat_s", 8 * w, i16_sat((i32(i16_1) * i32(i16_2) + (1 << 14)) / (1 << 15)));
 
                 // Lane-wise integer minimum
                 check("i8x16.min_s", 16 * w, min(i8_1, i8_2));
@@ -1904,9 +1919,7 @@ public:
                 check("i8x16.abs", 16 * w, abs(i8_1));
                 check("i16x8.abs", 8 * w, abs(i16_1));
                 check("i32x4.abs", 4 * w, abs(i32_1));
-                if (Halide::Internal::get_llvm_version() >= 130) {
-                    check("i64x2.abs", 2 * w, abs(i64_1));
-                }
+                check("i64x2.abs", 2 * w, abs(i64_1));
 
                 // Left shift by constant scalar
                 check("i8x16.shl", 16 * w, i8_1 << i8(7));
@@ -1986,21 +1999,14 @@ public:
 
                 check("v128.bitselect", 16 * w, select(bool_1, u8_1, u8_2));
                 check("v128.bitselect", 8 * w, select(bool_1, u16_1, u16_2));
-                if (Halide::Internal::get_llvm_version() >= 120) {
-                    check("v128.bitselect", 4 * w, select(bool_1, u32_1, u32_2));
-                    check("v128.bitselect", 2 * w, select(bool_1, u64_1, u64_2));
-                    check("v128.bitselect", 4 * w, select(bool_1, f32_1, f32_2));
-                    check("v128.bitselect", 2 * w, select(bool_1, f64_1, f64_2));
-                }
+                check("v128.bitselect", 4 * w, select(bool_1, u32_1, u32_2));
+                check("v128.bitselect", 2 * w, select(bool_1, u64_1, u64_2));
+                check("v128.bitselect", 4 * w, select(bool_1, f32_1, f32_2));
+                check("v128.bitselect", 2 * w, select(bool_1, f64_1, f64_2));
 
                 // Lane-wise Population Count
-                // TODO(https://github.com/halide/Halide/issues/5130): NOT BEING GENERATED AT TRUNK
-                // check("i8x16.popcnt", 8 * w, popcount(i8_1));
-                // check("i8x16.popcnt", 8 * w, popcount(u8_1));
-                // check("i8x16.popcnt", 8 * w, popcount(i16_1));
-                // check("i8x16.popcnt", 8 * w, popcount(u16_1));
-                // check("i8x16.popcnt", 8 * w, popcount(i32_1));
-                // check("i8x16.popcnt", 8 * w, popcount(u32_1));
+                check("i8x16.popcnt", 8 * w, popcount(i8_1));
+                check("i8x16.popcnt", 8 * w, popcount(u8_1));
 
                 // Any lane true -- for VectorReduce::Or on 8-bit data
                 // All lanes true  -- for VectorReduce::And on 8-bit data
@@ -2022,9 +2028,7 @@ public:
                 check("i8x16.eq", 16 * w, i8_1 == i8_2);
                 check("i16x8.eq", 8 * w, i16_1 == i16_2);
                 check("i32x4.eq", 4 * w, i32_1 == i32_2);
-                if (Halide::Internal::get_llvm_version() >= 130) {
-                    check("i64x2.eq", 2 * w, i64_1 == i64_2);
-                }
+                check("i64x2.eq", 2 * w, i64_1 == i64_2);
                 check("f32x4.eq", 4 * w, f32_1 == f32_2);
                 check("f64x2.eq", 2 * w, f64_1 == f64_2);
 
@@ -2032,9 +2036,7 @@ public:
                 check("i8x16.ne", 16 * w, i8_1 != i8_2);
                 check("i16x8.ne", 8 * w, i16_1 != i16_2);
                 check("i32x4.ne", 4 * w, i32_1 != i32_2);
-                if (Halide::Internal::get_llvm_version() >= 130) {
-                    check("i64x2.ne", 2 * w, i64_1 != i64_2);
-                }
+                check("i64x2.ne", 2 * w, i64_1 != i64_2);
                 check("f32x4.ne", 4 * w, f32_1 != f32_2);
                 check("f64x2.ne", 2 * w, f64_1 != f64_2);
 
@@ -2045,9 +2047,7 @@ public:
                 check("i16x8.lt_u", 8 * w, u16_1 < u16_2);
                 check("i32x4.lt_s", 4 * w, i32_1 < i32_2);
                 check("i32x4.lt_u", 4 * w, u32_1 < u32_2);
-                if (Halide::Internal::get_llvm_version() >= 130) {
-                    check("i64x2.lt_s", 2 * w, i64_1 < i64_2);
-                }
+                check("i64x2.lt_s", 2 * w, i64_1 < i64_2);
                 check("f32x4.lt", 4 * w, f32_1 < f32_2);
                 check("f64x2.lt", 2 * w, f64_1 < f64_2);
 
@@ -2058,9 +2058,7 @@ public:
                 check("i16x8.le_u", 8 * w, u16_1 <= u16_2);
                 check("i32x4.le_s", 4 * w, i32_1 <= i32_2);
                 check("i32x4.le_u", 4 * w, u32_1 <= u32_2);
-                if (Halide::Internal::get_llvm_version() >= 130) {
-                    check("i64x2.le_s", 2 * w, i64_1 <= i64_2);
-                }
+                check("i64x2.le_s", 2 * w, i64_1 <= i64_2);
                 check("f32x4.le", 4 * w, f32_1 <= f32_2);
                 check("f64x2.le", 2 * w, f64_1 <= f64_2);
 
@@ -2083,18 +2081,10 @@ public:
                 // check("v128.load64_zero", 2 * w, in_u64(0));
 
                 // Load vector with identical lanes
-                if (Halide::Internal::get_llvm_version() >= 120) {
-                    check("v128.load8_splat", 16 * w, in_u8(0));
-                    check("v128.load16_splat", 8 * w, in_u16(0));
-                    check("v128.load32_splat", 4 * w, in_u32(0));
-                    check("v128.load64_splat", 2 * w, in_u64(0));
-                } else {
-                    // older mnemonics
-                    check("v8x16.load_splat", 16 * w, in_u8(0));
-                    check("v16x8.load_splat", 8 * w, in_u16(0));
-                    check("v32x4.load_splat", 4 * w, in_u32(0));
-                    check("v64x2.load_splat", 2 * w, in_u64(0));
-                }
+                check("v128.load8_splat", 16 * w, in_u8(0));
+                check("v128.load16_splat", 8 * w, in_u16(0));
+                check("v128.load32_splat", 4 * w, in_u32(0));
+                check("v128.load64_splat", 2 * w, in_u64(0));
 
                 // Load Lane
                 // TODO: does Halide have any idiom that obviously generates these?
@@ -2159,23 +2149,21 @@ public:
                 check("f32x4.sqrt", 4 * w, sqrt(f32_1));
                 check("f64x2.sqrt", 2 * w, sqrt(f64_1));
 
-                if (Halide::Internal::get_llvm_version() >= 130) {
-                    // Round to integer above (ceiling)
-                    check("f32x4.ceil", 4 * w, ceil(f32_1));
-                    check("f64x2.ceil", 2 * w, ceil(f64_1));
+                // Round to integer above (ceiling)
+                check("f32x4.ceil", 4 * w, ceil(f32_1));
+                check("f64x2.ceil", 2 * w, ceil(f64_1));
 
-                    // Round to integer below (floor)
-                    check("f32x4.floor", 4 * w, floor(f32_1));
-                    check("f64x2.floor", 2 * w, floor(f64_1));
+                // Round to integer below (floor)
+                check("f32x4.floor", 4 * w, floor(f32_1));
+                check("f64x2.floor", 2 * w, floor(f64_1));
 
-                    // Round to integer toward zero (truncate to integer)
-                    check("f32x4.trunc", 4 * w, trunc(f32_1));
-                    check("f64x2.trunc", 2 * w, trunc(f64_1));
+                // Round to integer toward zero (truncate to integer)
+                check("f32x4.trunc", 4 * w, trunc(f32_1));
+                check("f64x2.trunc", 2 * w, trunc(f64_1));
 
-                    // Round to nearest integer, ties to even)
-                    check("f32x4.nearest", 4 * w, round(f32_1));
-                    check("f64x2.nearest", 2 * w, round(f64_1));
-                }
+                // Round to nearest integer, ties to even)
+                check("f32x4.nearest", 4 * w, round(f32_1));
+                check("f64x2.nearest", 2 * w, round(f64_1));
 
                 // Integer to single-precision floating point
                 check("f32x4.convert_i32x4_s", 8 * w, cast<float>(i32_1));
@@ -2206,32 +2194,29 @@ public:
                     if (w < 2) {
                         check("f64x2.promote_low_f32x4", 2 * w, cast<double>(f32_1));
                     }
-                } else if (Halide::Internal::get_llvm_version() >= 130) {
+                } else {
                     check("f64x2.promote_low_f32x4", 2 * w, cast<double>(f32_1));
                 }
 
                 // Integer to integer narrowing
-                if (Halide::Internal::get_llvm_version() >= 130) {
-                    check("i8x16.narrow_i16x8_s", 16 * w, i8_sat(i16_1));
-                    check("i8x16.narrow_i16x8_u", 16 * w, u8_sat(i16_1));
-                    check("i16x8.narrow_i32x4_s", 8 * w, i16_sat(i32_1));
-                    check("i16x8.narrow_i32x4_u", 8 * w, u16_sat(i32_1));
-                }
+                check("i8x16.narrow_i16x8_s", 16 * w, i8_sat(i16_1));
+                check("i8x16.narrow_i16x8_u", 16 * w, u8_sat(i16_1));
+                check("i16x8.narrow_i32x4_s", 8 * w, i16_sat(i32_1));
+                check("i16x8.narrow_i32x4_u", 8 * w, u16_sat(i32_1));
 
                 // Integer to integer widening
-                // TODO(https://github.com/halide/Halide/issues/5130): NOT BEING GENERATED AT TRUNK
-                // check("i16x8.extend_low_i8x16_s", 8*w, i8(x) * 2);
-                // check("i16x8.extend_high_i8x16_s", 8*w, i16(i8_1));
-                // check("i16x8.extend_low_i8x16_u", 8*w, u8(x) * 2);
-                // check("i16x8.extend_high_i8x16_u", 8*w, u16(u8_1));
-                // check("i32x4.extend_low_i16x8_s", 4*w, i32(i16_1));
-                // check("i32x4.extend_high_i16x8_s", 4*w, i32(i16_1));
-                // check("i32x4.extend_low_i16x8_u", 4*w, u32(u16_1));
-                // check("i32x4.extend_high_i16x8_u", 4*w, u32(u16_1));
-                // check("i64x2.extend_low_i32x4_s", 2*w, i64(i32_1));
-                // check("i64x2.extend_high_i32x4_s", 2*w, i64(i32_1));
-                // check("i64x2.extend_low_i32x4_u", 2*w, u64(u32_1));
-                // check("i64x2.extend_high_i32x4_u", 2*w, u64(u32_1));
+                check("i16x8.extend_low_i8x16_s", 16 * w, i16(i8_1));
+                check("i16x8.extend_high_i8x16_s", 16 * w, i16(i8_1));
+                check("i16x8.extend_low_i8x16_u", 16 * w, u16(u8_1));
+                check("i16x8.extend_high_i8x16_u", 16 * w, u16(u8_1));
+                check("i32x4.extend_low_i16x8_s", 8 * w, i32(i16_1));
+                check("i32x4.extend_high_i16x8_s", 8 * w, i32(i16_1));
+                check("i32x4.extend_low_i16x8_u", 8 * w, u32(u16_1));
+                check("i32x4.extend_high_i16x8_u", 8 * w, u32(u16_1));
+                check("i64x2.extend_low_i32x4_s", 4 * w, i64(i32_1));
+                check("i64x2.extend_high_i32x4_s", 4 * w, i64(i32_1));
+                check("i64x2.extend_low_i32x4_u", 4 * w, u64(u32_1));
+                check("i64x2.extend_high_i32x4_u", 4 * w, u64(u32_1));
             }
         }
     }

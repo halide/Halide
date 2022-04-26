@@ -69,4 +69,29 @@ WEAK_INLINE uint8_t *_halide_hexagon_buffer_get_host(const hexagon_buffer_t_arg 
 WEAK_INLINE uint64_t _halide_hexagon_buffer_get_device(const hexagon_buffer_t_arg *buf) {
     return buf->device;
 }
+
+WEAK_INLINE int _halide_hexagon_do_par_for(void *user_context, halide_task_t f,
+                                           int min, int size, uint8_t *closure,
+                                           int use_hvx) {
+    if (use_hvx) {
+        const int result = halide_qurt_hvx_unlock(user_context);
+        if (result != 0) {
+            return result;
+        }
+    }
+
+    const int result = halide_do_par_for(user_context, f, min, size, closure);
+    if (result != 0) {
+        return result;
+    }
+
+    if (use_hvx) {
+        const int result = halide_qurt_hvx_lock(user_context);
+        if (result != 0) {
+            return result;
+        }
+    }
+
+    return 0;
+}
 }

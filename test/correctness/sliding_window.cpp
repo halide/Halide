@@ -16,19 +16,16 @@ extern "C" DLLEXPORT int call_counter(int x, int y) {
 }
 HalideExtern_2(int, call_counter, int, int);
 
-extern "C" void *my_malloc(void *, size_t x) {
+extern "C" void *my_malloc(JITUserContext *, size_t x) {
     printf("Malloc wasn't supposed to be called!\n");
     exit(-1);
-}
-
-extern "C" void my_free(void *, void *) {
 }
 
 int main(int argc, char **argv) {
     Var x, y;
 
     if (get_jit_target_from_environment().arch == Target::WebAssembly) {
-        printf("[SKIP] WebAssembly JIT does not support set_custom_allocator().\n");
+        printf("[SKIP] WebAssembly JIT does not support custom allocators.\n");
         return 0;
     }
 
@@ -201,7 +198,7 @@ int main(int argc, char **argv) {
         f(x, y) = x * y;
         g(x, y) = f(x, y) + f(x + 1, y) + f(x, y + 1) + f(x + 1, y + 1);
         f.store_at(g, y).compute_at(g, x);
-        g.set_custom_allocator(&my_malloc, &my_free);
+        g.jit_handlers().custom_malloc = my_malloc;
         Buffer<int> im = g.realize({10, 10});
     }
 

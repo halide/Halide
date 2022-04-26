@@ -60,6 +60,7 @@ set(HEADER_FILES
     ExprUsesVar.h
     Extern.h
     ExternFuncArgument.h
+    ExtractTileOperations.h
     FastIntegerDivide.h
     FindCalls.h
     FindIntrinsics.h
@@ -97,6 +98,7 @@ set(HEADER_FILES
     LLVM_Runtime_Linker.h
     LoopCarry.h
     Lower.h
+    LowerParallelTasks.h
     LowerWarpShuffles.h
     MainPage.h
     MatlabWrapper.h
@@ -221,6 +223,7 @@ set(SOURCE_FILES
     EmulateFloat16Math.cpp
     Error.cpp
     Expr.cpp
+    ExtractTileOperations.cpp
     FastIntegerDivide.cpp
     FindCalls.cpp
     FindIntrinsics.cpp
@@ -256,6 +259,7 @@ set(SOURCE_FILES
     LLVM_Runtime_Linker.cpp
     LoopCarry.cpp
     Lower.cpp
+    LowerParallelTasks.cpp
     LowerWarpShuffles.cpp
     MatlabWrapper.cpp
     Memoization.cpp
@@ -381,10 +385,14 @@ target_export_script(Halide
                      APPLE_LD "${CMAKE_CURRENT_LIST_DIR}/exported_symbols.osx"
                      GNU_LD "${CMAKE_CURRENT_LIST_DIR}/exported_symbols.ldscript")
 
+set(Halide_SOVERSION_OVERRIDE "${Halide_VERSION_MAJOR}"
+    CACHE STRING "SOVERSION to set for custom Halide packaging")
+mark_as_advanced(Halide_SOVERSION_OVERRIDE)
+
 set_target_properties(Halide PROPERTIES
                       POSITION_INDEPENDENT_CODE ON
                       VERSION ${Halide_VERSION}
-                      SOVERSION ${Halide_VERSION_MAJOR})
+                      SOVERSION ${Halide_SOVERSION_OVERRIDE})
 
 target_include_directories(Halide INTERFACE "$<BUILD_INTERFACE:${Halide_BINARY_DIR}/include>")
 add_dependencies(Halide HalideIncludes)
@@ -397,6 +405,11 @@ endif ()
 if (TARGET Halide_wabt)
     target_link_libraries(Halide PRIVATE Halide_wabt)
     target_compile_definitions(Halide PRIVATE WITH_WABT)
+endif ()
+
+if (TARGET Halide_V8)
+    target_link_libraries(Halide PRIVATE Halide_V8)
+    target_compile_definitions(Halide PRIVATE WITH_V8)
 endif ()
 
 ##
@@ -446,13 +459,15 @@ target_compile_options(
         $<$<CXX_COMPILER_ID:Clang,AppleClang>:-Wno-missing-prototypes>
         $<$<CXX_COMPILER_ID:Clang,AppleClang>:-Wno-nonportable-system-include-path>
         $<$<CXX_COMPILER_ID:Clang,AppleClang>:-Wno-reserved-id-macro>
-        $<$<CXX_COMPILER_ID:Clang,AppleClang>:-Wno-return-std-move-in-c++11>
         $<$<CXX_COMPILER_ID:Clang,AppleClang>:-Wno-shadow-field-in-constructor>
         $<$<CXX_COMPILER_ID:Clang,AppleClang>:-Wno-shadow-field>
         $<$<CXX_COMPILER_ID:Clang,AppleClang>:-Wno-shorten-64-to-32>
         $<$<CXX_COMPILER_ID:Clang,AppleClang>:-Wno-undefined-func-template>
         $<$<CXX_COMPILER_ID:Clang,AppleClang>:-Wno-unused-member-function>
         $<$<CXX_COMPILER_ID:Clang,AppleClang>:-Wno-unused-template>
+
+        # This warning was removed in Clang 13
+        $<$<AND:$<CXX_COMPILER_ID:Clang,AppleClang>,$<VERSION_LESS:$<CXX_COMPILER_VERSION>,13.0>>:-Wno-return-std-move-in-c++11>
 
         $<$<CXX_COMPILER_ID:MSVC>:/W3>
         $<$<CXX_COMPILER_ID:MSVC>:/wd4018>  # 4018: disable "signed/unsigned mismatch"

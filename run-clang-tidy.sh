@@ -13,18 +13,18 @@ FIX=$1
 # are using to build Halide itself. If you don't have LLVM12 installed,
 # you can usually install what you need easily via:
 #
-# sudo apt-get install llvm-12 clang-12 libclang-12-dev clang-tidy-12
-# export CLANG_TIDY_LLVM_INSTALL_DIR=/usr/lib/llvm-12
+# sudo apt-get install llvm-13 clang-13 libclang-13-dev clang-tidy-13
+# export CLANG_TIDY_LLVM_INSTALL_DIR=/usr/lib/llvm-13
 
 [ -z "$CLANG_TIDY_LLVM_INSTALL_DIR" ] && echo "CLANG_TIDY_LLVM_INSTALL_DIR must point to an LLVM installation dir for this script." && exit
 echo CLANG_TIDY_LLVM_INSTALL_DIR = ${CLANG_TIDY_LLVM_INSTALL_DIR}
 
 VERSION=$(${CLANG_TIDY_LLVM_INSTALL_DIR}/bin/clang-tidy --version)
-if [[ ${VERSION} =~ .*version\ 12.* ]]
+if [[ ${VERSION} =~ .*version\ 13.* ]]
 then
-    echo "clang-tidy version 12 found."
+    echo "clang-tidy version 13 found."
 else
-    echo "CLANG_TIDY_LLVM_INSTALL_DIR must point to an LLVM 12 install!"
+    echo "CLANG_TIDY_LLVM_INSTALL_DIR must point to an LLVM 13 install!"
     exit 1
 fi
 
@@ -49,7 +49,7 @@ cmake -DCMAKE_BUILD_TYPE=Debug \
 # We must populate the includes directory to check things outside of src/
 cmake --build ${CLANG_TIDY_BUILD_DIR} --target HalideIncludes
 
-RUN_CLANG_TIDY=${CLANG_TIDY_LLVM_INSTALL_DIR}/share/clang/run-clang-tidy.py
+RUN_CLANG_TIDY=${CLANG_TIDY_LLVM_INSTALL_DIR}/bin/run-clang-tidy
 
 # We deliberately skip apps/ and test/ for now, as the compile commands won't include
 # generated headers files from Generators.

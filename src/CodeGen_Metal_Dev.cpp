@@ -2,7 +2,6 @@
 #include <sstream>
 #include <utility>
 
-#include "CodeGen_C.h"
 #include "CodeGen_GPU_Dev.h"
 #include "CodeGen_Internal.h"
 #include "CodeGen_Metal_Dev.h"
@@ -50,17 +49,17 @@ public:
     }
 
 protected:
-    class CodeGen_Metal_C : public CodeGen_C {
+    class CodeGen_Metal_C : public CodeGen_GPU_C {
     public:
         CodeGen_Metal_C(std::ostream &s, const Target &t)
-            : CodeGen_C(s, t) {
+            : CodeGen_GPU_C(s, t) {
         }
         void add_kernel(const Stmt &stmt,
                         const std::string &name,
                         const std::vector<DeviceArgument> &args);
 
     protected:
-        using CodeGen_C::visit;
+        using CodeGen_GPU_C::visit;
         std::string print_type(Type type, AppendSpaceIfNeeded space_option = DoNotAppendSpace) override;
         // Vectors in Metal come in two varieties, regular and packed.
         // For storage allocations and pointers used in address arithmetic,
@@ -267,7 +266,7 @@ void CodeGen_Metal_Dev::CodeGen_Metal_C::visit(const For *loop) {
 
     } else {
         user_assert(loop->for_type != ForType::Parallel) << "Cannot use parallel loops inside Metal kernel\n";
-        CodeGen_C::visit(loop);
+        CodeGen_GPU_C::visit(loop);
     }
 }
 
@@ -321,7 +320,7 @@ void CodeGen_Metal_Dev::CodeGen_Metal_C::visit(const Call *op) {
         stream << ");\n";
         print_assignment(op->type, "0");
     } else {
-        CodeGen_C::visit(op);
+        CodeGen_GPU_C::visit(op);
     }
 }
 
@@ -789,7 +788,7 @@ void CodeGen_Metal_Dev::init_module() {
                << "#endif\n"
                << "}\n";  // close namespace
 
-    src_stream << "#define halide_unused(x) (void)(x)\n";
+    src_stream << "#define halide_maybe_unused(x) (void)(x)\n";
 
     src_stream << "\n";
 

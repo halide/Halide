@@ -171,7 +171,7 @@ extern "C" int32_t gpu_input(halide_buffer_t *input, halide_buffer_t *output) {
 int main(int argc, char **argv) {
     {
         // Make sure the OpenCL library is loaded/symbols looked up in Halide
-        Buffer<int32_t> buf(32);
+        Buffer<int32_t, 1> buf(32);
         buf.device_malloc(halide_opencl_device_interface());
     }
 
@@ -184,13 +184,13 @@ int main(int argc, char **argv) {
     // Everything else is a normal Halide program. The GPU runtime will call
     // the above acquire/release functions to get the context instead of using
     // its own internal context.
-    Buffer<int32_t> input(W);
+    Buffer<int32_t, 1> input(W);
     for (int x = 0; x < W; x++) {
         input(x) = x;
     }
     input.set_host_dirty(true);
 
-    Buffer<int32_t> output(W);
+    Buffer<int32_t, 1> output(W);
 
     define_extern_opencl(input, output);
     output.copy_to_host();

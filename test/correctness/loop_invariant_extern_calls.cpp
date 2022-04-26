@@ -25,7 +25,7 @@ extern "C" DLLEXPORT int my_impure_func(int counter, int x) {
 HalideExtern_2(int, my_impure_func, int, int);
 
 // A parallel for loop runner that isn't actually parallel
-int not_really_parallel_for(void *ctx, int (*f)(void *, int, uint8_t *), int min, int extent, uint8_t *closure) {
+int not_really_parallel_for(JITUserContext *ctx, int (*f)(JITUserContext *, int, uint8_t *), int min, int extent, uint8_t *closure) {
     for (int i = min; i < min + extent; i++) {
         f(ctx, i, closure);
     }
@@ -34,7 +34,7 @@ int not_really_parallel_for(void *ctx, int (*f)(void *, int, uint8_t *), int min
 
 int main(int argc, char **argv) {
     if (get_jit_target_from_environment().arch == Target::WebAssembly) {
-        printf("[SKIP] Skipping test for WebAssembly as the wasm JIT cannot support set_custom_do_par_for().\n");
+        printf("[SKIP] Skipping test for WebAssembly as the wasm JIT cannot support custom parallel runtimes\n");
         return 0;
     }
 
@@ -73,7 +73,7 @@ int main(int argc, char **argv) {
     g(x, y) = my_func(3, Expr(0)) + my_impure_func(4, Expr(0));
     g.parallel(y);
     // Avoid the race condition by not actually being parallel
-    g.set_custom_do_par_for(&not_really_parallel_for);
+    g.jit_handlers().custom_do_par_for = not_really_parallel_for;
     g.realize({32, 32});
 
     if (call_counter[3] != 1 || call_counter[4] != 32 * 32) {

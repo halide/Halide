@@ -8,8 +8,8 @@ using namespace Halide::BoundaryConditions;
 class Max : public Halide::Generator<Max> {
 public:
     GeneratorParam<int> radius_{"radius", 26};
-    Input<Buffer<float>> input_{"input", 3};
-    Output<Buffer<float>> output_{"output", 3};
+    Input<Buffer<float, 3>> input_{"input"};
+    Output<Buffer<float, 3>> output_{"output"};
 
     void generate() {
         Var x("x"), y("y"), c("c"), t("t");

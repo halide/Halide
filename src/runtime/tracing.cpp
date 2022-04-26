@@ -84,7 +84,7 @@ class TraceBuffer {
     // packet. Returns nullptr if the buffer was full.
     ALWAYS_INLINE halide_trace_packet_t *try_acquire_packet(void *user_context, uint32_t size) {
         lock.acquire_shared();
-        halide_assert(user_context, size <= buffer_size);
+        halide_abort_if_false(user_context, size <= buffer_size);
         uint32_t my_cursor = __sync_fetch_and_add(&cursor, size);
         if (my_cursor + size > sizeof(buf)) {
             // Don't try to back it out: instead, just allow this request to fail
@@ -112,7 +112,7 @@ public:
             overage = 0;
         }
         lock.release_exclusive();
-        halide_assert(user_context, success && "Could not write to trace file");
+        halide_abort_if_false(user_context, success && "Could not write to trace file");
     }
 
     // Acquire and return a packet's worth of space in the trace
@@ -208,15 +208,14 @@ WEAK int32_t halide_default_trace(void *user_context, const halide_trace_event_t
         }
 
     } else {
-        uint8_t buffer[4096];
-        Printer<StringStreamPrinter, sizeof(buffer)> ss(user_context, (char *)buffer);
+        StringStreamPrinter<4096> ss(user_context);
 
         // Round up bits to 8, 16, 32, or 64
         int print_bits = 8;
         while (print_bits < e->type.bits) {
             print_bits <<= 1;
         }
-        halide_assert(user_context, print_bits <= 64 && "Tracing bad type");
+        halide_abort_if_false(user_context, print_bits <= 64 && "Tracing bad type");
 
         // Otherwise, use halide_print and a plain-text format
         const char *event_types[] = {"Load",
@@ -285,7 +284,7 @@ WEAK int32_t halide_default_trace(void *user_context, const halide_trace_event_t
                         ss << ((uint64_t *)(e->value))[i];
                     }
                 } else if (e->type.code == 2) {
-                    halide_assert(user_context, print_bits >= 16 && "Tracing a bad type");
+                    halide_abort_if_false(user_context, print_bits >= 16 && "Tracing a bad type");
                     if (print_bits == 32) {
                         ss << ((float *)(e->value))[i];
                     } else if (print_bits == 16) {
@@ -307,11 +306,10 @@ WEAK int32_t halide_default_trace(void *user_context, const halide_trace_event_t
         }
 
         ss << "\n";
-        ss.msan_annotate_is_initialized();
 
         {
             ScopedSpinLock lock(&halide_trace_file_lock);
-            halide_print(user_context, (const char *)buffer);
+            halide_print(user_context, ss.str());
         }
     }
 
@@ -350,7 +348,7 @@ WEAK int halide_get_trace_file(void *user_context) {
         const char *trace_file_name = getenv("HL_TRACE_FILE");
         if (trace_file_name) {
             void *file = fopen(trace_file_name, "ab");
-            halide_assert(user_context, file && "Failed to open trace file\n");
+            halide_abort_if_false(user_context, file && "Failed to open trace file\n");
             halide_set_trace_file(fileno(file));
             halide_trace_file_internally_opened = file;
             if (!halide_trace_buffer) {
@@ -385,7 +383,7 @@ WEAK int halide_shutdown_trace() {
 
 namespace {
 WEAK __attribute__((destructor)) void halide_trace_cleanup() {
-    halide_shutdown_trace();
+    (void)halide_shutdown_trace();  // ignore errors
 }
 }  // namespace
 }

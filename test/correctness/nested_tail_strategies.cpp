@@ -4,7 +4,7 @@ using namespace Halide;
 
 size_t largest_allocation = 0;
 
-void *my_malloc(void *user_context, size_t x) {
+void *my_malloc(JITUserContext *user_context, size_t x) {
     largest_allocation = std::max(x, largest_allocation);
     void *orig = malloc(x + 32);
     void *ptr = (void *)((((size_t)orig + 32) >> 5) << 5);
@@ -12,7 +12,7 @@ void *my_malloc(void *user_context, size_t x) {
     return ptr;
 }
 
-void my_free(void *user_context, void *ptr) {
+void my_free(JITUserContext *user_context, void *ptr) {
     free(((void **)ptr)[-1]);
 }
 
@@ -41,7 +41,8 @@ void check(Func out, int line, std::vector<TailStrategy> tails) {
         sizes_to_try.push_back(3);
     }
 
-    out.set_custom_allocator(my_malloc, my_free);
+    out.jit_handlers().custom_malloc = my_malloc;
+    out.jit_handlers().custom_free = my_free;
 
     for (int s : sizes_to_try) {
         largest_allocation = 0;
@@ -63,7 +64,7 @@ void check(Func out, int line, std::vector<TailStrategy> tails) {
 
 int main(int argc, char **argv) {
     if (get_jit_target_from_environment().arch == Target::WebAssembly) {
-        printf("[SKIP] WebAssembly JIT does not support set_custom_allocator().\n");
+        printf("[SKIP] WebAssembly JIT does not support custom allocators.\n");
         return 0;
     }
 

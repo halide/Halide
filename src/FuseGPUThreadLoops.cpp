@@ -1278,6 +1278,7 @@ class InjectThreadBarriers : public IRMutator {
         case MemoryType::Register:
         case MemoryType::LockedCache:
         case MemoryType::VTCM:
+        case MemoryType::AMXTile:
             break;
         }
 
@@ -1302,6 +1303,7 @@ class InjectThreadBarriers : public IRMutator {
         case MemoryType::Register:
         case MemoryType::LockedCache:
         case MemoryType::VTCM:
+        case MemoryType::AMXTile:
             break;
         }
 

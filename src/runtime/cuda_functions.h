@@ -21,7 +21,7 @@ CUDA_FN(CUresult, cuDeviceGetCount, (int *count));
 CUDA_FN(CUresult, cuDeviceGet, (CUdevice * device, int ordinal));
 CUDA_FN(CUresult, cuDeviceGetAttribute, (int *, CUdevice_attribute attrib, CUdevice dev));
 CUDA_FN(CUresult, cuDeviceGetName, (char *, int len, CUdevice dev));
-CUDA_FN(CUresult, cuDeviceTotalMem, (size_t *, CUdevice dev));
+CUDA_FN_3020(CUresult, cuDeviceTotalMem, cuDeviceTotalMem_v2, (size_t *, CUdevice dev));
 CUDA_FN_3020(CUresult, cuCtxCreate, cuCtxCreate_v2, (CUcontext * pctx, unsigned int flags, CUdevice dev));
 CUDA_FN_4000(CUresult, cuCtxDestroy, cuCtxDestroy_v2, (CUcontext pctx));
 CUDA_FN(CUresult, cuProfilerStop, ());
@@ -36,6 +36,11 @@ CUDA_FN_3020(CUresult, cuMemFree, cuMemFree_v2, (CUdeviceptr dptr));
 CUDA_FN_3020(CUresult, cuMemcpyHtoD, cuMemcpyHtoD_v2, (CUdeviceptr dstDevice, const void *srcHost, size_t ByteCount));
 CUDA_FN_3020(CUresult, cuMemcpyDtoH, cuMemcpyDtoH_v2, (void *dstHost, CUdeviceptr srcDevice, size_t ByteCount));
 CUDA_FN_3020(CUresult, cuMemcpyDtoD, cuMemcpyDtoD_v2, (CUdeviceptr dstHost, CUdeviceptr srcDevice, size_t ByteCount));
+
+CUDA_FN_3020(CUresult, cuMemcpyHtoDAsync, cuMemcpyHtoDAsync_v2, (CUdeviceptr dstDevice, const void *srcHost, size_t ByteCount, CUstream stream));
+CUDA_FN_3020(CUresult, cuMemcpyDtoHAsync, cuMemcpyDtoHAsync_v2, (void *dstHost, CUdeviceptr srcDevice, size_t ByteCount, CUstream stream));
+CUDA_FN_3020(CUresult, cuMemcpyDtoDAsync, cuMemcpyDtoDAsync_v2, (CUdeviceptr dstHost, CUdeviceptr srcDevice, size_t ByteCount, CUstream stream));
+
 CUDA_FN_3020(CUresult, cuMemcpy3D, cuMemcpy3D_v2, (const CUDA_MEMCPY3D *pCopy));
 CUDA_FN(CUresult, cuLaunchKernel, (CUfunction f, unsigned int gridDimX, unsigned int gridDimY, unsigned int gridDimZ, unsigned int blockDimX, unsigned int blockDimY, unsigned int blockDimZ, unsigned int sharedMemBytes, CUstream hStream, void **kernelParams, void **extra));
 CUDA_FN(CUresult, cuCtxSynchronize, ());

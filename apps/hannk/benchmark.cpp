@@ -26,6 +26,11 @@ void run_benchmark(const std::string &filename, const InterpreterOptions &option
     }
 
     Interpreter interpreter(std::move(model), options);
+    if (!interpreter.prepare()) {
+        std::cerr << "hannk::Interpreter::prepare() failed\n";
+        // TODO: probably better form to return an error here, but for now, this is fine.
+        exit(-1);
+    }
 
     if (!options.trace) {
         auto result = Halide::Tools::benchmark([&]() { interpreter.execute(); });

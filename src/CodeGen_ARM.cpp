@@ -580,15 +580,19 @@ const ArmIntrinsic intrinsic_defs[] = {
     {nullptr, "udot.v4i32.v16i8", UInt(32, 4), "dot_product", {UInt(32, 4), UInt(8, 16), UInt(8, 16)}, ArmIntrinsic::NoMangle},
 
     // ABDL - Widening absolute difference
-    // Need to be able to handle both signed and unsigned outputs for signed inputs.
+    // The ARM backend folds both signed and unsigned widening casts of absd to a widening_absd, so we need to handle both signed and
+    // unsigned input and return types.
     {"vabdl_i8x8", "vabdl_i8x8", Int(16, 8), "widening_absd", {Int(8, 8), Int(8, 8)}, ArmIntrinsic::NoMangle | ArmIntrinsic::NoPrefix},
     {"vabdl_i8x8", "vabdl_i8x8", UInt(16, 8), "widening_absd", {Int(8, 8), Int(8, 8)}, ArmIntrinsic::NoMangle | ArmIntrinsic::NoPrefix},
+    {"vabdl_u8x8", "vabdl_u8x8", Int(16, 8), "widening_absd", {UInt(8, 8), UInt(8, 8)}, ArmIntrinsic::NoMangle | ArmIntrinsic::NoPrefix},
     {"vabdl_u8x8", "vabdl_u8x8", UInt(16, 8), "widening_absd", {UInt(8, 8), UInt(8, 8)}, ArmIntrinsic::NoMangle | ArmIntrinsic::NoPrefix},
     {"vabdl_i16x4", "vabdl_i16x4", Int(32, 4), "widening_absd", {Int(16, 4), Int(16, 4)}, ArmIntrinsic::NoMangle | ArmIntrinsic::NoPrefix},
     {"vabdl_i16x4", "vabdl_i16x4", UInt(32, 4), "widening_absd", {Int(16, 4), Int(16, 4)}, ArmIntrinsic::NoMangle | ArmIntrinsic::NoPrefix},
+    {"vabdl_u16x4", "vabdl_u16x4", Int(32, 4), "widening_absd", {UInt(16, 4), UInt(16, 4)}, ArmIntrinsic::NoMangle | ArmIntrinsic::NoPrefix},
     {"vabdl_u16x4", "vabdl_u16x4", UInt(32, 4), "widening_absd", {UInt(16, 4), UInt(16, 4)}, ArmIntrinsic::NoMangle | ArmIntrinsic::NoPrefix},
     {"vabdl_i32x2", "vabdl_i32x2", Int(64, 2), "widening_absd", {Int(32, 2), Int(32, 2)}, ArmIntrinsic::NoMangle | ArmIntrinsic::NoPrefix},
     {"vabdl_i32x2", "vabdl_i32x2", UInt(64, 2), "widening_absd", {Int(32, 2), Int(32, 2)}, ArmIntrinsic::NoMangle | ArmIntrinsic::NoPrefix},
+    {"vabdl_u32x2", "vabdl_u32x2", Int(64, 2), "widening_absd", {UInt(32, 2), UInt(32, 2)}, ArmIntrinsic::NoMangle | ArmIntrinsic::NoPrefix},
     {"vabdl_u32x2", "vabdl_u32x2", UInt(64, 2), "widening_absd", {UInt(32, 2), UInt(32, 2)}, ArmIntrinsic::NoMangle | ArmIntrinsic::NoPrefix},
 };
 
@@ -808,16 +812,22 @@ void CodeGen_ARM::visit(const Cast *op) {
             // regular narrowing casts.
             {u8_sat(wild_u32x_), u8_sat(u16_sat(wild_u32x_))},
             {u8_sat(wild_i32x_), u8_sat(i16_sat(wild_i32x_))},
+            {u8_sat(wild_f32x_), u8_sat(i16_sat(wild_f32x_))},
             {i8_sat(wild_u32x_), i8_sat(u16_sat(wild_u32x_))},
             {i8_sat(wild_i32x_), i8_sat(i16_sat(wild_i32x_))},
+            {i8_sat(wild_f32x_), i8_sat(i16_sat(wild_f32x_))},
             {u16_sat(wild_u64x_), u16_sat(u32_sat(wild_u64x_))},
             {u16_sat(wild_i64x_), u16_sat(i32_sat(wild_i64x_))},
+            {u16_sat(wild_f64x_), u16_sat(i32_sat(wild_f64x_))},
             {i16_sat(wild_u64x_), i16_sat(u32_sat(wild_u64x_))},
             {i16_sat(wild_i64x_), i16_sat(i32_sat(wild_i64x_))},
+            {i16_sat(wild_f64x_), i16_sat(i32_sat(wild_f64x_))},
             {u8_sat(wild_u64x_), u8_sat(u16_sat(u32_sat(wild_u64x_)))},
             {u8_sat(wild_i64x_), u8_sat(i16_sat(i32_sat(wild_i64x_)))},
+            {u8_sat(wild_f64x_), u8_sat(i16_sat(i32_sat(wild_f64x_)))},
             {i8_sat(wild_u64x_), i8_sat(u16_sat(u32_sat(wild_u64x_)))},
             {i8_sat(wild_i64x_), i8_sat(i16_sat(i32_sat(wild_i64x_)))},
+            {i8_sat(wild_f64x_), i8_sat(i16_sat(i32_sat(wild_f64x_)))},
         };
         for (const auto &i : cast_rewrites) {
             if (expr_match(i.first, op, matches)) {

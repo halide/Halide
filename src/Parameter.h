@@ -6,6 +6,7 @@
  */
 #include <string>
 
+#include "Buffer.h"
 #include "IntrusivePtr.h"
 #include "Type.h"
 #include "Util.h"                   // for HALIDE_NO_USER_CODE_INLINE
@@ -14,8 +15,6 @@
 namespace Halide {
 
 struct ArgumentEstimates;
-template<typename T>
-class Buffer;
 struct Expr;
 struct Type;
 enum class MemoryType;

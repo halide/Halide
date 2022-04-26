@@ -543,7 +543,9 @@ string CodeGen_PTX_Dev::march() const {
 }
 
 string CodeGen_PTX_Dev::mcpu() const {
-    if (target.has_feature(Target::CUDACapability80)) {
+    if (target.has_feature(Target::CUDACapability86)) {
+        return "sm_86";
+    } else if (target.has_feature(Target::CUDACapability80)) {
         return "sm_80";
     } else if (target.has_feature(Target::CUDACapability75)) {
         return "sm_75";
@@ -565,7 +567,9 @@ string CodeGen_PTX_Dev::mcpu() const {
 }
 
 string CodeGen_PTX_Dev::mattrs() const {
-    if (target.has_feature(Target::CUDACapability80)) {
+    if (target.has_feature(Target::CUDACapability86)) {
+        return "+ptx71";
+    } else if (target.has_feature(Target::CUDACapability80)) {
         return "+ptx70";
     } else if (target.has_feature(Target::CUDACapability70) ||
                target.has_feature(Target::CUDACapability75)) {
@@ -603,9 +607,6 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
     internal_assert(llvm_target) << err_str << "\n";
 
     TargetOptions options;
-#if LLVM_VERSION < 120
-    options.PrintMachineCode = false;
-#endif
     options.AllowFPOpFusion = FPOpFusion::Fast;
     options.UnsafeFPMath = true;
     options.NoInfsFPMath = true;
@@ -613,11 +614,6 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
     options.HonorSignDependentRoundingFPMathOption = false;
     options.NoZerosInBSS = false;
     options.GuaranteedTailCallOpt = false;
-#if LLVM_VERSION >= 130
-    // nothing
-#else
-    options.StackAlignmentOverride = 0;
-#endif
 
     std::unique_ptr<TargetMachine>
         target_machine(llvm_target->createTargetMachine(triple.str(),
@@ -635,6 +631,16 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
     raw_svector_ostream ostream(outstr);
     ostream.SetUnbuffered();
 
+    // NOTE: use of the "legacy" PassManager here is still required; it is deprecated
+    // for optimization, but is still the only complete API for codegen as of work-in-progress
+    // LLVM14. At the time of this comment (Dec 2021), there is no firm plan as to when codegen will
+    // be fully available in the new PassManager, so don't worry about this 'legacy'
+    // tag until there's any indication that the old APIs start breaking.
+    //
+    // See:
+    // https://lists.llvm.org/pipermail/llvm-dev/2021-April/150100.html
+    // https://releases.llvm.org/13.0.0/docs/ReleaseNotes.html#changes-to-the-llvm-ir
+    // https://groups.google.com/g/llvm-dev/c/HoS07gXx0p8
     legacy::FunctionPassManager function_pass_manager(module.get());
     legacy::PassManager module_pass_manager;
 

@@ -3377,9 +3377,6 @@ struct Mullapudi2016 {
         results.target = target;
         results.machine_params_string = arch_params.to_string();
 
-        user_assert(target.arch == Target::X86 || target.arch == Target::ARM ||
-                    target.arch == Target::POWERPC || target.arch == Target::MIPS)
-            << "The Mullapudi2016 autoscheduler is not supported for the target: " << target.to_string();
         results.scheduler_name = "Mullapudi2016";
         std::vector<Function> pipeline_outputs;
         for (const Func &f : pipeline.outputs()) {

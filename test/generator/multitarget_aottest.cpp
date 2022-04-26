@@ -57,7 +57,7 @@ int my_can_use_target_features(int count, const uint64_t *features) {
 
 int main(int argc, char **argv) {
     const int W = 32, H = 32;
-    Buffer<uint32_t> output(W, H);
+    Buffer<uint32_t, 2> output(W, H);
 
     halide_set_error_handler(my_error_handler);
     halide_set_custom_can_use_target_features(my_can_use_target_features);
@@ -95,7 +95,7 @@ int main(int argc, char **argv) {
     {
         // Verify that the multitarget wrapper code propagates nonzero error
         // results back to the caller properly.
-        Buffer<uint8_t> bad_type(W, H);
+        Buffer<uint8_t, 2> bad_type(W, H);
         int result = HalideTest::multitarget(bad_type);
         if (result != halide_error_code_bad_type) {
             printf("Error: expected to fail with halide_error_code_bad_type (%d) but actually got %d!\n", (int)halide_error_code_bad_type, result);

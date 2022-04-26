@@ -34,7 +34,7 @@ WEAK void annotate_helper(void *uc, const device_copy &c, int d, int64_t off) {
 
     if (d == -1) {
         const void *from = (void *)(c.src + off);
-        halide_msan_annotate_memory_is_initialized(uc, from, c.chunk_size);
+        (void)halide_msan_annotate_memory_is_initialized(uc, from, c.chunk_size);  // ignore errors
     } else {
         for (uint64_t i = 0; i < c.extent[d]; i++) {
             annotate_helper(uc, c, d - 1, off);
@@ -50,7 +50,7 @@ WEAK void check_helper(void *uc, const device_copy &c, int d, int64_t off, const
 
     if (d == -1) {
         const void *from = (void *)(c.src + off);
-        halide_msan_check_memory_is_initialized(uc, from, c.chunk_size, buf_name);
+        (void)halide_msan_check_memory_is_initialized(uc, from, c.chunk_size, buf_name);  // ignore errors
     } else {
         for (uint64_t i = 0; i < c.extent[d]; i++) {
             check_helper(uc, c, d - 1, off, buf_name);
@@ -97,8 +97,8 @@ WEAK int halide_msan_check_buffer_is_initialized(void *user_context, halide_buff
         return 0;
     }
 
-    halide_msan_check_memory_is_initialized(user_context, (void *)b, sizeof(*b), buf_name);
-    halide_msan_check_memory_is_initialized(user_context, (void *)b->dim, b->dimensions * sizeof(b->dim[0]), buf_name);
+    (void)halide_msan_check_memory_is_initialized(user_context, (void *)b, sizeof(*b), buf_name);                              // ignore errors
+    (void)halide_msan_check_memory_is_initialized(user_context, (void *)b->dim, b->dimensions * sizeof(b->dim[0]), buf_name);  // ignore errors
 
     Halide::Runtime::Internal::device_copy c = Halide::Runtime::Internal::make_host_to_device_copy(b);
     if (c.chunk_size == 0) {

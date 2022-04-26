@@ -8,8 +8,8 @@ using StubNS1::StubNS2::StubTest;
 namespace {
 
 template<typename Type, int size = 32>
-Buffer<Type> make_image() {
-    Buffer<Type> im(size, size, 3);
+Buffer<Type, 3> make_image() {
+    Buffer<Type, 3> im(size, size, 3);
     for (int x = 0; x < size; x++) {
         for (int y = 0; y < size; y++) {
             for (int c = 0; c < 3; c++) {
@@ -24,21 +24,21 @@ class StubUser : public Halide::Generator<StubUser> {
 public:
     GeneratorParam<int32_t> int_arg{"int_arg", 33};
 
-    Input<Buffer<uint8_t>> input{"input", 3};
-    Output<Buffer<uint8_t>> calculated_output{"calculated_output"};
-    Output<Buffer<float>> float32_buffer_output{"float32_buffer_output"};
-    Output<Buffer<int32_t>> int32_buffer_output{"int32_buffer_output"};
-    Output<Buffer<uint8_t>> array_test_output{"array_test_output"};
+    Input<Buffer<uint8_t, 3>> input{"input"};
+    Output<Buffer<uint8_t, 3>> calculated_output{"calculated_output"};
+    Output<Buffer<float, 3>> float32_buffer_output{"float32_buffer_output"};
+    Output<Buffer<int32_t, 3>> int32_buffer_output{"int32_buffer_output"};
+    Output<Buffer<uint8_t, 3>> array_test_output{"array_test_output"};
     // We can infer the tupled-output-type from the Stub
-    Output<Buffer<>> tupled_output{"tupled_output", 3};
-    Output<Buffer<int>> int_output{"int_output", 3};
-    Output<Buffer<Halide::float16_t>> float16_output{"float16_output", 3};
-    Output<Buffer<Halide::bfloat16_t>> bfloat16_output{"bfloat16_output", 3};
+    Output<Buffer<void, 3>> tupled_output{"tupled_output"};
+    Output<Buffer<int, 3>> int_output{"int_output"};
+    Output<Buffer<Halide::float16_t, 3>> float16_output{"float16_output"};
+    Output<Buffer<Halide::bfloat16_t, 3>> bfloat16_output{"bfloat16_output"};
 
     void generate() {
         Var x{"x"}, y{"y"}, c{"c"};
 
-        Buffer<uint8_t> constant_image = make_image<uint8_t>();
+        Buffer<uint8_t, 3> constant_image = make_image<uint8_t>();
 
         // We'll explicitly fill in the struct fields by name, just to show
         // it as an option. (Alternately, we could fill it in by using
@@ -62,7 +62,7 @@ public:
         // can really only be assigned to another Output<Buffer>; this is
         // nevertheless useful, as we can still set stride (etc) constraints
         // on the Output.
-        StubTest::Outputs out = StubTest::generate(this, inputs, gp);
+        StubTest::Outputs out = StubTest::generate(context(), inputs, gp);
 
         float32_buffer_output = out.typed_buffer_output;
         int32_buffer_output = out.untyped_buffer_output;
@@ -74,25 +74,25 @@ public:
         const float kOffset = 2.f;
         calculated_output(x, y, c) = cast<uint8_t>(out.tuple_output(x, y, c)[1] + kOffset);
 
-        Buffer<int> configure_input = make_image<int>();
+        Buffer<int, 3> configure_input = make_image<int>();
         const int bias = 1;
-        Buffer<uint8_t> extra_u8(32, 32);
+        Buffer<uint8_t, 2> extra_u8(32, 32);
         extra_u8.fill(0);
-        Buffer<int16_t> extra_i16(32, 32);
+        Buffer<int16_t, 2> extra_i16(32, 32);
         extra_i16.fill(0);
         Func extra_func;
         extra_func(x, y, c) = cast<uint16_t>(3);
         const int extra_scalar = 0;
         const int8_t extra_dynamic_scalar = 0;
-        int_output = configure::generate(this, {configure_input,
-                                                bias,
-                                                extra_u8,
-                                                extra_u8,
-                                                extra_u8,
-                                                extra_i16,
-                                                extra_func,
-                                                extra_scalar,
-                                                cast<int8_t>(extra_dynamic_scalar)})
+        int_output = configure::generate(context(), {configure_input,
+                                                     bias,
+                                                     extra_u8,
+                                                     extra_u8,
+                                                     extra_u8,
+                                                     extra_i16,
+                                                     extra_func,
+                                                     extra_scalar,
+                                                     cast<int8_t>(extra_dynamic_scalar)})
                          .output;
     }
 };

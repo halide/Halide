@@ -286,7 +286,7 @@ int main(int argc, char **argv) {
             Buffer<int16_t> out(f_buf.width() - g_buf.width() - 128);
 
             // Uncomment to check the asm
-            //result.compile_to_assembly("/dev/stdout", {f, g}, target);
+            // result.compile_to_assembly("/dev/stdout", {f, g}, target);
 
             times[use_nested_vectorization] =
                 Tools::benchmark(10, 10, [&]() {

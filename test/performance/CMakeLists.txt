@@ -1,5 +1,6 @@
 tests(GROUPS performance
       SOURCES
+      tiled_matmul.cpp
       async_gpu.cpp
       block_transpose.cpp
       boundary_conditions.cpp

@@ -1133,7 +1133,10 @@ public:
                 auto boxes = boxes_provided(body, empty_scope, func_bounds);
                 for (const auto &fused : fused_group) {
                     string fused_stage_name = fused.first + ".s" + std::to_string(fused.second);
-                    boxes_for_fused_group[fused_stage_name] = boxes[fused.first];
+                    auto it = boxes.find(fused.first);
+                    if (it != boxes.end()) {
+                        boxes_for_fused_group[fused_stage_name] = it->second;
+                    }
                     for (const auto &fn : funcs) {
                         if (fn.name() == fused.first) {
                             stage_name_to_func[fused_stage_name] = fn;

@@ -12,8 +12,7 @@ set(CMAKE_CXX_EXTENSIONS NO)
 find_package(Halide REQUIRED)
 
 # Generator
-add_executable(interpolate.generator interpolate_generator.cpp)
-target_link_libraries(interpolate.generator PRIVATE Halide::Generator Halide::Tools)
+add_halide_generator(interpolate.generator SOURCES interpolate_generator.cpp)
 
 # Filters
 add_halide_library(interpolate FROM interpolate.generator)

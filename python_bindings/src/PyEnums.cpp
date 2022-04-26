@@ -22,6 +22,7 @@ void define_enums(py::module &m) {
     py::enum_<LinkageType>(m, "LinkageType")
         .value("External", LinkageType::External)
         .value("ExternalPlusMetadata", LinkageType::ExternalPlusMetadata)
+        .value("ExternalPlusArgv", LinkageType::ExternalPlusArgv)
         .value("Internal", LinkageType::Internal);
 
     py::enum_<LoopAlignStrategy>(m, "LoopAlignStrategy")
@@ -80,6 +81,22 @@ void define_enums(py::module &m) {
         .value("POWERPC", Target::Arch::POWERPC)
         .value("RISCV", Target::Arch::RISCV)
         .value("WebAssembly", Target::Arch::WebAssembly);
+
+    // Please keep sorted.
+    py::enum_<Target::Processor>(m, "TargetProcessorTune")
+        .value("TuneAMDFam10", Target::Processor::AMDFam10)
+        .value("TuneBdVer1", Target::Processor::BdVer1)
+        .value("TuneBdVer2", Target::Processor::BdVer2)
+        .value("TuneBdVer3", Target::Processor::BdVer3)
+        .value("TuneBdVer4", Target::Processor::BdVer4)
+        .value("TuneBtVer1", Target::Processor::BtVer1)
+        .value("TuneBtVer2", Target::Processor::BtVer2)
+        .value("TuneGeneric", Target::Processor::ProcessorGeneric)
+        .value("TuneK8", Target::Processor::K8)
+        .value("TuneK8_SSE3", Target::Processor::K8_SSE3)
+        .value("TuneZnVer1", Target::Processor::ZnVer1)
+        .value("TuneZnVer2", Target::Processor::ZnVer2)
+        .value("TuneZnVer3", Target::Processor::ZnVer3);
 
     py::enum_<Target::Feature>(m, "TargetFeature")
         .value("JIT", Target::Feature::JIT)
@@ -153,6 +170,8 @@ void define_enums(py::module &m) {
         .value("LLVMLargeCodeModel", Target::Feature::LLVMLargeCodeModel)
         .value("RVV", Target::Feature::RVV)
         .value("ARMv81a", Target::Feature::ARMv81a)
+        .value("SanitizerCoverage", Target::Feature::SanitizerCoverage)
+        .value("ProfileByTimer", Target::Feature::ProfileByTimer)
         .value("FeatureEnd", Target::Feature::FeatureEnd);
 
     py::enum_<halide_type_code_t>(m, "TypeCode")
@@ -161,23 +180,23 @@ void define_enums(py::module &m) {
         .value("Float", Type::Float)
         .value("Handle", Type::Handle);
 
-    py::enum_<Output>(m, "Output")
-        .value("assembly", Output::assembly)
-        .value("bitcode", Output::bitcode)
-        .value("c_header", Output::c_header)
-        .value("c_source", Output::c_source)
-        .value("cpp_stub", Output::cpp_stub)
-        .value("featurization", Output::featurization)
-        .value("llvm_assembly", Output::llvm_assembly)
-        .value("object", Output::object)
-        .value("python_extension", Output::python_extension)
-        .value("pytorch_wrapper", Output::pytorch_wrapper)
-        .value("registration", Output::registration)
-        .value("schedule", Output::schedule)
-        .value("static_library", Output::static_library)
-        .value("stmt", Output::stmt)
-        .value("stmt_html", Output::stmt_html)
-        .value("compiler_log", Output::compiler_log);
+    py::enum_<OutputFileType>(m, "OutputFileType")
+        .value("assembly", OutputFileType::assembly)
+        .value("bitcode", OutputFileType::bitcode)
+        .value("c_header", OutputFileType::c_header)
+        .value("c_source", OutputFileType::c_source)
+        .value("cpp_stub", OutputFileType::cpp_stub)
+        .value("featurization", OutputFileType::featurization)
+        .value("llvm_assembly", OutputFileType::llvm_assembly)
+        .value("object", OutputFileType::object)
+        .value("python_extension", OutputFileType::python_extension)
+        .value("pytorch_wrapper", OutputFileType::pytorch_wrapper)
+        .value("registration", OutputFileType::registration)
+        .value("schedule", OutputFileType::schedule)
+        .value("static_library", OutputFileType::static_library)
+        .value("stmt", OutputFileType::stmt)
+        .value("stmt_html", OutputFileType::stmt_html)
+        .value("compiler_log", OutputFileType::compiler_log);
 }
 
 }  // namespace PythonBindings

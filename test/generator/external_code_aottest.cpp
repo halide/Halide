@@ -12,7 +12,7 @@ using namespace std;
 using namespace Halide::Runtime;
 
 int main() {
-    Buffer<int32_t> buf(10, 10);
+    Buffer<int32_t, 2> buf(10, 10);
 
     for (int i = 0; i < 10; i++) {
         for (int j = 0; j < 10; j++) {
@@ -20,7 +20,7 @@ int main() {
         }
     }
 
-    Buffer<float> out(10, 10);
+    Buffer<float, 2> out(10, 10);
     int ret_code = external_code(buf.raw_buffer(), out.raw_buffer());
 
     assert(ret_code == 0);

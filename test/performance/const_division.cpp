@@ -12,7 +12,7 @@ using namespace Halide::Tools;
 std::mt19937 rng(0);
 
 template<typename T>
-bool test(int w, bool div) {
+bool test(int w, bool div, bool round_to_zero) {
     Func f, g, h;
     Var x, y;
 
@@ -40,18 +40,33 @@ bool test(int w, bool div) {
         for (int x = 0; x < input.width(); x++) {
             uint32_t bits = (uint32_t)rng();
             input(x, y) = (T)bits;
+            // Round-to-zero faults on zero denominators
+            if (round_to_zero && (input(x, y) == 0)) {
+                input(x, y) = 1;
+            }
         }
     }
 
     if (div) {
-        // Test div
-        f(x, y) = input(x, y) / cast<T>(y + min_val);
+        if (round_to_zero) {
+            // Test div. We'll unroll entirely across y to turn the denominator into a constant.
+            f(x, y) = div_round_to_zero(input(x, y), cast<T>(y + min_val));
 
-        // Reference good version
-        g(x, y) = input(x, y) / cast<T>(y + min_val);
+            // Reference good version. Not unrolled across y.
+            g(x, y) = div_round_to_zero(input(x, y), cast<T>(y + min_val));
 
-        // Version that uses fast_integer_divide
-        h(x, y) = Halide::fast_integer_divide(input(x, y), cast<uint8_t>(y + min_val));
+            // Version that uses fast_integer_divide
+            h(x, y) = Halide::fast_integer_divide_round_to_zero(input(x, y), cast<uint8_t>(y + min_val));
+        } else {
+            // Test div
+            f(x, y) = input(x, y) / cast<T>(y + min_val);
+
+            // Reference good version
+            g(x, y) = input(x, y) / cast<T>(y + min_val);
+
+            // Version that uses fast_integer_divide
+            h(x, y) = Halide::fast_integer_divide(input(x, y), cast<uint8_t>(y + min_val));
+        }
     } else {
         // Test mod
         f(x, y) = input(x, y) % cast<T>(y + min_val);
@@ -70,10 +85,11 @@ bool test(int w, bool div) {
         f.vectorize(x);
         h.vectorize(x);
     }
-
-    f.compile_jit();
-    g.compile_jit();
-    h.compile_jit();
+    Target t = get_jit_target_from_environment();
+    t.set_feature(Target::DisableLLVMLoopOpt);
+    f.compile_jit(t);
+    g.compile_jit(t);
+    h.compile_jit(t);
 
     Buffer<T> correct = g.realize({input.width(), num_vals});
     double t_correct = benchmark([&]() { g.realize(correct); });
@@ -115,23 +131,39 @@ int main(int argc, char **argv) {
     std::cout << "const_division test seed: " << seed << std::endl;
 
     bool success = true;
-    for (int i = 0; i < 2; i++) {
-        const char *name = (i == 0 ? "divisor" : "modulus");
-        printf("type            const-%s speed-up  runtime-%s speed-up\n", name, name);
+    for (int i = 0; i < 3; i++) {
+        switch (i) {
+        case 0:
+            printf("division rounding to negative infinity:\n");
+            break;
+        case 1:
+            printf("signed division rounding to zero:\n");
+            break;
+        case 2:
+            printf("modulus:\n");
+            break;
+        }
+        printf("type            const-divisor speed-up  runtime-divisor speed-up\n");
+
         // Scalar
-        success = success && test<int32_t>(1, i == 0);
-        success = success && test<int16_t>(1, i == 0);
-        success = success && test<int8_t>(1, i == 0);
-        success = success && test<uint32_t>(1, i == 0);
-        success = success && test<uint16_t>(1, i == 0);
-        success = success && test<uint8_t>(1, i == 0);
+        success = success && test<int32_t>(1, i == 0, i == 1);
+        success = success && test<int16_t>(1, i == 0, i == 1);
+        success = success && test<int8_t>(1, i == 0, i == 1);
+        if (i != 1) {
+            success = success && test<uint32_t>(1, i == 0, false);
+            success = success && test<uint16_t>(1, i == 0, false);
+            success = success && test<uint8_t>(1, i == 0, false);
+        }
+
         // Vector
-        success = success && test<int32_t>(8, i == 0);
-        success = success && test<int16_t>(16, i == 0);
-        success = success && test<int8_t>(32, i == 0);
-        success = success && test<uint32_t>(8, i == 0);
-        success = success && test<uint16_t>(16, i == 0);
-        success = success && test<uint8_t>(32, i == 0);
+        success = success && test<int32_t>(8, i == 0, i == 1);
+        success = success && test<int16_t>(16, i == 0, i == 1);
+        success = success && test<int8_t>(32, i == 0, i == 1);
+        if (i != 1) {
+            success = success && test<uint32_t>(8, i == 0, false);
+            success = success && test<uint16_t>(16, i == 0, false);
+            success = success && test<uint8_t>(32, i == 0, false);
+        }
     }
 
     if (!success) {

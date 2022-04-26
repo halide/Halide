@@ -12,8 +12,7 @@ set(CMAKE_CXX_EXTENSIONS NO)
 find_package(Halide REQUIRED)
 
 # Generator
-add_executable(bgu.generator bgu_generator.cpp)
-target_link_libraries(bgu.generator PRIVATE Halide::Generator Halide::Tools)
+add_halide_generator(bgu.generator SOURCES bgu_generator.cpp)
 
 # Filters
 add_halide_library(bgu FROM bgu.generator)

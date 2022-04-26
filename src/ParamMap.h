@@ -33,8 +33,8 @@ public:
             : image_param(&p), buf(buf), buf_out_param(nullptr) {
         }
 
-        template<typename T>
-        ParamMapping(const ImageParam &p, Buffer<T> &buf)
+        template<typename T, int Dims>
+        ParamMapping(const ImageParam &p, Buffer<T, Dims> &buf)
             : image_param(&p), buf(buf), buf_out_param(nullptr) {
         }
 
@@ -42,8 +42,8 @@ public:
             : image_param(&p), buf_out_param(buf_ptr) {
         }
 
-        template<typename T>
-        ParamMapping(const ImageParam &p, Buffer<T> *buf_ptr)
+        template<typename T, int Dims>
+        ParamMapping(const ImageParam &p, Buffer<T, Dims> *buf_ptr)
             : image_param(&p), buf_out_param((Buffer<> *)buf_ptr) {
         }
     };

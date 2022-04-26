@@ -17,6 +17,12 @@ function(_Halide_cmake_target OUTVAR)
     # Get OS from CMake
     string(TOLOWER "${CMAKE_SYSTEM_NAME}" os)
     list(TRANSFORM os REPLACE "^darwin$" "osx")
+    list(TRANSFORM os REPLACE "^emscripten$" "wasmrt")
+
+    # Fix up emscripten usage
+    if (os STREQUAL "wasmrt" AND arch STREQUAL "x86")
+        set(arch "wasm")
+    endif ()
 
     set(${OUTVAR} "${arch}-${bits}-${os}" PARENT_SCOPE)
 endfunction()
@@ -60,8 +66,10 @@ unset(_default_target)
 # Print the active values of all special target triples.
 ##
 
-if (NOT ${CMAKE_FIND_PACKAGE_NAME}_FIND_QUIETLY)
+get_property(${CMAKE_FIND_PACKAGE_NAME}_MESSAGE_PRINTED GLOBAL PROPERTY ${CMAKE_FIND_PACKAGE_NAME}_MESSAGE_PRINTED)
+if (NOT ${CMAKE_FIND_PACKAGE_NAME}_FIND_QUIETLY AND NOT ${CMAKE_FIND_PACKAGE_NAME}_MESSAGE_PRINTED)
     message(STATUS "Halide 'host' platform triple:   ${Halide_HOST_TARGET}")
     message(STATUS "Halide 'cmake' platform triple:  ${Halide_CMAKE_TARGET}")
     message(STATUS "Halide default AOT target:       ${Halide_TARGET}")
+    set_property(GLOBAL PROPERTY ${CMAKE_FIND_PACKAGE_NAME}_MESSAGE_PRINTED 1)
 endif ()

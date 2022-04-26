@@ -1,4 +1,5 @@
 #include "HalideRuntime.h"
+#include "runtime_internal.h"
 
 #ifndef __clockid_t_defined
 #define __clockid_t_defined 1
@@ -62,6 +63,9 @@ WEAK int halide_start_clock(void *user_context) {
 }
 
 WEAK int64_t halide_current_time_ns(void *user_context) {
+    // It is an error to call halide_current_time_ns() if halide_start_clock() has never been called
+    halide_debug_assert(user_context, halide_reference_clock_inited);
+
     timespec now;
     // To avoid requiring people to link -lrt, we just make the syscall directly.
 

@@ -6,8 +6,8 @@ enum class BagType { Paper,
                      Plastic };
 
 template<typename Type, int size = 32, int dim = 3>
-Halide::Buffer<Type> make_image(int extra) {
-    Halide::Buffer<Type> im(size, size, dim);
+Halide::Buffer<Type, 3> make_image(int extra) {
+    Halide::Buffer<Type, 3> im(size, size, dim);
     for (int x = 0; x < size; x++) {
         for (int y = 0; y < size; y++) {
             for (int c = 0; c < dim; c++) {
@@ -30,9 +30,9 @@ public:
     GeneratorParam<bool> vectorize{"vectorize", true};
     GeneratorParam<LoopLevel> intermediate_level{"intermediate_level", LoopLevel::root()};
 
-    Input<Buffer<uint8_t>> typed_buffer_input{"typed_buffer_input", 3};
+    Input<Buffer<uint8_t, 3>> typed_buffer_input{"typed_buffer_input"};
     Input<Buffer<>> untyped_buffer_input{"untyped_buffer_input"};
-    Input<Buffer<uint8_t>[2]> array_buffer_input { "array_buffer_input", 3 };
+    Input<Buffer<uint8_t, 3>[2]> array_buffer_input { "array_buffer_input" };
     Input<Func> simple_input{"simple_input", 3};  // require a 3-dimensional Func but leave Type unspecified
     Input<Func[]> array_input{"array_input", 3};  // require a 3-dimensional Func but leave Type and ArraySize unspecified
     // Note that Input<Func> does not (yet) support Tuples
@@ -41,14 +41,14 @@ public:
 
     Output<Func> simple_output{"simple_output", Float(32), 3};
     Output<Func> tuple_output{"tuple_output", 3};             // require a 3-dimensional Func but leave Type(s) unspecified
-    Output<Func[]> array_output{"array_output", Int(16), 2};  // leave ArraySize unspecified
-    Output<Buffer<float>> typed_buffer_output{"typed_buffer_output"};
+    Output<Func[]> array_output{"array_output", Int(16), 3};  // leave ArraySize unspecified
+    Output<Buffer<float, 3>> typed_buffer_output{"typed_buffer_output"};
     Output<Buffer<>> untyped_buffer_output{"untyped_buffer_output"};
-    Output<Buffer<>> tupled_output{"tupled_output", {Float(32), Int(32)}, 3};
-    Output<Buffer<uint8_t>> static_compiled_buffer_output{"static_compiled_buffer_output", 3};
-    Output<Buffer<uint8_t>[2]> array_buffer_output { "array_buffer_output", 3 };
-    Output<Buffer<Halide::float16_t>> float16_output{"float16_output", 3};
-    Output<Buffer<Halide::bfloat16_t>> bfloat16_output{"bfloat16_output", 3};
+    Output<Buffer<void, 3>> tupled_output{"tupled_output", {Float(32), Int(32)}};
+    Output<Buffer<uint8_t, 3>> static_compiled_buffer_output{"static_compiled_buffer_output"};
+    Output<Buffer<uint8_t, 3>[2]> array_buffer_output { "array_buffer_output" };
+    Output<Buffer<Halide::float16_t, 3>> float16_output{"float16_output"};
+    Output<Buffer<Halide::bfloat16_t, 3>> bfloat16_output{"bfloat16_output"};
 
     void generate() {
         simple_output(x, y, c) = cast<float>(simple_input(x, y, c));
@@ -82,12 +82,12 @@ public:
 
         array_output.resize(array_input.size());
         for (size_t i = 0; i < array_input.size(); ++i) {
-            array_output[i](x, y) = cast<int16_t>(array_input[i](x, y, 0) + int_arg[i]);
+            array_output[i](x, y, c) = cast<int16_t>(array_input[i](x, y, c) + int_arg[i]);
         }
 
         // This should be compiled into the Generator product itself,
         // and not produce another input for the Stub or AOT filter.
-        Buffer<uint8_t> static_compiled_buffer = make_image<uint8_t>(42);
+        Buffer<uint8_t, 3> static_compiled_buffer = make_image<uint8_t>(42);
         static_compiled_buffer_output = static_compiled_buffer;
     }
 

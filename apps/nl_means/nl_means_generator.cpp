@@ -6,12 +6,12 @@ using namespace Halide;
 
 class NonLocalMeans : public Halide::Generator<NonLocalMeans> {
 public:
-    Input<Buffer<float>> input{"input", 3};
+    Input<Buffer<float, 3>> input{"input"};
     Input<int> patch_size{"patch_size"};
     Input<int> search_area{"search_area"};
     Input<float> sigma{"sigma"};
 
-    Output<Buffer<float>> non_local_means{"non_local_means", 3};
+    Output<Buffer<float, 3>> non_local_means{"non_local_means"};
 
     void generate() {
         /* THE ALGORITHM */
