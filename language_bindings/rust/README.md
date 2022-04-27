@@ -39,17 +39,6 @@ Rust handles that in the build.rs
 
 
 
-
-## Building custom generator
-Halide rust bindings allow a rust user to generate a user defined Halide generator and automatically create associated rust bindings.  
-1.) Step one TODO when finished with automatic generating of generators
-
-TOMOVE..?
-  
-## Description of bindings
-
-TODO...?
-
 ## link to cargo docs
 
 TODO...
