@@ -69,7 +69,6 @@ use std::io::Write;
 
 fn main() {
     let Hal = GenBuilder::new("../../../../", "src/gens").debug(true);
-    // .out_dir("src/rs");
 
     let gen = Hal.new_gen("iir_blur".to_string());
 
