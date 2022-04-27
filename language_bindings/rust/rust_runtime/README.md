@@ -1,62 +1,47 @@
-# halide rust bindings
+# Rust Runtime
 
+src/lib.rs contains a helper struct to more easily create buffer_t objects in Rust.
 
-These instructions also assume a fresh install of Ubntu LTS 21.04.
+# Example:
+```
+use halide_runtime::runtime_bindings::{ halide_type_t}; 
+use halide_runtime::HalideBuffer;
+use image::io::Reader;
 
-First, update your system.
+fn main() {
 
-dev@ubuntu:~$ sudo apt update
-dev@ubuntu:~$ sudo apt upgrade
-Then, install Halide's necessary build tools and dependencies.
+    let img = Reader::open("images/Hummingbird.jpg")
+        //Img source: https://commons.wikimedia.org/wiki/File:Hummingbird.jpg#filelinks
+        //Image released into public domain by Jon Sullivan PDPhoto.org
+        .unwrap()
+        .decode()
+        .unwrap()
+        .to_rgba8();
 
-dev@ubuntu:~$ sudo apt install \
-build-essential git ninja-build \
-clang-tools lld llvm-dev libclang-dev \
-libpng-dev libjpeg-dev libgl-dev \
-python3-dev python3-numpy python3-scipy python3-imageio \
-libopenblas-dev libeigen3-dev libatlas-base-dev
-Next, you will want the latest version of CMake (3.16+ supported):
+    let height = img.height();
+    let width = img.width();
+    let channels = 4;
 
-dev@ubuntu:~$ wget -O - https://apt.kitware.com/keys/kitware-archive-latest.asc 2>/dev/null |\
-gpg --dearmor - | sudo tee /etc/apt/trusted.gpg.d/kitware.gpg >/dev/null
-dev@ubuntu:~$ sudo apt-add-repository 'deb https://apt.kitware.com/ubuntu/ focal main'
-dev@ubuntu:~$ sudo apt install cmake kitware-archive-keyring
-dev@ubuntu:~$ sudo rm /etc/apt/trusted.gpg.d/kitware.gpg
-Alternatively, you can install CMake via the Snap store:
+    let mut img_raw = img.into_raw();
 
-dev@ubuntu:~$ snap install cmake
-Be sure to also install the GPU drivers for your system (either Nvidia or AMD).
+    let mut input: Vec<f32> = vec![0.0; img_raw.len()];
+    for x in 0..img_raw.len() {
+        input[x] = img_raw[x] as f32;
+    }
 
-Get Halide & run the build
-
-This is mostly copied from the README, so check there first if these instructions have gone stale.
-
-dev@ubuntu:~$ git clone https://github.com/halide/Halide.git
-dev@ubuntu:~$ Make (Inside the cloned repo)
-
-
-##Description of bindings
-###link to cargo docs
-##Demo app Getting Started Guild
-
-1.) Install Halide Source
-a.) The following install guild should be used: (link to halide install guild)
-2.)
-install rust Following the below install guild:
-link to rust install guild
-install Rust Cargo
-link to cargo install guild
-3.)
-1.) In the terminal cd into the Halide/RustBindings/Demo
-2.) run Cargo Build
-3.) run Cargo test
-4.) run Cargo run
-4.) You should now have a slightly blurry picture of a cat
-
-##Building custom generator
-Halide rust bindings allow a rust user to generate a user defined Halide generator and automatically create associated rust bindings.  
-1.) Step one TODO when finished with automatic generating of generators
-
-
-to be continue........
-  
+    // Create the input buffer
+    let mut inbuf = HalideBuffer {
+        width: width as i32,
+        height: height as i32,
+        channels: channels as i32,
+        t: halide_type_t {
+            bits: 32,
+            code: 2,
+            lanes: 1,
+        },
+        data: input.as_mut_ptr(),
+        flags: 1,
+    }
+    .create_buffer();
+}
+```
