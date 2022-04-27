@@ -1249,13 +1249,6 @@ Expr halving_sub(Expr a, Expr b) {
     return Call::make(result_type, Call::halving_sub, {std::move(a), std::move(b)}, Call::PureIntrinsic);
 }
 
-Expr rounding_halving_sub(Expr a, Expr b) {
-    user_assert(a.defined() && b.defined()) << "rounding_halving_sub of undefined Expr\n";
-    match_types(a, b);
-    Type result_type = a.type();
-    return Call::make(result_type, Call::rounding_halving_sub, {std::move(a), std::move(b)}, Call::PureIntrinsic);
-}
-
 Expr mul_shift_right(Expr a, Expr b, Expr q) {
     user_assert(a.defined() && b.defined() && q.defined()) << "mul_shift_right of undefined Expr\n";
     user_assert(q.type().is_uint()) << "mul_shift_right shift must be unsigned\n";
