@@ -20,11 +20,11 @@ Install Cargo: https://doc.rust-lang.org/cargo/getting-started/installation.html
   Cargo run
 ```
 
-3.) You should now have a slightly blurry picture of a hummingbird in the images/ directory called.
+3.) You should now have a slightly blurry picture of a hummingbird in the images/ directory.
 
 ## Generating rustdocs
 
-In any folder you can use the command 
+To generate rustdocs for the halide_build or halide_runtime crate navigate to the crates root dir (where the .toml is) and run: 
 
 ```cargo doc --open``` 
 
@@ -34,8 +34,8 @@ To generate the rustdocs and open the html file.
 
 ## FAQ
 
-### Where are the make files or cmake lists?
-Rust handles that in the build.rs
+### Where are the makefiles or cmakelists?
+The halide_build crate contains that funtionality, the usage can be seen in the iir_blur example app build.rs file
 
 
 
