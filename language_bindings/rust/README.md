@@ -55,7 +55,7 @@ TODO...
 
 ## Demo app Getting Started Guide
 
-1.) Install Halide 
+1.) Install Halide using the steps above or the instructions at
     https://github.com/halide/Halide
    
 2.) Install Rust
