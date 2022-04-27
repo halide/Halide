@@ -32,7 +32,7 @@ Then a user can use the relevant generator functions
 ### make_runtime()
   Makes the Halide runtime
   
-### rename
+### rename()
   Renames the gen outputs to be what Rust and Bindgen expect on Linux distros
   
 ### bind()
