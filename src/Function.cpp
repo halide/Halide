@@ -362,6 +362,14 @@ struct PrintTypeList {
     }
 };
 
+// Some compilers will (inexplicably) complain:
+//
+//    'PrintTypeList' may not intend to support class template argument deduction
+//
+// ...so add a CTAD to deal with this.
+template<typename T>
+PrintTypeList(const std::vector<T> &) -> PrintTypeList<T>;
+
 bool types_match(const std::vector<Type> &types, const std::vector<Expr> &exprs) {
     size_t n = types.size();
     if (n != exprs.size()) {
