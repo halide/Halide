@@ -1,5 +1,4 @@
-# Halide Rust Bindings
-
+# Halide in Rust
 
 ## Instalation Steps:
 These instructions were tested on a fresh install of Ubuntu 21.04.
