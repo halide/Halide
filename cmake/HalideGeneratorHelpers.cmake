@@ -1,5 +1,7 @@
 cmake_minimum_required(VERSION 3.16)
 
+option(Halide_NO_DEFAULT_FLAGS "When enabled, suppresses recommended flags in add_halide_generator" OFF)
+
 include(${CMAKE_CURRENT_LIST_DIR}/HalideTargetHelpers.cmake)
 
 define_property(TARGET PROPERTY Halide_RT_TARGETS
@@ -16,7 +18,7 @@ define_property(TARGET PROPERTY Halide_GENERATOR_HAS_POST_BUILD
 ##
 
 function(add_halide_generator TARGET)
-    set(options "")
+    set(options NO_DEFAULT_FLAGS)
     set(oneValueArgs PACKAGE_NAME PACKAGE_NAMESPACE EXPORT_FILE)
     set(multiValueArgs SOURCES LINK_LIBRARIES)
     cmake_parse_arguments(ARG "${options}" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
@@ -56,6 +58,18 @@ function(add_halide_generator TARGET)
         add_executable(${TARGET} ${ARG_SOURCES})
         add_executable(${gen} ALIAS ${TARGET})
         target_link_libraries(${TARGET} PRIVATE Halide::Generator ${ARG_LINK_LIBRARIES})
+
+        if (NOT ARG_NO_DEFAULT_FLAGS AND NOT Halide_NO_DEFAULT_FLAGS)
+            # For crosscompiling builds, the Halide headers will be included using -isystem,
+            # which will cause all warnings to be ignored. This is not helpful, since
+            # we *want* deprecation warnings to be propagated. So we must set
+            # NO_SYSTEM_FROM_IMPORTED in order for it to be seen.
+            set_target_properties(${TARGET} PROPERTIES NO_SYSTEM_FROM_IMPORTED YES)
+            target_compile_options(${TARGET} PRIVATE
+                $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wdeprecated-declarations>
+                $<$<CXX_COMPILER_ID:MSVC>:/w14996>  # 4996: compiler encountered deprecated declaration
+            )
+        endif ()
 
         add_dependencies("${ARG_PACKAGE_NAME}" ${TARGET})
         export(TARGETS ${TARGET}
