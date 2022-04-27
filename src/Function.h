@@ -17,6 +17,7 @@
 namespace Halide {
 
 struct ExternFuncArgument;
+class Tuple;
 
 class Var;
 
@@ -56,6 +57,13 @@ public:
 
     /** Construct a new function with the given name */
     explicit Function(const std::string &n);
+
+    /** Construct a new function with the given name,
+     * with a requirement that it can only represent Expr(s) of the given type(s),
+     * and must have exactly the give nnumber of dimensions.
+     * required_types.empty() means there are no constraints on the type(s).
+     * required_dims == AnyDims means there are no constraints on the dimensions. */
+    explicit Function(const std::vector<Type> &required_types, int required_dims, const std::string &n);
 
     /** Construct a Function from an existing FunctionContents pointer. Must be non-null */
     explicit Function(const FunctionPtr &);
@@ -292,6 +300,18 @@ public:
 
     /** Return true iff the name matches one of the Function's pure args. */
     bool is_pure_arg(const std::string &name) const;
+
+    /** If the Function has type requirements, check that the given argument
+     * is compatible with them. If not, assert-fail. (If there are no type requirements, do nothing.) */
+    void check_types(const Expr &e) const;
+    void check_types(const Tuple &t) const;
+    void check_types(const Type &t) const;
+    void check_types(const std::vector<Expr> &exprs) const;
+    void check_types(const std::vector<Type> &types) const;
+
+    /** If the Function has dimension requirements, check that the given argument
+     * is compatible with them. If not, assert-fail. (If there are no dimension requirements, do nothing.) */
+    void check_dims(int dims) const;
 };
 
 /** Deep copy an entire Function DAG. */

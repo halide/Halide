@@ -309,11 +309,44 @@ def test_bool_conversion():
     # Verify that this doesn't fail with 'Argument passed to specialize must be of type bool'
     f.compute_root().specialize(True)
 
+def test_typed_funcs():
+    x = hl.Var('x')
+    y = hl.Var('y')
+
+    f = hl.Func(hl.Int(32), 1, 'f')
+    try:
+        f[x, y] = hl.i32(0);
+        f.realize([10, 10])
+    except RuntimeError as e:
+        assert 'is constrained to have exactly 1 dimensions, but is defined with 2 dimensions' in str(e)
+    else:
+        assert False, 'Did not see expected exception!'
+
+    f = hl.Func(hl.Int(32), 2, 'f')
+    try:
+        f[x, y] = hl.i16(0);
+        f.realize([10, 10])
+    except RuntimeError as e:
+        assert 'is constrained to only hold values of type int32 but is defined with values of type int16' in str(e)
+    else:
+        assert False, 'Did not see expected exception!'
+
+    f = hl.Func((hl.Int(32), hl.Float(32)), 2, 'f')
+    try:
+        f[x, y] = (hl.i16(0), hl.f64(0))
+        f.realize([10, 10])
+    except RuntimeError as e:
+        assert 'is constrained to only hold values of type (int32, float32) but is defined with values of type (int16, float64)' in str(e)
+    else:
+        assert False, 'Did not see expected exception!'
+
+
 if __name__ == "__main__":
     test_compiletime_error()
     test_runtime_error()
     test_misused_and()
     test_misused_or()
+    test_typed_funcs()
     test_float_or_int()
     test_operator_order()
     test_int_promotion()

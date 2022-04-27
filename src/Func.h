@@ -715,6 +715,19 @@ public:
     /** Declare a new undefined function with the given name */
     explicit Func(const std::string &name);
 
+    /** Declare a new undefined function with the given name.
+     * The function will be constrained to represent Exprs of required_type.
+     * If required_dims is not AnyDims, the function will be constrained to exactly
+     * that many dimensions. */
+    explicit Func(const Type &required_type, int required_dims, const std::string &name);
+
+    /** Declare a new undefined function with the given name.
+     * If required_types is not empty, the function will be constrained to represent
+     * Tuples of the same arity and types. (If required_types is empty, there is no constraint.)
+     * If required_dims is not AnyDims, the function will be constrained to exactly
+     * that many dimensions. */
+    explicit Func(const std::vector<Type> &required_types, int required_dims, const std::string &name);
+
     /** Declare a new undefined function with an
      * automatically-generated unique name */
     Func();
