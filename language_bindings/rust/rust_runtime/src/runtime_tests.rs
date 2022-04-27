@@ -1,10 +1,8 @@
-//todo re-add tests
-/* not sure if this is possible with them in the same moduler may have to have test plan reflect these tests
 use std::ffi::c_void;
 use std::os::raw::c_int;
 use std::ptr::null_mut;
 
-use crate::runtime::runtime_bindings::*;
+use crate::runtime_bindings::*;
 
 fn link(){
     println!(":rustc-link-search=native={}","/home/rootbutcher2/CLionProjects/Halide-rustbinding/bindings/rust/target");
@@ -132,7 +130,7 @@ fn test_halide_profiler_reset(){
     }
 }
 
-/*
+
     #[test]
     fn test_halide_memoization_cache_release(){
         //let x = std::ptr::null_mut();
@@ -143,7 +141,7 @@ fn test_halide_profiler_reset(){
             //halide_memoization_cache_release(x, raw_ptr)
         }
     }
-*/
+
 
 #[test]
 fn test_halide_memoization_cache_set_size(){
@@ -153,4 +151,3 @@ fn test_halide_memoization_cache_set_size(){
     }
 
 }
-*/

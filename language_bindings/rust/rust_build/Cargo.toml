@@ -1,5 +1,5 @@
 [package]
-name = "halide"
+name = "halide_build"
 description ="Rust build script and runtime libaries for conviently useing Halide code in rust projects"
 version = "0.1.0"
 edition = "2021" #this is rust cargo edition

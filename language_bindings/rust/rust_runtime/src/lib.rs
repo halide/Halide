@@ -1,6 +1,6 @@
 
 include!("Runtime_bindings.rs");
-use crate::runtime::runtime_bindings::*;
+use crate::runtime_bindings::*;
 
 ///Need doc
 pub struct HalideBuffer {
@@ -55,4 +55,4 @@ impl HalideBuffer {
         buf
     }
 }
-//}
+//mod runtime_tests; todo reimplement
