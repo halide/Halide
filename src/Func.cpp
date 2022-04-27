@@ -219,11 +219,9 @@ const std::vector<Type> &Func::output_types() const {
 /** Get the number of outputs this function has. */
 int Func::outputs() const {
     const auto &types = defined() ? func.output_types() : func.required_types();
-    // For backwards compatibility, we want to return 0 if the Func
-    // has no type requirements.
-    if (types.empty()) {
-        return 0;
-    }
+    user_assert(!types.empty())
+        << "Can't call Func::outputs on Func \"" << name()
+        << "\" because it is undefined or has no type requirements.\n";
     return (int)types.size();
 }
 
@@ -235,11 +233,9 @@ const std::string &Func::extern_function_name() const {
 
 int Func::dimensions() const {
     const int dims = defined() ? func.dimensions() : func.required_dimensions();
-    // For backwards compatibility, we want to return 0 if the Func
-    // has no dimension requirements.
-    if (dims == AnyDims) {
-        return 0;
-    }
+    user_assert(dims != AnyDims)
+        << "Can't call Func::dimensions on Func \"" << name()
+        << "\" because it is undefined or has no dimension requirements.\n";
     return dims;
 }
 

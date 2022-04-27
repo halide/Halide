@@ -921,7 +921,7 @@ bool Function::is_pure_arg(const std::string &name) const {
 }
 
 int Function::dimensions() const {
-    return args().size();
+    return (int)args().size();
 }
 
 int Function::outputs() const {

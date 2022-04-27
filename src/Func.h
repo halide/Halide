@@ -1214,16 +1214,16 @@ public:
     /** Get the number of outputs of this Func. Corresponds to the
      * size of the Tuple this Func was defined to return.
      * If the Func isn't yet defined, but was specified with required types,
-     * the number of outputs specific in the requirements will be returned. */
+     * the number of outputs specified in the requirements will be returned. */
     int outputs() const;
 
     /** Get the name of the extern function called for an extern
      * definition. */
     const std::string &extern_function_name() const;
 
-    /** The dimensionality (number of arguments) of this
-     * function. Zero if the function is not yet defined and has no required
-     * dimensionality specified. */
+    /** The dimensionality (number of arguments) of this function.
+     * If the Func isn't yet defined, but was specified with required dimensionality,
+     * the dimensionality specified in the requirements will be returned. */
     int dimensions() const;
 
     /** Construct either the left-hand-side of a definition, or a call

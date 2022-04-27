@@ -315,9 +315,26 @@ def test_typed_funcs():
 
     f = hl.Func('f')
     assert not f.defined()
-    # assert f.output_type() == Int(32)  -- will assert-fail
-    assert f.outputs() == 0
-    assert f.dimensions() == 0
+    try:
+        assert f.output_type() == Int(32)
+    except RuntimeError as e:
+        assert 'it is undefined' in str(e)
+    else:
+        assert False, 'Did not see expected exception!'
+
+    try:
+        assert f.outputs() == 0
+    except RuntimeError as e:
+        assert 'it is undefined' in str(e)
+    else:
+        assert False, 'Did not see expected exception!'
+
+    try:
+        assert f.dimensions() == 0
+    except RuntimeError as e:
+        assert 'it is undefined' in str(e)
+    else:
+        assert False, 'Did not see expected exception!'
 
 
     f = hl.Func(hl.Int(32), 2, 'f')
@@ -329,7 +346,13 @@ def test_typed_funcs():
 
     f = hl.Func([hl.Int(32), hl.Float(64)], 3, 'f')
     assert not f.defined()
-    # assert f.output_type() == hl.Int(32)  -- will assert-fail
+    try:
+        assert f.output_type() == hl.Int(32)
+    except RuntimeError as e:
+        assert 'it returns a Tuple' in str(e)
+    else:
+        assert False, 'Did not see expected exception!'
+
     assert f.output_types() == [hl.Int(32), hl.Float(64)]
     assert f.outputs() == 2
     assert f.dimensions() == 3
