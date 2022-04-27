@@ -20,7 +20,7 @@ Install Cargo: https://doc.rust-lang.org/cargo/getting-started/installation.html
   Cargo run
 ```
 
-3.) You should now have a slightly blurry picture of a cat in the images/ directory called.
+3.) You should now have a slightly blurry picture of a hummingbird in the images/ directory called.
 
 ## Generating rustdocs
 
@@ -30,10 +30,19 @@ In any folder you can use the command
 
 To generate the rustdocs and open the html file.
 
+
+
+## FAQ
+
+### Where are the make files or cmake lists?
+Rust handles that in the build.rs
+
+
+
+
 ## Building custom generator
 Halide rust bindings allow a rust user to generate a user defined Halide generator and automatically create associated rust bindings.  
 1.) Step one TODO when finished with automatic generating of generators
-
 
 TOMOVE..?
   
