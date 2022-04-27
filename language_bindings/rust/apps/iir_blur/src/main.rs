@@ -4,15 +4,16 @@
 
 include!(concat!(env!("OUT_DIR"), "/iir_blur.rs"));
 
-use halide_runtime::{HalideBuffer};
-use halide_runtime::runtime_bindings::{halide_buffer_t, halide_type_t};//todo rust enum type to runtime mod and possibly escape from useing buffer_t
+use halide_runtime::runtime_bindings::{halide_buffer_t, halide_type_t}; //todo rust enum type to runtime mod and possibly escape from useing buffer_t
+use halide_runtime::HalideBuffer;
 use image::io::Reader;
 
-fn main(){
-
+fn main() {
     println!("halide mainish thing");
 
-    let img = Reader::open("images/cat.png")
+    let img = Reader::open("images/Hummingbird.jpg")
+        //Img source: https://commons.wikimedia.org/wiki/File:Hummingbird.jpg#filelinks
+        //Image released into public domain by Jon Sullivan PDPhoto.org
         .unwrap()
         .decode()
         .unwrap()
@@ -32,32 +33,34 @@ fn main(){
     let mut output_raw: Vec<f32> = vec![0.0; img_raw.len()];
 
     // Create the input buffer
-    let mut inbuf = HalideBuffer{
+    let mut inbuf = HalideBuffer {
         width: width as i32,
         height: height as i32,
         channels: channels as i32,
-        t: halide_type_t{
+        t: halide_type_t {
             bits: 32,
             code: 2,
             lanes: 1,
         },
         data: input.as_mut_ptr(),
         flags: 1,
-    }.create_buffer();
-    
+    }
+    .create_buffer();
+
     // Create the output buffer
-    let mut outbuf = HalideBuffer{
+    let mut outbuf = HalideBuffer {
         width: width as i32,
         height: height as i32,
         channels: channels as i32,
-        t: halide_type_t{
+        t: halide_type_t {
             bits: 32,
             code: 2,
             lanes: 1,
         },
         data: output_raw.as_mut_ptr(),
         flags: 0,
-    }.create_buffer();
+    }
+    .create_buffer();
 
     unsafe {
         iir_blur(&mut inbuf, 0.1, &mut outbuf);
