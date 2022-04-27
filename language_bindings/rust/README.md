@@ -22,11 +22,11 @@ Install Rust: https://www.rust-lang.org/tools/install
 
 ## Generating rustdocs
 
-In any folder foo/ you can use the command 
+In any folder you can use the command 
 
-```cargo doc``` 
+```cargo doc --open``` 
 
-Then look in the target/doc/foo/index.html to see the generated rust docs
+To generate the rustdocs and open the html file.
 
 ## Building custom generator
 Halide rust bindings allow a rust user to generate a user defined Halide generator and automatically create associated rust bindings.  
