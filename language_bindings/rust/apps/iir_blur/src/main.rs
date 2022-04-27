@@ -12,7 +12,9 @@ fn main(){
 
     println!("halide mainish thing");
 
-    let img = Reader::open("images/cat.png")
+    let img = Reader::open("images/Hummingbird.jpg")
+        //Img source: https://commons.wikimedia.org/wiki/File:Hummingbird.jpg#filelinks
+        //Image released into public domain by Jon Sullivan PDPhoto.org
         .unwrap()
         .decode()
         .unwrap()
