@@ -319,7 +319,7 @@ public:
 
     /** Define the output buffers. If the Function has types specified, this can be called at
      * any time. If not, it can only be called for a Function with a pure definition. */
-    void define_output_buffers(const std::vector<Type> &types, int dims) const;
+    void create_output_buffers(const std::vector<Type> &types, int dims) const;
 };
 
 /** Deep copy an entire Function DAG. */

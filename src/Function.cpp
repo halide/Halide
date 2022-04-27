@@ -608,11 +608,11 @@ void Function::define(const vector<string> &args, vector<Expr> values) {
     }
 
     if (contents->output_buffers.empty()) {
-        define_output_buffers(contents->output_types, (int)args.size());
+        create_output_buffers(contents->output_types, (int)args.size());
     }
 }
 
-void Function::define_output_buffers(const std::vector<Type> &types, int dims) const {
+void Function::create_output_buffers(const std::vector<Type> &types, int dims) const {
     internal_assert(contents->output_buffers.empty());
     internal_assert(!types.empty() && dims != AnyDims);
 
@@ -965,7 +965,7 @@ const std::vector<Parameter> &Function::output_buffers() const {
     // If types and dims are already specified, we can go ahead and create
     // the output buffer(s) even if the Function has no pure definition yet.
     if (!contents->required_types.empty() && contents->required_dims != AnyDims) {
-        define_output_buffers(contents->required_types, contents->required_dims);
+        create_output_buffers(contents->required_types, contents->required_dims);
         return contents->output_buffers;
     }
 
