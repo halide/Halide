@@ -10,11 +10,11 @@ int main(int argc, char **argv) {
         Func f("f");
 
         assert(!f.defined());
-        // undefined funcs assert-fail if you call output_type(s),
+        // undefined funcs assert-fail for these calls.
         // but return 0 for outputs() and dimensions().
         // assert(f.output_type() == Int(32));
-        assert(f.outputs() == 0);
-        assert(f.dimensions() == 0);
+        // assert(f.outputs() == 0);
+        // assert(f.dimensions() == 0);
     }
 
     // Verify that func with type-and-dim specifications
