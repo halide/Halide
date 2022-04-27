@@ -42,7 +42,10 @@ This is mostly copied from the README, so check there first if these instruction
 
 ```
 dev@ubuntu:~$ git clone https://github.com/halide/Halide.git
-dev@ubuntu:~$ Make #(Inside the cloned repo)
+```
+Then inside the cloned repo
+```
+dev@ubuntu:~$ Make
 ```
 
 ## Description of bindings
