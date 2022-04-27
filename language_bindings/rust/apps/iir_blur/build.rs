@@ -1,18 +1,12 @@
+use halide_build::{GenBuilder, Generator};
 use std::io;
 use std::io::Write;
-use halide_build::{GenBuilder,Generator};
 
 fn main() {
-
-    let Hal = GenBuilder::new(
-        "../../../../",
-        "src/gens"
-    ).debug(true);
-       // .out_dir("src/rs");
-
+    let Hal = GenBuilder::new("../../../../", "src/gens").debug(true);
+    // .out_dir("src/rs");
 
     let gen = Hal.new_gen("iir_blur".to_string());
-
 
     gen.build_bind();
 
