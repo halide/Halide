@@ -2,30 +2,23 @@
 
 ## Instalation Steps:
 
-Refer to: https://github.com/halide/Halide#readme
+For installing Halide refer to: https://github.com/halide/Halide#readme
 
-## Description of bindings
+Install Rust: https://www.rust-lang.org/tools/install
 
-TODO...?
-
-## link to cargo docs
-
-TODO...
-
-## Demo app Getting Started Guide
+## Demo App Guide
    
-1.) Install Rust
-    https://www.rust-lang.org/tools/install
+1.) Navigate to Halide/language_bindings/rust/apps/iir_blur
 
-2.) In the terminal cd into the Halide/language_bindings/rust/apps/iir_blur
+2.) Run the following:
 
-3.) run the following:
 ```
   Cargo Build
   Cargo test
   Cargo run
 ```
-4.) You should now have a slightly blurry picture of a cat in the images/ directory called.
+
+3.) You should now have a slightly blurry picture of a cat in the images/ directory called.
 
 ## Generating rustdocs
 
@@ -42,3 +35,11 @@ Halide rust bindings allow a rust user to generate a user defined Halide generat
 
 TOMOVE..?
   
+## Description of bindings
+
+TODO...?
+
+## link to cargo docs
+
+TODO...
+
