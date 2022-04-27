@@ -313,6 +313,27 @@ def test_typed_funcs():
     x = hl.Var('x')
     y = hl.Var('y')
 
+    f = hl.Func('f')
+    assert not f.defined()
+    # assert f.output_type() == Int(32)  -- will assert-fail
+    assert f.outputs() == 0
+    assert f.dimensions() == 0
+
+
+    f = hl.Func(hl.Int(32), 2, 'f')
+    assert not f.defined()
+    assert f.output_type() == hl.Int(32)
+    assert f.output_types() == [hl.Int(32)]
+    assert f.outputs() == 1
+    assert f.dimensions() == 2
+
+    f = hl.Func([hl.Int(32), hl.Float(64)], 3, 'f')
+    assert not f.defined()
+    # assert f.output_type() == hl.Int(32)  -- will assert-fail
+    assert f.output_types() == [hl.Int(32), hl.Float(64)]
+    assert f.outputs() == 2
+    assert f.dimensions() == 3
+
     f = hl.Func(hl.Int(32), 1, 'f')
     try:
         f[x, y] = hl.i32(0);
