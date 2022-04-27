@@ -19,6 +19,14 @@ Buffer<void> &Realization::operator[](size_t x) {
     return images[x];
 }
 
+Realization::Realization(const Buffer<void> &e)
+    : images({e}) {
+}
+
+Realization::Realization(Buffer<void> &&e)
+    : images({std::move(e)}) {
+}
+
 Realization::Realization(const std::vector<Buffer<void>> &e)
     : images(e) {
     user_assert(!images.empty()) << "Realizations must have at least one element\n";

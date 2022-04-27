@@ -447,16 +447,8 @@ protected:
                         rounding_halving_add(x, y),
                         is_x_same_int_or_uint) ||
 
-                rewrite(halving_add(widening_sub(x, y), 1),
-                        rounding_halving_sub(x, y),
-                        is_x_same_int_or_uint) ||
-
                 rewrite(rounding_shift_right(widening_add(x, y), 1),
                         rounding_halving_add(x, y),
-                        is_x_same_int_or_uint) ||
-
-                rewrite(rounding_shift_right(widening_sub(x, y), 1),
-                        rounding_halving_sub(x, y),
                         is_x_same_int_or_uint) ||
 
                 // Multiply-keep-high-bits patterns.
@@ -519,10 +511,6 @@ protected:
                 // Halving subtract patterns
                 rewrite(shift_right(cast(op_type_wide, widening_sub(x, y)), 1),
                         halving_sub(x, y),
-                        is_x_same_int_or_uint) ||
-
-                rewrite(rounding_shift_right(cast(op_type_wide, widening_sub(x, y)), 1),
-                        rounding_halving_sub(x, y),
                         is_x_same_int_or_uint) ||
 
                 false) {
@@ -592,13 +580,10 @@ protected:
             if (rewrite(halving_add(x + y, 1), rounding_halving_add(x, y)) ||
                 rewrite(halving_add(x, y + 1), rounding_halving_add(x, y)) ||
                 rewrite(halving_add(x + 1, y), rounding_halving_add(x, y)) ||
-                rewrite(halving_add(x - y, 1), rounding_halving_sub(x, y)) ||
-                rewrite(halving_sub(x + 1, y), rounding_halving_sub(x, y)) ||
                 rewrite(halving_add(x, 1), rounding_shift_right(x, 1)) ||
                 rewrite(shift_right(x + y, 1), halving_add(x, y)) ||
                 rewrite(shift_right(x - y, 1), halving_sub(x, y)) ||
                 rewrite(rounding_shift_right(x + y, 1), rounding_halving_add(x, y)) ||
-                rewrite(rounding_shift_right(x - y, 1), rounding_halving_sub(x, y)) ||
                 false) {
                 return mutate(rewrite.result);
             }
@@ -919,11 +904,6 @@ Expr lower_rounding_halving_add(const Expr &a, const Expr &b) {
     return (a >> 1) + (b >> 1) + (((a & 1) + (b & 1) + 1) >> 1);
 }
 
-Expr lower_rounding_halving_sub(const Expr &a, const Expr &b) {
-    internal_assert(a.type() == b.type());
-    return (a >> 1) - (b >> 1) + (((a & 1) - (b & 1) + 1) >> 1);
-}
-
 Expr lower_sorted_avg(const Expr &a, const Expr &b) {
     // b > a, so the following works without widening.
     return a + ((b - a) >> 1);
@@ -1040,9 +1020,6 @@ Expr lower_intrinsic(const Call *op) {
     } else if (op->is_intrinsic(Call::rounding_halving_add)) {
         internal_assert(op->args.size() == 2);
         return lower_rounding_halving_add(op->args[0], op->args[1]);
-    } else if (op->is_intrinsic(Call::rounding_halving_sub)) {
-        internal_assert(op->args.size() == 2);
-        return lower_rounding_halving_sub(op->args[0], op->args[1]);
     } else if (op->is_intrinsic(Call::rounding_mul_shift_right)) {
         internal_assert(op->args.size() == 3);
         return lower_rounding_mul_shift_right(op->args[0], op->args[1], op->args[2]);

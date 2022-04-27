@@ -30,6 +30,7 @@ typedef map<FunctionPtr, FunctionPtr> DeepCopyMap;
 struct FunctionContents;
 
 namespace {
+
 // Weaken all the references to a particular Function to break
 // reference cycles. Also count the number of references found.
 class WeakenFunctionPtrs : public IRMutator {
@@ -58,12 +59,29 @@ public:
         : func(f) {
     }
 };
+
 }  // namespace
 
 struct FunctionContents {
     std::string name;
     std::string origin_name;
     std::vector<Type> output_types;
+
+    /** Optional type constraints on the Function:
+     * - If empty, there are no constraints.
+     * - If size == 1, the Func is only allowed to have values of Expr with that type
+     * - If size > 1, the Func is only allowed to have values of Tuple with those types
+     *
+     * Note that when this is nonempty, then output_types should match
+     * required_types for all defined Functions.
+     */
+    std::vector<Type> required_types;
+
+    /** Optional dimension constraints on the Function:
+     * - If required_dims == AnyDims, there are no constraints.
+     * - Otherwise, the Function's dimensionality must exactly match required_dims.
+     */
+    int required_dims = AnyDims;
 
     // The names of the dimensions of the Function. Corresponds to the
     // LHS of the pure definition if there is one. Is also the initial
@@ -306,9 +324,100 @@ Function::Function(const std::string &n) {
     contents->origin_name = n;
 }
 
+Function::Function(const std::vector<Type> &required_types, int required_dims, const std::string &n)
+    : Function(n) {
+    user_assert(required_dims >= AnyDims);
+    contents->required_types = required_types;
+    contents->required_dims = required_dims;
+}
+
+namespace {
+
+template<typename T>
+struct PrintTypeList {
+    const std::vector<T> &list_;
+
+    explicit PrintTypeList(const std::vector<T> &list)
+        : list_(list) {
+    }
+
+    friend std::ostream &operator<<(std::ostream &s, const PrintTypeList &self) {
+        const size_t n = self.list_.size();
+        if (n != 1) {
+            s << "(";
+        }
+        const char *comma = "";
+        for (const auto &t : self.list_) {
+            if constexpr (std::is_same<Type, T>::value) {
+                s << comma << t;
+            } else {
+                s << comma << t.type();
+            }
+            comma = ", ";
+        }
+        if (n != 1) {
+            s << ")";
+        }
+        return s;
+    }
+};
+
+bool types_match(const std::vector<Type> &types, const std::vector<Expr> &exprs) {
+    size_t n = types.size();
+    if (n != exprs.size()) {
+        return false;
+    }
+    for (size_t i = 0; i < n; i++) {
+        if (types[i] != exprs[i].type()) {
+            return false;
+        }
+    }
+    return true;
+}
+
+}  // namespace
+
+void Function::check_types(const Expr &e) const {
+    check_types(std::vector<Expr>{e});
+}
+
+void Function::check_types(const Tuple &t) const {
+    check_types(t.as_vector());
+}
+
+void Function::check_types(const Type &t) const {
+    check_types(std::vector<Type>{t});
+}
+
+void Function::check_types(const std::vector<Expr> &exprs) const {
+    if (!contents->required_types.empty()) {
+        user_assert(types_match(contents->required_types, exprs))
+            << "Func \"" << name() << "\" is constrained to only hold values of type " << PrintTypeList(contents->required_types)
+            << " but is defined with values of type " << PrintTypeList(exprs) << ".\n";
+    }
+}
+
+void Function::check_types(const std::vector<Type> &types) const {
+    if (!contents->required_types.empty()) {
+        user_assert(contents->required_types == types)
+            << "Func \"" << name() << "\" is constrained to only hold values of type " << PrintTypeList(contents->required_types)
+            << " but is defined with values of type " << PrintTypeList(types) << ".\n";
+    }
+}
+
+void Function::check_dims(int dims) const {
+    if (contents->required_dims != AnyDims) {
+        user_assert(contents->required_dims == dims)
+            << "Func \"" << name() << "\" is constrained to have exactly " << contents->required_dims
+            << " dimensions, but is defined with " << dims << " dimensions.\n";
+    }
+}
+
+namespace {
+
 // Return deep-copy of ExternFuncArgument 'src'
-ExternFuncArgument deep_copy_extern_func_argument_helper(
-    const ExternFuncArgument &src, DeepCopyMap &copied_map) {
+ExternFuncArgument deep_copy_extern_func_argument_helper(const ExternFuncArgument &src,
+                                                         DeepCopyMap &copied_map) {
     ExternFuncArgument copy;
     copy.arg_type = src.arg_type;
     copy.buffer = src.buffer;
@@ -329,6 +438,8 @@ ExternFuncArgument deep_copy_extern_func_argument_helper(
     copy.func = copied_func;
     return copy;
 }
+
+}  // namespace
 
 void Function::deep_copy(const FunctionPtr &copy, DeepCopyMap &copied_map) const {
     internal_assert(copy.defined() && contents.defined())
@@ -456,6 +567,8 @@ void Function::define(const vector<string> &args, vector<Expr> values) {
         << "In pure definition of Func \"" << name() << "\":\n"
         << "Func is already defined.\n";
 
+    check_types(values);
+    check_dims((int)args.size());
     contents->args = args;
 
     std::vector<Expr> init_def_args;
@@ -483,6 +596,11 @@ void Function::define(const vector<string> &args, vector<Expr> values) {
     contents->output_types.resize(values.size());
     for (size_t i = 0; i < contents->output_types.size(); i++) {
         contents->output_types[i] = values[i].type();
+    }
+
+    if (!contents->required_types.empty()) {
+        // Just a reality check; mismatches here really should have been caught earlier
+        internal_assert(contents->required_types == contents->output_types);
     }
 
     for (size_t i = 0; i < values.size(); i++) {
@@ -703,6 +821,8 @@ void Function::define_extern(const std::string &function_name,
                              const std::vector<Var> &args,
                              NameMangling mangling,
                              DeviceAPI device_api) {
+    check_types(types);
+    check_dims((int)args.size());
 
     user_assert(!has_pure_definition() && !has_update_definition())
         << "In extern definition for Func \"" << name() << "\":\n"

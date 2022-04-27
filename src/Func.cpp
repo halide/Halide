@@ -59,6 +59,14 @@ Func::Func(const string &name)
     : func(unique_name(name)) {
 }
 
+Func::Func(const Type &required_type, int required_dims, const string &name)
+    : func({required_type}, required_dims, unique_name(name)) {
+}
+
+Func::Func(const std::vector<Type> &required_types, int required_dims, const string &name)
+    : func(required_types, required_dims, unique_name(name)) {
+}
+
 Func::Func()
     : func(make_entity_name(this, "Halide:.*:Func", 'f')) {
 }
@@ -188,7 +196,18 @@ void Func::define_extern(const std::string &function_name,
 }
 
 /** Get the types of the buffers returned by an extern definition. */
+const Type &Func::output_type() const {
+    user_assert(defined())
+        << "Can't access output buffer of undefined Func.\n";
+    user_assert(func.output_types().size() == 1)
+        << "Can't call Func::output_type on Func \"" << name()
+        << "\" because it returns a Tuple.\n";
+    return func.output_types()[0];
+}
+
 const std::vector<Type> &Func::output_types() const {
+    user_assert(defined())
+        << "Can't access output buffer of undefined Func.\n";
     return func.output_types();
 }
 
@@ -2921,6 +2940,8 @@ Stage FuncRef::operator=(const FuncRef &e) {
     }
 }
 
+namespace {
+
 // Inject a suitable base-case definition given an update
 // definition. This is a helper for FuncRef::operator+= and co.
 Func define_base_case(const Internal::Function &func, const vector<Expr> &a, const Tuple &e) {
@@ -2950,8 +2971,12 @@ Func define_base_case(const Internal::Function &func, const vector<Expr> &a, con
     return define_base_case(func, a, Tuple(e));
 }
 
+}  // namespace
+
 template<typename BinaryOp>
 Stage FuncRef::func_ref_update(const Tuple &e, int init_val) {
+    func.check_types(e);
+
     internal_assert(e.size() > 1);
 
     vector<Expr> init_values(e.size());
@@ -2970,6 +2995,7 @@ Stage FuncRef::func_ref_update(const Tuple &e, int init_val) {
 
 template<typename BinaryOp>
 Stage FuncRef::func_ref_update(Expr e, int init_val) {
+    func.check_types(e);
     vector<Expr> expanded_args = args_with_implicit_vars({e});
     FuncRef self_ref = define_base_case(func, expanded_args, cast(e.type(), init_val))(expanded_args);
     return self_ref = BinaryOp()(Expr(self_ref), e);

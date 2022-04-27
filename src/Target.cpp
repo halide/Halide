@@ -104,8 +104,41 @@ void detect_family_and_model(int info0, unsigned &family, unsigned &model) {
     }
 }
 
-Target::Processor get_amd_processor(unsigned family, unsigned model) {
+Target::Processor get_amd_processor(unsigned family, unsigned model, bool have_sse3) {
     switch (family) {
+    case 0xF:  // AMD Family 0Fh
+        if (have_sse3) {
+            return Target::Processor::K8_SSE3;  // Hammer (modern, with SSE3)
+        }
+        return Target::Processor::K8;        // Hammer (original, without SSE3)
+    case 0x10:                               // AMD Family 10h
+        return Target::Processor::AMDFam10;  // Barcelona
+    case 0x14:                               // AMD Family 14h
+        return Target::Processor::BtVer1;    // Bobcat
+    case 0x15:                               // AMD Family 15h
+        if (model >= 0x60 && model <= 0x7f) {
+            return Target::Processor::BdVer4;  // 60h-7Fh: Excavator
+        }
+        if (model >= 0x30 && model <= 0x3f) {
+            return Target::Processor::BdVer3;  // 30h-3Fh: Steamroller
+        }
+        if ((model >= 0x10 && model <= 0x1f) || model == 0x02) {
+            return Target::Processor::BdVer2;  // 02h, 10h-1Fh: Piledriver
+        }
+        if (model <= 0x0f) {
+            return Target::Processor::BdVer1;  // 00h-0Fh: Bulldozer
+        }
+        break;
+    case 0x16:                             // AMD Family 16h
+        return Target::Processor::BtVer2;  // Jaguar
+    case 0x17:                             // AMD Family 17h
+        if ((model >= 0x30 && model <= 0x3f) || model == 0x71) {
+            return Target::Processor::ZnVer2;  // 30h-3Fh, 71h: Zen2
+        }
+        if (model <= 0x0f) {
+            return Target::Processor::ZnVer1;  // 00h-0Fh: Zen1
+        }
+        break;
     case 0x19:  // AMD Family 19h
         if (model <= 0x0f || model == 0x21) {
             return Target::Processor::ZnVer3;  // 00h-0Fh, 21h: Zen3
@@ -177,16 +210,13 @@ Target calculate_host_target() {
     unsigned family = 0, model = 0;
     detect_family_and_model(info[0], family, model);
 
-    if (vendor_signature == VendorSignatures::AuthenticAMD) {
-        processor = get_amd_processor(family, model);
-    }
-
-    bool have_sse41 = (info[2] & (1 << 19)) != 0;
-    bool have_sse2 = (info[3] & (1 << 26)) != 0;
-    bool have_avx = (info[2] & (1 << 28)) != 0;
-    bool have_f16c = (info[2] & (1 << 29)) != 0;
-    bool have_rdrand = (info[2] & (1 << 30)) != 0;
-    bool have_fma = (info[2] & (1 << 12)) != 0;
+    bool have_sse41 = (info[2] & (1 << 19)) != 0;   // ECX[19]
+    bool have_sse2 = (info[3] & (1 << 26)) != 0;    // EDX[26]
+    bool have_sse3 = (info[2] & (1 << 0)) != 0;     // ECX[0]
+    bool have_avx = (info[2] & (1 << 28)) != 0;     // ECX[28]
+    bool have_f16c = (info[2] & (1 << 29)) != 0;    // ECX[29]
+    bool have_rdrand = (info[2] & (1 << 30)) != 0;  // ECX[30]
+    bool have_fma = (info[2] & (1 << 12)) != 0;     // ECX[12]
 
     user_assert(have_sse2)
         << "The x86 backend assumes at least sse2 support. This machine does not appear to have sse2.\n"
@@ -196,6 +226,10 @@ Target calculate_host_target() {
         << ", " << info[2]
         << ", " << info[3]
         << std::dec << "\n";
+
+    if (vendor_signature == VendorSignatures::AuthenticAMD) {
+        processor = get_amd_processor(family, model, have_sse3);
+    }
 
     if (have_sse41) {
         initial_features.push_back(Target::SSE41);

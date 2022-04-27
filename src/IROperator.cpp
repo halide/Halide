@@ -62,6 +62,10 @@ Expr stringify(const std::vector<Expr> &args) {
 }
 
 Expr combine_strings(const std::vector<Expr> &args) {
+    if (args.empty()) {
+        return Expr("");
+    }
+
     // Insert spaces between each expr.
     std::vector<Expr> strings(args.size() * 2);
     for (size_t i = 0; i < args.size(); i++) {
@@ -71,6 +75,20 @@ Expr combine_strings(const std::vector<Expr> &args) {
         } else {
             strings[i * 2 + 1] = Expr("\n");
         }
+    }
+
+    // Now combine all adjacent string literals, which is
+    // useful to reduce emitted code size when printing
+    size_t i = 0;
+    while (i < strings.size() - 1) {
+        const auto *cur_str = strings[i].as<Internal::StringImm>();
+        const auto *next_str = strings[i + 1].as<Internal::StringImm>();
+        if (cur_str && next_str) {
+            strings[i] = Internal::StringImm::make(cur_str->value + next_str->value);
+            strings.erase(strings.begin() + i + 1);
+            continue;
+        }
+        i++;
     }
 
     return stringify(strings);
@@ -1229,13 +1247,6 @@ Expr halving_sub(Expr a, Expr b) {
     match_types(a, b);
     Type result_type = a.type();
     return Call::make(result_type, Call::halving_sub, {std::move(a), std::move(b)}, Call::PureIntrinsic);
-}
-
-Expr rounding_halving_sub(Expr a, Expr b) {
-    user_assert(a.defined() && b.defined()) << "rounding_halving_sub of undefined Expr\n";
-    match_types(a, b);
-    Type result_type = a.type();
-    return Call::make(result_type, Call::rounding_halving_sub, {std::move(a), std::move(b)}, Call::PureIntrinsic);
 }
 
 Expr mul_shift_right(Expr a, Expr b, Expr q) {
