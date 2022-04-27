@@ -39,7 +39,7 @@ Rust handles that in the build.rs
 
 
 
-## link to cargo docs
+## Link to cargo docs
 
 TODO...
 
