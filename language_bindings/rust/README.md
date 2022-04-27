@@ -6,6 +6,8 @@ For installing Halide refer to: https://github.com/halide/Halide#readme
 
 Install Rust: https://www.rust-lang.org/tools/install
 
+Install Cargo: https://doc.rust-lang.org/cargo/getting-started/installation.html
+
 ## Demo App Guide
    
 1.) Navigate to Halide/language_bindings/rust/apps/iir_blur
@@ -13,7 +15,7 @@ Install Rust: https://www.rust-lang.org/tools/install
 2.) Run the following:
 
 ```
-  Cargo Build
+  Cargo build
   Cargo test
   Cargo run
 ```
