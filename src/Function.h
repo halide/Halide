@@ -133,12 +133,16 @@ public:
     int dimensions() const;
 
     /** Get the number of outputs. */
-    int outputs() const {
-        return (int)output_types().size();
-    }
+    int outputs() const;
 
     /** Get the types of the outputs. */
     const std::vector<Type> &output_types() const;
+
+    /** Get the type constaints on the outputs (if any). */
+    const std::vector<Type> &required_types() const;
+
+    /** Get the dimensionality constaints on the outputs (if any). */
+    int required_dimensions() const;
 
     /** Get the right-hand-side of the pure definition. Returns an
      * empty vector if there is no pure definition. */
@@ -312,6 +316,10 @@ public:
     /** If the Function has dimension requirements, check that the given argument
      * is compatible with them. If not, assert-fail. (If there are no dimension requirements, do nothing.) */
     void check_dims(int dims) const;
+
+    /** Define the output buffers. If the Function has types specified, this can be called at
+     * any time. If not, it can only be called for a Function with a pure definition. */
+    void create_output_buffers(const std::vector<Type> &types, int dims) const;
 };
 
 /** Deep copy an entire Function DAG. */
