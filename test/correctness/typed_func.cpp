@@ -66,9 +66,73 @@ int main(int argc, char **argv) {
         f(x, y) = x + y;
 
         auto r = f.realize({10, 10});  // will assert-fail for values other than 10x10
-        Buffer<int> b = r[0];
+        Buffer<int32_t> b = r[0];
         b.for_each_element([&](int x, int y) {
             assert(b(x, y) == x + y);
+        });
+    }
+
+    // Verify that update stages defined via += and friends *don't* require
+    // the RHS type to match the LHS type (whether or not the pure definition
+    // is implicitly defined)
+    {
+        Func f(Int(32), 2, "f");
+
+        f(x, y) = cast<int32_t>(1);
+        f(x, y) += cast<uint8_t>(x + y);
+
+        auto r = f.realize({10, 10});
+        Buffer<int32_t> b = r[0];
+        b.for_each_element([&](int x, int y) {
+            assert(b(x, y) == 1 + (uint8_t)(x + y));
+        });
+    }
+
+    {
+        Func f(Int(32), 2, "f");
+
+        // f(x, y) = cast<int32_t>(0);  // leave out, so Halide injects the implicit init
+        f(x, y) += cast<uint8_t>(x + y);
+
+        auto r = f.realize({10, 10});
+        Buffer<int32_t> b = r[0];
+        b.for_each_element([&](int x, int y) {
+            assert(b(x, y) == 0 + (uint8_t)(x + y));
+        });
+    }
+
+    // Same, but with Tuples
+    {
+        Func f({Int(32), Int(8)}, 2, "f");
+
+        f(x, y) = Tuple(cast<int32_t>(1), cast<int8_t>(2));
+        f(x, y) += Tuple(cast<uint8_t>(x + y), cast<int8_t>(x - y));
+
+        auto r = f.realize({10, 10});
+        Buffer<int32_t> b0 = r[0];
+        Buffer<int8_t> b1 = r[1];
+        b0.for_each_element([&](int x, int y) {
+            assert(b0(x, y) == 1 + (uint8_t)(x + y));
+        });
+        b1.for_each_element([&](int x, int y) {
+            assert(b1(x, y) == 2 + (int8_t)(x - y));
+        });
+    }
+
+    {
+        Func f({Int(32), Int(8)}, 2, "f");
+
+        // f(x, y) = Tuple(cast<int32_t>(1), cast<int8_t>(2));  // leave out, so Halide injects the implicit init
+        f(x, y) += Tuple(cast<uint8_t>(x + y), cast<int8_t>(x - y));
+
+        auto r = f.realize({10, 10});
+        Buffer<int32_t> b0 = r[0];
+        Buffer<int8_t> b1 = r[1];
+        b0.for_each_element([&](int x, int y) {
+            assert(b0(x, y) == 0 + (uint8_t)(x + y));
+        });
+        b1.for_each_element([&](int x, int y) {
+            assert(b1(x, y) == 0 + (int8_t)(x - y));
         });
     }
 
