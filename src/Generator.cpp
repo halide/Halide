@@ -113,7 +113,7 @@ Argument to_argument(const Internal::Parameter &param) {
 
 Func make_param_func(const Parameter &p, const std::string &name) {
     internal_assert(p.is_buffer());
-    Func f(name + "_im");
+    Func f(p.type(), p.dimensions(), name + "_im");
     auto b = p.buffer();
     if (b.defined()) {
         // If the Parameter has an explicit BufferPtr set, bind directly to it
@@ -2134,8 +2134,10 @@ void GeneratorOutputBase::init_internals() {
     exprs_.clear();
     funcs_.clear();
     if (array_size_defined()) {
+        const auto t = types_defined() ? types() : std::vector<Type>{};
+        const int d = dims_defined() ? dims() : -1;
         for (size_t i = 0; i < array_size(); ++i) {
-            funcs_.emplace_back(array_name(i));
+            funcs_.emplace_back(t, d, array_name(i));
         }
     }
 }

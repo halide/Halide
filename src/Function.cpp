@@ -602,13 +602,26 @@ void Function::define(const vector<string> &args, vector<Expr> values) {
         // Just a reality check; mismatches here really should have been caught earlier
         internal_assert(contents->required_types == contents->output_types);
     }
+    if (contents->required_dims != AnyDims) {
+        // Just a reality check; mismatches here really should have been caught earlier
+        internal_assert(contents->required_dims == (int)args.size());
+    }
 
-    for (size_t i = 0; i < values.size(); i++) {
+    if (contents->output_buffers.empty()) {
+        create_output_buffers(contents->output_types, (int)args.size());
+    }
+}
+
+void Function::create_output_buffers(const std::vector<Type> &types, int dims) const {
+    internal_assert(contents->output_buffers.empty());
+    internal_assert(!types.empty() && dims != AnyDims);
+
+    for (size_t i = 0; i < types.size(); i++) {
         string buffer_name = name();
-        if (values.size() > 1) {
+        if (types.size() > 1) {
             buffer_name += '.' + std::to_string((int)i);
         }
-        Parameter output(values[i].type(), true, args.size(), buffer_name);
+        Parameter output(types[i], true, dims, buffer_name);
         contents->output_buffers.push_back(output);
     }
 }
@@ -908,11 +921,23 @@ bool Function::is_pure_arg(const std::string &name) const {
 }
 
 int Function::dimensions() const {
-    return args().size();
+    return (int)args().size();
+}
+
+int Function::outputs() const {
+    return (int)output_types().size();
 }
 
 const std::vector<Type> &Function::output_types() const {
     return contents->output_types;
+}
+
+const std::vector<Type> &Function::required_types() const {
+    return contents->required_types;
+}
+
+int Function::required_dimensions() const {
+    return contents->required_dims;
 }
 
 const std::vector<Expr> &Function::values() const {
@@ -933,6 +958,18 @@ const FuncSchedule &Function::schedule() const {
 }
 
 const std::vector<Parameter> &Function::output_buffers() const {
+    if (!contents->output_buffers.empty()) {
+        return contents->output_buffers;
+    }
+
+    // If types and dims are already specified, we can go ahead and create
+    // the output buffer(s) even if the Function has no pure definition yet.
+    if (!contents->required_types.empty() && contents->required_dims != AnyDims) {
+        create_output_buffers(contents->required_types, contents->required_dims);
+        return contents->output_buffers;
+    }
+
+    user_error << "Can't access output buffer(s) of undefined Func \"" << name() << "\".\n";
     return contents->output_buffers;
 }
 

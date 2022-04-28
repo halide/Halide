@@ -197,23 +197,32 @@ void Func::define_extern(const std::string &function_name,
 
 /** Get the types of the buffers returned by an extern definition. */
 const Type &Func::output_type() const {
-    user_assert(defined())
-        << "Can't access output buffer of undefined Func.\n";
-    user_assert(func.output_types().size() == 1)
-        << "Can't call Func::output_type on Func \"" << name()
-        << "\" because it returns a Tuple.\n";
-    return func.output_types()[0];
+    const auto &types = defined() ? func.output_types() : func.required_types();
+    if (types.empty()) {
+        user_error << "Can't call Func::output_type on Func \"" << name()
+                   << "\" because it is undefined or has no type requirements.\n";
+    } else if (types.size() > 1) {
+        user_error << "Can't call Func::output_type on Func \"" << name()
+                   << "\" because it returns a Tuple.\n";
+    }
+    return types[0];
 }
 
 const std::vector<Type> &Func::output_types() const {
-    user_assert(defined())
-        << "Can't access output buffer of undefined Func.\n";
-    return func.output_types();
+    const auto &types = defined() ? func.output_types() : func.required_types();
+    user_assert(!types.empty())
+        << "Can't call Func::output_type on Func \"" << name()
+        << "\" because it is undefined or has no type requirements.\n";
+    return types;
 }
 
 /** Get the number of outputs this function has. */
 int Func::outputs() const {
-    return func.outputs();
+    const auto &types = defined() ? func.output_types() : func.required_types();
+    user_assert(!types.empty())
+        << "Can't call Func::outputs on Func \"" << name()
+        << "\" because it is undefined or has no type requirements.\n";
+    return (int)types.size();
 }
 
 /** Get the name of the extern function called for an extern
@@ -223,10 +232,11 @@ const std::string &Func::extern_function_name() const {
 }
 
 int Func::dimensions() const {
-    if (!defined()) {
-        return 0;
-    }
-    return func.dimensions();
+    const int dims = defined() ? func.dimensions() : func.required_dimensions();
+    user_assert(dims != AnyDims)
+        << "Can't call Func::dimensions on Func \"" << name()
+        << "\" because it is undefined or has no dimension requirements.\n";
+    return dims;
 }
 
 FuncRef Func::operator()(vector<Var> args) const {
@@ -251,7 +261,9 @@ std::pair<int, int> Func::add_implicit_vars(vector<Var> &args) const {
         placeholder_pos = (int)(iter - args.begin());
         int i = 0;
         iter = args.erase(iter);
-        while ((int)args.size() < dimensions()) {
+        // It's important to use func.dimensions() here, *not* this->dimensions(),
+        // since the latter can return the Func's required dimensions rather than its actual dimensions.
+        while ((int)args.size() < func.dimensions()) {
             Internal::debug(2) << "Adding implicit var " << i << " to call to " << name() << "\n";
             iter = args.insert(iter, Var::implicit(i++));
             iter++;
@@ -259,9 +271,9 @@ std::pair<int, int> Func::add_implicit_vars(vector<Var> &args) const {
         }
     }
 
-    if (defined() && args.size() != (size_t)dimensions()) {
+    if (defined() && args.size() != (size_t)func.dimensions()) {
         user_error << "Func \"" << name() << "\" was called with "
-                   << args.size() << " arguments, but was defined with " << dimensions() << "\n";
+                   << args.size() << " arguments, but was defined with " << func.dimensions() << "\n";
     }
 
     return {placeholder_pos, count};
@@ -282,7 +294,9 @@ std::pair<int, int> Func::add_implicit_vars(vector<Expr> &args) const {
         placeholder_pos = (int)(iter - args.begin());
         int i = 0;
         iter = args.erase(iter);
-        while ((int)args.size() < dimensions()) {
+        // It's important to use func.dimensions() here, *not* this->dimensions(),
+        // since the latter can return the Func's required dimensions rather than its actual dimensions.
+        while ((int)args.size() < func.dimensions()) {
             Internal::debug(2) << "Adding implicit var " << i << " to call to " << name() << "\n";
             iter = args.insert(iter, Var::implicit(i++));
             iter++;
@@ -290,9 +304,9 @@ std::pair<int, int> Func::add_implicit_vars(vector<Expr> &args) const {
         }
     }
 
-    if (defined() && args.size() != (size_t)dimensions()) {
+    if (defined() && args.size() != (size_t)func.dimensions()) {
         user_error << "Func \"" << name() << "\" was called with "
-                   << args.size() << " arguments, but was defined with " << dimensions() << "\n";
+                   << args.size() << " arguments, but was defined with " << func.dimensions() << "\n";
     }
 
     return {placeholder_pos, count};
@@ -3188,21 +3202,20 @@ void Func::infer_input_bounds(JITUserContext *context,
 }
 
 OutputImageParam Func::output_buffer() const {
-    user_assert(defined())
-        << "Can't access output buffer of undefined Func.\n";
-    user_assert(func.output_buffers().size() == 1)
+    const auto &ob = func.output_buffers();
+
+    user_assert(ob.size() == 1)
         << "Can't call Func::output_buffer on Func \"" << name()
         << "\" because it returns a Tuple.\n";
-    return OutputImageParam(func.output_buffers()[0], Argument::OutputBuffer, *this);
+    return OutputImageParam(ob[0], Argument::OutputBuffer, *this);
 }
 
 vector<OutputImageParam> Func::output_buffers() const {
-    user_assert(defined())
-        << "Can't access output buffers of undefined Func.\n";
+    const auto &ob = func.output_buffers();
 
-    vector<OutputImageParam> bufs(func.output_buffers().size());
+    vector<OutputImageParam> bufs(ob.size());
     for (size_t i = 0; i < bufs.size(); i++) {
-        bufs[i] = OutputImageParam(func.output_buffers()[i], Argument::OutputBuffer, *this);
+        bufs[i] = OutputImageParam(ob[i], Argument::OutputBuffer, *this);
     }
     return bufs;
 }
