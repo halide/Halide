@@ -467,6 +467,9 @@ target_compile_options(
         # This warning was removed in Clang 13
         $<$<AND:$<CXX_COMPILER_ID:Clang,AppleClang>,$<VERSION_LESS:$<CXX_COMPILER_VERSION>,13.0>>:-Wno-return-std-move-in-c++11>
 
+        # This warning was added in Clang 13 -- some downstream code will complain without it
+        $<$<AND:$<CXX_COMPILER_ID:Clang,AppleClang>,$<VERSION_GREATER_EQUAL:$<CXX_COMPILER_VERSION>,13.0>>:-Wctad-maybe-unsupported>
+
         $<$<CXX_COMPILER_ID:MSVC>:/W3>
         $<$<CXX_COMPILER_ID:MSVC>:/wd4018>  # 4018: disable "signed/unsigned mismatch"
         $<$<CXX_COMPILER_ID:MSVC>:/wd4141>  # 4141: 'inline' used more than once

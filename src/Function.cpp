@@ -362,11 +362,8 @@ struct PrintTypeList {
     }
 };
 
-// Some compilers will (inexplicably) complain:
-//
-//    'PrintTypeList' may not intend to support class template argument deduction
-//
-// ...so add a CTAD to deal with this.
+// Add an explicit CTAD here just in case we are compiling in an environment with a
+// warning like `-Wctad-maybe-unsupported` enabled.
 template<typename T>
 PrintTypeList(const std::vector<T> &) -> PrintTypeList<T>;
 
