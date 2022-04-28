@@ -9,7 +9,7 @@ int main(int argc, char **argv) {
     Func f({UInt(8), Float(64)}, 2, "f");
 
     f(x, y) = {cast<uint8_t>(0), cast<double>(0)};
-    f(x, y) += {cast<int>(0), cast<float>(0)};
+    f(x, y) = {cast<int>(0), cast<float>(0)};
 
     f.realize({100, 100});
 

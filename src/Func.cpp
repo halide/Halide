@@ -2952,7 +2952,7 @@ namespace {
 
 // Inject a suitable base-case definition given an update
 // definition. This is a helper for FuncRef::operator+= and co.
-Func define_base_case(const Internal::Function &func, const vector<Expr> &a, const Tuple &e) {
+Func define_base_case(const Internal::Function &func, const vector<Expr> &a, const vector<Expr> &rhs, int init_val) {
     Func f(func);
 
     if (func.has_pure_definition()) {
@@ -2971,28 +2971,32 @@ Func define_base_case(const Internal::Function &func, const vector<Expr> &a, con
         }
     }
 
-    f(pure_args) = e;
-    return f;
-}
+    const auto &required_types = func.required_types();
+    internal_assert(required_types.empty() || required_types.size() == rhs.size());
 
-Func define_base_case(const Internal::Function &func, const vector<Expr> &a, const Expr &e) {
-    return define_base_case(func, a, Tuple(e));
+    vector<Expr> init_values(rhs.size());
+    for (size_t i = 0; i < rhs.size(); ++i) {
+        // If we have required types, cast the init_val to that type instead of the rhs type
+        const Type &t = required_types.empty() ? rhs[i].type() : required_types[i];
+        init_values[i] = cast(t, init_val);
+    }
+
+    f(pure_args) = Tuple(init_values);
+    return f;
 }
 
 }  // namespace
 
 template<typename BinaryOp>
 Stage FuncRef::func_ref_update(const Tuple &e, int init_val) {
-    func.check_types(e);
+    // Don't do this: we want to allow the RHS to be implicitly cast to the type of LHS.
+    // func.check_types(e);
 
     internal_assert(e.size() > 1);
 
-    vector<Expr> init_values(e.size());
-    for (int i = 0; i < (int)init_values.size(); ++i) {
-        init_values[i] = cast(e[i].type(), init_val);
-    }
-    vector<Expr> expanded_args = args_with_implicit_vars(e.as_vector());
-    FuncRef self_ref = define_base_case(func, expanded_args, Tuple(init_values))(expanded_args);
+    const vector<Expr> &rhs = e.as_vector();
+    const vector<Expr> expanded_args = args_with_implicit_vars(rhs);
+    FuncRef self_ref = define_base_case(func, expanded_args, rhs, init_val)(expanded_args);
 
     vector<Expr> values(e.size());
     for (int i = 0; i < (int)values.size(); ++i) {
@@ -3003,9 +3007,12 @@ Stage FuncRef::func_ref_update(const Tuple &e, int init_val) {
 
 template<typename BinaryOp>
 Stage FuncRef::func_ref_update(Expr e, int init_val) {
-    func.check_types(e);
-    vector<Expr> expanded_args = args_with_implicit_vars({e});
-    FuncRef self_ref = define_base_case(func, expanded_args, cast(e.type(), init_val))(expanded_args);
+    // Don't do this: we want to allow the RHS to be implicitly cast to the type of LHS.
+    // func.check_types(e);
+
+    const vector<Expr> rhs = {e};
+    const vector<Expr> expanded_args = args_with_implicit_vars(rhs);
+    FuncRef self_ref = define_base_case(func, expanded_args, rhs, init_val)(expanded_args);
     return self_ref = BinaryOp()(Expr(self_ref), e);
 }
 
