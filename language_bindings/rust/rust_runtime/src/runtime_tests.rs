@@ -4,10 +4,12 @@ use std::ptr::null_mut;
 
 use crate::runtime_bindings::*;
 
-fn link(){
-    println!(":rustc-link-search=native={}","/home/rootbutcher2/CLionProjects/Halide-rustbinding/bindings/rust/target");
-    println!(":rustc-link-lib=static={}","runtime");
-
+fn link() {
+    println!(
+        ":rustc-link-search=native={}",
+        "/home/rootbutcher2/CLionProjects/Halide-rustbinding/bindings/rust/target"
+    );
+    println!(":rustc-link-lib=static={}", "runtime");
 }
 
 #[test]
@@ -15,23 +17,22 @@ fn i_got_here() {
     assert_eq!(2 + 2, 4);
 }
 #[test]
-fn memalloc(){
+fn memalloc() {
     link();
     let raw_ptr: *mut ::std::os::raw::c_void = std::ptr::null_mut();
     //let raw_ptr = 10;
     unsafe {
         let x = halide_malloc(raw_ptr, 1000);
         //println!("{:?}",x);
-        halide_free(raw_ptr,x);
+        halide_free(raw_ptr, x);
         //println!("{}",x);
-
     }
 }
 
 #[test]
 fn malloc_doesnt_return_null() {
     let raw_ptr: *mut ::std::os::raw::c_void = std::ptr::null_mut();
-    let mut newptr:*mut c_void = std::ptr::null_mut();
+    let mut newptr: *mut c_void = std::ptr::null_mut();
     unsafe {
         assert_eq!(newptr as usize, 0x0);
         newptr = halide_malloc(raw_ptr, 1000);
@@ -39,40 +40,38 @@ fn malloc_doesnt_return_null() {
     }
 }
 #[test]
-fn thread_set(){
-    let  a = 5;
+fn thread_set() {
+    let a = 5;
     let b = 1;
     unsafe {
-        let x = halide_set_num_threads(a );
+        let x = halide_set_num_threads(a);
         assert_eq!(halide_set_num_threads(b), a as c_int)
     }
 }
 #[test]
-fn test_halide_set_trace_file(){
-    let  a = 0;
-    unsafe{
-        halide_set_trace_file(a)
-    }
+fn test_halide_set_trace_file() {
+    let a = 0;
+    unsafe { halide_set_trace_file(a) }
 }
 #[test]
-fn test_shutdown_thread_pool(){
-    unsafe{
+fn test_shutdown_thread_pool() {
+    unsafe {
         halide_shutdown_thread_pool();
     }
 }
 
 #[test]
-fn test_shutdown_trace_file(){
-    unsafe{
+fn test_shutdown_trace_file() {
+    unsafe {
         halide_shutdown_trace();
     }
 }
 
 #[test]
-fn test_buff_t(){
-    let host: *mut f32  = f32::min as *mut f32;
+fn test_buff_t() {
+    let host: *mut f32 = f32::min as *mut f32;
     let IMPL = HalideDeviceInterfaceImplT { _unused: [] };
-    let dev_int:halide_device_interface_t = halide_device_interface_t {
+    let dev_int: halide_device_interface_t = halide_device_interface_t {
         device_malloc: None,
         device_free: None,
         device_sync: None,
@@ -90,19 +89,19 @@ fn test_buff_t(){
         compute_capability: None,
         impl_: &IMPL as *const HalideDeviceInterfaceImplT,
     };
-    let H_type_t: halide_type_t = halide_type_t{
+    let H_type_t: halide_type_t = halide_type_t {
         code: 0,
         bits: 0,
-        lanes: 0
+        lanes: 0,
     };
-    let mut Bdim:halide_dimension_t = halide_dimension_t {
+    let mut Bdim: halide_dimension_t = halide_dimension_t {
         min: 0,
         extent: 0,
         stride: 0,
-        flags: 0
+        flags: 0,
     };
     let raw_ptr: *mut ::std::os::raw::c_void = std::ptr::null_mut();
-    unsafe{
+    unsafe {
         let t = halide_buffer_t {
             device: 0,
             device_interface: (&dev_int as *const halide_device_interface_t),
@@ -116,38 +115,23 @@ fn test_buff_t(){
     }
 }
 #[test]
-fn test_Profiler_report(){
-    let x= std::ptr::null_mut();
-    unsafe{
+fn test_Profiler_report() {
+    let x = std::ptr::null_mut();
+    unsafe {
         halide_profiler_report(x);
     }
 }
 
 #[test]
-fn test_halide_profiler_reset(){
-    unsafe{
+fn test_halide_profiler_reset() {
+    unsafe {
         halide_profiler_reset();
     }
 }
 
-
-    #[test]
-    fn test_halide_memoization_cache_release(){
-        //let x = std::ptr::null_mut();
-        let raw_ptr: *mut ::std::os::raw::c_void = std::ptr::null_mut();
-
-        assert_eq!(2,3);
-        unsafe {
-            //halide_memoization_cache_release(x, raw_ptr)
-        }
-    }
-
-
 #[test]
-fn test_halide_memoization_cache_set_size(){
-    let x = 0;
+fn test_halide_memoization_cache_set_size() {
     unsafe {
-        halide_memoization_cache_set_size(0)
+        halide_memoization_cache_set_size(10);
     }
-
 }

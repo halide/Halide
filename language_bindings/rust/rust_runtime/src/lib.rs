@@ -1,4 +1,3 @@
-
 include!("Runtime_bindings.rs");
 use crate::runtime_bindings::*;
 
@@ -55,4 +54,4 @@ impl HalideBuffer {
         buf
     }
 }
-//mod runtime_tests; todo reimplement
+mod runtime_tests;
