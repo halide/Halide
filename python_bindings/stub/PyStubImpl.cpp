@@ -108,7 +108,7 @@ py::object generate_impl(const GeneratorFactory &factory,
     std::vector<ArgInfo> input_arguments, output_arguments;
     std::map<std::string, ArgInfo> input_arguments_map;
     for (const auto &a : arg_infos) {
-        if (a.dir == Internal::ArgInfoDir::Input) {
+        if (a.dir == Internal::ArgInfoDirection::Input) {
             input_arguments.push_back(a);
             input_arguments_map[a.name] = a;
         } else {

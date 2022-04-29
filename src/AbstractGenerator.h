@@ -24,8 +24,8 @@ enum class ArgInfoKind { Scalar,
                          Function,
                          Buffer };
 
-enum class ArgInfoDir { Input,
-                        Output };
+enum class ArgInfoDirection { Input,
+                              Output };
 
 using ExternsMap = std::map<std::string, ExternalCode>;
 
@@ -67,7 +67,7 @@ public:
      */
     struct ArgInfo {
         std::string name;
-        ArgInfoDir dir = ArgInfoDir::Input;
+        ArgInfoDirection dir = ArgInfoDirection::Input;
         ArgInfoKind kind = ArgInfoKind::Scalar;
         // Note that this can have multiple entries for Tuple-valued Inputs or Outputs
         std::vector<Type> types;

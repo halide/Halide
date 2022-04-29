@@ -766,7 +766,7 @@ Module build_module(AbstractGenerator &g, const std::string &function_name) {
     std::vector<Argument> filter_arguments;
     const auto arg_infos = g.get_arginfos();
     for (const auto &a : arg_infos) {
-        if (a.dir != ArgInfoDir::Input) {
+        if (a.dir != ArgInfoDirection::Input) {
             continue;
         }
         for (const auto &p : g.get_parameters_for_input(a.name)) {
@@ -780,7 +780,7 @@ Module build_module(AbstractGenerator &g, const std::string &function_name) {
     }
 
     for (const auto &a : arg_infos) {
-        if (a.dir != ArgInfoDir::Output) {
+        if (a.dir != ArgInfoDirection::Output) {
             continue;
         }
         const std::vector<Func> output_funcs = g.get_funcs_for_output(a.name);
@@ -844,7 +844,7 @@ Module build_gradient_module(Halide::Internal::AbstractGenerator &g, const std::
     std::vector<Argument> gradient_inputs;
     const auto arg_infos = g.get_arginfos();
     for (const auto &a : arg_infos) {
-        if (a.dir != ArgInfoDir::Input) {
+        if (a.dir != ArgInfoDirection::Input) {
             continue;
         }
         for (const auto &p : g.get_parameters_for_input(a.name)) {
@@ -860,7 +860,7 @@ Module build_gradient_module(Halide::Internal::AbstractGenerator &g, const std::
 
     std::vector<ImageParam> d_output_imageparams;
     for (const auto &a : arg_infos) {
-        if (a.dir != ArgInfoDir::Output) {
+        if (a.dir != ArgInfoDirection::Output) {
             continue;
         }
         for (const auto &f : g.get_funcs_for_output(a.name)) {
@@ -903,7 +903,7 @@ Module build_gradient_module(Halide::Internal::AbstractGenerator &g, const std::
 
         const std::string &output_name = original_output.name();
         for (const auto &a : arg_infos) {
-            if (a.dir != ArgInfoDir::Input) {
+            if (a.dir != ArgInfoDirection::Input) {
                 continue;
             }
             for (const auto &p : g.get_parameters_for_input(a.name)) {
@@ -1785,7 +1785,7 @@ namespace {
 // Note that this deliberately ignores inputs/outputs with multiple array values
 // (ie, one name per input or output, regardless of array_size())
 template<typename T>
-void get_arguments(std::vector<AbstractGenerator::ArgInfo> &args, ArgInfoDir dir, const T &t) {
+void get_arguments(std::vector<AbstractGenerator::ArgInfo> &args, ArgInfoDirection dir, const T &t) {
     for (auto *e : t) {
         args.push_back({e->name(),
                         dir,
@@ -1801,8 +1801,8 @@ std::vector<AbstractGenerator::ArgInfo> GeneratorBase::get_arginfos() {
     ensure_configure_has_been_called();
     std::vector<AbstractGenerator::ArgInfo> args;
     args.reserve(param_info().inputs().size() + param_info().outputs().size());
-    get_arguments(args, ArgInfoDir::Input, param_info().inputs());
-    get_arguments(args, ArgInfoDir::Output, param_info().outputs());
+    get_arguments(args, ArgInfoDirection::Input, param_info().inputs());
+    get_arguments(args, ArgInfoDirection::Output, param_info().outputs());
     return args;
 }
 
