@@ -1,7 +1,7 @@
 include!("Runtime_bindings.rs");
 use crate::runtime_bindings::*;
 
-///Need doc
+/// Is a helper struct to more easily create buffer_t objects in Rust.
 pub struct HalideBuffer {
     pub width: i32,
     pub height: i32,

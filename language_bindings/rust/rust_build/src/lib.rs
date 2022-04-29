@@ -2,8 +2,8 @@
 //#![warn(missing_doc_code_examples)]
 
 //!This crate is an example of calling Halide generated code from Rust.
-//!This crate also has an example of IIR-blur halide app that get called from rust.
-//! IIR blur takes a image input, goes through the full halide pipeline, and outputs a blurred image all using rust.
+//!This crate also has an example of IIR-blur Halide app that get called from rust.
+//! IIR blur takes a image input, goes through the full Halide pipeline, and outputs a blurred image all using rust.
 //!
 
 use std::fs;
@@ -32,7 +32,7 @@ pub struct GenBuilder {
     target: String,
 }
 
-/// This represents a halide generator that is built using [GenBuilder]
+/// This represents a Halide generator that is built using [GenBuilder]
 ///
 ///
 pub struct Generator<'a> {
@@ -153,7 +153,7 @@ impl GenBuilder {
 }
 
 impl Generator<'static> {
-    ///Make the generator executable using halide gengen and g++
+    ///Make the generator executable using Halide GenGen and g++
     pub fn compile(&self) -> Output {
         let mut cmd_compile = Command::new("g++");
         cmd_compile.args(["-std=c++17"]);
@@ -220,7 +220,7 @@ impl Generator<'static> {
 
     /// Make the Halide runtime
     ///
-    /// The Halide runtime is required for using halide and contains the buffer_t and other useful functions
+    /// The Halide runtime is required for using Halide and contains the buffer_t and other useful functions
     pub fn make_runtime(&self) -> Result<()> {
         println!(
             "cargo:rustc-link-search=native={}",
