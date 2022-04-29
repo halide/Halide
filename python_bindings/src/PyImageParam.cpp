@@ -57,7 +57,7 @@ void define_image_param(py::module &m) {
     auto image_param_class =
         py::class_<ImageParam>(m, "ImageParam", output_image_param_class)
             .def(py::init<>())
-            .def(py::init<Type, int>())
+            .def(py::init<Type, int>(), py::arg("type"), py::arg("dimensions"))
             .def(py::init<Type, int, std::string>(), py::arg("type"), py::arg("dimensions"), py::arg("name"))
             .def("set", &ImageParam::set)
             .def("get", &ImageParam::get)

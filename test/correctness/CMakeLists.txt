@@ -331,6 +331,7 @@ tests(GROUPS correctness
       tuple_update_ops.cpp
       tuple_vector_reduce.cpp
       two_vector_args.cpp
+      typed_func.cpp
       undef.cpp
       uninitialized_read.cpp
       unique_func_image.cpp

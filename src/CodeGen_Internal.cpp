@@ -611,11 +611,6 @@ void get_target_options(const llvm::Module &module, llvm::TargetOptions &options
     options.HonorSignDependentRoundingFPMathOption = !per_instruction_fast_math_flags;
     options.NoZerosInBSS = false;
     options.GuaranteedTailCallOpt = false;
-#if LLVM_VERSION >= 130
-    // nothing
-#else
-    options.StackAlignmentOverride = 0;
-#endif
     options.FunctionSections = true;
     options.UseInitArray = true;
     options.FloatABIType =
@@ -690,11 +685,7 @@ void set_function_attributes_for_target(llvm::Function *fn, const Target &t) {
 void embed_bitcode(llvm::Module *M, const string &halide_command) {
     // Save llvm.compiler.used and remote it.
     SmallVector<Constant *, 2> used_array;
-#if LLVM_VERSION >= 130
     SmallVector<GlobalValue *, 4> used_globals;
-#else
-    SmallPtrSet<GlobalValue *, 4> used_globals;
-#endif
     llvm::Type *used_element_type = llvm::Type::getInt8Ty(M->getContext())->getPointerTo(0);
     GlobalVariable *used = collectUsedGlobalVariables(*M, used_globals, true);
     for (auto *GV : used_globals) {

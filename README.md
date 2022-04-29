@@ -31,10 +31,12 @@ If you've acquired a full source distribution and want to build Halide, see the
 
 ## Binary tarballs
 
-The latest version of Halide is **Halide 13.0.0**. We provide binary releases
-for many popular platforms and architectures, including 32/64-bit x86 Windows,
-64-bit macOS, and 32/64-bit x86/ARM Ubuntu Linux. See the releases tab on the
-right (or click [here](https://github.com/halide/Halide/releases)).
+The latest version of Halide can always be found on GitHub
+at https://github.com/halide/Halide/releases
+
+We provide binary releases for many popular platforms and architectures, 
+including 32/64-bit x86 Windows, 64-bit macOS, and 32/64-bit x86/ARM
+Ubuntu Linux.
 
 ## Vcpkg
 
@@ -80,7 +82,7 @@ These are the **tested** host toolchain and platform combinations for building
 and running the Halide compiler library.
 
 | Compiler   | Version      | OS                     | Architectures   |
-| ---------- | ------------ | ---------------------- | --------------- |
+|------------|--------------|------------------------|-----------------|
 | GCC        | 7.5          | Ubuntu Linux 20.04 LTS | x86, x64, ARM32 |
 | GCC        | 7.5          | Ubuntu Linux 18.04 LTS | ARM32, ARM64    |
 | MSVC       | 2019 (19.28) | Windows 10 (20H2)      | x86, x64        |
@@ -107,14 +109,14 @@ issue.
 
 ### TL;DR
 
-Have llvm-12.0 (or greater) installed and run `make` in the root directory of
+Have llvm-13.0 (or greater) installed and run `make` in the root directory of
 the repository (where this README is).
 
 ### Acquiring LLVM
 
 At any point in time, building Halide requires either the latest stable version
 of LLVM, the previous stable version of LLVM, and trunk. At the time of writing,
-this means versions 13.0 and 12.0 are supported, but 11.0 is not. The commands
+this means versions 14.0 and 13.0 are supported, but 12.0 is not. The commands
 `llvm-config` and `clang` must be somewhere in the path.
 
 If your OS does not have packages for LLVM, you can find binaries for it at
@@ -128,7 +130,7 @@ If you want to build it yourself, first check it out from GitHub:
 % git clone --depth 1 --branch llvmorg-13.0.0 https://github.com/llvm/llvm-project.git
 ```
 
-(If you want to build LLVM 12.x, use branch `release/12.x`; for current trunk,
+(If you want to build LLVM 13.x, use branch `release/13.x`; for current trunk,
 use `main`)
 
 Then build it like so:
@@ -283,7 +285,7 @@ Subsets of the tests can be selected with `-L` and include `correctness`,
 #### Building LLVM (optional)
 
 Follow these steps if you want to build LLVM yourself. First, download LLVM's
-sources (these instructions use the latest 12.0 release)
+sources (these instructions use the latest 13.0 release)
 
 ```
 D:\> git clone --depth 1 --branch llvmorg-13.0.0 https://github.com/llvm/llvm-project.git

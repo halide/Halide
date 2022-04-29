@@ -64,7 +64,7 @@ Expr rng32(const Expr &x) {
 }  // namespace
 
 Expr random_int(const vector<Expr> &e) {
-    internal_assert(e.size());
+    internal_assert(!e.empty());
     internal_assert(e[0].type() == Int(32) || e[0].type() == UInt(32));
     // Permute the first term
     Expr result = rng32(cast(UInt(32), e[0]));

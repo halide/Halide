@@ -8,7 +8,9 @@
 
 namespace Halide {
 
-template<typename T = void, int Dims = Halide::Runtime::AnyDims>
+constexpr int AnyDims = Halide::Runtime::AnyDims;  // -1
+
+template<typename T = void, int Dims = AnyDims>
 class Buffer;
 
 struct JITUserContext;
@@ -153,7 +155,7 @@ class Buffer {
     }
 
 public:
-    static constexpr int AnyDims = Halide::Runtime::AnyDims;
+    static constexpr int AnyDims = Halide::AnyDims;
     static_assert(Dims == AnyDims || Dims >= 0);
 
     typedef T ElemType;

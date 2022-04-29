@@ -23,7 +23,6 @@
 #include "LLVM_Runtime_Linker.h"
 #include "Lerp.h"
 #include "LowerParallelTasks.h"
-#include "MatlabWrapper.h"
 #include "Pipeline.h"
 #include "Simplify.h"
 #include "Util.h"
@@ -147,21 +146,12 @@ namespace {
 
 llvm::Value *CreateConstGEP1_32(IRBuilderBase *builder, llvm::Type *gep_type,
                                 Value *ptr, unsigned index) {
-#if LLVM_VERSION >= 130
     return builder->CreateConstGEP1_32(gep_type, ptr, index);
-#else
-    (void)gep_type;
-    return builder->CreateConstGEP1_32(ptr, index);
-#endif
 }
 
 llvm::Value *CreateInBoundsGEP(IRBuilderBase *builder, llvm::Type *gep_type,
                                Value *ptr, ArrayRef<Value *> index_list) {
-#if LLVM_VERSION >= 130
     return builder->CreateInBoundsGEP(gep_type, ptr, index_list);
-#else
-    return builder->CreateInBoundsGEP(ptr, index_list);
-#endif
 }
 
 // Get the LLVM linkage corresponding to a Halide linkage type.
@@ -499,12 +489,6 @@ void CodeGen_LLVM::init_codegen(const std::string &name, bool any_strict_float) 
 
     semaphore_t_type = get_llvm_struct_type_by_name(module.get(), "struct.halide_semaphore_t");
     internal_assert(semaphore_t_type) << "Did not find halide_semaphore_t in initial module";
-
-    semaphore_acquire_t_type = get_llvm_struct_type_by_name(module.get(), "struct.halide_semaphore_acquire_t");
-    internal_assert(semaphore_acquire_t_type) << "Did not find halide_semaphore_acquire_t in initial module";
-
-    parallel_task_t_type = get_llvm_struct_type_by_name(module.get(), "struct.halide_parallel_task_t");
-    internal_assert(parallel_task_t_type) << "Did not find halide_parallel_task_t in initial module";
 }
 
 std::unique_ptr<llvm::Module> CodeGen_LLVM::compile(const Module &input) {
@@ -557,14 +541,10 @@ std::unique_ptr<llvm::Module> CodeGen_LLVM::compile(const Module &input) {
         // If the Func is externally visible, also create the argv wrapper and metadata.
         // (useful for calling from JIT and other machine interfaces).
         if (f.linkage == LinkageType::ExternalPlusArgv || f.linkage == LinkageType::ExternalPlusMetadata) {
-            llvm::Function *wrapper = add_argv_wrapper(function, names.argv_name, false, buffer_args);
+            add_argv_wrapper(function, names.argv_name, false, buffer_args);
             if (f.linkage == LinkageType::ExternalPlusMetadata) {
-                llvm::Function *metadata_getter = embed_metadata_getter(names.metadata_name,
-                                                                        names.simple_name, f.args, input.get_metadata_name_map());
-
-                if (target.has_feature(Target::Matlab)) {
-                    define_matlab_wrapper(module.get(), wrapper, metadata_getter);
-                }
+                embed_metadata_getter(names.metadata_name,
+                                      names.simple_name, f.args, input.get_metadata_name_map());
             }
         }
     }
@@ -1126,28 +1106,14 @@ void CodeGen_LLVM::optimize_module() {
     // 21.04 -> 14.78 using current ToT release build. (See also https://reviews.llvm.org/rL358304)
     pto.ForgetAllSCEVInLoopUnroll = true;
 
-#if LLVM_VERSION >= 130
     llvm::PassBuilder pb(tm.get(), pto);
-#else
-    llvm::PassBuilder pb(/*DebugLogging*/ false, tm.get(), pto);
-#endif
 
     bool debug_pass_manager = false;
     // These analysis managers have to be declared in this order.
-#if LLVM_VERSION >= 130
     llvm::LoopAnalysisManager lam;
     llvm::FunctionAnalysisManager fam;
     llvm::CGSCCAnalysisManager cgam;
     llvm::ModuleAnalysisManager mam;
-#else
-    llvm::LoopAnalysisManager lam(debug_pass_manager);
-    llvm::FunctionAnalysisManager fam(debug_pass_manager);
-    llvm::CGSCCAnalysisManager cgam(debug_pass_manager);
-    llvm::ModuleAnalysisManager mam(debug_pass_manager);
-#endif
-
-    llvm::AAManager aa = pb.buildDefaultAAPipeline();
-    fam.registerPass([&] { return std::move(aa); });
 
     // Register all the basic analyses with the managers.
     pb.registerModuleAnalyses(mam);
@@ -1155,11 +1121,7 @@ void CodeGen_LLVM::optimize_module() {
     pb.registerFunctionAnalyses(fam);
     pb.registerLoopAnalyses(lam);
     pb.crossRegisterProxies(lam, fam, cgam, mam);
-#if LLVM_VERSION >= 130
     ModulePassManager mpm;
-#else
-    ModulePassManager mpm(debug_pass_manager);
-#endif
 
 #if LLVM_VERSION >= 140
     using OptimizationLevel = llvm::OptimizationLevel;
@@ -1246,15 +1208,9 @@ void CodeGen_LLVM::optimize_module() {
         }
     }
 
-#if LLVM_VERSION >= 130
     if (tm) {
         tm->registerPassBuilderCallbacks(pb);
     }
-#else
-    if (tm) {
-        tm->registerPassBuilderCallbacks(pb, debug_pass_manager);
-    }
-#endif
 
     mpm = pb.buildPerModuleDefaultPipeline(level, debug_pass_manager);
     mpm.run(*module, mam);
@@ -2376,11 +2332,7 @@ llvm::Value *CodeGen_LLVM::codegen_dense_vector_load(const Type &type, const std
         Instruction *load_inst;
         if (vpred != nullptr) {
             Value *slice_mask = slice_vector(vpred, i, slice_lanes);
-#if LLVM_VERSION >= 130
             load_inst = builder->CreateMaskedLoad(slice_type, vec_ptr, llvm::Align(align_bytes), slice_mask);
-#else
-            load_inst = builder->CreateMaskedLoad(vec_ptr, llvm::Align(align_bytes), slice_mask);
-#endif
         } else {
             load_inst = builder->CreateAlignedLoad(slice_type, vec_ptr, llvm::Align(align_bytes));
         }
@@ -2467,20 +2419,11 @@ void CodeGen_LLVM::codegen_atomic_rmw(const Store *op) {
             Value *ptr = codegen_buffer_pointer(op->name,
                                                 op->value.type(),
                                                 op->index);
-#if LLVM_VERSION >= 130
             if (value_type.is_float()) {
                 builder->CreateAtomicRMW(AtomicRMWInst::FAdd, ptr, val, llvm::MaybeAlign(), AtomicOrdering::Monotonic);
             } else {
                 builder->CreateAtomicRMW(AtomicRMWInst::Add, ptr, val, llvm::MaybeAlign(), AtomicOrdering::Monotonic);
             }
-#else
-            // llvm 9 has FAdd which can be used for atomic floats.
-            if (value_type.is_float()) {
-                builder->CreateAtomicRMW(AtomicRMWInst::FAdd, ptr, val, AtomicOrdering::Monotonic);
-            } else {
-                builder->CreateAtomicRMW(AtomicRMWInst::Add, ptr, val, AtomicOrdering::Monotonic);
-            }
-#endif
         } else {
             Value *index = codegen(op->index);
             // Scalarize vector store.
@@ -2489,19 +2432,11 @@ void CodeGen_LLVM::codegen_atomic_rmw(const Store *op) {
                 Value *idx = builder->CreateExtractElement(index, lane);
                 Value *v = builder->CreateExtractElement(val, lane);
                 Value *ptr = codegen_buffer_pointer(op->name, value_type.element_of(), idx);
-#if LLVM_VERSION >= 130
                 if (value_type.is_float()) {
                     builder->CreateAtomicRMW(AtomicRMWInst::FAdd, ptr, v, llvm::MaybeAlign(), AtomicOrdering::Monotonic);
                 } else {
                     builder->CreateAtomicRMW(AtomicRMWInst::Add, ptr, v, llvm::MaybeAlign(), AtomicOrdering::Monotonic);
                 }
-#else
-                if (value_type.is_float()) {
-                    builder->CreateAtomicRMW(AtomicRMWInst::FAdd, ptr, v, AtomicOrdering::Monotonic);
-                } else {
-                    builder->CreateAtomicRMW(AtomicRMWInst::Add, ptr, v, AtomicOrdering::Monotonic);
-                }
-#endif
             }
         }
     } else {
@@ -2564,13 +2499,8 @@ void CodeGen_LLVM::codegen_atomic_rmw(const Store *op) {
                 val = builder->CreateBitCast(val, int_type);
                 cmp_val = builder->CreateBitCast(cmp_val, int_type);
             }
-#if LLVM_VERSION >= 130
             Value *cmpxchg_pair = builder->CreateAtomicCmpXchg(
                 ptr, cmp_val, val, llvm::MaybeAlign(), AtomicOrdering::Monotonic, AtomicOrdering::Monotonic);
-#else
-            Value *cmpxchg_pair = builder->CreateAtomicCmpXchg(
-                ptr, cmp_val, val, AtomicOrdering::Monotonic, AtomicOrdering::Monotonic);
-#endif
             Value *val_loaded = builder->CreateExtractValue(cmpxchg_pair, 0, "val_loaded");
             Value *success = builder->CreateExtractValue(cmpxchg_pair, 1, "success");
             if (need_bit_cast) {

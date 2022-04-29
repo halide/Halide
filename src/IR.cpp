@@ -634,7 +634,6 @@ const char *const intrinsic_op_names[] = {
     "return_second",
     "rewrite_buffer",
     "rounding_halving_add",
-    "rounding_halving_sub",
     "rounding_mul_shift_right",
     "rounding_shift_left",
     "rounding_shift_right",

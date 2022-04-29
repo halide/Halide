@@ -44,6 +44,14 @@ tests(GROUPS error
       five_d_gpu_buffer.cpp
       float_arg.cpp
       forward_on_undefined_buffer.cpp
+      func_expr_dim_mismatch.cpp
+      func_expr_type_mismatch.cpp
+      func_expr_update_type_mismatch.cpp
+      func_extern_dim_mismatch.cpp
+      func_extern_type_mismatch.cpp
+      func_tuple_dim_mismatch.cpp
+      func_tuple_types_mismatch.cpp
+      func_tuple_update_types_mismatch.cpp
       implicit_args.cpp
       impossible_constraints.cpp
       init_def_should_be_all_vars.cpp

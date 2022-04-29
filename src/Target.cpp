@@ -62,6 +62,97 @@ static void cpuid(int info[4], int infoType, int extra) {
 #endif
 #endif
 
+#if defined(__x86_64__) || defined(__i386__) || defined(_MSC_VER)
+
+enum class VendorSignatures {
+    Unknown,
+    GenuineIntel,
+    AuthenticAMD,
+};
+
+VendorSignatures get_vendor_signature() {
+    int info[4];
+    cpuid(info, 0, 0);
+
+    if (info[0] < 1) {
+        return VendorSignatures::Unknown;
+    }
+
+    // "Genu ineI ntel"
+    if (info[1] == 0x756e6547 && info[3] == 0x49656e69 && info[2] == 0x6c65746e) {
+        return VendorSignatures::GenuineIntel;
+    }
+
+    // "Auth enti cAMD"
+    if (info[1] == 0x68747541 && info[3] == 0x69746e65 && info[2] == 0x444d4163) {
+        return VendorSignatures::AuthenticAMD;
+    }
+
+    return VendorSignatures::Unknown;
+}
+
+void detect_family_and_model(int info0, unsigned &family, unsigned &model) {
+    family = (info0 >> 8) & 0xF;  // Bits 8..11
+    model = (info0 >> 4) & 0xF;   // Bits 4..7
+    if (family == 0x6 || family == 0xF) {
+        if (family == 0xF) {
+            // Examine extended family ID if family ID is 0xF.
+            family += (info0 >> 20) & 0xFf;  // Bits 20..27
+        }
+        // Examine extended model ID if family ID is 0x6 or 0xF.
+        model += ((info0 >> 16) & 0xF) << 4;  // Bits 16..19
+    }
+}
+
+Target::Processor get_amd_processor(unsigned family, unsigned model, bool have_sse3) {
+    switch (family) {
+    case 0xF:  // AMD Family 0Fh
+        if (have_sse3) {
+            return Target::Processor::K8_SSE3;  // Hammer (modern, with SSE3)
+        }
+        return Target::Processor::K8;        // Hammer (original, without SSE3)
+    case 0x10:                               // AMD Family 10h
+        return Target::Processor::AMDFam10;  // Barcelona
+    case 0x14:                               // AMD Family 14h
+        return Target::Processor::BtVer1;    // Bobcat
+    case 0x15:                               // AMD Family 15h
+        if (model >= 0x60 && model <= 0x7f) {
+            return Target::Processor::BdVer4;  // 60h-7Fh: Excavator
+        }
+        if (model >= 0x30 && model <= 0x3f) {
+            return Target::Processor::BdVer3;  // 30h-3Fh: Steamroller
+        }
+        if ((model >= 0x10 && model <= 0x1f) || model == 0x02) {
+            return Target::Processor::BdVer2;  // 02h, 10h-1Fh: Piledriver
+        }
+        if (model <= 0x0f) {
+            return Target::Processor::BdVer1;  // 00h-0Fh: Bulldozer
+        }
+        break;
+    case 0x16:                             // AMD Family 16h
+        return Target::Processor::BtVer2;  // Jaguar
+    case 0x17:                             // AMD Family 17h
+        if ((model >= 0x30 && model <= 0x3f) || model == 0x71) {
+            return Target::Processor::ZnVer2;  // 30h-3Fh, 71h: Zen2
+        }
+        if (model <= 0x0f) {
+            return Target::Processor::ZnVer1;  // 00h-0Fh: Zen1
+        }
+        break;
+    case 0x19:  // AMD Family 19h
+        if (model <= 0x0f || model == 0x21) {
+            return Target::Processor::ZnVer3;  // 00h-0Fh, 21h: Zen3
+        }
+        break;
+    default:
+        break;  // Unknown AMD CPU.
+    }
+
+    return Target::Processor::ProcessorGeneric;
+}
+
+#endif  // defined(__x86_64__) || defined(__i386__) || defined(_MSC_VER)
+
 Target calculate_host_target() {
     Target::OS os = Target::OSUnknown;
 #ifdef __linux__
@@ -76,6 +167,7 @@ Target calculate_host_target() {
 
     bool use_64_bits = (sizeof(size_t) == 8);
     int bits = use_64_bits ? 64 : 32;
+    Target::Processor processor = Target::Processor::ProcessorGeneric;
     std::vector<Target::Feature> initial_features;
 
 #if __riscv
@@ -110,14 +202,21 @@ Target calculate_host_target() {
 #else
     Target::Arch arch = Target::X86;
 
+    VendorSignatures vendor_signature = get_vendor_signature();
+
     int info[4];
     cpuid(info, 1, 0);
-    bool have_sse41 = (info[2] & (1 << 19)) != 0;
-    bool have_sse2 = (info[3] & (1 << 26)) != 0;
-    bool have_avx = (info[2] & (1 << 28)) != 0;
-    bool have_f16c = (info[2] & (1 << 29)) != 0;
-    bool have_rdrand = (info[2] & (1 << 30)) != 0;
-    bool have_fma = (info[2] & (1 << 12)) != 0;
+
+    unsigned family = 0, model = 0;
+    detect_family_and_model(info[0], family, model);
+
+    bool have_sse41 = (info[2] & (1 << 19)) != 0;   // ECX[19]
+    bool have_sse2 = (info[3] & (1 << 26)) != 0;    // EDX[26]
+    bool have_sse3 = (info[2] & (1 << 0)) != 0;     // ECX[0]
+    bool have_avx = (info[2] & (1 << 28)) != 0;     // ECX[28]
+    bool have_f16c = (info[2] & (1 << 29)) != 0;    // ECX[29]
+    bool have_rdrand = (info[2] & (1 << 30)) != 0;  // ECX[30]
+    bool have_fma = (info[2] & (1 << 12)) != 0;     // ECX[12]
 
     user_assert(have_sse2)
         << "The x86 backend assumes at least sse2 support. This machine does not appear to have sse2.\n"
@@ -127,6 +226,10 @@ Target calculate_host_target() {
         << ", " << info[2]
         << ", " << info[3]
         << std::dec << "\n";
+
+    if (vendor_signature == VendorSignatures::AuthenticAMD) {
+        processor = get_amd_processor(family, model, have_sse3);
+    }
 
     if (have_sse41) {
         initial_features.push_back(Target::SSE41);
@@ -164,12 +267,15 @@ Target calculate_host_target() {
         }
         if ((info2[1] & avx512) == avx512) {
             initial_features.push_back(Target::AVX512);
+            // TODO: port to family/model -based detection.
             if ((info2[1] & avx512_knl) == avx512_knl) {
                 initial_features.push_back(Target::AVX512_KNL);
             }
+            // TODO: port to family/model -based detection.
             if ((info2[1] & avx512_skylake) == avx512_skylake) {
                 initial_features.push_back(Target::AVX512_Skylake);
             }
+            // TODO: port to family/model -based detection.
             if ((info2[1] & avx512_cannonlake) == avx512_cannonlake) {
                 initial_features.push_back(Target::AVX512_Cannonlake);
 
@@ -177,6 +283,7 @@ Target calculate_host_target() {
                 const uint32_t avx512bf16 = 1U << 5;   // bf16 result in eax, with cpuid(eax=7, ecx=1)
                 int info3[4];
                 cpuid(info3, 7, 1);
+                // TODO: port to family/model -based detection.
                 if ((info2[2] & avx512vnni) == avx512vnni &&
                     (info3[0] & avx512bf16) == avx512bf16) {
                     initial_features.push_back(Target::AVX512_SapphireRapids);
@@ -189,7 +296,7 @@ Target calculate_host_target() {
 #endif
 #endif
 
-    return {os, arch, bits, initial_features};
+    return {os, arch, bits, processor, initial_features};
 }
 
 bool is_using_hexagon(const Target &t) {
@@ -254,7 +361,7 @@ Target::Feature calculate_host_cuda_capability(Target t) {
         return Target::CUDACapability70;
     } else if (ver < 80) {
         return Target::CUDACapability75;
-    } else if (ver < 86 || LLVM_VERSION < 130) {
+    } else if (ver < 86) {
         return Target::CUDACapability80;
     } else {
         return Target::CUDACapability86;
@@ -307,6 +414,38 @@ bool lookup_arch(const std::string &tok, Target::Arch &result) {
     return false;
 }
 
+/// Important design consideration: currently, the string key is
+/// effectively identical to the LLVM CPU string, and it would be really really
+/// good to keep it that way, so the proper tune_* can be autogenerated easily
+/// from the LLVM CPU string (currently, by replacing "-" with "_",
+/// and prepending "tune_" prefix)
+///
+/// Please keep sorted.
+const std::map<std::string, Target::Processor> processor_name_map = {
+    {"tune_amdfam10", Target::Processor::AMDFam10},
+    {"tune_bdver1", Target::Processor::BdVer1},
+    {"tune_bdver2", Target::Processor::BdVer2},
+    {"tune_bdver3", Target::Processor::BdVer3},
+    {"tune_bdver4", Target::Processor::BdVer4},
+    {"tune_btver1", Target::Processor::BtVer1},
+    {"tune_btver2", Target::Processor::BtVer2},
+    {"tune_generic", Target::Processor::ProcessorGeneric},
+    {"tune_k8", Target::Processor::K8},
+    {"tune_k8_sse3", Target::Processor::K8_SSE3},
+    {"tune_znver1", Target::Processor::ZnVer1},
+    {"tune_znver2", Target::Processor::ZnVer2},
+    {"tune_znver3", Target::Processor::ZnVer3},
+};
+
+bool lookup_processor(const std::string &tok, Target::Processor &result) {
+    auto processor_iter = processor_name_map.find(tok);
+    if (processor_iter != processor_name_map.end()) {
+        result = processor_iter->second;
+        return true;
+    }
+    return false;
+}
+
 const std::map<std::string, Target::Feature> feature_name_map = {
     {"jit", Target::JIT},
     {"debug", Target::Debug},
@@ -339,7 +478,6 @@ const std::map<std::string, Target::Feature> feature_name_map = {
     {"openglcompute", Target::OpenGLCompute},
     {"egl", Target::EGL},
     {"user_context", Target::UserContext},
-    {"matlab", Target::Matlab},
     {"profile", Target::Profile},
     {"no_runtime", Target::NoRuntime},
     {"metal", Target::Metal},
@@ -454,7 +592,7 @@ bool merge_string(Target &t, const std::string &target) {
     }
     tokens.push_back(rest);
 
-    bool os_specified = false, arch_specified = false, bits_specified = false, features_specified = false;
+    bool os_specified = false, arch_specified = false, bits_specified = false, processor_specified = false, features_specified = false;
     bool is_host = false;
 
     for (size_t i = 0; i < tokens.size(); i++) {
@@ -484,6 +622,11 @@ bool merge_string(Target &t, const std::string &target) {
                 return false;
             }
             os_specified = true;
+        } else if (lookup_processor(tok, t.processor_tune)) {
+            if (processor_specified) {
+                return false;
+            }
+            processor_specified = true;
         } else if (lookup_feature(tok, feature)) {
             t.set_feature(feature);
             features_specified = true;
@@ -541,6 +684,12 @@ void bad_target_string(const std::string &target) {
         separator = ", ";
     }
     separator = "";
+    std::string processors;
+    for (const auto &processor_entry : processor_name_map) {
+        processors += separator + processor_entry.first;
+        separator = ", ";
+    }
+    separator = "";
     // Format the features to go one feature over 70 characters per line,
     // assume the first line starts with "Features are ".
     int line_char_start = -(int)sizeof("Features are");
@@ -555,12 +704,15 @@ void bad_target_string(const std::string &target) {
         }
     }
     user_error << "Did not understand Halide target " << target << "\n"
-               << "Expected format is arch-bits-os-feature1-feature2-...\n"
+               << "Expected format is arch-bits-os-processor-feature1-feature2-...\n"
                << "Where arch is: " << architectures << ".\n"
                << "bits is either 32 or 64.\n"
                << "os is: " << oses << ".\n"
+               << "processor is: " << processors << ".\n"
                << "\n"
                << "If arch, bits, or os are omitted, they default to the host.\n"
+               << "\n"
+               << "If processor is omitted, it defaults to tune_generic.\n"
                << "\n"
                << "Features are: " << features << ".\n"
                << "\n"
@@ -626,6 +778,14 @@ std::string Target::to_string() const {
         if (os_entry.second == os) {
             result += "-" + os_entry.first;
             break;
+        }
+    }
+    if (processor_tune != ProcessorGeneric) {
+        for (const auto &processor_entry : processor_name_map) {
+            if (processor_entry.second == processor_tune) {
+                result += "-" + processor_entry.first;
+                break;
+            }
         }
     }
     for (const auto &feature_entry : feature_name_map) {
@@ -1047,7 +1207,7 @@ bool Target::get_runtime_compatible_target(const Target &other, Target &result) 
     // Union of features is computed through bitwise-or, and masked away by the features we care about
     // Intersection of features is computed through bitwise-and and masked away, too.
     // We merge the bits via bitwise or.
-    Target output = Target{os, arch, bits};
+    Target output = Target{os, arch, bits, processor_tune};
     output.features = ((features | other.features) & union_mask) | ((features | other.features) & matching_mask) | ((features & other.features) & intersection_mask);
 
     // Pick tight lower bound for CUDA capability. Use fall-through to clear redundant features

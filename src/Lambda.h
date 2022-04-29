@@ -47,4 +47,4 @@ Func lambda(const Var &x, const Var &y, const Var &z, const Var &w, const Var &v
 
 }  // namespace Halide
 
-#endif  //HALIDE_LAMBDA_H
+#endif  // HALIDE_LAMBDA_H

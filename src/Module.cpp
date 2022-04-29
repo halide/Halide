@@ -615,7 +615,7 @@ void Module::compile(const std::map<OutputFileType, std::string> &output_files) 
                 }
             }
             debug(1) << "Module.compile(): static_library " << output_files.at(OutputFileType::static_library) << "\n";
-            Target base_target(target().os, target().arch, target().bits);
+            Target base_target(target().os, target().arch, target().bits, target().processor_tune);
             create_static_library(temp_dir.files(), base_target, output_files.at(OutputFileType::static_library));
         }
         if (contains(output_files, OutputFileType::assembly)) {
@@ -842,7 +842,6 @@ void compile_multitarget(const std::string &fn_name,
             Target::CPlusPlusMangling,
             Target::Debug,
             Target::JIT,
-            Target::Matlab,
             Target::MSAN,
             Target::NoRuntime,
             Target::TSAN,
@@ -861,11 +860,7 @@ void compile_multitarget(const std::string &fn_name,
         std::string sub_fn_name = needs_wrapper ? (fn_name + suffix) : fn_name;
 
         // We always produce the runtime separately, so add NoRuntime explicitly.
-        // Matlab should be added to the wrapper pipeline below, instead of each sub-pipeline.
         Target sub_fn_target = target.with_feature(Target::NoRuntime);
-        if (needs_wrapper) {
-            sub_fn_target = sub_fn_target.without_feature(Target::Matlab);
-        }
 
         {
             ScopedCompilerLogger activate(compiler_logger_factory, sub_fn_name, sub_fn_target);
@@ -923,7 +918,7 @@ void compile_multitarget(const std::string &fn_name,
     // and add that to the result.
     if (!base_target.has_feature(Target::NoRuntime)) {
         // Start with a bare Target, set only the features we know are common to all.
-        Target runtime_target(base_target.os, base_target.arch, base_target.bits);
+        Target runtime_target(base_target.os, base_target.arch, base_target.bits, base_target.processor_tune);
         for (int i = 0; i < Target::FeatureEnd; ++i) {
             // We never want NoRuntime set here.
             if (i == Target::NoRuntime) {
@@ -962,12 +957,6 @@ void compile_multitarget(const std::string &fn_name,
                                     .with_feature(Target::NoRuntime)
                                     .with_feature(Target::NoBoundsQuery)
                                     .without_feature(Target::NoAsserts);
-
-        // If the base target specified the Matlab target, we want the Matlab target
-        // on the wrapper instead.
-        if (base_target.has_feature(Target::Matlab)) {
-            wrapper_target = wrapper_target.with_feature(Target::Matlab);
-        }
 
         Module wrapper_module(fn_name, wrapper_target);
         wrapper_module.append(LoweredFunc(fn_name, base_target_args, wrapper_body, LinkageType::ExternalPlusMetadata));
