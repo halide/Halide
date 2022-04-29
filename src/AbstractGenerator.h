@@ -42,7 +42,7 @@ using ExternsMap = std::map<std::string, ExternalCode>;
  * - optionally set GeneratorParam values
  * - optionally re-bind inputs (if using in JIT or Stub modes)
  * - call build_pipeline()
- * - optionally call get_funcs_for_output() to get the output(s) (if using in JIT or Stub modes)
+ * - optionally call get_output_func() to get the output(s) (if using in JIT or Stub modes)
  * - discard the instance
  *
  * AbstractGenerators should be fairly cheap to instantiate! Don't try to re-use
@@ -122,7 +122,7 @@ public:
      * only once per instance.
      *
      * CALL-AFTER: set_generatorparam_value, bind_input
-     * CALL-BEFORE: get_parameters_for_input, get_funcs_for_output, get_external_code_map
+     * CALL-BEFORE: get_input_parameter, get_output_func, get_external_code_map
      */
     virtual Pipeline build_pipeline() = 0;
 
@@ -133,7 +133,7 @@ public:
      * CALL-AFTER: build_pipeline
      * CALL-BEFORE: none
      */
-    virtual std::vector<Parameter> get_parameters_for_input(const std::string &name) = 0;
+    virtual std::vector<Parameter> get_input_parameter(const std::string &name) = 0;
 
     /** Given the name of an output, return the Func(s) for that output.
      * (Most outputs will have exactly one, but outputs that are declared as arrays, or that return Tuples,
@@ -144,7 +144,7 @@ public:
      * CALL-AFTER: build_pipeline()
      * CALL-BEFORE: none
      */
-    virtual std::vector<Func> get_funcs_for_output(const std::string &name) = 0;
+    virtual std::vector<Func> get_output_func(const std::string &name) = 0;
 
     /** Return the ExternsMap for the Generator, if any.
      *
@@ -153,15 +153,11 @@ public:
      */
     virtual ExternsMap get_external_code_map() = 0;
 
-    /** Rebind all the inputs in a single call. The vector of StubInputs is assumed to have
-     * the same size and ordering as the list of inputs. Basic type-checking is done to ensure
-     * that inputs are still sane (e.g. types, dimensions, etc must match expectations).
+    /** Rebind a specified Input to refer to the given piece of IR, replacing the
+     * default ImageParam / Param in place for that Input. Basic type-checking is
+     * done to ensure that inputs are still sane (e.g. types, dimensions, etc must match expectations).
      *
-     * This call is infrequently used, and is only useful in JIT or Stub situations;
-     * this allows you to bind the inputs to be Funcs, Buffers, etc from another Halide code
-     * fragment, allowing inlining of multiple fragments together.
-     *
-     * CALL-AFTER: n/a
+     * CALL-AFTER: set_generatorparam_value
      * CALL-BEFORE: build_pipeline
      */
     // @{

@@ -190,7 +190,7 @@ py::object generate_impl(const GeneratorFactory &factory,
     const size_t outputs_size = output_arguments.size();
     py::tuple py_outputs(outputs_size);
     for (size_t i = 0; i < outputs_size; i++) {
-        std::vector<Func> outputs = generator->get_funcs_for_output(output_arguments[i].name);
+        std::vector<Func> outputs = generator->get_output_func(output_arguments[i].name);
 
         py::object o;
         if (outputs.size() == 1) {

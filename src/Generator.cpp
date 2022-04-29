@@ -423,7 +423,7 @@ void StubEmitter::emit() {
     for (auto *output : outputs) {
         std::string c_type = output->get_c_type();
         const bool is_func = (c_type == "Func");
-        std::string getter = "generator->get_funcs_for_output(\"" + output->name() + "\")";
+        std::string getter = "generator->get_output_func(\"" + output->name() + "\")";
         if (!is_func) {
             getter = c_type + "::to_output_buffers(" + getter + ", generator)";
         }
@@ -769,7 +769,7 @@ Module build_module(AbstractGenerator &g, const std::string &function_name) {
         if (a.dir != ArgInfoDirection::Input) {
             continue;
         }
-        for (const auto &p : g.get_parameters_for_input(a.name)) {
+        for (const auto &p : g.get_input_parameter(a.name)) {
             filter_arguments.push_back(to_argument(p));
         }
     }
@@ -783,7 +783,7 @@ Module build_module(AbstractGenerator &g, const std::string &function_name) {
         if (a.dir != ArgInfoDirection::Output) {
             continue;
         }
-        const std::vector<Func> output_funcs = g.get_funcs_for_output(a.name);
+        const std::vector<Func> output_funcs = g.get_output_func(a.name);
         for (size_t i = 0; i < output_funcs.size(); ++i) {
             const Func &f = output_funcs[i];
 
@@ -847,7 +847,7 @@ Module build_gradient_module(Halide::Internal::AbstractGenerator &g, const std::
         if (a.dir != ArgInfoDirection::Input) {
             continue;
         }
-        for (const auto &p : g.get_parameters_for_input(a.name)) {
+        for (const auto &p : g.get_input_parameter(a.name)) {
             gradient_inputs.push_back(to_argument(p));
             debug(DBG) << "    gradient copied input is: " << gradient_inputs.back().name << "\n";
         }
@@ -863,7 +863,7 @@ Module build_gradient_module(Halide::Internal::AbstractGenerator &g, const std::
         if (a.dir != ArgInfoDirection::Output) {
             continue;
         }
-        for (const auto &f : g.get_funcs_for_output(a.name)) {
+        for (const auto &f : g.get_output_func(a.name)) {
             const Parameter &p = f.output_buffer().parameter();
             const std::string &output_name = p.name();
             // output_name is something like "funcname_i"
@@ -906,7 +906,7 @@ Module build_gradient_module(Halide::Internal::AbstractGenerator &g, const std::
             if (a.dir != ArgInfoDirection::Input) {
                 continue;
             }
-            for (const auto &p : g.get_parameters_for_input(a.name)) {
+            for (const auto &p : g.get_input_parameter(a.name)) {
                 const std::string &input_name = p.name();
 
                 if (!p.is_buffer()) {
@@ -1806,7 +1806,7 @@ std::vector<AbstractGenerator::ArgInfo> GeneratorBase::get_arginfos() {
     return args;
 }
 
-std::vector<Parameter> GeneratorBase::get_parameters_for_input(const std::string &name) {
+std::vector<Parameter> GeneratorBase::get_input_parameter(const std::string &name) {
     auto *input = find_input_by_name(name);
 
     std::vector<Parameter> params;
@@ -1836,7 +1836,7 @@ std::vector<Parameter> GeneratorBase::get_parameters_for_input(const std::string
     return params;
 }
 
-std::vector<Func> GeneratorBase::get_funcs_for_output(const std::string &n) {
+std::vector<Func> GeneratorBase::get_output_func(const std::string &n) {
     check_min_phase(GenerateCalled);
     auto *output = find_output_by_name(n);
     // Call for the side-effect of asserting if the value isn't defined.

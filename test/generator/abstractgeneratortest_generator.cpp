@@ -94,7 +94,7 @@ public:
         return pipeline_;
     }
 
-    std::vector<Parameter> get_parameters_for_input(const std::string &name) override {
+    std::vector<Parameter> get_input_parameter(const std::string &name) override {
         _halide_user_assert(pipeline_.defined());
         if (name == "input") {
             return {input_.parameter()};
@@ -106,7 +106,7 @@ public:
         return {};
     }
 
-    std::vector<Func> get_funcs_for_output(const std::string &name) override {
+    std::vector<Func> get_output_func(const std::string &name) override {
         _halide_user_assert(pipeline_.defined());
         if (name == "output") {
             return {output_};

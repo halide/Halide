@@ -3618,8 +3618,8 @@ public:
     void set_generatorparam_value(const std::string &name, const std::string &value) override;
     void set_generatorparam_value(const std::string &name, const LoopLevel &loop_level) override;
 
-    std::vector<Parameter> get_parameters_for_input(const std::string &name) override;
-    std::vector<Func> get_funcs_for_output(const std::string &name) override;
+    std::vector<Parameter> get_input_parameter(const std::string &name) override;
+    std::vector<Func> get_output_func(const std::string &name) override;
 
     ExternsMap get_external_code_map() override;
 
