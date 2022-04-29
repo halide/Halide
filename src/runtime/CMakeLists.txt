@@ -5,6 +5,7 @@ set(RUNTIME_CPP
     alignment_32
     alignment_64
     allocation_cache
+    amx
     android_clock
     android_host_cpu_count
     android_io
@@ -172,6 +173,8 @@ foreach (i IN LISTS RUNTIME_CPP)
         set(fpic -fpic)
         # for the generic windows 64-bit target, we need -fshort-wchar
         set(fshort-wchar "")
+        # xsave is required for checking AMX
+        set(xsave "")
         # Windows
         if (i MATCHES "windows_.*")
             # must omit -fpic, otherwise clang will complain with the following:
@@ -208,6 +211,17 @@ foreach (i IN LISTS RUNTIME_CPP)
                     set(TARGET "le64-unknown-windows-unknown")
                 endif ()
             endif()
+        # AMX only works on x86
+        elseif (i MATCHES "amx")
+            message(STATUS "found the amx!")
+            set(xsave "-mxsave")
+            if (j EQUAL 32)
+                set(TARGET "i386-unknown-unknown-unknown")
+            elseif (j EQUAL 64)
+                set(TARGET "x86_64-unknown-unknown-unknown")
+            else ()
+                continue()
+            endif ()
         # Everything else
         else()
             if (j EQUAL 32)
@@ -231,7 +245,7 @@ foreach (i IN LISTS RUNTIME_CPP)
             set(INITMOD "_initmod_${i}_${j}${SUFFIX}.cpp")
             set(SYMBOL "halide_internal_initmod_${i}_${j}${SUFFIX}")
 
-            set(clang_flags ${RUNTIME_CXX_FLAGS} ${fpic} ${fshort-wchar} ${RUNTIME_DEFINES${SUFFIX}} -m${j} -target ${TARGET} -emit-llvm -S -MD -MF "${basename}.d")
+            set(clang_flags ${RUNTIME_CXX_FLAGS} ${fpic} ${fshort-wchar} ${xsave} ${RUNTIME_DEFINES${SUFFIX}} -m${j} -target ${TARGET} -emit-llvm -S -MD -MF "${basename}.d")
 
             if (Halide_CLANG_TIDY_BUILD)
                 # Create a 'fake' entry just so that clang-tidy will see a C++ compilation command
