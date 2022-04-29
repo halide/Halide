@@ -9,5 +9,5 @@ edition = "2021"
 halide_build = "0.1.0"
 
 [patch.crates-io]
-halide_runtime = {path = "../../rust_runtime"}
+halide_build = {path = "../rust_build"}
 
