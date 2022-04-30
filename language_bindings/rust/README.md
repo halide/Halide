@@ -16,7 +16,6 @@ Install Cargo: https://doc.rust-lang.org/cargo/getting-started/installation.html
 
 ```
   Cargo build
-  Cargo test
   Cargo run
 ```
 
@@ -35,8 +34,9 @@ To generate the rustdocs and open the html file.
 ## FAQ
 
 ### Where are the makefiles or cmakelists?
-The halide_build crate contains that funtionality, the usage can be seen in the iir_blur example app build.rs file
-
+The halide_build crate contains that functionality, the usage can be seen in the iir_blur example app build.rs file
+### Why are halide_runtime test located in a separate crate?
+The halide_runtime crate requires being linked to a libhalide.a to perform meaningful tests.
 
 
 ## Link to cargo docs

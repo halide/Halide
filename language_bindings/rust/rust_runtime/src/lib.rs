@@ -1,4 +1,9 @@
-include!("Runtime_bindings.rs");
+//!halide runtime is a crate containing the buffer_t and other useful halide items.
+//!
+//! runtime_bindings is a module of bindgen generated bindings to the halide runtime addition functionality may be added on demand
+
+pub mod runtime_bindings;
+
 use crate::runtime_bindings::*;
 
 /// Is a helper struct to more easily create buffer_t objects in Rust.
@@ -54,4 +59,4 @@ impl HalideBuffer {
         buf
     }
 }
-mod runtime_tests;
+
