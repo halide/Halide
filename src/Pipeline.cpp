@@ -687,6 +687,8 @@ Realization Pipeline::realize(JITUserContext *context,
     user_assert(defined()) << "Pipeline is undefined\n";
     vector<Buffer<>> bufs;
     for (auto &out : contents->outputs) {
+        user_assert((int)sizes.size() == out.dimensions())
+            << "Func " << out.name() << " is defined with " << out.dimensions() << " dimensions, but realize() is requesting a realization with " << sizes.size() << " dimensions.\n";
         user_assert(out.has_pure_definition() || out.has_extern_definition()) << "Can't realize Pipeline with undefined output Func: " << out.name() << ".\n";
         for (Type t : out.output_types()) {
             bufs.emplace_back(t, nullptr, sizes);
