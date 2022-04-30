@@ -1,6 +1,7 @@
 
-
-pub mod runtime_bindings {
+//! runtime_bindings is a manually generated using bindgen on halide_runtime.h.
+//!
+//! Eventually automatically generating this file may be a better approach, but may introduce stability issues.
     #![allow(dead_code)]
 
     #![allow(non_camel_case_types)]
@@ -297,4 +298,3 @@ pub mod runtime_bindings {
     #[doc = " Note that the int/uint/float values do not imply a specific bit width"]
     #[doc = " (the bit width is expected to be encoded in a separate value)."]
     pub type halide_type_code_t = ::std::os::raw::c_uint;
-}

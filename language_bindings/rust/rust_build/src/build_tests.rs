@@ -3,7 +3,7 @@ use crate::GenBuilder;
 use std::io;
 use std::io::prelude::*;
 
-//#[test]
+#[test]
 fn build_bind_iir_blur() {
     let h = GenBuilder::new("../../../", "test_files/").debug(true);
     let g = h.new_gen("iir_blur".to_string());
@@ -37,4 +37,4 @@ fn build_lib() {
     let h = GenBuilder::new("../../../", "");
     h.make_runtime();
 }
-//}
+
