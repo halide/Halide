@@ -28,6 +28,9 @@ public:
         input.dim(0).set_stride(Expr()).set_extent(4).dim(1).set_extent(4).dim(2).set_extent(3);
         output.parallel(y).vectorize(x, 4);
         output.dim(0).set_stride(Expr()).set_extent(4).dim(1).set_extent(4).dim(2).set_extent(3);
+        // Silence warnings.
+        output.update(0).unscheduled();
+        output.update(1).unscheduled();
     }
 
 private:
