@@ -16,14 +16,11 @@ set(FEATURES_user_context user_context)
 # specified for AOT. (We currently don't use or test these in AOT form, so the settings
 # are somewhat arbitrary.)
 set(GENPARAMS_complex
-    array_input.size=2
-    array_input.type=uint8
-    int_arg.size=2
     simple_input.type=uint8
-    untyped_buffer_input.type=uint8)
+    untyped_buffer_input.type=uint8
+    untyped_buffer_output.type=uint8)
 
-set(GENPARAMS_simple
-    func_input.type=uint8)
+set(GENPARAMS_complexpy ${GENPARAMS_complex})
 
 foreach (GEN IN LISTS GENERATORS)
     add_python_aot_extension(py_aot_${GEN}

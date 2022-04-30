@@ -130,6 +130,9 @@ py::object generate_impl(const GeneratorFactory &factory,
         // vector. If not, stick it in the constants (if it's invalid,
         // an error will be reported further downstream).
         std::string name = kw.first.cast<std::string>();
+        // Allow synthetic params to be specified as __type or __dim
+        name = Internal::replace_all(name, "__type", ".type");
+        name = Internal::replace_all(name, "__dim", ".dim");
         py::handle value = kw.second;
         auto it = input_arguments_map.find(name);
         if (it != input_arguments_map.end()) {
@@ -144,6 +147,9 @@ py::object generate_impl(const GeneratorFactory &factory,
             }
             kw_inputs_specified++;
         } else {
+            // Note that while Python Generators don't support LoopLevels,
+            // C++ Generators do, and that's what we're calling here, so
+            // be sure to allow passing 'em in.
             if (py::isinstance<LoopLevel>(value)) {
                 generator->set_generatorparam_value(name, value.cast<LoopLevel>());
             } else if (py::isinstance<py::list>(value)) {

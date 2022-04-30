@@ -4,6 +4,9 @@ import halide as hl
 import simple_stub
 import complex_stub
 
+from simplepy_generator import SimplePy
+from complexpy_generator import ComplexPy
+
 def _realize_and_check(f, offset = 0):
     b = hl.Buffer(hl.Float(32), [2, 2])
     f.realize(b)
@@ -20,45 +23,45 @@ def test_simple(gen):
 
     b_in = hl.Buffer(hl.UInt(8), [2, 2])
     b_in.fill(123)
-
-    f_in = hl.Func("f")
-    f_in[x, y] = x + y
+    for xx in range(2):
+        for yy in range(2):
+            b_in[xx, yy] += xx + yy
 
     # ----------- Inputs by-position
-    f = gen(target, b_in, f_in, 3.5)
+    f = gen(target, b_in, 3.5)
     _realize_and_check(f)
 
     # ----------- Inputs by-name
-    f = gen(target, buffer_input=b_in, func_input=f_in, float_arg=3.5)
+    f = gen(target, buffer_input=b_in, float_arg=3.5)
     _realize_and_check(f)
 
-    f = gen(target, float_arg=3.5, buffer_input=b_in, func_input=f_in)
+    f = gen(target, float_arg=3.5, buffer_input=b_in)
     _realize_and_check(f)
 
     # ----------- Above set again, w/ GeneratorParam mixed in
     k = 42
 
     # (positional)
-    f = gen(target, b_in, f_in, 3.5, offset=k)
+    f = gen(target, b_in, 3.5, offset=k)
     _realize_and_check(f, k)
 
     # (keyword)
-    f = gen(target, offset=k, buffer_input=b_in, func_input=f_in, float_arg=3.5)
+    f = gen(target, offset=k, buffer_input=b_in, float_arg=3.5)
     _realize_and_check(f, k)
 
-    f = gen(target, buffer_input=b_in, offset=k, func_input=f_in, float_arg=3.5)
+    f = gen(target, buffer_input=b_in, offset=k, float_arg=3.5)
     _realize_and_check(f, k)
 
-    f = gen(target, buffer_input=b_in, func_input=f_in, offset=k, float_arg=3.5)
+    f = gen(target, buffer_input=b_in, offset=k, float_arg=3.5)
     _realize_and_check(f, k)
 
-    f = gen(target, buffer_input=b_in, float_arg=3.5, func_input=f_in, offset=k)
+    f = gen(target, buffer_input=b_in, float_arg=3.5, offset=k)
     _realize_and_check(f, k)
 
     # ----------- Test various failure modes
     try:
         # Inputs w/ mixed by-position and by-name
-        f = gen(target, b_in, f_in, float_arg=3.5)
+        f = gen(target, b_in, float_arg=3.5)
     except RuntimeError as e:
         assert 'Cannot use both positional and keyword arguments for inputs.' in str(e)
     else:
@@ -66,39 +69,41 @@ def test_simple(gen):
 
     try:
         # too many positional args
-        f = gen(target, b_in, f_in, 3.5, 4)
+        f = gen(target, b_in, 3.5, 4)
     except RuntimeError as e:
-        assert 'Expected exactly 3 positional args for inputs, but saw 4.' in str(e)
+        assert 'Expected exactly 2 positional args for inputs, but saw 3.' in str(e)
     else:
         assert False, 'Did not see expected exception!'
 
     try:
         # too few positional args
-        f = gen(target, b_in, f_in)
+        f = gen(target, b_in)
     except RuntimeError as e:
-        assert 'Expected exactly 3 positional args for inputs, but saw 2.' in str(e)
+        assert 'Expected exactly 2 positional args for inputs, but saw 1.' in str(e)
     else:
         assert False, 'Did not see expected exception!'
 
     try:
         # Inputs that can't be converted to what the receiver needs (positional)
-        f = gen(target, hl.f32(3.141592), "happy", k)
+        f = gen(target, hl.f32(3.141592), "happy")
     except RuntimeError as e:
-        assert 'Unable to cast Python instance' in str(e)
+        assert 'Unable to cast Python instance' in str(e) or \
+               'requires an ImageParam or Buffer' in str(e)
     else:
         assert False, 'Did not see expected exception!'
 
     try:
         # Inputs that can't be converted to what the receiver needs (named)
-        f = gen(target, b_in, f_in, float_arg="bogus")
+        f = gen(target, b_in, float_arg="bogus")
     except RuntimeError as e:
-        assert 'Unable to cast Python instance' in str(e)
+        assert 'Unable to cast Python instance' in str(e) or \
+               'requires a Param (or scalar literal) argument' in str(e)
     else:
         assert False, 'Did not see expected exception!'
 
     try:
         # Input specified by both pos and kwarg
-        f = gen(target, b_in, f_in, 3.5, float_arg=4.5)
+        f = gen(target, b_in, 3.5, float_arg=4.5)
     except RuntimeError as e:
         assert "Cannot use both positional and keyword arguments for inputs." in str(e)
     else:
@@ -106,44 +111,24 @@ def test_simple(gen):
 
     try:
         # Bad input name
-        f = gen(target, buffer_input=b_in, float_arg=3.5, offset=k, funk_input=f_in)
+        f = gen(target, buzzer_input=b_in, float_arg=3.5, offset=k)
     except RuntimeError as e:
-        assert "has no GeneratorParam named: funk_input" in str(e)
+        assert "has no GeneratorParam named: buzzer_input" in str(e) or \
+               "has no GeneratorParam(s) named: ['buzzer_input']" in str(e)
     else:
         assert False, 'Did not see expected exception!'
 
     try:
         # Bad gp name
-        f = gen(target, buffer_input=b_in, float_arg=3.5, offset=k, func_input=f_in, nonexistent_generator_param="wat")
+        f = gen(target, buffer_input=b_in, float_arg=3.5, offset=k, nonexistent_generator_param="wat")
     except RuntimeError as e:
-        assert "has no GeneratorParam named: nonexistent_generator_param" in str(e)
+        assert "has no GeneratorParam named: nonexistent_generator_param" in str(e) or \
+               "has no GeneratorParam(s) named: ['nonexistent_generator_param']" in str(e)
     else:
         assert False, 'Did not see expected exception!'
 
-def test_looplevel(gen):
-    x, y = hl.Var('x'), hl.Var('y')
-    target = hl.get_jit_target_from_environment()
-
-    buffer_input = hl.Buffer(hl.UInt(8), [4, 4])
-    buffer_input.fill(123)
-
-    func_input = hl.Func("func_input")
-    func_input[x, y] = x + y
-
-    simple_compute_at = hl.LoopLevel()
-    simple = gen(target, buffer_input, func_input, 3.5,
-        compute_level=simple_compute_at)
-
-    computed_output = hl.Func('computed_output')
-    computed_output[x, y] = simple[x, y] + 3
-
-    simple_compute_at.set(hl.LoopLevel(computed_output, x))
-
-    _realize_and_check(computed_output, 3)
-
-
-def _make_constant_image():
-    constant_image = hl.Buffer(hl.UInt(8), [32, 32, 3], 'constant_image')
+def _make_constant_image(type):
+    constant_image = hl.Buffer(type, [32, 32, 3], 'constant_image')
     for x in range(32):
         for y in range(32):
             for c in range(3):
@@ -151,7 +136,8 @@ def _make_constant_image():
     return constant_image
 
 def test_complex(gen):
-    constant_image = _make_constant_image()
+    constant_image = _make_constant_image(hl.UInt(8))
+    constant_image_u16 = _make_constant_image(hl.UInt(16))
     input = hl.ImageParam(hl.UInt(8), 3, 'input')
     input.set(constant_image)
 
@@ -161,25 +147,32 @@ def test_complex(gen):
     float_arg = 1.25
     int_arg = 33
 
-    func_input = hl.Func("func_input")
-    func_input[x, y, c] = hl.u16(x + y + c)
-
     r = gen(target,
             typed_buffer_input=constant_image,
             untyped_buffer_input=constant_image,
-            simple_input=input,
-            array_input=[ input, input ],
+            simple_input=constant_image,
             float_arg=float_arg,
-            int_arg=[ int_arg, int_arg ],
-            untyped_buffer_output_type="uint8",
-            extra_func_input=func_input,
-            vectorize=True)
+            int_arg=int_arg,
+            extra_input=constant_image_u16,
+            vectorize=True,
+            # We can put GeneratorParams anywhere in the list we want --
+            # they will be examined and applied before anything else --
+            # but it's usually better form to put them all at the end.
+            #
+            # We can specify a halide Type via string or object here
+            simple_input__type=hl.UInt(8),
+            untyped_buffer_input__type="uint8",
+            untyped_buffer_output__type="uint8",
+            # Can specify a list-of-types for Tuple output
+            tuple_output__type=[hl.Float(32), hl.Float(32)],
+            # Alternately, we could specify comma-delimited string:
+            # tuple_output__type="float32,float32",
+        )
 
     # return value is a tuple; unpack separately to avoid
     # making the callsite above unreadable
     (simple_output,
         tuple_output,
-        array_output,
         typed_buffer_output,
         untyped_buffer_output,
         static_compiled_buffer_output,
@@ -207,16 +200,6 @@ def test_complex(gen):
                 actual1, actual2 = b[0][x, y, c], b[1][x, y, c]
                 assert expected1 == actual1, "Expected1 %s Actual1 %s" % (expected1, actual1)
                 assert expected2 == actual2, "Expected2 %s Actual1 %s" % (expected2, actual2)
-
-    assert len(array_output) == 2
-    for a in array_output:
-        b = a.realize([32, 32], target)
-        assert b.type() == hl.Int(16)
-        for x in range(32):
-            for y in range(32):
-                expected = constant_image[x, y, 0] + int_arg
-                actual = b[x, y]
-                assert expected == actual, "Expected %s Actual %s" % (expected, actual)
 
     # TODO: Output<Buffer<>> has additional behaviors useful when a Stub
     # is used within another Generator; this isn't yet implemented since there
@@ -263,5 +246,7 @@ def test_complex(gen):
 
 if __name__ == "__main__":
     test_simple(simple_stub.generate)
-    test_looplevel(simple_stub.generate)
     test_complex(complex_stub.generate)
+
+    test_simple(SimplePy.call)
+    test_complex(ComplexPy.call)
