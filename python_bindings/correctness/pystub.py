@@ -38,21 +38,23 @@ def test_simple(gen):
     # ----------- Above set again, w/ GeneratorParam mixed in
     k = 42
 
+    gp = { "offset": k }
+
     # (positional)
-    f = gen(target, b_in, f_in, 3.5, offset=k)
+    f = gen(target, b_in, f_in, 3.5, generator_params=gp)
     _realize_and_check(f, k)
 
     # (keyword)
-    f = gen(target, offset=k, buffer_input=b_in, func_input=f_in, float_arg=3.5)
+    f = gen(target, generator_params=gp, buffer_input=b_in, func_input=f_in, float_arg=3.5)
     _realize_and_check(f, k)
 
-    f = gen(target, buffer_input=b_in, offset=k, func_input=f_in, float_arg=3.5)
+    f = gen(target, buffer_input=b_in, generator_params=gp, func_input=f_in, float_arg=3.5)
     _realize_and_check(f, k)
 
-    f = gen(target, buffer_input=b_in, func_input=f_in, offset=k, float_arg=3.5)
+    f = gen(target, buffer_input=b_in, func_input=f_in, generator_params=gp, float_arg=3.5)
     _realize_and_check(f, k)
 
-    f = gen(target, buffer_input=b_in, float_arg=3.5, func_input=f_in, offset=k)
+    f = gen(target, buffer_input=b_in, float_arg=3.5, func_input=f_in, generator_params=gp)
     _realize_and_check(f, k)
 
     # ----------- Test various failure modes
@@ -105,18 +107,34 @@ def test_simple(gen):
         assert False, 'Did not see expected exception!'
 
     try:
-        # Bad input name
-        f = gen(target, buffer_input=b_in, float_arg=3.5, offset=k, funk_input=f_in)
-    except RuntimeError as e:
-        assert "Expected exactly 3 keyword args for inputs, but saw 2." in str(e)
+        # generator_params is not a dict
+        f = gen(target, b_in, f_in, 3.5, generator_params=[1, 2, 3])
+    except TypeError as e:
+        assert "cannot convert dictionary" in str(e)
     else:
         assert False, 'Did not see expected exception!'
 
     try:
         # Bad gp name
-        f = gen(target, buffer_input=b_in, float_arg=3.5, offset=k, func_input=f_in, nonexistent_generator_param="wat")
+        f = gen(target, b_in, f_in, 3.5, generator_params={"foo": 0})
     except RuntimeError as e:
-        assert "has no GeneratorParam named: nonexistent_generator_param" in str(e)
+        assert "has no GeneratorParam named: foo" in str(e)
+    else:
+        assert False, 'Did not see expected exception!'
+
+    try:
+        # Bad input name
+        f = gen(target, buffer_input=b_in, float_arg=3.5, generator_params=gp, funk_input=f_in)
+    except RuntimeError as e:
+        assert "Unknown input 'funk_input' specified via keyword argument." in str(e)
+    else:
+        assert False, 'Did not see expected exception!'
+
+    try:
+        # Bad gp name
+        f = gen(target, buffer_input=b_in, float_arg=3.5, generator_params=gp, func_input=f_in, nonexistent_generator_param="wat")
+    except RuntimeError as e:
+        assert "Unknown input 'nonexistent_generator_param' specified via keyword argument." in str(e)
     else:
         assert False, 'Did not see expected exception!'
 
@@ -132,7 +150,9 @@ def test_looplevel(gen):
 
     simple_compute_at = hl.LoopLevel()
     simple = gen(target, buffer_input, func_input, 3.5,
-        compute_level=simple_compute_at)
+        generator_params = {
+            "compute_level": simple_compute_at
+        })
 
     computed_output = hl.Func('computed_output')
     computed_output[x, y] = simple[x, y] + 3
@@ -171,9 +191,11 @@ def test_complex(gen):
             array_input=[ input, input ],
             float_arg=float_arg,
             int_arg=[ int_arg, int_arg ],
-            untyped_buffer_output_type="uint8",
             extra_func_input=func_input,
-            vectorize=True)
+            generator_params = {
+                "untyped_buffer_output.type": hl.UInt(8),
+                "vectorize": True
+            })
 
     # return value is a tuple; unpack separately to avoid
     # making the callsite above unreadable

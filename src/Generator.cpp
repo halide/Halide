@@ -79,6 +79,11 @@ bool is_valid_name(const std::string &n) {
             return false;
         }
     }
+    // prohibit this specific string so that we can use it for
+    // passing GeneratorParams in Python.
+    if (n == "generator_params") {
+        return false;
+    }
     return true;
 }
 
