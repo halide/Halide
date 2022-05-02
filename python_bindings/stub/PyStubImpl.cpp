@@ -98,7 +98,7 @@ std::vector<T> to_input_vector(const py::object &value) {
     return v;
 }
 
-py::object generate_impl(const GeneratorFactory &factory,
+py::object call_impl(const GeneratorFactory &factory,
                          const GeneratorContext &context,
                          const py::args &args,
                          const py::kwargs &kwargs) {
@@ -219,10 +219,10 @@ py::object generate_impl(const GeneratorFactory &factory,
 
 void pystub_init(pybind11::module &m, const GeneratorFactory &factory) {
     m.def(
-        "generate", [factory](const Halide::Target &target, const py::args &args, const py::kwargs &kwargs) -> py::object {
-            return generate_impl(factory, Halide::GeneratorContext(target), args, kwargs);
+        "call", [factory](const Halide::GeneratorContext &context, const py::args &args, const py::kwargs &kwargs) -> py::object {
+            return call_impl(factory, context, args, kwargs);
         },
-        py::arg("target"));
+        py::arg("context"));
 }
 
 }  // namespace

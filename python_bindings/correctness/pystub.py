@@ -17,9 +17,10 @@ def _realize_and_check(f, offset = 0):
     assert b[1, 1] == 5.5 + offset + 123
 
 
-def test_simple(gen):
+def test_simple(cls):
     x, y = hl.Var(), hl.Var()
     target = hl.get_jit_target_from_environment()
+    ctx = hl.GeneratorContext(target)
 
     b_in = hl.Buffer(hl.UInt(8), [2, 2])
     b_in.fill(123)
@@ -28,40 +29,40 @@ def test_simple(gen):
             b_in[xx, yy] += xx + yy
 
     # ----------- Inputs by-position
-    f = gen(target, b_in, 3.5)
+    f = cls.call(ctx, b_in, 3.5)
     _realize_and_check(f)
 
     # ----------- Inputs by-name
-    f = gen(target, buffer_input=b_in, float_arg=3.5)
+    f = cls.call(ctx, buffer_input=b_in, float_arg=3.5)
     _realize_and_check(f)
 
-    f = gen(target, float_arg=3.5, buffer_input=b_in)
+    f = cls.call(ctx, float_arg=3.5, buffer_input=b_in)
     _realize_and_check(f)
 
     # ----------- Above set again, w/ GeneratorParam mixed in
     k = 42
 
     # (positional)
-    f = gen(target, b_in, 3.5, offset=k)
+    f = cls.call(ctx, b_in, 3.5, offset=k)
     _realize_and_check(f, k)
 
     # (keyword)
-    f = gen(target, offset=k, buffer_input=b_in, float_arg=3.5)
+    f = cls.call(ctx, offset=k, buffer_input=b_in, float_arg=3.5)
     _realize_and_check(f, k)
 
-    f = gen(target, buffer_input=b_in, offset=k, float_arg=3.5)
+    f = cls.call(ctx, buffer_input=b_in, offset=k, float_arg=3.5)
     _realize_and_check(f, k)
 
-    f = gen(target, buffer_input=b_in, offset=k, float_arg=3.5)
+    f = cls.call(ctx, buffer_input=b_in, offset=k, float_arg=3.5)
     _realize_and_check(f, k)
 
-    f = gen(target, buffer_input=b_in, float_arg=3.5, offset=k)
+    f = cls.call(ctx, buffer_input=b_in, float_arg=3.5, offset=k)
     _realize_and_check(f, k)
 
     # ----------- Test various failure modes
     try:
         # Inputs w/ mixed by-position and by-name
-        f = gen(target, b_in, float_arg=3.5)
+        f = cls.call(ctx, b_in, float_arg=3.5)
     except RuntimeError as e:
         assert 'Cannot use both positional and keyword arguments for inputs.' in str(e)
     else:
@@ -69,7 +70,7 @@ def test_simple(gen):
 
     try:
         # too many positional args
-        f = gen(target, b_in, 3.5, 4)
+        f = cls.call(ctx, b_in, 3.5, 4)
     except RuntimeError as e:
         assert 'Expected exactly 2 positional args for inputs, but saw 3.' in str(e)
     else:
@@ -77,7 +78,7 @@ def test_simple(gen):
 
     try:
         # too few positional args
-        f = gen(target, b_in)
+        f = cls.call(ctx, b_in)
     except RuntimeError as e:
         assert 'Expected exactly 2 positional args for inputs, but saw 1.' in str(e)
     else:
@@ -85,7 +86,7 @@ def test_simple(gen):
 
     try:
         # Inputs that can't be converted to what the receiver needs (positional)
-        f = gen(target, hl.f32(3.141592), "happy")
+        f = cls.call(ctx, hl.f32(3.141592), "happy")
     except RuntimeError as e:
         assert 'Unable to cast Python instance' in str(e) or \
                'requires an ImageParam or Buffer' in str(e)
@@ -94,7 +95,7 @@ def test_simple(gen):
 
     try:
         # Inputs that can't be converted to what the receiver needs (named)
-        f = gen(target, b_in, float_arg="bogus")
+        f = cls.call(ctx, b_in, float_arg="bogus")
     except RuntimeError as e:
         assert 'Unable to cast Python instance' in str(e) or \
                'requires a Param (or scalar literal) argument' in str(e)
@@ -103,7 +104,7 @@ def test_simple(gen):
 
     try:
         # Input specified by both pos and kwarg
-        f = gen(target, b_in, 3.5, float_arg=4.5)
+        f = cls.call(ctx, b_in, 3.5, float_arg=4.5)
     except RuntimeError as e:
         assert "Cannot use both positional and keyword arguments for inputs." in str(e)
     else:
@@ -111,7 +112,7 @@ def test_simple(gen):
 
     try:
         # Bad input name
-        f = gen(target, buzzer_input=b_in, float_arg=3.5, offset=k)
+        f = cls.call(ctx, buzzer_input=b_in, float_arg=3.5, offset=k)
     except RuntimeError as e:
         assert "has no GeneratorParam named: buzzer_input" in str(e) or \
                "has no GeneratorParam(s) named: ['buzzer_input']" in str(e)
@@ -120,7 +121,7 @@ def test_simple(gen):
 
     try:
         # Bad gp name
-        f = gen(target, buffer_input=b_in, float_arg=3.5, offset=k, nonexistent_generator_param="wat")
+        f = cls.call(ctx, buffer_input=b_in, float_arg=3.5, offset=k, nonexistent_generator_param="wat")
     except RuntimeError as e:
         assert "has no GeneratorParam named: nonexistent_generator_param" in str(e) or \
                "has no GeneratorParam(s) named: ['nonexistent_generator_param']" in str(e)
@@ -135,7 +136,7 @@ def _make_constant_image(type):
                 constant_image[x, y, c] = x + y + c
     return constant_image
 
-def test_complex(gen):
+def test_complex(cls):
     constant_image = _make_constant_image(hl.UInt(8))
     constant_image_u16 = _make_constant_image(hl.UInt(16))
     input = hl.ImageParam(hl.UInt(8), 3, 'input')
@@ -143,11 +144,12 @@ def test_complex(gen):
 
     x, y, c = hl.Var(), hl.Var(), hl.Var()
     target = hl.get_jit_target_from_environment()
+    ctx = hl.GeneratorContext(target)
 
     float_arg = 1.25
     int_arg = 33
 
-    r = gen(target,
+    r = cls.call(ctx,
             typed_buffer_input=constant_image,
             untyped_buffer_input=constant_image,
             simple_input=constant_image,
@@ -245,8 +247,7 @@ def test_complex(gen):
             assert expected == actual, "Expected %s Actual %s" % (expected, actual)
 
 if __name__ == "__main__":
-    test_simple(simple_stub.generate)
-    test_complex(complex_stub.generate)
-
-    test_simple(SimplePy.call)
-    test_complex(ComplexPy.call)
+    test_simple(simple_stub)
+    test_complex(complex_stub)
+    test_simple(SimplePy)
+    test_complex(ComplexPy)

@@ -396,10 +396,7 @@ class Generator(ABC):
     #
     # GeneratorParams can only be specified by name, and are always optional.
     @classmethod
-    def call(cls, context, *args, **kwargs):
-        # Allow passing a Target or a GeneratorContext
-        if isinstance(context, Target):
-            context = GeneratorContext(context)
+    def call(cls, context:GeneratorContext, *args, **kwargs):
         generator = cls(context)
 
         # Process the kwargs first: first, fill in all the GeneratorParams
