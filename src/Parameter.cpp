@@ -191,10 +191,6 @@ void Parameter::set_buffer(const Buffer<> &b) {
     contents->buffer = b;
 }
 
-    /** Disallow any future calls to `set_buffer()` for the Parameter; attempts to
-     * do so will assert-fail. Only relevant when jitting */
-    void freeze_buffer();
-
 const void *Parameter::scalar_address() const {
     check_is_scalar();
     return &contents->data;
