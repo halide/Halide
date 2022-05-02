@@ -352,6 +352,24 @@ class _Stage(Enum):
             return self.value < other.value
         return NotImplemented
 
+# Prevent user code from inadvertently overwriting fields -- this is
+# not at all foolproof but will make it inconvenient to do so.
+# TODO: add ability to freeze ImageParam and Param so you can't call set(), etc.
+def _make_freezable(cls:type):
+
+    # TODO: kinda janky, is this the best way to implement this?
+    def _freeze(self):
+        setattr(self, "_frozen", True)
+
+    def _freezable_setattr(self, name, value):
+        if getattr(self, "_frozen", False):
+            raise AttributeError("Invalid write to field '%s'" % name)
+        self.__class__._old_halide_setattr(self, name, value)
+
+    if not hasattr(cls, "_old_halide_setattr"):
+        cls._old_halide_setattr = cls.__setattr__
+        cls.__setattr__ = _freezable_setattr
+        cls._freeze = _freeze
 
 class Generator(ABC):
     """Base class for Halide Generators in Python"""
@@ -512,6 +530,7 @@ class Generator(ABC):
         gp_class = getattr(self, "GeneratorParams", self.Empty)
         if not type(gp_class) is type:
             gp_class = gp_class()
+        _make_freezable(gp_class)
         self._gp = gp_class()
         self._gp_names = _get_data_member_names(self._gp)
         for name in self._gp_names:
@@ -539,10 +558,14 @@ class Generator(ABC):
         assert not self._arginfos
         assert self._stage == _Stage.GeneratorParamsBuilt
 
+        # Freeze the GeneratorParams now
+        self._gp._freeze()
+
         def _build_one_io(cls_name: str, legal_types: tuple[type]):
             io_class = getattr(self, cls_name, self.Empty)
             if not type(io_class) is type:
                 io_class = io_class(self._gp)
+            _make_freezable(io_class)
             io = io_class()
             io_names = _get_data_member_names(io)
             arginfos = []
@@ -578,7 +601,7 @@ class Generator(ABC):
                         dims,
                     ))
 
-            return io, io_names, arginfos
+            return io, io_names, arginfos,
 
         self._inputs, self._inputs_names, inputs_arginfos = _build_one_io(
             "Inputs", (InputBuffer, InputScalar))
@@ -601,6 +624,7 @@ class Generator(ABC):
     def _finalize_io(self):
         if self._stage < _Stage.IOBuilt:
             self._build_io()
+        assert self._stage == _Stage.IOBuilt
 
         def _finalize_one_io(io, io_names: list[str]):
             for name in io_names:
@@ -611,6 +635,8 @@ class Generator(ABC):
                     new_io = initial_io._make_replacement(
                         None, self._requirements[name])
                 setattr(io, name, new_io)
+            # Freeze the IO now
+            io._freeze()
 
         _finalize_one_io(self._inputs, self._inputs_names)
         _finalize_one_io(self._outputs, self._outputs_names)
