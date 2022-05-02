@@ -31,6 +31,7 @@ class Parameter {
     void check_is_scalar() const;
     void check_dim_ok(int dim) const;
     void check_type(const Type &t) const;
+    void check_not_frozen() const;
 
 protected:
     IntrusivePtr<ParameterContents> contents;
@@ -77,7 +78,9 @@ public:
     template<typename T>
     HALIDE_NO_USER_CODE_INLINE T scalar() const {
         check_type(type_of<T>());
-        return *((const T *)(scalar_address()));
+        T val;
+        memcpy(&val, scalar_address(), sizeof(val));
+        return val;
     }
 
     /** This returns the current value of scalar<type()>()
@@ -89,7 +92,7 @@ public:
     template<typename T>
     HALIDE_NO_USER_CODE_INLINE void set_scalar(T val) {
         check_type(type_of<T>());
-        *((T *)(scalar_address())) = val;
+        memcpy(scalar_address(), &val, sizeof(val));
     }
 
     /** If the parameter is a scalar parameter, set its current
@@ -110,10 +113,17 @@ public:
      * value. Only relevant when jitting */
     void set_buffer(const Buffer<void> &b);
 
+    /** Disallow any future calls to `set_buffer()` or `set_scalar` for the Parameter; attempts to
+     * do so will assert-fail. Only relevant when jitting */
+    void freeze();
+
     /** Get the pointer to the current value of the scalar
      * parameter. For a given parameter, this address will never
      * change. Only relevant when jitting. */
-    void *scalar_address() const;
+    // @{
+    const void *scalar_address() const;
+    void *scalar_address();
+    // @}
 
     /** Tests if this handle is the same as another handle */
     bool same_as(const Parameter &other) const;

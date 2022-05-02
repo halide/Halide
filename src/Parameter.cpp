@@ -24,11 +24,12 @@ struct ParameterContents {
     std::vector<BufferConstraint> buffer_constraints;
     Expr scalar_default, scalar_min, scalar_max, scalar_estimate;
     const bool is_buffer;
+    bool is_frozen;
     MemoryType memory_type = MemoryType::Auto;
 
     ParameterContents(Type t, bool b, int d, const std::string &n)
         : type(t), dimensions(d), name(n), buffer(Buffer<>()), data(0),
-          host_alignment(t.bytes()), buffer_constraints(dimensions), is_buffer(b) {
+          host_alignment(t.bytes()), buffer_constraints(dimensions), is_buffer(b), is_frozen(false) {
         // stride_constraint[0] defaults to 1. This is important for
         // dense vectorization. You can unset it by setting it to a
         // null expression. (param.set_stride(0, Expr());)
@@ -72,6 +73,16 @@ void Parameter::check_type(const Type &t) const {
     user_assert(type() == t || (type().is_handle() && t == UInt(64)))
         << "Param<" << type()
         << "> cannot be accessed as scalar of type " << t << "\n";
+}
+
+void Parameter::check_not_frozen() const {
+    check_defined();
+    user_assert(!contents->is_frozen) << "Parameter '" << name() << "'' is frozen and cannot have its set() methods called.\n";
+}
+
+void Parameter::freeze() {
+    check_defined();
+    contents->is_frozen = true;
 }
 
 Parameter::Parameter(const Type &t, bool is_buffer, int d)
@@ -169,6 +180,7 @@ const halide_buffer_t *Parameter::raw_buffer() const {
 
 void Parameter::set_buffer(const Buffer<> &b) {
     check_is_buffer();
+    check_not_frozen();
     if (b.defined()) {
         user_assert(contents->type == b.type())
             << "Can't bind Parameter " << name()
@@ -179,7 +191,16 @@ void Parameter::set_buffer(const Buffer<> &b) {
     contents->buffer = b;
 }
 
-void *Parameter::scalar_address() const {
+    /** Disallow any future calls to `set_buffer()` for the Parameter; attempts to
+     * do so will assert-fail. Only relevant when jitting */
+    void freeze_buffer();
+
+const void *Parameter::scalar_address() const {
+    check_is_scalar();
+    return &contents->data;
+}
+
+void *Parameter::scalar_address() {
     check_is_scalar();
     return &contents->data;
 }

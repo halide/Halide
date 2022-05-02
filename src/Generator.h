@@ -1717,7 +1717,9 @@ public:
     operator ImageParam() const {
         this->check_gio_access();
         user_assert(!this->is_array()) << "Cannot convert an Input<Buffer<>[]> to an ImageParam; use an explicit subscript operator: " << this->name();
-        return ImageParam(this->parameters_.at(0), Func(*this));
+        ImageParam im(this->parameters_.at(0), Func(*this));
+        im.parameter().freeze();
+        return im;
     }
 
     template<typename T2 = T, typename std::enable_if<std::is_array<T2>::value>::type * = nullptr>
@@ -1729,13 +1731,17 @@ public:
     template<typename T2 = T, typename std::enable_if<std::is_array<T2>::value>::type * = nullptr>
     ImageParam operator[](size_t i) const {
         this->check_gio_access();
-        return ImageParam(this->parameters_.at(i), this->funcs().at(i));
+        ImageParam im(this->parameters_.at(i), this->funcs().at(i));
+        im.parameter().freeze();
+        return im;
     }
 
     template<typename T2 = T, typename std::enable_if<std::is_array<T2>::value>::type * = nullptr>
     ImageParam at(size_t i) const {
         this->check_gio_access();
-        return ImageParam(this->parameters_.at(i), this->funcs().at(i));
+        ImageParam im(this->parameters_.at(i), this->funcs().at(i));
+        im.parameter().freeze();
+        return im;
     }
 
     template<typename T2 = T, typename std::enable_if<std::is_array<T2>::value>::type * = nullptr>
