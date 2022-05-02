@@ -186,17 +186,11 @@ class InputBuffer(ImageParam):
             dimensions = -1
         ImageParam.__init__(self, type, dimensions, _unique_name())
 
-    def _get_types(self) -> list[Type]:
-        return _normalize_type_list(self.type())
+    def _get_types_and_dims(self) -> (list[Type], int):
+        return _normalize_type_list(self.type()), self.dimensions()
 
-    def _get_dims(self) -> int:
-        return self.dimensions()
-
-    def _get_direction(self) -> ArgInfoDirection:
-        return ArgInfoDirection.Input
-
-    def _get_kind(self) -> ArgInfoKind:
-        return ArgInfoKind.Buffer
+    def _get_direction_and_kind(self) -> (ArgInfoDirection, ArgInfoKind):
+        return ArgInfoDirection.Input, ArgInfoKind.Buffer
 
     def _make_replacement(self, value: Any, r: Requirement) -> ImageParam:
         assert _is_valid_name(r._name) and len(r._types) == 1 and r._dims >= 0
@@ -227,17 +221,11 @@ class InputScalar(Param):
             type = _NoneType()
         Param.__init__(self, type, _unique_name())
 
-    def _get_types(self) -> list[Type]:
-        return _normalize_type_list(self.type())
+    def _get_types_and_dims(self) -> (list[Type], int):
+        return _normalize_type_list(self.type()), 0
 
-    def _get_dims(self) -> int:
-        return 0
-
-    def _get_direction(self) -> ArgInfoDirection:
-        return ArgInfoDirection.Input
-
-    def _get_kind(self) -> ArgInfoKind:
-        return ArgInfoKind.Scalar
+    def _get_direction_and_kind(self) -> (ArgInfoDirection, ArgInfoKind):
+        return ArgInfoDirection.Input, ArgInfoKind.Scalar
 
     def _make_replacement(self, value: Any, r: Requirement) -> Param:
         assert _is_valid_name(r._name) and len(r._types) == 1 and r._dims == 0
@@ -271,17 +259,11 @@ class OutputBuffer(Func):
         self._types = types
         self._dims = dimensions
 
-    def _get_types(self) -> list[Type]:
-        return self._types
+    def _get_types_and_dims(self) -> (list[Type], int):
+        return self._types, self._dims
 
-    def _get_dims(self) -> int:
-        return self._dims
-
-    def _get_direction(self) -> ArgInfoDirection:
-        return ArgInfoDirection.Output
-
-    def _get_kind(self) -> ArgInfoKind:
-        return ArgInfoKind.Buffer
+    def _get_direction_and_kind(self) -> (ArgInfoDirection, ArgInfoKind):
+        return ArgInfoDirection.Output, ArgInfoKind.Buffer
 
     def _make_replacement(self, value: Any, r: Requirement) -> Func:
         assert _is_valid_name(r._name) and len(r._types) > 0 and r._dims >= 0
@@ -582,8 +564,7 @@ class Generator(ABC):
                     "The name '%s' is used more than once in Generator %s." %
                     (name, self._get_name()),
                 )
-                types = initial_io._get_types()
-                dims = initial_io._get_dims()
+                types, dims = initial_io._get_types_and_dims()
                 types, dims = self._finalize_types_and_dims(name, types, dims)
                 r = Requirement(name, types, dims)
                 # This just verifies that all types and dims are well-defined
@@ -592,13 +573,12 @@ class Generator(ABC):
                 arginfos.append(
                     ArgInfo(
                         name,
-                        initial_io._get_direction(),
-                        initial_io._get_kind(),
+                        *initial_io._get_direction_and_kind(),
                         types,
                         dims,
                     ))
 
-            return io, io_names, arginfos,
+            return io, io_names, arginfos
 
         self._inputs, self._inputs_names, inputs_arginfos = _build_one_io(
             "Inputs", (InputBuffer, InputScalar))

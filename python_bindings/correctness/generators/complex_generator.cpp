@@ -22,14 +22,13 @@ public:
     Input<Buffer<uint8_t, 3>> typed_buffer_input{"typed_buffer_input"};
     Input<Buffer<void, 3>> untyped_buffer_input{"untyped_buffer_input"};
     Input<Buffer<void, 3>> simple_input{"simple_input"};
-    // Note that Input<Func> does not (yet) support Tuples
     Input<float> float_arg{"float_arg", 1.0f, 0.0f, 100.0f};
     Input<int32_t> int_arg{"int_arg", 1};
 
     Output<Buffer<float, 3>> simple_output{"simple_output"};
     Output<Buffer<void, 3>> tuple_output{"tuple_output"};
     Output<Buffer<float, 3>> typed_buffer_output{"typed_buffer_output"};
-    Output<Buffer<void, 3>> untyped_buffer_output{"untyped_buffer_output"};
+    Output<Buffer<void, -1>> untyped_buffer_output{"untyped_buffer_output"};
     Output<Buffer<uint8_t, 3>> static_compiled_buffer_output{"static_compiled_buffer_output"};
     Output<float> scalar_output{"scalar_output"};
 

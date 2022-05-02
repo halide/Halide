@@ -165,6 +165,7 @@ def test_complex(cls):
             simple_input__type=hl.UInt(8),
             untyped_buffer_input__type="uint8",
             untyped_buffer_output__type="uint8",
+            untyped_buffer_output__dim=3,
             # Can specify a list-of-types for Tuple output
             tuple_output__type=[hl.Float(32), hl.Float(32)],
             # Alternately, we could specify comma-delimited string:

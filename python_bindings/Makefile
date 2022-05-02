@@ -164,7 +164,8 @@ GENPARAMS_complex=\
 	simple_input.type=uint8 \
 	tuple_output.type=float32,float32 \
 	untyped_buffer_input.type=uint8 \
-	untyped_buffer_output.type=uint8
+	untyped_buffer_output.type=uint8 \
+	untyped_buffer_output.dim=3
 
 GENPARAMS_complexpy=$(GENPARAMS_complex)
 
@@ -247,7 +248,7 @@ test_correctness: $(CORRECTNESS:$(ROOT_DIR)/correctness/%.py=test_correctness_%)
 test_correctness_%: $(ROOT_DIR)/correctness/%.py $(MODULE) $(GENERATOR_AOT_EXTENSIONS) $(GENERATOR_STUB_EXTENSIONS)
 	@echo Testing $*...
 	@mkdir -p $(TEST_TMP)
-	@cd $(TEST_TMP); PYTHONPATH="$(ROOT_DIR)/correctness/generators:$(BIN)/aot:$(BIN)/stub:$(BIN):$$PYTHONPATH" $(PYTHON) $<
+	cd $(TEST_TMP); PYTHONPATH="$(ROOT_DIR)/correctness/generators:$(BIN)/aot:$(BIN)/stub:$(BIN):$$PYTHONPATH" $(PYTHON) $<
 
 .PHONY: test_tutorial
 test_tutorial: $(TUTORIAL:$(ROOT_DIR)/tutorial/%.py=test_tutorial_%)

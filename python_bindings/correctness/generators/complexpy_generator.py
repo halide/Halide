@@ -28,7 +28,7 @@ class ComplexPy:
             simple_output = hl.OutputBuffer(hl.Float(32), 3)
             tuple_output = hl.OutputBuffer(None, 3)
             typed_buffer_output = hl.OutputBuffer(hl.Float(32), 3)
-            untyped_buffer_output = hl.OutputBuffer(None, 3)
+            untyped_buffer_output = hl.OutputBuffer(None, None)
             static_compiled_buffer_output = hl.OutputBuffer(hl.UInt(8), 3)
             scalar_output = hl.OutputScalar(hl.Float(32))
             extra_output = hl.OutputBuffer(hl.Float(64), 2)
