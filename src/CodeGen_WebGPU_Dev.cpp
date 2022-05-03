@@ -295,7 +295,7 @@ void CodeGen_WebGPU_Dev::CodeGen_WGSL::add_kernel(
             internal_assert(arg.type.bytes() == 4)
                 << "unimplemented: non-buffer args assumed to be 32-bits";
             uniforms << "  " << print_name(arg.name) << " : "
-                     << print_type(arg.type) << ";\n";
+                     << print_type(arg.type) << ",\n";
         }
     }
     if (!uniforms.str().empty()) {
