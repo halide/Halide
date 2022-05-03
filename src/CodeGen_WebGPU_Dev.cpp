@@ -443,7 +443,7 @@ void CodeGen_WebGPU_Dev::CodeGen_WGSL::visit(const And *op) {
     const Expr &b = op->b;
     const Type &t = op->type;
     if (t.is_scalar()) {
-        visit_binop(t, a, b, "&&");
+        visit_binop(t, a, b, "&");
     } else {
         internal_assert(a.type() == b.type());
         string sa = print_expr(a);
@@ -451,7 +451,7 @@ void CodeGen_WebGPU_Dev::CodeGen_WGSL::visit(const And *op) {
         string rhs = print_type(t) + "(";
         for (int i = 0; i < t.lanes(); i++) {
             const string si = std::to_string(i);
-            rhs += sa + "[" + si + "] && " + sb + "[" + si + "], ";
+            rhs += sa + "[" + si + "] & " + sb + "[" + si + "], ";
         }
         rhs += ")";
         print_assignment(t, rhs);
@@ -740,7 +740,7 @@ void CodeGen_WebGPU_Dev::CodeGen_WGSL::visit(const Or *op) {
     const Expr &b = op->b;
     const Type &t = op->type;
     if (t.is_scalar()) {
-        visit_binop(t, a, b, "||");
+        visit_binop(t, a, b, "|");
     } else {
         internal_assert(a.type() == b.type());
         string sa = print_expr(a);
@@ -748,7 +748,7 @@ void CodeGen_WebGPU_Dev::CodeGen_WGSL::visit(const Or *op) {
         string rhs = print_type(t) + "(";
         for (int i = 0; i < t.lanes(); i++) {
             const string si = std::to_string(i);
-            rhs += sa + "[" + si + "] || " + sb + "[" + si + "], ";
+            rhs += sa + "[" + si + "] | " + sb + "[" + si + "], ";
         }
         rhs += ")";
         print_assignment(t, rhs);
