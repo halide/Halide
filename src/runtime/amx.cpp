@@ -4,7 +4,7 @@
 
 extern "C" long syscall(long sysno, ...) throw();
 
-extern "C" WEAK int halide_amx_req_perm(void *user_context) {
+extern "C" WEAK int halide_amx_req_perm() {
     constexpr int XFEATURE_XTILECFG = 17;
     constexpr int XFEATURE_XTILEDATA = 18;
     constexpr int ARCH_REQ_XCOMP_PERM = 0x1023;
@@ -14,10 +14,12 @@ extern "C" WEAK int halide_amx_req_perm(void *user_context) {
 
     // if AMX is not supported by the OS these bits are not set
     if (!(res & (1 << XFEATURE_XTILECFG))) {
+        halide_error(nullptr, "XTILECFG not available for AMX instructions.");
         return -2;
     }
 
     if (!(res & (1 << XFEATURE_XTILEDATA))) {
+        halide_error(nullptr, "XTILEDATA not available for AMX instructions.");
         return -2;
     }
 
@@ -25,6 +27,7 @@ extern "C" WEAK int halide_amx_req_perm(void *user_context) {
     long ret = syscall(SYS_arch_prctl, ARCH_REQ_XCOMP_PERM, XFEATURE_XTILEDATA);
 
     if (ret) {
+        halide_error(nullptr, "Failed to enable AMX instructions.");
         return -1;
     }
 
