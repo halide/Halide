@@ -12,6 +12,7 @@ set(HEADER_FILES
     AddParameterChecks.h
     AlignLoads.h
     AllocationBoundsInference.h
+    AMXReqPerm.h
     ApplySplit.h
     Argument.h
     AssociativeOpsTable.h
@@ -175,6 +176,7 @@ set(SOURCE_FILES
     AddParameterChecks.cpp
     AlignLoads.cpp
     AllocationBoundsInference.cpp
+    AMXReqPerm.cpp
     ApplySplit.cpp
     Argument.cpp
     AssociativeOpsTable.cpp
