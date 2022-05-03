@@ -53,6 +53,7 @@ src/test_*.s
 tools/objc/BUILD
 tools/objc/*.mobileprovision
 *.xcworkspacedata
+__pycache__
 
 
 *.txt.user*
