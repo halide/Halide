@@ -4,6 +4,10 @@ x = hl.Var('x')
 y = hl.Var('y')
 z = hl.Var('z')
 
+@hl.alias(
+    addconstantpy_with_offset_42={'extra_int':42},
+    addconstantpy_with_negative_offset={'extra_int': -1}
+)
 @hl.generator(name = "addconstantpy")
 class AddConstantGenerator:
     class GeneratorParams:

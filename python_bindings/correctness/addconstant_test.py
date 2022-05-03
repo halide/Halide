@@ -1,12 +1,21 @@
 import addconstant, addconstantpy
+import addconstant_with_offset_42, addconstantpy_with_offset_42
+import addconstant_with_negative_offset, addconstantpy_with_negative_offset
 import numpy
-import inspect
 
+TESTS_AND_OFFSETS = [
+    (addconstant.addconstant, 0),
+    (addconstantpy.addconstantpy, 0),
+    (addconstant_with_offset_42.addconstant_with_offset_42, 42),
+    (addconstantpy_with_offset_42.addconstantpy_with_offset_42, 42),
+    (addconstant_with_negative_offset.addconstant_with_negative_offset, -1),
+    (addconstantpy_with_negative_offset.addconstantpy_with_negative_offset, -1),
+]
 
 ERROR_THRESHOLD = 0.0001
 
 
-def test(addconstant_impl_func):
+def test(addconstant_impl_func, offset):
     scalar_u1 = True
     scalar_u8 = 3
     scalar_u16 = 49153
@@ -82,9 +91,10 @@ def test(addconstant_impl_func):
     for x in range(input_3d.shape[0]):
         for y in range(input_3d.shape[1]):
             for z in range(input_3d.shape[2]):
-                assert output_3d[x, y, z] == input_3d[x, y, z] + scalar_i8
+                assert output_3d[x, y, z] == input_3d[x, y, z] + scalar_i8 + offset
 
 
 if __name__ == "__main__":
-  test(addconstant.addconstant)
-  test(addconstantpy.addconstantpy)
+    for t, o in TESTS_AND_OFFSETS:
+        print("testing",t,o)
+        test(t, o)

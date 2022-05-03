@@ -1,9 +1,12 @@
+
 #include "Halide.h"
 
 using namespace Halide;
 
 class AddConstantGenerator : public Halide::Generator<AddConstantGenerator> {
 public:
+    GeneratorParam<int> extra_int{"extra_int", 0};
+
     Input<bool> scalar_uint1{"scalar_uint1"};
     Input<uint8_t> scalar_uint8{"scalar_uint8"};
     Input<uint16_t> scalar_uint16{"scalar_uint16"};
@@ -56,7 +59,7 @@ public:
         output_float(x) = input_float(x) + scalar_float;
         output_double(x) = input_double(x) + scalar_double;
         output_2d(x, y) = input_2d(x, y) + scalar_int8;
-        output_3d(x, y, z) = input_3d(x, y, z) + scalar_int8;
+        output_3d(x, y, z) = input_3d(x, y, z) + scalar_int8 + extra_int;
     }
 
     void schedule() {
@@ -64,3 +67,5 @@ public:
 };
 
 HALIDE_REGISTER_GENERATOR(AddConstantGenerator, addconstant)
+HALIDE_REGISTER_GENERATOR_ALIAS(addconstant_with_offset_42, addconstant, {{"extra_int", "42"}})
+HALIDE_REGISTER_GENERATOR_ALIAS(addconstant_with_negative_offset, addconstant, {{"extra_int", "-1"}})

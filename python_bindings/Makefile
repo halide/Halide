@@ -57,10 +57,12 @@ $(BIN)/binary2cpp: $(HALIDE_PATH)/tools/binary2cpp.cpp
 
 $(BIN)/src/builtin_helpers_src.cpp: $(ROOT_DIR)/src/builtin_helpers_src.py $(BIN)/binary2cpp
 	@echo Building $@...
+	@mkdir -p $(@D)
 	@$(BIN)/binary2cpp builtin_helpers_src < $< > $@
 
 $(BIN)/src/builtin_helpers_src.o: $(BIN)/src/builtin_helpers_src.cpp
 	@echo Building $@...
+	@mkdir -p $(@D)
 	@$(CXX) $(CCFLAGS) -c $< -o $@
 
 PY_SRCS=$(shell ls $(ROOT_DIR)/src/*.cpp)
@@ -169,6 +171,16 @@ GENPARAMS_complex=\
 
 GENPARAMS_complexpy=$(GENPARAMS_complex)
 
+$(BIN)/addconstant_with_offset_42.generator $(BIN)/addconstant_with_negative_offset.generator: $(BIN)/addconstant.generator
+	@echo Building $@...
+	@mkdir -p $(@D)
+	@ln -s $< $@
+
+$(BIN)/addconstant_with_offset_42_generator.o $(BIN)/addconstant_with_negative_offset_generator.o: $(BIN)/addconstant_generator.o
+	@echo Building $@...
+	@mkdir -p $(@D)
+	@ln -s $< $@
+
 # Run the Generator to produce a static library of AOT code,
 # plus the 'python_extension' code necessary to produce a useful
 # AOT Extention for Python:
@@ -181,8 +193,18 @@ $(BIN)/%.py.cpp $(BIN)/%.a $(BIN)/%.h: $(BIN)/%.generator
 	    target=host-no_runtime$(FEATURES_$(notdir $(basename $<))) \
 	    $(GENPARAMS_$*)
 
+$(BIN)/%_generator.py: $(ROOT_DIR)/correctness/generators/%_generator.py
+	@echo Building $@...
+	@mkdir -p $(@D)
+	@ln -s $< $@
+
+$(BIN)/addconstantpy_with_offset_42_generator.py $(BIN)/addconstantpy_with_negative_offset_generator.py: $(BIN)/addconstantpy_generator.py
+	@echo Building $@...
+	@mkdir -p $(@D)
+	@ln -s $< $@
+
 # Make each Python generator generate a Python extension:
-$(BIN)/%.py.cpp $(BIN)/%.a $(BIN)/%.h: $(ROOT_DIR)/correctness/generators/%_generator.py $(MODULE)
+$(BIN)/%.py.cpp $(BIN)/%.a $(BIN)/%.h: $(BIN)/%_generator.py $(MODULE)
 	@echo Building $@...
 	@PYTHONPATH="$(BIN):$$PYTHONPATH" $(PYTHON) $< \
 	    -e static_library,c_header,python_extension \
@@ -219,12 +241,26 @@ $(BIN)/stub/%_stub.so: $(BIN)/%_PyStub.o $(BIN)/PyStubImpl.o $(BIN)/%_generator.
 	@mkdir -p $(@D)
 	@$(CXX) $(LDFLAGS) $(filter-out %.ldscript,$^) -shared $(subst %LDSCRIPT%,$(BIN)/$*_stub.ldscript,$(PYEXT_LDSCRIPT_FLAG)) -o $@
 
-GENERATOR_SRCS_CPP=$(patsubst $(ROOT_DIR)/correctness/generators/%_generator.cpp,%,$(shell ls $(ROOT_DIR)/correctness/generators/*_generator.cpp))
-GENERATOR_SRCS_PY=$(patsubst $(ROOT_DIR)/correctness/generators/%_generator.py,%,$(shell ls $(ROOT_DIR)/correctness/generators/*_generator.py))
-GENERATOR_SRCS_ALL=$(GENERATOR_SRCS_CPP) $(GENERATOR_SRCS_PY)
-GENERATOR_AOT_EXTENSIONS=$(GENERATOR_SRCS_ALL:%=$(BIN)/aot/%.so)
+CPP_GENERATOR_OUTPUTS=\
+	addconstant \
+	addconstant_with_offset_42 \
+	addconstant_with_negative_offset \
+	bit \
+	complex \
+	simple \
+	user_context
+
+PY_GENERATOR_OUTPUTS=\
+	addconstantpy \
+	addconstantpy_with_offset_42 \
+	addconstantpy_with_negative_offset \
+	bitpy \
+	complexpy \
+	simplepy
+
+GENERATOR_AOT_EXTENSIONS=$(CPP_GENERATOR_OUTPUTS:%=$(BIN)/aot/%.so) $(PY_GENERATOR_OUTPUTS:%=$(BIN)/aot/%.so)
 # Only CPP Generators get Stub extensions (Python Generators can be imported directly)
-GENERATOR_STUB_EXTENSIONS=$(GENERATOR_SRCS_CPP:%=$(BIN)/stub/%_stub.so)
+GENERATOR_STUB_EXTENSIONS=$(CPP_GENERATOR_OUTPUTS:%=$(BIN)/stub/%_stub.so)
 
 APPS = $(shell ls $(ROOT_DIR)/apps/*.py)
 CORRECTNESS = $(shell ls $(ROOT_DIR)/correctness/*.py)
@@ -248,7 +284,7 @@ test_correctness: $(CORRECTNESS:$(ROOT_DIR)/correctness/%.py=test_correctness_%)
 test_correctness_%: $(ROOT_DIR)/correctness/%.py $(MODULE) $(GENERATOR_AOT_EXTENSIONS) $(GENERATOR_STUB_EXTENSIONS)
 	@echo Testing $*...
 	@mkdir -p $(TEST_TMP)
-	cd $(TEST_TMP); PYTHONPATH="$(ROOT_DIR)/correctness/generators:$(BIN)/aot:$(BIN)/stub:$(BIN):$$PYTHONPATH" $(PYTHON) $<
+	@cd $(TEST_TMP); PYTHONPATH="$(ROOT_DIR)/correctness/generators:$(BIN)/aot:$(BIN)/stub:$(BIN):$$PYTHONPATH" $(PYTHON) $<
 
 .PHONY: test_tutorial
 test_tutorial: $(TUTORIAL:$(ROOT_DIR)/tutorial/%.py=test_tutorial_%)

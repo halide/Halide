@@ -529,6 +529,10 @@ class Generator(ABC):
             self._requirements[name] = None
 
         self._stage = _Stage.GeneratorParamsBuilt
+        if hasattr(self, "_halide_alias_generator_params"):
+            for k, v in self._halide_alias_generator_params.items():
+                self._set_generatorparam_value(k, v)
+
 
     def _build_io(self):
         assert self._gp
@@ -622,7 +626,7 @@ class Generator(ABC):
 
     # --------------- AbstractGenerator methods (partial)
     def _get_name(self) -> str:
-        return self._registered_name
+        return self._halide_registered_name
 
     def _get_arginfos(self) -> list[ArgInfo]:
         if self._stage < _Stage.IOBuilt:
@@ -726,6 +730,21 @@ def _find_python_generator_class(name: str):
     return cls
 
 
+def alias(**kwargs):
+    def alias_impl(cls):
+        nonlocal kwargs
+        for k, v in kwargs.items():
+            _check_valid_name(k)
+            _check(hasattr(cls, "_halide_registered_name"), "@alias can only be used in conjunction with @generator.")
+            _check(not k in _python_generators, "The Generator name %s is already in use." % k)
+            _check(type(v) is dict, "The Generator alias %s specifies something other than a dict." % k)
+            new_cls = type(k, (cls,), {"_halide_registered_name": k, "_halide_alias_generator_params": v})
+            _python_generators[k] = new_cls
+        return cls
+
+    return alias_impl
+
+
 def generator(name=""):
     # This code relies on dicts preserving key-insertion order, which is only
     # guaranteed for all Python implementations as of v3.7.
@@ -736,13 +755,13 @@ def generator(name=""):
         nonlocal name
         if not name:
             name = _fqname(cls)
+        _check(not name in _python_generators, "The Generator name %s is already in use." % name)
         _check(isclass(cls), "@generator can only be used on classes.")
         _check(
             not issubclass(cls, Generator),
-            "Please use the @hl.generator decorator instead of inheriting from hl.Generator",
+            "Please use the @generator decorator instead of inheriting from hl.Generator",
         )
-        new_cls = type(cls.__name__, (cls, Generator), {})
-        new_cls._registered_name = name
+        new_cls = type(cls.__name__, (cls, Generator), {"_halide_registered_name": name})
         _python_generators[name] = new_cls
         return new_cls
 
