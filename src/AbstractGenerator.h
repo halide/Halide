@@ -69,8 +69,8 @@ public:
         std::string name;
         ArgInfoDirection dir = ArgInfoDirection::Input;
         ArgInfoKind kind = ArgInfoKind::Scalar;
-        // Note that this can have multiple entries for Tuple-valued Inputs or Outputs
-        std::vector<Type> types;
+        std::vector<Type> types;  // Will have multiple entrues for Tuples
+        size_t array_size = 1;    // Array size (1 for non-Array args). Must be >= 1.
         int dimensions = 0;
     };
 
@@ -93,7 +93,9 @@ public:
      * that the input and outputs are declared (possibly interleaved).
      * Any inputs or outputs added by a configure() method will be in the list,
      * at the end, in the order added.
-     * All input and output names will be unique within a given Generator instance.
+     *
+     * All input and output names must be unique within a given Generator instance.
+     *
      *
      * CALL-AFTER: configure()
      * CALL-BEFORE: any

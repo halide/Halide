@@ -63,9 +63,9 @@ public:
 
     std::vector<ArgInfo> get_arginfos() override {
         return {
-            {"input", ArgInfoDirection::Input, ArgInfoKind::Buffer, {Int(32)}, 2},
-            {"offset", ArgInfoDirection::Input, ArgInfoKind::Scalar, {Int(32)}, 0},
-            {"output", ArgInfoDirection::Output, ArgInfoKind::Buffer, {Int(32)}, 2},
+            {"input", ArgInfoDirection::Input, ArgInfoKind::Buffer, {Int(32)}, 1, 2},
+            {"offset", ArgInfoDirection::Input, ArgInfoKind::Scalar, {Int(32)}, 1, 0},
+            {"output", ArgInfoDirection::Output, ArgInfoKind::Buffer, {Int(32)}, 1, 2},
         };
     }
 

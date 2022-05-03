@@ -185,12 +185,27 @@ py::object generate_impl(const GeneratorFactory &factory,
         }
     }
 
-    generator->build_pipeline();
+    Pipeline p = generator->build_pipeline();
+    const auto output_funcs = p.outputs();
+    size_t next_output_func_idx = 0;
 
     const size_t outputs_size = output_arguments.size();
     py::tuple py_outputs(outputs_size);
     for (size_t i = 0; i < outputs_size; i++) {
+        const auto &a = output_arguments[i];
         std::vector<Func> outputs = generator->get_output_func(output_arguments[i].name);
+        _halide_user_assert(outputs.size() == a.array_size);
+        std::vector<Func> outputs2;
+        for (size_t o = 0; o < a.array_size; o++) {
+            outputs2.push_back(output_funcs[next_output_func_idx++]);
+        }
+
+        _halide_user_assert(outputs.size() == outputs2.size());
+        for (size_t j = 0; j < outputs.size(); j++) {
+            auto f = outputs[j].function();
+            auto f2 = outputs2[j].function();
+            _halide_user_assert(f.same_as(f2));
+        }
 
         py::object o;
         if (outputs.size() == 1) {
@@ -205,6 +220,7 @@ py::object generate_impl(const GeneratorFactory &factory,
         }
         py_outputs[i] = o;
     }
+    _halide_user_assert(next_output_func_idx == output_funcs.size());
 
     // An explicit "std::move" is needed here because there's
     // an implicit tuple->object conversion that inhibits it otherwise.

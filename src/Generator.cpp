@@ -420,20 +420,29 @@ void StubEmitter::emit() {
     };
     bool all_outputs_are_func = true;
     std::vector<OutputInfo> out_info;
-    for (auto *output : outputs) {
+    for (size_t out_index = 0; out_index < outputs.size(); out_index++) {
+        const auto *output = outputs[out_index];
         std::string c_type = output->get_c_type();
+        std::string actual_c_type = output->is_array() ? ("std::vector<" + c_type + ">") : c_type;
+
         const bool is_func = (c_type == "Func");
-        std::string getter = "generator->get_output_func(\"" + output->name() + "\")";
-        if (!is_func) {
-            getter = c_type + "::to_output_buffers(" + getter + ", generator)";
-        }
-        if (!output->is_array()) {
-            getter = getter + ".at(0)";
+        std::ostringstream getter;
+        if (is_func) {
+            if (output->is_array()) {
+                getter << "subvector(output_funcs, offset[" << out_index << "], count[" << out_index << "])";
+            } else {
+                getter << "output_funcs.at(offset[" << out_index << "])";
+            }
+        } else {
+            getter << c_type << "::to_output_buffers(subvector(output_funcs, offset[" << out_index << "], count[" << out_index << "]), generator)";
+            if (!output->is_array()) {
+                getter << ".at(0)";
+            }
         }
 
         out_info.push_back({output->name(),
-                            output->is_array() ? "std::vector<" + c_type + ">" : c_type,
-                            getter});
+                            actual_c_type,
+                            getter.str()});
         if (c_type != "Func") {
             all_outputs_are_func = false;
         }
@@ -645,7 +654,16 @@ void StubEmitter::emit() {
         stream << ");\n";
     }
 
-    stream << get_indent() << "generator->build_pipeline();\n";
+    stream << get_indent() << "Pipeline pipeline = generator->build_pipeline();\n";
+    stream << get_indent() << "const auto output_funcs = pipeline.outputs();\n";
+    stream << get_indent() << "auto arginfos = generator->get_arginfos();\n";
+    stream << get_indent() << "arginfos.erase(std::remove_if(arginfos.begin(), arginfos.end(), [&](const auto& a) { return a.dir != Halide::Internal::ArgInfoDirection::Output; }), arginfos.end());\n";
+    stream << get_indent() << "assert(arginfos.size() == " << out_info.size() << ");\n";
+    stream << get_indent() << "const auto subvector = [](const std::vector<Func> &in, int first, int count) { auto it = in.begin(); return std::vector<Func>(it + first, it + first + count); }; (void)subvector;\n";
+    stream << get_indent() << "size_t offset[" << out_info.size() << "], count[" << out_info.size() << "];\n";
+    stream << get_indent() << "for (size_t i = 0; i < " << out_info.size() << "; i++) { count[i] = arginfos.at(i).array_size; }\n";
+    stream << get_indent() << "offset[0] = 0;\n";
+    stream << get_indent() << "for (size_t i = 1; i < " << out_info.size() << "; i++) { offset[i] = offset[i-1] + count[i-1]; }\n";
     stream << get_indent() << "return {\n";
     indent_level++;
     for (const auto &out : out_info) {
@@ -765,11 +783,14 @@ Module build_module(AbstractGenerator &g, const std::string &function_name) {
 
     std::vector<Argument> filter_arguments;
     const auto arg_infos = g.get_arginfos();
+    // const auto arg_infos2 = g.get_arginfos2();
     for (const auto &a : arg_infos) {
         if (a.dir != ArgInfoDirection::Input) {
             continue;
         }
-        for (const auto &p : g.get_input_parameter(a.name)) {
+        const auto input_parameters = g.get_input_parameter(a.name);
+        internal_assert(input_parameters.size() == a.array_size);
+        for (const auto &p : input_parameters) {
             filter_arguments.push_back(to_argument(p));
         }
     }
@@ -779,13 +800,22 @@ Module build_module(AbstractGenerator &g, const std::string &function_name) {
         result.append(map_entry.second);
     }
 
+    const std::vector<Func> output_funcs2 = pipeline.outputs();
+    size_t next_output_func_idx = 0;
     for (const auto &a : arg_infos) {
         if (a.dir != ArgInfoDirection::Output) {
             continue;
         }
         const std::vector<Func> output_funcs = g.get_output_func(a.name);
+        internal_assert(output_funcs.size() == a.array_size);
         for (size_t i = 0; i < output_funcs.size(); ++i) {
             const Func &f = output_funcs[i];
+            {
+                Func f2 = output_funcs2[next_output_func_idx++];
+                auto ff = f.function();
+                auto ff2 = f2.function();
+                internal_assert(ff.same_as(ff2));
+            }
 
             const std::string &from = f.name();
             std::string to = a.name;
@@ -800,6 +830,7 @@ Module build_module(AbstractGenerator &g, const std::string &function_name) {
             }
         }
     }
+    internal_assert(next_output_func_idx == output_funcs2.size());
 
     result.set_auto_scheduler_results(auto_schedule_results);
 
@@ -830,9 +861,9 @@ Module build_gradient_module(Halide::Internal::AbstractGenerator &g, const std::
 
     user_assert(!function_name.empty()) << "build_gradient_module(): function_name cannot be empty\n";
 
-    Pipeline original_pipeline = g.build_pipeline();
+    const Pipeline original_pipeline = g.build_pipeline();
 
-    std::vector<Func> original_outputs = original_pipeline.outputs();
+    const std::vector<Func> original_outputs = original_pipeline.outputs();
 
     // Construct the adjoint pipeline, which has:
     // - All the same inputs as the original, in the same order
@@ -843,11 +874,14 @@ Module build_gradient_module(Halide::Internal::AbstractGenerator &g, const std::
     // rather being promoted into zero-dimensional buffers.
     std::vector<Argument> gradient_inputs;
     const auto arg_infos = g.get_arginfos();
+    // const auto arg_infos2 = g.get_arginfos2();
     for (const auto &a : arg_infos) {
         if (a.dir != ArgInfoDirection::Input) {
             continue;
         }
-        for (const auto &p : g.get_input_parameter(a.name)) {
+        const auto input_parameters = g.get_input_parameter(a.name);
+        internal_assert(input_parameters.size() == a.array_size);
+        for (const auto &p : input_parameters) {
             gradient_inputs.push_back(to_argument(p));
             debug(DBG) << "    gradient copied input is: " << gradient_inputs.back().name << "\n";
         }
@@ -858,12 +892,20 @@ Module build_gradient_module(Halide::Internal::AbstractGenerator &g, const std::
     // those outputs onto these estimates).
     // - If an output is an Array, we'll have a separate input for each array element.
 
+    size_t next_output_func_idx = 0;
+
     std::vector<ImageParam> d_output_imageparams;
     for (const auto &a : arg_infos) {
         if (a.dir != ArgInfoDirection::Output) {
             continue;
         }
-        for (const auto &f : g.get_output_func(a.name)) {
+        for (const Func &f : g.get_output_func(a.name)) {
+            {
+                Func f2 = original_outputs[next_output_func_idx++];
+                auto ff = f.function();
+                auto ff2 = f2.function();
+                internal_assert(ff.same_as(ff2));
+            }
             const Parameter &p = f.output_buffer().parameter();
             const std::string &output_name = p.name();
             // output_name is something like "funcname_i"
@@ -886,6 +928,8 @@ Module build_gradient_module(Halide::Internal::AbstractGenerator &g, const std::
             debug(DBG) << "    gradient synthesized input is: " << gradient_inputs.back().name << "\n";
         }
     }
+    internal_assert(next_output_func_idx == original_outputs.size());
+    internal_assert(next_output_func_idx == d_output_imageparams.size());
 
     // Finally: define the output Func(s), one for each unique output/input pair.
     // Note that original_outputs.size() != pi.outputs().size() if any outputs are arrays.
@@ -1791,10 +1835,10 @@ void get_arguments(std::vector<AbstractGenerator::ArgInfo> &args, ArgInfoDirecti
                         dir,
                         e->kind(),
                         e->types_defined() ? e->types() : std::vector<Type>{},
+                        e->array_size(),
                         e->dims_defined() ? e->dims() : 0});
     }
 }
-
 }  // namespace
 
 std::vector<AbstractGenerator::ArgInfo> GeneratorBase::get_arginfos() {
@@ -1903,7 +1947,7 @@ bool GIOBase::array_size_defined() const {
 }
 
 size_t GIOBase::array_size() const {
-    user_assert(array_size_defined()) << "ArraySize is unspecified for " << input_or_output() << "'" << name() << "'; you need to explicitly set it via the resize() method or by setting '"
+    user_assert(array_size_defined()) << "ArraySize is unspecified for " << input_or_output() << " '" << name() << "'; you need to explicitly set it via the resize() method or by setting '"
                                       << name() << ".size' in your build rules.";
     return (size_t)array_size_;
 }
