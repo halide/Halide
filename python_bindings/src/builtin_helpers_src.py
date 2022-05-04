@@ -323,11 +323,11 @@ class OutputScalar(OutputBuffer):
 
 @total_ordering
 class _Stage(Enum):
-    Created = 1
-    GeneratorParamsBuilt = 2
-    IOBuilt = 4
-    IOFinalized = 7
-    PipelineBuilt = 8
+    Created = 0
+    GeneratorParamsBuilt = 1
+    IOBuilt = 2
+    IOFinalized = 3
+    PipelineBuilt = 4
 
     def __lt__(self, other):
         if self.__class__ is other.__class__:
