@@ -173,7 +173,7 @@ py::object call_impl(const GeneratorFactory &factory,
 
         auto it = input_arguments_map.find(name);
         _halide_user_assert(it != input_arguments_map.end()) << "Unknown input '" << name << "' specified via keyword argument.";
-        _halide_user_assert(inputs_seen.count(name) == 0) <<"Input '" << "'' specified multiple times.";
+        _halide_user_assert(inputs_seen.count(name) == 0) << "Input " << a.name << " specified multiple times.";
         inputs_seen.insert(name);
 
         const auto &a = it->second;
@@ -192,7 +192,7 @@ py::object call_impl(const GeneratorFactory &factory,
             << "Expected exactly " << input_arguments.size() << " positional args for inputs, but saw " << args.size() << ".";
         for (size_t i = 0; i < args.size(); i++) {
             const auto &a = input_arguments[i];
-            _halide_user_assert(inputs_seen.count(a.name) == 0) <<"Input " << " specified multiple times.";
+            _halide_user_assert(inputs_seen.count(a.name) == 0) << "Input " << a.name << " specified multiple times.";
             inputs_seen.insert(a.name);
             bind_one(args[i], a);
         }
