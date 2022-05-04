@@ -179,6 +179,7 @@ class Requirement:
 
 
 class InputBuffer(ImageParam):
+
     def __init__(self, type: Optional[Type], dimensions: Optional[int]):
         if type is None:
             type = _NoneType()
@@ -216,6 +217,7 @@ class InputBuffer(ImageParam):
 
 # InputScalar looks like a Param
 class InputScalar(Param):
+
     def __init__(self, type: Optional[Type]):
         if type is None:
             type = _NoneType()
@@ -251,6 +253,7 @@ class InputScalar(Param):
 
 
 class OutputBuffer(Func):
+
     def __init__(self, types: Optional[Type], dimensions: Optional[int]):
         types = _normalize_type_list(types)
         if dimensions is None:
@@ -298,6 +301,7 @@ class OutputBuffer(Func):
 
 # OutputScalar is just like OutputBuffer, except it is always dimensions = 0
 class OutputScalar(OutputBuffer):
+
     def __init__(self, types: Optional[Type]):
         OutputBuffer.__init__(self, types, 0)
 
@@ -334,10 +338,11 @@ class _Stage(Enum):
             return self.value < other.value
         return NotImplemented
 
+
 # Prevent user code from inadvertently overwriting fields -- this is
 # not at all foolproof but will make it inconvenient to do so.
 # TODO: add ability to freeze ImageParam and Param so you can't call set(), etc.
-def _make_freezable(cls:type):
+def _make_freezable(cls: type):
 
     # TODO: kinda janky, is this the best way to implement this?
     def _freeze(self):
@@ -352,6 +357,7 @@ def _make_freezable(cls:type):
         cls._old_halide_setattr = cls.__setattr__
         cls.__setattr__ = _freezable_setattr
         cls._freeze = _freeze
+
 
 class Generator(ABC):
     """Base class for Halide Generators in Python"""
@@ -378,7 +384,7 @@ class Generator(ABC):
     #
     # GeneratorParams can only be specified by name, and are always optional.
     @classmethod
-    def call(cls, context:GeneratorContext, *args, **kwargs):
+    def call(cls, context: GeneratorContext, *args, **kwargs):
         generator = cls(context)
 
         # Process the kwargs first: first, fill in all the GeneratorParams
@@ -532,7 +538,6 @@ class Generator(ABC):
         if hasattr(self, "_halide_alias_generator_params"):
             for k, v in self._halide_alias_generator_params.items():
                 self._set_generatorparam_value(k, v)
-
 
     def _build_io(self):
         assert self._gp
@@ -731,14 +736,23 @@ def _find_python_generator_class(name: str):
 
 
 def alias(**kwargs):
+
     def alias_impl(cls):
         nonlocal kwargs
         for k, v in kwargs.items():
             _check_valid_name(k)
-            _check(hasattr(cls, "_halide_registered_name"), "@alias can only be used in conjunction with @generator.")
-            _check(not k in _python_generators, "The Generator name %s is already in use." % k)
-            _check(type(v) is dict, "The Generator alias %s specifies something other than a dict." % k)
-            new_cls = type(k, (cls,), {"_halide_registered_name": k, "_halide_alias_generator_params": v})
+            _check(hasattr(cls, "_halide_registered_name"),
+                   "@alias can only be used in conjunction with @generator.")
+            _check(not k in _python_generators,
+                   "The Generator name %s is already in use." % k)
+            _check(
+                type(v) is dict,
+                "The Generator alias %s specifies something other than a dict."
+                % k)
+            new_cls = type(k, (cls, ), {
+                "_halide_registered_name": k,
+                "_halide_alias_generator_params": v
+            })
             _python_generators[k] = new_cls
         return cls
 
@@ -755,13 +769,15 @@ def generator(name=""):
         nonlocal name
         if not name:
             name = _fqname(cls)
-        _check(not name in _python_generators, "The Generator name %s is already in use." % name)
+        _check(not name in _python_generators,
+               "The Generator name %s is already in use." % name)
         _check(isclass(cls), "@generator can only be used on classes.")
         _check(
             not issubclass(cls, Generator),
             "Please use the @generator decorator instead of inheriting from hl.Generator",
         )
-        new_cls = type(cls.__name__, (cls, Generator), {"_halide_registered_name": name})
+        new_cls = type(cls.__name__, (cls, Generator),
+                       {"_halide_registered_name": name})
         _python_generators[name] = new_cls
         return new_cls
 
