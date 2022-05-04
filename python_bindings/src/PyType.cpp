@@ -100,7 +100,7 @@ void define_type(py::module &m) {
     // This is an expedient: a unique Handle type that we use as a placeholder
     // in Python generators. It should never be visible to the end user.
     m.def("_NoneType", []() -> Type {
-        return type_of<NoneType*>();
+        return type_of<NoneType *>();
     });
 }
 

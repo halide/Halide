@@ -99,9 +99,9 @@ std::vector<T> to_input_vector(const py::object &value) {
 }
 
 py::object call_impl(const GeneratorFactory &factory,
-                         const GeneratorContext &context,
-                         const py::args &args,
-                         const py::kwargs &kwargs) {
+                     const GeneratorContext &context,
+                     const py::args &args,
+                     const py::kwargs &kwargs) {
     auto generator = factory(context);
 
     const auto arg_infos = generator->get_arginfos();

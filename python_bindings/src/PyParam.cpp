@@ -39,7 +39,7 @@ void define_param(py::module &m) {
     // and we should keep it that way.
     auto parameter_class =
         py::class_<Parameter>(m, "InternalParameter")
-            .def(py::init<const Parameter&>(), py::arg("p"))
+            .def(py::init<const Parameter &>(), py::arg("p"))
             .def("defined", &Parameter::defined)
             .def("type", &Parameter::type)
             .def("dimensions", &Parameter::dimensions)
