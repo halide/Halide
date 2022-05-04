@@ -411,8 +411,10 @@ class Generator(ABC):
         inputs_seen = []
         kw_inputs_specified = 0
         for k, v in kwargs.items():
-            _check(k in input_names, "Unknown input '%s' specified via keyword argument." % k)
-            _check(not k in inputs_seen, "Input %s specified multiple times." % k)
+            _check(k in input_names,
+                   "Unknown input '%s' specified via keyword argument." % k)
+            _check(not k in inputs_seen,
+                   "Input %s specified multiple times." % k)
             inputs_seen.append(k)
             generator._bind_input(k, [v])
             kw_inputs_specified = kw_inputs_specified + 1
@@ -439,7 +441,8 @@ class Generator(ABC):
                 a = input_arginfos[i]
                 k = a.name
                 v = args[i]
-                _check(not k in inputs_seen, "Input %s specified multiple times." % k)
+                _check(not k in inputs_seen,
+                       "Input %s specified multiple times." % k)
                 inputs_seen.append(k)
                 generator._bind_input(k, [v])
 
