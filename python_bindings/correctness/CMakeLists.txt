@@ -1,3 +1,5 @@
+include(MakeShellPath)
+
 add_subdirectory(generators)
 
 add_library(the_sort_function MODULE the_sort_function.c)
