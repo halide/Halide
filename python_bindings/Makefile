@@ -151,7 +151,8 @@ GENPARAMS_complex=\
 	array_input.type=uint8 \
 	int_arg.size=2 \
 	simple_input.type=uint8 \
-	untyped_buffer_input.type=uint8
+	untyped_buffer_input.type=uint8 \
+	untyped_buffer_output.type=uint8
 
 GENPARAMS_simple=\
 	func_input.type=uint8
