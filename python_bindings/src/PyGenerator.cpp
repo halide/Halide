@@ -141,7 +141,7 @@ void define_generator(py::module &m) {
         py::class_<ArgInfo>(m, "ArgInfo")
             .def(py::init<>())
             .def(py::init([](const std::string &name, ArgInfoDirection dir, ArgInfoKind kind, std::vector<Type> types, int dimensions) -> ArgInfo {
-                     return ArgInfo{name, dir, kind, types, dimensions};
+                     return ArgInfo{name, dir, kind, std::move(types), dimensions};
                  }),
                  py::arg("name"), py::arg("dir"), py::arg("kind"), py::arg("types"), py::arg("dimensions"))
             .def_readonly("name", &ArgInfo::name)
