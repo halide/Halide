@@ -741,7 +741,6 @@ def _find_python_generator_class(name: str):
 def alias(**kwargs):
 
     def alias_impl(cls):
-        nonlocal kwargs
         for k, v in kwargs.items():
             _check_valid_name(k)
             _check(hasattr(cls, "_halide_registered_name"),
