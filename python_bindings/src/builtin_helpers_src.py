@@ -768,19 +768,17 @@ def generator(name=""):
         3, 7), "Halide Generators require Python 3.7 or later."
 
     def generator_impl(cls):
-        nonlocal name
-        if not name:
-            name = _fqname(cls)
-        _check(not name in _python_generators,
-               "The Generator name %s is already in use." % name)
+        n = name if name else _fqname(cls)
+        _check(not n in _python_generators,
+               "The Generator name %s is already in use." % n)
         _check(isclass(cls), "@generator can only be used on classes.")
         _check(
             not issubclass(cls, Generator),
             "Please use the @generator decorator instead of inheriting from hl.Generator",
         )
         new_cls = type(cls.__name__, (cls, Generator),
-                       {"_halide_registered_name": name})
-        _python_generators[name] = new_cls
+                       {"_halide_registered_name": n})
+        _python_generators[n] = new_cls
         return new_cls
 
     return generator_impl
