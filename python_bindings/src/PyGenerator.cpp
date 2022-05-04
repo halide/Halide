@@ -45,7 +45,7 @@ class PyGeneratorBase : public AbstractGenerator {
 public:
     // Note: this ctor should not throw any exceptions. Success will be checked
     // by calling is_valid() later.
-    explicit PyGeneratorBase(const GeneratorContext &context, const std::string name)
+    explicit PyGeneratorBase(const GeneratorContext &context, const std::string &name)
         : context_(context),
           name_(name),
           class_(py::module_::import("halide").attr("_find_python_generator_class")(name)),  // could be None!
