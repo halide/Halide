@@ -173,7 +173,7 @@ py::object call_impl(const GeneratorFactory &factory,
 
         auto it = input_arguments_map.find(name);
         _halide_user_assert(it != input_arguments_map.end()) << "Unknown input '" << name << "' specified via keyword argument.";
-        _halide_user_assert(inputs_seen.count(name) == 0) << "Input " << a.name << " specified multiple times.";
+        _halide_user_assert(inputs_seen.count(name) == 0) << "Input " << name << " specified multiple times.";
         inputs_seen.insert(name);
 
         const auto &a = it->second;
