@@ -53,15 +53,15 @@ public:
         : context_(context) {
     }
 
-    std::string get_name() override {
+    std::string name() override {
         return AbstractGeneratorTestName;
     }
 
-    GeneratorContext get_context() const override {
+    GeneratorContext context() const override {
         return context_;
     }
 
-    std::vector<ArgInfo> get_arginfos() override {
+    std::vector<ArgInfo> arginfos() override {
         return {
             {"input", ArgInfoDirection::Input, ArgInfoKind::Buffer, {Int(32)}, 2},
             {"offset", ArgInfoDirection::Input, ArgInfoKind::Scalar, {Int(32)}, 0},
@@ -94,7 +94,7 @@ public:
         return pipeline_;
     }
 
-    std::vector<Parameter> get_input_parameter(const std::string &name) override {
+    std::vector<Parameter> input_parameter(const std::string &name) override {
         _halide_user_assert(pipeline_.defined());
         if (name == "input") {
             return {input_.parameter()};
@@ -106,7 +106,7 @@ public:
         return {};
     }
 
-    std::vector<Func> get_output_func(const std::string &name) override {
+    std::vector<Func> output_func(const std::string &name) override {
         _halide_user_assert(pipeline_.defined());
         if (name == "output") {
             return {output_};
@@ -115,7 +115,7 @@ public:
         return {};
     }
 
-    ExternsMap get_external_code_map() override {
+    ExternsMap external_code_map() override {
         // none
         return {};
     }

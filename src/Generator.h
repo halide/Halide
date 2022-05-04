@@ -3607,23 +3607,18 @@ private:
     }
 
 public:
-    // For backwards compatibility
-    inline GeneratorContext context() const {
-        return this->get_context();
-    }
-
     // AbstractGenerator methods
-    std::string get_name() override;
-    GeneratorContext get_context() const override;
-    std::vector<ArgInfo> get_arginfos() override;
+    std::string name() override;
+    GeneratorContext context() const override;
+    std::vector<ArgInfo> arginfos() override;
 
     void set_generatorparam_value(const std::string &name, const std::string &value) override;
     void set_generatorparam_value(const std::string &name, const LoopLevel &loop_level) override;
 
-    std::vector<Parameter> get_input_parameter(const std::string &name) override;
-    std::vector<Func> get_output_func(const std::string &name) override;
+    std::vector<Parameter> input_parameter(const std::string &name) override;
+    std::vector<Func> output_func(const std::string &name) override;
 
-    ExternsMap get_external_code_map() override;
+    ExternsMap external_code_map() override;
 
     // This is overridden in the concrete Generator<> subclass.
     // Pipeline build_pipeline() override;
