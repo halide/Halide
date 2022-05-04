@@ -163,7 +163,7 @@ function(add_halide_library TARGET)
             endif ()
             set(ARG_FROM "${FQ_ARG_FROM}")
         endif()
-        set(GENERATOR_CMD "$<TARGET_FILE:${ARG_FROM}>")
+        set(GENERATOR_CMD "${ARG_FROM}")
         set(GENERATOR_CMD_DEPS ${ARG_FROM})
     endif()
 
