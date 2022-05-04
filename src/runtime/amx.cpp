@@ -1,8 +1,10 @@
+#include "HalideRuntime.h"
+#include "printer.h"
 #include "runtime_internal.h"
 
 #define SYS_arch_prctl 158
 
-extern "C" long syscall(long sysno, ...) throw();
+extern "C" int syscall(long sysno, ...) throw();
 
 extern "C" WEAK int halide_amx_req_perm() {
     constexpr int XFEATURE_XTILECFG = 17;
@@ -14,22 +16,24 @@ extern "C" WEAK int halide_amx_req_perm() {
 
     // if AMX is not supported by the OS these bits are not set
     if (!(res & (1 << XFEATURE_XTILECFG))) {
-        halide_error(nullptr, "XTILECFG not available for AMX instructions.");
+        error(nullptr) << "XTILECFG not available for AMX instructions.\n";
         return -2;
     }
 
     if (!(res & (1 << XFEATURE_XTILEDATA))) {
-        halide_error(nullptr, "XTILEDATA not available for AMX instructions.");
+        error(nullptr) << "XTILEDATA not available for AMX instruction.\n";
         return -2;
     }
 
     // we must request permission to use AMX
-    long ret = syscall(SYS_arch_prctl, ARCH_REQ_XCOMP_PERM, XFEATURE_XTILEDATA);
+    auto ret = syscall(SYS_arch_prctl, ARCH_REQ_XCOMP_PERM, XFEATURE_XTILEDATA);
 
     if (ret) {
-        halide_error(nullptr, "Failed to enable AMX instructions.");
+        error(nullptr) << "Failed to enable AMX instructions: " << ret << '\n';
         return -1;
     }
+
+    debug(nullptr) << "AMX permissions acquired\n";
 
     return 0;
 }
