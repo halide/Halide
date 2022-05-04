@@ -391,9 +391,7 @@ class Generator(ABC):
         # (in case some are tied to Inputs). Just send all kwargs to
         # _set_generatorparam_value(); the ones that aren't valid will
         # be saved in _unhandled_generator_params and dealt with during Input processing.
-        for k, v in kwargs.items():
-            # Allow synthetic params to be specified as __type or __dim
-            k = k.replace("__type", ".type").replace("__dim", ".dim")
+        for k, v in kwargs.pop("generator_params", {}).items():
             generator._set_generatorparam_value(k, v)
 
         arginfos = generator._get_arginfos()
@@ -406,11 +404,14 @@ class Generator(ABC):
 
         # Now inputs:
         input_names = [a.name for a in input_arginfos]
+        inputs_seen = []
         kw_inputs_specified = 0
         for k, v in kwargs.items():
-            if k in input_names:
-                generator._bind_input(k, [v])
-                kw_inputs_specified = kw_inputs_specified + 1
+            _check(k in input_names, "Unknown input '%s' specified via keyword argument." % k)
+            _check(not k in inputs_seen, "Input %s specified multiple times." % k)
+            inputs_seen.append(k)
+            generator._bind_input(k, [v])
+            kw_inputs_specified = kw_inputs_specified + 1
 
         if len(args) == 0:
             # No args specified positionally, so they must all be via keywords.
@@ -434,6 +435,8 @@ class Generator(ABC):
                 a = input_arginfos[i]
                 k = a.name
                 v = args[i]
+                _check(not k in inputs_seen, "Input %s specified multiple times." % k)
+                inputs_seen.append(k)
                 generator._bind_input(k, [v])
 
         generator._build_pipeline()
