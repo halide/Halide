@@ -5,10 +5,6 @@
 extern "C" unsigned char builtin_helpers_src[];
 extern "C" int builtin_helpers_src_length;
 
-// Temporary, for development: slurp the Python source directly from disk.
-// Don't check in with this defined. Duh.
-#define LOAD_PY_FROM_FILE 0
-
 namespace Halide {
 namespace PythonBindings {
 
@@ -169,15 +165,7 @@ void define_generator(py::module &m) {
             });
 
     py::object scope = m.attr("__dict__");
-#if LOAD_PY_FROM_FILE
-#pragma message "WARNING, compiling with LOAD_PY_FROM_FILE enabled"
-    std::string src = Internal::get_env_variable("HL_DEV_PATH_TO_PYTHON_SRC");
-    _halide_user_assert(!src.empty()) << "You must define HL_DEV_PATH_TO_PYTHON_SRC as the absolute path to builtin_helpers_src.py";
-    Internal::debug(0) << "LOADING file " << src << " ... \n";
-    py::eval_file(src, scope);
-#else
     py::exec(py::str((const char *)builtin_helpers_src, builtin_helpers_src_length), scope);
-#endif
 
     m.def("main", []() -> void {
         py::object argv_object = py::module_::import("sys").attr("argv");
