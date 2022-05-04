@@ -43,7 +43,7 @@ public:
     void generate() {
         simple_output(x, y, c) = cast<float>(simple_input(x, y, c));
         typed_buffer_output(x, y, c) = cast<float>(typed_buffer_input(x, y, c));
-        untyped_buffer_output(x, y, c) = cast(untyped_buffer_output.type(), untyped_buffer_input(x, y, c));
+        untyped_buffer_output(x, y, c) = cast(untyped_buffer_output.output_type(), untyped_buffer_input(x, y, c));
 
         intermediate(x, y, c) = simple_input(x, y, c) * float_arg;
 

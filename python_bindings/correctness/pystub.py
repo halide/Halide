@@ -42,6 +42,8 @@ def test_simple(cls):
     # ----------- Above set again, w/ GeneratorParam mixed in
     k = 42
 
+    gp = { "offset": k }
+
     # (positional)
     f = cls.call(ctx, b_in, 3.5, offset=k)
     _realize_and_check(f, k)
@@ -154,23 +156,29 @@ def test_complex(cls):
             untyped_buffer_input=constant_image,
             simple_input=constant_image,
             float_arg=float_arg,
-            int_arg=int_arg,
-            extra_input=constant_image_u16,
-            vectorize=True,
-            # We can put GeneratorParams anywhere in the list we want --
-            # they will be examined and applied before anything else --
-            # but it's usually better form to put them all at the end.
-            #
-            # We can specify a halide Type via string or object here
-            simple_input__type=hl.UInt(8),
-            untyped_buffer_input__type="uint8",
-            untyped_buffer_output__type="uint8",
-            untyped_buffer_output__dim=3,
-            # Can specify a list-of-types for Tuple output
-            tuple_output__type=[hl.Float(32), hl.Float(32)],
-            # Alternately, we could specify comma-delimited string:
-            # tuple_output__type="float32,float32",
-        )
+        #     int_arg=int_arg,
+        #     extra_input=constant_image_u16,
+        #     vectorize=True,
+        #     # We can put GeneratorParams anywhere in the list we want --
+        #     # they will be examined and applied before anything else --
+        #     # but it's usually better form to put them all at the end.
+        #     #
+        #     # We can specify a halide Type via string or object here
+        #     simple_input__type=hl.UInt(8),
+        #     untyped_buffer_input__type="uint8",
+        #     untyped_buffer_output__type="uint8",
+        #     untyped_buffer_output__dim=3,
+        #     # Can specify a list-of-types for Tuple output
+        #     tuple_output__type=[hl.Float(32), hl.Float(32)],
+        #     # Alternately, we could specify comma-delimited string:
+        #     # tuple_output__type="float32,float32",
+        # )
+            int_arg=[ int_arg, int_arg ],
+            extra_func_input=func_input,
+            generator_params = {
+                "untyped_buffer_output.type": hl.UInt(8),
+                "vectorize": True
+            })
 
     # return value is a tuple; unpack separately to avoid
     # making the callsite above unreadable

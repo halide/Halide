@@ -107,6 +107,7 @@ py::object call_impl(const GeneratorFactory &factory,
     const auto arg_infos = generator->get_arginfos();
     std::vector<ArgInfo> input_arguments, output_arguments;
     std::map<std::string, ArgInfo> input_arguments_map;
+    std::set<std::string> inputs_seen;
     for (const auto &a : arg_infos) {
         if (a.dir == Internal::ArgInfoDirection::Input) {
             input_arguments.push_back(a);
@@ -117,55 +118,67 @@ py::object call_impl(const GeneratorFactory &factory,
     }
     size_t kw_inputs_specified = 0;
 
-    // Inputs can be specified by either positional or named args,
-    // but may not be mixed. (i.e., if any inputs are specified as a named
-    // argument, they all must be specified that way; otherwise they must all be
-    // positional, in the order declared in the Generator.)
-    //
-    // GeneratorParams can only be specified by name, and are always optional.
-
-    // Process the kwargs first.
-    for (auto kw : kwargs) {
-        // If the kwarg is the name of a known input, stick it in the input
-        // vector. If not, stick it in the constants (if it's invalid,
-        // an error will be reported further downstream).
-        std::string name = kw.first.cast<std::string>();
-        // Allow synthetic params to be specified as __type or __dim
-        name = Internal::replace_all(name, "__type", ".type");
-        name = Internal::replace_all(name, "__dim", ".dim");
-        py::handle value = kw.second;
-        auto it = input_arguments_map.find(name);
-        if (it != input_arguments_map.end()) {
-            const auto &a = it->second;
-            auto o = py::cast<py::object>(value);
-            if (a.kind == ArgInfoKind::Buffer) {
-                generator->bind_input(name, to_input_vector<Parameter>(o));
-            } else if (a.kind == ArgInfoKind::Function) {
-                generator->bind_input(name, to_input_vector<Func>(o));
-            } else {
-                generator->bind_input(name, to_input_vector<Expr>(o));
-            }
-            kw_inputs_specified++;
-        } else {
-            // Note that while Python Generators don't support LoopLevels,
-            // C++ Generators do, and that's what we're calling here, so
-            // be sure to allow passing 'em in.
-            if (py::isinstance<LoopLevel>(value)) {
-                generator->set_generatorparam_value(name, value.cast<LoopLevel>());
-            } else if (py::isinstance<py::list>(value)) {
+    // GeneratorParams are always specified as an optional named parameter
+    // called "generator_params", which is expected to be a python dict.
+    // If generatorparams are specified, do them first, before any Inputs.
+    if (kwargs.contains("generator_params")) {
+        py::dict gp = py::cast<py::dict>(kwargs["generator_params"]);
+        for (auto item : gp) {
+            const std::string gp_name = py::str(item.first).cast<std::string>();
+            const py::handle gp_value = item.second;
+            if (py::isinstance<LoopLevel>(gp_value)) {
+                // Note that while Python Generators don't support LoopLevels,
+                // C++ Generators do, and that's what we're calling here, so
+                // be sure to allow passing 'em in.
+                generator->set_generatorparam_value(gp_name, gp_value.cast<LoopLevel>());
+            } else if (py::isinstance<py::list>(gp_value)) {
                 // Convert [hl.UInt(8), hl.Int(16)] -> uint8,int16
                 std::string v;
-                for (auto t : value) {
+                for (auto t : gp_value) {
                     if (!v.empty()) {
                         v += ",";
                     }
                     v += py::str(t).cast<std::string>();
                 }
-                generator->set_generatorparam_value(name, v);
+                generator->set_generatorparam_value(gp_name, v);
             } else {
-                generator->set_generatorparam_value(name, py::str(value).cast<std::string>());
+                generator->set_generatorparam_value(gp_name, py::str(gp_value).cast<std::string>());
             }
         }
+    }
+
+    // Inputs can be specified by either positional or named args,
+    // but may not be mixed. (i.e., if any inputs are specified as a named
+    // argument, they all must be specified that way; otherwise they must all be
+    // positional, in the order declared in the Generator.)
+
+    const auto bind_one = [&generator](py::handle h, const ArgInfo &a) {
+        py::object o = py::cast<py::object>(h);
+        if (a.kind == ArgInfoKind::Buffer) {
+            generator->bind_input(a.name, to_input_vector<Parameter>(o));
+        } else if (a.kind == ArgInfoKind::Function) {
+            generator->bind_input(a.name, to_input_vector<Func>(o));
+        } else {
+            generator->bind_input(a.name, to_input_vector<Expr>(o));
+        }
+    };
+
+    for (auto kw : kwargs) {
+        const std::string name = kw.first.cast<std::string>();
+        const py::handle value = kw.second;
+
+        if (name == "generator_params") {
+            continue;
+        }
+
+        auto it = input_arguments_map.find(name);
+        _halide_user_assert(it != input_arguments_map.end()) << "Unknown input '" << name << "' specified via keyword argument.";
+        _halide_user_assert(inputs_seen.count(name) == 0) <<"Input " << " specified multiple times.";
+        inputs_seen.insert(name);
+
+        const auto &a = it->second;
+        bind_one(value, a);
+        kw_inputs_specified++;
     }
 
     if (args.empty()) {
@@ -174,20 +187,14 @@ py::object call_impl(const GeneratorFactory &factory,
             << "Expected exactly " << input_arguments.size() << " keyword args for inputs, but saw " << kw_inputs_specified << ".";
     } else {
         // Some positional arguments, so all inputs must be positional (and none via keyword).
-        _halide_user_assert(kw_inputs_specified == 0)
-            << "Cannot use both positional and keyword arguments for inputs.";
+        _halide_user_assert(kw_inputs_specified == 0) << "Cannot use both positional and keyword arguments for inputs.";
         _halide_user_assert(args.size() == input_arguments.size())
             << "Expected exactly " << input_arguments.size() << " positional args for inputs, but saw " << args.size() << ".";
         for (size_t i = 0; i < args.size(); i++) {
             const auto &a = input_arguments[i];
-            auto o = py::cast<py::object>(args[i]);
-            if (a.kind == ArgInfoKind::Buffer) {
-                generator->bind_input(a.name, to_input_vector<Parameter>(o));
-            } else if (a.kind == ArgInfoKind::Function) {
-                generator->bind_input(a.name, to_input_vector<Func>(o));
-            } else {
-                generator->bind_input(a.name, to_input_vector<Expr>(o));
-            }
+            _halide_user_assert(inputs_seen.count(a.name) == 0) <<"Input " << " specified multiple times.";
+            inputs_seen.insert(a.name);
+            bind_one(args[i], a);
         }
     }
 

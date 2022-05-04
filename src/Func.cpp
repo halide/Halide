@@ -211,7 +211,7 @@ const Type &Func::output_type() const {
 const std::vector<Type> &Func::output_types() const {
     const auto &types = defined() ? func.output_types() : func.required_types();
     user_assert(!types.empty())
-        << "Can't call Func::output_type on Func \"" << name()
+        << "Can't call Func::output_types on Func \"" << name()
         << "\" because it is undefined or has no type requirements.\n";
     return types;
 }
