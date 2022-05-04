@@ -62,8 +62,6 @@ public:
      * Note that this looks rather similar to Halide::Argument, but unfortunately
      * that is not a good fit here, as it cannot represent Func inputs (only
      * Buffer and Scalar), nor can it really handle Outputs.
-     *
-     * TODO: name is suboptimal. Is there a better one?
      */
     struct ArgInfo {
         std::string name;
@@ -110,7 +108,7 @@ public:
      *
      * This can be called multiple times, but only prior to build_pipeline().
      *
-     * CALL-AFTER: nona
+     * CALL-AFTER: none
      * CALL-BEFORE: build_pipeline
      */
     // @{
@@ -136,8 +134,11 @@ public:
     virtual std::vector<Parameter> get_input_parameter(const std::string &name) = 0;
 
     /** Given the name of an output, return the Func(s) for that output.
-     * (Most outputs will have exactly one, but outputs that are declared as arrays, or that return Tuples,
-     * will have multiple.)
+     *
+     * Most outputs will have exactly one, but outputs that are declared as arrays will have multiple.
+     *
+     * Note that outputs with Tuple values are still just a single Func, though they do get realized
+     * as multiple Buffers.
      *
      * Must be called after build_pipeline(), since the output Funcs will be undefined prior to that.
      *

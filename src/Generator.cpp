@@ -1381,6 +1381,14 @@ GeneratorParamBase::~GeneratorParamBase() {
 }
 
 void GeneratorParamBase::check_value_readable() const {
+    // These are always readable.
+    if (name() == "target" ||
+        name() == "auto_schedule" ||
+        name() == "machine_params") {
+        return;
+    }
+    user_assert(generator && generator->phase >= GeneratorBase::ConfigureCalled)
+        << "The GeneratorParam \"" << name() << "\" cannot be read before configure()/generate() is called.\n";
 }
 
 void GeneratorParamBase::check_value_writable() const {
@@ -1814,29 +1822,26 @@ std::vector<AbstractGenerator::ArgInfo> GeneratorBase::get_arginfos() {
 std::vector<Parameter> GeneratorBase::get_input_parameter(const std::string &name) {
     auto *input = find_input_by_name(name);
 
-    std::vector<Parameter> params;
-    // TODO: replicated code, yuck
-    if (input->kind() == ArgInfoKind::Scalar) {
-        internal_assert(input->funcs_.empty() && input->exprs_.size() == input->parameters_.size());
-        for (size_t i = 0; i < input->exprs_.size(); ++i) {
-            const auto &p = input->parameters_[i];
-            internal_assert(!p.is_buffer());
-            internal_assert(p.name() == input->array_name(i)) << "input name was " << p.name() << " expected " << input->array_name(i);
-            internal_assert(p.dimensions() == 0) << "input dimensions was " << p.dimensions() << " expected " << 0;
-            internal_assert(p.type() == input->type()) << "input type was " << p.name() << " expected " << input->type();
-            params.push_back(p);
-        }
+    const size_t params_size = input->parameters_.size();
+    const bool is_buffer = input->kind() != ArgInfoKind::Scalar;
+    if (is_buffer) {
+        internal_assert(input->exprs_.empty() && input->funcs_.size() == params_size);
     } else {
-        internal_assert(input->exprs_.empty() && input->funcs_.size() == input->parameters_.size());
-        for (size_t i = 0; i < input->funcs_.size(); ++i) {
-            const auto &f = input->funcs_[i];
-            const auto &p = input->parameters_[i];
-            internal_assert(p.is_buffer());
-            internal_assert(p.name() == input->array_name(i)) << "input name was " << p.name() << " expected " << input->array_name(i);
-            internal_assert(p.dimensions() == f.dimensions()) << "input dimensions was " << p.dimensions() << " expected " << f.dimensions();
-            internal_assert(p.type() == input->type()) << "input type was " << p.name() << " expected " << input->type();
-            params.push_back(p);
-        }
+        internal_assert(input->funcs_.empty() && input->exprs_.size() == params_size);
+    }
+
+    std::vector<Parameter> params;
+    params.reserve(params_size);
+
+    for (size_t i = 0; i < params_size; ++i) {
+        const auto &p = input->parameters_[i];
+        internal_assert(p.is_buffer() == is_buffer);
+        const auto name = input->array_name(i);
+        internal_assert(p.name() == name) << "input name was " << p.name() << " expected " << name;
+        const int expected_dimensions = is_buffer ? input->funcs_[i].dimensions() : 0;
+        internal_assert(p.dimensions() == expected_dimensions) << "input dimensions was " << p.dimensions() << " expected " << expected_dimensions;
+        internal_assert(p.type() == input->type()) << "input type was " << p.type() << " expected " << input->type();
+        params.push_back(p);
     }
     return params;
 }
