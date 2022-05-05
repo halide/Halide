@@ -38,9 +38,11 @@ void define_error(py::module &m) {
     Halide::Internal::JITSharedRuntime::set_default_handlers(handlers);
 
     static py::exception<Error> halide_generator_error(m, "Error");
-    py::register_exception_translator([](std::exception_ptr p) {
+    py::register_exception_translator([](std::exception_ptr p) {  // NOLINT
         try {
-            if (p) std::rethrow_exception(p);
+            if (p) {
+                std::rethrow_exception(p);
+            }
         } catch (const Error &e) {
             halide_generator_error(e.what());
         }

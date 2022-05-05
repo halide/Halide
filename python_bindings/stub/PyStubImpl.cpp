@@ -74,9 +74,11 @@ void install_error_handlers(py::module &m) {
     static py::exception<Halide::Error> halide_generator_error(m, "PyStubGeneratorError", base);
 
     // This allows a thrown Error here to be translated into hl.Error in Python.
-    py::register_exception_translator([](std::exception_ptr p) {
+    py::register_exception_translator([](std::exception_ptr p) {  // NOLINT
         try {
-            if (p) std::rethrow_exception(p);
+            if (p) {
+                std::rethrow_exception(p);
+            }
         } catch (const Halide::Error &e) {
             halide_generator_error(e.what());
         }
