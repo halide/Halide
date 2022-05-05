@@ -96,5 +96,4 @@ def test(addconstant_impl_func, offset):
 
 if __name__ == "__main__":
     for t, o in TESTS_AND_OFFSETS:
-        print("testing",t,o)
         test(t, o)

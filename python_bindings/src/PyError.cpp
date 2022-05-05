@@ -36,6 +36,15 @@ void define_error(py::module &m) {
     handlers.custom_error = halide_python_error;
     handlers.custom_print = halide_python_print;
     Halide::Internal::JITSharedRuntime::set_default_handlers(handlers);
+
+    static py::exception<Error> halide_generator_error(m, "Error");
+    py::register_exception_translator([](std::exception_ptr p) {
+        try {
+            if (p) std::rethrow_exception(p);
+        } catch (const Error &e) {
+            halide_generator_error(e.what());
+        }
+    });
 }
 
 }  // namespace PythonBindings

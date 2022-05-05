@@ -18,13 +18,12 @@ import sys
 
 # Everything below here is implicitly in the `halide` package
 
+# Error is defined in PyError.cpp
+class GeneratorError(Error):
+    pass
 
 def _fail(msg: str):
-    # TODO: It might be polite to use a custom exception type like GeneratorError
-    # for the sake of metaprogramming systems built on top of this. The gotcha is
-    # that some exceptions in the pybind11 layer that should be "GeneratorError"
-    # are thrown as RuntimeError, which (if nothing else) makes getting robust tests hard.
-    raise RuntimeError(msg)
+    raise GeneratorError(msg)
 
 
 def _check(cond: bool, msg: str):

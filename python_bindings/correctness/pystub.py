@@ -65,52 +65,47 @@ def test_simple(cls):
     try:
         # Inputs w/ mixed by-position and by-name
         f = cls.call(ctx, b_in, float_arg=3.5)
-    except RuntimeError as e:
-        assert 'Cannot use both positional and keyword arguments for inputs.' in str(
-            e)
+    except hl.GeneratorError as e:
+        assert 'Cannot use both positional and keyword arguments for inputs.' in str(e)
     else:
         assert False, 'Did not see expected exception!'
 
     try:
         # too many positional args
         f = cls.call(ctx, b_in, 3.5, 4)
-    except RuntimeError as e:
-        assert 'Expected exactly 2 positional args for inputs, but saw 3.' in str(
-            e)
+    except hl.GeneratorError as e:
+        assert 'Expected exactly 2 positional args for inputs, but saw 3.' in str(e)
     else:
         assert False, 'Did not see expected exception!'
 
     try:
         # too few positional args
         f = cls.call(ctx, b_in)
-    except RuntimeError as e:
-        assert 'Expected exactly 2 positional args for inputs, but saw 1.' in str(
-            e)
+    except hl.GeneratorError as e:
+        assert 'Expected exactly 2 positional args for inputs, but saw 1.' in str(e)
     else:
         assert False, 'Did not see expected exception!'
 
     try:
         # Inputs that can't be converted to what the receiver needs (positional)
         f = cls.call(ctx, hl.f32(3.141592), "happy")
-    except RuntimeError as e:
-        assert 'Unable to cast Python instance' in str(e) or \
-               'requires an ImageParam or Buffer' in str(e)
+    except hl.GeneratorError as e:
+        assert 'Input buffer_input requires an ImageParam or Buffer argument when using call' in str(e)
     else:
         assert False, 'Did not see expected exception!'
 
     try:
         # Inputs that can't be converted to what the receiver needs (named)
         f = cls.call(ctx, b_in, float_arg="bogus")
-    except RuntimeError as e:
-        assert 'Unable to cast Python instance' in str(e) or \
-               'requires a Param (or scalar literal) argument' in str(e)
+    except hl.GeneratorError as e:
+        assert 'Input float_arg requires a Param (or scalar literal) argument when using call' in str(e)
     else:
         assert False, 'Did not see expected exception!'
 
     try:
         # Input specified by both pos and kwarg
         f = cls.call(ctx, b_in, 3.5, float_arg=4.5)
-    except RuntimeError as e:
+    except hl.GeneratorError as e:
         assert "Cannot use both positional and keyword arguments for inputs." in str(
             e)
     else:
@@ -122,9 +117,8 @@ def test_simple(cls):
                      buzzer_input=b_in,
                      float_arg=3.5,
                      generator_params=gp)
-    except RuntimeError as e:
-        assert "Unknown input 'buzzer_input' specified via keyword argument" in str(e) or \
-               "has no GeneratorParam(s) named: ['buzzer_input']" in str(e)
+    except hl.GeneratorError as e:
+        assert "Unknown input 'buzzer_input' specified via keyword argument" in str(e)
     else:
         assert False, 'Did not see expected exception!'
 
@@ -135,9 +129,8 @@ def test_simple(cls):
                      float_arg=3.5,
                      generator_params=gp,
                      nonexistent_generator_param="wat")
-    except RuntimeError as e:
-        assert "Unknown input 'nonexistent_generator_param' specified via keyword argument" in str(e) or \
-               "has no GeneratorParam(s) named: ['nonexistent_generator_param']" in str(e)
+    except hl.GeneratorError as e:
+        assert "Unknown input 'nonexistent_generator_param' specified via keyword argument" in str(e)
     else:
         assert False, 'Did not see expected exception!'
 
