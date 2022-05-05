@@ -129,14 +129,6 @@ T cast_to(const py::handle &h, const std::string &name) {
     }
 }
 
-// template<>
-// Parameter cast_to(const py::handle &h, const std::string &name) {
-//     auto b = cast_to<Buffer<>>(h, name);
-//     Parameter p(b.type(), true, b.dimensions());
-//     p.set_buffer(b);
-//     return p;
-// }
-
 StubInput to_stub_input(const py::object &o, const std::string &name) {
     // Don't use isinstance: we want to get things that
     // can be implicitly converted as well (eg ImageParam -> Func)
