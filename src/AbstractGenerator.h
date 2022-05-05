@@ -42,7 +42,7 @@ using ExternsMap = std::map<std::string, ExternalCode>;
  * - optionally set GeneratorParam values
  * - optionally re-bind inputs (if using in JIT or Stub modes)
  * - call build_pipeline()
- * - optionally call get_output_func() to get the output(s) (if using in JIT or Stub modes)
+ * - optionally call output_func() to get the output(s) (if using in JIT or Stub modes)
  * - discard the instance
  *
  * AbstractGenerators should be fairly cheap to instantiate! Don't try to re-use
@@ -62,8 +62,6 @@ public:
      * Note that this looks rather similar to Halide::Argument, but unfortunately
      * that is not a good fit here, as it cannot represent Func inputs (only
      * Buffer and Scalar), nor can it really handle Outputs.
-     *
-     * TODO: name is suboptimal. Is there a better one?
      */
     struct ArgInfo {
         std::string name;
@@ -76,7 +74,7 @@ public:
 
     /** Return the name of this Generator. (This should always be the name
      * used to register it.) */
-    virtual std::string get_name() = 0;
+    virtual std::string name() = 0;
 
     /** Return the Target, autoscheduler flag, and MachineParams that this Generator
      * was created with. Always legal to call on any AbstractGenerator instance,
@@ -87,7 +85,7 @@ public:
      * CALL-AFTER: any
      * CALL-BEFORE: any
      */
-    virtual GeneratorContext get_context() const = 0;
+    virtual GeneratorContext context() const = 0;
 
     /** Return a list of all the ArgInfos for this generator. The list will be in the order
      * that the input and outputs are declared (possibly interleaved).
@@ -98,7 +96,7 @@ public:
      * CALL-AFTER: configure()
      * CALL-BEFORE: any
      */
-    virtual std::vector<ArgInfo> get_arginfos() = 0;
+    virtual std::vector<ArgInfo> arginfos() = 0;
 
     /** Set the value for a specific GeneratorParam for an AbstractGenerator instance.
      *
@@ -110,7 +108,7 @@ public:
      *
      * This can be called multiple times, but only prior to build_pipeline().
      *
-     * CALL-AFTER: nona
+     * CALL-AFTER: none
      * CALL-BEFORE: build_pipeline
      */
     // @{
@@ -122,7 +120,7 @@ public:
      * only once per instance.
      *
      * CALL-AFTER: set_generatorparam_value, bind_input
-     * CALL-BEFORE: get_input_parameter, get_output_func, get_external_code_map
+     * CALL-BEFORE: input_parameter, output_func, external_code_map
      */
     virtual Pipeline build_pipeline() = 0;
 
@@ -133,25 +131,28 @@ public:
      * CALL-AFTER: build_pipeline
      * CALL-BEFORE: none
      */
-    virtual std::vector<Parameter> get_input_parameter(const std::string &name) = 0;
+    virtual std::vector<Parameter> input_parameter(const std::string &name) = 0;
 
     /** Given the name of an output, return the Func(s) for that output.
-     * (Most outputs will have exactly one, but outputs that are declared as arrays, or that return Tuples,
-     * will have multiple.)
+     *
+     * Most outputs will have exactly one, but outputs that are declared as arrays will have multiple.
+     *
+     * Note that outputs with Tuple values are still just a single Func, though they do get realized
+     * as multiple Buffers.
      *
      * Must be called after build_pipeline(), since the output Funcs will be undefined prior to that.
      *
      * CALL-AFTER: build_pipeline()
      * CALL-BEFORE: none
      */
-    virtual std::vector<Func> get_output_func(const std::string &name) = 0;
+    virtual std::vector<Func> output_func(const std::string &name) = 0;
 
     /** Return the ExternsMap for the Generator, if any.
      *
      * CALL-AFTER: build_pipeline()
      * CALL-BEFORE: n/a
      */
-    virtual ExternsMap get_external_code_map() = 0;
+    virtual ExternsMap external_code_map() = 0;
 
     /** Rebind a specified Input to refer to the given piece of IR, replacing the
      * default ImageParam / Param in place for that Input. Basic type-checking is

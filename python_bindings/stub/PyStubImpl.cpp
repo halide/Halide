@@ -157,7 +157,7 @@ py::object call_impl(const GeneratorFactory &factory,
                      const py::kwargs &kwargs) {
     auto generator = factory(context);
 
-    const auto arg_infos = generator->get_arginfos();
+    const auto arg_infos = generator->arginfos();
     std::vector<ArgInfo> input_arguments, output_arguments;
     std::map<std::string, ArgInfo> input_arguments_map;
     std::set<std::string> inputs_seen;
@@ -256,7 +256,7 @@ py::object call_impl(const GeneratorFactory &factory,
     const size_t outputs_size = output_arguments.size();
     py::tuple py_outputs(outputs_size);
     for (size_t i = 0; i < outputs_size; i++) {
-        std::vector<Func> outputs = generator->get_output_func(output_arguments[i].name);
+        std::vector<Func> outputs = generator->output_func(output_arguments[i].name);
 
         py::object o;
         if (outputs.size() == 1) {

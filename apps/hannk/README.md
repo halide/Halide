@@ -6,7 +6,7 @@ There are several front ends for the interpreter:
 - Direct API
 
 This app is a work in progress. Currently, only quantized uint8 networks are supported.
-All of the [TensorFlow hosted models](https://www.tensorflow.org/lite/guide/hosted_models)
+All of the [TensorFlow hosted models](https://tfhub.dev/s?deployment-format=lite)
 are working and producing good performance.
 
 ### Benchmarks
