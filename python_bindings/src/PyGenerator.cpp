@@ -59,15 +59,15 @@ public:
         return true;
     }
 
-    std::string get_name() override {
+    std::string name() override {
         return name_;
     }
 
-    GeneratorContext get_context() const override {
+    GeneratorContext context() const override {
         return context_;
     }
 
-    std::vector<ArgInfo> get_arginfos() override {
+    std::vector<ArgInfo> arginfos() override {
         return args_to_vector<ArgInfo>(generator_.attr("_get_arginfos")());
     }
 
@@ -83,15 +83,15 @@ public:
         return generator_.attr("_build_pipeline")().cast<Pipeline>();
     }
 
-    std::vector<Parameter> get_input_parameter(const std::string &name) override {
+    std::vector<Parameter> input_parameter(const std::string &name) override {
         return args_to_vector<Parameter>(generator_.attr("_get_input_parameter")(name));
     }
 
-    std::vector<Func> get_output_func(const std::string &name) override {
+    std::vector<Func> output_func(const std::string &name) override {
         return args_to_vector<Func>(generator_.attr("_get_output_func")(name));
     }
 
-    ExternsMap get_external_code_map() override {
+    ExternsMap external_code_map() override {
         // Python Generators don't support this (yet? ever?),
         // but don't throw an error, just return an empty map.
         return {};
