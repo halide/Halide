@@ -69,7 +69,7 @@ void install_error_handlers(py::module &m) {
 
     static py::object base = py::module_::import("halide").attr("GeneratorError");
     if (base.is(py::none())) {
-        throw std::runtime_error("Could not find halide.Error");
+        throw std::runtime_error("Could not find halide.GeneratorError");
     }
     static py::exception<Halide::Error> halide_generator_error(m, "PyStubGeneratorError", base);
 
