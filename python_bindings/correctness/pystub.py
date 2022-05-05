@@ -61,7 +61,7 @@ def test_simple(gen):
     try:
         # Inputs w/ mixed by-position and by-name
         f = gen(target, b_in, f_in, float_arg=3.5)
-    except RuntimeError as e:
+    except hl.HalideError as e:
         assert 'Cannot use both positional and keyword arguments for inputs.' in str(e)
     else:
         assert False, 'Did not see expected exception!'
@@ -69,7 +69,7 @@ def test_simple(gen):
     try:
         # too many positional args
         f = gen(target, b_in, f_in, 3.5, 4)
-    except RuntimeError as e:
+    except hl.HalideError as e:
         assert 'Expected exactly 3 positional args for inputs, but saw 4.' in str(e)
     else:
         assert False, 'Did not see expected exception!'
@@ -77,7 +77,7 @@ def test_simple(gen):
     try:
         # too few positional args
         f = gen(target, b_in, f_in)
-    except RuntimeError as e:
+    except hl.HalideError as e:
         assert 'Expected exactly 3 positional args for inputs, but saw 2.' in str(e)
     else:
         assert False, 'Did not see expected exception!'
@@ -85,23 +85,23 @@ def test_simple(gen):
     try:
         # Inputs that can't be converted to what the receiver needs (positional)
         f = gen(target, hl.f32(3.141592), "happy", k)
-    except RuntimeError as e:
-        assert 'Unable to cast Python instance' in str(e)
+    except hl.HalideError as e:
+        assert 'Input func_input requires a Param (or scalar literal) argument' in str(e)
     else:
         assert False, 'Did not see expected exception!'
 
     try:
         # Inputs that can't be converted to what the receiver needs (named)
         f = gen(target, b_in, f_in, float_arg="bogus")
-    except RuntimeError as e:
-        assert 'Unable to cast Python instance' in str(e)
+    except hl.HalideError as e:
+        assert 'Input float_arg requires a Param (or scalar literal) argument' in str(e)
     else:
         assert False, 'Did not see expected exception!'
 
     try:
         # Input specified by both pos and kwarg
         f = gen(target, b_in, f_in, 3.5, float_arg=4.5)
-    except RuntimeError as e:
+    except hl.HalideError as e:
         assert "Cannot use both positional and keyword arguments for inputs." in str(e)
     else:
         assert False, 'Did not see expected exception!'
@@ -117,7 +117,7 @@ def test_simple(gen):
     try:
         # Bad gp name
         f = gen(target, b_in, f_in, 3.5, generator_params={"foo": 0})
-    except RuntimeError as e:
+    except hl.HalideError as e:
         assert "has no GeneratorParam named: foo" in str(e)
     else:
         assert False, 'Did not see expected exception!'
@@ -125,7 +125,7 @@ def test_simple(gen):
     try:
         # Bad input name
         f = gen(target, buffer_input=b_in, float_arg=3.5, generator_params=gp, funk_input=f_in)
-    except RuntimeError as e:
+    except hl.HalideError as e:
         assert "Unknown input 'funk_input' specified via keyword argument." in str(e)
     else:
         assert False, 'Did not see expected exception!'
@@ -133,7 +133,7 @@ def test_simple(gen):
     try:
         # Bad gp name
         f = gen(target, buffer_input=b_in, float_arg=3.5, generator_params=gp, func_input=f_in, nonexistent_generator_param="wat")
-    except RuntimeError as e:
+    except hl.HalideError as e:
         assert "Unknown input 'nonexistent_generator_param' specified via keyword argument." in str(e)
     else:
         assert False, 'Did not see expected exception!'
