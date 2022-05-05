@@ -756,6 +756,7 @@ RUNTIME_CPP_COMPONENTS = \
   alignment_32 \
   allocation_cache \
   alignment_64 \
+  amx \
   android_clock \
   android_host_cpu_count \
   android_io \
@@ -1008,11 +1009,22 @@ RUNTIME_TRIPLE_WIN_ARM_32 = "arm-unknown-windows-unknown"
 RUNTIME_TRIPLE_WIN_ARM_64 = "aarch64-unknown-windows-unknown"
 RUNTIME_TRIPLE_WIN_GENERIC_64 = "le64-unknown-windows-unknown"
 
+RUNTIME_TRIPLE_AMX_X86_32 = "i386-unknown-unknown-unknown"
+RUNTIME_TRIPLE_AMX_X86_64 = "x86_64-unknown-unknown-unknown"
+
 # `-fno-threadsafe-statics` is very important here (note that it allows us to use a 'modern' C++
 # standard but still skip threadsafe guards for static initialization in our runtime code)
 #
 # `-fno-rtti` is necessary to allow us to use classes with virtual functions in the runtime code
 RUNTIME_CXX_FLAGS = -std=c++17 -O3 -fno-vectorize -ffreestanding -fno-blocks -fno-exceptions -fno-unwind-tables -fno-threadsafe-statics -fno-rtti
+
+$(BUILD_DIR)/initmod.amx_x86_32.ll: $(SRC_DIR)/runtime/amx.cpp $(BUILD_DIR)/clang_ok
+	@mkdir -p $(@D)
+	$(CLANG) $(CXX_WARNING_FLAGS) $(RUNTIME_CXX_FLAGS) -m32 -target $(RUNTIME_TRIPLE_AMX_X86_32) -mxsave -DCOMPILING_HALIDE_RUNTIME -DBITS_32 -emit-llvm -S $(SRC_DIR)/runtime/amx.cpp -o $@ -MMD -MP -MF $(BUILD_DIR)/initmod.amx_x86_32.d
+
+$(BUILD_DIR)/initmod.amx_x86_64.ll: $(SRC_DIR)/runtime/amx.cpp $(BUILD_DIR)/clang_ok
+	@mkdir -p $(@D)
+	$(CLANG) $(CXX_WARNING_FLAGS) $(RUNTIME_CXX_FLAGS) -m64 -target $(RUNTIME_TRIPLE_AMX_X86_64) -mxsave -DCOMPILING_HALIDE_RUNTIME -DBITS_64 -emit-llvm -S $(SRC_DIR)/runtime/amx.cpp -o $@ -MMD -MP -MF $(BUILD_DIR)/initmod.amx_x86_64.d
 
 $(BUILD_DIR)/initmod.windows_%_x86_32.ll: $(SRC_DIR)/runtime/windows_%_x86.cpp $(BUILD_DIR)/clang_ok
 	@mkdir -p $(@D)
