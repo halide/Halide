@@ -71,15 +71,13 @@ void install_error_handlers(py::module &m) {
         throw std::runtime_error("Could not find halide.HalideError");
     }
 
-    // Make a subclass of HalideError for this stub to throw.
-    static py::exception<Error> halide_stub_error(m, "HalidePyStubError", halide_error);
     py::register_exception_translator([](std::exception_ptr p) {  // NOLINT
         try {
             if (p) {
                 std::rethrow_exception(p);
             }
         } catch (const Error &e) {
-            halide_stub_error(e.what());
+            PyErr_SetString(halide_error.ptr(), e.what());
         }
     });
 }
