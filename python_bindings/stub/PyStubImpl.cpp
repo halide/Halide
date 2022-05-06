@@ -41,12 +41,14 @@ void halide_python_error(JITUserContext *, const char *msg) {
 }
 
 void halide_python_print(JITUserContext *, const char *msg) {
+    py::gil_scoped_acquire acquire;
     py::print(msg, py::arg("end") = "");
 }
 
 class HalidePythonCompileTimeErrorReporter : public CompileTimeErrorReporter {
 public:
     void warning(const char *msg) override {
+        py::gil_scoped_acquire acquire;
         py::print(msg, py::arg("end") = "");
     }
 
@@ -64,6 +66,21 @@ void install_error_handlers(py::module &m) {
     handlers.custom_error = halide_python_error;
     handlers.custom_print = halide_python_print;
     Halide::Internal::JITSharedRuntime::set_default_handlers(handlers);
+
+    static py::object halide_error = py::module_::import("halide").attr("HalideError");
+    if (halide_error.is(py::none())) {
+        throw std::runtime_error("Could not find halide.HalideError");
+    }
+
+    py::register_exception_translator([](std::exception_ptr p) {  // NOLINT
+        try {
+            if (p) {
+                std::rethrow_exception(p);
+            }
+        } catch (const Error &e) {
+            PyErr_SetString(halide_error.ptr(), e.what());
+        }
+    });
 }
 
 // Anything that defines __getitem__ looks sequencelike to pybind,
@@ -73,8 +90,42 @@ bool is_real_sequence(const py::object &o) {
 }
 
 template<typename T>
-T cast_to(const py::object &o) {
-    return o.cast<T>();
+struct cast_error_string {
+    std::string operator()(const py::handle &h, const std::string &name) {
+        return "Unable to cast Input " + name + " to " + py::type_id<T>() + " from " + (std::string)py::str(py::type::handle_of(h));
+    }
+};
+
+template<>
+std::string cast_error_string<Buffer<>>::operator()(const py::handle &h, const std::string &name) {
+    std::ostringstream o;
+    o << "Input " << name << " requires an ImageParam or Buffer argument when using generate(), but saw " << (std::string)py::str(py::type::handle_of(h));
+    return o.str();
+}
+
+template<>
+std::string cast_error_string<Func>::operator()(const py::handle &h, const std::string &name) {
+    std::ostringstream o;
+    o << "Input " << name << " requires a Func argument when using generate(), but saw " << (std::string)py::str(py::type::handle_of(h));
+    return o.str();
+}
+
+template<>
+std::string cast_error_string<Expr>::operator()(const py::handle &h, const std::string &name) {
+    std::ostringstream o;
+    o << "Input " << name << " requires a Param (or scalar literal) argument when using generate(), but saw " << (std::string)py::str(py::type::handle_of(h));
+    return o.str();
+}
+
+template<typename T>
+T cast_to(const py::handle &h, const std::string &name) {
+    // We want to ensure that the error thrown is one that will be translated
+    // to `hl.Error` in Python.
+    try {
+        return h.cast<T>();
+    } catch (const std::exception &e) {
+        throw Halide::Error(cast_error_string<T>()(h, name));
+    }
 }
 
 template<>
