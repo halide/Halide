@@ -173,7 +173,9 @@ py::object call_impl(const GeneratorFactory &factory,
     // called "generator_params", which is expected to be a python dict.
     // If generatorparams are specified, do them first, before any Inputs.
     if (kwargs.contains("generator_params")) {
-        py::dict gp = py::cast<py::dict>(kwargs["generator_params"]);
+        py::handle h = kwargs["generator_params"];
+        _halide_user_assert(py::isinstance<py::dict>(h)) << "generator_params must be a dict";
+        py::dict gp = py::cast<py::dict>(h);
         for (auto item : gp) {
             const std::string gp_name = py::str(item.first).cast<std::string>();
             const py::handle gp_value = item.second;

@@ -18,12 +18,8 @@ import sys
 
 # Everything below here is implicitly in the `halide` package
 
-# Error is defined in PyError.cpp
-class GeneratorError(Error):
-    pass
-
 def _fail(msg: str):
-    raise GeneratorError(msg)
+    raise HalideError(msg)
 
 
 def _check(cond: bool, msg: str):
@@ -388,13 +384,16 @@ class Generator(ABC):
     # GeneratorParams can only be specified by name, and are always optional.
     @classmethod
     def call(cls, context: GeneratorContext, *args, **kwargs):
+        _check(isinstance(context, GeneratorContext), "The first argument to call() must be a GeneratorContext")
         generator = cls(context)
 
         # Process the kwargs first: first, fill in all the GeneratorParams
         # (in case some are tied to Inputs). Just send all kwargs to
         # _set_generatorparam_value(); the ones that aren't valid will
         # be saved in _unhandled_generator_params and dealt with during Input processing.
-        for k, v in kwargs.pop("generator_params", {}).items():
+        gp = kwargs.pop("generator_params", {})
+        _check(isinstance(gp, dict), "generator_params must be a dict")
+        for k, v in gp.items():
             generator._set_generatorparam_value(k, v)
 
         arginfos = generator._get_arginfos()
@@ -454,7 +453,7 @@ class Generator(ABC):
         return outputs[0] if len(outputs) == 1 else tuple(outputs)
 
     def __init__(self, context: GeneratorContext):
-        assert isinstance(context, GeneratorContext)
+        _check(isinstance(context, GeneratorContext), "The first argument to Generator must be a GeneratorContext")
 
         self._context = context
         self._stage = _Stage.Created

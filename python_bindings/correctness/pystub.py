@@ -107,25 +107,22 @@ def test_simple(cls):
         f = cls.call(ctx, b_in, 3.5, float_arg=4.5)
     except hl.HalideError as e:
         assert "Cannot use both positional and keyword arguments for inputs." in str(e)
-        f = gen(target, b_in, f_in, 3.5, float_arg=4.5)
-    except hl.HalideError as e:
-        assert "Cannot use both positional and keyword arguments for inputs." in str(e)
     else:
         assert False, 'Did not see expected exception!'
 
     try:
         # generator_params is not a dict
-        f = gen(target, b_in, f_in, 3.5, generator_params=[1, 2, 3])
-    except TypeError as e:
-        assert "cannot convert dictionary" in str(e)
+        f = cls.call(ctx, b_in, 3.5, generator_params=[1, 2, 3])
+    except hl.HalideError as e:
+        assert "generator_params must be a dict" in str(e)
     else:
         assert False, 'Did not see expected exception!'
 
     try:
         # Bad gp name
-        f = gen(target, b_in, f_in, 3.5, generator_params={"foo": 0})
+        f = cls.call(ctx, b_in, 3.5, generator_params={"foo": 0})
     except hl.HalideError as e:
-        assert "has no GeneratorParam named: foo" in str(e)
+        assert "has no GeneratorParam" in str(e)
     else:
         assert False, 'Did not see expected exception!'
 
