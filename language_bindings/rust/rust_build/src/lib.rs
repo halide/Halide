@@ -158,7 +158,7 @@ impl Generator<'static> {
         let mut cmd_compile = Command::new("g++");
         cmd_compile.args(["-std=c++17"]);
 
-        // Inlcude flags
+        // Include flags
         cmd_compile.args(["-I", self.halide_path.join("include").to_str().unwrap()]);
         cmd_compile.args(["-I", self.halide_path.join("tools").to_str().unwrap()]);
 
