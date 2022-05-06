@@ -15,8 +15,8 @@ Install Cargo: https://doc.rust-lang.org/cargo/getting-started/installation.html
 2.) Run the following:
 
 ```
-  Cargo build
-  Cargo run
+  cargo build
+  cargo run
 ```
 
 3.) You should now have a slightly blurry picture of a hummingbird in the images/ directory.
