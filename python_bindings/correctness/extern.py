@@ -32,7 +32,7 @@ def test_extern():
 
     try:
         sort_func.compile_jit()
-    except hl.Error:
+    except hl.HalideError:
         assert 'cannot be converted to a bool' in str(e)
     else:
         assert False, 'Did not see expected exception!'
@@ -44,7 +44,7 @@ def test_extern():
 
     try:
         sort_func.compile_jit()
-    except hl.Error:
+    except hl.HalideError:
         assert 'cannot be converted to a bool' in str(e)
     else:
         assert False, 'Did not see expected exception!'

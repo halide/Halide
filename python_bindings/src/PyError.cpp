@@ -37,7 +37,7 @@ void define_error(py::module &m) {
     handlers.custom_print = halide_python_print;
     Halide::Internal::JITSharedRuntime::set_default_handlers(handlers);
 
-    static py::exception<Error> halide_error(m, "Error");
+    static py::exception<Error> halide_error(m, "HalideError");
     py::register_exception_translator([](std::exception_ptr p) {  // NOLINT
         try {
             if (p) {

@@ -67,20 +67,18 @@ void install_error_handlers(py::module &m) {
     handlers.custom_print = halide_python_print;
     Halide::Internal::JITSharedRuntime::set_default_handlers(handlers);
 
-    static py::object base = py::module_::import("halide").attr("GeneratorError");
-    if (base.is(py::none())) {
-        throw std::runtime_error("Could not find halide.GeneratorError");
+    static py::object halide_error = py::module_::import("halide").attr("HalideError");
+    if (halide_error.is(py::none())) {
+        throw std::runtime_error("Could not find halide.HalideError");
     }
-    static py::exception<Halide::Error> halide_generator_error(m, "PyStubGeneratorError", base);
 
-    // This allows a thrown Error here to be translated into hl.Error in Python.
     py::register_exception_translator([](std::exception_ptr p) {  // NOLINT
         try {
             if (p) {
                 std::rethrow_exception(p);
             }
-        } catch (const Halide::Error &e) {
-            halide_generator_error(e.what());
+        } catch (const Error &e) {
+            PyErr_SetString(halide_error.ptr(), e.what());
         }
     });
 }

@@ -65,7 +65,7 @@ def test_simple(cls):
     try:
         # Inputs w/ mixed by-position and by-name
         f = cls.call(ctx, b_in, float_arg=3.5)
-    except hl.GeneratorError as e:
+    except hl.HalideError as e:
         assert 'Cannot use both positional and keyword arguments for inputs.' in str(e)
     else:
         assert False, 'Did not see expected exception!'
@@ -73,7 +73,7 @@ def test_simple(cls):
     try:
         # too many positional args
         f = cls.call(ctx, b_in, 3.5, 4)
-    except hl.GeneratorError as e:
+    except hl.HalideError as e:
         assert 'Expected exactly 2 positional args for inputs, but saw 3.' in str(e)
     else:
         assert False, 'Did not see expected exception!'
@@ -81,7 +81,7 @@ def test_simple(cls):
     try:
         # too few positional args
         f = cls.call(ctx, b_in)
-    except hl.GeneratorError as e:
+    except hl.HalideError as e:
         assert 'Expected exactly 2 positional args for inputs, but saw 1.' in str(e)
     else:
         assert False, 'Did not see expected exception!'
@@ -89,7 +89,7 @@ def test_simple(cls):
     try:
         # Inputs that can't be converted to what the receiver needs (positional)
         f = cls.call(ctx, hl.f32(3.141592), "happy")
-    except hl.GeneratorError as e:
+    except hl.HalideError as e:
         assert 'Input buffer_input requires an ImageParam or Buffer argument when using call' in str(e)
     else:
         assert False, 'Did not see expected exception!'
@@ -97,7 +97,7 @@ def test_simple(cls):
     try:
         # Inputs that can't be converted to what the receiver needs (named)
         f = cls.call(ctx, b_in, float_arg="bogus")
-    except hl.GeneratorError as e:
+    except hl.HalideError as e:
         assert 'Input float_arg requires a Param (or scalar literal) argument when using call' in str(e)
     else:
         assert False, 'Did not see expected exception!'
@@ -105,9 +105,27 @@ def test_simple(cls):
     try:
         # Input specified by both pos and kwarg
         f = cls.call(ctx, b_in, 3.5, float_arg=4.5)
-    except hl.GeneratorError as e:
-        assert "Cannot use both positional and keyword arguments for inputs." in str(
-            e)
+    except hl.HalideError as e:
+        assert "Cannot use both positional and keyword arguments for inputs." in str(e)
+        f = gen(target, b_in, f_in, 3.5, float_arg=4.5)
+    except hl.HalideError as e:
+        assert "Cannot use both positional and keyword arguments for inputs." in str(e)
+    else:
+        assert False, 'Did not see expected exception!'
+
+    try:
+        # generator_params is not a dict
+        f = gen(target, b_in, f_in, 3.5, generator_params=[1, 2, 3])
+    except TypeError as e:
+        assert "cannot convert dictionary" in str(e)
+    else:
+        assert False, 'Did not see expected exception!'
+
+    try:
+        # Bad gp name
+        f = gen(target, b_in, f_in, 3.5, generator_params={"foo": 0})
+    except hl.HalideError as e:
+        assert "has no GeneratorParam named: foo" in str(e)
     else:
         assert False, 'Did not see expected exception!'
 
@@ -117,7 +135,7 @@ def test_simple(cls):
                      buzzer_input=b_in,
                      float_arg=3.5,
                      generator_params=gp)
-    except hl.GeneratorError as e:
+    except hl.HalideError as e:
         assert "Unknown input 'buzzer_input' specified via keyword argument" in str(e)
     else:
         assert False, 'Did not see expected exception!'
@@ -129,7 +147,7 @@ def test_simple(cls):
                      float_arg=3.5,
                      generator_params=gp,
                      nonexistent_generator_param="wat")
-    except hl.GeneratorError as e:
+    except hl.HalideError as e:
         assert "Unknown input 'nonexistent_generator_param' specified via keyword argument" in str(e)
     else:
         assert False, 'Did not see expected exception!'
