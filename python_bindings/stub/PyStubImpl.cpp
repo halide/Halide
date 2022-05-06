@@ -129,22 +129,22 @@ T cast_to(const py::handle &h, const std::string &name) {
 }
 
 template<>
-Parameter cast_to(const py::object &o) {
-    auto b = o.cast<Buffer<>>();
+Parameter cast_to(const py::handle &h, const std::string &name) {
+    auto b = cast_to<Buffer<>>(h, name);
     Parameter p(b.type(), true, b.dimensions());
     p.set_buffer(b);
     return p;
 }
 
 template<typename T>
-std::vector<T> to_input_vector(const py::object &value) {
+std::vector<T> to_input_vector(const py::object &value, const std::string &name) {
     std::vector<T> v;
     if (is_real_sequence(value)) {
         for (const auto &o : py::reinterpret_borrow<py::sequence>(value)) {
-            v.push_back(cast_to<T>(o));
+            v.push_back(cast_to<T>(o, name));
         }
     } else {
-        v.push_back(cast_to<T>(value));
+        v.push_back(cast_to<T>(value, name));
     }
     return v;
 }
@@ -203,11 +203,11 @@ py::object generate_impl(const GeneratorFactory &factory,
     const auto bind_one = [&generator](py::handle h, const ArgInfo &a) {
         py::object o = py::cast<py::object>(h);
         if (a.kind == ArgInfoKind::Buffer) {
-            generator->bind_input(a.name, to_input_vector<Parameter>(o));
+            generator->bind_input(a.name, to_input_vector<Parameter>(o, a.name));
         } else if (a.kind == ArgInfoKind::Function) {
-            generator->bind_input(a.name, to_input_vector<Func>(o));
+            generator->bind_input(a.name, to_input_vector<Func>(o, a.name));
         } else {
-            generator->bind_input(a.name, to_input_vector<Expr>(o));
+            generator->bind_input(a.name, to_input_vector<Expr>(o, a.name));
         }
     };
 
