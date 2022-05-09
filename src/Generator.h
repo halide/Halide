@@ -2949,12 +2949,25 @@ public:
     GeneratorContext(GeneratorContext &&) = default;
     GeneratorContext &operator=(GeneratorContext &&) = default;
 
+    const Target &target() const {
+        return target_;
+    }
+    bool auto_schedule() const {
+        return auto_schedule_;
+    }
+    const MachineParams &machine_params() const {
+        return machine_params_;
+    }
+
+    HALIDE_ATTRIBUTE_DEPRECATED("Call GeneratorContext::target() instead of GeneratorContext::get_target().")
     const Target &get_target() const {
         return target_;
     }
+    HALIDE_ATTRIBUTE_DEPRECATED("Call GeneratorContext::auto_schedule() instead of GeneratorContext::get_auto_schedule().")
     bool get_auto_schedule() const {
         return auto_schedule_;
     }
+    HALIDE_ATTRIBUTE_DEPRECATED("Call GeneratorContext::machine_params() instead of GeneratorContext::get_machine_params().")
     const MachineParams &get_machine_params() const {
         return machine_params_;
     }
