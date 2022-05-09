@@ -657,14 +657,15 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
         }
     }
 
-    // At present, we default to *enabling* LLVM loop optimization,
-    // unless DisableLLVMLoopOpt is set; we're going to flip this to defaulting
-    // to *not* enabling these optimizations (and removing the DisableLLVMLoopOpt feature).
-    // See https://github.com/halide/Halide/issues/4113 for more info.
-    // (Note that setting EnableLLVMLoopOpt always enables loop opt, regardless
-    // of the setting of DisableLLVMLoopOpt.)
-    const bool do_loop_opt = !target.has_feature(Target::DisableLLVMLoopOpt) ||
-                             target.has_feature(Target::EnableLLVMLoopOpt);
+    // halide_target_feature_disable_llvm_loop_opt is deprecated in Halide 15
+    // (and will be removed in Halide 16). Halide 15 now defaults to disabling
+    // LLVM loop optimization, unless halide_target_feature_enable_llvm_loop_opt is set.
+    if (get_target().has_feature(Target::DisableLLVMLoopOpt)) {
+        user_warning << "halide_target_feature_disable_llvm_loop_opt is deprecated in Halide 15 "
+                        "(and will be removed in Halide 16). Halide 15 now defaults to disabling "
+                        "LLVM loop optimization, unless halide_target_feature_enable_llvm_loop_opt is set.\n";
+    }
+    const bool do_loop_opt = get_target().has_feature(Target::EnableLLVMLoopOpt);
 
     // Define and run optimization pipeline with new pass manager
     PipelineTuningOptions pto;
