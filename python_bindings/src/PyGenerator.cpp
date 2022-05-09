@@ -13,7 +13,7 @@ namespace {
 using Halide::Internal::AbstractGenerator;
 using Halide::Internal::AbstractGeneratorPtr;
 using Halide::Internal::ExternsMap;
-using Halide::Internal::GeneratorsForMain;
+using Halide::Internal::GeneratorFactoryProvider;
 using ArgInfo = Halide::Internal::AbstractGenerator::ArgInfo;
 using Halide::Internal::ArgInfoDirection;
 using Halide::Internal::ArgInfoKind;
@@ -116,9 +116,9 @@ public:
     }
 };
 
-class PyGeneratorsForMain : public GeneratorsForMain {
+class PyGeneratorFactoryProvider : public GeneratorFactoryProvider {
 public:
-    PyGeneratorsForMain() = default;
+    PyGeneratorFactoryProvider() = default;
 
     std::vector<std::string> enumerate() const override {
         py::object f = py::module_::import("halide").attr("_get_python_generator_names");
@@ -154,13 +154,13 @@ void define_generator(py::module &m) {
         py::class_<GeneratorContext>(m, "GeneratorContext")
             .def(py::init<const Target &, bool, const MachineParams &>(),
                  py::arg("target"), py::arg("auto_schedule") = false, py::arg("machine_params") = MachineParams::generic())
-            .def("get_target", &GeneratorContext::get_target)
-            .def("get_auto_schedule", &GeneratorContext::get_auto_schedule)
-            .def("get_machine_params", &GeneratorContext::get_machine_params)
+            .def("target", &GeneratorContext::target)
+            .def("auto_schedule", &GeneratorContext::auto_schedule)
+            .def("machine_params", &GeneratorContext::machine_params)
             // TODO: handle get_externs_map() someday?
             .def("__repr__", [](const GeneratorContext &context) -> std::string {
                 std::ostringstream o;
-                o << "<halide.GeneratorContext " << context.get_target() << ">";
+                o << "<halide.GeneratorContext " << context.target() << ">";
                 return o.str();
             });
 
@@ -176,7 +176,7 @@ void define_generator(py::module &m) {
             argv.push_back(const_cast<char *>(s.c_str()));
         }
         std::ostringstream error_stream;
-        int result = Halide::Internal::generate_filter_main((int)argv.size(), argv.data(), error_stream, PyGeneratorsForMain());
+        int result = Halide::Internal::generate_filter_main((int)argv.size(), argv.data(), error_stream, PyGeneratorFactoryProvider());
         if (!error_stream.str().empty()) {
             py::print(error_stream.str(), py::arg("end") = "");
         }

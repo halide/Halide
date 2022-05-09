@@ -364,17 +364,17 @@ class Generator(ABC):
     def context(self):
         return self._context
 
-    def get_target(self):
-        return self.context().get_target()
+    def target(self):
+        return self.context().target()
 
-    def get_auto_schedule(self):
-        return self.context().get_auto_schedule()
+    def auto_schedule(self):
+        return self.context().auto_schedule()
 
-    def get_machine_params(self):
-        return self.context().get_machine_params()
+    def machine_params(self):
+        return self.context().machine_params()
 
     def natural_vector_size(self, type: Type) -> int:
-        return self.get_target().natural_vector_size(type)
+        return self.target().natural_vector_size(type)
 
     # Inputs can be specified by either positional or named args,
     # but may not be mixed. (i.e., if any inputs are specified as a named
