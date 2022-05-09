@@ -1119,11 +1119,10 @@ gengen
             for (const auto &n : generator_names) {
                 o << "    " << n << "\n";
             }
-            error_output << o.str();
             // We can't easily return an error from main here, so just assert-fail --
             // note that this means we deliberately use user_error, *not* error_output,
             // to ensure that we terminate.
-            user_error << "Unable to create Generator: " << generator_name << "\n";
+            user_error << o.str();
         }
         return g;
     };
@@ -1258,9 +1257,13 @@ std::unique_ptr<GeneratorBase> GeneratorRegistry::create(const std::string &name
     GeneratorRegistry &registry = get_registry();
     std::lock_guard<std::mutex> lock(registry.mutex);
     auto it = registry.factories.find(name);
-    internal_assert(it != registry.factories.end());
-    std::unique_ptr<GeneratorBase> g = it->second(context);
-    internal_assert(g != nullptr);
+    if (it == registry.factories.end()) {
+        return nullptr;
+    }
+    GeneratorFactory f = it->second;
+    std::unique_ptr<GeneratorBase> g = f(context);
+    // Do not assert! Just return nullptr.
+    // internal_assert(g != nullptr);
     return g;
 }
 
