@@ -1166,7 +1166,7 @@ public:
         return GeneratorRegistry::enumerate();
     }
     std::unique_ptr<GeneratorBase> create(const std::string &name,
-                                const Halide::GeneratorContext &context) const override {
+                                          const Halide::GeneratorContext &context) const override {
         return GeneratorRegistry::create(name, context);
     }
 };
