@@ -291,6 +291,7 @@ namespace Internal {
 
 void generator_test();
 
+class GeneratorBase;
 class ValueTracker;
 
 std::vector<Expr> parameter_constraints(const Parameter &p);
@@ -328,7 +329,7 @@ std::string halide_type_to_c_type(const Type &t);
 
 /** GeneratorFactoryProvider provides a way to customize the Generators
  * that are visible to generate_filter_main (which otherwise would just
- * look at the global registry of C++ Generators).
+ * look at the global registry of C++ Generators). */
 class GeneratorFactoryProvider {
 public:
     GeneratorFactoryProvider() = default;
@@ -336,17 +337,17 @@ public:
 
     /** Return a list of all registerd Generators that are available for use
      * with the create() method. */
-virtual std::vector<std::string> enumerate() const = 0;
+    virtual std::vector<std::string> enumerate() const = 0;
 
-/** Create an instance of the Generator that is registered under the given
- * name. If the name isn't one returned by enumerate(), assert-fail. */
-virtual AbstractGeneratorPtr create(const std::string &name,
-                                    const Halide::GeneratorContext &context) const = 0;
+    /** Create an instance of the Generator that is registered under the given
+     * name. If the name isn't one returned by enumerate(), assert-fail. */
+    virtual std::unique_ptr<GeneratorBase> create(const std::string &name,
+                                                  const Halide::GeneratorContext &context) const = 0;
 
-GeneratorFactoryProvider(const GeneratorFactoryProvider &) = delete;
-GeneratorFactoryProvider &operator=(const GeneratorFactoryProvider &) = delete;
-GeneratorFactoryProvider(GeneratorFactoryProvider &&) = delete;
-GeneratorFactoryProvider &operator=(GeneratorFactoryProvider &&) = delete;
+    GeneratorFactoryProvider(const GeneratorFactoryProvider &) = delete;
+    GeneratorFactoryProvider &operator=(const GeneratorFactoryProvider &) = delete;
+    GeneratorFactoryProvider(GeneratorFactoryProvider &&) = delete;
+    GeneratorFactoryProvider &operator=(GeneratorFactoryProvider &&) = delete;
 };
 
 /** generate_filter_main() is a convenient wrapper for GeneratorRegistry::create() +
@@ -354,7 +355,7 @@ GeneratorFactoryProvider &operator=(GeneratorFactoryProvider &&) = delete;
  * command-line utility for ahead-of-time filter compilation. */
 int generate_filter_main(int argc, char **argv, std::ostream &cerr);
 
-/** This variant lets you provide your own provider for how to enumerate and/or create
+/** This overload of generate_filter_main lets you provide your own provider for how to enumerate and/or create
  * the generators based on registration name; this is useful if you want to re-use the
  * 'main' logic but avoid the global Generator registry (e.g. for bindings in languages
  * other than C++). */
@@ -386,7 +387,6 @@ struct select_type : std::conditional<First::value, typename First::type, typena
 template<typename First>
 struct select_type<First> { using type = typename std::conditional<First::value, typename First::type, void>::type; };
 
-class GeneratorBase;
 class GeneratorParamInfo;
 
 class GeneratorParamBase {
