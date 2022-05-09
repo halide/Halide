@@ -326,25 +326,39 @@ std::string halide_type_to_c_source(const Type &t);
 // e.g., Int(32) -> "int32_t"
 std::string halide_type_to_c_type(const Type &t);
 
-class GeneratorsForMain {
+/** GeneratorFactoryProvider provides a way to customize the Generators
+ * that are visible to generate_filter_main (which otherwise would just
+ * look at the global registry of C++ Generators).
+class GeneratorFactoryProvider {
 public:
-    GeneratorsForMain() = default;
-    virtual ~GeneratorsForMain() = default;
+    GeneratorFactoryProvider() = default;
+    virtual ~GeneratorFactoryProvider() = default;
 
-    virtual std::vector<std::string> enumerate() const;
-    virtual AbstractGeneratorPtr create(const std::string &name,
-                                        const Halide::GeneratorContext &context) const;
+    /** Return a list of all registerd Generators that are available for use
+     * with the create() method. */
+virtual std::vector<std::string> enumerate() const = 0;
 
-    GeneratorsForMain(const GeneratorsForMain &) = delete;
-    GeneratorsForMain &operator=(const GeneratorsForMain &) = delete;
-    GeneratorsForMain(GeneratorsForMain &&) = delete;
-    GeneratorsForMain &operator=(GeneratorsForMain &&) = delete;
+/** Create an instance of the Generator that is registered under the given
+ * name. If the name isn't one returned by enumerate(), assert-fail. */
+virtual AbstractGeneratorPtr create(const std::string &name,
+                                    const Halide::GeneratorContext &context) const = 0;
+
+GeneratorFactoryProvider(const GeneratorFactoryProvider &) = delete;
+GeneratorFactoryProvider &operator=(const GeneratorFactoryProvider &) = delete;
+GeneratorFactoryProvider(GeneratorFactoryProvider &&) = delete;
+GeneratorFactoryProvider &operator=(GeneratorFactoryProvider &&) = delete;
 };
 
 /** generate_filter_main() is a convenient wrapper for GeneratorRegistry::create() +
  * compile_to_files(); it can be trivially wrapped by a "real" main() to produce a
  * command-line utility for ahead-of-time filter compilation. */
-int generate_filter_main(int argc, char **argv, std::ostream &cerr, const GeneratorsForMain &generators_for_main = GeneratorsForMain());
+int generate_filter_main(int argc, char **argv, std::ostream &cerr);
+
+/** This variant lets you provide your own provider for how to enumerate and/or create
+ * the generators based on registration name; this is useful if you want to re-use the
+ * 'main' logic but avoid the global Generator registry (e.g. for bindings in languages
+ * other than C++). */
+int generate_filter_main(int argc, char **argv, std::ostream &cerr, const GeneratorFactoryProvider &generator_factory_provider);
 
 // select_type<> is to std::conditional as switch is to if:
 // it allows a multiway compile-time type definition via the form

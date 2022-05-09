@@ -981,7 +981,7 @@ Module build_gradient_module(Halide::Internal::AbstractGenerator &g, const std::
     return result;
 }
 
-int generate_filter_main_inner(int argc, char **argv, std::ostream &error_output, const GeneratorsForMain &generators_for_main) {
+int generate_filter_main_inner(int argc, char **argv, std::ostream &error_output, const GeneratorFactoryProvider &generator_factory_provider) {
     static const char kUsage[] = R"INLINE_CODE(
 gengen
   [-g GENERATOR_NAME] [-f FUNCTION_NAME] [-o OUTPUT_DIR] [-r RUNTIME_NAME]
@@ -1082,7 +1082,7 @@ gengen
 
     std::string runtime_name = flags_info["-r"];
 
-    std::vector<std::string> generator_names = generators_for_main.enumerate();
+    std::vector<std::string> generator_names = generator_factory_provider.enumerate();
     if (generator_names.empty() && runtime_name.empty()) {
         error_output << "No generators have been registered and not compiling a standalone runtime\n";
         error_output << kUsage;
@@ -1289,9 +1289,9 @@ gengen
         compile_standalone_runtime(output_files, gcd_target);
     }
 
-    const auto create_or_die = [&generator_names, &generators_for_main](const std::string &name,
-                                                                        const Halide::GeneratorContext &context) -> AbstractGeneratorPtr {
-        auto g = generators_for_main.create(name, context);
+    const auto create_or_die = [&generator_names, &generator_factory_provider](const std::string &name,
+                                                                               const Halide::GeneratorContext &context) -> AbstractGeneratorPtr {
+        auto g = generator_factory_provider.create(name, context);
         if (!g) {
             std::ostringstream o;
             o << "Generator not found: " << name << "\n";
@@ -1345,30 +1345,40 @@ gengen
     return 0;
 }
 
+class GeneratorsFromRegistry : public GeneratorFactoryProvider {
+public:
+    GeneratorsFromRegistry() = default;
+    ~GeneratorsFromRegistry() override = default;
+
+    std::vector<std::string> enumerate() const override {
+        return GeneratorRegistry::enumerate();
+    }
+    AbstractGeneratorPtr create(const std::string &name,
+                                const Halide::GeneratorContext &context) const override {
+        return GeneratorRegistry::create(name, context);
+    }
+};
+
 }  // namespace
 
-std::vector<std::string> GeneratorsForMain::enumerate() const {
-    return GeneratorRegistry::enumerate();
-}
-
-AbstractGeneratorPtr GeneratorsForMain::create(const std::string &name, const Halide::GeneratorContext &context) const {
-    return GeneratorRegistry::create(name, context);
-}
-
 #ifdef HALIDE_WITH_EXCEPTIONS
-int generate_filter_main(int argc, char **argv, std::ostream &error_output, const GeneratorsForMain &generators_for_main) {
+int generate_filter_main(int argc, char **argv, std::ostream &error_output, const GeneratorFactoryProvider &generator_factory_provider) {
     try {
-        return generate_filter_main_inner(argc, argv, error_output, generators_for_main);
+        return generate_filter_main_inner(argc, argv, error_output, generator_factory_provider);
     } catch (std::runtime_error &err) {
         error_output << "Unhandled exception: " << err.what() << "\n";
         return -1;
     }
 }
 #else
-int generate_filter_main(int argc, char **argv, std::ostream &error_output, const GeneratorsForMain &generators_for_main) {
-    return generate_filter_main_inner(argc, argv, error_output, generators_for_main);
+int generate_filter_main(int argc, char **argv, std::ostream &error_output, const GeneratorFactoryProvider &generator_factory_provider) {
+    return generate_filter_main_inner(argc, argv, error_output, generator_factory_provider);
 }
 #endif
+
+int generate_filter_main(int argc, char **argv, std::ostream &error_output) {
+    return generate_filter_main(argc, argv, error_output, GeneratorsFromRegistry());
+}
 
 GeneratorParamBase::GeneratorParamBase(const std::string &name)
     : name_(name) {
