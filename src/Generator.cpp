@@ -656,7 +656,7 @@ void StubEmitter::emit() {
     for (const auto &out : out_info) {
         stream << get_indent() << out.getter << ",\n";
     }
-    stream << get_indent() << "generator->context().get_target()\n";
+    stream << get_indent() << "generator->context().target()\n";
     indent_level--;
     stream << get_indent() << "};\n";
     indent_level--;
@@ -764,8 +764,8 @@ Module build_module(AbstractGenerator &g, const std::string &function_name) {
 
     AutoSchedulerResults auto_schedule_results;
     const auto context = g.context();
-    if (context.get_auto_schedule()) {
-        auto_schedule_results = pipeline.auto_schedule(context.get_target(), context.get_machine_params());
+    if (context.auto_schedule()) {
+        auto_schedule_results = pipeline.auto_schedule(context.target(), context.machine_params());
     }
 
     std::vector<Argument> filter_arguments;
@@ -779,7 +779,7 @@ Module build_module(AbstractGenerator &g, const std::string &function_name) {
         }
     }
 
-    Module result = pipeline.compile_to_module(filter_arguments, function_name, context.get_target(), linkage_type);
+    Module result = pipeline.compile_to_module(filter_arguments, function_name, context.target(), linkage_type);
     for (const auto &map_entry : g.external_code_map()) {
         result.append(map_entry.second);
     }
@@ -966,14 +966,14 @@ Module build_gradient_module(Halide::Internal::AbstractGenerator &g, const std::
 
     AutoSchedulerResults auto_schedule_results;
     const auto context = g.context();
-    if (context.get_auto_schedule()) {
-        auto_schedule_results = grad_pipeline.auto_schedule(context.get_target(), context.get_machine_params());
+    if (context.auto_schedule()) {
+        auto_schedule_results = grad_pipeline.auto_schedule(context.target(), context.machine_params());
     } else {
         user_warning << "Autoscheduling is not enabled in build_gradient_module(), so the resulting "
                         "gradient module will be unscheduled; this is very unlikely to be what you want.\n";
     }
 
-    Module result = grad_pipeline.compile_to_module(gradient_inputs, function_name, context.get_target(), linkage_type);
+    Module result = grad_pipeline.compile_to_module(gradient_inputs, function_name, context.target(), linkage_type);
     user_assert(g.external_code_map().empty())
         << "Building a gradient-descent module for a Generator with ExternalCode is not supported.\n";
 
@@ -981,7 +981,10 @@ Module build_gradient_module(Halide::Internal::AbstractGenerator &g, const std::
     return result;
 }
 
-int generate_filter_main_inner(int argc, char **argv, std::ostream &error_output, const GeneratorsForMain &generators_for_main) {
+int generate_filter_main_inner(int argc,
+                               char **argv,
+                               std::ostream &error_output,
+                               const GeneratorFactoryProvider &generator_factory_provider) {
     static const char kUsage[] = R"INLINE_CODE(
 gengen
   [-g GENERATOR_NAME] [-f FUNCTION_NAME] [-o OUTPUT_DIR] [-r RUNTIME_NAME]
@@ -1082,7 +1085,7 @@ gengen
 
     std::string runtime_name = flags_info["-r"];
 
-    std::vector<std::string> generator_names = generators_for_main.enumerate();
+    std::vector<std::string> generator_names = generator_factory_provider.enumerate();
     if (generator_names.empty() && runtime_name.empty()) {
         error_output << "No generators have been registered and not compiling a standalone runtime\n";
         error_output << kUsage;
@@ -1289,17 +1292,20 @@ gengen
         compile_standalone_runtime(output_files, gcd_target);
     }
 
-    const auto create_or_die = [&generator_names, &generators_for_main](const std::string &name,
-                                                                        const Halide::GeneratorContext &context) -> AbstractGeneratorPtr {
-        auto g = generators_for_main.create(name, context);
+    const auto create_generator = [&](const Halide::GeneratorContext &context) -> AbstractGeneratorPtr {
+        auto g = generator_factory_provider.create(generator_name, context);
         if (!g) {
             std::ostringstream o;
-            o << "Generator not found: " << name << "\n";
+            o << "Generator not found: " << generator_name << "\n";
             o << "Did you mean:\n";
             for (const auto &n : generator_names) {
                 o << "    " << n << "\n";
             }
-            user_error << o.str();
+            error_output << o.str();
+            // We can't easily return an error from main here, so just assert-fail --
+            // note that this means we deliberately use user_error, *not* error_output,
+            // to ensure that we terminate.
+            user_error << "Unable to create Generator: " << generator_name << "\n";
         }
         return g;
     };
@@ -1310,7 +1316,7 @@ gengen
         if (outputs.count(OutputFileType::cpp_stub)) {
             // When generating cpp_stub, we ignore all generator args passed in, and supply a fake Target.
             // (CompilerLogger is never enabled for cpp_stub, for now anyway.)
-            auto gen = create_or_die(generator_name, GeneratorContext(Target()));
+            auto gen = create_generator(GeneratorContext(Target()));
             auto stub_file_path = base_path + output_info[OutputFileType::cpp_stub].extension;
             if (!gen->emit_cpp_stub(stub_file_path)) {
                 error_output << "Generator '" << generator_name << "' is not capable of generating Stubs.\n";
@@ -1321,13 +1327,13 @@ gengen
         // Don't bother with this if we're just emitting a cpp_stub.
         if (!stub_only) {
             auto output_files = compute_output_files(targets[0], base_path, outputs);
-            auto module_factory = [&generator_name, &generator_args, &create_or_die, do_build_gradient_module](const std::string &name, const Target &target) -> Module {
+            const std::string &auto_schedule_string = generator_args["auto_schedule"];
+            const std::string &machine_params_string = generator_args["machine_params"];
+            const bool auto_schedule = auto_schedule_string == "true" || auto_schedule_string == "True";
+            const MachineParams machine_params = machine_params_string.empty() ? MachineParams::generic() : MachineParams(machine_params_string);
+            auto module_factory = [&](const std::string &fn_name, const Target &target) -> Module {
                 // Must re-create each time since each instance will have a different Target.
-                const std::string &auto_schedule_string = generator_args["auto_schedule"];
-                const std::string &machine_params_string = generator_args["machine_params"];
-                const bool auto_schedule = auto_schedule_string == "true" || auto_schedule_string == "True";
-                const MachineParams machine_params = machine_params_string.empty() ? MachineParams::generic() : MachineParams(machine_params_string);
-                auto gen = create_or_die(generator_name, GeneratorContext(target, auto_schedule, machine_params));
+                auto gen = create_generator(GeneratorContext(target, auto_schedule, machine_params));
                 for (const auto &kv : generator_args) {
                     if (kv.first == "target" ||
                         kv.first == "auto_schedule" ||
@@ -1336,7 +1342,7 @@ gengen
                     }
                     gen->set_generatorparam_value(kv.first, kv.second);
                 }
-                return do_build_gradient_module ? build_gradient_module(*gen, name) : build_module(*gen, name);
+                return do_build_gradient_module ? build_gradient_module(*gen, fn_name) : build_module(*gen, fn_name);
             };
             compile_multitarget(function_name, output_files, targets, target_strings, module_factory, compiler_logger_factory);
         }
@@ -1345,30 +1351,40 @@ gengen
     return 0;
 }
 
+class GeneratorsFromRegistry : public GeneratorFactoryProvider {
+public:
+    GeneratorsFromRegistry() = default;
+    ~GeneratorsFromRegistry() override = default;
+
+    std::vector<std::string> enumerate() const override {
+        return GeneratorRegistry::enumerate();
+    }
+    AbstractGeneratorPtr create(const std::string &name,
+                                const Halide::GeneratorContext &context) const override {
+        return GeneratorRegistry::create(name, context);
+    }
+};
+
 }  // namespace
 
-std::vector<std::string> GeneratorsForMain::enumerate() const {
-    return GeneratorRegistry::enumerate();
-}
-
-AbstractGeneratorPtr GeneratorsForMain::create(const std::string &name, const Halide::GeneratorContext &context) const {
-    return GeneratorRegistry::create(name, context);
-}
-
 #ifdef HALIDE_WITH_EXCEPTIONS
-int generate_filter_main(int argc, char **argv, std::ostream &error_output, const GeneratorsForMain &generators_for_main) {
+int generate_filter_main(int argc, char **argv, std::ostream &error_output, const GeneratorFactoryProvider &generator_factory_provider) {
     try {
-        return generate_filter_main_inner(argc, argv, error_output, generators_for_main);
+        return generate_filter_main_inner(argc, argv, error_output, generator_factory_provider);
     } catch (std::runtime_error &err) {
         error_output << "Unhandled exception: " << err.what() << "\n";
         return -1;
     }
 }
 #else
-int generate_filter_main(int argc, char **argv, std::ostream &error_output, const GeneratorsForMain &generators_for_main) {
-    return generate_filter_main_inner(argc, argv, error_output, generators_for_main);
+int generate_filter_main(int argc, char **argv, std::ostream &error_output, const GeneratorFactoryProvider &generator_factory_provider) {
+    return generate_filter_main_inner(argc, argv, error_output, generator_factory_provider);
 }
 #endif
+
+int generate_filter_main(int argc, char **argv, std::ostream &error_output) {
+    return generate_filter_main(argc, argv, error_output, GeneratorsFromRegistry());
+}
 
 GeneratorParamBase::GeneratorParamBase(const std::string &name)
     : name_(name) {
@@ -1436,9 +1452,7 @@ AbstractGeneratorPtr GeneratorRegistry::create(const std::string &name,
     GeneratorRegistry &registry = get_registry();
     std::lock_guard<std::mutex> lock(registry.mutex);
     auto it = registry.factories.find(name);
-    if (it == registry.factories.end()) {
-        return nullptr;
-    }
+    internal_assert(it != registry.factories.end());
     GeneratorFactory f = it->second;
     AbstractGeneratorPtr g = f(context);
     internal_assert(g != nullptr);
@@ -2284,7 +2298,7 @@ Realization StubOutputBufferBase::realize(std::vector<int32_t> sizes) {
 }
 
 Target StubOutputBufferBase::get_target() const {
-    return generator->context().get_target();
+    return generator->context().target();
 }
 
 RegisterGenerator::RegisterGenerator(const char *registered_name, GeneratorFactory generator_factory) {
