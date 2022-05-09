@@ -171,6 +171,7 @@ void define_enums(py::module &m) {
         .value("c_source", OutputFileType::c_source)
         .value("cpp_stub", OutputFileType::cpp_stub)
         .value("featurization", OutputFileType::featurization)
+        .value("path_featurization", OutputFileType::path_featurization)
         .value("llvm_assembly", OutputFileType::llvm_assembly)
         .value("object", OutputFileType::object)
         .value("python_extension", OutputFileType::python_extension)

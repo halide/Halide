@@ -191,6 +191,7 @@ void test_compile_to_everything(Func j, bool do_object) {
         // even if you pass this in.
         // {OutputFileType::cpp_stub, fname + ".stub.h"},  // IsSingle
         {OutputFileType::featurization, fname + ".featurization"},    // IsMulti
+        {OutputFileType::path_featurization, fname + ".path_featurization"},    // IsMulti
         {OutputFileType::llvm_assembly, fname + ".ll"},               // IsMulti
         {OutputFileType::object, fname + o},                          // IsMulti
         {OutputFileType::python_extension, fname + ".py.cpp"},        // IsSingle

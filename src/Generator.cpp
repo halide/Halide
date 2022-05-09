@@ -818,6 +818,7 @@ gengen
 
  -e  A comma separated list of files to emit. Accepted values are:
      [assembly, bitcode, c_header, c_source, cpp_stub, featurization,
+     path_featurization,
       llvm_assembly, object, python_extension, pytorch_wrapper, registration,
       schedule, static_library, stmt, stmt_html, compiler_log].
      If omitted, default value is [c_header, static_library, registration].
