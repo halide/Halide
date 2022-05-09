@@ -1331,7 +1331,7 @@ gengen
             const std::string &machine_params_string = generator_args["machine_params"];
             const bool auto_schedule = auto_schedule_string == "true" || auto_schedule_string == "True";
             const MachineParams machine_params = machine_params_string.empty() ? MachineParams::generic() : MachineParams(machine_params_string);
-            auto module_factory = [&&](const std::string &fn_name, const Target &target) -> Module {
+            auto module_factory = [&](const std::string &fn_name, const Target &target) -> Module {
                 // Must re-create each time since each instance will have a different Target.
                 auto gen = create_generator(GeneratorContext(target, auto_schedule, machine_params));
                 for (const auto &kv : generator_args) {

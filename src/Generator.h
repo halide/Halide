@@ -341,8 +341,8 @@ public:
 
     /** Create an instance of the Generator that is registered under the given
      * name. If the name isn't one returned by enumerate(), assert-fail. */
-    virtual std::unique_ptr<GeneratorBase> create(const std::string &name,
-                                                  const Halide::GeneratorContext &context) const = 0;
+    virtual AbstractGeneratorPtr create(const std::string &name,
+                                        const Halide::GeneratorContext &context) const = 0;
 
     GeneratorFactoryProvider(const GeneratorFactoryProvider &) = delete;
     GeneratorFactoryProvider &operator=(const GeneratorFactoryProvider &) = delete;
