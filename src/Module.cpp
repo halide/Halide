@@ -954,7 +954,7 @@ void compile_multitarget(const std::string &fn_name,
 
     if (needs_wrapper) {
         const auto make_wrapper = [](const std::vector<Expr> &wrapper_args, const std::string &fn_name) -> Stmt {
-            internal_assert(fn_name.find("-") == std::string::npos);
+            internal_assert(fn_name.find('-') == std::string::npos);
             Expr indirect_result = Call::make(Int(32), Call::call_cached_indirect_function, wrapper_args, Call::Intrinsic);
             std::string private_result_name = unique_name(fn_name + "_result");
             Expr private_result_var = Variable::make(Int(32), private_result_name);
