@@ -769,7 +769,7 @@ void compile_multitarget(const std::string &fn_name,
     user_assert(!base_target.has_feature(Target::JIT)) << "JIT not allowed for compile_multitarget.\n";
 
     const auto suffix_for_entry = [&](int i) -> std::string {
-        return "_" + (suffixes.empty() ? replace_all(targets[i].to_string(), "-", "_") : suffixes[i]);
+        return "-" + (suffixes.empty() ? targets[i].to_string() : suffixes[i]);
     };
 
     const auto add_suffixes = [&](const std::map<OutputFileType, std::string> &in, const std::string &suffix) -> std::map<OutputFileType, std::string> {
@@ -859,8 +859,10 @@ void compile_multitarget(const std::string &fn_name,
 
         // Each sub-target has a function name that is the 'real' name plus a suffix
         std::string suffix = suffix_for_entry(i);
-        std::string sub_fn_name = needs_wrapper ? (fn_name + suffix) : fn_name;
-        std::string md_sub_fn_name = needs_wrapper ? (fn_name + suffix + "_metadata") : md_fn_name;
+        // Leave the filenames with hyphens in them, but normalize the - to _ in function/symbol names.
+        std::string suffix_for_fn_names = replace_all(suffix, "-", "_");
+        std::string sub_fn_name = needs_wrapper ? (fn_name + suffix_for_fn_names) : fn_name;
+        std::string md_sub_fn_name = needs_wrapper ? (fn_name + suffix_for_fn_names + "_metadata") : md_fn_name;
 
         // We always produce the runtime separately, so add NoRuntime explicitly.
         Target sub_fn_target = target.with_feature(Target::NoRuntime);
@@ -952,6 +954,7 @@ void compile_multitarget(const std::string &fn_name,
 
     if (needs_wrapper) {
         const auto make_wrapper = [](const std::vector<Expr> &wrapper_args, const std::string &fn_name) -> Stmt {
+            internal_assert(fn_name.find("-") == std::string::npos);
             Expr indirect_result = Call::make(Int(32), Call::call_cached_indirect_function, wrapper_args, Call::Intrinsic);
             std::string private_result_name = unique_name(fn_name + "_result");
             Expr private_result_var = Variable::make(Int(32), private_result_name);
