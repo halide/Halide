@@ -799,7 +799,10 @@ std::string halide_type_to_c_type(const Type &t) {
 
 namespace {
 
-int generate_filter_main_inner(int argc, char **argv, std::ostream &error_output) {
+int generate_filter_main_inner(int argc,
+                               char **argv,
+                               std::ostream &error_output,
+                               const GeneratorFactoryProvider &generator_factory_provider) {
     static const char kUsage[] = R"INLINE_CODE(
 gengen
   [-g GENERATOR_NAME] [-f FUNCTION_NAME] [-o OUTPUT_DIR] [-r RUNTIME_NAME]
@@ -900,7 +903,7 @@ gengen
 
     std::string runtime_name = flags_info["-r"];
 
-    std::vector<std::string> generator_names = GeneratorRegistry::enumerate();
+    std::vector<std::string> generator_names = generator_factory_provider.enumerate();
     if (generator_names.empty() && runtime_name.empty()) {
         error_output << "No generators have been registered and not compiling a standalone runtime\n";
         error_output << kUsage;
@@ -1107,13 +1110,30 @@ gengen
         compile_standalone_runtime(output_files, gcd_target);
     }
 
+    const auto create_generator = [&](const Halide::GeneratorContext &context) -> std::unique_ptr<GeneratorBase> {
+        auto g = generator_factory_provider.create(generator_name, context);
+        if (!g) {
+            std::ostringstream o;
+            o << "Generator not found: " << generator_name << "\n";
+            o << "Did you mean:\n";
+            for (const auto &n : generator_names) {
+                o << "    " << n << "\n";
+            }
+            // We can't easily return an error from main here, so just assert-fail --
+            // note that this means we deliberately use user_error, *not* error_output,
+            // to ensure that we terminate.
+            user_error << o.str();
+        }
+        return g;
+    };
+
     if (!generator_name.empty()) {
         std::string base_path = compute_base_path(output_dir, function_name, file_base_name);
         debug(1) << "Generator " << generator_name << " has base_path " << base_path << "\n";
         if (outputs.count(OutputFileType::cpp_stub)) {
             // When generating cpp_stub, we ignore all generator args passed in, and supply a fake Target.
             // (CompilerLogger is never enabled for cpp_stub, for now anyway.)
-            auto gen = GeneratorRegistry::create(generator_name, GeneratorContext(Target()));
+            auto gen = create_generator(GeneratorContext(Target()));
             auto stub_file_path = base_path + output_info[OutputFileType::cpp_stub].extension;
             gen->emit_cpp_stub(stub_file_path);
         }
@@ -1121,13 +1141,13 @@ gengen
         // Don't bother with this if we're just emitting a cpp_stub.
         if (!stub_only) {
             auto output_files = compute_output_files(targets[0], base_path, outputs);
-            auto module_factory = [&generator_name, &generator_args, build_gradient_module](const std::string &name, const Target &target) -> Module {
+            auto module_factory = [&](const std::string &fn_name, const Target &target) -> Module {
                 auto sub_generator_args = generator_args;
                 sub_generator_args.erase("target");
                 // Must re-create each time since each instance will have a different Target.
-                auto gen = GeneratorRegistry::create(generator_name, GeneratorContext(target));
+                auto gen = create_generator(GeneratorContext(target));
                 gen->set_generator_param_values(sub_generator_args);
-                return build_gradient_module ? gen->build_gradient_module(name) : gen->build_module(name);
+                return build_gradient_module ? gen->build_gradient_module(fn_name) : gen->build_module(fn_name);
             };
             compile_multitarget(function_name, output_files, targets, target_strings, module_factory, compiler_logger_factory);
         }
@@ -1136,22 +1156,40 @@ gengen
     return 0;
 }
 
+class GeneratorsFromRegistry : public GeneratorFactoryProvider {
+public:
+    GeneratorsFromRegistry() = default;
+    ~GeneratorsFromRegistry() override = default;
+
+    std::vector<std::string> enumerate() const override {
+        return GeneratorRegistry::enumerate();
+    }
+    std::unique_ptr<GeneratorBase> create(const std::string &name,
+                                          const Halide::GeneratorContext &context) const override {
+        return GeneratorRegistry::create(name, context);
+    }
+};
+
 }  // namespace
 
 #ifdef HALIDE_WITH_EXCEPTIONS
-int generate_filter_main(int argc, char **argv, std::ostream &error_output) {
+int generate_filter_main(int argc, char **argv, std::ostream &error_output, const GeneratorFactoryProvider &generator_factory_provider) {
     try {
-        return generate_filter_main_inner(argc, argv, error_output);
+        return generate_filter_main_inner(argc, argv, error_output, generator_factory_provider);
     } catch (std::runtime_error &err) {
         error_output << "Unhandled exception: " << err.what() << "\n";
         return -1;
     }
 }
 #else
-int generate_filter_main(int argc, char **argv, std::ostream &error_output) {
-    return generate_filter_main_inner(argc, argv, error_output);
+int generate_filter_main(int argc, char **argv, std::ostream &error_output, const GeneratorFactoryProvider &generator_factory_provider) {
+    return generate_filter_main_inner(argc, argv, error_output, generator_factory_provider);
 }
 #endif
+
+int generate_filter_main(int argc, char **argv, std::ostream &error_output) {
+    return generate_filter_main(argc, argv, error_output, GeneratorsFromRegistry());
+}
 
 GeneratorParamBase::GeneratorParamBase(const std::string &name)
     : name_(name) {
@@ -1220,16 +1258,12 @@ std::unique_ptr<GeneratorBase> GeneratorRegistry::create(const std::string &name
     std::lock_guard<std::mutex> lock(registry.mutex);
     auto it = registry.factories.find(name);
     if (it == registry.factories.end()) {
-        std::ostringstream o;
-        o << "Generator not found: " << name << "\n";
-        o << "Did you mean:\n";
-        for (const auto &n : registry.factories) {
-            o << "    " << n.first << "\n";
-        }
-        user_error << o.str();
+        return nullptr;
     }
-    std::unique_ptr<GeneratorBase> g = it->second(context);
-    internal_assert(g != nullptr);
+    GeneratorFactory f = it->second;
+    std::unique_ptr<GeneratorBase> g = f(context);
+    // Do not assert! Just return nullptr.
+    // internal_assert(g != nullptr);
     return g;
 }
 
