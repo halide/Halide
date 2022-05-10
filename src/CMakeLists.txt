@@ -167,6 +167,7 @@ set(HEADER_FILES
     )
 
 set(SOURCE_FILES
+    AbstractGenerator.cpp
     AddAtomicMutex.cpp
     AddImageChecks.cpp
     AddParameterChecks.cpp

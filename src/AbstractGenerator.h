@@ -8,6 +8,7 @@
 
 #include "Expr.h"
 #include "Func.h"
+#include "Module.h"
 #include "Parameter.h"
 #include "Pipeline.h"
 #include "Schedule.h"
@@ -181,6 +182,29 @@ public:
      * CALL-BEFORE: none
      */
     virtual bool emit_cpp_stub(const std::string &stub_file_path) = 0;
+
+    // Below are some concrete methods that build on top of the rest of the AbstractGenerator API.
+    // Note that they are nonvirtual.
+
+    /** Call generate() and produce a Module for the result.
+     *If function_name is empty, generator_name() will be used for the function. */
+    Module build_module(const std::string &function_name = "");
+
+    /**
+     * Build a module that is suitable for using for gradient descent calculation in TensorFlow or PyTorch.
+     *
+     * Essentially:
+     *   - A new Pipeline is synthesized from the current Generator (according to the rules below)
+     *   - The new Pipeline is autoscheduled (if autoscheduling is requested, but it would be odd not to do so)
+     *   - The Pipeline is compiled to a Module and returned
+     *
+     * The new Pipeline is adjoint to the original; it has:
+     *   - All the same inputs as the original, in the same order
+     *   - Followed by one grad-input for each original output
+     *   - Followed by one output for each unique pairing of original-output + original-input.
+     *     (For the common case of just one original-output, this amounts to being one output for each original-input.)
+     */
+    Module build_gradient_module(const std::string &function_name);
 };
 
 using AbstractGeneratorPtr = std::unique_ptr<AbstractGenerator>;
