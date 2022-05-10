@@ -1525,7 +1525,16 @@ void CodeGen_C::emit_metadata_getter(const std::string &function_name,
                                      const std::vector<LoweredArgument> &args,
                                      const std::map<std::string, std::string> &metadata_name_map) {
     if (is_header_or_extern_decl()) {
-        stream << "\nHALIDE_FUNCTION_ATTRS\nconst struct halide_filter_metadata_t *" << function_name << "_metadata();\n";
+        stream << "\nHALIDE_FUNCTION_ATTRS\nint " << function_name << "_get_metadata(const struct halide_filter_metadata_t **md_out);\n";
+
+        // Add an inline wrapper that uses the older name and calling convention,
+        // so that existing code (probably) doesn't need to change.
+        stream << "HALIDE_FUNCTION_ATTRS\ninline const struct halide_filter_metadata_t *" << function_name << "_metadata() {\n";
+        stream << "    const halide_filter_metadata_t *md = nullptr;\n";
+        stream << "    int r = " << function_name << "_get_metadata(&md);\n";
+        stream << "    return r == 0 ? md : nullptr;\n";
+        stream << "}\n";
+
         return;
     }
 
@@ -1534,7 +1543,7 @@ void CodeGen_C::emit_metadata_getter(const std::string &function_name,
         return it == metadata_name_map.end() ? from : it->second;
     };
 
-    stream << "\nHALIDE_FUNCTION_ATTRS\nconst struct halide_filter_metadata_t *" << function_name << "_metadata() {\n";
+    stream << "\nHALIDE_FUNCTION_ATTRS\nint " << function_name << "_get_metadata(const struct halide_filter_metadata_t **md_out) {\n";
 
     indent += 1;
 
@@ -1722,7 +1731,8 @@ void CodeGen_C::emit_metadata_getter(const std::string &function_name,
     stream << get_indent() << "};\n";
     indent -= 1;
 
-    stream << get_indent() << "return &md;\n";
+    stream << get_indent() << "*md_out = &md;\n";
+    stream << get_indent() << "return 0;\n";
 
     indent -= 1;
 

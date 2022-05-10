@@ -368,7 +368,7 @@ MangledNames get_mangled_names(const std::string &name,
     names.simple_name = extract_namespaces(name, namespaces);
     names.extern_name = names.simple_name;
     names.argv_name = names.simple_name + "_argv";
-    names.metadata_name = names.simple_name + "_metadata";
+    names.metadata_name = names.simple_name + "_get_metadata";
 
     if (linkage != LinkageType::Internal &&
         ((mangling == NameMangling::Default &&
@@ -384,11 +384,17 @@ MangledNames get_mangled_names(const std::string &name,
             }
         }
         names.extern_name = cplusplus_function_mangled_name(names.simple_name, namespaces, type_of<int>(), mangle_args, target);
-        halide_handle_cplusplus_type inner_type(halide_cplusplus_type_name(halide_cplusplus_type_name::Simple, "void"), {}, {},
-                                                {halide_handle_cplusplus_type::Pointer, halide_handle_cplusplus_type::Pointer});
-        Type void_star_star(Handle(1, &inner_type));
+
+        // halide_handle_cplusplus_type is saved as a simple pointer in the Type, so declare it 'static const'.
+        static const halide_handle_cplusplus_type void_star(halide_cplusplus_type_name(halide_cplusplus_type_name::Simple, "void"), {}, {},
+                                                            {halide_handle_cplusplus_type::Pointer, halide_handle_cplusplus_type::Pointer});
+        Type void_star_star(Handle(1, &void_star));
         names.argv_name = cplusplus_function_mangled_name(names.argv_name, namespaces, type_of<int>(), {ExternFuncArgument(make_zero(void_star_star))}, target);
-        names.metadata_name = cplusplus_function_mangled_name(names.metadata_name, namespaces, type_of<const struct halide_filter_metadata_t *>(), {}, target);
+
+        static const halide_handle_cplusplus_type metadata_star(halide_cplusplus_type_name(halide_cplusplus_type_name::Struct, "halide_filter_metadata_t"), {}, {},
+                                                                {halide_handle_cplusplus_type::Const | halide_handle_cplusplus_type::Pointer, halide_handle_cplusplus_type::Pointer});
+        Type metadata_star_star(Handle(1, &metadata_star));
+        names.metadata_name = cplusplus_function_mangled_name(names.metadata_name, namespaces, type_of<int>(), {ExternFuncArgument(make_zero(metadata_star_star))}, target);
     }
     return names;
 }
@@ -1060,11 +1066,15 @@ llvm::Function *CodeGen_LLVM::embed_metadata_getter(const std::string &metadata_
         ConstantStruct::get(metadata_t_type, metadata_fields),
         metadata_name + "_storage");
 
-    llvm::FunctionType *func_t = llvm::FunctionType::get(metadata_t_type->getPointerTo(), false);
+    llvm::Type *arg_types[] = {metadata_t_type->getPointerTo()->getPointerTo()};
+    llvm::FunctionType *func_t = llvm::FunctionType::get(i32_t, arg_types, false);
     llvm::Function *metadata_getter = llvm::Function::Create(func_t, llvm::GlobalValue::ExternalLinkage, metadata_name, module.get());
     llvm::BasicBlock *block = llvm::BasicBlock::Create(module->getContext(), "entry", metadata_getter);
     builder->SetInsertPoint(block);
-    builder->CreateRet(metadata_storage);
+    llvm::Value *arg_array = iterator_to_pointer(metadata_getter->arg_begin());
+    llvm::Value *md_out = builder->CreateConstInBoundsGEP1_32(arg_types[0], arg_array, 0);
+    builder->CreateStore(metadata_storage, md_out);
+    builder->CreateRet(ConstantInt::getSigned(i32_t, 0));
     internal_assert(!verifyFunction(*metadata_getter, &llvm::errs()));
 
     return metadata_getter;

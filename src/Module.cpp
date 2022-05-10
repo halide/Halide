@@ -187,7 +187,7 @@ void halide_register_argv_and_metadata(
 
 $NAMESPACEOPEN$
 extern int $SHORTNAME$_argv(void **args);
-extern const struct halide_filter_metadata_t *$SHORTNAME$_metadata();
+extern int $SHORTNAME$_get_metadata(const struct halide_filter_metadata_t **md_out);
 $NAMESPACECLOSE$
 
 #ifdef HALIDE_REGISTER_EXTRA_KEY_VALUE_PAIRS_FUNC
@@ -198,10 +198,15 @@ namespace $NREGS$ {
 namespace {
 struct Registerer {
     Registerer() {
+        const halide_filter_metadata_t *md = nullptr;
+        int result = ::$FULLNAME$_get_metadata(&md);
+        if (result != 0) {
+            md = nullptr;
+        }
 #ifdef HALIDE_REGISTER_EXTRA_KEY_VALUE_PAIRS_FUNC
-        halide_register_argv_and_metadata(::$FULLNAME$_argv, ::$FULLNAME$_metadata(), HALIDE_REGISTER_EXTRA_KEY_VALUE_PAIRS_FUNC());
+        halide_register_argv_and_metadata(::$FULLNAME$_argv, md, HALIDE_REGISTER_EXTRA_KEY_VALUE_PAIRS_FUNC());
 #else
-        halide_register_argv_and_metadata(::$FULLNAME$_argv, ::$FULLNAME$_metadata(), nullptr);
+        halide_register_argv_and_metadata(::$FULLNAME$_argv, md, nullptr);
 #endif  // HALIDE_REGISTER_EXTRA_KEY_VALUE_PAIRS_FUNC
     }
 };
