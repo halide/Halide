@@ -5,6 +5,13 @@
 
 using namespace Halide;
 
+// Given a path like /path/to/some/file.ext, return file.ext
+// If the path contains no separators (/ or \), just return it as-is
+std::string leaf_name(const std::string &path) {
+    size_t sep = std::min(path.rfind('/'), path.rfind('\\'));
+    return path.substr(sep == std::string::npos ? 0 : sep + 1);
+}
+
 std::string get_fname(const std::string &base) {
     return Internal::get_test_tmp_dir() + "halide_test_correctness_compile_to_multitarget_" + base;
 }
@@ -205,7 +212,8 @@ void test_compile_to_everything(Func j, bool do_object) {
         // it exists or not --  so just fill in with arbitrary strings.
         return std::unique_ptr<Internal::CompilerLogger>(new Internal::JSONCompilerLogger("generator_name", "function_name", "autoscheduler_name", Target(), "generator_args", false));
     };
-    compile_multitarget(fname, outputs, targets, target_strings, module_producer, compiler_logger_factory);
+    // The first argument to compile_multitarget is *function* name, not filename
+    compile_multitarget(leaf_name(fname), outputs, targets, target_strings, module_producer, compiler_logger_factory);
 
     for (auto f : files) {
         Internal::assert_file_exists(f);
