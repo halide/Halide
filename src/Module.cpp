@@ -761,7 +761,7 @@ void compile_multitarget(const std::string &fn_name,
         << "The suffixes list must be empty or the same length as the targets list.\n";
 
     // Some tests were mistakenly passing filenames/pathnames here, which is not kosher
-    for (char c : "/\\-") {
+    for (char c : "/\\") {
         user_assert(fn_name.find(c) == std::string::npos) << "compile_multitarget: fn_name must not contain '" << c << "', but saw '" << fn_name << "'\n";
     }
 
@@ -864,10 +864,8 @@ void compile_multitarget(const std::string &fn_name,
 
         // Each sub-target has a function name that is the 'real' name plus a suffix
         std::string suffix = suffix_for_entry(i);
-        // Leave the filenames with hyphens in them, but normalize the - to _ in function/symbol names.
-        std::string suffix_for_fn_names = replace_all(suffix, "-", "_");
-        std::string sub_fn_name = needs_wrapper ? (fn_name + suffix_for_fn_names) : fn_name;
-        std::string md_sub_fn_name = needs_wrapper ? (fn_name + suffix_for_fn_names + "_metadata") : md_fn_name;
+        std::string sub_fn_name = needs_wrapper ? (fn_name + suffix) : fn_name;
+        std::string md_sub_fn_name = needs_wrapper ? (fn_name + suffix + "_metadata") : md_fn_name;
 
         // We always produce the runtime separately, so add NoRuntime explicitly.
         Target sub_fn_target = target.with_feature(Target::NoRuntime);
@@ -959,7 +957,6 @@ void compile_multitarget(const std::string &fn_name,
 
     if (needs_wrapper) {
         const auto make_wrapper = [](const std::vector<Expr> &wrapper_args, const std::string &fn_name) -> Stmt {
-            internal_assert(fn_name.find('-') == std::string::npos) << fn_name;
             Expr indirect_result = Call::make(Int(32), Call::call_cached_indirect_function, wrapper_args, Call::Intrinsic);
             std::string private_result_name = unique_name(fn_name + "_result");
             Expr private_result_var = Variable::make(Int(32), private_result_name);
