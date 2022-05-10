@@ -769,7 +769,7 @@ void compile_multitarget(const std::string &fn_name,
     user_assert(!base_target.has_feature(Target::JIT)) << "JIT not allowed for compile_multitarget.\n";
 
     const auto suffix_for_entry = [&](int i) -> std::string {
-        return "-" + (suffixes.empty() ? targets[i].to_string() : suffixes[i]);
+        return "_" + (suffixes.empty() ? replace_all(targets[i].to_string(), "-", "_") : suffixes[i]);
     };
 
     const auto add_suffixes = [&](const std::map<OutputFileType, std::string> &in, const std::string &suffix) -> std::map<OutputFileType, std::string> {
@@ -783,6 +783,8 @@ void compile_multitarget(const std::string &fn_name,
         }
         return out;
     };
+
+    const std::string md_fn_name = fn_name + "_metadata";
 
     // If only one target, don't bother with the runtime feature detection wrapping.
     const bool needs_wrapper = (targets.size() > 1);
@@ -823,8 +825,8 @@ void compile_multitarget(const std::string &fn_name,
     uint64_t runtime_features[kFeaturesWordCount] = {(uint64_t)-1LL};
 
     TemporaryObjectFileDir temp_obj_dir, temp_compiler_log_dir;
-    std::vector<Expr> wrapper_args;
-    std::vector<LoweredArgument> base_target_args;
+    std::vector<Expr> wrapper_args, md_wrapper_args;
+    std::vector<LoweredArgument> base_target_args, md_base_target_args;
     std::vector<AutoSchedulerResults> auto_scheduler_results;
 
     for (size_t i = 0; i < targets.size(); ++i) {
@@ -858,6 +860,7 @@ void compile_multitarget(const std::string &fn_name,
         // Each sub-target has a function name that is the 'real' name plus a suffix
         std::string suffix = suffix_for_entry(i);
         std::string sub_fn_name = needs_wrapper ? (fn_name + suffix) : fn_name;
+        std::string md_sub_fn_name = needs_wrapper ? (fn_name + suffix + "_metadata") : md_fn_name;
 
         // We always produce the runtime separately, so add NoRuntime explicitly.
         Target sub_fn_target = target.with_feature(Target::NoRuntime);
@@ -881,6 +884,10 @@ void compile_multitarget(const std::string &fn_name,
                 sub_out[OutputFileType::compiler_log] = temp_compiler_log_dir.add_temp_file(output_files.at(OutputFileType::compiler_log), suffix, target);
             }
             debug(1) << "compile_multitarget: compile_sub_target " << sub_out[OutputFileType::object] << "\n";
+            if (needs_wrapper) {
+                // Make sure that the metadata we generate has the toplevel name, not the mangled sub-name
+                sub_module.remap_metadata_name(extract_namespaces(sub_fn_name), extract_namespaces(fn_name));
+            }
             sub_module.compile(sub_out);
             const auto *r = sub_module.get_auto_scheduler_results();
             auto_scheduler_results.push_back(r ? *r : AutoSchedulerResults());
@@ -912,6 +919,9 @@ void compile_multitarget(const std::string &fn_name,
 
         wrapper_args.push_back(can_use != 0);
         wrapper_args.emplace_back(sub_fn_name);
+
+        md_wrapper_args.push_back(can_use != 0);
+        md_wrapper_args.emplace_back(md_sub_fn_name);
     }
 
     // If we haven't specified "no runtime", build a runtime with the base target
@@ -941,11 +951,17 @@ void compile_multitarget(const std::string &fn_name,
     }
 
     if (needs_wrapper) {
-        Expr indirect_result = Call::make(Int(32), Call::call_cached_indirect_function, wrapper_args, Call::Intrinsic);
-        std::string private_result_name = unique_name(fn_name + "_result");
-        Expr private_result_var = Variable::make(Int(32), private_result_name);
-        Stmt wrapper_body = AssertStmt::make(private_result_var == 0, private_result_var);
-        wrapper_body = LetStmt::make(private_result_name, indirect_result, wrapper_body);
+        const auto make_wrapper = [](const std::vector<Expr> &wrapper_args, const std::string &fn_name) -> Stmt {
+            Expr indirect_result = Call::make(Int(32), Call::call_cached_indirect_function, wrapper_args, Call::Intrinsic);
+            std::string private_result_name = unique_name(fn_name + "_result");
+            Expr private_result_var = Variable::make(Int(32), private_result_name);
+            Stmt wrapper_body = AssertStmt::make(private_result_var == 0, private_result_var);
+            wrapper_body = LetStmt::make(private_result_name, indirect_result, wrapper_body);
+            return wrapper_body;
+        };
+
+        Stmt wrapper_body = make_wrapper(wrapper_args, fn_name);
+        Stmt md_wrapper_body = make_wrapper(md_wrapper_args, md_fn_name);
 
         // Always build with NoRuntime: that's handled as a separate module.
         //
@@ -959,7 +975,8 @@ void compile_multitarget(const std::string &fn_name,
                                     .without_feature(Target::NoAsserts);
 
         Module wrapper_module(fn_name, wrapper_target);
-        wrapper_module.append(LoweredFunc(fn_name, base_target_args, wrapper_body, LinkageType::ExternalPlusMetadata));
+        wrapper_module.append(LoweredFunc(fn_name, base_target_args, wrapper_body, LinkageType::ExternalPlusArgv));
+        wrapper_module.append(LoweredFunc(md_fn_name, md_base_target_args, md_wrapper_body, LinkageType::External));
 
         std::string wrapper_path = contains(output_files, OutputFileType::static_library) ?
                                        temp_obj_dir.add_temp_object_file(output_files.at(OutputFileType::static_library), "_wrapper", base_target, /* in_front*/ true) :

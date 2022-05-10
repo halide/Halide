@@ -1050,7 +1050,7 @@ llvm::Function *CodeGen_LLVM::embed_metadata_getter(const std::string &metadata_
         /* num_arguments */ ConstantInt::get(i32_t, num_args),
         /* arguments */ ConstantExpr::getInBoundsGetElementPtr(arguments_array, arguments_array_storage, zeros),
         /* target */ create_string_constant(target.to_string()),
-        /* name */ create_string_constant(function_name)};
+        /* name */ create_string_constant(map_string(function_name))};
 
     GlobalVariable *metadata_storage = new GlobalVariable(
         *module,

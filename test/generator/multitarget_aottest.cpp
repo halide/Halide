@@ -62,6 +62,25 @@ int main(int argc, char **argv) {
     halide_set_error_handler(my_error_handler);
     halide_set_custom_can_use_target_features(my_can_use_target_features);
 
+    const auto *md = HalideTest::multitarget_metadata();
+    printf("Observed metadata target is: %s\n", md->target);
+
+    // multitarget_metadata() also uses can_use_target and will return
+    // a pointer to metadata that contains the actual Target string of the
+    // filter we're going to execute. Verify that it is what we expect.
+    bool expected_nbq = use_noboundsquery_feature();
+    bool actual_nbq = strstr(md->target, "no_bounds_query") != nullptr;
+    if (expected_nbq != actual_nbq) {
+        printf("Expected to have no_bounds_query=%d, but actually ran with no_bounds_query=%d\n", expected_nbq, actual_nbq);
+        return -1;
+    }
+
+    const std::string expected_name = "multitarget";
+    if (md->name != expected_name) {
+        printf("Expected metadata name to be '%s', but saw '%s'\n", expected_name.c_str(), md->name);
+        return -1;
+    }
+
     if (HalideTest::multitarget(output) != 0) {
         printf("Error at multitarget\n");
         return -1;
@@ -79,15 +98,17 @@ int main(int argc, char **argv) {
         }
     }
 
-    // halide_can_use_target_features() should be called exactly once, with the
-    // result cached; call this a few more times to verify.
+    // halide_can_use_target_features() should be called exactly twice (once
+    // for the real call, once for the call to multitarget_metadata()), with the
+    // results cached; call these a few more times to verify.
     for (int i = 0; i < 10; ++i) {
         if (HalideTest::multitarget(output) != 0) {
             printf("Error at multitarget\n");
             return -1;
         }
+        (void)HalideTest::multitarget_metadata();
     }
-    if (can_use_count != 1) {
+    if (can_use_count != 2) {
         printf("Error: halide_can_use_target_features was called %d times!\n", (int)can_use_count);
         return -1;
     }
