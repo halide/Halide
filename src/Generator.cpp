@@ -1301,11 +1301,10 @@ gengen
             for (const auto &n : generator_names) {
                 o << "    " << n << "\n";
             }
-            error_output << o.str();
             // We can't easily return an error from main here, so just assert-fail --
             // note that this means we deliberately use user_error, *not* error_output,
             // to ensure that we terminate.
-            user_error << "Unable to create Generator: " << generator_name << "\n";
+            user_error << o.str();
         }
         return g;
     };
@@ -1359,6 +1358,7 @@ public:
     std::vector<std::string> enumerate() const override {
         return GeneratorRegistry::enumerate();
     }
+
     AbstractGeneratorPtr create(const std::string &name,
                                 const Halide::GeneratorContext &context) const override {
         return GeneratorRegistry::create(name, context);
@@ -1452,10 +1452,13 @@ AbstractGeneratorPtr GeneratorRegistry::create(const std::string &name,
     GeneratorRegistry &registry = get_registry();
     std::lock_guard<std::mutex> lock(registry.mutex);
     auto it = registry.factories.find(name);
-    internal_assert(it != registry.factories.end());
+    if (it == registry.factories.end()) {
+        return nullptr;
+    }
     GeneratorFactory f = it->second;
     AbstractGeneratorPtr g = f(context);
-    internal_assert(g != nullptr);
+    // Do not assert! Just return nullptr.
+    // internal_assert(g != nullptr);
     return g;
 }
 

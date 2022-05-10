@@ -340,7 +340,8 @@ public:
     virtual std::vector<std::string> enumerate() const = 0;
 
     /** Create an instance of the Generator that is registered under the given
-     * name. If the name isn't one returned by enumerate(), assert-fail. */
+     * name. If the name isn't one returned by enumerate(), return nullptr
+     * rather than assert-fail; caller must check for a valid result. */
     virtual AbstractGeneratorPtr create(const std::string &name,
                                         const Halide::GeneratorContext &context) const = 0;
 
@@ -353,7 +354,13 @@ public:
 /** generate_filter_main() is a convenient wrapper for GeneratorRegistry::create() +
  * compile_to_files(); it can be trivially wrapped by a "real" main() to produce a
  * command-line utility for ahead-of-time filter compilation. */
-int generate_filter_main(int argc, char **argv, std::ostream &cerr);
+int generate_filter_main(int argc, char **argv, std::ostream &error_output);
+
+/** This overload of generate_filter_main lets you provide your own provider for how to enumerate and/or create
+ * the generators based on registration name; this is useful if you want to re-use the
+ * 'main' logic but avoid the global Generator registry (e.g. for bindings in languages
+ * other than C++). */
+int generate_filter_main(int argc, char **argv, std::ostream &error_output, const GeneratorFactoryProvider &generator_factory_provider);
 
 /** This overload of generate_filter_main lets you provide your own provider for how to enumerate and/or create
  * the generators based on registration name; this is useful if you want to re-use the
@@ -3667,8 +3674,8 @@ public:
     static void register_factory(const std::string &name, GeneratorFactory generator_factory);
     static void unregister_factory(const std::string &name);
     static std::vector<std::string> enumerate();
-    // Note that this method will never return null:
-    // if it cannot return a valid Generator, it should assert-fail.
+    // This method returns nullptr if it cannot return a valid Generator;
+    // the caller is responsible for checking the result.
     static AbstractGeneratorPtr create(const std::string &name,
                                        const Halide::GeneratorContext &context);
 
