@@ -1529,7 +1529,7 @@ void CodeGen_C::emit_metadata_getter(const std::string &function_name,
 
         // Add an inline wrapper that uses the older name and calling convention,
         // so that existing code (probably) doesn't need to change.
-        stream << "HALIDE_FUNCTION_ATTRS\ninline const struct halide_filter_metadata_t *" << function_name << "_metadata() {\n";
+        stream << "\nHALIDE_FUNCTION_ATTRS\ninline const struct halide_filter_metadata_t *" << function_name << "_metadata() {\n";
         stream << "    const halide_filter_metadata_t *md = nullptr;\n";
         stream << "    int r = " << function_name << "_get_metadata(&md);\n";
         stream << "    return r == 0 ? md : nullptr;\n";

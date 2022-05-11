@@ -124,7 +124,14 @@ HALIDE_FUNCTION_ATTRS
 int test1_argv(void **args);
 
 HALIDE_FUNCTION_ATTRS
-const struct halide_filter_metadata_t *test1_metadata();
+int test1_get_metadata(const struct halide_filter_metadata_t **md_out);
+
+HALIDE_FUNCTION_ATTRS
+inline const struct halide_filter_metadata_t *test1_metadata() {
+    const halide_filter_metadata_t *md = nullptr;
+    int r = test1_get_metadata(&md);
+    return r == 0 ? md : nullptr;
+}
 
 #ifdef __cplusplus
 }  // extern "C"
@@ -206,7 +213,14 @@ HALIDE_FUNCTION_ATTRS
 int test2_argv(void **args);
 
 HALIDE_FUNCTION_ATTRS
-const struct halide_filter_metadata_t *test2_metadata();
+int test2_get_metadata(const struct halide_filter_metadata_t **md_out);
+
+HALIDE_FUNCTION_ATTRS
+inline const struct halide_filter_metadata_t *test2_metadata() {
+    const halide_filter_metadata_t *md = nullptr;
+    int r = test2_get_metadata(&md);
+    return r == 0 ? md : nullptr;
+}
 
 #ifdef __cplusplus
 }  // extern "C"
