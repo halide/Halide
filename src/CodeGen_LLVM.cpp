@@ -1072,8 +1072,7 @@ llvm::Function *CodeGen_LLVM::embed_metadata_getter(const std::string &metadata_
     llvm::BasicBlock *block = llvm::BasicBlock::Create(module->getContext(), "entry", metadata_getter);
     builder->SetInsertPoint(block);
     llvm::Value *arg_array = iterator_to_pointer(metadata_getter->arg_begin());
-    llvm::Value *md_out = builder->CreateConstInBoundsGEP1_32(arg_types[0], arg_array, 0);
-    builder->CreateStore(metadata_storage, md_out);
+    builder->CreateStore(metadata_storage, arg_array);
     builder->CreateRet(ConstantInt::getSigned(i32_t, 0));
     internal_assert(!verifyFunction(*metadata_getter, &llvm::errs()));
 
