@@ -1149,7 +1149,11 @@ gengen
                 gen->set_generator_param_values(sub_generator_args);
                 return build_gradient_module ? gen->build_gradient_module(fn_name) : gen->build_module(fn_name);
             };
-            compile_multitarget(function_name, output_files, targets, target_strings, module_factory, compiler_logger_factory);
+            // Pass target_strings for suffixes; if we omit this, we'll use *canonical* target strings
+            // for suffixes, but our caller might have passed non-canonical-but-still-legal target strings,
+            // and if we don't use those, the output filenames might not match what the caller expects.
+            const auto &suffixes = target_strings;
+            compile_multitarget(function_name, output_files, targets, suffixes, module_factory, compiler_logger_factory);
         }
     }
 
