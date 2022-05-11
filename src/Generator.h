@@ -3005,6 +3005,11 @@ public:
         return machine_params_;
     }
 
+    // Return a copy of this GeneratorContext that uses the given Target.
+    // This method is rarely needed; it's really provided as a convenience
+    // for use with init_from_context().
+    GeneratorContext with_target(const Target &t) const;
+
     template<typename T>
     inline std::unique_ptr<T> create() const {
         return T::create(*this);
@@ -3385,7 +3390,27 @@ protected:
     GeneratorBase(size_t size, const void *introspection_helper);
     void set_generator_names(const std::string &registered_name, const std::string &stub_name);
 
-    void init_from_context(const Halide::GeneratorContext &context);
+    // Note that it is explicitly legal to override init_from_context(), so that you can (say)
+    // create a modified context with a different Target (eg with features enabled or disabled), but...
+    //
+    // *** WARNING ***
+    //
+    // Modifying the context here can be fraught with subtle hazards, especially when used
+    // in conjunction with compiling to multitarget output; the code that produces multitarget
+    // code is unfortunately-but-necessarily complex, and even adding or removing a feature
+    // at this point could cause subtle, hard-to-debug flakiness in your code. We highly recommend
+    // that you override this method *only* for temporary debugging purposes; e.g. if you
+    // need to add the `profile` feature to a specific Generator, but your build system doesn't easily
+    // let you specify per-Generator target features, this is the right tool for the job.
+    //
+    // Furthermore, if you override this, please don't try to directly set the `target` (etc) GeneratorParams
+    // directly; instead, construct the new GeneratorContext you want and call the superclass
+    // implementation of init_from_context.
+    //
+    // TL;DR: overrides to this method should probably never be checked in to your source control system
+    // (rather, the override should be temporary and local, for experimentation).
+    //
+    virtual void init_from_context(const Halide::GeneratorContext &context);
 
     virtual Pipeline build_pipeline() = 0;
     virtual void call_configure() = 0;
