@@ -334,7 +334,7 @@ public:
     GeneratorFactoryProvider() = default;
     virtual ~GeneratorFactoryProvider() = default;
 
-    /** Return a list of all registerd Generators that are available for use
+    /** Return a list of all registered Generators that are available for use
      * with the create() method. */
     virtual std::vector<std::string> enumerate() const = 0;
 
