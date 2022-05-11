@@ -11,7 +11,7 @@ def test_compiletime_error():
     buf = hl.Buffer(hl.UInt(8), [2, 2])
     try:
         f.realize(buf)
-    except RuntimeError as e:
+    except hl.HalideError as e:
         assert 'Output buffer f has type uint16 but type of the buffer passed in is uint8' in str(e)
     else:
         assert False, 'Did not see expected exception!'
@@ -25,7 +25,7 @@ def test_runtime_error():
     buf = hl.Buffer(hl.UInt(8), [10])
     try:
         f.realize(buf)
-    except RuntimeError as e:
+    except hl.HalideError as e:
         assert 'do not cover required region' in str(e)
     else:
         assert False, 'Did not see expected exception!'
@@ -117,7 +117,7 @@ def test_basics2():
 
     try:
         val1 = clamped[x * s_sigma - s_sigma/2, y * s_sigma - s_sigma/2]
-    except RuntimeError as e:
+    except hl.HalideError as e:
         assert 'Implicit cast from float32 to int' in str(e)
     else:
         assert False, 'Did not see expected exception!'
@@ -317,21 +317,21 @@ def test_typed_funcs():
     assert not f.defined()
     try:
         assert f.output_type() == Int(32)
-    except RuntimeError as e:
+    except hl.HalideError as e:
         assert 'it is undefined' in str(e)
     else:
         assert False, 'Did not see expected exception!'
 
     try:
         assert f.outputs() == 0
-    except RuntimeError as e:
+    except hl.HalideError as e:
         assert 'it is undefined' in str(e)
     else:
         assert False, 'Did not see expected exception!'
 
     try:
         assert f.dimensions() == 0
-    except RuntimeError as e:
+    except hl.HalideError as e:
         assert 'it is undefined' in str(e)
     else:
         assert False, 'Did not see expected exception!'
@@ -348,7 +348,7 @@ def test_typed_funcs():
     assert not f.defined()
     try:
         assert f.output_type() == hl.Int(32)
-    except RuntimeError as e:
+    except hl.HalideError as e:
         assert 'it returns a Tuple' in str(e)
     else:
         assert False, 'Did not see expected exception!'
@@ -361,7 +361,7 @@ def test_typed_funcs():
     try:
         f[x, y] = hl.i32(0);
         f.realize([10, 10])
-    except RuntimeError as e:
+    except hl.HalideError as e:
         assert 'is constrained to have exactly 1 dimensions, but is defined with 2 dimensions' in str(e)
     else:
         assert False, 'Did not see expected exception!'
@@ -370,7 +370,7 @@ def test_typed_funcs():
     try:
         f[x, y] = hl.i16(0);
         f.realize([10, 10])
-    except RuntimeError as e:
+    except hl.HalideError as e:
         assert 'is constrained to only hold values of type int32 but is defined with values of type int16' in str(e)
     else:
         assert False, 'Did not see expected exception!'
@@ -379,7 +379,7 @@ def test_typed_funcs():
     try:
         f[x, y] = (hl.i16(0), hl.f64(0))
         f.realize([10, 10])
-    except RuntimeError as e:
+    except hl.HalideError as e:
         assert 'is constrained to only hold values of type (int32, float32) but is defined with values of type (int16, float64)' in str(e)
     else:
         assert False, 'Did not see expected exception!'
