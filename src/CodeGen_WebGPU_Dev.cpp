@@ -3,7 +3,6 @@
 #include <unordered_set>
 #include <utility>
 
-#include "CodeGen_C.h"
 #include "CodeGen_GPU_Dev.h"
 #include "CodeGen_Internal.h"
 #include "CodeGen_WebGPU_Dev.h"
@@ -47,17 +46,18 @@ public:
     }
 
 protected:
-    class CodeGen_WGSL : public CodeGen_C {
+    class CodeGen_WGSL : public CodeGen_GPU_C {
     public:
         CodeGen_WGSL(std::ostream &s, Target t)
-            : CodeGen_C(s, t) {
+            : CodeGen_GPU_C(s, t) {
+            vector_declaration_style = VectorDeclarationStyle::WGSLSyntax;
         }
         void add_kernel(const Stmt &stmt,
                         const string &name,
                         const vector<DeviceArgument> &args);
 
     protected:
-        using CodeGen_C::visit;
+        using CodeGen_GPU_C::visit;
 
         std::string print_name(const std::string &) override;
         std::string print_type(Type type,
@@ -508,7 +508,7 @@ void CodeGen_WebGPU_Dev::CodeGen_WGSL::visit(const Call *op) {
         }
         print_assignment(op->type, result_id);
     } else {
-        CodeGen_C::visit(op);
+        CodeGen_GPU_C::visit(op);
     }
 }
 
@@ -524,7 +524,7 @@ void CodeGen_WebGPU_Dev::CodeGen_WGSL::visit(const Div *op) {
         Type uint_type = op->a.type().with_code(halide_type_uint);
         visit_binop(op->type, op->a, make_const(uint_type, bits), ">>");
     } else {
-        CodeGen_C::visit(op);
+        CodeGen_GPU_C::visit(op);
     }
 }
 
