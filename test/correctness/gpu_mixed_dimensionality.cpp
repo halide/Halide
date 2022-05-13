@@ -28,8 +28,8 @@ int main(int argc, char **argv) {
     h.compute_at(out, x).gpu_threads(x, y);
     h.update().gpu_threads(x);
     // TODO: NormalizeDimensionality in FuseGPUThreadLoops.cpp doesn't work in the following case.
-    //g.compute_at(h, y).gpu_threads(x);
-    //g.update();
+    // g.compute_at(h, y).gpu_threads(x);
+    // g.update();
     g.compute_at(h, x);
     g.update();
     f.compute_at(g, x);

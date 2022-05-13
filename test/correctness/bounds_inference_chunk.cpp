@@ -15,7 +15,7 @@ int main(int argc, char **argv) {
     h.compute_root();
     g.compute_at(f, y);
 
-    //f.trace();
+    // f.trace();
 
     Buffer<int> out = f.realize({32, 32});
 

@@ -15,6 +15,10 @@
 #include "Module.h"
 #include "Simplify.h"
 
+#ifdef HALIDE_ALLOW_GENERATOR_BUILD_METHOD
+#pragma message "Support for Generator build() methods has been removed in Halide version 15."
+#endif
+
 namespace Halide {
 
 GeneratorContext::GeneratorContext(const Target &target,
@@ -75,6 +79,11 @@ bool is_valid_name(const std::string &n) {
             return false;
         }
     }
+    // prohibit this specific string so that we can use it for
+    // passing GeneratorParams in Python.
+    if (n == "generator_params") {
+        return false;
+    }
     return true;
 }
 
@@ -109,7 +118,7 @@ Argument to_argument(const Internal::Parameter &param) {
 
 Func make_param_func(const Parameter &p, const std::string &name) {
     internal_assert(p.is_buffer());
-    Func f(name + "_im");
+    Func f(p.type(), p.dimensions(), name + "_im");
     auto b = p.buffer();
     if (b.defined()) {
         // If the Parameter has an explicit BufferPtr set, bind directly to it
@@ -640,7 +649,7 @@ void StubEmitter::emit() {
     for (const auto &out : out_info) {
         stream << get_indent() << "stub." << out.getter << ",\n";
     }
-    stream << get_indent() << "stub.generator->context().get_target()\n";
+    stream << get_indent() << "stub.generator->context().target()\n";
     indent_level--;
     stream << get_indent() << "};\n";
     indent_level--;
@@ -717,23 +726,10 @@ std::vector<std::vector<Func>> GeneratorStub::generate(const GeneratorParamsMap 
 
     std::vector<std::vector<Func>> v;
     GeneratorParamInfo &pi = generator->param_info();
-#ifdef HALIDE_ALLOW_GENERATOR_BUILD_METHOD
-    if (!pi.outputs().empty()) {
-        for (auto *output : pi.outputs()) {
-            v.push_back(get_outputs(output->name()));
-        }
-    } else {
-        // Generators with build() method can't have Output<>, hence can't have array outputs
-        for (const auto &output : p.outputs()) {
-            v.push_back(std::vector<Func>{output});
-        }
-    }
-#else
     internal_assert(!pi.outputs().empty());
     for (auto *output : pi.outputs()) {
         v.push_back(get_outputs(output->name()));
     }
-#endif
     return v;
 }
 
@@ -803,7 +799,10 @@ std::string halide_type_to_c_type(const Type &t) {
 
 namespace {
 
-int generate_filter_main_inner(int argc, char **argv, std::ostream &error_output) {
+int generate_filter_main_inner(int argc,
+                               char **argv,
+                               std::ostream &error_output,
+                               const GeneratorFactoryProvider &generator_factory_provider) {
     static const char kUsage[] = R"INLINE_CODE(
 gengen
   [-g GENERATOR_NAME] [-f FUNCTION_NAME] [-o OUTPUT_DIR] [-r RUNTIME_NAME]
@@ -904,7 +903,7 @@ gengen
 
     std::string runtime_name = flags_info["-r"];
 
-    std::vector<std::string> generator_names = GeneratorRegistry::enumerate();
+    std::vector<std::string> generator_names = generator_factory_provider.enumerate();
     if (generator_names.empty() && runtime_name.empty()) {
         error_output << "No generators have been registered and not compiling a standalone runtime\n";
         error_output << kUsage;
@@ -1111,13 +1110,30 @@ gengen
         compile_standalone_runtime(output_files, gcd_target);
     }
 
+    const auto create_generator = [&](const Halide::GeneratorContext &context) -> std::unique_ptr<GeneratorBase> {
+        auto g = generator_factory_provider.create(generator_name, context);
+        if (!g) {
+            std::ostringstream o;
+            o << "Generator not found: " << generator_name << "\n";
+            o << "Did you mean:\n";
+            for (const auto &n : generator_names) {
+                o << "    " << n << "\n";
+            }
+            // We can't easily return an error from main here, so just assert-fail --
+            // note that this means we deliberately use user_error, *not* error_output,
+            // to ensure that we terminate.
+            user_error << o.str();
+        }
+        return g;
+    };
+
     if (!generator_name.empty()) {
         std::string base_path = compute_base_path(output_dir, function_name, file_base_name);
         debug(1) << "Generator " << generator_name << " has base_path " << base_path << "\n";
         if (outputs.count(OutputFileType::cpp_stub)) {
             // When generating cpp_stub, we ignore all generator args passed in, and supply a fake Target.
             // (CompilerLogger is never enabled for cpp_stub, for now anyway.)
-            auto gen = GeneratorRegistry::create(generator_name, GeneratorContext(Target()));
+            auto gen = create_generator(GeneratorContext(Target()));
             auto stub_file_path = base_path + output_info[OutputFileType::cpp_stub].extension;
             gen->emit_cpp_stub(stub_file_path);
         }
@@ -1125,37 +1141,59 @@ gengen
         // Don't bother with this if we're just emitting a cpp_stub.
         if (!stub_only) {
             auto output_files = compute_output_files(targets[0], base_path, outputs);
-            auto module_factory = [&generator_name, &generator_args, build_gradient_module](const std::string &name, const Target &target) -> Module {
+            auto module_factory = [&](const std::string &fn_name, const Target &target) -> Module {
                 auto sub_generator_args = generator_args;
                 sub_generator_args.erase("target");
                 // Must re-create each time since each instance will have a different Target.
-                auto gen = GeneratorRegistry::create(generator_name, GeneratorContext(target));
+                auto gen = create_generator(GeneratorContext(target));
                 gen->set_generator_param_values(sub_generator_args);
-                return build_gradient_module ? gen->build_gradient_module(name) : gen->build_module(name);
+                return build_gradient_module ? gen->build_gradient_module(fn_name) : gen->build_module(fn_name);
             };
-            compile_multitarget(function_name, output_files, targets, target_strings, module_factory, compiler_logger_factory);
+            // Pass target_strings for suffixes; if we omit this, we'll use *canonical* target strings
+            // for suffixes, but our caller might have passed non-canonical-but-still-legal target strings,
+            // and if we don't use those, the output filenames might not match what the caller expects.
+            const auto &suffixes = target_strings;
+            compile_multitarget(function_name, output_files, targets, suffixes, module_factory, compiler_logger_factory);
         }
     }
 
     return 0;
 }
 
+class GeneratorsFromRegistry : public GeneratorFactoryProvider {
+public:
+    GeneratorsFromRegistry() = default;
+    ~GeneratorsFromRegistry() override = default;
+
+    std::vector<std::string> enumerate() const override {
+        return GeneratorRegistry::enumerate();
+    }
+    std::unique_ptr<GeneratorBase> create(const std::string &name,
+                                          const Halide::GeneratorContext &context) const override {
+        return GeneratorRegistry::create(name, context);
+    }
+};
+
 }  // namespace
 
 #ifdef HALIDE_WITH_EXCEPTIONS
-int generate_filter_main(int argc, char **argv, std::ostream &error_output) {
+int generate_filter_main(int argc, char **argv, std::ostream &error_output, const GeneratorFactoryProvider &generator_factory_provider) {
     try {
-        return generate_filter_main_inner(argc, argv, error_output);
+        return generate_filter_main_inner(argc, argv, error_output, generator_factory_provider);
     } catch (std::runtime_error &err) {
         error_output << "Unhandled exception: " << err.what() << "\n";
         return -1;
     }
 }
 #else
-int generate_filter_main(int argc, char **argv, std::ostream &error_output) {
-    return generate_filter_main_inner(argc, argv, error_output);
+int generate_filter_main(int argc, char **argv, std::ostream &error_output, const GeneratorFactoryProvider &generator_factory_provider) {
+    return generate_filter_main_inner(argc, argv, error_output, generator_factory_provider);
 }
 #endif
+
+int generate_filter_main(int argc, char **argv, std::ostream &error_output) {
+    return generate_filter_main(argc, argv, error_output, GeneratorsFromRegistry());
+}
 
 GeneratorParamBase::GeneratorParamBase(const std::string &name)
     : name_(name) {
@@ -1174,13 +1212,8 @@ void GeneratorParamBase::check_value_readable() const {
         name() == "machine_params") {
         return;
     }
-#ifdef HALIDE_ALLOW_GENERATOR_BUILD_METHOD
-    user_assert(generator && generator->phase >= GeneratorBase::ConfigureCalled)
-        << "The GeneratorParam \"" << name() << "\" cannot be read before build() or configure()/generate() is called.\n";
-#else
     user_assert(generator && generator->phase >= GeneratorBase::ConfigureCalled)
         << "The GeneratorParam \"" << name() << "\" cannot be read before configure()/generate() is called.\n";
-#endif
 }
 
 void GeneratorParamBase::check_value_writable() const {
@@ -1188,13 +1221,8 @@ void GeneratorParamBase::check_value_writable() const {
     if (!generator) {
         return;
     }
-#ifdef HALIDE_ALLOW_GENERATOR_BUILD_METHOD
-    user_assert(generator->phase < GeneratorBase::GenerateCalled)
-        << "The GeneratorParam \"" << name() << "\" cannot be written after build() or generate() is called.\n";
-#else
     user_assert(generator->phase < GeneratorBase::GenerateCalled)
         << "The GeneratorParam \"" << name() << "\" cannot be written after generate() is called.\n";
-#endif
 }
 
 void GeneratorParamBase::fail_wrong_type(const char *type) {
@@ -1234,16 +1262,12 @@ std::unique_ptr<GeneratorBase> GeneratorRegistry::create(const std::string &name
     std::lock_guard<std::mutex> lock(registry.mutex);
     auto it = registry.factories.find(name);
     if (it == registry.factories.end()) {
-        std::ostringstream o;
-        o << "Generator not found: " << name << "\n";
-        o << "Did you mean:\n";
-        for (const auto &n : registry.factories) {
-            o << "    " << n.first << "\n";
-        }
-        user_error << o.str();
+        return nullptr;
     }
-    std::unique_ptr<GeneratorBase> g = it->second(context);
-    internal_assert(g != nullptr);
+    GeneratorFactory f = it->second;
+    std::unique_ptr<GeneratorBase> g = f(context);
+    // Do not assert! Just return nullptr.
+    // internal_assert(g != nullptr);
     return g;
 }
 
@@ -1530,26 +1554,6 @@ void GeneratorBase::pre_schedule() {
 void GeneratorBase::post_schedule() {
     track_parameter_values(true);
 }
-
-#ifdef HALIDE_ALLOW_GENERATOR_BUILD_METHOD
-void GeneratorBase::pre_build() {
-    advance_phase(GenerateCalled);
-    advance_phase(ScheduleCalled);
-    GeneratorParamInfo &pi = param_info();
-    user_assert(pi.outputs().empty()) << "May not use build() method with Output<>.";
-    if (!inputs_set) {
-        for (auto *input : pi.inputs()) {
-            input->init_internals();
-        }
-        inputs_set = true;
-    }
-    track_parameter_values(false);
-}
-
-void GeneratorBase::post_build() {
-    track_parameter_values(true);
-}
-#endif
 
 Pipeline GeneratorBase::get_pipeline() {
     check_min_phase(GenerateCalled);
@@ -1984,13 +1988,8 @@ void GIOBase::check_gio_access() const {
     if (!generator) {
         return;
     }
-#ifdef HALIDE_ALLOW_GENERATOR_BUILD_METHOD
-    user_assert(generator->phase > GeneratorBase::InputsSet)
-        << "The " << input_or_output() << " \"" << name() << "\" cannot be examined before build() or generate() is called.\n";
-#else
     user_assert(generator->phase > GeneratorBase::InputsSet)
         << "The " << input_or_output() << " \"" << name() << "\" cannot be examined before generate() is called.\n";
-#endif
 }
 
 // If our dims are defined, ensure it matches the one passed in, asserting if not.
@@ -2178,8 +2177,10 @@ void GeneratorOutputBase::init_internals() {
     exprs_.clear();
     funcs_.clear();
     if (array_size_defined()) {
+        const auto t = types_defined() ? types() : std::vector<Type>{};
+        const int d = dims_defined() ? dims() : -1;
         for (size_t i = 0; i < array_size(); ++i) {
-            funcs_.emplace_back(array_name(i));
+            funcs_.emplace_back(t, d, array_name(i));
         }
     }
 }
@@ -2269,75 +2270,6 @@ void generator_test() {
         // tester.gp2.set(2);  // This will assert-fail.
         // tester.sp2.set(202);  // This will assert-fail.
     }
-
-#ifdef HALIDE_ALLOW_GENERATOR_BUILD_METHOD
-    // Verify that the Generator's internal phase actually prevents unsupported
-    // order of operations (with old-style Generator)
-    {
-        class Tester : public Generator<Tester> {
-        public:
-            GeneratorParam<int> gp0{"gp0", 0};
-            GeneratorParam<float> gp1{"gp1", 1.f};
-            GeneratorParam<uint64_t> gp2{"gp2", 2};
-            GeneratorParam<uint8_t> gp_uint8{"gp_uint8", 65};
-            GeneratorParam<int8_t> gp_int8{"gp_int8", 66};
-            GeneratorParam<char> gp_char{"gp_char", 97};
-            GeneratorParam<signed char> gp_schar{"gp_schar", 98};
-            GeneratorParam<unsigned char> gp_uchar{"gp_uchar", 99};
-            GeneratorParam<bool> gp_bool{"gp_bool", true};
-
-            Input<int> input{"input"};
-
-            Func build() {
-                internal_assert(gp0 == 1);
-                internal_assert(gp1 == 2.f);
-                internal_assert(gp2 == (uint64_t)2);  // unchanged
-                internal_assert(gp_uint8 == 67);
-                internal_assert(gp_int8 == 68);
-                internal_assert(gp_bool == false);
-                internal_assert(gp_char == 107);
-                internal_assert(gp_schar == 108);
-                internal_assert(gp_uchar == 109);
-                Var x;
-                Func output;
-                output(x) = input + gp0;
-                return output;
-            }
-        };
-
-        Tester tester;
-        tester.init_from_context(context);
-        internal_assert(tester.phase == GeneratorBase::Created);
-
-        // Verify that calling GeneratorParam::set() works.
-        tester.gp0.set(1);
-
-        // set_inputs_vector() can't be called on an old-style Generator;
-        // that's OK, since we can skip from Created -> GenerateCalled anyway
-        // tester.set_inputs_vector({{StubInput(42)}});
-        // internal_assert(tester.phase == GeneratorBase::InputsSet);
-
-        // tester.set_inputs_vector({{StubInput(43)}});  // This will assert-fail.
-
-        // Also ok to call in this phase.
-        tester.gp1.set(2.f);
-
-        // Verify that 8-bit non-boolean GP values are parsed as integers, not chars.
-        tester.gp_int8.set_from_string("68");
-        tester.gp_uint8.set_from_string("67");
-        tester.gp_char.set_from_string("107");
-        tester.gp_schar.set_from_string("108");
-        tester.gp_uchar.set_from_string("109");
-        tester.gp_bool.set_from_string("false");
-
-        tester.build_pipeline();
-        internal_assert(tester.phase == GeneratorBase::ScheduleCalled);
-
-        // tester.set_inputs_vector({{StubInput(45)}});  // This will assert-fail.
-        // tester.gp2.set(2);  // This will assert-fail.
-        // tester.sp2.set(202);  // This will assert-fail.
-    }
-#endif
 
     // Verify that set_inputs() works properly, even if the specific subtype of Generator is not known.
     {

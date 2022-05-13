@@ -2,6 +2,7 @@
 #define HALIDE_THREAD_POOL_H
 
 #include <condition_variable>
+#include <functional>
 #include <future>
 #include <mutex>
 #include <queue>

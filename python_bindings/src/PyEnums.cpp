@@ -82,6 +82,22 @@ void define_enums(py::module &m) {
         .value("RISCV", Target::Arch::RISCV)
         .value("WebAssembly", Target::Arch::WebAssembly);
 
+    // Please keep sorted.
+    py::enum_<Target::Processor>(m, "TargetProcessorTune")
+        .value("TuneAMDFam10", Target::Processor::AMDFam10)
+        .value("TuneBdVer1", Target::Processor::BdVer1)
+        .value("TuneBdVer2", Target::Processor::BdVer2)
+        .value("TuneBdVer3", Target::Processor::BdVer3)
+        .value("TuneBdVer4", Target::Processor::BdVer4)
+        .value("TuneBtVer1", Target::Processor::BtVer1)
+        .value("TuneBtVer2", Target::Processor::BtVer2)
+        .value("TuneGeneric", Target::Processor::ProcessorGeneric)
+        .value("TuneK8", Target::Processor::K8)
+        .value("TuneK8_SSE3", Target::Processor::K8_SSE3)
+        .value("TuneZnVer1", Target::Processor::ZnVer1)
+        .value("TuneZnVer2", Target::Processor::ZnVer2)
+        .value("TuneZnVer3", Target::Processor::ZnVer3);
+
     py::enum_<Target::Feature>(m, "TargetFeature")
         .value("JIT", Target::Feature::JIT)
         .value("Debug", Target::Feature::Debug)
@@ -110,7 +126,6 @@ void define_enums(py::module &m) {
         .value("OpenGLCompute", Target::Feature::OpenGLCompute)
         .value("EGL", Target::Feature::EGL)
         .value("UserContext", Target::Feature::UserContext)
-        .value("Matlab", Target::Feature::Matlab)
         .value("Profile", Target::Feature::Profile)
         .value("NoRuntime", Target::Feature::NoRuntime)
         .value("Metal", Target::Feature::Metal)
@@ -141,6 +156,9 @@ void define_enums(py::module &m) {
         .value("HexagonDma", Target::Feature::HexagonDma)
         .value("EmbedBitcode", Target::Feature::EmbedBitcode)
         .value("EnableLLVMLoopOpt", Target::Feature::EnableLLVMLoopOpt)
+        // halide_target_feature_disable_llvm_loop_opt is deprecated in Halide 15
+        // (and will be removed in Halide 16). Halide 15 now defaults to disabling
+        // LLVM loop optimization, unless halide_target_feature_enable_llvm_loop_opt is set.
         .value("DisableLLVMLoopOpt", Target::Feature::DisableLLVMLoopOpt)
         .value("WasmSimd128", Target::Feature::WasmSimd128)
         .value("WasmSignExt", Target::Feature::WasmSignExt)
@@ -155,6 +173,7 @@ void define_enums(py::module &m) {
         .value("RVV", Target::Feature::RVV)
         .value("ARMv81a", Target::Feature::ARMv81a)
         .value("SanitizerCoverage", Target::Feature::SanitizerCoverage)
+        .value("ProfileByTimer", Target::Feature::ProfileByTimer)
         .value("FeatureEnd", Target::Feature::FeatureEnd);
 
     py::enum_<halide_type_code_t>(m, "TypeCode")

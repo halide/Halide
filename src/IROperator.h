@@ -375,8 +375,6 @@ Expr halving_add(Expr a, Expr b);
 Expr rounding_halving_add(Expr a, Expr b);
 /** Compute narrow((widen(a) - widen(b)) / 2) */
 Expr halving_sub(Expr a, Expr b);
-/** Compute narrow((widen(a) - widen(b) + 1) / 2) */
-Expr rounding_halving_sub(Expr a, Expr b);
 
 /** Compute saturating_narrow(shift_right(widening_mul(a, b), q)) */
 Expr mul_shift_right(Expr a, Expr b, Expr q);
@@ -1034,21 +1032,21 @@ Expr round(Expr x);
 Expr trunc(Expr x);
 
 /** Returns true if the argument is a Not a Number (NaN). Requires a
-  * floating point argument.  Vectorizes cleanly.
-  * Note that the Expr passed in will be evaluated in strict_float mode,
-  * regardless of whether strict_float mode is enabled in the current Target. */
+ * floating point argument.  Vectorizes cleanly.
+ * Note that the Expr passed in will be evaluated in strict_float mode,
+ * regardless of whether strict_float mode is enabled in the current Target. */
 Expr is_nan(Expr x);
 
 /** Returns true if the argument is Inf or -Inf. Requires a
-  * floating point argument.  Vectorizes cleanly.
-  * Note that the Expr passed in will be evaluated in strict_float mode,
-  * regardless of whether strict_float mode is enabled in the current Target. */
+ * floating point argument.  Vectorizes cleanly.
+ * Note that the Expr passed in will be evaluated in strict_float mode,
+ * regardless of whether strict_float mode is enabled in the current Target. */
 Expr is_inf(Expr x);
 
 /** Returns true if the argument is a finite value (ie, neither NaN nor Inf).
-  * Requires a floating point argument.  Vectorizes cleanly.
-  * Note that the Expr passed in will be evaluated in strict_float mode,
-  * regardless of whether strict_float mode is enabled in the current Target. */
+ * Requires a floating point argument.  Vectorizes cleanly.
+ * Note that the Expr passed in will be evaluated in strict_float mode,
+ * regardless of whether strict_float mode is enabled in the current Target. */
 Expr is_finite(Expr x);
 
 /** Return the fractional part of a floating-point expression. If the argument

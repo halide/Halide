@@ -6,34 +6,34 @@ namespace PythonBindings {
 void define_concise_casts(py::module &m) {
     // explicit cast should be tried before
     //  the pybind11::implicitly_convertible<T, Expr> conversion
-    m.def("f64", [](double v) {
+    m.def("f64", [](double v) -> Expr {
         return Expr(v);
     });
-    m.def("f32", [](float v) {
+    m.def("f32", [](float v) -> Expr {
         return Expr(v);
     });
-    m.def("i64", [](int64_t v) {
+    m.def("i64", [](int64_t v) -> Expr {
         return Expr(v);
     });
-    m.def("i32", [](int32_t v) {
+    m.def("i32", [](int32_t v) -> Expr {
         return Expr(v);
     });
-    m.def("i16", [](int16_t v) {
+    m.def("i16", [](int16_t v) -> Expr {
         return Expr(v);
     });
-    m.def("i8", [](int8_t v) {
+    m.def("i8", [](int8_t v) -> Expr {
         return Expr(v);
     });
-    m.def("u64", [](uint64_t v) {
+    m.def("u64", [](uint64_t v) -> Expr {
         return Expr(v);
     });
-    m.def("u32", [](uint32_t v) {
+    m.def("u32", [](uint32_t v) -> Expr {
         return Expr(v);
     });
-    m.def("u16", [](uint16_t v) {
+    m.def("u16", [](uint16_t v) -> Expr {
         return Expr(v);
     });
-    m.def("u8", [](uint8_t v) {
+    m.def("u8", [](uint8_t v) -> Expr {
         return Expr(v);
     });
     // pybind11::implicitly_convertible<T, Expr> conversions

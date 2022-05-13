@@ -64,7 +64,7 @@ def test_tuple_select():
         f[x, y] = hl.tuple_select((x < 30, y < 30), (x, y),
                                    x + y < 100,     (x-1, y-2),
                                                     (x-100, y-200))
-    except RuntimeError as e:
+    except hl.HalideError as e:
         assert 'tuple_select() may not mix Expr and Tuple for the condition elements.' in str(e)
     else:
         assert False, 'Did not see expected exception!'
@@ -73,7 +73,7 @@ def test_tuple_select():
     try:
         f = hl.Func('f')
         f[x, y] = hl.tuple_select((x < 30, y < 30), (x, y, 0), (1, 2, 3, 4))
-    except RuntimeError as e:
+    except hl.HalideError as e:
         assert 'tuple_select() requires all Tuples to have identical sizes' in str(e)
     else:
         assert False, 'Did not see expected exception!'
