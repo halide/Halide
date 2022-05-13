@@ -19,7 +19,8 @@ public:
 protected:
     using CodeGen_Posix::visit;
 
-    string mcpu() const override;
+    string mcpu_target() const override;
+    string mcpu_tune() const override;
     string mattrs() const override;
     string mabi() const override;
     bool use_soft_float_abi() const override;
@@ -30,8 +31,12 @@ CodeGen_RISCV::CodeGen_RISCV(const Target &t)
     : CodeGen_Posix(t) {
 }
 
-string CodeGen_RISCV::mcpu() const {
+string CodeGen_RISCV::mcpu_target() const {
     return "";
+}
+
+string CodeGen_RISCV::mcpu_tune() const {
+    return mcpu_target();
 }
 
 string CodeGen_RISCV::mattrs() const {

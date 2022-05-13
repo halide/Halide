@@ -19,7 +19,8 @@ public:
 protected:
     using CodeGen_Posix::visit;
 
-    string mcpu() const override;
+    string mcpu_target() const override;
+    string mcpu_tune() const override;
     string mattrs() const override;
     bool use_soft_float_abi() const override;
     int native_vector_bits() const override;
@@ -29,12 +30,16 @@ CodeGen_MIPS::CodeGen_MIPS(const Target &t)
     : CodeGen_Posix(t) {
 }
 
-string CodeGen_MIPS::mcpu() const {
+string CodeGen_MIPS::mcpu_target() const {
     if (target.bits == 32) {
         return "";
     } else {
         return "";
     }
+}
+
+string CodeGen_MIPS::mcpu_tune() const {
+    return mcpu_target();
 }
 
 string CodeGen_MIPS::mattrs() const {

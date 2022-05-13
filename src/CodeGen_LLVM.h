@@ -106,11 +106,12 @@ protected:
     virtual void end_func(const std::vector<LoweredArgument> &args);
     // @}
 
-    /** What should be passed as -mcpu, -mattrs, and related for
-     * compilation. The architecture-specific code generator should
-     * define these. */
+    /** What should be passed as -mcpu (warning: implies attrs!), -mattrs,
+     *  and related for compilation. The architecture-specific code generator
+     *  should define these. */
     // @{
-    virtual std::string mcpu() const = 0;
+    virtual std::string mcpu_target() const = 0;
+    virtual std::string mcpu_tune() const = 0;
     virtual std::string mattrs() const = 0;
     virtual std::string mabi() const;
     virtual bool use_soft_float_abi() const = 0;
