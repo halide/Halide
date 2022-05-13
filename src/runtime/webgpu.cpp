@@ -822,8 +822,8 @@ WEAK int halide_webgpu_run(void *user_context,
         wgpuBufferRelease(arg_buffer);
     }
 
-    wgpuComputePassEncoderDispatch(pass, groupsX, groupsY, groupsZ);
-    wgpuComputePassEncoderEndPass(pass);
+    wgpuComputePassEncoderDispatchWorkgroups(pass, groupsX, groupsY, groupsZ);
+    wgpuComputePassEncoderEnd(pass);
 
     // Submit the compute command.
     WGPUCommandBuffer commands = wgpuCommandEncoderFinish(encoder, nullptr);

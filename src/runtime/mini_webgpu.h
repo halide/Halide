@@ -27,6 +27,8 @@
 // CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
 // OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+#ifndef WEBGPU_H_
+#define WEBGPU_H_
 
 #if defined(WGPU_SHARED_LIBRARY)
 #if defined(_WIN32)
@@ -46,12 +48,13 @@
 #define WGPU_EXPORT
 #endif  // defined(WGPU_SHARED_LIBRARY)
 
-#define WGPU_WHOLE_SIZE (0xffffffffffffffffULL)
+#define WGPU_ARRAY_LAYER_COUNT_UNDEFINED (0xffffffffUL)
 #define WGPU_COPY_STRIDE_UNDEFINED (0xffffffffUL)
 #define WGPU_LIMIT_U32_UNDEFINED (0xffffffffUL)
 #define WGPU_LIMIT_U64_UNDEFINED (0xffffffffffffffffULL)
-#define WGPU_ARRAY_LAYER_COUNT_UNDEFINED (0xffffffffUL)
 #define WGPU_MIP_LEVEL_COUNT_UNDEFINED (0xffffffffUL)
+#define WGPU_WHOLE_MAP_SIZE SIZE_MAX
+#define WGPU_WHOLE_SIZE (0xffffffffffffffffULL)
 
 typedef uint32_t WGPUFlags;
 
@@ -163,12 +166,26 @@ typedef enum WGPUCompareFunction {
     WGPUCompareFunction_Force32 = 0x7FFFFFFF
 } WGPUCompareFunction;
 
+typedef enum WGPUCompilationInfoRequestStatus {
+    WGPUCompilationInfoRequestStatus_Success = 0x00000000,
+    WGPUCompilationInfoRequestStatus_Error = 0x00000001,
+    WGPUCompilationInfoRequestStatus_DeviceLost = 0x00000002,
+    WGPUCompilationInfoRequestStatus_Unknown = 0x00000003,
+    WGPUCompilationInfoRequestStatus_Force32 = 0x7FFFFFFF
+} WGPUCompilationInfoRequestStatus;
+
 typedef enum WGPUCompilationMessageType {
     WGPUCompilationMessageType_Error = 0x00000000,
     WGPUCompilationMessageType_Warning = 0x00000001,
     WGPUCompilationMessageType_Info = 0x00000002,
     WGPUCompilationMessageType_Force32 = 0x7FFFFFFF
 } WGPUCompilationMessageType;
+
+typedef enum WGPUComputePassTimestampLocation {
+    WGPUComputePassTimestampLocation_Beginning = 0x00000000,
+    WGPUComputePassTimestampLocation_End = 0x00000001,
+    WGPUComputePassTimestampLocation_Force32 = 0x7FFFFFFF
+} WGPUComputePassTimestampLocation;
 
 typedef enum WGPUCreatePipelineAsyncStatus {
     WGPUCreatePipelineAsyncStatus_Success = 0x00000000,
@@ -209,7 +226,7 @@ typedef enum WGPUErrorType {
 
 typedef enum WGPUFeatureName {
     WGPUFeatureName_Undefined = 0x00000000,
-    WGPUFeatureName_DepthClamping = 0x00000001,
+    WGPUFeatureName_DepthClipControl = 0x00000001,
     WGPUFeatureName_Depth24UnormStencil8 = 0x00000002,
     WGPUFeatureName_Depth32FloatStencil8 = 0x00000003,
     WGPUFeatureName_TimestampQuery = 0x00000004,
@@ -217,6 +234,8 @@ typedef enum WGPUFeatureName {
     WGPUFeatureName_TextureCompressionBC = 0x00000006,
     WGPUFeatureName_TextureCompressionETC2 = 0x00000007,
     WGPUFeatureName_TextureCompressionASTC = 0x00000008,
+    WGPUFeatureName_IndirectFirstInstance = 0x00000009,
+    WGPUFeatureName_DepthClamping = 0x000003E8,
     WGPUFeatureName_Force32 = 0x7FFFFFFF
 } WGPUFeatureName;
 
@@ -240,8 +259,9 @@ typedef enum WGPUIndexFormat {
 } WGPUIndexFormat;
 
 typedef enum WGPULoadOp {
-    WGPULoadOp_Clear = 0x00000000,
-    WGPULoadOp_Load = 0x00000001,
+    WGPULoadOp_Undefined = 0x00000000,
+    WGPULoadOp_Clear = 0x00000001,
+    WGPULoadOp_Load = 0x00000002,
     WGPULoadOp_Force32 = 0x7FFFFFFF
 } WGPULoadOp;
 
@@ -255,10 +275,17 @@ typedef enum WGPUPipelineStatisticName {
 } WGPUPipelineStatisticName;
 
 typedef enum WGPUPowerPreference {
-    WGPUPowerPreference_LowPower = 0x00000000,
-    WGPUPowerPreference_HighPerformance = 0x00000001,
+    WGPUPowerPreference_Undefined = 0x00000000,
+    WGPUPowerPreference_LowPower = 0x00000001,
+    WGPUPowerPreference_HighPerformance = 0x00000002,
     WGPUPowerPreference_Force32 = 0x7FFFFFFF
 } WGPUPowerPreference;
+
+typedef enum WGPUPredefinedColorSpace {
+    WGPUPredefinedColorSpace_Undefined = 0x00000000,
+    WGPUPredefinedColorSpace_Srgb = 0x00000001,
+    WGPUPredefinedColorSpace_Force32 = 0x7FFFFFFF
+} WGPUPredefinedColorSpace;
 
 typedef enum WGPUPresentMode {
     WGPUPresentMode_Immediate = 0x00000000,
@@ -291,6 +318,12 @@ typedef enum WGPUQueueWorkDoneStatus {
     WGPUQueueWorkDoneStatus_Force32 = 0x7FFFFFFF
 } WGPUQueueWorkDoneStatus;
 
+typedef enum WGPURenderPassTimestampLocation {
+    WGPURenderPassTimestampLocation_Beginning = 0x00000000,
+    WGPURenderPassTimestampLocation_End = 0x00000001,
+    WGPURenderPassTimestampLocation_Force32 = 0x7FFFFFFF
+} WGPURenderPassTimestampLocation;
+
 typedef enum WGPURequestAdapterStatus {
     WGPURequestAdapterStatus_Success = 0x00000000,
     WGPURequestAdapterStatus_Unavailable = 0x00000001,
@@ -311,7 +344,8 @@ typedef enum WGPUSType {
     WGPUSType_SurfaceDescriptorFromCanvasHTMLSelector = 0x00000004,
     WGPUSType_ShaderModuleSPIRVDescriptor = 0x00000005,
     WGPUSType_ShaderModuleWGSLDescriptor = 0x00000006,
-    WGPUSType_PrimitiveDepthClampingState = 0x00000007,
+    WGPUSType_PrimitiveDepthClipControl = 0x00000007,
+    WGPUSType_PrimitiveDepthClampingState = 0x000003E9,
     WGPUSType_Force32 = 0x7FFFFFFF
 } WGPUSType;
 
@@ -342,8 +376,9 @@ typedef enum WGPUStorageTextureAccess {
 } WGPUStorageTextureAccess;
 
 typedef enum WGPUStoreOp {
-    WGPUStoreOp_Store = 0x00000000,
-    WGPUStoreOp_Discard = 0x00000001,
+    WGPUStoreOp_Undefined = 0x00000000,
+    WGPUStoreOp_Store = 0x00000001,
+    WGPUStoreOp_Discard = 0x00000002,
     WGPUStoreOp_Force32 = 0x7FFFFFFF
 } WGPUStoreOp;
 
@@ -411,59 +446,61 @@ typedef enum WGPUTextureFormat {
     WGPUTextureFormat_Depth16Unorm = 0x00000026,
     WGPUTextureFormat_Depth24Plus = 0x00000027,
     WGPUTextureFormat_Depth24PlusStencil8 = 0x00000028,
-    WGPUTextureFormat_Depth32Float = 0x00000029,
-    WGPUTextureFormat_BC1RGBAUnorm = 0x0000002A,
-    WGPUTextureFormat_BC1RGBAUnormSrgb = 0x0000002B,
-    WGPUTextureFormat_BC2RGBAUnorm = 0x0000002C,
-    WGPUTextureFormat_BC2RGBAUnormSrgb = 0x0000002D,
-    WGPUTextureFormat_BC3RGBAUnorm = 0x0000002E,
-    WGPUTextureFormat_BC3RGBAUnormSrgb = 0x0000002F,
-    WGPUTextureFormat_BC4RUnorm = 0x00000030,
-    WGPUTextureFormat_BC4RSnorm = 0x00000031,
-    WGPUTextureFormat_BC5RGUnorm = 0x00000032,
-    WGPUTextureFormat_BC5RGSnorm = 0x00000033,
-    WGPUTextureFormat_BC6HRGBUfloat = 0x00000034,
-    WGPUTextureFormat_BC6HRGBFloat = 0x00000035,
-    WGPUTextureFormat_BC7RGBAUnorm = 0x00000036,
-    WGPUTextureFormat_BC7RGBAUnormSrgb = 0x00000037,
-    WGPUTextureFormat_ETC2RGB8Unorm = 0x00000038,
-    WGPUTextureFormat_ETC2RGB8UnormSrgb = 0x00000039,
-    WGPUTextureFormat_ETC2RGB8A1Unorm = 0x0000003A,
-    WGPUTextureFormat_ETC2RGB8A1UnormSrgb = 0x0000003B,
-    WGPUTextureFormat_ETC2RGBA8Unorm = 0x0000003C,
-    WGPUTextureFormat_ETC2RGBA8UnormSrgb = 0x0000003D,
-    WGPUTextureFormat_EACR11Unorm = 0x0000003E,
-    WGPUTextureFormat_EACR11Snorm = 0x0000003F,
-    WGPUTextureFormat_EACRG11Unorm = 0x00000040,
-    WGPUTextureFormat_EACRG11Snorm = 0x00000041,
-    WGPUTextureFormat_ASTC4x4Unorm = 0x00000042,
-    WGPUTextureFormat_ASTC4x4UnormSrgb = 0x00000043,
-    WGPUTextureFormat_ASTC5x4Unorm = 0x00000044,
-    WGPUTextureFormat_ASTC5x4UnormSrgb = 0x00000045,
-    WGPUTextureFormat_ASTC5x5Unorm = 0x00000046,
-    WGPUTextureFormat_ASTC5x5UnormSrgb = 0x00000047,
-    WGPUTextureFormat_ASTC6x5Unorm = 0x00000048,
-    WGPUTextureFormat_ASTC6x5UnormSrgb = 0x00000049,
-    WGPUTextureFormat_ASTC6x6Unorm = 0x0000004A,
-    WGPUTextureFormat_ASTC6x6UnormSrgb = 0x0000004B,
-    WGPUTextureFormat_ASTC8x5Unorm = 0x0000004C,
-    WGPUTextureFormat_ASTC8x5UnormSrgb = 0x0000004D,
-    WGPUTextureFormat_ASTC8x6Unorm = 0x0000004E,
-    WGPUTextureFormat_ASTC8x6UnormSrgb = 0x0000004F,
-    WGPUTextureFormat_ASTC8x8Unorm = 0x00000050,
-    WGPUTextureFormat_ASTC8x8UnormSrgb = 0x00000051,
-    WGPUTextureFormat_ASTC10x5Unorm = 0x00000052,
-    WGPUTextureFormat_ASTC10x5UnormSrgb = 0x00000053,
-    WGPUTextureFormat_ASTC10x6Unorm = 0x00000054,
-    WGPUTextureFormat_ASTC10x6UnormSrgb = 0x00000055,
-    WGPUTextureFormat_ASTC10x8Unorm = 0x00000056,
-    WGPUTextureFormat_ASTC10x8UnormSrgb = 0x00000057,
-    WGPUTextureFormat_ASTC10x10Unorm = 0x00000058,
-    WGPUTextureFormat_ASTC10x10UnormSrgb = 0x00000059,
-    WGPUTextureFormat_ASTC12x10Unorm = 0x0000005A,
-    WGPUTextureFormat_ASTC12x10UnormSrgb = 0x0000005B,
-    WGPUTextureFormat_ASTC12x12Unorm = 0x0000005C,
-    WGPUTextureFormat_ASTC12x12UnormSrgb = 0x0000005D,
+    WGPUTextureFormat_Depth24UnormStencil8 = 0x00000029,
+    WGPUTextureFormat_Depth32Float = 0x0000002A,
+    WGPUTextureFormat_Depth32FloatStencil8 = 0x0000002B,
+    WGPUTextureFormat_BC1RGBAUnorm = 0x0000002C,
+    WGPUTextureFormat_BC1RGBAUnormSrgb = 0x0000002D,
+    WGPUTextureFormat_BC2RGBAUnorm = 0x0000002E,
+    WGPUTextureFormat_BC2RGBAUnormSrgb = 0x0000002F,
+    WGPUTextureFormat_BC3RGBAUnorm = 0x00000030,
+    WGPUTextureFormat_BC3RGBAUnormSrgb = 0x00000031,
+    WGPUTextureFormat_BC4RUnorm = 0x00000032,
+    WGPUTextureFormat_BC4RSnorm = 0x00000033,
+    WGPUTextureFormat_BC5RGUnorm = 0x00000034,
+    WGPUTextureFormat_BC5RGSnorm = 0x00000035,
+    WGPUTextureFormat_BC6HRGBUfloat = 0x00000036,
+    WGPUTextureFormat_BC6HRGBFloat = 0x00000037,
+    WGPUTextureFormat_BC7RGBAUnorm = 0x00000038,
+    WGPUTextureFormat_BC7RGBAUnormSrgb = 0x00000039,
+    WGPUTextureFormat_ETC2RGB8Unorm = 0x0000003A,
+    WGPUTextureFormat_ETC2RGB8UnormSrgb = 0x0000003B,
+    WGPUTextureFormat_ETC2RGB8A1Unorm = 0x0000003C,
+    WGPUTextureFormat_ETC2RGB8A1UnormSrgb = 0x0000003D,
+    WGPUTextureFormat_ETC2RGBA8Unorm = 0x0000003E,
+    WGPUTextureFormat_ETC2RGBA8UnormSrgb = 0x0000003F,
+    WGPUTextureFormat_EACR11Unorm = 0x00000040,
+    WGPUTextureFormat_EACR11Snorm = 0x00000041,
+    WGPUTextureFormat_EACRG11Unorm = 0x00000042,
+    WGPUTextureFormat_EACRG11Snorm = 0x00000043,
+    WGPUTextureFormat_ASTC4x4Unorm = 0x00000044,
+    WGPUTextureFormat_ASTC4x4UnormSrgb = 0x00000045,
+    WGPUTextureFormat_ASTC5x4Unorm = 0x00000046,
+    WGPUTextureFormat_ASTC5x4UnormSrgb = 0x00000047,
+    WGPUTextureFormat_ASTC5x5Unorm = 0x00000048,
+    WGPUTextureFormat_ASTC5x5UnormSrgb = 0x00000049,
+    WGPUTextureFormat_ASTC6x5Unorm = 0x0000004A,
+    WGPUTextureFormat_ASTC6x5UnormSrgb = 0x0000004B,
+    WGPUTextureFormat_ASTC6x6Unorm = 0x0000004C,
+    WGPUTextureFormat_ASTC6x6UnormSrgb = 0x0000004D,
+    WGPUTextureFormat_ASTC8x5Unorm = 0x0000004E,
+    WGPUTextureFormat_ASTC8x5UnormSrgb = 0x0000004F,
+    WGPUTextureFormat_ASTC8x6Unorm = 0x00000050,
+    WGPUTextureFormat_ASTC8x6UnormSrgb = 0x00000051,
+    WGPUTextureFormat_ASTC8x8Unorm = 0x00000052,
+    WGPUTextureFormat_ASTC8x8UnormSrgb = 0x00000053,
+    WGPUTextureFormat_ASTC10x5Unorm = 0x00000054,
+    WGPUTextureFormat_ASTC10x5UnormSrgb = 0x00000055,
+    WGPUTextureFormat_ASTC10x6Unorm = 0x00000056,
+    WGPUTextureFormat_ASTC10x6UnormSrgb = 0x00000057,
+    WGPUTextureFormat_ASTC10x8Unorm = 0x00000058,
+    WGPUTextureFormat_ASTC10x8UnormSrgb = 0x00000059,
+    WGPUTextureFormat_ASTC10x10Unorm = 0x0000005A,
+    WGPUTextureFormat_ASTC10x10UnormSrgb = 0x0000005B,
+    WGPUTextureFormat_ASTC12x10Unorm = 0x0000005C,
+    WGPUTextureFormat_ASTC12x10UnormSrgb = 0x0000005D,
+    WGPUTextureFormat_ASTC12x12Unorm = 0x0000005E,
+    WGPUTextureFormat_ASTC12x12UnormSrgb = 0x0000005F,
     WGPUTextureFormat_Force32 = 0x7FFFFFFF
 } WGPUTextureFormat;
 
@@ -653,6 +690,7 @@ typedef struct WGPUCommandEncoderDescriptor {
 } WGPUCommandEncoderDescriptor;
 
 typedef struct WGPUCompilationMessage {
+    WGPUChainedStruct const *nextInChain;
     char const *message;
     WGPUCompilationMessageType type;
     uint64_t lineNum;
@@ -661,10 +699,11 @@ typedef struct WGPUCompilationMessage {
     uint64_t length;
 } WGPUCompilationMessage;
 
-typedef struct WGPUComputePassDescriptor {
-    WGPUChainedStruct const *nextInChain;
-    char const *label;
-} WGPUComputePassDescriptor;
+typedef struct WGPUComputePassTimestampWrite {
+    WGPUQuerySet querySet;
+    uint32_t queryIndex;
+    WGPUComputePassTimestampLocation location;
+} WGPUComputePassTimestampWrite;
 
 typedef struct WGPUConstantEntry {
     WGPUChainedStruct const *nextInChain;
@@ -736,6 +775,11 @@ typedef struct WGPUPrimitiveDepthClampingState {
     bool clampDepth;
 } WGPUPrimitiveDepthClampingState;
 
+typedef struct WGPUPrimitiveDepthClipControl {
+    WGPUChainedStruct chain;
+    bool unclippedDepth;
+} WGPUPrimitiveDepthClipControl;
+
 typedef struct WGPUPrimitiveState {
     WGPUChainedStruct const *nextInChain;
     WGPUPrimitiveTopology topology;
@@ -753,6 +797,11 @@ typedef struct WGPUQuerySetDescriptor {
     uint32_t pipelineStatisticsCount;
 } WGPUQuerySetDescriptor;
 
+typedef struct WGPUQueueDescriptor {
+    WGPUChainedStruct const *nextInChain;
+    char const *label;
+} WGPUQueueDescriptor;
+
 typedef struct WGPURenderBundleDescriptor {
     WGPUChainedStruct const *nextInChain;
     char const *label;
@@ -765,19 +814,27 @@ typedef struct WGPURenderBundleEncoderDescriptor {
     WGPUTextureFormat const *colorFormats;
     WGPUTextureFormat depthStencilFormat;
     uint32_t sampleCount;
+    bool depthReadOnly;
+    bool stencilReadOnly;
 } WGPURenderBundleEncoderDescriptor;
 
 typedef struct WGPURenderPassDepthStencilAttachment {
     WGPUTextureView view;
     WGPULoadOp depthLoadOp;
     WGPUStoreOp depthStoreOp;
-    float clearDepth;
+    float depthClearValue;
     bool depthReadOnly;
     WGPULoadOp stencilLoadOp;
     WGPUStoreOp stencilStoreOp;
-    uint32_t clearStencil;
+    uint32_t stencilClearValue;
     bool stencilReadOnly;
 } WGPURenderPassDepthStencilAttachment;
+
+typedef struct WGPURenderPassTimestampWrite {
+    WGPUQuerySet querySet;
+    uint32_t queryIndex;
+    WGPURenderPassTimestampLocation location;
+} WGPURenderPassTimestampWrite;
 
 typedef struct WGPURequestAdapterOptions {
     WGPUChainedStruct const *nextInChain;
@@ -912,9 +969,17 @@ typedef struct WGPUBlendState {
 } WGPUBlendState;
 
 typedef struct WGPUCompilationInfo {
+    WGPUChainedStruct const *nextInChain;
     uint32_t messageCount;
     WGPUCompilationMessage const *messages;
 } WGPUCompilationInfo;
+
+typedef struct WGPUComputePassDescriptor {
+    WGPUChainedStruct const *nextInChain;
+    char const *label;
+    uint32_t timestampWriteCount;
+    WGPUComputePassTimestampWrite const *timestampWrites;
+} WGPUComputePassDescriptor;
 
 typedef struct WGPUDepthStencilState {
     WGPUChainedStruct const *nextInChain;
@@ -957,7 +1022,7 @@ typedef struct WGPURenderPassColorAttachment {
     WGPUTextureView resolveTarget;
     WGPULoadOp loadOp;
     WGPUStoreOp storeOp;
-    WGPUColor clearColor;
+    WGPUColor clearValue;
 } WGPURenderPassColorAttachment;
 
 typedef struct WGPURequiredLimits {
@@ -979,6 +1044,8 @@ typedef struct WGPUTextureDescriptor {
     WGPUTextureFormat format;
     uint32_t mipLevelCount;
     uint32_t sampleCount;
+    uint32_t viewFormatCount;
+    WGPUTextureFormat const *viewFormats;
 } WGPUTextureDescriptor;
 
 typedef struct WGPUVertexBufferLayout {
@@ -1015,6 +1082,7 @@ typedef struct WGPUDeviceDescriptor {
     uint32_t requiredFeaturesCount;
     WGPUFeatureName const *requiredFeatures;
     WGPURequiredLimits const *requiredLimits;
+    WGPUQueueDescriptor defaultQueue;
 } WGPUDeviceDescriptor;
 
 typedef struct WGPURenderPassDescriptor {
@@ -1024,6 +1092,8 @@ typedef struct WGPURenderPassDescriptor {
     WGPURenderPassColorAttachment const *colorAttachments;
     WGPURenderPassDepthStencilAttachment const *depthStencilAttachment;
     WGPUQuerySet occlusionQuerySet;
+    uint32_t timestampWriteCount;
+    WGPURenderPassTimestampWrite const *timestampWrites;
 } WGPURenderPassDescriptor;
 
 typedef struct WGPUVertexState {
@@ -1062,15 +1132,15 @@ extern "C" {
 #endif
 
 typedef void (*WGPUBufferMapCallback)(WGPUBufferMapAsyncStatus status, void *userdata);
+typedef void (*WGPUCompilationInfoCallback)(WGPUCompilationInfoRequestStatus status, WGPUCompilationInfo const *compilationInfo, void *userdata);
 typedef void (*WGPUCreateComputePipelineAsyncCallback)(WGPUCreatePipelineAsyncStatus status, WGPUComputePipeline pipeline, char const *message, void *userdata);
 typedef void (*WGPUCreateRenderPipelineAsyncCallback)(WGPUCreatePipelineAsyncStatus status, WGPURenderPipeline pipeline, char const *message, void *userdata);
 typedef void (*WGPUDeviceLostCallback)(WGPUDeviceLostReason reason, char const *message, void *userdata);
 typedef void (*WGPUErrorCallback)(WGPUErrorType type, char const *message, void *userdata);
+typedef void (*WGPUProc)(void);
 typedef void (*WGPUQueueWorkDoneCallback)(WGPUQueueWorkDoneStatus status, void *userdata);
 typedef void (*WGPURequestAdapterCallback)(WGPURequestAdapterStatus status, WGPUAdapter adapter, char const *message, void *userdata);
 typedef void (*WGPURequestDeviceCallback)(WGPURequestDeviceStatus status, WGPUDevice device, char const *message, void *userdata);
-
-typedef void (*WGPUProc)();
 
 #if !defined(WGPU_SKIP_PROCS)
 
@@ -1078,6 +1148,7 @@ typedef WGPUInstance (*WGPUProcCreateInstance)(WGPUInstanceDescriptor const *des
 typedef WGPUProc (*WGPUProcGetProcAddress)(WGPUDevice device, char const *procName);
 
 // Procs of Adapter
+typedef size_t (*WGPUProcAdapterEnumerateFeatures)(WGPUAdapter adapter, WGPUFeatureName *features);
 typedef bool (*WGPUProcAdapterGetLimits)(WGPUAdapter adapter, WGPUSupportedLimits *limits);
 typedef void (*WGPUProcAdapterGetProperties)(WGPUAdapter adapter, WGPUAdapterProperties *properties);
 typedef bool (*WGPUProcAdapterHasFeature)(WGPUAdapter adapter, WGPUFeatureName feature);
@@ -1086,10 +1157,12 @@ typedef void (*WGPUProcAdapterReference)(WGPUAdapter adapter);
 typedef void (*WGPUProcAdapterRelease)(WGPUAdapter adapter);
 
 // Procs of BindGroup
+typedef void (*WGPUProcBindGroupSetLabel)(WGPUBindGroup bindGroup, char const *label);
 typedef void (*WGPUProcBindGroupReference)(WGPUBindGroup bindGroup);
 typedef void (*WGPUProcBindGroupRelease)(WGPUBindGroup bindGroup);
 
 // Procs of BindGroupLayout
+typedef void (*WGPUProcBindGroupLayoutSetLabel)(WGPUBindGroupLayout bindGroupLayout, char const *label);
 typedef void (*WGPUProcBindGroupLayoutReference)(WGPUBindGroupLayout bindGroupLayout);
 typedef void (*WGPUProcBindGroupLayoutRelease)(WGPUBindGroupLayout bindGroupLayout);
 
@@ -1098,17 +1171,20 @@ typedef void (*WGPUProcBufferDestroy)(WGPUBuffer buffer);
 typedef void const *(*WGPUProcBufferGetConstMappedRange)(WGPUBuffer buffer, size_t offset, size_t size);
 typedef void *(*WGPUProcBufferGetMappedRange)(WGPUBuffer buffer, size_t offset, size_t size);
 typedef void (*WGPUProcBufferMapAsync)(WGPUBuffer buffer, WGPUMapModeFlags mode, size_t offset, size_t size, WGPUBufferMapCallback callback, void *userdata);
+typedef void (*WGPUProcBufferSetLabel)(WGPUBuffer buffer, char const *label);
 typedef void (*WGPUProcBufferUnmap)(WGPUBuffer buffer);
 typedef void (*WGPUProcBufferReference)(WGPUBuffer buffer);
 typedef void (*WGPUProcBufferRelease)(WGPUBuffer buffer);
 
 // Procs of CommandBuffer
+typedef void (*WGPUProcCommandBufferSetLabel)(WGPUCommandBuffer commandBuffer, char const *label);
 typedef void (*WGPUProcCommandBufferReference)(WGPUCommandBuffer commandBuffer);
 typedef void (*WGPUProcCommandBufferRelease)(WGPUCommandBuffer commandBuffer);
 
 // Procs of CommandEncoder
 typedef WGPUComputePassEncoder (*WGPUProcCommandEncoderBeginComputePass)(WGPUCommandEncoder commandEncoder, WGPUComputePassDescriptor const *descriptor);
 typedef WGPURenderPassEncoder (*WGPUProcCommandEncoderBeginRenderPass)(WGPUCommandEncoder commandEncoder, WGPURenderPassDescriptor const *descriptor);
+typedef void (*WGPUProcCommandEncoderClearBuffer)(WGPUCommandEncoder commandEncoder, WGPUBuffer buffer, uint64_t offset, uint64_t size);
 typedef void (*WGPUProcCommandEncoderCopyBufferToBuffer)(WGPUCommandEncoder commandEncoder, WGPUBuffer source, uint64_t sourceOffset, WGPUBuffer destination, uint64_t destinationOffset, uint64_t size);
 typedef void (*WGPUProcCommandEncoderCopyBufferToTexture)(WGPUCommandEncoder commandEncoder, WGPUImageCopyBuffer const *source, WGPUImageCopyTexture const *destination, WGPUExtent3D const *copySize);
 typedef void (*WGPUProcCommandEncoderCopyTextureToBuffer)(WGPUCommandEncoder commandEncoder, WGPUImageCopyTexture const *source, WGPUImageCopyBuffer const *destination, WGPUExtent3D const *copySize);
@@ -1118,20 +1194,22 @@ typedef void (*WGPUProcCommandEncoderInsertDebugMarker)(WGPUCommandEncoder comma
 typedef void (*WGPUProcCommandEncoderPopDebugGroup)(WGPUCommandEncoder commandEncoder);
 typedef void (*WGPUProcCommandEncoderPushDebugGroup)(WGPUCommandEncoder commandEncoder, char const *groupLabel);
 typedef void (*WGPUProcCommandEncoderResolveQuerySet)(WGPUCommandEncoder commandEncoder, WGPUQuerySet querySet, uint32_t firstQuery, uint32_t queryCount, WGPUBuffer destination, uint64_t destinationOffset);
+typedef void (*WGPUProcCommandEncoderSetLabel)(WGPUCommandEncoder commandEncoder, char const *label);
 typedef void (*WGPUProcCommandEncoderWriteTimestamp)(WGPUCommandEncoder commandEncoder, WGPUQuerySet querySet, uint32_t queryIndex);
 typedef void (*WGPUProcCommandEncoderReference)(WGPUCommandEncoder commandEncoder);
 typedef void (*WGPUProcCommandEncoderRelease)(WGPUCommandEncoder commandEncoder);
 
 // Procs of ComputePassEncoder
 typedef void (*WGPUProcComputePassEncoderBeginPipelineStatisticsQuery)(WGPUComputePassEncoder computePassEncoder, WGPUQuerySet querySet, uint32_t queryIndex);
-typedef void (*WGPUProcComputePassEncoderDispatch)(WGPUComputePassEncoder computePassEncoder, uint32_t x, uint32_t y, uint32_t z);
-typedef void (*WGPUProcComputePassEncoderDispatchIndirect)(WGPUComputePassEncoder computePassEncoder, WGPUBuffer indirectBuffer, uint64_t indirectOffset);
-typedef void (*WGPUProcComputePassEncoderEndPass)(WGPUComputePassEncoder computePassEncoder);
+typedef void (*WGPUProcComputePassEncoderDispatchWorkgroups)(WGPUComputePassEncoder computePassEncoder, uint32_t workgroupCountX, uint32_t workgroupCountY, uint32_t workgroupCountZ);
+typedef void (*WGPUProcComputePassEncoderDispatchWorkgroupsIndirect)(WGPUComputePassEncoder computePassEncoder, WGPUBuffer indirectBuffer, uint64_t indirectOffset);
+typedef void (*WGPUProcComputePassEncoderEnd)(WGPUComputePassEncoder computePassEncoder);
 typedef void (*WGPUProcComputePassEncoderEndPipelineStatisticsQuery)(WGPUComputePassEncoder computePassEncoder);
 typedef void (*WGPUProcComputePassEncoderInsertDebugMarker)(WGPUComputePassEncoder computePassEncoder, char const *markerLabel);
 typedef void (*WGPUProcComputePassEncoderPopDebugGroup)(WGPUComputePassEncoder computePassEncoder);
 typedef void (*WGPUProcComputePassEncoderPushDebugGroup)(WGPUComputePassEncoder computePassEncoder, char const *groupLabel);
 typedef void (*WGPUProcComputePassEncoderSetBindGroup)(WGPUComputePassEncoder computePassEncoder, uint32_t groupIndex, WGPUBindGroup group, uint32_t dynamicOffsetCount, uint32_t const *dynamicOffsets);
+typedef void (*WGPUProcComputePassEncoderSetLabel)(WGPUComputePassEncoder computePassEncoder, char const *label);
 typedef void (*WGPUProcComputePassEncoderSetPipeline)(WGPUComputePassEncoder computePassEncoder, WGPUComputePipeline pipeline);
 typedef void (*WGPUProcComputePassEncoderWriteTimestamp)(WGPUComputePassEncoder computePassEncoder, WGPUQuerySet querySet, uint32_t queryIndex);
 typedef void (*WGPUProcComputePassEncoderReference)(WGPUComputePassEncoder computePassEncoder);
@@ -1160,11 +1238,14 @@ typedef WGPUShaderModule (*WGPUProcDeviceCreateShaderModule)(WGPUDevice device, 
 typedef WGPUSwapChain (*WGPUProcDeviceCreateSwapChain)(WGPUDevice device, WGPUSurface surface, WGPUSwapChainDescriptor const *descriptor);
 typedef WGPUTexture (*WGPUProcDeviceCreateTexture)(WGPUDevice device, WGPUTextureDescriptor const *descriptor);
 typedef void (*WGPUProcDeviceDestroy)(WGPUDevice device);
+typedef size_t (*WGPUProcDeviceEnumerateFeatures)(WGPUDevice device, WGPUFeatureName *features);
 typedef bool (*WGPUProcDeviceGetLimits)(WGPUDevice device, WGPUSupportedLimits *limits);
 typedef WGPUQueue (*WGPUProcDeviceGetQueue)(WGPUDevice device);
+typedef bool (*WGPUProcDeviceHasFeature)(WGPUDevice device, WGPUFeatureName feature);
 typedef bool (*WGPUProcDevicePopErrorScope)(WGPUDevice device, WGPUErrorCallback callback, void *userdata);
 typedef void (*WGPUProcDevicePushErrorScope)(WGPUDevice device, WGPUErrorFilter filter);
 typedef void (*WGPUProcDeviceSetDeviceLostCallback)(WGPUDevice device, WGPUDeviceLostCallback callback, void *userdata);
+typedef void (*WGPUProcDeviceSetLabel)(WGPUDevice device, char const *label);
 typedef void (*WGPUProcDeviceSetUncapturedErrorCallback)(WGPUDevice device, WGPUErrorCallback callback, void *userdata);
 typedef void (*WGPUProcDeviceReference)(WGPUDevice device);
 typedef void (*WGPUProcDeviceRelease)(WGPUDevice device);
@@ -1177,16 +1258,19 @@ typedef void (*WGPUProcInstanceReference)(WGPUInstance instance);
 typedef void (*WGPUProcInstanceRelease)(WGPUInstance instance);
 
 // Procs of PipelineLayout
+typedef void (*WGPUProcPipelineLayoutSetLabel)(WGPUPipelineLayout pipelineLayout, char const *label);
 typedef void (*WGPUProcPipelineLayoutReference)(WGPUPipelineLayout pipelineLayout);
 typedef void (*WGPUProcPipelineLayoutRelease)(WGPUPipelineLayout pipelineLayout);
 
 // Procs of QuerySet
 typedef void (*WGPUProcQuerySetDestroy)(WGPUQuerySet querySet);
+typedef void (*WGPUProcQuerySetSetLabel)(WGPUQuerySet querySet, char const *label);
 typedef void (*WGPUProcQuerySetReference)(WGPUQuerySet querySet);
 typedef void (*WGPUProcQuerySetRelease)(WGPUQuerySet querySet);
 
 // Procs of Queue
 typedef void (*WGPUProcQueueOnSubmittedWorkDone)(WGPUQueue queue, uint64_t signalValue, WGPUQueueWorkDoneCallback callback, void *userdata);
+typedef void (*WGPUProcQueueSetLabel)(WGPUQueue queue, char const *label);
 typedef void (*WGPUProcQueueSubmit)(WGPUQueue queue, uint32_t commandCount, WGPUCommandBuffer const *commands);
 typedef void (*WGPUProcQueueWriteBuffer)(WGPUQueue queue, WGPUBuffer buffer, uint64_t bufferOffset, void const *data, size_t size);
 typedef void (*WGPUProcQueueWriteTexture)(WGPUQueue queue, WGPUImageCopyTexture const *destination, void const *data, size_t dataSize, WGPUTextureDataLayout const *dataLayout, WGPUExtent3D const *writeSize);
@@ -1208,6 +1292,7 @@ typedef void (*WGPUProcRenderBundleEncoderPopDebugGroup)(WGPURenderBundleEncoder
 typedef void (*WGPUProcRenderBundleEncoderPushDebugGroup)(WGPURenderBundleEncoder renderBundleEncoder, char const *groupLabel);
 typedef void (*WGPUProcRenderBundleEncoderSetBindGroup)(WGPURenderBundleEncoder renderBundleEncoder, uint32_t groupIndex, WGPUBindGroup group, uint32_t dynamicOffsetCount, uint32_t const *dynamicOffsets);
 typedef void (*WGPUProcRenderBundleEncoderSetIndexBuffer)(WGPURenderBundleEncoder renderBundleEncoder, WGPUBuffer buffer, WGPUIndexFormat format, uint64_t offset, uint64_t size);
+typedef void (*WGPUProcRenderBundleEncoderSetLabel)(WGPURenderBundleEncoder renderBundleEncoder, char const *label);
 typedef void (*WGPUProcRenderBundleEncoderSetPipeline)(WGPURenderBundleEncoder renderBundleEncoder, WGPURenderPipeline pipeline);
 typedef void (*WGPUProcRenderBundleEncoderSetVertexBuffer)(WGPURenderBundleEncoder renderBundleEncoder, uint32_t slot, WGPUBuffer buffer, uint64_t offset, uint64_t size);
 typedef void (*WGPUProcRenderBundleEncoderReference)(WGPURenderBundleEncoder renderBundleEncoder);
@@ -1220,8 +1305,8 @@ typedef void (*WGPUProcRenderPassEncoderDraw)(WGPURenderPassEncoder renderPassEn
 typedef void (*WGPUProcRenderPassEncoderDrawIndexed)(WGPURenderPassEncoder renderPassEncoder, uint32_t indexCount, uint32_t instanceCount, uint32_t firstIndex, int32_t baseVertex, uint32_t firstInstance);
 typedef void (*WGPUProcRenderPassEncoderDrawIndexedIndirect)(WGPURenderPassEncoder renderPassEncoder, WGPUBuffer indirectBuffer, uint64_t indirectOffset);
 typedef void (*WGPUProcRenderPassEncoderDrawIndirect)(WGPURenderPassEncoder renderPassEncoder, WGPUBuffer indirectBuffer, uint64_t indirectOffset);
+typedef void (*WGPUProcRenderPassEncoderEnd)(WGPURenderPassEncoder renderPassEncoder);
 typedef void (*WGPUProcRenderPassEncoderEndOcclusionQuery)(WGPURenderPassEncoder renderPassEncoder);
-typedef void (*WGPUProcRenderPassEncoderEndPass)(WGPURenderPassEncoder renderPassEncoder);
 typedef void (*WGPUProcRenderPassEncoderEndPipelineStatisticsQuery)(WGPURenderPassEncoder renderPassEncoder);
 typedef void (*WGPUProcRenderPassEncoderExecuteBundles)(WGPURenderPassEncoder renderPassEncoder, uint32_t bundlesCount, WGPURenderBundle const *bundles);
 typedef void (*WGPUProcRenderPassEncoderInsertDebugMarker)(WGPURenderPassEncoder renderPassEncoder, char const *markerLabel);
@@ -1230,6 +1315,7 @@ typedef void (*WGPUProcRenderPassEncoderPushDebugGroup)(WGPURenderPassEncoder re
 typedef void (*WGPUProcRenderPassEncoderSetBindGroup)(WGPURenderPassEncoder renderPassEncoder, uint32_t groupIndex, WGPUBindGroup group, uint32_t dynamicOffsetCount, uint32_t const *dynamicOffsets);
 typedef void (*WGPUProcRenderPassEncoderSetBlendConstant)(WGPURenderPassEncoder renderPassEncoder, WGPUColor const *color);
 typedef void (*WGPUProcRenderPassEncoderSetIndexBuffer)(WGPURenderPassEncoder renderPassEncoder, WGPUBuffer buffer, WGPUIndexFormat format, uint64_t offset, uint64_t size);
+typedef void (*WGPUProcRenderPassEncoderSetLabel)(WGPURenderPassEncoder renderPassEncoder, char const *label);
 typedef void (*WGPUProcRenderPassEncoderSetPipeline)(WGPURenderPassEncoder renderPassEncoder, WGPURenderPipeline pipeline);
 typedef void (*WGPUProcRenderPassEncoderSetScissorRect)(WGPURenderPassEncoder renderPassEncoder, uint32_t x, uint32_t y, uint32_t width, uint32_t height);
 typedef void (*WGPUProcRenderPassEncoderSetStencilReference)(WGPURenderPassEncoder renderPassEncoder, uint32_t reference);
@@ -1246,10 +1332,12 @@ typedef void (*WGPUProcRenderPipelineReference)(WGPURenderPipeline renderPipelin
 typedef void (*WGPUProcRenderPipelineRelease)(WGPURenderPipeline renderPipeline);
 
 // Procs of Sampler
+typedef void (*WGPUProcSamplerSetLabel)(WGPUSampler sampler, char const *label);
 typedef void (*WGPUProcSamplerReference)(WGPUSampler sampler);
 typedef void (*WGPUProcSamplerRelease)(WGPUSampler sampler);
 
 // Procs of ShaderModule
+typedef void (*WGPUProcShaderModuleGetCompilationInfo)(WGPUShaderModule shaderModule, WGPUCompilationInfoCallback callback, void *userdata);
 typedef void (*WGPUProcShaderModuleSetLabel)(WGPUShaderModule shaderModule, char const *label);
 typedef void (*WGPUProcShaderModuleReference)(WGPUShaderModule shaderModule);
 typedef void (*WGPUProcShaderModuleRelease)(WGPUShaderModule shaderModule);
@@ -1268,10 +1356,12 @@ typedef void (*WGPUProcSwapChainRelease)(WGPUSwapChain swapChain);
 // Procs of Texture
 typedef WGPUTextureView (*WGPUProcTextureCreateView)(WGPUTexture texture, WGPUTextureViewDescriptor const *descriptor);
 typedef void (*WGPUProcTextureDestroy)(WGPUTexture texture);
+typedef void (*WGPUProcTextureSetLabel)(WGPUTexture texture, char const *label);
 typedef void (*WGPUProcTextureReference)(WGPUTexture texture);
 typedef void (*WGPUProcTextureRelease)(WGPUTexture texture);
 
 // Procs of TextureView
+typedef void (*WGPUProcTextureViewSetLabel)(WGPUTextureView textureView, char const *label);
 typedef void (*WGPUProcTextureViewReference)(WGPUTextureView textureView);
 typedef void (*WGPUProcTextureViewRelease)(WGPUTextureView textureView);
 
@@ -1283,6 +1373,7 @@ WGPU_EXPORT WGPUInstance wgpuCreateInstance(WGPUInstanceDescriptor const *descri
 WGPU_EXPORT WGPUProc wgpuGetProcAddress(WGPUDevice device, char const *procName);
 
 // Methods of Adapter
+WGPU_EXPORT size_t wgpuAdapterEnumerateFeatures(WGPUAdapter adapter, WGPUFeatureName *features);
 WGPU_EXPORT bool wgpuAdapterGetLimits(WGPUAdapter adapter, WGPUSupportedLimits *limits);
 WGPU_EXPORT void wgpuAdapterGetProperties(WGPUAdapter adapter, WGPUAdapterProperties *properties);
 WGPU_EXPORT bool wgpuAdapterHasFeature(WGPUAdapter adapter, WGPUFeatureName feature);
@@ -1291,10 +1382,12 @@ WGPU_EXPORT void wgpuAdapterReference(WGPUAdapter adapter);
 WGPU_EXPORT void wgpuAdapterRelease(WGPUAdapter adapter);
 
 // Methods of BindGroup
+WGPU_EXPORT void wgpuBindGroupSetLabel(WGPUBindGroup bindGroup, char const *label);
 WGPU_EXPORT void wgpuBindGroupReference(WGPUBindGroup bindGroup);
 WGPU_EXPORT void wgpuBindGroupRelease(WGPUBindGroup bindGroup);
 
 // Methods of BindGroupLayout
+WGPU_EXPORT void wgpuBindGroupLayoutSetLabel(WGPUBindGroupLayout bindGroupLayout, char const *label);
 WGPU_EXPORT void wgpuBindGroupLayoutReference(WGPUBindGroupLayout bindGroupLayout);
 WGPU_EXPORT void wgpuBindGroupLayoutRelease(WGPUBindGroupLayout bindGroupLayout);
 
@@ -1303,17 +1396,20 @@ WGPU_EXPORT void wgpuBufferDestroy(WGPUBuffer buffer);
 WGPU_EXPORT void const *wgpuBufferGetConstMappedRange(WGPUBuffer buffer, size_t offset, size_t size);
 WGPU_EXPORT void *wgpuBufferGetMappedRange(WGPUBuffer buffer, size_t offset, size_t size);
 WGPU_EXPORT void wgpuBufferMapAsync(WGPUBuffer buffer, WGPUMapModeFlags mode, size_t offset, size_t size, WGPUBufferMapCallback callback, void *userdata);
+WGPU_EXPORT void wgpuBufferSetLabel(WGPUBuffer buffer, char const *label);
 WGPU_EXPORT void wgpuBufferUnmap(WGPUBuffer buffer);
 WGPU_EXPORT void wgpuBufferReference(WGPUBuffer buffer);
 WGPU_EXPORT void wgpuBufferRelease(WGPUBuffer buffer);
 
 // Methods of CommandBuffer
+WGPU_EXPORT void wgpuCommandBufferSetLabel(WGPUCommandBuffer commandBuffer, char const *label);
 WGPU_EXPORT void wgpuCommandBufferReference(WGPUCommandBuffer commandBuffer);
 WGPU_EXPORT void wgpuCommandBufferRelease(WGPUCommandBuffer commandBuffer);
 
 // Methods of CommandEncoder
 WGPU_EXPORT WGPUComputePassEncoder wgpuCommandEncoderBeginComputePass(WGPUCommandEncoder commandEncoder, WGPUComputePassDescriptor const *descriptor);
 WGPU_EXPORT WGPURenderPassEncoder wgpuCommandEncoderBeginRenderPass(WGPUCommandEncoder commandEncoder, WGPURenderPassDescriptor const *descriptor);
+WGPU_EXPORT void wgpuCommandEncoderClearBuffer(WGPUCommandEncoder commandEncoder, WGPUBuffer buffer, uint64_t offset, uint64_t size);
 WGPU_EXPORT void wgpuCommandEncoderCopyBufferToBuffer(WGPUCommandEncoder commandEncoder, WGPUBuffer source, uint64_t sourceOffset, WGPUBuffer destination, uint64_t destinationOffset, uint64_t size);
 WGPU_EXPORT void wgpuCommandEncoderCopyBufferToTexture(WGPUCommandEncoder commandEncoder, WGPUImageCopyBuffer const *source, WGPUImageCopyTexture const *destination, WGPUExtent3D const *copySize);
 WGPU_EXPORT void wgpuCommandEncoderCopyTextureToBuffer(WGPUCommandEncoder commandEncoder, WGPUImageCopyTexture const *source, WGPUImageCopyBuffer const *destination, WGPUExtent3D const *copySize);
@@ -1323,20 +1419,22 @@ WGPU_EXPORT void wgpuCommandEncoderInsertDebugMarker(WGPUCommandEncoder commandE
 WGPU_EXPORT void wgpuCommandEncoderPopDebugGroup(WGPUCommandEncoder commandEncoder);
 WGPU_EXPORT void wgpuCommandEncoderPushDebugGroup(WGPUCommandEncoder commandEncoder, char const *groupLabel);
 WGPU_EXPORT void wgpuCommandEncoderResolveQuerySet(WGPUCommandEncoder commandEncoder, WGPUQuerySet querySet, uint32_t firstQuery, uint32_t queryCount, WGPUBuffer destination, uint64_t destinationOffset);
+WGPU_EXPORT void wgpuCommandEncoderSetLabel(WGPUCommandEncoder commandEncoder, char const *label);
 WGPU_EXPORT void wgpuCommandEncoderWriteTimestamp(WGPUCommandEncoder commandEncoder, WGPUQuerySet querySet, uint32_t queryIndex);
 WGPU_EXPORT void wgpuCommandEncoderReference(WGPUCommandEncoder commandEncoder);
 WGPU_EXPORT void wgpuCommandEncoderRelease(WGPUCommandEncoder commandEncoder);
 
 // Methods of ComputePassEncoder
 WGPU_EXPORT void wgpuComputePassEncoderBeginPipelineStatisticsQuery(WGPUComputePassEncoder computePassEncoder, WGPUQuerySet querySet, uint32_t queryIndex);
-WGPU_EXPORT void wgpuComputePassEncoderDispatch(WGPUComputePassEncoder computePassEncoder, uint32_t x, uint32_t y, uint32_t z);
-WGPU_EXPORT void wgpuComputePassEncoderDispatchIndirect(WGPUComputePassEncoder computePassEncoder, WGPUBuffer indirectBuffer, uint64_t indirectOffset);
-WGPU_EXPORT void wgpuComputePassEncoderEndPass(WGPUComputePassEncoder computePassEncoder);
+WGPU_EXPORT void wgpuComputePassEncoderDispatchWorkgroups(WGPUComputePassEncoder computePassEncoder, uint32_t workgroupCountX, uint32_t workgroupCountY, uint32_t workgroupCountZ);
+WGPU_EXPORT void wgpuComputePassEncoderDispatchWorkgroupsIndirect(WGPUComputePassEncoder computePassEncoder, WGPUBuffer indirectBuffer, uint64_t indirectOffset);
+WGPU_EXPORT void wgpuComputePassEncoderEnd(WGPUComputePassEncoder computePassEncoder);
 WGPU_EXPORT void wgpuComputePassEncoderEndPipelineStatisticsQuery(WGPUComputePassEncoder computePassEncoder);
 WGPU_EXPORT void wgpuComputePassEncoderInsertDebugMarker(WGPUComputePassEncoder computePassEncoder, char const *markerLabel);
 WGPU_EXPORT void wgpuComputePassEncoderPopDebugGroup(WGPUComputePassEncoder computePassEncoder);
 WGPU_EXPORT void wgpuComputePassEncoderPushDebugGroup(WGPUComputePassEncoder computePassEncoder, char const *groupLabel);
 WGPU_EXPORT void wgpuComputePassEncoderSetBindGroup(WGPUComputePassEncoder computePassEncoder, uint32_t groupIndex, WGPUBindGroup group, uint32_t dynamicOffsetCount, uint32_t const *dynamicOffsets);
+WGPU_EXPORT void wgpuComputePassEncoderSetLabel(WGPUComputePassEncoder computePassEncoder, char const *label);
 WGPU_EXPORT void wgpuComputePassEncoderSetPipeline(WGPUComputePassEncoder computePassEncoder, WGPUComputePipeline pipeline);
 WGPU_EXPORT void wgpuComputePassEncoderWriteTimestamp(WGPUComputePassEncoder computePassEncoder, WGPUQuerySet querySet, uint32_t queryIndex);
 WGPU_EXPORT void wgpuComputePassEncoderReference(WGPUComputePassEncoder computePassEncoder);
@@ -1365,11 +1463,14 @@ WGPU_EXPORT WGPUShaderModule wgpuDeviceCreateShaderModule(WGPUDevice device, WGP
 WGPU_EXPORT WGPUSwapChain wgpuDeviceCreateSwapChain(WGPUDevice device, WGPUSurface surface, WGPUSwapChainDescriptor const *descriptor);
 WGPU_EXPORT WGPUTexture wgpuDeviceCreateTexture(WGPUDevice device, WGPUTextureDescriptor const *descriptor);
 WGPU_EXPORT void wgpuDeviceDestroy(WGPUDevice device);
+WGPU_EXPORT size_t wgpuDeviceEnumerateFeatures(WGPUDevice device, WGPUFeatureName *features);
 WGPU_EXPORT bool wgpuDeviceGetLimits(WGPUDevice device, WGPUSupportedLimits *limits);
 WGPU_EXPORT WGPUQueue wgpuDeviceGetQueue(WGPUDevice device);
+WGPU_EXPORT bool wgpuDeviceHasFeature(WGPUDevice device, WGPUFeatureName feature);
 WGPU_EXPORT bool wgpuDevicePopErrorScope(WGPUDevice device, WGPUErrorCallback callback, void *userdata);
 WGPU_EXPORT void wgpuDevicePushErrorScope(WGPUDevice device, WGPUErrorFilter filter);
 WGPU_EXPORT void wgpuDeviceSetDeviceLostCallback(WGPUDevice device, WGPUDeviceLostCallback callback, void *userdata);
+WGPU_EXPORT void wgpuDeviceSetLabel(WGPUDevice device, char const *label);
 WGPU_EXPORT void wgpuDeviceSetUncapturedErrorCallback(WGPUDevice device, WGPUErrorCallback callback, void *userdata);
 WGPU_EXPORT void wgpuDeviceReference(WGPUDevice device);
 WGPU_EXPORT void wgpuDeviceRelease(WGPUDevice device);
@@ -1382,16 +1483,19 @@ WGPU_EXPORT void wgpuInstanceReference(WGPUInstance instance);
 WGPU_EXPORT void wgpuInstanceRelease(WGPUInstance instance);
 
 // Methods of PipelineLayout
+WGPU_EXPORT void wgpuPipelineLayoutSetLabel(WGPUPipelineLayout pipelineLayout, char const *label);
 WGPU_EXPORT void wgpuPipelineLayoutReference(WGPUPipelineLayout pipelineLayout);
 WGPU_EXPORT void wgpuPipelineLayoutRelease(WGPUPipelineLayout pipelineLayout);
 
 // Methods of QuerySet
 WGPU_EXPORT void wgpuQuerySetDestroy(WGPUQuerySet querySet);
+WGPU_EXPORT void wgpuQuerySetSetLabel(WGPUQuerySet querySet, char const *label);
 WGPU_EXPORT void wgpuQuerySetReference(WGPUQuerySet querySet);
 WGPU_EXPORT void wgpuQuerySetRelease(WGPUQuerySet querySet);
 
 // Methods of Queue
 WGPU_EXPORT void wgpuQueueOnSubmittedWorkDone(WGPUQueue queue, uint64_t signalValue, WGPUQueueWorkDoneCallback callback, void *userdata);
+WGPU_EXPORT void wgpuQueueSetLabel(WGPUQueue queue, char const *label);
 WGPU_EXPORT void wgpuQueueSubmit(WGPUQueue queue, uint32_t commandCount, WGPUCommandBuffer const *commands);
 WGPU_EXPORT void wgpuQueueWriteBuffer(WGPUQueue queue, WGPUBuffer buffer, uint64_t bufferOffset, void const *data, size_t size);
 WGPU_EXPORT void wgpuQueueWriteTexture(WGPUQueue queue, WGPUImageCopyTexture const *destination, void const *data, size_t dataSize, WGPUTextureDataLayout const *dataLayout, WGPUExtent3D const *writeSize);
@@ -1413,6 +1517,7 @@ WGPU_EXPORT void wgpuRenderBundleEncoderPopDebugGroup(WGPURenderBundleEncoder re
 WGPU_EXPORT void wgpuRenderBundleEncoderPushDebugGroup(WGPURenderBundleEncoder renderBundleEncoder, char const *groupLabel);
 WGPU_EXPORT void wgpuRenderBundleEncoderSetBindGroup(WGPURenderBundleEncoder renderBundleEncoder, uint32_t groupIndex, WGPUBindGroup group, uint32_t dynamicOffsetCount, uint32_t const *dynamicOffsets);
 WGPU_EXPORT void wgpuRenderBundleEncoderSetIndexBuffer(WGPURenderBundleEncoder renderBundleEncoder, WGPUBuffer buffer, WGPUIndexFormat format, uint64_t offset, uint64_t size);
+WGPU_EXPORT void wgpuRenderBundleEncoderSetLabel(WGPURenderBundleEncoder renderBundleEncoder, char const *label);
 WGPU_EXPORT void wgpuRenderBundleEncoderSetPipeline(WGPURenderBundleEncoder renderBundleEncoder, WGPURenderPipeline pipeline);
 WGPU_EXPORT void wgpuRenderBundleEncoderSetVertexBuffer(WGPURenderBundleEncoder renderBundleEncoder, uint32_t slot, WGPUBuffer buffer, uint64_t offset, uint64_t size);
 WGPU_EXPORT void wgpuRenderBundleEncoderReference(WGPURenderBundleEncoder renderBundleEncoder);
@@ -1425,8 +1530,8 @@ WGPU_EXPORT void wgpuRenderPassEncoderDraw(WGPURenderPassEncoder renderPassEncod
 WGPU_EXPORT void wgpuRenderPassEncoderDrawIndexed(WGPURenderPassEncoder renderPassEncoder, uint32_t indexCount, uint32_t instanceCount, uint32_t firstIndex, int32_t baseVertex, uint32_t firstInstance);
 WGPU_EXPORT void wgpuRenderPassEncoderDrawIndexedIndirect(WGPURenderPassEncoder renderPassEncoder, WGPUBuffer indirectBuffer, uint64_t indirectOffset);
 WGPU_EXPORT void wgpuRenderPassEncoderDrawIndirect(WGPURenderPassEncoder renderPassEncoder, WGPUBuffer indirectBuffer, uint64_t indirectOffset);
+WGPU_EXPORT void wgpuRenderPassEncoderEnd(WGPURenderPassEncoder renderPassEncoder);
 WGPU_EXPORT void wgpuRenderPassEncoderEndOcclusionQuery(WGPURenderPassEncoder renderPassEncoder);
-WGPU_EXPORT void wgpuRenderPassEncoderEndPass(WGPURenderPassEncoder renderPassEncoder);
 WGPU_EXPORT void wgpuRenderPassEncoderEndPipelineStatisticsQuery(WGPURenderPassEncoder renderPassEncoder);
 WGPU_EXPORT void wgpuRenderPassEncoderExecuteBundles(WGPURenderPassEncoder renderPassEncoder, uint32_t bundlesCount, WGPURenderBundle const *bundles);
 WGPU_EXPORT void wgpuRenderPassEncoderInsertDebugMarker(WGPURenderPassEncoder renderPassEncoder, char const *markerLabel);
@@ -1435,6 +1540,7 @@ WGPU_EXPORT void wgpuRenderPassEncoderPushDebugGroup(WGPURenderPassEncoder rende
 WGPU_EXPORT void wgpuRenderPassEncoderSetBindGroup(WGPURenderPassEncoder renderPassEncoder, uint32_t groupIndex, WGPUBindGroup group, uint32_t dynamicOffsetCount, uint32_t const *dynamicOffsets);
 WGPU_EXPORT void wgpuRenderPassEncoderSetBlendConstant(WGPURenderPassEncoder renderPassEncoder, WGPUColor const *color);
 WGPU_EXPORT void wgpuRenderPassEncoderSetIndexBuffer(WGPURenderPassEncoder renderPassEncoder, WGPUBuffer buffer, WGPUIndexFormat format, uint64_t offset, uint64_t size);
+WGPU_EXPORT void wgpuRenderPassEncoderSetLabel(WGPURenderPassEncoder renderPassEncoder, char const *label);
 WGPU_EXPORT void wgpuRenderPassEncoderSetPipeline(WGPURenderPassEncoder renderPassEncoder, WGPURenderPipeline pipeline);
 WGPU_EXPORT void wgpuRenderPassEncoderSetScissorRect(WGPURenderPassEncoder renderPassEncoder, uint32_t x, uint32_t y, uint32_t width, uint32_t height);
 WGPU_EXPORT void wgpuRenderPassEncoderSetStencilReference(WGPURenderPassEncoder renderPassEncoder, uint32_t reference);
@@ -1451,10 +1557,12 @@ WGPU_EXPORT void wgpuRenderPipelineReference(WGPURenderPipeline renderPipeline);
 WGPU_EXPORT void wgpuRenderPipelineRelease(WGPURenderPipeline renderPipeline);
 
 // Methods of Sampler
+WGPU_EXPORT void wgpuSamplerSetLabel(WGPUSampler sampler, char const *label);
 WGPU_EXPORT void wgpuSamplerReference(WGPUSampler sampler);
 WGPU_EXPORT void wgpuSamplerRelease(WGPUSampler sampler);
 
 // Methods of ShaderModule
+WGPU_EXPORT void wgpuShaderModuleGetCompilationInfo(WGPUShaderModule shaderModule, WGPUCompilationInfoCallback callback, void *userdata);
 WGPU_EXPORT void wgpuShaderModuleSetLabel(WGPUShaderModule shaderModule, char const *label);
 WGPU_EXPORT void wgpuShaderModuleReference(WGPUShaderModule shaderModule);
 WGPU_EXPORT void wgpuShaderModuleRelease(WGPUShaderModule shaderModule);
@@ -1473,10 +1581,12 @@ WGPU_EXPORT void wgpuSwapChainRelease(WGPUSwapChain swapChain);
 // Methods of Texture
 WGPU_EXPORT WGPUTextureView wgpuTextureCreateView(WGPUTexture texture, WGPUTextureViewDescriptor const *descriptor);
 WGPU_EXPORT void wgpuTextureDestroy(WGPUTexture texture);
+WGPU_EXPORT void wgpuTextureSetLabel(WGPUTexture texture, char const *label);
 WGPU_EXPORT void wgpuTextureReference(WGPUTexture texture);
 WGPU_EXPORT void wgpuTextureRelease(WGPUTexture texture);
 
 // Methods of TextureView
+WGPU_EXPORT void wgpuTextureViewSetLabel(WGPUTextureView textureView, char const *label);
 WGPU_EXPORT void wgpuTextureViewReference(WGPUTextureView textureView);
 WGPU_EXPORT void wgpuTextureViewRelease(WGPUTextureView textureView);
 
@@ -1485,3 +1595,5 @@ WGPU_EXPORT void wgpuTextureViewRelease(WGPUTextureView textureView);
 #ifdef __cplusplus
 }  // extern "C"
 #endif
+
+#endif  // WEBGPU_H_
