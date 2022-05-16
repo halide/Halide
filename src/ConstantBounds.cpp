@@ -40,17 +40,16 @@ Direction flip(const Direction &direction) {
 }
 
 /*
-* Methods that push divisions or multiplications by constants inwards
-* These are approximation techniques that approximate in a give direction.
-*/
+ * Methods that push divisions or multiplications by constants inwards
+ * These are approximation techniques that approximate in a give direction.
+ */
 Expr handle_push_div(const Expr &expr, Direction direction, int64_t denom);
 Expr handle_push_mul(const Expr &expr, Direction direction, int64_t factor);
 Expr handle_push_none(const Expr &expr, Direction direction);
 
-
 /*
-* Helper functions for pushing a multiplication inside of a division.
-*/
+ * Helper functions for pushing a multiplication inside of a division.
+ */
 Expr push_div_inside_mul_helper(const Expr &a, const IntImm *b, const Direction direction, const int64_t denom) {
     // Can only go inside a mul if the constant of multiplication is divisible by the denominator
     // TODO: are there any other cases that we can handle?
@@ -101,10 +100,10 @@ Expr push_div_inside_mul(const Mul *op, const Direction direction, const int64_t
 }
 
 /*
-* Approximate method. Push division by a constant inside a number of possible IR nodes.
-* Requires that the denominator being pushed is positive. This is the common case anyways.
-* Requires that the denom is not 1 - if denom=1, handle_push_none should be called.
-*/
+ * Approximate method. Push division by a constant inside a number of possible IR nodes.
+ * Requires that the denominator being pushed is positive. This is the common case anyways.
+ * Requires that the denom is not 1 - if denom=1, handle_push_none should be called.
+ */
 Expr handle_push_div(const Expr &expr, const Direction direction, const int64_t denom) {
     debug(3) << "push_div(" << expr << ", " << direction << ", " << denom << ")\n";
     internal_assert(denom != 1) << "handle_push_div called with denom=1 on Expr: " << expr << "\n";
@@ -177,9 +176,9 @@ Expr handle_push_div(const Expr &expr, const Direction direction, const int64_t 
 }
 
 /*
-* Approximate method. Push multiplication by a constant inside a number of possible IR nodes.
-* Requires that the factor is not 1 - if factor=1, handle_push_none should be called.
-*/
+ * Approximate method. Push multiplication by a constant inside a number of possible IR nodes.
+ * Requires that the factor is not 1 - if factor=1, handle_push_none should be called.
+ */
 Expr handle_push_mul(const Expr &expr, Direction direction, const int64_t factor) {
     debug(3) << "push_mul(" << expr << ", " << direction << ", " << factor << ")\n";
     internal_assert(factor != 1) << "handle_push_mul called with factor=1 on Expr: " << expr << "\n";
@@ -374,9 +373,9 @@ public:
 };
 
 /*
-* Visitor for removing terms that are completely unbounded from
-* a min or a max
-*/
+ * Visitor for removing terms that are completely unbounded from
+ * a min or a max.
+ */
 class StripUnboundedTerms : public IRMutator {
     // Which direction we are approximating.
     Direction direction;
@@ -618,10 +617,10 @@ public:
 };
 
 /*
-* Visitor for reordering summations and removing like-terms from min/max/select nodes.
-* This is an exact method, no approximations.
-* Summations are represented as a vector of affine terms.
-*/
+ * Visitor for reordering summations and removing like-terms from min/max/select nodes.
+ * This is an exact method, no approximations.
+ * Summations are represented as a vector of affine terms.
+ */
 class ReorderTerms : public IRGraphMutator {
     using IRGraphMutator::visit;
 
@@ -994,7 +993,7 @@ Expr approximate_optimizations(const Expr &expr, Direction direction, const Scop
     // TODO: try smart substitutions and/or an early-out mechanism.
     Expr subs = substitute_some_lets(expr);
     if (!subs.same_as(expr)) {
-      subs = simplify(subs);
+        subs = simplify(subs);
     }
     subs = reorder_terms(subs);
     // TODO: only do push_rationals if correlated divisions exist.
