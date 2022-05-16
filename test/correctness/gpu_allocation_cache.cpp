@@ -125,10 +125,10 @@ int main(int argc, char **argv) {
     };
 
     // First run them serially (compilation of a Func isn't thread-safe).
-    //test1(true);
-    //test2(true);
-    //test3(true);
-    //return 0;
+    // test1(true);
+    // test2(true);
+    // test3(true);
+    // return 0;
 
     // Now run all at the same time to check for concurrency issues.
 

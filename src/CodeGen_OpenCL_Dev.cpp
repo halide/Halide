@@ -4,7 +4,6 @@
 #include <utility>
 
 #include "CSE.h"
-#include "CodeGen_C.h"
 #include "CodeGen_GPU_Dev.h"
 #include "CodeGen_Internal.h"
 #include "CodeGen_OpenCL_Dev.h"
@@ -55,18 +54,19 @@ public:
     }
 
 protected:
-    class CodeGen_OpenCL_C : public CodeGen_C {
+    class CodeGen_OpenCL_C : public CodeGen_GPU_C {
     public:
         CodeGen_OpenCL_C(std::ostream &s, Target t)
-            : CodeGen_C(s, t) {
+            : CodeGen_GPU_C(s, t) {
             integer_suffix_style = IntegerSuffixStyle::OpenCL;
+            vector_declaration_style = VectorDeclarationStyle::OpenCLSyntax;
         }
         void add_kernel(Stmt stmt,
                         const std::string &name,
                         const std::vector<DeviceArgument> &args);
 
     protected:
-        using CodeGen_C::visit;
+        using CodeGen_GPU_C::visit;
         std::string print_type(Type type, AppendSpaceIfNeeded append_space = DoNotAppendSpace) override;
         std::string print_reinterpret(Type type, const Expr &e) override;
         std::string print_extern_call(const Call *op) override;
@@ -223,7 +223,7 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const For *loop) {
 
     } else {
         user_assert(loop->for_type != ForType::Parallel) << "Cannot use parallel loops inside OpenCL kernel\n";
-        CodeGen_C::visit(loop);
+        CodeGen_GPU_C::visit(loop);
     }
 }
 
@@ -351,7 +351,7 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Call *op) {
                 print_assignment(op->type, a0 + " >> " + a1);
             }
         } else {
-            CodeGen_C::visit(op);
+            CodeGen_GPU_C::visit(op);
         }
     } else if (op->is_intrinsic(Call::image_load)) {
         // image_load(<image name>, <buffer>, <x>, <x-extent>, <y>,
@@ -455,7 +455,7 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Call *op) {
             stream << write_image.str();
         }
     } else {
-        CodeGen_C::visit(op);
+        CodeGen_GPU_C::visit(op);
     }
 }
 
@@ -743,7 +743,7 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Cast *op) {
     if (op->type.is_vector()) {
         print_assignment(op->type, "convert_" + print_type(op->type) + "(" + print_expr(op->value) + ")");
     } else {
-        CodeGen_C::visit(op);
+        CodeGen_GPU_C::visit(op);
     }
 }
 
@@ -755,7 +755,7 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Select *op) {
         equiv.accept(this);
         return;
     }
-    CodeGen_C::visit(op);
+    CodeGen_GPU_C::visit(op);
 }
 
 void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Allocate *op) {
@@ -858,8 +858,14 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Shuffle *op) {
             }
             stream << ");\n";
         }
+    } else if (op->is_extract_element()) {
+        // OpenCL requires using .s<n> format for extracting an element
+        ostringstream rhs;
+        rhs << print_expr(op->vectors[0]);
+        rhs << ".s" << op->indices[0];
+        print_assignment(op->type, rhs.str());
     } else {
-        internal_error << "Shuffle not implemented.\n";
+        CodeGen_GPU_C::visit(op);
     }
 }
 
@@ -879,7 +885,7 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Atomic *op) {
 
     // Issue atomic stores.
     ScopedValue<bool> old_emit_atomic_stores(emit_atomic_stores, true);
-    CodeGen_C::visit(op);
+    CodeGen_GPU_C::visit(op);
 }
 
 void CodeGen_OpenCL_Dev::add_kernel(Stmt s,
@@ -925,6 +931,13 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::add_kernel(Stmt s,
     s = eliminate_bool_vectors(s);
     debug(2) << "After eliminating bool vectors:\n"
              << s << "\n";
+
+    // We need to scalarize/de-predicate any loads/stores, since OpenCL does not
+    // support predication.
+    s = scalarize_predicated_loads_stores(s);
+
+    debug(2) << "After removing predication: \n"
+             << s;
 
     // Figure out which arguments should be passed in __constant.
     // Such arguments should be:
@@ -1136,7 +1149,7 @@ void CodeGen_OpenCL_Dev::init_module() {
 
     // There does not appear to be a reliable way to safely ignore unused
     // variables in OpenCL C. See https://github.com/halide/Halide/issues/4918.
-    src_stream << "#define halide_unused(x)\n";
+    src_stream << "#define halide_maybe_unused(x)\n";
 
     if (target.has_feature(Target::CLDoubles)) {
         src_stream << "#pragma OPENCL EXTENSION cl_khr_fp64 : enable\n"

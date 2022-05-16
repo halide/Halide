@@ -18,6 +18,8 @@
 // Can be generated via the following:
 // cat src/runtime/runtime_internal.h src/runtime/HalideRuntime*.h | grep "^[^ ][^(]*halide_[^ ]*(" | grep -v '#define' | sed "s/[^(]*halide/halide/" | sed "s/(.*//" | sed "s/^h/    \(void *)\&h/" | sed "s/$/,/" | sort | uniq
 
+extern "C" void halide_unused_force_include_types();
+
 extern "C" __attribute__((used)) void *halide_runtime_api_functions[] = {
     (void *)&halide_buffer_copy,
     (void *)&halide_buffer_to_string,
@@ -46,11 +48,13 @@ extern "C" __attribute__((used)) void *halide_runtime_api_functions[] = {
     (void *)&halide_device_malloc,
     (void *)&halide_device_release,
     (void *)&halide_device_sync,
+    (void *)&halide_disable_timer_interrupt,
     (void *)&halide_do_par_for,
     (void *)&halide_do_parallel_tasks,
     (void *)&halide_do_task,
     (void *)&halide_do_loop_task,
     (void *)&halide_double_to_string,
+    (void *)&halide_enable_timer_interrupt,
     (void *)&halide_error,
     (void *)&halide_error_access_out_of_bounds,
     (void *)&halide_error_bad_dimensions,
@@ -109,7 +113,6 @@ extern "C" __attribute__((used)) void *halide_runtime_api_functions[] = {
     (void *)&halide_join_thread,
     (void *)&halide_load_library,
     (void *)&halide_malloc,
-    (void *)&halide_matlab_call_pipeline,
     (void *)&halide_memoization_cache_cleanup,
     (void *)&halide_memoization_cache_evict,
     (void *)&halide_memoization_cache_lookup,
@@ -196,6 +199,7 @@ extern "C" __attribute__((used)) void *halide_runtime_api_functions[] = {
     (void *)&halide_sleep_ms,
     (void *)&halide_spawn_thread,
     (void *)&halide_start_clock,
+    (void *)&halide_start_timer_chain,
     (void *)&halide_string_to_string,
     (void *)&halide_trace,
     (void *)&halide_trace_helper,
@@ -207,4 +211,5 @@ extern "C" __attribute__((used)) void *halide_runtime_api_functions[] = {
     (void *)&halide_d3d12compute_finalize_kernels,
     (void *)&halide_d3d12compute_release_context,
     (void *)&halide_d3d12compute_run,
+    (void *)&halide_unused_force_include_types,
 };
