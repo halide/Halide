@@ -243,6 +243,9 @@ string CodeGen_WebGPU_Dev::CodeGen_WGSL::print_buffer_type(Type type) {
         internal_assert(type.bits() == 8 || type.bits() == 16);
         internal_assert(!type.is_float());
         // Types that are not 32-bits are emulated using atomics.
+        user_warning << "buffers of small integer types are currently emulated "
+                     << "using atomics in the WebGPU backend, and accesses to "
+                     << "them will be slow";
         return "atomic<u32>";
     }
     return print_type(type);
