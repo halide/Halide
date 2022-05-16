@@ -24,7 +24,7 @@ void check(Buffer<float> a, Buffer<float> b) {
         int err = bits_diff(a(i), b(i));
         if (err > 13) {
             printf("Mismatch in mantissa at %d: %10.10f %10.10f. Differs by %d bits.\n", i, a(i), b(i), err);
-            //exit(-1);
+            // exit(-1);
         }
     }
 }

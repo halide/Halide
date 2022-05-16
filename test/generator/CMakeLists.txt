@@ -183,10 +183,6 @@ halide_define_aot_test(blur2x2)
 # buffer_copy_generator.cpp
 halide_define_aot_test(buffer_copy)
 
-# buildmethod_aottest.cpp
-# buildmethod_generator.cpp
-halide_define_aot_test(buildmethod)
-
 # can_use_target_aottest.cpp
 # can_use_target_generator.cpp
 halide_define_aot_test(can_use_target)
@@ -305,16 +301,6 @@ halide_define_aot_test(image_from_array)
 # mandelbrot_aottest.cpp
 # mandelbrot_generator.cpp
 halide_define_aot_test(mandelbrot)
-
-# matlab_aottest.cpp
-# matlab_generator.cpp
-halide_define_aot_test(matlab
-                       # Needs matlab support. See https://github.com/halide/Halide/issues/2082
-                       ENABLE_IF NOT ${USING_WASM}
-                       FEATURES matlab)
-if (TARGET generator_aot_matlab)
-    set_target_properties(generator_aot_matlab PROPERTIES ENABLE_EXPORTS TRUE)
-endif ()
 
 # memory_profiler_mandelbrot_aottest.cpp
 # memory_profiler_mandelbrot_generator.cpp

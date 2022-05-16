@@ -24,7 +24,9 @@ void define_target(py::module &m) {
             .def(py::init<>())
             .def(py::init<const std::string &>())
             .def(py::init<Target::OS, Target::Arch, int>())
+            .def(py::init<Target::OS, Target::Arch, int, Target::Processor>())
             .def(py::init<Target::OS, Target::Arch, int, std::vector<Target::Feature>>())
+            .def(py::init<Target::OS, Target::Arch, int, Target::Processor, std::vector<Target::Feature>>())
 
             .def("__eq__", [](const Target &value, Target *value2) { return value2 && value == *value2; })
             .def("__ne__", [](const Target &value, Target *value2) { return !value2 || value != *value2; })
@@ -32,12 +34,13 @@ void define_target(py::module &m) {
             .def_readwrite("os", &Target::os)
             .def_readwrite("arch", &Target::arch)
             .def_readwrite("bits", &Target::bits)
+            .def_readwrite("processor_tune", &Target::processor_tune)
 
             .def("__repr__", &target_repr)
             .def("__str__", &Target::to_string)
             .def("to_string", &Target::to_string)
 
-            .def("has_feature", (bool (Target::*)(Target::Feature) const) & Target::has_feature)
+            .def("has_feature", (bool(Target::*)(Target::Feature) const) & Target::has_feature)
             .def("features_any_of", &Target::features_any_of, py::arg("features"))
             .def("features_all_of", &Target::features_all_of, py::arg("features"))
 

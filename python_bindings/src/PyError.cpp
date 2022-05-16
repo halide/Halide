@@ -17,7 +17,7 @@ void halide_python_print(JITUserContext *, const char *msg) {
 class HalidePythonCompileTimeErrorReporter : public CompileTimeErrorReporter {
 public:
     void warning(const char *msg) override {
-        py::print(msg, py::arg("end") = "");
+        halide_python_print(nullptr, msg);
     }
 
     void error(const char *msg) override {
@@ -36,6 +36,17 @@ void define_error(py::module &m) {
     handlers.custom_error = halide_python_error;
     handlers.custom_print = halide_python_print;
     Halide::Internal::JITSharedRuntime::set_default_handlers(handlers);
+
+    static py::exception<Error> halide_error(m, "HalideError");
+    py::register_exception_translator([](std::exception_ptr p) {  // NOLINT
+        try {
+            if (p) {
+                std::rethrow_exception(p);
+            }
+        } catch (const Error &e) {
+            halide_error(e.what());
+        }
+    });
 }
 
 }  // namespace PythonBindings

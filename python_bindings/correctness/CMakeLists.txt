@@ -1,17 +1,4 @@
-set(GENERATORS
-    complexstub_generator.cpp
-    nobuildmethod_generator.cpp
-    partialbuildmethod_generator.cpp
-    simplestub_generator.cpp
-    )
-
-foreach (GEN IN LISTS GENERATORS)
-    string(REPLACE "_generator.cpp" "" TARGET "${GEN}")
-    add_generator_python(${TARGET} ${GEN})
-endforeach ()
-
-# Handle addconstant, bit, user_context
-add_subdirectory(ext)
+add_subdirectory(generators)
 
 add_library(the_sort_function MODULE the_sort_function.c)
 target_link_libraries(the_sort_function PRIVATE Halide::Runtime)
@@ -32,6 +19,7 @@ set(TESTS
     multipass_constraints.py
     pystub.py
     rdom.py
+    realize_warnings.py
     target.py
     tuple_select.py
     type.py
@@ -39,12 +27,12 @@ set(TESTS
     var.py
     )
 
-# Use generator expressions to get the true output paths of these files
-# CMAKE_CURRENT_BINARY_DIR is incorrect.
+# Use generator expressions to get the true output paths of these files.
 make_shell_path(PYTHONPATH
-                "$<TARGET_FILE_DIR:py_addconstant>"
-                "$<TARGET_FILE_DIR:simplestub>"
-                "$<TARGET_FILE_DIR:Halide::Python>")
+                "$<TARGET_FILE_DIR:py_aot_bit>"
+                "$<TARGET_FILE_DIR:py_stub_bit>"
+                "$<TARGET_FILE_DIR:Halide::Python>"
+                )
 
 foreach (TEST IN LISTS TESTS)
     get_filename_component(TEST_NAME ${TEST} NAME_WE)

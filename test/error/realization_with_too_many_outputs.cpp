@@ -13,7 +13,7 @@ int main(int argc, char **argv) {
     Buffer<int> first(10);
     Buffer<int> second(10);
 
-    Realization r(first, second);
+    Realization r({first, second});
     f.realize(r);
 
     printf("Success!\n");

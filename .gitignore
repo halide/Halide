@@ -3,8 +3,6 @@ CMakeUserPresets.json
 /tutorial/figures/tmp/trace.bin
 /apps/*/bin
 /apps/*/cmake_build
-/apps/HelloMatlab/blurred.png
-/apps/HelloMatlab/iir_blur.mex
 bin/*
 build/*
 share/*
@@ -55,6 +53,7 @@ src/test_*.s
 tools/objc/BUILD
 tools/objc/*.mobileprovision
 *.xcworkspacedata
+__pycache__
 
 
 *.txt.user*

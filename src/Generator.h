@@ -283,47 +283,15 @@
 #endif
 
 namespace Halide {
+
+class GeneratorContext;
+
 namespace Internal {
 
 void generator_test();
 
-/**
- * ValueTracker is an internal utility class that attempts to track and flag certain
- * obvious Stub-related errors at Halide compile time: it tracks the constraints set
- * on any Parameter-based argument (i.e., Input<Buffer> and Output<Buffer>) to
- * ensure that incompatible values aren't set.
- *
- * e.g.: if a Generator A requires stride[0] == 1,
- * and Generator B uses Generator A via stub, but requires stride[0] == 4,
- * we should be able to detect this at Halide compilation time, and fail immediately,
- * rather than producing code that fails at runtime and/or runs slowly due to
- * vectorization being unavailable.
- *
- * We do this by tracking the active values at entrance and exit to all user-provided
- * Generator methods (generate()/schedule()); if we ever find more than two unique
- * values active, we know we have a potential conflict. ("two" here because the first
- * value is the default value for a given constraint.)
- *
- * Note that this won't catch all cases:
- * -- JIT compilation has no way to check for conflicts at the top-level
- * -- constraints that match the default value (e.g. if dim(0).set_stride(1) is the
- * first value seen by the tracker) will be ignored, so an explicit requirement set
- * this way can be missed
- *
- * Nevertheless, this is likely to be much better than nothing when composing multiple
- * layers of Stubs in a single fused result.
- */
-class ValueTracker {
-private:
-    std::map<std::string, std::vector<std::vector<Expr>>> values_history;
-    const size_t max_unique_values;
-
-public:
-    explicit ValueTracker(size_t max_unique_values = 2)
-        : max_unique_values(max_unique_values) {
-    }
-    void track_values(const std::string &name, const std::vector<Expr> &values);
-};
+class GeneratorBase;
+class ValueTracker;
 
 std::vector<Expr> parameter_constraints(const Parameter &p);
 
@@ -358,10 +326,40 @@ std::string halide_type_to_c_source(const Type &t);
 // e.g., Int(32) -> "int32_t"
 std::string halide_type_to_c_type(const Type &t);
 
+/** GeneratorFactoryProvider provides a way to customize the Generators
+ * that are visible to generate_filter_main (which otherwise would just
+ * look at the global registry of C++ Generators). */
+class GeneratorFactoryProvider {
+public:
+    GeneratorFactoryProvider() = default;
+    virtual ~GeneratorFactoryProvider() = default;
+
+    /** Return a list of all registerd Generators that are available for use
+     * with the create() method. */
+    virtual std::vector<std::string> enumerate() const = 0;
+
+    /** Create an instance of the Generator that is registered under the given
+     * name. If the name isn't one returned by enumerate(), return nullptr
+     * rather than assert-fail; caller must check for a valid result. */
+    virtual std::unique_ptr<GeneratorBase> create(const std::string &name,
+                                                  const Halide::GeneratorContext &context) const = 0;
+
+    GeneratorFactoryProvider(const GeneratorFactoryProvider &) = delete;
+    GeneratorFactoryProvider &operator=(const GeneratorFactoryProvider &) = delete;
+    GeneratorFactoryProvider(GeneratorFactoryProvider &&) = delete;
+    GeneratorFactoryProvider &operator=(GeneratorFactoryProvider &&) = delete;
+};
+
 /** generate_filter_main() is a convenient wrapper for GeneratorRegistry::create() +
  * compile_to_files(); it can be trivially wrapped by a "real" main() to produce a
  * command-line utility for ahead-of-time filter compilation. */
-int generate_filter_main(int argc, char **argv, std::ostream &cerr);
+int generate_filter_main(int argc, char **argv, std::ostream &error_output);
+
+/** This overload of generate_filter_main lets you provide your own provider for how to enumerate and/or create
+ * the generators based on registration name; this is useful if you want to re-use the
+ * 'main' logic but avoid the global Generator registry (e.g. for bindings in languages
+ * other than C++). */
+int generate_filter_main(int argc, char **argv, std::ostream &error_output, const GeneratorFactoryProvider &generator_factory_provider);
 
 // select_type<> is to std::conditional as switch is to if:
 // it allows a multiway compile-time type definition via the form
@@ -389,7 +387,6 @@ struct select_type : std::conditional<First::value, typename First::type, typena
 template<typename First>
 struct select_type<First> { using type = typename std::conditional<First::value, typename First::type, void>::type; };
 
-class GeneratorBase;
 class GeneratorParamInfo;
 
 class GeneratorParamBase {
@@ -1917,6 +1914,7 @@ public:
     HALIDE_FORWARD_METHOD_CONST(Func, defined)
     HALIDE_FORWARD_METHOD_CONST(Func, has_update_definition)
     HALIDE_FORWARD_METHOD_CONST(Func, num_update_definitions)
+    HALIDE_FORWARD_METHOD_CONST(Func, output_type)
     HALIDE_FORWARD_METHOD_CONST(Func, output_types)
     HALIDE_FORWARD_METHOD_CONST(Func, outputs)
     HALIDE_FORWARD_METHOD_CONST(Func, rvars)
@@ -2271,6 +2269,7 @@ public:
     HALIDE_FORWARD_METHOD(Func, in)
     HALIDE_FORWARD_METHOD(Func, memoize)
     HALIDE_FORWARD_METHOD_CONST(Func, num_update_definitions)
+    HALIDE_FORWARD_METHOD_CONST(Func, output_type)
     HALIDE_FORWARD_METHOD_CONST(Func, output_types)
     HALIDE_FORWARD_METHOD_CONST(Func, outputs)
     HALIDE_FORWARD_METHOD(Func, parallel)
@@ -2932,7 +2931,7 @@ class GeneratorStub;
 
 }  // namespace Internal
 
-/** GeneratorContext is a base class that is used when using Generators (or Stubs) directly;
+/** GeneratorContext is a class that is used when using Generators (or Stubs) directly;
  * it is used to allow the outer context (typically, either a Generator or "top-level" code)
  * to specify certain information to the inner context to ensure that inner and outer
  * Generators are compiled in a compatible way.
@@ -2949,14 +2948,14 @@ class GeneratorStub;
  *   );
  * \endcode
  *
- * Note that all Generators inherit from GeneratorContext, so if you are using a Stub
- * from within a Generator, you can just pass 'this' for the GeneratorContext:
+ * Note that all Generators embed a GeneratorContext, so if you are using a Stub
+ * from within a Generator, you can just pass 'contex()' for the GeneratorContext:
  * \code
  *  struct SomeGen : Generator<SomeGen> {
  *   void generate() {
  *     ...
  *     auto my_stub = MyStub(
- *       this,  // GeneratorContext
+ *       context(),  // GeneratorContext
  *       // inputs
  *       { ... },
  *       // generator params
@@ -2969,47 +2968,47 @@ class GeneratorStub;
  */
 class GeneratorContext {
 public:
+    friend class Internal::GeneratorBase;
+
     using ExternsMap = std::map<std::string, ExternalCode>;
 
     explicit GeneratorContext(const Target &t,
                               bool auto_schedule = false,
                               const MachineParams &machine_params = MachineParams::generic());
-    virtual ~GeneratorContext() = default;
 
-    inline Target get_target() const {
-        return target;
+    GeneratorContext() = default;
+    GeneratorContext(const GeneratorContext &) = default;
+    GeneratorContext &operator=(const GeneratorContext &) = default;
+    GeneratorContext(GeneratorContext &&) = default;
+    GeneratorContext &operator=(GeneratorContext &&) = default;
+
+    const Target &target() const {
+        return target_;
     }
-    inline bool get_auto_schedule() const {
-        return auto_schedule;
+    bool auto_schedule() const {
+        return auto_schedule_;
     }
-    inline MachineParams get_machine_params() const {
-        return machine_params;
+    const MachineParams &machine_params() const {
+        return machine_params_;
     }
 
-    /** Generators can register ExternalCode objects onto
-     * themselves. The Generator infrastructure will arrange to have
-     * this ExternalCode appended to the Module that is finally
-     * compiled using the Generator. This allows encapsulating
-     * functionality that depends on external libraries or handwritten
-     * code for various targets. The name argument should match the
-     * name of the ExternalCode block and is used to ensure the same
-     * code block is not duplicated in the output. Halide does not do
-     * anything other than to compare names for equality. To guarantee
-     * uniqueness in public code, we suggest using a Java style
-     * inverted domain name followed by organization specific
-     * naming. E.g.:
-     *     com.yoyodyne.overthruster.0719acd19b66df2a9d8d628a8fefba911a0ab2b7
-     *
-     * See test/generator/external_code_generator.cpp for example use. */
-    inline std::shared_ptr<ExternsMap> get_externs_map() const {
-        return externs_map;
+    HALIDE_ATTRIBUTE_DEPRECATED("Call GeneratorContext::target() instead of GeneratorContext::get_target().")
+    const Target &get_target() const {
+        return target_;
+    }
+    HALIDE_ATTRIBUTE_DEPRECATED("Call GeneratorContext::auto_schedule() instead of GeneratorContext::get_auto_schedule().")
+    bool get_auto_schedule() const {
+        return auto_schedule_;
+    }
+    HALIDE_ATTRIBUTE_DEPRECATED("Call GeneratorContext::machine_params() instead of GeneratorContext::get_machine_params().")
+    const MachineParams &get_machine_params() const {
+        return machine_params_;
     }
 
     template<typename T>
     inline std::unique_ptr<T> create() const {
         return T::create(*this);
     }
-
     template<typename T, typename... Args>
     inline std::unique_ptr<T> apply(const Args &...args) const {
         auto t = this->create<T>();
@@ -3017,28 +3016,18 @@ public:
         return t;
     }
 
-protected:
-    GeneratorParam<Target> target;
-    GeneratorParam<bool> auto_schedule;
-    GeneratorParam<MachineParams> machine_params;
-    std::shared_ptr<ExternsMap> externs_map;
-    std::shared_ptr<Internal::ValueTracker> value_tracker;
+private:
+    Target target_;
+    bool auto_schedule_ = false;
+    MachineParams machine_params_ = MachineParams::generic();
+    std::shared_ptr<ExternsMap> externs_map_;
+    std::shared_ptr<Internal::ValueTracker> value_tracker_;
 
-    GeneratorContext()
-        : GeneratorContext(Target()) {
-    }
-
-    virtual void init_from_context(const Halide::GeneratorContext &context);
-
-    inline std::shared_ptr<Internal::ValueTracker> get_value_tracker() const {
-        return value_tracker;
-    }
-
-public:
-    GeneratorContext(const GeneratorContext &) = delete;
-    GeneratorContext &operator=(const GeneratorContext &) = delete;
-    GeneratorContext(GeneratorContext &&) = delete;
-    GeneratorContext &operator=(GeneratorContext &&) = delete;
+    GeneratorContext(const Target &target,
+                     bool auto_schedule,
+                     const MachineParams &machine_params,
+                     std::shared_ptr<ExternsMap> externs_map,
+                     std::shared_ptr<Internal::ValueTracker> value_tracker);
 };
 
 class NamesInterface {
@@ -3164,9 +3153,9 @@ public:
     }
 };
 
-class GeneratorBase : public NamesInterface, public GeneratorContext {
+class GeneratorBase : public NamesInterface {
 public:
-    ~GeneratorBase() override;
+    virtual ~GeneratorBase();
 
     void set_generator_param_values(const GeneratorParamsMap &params);
 
@@ -3244,20 +3233,11 @@ public:
         get_pipeline().realize(r, get_target());
     }
 
-#ifdef HALIDE_ALLOW_GENERATOR_BUILD_METHOD
-    // Return the Pipeline that has been built by the generate() method.
-    // This method can only be used from a Generator that has a generate()
-    // method (vs a build() method), and currently can only be called from
-    // the schedule() method. (This may be relaxed in the future to allow
-    // calling from generate() as long as all Outputs have been defined.)
-    Pipeline get_pipeline();
-#else
     // Return the Pipeline that has been built by the generate() method.
     // This method can only be called from the schedule() method.
     // (This may be relaxed in the future to allow calling from generate() as
     // long as all Outputs have been defined.)
     Pipeline get_pipeline();
-#endif
 
     // Create Input<Func> with dynamic type & dimensions
     template<typename T,
@@ -3399,11 +3379,13 @@ public:
         get_pipeline().trace_pipeline();
     }
 
+    GeneratorContext context() const;
+
 protected:
     GeneratorBase(size_t size, const void *introspection_helper);
     void set_generator_names(const std::string &registered_name, const std::string &stub_name);
 
-    void init_from_context(const Halide::GeneratorContext &context) override;
+    void init_from_context(const Halide::GeneratorContext &context);
 
     virtual Pipeline build_pipeline() = 0;
     virtual void call_configure() = 0;
@@ -3443,15 +3425,8 @@ protected:
         // in AOT mode, this can be skipped, going Created->GenerateCalled directly.)
         InputsSet,
 
-#ifdef HALIDE_ALLOW_GENERATOR_BUILD_METHOD
-        // Generator has had its generate() method called. (For Generators with
-        // a build() method instead of generate(), this phase will be skipped
-        // and will advance directly to ScheduleCalled.)
-        GenerateCalled,
-#else
         // Generator has had its generate() method called.
         GenerateCalled,
-#endif
 
         // Generator has had its schedule() method (if any) called.
         ScheduleCalled,
@@ -3462,6 +3437,39 @@ protected:
     void advance_phase(Phase new_phase);
 
     void ensure_configure_has_been_called();
+
+    Target get_target() const {
+        return target;
+    }
+    bool get_auto_schedule() const {
+        return auto_schedule;
+    }
+    MachineParams get_machine_params() const {
+        return machine_params;
+    }
+    /** Generators can register ExternalCode objects onto
+     * themselves. The Generator infrastructure will arrange to have
+     * this ExternalCode appended to the Module that is finally
+     * compiled using the Generator. This allows encapsulating
+     * functionality that depends on external libraries or handwritten
+     * code for various targets. The name argument should match the
+     * name of the ExternalCode block and is used to ensure the same
+     * code block is not duplicated in the output. Halide does not do
+     * anything other than to compare names for equality. To guarantee
+     * uniqueness in public code, we suggest using a Java style
+     * inverted domain name followed by organization specific
+     * naming. E.g.:
+     *     com.yoyodyne.overthruster.0719acd19b66df2a9d8d628a8fefba911a0ab2b7
+     *
+     * See test/generator/external_code_generator.cpp for example use. */
+    std::shared_ptr<GeneratorContext::ExternsMap> get_externs_map() const {
+        return externs_map;
+    }
+
+    // These must remain here for legacy code that access the fields directly.
+    GeneratorParam<Target> target{"target", Target()};
+    GeneratorParam<bool> auto_schedule{"auto_schedule", false};
+    GeneratorParam<MachineParams> machine_params{"machine_params", MachineParams::generic()};
 
 private:
     friend void ::Halide::Internal::generator_test();
@@ -3474,12 +3482,12 @@ private:
     friend class StubOutputBufferBase;
 
     const size_t size;
+    std::shared_ptr<GeneratorContext::ExternsMap> externs_map;
+    std::shared_ptr<Internal::ValueTracker> value_tracker;
 
     // Lazily-allocated-and-inited struct with info about our various Params.
     // Do not access directly: use the param_info() getter.
     std::unique_ptr<GeneratorParamInfo> param_info_ptr;
-
-    mutable std::shared_ptr<ExternsMap> externs_map;
 
     bool inputs_set{false};
     std::string generator_registered_name, generator_stub_name;
@@ -3656,8 +3664,8 @@ public:
     static void register_factory(const std::string &name, GeneratorFactory generator_factory);
     static void unregister_factory(const std::string &name);
     static std::vector<std::string> enumerate();
-    // Note that this method will never return null:
-    // if it cannot return a valid Generator, it should assert-fail.
+    // This method returns nullptr if it cannot return a valid Generator;
+    // the caller is responsible for checking the result.
     static std::unique_ptr<GeneratorBase> create(const std::string &name,
                                                  const Halide::GeneratorContext &context);
 
@@ -3706,23 +3714,24 @@ public:
         return g;
     }
 
-    using Internal::GeneratorBase::apply;
-    using Internal::GeneratorBase::create;
-
     template<typename... Args>
     void apply(const Args &...args) {
-#ifdef HALIDE_ALLOW_GENERATOR_BUILD_METHOD
-#ifndef _MSC_VER
-        // VS2015 apparently has some SFINAE issues, so this can inappropriately
-        // trigger there. (We'll still fail when generate() is called, just
-        // with a less-helpful error message.)
-        static_assert(has_generate_method<T>::value, "apply() is not supported for old-style Generators.");
-#endif
-#endif
         call_configure();
         set_inputs(args...);
         call_generate();
         call_schedule();
+    }
+
+    template<typename T2>
+    std::unique_ptr<T2> create() const {
+        return T2::create(context());
+    }
+
+    template<typename T2, typename... Args>
+    inline std::unique_ptr<T2> apply(const Args &...args) const {
+        auto t = this->create<T2>();
+        t->apply(args...);
+        return t;
     }
 
 private:
@@ -3749,118 +3758,6 @@ private:
     template<typename T2>
     struct has_schedule_method<T2, typename type_sink<decltype(std::declval<T2>().schedule())>::type> : std::true_type {};
 
-#ifdef HALIDE_ALLOW_GENERATOR_BUILD_METHOD
-    // Implementations for build_pipeline_impl(), specialized on whether we
-    // have build() or generate()/schedule() methods.
-
-    // MSVC apparently has some weirdness with the usual sfinae tricks
-    // for detecting method-shaped things, so we can't actually use
-    // the helpers above outside of static_assert. Instead we make as
-    // many overloads as we can exist, and then use C++'s preference
-    // for treating a 0 as an int rather than a double to choose one
-    // of them.
-    template<typename T2 = T,
-             typename std::enable_if<!has_generate_method<T2>::value>::type * = nullptr>
-    HALIDE_ATTRIBUTE_DEPRECATED("The build() method is deprecated for Halide Generators and will be removed entirely in future versions of Halide. Please use a generate() method with Output<> members instead.")
-    Pipeline build_pipeline_impl(double) {
-        static_assert(!has_configure_method<T2>::value, "The configure() method is ignored if you define a build() method; use generate() instead.");
-        static_assert(!has_schedule_method<T2>::value, "The schedule() method is ignored if you define a build() method; use generate() instead.");
-
-        user_warning << "The build() method is deprecated for Halide Generators and will be removed entirely in future versions of Halide. "
-                     << "Please use a generate() method with Output<> members instead.\n";
-
-        pre_build();
-        Pipeline p = ((T *)this)->build();
-        post_build();
-        return p;
-    }
-
-    template<typename T2 = T,
-             typename = decltype(std::declval<T2>().generate())>
-    Pipeline build_pipeline_impl(int) {
-        // No: configure() must be called prior to this
-        // (and in fact, prior to calling set_inputs).
-        //
-        // ((T *)this)->call_configure_impl(0, 0);
-
-        ((T *)this)->call_generate_impl(0);
-        ((T *)this)->call_schedule_impl(0, 0);
-        return get_pipeline();
-    }
-
-    // Implementations for call_configure_impl(), specialized on whether we
-    // have build() or configure()/generate()/schedule() methods.
-
-    void call_configure_impl(double, double) {
-        pre_configure();
-        // Called as a side effect for build()-method Generators; quietly do nothing
-        // (except for pre_configure(), to advance the phase).
-        post_configure();
-    }
-
-    template<typename T2 = T,
-             typename = decltype(std::declval<T2>().generate())>
-    void call_configure_impl(double, int) {
-        // Generator has a generate() method but no configure() method. This is ok. Just advance the phase.
-        pre_configure();
-        static_assert(!has_configure_method<T2>::value, "Did not expect a configure method here.");
-        post_configure();
-    }
-
-    template<typename T2 = T,
-             typename = decltype(std::declval<T2>().generate()),
-             typename = decltype(std::declval<T2>().configure())>
-    void call_configure_impl(int, int) {
-        T *t = (T *)this;
-        static_assert(std::is_void<decltype(t->configure())>::value, "configure() must return void");
-        pre_configure();
-        t->configure();
-        post_configure();
-    }
-
-    // Implementations for call_generate_impl(), specialized on whether we
-    // have build() or configure()/generate()/schedule() methods.
-
-    void call_generate_impl(double) {
-        user_error << "Unimplemented";
-    }
-
-    template<typename T2 = T,
-             typename = decltype(std::declval<T2>().generate())>
-    void call_generate_impl(int) {
-        T *t = (T *)this;
-        static_assert(std::is_void<decltype(t->generate())>::value, "generate() must return void");
-        pre_generate();
-        t->generate();
-        post_generate();
-    }
-
-    // Implementations for call_schedule_impl(), specialized on whether we
-    // have build() or configure()generate()/schedule() methods.
-
-    void call_schedule_impl(double, double) {
-        user_error << "Unimplemented";
-    }
-
-    template<typename T2 = T,
-             typename = decltype(std::declval<T2>().generate())>
-    void call_schedule_impl(double, int) {
-        // Generator has a generate() method but no schedule() method. This is ok. Just advance the phase.
-        pre_schedule();
-        post_schedule();
-    }
-
-    template<typename T2 = T,
-             typename = decltype(std::declval<T2>().generate()),
-             typename = decltype(std::declval<T2>().schedule())>
-    void call_schedule_impl(int, int) {
-        T *t = (T *)this;
-        static_assert(std::is_void<decltype(t->schedule())>::value, "schedule() must return void");
-        pre_schedule();
-        t->schedule();
-        post_schedule();
-    }
-#else
     Pipeline build_pipeline_impl() {
         T *t = (T *)this;
         // No: configure() must be called prior to this
@@ -3901,26 +3798,8 @@ private:
         }
         post_schedule();
     }
-#endif
 
 protected:
-#ifdef HALIDE_ALLOW_GENERATOR_BUILD_METHOD
-    Pipeline build_pipeline() override {
-        return this->build_pipeline_impl(0);
-    }
-
-    void call_configure() override {
-        this->call_configure_impl(0, 0);
-    }
-
-    void call_generate() override {
-        this->call_generate_impl(0);
-    }
-
-    void call_schedule() override {
-        this->call_schedule_impl(0, 0);
-    }
-#else
     Pipeline build_pipeline() override {
         return this->build_pipeline_impl();
     }
@@ -3936,7 +3815,7 @@ protected:
     void call_schedule() override {
         this->call_schedule_impl();
     }
-#endif
+
 private:
     friend void ::Halide::Internal::generator_test();
     friend void ::Halide::Internal::generator_test();

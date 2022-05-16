@@ -94,7 +94,6 @@ public:
     Stage(Internal::Function f, Internal::Definition d, size_t stage_index)
         : function(std::move(f)), definition(std::move(d)), stage_index(stage_index) {
         internal_assert(definition.defined());
-        definition.schedule().touched() = true;
 
         dim_vars.reserve(function.args().size());
         for (const auto &arg : function.args()) {
@@ -442,22 +441,6 @@ public:
 
     Stage &hexagon(const VarOrRVar &x = Var::outermost());
 
-    HALIDE_ATTRIBUTE_DEPRECATED("Call prefetch() with the two-var form instead.")
-    Stage &prefetch(const Func &f, const VarOrRVar &var, int offset = 1,
-                    PrefetchBoundStrategy strategy = PrefetchBoundStrategy::GuardWithIf) {
-        return prefetch(f, var, var, offset, strategy);
-    }
-    HALIDE_ATTRIBUTE_DEPRECATED("Call prefetch() with the two-var form instead.")
-    Stage &prefetch(const Internal::Parameter &param, const VarOrRVar &var, int offset = 1,
-                    PrefetchBoundStrategy strategy = PrefetchBoundStrategy::GuardWithIf) {
-        return prefetch(param, var, var, offset, strategy);
-    }
-    template<typename T>
-    HALIDE_ATTRIBUTE_DEPRECATED("Call prefetch() with the two-var form instead.")
-    Stage &prefetch(const T &image, VarOrRVar var, int offset = 1,
-                    PrefetchBoundStrategy strategy = PrefetchBoundStrategy::GuardWithIf) {
-        return prefetch(image.parameter(), var, var, offset, strategy);
-    }
     Stage &prefetch(const Func &f, const VarOrRVar &at, const VarOrRVar &from, Expr offset = 1,
                     PrefetchBoundStrategy strategy = PrefetchBoundStrategy::GuardWithIf);
     Stage &prefetch(const Internal::Parameter &param, const VarOrRVar &at, const VarOrRVar &from, Expr offset = 1,
@@ -474,6 +457,12 @@ public:
      * empty string if no debug symbols were found or the debug
      * symbols were not understood. Works on OS X and Linux only. */
     std::string source_location() const;
+
+    /** Assert that this stage has intentionally been given no schedule, and
+     * suppress the warning about unscheduled update definitions that would
+     * otherwise fire. This counts as a schedule, so calling this twice on the
+     * same Stage will fail the assertion. */
+    void unscheduled();
 };
 
 // For backwards compatibility, keep the ScheduleHandle name.
@@ -725,6 +714,19 @@ class Func {
 public:
     /** Declare a new undefined function with the given name */
     explicit Func(const std::string &name);
+
+    /** Declare a new undefined function with the given name.
+     * The function will be constrained to represent Exprs of required_type.
+     * If required_dims is not AnyDims, the function will be constrained to exactly
+     * that many dimensions. */
+    explicit Func(const Type &required_type, int required_dims, const std::string &name);
+
+    /** Declare a new undefined function with the given name.
+     * If required_types is not empty, the function will be constrained to represent
+     * Tuples of the same arity and types. (If required_types is empty, there is no constraint.)
+     * If required_dims is not AnyDims, the function will be constrained to exactly
+     * that many dimensions. */
+    explicit Func(const std::vector<Type> &required_types, int required_dims, const std::string &name);
 
     /** Declare a new undefined function with an
      * automatically-generated unique name */
@@ -1048,29 +1050,6 @@ public:
      */
     void compile_jit(const Target &target = get_jit_target_from_environment());
 
-    /** Deprecated variants of the above that use a void pointer
-     * instead of a JITUserContext pointer. */
-    // @{
-    HALIDE_ATTRIBUTE_DEPRECATED("Custom handlers should by set by modifying the struct returned by jit_handlers()")
-    void set_error_handler(void (*handler)(void *, const char *));
-    HALIDE_ATTRIBUTE_DEPRECATED("Custom handlers should by set by modifying the struct returned by jit_handlers()")
-    void set_custom_allocator(void *(*malloc)(void *, size_t),
-                              void (*free)(void *, void *));
-    HALIDE_ATTRIBUTE_DEPRECATED("Custom handlers should by set by modifying the struct returned by jit_handlers()")
-    void set_custom_do_task(
-        int (*custom_do_task)(void *, int (*)(void *, int, uint8_t *),
-                              int, uint8_t *));
-    HALIDE_ATTRIBUTE_DEPRECATED("Custom handlers should by set by modifying the struct returned by jit_handlers()")
-    void set_custom_do_par_for(
-        int (*custom_do_par_for)(void *, int (*)(void *, int, uint8_t *), int,
-                                 int, uint8_t *));
-    HALIDE_ATTRIBUTE_DEPRECATED("Custom handlers should by set by modifying the struct returned by jit_handlers()")
-    void set_custom_trace(int (*trace_fn)(void *, const halide_trace_event_t *));
-
-    HALIDE_ATTRIBUTE_DEPRECATED("Custom handlers should by set by modifying the struct returned by jit_handlers()")
-    void set_custom_print(void (*handler)(void *, const char *));
-    // @}
-
     /** Get a struct containing the currently set custom functions
      * used by JIT. This can be mutated. Changes will take effect the
      * next time this Func is realized. */
@@ -1224,19 +1203,27 @@ public:
                        DeviceAPI device_api = DeviceAPI::Host);
     // @}
 
-    /** Get the types of the outputs of this Func. */
+    /** Get the type(s) of the outputs of this Func.
+     * If the Func isn't yet defined, but was specified with required types,
+     * the requirements will be returned. */
+    // @{
+    const Type &output_type() const;
     const std::vector<Type> &output_types() const;
+    // @}
 
     /** Get the number of outputs of this Func. Corresponds to the
-     * size of the Tuple this Func was defined to return. */
+     * size of the Tuple this Func was defined to return.
+     * If the Func isn't yet defined, but was specified with required types,
+     * the number of outputs specified in the requirements will be returned. */
     int outputs() const;
 
     /** Get the name of the extern function called for an extern
      * definition. */
     const std::string &extern_function_name() const;
 
-    /** The dimensionality (number of arguments) of this
-     * function. Zero if the function is not yet defined. */
+    /** The dimensionality (number of arguments) of this function.
+     * If the Func isn't yet defined, but was specified with required dimensionality,
+     * the dimensionality specified in the requirements will be returned. */
     int dimensions() const;
 
     /** Construct either the left-hand-side of a definition, or a call
@@ -1936,55 +1923,7 @@ public:
     Func &hexagon(const VarOrRVar &x = Var::outermost());
 
     /** Prefetch data written to or read from a Func or an ImageParam by a
-     * subsequent loop iteration, at an optionally specified iteration offset.
-     * 'var' specifies at which loop level the prefetch calls should be inserted.
-     * The final argument specifies how prefetch of region outside bounds
-     * should be handled.
-     *
-     * For example, consider this pipeline:
-     \code
-     Func f, g;
-     Var x, y;
-     f(x, y) = x + y;
-     g(x, y) = 2 * f(x, y);
-     \endcode
-     *
-     * The following schedule:
-     \code
-     f.compute_root();
-     g.prefetch(f, x, 2, PrefetchBoundStrategy::NonFaulting);
-     \endcode
-     *
-     * will inject prefetch call at the innermost loop of 'g' and generate
-     * the following loop nest:
-     * for y = ...
-     *   for x = ...
-     *     f(x, y) = x + y
-     * for y = ..
-     *   for x = ...
-     *     prefetch(&f[x + 2, y], 1, 16);
-     *     g(x, y) = 2 * f(x, y)
-     */
-    // @{
-    HALIDE_ATTRIBUTE_DEPRECATED("Call prefetch() with the two-var form instead.")
-    Func &prefetch(const Func &f, const VarOrRVar &var, int offset = 1,
-                   PrefetchBoundStrategy strategy = PrefetchBoundStrategy::GuardWithIf) {
-        return prefetch(f, var, var, offset, strategy);
-    }
-    HALIDE_ATTRIBUTE_DEPRECATED("Call prefetch() with the two-var form instead.")
-    Func &prefetch(const Internal::Parameter &param, const VarOrRVar &var, int offset = 1,
-                   PrefetchBoundStrategy strategy = PrefetchBoundStrategy::GuardWithIf) {
-        return prefetch(param, var, var, offset, strategy);
-    }
-    template<typename T>
-    HALIDE_ATTRIBUTE_DEPRECATED("Call prefetch() with the two-var form instead.")
-    Func &prefetch(const T &image, VarOrRVar var, int offset = 1,
-                   PrefetchBoundStrategy strategy = PrefetchBoundStrategy::GuardWithIf) {
-        return prefetch<T>(image, var, var, offset, strategy);
-    }
-    // @}
-
-    /** prefetch() is a more fine-grained version of prefetch(), which allows
+     * subsequent loop iteration, at an optionally specified iteration offset. You may specify
      * specification of different vars for the location of the prefetch() instruction
      * vs. the location that is being prefetched:
      *
@@ -1994,6 +1933,9 @@ public:
      *
      * If 'at' and 'from' are distinct vars, then 'from' must be at a nesting level outside 'at.'
      * Note that the value for 'offset' applies only to 'from', not 'at'.
+     *
+     * The final argument specifies how prefetch of region outside bounds
+     * should be handled.
      *
      * For example, consider this pipeline:
      \code

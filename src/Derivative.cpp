@@ -1808,7 +1808,7 @@ void ReverseAccumulationVisitor::propagate_halide_function_call(
         // If previous update has a different set of reduction variables,
         // don't merge
         const vector<ReductionVariable> &rvars =
-            func_to_update.update(update_id).get_schedule().rvars();
+            func_to_update.function().update(update_id).schedule().rvars();
         if (!merged_r.defined()) {
             return rvars.empty();
         }
