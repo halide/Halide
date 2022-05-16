@@ -24,6 +24,7 @@ int main(int argc, char **argv) {
         }
 
         u.set(17);
+        u.set_estimate(17);
         Buffer<int> out_17 = f.realize({1024}, target);
 
         // verify the get method.
@@ -33,6 +34,7 @@ int main(int argc, char **argv) {
         // so setting the copy should be equivalent to setting the original.
         Param<int> u_alias = u;
         u_alias.set(123);
+        u_alias.set_estimate(123);
         Buffer<int> out_123 = f.realize({1024}, target);
 
         // verify the get method, again.
@@ -69,6 +71,7 @@ int main(int argc, char **argv) {
         // For Param<void>, you must provide an explicit template argument to set(),
         // and it must match the dynamic type of the Param.
         u.set<int32_t>(17);
+        u.set_estimate<int32_t>(17);
         Buffer<int32_t> out_17 = f.realize({1024}, target);
 
         // For Param<void>, you must provide an explicit template argument to get(),
@@ -82,6 +85,7 @@ int main(int argc, char **argv) {
         // so setting the copy should be equivalent to setting the original.
         Param<> u_alias = u;
         u_alias.set(123);
+        u_alias.set_estimate(123);
         Buffer<int32_t> out_123 = f.realize({1024}, target);
 
         assert(u.get<int32_t>() == 123);
@@ -105,12 +109,14 @@ int main(int argc, char **argv) {
         f(x) = u;
 
         u.set(17);
+        u.set_estimate(17);
         Buffer<int32_t> out_17 = f.realize({1});
         assert(out_17(0) == 17);
 
         // You can always construct a Param<void> from a Param<nonvoid>
         Param<> u_alias = u;
         u_alias.set(123);
+        u_alias.set_estimate(123);
         Buffer<int32_t> out_123 = f.realize({1});
         assert(out_123(0) == 123);
 
@@ -119,6 +125,7 @@ int main(int argc, char **argv) {
         // of the LHS (otherwise, assert-fails)
         Param<int32_t> u_alias2 = u_alias;
         u_alias2.set(124);
+        u_alias2.set_estimate(124);
         Buffer<int32_t> out_124 = f.realize({1});
         assert(out_124(0) == 124);
     }
@@ -131,6 +138,7 @@ int main(int argc, char **argv) {
         f(x) = u;
 
         u.set(17);
+        u.set_estimate(17);
         Buffer<int32_t> out_17 = f.realize({1});
         assert(out_17(0) == 17);
 
@@ -139,6 +147,7 @@ int main(int argc, char **argv) {
         u_alias = u;
         assert(u_alias.type() == Int(32));
         u_alias.set(123);
+        u_alias.set_estimate(123);
         Buffer<int32_t> out_123 = f.realize({1});
         assert(out_123(0) == 123);
 
@@ -148,6 +157,7 @@ int main(int argc, char **argv) {
         Param<int32_t> u_alias2;
         u_alias2 = u_alias;
         u_alias2.set(124);
+        u_alias2.set_estimate(124);
         Buffer<int32_t> out_124 = f.realize({1});
         assert(out_124(0) == 124);
     }
