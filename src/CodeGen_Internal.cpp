@@ -598,6 +598,7 @@ void get_target_options(const llvm::Module &module, llvm::TargetOptions &options
     bool use_pic = true;
     get_md_bool(module.getModuleFlag("halide_use_pic"), use_pic);
 
+    // FIXME: can this be migrated into `set_function_attributes_from_halide_target_options()`?
     bool per_instruction_fast_math_flags = false;
     get_md_bool(module.getModuleFlag("halide_per_instruction_fast_math_flags"), per_instruction_fast_math_flags);
 
