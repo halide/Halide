@@ -115,8 +115,8 @@ protected:
      *
      *  `mcpu_tune()` - expect that we will be running on this specific CPU,
      *  so perform CPU-specific tuning/assembly instruction scheduling, *but*
-     *  DON'T sacrifice the portability, support running on other CPU's, only
-     *  make use of the ISA's that are enabled by `mcpu_target()`+`mattrs()`.
+     *  DON'T sacrifice the portability, support running on other CPUs, only
+     *  make use of the ISAs that are enabled by `mcpu_target()`+`mattrs()`.
      */
     // @{
     virtual std::string mcpu_target() const = 0;
