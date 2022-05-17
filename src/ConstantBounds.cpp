@@ -377,6 +377,10 @@ public:
  * a min or a max.
  */
 class StripUnboundedTerms : public IRMutator {
+public:
+    // A count of the number of unbounded vars in a given sub expression.
+    int32_t unbounded_vars = 0;
+private:
     // Which direction we are approximating.
     Direction direction;
     // Pointer to scope for checking if a variable is bounded or not.
@@ -384,8 +388,6 @@ class StripUnboundedTerms : public IRMutator {
     // The number of times a variable is used. Can be used to remove
     // non-correlated terms.
     const std::map<std::string, int> &var_uses;
-    // A count of the number of unbounded vars in a given sub expression.
-    int32_t unbounded_vars = 0;
 
     void flip_direction() {
         direction = flip(direction);
@@ -962,8 +964,6 @@ void make_const_interval(Interval &interval) {
     }
 }
 
-}  // namespace
-
 Expr push_rationals(const Expr &expr, const Direction direction) {
     if (expr.type() == Int(32)) {
         return handle_push_none(expr, direction);
@@ -972,13 +972,14 @@ Expr push_rationals(const Expr &expr, const Direction direction) {
     }
 }
 
-Expr strip_unbounded_terms(const Expr &expr, Direction direction, const Scope<Interval> &scope) {
+std::pair<Expr, bool> remove_unbounded_terms(const Expr &expr, Direction direction, const Scope<Interval> &scope) {
     std::map<std::string, int> var_uses;
     CountVarUses counter(var_uses);
     expr.accept(&counter);
     // To strip unbounded/uncorrelated terms, we need to know use counts.
     StripUnboundedTerms tool(direction, &scope, var_uses);
-    return tool.mutate(expr);
+    Expr mut = tool.mutate(expr);
+    return {mut, tool.unbounded_vars != 0};
 }
 
 Expr reorder_terms(const Expr &expr) {
@@ -995,17 +996,22 @@ Expr approximate_optimizations(const Expr &expr, Direction direction, const Scop
     if (!subs.same_as(expr)) {
         subs = simplify(subs);
     }
-    subs = reorder_terms(subs);
+
+    auto [cleaned, unbounded] = remove_unbounded_terms(subs, direction, scope);
+
+    if (unbounded) {
+        return Expr();
+    } else if (!cleaned.same_as(subs)) {
+        cleaned = simplify(cleaned);
+    }
+
+    subs = reorder_terms(cleaned);
     // TODO: only do push_rationals if correlated divisions exist.
     Expr pushed = push_rationals(subs, direction);
     if (!pushed.same_as(subs)) {
         pushed = simplify(pushed);
     }
-    Expr stripped = strip_unbounded_terms(pushed, direction, scope);
-    if (!stripped.same_as(pushed)) {
-        stripped = simplify(stripped);
-    }
-    return stripped;
+    return pushed;
 }
 
 bool possibly_correlated(const Expr &expr) {
@@ -1021,13 +1027,37 @@ bool possibly_correlated(const Expr &expr) {
     return false;
 }
 
+bool should_use_approximate_methods(const Expr &expr) {
+    return !is_const(expr) && expr.type() == Int(32) && possibly_correlated(expr);
+}
+
 Interval approximate_constant_bounds(const Expr &expr, const Scope<Interval> &scope) {
     Interval interval;
-    if (!is_const(expr) && expr.type() == Int(32) && possibly_correlated(expr)) {
+    if (should_use_approximate_methods(expr)) {
         Expr lower = approximate_optimizations(expr, Direction::Lower, scope);
         Expr upper = approximate_optimizations(expr, Direction::Upper, scope);
-        interval.min = bounds_of_expr_in_scope(lower, scope, FuncValueBounds(), true).min;
-        interval.max = bounds_of_expr_in_scope(upper, scope, FuncValueBounds(), true).max;
+
+        // TODO: should these use `same_as`?
+        const bool defined = lower.defined() || upper.defined();
+        const bool equiv = lower.defined() && upper.defined() && equal(lower, upper);
+        const bool lower_equiv = lower.defined() && !upper.defined() && equal(lower, expr);
+        const bool upper_equiv = !lower.defined() && upper.defined() && equal(upper, expr);
+
+        const bool early_out = !defined || lower_equiv || upper_equiv || (equiv && equal(expr, lower));
+
+        if (early_out) {
+            // Not worth calling bounds_of_expr_in_scope.
+            return interval;
+        }
+
+        if (equiv) {
+            // upper and lower are equivalent, but not equal to the original expr.
+            interval = bounds_of_expr_in_scope(lower, scope, FuncValueBounds(), true);
+        } else {
+            interval.min = lower.defined() ? bounds_of_expr_in_scope(lower, scope, FuncValueBounds(), true).min : interval.min;
+            interval.max = upper.defined() ? bounds_of_expr_in_scope(upper, scope, FuncValueBounds(), true).max : interval.max;
+        }
+
         interval.min = simplify(interval.min);
         interval.max = simplify(interval.max);
         make_const_interval(interval);
@@ -1037,8 +1067,13 @@ Interval approximate_constant_bounds(const Expr &expr, const Scope<Interval> &sc
 
 // The same as the above, but uni-directional.
 Expr approximate_constant_bound(const Expr &expr, const Direction d, const Scope<Interval> &scope) {
-    if (!is_const(expr) && expr.type() == Int(32) && possibly_correlated(expr)) {
+    Expr failure = (d == Direction::Upper) ? Interval::pos_inf() : Interval::neg_inf();
+
+    if (should_use_approximate_methods(expr)) {
         Expr opt = approximate_optimizations(expr, d, scope);
+        if (!opt.defined()) {
+            return failure;
+        }
         Interval bounds = bounds_of_expr_in_scope(opt, scope, FuncValueBounds(), true);
 
         Expr sol = (d == Direction::Upper) ? bounds.max : bounds.min;
@@ -1050,12 +1085,10 @@ Expr approximate_constant_bound(const Expr &expr, const Direction d, const Scope
     }
 
     // Either failed to find a const bound, or was not a good Expr for approximate opts.
-    if (d == Direction::Upper) {
-        return Interval::pos_inf();
-    } else {
-        return Interval::neg_inf();
-    }
+    return failure;
 }
+
+}  // namespace
 
 Expr find_constant_bound(const Expr &e, Direction d, const Scope<Interval> &scope) {
     Expr expr = bound_correlated_differences(simplify(remove_likelies(e)));
