@@ -163,9 +163,15 @@ void populate_fused_pairs_list(const string &func, const Definition &def,
                    func, stage_index, fuse_level.var().name());
     if (fuse_level.stage_index() == 0) {
         parent.definition().schedule().fused_pairs().push_back(pair);
+        for (int i = 0; i < parent.definition().specializations().size(); i++) {
+            parent.definition().specializations()[i].definition.schedule().fused_pairs().push_back(pair);
+        }
     } else {
         internal_assert(fuse_level.stage_index() > 0);
         parent.update(fuse_level.stage_index() - 1).schedule().fused_pairs().push_back(pair);
+        for (int i = 0; i < parent.update(fuse_level.stage_index() - 1).specializations().size(); i++) {
+            parent.update(fuse_level.stage_index() - 1).specializations()[i].definition.schedule().fused_pairs().push_back(pair);
+        }
     }
 }
 
