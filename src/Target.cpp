@@ -879,6 +879,14 @@ void Target::set_feature(Feature f, bool value) {
     }
     user_assert(f < FeatureEnd) << "Invalid Target feature.\n";
     features.set(f, value);
+
+    if (f == Target::SVE2) {
+#if LLVM_VERSION >= 140
+        set_features({Target::ARMDotProd, Target::ARMFp16}, value);
+#else
+        user_error << "Unsupported LLVM version for Target::SVE2. Please use LLVM 14 or later.\n";
+#endif
+    }
 }
 
 void Target::set_features(const std::vector<Feature> &features_to_set, bool value) {

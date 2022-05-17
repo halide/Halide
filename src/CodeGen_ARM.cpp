@@ -42,6 +42,9 @@ protected:
     /** Assuming 'inner' is a function that takes two vector arguments, define a wrapper that
      * takes one vector argument and splits it into two to call inner. */
     llvm::Function *define_concat_args_wrapper(llvm::Function *inner, const string &name);
+
+    int target_vscale() const override;
+
     void init_module() override;
 
     /** Nodes for which we want to emit specific neon intrinsics */
@@ -662,6 +665,36 @@ llvm::Function *CodeGen_ARM::define_concat_args_wrapper(llvm::Function *inner, c
 
     llvm::verifyFunction(*wrapper);
     return wrapper;
+}
+
+int CodeGen_ARM::target_vscale() const {
+    if (target.has_feature(Target::SVE)) {
+        user_error << "Feature SVE is not supported yet, please set SVE2 if the target has the capability\n";
+        return 0;
+    }
+
+    if (target.features_any_of({Target::SVE, Target::SVE2})) {
+        if (target.vector_bits == 0) {
+            user_error << "Please set vector_bits in Target with SVE/SVE2 feature. Halide asserts target vector length in compilation time\n";
+            return 0;
+        } else if (target.vector_bits % 128 != 0) {
+            user_error << "Unexpected vector_bits " << target.vector_bits << ", which is not multiple of 128\n";
+            return 0;
+        } else {
+            int vscale = target.vector_bits / 128;
+            if (vscale != 1) {
+                user_error << "vector_bits other than 128 bits is not supported yet\n";
+                return 0;
+            }
+            return vscale;
+        }
+    } else {  // without SVE/SVE2
+        if (target.vector_bits != 0) {
+            user_warning << "vector_bits is set in the target which doesn't have scalable vector feature\n";
+        }
+        return 0;
+    }
+    return 0;
 }
 
 void CodeGen_ARM::init_module() {
@@ -1426,7 +1459,6 @@ string CodeGen_ARM::mattrs() const {
             return "-neon";
         }
     } else {
-        // TODO: Should Halide's SVE flags be 64-bit only?
         string arch_flags;
         string separator;
         if (target.has_feature(Target::SVE2)) {
