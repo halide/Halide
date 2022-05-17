@@ -60,11 +60,19 @@ protected:
     void visit(const Call *) override;
     void visit(const LT *) override;
     void visit(const LE *) override;
+    void visit(const Shuffle *) override;
     void codegen_vector_reduce(const VectorReduce *, const Expr &) override;
     // @}
     Type upgrade_type_for_arithmetic(const Type &t) const override;
     Type upgrade_type_for_argument_passing(const Type &t) const override;
     Type upgrade_type_for_storage(const Type &t) const override;
+    Value *interleave_vectors(const std::vector<Value *> &) override;
+    Value *shuffle_vectors(Value *a, Value *b, const std::vector<int> &indices) override;
+    Value *shuffle_single_vector_with_tbl(Value *a, const std::vector<int> &indices);
+    Value *shuffle_vectors_with_tbl2(Value *a, Value *b, const std::vector<int> &indices);
+    Value *try_to_decompose_into_sub_shuffles(Value *a, Value *b, const std::vector<int> &indices);
+    Value *codegen_shuffle_indices(int bits, const std::vector<int> &indices);
+    Value *codegen_whilelt(int total_lanes, int start, int end);
 
     /** Various patterns to peephole match against */
     struct Pattern {
@@ -93,6 +101,11 @@ protected:
         return t.code() == Type::Float && t.bits() == 16 && target.has_feature(Target::ARMFp16);
     }
     bool supports_call_as_float16(const Call *op) const override;
+
+    template<typename T>
+    T align_up(T x, int n) const {
+        return (x + n - 1) / n * n;
+    }
 };
 
 CodeGen_ARM::CodeGen_ARM(const Target &target)
@@ -1287,6 +1300,446 @@ void CodeGen_ARM::visit(const LE *op) {
     CodeGen_Posix::visit(op);
 }
 
+void CodeGen_ARM::visit(const Shuffle *op) {
+    if (effective_vscale == 0) {
+        CodeGen_Posix::visit(op);
+        return;
+    }
+
+    if (op->is_concat() && op->vectors.size() == 2) {
+        // Here, we deal with some specific patterns of concat(a, b).
+        // Others are decomposed by CodeGen_LLVM at first,
+        // which in turn calles CodeGen_ARM::concat_scalable_vectors().
+
+        if (op->type.bits() == 1 && op->type.is_int_or_uint()) {
+            // Predicate vector
+
+            // Peep-hole pattern that matches SVE "whilelt" which represents particular pattern of
+            // vector predicate. e.g. 11100000 (active_lanes=3, all_lanes=8)
+            if (const int total_lanes = op->type.lanes();
+                is_power_of_two(total_lanes) && total_lanes >= 2 && total_lanes <= 16 &&
+                is_const_one(op->vectors[0]) && is_const_zero(op->vectors[1])) {
+
+                int active_lanes = op->vectors[0].type().lanes();
+                value = codegen_whilelt(op->type.lanes(), 0, active_lanes);
+                return;
+            } else {
+                // Rewrite to process predicate as 8 bit vector
+                auto upgrade = [&](int idx) -> Expr {
+                    return Cast::make(op->vectors[idx].type().with_bits(8), op->vectors[idx]);
+                };
+                Expr equiv = Cast::make(op->type, Shuffle::make_concat({upgrade(0), upgrade(1)}));
+                equiv = common_subexpression_elimination(equiv);
+                value = codegen(equiv);
+                return;
+            }
+        } else if (const Broadcast *bc_1 = op->vectors[1].as<Broadcast>()) {
+            // Common pattern where padding is appended to align lanes.
+            // Create broadcast of padding with dst lanes, then insert vec[0] at lane 0.
+            const int lanes_0 = op->vectors[0].type().lanes();
+            const int lanes_1 = op->vectors[1].type().lanes();
+            const int total_lanes = lanes_0 + lanes_1;
+            const int natural_lanes = target.natural_vector_size(op->type);
+            if ((lanes_0 % natural_lanes == 0 && lanes_1 == natural_lanes)) {
+                // Safe to use llvm vanilla intrinsic
+                Value *val_0 = codegen(op->vectors[0]);
+                Value *val_1_scalar = codegen(bc_1->value);
+                Value *padding = builder->CreateVectorSplat(element_count(total_lanes), val_1_scalar);
+                value = insert_scalable_vector(padding, val_0, 0);
+                return;
+            } else if (total_lanes <= natural_lanes) {
+                // Codegen with arm intrinsic, SEL and WHILELT
+                Value *val_0 = codegen(op->vectors[0]);
+                Value *val_1_scalar = codegen(bc_1->value);
+                Value *padding = builder->CreateVectorSplat(element_count(natural_lanes), val_1_scalar);
+
+                Value *pred = codegen_whilelt(natural_lanes, 0, lanes_0);
+                Value *val_0_aligned = extend_scalable_vector(val_0, natural_lanes);
+
+                std::ostringstream instr;
+                instr << "llvm.aarch64.sve.sel.nxv"
+                      << natural_lanes
+                      << (op->type.is_int_or_uint() ? "i" : "f")
+                      << op->type.bits();
+                auto *vec_type = padding->getType();
+                std::vector llvm_arg_types{pred->getType(), vec_type, vec_type};
+                llvm::FunctionType *fn_type = FunctionType::get(vec_type, llvm_arg_types, false);
+                FunctionCallee fn = module->getOrInsertFunction(instr.str(), fn_type);
+                value = builder->CreateCall(fn, {pred, val_0_aligned, padding});
+                value = shorten_scalable_vector(value, total_lanes);
+                return;
+            }
+        }
+    } else if (op->is_slice()) {
+
+        if (op->slice_stride() == 1 || op->type.lanes() == 1) {
+            Value *val = codegen(op->vectors[0]);
+            value = slice_scalable_vector(val, op->slice_begin(), op->type.lanes());
+            return;
+        }
+
+        if (op->type.bits() == 1) {
+            // Rewrite to process predicate as 8 bit vector
+            auto upgrade = [&](int idx) -> Expr {
+                return Cast::make(op->vectors[idx].type().with_bits(8), op->vectors[idx]);
+            };
+            Expr equiv = Shuffle::make_slice(upgrade(0), op->slice_begin(), op->slice_stride(), op->type.lanes());
+            equiv = Cast::make(op->type, equiv);
+            equiv = common_subexpression_elimination(equiv);
+            value = codegen(equiv);
+            return;
+        }
+    } else if (op->is_broadcast()) {
+        Expr equiv;
+        for (int f = 0; f < op->broadcast_factor(); ++f) {
+            if (equiv.defined()) {
+                equiv = Shuffle::make_concat({equiv, op->vectors[0]});
+            } else {
+                equiv = op->vectors[0];
+            }
+        }
+        equiv = common_subexpression_elimination(equiv);
+        value = codegen(equiv);
+        return;
+    } else if (op->is_interleave()) {
+        if (op->type.bits() == 1) {
+            // Rewrite to process bool vector as 8 bit vector
+            std::vector<Expr> vecs_i8;
+            Type upgraded_type = op->vectors[0].type().with_bits(8);
+            for (const auto &vec_i1 : op->vectors) {
+                vecs_i8.emplace_back(Cast::make(upgraded_type, vec_i1));
+            }
+            Expr equiv = Shuffle::make_interleave(vecs_i8);
+            equiv = Cast::make(op->type, equiv);
+            equiv = common_subexpression_elimination(equiv);
+            value = codegen(equiv);
+            return;
+        }
+    }
+
+    CodeGen_Posix::visit(op);
+}
+
+Value *CodeGen_ARM::interleave_vectors(const std::vector<Value *> &vecs) {
+    if (neon_intrinsics_disabled()) {
+        return CodeGen_Posix::interleave_vectors(vecs);
+    }
+
+    if (target.has_feature(Target::SVE2)) {
+        if (vecs.size() == 2) {
+            // ZIP1/ZIP2
+            llvm::Type *vt = vecs[0]->getType();
+            llvm::Type *elt = get_vector_element_type(vt);
+            const int bits = elt->getScalarSizeInBits();
+            const int src_lanes = get_vector_num_elements(vt);
+            const int dst_lanes = src_lanes * 2;
+            const int natural_lanes = target.natural_vector_size(Int(bits));
+            llvm::Type *vt_natural = get_vector_type(elt, natural_lanes);
+
+            llvm::FunctionType *fn_type = FunctionType::get(vt_natural, {vt_natural, vt_natural}, false);
+            std::ostringstream mangle;
+            mangle << ".nxv"
+                   << natural_lanes
+                   << (elt->isIntegerTy() ? "i" : "f")
+                   << bits;
+            FunctionCallee fn_zip1 = module->getOrInsertFunction("llvm.aarch64.sve.zip1" + mangle.str(), fn_type);
+            FunctionCallee fn_zip2 = module->getOrInsertFunction("llvm.aarch64.sve.zip2" + mangle.str(), fn_type);
+
+            std::vector<Value *> results;
+            for (int i = 0; i < src_lanes; i += natural_lanes) {
+                const int active_src_lanes = std::min(src_lanes - i, natural_lanes);
+                const int active_dst_lanes = active_src_lanes * 2;
+                Value *src_0 = slice_vector(vecs[0], i, natural_lanes);
+                Value *src_1 = slice_vector(vecs[1], i, natural_lanes);
+
+                // ZIP1 for high halves
+                Value *slice_hi = builder->CreateCall(fn_zip1, {src_0, src_1});
+                results.push_back(slice_hi);
+
+                // ZIP2 for low halves
+                if (active_dst_lanes > natural_lanes) {
+                    Value *slice_low = builder->CreateCall(fn_zip2, {src_0, src_1});
+                    results.push_back(slice_low);
+                }
+            }
+            Value *result = concat_vectors(results);
+            result = slice_vector(result, 0, dst_lanes);
+            return result;
+        }
+    }
+
+    return CodeGen_Posix::interleave_vectors(vecs);
+};
+
+Value *CodeGen_ARM::shuffle_vectors(Value *a, Value *b, const std::vector<int> &indices) {
+    if (neon_intrinsics_disabled()) {
+        return CodeGen_Posix::shuffle_vectors(a, b, indices);
+    }
+
+    if (target.has_feature(Target::SVE2)) {
+        internal_assert(a->getType() == b->getType());
+        if (!a->getType()->isVectorTy()) {
+            a = create_broadcast(a, 1);
+            b = create_broadcast(b, 1);
+        }
+
+        internal_assert(is_scalable_vector(a));
+        llvm::Type *elt = get_vector_element_type(a->getType());
+        const int bits = elt->getScalarSizeInBits();
+        const int natural_lanes = target.natural_vector_size(Int(bits));
+        const int src_lanes = get_vector_num_elements(a->getType());
+        const int dst_lanes = indices.size();
+
+        // SVE intrinsic can only deal with vector shorter than natural_lanes
+        if (src_lanes <= natural_lanes && dst_lanes <= natural_lanes) {
+            if (*std::max_element(indices.begin(), indices.end()) < src_lanes) {
+                // Only a is necessary. i.e. b is unused.
+                return shuffle_single_vector_with_tbl(a, indices);
+            } else {
+                return shuffle_vectors_with_tbl2(a, b, indices);
+            }
+        } else if (Value *v = try_to_decompose_into_sub_shuffles(a, b, indices)) {
+            return v;
+        }
+
+        // Scalarize, as there is no intrinsic for general shuffle for scalable vector as of LLVM 14
+        const int arg_lanes = get_vector_num_elements(a->getType());
+        llvm::Type *dst_type = get_vector_type(a->getType()->getScalarType(), indices.size());
+        Value *dst = UndefValue::get(dst_type);
+        for (size_t i = 0; i < indices.size(); ++i) {
+            Value *src = a;
+            Value *index = ConstantInt::get(i32_t, indices[i]);
+            if (indices[i] >= arg_lanes) {
+                src = b;
+                index = ConstantInt::get(i32_t, indices[i] - arg_lanes);
+            } else if (indices[i] == -1) {
+                index = UndefValue::get(i32_t);
+            }
+            Value *extracted = builder->CreateExtractElement(src, index);
+            dst = builder->CreateInsertElement(dst, extracted, i);
+        }
+        return dst;
+    }
+
+    return CodeGen_Posix::shuffle_vectors(a, b, indices);
+}
+
+Value *CodeGen_ARM::shuffle_single_vector_with_tbl(Value *a, const std::vector<int> &indices) {
+    internal_assert(target.has_feature(Target::SVE2));
+    llvm::Type *elt = get_vector_element_type(a->getType());
+    const int bits = elt->getScalarSizeInBits();
+    const int natural_lanes = target.natural_vector_size(Int(bits));
+    const int src_lanes = get_vector_num_elements(a->getType());
+    const int dst_lanes = indices.size();
+    internal_assert(src_lanes <= natural_lanes && dst_lanes <= natural_lanes);
+
+    if (src_lanes < natural_lanes) {
+        a = slice_vector(a, 0, natural_lanes);
+    }
+    std::ostringstream instr;
+    instr << "llvm.aarch64.sve.tbl.nxv"
+          << natural_lanes
+          << (elt->isIntegerTy() ? "i" : "f")
+          << bits;
+
+    std::vector<int> new_indices(natural_lanes, -1);
+    for (size_t i = 0; i < indices.size(); ++i) {
+        new_indices[i] = indices[i];
+    }
+    Value *val_indices = codegen_shuffle_indices(bits, new_indices);
+
+    llvm::Type *vt_natural = get_vector_type(elt, natural_lanes);
+    std::vector llvm_arg_types{vt_natural, val_indices->getType()};
+    llvm::FunctionType *fn_type = FunctionType::get(vt_natural, llvm_arg_types, false);
+    FunctionCallee fn = module->getOrInsertFunction(instr.str(), fn_type);
+
+    Value *v = builder->CreateCall(fn, {a, val_indices});
+    v = slice_vector(v, 0, dst_lanes);
+    return v;
+}
+
+Value *CodeGen_ARM::shuffle_vectors_with_tbl2(Value *a, Value *b, const std::vector<int> &indices) {
+    internal_assert(target.has_feature(Target::SVE2));
+    internal_assert(a->getType() == b->getType());
+    llvm::Type *elt = get_vector_element_type(a->getType());
+    const int bits = elt->getScalarSizeInBits();
+    const int natural_lanes = target.natural_vector_size(Int(bits));
+    const int src_lanes = get_vector_num_elements(a->getType());
+    const int dst_lanes = indices.size();
+    internal_assert(src_lanes <= natural_lanes && dst_lanes <= natural_lanes);
+
+    if (src_lanes < natural_lanes) {
+        a = slice_vector(a, 0, natural_lanes);
+        b = slice_vector(b, 0, natural_lanes);
+    }
+    std::ostringstream instr;
+    instr << "llvm.aarch64.sve.tbl2.nxv"
+          << natural_lanes
+          << (elt->isIntegerTy() ? "i" : "f")
+          << bits;
+
+    std::vector<int> new_indices(natural_lanes, -1);
+    for (size_t i = 0; i < indices.size(); ++i) {
+        int index = indices[i];
+        if (index >= src_lanes) {
+            // The index originaly pointed to "b".
+            // Now that "a" is aligned to natural_lanes, we need to add offset.
+            index += (natural_lanes - src_lanes);
+        }
+        new_indices[i] = index;
+    }
+    Value *val_indices = codegen_shuffle_indices(bits, new_indices);
+
+    llvm::Type *vt_natural = get_vector_type(elt, natural_lanes);
+    std::vector llvm_arg_types{vt_natural, vt_natural, val_indices->getType()};
+    llvm::FunctionType *fn_type = FunctionType::get(vt_natural, llvm_arg_types, false);
+    FunctionCallee fn = module->getOrInsertFunction(instr.str(), fn_type);
+
+    Value *v = builder->CreateCall(fn, {a, b, val_indices});
+    v = slice_vector(v, 0, dst_lanes);
+    return v;
+}
+
+Value *CodeGen_ARM::codegen_shuffle_indices(int bits, const std::vector<int> &indices) {
+    const int lanes = indices.size();
+    llvm::Type *index_type = IntegerType::get(module->getContext(), bits);
+    llvm::Type *index_vec_type = get_vector_type(index_type, lanes);
+
+    std::vector<Constant *> llvm_indices(lanes);
+    for (int i = 0; i < lanes; i++) {
+        int idx = indices[i];
+        llvm_indices[i] = idx >= 0 ? ConstantInt::get(index_type, idx) : UndefValue::get(index_type);
+    }
+    Value *v = ConstantVector::get(llvm_indices);
+    // Convert fixed sized vector into scalable vector.
+    // As of LLVM 14, this works only with natural_lanes.
+    // https://github.com/llvm/llvm-project/issues/55412
+    internal_assert(lanes == target.natural_vector_size(Int(bits)));
+    v = builder->CreateInsertVector(index_vec_type, UndefValue::get(index_vec_type),
+                                    v, ConstantInt::get(i64_t, 0));
+    return v;
+}
+
+Value *CodeGen_ARM::try_to_decompose_into_sub_shuffles(Value *a, Value *b, const std::vector<int> &org_indices) {
+    internal_assert(a->getType() == b->getType());
+    llvm::Type *elt = get_vector_element_type(a->getType());
+    const int bits = elt->getScalarSizeInBits();
+    const int natural_lanes = target.natural_vector_size(Int(bits));
+    const int src_lanes = get_vector_num_elements(a->getType());
+    const int dst_lanes = org_indices.size();
+
+    // Update indices so that src vectors are aligned with natural_lanes
+    const int src_lanes_aligned = align_up(src_lanes, natural_lanes);
+    const int num_slices_a = src_lanes_aligned / natural_lanes;
+    const int num_slices = num_slices_a * 2;
+    std::vector<int> indices = org_indices;
+    for (auto &idx : indices) {
+        if (idx >= src_lanes) {
+            // This idx points to src b. Adjust as if src a is aligned.
+            idx += src_lanes_aligned - src_lanes;
+        }
+    }
+
+    struct Slice {
+        Value *base;  // vector from which slice is created
+        int start;
+
+        // Track which index of shuffle uses this slice as src.
+        // Collect index to indices[] as relation.
+        std::set<int> indices_to_shuffle_indices;
+
+        Slice(Value *b, int s)
+            : base(b), start(s){};
+    };
+    std::vector<Slice> src_slices;
+
+    // Initialize src_slices
+    for (int i = 0; i < num_slices; ++i) {
+        if (i < num_slices_a) {
+            src_slices.emplace_back(a, i * natural_lanes);
+        } else {
+            src_slices.emplace_back(b, (i - num_slices_a) * natural_lanes);
+        }
+    }
+
+    struct SubShuffle {
+        std::vector<Slice> src_vectors;
+        std::vector<int> indices;
+    };
+    std::vector<SubShuffle> sub_shuffles;
+
+    // Try to decompose into sub shuffles where src vectors have natural_lanes
+    bool possible = true;
+    for (int sub_dst_start = 0; sub_dst_start < dst_lanes; sub_dst_start += natural_lanes) {
+        // reset indices of previous iteration
+        for (auto &s : src_slices) {
+            s.indices_to_shuffle_indices.clear();
+        }
+        const int dst_slice_size = std::min(dst_lanes - sub_dst_start, natural_lanes);
+        std::vector<int> local_indices(dst_slice_size);
+
+        for (int i = 0; i < dst_slice_size; ++i) {
+            int index = indices[sub_dst_start + i];
+
+            if (index < 0) {
+                local_indices[i] = index;
+            } else {
+                local_indices[i] = index % natural_lanes;
+                // Track which src slice this index points to.
+                int slice_index = index / natural_lanes;
+                internal_assert(slice_index < num_slices);
+                src_slices[slice_index].indices_to_shuffle_indices.insert(i);
+            }
+        }
+
+        // Collect slices which is actually accessed by this sub shuffle
+        std::vector<Slice> used_slices;
+        for (auto &s : src_slices) {
+            if (!s.indices_to_shuffle_indices.empty()) {
+                used_slices.push_back(s);
+            }
+        }
+
+        // if the number of slices used for this sub shuffle is 2 or less, it is possible to use intrin
+        if (used_slices.size() > 2) {
+            possible = false;
+            break;
+        }
+
+        SubShuffle sub_shuffle{used_slices, local_indices};
+        if (used_slices.size() == 2) {
+            // Add offset to the index which points to the 2nd src slice
+            for (auto i : used_slices[1].indices_to_shuffle_indices) {
+                sub_shuffle.indices[i] += natural_lanes;
+            }
+        }
+        sub_shuffles.emplace_back(std::move(sub_shuffle));
+    }
+
+    if (possible) {
+        // Now generate all the sub shuffles
+        std::vector<Value *> val_sub_shuffles;
+        for (auto &ss : sub_shuffles) {
+            Value *val_ss_a = UndefValue::get(get_vector_type(elt, natural_lanes));
+            Value *val_ss_b = UndefValue::get(get_vector_type(elt, natural_lanes));
+            if (!ss.src_vectors.empty()) {
+                val_ss_a = slice_vector(ss.src_vectors[0].base, ss.src_vectors[0].start, natural_lanes);
+            }
+            if (ss.src_vectors.size() == 2) {
+                val_ss_b = slice_vector(ss.src_vectors[1].base, ss.src_vectors[1].start, natural_lanes);
+            }
+            Value *val_ss = shuffle_vectors(val_ss_a, val_ss_b, ss.indices);
+            val_sub_shuffles.push_back(val_ss);
+        }
+        // Retrieve origial lanes
+        Value *dst = concat_vectors(val_sub_shuffles);
+        dst = slice_vector(dst, 0, dst_lanes);
+        return dst;
+    }
+
+    return nullptr;
+}
+
 void CodeGen_ARM::codegen_vector_reduce(const VectorReduce *op, const Expr &init) {
     if (neon_intrinsics_disabled() ||
         op->op == VectorReduce::Or ||
@@ -1444,6 +1897,24 @@ Type CodeGen_ARM::upgrade_type_for_storage(const Type &t) const {
         return t;
     }
     return CodeGen_Posix::upgrade_type_for_storage(t);
+}
+
+Value *CodeGen_ARM::codegen_whilelt(int total_lanes, int start, int end) {
+    // Generates SVE "whilelt" instruction which represents vector predicate pattern of
+    // e.g. 11100000 (total_lanes = 8 , start = 0, end = 3)
+    //     -> @llvm.aarch64.sve.whilelt.nxv8i1.i32(i32 0, i32 3)
+    std::ostringstream instr;
+    instr << "llvm.aarch64.sve.whilelt.nxv"
+          << total_lanes
+          << "i1.i32";
+    llvm::Type *pred_type = get_vector_type(llvm_type_of(Int(1)), total_lanes);
+
+    llvm::FunctionType *fn_type = FunctionType::get(pred_type, {i32_t, i32_t}, false);
+    FunctionCallee fn = module->getOrInsertFunction(instr.str(), fn_type);
+
+    value = builder->CreateCall(fn, {codegen(Expr(start)), codegen(Expr(end))});
+
+    return value;
 }
 
 string CodeGen_ARM::mcpu_target() const {

@@ -1349,17 +1349,14 @@ void CodeGen_LLVM::codegen(const Stmt &s) {
     value = nullptr;
     s.accept(this);
 }
-namespace {
 
-bool is_power_of_two(int x) {
+bool CodeGen_LLVM::is_power_of_two(int x) const {
     return (x & (x - 1)) == 0;
 }
 
-int next_power_of_two(int x) {
+int CodeGen_LLVM::next_power_of_two(int x) const {
     return static_cast<int>(1) << static_cast<int>(std::ceil(std::log2(x)));
 }
-
-}  // namespace
 
 Type CodeGen_LLVM::upgrade_type_for_arithmetic(const Type &t) const {
     if (t.is_bfloat() || (t.is_float() && t.bits() < 32)) {
@@ -4629,6 +4626,10 @@ Value *CodeGen_LLVM::call_intrin(const llvm::Type *result_type, int intrin_lanes
 }
 
 Value *CodeGen_LLVM::slice_vector(Value *vec, int start, int size) {
+    if (effective_vscale != 0) {
+        return slice_scalable_vector(vec, start, size);
+    }
+
     // Force the arg to be an actual vector
     if (!vec->getType()->isVectorTy()) {
         vec = create_broadcast(vec, 1);
@@ -4665,12 +4666,13 @@ Value *CodeGen_LLVM::concat_vectors(const vector<Value *> &v) {
 
     vector<Value *> vecs = v;
 
-    // Force them all to be actual vectors
-    for (Value *&val : vecs) {
+    auto convert_scalar_to_vector = [this](Value *val) {
         if (!val->getType()->isVectorTy()) {
-            val = create_broadcast(val, 1);
+            return create_broadcast(val, 1);
+        } else {
+            return val;
         }
-    }
+    };
 
     while (vecs.size() > 1) {
         vector<Value *> new_vecs;
@@ -4678,30 +4680,36 @@ Value *CodeGen_LLVM::concat_vectors(const vector<Value *> &v) {
         for (size_t i = 0; i < vecs.size() - 1; i += 2) {
             Value *v1 = vecs[i];
             Value *v2 = vecs[i + 1];
+            Value *merged;
+            if (effective_vscale != 0) {
+                merged = concat_scalable_vectors(v1, v2);
+            } else {
+                // Force them all to be actual vectors
+                v1 = convert_scalar_to_vector(v1);
+                v2 = convert_scalar_to_vector(v2);
+                int w1 = get_vector_num_elements(v1->getType());
+                int w2 = get_vector_num_elements(v2->getType());
 
-            int w1 = get_vector_num_elements(v1->getType());
-            int w2 = get_vector_num_elements(v2->getType());
+                // Possibly pad one of the vectors to match widths.
+                if (w1 < w2) {
+                    v1 = slice_vector(v1, 0, w2);
+                } else if (w2 < w1) {
+                    v2 = slice_vector(v2, 0, w1);
+                }
+                int w_matched = std::max(w1, w2);
 
-            // Possibly pad one of the vectors to match widths.
-            if (w1 < w2) {
-                v1 = slice_vector(v1, 0, w2);
-            } else if (w2 < w1) {
-                v2 = slice_vector(v2, 0, w1);
+                internal_assert(v1->getType() == v2->getType());
+
+                vector<int> indices(w1 + w2);
+                for (int i = 0; i < w1; i++) {
+                    indices[i] = i;
+                }
+                for (int i = 0; i < w2; i++) {
+                    indices[w1 + i] = w_matched + i;
+                }
+
+                merged = shuffle_vectors(v1, v2, indices);
             }
-            int w_matched = std::max(w1, w2);
-
-            internal_assert(v1->getType() == v2->getType());
-
-            vector<int> indices(w1 + w2);
-            for (int i = 0; i < w1; i++) {
-                indices[i] = i;
-            }
-            for (int i = 0; i < w2; i++) {
-                indices[w1 + i] = w_matched + i;
-            }
-
-            Value *merged = shuffle_vectors(v1, v2, indices);
-
             new_vecs.push_back(merged);
         }
 
@@ -4715,6 +4723,160 @@ Value *CodeGen_LLVM::concat_vectors(const vector<Value *> &v) {
     }
 
     return vecs[0];
+}
+
+Value *CodeGen_LLVM::concat_scalable_vectors(llvm::Value *a, llvm::Value *b) {
+    const int lanes_a = get_vector_num_elements(a->getType());
+    const int lanes_b = get_vector_num_elements(b->getType());
+    llvm::Type *concat_type = get_vector_type(a, lanes_a + lanes_b);
+    Value *v = UndefValue::get(concat_type);
+    v = insert_scalable_vector(v, a, 0);
+    v = insert_scalable_vector(v, b, lanes_a);
+    return v;
+}
+
+Value *CodeGen_LLVM::slice_scalable_vector(llvm::Value *vec, int start, int slice_size) {
+    const int vec_lanes = get_vector_num_elements(vec->getType());
+    if (slice_size == 1) {
+        return builder->CreateExtractElement(vec, ConstantInt::get(i64_t, start, true));
+    } else if (start == 0) {
+        if (vec_lanes <= slice_size) {
+            return extend_scalable_vector(vec, slice_size);
+        } else {
+            return shorten_scalable_vector(vec, slice_size);
+        }
+    } else {
+        const int extract_size = std::min(vec_lanes - start, slice_size);
+        Value *extracted = extract_scalable_vector(vec, start, extract_size);
+        if (slice_size == extract_size) {
+            return extracted;
+        } else {
+            Value *sliced = UndefValue::get(get_vector_type(vec, slice_size));
+            sliced = insert_scalable_vector(sliced, extracted, 0);
+            return sliced;
+        }
+    }
+}
+
+Value *CodeGen_LLVM::extend_scalable_vector(llvm::Value *vec, int extent) {
+    const int vec_lanes = get_vector_num_elements(vec->getType());
+    if (extent == vec_lanes) {
+        return vec;
+    }
+    internal_assert(vec_lanes < extent);
+    return insert_scalable_vector(UndefValue::get(get_vector_type(vec, extent)), vec, 0);
+}
+
+Value *CodeGen_LLVM::shorten_scalable_vector(llvm::Value *vec, int extent) {
+    const int vec_lanes = get_vector_num_elements(vec->getType());
+    if (extent == vec_lanes) {
+        return vec;
+    }
+    internal_assert(vec_lanes > extent);
+    Value *val_index = ConstantInt::get(i64_t, 0, true);
+    if (extent == 1) {
+        return builder->CreateExtractElement(vec, val_index);
+    } else {
+        return builder->CreateExtractVector(get_vector_type(vec, extent), vec, val_index);
+    }
+}
+
+Value *CodeGen_LLVM::extract_scalable_vector(Value *vec, int start, int extract_size) {
+    internal_assert(is_scalable_vector(vec) && effective_vscale);
+    internal_assert(start + extract_size <= get_vector_num_elements(vec->getType()));  // No overrun
+
+    if (extract_size == 1) {
+        return builder->CreateExtractElement(vec, ConstantInt::get(i64_t, start, true));
+    } else {
+        // To follow the requirement of ‘llvm.experimental.vector.extract’ intrinsic that
+        // idx must be a constant multiple of the known-minimum vector length of the result type,
+        // the extraction is performed as multiple sub-extraction, where the worst case is extraction of scalar.
+        std::vector<Value *> sub_slices;
+        int i = 0;
+        while (i < extract_size) {
+            int sub_extract_pos = start + i;
+            for (int sub_extract_size = extract_size - i; sub_extract_size > 0; --sub_extract_size) {
+                if (sub_extract_pos % sub_extract_size == 0) {
+                    internal_assert(sub_extract_pos % effective_vscale == 0);
+                    Value *idx_val = ConstantInt::get(i64_t, sub_extract_pos / effective_vscale, true);
+                    Value *sub_extracted;
+                    if (sub_extract_size == 1) {
+                        sub_extracted = builder->CreateExtractElement(vec, idx_val);
+                    } else {
+                        llvm::Type *sub_extract_type = get_vector_type(vec, sub_extract_size);
+                        sub_extracted = builder->CreateExtractVector(sub_extract_type, vec, idx_val);
+                    }
+                    sub_slices.push_back(sub_extracted);
+
+                    i += sub_extract_size;
+                    break;
+                }
+            }
+        }
+        Value *extracted = concat_vectors(sub_slices);
+        return extracted;
+    }
+}
+
+Value *CodeGen_LLVM::insert_scalable_vector(Value *base_vec, Value *new_vec, int start) {
+    // To follow the requirement of ‘llvm.experimental.vector.insert’ intrinsic that
+    // idx must be a constant multiple of subvec’s known minimum vector length,
+    // insertion is performed in multiple sub slices.
+    // As of LLVM 14, LLVM Error occurs in some cases.
+    // The workaround is to use power-of-two lanes.
+
+    const int base_lanes = get_vector_num_elements(base_vec->getType());
+    const int new_vec_lanes = get_vector_num_elements(new_vec->getType());
+    llvm::Type *element_type = get_vector_element_type(base_vec->getType());
+
+    internal_assert(start + new_vec_lanes <= base_lanes);
+
+    if (base_lanes == 1 && new_vec_lanes == 1) {
+        return new_vec;
+    }
+
+    internal_assert(is_scalable_vector(base_vec) && effective_vscale);
+    Value *val_start_index = ConstantInt::get(i64_t, start, true);
+    if (!new_vec->getType()->isVectorTy()) {
+        return builder->CreateInsertElement(base_vec, new_vec, val_start_index);
+    } else if (is_power_of_two(new_vec_lanes) && start % new_vec_lanes == 0) {
+        // Most of the ordinal use cases are this pattern
+        return builder->CreateInsertVector(base_vec->getType(), base_vec, new_vec, val_start_index);
+    }
+
+    Value *ret = base_vec;
+    int extract_index = 0;
+    int insert_index = start;
+    int sub_slice_size = new_vec_lanes;
+
+    while (extract_index < new_vec_lanes) {
+        if (extract_index + sub_slice_size <= new_vec_lanes &&  // Condition to not overrun
+            extract_index % sub_slice_size == 0 &&              // Requirement of LLVM intrinsic
+            insert_index % sub_slice_size == 0 &&               // Requirement of LLVM intrinsic
+            is_power_of_two(sub_slice_size)) {                  // Workaround to avoid LLVM Error
+
+            internal_assert(extract_index % effective_vscale == 0);
+            internal_assert(insert_index % effective_vscale == 0);
+            Value *val_extract_index = ConstantInt::get(i64_t, extract_index / effective_vscale, true);
+            Value *val_insert_index = ConstantInt::get(i64_t, insert_index / effective_vscale, true);
+            if (sub_slice_size > 1) {
+                // vector operation
+                llvm::Type *sub_sliced_type = get_vector_type(element_type, sub_slice_size);
+                Value *sub_slice = builder->CreateExtractVector(sub_sliced_type, new_vec, val_extract_index);
+                ret = builder->CreateInsertVector(base_vec->getType(), ret, sub_slice, val_insert_index);
+            } else {
+                // single element operation
+                Value *sub_slice = builder->CreateExtractElement(new_vec, val_extract_index);
+                ret = builder->CreateInsertElement(ret, sub_slice, val_insert_index);
+            }
+            insert_index += sub_slice_size;
+            extract_index += sub_slice_size;
+        } else {
+            // move on to next candidate
+            --sub_slice_size;
+        }
+    }
+    return ret;
 }
 
 Value *CodeGen_LLVM::shuffle_vectors(Value *a, Value *b,

@@ -483,6 +483,26 @@ protected:
     /** Concatenate a bunch of llvm vectors. Must be of the same type. */
     virtual llvm::Value *concat_vectors(const std::vector<llvm::Value *> &);
 
+    /** Sub function of concat_vectors, specialized for scalable vector */
+    virtual llvm::Value *concat_scalable_vectors(llvm::Value *a, llvm::Value *b);
+
+    /** Equivalent of slice_vector, specialized for scalable vector */
+    virtual llvm::Value *slice_scalable_vector(llvm::Value *vec, int start, int extent);
+
+    /** Special simple case of slice_scalable_vector, which extends the vector lanes with undef padding*/
+    virtual llvm::Value *extend_scalable_vector(llvm::Value *vec, int extent);
+
+    /** Special simple case of slice_scalable_vector, where lanes[0, extent) are extracted*/
+    virtual llvm::Value *shorten_scalable_vector(llvm::Value *vec, int extent);
+
+    /** Extract a sub vector from a vector, all the elements in the sub vector must be in the src vector.
+     * Specialized for scalable vector */
+    llvm::Value *extract_scalable_vector(llvm::Value *vec, int start, int extract_size);
+
+    /** Insert a vector into the "start" position of a base vector.
+     * Specialized for scalable vector */
+    llvm::Value *insert_scalable_vector(llvm::Value *base_vec, llvm::Value *new_vec, int start);
+
     /** Create an LLVM shuffle vectors instruction. */
     virtual llvm::Value *shuffle_vectors(llvm::Value *a, llvm::Value *b,
                                          const std::vector<int> &indices);
@@ -544,6 +564,9 @@ protected:
 
     /** Get number of vector elements, taking into account scalable vectors. Returns 1 for scalars. */
     int get_vector_num_elements(const llvm::Type *t);
+
+    bool is_power_of_two(int x) const;
+    int next_power_of_two(int x) const;
 
 private:
     /** All the values in scope at the current code location during
