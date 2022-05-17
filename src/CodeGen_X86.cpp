@@ -744,8 +744,10 @@ string CodeGen_X86::mcpu_tune() const {
         return "znver3";
 
     case Target::Processor::ProcessorGeneric:
-        return mcpu_target();  // Detect "best" CPU from the enabled ISA's.
+        break;
     }
+    internal_assert(target.processor_tune == Target::Processor::ProcessorGeneric && "The switch should be exhaustive.");
+    return mcpu_target();  // Detect "best" CPU from the enabled ISA's.
 }
 
 // FIXME: we should lower everything here, instead of relying
