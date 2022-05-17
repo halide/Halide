@@ -253,6 +253,8 @@ void JITModule::compile_module(std::unique_ptr<llvm::Module> m, const string &fu
     debug(2) << "Target triple: " << m->getTargetTriple() << "\n";
     string error_string;
 
+    llvm::for_each(*m, set_function_attributes_from_halide_target_options);
+
     llvm::TargetOptions options;
     get_target_options(*m, options);
 
