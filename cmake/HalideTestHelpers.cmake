@@ -46,7 +46,7 @@ function(add_halide_test TARGET)
     endif ()
 
     add_test(NAME ${TARGET}
-             COMMAND ${args_COMMAND} ${args_ARGS}
+             COMMAND ${TARGET_EMULATOR} ${args_COMMAND} ${args_ARGS}
              WORKING_DIRECTORY "${args_WORKING_DIRECTORY}")
 
     set_tests_properties(${TARGET} PROPERTIES

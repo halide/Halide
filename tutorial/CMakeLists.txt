@@ -13,7 +13,7 @@ function(add_tutorial source_file)
     target_link_libraries("${name}" PRIVATE Halide::Halide Halide::Tools)
     target_compile_options(${name} PRIVATE "$<$<CXX_COMPILER_ID:GNU>:-Wno-unused-but-set-variable>")
 
-    add_test(NAME tutorial_${name} COMMAND ${name})
+    add_test(NAME tutorial_${name} COMMAND ${TARGET_EMULATOR} ${name})
     set_tests_properties(tutorial_${name}
                          PROPERTIES
                          ENVIRONMENT "HL_TARGET=${Halide_TARGET};HL_JIT_TARGET=${Halide_TARGET}"
@@ -84,7 +84,7 @@ if (TARGET_NVPTX)
 
         target_include_directories(lesson_10_aot_compilation_run PRIVATE "${CMAKE_CURRENT_BINARY_DIR}")
 
-        add_test(NAME tutorial_lesson_10_aot_compilation_run COMMAND lesson_10_aot_compilation_run)
+        add_test(NAME tutorial_lesson_10_aot_compilation_run COMMAND ${TARGET_EMULATOR} lesson_10_aot_compilation_run)
         set_tests_properties(tutorial_lesson_10_aot_compilation_run PROPERTIES LABELS "tutorial;multithreaded")
     endif ()
 endif ()
@@ -177,7 +177,7 @@ else ()
                           Halide::ImageIO
                           Halide::Tools)
 
-    add_test(NAME tutorial_lesson_16_rgb_run COMMAND lesson_16_rgb_run)
+    add_test(NAME tutorial_lesson_16_rgb_run COMMAND ${TARGET_EMULATOR} lesson_16_rgb_run)
     set_tests_properties(tutorial_lesson_16_rgb_run PROPERTIES LABELS tutorial)
 endif ()
 
@@ -204,6 +204,6 @@ if (TARGET Halide::Mullapudi2016)
     target_link_libraries(lesson_21_auto_scheduler_run PRIVATE
                           auto_schedule_false auto_schedule_true Halide::Tools)
 
-    add_test(NAME tutorial_lesson_21_auto_scheduler_run COMMAND lesson_21_auto_scheduler_run)
+    add_test(NAME tutorial_lesson_21_auto_scheduler_run COMMAND ${TARGET_EMULATOR} lesson_21_auto_scheduler_run)
     set_tests_properties(tutorial_lesson_21_auto_scheduler_run PROPERTIES LABELS "tutorial;multithreaded")
 endif ()
