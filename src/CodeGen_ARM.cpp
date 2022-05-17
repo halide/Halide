@@ -46,6 +46,8 @@ protected:
     int target_vscale() const override;
 
     void init_module() override;
+    void begin_func(LinkageType linkage, const std::string &simple_name,
+                    const std::string &extern_name, const std::vector<LoweredArgument> &args) override;
 
     /** Nodes for which we want to emit specific neon intrinsics */
     // @{
@@ -794,6 +796,24 @@ void CodeGen_ARM::init_module() {
                 declare_intrin_overload(intrin.name, ret_type, intrin_impl, arg_types);
             }
         }
+    }
+}
+
+Expr runtime_vscale() {
+    return Call::make(Int(32), "get_runtime_vscale", std::vector<Expr>(), Call::PureExtern);
+}
+
+void CodeGen_ARM::begin_func(LinkageType linkage, const std::string &simple_name,
+                             const std::string &extern_name, const std::vector<LoweredArgument> &args) {
+    CodeGen_Posix::begin_func(linkage, simple_name, extern_name, args);
+
+    if (effective_vscale != 0 && !target.has_feature(Target::NoAsserts)) {
+        // Make sure run-time vscale is equal to compile-time vscale
+        Value *val_runtime_vscale = codegen(runtime_vscale());
+        Value *val_compiletime_vscale = ConstantInt::get(i32_t, effective_vscale);
+        Value *cond = builder->CreateICmpEQ(val_runtime_vscale, val_compiletime_vscale);
+        create_assertion(cond, Call::make(Int(32), "halide_error_vscale_invalid",
+                                          {simple_name, runtime_vscale(), Expr(effective_vscale)}, Call::Extern));
     }
 }
 

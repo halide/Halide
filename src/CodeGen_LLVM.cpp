@@ -3337,6 +3337,8 @@ void CodeGen_LLVM::visit(const Call *op) {
         internal_assert(e.type().is_float());
         Expr inf = e.type().max();
         codegen(abs(e) != inf && e == e);
+    } else if (op->call_type == Call::PureExtern && op->name == "get_runtime_vscale") {
+        value = builder->CreateVScale(ConstantInt::get(i32_t, 1));
     } else {
         // It's an extern call.
 
