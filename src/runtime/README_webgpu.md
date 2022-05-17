@@ -16,7 +16,6 @@ The following is a non-comprehensive list of known limitations:
     * 8-bit and 16-bit integers will be implemented using emulation inside
       Halide and with future extensions to WGSL.
     * 64-bit integers and floats will likely remain unsupported.
--   Schedules that use workgroup memory are not yet supported.
 -   Dynamic gpu_tile sizes are not yet supported.
 -   Host<->Device copies are only implemented for contiguous data regions.
 -   Device<->Device copies are not yet implemented.
@@ -30,7 +29,7 @@ device codegen may be required before it becomes profitable to use.
 
 ## Running with WebAssembly via Emscripten: `HL_TARGET=wasm-32-wasmrt-webgpu`
 
-> _Tested with top-of-tree Emscripten as of 2022-01-06, against Chrome v99._
+> _Tested with top-of-tree Emscripten as of 2022-05-16, against Chrome v103._
 
 Halide can generate WebGPU code that can be integrated with WASM code using
 Emscripten.
