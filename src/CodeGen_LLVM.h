@@ -568,6 +568,10 @@ protected:
     bool is_power_of_two(int x) const;
     int next_power_of_two(int x) const;
 
+    /** A helper routine for generating folded vector reductions. */
+    template<typename Op>
+    bool try_to_fold_vector_reduce(const Expr &a, Expr b);
+
 private:
     /** All the values in scope at the current code location during
      * codegen. Use sym_push and sym_pop to access. */
@@ -616,10 +620,6 @@ private:
 
     void init_codegen(const std::string &name, bool any_strict_float = false);
     std::unique_ptr<llvm::Module> finish_codegen();
-
-    /** A helper routine for generating folded vector reductions. */
-    template<typename Op>
-    bool try_to_fold_vector_reduce(const Expr &a, Expr b);
 
     /** Records the StructType for pointer values returned from
      * make_struct intrinsic. Required for opaque pointer support.

@@ -5060,5 +5060,12 @@ int CodeGen_LLVM::get_vector_num_elements(const llvm::Type *t) {
     }
 }
 
+template bool CodeGen_LLVM::try_to_fold_vector_reduce<Add>(const Expr &a, Expr b);
+template bool CodeGen_LLVM::try_to_fold_vector_reduce<Mul>(const Expr &a, Expr b);
+template bool CodeGen_LLVM::try_to_fold_vector_reduce<Min>(const Expr &a, Expr b);
+template bool CodeGen_LLVM::try_to_fold_vector_reduce<Max>(const Expr &a, Expr b);
+template bool CodeGen_LLVM::try_to_fold_vector_reduce<And>(const Expr &a, Expr b);
+template bool CodeGen_LLVM::try_to_fold_vector_reduce<Or>(const Expr &a, Expr b);
+template bool CodeGen_LLVM::try_to_fold_vector_reduce<Call>(const Expr &a, Expr b);
 }  // namespace Internal
 }  // namespace Halide

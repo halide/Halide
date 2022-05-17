@@ -38,6 +38,7 @@ public:
 
 protected:
     using CodeGen_Posix::visit;
+    using codegen_func_t = std::function<Value *(int lanes, const std::vector<Value *> &)>;
 
     /** Assuming 'inner' is a function that takes two vector arguments, define a wrapper that
      * takes one vector argument and splits it into two to call inner. */
@@ -52,14 +53,25 @@ protected:
     /** Nodes for which we want to emit specific neon intrinsics */
     // @{
     void visit(const Cast *) override;
+    void visit(const Add *) override;
     void visit(const Sub *) override;
+    void visit(const Mul *) override;
+    void visit(const Div *) override;
     void visit(const Min *) override;
     void visit(const Max *) override;
     void visit(const Store *) override;
     void visit(const Load *) override;
     void visit(const Call *) override;
+    void visit(const EQ *) override;
+    void visit(const NE *) override;
     void visit(const LT *) override;
     void visit(const LE *) override;
+    void visit(const GT *) override;
+    void visit(const GE *) override;
+    void visit(const And *) override;
+    void visit(const Or *) override;
+    void visit(const Not *) override;
+    void visit(const Select *op) override;
     void visit(const Shuffle *) override;
     void codegen_vector_reduce(const VectorReduce *, const Expr &) override;
     // @}
@@ -73,6 +85,20 @@ protected:
     Value *try_to_decompose_into_sub_shuffles(Value *a, Value *b, const std::vector<int> &indices);
     Value *codegen_shuffle_indices(int bits, const std::vector<int> &indices);
     Value *codegen_whilelt(int total_lanes, int start, int end);
+
+    /** Helper function to perform codegen in native vector lanes basis.
+     * This API is mainly used in case LLVM error occurs with vanila codegen for
+     * vector type with "unnatural" lanes.
+     * The condition is checked to see if it is necessary to slice the op.
+     * In case vanila codegen is possible to handle, nothing happens and false is returned.
+     */
+    bool codegen_with_natural_lanes_if_necessary(Type op_type, const std::vector<Expr> &args, codegen_func_t &cg_func);
+
+    /** Helper function to perform codegen of vector operation in a way that
+     * total_lanes are divided into slices, codegen is performed for each slice
+     * and results are concatenated into total_lanes.
+     */
+    Value *codegen_with_lanes(int slice_lanes, int total_lanes, const std::vector<Expr> &args, codegen_func_t &cg_func);
 
     /** Various patterns to peephole match against */
     struct Pattern {
@@ -909,6 +935,19 @@ void CodeGen_ARM::visit(const Cast *op) {
         }
     }
 
+    // TODO: Workaround for LLVM Error as of LLVM 14
+    // https://github.com/llvm/llvm-project/issues/54424
+    // https://github.com/llvm/llvm-project/issues/54423
+    if (op->value.type().is_float() && op->type.is_float()) {
+        codegen_func_t cg_func = [&](int lanes, const std::vector<Value *> &args) {
+            internal_assert(args.size() == 1);
+            return builder->CreateFPCast(args[0], llvm_type_of(op->type.with_lanes(lanes)));
+        };
+        if (codegen_with_natural_lanes_if_necessary(op->type, {op->value}, cg_func)) {
+            return;
+        }
+    }
+
     CodeGen_Posix::visit(op);
 }
 
@@ -951,6 +990,86 @@ void CodeGen_ARM::visit(const Sub *op) {
         }
         value = builder->CreateFSub(a, b);
         return;
+    }
+    // TODO: Workaround for LLVM Error as of LLVM 14
+    // https://github.com/llvm/llvm-project/issues/54424
+    // https://github.com/llvm/llvm-project/issues/54423
+    if (op->type.is_float() || op->type.bits() == 64) {
+        codegen_func_t cg_func = [&](int lanes, const std::vector<Value *> &args) {
+            internal_assert(args.size() == 2);
+            if (op->type.is_float()) {
+                return builder->CreateFSub(args[0], args[1]);
+            } else if (op->type.is_int() && op->type.bits() >= 32) {
+                return builder->CreateNSWSub(args[0], args[1]);
+            } else {
+                return builder->CreateSub(args[0], args[1]);
+            }
+        };
+        if (codegen_with_natural_lanes_if_necessary(op->type, {op->a, op->b}, cg_func)) {
+            return;
+        }
+    }
+
+    CodeGen_Posix::visit(op);
+}
+
+void CodeGen_ARM::visit(const Add *op) {
+    // TODO: Workaround for LLVM Error as of LLVM 14
+    // https://github.com/llvm/llvm-project/issues/54424
+    // https://github.com/llvm/llvm-project/issues/54423
+    if (op->type.is_float() || op->type.bits() == 64) {
+        codegen_func_t cg_func = [&](int lanes, const std::vector<Value *> &args) {
+            internal_assert(args.size() == 2);
+            if (op->type.is_float()) {
+                return builder->CreateFAdd(args[0], args[1]);
+            } else if (op->type.is_int() && op->type.bits() >= 32) {
+                return builder->CreateNSWAdd(args[0], args[1]);
+            } else {
+                return builder->CreateAdd(args[0], args[1]);
+            }
+        };
+        if (codegen_with_natural_lanes_if_necessary(op->type, {op->a, op->b}, cg_func)) {
+            return;
+        }
+    }
+    CodeGen_Posix::visit(op);
+}
+
+void CodeGen_ARM::visit(const Mul *op) {
+    // TODO: Workaround for LLVM Error as of LLVM 14
+    // https://github.com/llvm/llvm-project/issues/54424
+    // https://github.com/llvm/llvm-project/issues/54423
+    if (op->type.is_float() || op->type.bits() == 64) {
+        codegen_func_t cg_func = [&](int lanes, const std::vector<Value *> &args) {
+            internal_assert(args.size() == 2);
+            if (op->type.is_float()) {
+                return builder->CreateFMul(args[0], args[1]);
+            } else if (op->type.is_int() && op->type.bits() >= 32) {
+                return builder->CreateNSWMul(args[0], args[1]);
+            } else {
+                return builder->CreateMul(args[0], args[1]);
+            }
+        };
+        if (codegen_with_natural_lanes_if_necessary(op->type, {op->a, op->b}, cg_func)) {
+            return;
+        }
+    }
+
+    CodeGen_Posix::visit(op);
+}
+
+void CodeGen_ARM::visit(const Div *op) {
+    // TODO: Workaround for LLVM Error as of LLVM 14
+    // https://github.com/llvm/llvm-project/issues/54424
+    // https://github.com/llvm/llvm-project/issues/54423
+    if (op->type.is_float()) {
+        codegen_func_t cg_func = [&](int lanes, const std::vector<Value *> &args) {
+            internal_assert(args.size() == 2);
+            return builder->CreateFDiv(args[0], args[1]);
+        };
+        if (codegen_with_natural_lanes_if_necessary(op->type, {op->a, op->b}, cg_func)) {
+            return;
+        }
     }
 
     CodeGen_Posix::visit(op);
@@ -1269,10 +1388,205 @@ void CodeGen_ARM::visit(const Call *op) {
         }
     }
 
+    // TODO: Workaround for LLVM Error as of LLVM 14
+    // https://github.com/llvm/llvm-project/issues/54424
+    // https://github.com/llvm/llvm-project/issues/54423
+    if (effective_vscale != 0) {
+
+        if (op->is_intrinsic(Call::bitwise_and)) {
+            codegen_func_t cg_func = [&](int lanes, const std::vector<Value *> &args) {
+                internal_assert(args.size() == 2);
+                return builder->CreateAnd(args[0], args[1]);
+            };
+            if (codegen_with_natural_lanes_if_necessary(op->type, op->args, cg_func)) {
+                return;
+            }
+        } else if (op->is_intrinsic(Call::bitwise_xor)) {
+            codegen_func_t cg_func = [&](int lanes, const std::vector<Value *> &args) {
+                internal_assert(args.size() == 2);
+                return builder->CreateXor(args[0], args[1]);
+            };
+            if (codegen_with_natural_lanes_if_necessary(op->type, op->args, cg_func)) {
+                return;
+            }
+        } else if (op->is_intrinsic(Call::bitwise_or)) {
+            codegen_func_t cg_func = [&](int lanes, const std::vector<Value *> &args) {
+                internal_assert(args.size() == 2);
+                return builder->CreateOr(args[0], args[1]);
+            };
+            if (codegen_with_natural_lanes_if_necessary(op->type, op->args, cg_func)) {
+                return;
+            }
+        } else if (op->is_intrinsic(Call::bitwise_not)) {
+            codegen_func_t cg_func = [&](int lanes, const std::vector<Value *> &args) {
+                internal_assert(args.size() == 1);
+                return builder->CreateNot(args[0]);
+            };
+            if (codegen_with_natural_lanes_if_necessary(op->type, op->args, cg_func)) {
+                return;
+            }
+        } else if (op->is_intrinsic(Call::shift_left)) {
+            if (op->args[1].type().is_uint()) {
+                codegen_func_t cg_func = [&](int lanes, const std::vector<Value *> &args) {
+                    internal_assert(args.size() == 2);
+                    return builder->CreateShl(args[0], args[1]);
+                };
+                if (codegen_with_natural_lanes_if_necessary(op->type, op->args, cg_func)) {
+                    return;
+                }
+            } else {
+                value = codegen(lower_signed_shift_left(op->args[0], op->args[1]));
+            }
+        } else if (op->is_intrinsic(Call::shift_right)) {
+            if (op->args[1].type().is_uint()) {
+                codegen_func_t cg_func = [&](int lanes, const std::vector<Value *> &args) {
+                    internal_assert(args.size() == 2);
+                    if (op->type.is_int()) {
+                        return builder->CreateAShr(args[0], args[1]);
+                    } else {
+                        return builder->CreateLShr(args[0], args[1]);
+                    }
+                };
+                if (codegen_with_natural_lanes_if_necessary(op->type, op->args, cg_func)) {
+                    return;
+                }
+            } else {
+                value = codegen(lower_signed_shift_right(op->args[0], op->args[1]));
+            }
+        } else if (op->is_intrinsic(Call::div_round_to_zero)) {
+            // See if we can rewrite it to something faster (e.g. a shift)
+            Expr e = lower_int_uint_div(op->args[0], op->args[1], /** round to zero */ true);
+            if (!e.as<Call>()) {
+                codegen(e);
+                return;
+            }
+
+            internal_assert(op->type.is_int_or_uint());
+            codegen_func_t cg_func = [&](int lanes, const std::vector<Value *> &args) {
+                internal_assert(args.size() == 2);
+                if (op->type.is_int()) {
+                    return builder->CreateSDiv(args[0], args[1]);
+                } else {
+                    return builder->CreateUDiv(args[0], args[1]);
+                }
+            };
+            if (codegen_with_natural_lanes_if_necessary(op->type, op->args, cg_func)) {
+                return;
+            }
+        } else if (op->is_intrinsic(Call::mod_round_to_zero)) {
+            internal_assert(op->type.is_int_or_uint());
+            codegen_func_t cg_func = [&](int lanes, const std::vector<Value *> &args) {
+                internal_assert(args.size() == 2);
+                if (op->type.is_int()) {
+                    return builder->CreateSRem(args[0], args[1]);
+                } else {
+                    return builder->CreateURem(args[0], args[1]);
+                }
+            };
+            if (codegen_with_natural_lanes_if_necessary(op->type, op->args, cg_func)) {
+                return;
+            }
+        } else if (op->is_intrinsic(Call::popcount)) {
+            codegen_func_t cg_func = [&](int lanes, const std::vector<Value *> &args) {
+                internal_assert(args.size() == 1);
+                llvm::Function *fn = llvm::Intrinsic::getDeclaration(module.get(), llvm::Intrinsic::ctpop, {args[0]->getType()});
+                return builder->CreateCall(fn, args[0]);
+            };
+            if (codegen_with_natural_lanes_if_necessary(op->args[0].type(), op->args, cg_func)) {
+                return;
+            }
+        } else if (op->is_intrinsic(Call::count_leading_zeros) ||
+                   op->is_intrinsic(Call::count_trailing_zeros)) {
+
+            codegen_func_t cg_func = [&](int lanes, const std::vector<Value *> &args) {
+                internal_assert(args.size() == 1);
+                auto intrin_id = (op->is_intrinsic(Call::count_leading_zeros)) ? llvm::Intrinsic::ctlz : llvm::Intrinsic::cttz;
+                llvm::Function *fn = llvm::Intrinsic::getDeclaration(module.get(), intrin_id, {args[0]->getType()});
+                llvm::Value *is_const_zero_undef = llvm::ConstantInt::getFalse(*context);
+                return builder->CreateCall(fn, {args[0], is_const_zero_undef});
+            };
+            if (codegen_with_natural_lanes_if_necessary(op->args[0].type(), op->args, cg_func)) {
+                return;
+            }
+        } else if (op->call_type == Call::PureExtern &&
+                   (op->name == "is_nan_f32" || op->name == "is_nan_f64" || op->name == "is_nan_f16")) {
+
+            // Copied from CodeGen_LLVM::visit(const Call)
+            IRBuilder<llvm::ConstantFolder, llvm::IRBuilderDefaultInserter>::FastMathFlagGuard guard(*builder);
+            llvm::FastMathFlags safe_flags;
+            safe_flags.clear();
+            builder->setFastMathFlags(safe_flags);
+            builder->setDefaultFPMathTag(strict_fp_math_md);
+
+            codegen_func_t cg_func = [&](int lanes, const std::vector<Value *> &args) {
+                internal_assert(args.size() == 1);
+                return builder->CreateFCmpUNO(args[0], args[0]);
+            };
+            if (codegen_with_natural_lanes_if_necessary(op->args[0].type(), op->args, cg_func)) {
+                return;
+            }
+        }
+    }
+
+    CodeGen_Posix::visit(op);
+}
+
+void CodeGen_ARM::visit(const EQ *op) {
+    // TODO: Workaround for LLVM Error as of LLVM 14
+    // https://github.com/llvm/llvm-project/issues/54424
+    // https://github.com/llvm/llvm-project/issues/54423
+    codegen_func_t cg_func = [&](int lanes, const std::vector<Value *> &args) {
+        internal_assert(args.size() == 2);
+        if (op->a.type().is_float()) {
+            return builder->CreateFCmpOEQ(args[0], args[1]);
+        } else {
+            return builder->CreateICmpEQ(args[0], args[1]);
+        }
+    };
+    if (codegen_with_natural_lanes_if_necessary(op->a.type(), {op->a, op->b}, cg_func)) {
+        return;
+    }
+
+    CodeGen_Posix::visit(op);
+}
+
+void CodeGen_ARM::visit(const NE *op) {
+    // TODO: Workaround for LLVM Error as of LLVM 14
+    // https://github.com/llvm/llvm-project/issues/54424
+    // https://github.com/llvm/llvm-project/issues/54423
+    codegen_func_t cg_func = [&](int lanes, const std::vector<Value *> &args) {
+        internal_assert(args.size() == 2);
+        if (op->a.type().is_float()) {
+            return builder->CreateFCmpONE(args[0], args[1]);
+        } else {
+            return builder->CreateICmpNE(args[0], args[1]);
+        }
+    };
+    if (codegen_with_natural_lanes_if_necessary(op->a.type(), {op->a, op->b}, cg_func)) {
+        return;
+    }
+
     CodeGen_Posix::visit(op);
 }
 
 void CodeGen_ARM::visit(const LT *op) {
+    // TODO: Workaround for LLVM Error as of LLVM 14
+    // https://github.com/llvm/llvm-project/issues/54424
+    // https://github.com/llvm/llvm-project/issues/54423
+    codegen_func_t cg_func = [&](int lanes, const std::vector<Value *> &args) {
+        internal_assert(args.size() == 2);
+        if (op->a.type().is_float()) {
+            return builder->CreateFCmpOLT(args[0], args[1]);
+        } else if (op->a.type().is_int()) {
+            return builder->CreateICmpSLT(args[0], args[1]);
+        } else {
+            return builder->CreateICmpULT(args[0], args[1]);
+        }
+    };
+    if (codegen_with_natural_lanes_if_necessary(op->a.type(), {op->a, op->b}, cg_func)) {
+        return;
+    }
+
     if (op->a.type().is_float() && op->type.is_vector()) {
         // Fast-math flags confuse LLVM's aarch64 backend, so
         // temporarily clear them for this instruction.
@@ -1287,6 +1601,23 @@ void CodeGen_ARM::visit(const LT *op) {
 }
 
 void CodeGen_ARM::visit(const LE *op) {
+    // TODO: Workaround for LLVM Error as of LLVM 14
+    // https://github.com/llvm/llvm-project/issues/54424
+    // https://github.com/llvm/llvm-project/issues/54423
+    codegen_func_t cg_func = [&](int lanes, const std::vector<Value *> &args) {
+        internal_assert(args.size() == 2);
+        if (op->a.type().is_float()) {
+            return builder->CreateFCmpOLE(args[0], args[1]);
+        } else if (op->a.type().is_int()) {
+            return builder->CreateICmpSLE(args[0], args[1]);
+        } else {
+            return builder->CreateICmpULE(args[0], args[1]);
+        }
+    };
+    if (codegen_with_natural_lanes_if_necessary(op->a.type(), {op->a, op->b}, cg_func)) {
+        return;
+    }
+
     if (op->a.type().is_float() && op->type.is_vector()) {
         // Fast-math flags confuse LLVM's aarch64 backend, so
         // temporarily clear them for this instruction.
@@ -1295,6 +1626,125 @@ void CodeGen_ARM::visit(const LE *op) {
         builder->clearFastMathFlags();
         CodeGen_Posix::visit(op);
         return;
+    }
+
+    CodeGen_Posix::visit(op);
+}
+
+void CodeGen_ARM::visit(const GT *op) {
+    // TODO: Workaround for LLVM Error as of LLVM 14
+    // https://github.com/llvm/llvm-project/issues/54424
+    // https://github.com/llvm/llvm-project/issues/54423
+    codegen_func_t cg_func = [&](int lanes, const std::vector<Value *> &args) {
+        internal_assert(args.size() == 2);
+        if (op->a.type().is_float()) {
+            return builder->CreateFCmpOGT(args[0], args[1]);
+        } else if (op->a.type().is_int()) {
+            return builder->CreateICmpSGT(args[0], args[1]);
+        } else {
+            return builder->CreateICmpUGT(args[0], args[1]);
+        }
+    };
+    if (codegen_with_natural_lanes_if_necessary(op->a.type(), {op->a, op->b}, cg_func)) {
+        return;
+    }
+
+    CodeGen_Posix::visit(op);
+}
+
+void CodeGen_ARM::visit(const GE *op) {
+    // TODO: Workaround for LLVM Error as of LLVM 14
+    // https://github.com/llvm/llvm-project/issues/54424
+    // https://github.com/llvm/llvm-project/issues/54423
+    codegen_func_t cg_func = [&](int lanes, const std::vector<Value *> &args) {
+        internal_assert(args.size() == 2);
+        if (op->a.type().is_float()) {
+            return builder->CreateFCmpOGE(args[0], args[1]);
+        } else if (op->a.type().is_int()) {
+            return builder->CreateICmpSGE(args[0], args[1]);
+        } else {
+            return builder->CreateICmpUGE(args[0], args[1]);
+        }
+    };
+    if (codegen_with_natural_lanes_if_necessary(op->a.type(), {op->a, op->b}, cg_func)) {
+        return;
+    }
+
+    CodeGen_Posix::visit(op);
+}
+
+void CodeGen_ARM::visit(const And *op) {
+    // TODO: Workaround for LLVM Error as of LLVM 14
+    // https://github.com/llvm/llvm-project/issues/54424
+    // https://github.com/llvm/llvm-project/issues/54423
+    if (try_to_fold_vector_reduce<And>(op->a, op->b)) {
+        return;
+    }
+
+    if (op->a.type().bits() == 64) {
+        codegen_func_t cg_func = [&](int lanes, const std::vector<Value *> &args) {
+            internal_assert(args.size() == 2);
+            return builder->CreateAnd(args[0], args[1]);
+        };
+        if (codegen_with_natural_lanes_if_necessary(op->a.type(), {op->a, op->b}, cg_func)) {
+            return;
+        }
+    }
+
+    CodeGen_Posix::visit(op);
+}
+
+void CodeGen_ARM::visit(const Or *op) {
+    // TODO: Workaround for LLVM Error as of LLVM 14
+    // https://github.com/llvm/llvm-project/issues/54424
+    // https://github.com/llvm/llvm-project/issues/54423
+    if (try_to_fold_vector_reduce<Or>(op->a, op->b)) {
+        return;
+    }
+
+    if (op->a.type().bits() == 64) {
+        codegen_func_t cg_func = [&](int lanes, const std::vector<Value *> &args) {
+            internal_assert(args.size() == 2);
+            return builder->CreateOr(args[0], args[1]);
+        };
+        if (codegen_with_natural_lanes_if_necessary(op->a.type(), {op->a, op->b}, cg_func)) {
+            return;
+        }
+    }
+
+    CodeGen_Posix::visit(op);
+}
+
+void CodeGen_ARM::visit(const Not *op) {
+    // TODO: Workaround for LLVM Error as of LLVM 14
+    // https://github.com/llvm/llvm-project/issues/54424
+    // https://github.com/llvm/llvm-project/issues/54423
+    if (op->a.type().bits() == 64) {
+        codegen_func_t cg_func = [&](int lanes, const std::vector<Value *> &args) {
+            internal_assert(args.size() == 1);
+            return builder->CreateNot(args[0]);
+        };
+        if (codegen_with_natural_lanes_if_necessary(op->a.type(), {op->a}, cg_func)) {
+            return;
+        }
+    }
+
+    CodeGen_Posix::visit(op);
+}
+
+void CodeGen_ARM::visit(const Select *op) {
+    // TODO: Workaround for LLVM Error as of LLVM 14
+    // https://github.com/llvm/llvm-project/issues/54424
+    // https://github.com/llvm/llvm-project/issues/54423
+    if (op->type.is_float() || op->type.bits() == 64) {
+        codegen_func_t cg_func = [&](int lanes, const std::vector<Value *> &args) {
+            internal_assert(args.size() == 3);
+            return builder->CreateSelect(args[0], args[1], args[2]);
+        };
+        if (codegen_with_natural_lanes_if_necessary(op->true_value.type(),
+                                                    {op->condition, op->true_value, op->false_value}, cg_func)) {
+            return;
+        }
     }
 
     CodeGen_Posix::visit(op);
@@ -1915,6 +2365,50 @@ Value *CodeGen_ARM::codegen_whilelt(int total_lanes, int start, int end) {
     value = builder->CreateCall(fn, {codegen(Expr(start)), codegen(Expr(end))});
 
     return value;
+}
+
+bool CodeGen_ARM::codegen_with_natural_lanes_if_necessary(Type op_type, const std::vector<Expr> &args, codegen_func_t &cg_func) {
+    if (effective_vscale != 0 &&
+        op_type.is_vector() &&
+        !is_power_of_two(op_type.lanes())) {  // This condition is to avoid LLVM Error as of LLVM 14.
+
+        value = codegen_with_lanes(target.natural_vector_size(op_type), op_type.lanes(), args, cg_func);
+        return true;
+    }
+    return false;
+}
+
+Value *CodeGen_ARM::codegen_with_lanes(int slice_lanes, int total_lanes,
+                                       const std::vector<Expr> &args, codegen_func_t &cg_func) {
+    std::vector<Value *> llvm_args;
+    // codegen args
+    for (const auto &arg : args) {
+        llvm_args.push_back(codegen(arg));
+    }
+
+    if (slice_lanes == total_lanes) {
+        // codegen op
+        return cg_func(slice_lanes, llvm_args);
+    }
+
+    std::vector<Value *> results;
+    for (int start = 0; start < total_lanes; start += slice_lanes) {
+        std::vector<Value *> sliced_args;
+        for (auto &llvm_arg : llvm_args) {
+            Value *v = llvm_arg;
+            if (get_vector_num_elements(llvm_arg->getType()) == total_lanes) {
+                // Except for scalar argument which some ops have, arguments are sliced
+                v = slice_vector(llvm_arg, start, slice_lanes);
+            }
+            sliced_args.push_back(v);
+        }
+        // codegen op
+        value = cg_func(slice_lanes, sliced_args);
+        results.push_back(value);
+    }
+    // Restore the results into vector with total_lanes
+    value = concat_vectors(results);
+    return slice_vector(value, 0, total_lanes);
 }
 
 string CodeGen_ARM::mcpu_target() const {
