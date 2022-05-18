@@ -61,6 +61,7 @@ protected:
     void visit(const Max *) override;
     void visit(const Store *) override;
     void visit(const Load *) override;
+    void visit(const Ramp *op) override;
     void visit(const Call *) override;
     void visit(const EQ *) override;
     void visit(const NE *) override;
@@ -1327,6 +1328,31 @@ void CodeGen_ARM::visit(const Load *op) {
             Instruction *load = builder->CreateCall(fn, args, builtin.str());
             add_tbaa_metadata(load, op->name, op->index);
             value = load;
+            return;
+        }
+    }
+}
+
+void CodeGen_ARM::visit(const Ramp *op) {
+    if (effective_vscale != 0 && op->type.is_int_or_uint()) {
+        if (is_const_zero(op->base) && is_const_one(op->stride)) {
+
+            codegen_func_t cg_func = [&](int lanes, const std::vector<Value *> &args) {
+                internal_assert(args.empty());
+                // Generate stepvector intrinsic for ScalableVector
+                return builder->CreateStepVector(llvm_type_of(op->type.with_lanes(lanes)));
+            };
+            // codgen with next-power-of-two lanes, because if we sliced into natural_lanes(e.g. 4),
+            // it would produce {0,1,2,3,0,1,..} instead of {0,1,2,3,4,5,..}
+            const int ret_lanes = op->type.lanes();
+            const int aligned_lanes = next_power_of_two(ret_lanes);
+            value = codegen_with_lanes(aligned_lanes, ret_lanes, {}, cg_func);
+            return;
+        } else {
+            Expr broadcast_base = Broadcast::make(op->base, op->lanes);
+            Expr broadcast_stride = Broadcast::make(op->stride, op->lanes);
+            Expr step_ramp = Ramp::make(make_zero(op->base.type()), make_one(op->base.type()), op->lanes);
+            value = codegen(broadcast_base + broadcast_stride * step_ramp);
             return;
         }
     }
