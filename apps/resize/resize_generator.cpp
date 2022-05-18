@@ -135,10 +135,10 @@ public:
             resized = resized_x;
         }
 
-        if (input.type().is_float()) {
+        if (input.gio_type().is_float()) {
             output(x, y, c) = clamp(resized(x, y, c), 0.0f, 1.0f);
         } else {
-            output(x, y, c) = saturating_cast(input.type(), resized(x, y, c));
+            output(x, y, c) = saturating_cast(input.gio_type(), resized(x, y, c));
         }
     }
 

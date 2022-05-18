@@ -79,8 +79,8 @@ public:
     void generate() {
         Var x("x"), y("y"), c("c");
 
-        assert(buffer_f16_untyped.type() == Float(16));
-        assert(untyped_scalar_input.type() == UInt(8));
+        assert(buffer_f16_untyped.gio_type() == Float(16));
+        assert(untyped_scalar_input.gio_type() == UInt(8));
 
         // These should all be zero; they are here to exercise the operator[] overloads
         Expr zero1 = array_input[1](x, y, c) - array_input[0](x, y, c);
@@ -97,8 +97,8 @@ public:
 
         Expr zero = zero1 + zero2 + bzero1 + bzero2 + bzero3 + bzero4 + bzero5 + bzero6 + bzero7 + bzero8;
 
-        assert(output.types().size() == 2);
-        Type output_type = output.types().at(0);
+        assert(output.output_types().size() == 2);
+        Type output_type = output.output_types().at(0);
 
         Func f1("f1"), f2("f2");
         f1(x, y, c) = cast(output_type, input(x, y, c) + zero + untyped_scalar_input);

@@ -17,17 +17,17 @@ public:
         Var c("c"), x("x"), y("y"), b("b");
 
         // This pipeline only supports padding dimension 0.
-        Expr pad_value = cast(input_.type(), pad_value_);
+        Expr pad_value = cast(input_.gio_type(), pad_value_);
         Func input_bounded =
             constant_exterior(input_, pad_value, {{input_.dim(0).min(), input_.dim(0).extent()}});
 
-        output_(c, x, y, b) = cast(output_.type(), input_bounded(c, x, y, b));
+        output_(c, x, y, b) = cast(output_.output_type(), input_bounded(c, x, y, b));
 
         // Schedule.
         const int vector_size =
-            std::max(natural_vector_size(output_.type()), natural_vector_size(input_.type()));
+            std::max(natural_vector_size(output_.output_type()), natural_vector_size(input_.gio_type()));
 
-        if (input_.type() == UInt(8) && output_.type() == UInt(8)) {
+        if (input_.gio_type() == UInt(8) && output_.output_type() == UInt(8)) {
             // Handle 3 channel -> 4 channel padding as a special case.
             // TODO: vectorize c instead of unroll c.
             output_.specialize(is_interleaved(input_, 3) && is_interleaved(output_, 4))

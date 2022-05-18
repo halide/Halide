@@ -1434,9 +1434,9 @@ public:
     const std::string &name() const;
     IOKind kind() const;
 
-    bool types_defined() const;
-    const std::vector<Type> &types() const;
-    Type type() const;
+    bool gio_types_defined() const;
+    const std::vector<Type> &gio_types() const;
+    Type gio_type() const;
 
     bool dims_defined() const;
     int dims() const;
@@ -2438,8 +2438,8 @@ private:
 
         internal_assert(f.defined());
 
-        if (this->types_defined()) {
-            const auto &my_types = this->types();
+        if (this->gio_types_defined()) {
+            const auto &my_types = this->gio_types();
             user_assert(my_types.size() == f.output_types().size())
                 << "Cannot assign Func \"" << f.name()
                 << "\" to Output \"" << this->name() << "\"\n"
@@ -2563,9 +2563,9 @@ public:
             << "Cannot assign to the Output \"" << this->name()
             << "\": the expression is not convertible to the same Buffer type and/or dimensions.\n";
 
-        if (this->types_defined()) {
-            user_assert(Type(buffer.type()) == this->type())
-                << "Output " << this->name() << " should have type=" << this->type() << " but saw type=" << Type(buffer.type()) << "\n";
+        if (this->gio_types_defined()) {
+            user_assert(Type(buffer.type()) == this->gio_type())
+                << "Output " << this->name() << " should have type=" << this->gio_type() << " but saw type=" << Type(buffer.type()) << "\n";
         }
         if (this->dims_defined()) {
             user_assert(buffer.dimensions() == this->dims())

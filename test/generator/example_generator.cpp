@@ -74,7 +74,7 @@ public:
     void generate() {
         Func f;
         f(x, y) = max(x, y);
-        output(x, y, c) = cast(output.type(), f(x, y) * c * compiletime_factor * runtime_factor);
+        output(x, y, c) = cast(output.output_type(), f(x, y) * c * compiletime_factor * runtime_factor);
     }
 
     void schedule() {
@@ -89,7 +89,7 @@ public:
             // Note that we can use the Generator method natural_vector_size()
             // here; this produces the width of the SIMD vector being targeted
             // divided by the width of the data type.
-            const int v = natural_vector_size(output.type());
+            const int v = natural_vector_size(output.output_type());
             if (parallelize && vectorize) {
                 output.parallel(y).vectorize(x, v);
             } else if (parallelize) {

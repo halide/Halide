@@ -28,12 +28,12 @@ public:
     void generate() {
         Func f;
         f(x, y) = max(x, y);
-        output(x, y, c) = cast(output.type(), f(x, y) * c * compiletime_factor * runtime_factor + runtime_offset);
+        output(x, y, c) = cast(output.output_type(), f(x, y) * c * compiletime_factor * runtime_factor + runtime_offset);
     }
 
     void schedule() {
         output.bound(c, 0, 3).reorder(c, x, y).unroll(c);
-        output.specialize(vectorize).vectorize(x, natural_vector_size(output.type()));
+        output.specialize(vectorize).vectorize(x, natural_vector_size(output.output_type()));
     }
 
 private:

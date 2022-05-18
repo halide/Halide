@@ -73,7 +73,7 @@ public:
         // Attempting to call add_input() outside of the configure method will fail.
         // auto *this_will_fail = add_input<Buffer<>>("untyped_uint8", UInt(8), 2);
 
-        assert((*extra_dynamic_scalar_input).type() == Int(8));
+        assert((*extra_dynamic_scalar_input).gio_type() == Int(8));
 
         Var x, y, c;
 
