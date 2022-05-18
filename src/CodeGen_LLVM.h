@@ -503,6 +503,8 @@ protected:
      * Specialized for scalable vector */
     llvm::Value *insert_scalable_vector(llvm::Value *base_vec, llvm::Value *new_vec, int start);
 
+    llvm::Value *reverse_vector(llvm::Value *v);
+
     /** Create an LLVM shuffle vectors instruction. */
     virtual llvm::Value *shuffle_vectors(llvm::Value *a, llvm::Value *b,
                                          const std::vector<int> &indices);
