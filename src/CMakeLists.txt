@@ -70,6 +70,8 @@ set(HEADER_FILES
     FlattenNestedRamps.h
     Float16.h
     Func.h
+    FuncExtras.h
+    FuncTypeChanging.h
     Function.h
     FunctionPtr.h
     FuseGPUThreadLoops.h
@@ -234,6 +236,7 @@ set(SOURCE_FILES
     FlattenNestedRamps.cpp
     Float16.cpp
     Func.cpp
+    FuncTypeChanging.cpp
     Function.cpp
     FuseGPUThreadLoops.cpp
     FuzzFloatStores.cpp

@@ -11,6 +11,7 @@
 #include "PyExpr.h"
 #include "PyExternFuncArgument.h"
 #include "PyFunc.h"
+#include "PyFuncTypeChanging.h"
 #include "PyIROperator.h"
 #include "PyImageParam.h"
 #include "PyInlineReductions.h"
@@ -49,6 +50,7 @@ PYBIND11_MODULE(HALIDE_PYBIND_MODULE_NAME, m) {
     define_tuple(m);
     define_argument(m);
     define_boundary_conditions(m);
+    define_func_type_changing(m);
     define_buffer(m);
     define_concise_casts(m);
     define_error(m);

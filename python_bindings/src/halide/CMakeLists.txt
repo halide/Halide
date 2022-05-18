@@ -11,6 +11,7 @@ set(SOURCES
     PyExternFuncArgument.cpp
     PyFunc.cpp
     PyFuncRef.cpp
+    PyFuncTypeChanging.cpp
     PyHalide.cpp
     PyImageParam.cpp
     PyInlineReductions.cpp

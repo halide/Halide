@@ -108,6 +108,7 @@ tests(GROUPS correctness
       force_onto_stack.cpp
       func_lifetime.cpp
       func_lifetime_2.cpp
+      func_type_changing.cpp
       fuse.cpp
       fuse_gpu_threads.cpp
       fused_where_inner_extent_is_zero.cpp
@@ -310,6 +311,7 @@ tests(GROUPS correctness
       unsafe_promises.cpp
       unused_func.cpp
       update_chunk.cpp
+      variable_bit_length_ops.cpp
       vector_bounds_inference.cpp
       vector_cast.cpp
       vector_extern.cpp

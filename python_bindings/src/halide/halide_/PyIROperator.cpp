@@ -167,6 +167,10 @@ void define_operators(py::module &m) {
     m.def("popcount", &popcount);
     m.def("count_leading_zeros", &count_leading_zeros);
     m.def("count_trailing_zeros", &count_trailing_zeros);
+    m.def("extract_high_bits", &extract_high_bits);
+    m.def("variable_length_extend", &variable_length_extend);
+    m.def("extract_bits", &extract_bits);
+    m.def("extract_low_bits", &extract_low_bits);
     m.def("div_round_to_zero", &div_round_to_zero);
     m.def("mod_round_to_zero", &mod_round_to_zero);
     m.def("random_float", (Expr(*)()) & random_float);

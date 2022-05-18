@@ -394,6 +394,9 @@ inline Expr cast(Expr a) {
 /** Cast an expression to a new type. */
 Expr cast(Type t, Expr a);
 
+/** Cast an integer-typed expression to an unsigned integer type. */
+Expr make_unsigned(Expr a);
+
 /** Return the sum of two expressions, doing any necessary type
  * coercion using \ref Internal::match_types */
 Expr operator+(Expr a, Expr b);
@@ -1207,6 +1210,43 @@ Expr count_leading_zeros(Expr x);
 /** Count the number of trailing zero bits in an expression. If the expression is
  * zero, the result is the number of bits in the type. */
 Expr count_trailing_zeros(Expr x);
+
+/**
+ * Extract \p num_high_bits high bits of \p val.
+ * (with either zero-extension, if \p val is uint,
+ *           or sign-extension, if \p val is  int)
+ *
+ * NOTE: Precondition: `num_high_bits != 0 && num_high_bits u<= bitwidth(val)`!
+ */
+Expr extract_high_bits(const Expr &val, const Expr &num_high_bits);
+
+/**
+ * Extend (either zero-extend if \p val is uint or sign-extend, if \p is int)
+ * low \p num_low_bits bits of \p val to the whole \p val underlying type.
+ *
+ * NOTE: Precondition: `num_low_bits != 0 && num_low_bits u<= bitwidth(val)`!
+ */
+Expr variable_length_extend(Expr val, const Expr &num_low_bits);
+
+/**
+ * Extract \p num_bits bits starting with the \p low_bit_offset bit.
+ * (with either zero-extension, if \p val is uint,
+ *           or sign-extension, if \p val is  int)
+ *
+ * NOTE: Precondition:
+ *           `num_bits != 0 && (num_bits + low_bit_offset) u<= bitwidth(val)`!
+ */
+Expr extract_bits(Expr val, const Expr &num_low_padding_bits,
+                  const Expr &num_bits);
+
+/**
+ * Extract \p num_high_bits high bits of \p val.
+ * (with either zero-extension, if \p val is uint,
+ *           or sign-extension, if \p val is  int)
+ *
+ * NOTE: Precondition: `num_low_bits != 0 && num_low_bits u<= bitwidth(val)`!
+ */
+Expr extract_low_bits(Expr val, const Expr &num_low_bits);
 
 /** Divide two integers, rounding towards zero. This is the typical
  * behavior of most hardware architectures, which differs from

@@ -9,6 +9,7 @@
 
 #include "Expr.h"
 #include "Func.h"
+#include "FuncExtras.h"
 #include "Lambda.h"
 
 namespace Halide {
@@ -62,15 +63,6 @@ inline HALIDE_NO_USER_CODE_INLINE void collect_region(Region &collected_args,
     collect_region(collected_args, std::forward<Args>(args)...);
 }
 
-inline const Func &func_like_to_func(const Func &func) {
-    return func;
-}
-
-template<typename T>
-inline HALIDE_NO_USER_CODE_INLINE Func func_like_to_func(const T &func_like) {
-    return lambda(_, func_like(_));
-}
-
 }  // namespace Internal
 
 /** Impose a boundary condition such that a given expression is returned
@@ -99,12 +91,12 @@ Func constant_exterior(const Func &source, const Expr &value,
 
 template<typename T>
 HALIDE_NO_USER_CODE_INLINE Func constant_exterior(const T &func_like, const Tuple &value, const Region &bounds) {
-    return constant_exterior(Internal::func_like_to_func(func_like), value, bounds);
+    return constant_exterior(::Halide::Internal::func_like_to_func(func_like), value, bounds);
 }
 
 template<typename T>
 HALIDE_NO_USER_CODE_INLINE Func constant_exterior(const T &func_like, const Expr &value, const Region &bounds) {
-    return constant_exterior(Internal::func_like_to_func(func_like), value, bounds);
+    return constant_exterior(::Halide::Internal::func_like_to_func(func_like), value, bounds);
 }
 
 template<typename T>
@@ -114,7 +106,7 @@ HALIDE_NO_USER_CODE_INLINE Func constant_exterior(const T &func_like, const Tupl
         object_bounds.push_back({Expr(func_like.dim(i).min()), Expr(func_like.dim(i).extent())});
     }
 
-    return constant_exterior(Internal::func_like_to_func(func_like), value, object_bounds);
+    return constant_exterior(::Halide::Internal::func_like_to_func(func_like), value, object_bounds);
 }
 template<typename T>
 HALIDE_NO_USER_CODE_INLINE Func constant_exterior(const T &func_like, const Expr &value) {
@@ -127,7 +119,7 @@ HALIDE_NO_USER_CODE_INLINE Func constant_exterior(const T &func_like, const Tupl
                                                   Bounds &&...bounds) {
     Region collected_bounds;
     Internal::collect_region(collected_bounds, std::forward<Bounds>(bounds)...);
-    return constant_exterior(Internal::func_like_to_func(func_like), value, collected_bounds);
+    return constant_exterior(::Halide::Internal::func_like_to_func(func_like), value, collected_bounds);
 }
 template<typename T, typename... Bounds,
          typename std::enable_if<Halide::Internal::all_are_convertible<Expr, Bounds...>::value>::type * = nullptr>
@@ -154,7 +146,7 @@ Func repeat_edge(const Func &source, const Region &bounds);
 
 template<typename T>
 HALIDE_NO_USER_CODE_INLINE Func repeat_edge(const T &func_like, const Region &bounds) {
-    return repeat_edge(Internal::func_like_to_func(func_like), bounds);
+    return repeat_edge(::Halide::Internal::func_like_to_func(func_like), bounds);
 }
 
 template<typename T>
@@ -164,7 +156,7 @@ HALIDE_NO_USER_CODE_INLINE Func repeat_edge(const T &func_like) {
         object_bounds.push_back({Expr(func_like.dim(i).min()), Expr(func_like.dim(i).extent())});
     }
 
-    return repeat_edge(Internal::func_like_to_func(func_like), object_bounds);
+    return repeat_edge(::Halide::Internal::func_like_to_func(func_like), object_bounds);
 }
 // @}
 
@@ -185,7 +177,7 @@ Func repeat_image(const Func &source, const Region &bounds);
 
 template<typename T>
 HALIDE_NO_USER_CODE_INLINE Func repeat_image(const T &func_like, const Region &bounds) {
-    return repeat_image(Internal::func_like_to_func(func_like), bounds);
+    return repeat_image(::Halide::Internal::func_like_to_func(func_like), bounds);
 }
 
 template<typename T>
@@ -195,7 +187,7 @@ HALIDE_NO_USER_CODE_INLINE Func repeat_image(const T &func_like) {
         object_bounds.push_back({Expr(func_like.dim(i).min()), Expr(func_like.dim(i).extent())});
     }
 
-    return repeat_image(Internal::func_like_to_func(func_like), object_bounds);
+    return repeat_image(::Halide::Internal::func_like_to_func(func_like), object_bounds);
 }
 
 /** Impose a boundary condition such that the entire coordinate space is
@@ -216,7 +208,7 @@ Func mirror_image(const Func &source, const Region &bounds);
 
 template<typename T>
 HALIDE_NO_USER_CODE_INLINE Func mirror_image(const T &func_like, const Region &bounds) {
-    return mirror_image(Internal::func_like_to_func(func_like), bounds);
+    return mirror_image(::Halide::Internal::func_like_to_func(func_like), bounds);
 }
 
 template<typename T>
@@ -226,7 +218,7 @@ HALIDE_NO_USER_CODE_INLINE Func mirror_image(const T &func_like) {
         object_bounds.push_back({Expr(func_like.dim(i).min()), Expr(func_like.dim(i).extent())});
     }
 
-    return mirror_image(Internal::func_like_to_func(func_like), object_bounds);
+    return mirror_image(::Halide::Internal::func_like_to_func(func_like), object_bounds);
 }
 
 // @}
@@ -251,7 +243,7 @@ Func mirror_interior(const Func &source, const Region &bounds);
 
 template<typename T>
 HALIDE_NO_USER_CODE_INLINE Func mirror_interior(const T &func_like, const Region &bounds) {
-    return mirror_interior(Internal::func_like_to_func(func_like), bounds);
+    return mirror_interior(::Halide::Internal::func_like_to_func(func_like), bounds);
 }
 
 template<typename T>
@@ -261,7 +253,7 @@ HALIDE_NO_USER_CODE_INLINE Func mirror_interior(const T &func_like) {
         object_bounds.push_back({Expr(func_like.dim(i).min()), Expr(func_like.dim(i).extent())});
     }
 
-    return mirror_interior(Internal::func_like_to_func(func_like), object_bounds);
+    return mirror_interior(::Halide::Internal::func_like_to_func(func_like), object_bounds);
 }
 
 // @}

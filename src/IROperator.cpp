@@ -1941,6 +1941,21 @@ Expr cast(Type t, Expr a) {
     return Internal::Cast::make(t, std::move(a));
 }
 
+Expr make_unsigned(Expr a) {
+    user_assert(a.defined()) << "cast of undefined Expr\n";
+
+    Type ty = a.type();
+
+    user_assert(ty.is_int_or_uint())
+        << "The input must be of an integer type, got " << ty << "\n";
+
+    if (ty.is_uint()) {
+        return a;
+    }
+
+    return cast(ty.with_code(halide_type_uint), a);
+}
+
 Expr clamp(Expr a, const Expr &min_val, const Expr &max_val) {
     user_assert(a.defined() && min_val.defined() && max_val.defined())
         << "clamp of undefined Expr\n";
@@ -2529,6 +2544,99 @@ Expr count_trailing_zeros(Expr x) {
         << "Argument to count_trailing_zeros must be an integer\n";
     return Internal::Call::make(t, Internal::Call::count_trailing_zeros,
                                 {std::move(x)}, Internal::Call::PureIntrinsic);
+}
+
+// FIXME: this only handles the sane case when at least one,
+// but not more than all, bits are extracted.
+// Do we need to handle the general case instead?
+Expr extract_high_bits(const Expr &val, const Expr &num_high_bits) {
+    user_assert(val.defined()) << "extract_high_bits with undefined val";
+    user_assert(num_high_bits.defined())
+        << "extract_high_bits with undefined num_high_bits";
+
+    Type ty = val.type();
+    user_assert(ty.is_int_or_uint())
+        << "extract_high_bits: val must be of an integer type, got " << ty
+        << "\n";
+
+    Type shamt_ty = num_high_bits.type();
+    user_assert(shamt_ty.is_uint()) << "extract_high_bits: num_high_bits must "
+                                       "be of an unsigned integer type, got "
+                                    << shamt_ty << "\n";
+
+    Expr num_low_padding_bits = ty.bits() - num_high_bits;
+    // The sign bit is already positioned, just perform the right-shift.
+    // We'll either pad with zeros (if uint) or replicate sign bit (if int).
+    return val >> cast(UInt(ty.bits()), num_low_padding_bits);
+}
+
+// FIXME: this only handles the sane case when at least one,
+// but not more than all, bits are extracted.
+// Do we need to handle the general case instead?
+Expr variable_length_extend(Expr val, const Expr &num_low_bits) {
+    user_assert(val.defined()) << "variable_length_extend with undefined val";
+    user_assert(num_low_bits.defined())
+        << "variable_length_extend with undefined num_low_bits";
+
+    Type ty = val.type();
+    user_assert(ty.is_int_or_uint())
+        << "variable_length_extend: val must be of an integer type, got " << ty
+        << "\n";
+
+    Type shamt_ty = num_low_bits.type();
+    user_assert(shamt_ty.is_uint())
+        << "variable_length_extend: num_low_bits must be of an unsigned "
+           "integer type, got "
+        << shamt_ty << "\n";
+
+    Expr num_high_padding_bits = ty.bits() - num_low_bits;
+    // First, left-shift the variable-sized input so that it's highest (sign)
+    // bit is positioned in the highest (sign) bit of the containment type.
+    val = val << cast(UInt(ty.bits()), num_high_padding_bits);
+    // And then let the `extract_high_bits()` deal with it.
+    return extract_high_bits(val, /*num_high_bits=*/num_low_bits);
+}
+
+// FIXME: this only handles the sane case when at least one,
+// but not more than all, bits are extracted.
+// Do we need to handle the general case instead?
+Expr extract_bits(Expr val, const Expr &num_low_padding_bits,
+                  const Expr &num_bits) {
+    user_assert(val.defined()) << "extract_bits with undefined val";
+    user_assert(num_low_padding_bits.defined())
+        << "extract_bits with undefined num_low_padding_bits";
+    user_assert(num_bits.defined()) << "extract_bits with undefined num_bits";
+
+    Type ty = val.type();
+    user_assert(ty.is_int_or_uint())
+        << "extract_bits: val must be of an integer type, got " << ty << "\n";
+
+    Type shamt_ty = num_low_padding_bits.type();
+    user_assert(shamt_ty.is_uint())
+        << "extract_bits: num_low_padding_bits must be of an unsigned integer "
+           "type, got "
+        << shamt_ty << "\n";
+
+    shamt_ty = num_bits.type();
+    user_assert(shamt_ty.is_uint())
+        << "extract_bits: num_bits must be of an unsigned integer type, got "
+        << shamt_ty << "\n";
+
+    Expr num_high_padding_bits = (ty.bits() - num_low_padding_bits) - num_bits;
+    // First, left-shift the variable-sized input so that it's highest (sign)
+    // bit is positioned in the highest (sign) bit of the containment type.
+    val = val << cast(UInt(ty.bits()), num_high_padding_bits);
+    // And then let the `extract_high_bits()` deal with it.
+    return extract_high_bits(val, /*num_high_bits=*/num_bits);
+}
+
+// FIXME: this only handles the sane case when at least one,
+// but not more than all, bits are extracted.
+// Do we need to handle the general case instead?
+Expr extract_low_bits(Expr val, const Expr &num_low_bits) {
+    // Let `extract_bits()` deal with everything.
+    return extract_bits(std::move(val), /*num_low_padding_bits=*/Expr(0U),
+                        /*num_bits=*/num_low_bits);
 }
 
 Expr div_round_to_zero(Expr x, Expr y) {
