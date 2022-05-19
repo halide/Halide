@@ -1301,7 +1301,7 @@ GeneratorParamInfo::GeneratorParamInfo(GeneratorBase *generator, const size_t si
         const std::string &n = gio->name();
         const std::string &gn = generator->generator_registered_name;
 
-        owned_synthetic_params.push_back(GeneratorParam_Synthetic<Type>::make(generator, gn, n + ".type", *gio, SyntheticParamType::Type, gio->types_defined()));
+        owned_synthetic_params.push_back(GeneratorParam_Synthetic<Type>::make(generator, gn, n + ".type", *gio, SyntheticParamType::Type, gio->gio_types_defined()));
         filter_generator_params.push_back(owned_synthetic_params.back().get());
 
         if (gio->kind() != IOKind::Scalar) {
@@ -1569,13 +1569,13 @@ Pipeline GeneratorBase::get_pipeline() {
                                                                   << "\" requires dimensions=" << output->dims()
                                                                   << " but was defined as dimensions=" << f.dimensions() << ".\n";
                 }
-                if (output->types_defined()) {
-                    user_assert((int)f.outputs() == (int)output->types().size()) << "Output \"" << f.name()
-                                                                                 << "\" requires a Tuple of size " << output->types().size()
-                                                                                 << " but was defined as Tuple of size " << f.outputs() << ".\n";
-                    for (size_t i = 0; i < f.output_types().size(); ++i) {
-                        Type expected = output->types().at(i);
-                        Type actual = f.output_types()[i];
+                if (output->gio_types_defined()) {
+                    user_assert((int)f.outputs() == (int)output->gio_types().size()) << "Output \"" << f.name()
+                                                                                     << "\" requires a Tuple of size " << output->gio_types().size()
+                                                                                     << " but was defined as Tuple of size " << f.outputs() << ".\n";
+                    for (size_t i = 0; i < f.types().size(); ++i) {
+                        Type expected = output->gio_types().at(i);
+                        Type actual = f.types()[i];
                         user_assert(expected == actual) << "Output \"" << f.name()
                                                         << "\" requires type " << expected
                                                         << " but was defined as type " << actual << ".\n";
@@ -1616,7 +1616,7 @@ Module GeneratorBase::build_module(const std::string &function_name,
         for (size_t i = 0; i < output->funcs().size(); ++i) {
             auto from = output->funcs()[i].name();
             auto to = output->array_name(i);
-            size_t tuple_size = output->types_defined() ? output->types().size() : 1;
+            size_t tuple_size = output->gio_types_defined() ? output->gio_types().size() : 1;
             for (size_t t = 0; t < tuple_size; ++t) {
                 std::string suffix = (tuple_size > 1) ? ("." + std::to_string(t)) : "";
                 result.remap_metadata_name(from + suffix, to + suffix);
@@ -1660,12 +1660,12 @@ Module GeneratorBase::build_gradient_module(const std::string &function_name) {
     // support for Tupled outputs could be added with some effort, so if this
     // is somehow deemed critical, go for it)
     for (const auto *input : pi.inputs()) {
-        const size_t tuple_size = input->types_defined() ? input->types().size() : 1;
+        const size_t tuple_size = input->gio_types_defined() ? input->gio_types().size() : 1;
         // Note: this should never happen
         internal_assert(tuple_size == 1) << "Tuple Inputs are not yet supported by build_gradient_module()";
     }
     for (const auto *output : pi.outputs()) {
-        const size_t tuple_size = output->types_defined() ? output->types().size() : 1;
+        const size_t tuple_size = output->gio_types_defined() ? output->gio_types().size() : 1;
         internal_assert(tuple_size == 1) << "Tuple Outputs are not yet supported by build_gradient_module";
     }
 
@@ -1699,7 +1699,7 @@ Module GeneratorBase::build_gradient_module(const std::string &function_name) {
             const std::string grad_in_name = replace_all(grad_input_pattern, "$OUT$", output_name);
             // TODO(srj): does it make sense for gradient to be a non-float type?
             // For now, assume it's always float32 (unless the output is already some float).
-            const Type grad_in_type = output->type().is_float() ? output->type() : Float(32);
+            const Type grad_in_type = output->gio_type().is_float() ? output->gio_type() : Float(32);
             const int grad_in_dimensions = f.dimensions();
             const ArgumentEstimates grad_in_estimates = f.output_buffer().parameter().get_argument_estimates();
             internal_assert((int)grad_in_estimates.buffer_estimates.size() == grad_in_dimensions);
@@ -1856,34 +1856,34 @@ IOKind GIOBase::kind() const {
     return kind_;
 }
 
-bool GIOBase::types_defined() const {
+bool GIOBase::gio_types_defined() const {
     return !types_.empty();
 }
 
-const std::vector<Type> &GIOBase::types() const {
+const std::vector<Type> &GIOBase::gio_types() const {
     // If types aren't defined, but we have one Func that is,
     // we probably just set an Output<Func> and should propagate the types.
-    if (!types_defined()) {
+    if (!gio_types_defined()) {
         // use funcs_, not funcs(): the latter could give a much-less-helpful error message
         // in this case.
         const auto &f = funcs_;
         if (f.size() == 1 && f.at(0).defined()) {
-            check_matching_types(f.at(0).output_types());
+            check_matching_types(f.at(0).types());
         }
     }
-    user_assert(types_defined()) << "Type is not defined for " << input_or_output() << " '" << name() << "'; you may need to specify '" << name() << ".type' as a GeneratorParam, or call set_type() from the configure() method.\n";
+    user_assert(gio_types_defined()) << "Type is not defined for " << input_or_output() << " '" << name() << "'; you may need to specify '" << name() << ".type' as a GeneratorParam, or call set_type() from the configure() method.\n";
     return types_;
 }
 
-Type GIOBase::type() const {
-    const auto &t = types();
+Type GIOBase::gio_type() const {
+    const auto &t = gio_types();
     internal_assert(t.size() == 1) << "Expected types_.size() == 1, saw " << t.size() << " for " << name() << "\n";
     return t.at(0);
 }
 
 void GIOBase::set_type(const Type &type) {
     generator->check_exact_phase(GeneratorBase::ConfigureCalled);
-    user_assert(!types_defined()) << "set_type() may only be called on an Input or Output that has no type specified.";
+    user_assert(!gio_types_defined()) << "set_type() may only be called on an Input or Output that has no type specified.";
     types_ = {type};
 }
 
@@ -1942,20 +1942,20 @@ void GIOBase::verify_internals() {
                 << "Expected outputs() == " << 1
                 << " but got " << f.outputs()
                 << " for " << name() << "\n";
-            user_assert(f.output_types().size() == 1)
-                << "Expected output_types().size() == " << 1
+            user_assert(f.types().size() == 1)
+                << "Expected types().size() == " << 1
                 << " but got " << f.outputs()
                 << " for " << name() << "\n";
-            user_assert(f.output_types()[0] == type())
-                << "Expected type " << type()
-                << " but got " << f.output_types()[0]
+            user_assert(f.types()[0] == gio_type())
+                << "Expected type " << gio_type()
+                << " but got " << f.types()[0]
                 << " for " << name() << "\n";
         }
     } else {
         for (const Expr &e : exprs()) {
             user_assert(e.defined()) << "Input/Ouput " << name() << " is not defined.\n";
-            user_assert(e.type() == type())
-                << "Expected type " << type()
+            user_assert(e.type() == gio_type())
+                << "Expected type " << gio_type()
                 << " but got " << e.type()
                 << " for " << name() << "\n";
         }
@@ -1973,10 +1973,10 @@ std::string GIOBase::array_name(size_t i) const {
 // If our type(s) are defined, ensure it matches the ones passed in, asserting if not.
 // If our type(s) are not defined, just set to the ones passed in.
 void GIOBase::check_matching_types(const std::vector<Type> &t) const {
-    if (types_defined()) {
-        user_assert(types().size() == t.size()) << "Type mismatch for " << name() << ": expected " << types().size() << " types but saw " << t.size();
+    if (gio_types_defined()) {
+        user_assert(gio_types().size() == t.size()) << "Type mismatch for " << name() << ": expected " << gio_types().size() << " types but saw " << t.size();
         for (size_t i = 0; i < t.size(); ++i) {
-            user_assert(types().at(i) == t.at(i)) << "Type mismatch for " << name() << ": expected " << types().at(i) << " saw " << t.at(i);
+            user_assert(gio_types().at(i) == t.at(i)) << "Type mismatch for " << name() << ": expected " << gio_types().at(i) << " saw " << t.at(i);
         }
     } else {
         types_ = t;
@@ -2054,7 +2054,7 @@ void GeneratorInputBase::verify_internals() {
 void GeneratorInputBase::init_internals() {
     // Call these for the side-effect of asserting if the values aren't defined.
     (void)array_size();
-    (void)types();
+    (void)gio_types();
     (void)dims();
 
     parameters_.clear();
@@ -2062,13 +2062,13 @@ void GeneratorInputBase::init_internals() {
     funcs_.clear();
     for (size_t i = 0; i < array_size(); ++i) {
         auto name = array_name(i);
-        parameters_.emplace_back(type(), kind() != IOKind::Scalar, dims(), name);
+        parameters_.emplace_back(gio_type(), kind() != IOKind::Scalar, dims(), name);
         auto &p = parameters_[i];
         if (kind() != IOKind::Scalar) {
             internal_assert(dims() == p.dimensions());
             funcs_.push_back(make_param_func(p, name));
         } else {
-            Expr e = Internal::Variable::make(type(), name, p);
+            Expr e = Internal::Variable::make(gio_type(), name, p);
             exprs_.push_back(e);
         }
     }
@@ -2089,10 +2089,10 @@ void GeneratorInputBase::set_inputs(const std::vector<StubInput> &inputs) {
         if (kind() == IOKind::Function) {
             auto f = in.func();
             user_assert(f.defined()) << "The input for " << name() << " is an undefined Func. Please define it.\n";
-            check_matching_types(f.output_types());
+            check_matching_types(f.types());
             check_matching_dims(f.dimensions());
             funcs_.push_back(f);
-            parameters_.emplace_back(f.output_types().at(0), true, f.dimensions(), array_name(i));
+            parameters_.emplace_back(f.types().at(0), true, f.dimensions(), array_name(i));
         } else if (kind() == IOKind::Buffer) {
             auto p = in.parameter();
             user_assert(p.defined()) << "The input for " << name() << " is an undefined Buffer. Please define it.\n";
@@ -2177,7 +2177,7 @@ void GeneratorOutputBase::init_internals() {
     exprs_.clear();
     funcs_.clear();
     if (array_size_defined()) {
-        const auto t = types_defined() ? types() : std::vector<Type>{};
+        const auto t = gio_types_defined() ? gio_types() : std::vector<Type>{};
         const int d = dims_defined() ? dims() : -1;
         for (size_t i = 0; i < array_size(); ++i) {
             funcs_.emplace_back(t, d, array_name(i));

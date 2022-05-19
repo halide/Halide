@@ -196,22 +196,22 @@ void Func::define_extern(const std::string &function_name,
 }
 
 /** Get the types of the buffers returned by an extern definition. */
-const Type &Func::output_type() const {
+const Type &Func::type() const {
     const auto &types = defined() ? func.output_types() : func.required_types();
     if (types.empty()) {
-        user_error << "Can't call Func::output_type on Func \"" << name()
+        user_error << "Can't call Func::type on Func \"" << name()
                    << "\" because it is undefined or has no type requirements.\n";
     } else if (types.size() > 1) {
-        user_error << "Can't call Func::output_type on Func \"" << name()
+        user_error << "Can't call Func::type on Func \"" << name()
                    << "\" because it returns a Tuple.\n";
     }
     return types[0];
 }
 
-const std::vector<Type> &Func::output_types() const {
+const std::vector<Type> &Func::types() const {
     const auto &types = defined() ? func.output_types() : func.required_types();
     user_assert(!types.empty())
-        << "Can't call Func::output_types on Func \"" << name()
+        << "Can't call Func::types on Func \"" << name()
         << "\" because it is undefined or has no type requirements.\n";
     return types;
 }
@@ -981,7 +981,7 @@ Func Stage::rfactor(vector<pair<RVar, Var>> preserved) {
         }
 
         if (!prover_result.xs[i].var.empty()) {
-            Expr prev_val = Call::make(intm.output_types()[i], func_name,
+            Expr prev_val = Call::make(intm.types()[i], func_name,
                                        f_store_args, Call::CallType::Halide,
                                        FunctionPtr(), i);
             replacements.emplace(prover_result.xs[i].var, prev_val);
