@@ -1804,7 +1804,6 @@ public:
     HALIDE_FORWARD_METHOD_CONST(ImageParam, trace_loads)
     HALIDE_FORWARD_METHOD_CONST(ImageParam, add_trace_tag)
     HALIDE_FORWARD_METHOD_CONST(ImageParam, type)
-    HALIDE_FORWARD_METHOD_CONST(Func, name)
     // }@
 };
 
@@ -1920,7 +1919,6 @@ public:
     HALIDE_FORWARD_METHOD_CONST(Func, dimensions)
     HALIDE_FORWARD_METHOD_CONST(Func, has_update_definition)
     HALIDE_FORWARD_METHOD_CONST(Func, num_update_definitions)
-    HALIDE_FORWARD_METHOD_CONST(Func, name)
     HALIDE_ATTRIBUTE_DEPRECATED("Func::output_type() is deprecated; use Func::type() instead.")
     const Type &output_type() const {
         this->check_gio_access();
@@ -2295,7 +2293,6 @@ public:
     HALIDE_FORWARD_METHOD(Func, hexagon)
     HALIDE_FORWARD_METHOD(Func, in)
     HALIDE_FORWARD_METHOD(Func, memoize)
-    HALIDE_FORWARD_METHOD_CONST(Func, name)
     HALIDE_FORWARD_METHOD_CONST(Func, num_update_definitions)
     HALIDE_ATTRIBUTE_DEPRECATED("Func::output_type() is deprecated; use Func::type() instead.")
     const Type &output_type() const {
@@ -2336,6 +2333,9 @@ public:
     HALIDE_FORWARD_METHOD(Func, vectorize)
 
     // }@
+
+#undef HALIDE_OUTPUT_FORWARD
+#undef HALIDE_OUTPUT_FORWARD_CONST
 
 protected:
     GeneratorOutputBase(size_t array_size,
