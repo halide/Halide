@@ -1079,6 +1079,16 @@ void CodeGen_ARM::visit(const Cast *op) {
         }
     }
 
+    if (effective_vscale != 0) {
+        // Workaround for LLVM issue https://github.com/llvm/llvm-project/issues/55348
+        // found in correctness_half_native_interleave test
+        if (const Broadcast *bc = op->value.as<Broadcast>()) {
+            Expr equiv = Broadcast::make(Cast::make(op->type.element_of(), bc->value), bc->lanes);
+            value = codegen(equiv);
+            return;
+        }
+    }
+
     CodeGen_Posix::visit(op);
 }
 
