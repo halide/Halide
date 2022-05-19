@@ -1327,13 +1327,13 @@ GeneratorParamInfo &GeneratorBase::param_info() {
 }
 
 GeneratorInputBase *GeneratorBase::find_input_by_name(const std::string &name) {
-    auto *t = find_by_name(name, param_info().inputs());
+    auto *t = GeneratorBase::find_by_name(name, param_info().inputs());
     internal_assert(t != nullptr) << "Input " << name << " not found.";
     return t;
 }
 
 GeneratorOutputBase *GeneratorBase::find_output_by_name(const std::string &name) {
-    auto *t = find_by_name(name, param_info().outputs());
+    auto *t = GeneratorBase::find_by_name(name, param_info().outputs());
     internal_assert(t != nullptr) << "Output " << name << " not found.";
     return t;
 }
@@ -1572,8 +1572,8 @@ std::vector<AbstractGenerator::ArgInfo> GeneratorBase::arginfos() {
     ensure_configure_has_been_called();
     std::vector<AbstractGenerator::ArgInfo> args;
     args.reserve(param_info().inputs().size() + param_info().outputs().size());
-    get_arguments(args, ArgInfoDirection::Input, param_info().inputs());
-    get_arguments(args, ArgInfoDirection::Output, param_info().outputs());
+    GeneratorBase::get_arguments(args, ArgInfoDirection::Input, param_info().inputs());
+    GeneratorBase::get_arguments(args, ArgInfoDirection::Output, param_info().outputs());
     return args;
 }
 
