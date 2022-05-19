@@ -22,7 +22,8 @@ public:
 protected:
     void init_module() override;
 
-    string mcpu() const override;
+    string mcpu_target() const override;
+    string mcpu_tune() const override;
     string mattrs() const override;
     bool use_soft_float_abi() const override;
     int native_vector_bits() const override;
@@ -141,7 +142,7 @@ void CodeGen_PowerPC::visit(const Max *op) {
     return CodeGen_Posix::visit(op);
 }
 
-string CodeGen_PowerPC::mcpu() const {
+string CodeGen_PowerPC::mcpu_target() const {
     if (target.bits == 32) {
         return "ppc32";
     } else {
@@ -153,6 +154,10 @@ string CodeGen_PowerPC::mcpu() const {
             return "ppc64";
         }
     }
+}
+
+string CodeGen_PowerPC::mcpu_tune() const {
+    return mcpu_target();
 }
 
 string CodeGen_PowerPC::mattrs() const {

@@ -253,10 +253,10 @@ void JITModule::compile_module(std::unique_ptr<llvm::Module> m, const string &fu
     debug(2) << "Target triple: " << m->getTargetTriple() << "\n";
     string error_string;
 
-    string mcpu;
-    string mattrs;
+    llvm::for_each(*m, set_function_attributes_from_halide_target_options);
+
     llvm::TargetOptions options;
-    get_target_options(*m, options, mcpu, mattrs);
+    get_target_options(*m, options);
 
     DataLayout initial_module_data_layout = m->getDataLayout();
     string module_name = m->getModuleIdentifier();
@@ -269,11 +269,6 @@ void JITModule::compile_module(std::unique_ptr<llvm::Module> m, const string &fu
     engine_builder.setMCJITMemoryManager(std::unique_ptr<RTDyldMemoryManager>(memory_manager));
 
     engine_builder.setOptLevel(CodeGenOpt::Aggressive);
-    if (!mcpu.empty()) {
-        engine_builder.setMCPU(mcpu);
-    }
-    std::vector<string> mattrs_array = {mattrs};
-    engine_builder.setMAttrs(mattrs_array);
 
     TargetMachine *tm = engine_builder.selectTarget();
     internal_assert(tm) << error_string << "\n";

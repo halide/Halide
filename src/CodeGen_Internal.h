@@ -92,8 +92,8 @@ Expr lower_signed_shift_right(const Expr &a, const Expr &b);
 /** Reduce a mux intrinsic to a select tree */
 Expr lower_mux(const Call *mux);
 
-/** Given an llvm::Module, set llvm:TargetOptions, cpu and attr information */
-void get_target_options(const llvm::Module &module, llvm::TargetOptions &options, std::string &mcpu, std::string &mattrs);
+/** Given an llvm::Module, set llvm:TargetOptions information */
+void get_target_options(const llvm::Module &module, llvm::TargetOptions &options);
 
 /** Given two llvm::Modules, clone target options from one to the other */
 void clone_target_options(const llvm::Module &from, llvm::Module &to);
@@ -101,8 +101,8 @@ void clone_target_options(const llvm::Module &from, llvm::Module &to);
 /** Given an llvm::Module, get or create an llvm:TargetMachine */
 std::unique_ptr<llvm::TargetMachine> make_target_machine(const llvm::Module &module);
 
-/** Set the appropriate llvm Function attributes given a Target. */
-void set_function_attributes_for_target(llvm::Function *, const Target &);
+/** Set the appropriate llvm Function attributes given the Halide Target. */
+void set_function_attributes_from_halide_target_options(llvm::Function &);
 
 /** Save a copy of the llvm IR currently represented by the module as
  * data in the __LLVM,__bitcode section. Emulates clang's
