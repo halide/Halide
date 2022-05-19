@@ -1204,12 +1204,27 @@ public:
     // @}
 
     /** Get the type(s) of the outputs of this Func.
-     * If the Func isn't yet defined, but was specified with required types,
+     *
+     * It is not legal to call type() unless the Func has non-Tuple elements.
+     *
+     * If the Func isn't yet defined, and was not specified with required types,
+     * a runtime error will occur.
+     *
+     * If the Func isn't yet defined, but *was* specified with required types,
      * the requirements will be returned. */
     // @{
-    const Type &output_type() const;
-    const std::vector<Type> &output_types() const;
+    const Type &type() const;
+    const std::vector<Type> &types() const;
     // @}
+
+    HALIDE_ATTRIBUTE_DEPRECATED("Func::output_type() is deprecated; use Func::type() instead.")
+    const Type &output_type() const {
+        return type();
+    }
+    HALIDE_ATTRIBUTE_DEPRECATED("Func::output_types() is deprecated; use Func::types() instead.")
+    const std::vector<Type> &output_types() const {
+        return types();
+    }
 
     /** Get the number of outputs of this Func. Corresponds to the
      * size of the Tuple this Func was defined to return.

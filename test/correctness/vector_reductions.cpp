@@ -2,7 +2,11 @@
 
 using namespace Halide;
 
-int main(int argc, char **argv) {
+namespace {
+
+void run_test(const Target &target) {
+    std::cout << "vector_reductions: Testing with " << target << "\n";
+
     for (int dst_lanes : {1, 3}) {
         for (int reduce_factor : {2, 3, 4}) {
             std::vector<Type> types =
@@ -103,10 +107,23 @@ int main(int argc, char **argv) {
                             .vectorize(rx);
                         ref.compute_root();
 
-                        RDom c(0, 128);
-                        Expr err = cast<double>(maximum(absd(f(c), ref(c))));
+                        // Useful for debugging; leave in (commented out)
+                        // std::cout << "Testing: dst_lanes: " << dst_lanes
+                        //           << " reduce_factor " << reduce_factor
+                        //           << " src_type " << src_type
+                        //           << " widen_factor " << widen_factor
+                        //           << " dst_type " << dst_type
+                        //           << " op " << op
+                        //           << "\n";
 
-                        double e = evaluate<double>(err);
+                        RDom c(0, 128);
+
+                        // Func.evaluate() doesn't let you specify a Target (!),
+                        // so let's use Func.realize() instead.
+                        Func err("err");
+                        err() = cast<double>(maximum(absd(f(c), ref(c))));
+                        Buffer<double, 0> err_im = err.realize({}, target);
+                        double e = err_im();
 
                         if (e > 1e-3) {
                             std::cerr
@@ -122,7 +139,43 @@ int main(int argc, char **argv) {
             }
         }
     }
+}
 
-    printf("Success!\n");
+}  // namespace
+
+int main(int argc, char **argv) {
+    Target target = get_jit_target_from_environment();
+    run_test(target);
+    if (target.arch == Target::X86) {
+        // LLVM has had SIMD codegen errors that we missed because we didn't test against
+        // multiple SIMD architectures, using just 'host' instead. To remedy this, we'll
+        // re-run this multiple times, downgrading the SIMD successively, to ensure we get
+        // test coverage. Note that this doesn't attempt to be exhaustive -- there are too
+        // many permutations to really test, especially with AVX512 -- but this way we
+        // can get at least baseline coverage for the major variants.
+        //
+        // (Note also that our codegen for x86 implicitly 'fills in' required prerequisites,
+        // e.g. if you specify a target with AVX2, the codegen will automatically include
+        // AVX and SSE41 as well.)
+        if (target.has_feature(Target::AVX512)) {
+            Target avx2_target(target.os, target.arch, target.bits, {Target::AVX2});
+            run_test(avx2_target);
+        }
+        if (target.has_feature(Target::AVX2)) {
+            Target sse41_target(target.os, target.arch, target.bits, {Target::AVX});
+            run_test(sse41_target);
+        }
+        if (target.has_feature(Target::AVX)) {
+            Target sse41_target(target.os, target.arch, target.bits, {Target::SSE41});
+            run_test(sse41_target);
+        }
+        if (target.has_feature(Target::SSE41)) {
+            // Halide assumes that all x86 targets have at least sse2
+            Target sse2_target(target.os, target.arch, target.bits);
+            run_test(sse2_target);
+        }
+    }
+
+    std::cout << "Success!\n";
     return 0;
 }

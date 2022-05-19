@@ -1427,6 +1427,15 @@ private:
  */
 class GIOBase {
 public:
+    virtual ~GIOBase() = default;
+
+    // These should only be called from configure() methods.
+    // TODO: find a way to enforce this. Better yet, find a way to remove these.
+    void set_type(const Type &type);
+    void set_dimensions(int dims);
+    void set_array_size(int size);
+
+protected:
     bool array_size_defined() const;
     size_t array_size() const;
     virtual bool is_array() const;
@@ -1434,9 +1443,9 @@ public:
     const std::string &name() const;
     IOKind kind() const;
 
-    bool types_defined() const;
-    const std::vector<Type> &types() const;
-    Type type() const;
+    bool gio_types_defined() const;
+    const std::vector<Type> &gio_types() const;
+    Type gio_type() const;
 
     bool dims_defined() const;
     int dims() const;
@@ -1444,13 +1453,6 @@ public:
     const std::vector<Func> &funcs() const;
     const std::vector<Expr> &exprs() const;
 
-    virtual ~GIOBase() = default;
-
-    void set_type(const Type &type);
-    void set_dimensions(int dims);
-    void set_array_size(int size);
-
-protected:
     GIOBase(size_t array_size,
             const std::string &name,
             IOKind kind,
@@ -1499,6 +1501,7 @@ protected:
 private:
     template<typename T>
     friend class GeneratorParam_Synthetic;
+    friend class GeneratorStub;
 
 public:
     GIOBase(const GIOBase &) = delete;
@@ -1800,6 +1803,7 @@ public:
     HALIDE_FORWARD_METHOD_CONST(ImageParam, channels)
     HALIDE_FORWARD_METHOD_CONST(ImageParam, trace_loads)
     HALIDE_FORWARD_METHOD_CONST(ImageParam, add_trace_tag)
+    HALIDE_FORWARD_METHOD_CONST(ImageParam, type)
     // }@
 };
 
@@ -1912,12 +1916,23 @@ public:
     // @{
     HALIDE_FORWARD_METHOD_CONST(Func, args)
     HALIDE_FORWARD_METHOD_CONST(Func, defined)
+    HALIDE_FORWARD_METHOD_CONST(Func, dimensions)
     HALIDE_FORWARD_METHOD_CONST(Func, has_update_definition)
     HALIDE_FORWARD_METHOD_CONST(Func, num_update_definitions)
-    HALIDE_FORWARD_METHOD_CONST(Func, output_type)
-    HALIDE_FORWARD_METHOD_CONST(Func, output_types)
+    HALIDE_ATTRIBUTE_DEPRECATED("Func::output_type() is deprecated; use Func::type() instead.")
+    const Type &output_type() const {
+        this->check_gio_access();
+        return this->as<Func>().type();
+    }
+    HALIDE_ATTRIBUTE_DEPRECATED("Func::output_types() is deprecated; use Func::types() instead.")
+    const std::vector<Type> &output_types() const {
+        this->check_gio_access();
+        return this->as<Func>().types();
+    }
     HALIDE_FORWARD_METHOD_CONST(Func, outputs)
     HALIDE_FORWARD_METHOD_CONST(Func, rvars)
+    HALIDE_FORWARD_METHOD_CONST(Func, type)
+    HALIDE_FORWARD_METHOD_CONST(Func, types)
     HALIDE_FORWARD_METHOD_CONST(Func, update_args)
     HALIDE_FORWARD_METHOD_CONST(Func, update_value)
     HALIDE_FORWARD_METHOD_CONST(Func, update_values)
@@ -1963,6 +1978,10 @@ public:
         for (Parameter &p : this->parameters_) {
             p.set_estimate(value);
         }
+    }
+
+    Type type() const {
+        return Expr(*this).type();
     }
 };
 
@@ -2065,6 +2084,10 @@ public:
             e = cast<bool>(e);
         }
         this->parameters_.at(index).set_estimate(e);
+    }
+
+    Type type() const {
+        return Expr(*this).type();
     }
 };
 
@@ -2235,6 +2258,7 @@ protected:
         static_assert(std::is_same<T2, Func>::value, "Only Func allowed here");
         internal_assert(kind() != IOKind::Scalar);
         internal_assert(exprs_.empty());
+        user_assert(!funcs_.empty()) << "No funcs_ are defined yet";
         user_assert(funcs_.size() == 1) << "Use [] to access individual Funcs in Output<Func[]>";
         return funcs_[0];
     }
@@ -2257,6 +2281,7 @@ public:
     HALIDE_FORWARD_METHOD(Func, copy_to_host)
     HALIDE_FORWARD_METHOD(Func, define_extern)
     HALIDE_FORWARD_METHOD_CONST(Func, defined)
+    HALIDE_FORWARD_METHOD_CONST(Func, dimensions)
     HALIDE_FORWARD_METHOD(Func, fold_storage)
     HALIDE_FORWARD_METHOD(Func, fuse)
     HALIDE_FORWARD_METHOD(Func, gpu)
@@ -2269,8 +2294,16 @@ public:
     HALIDE_FORWARD_METHOD(Func, in)
     HALIDE_FORWARD_METHOD(Func, memoize)
     HALIDE_FORWARD_METHOD_CONST(Func, num_update_definitions)
-    HALIDE_FORWARD_METHOD_CONST(Func, output_type)
-    HALIDE_FORWARD_METHOD_CONST(Func, output_types)
+    HALIDE_ATTRIBUTE_DEPRECATED("Func::output_type() is deprecated; use Func::type() instead.")
+    const Type &output_type() const {
+        this->check_gio_access();
+        return this->as<Func>().type();
+    }
+    HALIDE_ATTRIBUTE_DEPRECATED("Func::output_types() is deprecated; use Func::types() instead.")
+    const std::vector<Type> &output_types() const {
+        this->check_gio_access();
+        return this->as<Func>().types();
+    }
     HALIDE_FORWARD_METHOD_CONST(Func, outputs)
     HALIDE_FORWARD_METHOD(Func, parallel)
     HALIDE_FORWARD_METHOD(Func, prefetch)
@@ -2288,6 +2321,8 @@ public:
     HALIDE_FORWARD_METHOD(Func, store_root)
     HALIDE_FORWARD_METHOD(Func, tile)
     HALIDE_FORWARD_METHOD(Func, trace_stores)
+    HALIDE_FORWARD_METHOD_CONST(Func, type)
+    HALIDE_FORWARD_METHOD_CONST(Func, types)
     HALIDE_FORWARD_METHOD(Func, unroll)
     HALIDE_FORWARD_METHOD(Func, update)
     HALIDE_FORWARD_METHOD_CONST(Func, update_args)
@@ -2296,6 +2331,7 @@ public:
     HALIDE_FORWARD_METHOD_CONST(Func, value)
     HALIDE_FORWARD_METHOD_CONST(Func, values)
     HALIDE_FORWARD_METHOD(Func, vectorize)
+
     // }@
 
 #undef HALIDE_OUTPUT_FORWARD
@@ -2438,24 +2474,24 @@ private:
 
         internal_assert(f.defined());
 
-        if (this->types_defined()) {
-            const auto &my_types = this->types();
-            user_assert(my_types.size() == f.output_types().size())
+        if (this->gio_types_defined()) {
+            const auto &my_types = this->gio_types();
+            user_assert(my_types.size() == f.types().size())
                 << "Cannot assign Func \"" << f.name()
                 << "\" to Output \"" << this->name() << "\"\n"
                 << "Output " << this->name()
                 << " is declared to have " << my_types.size() << " tuple elements"
                 << " but Func " << f.name()
-                << " has " << f.output_types().size() << " tuple elements.\n";
+                << " has " << f.types().size() << " tuple elements.\n";
             for (size_t i = 0; i < my_types.size(); i++) {
-                user_assert(my_types[i] == f.output_types().at(i))
+                user_assert(my_types[i] == f.types().at(i))
                     << "Cannot assign Func \"" << f.name()
                     << "\" to Output \"" << this->name() << "\"\n"
                     << (my_types.size() > 1 ? "In tuple element " + std::to_string(i) + ", " : "")
                     << "Output " << this->name()
                     << " has declared type " << my_types[i]
                     << " but Func " << f.name()
-                    << " has type " << f.output_types().at(i) << "\n";
+                    << " has type " << f.types().at(i) << "\n";
             }
         }
         if (this->dims_defined()) {
@@ -2563,9 +2599,9 @@ public:
             << "Cannot assign to the Output \"" << this->name()
             << "\": the expression is not convertible to the same Buffer type and/or dimensions.\n";
 
-        if (this->types_defined()) {
-            user_assert(Type(buffer.type()) == this->type())
-                << "Output " << this->name() << " should have type=" << this->type() << " but saw type=" << Type(buffer.type()) << "\n";
+        if (this->gio_types_defined()) {
+            user_assert(Type(buffer.type()) == this->gio_type())
+                << "Output " << this->name() << " should have type=" << this->gio_type() << " but saw type=" << Type(buffer.type()) << "\n";
         }
         if (this->dims_defined()) {
             user_assert(buffer.dimensions() == this->dims())

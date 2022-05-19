@@ -12,7 +12,7 @@ int main(int argc, char **argv) {
         assert(!f.defined());
         // undefined funcs assert-fail for these calls.
         // but return 0 for outputs() and dimensions().
-        // assert(f.output_type() == Int(32));
+        // assert(f.type() == Int(32));
         // assert(f.outputs() == 0);
         // assert(f.dimensions() == 0);
     }
@@ -24,8 +24,8 @@ int main(int argc, char **argv) {
 
         assert(!f.defined());
         const std::vector<Type> expected = {Int(32)};
-        assert(f.output_type() == expected[0]);
-        assert(f.output_types() == expected);
+        assert(f.type() == expected[0]);
+        assert(f.types() == expected);
         assert(f.outputs() == 1);
         assert(f.dimensions() == 2);
     }
@@ -36,8 +36,8 @@ int main(int argc, char **argv) {
 
         const std::vector<Type> expected = {Int(32), Float(64)};
         assert(!f.defined());
-        // assert(f.output_type() == expected[0]);  // will assert-fail
-        assert(f.output_types() == expected);
+        // assert(f.type() == expected[0]);  // will assert-fail
+        assert(f.types() == expected);
         assert(f.outputs() == 2);
         assert(f.dimensions() == 3);
     }
