@@ -1427,6 +1427,15 @@ private:
  */
 class GIOBase {
 public:
+    virtual ~GIOBase() = default;
+
+    // These should only be called from configure() methods.
+    // TODO: find a way to enforce this. Better yet, find a way to remove these.
+    void set_type(const Type &type);
+    void set_dimensions(int dims);
+    void set_array_size(int size);
+
+protected:
     bool array_size_defined() const;
     size_t array_size() const;
     virtual bool is_array() const;
@@ -1444,13 +1453,6 @@ public:
     const std::vector<Func> &funcs() const;
     const std::vector<Expr> &exprs() const;
 
-    virtual ~GIOBase() = default;
-
-    void set_type(const Type &type);
-    void set_dimensions(int dims);
-    void set_array_size(int size);
-
-protected:
     GIOBase(size_t array_size,
             const std::string &name,
             IOKind kind,
@@ -1499,6 +1501,7 @@ protected:
 private:
     template<typename T>
     friend class GeneratorParam_Synthetic;
+    friend class GeneratorStub;
 
 public:
     GIOBase(const GIOBase &) = delete;
@@ -1913,6 +1916,7 @@ public:
     // @{
     HALIDE_FORWARD_METHOD_CONST(Func, args)
     HALIDE_FORWARD_METHOD_CONST(Func, defined)
+    HALIDE_FORWARD_METHOD_CONST(Func, dimensions)
     HALIDE_FORWARD_METHOD_CONST(Func, has_update_definition)
     HALIDE_FORWARD_METHOD_CONST(Func, num_update_definitions)
     HALIDE_ATTRIBUTE_DEPRECATED("Func::output_type() is deprecated; use Func::type() instead.")
@@ -2277,6 +2281,7 @@ public:
     HALIDE_FORWARD_METHOD(Func, copy_to_host)
     HALIDE_FORWARD_METHOD(Func, define_extern)
     HALIDE_FORWARD_METHOD_CONST(Func, defined)
+    HALIDE_FORWARD_METHOD_CONST(Func, dimensions)
     HALIDE_FORWARD_METHOD(Func, fold_storage)
     HALIDE_FORWARD_METHOD(Func, fuse)
     HALIDE_FORWARD_METHOD(Func, gpu)
