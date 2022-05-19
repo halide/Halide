@@ -3525,6 +3525,16 @@ private:
     // Return our GeneratorParamInfo.
     GeneratorParamInfo &param_info();
 
+    template<typename T>
+    T *find_by_name(const std::string &name, const std::vector<T *> &v) {
+        for (T *t : v) {
+            if (t->name() == name) {
+                return t;
+            }
+        }
+        return nullptr;
+    }
+
     Internal::GeneratorInputBase *find_input_by_name(const std::string &name);
     Internal::GeneratorOutputBase *find_output_by_name(const std::string &name);
 
@@ -3674,6 +3684,19 @@ private:
     template<typename... Args, size_t... Indices>
     std::vector<std::vector<StubInput>> build_inputs(const std::tuple<const Args &...> &t, std::index_sequence<Indices...>) {
         return {build_input(Indices, std::get<Indices>(t))...};
+    }
+
+    // Note that this deliberately ignores inputs/outputs with multiple array values
+    // (ie, one name per input or output, regardless of array_size())
+    template<typename T>
+    static void get_arguments(std::vector<AbstractGenerator::ArgInfo> &args, ArgInfoDirection dir, const T &t) {
+        for (auto *e : t) {
+            args.push_back({e->name(),
+                            dir,
+                            e->kind(),
+                            e->gio_types_defined() ? e->gio_types() : std::vector<Type>{},
+                            e->dims_defined() ? e->dims() : 0});
+        }
     }
 
 public:
