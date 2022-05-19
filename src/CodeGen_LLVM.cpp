@@ -4936,7 +4936,8 @@ std::pair<llvm::Function *, int> CodeGen_LLVM::find_vector_runtime_function(cons
     // Check if a vector version of the function already
     // exists at some useful width. We use the naming
     // convention that a N-wide version of a function foo is
-    // called fooxN. All of our intrinsics are power-of-two
+    // called fooxN in case of Fixed Sized Vector, and foonxN in case of Scalable Vector.
+    // All of our intrinsics are power-of-two
     // sized, so starting at the first power of two >= the
     // vector width, we'll try all powers of two in decreasing
     // order.
@@ -4956,7 +4957,12 @@ std::pair<llvm::Function *, int> CodeGen_LLVM::find_vector_runtime_function(cons
     sizes_to_try.push_back(l * 2);
 
     for (int l : sizes_to_try) {
-        llvm::Function *vec_fn = module->getFunction(name + "x" + std::to_string(l));
+        std::ostringstream fn_name;
+        fn_name << name
+                << (effective_vscale != 0 ? "nx" : "x")
+                << l;
+
+        llvm::Function *vec_fn = module->getFunction(fn_name.str());
         if (vec_fn) {
             return {vec_fn, l};
         }
