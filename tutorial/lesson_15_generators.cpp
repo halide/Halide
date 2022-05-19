@@ -155,7 +155,7 @@ public:
         if (rotation != Rotation::None) {
             rotated
                 .compute_at(output, y)
-                .vectorize(x, natural_vector_size(rotated.output_types()[0]));
+                .vectorize(x, natural_vector_size(rotated.types()[0]));
         }
     }
 };
