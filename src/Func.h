@@ -1219,11 +1219,11 @@ public:
 
     HALIDE_ATTRIBUTE_DEPRECATED("Func::output_type() is deprecated; use Func::type() instead.")
     const Type &output_type() const {
-      return type();
+        return type();
     }
     HALIDE_ATTRIBUTE_DEPRECATED("Func::output_types() is deprecated; use Func::types() instead.")
     const std::vector<Type> &output_types() const {
-      return types();
+        return types();
     }
 
     /** Get the number of outputs of this Func. Corresponds to the
