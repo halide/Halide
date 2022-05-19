@@ -1440,7 +1440,7 @@ protected:
     size_t array_size() const;
     virtual bool is_array() const;
 
-    const std::string &name() const;
+    const std::string &gio_name() const;
     IOKind kind() const;
 
     bool gio_types_defined() const;
@@ -1709,7 +1709,7 @@ public:
 
     template<typename T2>
     operator StubInputBuffer<T2>() const {
-        user_assert(!this->is_array()) << "Cannot assign an array type to a non-array type for Input " << this->name();
+        user_assert(!this->is_array()) << "Cannot assign an array type to a non-array type for Input " << this->gio_name();
         return StubInputBuffer<T2>(this->parameters_.at(0));
     }
 
@@ -1752,7 +1752,7 @@ public:
 
     operator ImageParam() const {
         this->check_gio_access();
-        user_assert(!this->is_array()) << "Cannot convert an Input<Buffer<>[]> to an ImageParam; use an explicit subscript operator: " << this->name();
+        user_assert(!this->is_array()) << "Cannot convert an Input<Buffer<>[]> to an ImageParam; use an explicit subscript operator: " << this->gio_name();
         return ImageParam(this->parameters_.at(0), Func(*this));
     }
 
@@ -2478,17 +2478,17 @@ private:
             const auto &my_types = this->gio_types();
             user_assert(my_types.size() == f.types().size())
                 << "Cannot assign Func \"" << f.name()
-                << "\" to Output \"" << this->name() << "\"\n"
-                << "Output " << this->name()
+                << "\" to Output \"" << this->gio_name() << "\"\n"
+                << "Output " << this->gio_name()
                 << " is declared to have " << my_types.size() << " tuple elements"
                 << " but Func " << f.name()
                 << " has " << f.types().size() << " tuple elements.\n";
             for (size_t i = 0; i < my_types.size(); i++) {
                 user_assert(my_types[i] == f.types().at(i))
                     << "Cannot assign Func \"" << f.name()
-                    << "\" to Output \"" << this->name() << "\"\n"
+                    << "\" to Output \"" << this->gio_name() << "\"\n"
                     << (my_types.size() > 1 ? "In tuple element " + std::to_string(i) + ", " : "")
-                    << "Output " << this->name()
+                    << "Output " << this->gio_name()
                     << " has declared type " << my_types[i]
                     << " but Func " << f.name()
                     << " has type " << f.types().at(i) << "\n";
@@ -2497,8 +2497,8 @@ private:
         if (this->dims_defined()) {
             user_assert(f.dimensions() == this->dims())
                 << "Cannot assign Func \"" << f.name()
-                << "\" to Output \"" << this->name() << "\"\n"
-                << "Output " << this->name()
+                << "\" to Output \"" << this->gio_name() << "\"\n"
+                << "Output " << this->gio_name()
                 << " has declared dimensionality " << this->dims()
                 << " but Func " << f.name()
                 << " has dimensionality " << f.dimensions() << "\n";
@@ -2596,16 +2596,16 @@ public:
         this->check_value_writable();
 
         user_assert(T::can_convert_from(buffer))
-            << "Cannot assign to the Output \"" << this->name()
+            << "Cannot assign to the Output \"" << this->gio_name()
             << "\": the expression is not convertible to the same Buffer type and/or dimensions.\n";
 
         if (this->gio_types_defined()) {
             user_assert(Type(buffer.type()) == this->gio_type())
-                << "Output " << this->name() << " should have type=" << this->gio_type() << " but saw type=" << Type(buffer.type()) << "\n";
+                << "Output " << this->gio_name() << " should have type=" << this->gio_type() << " but saw type=" << Type(buffer.type()) << "\n";
         }
         if (this->dims_defined()) {
             user_assert(buffer.dimensions() == this->dims())
-                << "Output " << this->name() << " should have dim=" << this->dims() << " but saw dim=" << buffer.dimensions() << "\n";
+                << "Output " << this->gio_name() << " should have dim=" << this->dims() << " but saw dim=" << buffer.dimensions() << "\n";
         }
 
         internal_assert(this->exprs_.empty() && this->funcs_.size() == 1);
@@ -2636,7 +2636,7 @@ public:
 
     operator OutputImageParam() const {
         this->check_gio_access();
-        user_assert(!this->is_array()) << "Cannot convert an Output<Buffer<>[]> to an ImageParam; use an explicit subscript operator: " << this->name();
+        user_assert(!this->is_array()) << "Cannot convert an Output<Buffer<>[]> to an ImageParam; use an explicit subscript operator: " << this->gio_name();
         internal_assert(this->exprs_.empty() && this->funcs_.size() == 1);
         return this->funcs_.at(0).output_buffer();
     }
@@ -2644,7 +2644,7 @@ public:
     // Forward set_estimates() to Func (rather than OutputImageParam) so that it can
     // handle Tuple-valued outputs correctly.
     GeneratorOutput_Buffer<T> &set_estimates(const Region &estimates) {
-        user_assert(!this->is_array()) << "Cannot call set_estimates() on an array Output; use an explicit subscript operator: " << this->name();
+        user_assert(!this->is_array()) << "Cannot call set_estimates() on an array Output; use an explicit subscript operator: " << this->gio_name();
         internal_assert(this->exprs_.empty() && this->funcs_.size() == 1);
         this->funcs_.at(0).set_estimates(estimates);
         return *this;

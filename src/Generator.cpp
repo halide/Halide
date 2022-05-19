@@ -385,7 +385,7 @@ void StubEmitter::emit_inputs_struct() {
         if (input->is_array()) {
             c_type = "std::vector<" + c_type + ">";
         }
-        in_info.push_back({c_type, input->name()});
+        in_info.push_back({c_type, input->gio_name()});
     }
 
     const std::string name = "Inputs";
@@ -449,9 +449,9 @@ void StubEmitter::emit() {
         const bool is_func = (c_type == "Func");
         std::string getter = is_func ? "get_outputs" : "get_output_buffers<" + c_type + ">";
         std::string getter_suffix = output->is_array() ? "" : ".at(0)";
-        out_info.push_back({output->name(),
+        out_info.push_back({output->gio_name(),
                             output->is_array() ? "std::vector<" + c_type + ">" : c_type,
-                            getter + "(\"" + output->name() + "\")" + getter_suffix});
+                            getter + "(\"" + output->gio_name() + "\")" + getter_suffix});
         if (c_type != "Func") {
             all_outputs_are_func = false;
         }
@@ -636,7 +636,7 @@ void StubEmitter::emit() {
     stream << get_indent() << "{\n";
     indent_level++;
     for (auto *input : inputs) {
-        stream << get_indent() << "Stub::to_stub_input_vector(inputs." << input->name() << ")";
+        stream << get_indent() << "Stub::to_stub_input_vector(inputs." << input->gio_name() << ")";
         stream << ",\n";
     }
     indent_level--;
@@ -728,7 +728,7 @@ std::vector<std::vector<Func>> GeneratorStub::generate(const GeneratorParamsMap 
     GeneratorParamInfo &pi = generator->param_info();
     internal_assert(!pi.outputs().empty());
     for (auto *output : pi.outputs()) {
-        v.push_back(get_outputs(output->name()));
+        v.push_back(get_outputs(output->gio_name()));
     }
     return v;
 }
@@ -741,10 +741,10 @@ GeneratorStub::Names GeneratorStub::get_names() const {
         names.generator_params.push_back(o->name());
     }
     for (auto *o : pi.inputs()) {
-        names.inputs.push_back(o->name());
+        names.inputs.push_back(o->gio_name());
     }
     for (auto *o : pi.outputs()) {
-        names.outputs.push_back(o->name());
+        names.outputs.push_back(o->gio_name());
     }
     return names;
 }
@@ -1298,7 +1298,7 @@ GeneratorParamInfo::GeneratorParamInfo(GeneratorBase *generator, const size_t si
     user_assert(vf.empty()) << "ImageParam and Param<> are no longer allowed in Generators; use Input<> instead.";
 
     const auto add_synthetic_params = [this, generator](GIOBase *gio) {
-        const std::string &n = gio->name();
+        const std::string &n = gio->gio_name();
         const std::string &gn = generator->generator_registered_name;
 
         owned_synthetic_params.push_back(GeneratorParam_Synthetic<Type>::make(generator, gn, n + ".type", *gio, SyntheticParamType::Type, gio->gio_types_defined()));
@@ -1319,9 +1319,9 @@ GeneratorParamInfo::GeneratorParamInfo(GeneratorBase *generator, const size_t si
     for (auto *v : vi) {
         auto *input = static_cast<Internal::GeneratorInputBase *>(v);
         internal_assert(input != nullptr);
-        user_assert(is_valid_name(input->name())) << "Invalid Input name: (" << input->name() << ")\n";
-        user_assert(!names.count(input->name())) << "Duplicate Input name: " << input->name();
-        names.insert(input->name());
+        user_assert(is_valid_name(input->gio_name())) << "Invalid Input name: (" << input->gio_name() << ")\n";
+        user_assert(!names.count(input->gio_name())) << "Duplicate Input name: " << input->gio_name();
+        names.insert(input->gio_name());
         internal_assert(input->generator == nullptr || input->generator == generator);
         input->generator = generator;
         filter_inputs.push_back(input);
@@ -1333,9 +1333,9 @@ GeneratorParamInfo::GeneratorParamInfo(GeneratorBase *generator, const size_t si
     for (auto *v : vo) {
         auto *output = static_cast<Internal::GeneratorOutputBase *>(v);
         internal_assert(output != nullptr);
-        user_assert(is_valid_name(output->name())) << "Invalid Output name: (" << output->name() << ")\n";
-        user_assert(!names.count(output->name())) << "Duplicate Output name: " << output->name();
-        names.insert(output->name());
+        user_assert(is_valid_name(output->gio_name())) << "Invalid Output name: (" << output->gio_name() << ")\n";
+        user_assert(!names.count(output->gio_name())) << "Duplicate Output name: " << output->gio_name();
+        names.insert(output->gio_name());
         internal_assert(output->generator == nullptr || output->generator == generator);
         output->generator = generator;
         filter_outputs.push_back(output);
@@ -1381,7 +1381,7 @@ GeneratorOutputBase *GeneratorBase::find_output_by_name(const std::string &name)
     // There usually are very few outputs, so a linear search is fine
     GeneratorParamInfo &pi = param_info();
     for (GeneratorOutputBase *output : pi.outputs()) {
-        if (output->name() == name) {
+        if (output->gio_name() == name) {
             return output;
         }
     }
@@ -1457,7 +1457,7 @@ void GeneratorBase::track_parameter_values(bool include_outputs) {
         if (input->kind() == IOKind::Buffer) {
             internal_assert(!input->parameters_.empty());
             for (auto &p : input->parameters_) {
-                // This must use p.name(), *not* input->name()
+                // This must use p.name(), *not* input->gio_name()
                 value_tracker->track_values(p.name(), parameter_constraints(p));
             }
         }
@@ -1467,11 +1467,11 @@ void GeneratorBase::track_parameter_values(bool include_outputs) {
             if (output->kind() == IOKind::Buffer) {
                 internal_assert(!output->funcs().empty());
                 for (const auto &f : output->funcs()) {
-                    user_assert(f.defined()) << "Output " << output->name() << " is not fully defined.";
+                    user_assert(f.defined()) << "Output " << output->gio_name() << " is not fully defined.";
                     auto output_buffers = f.output_buffers();
                     for (auto &o : output_buffers) {
                         Parameter p = o.parameter();
-                        // This must use p.name(), *not* output->name()
+                        // This must use p.name(), *not* output->gio_name()
                         value_tracker->track_values(p.name(), parameter_constraints(p));
                     }
                 }
@@ -1812,17 +1812,17 @@ void GeneratorBase::check_scheduled(const char *m) const {
 
 void GeneratorBase::check_input_is_singular(Internal::GeneratorInputBase *in) {
     user_assert(!in->is_array())
-        << "Input " << in->name() << " is an array, and must be set with a vector type.";
+        << "Input " << in->gio_name() << " is an array, and must be set with a vector type.";
 }
 
 void GeneratorBase::check_input_is_array(Internal::GeneratorInputBase *in) {
     user_assert(in->is_array())
-        << "Input " << in->name() << " is not an array, and must not be set with a vector type.";
+        << "Input " << in->gio_name() << " is not an array, and must not be set with a vector type.";
 }
 
 void GeneratorBase::check_input_kind(Internal::GeneratorInputBase *in, Internal::IOKind kind) {
     user_assert(in->kind() == kind)
-        << "Input " << in->name() << " cannot be set with the type specified.";
+        << "Input " << in->gio_name() << " cannot be set with the type specified.";
 }
 
 GIOBase::GIOBase(size_t array_size,
@@ -1838,8 +1838,8 @@ bool GIOBase::array_size_defined() const {
 }
 
 size_t GIOBase::array_size() const {
-    user_assert(array_size_defined()) << "ArraySize is unspecified for " << input_or_output() << "'" << name() << "'; you need to explicitly set it via the resize() method or by setting '"
-                                      << name() << ".size' in your build rules.";
+    user_assert(array_size_defined()) << "ArraySize is unspecified for " << input_or_output() << "'" << gio_name() << "'; you need to explicitly set it via the resize() method or by setting '"
+                                      << gio_name() << ".size' in your build rules.";
     return (size_t)array_size_;
 }
 
@@ -1848,7 +1848,7 @@ bool GIOBase::is_array() const {
     return false;
 }
 
-const std::string &GIOBase::name() const {
+const std::string &GIOBase::gio_name() const {
     return name_;
 }
 
@@ -1871,13 +1871,13 @@ const std::vector<Type> &GIOBase::gio_types() const {
             check_matching_types(f.at(0).types());
         }
     }
-    user_assert(gio_types_defined()) << "Type is not defined for " << input_or_output() << " '" << name() << "'; you may need to specify '" << name() << ".type' as a GeneratorParam, or call set_type() from the configure() method.\n";
+    user_assert(gio_types_defined()) << "Type is not defined for " << input_or_output() << " '" << gio_name() << "'; you may need to specify '" << gio_name() << ".type' as a GeneratorParam, or call set_type() from the configure() method.\n";
     return types_;
 }
 
 Type GIOBase::gio_type() const {
     const auto &t = gio_types();
-    internal_assert(t.size() == 1) << "Expected types_.size() == 1, saw " << t.size() << " for " << name() << "\n";
+    internal_assert(t.size() == 1) << "Expected types_.size() == 1, saw " << t.size() << " for " << gio_name() << "\n";
     return t.at(0);
 }
 
@@ -1914,7 +1914,7 @@ int GIOBase::dims() const {
             check_matching_dims(funcs().at(0).dimensions());
         }
     }
-    user_assert(dims_defined()) << "Dimensions are not defined for " << input_or_output() << " '" << name() << "'; you may need to specify '" << name() << ".dim' as a GeneratorParam.\n";
+    user_assert(dims_defined()) << "Dimensions are not defined for " << input_or_output() << " '" << gio_name() << "'; you may need to specify '" << gio_name() << ".dim' as a GeneratorParam.\n";
     return dims_;
 }
 
@@ -1933,37 +1933,37 @@ void GIOBase::verify_internals() {
 
     if (kind() != IOKind::Scalar) {
         for (const Func &f : funcs()) {
-            user_assert(f.defined()) << "Input/Output " << name() << " is not defined.\n";
+            user_assert(f.defined()) << "Input/Output " << gio_name() << " is not defined.\n";
             user_assert(f.dimensions() == dims())
                 << "Expected dimensions " << dims()
                 << " but got " << f.dimensions()
-                << " for " << name() << "\n";
+                << " for " << gio_name() << "\n";
             user_assert(f.outputs() == 1)
                 << "Expected outputs() == " << 1
                 << " but got " << f.outputs()
-                << " for " << name() << "\n";
+                << " for " << gio_name() << "\n";
             user_assert(f.types().size() == 1)
                 << "Expected types().size() == " << 1
                 << " but got " << f.outputs()
-                << " for " << name() << "\n";
+                << " for " << gio_name() << "\n";
             user_assert(f.types()[0] == gio_type())
                 << "Expected type " << gio_type()
                 << " but got " << f.types()[0]
-                << " for " << name() << "\n";
+                << " for " << gio_name() << "\n";
         }
     } else {
         for (const Expr &e : exprs()) {
-            user_assert(e.defined()) << "Input/Ouput " << name() << " is not defined.\n";
+            user_assert(e.defined()) << "Input/Ouput " << gio_name() << " is not defined.\n";
             user_assert(e.type() == gio_type())
                 << "Expected type " << gio_type()
                 << " but got " << e.type()
-                << " for " << name() << "\n";
+                << " for " << gio_name() << "\n";
         }
     }
 }
 
 std::string GIOBase::array_name(size_t i) const {
-    std::string n = name();
+    std::string n = gio_name();
     if (is_array()) {
         n += "_" + std::to_string(i);
     }
@@ -1974,9 +1974,9 @@ std::string GIOBase::array_name(size_t i) const {
 // If our type(s) are not defined, just set to the ones passed in.
 void GIOBase::check_matching_types(const std::vector<Type> &t) const {
     if (gio_types_defined()) {
-        user_assert(gio_types().size() == t.size()) << "Type mismatch for " << name() << ": expected " << gio_types().size() << " types but saw " << t.size();
+        user_assert(gio_types().size() == t.size()) << "Type mismatch for " << gio_name() << ": expected " << gio_types().size() << " types but saw " << t.size();
         for (size_t i = 0; i < t.size(); ++i) {
-            user_assert(gio_types().at(i) == t.at(i)) << "Type mismatch for " << name() << ": expected " << gio_types().at(i) << " saw " << t.at(i);
+            user_assert(gio_types().at(i) == t.at(i)) << "Type mismatch for " << gio_name() << ": expected " << gio_types().at(i) << " saw " << t.at(i);
         }
     } else {
         types_ = t;
@@ -1989,7 +1989,7 @@ void GIOBase::check_gio_access() const {
         return;
     }
     user_assert(generator->phase > GeneratorBase::InputsSet)
-        << "The " << input_or_output() << " \"" << name() << "\" cannot be examined before generate() is called.\n";
+        << "The " << input_or_output() << " \"" << gio_name() << "\" cannot be examined before generate() is called.\n";
 }
 
 // If our dims are defined, ensure it matches the one passed in, asserting if not.
@@ -1997,7 +1997,7 @@ void GIOBase::check_gio_access() const {
 void GIOBase::check_matching_dims(int d) const {
     internal_assert(d >= 0);
     if (dims_defined()) {
-        user_assert(dims() == d) << "Dimensions mismatch for " << name() << ": expected " << dims() << " saw " << d;
+        user_assert(dims() == d) << "Dimensions mismatch for " << gio_name() << ": expected " << dims() << " saw " << d;
     } else {
         dims_ = d;
     }
@@ -2005,7 +2005,7 @@ void GIOBase::check_matching_dims(int d) const {
 
 void GIOBase::check_matching_array_size(size_t size) const {
     if (array_size_defined()) {
-        user_assert(array_size() == size) << "ArraySize mismatch for " << name() << ": expected " << array_size() << " saw " << size;
+        user_assert(array_size() == size) << "ArraySize mismatch for " << gio_name() << ": expected " << array_size() << " saw " << size;
     } else {
         array_size_ = size;
     }
@@ -2031,7 +2031,7 @@ GeneratorInputBase::~GeneratorInputBase() {
 
 void GeneratorInputBase::check_value_writable() const {
     user_assert(generator && generator->phase == GeneratorBase::InputsSet)
-        << "The Input " << name() << " cannot be set at this point.\n";
+        << "The Input " << gio_name() << " cannot be set at this point.\n";
 }
 
 void GeneratorInputBase::set_def_min_max() {
@@ -2039,7 +2039,7 @@ void GeneratorInputBase::set_def_min_max() {
 }
 
 Parameter GeneratorInputBase::parameter() const {
-    user_assert(!this->is_array()) << "Cannot call the parameter() method on Input<[]> " << name() << "; use an explicit subscript operator instead.";
+    user_assert(!this->is_array()) << "Cannot call the parameter() method on Input<[]> " << gio_name() << "; use an explicit subscript operator instead.";
     return parameters_.at(0);
 }
 
@@ -2048,7 +2048,7 @@ void GeneratorInputBase::verify_internals() {
 
     const size_t expected = (kind() != IOKind::Scalar) ? funcs().size() : exprs().size();
     user_assert(parameters_.size() == expected) << "Expected parameters_.size() == "
-                                                << expected << ", saw " << parameters_.size() << " for " << name() << "\n";
+                                                << expected << ", saw " << parameters_.size() << " for " << gio_name() << "\n";
 }
 
 void GeneratorInputBase::init_internals() {
@@ -2085,24 +2085,24 @@ void GeneratorInputBase::set_inputs(const std::vector<StubInput> &inputs) {
     check_matching_array_size(inputs.size());
     for (size_t i = 0; i < inputs.size(); ++i) {
         const StubInput &in = inputs.at(i);
-        user_assert(in.kind() == kind()) << "An input for " << name() << " is not of the expected kind.\n";
+        user_assert(in.kind() == kind()) << "An input for " << gio_name() << " is not of the expected kind.\n";
         if (kind() == IOKind::Function) {
             auto f = in.func();
-            user_assert(f.defined()) << "The input for " << name() << " is an undefined Func. Please define it.\n";
+            user_assert(f.defined()) << "The input for " << gio_name() << " is an undefined Func. Please define it.\n";
             check_matching_types(f.types());
             check_matching_dims(f.dimensions());
             funcs_.push_back(f);
             parameters_.emplace_back(f.types().at(0), true, f.dimensions(), array_name(i));
         } else if (kind() == IOKind::Buffer) {
             auto p = in.parameter();
-            user_assert(p.defined()) << "The input for " << name() << " is an undefined Buffer. Please define it.\n";
+            user_assert(p.defined()) << "The input for " << gio_name() << " is an undefined Buffer. Please define it.\n";
             check_matching_types({p.type()});
             check_matching_dims(p.dimensions());
-            funcs_.push_back(make_param_func(p, name()));
+            funcs_.push_back(make_param_func(p, gio_name()));
             parameters_.push_back(p);
         } else {
             auto e = in.expr();
-            user_assert(e.defined()) << "The input for " << name() << " is an undefined Expr. Please define it.\n";
+            user_assert(e.defined()) << "The input for " << gio_name() << " is an undefined Expr. Please define it.\n";
             check_matching_types({e.type()});
             check_matching_dims(0);
             exprs_.push_back(e);
@@ -2170,7 +2170,7 @@ GeneratorOutputBase::~GeneratorOutputBase() {
 
 void GeneratorOutputBase::check_value_writable() const {
     user_assert(generator && generator->phase == GeneratorBase::GenerateCalled)
-        << "The Output " << name() << " can only be set inside generate().\n";
+        << "The Output " << gio_name() << " can only be set inside generate().\n";
 }
 
 void GeneratorOutputBase::init_internals() {
@@ -2187,7 +2187,7 @@ void GeneratorOutputBase::init_internals() {
 
 void GeneratorOutputBase::resize(size_t size) {
     internal_assert(is_array());
-    internal_assert(!array_size_defined()) << "You may only call " << name()
+    internal_assert(!array_size_defined()) << "You may only call " << gio_name()
                                            << ".resize() when then size is undefined\n";
     array_size_ = (int)size;
     init_internals();
