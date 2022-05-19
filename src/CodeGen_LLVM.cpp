@@ -2812,17 +2812,37 @@ void CodeGen_LLVM::visit(const Call *op) {
             bool all_same_type = true;
             vector<llvm::Value *> args(op->args.size());
             vector<llvm::Type *> types(op->args.size());
+
             for (size_t i = 0; i < op->args.size(); i++) {
-                args[i] = codegen(op->args[i]);
-                types[i] = args[i]->getType();
+                Expr e = op->args[i];
+                args[i] = codegen(e);
+                if (e.type().is_vector() && effective_vscale != 0) {
+                    // Convert ScalableVector to FixedSizedVector for now,
+                    // as LLVM doesn't accept it for an element in aggregate.
+                    const int total_lanes = e.type().lanes();
+                    llvm::Type *elt = llvm_type_of(e.type().element_of());
+                    types[i] = Internal::get_vector_type(elt, total_lanes, /* effective_vscale */ 0);
+                } else {
+                    types[i] = args[i]->getType();
+                }
                 all_same_type &= (types[0] == types[i]);
             }
+
+            auto cast_to_scalable_vector_ptr_if_necessasry = [&](Value *ptr, Value *val) {
+                if (is_scalable_vector(val)) {
+                    llvm::Type *scalable_ptr_ty = val->getType()->getPointerTo();
+                    return builder->CreateBitCast(ptr, scalable_ptr_ty);
+                } else {
+                    return ptr;
+                }
+            };
 
             // Use either a single scalar, a fixed-size array, or a
             // struct. The struct type would always be correct, but
             // the array or scalar type produce slightly simpler IR.
             if (args.size() == 1) {
                 value = create_alloca_at_entry(types[0], 1);
+                value = cast_to_scalable_vector_ptr_if_necessasry(value, args[0]);
                 builder->CreateStore(args[0], value);
             } else {
                 llvm::Type *aggregate_t = (all_same_type ? (llvm::Type *)ArrayType::get(types[0], types.size()) : (llvm::Type *)llvm::StructType::get(*context, types));
@@ -2831,6 +2851,7 @@ void CodeGen_LLVM::visit(const Call *op) {
                 struct_type_recovery[value] = aggregate_t;
                 for (size_t i = 0; i < args.size(); i++) {
                     Value *elem_ptr = builder->CreateConstInBoundsGEP2_32(aggregate_t, value, 0, i);
+                    elem_ptr = cast_to_scalable_vector_ptr_if_necessasry(elem_ptr, args[i]);
                     builder->CreateStore(args[i], elem_ptr);
                 }
             }
@@ -4316,7 +4337,10 @@ Value *CodeGen_LLVM::create_alloca_at_entry(llvm::Type *t, int n, bool zero_init
     AllocaInst *ptr = builder->CreateAlloca(t, size, name);
     int align = native_vector_bits() / 8;
     llvm::DataLayout d(module.get());
-    int allocated_size = n * (int)d.getTypeAllocSize(t);
+    int allocated_size = n * d.getTypeAllocSize(t).getKnownMinSize();
+    if (effective_vscale != 0) {
+        allocated_size *= effective_vscale;
+    }
     if (t->isVectorTy() || n > 1) {
         ptr->setAlignment(llvm::Align(align));
     }
