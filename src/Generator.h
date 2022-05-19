@@ -3432,19 +3432,54 @@ protected:
     // *** WARNING ***
     //
     // Modifying the context here can be fraught with subtle hazards, especially when used
-    // in conjunction with compiling to multitarget output; the code that produces multitarget
-    // code is unfortunately-but-necessarily complex, and even adding or removing a feature
-    // at this point could cause subtle, hard-to-debug flakiness in your code. We highly recommend
-    // that you override this method *only* for temporary debugging purposes; e.g. if you
+    // in conjunction with compiling to multitarget output. Adding or removing Feature
+    // flags could break your build (if you are lucky), or cause subtle runtime failures (if unlucky)...
+    //
+    // e.g. in the latter case, say you decided to enable AVX512_SapphireRapids as an experiment,
+    // and override init_from_context() to do just that. You'd end up being crashy on pre-AVX512
+    // hardware, because the code that Halide injects to do runtime CPU feature detection at runtime
+    // doesn't know it needs to do the runtime detection for this flag.
+    //
+    // Even if you are using multitarget output, using this as a 'hook' to enable or disable Features
+    // can produce hard-to-maintain code in the long term: Halide has dozens of feature flags now,
+    // many of which are orthogonal to each other and/or specific to a certain architecture
+    // (or sub-architecture). The interaction between 'orthogonal' flags like this is essentially
+    // Undefined Behavior (e.g. if I enable the SSE41 Feature on a Target where arch = RISCV, what happens?
+    // Is it ignored? Does it fail to compile? Something else?). The point here is that adding Features
+    // here may end up eventually getting added to a Target you didn't anticipate and have adverse consequences.
+    //
+    // With all that in mind, here are some guidelines we think will make long-term code maintenance
+    // less painful for you:
+    //
+    // - Override this method *only* for temporary debugging purposes; e.g. if you
     // need to add the `profile` feature to a specific Generator, but your build system doesn't easily
     // let you specify per-Generator target features, this is the right tool for the job.
+    //
+    // - If your build system makes it infeasible to customize the build Target in a reasonable way,
+    // it may be appropriate to permanently override this method to enable specific Features for
+    // specific Generators (e.g., enabling `strict_float` is a likely example). In that case,
+    // we would suggest:
+    //
+    //      - *NEVER* change the arch/bits/os of the Target.
+    //      - Only add Features; don't remove Features.
+    //      - For Features that are architecture-specific, always check the arch/bits/os
+    //        of the Target to be sure it's what you expect... e.g. if you are enabling
+    //        AVX512, only do so if compiling for an x86-64 Target. Even if your code
+    //        doesn't target any other architecture at the present time, Future You will be
+    //        happier.
+    //      - If you mutate a target conditionally based on the incoming target, try to do so
+    //        so based only on the Target's arch/bits/os, and not at the Features set on the target.
+    //        If examining Features is unavoidable (e.g. enable $FOO only if $BAR is enabled),
+    //        do so as conservatively as possible, and always validate that the rest of the Target
+    //        is sensible for what you are doing.
     //
     // Furthermore, if you override this, please don't try to directly set the `target` (etc) GeneratorParams
     // directly; instead, construct the new GeneratorContext you want and call the superclass
     // implementation of init_from_context.
     //
     // TL;DR: overrides to this method should probably never be checked in to your source control system
-    // (rather, the override should be temporary and local, for experimentation).
+    // (rather, the override should be temporary and local, for experimentation). If you must check in
+    // overrides to this method, be paranoid that the Target you get could be something you don't expect.
     //
     virtual void init_from_context(const Halide::GeneratorContext &context);
 
