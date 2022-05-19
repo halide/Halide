@@ -75,6 +75,9 @@ protected:
     void visit(const Select *op) override;
     void visit(const Shuffle *) override;
     void codegen_vector_reduce(const VectorReduce *, const Expr &) override;
+    bool codegen_dot_product_vector_reduce(const VectorReduce *, const Expr &);
+    bool codegen_pairwise_vector_reduce(const VectorReduce *, const Expr &);
+    bool codegen_across_vector_reduce(const VectorReduce *, const Expr &);
     // @}
     Type upgrade_type_for_arithmetic(const Type &t) const override;
     Type upgrade_type_for_argument_passing(const Type &t) const override;
@@ -2479,12 +2482,26 @@ Value *CodeGen_ARM::try_to_decompose_into_sub_shuffles(Value *a, Value *b, const
 }
 
 void CodeGen_ARM::codegen_vector_reduce(const VectorReduce *op, const Expr &init) {
-    if (neon_intrinsics_disabled() ||
-        op->op == VectorReduce::Or ||
-        op->op == VectorReduce::And ||
-        op->op == VectorReduce::Mul) {
+    if (neon_intrinsics_disabled()) {
         CodeGen_Posix::codegen_vector_reduce(op, init);
         return;
+    }
+
+    if (codegen_dot_product_vector_reduce(op, init)) {
+        return;
+    }
+    if (codegen_pairwise_vector_reduce(op, init)) {
+        return;
+    }
+    if (codegen_across_vector_reduce(op, init)) {
+        return;
+    }
+    CodeGen_Posix::codegen_vector_reduce(op, init);
+}
+
+bool CodeGen_ARM::codegen_dot_product_vector_reduce(const VectorReduce *op, const Expr &init) {
+    if (op->op != VectorReduce::Add) {
+        return false;
     }
 
     struct Pattern {
@@ -2500,11 +2517,17 @@ void CodeGen_ARM::codegen_vector_reduce(const VectorReduce *op, const Expr &init
         {VectorReduce::Add, 4, i32(widening_mul(wild_i8x_, wild_i8x_)), "dot_product", Target::ARMDotProd},
         {VectorReduce::Add, 4, i32(widening_mul(wild_u8x_, wild_u8x_)), "dot_product", Target::ARMDotProd},
         {VectorReduce::Add, 4, u32(widening_mul(wild_u8x_, wild_u8x_)), "dot_product", Target::ARMDotProd},
+        {VectorReduce::Add, 4, i64(widening_mul(wild_i16x_, wild_i16x_)), "dot_product", Target::SVE2},
+        {VectorReduce::Add, 4, i64(widening_mul(wild_u16x_, wild_u16x_)), "dot_product", Target::SVE2},
+        {VectorReduce::Add, 4, u64(widening_mul(wild_u16x_, wild_u16x_)), "dot_product", Target::SVE2},
         // A sum is the same as a dot product with a vector of ones, and this appears to
         // be a bit faster.
         {VectorReduce::Add, 4, i32(wild_i8x_), "dot_product", Target::ARMDotProd, {1}},
         {VectorReduce::Add, 4, i32(wild_u8x_), "dot_product", Target::ARMDotProd, {1}},
         {VectorReduce::Add, 4, u32(wild_u8x_), "dot_product", Target::ARMDotProd, {1}},
+        {VectorReduce::Add, 4, i64(wild_i16x_), "dot_product", Target::SVE2, {1}},
+        {VectorReduce::Add, 4, i64(wild_u16x_), "dot_product", Target::SVE2, {1}},
+        {VectorReduce::Add, 4, u64(wild_u16x_), "dot_product", Target::SVE2, {1}},
     };
     // clang-format on
 
@@ -2522,7 +2545,7 @@ void CodeGen_ARM::codegen_vector_reduce(const VectorReduce *op, const Expr &init
                 Expr equiv = VectorReduce::make(op->op, op->value, op->value.type().lanes() / p.factor);
                 equiv = VectorReduce::make(op->op, equiv, op->type.lanes());
                 codegen_vector_reduce(equiv.as<VectorReduce>(), init);
-                return;
+                return true;
             }
 
             for (int i : p.extra_operands) {
@@ -2540,15 +2563,26 @@ void CodeGen_ARM::codegen_vector_reduce(const VectorReduce *op, const Expr &init
                     std::swap(matches[0], matches[1]);
                 }
             }
-            value = call_overloaded_intrin(op->type, p.intrin, {i, matches[0], matches[1]});
-            if (value) {
-                return;
+            if (Value *v = call_overloaded_intrin(op->type, p.intrin, {i, matches[0], matches[1]})) {
+                value = v;
+                return true;
             }
         }
     }
 
+    return false;
+}
+
+bool CodeGen_ARM::codegen_pairwise_vector_reduce(const VectorReduce *op, const Expr &init) {
+    if (op->op != VectorReduce::Add &&
+        op->op != VectorReduce::Max &&
+        op->op != VectorReduce::Min) {
+        return false;
+    }
+
     // TODO: Move this to be patterns? The patterns are pretty trivial, but some
     // of the other logic is tricky.
+    int factor = op->value.type().lanes() / op->type.lanes();
     const char *intrin = nullptr;
     vector<Expr> intrin_args;
     Expr accumulator = init;
@@ -2562,10 +2596,14 @@ void CodeGen_ARM::codegen_vector_reduce(const VectorReduce *op, const Expr &init
             narrow = lossless_cast(narrow_type.with_code(Type::UInt), op->value);
         }
         if (narrow.defined()) {
-            if (init.defined() && target.bits == 32) {
-                // On 32-bit, we have an intrinsic for widening add-accumulate.
+            if (init.defined() && (target.bits == 32 || target.has_feature(Target::SVE2))) {
+                // On 32-bit or SVE2, we have an intrinsic for widening add-accumulate.
                 intrin = "pairwise_widening_add_accumulate";
                 intrin_args = {accumulator, narrow};
+                accumulator = Expr();
+            } else if (target.has_feature(Target::SVE2)) {
+                intrin = "pairwise_widening_add_accumulate";
+                intrin_args = {Expr(0), narrow};
                 accumulator = Expr();
             } else {
                 // On 64-bit, LLVM pattern matches widening add-accumulate if
@@ -2573,21 +2611,22 @@ void CodeGen_ARM::codegen_vector_reduce(const VectorReduce *op, const Expr &init
                 intrin = "pairwise_widening_add";
                 intrin_args = {narrow};
             }
-        } else {
+        } else if (!target.has_feature(Target::SVE2)) {
+            // Exclude SVE, as it process lanes in different order (even/odd wise) than NEON
             intrin = "pairwise_add";
             intrin_args = {op->value};
         }
-    } else if (op->op == VectorReduce::Min && factor == 2) {
+    } else if (op->op == VectorReduce::Min && factor == 2 && !target.has_feature(Target::SVE2)) {
         intrin = "pairwise_min";
         intrin_args = {op->value};
-    } else if (op->op == VectorReduce::Max && factor == 2) {
+    } else if (op->op == VectorReduce::Max && factor == 2 && !target.has_feature(Target::SVE2)) {
         intrin = "pairwise_max";
         intrin_args = {op->value};
     }
 
     if (intrin) {
-        value = call_overloaded_intrin(op->type, intrin, intrin_args);
-        if (value) {
+        if (Value *v = call_overloaded_intrin(op->type, intrin, intrin_args)) {
+            value = v;
             if (accumulator.defined()) {
                 // We still have an initial value to take care of
                 string n = unique_name('t');
@@ -2609,11 +2648,125 @@ void CodeGen_ARM::codegen_vector_reduce(const VectorReduce *op, const Expr &init
                 codegen(accumulator);
                 sym_pop(n);
             }
-            return;
+            return true;
         }
     }
 
-    CodeGen_Posix::codegen_vector_reduce(op, init);
+    return false;
+}
+
+bool CodeGen_ARM::codegen_across_vector_reduce(const VectorReduce *op, const Expr &init) {
+    if (effective_vscale == 0) {
+        // Leave this to vanilla codegen to emit "llvm.vector.reduce." intrinsic,
+        // which doesn't support scalable vector in LLVM 14
+        return false;
+    }
+
+    if (op->op != VectorReduce::Add &&
+        op->op != VectorReduce::Max &&
+        op->op != VectorReduce::Min) {
+        return false;
+    }
+
+    Expr val = op->value;
+    const int output_lanes = op->type.lanes();
+    const int native_lanes = target.natural_vector_size(op->type);
+    const int input_lanes = val.type().lanes();
+    const int input_bits = op->type.bits();
+    Type elt = op->type.element_of();
+
+    if (output_lanes != 1 || input_lanes < 2) {
+        return false;
+    }
+
+    Expr (*binop)(Expr, Expr) = nullptr;
+    std::string op_name;
+    switch (op->op) {
+    case VectorReduce::Add:
+        binop = Add::make;
+        op_name = "add";
+        break;
+    case VectorReduce::Min:
+        binop = Min::make;
+        op_name = "min";
+        break;
+    case VectorReduce::Max:
+        binop = Max::make;
+        op_name = "max";
+        break;
+    default:
+        internal_error << "unreachable";
+    }
+
+    if (input_lanes == native_lanes) {
+        std::stringstream name;  // e.g. llvm.aarch64.sve.sminv.nxv4i32
+        name << "llvm.aarch64.sve."
+             << (op->type.is_float() ? "f" : op->type.is_int() ? "s" :
+                                                                 "u")
+             << op_name << "v"
+             << ".nxv" << native_lanes << (op->type.is_float() ? "f" : "i") << input_bits;
+
+        // Integer add accumulation output is 64 bit only
+        const bool type_upgraded = op->op == VectorReduce::Add && op->type.is_int_or_uint();
+        const int output_bits = type_upgraded ? 64 : input_bits;
+        Type intrin_ret_type = op->type.with_bits(output_bits);
+
+        const string intrin_name = name.str();
+
+        Expr pred = const_true(native_lanes);
+        vector<Expr> args{pred, op->value};
+
+        // Make sure the declaration exists, or the codegen for
+        // call will assume that the args should scalarize.
+        if (!module->getFunction(intrin_name)) {
+            vector<llvm::Type *> arg_types;
+            for (const Expr &e : args) {
+                arg_types.push_back(llvm_type_of(e.type()));
+            }
+            FunctionType *func_t = FunctionType::get(llvm_type_of(intrin_ret_type), arg_types, false);
+            llvm::Function::Create(func_t, llvm::Function::ExternalLinkage, intrin_name, module.get());
+        }
+
+        Expr equiv = Call::make(intrin_ret_type, intrin_name, args, Call::PureExtern);
+        if (type_upgraded) {
+            equiv = Cast::make(op->type, equiv);
+        }
+        if (init.defined()) {
+            equiv = binop(init, equiv);
+        }
+        equiv = common_subexpression_elimination(equiv);
+        equiv.accept(this);
+        return true;
+
+    } else if (input_lanes < native_lanes) {
+        // Create equivalent where lanes==native_lanes by padding data which doesn't affect the result
+        Expr padding;
+        const int inactive_lanes = native_lanes - input_lanes;
+
+        switch (op->op) {
+        case VectorReduce::Add:
+            padding = make_zero(elt.with_lanes(inactive_lanes));
+            break;
+        case VectorReduce::Min:
+            padding = elt.with_lanes(inactive_lanes).min();
+            break;
+        case VectorReduce::Max:
+            padding = elt.with_lanes(inactive_lanes).max();
+            break;
+        default:
+            internal_error << "unreachable";
+        }
+
+        Expr equiv = VectorReduce::make(op->op, Shuffle::make_concat({val, padding}), 1);
+        if (init.defined()) {
+            equiv = binop(equiv, init);
+        }
+        equiv = common_subexpression_elimination(equiv);
+        equiv.accept(this);
+        return true;
+    }
+
+    return false;
 }
 
 Type CodeGen_ARM::upgrade_type_for_arithmetic(const Type &t) const {

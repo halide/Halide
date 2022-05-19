@@ -4136,7 +4136,9 @@ void CodeGen_LLVM::codegen_vector_reduce(const VectorReduce *op, const Expr &ini
              // As of the release of llvm 10, the 64-bit experimental total
              // reductions don't seem to be done yet on arm.
              (val.type().bits() != 64 ||
-              target.arch != Target::ARM));
+              target.arch != Target::ARM) &&
+             // As of LLVM 14, "llvm.vector.reduce" intrin doesn't support scalable vector
+             effective_vscale == 0);
 
         if (llvm_has_intrinsic) {
             std::stringstream name;
@@ -4876,10 +4878,6 @@ Value *CodeGen_LLVM::reverse_vector(Value *v) {
         return v;
     }
 
-    vector<int> indices(lanes);
-    for (int i = 0; i < lanes; i++) {
-        indices[i] = lanes - 1 - i;
-    }
     if (effective_vscale != 0) {
         // Use vector.reverse intrinsic for scalable vector
         // To avoid LLVM Error in LLVM 14, process with lanes of "next power of two"
@@ -4894,6 +4892,10 @@ Value *CodeGen_LLVM::reverse_vector(Value *v) {
             return v;
         }
     } else {
+        vector<int> indices(lanes);
+        for (int i = 0; i < lanes; i++) {
+            indices[i] = lanes - 1 - i;
+        }
         return shuffle_vectors(v, indices);
     }
 }
