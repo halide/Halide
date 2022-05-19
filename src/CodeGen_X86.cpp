@@ -53,7 +53,8 @@ public:
     CodeGen_X86(Target);
 
 protected:
-    string mcpu() const override;
+    string mcpu_target() const override;
+    string mcpu_tune() const override;
     string mattrs() const override;
     bool use_soft_float_abi() const override;
     int native_vector_bits() const override;
@@ -689,8 +690,33 @@ void CodeGen_X86::visit(const Store *op) {
     CodeGen_Posix::visit(op);
 }
 
-string CodeGen_X86::mcpu() const {
-    // First, check if any explicit request for tuning exists.
+string CodeGen_X86::mcpu_target() const {
+    // Perform an ad-hoc guess for the -mcpu given features.
+    // WARNING: this is used to drive -mcpu, *NOT* -mtune!
+    //          The CPU choice here *WILL* affect -mattrs!
+    if (target.has_feature(Target::AVX512_SapphireRapids)) {
+        return "sapphirerapids";
+    } else if (target.has_feature(Target::AVX512_Cannonlake)) {
+        return "cannonlake";
+    } else if (target.has_feature(Target::AVX512_Skylake)) {
+        return "skylake-avx512";
+    } else if (target.has_feature(Target::AVX512_KNL)) {
+        return "knl";
+    } else if (target.has_feature(Target::AVX2)) {
+        return "haswell";
+    } else if (target.has_feature(Target::AVX)) {
+        return "corei7-avx";
+    } else if (target.has_feature(Target::SSE41)) {
+        // We want SSE4.1 but not SSE4.2, hence "penryn" rather than "corei7"
+        return "penryn";
+    } else {
+        // Default should not include SSSE3, hence "k8" rather than "core2"
+        return "k8";
+    }
+}
+
+string CodeGen_X86::mcpu_tune() const {
+    // Check if any explicit request for tuning exists.
     switch (target.processor_tune) {  // Please keep sorted.
     case Target::Processor::AMDFam10:
         return "amdfam10";
@@ -718,31 +744,14 @@ string CodeGen_X86::mcpu() const {
         return "znver3";
 
     case Target::Processor::ProcessorGeneric:
-        break;  // Detect "best" CPU from the enabled ISA's.
+        break;
     }
-
-    // And only after that, perform an ad-hoc guess for the tune given features.
-    if (target.has_feature(Target::AVX512_SapphireRapids)) {
-        return "sapphirerapids";
-    } else if (target.has_feature(Target::AVX512_Cannonlake)) {
-        return "cannonlake";
-    } else if (target.has_feature(Target::AVX512_Skylake)) {
-        return "skylake-avx512";
-    } else if (target.has_feature(Target::AVX512_KNL)) {
-        return "knl";
-    } else if (target.has_feature(Target::AVX2)) {
-        return "haswell";
-    } else if (target.has_feature(Target::AVX)) {
-        return "corei7-avx";
-    } else if (target.has_feature(Target::SSE41)) {
-        // We want SSE4.1 but not SSE4.2, hence "penryn" rather than "corei7"
-        return "penryn";
-    } else {
-        // Default should not include SSSE3, hence "k8" rather than "core2"
-        return "k8";
-    }
+    internal_assert(target.processor_tune == Target::Processor::ProcessorGeneric && "The switch should be exhaustive.");
+    return mcpu_target();  // Detect "best" CPU from the enabled ISA's.
 }
 
+// FIXME: we should lower everything here, instead of relying
+//        that -mcpu= (`mcpu_target()`) implies/sets features for us.
 string CodeGen_X86::mattrs() const {
     string features;
     string separator;

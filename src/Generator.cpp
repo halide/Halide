@@ -1109,7 +1109,11 @@ gengen
                 }
                 return do_build_gradient_module ? gen->build_gradient_module(fn_name) : gen->build_module(fn_name);
             };
-            compile_multitarget(function_name, output_files, targets, target_strings, module_factory, compiler_logger_factory);
+            // Pass target_strings for suffixes; if we omit this, we'll use *canonical* target strings
+            // for suffixes, but our caller might have passed non-canonical-but-still-legal target strings,
+            // and if we don't use those, the output filenames might not match what the caller expects.
+            const auto &suffixes = target_strings;
+            compile_multitarget(function_name, output_files, targets, suffixes, module_factory, compiler_logger_factory);
         }
     }
 
@@ -1258,7 +1262,7 @@ GeneratorParamInfo::GeneratorParamInfo(GeneratorBase *generator, const size_t si
         const std::string &n = gio->name();
         const std::string &gn = generator->generator_registered_name;
 
-        owned_synthetic_params.push_back(GeneratorParam_Synthetic<Type>::make(generator, gn, n + ".type", *gio, SyntheticParamType::Type, gio->types_defined()));
+        owned_synthetic_params.push_back(GeneratorParam_Synthetic<Type>::make(generator, gn, n + ".type", *gio, SyntheticParamType::Type, gio->gio_types_defined()));
         filter_generator_params.push_back(owned_synthetic_params.back().get());
 
         if (gio->kind() != ArgInfoKind::Scalar) {
@@ -1321,19 +1325,6 @@ GeneratorParamInfo &GeneratorBase::param_info() {
     internal_assert(param_info_ptr != nullptr);
     return *param_info_ptr;
 }
-
-namespace {
-template<typename T>
-T *find_by_name(const std::string &name, const std::vector<T *> &v) {
-    for (T *t : v) {
-        if (t->name() == name) {
-            return t;
-        }
-    }
-    return nullptr;
-}
-
-}  // namespace
 
 GeneratorInputBase *GeneratorBase::find_input_by_name(const std::string &name) {
     auto *t = find_by_name(name, param_info().inputs());
@@ -1499,13 +1490,13 @@ Pipeline GeneratorBase::get_pipeline() {
                                                                   << "\" requires dimensions=" << output->dims()
                                                                   << " but was defined as dimensions=" << f.dimensions() << ".\n";
                 }
-                if (output->types_defined()) {
-                    user_assert((int)f.outputs() == (int)output->types().size()) << "Output \"" << f.name()
-                                                                                 << "\" requires a Tuple of size " << output->types().size()
-                                                                                 << " but was defined as Tuple of size " << f.outputs() << ".\n";
-                    for (size_t i = 0; i < f.output_types().size(); ++i) {
-                        Type expected = output->types().at(i);
-                        Type actual = f.output_types()[i];
+                if (output->gio_types_defined()) {
+                    user_assert((int)f.outputs() == (int)output->gio_types().size()) << "Output \"" << f.name()
+                                                                                     << "\" requires a Tuple of size " << output->gio_types().size()
+                                                                                     << " but was defined as Tuple of size " << f.outputs() << ".\n";
+                    for (size_t i = 0; i < f.types().size(); ++i) {
+                        Type expected = output->gio_types().at(i);
+                        Type actual = f.types()[i];
                         user_assert(expected == actual) << "Output \"" << f.name()
                                                         << "\" requires type " << expected
                                                         << " but was defined as type " << actual << ".\n";
@@ -1577,22 +1568,6 @@ std::string GeneratorBase::name() {
     return generator_registered_name;
 }
 
-namespace {
-// Note that this deliberately ignores inputs/outputs with multiple array values
-// (ie, one name per input or output, regardless of array_size())
-template<typename T>
-void get_arguments(std::vector<AbstractGenerator::ArgInfo> &args, ArgInfoDirection dir, const T &t) {
-    for (auto *e : t) {
-        args.push_back({e->name(),
-                        dir,
-                        e->kind(),
-                        e->types_defined() ? e->types() : std::vector<Type>{},
-                        e->dims_defined() ? e->dims() : 0});
-    }
-}
-
-}  // namespace
-
 std::vector<AbstractGenerator::ArgInfo> GeneratorBase::arginfos() {
     ensure_configure_has_been_called();
     std::vector<AbstractGenerator::ArgInfo> args;
@@ -1623,7 +1598,7 @@ std::vector<Parameter> GeneratorBase::input_parameter(const std::string &name) {
         internal_assert(p.name() == name) << "input name was " << p.name() << " expected " << name;
         const int expected_dimensions = is_buffer ? input->funcs_[i].dimensions() : 0;
         internal_assert(p.dimensions() == expected_dimensions) << "input dimensions was " << p.dimensions() << " expected " << expected_dimensions;
-        internal_assert(p.type() == input->type()) << "input type was " << p.type() << " expected " << input->type();
+        internal_assert(p.type() == input->gio_type()) << "input type was " << p.type() << " expected " << input->gio_type();
         params.push_back(p);
     }
     return params;
@@ -1714,34 +1689,34 @@ ArgInfoKind GIOBase::kind() const {
     return kind_;
 }
 
-bool GIOBase::types_defined() const {
+bool GIOBase::gio_types_defined() const {
     return !types_.empty();
 }
 
-const std::vector<Type> &GIOBase::types() const {
+const std::vector<Type> &GIOBase::gio_types() const {
     // If types aren't defined, but we have one Func that is,
     // we probably just set an Output<Func> and should propagate the types.
-    if (!types_defined()) {
+    if (!gio_types_defined()) {
         // use funcs_, not funcs(): the latter could give a much-less-helpful error message
         // in this case.
         const auto &f = funcs_;
         if (f.size() == 1 && f.at(0).defined()) {
-            check_matching_types(f.at(0).output_types());
+            check_matching_types(f.at(0).types());
         }
     }
-    user_assert(types_defined()) << "Type is not defined for " << input_or_output() << " '" << name() << "'; you may need to specify '" << name() << ".type' as a GeneratorParam, or call set_type() from the configure() method.\n";
+    user_assert(gio_types_defined()) << "Type is not defined for " << input_or_output() << " '" << name() << "'; you may need to specify '" << name() << ".type' as a GeneratorParam, or call set_type() from the configure() method.\n";
     return types_;
 }
 
-Type GIOBase::type() const {
-    const auto &t = types();
+Type GIOBase::gio_type() const {
+    const auto &t = gio_types();
     internal_assert(t.size() == 1) << "Expected types_.size() == 1, saw " << t.size() << " for " << name() << "\n";
     return t.at(0);
 }
 
 void GIOBase::set_type(const Type &type) {
     generator->check_exact_phase(GeneratorBase::ConfigureCalled);
-    user_assert(!types_defined()) << "set_type() may only be called on an Input or Output that has no type specified.";
+    user_assert(!gio_types_defined()) << "set_type() may only be called on an Input or Output that has no type specified.";
     types_ = {type};
 }
 
@@ -1800,20 +1775,20 @@ void GIOBase::verify_internals() {
                 << "Expected outputs() == " << 1
                 << " but got " << f.outputs()
                 << " for " << name() << "\n";
-            user_assert(f.output_types().size() == 1)
-                << "Expected output_types().size() == " << 1
+            user_assert(f.types().size() == 1)
+                << "Expected types().size() == " << 1
                 << " but got " << f.outputs()
                 << " for " << name() << "\n";
-            user_assert(f.output_types()[0] == type())
-                << "Expected type " << type()
-                << " but got " << f.output_types()[0]
+            user_assert(f.types()[0] == gio_type())
+                << "Expected type " << gio_type()
+                << " but got " << f.types()[0]
                 << " for " << name() << "\n";
         }
     } else {
         for (const Expr &e : exprs()) {
             user_assert(e.defined()) << "Input/Ouput " << name() << " is not defined.\n";
-            user_assert(e.type() == type())
-                << "Expected type " << type()
+            user_assert(e.type() == gio_type())
+                << "Expected type " << gio_type()
                 << " but got " << e.type()
                 << " for " << name() << "\n";
         }
@@ -1831,10 +1806,10 @@ std::string GIOBase::array_name(size_t i) const {
 // If our type(s) are defined, ensure it matches the ones passed in, asserting if not.
 // If our type(s) are not defined, just set to the ones passed in.
 void GIOBase::check_matching_types(const std::vector<Type> &t) const {
-    if (types_defined()) {
-        user_assert(types().size() == t.size()) << "Type mismatch for " << name() << ": expected " << types().size() << " types but saw " << t.size();
+    if (gio_types_defined()) {
+        user_assert(gio_types().size() == t.size()) << "Type mismatch for " << name() << ": expected " << gio_types().size() << " types but saw " << t.size();
         for (size_t i = 0; i < t.size(); ++i) {
-            user_assert(types().at(i) == t.at(i)) << "Type mismatch for " << name() << ": expected " << types().at(i) << " saw " << t.at(i);
+            user_assert(gio_types().at(i) == t.at(i)) << "Type mismatch for " << name() << ": expected " << gio_types().at(i) << " saw " << t.at(i);
         }
     } else {
         types_ = t;
@@ -1916,7 +1891,7 @@ void GeneratorInputBase::init_internals() {
 
     // Call these for the side-effect of asserting if the values aren't defined.
     (void)array_size();
-    (void)types();
+    (void)gio_types();
     (void)dims();
 
     parameters_.clear();
@@ -1924,13 +1899,13 @@ void GeneratorInputBase::init_internals() {
     funcs_.clear();
     for (size_t i = 0; i < array_size(); ++i) {
         auto name = array_name(i);
-        parameters_.emplace_back(type(), kind() != ArgInfoKind::Scalar, dims(), name);
+        parameters_.emplace_back(gio_type(), kind() != ArgInfoKind::Scalar, dims(), name);
         auto &p = parameters_[i];
         if (kind() != ArgInfoKind::Scalar) {
             internal_assert(dims() == p.dimensions());
             funcs_.push_back(make_param_func(p, name));
         } else {
-            Expr e = Internal::Variable::make(type(), name, p);
+            Expr e = Internal::Variable::make(gio_type(), name, p);
             exprs_.push_back(e);
         }
     }
@@ -1951,10 +1926,10 @@ void GeneratorInputBase::set_inputs(const std::vector<StubInput> &inputs) {
         if (kind() == ArgInfoKind::Function) {
             auto f = in.func();
             user_assert(f.defined()) << "The input for " << name() << " is an undefined Func. Please define it.\n";
-            check_matching_types(f.output_types());
+            check_matching_types(f.types());
             check_matching_dims(f.dimensions());
             funcs_.push_back(f);
-            parameters_.emplace_back(f.output_types().at(0), true, f.dimensions(), array_name(i));
+            parameters_.emplace_back(f.types().at(0), true, f.dimensions(), array_name(i));
         } else if (kind() == ArgInfoKind::Buffer) {
             auto p = in.parameter();
             user_assert(p.defined()) << "The input for " << name() << " is an undefined Buffer. Please define it.\n";
@@ -2040,7 +2015,7 @@ void GeneratorOutputBase::init_internals() {
     exprs_.clear();
     funcs_.clear();
     if (array_size_defined()) {
-        const auto t = types_defined() ? types() : std::vector<Type>{};
+        const auto t = gio_types_defined() ? gio_types() : std::vector<Type>{};
         const int d = dims_defined() ? dims() : -1;
         for (size_t i = 0; i < array_size(); ++i) {
             funcs_.emplace_back(t, d, array_name(i));
