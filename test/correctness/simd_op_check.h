@@ -6,6 +6,7 @@
 #include "test_sharding.h"
 
 #include <fstream>
+#include <cmath>
 
 namespace Halide {
 struct TestResult {
@@ -203,15 +204,17 @@ public:
             RVar rxi;
             Func g{has_inline_reduction.inline_reduction};
 
-            // Do the reduction separately in f_scalar
-            g.clone_in(f_scalar);
+            if (g.rvars().size() > 0) {  // Exclude update definition without reduction
+                // Do the reduction separately in f_scalar
+                g.clone_in(f_scalar);
 
-            g.compute_at(f, x)
-                .update()
-                .split(x, xo, xi, vector_width)
-                .atomic(true)
-                .vectorize(g.rvars()[0])
-                .vectorize(xi);
+                g.compute_at(f, x)
+                    .update()
+                    .split(x, xo, xi, vector_width)
+                    .atomic(true)
+                    .vectorize(g.rvars()[0])
+                    .vectorize(xi);
+            }
         }
 
         // The output to the pipeline is the maximum absolute difference as a double.
@@ -262,7 +265,7 @@ public:
             // kinds of bugs we're looking for are codegen bugs that
             // return the wrong value entirely, not floating point
             // accuracy differences between vectors and scalars.
-            if (e > 0.001) {
+            if (e > 0.001 || std::isnan(e)) {
                 error_msg << "The vector and scalar versions of " << name << " disagree. Maximum error: " << e << "\n";
 
                 std::string error_filename = output_directory + "error_" + name + ".s";
@@ -278,6 +281,8 @@ public:
                 }
 
                 error_file.close();
+            } else if (Internal::get_env_variable("HL_DEBUG_SIMDOPCHECK") == "1") {
+                error_msg << "Ran, e: " << e << "\n";
             }
         }
 

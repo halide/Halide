@@ -41,7 +41,7 @@ public:
 
         // A bunch of feature flags also need to match between the
         // compiled code and the host in order to run the code.
-        for (Target::Feature f : {Target::ARMv7s, Target::ARMFp16, Target::NoNEON}) {
+        for (Target::Feature f : {Target::ARMv7s, Target::ARMFp16, Target::NoNEON, Target::SVE2}) {
             if (target.has_feature(f) != jit_target.has_feature(f)) {
                 can_run_the_code = false;
             }
@@ -65,6 +65,7 @@ public:
         check_arm_pairwise();
     }
 
+private:
     void check_arm_integer() {
         // clang-format off
         vector<tuple<int, ImageParam, ImageParam, ImageParam, ImageParam, ImageParam,
@@ -94,25 +95,35 @@ public:
             // bits, 192 bits, and 256 bits for everything.
             for (auto &total_bits : {64, 128, 192, 256}) {
                 const int vf = total_bits / bits;
-                const int instr_lanes = Instruction::get_instr_lanes(bits, vf);
-                const int widen_lanes = Instruction::get_instr_lanes(bits * 2, vf);
-                const int narrow_lanes = Instruction::get_instr_lanes(bits, vf * 2);
 
-                AddTestFunctor add_all(*this, bits, vf);
-                AddTestFunctor add_all_vec(*this, bits, vf, vf != 1);
-                AddTestFunctor add_8_16_32(*this, bits, vf, bits != 64);
-                AddTestFunctor add_16_32_64(*this, bits, vf, bits != 8);
-                AddTestFunctor add_16_32(*this, bits, vf, bits == 16 || bits == 32);
-                AddTestFunctor add_32(*this, bits, vf, bits == 32);
-                AddTestFunctor add_8_16_32_widen(*this, bits, widen_lanes, vf, bits != 64);
-                AddTestFunctor add_16_32_64_narrow(*this, bits, narrow_lanes, vf * 2, bits != 8);
-                AddTestFunctor add_16_32_narrow(*this, bits, narrow_lanes, vf * 2, bits == 16 || bits == 32);
-                AddTestFunctor add_16_narrow(*this, bits, narrow_lanes, vf * 2, bits == 16);
+                // Due to workaround for SVE LLVM issues, in case of vector of half length of natural_lanes,
+                // there is some inconsistency in generated SVE insturction about the number of lanes.
+                // So the verification of lanes is skipped for this specific case.
+                const int instr_lanes = (total_bits == 64 && has_sve()) ? \
+                    Instruction::ANY_LANES : Instruction::get_instr_lanes(bits, vf, target);
+                const int widen_lanes = Instruction::get_instr_lanes(bits * 2, vf, target);
+                const int narrow_lanes = Instruction::get_instr_lanes(bits, vf * 2, target);
+
+                AddTestFunctor add_all(*this, bits, instr_lanes, vf);
+                AddTestFunctor add_all_vec(*this, bits, instr_lanes, vf, vf != 1);
+                AddTestFunctor add_8_16_32(*this, bits, instr_lanes, vf, bits != 64);
+                AddTestFunctor add_16_32_64(*this, bits, instr_lanes, vf, bits != 8);
+                AddTestFunctor add_16_32(*this, bits, instr_lanes, vf, bits == 16 || bits == 32);
+                AddTestFunctor add_32(*this, bits, instr_lanes, vf, bits == 32);
+
+                AddTestFunctor add_8_16_32_widen(*this, bits, widen_lanes, vf, bits != 64 && !has_sve());
+
+                AddTestFunctor add_16_32_64_narrow(*this, bits, narrow_lanes, vf * 2, bits != 8 && !has_sve());
+                AddTestFunctor add_16_32_narrow(*this, bits, narrow_lanes, vf * 2, (bits == 16 || bits == 32) && !has_sve());
+                AddTestFunctor add_16_narrow(*this, bits, narrow_lanes, vf * 2, bits == 16 && !has_sve());
 
                 // VABA     I       -       Absolute Difference and Accumulate
-                add_8_16_32(sel_op("vaba.s", "saba"), i_1 + absd(i_2, i_3));
-                add_8_16_32(sel_op("vaba.u", "uaba"), u_1 + absd(u_2, u_3));
-
+                if (!has_sve()) {
+                    // Relying on LLVM to detect accumulation
+                    add_8_16_32(sel_op("vaba.s", "saba"), i_1 + absd(i_2, i_3));
+                    add_8_16_32(sel_op("vaba.u", "uaba"), u_1 + absd(u_2, u_3));
+                }
+    
                 // VABAL    I       -       Absolute Difference and Accumulate Long
                 add_8_16_32_widen(sel_op("vabal.s", "sabal"), i_wide_1 + absd(i_2, i_3));
                 add_8_16_32_widen(sel_op("vabal.u", "uabal"), u_wide_1 + absd(u_2, u_3));
@@ -160,8 +171,8 @@ public:
                 // skip these ones
 
                 // VCEQ     I, F    -       Compare Equal
-                add_8_16_32(sel_op("vceq.i", "cmeq"), select(i_1 == i_2, cast_i(1), cast_i(2)));
-                add_8_16_32(sel_op("vceq.i", "cmeq"), select(u_1 == u_2, cast_u(1), cast_u(2)));
+                add_8_16_32(sel_op("vceq.i", "cmeq", "cmpeq"), select(i_1 == i_2, cast_i(1), cast_i(2)));
+                add_8_16_32(sel_op("vceq.i", "cmeq", "cmpeq"), select(u_1 == u_2, cast_u(1), cast_u(2)));
 #if 0
                 // VCGE     I, F    -       Compare Greater Than or Equal
                 // Halide flips these to less than instead
@@ -181,8 +192,8 @@ public:
                 check("vcge.f32", 2, select(f32_1 >= f32_2, 1.0f, 2.0f));
 #endif
                 // VCGT     I, F    -       Compare Greater Than
-                add_8_16_32(sel_op("vcgt.s", "cmgt"), select(i_1 > i_2, cast_i(1), cast_i(2)));
-                add_8_16_32(sel_op("vcgt.u", "cmhi"), select(u_1 > u_2, cast_u(1), cast_u(2)));
+                add_8_16_32(sel_op("vcgt.s", "cmgt", "cmpgt"), select(i_1 > i_2, cast_i(1), cast_i(2)));
+                add_8_16_32(sel_op("vcgt.u", "cmhi", "cmphi"), select(u_1 > u_2, cast_u(1), cast_u(2)));
 #if 0
                 // VCLS     I       -       Count Leading Sign Bits
                 // We don't currently match these, but it wouldn't be hard to do.
@@ -198,13 +209,18 @@ public:
                 // We skip this
 
                 // VCNT     I       -       Count Number of Set Bits
-                // There is only cnt for bytes, and then horizontal adds.
-                add_8_16_32({{sel_op("vcnt.", "cnt"), 8, total_bits == 64 ? 8 : 16}}, vf, popcount(i_1));
-                add_8_16_32({{sel_op("vcnt.", "cnt"), 8, total_bits == 64 ? 8 : 16}}, vf, popcount(u_1));
+                if (!has_sve()) {
+                    // In NEON, there is only cnt for bytes, and then horizontal adds.
+                    add_8_16_32({{sel_op("vcnt.", "cnt"), 8, total_bits == 64 ? 8 : 16}}, vf, popcount(i_1));
+                    add_8_16_32({{sel_op("vcnt.", "cnt"), 8, total_bits == 64 ? 8 : 16}}, vf, popcount(u_1));
+                } else {
+                    add_8_16_32("cnt", popcount(i_1));
+                    add_8_16_32("cnt", popcount(u_1));
+                }
 
                 // VDUP     X       -       Duplicate
-                add_8_16_32(sel_op("vdup.", "dup"), cast_i(y));
-                add_8_16_32(sel_op("vdup.", "dup"), cast_u(y));
+                add_8_16_32(sel_op("vdup.", "dup", "mov"), cast_i(y));
+                add_8_16_32(sel_op("vdup.", "dup", "mov"), cast_u(y));
 
                 // VEOR     X       -       Bitwise Exclusive OR
                 // check("veor", 4, bool1 ^ bool2);
@@ -380,7 +396,9 @@ public:
                 add_8_16_32(sel_op("vqshl.u", "uqshl"), cast_u(min(widen_u(u_1) * 16, max_u)));
 
                 // VQSHLU   I       -       Saturating Shift Left Unsigned
-                add_8_16_32(sel_op("vqshlu.s", "sqshlu"), satcast_u(widen_i(i_1) * 16));
+                if (!has_sve()) {
+                    add_8_16_32(sel_op("vqshlu.s", "sqshlu"), satcast_u(widen_i(i_1) * 16));
+                }
 
                 // VQSHRN   I       -       Saturating Shift Right Narrow
                 // VQSHRUN  I       -       Saturating Shift Right Unsigned Narrow
@@ -414,17 +432,17 @@ public:
                 Expr shift = (i_2 % bits) - (bits / 2);
                 Expr round_s = (cast_i(1) >> min(shift, 0)) / 2;
                 Expr round_u = (cast_u(1) >> min(shift, 0)) / 2;
-                add_8_16_32(sel_op("vrshl.s", "srshl"), cast_i((widen_i(i_1) + round_s) << shift));
-                add_8_16_32(sel_op("vrshl.u", "urshl"), cast_u((widen_u(u_1) + round_u) << shift));
+                add_8_16_32(sel_op("vrshl.s", "srshl", "srshlr"), cast_i((widen_i(i_1) + round_s) << shift));
+                add_8_16_32(sel_op("vrshl.u", "urshl", "urshlr"), cast_u((widen_u(u_1) + round_u) << shift));
 
                 round_s = (cast_i(1) << max(shift, 0)) / 2;
                 round_u = (cast_u(1) << max(shift, 0)) / 2;
-                add_8_16_32(sel_op("vrshl.s", "srshl"), cast_i((widen_i(i_1) + round_s) >> shift));
-                add_8_16_32(sel_op("vrshl.u", "urshl"), cast_u((widen_u(u_1) + round_u) >> shift));
+                add_8_16_32(sel_op("vrshl.s", "srshl", "srshlr"), cast_i((widen_i(i_1) + round_s) >> shift));
+                add_8_16_32(sel_op("vrshl.u", "urshl", "urshlr"), cast_u((widen_u(u_1) + round_u) >> shift));
 
                 // VRSHR    I       -       Rounding Shift Right
-                add_8_16_32(sel_op("vrshr.s", "srshr"), cast_i((widen_i(i_1) + 1) >> 1));
-                add_8_16_32(sel_op("vrshr.u", "urshr"), cast_u((widen_u(u_1) + 1) >> 1));
+                add_8_16_32(sel_op("vrshr.s", "srshr", "srshl"), cast_i((widen_i(i_1) + 1) >> 1));
+                add_8_16_32(sel_op("vrshr.u", "urshr", "urshl"), cast_u((widen_u(u_1) + 1) >> 1));
 
                 // VRSHRN   I       -       Rounding Shift Right Narrow
                 if (Halide::Internal::get_llvm_version() >= 140) {
@@ -437,29 +455,34 @@ public:
                 add_16_32_narrow(sel_op("vrshrn.i", "rshrn"), narrow_u((widen_u(u_1) + (1 << (bits / 4))) >> (bits / 4 + 1)));
 
                 // VRSRA    I       -       Rounding Shift Right and Accumulate
-                add_8_16_32(sel_op("vrsra.s", "srsra"), i_2 + cast_i((widen_i(i_1) + 1) >> 1));
-                add_8_16_32(sel_op("vrsra.u", "ursra"), i_2 + cast_u((widen_u(u_1) + 1) >> 1));
+                if (!has_sve()) {
+                    // Relying on LLVM to detect accumulation
+                    add_8_16_32(sel_op("vrsra.s", "srsra"), i_2 + cast_i((widen_i(i_1) + 1) >> 1));
+                    add_8_16_32(sel_op("vrsra.u", "ursra"), i_2 + cast_u((widen_u(u_1) + 1) >> 1));
+                }
 
                 // VRSUBHN  I       -       Rounding Subtract and Narrow Returning High Half
                 add_16_32_64_narrow(sel_op("vrsubhn.i", "rsubhn"), narrow_i((widen_i(i_1 - i_2) + (Expr(cast_i(1)) << (bits / 2 - 1))) >> (bits / 2)));
                 add_16_32_narrow(sel_op("vrsubhn.i", "rsubhn"), narrow_u((widen_u(u_1 - u_2) + (Expr(cast_u(1)) << (bits / 2 - 1))) >> (bits / 2)));
 
                 // VSHL     I       -       Shift Left
-                add_all_vec(sel_op("vshl.i", "shl"), i_1 * 16);
-                add_all_vec(sel_op("vshl.i", "shl"), u_1 * 16);
+                add_all_vec(sel_op("vshl.i", "shl", "lsl"), i_1 * 16);
+                add_all_vec(sel_op("vshl.i", "shl", "lsl"), u_1 * 16);
 
-                add_all_vec(sel_op("vshl.s", "sshl"), i_1 << shift);
-                add_all_vec(sel_op("vshl.s", "sshl"), i_1 >> shift);
-                add_all_vec(sel_op("vshl.u", "ushl"), u_1 << shift);
-                add_all_vec(sel_op("vshl.u", "ushl"), u_1 >> shift);
+                if (!has_sve()) {  // No equivalent instruction in SVE.
+                    add_all_vec(sel_op("vshl.s", "sshl"), i_1 << shift);
+                    add_all_vec(sel_op("vshl.s", "sshl"), i_1 >> shift);
+                    add_all_vec(sel_op("vshl.u", "ushl"), u_1 << shift);
+                    add_all_vec(sel_op("vshl.u", "ushl"), u_1 >> shift);
+                }
 
                 // VSHLL    I       -       Shift Left Long
                 add_8_16_32_widen(sel_op("vshll.s", "sshll"), widen_i(i_1) * 16);
                 add_8_16_32_widen(sel_op("vshll.u", "ushll"), widen_u(u_1) * 16);
 
                 // VSHR     I       -       Shift Right
-                add_all_vec(sel_op("vshr.s", "sshr"), i_1 / 16);
-                add_all_vec(sel_op("vshr.u", "ushr"), u_1 / 16);
+                add_all_vec(sel_op("vshr.s", "sshr", "asr"), i_1 / 16);
+                add_all_vec(sel_op("vshr.u", "ushr", "lsr"), u_1 / 16);
 
                 // VSHRN    I       -       Shift Right Narrow
                 add_16_32_64_narrow(sel_op("vshrn.i", "shrn"), narrow_i(i_1 >> (bits / 2)));
@@ -472,8 +495,11 @@ public:
                 // I guess this could be used for (x*256) | (y & 255)? We don't do bitwise ops on integers, so skip it.
 
                 // VSRA     I       -       Shift Right and Accumulate
-                add_all_vec(sel_op("vsra.s", "ssra"), i_2 + i_1 / 16);
-                add_all_vec(sel_op("vsra.u", "usra"), u_2 + u_1 / 16);
+                if (!has_sve()) {
+                    // Relying on LLVM to detect accumulation
+                    add_all_vec(sel_op("vsra.s", "ssra"), i_2 + i_1 / 16);
+                    add_all_vec(sel_op("vsra.u", "usra"), u_2 + u_1 / 16);
+                }
 
                 // VSRI     X       -       Shift Right and Insert
                 // See VSLI
@@ -514,6 +540,14 @@ public:
             Expr u_1 = in_u(x);
             Expr i_1 = in_i(x);
 
+            // Arithmetic which could throw FP exception could return NaN, which results in output mismatch.
+            // To avoid that, we need a positive value within certain range
+            Func in_f_clamped;
+            in_f_clamped(x) = clamp(in_f(x), cast_f(1e-3f), cast_f(1.0f));
+            in_f_clamped.compute_root();  // To prevent LLVM optimization which results in a different instruction
+            Expr f_1_clamped = in_f_clamped(x);
+            Expr f_2_clamped = in_f_clamped(x + 16);
+
             if (bits == 16 && !is_float16_supported()) {
                 continue;
             }
@@ -528,64 +562,55 @@ public:
                 const int vf = total_bits / bits;
                 const bool is_vector = vf > 1;
                 
-                const int instr_lanes = Instruction::get_instr_lanes(bits, vf);
-                const int force_vectorized_lanes = Instruction::get_force_vectorized_instr_lanes(bits, vf);
-                auto lanes_vectorized_if = [instr_lanes, force_vectorized_lanes](bool cond) {
-                    return cond ? force_vectorized_lanes : instr_lanes;
-                };
+                const int instr_lanes = Instruction::get_instr_lanes(bits, vf, target);
+                const int force_vectorized_lanes = Instruction::get_force_vectorized_instr_lanes(bits, vf, target);
 
-                AddTestFunctor add(*this, bits, vf);
-                AddTestFunctor add_arm32(*this, bits, vf, is_arm32());
-                AddTestFunctor add_arm32_f16_f32(*this, bits, vf, is_arm32() && bits != 64);
-                AddTestFunctor add_arm64(*this, bits, vf, !is_arm32());
+                AddTestFunctor add(*this, bits, instr_lanes, vf);
+                AddTestFunctor add_arm32_f32(*this, bits, vf, is_arm32() && bits == 32);
+                AddTestFunctor add_arm64(*this, bits, instr_lanes, vf, !is_arm32());
 
-                add({{sel_op("vabs.f", "fabs"), bits, lanes_vectorized_if(bits != 64)}}, vf, abs(f_1));
+                add({{sel_op("vabs.f", "fabs"), bits, force_vectorized_lanes}}, vf, abs(f_1));
                 add(sel_op("vadd.f", "fadd"), f_1 + f_2);
                 add(sel_op("vsub.f", "fsub"), f_1 - f_2);
                 add(sel_op("vmul.f", "fmul"), f_1 * f_2);
-                add(sel_op("vdiv.f", "fdiv"), f_1 / f_2);
-                add(sel_op("vneg.f", "fneg"), -f_1);
-                add({{sel_op("vsqrt.f", "fsqrt"), bits, lanes_vectorized_if(bits != 16)}}, vf, sqrt(f_1));
+                add(sel_op("vdiv.f", "fdiv"), f_1 / f_2_clamped);
+                auto fneg_lanes = has_sve() ? force_vectorized_lanes : instr_lanes;
+                add({{sel_op("vneg.f", "fneg"), bits, fneg_lanes}}, vf, -f_1);
+                add({{sel_op("vsqrt.f", "fsqrt"), bits, force_vectorized_lanes}}, vf, sqrt(f_1_clamped));
 
-                add_arm32_f16_f32(is_vector ? "vceq.f" : "vcmp.f", select(f_1 == f_2, cast_f(1.0f), cast_f(2.0f)));
-                add_arm32_f16_f32(is_vector ? "vcgt.f" : "vcmp.f", select(f_1 > f_2,  cast_f(1.0f), cast_f(2.0f)));
+                add_arm32_f32(is_vector ? "vceq.f" : "vcmp.f", select(f_1 == f_2, cast_f(1.0f), cast_f(2.0f)));
+                add_arm32_f32(is_vector ? "vcgt.f" : "vcmp.f", select(f_1 > f_2,  cast_f(1.0f), cast_f(2.0f)));
                 add_arm64(is_vector ? "fcmeq" : "fcmp", select(f_1 == f_2, cast_f(1.0f), cast_f(2.0f)));
                 add_arm64(is_vector ? "fcmgt" : "fcmp", select(f_1 > f_2,  cast_f(1.0f), cast_f(2.0f)));
 
-                add_arm32_f16_f32("vcvt.f32.u", cast_f(u_1));
-                add_arm32_f16_f32("vcvt.f32.s", cast_f(i_1));
-                add_arm32_f16_f32("vcvt.u32.f", cast(UInt(bits), f_1));
-                add_arm32_f16_f32("vcvt.s32.f", cast(Int(bits),  f_1));
-
-                add_arm64("ucvtf", cast_f(u_1));
+                add_arm32_f32("vcvt.f32.u", cast_f(u_1));
+                add_arm32_f32("vcvt.f32.s", cast_f(i_1));
+                add_arm32_f32("vcvt.u32.f", cast(UInt(bits), f_1));
+                add_arm32_f32("vcvt.s32.f", cast(Int(bits),  f_1));
+                // The max of Float(16) is less than that of UInt(16), which generates "nan" in emulator
+                Expr float_max = Float(bits).max();
+                add_arm64("ucvtf", cast_f(min(float_max, u_1)));
                 add_arm64("scvtf", cast_f(i_1));
-                add_arm64({{"fcvtzu", bits, lanes_vectorized_if(bits == 16)}}, vf, cast(UInt(bits), f_1));
-                add_arm64({{"fcvtzs", bits, lanes_vectorized_if(bits == 16)}}, vf, cast(Int(bits),  f_1));
-                add_arm64("frinti", round(f_1));
-                add_arm64("frintm", floor(f_1));
-                add_arm64("frintp", ceil(f_1));
+                add_arm64({{"fcvtzu", bits, force_vectorized_lanes}}, vf, cast(UInt(bits), f_1));
+                add_arm64({{"fcvtzs", bits, force_vectorized_lanes}}, vf, cast(Int(bits),  f_1));
+                add_arm64({{"frinti", bits, force_vectorized_lanes}}, vf, round(f_1));
+                add_arm64({{"frintm", bits, force_vectorized_lanes}}, vf, floor(f_1));
+                add_arm64({{"frintp", bits, force_vectorized_lanes}}, vf, ceil(f_1));
+                add_arm64({{"frintz", bits, force_vectorized_lanes}}, vf, trunc(f_1));
 
-                if (is_vector) {
-                    add_arm64("dup", cast_f(y));
+                add_arm32_f32({{"vmax.f", bits, force_vectorized_lanes}}, vf, max(f_1, f_2));
+                add_arm32_f32({{"vmin.f", bits, force_vectorized_lanes}}, vf, min(f_1, f_2));
+                
+                add_arm64({{"fmax", bits, force_vectorized_lanes}}, vf, max(f_1, f_2));
+                add_arm64({{"fmin", bits, force_vectorized_lanes}}, vf, min(f_1, f_2));
+                if (bits != 64 && total_bits != 192) {
+                    // Halide relies on LLVM optimization for this pattern, and in some case it doesn't work
+                    add_arm64(is_vector ? "fmla" : "fmadd", f_1 + f_2 * f_3);
+                    add_arm64(is_vector ? "fmls" : "fmsub", f_1 - f_2 * f_3);
                 }
-
-                if (bits == 16) {
-                    add_arm64(is_vector ? "fmax" : "fmaxnm", max(f_1, f_2));
-                    add_arm64(is_vector ? "fmin" : "fminnm", min(f_1, f_2));
-                } else if (bits == 32) {
-                    add({{sel_op("vmax.f", "fmax"), bits, force_vectorized_lanes}}, vf, max(f_1, f_2));
-                    add({{sel_op("vmin.f", "fmin"), bits, force_vectorized_lanes}}, vf, min(f_1, f_2));
-                } else {
-                    add_arm64("fmaxnm", max(f_1, f_2));
-                    add_arm64("fminnm", min(f_1, f_2));
-                }
-                add_arm64(is_vector ? "fmla" : "fmadd", f_1 + f_2 * f_3);
-                add_arm64(is_vector ? "fmls" : "fmsub", f_1 - f_2 * f_3);
                 if (bits != 64) {
-                    add_arm64({{"frecpe", bits, force_vectorized_lanes}}, vf, fast_inverse(f_1));
-                    add_arm64({{"frecps", bits, force_vectorized_lanes}}, vf, fast_inverse(f_1));
-                    add_arm64({{"frsqrte", bits, force_vectorized_lanes}}, vf, fast_inverse_sqrt(f_1));
-                    add_arm64({{"frsqrts", bits, force_vectorized_lanes}}, vf, fast_inverse_sqrt(f_1));
+                    add_arm64(vector<string>{"frecpe", "frecps"}, fast_inverse(f_1_clamped));
+                    add_arm64(vector<string>{"frsqrte", "frsqrts"}, fast_inverse_sqrt(f_1_clamped));
                 }
 
                 if (bits == 16) {
@@ -593,52 +618,46 @@ public:
                     // and then lowered to Internal::halide_xxx() function.
                     // In case the target has FP16 feature, native type conversion between fp16 and fp32 should be generated
                     // instead of emulated equivalent code with other types.
-                    if (is_vector) {
-                        add_arm64("exp", {{"fcvtl", 16, 4}, {"fcvtn", 16, 4}}, vf, exp(f_1));
-                        add_arm64("log", {{"fcvtl", 16, 4}, {"fcvtn", 16, 4}}, vf, log(f_1));
-                        add_arm64("pow", {{"fcvtl", 16, 4}, {"fcvtn", 16, 4}}, vf, pow(f_1, f_2));
+                    if (is_vector && !has_sve()) {
+                        add_arm64("exp", {{"fcvtl", 16, 4}, {"fcvtn", 16, 4}}, vf, exp(f_1_clamped));
+                        add_arm64("log", {{"fcvtl", 16, 4}, {"fcvtn", 16, 4}}, vf, log(f_1_clamped));
+                        add_arm64("pow", {{"fcvtl", 16, 4}, {"fcvtn", 16, 4}}, vf, pow(f_1_clamped, f_2_clamped));
                     } else {
-                        add_arm64("exp", {{"fcvt", 16, 1}}, vf, exp(f_1));
-                        add_arm64("log", {{"fcvt", 16, 1}}, vf, log(f_1));
-                        add_arm64("pow", {{"fcvt", 16, 1}}, vf, pow(f_1, f_2));
+                        add_arm64("exp", "fcvt", exp(f_1_clamped));
+                        add_arm64("log", "fcvt", log(f_1_clamped));
+                        add_arm64("pow", "fcvt", pow(f_1_clamped, f_2_clamped));
                     }
                 }
 
                 // No corresponding instructions exists for is_nan, is_inf, is_finite.
                 // The instructions expected to be generated depends on CodeGen_LLVM::visit(const Call *op)
-                add_arm64("nan", is_vector ? "fcmge" : "fcmp", is_nan(f_1));
-                if (bits == 64) {
-                    add_arm64("inf", "fneg", is_inf(f_1));
-                } else {
-                    add_arm64("inf", {{"fabs", bits, force_vectorized_lanes}}, vf, is_inf(f_1));
-                }
-                add_arm64("finite", is_vector ? "fcmlt" : "fcmp", is_finite(f_1));
+                add_arm64("nan", is_vector ? sel_op("",  "fcmge", "fcmuo") : "fcmp", is_nan(f_1));
+                add_arm64("inf", {{"fabs", bits, force_vectorized_lanes}}, vf, is_inf(f_1));
+                add_arm64("finite", {{"fabs", bits, force_vectorized_lanes}}, vf, is_inf(f_1));
+            }
+
+            if (bits == 16) {
+                // Actually, the following ops are not vectorized because SIMD instruction is unavailable.
+                // The purpose of the test is just to confirm no error.
+                // In case the target has FP16 feature, native type conversion between fp16 and fp32 should be generated
+                // instead of emulated equivalent code with other types.
+                AddTestFunctor add_f16(*this, 16, 1);
+
+                add_f16("sinf",   {{"bl", "sinf"},   {"fcvt", 16, 1}}, 1, sin(f_1_clamped));
+                add_f16("asinf",  {{"bl", "asinf"},  {"fcvt", 16, 1}}, 1, asin(f_1_clamped));
+                add_f16("cosf",   {{"bl", "cosf"},   {"fcvt", 16, 1}}, 1, cos(f_1_clamped));
+                add_f16("acosf",  {{"bl", "acosf"},  {"fcvt", 16, 1}}, 1, acos(f_1_clamped));
+                add_f16("tanf",   {{"bl", "tanf"},   {"fcvt", 16, 1}}, 1, tan(f_1_clamped));
+                add_f16("atanf",  {{"bl", "atanf"},  {"fcvt", 16, 1}}, 1, atan(f_1_clamped));
+                add_f16("atan2f", {{"bl", "atan2f"}, {"fcvt", 16, 1}}, 1, atan2(f_1_clamped, f_2_clamped));
+                add_f16("sinhf",  {{"bl", "sinhf"},  {"fcvt", 16, 1}}, 1, sinh(f_1_clamped));
+                add_f16("asinhf", {{"bl", "asinhf"}, {"fcvt", 16, 1}}, 1, asinh(f_1_clamped));
+                add_f16("coshf",  {{"bl", "coshf"},  {"fcvt", 16, 1}}, 1, cosh(f_1_clamped));
+                add_f16("acoshf", {{"bl", "acoshf"}, {"fcvt", 16, 1}}, 1, acosh(max(f_1, cast_f(1.0f))));
+                add_f16("tanhf",  {{"bl", "tanhf"},  {"fcvt", 16, 1}}, 1, tanh(f_1_clamped));
+                add_f16("atanhf", {{"bl", "atanhf"}, {"fcvt", 16, 1}}, 1, atanh(clamp(f_1, cast_f(-0.5f), cast_f(0.5f))));
             }
         }
-
-        if (is_float16_supported()) {
-            // Actually, the following ops are not vectorized because SIMD instruction is unavailable.
-            // The purpose of the test is just to confirm no error.
-            // In case the target has FP16 feature, native type conversion between fp16 and fp32 should be generated
-            // instead of emulated equivalent code with other types.
-            Expr f16_1 = in_f16(x), f16_2 = in_f16(x + 16);
-            AddTestFunctor add_f16(*this, 16, 1);
-
-            add_f16("sinf",   {{"bl", "sinf"},   {"fcvt", 16, 1}}, 1, sin(f16_1));
-            add_f16("asinf",  {{"bl", "asinf"},  {"fcvt", 16, 1}}, 1, asin(f16_1));
-            add_f16("cosf",   {{"bl", "cosf"},   {"fcvt", 16, 1}}, 1, cos(f16_1));
-            add_f16("acosf",  {{"bl", "acosf"},  {"fcvt", 16, 1}}, 1, acos(f16_1));
-            add_f16("tanf",   {{"bl", "tanf"},   {"fcvt", 16, 1}}, 1, tan(f16_1));
-            add_f16("atanf",  {{"bl", "atanf"},  {"fcvt", 16, 1}}, 1, atan(f16_1));
-            add_f16("atan2f", {{"bl", "atan2f"}, {"fcvt", 16, 1}}, 1, atan2(f16_1, f16_2));
-            add_f16("sinhf",  {{"bl", "sinhf"},  {"fcvt", 16, 1}}, 1, sinh(f16_1));
-            add_f16("asinhf", {{"bl", "asinhf"}, {"fcvt", 16, 1}}, 1, asinh(f16_1));
-            add_f16("coshf",  {{"bl", "coshf"},  {"fcvt", 16, 1}}, 1, cosh(f16_1));
-            add_f16("acoshf", {{"bl", "acoshf"}, {"fcvt", 16, 1}}, 1, acosh(f16_1));
-            add_f16("tanhf",  {{"bl", "tanhf"},  {"fcvt", 16, 1}}, 1, tanh(f16_1));
-            add_f16("atanhf", {{"bl", "atanhf"}, {"fcvt", 16, 1}}, 1, atanh(f16_1));
-        }
-
     }
 
     void check_arm_load_store() {
@@ -647,7 +666,7 @@ public:
             {UInt(8), in_u8}, {UInt(16), in_u16}, {UInt(32), in_u32}, {UInt(64), in_u64},
             {Float(16), in_f16}, {Float(32), in_f32}, {Float(64), in_f64}
         };
-        
+
         for (const auto& [elt, in_im] : test_params) {
             const int bits = elt.bits();
             if ((elt == Float(16) && !is_float16_supported()) ||
@@ -663,12 +682,20 @@ public:
 
                 // In case of arm32, instruction selection looks inconsistent due to optimization by LLVM
                 AddTestFunctor add(*this, bits, total_lanes, target.bits == 64);
+                // NOTE: if the expr is too simple, LLVM might generate "bl memcpy"
+                Expr load_store_1 = in_im(x) * 3;
 
-                // vector register is not used for simple load/store
-                string opcode_suffix = (width < 256) ? "r" : "p";
-                string operand_prefix = (width <= 64) ? "d" : "q";
-                add({{"st" + opcode_suffix, operand_prefix + R"(\d\d?)"}}, total_lanes, in_im(x));
-                add({{"ld" + opcode_suffix, operand_prefix + R"(\d\d?)"}}, total_lanes, in_im(x));
+                if (has_sve()) {
+                    // in 128 bits, ld1b/st1b is used regardless of data type
+                    const int instr_bits = (width == 128) ? 8 : bits;
+                    add({get_sve_ls_instr("ld1", instr_bits)}, total_lanes, load_store_1);
+                    add({get_sve_ls_instr("st1", instr_bits)}, total_lanes, load_store_1);
+                } else {
+                    // vector register is not used for simple load/store
+                    string reg_prefix = (width <= 64) ? "d" : "q";
+                    add({{"st[rp]", reg_prefix + R"(\d\d?)"}}, total_lanes, load_store_1);
+                    add({{"ld[rp]", reg_prefix + R"(\d\d?)"}}, total_lanes, load_store_1);
+                }
             }
 
             // LD2/ST2       -       Load/Store two-element structures
@@ -686,16 +713,24 @@ public:
                 tmp1.compute_root();
                 tmp2(x, y) = select(x % 2 == 0, tmp1(x / 2), tmp1(x / 2 + 16));
                 tmp2.compute_root().vectorize(x, total_lanes);
+                Expr load_2 = in_im(x * 2) + in_im(x * 2 + 1);
+                Expr store_2 = tmp2(0, 0) + tmp2(0, 127);
 
-                add_ldn(sel_op("vld2.", "ld2"), in_im(x * 2) + in_im(x * 2 + 1));
-                add_stn(sel_op("vst2.", "st2"), tmp2(0, 0) + tmp2(0, 127));
+                if (has_sve()) {
+                    add_ldn({get_sve_ls_instr("ld2", bits)}, vector_lanes, load_2);
+                    add_stn({get_sve_ls_instr("st2", bits)}, total_lanes, store_2);
+                } else {
+                    add_ldn(sel_op("vld2.", "ld2"), load_2);
+                    add_stn(sel_op("vst2.", "st2"), store_2);
+                }
             }
+
             // Also check when the two expressions interleaved have a common
             // subexpression, which results in a vector var being lifted out.
             for (int width = 128; width <= 128 * 4; width *= 2) {
                 const int total_lanes = width / bits;
                 const int vector_lanes = total_lanes / 2;
-                const int instr_lanes = Instruction::get_instr_lanes(bits, vector_lanes);
+                const int instr_lanes = Instruction::get_instr_lanes(bits, vector_lanes, target);
                 if (instr_lanes < 2) continue;  // bail out scalar op
 
                 AddTestFunctor add_stn(*this, bits, instr_lanes, total_lanes);
@@ -706,15 +741,20 @@ public:
                 Expr e = (tmp1(x / 2) * 2 + 7) / 4;
                 tmp2(x, y) = select(x % 2 == 0, e * 3, e + 17);
                 tmp2.compute_root().vectorize(x, total_lanes);
+                Expr store_2 = tmp2(0, 0) + tmp2(0, 127);
 
-                add_stn(sel_op("vst2.", "st2"), tmp2(0, 0) + tmp2(0, 127));
+                if (has_sve()) {
+                    add_stn({get_sve_ls_instr("st2", bits)}, total_lanes, store_2);
+                } else {
+                    add_stn(sel_op("vst2.", "st2"), store_2);
+                }
             }
 
             // LD3/ST3       -       Store three-element structures
             for (int width = 192; width <= 192 * 4; width *= 2) {
                 const int total_lanes = width / bits;
                 const int vector_lanes = total_lanes / 3;
-                const int instr_lanes = Instruction::get_instr_lanes(bits, vector_lanes);
+                const int instr_lanes = Instruction::get_instr_lanes(bits, vector_lanes, target);
                 if (instr_lanes < 2) continue;  // bail out scalar op
 
                 AddTestFunctor add_ldn(*this, bits, vector_lanes);
@@ -727,16 +767,23 @@ public:
                                     x % 3 == 1, tmp1(x / 3 + 16),
                                     tmp1(x / 3 + 32));
                 tmp2.compute_root().vectorize(x, total_lanes);
+                Expr load_3 = in_im(x * 3) + in_im(x * 3 + 1) + in_im(x * 3 + 2);
+                Expr store_3 = tmp2(0, 0) + tmp2(0, 127);
 
-                add_ldn(sel_op("vld3.", "ld3"), in_im(x * 3) + in_im(x * 3 + 1) + in_im(x * 3 + 2));
-                add_stn(sel_op("vst3.", "st3"), tmp2(0, 0) + tmp2(0, 127));
+                if (has_sve()) {
+                    add_ldn({get_sve_ls_instr("ld3", bits)}, vector_lanes, load_3);
+                    add_stn({get_sve_ls_instr("st3", bits)}, total_lanes, store_3);
+                } else {
+                    add_ldn(sel_op("vld3.", "ld3"), load_3);
+                    add_stn(sel_op("vst3.", "st3"), store_3);
+                }
             }
 
             // LD4/ST4       -       Store four-element structures
             for (int width = 256; width <= 256 * 4; width *= 2) {
                 const int total_lanes = width / bits;
                 const int vector_lanes = total_lanes / 4;
-                const int instr_lanes = Instruction::get_instr_lanes(bits, vector_lanes);
+                const int instr_lanes = Instruction::get_instr_lanes(bits, vector_lanes, target);
                 if (instr_lanes < 2) continue;  // bail out scalar op
 
                 AddTestFunctor add_ldn(*this, bits, vector_lanes);
@@ -750,13 +797,40 @@ public:
                                     x % 4 == 2, tmp1(x / 4 + 32),
                                     tmp1(x / 4 + 48));
                 tmp2.compute_root().vectorize(x, total_lanes);
+                Expr load_4 = in_im(x * 4) + in_im(x * 4 + 1) + in_im(x * 4 + 2) + in_im(x * 4 + 3);
+                Expr store_4 = tmp2(0, 0) + tmp2(0, 127);
 
-                add_ldn(sel_op("vld4.", "ld4"), in_im(x * 4) + in_im(x * 4 + 1) + in_im(x * 4 + 2) + in_im(x * 4 + 3));
-                add_stn(sel_op("vst4.", "st4"), tmp2(0, 0) + tmp2(0, 127));
+                if (has_sve()) {
+                    add_ldn({get_sve_ls_instr("ld4", bits)}, vector_lanes, load_4);
+                    add_stn({get_sve_ls_instr("st4", bits)}, total_lanes, store_4);
+                } else {
+                    add_ldn(sel_op("vld4.", "ld4"), load_4);
+                    add_stn(sel_op("vst4.", "st4"), store_4);
+                }
             }
 
-        }
+            // SVE Gather/Scatter
+            if (has_sve()) {
+                for (int width = 64; width <= 64 * 4; width *= 2) {
+                    const int total_lanes = width / bits;
+                    const int instr_lanes = min(total_lanes, 128 / bits);
+                    if (instr_lanes < 2) continue;  // bail out scalar op
 
+                    AddTestFunctor add(*this, bits, total_lanes);
+                    Expr index = clamp(cast<int>(in_im(x)), 0, W - 1);
+                    Func tmp;
+                    tmp(x, y) = cast(elt, y);
+                    tmp(x, index) = cast(elt, 1);
+                    tmp.compute_root().update().vectorize(x, total_lanes);
+                    Expr gather = in_im(index);
+                    Expr scatter = tmp(0, 0) + tmp(0, 127);
+
+                    const int index_bits = std::max(32, bits);
+                    add({get_sve_ls_instr("ld1", bits, index_bits, "uxtw")}, total_lanes, gather);
+                    add({get_sve_ls_instr("st1", bits, index_bits, "uxtw")}, total_lanes, scatter);
+                }
+            }
+        }
     }
 
     void check_arm_pairwise() {
@@ -776,70 +850,103 @@ public:
                 {8,  in_i8,  in_u8 , i16, i32, u16, u32},
                 {16, in_i16, in_u16, i32, i64, u32, u64},
                 {32, in_i32, in_u32, i64, i64, u64, u64},
+                {64, in_i64, in_u64, i64, i64, u64, u64},
             };
             // clang-format on
 
             for (const auto& [bits, in_i, in_u, widen_i, widenx4_i, widen_u, widenx4_u] : test_params) {
-                const int vf = 128 / bits;
-                AddTestFunctor add(*this, bits, vf);
 
-                // VPADD    I, F    -       Pairwise Add
-                // VPMAX    I, F    -       Pairwise Maximum
-                // VPMIN    I, F    -       Pairwise Minimum
-                for (int f : {2, 4}) {
-                    RDom r(0, f);
+                for (auto &total_bits : {64, 128}) {
+                    const int vf = total_bits / bits;
+                    const int instr_lanes = Instruction::get_force_vectorized_instr_lanes(bits, vf, target);
+                    AddTestFunctor add(*this, bits, instr_lanes, vf, !(is_arm32() && bits == 64));  // 64 bit is unavailable in neon 32 bit
+                    AddTestFunctor add_8_16_32(*this, bits, instr_lanes, vf, bits != 64);
+                    const int widen_lanes = Instruction::get_instr_lanes(bits, vf * 2, target);
+                    AddTestFunctor add_widen(*this, bits, widen_lanes, vf, bits != 64);
 
-                    add(sel_op("vpadd.i", "addp"), sum_(in_i(f * x + r)));
-                    add(sel_op("vpadd.i", "addp"), sum_(in_u(f * x + r)));
-                    add(sel_op("vpmax.s", "smaxp"), maximum(in_i(f * x + r)));
-                    add(sel_op("vpmax.u", "umaxp"), maximum(in_u(f * x + r)));
-                    add(sel_op("vpmin.s", "sminp"), minimum(in_i(f * x + r)));
-                    add(sel_op("vpmin.u", "uminp"), minimum(in_u(f * x + r)));
-                }
+                    if (!has_sve()) {
+                        // VPADD    I, F    -       Pairwise Add
+                        // VPMAX    I, F    -       Pairwise Maximum
+                        // VPMIN    I, F    -       Pairwise Minimum
+                        for (int f : {2, 4}) {
+                            RDom r(0, f);
 
-                // VPADAL   I       -       Pairwise Add and Accumulate Long
-                // VPADDL   I       -       Pairwise Add Long
-                {
-                    int f = 2;
-                    RDom r(0, f);
+                            add(sel_op("vpadd.i", "addp"), sum_(in_i(f * x + r)));
+                            add(sel_op("vpadd.i", "addp"), sum_(in_u(f * x + r)));
+                            add_8_16_32(sel_op("vpmax.s", "smaxp"), maximum(in_i(f * x + r)));
+                            add_8_16_32(sel_op("vpmax.u", "umaxp"), maximum(in_u(f * x + r)));
+                            add_8_16_32(sel_op("vpmin.s", "sminp"), minimum(in_i(f * x + r)));
+                            add_8_16_32(sel_op("vpmin.u", "uminp"), minimum(in_u(f * x + r)));
+                        }
+                    }
 
-                    // If we're reducing by a factor of two, we can
-                    // use the forms with an accumulator
-                    add(sel_op("vpadal.s", "sadalp"), sum_(widen_i(in_i(f * x + r))));
-                    add(sel_op("vpadal.u", "uadalp"), sum_(widen_i(in_u(f * x + r))));
-                    add(sel_op("vpadal.u", "uadalp"), sum_(widen_u(in_u(f * x + r))));
-                }
-                {
-                    int f = 4;
-                    RDom r(0, f);
+                    // VPADAL   I       -       Pairwise Add and Accumulate Long
+                    // VPADDL   I       -       Pairwise Add Long
+                    {
+                        int f = 2;
+                        RDom r(0, f);
 
-                    // If we're reducing by more than that, that's not
-                    // possible.
-                    add(sel_op("vpaddl.s", "saddlp"), sum_(widen_i(in_i(f * x + r))));
-                    add(sel_op("vpaddl.u", "uaddlp"), sum_(widen_i(in_u(f * x + r))));
-                    add(sel_op("vpaddl.u", "uaddlp"), sum_(widen_u(in_u(f * x + r))));
-                }
+                        // If we're reducing by a factor of two, we can
+                        // use the forms with an accumulator
+                        add_widen(sel_op("vpadal.s", "sadalp"), sum_(widen_i(in_i(f * x + r))));
+                        add_widen(sel_op("vpadal.u", "uadalp"), sum_(widen_i(in_u(f * x + r))));
+                        add_widen(sel_op("vpadal.u", "uadalp"), sum_(widen_u(in_u(f * x + r))));
+                    }
+                    {
+                        int f = 4;
+                        RDom r(0, f);
 
-                if (bits == 8 || bits == 16) {
-                    int f = 4;
-                    RDom r(0, f);
-                    // If we're widening the type by a factor of four
-                    // as well as reducing by a factor of four, we
-                    // expect vpaddl followed by vpadal
-                    // Note that when going from u8 to i32 like this,
-                    // the vpaddl is unsigned and the vpadal is a
-                    // signed, because the intermediate type is u16
-                    const int vl_x4 = 128 / bits / 2;
-                    const int lanes = 128 / bits;
-                    AddTestFunctor add_x4(*this, bits, vl_x4);
-                    string op_addl, op_adal;
-                    op_addl = sel_op("vpaddl.s", "saddlp");
-                    op_adal = sel_op("vpadal.s", "sadalp");
-                    add_x4({{op_addl, bits, lanes}, {op_adal, bits * 2, lanes / 2}}, vl_x4, sum_(widenx4_i(in_i(f * x + r))));
-                    op_addl = sel_op("vpaddl.u", "uaddlp");
-                    op_adal = sel_op("vpadal.u", "uadalp");
-                    add_x4({{op_addl, bits, lanes}, {op_adal, bits * 2, lanes / 2}}, vl_x4, sum_(widenx4_i(in_u(f * x + r))));
-                    add_x4({{op_addl, bits, lanes}, {op_adal, bits * 2, lanes / 2}}, vl_x4, sum_(widenx4_u(in_u(f * x + r))));
+                        // If we're reducing by more than that, that's not
+                        // possible.
+                        // In case of SVE, addlp is unavailable, so adalp is used with accumulator=0 instead.
+                        add_widen(sel_op("vpaddl.s", "saddlp", "sadalp"), sum_(widen_i(in_i(f * x + r))));
+                        add_widen(sel_op("vpaddl.u", "uaddlp", "uadalp"), sum_(widen_i(in_u(f * x + r))));
+                        add_widen(sel_op("vpaddl.u", "uaddlp", "uadalp"), sum_(widen_u(in_u(f * x + r))));
+                    }
+
+                    const bool is_arm_dot_prod_available = (!is_arm32() && target.has_feature(Target::ARMDotProd) && bits == 8) ||
+                                                           (has_sve() && (bits == 8 || bits == 16));
+                    if ((bits == 8 || bits == 16) && !is_arm_dot_prod_available) {  // udot/sdot is applied if available
+                        int f = 4;
+                        RDom r(0, f);
+                        // If we're widening the type by a factor of four
+                        // as well as reducing by a factor of four, we
+                        // expect vpaddl followed by vpadal
+                        // Note that when going from u8 to i32 like this,
+                        // the vpaddl is unsigned and the vpadal is a
+                        // signed, because the intermediate type is u16
+                        const int widenx4_lanes = Instruction::get_instr_lanes(bits * 2, vf, target);
+                        string op_addl, op_adal;
+                        op_addl = sel_op("vpaddl.s", "saddlp");
+                        op_adal = sel_op("vpadal.s", "sadalp");
+                        add({{op_addl, bits, widen_lanes}, {op_adal, bits * 2, widenx4_lanes}}, vf, sum_(widenx4_i(in_i(f * x + r))));
+                        op_addl = sel_op("vpaddl.u", "uaddlp");
+                        op_adal = sel_op("vpadal.u", "uadalp");
+                        add({{op_addl, bits, widen_lanes}, {op_adal, bits * 2, widenx4_lanes}}, vf, sum_(widenx4_i(in_u(f * x + r))));
+                        add({{op_addl, bits, widen_lanes}, {op_adal, bits * 2, widenx4_lanes}}, vf, sum_(widenx4_u(in_u(f * x + r))));
+                    }
+
+                    // UDOT/SDOT
+                    if (is_arm_dot_prod_available) {
+                        const int factor_32bit = vf / 4;
+                        for (int f : {4, 8}) {
+                            // checks vector register for narrow src data type (i.e. 8 or 16 bit)
+                            const int lanes_src = Instruction::get_instr_lanes(bits, f * factor_32bit, target);
+                            AddTestFunctor add_dot(*this, bits, lanes_src, factor_32bit);
+                            RDom r(0, f);
+
+                            add_dot("udot", sum(widenx4_u(in_u(f * x + r)) * in_u(f * x + r + 32)));
+                            add_dot("sdot", sum(widenx4_i(in_i(f * x + r)) * in_i(f * x + r + 32)));
+                            if (f == 4) {
+                                // This doesn't generate for higher reduction factors because the
+                                // intermediate is 16-bit instead of 32-bit. It seems like it would
+                                // be slower to fix this (because the intermediate sum would be
+                                // 32-bit instead of 16-bit).
+                                add_dot("udot", sum(widenx4_u(in_u(f * x + r))));
+                                add_dot("sdot", sum(widenx4_i(in_i(f * x + r))));
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -853,28 +960,31 @@ public:
                 {64, in_f64},
             };
             // clang-format on
-            for (const auto &[bits, in_f] : test_params) {
-                const int vf = 128 / bits;
-                AddTestFunctor add(*this, bits, vf);
-                AddTestFunctor add_16_32(*this, bits, vf, bits != 64);
+            if (!has_sve()) {
+                for (const auto &[bits, in_f] : test_params) {
+                    for (auto &total_bits : {64, 128}) {
+                        const int vf = total_bits / bits;
+                        if (vf < 2) continue;
+                        AddTestFunctor add(*this, bits, vf);
+                        AddTestFunctor add_16_32(*this, bits, vf, bits != 64);
 
-                if (bits == 16 && !is_float16_supported()) {
-                    continue;
-                }
+                        if (bits == 16 && !is_float16_supported()) {
+                            continue;
+                        }
 
-                for (int f : {2, 4}) {
-                    RDom r(0, f);
+                        for (int f : {2, 4}) {
+                            RDom r(0, f);
 
-                    add(sel_op("vadd.f", "faddp"), sum_(in_f(f * x + r)));
-                    add_16_32(sel_op("vmax.f", "fmaxp"), maximum(in_f(f * x + r)));
-                    add_16_32(sel_op("vmin.f", "fminp"), minimum(in_f(f * x + r)));
+                            add(sel_op("vadd.f", "faddp"), sum_(in_f(f * x + r)));
+                            add_16_32(sel_op("vmax.f", "fmaxp"), maximum(in_f(f * x + r)));
+                            add_16_32(sel_op("vmin.f", "fminp"), minimum(in_f(f * x + r)));
+                        }
+                    }
                 }
             }
         }
-
     }
 
-private:
     struct ArmTask {
         vector<string> instrs;
     };
@@ -884,6 +994,7 @@ private:
         optional<string> operand;
         optional<int> bits;
         optional<int> lanes;
+        static inline const int ANY_LANES = -1;
 
         // matching pattern for opcode/operand is directly set
         Instruction(const string &opcode, const string &operand)
@@ -895,7 +1006,7 @@ private:
 
         string generate_pattern(const Target& target) const {
             bool is_arm32 = target.bits == 32;
-            bool has_sve = target.has_feature(Target::SVE) || target.has_feature(Target::SVE2);
+            bool has_sve = target.has_feature(Target::SVE2);
 
             string opcode_pattern;
             string operand_pattern;
@@ -920,14 +1031,22 @@ private:
 
         static int natural_lanes(int bits) { return 128 / bits;}
 
-        static int get_instr_lanes(int bits, int vec_factor) {
-            return min(natural_lanes(bits), vec_factor);
+        static int get_instr_lanes(int bits, int vec_factor, const Target& target) {
+            if (target.has_feature(Target::SVE2)) {
+                return vec_factor == 1 ? 1 : natural_lanes(bits);
+            } else {
+                return min(natural_lanes(bits), vec_factor);
+            }
         }
 
-        static int get_force_vectorized_instr_lanes(int bits, int vec_factor) {
+        static int get_force_vectorized_instr_lanes(int bits, int vec_factor, const Target& target) {
             // For some cases, where scalar operation is forced to vectorize
-            int min_lanes = std::max(2, natural_lanes(bits) / 2);  // 64 bit wide VL
-            return max(min_lanes, get_instr_lanes(bits, vec_factor));
+            if (target.has_feature(Target::SVE2)) {
+                return natural_lanes(bits);
+            } else {
+                int min_lanes = std::max(2, natural_lanes(bits) / 2);  // 64 bit wide VL
+                return max(min_lanes, get_instr_lanes(bits, vec_factor, target));
+            }
         }
 
         string get_opcode_neon32() const {
@@ -940,6 +1059,8 @@ private:
             };
             if (lanes == 1) {
                 return get_reg_neon64();
+            } else if (lanes == ANY_LANES) {
+                return R"(z\d\d?\.[bhsd])";
             } else {
                 auto itr = suffix.find(lanes.value());
                 assert(itr != suffix.end());
@@ -959,11 +1080,28 @@ private:
             assert(itr != suffix.end());
             if (lanes == 1) {
                 return itr->second + R"(\d\d?)";  // e.g. "h15"
+            } else if (lanes == ANY_LANES) {
+                return R"(v\d\d?\.[bhsd])";
             } else {
                 return R"(v\d\d?\.)" + to_string(lanes.value()) + itr->second;  // e.g. "v15.h"
             }
         }
     };
+
+    Instruction get_sve_ls_instr(const string& base_opcode, int opcode_bits, int operand_bits, const string& additional) {
+        static const map<int, string> opcode_suffix_map = {{8, "b"}, {16, "h"}, {32, "w"}, {64, "d"}};
+        static const map<int, string> operand_suffix_map = {{8, "b"}, {16, "h"}, {32, "s"}, {64, "d"}};
+        const string opcode = base_opcode + opcode_suffix_map.at(opcode_bits);
+        string operand = R"(z\d\d?\.)" + operand_suffix_map.at(operand_bits);
+        if (!additional.empty()) {
+            operand += ", " + additional;
+        }
+        return Instruction(opcode, operand);
+    }
+
+    Instruction get_sve_ls_instr(const string& base_opcode, int bits) {
+        return get_sve_ls_instr(base_opcode, bits, bits, "");
+    }
 
     // Helper functor to add test case
     class AddTestFunctor {
@@ -982,21 +1120,36 @@ private:
                        int default_vec_factor,
                        bool is_enabled = true /* false to skip testing */)
             : parent(p), default_bits(default_bits),
-              default_instr_lanes(Instruction::get_instr_lanes(default_bits, default_vec_factor)),
+              default_instr_lanes(Instruction::get_instr_lanes(default_bits, default_vec_factor, p.target)),
               default_vec_factor(default_vec_factor), is_enabled(is_enabled) {};
 
-        // Default API which constructs single Instruction with default parameters
+        // Constructs single Instruction with default parameters
         void operator()(const string &opcode, Expr e) {
             // Use opcode for name
             (*this)(opcode, opcode, e);
         }
 
-        // Default API but with custom name
+        // Constructs single Instruction with default parameters except for custom name
         void operator()(const string &op_name, const string &opcode, Expr e) {
-            create_and_register(op_name, {{Instruction{opcode, default_bits, default_instr_lanes}}}, default_vec_factor, e);
+            create_and_register(op_name, {Instruction{opcode, default_bits, default_instr_lanes}}, default_vec_factor, e);
         }
 
-        // API to construct single or multiple Instructions with custom parameters
+        // Constructs multiple Instruction with default parameters
+        void operator()(const vector<string> &opcodes, Expr e) {
+            assert(opcodes.size());
+            (*this)(opcodes[0], opcodes, e);
+        }
+
+        // Constructs multiple Instruction with default parameters except for custom name
+        void operator()(const string &op_name, const vector<string> &opcodes, Expr e) {
+            vector<Instruction> instrs;
+            for (const auto& opcode : opcodes) {
+                instrs.emplace_back(opcode, default_bits, default_instr_lanes);
+            }
+            create_and_register(op_name, instrs, default_vec_factor, e);
+        }
+
+        // Set single or multiple Instructions of custom parameters
         void operator()(const vector<Instruction> &instructions, int vec_factor, Expr e) {
             // Use the 1st opcode for name
             assert(instructions.size());
@@ -1004,7 +1157,7 @@ private:
             (*this)(op_name, instructions, vec_factor, e);
         }
 
-        // API for custom construction with custom name
+        // Set single or multiple Instructions of custom parameters, with custom name
         void operator()(const string &op_name, const vector<Instruction> &instructions, int vec_factor, Expr e) {
             create_and_register(op_name, instructions, vec_factor, e);
         }
@@ -1044,14 +1197,15 @@ private:
         auto ext = Internal::get_output_info(target);
         std::map<OutputFileType, std::string> outputs = {
             {OutputFileType::llvm_assembly, file_name + ext.at(OutputFileType::llvm_assembly).extension},
-            // {OutputFileType::c_header, file_name + ext.at(OutputFileType::c_header).extension},
-            // {OutputFileType::object, file_name + ext.at(OutputFileType::object).extension},
+            {OutputFileType::c_header, file_name + ext.at(OutputFileType::c_header).extension},
+            {OutputFileType::object, file_name + ext.at(OutputFileType::object).extension},
             {OutputFileType::assembly, file_name + ".s"},
         };
         try {
             error.compile_to(outputs, arg_types, fn_name, target);
-        } catch (...) {
-            cerr << "Error: compilation failed in " << name << endl;
+        } catch (const std::runtime_error& re) {
+            cerr << "Error: compilation failed in " << name << ", msg: " << endl;
+            cerr << re.what() << endl;
             return;
         }
 
@@ -1106,6 +1260,7 @@ private:
     }
 
     inline bool is_arm32() const { return target.bits == 32; };
+    inline bool has_sve() const { return target.has_feature(Target::SVE2); };
 
     bool is_float16_supported() const {
         return (target.bits == 64) && target.has_feature(Target::ARMFp16);
