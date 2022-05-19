@@ -1800,6 +1800,7 @@ public:
     HALIDE_FORWARD_METHOD_CONST(ImageParam, channels)
     HALIDE_FORWARD_METHOD_CONST(ImageParam, trace_loads)
     HALIDE_FORWARD_METHOD_CONST(ImageParam, add_trace_tag)
+    HALIDE_FORWARD_METHOD_CONST(ImageParam, type)
     // }@
 };
 
@@ -1974,6 +1975,10 @@ public:
             p.set_estimate(value);
         }
     }
+
+    Type type() const {
+        return Expr(*this).type();
+    }
 };
 
 template<typename T>
@@ -2075,6 +2080,10 @@ public:
             e = cast<bool>(e);
         }
         this->parameters_.at(index).set_estimate(e);
+    }
+
+    Type type() const {
+        return Expr(*this).type();
     }
 };
 

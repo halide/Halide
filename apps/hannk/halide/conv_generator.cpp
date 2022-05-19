@@ -166,7 +166,7 @@ public:
         require_same_min_extent(0, bias_, output_);
 
         const int filter_alignment = vector_reduction * accum_vector_size;
-        filter_.set_host_alignment(filter_alignment * filter_.gio_type().bytes());
+        filter_.set_host_alignment(filter_alignment * filter_.type().bytes());
         filter_.dim(0).set_min(0).set_extent(vector_reduction).set_stride(1);
         filter_.dim(1).set_min(0).set_extent(accum_vector_size).set_stride(vector_reduction);
         filter_.dim(2).set_min(0).set_stride(filter_alignment);
