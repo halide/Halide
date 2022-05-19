@@ -150,7 +150,7 @@ public:
 
         // Saturate and narrow the output.
         Expr output;
-        if (output_.output_type() == halide_type_of<uint8_t>()) {
+        if (output_.type() == halide_type_of<uint8_t>()) {
             output = quantize_and_relu_u8(convolved(c, x, y, b), output_multiplier_, output_shift_, output_zero_,
                                           output_min_, output_max_, target);
         } else {
@@ -347,7 +347,7 @@ public:
 
         Expr filter_cxyb =
             i16(input_bounded(co * vector_reduction + ci, x, y, bo * vector_tile + bi)) - i16(input_zero_);
-        output_(ci, bi, co, bo, x, y) = cast(output_.output_type(), filter_cxyb + output_zero_);
+        output_(ci, bi, co, bo, x, y) = cast(output_.type(), filter_cxyb + output_zero_);
 
         // Schedule.
         output_.dim(0).set_min(0).set_extent(vector_reduction);

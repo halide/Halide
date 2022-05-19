@@ -1573,9 +1573,9 @@ Pipeline GeneratorBase::get_pipeline() {
                     user_assert((int)f.outputs() == (int)output->gio_types().size()) << "Output \"" << f.name()
                                                                                      << "\" requires a Tuple of size " << output->gio_types().size()
                                                                                      << " but was defined as Tuple of size " << f.outputs() << ".\n";
-                    for (size_t i = 0; i < f.output_types().size(); ++i) {
+                    for (size_t i = 0; i < f.types().size(); ++i) {
                         Type expected = output->gio_types().at(i);
-                        Type actual = f.output_types()[i];
+                        Type actual = f.types()[i];
                         user_assert(expected == actual) << "Output \"" << f.name()
                                                         << "\" requires type " << expected
                                                         << " but was defined as type " << actual << ".\n";
@@ -1868,7 +1868,7 @@ const std::vector<Type> &GIOBase::gio_types() const {
         // in this case.
         const auto &f = funcs_;
         if (f.size() == 1 && f.at(0).defined()) {
-            check_matching_types(f.at(0).output_types());
+            check_matching_types(f.at(0).types());
         }
     }
     user_assert(gio_types_defined()) << "Type is not defined for " << input_or_output() << " '" << name() << "'; you may need to specify '" << name() << ".type' as a GeneratorParam, or call set_type() from the configure() method.\n";
@@ -1942,13 +1942,13 @@ void GIOBase::verify_internals() {
                 << "Expected outputs() == " << 1
                 << " but got " << f.outputs()
                 << " for " << name() << "\n";
-            user_assert(f.output_types().size() == 1)
-                << "Expected output_types().size() == " << 1
+            user_assert(f.types().size() == 1)
+                << "Expected types().size() == " << 1
                 << " but got " << f.outputs()
                 << " for " << name() << "\n";
-            user_assert(f.output_types()[0] == gio_type())
+            user_assert(f.types()[0] == gio_type())
                 << "Expected type " << gio_type()
-                << " but got " << f.output_types()[0]
+                << " but got " << f.types()[0]
                 << " for " << name() << "\n";
         }
     } else {
@@ -2089,10 +2089,10 @@ void GeneratorInputBase::set_inputs(const std::vector<StubInput> &inputs) {
         if (kind() == IOKind::Function) {
             auto f = in.func();
             user_assert(f.defined()) << "The input for " << name() << " is an undefined Func. Please define it.\n";
-            check_matching_types(f.output_types());
+            check_matching_types(f.types());
             check_matching_dims(f.dimensions());
             funcs_.push_back(f);
-            parameters_.emplace_back(f.output_types().at(0), true, f.dimensions(), array_name(i));
+            parameters_.emplace_back(f.types().at(0), true, f.dimensions(), array_name(i));
         } else if (kind() == IOKind::Buffer) {
             auto p = in.parameter();
             user_assert(p.defined()) << "The input for " << name() << " is an undefined Buffer. Please define it.\n";

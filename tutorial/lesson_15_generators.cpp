@@ -132,7 +132,7 @@ public:
         }
 
         // We'll then cast to the desired output type.
-        output(x, y) = cast(output.output_type(), rotated(x, y));
+        output(x, y) = cast(output.type(), rotated(x, y));
 
         // The structure of the pipeline depended on the generator
         // params. So will the schedule.
@@ -142,7 +142,7 @@ public:
         // provide a helper called "natural_vector_size" which will
         // pick a reasonable factor for you given the type and the
         // target you're compiling to.
-        output.vectorize(x, natural_vector_size(output.output_type()));
+        output.vectorize(x, natural_vector_size(output.type()));
 
         // Now we'll possibly parallelize it:
         if (parallel) {
@@ -155,7 +155,7 @@ public:
         if (rotation != Rotation::None) {
             rotated
                 .compute_at(output, y)
-                .vectorize(x, natural_vector_size(rotated.output_types()[0]));
+                .vectorize(x, natural_vector_size(rotated.types()[0]));
         }
     }
 };

@@ -53,7 +53,7 @@ public:
         inputs.int_arg = {int_arg};
 
         StubTest::GeneratorParams gp;
-        gp.untyped_buffer_output_type = int32_buffer_output.output_type();
+        gp.untyped_buffer_output_type = int32_buffer_output.type();
         gp.intermediate_level.set(LoopLevel(calculated_output, Var("y")));
         gp.vectorize = true;
         gp.str_param = "2 x * y +";

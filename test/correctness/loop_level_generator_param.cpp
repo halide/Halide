@@ -84,7 +84,7 @@ public:
         // Use sin() as a proxy for verifying compute_at, since it won't
         // ever be generated incidentally by the lowering code as part of
         // general code structure.
-        inner(x) = cast(inner.output_type(), trunc(sin(x) * 1000.0f));
+        inner(x) = cast(inner.type(), trunc(sin(x) * 1000.0f));
     }
 
     void schedule() {

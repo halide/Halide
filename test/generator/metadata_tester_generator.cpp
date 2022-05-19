@@ -97,8 +97,8 @@ public:
 
         Expr zero = zero1 + zero2 + bzero1 + bzero2 + bzero3 + bzero4 + bzero5 + bzero6 + bzero7 + bzero8;
 
-        assert(output.output_types().size() == 2);
-        Type output_type = output.output_types().at(0);
+        assert(output.types().size() == 2);
+        Type output_type = output.types().at(0);
 
         Func f1("f1"), f2("f2");
         f1(x, y, c) = cast(output_type, input(x, y, c) + zero + untyped_scalar_input);

@@ -1914,10 +1914,20 @@ public:
     HALIDE_FORWARD_METHOD_CONST(Func, defined)
     HALIDE_FORWARD_METHOD_CONST(Func, has_update_definition)
     HALIDE_FORWARD_METHOD_CONST(Func, num_update_definitions)
-    HALIDE_FORWARD_METHOD_CONST(Func, output_type)
-    HALIDE_FORWARD_METHOD_CONST(Func, output_types)
+    HALIDE_ATTRIBUTE_DEPRECATED("Func::output_type() is deprecated; use Func::type() instead.")
+    const Type &output_type() const {
+        this->check_gio_access();
+        return this->as<Func>().type();
+    }
+    HALIDE_ATTRIBUTE_DEPRECATED("Func::output_types() is deprecated; use Func::types() instead.")
+    const std::vector<Type> &output_types() const {
+        this->check_gio_access();
+        return this->as<Func>().types();
+    }
     HALIDE_FORWARD_METHOD_CONST(Func, outputs)
     HALIDE_FORWARD_METHOD_CONST(Func, rvars)
+    HALIDE_FORWARD_METHOD_CONST(Func, type)
+    HALIDE_FORWARD_METHOD_CONST(Func, types)
     HALIDE_FORWARD_METHOD_CONST(Func, update_args)
     HALIDE_FORWARD_METHOD_CONST(Func, update_value)
     HALIDE_FORWARD_METHOD_CONST(Func, update_values)
@@ -2235,6 +2245,7 @@ protected:
         static_assert(std::is_same<T2, Func>::value, "Only Func allowed here");
         internal_assert(kind() != IOKind::Scalar);
         internal_assert(exprs_.empty());
+        user_assert(!funcs_.empty()) << "No funcs_ are defined yet";
         user_assert(funcs_.size() == 1) << "Use [] to access individual Funcs in Output<Func[]>";
         return funcs_[0];
     }
@@ -2269,8 +2280,16 @@ public:
     HALIDE_FORWARD_METHOD(Func, in)
     HALIDE_FORWARD_METHOD(Func, memoize)
     HALIDE_FORWARD_METHOD_CONST(Func, num_update_definitions)
-    HALIDE_FORWARD_METHOD_CONST(Func, output_type)
-    HALIDE_FORWARD_METHOD_CONST(Func, output_types)
+    HALIDE_ATTRIBUTE_DEPRECATED("Func::output_type() is deprecated; use Func::type() instead.")
+    const Type &output_type() const {
+        this->check_gio_access();
+        return this->as<Func>().type();
+    }
+    HALIDE_ATTRIBUTE_DEPRECATED("Func::output_types() is deprecated; use Func::types() instead.")
+    const std::vector<Type> &output_types() const {
+        this->check_gio_access();
+        return this->as<Func>().types();
+    }
     HALIDE_FORWARD_METHOD_CONST(Func, outputs)
     HALIDE_FORWARD_METHOD(Func, parallel)
     HALIDE_FORWARD_METHOD(Func, prefetch)
@@ -2288,6 +2307,8 @@ public:
     HALIDE_FORWARD_METHOD(Func, store_root)
     HALIDE_FORWARD_METHOD(Func, tile)
     HALIDE_FORWARD_METHOD(Func, trace_stores)
+    HALIDE_FORWARD_METHOD_CONST(Func, type)
+    HALIDE_FORWARD_METHOD_CONST(Func, types)
     HALIDE_FORWARD_METHOD(Func, unroll)
     HALIDE_FORWARD_METHOD(Func, update)
     HALIDE_FORWARD_METHOD_CONST(Func, update_args)
@@ -2296,6 +2317,7 @@ public:
     HALIDE_FORWARD_METHOD_CONST(Func, value)
     HALIDE_FORWARD_METHOD_CONST(Func, values)
     HALIDE_FORWARD_METHOD(Func, vectorize)
+
     // }@
 
 #undef HALIDE_OUTPUT_FORWARD
@@ -2440,22 +2462,22 @@ private:
 
         if (this->gio_types_defined()) {
             const auto &my_types = this->gio_types();
-            user_assert(my_types.size() == f.output_types().size())
+            user_assert(my_types.size() == f.types().size())
                 << "Cannot assign Func \"" << f.name()
                 << "\" to Output \"" << this->name() << "\"\n"
                 << "Output " << this->name()
                 << " is declared to have " << my_types.size() << " tuple elements"
                 << " but Func " << f.name()
-                << " has " << f.output_types().size() << " tuple elements.\n";
+                << " has " << f.types().size() << " tuple elements.\n";
             for (size_t i = 0; i < my_types.size(); i++) {
-                user_assert(my_types[i] == f.output_types().at(i))
+                user_assert(my_types[i] == f.types().at(i))
                     << "Cannot assign Func \"" << f.name()
                     << "\" to Output \"" << this->name() << "\"\n"
                     << (my_types.size() > 1 ? "In tuple element " + std::to_string(i) + ", " : "")
                     << "Output " << this->name()
                     << " has declared type " << my_types[i]
                     << " but Func " << f.name()
-                    << " has type " << f.output_types().at(i) << "\n";
+                    << " has type " << f.types().at(i) << "\n";
             }
         }
         if (this->dims_defined()) {
