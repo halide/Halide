@@ -17,8 +17,6 @@ The following is a non-comprehensive list of known limitations:
       Halide and with future extensions to WGSL.
     * 64-bit integers and floats will likely remain unsupported.
 -   Dynamic gpu_tile sizes are not yet supported.
--   Host<->Device copies are only implemented for contiguous data regions.
--   Device<->Device copies are not yet implemented.
 -   Device buffer cropping/slicing is not yet implemented.
 -   Wrapping native device buffer handles is not yet implemented.
 -   Many intrinsic functions are not yet implemented.

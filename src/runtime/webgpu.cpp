@@ -1,4 +1,5 @@
 #include "HalideRuntimeWebGPU.h"
+#include "device_buffer_utils.h"
 #include "device_interface.h"
 #include "gpu_context_common.h"
 #include "printer.h"
@@ -206,6 +207,12 @@ private:
     }
 };
 
+// WgpuBufferHandle represents a device buffer with an offset.
+struct WgpuBufferHandle {
+    uint64_t offset;
+    WGPUBuffer buffer;
+};
+
 // A cache for compiled WGSL shader modules.
 WEAK Halide::Internal::GPUCompilationCache<WGPUDevice, WGPUShaderModule>
     shader_cache;
@@ -313,7 +320,10 @@ WEAK int halide_webgpu_device_malloc(void *user_context, halide_buffer_t *buf) {
         .size = buf->size_in_bytes(),
         .mappedAtCreation = false,
     };
-    WGPUBuffer device_buffer = wgpuDeviceCreateBuffer(context.device, &desc);
+    WgpuBufferHandle *device_handle =
+        (WgpuBufferHandle *)malloc(sizeof(WgpuBufferHandle));
+    device_handle->buffer = wgpuDeviceCreateBuffer(context.device, &desc);
+    device_handle->offset = 0;
 
     int error_code = error_scope.wait();
     if (error_code != halide_error_code_success) {
@@ -340,7 +350,7 @@ WEAK int halide_webgpu_device_malloc(void *user_context, halide_buffer_t *buf) {
         }
     }
 
-    buf->device = (uint64_t)device_buffer;
+    buf->device = (uint64_t)device_handle;
     buf->device_interface = &webgpu_device_interface;
     buf->device_interface->impl->use_module();
 
@@ -355,13 +365,19 @@ WEAK int halide_webgpu_device_free(void *user_context, halide_buffer_t *buf) {
         return 0;
     }
 
-    WGPUBuffer buffer = (WGPUBuffer)buf->device;
+    WgpuBufferHandle *handle = (WgpuBufferHandle *)buf->device;
 
     debug(user_context)
         << "WGPU: halide_webgpu_device_free (user_context: " << user_context
-        << ", buf: " << buf << ") WGPUBuffer: " << buffer << "\n";
+        << ", buf: " << buf << ") WGPUBuffer: " << handle->buffer << "\n";
 
-    wgpuBufferRelease(buffer);
+    WgpuContext context(user_context);
+    if (context.error_code) {
+        return context.error_code;
+    }
+
+    wgpuBufferRelease(handle->buffer);
+    free(handle);
     buf->device = 0;
     buf->device_interface->impl->release_module();
     buf->device_interface = nullptr;
@@ -455,39 +471,39 @@ WEAK int halide_webgpu_device_release(void *user_context) {
     return 1;
 }
 
-WEAK int halide_webgpu_copy_to_host(void *user_context, halide_buffer_t *buf) {
-    debug(user_context)
-        << "WGPU: halide_webgpu_copy_to_host (user_context: " << user_context
-        << ", buf: " << buf << ")\n";
+WEAK int halide_webgpu_device_and_host_malloc(void *user_context,
+                                              struct halide_buffer_t *buf) {
+    return halide_default_device_and_host_malloc(user_context, buf,
+                                                 &webgpu_device_interface);
+}
 
-    // TODO: Handle multi-dimensional strided copies.
+WEAK int halide_webgpu_device_and_host_free(void *user_context,
+                                            struct halide_buffer_t *buf) {
+    return halide_default_device_and_host_free(user_context, buf,
+                                               &webgpu_device_interface);
+}
 
-    WgpuContext context(user_context);
-    if (context.error_code) {
-        return context.error_code;
-    }
+namespace {
 
-    ErrorScope error_scope(user_context, context.device);
-
-    WGPUBuffer buffer = (WGPUBuffer)buf->device;
-
+// Copy `size` bytes of data from buffer `src` to a host pointer `dst`.
+int do_copy_to_host(void *user_context, WgpuContext *context, uint8_t *dst,
+                    WGPUBuffer src, int64_t src_offset, int64_t size) {
     // Copy chunks via the staging buffer.
-    for (size_t offset = 0; offset < buf->size_in_bytes();
+    for (int64_t offset = 0; offset < size;
          offset += kWebGpuStagingBufferSize) {
-
-        size_t num_bytes = kWebGpuStagingBufferSize;
-        if (offset + num_bytes > buf->size_in_bytes()) {
-            num_bytes = buf->size_in_bytes() - offset;
+        int64_t num_bytes = kWebGpuStagingBufferSize;
+        if (offset + num_bytes > size) {
+            num_bytes = size - offset;
         }
 
         // Copy this chunk to the staging buffer.
         WGPUCommandEncoder encoder =
-            wgpuDeviceCreateCommandEncoder(context.device, nullptr);
-        wgpuCommandEncoderCopyBufferToBuffer(encoder, buffer, offset,
+            wgpuDeviceCreateCommandEncoder(context->device, nullptr);
+        wgpuCommandEncoderCopyBufferToBuffer(encoder, src, src_offset + offset,
                                              staging_buffer, 0, num_bytes);
         WGPUCommandBuffer command_buffer =
             wgpuCommandEncoderFinish(encoder, nullptr);
-        wgpuQueueSubmit(context.queue, 1, &command_buffer);
+        wgpuQueueSubmit(context->queue, 1, &command_buffer);
 
         struct BufferMapResult {
             volatile ScopedSpinLock::AtomicFlag map_complete;
@@ -507,7 +523,7 @@ WEAK int halide_webgpu_copy_to_host(void *user_context, halide_buffer_t *buf) {
             &result);
 
         while (__atomic_test_and_set(&result.map_complete, __ATOMIC_ACQUIRE)) {
-            wgpuDeviceTick(context.device);
+            wgpuDeviceTick(context->device);
         }
         if (result.map_status != WGPUBufferMapAsyncStatus_Success) {
             debug(user_context) << "wgpuBufferMapAsync failed: "
@@ -518,60 +534,179 @@ WEAK int halide_webgpu_copy_to_host(void *user_context, halide_buffer_t *buf) {
         // Copy the data from the mapped staging buffer to the host allocation.
         const void *src = wgpuBufferGetConstMappedRange(staging_buffer, 0,
                                                         num_bytes);
-        memcpy(buf->host + offset, src, num_bytes);
+        memcpy(dst + offset, src, num_bytes);
         wgpuBufferUnmap(staging_buffer);
     }
 
-    return error_scope.wait();
+    return halide_error_code_success;
 }
 
-WEAK int halide_webgpu_copy_to_device(void *user_context, halide_buffer_t *buf) {
+int do_multidimensional_copy(void *user_context, WgpuContext *context,
+                             const device_copy &c,
+                             int64_t src_idx, int64_t dst_idx,
+                             int d, bool from_host, bool to_host) {
+    if (d > MAX_COPY_DIMS) {
+        error(user_context)
+            << "Buffer has too many dimensions to copy to/from GPU\n";
+        return -1;
+    } else if (d == 0) {
+        int err = 0;
+
+        WgpuBufferHandle *src = (WgpuBufferHandle *)(c.src);
+        WgpuBufferHandle *dst = (WgpuBufferHandle *)(c.dst);
+
+        debug(user_context) << "    from " << (from_host ? "host" : "device")
+                            << " to " << (to_host ? "host" : "device") << ", "
+                            << (void *)c.src << " + " << src_idx
+                            << " -> " << (void *)c.dst << " + " << dst_idx
+                            << ", " << c.chunk_size << " bytes\n";
+        if (!from_host && to_host) {
+            err = do_copy_to_host(user_context, context,
+                                  (uint8_t *)(c.dst + dst_idx),
+                                  src->buffer, src_idx + src->offset,
+                                  c.chunk_size);
+        } else if (from_host && !to_host) {
+            wgpuQueueWriteBuffer(context->queue, dst->buffer,
+                                 dst_idx + dst->offset,
+                                 (void *)(c.src + src_idx), c.chunk_size);
+        } else if (!from_host && !to_host) {
+            // Create a command encoder and encode a copy command.
+            WGPUCommandEncoder encoder =
+                wgpuDeviceCreateCommandEncoder(context->device, nullptr);
+            wgpuCommandEncoderCopyBufferToBuffer(encoder,
+                                                 src->buffer,
+                                                 src_idx + src->offset,
+                                                 dst->buffer,
+                                                 dst_idx + dst->offset,
+                                                 c.chunk_size);
+
+            // Submit the copy command.
+            WGPUCommandBuffer cmd = wgpuCommandEncoderFinish(encoder, nullptr);
+            wgpuQueueSubmit(context->queue, 1, &cmd);
+            wgpuCommandEncoderRelease(encoder);
+        } else if ((c.dst + dst_idx) != (c.src + src_idx)) {
+            // Could reach here if a user called directly into the
+            // WebGPU API for a device->host copy on a source buffer
+            // with device_dirty = false.
+            halide_debug_assert(user_context, false && "unimplemented");
+        }
+
+        if (err) {
+            error(user_context) << "WGPU: buffer copy failed: " << err;
+            return err;
+        }
+    } else {
+        ssize_t src_off = 0, dst_off = 0;
+        for (int i = 0; i < (int)c.extent[d - 1]; i++) {
+            int err = do_multidimensional_copy(user_context, context, c,
+                                               src_idx + src_off,
+                                               dst_idx + dst_off,
+                                               d - 1, from_host, to_host);
+            dst_off += c.dst_stride_bytes[d - 1];
+            src_off += c.src_stride_bytes[d - 1];
+            if (err) {
+                return err;
+            }
+        }
+    }
+    return 0;
+}
+
+}  // namespace
+
+WEAK int halide_webgpu_buffer_copy(void *user_context,
+                                   struct halide_buffer_t *src,
+                                   const struct halide_device_interface_t *dst_device_interface,
+                                   struct halide_buffer_t *dst) {
     debug(user_context)
-        << "WGPU: halide_webgpu_copy_to_device (user_context: " << user_context
-        << ", buf: " << buf << ")\n";
+        << "WGPU: halide_webgpu_buffer_copy (user_context: " << user_context
+        << ", src: " << src << ", dst: " << dst << ")\n";
 
-    // TODO: Handle multi-dimensional strided copies.
+    // We only handle copies between WebGPU devices or to/from the host.
+    halide_abort_if_false(user_context,
+                          dst_device_interface == nullptr ||
+                              dst_device_interface == &webgpu_device_interface);
 
+    if ((src->device_dirty() || src->host == nullptr) &&
+        src->device_interface != &webgpu_device_interface) {
+        halide_abort_if_false(user_context,
+                              dst_device_interface == &webgpu_device_interface);
+        // This is handled at the higher level.
+        return halide_error_code_incompatible_device_interface;
+    }
+
+    bool from_host = (src->device_interface != &webgpu_device_interface) ||
+                     (src->device == 0) ||
+                     (src->host_dirty() && src->host != nullptr);
+    bool to_host = !dst_device_interface;
+
+    halide_abort_if_false(user_context, from_host || src->device);
+    halide_abort_if_false(user_context, to_host || dst->device);
+
+    device_copy c = make_buffer_copy(src, from_host, dst, to_host);
+
+    int err = halide_error_code_success;
+    {
+        WgpuContext context(user_context);
+        if (context.error_code) {
+            return context.error_code;
+        }
+
+        ErrorScope error_scope(user_context, context.device);
+
+        err = do_multidimensional_copy(user_context, &context, c,
+                                       c.src_begin, 0, dst->dimensions,
+                                       from_host, to_host);
+
+        err = error_scope.wait();
+    }
+
+    return err;
+}
+
+WEAK int halide_webgpu_copy_to_device(void *user_context,
+                                      halide_buffer_t *buf) {
+    return halide_webgpu_buffer_copy(user_context, buf,
+                                     &webgpu_device_interface, buf);
+}
+
+WEAK int halide_webgpu_copy_to_host(void *user_context, halide_buffer_t *buf) {
+    return halide_webgpu_buffer_copy(user_context, buf,
+                                     nullptr, buf);
+}
+
+namespace {
+
+WEAK int webgpu_device_crop_from_offset(void *user_context,
+                                        const struct halide_buffer_t *src,
+                                        int64_t offset,
+                                        struct halide_buffer_t *dst) {
     WgpuContext context(user_context);
     if (context.error_code) {
         return context.error_code;
     }
 
-    ErrorScope error_scope(user_context, context.device);
+    dst->device_interface = src->device_interface;
 
-    WGPUBuffer buffer = (WGPUBuffer)buf->device;
-    wgpuQueueWriteBuffer(context.queue, buffer, 0, buf->host,
-                         buf->size_in_bytes());
+    WgpuBufferHandle *src_handle = (WgpuBufferHandle *)src->device;
+    wgpuBufferReference(src_handle->buffer);
 
-    return error_scope.wait();
+    WgpuBufferHandle *dst_handle =
+        (WgpuBufferHandle *)malloc(sizeof(WgpuBufferHandle));
+    dst_handle->buffer = src_handle->buffer;
+    dst_handle->offset = src_handle->offset + offset;
+    dst->device = (uint64_t)dst_handle;
+
+    return 0;
 }
 
-WEAK int halide_webgpu_device_and_host_malloc(void *user_context,
-                                              struct halide_buffer_t *buf) {
-    return halide_default_device_and_host_malloc(user_context, buf,
-                                                 &webgpu_device_interface);
-}
-
-WEAK int halide_webgpu_device_and_host_free(void *user_context,
-                                            struct halide_buffer_t *buf) {
-    return halide_default_device_and_host_free(user_context, buf,
-                                               &webgpu_device_interface);
-}
-
-WEAK int halide_webgpu_buffer_copy(void *user_context, struct halide_buffer_t *src,
-                                   const struct halide_device_interface_t *dst_device_interface,
-                                   struct halide_buffer_t *dst) {
-    // TODO: Implement this.
-    halide_debug_assert(user_context, false && "unimplemented");
-    return 1;
-}
+}  // namespace
 
 WEAK int halide_webgpu_device_crop(void *user_context,
                                    const struct halide_buffer_t *src,
                                    struct halide_buffer_t *dst) {
-    // TODO: Implement this.
-    halide_debug_assert(user_context, false && "unimplemented");
-    return 1;
+    const int64_t offset = calc_device_crop_byte_offset(src, dst);
+    return webgpu_device_crop_from_offset(user_context, src, offset, dst);
 }
 
 WEAK int halide_webgpu_device_slice(void *user_context,
@@ -579,16 +714,30 @@ WEAK int halide_webgpu_device_slice(void *user_context,
                                     int slice_dim,
                                     int slice_pos,
                                     struct halide_buffer_t *dst) {
-    // TODO: Implement this.
-    halide_debug_assert(user_context, false && "unimplemented");
-    return 1;
+    const int64_t offset =
+        calc_device_slice_byte_offset(src, slice_dim, slice_pos);
+    return webgpu_device_crop_from_offset(user_context, src, offset, dst);
 }
 
 WEAK int halide_webgpu_device_release_crop(void *user_context,
                                            struct halide_buffer_t *buf) {
-    // TODO: Implement this.
-    halide_debug_assert(user_context, false && "unimplemented");
-    return 1;
+    WgpuBufferHandle *handle = (WgpuBufferHandle *)buf->device;
+
+    debug(user_context)
+        << "WGPU: halide_webgpu_device_release_crop (user_context: "
+        << user_context << ", buf: " << buf << ") WGPUBuffer: "
+        << handle->buffer << " offset: " << handle->offset << "\n";
+
+    WgpuContext context(user_context);
+    if (context.error_code) {
+        return context.error_code;
+    }
+
+    wgpuBufferRelease(handle->buffer);
+    free(handle);
+    buf->device = 0;
+
+    return halide_error_code_success;
 }
 
 WEAK int halide_webgpu_wrap_native(void *user_context, struct halide_buffer_t *buf, uint64_t mem) {
@@ -738,11 +887,12 @@ WEAK int halide_webgpu_run(void *user_context,
         for (uint32_t i = 0, b = 0; i < num_args; i++) {
             if (arg_is_buffer[i]) {
                 halide_buffer_t *buffer = (halide_buffer_t *)args[i];
+                WgpuBufferHandle *handle = (WgpuBufferHandle *)(buffer->device);
                 bind_group_entries[b] = WGPUBindGroupEntry{
                     .nextInChain = nullptr,
                     .binding = i,
-                    .buffer = (WGPUBuffer)(buffer->device),
-                    .offset = 0,
+                    .buffer = handle->buffer,
+                    .offset = handle->offset,
                     .size = buffer->size_in_bytes(),
                     .sampler = nullptr,
                     .textureView = nullptr,
