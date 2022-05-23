@@ -353,13 +353,13 @@ public:
 /** generate_filter_main() is a convenient wrapper for GeneratorRegistry::create() +
  * compile_to_files(); it can be trivially wrapped by a "real" main() to produce a
  * command-line utility for ahead-of-time filter compilation. */
-int generate_filter_main(int argc, char **argv, std::ostream &error_output);
+int generate_filter_main(int argc, char **argv);
 
 /** This overload of generate_filter_main lets you provide your own provider for how to enumerate and/or create
  * the generators based on registration name; this is useful if you want to re-use the
  * 'main' logic but avoid the global Generator registry (e.g. for bindings in languages
  * other than C++). */
-int generate_filter_main(int argc, char **argv, std::ostream &error_output, const GeneratorFactoryProvider &generator_factory_provider);
+int generate_filter_main(int argc, char **argv, const GeneratorFactoryProvider &generator_factory_provider);
 
 // select_type<> is to std::conditional as switch is to if:
 // it allows a multiway compile-time type definition via the form
@@ -3925,6 +3925,99 @@ public:
 
     std::shared_ptr<GeneratorBase> generator;
 };
+
+// -----------------------------
+
+/** ExecuteGeneratorArgs is the set of arguments to execute_generator().
+ */
+struct ExecuteGeneratorArgs {
+    // Output directory for all files generated. Must not be empty.
+    std::string output_dir;
+
+    // Type(s) of outputs to produce. Must not be empty.
+    std::set<OutputFileType> output_types;
+
+    // Target(s) to use when generating. Must not be empty.
+    // If list contains multiple entries, a multitarget output will be produced.
+    std::vector<Target> targets;
+
+    // When generating multitarget output, use these as the suffixes for each Target
+    // specified by the targets field. If empty, the canonical string form of
+    // each Target will be used. If nonempty, it must be the same length as the
+    // targets vector.
+    std::vector<std::string> suffixes;
+
+    // Name of the generator to execute (or empty if none, e.g. if generating a runtime)
+    // Must be one recognized by the specified GeneratorFactoryProvider.
+    std::string generator_name;
+
+    // Name to use for the generated function. May include C++ namespaces,
+    // e.g. "HalideTest::AnotherNamespace::cxx_mangling". If empty, use `generator_name`.
+    std::string function_name;
+
+    // Base filename for all outputs (differentated by file extension).
+    // If empty, use `function_name` (ignoring any C++ namespaces).
+    std::string file_base_name;
+
+    // The name of a standalone runtime to generate. Only honors EMIT_OPTIONS 'o'
+    // and 'static_library'. When multiple targets are specified, it picks a
+    // runtime that is compatible with all of the targets, or fails if it cannot
+    // find one. Flags across all of the targets that do not affect runtime code
+    // generation, such as `no_asserts` and `no_runtime`, are ignored.
+    std::string runtime_name;
+
+    // The mode in which to build the Generator.
+    enum BuildMode {
+        // Build it as written.
+        Default,
+
+        // Build a version suitable for using for gradient descent calculation.
+        Gradient
+    } build_mode = Default;
+
+    // The fn that will produce Generator(s) from the name specified.
+    // (Note that `generator_name` is the only value that will ever be passed
+    // for name here; it is provided for ease of interoperation with existing code.)
+    //
+    // If null, the default global registry of Generators will be used.
+    using CreateGeneratorFn = std::function<std::unique_ptr<GeneratorBase>(const std::string &name, const GeneratorContext &context)>;
+    CreateGeneratorFn create_generator = nullptr;
+
+    // Values to substitute for GeneratorParams in the selected Generator.
+    // Should not contain `target`.
+    //
+    // If any of the generator param names specified in this map are unknown
+    // to the Generator created, an error will occur.
+    GeneratorParamsMap generator_params;
+
+    // The name of the autoscheduler to use.
+    // If empty, the default autoscheduler will be used.
+    std::string autoscheduler_name;
+
+    // A list of shared libraries that will be loaded before the
+    // generator is executed (typically, custom auto-schedulers).
+    //
+    // Note that in these cases, C++ generators must either be linked against
+    // a shared libHalide or compiled with -rdynamic so that references in the
+    // shared library to libHalide can resolve.
+    //
+    // Note that loading plugin(s) doesn't change the default autoscheduler
+    // (it just makes them available); set the `autoscheduler_name` field
+    // to change that.
+    std::vector<std::string> plugin_paths;
+
+    // Compiler Logger to use, for diagnostic work. If null, don't do any logging.
+    CompilerLoggerFactory compiler_logger_factory = nullptr;
+};
+
+/**
+ * Execute a Generator for AOT compilation -- this provides the implementation of
+ * the command-line Generator interface `generate_filter_main()`, but with a structured
+ * API that is more suitable for calling directly from code (vs command line).
+ */
+void execute_generator(const ExecuteGeneratorArgs &args);
+
+// -----------------------------
 
 }  // namespace Internal
 

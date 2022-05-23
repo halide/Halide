@@ -208,8 +208,8 @@ struct all_are_convertible : meta_and<std::is_convertible<Args, To>...> {};
 /** Returns base name and fills in namespaces, outermost one first in vector. */
 std::string extract_namespaces(const std::string &name, std::vector<std::string> &namespaces);
 
-/** Overload that returns base name only */
-std::string extract_namespaces(const std::string &name);
+/** Like extract_namespaces(), but strip and discard the namespaces, returning base name only */
+std::string strip_namespaces(const std::string &name);
 
 struct FileStat {
     uint64_t file_size;
