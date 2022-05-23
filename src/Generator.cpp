@@ -43,6 +43,10 @@ GeneratorContext::GeneratorContext(const Target &target,
                        std::make_shared<Internal::ValueTracker>()) {
 }
 
+GeneratorContext GeneratorContext::with_target(const Target &t) const {
+    return GeneratorContext(t, auto_schedule_, machine_params_, externs_map_, value_tracker_);
+}
+
 namespace Internal {
 
 namespace {
@@ -2243,7 +2247,7 @@ RegisterGenerator::RegisterGenerator(const char *registered_name, GeneratorFacto
 }
 
 void generator_test() {
-    GeneratorContext context(get_host_target());
+    GeneratorContext context(get_host_target().without_feature(Target::Profile));
 
     // Verify that the Generator's internal phase actually prevents unsupported
     // order of operations.
@@ -2395,10 +2399,21 @@ void generator_test() {
     public:
         GeneratorParam<int> gp{"gp", 0};
         Output<Func> output{"output", Int(32), 0};
+
         void generate() {
+            internal_assert(get_target().has_feature(Target::Profile));
             output() = 0;
         }
         void schedule() {
+        }
+
+        // Test that we can override init_from_context() to modify the target
+        // we use. (Generally speaking, your code probably should ever need to
+        // do this; this code only does it for testing purposes. See comments
+        // in Generator.h.)
+        void init_from_context(const GeneratorContext &context) override {
+            auto t = context.target().with_feature(Target::Profile);
+            Generator<GPTester>::init_from_context(context.with_target(t));
         }
     };
     GPTester gp_tester;
