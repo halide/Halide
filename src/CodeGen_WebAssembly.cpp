@@ -29,7 +29,8 @@ protected:
 
     void init_module() override;
 
-    string mcpu() const override;
+    string mcpu_target() const override;
+    string mcpu_tune() const override;
     string mattrs() const override;
     bool use_soft_float_abi() const override;
     int native_vector_bits() const override;
@@ -256,8 +257,12 @@ void CodeGen_WebAssembly::codegen_vector_reduce(const VectorReduce *op, const Ex
     CodeGen_Posix::codegen_vector_reduce(op, init);
 }
 
-string CodeGen_WebAssembly::mcpu() const {
+string CodeGen_WebAssembly::mcpu_target() const {
     return "";
+}
+
+string CodeGen_WebAssembly::mcpu_tune() const {
+    return mcpu_target();
 }
 
 string CodeGen_WebAssembly::mattrs() const {
