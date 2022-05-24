@@ -888,14 +888,17 @@ gengen
         return g;
     };
 
-    const auto build_target_strings = [](GeneratorParamsMap *gp) {
-        std::vector<std::string> target_strings;
-        if (gp->find("target") != gp->end()) {
-            target_strings = split_string((*gp)["target"].string_value, ",");
-            gp->erase("target");
+    const auto pop = [&args](const std::string &key) -> std::string {
+        auto it = args.generator_params.find(key);
+        if (it != args.generator_params.end()) {
+            std::string value = std::move(it->second.string_value);
+            args.generator_params.erase(key);
+            return value;
         }
-        return target_strings;
+        return std::string();
     };
+    std::string auto_schedule_string = pop("auto_schedule");
+    std::string machine_params_string = pop("machine_params");
 
     const auto build_targets = [](const std::vector<std::string> &target_strings) {
         std::vector<Target> targets;
@@ -969,8 +972,10 @@ gengen
     // Always specify target_strings for suffixes: if we omit this, we'll use *canonical* target strings
     // for suffixes, but our caller might have passed non-canonical-but-still-legal target strings,
     // and if we don't use those, the output filenames might not match what the caller expects.
-    args.suffixes = build_target_strings(&args.generator_params);
+    args.suffixes = split_string(pop("target"), ",");
     args.targets = build_targets(args.suffixes);
+    args.auto_schedule = auto_schedule_string == "true" || auto_schedule_string == "True";
+    args.machine_params = machine_params_string.empty() ? MachineParams::generic() :  MachineParams(machine_params_string);
     args.output_dir = flags_info["-o"];
     args.output_types = build_output_types();
     args.generator_name = flags_info["-g"];
@@ -1198,26 +1203,6 @@ void execute_generator(const ExecuteGeneratorArgs &args_in) {
         compile_standalone_runtime(output_files, gcd_target);
     }
 
-    const auto pop = [&args](const std::string &key) -> std::string {
-        auto it = args.generator_params.find(key);
-        if (it != args.generator_params.end()) {
-            std::string value = std::move(it->second.string_value);
-            args.generator_params.erase(key);
-            return value;
-        }
-        return std::string();
-    };
-
-    std::string auto_schedule_string = pop("auto_schedule");
-    std::string machine_params_string = pop("machine_params");
-
-    const bool auto_schedule = auto_schedule_string == "true" ||
-                               auto_schedule_string == "True";
-
-    const MachineParams machine_params = machine_params_string.empty() ?
-                                             MachineParams::generic() :
-                                             MachineParams(machine_params_string);
-
     if (!args.generator_name.empty()) {
         const std::string base_path = args.output_dir + "/" + args.file_base_name;
         debug(1) << "Generator " << args.generator_name << " has base_path " << base_path << "\n";
@@ -1235,7 +1220,7 @@ void execute_generator(const ExecuteGeneratorArgs &args_in) {
             auto output_files = compute_output_files(args.targets[0], base_path, args.output_types);
             auto module_factory = [&](const std::string &function_name, const Target &target) -> Module {
                 // Must re-create each time since each instance will have a different Target.
-                auto gen = args.create_generator(args.generator_name, GeneratorContext(target, auto_schedule, machine_params));
+                auto gen = args.create_generator(args.generator_name, GeneratorContext(target, args.auto_schedule, args.machine_params));
                 gen->set_generator_param_values(args.generator_params);
                 return args.build_mode == ExecuteGeneratorArgs::Gradient ?
                            gen->build_gradient_module(function_name) :

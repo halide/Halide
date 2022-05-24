@@ -249,7 +249,7 @@
  * \endcode
  *
  * Note that a Generator is always executed with a specific Target assigned to it,
- * that you can access via the get_target() method. (You should *not* use the
+ * that you can access via the target() method. (You should *not* use the
  * global get_target_from_environment(), etc. methods provided in Target.h)
  *
  * (Note that there are older variations of Generator that differ from what's
@@ -385,9 +385,7 @@ template<typename First, typename... Rest>
 struct select_type : std::conditional<First::value, typename First::type, typename select_type<Rest...>::type> {};
 
 template<typename First>
-struct select_type<First> {
-    using type = typename std::conditional<First::value, typename First::type, void>::type;
-};
+struct select_type<First> { using type = typename std::conditional<First::value, typename First::type, void>::type; };
 
 class GeneratorParamInfo;
 
@@ -3580,13 +3578,13 @@ protected:
 
 #else
     Target get_target() const {
-        return context().get_target();
+        return context().target();
     }
     bool get_auto_schedule() const {
-        return context().get_auto_schedule();
+        return context().auto_schedule();
     }
     MachineParams get_machine_params() const {
-        return context().get_machine_params();
+        return context().machine_params();
     }
 #endif
 
@@ -4062,6 +4060,12 @@ struct ExecuteGeneratorArgs {
     // Target(s) to use when generating. Must not be empty.
     // If list contains multiple entries, a multitarget output will be produced.
     std::vector<Target> targets;
+
+    // If true, auto-schedule.
+    bool auto_schedule = false;
+
+    // MachineParams used for autoscheduling.
+    MachineParams machine_params = MachineParams::generic();
 
     // When generating multitarget output, use these as the suffixes for each Target
     // specified by the targets field. If empty, the canonical string form of
