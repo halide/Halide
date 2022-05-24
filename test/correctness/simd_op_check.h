@@ -58,6 +58,15 @@ public:
                      .with_feature(Target::NoBoundsQuery)
                      .with_feature(Target::NoAsserts)
                      .with_feature(Target::NoRuntime);
+        // See comments in test_all()
+        std::string shard_status_file = get_env("TEST_SHARD_STATUS_FILE");
+        if (!shard_status_file.empty()) {
+            std::ofstream f(shard_status_file, std::ios::out | std::ios::binary);
+            f << "simd_op_check\n";
+            f.flush();
+            f.close();
+        }
+
     }
     virtual ~SimdOpCheckTest() = default;
 
@@ -339,14 +348,6 @@ public:
             if (total_shards < 0 || current_shard < 0 || current_shard >= total_shards) {
                 std::cerr << "Illegal values for sharding: total " << total_shards << " current " << current_shard << "\n";
                 exit(-1);
-            }
-
-            // If shard_status_file is nonempty, we must create that file (the contents don't matter)
-            if (!shard_status_file.empty()) {
-                std::ofstream f(shard_status_file, std::ios::out | std::ios::binary);
-                f << "simd_op_check\n";
-                f.flush();
-                f.close();
             }
 
             size_t shard_size = (tasks.size() + total_shards - 1) / total_shards;

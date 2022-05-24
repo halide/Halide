@@ -717,12 +717,15 @@ int main(int argc, char **argv) {
             t.set_feature(f);
         }
     }
+
+    // Instantiate the SimdOpCheck before we skip-return,
+    // so that the sharding setup (if any) will be happy.
+    SimdOpCheckHVX test_hvx(t);
+
     if (t == Target("hexagon-32-noos")) {
         printf("[SKIP] No HVX target enabled.\n");
         return 0;
     }
-
-    SimdOpCheckHVX test_hvx(t);
 
     if (argc > 1) {
         test_hvx.filter = argv[1];

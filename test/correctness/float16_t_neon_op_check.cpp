@@ -322,14 +322,17 @@ int main(int argc, char **argv) {
     printf("HL_TARGET is: %s\n", hl_target.to_string().c_str());
     printf("HL_JIT_TARGET is: %s\n", jit_target.to_string().c_str());
 
+    // Create Test Object
+    // Use smaller dimension than default(768, 128) to avoid fp16 overflow in reduction test case
+    // Instantiate the SimdOpCheck before we skip-return,
+    // so that the sharding setup (if any) will be happy.
+    SimdOpCheck test(hl_target, 384, 32);
+
     // Only for 64bit target with fp16 feature
     if (!(hl_target.arch == Target::ARM && hl_target.bits == 64 && hl_target.has_feature(Target::ARMFp16))) {
         printf("[SKIP] To run this test, set HL_TARGET=arm-64-<os>-arm_fp16. \n");
         return 0;
     }
-    // Create Test Object
-    // Use smaller dimension than default(768, 128) to avoid fp16 overflow in reduction test case
-    SimdOpCheck test(hl_target, 384, 32);
 
     if (!test.can_run_code()) {
         printf("[WARN] To run verification of realization, set HL_JIT_TARGET=arm-64-<os>-arm_fp16. \n");
