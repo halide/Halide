@@ -46,26 +46,23 @@ public:
     int W;
     int H;
 
+    static std::string get_env(const char *v) {
+        const char *r = getenv(v);
+        if (!r) r = "";
+        return r;
+    }
+
     SimdOpCheckTest(const Target t, int w, int h)
         : target(t), W(w), H(h) {
         target = target
                      .with_feature(Target::NoBoundsQuery)
                      .with_feature(Target::NoAsserts)
                      .with_feature(Target::NoRuntime);
-        num_threads = Internal::ThreadPool<void>::num_processors_online();
     }
     virtual ~SimdOpCheckTest() = default;
 
     void set_seed(int seed) {
         rng.seed(seed);
-    }
-
-    size_t get_num_threads() const {
-        return num_threads;
-    }
-
-    void set_num_threads(size_t n) {
-        num_threads = n;
     }
 
     virtual bool can_run_code() const {
@@ -320,17 +317,48 @@ public:
     virtual bool test_all() {
         /* First add some tests based on the target */
         add_tests();
-        Internal::ThreadPool<TestResult> pool(num_threads);
-        std::vector<std::future<TestResult>> futures;
-        for (const Task &task : tasks) {
-            futures.push_back(pool.async([this, task]() {
-                return check_one(task.op, task.name, task.vector_width, task.expr);
-            }));
+
+        size_t first_task = 0;
+        size_t last_task = tasks.size() - 1;
+
+        // These environment variables are used by the GoogleTest framework
+        // to allow a large test to be 'sharded' into smaller pieces:
+        //
+        // - If TEST_SHARD_STATUS_FILE is not empty, we should create a file at that path
+        //   to indicate to the test framework that we support sharding.
+        // - If TEST_TOTAL_SHARDS and TEST_SHARD_INDEX are defined, we should
+        //   split our work into TEST_TOTAL_SHARDS chunks, and only do the TEST_SHARD_INDEX-th
+        //   chunk on this run.
+        //
+        // The Halide buildbots don't (yet) make use of these, but some downstream consumers do.
+        int total_shards = std::atoi(get_env("TEST_TOTAL_SHARDS").c_str());  // 0 if not present
+        int current_shard = std::atoi(get_env("TEST_SHARD_INDEX").c_str());  // 0 if not present
+        std::string shard_status_file = get_env("TEST_SHARD_STATUS_FILE");
+
+        if (total_shards != 0) {
+            if (total_shards < 0 || current_shard < 0 || current_shard >= total_shards) {
+                std::cerr << "Illegal values for sharding: total " << total_shards << " current " << current_shard << "\n";
+                exit(-1);
+            }
+
+            // If shard_status_file is nonempty, we must create that file (the contents don't matter)
+            if (!shard_status_file.empty()) {
+                std::ofstream f(shard_status_file, std::ios::out | std::ios::binary);
+                f << "simd_op_check\n";
+                f.flush();
+                f.close();
+            }
+
+            size_t shard_size = (tasks.size() + total_shards - 1) / total_shards;
+            first_task = current_shard * shard_size;
+            last_task = std::min(first_task + shard_size - 1, tasks.size() - 1);
+            std::cout << "Tasks " << tasks.size() << " shard_size " << shard_size << " first_task " << first_task << " last_task " << last_task << " shard_status_file (" << shard_status_file << ")\n";
         }
 
         bool success = true;
-        for (auto &f : futures) {
-            const TestResult &result = f.get();
+        for (size_t t = first_task; t <= last_task; t++) {
+            const auto &task = tasks.at(t);
+            auto result = check_one(task.op, task.name, task.vector_width, task.expr);
             std::cout << result.op << "\n";
             if (!result.error_msg.empty()) {
                 std::cerr << result.error_msg;
@@ -342,8 +370,9 @@ public:
     }
 
 private:
-    size_t num_threads;
     const Halide::Var x{"x"}, y{"y"};
 };
+
 }  // namespace Halide
+
 #endif  // SIMD_OP_CHECK_H
