@@ -975,7 +975,7 @@ gengen
     args.suffixes = split_string(pop("target"), ",");
     args.targets = build_targets(args.suffixes);
     args.auto_schedule = auto_schedule_string == "true" || auto_schedule_string == "True";
-    args.machine_params = machine_params_string.empty() ? MachineParams::generic() :  MachineParams(machine_params_string);
+    args.machine_params = machine_params_string.empty() ? MachineParams::generic() : MachineParams(machine_params_string);
     args.output_dir = flags_info["-o"];
     args.output_types = build_output_types();
     args.generator_name = flags_info["-g"];
