@@ -30,6 +30,9 @@ template<>
 bool is_native_xtensa_vector<int32_t>(const Type &t);
 
 template<>
+bool is_native_xtensa_vector<int64_t>(const Type &t);
+
+template<>
 bool is_native_xtensa_vector<uint32_t>(const Type &t);
 
 template<>

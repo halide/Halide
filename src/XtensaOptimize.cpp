@@ -51,6 +51,11 @@ bool is_native_xtensa_vector<int32_t>(const Type &t) {
 }
 
 template<>
+bool is_native_xtensa_vector<int64_t>(const Type &t) {
+    return t.is_int() && (t.bits() == 64) && (t.lanes() == 16);
+}
+
+template<>
 bool is_native_xtensa_vector<uint32_t>(const Type &t) {
     return t.is_uint() && (t.bits() == 32) && (t.lanes() == 16);
 }
@@ -186,6 +191,7 @@ Expr wild_i16 = Variable::make(Int(16), "*");
 Expr wild_i24 = Variable::make(Int(24), "*");
 Expr wild_i32 = Variable::make(Int(32), "*");
 Expr wild_i64 = Variable::make(Int(64), "*");
+Expr wild_f32 = Variable::make(Float(32), "*");
 
 Expr wild_u1x = Variable::make(Type(Type::UInt, 1, 0), "*");
 Expr wild_u8x = Variable::make(Type(Type::UInt, 8, 0), "*");
@@ -208,6 +214,7 @@ Expr wild_i24x256 = Variable::make(Type(Type::Int, 24, 256), "*");
 Expr wild_i32x = Variable::make(Type(Type::Int, 32, 0), "*");
 Expr wild_i48x = Variable::make(Type(Type::Int, 48, 0), "*");
 Expr wild_i64x = Variable::make(Type(Type::Int, 64, 0), "*");
+Expr wild_f32x = Variable::make(Type(Type::Float, 32, 0), "*");
 
 inline Expr i24(Expr e) {
     Type t = Int(24, e.type().lanes());
@@ -724,6 +731,7 @@ private:
 
                 {"halide_xtensa_widen_mul_add_i64", widening_mul(wild_i32x, wild_i32x) + bc(wild_i64), Pattern::NarrowOp2 | Pattern::AccumulatorOutput64},
                 {"halide_xtensa_widen_mul_add_i64", widening_mul(wild_i32x, wild_i32x) + wild_i64x, Pattern::NarrowOp2 | Pattern::AccumulatorOutput64},
+                {"halide_xtensa_widen_mul_add_i64", i32(wild_i64x) + i32(call("halide_xtensa_mul_i32", wild_i64x, {wild_i32x, wild_i32x})), Pattern::AccumulatorOutput64},
             };
 
             Expr new_expr = apply_commutative_patterns(op, adds, this);
@@ -771,6 +779,8 @@ private:
                 {"halide_xtensa_widen_mul_by_diff_u24", (i24(wild_u8x) - bc(i24(wild_u8))) * i24(wild_u8x)},
 
                 {"halide_xtensa_widen_mul_i48", i48(wild_i16x) * i48(wild_i16x)},
+
+                {"halide_xtensa_mul_i32", wild_i32x * wild_i32x, Pattern::AccumulatorOutput64},
 
                 {"halide_xtensa_widen_zzzzz", i24(concat({wild_i8x64, wild_i8x64, wild_i8x64, wild_i8x64})) * i24(repeat_each_element(wild_i8x4, 64))},
                 {"halide_xtensa_widen_zzzzz", i24(wild_i8x256) * i24(repeat_each_element(wild_i8x4, 64))},
@@ -1067,6 +1077,11 @@ private:
         }
 
         static const std::vector<Pattern> calls = {
+            {"halide_xtensa_abs_i8", abs(wild_i8x)},
+            {"halide_xtensa_abs_i16", abs(wild_i16x)},
+            {"halide_xtensa_abs_i32", abs(wild_i32x)},
+            {"halide_xtensa_abs_f32", abs(wild_f32x)},
+
             {"halide_xtensa_avg_u8", halving_add(wild_u8x, wild_u8x)},
             {"halide_xtensa_avg_i8", halving_add(wild_i8x, wild_i8x)},
 
