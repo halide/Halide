@@ -1433,7 +1433,7 @@ public:
      * factor does not provably divide the extent. */
     Func &split(const VarOrRVar &old, const VarOrRVar &outer, const VarOrRVar &inner, const Expr &factor, TailStrategy tail = TailStrategy::Auto);
 
-    /** Join two dimensions into a single fused dimenion. The fused
+    /** Join two dimensions into a single fused dimension. The fused
      * dimension covers the product of the extents of the inner and
      * outer dimensions given. */
     Func &fuse(const VarOrRVar &inner, const VarOrRVar &outer, const VarOrRVar &fused);
