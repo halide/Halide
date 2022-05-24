@@ -23,7 +23,7 @@ int main(int argc, char **argv) {
     g(x) = f(2 * x);
     g.compute_root().vectorize(x, 16).bound(x, 0, 425);  // 24 * 2 = 48 < 49
 
-    //g.compile_to_assembly("/dev/stdout", std::vector<Argument>(), "g");
+    // g.compile_to_assembly("/dev/stdout", std::vector<Argument>(), "g");
 
     g.realize({425});
 

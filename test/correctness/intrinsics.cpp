@@ -72,7 +72,6 @@ void check_intrinsics_over_range() {
                 {halving_add(a_expr, b_expr), (a + b) >> 1},
                 {rounding_halving_add(a_expr, b_expr), (a + b + 1) >> 1},
                 {halving_sub(a_expr, b_expr), (a - b) >> 1},
-                {rounding_halving_sub(a_expr, b_expr), (a - b + 1) >> 1},
             };
             for (const auto &p : intrinsics_with_reference_answer) {
                 Expr test = lower_intrinsics(p.first);
@@ -221,12 +220,6 @@ int main(int argc, char **argv) {
     check(i8((widening_add(i8x, i8y) + 1) / 2), rounding_halving_add(i8x, i8y));
     check(u8((widening_add(u8x, u8y) + 1) / 2), rounding_halving_add(u8x, u8y));
     check((i32x + i32y + 1) / 2, rounding_halving_add(i32x, i32y));
-
-    check(i8((i16(i8x) - i8y + 1) / 2), rounding_halving_sub(i8x, i8y));
-    check(u8((u16(u8x) - u8y + 1) / 2), rounding_halving_sub(u8x, u8y));
-    check(i8((widening_sub(i8x, i8y) + 1) / 2), rounding_halving_sub(i8x, i8y));
-    check(u8((widening_sub(u8x, u8y) + 1) / 2), rounding_halving_sub(u8x, u8y));
-    check((i32x - i32y + 1) / 2, rounding_halving_sub(i32x, i32y));
 
     // Check absd
     check(abs(i16(i8x) - i16(i8y)), u16(absd(i8x, i8y)));

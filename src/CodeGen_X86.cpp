@@ -53,7 +53,8 @@ public:
     CodeGen_X86(Target);
 
 protected:
-    string mcpu() const override;
+    string mcpu_target() const override;
+    string mcpu_tune() const override;
     string mattrs() const override;
     bool use_soft_float_abi() const override;
     int native_vector_bits() const override;
@@ -162,6 +163,10 @@ const x86Intrinsic intrinsic_defs[] = {
     {"packusdwx8", UInt(16, 8), "saturating_narrow", {Int(32, 8)}, Target::SSE41},
     {"packuswbx32", UInt(8, 32), "saturating_narrow", {Int(16, 32)}, Target::AVX2},
     {"packuswbx16", UInt(8, 16), "saturating_narrow", {Int(16, 16)}},
+
+    // Widening multiplies that use (v)pmaddwd
+    {"wmul_pmaddwd_avx2", Int(32, 8), "widening_mul", {Int(16, 8), Int(16, 8)}, Target::AVX2},
+    {"wmul_pmaddwd_sse2", Int(32, 4), "widening_mul", {Int(16, 4), Int(16, 4)}},
 
     // Multiply keep high half
     {"llvm.x86.avx2.pmulh.w", Int(16, 16), "pmulh", {Int(16, 16), Int(16, 16)}, Target::AVX2},
@@ -663,7 +668,7 @@ void CodeGen_X86::visit(const Load *op) {
         const Ramp *ramp = op->index.as<Ramp>();
         internal_assert(ramp) << "Expected AMXTile to have index ramp\n";
         Value *ptr = codegen_buffer_pointer(op->name, op->type, ramp->base);
-        LoadInst *load = builder->CreateAlignedLoad(ptr->getType()->getPointerElementType(), ptr, llvm::Align(op->type.bytes()));
+        LoadInst *load = builder->CreateAlignedLoad(llvm_type_of(upgrade_type_for_storage(op->type)), ptr, llvm::Align(op->type.bytes()));
         add_tbaa_metadata(load, op->name, op->index);
         value = load;
         return;
@@ -685,8 +690,33 @@ void CodeGen_X86::visit(const Store *op) {
     CodeGen_Posix::visit(op);
 }
 
-string CodeGen_X86::mcpu() const {
-    // First, check if any explicit request for tuning exists.
+string CodeGen_X86::mcpu_target() const {
+    // Perform an ad-hoc guess for the -mcpu given features.
+    // WARNING: this is used to drive -mcpu, *NOT* -mtune!
+    //          The CPU choice here *WILL* affect -mattrs!
+    if (target.has_feature(Target::AVX512_SapphireRapids)) {
+        return "sapphirerapids";
+    } else if (target.has_feature(Target::AVX512_Cannonlake)) {
+        return "cannonlake";
+    } else if (target.has_feature(Target::AVX512_Skylake)) {
+        return "skylake-avx512";
+    } else if (target.has_feature(Target::AVX512_KNL)) {
+        return "knl";
+    } else if (target.has_feature(Target::AVX2)) {
+        return "haswell";
+    } else if (target.has_feature(Target::AVX)) {
+        return "corei7-avx";
+    } else if (target.has_feature(Target::SSE41)) {
+        // We want SSE4.1 but not SSE4.2, hence "penryn" rather than "corei7"
+        return "penryn";
+    } else {
+        // Default should not include SSSE3, hence "k8" rather than "core2"
+        return "k8";
+    }
+}
+
+string CodeGen_X86::mcpu_tune() const {
+    // Check if any explicit request for tuning exists.
     switch (target.processor_tune) {  // Please keep sorted.
     case Target::Processor::AMDFam10:
         return "amdfam10";
@@ -714,31 +744,14 @@ string CodeGen_X86::mcpu() const {
         return "znver3";
 
     case Target::Processor::ProcessorGeneric:
-        break;  // Detect "best" CPU from the enabled ISA's.
+        break;
     }
-
-    // And only after that, perform an ad-hoc guess for the tune given features.
-    if (target.has_feature(Target::AVX512_SapphireRapids)) {
-        return "sapphirerapids";
-    } else if (target.has_feature(Target::AVX512_Cannonlake)) {
-        return "cannonlake";
-    } else if (target.has_feature(Target::AVX512_Skylake)) {
-        return "skylake-avx512";
-    } else if (target.has_feature(Target::AVX512_KNL)) {
-        return "knl";
-    } else if (target.has_feature(Target::AVX2)) {
-        return "haswell";
-    } else if (target.has_feature(Target::AVX)) {
-        return "corei7-avx";
-    } else if (target.has_feature(Target::SSE41)) {
-        // We want SSE4.1 but not SSE4.2, hence "penryn" rather than "corei7"
-        return "penryn";
-    } else {
-        // Default should not include SSSE3, hence "k8" rather than "core2"
-        return "k8";
-    }
+    internal_assert(target.processor_tune == Target::Processor::ProcessorGeneric && "The switch should be exhaustive.");
+    return mcpu_target();  // Detect "best" CPU from the enabled ISA's.
 }
 
+// FIXME: we should lower everything here, instead of relying
+//        that -mcpu= (`mcpu_target()`) implies/sets features for us.
 string CodeGen_X86::mattrs() const {
     string features;
     string separator;

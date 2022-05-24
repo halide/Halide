@@ -40,12 +40,14 @@ void halide_python_error(JITUserContext *, const char *msg) {
 }
 
 void halide_python_print(JITUserContext *, const char *msg) {
+    py::gil_scoped_acquire acquire;
     py::print(msg, py::arg("end") = "");
 }
 
 class HalidePythonCompileTimeErrorReporter : public CompileTimeErrorReporter {
 public:
     void warning(const char *msg) override {
+        py::gil_scoped_acquire acquire;
         py::print(msg, py::arg("end") = "");
     }
 
@@ -63,6 +65,21 @@ void install_error_handlers(py::module &m) {
     handlers.custom_error = halide_python_error;
     handlers.custom_print = halide_python_print;
     Halide::Internal::JITSharedRuntime::set_default_handlers(handlers);
+
+    static py::object halide_error = py::module_::import("halide").attr("HalideError");
+    if (halide_error.is(py::none())) {
+        throw std::runtime_error("Could not find halide.HalideError");
+    }
+
+    py::register_exception_translator([](std::exception_ptr p) {  // NOLINT
+        try {
+            if (p) {
+                std::rethrow_exception(p);
+            }
+        } catch (const Error &e) {
+            PyErr_SetString(halide_error.ptr(), e.what());
+        }
+    });
 }
 
 // Anything that defines __getitem__ looks sequencelike to pybind,
@@ -71,33 +88,72 @@ bool is_real_sequence(const py::object &o) {
     return py::isinstance<py::sequence>(o) && py::hasattr(o, "__len__");
 }
 
-StubInput to_stub_input(const py::object &o) {
+template<typename T>
+struct cast_error_string {
+    std::string operator()(const py::handle &h, const std::string &name) {
+        return "Unable to cast Input " + name + " to " + py::type_id<T>() + " from " + (std::string)py::str(py::type::handle_of(h));
+    }
+};
+
+template<>
+std::string cast_error_string<Buffer<>>::operator()(const py::handle &h, const std::string &name) {
+    std::ostringstream o;
+    o << "Input " << name << " requires an ImageParam or Buffer argument when using generate(), but saw " << (std::string)py::str(py::type::handle_of(h));
+    return o.str();
+}
+
+template<>
+std::string cast_error_string<Func>::operator()(const py::handle &h, const std::string &name) {
+    std::ostringstream o;
+    o << "Input " << name << " requires a Func argument when using generate(), but saw " << (std::string)py::str(py::type::handle_of(h));
+    return o.str();
+}
+
+template<>
+std::string cast_error_string<Expr>::operator()(const py::handle &h, const std::string &name) {
+    std::ostringstream o;
+    o << "Input " << name << " requires a Param (or scalar literal) argument when using generate(), but saw " << (std::string)py::str(py::type::handle_of(h));
+    return o.str();
+}
+
+template<typename T>
+T cast_to(const py::handle &h, const std::string &name) {
+    // We want to ensure that the error thrown is one that will be translated
+    // to `hl.Error` in Python.
+    try {
+        return h.cast<T>();
+    } catch (const std::exception &e) {
+        throw Halide::Error(cast_error_string<T>()(h, name));
+    }
+}
+
+StubInput to_stub_input(const py::object &o, const std::string &name) {
     // Don't use isinstance: we want to get things that
     // can be implicitly converted as well (eg ImageParam -> Func)
     try {
-        return StubInput(StubInputBuffer(o.cast<Buffer<>>()));
+        return StubInput(StubInputBuffer(cast_to<Buffer<>>(o, name)));
     } catch (...) {
         // Not convertible to Buffer. Fall thru and try next.
     }
 
     try {
-        return StubInput(o.cast<Func>());
+        return StubInput(cast_to<Func>(o, name));
     } catch (...) {
         // Not convertible to Func. Fall thru and try next.
     }
 
-    return StubInput(o.cast<Expr>());
+    return StubInput(cast_to<Expr>(o, name));
 }
 
-std::vector<StubInput> to_stub_inputs(const py::object &value) {
+std::vector<StubInput> to_stub_inputs(const py::object &value, const std::string &name) {
     if (is_real_sequence(value)) {
         std::vector<StubInput> v;
         for (const auto &o : py::reinterpret_borrow<py::sequence>(value)) {
-            v.push_back(to_stub_input(o));
+            v.push_back(to_stub_input(o, name));
         }
         return v;
     } else {
-        return {to_stub_input(value)};
+        return {to_stub_input(value, name)};
     }
 }
 
@@ -114,7 +170,8 @@ py::object generate_impl(const GeneratorFactory &factory, const GeneratorContext
     // arg, they all must be specified that way; otherwise they must all be
     // positional, in the order declared in the Generator.)
     //
-    // GeneratorParams can only be specified by name, and are always optional.
+    // GeneratorParams are always specified as an optional named parameter
+    // called "generator_params", which is expected to be a python dict.
 
     std::map<std::string, std::vector<StubInput>> kw_inputs;
     for (const auto &name : names.inputs) {
@@ -127,24 +184,38 @@ py::object generate_impl(const GeneratorFactory &factory, const GeneratorContext
 
     // Process the kwargs first.
     for (auto kw : kwargs) {
-        // If the kwarg is the name of a known input, stick it in the input
-        // vector. If not, stick it in the GeneratorParamsMap (if it's invalid,
-        // an error will be reported further downstream).
-        std::string name = kw.first.cast<std::string>();
-        py::handle value = kw.second;
-        auto it = kw_inputs.find(name);
-        if (it != kw_inputs.end()) {
-            _halide_user_assert(it->second.empty())
-                << "Generator Input named '" << it->first << "' was specified more than once.";
-            it->second = to_stub_inputs(py::cast<py::object>(value));
-            kw_inputs_specified++;
-        } else {
-            if (py::isinstance<LoopLevel>(value)) {
-                generator_params[name] = value.cast<LoopLevel>();
-            } else {
-                generator_params[name] = py::str(value).cast<std::string>();
+        const std::string name = kw.first.cast<std::string>();
+        const py::handle value = kw.second;
+
+        if (name == "generator_params") {
+            py::dict gp = py::cast<py::dict>(value);
+            for (auto item : gp) {
+                const std::string gp_name = py::str(item.first).cast<std::string>();
+                const py::handle gp_value = item.second;
+                if (py::isinstance<LoopLevel>(gp_value)) {
+                    generator_params[gp_name] = gp_value.cast<LoopLevel>();
+                } else if (py::isinstance<py::list>(gp_value)) {
+                    // Convert [hl.UInt(8), hl.Int(16)] -> uint8,int16
+                    std::string v;
+                    for (auto t : gp_value) {
+                        if (!v.empty()) {
+                            v += ",";
+                        }
+                        v += py::str(t).cast<std::string>();
+                    }
+                    generator_params[gp_name] = v;
+                } else {
+                    generator_params[gp_name] = py::str(gp_value).cast<std::string>();
+                }
             }
+            continue;
         }
+
+        auto it = kw_inputs.find(name);
+        _halide_user_assert(it != kw_inputs.end()) << "Unknown input '" << name << "' specified via keyword argument.";
+        _halide_user_assert(it->second.empty()) << "Generator Input named '" << it->first << "' was specified more than once.";
+        it->second = to_stub_inputs(py::cast<py::object>(value), name);
+        kw_inputs_specified++;
     }
 
     std::vector<std::vector<StubInput>> inputs;
@@ -163,8 +234,8 @@ py::object generate_impl(const GeneratorFactory &factory, const GeneratorContext
             << "Cannot use both positional and keyword arguments for inputs.";
         _halide_user_assert(args.size() == names.inputs.size())
             << "Expected exactly " << names.inputs.size() << " positional args for inputs, but saw " << args.size() << ".";
-        for (auto arg : args) {
-            inputs.push_back(to_stub_inputs(py::cast<py::object>(arg)));
+        for (size_t i = 0; i < args.size(); i++) {
+            inputs.push_back(to_stub_inputs(py::cast<py::object>(args[i]), names.inputs[i]));
         }
     }
 

@@ -746,14 +746,14 @@ class PartitionLoops : public IRMutator {
 
         if (make_epilogue) {
             // Uncomment to include code that prints the epilogue value
-            //epilogue_val = print(epilogue_val, op->name, "epilogue");
+            // epilogue_val = print(epilogue_val, op->name, "epilogue");
             stmt = LetStmt::make(epilogue_name, epilogue_val, stmt);
         } else {
             epilogue_val = op->min + op->extent;
         }
         if (make_prologue) {
             // Uncomment to include code that prints the prologue value
-            //prologue_val = print(prologue_val, op->name, "prologue");
+            // prologue_val = print(prologue_val, op->name, "prologue");
             stmt = LetStmt::make(prologue_name, prologue_val, stmt);
         } else {
             prologue_val = op->min;

@@ -62,7 +62,7 @@ bool test(int vec_width, const Target &target) {
     } else {
         if (target.has_feature(Target::HVX)) {
             // TODO: Non-native vector widths hang the compiler here.
-            //f.hexagon();
+            // f.hexagon();
         }
         if (vec_width > 1) {
             f.vectorize(x, vec_width);

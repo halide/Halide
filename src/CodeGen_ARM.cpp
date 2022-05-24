@@ -72,7 +72,8 @@ protected:
     };
     vector<Pattern> casts, calls, averagings, negations;
 
-    string mcpu() const override;
+    string mcpu_target() const override;
+    string mcpu_tune() const override;
     string mattrs() const override;
     bool use_soft_float_abi() const override;
     int native_vector_bits() const override;
@@ -296,14 +297,6 @@ const ArmIntrinsic intrinsic_defs[] = {
     {"vrhaddu", "urhadd", UInt(16, 4), "rounding_halving_add", {UInt(16, 4), UInt(16, 4)}, ArmIntrinsic::HalfWidth},
     {"vrhadds", "srhadd", Int(32, 2), "rounding_halving_add", {Int(32, 2), Int(32, 2)}, ArmIntrinsic::HalfWidth},
     {"vrhaddu", "urhadd", UInt(32, 2), "rounding_halving_add", {UInt(32, 2), UInt(32, 2)}, ArmIntrinsic::HalfWidth},
-
-    // SRHSUB, URHSUB - Halving sub with rounding
-    {"vrhsubs", "srhsub", Int(8, 8), "rounding_halving_sub", {Int(8, 8), Int(8, 8)}, ArmIntrinsic::HalfWidth},
-    {"vrhsubu", "urhsub", UInt(8, 8), "rounding_halving_sub", {UInt(8, 8), UInt(8, 8)}, ArmIntrinsic::HalfWidth},
-    {"vrhsubs", "srhsub", Int(16, 4), "rounding_halving_sub", {Int(16, 4), Int(16, 4)}, ArmIntrinsic::HalfWidth},
-    {"vrhsubu", "urhsub", UInt(16, 4), "rounding_halving_sub", {UInt(16, 4), UInt(16, 4)}, ArmIntrinsic::HalfWidth},
-    {"vrhsubs", "srhsub", Int(32, 2), "rounding_halving_sub", {Int(32, 2), Int(32, 2)}, ArmIntrinsic::HalfWidth},
-    {"vrhsubu", "urhsub", UInt(32, 2), "rounding_halving_sub", {UInt(32, 2), UInt(32, 2)}, ArmIntrinsic::HalfWidth},
 
     // SMIN, UMIN, FMIN - Min
     {"vmins", "smin", Int(8, 8), "min", {Int(8, 8), Int(8, 8)}, ArmIntrinsic::HalfWidth},
@@ -999,15 +992,21 @@ void CodeGen_ARM::visit(const Store *op) {
         // Declare the function
         std::ostringstream instr;
         vector<llvm::Type *> arg_types;
+        llvm::Type *intrin_llvm_type = llvm_type_of(intrin_type);
+#if LLVM_VERSION >= 150
+        const bool is_opaque = llvm::PointerType::get(intrin_llvm_type, 0)->isOpaque();
+#else
+        const bool is_opaque = false;
+#endif
         if (target.bits == 32) {
             instr << "llvm.arm.neon.vst"
                   << num_vecs
-                  << ".p0i8"
+                  << (is_opaque ? ".p0" : ".p0i8")
                   << ".v"
                   << intrin_type.lanes()
                   << (t.is_float() ? 'f' : 'i')
                   << t.bits();
-            arg_types = vector<llvm::Type *>(num_vecs + 2, llvm_type_of(intrin_type));
+            arg_types = vector<llvm::Type *>(num_vecs + 2, intrin_llvm_type);
             arg_types.front() = i8_t->getPointerTo();
             arg_types.back() = i32_t;
         } else {
@@ -1017,10 +1016,11 @@ void CodeGen_ARM::visit(const Store *op) {
                   << intrin_type.lanes()
                   << (t.is_float() ? 'f' : 'i')
                   << t.bits()
-                  << ".p0"
-                  << (t.is_float() ? 'f' : 'i')
-                  << t.bits();
-            arg_types = vector<llvm::Type *>(num_vecs + 1, llvm_type_of(intrin_type));
+                  << ".p0";
+            if (!is_opaque) {
+                instr << (t.is_float() ? 'f' : 'i') << t.bits();
+            }
+            arg_types = vector<llvm::Type *>(num_vecs + 1, intrin_llvm_type);
             arg_types.back() = llvm_type_of(intrin_type.element_of())->getPointerTo();
         }
         llvm::FunctionType *fn_type = FunctionType::get(llvm::Type::getVoidTy(*context), arg_types, false);
@@ -1393,7 +1393,7 @@ Type CodeGen_ARM::upgrade_type_for_storage(const Type &t) const {
     return CodeGen_Posix::upgrade_type_for_storage(t);
 }
 
-string CodeGen_ARM::mcpu() const {
+string CodeGen_ARM::mcpu_target() const {
     if (target.bits == 32) {
         if (target.has_feature(Target::ARMv7s)) {
             return "swift";
@@ -1409,6 +1409,10 @@ string CodeGen_ARM::mcpu() const {
             return "generic";
         }
     }
+}
+
+string CodeGen_ARM::mcpu_tune() const {
+    return mcpu_target();
 }
 
 string CodeGen_ARM::mattrs() const {
