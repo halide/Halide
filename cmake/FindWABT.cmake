@@ -1,7 +1,7 @@
 # TODO: if wabt ever corrects their CMake build, replace the FetchContent business
 #  with a proper find module or use their config mode.
 
-function(_WABT_chainload)
+function(_FindWABT)
     if (${CMAKE_FIND_PACKAGE_NAME}_FIND_VERSION)
         set(WABT_VERSION ${${CMAKE_FIND_PACKAGE_NAME}_FIND_VERSION})
     else ()
@@ -35,17 +35,17 @@ function(_WABT_chainload)
     set(WABT_VERSION "${WABT_VERSION}" PARENT_SCOPE)
 endfunction()
 
-_WABT_chainload()
+_FindWABT()
 
 include(FindPackageHandleStandardArgs)
 find_package_handle_standard_args(WABT CONFIG_MODE)
 
 # Delete the function to prevent it from being improperly called outside this
 # module. After the first redefinition, the original function is still present
-# as __WABT_chainload. The second redefinition overwrites __WABT_chainload so
-# that calling either one is a no-op.
-function(_WABT_chainload)
+# as __FindWABT. The second redefinition overwrites __FindWABT so that calling
+# either one is a no-op.
+function(_FindWABT)
 endfunction()
 
-function(_WABT_chainload)
+function(_FindWABT)
 endfunction()

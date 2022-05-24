@@ -76,7 +76,7 @@ include(FindPackageHandleStandardArgs)
 # added to the caller's scope. In particular, we should not clobber
 # the various CMAKE_MAP_IMPORTED_CONFIG_* variables and we shouldn't
 # expose anything from the LLVM packages that we don't intend, either.
-function(_HalideLLVM_impl)
+function(_FindHalideLLVM)
     ##
     # Set up component lists and result variables
     ##
@@ -316,14 +316,14 @@ function(_HalideLLVM_impl)
     set(LLVM_ENABLE_RTTI "${LLVM_ENABLE_RTTI}" PARENT_SCOPE)
 endfunction()
 
-_HalideLLVM_impl()
+_FindHalideLLVM()
 
 # Delete the function to prevent it from being improperly called outside this
 # module. After the first redefinition, the original function is still present
 # as __HalideLLVM_impl. The second redefinition overwrites __HalideLLVM_impl
 # so that calling either one is a no-op.
-function(_HalideLLVM_impl)
+function(_FindHalideLLVM)
 endfunction()
 
-function(_HalideLLVM_impl)
+function(_FindHalideLLVM)
 endfunction()
