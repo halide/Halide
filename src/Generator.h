@@ -283,10 +283,14 @@
 #endif
 
 namespace Halide {
+
+class GeneratorContext;
+
 namespace Internal {
 
 void generator_test();
 
+class GeneratorBase;
 class ValueTracker;
 
 std::vector<Expr> parameter_constraints(const Parameter &p);
@@ -322,10 +326,40 @@ std::string halide_type_to_c_source(const Type &t);
 // e.g., Int(32) -> "int32_t"
 std::string halide_type_to_c_type(const Type &t);
 
+/** GeneratorFactoryProvider provides a way to customize the Generators
+ * that are visible to generate_filter_main (which otherwise would just
+ * look at the global registry of C++ Generators). */
+class GeneratorFactoryProvider {
+public:
+    GeneratorFactoryProvider() = default;
+    virtual ~GeneratorFactoryProvider() = default;
+
+    /** Return a list of all registered Generators that are available for use
+     * with the create() method. */
+    virtual std::vector<std::string> enumerate() const = 0;
+
+    /** Create an instance of the Generator that is registered under the given
+     * name. If the name isn't one returned by enumerate(), return nullptr
+     * rather than assert-fail; caller must check for a valid result. */
+    virtual std::unique_ptr<GeneratorBase> create(const std::string &name,
+                                                  const Halide::GeneratorContext &context) const = 0;
+
+    GeneratorFactoryProvider(const GeneratorFactoryProvider &) = delete;
+    GeneratorFactoryProvider &operator=(const GeneratorFactoryProvider &) = delete;
+    GeneratorFactoryProvider(GeneratorFactoryProvider &&) = delete;
+    GeneratorFactoryProvider &operator=(GeneratorFactoryProvider &&) = delete;
+};
+
 /** generate_filter_main() is a convenient wrapper for GeneratorRegistry::create() +
  * compile_to_files(); it can be trivially wrapped by a "real" main() to produce a
  * command-line utility for ahead-of-time filter compilation. */
-int generate_filter_main(int argc, char **argv, std::ostream &cerr);
+int generate_filter_main(int argc, char **argv);
+
+/** This overload of generate_filter_main lets you provide your own provider for how to enumerate and/or create
+ * the generators based on registration name; this is useful if you want to re-use the
+ * 'main' logic but avoid the global Generator registry (e.g. for bindings in languages
+ * other than C++). */
+int generate_filter_main(int argc, char **argv, const GeneratorFactoryProvider &generator_factory_provider);
 
 // select_type<> is to std::conditional as switch is to if:
 // it allows a multiway compile-time type definition via the form
@@ -353,7 +387,6 @@ struct select_type : std::conditional<First::value, typename First::type, typena
 template<typename First>
 struct select_type<First> { using type = typename std::conditional<First::value, typename First::type, void>::type; };
 
-class GeneratorBase;
 class GeneratorParamInfo;
 
 class GeneratorParamBase {
@@ -1394,6 +1427,15 @@ private:
  */
 class GIOBase {
 public:
+    virtual ~GIOBase() = default;
+
+    // These should only be called from configure() methods.
+    // TODO: find a way to enforce this. Better yet, find a way to remove these.
+    void set_type(const Type &type);
+    void set_dimensions(int dims);
+    void set_array_size(int size);
+
+protected:
     bool array_size_defined() const;
     size_t array_size() const;
     virtual bool is_array() const;
@@ -1401,9 +1443,9 @@ public:
     const std::string &name() const;
     IOKind kind() const;
 
-    bool types_defined() const;
-    const std::vector<Type> &types() const;
-    Type type() const;
+    bool gio_types_defined() const;
+    const std::vector<Type> &gio_types() const;
+    Type gio_type() const;
 
     bool dims_defined() const;
     int dims() const;
@@ -1411,13 +1453,6 @@ public:
     const std::vector<Func> &funcs() const;
     const std::vector<Expr> &exprs() const;
 
-    virtual ~GIOBase() = default;
-
-    void set_type(const Type &type);
-    void set_dimensions(int dims);
-    void set_array_size(int size);
-
-protected:
     GIOBase(size_t array_size,
             const std::string &name,
             IOKind kind,
@@ -1466,6 +1501,7 @@ protected:
 private:
     template<typename T>
     friend class GeneratorParam_Synthetic;
+    friend class GeneratorStub;
 
 public:
     GIOBase(const GIOBase &) = delete;
@@ -1767,6 +1803,7 @@ public:
     HALIDE_FORWARD_METHOD_CONST(ImageParam, channels)
     HALIDE_FORWARD_METHOD_CONST(ImageParam, trace_loads)
     HALIDE_FORWARD_METHOD_CONST(ImageParam, add_trace_tag)
+    HALIDE_FORWARD_METHOD_CONST(ImageParam, type)
     // }@
 };
 
@@ -1879,11 +1916,23 @@ public:
     // @{
     HALIDE_FORWARD_METHOD_CONST(Func, args)
     HALIDE_FORWARD_METHOD_CONST(Func, defined)
+    HALIDE_FORWARD_METHOD_CONST(Func, dimensions)
     HALIDE_FORWARD_METHOD_CONST(Func, has_update_definition)
     HALIDE_FORWARD_METHOD_CONST(Func, num_update_definitions)
-    HALIDE_FORWARD_METHOD_CONST(Func, output_types)
+    HALIDE_ATTRIBUTE_DEPRECATED("Func::output_type() is deprecated; use Func::type() instead.")
+    const Type &output_type() const {
+        this->check_gio_access();
+        return this->as<Func>().type();
+    }
+    HALIDE_ATTRIBUTE_DEPRECATED("Func::output_types() is deprecated; use Func::types() instead.")
+    const std::vector<Type> &output_types() const {
+        this->check_gio_access();
+        return this->as<Func>().types();
+    }
     HALIDE_FORWARD_METHOD_CONST(Func, outputs)
     HALIDE_FORWARD_METHOD_CONST(Func, rvars)
+    HALIDE_FORWARD_METHOD_CONST(Func, type)
+    HALIDE_FORWARD_METHOD_CONST(Func, types)
     HALIDE_FORWARD_METHOD_CONST(Func, update_args)
     HALIDE_FORWARD_METHOD_CONST(Func, update_value)
     HALIDE_FORWARD_METHOD_CONST(Func, update_values)
@@ -1929,6 +1978,10 @@ public:
         for (Parameter &p : this->parameters_) {
             p.set_estimate(value);
         }
+    }
+
+    Type type() const {
+        return Expr(*this).type();
     }
 };
 
@@ -2031,6 +2084,10 @@ public:
             e = cast<bool>(e);
         }
         this->parameters_.at(index).set_estimate(e);
+    }
+
+    Type type() const {
+        return Expr(*this).type();
     }
 };
 
@@ -2201,6 +2258,7 @@ protected:
         static_assert(std::is_same<T2, Func>::value, "Only Func allowed here");
         internal_assert(kind() != IOKind::Scalar);
         internal_assert(exprs_.empty());
+        user_assert(!funcs_.empty()) << "No funcs_ are defined yet";
         user_assert(funcs_.size() == 1) << "Use [] to access individual Funcs in Output<Func[]>";
         return funcs_[0];
     }
@@ -2223,6 +2281,7 @@ public:
     HALIDE_FORWARD_METHOD(Func, copy_to_host)
     HALIDE_FORWARD_METHOD(Func, define_extern)
     HALIDE_FORWARD_METHOD_CONST(Func, defined)
+    HALIDE_FORWARD_METHOD_CONST(Func, dimensions)
     HALIDE_FORWARD_METHOD(Func, fold_storage)
     HALIDE_FORWARD_METHOD(Func, fuse)
     HALIDE_FORWARD_METHOD(Func, gpu)
@@ -2235,7 +2294,16 @@ public:
     HALIDE_FORWARD_METHOD(Func, in)
     HALIDE_FORWARD_METHOD(Func, memoize)
     HALIDE_FORWARD_METHOD_CONST(Func, num_update_definitions)
-    HALIDE_FORWARD_METHOD_CONST(Func, output_types)
+    HALIDE_ATTRIBUTE_DEPRECATED("Func::output_type() is deprecated; use Func::type() instead.")
+    const Type &output_type() const {
+        this->check_gio_access();
+        return this->as<Func>().type();
+    }
+    HALIDE_ATTRIBUTE_DEPRECATED("Func::output_types() is deprecated; use Func::types() instead.")
+    const std::vector<Type> &output_types() const {
+        this->check_gio_access();
+        return this->as<Func>().types();
+    }
     HALIDE_FORWARD_METHOD_CONST(Func, outputs)
     HALIDE_FORWARD_METHOD(Func, parallel)
     HALIDE_FORWARD_METHOD(Func, prefetch)
@@ -2253,6 +2321,8 @@ public:
     HALIDE_FORWARD_METHOD(Func, store_root)
     HALIDE_FORWARD_METHOD(Func, tile)
     HALIDE_FORWARD_METHOD(Func, trace_stores)
+    HALIDE_FORWARD_METHOD_CONST(Func, type)
+    HALIDE_FORWARD_METHOD_CONST(Func, types)
     HALIDE_FORWARD_METHOD(Func, unroll)
     HALIDE_FORWARD_METHOD(Func, update)
     HALIDE_FORWARD_METHOD_CONST(Func, update_args)
@@ -2261,6 +2331,7 @@ public:
     HALIDE_FORWARD_METHOD_CONST(Func, value)
     HALIDE_FORWARD_METHOD_CONST(Func, values)
     HALIDE_FORWARD_METHOD(Func, vectorize)
+
     // }@
 
 #undef HALIDE_OUTPUT_FORWARD
@@ -2403,24 +2474,24 @@ private:
 
         internal_assert(f.defined());
 
-        if (this->types_defined()) {
-            const auto &my_types = this->types();
-            user_assert(my_types.size() == f.output_types().size())
+        if (this->gio_types_defined()) {
+            const auto &my_types = this->gio_types();
+            user_assert(my_types.size() == f.types().size())
                 << "Cannot assign Func \"" << f.name()
                 << "\" to Output \"" << this->name() << "\"\n"
                 << "Output " << this->name()
                 << " is declared to have " << my_types.size() << " tuple elements"
                 << " but Func " << f.name()
-                << " has " << f.output_types().size() << " tuple elements.\n";
+                << " has " << f.types().size() << " tuple elements.\n";
             for (size_t i = 0; i < my_types.size(); i++) {
-                user_assert(my_types[i] == f.output_types().at(i))
+                user_assert(my_types[i] == f.types().at(i))
                     << "Cannot assign Func \"" << f.name()
                     << "\" to Output \"" << this->name() << "\"\n"
                     << (my_types.size() > 1 ? "In tuple element " + std::to_string(i) + ", " : "")
                     << "Output " << this->name()
                     << " has declared type " << my_types[i]
                     << " but Func " << f.name()
-                    << " has type " << f.output_types().at(i) << "\n";
+                    << " has type " << f.types().at(i) << "\n";
             }
         }
         if (this->dims_defined()) {
@@ -2528,9 +2599,9 @@ public:
             << "Cannot assign to the Output \"" << this->name()
             << "\": the expression is not convertible to the same Buffer type and/or dimensions.\n";
 
-        if (this->types_defined()) {
-            user_assert(Type(buffer.type()) == this->type())
-                << "Output " << this->name() << " should have type=" << this->type() << " but saw type=" << Type(buffer.type()) << "\n";
+        if (this->gio_types_defined()) {
+            user_assert(Type(buffer.type()) == this->gio_type())
+                << "Output " << this->name() << " should have type=" << this->gio_type() << " but saw type=" << Type(buffer.type()) << "\n";
         }
         if (this->dims_defined()) {
             user_assert(buffer.dimensions() == this->dims())
@@ -2947,15 +3018,33 @@ public:
     GeneratorContext(GeneratorContext &&) = default;
     GeneratorContext &operator=(GeneratorContext &&) = default;
 
+    const Target &target() const {
+        return target_;
+    }
+    bool auto_schedule() const {
+        return auto_schedule_;
+    }
+    const MachineParams &machine_params() const {
+        return machine_params_;
+    }
+
+    HALIDE_ATTRIBUTE_DEPRECATED("Call GeneratorContext::target() instead of GeneratorContext::get_target().")
     const Target &get_target() const {
         return target_;
     }
+    HALIDE_ATTRIBUTE_DEPRECATED("Call GeneratorContext::auto_schedule() instead of GeneratorContext::get_auto_schedule().")
     bool get_auto_schedule() const {
         return auto_schedule_;
     }
+    HALIDE_ATTRIBUTE_DEPRECATED("Call GeneratorContext::machine_params() instead of GeneratorContext::get_machine_params().")
     const MachineParams &get_machine_params() const {
         return machine_params_;
     }
+
+    // Return a copy of this GeneratorContext that uses the given Target.
+    // This method is rarely needed; it's really provided as a convenience
+    // for use with init_from_context().
+    GeneratorContext with_target(const Target &t) const;
 
     template<typename T>
     inline std::unique_ptr<T> create() const {
@@ -3337,7 +3426,62 @@ protected:
     GeneratorBase(size_t size, const void *introspection_helper);
     void set_generator_names(const std::string &registered_name, const std::string &stub_name);
 
-    void init_from_context(const Halide::GeneratorContext &context);
+    // Note that it is explicitly legal to override init_from_context(), so that you can (say)
+    // create a modified context with a different Target (eg with features enabled or disabled), but...
+    //
+    // *** WARNING ***
+    //
+    // Modifying the context here can be fraught with subtle hazards, especially when used
+    // in conjunction with compiling to multitarget output. Adding or removing Feature
+    // flags could break your build (if you are lucky), or cause subtle runtime failures (if unlucky)...
+    //
+    // e.g. in the latter case, say you decided to enable AVX512_SapphireRapids as an experiment,
+    // and override init_from_context() to do just that. You'd end up being crashy on pre-AVX512
+    // hardware, because the code that Halide injects to do runtime CPU feature detection at runtime
+    // doesn't know it needs to do the runtime detection for this flag.
+    //
+    // Even if you are using multitarget output, using this as a 'hook' to enable or disable Features
+    // can produce hard-to-maintain code in the long term: Halide has dozens of feature flags now,
+    // many of which are orthogonal to each other and/or specific to a certain architecture
+    // (or sub-architecture). The interaction between 'orthogonal' flags like this is essentially
+    // Undefined Behavior (e.g. if I enable the SSE41 Feature on a Target where arch = RISCV, what happens?
+    // Is it ignored? Does it fail to compile? Something else?). The point here is that adding Features
+    // here may end up eventually getting added to a Target you didn't anticipate and have adverse consequences.
+    //
+    // With all that in mind, here are some guidelines we think will make long-term code maintenance
+    // less painful for you:
+    //
+    // - Override this method *only* for temporary debugging purposes; e.g. if you
+    // need to add the `profile` feature to a specific Generator, but your build system doesn't easily
+    // let you specify per-Generator target features, this is the right tool for the job.
+    //
+    // - If your build system makes it infeasible to customize the build Target in a reasonable way,
+    // it may be appropriate to permanently override this method to enable specific Features for
+    // specific Generators (e.g., enabling `strict_float` is a likely example). In that case,
+    // we would suggest:
+    //
+    //      - *NEVER* change the arch/bits/os of the Target.
+    //      - Only add Features; don't remove Features.
+    //      - For Features that are architecture-specific, always check the arch/bits/os
+    //        of the Target to be sure it's what you expect... e.g. if you are enabling
+    //        AVX512, only do so if compiling for an x86-64 Target. Even if your code
+    //        doesn't target any other architecture at the present time, Future You will be
+    //        happier.
+    //      - If you mutate a target conditionally based on the incoming target, try to do so
+    //        so based only on the Target's arch/bits/os, and not at the Features set on the target.
+    //        If examining Features is unavoidable (e.g. enable $FOO only if $BAR is enabled),
+    //        do so as conservatively as possible, and always validate that the rest of the Target
+    //        is sensible for what you are doing.
+    //
+    // Furthermore, if you override this, please don't try to directly set the `target` (etc) GeneratorParams
+    // directly; instead, construct the new GeneratorContext you want and call the superclass
+    // implementation of init_from_context.
+    //
+    // TL;DR: overrides to this method should probably never be checked in to your source control system
+    // (rather, the override should be temporary and local, for experimentation). If you must check in
+    // overrides to this method, be paranoid that the Target you get could be something you don't expect.
+    //
+    virtual void init_from_context(const Halide::GeneratorContext &context);
 
     virtual Pipeline build_pipeline() = 0;
     virtual void call_configure() = 0;
@@ -3616,8 +3760,8 @@ public:
     static void register_factory(const std::string &name, GeneratorFactory generator_factory);
     static void unregister_factory(const std::string &name);
     static std::vector<std::string> enumerate();
-    // Note that this method will never return null:
-    // if it cannot return a valid Generator, it should assert-fail.
+    // This method returns nullptr if it cannot return a valid Generator;
+    // the caller is responsible for checking the result.
     static std::unique_ptr<GeneratorBase> create(const std::string &name,
                                                  const Halide::GeneratorContext &context);
 
@@ -3841,6 +3985,99 @@ public:
 
     std::shared_ptr<GeneratorBase> generator;
 };
+
+// -----------------------------
+
+/** ExecuteGeneratorArgs is the set of arguments to execute_generator().
+ */
+struct ExecuteGeneratorArgs {
+    // Output directory for all files generated. Must not be empty.
+    std::string output_dir;
+
+    // Type(s) of outputs to produce. Must not be empty.
+    std::set<OutputFileType> output_types;
+
+    // Target(s) to use when generating. Must not be empty.
+    // If list contains multiple entries, a multitarget output will be produced.
+    std::vector<Target> targets;
+
+    // When generating multitarget output, use these as the suffixes for each Target
+    // specified by the targets field. If empty, the canonical string form of
+    // each Target will be used. If nonempty, it must be the same length as the
+    // targets vector.
+    std::vector<std::string> suffixes;
+
+    // Name of the generator to execute (or empty if none, e.g. if generating a runtime)
+    // Must be one recognized by the specified GeneratorFactoryProvider.
+    std::string generator_name;
+
+    // Name to use for the generated function. May include C++ namespaces,
+    // e.g. "HalideTest::AnotherNamespace::cxx_mangling". If empty, use `generator_name`.
+    std::string function_name;
+
+    // Base filename for all outputs (differentated by file extension).
+    // If empty, use `function_name` (ignoring any C++ namespaces).
+    std::string file_base_name;
+
+    // The name of a standalone runtime to generate. Only honors EMIT_OPTIONS 'o'
+    // and 'static_library'. When multiple targets are specified, it picks a
+    // runtime that is compatible with all of the targets, or fails if it cannot
+    // find one. Flags across all of the targets that do not affect runtime code
+    // generation, such as `no_asserts` and `no_runtime`, are ignored.
+    std::string runtime_name;
+
+    // The mode in which to build the Generator.
+    enum BuildMode {
+        // Build it as written.
+        Default,
+
+        // Build a version suitable for using for gradient descent calculation.
+        Gradient
+    } build_mode = Default;
+
+    // The fn that will produce Generator(s) from the name specified.
+    // (Note that `generator_name` is the only value that will ever be passed
+    // for name here; it is provided for ease of interoperation with existing code.)
+    //
+    // If null, the default global registry of Generators will be used.
+    using CreateGeneratorFn = std::function<std::unique_ptr<GeneratorBase>(const std::string &name, const GeneratorContext &context)>;
+    CreateGeneratorFn create_generator = nullptr;
+
+    // Values to substitute for GeneratorParams in the selected Generator.
+    // Should not contain `target`.
+    //
+    // If any of the generator param names specified in this map are unknown
+    // to the Generator created, an error will occur.
+    GeneratorParamsMap generator_params;
+
+    // The name of the autoscheduler to use.
+    // If empty, the default autoscheduler will be used.
+    std::string autoscheduler_name;
+
+    // A list of shared libraries that will be loaded before the
+    // generator is executed (typically, custom auto-schedulers).
+    //
+    // Note that in these cases, C++ generators must either be linked against
+    // a shared libHalide or compiled with -rdynamic so that references in the
+    // shared library to libHalide can resolve.
+    //
+    // Note that loading plugin(s) doesn't change the default autoscheduler
+    // (it just makes them available); set the `autoscheduler_name` field
+    // to change that.
+    std::vector<std::string> plugin_paths;
+
+    // Compiler Logger to use, for diagnostic work. If null, don't do any logging.
+    CompilerLoggerFactory compiler_logger_factory = nullptr;
+};
+
+/**
+ * Execute a Generator for AOT compilation -- this provides the implementation of
+ * the command-line Generator interface `generate_filter_main()`, but with a structured
+ * API that is more suitable for calling directly from code (vs command line).
+ */
+void execute_generator(const ExecuteGeneratorArgs &args);
+
+// -----------------------------
 
 }  // namespace Internal
 

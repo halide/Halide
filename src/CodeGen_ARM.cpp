@@ -72,7 +72,8 @@ protected:
     };
     vector<Pattern> casts, calls, averagings, negations;
 
-    string mcpu() const override;
+    string mcpu_target() const override;
+    string mcpu_tune() const override;
     string mattrs() const override;
     bool use_soft_float_abi() const override;
     int native_vector_bits() const override;
@@ -296,14 +297,6 @@ const ArmIntrinsic intrinsic_defs[] = {
     {"vrhaddu", "urhadd", UInt(16, 4), "rounding_halving_add", {UInt(16, 4), UInt(16, 4)}, ArmIntrinsic::HalfWidth},
     {"vrhadds", "srhadd", Int(32, 2), "rounding_halving_add", {Int(32, 2), Int(32, 2)}, ArmIntrinsic::HalfWidth},
     {"vrhaddu", "urhadd", UInt(32, 2), "rounding_halving_add", {UInt(32, 2), UInt(32, 2)}, ArmIntrinsic::HalfWidth},
-
-    // SRHSUB, URHSUB - Halving sub with rounding
-    {"vrhsubs", "srhsub", Int(8, 8), "rounding_halving_sub", {Int(8, 8), Int(8, 8)}, ArmIntrinsic::HalfWidth},
-    {"vrhsubu", "urhsub", UInt(8, 8), "rounding_halving_sub", {UInt(8, 8), UInt(8, 8)}, ArmIntrinsic::HalfWidth},
-    {"vrhsubs", "srhsub", Int(16, 4), "rounding_halving_sub", {Int(16, 4), Int(16, 4)}, ArmIntrinsic::HalfWidth},
-    {"vrhsubu", "urhsub", UInt(16, 4), "rounding_halving_sub", {UInt(16, 4), UInt(16, 4)}, ArmIntrinsic::HalfWidth},
-    {"vrhsubs", "srhsub", Int(32, 2), "rounding_halving_sub", {Int(32, 2), Int(32, 2)}, ArmIntrinsic::HalfWidth},
-    {"vrhsubu", "urhsub", UInt(32, 2), "rounding_halving_sub", {UInt(32, 2), UInt(32, 2)}, ArmIntrinsic::HalfWidth},
 
     // SMIN, UMIN, FMIN - Min
     {"vmins", "smin", Int(8, 8), "min", {Int(8, 8), Int(8, 8)}, ArmIntrinsic::HalfWidth},
@@ -1400,7 +1393,7 @@ Type CodeGen_ARM::upgrade_type_for_storage(const Type &t) const {
     return CodeGen_Posix::upgrade_type_for_storage(t);
 }
 
-string CodeGen_ARM::mcpu() const {
+string CodeGen_ARM::mcpu_target() const {
     if (target.bits == 32) {
         if (target.has_feature(Target::ARMv7s)) {
             return "swift";
@@ -1416,6 +1409,10 @@ string CodeGen_ARM::mcpu() const {
             return "generic";
         }
     }
+}
+
+string CodeGen_ARM::mcpu_tune() const {
+    return mcpu_target();
 }
 
 string CodeGen_ARM::mattrs() const {

@@ -32,10 +32,10 @@ def test_extern():
 
     try:
         sort_func.compile_jit()
-    except RuntimeError:
-        pass
+    except hl.HalideError:
+        assert 'cannot be converted to a bool' in str(e)
     else:
-        raise Exception("compile_jit should have raised a 'Symbol not found' RuntimeError")
+        assert False, 'Did not see expected exception!'
 
 
     import ctypes
@@ -44,10 +44,10 @@ def test_extern():
 
     try:
         sort_func.compile_jit()
-    except RuntimeError:
-        print("ctypes CDLL did not work out")
+    except hl.HalideError:
+        assert 'cannot be converted to a bool' in str(e)
     else:
-        print("ctypes CDLL worked !")
+        assert False, 'Did not see expected exception!'
 
     lib_path = "the_sort_function.so"
     #lib_path = "/home/rodrigob/code/references/" \

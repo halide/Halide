@@ -5,12 +5,19 @@
 
 using namespace Halide;
 
-std::string get_fname(const std::string &base) {
+// Given a path like /path/to/some/file.ext, return file.ext
+// If the path contains no separators (/ or \), just return it as-is
+std::string leaf_name(const std::string &path) {
+    size_t sep = std::min(path.rfind('/'), path.rfind('\\'));
+    return path.substr(sep == std::string::npos ? 0 : sep + 1);
+}
+
+std::string get_output_path_prefix(const std::string &base) {
     return Internal::get_test_tmp_dir() + "halide_test_correctness_compile_to_multitarget_" + base;
 }
 
 void test_compile_to_static_library(Func j) {
-    std::string fname = get_fname("c1");
+    std::string filename_prefix = get_output_path_prefix("c1");
     const char *a = get_host_target().os == Target::Windows ? ".lib" : ".a";
 
     std::vector<Target> targets = {
@@ -19,14 +26,14 @@ void test_compile_to_static_library(Func j) {
     };
 
     std::vector<std::string> files;
-    files.push_back(fname + ".h");
-    files.push_back(fname + a);
+    files.push_back(filename_prefix + ".h");
+    files.push_back(filename_prefix + a);
 
     for (auto f : files) {
         Internal::ensure_no_file_exists(f);
     }
 
-    j.compile_to_multitarget_static_library(fname, j.infer_arguments(), targets);
+    j.compile_to_multitarget_static_library(filename_prefix, j.infer_arguments(), targets);
 
     for (auto f : files) {
         Internal::assert_file_exists(f);
@@ -37,7 +44,7 @@ void test_compile_to_static_library(Func j) {
 }
 
 void test_compile_to_object_files(Func j) {
-    std::string fname = get_fname("c2");
+    std::string filename_prefix = get_output_path_prefix("c2");
     const char *o = get_host_target().os == Target::Windows ? ".obj" : ".o";
 
     std::vector<std::string> target_strings = {
@@ -51,18 +58,18 @@ void test_compile_to_object_files(Func j) {
     }
 
     std::vector<std::string> files;
-    files.push_back(fname + ".h");
-    files.push_back(fname + "_runtime" + o);
-    files.push_back(fname + "_wrapper" + o);
+    files.push_back(filename_prefix + ".h");
+    files.push_back(filename_prefix + "_runtime" + o);
+    files.push_back(filename_prefix + "_wrapper" + o);
     for (auto s : target_strings) {
-        files.push_back(fname + "-" + s + o);
+        files.push_back(filename_prefix + "-" + s + o);
     }
 
     for (auto f : files) {
         Internal::ensure_no_file_exists(f);
     }
 
-    j.compile_to_multitarget_object_files(fname, j.infer_arguments(), targets, target_strings);
+    j.compile_to_multitarget_object_files(filename_prefix, j.infer_arguments(), targets, target_strings);
 
     for (auto f : files) {
         Internal::assert_file_exists(f);
@@ -70,7 +77,7 @@ void test_compile_to_object_files(Func j) {
 }
 
 void test_compile_to_object_files_no_runtime(Func j) {
-    std::string fname = get_fname("c3");
+    std::string filename_prefix = get_output_path_prefix("c3");
     const char *o = get_host_target().os == Target::Windows ? ".obj" : ".o";
 
     std::vector<std::string> target_strings = {
@@ -84,17 +91,17 @@ void test_compile_to_object_files_no_runtime(Func j) {
     }
 
     std::vector<std::string> files;
-    files.push_back(fname + ".h");
-    files.push_back(fname + "_wrapper" + o);
+    files.push_back(filename_prefix + ".h");
+    files.push_back(filename_prefix + "_wrapper" + o);
     for (auto s : target_strings) {
-        files.push_back(fname + "-" + s + o);
+        files.push_back(filename_prefix + "-" + s + o);
     }
 
     for (auto f : files) {
         Internal::ensure_no_file_exists(f);
     }
 
-    j.compile_to_multitarget_object_files(fname, j.infer_arguments(), targets, target_strings);
+    j.compile_to_multitarget_object_files(filename_prefix, j.infer_arguments(), targets, target_strings);
 
     for (auto f : files) {
         Internal::assert_file_exists(f);
@@ -102,7 +109,7 @@ void test_compile_to_object_files_no_runtime(Func j) {
 }
 
 void test_compile_to_object_files_single_target(Func j) {
-    std::string fname = get_fname("c4");
+    std::string filename_prefix = get_output_path_prefix("c4");
     const char *o = get_host_target().os == Target::Windows ? ".obj" : ".o";
 
     std::vector<std::string> target_strings = {
@@ -115,14 +122,14 @@ void test_compile_to_object_files_single_target(Func j) {
     }
 
     std::vector<std::string> files;
-    files.push_back(fname + ".h");
-    files.push_back(fname + o);
+    files.push_back(filename_prefix + ".h");
+    files.push_back(filename_prefix + o);
 
     for (auto f : files) {
         Internal::ensure_no_file_exists(f);
     }
 
-    j.compile_to_multitarget_object_files(fname, j.infer_arguments(), targets, target_strings);
+    j.compile_to_multitarget_object_files(filename_prefix, j.infer_arguments(), targets, target_strings);
 
     for (auto f : files) {
         Internal::assert_file_exists(f);
@@ -130,7 +137,7 @@ void test_compile_to_object_files_single_target(Func j) {
 }
 
 void test_compile_to_everything(Func j, bool do_object) {
-    std::string fname = get_fname(do_object ? "c5" : "c6");
+    std::string filename_prefix = get_output_path_prefix(do_object ? "c5" : "c6");
     const char *a = get_host_target().os == Target::Windows ? ".lib" : ".a";
     const char *o = get_host_target().os == Target::Windows ? ".obj" : ".o";
 
@@ -149,18 +156,18 @@ void test_compile_to_everything(Func j, bool do_object) {
     // single-file outputs
     for (const char *ext : {".h", ".halide_generated.cpp", ".halide_compiler_log", ".py.cpp", ".pytorch.h", ".registration.cpp", ".schedule.h", a}) {
         if (do_object && !strcmp(ext, a)) continue;
-        files.push_back(fname + ext);
+        files.push_back(filename_prefix + ext);
     }
     if (do_object) {
-        files.push_back(fname + "_runtime" + o);
-        files.push_back(fname + "_wrapper" + o);
+        files.push_back(filename_prefix + "_runtime" + o);
+        files.push_back(filename_prefix + "_wrapper" + o);
     }
 
     // multi-file outputs
     for (const auto &s : target_strings) {
         for (const char *ext : {".s", ".bc", ".featurization", ".ll", ".stmt", ".stmt.html", o}) {
             if (!do_object && !strcmp(ext, o)) continue;
-            files.push_back(fname + "-" + s + ext);
+            files.push_back(filename_prefix + "-" + s + ext);
         }
     }
 
@@ -175,24 +182,24 @@ void test_compile_to_everything(Func j, bool do_object) {
         return j.compile_to_module(args, name, target);
     };
     std::map<OutputFileType, std::string> outputs = {
-        {OutputFileType::assembly, fname + ".s"},                        // IsMulti
-        {OutputFileType::bitcode, fname + ".bc"},                        // IsMulti
-        {OutputFileType::c_header, fname + ".h"},                        // IsSingle
-        {OutputFileType::c_source, fname + ".halide_generated.cpp"},     // IsSingle
-        {OutputFileType::compiler_log, fname + ".halide_compiler_log"},  // IsSingle
+        {OutputFileType::assembly, filename_prefix + ".s"},                        // IsMulti
+        {OutputFileType::bitcode, filename_prefix + ".bc"},                        // IsMulti
+        {OutputFileType::c_header, filename_prefix + ".h"},                        // IsSingle
+        {OutputFileType::c_source, filename_prefix + ".halide_generated.cpp"},     // IsSingle
+        {OutputFileType::compiler_log, filename_prefix + ".halide_compiler_log"},  // IsSingle
         // Note: compile_multitarget() doesn't produce cpp_stub output,
         // even if you pass this in.
-        // {OutputFileType::cpp_stub, fname + ".stub.h"},  // IsSingle
-        {OutputFileType::featurization, fname + ".featurization"},    // IsMulti
-        {OutputFileType::llvm_assembly, fname + ".ll"},               // IsMulti
-        {OutputFileType::object, fname + o},                          // IsMulti
-        {OutputFileType::python_extension, fname + ".py.cpp"},        // IsSingle
-        {OutputFileType::pytorch_wrapper, fname + ".pytorch.h"},      // IsSingle
-        {OutputFileType::registration, fname + ".registration.cpp"},  // IsSingle
-        {OutputFileType::schedule, fname + ".schedule.h"},            // IsSingle
-        {OutputFileType::static_library, fname + a},                  // IsSingle
-        {OutputFileType::stmt, fname + ".stmt"},                      // IsMulti
-        {OutputFileType::stmt_html, fname + ".stmt.html"},            // IsMulti
+        // {OutputFileType::cpp_stub, filename_prefix + ".stub.h"},  // IsSingle
+        {OutputFileType::featurization, filename_prefix + ".featurization"},    // IsMulti
+        {OutputFileType::llvm_assembly, filename_prefix + ".ll"},               // IsMulti
+        {OutputFileType::object, filename_prefix + o},                          // IsMulti
+        {OutputFileType::python_extension, filename_prefix + ".py.cpp"},        // IsSingle
+        {OutputFileType::pytorch_wrapper, filename_prefix + ".pytorch.h"},      // IsSingle
+        {OutputFileType::registration, filename_prefix + ".registration.cpp"},  // IsSingle
+        {OutputFileType::schedule, filename_prefix + ".schedule.h"},            // IsSingle
+        {OutputFileType::static_library, filename_prefix + a},                  // IsSingle
+        {OutputFileType::stmt, filename_prefix + ".stmt"},                      // IsMulti
+        {OutputFileType::stmt_html, filename_prefix + ".stmt.html"},            // IsMulti
     };
     if (do_object) {
         outputs.erase(OutputFileType::static_library);
@@ -205,7 +212,9 @@ void test_compile_to_everything(Func j, bool do_object) {
         // it exists or not --  so just fill in with arbitrary strings.
         return std::unique_ptr<Internal::CompilerLogger>(new Internal::JSONCompilerLogger("generator_name", "function_name", "autoscheduler_name", Target(), "generator_args", false));
     };
-    compile_multitarget(fname, outputs, targets, target_strings, module_producer, compiler_logger_factory);
+    // The first argument to compile_multitarget is *function* name, not filename
+    std::string function_name = leaf_name(filename_prefix);
+    compile_multitarget(function_name, outputs, targets, target_strings, module_producer, compiler_logger_factory);
 
     for (auto f : files) {
         Internal::assert_file_exists(f);

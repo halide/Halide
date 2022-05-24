@@ -33,7 +33,7 @@ Func ImageParam::create_func() const {
         // Discourage future Funcs from having the same name
         Internal::unique_name(name());
     }
-    Func f(name() + "_im");
+    Func f(param.type(), param.dimensions(), name() + "_im");
     f(args) = Internal::Call::make(param, args_expr);
     return f;
 }
