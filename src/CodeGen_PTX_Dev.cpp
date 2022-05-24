@@ -91,7 +91,8 @@ protected:
     // @}
 
     std::string march() const;
-    std::string mcpu() const override;
+    std::string mcpu_target() const override;
+    std::string mcpu_tune() const override;
     std::string mattrs() const override;
     bool use_soft_float_abi() const override;
     int native_vector_bits() const override;
@@ -153,7 +154,7 @@ void CodeGen_PTX_Dev::add_kernel(Stmt stmt,
     // Make our function
     FunctionType *func_t = FunctionType::get(void_t, arg_types, false);
     function = llvm::Function::Create(func_t, llvm::Function::ExternalLinkage, name, module.get());
-    set_function_attributes_for_target(function, target);
+    set_function_attributes_from_halide_target_options(*function);
 
     // Mark the buffer args as no alias
     for (size_t i = 0; i < args.size(); i++) {
@@ -542,7 +543,7 @@ string CodeGen_PTX_Dev::march() const {
     return "nvptx64";
 }
 
-string CodeGen_PTX_Dev::mcpu() const {
+string CodeGen_PTX_Dev::mcpu_target() const {
     if (target.has_feature(Target::CUDACapability86)) {
         return "sm_86";
     } else if (target.has_feature(Target::CUDACapability80)) {
@@ -564,6 +565,10 @@ string CodeGen_PTX_Dev::mcpu() const {
     } else {
         return "sm_20";
     }
+}
+
+string CodeGen_PTX_Dev::mcpu_tune() const {
+    return mcpu_target();
 }
 
 string CodeGen_PTX_Dev::mattrs() const {
@@ -617,7 +622,7 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
 
     std::unique_ptr<TargetMachine>
         target_machine(llvm_target->createTargetMachine(triple.str(),
-                                                        mcpu(), mattrs(), options,
+                                                        mcpu_target(), mattrs(), options,
                                                         llvm::Reloc::PIC_,
                                                         llvm::CodeModel::Small,
                                                         CodeGenOpt::Aggressive));
@@ -657,14 +662,15 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
         }
     }
 
-    // At present, we default to *enabling* LLVM loop optimization,
-    // unless DisableLLVMLoopOpt is set; we're going to flip this to defaulting
-    // to *not* enabling these optimizations (and removing the DisableLLVMLoopOpt feature).
-    // See https://github.com/halide/Halide/issues/4113 for more info.
-    // (Note that setting EnableLLVMLoopOpt always enables loop opt, regardless
-    // of the setting of DisableLLVMLoopOpt.)
-    const bool do_loop_opt = !target.has_feature(Target::DisableLLVMLoopOpt) ||
-                             target.has_feature(Target::EnableLLVMLoopOpt);
+    // halide_target_feature_disable_llvm_loop_opt is deprecated in Halide 15
+    // (and will be removed in Halide 16). Halide 15 now defaults to disabling
+    // LLVM loop optimization, unless halide_target_feature_enable_llvm_loop_opt is set.
+    if (get_target().has_feature(Target::DisableLLVMLoopOpt)) {
+        user_warning << "halide_target_feature_disable_llvm_loop_opt is deprecated in Halide 15 "
+                        "(and will be removed in Halide 16). Halide 15 now defaults to disabling "
+                        "LLVM loop optimization, unless halide_target_feature_enable_llvm_loop_opt is set.\n";
+    }
+    const bool do_loop_opt = get_target().has_feature(Target::EnableLLVMLoopOpt);
 
     // Define and run optimization pipeline with new pass manager
     PipelineTuningOptions pto;
@@ -757,7 +763,7 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
         f.write(buffer.data(), buffer.size());
         f.close();
 
-        string cmd = "ptxas --gpu-name " + mcpu() + " " + ptx.pathname() + " -o " + sass.pathname();
+        string cmd = "ptxas --gpu-name " + mcpu_target() + " " + ptx.pathname() + " -o " + sass.pathname();
         if (system(cmd.c_str()) == 0) {
             cmd = "nvdisasm " + sass.pathname();
             int ret = system(cmd.c_str());

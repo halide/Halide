@@ -760,6 +760,11 @@ void compile_multitarget(const std::string &fn_name,
     user_assert(suffixes.empty() || suffixes.size() == targets.size())
         << "The suffixes list must be empty or the same length as the targets list.\n";
 
+    // Some tests were mistakenly passing filenames/pathnames here, which is not kosher
+    for (char c : "/\\") {
+        user_assert(fn_name.find(c) == std::string::npos) << "compile_multitarget: fn_name must not contain '" << c << "', but saw '" << fn_name << "'\n";
+    }
+
     // The final target in the list is considered "baseline", and is used
     // for (e.g.) the runtime and shared code. It is often just arch-bits-os
     // with no other features (though this is *not* a requirement).

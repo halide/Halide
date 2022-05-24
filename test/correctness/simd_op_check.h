@@ -51,8 +51,7 @@ public:
         target = target
                      .with_feature(Target::NoBoundsQuery)
                      .with_feature(Target::NoAsserts)
-                     .with_feature(Target::NoRuntime)
-                     .with_feature(Target::DisableLLVMLoopOpt);
+                     .with_feature(Target::NoRuntime);
         num_threads = Internal::ThreadPool<void>::num_processors_online();
     }
     virtual ~SimdOpCheckTest() = default;

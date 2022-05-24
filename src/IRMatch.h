@@ -1437,8 +1437,6 @@ struct Intrin {
             return halving_sub(arg0, arg1);
         } else if (intrin == Call::rounding_halving_add) {
             return rounding_halving_add(arg0, arg1);
-        } else if (intrin == Call::rounding_halving_sub) {
-            return rounding_halving_sub(arg0, arg1);
         } else if (intrin == Call::shift_left) {
             return arg0 << arg1;
         } else if (intrin == Call::shift_right) {
@@ -1554,10 +1552,6 @@ auto halving_sub(A &&a, B &&b) noexcept -> Intrin<decltype(pattern_arg(a)), decl
 template<typename A, typename B>
 auto rounding_halving_add(A &&a, B &&b) noexcept -> Intrin<decltype(pattern_arg(a)), decltype(pattern_arg(b))> {
     return {Call::rounding_halving_add, pattern_arg(a), pattern_arg(b)};
-}
-template<typename A, typename B>
-auto rounding_halving_sub(A &&a, B &&b) noexcept -> Intrin<decltype(pattern_arg(a)), decltype(pattern_arg(b))> {
-    return {Call::rounding_halving_sub, pattern_arg(a), pattern_arg(b)};
 }
 template<typename A, typename B>
 auto shift_left(A &&a, B &&b) noexcept -> Intrin<decltype(pattern_arg(a)), decltype(pattern_arg(b))> {

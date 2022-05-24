@@ -1326,6 +1326,9 @@ typedef enum halide_target_feature_t {
     halide_target_feature_hexagon_dma,            ///< Enable Hexagon DMA buffers.
     halide_target_feature_embed_bitcode,          ///< Emulate clang -fembed-bitcode flag.
     halide_target_feature_enable_llvm_loop_opt,   ///< Enable loop vectorization + unrolling in LLVM. Overrides halide_target_feature_disable_llvm_loop_opt. (Ignored for non-LLVM targets.)
+    // halide_target_feature_disable_llvm_loop_opt is deprecated in Halide 15
+    // (and will be removed in Halide 16). Halide 15 now defaults to disabling
+    // LLVM loop optimization, unless halide_target_feature_enable_llvm_loop_opt is set.
     halide_target_feature_disable_llvm_loop_opt,  ///< Disable loop vectorization + unrolling in LLVM. (Ignored for non-LLVM targets.)
     halide_target_feature_wasm_simd128,           ///< Enable +simd128 instructions for WebAssembly codegen.
     halide_target_feature_wasm_signext,           ///< Enable +sign-ext instructions for WebAssembly codegen.
