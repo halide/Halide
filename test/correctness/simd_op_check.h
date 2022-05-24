@@ -66,7 +66,6 @@ public:
             f.flush();
             f.close();
         }
-
     }
     virtual ~SimdOpCheckTest() = default;
 
