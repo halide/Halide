@@ -233,16 +233,10 @@ function(_FindHalideLLVM)
     # Check for consistency and report errors
     list(JOIN errors "\n" error_msg)
 
-    if (CMAKE_VERSION VERSION_LESS 3.18)
-        set(fphsa_required_vars REQUIRED_VARS HalideLLVM_CONFIG)
-    else ()
-        set(fphsa_required_vars "")
-    endif ()
-
     find_package_handle_standard_args(
         HalideLLVM
         HANDLE_COMPONENTS
-        ${fphsa_required_vars}
+        REQUIRED_VARS HalideLLVM_CONFIG
         VERSION_VAR llvm_found_version
         REASON_FAILURE_MESSAGE "\n${error_msg}"
     )
