@@ -575,11 +575,12 @@ void halide_toc_impl(const char *file, int line) {
     debug(1) << t1.file << ":" << t1.line << " ... " << f << ":" << line << " : " << diff.count() * 1000 << " ms\n";
 }
 
-std::string c_print_name(const std::string &name) {
+std::string c_print_name(const std::string &name,
+                         bool prefix_underscore) {
     ostringstream oss;
 
     // Prefix an underscore to avoid reserved words (e.g. a variable named "while")
-    if (isalpha(name[0])) {
+    if (prefix_underscore && isalpha(name[0])) {
         oss << "_";
     }
 

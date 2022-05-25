@@ -6,6 +6,10 @@ WEAK char *halide_string_to_string(char *dst, char *end, const char *arg) {
     if (dst >= end) {
         return dst;
     }
+    if (!arg) {
+        // Crashing on nullptr here is a big debugging time sink.
+        arg = "<nullptr>";
+    }
     while (true) {
         if (dst == end) {
             dst[-1] = 0;

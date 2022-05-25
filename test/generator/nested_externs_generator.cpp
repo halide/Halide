@@ -12,8 +12,8 @@ void set_interleaved(T &t) {
 // Add two inputs
 class NestedExternsCombine : public Generator<NestedExternsCombine> {
 public:
-    Input<Buffer<float>> input_a{"input_a", 3};
-    Input<Buffer<float>> input_b{"input_b", 3};
+    Input<Buffer<float, 3>> input_a{"input_a"};
+    Input<Buffer<float, 3>> input_b{"input_b"};
     Output<Buffer<>> combine{"combine"};  // unspecified type-and-dim will be inferred
 
     void generate() {
@@ -32,7 +32,7 @@ public:
 class NestedExternsInner : public Generator<NestedExternsInner> {
 public:
     Input<float> value{"value", 1.0f};
-    Output<Buffer<float>> inner{"inner", 3};
+    Output<Buffer<float, 3>> inner{"inner"};
 
     void generate() {
         extern_stage_1.define_extern("nested_externs_leaf", {value}, Float(32), 3);
@@ -59,7 +59,7 @@ private:
 class NestedExternsLeaf : public Generator<NestedExternsLeaf> {
 public:
     Input<float> value{"value", 1.0f};
-    Output<Buffer<float>> leaf{"leaf", 3};
+    Output<Buffer<float, 3>> leaf{"leaf"};
 
     void generate() {
         Var x, y, c;
@@ -75,7 +75,7 @@ public:
 class NestedExternsRoot : public Generator<NestedExternsRoot> {
 public:
     Input<float> value{"value", 1.0f};
-    Output<Buffer<float>> root{"root", 3};
+    Output<Buffer<float, 3>> root{"root"};
 
     void generate() {
         extern_stage_1.define_extern("nested_externs_inner", {value}, Float(32), 3);

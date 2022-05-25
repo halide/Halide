@@ -1,10 +1,10 @@
 #ifndef HALIDE_LLVM_HEADERS_H
 #define HALIDE_LLVM_HEADERS_H
 
-#if LLVM_VERSION >= 120
+#if LLVM_VERSION >= 130
 // We're good to go
 #else
-#error "Compiling Halide requires LLVM 12.0 or newer"
+#error "Compiling Halide requires LLVM 13.0 or newer"
 #endif
 
 // No msvc warnings from llvm headers please
@@ -20,7 +20,7 @@
 
 // IWYU pragma: begin_exports
 
-#ifdef WITH_WABT
+#if WITH_WABT || WITH_V8
 #include <lld/Common/Driver.h>
 #endif
 #include <llvm/ADT/APFloat.h>
@@ -91,6 +91,7 @@
 #include <llvm/Transforms/IPO/PassManagerBuilder.h>
 #include <llvm/Transforms/Instrumentation.h>
 #include <llvm/Transforms/Instrumentation/AddressSanitizer.h>
+#include <llvm/Transforms/Instrumentation/SanitizerCoverage.h>
 #include <llvm/Transforms/Instrumentation/ThreadSanitizer.h>
 #include <llvm/Transforms/Scalar/GVN.h>
 #include <llvm/Transforms/Utils/ModuleUtils.h>

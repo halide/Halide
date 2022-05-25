@@ -52,7 +52,7 @@ public:
     };
 
 private:
-    Halide::Runtime::Buffer<int16_t> instructions;
+    Halide::Runtime::Buffer<int16_t, 2> instructions;
     int size = 0;
 
     Slot add_instruction(OpCode op, Slot op1, Slot op2, int16_t op3, int16_t op4 = 0);
@@ -67,7 +67,7 @@ public:
 
     // Assemble the current program. The return value is the buffer
     // fromt his assembler cropped to the region needed for the program.
-    Halide::Runtime::Buffer<int16_t> assemble(std::initializer_list<Slot> outputs);
+    Halide::Runtime::Buffer<int16_t, 2> assemble(std::initializer_list<Slot> outputs);
 
     // Write the current program to the given stream.
     void disassemble(std::ostream &output);

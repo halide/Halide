@@ -82,12 +82,13 @@ struct halide_handle_cplusplus_type {
     std::vector<halide_cplusplus_type_name> enclosing_types;
 
     /// One set of modifiers on a type.
-    /// The const/volatile/restrict propertises are "inside" the pointer property.
+    /// The const/volatile/restrict properties are "inside" the pointer property.
     enum Modifier : uint8_t {
-        Const = 1 << 0,     ///< Bitmask flag for "const"
-        Volatile = 1 << 1,  ///< Bitmask flag for "volatile"
-        Restrict = 1 << 2,  ///< Bitmask flag for "restrict"
-        Pointer = 1 << 3,   ///< Bitmask flag for a pointer "*"
+        Const = 1 << 0,            ///< Bitmask flag for "const"
+        Volatile = 1 << 1,         ///< Bitmask flag for "volatile"
+        Restrict = 1 << 2,         ///< Bitmask flag for "restrict"
+        Pointer = 1 << 3,          ///< Bitmask flag for a pointer "*"
+        FunctionTypedef = 1 << 4,  ///< Bitmask flag for a function typedef; when this is set, Pointer should also always be set
     };
 
     /// Qualifiers and indirections on type. 0 is innermost.
@@ -163,6 +164,8 @@ HALIDE_DECLARE_EXTERN_SIMPLE_TYPE(int64_t);
 HALIDE_DECLARE_EXTERN_SIMPLE_TYPE(uint64_t);
 HALIDE_DECLARE_EXTERN_SIMPLE_TYPE(Halide::float16_t);
 HALIDE_DECLARE_EXTERN_SIMPLE_TYPE(Halide::bfloat16_t);
+HALIDE_DECLARE_EXTERN_SIMPLE_TYPE(halide_task_t);
+HALIDE_DECLARE_EXTERN_SIMPLE_TYPE(halide_loop_task_t);
 HALIDE_DECLARE_EXTERN_SIMPLE_TYPE(float);
 HALIDE_DECLARE_EXTERN_SIMPLE_TYPE(double);
 HALIDE_DECLARE_EXTERN_STRUCT_TYPE(halide_buffer_t);
@@ -170,6 +173,7 @@ HALIDE_DECLARE_EXTERN_STRUCT_TYPE(halide_dimension_t);
 HALIDE_DECLARE_EXTERN_STRUCT_TYPE(halide_device_interface_t);
 HALIDE_DECLARE_EXTERN_STRUCT_TYPE(halide_filter_metadata_t);
 HALIDE_DECLARE_EXTERN_STRUCT_TYPE(halide_semaphore_t);
+HALIDE_DECLARE_EXTERN_STRUCT_TYPE(halide_semaphore_acquire_t);
 HALIDE_DECLARE_EXTERN_STRUCT_TYPE(halide_parallel_task_t);
 
 // You can make arbitrary user-defined types be "Known" using the
@@ -195,11 +199,18 @@ template<typename T>
     constexpr bool is_lvalue_reference = std::is_lvalue_reference<T>::value;
     constexpr bool is_rvalue_reference = std::is_rvalue_reference<T>::value;
 
-    using TBase = typename std::remove_pointer<typename std::remove_reference<T>::type>::type;
+    using TNoRef = typename std::remove_reference<T>::type;
+    using TNoRefNoPtr = typename std::remove_pointer<TNoRef>::type;
+    constexpr bool is_function_pointer = std::is_pointer<TNoRef>::value &&
+                                         std::is_function<TNoRefNoPtr>::value;
+
+    // Don't remove the pointer-ness from a function pointer.
+    using TBase = typename std::conditional<is_function_pointer, TNoRef, TNoRefNoPtr>::type;
     constexpr bool is_const = std::is_const<TBase>::value;
     constexpr bool is_volatile = std::is_volatile<TBase>::value;
 
     constexpr uint8_t modifiers = static_cast<uint8_t>(
+        (is_function_pointer ? halide_handle_cplusplus_type::FunctionTypedef : 0) |
         (is_ptr ? halide_handle_cplusplus_type::Pointer : 0) |
         (is_const ? halide_handle_cplusplus_type::Const : 0) |
         (is_volatile ? halide_handle_cplusplus_type::Volatile : 0));
@@ -352,14 +363,25 @@ public:
         return Type(code(), bits(), new_lanes, handle_type);
     }
 
-    /** Return Type with the same type code and number of lanes, but with twice as many bits. */
+    /** Return Type with the same type code and number of lanes, but with at least twice as many bits. */
     Type widen() const {
-        return with_bits(bits() * 2);
+        if (bits() == 1) {
+            // Widening a 1-bit type should produce an 8-bit type.
+            return with_bits(8);
+        } else {
+            return with_bits(bits() * 2);
+        }
     }
 
-    /** Return Type with the same type code and number of lanes, but with half as many bits. */
+    /** Return Type with the same type code and number of lanes, but with at most half as many bits. */
     Type narrow() const {
-        return with_bits(bits() / 2);
+        internal_assert(bits() != 1) << "Attempting to narrow a 1-bit type\n";
+        if (bits() == 8) {
+            // Narrowing an 8-bit type should produce a 1-bit type.
+            return with_bits(1);
+        } else {
+            return with_bits(bits() / 2);
+        }
     }
 
     /** Type to be printed when declaring handles of this type. */

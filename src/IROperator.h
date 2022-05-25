@@ -342,7 +342,7 @@ Expr requirement_failed_error(Expr condition, const std::vector<Expr> &args);
 
 Expr memoize_tag_helper(Expr result, const std::vector<Expr> &cache_key_values);
 
-/** Compute widen(a) + widen(b). The result is always signed. */
+/** Compute widen(a) + widen(b). */
 Expr widening_add(Expr a, Expr b);
 /** Compute widen(a) * widen(b). a and b may have different signedness. */
 Expr widening_mul(Expr a, Expr b);
@@ -355,12 +355,12 @@ Expr widening_shift_left(Expr a, int b);
 Expr widening_shift_right(Expr a, Expr b);
 Expr widening_shift_right(Expr a, int b);
 
-/** Compute saturating_add(a, (1 >> min(b, 0)) / 2) << b. When b is positive
- * indicating a left shift, the rounding term is zero. */
+/** Compute saturating_narrow(widening_add(a, (1 >> min(b, 0)) / 2) << b).
+ * When b is positive indicating a left shift, the rounding term is zero. */
 Expr rounding_shift_left(Expr a, Expr b);
 Expr rounding_shift_left(Expr a, int b);
-/** Compute saturating_add(a, (1 << max(b, 0)) / 2) >> b. When b is negative
- * indicating a left shift, the rounding term is zero. */
+/** Compute saturating_narrow(widening_add(a, (1 << max(b, 0)) / 2) >> b).
+ * When b is negative indicating a left shift, the rounding term is zero. */
 Expr rounding_shift_right(Expr a, Expr b);
 Expr rounding_shift_right(Expr a, int b);
 
@@ -375,8 +375,6 @@ Expr halving_add(Expr a, Expr b);
 Expr rounding_halving_add(Expr a, Expr b);
 /** Compute narrow((widen(a) - widen(b)) / 2) */
 Expr halving_sub(Expr a, Expr b);
-/** Compute narrow((widen(a) - widen(b) + 1) / 2) */
-Expr rounding_halving_sub(Expr a, Expr b);
 
 /** Compute saturating_narrow(shift_right(widening_mul(a, b), q)) */
 Expr mul_shift_right(Expr a, Expr b, Expr q);
@@ -1034,21 +1032,21 @@ Expr round(Expr x);
 Expr trunc(Expr x);
 
 /** Returns true if the argument is a Not a Number (NaN). Requires a
-  * floating point argument.  Vectorizes cleanly.
-  * Note that the Expr passed in will be evaluated in strict_float mode,
-  * regardless of whether strict_float mode is enabled in the current Target. */
+ * floating point argument.  Vectorizes cleanly.
+ * Note that the Expr passed in will be evaluated in strict_float mode,
+ * regardless of whether strict_float mode is enabled in the current Target. */
 Expr is_nan(Expr x);
 
 /** Returns true if the argument is Inf or -Inf. Requires a
-  * floating point argument.  Vectorizes cleanly.
-  * Note that the Expr passed in will be evaluated in strict_float mode,
-  * regardless of whether strict_float mode is enabled in the current Target. */
+ * floating point argument.  Vectorizes cleanly.
+ * Note that the Expr passed in will be evaluated in strict_float mode,
+ * regardless of whether strict_float mode is enabled in the current Target. */
 Expr is_inf(Expr x);
 
 /** Returns true if the argument is a finite value (ie, neither NaN nor Inf).
-  * Requires a floating point argument.  Vectorizes cleanly.
-  * Note that the Expr passed in will be evaluated in strict_float mode,
-  * regardless of whether strict_float mode is enabled in the current Target. */
+ * Requires a floating point argument.  Vectorizes cleanly.
+ * Note that the Expr passed in will be evaluated in strict_float mode,
+ * regardless of whether strict_float mode is enabled in the current Target. */
 Expr is_finite(Expr x);
 
 /** Return the fractional part of a floating-point expression. If the argument

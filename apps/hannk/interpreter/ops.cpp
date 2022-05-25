@@ -836,10 +836,10 @@ void call_conv2d(halide_buffer_t *input, halide_buffer_t *filter, halide_buffer_
 bool ConvOp::prepare() {
     // Pass minimal sized buffers to learn about the alignment requirements.
     // TODO: need to adapt this to the types of in, filt, out once we support multiple variants
-    HalideBuffer<uint8_t> input_buf(nullptr, 1, 1, 1, 1);
-    HalideBuffer<int32_t> bias_buf(nullptr, 1);
-    HalideBuffer<void> filter_buf(filter_type(), nullptr, 1, 1, 1, 1, 1, 1);
-    HalideBuffer<uint8_t> output_buf(nullptr, 1, 1, 1, 1);
+    HalideBuffer<uint8_t, 4> input_buf(nullptr, 1, 1, 1, 1);
+    HalideBuffer<int32_t, 1> bias_buf(nullptr, 1);
+    HalideBuffer<void, 6> filter_buf(filter_type(), nullptr, 1, 1, 1, 1, 1, 1);
+    HalideBuffer<uint8_t, 4> output_buf(nullptr, 1, 1, 1, 1);
     if (conv_u8_u8_u8(input_buf, 0, filter_buf, 0, bias_buf, 1, 1, 1, 1, 0, 0, 0, 0, 0, output_buf) != 0) {
         return false;
     }
@@ -975,10 +975,10 @@ BoundsMap DepthwiseConv2DOp::map_bounds(int input_idx, int output_idx) const {
 bool DepthwiseConv2DOp::prepare() {
     // Pass minimal sized buffers to learn about the alignment requirements.
     // TODO: need to adapt this to the types of in, filt, out once we support multiple variants
-    HalideBuffer<uint8_t> input_buf(nullptr, 1, 1, 1, 1);
-    HalideBuffer<int32_t> bias_buf(nullptr, 1);
-    HalideBuffer<uint8_t> filter_buf(nullptr, 1, 1, 1);
-    HalideBuffer<uint8_t> output_buf(nullptr, 1, 1, 1, 1);
+    HalideBuffer<uint8_t, 4> input_buf(nullptr, 1, 1, 1, 1);
+    HalideBuffer<int32_t, 1> bias_buf(nullptr, 1);
+    HalideBuffer<uint8_t, 3> filter_buf(nullptr, 1, 1, 1);
+    HalideBuffer<uint8_t, 4> output_buf(nullptr, 1, 1, 1, 1);
     if (depthwise_conv_uint8(input_buf, 0, filter_buf, 0, bias_buf, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, output_buf) != 0) {
         return false;
     }

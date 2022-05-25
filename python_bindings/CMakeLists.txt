@@ -19,7 +19,7 @@ endif ()
 ##
 
 add_subdirectory(src)
-include(stub/CMakeLists.txt)
+add_subdirectory(stub)
 
 option(WITH_TEST_PYTHON "Build Python tests" ON)
 if (WITH_TESTS AND WITH_TEST_PYTHON)

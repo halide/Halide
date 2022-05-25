@@ -63,6 +63,7 @@ tests(GROUPS correctness
       convolution.cpp
       convolution_multiple_kernels.cpp
       cross_compilation.cpp
+      cse_nan.cpp
       cuda_8_bit_dot_product.cpp
       custom_allocator.cpp
       custom_auto_scheduler.cpp
@@ -330,6 +331,7 @@ tests(GROUPS correctness
       tuple_update_ops.cpp
       tuple_vector_reduce.cpp
       two_vector_args.cpp
+      typed_func.cpp
       undef.cpp
       uninitialized_read.cpp
       unique_func_image.cpp
@@ -355,6 +357,7 @@ tests(GROUPS correctness
       vectorized_initialization.cpp
       vectorized_load_from_vectorized_allocation.cpp
       vectorized_reduction_bug.cpp
+      widening_lerp.cpp
       widening_reduction.cpp
       )
 

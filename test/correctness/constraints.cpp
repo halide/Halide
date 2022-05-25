@@ -8,7 +8,7 @@ using namespace Halide;
 
 bool error_occurred = false;
 void my_error_handler(JITUserContext *user_context, const char *msg) {
-    //printf("%s\n", msg);
+    // printf("%s\n", msg);
     error_occurred = true;
 }
 

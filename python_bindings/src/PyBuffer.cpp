@@ -313,10 +313,10 @@ void define_buffer(py::module &m) {
 
                 const int d = b.dimensions();
                 const int bytes = b.type().bytes();
-                std::vector<ssize_t> shape, strides;
+                std::vector<Py_ssize_t> shape, strides;
                 for (int i = 0; i < d; i++) {
-                    shape.push_back((ssize_t)b.raw_buffer()->dim[i].extent);
-                    strides.push_back((ssize_t)(b.raw_buffer()->dim[i].stride * bytes));
+                    shape.push_back((Py_ssize_t)b.raw_buffer()->dim[i].extent);
+                    strides.push_back((Py_ssize_t)(b.raw_buffer()->dim[i].stride * bytes));
                 }
 
                 return py::buffer_info(
@@ -363,23 +363,23 @@ void define_buffer(py::module &m) {
             .def("set_name", &Buffer<>::set_name)
             .def("name", &Buffer<>::name)
 
-            .def("same_as", (bool (Buffer<>::*)(const Buffer<> &other) const) & Buffer<>::same_as, py::arg("other"))
+            .def("same_as", (bool(Buffer<>::*)(const Buffer<> &other) const) & Buffer<>::same_as, py::arg("other"))
             .def("defined", &Buffer<>::defined)
 
             .def("type", &Buffer<>::type)
-            .def("channels", (int (Buffer<>::*)() const) & Buffer<>::channels)
-            .def("dimensions", (int (Buffer<>::*)() const) & Buffer<>::dimensions)
-            .def("width", (int (Buffer<>::*)() const) & Buffer<>::width)
-            .def("height", (int (Buffer<>::*)() const) & Buffer<>::height)
-            .def("top", (int (Buffer<>::*)() const) & Buffer<>::top)
-            .def("bottom", (int (Buffer<>::*)() const) & Buffer<>::bottom)
-            .def("left", (int (Buffer<>::*)() const) & Buffer<>::left)
-            .def("right", (int (Buffer<>::*)() const) & Buffer<>::right)
+            .def("channels", (int(Buffer<>::*)() const) & Buffer<>::channels)
+            .def("dimensions", (int(Buffer<>::*)() const) & Buffer<>::dimensions)
+            .def("width", (int(Buffer<>::*)() const) & Buffer<>::width)
+            .def("height", (int(Buffer<>::*)() const) & Buffer<>::height)
+            .def("top", (int(Buffer<>::*)() const) & Buffer<>::top)
+            .def("bottom", (int(Buffer<>::*)() const) & Buffer<>::bottom)
+            .def("left", (int(Buffer<>::*)() const) & Buffer<>::left)
+            .def("right", (int(Buffer<>::*)() const) & Buffer<>::right)
             .def("number_of_elements", (size_t(Buffer<>::*)() const) & Buffer<>::number_of_elements)
             .def("size_in_bytes", (size_t(Buffer<>::*)() const) & Buffer<>::size_in_bytes)
-            .def("has_device_allocation", (bool (Buffer<>::*)() const) & Buffer<>::has_device_allocation)
-            .def("host_dirty", (bool (Buffer<>::*)() const) & Buffer<>::host_dirty)
-            .def("device_dirty", (bool (Buffer<>::*)() const) & Buffer<>::device_dirty)
+            .def("has_device_allocation", (bool(Buffer<>::*)() const) & Buffer<>::has_device_allocation)
+            .def("host_dirty", (bool(Buffer<>::*)() const) & Buffer<>::host_dirty)
+            .def("device_dirty", (bool(Buffer<>::*)() const) & Buffer<>::device_dirty)
 
             .def(
                 "set_host_dirty", [](Buffer<> &b, bool dirty) -> void {
@@ -393,15 +393,15 @@ void define_buffer(py::module &m) {
                 py::arg("dirty") = true)
 
             .def("copy", &Buffer<>::copy)
-            .def("copy_from", &Buffer<>::copy_from<void>)
+            .def("copy_from", &Buffer<>::copy_from<void, Buffer<>::AnyDims>)
 
-            .def("add_dimension", (void (Buffer<>::*)()) & Buffer<>::add_dimension)
+            .def("add_dimension", (void(Buffer<>::*)()) & Buffer<>::add_dimension)
 
             .def("allocate", [](Buffer<> &b) -> void {
                 b.allocate(nullptr, nullptr);
             })
-            .def("deallocate", (void (Buffer<>::*)()) & Buffer<>::deallocate)
-            .def("device_deallocate", (void (Buffer<>::*)()) & Buffer<>::device_deallocate)
+            .def("deallocate", (void(Buffer<>::*)()) & Buffer<>::deallocate)
+            .def("device_deallocate", (void(Buffer<>::*)()) & Buffer<>::device_deallocate)
 
             .def(
                 "crop", [](Buffer<> &b, int d, int min, int extent) -> void {

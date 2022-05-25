@@ -13,104 +13,8 @@ namespace Halide {
 namespace Internal {
 
 using std::string;
-using std::vector;
 
 using namespace llvm;
-
-namespace {
-
-vector<llvm::Type *> llvm_types(const Closure &closure, llvm::StructType *halide_buffer_t_type, LLVMContext &context) {
-    vector<llvm::Type *> res;
-    for (const auto &v : closure.vars) {
-      res.push_back(llvm_type_of(&context, v.second, 0));
-    }
-    for (const auto &b : closure.buffers) {
-        res.push_back(llvm_type_of(&context, b.second.type, 0)->getPointerTo());
-        res.push_back(halide_buffer_t_type->getPointerTo());
-    }
-    return res;
-}
-
-}  // namespace
-
-StructType *build_closure_type(const Closure &closure,
-                               llvm::StructType *halide_buffer_t_type,
-                               LLVMContext *context) {
-    StructType *struct_t = StructType::create(*context, "closure_t");
-    struct_t->setBody(llvm_types(closure, halide_buffer_t_type, *context), false);
-    return struct_t;
-}
-
-void pack_closure(llvm::StructType *type,
-                  Value *dst,
-                  const Closure &closure,
-                  const Scope<Value *> &src,
-                  llvm::StructType *halide_buffer_t_type,
-                  IRBuilder<> *builder) {
-    // type, type of dst should be a pointer to a struct of the type returned by build_type
-    int idx = 0;
-    for (const auto &v : closure.vars) {
-        llvm::Type *t = type->elements()[idx];
-        Value *ptr = builder->CreateConstInBoundsGEP2_32(type, dst, 0, idx++);
-        Value *val = src.get(v.first);
-        val = builder->CreateBitCast(val, t);
-        builder->CreateStore(val, ptr);
-    }
-    for (const auto &b : closure.buffers) {
-        // For buffers we pass through base address (the symbol with
-        // the same name as the buffer), and the .buffer symbol (GPU
-        // code might implicitly need it).
-        // FIXME: This dependence should be explicitly encoded in the IR.
-        {
-            llvm::Type *t = type->elements()[idx];
-            Value *ptr = builder->CreateConstInBoundsGEP2_32(type, dst, 0, idx++);
-            Value *val = src.get(b.first);
-            val = builder->CreateBitCast(val, t);
-            builder->CreateStore(val, ptr);
-        }
-        {
-            llvm::PointerType *t = halide_buffer_t_type->getPointerTo();
-            Value *ptr = builder->CreateConstInBoundsGEP2_32(type, dst, 0, idx++);
-            Value *val = nullptr;
-            if (src.contains(b.first + ".buffer")) {
-                val = src.get(b.first + ".buffer");
-                val = builder->CreateBitCast(val, t);
-            } else {
-                val = ConstantPointerNull::get(t);
-            }
-            builder->CreateStore(val, ptr);
-        }
-    }
-}
-
-void unpack_closure(const Closure &closure,
-                    Scope<Value *> &dst,
-                    llvm::StructType *type,
-                    Value *src,
-                    IRBuilder<> *builder) {
-    // type, type of src should be a pointer to a struct of the type returned by build_type
-    int idx = 0;
-    for (const auto &v : closure.vars) {
-        Value *ptr = builder->CreateConstInBoundsGEP2_32(type, src, 0, idx++);
-        LoadInst *load = builder->CreateLoad(ptr->getType()->getPointerElementType(), ptr);
-        dst.push(v.first, load);
-        load->setName(v.first);
-    }
-    for (const auto &b : closure.buffers) {
-        {
-            Value *ptr = builder->CreateConstInBoundsGEP2_32(type, src, 0, idx++);
-            LoadInst *load = builder->CreateLoad(ptr->getType()->getPointerElementType(), ptr);
-            dst.push(b.first, load);
-            load->setName(b.first);
-        }
-        {
-            Value *ptr = builder->CreateConstInBoundsGEP2_32(type, src, 0, idx++);
-            LoadInst *load = builder->CreateLoad(ptr->getType()->getPointerElementType(), ptr);
-            dst.push(b.first + ".buffer", load);
-            load->setName(b.first + ".buffer");
-        }
-    }
-}
 
 llvm::Type *llvm_type_of(LLVMContext *c, Halide::Type t, int effective_vscale) {
     if (t.lanes() == 1) {
@@ -143,11 +47,30 @@ llvm::Type *llvm_type_of(LLVMContext *c, Halide::Type t, int effective_vscale) {
             } else {
                 debug(0) << "Failed to make scalable with bits " << t.bits() << " lanes " << t.lanes() << " effective_vscale " << effective_vscale << " total_bits " << total_bits << "\n";
             }
-                    
         }
         return get_vector_type(element_type, lanes, scalable);
     }
 }
+
+#if LLVM_VERSION >= 120
+int get_vector_num_elements(llvm::Type *t) {
+    if (t->isVectorTy()) {
+        auto *vt = dyn_cast<llvm::FixedVectorType>(t);
+        internal_assert(vt) << "Called get_vector_num_elements on a scalable vector type\n";
+        return vt->getNumElements();
+    } else {
+        return 1;
+    }
+}
+#else
+int get_vector_num_elements(llvm::Type *t) {
+    if (t->isVectorTy()) {
+        return dyn_cast<llvm::VectorType>(t)->getNumElements();
+    } else {
+        return 1;
+    }
+}
+#endif
 
 llvm::Type *get_vector_element_type(llvm::Type *t) {
     if (t->isVectorTy()) {
@@ -240,6 +163,7 @@ bool function_takes_user_context(const std::string &name) {
         "_halide_buffer_crop",
         "_halide_buffer_retire_crop_after_extern_stage",
         "_halide_buffer_retire_crops_after_extern_stage",
+        "_halide_hexagon_do_par_for",
     };
     for (const char *user_context_runtime_func : user_context_runtime_funcs) {
         if (name == user_context_runtime_func) {
@@ -713,11 +637,6 @@ void get_target_options(const llvm::Module &module, llvm::TargetOptions &options
     options.HonorSignDependentRoundingFPMathOption = !per_instruction_fast_math_flags;
     options.NoZerosInBSS = false;
     options.GuaranteedTailCallOpt = false;
-#if LLVM_VERSION >= 130
-    // nothing
-#else
-    options.StackAlignmentOverride = 0;
-#endif
     options.FunctionSections = true;
     options.UseInitArray = true;
     options.FloatABIType =
@@ -797,11 +716,7 @@ void set_function_attributes_for_target(llvm::Function *fn, const Target &t) {
 void embed_bitcode(llvm::Module *M, const string &halide_command) {
     // Save llvm.compiler.used and remote it.
     SmallVector<Constant *, 2> used_array;
-#if LLVM_VERSION >= 130
     SmallVector<GlobalValue *, 4> used_globals;
-#else
-    SmallPtrSet<GlobalValue *, 4> used_globals;
-#endif
     llvm::Type *used_element_type = llvm::Type::getInt8Ty(M->getContext())->getPointerTo(0);
     GlobalVariable *used = collectUsedGlobalVariables(*M, used_globals, true);
     for (auto *GV : used_globals) {

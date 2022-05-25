@@ -393,7 +393,7 @@ WEAK int create_opencl_context(void *user_context, cl_context *ctx, cl_command_q
         debug(user_context) << "    clGetPlatformInfo(CL_PLATFORM_NAME) failed: "
                             << get_opencl_error_name(err) << "\n";
         // This is just debug info, report the error but don't fail context creation due to it.
-        //return err;
+        // return err;
     } else {
         debug(user_context) << "    Got platform '" << platform_name
                             << "', about to create context (t="
@@ -611,26 +611,37 @@ WEAK cl_program compile_kernel(void *user_context, cl_context ctx, const char *s
                         << " " << options.str() << "\n";
     err = clBuildProgram(program, 1, devices, options.str(), nullptr, nullptr);
     if (err != CL_SUCCESS) {
-
-        {
-            // Allocate an appropriately sized buffer for the build log.
-            Printer<ErrorPrinter, 16384> p(user_context);
-
-            p << "CL: clBuildProgram failed: "
-              << get_opencl_error_name(err)
-              << "\nBuild Log:\n";
-
-            // Get build log
-            if (clGetProgramBuildInfo(program, dev,
-                                      CL_PROGRAM_BUILD_LOG,
-                                      p.capacity() - p.size() - 1, p.dst,
-                                      nullptr) != CL_SUCCESS) {
-                p << "clGetProgramBuildInfo failed (Printer buffer too small?)";
+        struct Alloc {
+            void *mem;
+            inline explicit Alloc(size_t size)
+                : mem(malloc(size)) {
             }
+            inline ~Alloc() {
+                free(mem);
+            }
+        };
+
+        // Allocate an appropriately sized buffer for the build log.
+        // (Don't even try to use the stack, we may be on a stack-constrained OS.)
+        constexpr size_t build_log_size = 16384;
+        Alloc alloc(build_log_size);
+
+        const char *log = (const char *)alloc.mem;
+        if (!alloc.mem || clGetProgramBuildInfo(program, dev,
+                                                CL_PROGRAM_BUILD_LOG,
+                                                build_log_size,
+                                                alloc.mem,
+                                                nullptr) != CL_SUCCESS) {
+            log = "(Unable to get build log)";
         }
 
+        error(user_context) << "CL: clBuildProgram failed: "
+                            << get_opencl_error_name(err)
+                            << "\nBuild Log:\n"
+                            << log << "\n";
         return nullptr;
     }
+
     return program;
 }
 

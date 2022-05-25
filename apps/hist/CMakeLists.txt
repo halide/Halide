@@ -12,8 +12,7 @@ set(CMAKE_CXX_EXTENSIONS NO)
 find_package(Halide REQUIRED)
 
 # Generator
-add_executable(hist.generator hist_generator.cpp)
-target_link_libraries(hist.generator PRIVATE Halide::Generator Halide::Tools)
+add_halide_generator(hist.generator SOURCES hist_generator.cpp)
 
 # Filters
 add_halide_library(hist FROM hist.generator)

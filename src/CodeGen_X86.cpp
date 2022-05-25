@@ -163,6 +163,10 @@ const x86Intrinsic intrinsic_defs[] = {
     {"packuswbx32", UInt(8, 32), "saturating_narrow", {Int(16, 32)}, Target::AVX2},
     {"packuswbx16", UInt(8, 16), "saturating_narrow", {Int(16, 16)}},
 
+    // Widening multiplies that use (v)pmaddwd
+    {"wmul_pmaddwd_avx2", Int(32, 8), "widening_mul", {Int(16, 8), Int(16, 8)}, Target::AVX2},
+    {"wmul_pmaddwd_sse2", Int(32, 4), "widening_mul", {Int(16, 4), Int(16, 4)}},
+
     // Multiply keep high half
     {"llvm.x86.avx2.pmulh.w", Int(16, 16), "pmulh", {Int(16, 16), Int(16, 16)}, Target::AVX2},
     {"llvm.x86.avx2.pmulhu.w", UInt(16, 16), "pmulh", {UInt(16, 16), UInt(16, 16)}, Target::AVX2},
@@ -495,6 +499,46 @@ void CodeGen_X86::visit(const Call *op) {
         return;
     }
 
+    // A 16-bit mul-shift-right of less than 16 can sometimes be rounded up to a
+    // full 16 to use pmulh(u)w by left-shifting one of the operands. This is
+    // handled here instead of in the lowering of mul_shift_right because it's
+    // unlikely to be a good idea on platforms other than x86, as it adds an
+    // extra shift in the fully-lowered case.
+    if ((op->type.element_of() == UInt(16) ||
+         op->type.element_of() == Int(16)) &&
+        op->is_intrinsic(Call::mul_shift_right)) {
+        internal_assert(op->args.size() == 3);
+        const uint64_t *shift = as_const_uint(op->args[2]);
+        if (shift && *shift < 16 && *shift >= 8) {
+            Type narrow = op->type.with_bits(8);
+            Expr narrow_a = lossless_cast(narrow, op->args[0]);
+            Expr narrow_b = narrow_a.defined() ? Expr() : lossless_cast(narrow, op->args[1]);
+            int shift_left = 16 - (int)(*shift);
+            if (narrow_a.defined()) {
+                codegen(mul_shift_right(op->args[0] << shift_left, op->args[1], 16));
+                return;
+            } else if (narrow_b.defined()) {
+                codegen(mul_shift_right(op->args[0], op->args[1] << shift_left, 16));
+                return;
+            }
+        }
+    } else if (op->is_intrinsic(Call::absd)) {
+        internal_assert(op->args.size() == 2);
+        if (op->args[0].type().is_uint()) {
+            // On x86, there are many 3-instruction sequences to compute absd of
+            // unsigned integers. This one consists solely of instructions with
+            // throughput of 3 ops per cycle on Cannon Lake.
+            //
+            // Solution due to Wojciech Mula:
+            // http://0x80.pl/notesen/2018-03-11-sse-abs-unsigned.html
+            codegen(saturating_sub(op->args[0], op->args[1]) | saturating_sub(op->args[1], op->args[0]));
+            return;
+        } else if (op->args[0].type().is_int()) {
+            codegen(Max::make(op->args[0], op->args[1]) - Min::make(op->args[0], op->args[1]));
+            return;
+        }
+    }
+
     struct Pattern {
         string intrin;
         Expr pattern;
@@ -587,11 +631,15 @@ void CodeGen_X86::codegen_vector_reduce(const VectorReduce *op, const Expr &init
                 a = lossless_cast(p.narrow_type.with_lanes(a.type().lanes()), a);
                 b = lossless_cast(p.narrow_type.with_lanes(b.type().lanes()), b);
             }
-            if (!a.defined() || !b.defined()) { continue; }
+            if (!a.defined() || !b.defined()) {
+                continue;
+            }
 
             if (init.defined() && (p.flags & Pattern::CombineInit)) {
                 value = call_overloaded_intrin(op->type, p.intrin, {init, a, b});
-                if (value) { return; }
+                if (value) {
+                    return;
+                }
             } else {
                 value = call_overloaded_intrin(op->type, p.intrin, {a, b});
                 if (value) {
@@ -619,7 +667,7 @@ void CodeGen_X86::visit(const Load *op) {
         const Ramp *ramp = op->index.as<Ramp>();
         internal_assert(ramp) << "Expected AMXTile to have index ramp\n";
         Value *ptr = codegen_buffer_pointer(op->name, op->type, ramp->base);
-        LoadInst *load = builder->CreateAlignedLoad(ptr->getType()->getPointerElementType(), ptr, llvm::Align(op->type.bytes()));
+        LoadInst *load = builder->CreateAlignedLoad(llvm_type_of(upgrade_type_for_storage(op->type)), ptr, llvm::Align(op->type.bytes()));
         add_tbaa_metadata(load, op->name, op->index);
         value = load;
         return;
@@ -642,6 +690,38 @@ void CodeGen_X86::visit(const Store *op) {
 }
 
 string CodeGen_X86::mcpu() const {
+    // First, check if any explicit request for tuning exists.
+    switch (target.processor_tune) {  // Please keep sorted.
+    case Target::Processor::AMDFam10:
+        return "amdfam10";
+    case Target::Processor::BdVer1:
+        return "bdver1";
+    case Target::Processor::BdVer2:
+        return "bdver2";
+    case Target::Processor::BdVer3:
+        return "bdver3";
+    case Target::Processor::BdVer4:
+        return "bdver4";
+    case Target::Processor::BtVer1:
+        return "btver1";
+    case Target::Processor::BtVer2:
+        return "btver2";
+    case Target::Processor::K8:
+        return "k8";
+    case Target::Processor::K8_SSE3:
+        return "k8-sse3";
+    case Target::Processor::ZnVer1:
+        return "znver1";
+    case Target::Processor::ZnVer2:
+        return "znver2";
+    case Target::Processor::ZnVer3:
+        return "znver3";
+
+    case Target::Processor::ProcessorGeneric:
+        break;  // Detect "best" CPU from the enabled ISA's.
+    }
+
+    // And only after that, perform an ad-hoc guess for the tune given features.
     if (target.has_feature(Target::AVX512_SapphireRapids)) {
         return "sapphirerapids";
     } else if (target.has_feature(Target::AVX512_Cannonlake)) {

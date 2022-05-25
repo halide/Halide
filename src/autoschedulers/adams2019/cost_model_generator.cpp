@@ -533,7 +533,7 @@ public:
             };
 
             // Pipeline features processing
-            conv1_stage1.compute_root().vectorize(c);
+            conv1_stage1.compute_root().vectorize(c).update().vectorize(c);
             squashed_head1_filter.compute_root().vectorize(c);
 
             // Schedule features processing. The number of schedule

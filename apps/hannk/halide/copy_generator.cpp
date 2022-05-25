@@ -9,11 +9,9 @@ namespace hannk {
 // TODO: It might be better to implement this in C++ and not Halide. It's a trivial pipeline.
 class Copy : public Generator<Copy> {
 public:
-    Input<Buffer<>> input_{"input", 4};
-
+    Input<Buffer<void, 4>> input_{"input"};
     Input<int> pad_value_{"pad_value"};
-
-    Output<Buffer<>> output_{"output", 4};
+    Output<Buffer<void, 4>> output_{"output"};
 
     void generate() {
         Var c("c"), x("x"), y("y"), b("b");

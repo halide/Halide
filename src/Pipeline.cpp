@@ -34,27 +34,27 @@ std::string output_name(const string &filename, const Module &m, const string &e
     return output_name(filename, m.name(), ext);
 }
 
-std::map<Output, std::string> single_output(const string &filename, const Module &m, Output output_type) {
+std::map<OutputFileType, std::string> single_output(const string &filename, const Module &m, OutputFileType output_type) {
     auto ext = get_output_info(m.target());
-    std::map<Output, std::string> outputs = {
+    std::map<OutputFileType, std::string> outputs = {
         {output_type, output_name(filename, m, ext.at(output_type).extension)}};
     return outputs;
 }
 
-std::map<Output, std::string> static_library_outputs(const string &filename_prefix, const Target &target) {
+std::map<OutputFileType, std::string> static_library_outputs(const string &filename_prefix, const Target &target) {
     auto ext = get_output_info(target);
-    std::map<Output, std::string> outputs = {
-        {Output::c_header, filename_prefix + ext.at(Output::c_header).extension},
-        {Output::static_library, filename_prefix + ext.at(Output::static_library).extension},
+    std::map<OutputFileType, std::string> outputs = {
+        {OutputFileType::c_header, filename_prefix + ext.at(OutputFileType::c_header).extension},
+        {OutputFileType::static_library, filename_prefix + ext.at(OutputFileType::static_library).extension},
     };
     return outputs;
 }
 
-std::map<Output, std::string> object_file_outputs(const string &filename_prefix, const Target &target) {
+std::map<OutputFileType, std::string> object_file_outputs(const string &filename_prefix, const Target &target) {
     auto ext = get_output_info(target);
-    std::map<Output, std::string> outputs = {
-        {Output::c_header, filename_prefix + ext.at(Output::c_header).extension},
-        {Output::object, filename_prefix + ext.at(Output::object).extension},
+    std::map<OutputFileType, std::string> outputs = {
+        {OutputFileType::c_header, filename_prefix + ext.at(OutputFileType::c_header).extension},
+        {OutputFileType::object, filename_prefix + ext.at(OutputFileType::object).extension},
     };
     return outputs;
 }
@@ -255,7 +255,7 @@ Func Pipeline::get_func(size_t index) {
     return Func(env.find(order[index])->second);
 }
 
-void Pipeline::compile_to(const std::map<Output, std::string> &output_files,
+void Pipeline::compile_to(const std::map<OutputFileType, std::string> &output_files,
                           const vector<Argument> &args,
                           const string &fn_name,
                           const Target &target) {
@@ -267,7 +267,7 @@ void Pipeline::compile_to_bitcode(const string &filename,
                                   const string &fn_name,
                                   const Target &target) {
     Module m = compile_to_module(args, fn_name, target);
-    m.compile(single_output(filename, m, Output::bitcode));
+    m.compile(single_output(filename, m, OutputFileType::bitcode));
 }
 
 void Pipeline::compile_to_llvm_assembly(const string &filename,
@@ -275,7 +275,7 @@ void Pipeline::compile_to_llvm_assembly(const string &filename,
                                         const string &fn_name,
                                         const Target &target) {
     Module m = compile_to_module(args, fn_name, target);
-    m.compile(single_output(filename, m, Output::llvm_assembly));
+    m.compile(single_output(filename, m, OutputFileType::llvm_assembly));
 }
 
 void Pipeline::compile_to_object(const string &filename,
@@ -284,7 +284,7 @@ void Pipeline::compile_to_object(const string &filename,
                                  const Target &target) {
     Module m = compile_to_module(args, fn_name, target);
     auto ext = get_output_info(target);
-    m.compile({{Output::object, output_name(filename, m, ext.at(Output::object).extension)}});
+    m.compile({{OutputFileType::object, output_name(filename, m, ext.at(OutputFileType::object).extension)}});
 }
 
 void Pipeline::compile_to_header(const string &filename,
@@ -292,7 +292,7 @@ void Pipeline::compile_to_header(const string &filename,
                                  const string &fn_name,
                                  const Target &target) {
     Module m = compile_to_module(args, fn_name, target);
-    m.compile(single_output(filename, m, Output::c_header));
+    m.compile(single_output(filename, m, OutputFileType::c_header));
 }
 
 void Pipeline::compile_to_assembly(const string &filename,
@@ -300,7 +300,7 @@ void Pipeline::compile_to_assembly(const string &filename,
                                    const string &fn_name,
                                    const Target &target) {
     Module m = compile_to_module(args, fn_name, target);
-    m.compile(single_output(filename, m, Output::assembly));
+    m.compile(single_output(filename, m, OutputFileType::assembly));
 }
 
 void Pipeline::compile_to_c(const string &filename,
@@ -308,7 +308,7 @@ void Pipeline::compile_to_c(const string &filename,
                             const string &fn_name,
                             const Target &target) {
     Module m = compile_to_module(args, fn_name, target);
-    m.compile(single_output(filename, m, Output::c_source));
+    m.compile(single_output(filename, m, OutputFileType::c_source));
 }
 
 void Pipeline::print_loop_nest() {
@@ -321,7 +321,7 @@ void Pipeline::compile_to_lowered_stmt(const string &filename,
                                        StmtOutputFormat fmt,
                                        const Target &target) {
     Module m = compile_to_module(args, "", target);
-    m.compile(single_output(filename, m, fmt == HTML ? Output::stmt_html : Output::stmt));
+    m.compile(single_output(filename, m, fmt == HTML ? OutputFileType::stmt_html : OutputFileType::stmt));
 }
 
 void Pipeline::compile_to_static_library(const string &filename_prefix,
@@ -359,9 +359,9 @@ void Pipeline::compile_to_file(const string &filename_prefix,
                                const Target &target) {
     Module m = compile_to_module(args, fn_name, target);
     auto ext = get_output_info(target);
-    std::map<Output, std::string> outputs = {
-        {Output::c_header, filename_prefix + ext.at(Output::c_header).extension},
-        {Output::object, filename_prefix + ext.at(Output::object).extension},
+    std::map<OutputFileType, std::string> outputs = {
+        {OutputFileType::c_header, filename_prefix + ext.at(OutputFileType::c_header).extension},
+        {OutputFileType::object, filename_prefix + ext.at(OutputFileType::object).extension},
     };
     m.compile(outputs);
 }
@@ -634,47 +634,10 @@ void Pipeline::compile_jit(const Target &target_arg) {
         }
         string file_name = program_name + "_" + name + "_" + unique_name('g').substr(1) + ".bc";
         debug(4) << "Saving bitcode to: " << file_name << "\n";
-        module.compile({{Output::bitcode, file_name}});
+        module.compile({{OutputFileType::bitcode, file_name}});
     }
 
     contents->jit_module = jit_module;
-}
-
-template<typename A, typename B>
-void set_handler(A &a, B b) {
-    a = (A)b;
-}
-
-void Pipeline::set_error_handler(void (*handler)(void *, const char *)) {
-    user_assert(defined()) << "Pipeline is undefined\n";
-    set_handler(contents->jit_handlers.custom_error, handler);
-}
-
-void Pipeline::set_custom_allocator(void *(*cust_malloc)(void *, size_t),
-                                    void (*cust_free)(void *, void *)) {
-    user_assert(defined()) << "Pipeline is undefined\n";
-    set_handler(contents->jit_handlers.custom_malloc, cust_malloc);
-    set_handler(contents->jit_handlers.custom_free, cust_free);
-}
-
-void Pipeline::set_custom_do_par_for(int (*cust_do_par_for)(void *, int (*)(void *, int, uint8_t *), int, int, uint8_t *)) {
-    user_assert(defined()) << "Pipeline is undefined\n";
-    set_handler(contents->jit_handlers.custom_do_par_for, cust_do_par_for);
-}
-
-void Pipeline::set_custom_do_task(int (*cust_do_task)(void *, int (*)(void *, int, uint8_t *), int, uint8_t *)) {
-    user_assert(defined()) << "Pipeline is undefined\n";
-    set_handler(contents->jit_handlers.custom_do_task, cust_do_task);
-}
-
-void Pipeline::set_custom_trace(int (*trace_fn)(void *, const halide_trace_event_t *)) {
-    user_assert(defined()) << "Pipeline is undefined\n";
-    set_handler(contents->jit_handlers.custom_trace, trace_fn);
-}
-
-void Pipeline::set_custom_print(void (*cust_print)(void *, const char *)) {
-    user_assert(defined()) << "Pipeline is undefined\n";
-    set_handler(contents->jit_handlers.custom_print, cust_print);
 }
 
 void Pipeline::set_jit_externs(const std::map<std::string, JITExtern> &externs) {
@@ -724,12 +687,14 @@ Realization Pipeline::realize(JITUserContext *context,
     user_assert(defined()) << "Pipeline is undefined\n";
     vector<Buffer<>> bufs;
     for (auto &out : contents->outputs) {
+        user_assert((int)sizes.size() == out.dimensions())
+            << "Func " << out.name() << " is defined with " << out.dimensions() << " dimensions, but realize() is requesting a realization with " << sizes.size() << " dimensions.\n";
         user_assert(out.has_pure_definition() || out.has_extern_definition()) << "Can't realize Pipeline with undefined output Func: " << out.name() << ".\n";
         for (Type t : out.output_types()) {
             bufs.emplace_back(t, nullptr, sizes);
         }
     }
-    Realization r(bufs);
+    Realization r(std::move(bufs));
     // Do an output bounds query if we can. Otherwise just assume the
     // output size is good.
     if (!target.has_feature(Target::NoBoundsQuery)) {
@@ -1161,7 +1126,7 @@ void Pipeline::realize(JITUserContext *context,
     debug(2) << "Back from jitted function. Exit status was " << exit_status << "\n";
 
     // If we're profiling, report runtimes and reset profiler stats.
-    if (target.has_feature(Target::Profile)) {
+    if (target.has_feature(Target::Profile) || target.has_feature(Target::ProfileByTimer)) {
         JITModule::Symbol report_sym =
             contents->jit_module.find_symbol_by_name("halide_profiler_report");
         JITModule::Symbol reset_sym =
@@ -1308,7 +1273,7 @@ void Pipeline::infer_input_bounds(JITUserContext *context,
     for (Type t : contents->outputs[0].output_types()) {
         bufs.emplace_back(t, sizes);
     }
-    Realization r(bufs);
+    Realization r(std::move(bufs));
     infer_input_bounds(context, r, target, param_map);
 }
 

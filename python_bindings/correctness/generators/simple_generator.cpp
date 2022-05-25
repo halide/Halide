@@ -2,12 +2,12 @@
 
 namespace {
 
-class SimpleStub : public Halide::Generator<SimpleStub> {
+class Simple : public Halide::Generator<Simple> {
 public:
     GeneratorParam<int> offset{"offset", 0};
     GeneratorParam<LoopLevel> compute_level{"compute_level", LoopLevel::root()};
 
-    Input<Buffer<uint8_t>> buffer_input{"buffer_input", 2};
+    Input<Buffer<uint8_t, 2>> buffer_input{"buffer_input"};
     Input<Func> func_input{"func_input", 2};  // require a 2-dimensional Func but leave Type unspecified
     Input<float> float_arg{"float_arg", 1.0f, 0.0f, 100.0f};
 
@@ -27,4 +27,4 @@ private:
 
 }  // namespace
 
-HALIDE_REGISTER_GENERATOR(SimpleStub, simplestub)
+HALIDE_REGISTER_GENERATOR(Simple, simple)

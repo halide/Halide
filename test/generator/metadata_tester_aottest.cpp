@@ -190,8 +190,8 @@ void match_argument(const halide_filter_argument_t &e, const halide_filter_argum
 }
 
 template<typename Type>
-Buffer<Type> make_image() {
-    Buffer<Type> im(kSize, kSize, 3);
+Buffer<Type, 3> make_image() {
+    Buffer<Type, 3> im(kSize, kSize, 3);
     for (int x = 0; x < kSize; x++) {
         for (int y = 0; y < kSize; y++) {
             for (int c = 0; c < 3; c++) {
@@ -202,15 +202,15 @@ Buffer<Type> make_image() {
     return im;
 }
 
-void verify(const Buffer<uint8_t> &input,
-            const Buffer<float> &output0,
-            const Buffer<float> &output1,
-            const Buffer<float> &output_scalar,
-            const Buffer<float> &output_array0,
-            const Buffer<float> &output_array1,
-            const Buffer<float> &untyped_output_buffer,
-            const Buffer<float> &tupled_output_buffer0,
-            const Buffer<int32_t> &tupled_output_buffer1) {
+void verify(const Buffer<uint8_t, 3> &input,
+            const Buffer<float, 3> &output0,
+            const Buffer<float, 3> &output1,
+            const Buffer<float, 0> &output_scalar,
+            const Buffer<float, 3> &output_array0,
+            const Buffer<float, 3> &output_array1,
+            const Buffer<float, 3> &untyped_output_buffer,
+            const Buffer<float, 3> &tupled_output_buffer0,
+            const Buffer<int32_t, 3> &tupled_output_buffer1) {
     if (output_scalar.dimensions() != 0) {
         std::cerr << "output_scalar should be zero-dimensional\n";
         exit(-1);
@@ -1354,30 +1354,30 @@ int main(int argc, char **argv) {
 
     int result;
 
-    Buffer<uint8_t> input = make_image<uint8_t>();
-    Buffer<float> input_array[2] = {make_image<float>(), make_image<float>()};
+    Buffer<uint8_t, 3> input = make_image<uint8_t>();
+    Buffer<float, 3> input_array[2] = {make_image<float>(), make_image<float>()};
     // TODO: there is no runtime type for float16, so we'll declare this using a halide_type_t
     const halide_type_t halide_type_float16 = halide_type_t(halide_type_float, 16, 1);
     Buffer<> input_f16 = Buffer<>(halide_type_float16, kSize);
 
-    Buffer<float> output0(kSize, kSize, 3);
-    Buffer<float> output1(kSize, kSize, 3);
-    Buffer<float> typed_output_buffer(kSize, kSize, 3);
-    Buffer<float> type_only_output_buffer(kSize, kSize, 3);
-    Buffer<float> dim_only_output_buffer(kSize, kSize, 3);
-    Buffer<float> untyped_output_buffer(kSize, kSize, 3);
-    Buffer<float> tupled_output_buffer0(kSize, kSize, 3);
-    Buffer<int32_t> tupled_output_buffer1(kSize, kSize, 3);
-    Buffer<float> output_scalar = Buffer<float>::make_scalar();
-    Buffer<float> output_array[2] = {{kSize, kSize, 3}, {kSize, kSize, 3}};
-    Buffer<float> output_array2[4] = {{kSize, kSize, 3}, {kSize, kSize, 3}, {kSize, kSize, 3}, {kSize, kSize, 3}};
-    Buffer<float> output_array3[2] = {Buffer<float>::make_scalar(), Buffer<float>::make_scalar()};
-    Buffer<float> output_array4[2] = {{kSize, kSize, 3}, {kSize, kSize, 3}};
-    Buffer<float> output_array5[2] = {{kSize, kSize, 3}, {kSize, kSize, 3}};
-    Buffer<float> output_array6[2] = {{kSize, kSize, 3}, {kSize, kSize, 3}};
-    Buffer<float> output_array7[2] = {{kSize, kSize, 3}, {kSize, kSize, 3}};
-    Buffer<float> output_array8[2] = {{kSize, kSize, 3}, {kSize, kSize, 3}};
-    Buffer<float> output_array9[2] = {{kSize, kSize, 3}, {kSize, kSize, 3}};
+    Buffer<float, 3> output0(kSize, kSize, 3);
+    Buffer<float, 3> output1(kSize, kSize, 3);
+    Buffer<float, 3> typed_output_buffer(kSize, kSize, 3);
+    Buffer<float, 3> type_only_output_buffer(kSize, kSize, 3);
+    Buffer<float, 3> dim_only_output_buffer(kSize, kSize, 3);
+    Buffer<float, 3> untyped_output_buffer(kSize, kSize, 3);
+    Buffer<float, 3> tupled_output_buffer0(kSize, kSize, 3);
+    Buffer<int32_t, 3> tupled_output_buffer1(kSize, kSize, 3);
+    Buffer<float, 0> output_scalar = Buffer<float>::make_scalar();
+    Buffer<float, 3> output_array[2] = {{kSize, kSize, 3}, {kSize, kSize, 3}};
+    Buffer<float, 3> output_array2[4] = {{kSize, kSize, 3}, {kSize, kSize, 3}, {kSize, kSize, 3}, {kSize, kSize, 3}};
+    Buffer<float, 0> output_array3[2] = {Buffer<float>::make_scalar(), Buffer<float>::make_scalar()};
+    Buffer<float, 3> output_array4[2] = {{kSize, kSize, 3}, {kSize, kSize, 3}};
+    Buffer<float, 3> output_array5[2] = {{kSize, kSize, 3}, {kSize, kSize, 3}};
+    Buffer<float, 3> output_array6[2] = {{kSize, kSize, 3}, {kSize, kSize, 3}};
+    Buffer<float, 3> output_array7[2] = {{kSize, kSize, 3}, {kSize, kSize, 3}};
+    Buffer<float, 3> output_array8[2] = {{kSize, kSize, 3}, {kSize, kSize, 3}};
+    Buffer<float, 3> output_array9[2] = {{kSize, kSize, 3}, {kSize, kSize, 3}};
 
     result = metadata_tester(
         input,                                                                   // Input<Func>

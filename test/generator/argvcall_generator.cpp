@@ -6,8 +6,7 @@ class ArgvCall : public Halide::Generator<ArgvCall> {
 public:
     Input<float> f1{"f1", 1.0};
     Input<float> f2{"f2", 1.0};
-
-    Output<Buffer<int32_t>> output{"output", 3};
+    Output<Buffer<int32_t, 3>> output{"output"};
 
     void generate() {
         Var x, y, c;

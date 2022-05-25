@@ -4,7 +4,7 @@ namespace {
 
 class ReactionDiffusion2Init : public Halide::Generator<ReactionDiffusion2Init> {
 public:
-    Output<Buffer<float>> output{"output", 3};
+    Output<Buffer<float, 3>> output{"output"};
 
     void generate() {
         output(x, y, c) = Halide::random_float();
@@ -28,11 +28,11 @@ private:
 
 class ReactionDiffusion2Update : public Halide::Generator<ReactionDiffusion2Update> {
 public:
-    Input<Buffer<float>> state{"state", 3};
+    Input<Buffer<float, 3>> state{"state"};
     Input<int> mouse_x{"mouse_x"};
     Input<int> mouse_y{"mouse_y"};
     Input<int> frame{"frame"};
-    Output<Buffer<float>> new_state{"new_state", 3};
+    Output<Buffer<float, 3>> new_state{"new_state"};
 
     void generate() {
         clamped = Halide::BoundaryConditions::repeat_edge(state);
@@ -163,10 +163,10 @@ private:
 
 class ReactionDiffusion2Render : public Halide::Generator<ReactionDiffusion2Render> {
 public:
-    Input<Buffer<float>> state{"state", 3};
+    Input<Buffer<float, 3>> state{"state"};
     // TODO(srj): should be Input<bool>; using Input<int> to work around Issue #1760
     Input<int> output_bgra{"output_bgra", 0, 0, 1};
-    Output<Buffer<uint8_t>> render{"render", 3};
+    Output<Buffer<uint8_t, 3>> render{"render"};
 
     void generate() {
         Func contour;

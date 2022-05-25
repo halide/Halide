@@ -212,13 +212,13 @@ private:
 
 class ElementwiseProgramOp : public ElementwiseOp {
 private:
-    Halide::Runtime::Buffer<int16_t> program_;
+    Halide::Runtime::Buffer<int16_t, 2> program_;
 
 public:
-    ElementwiseProgramOp(std::vector<TensorPtr> inputs, const TensorPtr &output, HalideBuffer<int16_t> program)
+    ElementwiseProgramOp(std::vector<TensorPtr> inputs, const TensorPtr &output, HalideBuffer<int16_t, 2> program)
         : ElementwiseOp(std::move(inputs), {output}), program_(program) {
     }
-    ElementwiseProgramOp(std::vector<TensorPtr> inputs, std::vector<TensorPtr> outputs, HalideBuffer<int16_t> program)
+    ElementwiseProgramOp(std::vector<TensorPtr> inputs, std::vector<TensorPtr> outputs, HalideBuffer<int16_t, 2> program)
         : ElementwiseOp(std::move(inputs), std::move(outputs)), program_(program) {
     }
 

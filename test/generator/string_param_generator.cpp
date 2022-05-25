@@ -7,7 +7,7 @@ class StringParam : public Halide::Generator<StringParam> {
 public:
     GeneratorParam<std::string> rpn{"rpn_expr", ""};
 
-    Output<Buffer<int>> output{"output", 2};
+    Output<Buffer<int, 2>> output{"output"};
 
     void generate() {
         // Remove cmake extra skip characters if any exist.

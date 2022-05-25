@@ -33,7 +33,7 @@ bool test_approx_log2() {
     auto results = test.realize({extent});
     const int log2_precisions_size = sizeof(log2_precisions) / sizeof(log2_precisions[0]);
     for (int z = 0; z < log2_precisions_size; z++) {
-        Buffer<T> result = results[z];
+        Buffer<T, 1> result = results[z];
         const int log2_precision = log2_precisions[z];
         const double precision = 1 << log2_precision;
         for (int x = 0; x < result.width(); x++) {
@@ -76,7 +76,7 @@ bool test_approx_exp2() {
     const int log2_precision_results_size =
         sizeof(log2_precision_results) / sizeof(log2_precision_results[0]);
     for (int z = 0; z < log2_precision_results_size; z++) {
-        Buffer<T> result = results[z];
+        Buffer<T, 1> result = results[z];
         const int log2_precision_result = log2_precision_results[z];
         const double precision_result = 1 << log2_precision_result;
         for (int y = 0; y < result.height(); y++) {
@@ -122,7 +122,7 @@ bool test_approx_log2p1_exp2() {
     const int log2_precision_results_size =
         sizeof(log2_precision_results) / sizeof(log2_precision_results[0]);
     for (int z = 0; z < log2_precision_results_size; z++) {
-        Buffer<T> result = results[z];
+        Buffer<T, 2> result = results[z];
         const int log2_precision_result = log2_precision_results[z];
         const double precision_result = 1 << log2_precision_result;
         for (int y = 0; y < result.height(); y++) {
@@ -163,7 +163,7 @@ bool test_approx_log2m1_exp2() {
     const int log2_precision_results_size =
         sizeof(log2_precision_results) / sizeof(log2_precision_results[0]);
     for (int z = 0; z < log2_precision_results_size; z++) {
-        Buffer<T> result = results[z];
+        Buffer<T, 2> result = results[z];
         const int log2_precision_result = log2_precision_results[z];
         const double precision_result = 1 << log2_precision_result;
         for (int y = 0; y < result.height(); y++) {
@@ -204,7 +204,7 @@ bool test_approx_logistic() {
     const int log2_precision_results_size =
         sizeof(log2_precision_results) / sizeof(log2_precision_results[0]);
     for (int z = 0; z < log2_precision_results_size; z++) {
-        Buffer<T> result = results[z];
+        Buffer<T, 2> result = results[z];
         const int log2_precision_result = log2_precision_results[z];
         const double precision_result = 1 << log2_precision_result;
         const double absolute_tolerance = precision_result / 128;
@@ -250,7 +250,7 @@ bool test_approx_tanh() {
     const int log2_precision_results_size =
         sizeof(log2_precision_results) / sizeof(log2_precision_results[0]);
     for (int z = 0; z < log2_precision_results_size; z++) {
-        Buffer<T> result = results[z];
+        Buffer<T, 2> result = results[z];
         const int log2_precision_result = log2_precision_results[z];
         const double precision_result = 1 << log2_precision_result;
         const double absolute_tolerance = std::max(3.0, precision_result / 512);

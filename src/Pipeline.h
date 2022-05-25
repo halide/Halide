@@ -113,17 +113,17 @@ public:
         RealizationArg(halide_buffer_t *buf)
             : buf(buf) {
         }
-        template<typename T, int D>
-        RealizationArg(Runtime::Buffer<T, D> &dst)
+        template<typename T, int Dims>
+        RealizationArg(Runtime::Buffer<T, Dims> &dst)
             : buf(dst.raw_buffer()) {
         }
-        template<typename T>
-        HALIDE_NO_USER_CODE_INLINE RealizationArg(Buffer<T> &dst)
+        template<typename T, int Dims>
+        HALIDE_NO_USER_CODE_INLINE RealizationArg(Buffer<T, Dims> &dst)
             : buf(dst.raw_buffer()) {
         }
-        template<typename T, typename... Args,
+        template<typename T, int Dims, typename... Args,
                  typename = typename std::enable_if<Internal::all_are_convertible<Buffer<>, Args...>::value>::type>
-        RealizationArg(Buffer<T> &a, Args &&...args)
+        RealizationArg(Buffer<T, Dims> &a, Args &&...args)
             : buffer_list(std::make_unique<std::vector<Buffer<>>>(std::initializer_list<Buffer<>>{a, std::forward<Args>(args)...})) {
         }
         RealizationArg(RealizationArg &&from) = default;
@@ -214,7 +214,7 @@ public:
      * Deduces target files based on filenames specified in
      * output_files map.
      */
-    void compile_to(const std::map<Output, std::string> &output_files,
+    void compile_to(const std::map<OutputFileType, std::string> &output_files,
                     const std::vector<Argument> &args,
                     const std::string &fn_name,
                     const Target &target);
@@ -348,28 +348,6 @@ public:
      * returned from Halide::get_jit_target_from_environment()
      */
     void compile_jit(const Target &target = get_jit_target_from_environment());
-
-    /** Deprecated variants of the above that use a void pointer
-     * instead of a JITUserContext pointer. */
-    // @{
-    HALIDE_ATTRIBUTE_DEPRECATED("Custom handlers should by set by modifying the struct returned by jit_handlers()")
-    void set_error_handler(void (*handler)(void *, const char *));
-    HALIDE_ATTRIBUTE_DEPRECATED("Custom handlers should by set by modifying the struct returned by jit_handlers()")
-    void set_custom_allocator(void *(*malloc)(void *, size_t),
-                              void (*free)(void *, void *));
-    HALIDE_ATTRIBUTE_DEPRECATED("Custom handlers should by set by modifying the struct returned by jit_handlers()")
-    void set_custom_do_task(
-        int (*custom_do_task)(void *, int (*)(void *, int, uint8_t *),
-                              int, uint8_t *));
-    HALIDE_ATTRIBUTE_DEPRECATED("Custom handlers should by set by modifying the struct returned by jit_handlers()")
-    void set_custom_do_par_for(
-        int (*custom_do_par_for)(void *, int (*)(void *, int, uint8_t *), int,
-                                 int, uint8_t *));
-    HALIDE_ATTRIBUTE_DEPRECATED("Custom handlers should by set by modifying the struct returned by jit_handlers()")
-    void set_custom_trace(int (*trace_fn)(void *, const halide_trace_event_t *));
-    HALIDE_ATTRIBUTE_DEPRECATED("Custom handlers should by set by modifying the struct returned by jit_handlers()")
-    void set_custom_print(void (*handler)(void *, const char *));
-    // @}
 
     /** Install a set of external C functions or Funcs to satisfy
      * dependencies introduced by HalideExtern and define_extern

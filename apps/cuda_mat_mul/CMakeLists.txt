@@ -25,8 +25,7 @@ set(CMAKE_CXX_EXTENSIONS NO)
 find_package(Halide REQUIRED)
 
 # Generator
-add_executable(mat_mul.generator mat_mul_generator.cpp)
-target_link_libraries(mat_mul.generator PRIVATE Halide::Generator)
+add_halide_generator(mat_mul.generator SOURCES mat_mul_generator.cpp)
 
 # Filters
 add_halide_library(mat_mul FROM mat_mul.generator

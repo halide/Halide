@@ -2,7 +2,7 @@ include ../support/Makefile.inc
 
 # The emscripten compiler
 EMCC ?= emcc
-EMCC_FLAGS ?= -s WASM=1 -s USE_SDL=2 -s TOTAL_MEMORY=512MB -O3 -I $(HALIDE_DISTRIB_PATH)/include
+EMCC_FLAGS ?= -std=c++17 -s WASM=1 -s USE_SDL=2 -s TOTAL_MEMORY=512MB -O3 -I $(HALIDE_DISTRIB_PATH)/include
 EMCC_THREADS_FLAGS ?= $(EMCC_FLAGS) -pthread -matomics
 
 # the output dir for the .js products must be fixed, because that's what index.html looks for

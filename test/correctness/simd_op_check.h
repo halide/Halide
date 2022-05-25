@@ -1,6 +1,14 @@
 #ifndef SIMD_OP_CHECK_H
 #define SIMD_OP_CHECK_H
 
+/** \file Support for small, perhaps single line, tests that can be checked both
+ * for appearance of patterns in the generated assembly and, if the host
+ * architecture supports the target being tested, will run the snippet on random
+ * inputs and check if scalar and vector compilations match. (Floating-point
+ * matching is done approximately.) This is used in simd_op_check.cpp and more
+ * specialized tests for specific architectures.
+ */
+
 #include "Halide.h"
 #include "halide_test_dirs.h"
 
@@ -88,7 +96,7 @@ public:
                                   Target::FMA, Target::FMA4, Target::F16C,
                                   Target::VSX, Target::POWER_ARCH_2_07,
                                   Target::ARMv7s, Target::NoNEON,
-                                  Target::WasmSimd128}) {
+                                  Target::WasmSimd128, Target::RVV}) {
             if (target.has_feature(f) != host_target.has_feature(f)) {
                 can_run_the_code = false;
             }
@@ -101,10 +109,10 @@ public:
         std::string file_name = output_directory + fn_name;
 
         auto ext = Internal::get_output_info(target);
-        std::map<Output, std::string> outputs = {
-            {Output::c_header, file_name + ext.at(Output::c_header).extension},
-            {Output::object, file_name + ext.at(Output::object).extension},
-            {Output::assembly, file_name + ".s"},
+        std::map<OutputFileType, std::string> outputs = {
+            {OutputFileType::c_header, file_name + ext.at(OutputFileType::c_header).extension},
+            {OutputFileType::object, file_name + ext.at(OutputFileType::object).extension},
+            {OutputFileType::assembly, file_name + ".s"},
         };
         error.compile_to(outputs, arg_types, fn_name, target);
 

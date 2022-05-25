@@ -40,6 +40,7 @@
 #include "Inline.h"
 #include "LICM.h"
 #include "LoopCarry.h"
+#include "LowerParallelTasks.h"
 #include "LowerWarpShuffles.h"
 #include "Memoization.h"
 #include "OffloadGPULoops.h"
@@ -109,6 +110,8 @@ void lower_impl(const vector<Function> &output_funcs,
                 const vector<IRMutator *> &custom_passes,
                 Module &result_module) {
     auto time_start = std::chrono::high_resolution_clock::now();
+
+    size_t initial_lowered_function_count = result_module.functions().size();
 
     // Create a deep-copy of the entire graph of Funcs.
     auto [outputs, env] = deep_copy(output_funcs, build_environment(output_funcs));
@@ -364,7 +367,7 @@ void lower_impl(const vector<Function> &output_funcs,
     s = bound_small_allocations(s);
     log("Lowering after bounding small allocations:", s);
 
-    if (t.has_feature(Target::Profile)) {
+    if (t.has_feature(Target::Profile) || t.has_feature(Target::ProfileByTimer)) {
         debug(1) << "Injecting profiling...\n";
         s = inject_profiling(s, pipeline_name);
         log("Lowering after injecting profiling:", s);
@@ -372,7 +375,7 @@ void lower_impl(const vector<Function> &output_funcs,
 
     if (t.has_feature(Target::CUDA)) {
         debug(1) << "Injecting warp shuffles...\n";
-        s = lower_warp_shuffles(s);
+        s = lower_warp_shuffles(s, t);
         log("Lowering after injecting warp shuffles:", s);
     }
 
@@ -440,6 +443,34 @@ void lower_impl(const vector<Function> &output_funcs,
         debug(1) << "Skipping GPU offload...\n";
     }
 
+    // TODO: This needs to happen before lowering parallel tasks, because global
+    // images used inside parallel loops are rewritten from loads from images to
+    // loads from closure parameters. Closure parameters are missing the Buffer<>
+    // object, which needs to be found by infer_arguments here. Running
+    // infer_arguments prior to lower_parallel_tasks is a hacky solution to this
+    // problem. It would be better if closures could directly reference globals
+    // so they don't add overhead to the closure.
+    vector<InferredArgument> inferred_args = infer_arguments(s, outputs);
+
+    std::vector<LoweredFunc> closure_implementations;
+    debug(1) << "Lowering Parallel Tasks...\n";
+    s = lower_parallel_tasks(s, closure_implementations, pipeline_name, t);
+    // Process any LoweredFunctions added by other passes. In practice, this
+    // will likely not work well enough due to ordering issues with
+    // closure generating passes and instead all such passes will need to
+    // be done at once.
+    for (size_t i = initial_lowered_function_count; i < result_module.functions().size(); i++) {
+        // Note that lower_parallel_tasks() appends to the end of closure_implementations
+        result_module.functions()[i].body =
+            lower_parallel_tasks(result_module.functions()[i].body, closure_implementations,
+                                 result_module.functions()[i].name, t);
+    }
+    for (auto &lowered_func : closure_implementations) {
+        result_module.append(lowered_func);
+    }
+    debug(2) << "Lowering after generating parallel tasks and closures:\n"
+             << s << "\n\n";
+
     vector<Argument> public_args = args;
     for (const auto &out : outputs) {
         for (const Parameter &buf : out.output_buffers()) {
@@ -449,7 +480,6 @@ void lower_impl(const vector<Function> &output_funcs,
         }
     }
 
-    vector<InferredArgument> inferred_args = infer_arguments(s, outputs);
     for (const InferredArgument &arg : inferred_args) {
         if (arg.param.defined() && arg.param.name() == "__user_context") {
             // The user context is always in the inferred args, but is

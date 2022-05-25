@@ -64,7 +64,7 @@ int main(int argc, char **argv) {
     halide_set_custom_free(&my_halide_free);
     halide_set_error_handler(&my_halide_error);
 
-    Buffer<int32_t> output(size);
+    Buffer<int32_t, 1> output(size);
     int result = cleanup_on_error(output);
 
     if (result != halide_error_code_out_of_memory &&

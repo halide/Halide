@@ -402,8 +402,11 @@ struct IsRoundtrippable {
     }
 };
 
-/** Emit a version of a string that is a valid identifier in C (. is replaced with _) */
-std::string c_print_name(const std::string &name);
+/** Emit a version of a string that is a valid identifier in C (. is replaced with _)
+ * If prefix_underscore is true (the default), an underscore will be prepended if the
+ * input starts with an alphabetic character to avoid reserved word clashes.
+ */
+std::string c_print_name(const std::string &name, bool prefix_underscore = true);
 
 /** Return the LLVM_VERSION against which this libHalide is compiled. This is provided
  * only for internal tests which need to verify behavior; please don't use this outside

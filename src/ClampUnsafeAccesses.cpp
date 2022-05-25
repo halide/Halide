@@ -11,13 +11,35 @@ namespace {
 struct ClampUnsafeAccesses : IRMutator {
     const std::map<std::string, Function> &env;
     FuncValueBounds &func_bounds;
+    std::vector<std::string> realizes_inside_current_producer;
 
     ClampUnsafeAccesses(const std::map<std::string, Function> &env, FuncValueBounds &func_bounds)
         : env(env), func_bounds(func_bounds) {
     }
 
+    bool is_realize_inside_current_producer(const std::string &n) const {
+        return std::find(realizes_inside_current_producer.begin(),
+                         realizes_inside_current_producer.end(), n) != realizes_inside_current_producer.end();
+    }
+
 protected:
     using IRMutator::visit;
+
+    Stmt visit(const ProducerConsumer *op) override {
+        if (op->is_producer) {
+            ScopedValue<std::vector<std::string>> r(realizes_inside_current_producer, {});
+            return IRMutator::visit(op);
+        } else {
+            return IRMutator::visit(op);
+        }
+    }
+
+    Stmt visit(const Realize *op) override {
+        realizes_inside_current_producer.push_back(op->name);
+        auto new_stmt = IRMutator::visit(op);
+        realizes_inside_current_producer.pop_back();
+        return new_stmt;
+    }
 
     Expr visit(const Let *let) override {
         return visit_let<Let, Expr>(let);
@@ -35,22 +57,23 @@ protected:
     }
 
     Expr visit(const Call *call) override {
-        if (call->call_type != Call::Halide) {
-            return IRMutator::visit(call);
-        }
-
-        if (is_inside_indexing) {
+        // Note that if the call's realization is inside the current producer (i.e. it's caller),
+        // the compute bounds of this call should be known to cover all loaded values, so we
+        // should be able to safely skip the clamp injection (see #6297).
+        if (call->call_type == Call::Halide && is_inside_indexing && !is_realize_inside_current_producer(call->name)) {
             auto bounds = func_bounds.at({call->name, call->value_index});
             if (bounds_smaller_than_type(bounds, call->type)) {
                 // TODO(#6297): check that the clamped function's allocation bounds might be wider than its compute bounds
-
                 auto [new_args, changed] = mutate_with_changes(call->args);
-                Expr new_call = changed ? call : Call::make(call->type, call->name, new_args, call->call_type, call->func, call->value_index, call->image, call->param);
+                Expr new_call = !changed ? call : Call::make(call->type, call->name, new_args, call->call_type, call->func, call->value_index, call->image, call->param);
                 return Max::make(Min::make(new_call, std::move(bounds.max)), std::move(bounds.min));
             }
         }
 
-        ScopedValue<bool> s(is_inside_indexing, true);
+        ScopedValue<bool> s(is_inside_indexing,
+                            (is_inside_indexing ||
+                             call->call_type == Call::Halide ||
+                             call->call_type == Call::Image));
         return IRMutator::visit(call);
     }
 

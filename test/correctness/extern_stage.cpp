@@ -31,7 +31,7 @@ extern "C" DLLEXPORT int flip_x(halide_buffer_t *in1, halide_buffer_t *in2, hali
         // We don't mutate the output buffer, because we can handle
         // any size output.
 
-        //printf("Bounds inference flip_x over [%d %d] requires [%d %d]\n", min, extent, flipped_min, extent);
+        // printf("Bounds inference flip_x over [%d %d] requires [%d %d]\n", min, extent, flipped_min, extent);
     } else {
         assert(in1->type == halide_type_of<uint8_t>());
         assert(in2->type == halide_type_of<int32_t>());

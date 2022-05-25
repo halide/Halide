@@ -42,7 +42,7 @@ bool can_convert(const LoweredArgument *arg) {
     if (arg->type.is_handle()) {
         if (arg->name == "__user_context") {
             /* __user_context is a void* pointer to a user supplied memory region.
-           * We allow the Python callee to pass PyObject* pointers to that. */
+             * We allow the Python callee to pass PyObject* pointers to that. */
             return true;
         } else {
             return false;
@@ -101,13 +101,15 @@ std::pair<string, string> print_type(const LoweredArgument *arg) {
 
 void PythonExtensionGen::convert_buffer(const string &name, const LoweredArgument *arg) {
     internal_assert(arg->is_buffer());
-    internal_assert(arg->dimensions);
+    const int dims_to_use = arg->dimensions;
+    // Always allocate at least 1 halide_dimension_t, even for zero-dimensional buffers
+    const int dims_to_allocate = std::max(1, dims_to_use);
     dest << "    halide_buffer_t buffer_" << name << ";\n";
-    dest << "    halide_dimension_t dimensions_" << name << "[" << (int)arg->dimensions << "];\n";
+    dest << "    halide_dimension_t dimensions_" << name << "[" << dims_to_allocate << "];\n";
     dest << "    Py_buffer view_" << name << ";\n";
     dest << "    if (_convert_py_buffer_to_halide(";
     dest << /*pyobj*/ "py_" << name << ", ";
-    dest << /*dimensions*/ (int)arg->dimensions << ", ";
+    dest << /*dimensions*/ (int)dims_to_use << ", ";
     dest << /*flags*/ (arg->is_output() ? "PyBUF_WRITABLE" : "0") << ", ";
     dest << /*dim*/ "dimensions_" << name << ", ";
     dest << /*out*/ "&buffer_" << name << ", ";
@@ -164,7 +166,7 @@ __attribute__((unused))
 #endif
 int _convert_py_buffer_to_halide(
         PyObject* pyobj, int dimensions, int flags,
-        halide_dimension_t* dim,  // array of size `dimensions`
+        halide_dimension_t* dim,  // array of >= size `dimensions`
         halide_buffer_t* out, Py_buffer &buf, const char* name) {
     int ret = PyObject_GetBuffer(
       pyobj, &buf, PyBUF_FORMAT | PyBUF_STRIDED_RO | PyBUF_ANY_CONTIGUOUS | flags);
@@ -347,7 +349,9 @@ void PythonExtensionGen::compile(const LoweredFunc &f) {
             // Python already converted this.
         }
     }
-    dest << "    int result = " << f.name << "(";
+    dest << "    int result;\n";
+    dest << "    Py_BEGIN_ALLOW_THREADS\n";
+    dest << "    result = " << f.name << "(";
     for (size_t i = 0; i < args.size(); i++) {
         if (i > 0) {
             dest << ", ";
@@ -359,6 +363,7 @@ void PythonExtensionGen::compile(const LoweredFunc &f) {
         }
     }
     dest << ");\n";
+    dest << "    Py_END_ALLOW_THREADS\n";
     release_buffers();
     dest << R"INLINE_CODE(
     if (result != 0) {

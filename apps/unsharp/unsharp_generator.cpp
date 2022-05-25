@@ -6,8 +6,8 @@ class Unsharp : public Halide::Generator<Unsharp> {
 public:
     GeneratorParam<float> sigma{"sigma", 1.5f};
 
-    Input<Buffer<float>> input{"input", 3};
-    Output<Buffer<float>> output{"output", 3};
+    Input<Buffer<float, 3>> input{"input"};
+    Output<Buffer<float, 3>> output{"output"};
 
     void generate() {
         Var x("x"), y("y"), c("c");

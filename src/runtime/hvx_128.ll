@@ -423,7 +423,7 @@ define weak_odr void @halide.hexagon.vscatter_acc.w.w(i8* %buf_ptr, i32 %size, <
 }
 
 define weak_odr void @halide.hexagon.scatter.release(i8* %ptr) nounwind uwtable {
-  call void asm sideeffect "vmem($0 + #0):scatter_release\0A; v1 = vmem($0 + #0)\0A", "=*m,*m,~{v1}"(i8* %ptr, i8* %ptr)
+  call void asm sideeffect "vmem($0 + #0):scatter_release\0A; v1 = vmem($0 + #0)\0A", "=*m,*m,~{v1}"(i8* elementtype(i8) %ptr, i8* elementtype(i8) %ptr)
   ret void
 }
 

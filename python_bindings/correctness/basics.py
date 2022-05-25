@@ -284,6 +284,105 @@ def test_vector_tile():
     p = hl.Pipeline([f, g])
     p.compile_jit()
 
+def test_scalar_funcs():
+    input = hl.ImageParam(hl.UInt(16), 0, 'input')
+
+    f = hl.Func('f')
+    g = hl.Func('g')
+
+    input[()]
+
+    (input[()]+input[()]) / 2
+    f[()]
+    g[()]
+
+    f[()] = (input[()]+input[()]+input[()])/3
+    g[()] = (f[()]+f[()]+f[()])/3
+
+    g.compile_jit()
+
+def test_bool_conversion():
+    x = hl.Var('x')
+    f = hl.Func('f')
+    f[x] = x
+    s = bool(True)
+    # Verify that this doesn't fail with 'Argument passed to specialize must be of type bool'
+    f.compute_root().specialize(True)
+
+def test_typed_funcs():
+    x = hl.Var('x')
+    y = hl.Var('y')
+
+    f = hl.Func('f')
+    assert not f.defined()
+    try:
+        assert f.output_type() == Int(32)
+    except RuntimeError as e:
+        assert 'it is undefined' in str(e)
+    else:
+        assert False, 'Did not see expected exception!'
+
+    try:
+        assert f.outputs() == 0
+    except RuntimeError as e:
+        assert 'it is undefined' in str(e)
+    else:
+        assert False, 'Did not see expected exception!'
+
+    try:
+        assert f.dimensions() == 0
+    except RuntimeError as e:
+        assert 'it is undefined' in str(e)
+    else:
+        assert False, 'Did not see expected exception!'
+
+
+    f = hl.Func(hl.Int(32), 2, 'f')
+    assert not f.defined()
+    assert f.output_type() == hl.Int(32)
+    assert f.output_types() == [hl.Int(32)]
+    assert f.outputs() == 1
+    assert f.dimensions() == 2
+
+    f = hl.Func([hl.Int(32), hl.Float(64)], 3, 'f')
+    assert not f.defined()
+    try:
+        assert f.output_type() == hl.Int(32)
+    except RuntimeError as e:
+        assert 'it returns a Tuple' in str(e)
+    else:
+        assert False, 'Did not see expected exception!'
+
+    assert f.output_types() == [hl.Int(32), hl.Float(64)]
+    assert f.outputs() == 2
+    assert f.dimensions() == 3
+
+    f = hl.Func(hl.Int(32), 1, 'f')
+    try:
+        f[x, y] = hl.i32(0);
+        f.realize([10, 10])
+    except RuntimeError as e:
+        assert 'is constrained to have exactly 1 dimensions, but is defined with 2 dimensions' in str(e)
+    else:
+        assert False, 'Did not see expected exception!'
+
+    f = hl.Func(hl.Int(32), 2, 'f')
+    try:
+        f[x, y] = hl.i16(0);
+        f.realize([10, 10])
+    except RuntimeError as e:
+        assert 'is constrained to only hold values of type int32 but is defined with values of type int16' in str(e)
+    else:
+        assert False, 'Did not see expected exception!'
+
+    f = hl.Func((hl.Int(32), hl.Float(32)), 2, 'f')
+    try:
+        f[x, y] = (hl.i16(0), hl.f64(0))
+        f.realize([10, 10])
+    except RuntimeError as e:
+        assert 'is constrained to only hold values of type (int32, float32) but is defined with values of type (int16, float64)' in str(e)
+    else:
+        assert False, 'Did not see expected exception!'
 
 
 if __name__ == "__main__":
@@ -291,6 +390,7 @@ if __name__ == "__main__":
     test_runtime_error()
     test_misused_and()
     test_misused_or()
+    test_typed_funcs()
     test_float_or_int()
     test_operator_order()
     test_int_promotion()
@@ -300,3 +400,5 @@ if __name__ == "__main__":
     test_basics3()
     test_basics4()
     test_basics5()
+    test_scalar_funcs()
+    test_bool_conversion()

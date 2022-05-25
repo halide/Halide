@@ -15,11 +15,10 @@ Halide::Expr is_planar(const T &p, int channels = 3) {
 // A trivial 2x2 blur.
 class Blur2x2 : public Halide::Generator<Blur2x2> {
 public:
-    Input<Buffer<float>> input{"input", 3};
+    Input<Buffer<float, 3>> input{"input"};
     Input<int32_t> width{"width"};
     Input<int32_t> height{"height"};
-
-    Output<Buffer<float>> blur{"blur", 3};
+    Output<Buffer<float, 3>> blur{"blur"};
 
     void generate() {
         // We pass in parameters to tell us where the boundary

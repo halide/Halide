@@ -10,7 +10,7 @@ function(target_export_script TARGET)
     cmake_parse_arguments(ARG "${options}" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
 
     get_property(target_type TARGET ${TARGET} PROPERTY TYPE)
-    if (NOT target_type STREQUAL "SHARED_LIBRARY")
+    if (NOT target_type STREQUAL "SHARED_LIBRARY" AND NOT target_type STREQUAL "MODULE_LIBRARY")
         # Linker scripts do nothing on non-shared libraries.
         return()
     endif ()

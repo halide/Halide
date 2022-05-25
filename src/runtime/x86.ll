@@ -1,4 +1,3 @@
-; Note that this is only used for LLVM 8.0+
 define weak_odr <16 x i8>  @paddusbx16(<16 x i8> %a0, <16 x i8> %a1) nounwind alwaysinline {
   %1 = add <16 x i8> %a0, %a1
   %2 = icmp ugt <16 x i8> %a0, %1
@@ -6,7 +5,6 @@ define weak_odr <16 x i8>  @paddusbx16(<16 x i8> %a0, <16 x i8> %a1) nounwind al
   ret <16 x i8> %3
 }
 
-; Note that this is only used for LLVM 8.0+
 define weak_odr <8 x i16> @padduswx8(<8 x i16> %a0, <8 x i16> %a1) nounwind alwaysinline {
   %1 = add <8 x i16> %a0, %a1
   %2 = icmp ugt <8 x i16> %a0, %1
@@ -14,7 +12,6 @@ define weak_odr <8 x i16> @padduswx8(<8 x i16> %a0, <8 x i16> %a1) nounwind alwa
   ret <8 x i16> %3
 }
 
-; Note that this is only used for LLVM 8.0+
 define weak_odr <16 x i8> @psubusbx16(<16 x i8> %a0, <16 x i8> %a1) nounwind alwaysinline {
   %1 = icmp ugt <16 x i8> %a0, %a1
   %2 = select <16 x i1> %1, <16 x i8> %a0, <16 x i8> %a1
@@ -22,7 +19,6 @@ define weak_odr <16 x i8> @psubusbx16(<16 x i8> %a0, <16 x i8> %a1) nounwind alw
   ret <16 x i8> %3
 }
 
-; Note that this is only used for LLVM 8.0+
 define weak_odr <8 x i16> @psubuswx8(<8 x i16> %a0, <8 x i16> %a1) nounwind alwaysinline {
   %1 = icmp ugt <8 x i16> %a0, %a1
   %2 = select <8 x i1> %1, <8 x i16> %a0, <8 x i16> %a1
@@ -54,6 +50,28 @@ define weak_odr <8 x i16>  @packssdwx8(<8 x i32> %arg) nounwind alwaysinline {
   %3 = tail call <8 x i16> @llvm.x86.sse2.packssdw.128(<4 x i32> %1, <4 x i32> %2)
   ret <8 x i16> %3
 }
+
+define weak_odr <8 x i32> @wmul_pmaddwd_avx2(<8 x i16> %a, <8 x i16> %b) nounwind alwaysinline {
+  %1 = zext <8 x i16> %a to <8 x i32>
+  %2 = zext <8 x i16> %b to <8 x i32>
+  %3 = bitcast <8 x i32> %1 to <16 x i16>
+  %4 = bitcast <8 x i32> %2 to <16 x i16>
+  %res = call <8 x i32> @llvm.x86.avx2.pmadd.wd(<16 x i16> %3, <16 x i16> %4)
+  ret <8 x i32> %res
+}
+
+declare <8 x i32> @llvm.x86.avx2.pmadd.wd(<16 x i16>, <16 x i16>) nounwind readnone
+
+define weak_odr <4 x i32> @wmul_pmaddwd_sse2(<4 x i16> %a, <4 x i16> %b) nounwind alwaysinline {
+  %1 = zext <4 x i16> %a to <4 x i32>
+  %2 = zext <4 x i16> %b to <4 x i32>
+  %3 = bitcast <4 x i32> %1 to <8 x i16>
+  %4 = bitcast <4 x i32> %2 to <8 x i16>
+  %res = call <4 x i32> @llvm.x86.sse2.pmadd.wd(<8 x i16> %3, <8 x i16> %4)
+  ret <4 x i32> %res
+}
+
+declare <4 x i32> @llvm.x86.sse2.pmadd.wd(<8 x i16>, <8 x i16>) nounwind readnone
 
 define weak_odr <4 x float> @sqrt_f32x4(<4 x float> %x) nounwind uwtable readnone alwaysinline {
   %1 = tail call <4 x float> @llvm.x86.sse.sqrt.ps(<4 x float> %x) nounwind
@@ -125,12 +143,12 @@ define weak_odr <4 x float> @fast_inverse_sqrt_f32x4(<4 x float> %x) nounwind uw
 ; -- A version without stack spills tends to confuse the x86-32 code generator
 ; and cause it to fail via running out of registers.
 define weak_odr void @x86_cpuid_halide(i32* %info) nounwind uwtable {
-  call void asm sideeffect inteldialect "xchg ebx, esi\0A\09mov eax, dword ptr $$0 $0\0A\09mov ecx, dword ptr $$4 $0\0A\09cpuid\0A\09mov dword ptr $$0 $0, eax\0A\09mov dword ptr $$4 $0, ebx\0A\09mov dword ptr $$8 $0, ecx\0A\09mov dword ptr $$12 $0, edx\0A\09xchg ebx, esi", "=*m,~{eax},~{ebx},~{ecx},~{edx},~{esi},~{dirflag},~{fpsr},~{flags}"(i32* %info)
+  call void asm sideeffect inteldialect "xchg ebx, esi\0A\09mov eax, dword ptr $$0 $0\0A\09mov ecx, dword ptr $$4 $0\0A\09cpuid\0A\09mov dword ptr $$0 $0, eax\0A\09mov dword ptr $$4 $0, ebx\0A\09mov dword ptr $$8 $0, ecx\0A\09mov dword ptr $$12 $0, edx\0A\09xchg ebx, esi", "=*m,~{eax},~{ebx},~{ecx},~{edx},~{esi},~{dirflag},~{fpsr},~{flags}"(i32* elementtype(i32) %info)
   ret void
 }
 
 ; Same, but ensure that we save/restore the full 64 bits of rbx/rsi.
 define weak_odr void @x64_cpuid_halide(i32* %info) nounwind uwtable {
-  call void asm sideeffect inteldialect "xchg rbx, rsi\0A\09mov eax, dword ptr $$0 $0\0A\09mov ecx, dword ptr $$4 $0\0A\09cpuid\0A\09mov dword ptr $$0 $0, eax\0A\09mov dword ptr $$4 $0, ebx\0A\09mov dword ptr $$8 $0, ecx\0A\09mov dword ptr $$12 $0, edx\0A\09xchg rbx, rsi", "=*m,~{eax},~{ebx},~{ecx},~{edx},~{esi},~{dirflag},~{fpsr},~{flags}"(i32* %info)
+  call void asm sideeffect inteldialect "xchg rbx, rsi\0A\09mov eax, dword ptr $$0 $0\0A\09mov ecx, dword ptr $$4 $0\0A\09cpuid\0A\09mov dword ptr $$0 $0, eax\0A\09mov dword ptr $$4 $0, ebx\0A\09mov dword ptr $$8 $0, ecx\0A\09mov dword ptr $$12 $0, edx\0A\09xchg rbx, rsi", "=*m,~{eax},~{ebx},~{ecx},~{edx},~{esi},~{dirflag},~{fpsr},~{flags}"(i32* elementtype(i32) %info)
   ret void
 }

@@ -19,12 +19,12 @@
 
 namespace Halide {
 
-template<typename T>
+template<typename T, int Dims>
 class Buffer;
 struct Target;
 
 /** Enums specifying various kinds of outputs that can be produced from a Halide Pipeline. */
-enum class Output {
+enum class OutputFileType {
     assembly,
     bitcode,
     c_header,
@@ -72,7 +72,7 @@ struct OutputInfo {
     //
     bool is_multi{false};
 };
-std::map<Output, const OutputInfo> get_output_info(const Target &target);
+std::map<OutputFileType, const OutputInfo> get_output_info(const Target &target);
 
 /** Definition of an argument to a LoweredFunc. This is similar to
  * Argument, except it enables passing extra information useful to
@@ -163,7 +163,7 @@ public:
     // @}
 
     /** Return the function with the given name. If no such function
-    * exists in this module, assert. */
+     * exists in this module, assert. */
     Internal::LoweredFunc get_function_by_name(const std::string &name) const;
 
     /** Add a declaration to this module. */
@@ -176,7 +176,7 @@ public:
 
     /** Compile a halide Module to variety of outputs, depending on
      * the fields set in output_files. */
-    void compile(const std::map<Output, std::string> &output_files) const;
+    void compile(const std::map<OutputFileType, std::string> &output_files) const;
 
     /** Compile a halide Module to in-memory object code. Currently
      * only supports LLVM based compilation, but should be extended to
@@ -214,15 +214,15 @@ void compile_standalone_runtime(const std::string &object_filename, const Target
  * for a given target. For use with Target::NoRuntime. Standalone runtimes are
  * only compatible with pipelines compiled by the same build of Halide used to
  * call this function. Return a map with just the actual outputs filled in
- * (typically, Output::object and/or Output::static_library).
+ * (typically, OutputFileType::object and/or OutputFileType::static_library).
  */
-std::map<Output, std::string> compile_standalone_runtime(const std::map<Output, std::string> &output_files, const Target &t);
+std::map<OutputFileType, std::string> compile_standalone_runtime(const std::map<OutputFileType, std::string> &output_files, const Target &t);
 
 using ModuleFactory = std::function<Module(const std::string &fn_name, const Target &target)>;
 using CompilerLoggerFactory = std::function<std::unique_ptr<Internal::CompilerLogger>(const std::string &fn_name, const Target &target)>;
 
 void compile_multitarget(const std::string &fn_name,
-                         const std::map<Output, std::string> &output_files,
+                         const std::map<OutputFileType, std::string> &output_files,
                          const std::vector<Target> &targets,
                          const std::vector<std::string> &suffixes,
                          const ModuleFactory &module_factory,

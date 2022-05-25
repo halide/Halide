@@ -11,7 +11,7 @@
 namespace Halide {
 namespace Internal {
 
-Expr lower_lerp(Expr zero_val, Expr one_val, const Expr &weight, const Target &target) {
+Expr lower_lerp(Type final_type, Expr zero_val, Expr one_val, const Expr &weight, const Target &target) {
 
     Expr result;
 
@@ -153,7 +153,6 @@ Expr lower_lerp(Expr zero_val, Expr one_val, const Expr &weight, const Target &t
                 } else {
                     result = rounding_shift_right(rounding_shift_right(prod_sum, bits) + prod_sum, bits);
                 }
-                result = Cast::make(UInt(bits, computation_type.lanes()), result);
                 break;
             }
             case 64:
@@ -165,11 +164,22 @@ Expr lower_lerp(Expr zero_val, Expr one_val, const Expr &weight, const Target &t
             default:
                 break;
             }
+
+            if (weight.type().is_float()) {
+                // Insert an explicit cast to the computation type, even if
+                // we're going to widen, because out-of-range floats can produce
+                // out-of-range outputs.
+                result = Cast::make(computation_type, result);
+            }
         }
 
         if (!is_const_zero(bias_value)) {
             result = Cast::make(result_type, result + bias_value);
         }
+    }
+
+    if (result.type() != final_type) {
+        result = Cast::make(final_type, result);
     }
 
     return simplify(common_subexpression_elimination(result));

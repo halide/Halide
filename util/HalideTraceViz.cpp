@@ -1302,7 +1302,7 @@ int run(bool ignore_trace_tags, FlagProcessor flag_processor) {
                 Label l = label;
                 l.pos.x += fi.config.pos.x;
                 l.pos.y += fi.config.pos.y;
-                labels_being_drawn.emplace_back(l, halide_clock);
+                labels_being_drawn.emplace_back(l, (int)halide_clock);
             }
         }
 

@@ -46,7 +46,7 @@ int main(int argc, char **argv) {
         // Do an explicit copy-back and device free.
         {
             int scratch[80];
-            Buffer<int> output = wrap_memory ? Buffer<int>(scratch, 80) : Buffer<int>(80);
+            Buffer<int, 1> output = wrap_memory ? Buffer<int, 1>(scratch, 80) : Buffer<int, 1>(80);
 
             gpu_object_lifetime(output);
 
@@ -64,7 +64,7 @@ int main(int argc, char **argv) {
         // Do an explicit copy-back but no device free
         {
             int scratch[80];
-            Buffer<int> output = wrap_memory ? Buffer<int>(scratch, 80) : Buffer<int>(80);
+            Buffer<int, 1> output = wrap_memory ? Buffer<int, 1>(scratch, 80) : Buffer<int, 1>(80);
 
             gpu_object_lifetime(output);
 
@@ -81,13 +81,13 @@ int main(int argc, char **argv) {
         // Do no explicit copy-back and no device free
         {
             int scratch[80];
-            Buffer<int> output = wrap_memory ? Buffer<int>(scratch, 80) : Buffer<int>(80);
+            Buffer<int, 1> output = wrap_memory ? Buffer<int, 1>(scratch, 80) : Buffer<int, 1>(80);
             gpu_object_lifetime(output);
         }
 
         // Test coverage for Halide::Runtime::Buffer device pointer management.
         {
-            Buffer<int> output(80);
+            Buffer<int, 1> output(80);
 
             // Call Halide filter to get a device allocation.
             gpu_object_lifetime(output);
@@ -95,14 +95,14 @@ int main(int argc, char **argv) {
             {
                 // Construct a new buffer from the halide_buffer_t and let it destruct.
                 // Verifies this does not deallocate or otherwise disable the device handle.
-                Buffer<int> temp(*output.raw_buffer());
+                Buffer<int, 1> temp(*output.raw_buffer());
             }
             output.copy_to_host();
         }
 
         // Do this test twice to test explicit unwrapping and letting the destructor do it.
         for (int i = 0; i < 2; i++) {
-            Buffer<int> output(80);
+            Buffer<int, 1> output(80);
 
             // Call Halide filter to get a device allocation.
             gpu_object_lifetime(output);
@@ -133,7 +133,7 @@ int main(int argc, char **argv) {
 #endif
 
             if (can_rewrap) {
-                Buffer<int> wrap_test(80);
+                Buffer<int, 1> wrap_test(80);
                 wrap_test.device_wrap_native(output.raw_buffer()->device_interface, native_handle);
                 wrap_test.set_device_dirty();
                 wrap_test.copy_to_host();
@@ -153,14 +153,14 @@ int main(int argc, char **argv) {
 
         // Test coverage for Halide::Runtime::Buffer construction from halide_buffer_t, unmanaged
         {
-            Buffer<int> output(80);
+            Buffer<int, 1> output(80);
             halide_buffer_t raw_buf = *output.raw_buffer();
 
             // Call Halide filter to get a device allocation.
             gpu_object_lifetime(&raw_buf);
 
             {
-                Buffer<int> copy(raw_buf);
+                Buffer<int, 1> copy(raw_buf);
             }
             // Note that a nonzero result should be impossible here (in theory)
             int result = halide_device_free(nullptr, &raw_buf);
@@ -172,21 +172,21 @@ int main(int argc, char **argv) {
 
         // Test coverage for Halide::Runtime::Buffer construction from halide_buffer_t, taking ownership
         {
-            Buffer<int> output(80);
+            Buffer<int, 1> output(80);
             halide_buffer_t raw_buf = *output.raw_buffer();
 
             // Call Halide filter to get a device allocation.
             gpu_object_lifetime(&raw_buf);
 
-            Buffer<int> copy(raw_buf, Halide::Runtime::BufferDeviceOwnership::Allocated);
+            Buffer<int, 1> copy(raw_buf, Halide::Runtime::BufferDeviceOwnership::Allocated);
         }
 
         // Test combined device and host allocation support.
         {
-            Buffer<int> output(80);
+            Buffer<int, 1> output(80);
             gpu_object_lifetime(output);
             if (output.raw_buffer()->device_interface != nullptr) {
-                Buffer<int> output2(nullptr, 80);
+                Buffer<int, 1> output2(nullptr, 80);
                 output2.device_and_host_malloc(output.raw_buffer()->device_interface);
                 gpu_object_lifetime(output2);
 

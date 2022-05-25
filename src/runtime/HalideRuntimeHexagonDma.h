@@ -49,7 +49,7 @@ typedef enum {
 
 extern const struct halide_device_interface_t *halide_hexagon_dma_device_interface();
 
-/** This API is used to set up the DMA device interface to be used for DMA transfer. This also internally 
+/** This API is used to set up the DMA device interface to be used for DMA transfer. This also internally
  * creates the DMA device handle and populates all the Buffer related parameters (width, height, stride)
  * to be used for DMA configuration.
  */
@@ -66,7 +66,7 @@ extern int halide_hexagon_dma_device_detach_native(void *user_context, struct ha
  */
 extern int halide_hexagon_dma_allocate_engine(void *user_context, void **dma_engine);
 
-/** This API free up the allocated DMA engine. This need to be called after a user program ends 
+/** This API free up the allocated DMA engine. This need to be called after a user program ends
  * all the DMA Operations and make it available for subsequent DMA transfers */
 extern int halide_hexagon_dma_deallocate_engine(void *user_context, void *dma_engine);
 
@@ -83,7 +83,7 @@ extern int halide_hexagon_dma_prepare_for_copy_to_device(void *user_context, str
                                                          void *dma_engine, bool is_ubwc,
                                                          halide_hexagon_image_fmt_t fmt);
 
-/** This API is used to frees up the DMA Resources associated with the buffer. 
+/** This API is used to frees up the DMA Resources associated with the buffer.
  * TODO: Currently this API is a dummy as all the necessary freeing is done in an another API.
  * This will be used in future.
  */

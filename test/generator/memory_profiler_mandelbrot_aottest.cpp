@@ -60,7 +60,7 @@ void validate(halide_profiler_state *s) {
 }
 
 int launcher_task(void *user_context, int index, uint8_t *closure) {
-    Buffer<int> output(width, height);
+    Buffer<int, 2> output(width, height);
     float fx = cos(index / 10.0f), fy = sin(index / 10.0f);
     memory_profiler_mandelbrot(-2.0f, 2.0f, -1.4f, 1.4f, fx, fy, iters,
                                output.width(), output.height(), output);

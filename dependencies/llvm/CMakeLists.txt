@@ -20,15 +20,12 @@ message(STATUS "Found LLVM ${LLVM_PACKAGE_VERSION}")
 message(STATUS "Using LLVMConfig.cmake in: ${LLVM_DIR}")
 message(STATUS "Using ClangConfig.cmake in: ${Clang_DIR}")
 
-# LLVM_PACKAGE_VERSION does not propagate to higher scopes
-set(Halide_LLVM_VERSION ${LLVM_PACKAGE_VERSION} CACHE INTERNAL "Provided LLVM version")
-
-if (LLVM_PACKAGE_VERSION VERSION_LESS 12.0)
-    message(FATAL_ERROR "LLVM version must be 12.0 or newer")
+if (LLVM_PACKAGE_VERSION VERSION_LESS 13.0)
+    message(FATAL_ERROR "LLVM version must be 13.0 or newer")
 endif ()
 
-if (LLVM_PACKAGE_VERSION VERSION_GREATER 14.0)
-    message(WARNING "Halide is not tested on LLVM versions beyond 14.0")
+if (LLVM_PACKAGE_VERSION VERSION_GREATER 15.0)
+    message(WARNING "Halide is not tested on LLVM versions beyond 15.0")
 endif ()
 
 set(Halide_LLVM_DEFS ${LLVM_DEFINITIONS} $<BUILD_INTERFACE:LLVM_VERSION=${LLVM_VERSION_MAJOR}${LLVM_VERSION_MINOR}>)
@@ -101,7 +98,7 @@ add_library(Halide_LLVM INTERFACE)
 add_library(Halide::LLVM ALIAS Halide_LLVM)
 
 set_target_properties(Halide_LLVM PROPERTIES EXPORT_NAME LLVM)
-target_include_directories(Halide_LLVM INTERFACE $<BUILD_INTERFACE:${LLVM_INCLUDE_DIRS}>)
+target_include_directories(Halide_LLVM INTERFACE "$<BUILD_INTERFACE:${LLVM_INCLUDE_DIRS}>")
 target_compile_definitions(Halide_LLVM INTERFACE ${Halide_LLVM_DEFS})
 
 # Link LLVM libraries to Halide_LLVM, depending on shared, static, or bundled selection.

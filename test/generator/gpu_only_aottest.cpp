@@ -38,7 +38,7 @@ using namespace Halide::Runtime;
 int main(int argc, char **argv) {
 #if defined(TEST_OPENCL) || defined(TEST_CUDA)
     const int W = 32, H = 32;
-    Buffer<int> input(W, H);
+    Buffer<int, 2> input(W, H);
     for (int y = 0; y < input.height(); y++) {
         for (int x = 0; x < input.width(); x++) {
             input(x, y) = x + y;
@@ -53,7 +53,7 @@ int main(int argc, char **argv) {
     input.copy_to_device(halide_cuda_device_interface());
 #endif
 
-    Buffer<int> output(W, H);
+    Buffer<int, 2> output(W, H);
 
     // Create halide_buffer_ts without host pointers.
     halide_buffer_t input_no_host = *((halide_buffer_t *)input);
