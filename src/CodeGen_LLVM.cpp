@@ -467,12 +467,20 @@ void CodeGen_LLVM::init_codegen(const std::string &name, bool any_strict_float) 
 
     // Add some target specific info to the module as metadata.
     module->addModuleFlag(llvm::Module::Warning, "halide_use_soft_float_abi", use_soft_float_abi() ? 1 : 0);
-    module->addModuleFlag(llvm::Module::Warning, "halide_mcpu", MDString::get(*context, mcpu()));
+    module->addModuleFlag(llvm::Module::Warning, "halide_mcpu_target", MDString::get(*context, mcpu_target()));
+    module->addModuleFlag(llvm::Module::Warning, "halide_mcpu_tune", MDString::get(*context, mcpu_tune()));
     module->addModuleFlag(llvm::Module::Warning, "halide_mattrs", MDString::get(*context, mattrs()));
     module->addModuleFlag(llvm::Module::Warning, "halide_mabi", MDString::get(*context, mabi()));
     module->addModuleFlag(llvm::Module::Warning, "halide_use_pic", use_pic() ? 1 : 0);
     module->addModuleFlag(llvm::Module::Warning, "halide_use_large_code_model", llvm_large_code_model ? 1 : 0);
     module->addModuleFlag(llvm::Module::Warning, "halide_per_instruction_fast_math_flags", any_strict_float);
+    int vector_bits = get_target().vector_bits;
+    if (vector_bits != 0) {
+        internal_assert(vector_bits % 128 == 0);
+        int vscale = vector_bits / 128;
+        module->addModuleFlag(llvm::Module::Warning, "halide_vscale_range",
+                              MDString::get(*context, std::to_string(vscale) + ", " + std::to_string(vscale)));
+    }
 
     // Ensure some types we need are defined
     halide_buffer_t_type = get_llvm_struct_type_by_name(module.get(), "struct.halide_buffer_t");
@@ -535,7 +543,7 @@ std::unique_ptr<llvm::Module> CodeGen_LLVM::compile(const Module &input) {
         }
         FunctionType *func_t = FunctionType::get(i32_t, arg_types, false);
         function = llvm::Function::Create(func_t, llvm_linkage(f.linkage), names.extern_name, module.get());
-        set_function_attributes_for_target(function, target);
+        set_function_attributes_from_halide_target_options(*function);
 
         // Mark the buffer args as no alias and save indication for add_argv_wrapper if needed
         std::vector<bool> buffer_args(f.args.size());
@@ -576,6 +584,8 @@ std::unique_ptr<llvm::Module> CodeGen_LLVM::compile(const Module &input) {
 }
 
 std::unique_ptr<llvm::Module> CodeGen_LLVM::finish_codegen() {
+    llvm::for_each(*module, set_function_attributes_from_halide_target_options);
+
     // Verify the module is ok
     internal_assert(!verifyModule(*module, &llvm::errs()));
     debug(2) << "Done generating llvm bitcode\n";
@@ -1128,14 +1138,15 @@ void CodeGen_LLVM::optimize_module() {
 
     std::unique_ptr<TargetMachine> tm = make_target_machine(*module);
 
-    // At present, we default to *enabling* LLVM loop optimization,
-    // unless DisableLLVMLoopOpt is set; we're going to flip this to defaulting
-    // to *not* enabling these optimizations (and removing the DisableLLVMLoopOpt feature).
-    // See https://github.com/halide/Halide/issues/4113 for more info.
-    // (Note that setting EnableLLVMLoopOpt always enables loop opt, regardless
-    // of the setting of DisableLLVMLoopOpt.)
-    const bool do_loop_opt = !get_target().has_feature(Target::DisableLLVMLoopOpt) ||
-                             get_target().has_feature(Target::EnableLLVMLoopOpt);
+    // halide_target_feature_disable_llvm_loop_opt is deprecated in Halide 15
+    // (and will be removed in Halide 16). Halide 15 now defaults to disabling
+    // LLVM loop optimization, unless halide_target_feature_enable_llvm_loop_opt is set.
+    if (get_target().has_feature(Target::DisableLLVMLoopOpt)) {
+        user_warning << "halide_target_feature_disable_llvm_loop_opt is deprecated in Halide 15 "
+                        "(and will be removed in Halide 16). Halide 15 now defaults to disabling "
+                        "LLVM loop optimization, unless halide_target_feature_enable_llvm_loop_opt is set.\n";
+    }
+    const bool do_loop_opt = get_target().has_feature(Target::EnableLLVMLoopOpt);
 
     PipelineTuningOptions pto;
     pto.LoopInterleaving = do_loop_opt;

@@ -616,16 +616,15 @@ bool get_md_string(llvm::Metadata *value, std::string &result) {
     return false;
 }
 
-void get_target_options(const llvm::Module &module, llvm::TargetOptions &options, std::string &mcpu, std::string &mattrs) {
+void get_target_options(const llvm::Module &module, llvm::TargetOptions &options) {
     bool use_soft_float_abi = false;
     get_md_bool(module.getModuleFlag("halide_use_soft_float_abi"), use_soft_float_abi);
-    get_md_string(module.getModuleFlag("halide_mcpu"), mcpu);
-    get_md_string(module.getModuleFlag("halide_mattrs"), mattrs);
     std::string mabi;
     get_md_string(module.getModuleFlag("halide_mabi"), mabi);
     bool use_pic = true;
     get_md_bool(module.getModuleFlag("halide_use_pic"), use_pic);
 
+    // FIXME: can this be migrated into `set_function_attributes_from_halide_target_options()`?
     bool per_instruction_fast_math_flags = false;
     get_md_bool(module.getModuleFlag("halide_per_instruction_fast_math_flags"), per_instruction_fast_math_flags);
 
@@ -655,9 +654,14 @@ void clone_target_options(const llvm::Module &from, llvm::Module &to) {
         to.addModuleFlag(llvm::Module::Warning, "halide_use_soft_float_abi", use_soft_float_abi ? 1 : 0);
     }
 
-    std::string mcpu;
-    if (get_md_string(from.getModuleFlag("halide_mcpu"), mcpu)) {
-        to.addModuleFlag(llvm::Module::Warning, "halide_mcpu", llvm::MDString::get(context, mcpu));
+    std::string mcpu_target;
+    if (get_md_string(from.getModuleFlag("halide_mcpu_target"), mcpu_target)) {
+        to.addModuleFlag(llvm::Module::Warning, "halide_mcpu_target", llvm::MDString::get(context, mcpu_target));
+    }
+
+    std::string mcpu_tune;
+    if (get_md_string(from.getModuleFlag("halide_mcpu_tune"), mcpu_tune)) {
+        to.addModuleFlag(llvm::Module::Warning, "halide_mcpu_tune", llvm::MDString::get(context, mcpu_tune));
     }
 
     std::string mattrs;
@@ -683,9 +687,7 @@ std::unique_ptr<llvm::TargetMachine> make_target_machine(const llvm::Module &mod
     internal_assert(llvm_target) << "Could not create LLVM target for " << triple.str() << "\n";
 
     llvm::TargetOptions options;
-    std::string mcpu = "";
-    std::string mattrs = "";
-    get_target_options(module, options, mcpu, mattrs);
+    get_target_options(module, options);
 
     bool use_pic = true;
     get_md_bool(module.getModuleFlag("halide_use_pic"), use_pic);
@@ -694,7 +696,7 @@ std::unique_ptr<llvm::TargetMachine> make_target_machine(const llvm::Module &mod
     get_md_bool(module.getModuleFlag("halide_use_large_code_model"), use_large_code_model);
 
     auto *tm = llvm_target->createTargetMachine(module.getTargetTriple(),
-                                                mcpu, mattrs,
+                                                /*CPU target=*/"", /*Features=*/"",
                                                 options,
                                                 use_pic ? llvm::Reloc::PIC_ : llvm::Reloc::Static,
                                                 use_large_code_model ? llvm::CodeModel::Large : llvm::CodeModel::Small,
@@ -702,14 +704,24 @@ std::unique_ptr<llvm::TargetMachine> make_target_machine(const llvm::Module &mod
     return std::unique_ptr<llvm::TargetMachine>(tm);
 }
 
-void set_function_attributes_for_target(llvm::Function *fn, const Target &t) {
+void set_function_attributes_from_halide_target_options(llvm::Function &fn) {
+    llvm::Module &module = *fn.getParent();
+
+    std::string mcpu_target, mcpu_tune, mattrs, vscale_range;
+    get_md_string(module.getModuleFlag("halide_mcpu_target"), mcpu_target);
+    get_md_string(module.getModuleFlag("halide_mcpu_tune"), mcpu_tune);
+    get_md_string(module.getModuleFlag("halide_mattrs"), mattrs);
+    get_md_string(module.getModuleFlag("halide_vscale_range"), vscale_range);
+
+    fn.addFnAttr("target-cpu", mcpu_target);
+    fn.addFnAttr("tune-cpu", mcpu_tune);
+    fn.addFnAttr("target-features", mattrs);
+
     // Turn off approximate reciprocals for division. It's too
     // inaccurate even for us.
-    fn->addFnAttr("reciprocal-estimates", "none");
-    if (t.vector_bits != 0) {
-        internal_assert(t.vector_bits % 128 == 0);
-        int vscale = t.vector_bits / 128;
-        fn->addFnAttr("vscale_range", std::to_string(vscale) + ", " + std::to_string(vscale));
+    fn.addFnAttr("reciprocal-estimates", "none");
+    if (!vscale_range.empty()) {
+        fn.addFnAttr("vscale_range", vscale_range);
     }
 }
 

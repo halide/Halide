@@ -114,7 +114,8 @@ protected:
 
     void init_module() override;
 
-    string mcpu() const override;
+    string mcpu_target() const override;
+    string mcpu_tune() const override;
     string mattrs() const override;
     string mabi() const override;
     bool use_soft_float_abi() const override;
@@ -250,8 +251,12 @@ void CodeGen_RISCV::visit(const Call *op) {
     CodeGen_Posix::visit(op);
 }
 
-string CodeGen_RISCV::mcpu() const {
+string CodeGen_RISCV::mcpu_target() const {
     return "";
+}
+
+string CodeGen_RISCV::mcpu_tune() const {
+    return mcpu_target();
 }
 
 string CodeGen_RISCV::mattrs() const {
