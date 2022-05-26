@@ -3401,4 +3401,8 @@ void Func::compile_jit(const Target &target) {
     pipeline().compile_jit(target);
 }
 
+Callable Func::compile_to_callable(const std::vector<Argument> &args, const Target &target) {
+    return pipeline().compile_to_callable(args, target);
+}
+
 }  // namespace Halide
