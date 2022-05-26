@@ -1119,6 +1119,13 @@ void CodeGen_LLVM::optimize_module() {
     llvm::CGSCCAnalysisManager cgam;
     llvm::ModuleAnalysisManager mam;
 
+#if LLVM_VERSION < 140
+    // If building against LLVM older than 14, explicitly specify AA pipeline.
+    // Not needed with LLVM14 or later, already the default.
+    llvm::AAManager aa = pb.buildDefaultAAPipeline();
+    fam.registerPass([&] { return std::move(aa); });
+#endif
+
     // Register all the basic analyses with the managers.
     pb.registerModuleAnalyses(mam);
     pb.registerCGSCCAnalyses(cgam);
