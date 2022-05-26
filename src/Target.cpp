@@ -547,9 +547,9 @@ int parse_vector_bits(const std::string &tok) {
         int parsed = std::stoi(num, &end_index);
         if (end_index == num.size()) {
             return parsed;
-        }      
+        }
     }
-    return -1; 
+    return -1;
 }
 
 }  // End anonymous namespace
