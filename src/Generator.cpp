@@ -867,6 +867,19 @@ gengen
         }
     }
 
+    // It's possible that in the future loaded plugins might change
+    // how arguments are parsed, so we handle those first.
+    for (const auto &lib_path : split_string(flags_info["-p"], ",")) {
+        if (!lib_path.empty()) {
+            load_plugin(lib_path);
+        }
+    }
+
+    const auto autoscheduler_name = flags_info["-s"];
+    if (!autoscheduler_name.empty()) {
+        Pipeline::set_default_autoscheduler_name(autoscheduler_name);
+    }
+
     const auto &d_val = flags_info["-d"];
     user_assert(d_val == "1" || d_val == "0") << "-d must be 0 or 1\n"
                                               << kUsage;
@@ -980,8 +993,6 @@ gengen
     args.build_mode = (d_val == "1") ? ExecuteGeneratorArgs::Gradient : ExecuteGeneratorArgs::Default;
     args.create_generator = create_generator;
     // args.generator_params is already set
-    args.autoscheduler_name = flags_info["-s"];
-    args.plugin_paths = split_string(flags_info["-p"], ",");
 
     // Allow quick-n-dirty use of compiler logging via HL_DEBUG_COMPILER_LOGGER env var
     const bool do_compiler_logging = args.output_types.count(OutputFileType::compiler_log) ||
@@ -989,7 +1000,7 @@ gengen
     if (do_compiler_logging) {
         const bool obfuscate_compiler_logging = get_env_variable("HL_OBFUSCATE_COMPILER_LOGGER") == "1";
         args.compiler_logger_factory =
-            [obfuscate_compiler_logging, &args](const std::string &function_name, const Target &target) -> std::unique_ptr<CompilerLogger> {
+            [obfuscate_compiler_logging, &args, &autoscheduler_name](const std::string &function_name, const Target &target) -> std::unique_ptr<CompilerLogger> {
             // rebuild generator_args from the map so that they are always canonical
             std::string generator_args_string;
             std::string sep;
@@ -1001,7 +1012,7 @@ gengen
             std::unique_ptr<JSONCompilerLogger> t(new JSONCompilerLogger(
                 obfuscate_compiler_logging ? "" : args.generator_name,
                 obfuscate_compiler_logging ? "" : args.function_name,
-                obfuscate_compiler_logging ? "" : args.autoscheduler_name,
+                obfuscate_compiler_logging ? "" : autoscheduler_name,
                 obfuscate_compiler_logging ? Target() : target,
                 obfuscate_compiler_logging ? "" : generator_args_string,
                 obfuscate_compiler_logging));
@@ -1155,7 +1166,6 @@ void execute_generator(const ExecuteGeneratorArgs &args_in) {
 
     // These should be valid Generator names by the rules of is_valid_name()
     ensure_valid_name(args.generator_name);
-    ensure_valid_name(args.autoscheduler_name);
 
     // These should be valid "leaf" filenames, but not full or partial pathnames
     ensure_not_pathname(args.runtime_name);
@@ -1166,18 +1176,6 @@ void execute_generator(const ExecuteGeneratorArgs &args_in) {
     }
 
     // -------------- Process the arguments.
-
-    // It's possible that in the future loaded plugins might change
-    // how arguments are parsed, so we handle those first.
-    for (const auto &lib_path : args.plugin_paths) {
-        if (!lib_path.empty()) {
-            load_plugin(lib_path);
-        }
-    }
-
-    if (!args.autoscheduler_name.empty()) {
-        Pipeline::set_default_autoscheduler_name(args.autoscheduler_name);
-    }
 
     if (!args.runtime_name.empty()) {
         // Runtime always ignores file_base_name

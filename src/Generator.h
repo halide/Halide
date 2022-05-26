@@ -4050,22 +4050,6 @@ struct ExecuteGeneratorArgs {
     // to the Generator created, an error will occur.
     GeneratorParamsMap generator_params;
 
-    // The name of the autoscheduler to use.
-    // If empty, the default autoscheduler will be used.
-    std::string autoscheduler_name;
-
-    // A list of shared libraries that will be loaded before the
-    // generator is executed (typically, custom auto-schedulers).
-    //
-    // Note that in these cases, C++ generators must either be linked against
-    // a shared libHalide or compiled with -rdynamic so that references in the
-    // shared library to libHalide can resolve.
-    //
-    // Note that loading plugin(s) doesn't change the default autoscheduler
-    // (it just makes them available); set the `autoscheduler_name` field
-    // to change that.
-    std::vector<std::string> plugin_paths;
-
     // Compiler Logger to use, for diagnostic work. If null, don't do any logging.
     CompilerLoggerFactory compiler_logger_factory = nullptr;
 };
