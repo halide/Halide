@@ -541,15 +541,15 @@ bool lookup_feature(const std::string &tok, Target::Feature &result) {
 }
 
 int parse_vector_bits(const std::string &tok) {
-  if (tok.find("vector_bits_") == 0) {
-      std::string num = tok.substr(sizeof("vector_bits_") - 1, std::string::npos);
-      size_t end_index;
-      int parsed = std::stoi(num, &end_index);
-      if (end_index == num.size()) {
-          return parsed;
-      }      
-  }
-  return -1; 
+    if (tok.find("vector_bits_") == 0) {
+        std::string num = tok.substr(sizeof("vector_bits_") - 1, std::string::npos);
+        size_t end_index;
+        int parsed = std::stoi(num, &end_index);
+        if (end_index == num.size()) {
+            return parsed;
+        }      
+    }
+    return -1; 
 }
 
 }  // End anonymous namespace
