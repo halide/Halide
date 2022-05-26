@@ -120,36 +120,6 @@ private:
             argv[idx] = dest;
         }
 
-        // // Normally, halide_type_of<>() will fail at compiletime if you pass it a type that
-        // // it isn't specialized for -- that's the correct behavior and should not be changed.
-        // template<typename... Ts>
-        // using void_t = void;
-
-        // template<typename T, typename = void>
-        // struct has_halide_type_of : std::false_type {};
-
-        // template<typename T>
-        // struct has_halide_type_of<T, void_t<decltype(halide_type_of<T>())>> : std::true_type {};
-
-        // template<typename T>
-        // constexpr halide_type_t safe_halide_type_of() {
-        //     if constexpr (has_halide_type_of<T>::value) {
-        //         return halide_type_of<T>();
-        //     } else {
-        //         return halide_type_t();
-        //     }
-        // }
-
-        // template<typename T, typename = void>
-        // struct safe_halide_type_of {
-        //     static constexpr halide_type_t value = halide_type_t();
-        // };
-
-        // template<typename T>
-        // struct safe_halide_type_of<T, void_t<decltype(halide_type_of<T>())>> {
-        //     static constexpr halide_type_t value = halide_type_of<T>();
-        // };
-
         template<typename T>
         HALIDE_ALWAYS_INLINE void fill_slot(const CallCheckInfo &cci, BadArgMask &bad_arg_mask, size_t idx, const T &value) {
             // TODO: this will fail to compile if halide_type_of<>() is not defined for the type;
