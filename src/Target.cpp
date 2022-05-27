@@ -1347,7 +1347,7 @@ void target_test() {
 
     internal_assert(Target().vector_bits == 0) << "Default Target vector_bits not 0.\n";
     internal_assert(Target("arm-64-linux-sve2-vector_bits_512").vector_bits == 512) << "Vector bits not parsed correctly.\n";
-    Target with_vector_bits(Target::Linux, Target::ARM, 64, Target::ProcessorGeneric, { Target::SVE }, 512);
+    Target with_vector_bits(Target::Linux, Target::ARM, 64, Target::ProcessorGeneric, {Target::SVE}, 512);
     internal_assert(with_vector_bits.vector_bits == 512) << "Vector bits not populated in constructor.\n";
     internal_assert(Target(with_vector_bits.to_string()).vector_bits == 512) << "Vector bits not round tripped properly.\n";
 
