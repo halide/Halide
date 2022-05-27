@@ -12,7 +12,7 @@ namespace {
 // We avoid extra dynamic memory allocations for Buffers by preallocating enough
 // space for 8 (rather than the default of 4) -- more is ok but slower, and > 8
 // seems pretty unlikely for real world code.
-static constexpr int MaxFastDimensions = 8;
+constexpr int MaxFastDimensions = 8;
 using HalideBuffer = Halide::Runtime::Buffer<void, AnyDims, MaxFastDimensions>;
 
 struct HBufArray {
