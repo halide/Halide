@@ -262,11 +262,8 @@ struct CallableContents {
     // The cached code
     JITCache jit_cache;
 
-    // Expected argument count, including JITUserContext, Inputs, and Outputs
-    size_t arg_count;
-
     // Encoded values for efficient runtime type checking;
-    // arg_count in length.
+    // identical to jit_cache.arguments in length.
     std::vector<Callable::CallCheckInfo> call_check_info;
 
     // Save the jit_handlers and jit_externs as they were at the time this
@@ -298,7 +295,11 @@ const Callable::CallCheckInfo *Callable::call_check_info() const {
 }
 
 size_t Callable::arg_count() const {
-    return contents->arg_count;  // Note: always includes JITUserContext
+    return contents->jit_cache.arguments.size();
+}
+
+const std::vector<Argument> &Callable::arguments() const {
+    return contents->jit_cache.arguments;
 }
 
 void Callable::do_fail_bad_call(BadArgMask bad_arg_mask, size_t hidden_args) const {
@@ -329,6 +330,8 @@ void Callable::do_fail_bad_call(BadArgMask bad_arg_mask, size_t hidden_args) con
     user_error << "Error calling '" << contents->name << "':\n"
                << errors.str();
 }
+
+/*static*/ JITUserContext Callable::empty_jit_user_context;
 
 int Callable::call_argv(size_t argc, const void **argv) const {
     assert(contents->jit_cache.jit_target.has_feature(Target::UserContext));
@@ -890,8 +893,7 @@ Callable Pipeline::compile_to_callable(const std::vector<Argument> &args_in, con
     // Note: this isn't the same as the 'args' we passed in; it has outputs
     // appended to it, so even if 'args' was still valid, it's not what we want here
     const auto &all_args = c.contents->jit_cache.arguments;
-    c.contents->arg_count = all_args.size();
-    c.contents->call_check_info.reserve(c.contents->arg_count);
+    c.contents->call_check_info.reserve(all_args.size());
     for (const Argument &a : all_args) {
         const auto cci = (a.name == user_context_arg.name) ?
                              Callable::make_ucon_cci() :

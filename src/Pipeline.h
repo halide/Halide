@@ -29,11 +29,16 @@ struct CallableContents;
 class Func;
 struct PipelineContents;
 
+namespace PythonBindings {
+class PyCallable;
+}
+
 // TODO: "Callable" is a terrible name, find something better
 class Callable {
 private:
     friend class Pipeline;
     friend struct CallableContents;
+    friend class PythonBindings::PyCallable;
 
     Internal::IntrusivePtr<CallableContents> contents;
 
@@ -180,7 +185,13 @@ private:
         return call_argv(count, &argv.argv[0]);
     }
 
+    static JITUserContext empty_jit_user_context;
+
 public:
+    /** Return the expected Arguments for this Callable, in the order they must be specified, including all outputs.
+     * Note that the first entry will *always* specify a JITUserContext. */
+    const std::vector<Argument> &arguments() const;
+
     template<typename... Args>
     HALIDE_MUST_USE_RESULT int
     operator()(JITUserContext *context, Args &&...args) {
@@ -190,9 +201,6 @@ public:
     template<typename... Args>
     HALIDE_MUST_USE_RESULT int
     operator()(Args &&...args) {
-        // TODO: could we just make a single static instance of this
-        // to share between all call sites?
-        JITUserContext empty_jit_user_context;
         return call<1, Args...>(&empty_jit_user_context, std::forward<Args>(args)...);
     }
 

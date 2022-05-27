@@ -94,6 +94,8 @@ void define_pipeline(py::module &m) {
 
             .def("compile_jit", &Pipeline::compile_jit, py::arg("target") = get_jit_target_from_environment())
 
+            .def("compile_to_callable", &Pipeline::compile_to_callable, py::arg("arguments"), py::arg("target") = get_jit_target_from_environment())
+
             .def(
                 "realize", [](Pipeline &p, Buffer<> buffer, const Target &target) -> void {
                     py::gil_scoped_release release;

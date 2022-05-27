@@ -11,6 +11,7 @@ set(TESTS
     bit_test.py
     boundary_conditions.py
     buffer.py
+    callable.py
     compile_to.py
     division.py
     extern.py
