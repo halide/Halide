@@ -285,6 +285,7 @@ tests(GROUPS correctness
       set_custom_trace.cpp
       shadowed_bound.cpp
       shared_self_references.cpp
+      shift_by_unsigned_negated.cpp
       shifted_image.cpp
       side_effects.cpp
       simd_op_check.cpp
