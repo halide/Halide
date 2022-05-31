@@ -142,7 +142,7 @@ void add_tasks(const Target &target, std::vector<Task> &tasks) {
                                 exit(-1);
                             }
                         };
-                        tasks.emplace_back(target, fn);
+                        tasks.push_back({target, fn});
                     }
                 }
             }
