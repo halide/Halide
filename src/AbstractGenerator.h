@@ -32,7 +32,7 @@ using ExternsMap = std::map<std::string, ExternalCode>;
 
 /**
  * AbstractGenerator is an ABC that defines the API a Generator must provide
- * to work with the existing Generator infrastructure (GenGen, RunGen,
+ * to work with the existing Generator infrastructure (GenGen, RunGen, execute_generator(),
  * Generator Stubs). The existing Generator<>-based instances all implement
  * this API, but any other code that implements this (and uses RegisterGenerator
  * to register itself) should be indistinguishable from a user perspective.
@@ -81,7 +81,8 @@ public:
      * was created with. Always legal to call on any AbstractGenerator instance,
      * regardless of what other methods have been called. (All AbstractGenerator instances
      * are expected to be created with immutable values for these, which can't be
-     * changed for a given instance.)
+     * changed for a given instance after creation. Note that Generator<> based subclasses
+     * can customize Target somewhat via init_from_context(); see Generator.h for more info.)
      *
      * CALL-AFTER: any
      * CALL-BEFORE: any
@@ -184,7 +185,8 @@ public:
     virtual bool emit_cpp_stub(const std::string &stub_file_path) = 0;
 
     // Below are some concrete methods that build on top of the rest of the AbstractGenerator API.
-    // Note that they are nonvirtual.
+    // Note that they are nonvirtual. TODO: would these be better as freestanding methods that
+    // just take AbstractGeneratorPtr as arguments?
 
     /** Call generate() and produce a Module for the result.
      *If function_name is empty, generator_name() will be used for the function. */
