@@ -399,6 +399,7 @@ HEXAGON_RUNTIME_LIBS = \
 
 # Keep this list sorted in alphabetical order.
 SOURCE_FILES = \
+  AbstractGenerator.cpp \
   AddAtomicMutex.cpp \
   AddImageChecks.cpp \
   AddParameterChecks.cpp \
@@ -575,6 +576,7 @@ SOURCE_FILES = \
 # Don't include anything here that includes llvm headers.
 # Keep this list sorted in alphabetical order.
 HEADER_FILES = \
+  AbstractGenerator.h \
   AddAtomicMutex.h \
   AddImageChecks.h \
   AddParameterChecks.h \
