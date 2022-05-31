@@ -66,6 +66,7 @@ Expr push_div_inside_mul_helper(const Expr &a, const IntImm *b, const Direction 
         // (c0 * x) / c1 when c0 % c1 == 0 -> x * (c0 / c1)
         const int64_t new_factor = div_imp(b->value, denom);
         if (new_factor == 1) {
+            // (c0 * x) / c0 -> x
             return handle_push_none(a, new_direction);
         } else {
             // Push the x * (c0 / c1)
@@ -177,7 +178,7 @@ Expr handle_push_div(const Expr &expr, const Direction direction, const int64_t 
 
 /*
  * Approximate method. Push multiplication by a constant inside a number of possible IR nodes.
- * Requires that the factor is not 1 - if factor=1, handle_push_none should be called.
+ * Requires that the factor is not 1. If factor=1, handle_push_none should be called.
  */
 Expr handle_push_mul(const Expr &expr, Direction direction, const int64_t factor) {
     debug(3) << "push_mul(" << expr << ", " << direction << ", " << factor << ")\n";
@@ -255,7 +256,7 @@ Expr handle_push_mul(const Expr &expr, Direction direction, const int64_t factor
         if (const IntImm *constant = op->b.as<IntImm>()) {
             // This is an approximation.
             if (constant->value > 0 && factor > 0) {
-                // Do some factoring simplification
+                // Do some factoring simplification.
                 int64_t gcd_val = gcd(constant->value, factor);
 
                 // For positive c0 and c1,
@@ -271,7 +272,7 @@ Expr handle_push_mul(const Expr &expr, Direction direction, const int64_t factor
                         return recurse;
                     }
                 } else {
-                    // Do GCD simplification
+                    // Do GCD simplification.
                     // All constants (factor, denominator, gcd) must be positive at this point.
                     internal_assert(gcd_val > 0) << "GCD is non-positive: " << gcd_val << "For expression: " << expr << " with factor: " << factor << " bound: " << direction << "\n";
                     // Factor out the greatest common divisior from both the factor and the denominator.
@@ -734,7 +735,7 @@ class ReorderTerms : public IRGraphMutator {
         return simplify_linear_summation(terms);
     }
 
-    // Two-finger O(n) algorithm for simplifying sums
+    // Two-finger O(n) algorithm for simplifying sums.
     std::vector<AffineTerm> simplify_linear_summation(const std::vector<AffineTerm> &terms) {
         if (terms.empty()) {
             // Nothing to do here.
@@ -991,7 +992,6 @@ Expr substitute_some_lets(const Expr &expr, size_t count = 100) {
 }
 
 Expr approximate_optimizations(const Expr &expr, Direction direction, const Scope<Interval> &scope) {
-    // TODO: try smart substitutions and/or an early-out mechanism.
     Expr subs = substitute_some_lets(expr);
     if (!subs.same_as(expr)) {
         subs = simplify(subs);
@@ -1037,7 +1037,7 @@ Interval approximate_constant_bounds(const Expr &expr, const Scope<Interval> &sc
         Expr lower = approximate_optimizations(expr, Direction::Lower, scope);
         Expr upper = approximate_optimizations(expr, Direction::Upper, scope);
 
-        // TODO: should these use `same_as`?
+        // Should these use `same_as`?
         const bool defined = lower.defined() || upper.defined();
         const bool equiv = lower.defined() && upper.defined() && equal(lower, upper);
         const bool lower_equiv = lower.defined() && !upper.defined() && equal(lower, expr);
