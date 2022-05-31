@@ -723,9 +723,12 @@ int main(int argc, char **argv) {
     SimdOpCheckHVX test_hvx(t);
 
     if (t == Target("hexagon-32-noos")) {
+        Halide::Internal::Test::Sharder::accept_sharded_status();
         printf("[SKIP] No HVX target enabled.\n");
         return 0;
     }
+
+    SimdOpCheckHVX test_hvx(t);
 
     if (argc > 1) {
         test_hvx.filter = argv[1];
