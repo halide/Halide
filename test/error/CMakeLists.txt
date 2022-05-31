@@ -32,6 +32,7 @@ tests(GROUPS error
       clamp_out_of_range.cpp
       compute_with_crossing_edges1.cpp
       compute_with_crossing_edges2.cpp
+      compute_with_fuse_in_specialization.cpp
       constrain_wrong_output_buffer.cpp
       constraint_uses_non_param.cpp
       define_after_realize.cpp
