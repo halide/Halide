@@ -1438,7 +1438,7 @@ void GeneratorBase::check_exact_phase(Phase expected_phase) const {
 void GeneratorBase::advance_phase(Phase new_phase) {
     switch (new_phase) {
     case Created:
-        internal_error;
+        internal_error << "Impossible";
         break;
     case ConfigureCalled:
         internal_assert(phase == Created);
