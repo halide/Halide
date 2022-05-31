@@ -127,7 +127,7 @@ static_assert(sizeof(float16_t) == 2, "float16_t should occupy two bytes");
 }  // namespace Halide
 
 template<>
-HALIDE_ALWAYS_INLINE halide_type_t halide_type_of<Halide::float16_t>() {
+HALIDE_ALWAYS_INLINE constexpr halide_type_t halide_type_of<Halide::float16_t>() {
     return halide_type_t(halide_type_float, 16);
 }
 
@@ -254,7 +254,7 @@ static_assert(sizeof(bfloat16_t) == 2, "bfloat16_t should occupy two bytes");
 }  // namespace Halide
 
 template<>
-HALIDE_ALWAYS_INLINE halide_type_t halide_type_of<Halide::bfloat16_t>() {
+HALIDE_ALWAYS_INLINE constexpr halide_type_t halide_type_of<Halide::bfloat16_t>() {
     return halide_type_t(halide_type_bfloat, 16);
 }
 
