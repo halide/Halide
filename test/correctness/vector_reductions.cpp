@@ -1,12 +1,16 @@
 #include "Halide.h"
+#include "test_sharding.h"
 
 using namespace Halide;
 
 namespace {
 
-void run_test(const Target &target) {
-    std::cout << "vector_reductions: Testing with " << target << "\n";
+struct Task {
+    Target target;
+    std::function<void()> fn;
+};
 
+void add_tasks(const Target &target, std::vector<Task> &tasks) {
     for (int dst_lanes : {1, 3}) {
         for (int reduce_factor : {2, 3, 4}) {
             std::vector<Type> types =
@@ -145,7 +149,10 @@ void run_test(const Target &target) {
 
 int main(int argc, char **argv) {
     Target target = get_jit_target_from_environment();
-    run_test(target);
+
+    std::vector<Task> tasks;
+    add_tasks(target, tasks);
+
     if (target.arch == Target::X86) {
         // LLVM has had SIMD codegen errors that we missed because we didn't test against
         // multiple SIMD architectures, using just 'host' instead. To remedy this, we'll
@@ -159,21 +166,33 @@ int main(int argc, char **argv) {
         // AVX and SSE41 as well.)
         if (target.has_feature(Target::AVX512)) {
             Target avx2_target(target.os, target.arch, target.bits, {Target::AVX2});
-            run_test(avx2_target);
+            add_tasks(avx2_target, tasks);
         }
         if (target.has_feature(Target::AVX2)) {
             Target sse41_target(target.os, target.arch, target.bits, {Target::AVX});
-            run_test(sse41_target);
+            add_tasks(sse41_target, tasks);
         }
         if (target.has_feature(Target::AVX)) {
             Target sse41_target(target.os, target.arch, target.bits, {Target::SSE41});
-            run_test(sse41_target);
+            add_tasks(sse41_target, tasks);
         }
         if (target.has_feature(Target::SSE41)) {
             // Halide assumes that all x86 targets have at least sse2
             Target sse2_target(target.os, target.arch, target.bits);
-            run_test(sse2_target);
+            add_tasks(sse2_target, tasks);
         }
+    }
+
+    using Sharder = Halide::Internal::Test::Sharder;
+    Sharder sharder(tasks.size());
+    Target prev_target;
+    for (size_t t = sharder.first(); t <= sharder.last(); t++) {
+        const auto &task = tasks.at(t);
+        if (task.target != prev_target) {
+            std::cout << "vector_reductions: Testing with " << task.target << "\n";
+            prev_target = task.target;
+        }
+        task.fn();
     }
 
     std::cout << "Success!\n";
