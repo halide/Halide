@@ -814,25 +814,35 @@ void CodeGen_WebGPU_Dev::CodeGen_WGSL::visit(const Store *op) {
         internal_assert(bits == 8 || bits == 16);
         internal_assert(!op->value.type().is_float());
         // Generated code (16-bits):
-        //  let prev = atomicLoad(&out.data[i / 2]);
         //  let shift = u32(i % 2) * 16u;
-        //  let mask = (prev ^ (bitcast<u32>(value)<<shift)) & (0xFFFFu<<shift);
-        //  atomicXor(&out.data[i / 2u], mask);
-        const string prev = "_" + unique_name('P');
+        //  var old = atomicLoad(&out[i / 2u]);
+        //  while (true) {
+        //    let mask = ((old >> shift) ^ bitcast<u32>(value)) & 0xFFFFu;
+        //    let new = old ^ (mask << shift);
+        //    let result = atomicCompareExchangeWeak(&out[i / 2u], old, new);
+        //    if (result.exchanged) {
+        //      break;
+        //    }
+        //    old = result.old_value;
+        // }
         const string shift = "_" + unique_name('S');
-        const string mask = "_" + unique_name('M');
-        stream << get_indent() << "let " << prev << " = atomicLoad(&"
-               << name << "[" << idx << " / " << elements << "]);\n";
+        const string old = "_" + unique_name('O');
         stream << get_indent() << "let " << shift << " = u32(" << idx << " % "
                << elements << ") * " << bits_str << "u;\n";
-        stream << get_indent() << "let " << mask << " = ("
-               << prev << " ^ (bitcast<u32>(" << value << ") << " << shift
-               << ")) & ("
-               << std::to_string((1 << bits) - 1) << "u << " << shift << ");\n";
-        stream << get_indent()
-               << "atomicXor(&"
+        stream << get_indent() << "var " << old << " = atomicLoad(&"
+               << name << "[" << idx << " / " << elements << "]);\n";
+        stream << get_indent() << "for (;;) {\n";
+        stream << get_indent() << "  let mask = ((" << old << " >> "
+               << shift << ") ^ bitcast<u32>(" << value << ")) & "
+               << std::to_string((1 << bits) - 1) << "u;\n";
+        stream << get_indent() << "  let new = " << old << " ^ (mask << "
+               << shift << ");\n";
+        stream << get_indent() << "  let result = atomicCompareExchangeWeak(&"
                << name << "[" << idx << " / " << elements << "], "
-               << mask << ");\n";
+               << old << ", new);\n";
+        stream << get_indent() << "  if (result.exchanged) { break; }\n";
+        stream << get_indent() << "  " << old << " = result.old_value;\n";
+        stream << get_indent() << "}\n";
     };
 
     const string idx = print_expr(op->index);
