@@ -97,6 +97,11 @@ int test() {
 }
 
 int main() {
+    if (!get_jit_target_from_environment().has_feature(Target::HVX)) {
+        printf("[SKIP] hexagon_scatter is only useful when targeting HVX.\n");
+        return 0;
+    }
+
     if (!test<uint16_t>() ||
         !test<int16_t>() ||
         !test<uint32_t>() ||
