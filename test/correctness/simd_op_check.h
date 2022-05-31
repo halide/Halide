@@ -315,7 +315,6 @@ public:
         /* First add some tests based on the target */
         add_tests();
 
-        Sharder::accept_sharded_status();
         Sharder sharder(tasks.size());
         bool success = true;
         for (size_t t = sharder.first(); t <= sharder.last(); t++) {
