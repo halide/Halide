@@ -190,6 +190,7 @@ int main(int argc, char **argv) {
 
     using Sharder = Halide::Internal::Test::Sharder;
     Sharder sharder(tasks.size());
+    std::cout << "Tasks " << tasks.size() << " first " << sharder.first() << " last " << sharder.last() << "\n";
     Target prev_target;
     for (size_t t = sharder.first(); t <= sharder.last(); t++) {
         const auto &task = tasks.at(t);
