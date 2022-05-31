@@ -50,7 +50,8 @@ public:
         }
     }
 
-    explicit Sharder(size_t num_tasks) : sharded_first(0), sharded_last(num_tasks - 1), sharded(false) {
+    explicit Sharder(size_t num_tasks)
+        : sharded_first(0), sharded_last(num_tasks - 1), sharded(false) {
         accept_sharded_status();
 
         int total_shards = std::atoi(get_env("TEST_TOTAL_SHARDS").c_str());  // 0 if not present
@@ -71,9 +72,15 @@ public:
         }
     }
 
-    size_t first() const { return sharded_first; }
-    size_t last() const { return sharded_last; }
-    bool is_sharded() const { return sharded; }
+    size_t first() const {
+        return sharded_first;
+    }
+    size_t last() const {
+        return sharded_last;
+    }
+    bool is_sharded() const {
+        return sharded;
+    }
 };
 
 }  // namespace Test
