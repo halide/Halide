@@ -381,6 +381,7 @@ class StripUnboundedTerms : public IRMutator {
 public:
     // A count of the number of unbounded vars in a given sub expression.
     int32_t unbounded_vars = 0;
+
 private:
     // Which direction we are approximating.
     Direction direction;
