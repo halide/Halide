@@ -271,6 +271,7 @@
 #include <utility>
 #include <vector>
 
+#include "AbstractGenerator.h"
 #include "ExternalCode.h"
 #include "Func.h"
 #include "ImageParam.h"
@@ -341,8 +342,8 @@ public:
     /** Create an instance of the Generator that is registered under the given
      * name. If the name isn't one returned by enumerate(), return nullptr
      * rather than assert-fail; caller must check for a valid result. */
-    virtual std::unique_ptr<GeneratorBase> create(const std::string &name,
-                                                  const Halide::GeneratorContext &context) const = 0;
+    virtual AbstractGeneratorPtr create(const std::string &name,
+                                        const Halide::GeneratorContext &context) const = 0;
 
     GeneratorFactoryProvider(const GeneratorFactoryProvider &) = delete;
     GeneratorFactoryProvider &operator=(const GeneratorFactoryProvider &) = delete;
@@ -360,6 +361,12 @@ int generate_filter_main(int argc, char **argv);
  * 'main' logic but avoid the global Generator registry (e.g. for bindings in languages
  * other than C++). */
 int generate_filter_main(int argc, char **argv, const GeneratorFactoryProvider &generator_factory_provider);
+
+/** This overload of generate_filter_main lets you provide your own provider for how to enumerate and/or create
+ * the generators based on registration name; this is useful if you want to re-use the
+ * 'main' logic but avoid the global Generator registry (e.g. for bindings in languages
+ * other than C++). */
+int generate_filter_main(int argc, char **argv, std::ostream &cerr, const GeneratorFactoryProvider &generator_factory_provider);
 
 // select_type<> is to std::conditional as switch is to if:
 // it allows a multiway compile-time type definition via the form
@@ -1256,10 +1263,6 @@ namespace Internal {
 template<typename T2>
 class GeneratorInput_Buffer;
 
-enum class IOKind { Scalar,
-                    Function,
-                    Buffer };
-
 /**
  * StubInputBuffer is the placeholder that a Stub uses when it requires
  * a Buffer for an input (rather than merely a Func or Expr). It is constructed
@@ -1274,6 +1277,8 @@ class StubInputBuffer {
     friend class StubInput;
     template<typename T2>
     friend class GeneratorInput_Buffer;
+    template<typename T2, int D2>
+    friend class StubInputBuffer;
 
     Parameter parameter_;
 
@@ -1306,31 +1311,45 @@ public:
     StubInputBuffer(const Buffer<T2, D2> &b)
         : parameter_(parameter_from_buffer(b)) {
     }
+
+    template<typename T2>
+    static std::vector<Parameter> to_parameter_vector(const StubInputBuffer<T2> &t) {
+        return {t.parameter_};
+    }
+
+    template<typename T2>
+    static std::vector<Parameter> to_parameter_vector(const std::vector<StubInputBuffer<T2>> &v) {
+        std::vector<Parameter> r;
+        r.reserve(v.size());
+        for (const auto &s : v) {
+            r.push_back(s.parameter_);
+        }
+        return r;
+    }
 };
+
+class AbstractGenerator;
 
 class StubOutputBufferBase {
 protected:
     Func f;
-    std::shared_ptr<GeneratorBase> generator;
+    std::shared_ptr<AbstractGenerator> generator;
 
-    void check_scheduled(const char *m) const;
     Target get_target() const;
 
     StubOutputBufferBase();
-    explicit StubOutputBufferBase(const Func &f, const std::shared_ptr<GeneratorBase> &generator);
+    explicit StubOutputBufferBase(const Func &f, const std::shared_ptr<AbstractGenerator> &generator);
 
 public:
     Realization realize(std::vector<int32_t> sizes);
 
     template<typename... Args>
     Realization realize(Args &&...args) {
-        check_scheduled("realize");
         return f.realize(std::forward<Args>(args)..., get_target());
     }
 
     template<typename Dst>
     void realize(Dst dst) {
-        check_scheduled("realize");
         f.realize(dst, get_target());
     }
 };
@@ -1351,13 +1370,21 @@ template<typename T = void>
 class StubOutputBuffer : public StubOutputBufferBase {
     template<typename T2>
     friend class GeneratorOutput_Buffer;
-    friend class GeneratorStub;
-    explicit StubOutputBuffer(const Func &f, const std::shared_ptr<GeneratorBase> &generator)
+    explicit StubOutputBuffer(const Func &f, const std::shared_ptr<AbstractGenerator> &generator)
         : StubOutputBufferBase(f, generator) {
     }
 
 public:
     StubOutputBuffer() = default;
+
+    static std::vector<StubOutputBuffer<T>> to_output_buffers(const std::vector<Func> &v,
+                                                              const std::shared_ptr<AbstractGenerator> &generator) {
+        std::vector<StubOutputBuffer<T>> result;
+        for (const Func &f : v) {
+            result.push_back(StubOutputBuffer<T>(f, generator));
+        }
+        return result;
+    }
 };
 
 // This is a union-like class that allows for convenient initialization of Stub Inputs
@@ -1365,7 +1392,7 @@ public:
 // downstream consumer will be able to explicitly check that each value is
 // of the expected/required kind.
 class StubInput {
-    const IOKind kind_;
+    const ArgInfoKind kind_;
     // Exactly one of the following fields should be defined:
     const Parameter parameter_;
     const Func func_;
@@ -1375,34 +1402,34 @@ public:
     // *not* explicit.
     template<typename T2>
     StubInput(const StubInputBuffer<T2> &b)
-        : kind_(IOKind::Buffer), parameter_(b.parameter_), func_(), expr_() {
+        : kind_(ArgInfoKind::Buffer), parameter_(b.parameter_), func_(), expr_() {
+    }
+    StubInput(const Parameter &p)
+        : kind_(ArgInfoKind::Buffer), parameter_(p), func_(), expr_() {
     }
     StubInput(const Func &f)
-        : kind_(IOKind::Function), parameter_(), func_(f), expr_() {
+        : kind_(ArgInfoKind::Function), parameter_(), func_(f), expr_() {
     }
     StubInput(const Expr &e)
-        : kind_(IOKind::Scalar), parameter_(), func_(), expr_(e) {
+        : kind_(ArgInfoKind::Scalar), parameter_(), func_(), expr_(e) {
     }
 
-private:
-    friend class GeneratorInputBase;
-
-    IOKind kind() const {
+    ArgInfoKind kind() const {
         return kind_;
     }
 
     Parameter parameter() const {
-        internal_assert(kind_ == IOKind::Buffer);
+        internal_assert(kind_ == ArgInfoKind::Buffer);
         return parameter_;
     }
 
     Func func() const {
-        internal_assert(kind_ == IOKind::Function);
+        internal_assert(kind_ == ArgInfoKind::Function);
         return func_;
     }
 
     Expr expr() const {
-        internal_assert(kind_ == IOKind::Scalar);
+        internal_assert(kind_ == ArgInfoKind::Scalar);
         return expr_;
     }
 };
@@ -1441,7 +1468,7 @@ protected:
     virtual bool is_array() const;
 
     const std::string &name() const;
-    IOKind kind() const;
+    ArgInfoKind kind() const;
 
     bool gio_types_defined() const;
     const std::vector<Type> &gio_types() const;
@@ -1455,7 +1482,7 @@ protected:
 
     GIOBase(size_t array_size,
             const std::string &name,
-            IOKind kind,
+            ArgInfoKind kind,
             const std::vector<Type> &types,
             int dims);
 
@@ -1466,7 +1493,7 @@ protected:
                               // -1 if is_array() == true but unspecified.
 
     const std::string name_;
-    const IOKind kind_;
+    const ArgInfoKind kind_;
     mutable std::vector<Type> types_;  // empty if type is unspecified
     mutable int dims_;                 // -1 if dim is unspecified
 
@@ -1524,11 +1551,11 @@ class GeneratorInputBase : public GIOBase {
 protected:
     GeneratorInputBase(size_t array_size,
                        const std::string &name,
-                       IOKind kind,
+                       ArgInfoKind kind,
                        const std::vector<Type> &t,
                        int d);
 
-    GeneratorInputBase(const std::string &name, IOKind kind, const std::vector<Type> &t, int d);
+    GeneratorInputBase(const std::string &name, ArgInfoKind kind, const std::vector<Type> &t, int d);
 
     friend class GeneratorBase;
     friend class GeneratorParamInfo;
@@ -1539,6 +1566,7 @@ protected:
 
     void init_internals();
     void set_inputs(const std::vector<StubInput> &inputs);
+    bool inputs_set = false;
 
     virtual void set_def_min_max();
 
@@ -1573,21 +1601,21 @@ protected:
     template<typename T2 = T, typename std::enable_if<
                                   // Only allow T2 not-an-array
                                   !std::is_array<T2>::value>::type * = nullptr>
-    GeneratorInputImpl(const std::string &name, IOKind kind, const std::vector<Type> &t, int d)
+    GeneratorInputImpl(const std::string &name, ArgInfoKind kind, const std::vector<Type> &t, int d)
         : GeneratorInputBase(name, kind, t, d) {
     }
 
     template<typename T2 = T, typename std::enable_if<
                                   // Only allow T2[kSomeConst]
                                   std::is_array<T2>::value && std::rank<T2>::value == 1 && (std::extent<T2, 0>::value > 0)>::type * = nullptr>
-    GeneratorInputImpl(const std::string &name, IOKind kind, const std::vector<Type> &t, int d)
+    GeneratorInputImpl(const std::string &name, ArgInfoKind kind, const std::vector<Type> &t, int d)
         : GeneratorInputBase(std::extent<T2, 0>::value, name, kind, t, d) {
     }
 
     template<typename T2 = T, typename std::enable_if<
                                   // Only allow T2[]
                                   std::is_array<T2>::value && std::rank<T2>::value == 1 && std::extent<T2, 0>::value == 0>::type * = nullptr>
-    GeneratorInputImpl(const std::string &name, IOKind kind, const std::vector<Type> &t, int d)
+    GeneratorInputImpl(const std::string &name, ArgInfoKind kind, const std::vector<Type> &t, int d)
         : GeneratorInputBase(-1, name, kind, t, d) {
     }
 
@@ -1673,24 +1701,24 @@ protected:
 
 public:
     explicit GeneratorInput_Buffer(const std::string &name)
-        : Super(name, IOKind::Buffer,
+        : Super(name, ArgInfoKind::Buffer,
                 TBase::has_static_halide_type ? std::vector<Type>{TBase::static_halide_type()} : std::vector<Type>{},
                 TBase::has_static_dimensions ? TBase::static_dimensions() : -1) {
     }
 
     GeneratorInput_Buffer(const std::string &name, const Type &t, int d)
-        : Super(name, IOKind::Buffer, {t}, d) {
+        : Super(name, ArgInfoKind::Buffer, {t}, d) {
         static_assert(!TBase::has_static_halide_type, "You can only specify a Type argument for Input<Buffer<T>> if T is void or omitted.");
         static_assert(!TBase::has_static_dimensions, "You can only specify a dimension argument for Input<Buffer<T, D>> if D is -1 or omitted.");
     }
 
     GeneratorInput_Buffer(const std::string &name, const Type &t)
-        : Super(name, IOKind::Buffer, {t}, -1) {
+        : Super(name, ArgInfoKind::Buffer, {t}, -1) {
         static_assert(!TBase::has_static_halide_type, "You can only specify a Type argument for Input<Buffer<T>> if T is void or omitted.");
     }
 
     GeneratorInput_Buffer(const std::string &name, int d)
-        : Super(name, IOKind::Buffer,
+        : Super(name, ArgInfoKind::Buffer,
                 TBase::has_static_halide_type ? std::vector<Type>{TBase::static_halide_type()} : std::vector<Type>{},
                 d) {
         static_assert(!TBase::has_static_dimensions, "You can only specify a dimension argument for Input<Buffer<T, D>> if D is -1 or omitted.");
@@ -1826,41 +1854,41 @@ protected:
 
 public:
     GeneratorInput_Func(const std::string &name, const Type &t, int d)
-        : Super(name, IOKind::Function, {t}, d) {
+        : Super(name, ArgInfoKind::Function, {t}, d) {
     }
 
     // unspecified type
     GeneratorInput_Func(const std::string &name, int d)
-        : Super(name, IOKind::Function, {}, d) {
+        : Super(name, ArgInfoKind::Function, {}, d) {
     }
 
     // unspecified dimension
     GeneratorInput_Func(const std::string &name, const Type &t)
-        : Super(name, IOKind::Function, {t}, -1) {
+        : Super(name, ArgInfoKind::Function, {t}, -1) {
     }
 
     // unspecified type & dimension
     explicit GeneratorInput_Func(const std::string &name)
-        : Super(name, IOKind::Function, {}, -1) {
+        : Super(name, ArgInfoKind::Function, {}, -1) {
     }
 
     GeneratorInput_Func(size_t array_size, const std::string &name, const Type &t, int d)
-        : Super(array_size, name, IOKind::Function, {t}, d) {
+        : Super(array_size, name, ArgInfoKind::Function, {t}, d) {
     }
 
     // unspecified type
     GeneratorInput_Func(size_t array_size, const std::string &name, int d)
-        : Super(array_size, name, IOKind::Function, {}, d) {
+        : Super(array_size, name, ArgInfoKind::Function, {}, d) {
     }
 
     // unspecified dimension
     GeneratorInput_Func(size_t array_size, const std::string &name, const Type &t)
-        : Super(array_size, name, IOKind::Function, {t}, -1) {
+        : Super(array_size, name, ArgInfoKind::Function, {t}, -1) {
     }
 
     // unspecified type & dimension
     GeneratorInput_Func(size_t array_size, const std::string &name)
-        : Super(array_size, name, IOKind::Function, {}, -1) {
+        : Super(array_size, name, ArgInfoKind::Function, {}, -1) {
     }
 
     template<typename... Args>
@@ -1955,7 +1983,7 @@ protected:
 
 public:
     explicit GeneratorInput_DynamicScalar(const std::string &name)
-        : Super(name, IOKind::Scalar, {}, 0) {
+        : Super(name, ArgInfoKind::Scalar, {}, 0) {
         user_assert(!std::is_array<T>::value) << "Input<Expr[]> is not allowed";
     }
 
@@ -2022,22 +2050,22 @@ protected:
 
 public:
     explicit GeneratorInput_Scalar(const std::string &name)
-        : Super(name, IOKind::Scalar, {type_of<TBase>()}, 0), def_(static_cast<TBase>(0)), def_expr_(Expr()) {
+        : Super(name, ArgInfoKind::Scalar, {type_of<TBase>()}, 0), def_(static_cast<TBase>(0)), def_expr_(Expr()) {
     }
 
     GeneratorInput_Scalar(const std::string &name, const TBase &def)
-        : Super(name, IOKind::Scalar, {type_of<TBase>()}, 0), def_(def), def_expr_(TBaseToExpr(def)) {
+        : Super(name, ArgInfoKind::Scalar, {type_of<TBase>()}, 0), def_(def), def_expr_(TBaseToExpr(def)) {
     }
 
     GeneratorInput_Scalar(size_t array_size,
                           const std::string &name)
-        : Super(array_size, name, IOKind::Scalar, {type_of<TBase>()}, 0), def_(static_cast<TBase>(0)), def_expr_(Expr()) {
+        : Super(array_size, name, ArgInfoKind::Scalar, {type_of<TBase>()}, 0), def_(static_cast<TBase>(0)), def_expr_(Expr()) {
     }
 
     GeneratorInput_Scalar(size_t array_size,
                           const std::string &name,
                           const TBase &def)
-        : Super(array_size, name, IOKind::Scalar, {type_of<TBase>()}, 0), def_(def), def_expr_(TBaseToExpr(def)) {
+        : Super(array_size, name, ArgInfoKind::Scalar, {type_of<TBase>()}, 0), def_(def), def_expr_(TBaseToExpr(def)) {
     }
 
     /** You can use this Input as an expression in a halide
@@ -2256,7 +2284,7 @@ protected:
     template<typename T2, typename std::enable_if<std::is_same<T2, Func>::value>::type * = nullptr>
     HALIDE_NO_USER_CODE_INLINE T2 as() const {
         static_assert(std::is_same<T2, Func>::value, "Only Func allowed here");
-        internal_assert(kind() != IOKind::Scalar);
+        internal_assert(kind() != ArgInfoKind::Scalar);
         internal_assert(exprs_.empty());
         user_assert(!funcs_.empty()) << "No funcs_ are defined yet";
         user_assert(funcs_.size() == 1) << "Use [] to access individual Funcs in Output<Func[]>";
@@ -2340,12 +2368,12 @@ public:
 protected:
     GeneratorOutputBase(size_t array_size,
                         const std::string &name,
-                        IOKind kind,
+                        ArgInfoKind kind,
                         const std::vector<Type> &t,
                         int d);
 
     GeneratorOutputBase(const std::string &name,
-                        IOKind kind,
+                        ArgInfoKind kind,
                         const std::vector<Type> &t,
                         int d);
 
@@ -2382,21 +2410,21 @@ protected:
     template<typename T2 = T, typename std::enable_if<
                                   // Only allow T2 not-an-array
                                   !std::is_array<T2>::value>::type * = nullptr>
-    GeneratorOutputImpl(const std::string &name, IOKind kind, const std::vector<Type> &t, int d)
+    GeneratorOutputImpl(const std::string &name, ArgInfoKind kind, const std::vector<Type> &t, int d)
         : GeneratorOutputBase(name, kind, t, d) {
     }
 
     template<typename T2 = T, typename std::enable_if<
                                   // Only allow T2[kSomeConst]
                                   std::is_array<T2>::value && std::rank<T2>::value == 1 && (std::extent<T2, 0>::value > 0)>::type * = nullptr>
-    GeneratorOutputImpl(const std::string &name, IOKind kind, const std::vector<Type> &t, int d)
+    GeneratorOutputImpl(const std::string &name, ArgInfoKind kind, const std::vector<Type> &t, int d)
         : GeneratorOutputBase(std::extent<T2, 0>::value, name, kind, t, d) {
     }
 
     template<typename T2 = T, typename std::enable_if<
                                   // Only allow T2[]
                                   std::is_array<T2>::value && std::rank<T2>::value == 1 && std::extent<T2, 0>::value == 0>::type * = nullptr>
-    GeneratorOutputImpl(const std::string &name, IOKind kind, const std::vector<Type> &t, int d)
+    GeneratorOutputImpl(const std::string &name, ArgInfoKind kind, const std::vector<Type> &t, int d)
         : GeneratorOutputBase(-1, name, kind, t, d) {
     }
 
@@ -2513,13 +2541,13 @@ protected:
     using TBase = typename Super::TBase;
 
     explicit GeneratorOutput_Buffer(const std::string &name)
-        : Super(name, IOKind::Buffer,
+        : Super(name, ArgInfoKind::Buffer,
                 TBase::has_static_halide_type ? std::vector<Type>{TBase::static_halide_type()} : std::vector<Type>{},
                 TBase::has_static_dimensions ? TBase::static_dimensions() : -1) {
     }
 
     GeneratorOutput_Buffer(const std::string &name, const std::vector<Type> &t, int d)
-        : Super(name, IOKind::Buffer, t, d) {
+        : Super(name, ArgInfoKind::Buffer, t, d) {
         internal_assert(!t.empty());
         internal_assert(d != -1);
         static_assert(!TBase::has_static_halide_type, "You can only specify a Type argument for Output<Buffer<T, D>> if T is void or omitted.");
@@ -2527,13 +2555,13 @@ protected:
     }
 
     GeneratorOutput_Buffer(const std::string &name, const std::vector<Type> &t)
-        : Super(name, IOKind::Buffer, t, -1) {
+        : Super(name, ArgInfoKind::Buffer, t, -1) {
         internal_assert(!t.empty());
         static_assert(!TBase::has_static_halide_type, "You can only specify a Type argument for Output<Buffer<T, D>> if T is void or omitted.");
     }
 
     GeneratorOutput_Buffer(const std::string &name, int d)
-        : Super(name, IOKind::Buffer,
+        : Super(name, ArgInfoKind::Buffer,
                 TBase::has_static_halide_type ? std::vector<Type>{TBase::static_halide_type()} : std::vector<Type>{},
                 d) {
         internal_assert(d != -1);
@@ -2541,13 +2569,13 @@ protected:
     }
 
     GeneratorOutput_Buffer(size_t array_size, const std::string &name)
-        : Super(array_size, name, IOKind::Buffer,
+        : Super(array_size, name, ArgInfoKind::Buffer,
                 TBase::has_static_halide_type ? std::vector<Type>{TBase::static_halide_type()} : std::vector<Type>{},
                 TBase::has_static_dimensions ? TBase::static_dimensions() : -1) {
     }
 
     GeneratorOutput_Buffer(size_t array_size, const std::string &name, const std::vector<Type> &t, int d)
-        : Super(array_size, name, IOKind::Buffer, t, d) {
+        : Super(array_size, name, ArgInfoKind::Buffer, t, d) {
         internal_assert(!t.empty());
         internal_assert(d != -1);
         static_assert(!TBase::has_static_halide_type, "You can only specify a Type argument for Output<Buffer<T, D>> if T is void or omitted.");
@@ -2555,13 +2583,13 @@ protected:
     }
 
     GeneratorOutput_Buffer(size_t array_size, const std::string &name, const std::vector<Type> &t)
-        : Super(array_size, name, IOKind::Buffer, t, -1) {
+        : Super(array_size, name, ArgInfoKind::Buffer, t, -1) {
         internal_assert(!t.empty());
         static_assert(!TBase::has_static_halide_type, "You can only specify a Type argument for Output<Buffer<T, D>> if T is void or omitted.");
     }
 
     GeneratorOutput_Buffer(size_t array_size, const std::string &name, int d)
-        : Super(array_size, name, IOKind::Buffer,
+        : Super(array_size, name, ArgInfoKind::Buffer,
                 TBase::has_static_halide_type ? std::vector<Type>{TBase::static_halide_type()} : std::vector<Type>{},
                 d) {
         internal_assert(d != -1);
@@ -2695,23 +2723,23 @@ protected:
     using TBase = typename Super::TBase;
 
     explicit GeneratorOutput_Func(const std::string &name)
-        : Super(name, IOKind::Function, std::vector<Type>{}, -1) {
+        : Super(name, ArgInfoKind::Function, std::vector<Type>{}, -1) {
     }
 
     GeneratorOutput_Func(const std::string &name, const std::vector<Type> &t, int d)
-        : Super(name, IOKind::Function, t, d) {
+        : Super(name, ArgInfoKind::Function, t, d) {
     }
 
     GeneratorOutput_Func(const std::string &name, const std::vector<Type> &t)
-        : Super(name, IOKind::Function, t, -1) {
+        : Super(name, ArgInfoKind::Function, t, -1) {
     }
 
     GeneratorOutput_Func(const std::string &name, int d)
-        : Super(name, IOKind::Function, {}, d) {
+        : Super(name, ArgInfoKind::Function, {}, d) {
     }
 
     GeneratorOutput_Func(size_t array_size, const std::string &name, const std::vector<Type> &t, int d)
-        : Super(array_size, name, IOKind::Function, t, d) {
+        : Super(array_size, name, ArgInfoKind::Function, t, d) {
     }
 
 public:
@@ -2770,11 +2798,11 @@ protected:
     using TBase = typename Super::TBase;
 
     explicit GeneratorOutput_Arithmetic(const std::string &name)
-        : Super(name, IOKind::Function, {type_of<TBase>()}, 0) {
+        : Super(name, ArgInfoKind::Function, {type_of<TBase>()}, 0) {
     }
 
     GeneratorOutput_Arithmetic(size_t array_size, const std::string &name)
-        : Super(array_size, name, IOKind::Function, {type_of<TBase>()}, 0) {
+        : Super(array_size, name, ArgInfoKind::Function, {type_of<TBase>()}, 0) {
     }
 };
 
@@ -2963,8 +2991,6 @@ private:
     const std::string error_msg;
 };
 
-class GeneratorStub;
-
 }  // namespace Internal
 
 /** GeneratorContext is a class that is used when using Generators (or Stubs) directly;
@@ -3134,11 +3160,9 @@ struct NoRealizations<T, Args...> {
     static const bool value = !std::is_convertible<T, Realization>::value && NoRealizations<Args...>::value;
 };
 
-class GeneratorStub;
-
 // Note that these functions must never return null:
 // if they cannot return a valid Generator, they must assert-fail.
-using GeneratorFactory = std::function<std::unique_ptr<GeneratorBase>(const GeneratorContext &)>;
+using GeneratorFactory = std::function<AbstractGeneratorPtr(const GeneratorContext &context)>;
 
 struct StringOrLoopLevel {
     std::string string_value;
@@ -3155,7 +3179,6 @@ struct StringOrLoopLevel {
         : loop_level(loop_level) {
     }
 };
-using GeneratorParamsMap = std::map<std::string, StringOrLoopLevel>;
 
 class GeneratorParamInfo {
     // names used across all params, inputs, and outputs.
@@ -3194,11 +3217,9 @@ public:
     }
 };
 
-class GeneratorBase : public NamesInterface {
+class GeneratorBase : public NamesInterface, public AbstractGenerator {
 public:
-    virtual ~GeneratorBase();
-
-    void set_generator_param_values(const GeneratorParamsMap &params);
+    ~GeneratorBase() override;
 
     /** Given a data type, return an estimate of the "natural" vector size
      * for that data type when compiling for the current target. */
@@ -3212,29 +3233,6 @@ public:
     int natural_vector_size() const {
         return get_target().natural_vector_size<data_t>();
     }
-
-    void emit_cpp_stub(const std::string &stub_file_path);
-
-    // Call generate() and produce a Module for the result.
-    // If function_name is empty, generator_name() will be used for the function.
-    Module build_module(const std::string &function_name = "",
-                        LinkageType linkage_type = LinkageType::ExternalPlusMetadata);
-
-    /**
-     * Build a module that is suitable for using for gradient descent calculation in TensorFlow or PyTorch.
-     *
-     * Essentially:
-     *   - A new Pipeline is synthesized from the current Generator (according to the rules below)
-     *   - The new Pipeline is autoscheduled (if autoscheduling is requested, but it would be odd not to do so)
-     *   - The Pipeline is compiled to a Module and returned
-     *
-     * The new Pipeline is adjoint to the original; it has:
-     *   - All the same inputs as the original, in the same order
-     *   - Followed by one grad-input for each original output
-     *   - Followed by one output for each unique pairing of original-output + original-input.
-     *     (For the common case of just one original-output, this amounts to being one output for each original-input.)
-     */
-    Module build_gradient_module(const std::string &function_name);
 
     /**
      * set_inputs is a variadic wrapper around set_inputs_vector, which makes usage much simpler
@@ -3420,8 +3418,6 @@ public:
         get_pipeline().trace_pipeline();
     }
 
-    GeneratorContext context() const;
-
 protected:
     GeneratorBase(size_t size, const void *introspection_helper);
     void set_generator_names(const std::string &registered_name, const std::string &stub_name);
@@ -3483,7 +3479,6 @@ protected:
     //
     virtual void init_from_context(const Halide::GeneratorContext &context);
 
-    virtual Pipeline build_pipeline() = 0;
     virtual void call_configure() = 0;
     virtual void call_generate() = 0;
     virtual void call_schedule() = 0;
@@ -3574,7 +3569,6 @@ private:
     friend class GeneratorInputBase;
     friend class GeneratorOutputBase;
     friend class GeneratorParamInfo;
-    friend class GeneratorStub;
     friend class StubOutputBufferBase;
 
     const size_t size;
@@ -3585,13 +3579,23 @@ private:
     // Do not access directly: use the param_info() getter.
     std::unique_ptr<GeneratorParamInfo> param_info_ptr;
 
-    bool inputs_set{false};
     std::string generator_registered_name, generator_stub_name;
     Pipeline pipeline;
 
     // Return our GeneratorParamInfo.
     GeneratorParamInfo &param_info();
 
+    template<typename T>
+    T *find_by_name(const std::string &name, const std::vector<T *> &v) {
+        for (T *t : v) {
+            if (t->name() == name) {
+                return t;
+            }
+        }
+        return nullptr;
+    }
+
+    Internal::GeneratorInputBase *find_input_by_name(const std::string &name);
     Internal::GeneratorOutputBase *find_output_by_name(const std::string &name);
 
     void check_scheduled(const char *m) const;
@@ -3605,17 +3609,11 @@ private:
     void get_jit_target_from_environment();
     void get_target_from_environment();
 
-    // Return the output with the given name.
-    // If the output is singular (a non-array), return a vector of size 1.
-    // If no such name exists (or is non-array), assert.
-    // This method never returns undefined Funcs.
-    std::vector<Func> get_outputs(const std::string &n);
-
     void set_inputs_vector(const std::vector<std::vector<StubInput>> &inputs);
 
     static void check_input_is_singular(Internal::GeneratorInputBase *in);
     static void check_input_is_array(Internal::GeneratorInputBase *in);
-    static void check_input_kind(Internal::GeneratorInputBase *in, Internal::IOKind kind);
+    static void check_input_kind(Internal::GeneratorInputBase *in, Internal::ArgInfoKind kind);
 
     // Allow Buffer<> if:
     // -- we are assigning it to an Input<Buffer<>> (with compatible type and dimensions),
@@ -3626,18 +3624,18 @@ private:
         auto *in = param_info().inputs().at(i);
         check_input_is_singular(in);
         const auto k = in->kind();
-        if (k == Internal::IOKind::Buffer) {
+        if (k == Internal::ArgInfoKind::Buffer) {
             Halide::Buffer<> b = arg;
             StubInputBuffer<> sib(b);
             StubInput si(sib);
             return {si};
-        } else if (k == Internal::IOKind::Function) {
+        } else if (k == Internal::ArgInfoKind::Function) {
             Halide::Func f(arg.name() + "_im");
             f(Halide::_) = arg(Halide::_);
             StubInput si(f);
             return {si};
         } else {
-            check_input_kind(in, Internal::IOKind::Buffer);  // just to trigger assertion
+            check_input_kind(in, Internal::ArgInfoKind::Buffer);  // just to trigger assertion
             return {};
         }
     }
@@ -3651,16 +3649,16 @@ private:
         auto *in = param_info().inputs().at(i);
         check_input_is_singular(in);
         const auto k = in->kind();
-        if (k == Internal::IOKind::Buffer) {
+        if (k == Internal::ArgInfoKind::Buffer) {
             StubInputBuffer<> sib = arg;
             StubInput si(sib);
             return {si};
-        } else if (k == Internal::IOKind::Function) {
+        } else if (k == Internal::ArgInfoKind::Function) {
             Halide::Func f = arg.funcs().at(0);
             StubInput si(f);
             return {si};
         } else {
-            check_input_kind(in, Internal::IOKind::Buffer);  // just to trigger assertion
+            check_input_kind(in, Internal::ArgInfoKind::Buffer);  // just to trigger assertion
             return {};
         }
     }
@@ -3668,7 +3666,7 @@ private:
     // Allow Func iff we are assigning it to an Input<Func> (with compatible type and dimensions).
     std::vector<StubInput> build_input(size_t i, const Func &arg) {
         auto *in = param_info().inputs().at(i);
-        check_input_kind(in, Internal::IOKind::Function);
+        check_input_kind(in, Internal::ArgInfoKind::Function);
         check_input_is_singular(in);
         const Halide::Func &f = arg;
         StubInput si(f);
@@ -3678,7 +3676,7 @@ private:
     // Allow vector<Func> iff we are assigning it to an Input<Func[]> (with compatible type and dimensions).
     std::vector<StubInput> build_input(size_t i, const std::vector<Func> &arg) {
         auto *in = param_info().inputs().at(i);
-        check_input_kind(in, Internal::IOKind::Function);
+        check_input_kind(in, Internal::ArgInfoKind::Function);
         check_input_is_array(in);
         // My kingdom for a list comprehension...
         std::vector<StubInput> siv;
@@ -3692,7 +3690,7 @@ private:
     // Expr must be Input<Scalar>.
     std::vector<StubInput> build_input(size_t i, const Expr &arg) {
         auto *in = param_info().inputs().at(i);
-        check_input_kind(in, Internal::IOKind::Scalar);
+        check_input_kind(in, Internal::ArgInfoKind::Scalar);
         check_input_is_singular(in);
         StubInput si(arg);
         return {si};
@@ -3701,7 +3699,7 @@ private:
     // (Array form)
     std::vector<StubInput> build_input(size_t i, const std::vector<Expr> &arg) {
         auto *in = param_info().inputs().at(i);
-        check_input_kind(in, Internal::IOKind::Scalar);
+        check_input_kind(in, Internal::ArgInfoKind::Scalar);
         check_input_is_array(in);
         std::vector<StubInput> siv;
         siv.reserve(arg.size());
@@ -3717,7 +3715,7 @@ private:
              typename std::enable_if<std::is_arithmetic<T>::value>::type * = nullptr>
     std::vector<StubInput> build_input(size_t i, const T &arg) {
         auto *in = param_info().inputs().at(i);
-        check_input_kind(in, Internal::IOKind::Scalar);
+        check_input_kind(in, Internal::ArgInfoKind::Scalar);
         check_input_is_singular(in);
         // We must use an explicit Expr() ctor to preserve the type
         Expr e(arg);
@@ -3730,7 +3728,7 @@ private:
              typename std::enable_if<std::is_arithmetic<T>::value>::type * = nullptr>
     std::vector<StubInput> build_input(size_t i, const std::vector<T> &arg) {
         auto *in = param_info().inputs().at(i);
-        check_input_kind(in, Internal::IOKind::Scalar);
+        check_input_kind(in, Internal::ArgInfoKind::Scalar);
         check_input_is_array(in);
         std::vector<StubInput> siv;
         siv.reserve(arg.size());
@@ -3748,7 +3746,42 @@ private:
         return {build_input(Indices, std::get<Indices>(t))...};
     }
 
+    // Note that this deliberately ignores inputs/outputs with multiple array values
+    // (ie, one name per input or output, regardless of array_size())
+    template<typename T>
+    static void get_arguments(std::vector<AbstractGenerator::ArgInfo> &args, ArgInfoDirection dir, const T &t) {
+        for (auto *e : t) {
+            args.push_back({e->name(),
+                            dir,
+                            e->kind(),
+                            e->gio_types_defined() ? e->gio_types() : std::vector<Type>{},
+                            e->dims_defined() ? e->dims() : 0});
+        }
+    }
+
 public:
+    // AbstractGenerator methods
+    std::string name() override;
+    GeneratorContext context() const override;
+    std::vector<ArgInfo> arginfos() override;
+
+    void set_generatorparam_value(const std::string &name, const std::string &value) override;
+    void set_generatorparam_value(const std::string &name, const LoopLevel &loop_level) override;
+
+    std::vector<Parameter> input_parameter(const std::string &name) override;
+    std::vector<Func> output_func(const std::string &name) override;
+
+    ExternsMap external_code_map() override;
+
+    // This is overridden in the concrete Generator<> subclass.
+    // Pipeline build_pipeline() override;
+
+    void bind_input(const std::string &name, const std::vector<Parameter> &v) override;
+    void bind_input(const std::string &name, const std::vector<Func> &v) override;
+    void bind_input(const std::string &name, const std::vector<Expr> &v) override;
+
+    bool emit_cpp_stub(const std::string &stub_file_path) override;
+
     GeneratorBase(const GeneratorBase &) = delete;
     GeneratorBase &operator=(const GeneratorBase &) = delete;
     GeneratorBase(GeneratorBase &&that) = delete;
@@ -3762,8 +3795,8 @@ public:
     static std::vector<std::string> enumerate();
     // This method returns nullptr if it cannot return a valid Generator;
     // the caller is responsible for checking the result.
-    static std::unique_ptr<GeneratorBase> create(const std::string &name,
-                                                 const Halide::GeneratorContext &context);
+    static AbstractGeneratorPtr create(const std::string &name,
+                                       const Halide::GeneratorContext &context);
 
 private:
     using GeneratorFactoryMap = std::map<const std::string, GeneratorFactory>;
@@ -3897,6 +3930,7 @@ private:
 
 protected:
     Pipeline build_pipeline() override {
+        ensure_configure_has_been_called();
         return this->build_pipeline_impl();
     }
 
@@ -3929,61 +3963,6 @@ namespace Internal {
 class RegisterGenerator {
 public:
     RegisterGenerator(const char *registered_name, GeneratorFactory generator_factory);
-};
-
-class GeneratorStub : public NamesInterface {
-public:
-    GeneratorStub(const GeneratorContext &context,
-                  const GeneratorFactory &generator_factory);
-
-    GeneratorStub(const GeneratorContext &context,
-                  const GeneratorFactory &generator_factory,
-                  const GeneratorParamsMap &generator_params,
-                  const std::vector<std::vector<Internal::StubInput>> &inputs);
-    std::vector<std::vector<Func>> generate(const GeneratorParamsMap &generator_params,
-                                            const std::vector<std::vector<Internal::StubInput>> &inputs);
-
-    // Output(s)
-    std::vector<Func> get_outputs(const std::string &n) const {
-        return generator->get_outputs(n);
-    }
-
-    template<typename T2>
-    std::vector<T2> get_output_buffers(const std::string &n) const {
-        auto v = generator->get_outputs(n);
-        std::vector<T2> result;
-        for (auto &o : v) {
-            result.push_back(T2(o, generator));
-        }
-        return result;
-    }
-
-    static std::vector<StubInput> to_stub_input_vector(const Expr &e) {
-        return {StubInput(e)};
-    }
-
-    static std::vector<StubInput> to_stub_input_vector(const Func &f) {
-        return {StubInput(f)};
-    }
-
-    template<typename T = void>
-    static std::vector<StubInput> to_stub_input_vector(const StubInputBuffer<T> &b) {
-        return {StubInput(b)};
-    }
-
-    template<typename T>
-    static std::vector<StubInput> to_stub_input_vector(const std::vector<T> &v) {
-        std::vector<StubInput> r;
-        std::copy(v.begin(), v.end(), std::back_inserter(r));
-        return r;
-    }
-
-    struct Names {
-        std::vector<std::string> generator_params, inputs, outputs;
-    };
-    Names get_names() const;
-
-    std::shared_ptr<GeneratorBase> generator;
 };
 
 // -----------------------------
@@ -4040,7 +4019,7 @@ struct ExecuteGeneratorArgs {
     // for name here; it is provided for ease of interoperation with existing code.)
     //
     // If null, the default global registry of Generators will be used.
-    using CreateGeneratorFn = std::function<std::unique_ptr<GeneratorBase>(const std::string &name, const GeneratorContext &context)>;
+    using CreateGeneratorFn = std::function<AbstractGeneratorPtr(const std::string &name, const GeneratorContext &context)>;
     CreateGeneratorFn create_generator = nullptr;
 
     // Values to substitute for GeneratorParams in the selected Generator.
@@ -4048,7 +4027,7 @@ struct ExecuteGeneratorArgs {
     //
     // If any of the generator param names specified in this map are unknown
     // to the Generator created, an error will occur.
-    GeneratorParamsMap generator_params;
+    std::map<std::string, std::string> generator_params;
 
     // Compiler Logger to use, for diagnostic work. If null, don't do any logging.
     CompilerLoggerFactory compiler_logger_factory = nullptr;
@@ -4078,8 +4057,8 @@ struct halide_global_ns;
     namespace halide_register_generator {                                                                                           \
     struct halide_global_ns;                                                                                                        \
     namespace GEN_REGISTRY_NAME##_ns {                                                                                              \
-        std::unique_ptr<Halide::Internal::GeneratorBase> factory(const Halide::GeneratorContext &context);                          \
-        std::unique_ptr<Halide::Internal::GeneratorBase> factory(const Halide::GeneratorContext &context) {                         \
+        std::unique_ptr<Halide::Internal::AbstractGenerator> factory(const Halide::GeneratorContext &context);                      \
+        std::unique_ptr<Halide::Internal::AbstractGenerator> factory(const Halide::GeneratorContext &context) {                     \
             using GenType = std::remove_pointer<decltype(new GEN_CLASS_NAME)>::type; /* NOLINT(bugprone-macro-parentheses) */       \
             return GenType::create(context, #GEN_REGISTRY_NAME, #FULLY_QUALIFIED_STUB_NAME);                                        \
         }                                                                                                                           \
@@ -4140,13 +4119,15 @@ struct halide_global_ns;
     namespace halide_register_generator {                                                                                           \
     struct halide_global_ns;                                                                                                        \
     namespace ORIGINAL_REGISTRY_NAME##_ns {                                                                                         \
-        std::unique_ptr<Halide::Internal::GeneratorBase> factory(const Halide::GeneratorContext &context);                          \
+        std::unique_ptr<Halide::Internal::AbstractGenerator> factory(const Halide::GeneratorContext &context);                      \
     }                                                                                                                               \
     namespace GEN_REGISTRY_NAME##_ns {                                                                                              \
-        std::unique_ptr<Halide::Internal::GeneratorBase> factory(const Halide::GeneratorContext &context);                          \
-        std::unique_ptr<Halide::Internal::GeneratorBase> factory(const Halide::GeneratorContext &context) {                         \
+        std::unique_ptr<Halide::Internal::AbstractGenerator> factory(const Halide::GeneratorContext &context) {                     \
             auto g = ORIGINAL_REGISTRY_NAME##_ns::factory(context);                                                                 \
-            g->set_generator_param_values(__VA_ARGS__);                                                                             \
+            const std::map<std::string, std::string> m = __VA_ARGS__;                                                               \
+            for (const auto &c : m) {                                                                                               \
+                g->set_generatorparam_value(c.first, c.second);                                                                     \
+            }                                                                                                                       \
             return g;                                                                                                               \
         }                                                                                                                           \
     }                                                                                                                               \
