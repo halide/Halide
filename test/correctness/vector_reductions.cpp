@@ -111,33 +111,37 @@ void add_tasks(const Target &target, std::vector<Task> &tasks) {
                             .vectorize(rx);
                         ref.compute_root();
 
-                        // Useful for debugging; leave in (commented out)
-                        // std::cout << "Testing: dst_lanes: " << dst_lanes
-                        //           << " reduce_factor " << reduce_factor
-                        //           << " src_type " << src_type
-                        //           << " widen_factor " << widen_factor
-                        //           << " dst_type " << dst_type
-                        //           << " op " << op
-                        //           << "\n";
+                        tasks.push_back({target, [=]() {
+                                             // Useful for debugging; leave in (commented out)
+                                             // std::cout << "Testing: "
+                                             //           << " target: " << target
+                                             //           << " dst_lanes: " << dst_lanes
+                                             //           << " reduce_factor " << reduce_factor
+                                             //           << " src_type " << src_type
+                                             //           << " widen_factor " << widen_factor
+                                             //           << " dst_type " << dst_type
+                                             //           << " op " << op
+                                             //           << "\n";
 
-                        RDom c(0, 128);
+                                             RDom c(0, 128);
 
-                        // Func.evaluate() doesn't let you specify a Target (!),
-                        // so let's use Func.realize() instead.
-                        Func err("err");
-                        err() = cast<double>(maximum(absd(f(c), ref(c))));
-                        Buffer<double, 0> err_im = err.realize({}, target);
-                        double e = err_im();
+                                             // Func.evaluate() doesn't let you specify a Target (!),
+                                             // so let's use Func.realize() instead.
+                                             Func err("err");
+                                             err() = cast<double>(maximum(absd(f(c), ref(c))));
+                                             Buffer<double, 0> err_im = err.realize({}, target);
+                                             double e = err_im();
 
-                        if (e > 1e-3) {
-                            std::cerr
-                                << "Horizontal reduction produced different output when vectorized!\n"
-                                << "Maximum error = " << e << "\n"
-                                << "Reducing from " << src_type.with_lanes(src_lanes)
-                                << " to " << dst_type.with_lanes(dst_lanes) << "\n"
-                                << "RHS: " << f.update_value() << "\n";
-                            exit(-1);
-                        }
+                                             if (e > 1e-3) {
+                                                 std::cerr
+                                                     << "Horizontal reduction produced different output when vectorized!\n"
+                                                     << "Maximum error = " << e << "\n"
+                                                     << "Reducing from " << src_type.with_lanes(src_lanes)
+                                                     << " to " << dst_type.with_lanes(dst_lanes) << "\n"
+                                                     << "RHS: " << f.update_value() << "\n";
+                                                 exit(-1);
+                                             }
+                                         }});
                     }
                 }
             }
