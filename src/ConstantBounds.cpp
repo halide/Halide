@@ -15,10 +15,6 @@
 namespace Halide {
 namespace Internal {
 
-static bool disable_approximate_methods() {
-    return get_env_variable("HL_DISABLE_APPROX_CBOUNDS") == "1";
-}
-
 // For debugging purposes.
 std::ostream &operator<<(std::ostream &s, const Direction &d) {
     if (d == Direction::Lower) {
@@ -1101,18 +1097,16 @@ Expr find_constant_bound(const Expr &e, Direction d, const Scope<Interval> &scop
         sol = simplify(interval.min);
     }
 
-    if (!disable_approximate_methods()) {
-        Expr approx = approximate_constant_bound(expr, d, scope);
-        // Take the interesection of the previous method and the aggresive method.
-        if (sol.defined()) {
-            if (d == Direction::Upper) {
-                sol = Interval::make_min(sol, approx);
-            } else {
-                sol = Interval::make_max(sol, approx);
-            }
+    Expr approx = approximate_constant_bound(expr, d, scope);
+    // Take the interesection of the previous method and the aggresive method.
+    if (sol.defined()) {
+        if (d == Direction::Upper) {
+            sol = Interval::make_min(sol, approx);
         } else {
-            sol = approx;
+            sol = Interval::make_max(sol, approx);
         }
+    } else {
+        sol = approx;
     }
 
     if (!is_const(sol)) {
@@ -1130,12 +1124,10 @@ Interval find_constant_bounds(const Expr &e, const Scope<Interval> &scope) {
     interval.max = simplify(interval.max);
     make_const_interval(interval);
 
-    if (!disable_approximate_methods()) {
-        Interval approx_interval = approximate_constant_bounds(expr, scope);
-        // Take the interesection of the previous method and the aggresive method.
-        interval.min = Interval::make_max(interval.min, approx_interval.min);
-        interval.max = Interval::make_min(interval.max, approx_interval.max);
-    }
+    Interval approx_interval = approximate_constant_bounds(expr, scope);
+    // Take the interesection of the previous method and the aggresive method.
+    interval.min = Interval::make_max(interval.min, approx_interval.min);
+    interval.max = Interval::make_min(interval.max, approx_interval.max);
 
     return interval;
 }
