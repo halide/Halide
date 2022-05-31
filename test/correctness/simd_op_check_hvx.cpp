@@ -718,10 +718,6 @@ int main(int argc, char **argv) {
         }
     }
 
-    // Instantiate the SimdOpCheck before we skip-return,
-    // so that the sharding setup (if any) will be happy.
-    SimdOpCheckHVX test_hvx(t);
-
     if (t == Target("hexagon-32-noos")) {
         Halide::Internal::Test::Sharder::accept_sharded_status();
         printf("[SKIP] No HVX target enabled.\n");
