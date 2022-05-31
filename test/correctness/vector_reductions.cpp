@@ -111,8 +111,7 @@ void add_tasks(const Target &target, std::vector<Task> &tasks) {
                             .vectorize(rx);
                         ref.compute_root();
 
-                                             Func err("err");
-                        const auto fn - [=]() {
+                        const auto fn = [=]() {
                             // Useful for debugging; leave in (commented out)
                             // std::cout << "Testing: "
                             //           << " target: " << target
