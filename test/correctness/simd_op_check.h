@@ -315,9 +315,10 @@ public:
         /* First add some tests based on the target */
         add_tests();
 
-        Sharder sharder(tasks.size());
+        Sharder sharder;
         bool success = true;
-        for (size_t t = sharder.first(); t <= sharder.last(); t++) {
+        for (size_t t = 0; t < tasks.size(); t++) {
+            if (!sharder.should_run(t)) continue;
             const auto &task = tasks.at(t);
             auto result = check_one(task.op, task.name, task.vector_width, task.expr);
             std::cout << result.op << "\n";

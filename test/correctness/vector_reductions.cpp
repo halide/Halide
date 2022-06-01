@@ -189,10 +189,10 @@ int main(int argc, char **argv) {
     }
 
     using Sharder = Halide::Internal::Test::Sharder;
-    Sharder sharder(tasks.size());
-    std::cout << "Tasks " << tasks.size() << " first " << sharder.first() << " last " << sharder.last() << "\n";
+    Sharder sharder;
     Target prev_target;
-    for (size_t t = sharder.first(); t <= sharder.last(); t++) {
+    for (size_t t = 0; t < tasks.size(); t++) {
+        if (!sharder.should_run(t)) continue;
         const auto &task = tasks.at(t);
         if (task.target != prev_target) {
             std::cout << "vector_reductions: Testing with " << task.target << "\n";

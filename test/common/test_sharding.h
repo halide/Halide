@@ -26,14 +26,19 @@ namespace Test {
 // The Halide buildbots don't (yet) make use of these, but some downstream consumers do.
 
 class Sharder {
+    // returns empty string (not null) if env var not found
     static std::string get_env(const char *v) {
         const char *r = getenv(v);
         if (!r) r = "";
         return r;
     }
 
-    size_t sharded_first, sharded_last;
-    bool sharded;
+    // returns 0 if env var not found
+    static int32_t get_env_i32(const char *v) {
+        return std::atoi(get_env(v).c_str());  // 0 if not found
+    }
+
+    const size_t total_shards, shard_index;
 
 public:
     // Available publicly in case the test is skipped via [SKIP] --
@@ -50,36 +55,29 @@ public:
         }
     }
 
-    explicit Sharder(size_t num_tasks)
-        : sharded_first(0), sharded_last(num_tasks - 1), sharded(false) {
+    explicit Sharder()
+        : total_shards(get_env_i32("TEST_TOTAL_SHARDS")),
+          shard_index(get_env_i32("TEST_SHARD_INDEX")) {
+
         accept_sharded_status();
-
-        int total_shards = std::atoi(get_env("TEST_TOTAL_SHARDS").c_str());  // 0 if not present
-        int current_shard = std::atoi(get_env("TEST_SHARD_INDEX").c_str());  // 0 if not present
-
         if (total_shards != 0) {
-            if (total_shards < 0 || current_shard < 0 || current_shard >= total_shards) {
-                std::cerr << "Illegal values for sharding: total " << total_shards << " current " << current_shard << "\n";
+            if (total_shards < 0 || shard_index < 0 || shard_index >= total_shards) {
+                std::cerr << "Illegal values for sharding: total " << total_shards << " current " << shard_index << "\n";
                 exit(-1);
             }
-
-            size_t shard_size = (num_tasks + total_shards - 1) / total_shards;
-            sharded_first = current_shard * shard_size;
-            sharded_last = std::min(sharded_first + shard_size - 1, num_tasks - 1);
-            sharded = true;
-            // Useful for debugging
-            // std::cout << "Tasks " << tasks.size() << " shard_size " << shard_size << " sharded_first " << sharded_first << " sharded_last " << sharded_last << "\n";
         }
     }
 
-    size_t first() const {
-        return sharded_first;
+    bool should_run(size_t task_index) const {
+        if (total_shards > 0) {
+            return (task_index % total_shards) == shard_index;
+        } else {
+            return true;
+        }
     }
-    size_t last() const {
-        return sharded_last;
-    }
+
     bool is_sharded() const {
-        return sharded;
+        return total_shards > 0;
     }
 };
 
