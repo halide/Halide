@@ -10,6 +10,7 @@
 #include "ApplySplit.h"
 #include "Argument.h"
 #include "Associativity.h"
+#include "Callable.h"
 #include "CodeGen_LLVM.h"
 #include "Debug.h"
 #include "ExprUsesVar.h"

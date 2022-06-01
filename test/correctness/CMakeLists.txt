@@ -36,6 +36,7 @@ tests(GROUPS correctness
       bounds_query.cpp
       buffer_t.cpp
       c_function.cpp
+      callable.cpp
       cascaded_filters.cpp
       cast.cpp
       cast_handle.cpp

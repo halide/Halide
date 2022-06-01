@@ -1059,8 +1059,6 @@ public:
      * struct that behaves like a function pointer. The calling convention
      * will exactly match that of an AOT-compiled version of this Func
      * with the same Argument list.
-     *
-     * TODO: "Callable" is a terrible name, find something better
      */
     Callable compile_to_callable(const std::vector<Argument> &args,
                                  const Target &target = get_jit_target_from_environment());

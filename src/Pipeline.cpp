@@ -3,6 +3,7 @@
 #include <utility>
 
 #include "Argument.h"
+#include "Callable.h"
 #include "CodeGen_Internal.h"
 #include "FindCalls.h"
 #include "Func.h"
@@ -104,266 +105,7 @@ public:
     JITCallArgs &operator=(JITCallArgs &&other) = delete;
 };
 
-struct JITCache {
-    Target jit_target;
-    // Arguments for all inputs and outputs
-    vector<Argument> arguments;
-    std::map<std::string, JITExtern> jit_externs;
-    JITModule jit_module;
-    WasmModule wasm_module;
-
-    // This essentially is just a getter for contents->jit_target,
-    // but also reality-checks that the status of the jit_module and/or wasm_module
-    // match what we expect.
-    Target get_compiled_jit_target() const {
-        const bool has_wasm = wasm_module.contents.defined();
-        const bool has_native = jit_module.compiled();
-        if (jit_target.arch == Target::WebAssembly) {
-            internal_assert(has_wasm && !has_native);
-        } else if (!jit_target.has_unknowns()) {
-            internal_assert(!has_wasm && has_native);
-        } else {
-            internal_assert(!has_wasm && !has_native);
-        }
-        return jit_target;
-    }
-
-    int call_jit_code(const Target &target, const void **args) {
-#if defined(__has_feature)
-#if __has_feature(memory_sanitizer)
-        user_warning << "MSAN does not support JIT compilers of any sort, and will report "
-                        "false positives when used in conjunction with the Halide JIT. "
-                        "If you need to test with MSAN enabled, you must use ahead-of-time "
-                        "compilation for Halide code.";
-#endif
-#endif
-        if (target.arch == Target::WebAssembly) {
-            internal_assert(wasm_module.contents.defined());
-            return wasm_module.run(args);
-        } else {
-            auto argv_wrapper = jit_module.argv_function();
-            internal_assert(argv_wrapper != nullptr);
-            return argv_wrapper(args);
-        }
-    }
-
-    void finish_profiling(JITUserContext *context) {
-        // If we're profiling, report runtimes and reset profiler stats.
-        if (jit_target.has_feature(Target::Profile) || jit_target.has_feature(Target::ProfileByTimer)) {
-            JITModule::Symbol report_sym = jit_module.find_symbol_by_name("halide_profiler_report");
-            JITModule::Symbol reset_sym = jit_module.find_symbol_by_name("halide_profiler_reset");
-            if (report_sym.address && reset_sym.address) {
-                void (*report_fn_ptr)(JITUserContext *) = (void (*)(JITUserContext *))(report_sym.address);
-                report_fn_ptr(context);
-
-                void (*reset_fn_ptr)() = (void (*)())(reset_sym.address);
-                reset_fn_ptr();
-            }
-        }
-    }
-};
-
-struct JITErrorBuffer {
-    enum { MaxBufSize = 4096 };
-    char buf[MaxBufSize];
-    std::atomic<size_t> end{0};
-
-    void concat(const char *message) {
-        size_t len = strlen(message);
-
-        if (len && message[len - 1] != '\n') {
-            // Claim some extra space for a newline.
-            len++;
-        }
-
-        // Atomically claim some space in the buffer
-        size_t old_end = end.fetch_add(len);
-
-        if (old_end + len >= MaxBufSize - 1) {
-            // Out of space
-            return;
-        }
-
-        for (size_t i = 0; i < len - 1; i++) {
-            buf[old_end + i] = message[i];
-        }
-        if (buf[old_end + len - 2] != '\n') {
-            buf[old_end + len - 1] = '\n';
-        }
-    }
-
-    std::string str() const {
-        return std::string(buf, end);
-    }
-
-    static void handler(JITUserContext *ctx, const char *message) {
-        if (ctx && ctx->error_buffer) {
-            ctx->error_buffer->concat(message);
-        }
-    }
-};
-
-struct JITFuncCallContext {
-    JITErrorBuffer error_buffer;
-    JITUserContext *context;
-    bool custom_error_handler;
-
-    JITFuncCallContext(JITUserContext *context, const JITHandlers &pipeline_handlers)
-        : context(context) {
-        custom_error_handler = (context->handlers.custom_error != nullptr ||
-                                pipeline_handlers.custom_error != nullptr);
-        // Hook the error handler if not set
-        if (!custom_error_handler) {
-            context->handlers.custom_error = JITErrorBuffer::handler;
-        }
-
-        // Add the handlers stored in the pipeline for anything else
-        // not set, then for anything still not set, use the global
-        // active handlers.
-        JITSharedRuntime::populate_jit_handlers(context, pipeline_handlers);
-        context->error_buffer = &error_buffer;
-
-        debug(2) << "custom_print: " << (void *)context->handlers.custom_print << "\n"
-                 << "custom_malloc: " << (void *)context->handlers.custom_malloc << "\n"
-                 << "custom_free: " << (void *)context->handlers.custom_free << "\n"
-                 << "custom_do_task: " << (void *)context->handlers.custom_do_task << "\n"
-                 << "custom_do_par_for: " << (void *)context->handlers.custom_do_par_for << "\n"
-                 << "custom_error: " << (void *)context->handlers.custom_error << "\n"
-                 << "custom_trace: " << (void *)context->handlers.custom_trace << "\n";
-    }
-
-    void report_if_error(int exit_status) {
-        // Only report the errors if no custom error handler was installed
-        if (exit_status && !custom_error_handler) {
-            std::string output = error_buffer.str();
-            if (output.empty()) {
-                output = ("The pipeline returned exit status " +
-                          std::to_string(exit_status) +
-                          " but halide_error was never called.\n");
-            }
-            halide_runtime_error << output;
-            error_buffer.end = 0;
-        }
-    }
-
-    void finalize(int exit_status) {
-        report_if_error(exit_status);
-    }
-};
-
 }  // namespace Internal
-
-struct CallableContents {
-    mutable RefCount ref_count;
-
-    // Name of the jitted function, here solely for error reporting
-    std::string name;
-
-    // The cached code
-    JITCache jit_cache;
-
-    // Encoded values for efficient runtime type checking;
-    // identical to jit_cache.arguments in length.
-    std::vector<Callable::CallCheckInfo> call_check_info;
-
-    // Save the jit_handlers and jit_externs as they were at the time this
-    // Callable was created, in case the Pipeline's version is mutated in
-    // between creation and call -- we want the Callable to remain immutable
-    // after creation, regardless of what you do to the Func.
-    JITHandlers saved_jit_handlers;
-    std::map<std::string, JITExtern> saved_jit_externs;
-};
-
-namespace Internal {
-template<>
-RefCount &ref_count<CallableContents>(const CallableContents *p) noexcept {
-    return p->ref_count;
-}
-
-template<>
-void destroy<CallableContents>(const CallableContents *p) {
-    delete p;
-}
-}  // namespace Internal
-
-Callable::Callable()
-    : contents(new CallableContents) {
-}
-
-const Callable::CallCheckInfo *Callable::call_check_info() const {
-    return contents->call_check_info.data();
-}
-
-size_t Callable::arg_count() const {
-    return contents->jit_cache.arguments.size();
-}
-
-const std::vector<Argument> &Callable::arguments() const {
-    return contents->jit_cache.arguments;
-}
-
-void Callable::do_fail_bad_call(BadArgMask bad_arg_mask, size_t hidden_args) const {
-    const size_t required_arg_count = arg_count();
-    const size_t required_user_visible_args = required_arg_count - hidden_args;
-    std::ostringstream errors;
-    if (bad_arg_mask < 0) {
-        // Note that we don't report the "actual count" here, just the expected count, in the
-        // name of keeping the generated code size small.
-        errors << "- Expected exactly " << required_user_visible_args << " arguments.";
-    } else {
-        uint64_t mask = 1;
-        for (size_t i = 0; i < required_arg_count; i++, mask <<= 1) {
-            if (!(bad_arg_mask & mask)) {
-                continue;
-            }
-            const Argument &a = contents->jit_cache.arguments.at(i);
-            const char *kind = a.is_scalar() ? "scalar" : "buffer";
-            // Note that we don't report the "actual type" here, just the expected type...
-            // saving the actual type leads to more code bloat than we can justify
-            // for this. (Consider adding as a debug-only enhancement?)
-            errors
-                << "- Argument " << (i - hidden_args + 1)
-                << " of " << required_user_visible_args << " ('" << a.name << "') was expected to be a "
-                << kind << " of type '" << a.type << "'.\n";
-        }
-    }
-    user_error << "Error calling '" << contents->name << "':\n"
-               << errors.str();
-}
-
-/*static*/ JITUserContext Callable::empty_jit_user_context;
-
-int Callable::call_argv(size_t argc, const void **argv) const {
-    assert(contents->jit_cache.jit_target.has_feature(Target::UserContext));
-
-    const size_t args_size = contents->jit_cache.arguments.size();
-    user_assert(argc == args_size)
-        << "Expected " << args_size
-        << " arguments (including user_context), but got " << argc << "\n";
-
-    assert(contents->jit_cache.arguments[0].name == "__user_context");
-    JITUserContext *context = *(JITUserContext **)const_cast<void *>(argv[0]);
-    JITFuncCallContext jit_call_context(context, contents->saved_jit_handlers);
-
-    debug(2) << "Calling jitted function\n";
-    int exit_status = contents->jit_cache.call_jit_code(contents->jit_cache.jit_target, argv);
-    debug(2) << "Back from jitted function. Exit status was " << exit_status << "\n";
-
-    // If we're profiling, report runtimes and reset profiler stats.
-    contents->jit_cache.finish_profiling(context);
-
-    // Don't call jit_call_context.finalize(): if no error handler was installed,
-    // it will call halide_error_handler for us, which is fine for realize()
-    // and friends because there is no other way to report an error. For this code
-    // path, though, we just return the error code (if any); if a custom error
-    // handler was installed, it presumably will get the first shot at handling it,
-    // and if not, the caller must handle it.
-    //
-    // No: jit_call_context.finalize(exit_status);
-    jit_call_context.finalize(exit_status);
-
-    return exit_status;
-}
 
 struct PipelineContents {
     mutable RefCount ref_count;
@@ -879,29 +621,25 @@ Callable Pipeline::compile_to_callable(const std::vector<Argument> &args_in, con
 
     Module module = compile_to_module(args, generate_function_name(), target).resolve_submodules();
 
-    Callable c;
-    // Save the jit_handlers and jit_externs as they were at the time this
-    // Callable was created, in case the Pipeline's version is mutated in
-    // between creation and call -- we want the Callable to remain immutable
-    // after creation, regardless of what you do to the Func.
-    c.contents->saved_jit_handlers = jit_handlers();
-    c.contents->saved_jit_externs = get_jit_externs();
-    c.contents->jit_cache = compile_jit_cache(module, std::move(args), contents->outputs, c.contents->saved_jit_externs, target);
-    // Name is only for bad-argument error reporting
-    c.contents->name = module.name();
+    auto jit_cache = compile_jit_cache(module, std::move(args), contents->outputs, get_jit_externs(), target);
 
     // Note: this isn't the same as the 'args' we passed in; it has outputs
     // appended to it, so even if 'args' was still valid, it's not what we want here
-    const auto &all_args = c.contents->jit_cache.arguments;
-    c.contents->call_check_info.reserve(all_args.size());
+    const auto &all_args = jit_cache.arguments;
+    std::vector<Callable::CallCheckInfo> call_check_info;
+    call_check_info.reserve(all_args.size());
     for (const Argument &a : all_args) {
         const auto cci = (a.name == user_context_arg.name) ?
                              Callable::make_ucon_cci() :
                              (a.is_scalar() ? Callable::make_scalar_cci(a.type) : Callable::make_buffer_cci());
-        c.contents->call_check_info.push_back(cci);
+        call_check_info.push_back(cci);
     }
 
-    return c;
+    // Save the jit_handlers and jit_externs as they were at the time this
+    // Callable was created, in case the Pipeline's version is mutated in
+    // between creation and call -- we want the Callable to remain immutable
+    // after creation, regardless of what you do to the Func.
+    return Callable(module.name(), jit_handlers(), get_jit_externs(), std::move(jit_cache), std::move(call_check_info));
 }
 
 /*static*/ JITCache Pipeline::compile_jit_cache(const Module &module,

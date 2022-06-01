@@ -11,16 +11,21 @@
  */
 
 #include "Argument.h"
-#include "JITModule.h"
 #include "Parameter.h"
 #include "Type.h"
 
+#include <map>
+#include <string>
+#include <vector>
+
 namespace Halide {
 
+struct JITExtern;
 struct Target;
 
 namespace Internal {
 
+struct JITModule;
 struct WasmModuleContents;
 
 /** Handle to compiled wasm code which can be called later. */
