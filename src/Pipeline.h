@@ -188,12 +188,12 @@ public:
 
     /** Generate a schedule for the pipeline using the currently-default autoscheduler. */
     AutoSchedulerResults auto_schedule(const Target &target,
-                                       const MachineParams &arch_params = MachineParams::generic());
+                                       const MachineParams &arch_params = MachineParams::generic()) const;
 
     /** Generate a schedule for the pipeline using the specified autoscheduler. */
     AutoSchedulerResults auto_schedule(const std::string &autoscheduler_name,
                                        const Target &target,
-                                       const MachineParams &arch_params = MachineParams::generic());
+                                       const MachineParams &arch_params = MachineParams::generic()) const;
 
     /** Add a new the autoscheduler method with the given name. Does not affect the current default autoscheduler.
      * It is an error to call this with the same name multiple times. */

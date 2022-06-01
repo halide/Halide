@@ -228,5 +228,22 @@ Module AbstractGenerator::build_gradient_module(const std::string &function_name
     return result;
 }
 
+Callable AbstractGenerator::compile_to_callable() {
+    Pipeline pipeline = build_pipeline();
+
+    std::vector<Argument> arguments;
+    const auto arg_infos = arginfos();
+    for (const auto &a : arg_infos) {
+        if (a.dir != ArgInfoDirection::Input) {
+            continue;
+        }
+        for (const auto &p : input_parameter(a.name)) {
+            arguments.push_back(to_argument(p));
+        }
+    }
+
+    return pipeline.compile_to_callable(arguments, context().target());
+}
+
 }  // namespace Internal
 }  // namespace Halide

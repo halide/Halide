@@ -6,6 +6,7 @@
 #include <string>
 #include <vector>
 
+#include "Callable.h"
 #include "Expr.h"
 #include "Func.h"
 #include "Module.h"
@@ -207,6 +208,12 @@ public:
      *     (For the common case of just one original-output, this amounts to being one output for each original-input.)
      */
     Module build_gradient_module(const std::string &function_name);
+
+    /**
+     * JIT the AbstractGenerator into a Callable (using the currently-set
+     * Target) and return it.
+     */
+    Callable compile_to_callable();
 };
 
 using AbstractGeneratorPtr = std::unique_ptr<AbstractGenerator>;

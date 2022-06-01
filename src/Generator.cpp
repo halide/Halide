@@ -1051,6 +1051,33 @@ public:
 
 }  // namespace
 
+const GeneratorFactoryProvider &get_registered_generators() {
+    static GeneratorsFromRegistry g;
+    return g;
+}
+
+AbstractGeneratorPtr create_generator(const std::string &name,
+    const GeneratorContext &context,
+    const GeneratorFactoryProvider &generator_factory_provider) {
+    return generator_factory_provider.create(name, context);
+}
+
+}  // namespace Internal
+
+Callable create_callable(const std::string &name,
+                         const GeneratorContext &context) {
+    auto g = create_generator(name, context, Internal::get_registered_generators());
+    user_assert(g != nullptr) << "There is no Generator with the name '" << name << "' currently available.";
+    return g->compile_to_callable();
+}
+
+Callable create_callable(const std::string &name,
+                         const Target &target) {
+    return create_callable(name, GeneratorContext(target));
+}
+
+namespace Internal {
+
 #ifdef HALIDE_WITH_EXCEPTIONS
 int generate_filter_main(int argc, char **argv, const GeneratorFactoryProvider &generator_factory_provider) {
     try {

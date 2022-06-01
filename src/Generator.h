@@ -351,6 +351,15 @@ public:
     GeneratorFactoryProvider &operator=(GeneratorFactoryProvider &&) = delete;
 };
 
+/** Return a GeneratorFactoryProvider that knows about all the currently-registered C++ Generators. */
+const GeneratorFactoryProvider &get_registered_generators();
+
+/** Create an instance of a given AbstractGenerator that is registered in the
+ * given GeneratorFactoryProvider. If the name isn't known, return nullptr. */
+AbstractGeneratorPtr create_generator(const std::string &name,
+                                      const GeneratorContext &context,
+                                      const GeneratorFactoryProvider &generator_factory_provider = get_registered_generators());
+
 /** generate_filter_main() is a convenient wrapper for GeneratorRegistry::create() +
  * compile_to_files(); it can be trivially wrapped by a "real" main() to produce a
  * command-line utility for ahead-of-time filter compilation. */
@@ -361,12 +370,6 @@ int generate_filter_main(int argc, char **argv);
  * 'main' logic but avoid the global Generator registry (e.g. for bindings in languages
  * other than C++). */
 int generate_filter_main(int argc, char **argv, const GeneratorFactoryProvider &generator_factory_provider);
-
-/** This overload of generate_filter_main lets you provide your own provider for how to enumerate and/or create
- * the generators based on registration name; this is useful if you want to re-use the
- * 'main' logic but avoid the global Generator registry (e.g. for bindings in languages
- * other than C++). */
-int generate_filter_main(int argc, char **argv, std::ostream &cerr, const GeneratorFactoryProvider &generator_factory_provider);
 
 // select_type<> is to std::conditional as switch is to if:
 // it allows a multiway compile-time type definition via the form
@@ -4043,6 +4046,15 @@ void execute_generator(const ExecuteGeneratorArgs &args);
 // -----------------------------
 
 }  // namespace Internal
+
+/** Create a Generator from the currently-registered Generators, use it to create a Callable.
+ * If the name isn't registered, assert-fail. */
+// @{
+Callable create_callable(const std::string &name,
+                         const GeneratorContext &context);
+Callable create_callable(const std::string &name,
+                         const Target &target = get_jit_target_from_environment());
+// @}
 
 }  // namespace Halide
 
