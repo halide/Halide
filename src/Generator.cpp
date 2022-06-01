@@ -1057,8 +1057,8 @@ const GeneratorFactoryProvider &get_registered_generators() {
 }
 
 AbstractGeneratorPtr create_generator(const std::string &name,
-    const GeneratorContext &context,
-    const GeneratorFactoryProvider &generator_factory_provider) {
+                                      const GeneratorContext &context,
+                                      const GeneratorFactoryProvider &generator_factory_provider) {
     return generator_factory_provider.create(name, context);
 }
 
