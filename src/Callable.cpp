@@ -1,23 +1,9 @@
-// #include <algorithm>
-// #include <atomic>
 #include <map>
 
 #include "Argument.h"
 #include "Callable.h"
 #include "JITModule.h"
-// #include "CodeGen_Internal.h"
-// #include "FindCalls.h"
-// #include "Func.h"
-// #include "IRVisitor.h"
-// #include "InferArguments.h"
-// #include "LLVM_Output.h"
-// #include "Lower.h"
-// #include "Module.h"
-// #include "ParamMap.h"
 #include "Pipeline.h"
-// #include "PrintLoopNest.h"
-// #include "RealizationOrder.h"
-// #include "WasmExecutor.h"
 
 using namespace Halide::Internal;
 
