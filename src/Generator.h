@@ -1370,18 +1370,18 @@ template<typename T = void>
 class StubOutputBuffer : public StubOutputBufferBase {
     template<typename T2>
     friend class GeneratorOutput_Buffer;
-    explicit StubOutputBuffer(const Func &f, const std::shared_ptr<AbstractGenerator> &generator)
-        : StubOutputBufferBase(f, generator) {
+    explicit StubOutputBuffer(const Func &fn, const std::shared_ptr<AbstractGenerator> &gen)
+        : StubOutputBufferBase(fn, gen) {
     }
 
 public:
     StubOutputBuffer() = default;
 
     static std::vector<StubOutputBuffer<T>> to_output_buffers(const std::vector<Func> &v,
-                                                              const std::shared_ptr<AbstractGenerator> &generator) {
+                                                              const std::shared_ptr<AbstractGenerator> &gen) {
         std::vector<StubOutputBuffer<T>> result;
         for (const Func &f : v) {
-            result.push_back(StubOutputBuffer<T>(f, generator));
+            result.push_back(StubOutputBuffer<T>(f, gen));
         }
         return result;
     }
