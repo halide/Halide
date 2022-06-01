@@ -86,7 +86,7 @@ def test_simple(gen):
         # Inputs that can't be converted to what the receiver needs (positional)
         f = gen(target, hl.f32(3.141592), "happy", k)
     except hl.HalideError as e:
-        assert 'Input func_input requires a Param (or scalar literal) argument' in str(e)
+        assert 'Input buffer_input requires an ImageParam or Buffer argument' in str(e)
     else:
         assert False, 'Did not see expected exception!'
 

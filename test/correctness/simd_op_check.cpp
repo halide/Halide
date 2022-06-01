@@ -2247,7 +2247,6 @@ int main(int argc, char **argv) {
 
     if (argc > 1) {
         test.filter = argv[1];
-        test.set_num_threads(1);
     }
 
     if (getenv("HL_SIMD_OP_CHECK_FILTER")) {
@@ -2257,20 +2256,6 @@ int main(int argc, char **argv) {
     const int seed = argc > 2 ? atoi(argv[2]) : time(nullptr);
     std::cout << "simd_op_check test seed: " << seed << "\n";
     test.set_seed(seed);
-
-    // TODO: multithreading here is the cause of https://github.com/halide/Halide/issues/3669;
-    // the fundamental issue is that we make one set of ImageParams to construct many
-    // Exprs, then realize those Exprs on arbitrary threads; it is known that sharing
-    // one Func across multiple threads is not guaranteed to be safe, and indeed, TSAN
-    // reports data races, of which some are likely 'benign' (e.g. Function.freeze) but others
-    // are highly suspect (e.g. Function.lock_loop_levels). Since multithreading here
-    // was added just to avoid having this test be the last to finish, the expedient 'fix'
-    // for now is to remove the multithreading. A proper fix could be made by restructuring this
-    // test so that every Expr constructed for testing was guaranteed to share no Funcs
-    // (Function.deep_copy() perhaps). Of course, it would also be desirable to allow Funcs, Exprs, etc
-    // to be usable across multiple threads, but that is a major undertaking that is
-    // definitely not worthwhile for present Halide usage patterns.
-    test.set_num_threads(1);
 
     if (argc > 2) {
         // Don't forget: if you want to run the standard tests to a specific output

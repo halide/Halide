@@ -171,6 +171,10 @@ if (TARGET generator_aot_autograd)
     target_link_libraries(generator_aot_autograd PRIVATE autograd_grad)
 endif ()
 
+# abstractgeneratortest_aottest.cpp
+# abstractgeneratortest_generator.cpp
+halide_define_aot_test(abstractgeneratortest)
+
 # bit_operations_aottest.cpp
 # bit_operations_generator.cpp
 halide_define_aot_test(bit_operations)

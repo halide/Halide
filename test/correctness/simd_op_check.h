@@ -3,6 +3,7 @@
 
 #include "Halide.h"
 #include "halide_test_dirs.h"
+#include "test_sharding.h"
 
 #include <fstream>
 
@@ -46,26 +47,19 @@ public:
     int W;
     int H;
 
+    using Sharder = Halide::Internal::Test::Sharder;
+
     SimdOpCheckTest(const Target t, int w, int h)
         : target(t), W(w), H(h) {
         target = target
                      .with_feature(Target::NoBoundsQuery)
                      .with_feature(Target::NoAsserts)
                      .with_feature(Target::NoRuntime);
-        num_threads = Internal::ThreadPool<void>::num_processors_online();
     }
     virtual ~SimdOpCheckTest() = default;
 
     void set_seed(int seed) {
         rng.seed(seed);
-    }
-
-    size_t get_num_threads() const {
-        return num_threads;
-    }
-
-    void set_num_threads(size_t n) {
-        num_threads = n;
     }
 
     virtual bool can_run_code() const {
@@ -320,17 +314,13 @@ public:
     virtual bool test_all() {
         /* First add some tests based on the target */
         add_tests();
-        Internal::ThreadPool<TestResult> pool(num_threads);
-        std::vector<std::future<TestResult>> futures;
-        for (const Task &task : tasks) {
-            futures.push_back(pool.async([this, task]() {
-                return check_one(task.op, task.name, task.vector_width, task.expr);
-            }));
-        }
 
+        Sharder sharder;
         bool success = true;
-        for (auto &f : futures) {
-            const TestResult &result = f.get();
+        for (size_t t = 0; t < tasks.size(); t++) {
+            if (!sharder.should_run(t)) continue;
+            const auto &task = tasks.at(t);
+            auto result = check_one(task.op, task.name, task.vector_width, task.expr);
             std::cout << result.op << "\n";
             if (!result.error_msg.empty()) {
                 std::cerr << result.error_msg;
@@ -342,8 +332,9 @@ public:
     }
 
 private:
-    size_t num_threads;
     const Halide::Var x{"x"}, y{"y"};
 };
+
 }  // namespace Halide
+
 #endif  // SIMD_OP_CHECK_H
