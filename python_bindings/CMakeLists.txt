@@ -1,8 +1,24 @@
-##
-# Load Python dependencies, including external pybind11
-##
+cmake_minimum_required(VERSION 3.16...3.23)
+project(Halide_Python)
 
-find_package(Python3 REQUIRED COMPONENTS Interpreter Development)
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
+
+find_package(Halide REQUIRED)
+find_package(PythonExtensions REQUIRED)
+
+if(SKBUILD)
+    # Scikit-Build does not add your site-packages to the search path
+    # automatically, so we need to add it _or_ the pybind11 specific directory
+    # here.
+    execute_process(
+        COMMAND "${PYTHON_EXECUTABLE}" -c
+                "import pybind11; print(pybind11.get_cmake_dir())"
+        OUTPUT_VARIABLE _tmp_dir
+        OUTPUT_STRIP_TRAILING_WHITESPACE COMMAND_ECHO STDOUT)
+    list(APPEND CMAKE_PREFIX_PATH "${_tmp_dir}")
+endif()
 
 set(PYBIND11_VER 2.6.2)
 find_package(pybind11 ${PYBIND11_VER} QUIET)
@@ -14,16 +30,4 @@ if (NOT pybind11_FOUND)
     FetchContent_MakeAvailable(pybind11)
 endif ()
 
-##
-# Add our sources to this sub-tree.
-##
-
 add_subdirectory(src)
-add_subdirectory(stub)
-
-option(WITH_TEST_PYTHON "Build Python tests" ON)
-if (WITH_TESTS AND WITH_TEST_PYTHON)
-    add_subdirectory(apps)
-    add_subdirectory(correctness)
-    add_subdirectory(tutorial)
-endif ()
