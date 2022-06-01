@@ -10,19 +10,12 @@
 
 #include "Buffer.h"
 #include "IntrusivePtr.h"
+#include "JITModule.h"
 
 namespace Halide {
 
 struct Argument;
 struct CallableContents;
-class Func;
-struct JITExtern;
-struct JITHandlers;
-struct PipelineContents;
-
-namespace Internal {
-struct JITCache;
-}
 
 namespace PythonBindings {
 class PyCallable;
@@ -184,8 +177,6 @@ private:
         return call_argv(count, &argv.argv[0]);
     }
 
-    static JITUserContext empty_jit_user_context;
-
 public:
     /** Return the expected Arguments for this Callable, in the order they must be specified, including all outputs.
      * Note that the first entry will *always* specify a JITUserContext. */
@@ -200,6 +191,7 @@ public:
     template<typename... Args>
     HALIDE_MUST_USE_RESULT int
     operator()(Args &&...args) {
+        JITUserContext empty_jit_user_context;
         return call<1, Args...>(&empty_jit_user_context, std::forward<Args>(args)...);
     }
 };

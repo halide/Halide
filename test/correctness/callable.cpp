@@ -50,7 +50,7 @@ HalideExtern_2(float, my_extern_func, int, float);
 int main(int argc, char **argv) {
     const Target t = get_jit_target_from_environment();
 
-    if (0) {
+    {
         Param<int32_t> p_int(42);
         Param<float> p_float(1.0f);
         ImageParam p_img(UInt(8), 2);

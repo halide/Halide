@@ -57,7 +57,8 @@ public:
         _halide_user_assert(args.size() == argc - 1) << "Expected exactly " << (argc - 1) << " arguments.";
 
         // args
-        scalar_storage[0] = (uintptr_t)&Callable::empty_jit_user_context;
+        JITUserContext empty_jit_user_context;
+        scalar_storage[0] = (uintptr_t)&empty_jit_user_context;
         argv[0] = &scalar_storage[0];
 
         for (size_t i = 1; i < argc; i++) {

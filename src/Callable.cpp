@@ -100,8 +100,6 @@ void Callable::do_fail_bad_call(BadArgMask bad_arg_mask, size_t hidden_args) con
                << errors.str();
 }
 
-/*static*/ JITUserContext Callable::empty_jit_user_context;
-
 int Callable::call_argv(size_t argc, const void **argv) const {
     assert(contents->jit_cache.jit_target.has_feature(Target::UserContext));
 
