@@ -49,9 +49,9 @@ void define_pipeline(py::module &m) {
 
             .def("outputs", &Pipeline::outputs)
 
-            .def("auto_schedule", (AutoSchedulerResults(Pipeline::*)(const std::string &, const Target &, const MachineParams &)) & Pipeline::auto_schedule,
+            .def("auto_schedule", (AutoSchedulerResults(Pipeline::*)(const std::string &, const Target &, const MachineParams &) const) & Pipeline::auto_schedule,
                  py::arg("autoscheduler_name"), py::arg("target"), py::arg("machine_params") = MachineParams::generic())
-            .def("auto_schedule", (AutoSchedulerResults(Pipeline::*)(const Target &, const MachineParams &)) & Pipeline::auto_schedule,
+            .def("auto_schedule", (AutoSchedulerResults(Pipeline::*)(const Target &, const MachineParams &) const) & Pipeline::auto_schedule,
                  py::arg("target"), py::arg("machine_params") = MachineParams::generic())
 
             .def_static("set_default_autoscheduler_name", &Pipeline::set_default_autoscheduler_name,
