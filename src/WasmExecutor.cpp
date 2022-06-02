@@ -2116,7 +2116,7 @@ void add_extern_callbacks(const Local<Context> &context,
             continue;
         }
 
-        TrampolineFn trampoline_fn;
+        TrampolineFn trampoline_fn = nullptr;
         std::vector<ExternArgType> arg_types;
         if (!build_extern_arg_types(fn_name, jit_externs, trampolines, trampoline_fn, arg_types)) {
             internal_error << "Missing fn_name " << fn_name;

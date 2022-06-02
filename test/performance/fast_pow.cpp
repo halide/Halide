@@ -6,14 +6,8 @@
 using namespace Halide;
 using namespace Halide::Tools;
 
-#ifdef _WIN32
-#define DLLEXPORT __declspec(dllexport)
-#else
-#define DLLEXPORT
-#endif
-
 // powf() is a macro in some environments, so always wrap it
-extern "C" DLLEXPORT float pow_ref(float x, float y) {
+extern "C" HALIDE_EXPORT_SYMBOL float pow_ref(float x, float y) {
     return powf(x, y);
 }
 HalideExtern_2(float, pow_ref, float, float);
