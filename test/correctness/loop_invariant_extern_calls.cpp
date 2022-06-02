@@ -5,20 +5,14 @@ using namespace Halide;
 
 // NB: You must compile with -rdynamic for llvm to be able to find the appropriate symbols
 
-#ifdef _WIN32
-#define DLLEXPORT __declspec(dllexport)
-#else
-#define DLLEXPORT
-#endif
-
 int call_counter[] = {0, 0, 0, 0, 0, 0};
-extern "C" DLLEXPORT int my_func(int counter, int x) {
+extern "C" HALIDE_EXPORT_SYMBOL int my_func(int counter, int x) {
     call_counter[counter]++;
     return x;
 }
 HalidePureExtern_2(int, my_func, int, int);
 
-extern "C" DLLEXPORT int my_impure_func(int counter, int x) {
+extern "C" HALIDE_EXPORT_SYMBOL int my_impure_func(int counter, int x) {
     call_counter[counter]++;
     return x;
 }
