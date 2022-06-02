@@ -45,6 +45,10 @@ public:
         return "webgpu";
     }
 
+    bool kernel_run_takes_types() const override {
+        return true;
+    }
+
 protected:
     class CodeGen_WGSL : public CodeGen_GPU_C {
     public:
@@ -294,9 +298,8 @@ void CodeGen_WebGPU_Dev::CodeGen_WGSL::add_kernel(
             next_binding++;
         } else {
             // Collect non-buffer arguments into a single uniform buffer.
-            // TODO: Support non-buffer args with different sizes.
-            internal_assert(arg.type.bytes() == 4)
-                << "unimplemented: non-buffer args assumed to be 32-bits";
+            internal_assert(arg.type.bytes() <= 4)
+                << "unimplemented: non-buffer args larger than 4 bytes";
             uniforms << "  " << print_name(arg.name) << " : "
                      << print_type(arg.type) << ",\n";
         }

@@ -31,7 +31,7 @@ extern int halide_webgpu_run(void *user_context,
                              int blocksX, int blocksY, int blocksZ,
                              int threadsX, int threadsY, int threadsZ,
                              int shared_mem_bytes,
-                             size_t arg_sizes[],
+                             halide_type_t arg_types[],
                              void *args[],
                              int8_t arg_is_buffer[]);
 extern void halide_webgpu_finalize_kernels(void *user_context, void *state_ptr);

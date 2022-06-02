@@ -816,7 +816,7 @@ WEAK int halide_webgpu_run(void *user_context,
                            int groupsX, int groupsY, int groupsZ,
                            int threadsX, int threadsY, int threadsZ,
                            int workgroup_mem_bytes,
-                           size_t arg_sizes[],
+                           halide_type_t arg_types[],
                            void *args[],
                            int8_t arg_is_buffer[]) {
     debug(user_context)
@@ -869,13 +869,17 @@ WEAK int halide_webgpu_run(void *user_context,
     uint32_t num_args = 0;
     uint32_t num_buffers = 0;
     uint32_t uniform_size = 0;
-    while (arg_sizes[num_args] != 0) {
+    while (args[num_args] != nullptr) {
         if (arg_is_buffer[num_args]) {
             num_buffers++;
         } else {
-            // TODO: Support non-buffer args with different sizes.
-            halide_abort_if_false(user_context, arg_sizes[num_args] == 4);
-            uniform_size += arg_sizes[num_args];
+            uint32_t arg_size = arg_types[num_args].bytes();
+            halide_abort_if_false(user_context, arg_size <= 4);
+
+            // Round up to 4 bytes.
+            arg_size = (arg_size + 3) & ~3;
+
+            uniform_size += arg_size;
         }
         num_args++;
     }
@@ -937,10 +941,72 @@ WEAK int halide_webgpu_run(void *user_context,
             if (arg_is_buffer[a]) {
                 continue;
             }
-            // TODO: Support non-buffer args with different sizes.
-            halide_abort_if_false(user_context, arg_sizes[a] == 4);
-            arg_values[i] = *(((uint32_t **)args)[a]);
-            i++;
+
+            halide_type_t arg_type = arg_types[a];
+            halide_abort_if_false(user_context, arg_type.lanes == 1);
+            halide_abort_if_false(user_context, arg_type.bits > 0);
+            halide_abort_if_false(user_context, arg_type.bits <= 32);
+
+            void *arg_in = args[a];
+            void *arg_out = &arg_values[i++];
+
+            // Copy the argument value, expanding it to 32-bits.
+            switch (arg_type.code) {
+            case halide_type_float: {
+                halide_abort_if_false(user_context, arg_type.bits == 32);
+                *(float *)arg_out = *(float *)arg_in;
+                break;
+            }
+            case halide_type_int: {
+                switch (arg_type.bits) {
+                case 1: {
+                    *(int32_t *)arg_out = *((int8_t *)arg_in);
+                }
+                case 8: {
+                    *(int32_t *)arg_out = *((int8_t *)arg_in);
+                    break;
+                }
+                case 16: {
+                    *(int32_t *)arg_out = *((int16_t *)arg_in);
+                    break;
+                }
+                case 32: {
+                    *(int32_t *)arg_out = *((int32_t *)arg_in);
+                    break;
+                }
+                default: {
+                    halide_abort_if_false(user_context, false);
+                }
+                }
+                break;
+            }
+            case halide_type_uint: {
+                switch (arg_type.bits) {
+                case 1: {
+                    *(uint32_t *)arg_out = *((uint8_t *)arg_in);
+                }
+                case 8: {
+                    *(uint32_t *)arg_out = *((uint8_t *)arg_in);
+                    break;
+                }
+                case 16: {
+                    *(uint32_t *)arg_out = *((uint16_t *)arg_in);
+                    break;
+                }
+                case 32: {
+                    *(uint32_t *)arg_out = *((uint32_t *)arg_in);
+                    break;
+                }
+                default: {
+                    halide_abort_if_false(user_context, false);
+                }
+                }
+                break;
+            }
+            default: {
+                halide_abort_if_false(user_context, false && "unhandled type");
+            }
+            }
         }
         wgpuBufferUnmap(arg_buffer);
 
