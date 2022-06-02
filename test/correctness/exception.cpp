@@ -39,7 +39,7 @@ int main(int argc, char **argv) {
         error = true;
         std::cout << "Expected compile error:\n"
                   << e.what() << "\n";
-    };
+    }
     // We should have entered the catch block
     check_error(error);
 

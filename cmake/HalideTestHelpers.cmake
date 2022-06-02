@@ -56,6 +56,10 @@ function(add_halide_test TARGET)
                          SKIP_REGULAR_EXPRESSION "\\[SKIP\\]"
                          WILL_FAIL ${args_EXPECT_FAILURE})
 
+    set_target_properties(${TARGET} PROPERTIES
+                          CXX_VISIBILITY_PRESET hidden
+                          VISIBILITY_INLINES_HIDDEN TRUE)
+
     # Add a meta-target for each group, to allow us to build by group easily
     foreach (GROUP IN LISTS args_GROUPS)
         set(META_TARGET build_${GROUP})

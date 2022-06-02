@@ -13,6 +13,7 @@ Checks: >
     -bugprone-narrowing-conversions,
     -bugprone-reserved-identifier,
     -bugprone-signed-char-misuse,
+    clang-diagnostic-shadow-field,
     misc-*,
     -misc-no-recursion,
     -misc-non-private-member-variables-in-classes,

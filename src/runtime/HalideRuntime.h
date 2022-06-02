@@ -55,6 +55,14 @@ extern "C" {
 #endif
 #endif
 
+#ifndef HALIDE_EXPORT_SYMBOL
+#ifdef _MSC_VER
+#define HALIDE_EXPORT_SYMBOL __declspec(dllexport)
+#else
+#define HALIDE_EXPORT_SYMBOL __attribute__((visibility("default")))
+#endif
+#endif
+
 /** \file
  *
  * This file declares the routines used by Halide internally in its
