@@ -14,7 +14,7 @@ struct struct_t {
 #ifdef _WIN32
 #define DLLEXPORT __declspec(dllexport)
 #else
-#define DLLEXPORT
+#define DLLEXPORT __attribute__((visibility("default")))
 #endif
 
 extern "C" DLLEXPORT int check_struct(struct_t *s) {

@@ -8,7 +8,7 @@ using namespace Halide;
 #ifdef _WIN32
 #define DLLEXPORT __declspec(dllexport)
 #else
-#define DLLEXPORT
+#define DLLEXPORT __attribute__((visibility("default")))
 #endif
 
 extern "C" DLLEXPORT int copy_row_plus_xcoord(halide_buffer_t *input, halide_buffer_t *output) {

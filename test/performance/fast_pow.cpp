@@ -9,7 +9,7 @@ using namespace Halide::Tools;
 #ifdef _WIN32
 #define DLLEXPORT __declspec(dllexport)
 #else
-#define DLLEXPORT
+#define DLLEXPORT __attribute__((visibility("default")))
 #endif
 
 // powf() is a macro in some environments, so always wrap it

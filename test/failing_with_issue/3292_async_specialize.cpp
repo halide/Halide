@@ -22,7 +22,7 @@ void my_free(void *user_context, void *ptr) {
 #ifdef _WIN32
 #define DLLEXPORT __declspec(dllexport)
 #else
-#define DLLEXPORT
+#define DLLEXPORT __attribute__((visibility("default")))
 #endif
 
 // An extern stage that copies input -> output

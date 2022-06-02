@@ -14,7 +14,7 @@ std::atomic<int32_t> call_count{0};
 #ifdef _WIN32
 #define DLLEXPORT __declspec(dllexport)
 #else
-#define DLLEXPORT
+#define DLLEXPORT __attribute__((visibility("default")))
 #endif
 
 extern "C" DLLEXPORT int five_ms(int arg) {

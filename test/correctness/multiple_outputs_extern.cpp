@@ -4,7 +4,7 @@
 #ifdef _WIN32
 #define DLLEXPORT __declspec(dllexport)
 #else
-#define DLLEXPORT
+#define DLLEXPORT __attribute__((visibility("default")))
 #endif
 
 extern "C" DLLEXPORT int flip_x_and_sum(halide_buffer_t *in1, halide_buffer_t *in2, halide_buffer_t *out) {

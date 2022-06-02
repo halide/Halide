@@ -7,7 +7,7 @@ using namespace Halide;
 #ifdef _WIN32
 #define DLLEXPORT __declspec(dllexport)
 #else
-#define DLLEXPORT
+#define DLLEXPORT __attribute__((visibility("default")))
 #endif
 
 // Use an extern stage to do a sort

@@ -9,7 +9,7 @@ using namespace Halide::Runtime;
 #ifdef _WIN32
 #define DLLEXPORT __declspec(dllexport)
 #else
-#define DLLEXPORT
+#define DLLEXPORT __attribute__((visibility("default")))
 #endif
 
 extern "C" DLLEXPORT int extern_stage(halide_buffer_t *input, int addend, halide_buffer_t *output) {

@@ -5,7 +5,7 @@ using namespace Halide;
 #ifdef _WIN32
 #define DLLEXPORT __declspec(dllexport)
 #else
-#define DLLEXPORT
+#define DLLEXPORT __attribute__((visibility("default")))
 #endif
 
 // Extern stages are supposed to obey the following nesting property
