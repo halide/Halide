@@ -495,7 +495,7 @@ HALIDE_ALWAYS_INLINE void store_variable(const VectorType& a, void *base, int32_
 
 template <>
 HALIDE_ALWAYS_INLINE void store_variable<uint8x64_t, uint8_t, 64>(const uint8x64_t& a, void *base, int32_t offset, int32_t count) {
-	valign align;
+	valign align = IVP_ZALIGN();
 	xb_vec2Nx8U* __restrict ptr  = (xb_vec2Nx8U*)((uint8_t*)base + offset);
 	IVP_SAV2NX8U_XP(a, align, ptr, count);
 	IVP_SAPOS2NX8U_FP(align, ptr);
@@ -851,7 +851,7 @@ HALIDE_ALWAYS_INLINE HALIDE_MAYBE_UNUSED uint8x64_t load<uint8x64_t, uint8_t, 64
 
 template<>
 HALIDE_ALWAYS_INLINE void store<int8x64_t, int8_t, 64>(const int8x64_t& a, void *base, int32_t offset) {
-	valign align;
+	valign align = IVP_ZALIGN();
 	xb_vec2Nx8* __restrict ptr  = (xb_vec2Nx8*)((int8_t*)base + offset);
 	IVP_SA2NX8_IP(a, align, ptr);
 	IVP_SAPOS2NX8_FP(align, ptr);
@@ -859,7 +859,7 @@ HALIDE_ALWAYS_INLINE void store<int8x64_t, int8_t, 64>(const int8x64_t& a, void 
 
 template<>
 HALIDE_ALWAYS_INLINE void store<uint8x64_t, uint8_t, 64>(const uint8x64_t& a, void *base, int32_t offset) {
-	valign align;
+	valign align = IVP_ZALIGN();
 	xb_vec2Nx8U* __restrict ptr  = (xb_vec2Nx8U*)((uint8_t*)base + offset);
 	IVP_SA2NX8U_IP(a, align, ptr);
 	IVP_SAPOS2NX8U_FP(align, ptr);
@@ -876,7 +876,7 @@ HALIDE_ALWAYS_INLINE HALIDE_MAYBE_UNUSED int16x32_t load<int16x32_t, int16_t, 32
 
 template<>
 HALIDE_ALWAYS_INLINE void store<int16x32_t, int16_t, 32>(const int16x32_t& a, void *base, int32_t offset) {
-    valign align;
+    valign align = IVP_ZALIGN();
     xb_vecNx16* ptr = (xb_vecNx16*)((int16_t*)base + offset);
     IVP_SANX16_IP(a, align, ptr);
     // Flush alignment register.
@@ -895,7 +895,7 @@ HALIDE_ALWAYS_INLINE HALIDE_MAYBE_UNUSED uint16x32_t load<uint16x32_t, uint16_t,
 
 template<>
 HALIDE_ALWAYS_INLINE void store<uint16x32_t, uint16_t, 32>(const uint16x32_t& a, void *base, int32_t offset) {
-	valign align;
+	valign align = IVP_ZALIGN();
 	xb_vecNx16U* ptr  = (xb_vecNx16U*)((uint16_t*)base + offset);
 	IVP_SANX16U_IP(a, align, ptr);
 	IVP_SAPOSNX16U_FP(align, ptr);
@@ -1034,7 +1034,7 @@ HALIDE_ALWAYS_INLINE void store_narrowing(const VectorType& a, void *base, int32
 
 template<>
 HALIDE_ALWAYS_INLINE void store_narrowing<int16x32_t, uint8_t, 32>(const int16x32_t& a, void *base, int32_t offset) {
-	valign align;
+	valign align = IVP_ZALIGN();
 	xb_vecNx8U* __restrict ptr  = (xb_vecNx8U*)((uint8_t*)base + offset);
 	IVP_SANX8U_IP(a, align, ptr);
 	IVP_SAPOSNX8U_FP(align, ptr);
@@ -1042,7 +1042,7 @@ HALIDE_ALWAYS_INLINE void store_narrowing<int16x32_t, uint8_t, 32>(const int16x3
 
 template<>
 HALIDE_ALWAYS_INLINE void store_narrowing<uint16x32_t, uint8_t, 32>(const uint16x32_t& a, void *base, int32_t offset) {
-	valign align;
+	valign align = IVP_ZALIGN();
 	xb_vecNx8U* __restrict ptr  = (xb_vecNx8U*)((uint8_t*)base + offset);
 	IVP_SANX8U_IP(a, align, ptr);
 	IVP_SAPOSNX8U_FP(align, ptr);
