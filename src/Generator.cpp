@@ -1056,18 +1056,11 @@ const GeneratorFactoryProvider &get_registered_generators() {
     return g;
 }
 
-AbstractGeneratorPtr create_generator(const std::string &name,
-                                      const GeneratorContext &context,
-                                      const GeneratorFactoryProvider &generator_factory_provider) {
-    return generator_factory_provider.create(name, context);
-}
-
 }  // namespace Internal
 
 Callable create_callable_from_generator(const GeneratorContext &context,
                                         const std::string &name,
                                         const std::map<std::string, std::string> &generator_params) {
-    auto g = create_generator(name, context, Internal::get_registered_generators());
     user_assert(g != nullptr) << "There is no Generator with the name '" << name << "' currently available.";
     for (const auto &kv : generator_params) {
         user_assert(kv.first != "target" && kv.first != "auto_schedule" && kv.first != "machine_params")
@@ -1198,7 +1191,8 @@ void execute_generator(const ExecuteGeneratorArgs &args_in) {
                 // Must re-create each time since each instance will have a different Target.
                 auto gen = args.create_generator(args.generator_name, GeneratorContext(target));
                 for (const auto &kv : args.generator_params) {
-                    if (kv.first == "auto_schedule" ||
+                    if (kv.first == "target" ||
+                        kv.first == "auto_schedule" ||
                         kv.first == "machine_params") {
                         continue;
                     }

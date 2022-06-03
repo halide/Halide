@@ -354,12 +354,6 @@ public:
 /** Return a GeneratorFactoryProvider that knows about all the currently-registered C++ Generators. */
 const GeneratorFactoryProvider &get_registered_generators();
 
-/** Create an instance of a given AbstractGenerator that is registered in the
- * given GeneratorFactoryProvider. If the name isn't known, return nullptr. */
-AbstractGeneratorPtr create_generator(const std::string &name,
-                                      const GeneratorContext &context,
-                                      const GeneratorFactoryProvider &generator_factory_provider = get_registered_generators());
-
 /** generate_filter_main() is a convenient wrapper for GeneratorRegistry::create() +
  * compile_to_files(); it can be trivially wrapped by a "real" main() to produce a
  * command-line utility for ahead-of-time filter compilation. */
