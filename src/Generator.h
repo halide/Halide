@@ -3167,22 +3167,6 @@ struct NoRealizations<T, Args...> {
 // if they cannot return a valid Generator, they must assert-fail.
 using GeneratorFactory = std::function<AbstractGeneratorPtr(const GeneratorContext &context)>;
 
-struct StringOrLoopLevel {
-    std::string string_value;
-    LoopLevel loop_level;
-
-    StringOrLoopLevel() = default;
-    /*not-explicit*/ StringOrLoopLevel(const char *s)
-        : string_value(s) {
-    }
-    /*not-explicit*/ StringOrLoopLevel(const std::string &s)
-        : string_value(s) {
-    }
-    /*not-explicit*/ StringOrLoopLevel(const LoopLevel &loop_level)
-        : loop_level(loop_level) {
-    }
-};
-
 class GeneratorParamInfo {
     // names used across all params, inputs, and outputs.
     std::set<std::string> names;
@@ -4048,12 +4032,15 @@ void execute_generator(const ExecuteGeneratorArgs &args);
 }  // namespace Internal
 
 /** Create a Generator from the currently-registered Generators, use it to create a Callable.
+ * Any GeneratorParams specified will be applied to the Generator before compilation.
  * If the name isn't registered, assert-fail. */
 // @{
-Callable create_callable(const std::string &name,
-                         const GeneratorContext &context);
-Callable create_callable(const std::string &name,
-                         const Target &target = get_jit_target_from_environment());
+Callable create_callable_from_generator(const GeneratorContext &context,
+                                        const std::string &name,
+                                        const std::map<std::string, std::string> &generator_params = {});
+Callable create_callable_from_generator(const Target &target,
+                                        const std::string &name,
+                                        const std::map<std::string, std::string> &generator_params = {});
 // @}
 
 }  // namespace Halide

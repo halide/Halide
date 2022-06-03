@@ -1064,16 +1064,23 @@ AbstractGeneratorPtr create_generator(const std::string &name,
 
 }  // namespace Internal
 
-Callable create_callable(const std::string &name,
-                         const GeneratorContext &context) {
+Callable create_callable_from_generator(const GeneratorContext &context,
+                                        const std::string &name,
+                                        const std::map<std::string, std::string> &generator_params) {
     auto g = create_generator(name, context, Internal::get_registered_generators());
     user_assert(g != nullptr) << "There is no Generator with the name '" << name << "' currently available.";
+    for (const auto &kv : generator_params) {
+        user_assert(kv.first != "target" && kv.first != "auto_schedule" && kv.first != "machine_params")
+            << "The GeneratorParam '" << kv.first << "' cannot be specified via string here; use GeneratorContext instead.";
+        g->set_generatorparam_value(kv.first, kv.second);
+    }
     return g->compile_to_callable();
 }
 
-Callable create_callable(const std::string &name,
-                         const Target &target) {
-    return create_callable(name, GeneratorContext(target));
+Callable create_callable_from_generator(const Target &target,
+                                        const std::string &name,
+                                        const std::map<std::string, std::string> &generator_params) {
+    return create_callable_from_generator(GeneratorContext(target), name, generator_params);
 }
 
 namespace Internal {

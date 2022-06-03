@@ -68,10 +68,10 @@ int main(int argc, char **argv) {
     {
         // Alternately, instead of using Generator Stubs, we can just use the Callable interface.
         // We can call this on any Generator that is registered in the current process.
-        Callable c = create_callable("example", context);
+        Callable example = create_callable_from_generator(context, "example");
 
         Buffer<int32_t, 3> img(kSize, kSize, 3);
-        int r = c(runtime_factor, img);
+        int r = example(runtime_factor, img);
         assert(r == 0);
 
         verify(img, 1.f, runtime_factor, 3);
