@@ -34,7 +34,7 @@ class AbstractGeneratorTest : public AbstractGenerator {
     const GeneratorContext context_;
 
     // Constants (aka GeneratorParams)
-    std::map<std::string, std::string> constants_ = {
+    GeneratorParamsMap constants_ = {
         {"scaling", "2"},
     };
 

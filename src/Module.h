@@ -131,6 +131,8 @@ class CompilerLogger;
 
 struct AutoSchedulerResults;
 
+using MetadataNameMap = std::map<std::string, std::string>;
+
 /** A halide module. This represents IR containing lowered function
  * definitions and buffers. */
 class Module {
@@ -192,7 +194,7 @@ public:
     void remap_metadata_name(const std::string &from, const std::string &to) const;
 
     /** Retrieve the metadata name map. */
-    std::map<std::string, std::string> get_metadata_name_map() const;
+    MetadataNameMap get_metadata_name_map() const;
 
     /** Set the AutoSchedulerResults for the Module. It is an error to call this
      * multiple times for a given Module. */

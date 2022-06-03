@@ -965,7 +965,7 @@ llvm::Function *CodeGen_LLVM::add_argv_wrapper(llvm::Function *fn,
 
 llvm::Function *CodeGen_LLVM::embed_metadata_getter(const std::string &metadata_name,
                                                     const std::string &function_name, const std::vector<LoweredArgument> &args,
-                                                    const std::map<std::string, std::string> &metadata_name_map) {
+                                                    const MetadataNameMap &metadata_name_map) {
     Constant *zero = ConstantInt::get(i32_t, 0);
 
     const int num_args = (int)args.size();
