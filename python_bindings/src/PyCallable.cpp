@@ -65,8 +65,17 @@ public:
             py::object a = args[i - 1];
             if (c_args[i].is_buffer()) {
                 const bool writable = c_args[i].is_output();
-                buffers.buffers[i] = pybuffer_to_halidebuffer<void, AnyDims, MaxFastDimensions>(a.cast<py::buffer>(), writable);
-                argv[i] = buffers.buffers[i].raw_buffer();
+                // If the argument is already a Halide Buffer of some sort,
+                // skip pybuffer_to_halidebuffer entirely, since the latter requires
+                // a non-null host ptr, but we might want such a buffer for bounds inference,
+                // and we don't need the intermediate HalideBuffer wrapper anyway.
+                if (py::isinstance<Halide::Buffer<>>(a)) {
+                    auto b = a.cast<Halide::Buffer<>>();
+                    argv[i] = b.raw_buffer();
+                } else {
+                    buffers.buffers[i] = pybuffer_to_halidebuffer<void, AnyDims, MaxFastDimensions>(a.cast<py::buffer>(), writable);
+                    argv[i] = buffers.buffers[i].raw_buffer();
+                }
             } else {
                 argv[i] = &scalar_storage[i];
 
