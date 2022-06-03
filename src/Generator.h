@@ -4110,7 +4110,7 @@ struct halide_global_ns;
     namespace GEN_REGISTRY_NAME##_ns {                                                                                              \
         std::unique_ptr<Halide::Internal::AbstractGenerator> factory(const Halide::GeneratorContext &context) {                     \
             auto g = ORIGINAL_REGISTRY_NAME##_ns::factory(context);                                                                 \
-            const Halide::Internal::GeneratorParamsMap m = __VA_ARGS__;                                                                               \
+            const Halide::Internal::GeneratorParamsMap m = __VA_ARGS__;                                                             \
             for (const auto &c : m) {                                                                                               \
                 g->set_generatorparam_value(c.first, c.second);                                                                     \
             }                                                                                                                       \
