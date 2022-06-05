@@ -265,6 +265,9 @@ TEST_LD_FLAGS = -L$(BIN_DIR) -lHalide $(COMMON_LD_FLAGS)
 # In the tests, some of our expectations change depending on the llvm version
 TEST_CXX_FLAGS += -DLLVM_VERSION=$(LLVM_VERSION_TIMES_10)
 
+# In the tests, default to exporting no symbols that aren't explicitly exported
+TEST_CXX_FLAGS += -fvisibility=hidden -fvisibility-inlines-hidden
+
 # gcc 4.8 fires a bogus warning on old versions of png.h
 ifneq (,$(findstring g++,$(CXX_VERSION)))
 ifneq (,$(findstring 4.8,$(CXX_VERSION)))
@@ -399,6 +402,7 @@ HEXAGON_RUNTIME_LIBS = \
 
 # Keep this list sorted in alphabetical order.
 SOURCE_FILES = \
+  AbstractGenerator.cpp \
   AddAtomicMutex.cpp \
   AddImageChecks.cpp \
   AddParameterChecks.cpp \
@@ -575,6 +579,7 @@ SOURCE_FILES = \
 # Don't include anything here that includes llvm headers.
 # Keep this list sorted in alphabetical order.
 HEADER_FILES = \
+  AbstractGenerator.h \
   AddAtomicMutex.h \
   AddImageChecks.h \
   AddParameterChecks.h \

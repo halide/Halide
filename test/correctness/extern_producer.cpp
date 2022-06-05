@@ -3,12 +3,6 @@
 
 using namespace Halide;
 
-#ifdef _WIN32
-#define DLLEXPORT __declspec(dllexport)
-#else
-#define DLLEXPORT
-#endif
-
 // Some helper functions for rounding
 int round_down(int, int);
 int round_up(int x, int m) {
@@ -29,7 +23,7 @@ int round_down(int x, int m) {
 
 // Imagine that this loads from a file, or tiled storage. Here we'll just fill in the data using a
 // periodic integer function.
-extern "C" DLLEXPORT int make_data(halide_buffer_t *out) {
+extern "C" HALIDE_EXPORT_SYMBOL int make_data(halide_buffer_t *out) {
     static int desired_row_extent = 0;
     if (out->is_bounds_query()) {
         // Bounds query mode. To make life interesting, let's add some
@@ -72,7 +66,7 @@ extern "C" DLLEXPORT int make_data(halide_buffer_t *out) {
 
 // Imagine that this loads from a file, or tiled storage. Here we'll just fill in the data using a
 // periodic integer function.
-extern "C" DLLEXPORT int make_data_multi(halide_buffer_t *out1, halide_buffer_t *out2) {
+extern "C" HALIDE_EXPORT_SYMBOL int make_data_multi(halide_buffer_t *out1, halide_buffer_t *out2) {
     if (!out1->host || !out2->host) {
         // Bounds query mode. We're ok with any requested output size (Halide guarantees they match).
         return 0;

@@ -13,27 +13,27 @@ namespace Halide {
 bool exceptions_enabled();
 
 /** A base class for Halide errors. */
-struct Error : public std::runtime_error {
+struct HALIDE_EXPORT_SYMBOL Error : public std::runtime_error {
     // Give each class a non-inlined constructor so that the type
     // doesn't get separately instantiated in each compilation unit.
     Error(const std::string &msg);
 };
 
 /** An error that occurs while running a JIT-compiled Halide pipeline. */
-struct RuntimeError : public Error {
+struct HALIDE_EXPORT_SYMBOL RuntimeError : public Error {
     RuntimeError(const std::string &msg);
 };
 
 /** An error that occurs while compiling a Halide pipeline that Halide
  * attributes to a user error. */
-struct CompileError : public Error {
+struct HALIDE_EXPORT_SYMBOL CompileError : public Error {
     CompileError(const std::string &msg);
 };
 
 /** An error that occurs while compiling a Halide pipeline that Halide
  * attributes to an internal compiler bug, or to an invalid use of
  * Halide's internals. */
-struct InternalError : public Error {
+struct HALIDE_EXPORT_SYMBOL InternalError : public Error {
     InternalError(const std::string &msg);
 };
 
