@@ -984,7 +984,7 @@ Expr reorder_terms(const Expr &expr) {
     return ReorderTerms().mutate(expr);
 }
 
-Expr substitute_some_lets(const Expr &expr, size_t count = 100) {
+Expr substitute_some_lets(const Expr &expr, size_t count = 16) {
     return SubstituteSomeLets(count).mutate(expr);
 }
 
