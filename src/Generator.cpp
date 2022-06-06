@@ -1160,9 +1160,17 @@ void execute_generator(const ExecuteGeneratorArgs &args_in) {
         // Don't bother with this if we're just emitting a cpp_stub.
         if (!cpp_stub_only) {
             auto output_files = compute_output_files(args.targets[0], base_path, args.output_types);
+            const auto get_gp = [&](const std::string &key) {
+                auto it = args.generator_params.find(key);
+                return it != args.generator_params.end() ? it->second : "";
+            };
+            const auto auto_schedule_string = get_gp("auto_schedule");
+            const auto machine_params_string = get_gp("machine_params");
+            const bool auto_schedule = auto_schedule_string == "true" || auto_schedule_string == "True";
+            const MachineParams machine_params = !machine_params_string.empty() ? MachineParams(machine_params_string) : MachineParams::generic();
             auto module_factory = [&](const std::string &function_name, const Target &target) -> Module {
                 // Must re-create each time since each instance will have a different Target.
-                auto gen = args.create_generator(args.generator_name, GeneratorContext(target));
+                auto gen = args.create_generator(args.generator_name, GeneratorContext(target, auto_schedule, machine_params));
                 for (const auto &kv : args.generator_params) {
                     if (kv.first == "auto_schedule" ||
                         kv.first == "machine_params") {
