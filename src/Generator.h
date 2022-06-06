@@ -3948,6 +3948,8 @@ public:
 
 // -----------------------------
 
+using GeneratorParamsMap = std::map<std::string, std::string>;
+
 /** ExecuteGeneratorArgs is the set of arguments to execute_generator().
  */
 struct ExecuteGeneratorArgs {
@@ -4008,7 +4010,7 @@ struct ExecuteGeneratorArgs {
     //
     // If any of the generator param names specified in this map are unknown
     // to the Generator created, an error will occur.
-    std::map<std::string, std::string> generator_params;
+    GeneratorParamsMap generator_params;
 
     // Compiler Logger to use, for diagnostic work. If null, don't do any logging.
     CompilerLoggerFactory compiler_logger_factory = nullptr;
@@ -4117,7 +4119,7 @@ struct halide_global_ns;
     namespace GEN_REGISTRY_NAME##_ns {                                                                                              \
         std::unique_ptr<Halide::Internal::AbstractGenerator> factory(const Halide::GeneratorContext &context) {                     \
             auto g = ORIGINAL_REGISTRY_NAME##_ns::factory(context);                                                                 \
-            const std::map<std::string, std::string> m = __VA_ARGS__;                                                               \
+            const Halide::Internal::GeneratorParamsMap m = __VA_ARGS__;                                                             \
             for (const auto &c : m) {                                                                                               \
                 g->set_generatorparam_value(c.first, c.second);                                                                     \
             }                                                                                                                       \

@@ -532,7 +532,7 @@ private:
      */
     llvm::Function *embed_metadata_getter(const std::string &metadata_getter_name,
                                           const std::string &function_name, const std::vector<LoweredArgument> &args,
-                                          const std::map<std::string, std::string> &metadata_name_map);
+                                          const MetadataNameMap &metadata_name_map);
 
     /** Embed a constant expression as a global variable. */
     llvm::Constant *embed_constant_expr(Expr e, llvm::Type *t);

@@ -7,6 +7,7 @@ bin/*
 build/*
 share/*
 python_bindings/bin/*
+build-32/*
 build-64/*
 build-ios/*
 build-osx/*
