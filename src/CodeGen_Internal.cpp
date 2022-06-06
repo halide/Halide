@@ -16,7 +16,8 @@ using std::string;
 
 using namespace llvm;
 
-llvm::Type *llvm_type_of(LLVMContext *c, Halide::Type t) {
+llvm::Type *llvm_type_of(LLVMContext *c, Halide::Type t,
+                         int effective_vscale) {
     if (t.lanes() == 1) {
         if (t.is_float() && !t.is_bfloat()) {
             switch (t.bits()) {
@@ -36,18 +37,20 @@ llvm::Type *llvm_type_of(LLVMContext *c, Halide::Type t) {
             return llvm::Type::getIntNTy(*c, t.bits());
         }
     } else {
-        llvm::Type *element_type = llvm_type_of(c, t.element_of());
-        return get_vector_type(element_type, t.lanes());
-    }
-}
-
-int get_vector_num_elements(llvm::Type *t) {
-    if (t->isVectorTy()) {
-        auto *vt = dyn_cast<llvm::FixedVectorType>(t);
-        internal_assert(vt) << "Called get_vector_num_elements on a scalable vector type\n";
-        return vt->getNumElements();
-    } else {
-        return 1;
+        llvm::Type *element_type = llvm_type_of(c, t.element_of(), 0);
+        bool scalable = false;
+        int lanes = t.lanes();
+        if (effective_vscale != 0) {
+            int total_bits = t.bits() * t.lanes();
+            scalable = ((total_bits % effective_vscale) == 0);
+            if (scalable) {
+                lanes /= effective_vscale;
+            } else {
+                debug(0) << "Failed to make scalable with bits " << t.bits() << " lanes " << t.lanes()
+                         << " effective_vscale " << effective_vscale << " total_bits " << total_bits << "\n";
+            }
+        }
+        return get_vector_type(element_type, lanes, scalable);
     }
 }
 
@@ -63,8 +66,13 @@ llvm::ElementCount element_count(int e) {
     return llvm::ElementCount::getFixed(e);
 }
 
-llvm::Type *get_vector_type(llvm::Type *t, int n) {
+llvm::Type *get_vector_type(llvm::Type *t, int n, bool scalable) {
+#if LLVM_VERSION >= 120  // TODO(zvookin): figure out when scalable vector types were added.
+    return VectorType::get(t, n, scalable);
+#else
+    internal_assert(!scalable) << "LLVM version too old to support scalable vector types.\n";
     return VectorType::get(t, element_count(n));
+#endif
 }
 
 // Returns true if the given function name is one of the Halide runtime
@@ -681,10 +689,11 @@ std::unique_ptr<llvm::TargetMachine> make_target_machine(const llvm::Module &mod
 void set_function_attributes_from_halide_target_options(llvm::Function &fn) {
     llvm::Module &module = *fn.getParent();
 
-    std::string mcpu_target, mcpu_tune, mattrs;
+    std::string mcpu_target, mcpu_tune, mattrs, vscale_range;
     get_md_string(module.getModuleFlag("halide_mcpu_target"), mcpu_target);
     get_md_string(module.getModuleFlag("halide_mcpu_tune"), mcpu_tune);
     get_md_string(module.getModuleFlag("halide_mattrs"), mattrs);
+    get_md_string(module.getModuleFlag("halide_vscale_range"), vscale_range);
 
     fn.addFnAttr("target-cpu", mcpu_target);
     fn.addFnAttr("tune-cpu", mcpu_tune);
@@ -693,6 +702,11 @@ void set_function_attributes_from_halide_target_options(llvm::Function &fn) {
     // Turn off approximate reciprocals for division. It's too
     // inaccurate even for us.
     fn.addFnAttr("reciprocal-estimates", "none");
+
+    // If a fixed vscale is asserted, add it as an attribute on the function.
+    if (!vscale_range.empty()) {
+        fn.addFnAttr("vscale_range", vscale_range);
+    }
 }
 
 void embed_bitcode(llvm::Module *M, const string &halide_command) {
