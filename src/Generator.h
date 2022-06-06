@@ -3948,8 +3948,6 @@ public:
 
 // -----------------------------
 
-using GeneratorParamsMap = std::map<std::string, std::string>;
-
 /** ExecuteGeneratorArgs is the set of arguments to execute_generator().
  */
 struct ExecuteGeneratorArgs {
@@ -4033,10 +4031,10 @@ void execute_generator(const ExecuteGeneratorArgs &args);
 // @{
 Callable create_callable_from_generator(const GeneratorContext &context,
                                         const std::string &name,
-                                        const std::map<std::string, std::string> &generator_params = {});
+                                        const GeneratorParamsMap &generator_params = {});
 Callable create_callable_from_generator(const Target &target,
                                         const std::string &name,
-                                        const std::map<std::string, std::string> &generator_params = {});
+                                        const GeneratorParamsMap &generator_params = {});
 // @}
 
 }  // namespace Halide
@@ -4119,10 +4117,8 @@ struct halide_global_ns;
     namespace GEN_REGISTRY_NAME##_ns {                                                                                              \
         std::unique_ptr<Halide::Internal::AbstractGenerator> factory(const Halide::GeneratorContext &context) {                     \
             auto g = ORIGINAL_REGISTRY_NAME##_ns::factory(context);                                                                 \
-            const Halide::Internal::GeneratorParamsMap m = __VA_ARGS__;                                                             \
-            for (const auto &c : m) {                                                                                               \
-                g->set_generatorparam_value(c.first, c.second);                                                                     \
-            }                                                                                                                       \
+            const Halide::GeneratorParamsMap m = __VA_ARGS__;                                                                       \
+            g->set_generatorparam_values(m);                                                                                        \
             return g;                                                                                                               \
         }                                                                                                                           \
     }                                                                                                                               \

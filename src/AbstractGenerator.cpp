@@ -245,5 +245,13 @@ Callable AbstractGenerator::compile_to_callable() {
     return pipeline.compile_to_callable(arguments, context().target());
 }
 
+void AbstractGenerator::set_generatorparam_values(const GeneratorParamsMap &m) {
+    for (const auto &c : m) {
+        user_assert(c.first != "target" && c.first != "auto_schedule" && c.first != "machine_params")
+            << "The GeneratorParam '" << c.first << "' cannot be specified via string here; use GeneratorContext instead.";
+        set_generatorparam_value(c.first, c.second);
+    }
+}
+
 }  // namespace Internal
 }  // namespace Halide

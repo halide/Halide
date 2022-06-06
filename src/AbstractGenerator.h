@@ -19,6 +19,7 @@
 namespace Halide {
 
 class GeneratorContext;
+using GeneratorParamsMap = std::map<std::string, std::string>;
 
 namespace Internal {
 
@@ -214,6 +215,11 @@ public:
      * Target) and return it.
      */
     Callable compile_to_callable();
+
+    /*
+     * Set all the GeneratorParams in the map. This is equivalent to simply calling the
+     * `set_generatorparam_value()` method in a loop over the map, but is quite convenient. */
+    void set_generatorparam_values(const GeneratorParamsMap &m);
 };
 
 using AbstractGeneratorPtr = std::unique_ptr<AbstractGenerator>;

@@ -1060,20 +1060,16 @@ const GeneratorFactoryProvider &get_registered_generators() {
 
 Callable create_callable_from_generator(const GeneratorContext &context,
                                         const std::string &name,
-                                        const std::map<std::string, std::string> &generator_params) {
+                                        const GeneratorParamsMap &generator_params) {
     auto g = Internal::get_registered_generators().create(name, context);
     user_assert(g != nullptr) << "There is no Generator with the name '" << name << "' currently available.";
-    for (const auto &kv : generator_params) {
-        user_assert(kv.first != "target" && kv.first != "auto_schedule" && kv.first != "machine_params")
-            << "The GeneratorParam '" << kv.first << "' cannot be specified via string here; use GeneratorContext instead.";
-        g->set_generatorparam_value(kv.first, kv.second);
-    }
+    g->set_generatorparam_values(generator_params);
     return g->compile_to_callable();
 }
 
 Callable create_callable_from_generator(const Target &target,
                                         const std::string &name,
-                                        const std::map<std::string, std::string> &generator_params) {
+                                        const GeneratorParamsMap &generator_params) {
     return create_callable_from_generator(GeneratorContext(target), name, generator_params);
 }
 
