@@ -140,7 +140,9 @@ protected:
      * Default of 0 means do not use vscale vectors. Generally will depend on
      * the target flags and vector_bits settings.
      */
-    virtual int target_vscale() const { return 0; };
+    virtual int target_vscale() const {
+        return 0;
+    }
 
     /** Return the type in which arithmetic should be done for the
      * given storage type. */
@@ -515,7 +517,7 @@ protected:
     /** Ensure that a vector value is either fixed or vscale depending to match desired_type.
      */
     llvm::Value *normalize_fixed_scalable_vector_type(llvm::Type *desired_type, llvm::Value *result);
-  
+
     /** Convert an LLVM fixed vector value to the corresponding vscale vector value. */
     llvm::Value *fixed_to_scalable_vector_type(llvm::Value *fixed);
 
