@@ -849,7 +849,7 @@ gengen
         return g;
     };
 
-    const auto build_target_strings = [](std::map<std::string, std::string> *gp) {
+    const auto build_target_strings = [](GeneratorParamsMap *gp) {
         std::vector<std::string> target_strings;
         if (gp->find("target") != gp->end()) {
             target_strings = split_string((*gp)["target"], ",");
