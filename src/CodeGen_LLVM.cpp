@@ -4865,7 +4865,6 @@ llvm::Value *CodeGen_LLVM::scalable_to_fixed_vector_type(llvm::Value *scalable_a
 }
 
 int CodeGen_LLVM::get_vector_num_elements(const llvm::Type *t) {
-#if LLVM_VERSION >= 120
     if (isa<llvm::FixedVectorType>(t)) {
         const auto *vt = cast<llvm::FixedVectorType>(t);
         return vt->getNumElements();
@@ -4876,13 +4875,6 @@ int CodeGen_LLVM::get_vector_num_elements(const llvm::Type *t) {
     } else {
         return 1;
     }
-#else
-    if (t->isVectorTy()) {
-        return dyn_cast<llvm::VectorType>(t)->getNumElements();
-    } else {
-        return 1;
-    }
-#endif
 }
 
 }  // namespace Internal

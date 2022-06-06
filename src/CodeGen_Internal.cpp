@@ -67,12 +67,7 @@ llvm::ElementCount element_count(int e) {
 }
 
 llvm::Type *get_vector_type(llvm::Type *t, int n, bool scalable) {
-#if LLVM_VERSION >= 120  // TODO(zvookin): figure out when scalable vector types were added.
     return VectorType::get(t, n, scalable);
-#else
-    internal_assert(!scalable) << "LLVM version too old to support scalable vector types.\n";
-    return VectorType::get(t, element_count(n));
-#endif
 }
 
 // Returns true if the given function name is one of the Halide runtime
