@@ -1,4 +1,5 @@
 #include "Simplify_Internal.h"
+#include "ExprUsesVar.h"
 #include "Substitute.h"
 
 namespace Halide {
@@ -6,41 +7,6 @@ namespace Internal {
 
 using std::string;
 using std::vector;
-
-namespace {
-
-class CountVarUses : public IRVisitor {
-    std::map<std::string, int> &var_uses;
-
-    void visit(const Variable *var) override {
-        var_uses[var->name]++;
-    }
-
-    void visit(const Load *op) override {
-        var_uses[op->name]++;
-        IRVisitor::visit(op);
-    }
-
-    void visit(const Store *op) override {
-        var_uses[op->name]++;
-        IRVisitor::visit(op);
-    }
-
-    using IRVisitor::visit;
-
-public:
-    CountVarUses(std::map<std::string, int> &var_uses)
-        : var_uses(var_uses) {
-    }
-};
-
-template<typename StmtOrExpr>
-void count_var_uses(StmtOrExpr x, std::map<std::string, int> &var_uses) {
-    CountVarUses counter(var_uses);
-    x.accept(&counter);
-}
-
-}  // namespace
 
 template<typename LetOrLetStmt, typename Body>
 Body Simplify::simplify_let(const LetOrLetStmt *op, ExprInfo *bounds) {

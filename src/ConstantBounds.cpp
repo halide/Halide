@@ -1,6 +1,7 @@
 #include "ConstantBounds.h"
 #include "Bounds.h"
 #include "Error.h"
+#include "ExprUsesVar.h"
 #include "IR.h"
 #include "IREquality.h"
 #include "IRMutator.h"
@@ -343,32 +344,6 @@ Expr handle_push_none(const Expr &expr, Direction direction) {
     }
     return expr;
 }
-
-// Taken from Simplify_Let.cpp
-class CountVarUses : public IRVisitor {
-    std::map<std::string, int> &var_uses;
-
-    void visit(const Variable *var) override {
-        var_uses[var->name]++;
-    }
-
-    void visit(const Load *op) override {
-        var_uses[op->name]++;
-        IRVisitor::visit(op);
-    }
-
-    void visit(const Store *op) override {
-        var_uses[op->name]++;
-        IRVisitor::visit(op);
-    }
-
-    using IRVisitor::visit;
-
-public:
-    CountVarUses(std::map<std::string, int> &_var_uses)
-        : var_uses(_var_uses) {
-    }
-};
 
 /*
  * Visitor for removing terms that are completely unbounded from
@@ -985,8 +960,7 @@ Expr push_rationals(const Expr &expr, const Direction direction) {
 
 std::pair<Expr, bool> remove_unbounded_terms(const Expr &expr, Direction direction, const Scope<Interval> &scope) {
     std::map<std::string, int> var_uses;
-    CountVarUses counter(var_uses);
-    expr.accept(&counter);
+    count_var_uses(expr, var_uses);
     // To strip unbounded/uncorrelated terms, we need to know use counts.
     StripUnboundedTerms tool(direction, scope, var_uses);
     Expr mut = tool.mutate(expr);
@@ -1032,8 +1006,7 @@ Expr approximate_optimizations(const Expr &expr, Direction direction, const Scop
 bool possibly_correlated(const Expr &expr) {
     // TODO: is there a better/cheaper way to detect possible correlations?
     std::map<std::string, int> var_uses;
-    CountVarUses counter(var_uses);
-    expr.accept(&counter);
+    count_var_uses(expr, var_uses);
     for (const auto &iter : var_uses) {
         if (iter.second > 1) {
             return true;

@@ -155,6 +155,14 @@ inline bool stmt_uses_vars(const Stmt &stmt, const Scope<T> &v,
     return stmt_or_expr_uses_vars(stmt, v, s);
 }
 
+/** Count the number of uses of each var.
+ */
+void count_var_uses(const Stmt &s, std::map<std::string, int> &var_uses);
+
+/** Count the number of uses of each var.
+ */
+void count_var_uses(const Expr &e, std::map<std::string, int> &var_uses);
+
 }  // namespace Internal
 }  // namespace Halide
 
