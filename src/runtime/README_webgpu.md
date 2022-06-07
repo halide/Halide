@@ -12,14 +12,13 @@ and versions of Emscripten.
 
 The following is a non-comprehensive list of known limitations:
 
--   Only 32-bit integers and floats are supported.
-    * 8-bit and 16-bit integers will be implemented using emulation inside
-      Halide and with future extensions to WGSL.
-    * 64-bit integers and floats will likely remain unsupported.
+-   Only 32-bit integers and floats have efficient support.
+    * 8-bit and 16-bit integers are implemented using emulation. Future
+      extensions to WGSL will allow them to be implemented more efficiently.
+    * 64-bit integers and floats will likely remain unsupported until WGSL gains
+      extensions to support them.
 -   Dynamic gpu_tile sizes are not yet supported.
--   Device buffer cropping/slicing is not yet implemented.
 -   Wrapping native device buffer handles is not yet implemented.
--   Many intrinsic functions are not yet implemented.
 
 In addition to these functional limitations, the performance of the WebGPU
 backend has not yet been evaluated, and so optimizations in the runtime or
