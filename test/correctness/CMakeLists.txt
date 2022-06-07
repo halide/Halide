@@ -37,6 +37,7 @@ tests(GROUPS correctness
       buffer_t.cpp
       c_function.cpp
       callable.cpp
+      callable_typed.cpp
       cascaded_filters.cpp
       cast.cpp
       cast_handle.cpp

@@ -105,6 +105,12 @@ private:
         // compile-time allocation on the stack.
         uintptr_t argv_scalar_store[Size];
 
+        template<typename... Args>
+        explicit ArgvStorage(Args &&...args) {
+            fill_slots(0, std::forward<Args>(args)...);
+        }
+
+    private:
         template<typename T, int Dims>
         HALIDE_ALWAYS_INLINE void fill_slot(size_t idx, const ::Halide::Buffer<T, Dims> &value) {
             // Don't call ::Halide::Buffer::raw_buffer(): it includes "user_assert(defined())"
@@ -158,13 +164,13 @@ private:
     static std::vector<CallCheckInfo> build_expected_call_check_info(const std::vector<Argument> &args, const std::string &ucon_arg_name);
 
     // Note that the first entry in argv must always be a JITUserContext*.
-    //
-    // Currently private because it does limited type checking and is "dangerous",
-    // but we could make public if there is a demand for it.
-    int call_argv(size_t argc, const void **argv, const CallCheckInfo *actual_cci) const;
+    int call_argv_checked(size_t argc, const void *const *argv, const CallCheckInfo *actual_cci) const;
+    int call_argv_fast(size_t argc, const void *const *argv) const;
+
+    void check_arg_count_and_types(size_t argc, const CallCheckInfo *actual_cci, const char *verb) const;
 
     template<typename... Args>
-    int call(JITUserContext *context, Args &&...args) {
+    int call(JITUserContext *context, Args &&...args) const {
         // This is built at compile time!
         static constexpr auto actual_arg_types = std::array<CallCheckInfo, 1 + sizeof...(Args)>{
             build_cci<JITUserContext *>(),
@@ -172,9 +178,8 @@ private:
         };
 
         constexpr size_t count = sizeof...(args) + 1;
-        ArgvStorage<count> argv;
-        argv.fill_slots(0, context, std::forward<Args>(args)...);
-        return call_argv(count, &argv.argv[0], actual_arg_types.data());
+        ArgvStorage<count> argv(context, std::forward<Args>(args)...);
+        return call_argv_checked(count, &argv.argv[0], actual_arg_types.data());
     }
 
     /** Return the expected Arguments for this Callable, in the order they must be specified, including all outputs.
@@ -184,15 +189,74 @@ private:
 public:
     template<typename... Args>
     HALIDE_MUST_USE_RESULT int
-    operator()(JITUserContext *context, Args &&...args) {
+    operator()(JITUserContext *context, Args &&...args) const {
         return call(context, std::forward<Args>(args)...);
     }
 
     template<typename... Args>
     HALIDE_MUST_USE_RESULT int
-    operator()(Args &&...args) {
+    operator()(Args &&...args) const {
         JITUserContext empty;
         return call(&empty, std::forward<Args>(args)...);
+    }
+
+    /** This allows us to construct a std::function<> that wraps the Callable.
+     * This is nice in that it is, well, just a std::function, but also in that
+     * since the argument-count-and-type checking are baked into the language,
+     * we can do the relevant checking only once -- when we first create the std::function --
+     * and skip it on all actual *calls* to the function, making it slightly more efficient.
+     * It's also more type-forgiving, in that the usual C++ numeric coercion rules apply here.
+     *
+     * The downside is that there isn't (currently) any way to automatically infer
+     * the static types reliably, since we may be using (e.g.) a Param<void>, where the
+     * type in question isn't available to the C++ compiler. This means that the coder
+     * must supply the correct type signature when calling this function -- but the good news
+     * is that if you get it wrong, this function will fail when you call it. (In other words:
+     * it can't choose the right thing for you, but it can tell you when you do the wrong thing.)
+     *
+     * TODO: it's possible that we could infer the correct signatures in some cases,
+     * and only fail for the ambiguous cases, but that would require a lot more template-fu
+     * here and elsewhere. I think this is good enough for now.
+     *
+     * TODO: for plain-old-Callable, we don't bother checking the static type-and-dims of Buffer<>
+     * values passed in (we defer to the runtime to handle that), but for this we probably want to
+     * do that check -- currently we allow any sort of Buffer<> as an argument for a buffer slot,
+     * so you can specify something that is guaranteed to fail at runtime. Ouch.
+     */
+    template<typename First, typename... Rest>
+    std::function<int(First, Rest...)>
+    make_std_function() const {
+        if constexpr (std::is_same_v<First, JITUserContext *>) {
+            constexpr auto actual_arg_types = std::array<CallCheckInfo, 1 + sizeof...(Rest)>{
+                build_cci<First>(),
+                build_cci<Rest>()...,
+            };
+            check_arg_count_and_types(actual_arg_types.size(), actual_arg_types.data(), "defining");
+
+            // Capture *this to ensure that the CallableContents stay valid as long as the std::function does
+            return [*this](auto &&first, auto &&...rest) -> int {
+                constexpr size_t count = 1 + sizeof...(rest);
+                ArgvStorage<count> argv(std::forward<First>(first), std::forward<Rest>(rest)...);
+                return call_argv_fast(count, &argv.argv[0]);
+            };
+        } else {
+            // Explicitly prepend JITUserContext* as first actual-arg-type.
+            constexpr auto actual_arg_types = std::array<CallCheckInfo, 1 + 1 + sizeof...(Rest)>{
+                build_cci<JITUserContext *>(),
+                build_cci<First>(),
+                build_cci<Rest>()...,
+            };
+            check_arg_count_and_types(actual_arg_types.size(), actual_arg_types.data(), "defining");
+
+            // Capture *this to ensure that the CallableContents stay valid as long as the std::function does
+            return [*this](auto &&first, auto &&...rest) -> int {
+                // Explicitly prepend an (empty) JITUserContext to the args.
+                JITUserContext empty;
+                constexpr size_t count = 1 + 1 + sizeof...(rest) + 1;
+                ArgvStorage<count> argv(&empty, std::forward<First>(first), std::forward<Rest>(rest)...);
+                return call_argv_fast(count, &argv.argv[0]);
+            };
+        }
     }
 };
 

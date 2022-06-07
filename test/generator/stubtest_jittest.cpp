@@ -191,6 +191,100 @@ int main(int argc, char **argv) {
         verify(array_buffer_input1, 1.f, 2, array_buffer_output1);
     }
 
+    // We can also make an explicitly-typed std::function if we prefer.
+    {
+        Buffer<uint8_t, 3> buffer_input = make_image<uint8_t>(0);
+        Buffer<float, 3> simple_input = make_image<float>(0);
+        Buffer<float, 3> array_input0 = make_image<float>(0);
+        Buffer<float, 3> array_input1 = make_image<float>(1);
+        Buffer<float, 3> typed_buffer_output(kSize, kSize, 3);
+        Buffer<float, 3> untyped_buffer_output(kSize, kSize, 3);
+        Buffer<float, 3> tupled_output0(kSize, kSize, 3);
+        Buffer<int32_t, 3> tupled_output1(kSize, kSize, 3);
+        Buffer<uint8_t, 3> array_buffer_input0 = make_image<uint8_t>(0);
+        Buffer<uint8_t, 3> array_buffer_input1 = make_image<uint8_t>(1);
+        Buffer<float, 3> simple_output(kSize, kSize, 3);
+        // TODO: see Issues #3709, #3967
+        Buffer<void, 3> float16_output(halide_type_t(halide_type_float, 16), kSize, kSize, 3);
+        Buffer<void, 3> bfloat16_output(halide_type_t(halide_type_bfloat, 16), kSize, kSize, 3);
+        Buffer<float, 3> tuple_output0(kSize, kSize, 3), tuple_output1(kSize, kSize, 3);
+        Buffer<int16_t, 3> array_output0(kSize, kSize, 3), array_output1(kSize, kSize, 3);
+        Buffer<uint8_t, 3> static_compiled_buffer_output(kSize, kSize, 3);
+        Buffer<uint8_t, 3> array_buffer_output0(kSize, kSize, 3), array_buffer_output1(kSize, kSize, 3);
+
+        // Note that this Generator has several GeneratorParams that need to be set correctly
+        // before compilation -- in the Stub case above, the values end up being inferred
+        // from the specific inputs we provide, but for the JIT (and AOT) cases, there are
+        // no such inputs available, so we must be explicit. (Note that these are the same
+        // values specified in our Make/CMake files.)
+        const std::map<std::string, std::string> gp = {
+            {"untyped_buffer_input.type", "uint8"},
+            {"untyped_buffer_input.dim", "3"},
+            {"simple_input.type", "float32"},
+            {"array_input.type", "float32"},
+            {"array_input.size", "2"},
+            {"int_arg.size", "2"},
+            {"tuple_output.type", "float32,float32"},
+            {"vectorize", "true"},
+        };
+
+        auto stubtest = create_callable_from_generator(context, "stubtest", gp)
+                            .make_std_function<
+                                Buffer<uint8_t, 3>,
+                                Buffer<uint8_t, 3>,
+                                Buffer<uint8_t, 3>, Buffer<uint8_t, 3>,
+                                Buffer<float, 3>,
+                                Buffer<float, 3>, Buffer<float, 3>,
+                                float,
+                                int32_t,
+                                int32_t,
+                                Buffer<float, 3>,
+                                Buffer<float, 3>, Buffer<float, 3>,
+                                Buffer<int16_t, 3>, Buffer<int16_t, 3>,
+                                Buffer<float, 3>,
+                                Buffer<float, 3>,
+                                Buffer<float, 3>, Buffer<int32_t, 3>,
+                                Buffer<uint8_t, 3>,
+                                Buffer<uint8_t, 3>, Buffer<uint8_t, 3>,
+                                Buffer<void, 3>,
+                                Buffer<void, 3>>();
+
+        int r = stubtest(
+            buffer_input,
+            buffer_input,
+            array_buffer_input0, array_buffer_input1,
+            simple_input,
+            array_input0, array_input1,
+            1.25f,
+            33,
+            66,
+            simple_output,
+            tuple_output0, tuple_output1,
+            array_output0, array_output1,
+            typed_buffer_output,
+            untyped_buffer_output,
+            tupled_output0, tupled_output1,
+            static_compiled_buffer_output,
+            array_buffer_output0, array_buffer_output1,
+            float16_output,
+            bfloat16_output);
+        assert(r == 0);
+
+        verify(buffer_input, 1.f, 0, typed_buffer_output);
+        verify(buffer_input, 1.f, 0, untyped_buffer_output);
+        verify(simple_input, 1.f, 0, simple_output);
+        verify(simple_input, 1.f, 0, tupled_output0);
+        verify(simple_input, 1.f, 1, tupled_output1);
+        verify(array_input0, 1.f, 0, simple_output);
+        verify(array_input0, 1.25f, 0, tuple_output0);
+        verify(array_input0, 1.25f, 33, tuple_output1);
+        verify(array_input0, 1.0f, 33, array_output0);
+        verify(array_input1, 1.0f, 66, array_output1);
+        verify(buffer_input, 1.0f, 42, static_compiled_buffer_output);
+        verify(array_buffer_input0, 1.f, 1, array_buffer_output0);
+        verify(array_buffer_input1, 1.f, 2, array_buffer_output1);
+    }
+
     printf("Success!\n");
     return 0;
 }

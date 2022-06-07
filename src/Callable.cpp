@@ -63,40 +63,43 @@ const std::vector<Argument> &Callable::arguments() const {
     return contents->jit_cache.arguments;
 }
 
-int Callable::call_argv(size_t argc, const void **argv, const CallCheckInfo *actual_cci) const {
+void Callable::check_arg_count_and_types(size_t argc, const CallCheckInfo *actual_cci, const char *verb) const {
     const size_t required_arg_count = contents->jit_cache.arguments.size();
 
+    // TODO: this assumes that the caller uses the no-explicit-JITUserContext call;
+    // the errors will be misleading otherwise.
+    constexpr int hidden_args = 1;
+
+    user_assert(argc == required_arg_count) << "Error " << verb << " '" << contents->name << "':\n"
+                                            << "Expected exactly " << (required_arg_count - hidden_args) << " arguments, "
+                                            << "but saw " << (argc - hidden_args) << ".";
+
+    const CallCheckInfo *expected_cci = contents->call_check_info.data();
+    for (size_t i = 0; i < argc; i++) {
+        if (actual_cci[i] != expected_cci[i]) {
+            const Argument &a = contents->jit_cache.arguments.at(i);
+            const char *kind = a.is_scalar() ? "scalar" : "buffer";
+            // Note that we don't report the "actual type" here, just the expected type...
+            // saving the actual type leads to more code bloat than we can justify
+            // for this. (Consider adding as a debug-only enhancement?)
+            user_error << "Error " << verb << " '" << contents->name << "':\n"
+                       << "Argument " << (i - hidden_args + 1)
+                       << " of " << (required_arg_count - hidden_args) << " ('" << a.name << "') was expected to be a "
+                       << kind << " of type '" << a.type << "'.\n";
+        }
+    }
+}
+
+// Entry point used from the std::function<> variant; we can skip the check_arg_count_and_types() stuff
+// since we verified the signature when we created the std::function, so incorrect types or counts
+// should be impossible.
+/*static*/ int Callable::call_argv_fast(size_t argc, const void *const *argv) const {
     // Callable should enforce these, so we can use assert() instead of internal_assert()
     assert(contents->jit_cache.jit_target.has_feature(Target::UserContext));
     assert(contents->jit_cache.arguments[0].name == "__user_context");
 
-    // TODO: this assues that the caller uses the no-explicit-JITUserContext call;
-    // the errors will be misleading otherwise.
-    constexpr int hidden_args = 1;
     JITUserContext *context = *(JITUserContext **)const_cast<void *>(argv[0]);
     assert(context != nullptr);
-
-    {
-        // Error checking. This is essential for safety!
-        user_assert(argc == required_arg_count) << "Error calling '" << contents->name << "':\n"
-                                                << "Expected exactly " << (required_arg_count - hidden_args) << " arguments, "
-                                                << "but saw " << (argc - hidden_args) << ".";
-
-        const CallCheckInfo *expected_cci = contents->call_check_info.data();
-        for (size_t i = 0; i < argc; i++) {
-            if (actual_cci[i] != expected_cci[i]) {
-                const Argument &a = contents->jit_cache.arguments.at(i);
-                const char *kind = a.is_scalar() ? "scalar" : "buffer";
-                // Note that we don't report the "actual type" here, just the expected type...
-                // saving the actual type leads to more code bloat than we can justify
-                // for this. (Consider adding as a debug-only enhancement?)
-                user_error << "Error calling '" << contents->name << "':\n"
-                           << "Argument " << (i - hidden_args + 1)
-                           << " of " << (required_arg_count - hidden_args) << " ('" << a.name << "') was expected to be a "
-                           << kind << " of type '" << a.type << "'.\n";
-            }
-        }
-    }
 
     JITFuncCallContext jit_call_context(context, contents->saved_jit_handlers);
 
@@ -118,6 +121,12 @@ int Callable::call_argv(size_t argc, const void **argv, const CallCheckInfo *act
     jit_call_context.finalize(exit_status);
 
     return exit_status;
+}
+
+int Callable::call_argv_checked(size_t argc, const void *const *argv, const CallCheckInfo *actual_cci) const {
+    // It's *essential* we call this for safety.
+    check_arg_count_and_types(argc, actual_cci, "calling");
+    return call_argv_fast(argc, argv);
 }
 
 /*static*/ std::vector<Callable::CallCheckInfo> Callable::build_expected_call_check_info(const std::vector<Argument> &args, const std::string &ucon_arg_name) {

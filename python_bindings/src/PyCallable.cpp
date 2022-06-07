@@ -172,7 +172,7 @@ public:
                 << "Expected exactly " << (argc - 1) << " positional arguments, but saw " << args.size() << ".";
         }
 
-        int result = c.call_argv(argc, argv, cci);
+        int result = c.call_argv_checked(argc, argv, cci);
         _halide_user_assert(result == 0) << "Halide Runtime Error: " << result;
     }
 

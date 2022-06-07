@@ -44,7 +44,7 @@ struct WasmModule {
         const std::vector<JITModule> &extern_deps);
 
     /** Run generated previously compiled wasm code with a set of arguments. */
-    int run(const void **args);
+    int run(const void *const *args);
 };
 
 }  // namespace Internal

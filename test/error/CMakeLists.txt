@@ -31,6 +31,7 @@ tests(GROUPS error
       buffer_larger_than_two_gigs.cpp
       callable_bad_arguments.cpp
       callable_bad_values_passed.cpp
+      callable_typed_bad_arguments.cpp
       clamp_out_of_range.cpp
       compute_with_crossing_edges1.cpp
       compute_with_crossing_edges2.cpp

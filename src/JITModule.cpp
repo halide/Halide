@@ -395,8 +395,8 @@ JITModule::Symbol JITModule::entrypoint_symbol() const {
     return jit_module->entrypoint;
 }
 
-int (*JITModule::argv_function() const)(const void **) {
-    return (int (*)(const void **))jit_module->argv_entrypoint.address;
+int (*JITModule::argv_function() const)(const void *const *) {
+    return (int (*)(const void *const *))jit_module->argv_entrypoint.address;
 }
 
 JITModule::Symbol JITModule::argv_entrypoint_symbol() const {
@@ -1014,7 +1014,7 @@ Target JITCache::get_compiled_jit_target() const {
     return jit_target;
 }
 
-int JITCache::call_jit_code(const Target &target, const void **args) {
+int JITCache::call_jit_code(const Target &target, const void *const *args) {
 #if defined(__has_feature)
 #if __has_feature(memory_sanitizer)
     user_warning << "MSAN does not support JIT compilers of any sort, and will report "

@@ -208,7 +208,7 @@ struct JITModule {
      * be nullptr for a JITModule which has not yet been compiled or one
      * that is not a Halide Func compilation at all. */
     // @{
-    typedef int (*argv_wrapper)(const void **args);
+    typedef int (*argv_wrapper)(const void *const *args);
     argv_wrapper argv_function() const;
     // @}
 
@@ -300,7 +300,7 @@ struct JITCache {
 
     Target get_compiled_jit_target() const;
 
-    int call_jit_code(const Target &target, const void **args);
+    int call_jit_code(const Target &target, const void *const *args);
 
     void finish_profiling(JITUserContext *context);
 };
