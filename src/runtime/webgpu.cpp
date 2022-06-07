@@ -257,6 +257,10 @@ void request_adapter_callback(WGPURequestAdapterStatus status,
                              user_context);
 }
 
+size_t roundUpToMultipleOf4(size_t x) {
+    return (x + 3) & ~0x3;
+}
+
 }  // namespace
 
 WEAK int create_webgpu_context(void *user_context) {
@@ -317,7 +321,7 @@ WEAK int halide_webgpu_device_malloc(void *user_context, halide_buffer_t *buf) {
         .usage = WGPUBufferUsage_Storage |
                  WGPUBufferUsage_CopyDst |
                  WGPUBufferUsage_CopySrc,
-        .size = buf->size_in_bytes(),
+        .size = roundUpToMultipleOf4(buf->size_in_bytes()),
         .mappedAtCreation = false,
     };
     WgpuBufferHandle *device_handle =
@@ -560,15 +564,16 @@ int do_multidimensional_copy(void *user_context, WgpuContext *context,
                             << (void *)c.src << " + " << src_idx
                             << " -> " << (void *)c.dst << " + " << dst_idx
                             << ", " << c.chunk_size << " bytes\n";
+        uint64_t copy_size = roundUpToMultipleOf4(c.chunk_size);
         if (!from_host && to_host) {
             err = do_copy_to_host(user_context, context,
                                   (uint8_t *)(c.dst + dst_idx),
                                   src->buffer, src_idx + src->offset,
-                                  c.chunk_size);
+                                  copy_size);
         } else if (from_host && !to_host) {
             wgpuQueueWriteBuffer(context->queue, dst->buffer,
                                  dst_idx + dst->offset,
-                                 (void *)(c.src + src_idx), c.chunk_size);
+                                 (void *)(c.src + src_idx), copy_size);
         } else if (!from_host && !to_host) {
             // Create a command encoder and encode a copy command.
             WGPUCommandEncoder encoder =
@@ -895,7 +900,7 @@ WEAK int halide_webgpu_run(void *user_context,
                     .binding = i,
                     .buffer = handle->buffer,
                     .offset = handle->offset,
-                    .size = buffer->size_in_bytes(),
+                    .size = roundUpToMultipleOf4(buffer->size_in_bytes()),
                     .sampler = nullptr,
                     .textureView = nullptr,
                 };
