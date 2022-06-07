@@ -6,6 +6,7 @@
  * Defines the front-end class representing a jitted, callable Halide pipeline.
  */
 
+#include <array>
 #include <map>
 
 #include "Buffer.h"
@@ -44,7 +45,8 @@ private:
     // This relies on the fact that the halide_type_t we use here
     // is never a vector, thus the 'lanes' value should always be 1.
     // Is this a little bit evil? Yeah, maybe. We could probably
-    // use uint64_t and still be ok.
+    // use uint64_t and still be ok. Alternately, we could probably
+    // pack all this info into a single byte if it helped...
     using CallCheckInfo = uint32_t;
 
     static constexpr CallCheckInfo make_scalar_cci(halide_type_t t) {
@@ -59,11 +61,36 @@ private:
         return halide_type_t(halide_type_handle, 64, (uint16_t)CallCheckType::UserContext).as_u32();
     }
 
-    // We use the lower 31 bits as a bitmask; if the bit is set, a value of
-    // the wrong type was specified for that arg. We use the sign bit for
-    // "wrong number of arguments", in which case the rest of the bits are
-    // ignored.
-    using BadArgMask = int32_t;
+    template<typename>
+    struct is_halide_buffer : std::false_type {};
+
+    template<typename T, int Dims>
+    struct is_halide_buffer<::Halide::Buffer<T, Dims>> : std::true_type {};
+
+    template<typename T, int Dims>
+    struct is_halide_buffer<::Halide::Runtime::Buffer<T, Dims>> : std::true_type {};
+
+    template<>
+    struct is_halide_buffer<halide_buffer_t *> : std::true_type {};
+
+    template<typename T>
+    static constexpr CallCheckInfo build_cci() {
+        using T0 = typename std::remove_const<typename std::remove_reference<T>::type>::type;
+        if constexpr (std::is_same<T0, JITUserContext *>::value) {
+            return make_ucon_cci();
+        } else if constexpr (is_halide_buffer<T0>::value) {
+            // Don't bother checking type-and-dimensions here (the callee will do that)
+            // TODO: would it be worthwhile to check *static* type/dim of buffer to get compile-time failures?
+            return make_buffer_cci();
+        } else if constexpr (std::is_arithmetic<T0>::value || std::is_pointer<T0>::value) {
+            return make_scalar_cci(halide_type_of<T0>());
+        } else {
+            // static_assert(false) will fail all the time, even inside constexpr,
+            // but gating on sizeof(T) is a nice trick that ensures we will always
+            // fail here (since no T is ever size 0).
+            static_assert(!sizeof(T), "Illegal type passed to Callable.");
+        }
+    }
 
     template<int Size>
     struct ArgvStorage {
@@ -74,65 +101,46 @@ private:
         // compile-time allocation on the stack.
         uintptr_t argv_scalar_store[Size];
 
-        static constexpr BadArgMask make_bad_arg_mask(bool is_bad, size_t idx) {
-            return ((BadArgMask)is_bad) << idx;
-        }
-
         template<typename T, int Dims>
-        HALIDE_ALWAYS_INLINE void fill_slot(const CallCheckInfo &cci, BadArgMask &bad_arg_mask, size_t idx, const ::Halide::Buffer<T, Dims> &value) {
-            bad_arg_mask |= make_bad_arg_mask(cci != make_buffer_cci(), idx);
-            // Don't bother checking type-and-dimensions here (the callee will do that)
-            // TODO: would it be worthwhile to check *static* type/dim of buffer to get compile-time failures?
-            //
+        HALIDE_ALWAYS_INLINE void fill_slot(size_t idx, const ::Halide::Buffer<T, Dims> &value) {
             // Don't call ::Halide::Buffer::raw_buffer(): it includes "user_assert(defined())"
             // as part of the wrapper code, and we want this lean-and-mean
             argv[idx] = value.get()->raw_buffer();
         }
 
         template<typename T, int Dims>
-        HALIDE_ALWAYS_INLINE void fill_slot(const CallCheckInfo &cci, BadArgMask &bad_arg_mask, size_t idx, const ::Halide::Runtime::Buffer<T, Dims> &value) {
-            bad_arg_mask |= make_bad_arg_mask(cci != make_buffer_cci(), idx);
-            // Don't bother checking type-and-dimensions here (the callee will do that)
-            // TODO: would it be worthwhile to check *static* type/dim of buffer to get compile-time failures?
+        HALIDE_ALWAYS_INLINE void fill_slot(size_t idx, const ::Halide::Runtime::Buffer<T, Dims> &value) {
             argv[idx] = value.raw_buffer();
         }
 
         HALIDE_ALWAYS_INLINE
-        void fill_slot(const CallCheckInfo &cci, BadArgMask &bad_arg_mask, size_t idx, halide_buffer_t *value) {
-            bad_arg_mask |= make_bad_arg_mask(cci != make_buffer_cci(), idx);
-            // Don't bother checking type-and-dimensions here (the callee will do that)
+        void fill_slot(size_t idx, halide_buffer_t *value) {
             argv[idx] = value;
         }
 
         HALIDE_ALWAYS_INLINE
-        void fill_slot(const CallCheckInfo &cci, BadArgMask &bad_arg_mask, size_t idx, JITUserContext *value) {
-            bad_arg_mask |= make_bad_arg_mask(cci != make_ucon_cci(), idx);
+        void fill_slot(size_t idx, JITUserContext *value) {
             auto *dest = &argv_scalar_store[idx];
             *dest = (uintptr_t)value;
             argv[idx] = dest;
         }
 
         template<typename T>
-        HALIDE_ALWAYS_INLINE void fill_slot(const CallCheckInfo &cci, BadArgMask &bad_arg_mask, size_t idx, const T &value) {
-            // TODO: this will fail to compile if halide_type_of<>() is not defined for the type;
-            // normally that's the right behavior for halide_type_of, but in this case we'd like to
-            // degrade and just have it report a bad type, but the use of static_assert() in the failure
-            // case means SFINAE won't help us.
-            bad_arg_mask |= make_bad_arg_mask(cci != make_scalar_cci(halide_type_of<T>()), idx);
+        HALIDE_ALWAYS_INLINE void fill_slot(size_t idx, const T &value) {
             auto *dest = &argv_scalar_store[idx];
             *(T *)dest = value;
             argv[idx] = dest;
         }
 
         template<typename T>
-        HALIDE_ALWAYS_INLINE void fill_slots(const CallCheckInfo *call_check_info, BadArgMask &bad_arg_mask, size_t idx, const T &value) {
-            fill_slot(call_check_info[idx], bad_arg_mask, idx, value);
+        HALIDE_ALWAYS_INLINE void fill_slots(size_t idx, const T &value) {
+            fill_slot(idx, value);
         }
 
         template<typename First, typename Second, typename... Rest>
-        HALIDE_ALWAYS_INLINE void fill_slots(const CallCheckInfo *call_check_info, BadArgMask &bad_arg_mask, int idx, First &&first, Second &&second, Rest &&...rest) {
-            fill_slots<First>(call_check_info, bad_arg_mask, idx, std::forward<First>(first));
-            fill_slots<Second, Rest...>(call_check_info, bad_arg_mask, idx + 1, std::forward<Second>(second), std::forward<Rest>(rest)...);
+        HALIDE_ALWAYS_INLINE void fill_slots(int idx, First &&first, Second &&second, Rest &&...rest) {
+            fill_slots<First>(idx, std::forward<First>(first));
+            fill_slots<Second, Rest...>(idx + 1, std::forward<Second>(second), std::forward<Rest>(rest)...);
         }
     };
 
@@ -143,56 +151,44 @@ private:
              Internal::JITCache &&jit_cache,
              std::vector<CallCheckInfo> &&call_check_info);
 
-    size_t arg_count() const;
-    const CallCheckInfo *call_check_info() const;
-
-    void do_fail_bad_call(BadArgMask bad_arg_mask, size_t hidden_args) const;
-
-    template<int hidden_args>
-    HALIDE_NEVER_INLINE void fail_bad_call(BadArgMask bad_arg_mask) const {
-        do_fail_bad_call(bad_arg_mask, hidden_args);
-    }
+    static std::vector<CallCheckInfo> build_expected_call_check_info(const std::vector<Argument> &args, const std::string &ucon_arg_name);
 
     // Note that the first entry in argv must always be a JITUserContext*.
     //
-    // Currently private because it does no type checking and is "dangerous",
+    // Currently private because it does limited type checking and is "dangerous",
     // but we could make public if there is a demand for it.
-    int call_argv(size_t argc, const void **argv) const;
+    int call_argv(size_t argc, const void **argv, const CallCheckInfo *actual_cci) const;
 
-    template<size_t hidden_args, typename... Args>
+    template<typename... Args>
     int call(JITUserContext *context, Args &&...args) {
+        // This is built at compile time!
+        static constexpr auto actual_arg_types = std::array<CallCheckInfo, 1 + sizeof...(Args)>{
+            build_cci<JITUserContext *>(),
+            build_cci<Args>()...,
+        };
+
         constexpr size_t count = sizeof...(args) + 1;
-        static_assert(count <= 31, "A maximum of 31 arguments are supported by Callable.");
-        BadArgMask bad_arg_mask = -1;
         ArgvStorage<count> argv;
-        if (count == arg_count()) {
-            // Must not call fill_slots() if we have a bad number of args (otherwise
-            // we could overread the call_check_info array).
-            bad_arg_mask = 0;
-            argv.fill_slots(call_check_info(), bad_arg_mask, 0, context, std::forward<Args>(args)...);
-        }
-        if (bad_arg_mask) {
-            fail_bad_call<hidden_args>(bad_arg_mask);
-        }
-        return call_argv(count, &argv.argv[0]);
+        argv.fill_slots(0, context, std::forward<Args>(args)...);
+        return call_argv(count, &argv.argv[0], actual_arg_types.data());
     }
 
-public:
     /** Return the expected Arguments for this Callable, in the order they must be specified, including all outputs.
      * Note that the first entry will *always* specify a JITUserContext. */
     const std::vector<Argument> &arguments() const;
 
+public:
     template<typename... Args>
     HALIDE_MUST_USE_RESULT int
     operator()(JITUserContext *context, Args &&...args) {
-        return call<0, Args...>(context, std::forward<Args>(args)...);
+        return call(context, std::forward<Args>(args)...);
     }
 
     template<typename... Args>
     HALIDE_MUST_USE_RESULT int
     operator()(Args &&...args) {
-        JITUserContext empty_jit_user_context;
-        return call<1, Args...>(&empty_jit_user_context, std::forward<Args>(args)...);
+        JITUserContext empty;
+        return call(&empty, std::forward<Args>(args)...);
     }
 };
 

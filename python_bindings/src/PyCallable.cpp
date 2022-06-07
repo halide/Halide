@@ -63,8 +63,9 @@ public:
         const void **argv = TYPED_ALLOCA(const void *, argc);
         halide_scalar_value_t *scalar_storage = TYPED_ALLOCA(halide_scalar_value_t, argc);
         HBufArray buffers(argc, TYPED_ALLOCA(HalideBuffer, argc));
+        Callable::CallCheckInfo *cci = TYPED_ALLOCA(Callable::CallCheckInfo, argc);
 
-        _halide_user_assert(argv && scalar_storage && buffers.buffers) << "alloca failure";
+        _halide_user_assert(argv && scalar_storage && buffers.buffers && cci) << "alloca failure";
 
         // Clear argv to all zero so we can use it to validate that all fields are
         // set properly when using kwargs -- a well-formed call will never have any
@@ -79,8 +80,9 @@ public:
         JITUserContext empty_jit_user_context;
         scalar_storage[0].u.u64 = (uintptr_t)&empty_jit_user_context;
         argv[0] = &scalar_storage[0];
+        cci[0] = Callable::make_ucon_cci();
 
-        const auto define_one_arg = [&argv, &scalar_storage, &buffers](const Argument &c_arg, py::handle value, size_t slot) {
+        const auto define_one_arg = [&argv, &scalar_storage, &buffers, &cci](const Argument &c_arg, py::handle value, size_t slot) {
             if (c_arg.is_buffer()) {
                 // If the argument is already a Halide Buffer of some sort,
                 // skip pybuffer_to_halidebuffer entirely, since the latter requires
@@ -94,14 +96,16 @@ public:
                     buffers.buffers[slot] = pybuffer_to_halidebuffer<void, AnyDims, MaxFastDimensions>(cast_to<py::buffer>(value), writable);
                     argv[slot] = buffers.buffers[slot].raw_buffer();
                 }
+                cci[slot] = Callable::make_buffer_cci();
             } else {
                 argv[slot] = &scalar_storage[slot];
 
                 // clang-format off
 
-                #define HALIDE_HANDLE_TYPE_DISPATCH(CODE, BITS, TYPE, FIELD) \
-                    case halide_type_t(CODE, BITS).as_u32():          \
-                        scalar_storage[slot].u.FIELD = cast_to<TYPE>(value); \
+                #define HALIDE_HANDLE_TYPE_DISPATCH(CODE, BITS, TYPE, FIELD)                \
+                    case halide_type_t(CODE, BITS).as_u32():                                \
+                        scalar_storage[slot].u.FIELD = cast_to<TYPE>(value);                \
+                        cci[slot] = Callable::make_scalar_cci(halide_type_t(CODE, BITS));   \
                         break;
 
                 switch (((halide_type_t)c_arg.type).element_of().as_u32()) {
@@ -168,7 +172,7 @@ public:
                 << "Expected exactly " << (argc - 1) << " positional arguments, but saw " << args.size() << ".";
         }
 
-        int result = c.call_argv(argc, argv);
+        int result = c.call_argv(argc, argv, cci);
         _halide_user_assert(result == 0) << "Halide Runtime Error: " << result;
     }
 

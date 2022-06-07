@@ -986,6 +986,18 @@ void JITSharedRuntime::reuse_device_allocations(bool b) {
     shared_runtimes(MainShared).reuse_device_allocations(b);
 }
 
+JITCache::JITCache(Target jit_target,
+                   std::vector<Argument> arguments,
+                   std::map<std::string, JITExtern> jit_externs,
+                   JITModule jit_module,
+                   WasmModule wasm_module)
+    : jit_target(std::move(jit_target)),
+      arguments(std::move(arguments)),
+      jit_externs(std::move(jit_externs)),
+      jit_module(std::move(jit_module)),
+      wasm_module(std::move(wasm_module)) {
+}
+
 Target JITCache::get_compiled_jit_target() const {
     // This essentially is just a getter for contents->jit_target,
     // but also reality-checks that the status of the jit_module and/or wasm_module

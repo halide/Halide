@@ -626,14 +626,7 @@ Callable Pipeline::compile_to_callable(const std::vector<Argument> &args_in, con
     // Note: this isn't the same as the 'args' we passed in; it has outputs
     // appended to it, so even if 'args' was still valid, it's not what we want here
     const auto &all_args = jit_cache.arguments;
-    std::vector<Callable::CallCheckInfo> call_check_info;
-    call_check_info.reserve(all_args.size());
-    for (const Argument &a : all_args) {
-        const auto cci = (a.name == user_context_arg.name) ?
-                             Callable::make_ucon_cci() :
-                             (a.is_scalar() ? Callable::make_scalar_cci(a.type) : Callable::make_buffer_cci());
-        call_check_info.push_back(cci);
-    }
+    std::vector<Callable::CallCheckInfo> call_check_info = Callable::build_expected_call_check_info(all_args, user_context_arg.name);
 
     // Save the jit_handlers and jit_externs as they were at the time this
     // Callable was created, in case the Pipeline's version is mutated in
@@ -645,47 +638,47 @@ Callable Pipeline::compile_to_callable(const std::vector<Argument> &args_in, con
 /*static*/ JITCache Pipeline::compile_jit_cache(const Module &module,
                                                 std::vector<Argument> args,
                                                 const std::vector<Internal::Function> &outputs,
-                                                const std::map<std::string, JITExtern> &jit_externs,
+                                                const std::map<std::string, JITExtern> &jit_externs_in,
                                                 const Target &target_arg) {
     user_assert(!target_arg.has_unknowns()) << "Cannot jit-compile for target '" << target_arg << "'\n";
 
-    Target target = target_arg.with_feature(Target::JIT).with_feature(Target::UserContext);
+    Target jit_target = target_arg.with_feature(Target::JIT).with_feature(Target::UserContext);
 
     debug(2) << "jit-compiling for: " << target_arg << "\n";
 
-    JITCache jit_cache;
-    jit_cache.jit_target = target;
-    jit_cache.jit_externs = jit_externs;
-    jit_cache.arguments = std::move(args);
     for (const auto &out : outputs) {
         for (Type t : out.output_types()) {
-            jit_cache.arguments.emplace_back(out.name(), Argument::OutputBuffer, t, out.dimensions(), ArgumentEstimates{});
+            args.emplace_back(out.name(), Argument::OutputBuffer, t, out.dimensions(), ArgumentEstimates{});
         }
     }
 
+    JITModule jit_module;
+    WasmModule wasm_module;
+
     // Note that make_externs_jit_module() mutates the jit_externs, so we keep a copy
     // TODO: it fills in the value side with JITExtern values, but does anything actually use those?
-    std::vector<JITModule> externs_jit_module = Pipeline::make_externs_jit_module(target, jit_cache.jit_externs);
-    if (target.arch == Target::WebAssembly) {
-        FindExterns find_externs(jit_cache.jit_externs);
+    auto jit_externs = jit_externs_in;
+    std::vector<JITModule> externs_jit_module = Pipeline::make_externs_jit_module(jit_target, jit_externs);
+    if (jit_target.arch == Target::WebAssembly) {
+        FindExterns find_externs(jit_externs);
         for (const LoweredFunc &f : module.functions()) {
             f.body.accept(&find_externs);
         }
         if (debug::debug_level() >= 1) {
-            for (const auto &p : jit_cache.jit_externs) {
+            for (const auto &p : jit_externs) {
                 debug(1) << "Found extern: " << p.first << "\n";
             }
         }
 
-        jit_cache.wasm_module = WasmModule::compile(module, jit_cache.arguments,
-                                                    module.name(), jit_cache.jit_externs, externs_jit_module);
+        wasm_module = WasmModule::compile(module, args,
+                                          module.name(), jit_externs, externs_jit_module);
     } else {
         std::string name = sanitize_function_name(outputs[0].name());
         auto f = module.get_function_by_name(name);
-        jit_cache.jit_module = JITModule(module, f, externs_jit_module);
+        jit_module = JITModule(module, f, externs_jit_module);
     }
 
-    return jit_cache;
+    return JITCache(std::move(jit_target), std::move(args), std::move(jit_externs), std::move(jit_module), std::move(wasm_module));
 }
 
 void Pipeline::set_jit_externs(const std::map<std::string, JITExtern> &externs) {

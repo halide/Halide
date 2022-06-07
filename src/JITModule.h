@@ -291,6 +291,13 @@ struct JITCache {
     JITModule jit_module;
     WasmModule wasm_module;
 
+    JITCache() = default;
+    JITCache(Target jit_target,
+             std::vector<Argument> arguments,
+             std::map<std::string, JITExtern> jit_externs,
+             JITModule jit_module,
+             WasmModule wasm_module);
+
     Target get_compiled_jit_target() const;
 
     int call_jit_code(const Target &target, const void **args);
