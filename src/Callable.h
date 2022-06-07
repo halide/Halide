@@ -22,6 +22,22 @@ namespace PythonBindings {
 class PyCallable;
 }
 
+namespace Internal {
+
+template<typename>
+struct is_halide_buffer : std::false_type {};
+
+template<typename T, int Dims>
+struct is_halide_buffer<::Halide::Buffer<T, Dims>> : std::true_type {};
+
+template<typename T, int Dims>
+struct is_halide_buffer<::Halide::Runtime::Buffer<T, Dims>> : std::true_type {};
+
+template<>
+struct is_halide_buffer<halide_buffer_t *> : std::true_type {};
+
+}  // namespace Internal
+
 class Callable {
 private:
     friend class Pipeline;
@@ -61,24 +77,12 @@ private:
         return halide_type_t(halide_type_handle, 64, (uint16_t)CallCheckType::UserContext).as_u32();
     }
 
-    template<typename>
-    struct is_halide_buffer : std::false_type {};
-
-    template<typename T, int Dims>
-    struct is_halide_buffer<::Halide::Buffer<T, Dims>> : std::true_type {};
-
-    template<typename T, int Dims>
-    struct is_halide_buffer<::Halide::Runtime::Buffer<T, Dims>> : std::true_type {};
-
-    template<>
-    struct is_halide_buffer<halide_buffer_t *> : std::true_type {};
-
     template<typename T>
     static constexpr CallCheckInfo build_cci() {
         using T0 = typename std::remove_const<typename std::remove_reference<T>::type>::type;
         if constexpr (std::is_same<T0, JITUserContext *>::value) {
             return make_ucon_cci();
-        } else if constexpr (is_halide_buffer<T0>::value) {
+        } else if constexpr (Internal::is_halide_buffer<T0>::value) {
             // Don't bother checking type-and-dimensions here (the callee will do that)
             // TODO: would it be worthwhile to check *static* type/dim of buffer to get compile-time failures?
             return make_buffer_cci();
