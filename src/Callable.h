@@ -46,39 +46,26 @@ private:
 
     Internal::IntrusivePtr<CallableContents> contents;
 
-    enum class CallCheckType {
-        // Unused = 1,
-        Scalar = 2,
-        Buffer = 3,
-        UserContext = 4
-    };
-
     // This value is constructed so we can do the necessary runtime check
-    // with a single 32-bit compare. The value here is:
-    //
-    //     halide_type_t().with_lanes(CallCheckType).as_u32()
-    //
-    // This relies on the fact that the halide_type_t we use here
-    // is never a vector, thus the 'lanes' value should always be 1.
-    // Is this a little bit evil? Yeah, maybe. We could probably
-    // use uint64_t and still be ok. Alternately, we could probably
-    // pack all this info into a single byte if it helped...
-    using CallCheckInfo = uint32_t;
+    // with a single 16-bit compare.
+    using QuickCallCheckInfo = uint16_t;
 
-    static constexpr CallCheckInfo make_scalar_cci(halide_type_t t) {
-        return t.with_lanes((uint16_t)CallCheckType::Scalar).as_u32();
+    static constexpr QuickCallCheckInfo make_scalar_cci(halide_type_t t) {
+        return ((uint16_t)t.code << 8) | t.bits;
     }
 
-    static constexpr CallCheckInfo make_buffer_cci() {
-        return halide_type_t(halide_type_handle, 64, (uint16_t)CallCheckType::Buffer).as_u32();
+    static constexpr QuickCallCheckInfo make_buffer_cci() {
+        constexpr uint8_t fake_bits_buffer_cci = 3;
+        return ((uint16_t)halide_type_handle << 8) | fake_bits_buffer_cci;
     }
 
-    static constexpr CallCheckInfo make_ucon_cci() {
-        return halide_type_t(halide_type_handle, 64, (uint16_t)CallCheckType::UserContext).as_u32();
+    static constexpr QuickCallCheckInfo make_ucon_cci() {
+        constexpr uint8_t fake_bits_ucon_cci = 5;
+        return ((uint16_t)halide_type_handle << 8) | fake_bits_ucon_cci;
     }
 
     template<typename T>
-    static constexpr CallCheckInfo build_cci() {
+    static constexpr QuickCallCheckInfo build_cci() {
         using T0 = typename std::remove_const<typename std::remove_reference<T>::type>::type;
         if constexpr (std::is_same<T0, JITUserContext *>::value) {
             return make_ucon_cci();
@@ -158,21 +145,18 @@ private:
     Callable(const std::string &name,
              const JITHandlers &jit_handlers,
              const std::map<std::string, JITExtern> &jit_externs,
-             Internal::JITCache &&jit_cache,
-             std::vector<CallCheckInfo> &&call_check_info);
-
-    static std::vector<CallCheckInfo> build_expected_call_check_info(const std::vector<Argument> &args, const std::string &ucon_arg_name);
+             Internal::JITCache &&jit_cache);
 
     // Note that the first entry in argv must always be a JITUserContext*.
-    int call_argv_checked(size_t argc, const void *const *argv, const CallCheckInfo *actual_cci) const;
+    int call_argv_checked(size_t argc, const void *const *argv, const QuickCallCheckInfo *actual_cci) const;
     int call_argv_fast(size_t argc, const void *const *argv) const;
 
-    void check_arg_count_and_types(size_t argc, const CallCheckInfo *actual_cci, const char *verb) const;
+    void check_arg_count_and_types(size_t argc, const QuickCallCheckInfo *actual_cci, const char *verb) const;
 
     template<typename... Args>
     int call(JITUserContext *context, Args &&...args) const {
         // This is built at compile time!
-        static constexpr auto actual_arg_types = std::array<CallCheckInfo, 1 + sizeof...(Args)>{
+        static constexpr auto actual_arg_types = std::array<QuickCallCheckInfo, 1 + sizeof...(Args)>{
             build_cci<JITUserContext *>(),
             build_cci<Args>()...,
         };
@@ -227,7 +211,7 @@ public:
     std::function<int(First, Rest...)>
     make_std_function() const {
         if constexpr (std::is_same_v<First, JITUserContext *>) {
-            constexpr auto actual_arg_types = std::array<CallCheckInfo, 1 + sizeof...(Rest)>{
+            constexpr auto actual_arg_types = std::array<QuickCallCheckInfo, 1 + sizeof...(Rest)>{
                 build_cci<First>(),
                 build_cci<Rest>()...,
             };
@@ -241,7 +225,7 @@ public:
             };
         } else {
             // Explicitly prepend JITUserContext* as first actual-arg-type.
-            constexpr auto actual_arg_types = std::array<CallCheckInfo, 1 + 1 + sizeof...(Rest)>{
+            constexpr auto actual_arg_types = std::array<QuickCallCheckInfo, 1 + 1 + sizeof...(Rest)>{
                 build_cci<JITUserContext *>(),
                 build_cci<First>(),
                 build_cci<Rest>()...,

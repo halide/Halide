@@ -63,7 +63,7 @@ public:
         const void **argv = TYPED_ALLOCA(const void *, argc);
         halide_scalar_value_t *scalar_storage = TYPED_ALLOCA(halide_scalar_value_t, argc);
         HBufArray buffers(argc, TYPED_ALLOCA(HalideBuffer, argc));
-        Callable::CallCheckInfo *cci = TYPED_ALLOCA(Callable::CallCheckInfo, argc);
+        Callable::QuickCallCheckInfo *cci = TYPED_ALLOCA(Callable::QuickCallCheckInfo, argc);
 
         _halide_user_assert(argv && scalar_storage && buffers.buffers && cci) << "alloca failure";
 

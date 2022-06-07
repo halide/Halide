@@ -18,16 +18,16 @@ struct CallableContents {
     // The cached code
     JITCache jit_cache;
 
-    // Encoded values for efficient runtime type checking;
-    // identical to jit_cache.arguments in length.
-    std::vector<Callable::CallCheckInfo> call_check_info;
-
     // Save the jit_handlers and jit_externs as they were at the time this
     // Callable was created, in case the Pipeline's version is mutated in
     // between creation and call -- we want the Callable to remain immutable
     // after creation, regardless of what you do to the Func.
     JITHandlers saved_jit_handlers;
     std::map<std::string, JITExtern> saved_jit_externs;
+
+    // Encoded values for efficient runtime type checking;
+    // identical to jit_cache.arguments in length.
+    std::vector<Callable::QuickCallCheckInfo> call_check_info;
 };
 
 namespace Internal {
@@ -49,21 +49,27 @@ Callable::Callable()
 Callable::Callable(const std::string &name,
                    const JITHandlers &jit_handlers,
                    const std::map<std::string, JITExtern> &jit_externs,
-                   JITCache &&jit_cache,
-                   std::vector<Callable::CallCheckInfo> &&call_check_info)
+                   JITCache &&jit_cache)
     : contents(new CallableContents) {
     contents->name = name;
     contents->jit_cache = std::move(jit_cache);
-    contents->call_check_info = std::move(call_check_info);
     contents->saved_jit_handlers = jit_handlers;
     contents->saved_jit_externs = jit_externs;
+
+    contents->call_check_info.reserve(contents->jit_cache.arguments.size());
+    for (const Argument &a : contents->jit_cache.arguments) {
+        const auto cci = (a.name == "__user_context") ?
+                             Callable::make_ucon_cci() :
+                             (a.is_scalar() ? Callable::make_scalar_cci(a.type) : Callable::make_buffer_cci());
+        contents->call_check_info.push_back(cci);
+    }
 }
 
 const std::vector<Argument> &Callable::arguments() const {
     return contents->jit_cache.arguments;
 }
 
-void Callable::check_arg_count_and_types(size_t argc, const CallCheckInfo *actual_cci, const char *verb) const {
+void Callable::check_arg_count_and_types(size_t argc, const QuickCallCheckInfo *actual_cci, const char *verb) const {
     const size_t required_arg_count = contents->jit_cache.arguments.size();
 
     // TODO: this assumes that the caller uses the no-explicit-JITUserContext call;
@@ -74,7 +80,7 @@ void Callable::check_arg_count_and_types(size_t argc, const CallCheckInfo *actua
                                             << "Expected exactly " << (required_arg_count - hidden_args) << " arguments, "
                                             << "but saw " << (argc - hidden_args) << ".";
 
-    const CallCheckInfo *expected_cci = contents->call_check_info.data();
+    const QuickCallCheckInfo *expected_cci = contents->call_check_info.data();
     for (size_t i = 0; i < argc; i++) {
         if (actual_cci[i] != expected_cci[i]) {
             const Argument &a = contents->jit_cache.arguments.at(i);
@@ -123,22 +129,10 @@ void Callable::check_arg_count_and_types(size_t argc, const CallCheckInfo *actua
     return exit_status;
 }
 
-int Callable::call_argv_checked(size_t argc, const void *const *argv, const CallCheckInfo *actual_cci) const {
+int Callable::call_argv_checked(size_t argc, const void *const *argv, const QuickCallCheckInfo *actual_cci) const {
     // It's *essential* we call this for safety.
     check_arg_count_and_types(argc, actual_cci, "calling");
     return call_argv_fast(argc, argv);
-}
-
-/*static*/ std::vector<Callable::CallCheckInfo> Callable::build_expected_call_check_info(const std::vector<Argument> &args, const std::string &ucon_arg_name) {
-    std::vector<Callable::CallCheckInfo> call_check_info;
-    call_check_info.reserve(args.size());
-    for (const Argument &a : args) {
-        const auto cci = (a.name == ucon_arg_name) ?
-                             Callable::make_ucon_cci() :
-                             (a.is_scalar() ? Callable::make_scalar_cci(a.type) : Callable::make_buffer_cci());
-        call_check_info.push_back(cci);
-    }
-    return call_check_info;
 }
 
 }  // namespace Halide

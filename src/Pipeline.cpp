@@ -623,16 +623,11 @@ Callable Pipeline::compile_to_callable(const std::vector<Argument> &args_in, con
 
     auto jit_cache = compile_jit_cache(module, std::move(args), contents->outputs, get_jit_externs(), target);
 
-    // Note: this isn't the same as the 'args' we passed in; it has outputs
-    // appended to it, so even if 'args' was still valid, it's not what we want here
-    const auto &all_args = jit_cache.arguments;
-    std::vector<Callable::CallCheckInfo> call_check_info = Callable::build_expected_call_check_info(all_args, user_context_arg.name);
-
     // Save the jit_handlers and jit_externs as they were at the time this
     // Callable was created, in case the Pipeline's version is mutated in
     // between creation and call -- we want the Callable to remain immutable
     // after creation, regardless of what you do to the Func.
-    return Callable(module.name(), jit_handlers(), get_jit_externs(), std::move(jit_cache), std::move(call_check_info));
+    return Callable(module.name(), jit_handlers(), get_jit_externs(), std::move(jit_cache));
 }
 
 /*static*/ JITCache Pipeline::compile_jit_cache(const Module &module,
