@@ -991,7 +991,7 @@ JITCache::JITCache(Target jit_target,
                    std::map<std::string, JITExtern> jit_externs,
                    JITModule jit_module,
                    WasmModule wasm_module)
-    : jit_target(std::move(jit_target)),
+    : jit_target(jit_target),  // clang-tidy complains that this is "trivially copyable" and std::move shouldn't be here, grr
       arguments(std::move(arguments)),
       jit_externs(std::move(jit_externs)),
       jit_module(std::move(jit_module)),
