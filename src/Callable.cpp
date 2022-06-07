@@ -59,8 +59,8 @@ Callable::Callable(const std::string &name,
     contents->call_check_info.reserve(contents->jit_cache.arguments.size());
     for (const Argument &a : contents->jit_cache.arguments) {
         const auto cci = (a.name == "__user_context") ?
-                             Callable::make_ucon_cci() :
-                             (a.is_scalar() ? Callable::make_scalar_cci(a.type) : Callable::make_buffer_cci());
+                             Callable::make_ucon_qcci() :
+                             (a.is_scalar() ? Callable::make_scalar_qcci(a.type) : Callable::make_buffer_qcci());
         contents->call_check_info.push_back(cci);
     }
 }
@@ -69,7 +69,7 @@ const std::vector<Argument> &Callable::arguments() const {
     return contents->jit_cache.arguments;
 }
 
-void Callable::check_arg_count_and_types(size_t argc, const QuickCallCheckInfo *actual_cci, const char *verb) const {
+void Callable::check_arg_count_and_types(size_t argc, const QuickCallCheckInfo *actual_qcci, const char *verb) const {
     const size_t required_arg_count = contents->jit_cache.arguments.size();
 
     // TODO: this assumes that the caller uses the no-explicit-JITUserContext call;
@@ -80,9 +80,9 @@ void Callable::check_arg_count_and_types(size_t argc, const QuickCallCheckInfo *
                                             << "Expected exactly " << (required_arg_count - hidden_args) << " arguments, "
                                             << "but saw " << (argc - hidden_args) << ".";
 
-    const QuickCallCheckInfo *expected_cci = contents->call_check_info.data();
+    const QuickCallCheckInfo *expected_qcci = contents->call_check_info.data();
     for (size_t i = 0; i < argc; i++) {
-        if (actual_cci[i] != expected_cci[i]) {
+        if (actual_qcci[i] != expected_qcci[i]) {
             const Argument &a = contents->jit_cache.arguments.at(i);
             const char *kind = a.is_scalar() ? "scalar" : "buffer";
             // Note that we don't report the "actual type" here, just the expected type...
@@ -129,9 +129,9 @@ void Callable::check_arg_count_and_types(size_t argc, const QuickCallCheckInfo *
     return exit_status;
 }
 
-int Callable::call_argv_checked(size_t argc, const void *const *argv, const QuickCallCheckInfo *actual_cci) const {
+int Callable::call_argv_checked(size_t argc, const void *const *argv, const QuickCallCheckInfo *actual_qcci) const {
     // It's *essential* we call this for safety.
-    check_arg_count_and_types(argc, actual_cci, "calling");
+    check_arg_count_and_types(argc, actual_qcci, "calling");
     return call_argv_fast(argc, argv);
 }
 

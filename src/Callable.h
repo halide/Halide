@@ -46,35 +46,44 @@ private:
 
     Internal::IntrusivePtr<CallableContents> contents;
 
+    // ---------------------------------
+
     // This value is constructed so we can do the necessary runtime check
-    // with a single 16-bit compare.
+    // with a single 16-bit compare. It's designed to to the minimal checking
+    // necessary to ensure that the arguments are well-formed, but not necessarily
+    // "correct"; in particular, it deliberately skips checking type-and-dim
+    // of Buffer arguments, since the generated code has assertions to check
+    // for that anyway.
     using QuickCallCheckInfo = uint16_t;
 
-    static constexpr QuickCallCheckInfo make_scalar_cci(halide_type_t t) {
-        return ((uint16_t)t.code << 8) | t.bits;
+    static constexpr QuickCallCheckInfo _make_qcci(uint8_t code, uint8_t bits) {
+        return (((uint16_t)code) << 8) | (uint16_t)bits;
     }
 
-    static constexpr QuickCallCheckInfo make_buffer_cci() {
+    static constexpr QuickCallCheckInfo make_scalar_qcci(halide_type_t t) {
+        return _make_qcci(t.code, t.bits);
+    }
+
+    static constexpr QuickCallCheckInfo make_buffer_qcci() {
         constexpr uint8_t fake_bits_buffer_cci = 3;
-        return ((uint16_t)halide_type_handle << 8) | fake_bits_buffer_cci;
+        return _make_qcci(halide_type_handle, fake_bits_buffer_cci);
     }
 
-    static constexpr QuickCallCheckInfo make_ucon_cci() {
+    static constexpr QuickCallCheckInfo make_ucon_qcci() {
         constexpr uint8_t fake_bits_ucon_cci = 5;
-        return ((uint16_t)halide_type_handle << 8) | fake_bits_ucon_cci;
+        return _make_qcci(halide_type_handle, fake_bits_ucon_cci);
     }
 
     template<typename T>
-    static constexpr QuickCallCheckInfo build_cci() {
+    static constexpr QuickCallCheckInfo make_qcci() {
         using T0 = typename std::remove_const<typename std::remove_reference<T>::type>::type;
         if constexpr (std::is_same<T0, JITUserContext *>::value) {
-            return make_ucon_cci();
+            return make_ucon_qcci();
         } else if constexpr (Internal::is_halide_buffer<T0>::value) {
             // Don't bother checking type-and-dimensions here (the callee will do that)
-            // TODO: would it be worthwhile to check *static* type/dim of buffer to get compile-time failures?
-            return make_buffer_cci();
+            return make_buffer_qcci();
         } else if constexpr (std::is_arithmetic<T0>::value || std::is_pointer<T0>::value) {
-            return make_scalar_cci(halide_type_of<T0>());
+            return make_scalar_qcci(halide_type_of<T0>());
         } else {
             // static_assert(false) will fail all the time, even inside constexpr,
             // but gating on sizeof(T) is a nice trick that ensures we will always
@@ -82,6 +91,13 @@ private:
             static_assert(!sizeof(T), "Illegal type passed to Callable.");
         }
     }
+
+    template<typename... Args>
+    static constexpr std::array<QuickCallCheckInfo, sizeof...(Args)> make_qcci_array() {
+        return std::array<QuickCallCheckInfo, sizeof...(Args)>{make_qcci<Args>()...};
+    }
+
+    // ---------------------------------
 
     template<int Size>
     struct ArgvStorage {
@@ -156,10 +172,7 @@ private:
     template<typename... Args>
     int call(JITUserContext *context, Args &&...args) const {
         // This is built at compile time!
-        static constexpr auto actual_arg_types = std::array<QuickCallCheckInfo, 1 + sizeof...(Args)>{
-            build_cci<JITUserContext *>(),
-            build_cci<Args>()...,
-        };
+        static constexpr auto actual_arg_types = make_qcci_array<JITUserContext *, Args...>();
 
         constexpr size_t count = sizeof...(args) + 1;
         ArgvStorage<count> argv(context, std::forward<Args>(args)...);
@@ -211,10 +224,7 @@ public:
     std::function<int(First, Rest...)>
     make_std_function() const {
         if constexpr (std::is_same_v<First, JITUserContext *>) {
-            constexpr auto actual_arg_types = std::array<QuickCallCheckInfo, 1 + sizeof...(Rest)>{
-                build_cci<First>(),
-                build_cci<Rest>()...,
-            };
+            constexpr auto actual_arg_types = make_qcci_array<First, Rest...>();
             check_arg_count_and_types(actual_arg_types.size(), actual_arg_types.data(), "defining");
 
             // Capture *this to ensure that the CallableContents stay valid as long as the std::function does
@@ -225,11 +235,7 @@ public:
             };
         } else {
             // Explicitly prepend JITUserContext* as first actual-arg-type.
-            constexpr auto actual_arg_types = std::array<QuickCallCheckInfo, 1 + 1 + sizeof...(Rest)>{
-                build_cci<JITUserContext *>(),
-                build_cci<First>(),
-                build_cci<Rest>()...,
-            };
+            constexpr auto actual_arg_types = make_qcci_array<JITUserContext *, First, Rest...>();
             check_arg_count_and_types(actual_arg_types.size(), actual_arg_types.data(), "defining");
 
             // Capture *this to ensure that the CallableContents stay valid as long as the std::function does

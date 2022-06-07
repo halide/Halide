@@ -80,7 +80,7 @@ public:
         JITUserContext empty_jit_user_context;
         scalar_storage[0].u.u64 = (uintptr_t)&empty_jit_user_context;
         argv[0] = &scalar_storage[0];
-        cci[0] = Callable::make_ucon_cci();
+        cci[0] = Callable::make_ucon_qcci();
 
         const auto define_one_arg = [&argv, &scalar_storage, &buffers, &cci](const Argument &c_arg, py::handle value, size_t slot) {
             if (c_arg.is_buffer()) {
@@ -96,7 +96,7 @@ public:
                     buffers.buffers[slot] = pybuffer_to_halidebuffer<void, AnyDims, MaxFastDimensions>(cast_to<py::buffer>(value), writable);
                     argv[slot] = buffers.buffers[slot].raw_buffer();
                 }
-                cci[slot] = Callable::make_buffer_cci();
+                cci[slot] = Callable::make_buffer_qcci();
             } else {
                 argv[slot] = &scalar_storage[slot];
 
@@ -105,7 +105,7 @@ public:
                 #define HALIDE_HANDLE_TYPE_DISPATCH(CODE, BITS, TYPE, FIELD)                \
                     case halide_type_t(CODE, BITS).as_u32():                                \
                         scalar_storage[slot].u.FIELD = cast_to<TYPE>(value);                \
-                        cci[slot] = Callable::make_scalar_cci(halide_type_t(CODE, BITS));   \
+                        cci[slot] = Callable::make_scalar_qcci(halide_type_t(CODE, BITS));   \
                         break;
 
                 switch (((halide_type_t)c_arg.type).element_of().as_u32()) {
