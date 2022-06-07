@@ -51,7 +51,7 @@ public:
         // assert-fail, because there is no type constraint set: the type
         // will end up as whatever we infer from the values put into it. We'll use an
         // explicit GeneratorParam to allow us to set it.
-        untyped_buffer_output(x, y, c) = cast(untyped_buffer_output.output_type(), untyped_buffer_input(x, y, c));
+        untyped_buffer_output(x, y, c) = cast(untyped_buffer_output.type(), untyped_buffer_input(x, y, c));
 
         // Gratuitous intermediate for the purpose of exercising
         // GeneratorParam<LoopLevel>

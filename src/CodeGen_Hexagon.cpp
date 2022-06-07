@@ -42,7 +42,8 @@ protected:
 
     void init_module() override;
 
-    std::string mcpu() const override;
+    std::string mcpu_target() const override;
+    std::string mcpu_tune() const override;
     std::string mattrs() const override;
     int isa_version;
     bool use_soft_float_abi() const override;
@@ -1788,7 +1789,7 @@ Value *CodeGen_Hexagon::call_intrin(llvm::Type *result_type, const string &name,
                                       fn, std::move(args));
 }
 
-string CodeGen_Hexagon::mcpu() const {
+string CodeGen_Hexagon::mcpu_target() const {
     if (target.has_feature(Halide::Target::HVX_v66)) {
         return "hexagonv66";
     } else if (target.has_feature(Halide::Target::HVX_v65)) {
@@ -1796,6 +1797,10 @@ string CodeGen_Hexagon::mcpu() const {
     } else {
         return "hexagonv62";
     }
+}
+
+string CodeGen_Hexagon::mcpu_tune() const {
+    return mcpu_target();
 }
 
 string CodeGen_Hexagon::mattrs() const {

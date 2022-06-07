@@ -72,7 +72,8 @@ protected:
     };
     vector<Pattern> casts, calls, averagings, negations;
 
-    string mcpu() const override;
+    string mcpu_target() const override;
+    string mcpu_tune() const override;
     string mattrs() const override;
     bool use_soft_float_abi() const override;
     int native_vector_bits() const override;
@@ -1392,7 +1393,7 @@ Type CodeGen_ARM::upgrade_type_for_storage(const Type &t) const {
     return CodeGen_Posix::upgrade_type_for_storage(t);
 }
 
-string CodeGen_ARM::mcpu() const {
+string CodeGen_ARM::mcpu_target() const {
     if (target.bits == 32) {
         if (target.has_feature(Target::ARMv7s)) {
             return "swift";
@@ -1408,6 +1409,10 @@ string CodeGen_ARM::mcpu() const {
             return "generic";
         }
     }
+}
+
+string CodeGen_ARM::mcpu_tune() const {
+    return mcpu_target();
 }
 
 string CodeGen_ARM::mattrs() const {

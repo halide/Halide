@@ -455,7 +455,8 @@ void CodeGen_LLVM::init_codegen(const std::string &name, bool any_strict_float) 
 
     // Add some target specific info to the module as metadata.
     module->addModuleFlag(llvm::Module::Warning, "halide_use_soft_float_abi", use_soft_float_abi() ? 1 : 0);
-    module->addModuleFlag(llvm::Module::Warning, "halide_mcpu", MDString::get(*context, mcpu()));
+    module->addModuleFlag(llvm::Module::Warning, "halide_mcpu_target", MDString::get(*context, mcpu_target()));
+    module->addModuleFlag(llvm::Module::Warning, "halide_mcpu_tune", MDString::get(*context, mcpu_tune()));
     module->addModuleFlag(llvm::Module::Warning, "halide_mattrs", MDString::get(*context, mattrs()));
     module->addModuleFlag(llvm::Module::Warning, "halide_mabi", MDString::get(*context, mabi()));
     module->addModuleFlag(llvm::Module::Warning, "halide_use_pic", use_pic() ? 1 : 0);
@@ -523,7 +524,7 @@ std::unique_ptr<llvm::Module> CodeGen_LLVM::compile(const Module &input) {
         }
         FunctionType *func_t = FunctionType::get(i32_t, arg_types, false);
         function = llvm::Function::Create(func_t, llvm_linkage(f.linkage), names.extern_name, module.get());
-        set_function_attributes_for_target(function, target);
+        set_function_attributes_from_halide_target_options(*function);
 
         // Mark the buffer args as no alias and save indication for add_argv_wrapper if needed
         std::vector<bool> buffer_args(f.args.size());
@@ -564,6 +565,8 @@ std::unique_ptr<llvm::Module> CodeGen_LLVM::compile(const Module &input) {
 }
 
 std::unique_ptr<llvm::Module> CodeGen_LLVM::finish_codegen() {
+    llvm::for_each(*module, set_function_attributes_from_halide_target_options);
+
     // Verify the module is ok
     internal_assert(!verifyModule(*module, &llvm::errs()));
     debug(2) << "Done generating llvm bitcode\n";
@@ -962,7 +965,7 @@ llvm::Function *CodeGen_LLVM::add_argv_wrapper(llvm::Function *fn,
 
 llvm::Function *CodeGen_LLVM::embed_metadata_getter(const std::string &metadata_name,
                                                     const std::string &function_name, const std::vector<LoweredArgument> &args,
-                                                    const std::map<std::string, std::string> &metadata_name_map) {
+                                                    const MetadataNameMap &metadata_name_map) {
     Constant *zero = ConstantInt::get(i32_t, 0);
 
     const int num_args = (int)args.size();
@@ -1115,6 +1118,13 @@ void CodeGen_LLVM::optimize_module() {
     llvm::FunctionAnalysisManager fam;
     llvm::CGSCCAnalysisManager cgam;
     llvm::ModuleAnalysisManager mam;
+
+#if LLVM_VERSION < 140
+    // If building against LLVM older than 14, explicitly specify AA pipeline.
+    // Not needed with LLVM14 or later, already the default.
+    llvm::AAManager aa = pb.buildDefaultAAPipeline();
+    fam.registerPass([&] { return std::move(aa); });
+#endif
 
     // Register all the basic analyses with the managers.
     pb.registerModuleAnalyses(mam);

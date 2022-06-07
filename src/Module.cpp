@@ -330,7 +330,7 @@ struct ModuleContents {
     std::vector<Internal::LoweredFunc> functions;
     std::vector<Module> submodules;
     std::vector<ExternalCode> external_code;
-    std::map<std::string, std::string> metadata_name_map;
+    MetadataNameMap metadata_name_map;
     bool any_strict_float{false};
     std::unique_ptr<AutoSchedulerResults> auto_scheduler_results;
 };
@@ -548,7 +548,7 @@ void Module::remap_metadata_name(const std::string &from, const std::string &to)
     contents->metadata_name_map[from] = to;
 }
 
-std::map<std::string, std::string> Module::get_metadata_name_map() const {
+MetadataNameMap Module::get_metadata_name_map() const {
     return contents->metadata_name_map;
 }
 

@@ -78,7 +78,7 @@ public:
         // Verify that Output::type() and ::dims() are well-defined after we define the Func
         assert(tuple_output.types()[0] == Float(32));
         assert(tuple_output.types()[1] == Float(32));
-        assert(tuple_output.dims() == 3);
+        assert(tuple_output.dimensions() == 3);
 
         array_output.resize(array_input.size());
         for (size_t i = 0; i < array_input.size(); ++i) {

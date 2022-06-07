@@ -2369,9 +2369,18 @@ void validate_fused_groups_schedule(const vector<vector<string>> &fused_groups, 
 
             validate_fused_group_schedule_helper(
                 iter->first, 0, iter->second.definition(), env);
-            for (size_t i = 0; i < iter->second.updates().size(); ++i) {
+            for (const auto &s : iter->second.definition().specializations()) {
                 validate_fused_group_schedule_helper(
-                    iter->first, i + 1, iter->second.updates()[i], env);
+                    iter->first, 0, s.definition, env);
+            }
+            for (size_t i = 0; i < iter->second.updates().size(); ++i) {
+                const auto &update_stage = iter->second.updates()[i];
+                validate_fused_group_schedule_helper(
+                    iter->first, i + 1, update_stage, env);
+                for (const auto &s : update_stage.specializations()) {
+                    validate_fused_group_schedule_helper(
+                        iter->first, i + 1, s.definition, env);
+                }
             }
         }
     }

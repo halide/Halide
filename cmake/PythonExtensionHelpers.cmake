@@ -85,7 +85,7 @@ function(add_python_aot_extension TARGET)
 
     Python3_add_library(${TARGET} MODULE ${abi_flags} ${${TARGET}.py.cpp})
     target_link_libraries(${TARGET} PRIVATE aot_${TARGET})
-    set_target_properties(${TARGET} PROPERTIES OUTPUT_NAME ${ARG_GENERATOR})
+    set_target_properties(${TARGET} PROPERTIES OUTPUT_NAME ${ARG_FUNCTION_NAME})
     target_export_single_symbol(${TARGET} ${ARG_FUNCTION_NAME})
 endfunction()
 
