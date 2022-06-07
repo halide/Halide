@@ -10,6 +10,7 @@
 #include "SimplifyCorrelatedDifferences.h"
 #include "UniquifyVariableNames.h"
 
+#include <limits>
 #include <vector>
 
 namespace Halide {
@@ -37,7 +38,7 @@ Direction flip(const Direction &direction) {
 
 /*
  * Methods that push divisions or multiplications by constants inwards
- * These are approximation techniques that approximate in a give direction.
+ * These are approximation techniques that approximate in a given direction.
  */
 Expr handle_push_div(const Expr &expr, Direction direction, int64_t denom);
 Expr handle_push_mul(const Expr &expr, Direction direction, int64_t factor);
@@ -382,7 +383,7 @@ private:
     // Which direction we are approximating.
     Direction direction;
     // Pointer to scope for checking if a variable is bounded or not.
-    const Scope<Interval> *scope_ptr;
+    const Scope<Interval> &scope;
     // The number of times a variable is used. Can be used to remove
     // non-correlated terms.
     const std::map<std::string, int> &var_uses;
@@ -408,8 +409,8 @@ private:
         internal_assert(iter != var_uses.end()) << "Encountered uncounted variable: " << Expr(op) << "\n";
         const int uses = iter->second;
         if (uses == 1) {
-            if (scope_ptr->contains(op->name)) {
-                const Interval interval = scope_ptr->get(op->name);
+            if (scope.contains(op->name)) {
+                const Interval interval = scope.get(op->name);
                 if (interval.is_everything()) {
                     unbounded_vars++;
                 }
@@ -495,13 +496,13 @@ private:
     }
 
     Expr visit(const Min *op) override {
-        // If we are trying to Lower bound a Min,
+        // If we are trying to lower bound a Min,
         // we merge the lower bounds of the two sides.
         if (direction == Direction::Lower) {
             return IRMutator::visit(op);
         }
 
-        // If we are trying to Upper bound a Min, then we can take either of the two sides of a Min,
+        // If we are trying to upper bound a Min, then we can take either of the two sides of a Min,
         // so choose the relevant one if possible.
         const int32_t original_count = unbounded_vars;
 
@@ -536,12 +537,12 @@ private:
     }
 
     Expr visit(const Max *op) override {
-        // If we are trying to Upper bound a Max, we merge the upper bounds of the two sides.
+        // If we are trying to upper bound a Max, we merge the upper bounds of the two sides.
         if (direction == Direction::Upper) {
             return IRMutator::visit(op);
         }
 
-        // If we are trying to Lower bound a Max, then we can take either of the two sides of a Max,
+        // If we are trying to lower bound a Max, then we can take either of the two sides of a Max,
         // so choose the relevant one if possible.
         int32_t original_count = unbounded_vars;
 
@@ -610,9 +611,9 @@ private:
     }
 
 public:
-    StripUnboundedTerms(Direction _direction, const Scope<Interval> *_scope_ptr,
+    StripUnboundedTerms(Direction _direction, const Scope<Interval> &_scope,
                         const std::map<std::string, int> &_var_uses)
-        : direction(_direction), scope_ptr(_scope_ptr), var_uses(_var_uses) {
+        : direction(_direction), scope(_scope), var_uses(_var_uses) {
     }
 };
 
@@ -646,7 +647,7 @@ class ReorderTerms : public IRGraphMutator {
     // This is very similar to code in LICM, but we don't care about depth.
     struct AffineTerm {
         Expr expr;
-        int coefficient;
+        int32_t coefficient;
     };
 
     // Simple helper function for negating a term.
@@ -654,24 +655,33 @@ class ReorderTerms : public IRGraphMutator {
         return AffineTerm{term.expr, -term.coefficient};
     }
 
+    bool is_valid_int(int64_t value) {
+        return value >= (int64_t)std::numeric_limits<int32_t>::min() && value <= (int64_t)std::numeric_limits<int32_t>::max();
+    }
+
     // Useful for extracting an affine term from an (x * c) term
     bool is_mul_by_int_const(const Expr &expr, AffineTerm &term) {
         const Mul *mul = expr.as<Mul>();
         if (mul) {
             if (const IntImm *a = mul->a.as<IntImm>()) {
-                term.coefficient = a->value;
-                term.expr = mul->b;
-                return true;
+                if (is_valid_int(a->value) && is_valid_int(-a->value)) {
+                    term.coefficient = a->value;
+                    term.expr = mul->b;
+                    return true;
+                }
             } else if (const IntImm *b = mul->b.as<IntImm>()) {
-                term.coefficient = b->value;
-                term.expr = mul->a;
-                return true;
+                if (is_valid_int(b->value) && is_valid_int(-b->value)) {
+                    term.coefficient = b->value;
+                    term.expr = mul->a;
+                    return true;
+                }
             }
         }
         return false;
     }
 
-    // Given a summation, extract it into a series of affine terms.
+    // Given a summation, extract it into a series of affine terms,
+    // sorted by `should_commute`.
     std::vector<AffineTerm> extract_summation(const Expr &e) {
         std::vector<AffineTerm> pending, terms;
         pending.push_back({e, 1});
@@ -704,7 +714,7 @@ class ReorderTerms : public IRGraphMutator {
                 } else {
                     // If this term is a mul by a constant, we can extract out the constant and keep trying.
                     AffineTerm term;
-                    if (is_mul_by_int_const(next.expr, term)) {
+                    if (is_mul_by_int_const(next.expr, term) && !mul_would_overflow(32, next.coefficient, term.coefficient)) {
                         internal_assert(term.expr.defined());
                         term.coefficient *= next.coefficient;
                         pending.push_back(term);
@@ -732,7 +742,10 @@ class ReorderTerms : public IRGraphMutator {
         return simplify_linear_summation(terms);
     }
 
-    // Two-finger O(n) algorithm for simplifying sums.
+    // Two-finger O(n) algorithm for simplifying sorted sums.
+    // Because the input is sorted, we only need to check equality
+    // on adjacent terms, i.e. the following:
+    // terms: [ {a, 1}, {a, 2}, {a, 4}, {b, 4} ] -> simplified : [ {a, 7}, {b, 4} ]
     std::vector<AffineTerm> simplify_linear_summation(const std::vector<AffineTerm> &terms) {
         if (terms.empty()) {
             // Nothing to do here.
@@ -975,7 +988,7 @@ std::pair<Expr, bool> remove_unbounded_terms(const Expr &expr, Direction directi
     CountVarUses counter(var_uses);
     expr.accept(&counter);
     // To strip unbounded/uncorrelated terms, we need to know use counts.
-    StripUnboundedTerms tool(direction, &scope, var_uses);
+    StripUnboundedTerms tool(direction, scope, var_uses);
     Expr mut = tool.mutate(expr);
     return {mut, tool.unbounded_vars != 0};
 }
@@ -1034,7 +1047,7 @@ bool should_use_approximate_methods(const Expr &expr) {
 }
 
 Interval approximate_constant_bounds(const Expr &expr, const Scope<Interval> &scope) {
-    Interval interval;
+    Interval interval = Interval::everything();
     if (should_use_approximate_methods(expr)) {
         Expr lower = approximate_optimizations(expr, Direction::Lower, scope);
         Expr upper = approximate_optimizations(expr, Direction::Upper, scope);
