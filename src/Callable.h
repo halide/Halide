@@ -217,6 +217,11 @@ public:
      * TODO: it's possible that we could infer the correct signatures in some cases,
      * and only fail for the ambiguous cases, but that would require a lot more template-fu
      * here and elsewhere. I think this is good enough for now.
+     *
+     * TODO: for plain-old-Callable, we don't bother checking the static type-and-dims of Buffer<>
+     * values passed in (we defer to the runtime to handle that), but for this we probably want to
+     * do that check -- currently we allow any sort of Buffer<> as an argument for a buffer slot,
+     * so you can specify something that is guaranteed to fail at runtime. Ouch.
      */
     template<typename First, typename... Rest>
     std::function<int(First, Rest...)>
