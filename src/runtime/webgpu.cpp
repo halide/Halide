@@ -591,10 +591,7 @@ int do_multidimensional_copy(void *user_context, WgpuContext *context,
             halide_debug_assert(user_context, false && "unimplemented");
         }
 
-        if (err) {
-            error(user_context) << "WGPU: buffer copy failed: " << err;
-            return err;
-        }
+        return err;
     } else {
         ssize_t src_off = 0, dst_off = 0;
         for (int i = 0; i < (int)c.extent[d - 1]; i++) {
@@ -609,7 +606,7 @@ int do_multidimensional_copy(void *user_context, WgpuContext *context,
             }
         }
     }
-    return 0;
+    return halide_error_code_success;
 }
 
 }  // namespace
@@ -657,8 +654,9 @@ WEAK int halide_webgpu_buffer_copy(void *user_context,
         err = do_multidimensional_copy(user_context, &context, c,
                                        c.src_begin, 0, dst->dimensions,
                                        from_host, to_host);
-
-        err = error_scope.wait();
+        if (err == halide_error_code_success) {
+            err = error_scope.wait();
+        }
     }
 
     return err;
