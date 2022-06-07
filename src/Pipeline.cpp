@@ -678,7 +678,7 @@ Callable Pipeline::compile_to_callable(const std::vector<Argument> &args_in, con
         jit_module = JITModule(module, f, externs_jit_module);
     }
 
-    return JITCache(std::move(jit_target), std::move(args), std::move(jit_externs), std::move(jit_module), std::move(wasm_module));
+    return JITCache(jit_target, std::move(args), std::move(jit_externs), std::move(jit_module), std::move(wasm_module));
 }
 
 void Pipeline::set_jit_externs(const std::map<std::string, JITExtern> &externs) {
