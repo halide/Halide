@@ -379,7 +379,7 @@ void CodeGen_WebGPU_Dev::CodeGen_WGSL::add_kernel(
     s.accept(&wgsize);
 
     // Emit the function prototype.
-    stream << "@stage(compute) @workgroup_size("
+    stream << "@compute @workgroup_size("
            << wgsize.values[0] << ", "
            << wgsize.values[1] << ", "
            << wgsize.values[2] << ")\n";
