@@ -984,7 +984,12 @@ Expr reorder_terms(const Expr &expr) {
     return ReorderTerms().mutate(expr);
 }
 
-Expr substitute_some_lets(const Expr &expr, size_t count = 16) {
+Expr substitute_some_lets(const Expr &expr) {
+    // Empirically appears to be a good value, most real
+    // expressions we see won't have more substitutions
+    // than this, but for some expressions, larger values
+    // can cause Expr size explosion.
+    static const size_t count = 16;
     return SubstituteSomeLets(count).mutate(expr);
 }
 
