@@ -79,7 +79,7 @@ int main(int argc, char **argv) {
 
     {
         // We can also make an explicitly-typed std::function if we prefer:
-        auto example = create_callable_from_generator(context, "example").make_std_function<float, Buffer<int32_t, 3>&>();
+        auto example = create_callable_from_generator(context, "example").make_std_function<float, Buffer<int32_t, 3>>();
 
         Buffer<int32_t, 3> img(kSize, kSize, 3);
         int r = example(runtime_factor, img);
