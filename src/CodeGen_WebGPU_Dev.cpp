@@ -71,9 +71,6 @@ protected:
         std::string print_extern_call(const Call *op) override;
         std::string print_assignment(Type t, const std::string &rhs) override;
 
-        // Print the WGSL type used for storing elements of `type` in a buffer.
-        std::string print_buffer_type(Type type);
-
         void visit(const Allocate *op) override;
         void visit(const And *op) override;
         void visit(const Broadcast *op) override;
@@ -96,6 +93,7 @@ protected:
 
         string kernel_name;
         std::unordered_set<string> buffers;
+        std::unordered_set<string> buffers_with_emulated_accesses;
         const Allocate *workgroup_array = nullptr;
     };
 
@@ -242,19 +240,6 @@ string CodeGen_WebGPU_Dev::CodeGen_WGSL::print_type(Type type,
     return oss.str();
 }
 
-string CodeGen_WebGPU_Dev::CodeGen_WGSL::print_buffer_type(Type type) {
-    if (type.bits() != 32) {
-        internal_assert(type.bits() == 8 || type.bits() == 16);
-        internal_assert(!type.is_float());
-        // Types that are not 32-bits are emulated using atomics.
-        user_warning << "buffers of small integer types are currently emulated "
-                     << "using atomics in the WebGPU backend, and accesses to "
-                     << "them will be slow";
-        return "atomic<u32>";
-    }
-    return print_type(type);
-}
-
 string CodeGen_WebGPU_Dev::CodeGen_WGSL::print_reinterpret(Type type,
                                                            const Expr &e) {
     ostringstream oss;
@@ -280,6 +265,31 @@ void CodeGen_WebGPU_Dev::CodeGen_WGSL::add_kernel(
 
     kernel_name = name;
 
+    // Look for buffer accesses that will require emulation via atomics.
+    class FindBufferAccessesRequiringEmulation : public IRVisitor {
+        using IRVisitor::visit;
+
+        void visit(const Load *op) override {
+            if (op->type.element_of().bits() < 32) {
+                needs_atomic_accesses.insert(op->name);
+            }
+            IRVisitor::visit(op);
+        }
+
+        void visit(const Store *op) override {
+            if (op->value.type().element_of().bits() < 32) {
+                needs_atomic_accesses.insert(op->name);
+            }
+            IRVisitor::visit(op);
+        }
+
+    public:
+        std::unordered_set<string> needs_atomic_accesses;
+    };
+
+    FindBufferAccessesRequiringEmulation fbare;
+    s.accept(&fbare);
+
     // The name of the variable that contains the non-buffer arguments.
     string args_var = "Args_" + name;
 
@@ -289,9 +299,20 @@ void CodeGen_WebGPU_Dev::CodeGen_WGSL::add_kernel(
         if (arg.is_buffer) {
             // Emit buffer arguments as read_write storage buffers.
             buffers.insert(arg.name);
+            std::string type_decl;
+            if (fbare.needs_atomic_accesses.count(arg.name)) {
+                user_warning
+                    << "buffers of small integer types are currently emulated "
+                    << "using atomics in the WebGPU backend, and accesses to "
+                    << "them will be slow";
+                buffers_with_emulated_accesses.insert(arg.name);
+                type_decl = "atomic<u32>";
+            } else {
+                type_decl = print_type(arg.type);
+            }
             stream << "@group(0) @binding(" << next_binding << ")\n"
                    << "var<storage, read_write> " << print_name(arg.name)
-                   << " : array<" << print_buffer_type(arg.type) << ">;\n\n";
+                   << " : array<" << type_decl << ">;\n\n";
             Allocation alloc;
             alloc.type = arg.type;
             allocations.push(arg.name, alloc);
@@ -666,7 +687,7 @@ void CodeGen_WebGPU_Dev::CodeGen_WGSL::visit(const Load *op) {
         alloc_type = workgroup_array->type;
     }
 
-    const int bits = alloc_type.bits();
+    const int bits = result_type.bits();
     const string name = print_name(op->name);
     const string bits_str = std::to_string(bits);
     const string elements = std::to_string(32 / bits);
@@ -703,10 +724,15 @@ void CodeGen_WebGPU_Dev::CodeGen_WGSL::visit(const Load *op) {
     const string idx = print_expr(op->index);
     if (op->type.is_scalar()) {
         string rhs;
-        if (bits == 32 || !buffers.count(op->name)) {
-            rhs = name + "[" + idx + "]";
+        if (buffers_with_emulated_accesses.count(op->name)) {
+            if (bits == 32) {
+                rhs = "bitcast<" + print_type(result_type) +
+                      ">(atomicLoad(&" + name + "[" + idx + "]))";
+            } else {
+                rhs = emulate_narrow_load(idx);
+            }
         } else {
-            rhs = emulate_narrow_load(idx);
+            rhs = name + "[" + idx + "]";
         }
         print_assignment(op->type, cast_if_needed(rhs));
         return;
@@ -720,10 +746,15 @@ void CodeGen_WebGPU_Dev::CodeGen_WGSL::visit(const Load *op) {
             stream << get_indent() << id << "[" << i << "] = ";
             const string idx_i = idx + "[" + std::to_string(i) + "]";
             string rhs;
-            if (bits == 32 || !buffers.count(op->name)) {
-                rhs = name + "[" + idx_i + "]";
+            if (buffers_with_emulated_accesses.count(op->name)) {
+                if (bits == 32) {
+                    rhs = "bitcast<" + print_type(result_type) +
+                          ">(atomicLoad(&" + name + "[" + idx_i + "]))";
+                } else {
+                    rhs = emulate_narrow_load(idx_i);
+                }
             } else {
-                rhs = emulate_narrow_load(idx_i);
+                rhs = name + "[" + idx_i + "]";
             }
             stream << cast_if_needed(rhs) << ";\n";
         }
@@ -807,7 +838,7 @@ void CodeGen_WebGPU_Dev::CodeGen_WGSL::visit(const Store *op) {
         }
     };
 
-    const int bits = alloc_type.bits();
+    const int bits = value_type.bits();
     const string name = print_name(op->name);
     const string bits_str = std::to_string(bits);
     const string elements = std::to_string(32 / bits);
@@ -852,24 +883,34 @@ void CodeGen_WebGPU_Dev::CodeGen_WGSL::visit(const Store *op) {
     const string rhs = print_expr(op->value);
 
     if (op->value.type().is_scalar()) {
-        const string value = cast_if_needed(rhs);
-        if (bits == 32 || !buffers.count(op->name)) {
-            stream << get_indent() << name << "[" << idx << "] = ";
-            stream << value << ";\n";
+        if (buffers_with_emulated_accesses.count(op->name)) {
+            if (bits == 32) {
+                stream << get_indent() << "atomicStore(&"
+                       << name << "[" << idx << "], "
+                       << "bitcast<u32>(" << rhs << "));\n";
+            } else {
+                emulate_narrow_store(idx, rhs);
+            }
         } else {
-            emulate_narrow_store(idx, value);
+            stream << get_indent() << name << "[" << idx << "] = ";
+            stream << cast_if_needed(rhs) << ";\n";
         }
     } else if (op->value.type().is_vector()) {
         // TODO: Could be smarter about this for a dense ramp.
         for (int i = 0; i < op->value.type().lanes(); ++i) {
             const string idx_i = idx + "[" + std::to_string(i) + "]";
             string value_i = rhs + "[" + std::to_string(i) + "]";
-            value_i = cast_if_needed(value_i);
-            if (bits == 32 || !buffers.count(op->name)) {
-                stream << get_indent() << name << "[" << idx_i << "] = ";
-                stream << value_i << ";\n";
+            if (buffers_with_emulated_accesses.count(op->name)) {
+                if (bits == 32) {
+                    stream << get_indent() << "atomicStore(&"
+                           << name << "[" << idx_i << "], "
+                           << "bitcast<u32>(" << value_i << "));\n";
+                } else {
+                    emulate_narrow_store(idx_i, value_i);
+                }
             } else {
-                emulate_narrow_store(idx_i, value_i);
+                stream << get_indent() << name << "[" << idx_i << "] = ";
+                stream << cast_if_needed(value_i) << ";\n";
             }
         }
     }
