@@ -875,7 +875,7 @@ class SubstituteSomeLets : public IRMutator {
     Expr visit(const Variable *op) override {
         if (count > 0 && scope.contains(op->name)) {
             count--;
-            return mutate(scope.get(op->name));
+            return scope.get(op->name);
         } else {
             return op;
         }
