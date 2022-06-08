@@ -5,6 +5,7 @@ namespace Halide {
 namespace Internal {
 
 namespace {
+
 class CountVarUses : public IRVisitor {
     std::map<std::string, int> &var_uses;
 

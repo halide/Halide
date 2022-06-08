@@ -353,7 +353,7 @@ strip_unbounded(const Expr &expr, const Direction &direction,
 template<typename BinOp>
 std::pair<size_t, Expr>
 strip_unbounded_binop(const BinOp *op, const Direction &direction,
-                const Scope<Interval> &scope, const std::map<std::string, int> &var_uses) {
+                      const Scope<Interval> &scope, const std::map<std::string, int> &var_uses) {
     auto [a_count, a_new] = strip_unbounded(op->a, direction, scope, var_uses);
     auto [b_count, b_new] = strip_unbounded(op->b, direction, scope, var_uses);
     const size_t unbounded_vars = a_count + b_count;
@@ -370,7 +370,7 @@ strip_unbounded_binop(const BinOp *op, const Direction &direction,
 template<typename MinMax>
 std::pair<size_t, Expr>
 strip_unbounded_minmax(const MinMax *op, const Direction &direction,
-                const Scope<Interval> &scope, const std::map<std::string, int> &var_uses) {
+                       const Scope<Interval> &scope, const std::map<std::string, int> &var_uses) {
     auto [a_count, a_new] = strip_unbounded(op->a, direction, scope, var_uses);
 
     if (a_count > 0) {
@@ -435,7 +435,7 @@ strip_unbounded(const Expr &expr, const Direction &direction,
         if (a_new.same_as(op->a) && b_new.same_as(op->b)) {
             return {unbounded_vars, op};
         } else {
-            Expr repl_expr =  Sub::make(std::move(a_new), std::move(b_new));
+            Expr repl_expr = Sub::make(std::move(a_new), std::move(b_new));
             return {unbounded_vars, std::move(repl_expr)};
         }
     } else if (const Add *op = expr.as<Add>()) {
@@ -451,7 +451,7 @@ strip_unbounded(const Expr &expr, const Direction &direction,
             if (a_new.same_as(op->a)) {
                 return {a_count, op};
             } else {
-                Expr repl_expr =  Mul::make(std::move(a_new), op->b);
+                Expr repl_expr = Mul::make(std::move(a_new), op->b);
                 return {a_count, std::move(repl_expr)};
             }
         } else if (is_const(op->a)) {
@@ -462,7 +462,7 @@ strip_unbounded(const Expr &expr, const Direction &direction,
             if (b_new.same_as(op->b)) {
                 return {b_count, op};
             } else {
-                Expr repl_expr =  Mul::make(std::move(b_new), op->a);
+                Expr repl_expr = Mul::make(std::move(b_new), op->a);
                 return {b_count, std::move(repl_expr)};
             }
         }
@@ -477,7 +477,7 @@ strip_unbounded(const Expr &expr, const Direction &direction,
                 if (a_new.same_as(op->a)) {
                     return {a_count, op};
                 } else {
-                    Expr repl_expr =  Div::make(std::move(a_new), op->b);
+                    Expr repl_expr = Div::make(std::move(a_new), op->b);
                     return {a_count, std::move(repl_expr)};
                 }
             }
