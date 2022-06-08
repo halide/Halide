@@ -345,44 +345,76 @@ Expr handle_push_none(const Expr &expr, Direction direction) {
     return expr;
 }
 
+std::pair<size_t, Expr>
+strip_unbounded(const Expr &expr, const Direction &direction,
+                const Scope<Interval> &scope, const std::map<std::string, int> &var_uses);
+
+// Helper method for Add, and Min/Max.
+template<typename BinOp>
+std::pair<size_t, Expr>
+strip_unbounded_binop(const BinOp *op, const Direction &direction,
+                const Scope<Interval> &scope, const std::map<std::string, int> &var_uses) {
+    auto [a_count, a_new] = strip_unbounded(op->a, direction, scope, var_uses);
+    auto [b_count, b_new] = strip_unbounded(op->b, direction, scope, var_uses);
+    const size_t unbounded_vars = a_count + b_count;
+
+    if (a_new.same_as(op->a) && b_new.same_as(op->b)) {
+        return {unbounded_vars, op};
+    } else {
+        Expr repl_expr = BinOp::make(std::move(a_new), std::move(b_new));
+        return {unbounded_vars, std::move(repl_expr)};
+    }
+}
+
+// Helper method for special cases of Min/Max.
+template<typename MinMax>
+std::pair<size_t, Expr>
+strip_unbounded_minmax(const MinMax *op, const Direction &direction,
+                const Scope<Interval> &scope, const std::map<std::string, int> &var_uses) {
+    auto [a_count, a_new] = strip_unbounded(op->a, direction, scope, var_uses);
+
+    if (a_count > 0) {
+        // We can strip a, replace Expr with b.
+        return strip_unbounded(op->b, direction, scope, var_uses);
+    }
+
+    auto [b_count, b_new] = strip_unbounded(op->b, direction, scope, var_uses);
+
+    if (b_count > 0) {
+        // We can strip b, replace Expr with a.
+        return {a_count, std::move(a_new)};
+    }
+
+    // No luck, return the mutated Min/Max with no unbounded vars.
+    if (a_new.same_as(op->a) && b_new.same_as(op->b)) {
+        return {0, op};
+    } else {
+        Expr repl_expr = MinMax::make(std::move(a_new), std::move(b_new));
+        return {0, std::move(repl_expr)};
+    }
+}
+
 /*
- * Visitor for removing terms that are completely unbounded from
+ * Visitor for remove terms that are completely unbounded from
  * a min or a max.
+ * @param expr : Expr to strip terms from.
+ * @param direction : Which direction we are approximating.
+ * @param scope : Used to check if a variable has a constant bound or not.
+ * @param var_uses : Counts of var use, used to strip uncorrelated terms.
+ * @param unbounded_vars : Count of the number of unbounded vars in a given sub expression.
  */
-class StripUnboundedTerms : public IRMutator {
-public:
-    // A count of the number of unbounded vars in a given sub expression.
-    int32_t unbounded_vars = 0;
+std::pair<size_t, Expr>
+strip_unbounded(const Expr &expr, const Direction &direction,
+                const Scope<Interval> &scope, const std::map<std::string, int> &var_uses) {
 
-private:
-    // Which direction we are approximating.
-    Direction direction;
-    // Pointer to scope for checking if a variable is bounded or not.
-    const Scope<Interval> &scope;
-    // The number of times a variable is used. Can be used to remove
-    // non-correlated terms.
-    const std::map<std::string, int> &var_uses;
-
-    void flip_direction() {
-        direction = flip(direction);
-    }
-
-    using IRMutator::visit;
-
-    // Do nothing for constants.
-
-    // Don't recurse on casts, casts can bound the size of an Expr.
-    Expr visit(const Cast *op) override {
-        return op;
-    }
-
-    Expr visit(const Variable *op) override {
+    if (const Variable *op = expr.as<Variable>()) {
         // A variable is unbounded if both are true:
         // 1) appears only once (can't be correlated with other expressions)
         // 2) has no constant bounds (on either side).
         const auto iter = var_uses.find(op->name);
         internal_assert(iter != var_uses.end()) << "Encountered uncounted variable: " << Expr(op) << "\n";
         const int uses = iter->second;
+        size_t unbounded_vars = 0;
         if (uses == 1) {
             if (scope.contains(op->name)) {
                 const Interval interval = scope.get(op->name);
@@ -393,205 +425,121 @@ private:
                 unbounded_vars++;
             }
         }
-        return op;
-    }
-
-    // The default beehavior for Add nodes is fine.
-
-    // Sub nodes must flip the approximation direction for the second argument.
-    Expr visit(const Sub *op) override {
-        Expr a_new = mutate(op->a);
-        flip_direction();
-        Expr b_new = mutate(op->b);
-        flip_direction();
+        return {unbounded_vars, op};
+    } else if (const Sub *op = expr.as<Sub>()) {
+        // Sub nodes must flip the approximation direction for the second argument.
+        auto [a_count, a_new] = strip_unbounded(op->a, direction, scope, var_uses);
+        auto [b_count, b_new] = strip_unbounded(op->b, flip(direction), scope, var_uses);
+        const size_t unbounded_vars = a_count + b_count;
 
         if (a_new.same_as(op->a) && b_new.same_as(op->b)) {
-            return op;
+            return {unbounded_vars, op};
         } else {
-            return Sub::make(std::move(a_new), std::move(b_new));
+            Expr repl_expr =  Sub::make(std::move(a_new), std::move(b_new));
+            return {unbounded_vars, std::move(repl_expr)};
         }
-    }
-
-    // Can only recurse on mul by constants, otherwise it's impossible
-    // to know which direction we should be approximating.
-    Expr visit(const Mul *op) override {
+    } else if (const Add *op = expr.as<Add>()) {
+        return strip_unbounded_binop(op, direction, scope, var_uses);
+    } else if (const Mul *op = expr.as<Mul>()) {
+        // Can only recurse on mul by constants, otherwise it's impossible
+        // to know which direction we should be approximating.
         if (is_const(op->b)) {
-            const bool neg_const = is_negative_const(op->b);
-            if (neg_const) {
-                flip_direction();
-            }
+            Direction new_direction = is_negative_const(op->b) ? flip(direction) : direction;
 
-            Expr a_new = mutate(op->a);
-
-            if (neg_const) {
-                flip_direction();
-            }
+            auto [a_count, a_new] = strip_unbounded(op->a, direction, scope, var_uses);
 
             if (a_new.same_as(op->a)) {
-                return op;
+                return {a_count, op};
             } else {
-                return Mul::make(std::move(a_new), op->b);
+                Expr repl_expr =  Mul::make(std::move(a_new), op->b);
+                return {a_count, std::move(repl_expr)};
             }
         } else if (is_const(op->a)) {
-            const bool neg_const = is_negative_const(op->a);
-            if (neg_const) {
-                flip_direction();
-            }
+            Direction new_direction = is_negative_const(op->a) ? flip(direction) : direction;
 
-            Expr b_new = mutate(op->b);
-
-            if (neg_const) {
-                flip_direction();
-            }
+            auto [b_count, b_new] = strip_unbounded(op->b, direction, scope, var_uses);
 
             if (b_new.same_as(op->b)) {
-                return op;
+                return {b_count, op};
             } else {
-                return Mul::make(std::move(b_new), op->a);
+                Expr repl_expr =  Mul::make(std::move(b_new), op->a);
+                return {b_count, std::move(repl_expr)};
             }
         }
-        return op;
-    }
-
-    // Can only recurse on div by constants, otherwise it's impossible
-    // to know which direction we should be approximating.
-    Expr visit(const Div *op) override {
+        // Fall to base case.
+    } else if (const Div *op = expr.as<Div>()) {
+        // Likewise, can only recurse on div by constants,
+        // otherwise it's impossible to know which direction
+        // we should be approximating.
         if (const IntImm *constant = op->b.as<IntImm>()) {
             if (constant->value > 0) {
-                Expr a = mutate(op->a);
-                if (a.same_as(op->a)) {
-                    return op;
+                auto [a_count, a_new] = strip_unbounded(op->a, direction, scope, var_uses);
+                if (a_new.same_as(op->a)) {
+                    return {a_count, op};
                 } else {
-                    return Div::make(std::move(a), op->b);
+                    Expr repl_expr =  Div::make(std::move(a_new), op->b);
+                    return {a_count, std::move(repl_expr)};
                 }
             }
-            // We could handle the negative case, but that is very uncommon.
+            // We could handle the negative denominator case,
+            // but that is very uncommon.
         }
-        return op;
-    }
-
-    Expr visit(const Min *op) override {
-        // If we are trying to lower bound a Min,
-        // we merge the lower bounds of the two sides.
-        if (direction == Direction::Lower) {
-            return IRMutator::visit(op);
-        }
-
-        // If we are trying to upper bound a Min, then we can take either of the two sides of a Min,
-        // so choose the relevant one if possible.
-        const int32_t original_count = unbounded_vars;
-
-        Expr a_new = mutate(op->a);
-        const int32_t a_count = unbounded_vars;
-
-        // short circuit if a contains at least one unbounded var (meaning a is unbounded)
-        if (a_count > original_count) {
-            // The only unbounded vars are those found in b now.
-            unbounded_vars = original_count;
-            return mutate(op->b);
-        }
-
-        // Otherwise try to get rid of b
-
-        Expr b_new = mutate(op->b);
-        const int32_t b_count = unbounded_vars;
-
-        // Check if b contains at least one unbounded var (meaning b is unbounded)
-        if (b_count > a_count) {
-            // The only unbounded vars are those found in a now.
-            unbounded_vars = a_count;
-            return a_new;
-        }
-
-        // No luck, return the mutated Min
-        if (!a_new.same_as(op->a) || !b_new.same_as(op->b)) {
-            return Min::make(std::move(a_new), std::move(b_new));
-        } else {
-            return op;
-        }
-    }
-
-    Expr visit(const Max *op) override {
-        // If we are trying to upper bound a Max, we merge the upper bounds of the two sides.
-        if (direction == Direction::Upper) {
-            return IRMutator::visit(op);
-        }
-
-        // If we are trying to lower bound a Max, then we can take either of the two sides of a Max,
-        // so choose the relevant one if possible.
-        int32_t original_count = unbounded_vars;
-
-        Expr a_new = mutate(op->a);
-        int32_t a_count = unbounded_vars;
-
-        // short circuit if a contains at least one unbounded var (meaning a is unbounded)
-        if (a_count > original_count) {
-            unbounded_vars = original_count;
-            return mutate(op->b);
-        }
-
-        // Otherwise try to get rid of b
-
-        Expr b_new = mutate(op->b);
-        int32_t b_count = unbounded_vars;
-
-        // Check if b contains at least one unbounded var (meaning b is unbounded)
-        if (b_count > a_count) {
-            unbounded_vars = a_count;
-            return a_new;
-        }
-
-        // No luck, return the mutated Max
-        if (!a_new.same_as(op->a) || !b_new.same_as(op->b)) {
-            return Max::make(std::move(a_new), std::move(b_new));
-        } else {
-            return op;
-        }
-    }
-
-    Expr visit(const Select *op) override {
+        // Fall to base case.
+    } else if (const Select *op = expr.as<Select>()) {
         // Do not visit condition, don't care about those variables.
-        Expr true_value = mutate(op->true_value);
-        Expr false_value = mutate(op->false_value);
-        if (true_value.same_as(op->true_value) &&
-            false_value.same_as(op->false_value)) {
-            return op;
+        auto [t_count, t_new] = strip_unbounded(op->true_value, direction, scope, var_uses);
+        auto [f_count, f_new] = strip_unbounded(op->false_value, direction, scope, var_uses);
+        const size_t unbounded_vars = t_count + f_count;
+        if (t_new.same_as(op->true_value) &&
+            f_new.same_as(op->false_value)) {
+            // No values stripped.
+            return {unbounded_vars, op};
+        } else {
+            Expr repl_expr = Select::make(op->condition, std::move(t_new), std::move(f_new));
+            return {unbounded_vars, std::move(repl_expr)};
         }
-        return Select::make(op->condition, std::move(true_value), std::move(false_value));
+    } else if (const Min *op = expr.as<Min>()) {
+        if (direction == Direction::Lower) {
+            // If we are trying to lower bound a Min,
+            // we merge the lower bounds of the two sides.
+            return strip_unbounded_binop(op, direction, scope, var_uses);
+        } else {
+            // However, if we are trying to upper bound a Min,
+            // then we can take either of the two sides of a Min,
+            // so remove a side with unbounded variables.
+            return strip_unbounded_minmax(op, direction, scope, var_uses);
+        }
+    } else if (const Max *op = expr.as<Max>()) {
+        if (direction == Direction::Upper) {
+            // If we are trying to upper bound a Max,
+            // we merge the upper bounds of the two sides.
+            return strip_unbounded_binop(op, direction, scope, var_uses);
+        } else {
+            // However, if we are trying to lower bound a Max,
+            // then we can take either of the two sides of a Max,
+            // so remove a side with unbounded variables.
+            return strip_unbounded_minmax(op, direction, scope, var_uses);
+        }
+    } else if (const Let *op = expr.as<Let>()) {
+        // We want to recurse through Lets.
+        auto [v_count, v_new] = strip_unbounded(op->value, direction, scope, var_uses);
+        auto [b_count, b_new] = strip_unbounded(op->body, direction, scope, var_uses);
+        // We might want to only count b_count.
+        const size_t unbounded_vars = v_count + b_count;
+
+        if (v_new.same_as(op->value) &&
+            b_new.same_as(op->body)) {
+            return {unbounded_vars, op};
+        } else {
+            Expr repl_expr = Let::make(op->name, std::move(v_new), std::move(b_new));
+            return {unbounded_vars, std::move(repl_expr)};
+        }
     }
 
-    // Do nothing for Loads, Ramps, Broadcasts, Calls, Shuffles, VectorReduce
-    Expr visit(const Load *op) override {
-        return op;
-    }
-
-    Expr visit(const Ramp *op) override {
-        return op;
-    }
-
-    Expr visit(const Broadcast *op) override {
-        return op;
-    }
-
-    Expr visit(const Call *op) override {
-        return op;
-    }
-
-    Expr visit(const Shuffle *op) override {
-        return op;
-    }
-
-    Expr visit(const VectorReduce *op) override {
-        return op;
-    }
-
-public:
-    StripUnboundedTerms(Direction _direction, const Scope<Interval> &_scope,
-                        const std::map<std::string, int> &_var_uses)
-        : direction(_direction), scope(_scope), var_uses(_var_uses) {
-    }
-};
-
+    // Base case: return 0 unbounded variables
+    // because this term should not be removed.
+    return {0, expr};
+}
 /*
  * Visitor for reordering summations and removing like-terms from min/max/select nodes.
  * This is an exact method, no approximations.
@@ -960,11 +908,12 @@ Expr push_rationals(const Expr &expr, const Direction direction) {
 
 std::pair<Expr, bool> remove_unbounded_terms(const Expr &expr, Direction direction, const Scope<Interval> &scope) {
     std::map<std::string, int> var_uses;
-    count_var_uses(expr, var_uses);
     // To strip unbounded/uncorrelated terms, we need to know use counts.
-    StripUnboundedTerms tool(direction, scope, var_uses);
-    Expr mut = tool.mutate(expr);
-    return {mut, tool.unbounded_vars != 0};
+    count_var_uses(expr, var_uses);
+
+    auto [unbounded_vars, mut] = strip_unbounded(expr, direction, scope, var_uses);
+
+    return {mut, unbounded_vars != 0};
 }
 
 Expr reorder_terms(const Expr &expr) {
