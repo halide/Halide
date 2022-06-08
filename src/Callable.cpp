@@ -27,7 +27,11 @@ struct CallableContents {
 
     // Encoded values for efficient runtime type checking;
     // identical to jit_cache.arguments in length.
-    std::vector<Callable::QuickCallCheckInfo> call_check_info;
+    std::vector<Callable::QuickCallCheckInfo> quick_call_check_info;
+
+    // Encoded values for complete runtime type checking, used
+    // only for make_std_function. Lazily created.
+    std::vector<Callable::FullCallCheckInfo> full_call_check_info;
 };
 
 namespace Internal {
@@ -56,47 +60,83 @@ Callable::Callable(const std::string &name,
     contents->saved_jit_handlers = jit_handlers;
     contents->saved_jit_externs = jit_externs;
 
-    contents->call_check_info.reserve(contents->jit_cache.arguments.size());
+    contents->quick_call_check_info.reserve(contents->jit_cache.arguments.size());
     for (const Argument &a : contents->jit_cache.arguments) {
-        const auto cci = (a.name == "__user_context") ?
-                             Callable::make_ucon_qcci() :
-                             (a.is_scalar() ? Callable::make_scalar_qcci(a.type) : Callable::make_buffer_qcci());
-        contents->call_check_info.push_back(cci);
+        const auto qcci = (a.name == "__user_context") ?
+                              Callable::make_ucon_qcci() :
+                              (a.is_scalar() ? Callable::make_scalar_qcci(a.type) : Callable::make_buffer_qcci());
+        contents->quick_call_check_info.push_back(qcci);
     }
+
+    // Don't create full_call_check_info yet.
 }
 
 const std::vector<Argument> &Callable::arguments() const {
     return contents->jit_cache.arguments;
 }
 
-void Callable::check_arg_count_and_types(size_t argc, const QuickCallCheckInfo *actual_qcci, const char *verb) const {
+void Callable::do_check_fail(int bad_idx, size_t argc, const char *verb) const {
     const size_t required_arg_count = contents->jit_cache.arguments.size();
 
     // TODO: this assumes that the caller uses the no-explicit-JITUserContext call;
     // the errors will be misleading otherwise.
     constexpr int hidden_args = 1;
 
-    user_assert(argc == required_arg_count) << "Error " << verb << " '" << contents->name << "':\n"
-                                            << "Expected exactly " << (required_arg_count - hidden_args) << " arguments, "
-                                            << "but saw " << (argc - hidden_args) << ".";
-
-    const QuickCallCheckInfo *expected_qcci = contents->call_check_info.data();
-    for (size_t i = 0; i < argc; i++) {
-        if (actual_qcci[i] != expected_qcci[i]) {
-            const Argument &a = contents->jit_cache.arguments.at(i);
-            const char *kind = a.is_scalar() ? "scalar" : "buffer";
-            // Note that we don't report the "actual type" here, just the expected type...
-            // saving the actual type leads to more code bloat than we can justify
-            // for this. (Consider adding as a debug-only enhancement?)
-            user_error << "Error " << verb << " '" << contents->name << "':\n"
-                       << "Argument " << (i - hidden_args + 1)
-                       << " of " << (required_arg_count - hidden_args) << " ('" << a.name << "') was expected to be a "
-                       << kind << " of type '" << a.type << "'.\n";
-        }
+    if (bad_idx < 0) {
+        user_error << "Error " << verb << " '" << contents->name << "':\n"
+                   << "Expected exactly " << (required_arg_count - hidden_args) << " arguments, "
+                   << "but saw " << (argc - hidden_args) << ".";
+    } else {
+        const Argument &a = contents->jit_cache.arguments.at(bad_idx);
+        const char *kind = a.is_scalar() ? "scalar" : "buffer";
+        // Note that we don't report the "actual type" here, just the expected type...
+        // saving the actual type leads to more code bloat than we can justify
+        // for this. (Consider adding as a debug-only enhancement?)
+        user_error << "Error " << verb << " '" << contents->name << "':\n"
+                   << "Argument " << (bad_idx - hidden_args + 1)
+                   << " of " << (required_arg_count - hidden_args) << " ('" << a.name << "') was expected to be a "
+                   << kind << " of type '" << a.type << "' and dimension " << (int)a.dimensions << ".\n";
     }
 }
 
-// Entry point used from the std::function<> variant; we can skip the check_arg_count_and_types() stuff
+void Callable::check_qcci(size_t argc, const QuickCallCheckInfo *actual_qcci) const {
+    const size_t required_arg_count = contents->quick_call_check_info.size();
+    if (argc == required_arg_count) {
+        const QuickCallCheckInfo *expected_qcci = contents->quick_call_check_info.data();
+        for (size_t i = 0; i < argc; i++) {
+            if (actual_qcci[i] != expected_qcci[i]) {
+                do_check_fail(i, argc, "calling");
+            }
+        }
+    } else {
+        do_check_fail(-1, argc, "calling");
+    }
+}
+
+void Callable::check_fcci(size_t argc, const FullCallCheckInfo *actual_fcci) const {
+    // Lazily create full_call_check_info upon the first call to make_std_function().
+    if (contents->full_call_check_info.empty()) {
+        contents->full_call_check_info.reserve(contents->jit_cache.arguments.size());
+        for (const Argument &a : contents->jit_cache.arguments) {
+            const auto fcci = a.is_scalar() ? Callable::make_scalar_fcci(a.type) : Callable::make_buffer_fcci(a.type, a.dimensions);
+            contents->full_call_check_info.push_back(fcci);
+        }
+    }
+
+    const size_t required_arg_count = contents->full_call_check_info.size();
+    if (argc == required_arg_count) {
+        const FullCallCheckInfo *expected_fcci = contents->full_call_check_info.data();
+        for (size_t i = 0; i < argc; i++) {
+            if (!Callable::is_compatible_fcci(actual_fcci[i], expected_fcci[i])) {
+                do_check_fail(i, argc, "defining");
+            }
+        }
+    } else {
+        do_check_fail(-1, argc, "defining");
+    }
+}
+
+// Entry point used from the std::function<> variant; we can skip the check_qcci() stuff
 // since we verified the signature when we created the std::function, so incorrect types or counts
 // should be impossible.
 /*static*/ int Callable::call_argv_fast(size_t argc, const void *const *argv) const {
@@ -124,14 +164,14 @@ void Callable::check_arg_count_and_types(size_t argc, const QuickCallCheckInfo *
     // and if not, the caller must handle it.
     //
     // No: jit_call_context.finalize(exit_status);
-    jit_call_context.finalize(exit_status);
+    // jit_call_context.finalize(exit_status);
 
     return exit_status;
 }
 
 int Callable::call_argv_checked(size_t argc, const void *const *argv, const QuickCallCheckInfo *actual_qcci) const {
     // It's *essential* we call this for safety.
-    check_arg_count_and_types(argc, actual_qcci, "calling");
+    check_qcci(argc, actual_qcci);
     return call_argv_fast(argc, argv);
 }
 

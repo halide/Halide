@@ -25,16 +25,54 @@ class PyCallable;
 namespace Internal {
 
 template<typename>
-struct is_halide_buffer : std::false_type {};
+struct IsHalideBuffer : std::false_type {};
 
 template<typename T, int Dims>
-struct is_halide_buffer<::Halide::Buffer<T, Dims>> : std::true_type {};
+struct IsHalideBuffer<::Halide::Buffer<T, Dims>> : std::true_type {};
 
 template<typename T, int Dims>
-struct is_halide_buffer<::Halide::Runtime::Buffer<T, Dims>> : std::true_type {};
+struct IsHalideBuffer<::Halide::Runtime::Buffer<T, Dims>> : std::true_type {};
 
 template<>
-struct is_halide_buffer<halide_buffer_t *> : std::true_type {};
+struct IsHalideBuffer<halide_buffer_t *> : std::true_type {};
+
+template<typename>
+struct HalideBufferStaticTypeAndDims {
+    static constexpr halide_type_t type() {
+        return halide_type_t();
+    }
+    static constexpr int dims() {
+        return -1;
+    }
+};
+
+template<typename T, int Dims>
+struct HalideBufferStaticTypeAndDims<::Halide::Buffer<T, Dims>> {
+    static constexpr halide_type_t type() {
+        if constexpr (std::is_void_v<T>) {
+            return halide_type_t();
+        } else {
+            return halide_type_of<T>();
+        }
+    }
+    static constexpr int dims() {
+        return Dims;
+    }
+};
+
+template<typename T, int Dims>
+struct HalideBufferStaticTypeAndDims<::Halide::Runtime::Buffer<T, Dims>> {
+    static constexpr halide_type_t type() {
+        if constexpr (std::is_void_v<T>) {
+            return halide_type_t();
+        } else {
+            return halide_type_of<T>();
+        }
+    }
+    static constexpr int dims() {
+        return Dims;
+    }
+};
 
 }  // namespace Internal
 
@@ -79,7 +117,7 @@ private:
         using T0 = typename std::remove_const<typename std::remove_reference<T>::type>::type;
         if constexpr (std::is_same<T0, JITUserContext *>::value) {
             return make_ucon_qcci();
-        } else if constexpr (Internal::is_halide_buffer<T0>::value) {
+        } else if constexpr (Internal::IsHalideBuffer<T0>::value) {
             // Don't bother checking type-and-dimensions here (the callee will do that)
             return make_buffer_qcci();
         } else if constexpr (std::is_arithmetic<T0>::value || std::is_pointer<T0>::value) {
@@ -95,6 +133,73 @@ private:
     template<typename... Args>
     static constexpr std::array<QuickCallCheckInfo, sizeof...(Args)> make_qcci_array() {
         return std::array<QuickCallCheckInfo, sizeof...(Args)>{make_qcci<Args>()...};
+    }
+
+    // ---------------------------------
+
+    // This value is constructed so we can do a complete type-and-dim check
+    // of Buffers, and is used for the make_std_function() method, to ensure
+    // that if we specify static type-and-dims for Buffers, the ones we specify
+    // actually match the underlying code. We take horrible liberties with halide_type_t
+    // to make this happen, but that's ok since this never escapes:
+    using FullCallCheckInfo = halide_type_t;
+
+    static constexpr FullCallCheckInfo _make_fcci(halide_type_t type, int dims, bool is_buffer) {
+        return type.with_lanes(((uint16_t)dims << 1) | (uint16_t)(is_buffer ? 1 : 0));
+    }
+
+    static constexpr FullCallCheckInfo make_scalar_fcci(halide_type_t t) {
+        return _make_fcci(t, 0, false);
+    }
+
+    static constexpr FullCallCheckInfo make_buffer_fcci(halide_type_t t, int dims) {
+        return _make_fcci(t, dims, true);
+    }
+
+    static bool is_compatible_fcci(FullCallCheckInfo actual, FullCallCheckInfo expected) {
+        if (actual == expected) {
+            return true;  // my, that was easy
+        }
+
+        // Might still be compatible
+        const bool a_is_buffer = (actual.lanes & 1) != 0;
+        const int a_dims = (((int16_t)actual.lanes) >> 1);
+        const halide_type_t a_type = actual.with_lanes(0);
+
+        const bool e_is_buffer = (expected.lanes & 1) != 0;
+        const int e_dims = (((int16_t)expected.lanes) >> 1);
+        const halide_type_t e_type = expected.with_lanes(0);
+
+        const bool types_match = (a_type == halide_type_t()) ||
+                                 (e_type == halide_type_t()) ||
+                                 (a_type == e_type);
+
+        const bool dims_match = a_dims < 0 ||
+                                e_dims < 0 ||
+                                a_dims == e_dims;
+
+        return a_is_buffer == e_is_buffer && types_match && dims_match;
+    }
+
+    template<typename T>
+    static constexpr FullCallCheckInfo make_fcci() {
+        using T0 = typename std::remove_const<typename std::remove_reference<T>::type>::type;
+        if constexpr (Internal::IsHalideBuffer<T0>::value) {
+            using TypeAndDims = Internal::HalideBufferStaticTypeAndDims<T0>;
+            return make_buffer_fcci(TypeAndDims::type(), TypeAndDims::dims());
+        } else if constexpr (std::is_arithmetic<T0>::value || std::is_pointer<T0>::value) {
+            return make_scalar_fcci(halide_type_of<T0>());
+        } else {
+            // static_assert(false) will fail all the time, even inside constexpr,
+            // but gating on sizeof(T) is a nice trick that ensures we will always
+            // fail here (since no T is ever size 0).
+            static_assert(!sizeof(T), "Illegal type passed to Callable.");
+        }
+    }
+
+    template<typename... Args>
+    static constexpr std::array<FullCallCheckInfo, sizeof...(Args)> make_fcci_array() {
+        return std::array<FullCallCheckInfo, sizeof...(Args)>{make_fcci<Args>()...};
     }
 
     // ---------------------------------
@@ -167,7 +272,9 @@ private:
     int call_argv_checked(size_t argc, const void *const *argv, const QuickCallCheckInfo *actual_cci) const;
     int call_argv_fast(size_t argc, const void *const *argv) const;
 
-    void check_arg_count_and_types(size_t argc, const QuickCallCheckInfo *actual_cci, const char *verb) const;
+    void do_check_fail(int bad_idx, size_t argc, const char *verb) const;
+    void check_qcci(size_t argc, const QuickCallCheckInfo *actual_cci) const;
+    void check_fcci(size_t argc, const FullCallCheckInfo *actual_cci) const;
 
     template<typename... Args>
     int call(JITUserContext *context, Args &&...args) const {
@@ -214,18 +321,13 @@ public:
      * TODO: it's possible that we could infer the correct signatures in some cases,
      * and only fail for the ambiguous cases, but that would require a lot more template-fu
      * here and elsewhere. I think this is good enough for now.
-     *
-     * TODO: for plain-old-Callable, we don't bother checking the static type-and-dims of Buffer<>
-     * values passed in (we defer to the runtime to handle that), but for this we probably want to
-     * do that check -- currently we allow any sort of Buffer<> as an argument for a buffer slot,
-     * so you can specify something that is guaranteed to fail at runtime. Ouch.
      */
     template<typename First, typename... Rest>
     std::function<int(First, Rest...)>
     make_std_function() const {
         if constexpr (std::is_same_v<First, JITUserContext *>) {
-            constexpr auto actual_arg_types = make_qcci_array<First, Rest...>();
-            check_arg_count_and_types(actual_arg_types.size(), actual_arg_types.data(), "defining");
+            constexpr auto actual_arg_types = make_fcci_array<First, Rest...>();
+            check_fcci(actual_arg_types.size(), actual_arg_types.data());
 
             // Capture *this to ensure that the CallableContents stay valid as long as the std::function does
             return [*this](auto &&first, auto &&...rest) -> int {
@@ -235,8 +337,8 @@ public:
             };
         } else {
             // Explicitly prepend JITUserContext* as first actual-arg-type.
-            constexpr auto actual_arg_types = make_qcci_array<JITUserContext *, First, Rest...>();
-            check_arg_count_and_types(actual_arg_types.size(), actual_arg_types.data(), "defining");
+            constexpr auto actual_arg_types = make_fcci_array<JITUserContext *, First, Rest...>();
+            check_fcci(actual_arg_types.size(), actual_arg_types.data());
 
             // Capture *this to ensure that the CallableContents stay valid as long as the std::function does
             return [*this](auto &&first, auto &&...rest) -> int {

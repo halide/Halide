@@ -32,6 +32,8 @@ tests(GROUPS error
       callable_bad_arguments.cpp
       callable_bad_values_passed.cpp
       callable_typed_bad_arguments.cpp
+      callable_typed_bad_arguments_buffer_dims.cpp
+      callable_typed_bad_arguments_buffer_type.cpp
       clamp_out_of_range.cpp
       compute_with_crossing_edges1.cpp
       compute_with_crossing_edges2.cpp
