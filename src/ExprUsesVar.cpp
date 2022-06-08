@@ -30,7 +30,7 @@ public:
     }
 };
 
-} // namespace
+}  // namespace
 
 void count_var_uses(const Stmt &s, std::map<std::string, int> &var_uses) {
     CountVarUses counter(var_uses);

@@ -1,5 +1,5 @@
-#include "Simplify_Internal.h"
 #include "ExprUsesVar.h"
+#include "Simplify_Internal.h"
 #include "Substitute.h"
 
 namespace Halide {
