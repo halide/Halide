@@ -456,6 +456,7 @@ SOURCE_FILES = \
   EmulateFloat16Math.cpp \
   Error.cpp \
   Expr.cpp \
+  ExprUsesVar.cpp \
   ExtractTileOperations.cpp \
   FastIntegerDivide.cpp \
   FindCalls.cpp \
