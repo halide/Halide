@@ -131,6 +131,7 @@ void CodeGen_WebGPU_Dev::init_module() {
     // Write out the Halide math functions.
     src_stream
         << "fn float_from_bits(x : u32) -> f32 {return bitcast<f32>(x);}\n"
+        << "fn nan_f32() -> f32 {return bitcast<f32>(0x7fc00000);}\n"
         << "fn acos_f32(x : f32) -> f32 {return acos(x);}\n"
         << "fn acosh_f32(x : f32) -> f32 {return log(x + sqrt(x*x - 1.0));}\n"
         << "fn asin_f32(x : f32) -> f32 {return asin(x);}\n"
@@ -146,7 +147,23 @@ void CodeGen_WebGPU_Dev::init_module() {
         << "fn fast_inverse_f32(x : f32) -> f32 {return 1.0 / x;}\n"
         << "fn fast_inverse_sqrt_f32(x : f32) -> f32 {return inverseSqrt(x);}\n"
         << "fn log_f32(x : f32) -> f32 {return log(x);}\n"
-        << "fn pow_f32(x : f32, y : f32) -> f32 {return pow(x, y);}\n"
+        // pow() in WGSL has the same semantics as C if x > 0.
+        // Otherwise, we need to emulate the behavior.
+        << "fn pow_f32(x : f32, y : f32) -> f32 { \n"
+        << "  if (x > 0.0) {                  \n"
+        << "    return pow(x, y);             \n"
+        << "  } else if (y == 0.0) {          \n"
+        << "    return 1.0;                   \n"
+        << "  } else if (trunc(y) == y) {     \n"
+        << "    if ((y % 2) == 0) {           \n"
+        << "      return pow(abs(x), y);      \n"
+        << "    } else {                      \n"
+        << "      return -pow(abs(x), y);     \n"
+        << "    }                             \n"
+        << "  } else {                        \n"
+        << "    return nan_f32();             \n"
+        << "  }                               \n"
+        << "}                                 \n"
         << "fn round_f32(x : f32) -> f32 {return round(x);}\n"
         << "fn sin_f32(x : f32) -> f32 {return sin(x);}\n"
         << "fn sinh_f32(x : f32) -> f32 {return sinh(x);}\n"
