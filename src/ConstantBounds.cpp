@@ -446,7 +446,7 @@ strip_unbounded(const Expr &expr, const Direction &direction,
         if (is_const(op->b)) {
             Direction new_direction = is_negative_const(op->b) ? flip(direction) : direction;
 
-            auto [a_count, a_new] = strip_unbounded(op->a, direction, scope, var_uses);
+            auto [a_count, a_new] = strip_unbounded(op->a, new_direction, scope, var_uses);
 
             if (a_new.same_as(op->a)) {
                 return {a_count, op};
@@ -457,7 +457,7 @@ strip_unbounded(const Expr &expr, const Direction &direction,
         } else if (is_const(op->a)) {
             Direction new_direction = is_negative_const(op->a) ? flip(direction) : direction;
 
-            auto [b_count, b_new] = strip_unbounded(op->b, direction, scope, var_uses);
+            auto [b_count, b_new] = strip_unbounded(op->b, new_direction, scope, var_uses);
 
             if (b_new.same_as(op->b)) {
                 return {b_count, op};
