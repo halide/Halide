@@ -46,8 +46,15 @@ llvm::Type *llvm_type_of(LLVMContext *c, Halide::Type t,
             if (scalable) {
                 lanes /= effective_vscale;
             } else {
-                debug(0) << "Failed to make scalable with bits " << t.bits() << " lanes " << t.lanes()
-                         << " effective_vscale " << effective_vscale << " total_bits " << total_bits << "\n";
+                // TODO(zvookin): This error indicates that the requested number of vector lanes
+                // is not expressible exactly via vscale. This will be fairly unusual unless
+                // non-power of two, or very short, vector sizes are used in a schedule.
+                // It is made an error, instead of passing the fixed non-vscale vector type to LLVM,
+                // to catch the case early while developing vscale backends.
+                // We may need to change this to allow the case so if one hits this error in situation
+                // where it should pass through a fixed width vector type, please discuss.
+                internal_error << "Failed to make vscale vector type with bits " << t.bits() << " lanes " << t.lanes()
+                               << " effective_vscale " << effective_vscale << " total_bits " << total_bits << "\n";
             }
         }
         return get_vector_type(element_type, lanes, scalable);
