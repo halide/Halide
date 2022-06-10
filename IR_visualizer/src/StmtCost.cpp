@@ -30,6 +30,9 @@ private:
     // create variable that will hold mapping of stmt to cost
     std::unordered_map<const IRNode *, StmtCost> stmt_cost;
 
+    // stores current loop depth level
+    int current_loop_depth = 0;
+
     // gets cost from `stmt_cost` map
     int get_cost(const IRNode *node) const {
         auto it = stmt_cost.find(node);
@@ -40,13 +43,14 @@ private:
         return it->second.cost;
     }
 
-    // sets cost in `stmt_cost` map
+    // sets cost & depth in `stmt_cost` map
     void set_cost(const IRNode *node, int cost) {
         auto it = stmt_cost.find(node);
         if (it == stmt_cost.end()) {
-            stmt_cost.emplace(node, StmtCost{cost, 0});
+            stmt_cost.emplace(node, StmtCost{cost, current_loop_depth});
         } else {
             it->second.cost = cost;
+            it->second.depth = current_loop_depth;
         }
     }
 
@@ -60,31 +64,9 @@ private:
         return it->second.depth;
     }
 
-    // sets depth in `stmt_cost` map
-    void set_depth(const IRNode *node, int depth) {
-        auto it = stmt_cost.find(node);
-        if (it == stmt_cost.end()) {
-            // should never be setting depth for a stmt that doesn't exist
-            assert(false);
-        } else {
-            it->second.depth = depth;
-        }
-    }
-
-    // increment depth in `stmt_cost` map by 1
-    void increment_depth(const IRNode *node) {
-        auto it = stmt_cost.find(node);
-        if (it == stmt_cost.end()) {
-            // should never be setting depth for a stmt that doesn't exist
-            assert(false);
-        } else {
-            it->second.depth += 1;
-        }
-    }
-
 public:
     // calculates the total cost of a stmt
-    int calculate_total_cost(const IRNode *node) const {
+    int get_total_cost(const IRNode *node) const {
         auto it = stmt_cost.find(node);
         if (it == stmt_cost.end()) {
             assert(false);
@@ -245,7 +227,7 @@ public:
     }
 
     void visit(const Load *op) override {
-        throw std::runtime_error("`Load` not supported");
+        assert(false);
         // op->predicate.accept(this);
         // op->index.accept(this);
         // int tempVal = get_cost(op->predicate.get()) + get_cost(op->index.get());
@@ -253,7 +235,7 @@ public:
     }
 
     void visit(const Ramp *op) override {
-        throw std::runtime_error("`Ramp` not supported");
+        assert(false);
         // op->base.accept(this);
         // op->stride.accept(this);
         // int tempVal = get_cost(op->base.get()) + get_cost(op->stride.get());
@@ -261,7 +243,7 @@ public:
     }
 
     void visit(const Broadcast *op) override {
-        throw std::runtime_error("`Broadcast` not supported");
+        assert(false);
         // op->value.accept(this);
         // int tempVal = get_cost(op->value.get());
         // set_cost(op, 1 + tempVal);
@@ -317,27 +299,30 @@ public:
     }
 
     void visit(const For *op) override {
+        current_loop_depth += 1;
+
         op->min.accept(this);
         op->extent.accept(this);
         op->body.accept(this);
+
+        current_loop_depth -= 1;
+
         int bodyCost = get_cost(op->body.get());
 
-        // FIXME: how to take into account the different types of for loops?
-        if (op->for_type == ForType::Parallel) {
-            throw std::runtime_error("`For - parallel` not supported");
-        }
+        // TODO: how to take into account the different types of for loops?
         // if (op->for_type == ForType::Serial) {
 
         // }
+        if (op->for_type == ForType::Parallel) {
+            assert(false);
+        }
         if (op->for_type == ForType::Unrolled) {
-            throw std::runtime_error("`For - unrolled` not supported");
+            assert(false);
         }
         if (op->for_type == ForType::Vectorized) {
-            throw std::runtime_error("`For - vectorized` not supported");
+            assert(false);
         }
-
-        // TODO: should we recurse into the body to set the depth?
-        increment_depth(op->body.get());
+        set_cost(op, 1 + bodyCost);
     }
 
     void visit(const Acquire *op) override {
@@ -357,7 +342,7 @@ public:
     }
 
     void visit(const Provide *op) override {
-        throw std::runtime_error("`Provide` not supported");
+        assert(false);
         // op->predicate.accept(this);
         // int tempVal = get_cost(op->predicate.get());
         // for (const auto &value : op->values) {
@@ -372,7 +357,7 @@ public:
     }
 
     void visit(const Allocate *op) override {
-        throw std::runtime_error("`Allocate` not supported");
+        assert(false);
         // int tempVal = 0;
         // for (const auto &extent : op->extents) {
         //     extent.accept(this);
@@ -398,7 +383,7 @@ public:
     }
 
     void visit(const Realize *op) override {
-        throw std::runtime_error("`Realize` not supported");
+        assert(false);
         // TODO: is this the same logic as For, where I add the depth?
         // int tempVal = 0;
         // for (const auto &bound : op->bounds) {
@@ -413,7 +398,7 @@ public:
     }
 
     void visit(const Prefetch *op) override {
-        throw std::runtime_error("`Prefetch` not supported");
+        assert(false);
         // TODO: similar question as one above
         // int tempVal = 0;
         // for (const auto &bound : op->bounds) {
@@ -428,7 +413,7 @@ public:
     }
 
     void visit(const Block *op) override {
-        throw std::runtime_error("`Block` not supported");
+        assert(false);
         // int tempVal = 0;
         // op->first.accept(this);
         // tempVal += get_cost(op->first.get());
@@ -440,7 +425,7 @@ public:
     }
 
     void visit(const Fork *op) override {
-        throw std::runtime_error("`Fork` not supported");
+        assert(false);
         // int tempVal = 0;
         // op->first.accept(this);
         // tempVal += get_cost(op->first.get());
@@ -471,7 +456,7 @@ public:
     }
 
     void visit(const Shuffle *op) override {
-        throw std::runtime_error("`Shuffle` not supported");
+        assert(false);
         // int tempVal = 0;
         // for (const Expr &i : op->vectors) {
         //     i.accept(this);
@@ -481,14 +466,14 @@ public:
     }
 
     void visit(const VectorReduce *op) override {
-        throw std::runtime_error("`VectorReduce` not supported");
+        assert(false);
         // op->value.accept(this);
         // int tempVal = get_cost(op->value.get());
         // set_cost(op, tempVal);
     }
 
     void visit(const Atomic *op) override {
-        throw std::runtime_error("`Atomic` not supported");
+        assert(false);
         // op->body.accept(this);
         // int tempVal = get_cost(op->body.get());
         // set_cost(op, tempVal);
