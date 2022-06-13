@@ -167,6 +167,7 @@ Target calculate_host_target() {
 
     bool use_64_bits = (sizeof(size_t) == 8);
     int bits = use_64_bits ? 64 : 32;
+    int vector_bits = 0;
     Target::Processor processor = Target::Processor::ProcessorGeneric;
     std::vector<Target::Feature> initial_features;
 
@@ -296,7 +297,7 @@ Target calculate_host_target() {
 #endif
 #endif
 
-    return {os, arch, bits, processor, initial_features};
+    return {os, arch, bits, processor, initial_features, vector_bits};
 }
 
 bool is_using_hexagon(const Target &t) {
@@ -539,6 +540,18 @@ bool lookup_feature(const std::string &tok, Target::Feature &result) {
     return false;
 }
 
+int parse_vector_bits(const std::string &tok) {
+    if (tok.find("vector_bits_") == 0) {
+        std::string num = tok.substr(sizeof("vector_bits_") - 1, std::string::npos);
+        size_t end_index;
+        int parsed = std::stoi(num, &end_index);
+        if (end_index == num.size()) {
+            return parsed;
+        }
+    }
+    return -1;
+}
+
 }  // End anonymous namespace
 
 Target get_target_from_environment() {
@@ -601,6 +614,7 @@ bool merge_string(Target &t, const std::string &target) {
     for (size_t i = 0; i < tokens.size(); i++) {
         const string &tok = tokens[i];
         Target::Feature feature;
+        int vector_bits;
 
         if (tok == "host") {
             if (i > 0) {
@@ -636,6 +650,8 @@ bool merge_string(Target &t, const std::string &target) {
         } else if (tok == "trace_all") {
             t.set_features({Target::TraceLoads, Target::TraceStores, Target::TraceRealizations});
             features_specified = true;
+        } else if ((vector_bits = parse_vector_bits(tok)) >= 0) {
+            t.vector_bits = vector_bits;
         } else {
             return false;
         }
@@ -801,6 +817,10 @@ std::string Target::to_string() const {
     if (has_feature(Target::TraceLoads) && has_feature(Target::TraceStores) && has_feature(Target::TraceRealizations)) {
         result = Internal::replace_all(result, "trace_loads-trace_realizations-trace_stores", "trace_all");
     }
+    if (vector_bits != 0) {
+        result += "-vector_bits_" + std::to_string(vector_bits);
+    }
+
     return result;
 }
 
@@ -1061,7 +1081,15 @@ int Target::natural_vector_size(const Halide::Type &t) const {
     const bool is_integer = t.is_int() || t.is_uint();
     const int data_size = t.bytes();
 
-    if (arch == Target::Hexagon) {
+    if (arch == Target::ARM) {
+        if (vector_bits != 0 &&
+            (has_feature(Halide::Target::SVE2) ||
+             (t.is_float() && has_feature(Halide::Target::SVE)))) {
+            return vector_bits / (data_size * 8);
+        } else {
+            return 16 / data_size;
+        }
+    } else if (arch == Target::Hexagon) {
         if (is_integer) {
             if (has_feature(Halide::Target::HVX)) {
                 return 128 / data_size;
@@ -1101,6 +1129,13 @@ int Target::natural_vector_size(const Halide::Type &t) const {
             return 16 / data_size;
         } else {
             // No vectors, sorry.
+            return 1;
+        }
+    } else if (arch == Target::RISCV) {
+        if (vector_bits != 0 &&
+            has_feature(Halide::Target::RVV)) {
+            return vector_bits / (data_size * 8);
+        } else {
             return 1;
         }
     } else {
@@ -1309,6 +1344,12 @@ void target_test() {
                 << "but " << test[2] << " was expected.";
         }
     }
+
+    internal_assert(Target().vector_bits == 0) << "Default Target vector_bits not 0.\n";
+    internal_assert(Target("arm-64-linux-sve2-vector_bits_512").vector_bits == 512) << "Vector bits not parsed correctly.\n";
+    Target with_vector_bits(Target::Linux, Target::ARM, 64, Target::ProcessorGeneric, {Target::SVE}, 512);
+    internal_assert(with_vector_bits.vector_bits == 512) << "Vector bits not populated in constructor.\n";
+    internal_assert(Target(with_vector_bits.to_string()).vector_bits == 512) << "Vector bits not round tripped properly.\n";
 
     std::cout << "Target test passed" << std::endl;
 }

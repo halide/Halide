@@ -6,13 +6,7 @@
 
 using namespace Halide::Runtime;
 
-#ifdef _WIN32
-#define DLLEXPORT __declspec(dllexport)
-#else
-#define DLLEXPORT
-#endif
-
-extern "C" DLLEXPORT int extern_stage(halide_buffer_t *input, int addend, halide_buffer_t *output) {
+extern "C" HALIDE_EXPORT_SYMBOL int extern_stage(halide_buffer_t *input, int addend, halide_buffer_t *output) {
     // Note the final output buffer argument is unused.
     if (input->is_bounds_query()) {
         for (int d = 0; d < 2; d++) {

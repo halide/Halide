@@ -1,14 +1,8 @@
 #include "Halide.h"
 #include <stdio.h>
 
-#ifdef _WIN32
-#define DLLEXPORT __declspec(dllexport)
-#else
-#define DLLEXPORT
-#endif
-
 // out(x) = in(x) * x;
-extern "C" DLLEXPORT int extern_stage(halide_buffer_t *in, halide_buffer_t *out) {
+extern "C" HALIDE_EXPORT_SYMBOL int extern_stage(halide_buffer_t *in, halide_buffer_t *out) {
     assert(in->type == halide_type_of<int>());
     assert(out->type == halide_type_of<int>());
     if (in->host == nullptr || out->host == nullptr) {

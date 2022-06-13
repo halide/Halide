@@ -132,7 +132,7 @@ Expr Simplify::visit(const Call *op, ExprInfo *bounds) {
         // If we know the sign of this shift, change it to an unsigned shift.
         if (b_info.min_defined && b_info.min >= 0) {
             b = mutate(cast(b.type().with_code(halide_type_uint), b), nullptr);
-        } else if (b_info.max_defined && b_info.max <= 0) {
+        } else if (b.type().is_int() && b_info.max_defined && b_info.max <= 0) {
             result_op = Call::get_intrinsic_name(op->is_intrinsic(Call::shift_right) ? Call::shift_left : Call::shift_right);
             b = mutate(cast(b.type().with_code(halide_type_uint), -b), nullptr);
         }
@@ -165,12 +165,14 @@ Expr Simplify::visit(const Call *op, ExprInfo *bounds) {
             }
         }
 
-        // Rewrite shifts with negated RHSes as shifts of the other direction.
-        if (const Sub *sub = b.as<Sub>()) {
-            if (is_const_zero(sub->a)) {
-                result_op = Call::get_intrinsic_name(op->is_intrinsic(Call::shift_right) ? Call::shift_left : Call::shift_right);
-                b = sub->b;
-                return mutate(Call::make(op->type, result_op, {a, b}, Call::PureIntrinsic), bounds);
+        // Rewrite shifts with signed negated RHSes as shifts of the other direction.
+        if (b.type().is_int()) {
+            if (const Sub *sub = b.as<Sub>()) {
+                if (is_const_zero(sub->a)) {
+                    result_op = Call::get_intrinsic_name(op->is_intrinsic(Call::shift_right) ? Call::shift_left : Call::shift_right);
+                    b = sub->b;
+                    return mutate(Call::make(op->type, result_op, {a, b}, Call::PureIntrinsic), bounds);
+                }
             }
         }
 

@@ -1,7 +1,8 @@
 #include "Halide.h"
+#include "test_sharding.h"
+
 #include <algorithm>
 #include <cmath>
-#include <future>
 #include <math.h>
 #include <random>
 #include <stdio.h>
@@ -713,32 +714,42 @@ bool test(int lanes, int seed) {
 }
 
 int main(int argc, char **argv) {
-
     int seed = argc > 1 ? atoi(argv[1]) : time(nullptr);
     std::cout << "vector_math test seed: " << seed << std::endl;
 
+    struct Task {
+        std::function<bool(int, int)> fn;
+        int lanes;
+        int seed;
+    };
+
     // Only native vector widths - llvm doesn't handle others well
-    Halide::Internal::ThreadPool<bool> pool;
-    std::vector<std::future<bool>> futures;
-    futures.push_back(pool.async(test<float>, 4, seed));
-    futures.push_back(pool.async(test<float>, 8, seed));
-    futures.push_back(pool.async(test<double>, 2, seed));
-    futures.push_back(pool.async(test<uint8_t>, 16, seed));
-    futures.push_back(pool.async(test<int8_t>, 16, seed));
-    futures.push_back(pool.async(test<uint16_t>, 8, seed));
-    futures.push_back(pool.async(test<int16_t>, 8, seed));
-    futures.push_back(pool.async(test<uint32_t>, 4, seed));
-    futures.push_back(pool.async(test<int32_t>, 4, seed));
-    futures.push_back(pool.async(test<bfloat16_t>, 8, seed));
-    futures.push_back(pool.async(test<bfloat16_t>, 16, seed));
-    futures.push_back(pool.async(test<float16_t>, 8, seed));
-    futures.push_back(pool.async(test<float16_t>, 16, seed));
-    bool ok = true;
-    for (auto &f : futures) {
-        ok &= f.get();
+    std::vector<Task> tasks = {
+        {test<float>, 4, seed},
+        {test<float>, 8, seed},
+        {test<double>, 2, seed},
+        {test<uint8_t>, 16, seed},
+        {test<int8_t>, 16, seed},
+        {test<uint16_t>, 8, seed},
+        {test<int16_t>, 8, seed},
+        {test<uint32_t>, 4, seed},
+        {test<int32_t>, 4, seed},
+        {test<bfloat16_t>, 8, seed},
+        {test<bfloat16_t>, 16, seed},
+        {test<float16_t>, 8, seed},
+        {test<float16_t>, 16, seed},
+    };
+
+    using Sharder = Halide::Internal::Test::Sharder;
+    Sharder sharder;
+    for (size_t t = 0; t < tasks.size(); t++) {
+        if (!sharder.should_run(t)) continue;
+        const auto &task = tasks.at(t);
+        if (!task.fn(task.lanes, task.seed)) {
+            exit(-1);
+        }
     }
 
-    if (!ok) return -1;
     printf("Success!\n");
     return 0;
 }

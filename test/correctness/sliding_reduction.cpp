@@ -3,14 +3,8 @@
 
 using namespace Halide;
 
-#ifdef _WIN32
-#define DLLEXPORT __declspec(dllexport)
-#else
-#define DLLEXPORT
-#endif
-
 int counter = 0;
-extern "C" DLLEXPORT int call_count(int x) {
+extern "C" HALIDE_EXPORT_SYMBOL int call_count(int x) {
     counter++;
     assert(counter > 0);
     return 99;
