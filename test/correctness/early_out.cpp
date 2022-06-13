@@ -43,5 +43,7 @@ int main(int argc, char **argv) {
 
     output.compile_jit();
 
+    printf("Success!\n");
+
     return 0;
 }
