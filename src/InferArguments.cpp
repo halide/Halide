@@ -184,7 +184,7 @@ private:
         }
 
         // It also misses wrappers
-        for (auto p : func.wrappers()) {
+        for (const auto &p : func.wrappers()) {
             Function(p.second).accept(this);
         }
     }
