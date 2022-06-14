@@ -1194,7 +1194,7 @@ HALIDE_ALWAYS_INLINE float32x64_t halide_xtensa_interleave_f32(const float32x16_
                                 IVP_SELN_2XF32I(cd1, ab1, IVP_SELI_32B_INTERLEAVE_2_HI));
 }
 
-HALIDE_ALWAYS_INLINE uint8x64_t halide_xtensa_extract_0_off_3_u8(const uint8x64_t& a0, const uint8x64_t& a1, const uint8x64_t& a2) {
+HALIDE_ALWAYS_INLINE uint8x64_t halide_xtensa_extract_0_of_3_u8(const uint8x64_t& a0, const uint8x64_t& a1, const uint8x64_t& a2) {
   // TODO(vksnk): there is likely a better way to do it.
   uint8x64_t vR, vG, vB, vRG0, vRG1;
   IVP_DSEL2NX8UI(vB, vRG0, a1, a0, IVP_DSELI_8B_DEINTERLEAVE_C3_STEP_0);
@@ -1203,8 +1203,8 @@ HALIDE_ALWAYS_INLINE uint8x64_t halide_xtensa_extract_0_off_3_u8(const uint8x64_
   return vR;
 }
 
-HALIDE_ALWAYS_INLINE uint8x64_t halide_xtensa_extract_0_off_3_u8(const uint8x192_t& a) {
-  return halide_xtensa_extract_0_off_3_u8(a.native_vector[0], a.native_vector[1], a.native_vector[2]);
+HALIDE_ALWAYS_INLINE uint8x64_t halide_xtensa_extract_0_of_3_u8(const uint8x192_t& a) {
+  return halide_xtensa_extract_0_of_3_u8(a.native_vector[0], a.native_vector[1], a.native_vector[2]);
 }
 
 HALIDE_ALWAYS_INLINE int16x32_t halide_xtensa_deinterleave_even_i16(const int16x64_t& a) {
@@ -1242,6 +1242,14 @@ HALIDE_ALWAYS_INLINE uint16x64_t halide_xtensa_deinterleave_even_u16(const uint1
       uint16x64_t::from_native_vector,
       halide_xtensa_deinterleave_even_u16(uint16x64_t(uint16x64_t::from_native_vector, a.native_vector[0], a.native_vector[1])),
       halide_xtensa_deinterleave_even_u16(uint16x64_t(uint16x64_t::from_native_vector, a.native_vector[2], a.native_vector[3])));
+}
+
+HALIDE_ALWAYS_INLINE int16x32_t halide_xtensa_extract_0_of_4_i16(const int16x128_t& a) {
+  return halide_xtensa_deinterleave_even_i16(
+          int16x64_t(int16x64_t::from_native_vector,
+          halide_xtensa_deinterleave_even_i16(int16x64_t(int16x64_t::from_native_vector, a.native_vector[0], a.native_vector[1])),
+          halide_xtensa_deinterleave_even_i16(int16x64_t(int16x64_t::from_native_vector, a.native_vector[2], a.native_vector[3]))
+        ));
 }
 
 HALIDE_ALWAYS_INLINE int16x32_t halide_xtensa_slice_i16(const int16x64_t& a, int start) {
@@ -3342,6 +3350,14 @@ void CodeGen_Xtensa::visit(const Shuffle *op) {
         if (op->is_slice() && (op->slice_begin() < 2) && (op->slice_stride() == 2) && ((int)op->indices.size() == op->vectors[0].type().lanes() / 2)) {
             string type_suffix = suffix_for_type(op->type);
             string function_name = std::string("halide_xtensa_deinterleave") + ((op->slice_begin() == 0) ? "_even" : "_odd");
+            Expr call = Call::make(op->type, function_name + type_suffix,
+                                   {op->vectors[0]}, Call::PureExtern);
+            call.accept(this);
+            return;
+        }
+        if (op->is_slice() && (op->slice_begin() < 1) && (op->slice_stride() == 4) && ((int)op->indices.size() == op->vectors[0].type().lanes() / 4)) {
+            string type_suffix = suffix_for_type(op->type);
+            string function_name = std::string("halide_xtensa_extract_0_of_4");
             Expr call = Call::make(op->type, function_name + type_suffix,
                                    {op->vectors[0]}, Call::PureExtern);
             call.accept(this);
