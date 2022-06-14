@@ -86,6 +86,7 @@ tests(GROUPS correctness
       dynamic_allocation_in_gpu_kernel.cpp
       dynamic_reduction_bounds.cpp
       embed_bitcode.cpp
+      early_out.cpp
       erf.cpp
       exception.cpp
       explicit_inline_reductions.cpp
