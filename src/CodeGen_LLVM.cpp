@@ -2526,6 +2526,50 @@ void CodeGen_LLVM::codegen_atomic_rmw(const Store *op) {
     }
 }
 
+// Given a `Call::reinterpret` to \p dst type of the `Load` \p l,
+// can we instead perform a load of \p dst type?
+// If so, returns (scalar!) index expression.
+Expr CodeGen_LLVM::should_load_scalar(const Load *l, Type dst) {
+    // For now, simply do not deal with predicated loads at all.
+    // FIXME: we could support scalar/splat predicate though.
+    if (!is_const_one(l->predicate)) {
+        return Expr();
+    }
+
+    Type src = l->type;
+
+    // We are interested in the case where we load a vector, and cast to scalar.
+    if (src.lanes() == 1 || dst.lanes() != 1) {
+        return Expr();
+    }
+
+    // The index must be produced by a `Ramp`.
+    const Ramp *r = l->index.as<Ramp>();
+    if (!r) {
+        return Expr();
+    }
+
+    // The `Ramp` must have scalar base pointer, and be dense (stride=1).
+    // FIXME: if we are loading a vector of i8, stride=-1 is fine (need bswap).
+    if (!is_const_one(r->stride) || r->base.type().lanes() != 1) {
+        return Expr();
+    }
+
+    // The `Call::reinterpret` must effectively be a no-op.
+    if (dst.bits() * dst.lanes() != src.bits() * src.lanes()) {
+        return Expr();
+    }
+
+    // Neither of of the types must need an upgrade.
+    if (upgrade_type_for_storage(src) != src ||
+        upgrade_type_for_storage(dst) != dst) {
+        return Expr();
+    }
+
+    // Awesome! Note that the index is for the `Load`'s current element type!
+    return r->base;
+}
+
 void CodeGen_LLVM::visit(const Call *op) {
     internal_assert(op->is_extern() || op->is_intrinsic())
         << "Can only codegen extern calls and intrinsics\n";
@@ -2582,6 +2626,19 @@ void CodeGen_LLVM::visit(const Call *op) {
         Type dst = op->type;
         Type src = op->args[0].type();
         llvm::Type *llvm_dst = llvm_type_of(dst);
+        if (const Load *l = op->args[0].as<Load>()) {
+            if (Expr index = should_load_scalar(l, dst); index.defined()) {
+                Value *ptr =
+                    codegen_buffer_pointer(l->name, src.element_of(), index);
+                // Pessimistically assume only scalar element alignment.
+                LoadInst *load = builder->CreateAlignedLoad(
+                    llvm_dst, ptr, llvm::Align(l->type.bytes()));
+                // FIXME: can we emit better TBAA for constant indexes here?
+                add_tbaa_metadata(load, l->name, /*index=*/Expr());
+                value = load;
+                return;
+            }
+        }
         value = codegen(op->args[0]);
         if (src.is_handle() && !dst.is_handle()) {
             internal_assert(dst.is_uint() && dst.bits() == 64);

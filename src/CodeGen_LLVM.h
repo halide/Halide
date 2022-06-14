@@ -293,6 +293,11 @@ protected:
     llvm::Value *codegen_buffer_pointer(llvm::Value *base_address, Type type, llvm::Value *index);
     // @}
 
+    /** Given a `Call::reinterpret` to \p dst type of the `Load` \p l,
+     *  can we instead perform a load of \p dst type?
+     *  If so, returns (scalar!) index expression. */
+    Expr should_load_scalar(const Load *l, Type dst);
+
     /** Turn a Halide Type into an llvm::Value representing a constant halide_type_t */
     llvm::Value *make_halide_type_t(const Type &);
 

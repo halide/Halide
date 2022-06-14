@@ -16,6 +16,7 @@ tests(GROUPS correctness
       autodiff.cpp
       bad_likely.cpp
       bit_counting.cpp
+      bitcast_vector_load_into_scalar.cpp
       bitwise_ops.cpp
       bool_compute_root_vectorize.cpp
       bound.cpp
