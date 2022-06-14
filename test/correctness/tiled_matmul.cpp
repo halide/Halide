@@ -50,14 +50,14 @@ bool equal_eps(float lhs, float rhs, float eps) {
 
 struct make_uint_t {
     template<typename... Args>
-    Type operator()(Args &&...args) const {
+    Type operator()(Args &&... args) const {
         return UInt(static_cast<Args &&>(args)...);
     }
 };
 
 struct make_int_t {
     template<typename... Args>
-    Type operator()(Args &&...args) const {
+    Type operator()(Args &&... args) const {
         return Int(static_cast<Args &&>(args)...);
     }
 };
@@ -263,27 +263,25 @@ int main(int argc, char **argv) {
         return -1;
     }
 
-    // llvm >= 13.0 is required for unsigned and float AMX instructions
-    if (Halide::Internal::get_llvm_version() >= 130) {
-        printf("Running AMX matmul (signed/unsigned)\n");
-        if (!run_tests(matmul_su, 1)) {
-            return -1;
-        }
-
-        printf("Running AMX matmul (unsigned/signed)\n");
-        if (!run_tests(matmul_us, 1)) {
-            return -1;
-        }
-
-        printf("Running AMX matmul (unsigned/unsigned)\n");
-        if (!run_tests(matmul_uu, 1)) {
-            return -1;
-        }
-
-        printf("Running AMX matmul (bf16)\n");
-        if (!run_tests(matmul_bf16, 2)) {
-            return -1;
-        }
+    printf("Running AMX matmul (signed/unsigned)\n");
+    if (!run_tests(matmul_su, 1)) {
+        return -1;
     }
+
+    printf("Running AMX matmul (unsigned/signed)\n");
+    if (!run_tests(matmul_us, 1)) {
+        return -1;
+    }
+
+    printf("Running AMX matmul (unsigned/unsigned)\n");
+    if (!run_tests(matmul_uu, 1)) {
+        return -1;
+    }
+
+    printf("Running AMX matmul (bf16)\n");
+    if (!run_tests(matmul_bf16, 2)) {
+        return -1;
+    }
+
     return 0;
 }
