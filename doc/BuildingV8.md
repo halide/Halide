@@ -38,17 +38,30 @@ Repeat this step any time to update the checkout.
 
 ## Step 4: Build!
 
-```
-$ tools/dev/gm.py x64.release
-```
-
-Quickly cancel the build and then run:
+Run the following command to begin configuring the build:
 
 ```
 $ gn args out/x64.release
 ```
 
-Make sure that `is_component_build = true` appears in the args file. Then run
+Make sure that the following options appear in the args file.
+
+```
+dcheck_always_on = false
+is_component_build = true
+is_debug = false
+target_cpu = "x64"  # adjust as needed
+use_custom_libcxx = false
+use_goma = false
+v8_enable_backtrace = true
+v8_enable_disassembler = false
+v8_enable_object_print = true
+v8_enable_verify_heap = true
+v8_expose_symbols = true
+v8_use_external_startup_data = false
+```
+
+Then run
 
 ```
 $ ninja -C out/x64.release
