@@ -1,7 +1,9 @@
 function(_FindV8)
-    # This is compatible with Ubuntu's libnode-dev package... no idea how V8
-    # was built to work this way.
-    find_library(V8_LIBRARY NAMES v8)
+    # This is compatible with Ubuntu's libnode-dev package and with the default
+    # instructions for building V8
+    find_library(V8_LIBRARY
+                 NAMES v8
+                 PATH_SUFFIXES out/x64.release)
 
     find_path(V8_INCLUDE_PATH
               NAMES v8.h libplatform/libplatform.h
