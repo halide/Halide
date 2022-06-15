@@ -5,11 +5,19 @@ function(_FindV8)
                  NAMES v8
                  PATH_SUFFIXES out/x64.release)
 
+    find_library(V8_LIBPLATFORM_LIBRARY
+                 NAMES v8_libplatform
+                 PATH_SUFFIXES out/x64.release)
+
+    find_library(V8_LIBBASE_LIBRARY
+                 NAMES v8_libbase
+                 PATH_SUFFIXES out/x64.release)
+
     find_path(V8_INCLUDE_PATH
               NAMES v8.h libplatform/libplatform.h
               PATH_SUFFIXES nodejs/deps/v8/include)
 
-    mark_as_advanced(V8_LIBRARY V8_INCLUDE_PATH)
+    mark_as_advanced(V8_LIBRARY V8_LIBPLATFORM_LIBRARY V8_LIBBASE_LIBRARY V8_INCLUDE_PATH)
 
     if (V8_INCLUDE_PATH AND EXISTS "${V8_INCLUDE_PATH}/v8-version.h")
         file(STRINGS "${V8_INCLUDE_PATH}/v8-version.h" V8_defines)
@@ -60,10 +68,28 @@ function(_FindV8)
         VERSION_VAR V8_VERSION
     )
 
+    if (V8_FOUND AND V8_LIBBASE_LIBRARY AND NOT TARGET V8::base)
+        add_library(V8::base UNKNOWN IMPORTED)
+        set_target_properties(V8::base PROPERTIES IMPORTED_LOCATION "${V8_LIBBASE_LIBRARY}")
+        target_include_directories(V8::base INTERFACE "${V8_INCLUDE_PATH}")
+    endif ()
+
+    if (V8_FOUND AND V8_LIBPLATFORM_LIBRARY AND NOT TARGET V8::platform)
+        add_library(V8::platform UNKNOWN IMPORTED)
+        set_target_properties(V8::platform PROPERTIES IMPORTED_LOCATION "${V8_LIBPLATFORM_LIBRARY}")
+        target_include_directories(V8::platform INTERFACE "${V8_INCLUDE_PATH}")
+    endif ()
+
     if (V8_FOUND AND NOT TARGET V8::V8)
         add_library(V8::V8 UNKNOWN IMPORTED)
         set_target_properties(V8::V8 PROPERTIES IMPORTED_LOCATION "${V8_LIBRARY}")
         target_include_directories(V8::V8 INTERFACE "${V8_INCLUDE_PATH}")
+        if (TARGET V8::base)
+            target_link_libraries(V8::V8 INTERFACE V8::base)
+        endif ()
+        if (TARGET V8::platform)
+            target_link_libraries(V8::V8 INTERFACE V8::platform)
+        endif ()
     endif ()
 endfunction()
 
