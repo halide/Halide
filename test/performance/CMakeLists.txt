@@ -16,7 +16,6 @@ tests(GROUPS performance
       packed_planar_fusion.cpp
       realize_overhead.cpp
       rgb_interleaved.cpp
-      thread_safe_jit.cpp
       tiled_matmul.cpp
       vectorize.cpp
       wrap.cpp
@@ -34,6 +33,7 @@ tests(GROUPS performance multithreaded
       rfactor.cpp
       sort.cpp
       stack_vs_heap.cpp
+      thread_safe_jit.cpp
       )
 
 # Make sure that performance tests do not run in parallel with other tests,

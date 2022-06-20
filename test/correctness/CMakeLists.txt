@@ -282,7 +282,6 @@ tests(GROUPS correctness
       strict_float_bounds.cpp
       strided_load.cpp
       target.cpp
-      thread_safety.cpp
       tiled_matmul.cpp
       tracing.cpp
       tracing_bounds.cpp
@@ -362,6 +361,7 @@ tests(GROUPS correctness multithreaded
       reorder_rvars.cpp
       rfactor.cpp
       stream_compaction.cpp
+      thread_safety.cpp
       truncated_pyramid.cpp
       tuple_vector_reduce.cpp
       unroll_huge_mux.cpp
