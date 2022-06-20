@@ -49,9 +49,15 @@ function(add_halide_test TARGET)
              COMMAND ${args_COMMAND} ${args_ARGS}
              WORKING_DIRECTORY "${args_WORKING_DIRECTORY}")
 
+    # If the test is not marked as being multi-threaded,
+    # limit it to one thread, as requested.
+    if (NOT "multithreaded" IN_LIST args_GROUPS)
+        set(MAYBE_FORCE_NO_THREADING "HL_NUM_THREADS=1")
+    endif()
+
     set_tests_properties(${TARGET} PROPERTIES
                          LABELS "${args_GROUPS}"
-                         ENVIRONMENT "HL_TARGET=${Halide_TARGET};HL_JIT_TARGET=${Halide_TARGET}"
+                         ENVIRONMENT "HL_TARGET=${Halide_TARGET};HL_JIT_TARGET=${Halide_TARGET};${MAYBE_FORCE_NO_THREADING}"
                          PASS_REGULAR_EXPRESSION "Success!"
                          SKIP_REGULAR_EXPRESSION "\\[SKIP\\]"
                          WILL_FAIL ${args_EXPECT_FAILURE})
