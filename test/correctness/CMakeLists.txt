@@ -19,8 +19,8 @@ tests(GROUPS correctness
       bitwise_ops.cpp
       bool_compute_root_vectorize.cpp
       bound.cpp
-      bound_storage.cpp
       bound_small_allocations.cpp
+      bound_storage.cpp
       boundary_conditions.cpp
       bounds.cpp
       bounds_inference.cpp
@@ -85,8 +85,8 @@ tests(GROUPS correctness
       div_by_zero.cpp
       dynamic_allocation_in_gpu_kernel.cpp
       dynamic_reduction_bounds.cpp
-      embed_bitcode.cpp
       early_out.cpp
+      embed_bitcode.cpp
       erf.cpp
       exception.cpp
       explicit_inline_reductions.cpp
@@ -245,9 +245,9 @@ tests(GROUPS correctness
       parallel_gpu_nested.cpp
       parallel_nested.cpp
       parallel_nested_1.cpp
-      parallel_scatter.cpp
       parallel_reductions.cpp
       parallel_rvar.cpp
+      parallel_scatter.cpp
       param.cpp
       param_map.cpp
       parameter_constraints.cpp
@@ -406,4 +406,3 @@ set_target_properties(correctness_async
                       correctness_sliding_window
                       correctness_storage_folding
                       PROPERTIES ENABLE_EXPORTS TRUE)
-
