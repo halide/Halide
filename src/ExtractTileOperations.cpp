@@ -56,16 +56,26 @@ const auto wild_i32x = Variable::make(Int(32, 0), "*");
 
 Tile<1> get_1d_tile_index(const Expr &e) {
     if (const auto *r1 = e.as<Ramp>()) {
-        Expr pattern = ((wild_i32 * wild_i32) + wild_i32) * wild_i32;
 
-        std::vector<Expr> results;
-        if (!expr_match(pattern, r1->base, results)) {
-            return {};
+        const auto stride_var = Variable::make(Int(32), "stride");
+        const auto v1 = Variable::make(Int(32), "v1");
+        const auto v2 = Variable::make(Int(32), "v2");
+        const auto v3 = Variable::make(Int(32), "v3");
+
+        Expr patterns[] = {
+            ((v1 * stride_var) + v2) * v3,
+            v3 * ((v1 * stride_var) + wild_i32),
+            (v2 + (v1 * stride_var)) * v3,
+            v3 * (v2 + (v1 * stride_var)),
+        };
+
+        std::map<std::string, Expr> matches;
+        for (const auto &pattern : patterns) {
+            if (expr_match(pattern, r1->base, matches)) {
+                auto stride = std::move(matches["stride"]);
+                return {true, r1->base, {std::move(stride)}, {r1->lanes}};
+            }
         }
-
-        auto stride = std::move(results[1]);
-
-        return {true, r1->base, {std::move(stride)}, {r1->lanes}};
     }
 
     return {};
