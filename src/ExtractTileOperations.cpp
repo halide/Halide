@@ -73,6 +73,9 @@ Tile<1> get_1d_tile_index(const Expr &e) {
         for (const auto &pattern : patterns) {
             if (expr_match(pattern, r1->base, matches)) {
                 auto stride = std::move(matches["stride"]);
+                if (!stride.as<IntImm>()) {
+                    return {};
+                }
                 return {true, r1->base, {std::move(stride)}, {r1->lanes}};
             }
         }
