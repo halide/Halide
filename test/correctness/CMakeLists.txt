@@ -374,6 +374,8 @@ set_target_properties(correctness_async
                       correctness_atomics
                       correctness_c_function
                       correctness_callable
+                      correctness_callable_generator
+                      correctness_callable_typed
                       correctness_compute_at_split_rvar
                       correctness_concat
                       correctness_custom_lowering_pass
