@@ -21,6 +21,13 @@ tools/objc/BUILD
 
 *.txt.user*
 
+*.png
+!apps/**/*.png
+!images/**/*.png
+
+*.weights
+!src/autoschedulers/**/*.weights
+
 ## Halide-specific build intermediates
 # apps
 apps/*/*.def
@@ -39,6 +46,12 @@ tutorial/lesson_10_halide.h
 err.txt
 log.txt
 test/*.lowered
+
+# linker scripts
+py_*.ldscript*
+
+# generated CMake configuration
+Halide-*-deps.cmake
 
 ## Build outputs
 # Directories
@@ -97,6 +110,21 @@ CMakeUserPresets.json
 # Common build directory names
 build*/
 cmake[-_]build*/
+
+# Generated files
+*ConfigVersion.cmake
+*-config-version.cmake
+
+# Build directory contents
+CMakeCache.txt
+*.ninja
+cmake_install.cmake
+compile_commands.json
+CPack*.cmake
+CTest*.cmake
+.cmake/
+_deps/
+CMakeFiles/
 
 ## IDE folders and metadata
 # Visual Studio
