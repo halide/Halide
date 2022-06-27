@@ -1154,7 +1154,7 @@ test_warning: $(WARNING_TESTS:$(ROOT_DIR)/test/warning/%.cpp=warning_%)
 test_tutorial: $(TUTORIALS:$(ROOT_DIR)/tutorial/%.cpp=tutorial_%)
 test_valgrind: $(CORRECTNESS_TESTS:$(ROOT_DIR)/test/correctness/%.cpp=valgrind_%)
 test_avx512: $(CORRECTNESS_TESTS:$(ROOT_DIR)/test/correctness/%.cpp=avx512_%)
-test_auto_schedule: test_mullapudi2016 test_adams2019
+test_auto_schedule: test_mullapudi2016 test_li2018 test_adams2019
 
 .PHONY: test_correctness_multi_gpu
 test_correctness_multi_gpu: correctness_gpu_multi_device
@@ -1940,6 +1940,10 @@ auto_schedule_%: $(BIN_DIR)/auto_schedule_% $(BIN_DIR)/libautoschedule_mullapudi
 # The other autoschedulers contain their own tests
 test_adams2019: distrib
 	$(MAKE) -f $(SRC_DIR)/autoschedulers/adams2019/Makefile test \
+		HALIDE_DISTRIB_PATH=$(CURDIR)/$(DISTRIB_DIR)
+
+test_li2018: distrib build_python_bindings
+	$(MAKE) -f $(SRC_DIR)/autoschedulers/li2018/Makefile test \
 		HALIDE_DISTRIB_PATH=$(CURDIR)/$(DISTRIB_DIR)
 
 time_compilation_test_%: $(BIN_DIR)/test_%
