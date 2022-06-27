@@ -1,5 +1,6 @@
 #include "Halide.h"
-#include <future>
+#include "test_sharding.h"
+
 #include <stdio.h>
 
 using namespace Halide;
@@ -34,6 +35,11 @@ bool is_type_supported(int vec_width, const Target &target) {
 
 template<typename A, typename B>
 bool test(int vec_width, const Target &target) {
+    // Useful for debugging; leave in (commented out)
+    // printf("Test %s x %d -> %s x %d\n",
+    //         string_of_type<A>(), vec_width,
+    //         string_of_type<B>(), vec_width);
+
     if (!is_type_supported<A>(vec_width, target) || !is_type_supported<B>(vec_width, target)) {
         // Type not supported, return pass.
         return true;
@@ -101,18 +107,21 @@ bool test(int vec_width, const Target &target) {
     return true;
 }
 
+struct Task {
+    std::function<bool()> fn;
+};
+
 template<typename A>
-bool test_all(int vec_width, const Target &target) {
-    bool success = true;
-    success = success && test<A, float>(vec_width, target);
-    success = success && test<A, double>(vec_width, target);
-    success = success && test<A, uint8_t>(vec_width, target);
-    success = success && test<A, uint16_t>(vec_width, target);
-    success = success && test<A, uint32_t>(vec_width, target);
-    success = success && test<A, int8_t>(vec_width, target);
-    success = success && test<A, int16_t>(vec_width, target);
-    success = success && test<A, int32_t>(vec_width, target);
-    return success;
+void add_all(int vec_width, const Target &target, std::vector<Task> &tasks) {
+    tasks.push_back({[=]() { return test<A, float>(vec_width, target); }});
+    tasks.push_back({[=]() { return test<A, float>(vec_width, target); }});
+    tasks.push_back({[=]() { return test<A, double>(vec_width, target); }});
+    tasks.push_back({[=]() { return test<A, uint8_t>(vec_width, target); }});
+    tasks.push_back({[=]() { return test<A, uint16_t>(vec_width, target); }});
+    tasks.push_back({[=]() { return test<A, uint32_t>(vec_width, target); }});
+    tasks.push_back({[=]() { return test<A, int8_t>(vec_width, target); }});
+    tasks.push_back({[=]() { return test<A, int16_t>(vec_width, target); }});
+    tasks.push_back({[=]() { return test<A, int32_t>(vec_width, target); }});
 }
 
 int main(int argc, char **argv) {
@@ -129,34 +138,33 @@ int main(int argc, char **argv) {
     Target target = get_jit_target_from_environment();
 
     // We only test power-of-two vector widths for now
-    Halide::Internal::ThreadPool<bool> pool;
-    std::vector<std::future<bool>> futures;
     int vec_width_max = 64;
     if (target.arch == Target::WebAssembly) {
         // The wasm jit is very slow, so shorten this test here.
         vec_width_max = 16;
     }
+    std::vector<Task> tasks;
     for (int vec_width = 1; vec_width <= vec_width_max; vec_width *= 2) {
-        futures.push_back(pool.async([=]() {
-            bool success = true;
-            success = success && test_all<float>(vec_width, target);
-            success = success && test_all<double>(vec_width, target);
-            success = success && test_all<uint8_t>(vec_width, target);
-            success = success && test_all<uint16_t>(vec_width, target);
-            success = success && test_all<uint32_t>(vec_width, target);
-            success = success && test_all<int8_t>(vec_width, target);
-            success = success && test_all<int16_t>(vec_width, target);
-            success = success && test_all<int32_t>(vec_width, target);
-            return success;
-        }));
+        add_all<float>(vec_width, target, tasks);
+        add_all<double>(vec_width, target, tasks);
+        add_all<uint8_t>(vec_width, target, tasks);
+        add_all<uint16_t>(vec_width, target, tasks);
+        add_all<uint32_t>(vec_width, target, tasks);
+        add_all<int8_t>(vec_width, target, tasks);
+        add_all<int16_t>(vec_width, target, tasks);
+        add_all<int32_t>(vec_width, target, tasks);
     }
 
-    bool ok = true;
-    for (auto &f : futures) {
-        ok &= f.get();
+    using Sharder = Halide::Internal::Test::Sharder;
+    Sharder sharder;
+    for (size_t t = 0; t < tasks.size(); t++) {
+        if (!sharder.should_run(t)) continue;
+        const auto &task = tasks.at(t);
+        if (!task.fn()) {
+            exit(-1);
+        }
     }
 
-    if (!ok) return -1;
     printf("Success!\n");
     return 0;
 }

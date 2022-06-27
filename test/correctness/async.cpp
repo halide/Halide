@@ -2,13 +2,7 @@
 
 using namespace Halide;
 
-#ifdef _WIN32
-#define DLLEXPORT __declspec(dllexport)
-#else
-#define DLLEXPORT
-#endif
-
-extern "C" DLLEXPORT int expensive(int x) {
+extern "C" HALIDE_EXPORT_SYMBOL int expensive(int x) {
     float f = 3.0f;
     for (int i = 0; i < (1 << 10); i++) {
         f = sqrtf(sinf(cosf(f)));

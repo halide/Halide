@@ -43,14 +43,8 @@ bool check_expected_mallocs(const std::vector<size_t> &expected) {
     return true;
 }
 
-#ifdef _WIN32
-#define DLLEXPORT __declspec(dllexport)
-#else
-#define DLLEXPORT
-#endif
-
 // An extern stage that copies input -> output
-extern "C" DLLEXPORT int simple_buffer_copy(halide_buffer_t *in, halide_buffer_t *out) {
+extern "C" HALIDE_EXPORT_SYMBOL int simple_buffer_copy(halide_buffer_t *in, halide_buffer_t *out) {
     if (in->is_bounds_query()) {
         memcpy(in->dim, out->dim, out->dimensions * sizeof(halide_dimension_t));
     } else {
@@ -60,7 +54,7 @@ extern "C" DLLEXPORT int simple_buffer_copy(halide_buffer_t *in, halide_buffer_t
 }
 
 // An extern stage accesses the input in a non-monotonic way in the y dimension.
-extern "C" DLLEXPORT int zigzag_buffer_copy(halide_buffer_t *in, halide_buffer_t *out) {
+extern "C" HALIDE_EXPORT_SYMBOL int zigzag_buffer_copy(halide_buffer_t *in, halide_buffer_t *out) {
     if (in->is_bounds_query()) {
         memcpy(in->dim, out->dim, out->dimensions * sizeof(halide_dimension_t));
 

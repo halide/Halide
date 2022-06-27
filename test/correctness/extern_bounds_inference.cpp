@@ -1,14 +1,8 @@
 #include "Halide.h"
 #include <stdio.h>
 
-#ifdef _WIN32
-#define DLLEXPORT __declspec(dllexport)
-#else
-#define DLLEXPORT
-#endif
-
 // An extern stage that translates.
-extern "C" DLLEXPORT int translate(halide_buffer_t *in, int dx, int dy, halide_buffer_t *out) {
+extern "C" HALIDE_EXPORT_SYMBOL int translate(halide_buffer_t *in, int dx, int dy, halide_buffer_t *out) {
 
     if (in->is_bounds_query()) {
         in->dim[0].min = out->dim[0].min + dx;

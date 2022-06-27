@@ -4,14 +4,8 @@
 
 using namespace Halide;
 
-#ifdef _WIN32
-#define DLLEXPORT __declspec(dllexport)
-#else
-#define DLLEXPORT
-#endif
-
 // Use an extern stage to do a sort
-extern "C" DLLEXPORT int sort_buffer(halide_buffer_t *in, halide_buffer_t *out) {
+extern "C" HALIDE_EXPORT_SYMBOL int sort_buffer(halide_buffer_t *in, halide_buffer_t *out) {
     if (in->is_bounds_query()) {
         in->dim[0].min = out->dim[0].min;
         in->dim[0].extent = out->dim[0].extent;
