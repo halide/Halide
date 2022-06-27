@@ -20,14 +20,28 @@
 ################################################################################
 ## Halide-specific build artifacts
 
-# Runtime modules
-_initmod*.cpp
+# Apps
+apps/*/*.def
+apps/*/*.ptx
+apps/*/*.sass
+apps/*/*out*.png
+apps/*/filter
+apps/*/passes.txt
+apps/HelloAndroidGL/jni/halide_gl_filter.h
 
-# Generated linker scripts
-py_*.ldscript*
+# Autoschedulers
+**/src/autoschedulers/adams2019/baseline.cpp
+**/src/autoschedulers/adams2019/cost_model.h
+**/src/autoschedulers/adams2019/demo.h
+**/src/autoschedulers/adams2019/included_schedule_file.h
+**/src/autoschedulers/adams2019/train_cost_model.h
+**/src/autoschedulers/li2018/demo_gradient.h
 
 # CMake configuration
 Halide-*-deps.cmake
+
+# Distribution headers
+**/include/Halide*.h
 
 # Generator executables
 *.generator
@@ -47,21 +61,38 @@ Halide-*-deps.cmake
 *.stmt.html
 *.stub.h
 
-# Apps
-apps/*/*.def
-apps/*/*.ptx
-apps/*/*.sass
-apps/*/*out*.png
-apps/*/filter
-apps/*/passes.txt
-apps/HelloAndroidGL/jni/halide_gl_filter.h
+# Linker scripts
+py_*.ldscript*
 
-# Tutorials
-tutorial/lesson_10_halide.h
+# Runtime modules
+_initmod*.cpp
 
 # Tests
 err.txt
 log.txt
+**/test/generator/*.h
+**/test/generator/external_code_extern_bitcode_32.cpp
+**/test/generator/external_code_extern_bitcode_64.cpp
+**/test/generator/external_code_extern_cpp_source.cpp
+**/python_bindings/correctness/generators/*.h
+
+# Tutorials
+**/tutorial/lesson_10_halide.h
+**/tutorial/auto_schedule_false.h
+**/tutorial/auto_schedule_true.h
+**/tutorial/brighten_either.h
+**/tutorial/brighten_interleaved.h
+**/tutorial/brighten_planar.h
+**/tutorial/brighten_specialized.h
+**/tutorial/my_first_generator.h
+**/tutorial/my_first_generator_win32.h
+**/tutorial/my_second_generator_1.h
+**/tutorial/my_second_generator_2.h
+**/tutorial/my_second_generator_3.h
+
+# Tutorial images, except the expected ones
+**/tutorial/images/
+!tutorial/images/
 
 ################################################################################
 ## Common build artifacts
@@ -69,7 +100,6 @@ log.txt
 # Directories
 bin/
 distrib/
-# include/
 lib/
 lib64/
 share/
@@ -128,7 +158,9 @@ CMakeUserPresets.json
 build*/
 cmake[-_]build*/
 
-# Generated files
+# Generated config files
+*Config.cmake
+*-config.cmake
 *ConfigVersion.cmake
 *-config-version.cmake
 
@@ -184,7 +216,6 @@ TAGS
 ################################################################################
 ## Halide-specific rule overrides
 
-
 # Allow particular extension-less files
 !Makefile
 !gradlew
@@ -206,3 +237,7 @@ TAGS
 
 # TODO: should this be checked in?
 !src/autoschedulers/adams2019/included_schedule_file.schedule.h
+
+# TODO: these should become .cmake.in
+!packaging/common/HalideHelpersConfig.cmake
+!packaging/common/HalideConfig.cmake
