@@ -1,3 +1,14 @@
+# NOTE: one can debug these rules with the following commands:
+#
+# $ git clean -ffdx
+# $ find . -not -path './.git/*' | git check-ignore --stdin --no-index
+#
+# The first command will delete all files that are ignored by Git (be warned!).
+# The second command will print all files that are checked in, but _would be_
+# ignored under the rules in this file. Such files should either be explicitly
+# added to the exclusions at the bottom of this file, or the rule excluding them
+# should be refined.
+
 ################################################################################
 ## Exclude files without extensions
 
