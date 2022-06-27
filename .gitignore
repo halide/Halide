@@ -80,29 +80,30 @@ py_*.ldscript*
 _initmod*.cpp
 
 # Tests
-err.txt
-log.txt
+**/python_bindings/correctness/generators/*.h
 **/test/generator/*.h
 **/test/generator/external_code_extern_bitcode_32.cpp
 **/test/generator/external_code_extern_bitcode_64.cpp
 **/test/generator/external_code_extern_cpp_source.cpp
-**/python_bindings/correctness/generators/*.h
+compile_log.txt
+stderr.txt
+stdout.txt
 
 # Tutorials
-**/tutorial/lesson_10_halide.h
 **/tutorial/auto_schedule_false.h
 **/tutorial/auto_schedule_true.h
 **/tutorial/brighten_either.h
 **/tutorial/brighten_interleaved.h
 **/tutorial/brighten_planar.h
 **/tutorial/brighten_specialized.h
-**/tutorial/my_first_generator.h
+**/tutorial/lesson_10_halide.h
 **/tutorial/my_first_generator_win32.h
+**/tutorial/my_first_generator.h
 **/tutorial/my_second_generator_1.h
 **/tutorial/my_second_generator_2.h
 **/tutorial/my_second_generator_3.h
 
-# Tutorial images, except the expected ones
+# Tutorial images that were copied to the install tree
 **/tutorial/images/
 !tutorial/images/
 
@@ -138,13 +139,14 @@ a.out
 ################################################################################
 ## Temporary and swap files
 
-tmp/
 temp/
+tmp/
 
 .*.swp
 .\#*
 .DS_Store
 *.log
+*.tmp
 *.txt.user*
 *~
 \#*\#
@@ -153,8 +155,8 @@ temp/
 ## Python
 
 # Common virtual environment directory names
-venv/
 .venv/
+venv/
 
 # Python binary caches
 __pycache__
@@ -171,10 +173,10 @@ build*/
 cmake[-_]build*/
 
 # Generated config files
-*Config.cmake
-*-config.cmake
-*ConfigVersion.cmake
 *-config-version.cmake
+*-config.cmake
+*Config.cmake
+*ConfigVersion.cmake
 
 # Build directory contents
 _deps/
@@ -201,9 +203,9 @@ CMakeSettings.json
 
 # XCode
 *.xcworkspacedata
-xcuserdata
 tools/objc/*.mobileprovision
 tools/objc/BUILD
+xcuserdata
 
 # CLion
 .idea/
@@ -230,11 +232,11 @@ TAGS
 ## Halide-specific rule overrides
 
 # Allow particular extension-less files
-!Makefile
 !gradlew
-!packaging/ubuntu/triggers
-!packaging/ubuntu/copyright
+!Makefile
 !packaging/ubuntu/changelog
+!packaging/ubuntu/copyright
+!packaging/ubuntu/triggers
 
 # Allow XCode PCHs in the HelloiOS app
 !apps/HelloiOS/**/*-Prefix.pch
@@ -252,5 +254,5 @@ TAGS
 !src/autoschedulers/adams2019/included_schedule_file.schedule.h
 
 # TODO: these should become .cmake.in
-!packaging/common/HalideHelpersConfig.cmake
 !packaging/common/HalideConfig.cmake
+!packaging/common/HalideHelpersConfig.cmake
