@@ -53,6 +53,7 @@ Halide-*-deps.cmake
 
 # Distribution headers
 **/include/Halide*.h
+**/include/wasm-rt*.h
 
 # Generator executables
 *.generator
@@ -184,6 +185,7 @@ CMakeFiles/
 compile_commands.json
 CPack*.cmake
 CTest*.cmake
+install_manifest.txt
 
 # Ninja files
 *.ninja*
