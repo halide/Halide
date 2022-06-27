@@ -2640,7 +2640,7 @@ private:
     void visit(const IfThenElse *op) override {
         TRACK_BOXES_TOUCHED;
         op->condition.accept(this);
-        if (expr_uses_vars(op->condition, scope)) {
+        if (expr_uses_vars(op->condition, scope) || !is_pure(op->condition)) {
             // We need to simplify the condition to get it into a
             // canonical form (e.g. (a < b) instead of !(a >= b))
             vector<pair<Expr, Stmt>> cases;

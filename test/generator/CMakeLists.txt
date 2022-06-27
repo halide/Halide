@@ -5,7 +5,7 @@
 function(halide_define_aot_test NAME)
     set(options OMIT_DEFAULT_GENERATOR)
     set(oneValueArgs FUNCTION_NAME)
-    set(multiValueArgs GEN_DEPS EXTRA_LIBS ENABLE_IF FEATURES PARAMS GEN_TARGET)
+    set(multiValueArgs GEN_DEPS EXTRA_LIBS ENABLE_IF FEATURES PARAMS GEN_TARGET GROUPS)
     cmake_parse_arguments(args "${options}" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
 
     if (args_ENABLE_IF AND NOT (${args_ENABLE_IF}))
@@ -37,7 +37,7 @@ function(halide_define_aot_test NAME)
                             "${Halide_SOURCE_DIR}/tools"
                             "${CMAKE_CURRENT_BINARY_DIR}")
 
-        add_wasm_halide_test("${TARGET}" GROUPS generator)
+        add_wasm_halide_test("${TARGET}" GROUPS generator "${args_GROUPS}")
     else ()
         add_executable("${TARGET}" "${NAME}_aottest.cpp")
         target_include_directories("${TARGET}" PRIVATE
@@ -60,7 +60,7 @@ function(halide_define_aot_test NAME)
         if ("${Halide_TARGET}" MATCHES "cuda")
             target_compile_definitions("${TARGET}" PRIVATE TEST_CUDA)
         endif ()
-        add_halide_test("${TARGET}" GROUPS generator)
+        add_halide_test("${TARGET}" GROUPS generator "${args_GROUPS}")
     endif ()
 endfunction()
 
@@ -157,11 +157,13 @@ halide_define_aot_test(argvcall)
 # async_parallel_generator.cpp
 halide_define_aot_test(async_parallel
                        # Requires threading support, not yet available for wasm tests
-                       ENABLE_IF NOT ${USING_WASM})
+                       ENABLE_IF NOT ${USING_WASM}
+                       GROUPS multithreaded)
 
 # autograd_aottest.cpp
 # autograd_generator.cpp
-halide_define_aot_test(autograd ENABLE_IF TARGET Halide::Mullapudi2016 AND NOT ${USING_WASM})
+halide_define_aot_test(autograd ENABLE_IF TARGET Halide::Mullapudi2016 AND NOT ${USING_WASM}
+                       GROUPS multithreaded)
 if (TARGET generator_aot_autograd)
     add_halide_library(autograd_grad
                        GRADIENT_DESCENT
@@ -249,11 +251,13 @@ halide_define_aot_test(error_codes)
 
 # example_aottest.cpp
 # example_generator.cpp
-halide_define_aot_test(example)
+halide_define_aot_test(example
+                       GROUPS multithreaded)
 
 # extern_output_aottest.cpp
 # extern_output_generator.cpp
-halide_define_aot_test(extern_output)
+halide_define_aot_test(extern_output
+                       GROUPS multithreaded)
 
 # external_code_aottest.cpp
 # external_code_generator.cpp
@@ -304,14 +308,16 @@ halide_define_aot_test(image_from_array)
 
 # mandelbrot_aottest.cpp
 # mandelbrot_generator.cpp
-halide_define_aot_test(mandelbrot)
+halide_define_aot_test(mandelbrot
+                       GROUPS multithreaded)
 
 # memory_profiler_mandelbrot_aottest.cpp
 # memory_profiler_mandelbrot_generator.cpp
 halide_define_aot_test(memory_profiler_mandelbrot
                        # Requires profiler support (which requires threading), not yet available for wasm tests
                        ENABLE_IF NOT ${USING_WASM}
-                       FEATURES profile)
+                       FEATURES profile
+                       GROUPS multithreaded)
 
 # metadata_tester_aottest.cpp
 # metadata_tester_generator.cpp
@@ -358,7 +364,8 @@ add_halide_library(metadata_tester_ucon
 
 # msan_aottest.cpp
 # msan_generator.cpp
-halide_define_aot_test(msan FEATURES msan)
+halide_define_aot_test(msan FEATURES msan
+                       GROUPS multithreaded)
 
 # (Doesn't build/link properly on windows / under wasm)
 if (NOT Halide_TARGET MATCHES "windows" AND NOT CMAKE_SYSTEM_NAME MATCHES "Windows" AND NOT Halide_TARGET MATCHES "wasm")
@@ -402,7 +409,8 @@ halide_define_aot_test(output_assign)
 
 # pyramid_aottest.cpp
 # pyramid_generator.cpp
-halide_define_aot_test(pyramid PARAMS levels=10)
+halide_define_aot_test(pyramid PARAMS levels=10
+                       GROUPS multithreaded)
 
 # rdom_input_aottest.cpp
 # rdom_input_generator.cpp
@@ -435,15 +443,17 @@ halide_define_aot_test(tiled_blur EXTRA_LIBS blur2x2)
 
 # user_context_aottest.cpp
 # user_context_generator.cpp
-halide_define_aot_test(user_context FEATURES user_context)
+halide_define_aot_test(user_context FEATURES user_context
+                       GROUPS multithreaded)
 
 # user_context_insanity_aottest.cpp
 # user_context_insanity_generator.cpp
-halide_define_aot_test(user_context_insanity FEATURES user_context)
+halide_define_aot_test(user_context_insanity FEATURES user_context
+                       GROUPS multithreaded)
 
 # variable_num_threads_aottest.cpp
 # variable_num_threads_generator.cpp
 halide_define_aot_test(variable_num_threads
                        # Requires threading support, not yet available for wasm tests
-                       ENABLE_IF NOT ${USING_WASM})
-
+                       ENABLE_IF NOT ${USING_WASM}
+                       GROUPS multithreaded)
