@@ -213,8 +213,13 @@ public:
     /**
      * JIT the AbstractGenerator into a Callable (using the currently-set
      * Target) and return it.
+     *
+     * If jit_handlers is not null, set the jitted func's jit_handlers to use a copy of it.
+     *
+     * If jit_externs is not null, use it to set the jitted func's external dependencies.
      */
-    Callable compile_to_callable();
+    Callable compile_to_callable(const JITHandlers *jit_handlers = nullptr,
+                                 const std::map<std::string, JITExtern> *jit_externs = nullptr);
 
     /*
      * Set all the GeneratorParams in the map. This is equivalent to simply calling the

@@ -228,7 +228,8 @@ Module AbstractGenerator::build_gradient_module(const std::string &function_name
     return result;
 }
 
-Callable AbstractGenerator::compile_to_callable() {
+Callable AbstractGenerator::compile_to_callable(const JITHandlers *jit_handlers,
+                                                const std::map<std::string, JITExtern> *jit_externs) {
     Pipeline pipeline = build_pipeline();
 
     std::vector<Argument> arguments;
@@ -241,7 +242,12 @@ Callable AbstractGenerator::compile_to_callable() {
             arguments.push_back(to_argument(p));
         }
     }
-
+    if (jit_handlers != nullptr) {
+        pipeline.jit_handlers() = *jit_handlers;
+    }
+    if (jit_externs != nullptr) {
+        pipeline.set_jit_externs(*jit_externs);
+    }
     return pipeline.compile_to_callable(arguments, context().target());
 }
 
