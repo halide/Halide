@@ -50,14 +50,14 @@ bool equal_eps(float lhs, float rhs, float eps) {
 
 struct make_uint_t {
     template<typename... Args>
-    Type operator()(Args &&... args) const {
+    Type operator()(Args &&...args) const {
         return UInt(static_cast<Args &&>(args)...);
     }
 };
 
 struct make_int_t {
     template<typename... Args>
-    Type operator()(Args &&... args) const {
+    Type operator()(Args &&...args) const {
         return Int(static_cast<Args &&>(args)...);
     }
 };
