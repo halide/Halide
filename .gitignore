@@ -1,37 +1,54 @@
+################################################################################
+## Exclude files without extensions
+
+*
+!*.*
+!*/
+
+################################################################################
 ## Halide-specific exclusions
-apps/patchmatch/
-cpp/
-llvm/
-msvc/*/Win32/
-msvc/*/x64/
-testing/
 
-_build
-*.dot
-*.guru
-hello-fimage
-in.png
-llvm_svn
-src/*.top
-test*.s
-testX64
-
-tools/objc/*.mobileprovision
-tools/objc/BUILD
-
-*.txt.user*
-
+# Images only allowed in apps and directories named "images"
 *.png
 !apps/**/*.png
-!images/**/*.png
+!**/images/**/*.png
 
+# Pre-trained weights only allowed in autoscheduler directories
 *.weights
 !src/autoschedulers/**/*.weights
 
-## Halide-specific build intermediates
-# apps
+################################################################################
+## Halide-specific build artifacts
+
+# Runtime modules
+_initmod*.cpp
+
+# Generated linker scripts
+py_*.ldscript*
+
+# CMake configuration
+Halide-*-deps.cmake
+
+# Generator executables
+*.generator
+
+# Generator outputs
+*.bc
+*.featurization
+*.halide_compiler_log
+*.halide_generated.cpp
+*.ll
+*.py.cpp
+*.pytorch.h
+*.registration.cpp
+*.s
+*.schedule.h
+*.stmt
+*.stmt.html
+*.stub.h
+
+# Apps
 apps/*/*.def
-apps/*/*.lowered
 apps/*/*.ptx
 apps/*/*.sass
 apps/*/*out*.png
@@ -39,25 +56,20 @@ apps/*/filter
 apps/*/passes.txt
 apps/HelloAndroidGL/jni/halide_gl_filter.h
 
-# tutorials
+# Tutorials
 tutorial/lesson_10_halide.h
 
-# tests
+# Tests
 err.txt
 log.txt
-test/*.lowered
 
-# linker scripts
-py_*.ldscript*
+################################################################################
+## Common build artifacts
 
-# generated CMake configuration
-Halide-*-deps.cmake
-
-## Build outputs
 # Directories
 bin/
 distrib/
-include/
+# include/
 lib/
 lib64/
 share/
@@ -72,6 +84,7 @@ share/
 *.o
 *.obj
 *.so
+*.so.*
 a.out
 
 # Compiler intermediates / debugging info
@@ -80,30 +93,34 @@ a.out
 *.d
 *.dSYM
 
-# LLVM generated files
-*.bc
-*.ll
-!src/runtime/*.ll
-
+################################################################################
 ## Temporary and swap files
+
 tmp/
+temp/
 
 .*.swp
+.\#*
 .DS_Store
 *.log
+*.txt.user*
 *~
-
-.\#*
 \#*\#
 
-## Python cruft
+################################################################################
+## Python
+
+# Common virtual environment directory names
 venv/
 .venv/
 
+# Python binary caches
 __pycache__
 *.py[cod]
 
-## CMake files
+################################################################################
+## CMake
+
 # User-specific configuration files
 CMakeUserPresets.json
 
@@ -116,17 +133,21 @@ cmake[-_]build*/
 *-config-version.cmake
 
 # Build directory contents
-CMakeCache.txt
-*.ninja
+_deps/
+.cmake/
 cmake_install.cmake
+CMakeCache.txt
+CMakeFiles/
 compile_commands.json
 CPack*.cmake
 CTest*.cmake
-.cmake/
-_deps/
-CMakeFiles/
 
-## IDE folders and metadata
+# Ninja files
+*.ninja*
+
+################################################################################
+## IDE directories and metadata
+
 # Visual Studio
 .vs/
 out/
@@ -136,6 +157,8 @@ CMakeSettings.json
 # XCode
 *.xcworkspacedata
 xcuserdata
+tools/objc/*.mobileprovision
+tools/objc/BUILD
 
 # CLion
 .idea/
@@ -149,8 +172,7 @@ xcuserdata
 # Sublime Text
 .tags
 .tags_sorted_by_file
-*.sublime-project
-*.sublime-workspace
+*.sublime-*
 
 # Vim
 .clang_complete
@@ -158,3 +180,29 @@ xcuserdata
 # Emacs
 tags
 TAGS
+
+################################################################################
+## Halide-specific rule overrides
+
+
+# Allow particular extension-less files
+!Makefile
+!gradlew
+!packaging/ubuntu/triggers
+!packaging/ubuntu/copyright
+!packaging/ubuntu/changelog
+
+# Allow XCode PCHs in the HelloiOS app
+!apps/HelloiOS/**/*-Prefix.pch
+
+# Allow the runtime to have handwritten LLVM modules
+!src/runtime/*.ll
+
+# Allow precompiled Nvidia bitcode
+!src/runtime/nvidia_libdevice_bitcode/*.bc
+
+# Anything goes in the hexagon_remote binaries
+!src/runtime/hexagon_remote/**/*
+
+# TODO: should this be checked in?
+!src/autoschedulers/adams2019/included_schedule_file.schedule.h
