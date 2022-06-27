@@ -78,8 +78,8 @@ private:
             // non-constant strides.
             return IRMutator::visit(op);
         }
-        if (!(*const_stride == 1 || *const_stride == 2 || *const_stride == 3)) {
-            // Handle ramps with stride 1, 2 or 3 only.
+        if (!(*const_stride == 1 || *const_stride == 2 || *const_stride == 3 || *const_stride == 4)) {
+            // Handle ramps with stride 1, 2, 3 or 4 only.
             return IRMutator::visit(op);
         }
 
