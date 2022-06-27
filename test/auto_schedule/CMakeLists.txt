@@ -1,9 +1,14 @@
 if (TARGET Halide::Mullapudi2016)
     tests(GROUPS auto_schedule
           SOURCES
+          extern.cpp
+          param.cpp
+          ARGS $<TARGET_FILE:Halide::Mullapudi2016>)
+
+    tests(GROUPS auto_schedule multithreaded
+          SOURCES
           cost_function.cpp
           data_dependent.cpp
-          extern.cpp
           fibonacci.cpp
           histogram.cpp
           large_window.cpp
@@ -11,7 +16,6 @@ if (TARGET Halide::Mullapudi2016)
           max_filter.cpp
           multi_output.cpp
           overlap.cpp
-          param.cpp
           reorder.cpp
           small_pure_update.cpp
           tile_vs_inline.cpp
