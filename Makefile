@@ -2048,6 +2048,11 @@ benchmark_apps: $(BENCHMARK_APPS)
 			|| exit 1 ; \
 	done
 
+# TODO: remove this target after landing PR #6821
+.PHONY: test_python
+test_python:
+	@echo "TODO: remove this target after landing PR #6821"
+
 # It's just for compiling the runtime, so earlier clangs *might* work,
 # but best to peg it to the minimum llvm version.
 ifneq (,$(findstring clang version 3.7,$(CLANG_VERSION)))
