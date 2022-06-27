@@ -1,97 +1,132 @@
-CMakeUserPresets.json
+## Halide-specific exclusions
+apps/patchmatch/
+cpp/
+llvm/
+msvc/*/Win32/
+msvc/*/x64/
+testing/
 
-/tutorial/figures/tmp/trace.bin
-/apps/*/bin
-/apps/*/cmake_build
-bin/*
-build/*
-share/*
-python_bindings/bin/*
-build-32/*
-build-64/*
-build-ios/*
-build-osx/*
-build_wasm*/*
-cmake_build*/*
-*/build/*
-tmp/*
-include/*
-distrib/*
-testing/*
-msvc/*/Win32/*
-msvc/*/x64/*
-\#*\#
-.\#*
-*~
-*.o
-*.a
-*.so
-*.dot
-.DS_Store
-*.log
-generated.obj
-hello-fimage
-test.s
-testX64
-xcuserdata
-in.png
 _build
-a.out
-*.bc
-*.cubin
-tags
-src/*.top
-llvm_svn
-llvm/*
-cpp/*
-*.h.gch
-src/test_*.ll
-src/test_*.s
-.clang_complete
+*.dot
 *.guru
-*.dSYM
-.*.swp
-tools/objc/BUILD
-tools/objc/*.mobileprovision
-*.xcworkspacedata
-__pycache__
+hello-fimage
+in.png
+llvm_svn
+src/*.top
+test*.s
+testX64
 
+tools/objc/*.mobileprovision
+tools/objc/BUILD
 
 *.txt.user*
+
+## Halide-specific build intermediates
+# apps
+apps/*/*.def
+apps/*/*.lowered
+apps/*/*.ptx
+apps/*/*.sass
+apps/*/*out*.png
+apps/*/filter
+apps/*/passes.txt
+apps/HelloAndroidGL/jni/halide_gl_filter.h
+
+# tutorials
+tutorial/lesson_10_halide.h
+
+# tests
+err.txt
+log.txt
+test/*.lowered
+
+## Build outputs
+# Directories
+bin/
+distrib/
+include/
+lib/
+lib64/
+share/
+
+# Binaries
+*.a
+*.cubin
+*.dll
+*.dylib
+*.exe
+*.lib
+*.o
+*.obj
+*.so
+a.out
+
+# Compiler intermediates / debugging info
+*.[ip]db
+*.[pg]ch
+*.d
+*.dSYM
+
+# LLVM generated files
+*.bc
+*.ll
+!src/runtime/*.ll
+
+## Temporary and swap files
+tmp/
+
+.*.swp
+.DS_Store
+*.log
+*~
+
+.\#*
+\#*\#
+
+## Python cruft
+venv/
+.venv/
+
+__pycache__
+*.py[cod]
+
+## CMake files
+# User-specific configuration files
+CMakeUserPresets.json
+
+# Common build directory names
+build*/
+cmake[-_]build*/
+
+## IDE folders and metadata
+# Visual Studio
+.vs/
+out/
+
+CMakeSettings.json
+
+# XCode
+*.xcworkspacedata
+xcuserdata
+
+# CLion
 .idea/
 
-# jrk editor settings
+# VSCode
+.vscode/
+
+# TextMate
 .tm_properties
+
+# Sublime Text
+.tags
+.tags_sorted_by_file
 *.sublime-project
 *.sublime-workspace
 
-apps/patchmatch
+# Vim
+.clang_complete
 
-# app intermediates
-apps/*/*out*.png
-apps/*/*.lowered
-apps/*/*.def
-apps/*/*.ptx
-apps/*/passes.txt
-apps/*/*.ll
-apps/*/*.sass
-apps/*/filter
-apps/HelloAndroidGL/jni/halide_gl_filter.h
-
-# tutorial intermediates
-tutorial/lesson_10_halide.h
-
-# test intermediates
-log.txt
-err.txt
-test/*.lowered
-*.pyc
-
-src/.tags
-src/.tags_sorted_by_file
-
-/.vs
-/out
-/CMakeSettings.json
-/venv/
-/cmake-build-*/
+# Emacs
+tags
+TAGS
