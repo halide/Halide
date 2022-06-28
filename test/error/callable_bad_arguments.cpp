@@ -18,14 +18,11 @@ int main(int argc, char **argv) {
 
     f(x, y) = p_img(x, y) + cast<uint8_t>(p_int / p_float);
 
-    Buffer<uint8_t> in1(10, 10), result1(10, 10);
-    in1.fill(0);
-
     // Should fail with "Generated code refers to parameter p_int, which was not found in the argument list."
     Callable c = f.compile_to_callable({p_img, p_float});
 
-    int r = c(in1, 42, 1.0f, result1);
-    _halide_user_assert(r == 0);
+    // Shouldn't get here, but if we do, return success, which is a failure...
 
     printf("Success!\n");
+    return 0;
 }
