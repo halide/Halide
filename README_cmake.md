@@ -311,24 +311,20 @@ standard types: `Debug`, `RelWithDebInfo`, `MinSizeRel`, or `Release`.
 
 ### CMake Presets
 
-If you are using CMake 3.19+, we provide several [presets][cmake_presets] to
+If you are using CMake 3.21+, we provide several [presets][cmake_presets] to
 make the above commands more convenient. The following CMake preset commands
 correspond to the longer ones above.
 
 ```
-> cmake --preset=msvc-release  # Ninja generator, MSVC compiler, Release build
-> cmake --preset=win64         # VS 2019 generator, 64-bit build
-> cmake --preset=win32         # VS 2019 generator, 32-bit build
-$ cmake --preset=gcc-release   # Ninja generator, GCC compiler, Release build
+> cmake --preset=win64    # VS 2019 generator, 64-bit build, vcpkg deps
+> cmake --preset=win32    # VS 2019 generator, 32-bit build, vcpkg deps
+> cmake --preset=release  # Release mode, any single-config generator / compiler
 
-$ cmake --list-presets         # Get full list of presets.
+$ cmake --list-presets    # Get full list of presets.
 ```
 
-The Windows and MSVC presets assume that the environment variable `VCPKG_ROOT`
-is set and points to the root of the vcpkg installation.
-
-Note that the GCC presets do not define `NDEBUG` in release configurations,
-departing from the usual CMake behavior.
+The Windows presets assume that the environment variable `VCPKG_ROOT` is set and
+points to the root of the vcpkg installation.
 
 ## Installing
 

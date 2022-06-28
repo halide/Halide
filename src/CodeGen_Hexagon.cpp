@@ -127,6 +127,9 @@ private:
 
     /** Generate a LUT (8/16 bit, max_index < 256) lookup using vlut instructions. */
     llvm::Value *vlut256(llvm::Value *lut, llvm::Value *indices, int min_index = 0, int max_index = 255);
+
+    /** Wrapper to create a vector populated with a constant value in each lane. */
+    Value *create_vector(llvm::Type *ty, int val);
 };
 
 CodeGen_Hexagon::CodeGen_Hexagon(const Target &t)
@@ -1614,7 +1617,7 @@ Value *CodeGen_Hexagon::vdelta(Value *lut, const vector<int> &indices) {
     return vlut(lut, indices);
 }
 
-Value *create_vector(llvm::Type *ty, int val) {
+Value *CodeGen_Hexagon::create_vector(llvm::Type *ty, int val) {
     llvm::Type *scalar_ty = ty->getScalarType();
     Constant *value = ConstantInt::get(scalar_ty, val);
     return ConstantVector::getSplat(element_count(get_vector_num_elements(ty)), value);

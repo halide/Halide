@@ -1,97 +1,258 @@
-CMakeUserPresets.json
+# NOTE: one can debug these rules with the following commands:
+#
+# $ git clean -ffdx
+# $ find . -not -path './.git/*' | git check-ignore --stdin --no-index
+#
+# The first command will delete all files that are ignored by Git (be warned!).
+# The second command will print all files that are checked in, but _would be_
+# ignored under the rules in this file. Such files should either be explicitly
+# added to the exclusions at the bottom of this file, or the rule excluding them
+# should be refined.
 
-/tutorial/figures/tmp/trace.bin
-/apps/*/bin
-/apps/*/cmake_build
-bin/*
-build/*
-share/*
-python_bindings/bin/*
-build-32/*
-build-64/*
-build-ios/*
-build-osx/*
-build_wasm*/*
-cmake_build*/*
-*/build/*
-tmp/*
-include/*
-distrib/*
-testing/*
-msvc/*/Win32/*
-msvc/*/x64/*
-\#*\#
-.\#*
-*~
-*.o
-*.a
-*.so
-*.dot
-.DS_Store
-*.log
-generated.obj
-hello-fimage
-test.s
-testX64
-xcuserdata
-in.png
-_build
-a.out
-*.bc
-*.cubin
-tags
-src/*.top
-llvm_svn
-llvm/*
-cpp/*
-*.h.gch
-src/test_*.ll
-src/test_*.s
-.clang_complete
-*.guru
-*.dSYM
-.*.swp
-tools/objc/BUILD
-tools/objc/*.mobileprovision
-*.xcworkspacedata
-__pycache__
+################################################################################
+## Exclude files without extensions
 
+*
+!*.*
+!*/
 
-*.txt.user*
-.idea/
+################################################################################
+## Halide-specific exclusions
 
-# jrk editor settings
-.tm_properties
-*.sublime-project
-*.sublime-workspace
+# Images only allowed in apps and directories named "images"
+*.png
+!apps/**/*.png
+!**/images/**/*.png
 
-apps/patchmatch
+# Pre-trained weights only allowed in autoscheduler directories
+*.weights
+!src/autoschedulers/**/*.weights
 
-# app intermediates
-apps/*/*out*.png
-apps/*/*.lowered
+################################################################################
+## Halide-specific build artifacts
+
+# Apps
 apps/*/*.def
 apps/*/*.ptx
-apps/*/passes.txt
-apps/*/*.ll
 apps/*/*.sass
+apps/*/*out*.png
 apps/*/filter
+apps/*/passes.txt
 apps/HelloAndroidGL/jni/halide_gl_filter.h
 
-# tutorial intermediates
-tutorial/lesson_10_halide.h
+# Autoschedulers
+**/src/autoschedulers/adams2019/baseline.cpp
+**/src/autoschedulers/adams2019/cost_model.h
+**/src/autoschedulers/adams2019/demo.h
+**/src/autoschedulers/adams2019/included_schedule_file.h
+**/src/autoschedulers/adams2019/train_cost_model.h
+**/src/autoschedulers/li2018/demo_gradient.h
 
-# test intermediates
-log.txt
-err.txt
-test/*.lowered
-*.pyc
+# CMake configuration
+Halide-*-deps.cmake
 
-src/.tags
-src/.tags_sorted_by_file
+# Distribution headers
+**/include/Halide*.h
+**/include/wasm-rt*.h
 
-/.vs
-/out
-/CMakeSettings.json
-/venv/
-/cmake-build-*/
+# Generator executables
+*.generator
+
+# Generator outputs
+*.bc
+*.featurization
+*.halide_compiler_log
+*.halide_generated.cpp
+*.ll
+*.py.cpp
+*.pytorch.h
+*.registration.cpp
+*.s
+*.schedule.h
+*.stmt
+*.stmt.html
+*.stub.h
+
+# Linker scripts
+py_*.ldscript*
+
+# Runtime modules
+_initmod*.cpp
+
+# Tests
+**/python_bindings/correctness/generators/*.h
+**/test/generator/*.h
+**/test/generator/external_code_extern_bitcode_32.cpp
+**/test/generator/external_code_extern_bitcode_64.cpp
+**/test/generator/external_code_extern_cpp_source.cpp
+compile_log.txt
+stderr.txt
+stdout.txt
+
+# Tutorials
+**/tutorial/auto_schedule_false.h
+**/tutorial/auto_schedule_true.h
+**/tutorial/brighten_either.h
+**/tutorial/brighten_interleaved.h
+**/tutorial/brighten_planar.h
+**/tutorial/brighten_specialized.h
+**/tutorial/lesson_10_halide.h
+**/tutorial/my_first_generator_win32.h
+**/tutorial/my_first_generator.h
+**/tutorial/my_second_generator_1.h
+**/tutorial/my_second_generator_2.h
+**/tutorial/my_second_generator_3.h
+
+# Tutorial images that were copied to the install tree
+**/tutorial/images/
+!tutorial/images/
+
+################################################################################
+## Common build artifacts
+
+# Directories
+bin/
+distrib/
+lib/
+lib64/
+share/
+
+# Binaries
+*.a
+*.cubin
+*.dll
+*.dylib
+*.exe
+*.lib
+*.o
+*.obj
+*.so
+*.so.*
+a.out
+
+# Compiler intermediates / debugging info
+*.[ip]db
+*.[pg]ch
+*.d
+*.dSYM
+
+################################################################################
+## Temporary and swap files
+
+temp/
+tmp/
+
+.*.swp
+.\#*
+.DS_Store
+*.log
+*.tmp
+*.txt.user*
+*~
+\#*\#
+
+################################################################################
+## Python
+
+# Common virtual environment directory names
+.venv/
+venv/
+
+# Python binary caches
+__pycache__
+*.py[cod]
+
+################################################################################
+## CMake
+
+# User-specific configuration files
+CMakeUserPresets.json
+
+# Common build directory names
+build*/
+cmake[-_]build*/
+
+# Generated config files
+*-config-version.cmake
+*-config.cmake
+*Config.cmake
+*ConfigVersion.cmake
+
+# Build directory contents
+_deps/
+.cmake/
+cmake_install.cmake
+CMakeCache.txt
+CMakeFiles/
+compile_commands.json
+CPack*.cmake
+CTest*.cmake
+install_manifest.txt
+
+# Ninja files
+*.ninja*
+
+################################################################################
+## IDE directories and metadata
+
+# Visual Studio
+.vs/
+out/
+
+CMakeSettings.json
+
+# XCode
+*.xcworkspacedata
+tools/objc/*.mobileprovision
+tools/objc/BUILD
+xcuserdata
+
+# CLion
+.idea/
+
+# VSCode
+.vscode/
+
+# TextMate
+.tm_properties
+
+# Sublime Text
+.tags
+.tags_sorted_by_file
+*.sublime-*
+
+# Vim
+.clang_complete
+
+# Emacs
+tags
+TAGS
+
+################################################################################
+## Halide-specific rule overrides
+
+# Allow particular extension-less files
+!gradlew
+!Makefile
+!packaging/ubuntu/changelog
+!packaging/ubuntu/copyright
+!packaging/ubuntu/triggers
+
+# Allow XCode PCHs in the HelloiOS app
+!apps/HelloiOS/**/*-Prefix.pch
+
+# Allow the runtime to have handwritten LLVM modules
+!src/runtime/*.ll
+
+# Allow precompiled Nvidia bitcode
+!src/runtime/nvidia_libdevice_bitcode/*.bc
+
+# Anything goes in the hexagon_remote binaries
+!src/runtime/hexagon_remote/**/*
+
+# TODO: should this be checked in?
+!src/autoschedulers/adams2019/included_schedule_file.schedule.h
+
+# TODO: these should become .cmake.in
+!packaging/common/HalideConfig.cmake
+!packaging/common/HalideHelpersConfig.cmake
