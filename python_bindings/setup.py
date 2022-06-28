@@ -22,6 +22,7 @@ setup(
     cmake_args=[
         f"-Dpybind11_ROOT={pybind11.get_cmake_dir()}",
         "-DCMAKE_REQUIRE_FIND_PACKAGE_pybind11=YES",
+        "-DHalide_INSTALL_PYTHONDIR=.",
     ],
     include_package_data=True,
     extras_require={"test": ["pytest>=6.0"]},
