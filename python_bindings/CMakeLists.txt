@@ -7,16 +7,20 @@ option(CMAKE_CXX_EXTENSIONS "Enable C++ vendor extensions (e.g. GNU)" OFF)
 
 set(PYBIND11_VER 2.6.2 CACHE STRING "The pybind11 version to use")
 
-find_package(Halide REQUIRED)
 find_package(Python3 REQUIRED COMPONENTS Interpreter Development)
-find_package(pybind11 ${PYBIND11_VER} QUIET)
 
+find_package(pybind11 ${PYBIND11_VER} QUIET)
 if (NOT pybind11_FOUND)
     include(FetchContent)
     FetchContent_Declare(pybind11
                          GIT_REPOSITORY https://github.com/pybind/pybind11.git
                          GIT_TAG v${PYBIND11_VER})
     FetchContent_MakeAvailable(pybind11)
+endif ()
+
+find_package(Halide REQUIRED)
+if (NOT Halide_ENABLE_RTTI OR NOT Halide_ENABLE_EXCEPTIONS)
+    message(FATAL_ERROR "Python bindings require RTTI and exceptions to be enabled.")
 endif ()
 
 add_subdirectory(src)
