@@ -899,7 +899,7 @@ Expr lower_halving_sub(const Expr &a, const Expr &b) {
         // An explanation in 8-bit:
         //   (x - y) / 2
         // = (x + 256 - y) / 2 - 128
-        // = (x + (255 - y) + 1) / 2
+        // = (x + (255 - y) + 1) / 2 - 128
         // = (x + ~y + 1) / 2 - 128
         // = rounding_halving_add(x, ~y) - 128
         // = rounding_halving_add(x, ~y) + 128 (due to 2s complement wrap-around)
