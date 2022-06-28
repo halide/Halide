@@ -1,27 +1,16 @@
 cmake_minimum_required(VERSION 3.16...3.23)
 project(Halide_Python)
 
-set(CMAKE_CXX_STANDARD 17)
-set(CMAKE_CXX_STANDARD_REQUIRED ON)
-set(CMAKE_CXX_EXTENSIONS OFF)
+set(CMAKE_CXX_STANDARD 17 CACHE STRING "The minimum C++ standard to use")
+option(CMAKE_CXX_STANDARD_REQUIRED "Prevent CMake C++ standard selection decay" ON)
+option(CMAKE_CXX_EXTENSIONS "Enable C++ vendor extensions (e.g. GNU)" OFF)
+
+set(PYBIND11_VER 2.6.2 CACHE STRING "The pybind11 version to use")
 
 find_package(Halide REQUIRED)
-find_package(PythonExtensions REQUIRED)
-
-if(SKBUILD)
-    # Scikit-Build does not add your site-packages to the search path
-    # automatically, so we need to add it _or_ the pybind11 specific directory
-    # here.
-    execute_process(
-        COMMAND "${PYTHON_EXECUTABLE}" -c
-                "import pybind11; print(pybind11.get_cmake_dir())"
-        OUTPUT_VARIABLE _tmp_dir
-        OUTPUT_STRIP_TRAILING_WHITESPACE COMMAND_ECHO STDOUT)
-    list(APPEND CMAKE_PREFIX_PATH "${_tmp_dir}")
-endif()
-
-set(PYBIND11_VER 2.6.2)
+find_package(Python3 REQUIRED COMPONENTS Interpreter Development)
 find_package(pybind11 ${PYBIND11_VER} QUIET)
+
 if (NOT pybind11_FOUND)
     include(FetchContent)
     FetchContent_Declare(pybind11
