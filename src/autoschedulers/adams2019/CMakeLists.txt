@@ -117,7 +117,7 @@ if (BUILD_SHARED_LIBS)
              COMMAND test_apps_autoscheduler $<TARGET_FILE:Halide_Adams2019>)
 
     set_tests_properties(test_apps_autoscheduler PROPERTIES
-                         LABELS Adams2019
+                         LABELS "Adams2019;multithreaded"
                          ENVIRONMENT "LD_LIBRARY_PATH=$<TARGET_FILE_DIR:Halide_Adams2019>:$ENV{LD_LIBRARY_PATH};HL_TARGET=${Halide_TARGET}")
 endif ()
 

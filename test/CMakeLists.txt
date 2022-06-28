@@ -38,3 +38,5 @@ option(WITH_TEST_GENERATOR "Build generator tests" ON)
 if (WITH_TEST_GENERATOR)
     add_subdirectory(generator)
 endif ()
+
+# FIXME: failing_with_issue is dead code :)

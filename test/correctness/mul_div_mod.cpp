@@ -1,7 +1,7 @@
 #include "Halide.h"
+#include "test_sharding.h"
 
 #include <algorithm>
-#include <future>
 #include <math.h>
 #include <stdio.h>
 
@@ -501,53 +501,44 @@ bool f_mod() {
     return success;
 }
 
-bool test_mul(int vector_width, ScheduleVariant scheduling, Target target) {
-    std::cout << "Testing mul vector_width: " + std::to_string(vector_width) + "\n";
+struct Task {
+    std::function<bool()> fn;
+};
 
-    bool success = true;
-
+void add_test_mul(int vector_width, ScheduleVariant scheduling, Target target, std::vector<Task> &tasks) {
     // Non-widening multiplication.
-    success &= mul<uint8_t, uint8_t, uint8_t, uint64_t>(vector_width, scheduling, target);
-    success &= mul<uint16_t, uint16_t, uint16_t, uint64_t>(vector_width, scheduling, target);
-    success &= mul<uint32_t, uint32_t, uint32_t, uint64_t>(vector_width, scheduling, target);
-    success &= mul<int8_t, int8_t, int8_t, int64_t>(vector_width, scheduling, target);
-    success &= mul<int16_t, int16_t, int16_t, int64_t>(vector_width, scheduling, target);
-    success &= mul<int32_t, int32_t, int32_t, int64_t>(vector_width, scheduling, target);
+    tasks.push_back({[=]() { return mul<uint8_t, uint8_t, uint8_t, uint64_t>(vector_width, scheduling, target); }});
+    tasks.push_back({[=]() { return mul<uint16_t, uint16_t, uint16_t, uint64_t>(vector_width, scheduling, target); }});
+    tasks.push_back({[=]() { return mul<uint32_t, uint32_t, uint32_t, uint64_t>(vector_width, scheduling, target); }});
+    tasks.push_back({[=]() { return mul<int8_t, int8_t, int8_t, int64_t>(vector_width, scheduling, target); }});
+    tasks.push_back({[=]() { return mul<int16_t, int16_t, int16_t, int64_t>(vector_width, scheduling, target); }});
+    tasks.push_back({[=]() { return mul<int32_t, int32_t, int32_t, int64_t>(vector_width, scheduling, target); }});
 
     // Widening multiplication.
-    success &= mul<uint8_t, uint8_t, uint16_t, uint64_t>(vector_width, scheduling, target);
-    success &= mul<uint16_t, uint16_t, uint32_t, uint64_t>(vector_width, scheduling, target);
-    success &= mul<int8_t, int8_t, int16_t, int64_t>(vector_width, scheduling, target);
-    success &= mul<int16_t, int16_t, int32_t, int64_t>(vector_width, scheduling, target);
+    tasks.push_back({[=]() { return mul<uint8_t, uint8_t, uint16_t, uint64_t>(vector_width, scheduling, target); }});
+    tasks.push_back({[=]() { return mul<uint16_t, uint16_t, uint32_t, uint64_t>(vector_width, scheduling, target); }});
+    tasks.push_back({[=]() { return mul<int8_t, int8_t, int16_t, int64_t>(vector_width, scheduling, target); }});
+    tasks.push_back({[=]() { return mul<int16_t, int16_t, int32_t, int64_t>(vector_width, scheduling, target); }});
 
     // Mixed multiplication. This isn't all of the possible mixed
     // multiplications, but it covers all of the special cases we
     // have in Halide.
-    success &= mul<uint16_t, uint32_t, uint32_t, uint64_t>(vector_width, scheduling, target);
-    success &= mul<int16_t, int32_t, int32_t, int64_t>(vector_width, scheduling, target);
-    success &= mul<uint16_t, int32_t, int32_t, uint64_t>(vector_width, scheduling, target);
-
-    return success;
+    tasks.push_back({[=]() { return mul<uint16_t, uint32_t, uint32_t, uint64_t>(vector_width, scheduling, target); }});
+    tasks.push_back({[=]() { return mul<int16_t, int32_t, int32_t, int64_t>(vector_width, scheduling, target); }});
+    tasks.push_back({[=]() { return mul<uint16_t, int32_t, int32_t, uint64_t>(vector_width, scheduling, target); }});
 }
 
-bool test_div_mod(int vector_width, ScheduleVariant scheduling, Target target) {
-    std::cout << "Testing div_mod vector_width: " + std::to_string(vector_width) + "\n";
-
-    bool success = true;
-
-    success &= div_mod<uint8_t, uint64_t>(vector_width, scheduling, target);
-    success &= div_mod<uint16_t, uint64_t>(vector_width, scheduling, target);
-    success &= div_mod<uint32_t, uint64_t>(vector_width, scheduling, target);
-    success &= div_mod<int8_t, int64_t>(vector_width, scheduling, target);
-    success &= div_mod<int16_t, int64_t>(vector_width, scheduling, target);
-    success &= div_mod<int32_t, int64_t>(vector_width, scheduling, target);
-    return success;
+void add_test_div_mod(int vector_width, ScheduleVariant scheduling, Target target, std::vector<Task> &tasks) {
+    tasks.push_back({[=]() { return div_mod<uint8_t, uint64_t>(vector_width, scheduling, target); }});
+    tasks.push_back({[=]() { return div_mod<uint16_t, uint64_t>(vector_width, scheduling, target); }});
+    tasks.push_back({[=]() { return div_mod<uint32_t, uint64_t>(vector_width, scheduling, target); }});
+    tasks.push_back({[=]() { return div_mod<int8_t, int64_t>(vector_width, scheduling, target); }});
+    tasks.push_back({[=]() { return div_mod<int16_t, int64_t>(vector_width, scheduling, target); }});
+    tasks.push_back({[=]() { return div_mod<int32_t, int64_t>(vector_width, scheduling, target); }});
 }
 
 int main(int argc, char **argv) {
     Target target = get_jit_target_from_environment();
-
-    bool can_parallelize = !target.has_feature(Target::OpenGLCompute);
 
     ScheduleVariant scheduling = CPU;
     if (target.has_gpu_feature()) {
@@ -573,52 +564,24 @@ int main(int argc, char **argv) {
         }
     }
 
-    size_t num_threads = Halide::Internal::ThreadPool<bool>::num_processors_online();
-    if (target.has_feature(Target::OpenCL)) {
-        // TODO(https://github.com/halide/Halide/issues/5634):
-        // Try to track down sporadic failures of this function for OpenCL
-        // -- avoid running simultaneous tests
-        // -- set HL_DEBUG_CODEGEN so we can see what the IR looks like
-        num_threads = 1;
-#ifdef _WIN32
-        _putenv_s("HL_DEBUG_CODEGEN", "1");
-#else
-        setenv("HL_DEBUG_CODEGEN", "1", 1);
-#endif
+    std::vector<Task> tasks;
+    for (int vector_width : vector_widths) {
+        add_test_mul(vector_width, scheduling, target, tasks);
+    }
+    for (int vector_width : vector_widths) {
+        add_test_div_mod(vector_width, scheduling, target, tasks);
     }
 
-    Halide::Internal::ThreadPool<bool> pool(num_threads);
-    std::vector<std::future<bool>> futures;
-
-    for (int vector_width : vector_widths) {
-        if (can_parallelize) {
-            auto f = pool.async(test_mul, vector_width, scheduling, target);
-            futures.push_back(std::move(f));
-        } else if (!test_mul(vector_width, scheduling, target)) {
-            return -1;
+    using Sharder = Halide::Internal::Test::Sharder;
+    Sharder sharder;
+    for (size_t t = 0; t < tasks.size(); t++) {
+        if (!sharder.should_run(t)) continue;
+        const auto &task = tasks.at(t);
+        if (!task.fn()) {
+            exit(-1);
         }
     }
 
-    for (int vector_width : vector_widths) {
-        if (can_parallelize) {
-            auto f = pool.async(test_div_mod, vector_width, scheduling, target);
-            futures.push_back(std::move(f));
-        } else if (!test_div_mod(vector_width, scheduling, target)) {
-            return -1;
-        }
-    }
-
-    futures.push_back(pool.async(f_mod<float, double>));
-
-    bool success = true;
-    for (auto &f : futures) {
-        success &= f.get();
-    }
-
-    if (!success) {
-        printf("Failure!\n");
-        return -1;
-    }
     printf("Success!\n");
     return 0;
 }
