@@ -7,6 +7,7 @@ import halide as hl
 import numpy as np
 import imageio
 import os.path
+from apps_helpers import apps_output_dir, apps_images_dir
 
 def get_erode(input):
     """
@@ -35,8 +36,7 @@ def get_erode(input):
 
 
 def get_input_data():
-
-    image_path = os.path.join(os.environ["TEST_IMAGES_DIR"], "rgb.png")
+    image_path = os.path.join(apps_images_dir(), "rgb.png")
     assert os.path.exists(image_path), \
         "Could not find %s" % image_path
     rgb_data = imageio.imread(image_path)
@@ -69,8 +69,8 @@ def main():
     erode.realize(output_image)
 
     # save results
-    input_path = "erode_input.png"
-    output_path = "erode_result.png"
+    input_path = os.path.join(apps_output_dir(), "erode_input.png")
+    output_path = os.path.join(apps_output_dir(), "erode_result.png")
     imageio.imsave(input_path, input_data)
     imageio.imsave(output_path, output_data)
     print("\nerode realized on output image.",

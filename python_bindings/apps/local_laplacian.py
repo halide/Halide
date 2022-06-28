@@ -7,6 +7,7 @@ import halide as hl
 import numpy as np
 import imageio
 import os.path
+from apps_helpers import apps_output_dir, apps_images_dir
 
 int_t = hl.Int(32)
 float_t = hl.Float(32)
@@ -175,7 +176,7 @@ def get_local_laplacian(input, levels, alpha, beta, J=8):
 
 
 def get_input_data():
-    image_path = os.path.join(os.environ["TEST_IMAGES_DIR"], "rgb.png")
+    image_path = os.path.join(apps_images_dir(), "rgb.png")
     assert os.path.exists(image_path), "Could not find {}".format(image_path)
 
     rgb_data = imageio.imread(image_path)
@@ -205,9 +206,8 @@ def filter_test_image(local_laplacian, input):
     output_data = (output_data >> 8).astype(np.uint8)
 
     # save results
-    tmpdir = os.environ["TEST_TMPDIR"]
-    input_path = os.path.join(tmpdir, "local_laplacian_input.png")
-    output_path = os.path.join(tmpdir, "local_laplacian.png")
+    input_path = os.path.join(apps_output_dir(), "local_laplacian_input.png")
+    output_path = os.path.join(apps_output_dir(), "local_laplacian.png")
 
     imageio.imsave(input_path, input_data)
     imageio.imsave(output_path, output_data)

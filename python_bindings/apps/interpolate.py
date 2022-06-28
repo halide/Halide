@@ -8,6 +8,7 @@ from datetime import datetime
 import imageio
 import numpy as np
 import os.path
+from apps_helpers import apps_output_dir, apps_images_dir
 
 int_t = hl.Int(32)
 float_t = hl.Float(32)
@@ -149,7 +150,7 @@ def get_interpolate(input, levels):
 
 
 def get_input_data():
-    image_path = os.path.join(os.environ["TEST_IMAGES_DIR"], "rgba.png")
+    image_path = os.path.join(apps_images_dir(), "rgba.png")
     assert os.path.exists(image_path), "Could not find %s" % image_path
 
     rgba_data = imageio.imread(image_path)
@@ -187,9 +188,8 @@ def main():
     output_data = (output_data * 255).astype(np.uint8)
 
     # save results
-    tmpdir = os.environ["TEST_TMPDIR"]
-    input_path = os.path.join(tmpdir, "interpolate_input.png")
-    output_path = os.path.join(tmpdir, "interpolate_result.png")
+    input_path = os.path.join(apps_output_dir(), "interpolate_input.png")
+    output_path = os.path.join(apps_output_dir(), "interpolate_result.png")
     imageio.imsave(input_path, input_data)
     imageio.imsave(output_path, output_data)
 
