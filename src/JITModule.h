@@ -324,8 +324,6 @@ struct JITFuncCallContext {
 
     JITFuncCallContext(JITUserContext *context, const JITHandlers &pipeline_handlers);
 
-    void report_if_error(int exit_status);
-
     void finalize(int exit_status);
 };
 

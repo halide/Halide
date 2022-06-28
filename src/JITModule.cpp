@@ -1106,7 +1106,7 @@ JITFuncCallContext::JITFuncCallContext(JITUserContext *context, const JITHandler
              << "custom_trace: " << (void *)context->handlers.custom_trace << "\n";
 }
 
-void JITFuncCallContext::report_if_error(int exit_status) {
+void JITFuncCallContext::finalize(int exit_status) {
     // Only report the errors if no custom error handler was installed
     if (exit_status && !custom_error_handler) {
         std::string output = error_buffer.str();
@@ -1118,10 +1118,6 @@ void JITFuncCallContext::report_if_error(int exit_status) {
         halide_runtime_error << output;
         error_buffer.end = 0;
     }
-}
-
-void JITFuncCallContext::finalize(int exit_status) {
-    report_if_error(exit_status);
 }
 
 }  // namespace Internal
