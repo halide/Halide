@@ -1097,7 +1097,7 @@ void Pipeline::infer_input_bounds(JITUserContext *context,
 
         Internal::debug(2) << "Calling jitted function\n";
         int exit_status = call_jit_code(contents->jit_cache.jit_target, args);
-        jit_context.report_if_error(exit_status);
+        jit_context.finalize(exit_status);
         Internal::debug(2) << "Back from jitted function\n";
         bool changed = false;
 
