@@ -22,7 +22,7 @@ def main():
     x, y = hl.Var("x"), hl.Var("y")
 
     # Load a grayscale image to use as an input.
-    image_path = os.path.join(os.environ["TEST_IMAGES_DIR"], "gray.png")
+    image_path = os.path.join(os.path.dirname(__file__), "../../tutorial/images/gray.png")
     input_data = imageio.imread(image_path)
     if True:
          # making the image smaller to go faster

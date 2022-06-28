@@ -19,7 +19,7 @@ def main():
     # First we'll declare some Vars to use below.
     x, y, c = hl.Var("x"), hl.Var("y"), hl.Var("c")
 
-    image_path = os.path.join(os.environ["TEST_IMAGES_DIR"], "rgb.png")
+    image_path = os.path.join(os.path.dirname(__file__), "../../tutorial/images/rgb.png")
 
     # Now we'll express a multi-stage pipeline that blurs an image
     # first horizontally, and then vertically.
@@ -84,10 +84,8 @@ def main():
         # shorter than the input image.
 
         # python3-imageio versions <2.5 expect a numpy array
-        tmpdir = os.environ["TEST_TMPDIR"]
-        output_path = os.path.join(tmpdir, "blurry_parrot_1.png")
-        imageio.imsave(output_path, np.asanyarray(result))
-        print("Created %s" % output_path)
+        imageio.imsave("blurry_parrot_1.png", np.asanyarray(result))
+        print("Created blurry_parrot_1.png")
 
         # This is usually the fastest way to deal with boundaries:
         # don't write code that reads out of bounds :) The more
@@ -157,10 +155,8 @@ def main():
         # input.
 
         # python3-imageio versions <2.5 expect a numpy array
-        tmpdir = os.environ["TEST_TMPDIR"]
-        output_path = os.path.join(tmpdir, "blurry_parrot_2.png")
-        imageio.imsave(output_path, np.asanyarray(result))
-        print("Created %s" % output_path)
+        imageio.imsave("blurry_parrot_2.png", np.asanyarray(result))
+        print("Created blurry_parrot_2.png")
 
     print("Success!")
     return 0

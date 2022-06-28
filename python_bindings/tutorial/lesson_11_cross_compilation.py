@@ -9,7 +9,6 @@
 # in a shell with the current directory at python_bindings/
 
 import halide as hl
-import os.path
 from struct import unpack
 
 
@@ -18,8 +17,6 @@ def main():
     # We'll define the simple one-stage pipeline that we used in lesson 10.
     brighter = hl.Func("brighter")
     x, y = hl.Var("x"), hl.Var("y")
-
-    tmpdir = os.environ["TEST_TMPDIR"]
 
     # Declare the arguments.
     offset = hl.Param(hl.UInt(8))
@@ -37,7 +34,7 @@ def main():
     # program on.  For example, if you compile and run this file on
     # 64-bit linux on an x86 cpu with sse4.1, then the generated code
     # will be suitable for 64-bit linux on x86 with sse4.1.
-    brighter.compile_to_file(os.path.join(tmpdir, "lesson_11_host"), args, "lesson_11_host")
+    brighter.compile_to_file("lesson_11_host", args, "lesson_11_host")
 
     # We can also compile object files suitable for other cpus and
     # operating systems. You do this with an optional third argument
@@ -56,7 +53,7 @@ def main():
         arm_features = []             # A list of features to set
         target.set_features(arm_features)
         # Pass the target as the last argument.
-        brighter.compile_to_file(os.path.join(tmpdir, "lesson_11_arm_32_android"), args,
+        brighter.compile_to_file("lesson_11_arm_32_android", args,
                                  "lesson_11_arm_32_android", target)
 
     if create_windows:
@@ -66,7 +63,7 @@ def main():
         target.arch = hl.TargetArch.X86
         target.bits = 64
         target.set_features([hl.TargetFeature.AVX, hl.TargetFeature.SSE41])
-        brighter.compile_to_file(os.path.join(tmpdir, "lesson_11_x86_64_windows"), args,
+        brighter.compile_to_file("lesson_11_x86_64_windows", args,
                                  "lesson_11_x86_64_windows", target)
 
     if create_ios:
@@ -81,7 +78,7 @@ def main():
         target.arch = hl.TargetArch.ARM
         target.bits = 32
         target.set_features([hl.TargetFeature.ARMv7s])
-        brighter.compile_to_file(os.path.join(tmpdir, "lesson_11_arm_32_ios"), args,
+        brighter.compile_to_file("lesson_11_arm_32_ios", args,
                                  "lesson_11_arm_32_ios", target)
 
     # Now let's check these files are what they claim, by examining
@@ -96,7 +93,7 @@ def main():
                                 1]       # Current version of elf
 
         length = len(arm_32_android_magic)
-        f = open(os.path.join(tmpdir, "lesson_11_arm_32_android.o"), "rb")
+        f = open("lesson_11_arm_32_android.o", "rb")
         try:
             header_bytes = f.read(length)
         except:
@@ -114,7 +111,7 @@ def main():
         # uint8_t  []
         win_64_magic = [0x64, 0x86]
 
-        f = open(os.path.join(tmpdir, "lesson_11_x86_64_windows.obj"), "rb")
+        f = open("lesson_11_x86_64_windows.obj", "rb")
         try:
             header_bytes = f.read(2)
         except:
@@ -133,7 +130,7 @@ def main():
             12,  # CPU type is ARM
             11,  # CPU subtype is ARMv7s
             1]  # It's a relocatable object file.
-        f = open(os.path.join(tmpdir, "lesson_11_arm_32_ios.o"), "rb")
+        f = open("lesson_11_arm_32_ios.o", "rb")
         try:
             header_bytes = f.read(4 * 4)
         except:
