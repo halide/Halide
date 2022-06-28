@@ -894,14 +894,17 @@ Expr lower_halving_add(const Expr &a, const Expr &b) {
 
 Expr lower_halving_sub(const Expr &a, const Expr &b) {
     internal_assert(a.type() == b.type());
-    return (a >> 1) - (b >> 1) - (((b & 1) - (a & 1) + 1) >> 1);
+    Expr e = rounding_halving_add(a, ~b);
+    if (a.type().is_uint()) {
+        return e + make_const(e.type(), (uint64_t)1 << (a.type().bits() - 1));
+    } else {
+        return e;
+    }
 }
 
-// TODO: These should using rounding_shift_right, but lowering that
-// results in double widening and the simplifier doesn't fix it.
 Expr lower_rounding_halving_add(const Expr &a, const Expr &b) {
     internal_assert(a.type() == b.type());
-    return (a >> 1) + (b >> 1) + (((a & 1) + (b & 1) + 1) >> 1);
+    return halving_add(a, b) + ((a ^ b) & 1);
 }
 
 Expr lower_sorted_avg(const Expr &a, const Expr &b) {
