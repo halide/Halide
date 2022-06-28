@@ -36,7 +36,7 @@ def get_erode(input):
 
 def get_input_data():
 
-    image_path = os.path.join(os.path.dirname(__file__), "../../apps/images/rgb.png")
+    image_path = os.path.join(os.environ["TEST_IMAGES_DIR"], "rgb.png")
     assert os.path.exists(image_path), \
         "Could not find %s" % image_path
     rgb_data = imageio.imread(image_path)

@@ -102,7 +102,7 @@ def generate_compiled_file(bilateral_grid):
 
 
 def get_input_data():
-    image_path = os.path.join(os.path.dirname(__file__), "../../apps/images/rgb.png")
+    image_path = os.path.join(os.environ["TEST_IMAGES_DIR"], "rgb.png")
     assert os.path.exists(image_path), \
         "Could not find %s" % image_path
     rgb_data = imageio.imread(image_path)
@@ -133,8 +133,9 @@ def filter_test_image(bilateral_grid, input):
     output_image.copy_to_host()
 
     # save results
-    input_path = "bilateral_grid_input.png"
-    output_path = "bilateral_grid.png"
+    tmpdir = os.environ["TEST_TMPDIR"]
+    input_path = os.path.join(tmpdir, "bilateral_grid_input.png")
+    output_path = os.path.join(tmpdir, "bilateral_grid.png")
     imageio.imsave(input_path, input_data)
     imageio.imsave(output_path, output_data)
     print("\nbilateral_grid realized on output_image.")

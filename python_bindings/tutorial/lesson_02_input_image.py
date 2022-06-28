@@ -18,7 +18,7 @@ def main():
     # brightens an image.
 
     # First we'll load the input image we wish to brighten.
-    image_path = os.path.join(os.path.dirname(__file__), "../../tutorial/images/rgb.png")
+    image_path = os.path.join(os.environ["TEST_IMAGES_DIR"], "rgb.png")
 
     # We create a hl.Buffer object to wrap the numpy array
     input = hl.Buffer(imageio.imread(image_path))
@@ -87,8 +87,10 @@ def main():
 
     # Save the output for inspection. It should look like a bright parrot.
     # python3-imageio versions <2.5 expect a numpy array
-    imageio.imsave("brighter.png", np.asanyarray(output_image))
-    print("Created brighter.png result file.")
+    tmpdir = os.environ["TEST_TMPDIR"]
+    output_path = os.path.join(tmpdir, "brighter.png")
+    imageio.imsave(output_path, np.asanyarray(output_image))
+    print("Created result file %s" % output_path)
 
     print("Success!")
     return 0

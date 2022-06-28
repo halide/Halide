@@ -31,7 +31,7 @@ def get_blur(input):
 
 
 def get_input_data():
-    image_path = os.path.join(os.path.dirname(__file__), "../../apps/images/rgb.png")
+    image_path = os.path.join(os.environ["TEST_IMAGES_DIR"], "rgb.png")
     assert os.path.exists(image_path), \
         "Could not find %s" % image_path
     rgb_data = imageio.imread(image_path)
@@ -63,8 +63,9 @@ def main():
     blur.realize(output_image)
 
     # save results
-    input_path = "blur_input.png"
-    output_path = "blur_result.png"
+    tmpdir = os.environ["TEST_TMPDIR"]
+    input_path = os.path.join(tmpdir, "blur_input.png")
+    output_path = os.path.join(tmpdir, "blur_result.png")
     imageio.imsave(input_path, input_data)
     imageio.imsave(output_path, output_data)
     print("\nblur realized on output image.",

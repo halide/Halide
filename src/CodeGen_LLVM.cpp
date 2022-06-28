@@ -286,7 +286,6 @@ void CodeGen_LLVM::initialize_llvm() {
 #define LLVM_ASM_PRINTER(target) \
     Initialize##target##AsmPrinter();
 #include <llvm/Config/AsmPrinters.def>
-#include <utility>
 #undef LLVM_ASM_PRINTER
     });
 }
