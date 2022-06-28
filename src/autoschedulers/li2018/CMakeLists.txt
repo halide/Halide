@@ -19,7 +19,7 @@ target_link_libraries(demo_gradient_autoscheduler PRIVATE demo_gradient Halide::
 add_test(NAME demo_gradient_autoscheduler
          COMMAND demo_gradient_autoscheduler --benchmarks=all --benchmark_min_time=1 --estimate_all)
 
-set_tests_properties(demo_gradient_autoscheduler PROPERTIES LABELS Li2018)
+set_tests_properties(demo_gradient_autoscheduler PROPERTIES LABELS "Li2018;multithreaded")
 
 ##
 
