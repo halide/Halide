@@ -533,7 +533,7 @@ void CodeGen_X86::visit(const Call *op) {
         Type t = op->type.with_code(halide_type_uint);
         Expr a = cast(t, op->args[0]);
         Expr b = cast(t, op->args[1]);
-        codegen(rounding_halving_add(a, b) + ((a ^ b) & (1 << (t.bits() - 1))));
+        codegen(cast(op->type, rounding_halving_add(a, b) + ((a ^ b) & (1 << (t.bits() - 1)))));
         return;
     } else if (op->is_intrinsic(Call::absd)) {
         internal_assert(op->args.size() == 2);
