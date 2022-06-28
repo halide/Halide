@@ -28,7 +28,7 @@ set(SOURCES
     PyVar.cpp
     PyVarOrRVar.cpp
     )
-  
+
 pybind11_add_module(Halide_Python MODULE ${SOURCES})
 add_library(Halide::Python ALIAS Halide_Python)
 set_target_properties(Halide_Python
