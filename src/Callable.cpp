@@ -140,7 +140,9 @@ void Callable::check_fcci(size_t argc, const FullCallCheckInfo *actual_fcci) con
 // since we verified the signature when we created the std::function, so incorrect types or counts
 // should be impossible.
 /*static*/ int Callable::call_argv_fast(size_t argc, const void *const *argv) const {
-    // Callable should enforce these, so we can use assert() instead of internal_assert()
+    // Callable should enforce these, so we can use assert() instead of internal_assert() --
+    // this is effectively just documentation that these invariants are expected to have
+    // been enforced prior to this call.
     assert(contents->jit_cache.jit_target.has_feature(Target::UserContext));
     assert(contents->jit_cache.arguments[0].name == "__user_context");
 
@@ -149,9 +151,7 @@ void Callable::check_fcci(size_t argc, const FullCallCheckInfo *actual_fcci) con
 
     JITFuncCallContext jit_call_context(context, contents->saved_jit_handlers);
 
-    // debug(2) << "Calling jitted function\n";
     int exit_status = contents->jit_cache.call_jit_code(contents->jit_cache.jit_target, argv);
-    // debug(2) << "Back from jitted function. Exit status was " << exit_status << "\n";
 
     // If we're profiling, report runtimes and reset profiler stats.
     contents->jit_cache.finish_profiling(context);
@@ -161,10 +161,8 @@ void Callable::check_fcci(size_t argc, const FullCallCheckInfo *actual_fcci) con
     // and friends because there is no other way to report an error. For this code
     // path, though, we just return the error code (if any); if a custom error
     // handler was installed, it presumably will get the first shot at handling it,
-    // and if not, the caller must handle it.
-    //
-    // No: jit_call_context.finalize(exit_status);
-    // jit_call_context.finalize(exit_status);
+    // and if not, the caller must handle it by checking that the result code
+    // is zero, in the same way that callers to an AOT-compiled Halide function must.
 
     return exit_status;
 }

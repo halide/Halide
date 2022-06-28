@@ -141,7 +141,8 @@ private:
     // of Buffers, and is used for the make_std_function() method, to ensure
     // that if we specify static type-and-dims for Buffers, the ones we specify
     // actually match the underlying code. We take horrible liberties with halide_type_t
-    // to make this happen, but that's ok since this never escapes:
+    // to make this happen -- specifically, encoding dimensionality and buffer-vs-scalar
+    // into the 'lanes' field -- but that's ok since this never escapes into other usage.
     using FullCallCheckInfo = halide_type_t;
 
     static constexpr FullCallCheckInfo _make_fcci(halide_type_t type, int dims, bool is_buffer) {
@@ -344,7 +345,7 @@ public:
             return [*this](auto &&first, auto &&...rest) -> int {
                 // Explicitly prepend an (empty) JITUserContext to the args.
                 JITUserContext empty;
-                constexpr size_t count = 1 + 1 + sizeof...(rest) + 1;
+                constexpr size_t count = 1 + 1 + sizeof...(rest);
                 ArgvStorage<count> argv(&empty, std::forward<First>(first), std::forward<Rest>(rest)...);
                 return call_argv_fast(count, &argv.argv[0]);
             };
