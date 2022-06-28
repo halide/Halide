@@ -1168,9 +1168,13 @@ void CodeGen_LLVM::optimize_module() {
     }
 
     if (get_target().has_feature(Target::ASAN)) {
+#if LLVM_VERSION >= 150
+        // Nothing, ASanGlobalsMetadataAnalysis no longer exists
+#else
         pb.registerPipelineStartEPCallback([&](ModulePassManager &mpm, OptimizationLevel) {
             mpm.addPass(RequireAnalysisPass<ASanGlobalsMetadataAnalysis, llvm::Module>());
         });
+#endif
         pb.registerPipelineStartEPCallback([](ModulePassManager &mpm, OptimizationLevel) {
 #if LLVM_VERSION >= 140
             AddressSanitizerOptions asan_options;  // default values are good...
