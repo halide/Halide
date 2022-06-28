@@ -7,20 +7,15 @@ tests(GROUPS correctness
       SOURCES
       align_bounds.cpp
       argmax.cpp
-      assertion_failure_in_parallel_for.cpp
-      async.cpp
-      async_copy_chain.cpp
       async_device_copy.cpp
-      atomic_tuples.cpp
-      atomics.cpp
       autodiff.cpp
       bad_likely.cpp
       bit_counting.cpp
       bitwise_ops.cpp
       bool_compute_root_vectorize.cpp
       bound.cpp
-      bound_storage.cpp
       bound_small_allocations.cpp
+      bound_storage.cpp
       boundary_conditions.cpp
       bounds.cpp
       bounds_inference.cpp
@@ -51,8 +46,6 @@ tests(GROUPS correctness
       compute_at_reordered_update_stage.cpp
       compute_at_split_rvar.cpp
       compute_inside_guard.cpp
-      compute_outermost.cpp
-      compute_with.cpp
       compute_with_in.cpp
       compute_with_inlined.cpp
       computed_index.cpp
@@ -60,7 +53,6 @@ tests(GROUPS correctness
       constant_expr.cpp
       constant_type.cpp
       constraints.cpp
-      convolution.cpp
       convolution_multiple_kernels.cpp
       cross_compilation.cpp
       cse_nan.cpp
@@ -85,21 +77,19 @@ tests(GROUPS correctness
       div_by_zero.cpp
       dynamic_allocation_in_gpu_kernel.cpp
       dynamic_reduction_bounds.cpp
-      embed_bitcode.cpp
       early_out.cpp
+      embed_bitcode.cpp
       erf.cpp
       exception.cpp
       explicit_inline_reductions.cpp
       extern_bounds_inference.cpp
       extern_consumer.cpp
-      extern_consumer_tiled.cpp
       extern_error.cpp
       extern_output_expansion.cpp
       extern_partial.cpp
       extern_producer.cpp
       extern_reorder_storage.cpp
       extern_sort.cpp
-      extern_stage.cpp
       extern_stage_on_device.cpp
       external_code.cpp
       failed_unroll.cpp
@@ -113,10 +103,8 @@ tests(GROUPS correctness
       float16_t_neon_op_check.cpp
       for_each_element.cpp
       force_onto_stack.cpp
-      func_clone.cpp
       func_lifetime.cpp
       func_lifetime_2.cpp
-      func_wrapper.cpp
       fuse.cpp
       fuse_gpu_threads.cpp
       fused_where_inner_extent_is_zero.cpp
@@ -171,7 +159,6 @@ tests(GROUPS correctness
       host_alignment.cpp
       image_io.cpp
       image_of_lists.cpp
-      image_wrapper.cpp
       implicit_args.cpp
       implicit_args_tests.cpp
       in_place.cpp
@@ -185,7 +172,6 @@ tests(GROUPS correctness
       interleave.cpp
       interleave_rgb.cpp
       interleave_x.cpp
-      interpreter.cpp
       interval.cpp
       intrinsics.cpp
       introspection.cpp
@@ -197,7 +183,6 @@ tests(GROUPS correctness
       lazy_convolution.cpp
       leak_device_memory.cpp
       left_shift_negative.cpp
-      legal_race_condition.cpp
       lerp.cpp
       let_in_rdom_bound.cpp
       likely.cpp
@@ -206,7 +191,6 @@ tests(GROUPS correctness
       loop_invariant_extern_calls.cpp
       loop_level_generator_param.cpp
       lossless_cast.cpp
-      lots_of_dimensions.cpp
       lots_of_loop_invariants.cpp
       make_struct.cpp
       many_dimensions.cpp
@@ -214,40 +198,25 @@ tests(GROUPS correctness
       many_updates.cpp
       math.cpp
       median3x3.cpp
-      memoize.cpp
       memoize_cloned.cpp
       min_extent.cpp
       mod.cpp
       mul_div_mod.cpp
       multi_output_pipeline_with_bad_sizes.cpp
-      multi_pass_reduction.cpp
       multi_splits_with_diff_tail_strategies.cpp
       multi_way_select.cpp
       multipass_constraints.cpp
       multiple_outputs.cpp
-      multiple_outputs_extern.cpp
-      multiple_scatter.cpp
       mux.cpp
-      named_updates.cpp
-      nested_shiftinwards.cpp
       nested_tail_strategies.cpp
       newtons_method.cpp
       non_nesting_extern_bounds_query.cpp
       non_vector_aligned_embeded_buffer.cpp
       obscure_image_references.cpp
-      oddly_sized_output.cpp
       out_constraint.cpp
       out_of_memory.cpp
       output_larger_than_two_gigs.cpp
-      parallel.cpp
-      parallel_alloc.cpp
-      parallel_fork.cpp
       parallel_gpu_nested.cpp
-      parallel_nested.cpp
-      parallel_nested_1.cpp
-      parallel_scatter.cpp
-      parallel_reductions.cpp
-      parallel_rvar.cpp
       param.cpp
       param_map.cpp
       parameter_constraints.cpp
@@ -267,19 +236,16 @@ tests(GROUPS correctness
       pseudostack_shares_slots.cpp
       python_extension_gen.cpp
       pytorch.cpp
-      random.cpp
       realize_larger_than_two_gigs.cpp
       realize_over_shifted_domain.cpp
       reduction_chain.cpp
       reduction_non_rectangular.cpp
       reduction_schedule.cpp
       register_shuffle.cpp
-      reorder_rvars.cpp
       reorder_storage.cpp
       require.cpp
       reschedule.cpp
       reuse_stack_alloc.cpp
-      rfactor.cpp
       round.cpp
       saturating_casts.cpp
       scatter.cpp
@@ -312,12 +278,10 @@ tests(GROUPS correctness
       stmt_to_html.cpp
       storage_folding.cpp
       store_in.cpp
-      stream_compaction.cpp
       strict_float.cpp
       strict_float_bounds.cpp
       strided_load.cpp
       target.cpp
-      thread_safety.cpp
       tiled_matmul.cpp
       tracing.cpp
       tracing_bounds.cpp
@@ -325,20 +289,17 @@ tests(GROUPS correctness
       tracing_stack.cpp
       transitive_bounds.cpp
       trim_no_ops.cpp
-      truncated_pyramid.cpp
       tuple_partial_update.cpp
       tuple_reduction.cpp
       tuple_select.cpp
       tuple_undef.cpp
       tuple_update_ops.cpp
-      tuple_vector_reduce.cpp
       two_vector_args.cpp
       typed_func.cpp
       undef.cpp
       uninitialized_read.cpp
       unique_func_image.cpp
       unroll_dynamic_loop.cpp
-      unroll_huge_mux.cpp
       unrolled_reduction.cpp
       unsafe_dedup_lets.cpp
       unsafe_promises.cpp
@@ -361,6 +322,49 @@ tests(GROUPS correctness
       vectorized_reduction_bug.cpp
       widening_lerp.cpp
       widening_reduction.cpp
+      )
+
+tests(GROUPS correctness multithreaded
+      SOURCES
+      assertion_failure_in_parallel_for.cpp
+      async.cpp
+      async_copy_chain.cpp
+      atomic_tuples.cpp
+      atomics.cpp
+      compute_outermost.cpp
+      compute_with.cpp
+      convolution.cpp
+      extern_consumer_tiled.cpp
+      extern_stage.cpp
+      func_clone.cpp
+      func_wrapper.cpp
+      image_wrapper.cpp
+      interpreter.cpp
+      legal_race_condition.cpp
+      lots_of_dimensions.cpp
+      memoize.cpp
+      multi_pass_reduction.cpp
+      multiple_outputs_extern.cpp
+      multiple_scatter.cpp
+      named_updates.cpp
+      nested_shiftinwards.cpp
+      oddly_sized_output.cpp
+      parallel.cpp
+      parallel_alloc.cpp
+      parallel_fork.cpp
+      parallel_nested.cpp
+      parallel_nested_1.cpp
+      parallel_reductions.cpp
+      parallel_rvar.cpp
+      parallel_scatter.cpp
+      random.cpp
+      reorder_rvars.cpp
+      rfactor.cpp
+      stream_compaction.cpp
+      thread_safety.cpp
+      truncated_pyramid.cpp
+      tuple_vector_reduce.cpp
+      unroll_huge_mux.cpp
       )
 
 # Make sure the test that needs image_io has it
@@ -406,4 +410,3 @@ set_target_properties(correctness_async
                       correctness_sliding_window
                       correctness_storage_folding
                       PROPERTIES ENABLE_EXPORTS TRUE)
-
