@@ -116,7 +116,6 @@
       ],
       "displayName": "Package ZIP for Windows",
       "description": "Build for packaging Windows shared libraries.",
-      "binaryDir": "${sourceDir}/build",
       "cacheVariables": {
         "BUILD_SHARED_LIBS": "YES",
         "CMAKE_INSTALL_BINDIR": "bin/$<CONFIG>",
@@ -130,7 +129,6 @@
       "inherits": "package",
       "displayName": "Package UNIX shared libs",
       "description": "Build for packaging UNIX shared libraries.",
-      "binaryDir": "shared-Release",
       "cacheVariables": {
         "BUILD_SHARED_LIBS": "YES"
       }
@@ -140,7 +138,6 @@
       "inherits": "package",
       "displayName": "Package UNIX static libs",
       "description": "Build for packaging UNIX static libraries.",
-      "binaryDir": "static-Release",
       "cacheVariables": {
         "BUILD_SHARED_LIBS": "NO",
         "Halide_BUNDLE_LLVM": "YES"
@@ -151,7 +148,6 @@
       "inherits": "package-unix-shared",
       "displayName": "Package shared Halide for Ubuntu",
       "description": "Package shared Halide for Ubuntu, using system packages.",
-      "binaryDir": "shared-release",
       "cacheVariables": {
         "Halide_SHARED_LLVM": "YES",
         "LLVM_DIR": "$env{LLVM_ROOT}/lib/cmake/llvm",
@@ -169,10 +165,24 @@
       "inherits": "package-ubuntu-shared",
       "displayName": "Package static Halide for Ubuntu",
       "description": "Package static Halide for Ubuntu, using system packages.",
-      "binaryDir": "static-release",
       "cacheVariables": {
         "BUILD_SHARED_LIBS": "NO",
         "WITH_DOCS": "NO"
+      }
+    },
+    {
+      "name": "pypi",
+      "inherits": "default",
+      "displayName": "PyPI",
+      "description": "Build Halide as we do for our PyPI wheels",
+      "cacheVariables": {
+        "BUILD_SHARED_LIBS": "YES",
+        "CMAKE_BUILD_TYPE": "Release",
+        "WITH_DOCS": "NO",
+        "WITH_PYTHON_BINDINGS": "NO",
+        "WITH_TESTS": "NO",
+        "WITH_TUTORIALS": "NO",
+        "WITH_UTILS": "NO"
       }
     }
   ]
