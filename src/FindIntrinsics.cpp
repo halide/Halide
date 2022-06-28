@@ -896,6 +896,13 @@ Expr lower_halving_sub(const Expr &a, const Expr &b) {
     internal_assert(a.type() == b.type());
     Expr e = rounding_halving_add(a, ~b);
     if (a.type().is_uint()) {
+        // An explanation in 8-bit:
+        //   (x - y) / 2
+        // = (x + 256 - y) / 2 - 128
+        // = (x + (255 - y) + 1) / 2
+        // = (x + ~y + 1) / 2 - 128
+        // = rounding_halving_add(x, ~y) - 128
+        // = rounding_halving_add(x, ~y) + 128 (due to 2s complement wrap-around)
         return e + make_const(e.type(), (uint64_t)1 << (a.type().bits() - 1));
     } else {
         return e;
