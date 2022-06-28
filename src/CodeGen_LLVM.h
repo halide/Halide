@@ -141,9 +141,12 @@ protected:
     virtual int native_vector_bits() const = 0;
 
     /** For architectures that have vscale vectors, return the constant vscale to use.
-     * Default of 0 means do not use vscale vectors.
+     * Default of 0 means do not use vscale vectors. Generally will depend on
+     * the target flags and vector_bits settings.
      */
-    virtual int target_vscale() const { return 0; };
+    virtual int target_vscale() const {
+        return 0;
+    }
 
     /** Return the type in which arithmetic should be done for the
      * given storage type. */
@@ -514,14 +517,14 @@ protected:
         This is used to avoid "emulated" equivalent code-gen in case target has FP16 feature **/
     virtual bool supports_call_as_float16(const Call *op) const;
 
-    /** Ensure that a vector value is correctly either fixed of vscale
+    /** Ensure that a vector value is either fixed or vscale depending to match desired_type.
      */
     llvm::Value *normalize_fixed_scalable_vector_type(llvm::Type *desired_type, llvm::Value *result);
-  
-    /** Convert fixed vector to a vscale one. */
+
+    /** Convert an LLVM fixed vector value to the corresponding vscale vector value. */
     llvm::Value *fixed_to_scalable_vector_type(llvm::Value *fixed);
 
-    /** Convert vscale vector to a fixed one. */
+    /** Convert an LLVM vscale vector value to the corresponding fixed vector value. */
     llvm::Value *scalable_to_fixed_vector_type(llvm::Value *scalable);
 
     /** Get number of vector elements, taking into account scalable vectors. Returns 1 for scalars. */
@@ -559,7 +562,7 @@ private:
      */
     llvm::Function *embed_metadata_getter(const std::string &metadata_getter_name,
                                           const std::string &function_name, const std::vector<LoweredArgument> &args,
-                                          const std::map<std::string, std::string> &metadata_name_map);
+                                          const MetadataNameMap &metadata_name_map);
 
     /** Embed a constant expression as a global variable. */
     llvm::Constant *embed_constant_expr(Expr e, llvm::Type *t);

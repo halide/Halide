@@ -38,13 +38,13 @@ struct Target;
 namespace Internal {
 
 /** Get the llvm type equivalent to a given halide type. If
- * target_vscale is nonzero and the type is a vector type, an LLVM
- * vscale vector type is generated based on target_vscale == 1
- * implying a 128-bit total vector size. If vector total size is not a
- * multiple of 128-bits a non vscale type is generated even if
- * target_vscale is nonzero.
+ * effective_vscale is nonzero and the type is a vector type with lanes
+ * a multiple of effective_vscale, a scalable vector type is generated
+ * with total lanes divided by effective_vscale. That is a scalable
+ * vector intended to be used with a fixed vscale of effective_vscale.
  */
-llvm::Type *llvm_type_of(llvm::LLVMContext *context, Halide::Type t, int target_vscale);
+llvm::Type *llvm_type_of(llvm::LLVMContext *context, Halide::Type t,
+                         int effective_vscale);
 
 /** Get the scalar type of an llvm vector type. Returns the argument
  * if it's not a vector type. */
@@ -52,7 +52,7 @@ llvm::Type *get_vector_element_type(llvm::Type *);
 
 llvm::ElementCount element_count(int e);
 
-llvm::Type *get_vector_type(llvm::Type *, int, bool scalable = false);
+llvm::Type *get_vector_type(llvm::Type *, int n, bool scalable = false);
 
 /** Which built-in functions require a user-context first argument? */
 bool function_takes_user_context(const std::string &name);

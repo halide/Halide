@@ -220,8 +220,9 @@ CodeGen_LLVM::CodeGen_LLVM(const Target &t)
 
       destructor_block(nullptr),
       strict_float(t.has_feature(Target::StrictFloat)),
-      llvm_large_code_model(t.has_feature(Target::LLVMLargeCodeModel)) {
-    initialize_llvm(t);
+      llvm_large_code_model(t.has_feature(Target::LLVMLargeCodeModel)),
+      effective_vscale(0) {
+    initialize_llvm();
 }
 
 void CodeGen_LLVM::set_context(llvm::LLVMContext &context) {
@@ -474,12 +475,9 @@ void CodeGen_LLVM::init_codegen(const std::string &name, bool any_strict_float) 
     module->addModuleFlag(llvm::Module::Warning, "halide_use_pic", use_pic() ? 1 : 0);
     module->addModuleFlag(llvm::Module::Warning, "halide_use_large_code_model", llvm_large_code_model ? 1 : 0);
     module->addModuleFlag(llvm::Module::Warning, "halide_per_instruction_fast_math_flags", any_strict_float);
-    int vector_bits = get_target().vector_bits;
-    if (vector_bits != 0) {
-        internal_assert(vector_bits % 128 == 0);
-        int vscale = vector_bits / 128;
+    if (effective_vscale != 0) {
         module->addModuleFlag(llvm::Module::Warning, "halide_vscale_range",
-                              MDString::get(*context, std::to_string(vscale) + ", " + std::to_string(vscale)));
+                              MDString::get(*context, std::to_string(effective_vscale) + ", " + std::to_string(effective_vscale)));
     }
 
     // Ensure some types we need are defined
@@ -984,7 +982,7 @@ llvm::Function *CodeGen_LLVM::add_argv_wrapper(llvm::Function *fn,
 
 llvm::Function *CodeGen_LLVM::embed_metadata_getter(const std::string &metadata_name,
                                                     const std::string &function_name, const std::vector<LoweredArgument> &args,
-                                                    const std::map<std::string, std::string> &metadata_name_map) {
+                                                    const MetadataNameMap &metadata_name_map) {
     Constant *zero = ConstantInt::get(i32_t, 0);
 
     const int num_args = (int)args.size();
@@ -1093,38 +1091,7 @@ llvm::Function *CodeGen_LLVM::embed_metadata_getter(const std::string &metadata_
 }
 
 llvm::Type *CodeGen_LLVM::llvm_type_of(const Type &t) const {
-
-// On vector architectures where the size of vector hardware can vary
-// by implementation, such as ARM SVE and RISC V Vector Extension,
-// Halide (currently) only generates code for a specific width.  There
-// are two ways Halide can generate LLVM IR for this. The first is to
-// generate simple LLVM dixed-width vector types that match the size
-// of the vector hardware and then to assert the size of the hardware
-// to LLVM via an architecture specific flag. The second way is to
-// generate vscale vector types and assert the size of vscale by
-// setting the vscale_range attribute on the function Halide produces.
-// In general the vscale approach must be used in some places because
-// architecture specific intrinsics take vscale types. Codegen will
-// automatically convert between the two as necessary. (Which should
-// not result in added instructions. It should just be an LLVM type
-// conversion effectively.)
-//
-// At present fixed vector code seems to produce better output, at
-// least on RISC V due to fewer set vector length instructions. Hence
-// the default here is to generate fixed. The direction LLVM seems to
-// be heading is toward vscale as the prefered method. E.g. using the
-// fixed types requires an architecture specific flag that is
-// effectively a global variable not a part of the passed in machine
-// configuration. So likely this mess^H^H^H^H choice will go away in
-// favor of always using vscale types, but for now there's this #ifdef
-// and very long comment.
-  
-#define USE_VSCALE_TYPES 0
-#if USE_VSCALE_TYPES
     return Internal::llvm_type_of(context, t, effective_vscale);
-#else
-    return Internal::llvm_type_of(context, t, 0);
-#endif    
 }
 
 void CodeGen_LLVM::optimize_module() {
@@ -1345,6 +1312,7 @@ Value *CodeGen_LLVM::codegen(const Expr &e) {
         value = builder->CreateExtractElement(value, ConstantInt::get(i32_t, 0));
     }
 
+    // Make sure fixed/vscale property of vector types match what is exepected.
     value = normalize_fixed_scalable_vector_type(llvm_type_of(e.type()), value);
 
     // TODO: skip this correctness check for bool vectors,
@@ -4777,7 +4745,7 @@ Value *CodeGen_LLVM::shuffle_vectors(Value *a, Value *b,
     }
     if (isa<llvm::ScalableVectorType>(b->getType())) {
         b = scalable_to_fixed_vector_type(b);
-    }    
+    }
     return builder->CreateShuffleVector(a, b, ConstantVector::get(llvm_indices));
 }
 
@@ -4846,7 +4814,7 @@ llvm::Value *CodeGen_LLVM::normalize_fixed_scalable_vector_type(llvm::Type *desi
             return fixed_to_scalable_vector_type(result);
         }
     } else if (isa<llvm::FixedVectorType>(desired_type) &&
-        isa<llvm::ScalableVectorType>(actual_type)) {
+               isa<llvm::ScalableVectorType>(actual_type)) {
         const llvm::ScalableVectorType *scalable = cast<llvm::ScalableVectorType>(actual_type);
         const llvm::FixedVectorType *fixed = cast<llvm::FixedVectorType>(desired_type);
         if (fixed->getElementType() == scalable->getElementType()) {
@@ -4865,13 +4833,13 @@ llvm::Value *CodeGen_LLVM::fixed_to_scalable_vector_type(llvm::Value *fixed_arg)
     auto lanes = fixed->getNumElements();
 
     const llvm::ScalableVectorType *scalable = cast<llvm::ScalableVectorType>(get_vector_type(fixed->getElementType(),
-                                                                                           lanes / effective_vscale, true));
+                                                                                              lanes / effective_vscale, true));
     internal_assert(fixed != nullptr);
 
     internal_assert(fixed->getElementType() == scalable->getElementType());
     internal_assert(lanes == (scalable->getMinNumElements() * effective_vscale));
 
-    //E.g. <vscale x 2 x i64> llvm.experimental.vector.insert.nxv2i64.v4i64(<vscale x 2 x i64>, <4 x i64>, i64)
+    // E.g. <vscale x 2 x i64> llvm.experimental.vector.insert.nxv2i64.v4i64(<vscale x 2 x i64>, <4 x i64>, i64)
     const char *type_designator;
     if (fixed->getElementType()->isIntegerTy()) {
         type_designator = "i";
@@ -4924,24 +4892,16 @@ llvm::Value *CodeGen_LLVM::scalable_to_fixed_vector_type(llvm::Value *scalable_a
 }
 
 int CodeGen_LLVM::get_vector_num_elements(const llvm::Type *t) {
-#if LLVM_VERSION >= 120
     if (isa<llvm::FixedVectorType>(t)) {
-        auto *vt = cast<llvm::FixedVectorType>(t);
+        const auto *vt = cast<llvm::FixedVectorType>(t);
         return vt->getNumElements();
     } else if (isa<llvm::ScalableVectorType>(t)) {
         internal_assert(effective_vscale != 0) << "Scalable vector type enountered without vector_bits being set.\n";
-        auto *vt = cast<llvm::ScalableVectorType>(t);
-        return vt->getMinNumElements() * effective_vscale; 
+        const auto *vt = cast<llvm::ScalableVectorType>(t);
+        return vt->getMinNumElements() * effective_vscale;
     } else {
         return 1;
     }
-#else
-    if (t->isVectorTy()) {
-        return dyn_cast<llvm::VectorType>(t)->getNumElements();
-    } else {
-        return 1;
-    }
-#endif
 }
 
 }  // namespace Internal

@@ -1523,7 +1523,7 @@ void CodeGen_C::emit_argv_wrapper(const std::string &function_name,
 
 void CodeGen_C::emit_metadata_getter(const std::string &function_name,
                                      const std::vector<LoweredArgument> &args,
-                                     const std::map<std::string, std::string> &metadata_name_map) {
+                                     const MetadataNameMap &metadata_name_map) {
     if (is_header_or_extern_decl()) {
         stream << "\nHALIDE_FUNCTION_ATTRS\nconst struct halide_filter_metadata_t *" << function_name << "_metadata();\n";
         return;
@@ -1798,7 +1798,7 @@ void CodeGen_C::compile(const Module &input) {
     }
 }
 
-void CodeGen_C::compile(const LoweredFunc &f, const std::map<std::string, std::string> &metadata_name_map) {
+void CodeGen_C::compile(const LoweredFunc &f, const MetadataNameMap &metadata_name_map) {
     // Don't put non-external function declarations in headers.
     if (is_header_or_extern_decl() && f.linkage == LinkageType::Internal) {
         return;
