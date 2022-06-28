@@ -2,8 +2,8 @@ from skbuild import setup
 from setuptools import find_packages
 import pybind11
 
-with open('version.py', 'r') as f:
-    version = f.read().strip().split(' ')[-1][1:-1]
+with open("version.py", "r") as f:
+    version = f.read().strip().split(" ")[-1][1:-1]
 
 with open("readme.md", "r") as fp:
     long_description = fp.read()
@@ -25,5 +25,5 @@ setup(
     ],
     include_package_data=True,
     extras_require={"test": ["pytest>=6.0"]},
-    zip_safe=False
+    zip_safe=False,
 )
