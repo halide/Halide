@@ -1,73 +1,96 @@
 {
-  "version": 1,
+  "version": 3,
   "cmakeMinimumRequired": {
     "major": 3,
-    "minor": 16,
+    "minor": 22,
     "patch": 0
   },
   "configurePresets": [
     {
-      "name": "gcc-debug",
-      "displayName": "GCC (Debug)",
-      "description": "Debug build using Ninja generator and GCC-compatible compiler",
-      "generator": "Ninja",
-      "binaryDir": "${sourceDir}/build",
+      "name": "default",
+      "hidden": true,
+      "binaryDir": "build/${presetName}",
+      "installDir": "install/${presetName}"
+    },
+    {
+      "name": "windows-only",
+      "hidden": true,
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Windows"
+      }
+    },
+    {
+      "name": "vcpkg",
+      "hidden": true,
+      "toolchainFile": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake"
+    },
+    {
+      "name": "vs2019",
+      "hidden": true,
+      "inherits": [
+        "vcpkg",
+        "windows-only"
+      ],
+      "generator": "Visual Studio 16 2019",
+      "toolset": "host=x64"
+    },
+    {
+      "name": "debug",
+      "inherits": "default",
+      "displayName": "Debug",
+      "description": "Debug build with no special settings",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Debug"
       }
     },
     {
-      "name": "gcc-release",
-      "inherits": "gcc-debug",
-      "displayName": "GCC (Release)",
-      "description": "Release build using Ninja generator and GCC-compatible compiler",
+      "name": "release",
+      "inherits": "default",
+      "displayName": "Release",
+      "description": "Release build with no special settings",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release"
       }
     },
     {
-      "name": "msvc-debug",
-      "displayName": "MSVC (Debug)",
-      "description": "Debug build using Ninja generator and MSVC with vcpkg dependencies.",
-      "generator": "Ninja",
-      "binaryDir": "${sourceDir}/build",
+      "name": "debian-debug",
+      "inherits": "debug",
+      "displayName": "Debian (Debug)",
+      "description": "Debug build assuming Debian-provided dependencies",
       "cacheVariables": {
-        "CMAKE_BUILD_TYPE": "Debug",
-        "CMAKE_TOOLCHAIN_FILE": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake"
+        "Halide_SHARED_LLVM": "ON"
       }
     },
     {
-      "name": "msvc-release",
-      "inherits": "msvc-debug",
-      "displayName": "MSVC (Release)",
-      "description": "Release build using Ninja generator and MSVC with vcpkg dependencies.",
+      "name": "debian-release",
+      "inherits": "debian-debug",
+      "displayName": "Debian (Release)",
+      "description": "Release build assuming Debian-provided dependencies",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release"
       }
     },
     {
       "name": "win32",
+      "inherits": [
+        "vs2019",
+        "default"
+      ],
       "displayName": "Win32 (Visual Studio)",
       "description": "Visual Studio-based Win32 build with vcpkg dependencies.",
-      "generator": "Visual Studio 16 2019",
-      "architecture": "Win32",
-      "toolset": "host=x64",
-      "binaryDir": "${sourceDir}/build",
-      "cacheVariables": {
-        "CMAKE_TOOLCHAIN_FILE": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake"
-      }
+      "architecture": "Win32"
     },
     {
       "name": "win64",
+      "inherits": [
+        "vs2019",
+        "default"
+      ],
       "displayName": "Win64 (Visual Studio)",
-      "description": "Visual Studio-based Win64 build with vcpkg dependencies.",
-      "generator": "Visual Studio 16 2019",
-      "architecture": "x64",
-      "toolset": "host=x64",
-      "binaryDir": "${sourceDir}/build",
-      "cacheVariables": {
-        "CMAKE_TOOLCHAIN_FILE": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake"
-      }
+      "description": "Visual Studio-based x64 build with vcpkg dependencies.",
+      "architecture": "x64"
     },
     {
       "name": "package",
@@ -87,14 +110,14 @@
     },
     {
       "name": "package-windows",
-      "inherits": "package",
+      "inherits": [
+        "package",
+        "vs2019"
+      ],
       "displayName": "Package ZIP for Windows",
       "description": "Build for packaging Windows shared libraries.",
       "binaryDir": "${sourceDir}/build",
-      "generator": "Visual Studio 16 2019",
-      "toolset": "host=x64",
       "cacheVariables": {
-        "CMAKE_TOOLCHAIN_FILE": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake",
         "BUILD_SHARED_LIBS": "YES",
         "CMAKE_INSTALL_BINDIR": "bin/$<CONFIG>",
         "CMAKE_INSTALL_LIBDIR": "lib/$<CONFIG>",
@@ -103,14 +126,8 @@
       }
     },
     {
-      "name": "package-unix",
-      "hidden": true,
-      "inherits": "package",
-      "generator": "Ninja"
-    },
-    {
       "name": "package-unix-shared",
-      "inherits": "package-unix",
+      "inherits": "package",
       "displayName": "Package UNIX shared libs",
       "description": "Build for packaging UNIX shared libraries.",
       "binaryDir": "shared-Release",
@@ -120,7 +137,7 @@
     },
     {
       "name": "package-unix-static",
-      "inherits": "package-unix",
+      "inherits": "package",
       "displayName": "Package UNIX static libs",
       "description": "Build for packaging UNIX static libraries.",
       "binaryDir": "static-Release",
