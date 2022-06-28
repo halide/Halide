@@ -223,8 +223,11 @@ private:
         template<typename T, int Dims>
         HALIDE_ALWAYS_INLINE void fill_slot(size_t idx, const ::Halide::Buffer<T, Dims> &value) {
             // Don't call ::Halide::Buffer::raw_buffer(): it includes "user_assert(defined())"
-            // as part of the wrapper code, and we want this lean-and-mean
-            argv[idx] = value.get()->raw_buffer();
+            // as part of the wrapper code, and we want this lean-and-mean. Instead, stick in a null
+            // value for undefined buffers, and let the Halide pipeline fail with the usual null-ptr
+            // check.
+            auto ptr = value.get();
+            argv[idx] = ptr ? ptr->raw_buffer() : nullptr;
         }
 
         template<typename T, int Dims>
