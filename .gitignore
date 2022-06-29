@@ -171,6 +171,7 @@ __pycache__
 # Python package build artifacts
 *.egg-info/
 *.whl
+MANIFEST.in
 
 ################################################################################
 ## CMake
