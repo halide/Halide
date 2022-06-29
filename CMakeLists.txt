@@ -94,6 +94,17 @@ if (CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
         message(STATUS "Building tests disabled")
     endif ()
 
+    cmake_dependent_option(
+        WITH_PYTHON_BINDINGS "Build Python bindings" ON
+        "Halide_ENABLE_RTTI;Halide_ENABLE_EXCEPTIONS" OFF
+    )
+    if (WITH_PYTHON_BINDINGS)
+        message(STATUS "Building Python bindings enabled")
+        add_subdirectory(python_bindings)
+    else ()
+        message(STATUS "Building Python bindings disabled")
+    endif ()
+
     option(WITH_TUTORIALS "Build tutorials" ON)
     if (WITH_TUTORIALS)
         message(STATUS "Building tutorials enabled")
