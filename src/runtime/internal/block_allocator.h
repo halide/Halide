@@ -11,15 +11,15 @@ namespace Internal {
 
 // --
 
-/** Allocator class interface for managing large contiguous blocks 
- * of memory, which are then sub-allocated into smaller regions of 
- * memory. This class only manages the address creation for the 
- * regions -- allocation callback functions are used to request the 
- * memory from the necessary system or API calls. This class is 
- * intended to be used inside of a higher level memory management 
- * class that provides thread safety, policy management and API 
- * integration for a specific runtime API (eg Vulkan, OpenCL, etc) 
-*/
+/** Allocator class interface for managing large contiguous blocks
+ * of memory, which are then sub-allocated into smaller regions of
+ * memory. This class only manages the address creation for the
+ * regions -- allocation callback functions are used to request the
+ * memory from the necessary system or API calls. This class is
+ * intended to be used inside of a higher level memory management
+ * class that provides thread safety, policy management and API
+ * integration for a specific runtime API (eg Vulkan, OpenCL, etc)
+ */
 class BlockAllocator {
 public:
     // disable copy constructors and assignment
