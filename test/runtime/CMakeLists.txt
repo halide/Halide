@@ -5,6 +5,7 @@ function(halide_define_runtime_internal_test NAME)
     target_include_directories(runtime_internal_${NAME} PRIVATE "${Halide_SOURCE_DIR}/src/runtime")
     target_link_libraries(runtime_internal_${NAME} PRIVATE Halide::Runtime)
     if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+        # Halide runtime lib has declarations for memcmp etc that conflict with GNU stdlib
         target_compile_options(runtime_internal_${NAME} PRIVATE -Wno-builtin-declaration-mismatch )
     endif()
     target_compile_definitions(
