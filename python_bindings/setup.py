@@ -28,7 +28,7 @@ def get_version():
         (src / "CMakeLists.txt").write_text(cmakelists_txt)
         with utils.push_dir(dst):
             cmkr = cmaker.CMaker()
-            cmkr.configure(cmake_source_dir=src)
+            cmkr.configure(cmake_source_dir=src, clargs=("--no-warn-unused-cli",))
             version = (src / "halide_version.txt").read_text().strip()
             return version
 
@@ -48,6 +48,7 @@ setup(
         "-DCMAKE_REQUIRE_FIND_PACKAGE_pybind11=YES",
         "-DHalide_INSTALL_PYTHONDIR=src/halide",
         "-DCMAKE_INSTALL_RPATH=$ORIGIN",
+        "--no-warn-unused-cli",
     ],
     include_package_data=True,
     extras_require={"test": ["pytest>=6.0"]},
