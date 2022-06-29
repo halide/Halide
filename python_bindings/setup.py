@@ -1,20 +1,20 @@
 from skbuild import setup
 from setuptools import find_packages
+from pathlib import Path
 import pybind11
 
-with open("version.py", "r") as f:
-    version = f.read().strip().split(" ")[-1][1:-1]
 
-with open("readme.md", "r") as fp:
-    long_description = fp.read()
+def get_version():
+    return "1.0.0"
+
 
 setup(
     name="halide",
-    version=version,
+    version=get_version(),
     author="The Halide team",
     author_email="",
     description="",
-    long_description=long_description,
+    long_description=Path("readme.md").read_text(),
     python_requires=">=3.6",
     packages=find_packages(where="src"),
     package_dir={"": "src"},
