@@ -142,13 +142,6 @@ if (WITH_TUTORIALS)
             PATTERN "*.jpg"
             PATTERN "*.mp4"
             PATTERN "*.png")
-
-    if (WITH_PYTHON_BINDINGS)
-      install(DIRECTORY ${Halide_SOURCE_DIR}/python_bindings/tutorial/
-              DESTINATION ${CMAKE_INSTALL_DOCDIR}/tutorial-python
-              COMPONENT Halide_Documentation
-              FILES_MATCHING PATTERN "*.py")
-    endif ()
 endif ()
 
 ##
@@ -251,6 +244,11 @@ include(CPack)
 cpack_add_component(Halide_Runtime
                     DISPLAY_NAME "Halide"
                     DESCRIPTION "Runtime files for libHalide and autoschedulers")
+
+cpack_add_component(Halide_Python
+                    DISPLAY_NAME "Halide Python bindings"
+                    DESCRIPTION "Halide Python bindings and support libraries"
+                    DEPENDS Halide_Runtime)
 
 cpack_add_component(Halide_Development
                     DISPLAY_NAME "Halide development"
