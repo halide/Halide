@@ -67,6 +67,32 @@ private:
         return it->second.depth;
     }
 
+    Expr eval(Func f, int tuple_idx = 0, int updef_idx = -1) {
+        if (!f.defined()) {
+            return Expr();
+        }
+
+        if (updef_idx == -1) {
+            // by default, choose the very last update definition (if any)
+            updef_idx = f.num_update_definitions();
+        }
+
+        Tuple values{Expr()};
+        if (updef_idx == 0) {
+            // pure definition
+            values = f.values();
+        } else {
+            --updef_idx;
+            assert(updef_idx >= 0);
+            assert(updef_idx < f.num_update_definitions());
+            values = f.update_values(updef_idx);
+        }
+
+        assert(tuple_idx < values.size());
+        Expr value = values[tuple_idx];
+        return value;
+    }
+
 public:
     // constructor
     FindStmtCost() = default;
@@ -76,6 +102,14 @@ public:
 
     // calculates the total cost of a stmt
     int get_total_cost(const IRNode *node) const;
+
+    void visit(Expr expr) {
+        expr.accept(this);
+    }
+
+    void visit(Func f) {
+        visit(eval(f));
+    }
 
     void visit(const IntImm *op) override;
     void visit(const UIntImm *op) override;
