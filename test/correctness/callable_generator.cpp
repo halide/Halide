@@ -163,10 +163,10 @@ int main(int argc, char **argv) {
         };
 
         auto gen_1 = TestGen3::create(context);
-        gen_1->set_generatorparam_values({{"vectorize", "false"}});
+        gen_1->vectorize_.set(false);
 
         auto gen_2 = TestGen3::create(context);
-        gen_2->set_generatorparam_values({{"vectorize", "true"}});
+        gen_2->vectorize_.set(true);
 
         Callable c1 = gen_1->compile_to_callable();
         Callable c2 = gen_2->compile_to_callable();
