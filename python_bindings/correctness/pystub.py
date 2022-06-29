@@ -1,8 +1,8 @@
 
 import halide as hl
 
-import simple_stub
-import complex_stub
+import simple_pystub
+import complex_pystub
 
 def _realize_and_check(f, offset = 0):
     b = hl.Buffer(hl.Float(32), [2, 2])
@@ -284,6 +284,6 @@ def test_complex(gen):
             assert expected == actual, "Expected %s Actual %s" % (expected, actual)
 
 if __name__ == "__main__":
-    test_simple(simple_stub.generate)
-    test_looplevel(simple_stub.generate)
-    test_complex(complex_stub.generate)
+    test_simple(simple_pystub.generate)
+    test_looplevel(simple_pystub.generate)
+    test_complex(complex_pystub.generate)
