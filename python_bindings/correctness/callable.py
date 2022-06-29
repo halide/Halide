@@ -1,7 +1,7 @@
 import halide as hl
 import numpy as np
 
-import simple_stub  # Needed for create_callable_from_generator("simple") to work
+import simple_pystub  # Needed for create_callable_from_generator("simple") to work
 
 def test_callable():
     p_int16 = hl.Param(hl.Int(16), 42)
