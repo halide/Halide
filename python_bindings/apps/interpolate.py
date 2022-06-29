@@ -9,6 +9,18 @@ import imageio
 import numpy as np
 import os.path
 
+# Return the directory to look in for test images:
+# - If TEST_IMAGES_DIR is defined, use that
+# - Otherwise, create a relative path to the C++ apps/images dir
+def apps_images_dir():
+    return os.environ.get("TEST_IMAGES_DIR", os.path.join(os.path.dirname(__file__), "../../apps/images"))
+
+# Return the directory to use when writing output files:
+# - If TEST_TMPDIR is defined, use that
+# - Otherwise, return an empty string (i.e., relative to whatever the current directory is)
+def apps_output_dir():
+    return os.environ.get("TEST_TMPDIR", "")
+
 int_t = hl.Int(32)
 float_t = hl.Float(32)
 
@@ -149,7 +161,7 @@ def get_interpolate(input, levels):
 
 
 def get_input_data():
-    image_path = os.path.join(os.path.dirname(__file__), "../../apps/images/rgba.png")
+    image_path = os.path.join(apps_images_dir(), "rgba.png")
     assert os.path.exists(image_path), "Could not find %s" % image_path
 
     rgba_data = imageio.imread(image_path)
@@ -187,8 +199,8 @@ def main():
     output_data = (output_data * 255).astype(np.uint8)
 
     # save results
-    input_path = "interpolate_input.png"
-    output_path = "interpolate_result.png"
+    input_path = os.path.join(apps_output_dir(), "interpolate_input.png")
+    output_path = os.path.join(apps_output_dir(), "interpolate_result.png")
     imageio.imsave(input_path, input_data)
     imageio.imsave(output_path, output_data)
 

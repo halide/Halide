@@ -9,8 +9,8 @@ tests(GROUPS error
       auto_schedule_no_parallel.cpp
       auto_schedule_no_reorder.cpp
       autodiff_unbounded.cpp
-      bad_bound_storage.cpp
       bad_bound.cpp
+      bad_bound_storage.cpp
       bad_compute_at.cpp
       bad_compute_with.cpp
       bad_compute_with_invalid_specialization.cpp
@@ -55,16 +55,16 @@ tests(GROUPS error
       func_tuple_update_types_mismatch.cpp
       implicit_args.cpp
       impossible_constraints.cpp
-      init_def_should_be_all_vars.cpp
       incomplete_target.cpp
+      init_def_should_be_all_vars.cpp
       inspect_loop_level.cpp
       lerp_float_weight_out_of_range.cpp
       lerp_mismatch.cpp
       lerp_signed_weight.cpp
       memoize_different_compute_store.cpp
       memoize_redefine_eviction_key.cpp
-      metal_vector_too_large.cpp
       metal_threads_too_large.cpp
+      metal_vector_too_large.cpp
       missing_args.cpp
       no_default_device.cpp
       nonexistent_update_stage.cpp
@@ -98,11 +98,11 @@ tests(GROUPS error
       undefined_pipeline_realize.cpp
       undefined_rdom_dimension.cpp
       unknown_target.cpp
+      vector_tile.cpp
       vectorize_dynamic.cpp
       vectorize_too_little.cpp
       vectorize_too_much.cpp
       vectorized_extern.cpp
-      vector_tile.cpp
       wrap_custom_after_shared.cpp
       wrap_frozen.cpp
       wrapper_never_used.cpp
