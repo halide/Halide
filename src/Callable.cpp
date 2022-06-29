@@ -106,8 +106,8 @@ Callable::FailureFn Callable::do_check_fail(int bad_idx, size_t argc, const char
 
         if (context && context->handlers.custom_error) {
             context->handlers.custom_error(context, msg.c_str());
-        } else if (this->contents->saved_jit_handlers.custom_error) {
-            this->contents->saved_jit_handlers.custom_error(context, msg.c_str());
+        } else if (contents->saved_jit_handlers.custom_error) {
+            contents->saved_jit_handlers.custom_error(context, msg.c_str());
         } else {
             if (msg.empty()) {
                 halide_runtime_error << "The pipeline returned exit status " << exit_status << " but halide_error was never called.\n";
