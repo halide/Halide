@@ -1,11 +1,36 @@
-from skbuild import setup
+from skbuild import setup, cmaker, utils
 from setuptools import find_packages
 from pathlib import Path
 import pybind11
+from tempfile import TemporaryDirectory as mkdtemp_ctx
+import textwrap
 
 
 def get_version():
-    return "1.0.0"
+    """
+    Builds a dummy project that prints the found Halide version. The "version"
+    of these Halide bindings is whatever version of Halide they're building
+    against.
+    """
+
+    cmakelists_txt = textwrap.dedent(
+        """
+        cmake_minimum_required(VERSION 3.22)
+        project(dummy)
+
+        find_package(Halide REQUIRED)
+        file(WRITE halide_version.txt "${Halide_VERSION}")
+        """
+    )
+
+    with mkdtemp_ctx() as srcdir, mkdtemp_ctx() as dstdir:
+        src, dst = Path(srcdir), Path(dstdir)
+        (src / "CMakeLists.txt").write_text(cmakelists_txt)
+        with utils.push_dir(dst):
+            cmkr = cmaker.CMaker()
+            cmkr.configure(cmake_source_dir=src)
+            version = (src / "halide_version.txt").read_text().strip()
+            return version
 
 
 setup(
