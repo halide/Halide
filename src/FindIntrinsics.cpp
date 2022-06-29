@@ -902,9 +902,15 @@ Expr lower_halving_sub(const Expr &a, const Expr &b) {
         // = (x + (255 - y) + 1) / 2 - 128
         // = (x + ~y + 1) / 2 - 128
         // = rounding_halving_add(x, ~y) - 128
-        // = rounding_halving_add(x, ~y) + 128 (due to 2s complement wrap-around)
+        // = rounding_halving_add(x, ~y) + 128 (due to 2s-complement wrap-around)
         return e + make_const(e.type(), (uint64_t)1 << (a.type().bits() - 1));
     } else {
+        // For 2s-complement signed integers, negating is done by flipping the
+        // bits and adding one, so:
+        //   (x - y) / 2
+        // = (x + (-y)) / 2
+        // = (x + (~y + 1)) / 2
+        // = rounding_halving_add(x, ~y)
         return e;
     }
 }
