@@ -46,11 +46,8 @@ setup(
     cmake_args=[
         f"-Dpybind11_ROOT={pybind11.get_cmake_dir()}",
         "-DCMAKE_REQUIRE_FIND_PACKAGE_pybind11=YES",
-        "-DHalide_INSTALL_PYTHONDIR=src/halide",
+        "-DHalide_INSTALL_PYTHONDIR=src",
         "-DCMAKE_INSTALL_RPATH=$ORIGIN",
         "--no-warn-unused-cli",
     ],
-    include_package_data=True,
-    extras_require={"test": ["pytest>=6.0"]},
-    zip_safe=False,
 )
