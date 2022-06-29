@@ -18,11 +18,11 @@ setup(
     python_requires=">=3.6",
     packages=find_packages(where="src"),
     package_dir={"": "src"},
-    cmake_install_dir="src/halide",
     cmake_args=[
         f"-Dpybind11_ROOT={pybind11.get_cmake_dir()}",
         "-DCMAKE_REQUIRE_FIND_PACKAGE_pybind11=YES",
-        "-DHalide_INSTALL_PYTHONDIR=.",
+        "-DHalide_INSTALL_PYTHONDIR=src/halide",
+        "-DCMAKE_INSTALL_RPATH=$ORIGIN",
     ],
     include_package_data=True,
     extras_require={"test": ["pytest>=6.0"]},
