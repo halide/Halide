@@ -95,7 +95,7 @@ $(BIN)/%_generator.o: $(ROOT_DIR)/correctness/generators/%_generator.cpp $(HALID
 # In our build files here, we build both kinds of extension for every Generator in the generators/
 # directory (even though not all are used). As a simplistic way to distinguish between the two
 # sorts of extensions, we use the unadorned Generator name for AOT extensions, and the Generator name
-# suffixed with "_stub" for Stub extensions. (TODO: this is unsatisfyingly hackish; better suggestions
+# suffixed with "_pystub" for Stub extensions. (TODO: this is unsatisfyingly hackish; better suggestions
 # would be welcome.)
 
 $(BIN)/PyStubImpl.o: $(ROOT_DIR)/stub/PyStubImpl.cpp $(HALIDE_DISTRIB_PATH)/include/Halide.h
@@ -186,21 +186,21 @@ $(BIN)/aot/%.so: $(BIN)/%.py.o $(BIN)/%.a $(BIN)/runtime.a $(BIN)/%.ldscript
 # Compiling PyStub.cpp, then linking with the generator's .o file, PyStubImpl.o, plus the same libHalide
 # being used by halide.so.
 #
-# Note that we set HALIDE_PYSTUB_MODULE_NAME to $*_stub (e.g. foo_stub) but
+# Note that we set HALIDE_PYSTUB_MODULE_NAME to $*_pystub (e.g. foo_pystub) but
 # set HALIDE_PYSTUB_GENERATOR_NAME to the unadorned name of the Generator.
 $(BIN)/%_PyStub.o: $(ROOT_DIR)/stub/PyStub.cpp
 	@echo Building $@...
 	@mkdir -p $(@D)
-	@$(CXX) $(CCFLAGS) -DHALIDE_PYSTUB_MODULE_NAME=$*_stub -DHALIDE_PYSTUB_GENERATOR_NAME=$* -c $< -o $@
+	@$(CXX) $(CCFLAGS) -DHALIDE_PYSTUB_MODULE_NAME=$*_pystub -DHALIDE_PYSTUB_GENERATOR_NAME=$* -c $< -o $@
 
-$(BIN)/stub/%_stub.so: $(BIN)/%_PyStub.o $(BIN)/PyStubImpl.o $(BIN)/%_generator.o $(BIN)/%_stub.ldscript $(LIBHALIDE)
+$(BIN)/stub/%_pystub.so: $(BIN)/%_PyStub.o $(BIN)/PyStubImpl.o $(BIN)/%_generator.o $(BIN)/%_pystub.ldscript $(LIBHALIDE)
 	@echo Building $@...
 	@mkdir -p $(@D)
-	@$(CXX) $(LDFLAGS) $(filter-out %.ldscript,$^) -shared $(subst %LDSCRIPT%,$(BIN)/$*_stub.ldscript,$(PYEXT_LDSCRIPT_FLAG)) -o $@
+	@$(CXX) $(LDFLAGS) $(filter-out %.ldscript,$^) -shared $(subst %LDSCRIPT%,$(BIN)/$*_pystub.ldscript,$(PYEXT_LDSCRIPT_FLAG)) -o $@
 
 GENERATOR_SRCS=$(shell ls $(ROOT_DIR)/correctness/generators/*_generator.cpp)
 GENERATOR_AOT_EXTENSIONS=$(GENERATOR_SRCS:$(ROOT_DIR)/correctness/generators/%_generator.cpp=$(BIN)/aot/%.so)
-GENERATOR_STUB_EXTENSIONS=$(GENERATOR_SRCS:$(ROOT_DIR)/correctness/generators/%_generator.cpp=$(BIN)/stub/%_stub.so)
+GENERATOR_STUB_EXTENSIONS=$(GENERATOR_SRCS:$(ROOT_DIR)/correctness/generators/%_generator.cpp=$(BIN)/stub/%_pystub.so)
 
 APPS = $(shell ls $(ROOT_DIR)/apps/*.py)
 CORRECTNESS = $(shell ls $(ROOT_DIR)/correctness/*.py)
