@@ -25,8 +25,7 @@ int main(int argc, char **argv) {
     auto c = f.compile_to_callable({p_int, p_float, p_img})
                  .make_std_function<Buffer<uint8_t>, uint8_t, float, Buffer<uint8_t>>();
 
-    int r = c(in1, 42, 1.0f, result1);
-    _halide_user_assert(r == 0);
+    // Shouldn't get here, but if we do, return success, which is a failure...
 
     printf("Success!\n");
 }

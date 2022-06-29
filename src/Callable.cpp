@@ -75,45 +75,67 @@ const std::vector<Argument> &Callable::arguments() const {
     return contents->jit_cache.arguments;
 }
 
-void Callable::do_check_fail(int bad_idx, size_t argc, const char *verb) const {
+Callable::FailureFn Callable::do_check_fail(int bad_idx, size_t argc, const char *verb) const {
     const size_t required_arg_count = contents->jit_cache.arguments.size();
 
     // TODO: this assumes that the caller uses the no-explicit-JITUserContext call;
     // the errors will be misleading otherwise.
     constexpr int hidden_args = 1;
 
+    std::ostringstream o;
     if (bad_idx < 0) {
-        user_error << "Error " << verb << " '" << contents->name << "':\n"
-                   << "Expected exactly " << (required_arg_count - hidden_args) << " arguments, "
-                   << "but saw " << (argc - hidden_args) << ".";
+        o << "Error " << verb << " '" << contents->name << "': "
+          << "Expected exactly " << (required_arg_count - hidden_args) << " arguments, "
+          << "but saw " << (argc - hidden_args) << ".";
     } else {
+        // Capture *this to ensure that the CallableContents stay valid as long as the std::function does
         const Argument &a = contents->jit_cache.arguments.at(bad_idx);
         const char *kind = a.is_scalar() ? "scalar" : "buffer";
         // Note that we don't report the "actual type" here, just the expected type...
         // saving the actual type leads to more code bloat than we can justify
         // for this. (Consider adding as a debug-only enhancement?)
-        user_error << "Error " << verb << " '" << contents->name << "':\n"
-                   << "Argument " << (bad_idx - hidden_args + 1)
-                   << " of " << (required_arg_count - hidden_args) << " ('" << a.name << "') was expected to be a "
-                   << kind << " of type '" << a.type << "' and dimension " << (int)a.dimensions << ".\n";
+        o << "Error " << verb << " '" << contents->name << "': "
+          << "Argument " << (bad_idx - hidden_args + 1)
+          << " of " << (required_arg_count - hidden_args) << " ('" << a.name << "') was expected to be a "
+          << kind << " of type '" << a.type << "' and dimension " << (int)a.dimensions << ".\n";
     }
+    std::string msg = o.str();
+
+    return [*this, msg](JITUserContext *context) -> int {
+        constexpr int exit_status = halide_error_code_internal_error;  // TODO: perhaps return a more useful error code?;
+
+        if (context && context->handlers.custom_error) {
+            context->handlers.custom_error(context, msg.c_str());
+        } else if (this->contents->saved_jit_handlers.custom_error) {
+            this->contents->saved_jit_handlers.custom_error(context, msg.c_str());
+        } else {
+            if (msg.empty()) {
+                halide_runtime_error << "The pipeline returned exit status " << exit_status << " but halide_error was never called.\n";
+            } else {
+                halide_runtime_error << msg;
+            }
+        }
+        return exit_status;
+    };
 }
 
-void Callable::check_qcci(size_t argc, const QuickCallCheckInfo *actual_qcci) const {
+Callable::FailureFn Callable::check_qcci(size_t argc, const QuickCallCheckInfo *actual_qcci) const {
     const size_t required_arg_count = contents->quick_call_check_info.size();
     if (argc == required_arg_count) {
         const QuickCallCheckInfo *expected_qcci = contents->quick_call_check_info.data();
         for (size_t i = 0; i < argc; i++) {
             if (actual_qcci[i] != expected_qcci[i]) {
-                do_check_fail(i, argc, "calling");
+                return do_check_fail(i, argc, "calling");
             }
         }
     } else {
-        do_check_fail(-1, argc, "calling");
+        return do_check_fail(-1, argc, "calling");
     }
+
+    return nullptr;
 }
 
-void Callable::check_fcci(size_t argc, const FullCallCheckInfo *actual_fcci) const {
+Callable::FailureFn Callable::check_fcci(size_t argc, const FullCallCheckInfo *actual_fcci) const {
     // Lazily create full_call_check_info upon the first call to make_std_function().
     if (contents->full_call_check_info.empty()) {
         contents->full_call_check_info.reserve(contents->jit_cache.arguments.size());
@@ -123,17 +145,30 @@ void Callable::check_fcci(size_t argc, const FullCallCheckInfo *actual_fcci) con
         }
     }
 
+    FailureFn failure_fn = nullptr;
     const size_t required_arg_count = contents->full_call_check_info.size();
     if (argc == required_arg_count) {
         const FullCallCheckInfo *expected_fcci = contents->full_call_check_info.data();
         for (size_t i = 0; i < argc; i++) {
             if (!Callable::is_compatible_fcci(actual_fcci[i], expected_fcci[i])) {
-                do_check_fail(i, argc, "defining");
+                failure_fn = do_check_fail(i, argc, "defining");
+                break;
             }
         }
     } else {
-        do_check_fail(-1, argc, "defining");
+        failure_fn = do_check_fail(-1, argc, "defining");
     }
+
+    if (failure_fn) {
+        // Go ahead and call it now, since we know that every possible call will fail.
+        // (We'll also return it as a sentinel so the caller knows that this is the case;
+        // if the Callable has hooked the error handler to do nothing, we don't want want
+        // to try to continue executing this path in the caller.)
+        JITUserContext empty;
+        (void)failure_fn(&empty);
+    }
+
+    return failure_fn;
 }
 
 // Entry point used from the std::function<> variant; we can skip the check_qcci() stuff
@@ -156,20 +191,18 @@ void Callable::check_fcci(size_t argc, const FullCallCheckInfo *actual_fcci) con
     // If we're profiling, report runtimes and reset profiler stats.
     contents->jit_cache.finish_profiling(context);
 
-    // Don't call jit_call_context.finalize(): if no error handler was installed,
-    // it will call halide_error_handler for us, which is fine for realize()
-    // and friends because there is no other way to report an error. For this code
-    // path, though, we just return the error code (if any); if a custom error
-    // handler was installed, it presumably will get the first shot at handling it,
-    // and if not, the caller must handle it by checking that the result code
-    // is zero, in the same way that callers to an AOT-compiled Halide function must.
+    jit_call_context.finalize(exit_status);
 
     return exit_status;
 }
 
 int Callable::call_argv_checked(size_t argc, const void *const *argv, const QuickCallCheckInfo *actual_qcci) const {
     // It's *essential* we call this for safety.
-    check_qcci(argc, actual_qcci);
+    const auto failure_fn = check_qcci(argc, actual_qcci);
+    if (failure_fn) {
+        JITUserContext *context = *(JITUserContext **)const_cast<void *>(argv[0]);
+        return failure_fn(context);
+    }
     return call_argv_fast(argc, argv);
 }
 

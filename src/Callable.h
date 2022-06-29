@@ -36,6 +36,9 @@ struct IsHalideBuffer<::Halide::Runtime::Buffer<T, Dims>> : std::true_type {};
 template<>
 struct IsHalideBuffer<halide_buffer_t *> : std::true_type {};
 
+template<>
+struct IsHalideBuffer<const halide_buffer_t *> : std::true_type {};
+
 template<typename>
 struct HalideBufferStaticTypeAndDims {
     static constexpr halide_type_t type() {
@@ -225,9 +228,8 @@ private:
             // Don't call ::Halide::Buffer::raw_buffer(): it includes "user_assert(defined())"
             // as part of the wrapper code, and we want this lean-and-mean. Instead, stick in a null
             // value for undefined buffers, and let the Halide pipeline fail with the usual null-ptr
-            // check.
-            auto ptr = value.get();
-            argv[idx] = ptr ? ptr->raw_buffer() : nullptr;
+            // check. (Note that H::R::B::get() *never* returns null; you must check defined() first.)
+            argv[idx] = value.defined() ? value.get()->raw_buffer() : nullptr;
         }
 
         template<typename T, int Dims>
@@ -237,6 +239,11 @@ private:
 
         HALIDE_ALWAYS_INLINE
         void fill_slot(size_t idx, halide_buffer_t *value) {
+            argv[idx] = value;
+        }
+
+        HALIDE_ALWAYS_INLINE
+        void fill_slot(size_t idx, const halide_buffer_t *value) {
             argv[idx] = value;
         }
 
@@ -276,9 +283,11 @@ private:
     int call_argv_checked(size_t argc, const void *const *argv, const QuickCallCheckInfo *actual_cci) const;
     int call_argv_fast(size_t argc, const void *const *argv) const;
 
-    void do_check_fail(int bad_idx, size_t argc, const char *verb) const;
-    void check_qcci(size_t argc, const QuickCallCheckInfo *actual_cci) const;
-    void check_fcci(size_t argc, const FullCallCheckInfo *actual_cci) const;
+    using FailureFn = std::function<int(JITUserContext *)>;
+
+    FailureFn do_check_fail(int bad_idx, size_t argc, const char *verb) const;
+    FailureFn check_qcci(size_t argc, const QuickCallCheckInfo *actual_cci) const;
+    FailureFn check_fcci(size_t argc, const FullCallCheckInfo *actual_cci) const;
 
     template<typename... Args>
     int call(JITUserContext *context, Args &&...args) const {
@@ -331,7 +340,14 @@ public:
     make_std_function() const {
         if constexpr (std::is_same_v<First, JITUserContext *>) {
             constexpr auto actual_arg_types = make_fcci_array<First, Rest...>();
-            check_fcci(actual_arg_types.size(), actual_arg_types.data());
+            const auto failure_fn = check_fcci(actual_arg_types.size(), actual_arg_types.data());
+            if (failure_fn) {
+                // Return a wrapper for the failure_fn in case the error handler is a no-op,
+                // so that subsequent calls won't attempt to use possibly-wrong argv packing.
+                return [*this, failure_fn](auto &&first, auto &&...rest) -> int {
+                    return failure_fn(std::forward<First>(first));
+                };
+            }
 
             // Capture *this to ensure that the CallableContents stay valid as long as the std::function does
             return [*this](auto &&first, auto &&...rest) -> int {
@@ -342,7 +358,15 @@ public:
         } else {
             // Explicitly prepend JITUserContext* as first actual-arg-type.
             constexpr auto actual_arg_types = make_fcci_array<JITUserContext *, First, Rest...>();
-            check_fcci(actual_arg_types.size(), actual_arg_types.data());
+            const auto failure_fn = check_fcci(actual_arg_types.size(), actual_arg_types.data());
+            if (failure_fn) {
+                // Return a wrapper for the failure_fn in case the error handler is a no-op,
+                // so that subsequent calls won't attempt to use possibly-wrong argv packing.
+                return [*this, failure_fn](auto &&first, auto &&...rest) -> int {
+                    JITUserContext empty;
+                    return failure_fn(&empty);
+                };
+            }
 
             // Capture *this to ensure that the CallableContents stay valid as long as the std::function does
             return [*this](auto &&first, auto &&...rest) -> int {
