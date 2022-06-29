@@ -9,6 +9,18 @@ import numpy as np
 import imageio
 import os.path
 
+# Return the directory to look in for test images:
+# - If TEST_IMAGES_DIR is defined, use that
+# - Otherwise, create a relative path to the C++ apps/images dir
+def apps_images_dir():
+    return os.environ.get("TEST_IMAGES_DIR", os.path.join(os.path.dirname(__file__), "../../apps/images"))
+
+# Return the directory to use when writing output files:
+# - If TEST_TMPDIR is defined, use that
+# - Otherwise, return an empty string (i.e., relative to whatever the current directory is)
+def apps_output_dir():
+    return os.environ.get("TEST_TMPDIR", "")
+
 def get_bilateral_grid(input, r_sigma, s_sigma, aot=False):
     x = hl.Var('x')
     y = hl.Var('y')
@@ -102,7 +114,7 @@ def generate_compiled_file(bilateral_grid):
 
 
 def get_input_data():
-    image_path = os.path.join(os.path.dirname(__file__), "../../apps/images/rgb.png")
+    image_path = os.path.join(apps_images_dir(), "rgb.png")
     assert os.path.exists(image_path), \
         "Could not find %s" % image_path
     rgb_data = imageio.imread(image_path)
@@ -133,8 +145,8 @@ def filter_test_image(bilateral_grid, input):
     output_image.copy_to_host()
 
     # save results
-    input_path = "bilateral_grid_input.png"
-    output_path = "bilateral_grid.png"
+    input_path = os.path.join(apps_output_dir(), "bilateral_grid_input.png")
+    output_path = os.path.join(apps_output_dir(), "bilateral_grid.png")
     imageio.imsave(input_path, input_data)
     imageio.imsave(output_path, output_data)
     print("\nbilateral_grid realized on output_image.")
