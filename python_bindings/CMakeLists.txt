@@ -23,7 +23,6 @@ add_subdirectory(stub)
 
 option(WITH_TEST_PYTHON "Build Python tests" ON)
 if (WITH_TESTS AND WITH_TEST_PYTHON)
-    add_subdirectory(apps)
-    add_subdirectory(correctness)
+    add_subdirectory(test)
     add_subdirectory(tutorial)
 endif ()
