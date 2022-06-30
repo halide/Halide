@@ -1944,7 +1944,7 @@ test_adams2019: distrib
 	$(MAKE) -f $(SRC_DIR)/autoschedulers/adams2019/Makefile test \
 		HALIDE_DISTRIB_PATH=$(CURDIR)/$(DISTRIB_DIR)
 
-test_li2018: distrib build_python_bindings
+test_li2018: distrib
 	$(MAKE) -f $(SRC_DIR)/autoschedulers/li2018/Makefile test \
 		HALIDE_DISTRIB_PATH=$(CURDIR)/$(DISTRIB_DIR)
 
@@ -2049,11 +2049,6 @@ benchmark_apps: $(BENCHMARK_APPS)
 			HL_TARGET=$(HL_TARGET) \
 			|| exit 1 ; \
 	done
-
-# TODO: remove this target after landing PR #6821
-.PHONY: test_python
-test_python:
-	@echo "TODO: remove this target after landing PR #6821"
 
 # It's just for compiling the runtime, so earlier clangs *might* work,
 # but best to peg it to the minimum llvm version.
