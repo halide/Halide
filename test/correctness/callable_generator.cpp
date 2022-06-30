@@ -26,12 +26,6 @@ void my_free(JITUserContext *user_context, void *ptr) {
     free(((void **)ptr)[-1]);
 }
 
-void *mischievous_malloc(JITUserContext *user_context, size_t x) {
-    fprintf(stderr, "This should never get called\n");
-    abort();
-    return nullptr;
-}
-
 int call_counter = 0;
 extern "C" HALIDE_EXPORT_SYMBOL float my_extern_func(int x, float y) {
     call_counter++;
