@@ -29,6 +29,11 @@ tests(GROUPS error
       bad_store_at.cpp
       broken_promise.cpp
       buffer_larger_than_two_gigs.cpp
+      callable_bad_arguments.cpp
+      callable_bad_values_passed.cpp
+      callable_typed_bad_arguments.cpp
+      callable_typed_bad_arguments_buffer_dims.cpp
+      callable_typed_bad_arguments_buffer_type.cpp
       clamp_out_of_range.cpp
       compute_with_crossing_edges1.cpp
       compute_with_crossing_edges2.cpp

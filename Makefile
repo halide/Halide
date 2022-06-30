@@ -67,8 +67,6 @@ LLVM_CXX_FLAGS = -std=c++17  $(filter-out -O% -g -fomit-frame-pointer -pedantic 
 OPTIMIZE ?= -O3
 OPTIMIZE_FOR_BUILD_TIME ?= -O0
 
-PYTHON ?= python3
-
 CLANG ?= $(LLVM_BINDIR)/clang
 CLANG_VERSION = $(shell $(CLANG) --version)
 
@@ -419,6 +417,7 @@ SOURCE_FILES = \
   BoundsInference.cpp \
   BoundSmallAllocations.cpp \
   Buffer.cpp \
+  Callable.cpp \
   CanonicalizeGPUVars.cpp \
   Closure.cpp \
   ClampUnsafeAccesses.cpp \
@@ -599,6 +598,7 @@ HEADER_FILES = \
   BoundsInference.h \
   BoundSmallAllocations.h \
   Buffer.h \
+  Callable.h \
   CanonicalizeGPUVars.h \
   ClampUnsafeAccesses.h \
   Closure.h \
@@ -1950,10 +1950,9 @@ test_adams2019: distrib
 	$(MAKE) -f $(SRC_DIR)/autoschedulers/adams2019/Makefile test \
 		HALIDE_DISTRIB_PATH=$(CURDIR)/$(DISTRIB_DIR)
 
-test_li2018: distrib build_python_bindings
+test_li2018: distrib
 	$(MAKE) -f $(SRC_DIR)/autoschedulers/li2018/Makefile test \
-		HALIDE_DISTRIB_PATH=$(CURDIR)/$(DISTRIB_DIR) \
-		HALIDE_PYTHON_BINDINGS_PATH=$(CURDIR)/$(BIN_DIR)/python3_bindings
+		HALIDE_DISTRIB_PATH=$(CURDIR)/$(DISTRIB_DIR)
 
 time_compilation_test_%: $(BIN_DIR)/test_%
 	$(TIME_COMPILATION) compile_times_correctness.csv make -f $(THIS_MAKEFILE) $(@:time_compilation_test_%=test_%)
@@ -1988,20 +1987,18 @@ TEST_APPS=\
 TEST_APPS_DEPS=$(TEST_APPS:%=%_test_app)
 BUILD_APPS_DEPS=$(TEST_APPS:%=%_build_app)
 
-$(BUILD_APPS_DEPS): distrib build_python_bindings
+$(BUILD_APPS_DEPS): distrib
 	@echo Building app $(@:%_build_app=%) for ${HL_TARGET}...
 	@$(MAKE) -C $(ROOT_DIR)/apps/$(@:%_build_app=%) build \
 		HALIDE_DISTRIB_PATH=$(CURDIR)/$(DISTRIB_DIR) \
-		HALIDE_PYTHON_BINDINGS_PATH=$(CURDIR)/$(BIN_DIR)/python3_bindings \
 		BIN_DIR=$(CURDIR)/$(BIN_DIR)/apps/$(@:%_build_app=%)/bin \
 		HL_TARGET=$(HL_TARGET) \
 		|| exit 1 ; \
 
-$(TEST_APPS_DEPS): distrib build_python_bindings
+$(TEST_APPS_DEPS): distrib
 	@echo Testing app $(@:%_test_app=%) for ${HL_TARGET}...
 	@$(MAKE) -C $(ROOT_DIR)/apps/$(@:%_test_app=%) test \
 		HALIDE_DISTRIB_PATH=$(CURDIR)/$(DISTRIB_DIR) \
-		HALIDE_PYTHON_BINDINGS_PATH=$(CURDIR)/$(BIN_DIR)/python3_bindings \
 		BIN_DIR=$(CURDIR)/$(BIN_DIR)/apps/$(@:%_test_app=%)/bin \
 		HL_TARGET=$(HL_TARGET) \
 		|| exit 1 ; \
@@ -2016,7 +2013,6 @@ build_hannk: distrib
 	@echo Building apps/hannk for ${HL_TARGET}...
 	@$(MAKE) -C $(ROOT_DIR)/apps/hannk build \
 		HALIDE_DISTRIB_PATH=$(CURDIR)/$(DISTRIB_DIR) \
-		HALIDE_PYTHON_BINDINGS_PATH=$(CURDIR)/$(BIN_DIR)/python3_bindings \
 		BIN_DIR=$(CURDIR)/$(BIN_DIR)/apps/hannk/bin \
 		HL_TARGET=$(HL_TARGET) \
 		|| exit 1 ; \
@@ -2025,7 +2021,6 @@ test_hannk: build_hannk
 	@echo Testing apps/hannk for ${HL_TARGET}...
 	@$(MAKE) -C $(ROOT_DIR)/apps/hannk test \
 		HALIDE_DISTRIB_PATH=$(CURDIR)/$(DISTRIB_DIR) \
-		HALIDE_PYTHON_BINDINGS_PATH=$(CURDIR)/$(BIN_DIR)/python3_bindings \
 		BIN_DIR=$(CURDIR)/$(BIN_DIR)/apps/hannk/bin \
 		HL_TARGET=$(HL_TARGET) \
 		|| exit 1 ; \
@@ -2038,12 +2033,11 @@ BENCHMARK_APPS=\
 	nl_means \
 	stencil_chain
 
-$(BENCHMARK_APPS): distrib build_python_bindings
+$(BENCHMARK_APPS): distrib
 	@echo Building $@ for ${HL_TARGET}...
 	@$(MAKE) -C $(ROOT_DIR)/apps/$@ \
 		$(CURDIR)/$(BIN_DIR)/apps/$@/bin/$(HL_TARGET)/$@.rungen \
 		HALIDE_DISTRIB_PATH=$(CURDIR)/$(DISTRIB_DIR) \
-		HALIDE_PYTHON_BINDINGS_PATH=$(CURDIR)/$(BIN_DIR)/python3_bindings \
 		BIN_DIR=$(CURDIR)/$(BIN_DIR)/apps/$@/bin \
 		HL_TARGET=$(HL_TARGET) \
 		> /dev/null \
@@ -2057,33 +2051,10 @@ benchmark_apps: $(BENCHMARK_APPS)
 		make -C $(ROOT_DIR)/apps/$${APP} \
 			$${APP}.benchmark \
 			HALIDE_DISTRIB_PATH=$(CURDIR)/$(DISTRIB_DIR) \
-			HALIDE_PYTHON_BINDINGS_PATH=$(CURDIR)/$(BIN_DIR)/python3_bindings \
 			BIN_DIR=$(CURDIR)/$(BIN_DIR)/apps/$${APP}/bin \
 			HL_TARGET=$(HL_TARGET) \
 			|| exit 1 ; \
 	done
-
-# TODO(srj): the python bindings need to be put into the distrib folders;
-# this is a hopefully-temporary workaround (https://github.com/halide/Halide/issues/4368)
-.PHONY: build_python_bindings
-build_python_bindings: distrib $(BIN_DIR)/host/runtime.a
-	$(MAKE) -C $(ROOT_DIR)/python_bindings \
-		-f $(ROOT_DIR)/python_bindings/Makefile \
-		build_python_bindings \
-		HALIDE_DISTRIB_PATH=$(CURDIR)/$(DISTRIB_DIR) \
-		BIN=$(CURDIR)/$(BIN_DIR)/python3_bindings \
-		PYTHON=$(PYTHON) \
-		OPTIMIZE="$(OPTIMIZE)"
-
-.PHONY: test_python
-test_python: distrib $(BIN_DIR)/host/runtime.a build_python_bindings
-	$(MAKE) -C $(ROOT_DIR)/python_bindings \
-		-f $(ROOT_DIR)/python_bindings/Makefile \
-		test \
-		HALIDE_DISTRIB_PATH=$(CURDIR)/$(DISTRIB_DIR) \
-		BIN=$(CURDIR)/$(BIN_DIR)/python3_bindings \
-		PYTHON=$(PYTHON) \
-		OPTIMIZE="$(OPTIMIZE)"
 
 # It's just for compiling the runtime, so earlier clangs *might* work,
 # but best to peg it to the minimum llvm version.

@@ -250,7 +250,7 @@ def test_overflow():
     try:
         hl.Buffer(size_over_intmax)
     except ValueError as e:
-        assert 'Out of range arguments to make_dim_vec.' in str(e)
+        assert 'Out of range dimensions in buffer conversion' in str(e)
 
 def test_buffer_to_str():
     b = hl.Buffer()
