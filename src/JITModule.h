@@ -8,9 +8,12 @@
 
 #include <map>
 #include <memory>
+#include <vector>
 
 #include "IntrusivePtr.h"
+#include "Target.h"
 #include "Type.h"
+#include "WasmExecutor.h"
 #include "runtime/HalideRuntime.h"
 
 namespace llvm {
@@ -21,7 +24,6 @@ namespace Halide {
 
 struct ExternCFunction;
 struct JITExtern;
-struct Target;
 class Module;
 
 struct JITUserContext;
@@ -206,7 +208,7 @@ struct JITModule {
      * be nullptr for a JITModule which has not yet been compiled or one
      * that is not a Halide Func compilation at all. */
     // @{
-    typedef int (*argv_wrapper)(const void **args);
+    typedef int (*argv_wrapper)(const void *const *args);
     argv_wrapper argv_function() const;
     // @}
 
@@ -280,6 +282,50 @@ public:
 };
 
 void *get_symbol_address(const char *s);
+
+struct JITCache {
+    Target jit_target;
+    // Arguments for all inputs and outputs
+    std::vector<Argument> arguments;
+    std::map<std::string, JITExtern> jit_externs;
+    JITModule jit_module;
+    WasmModule wasm_module;
+
+    JITCache() = default;
+    JITCache(Target jit_target,
+             std::vector<Argument> arguments,
+             std::map<std::string, JITExtern> jit_externs,
+             JITModule jit_module,
+             WasmModule wasm_module);
+
+    Target get_compiled_jit_target() const;
+
+    int call_jit_code(const Target &target, const void *const *args);
+
+    void finish_profiling(JITUserContext *context);
+};
+
+struct JITErrorBuffer {
+    enum { MaxBufSize = 4096 };
+    char buf[MaxBufSize];
+    std::atomic<size_t> end{0};
+
+    void concat(const char *message);
+
+    std::string str() const;
+
+    static void handler(JITUserContext *ctx, const char *message);
+};
+
+struct JITFuncCallContext {
+    JITErrorBuffer error_buffer;
+    JITUserContext *context;
+    bool custom_error_handler;
+
+    JITFuncCallContext(JITUserContext *context, const JITHandlers &pipeline_handlers);
+
+    void finalize(int exit_status);
+};
 
 }  // namespace Internal
 }  // namespace Halide

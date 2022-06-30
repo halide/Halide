@@ -143,6 +143,8 @@ std::string type_to_format_descriptor(const Type &type) {
     return std::string();
 }
 
+}  // namespace
+
 Type format_descriptor_to_type(const std::string &fd) {
 
 #define HANDLE_BUFFER_TYPE(TYPE) \
@@ -172,6 +174,8 @@ Type format_descriptor_to_type(const std::string &fd) {
     throw py::value_error("Unsupported Buffer<> type.");
     return Type();
 }
+
+namespace {
 
 py::object buffer_getitem_operator(Buffer<> &buf, const std::vector<int> &pos) {
     if ((size_t)pos.size() != (size_t)buf.dimensions()) {
@@ -236,26 +240,8 @@ py::object buffer_setitem_operator(Buffer<> &buf, const std::vector<int> &pos, c
 class PyBuffer : public Buffer<> {
     py::buffer_info info;
 
-    static std::vector<halide_dimension_t> make_dim_vec(const py::buffer_info &info) {
-        const Type t = format_descriptor_to_type(info.format);
-        std::vector<halide_dimension_t> dims;
-        dims.reserve(info.ndim);
-        for (int i = 0; i < info.ndim; i++) {
-            if (INT_MAX < info.shape[i] || INT_MAX < (info.strides[i] / t.bytes())) {
-                throw py::value_error("Out of range arguments to make_dim_vec.");
-            }
-            dims.emplace_back(0, (int32_t)info.shape[i], (int32_t)(info.strides[i] / t.bytes()));
-        }
-        return dims;
-    }
-
     PyBuffer(py::buffer_info &&info, const std::string &name)
-        : Buffer<>(
-              format_descriptor_to_type(info.format),
-              info.ptr,
-              (int)info.ndim,
-              make_dim_vec(info).data(),
-              name),
+        : Buffer<>(pybufferinfo_to_halidebuffer(info), name),
           info(std::move(info)) {
     }
 

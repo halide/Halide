@@ -228,5 +228,36 @@ Module AbstractGenerator::build_gradient_module(const std::string &function_name
     return result;
 }
 
+Callable AbstractGenerator::compile_to_callable(const JITHandlers *jit_handlers,
+                                                const std::map<std::string, JITExtern> *jit_externs) {
+    Pipeline pipeline = build_pipeline();
+
+    std::vector<Argument> arguments;
+    const auto arg_infos = arginfos();
+    for (const auto &a : arg_infos) {
+        if (a.dir != ArgInfoDirection::Input) {
+            continue;
+        }
+        for (const auto &p : input_parameter(a.name)) {
+            arguments.push_back(to_argument(p));
+        }
+    }
+    if (jit_handlers != nullptr) {
+        pipeline.jit_handlers() = *jit_handlers;
+    }
+    if (jit_externs != nullptr) {
+        pipeline.set_jit_externs(*jit_externs);
+    }
+    return pipeline.compile_to_callable(arguments, context().target());
+}
+
+void AbstractGenerator::set_generatorparam_values(const GeneratorParamsMap &m) {
+    for (const auto &c : m) {
+        user_assert(c.first != "target" && c.first != "auto_schedule" && c.first != "machine_params")
+            << "The GeneratorParam '" << c.first << "' cannot be specified via string here; use GeneratorContext instead.";
+        set_generatorparam_value(c.first, c.second);
+    }
+}
+
 }  // namespace Internal
 }  // namespace Halide

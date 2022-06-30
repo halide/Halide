@@ -65,6 +65,29 @@ int main(int argc, char **argv) {
         verify(img, 1.f, runtime_factor, 3);
     }
 
+    {
+        // Alternately, instead of using Generator Stubs, we can just use the Callable interface.
+        // We can call this on any Generator that is registered in the current process.
+        Callable example = create_callable_from_generator(context, "example");
+
+        Buffer<int32_t, 3> img(kSize, kSize, 3);
+        int r = example(runtime_factor, img);
+        assert(r == 0);
+
+        verify(img, 1.f, runtime_factor, 3);
+    }
+
+    {
+        // We can also make an explicitly-typed std::function if we prefer:
+        auto example = create_callable_from_generator(context, "example").make_std_function<float, Buffer<int32_t, 3>>();
+
+        Buffer<int32_t, 3> img(kSize, kSize, 3);
+        int r = example(runtime_factor, img);
+        assert(r == 0);
+
+        verify(img, 1.f, runtime_factor, 3);
+    }
+
     printf("Success!\n");
     return 0;
 }

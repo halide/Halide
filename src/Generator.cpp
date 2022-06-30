@@ -1051,6 +1051,30 @@ public:
 
 }  // namespace
 
+const GeneratorFactoryProvider &get_registered_generators() {
+    static GeneratorsFromRegistry g;
+    return g;
+}
+
+}  // namespace Internal
+
+Callable create_callable_from_generator(const GeneratorContext &context,
+                                        const std::string &name,
+                                        const GeneratorParamsMap &generator_params) {
+    auto g = Internal::get_registered_generators().create(name, context);
+    user_assert(g != nullptr) << "There is no Generator with the name '" << name << "' currently available.";
+    g->set_generatorparam_values(generator_params);
+    return g->compile_to_callable();
+}
+
+Callable create_callable_from_generator(const Target &target,
+                                        const std::string &name,
+                                        const GeneratorParamsMap &generator_params) {
+    return create_callable_from_generator(GeneratorContext(target), name, generator_params);
+}
+
+namespace Internal {
+
 #ifdef HALIDE_WITH_EXCEPTIONS
 int generate_filter_main(int argc, char **argv, const GeneratorFactoryProvider &generator_factory_provider) {
     try {
@@ -1172,7 +1196,8 @@ void execute_generator(const ExecuteGeneratorArgs &args_in) {
                 // Must re-create each time since each instance will have a different Target.
                 auto gen = args.create_generator(args.generator_name, GeneratorContext(target, auto_schedule, machine_params));
                 for (const auto &kv : args.generator_params) {
-                    if (kv.first == "auto_schedule" ||
+                    if (kv.first == "target" ||
+                        kv.first == "auto_schedule" ||
                         kv.first == "machine_params") {
                         continue;
                     }

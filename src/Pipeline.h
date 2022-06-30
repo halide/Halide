@@ -25,6 +25,7 @@
 namespace Halide {
 
 struct Argument;
+class Callable;
 class Func;
 struct PipelineContents;
 
@@ -55,6 +56,8 @@ struct MachineParams {
 
 namespace Internal {
 class IRMutator;
+struct JITCache;
+struct JITCallArgs;
 }  // namespace Internal
 
 /**
@@ -141,11 +144,9 @@ public:
 private:
     Internal::IntrusivePtr<PipelineContents> contents;
 
-    struct JITCallArgs;  // Opaque structure to optimize away dynamic allocation in this path.
-
     // For the three method below, precisely one of the first two args should be non-null
     void prepare_jit_call_arguments(RealizationArg &output, const Target &target, const ParamMap &param_map,
-                                    JITUserContext **user_context, bool is_bounds_inference, JITCallArgs &args_result);
+                                    JITUserContext **user_context, bool is_bounds_inference, Internal::JITCallArgs &args_result);
 
     static std::vector<Internal::JITModule> make_externs_jit_module(const Target &target,
                                                                     std::map<std::string, JITExtern> &externs_in_out);
@@ -156,11 +157,17 @@ private:
 
     static AutoSchedulerFn find_autoscheduler(const std::string &autoscheduler_name);
 
-    int call_jit_code(const Target &target, const JITCallArgs &args);
+    int call_jit_code(const Target &target, const Internal::JITCallArgs &args);
 
     // Get the value of contents->jit_target, but reality-check that the contents
     // sensibly match the value. Return Target() if not jitted.
     Target get_compiled_jit_target() const;
+
+    static Internal::JITCache compile_jit_cache(const Module &module,
+                                                std::vector<Argument> args,
+                                                const std::vector<Internal::Function> &outputs,
+                                                const std::map<std::string, JITExtern> &jit_externs,
+                                                const Target &target_arg);
 
 public:
     /** Make an undefined Pipeline object. */
@@ -181,12 +188,12 @@ public:
 
     /** Generate a schedule for the pipeline using the currently-default autoscheduler. */
     AutoSchedulerResults auto_schedule(const Target &target,
-                                       const MachineParams &arch_params = MachineParams::generic());
+                                       const MachineParams &arch_params = MachineParams::generic()) const;
 
     /** Generate a schedule for the pipeline using the specified autoscheduler. */
     AutoSchedulerResults auto_schedule(const std::string &autoscheduler_name,
                                        const Target &target,
-                                       const MachineParams &arch_params = MachineParams::generic());
+                                       const MachineParams &arch_params = MachineParams::generic()) const;
 
     /** Add a new the autoscheduler method with the given name. Does not affect the current default autoscheduler.
      * It is an error to call this with the same name multiple times. */
@@ -348,6 +355,14 @@ public:
      * returned from Halide::get_jit_target_from_environment()
      */
     void compile_jit(const Target &target = get_jit_target_from_environment());
+
+    /** Eagerly jit compile the function to machine code and return a callable
+     * struct that behaves like a function pointer. The calling convention
+     * will exactly match that of an AOT-compiled version of this Func
+     * with the same Argument list.
+     */
+    Callable compile_to_callable(const std::vector<Argument> &args,
+                                 const Target &target = get_jit_target_from_environment());
 
     /** Install a set of external C functions or Funcs to satisfy
      * dependencies introduced by HalideExtern and define_extern

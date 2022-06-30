@@ -11,6 +11,12 @@ namespace {
 template<typename TYPE>
 void add_param_methods(py::class_<Param<>> &param_class) {
     param_class
+        .def(py::init([](const Type &type, TYPE value) {
+                 Param<> param(type);
+                 param.set<TYPE>(value);
+                 return param;
+             }),
+             py::arg("type"), py::arg("value"))
         .def(py::init([](const Type &type, const std::string &name, TYPE value) {
                  Param<> param(type, name);
                  param.set<TYPE>(value);

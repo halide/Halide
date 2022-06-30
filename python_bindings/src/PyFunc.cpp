@@ -103,6 +103,7 @@ void define_func(py::module &m) {
     // - set_error_handler()
     // - set_custom_trace()
     // - set_custom_print()
+    // - JITUserContext
 
     auto func_class =
         py::class_<Func>(m, "Func")
@@ -235,6 +236,8 @@ void define_func(py::module &m) {
             .def("compile_to_module", &Func::compile_to_module, py::arg("arguments"), py::arg("fn_name") = "", py::arg("target") = get_target_from_environment())
 
             .def("compile_jit", &Func::compile_jit, py::arg("target") = get_jit_target_from_environment())
+
+            .def("compile_to_callable", &Func::compile_to_callable, py::arg("arguments"), py::arg("target") = get_jit_target_from_environment())
 
             .def("has_update_definition", &Func::has_update_definition)
             .def("num_update_definitions", &Func::num_update_definitions)

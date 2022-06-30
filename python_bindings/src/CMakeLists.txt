@@ -2,6 +2,7 @@ set(SOURCES
     PyArgument.cpp
     PyBoundaryConditions.cpp
     PyBuffer.cpp
+    PyCallable.cpp
     PyConciseCasts.cpp
     PyDerivative.cpp
     PyEnums.cpp
