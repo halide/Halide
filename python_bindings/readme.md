@@ -13,12 +13,12 @@ with some differences where the C++ idiom is either inappropriate or impossible:
     as `[]` is not syntactically acceptable in Python.
 - Some classes in the Halide API aren't provided because they are 'wrapped' with
   standard Python idioms:
-  - `Halide::Tuple` doesn't exist in the Python bindings; an ordinary Python
-    tuple of `Halide::Expr` is used instead.
-  - `Halide::Realization` doesn't exist in the Python bindings; an ordinary
-    Python tuple of `Halide::Buffer` is used instead.
-  - `Halide::Error` and friends don't exist; standard Python error handling is
-    used instead.
+    - `Halide::Tuple` doesn't exist in the Python bindings; an ordinary Python
+      tuple of `Halide::Expr` is used instead.
+    - `Halide::Realization` doesn't exist in the Python bindings; an ordinary
+      Python tuple of `Halide::Buffer` is used instead.
+    - `Halide::Error` and friends don't exist; standard Python error handling is
+      used instead.
 - static and instance method overloads with the same name in the same class
   aren't allowed, so some convenience methods are missing from `Halide::Var`
 - Templated types (notably `Halide::Buffer<>` and `Halide::Param<>`) aren't
@@ -35,7 +35,9 @@ with some differences where the C++ idiom is either inappropriate or impossible:
   entirely for now.
 - `Func::in` becomes `Func.in_` because `in` is a Python keyword.
 - `Func::async` becomes `Func.async_` because `async` is a Python keyword.
-- The `not` keyword cannot be used to negate boolean Halide expressions. Instead, the `logical_not` function can be used and is equivalent to using `operator!` in C++.
+- The `not` keyword cannot be used to negate boolean Halide expressions.
+  Instead, the `logical_not` function can be used and is equivalent to
+  using `operator!` in C++.
 
 ## Enhancements to the C++ API
 
@@ -47,8 +49,7 @@ with some differences where the C++ idiom is either inappropriate or impossible:
 ## Prerequisites
 
 The bindings (and demonstration applications) should work well for Python 3.4
-(or higher), on Linux and OSX platforms. Windows support is experimental, and
-available through the CMake build.
+(or higher), on Linux and OSX platforms. Windows support is experimental.
 
 #### Python requirements:
 
@@ -57,18 +58,15 @@ The best way to get set up is to use a virtual environment:
 ```console
 $ python3 -m venv venv
 $ . venv/bin/activate
-$ pip install -r requirements.txt 
+$ python3 -m pip install -U setuptools wheel
+$ python3 -m pip install -r requirements.txt 
 ```
-
-#### C++ requirements:
-
-- Halide compiled to a distribution (e.g. `make distrib` or similar), with the
-  `HALIDE_DISTRIB_PATH` env var pointing to it
-- If using CMake, simply set `-DWITH_PYTHON_BINDINGS=ON` from the main build. 
 
 ## Compilation instructions
 
-Build using: `make`
+Build as part of the CMake build with `-DWITH_PYTHON_BINDINGS=ON`. Note that
+this requires both Halide and LLVM to be built with RTTI and exceptions
+**enabled**, which is not the default for LLVM.
 
 ## Documentation and Examples
 
@@ -78,11 +76,14 @@ The Python API reflects directly the
 Check out the code for the example applications in the `apps/` and `tutorial/`
 subdirectory.
 
-You can run them as a batch via `make test_apps` or `make test_tutorial`.
+The tests run as part of the standard CTest infrastructure and are labeled with
+the `python` label. You can run the Python tests specifically by running:
 
-To run these examples, make sure the `PYTHONPATH` environment variable points to
-your build directory (e.g.
-`export PYTHONPATH=halide_source/python_bindings/bin:$PYTHONPATH`).
+```
+$ ctest -L python
+```
+
+From the Halide build directory.
 
 ## License
 

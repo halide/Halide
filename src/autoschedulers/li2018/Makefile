@@ -41,7 +41,7 @@ $(BIN)/%/demo.rungen: $(BIN)/%/RunGenMain.o $(BIN)/%/demo.registration.cpp $(BIN
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) -I$(BIN)/$* $^ -o $@ $(HALIDE_SYSTEM_LIBS) $(IMAGE_IO_FLAGS)
 
-.PHONY: build test clean run_test_cpp run_test_py test_generator
+.PHONY: build test clean run_test_cpp test_generator
 
 # demonstrates single-shot use of the autoscheduler
 test_generator: $(BIN)/$(HL_TARGET)/demo.rungen $(BIN)/libautoschedule_li2018.$(SHARED_EXT)
@@ -50,14 +50,9 @@ test_generator: $(BIN)/$(HL_TARGET)/demo.rungen $(BIN)/libautoschedule_li2018.$(
 run_test_cpp: $(BIN)/test
 	LD_LIBRARY_PATH=$(BIN) $< $(BIN)/libautoschedule_li2018.$(SHARED_EXT)
 
-run_test_py: $(SRC)/test.py $(BIN)/libautoschedule_li2018.$(SHARED_EXT)
-	PYTHONPATH=$(BIN):$(HALIDE_PYTHON_BINDINGS_PATH):$(HALIDE_DISTRIB_PATH)/bin:$$PYTHONPATH \
-		LD_LIBRARY_PATH=$(BIN):$(HALIDE_PYTHON_BINDINGS_PATH):$(HALIDE_DISTRIB_PATH)/bin \
-		$(PYTHON) $(SRC)/test.py
-
 \build: $(BIN)/test $(BIN)/$(HL_TARGET)/demo.rungen $(BIN)/libautoschedule_li2018.$(SHARED_EXT)
 
-test: run_test_cpp run_test_py test_generator
+test: run_test_cpp test_generator
 
 clean:
 	rm -rf $(BIN)
