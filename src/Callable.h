@@ -305,13 +305,13 @@ private:
 
 public:
     template<typename... Args>
-    HALIDE_MUST_USE_RESULT int
+    HALIDE_FUNCTION_ATTRS int
     operator()(JITUserContext *context, Args &&...args) const {
         return call(context, std::forward<Args>(args)...);
     }
 
     template<typename... Args>
-    HALIDE_MUST_USE_RESULT int
+    HALIDE_FUNCTION_ATTRS int
     operator()(Args &&...args) const {
         JITUserContext empty;
         return call(&empty, std::forward<Args>(args)...);
@@ -334,6 +334,8 @@ public:
      * TODO: it's possible that we could infer the correct signatures in some cases,
      * and only fail for the ambiguous cases, but that would require a lot more template-fu
      * here and elsewhere. I think this is good enough for now.
+     *
+     * TODO: is it possible to annotate the result of a std::function<> with HALIDE_FUNCTION_ATTRS?
      */
     template<typename First, typename... Rest>
     std::function<int(First, Rest...)>
