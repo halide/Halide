@@ -77,6 +77,11 @@ BENCHMARKS = \
 all: build
 	make run_benchmarks 
 
+ifneq (,$(findstring x86-32-linux,$(HL_TARGET)$(HL_JIT_TARGET)))
+build:
+	@echo linear_algebra not support using Make on x86-32-linux: skipping linear_algebra tests...
+test: build
+else
 ifneq ("$(wildcard /usr/include/cblas.h /usr/include/*/cblas.h)","")
 build: $(BENCHMARKS) $(BIN)/test_halide_blas
 test: $(BIN)/test_halide_blas
@@ -85,6 +90,7 @@ else
 build:
 	@echo /usr/include/cblas.h not found: skipping linear_algebra tests...
 test: build
+endif
 endif
 
 clean:
