@@ -208,13 +208,13 @@ void BlockStorage::resize(void *user_context, size_t entry_count, bool realloc) 
     }
 
 #if DEBUG
-    debug(0) << "BlockStorage: Resize ("
-             << "requested_size=" << (int32_t)requested_size << " "
-             << "current_size=" << (int32_t)current_size << " "
-             << "minimum_size=" << (int32_t)minimum_size << " "
-             << "actual_size=" << (int32_t)actual_size << " "
-             << "entry_size=" << (int32_t)config.entry_size << " "
-             << "realloc=" << (realloc ? "true" : "false") << ")...\n";
+    debug(user_context) << "BlockStorage: Resize ("
+                        << "requested_size=" << (int32_t)requested_size << " "
+                        << "current_size=" << (int32_t)current_size << " "
+                        << "minimum_size=" << (int32_t)minimum_size << " "
+                        << "actual_size=" << (int32_t)actual_size << " "
+                        << "entry_size=" << (int32_t)config.entry_size << " "
+                        << "realloc=" << (realloc ? "true" : "false") << ")...\n";
 #endif
 
     allocate(user_context, actual_size);

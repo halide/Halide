@@ -9,7 +9,7 @@ namespace Internal {
 
 // Hint for allocation usage indicating whether or not the resource
 // is in use, available, or dedicated (and can't be split or shared)
-enum AllocationStatus {
+enum class AllocationStatus {
     InvalidStatus,
     InUse,
     Available,
@@ -18,7 +18,7 @@ enum AllocationStatus {
 
 // Hint for allocation requests indicating intended usage
 // required between host and device address space mappings
-enum MemoryVisibility {
+enum class MemoryVisibility {
     InvalidVisibility,  //< invalid enum value
     HostOnly,           //< host local
     DeviceOnly,         //< device local
@@ -29,7 +29,7 @@ enum MemoryVisibility {
 
 // Hint for allocation requests indicating intended update
 // frequency for modifying the contents of the allocation
-enum MemoryUsage {
+enum class MemoryUsage {
     InvalidUsage,    //< invalid enum value
     StaticStorage,   //< intended for static storage, whereby the contents will be set once and remain unchanged
     DynamicStorage,  //< intended for dyanmic storage, whereby the contents will be set frequently and change constantly
@@ -41,7 +41,7 @@ enum MemoryUsage {
 };
 
 // Hint for allocation requests indicating ideal caching support (if available)
-enum MemoryCaching {
+enum class MemoryCaching {
     InvalidCaching,    //< invalid enum value
     Cached,            //< cached
     Uncached,          //< uncached

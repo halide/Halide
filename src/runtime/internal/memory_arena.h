@@ -150,7 +150,6 @@ bool MemoryArena::collect(void *user_context) {
 }
 
 void *MemoryArena::reserve(void *user_context, bool initialize) {
-
     // Scan blocks for a free entry
     for (size_t i = blocks.size(); i--;) {
         Block *block = lookup_block(user_context, i);
@@ -197,7 +196,6 @@ void MemoryArena::reclaim(void *user_context, void *entry_ptr) {
 }
 
 typename MemoryArena::Block *MemoryArena::create_block(void *user_context) {
-
     // resize capacity starting with initial up to 1.5 last capacity
     uint32_t new_capacity = config.minimum_block_capacity;
     if (!blocks.empty()) {
