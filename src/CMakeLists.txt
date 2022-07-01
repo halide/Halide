@@ -22,6 +22,7 @@ set(HEADER_FILES
     BoundsInference.h
     BoundSmallAllocations.h
     Buffer.h
+    Callable.h
     CanonicalizeGPUVars.h
     ClampUnsafeAccesses.h
     Closure.h
@@ -184,6 +185,7 @@ set(SOURCE_FILES
     BoundsInference.cpp
     BoundSmallAllocations.cpp
     Buffer.cpp
+    Callable.cpp
     CanonicalizeGPUVars.cpp
     ClampUnsafeAccesses.cpp
     Closure.cpp

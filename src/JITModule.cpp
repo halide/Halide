@@ -21,6 +21,7 @@
 #include "LLVM_Output.h"
 #include "LLVM_Runtime_Linker.h"
 #include "Pipeline.h"
+#include "WasmExecutor.h"
 
 namespace Halide {
 namespace Internal {
@@ -394,8 +395,8 @@ JITModule::Symbol JITModule::entrypoint_symbol() const {
     return jit_module->entrypoint;
 }
 
-int (*JITModule::argv_function() const)(const void **) {
-    return (int (*)(const void **))jit_module->argv_entrypoint.address;
+int (*JITModule::argv_function() const)(const void *const *) {
+    return (int (*)(const void *const *))jit_module->argv_entrypoint.address;
 }
 
 JITModule::Symbol JITModule::argv_entrypoint_symbol() const {
@@ -983,6 +984,140 @@ void JITSharedRuntime::memoization_cache_evict(uint64_t eviction_key) {
 void JITSharedRuntime::reuse_device_allocations(bool b) {
     std::lock_guard<std::mutex> lock(shared_runtimes_mutex);
     shared_runtimes(MainShared).reuse_device_allocations(b);
+}
+
+JITCache::JITCache(Target jit_target,
+                   std::vector<Argument> arguments,
+                   std::map<std::string, JITExtern> jit_externs,
+                   JITModule jit_module,
+                   WasmModule wasm_module)
+    : jit_target(jit_target),  // clang-tidy complains that this is "trivially copyable" and std::move shouldn't be here, grr
+      arguments(std::move(arguments)),
+      jit_externs(std::move(jit_externs)),
+      jit_module(std::move(jit_module)),
+      wasm_module(std::move(wasm_module)) {
+}
+
+Target JITCache::get_compiled_jit_target() const {
+    // This essentially is just a getter for contents->jit_target,
+    // but also reality-checks that the status of the jit_module and/or wasm_module
+    // match what we expect.
+    const bool has_wasm = wasm_module.contents.defined();
+    const bool has_native = jit_module.compiled();
+    if (jit_target.arch == Target::WebAssembly) {
+        internal_assert(has_wasm && !has_native);
+    } else if (!jit_target.has_unknowns()) {
+        internal_assert(!has_wasm && has_native);
+    } else {
+        internal_assert(!has_wasm && !has_native);
+    }
+    return jit_target;
+}
+
+int JITCache::call_jit_code(const Target &target, const void *const *args) {
+#if defined(__has_feature)
+#if __has_feature(memory_sanitizer)
+    user_warning << "MSAN does not support JIT compilers of any sort, and will report "
+                    "false positives when used in conjunction with the Halide JIT. "
+                    "If you need to test with MSAN enabled, you must use ahead-of-time "
+                    "compilation for Halide code.";
+#endif
+#endif
+    if (target.arch == Target::WebAssembly) {
+        internal_assert(wasm_module.contents.defined());
+        return wasm_module.run(args);
+    } else {
+        auto argv_wrapper = jit_module.argv_function();
+        internal_assert(argv_wrapper != nullptr);
+        return argv_wrapper(args);
+    }
+}
+
+void JITCache::finish_profiling(JITUserContext *context) {
+    // If we're profiling, report runtimes and reset profiler stats.
+    if (jit_target.has_feature(Target::Profile) || jit_target.has_feature(Target::ProfileByTimer)) {
+        JITModule::Symbol report_sym = jit_module.find_symbol_by_name("halide_profiler_report");
+        JITModule::Symbol reset_sym = jit_module.find_symbol_by_name("halide_profiler_reset");
+        if (report_sym.address && reset_sym.address) {
+            void (*report_fn_ptr)(JITUserContext *) = (void (*)(JITUserContext *))(report_sym.address);
+            report_fn_ptr(context);
+
+            void (*reset_fn_ptr)() = (void (*)())(reset_sym.address);
+            reset_fn_ptr();
+        }
+    }
+}
+
+void JITErrorBuffer::concat(const char *message) {
+    size_t len = strlen(message);
+
+    if (len && message[len - 1] != '\n') {
+        // Claim some extra space for a newline.
+        len++;
+    }
+
+    // Atomically claim some space in the buffer
+    size_t old_end = end.fetch_add(len);
+
+    if (old_end + len >= MaxBufSize - 1) {
+        // Out of space
+        return;
+    }
+
+    for (size_t i = 0; i < len - 1; i++) {
+        buf[old_end + i] = message[i];
+    }
+    if (buf[old_end + len - 2] != '\n') {
+        buf[old_end + len - 1] = '\n';
+    }
+}
+
+std::string JITErrorBuffer::str() const {
+    return std::string(buf, end);
+}
+
+/*static*/ void JITErrorBuffer::handler(JITUserContext *ctx, const char *message) {
+    if (ctx && ctx->error_buffer) {
+        ctx->error_buffer->concat(message);
+    }
+}
+
+JITFuncCallContext::JITFuncCallContext(JITUserContext *context, const JITHandlers &pipeline_handlers)
+    : context(context) {
+    custom_error_handler = (context->handlers.custom_error != nullptr ||
+                            pipeline_handlers.custom_error != nullptr);
+    // Hook the error handler if not set
+    if (!custom_error_handler) {
+        context->handlers.custom_error = JITErrorBuffer::handler;
+    }
+
+    // Add the handlers stored in the pipeline for anything else
+    // not set, then for anything still not set, use the global
+    // active handlers.
+    JITSharedRuntime::populate_jit_handlers(context, pipeline_handlers);
+    context->error_buffer = &error_buffer;
+
+    debug(2) << "custom_print: " << (void *)context->handlers.custom_print << "\n"
+             << "custom_malloc: " << (void *)context->handlers.custom_malloc << "\n"
+             << "custom_free: " << (void *)context->handlers.custom_free << "\n"
+             << "custom_do_task: " << (void *)context->handlers.custom_do_task << "\n"
+             << "custom_do_par_for: " << (void *)context->handlers.custom_do_par_for << "\n"
+             << "custom_error: " << (void *)context->handlers.custom_error << "\n"
+             << "custom_trace: " << (void *)context->handlers.custom_trace << "\n";
+}
+
+void JITFuncCallContext::finalize(int exit_status) {
+    // Only report the errors if no custom error handler was installed
+    if (exit_status && !custom_error_handler) {
+        std::string output = error_buffer.str();
+        if (output.empty()) {
+            output = ("The pipeline returned exit status " +
+                      std::to_string(exit_status) +
+                      " but halide_error was never called.\n");
+        }
+        halide_runtime_error << output;
+        error_buffer.end = 0;
+    }
 }
 
 }  // namespace Internal

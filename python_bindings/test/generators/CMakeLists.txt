@@ -36,5 +36,5 @@ foreach (GEN IN LISTS GENERATORS)
     add_python_stub_extension(py_stub_${GEN}
                               SOURCES ${GEN}_generator.cpp
                               GENERATOR ${GEN}
-                              MODULE ${GEN}_stub)
+                              MODULE ${GEN}_pystub)
 endforeach ()

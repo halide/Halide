@@ -6,6 +6,7 @@
 #include <string>
 #include <vector>
 
+#include "Callable.h"
 #include "Expr.h"
 #include "Func.h"
 #include "Module.h"
@@ -18,6 +19,7 @@
 namespace Halide {
 
 class GeneratorContext;
+using GeneratorParamsMap = std::map<std::string, std::string>;
 
 namespace Internal {
 
@@ -207,6 +209,22 @@ public:
      *     (For the common case of just one original-output, this amounts to being one output for each original-input.)
      */
     Module build_gradient_module(const std::string &function_name);
+
+    /**
+     * JIT the AbstractGenerator into a Callable (using the currently-set
+     * Target) and return it.
+     *
+     * If jit_handlers is not null, set the jitted func's jit_handlers to use a copy of it.
+     *
+     * If jit_externs is not null, use it to set the jitted func's external dependencies.
+     */
+    Callable compile_to_callable(const JITHandlers *jit_handlers = nullptr,
+                                 const std::map<std::string, JITExtern> *jit_externs = nullptr);
+
+    /*
+     * Set all the GeneratorParams in the map. This is equivalent to simply calling the
+     * `set_generatorparam_value()` method in a loop over the map, but is quite convenient. */
+    void set_generatorparam_values(const GeneratorParamsMap &m);
 };
 
 using AbstractGeneratorPtr = std::unique_ptr<AbstractGenerator>;

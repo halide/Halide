@@ -120,7 +120,7 @@ std::string cast_error_string<Expr>::operator()(const py::handle &h, const std::
 template<typename T>
 T cast_to(const py::handle &h, const std::string &name) {
     // We want to ensure that the error thrown is one that will be translated
-    // to `hl.Error` in Python.
+    // to `hl.HalideError` in Python.
     try {
         return h.cast<T>();
     } catch (const std::exception &e) {

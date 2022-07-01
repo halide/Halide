@@ -3,6 +3,7 @@
 #include <utility>
 
 #include "Argument.h"
+#include "Callable.h"
 #include "CodeGen_Internal.h"
 #include "FindCalls.h"
 #include "Func.h"
@@ -59,7 +60,52 @@ std::map<OutputFileType, std::string> object_file_outputs(const string &filename
     return outputs;
 }
 
+std::string sanitize_function_name(const std::string &s) {
+    string name = s;
+    for (char &c : name) {
+        if (!isalnum(c)) {
+            c = '_';
+        }
+    }
+    return name;
+}
+
 }  // namespace
+
+namespace Internal {
+
+struct JITCallArgs {
+    size_t size{0};
+    const void **store;
+
+    JITCallArgs(size_t size)
+        : size(size) {
+        if (size > kStoreSize) {
+            store = new ConstVoidPtr[size];
+        } else {
+            store = fixed_store;
+        }
+    }
+
+    ~JITCallArgs() {
+        if (store != fixed_store) {
+            delete[] store;
+        }
+    }
+
+private:
+    static constexpr int kStoreSize = 64;
+    using ConstVoidPtr = const void *;
+    ConstVoidPtr fixed_store[kStoreSize];
+
+public:
+    JITCallArgs(const JITCallArgs &other) = delete;
+    JITCallArgs &operator=(const JITCallArgs &other) = delete;
+    JITCallArgs(JITCallArgs &&other) = delete;
+    JITCallArgs &operator=(JITCallArgs &&other) = delete;
+};
+
+}  // namespace Internal
 
 struct PipelineContents {
     mutable RefCount ref_count;
@@ -67,23 +113,13 @@ struct PipelineContents {
     // Cached lowered stmt
     Module module;
 
-    // Name of the generated function
-    string name;
-
     // Cached jit-compiled code
-    JITModule jit_module;
-    Target jit_target;
-
-    // Cached compiled JavaScript and/or wasm if defined */
-    WasmModule wasm_module;
+    JITCache jit_cache;
 
     /** Clear all cached state */
     void invalidate_cache() {
         module = Module("", Target());
-        jit_module = JITModule();
-        jit_target = Target();
-        inferred_args.clear();
-        wasm_module = WasmModule();
+        jit_cache = JITCache();
     }
 
     // The outputs
@@ -208,7 +244,7 @@ AutoSchedulerFn Pipeline::find_autoscheduler(const std::string &autoscheduler_na
     return it->second;
 }
 
-AutoSchedulerResults Pipeline::auto_schedule(const std::string &autoscheduler_name, const Target &target, const MachineParams &arch_params) {
+AutoSchedulerResults Pipeline::auto_schedule(const std::string &autoscheduler_name, const Target &target, const MachineParams &arch_params) const {
     auto autoscheduler_fn = find_autoscheduler(autoscheduler_name);
     user_assert(autoscheduler_fn)
         << "Could not find autoscheduler named '" << autoscheduler_name << "'.\n"
@@ -222,7 +258,7 @@ AutoSchedulerResults Pipeline::auto_schedule(const std::string &autoscheduler_na
     return results;
 }
 
-AutoSchedulerResults Pipeline::auto_schedule(const Target &target, const MachineParams &arch_params) {
+AutoSchedulerResults Pipeline::auto_schedule(const Target &target, const MachineParams &arch_params) const {
     return auto_schedule(get_default_autoscheduler_name(), target, arch_params);
 }
 
@@ -525,39 +561,20 @@ Module Pipeline::compile_to_module(const vector<Argument> &args,
 
 std::string Pipeline::generate_function_name() const {
     user_assert(defined()) << "Pipeline is undefined\n";
-    // Come up with a name for a generated function
-    string name = contents->outputs[0].name();
-    for (char &c : name) {
-        if (!isalnum(c)) {
-            c = '_';
-        }
-    }
-    return name;
+    return sanitize_function_name(contents->outputs[0].name());
 }
 
 // This essentially is just a getter for contents->jit_target,
 // but also reality-checks that the status of the jit_module and/or wasm_module
 // match what we expect.
 Target Pipeline::get_compiled_jit_target() const {
-    const bool has_wasm = contents->wasm_module.contents.defined();
-    const bool has_native = contents->jit_module.compiled();
-    if (contents->jit_target.arch == Target::WebAssembly) {
-        internal_assert(has_wasm && !has_native);
-    } else if (!contents->jit_target.has_unknowns()) {
-        internal_assert(!has_wasm && has_native);
-    } else {
-        internal_assert(!has_wasm && !has_native);
-    }
-    return contents->jit_target;
+    return contents->jit_cache.get_compiled_jit_target();
 }
 
 void Pipeline::compile_jit(const Target &target_arg) {
     user_assert(defined()) << "Pipeline is undefined\n";
-    user_assert(!target_arg.has_unknowns()) << "Cannot compile_jit() for target '" << target_arg << "'\n";
 
-    Target target(target_arg);
-    target.set_feature(Target::JIT);
-    target.set_feature(Target::UserContext);
+    Target target = target_arg.with_feature(Target::JIT).with_feature(Target::UserContext);
 
     // If we're re-jitting for the same target, we can just keep the old jit module.
     if (get_compiled_jit_target() == target) {
@@ -566,12 +583,8 @@ void Pipeline::compile_jit(const Target &target_arg) {
         return;
     }
 
-    debug(2) << "jit-compiling for: " << target_arg << "\n";
-
     // Clear all cached info in case there is an error.
     contents->invalidate_cache();
-
-    contents->jit_target = target;
 
     // Infer an arguments vector
     infer_arguments();
@@ -585,59 +598,82 @@ void Pipeline::compile_jit(const Target &target_arg) {
         args.push_back(arg.arg);
     }
 
-    // Come up with a name for the generated function
-    string name = generate_function_name();
-
-    // Compile to a module and also compile any submodules.
-    Module module = compile_to_module(args, name, target).resolve_submodules();
-
+    Module module = compile_to_module(args, generate_function_name(), target).resolve_submodules();
     std::map<std::string, JITExtern> lowered_externs = contents->jit_externs;
+    contents->jit_cache = compile_jit_cache(module, std::move(args), contents->outputs, contents->jit_externs, target);
+}
 
-    if (target.arch == Target::WebAssembly) {
-        FindExterns find_externs(lowered_externs);
-        for (const LoweredFunc &f : contents->module.functions()) {
+Callable Pipeline::compile_to_callable(const std::vector<Argument> &args_in, const Target &target_arg) {
+    user_assert(defined()) << "Pipeline is undefined\n";
+
+    Target target = target_arg.with_feature(Target::JIT).with_feature(Target::UserContext);
+
+    const Argument &user_context_arg = contents->user_context_arg.arg;
+
+    std::vector<Argument> args;
+    args.reserve(args_in.size() + contents->outputs.size() + 1);
+    // JITUserContext is always the first argument for Callables.
+    args.push_back(user_context_arg);
+    for (const Argument &a : args_in) {
+        user_assert(a.name != user_context_arg.name) << "You may not specify an explicit UserContext Argument to compile_to_callable().";
+        args.push_back(a);
+    }
+
+    Module module = compile_to_module(args, generate_function_name(), target).resolve_submodules();
+
+    auto jit_cache = compile_jit_cache(module, std::move(args), contents->outputs, get_jit_externs(), target);
+
+    // Save the jit_handlers and jit_externs as they were at the time this
+    // Callable was created, in case the Pipeline's version is mutated in
+    // between creation and call -- we want the Callable to remain immutable
+    // after creation, regardless of what you do to the Func.
+    return Callable(module.name(), jit_handlers(), get_jit_externs(), std::move(jit_cache));
+}
+
+/*static*/ JITCache Pipeline::compile_jit_cache(const Module &module,
+                                                std::vector<Argument> args,
+                                                const std::vector<Internal::Function> &outputs,
+                                                const std::map<std::string, JITExtern> &jit_externs_in,
+                                                const Target &target_arg) {
+    user_assert(!target_arg.has_unknowns()) << "Cannot jit-compile for target '" << target_arg << "'\n";
+
+    Target jit_target = target_arg.with_feature(Target::JIT).with_feature(Target::UserContext);
+
+    debug(2) << "jit-compiling for: " << target_arg << "\n";
+
+    for (const auto &out : outputs) {
+        for (Type t : out.output_types()) {
+            args.emplace_back(out.name(), Argument::OutputBuffer, t, out.dimensions(), ArgumentEstimates{});
+        }
+    }
+
+    JITModule jit_module;
+    WasmModule wasm_module;
+
+    // Note that make_externs_jit_module() mutates the jit_externs, so we keep a copy
+    // TODO: it fills in the value side with JITExtern values, but does anything actually use those?
+    auto jit_externs = jit_externs_in;
+    std::vector<JITModule> externs_jit_module = Pipeline::make_externs_jit_module(jit_target, jit_externs);
+    if (jit_target.arch == Target::WebAssembly) {
+        FindExterns find_externs(jit_externs);
+        for (const LoweredFunc &f : module.functions()) {
             f.body.accept(&find_externs);
         }
         if (debug::debug_level() >= 1) {
-            for (const auto &p : lowered_externs) {
+            for (const auto &p : jit_externs) {
                 debug(1) << "Found extern: " << p.first << "\n";
             }
         }
 
-        vector<Argument> args_and_outputs = args;
-        for (auto &out : contents->outputs) {
-            for (Type t : out.output_types()) {
-                args_and_outputs.emplace_back(out.name(), Argument::OutputBuffer, t, out.dimensions(), ArgumentEstimates{});
-            }
-        }
-
-        contents->wasm_module = WasmModule::compile(
-            module,
-            args_and_outputs,
-            contents->module.name(),
-            lowered_externs,
-            make_externs_jit_module(target, lowered_externs));
-        return;
+        wasm_module = WasmModule::compile(module, args,
+                                          module.name(), jit_externs, externs_jit_module);
+    } else {
+        std::string name = sanitize_function_name(outputs[0].name());
+        auto f = module.get_function_by_name(name);
+        jit_module = JITModule(module, f, externs_jit_module);
     }
 
-    auto f = module.get_function_by_name(name);
-
-    // Compile to jit module
-    JITModule jit_module(module, f, make_externs_jit_module(target_arg, lowered_externs));
-
-    // Dump bitcode to a file if the environment variable
-    // HL_GENBITCODE is defined to a nonzero value.
-    if (atoi(get_env_variable("HL_GENBITCODE").c_str())) {
-        string program_name = running_program_name();
-        if (program_name.empty()) {
-            program_name = "unknown" + unique_name('_').substr(1);
-        }
-        string file_name = program_name + "_" + name + "_" + unique_name('g').substr(1) + ".bc";
-        debug(4) << "Saving bitcode to: " << file_name << "\n";
-        module.compile({{OutputFileType::bitcode, file_name}});
-    }
-
-    contents->jit_module = jit_module;
+    return JITCache(jit_target, std::move(args), std::move(jit_externs), std::move(jit_module), std::move(wasm_module));
 }
 
 void Pipeline::set_jit_externs(const std::map<std::string, JITExtern> &externs) {
@@ -765,127 +801,6 @@ void Pipeline::trace_pipeline() {
     contents->trace_pipeline = true;
 }
 
-namespace Internal {
-struct JITErrorBuffer {
-    enum { MaxBufSize = 4096 };
-    char buf[MaxBufSize];
-    std::atomic<size_t> end{0};
-
-    void concat(const char *message) {
-        size_t len = strlen(message);
-
-        if (len && message[len - 1] != '\n') {
-            // Claim some extra space for a newline.
-            len++;
-        }
-
-        // Atomically claim some space in the buffer
-        size_t old_end = end.fetch_add(len);
-
-        if (old_end + len >= MaxBufSize - 1) {
-            // Out of space
-            return;
-        }
-
-        for (size_t i = 0; i < len - 1; i++) {
-            buf[old_end + i] = message[i];
-        }
-        if (buf[old_end + len - 2] != '\n') {
-            buf[old_end + len - 1] = '\n';
-        }
-    }
-
-    std::string str() const {
-        return std::string(buf, end);
-    }
-
-    static void handler(JITUserContext *ctx, const char *message) {
-        if (ctx && ctx->error_buffer) {
-            ctx->error_buffer->concat(message);
-        }
-    }
-};
-
-struct JITFuncCallContext {
-    JITErrorBuffer error_buffer;
-    JITUserContext *context;
-    bool custom_error_handler;
-
-    JITFuncCallContext(JITUserContext *context, const JITHandlers &pipeline_handlers)
-        : context(context) {
-        custom_error_handler = (context->handlers.custom_error != nullptr ||
-                                pipeline_handlers.custom_error != nullptr);
-        // Hook the error handler if not set
-        if (!custom_error_handler) {
-            context->handlers.custom_error = JITErrorBuffer::handler;
-        }
-
-        // Add the handlers stored in the pipeline for anything else
-        // not set, then for anything still not set, use the global
-        // active handlers.
-        JITSharedRuntime::populate_jit_handlers(context, pipeline_handlers);
-        context->error_buffer = &error_buffer;
-
-        debug(2) << "custom_print: " << (void *)context->handlers.custom_print << "\n"
-                 << "custom_malloc: " << (void *)context->handlers.custom_malloc << "\n"
-                 << "custom_free: " << (void *)context->handlers.custom_free << "\n"
-                 << "custom_do_task: " << (void *)context->handlers.custom_do_task << "\n"
-                 << "custom_do_par_for: " << (void *)context->handlers.custom_do_par_for << "\n"
-                 << "custom_error: " << (void *)context->handlers.custom_error << "\n"
-                 << "custom_trace: " << (void *)context->handlers.custom_trace << "\n";
-    }
-
-    void report_if_error(int exit_status) {
-        // Only report the errors if no custom error handler was installed
-        if (exit_status && !custom_error_handler) {
-            std::string output = error_buffer.str();
-            if (output.empty()) {
-                output = ("The pipeline returned exit status " +
-                          std::to_string(exit_status) +
-                          " but halide_error was never called.\n");
-            }
-            halide_runtime_error << output;
-            error_buffer.end = 0;
-        }
-    }
-
-    void finalize(int exit_status) {
-        report_if_error(exit_status);
-    }
-};
-}  // namespace Internal
-
-struct Pipeline::JITCallArgs {
-    size_t size{0};
-    const void **store;
-
-    JITCallArgs(size_t size)
-        : size(size) {
-        if (size > kStoreSize) {
-            store = new ConstVoidPtr[size];
-        } else {
-            store = fixed_store;
-        }
-    }
-
-    ~JITCallArgs() {
-        if (store != fixed_store) {
-            delete[] store;
-        }
-    }
-
-private:
-    static constexpr int kStoreSize = 64;
-    using ConstVoidPtr = const void *;
-    ConstVoidPtr fixed_store[kStoreSize];
-
-public:
-    JITCallArgs(const JITCallArgs &other) = delete;
-    JITCallArgs &operator=(const JITCallArgs &other) = delete;
-    JITCallArgs(JITCallArgs &&other) = delete;
-    JITCallArgs &operator=(JITCallArgs &&other) = delete;
-};
-
 // Make a vector of void *'s to pass to the jit call using the
 // currently bound value for all of the params and image
 // params.
@@ -902,9 +817,9 @@ void Pipeline::prepare_jit_call_arguments(RealizationArg &outputs, const Target 
         << "Realization requires " << outputs.size() << " output(s) but pipeline produces "
         << total_outputs << " result(s).\n";
 
-    JITModule &compiled_module = contents->jit_module;
+    JITModule &compiled_module = contents->jit_cache.jit_module;
     internal_assert(compiled_module.argv_function() ||
-                    contents->wasm_module.contents.defined());
+                    contents->jit_cache.wasm_module.contents.defined());
 
     const bool no_param_map = &param_map == &ParamMap::empty_map();
 
@@ -963,7 +878,7 @@ void Pipeline::prepare_jit_call_arguments(RealizationArg &outputs, const Target 
     }
 }
 
-std::vector<JITModule>
+/*static*/ std::vector<JITModule>
 Pipeline::make_externs_jit_module(const Target &target,
                                   std::map<std::string, JITExtern> &externs_in_out) {
     std::vector<JITModule> result;
@@ -979,9 +894,9 @@ Pipeline::make_externs_jit_module(const Target &target,
             // Ensure that the pipeline is compiled.
             pipeline.compile_jit(target);
 
-            free_standing_jit_externs.add_dependency(pipeline_contents.jit_module);
-            free_standing_jit_externs.add_symbol_for_export(iter.first, pipeline_contents.jit_module.entrypoint_symbol());
-            void *address = pipeline_contents.jit_module.entrypoint_symbol().address;
+            free_standing_jit_externs.add_dependency(pipeline_contents.jit_cache.jit_module);
+            free_standing_jit_externs.add_symbol_for_export(iter.first, pipeline_contents.jit_cache.jit_module.entrypoint_symbol());
+            void *address = pipeline_contents.jit_cache.jit_module.entrypoint_symbol().address;
             std::vector<Type> arg_types;
             // Add the arguments to the compiled pipeline
             for (const InferredArgument &arg : pipeline_contents.inferred_args) {
@@ -1009,19 +924,7 @@ Pipeline::make_externs_jit_module(const Target &target,
 }
 
 int Pipeline::call_jit_code(const Target &target, const JITCallArgs &args) {
-#if defined(__has_feature)
-#if __has_feature(memory_sanitizer)
-    user_warning << "MSAN does not support JIT compilers of any sort, and will report "
-                    "false positives when used in conjunction with the Halide JIT. "
-                    "If you need to test with MSAN enabled, you must use ahead-of-time "
-                    "compilation for Halide code.";
-#endif
-#endif
-    if (target.arch == Target::WebAssembly) {
-        internal_assert(contents->wasm_module.contents.defined());
-        return contents->wasm_module.run(args.store);
-    }
-    return contents->jit_module.argv_function()(args.store);
+    return contents->jit_cache.call_jit_code(target, args.store);
 }
 
 void Pipeline::realize(RealizationArg outputs,
@@ -1126,19 +1029,7 @@ void Pipeline::realize(JITUserContext *context,
     debug(2) << "Back from jitted function. Exit status was " << exit_status << "\n";
 
     // If we're profiling, report runtimes and reset profiler stats.
-    if (target.has_feature(Target::Profile) || target.has_feature(Target::ProfileByTimer)) {
-        JITModule::Symbol report_sym =
-            contents->jit_module.find_symbol_by_name("halide_profiler_report");
-        JITModule::Symbol reset_sym =
-            contents->jit_module.find_symbol_by_name("halide_profiler_reset");
-        if (report_sym.address && reset_sym.address) {
-            void (*report_fn_ptr)(JITUserContext *) = (void (*)(JITUserContext *))(report_sym.address);
-            report_fn_ptr(context);
-
-            void (*reset_fn_ptr)() = (void (*)())(reset_sym.address);
-            reset_fn_ptr();
-        }
-    }
+    contents->jit_cache.finish_profiling(context);
 
     jit_call_context.finalize(exit_status);
 }
@@ -1163,7 +1054,7 @@ void Pipeline::infer_input_bounds(JITUserContext *context,
 
     size_t args_size = contents->inferred_args.size() + outputs.size();
     JITCallArgs args(args_size);
-    prepare_jit_call_arguments(outputs, contents->jit_target, param_map,
+    prepare_jit_call_arguments(outputs, contents->jit_cache.jit_target, param_map,
                                &context, true, args);
 
     struct TrackedBuffer {
@@ -1205,8 +1096,8 @@ void Pipeline::infer_input_bounds(JITUserContext *context,
         }
 
         Internal::debug(2) << "Calling jitted function\n";
-        int exit_status = call_jit_code(contents->jit_target, args);
-        jit_context.report_if_error(exit_status);
+        int exit_status = call_jit_code(contents->jit_cache.jit_target, args);
+        jit_context.finalize(exit_status);
         Internal::debug(2) << "Back from jitted function\n";
         bool changed = false;
 
