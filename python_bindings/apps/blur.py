@@ -4,6 +4,18 @@ import numpy as np
 import imageio
 import os.path
 
+# Return the directory to look in for test images:
+# - If TEST_IMAGES_DIR is defined, use that
+# - Otherwise, create a relative path to the C++ apps/images dir
+def apps_images_dir():
+    return os.environ.get("TEST_IMAGES_DIR", os.path.join(os.path.dirname(__file__), "../../apps/images"))
+
+# Return the directory to use when writing output files:
+# - If TEST_TMPDIR is defined, use that
+# - Otherwise, return an empty string (i.e., relative to whatever the current directory is)
+def apps_output_dir():
+    return os.environ.get("TEST_TMPDIR", "")
+
 def get_blur(input):
     assert type(input) == hl.ImageParam
     assert input.dimensions() == 2
@@ -31,7 +43,7 @@ def get_blur(input):
 
 
 def get_input_data():
-    image_path = os.path.join(os.path.dirname(__file__), "../../apps/images/rgb.png")
+    image_path = os.path.join(apps_images_dir(), "rgb.png")
     assert os.path.exists(image_path), \
         "Could not find %s" % image_path
     rgb_data = imageio.imread(image_path)
@@ -63,8 +75,8 @@ def main():
     blur.realize(output_image)
 
     # save results
-    input_path = "blur_input.png"
-    output_path = "blur_result.png"
+    input_path = os.path.join(apps_output_dir(), "blur_input.png")
+    output_path = os.path.join(apps_output_dir(), "blur_result.png")
     imageio.imsave(input_path, input_data)
     imageio.imsave(output_path, output_data)
     print("\nblur realized on output image.",
