@@ -50,15 +50,14 @@ endif ()
 # some platform specific ifdefs for attributes and types that are causing compile 
 # errors.
 #
-if(MSVC)
-    set(ENABLE_RUNTIME_TESTS OFF)
-else()
-    set(ENABLE_RUNTIME_TESTS ON)
-endif()
+cmake_dependent_option(WITH_TEST_RUNTIME "Build runtime tests" ON
+                       "NOT MSVC" OFF)
 
-option(WITH_TEST_RUNTIME "Build runtime tests" ENABLE_RUNTIME_TESTS)
 if (WITH_TEST_RUNTIME)
+    message(STATUS "Building internal runtime tests enabled")
     add_subdirectory(runtime)
+else ()
+    message(STATUS "Building internal runtime tests disabled")
 endif ()
 
 # FIXME: failing_with_issue is dead code :)
