@@ -77,9 +77,14 @@ BENCHMARKS = \
 all: build
 	make run_benchmarks 
 
-ifneq (,$(findstring x86-32-linux,$(HL_TARGET)$(HL_JIT_TARGET)))
+# This is a hack: disable this test when compiling 32-bit systems, as it's hard to find the right 32-bit versions
+# of these libraries on 64-bit hosts. Can't rely on HL_TARGET because it might be 'host' even for cross-compiling.
+# Look instead for `-m32` being passed to CXX, which is the cross-compiling flag we use. This is regrettable
+# but expedient. (Note that CMake is able to find this correctly, and so we have test coverage there; this is
+# simply not worth debugging as an edge case at the moment.)
+ifneq (,$(findstring -m32,$(CXX)))
 build:
-	@echo linear_algebra not support using Make on x86-32-linux: skipping linear_algebra tests...
+	@echo linear_algebra not support using Make on 32-bit systems: skipping linear_algebra tests...
 test: build
 else
 ifneq ("$(wildcard /usr/include/cblas.h /usr/include/*/cblas.h)","")
