@@ -19,6 +19,7 @@
 #include "Pipeline.h"
 #include "PythonExtensionGen.h"
 #include "StmtToHtml.h"
+#include "StmtToViz.h"
 
 using Halide::Internal::debug;
 
@@ -58,6 +59,7 @@ std::map<OutputFileType, const OutputInfo> get_output_info(const Target &target)
         {OutputFileType::static_library, {"static_library", is_windows_coff ? ".lib" : ".a", IsSingle}},
         {OutputFileType::stmt, {"stmt", ".stmt", IsMulti}},
         {OutputFileType::stmt_html, {"stmt_html", ".stmt.html", IsMulti}},
+        {OutputFileType::stmt_viz, {"stmt_viz", ".stmt.viz", IsMulti}},
     };
     return ext;
 }
@@ -566,6 +568,10 @@ void Module::compile(const std::map<OutputFileType, std::string> &output_files) 
     if (contains(output_files, OutputFileType::stmt_html)) {
         debug(1) << "Module.compile(): stmt_html " << output_files.at(OutputFileType::stmt_html) << "\n";
         Internal::print_to_html(output_files.at(OutputFileType::stmt_html), *this);
+    }
+    if (contains(output_files, OutputFileType::stmt_viz)) {
+        debug(1) << "Module.compile(): stmt_viz " << output_files.at(OutputFileType::stmt_viz) << "\n";
+        Internal::print_to_viz(output_files.at(OutputFileType::stmt_viz), *this);
     }
 
     // If there are submodules, recursively lower submodules to

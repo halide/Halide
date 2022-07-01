@@ -41,6 +41,7 @@ enum class OutputFileType {
     static_library,
     stmt,
     stmt_html,
+    stmt_viz,
 };
 
 /** Type of linkage a function in a lowered Halide module can have.

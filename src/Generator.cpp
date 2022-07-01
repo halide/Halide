@@ -760,7 +760,7 @@ gengen
  -e  A comma separated list of files to emit. Accepted values are:
      [assembly, bitcode, c_header, c_source, cpp_stub, featurization,
       llvm_assembly, object, python_extension, pytorch_wrapper, registration,
-      schedule, static_library, stmt, stmt_html, compiler_log].
+      schedule, static_library, stmt, stmt_html, stmt_viz, compiler_log].
      If omitted, default value is [c_header, static_library, registration].
 
  -p  A comma-separated list of shared libraries that will be loaded before the

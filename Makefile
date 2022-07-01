@@ -555,6 +555,7 @@ SOURCE_FILES = \
   Solve.cpp \
   SplitTuples.cpp \
   StmtToHtml.cpp \
+  StmtToViz.cpp \
   StorageFlattening.cpp \
   StorageFolding.cpp \
   StrictifyFloat.cpp \
@@ -719,6 +720,7 @@ HEADER_FILES = \
   Solve.h \
   SplitTuples.h \
   StmtToHtml.h \
+  StmtToViz.h \
   StorageFlattening.h \
   StorageFolding.h \
   StrictifyFloat.h \
