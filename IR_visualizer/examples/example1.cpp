@@ -1,22 +1,19 @@
-// to run:
+// to run from IR_visualizer/examples directory:
 // $ clang example1.cpp -o example1 -O2 --std=c++17 -lstdc++ -I/opt/homebrew/include -L/opt/homebrew/lib -lHalide
 // $ ./example1
 
-// The only Halide header file you need is Halide.h. It includes all of Halide.
 #include "Halide.h"
 
-// We'll also include stdio for printf.
 #include <stdio.h>
-// #include "halide_image_io.h"
 
-#include "../src/StmtCost.h"
+#include "../src/FindStmtCost.h"
 
 using namespace Halide;
 
 // example for testing StmtCost.cpp
-Func example_fixed(Halide::Buffer<uint8_t> input) {
+Func example_fixed(Halide::Buffer<uint16_t, 3> input) {
 
-    // Next we define our Func object that represents our one pipeline
+    // First we define our Func object that represents our one pipeline
     // stage.
     Halide::Func brighter("brighter");
 
@@ -58,13 +55,31 @@ int main(int argc, char **argv) {
     // TESTING - Darya
     // Halide::Buffer<uint8_t> input = load_image("images/rgb.png");
 
-    // Func myFunc = example_fixed(input);
+    const int width = 2568;
+    const int height = 1922;
+    const int channels = 3;
 
+    Buffer<uint16_t, 3> input(width, height, channels);
+
+    for (int y = 0; y < input.height(); y++) {
+        for (int x = 0; x < input.width(); x++) {
+            for (int c = 0; c < input.channels(); c++) {
+                input(x, y, c) = rand() & 0xfff;
+            }
+        }
+    }
+
+    Func myFunc = example_fixed(input);
     FindStmtCost cost;
+
+    // eventually: myFunc.add_custom_lowering_pass(cost);
+    myFunc.add_custom_lowering_pass(&cost);
+
+    // then do .realize or something to actually run it
+
     // cost.visit(myFunc);
 
-    // Everything worked! We defined a Func, then called 'realize' on
-    // it to generate and run machine code that produced an Buffer.
+    // If reached this point, then the program exited cleanly.
     printf("Success!\n");
 
     return 0;

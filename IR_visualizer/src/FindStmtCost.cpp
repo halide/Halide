@@ -4,7 +4,7 @@
 // #include "ExternFuncArgument.h"
 // #include "Function.h"
 
-#include "StmtCost.h"
+#include "FindStmtCost.h"
 #include "../../src/IRVisitor.h"
 #include <Halide.h>
 
@@ -31,177 +31,203 @@ int FindStmtCost::get_total_cost(const IRNode *node) const {
 }
 
 // TODO: decide if count of 1 or 0
-void FindStmtCost::visit(const IntImm *op) {
+Expr FindStmtCost::visit(const IntImm *op) {
     set_cost(op, 1);
+    return op;
 }
 
-void FindStmtCost::visit(const UIntImm *op) {
+Expr FindStmtCost::visit(const UIntImm *op) {
     set_cost(op, 1);
+    return op;
 }
 
-void FindStmtCost::visit(const FloatImm *op) {
+Expr FindStmtCost::visit(const FloatImm *op) {
     set_cost(op, 1);
+    return op;
 }
 
-void FindStmtCost::visit(const StringImm *op) {
+Expr FindStmtCost::visit(const StringImm *op) {
     set_cost(op, 1);
+    return op;
 }
 
-void FindStmtCost::visit(const Cast *op) {
+Expr FindStmtCost::visit(const Cast *op) {
     op->value.accept(this);
     int tempVal = get_cost(op->value.get());
     set_cost(op, 1 + tempVal);
+    return op;
 }
 
-void FindStmtCost::visit(const Variable *op) {
+Expr FindStmtCost::visit(const Variable *op) {
     set_cost(op, 1);
+    return op;
 }
 
-void FindStmtCost::visit(const Add *op) {
+Expr FindStmtCost::visit(const Add *op) {
     op->a.accept(this);
     op->b.accept(this);
     int tempVal = get_cost(op->a.get()) + get_cost(op->b.get());
     set_cost(op, 1 + tempVal);
+    return op;
 }
 
-void FindStmtCost::visit(const Sub *op) {
+Expr FindStmtCost::visit(const Sub *op) {
     op->a.accept(this);
     op->b.accept(this);
     int tempVal = get_cost(op->a.get()) + get_cost(op->b.get());
     set_cost(op, 1 + tempVal);
+    return op;
 }
 
-void FindStmtCost::visit(const Mul *op) {
+Expr FindStmtCost::visit(const Mul *op) {
     op->a.accept(this);
     op->b.accept(this);
     int tempVal = get_cost(op->a.get()) + get_cost(op->b.get());
     set_cost(op, 1 + tempVal);
+    return op;
 }
 
-void FindStmtCost::visit(const Div *op) {
+Expr FindStmtCost::visit(const Div *op) {
     op->a.accept(this);
     op->b.accept(this);
     int tempVal = get_cost(op->a.get()) + get_cost(op->b.get());
     set_cost(op, 1 + tempVal);
+    return op;
 }
 
-void FindStmtCost::visit(const Mod *op) {
+Expr FindStmtCost::visit(const Mod *op) {
     op->a.accept(this);
     op->b.accept(this);
     int tempVal = get_cost(op->a.get()) + get_cost(op->b.get());
     set_cost(op, 1 + tempVal);
+    return op;
 }
 
-void FindStmtCost::visit(const Min *op) {
+Expr FindStmtCost::visit(const Min *op) {
     op->a.accept(this);
     op->b.accept(this);
     int tempVal = get_cost(op->a.get()) + get_cost(op->b.get());
     set_cost(op, 1 + tempVal);
+    return op;
 }
 
-void FindStmtCost::visit(const Max *op) {
+Expr FindStmtCost::visit(const Max *op) {
     op->a.accept(this);
     op->b.accept(this);
     int tempVal = get_cost(op->a.get()) + get_cost(op->b.get());
     set_cost(op, 1 + tempVal);
+    return op;
 }
 
-void FindStmtCost::visit(const EQ *op) {
+Expr FindStmtCost::visit(const EQ *op) {
     op->a.accept(this);
     op->b.accept(this);
     int tempVal = get_cost(op->a.get()) + get_cost(op->b.get());
     set_cost(op, 1 + tempVal);
+    return op;
 }
 
-void FindStmtCost::visit(const NE *op) {
+Expr FindStmtCost::visit(const NE *op) {
     op->a.accept(this);
     op->b.accept(this);
     int tempVal = get_cost(op->a.get()) + get_cost(op->b.get());
     set_cost(op, 1 + tempVal);
+    return op;
 }
 
-void FindStmtCost::visit(const LT *op) {
+Expr FindStmtCost::visit(const LT *op) {
     op->a.accept(this);
     op->b.accept(this);
     int tempVal = get_cost(op->a.get()) + get_cost(op->b.get());
     set_cost(op, 1 + tempVal);
+    return op;
 }
 
-void FindStmtCost::visit(const LE *op) {
+Expr FindStmtCost::visit(const LE *op) {
     op->a.accept(this);
     op->b.accept(this);
     int tempVal = get_cost(op->a.get()) + get_cost(op->b.get());
     set_cost(op, 1 + tempVal);
+    return op;
 }
 
-void FindStmtCost::visit(const GT *op) {
+Expr FindStmtCost::visit(const GT *op) {
     op->a.accept(this);
     op->b.accept(this);
     int tempVal = get_cost(op->a.get()) + get_cost(op->b.get());
     set_cost(op, 1 + tempVal);
+    return op;
 }
 
-void FindStmtCost::visit(const GE *op) {
+Expr FindStmtCost::visit(const GE *op) {
     op->a.accept(this);
     op->b.accept(this);
     int tempVal = get_cost(op->a.get()) + get_cost(op->b.get());
     set_cost(op, 1 + tempVal);
+    return op;
 }
 
-void FindStmtCost::visit(const And *op) {
+Expr FindStmtCost::visit(const And *op) {
     op->a.accept(this);
     op->b.accept(this);
     int tempVal = get_cost(op->a.get()) + get_cost(op->b.get());
     set_cost(op, 1 + tempVal);
+    return op;
 }
 
-void FindStmtCost::visit(const Or *op) {
+Expr FindStmtCost::visit(const Or *op) {
     op->a.accept(this);
     op->b.accept(this);
     int tempVal = get_cost(op->a.get()) + get_cost(op->b.get());
     set_cost(op, 1 + tempVal);
+    return op;
 }
 
-void FindStmtCost::visit(const Not *op) {
+Expr FindStmtCost::visit(const Not *op) {
     op->a.accept(this);
     int tempVal = get_cost(op->a.get());
     set_cost(op, 1 + tempVal);
+    return op;
 }
 
 // TODO: do we agree on my counts?
-void FindStmtCost::visit(const Select *op) {
+Expr FindStmtCost::visit(const Select *op) {
     op->condition.accept(this);
     op->true_value.accept(this);
     op->false_value.accept(this);
 
     int tempVal = get_cost(op->condition.get()) + get_cost(op->true_value.get()) + get_cost(op->false_value.get());
     set_cost(op, 1 + tempVal);
+    return op;
 }
 
-void FindStmtCost::visit(const Load *op) {
+Expr FindStmtCost::visit(const Load *op) {
     assert(false);
     // op->predicate.accept(this);
     // op->index.accept(this);
     // int tempVal = get_cost(op->predicate.get()) + get_cost(op->index.get());
     // set_cost(op, 1 + tempVal);
+    // return op;
 }
 
-void FindStmtCost::visit(const Ramp *op) {
+Expr FindStmtCost::visit(const Ramp *op) {
     assert(false);
     // op->base.accept(this);
     // op->stride.accept(this);
     // int tempVal = get_cost(op->base.get()) + get_cost(op->stride.get());
     // set_cost(op, 1 + tempVal);
+    // return op;
 }
 
-void FindStmtCost::visit(const Broadcast *op) {
+Expr FindStmtCost::visit(const Broadcast *op) {
     assert(false);
     // op->value.accept(this);
     // int tempVal = get_cost(op->value.get());
     // set_cost(op, 1 + tempVal);
+    // return op;
 }
 
-void FindStmtCost::visit(const Call *op) {
+Expr FindStmtCost::visit(const Call *op) {
     int tempVal = 0;
     for (const auto &arg : op->args) {
         arg.accept(this);
@@ -221,36 +247,60 @@ void FindStmtCost::visit(const Call *op) {
         }
     }
     set_cost(op, tempVal);
+    return op;
 }
 
-void FindStmtCost::visit(const Let *op) {
+Expr FindStmtCost::visit(const Let *op) {
     op->value.accept(this);
     op->body.accept(this);
     int tempVal = get_cost(op->value.get()) + get_cost(op->body.get());
     set_cost(op, tempVal);
+    return op;
 }
 
-void FindStmtCost::visit(const LetStmt *op) {
+Expr FindStmtCost::visit(const Shuffle *op) {
+    assert(false);
+    // int tempVal = 0;
+    // for (const Expr &i : op->vectors) {
+    //     i.accept(this);
+    //     tempVal += get_cost(i.get());
+    // }
+    // set_cost(op, tempVal);
+    // return op;
+}
+
+Expr FindStmtCost::visit(const VectorReduce *op) {
+    assert(false);
+    // op->value.accept(this);
+    // int tempVal = get_cost(op->value.get());
+    // set_cost(op, tempVal);
+    // return op;
+}
+
+Expr FindStmtCost::visit(const LetStmt *op) {
     op->value.accept(this);
     op->body.accept(this);
     int tempVal = get_cost(op->value.get()) + get_cost(op->body.get());
     set_cost(op, 1 + tempVal);
+    return op;
 }
 
-void FindStmtCost::visit(const AssertStmt *op) {
+Expr FindStmtCost::visit(const AssertStmt *op) {
     op->condition.accept(this);
     op->message.accept(this);
     int tempVal = get_cost(op->condition.get()) + get_cost(op->message.get());
     set_cost(op, 1 + tempVal);
+    return op;
 }
 
-void FindStmtCost::visit(const ProducerConsumer *op) {
+Expr FindStmtCost::visit(const ProducerConsumer *op) {
     op->body.accept(this);
     int tempVal = get_cost(op->body.get());
     set_cost(op, 1 + tempVal);
+    return op;
 }
 
-void FindStmtCost::visit(const For *op) {
+Expr FindStmtCost::visit(const For *op) {
     current_loop_depth += 1;
 
     op->min.accept(this);
@@ -275,25 +325,28 @@ void FindStmtCost::visit(const For *op) {
         assert(false);
     }
     set_cost(op, 1 + bodyCost);
+    return op;
 }
 
-void FindStmtCost::visit(const Acquire *op) {
+Expr FindStmtCost::visit(const Acquire *op) {
     op->semaphore.accept(this);
     op->count.accept(this);
     op->body.accept(this);
     int tempVal = get_cost(op->semaphore.get()) + get_cost(op->count.get()) + get_cost(op->body.get());
     set_cost(op, tempVal);
+    return op;
 }
 
-void FindStmtCost::visit(const Store *op) {
+Expr FindStmtCost::visit(const Store *op) {
     op->predicate.accept(this);
     op->value.accept(this);
     op->index.accept(this);
     int tempVal = get_cost(op->predicate.get()) + get_cost(op->value.get()) + get_cost(op->index.get());
     set_cost(op, 1 + tempVal);
+    return op;
 }
 
-void FindStmtCost::visit(const Provide *op) {
+Expr FindStmtCost::visit(const Provide *op) {
     assert(false);
     // op->predicate.accept(this);
     // int tempVal = get_cost(op->predicate.get());
@@ -306,9 +359,10 @@ void FindStmtCost::visit(const Provide *op) {
     //     tempVal += get_cost(arg.get());
     // }
     // set_cost(op, 1 + tempVal);
+    // return op;
 }
 
-void FindStmtCost::visit(const Allocate *op) {
+Expr FindStmtCost::visit(const Allocate *op) {
     assert(false);
     // int tempVal = 0;
     // for (const auto &extent : op->extents) {
@@ -325,16 +379,18 @@ void FindStmtCost::visit(const Allocate *op) {
     // op->body.accept(this);
     // tempVal += get_cost(op->body.get());
     // set_cost(op, tempVal);
+    // return op;
 }
 
-void FindStmtCost::visit(const Free *op) {
+Expr FindStmtCost::visit(const Free *op) {
     // TODO: i feel like this should be more than cost 1, but the only
     //       vars it has is the name, which isn't helpful in determining
     //       the cost of the free
     set_cost(op, 1);
+    return op;
 }
 
-void FindStmtCost::visit(const Realize *op) {
+Expr FindStmtCost::visit(const Realize *op) {
     assert(false);
     // TODO: is this the same logic as For, where I add the depth?
     // int tempVal = 0;
@@ -347,9 +403,10 @@ void FindStmtCost::visit(const Realize *op) {
     // op->body.accept(this);
     // tempVal += get_cost(op->condition.get()) + get_cost(op->body.get());
     // set_cost(op, tempVal);
+    // return op;
 }
 
-void FindStmtCost::visit(const Prefetch *op) {
+Expr FindStmtCost::visit(const Prefetch *op) {
     assert(false);
     // TODO: similar question as one above
     // int tempVal = 0;
@@ -362,9 +419,10 @@ void FindStmtCost::visit(const Prefetch *op) {
     // op->body.accept(this);
     // tempVal += get_cost(op->condition.get()) + get_cost(op->body.get());
     // set_cost(op, tempVal);
+    // return op;
 }
 
-void FindStmtCost::visit(const Block *op) {
+Expr FindStmtCost::visit(const Block *op) {
     assert(false);
     // int tempVal = 0;
     // op->first.accept(this);
@@ -374,9 +432,10 @@ void FindStmtCost::visit(const Block *op) {
     //     tempVal += get_cost(op->rest.get());
     // }
     // set_cost(op, tempVal);
+    // return op;
 }
 
-void FindStmtCost::visit(const Fork *op) {
+Expr FindStmtCost::visit(const Fork *op) {
     assert(false);
     // int tempVal = 0;
     // op->first.accept(this);
@@ -386,9 +445,10 @@ void FindStmtCost::visit(const Fork *op) {
     //     tempVal += get_cost(op->rest.get());
     // }
     // set_cost(op, tempVal);
+    // return op;
 }
 
-void FindStmtCost::visit(const IfThenElse *op) {
+Expr FindStmtCost::visit(const IfThenElse *op) {
     // TODO: is this correct, based on discussion about if-then-else, as
     //       compared to Select?
     op->condition.accept(this);
@@ -399,34 +459,20 @@ void FindStmtCost::visit(const IfThenElse *op) {
         tempVal += get_cost(op->else_case.get());
     }
     set_cost(op, tempVal);
+    return op;
 }
 
-void FindStmtCost::visit(const Evaluate *op) {
+Expr FindStmtCost::visit(const Evaluate *op) {
     op->value.accept(this);
     int tempVal = get_cost(op->value.get());
     set_cost(op, tempVal);
+    return op;
 }
 
-void FindStmtCost::visit(const Shuffle *op) {
-    assert(false);
-    // int tempVal = 0;
-    // for (const Expr &i : op->vectors) {
-    //     i.accept(this);
-    //     tempVal += get_cost(i.get());
-    // }
-    // set_cost(op, tempVal);
-}
-
-void FindStmtCost::visit(const VectorReduce *op) {
-    assert(false);
-    // op->value.accept(this);
-    // int tempVal = get_cost(op->value.get());
-    // set_cost(op, tempVal);
-}
-
-void FindStmtCost::visit(const Atomic *op) {
+Expr FindStmtCost::visit(const Atomic *op) {
     assert(false);
     // op->body.accept(this);
     // int tempVal = get_cost(op->body.get());
     // set_cost(op, tempVal);
+    // return op;
 }
