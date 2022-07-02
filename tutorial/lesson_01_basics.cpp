@@ -21,10 +21,6 @@
 
 // We'll also include stdio for printf.
 #include <stdio.h>
-#include "halide_image_io.h"
-
-
-#include "../IR_visualizer/src/StmtCost.h"
 
 using namespace Halide;
 
@@ -144,17 +140,6 @@ int main(int argc, char **argv) {
                 return -1;
             }
         }
-    }
-
-    // TESTING - Darya
-    {
-        Halide::Buffer<uint8_t> input = Halide::Tools::load_image("images/rgb.png");
-
-        Func myFunc = example_fixed(input);
-
-        FindStmtCost cost;
-        // cost.visit(myFunc);
-        
     }
 
     // Everything worked! We defined a Func, then called 'realize' on
