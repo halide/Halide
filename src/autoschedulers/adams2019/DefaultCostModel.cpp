@@ -47,7 +47,7 @@ bool ends_with(const std::string &str, const std::string &suffix) {
 }  // namespace
 
 void DefaultCostModel::set_pipeline_features(const Internal::Autoscheduler::FunctionDAG &dag,
-                                             const MachineParams &params) {
+                                             const Internal::Autoscheduler::Adams2019Params &params) {
 
     const int pipeline_feat_size = head1_w * head1_h;
     // We ignore the first seven pipeline features in the cost

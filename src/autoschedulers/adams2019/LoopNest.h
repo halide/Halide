@@ -129,7 +129,7 @@ struct LoopNest {
 
     // Do a recursive walk over the loop nest computing features to feed the cost model.
     void compute_features(const FunctionDAG &dag,
-                          const MachineParams &params,
+                          const Adams2019Params &params,
                           const StageMap<Sites> &sites,
                           int64_t instances,
                           int64_t parallelism,
@@ -189,7 +189,7 @@ struct LoopNest {
     void compute_here(const FunctionDAG::Node *f, bool tileable, int v);
 
     // Parallelize this loop according to the given tiling.
-    IntrusivePtr<const LoopNest> parallelize_in_tiles(const MachineParams &params,
+    IntrusivePtr<const LoopNest> parallelize_in_tiles(const Adams2019Params &params,
                                                       const vector<int64_t> &tiling,
                                                       const LoopNest *parent) const;
 
@@ -197,7 +197,7 @@ struct LoopNest {
     // this loop nest.
     std::vector<IntrusivePtr<const LoopNest>> compute_in_tiles(const FunctionDAG::Node *f,
                                                                const LoopNest *parent,
-                                                               const MachineParams &params,
+                                                               const Adams2019Params &params,
                                                                int v,
                                                                bool in_realization) const;
 

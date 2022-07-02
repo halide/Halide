@@ -49,14 +49,18 @@ void define_pipeline(py::module &m) {
 
             .def("outputs", &Pipeline::outputs)
 
-            .def("auto_schedule", (AutoSchedulerResults(Pipeline::*)(const std::string &, const Target &, const MachineParams &) const) & Pipeline::auto_schedule,
-                 py::arg("autoscheduler_name"), py::arg("target"), py::arg("machine_params") = MachineParams::generic())
-            .def("auto_schedule", (AutoSchedulerResults(Pipeline::*)(const Target &, const MachineParams &) const) & Pipeline::auto_schedule,
-                 py::arg("target"), py::arg("machine_params") = MachineParams::generic())
+#ifdef HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
+            .def("auto_schedule", (AutoSchedulerResults(Pipeline::*)(const std::string &, const Target &, const zMachineParams &) const) & Pipeline::auto_schedule,
+                 py::arg("autoscheduler_name"), py::arg("target"), py::arg("machine_params") = zMachineParams::generic())
+            .def("auto_schedule", (AutoSchedulerResults(Pipeline::*)(const Target &, const zMachineParams &) const) & Pipeline::auto_schedule,
+                 py::arg("target"), py::arg("machine_params") = zMachineParams::generic())
 
             .def_static("set_default_autoscheduler_name", &Pipeline::set_default_autoscheduler_name,
                         py::arg("autoscheduler_name"))
-
+#else
+            .def("apply_autoscheduler", (AutoSchedulerResults(Pipeline::*)(const Target &, const AutoSchedulerParams &) const) & Pipeline::apply_autoscheduler,
+                 py::arg("target"), py::arg("autoscheduler_params"))
+#endif
             .def("get_func", &Pipeline::get_func,
                  py::arg("index"))
             .def("print_loop_nest", &Pipeline::print_loop_nest)

@@ -677,8 +677,7 @@ autoscheduler:
 
 ```cmake
 add_halide_library(my_second_generator FROM my_generators
-                   AUTOSCHEDULER Halide::Adams2019
-                   PARAMS auto_schedule=true)
+                   AUTOSCHEDULER Halide::Adams2019)
 ```
 
 ### RunGenMain

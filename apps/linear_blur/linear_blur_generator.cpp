@@ -17,7 +17,7 @@ struct LinearBlur : public Halide::Generator<LinearBlur> {
         Func srgb = linear_to_srgb::generate(this, {blurred});
         output(x, y, c) = srgb(x, y, c);
 
-        if (auto_schedule) {
+        if (using_autoscheduler()) {
             input.set_estimates({{0, 1536}, {0, 2560}, {0, 4}});
             output.set_estimates({{0, 1536}, {0, 2560}, {0, 4}});
         } else {

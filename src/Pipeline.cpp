@@ -220,6 +220,7 @@ std::map<std::string, AutoSchedulerFn> &Pipeline::get_autoscheduler_map() {
     return autoschedulers;
 }
 
+#ifdef HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
 /* static */
 std::string &Pipeline::get_default_autoscheduler_name() {
     static std::string autoscheduler_name = "";
@@ -228,6 +229,7 @@ std::string &Pipeline::get_default_autoscheduler_name() {
     }
     return autoscheduler_name;
 }
+#endif
 
 /* static */
 AutoSchedulerFn Pipeline::find_autoscheduler(const std::string &autoscheduler_name) {
@@ -244,7 +246,8 @@ AutoSchedulerFn Pipeline::find_autoscheduler(const std::string &autoscheduler_na
     return it->second;
 }
 
-AutoSchedulerResults Pipeline::auto_schedule(const std::string &autoscheduler_name, const Target &target, const MachineParams &arch_params) const {
+#ifdef HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
+AutoSchedulerResults Pipeline::auto_schedule(const std::string &autoscheduler_name, const Target &target, const zMachineParams &arch_params) const {
     auto autoscheduler_fn = find_autoscheduler(autoscheduler_name);
     user_assert(autoscheduler_fn)
         << "Could not find autoscheduler named '" << autoscheduler_name << "'.\n"
@@ -258,9 +261,27 @@ AutoSchedulerResults Pipeline::auto_schedule(const std::string &autoscheduler_na
     return results;
 }
 
-AutoSchedulerResults Pipeline::auto_schedule(const Target &target, const MachineParams &arch_params) const {
+AutoSchedulerResults Pipeline::auto_schedule(const Target &target, const zMachineParams &arch_params) const {
     return auto_schedule(get_default_autoscheduler_name(), target, arch_params);
 }
+#else
+AutoSchedulerResults Pipeline::apply_autoscheduler(const Target &target, const AutoSchedulerParams &autoscheduler_params) const {
+    internal_assert(!autoscheduler_params.empty());
+
+    const auto autoscheduler_name = autoscheduler_params.at("name");
+    auto autoscheduler_fn = find_autoscheduler(autoscheduler_name);
+    user_assert(autoscheduler_fn)
+        << "Could not find autoscheduler named '" << autoscheduler_name << "'.\n"
+        << "Did you remember to load the plugin?";
+
+    AutoSchedulerResults results;
+    results.target = target;
+    results.autoscheduler_params = autoscheduler_params;
+
+    autoscheduler_fn(*this, target, autoscheduler_params, &results);
+    return results;
+}
+#endif
 
 /* static */
 void Pipeline::add_autoscheduler(const std::string &autoscheduler_name, const AutoSchedulerFn &autoscheduler) {
@@ -269,11 +290,13 @@ void Pipeline::add_autoscheduler(const std::string &autoscheduler_name, const Au
     m[autoscheduler_name] = autoscheduler;
 }
 
+#ifdef HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
 /* static */
 void Pipeline::set_default_autoscheduler_name(const std::string &autoscheduler_name) {
     (void)find_autoscheduler(autoscheduler_name);  // ensure it's valid
     get_default_autoscheduler_name() = autoscheduler_name;
 }
+#endif
 
 Func Pipeline::get_func(size_t index) {
     // Compute an environment
@@ -1186,27 +1209,29 @@ JITExtern::JITExtern(const ExternCFunction &extern_c_function)
     : extern_c_function_(extern_c_function) {
 }
 
-MachineParams MachineParams::generic() {
+#ifdef HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
+zMachineParams zMachineParams::generic() {
     std::string params = Internal::get_env_variable("HL_MACHINE_PARAMS");
     if (params.empty()) {
-        return MachineParams(16, 16 * 1024 * 1024, 40);
+        return zMachineParams(16, 16 * 1024 * 1024, 40);
     } else {
-        return MachineParams(params);
+        return zMachineParams(params);
     }
 }
 
-std::string MachineParams::to_string() const {
+std::string zMachineParams::to_string() const {
     std::ostringstream o;
     o << parallelism << "," << last_level_cache_size << "," << balance;
     return o.str();
 }
 
-MachineParams::MachineParams(const std::string &s) {
+zMachineParams::zMachineParams(const std::string &s) {
     std::vector<std::string> v = Internal::split_string(s, ",");
-    user_assert(v.size() == 3) << "Unable to parse MachineParams: " << s;
+    user_assert(v.size() == 3) << "Unable to parse zMachineParams: " << s;
     parallelism = std::atoi(v[0].c_str());
     last_level_cache_size = std::atoll(v[1].c_str());
     balance = std::atof(v[2].c_str());
 }
+#endif
 
 }  // namespace Halide

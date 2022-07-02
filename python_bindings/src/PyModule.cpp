@@ -12,9 +12,13 @@ void define_module(py::module &m) {
     auto auto_scheduler_results_class =
         py::class_<AutoSchedulerResults>(m, "AutoSchedulerResults")
             .def(py::init<>())
-            .def_readwrite("scheduler_name", &AutoSchedulerResults::scheduler_name)
             .def_readwrite("target", &AutoSchedulerResults::target)
+#ifdef HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
+            .def_readwrite("scheduler_name", &AutoSchedulerResults::scheduler_name)
             .def_readwrite("machine_params_string", &AutoSchedulerResults::machine_params_string)
+#else
+            .def_readwrite("autoscheduler_params", &AutoSchedulerResults::autoscheduler_params)
+#endif
             .def_readwrite("schedule_source", &AutoSchedulerResults::schedule_source)
             .def_readwrite("featurization", &AutoSchedulerResults::featurization)
             .def("__repr__", [](const AutoSchedulerResults &o) -> std::string {

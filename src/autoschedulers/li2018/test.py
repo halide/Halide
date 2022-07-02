@@ -17,9 +17,7 @@ def main():
     f_2.set_estimate(x, 0, 1000)
     p = hl.Pipeline(f_2)
     target = hl.Target()
-    # Only first parameter is used (number of cores on CPU)
-    params = hl.MachineParams(32, 0, 0);
-    result = p.auto_schedule('Li2018', target, params)
+    result = p.apply_autoscheduler(target, {'name': 'Li2018', 'parallelism': 32})
     print('Schedule:')
     print(result.schedule_source)
 

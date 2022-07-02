@@ -1561,7 +1561,7 @@ $(FILTERS_DIR)/autograd_grad.a: $(BIN_DIR)/autograd.generator $(DISTRIB_DIR)/lib
 	# just copy the autoscheduler to a place where it won't
 	# confuse the linker.
 	cp $(DISTRIB_DIR)/lib/libautoschedule_mullapudi2016.$(SHARED_EXT) $(BIN_DIR)
-	$(CURDIR)/$< -g autograd $(GEN_AOT_OUTPUTS) -o $(CURDIR)/$(FILTERS_DIR) -f autograd_grad target=$(TARGET)-no_runtime auto_schedule=true -d 1 -p $(BIN_DIR)/libautoschedule_mullapudi2016.$(SHARED_EXT) -s Mullapudi2016
+	$(CURDIR)/$< -g autograd $(GEN_AOT_OUTPUTS) -o $(CURDIR)/$(FILTERS_DIR) -f autograd_grad target=$(TARGET)-no_runtime autoscheduler.name=Mullapudi2016 -d 1 -p $(BIN_DIR)/libautoschedule_mullapudi2016.$(SHARED_EXT)
 
 # Usually, it's considered best practice to have one Generator per
 # .cpp file, with the generator-name and filename matching;
@@ -1833,21 +1833,25 @@ $(BIN_DIR)/tutorial_lesson_21_auto_scheduler_generate: $(ROOT_DIR)/tutorial/less
 	$(CXX) $(TUTORIAL_CXX_FLAGS) $(IMAGE_IO_CXX_FLAGS) $(OPTIMIZE_FOR_BUILD_TIME) $< $(BUILD_DIR)/GenGen.o \
 	-I$(INCLUDE_DIR) $(TEST_LD_FLAGS) $(IMAGE_IO_LIBS) -o $@
 
-# The values in MachineParams are:
+# The values are:
 # - the maximum level of parallelism available,
 # - the size of the last-level cache (in bytes),
 # - the ratio between the cost of a miss at the last level cache and the cost
 #   of arithmetic on the target architecture
 # ...in that order.
-LESSON_21_MACHINE_PARAMS = 32,16777216,40
+LESSON_21_AUTOSCHEDULER_PARAMS=\
+    autoscheduler.name=Mullapudi2016 \
+    autoscheduler.parallelism=32 \
+    autoscheduler.last_level_cache_size=16777216 \
+    autoscheduler.balance=40
 
 $(BIN_DIR)/tutorial_lesson_21_auto_scheduler_run: $(ROOT_DIR)/tutorial/lesson_21_auto_scheduler_run.cpp $(BIN_DIR)/tutorial_lesson_21_auto_scheduler_generate $(DISTRIB_DIR)/lib/libautoschedule_mullapudi2016.$(SHARED_EXT)
 	@-mkdir -p $(TMP_DIR)
 	# Run the generator
-	$(BIN_DIR)/tutorial_lesson_21_auto_scheduler_generate -g auto_schedule_gen -o $(TMP_DIR) -e static_library,c_header,schedule -f auto_schedule_false target=host            auto_schedule=false
+	$(BIN_DIR)/tutorial_lesson_21_auto_scheduler_generate -g auto_schedule_gen -o $(TMP_DIR) -e static_library,c_header,schedule -f auto_schedule_false target=host
 	# FIXME: The relative path of the autoscheduler and libHalide must be preserved on OS X, or it tries to load the wrong libHalide.dylib
 	cp $(DISTRIB_DIR)/lib/libautoschedule_mullapudi2016.$(SHARED_EXT) $(BIN_DIR)
-	$(BIN_DIR)/tutorial_lesson_21_auto_scheduler_generate -g auto_schedule_gen -o $(TMP_DIR) -e static_library,c_header,schedule -f auto_schedule_true  target=host-no_runtime auto_schedule=true machine_params=$(LESSON_21_MACHINE_PARAMS) -p $(BIN_DIR)/libautoschedule_mullapudi2016.$(SHARED_EXT) -s Mullapudi2016
+	$(BIN_DIR)/tutorial_lesson_21_auto_scheduler_generate -g auto_schedule_gen -o $(TMP_DIR) -e static_library,c_header,schedule -f auto_schedule_true  target=host-no_runtime $(LESSON_21_AUTOSCHEDULER_PARAMS) -p $(BIN_DIR)/libautoschedule_mullapudi2016.$(SHARED_EXT)
 	# Compile the runner
 	$(CXX) $(TUTORIAL_CXX_FLAGS) $(IMAGE_IO_CXX_FLAGS) $(OPTIMIZE_FOR_BUILD_TIME) $< \
 	-I$(INCLUDE_DIR) -L$(BIN_DIR) -I $(TMP_DIR) $(TMP_DIR)/auto_schedule_*.a \
