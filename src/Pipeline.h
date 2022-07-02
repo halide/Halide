@@ -32,7 +32,7 @@ struct PipelineContents;
 #ifdef HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
 /** A struct representing the machine parameters to generate the auto-scheduled
  * code for. */
-struct zMachineParams {
+struct MachineParams {
     /** Maximum level of parallelism avalaible. */
     int parallelism;
     /** Size of the last-level cache (in bytes). */
@@ -41,18 +41,18 @@ struct zMachineParams {
      * the cost of an arithmetic operation at last level cache. */
     float balance;
 
-    explicit zMachineParams(int parallelism, uint64_t llc, float balance)
+    explicit MachineParams(int parallelism, uint64_t llc, float balance)
         : parallelism(parallelism), last_level_cache_size(llc), balance(balance) {
     }
 
     /** Default machine parameters for generic CPU architecture. */
-    static zMachineParams generic();
+    static MachineParams generic();
 
-    /** Convert the zMachineParams into canonical string form. */
+    /** Convert the MachineParams into canonical string form. */
     std::string to_string() const;
 
-    /** Reconstruct a zMachineParams from canonical string form. */
-    explicit zMachineParams(const std::string &s);
+    /** Reconstruct a MachineParams from canonical string form. */
+    explicit MachineParams(const std::string &s);
 };
 #else
 /** Special the AutoScheduler to be used (if any), along with arbitrary
@@ -118,7 +118,7 @@ struct AutoSchedulerResults {
 #ifdef HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
     std::string scheduler_name;         // name of the autoscheduler used
     Target target;                      // Target specified to the autoscheduler
-    std::string machine_params_string;  // zMachineParams specified to the autoscheduler (in string form)
+    std::string machine_params_string;  // MachineParams specified to the autoscheduler (in string form)
 #else
     Target target;                             // Target specified to the autoscheduler
     AutoSchedulerParams autoscheduler_params;  // The autoscheduler used, along with its params
@@ -130,7 +130,7 @@ struct AutoSchedulerResults {
 class Pipeline;
 
 #ifdef HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
-using AutoSchedulerFn = std::function<void(const Pipeline &, const Target &, const zMachineParams &, AutoSchedulerResults *outputs)>;
+using AutoSchedulerFn = std::function<void(const Pipeline &, const Target &, const MachineParams &, AutoSchedulerResults *outputs)>;
 #else
 using AutoSchedulerFn = std::function<void(const Pipeline &, const Target &, const AutoSchedulerParams &, AutoSchedulerResults *outputs)>;
 #endif
@@ -229,12 +229,12 @@ public:
 #ifdef HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
     /** Generate a schedule for the pipeline using the currently-default autoscheduler. */
     AutoSchedulerResults auto_schedule(const Target &target,
-                                       const zMachineParams &arch_params = zMachineParams::generic()) const;
+                                       const MachineParams &arch_params = MachineParams::generic()) const;
 
     /** Generate a schedule for the pipeline using the specified autoscheduler. */
     AutoSchedulerResults auto_schedule(const std::string &autoscheduler_name,
                                        const Target &target,
-                                       const zMachineParams &arch_params = zMachineParams::generic()) const;
+                                       const MachineParams &arch_params = MachineParams::generic()) const;
 #else
     /** Generate a schedule for the pipeline using the specified autoscheduler. */
     AutoSchedulerResults apply_autoscheduler(const Target &target,

@@ -648,7 +648,7 @@ void generate_schedule(const std::vector<Function> &outputs,
 
 struct Adams2019 {
 #ifdef HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
-    void operator()(const Pipeline &p, const Target &target, const zMachineParams &params_in, AutoSchedulerResults *results) {
+    void operator()(const Pipeline &p, const Target &target, const MachineParams &params_in, AutoSchedulerResults *results) {
         std::vector<Function> outputs;
         for (const Func &f : p.outputs()) {
             outputs.push_back(f.function());

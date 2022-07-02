@@ -24,7 +24,7 @@ bool test_caching(Pipeline &p1, Pipeline &p2, const Target &target) {
 
     constexpr int parallelism = 32;
 #ifdef HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
-    zMachineParams params(parallelism, 16000000, 40);
+    MachineParams params(parallelism, 16000000, 40);
 #else
     AutoSchedulerParams params = {{"name", "Adams2019"}, {"parallelism", std::to_string(parallelism)}};
 #endif

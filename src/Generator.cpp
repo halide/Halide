@@ -22,7 +22,7 @@ namespace Halide {
 GeneratorContext::GeneratorContext(const Target &target,
 #ifdef HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
                                    bool auto_schedule,
-                                   const zMachineParams &machine_params,
+                                   const MachineParams &machine_params,
 #else
                                    const AutoSchedulerParams &autoscheduler_params,
 #endif
@@ -42,7 +42,7 @@ GeneratorContext::GeneratorContext(const Target &target,
 #ifdef HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
 GeneratorContext::GeneratorContext(const Target &target,
                                    bool auto_schedule,
-                                   const zMachineParams &machine_params)
+                                   const MachineParams &machine_params)
     : GeneratorContext(target,
                        auto_schedule,
                        machine_params,
@@ -1253,7 +1253,7 @@ void execute_generator(const ExecuteGeneratorArgs &args_in) {
             const auto auto_schedule_string = get_gp("auto_schedule");
             const auto machine_params_string = get_gp("machine_params");
             const bool auto_schedule = auto_schedule_string == "true" || auto_schedule_string == "True";
-            const zMachineParams machine_params = !machine_params_string.empty() ? zMachineParams(machine_params_string) : zMachineParams::generic();
+            const MachineParams machine_params = !machine_params_string.empty() ? MachineParams(machine_params_string) : MachineParams::generic();
 #else
             AutoSchedulerParams autoscheduler_params;
             auto it = args.generator_params.find("autoscheduler.name");

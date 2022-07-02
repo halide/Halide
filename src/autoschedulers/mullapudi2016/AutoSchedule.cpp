@@ -3385,7 +3385,7 @@ string generate_schedules(const vector<Function> &outputs, const Target &target,
 
 struct Mullapudi2016 {
 #ifdef HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
-    void operator()(const Pipeline &pipeline, const Target &target, const zMachineParams &params_in, AutoSchedulerResults *outputs) {
+    void operator()(const Pipeline &pipeline, const Target &target, const MachineParams &params_in, AutoSchedulerResults *outputs) {
         AutoSchedulerResults results;
         results.target = target;
         results.machine_params_string = params_in.to_string();

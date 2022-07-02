@@ -247,7 +247,7 @@ AutoSchedulerFn Pipeline::find_autoscheduler(const std::string &autoscheduler_na
 }
 
 #ifdef HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
-AutoSchedulerResults Pipeline::auto_schedule(const std::string &autoscheduler_name, const Target &target, const zMachineParams &arch_params) const {
+AutoSchedulerResults Pipeline::auto_schedule(const std::string &autoscheduler_name, const Target &target, const MachineParams &arch_params) const {
     auto autoscheduler_fn = find_autoscheduler(autoscheduler_name);
     user_assert(autoscheduler_fn)
         << "Could not find autoscheduler named '" << autoscheduler_name << "'.\n"
@@ -261,7 +261,7 @@ AutoSchedulerResults Pipeline::auto_schedule(const std::string &autoscheduler_na
     return results;
 }
 
-AutoSchedulerResults Pipeline::auto_schedule(const Target &target, const zMachineParams &arch_params) const {
+AutoSchedulerResults Pipeline::auto_schedule(const Target &target, const MachineParams &arch_params) const {
     return auto_schedule(get_default_autoscheduler_name(), target, arch_params);
 }
 #else
@@ -1210,24 +1210,24 @@ JITExtern::JITExtern(const ExternCFunction &extern_c_function)
 }
 
 #ifdef HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
-zMachineParams zMachineParams::generic() {
+MachineParams MachineParams::generic() {
     std::string params = Internal::get_env_variable("HL_MACHINE_PARAMS");
     if (params.empty()) {
-        return zMachineParams(16, 16 * 1024 * 1024, 40);
+        return MachineParams(16, 16 * 1024 * 1024, 40);
     } else {
-        return zMachineParams(params);
+        return MachineParams(params);
     }
 }
 
-std::string zMachineParams::to_string() const {
+std::string MachineParams::to_string() const {
     std::ostringstream o;
     o << parallelism << "," << last_level_cache_size << "," << balance;
     return o.str();
 }
 
-zMachineParams::zMachineParams(const std::string &s) {
+MachineParams::MachineParams(const std::string &s) {
     std::vector<std::string> v = Internal::split_string(s, ",");
-    user_assert(v.size() == 3) << "Unable to parse zMachineParams: " << s;
+    user_assert(v.size() == 3) << "Unable to parse MachineParams: " << s;
     parallelism = std::atoi(v[0].c_str());
     last_level_cache_size = std::atoll(v[1].c_str());
     balance = std::atof(v[2].c_str());

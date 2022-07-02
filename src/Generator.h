@@ -426,7 +426,7 @@ public:
     HALIDE_GENERATOR_PARAM_TYPED_SETTER(double)
     HALIDE_GENERATOR_PARAM_TYPED_SETTER(Target)
 #ifdef HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
-    HALIDE_GENERATOR_PARAM_TYPED_SETTER(zMachineParams)
+    HALIDE_GENERATOR_PARAM_TYPED_SETTER(MachineParams)
 #else
     HALIDE_GENERATOR_PARAM_TYPED_SETTER(AutoSchedulerParams)
 #endif
@@ -544,7 +544,7 @@ public:
     HALIDE_GENERATOR_PARAM_TYPED_SETTER(double)
     HALIDE_GENERATOR_PARAM_TYPED_SETTER(Target)
 #ifdef HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
-    HALIDE_GENERATOR_PARAM_TYPED_SETTER(zMachineParams)
+    HALIDE_GENERATOR_PARAM_TYPED_SETTER(MachineParams)
 #else
     HALIDE_GENERATOR_PARAM_TYPED_SETTER(AutoSchedulerParams)
 #endif
@@ -650,7 +650,7 @@ public:
     }
 
     void set_from_string(const std::string &new_value_string) override {
-        this->set(zMachineParams(new_value_string));
+        this->set(MachineParams(new_value_string));
     }
 
     std::string get_default_value() const override {
@@ -664,7 +664,7 @@ public:
     }
 
     std::string get_c_type() const override {
-        return "zMachineParams";
+        return "MachineParams";
     }
 };
 #else
@@ -976,7 +976,7 @@ using GeneratorParamImplBase =
     typename select_type<
         cond<std::is_same<T, Target>::value, GeneratorParam_Target<T>>,
 #ifdef HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
-        cond<std::is_same<T, zMachineParams>::value, GeneratorParam_MachineParams<T>>,
+        cond<std::is_same<T, MachineParams>::value, GeneratorParam_MachineParams<T>>,
 #endif
         cond<std::is_same<T, LoopLevel>::value, GeneratorParam_LoopLevel>,
         cond<std::is_same<T, std::string>::value, GeneratorParam_String<T>>,
@@ -3058,7 +3058,7 @@ public:
 #ifdef HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
     explicit GeneratorContext(const Target &t,
                               bool auto_schedule = false,
-                              const zMachineParams &machine_params = zMachineParams::generic());
+                              const MachineParams &machine_params = MachineParams::generic());
 #else
     explicit GeneratorContext(const Target &t);
     explicit GeneratorContext(const Target &t,
@@ -3078,7 +3078,7 @@ public:
     bool auto_schedule() const {
         return auto_schedule_;
     }
-    const zMachineParams &machine_params() const {
+    const MachineParams &machine_params() const {
         return machine_params_;
     }
 #else
@@ -3097,7 +3097,7 @@ public:
         return auto_schedule_;
     }
     HALIDE_ATTRIBUTE_DEPRECATED("Call GeneratorContext::machine_params() instead of GeneratorContext::get_machine_params().")
-    const zMachineParams &get_machine_params() const {
+    const MachineParams &get_machine_params() const {
         return machine_params_;
     }
 #endif
@@ -3122,7 +3122,7 @@ private:
     Target target_;
 #ifdef HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
     bool auto_schedule_ = false;
-    zMachineParams machine_params_ = zMachineParams::generic();
+    MachineParams machine_params_ = MachineParams::generic();
 #else
     AutoSchedulerParams autoscheduler_params_;
 #endif
@@ -3132,7 +3132,7 @@ private:
     GeneratorContext(const Target &target,
 #ifdef HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
                      bool auto_schedule,
-                     const zMachineParams &machine_params,
+                     const MachineParams &machine_params,
 #else
                      const AutoSchedulerParams &autoscheduler_params,
 #endif
@@ -3563,7 +3563,7 @@ protected:
     bool get_auto_schedule() const {
         return auto_schedule;
     }
-    zMachineParams get_machine_params() const {
+    MachineParams get_machine_params() const {
         return machine_params;
     }
     bool using_autoscheduler() const {
@@ -3598,7 +3598,7 @@ protected:
     GeneratorParam<Target> target{"target", Target()};
 #ifdef HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
     GeneratorParam<bool> auto_schedule{"auto_schedule", false};
-    GeneratorParam<zMachineParams> machine_params{"machine_params", zMachineParams::generic()};
+    GeneratorParam<MachineParams> machine_params{"machine_params", MachineParams::generic()};
 #else
     GeneratorParam_AutoSchedulerParams autoscheduler;
 #endif

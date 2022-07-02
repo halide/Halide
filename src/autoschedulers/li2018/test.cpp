@@ -12,7 +12,7 @@ int main(int argc, char **argv) {
 
     constexpr int parallelism = 32;
 #ifdef HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
-    zMachineParams params(parallelism, 16000000, 40);
+    MachineParams params(parallelism, 16000000, 40);
 #else
     AutoSchedulerParams params = {{"name", "Li2018"}, {"parallelism", std::to_string(parallelism)}};
 #endif
