@@ -4,7 +4,6 @@
 #include <sstream>
 
 using namespace Halide;
-using Halide::Internal::Autoscheduler::Adams2019Params;
 
 extern "C" int mul_by_two(
     halide_buffer_t *input,
