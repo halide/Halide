@@ -681,7 +681,9 @@ void Module::compile(const std::map<OutputFileType, std::string> &output_files) 
         std::string autoscheduler_params_string;
         if (r) {
             for (const auto &kv : r->autoscheduler_params) {
-                if (autoscheduler_params_string.empty()) autoscheduler_params_string += " ";
+                if (autoscheduler_params_string.empty()) {
+                    autoscheduler_params_string += " ";
+                }
                 autoscheduler_params_string += kv.first + "=" + kv.second;
             }
         } else {
@@ -1032,7 +1034,9 @@ void compile_multitarget(const std::string &fn_name,
         std::string scheduler = autoscheduler_params.empty() ? "(None)" : autoscheduler_params.at("name");
         std::string autoscheduler_params_string;
         for (const auto &kv : autoscheduler_params) {
-            if (autoscheduler_params_string.empty()) autoscheduler_params_string += " ";
+            if (autoscheduler_params_string.empty()) {
+                autoscheduler_params_string += " ";
+            }
             autoscheduler_params_string += kv.first + "=" + kv.second;
         }
         if (autoscheduler_params_string.empty()) {
