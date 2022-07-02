@@ -463,6 +463,7 @@ SOURCE_FILES = \
   FastIntegerDivide.cpp \
   FindCalls.cpp \
   FindIntrinsics.cpp \
+  FindStmtCost.cpp \
   FlattenNestedRamps.cpp \
   Float16.cpp \
   Func.cpp \
@@ -640,6 +641,7 @@ HEADER_FILES = \
   FastIntegerDivide.h \
   FindCalls.h \
   FindIntrinsics.h \
+  FindStmtCost.h \
   FlattenNestedRamps.h \
   Float16.h \
   Func.h \

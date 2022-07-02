@@ -1,21 +1,9 @@
-// #include "IRVisitor.h"
-// #include <Halide.h>
-
-// #include "ExternFuncArgument.h"
-// #include "Function.h"
-
 #include "FindStmtCost.h"
-#include "../../src/IRVisitor.h"
-#include <Halide.h>
-
-#include "../../src/ExternFuncArgument.h"
-#include "../../src/Function.h"
-
-#include <stdexcept>
-#include <unordered_map>
 
 using namespace Halide;
 using namespace Internal;
+
+#define DEPTH_COST 3
 
 // calculates the total cost of a stmt
 int FindStmtCost::get_total_cost(const IRNode *node) const {
@@ -52,7 +40,8 @@ Expr FindStmtCost::visit(const StringImm *op) {
 }
 
 Expr FindStmtCost::visit(const Cast *op) {
-    op->value.accept(this);
+    // op->value.accept(this);
+    FindStmtCost::mutate(op);
     int tempVal = get_cost(op->value.get());
     set_cost(op, 1 + tempVal);
     return op;
@@ -64,127 +53,158 @@ Expr FindStmtCost::visit(const Variable *op) {
 }
 
 Expr FindStmtCost::visit(const Add *op) {
-    op->a.accept(this);
-    op->b.accept(this);
+    // op->a.accept(this);
+    // op->b.accept(this);
+    FindStmtCost::mutate(op->a);
+    FindStmtCost::mutate(op->b);
     int tempVal = get_cost(op->a.get()) + get_cost(op->b.get());
     set_cost(op, 1 + tempVal);
     return op;
 }
 
 Expr FindStmtCost::visit(const Sub *op) {
-    op->a.accept(this);
-    op->b.accept(this);
+    // op->a.accept(this);
+    // op->b.accept(this);
+    FindStmtCost::mutate(op->a);
+    FindStmtCost::mutate(op->b);
     int tempVal = get_cost(op->a.get()) + get_cost(op->b.get());
     set_cost(op, 1 + tempVal);
     return op;
 }
 
 Expr FindStmtCost::visit(const Mul *op) {
-    op->a.accept(this);
-    op->b.accept(this);
+    // op->a.accept(this);
+    // op->b.accept(this);
+    FindStmtCost::mutate(op->a);
+    FindStmtCost::mutate(op->b);
     int tempVal = get_cost(op->a.get()) + get_cost(op->b.get());
     set_cost(op, 1 + tempVal);
     return op;
 }
 
 Expr FindStmtCost::visit(const Div *op) {
-    op->a.accept(this);
-    op->b.accept(this);
+    // op->a.accept(this);
+    // op->b.accept(this);
+    FindStmtCost::mutate(op->a);
+    FindStmtCost::mutate(op->b);
     int tempVal = get_cost(op->a.get()) + get_cost(op->b.get());
     set_cost(op, 1 + tempVal);
     return op;
 }
 
 Expr FindStmtCost::visit(const Mod *op) {
-    op->a.accept(this);
-    op->b.accept(this);
+    // op->a.accept(this);
+    // op->b.accept(this);
+    FindStmtCost::mutate(op->a);
+    FindStmtCost::mutate(op->b);
     int tempVal = get_cost(op->a.get()) + get_cost(op->b.get());
     set_cost(op, 1 + tempVal);
     return op;
 }
 
 Expr FindStmtCost::visit(const Min *op) {
-    op->a.accept(this);
-    op->b.accept(this);
+    // op->a.accept(this);
+    // op->b.accept(this);
+    FindStmtCost::mutate(op->a);
+    FindStmtCost::mutate(op->b);
     int tempVal = get_cost(op->a.get()) + get_cost(op->b.get());
     set_cost(op, 1 + tempVal);
     return op;
 }
 
 Expr FindStmtCost::visit(const Max *op) {
-    op->a.accept(this);
-    op->b.accept(this);
+    // op->a.accept(this);
+    // op->b.accept(this);
+    FindStmtCost::mutate(op->a);
+    FindStmtCost::mutate(op->b);
     int tempVal = get_cost(op->a.get()) + get_cost(op->b.get());
     set_cost(op, 1 + tempVal);
     return op;
 }
 
 Expr FindStmtCost::visit(const EQ *op) {
-    op->a.accept(this);
-    op->b.accept(this);
+    // op->a.accept(this);
+    // op->b.accept(this);
+    FindStmtCost::mutate(op->a);
+    FindStmtCost::mutate(op->b);
     int tempVal = get_cost(op->a.get()) + get_cost(op->b.get());
     set_cost(op, 1 + tempVal);
     return op;
 }
 
 Expr FindStmtCost::visit(const NE *op) {
-    op->a.accept(this);
-    op->b.accept(this);
+    // op->a.accept(this);
+    // op->b.accept(this);
+    FindStmtCost::mutate(op->a);
+    FindStmtCost::mutate(op->b);
     int tempVal = get_cost(op->a.get()) + get_cost(op->b.get());
     set_cost(op, 1 + tempVal);
     return op;
 }
 
 Expr FindStmtCost::visit(const LT *op) {
-    op->a.accept(this);
-    op->b.accept(this);
+    // op->a.accept(this);
+    // op->b.accept(this);
+    FindStmtCost::mutate(op->a);
+    FindStmtCost::mutate(op->b);
     int tempVal = get_cost(op->a.get()) + get_cost(op->b.get());
     set_cost(op, 1 + tempVal);
     return op;
 }
 
 Expr FindStmtCost::visit(const LE *op) {
-    op->a.accept(this);
-    op->b.accept(this);
+    // op->a.accept(this);
+    // op->b.accept(this);
+    FindStmtCost::mutate(op->a);
+    FindStmtCost::mutate(op->b);
     int tempVal = get_cost(op->a.get()) + get_cost(op->b.get());
     set_cost(op, 1 + tempVal);
     return op;
 }
 
 Expr FindStmtCost::visit(const GT *op) {
-    op->a.accept(this);
-    op->b.accept(this);
+    // op->a.accept(this);
+    // op->b.accept(this);
+    FindStmtCost::mutate(op->a);
+    FindStmtCost::mutate(op->b);
     int tempVal = get_cost(op->a.get()) + get_cost(op->b.get());
     set_cost(op, 1 + tempVal);
     return op;
 }
 
 Expr FindStmtCost::visit(const GE *op) {
-    op->a.accept(this);
-    op->b.accept(this);
+    // op->a.accept(this);
+    // op->b.accept(this);
+    FindStmtCost::mutate(op->a);
+    FindStmtCost::mutate(op->b);
     int tempVal = get_cost(op->a.get()) + get_cost(op->b.get());
     set_cost(op, 1 + tempVal);
     return op;
 }
 
 Expr FindStmtCost::visit(const And *op) {
-    op->a.accept(this);
-    op->b.accept(this);
+    // op->a.accept(this);
+    // op->b.accept(this);
+    FindStmtCost::mutate(op->a);
+    FindStmtCost::mutate(op->b);
     int tempVal = get_cost(op->a.get()) + get_cost(op->b.get());
     set_cost(op, 1 + tempVal);
     return op;
 }
 
 Expr FindStmtCost::visit(const Or *op) {
-    op->a.accept(this);
-    op->b.accept(this);
+    // op->a.accept(this);
+    // op->b.accept(this);
+    FindStmtCost::mutate(op->a);
+    FindStmtCost::mutate(op->b);
     int tempVal = get_cost(op->a.get()) + get_cost(op->b.get());
     set_cost(op, 1 + tempVal);
     return op;
 }
 
 Expr FindStmtCost::visit(const Not *op) {
-    op->a.accept(this);
+    // op->a.accept(this);
+    FindStmtCost::mutate(op->a);
     int tempVal = get_cost(op->a.get());
     set_cost(op, 1 + tempVal);
     return op;
@@ -192,9 +212,12 @@ Expr FindStmtCost::visit(const Not *op) {
 
 // TODO: do we agree on my counts?
 Expr FindStmtCost::visit(const Select *op) {
-    op->condition.accept(this);
-    op->true_value.accept(this);
-    op->false_value.accept(this);
+    // op->condition.accept(this);
+    // op->true_value.accept(this);
+    // op->false_value.accept(this);
+    FindStmtCost::mutate(op->condition);
+    FindStmtCost::mutate(op->true_value);
+    FindStmtCost::mutate(op->false_value);
 
     int tempVal = get_cost(op->condition.get()) + get_cost(op->true_value.get()) + get_cost(op->false_value.get());
     set_cost(op, 1 + tempVal);
@@ -205,6 +228,8 @@ Expr FindStmtCost::visit(const Load *op) {
     assert(false);
     // op->predicate.accept(this);
     // op->index.accept(this);
+    // FindStmtCost::mutate(op->predicate);
+    // FindStmtCost::mutate(op->index);
     // int tempVal = get_cost(op->predicate.get()) + get_cost(op->index.get());
     // set_cost(op, 1 + tempVal);
     // return op;
@@ -214,6 +239,8 @@ Expr FindStmtCost::visit(const Ramp *op) {
     assert(false);
     // op->base.accept(this);
     // op->stride.accept(this);
+    // FindStmtCost::mutate(op->base);
+    // FindStmtCost::mutate(op->stride);
     // int tempVal = get_cost(op->base.get()) + get_cost(op->stride.get());
     // set_cost(op, 1 + tempVal);
     // return op;
@@ -222,6 +249,7 @@ Expr FindStmtCost::visit(const Ramp *op) {
 Expr FindStmtCost::visit(const Broadcast *op) {
     assert(false);
     // op->value.accept(this);
+    // FindStmtCost::mutate(op->value);
     // int tempVal = get_cost(op->value.get());
     // set_cost(op, 1 + tempVal);
     // return op;
@@ -230,7 +258,8 @@ Expr FindStmtCost::visit(const Broadcast *op) {
 Expr FindStmtCost::visit(const Call *op) {
     int tempVal = 0;
     for (const auto &arg : op->args) {
-        arg.accept(this);
+        // arg.accept(this);
+        FindStmtCost::mutate(arg);
         tempVal += get_cost(arg.get());
     }
 
@@ -240,7 +269,8 @@ Expr FindStmtCost::visit(const Call *op) {
         if (op->call_type == Call::Halide && f.has_extern_definition()) {
             for (const auto &arg : f.extern_arguments()) {
                 if (arg.is_expr()) {
-                    arg.expr.accept(this);
+                    // arg.expr.accept(this);
+                    FindStmtCost::mutate(arg.expr);
                     tempVal += get_cost(arg.expr.get());
                 }
             }
@@ -251,8 +281,10 @@ Expr FindStmtCost::visit(const Call *op) {
 }
 
 Expr FindStmtCost::visit(const Let *op) {
-    op->value.accept(this);
-    op->body.accept(this);
+    // op->value.accept(this);
+    // op->body.accept(this);
+    FindStmtCost::mutate(op->value);
+    FindStmtCost::mutate(op->body);
     int tempVal = get_cost(op->value.get()) + get_cost(op->body.get());
     set_cost(op, tempVal);
     return op;
@@ -263,6 +295,7 @@ Expr FindStmtCost::visit(const Shuffle *op) {
     // int tempVal = 0;
     // for (const Expr &i : op->vectors) {
     //     i.accept(this);
+    // FindStmtCost::mutate(i);
     //     tempVal += get_cost(i.get());
     // }
     // set_cost(op, tempVal);
@@ -272,40 +305,49 @@ Expr FindStmtCost::visit(const Shuffle *op) {
 Expr FindStmtCost::visit(const VectorReduce *op) {
     assert(false);
     // op->value.accept(this);
+    // FindStmtCost::mutate(op->value);
     // int tempVal = get_cost(op->value.get());
     // set_cost(op, tempVal);
     // return op;
 }
 
-Expr FindStmtCost::visit(const LetStmt *op) {
-    op->value.accept(this);
-    op->body.accept(this);
+Stmt FindStmtCost::visit(const LetStmt *op) {
+    // op->value.accept(this);
+    // op->body.accept(this);
+    FindStmtCost::mutate(op->value);
+    FindStmtCost::mutate(op->body);
     int tempVal = get_cost(op->value.get()) + get_cost(op->body.get());
     set_cost(op, 1 + tempVal);
     return op;
 }
 
-Expr FindStmtCost::visit(const AssertStmt *op) {
-    op->condition.accept(this);
-    op->message.accept(this);
+Stmt FindStmtCost::visit(const AssertStmt *op) {
+    // op->condition.accept(this);
+    // op->message.accept(this);
+    FindStmtCost::mutate(op->condition);
+    FindStmtCost::mutate(op->message);
     int tempVal = get_cost(op->condition.get()) + get_cost(op->message.get());
     set_cost(op, 1 + tempVal);
     return op;
 }
 
-Expr FindStmtCost::visit(const ProducerConsumer *op) {
-    op->body.accept(this);
+Stmt FindStmtCost::visit(const ProducerConsumer *op) {
+    // op->body.accept(this);
+    FindStmtCost::mutate(op->body);
     int tempVal = get_cost(op->body.get());
     set_cost(op, 1 + tempVal);
     return op;
 }
 
-Expr FindStmtCost::visit(const For *op) {
+Stmt FindStmtCost::visit(const For *op) {
     current_loop_depth += 1;
 
-    op->min.accept(this);
-    op->extent.accept(this);
-    op->body.accept(this);
+    // op->min.accept(this);
+    // op->extent.accept(this);
+    // op->body.accept(this);
+    FindStmtCost::mutate(op->min);
+    FindStmtCost::mutate(op->extent);
+    FindStmtCost::mutate(op->body);
 
     current_loop_depth -= 1;
 
@@ -328,45 +370,55 @@ Expr FindStmtCost::visit(const For *op) {
     return op;
 }
 
-Expr FindStmtCost::visit(const Acquire *op) {
-    op->semaphore.accept(this);
-    op->count.accept(this);
-    op->body.accept(this);
+Stmt FindStmtCost::visit(const Acquire *op) {
+    // op->semaphore.accept(this);
+    // op->count.accept(this);
+    // op->body.accept(this);
+    FindStmtCost::mutate(op->semaphore);
+    FindStmtCost::mutate(op->count);
+    FindStmtCost::mutate(op->body);
     int tempVal = get_cost(op->semaphore.get()) + get_cost(op->count.get()) + get_cost(op->body.get());
     set_cost(op, tempVal);
     return op;
 }
 
-Expr FindStmtCost::visit(const Store *op) {
-    op->predicate.accept(this);
-    op->value.accept(this);
-    op->index.accept(this);
+Stmt FindStmtCost::visit(const Store *op) {
+    // op->predicate.accept(this);
+    // op->value.accept(this);
+    // op->index.accept(this);
+    FindStmtCost::mutate(op->predicate);
+    FindStmtCost::mutate(op->value);
+    FindStmtCost::mutate(op->index);
+
     int tempVal = get_cost(op->predicate.get()) + get_cost(op->value.get()) + get_cost(op->index.get());
     set_cost(op, 1 + tempVal);
     return op;
 }
 
-Expr FindStmtCost::visit(const Provide *op) {
+Stmt FindStmtCost::visit(const Provide *op) {
     assert(false);
     // op->predicate.accept(this);
     // int tempVal = get_cost(op->predicate.get());
     // for (const auto &value : op->values) {
     //     value.accept(this);
+    // FindStmtCost::mutate(value);
     //     tempVal += get_cost(value.get());
     // }
     // for (const auto &arg : op->args) {
     //     arg.accept(this);
+    // FindStmtCost::mutate(arg);
     //     tempVal += get_cost(arg.get());
     // }
     // set_cost(op, 1 + tempVal);
     // return op;
 }
 
-Expr FindStmtCost::visit(const Allocate *op) {
+Stmt FindStmtCost::visit(const Allocate *op) {
     assert(false);
     // int tempVal = 0;
     // for (const auto &extent : op->extents) {
     //     extent.accept(this);
+    // FindStmtCost::mutate(extent);
     //     tempVal += get_cost(extent.get());
     // }
     // op->condition.accept(this);
@@ -382,7 +434,7 @@ Expr FindStmtCost::visit(const Allocate *op) {
     // return op;
 }
 
-Expr FindStmtCost::visit(const Free *op) {
+Stmt FindStmtCost::visit(const Free *op) {
     // TODO: i feel like this should be more than cost 1, but the only
     //       vars it has is the name, which isn't helpful in determining
     //       the cost of the free
@@ -390,88 +442,107 @@ Expr FindStmtCost::visit(const Free *op) {
     return op;
 }
 
-Expr FindStmtCost::visit(const Realize *op) {
+Stmt FindStmtCost::visit(const Realize *op) {
     assert(false);
     // TODO: is this the same logic as For, where I add the depth?
     // int tempVal = 0;
     // for (const auto &bound : op->bounds) {
     //     bound.min.accept(this);
     //     bound.extent.accept(this);
+    // FindStmtCost::mutate(bound.min);
+    // FindStmtCost::mutate(bound.extent);
     //     tempVal += get_cost(bound.min.get()) + get_cost(bound.extent.get());
     // }
     // op->condition.accept(this);
     // op->body.accept(this);
+    // FindStmtCost::mutate(op->condition);
+    // FindStmtCost::mutate(op->body);
     // tempVal += get_cost(op->condition.get()) + get_cost(op->body.get());
     // set_cost(op, tempVal);
     // return op;
 }
 
-Expr FindStmtCost::visit(const Prefetch *op) {
+Stmt FindStmtCost::visit(const Prefetch *op) {
     assert(false);
     // TODO: similar question as one above
     // int tempVal = 0;
     // for (const auto &bound : op->bounds) {
     //     bound.min.accept(this);
     //     bound.extent.accept(this);
+    // FindStmtCost::mutate(bound.min);
+    // FindStmtCost::mutate(bound.extent);
+
     //     tempVal += get_cost(bound.min.get()) + get_cost(bound.extent.get());
     // }
     // op->condition.accept(this);
     // op->body.accept(this);
+    // FindStmtCost::mutate(op->condition);
+    // FindStmtCost::mutate(op->body);
     // tempVal += get_cost(op->condition.get()) + get_cost(op->body.get());
     // set_cost(op, tempVal);
     // return op;
 }
 
-Expr FindStmtCost::visit(const Block *op) {
+Stmt FindStmtCost::visit(const Block *op) {
     assert(false);
     // int tempVal = 0;
     // op->first.accept(this);
+    // FindStmtCost::mutate(op->first);
     // tempVal += get_cost(op->first.get());
     // if (op->rest.defined()) {
     //     op->rest.accept(this);
+    //     FindStmtCost::mutate(op->rest);
     //     tempVal += get_cost(op->rest.get());
     // }
     // set_cost(op, tempVal);
     // return op;
 }
 
-Expr FindStmtCost::visit(const Fork *op) {
+Stmt FindStmtCost::visit(const Fork *op) {
     assert(false);
     // int tempVal = 0;
     // op->first.accept(this);
+    // FindStmtCost::mutate(op->first);
     // tempVal += get_cost(op->first.get());
     // if (op->rest.defined()) {
     //     op->rest.accept(this);
+    //     FindStmtCost::mutate(op->rest);
     //     tempVal += get_cost(op->rest.get());
     // }
     // set_cost(op, tempVal);
     // return op;
 }
 
-Expr FindStmtCost::visit(const IfThenElse *op) {
+Stmt FindStmtCost::visit(const IfThenElse *op) {
     // TODO: is this correct, based on discussion about if-then-else, as
     //       compared to Select?
-    op->condition.accept(this);
-    op->then_case.accept(this);
+    // op->condition.accept(this);
+    // op->then_case.accept(this);
+    FindStmtCost::mutate(op->condition);
+    FindStmtCost::mutate(op->then_case);
+
     int tempVal = get_cost(op->condition.get()) + get_cost(op->then_case.get());
     if (op->else_case.defined()) {
-        op->else_case.accept(this);
+        // op->else_case.accept(this);
+        FindStmtCost::mutate(op->else_case);
         tempVal += get_cost(op->else_case.get());
     }
     set_cost(op, tempVal);
     return op;
 }
 
-Expr FindStmtCost::visit(const Evaluate *op) {
-    op->value.accept(this);
+Stmt FindStmtCost::visit(const Evaluate *op) {
+    // op->value.accept(this);
+    FindStmtCost::mutate(op->value);
     int tempVal = get_cost(op->value.get());
     set_cost(op, tempVal);
     return op;
 }
 
-Expr FindStmtCost::visit(const Atomic *op) {
+Stmt FindStmtCost::visit(const Atomic *op) {
     assert(false);
     // op->body.accept(this);
+    // FindStmtCost::mutate(op->body);
     // int tempVal = get_cost(op->body.get());
     // set_cost(op, tempVal);
     // return op;

@@ -1,17 +1,9 @@
-#ifndef STMTCOST_H
-#define STMTCOST_H
+#ifndef FINDSTMTCOST_H
+#define FINDSTMTCOST_H
 
-// #include "IRVisitor.h"
-// #include <Halide.h>
-
-// #include "ExternFuncArgument.h"
-// #include "Function.h"
-
-#include "../../src/IRVisitor.h"
-#include <Halide.h>
-
-#include "../../src/ExternFuncArgument.h"
-#include "../../src/Function.h"
+#include "ExternFuncArgument.h"
+#include "Function.h"
+#include "IRMutator.h"
 
 #include <stdexcept>
 #include <unordered_map>
@@ -19,7 +11,6 @@
 using namespace Halide;
 using namespace Internal;
 
-#define DEPTH_COST 3
 struct StmtCost {
     int cost;   // per line
     int depth;  // per nested loop
@@ -69,50 +60,27 @@ private:
         return it->second.depth;
     }
 
-    // Expr eval(Func f, int tuple_idx = 0, int updef_idx = -1) {
-    //     if (!f.defined()) {
-    //         return Expr();
-    //     }
-
-    //     if (updef_idx == -1) {
-    //         // by default, choose the very last update definition (if any)
-    //         updef_idx = f.num_update_definitions();
-    //     }
-
-    //     Tuple values{Expr()};
-    //     if (updef_idx == 0) {
-    //         // pure definition
-    //         values = f.values();
-    //     } else {
-    //         --updef_idx;
-    //         assert(updef_idx >= 0);
-    //         assert(updef_idx < f.num_update_definitions());
-    //         values = f.update_values(updef_idx);
-    //     }
-
-    //     assert(tuple_idx < values.size());
-    //     Expr value = values[tuple_idx];
-    //     return value;
-    // }
-
 public:
     // constructor
-    FindStmtCost() = default;
+    FindStmtCost() {
+    }
 
     // destructor
-    ~FindStmtCost() = default;
+    ~FindStmtCost() {
+    }
 
     // calculates the total cost of a stmt
     int get_total_cost(const IRNode *node) const;
 
-    // void visit(Expr expr) {
-    //     expr.accept(this);
-    // }
+    Expr mutate(const Expr &expr) override {
+        return IRMutator::mutate(expr);
+    }
 
-    // void visit(Func f) {
-    //     visit(eval(f));
-    // }
+    Stmt mutate(const Stmt &stmt) override {
+        return IRMutator::mutate(stmt);
+    }
 
+protected:
     Expr visit(const IntImm *op) override;
     Expr visit(const UIntImm *op) override;
     Expr visit(const FloatImm *op) override;
@@ -143,7 +111,6 @@ public:
     Expr visit(const Let *op) override;
     Expr visit(const Shuffle *op) override;
     Expr visit(const VectorReduce *op) override;
-
     Stmt visit(const LetStmt *op) override;
     Stmt visit(const AssertStmt *op) override;
     Stmt visit(const ProducerConsumer *op) override;
@@ -162,4 +129,4 @@ public:
     Stmt visit(const Atomic *op) override;
 };
 
-#endif  // STMTCOST_H
+#endif  // FINDSTMTCOST_H
