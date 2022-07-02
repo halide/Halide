@@ -150,7 +150,7 @@ void StringStorage::prepend(void *user_context, const char *str, size_t length) 
     contents.resize(user_context, new_length, false);
     char *this_str = static_cast<char *>(contents.data());
     strncpy(this_str + length, this_str, old_size);
-    strncpy(this_str, str, length);
+    memcpy(this_str, str, length);
     terminate(user_context, new_length);
 }
 
