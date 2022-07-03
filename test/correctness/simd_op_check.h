@@ -5,8 +5,8 @@
 #include "halide_test_dirs.h"
 #include "test_sharding.h"
 
-#include <fstream>
 #include <cmath>
+#include <fstream>
 
 namespace Halide {
 struct TestResult {

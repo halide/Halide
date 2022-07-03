@@ -1,13 +1,13 @@
 #include "Halide.h"
 #include "simd_op_check.h"
 
-#include <string>
-#include <iomanip>
-#include <unordered_map>
-#include <tuple>
-#include <regex>
 #include <algorithm>
+#include <iomanip>
 #include <optional>
+#include <regex>
+#include <string>
+#include <tuple>
+#include <unordered_map>
 
 using namespace Halide;
 using namespace Halide::ConciseCasts;
@@ -33,7 +33,7 @@ public:
         cout << "HL_TARGET is:     " << target.to_string() << endl;
         cout << "HL_JIT_TARGET is: " << jit_target.to_string() << endl;
 
-        auto is_same_triple = [](const Target& t1, const Target& t2) -> bool {
+        auto is_same_triple = [](const Target &t1, const Target &t2) -> bool {
             return t1.arch == t2.arch && t1.bits == t2.bits && t1.os == t2.os;
         };
 
@@ -78,7 +78,7 @@ private:
         };
         // clang-format on
 
-        for (const auto& [bits, in_i, in_u, in_f, in_i_wide, in_u_wide,
+        for (const auto &[bits, in_i, in_u, in_f, in_i_wide, in_u_wide,
                           cast_i, satcast_i, widen_i, narrow_i, satnarrow_i,
                           cast_u, satcast_u, widen_u, narrow_u, satnarrow_u] : test_params) {
 
@@ -99,8 +99,9 @@ private:
                 // Due to workaround for SVE LLVM issues, in case of vector of half length of natural_lanes,
                 // there is some inconsistency in generated SVE insturction about the number of lanes.
                 // So the verification of lanes is skipped for this specific case.
-                const int instr_lanes = (total_bits == 64 && has_sve()) ? \
-                    Instruction::ANY_LANES : Instruction::get_instr_lanes(bits, vf, target);
+                const int instr_lanes = (total_bits == 64 && has_sve()) ?
+                                            Instruction::ANY_LANES :
+                                            Instruction::get_instr_lanes(bits, vf, target);
                 const int widen_lanes = Instruction::get_instr_lanes(bits * 2, vf, target);
                 const int narrow_lanes = Instruction::get_instr_lanes(bits, vf * 2, target);
 
@@ -123,7 +124,7 @@ private:
                     add_8_16_32(sel_op("vaba.s", "saba"), i_1 + absd(i_2, i_3));
                     add_8_16_32(sel_op("vaba.u", "uaba"), u_1 + absd(u_2, u_3));
                 }
-    
+
                 // VABAL    I       -       Absolute Difference and Accumulate Long
                 add_8_16_32_widen(sel_op("vabal.s", "sabal"), i_wide_1 + absd(i_2, i_3));
                 add_8_16_32_widen(sel_op("vabal.u", "uabal"), u_wide_1 + absd(u_2, u_3));
@@ -320,7 +321,7 @@ private:
                 // VNEG     I, F    F, D    Negate
                 add_8_16_32(sel_op("vneg.s", "neg"), -i_1);
 
-    #if 0
+#if 0
                 // These are vfp, not neon. They only work on scalars
                 check("vnmla.f32", 4, -(f32_1 + f32_2*f32_3));
                 check("vnmla.f64", 2, -(f64_1 + f64_2*f64_3));
@@ -337,7 +338,7 @@ private:
                 check("vqabs.s16", 4, abs(max(i16_1, -max_i16)));
                 check("vqabs.s32", 4, abs(max(i32_1, -max_i32)));
                 check("vqabs.s32", 2, abs(max(i32_1, -max_i32)));
-    #endif
+#endif
                 // VQADD    I       -       Saturating Add
                 add_8_16_32(sel_op("vqadd.s", "sqadd"), satcast_i(widen_i(i_1) + widen_i(i_2)));
                 const Expr max_u = UInt(bits).max();
@@ -523,9 +524,7 @@ private:
                 add_8_16_32_widen(sel_op("vsubw.s", "ssubw"), i_wide_1 - i_1);
                 add_8_16_32_widen(sel_op("vsubw.u", "usubw"), u_wide_1 - u_1);
             }
-
         }
-
     }
 
     void check_arm_float() {
@@ -535,7 +534,7 @@ private:
             {64, in_f64, in_u64, in_i64, f64},
         };
 
-        for (const auto& [bits, in_f, in_u, in_i, cast_f] : test_params) {
+        for (const auto &[bits, in_f, in_u, in_i, cast_f] : test_params) {
             Expr f_1 = in_f(x), f_2 = in_f(x + 16), f_3 = in_f(x + 32);
             Expr u_1 = in_u(x);
             Expr i_1 = in_i(x);
@@ -561,7 +560,7 @@ private:
             for (auto total_bits : total_bits_params) {
                 const int vf = total_bits / bits;
                 const bool is_vector = vf > 1;
-                
+
                 const int instr_lanes = Instruction::get_instr_lanes(bits, vf, target);
                 const int force_vectorized_lanes = Instruction::get_force_vectorized_instr_lanes(bits, vf, target);
 
@@ -579,20 +578,20 @@ private:
                 add({{sel_op("vsqrt.f", "fsqrt"), bits, force_vectorized_lanes}}, vf, sqrt(f_1_clamped));
 
                 add_arm32_f32(is_vector ? "vceq.f" : "vcmp.f", select(f_1 == f_2, cast_f(1.0f), cast_f(2.0f)));
-                add_arm32_f32(is_vector ? "vcgt.f" : "vcmp.f", select(f_1 > f_2,  cast_f(1.0f), cast_f(2.0f)));
+                add_arm32_f32(is_vector ? "vcgt.f" : "vcmp.f", select(f_1 > f_2, cast_f(1.0f), cast_f(2.0f)));
                 add_arm64(is_vector ? "fcmeq" : "fcmp", select(f_1 == f_2, cast_f(1.0f), cast_f(2.0f)));
-                add_arm64(is_vector ? "fcmgt" : "fcmp", select(f_1 > f_2,  cast_f(1.0f), cast_f(2.0f)));
+                add_arm64(is_vector ? "fcmgt" : "fcmp", select(f_1 > f_2, cast_f(1.0f), cast_f(2.0f)));
 
                 add_arm32_f32("vcvt.f32.u", cast_f(u_1));
                 add_arm32_f32("vcvt.f32.s", cast_f(i_1));
                 add_arm32_f32("vcvt.u32.f", cast(UInt(bits), f_1));
-                add_arm32_f32("vcvt.s32.f", cast(Int(bits),  f_1));
+                add_arm32_f32("vcvt.s32.f", cast(Int(bits), f_1));
                 // The max of Float(16) is less than that of UInt(16), which generates "nan" in emulator
                 Expr float_max = Float(bits).max();
                 add_arm64("ucvtf", cast_f(min(float_max, u_1)));
                 add_arm64("scvtf", cast_f(i_1));
                 add_arm64({{"fcvtzu", bits, force_vectorized_lanes}}, vf, cast(UInt(bits), f_1));
-                add_arm64({{"fcvtzs", bits, force_vectorized_lanes}}, vf, cast(Int(bits),  f_1));
+                add_arm64({{"fcvtzs", bits, force_vectorized_lanes}}, vf, cast(Int(bits), f_1));
                 add_arm64({{"frinti", bits, force_vectorized_lanes}}, vf, round(f_1));
                 add_arm64({{"frintm", bits, force_vectorized_lanes}}, vf, floor(f_1));
                 add_arm64({{"frintp", bits, force_vectorized_lanes}}, vf, ceil(f_1));
@@ -600,7 +599,7 @@ private:
 
                 add_arm32_f32({{"vmax.f", bits, force_vectorized_lanes}}, vf, max(f_1, f_2));
                 add_arm32_f32({{"vmin.f", bits, force_vectorized_lanes}}, vf, min(f_1, f_2));
-                
+
                 add_arm64({{"fmax", bits, force_vectorized_lanes}}, vf, max(f_1, f_2));
                 add_arm64({{"fmin", bits, force_vectorized_lanes}}, vf, min(f_1, f_2));
                 if (bits != 64 && total_bits != 192) {
@@ -631,7 +630,7 @@ private:
 
                 // No corresponding instructions exists for is_nan, is_inf, is_finite.
                 // The instructions expected to be generated depends on CodeGen_LLVM::visit(const Call *op)
-                add_arm64("nan", is_vector ? sel_op("",  "fcmge", "fcmuo") : "fcmp", is_nan(f_1));
+                add_arm64("nan", is_vector ? sel_op("", "fcmge", "fcmuo") : "fcmp", is_nan(f_1));
                 add_arm64("inf", {{"fabs", bits, force_vectorized_lanes}}, vf, is_inf(f_1));
                 add_arm64("finite", {{"fabs", bits, force_vectorized_lanes}}, vf, is_inf(f_1));
             }
@@ -643,18 +642,18 @@ private:
                 // instead of emulated equivalent code with other types.
                 AddTestFunctor add_f16(*this, 16, 1);
 
-                add_f16("sinf",   {{"bl", "sinf"},   {"fcvt", 16, 1}}, 1, sin(f_1_clamped));
-                add_f16("asinf",  {{"bl", "asinf"},  {"fcvt", 16, 1}}, 1, asin(f_1_clamped));
-                add_f16("cosf",   {{"bl", "cosf"},   {"fcvt", 16, 1}}, 1, cos(f_1_clamped));
-                add_f16("acosf",  {{"bl", "acosf"},  {"fcvt", 16, 1}}, 1, acos(f_1_clamped));
-                add_f16("tanf",   {{"bl", "tanf"},   {"fcvt", 16, 1}}, 1, tan(f_1_clamped));
-                add_f16("atanf",  {{"bl", "atanf"},  {"fcvt", 16, 1}}, 1, atan(f_1_clamped));
+                add_f16("sinf", {{"bl", "sinf"}, {"fcvt", 16, 1}}, 1, sin(f_1_clamped));
+                add_f16("asinf", {{"bl", "asinf"}, {"fcvt", 16, 1}}, 1, asin(f_1_clamped));
+                add_f16("cosf", {{"bl", "cosf"}, {"fcvt", 16, 1}}, 1, cos(f_1_clamped));
+                add_f16("acosf", {{"bl", "acosf"}, {"fcvt", 16, 1}}, 1, acos(f_1_clamped));
+                add_f16("tanf", {{"bl", "tanf"}, {"fcvt", 16, 1}}, 1, tan(f_1_clamped));
+                add_f16("atanf", {{"bl", "atanf"}, {"fcvt", 16, 1}}, 1, atan(f_1_clamped));
                 add_f16("atan2f", {{"bl", "atan2f"}, {"fcvt", 16, 1}}, 1, atan2(f_1_clamped, f_2_clamped));
-                add_f16("sinhf",  {{"bl", "sinhf"},  {"fcvt", 16, 1}}, 1, sinh(f_1_clamped));
+                add_f16("sinhf", {{"bl", "sinhf"}, {"fcvt", 16, 1}}, 1, sinh(f_1_clamped));
                 add_f16("asinhf", {{"bl", "asinhf"}, {"fcvt", 16, 1}}, 1, asinh(f_1_clamped));
-                add_f16("coshf",  {{"bl", "coshf"},  {"fcvt", 16, 1}}, 1, cosh(f_1_clamped));
+                add_f16("coshf", {{"bl", "coshf"}, {"fcvt", 16, 1}}, 1, cosh(f_1_clamped));
                 add_f16("acoshf", {{"bl", "acoshf"}, {"fcvt", 16, 1}}, 1, acosh(max(f_1, cast_f(1.0f))));
-                add_f16("tanhf",  {{"bl", "tanhf"},  {"fcvt", 16, 1}}, 1, tanh(f_1_clamped));
+                add_f16("tanhf", {{"bl", "tanhf"}, {"fcvt", 16, 1}}, 1, tanh(f_1_clamped));
                 add_f16("atanhf", {{"bl", "atanhf"}, {"fcvt", 16, 1}}, 1, atanh(clamp(f_1, cast_f(-0.5f), cast_f(0.5f))));
             }
         }
@@ -662,12 +661,9 @@ private:
 
     void check_arm_load_store() {
         vector<tuple<Type, ImageParam>> test_params = {
-            {Int(8), in_i8}, {Int(16), in_i16}, {Int(32), in_i32}, {Int(64), in_i64},
-            {UInt(8), in_u8}, {UInt(16), in_u16}, {UInt(32), in_u32}, {UInt(64), in_u64},
-            {Float(16), in_f16}, {Float(32), in_f32}, {Float(64), in_f64}
-        };
+            {Int(8), in_i8}, {Int(16), in_i16}, {Int(32), in_i32}, {Int(64), in_i64}, {UInt(8), in_u8}, {UInt(16), in_u16}, {UInt(32), in_u32}, {UInt(64), in_u64}, {Float(16), in_f16}, {Float(32), in_f32}, {Float(64), in_f64}};
 
-        for (const auto& [elt, in_im] : test_params) {
+        for (const auto &[elt, in_im] : test_params) {
             const int bits = elt.bits();
             if ((elt == Float(16) && !is_float16_supported()) ||
                 (is_arm32() && bits == 64)) {
@@ -847,14 +843,14 @@ private:
         // Tests for integer type
         {
             vector<tuple<int, ImageParam, ImageParam, CastFuncTy, CastFuncTy, CastFuncTy, CastFuncTy>> test_params{
-                {8,  in_i8,  in_u8 , i16, i32, u16, u32},
+                {8, in_i8, in_u8, i16, i32, u16, u32},
                 {16, in_i16, in_u16, i32, i64, u32, u64},
                 {32, in_i32, in_u32, i64, i64, u64, u64},
                 {64, in_i64, in_u64, i64, i64, u64, u64},
             };
             // clang-format on
 
-            for (const auto& [bits, in_i, in_u, widen_i, widenx4_i, widen_u, widenx4_u] : test_params) {
+            for (const auto &[bits, in_i, in_u, widen_i, widenx4_i, widen_u, widenx4_u] : test_params) {
 
                 for (auto &total_bits : {64, 128}) {
                     const int vf = total_bits / bits;
@@ -998,13 +994,15 @@ private:
 
         // matching pattern for opcode/operand is directly set
         Instruction(const string &opcode, const string &operand)
-            : opcode(opcode), operand(operand), bits(nullopt), lanes(nullopt) {}
+            : opcode(opcode), operand(operand), bits(nullopt), lanes(nullopt) {
+        }
 
         // matching pattern for opcode/operand is generated from bits/lanes
         Instruction(const string &opcode, int bits, int lanes)
-            : opcode(opcode), operand(nullopt), bits(bits), lanes(lanes) {}
+            : opcode(opcode), operand(nullopt), bits(bits), lanes(lanes) {
+        }
 
-        string generate_pattern(const Target& target) const {
+        string generate_pattern(const Target &target) const {
             bool is_arm32 = target.bits == 32;
             bool has_sve = target.has_feature(Target::SVE2);
 
@@ -1029,9 +1027,11 @@ private:
             return opcode_pattern + R"(\s.*\b)" + operand_pattern + R"(\b.*)";
         }
 
-        static int natural_lanes(int bits) { return 128 / bits;}
+        static int natural_lanes(int bits) {
+            return 128 / bits;
+        }
 
-        static int get_instr_lanes(int bits, int vec_factor, const Target& target) {
+        static int get_instr_lanes(int bits, int vec_factor, const Target &target) {
             if (target.has_feature(Target::SVE2)) {
                 return vec_factor == 1 ? 1 : natural_lanes(bits);
             } else {
@@ -1039,7 +1039,7 @@ private:
             }
         }
 
-        static int get_force_vectorized_instr_lanes(int bits, int vec_factor, const Target& target) {
+        static int get_force_vectorized_instr_lanes(int bits, int vec_factor, const Target &target) {
             // For some cases, where scalar operation is forced to vectorize
             if (target.has_feature(Target::SVE2)) {
                 return natural_lanes(bits);
@@ -1055,7 +1055,10 @@ private:
 
         string get_reg_sve() const {
             static const map<int, string> suffix{
-                {16, ".b"}, {8, ".h"}, {4, ".s"}, {2, ".d"},
+                {16, ".b"},
+                {8, ".h"},
+                {4, ".s"},
+                {2, ".d"},
             };
             if (lanes == 1) {
                 return get_reg_neon64();
@@ -1073,8 +1076,12 @@ private:
         }
 
         string get_reg_neon64() const {
-            static const map<int, string> suffix{  // NOTE: vector or float only
-                {8, "b"}, {16, "h"}, {32, "s"}, {64, "d"},
+            static const map<int, string> suffix{
+                // NOTE: vector or float only
+                {8, "b"},
+                {16, "h"},
+                {32, "s"},
+                {64, "d"},
             };
             auto itr = suffix.find(bits.value());
             assert(itr != suffix.end());
@@ -1088,7 +1095,7 @@ private:
         }
     };
 
-    Instruction get_sve_ls_instr(const string& base_opcode, int opcode_bits, int operand_bits, const string& additional) {
+    Instruction get_sve_ls_instr(const string &base_opcode, int opcode_bits, int operand_bits, const string &additional) {
         static const map<int, string> opcode_suffix_map = {{8, "b"}, {16, "h"}, {32, "w"}, {64, "d"}};
         static const map<int, string> operand_suffix_map = {{8, "b"}, {16, "h"}, {32, "s"}, {64, "d"}};
         const string opcode = base_opcode + opcode_suffix_map.at(opcode_bits);
@@ -1099,7 +1106,7 @@ private:
         return Instruction(opcode, operand);
     }
 
-    Instruction get_sve_ls_instr(const string& base_opcode, int bits) {
+    Instruction get_sve_ls_instr(const string &base_opcode, int bits) {
         return get_sve_ls_instr(base_opcode, bits, bits, "");
     }
 
@@ -1112,7 +1119,7 @@ private:
                        int default_vec_factor,
                        bool is_enabled = true /* false to skip testing */)
             : parent(p), default_bits(default_bits), default_instr_lanes(default_instr_lanes),
-              default_vec_factor(default_vec_factor), is_enabled(is_enabled) {};
+              default_vec_factor(default_vec_factor), is_enabled(is_enabled){};
 
         AddTestFunctor(SimdOpCheckArm &p,
                        int default_bits,
@@ -1121,7 +1128,7 @@ private:
                        bool is_enabled = true /* false to skip testing */)
             : parent(p), default_bits(default_bits),
               default_instr_lanes(Instruction::get_instr_lanes(default_bits, default_vec_factor, p.target)),
-              default_vec_factor(default_vec_factor), is_enabled(is_enabled) {};
+              default_vec_factor(default_vec_factor), is_enabled(is_enabled){};
 
         // Constructs single Instruction with default parameters
         void operator()(const string &opcode, Expr e) {
@@ -1143,7 +1150,7 @@ private:
         // Constructs multiple Instruction with default parameters except for custom name
         void operator()(const string &op_name, const vector<string> &opcodes, Expr e) {
             vector<Instruction> instrs;
-            for (const auto& opcode : opcodes) {
+            for (const auto &opcode : opcodes) {
                 instrs.emplace_back(opcode, default_bits, default_instr_lanes);
             }
             create_and_register(op_name, instrs, default_vec_factor, e);
@@ -1169,7 +1176,7 @@ private:
             // Generate regular expression for the instruction we check
             vector<string> instr_patterns;
             transform(instructions.begin(), instructions.end(), back_inserter(instr_patterns),
-                      [t = parent.target](const Instruction& instr) { return instr.generate_pattern(t); });
+                      [t = parent.target](const Instruction &instr) { return instr.generate_pattern(t); });
 
             auto unique_name = parent.get_unique_test_name(op_name, parent.arm_tasks.size());
 
@@ -1203,7 +1210,7 @@ private:
         };
         try {
             error.compile_to(outputs, arg_types, fn_name, target);
-        } catch (const std::runtime_error& re) {
+        } catch (const std::runtime_error &re) {
             cerr << "Error: compilation failed in " << name << ", msg: " << endl;
             cerr << re.what() << endl;
             return;
@@ -1221,7 +1228,7 @@ private:
 
         string line;
         vector<string> matched_lines;
-        vector<string>& patterns = arm_task->second.instrs;
+        vector<string> &patterns = arm_task->second.instrs;
         while (getline(asm_file, line) && !patterns.empty()) {
             msg << line << "\n";
             auto pattern = patterns.begin();
@@ -1239,28 +1246,33 @@ private:
         if (!patterns.empty()) {
             error_msg << "Failed: " << msg.str() << "\n";
             error_msg << "The following instruction patterns were not found:\n";
-            for (auto& p : patterns) {
+            for (auto &p : patterns) {
                 error_msg << p << "\n";
             }
         } else if (debug_mode == "1") {
-            for (auto& l : matched_lines) {
+            for (auto &l : matched_lines) {
                 error_msg << "    " << setw(20) << name << ", vf=" << setw(2) << vector_width << ",     ";
                 error_msg << l << endl;
             }
         }
     }
 
-    inline const string& sel_op(const string &neon32, const string &neon64) {
+    inline const string &sel_op(const string &neon32, const string &neon64) {
         return is_arm32() ? neon32 : neon64;
     }
 
-    inline const string& sel_op(const string &neon32, const string &neon64, const string &sve) {
-        return is_arm32() ? neon32 : 
-               target.has_feature(Target::SVE) || target.has_feature(Target::SVE2) ? sve : neon64;
+    inline const string &sel_op(const string &neon32, const string &neon64, const string &sve) {
+        return is_arm32()                                                          ? neon32 :
+               target.has_feature(Target::SVE) || target.has_feature(Target::SVE2) ? sve :
+                                                                                     neon64;
     }
 
-    inline bool is_arm32() const { return target.bits == 32; };
-    inline bool has_sve() const { return target.has_feature(Target::SVE2); };
+    inline bool is_arm32() const {
+        return target.bits == 32;
+    };
+    inline bool has_sve() const {
+        return target.has_feature(Target::SVE2);
+    };
 
     bool is_float16_supported() const {
         return (target.bits == 64) && target.has_feature(Target::ARMFp16);
