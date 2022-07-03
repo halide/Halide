@@ -43,9 +43,7 @@ llvm::Type *llvm_type_of(LLVMContext *c, Halide::Type t,
         if (effective_vscale != 0) {
             int total_bits = t.bits() * t.lanes();
             scalable = ((total_bits % effective_vscale) == 0);
-            if (scalable) {
-                lanes /= effective_vscale;
-            } else {
+            if (!scalable) {
                 // TODO(zvookin): This error indicates that the requested number of vector lanes
                 // is not expressible exactly via vscale. This will be fairly unusual unless
                 // non-power of two, or very short, vector sizes are used in a schedule.
@@ -57,7 +55,7 @@ llvm::Type *llvm_type_of(LLVMContext *c, Halide::Type t,
                                << " effective_vscale " << effective_vscale << " total_bits " << total_bits << "\n";
             }
         }
-        return get_vector_type(element_type, lanes, scalable);
+        return get_vector_type(element_type, lanes, effective_vscale);
     }
 }
 
@@ -69,12 +67,25 @@ llvm::Type *get_vector_element_type(llvm::Type *t) {
     }
 }
 
-llvm::ElementCount element_count(int e) {
-    return llvm::ElementCount::getFixed(e);
+llvm::ElementCount element_count(int c, int effective_vscale) {
+    if (effective_vscale != 0) {
+        if (c % effective_vscale) {
+            internal_error << " count " << c << " is not the multiple of effective_vscale " << effective_vscale << "\n";
+        }
+        return llvm::ElementCount::getScalable(c / effective_vscale);
+    } else {
+        return llvm::ElementCount::getFixed(c);
+    }
 }
 
-llvm::Type *get_vector_type(llvm::Type *t, int n, bool scalable) {
-    return VectorType::get(t, n, scalable);
+llvm::Type *get_vector_type(llvm::Value *vec_or_scalar, int n, int effective_vscale) {
+    llvm::Type *t = vec_or_scalar->getType();
+    llvm::Type *elt = t->isVectorTy() ? get_vector_element_type(t) : t;
+    return get_vector_type(elt, n, effective_vscale);
+}
+
+llvm::Type *get_vector_type(llvm::Type *t, int n, int effective_vscale) {
+    return VectorType::get(t, element_count(n, effective_vscale));
 }
 
 // Returns true if the given function name is one of the Halide runtime

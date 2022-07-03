@@ -217,11 +217,11 @@ CodeGen_LLVM::CodeGen_LLVM(const Target &t)
 
       inside_atomic_mutex_node(false),
       emit_atomic_stores(false),
+      effective_vscale(0),
 
       destructor_block(nullptr),
       strict_float(t.has_feature(Target::StrictFloat)),
-      llvm_large_code_model(t.has_feature(Target::LLVMLargeCodeModel)),
-      effective_vscale(0) {
+      llvm_large_code_model(t.has_feature(Target::LLVMLargeCodeModel)) {
     initialize_llvm();
 }
 
@@ -1080,6 +1080,22 @@ llvm::Function *CodeGen_LLVM::embed_metadata_getter(const std::string &metadata_
 
 llvm::Type *CodeGen_LLVM::llvm_type_of(const Type &t) const {
     return Internal::llvm_type_of(context, t, effective_vscale);
+}
+
+llvm::ElementCount CodeGen_LLVM::element_count(int c) const {
+    return Internal::element_count(c, effective_vscale);
+}
+
+llvm::Type *CodeGen_LLVM::get_vector_type(llvm::Value *vec_or_scalar, int n) const {
+    return Internal::get_vector_type(vec_or_scalar, n, effective_vscale);
+}
+
+llvm::Type *CodeGen_LLVM::get_vector_type(llvm::Type *t, int n) const {
+    return Internal::get_vector_type(t, n, effective_vscale);
+}
+
+bool CodeGen_LLVM::is_scalable_vector(llvm::Value *v) const {
+    return isa<ScalableVectorType>(v->getType());
 }
 
 void CodeGen_LLVM::optimize_module() {
@@ -4526,11 +4542,11 @@ Value *CodeGen_LLVM::call_intrin(const llvm::Type *result_type, int intrin_lanes
         llvm::Type *intrinsic_result_type = result_type->getScalarType();
         if (intrin_lanes > 1) {
             if (scalable_vector_result && effective_vscale != 0) {
-                intrinsic_result_type = get_vector_type(result_type->getScalarType(),
-                                                        intrin_lanes / effective_vscale, true);
+                intrinsic_result_type = Internal::get_vector_type(result_type->getScalarType(),
+                                                                  intrin_lanes, effective_vscale);
             } else {
-                intrinsic_result_type = get_vector_type(result_type->getScalarType(),
-                                                        intrin_lanes);
+                intrinsic_result_type = Internal::get_vector_type(result_type->getScalarType(),
+                                                                  intrin_lanes, 0);
             }
         }
         FunctionType *func_t = FunctionType::get(intrinsic_result_type, arg_types, false);
@@ -4808,8 +4824,7 @@ llvm::Value *CodeGen_LLVM::fixed_to_scalable_vector_type(llvm::Value *fixed_arg)
     internal_assert(fixed != nullptr);
     auto lanes = fixed->getNumElements();
 
-    const llvm::ScalableVectorType *scalable = cast<llvm::ScalableVectorType>(get_vector_type(fixed->getElementType(),
-                                                                                              lanes / effective_vscale, true));
+    const llvm::ScalableVectorType *scalable = cast<llvm::ScalableVectorType>(get_vector_type(fixed->getElementType(), lanes));
     internal_assert(fixed != nullptr);
 
     internal_assert(fixed->getElementType() == scalable->getElementType());
@@ -4843,8 +4858,8 @@ llvm::Value *CodeGen_LLVM::scalable_to_fixed_vector_type(llvm::Value *scalable_a
     const llvm::ScalableVectorType *scalable = cast<llvm::ScalableVectorType>(scalable_arg->getType());
     internal_assert(scalable != nullptr);
 
-    const llvm::FixedVectorType *fixed = cast<llvm::FixedVectorType>(get_vector_type(scalable->getElementType(),
-                                                                                     scalable->getMinNumElements() * effective_vscale, false));
+    const llvm::FixedVectorType *fixed = cast<llvm::FixedVectorType>(Internal::get_vector_type(scalable->getElementType(),
+                                                                                               scalable->getMinNumElements() * effective_vscale, 0));
     internal_assert(fixed != nullptr);
 
     internal_assert(fixed->getElementType() == scalable->getElementType());

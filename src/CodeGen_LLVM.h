@@ -30,6 +30,7 @@ class NamedMDNode;
 class DataLayout;
 class BasicBlock;
 class GlobalVariable;
+class ElementCount;
 }  // namespace llvm
 
 #include <map>
@@ -390,6 +391,18 @@ protected:
      * current context. */
     virtual llvm::Type *llvm_type_of(const Type &) const;
 
+    /** Represents the number of elements in a vector,
+     * either fixed size or min size of scalable vector */
+    llvm::ElementCount element_count(int e) const;
+
+    /** Return llvm vector type with actual lanes = n.
+     * In case of scalable vector, effective_vscale is taken into account and applied to n. */
+    llvm::Type *get_vector_type(llvm::Value *vec_or_scalar, int n) const;
+    llvm::Type *get_vector_type(llvm::Type *ty, int n) const;
+
+    /** Return true if scalable vector, false if scalar or fixed sized vector */
+    bool is_scalable_vector(llvm::Value *v) const;
+
     /** Perform an alloca at the function entrypoint. Will be cleaned
      * on function exit. */
     llvm::Value *create_alloca_at_entry(llvm::Type *type, int n,
@@ -510,6 +523,11 @@ protected:
     /** Emit atomic store instructions? */
     bool emit_atomic_stores;
 
+    /** Cache the result of target_vscale from architecture specific implementation
+     * as this is used on every Halide to LLVM type conversion.
+     */
+    int effective_vscale;
+
     /** Can we call this operation with float16 type?
         This is used to avoid "emulated" equivalent code-gen in case target has FP16 feature **/
     virtual bool supports_call_as_float16(const Call *op) const;
@@ -546,11 +564,6 @@ private:
 
     /** Use the LLVM large code model when this is set. */
     bool llvm_large_code_model;
-
-    /** Cache the result of target_vscale from architecture specific implementation
-     * as this is used on every Halide to LLVM type conversion.
-     */
-    int effective_vscale;
 
     /** Embed an instance of halide_filter_metadata_t in the code, using
      * the given name (by convention, this should be ${FUNCTIONNAME}_metadata)

@@ -50,9 +50,10 @@ llvm::Type *llvm_type_of(llvm::LLVMContext *context, Halide::Type t,
  * if it's not a vector type. */
 llvm::Type *get_vector_element_type(llvm::Type *);
 
-llvm::ElementCount element_count(int e);
+llvm::ElementCount element_count(int e, int effective_vscale);
 
-llvm::Type *get_vector_type(llvm::Type *, int n, bool scalable = false);
+llvm::Type *get_vector_type(llvm::Type *, int n, int effective_vscale);
+llvm::Type *get_vector_type(llvm::Value *vec_or_scalar, int n, int effective_vscale);
 
 /** Which built-in functions require a user-context first argument? */
 bool function_takes_user_context(const std::string &name);
