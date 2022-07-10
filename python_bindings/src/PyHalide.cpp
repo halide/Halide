@@ -3,6 +3,7 @@
 #include "PyArgument.h"
 #include "PyBoundaryConditions.h"
 #include "PyBuffer.h"
+#include "PyCallable.h"
 #include "PyConciseCasts.h"
 #include "PyDerivative.h"
 #include "PyEnums.h"
@@ -54,6 +55,7 @@ PYBIND11_MODULE(HALIDE_PYBIND_MODULE_NAME, m) {
     define_rdom(m);
     define_machine_params(m);
     define_module(m);
+    define_callable(m);
     define_func(m);
     define_pipeline(m);
     define_inline_reductions(m);

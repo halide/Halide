@@ -31,6 +31,10 @@ tests(GROUPS correctness
       bounds_query.cpp
       buffer_t.cpp
       c_function.cpp
+      callable.cpp
+      callable_errors.cpp
+      callable_generator.cpp
+      callable_typed.cpp
       cascaded_filters.cpp
       cast.cpp
       cast_handle.cpp
@@ -374,6 +378,9 @@ target_link_libraries(correctness_image_io PRIVATE Halide::ImageIO)
 set_target_properties(correctness_async
                       correctness_atomics
                       correctness_c_function
+                      correctness_callable
+                      correctness_callable_generator
+                      correctness_callable_typed
                       correctness_compute_at_split_rvar
                       correctness_concat
                       correctness_custom_lowering_pass

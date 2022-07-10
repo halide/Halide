@@ -49,9 +49,9 @@ void define_pipeline(py::module &m) {
 
             .def("outputs", &Pipeline::outputs)
 
-            .def("auto_schedule", (AutoSchedulerResults(Pipeline::*)(const std::string &, const Target &, const MachineParams &)) & Pipeline::auto_schedule,
+            .def("auto_schedule", (AutoSchedulerResults(Pipeline::*)(const std::string &, const Target &, const MachineParams &) const) & Pipeline::auto_schedule,
                  py::arg("autoscheduler_name"), py::arg("target"), py::arg("machine_params") = MachineParams::generic())
-            .def("auto_schedule", (AutoSchedulerResults(Pipeline::*)(const Target &, const MachineParams &)) & Pipeline::auto_schedule,
+            .def("auto_schedule", (AutoSchedulerResults(Pipeline::*)(const Target &, const MachineParams &) const) & Pipeline::auto_schedule,
                  py::arg("target"), py::arg("machine_params") = MachineParams::generic())
 
             .def_static("set_default_autoscheduler_name", &Pipeline::set_default_autoscheduler_name,
@@ -93,6 +93,8 @@ void define_pipeline(py::module &m) {
                  py::arg("arguments"), py::arg("fn_name"), py::arg("target") = get_target_from_environment(), py::arg("linkage") = LinkageType::ExternalPlusMetadata)
 
             .def("compile_jit", &Pipeline::compile_jit, py::arg("target") = get_jit_target_from_environment())
+
+            .def("compile_to_callable", &Pipeline::compile_to_callable, py::arg("arguments"), py::arg("target") = get_jit_target_from_environment())
 
             .def(
                 "realize", [](Pipeline &p, Buffer<> buffer, const Target &target) -> void {
@@ -175,6 +177,19 @@ void define_pipeline(py::module &m) {
                 o << "]>";
                 return o.str();
             });
+
+    // TODO: These should really live in PyGenerator.cpp once that lands
+    m.def(
+        "create_callable_from_generator", [](const GeneratorContext &context, const std::string &name, const std::map<std::string, std::string> &generator_params) -> Callable {
+            return create_callable_from_generator(context, name, generator_params);
+        },
+        py::arg("context"), py::arg("name"), py::arg("generator_params") = std::map<std::string, std::string>{});
+
+    m.def(
+        "create_callable_from_generator", [](const Target &target, const std::string &name, const std::map<std::string, std::string> &generator_params) -> Callable {
+            return create_callable_from_generator(target, name, generator_params);
+        },
+        py::arg("target"), py::arg("name"), py::arg("generator_params") = std::map<std::string, std::string>{});
 }
 
 }  // namespace PythonBindings
