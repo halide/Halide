@@ -390,14 +390,16 @@ void Stage::set_dim_type(const VarOrRVar &var, ForType t) {
             // This check is fairly conservative.
             if (var.is_rvar && is_parallel(t) && !definition.schedule().allow_race_conditions()) {
                 const string &func_name = function.name();
-                const auto &pred = var.rvar.domain().predicate();
-                user_assert(!expr_uses_var(pred, func_name))
-                    << "In scheudle for " << name() << ", marking var "
-                    << var.name() << " as parallel may introduce a race "
-                    << "condition, resulting in incorrect output. This is "
-                    << "because the RDom::where predictate reads from "
-                    << func_name << ". It is possible to override this error "
-                    << "using the allow_race_conditions() method.\n";
+                const auto &rdom = var.rvar.domain();
+                if (rdom.defined()) {
+                    user_assert(!expr_uses_var(rdom.predicate(), func_name))
+                        << "In scheudle for " << name() << ", marking var "
+                        << var.name() << " as parallel may introduce a race "
+                        << "condition, resulting in incorrect output. This is "
+                        << "because the RDom::where predictate reads from "
+                        << func_name << ". It is possible to override this error "
+                        << "using the allow_race_conditions() method.\n";
+                }
             }
 
             // If it's an rvar and the for type is parallel, we need to
