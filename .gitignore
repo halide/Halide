@@ -187,6 +187,7 @@ CMakeFiles/
 compile_commands.json
 CPack*.cmake
 CTest*.cmake
+CTest*.txt
 install_manifest.txt
 
 # Ninja files
