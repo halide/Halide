@@ -294,7 +294,6 @@ namespace Internal {
 void generator_test();
 
 class GeneratorBase;
-class ValueTracker;
 
 std::vector<Expr> parameter_constraints(const Parameter &p);
 
@@ -3091,15 +3090,13 @@ private:
 #ifdef HALIDE_ALLOW_GENERATOR_EXTERNAL_CODE
     std::shared_ptr<ExternsMap> externs_map_;
 #endif
-    std::shared_ptr<Internal::ValueTracker> value_tracker_;
 
+#ifdef HALIDE_ALLOW_GENERATOR_EXTERNAL_CODE
     GeneratorContext(const Target &target,
                      bool auto_schedule,
                      const MachineParams &machine_params,
-#ifdef HALIDE_ALLOW_GENERATOR_EXTERNAL_CODE
-                     std::shared_ptr<ExternsMap> externs_map,
+                     std::shared_ptr<ExternsMap> externs_map);
 #endif
-                     std::shared_ptr<Internal::ValueTracker> value_tracker);
 };
 
 class NamesInterface {
@@ -3472,8 +3469,6 @@ protected:
     virtual void call_generate() = 0;
     virtual void call_schedule() = 0;
 
-    void track_parameter_values(bool include_outputs);
-
     void pre_build();
     void post_build();
     void pre_configure();
@@ -3571,7 +3566,6 @@ private:
 #ifdef HALIDE_ALLOW_GENERATOR_EXTERNAL_CODE
     std::shared_ptr<GeneratorContext::ExternsMap> externs_map;
 #endif
-    std::shared_ptr<Internal::ValueTracker> value_tracker;
 
     // Lazily-allocated-and-inited struct with info about our various Params.
     // Do not access directly: use the param_info() getter.
