@@ -1,7 +1,7 @@
 #ifndef HALIDE_EXTERNAL_CODE_H
 #define HALIDE_EXTERNAL_CODE_H
 
-#ifdef HALIDE_ALLOW_GENERATOR_EXTERNS_MAP
+#ifdef HALIDE_ALLOW_GENERATOR_EXTERNAL_CODE
 
 #include <vector>
 
@@ -137,6 +137,6 @@ public:
 
 #error "ExternalCode is deprecated in Halide 15 and will be removed in Halide 16"
 
-#endif  // HALIDE_ALLOW_GENERATOR_EXTERNS_MAP
+#endif  // HALIDE_ALLOW_GENERATOR_EXTERNAL_CODE
 
 #endif

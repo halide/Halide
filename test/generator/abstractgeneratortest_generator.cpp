@@ -115,7 +115,7 @@ public:
         return {};
     }
 
-#ifdef HALIDE_ALLOW_GENERATOR_EXTERNS_MAP
+#ifdef HALIDE_ALLOW_GENERATOR_EXTERNAL_CODE
     ExternsMap external_code_map() override {
         // none
         return {};

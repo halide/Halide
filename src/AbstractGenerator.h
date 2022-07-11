@@ -30,7 +30,7 @@ enum class ArgInfoKind { Scalar,
 enum class ArgInfoDirection { Input,
                               Output };
 
-#ifdef HALIDE_ALLOW_GENERATOR_EXTERNS_MAP
+#ifdef HALIDE_ALLOW_GENERATOR_EXTERNAL_CODE
 using ExternsMap = std::map<std::string, ExternalCode>;
 #endif
 
@@ -153,7 +153,7 @@ public:
      */
     virtual std::vector<Func> output_func(const std::string &name) = 0;
 
-#ifdef HALIDE_ALLOW_GENERATOR_EXTERNS_MAP
+#ifdef HALIDE_ALLOW_GENERATOR_EXTERNAL_CODE
     /** Return the ExternsMap for the Generator, if any.
      *
      * CALL-AFTER: build_pipeline()

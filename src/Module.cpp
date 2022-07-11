@@ -329,7 +329,7 @@ struct ModuleContents {
     std::vector<Buffer<>> buffers;
     std::vector<Internal::LoweredFunc> functions;
     std::vector<Module> submodules;
-#ifdef HALIDE_ALLOW_GENERATOR_EXTERNS_MAP
+#ifdef HALIDE_ALLOW_GENERATOR_EXTERNAL_CODE
     std::vector<ExternalCode> external_code;
 #endif
     MetadataNameMap metadata_name_map;
@@ -417,7 +417,7 @@ const std::vector<Module> &Module::submodules() const {
     return contents->submodules;
 }
 
-#ifdef HALIDE_ALLOW_GENERATOR_EXTERNS_MAP
+#ifdef HALIDE_ALLOW_GENERATOR_EXTERNAL_CODE
 const std::vector<ExternalCode> &Module::external_code() const {
     return contents->external_code;
 }
@@ -445,7 +445,7 @@ void Module::append(const Module &module) {
     contents->submodules.push_back(module);
 }
 
-#ifdef HALIDE_ALLOW_GENERATOR_EXTERNS_MAP
+#ifdef HALIDE_ALLOW_GENERATOR_EXTERNAL_CODE
 void Module::append(const ExternalCode &external_code) {
     contents->external_code.push_back(external_code);
 }
@@ -517,7 +517,7 @@ Module Module::resolve_submodules() const {
     for (const auto &buf : buffers()) {
         lowered_module.append(buf);
     }
-#ifdef HALIDE_ALLOW_GENERATOR_EXTERNS_MAP
+#ifdef HALIDE_ALLOW_GENERATOR_EXTERNAL_CODE
     for (const auto &ec : external_code()) {
         lowered_module.append(ec);
     }
@@ -525,7 +525,7 @@ Module Module::resolve_submodules() const {
     for (const auto &m : submodules()) {
         Module copy(m.resolve_submodules());
 
-#ifdef HALIDE_ALLOW_GENERATOR_EXTERNS_MAP
+#ifdef HALIDE_ALLOW_GENERATOR_EXTERNAL_CODE
         // Propagate external code blocks.
         for (const auto &ec : external_code()) {
             // TODO(zalman): Is this the right thing to do?

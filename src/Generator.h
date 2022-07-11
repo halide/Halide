@@ -272,7 +272,7 @@
 #include <vector>
 
 #include "AbstractGenerator.h"
-#ifdef HALIDE_ALLOW_GENERATOR_EXTERNS_MAP
+#ifdef HALIDE_ALLOW_GENERATOR_EXTERNAL_CODE
 #include "ExternalCode.h"
 #endif
 #include "Func.h"
@@ -3031,7 +3031,7 @@ class GeneratorContext {
 public:
     friend class Internal::GeneratorBase;
 
-#ifdef HALIDE_ALLOW_GENERATOR_EXTERNS_MAP
+#ifdef HALIDE_ALLOW_GENERATOR_EXTERNAL_CODE
     using ExternsMap = std::map<std::string, ExternalCode>;
 #endif
 
@@ -3088,7 +3088,7 @@ private:
     Target target_;
     bool auto_schedule_ = false;
     MachineParams machine_params_ = MachineParams::generic();
-#ifdef HALIDE_ALLOW_GENERATOR_EXTERNS_MAP
+#ifdef HALIDE_ALLOW_GENERATOR_EXTERNAL_CODE
     std::shared_ptr<ExternsMap> externs_map_;
 #endif
     std::shared_ptr<Internal::ValueTracker> value_tracker_;
@@ -3096,7 +3096,7 @@ private:
     GeneratorContext(const Target &target,
                      bool auto_schedule,
                      const MachineParams &machine_params,
-#ifdef HALIDE_ALLOW_GENERATOR_EXTERNS_MAP
+#ifdef HALIDE_ALLOW_GENERATOR_EXTERNAL_CODE
                      std::shared_ptr<ExternsMap> externs_map,
 #endif
                      std::shared_ptr<Internal::ValueTracker> value_tracker);
@@ -3528,7 +3528,7 @@ protected:
         return machine_params;
     }
 
-#ifdef HALIDE_ALLOW_GENERATOR_EXTERNS_MAP
+#ifdef HALIDE_ALLOW_GENERATOR_EXTERNAL_CODE
     /** Generators can register ExternalCode objects onto
      * themselves. The Generator infrastructure will arrange to have
      * this ExternalCode appended to the Module that is finally
@@ -3550,7 +3550,7 @@ protected:
 #else
     /** ExternalCode objects in Generator are deprecated in Halide 15 and will
      * be removed in Halide 16. You may continue to use them in Halide 15
-     * by defining HALIDE_ALLOW_GENERATOR_EXTERNS_MAP when building Halide. */
+     * by defining HALIDE_ALLOW_GENERATOR_EXTERNAL_CODE when building Halide. */
 #endif
 
     // These must remain here for legacy code that access the fields directly.
@@ -3568,7 +3568,7 @@ private:
     friend class StubOutputBufferBase;
 
     const size_t size;
-#ifdef HALIDE_ALLOW_GENERATOR_EXTERNS_MAP
+#ifdef HALIDE_ALLOW_GENERATOR_EXTERNAL_CODE
     std::shared_ptr<GeneratorContext::ExternsMap> externs_map;
 #endif
     std::shared_ptr<Internal::ValueTracker> value_tracker;
@@ -3769,7 +3769,7 @@ public:
     std::vector<Parameter> input_parameter(const std::string &name) override;
     std::vector<Func> output_func(const std::string &name) override;
 
-#ifdef HALIDE_ALLOW_GENERATOR_EXTERNS_MAP
+#ifdef HALIDE_ALLOW_GENERATOR_EXTERNAL_CODE
     ExternsMap external_code_map() override;
 #endif
 
