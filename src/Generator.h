@@ -272,7 +272,9 @@
 #include <vector>
 
 #include "AbstractGenerator.h"
+#ifdef HALIDE_ALLOW_GENERATOR_EXTERNS_MAP
 #include "ExternalCode.h"
+#endif
 #include "Func.h"
 #include "ImageParam.h"
 #include "Introspection.h"
