@@ -28,13 +28,14 @@ set(SOURCES
     PyType.cpp
     PyVar.cpp
     PyVarOrRVar.cpp
-    )
+)
+list(TRANSFORM SOURCES PREPEND "_halide/")
 
 pybind11_add_module(Halide_Python MODULE ${SOURCES})
 add_library(Halide::Python ALIAS Halide_Python)
 set_target_properties(Halide_Python
                       PROPERTIES
-                      LIBRARY_OUTPUT_NAME halide_
+                      LIBRARY_OUTPUT_NAME _halide
                       EXPORT_NAME Python)
 target_link_libraries(Halide_Python PRIVATE Halide::Halide)
 
@@ -47,9 +48,11 @@ include(GNUInstallDirs)
 set(Halide_INSTALL_PYTHONDIR "${CMAKE_INSTALL_LIBDIR}/python3/site-packages"
     CACHE STRING "Path to Halide Python bindings folder")
 
-install(DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/halide"
+install(DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
         DESTINATION "${Halide_INSTALL_PYTHONDIR}"
-        COMPONENT Halide_Python)
+        COMPONENT Halide_Python
+        PATTERN "CMakeLists.txt" EXCLUDE
+        PATTERN "*/_halide*" EXCLUDE)
 
 install(TARGETS Halide_Python
         LIBRARY DESTINATION "${Halide_INSTALL_PYTHONDIR}/halide"

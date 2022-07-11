@@ -1,1 +1,1 @@
-from .halide_ import *
+from ._halide import *
