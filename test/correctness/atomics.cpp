@@ -978,27 +978,52 @@ void test_hist_tuple_rfactor(const Backend &backend) {
     }
 }
 
+#ifdef _WIN32
+#define LOG_TEST(T, B)                                                                                                                                                   \
+    do {                                                                                                                                                                 \
+        std::cout << "Test type=" << Halide::type_of<T>() << " backend=" << (int)(B) << " line=" << __LINE__ << "\n"; \
+    } while (0)
+#else
+#define LOG_TEST(T, B) \
+    do {               \
+    } while (0)
+#endif
+
 template<typename T>
 void test_all(const Backend &backend) {
+    LOG_TEST(T, backend);
     test_parallel_hist<T>(backend);
+    LOG_TEST(T, backend);
     test_parallel_cas_update<T>(backend);
+    LOG_TEST(T, backend);
     if (backend != Backend::CPUVectorize) {
         // Doesn't support vectorized predicated store yet.
+        LOG_TEST(T, backend);
         test_predicated_hist<T>(backend);
     }
+    LOG_TEST(T, backend);
     test_hist_compute_at<T>(backend);
     if (backend == Backend::CPU || backend == Backend::CPUVectorize) {
+        LOG_TEST(T, backend);
         test_hist_store_at<T>(backend);
     }
+    LOG_TEST(T, backend);
     test_hist_rfactor<T>(backend);
     if (backend == Backend::CPU) {
         // These require mutex locking which does not support vectorization and GPU
+        LOG_TEST(T, backend);
         test_parallel_hist_tuple<T>(backend);
+        LOG_TEST(T, backend);
         test_parallel_hist_tuple2<T>(backend);
+        LOG_TEST(T, backend);
         test_tuple_reduction<T>(backend);
+        LOG_TEST(T, backend);
         test_nested_atomics<T>(backend);
+        LOG_TEST(T, backend);
         test_hist_tuple_compute_at<T>(backend);
+        LOG_TEST(T, backend);
         test_hist_tuple_rfactor<T>(backend);
+        LOG_TEST(T, backend);
     }
 }
 
