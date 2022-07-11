@@ -115,10 +115,12 @@ public:
         return {};
     }
 
+#ifdef HALIDE_ALLOW_GENERATOR_EXTERNS_MAP
     ExternsMap external_code_map() override {
         // none
         return {};
     }
+#endif
 
     void bind_input(const std::string &name, const std::vector<Parameter> &v) override {
         _halide_user_assert(false) << "OOPS";

@@ -3029,7 +3029,9 @@ class GeneratorContext {
 public:
     friend class Internal::GeneratorBase;
 
+#ifdef HALIDE_ALLOW_GENERATOR_EXTERNS_MAP
     using ExternsMap = std::map<std::string, ExternalCode>;
+#endif
 
     explicit GeneratorContext(const Target &t,
                               bool auto_schedule = false,
@@ -3084,13 +3086,17 @@ private:
     Target target_;
     bool auto_schedule_ = false;
     MachineParams machine_params_ = MachineParams::generic();
+#ifdef HALIDE_ALLOW_GENERATOR_EXTERNS_MAP
     std::shared_ptr<ExternsMap> externs_map_;
+#endif
     std::shared_ptr<Internal::ValueTracker> value_tracker_;
 
     GeneratorContext(const Target &target,
                      bool auto_schedule,
                      const MachineParams &machine_params,
+#ifdef HALIDE_ALLOW_GENERATOR_EXTERNS_MAP
                      std::shared_ptr<ExternsMap> externs_map,
+#endif
                      std::shared_ptr<Internal::ValueTracker> value_tracker);
 };
 
@@ -3519,6 +3525,8 @@ protected:
     MachineParams get_machine_params() const {
         return machine_params;
     }
+
+#ifdef HALIDE_ALLOW_GENERATOR_EXTERNS_MAP
     /** Generators can register ExternalCode objects onto
      * themselves. The Generator infrastructure will arrange to have
      * this ExternalCode appended to the Module that is finally
@@ -3537,6 +3545,11 @@ protected:
     std::shared_ptr<GeneratorContext::ExternsMap> get_externs_map() const {
         return externs_map;
     }
+#else
+    /** ExternalCode objects in Generator are deprecated in Halide 15 and will
+     * be removed in Halide 16. You may continue to use them in Halide 15
+     * by defining HALIDE_ALLOW_GENERATOR_EXTERNS_MAP when building Halide. */
+#endif
 
     // These must remain here for legacy code that access the fields directly.
     GeneratorParam<Target> target{"target", Target()};
@@ -3553,7 +3566,9 @@ private:
     friend class StubOutputBufferBase;
 
     const size_t size;
+#ifdef HALIDE_ALLOW_GENERATOR_EXTERNS_MAP
     std::shared_ptr<GeneratorContext::ExternsMap> externs_map;
+#endif
     std::shared_ptr<Internal::ValueTracker> value_tracker;
 
     // Lazily-allocated-and-inited struct with info about our various Params.
@@ -3752,7 +3767,9 @@ public:
     std::vector<Parameter> input_parameter(const std::string &name) override;
     std::vector<Func> output_func(const std::string &name) override;
 
+#ifdef HALIDE_ALLOW_GENERATOR_EXTERNS_MAP
     ExternsMap external_code_map() override;
+#endif
 
     // This is overridden in the concrete Generator<> subclass.
     // Pipeline build_pipeline() override;

@@ -22,12 +22,16 @@ namespace Halide {
 GeneratorContext::GeneratorContext(const Target &target,
                                    bool auto_schedule,
                                    const MachineParams &machine_params,
+#ifdef HALIDE_ALLOW_GENERATOR_EXTERNS_MAP
                                    std::shared_ptr<ExternsMap> externs_map,
+#endif
                                    std::shared_ptr<Internal::ValueTracker> value_tracker)
     : target_(target),
       auto_schedule_(auto_schedule),
       machine_params_(machine_params),
+#ifdef HALIDE_ALLOW_GENERATOR_EXTERNS_MAP
       externs_map_(std::move(externs_map)),
+#endif
       value_tracker_(std::move(value_tracker)) {
 }
 
@@ -37,12 +41,18 @@ GeneratorContext::GeneratorContext(const Target &target,
     : GeneratorContext(target,
                        auto_schedule,
                        machine_params,
+#ifdef HALIDE_ALLOW_GENERATOR_EXTERNS_MAP
                        std::make_shared<ExternsMap>(),
+#endif
                        std::make_shared<Internal::ValueTracker>()) {
 }
 
 GeneratorContext GeneratorContext::with_target(const Target &t) const {
+#ifdef HALIDE_ALLOW_GENERATOR_EXTERNS_MAP
     return GeneratorContext(t, auto_schedule_, machine_params_, externs_map_, value_tracker_);
+#else
+    return GeneratorContext(t, auto_schedule_, machine_params_, value_tracker_);
+#endif
 }
 
 namespace Internal {
@@ -1395,7 +1405,11 @@ GeneratorOutputBase *GeneratorBase::find_output_by_name(const std::string &name)
 }
 
 GeneratorContext GeneratorBase::context() const {
+#ifdef HALIDE_ALLOW_GENERATOR_EXTERNS_MAP
     return GeneratorContext(target, auto_schedule, machine_params, externs_map, value_tracker);
+#else
+    return GeneratorContext(target, auto_schedule, machine_params, value_tracker);
+#endif
 }
 
 void GeneratorBase::init_from_context(const Halide::GeneratorContext &context) {
@@ -1403,7 +1417,9 @@ void GeneratorBase::init_from_context(const Halide::GeneratorContext &context) {
     auto_schedule.set(context.auto_schedule_);
     machine_params.set(context.machine_params_);
 
+#ifdef HALIDE_ALLOW_GENERATOR_EXTERNS_MAP
     externs_map = context.externs_map_;
+#endif
     value_tracker = context.value_tracker_;
 
     // pre-emptively build our param_info now
@@ -1671,10 +1687,12 @@ std::vector<Func> GeneratorBase::output_func(const std::string &n) {
     return output->funcs();
 }
 
+#ifdef HALIDE_ALLOW_GENERATOR_EXTERNS_MAP
 ExternsMap GeneratorBase::external_code_map() {
     // get_externs_map() returns a std::shared_ptr<ExternsMap>
     return *get_externs_map();
 }
+#endif
 
 void GeneratorBase::bind_input(const std::string &name, const std::vector<Parameter> &v) {
     ensure_configure_has_been_called();
