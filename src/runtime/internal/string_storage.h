@@ -38,7 +38,6 @@ struct StringUtils {
         }
         return size_t(ptr - str);
     }
-
 };
 
 // --
@@ -120,7 +119,7 @@ bool StringStorage::operator!=(const StringStorage &other) const {
 }
 
 void StringStorage::reserve(void *user_context, size_t length) {
-    contents.reserve(user_context, length + 1);   // leave room for termination
+    contents.reserve(user_context, length + 1);  // leave room for termination
     contents.resize(user_context, length, false);
     terminate(user_context, length);
 }
@@ -178,7 +177,7 @@ void StringStorage::terminate(void *user_context, size_t length) {
 
 void StringStorage::clear(void *user_context) {
     contents.clear(user_context);
-    if(contents.data()) { terminate(user_context, 0); }
+    if (contents.data()) { terminate(user_context, 0); }
 }
 
 void StringStorage::initialize(void *user_context, uint32_t capacity, const SystemMemoryAllocatorFns &sma) {
