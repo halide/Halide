@@ -523,6 +523,18 @@ void CodeGen_X86::visit(const Call *op) {
                 return;
             }
         }
+    } else if (op->type.is_int() &&
+               op->type.bits() <= 16 &&
+               op->is_intrinsic(Call::rounding_halving_add)) {
+        // We can redirect signed rounding halving add to unsigned rounding
+        // halving add by adding 128 / 32768 to the result if the sign of the
+        // args differs.
+        internal_assert(op->args.size() == 2);
+        Type t = op->type.with_code(halide_type_uint);
+        Expr a = cast(t, op->args[0]);
+        Expr b = cast(t, op->args[1]);
+        codegen(cast(op->type, rounding_halving_add(a, b) + ((a ^ b) & (1 << (t.bits() - 1)))));
+        return;
     } else if (op->is_intrinsic(Call::absd)) {
         internal_assert(op->args.size() == 2);
         if (op->args[0].type().is_uint()) {
