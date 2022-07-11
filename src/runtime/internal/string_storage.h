@@ -30,6 +30,15 @@ struct StringUtils {
         }
         return count;
     }
+
+    static size_t count_length(const char *str) {
+        const char *ptr = str;
+        while (!StringUtils::is_empty(ptr)) {
+            ++ptr;
+        }
+        return size_t(ptr - str);
+    }
+
 };
 
 // --
@@ -52,6 +61,7 @@ public:
     bool contains(const char *str) const;
     bool contains(const StringStorage &other) const;
 
+    void reserve(void *user_context, size_t length);
     void assign(void *user_context, char ch);
     void assign(void *user_context, const char *str, size_t length = 0);  // if length is zero, strlen is used
     void append(void *user_context, char ch);
@@ -109,6 +119,12 @@ bool StringStorage::operator!=(const StringStorage &other) const {
     return !(*this == other);
 }
 
+void StringStorage::reserve(void *user_context, size_t length) {
+    contents.reserve(user_context, length + 1);   // leave room for termination
+    contents.resize(user_context, length, false);
+    terminate(user_context, length);
+}
+
 void StringStorage::assign(void *user_context, char ch) {
     contents.resize(user_context, 1);
     char *ptr = static_cast<char *>(contents[0]);
@@ -118,10 +134,9 @@ void StringStorage::assign(void *user_context, char ch) {
 void StringStorage::assign(void *user_context, const char *str, size_t length) {
     if (StringUtils::is_empty(str)) { return; }
     if (length == 0) { length = strlen(str); }
-    contents.reserve(user_context, length + 1);
-    contents.resize(user_context, length, false);
     char *this_str = static_cast<char *>(contents.data());
-    strncpy(this_str, str, length);
+    reserve(user_context, length);
+    memcpy(this_str, str, length);
     terminate(user_context, length);
 }
 
@@ -130,10 +145,9 @@ void StringStorage::append(void *user_context, const char *str, size_t length) {
     if (length == 0) { length = strlen(str); }
     const size_t old_size = contents.size();
     size_t new_length = old_size + length;
-    contents.reserve(user_context, new_length + 1);
-    contents.resize(user_context, new_length, false);
     char *this_str = static_cast<char *>(contents[old_size]);
-    strncpy(this_str, str, length);
+    reserve(user_context, length);
+    memcpy(this_str, str, length);
     terminate(user_context, new_length);
 }
 
@@ -146,10 +160,9 @@ void StringStorage::prepend(void *user_context, const char *str, size_t length) 
     if (length == 0) { length = strlen(str); }
     const size_t old_size = contents.size();
     size_t new_length = old_size + length;
-    contents.reserve(user_context, new_length + 1);
-    contents.resize(user_context, new_length, false);
     char *this_str = static_cast<char *>(contents.data());
-    strncpy(this_str + length, this_str, old_size);
+    reserve(user_context, new_length);
+    memcpy(this_str + length, this_str, old_size);
     memcpy(this_str, str, length);
     terminate(user_context, new_length);
 }
@@ -165,6 +178,7 @@ void StringStorage::terminate(void *user_context, size_t length) {
 
 void StringStorage::clear(void *user_context) {
     contents.clear(user_context);
+    if(contents.data()) { terminate(user_context, 0); }
 }
 
 void StringStorage::initialize(void *user_context, uint32_t capacity, const SystemMemoryAllocatorFns &sma) {
@@ -177,7 +191,7 @@ void StringStorage::destroy(void *user_context) {
 }
 
 size_t StringStorage::length() const {
-    return contents.size();
+    return StringUtils::count_length(data());
 }
 
 const char *StringStorage::data() const {
