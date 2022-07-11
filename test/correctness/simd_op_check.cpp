@@ -158,9 +158,14 @@ public:
             check("pavgw", 4 * w, u16((u32(u16_1) + u32(u16_2) + 1) / 2));
             check("pavgw", 4 * w, u16((u32(u16_1) + u32(u16_2) + 1) >> 1));
 
-            // Rounding right shifts should also use pavg
+            // Rounding right shifts, halving subtracts, and signed rounding
+            // averages should also use pavg
             check("pavgb", 8 * w, rounding_shift_right(u8_1, 2));
             check("pavgw", 4 * w, rounding_shift_right(u16_1, 2));
+            check("pavgb", 8 * w, halving_sub(u8_1, u8_2));
+            check("pavgw", 4 * w, halving_sub(u16_1, u16_2));
+            check("pavgb", 8 * w, rounding_halving_add(i8_1, i8_2));
+            check("pavgw", 4 * w, rounding_halving_add(i16_1, i16_2));
 
             check("pmaxsw", 4 * w, max(i16_1, i16_2));
             check("pminsw", 4 * w, min(i16_1, i16_2));
