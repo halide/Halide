@@ -1215,43 +1215,44 @@ int main(int argc, char **argv) {
         return 0;
     }
 
-    // Target target = get_jit_target_from_environment();
+    Target target = get_jit_target_from_environment();
 // Most of the schedules used in this test are terrible for large
 // thread count machines, due to massive amounts of
 // contention. We'll just set the thread count to 4. Unfortunately
 // there's no JIT api for this yet.
 #ifdef _WIN32
     _putenv_s("HL_NUM_THREADS", "4");
-    _putenv_s("HL_DEBUG_CODEGEN", "2");
+    //_putenv_s("HL_DEBUG_CODEGEN", "2");
 #else
     setenv("HL_NUM_THREADS", "4", 1);
-    setenv("HL_DEBUG_CODEGEN", "2", 1);
+    //setenv("HL_DEBUG_CODEGEN", "2", 1);
 #endif
-    // test_all<uint8_t>(Backend::CPU);
-    // test_all<uint8_t>(Backend::CPUVectorize);
-    // test_all<int8_t>(Backend::CPU);
-    // test_all<int8_t>(Backend::CPUVectorize);
-    // test_all<uint16_t>(Backend::CPU);
-    // test_all<uint16_t>(Backend::CPUVectorize);
-    // test_all<int16_t>(Backend::CPU);
-    // test_all<int16_t>(Backend::CPUVectorize);
-    // if (target.has_feature(Target::F16C)) {
-    //     test_all<float16_t>(Backend::CPU);
-    //     test_all<float16_t>(Backend::CPUVectorize);
-    // }
-    // test_all<bfloat16_t>(Backend::CPU);
-    // test_all<bfloat16_t>(Backend::CPUVectorize);
-    // test_all<uint32_t>(Backend::CPU);
-    // test_all<uint32_t>(Backend::CPUVectorize);
-    // test_all<int32_t>(Backend::CPU);
-    // test_all<int32_t>(Backend::CPUVectorize);
-    // test_all<float>(Backend::CPU);
-    // test_all<float>(Backend::CPUVectorize);
-    // test_all<uint64_t>(Backend::CPU);
-    // test_all<uint64_t>(Backend::CPUVectorize);
-    // test_all<int64_t>(Backend::CPU);
-    // test_all<int64_t>(Backend::CPUVectorize);
+
     try {
+        test_all<uint8_t>(Backend::CPU);
+        test_all<uint8_t>(Backend::CPUVectorize);
+        test_all<int8_t>(Backend::CPU);
+        test_all<int8_t>(Backend::CPUVectorize);
+        test_all<uint16_t>(Backend::CPU);
+        test_all<uint16_t>(Backend::CPUVectorize);
+        test_all<int16_t>(Backend::CPU);
+        test_all<int16_t>(Backend::CPUVectorize);
+        if (target.has_feature(Target::F16C)) {
+            test_all<float16_t>(Backend::CPU);
+            test_all<float16_t>(Backend::CPUVectorize);
+        }
+        test_all<bfloat16_t>(Backend::CPU);
+        test_all<bfloat16_t>(Backend::CPUVectorize);
+        test_all<uint32_t>(Backend::CPU);
+        test_all<uint32_t>(Backend::CPUVectorize);
+        test_all<int32_t>(Backend::CPU);
+        test_all<int32_t>(Backend::CPUVectorize);
+        test_all<float>(Backend::CPU);
+        test_all<float>(Backend::CPUVectorize);
+        test_all<uint64_t>(Backend::CPU);
+        test_all<uint64_t>(Backend::CPUVectorize);
+        test_all<int64_t>(Backend::CPU);
+        test_all<int64_t>(Backend::CPUVectorize);
         test_all<double>(Backend::CPU);
         test_all<double>(Backend::CPUVectorize);
     } catch (const std::runtime_error &e) {
@@ -1289,12 +1290,18 @@ int main(int argc, char **argv) {
     //     test_all<int64_t>(Backend::CUDAVectorize);
     //     test_all<double>(Backend::CUDAVectorize);
     // }
-    // test_extern_func(Backend::CPU);
-    // test_extern_func(Backend::CPUVectorize);
-    // test_async(Backend::CPU);
-    // test_async(Backend::CPUVectorize);
-    // test_async_tuple(Backend::CPU);
+    std::cout<<"TEST:"<<__LINE__<<"\n"<<std::flush;
+    test_extern_func(Backend::CPU);
+    std::cout<<"TEST:"<<__LINE__<<"\n"<<std::flush;
+    test_extern_func(Backend::CPUVectorize);
+    std::cout<<"TEST:"<<__LINE__<<"\n"<<std::flush;
+    test_async(Backend::CPU);
+    std::cout<<"TEST:"<<__LINE__<<"\n"<<std::flush;
+    test_async(Backend::CPUVectorize);
+    std::cout<<"TEST:"<<__LINE__<<"\n"<<std::flush;
+    test_async_tuple(Backend::CPU);
 
-    printf("Success!\n");
+    // printf("Success!\n");
+    std::cout<<"Success!\n"<<std::flush;
     return 0;
 }
