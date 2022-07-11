@@ -41,9 +41,11 @@ Module AbstractGenerator::build_module(const std::string &function_name) {
     }
 
     Module result = pipeline.compile_to_module(filter_arguments, function_name, context.target(), linkage_type);
+#ifdef HALIDE_ALLOW_GENERATOR_EXTERNAL_CODE
     for (const auto &map_entry : external_code_map()) {
         result.append(map_entry.second);
     }
+#endif
 
     for (const auto &a : arg_infos) {
         if (a.dir != ArgInfoDirection::Output) {
@@ -221,8 +223,10 @@ Module AbstractGenerator::build_gradient_module(const std::string &function_name
     }
 
     Module result = grad_pipeline.compile_to_module(gradient_inputs, function_name, context.target(), linkage_type);
+#ifdef HALIDE_ALLOW_GENERATOR_EXTERNAL_CODE
     user_assert(external_code_map().empty())
         << "Building a gradient-descent module for a Generator with ExternalCode is not supported.\n";
+#endif
 
     result.set_auto_scheduler_results(auto_schedule_results);
     return result;

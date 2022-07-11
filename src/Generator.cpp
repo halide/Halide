@@ -19,6 +19,7 @@
 
 namespace Halide {
 
+#ifdef HALIDE_ALLOW_GENERATOR_EXTERNAL_CODE
 GeneratorContext::GeneratorContext(const Target &target,
                                    bool auto_schedule,
                                    const MachineParams &machine_params,
@@ -28,18 +29,27 @@ GeneratorContext::GeneratorContext(const Target &target,
       machine_params_(machine_params),
       externs_map_(std::move(externs_map)) {
 }
+#endif
 
 GeneratorContext::GeneratorContext(const Target &target,
                                    bool auto_schedule,
                                    const MachineParams &machine_params)
-    : GeneratorContext(target,
-                       auto_schedule,
-                       machine_params,
-                       std::make_shared<ExternsMap>()) {
+    : target_(target),
+      auto_schedule_(auto_schedule),
+      machine_params_(machine_params)
+#ifdef HALIDE_ALLOW_GENERATOR_EXTERNAL_CODE
+      ,
+      externs_map_(std::make_shared<ExternsMap>())
+#endif
+{
 }
 
 GeneratorContext GeneratorContext::with_target(const Target &t) const {
+#ifdef HALIDE_ALLOW_GENERATOR_EXTERNAL_CODE
     return GeneratorContext(t, auto_schedule_, machine_params_, externs_map_);
+#else
+    return GeneratorContext(t, auto_schedule_, machine_params_);
+#endif
 }
 
 namespace Internal {
@@ -1292,7 +1302,11 @@ GeneratorOutputBase *GeneratorBase::find_output_by_name(const std::string &name)
 }
 
 GeneratorContext GeneratorBase::context() const {
+#ifdef HALIDE_ALLOW_GENERATOR_EXTERNAL_CODE
     return GeneratorContext(target, auto_schedule, machine_params, externs_map);
+#else
+    return GeneratorContext(target, auto_schedule, machine_params);
+#endif
 }
 
 void GeneratorBase::init_from_context(const Halide::GeneratorContext &context) {
@@ -1300,7 +1314,9 @@ void GeneratorBase::init_from_context(const Halide::GeneratorContext &context) {
     auto_schedule.set(context.auto_schedule_);
     machine_params.set(context.machine_params_);
 
+#ifdef HALIDE_ALLOW_GENERATOR_EXTERNAL_CODE
     externs_map = context.externs_map_;
+#endif
 
     // pre-emptively build our param_info now
     internal_assert(param_info_ptr == nullptr);
@@ -1534,10 +1550,12 @@ std::vector<Func> GeneratorBase::output_func(const std::string &n) {
     return output->funcs();
 }
 
+#ifdef HALIDE_ALLOW_GENERATOR_EXTERNAL_CODE
 ExternsMap GeneratorBase::external_code_map() {
     // get_externs_map() returns a std::shared_ptr<ExternsMap>
     return *get_externs_map();
 }
+#endif
 
 void GeneratorBase::bind_input(const std::string &name, const std::vector<Parameter> &v) {
     ensure_configure_has_been_called();

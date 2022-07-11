@@ -12,7 +12,9 @@
 #include <memory>
 #include <vector>
 
+#ifdef HALIDE_ALLOW_GENERATOR_EXTERNAL_CODE
 #include "ExternalCode.h"
+#endif
 #include "IROperator.h"
 #include "IntrusivePtr.h"
 #include "JITModule.h"
