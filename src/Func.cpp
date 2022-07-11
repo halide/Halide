@@ -393,7 +393,7 @@ void Stage::set_dim_type(const VarOrRVar &var, ForType t) {
                 const auto &rdom = var.rvar.domain();
                 if (rdom.defined()) {
                     user_assert(!expr_uses_var(rdom.predicate(), func_name))
-                        << "In scheudle for " << name() << ", marking var "
+                        << "In schedule for " << name() << ", marking var "
                         << var.name() << " as parallel may introduce a race "
                         << "condition, resulting in incorrect output. This is "
                         << "because the RDom::where predictate reads from "
