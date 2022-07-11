@@ -177,8 +177,10 @@ protected:
      * multiple related modules (e.g. multiple device kernels). */
     virtual void init_module();
 
+#ifdef HALIDE_ALLOW_GENERATOR_EXTERNAL_CODE
     /** Add external_code entries to llvm module. */
     void add_external_code(const Module &halide_module);
+#endif
 
     /** Run all of llvm's optimization passes on the module. */
     void optimize_module();

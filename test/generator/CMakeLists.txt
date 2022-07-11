@@ -65,41 +65,6 @@ function(halide_define_aot_test NAME)
 endfunction()
 
 ##
-# Define a nontrivial dependency for external_code.generator
-##
-
-# external_code_extern.cpp
-set(EXTERNAL_CPP "${CMAKE_CURRENT_SOURCE_DIR}/external_code_extern.cpp")
-
-set(EC32 "external_code_extern_bitcode_32")
-add_custom_command(OUTPUT "${EC32}.bc"
-                   COMMAND clang -O3 -c -m32 -target le32-unknown-nacl-unknown -emit-llvm "$<SHELL_PATH:${EXTERNAL_CPP}>" -o "${EC32}.bc"
-                   DEPENDS "${EXTERNAL_CPP}"
-                   VERBATIM)
-add_custom_command(OUTPUT "${EC32}.cpp"
-                   COMMAND binary2cpp external_code_extern_bitcode_32 < "${EC32}.bc" > "${EC32}.cpp"
-                   DEPENDS "${EC32}.bc" binary2cpp
-                   VERBATIM)
-
-set(EC64 "external_code_extern_bitcode_64")
-add_custom_command(OUTPUT "${EC64}.bc"
-                   COMMAND clang -O3 -c -m64 -target le64-unknown-unknown-unknown -emit-llvm "$<SHELL_PATH:${EXTERNAL_CPP}>" -o "${EC64}.bc"
-                   DEPENDS "${EXTERNAL_CPP}" binary2cpp
-                   VERBATIM)
-add_custom_command(OUTPUT "${EC64}.cpp"
-                   COMMAND binary2cpp external_code_extern_bitcode_64 < "${EC64}.bc" > "${EC64}.cpp"
-                   DEPENDS "${EC64}.bc" binary2cpp
-                   VERBATIM)
-
-set(ECCPP "external_code_extern_cpp_source")
-add_custom_command(OUTPUT "${ECCPP}.cpp"
-                   COMMAND binary2cpp external_code_extern_cpp_source < "$<SHELL_PATH:${EXTERNAL_CPP}>" > "${ECCPP}.cpp"
-                   DEPENDS "${EXTERNAL_CPP}" binary2cpp
-                   VERBATIM)
-
-add_library(external_code_generator_deps OBJECT "${EC32}.cpp" "${EC64}.cpp" "${ECCPP}.cpp")
-
-##
 # Some tests are not available when compiling for WASM.
 ##
 
@@ -258,10 +223,6 @@ halide_define_aot_test(example
 # extern_output_generator.cpp
 halide_define_aot_test(extern_output
                        GROUPS multithreaded)
-
-# external_code_aottest.cpp
-# external_code_generator.cpp
-halide_define_aot_test(external_code GEN_DEPS external_code_generator_deps)
 
 # float16_t_aottest.cpp
 # float16_t_generator.cpp
