@@ -979,8 +979,8 @@ void test_hist_tuple_rfactor(const Backend &backend) {
 }
 
 #ifdef _WIN32
-#define LOG_TEST(T, B)                                                                                                                                                   \
-    do {                                                                                                                                                                 \
+#define LOG_TEST(T, B)                                                                                                \
+    do {                                                                                                              \
         std::cout << "Test type=" << Halide::type_of<T>() << " backend=" << (int)(B) << " line=" << __LINE__ << "\n"; \
     } while (0)
 #else
