@@ -243,6 +243,7 @@ tests(GROUPS correctness
       realize_larger_than_two_gigs.cpp
       realize_over_shifted_domain.cpp
       reduction_chain.cpp
+      reduction_predicate_racing.cpp
       reduction_non_rectangular.cpp
       reduction_schedule.cpp
       register_shuffle.cpp
