@@ -102,6 +102,12 @@ bool can_parallelize_rvar(const string &v,
         value.accept(&find);
     }
 
+    // add loads from predicate
+    const Expr pred = simplify(r.predicate());
+    if (pred.defined()) {
+        pred.accept(&find);
+    }
+
     // Make an expr representing the store done by a different thread.
     RenameFreeVars renamer;
     auto other_store = renamer.mutate(args);
@@ -139,7 +145,6 @@ bool can_parallelize_rvar(const string &v,
     }
 
     // Add the definition's predicate if there is any
-    Expr pred = simplify(r.predicate());
     if (pred.defined() || !equal(const_true(), pred)) {
         Expr this_pred = pred;
         Expr other_pred = renamer.mutate(pred);
