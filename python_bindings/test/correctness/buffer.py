@@ -130,6 +130,20 @@ def test_float16():
     hl_img = hl.Buffer(array_in)
     array_out = np.array(hl_img, copy = False)
 
+# TODO: https://github.com/halide/Halide/issues/6849
+# def test_bfloat16():
+#     try:
+#         from tensorflow.python.lib.core import _pywrap_bfloat16
+#         bfloat16 = _pywrap_bfloat16.TF_bfloat16_type()
+#         array_in = np.zeros((256, 256, 3), dtype=bfloat16, order='F')
+#         hl_img = hl.Buffer(array_in)
+#         array_out = np.array(hl_img, copy = False)
+#     except ModuleNotFoundError as e:
+#         print("skipping test_bfloat16() because tensorflow was not found: %s" % str(e))
+#         return
+#     else:
+#         assert False, "This should not happen"
+
 def test_int64():
     array_in = np.zeros((256, 256, 3), dtype=np.int64, order='F')
     hl_img = hl.Buffer(array_in)
@@ -279,6 +293,8 @@ if __name__ == "__main__":
     test_for_each_element()
     test_fill_all_equal()
     test_bufferinfo_sharing()
+    # TODO: https://github.com/halide/Halide/issues/6849
+    # test_bfloat16()
     test_float16()
     test_int64()
     test_reorder()
