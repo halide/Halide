@@ -3578,7 +3578,6 @@ protected:
     }
 #endif
 
-
 #ifdef HALIDE_ALLOW_GENERATOR_EXTERNAL_CODE
     /** Generators can register ExternalCode objects onto
      * themselves. The Generator infrastructure will arrange to have
