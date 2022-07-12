@@ -221,7 +221,7 @@
  *    (for JIT compilation).
  *  - 'autoscheduler' is a string-to-string map that is used to indicates whether
  *    and how an auto-scheduler should be run for this Generator:
- *      - if empty, the Generator should schedule its Funcs as it sees fit; no autoscheduler should be run.
+ *      - if empty, the Generator should schedule its Funcs as it sees fit; no autoscheduler will be run.
  *      - if the 'name' key is set, it should be one of the known autoschedulers
  *        provided with this release of Halide, which will be used to schedule
  *        the Funcs in the Generator. In this case, the Generator should only
@@ -3085,7 +3085,7 @@ public:
         return machine_params_;
     }
 #else
-    const AutoSchedulerParams &autoscheduler() const {
+    const AutoSchedulerParams &autoscheduler_params() const {
         return autoscheduler_params_;
     }
 #endif
@@ -3574,7 +3574,7 @@ protected:
     }
 #else
     bool using_autoscheduler() const {
-        return !autoscheduler.value().empty();
+        return !autoscheduler_.value().empty();
     }
 #endif
 
@@ -3608,8 +3608,6 @@ protected:
 #ifdef HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
     GeneratorParam<bool> auto_schedule{"auto_schedule", false};
     GeneratorParam<MachineParams> machine_params{"machine_params", MachineParams::generic()};
-#else
-    GeneratorParam_AutoSchedulerParams autoscheduler;
 #endif
 
 private:
@@ -3624,6 +3622,12 @@ private:
     const size_t size;
 #ifdef HALIDE_ALLOW_GENERATOR_EXTERNAL_CODE
     std::shared_ptr<GeneratorContext::ExternsMap> externs_map;
+#endif
+
+#ifdef HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
+    // nothing
+#else
+    GeneratorParam_AutoSchedulerParams autoscheduler_;
 #endif
 
     // Lazily-allocated-and-inited struct with info about our various Params.

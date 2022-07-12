@@ -30,8 +30,8 @@ Module AbstractGenerator::build_module(const std::string &function_name) {
         auto_schedule_results = pipeline.auto_schedule(context.target(), context.machine_params());
     }
 #else
-    if (!context.autoscheduler().empty()) {
-        auto_schedule_results = pipeline.apply_autoscheduler(context.target(), context.autoscheduler());
+    if (!context.autoscheduler_params().empty()) {
+        auto_schedule_results = pipeline.apply_autoscheduler(context.target(), context.autoscheduler_params());
     }
 #endif
 
@@ -226,8 +226,8 @@ Module AbstractGenerator::build_gradient_module(const std::string &function_name
         auto_schedule_results = grad_pipeline.auto_schedule(context.target(), context.machine_params());
     }
 #else
-    if (!context.autoscheduler().empty()) {
-        auto_schedule_results = grad_pipeline.apply_autoscheduler(context.target(), context.autoscheduler());
+    if (!context.autoscheduler_params().empty()) {
+        auto_schedule_results = grad_pipeline.apply_autoscheduler(context.target(), context.autoscheduler_params());
     }
 #endif
     else {

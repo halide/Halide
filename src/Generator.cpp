@@ -784,7 +784,7 @@ gengen
                    << kUsage;
     }
     if (args.generator_params.count("machine_params")) {
-        user_error << "machine_params is no longer supported as a GeneratorParam; specify autoscheduler.<field>=<value> instead.\n"
+        user_error << "machine_params is no longer supported as a GeneratorParam; specify autoscheduler.FIELD=VALUE instead.\n"
                    << kUsage;
     }
 #endif
@@ -1421,9 +1421,9 @@ GeneratorContext GeneratorBase::context() const {
 #endif
 #else
 #ifdef HALIDE_ALLOW_GENERATOR_EXTERNAL_CODE
-    return GeneratorContext(target, autoscheduler, externs_map);
+    return GeneratorContext(target, autoscheduler_, externs_map);
 #else
-    return GeneratorContext(target, autoscheduler);
+    return GeneratorContext(target, autoscheduler_);
 #endif
 #endif
 }
@@ -1434,7 +1434,7 @@ void GeneratorBase::init_from_context(const Halide::GeneratorContext &context) {
     auto_schedule.set(context.auto_schedule_);
     machine_params.set(context.machine_params_);
 #else
-    autoscheduler.set(context.autoscheduler_params_);
+    autoscheduler_.set(context.autoscheduler_params_);
 #endif
 
 #ifdef HALIDE_ALLOW_GENERATOR_EXTERNAL_CODE
