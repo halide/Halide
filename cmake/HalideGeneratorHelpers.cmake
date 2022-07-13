@@ -321,7 +321,9 @@ function(add_halide_library TARGET)
         foreach (p IN LISTS ARG_PLUGINS)
             list(APPEND generator_plugins "$<TARGET_FILE:${p}>")
         endforeach ()
-        set(generator_plugins -p "$<JOIN:${generator_plugins},$<COMMA>>")
+        # $<JOIN:> gets confused about quoting. Just use list(JOIN) here instead.
+        list(JOIN generator_plugins $<COMMA> generator_plugins_list)
+        set(generator_plugins -p ${generator_plugins_list})
     endif ()
 
     add_custom_command(OUTPUT ${generator_output_files}
