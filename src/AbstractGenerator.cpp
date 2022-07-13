@@ -31,6 +31,9 @@ Module AbstractGenerator::build_module(const std::string &function_name) {
     }
 #else
     if (!context.autoscheduler_params().empty()) {
+        user_assert(context.autoscheduler_params().count("name") == 1)
+            << "Generator " << name() << " specifies some autoscheduler params, but not autoscheduler.name, which is illegal.";
+        debug(1) << "Applying autoscheduler " << context.autoscheduler_params().at("name") << " to Generator " << name() << " ...\n";
         auto_schedule_results = pipeline.apply_autoscheduler(context.target(), context.autoscheduler_params());
     }
 #endif

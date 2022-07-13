@@ -268,6 +268,8 @@ AutoSchedulerResults Pipeline::auto_schedule(const Target &target, const Machine
 AutoSchedulerResults Pipeline::apply_autoscheduler(const Target &target, const AutoSchedulerParams &autoscheduler_params) const {
     internal_assert(!autoscheduler_params.empty());
 
+    user_assert(autoscheduler_params.count("name") == 1)
+        << "Some autoscheduler params were specified, but autoscheduler.name was not specified!";
     const auto autoscheduler_name = autoscheduler_params.at("name");
     auto autoscheduler_fn = find_autoscheduler(autoscheduler_name);
     user_assert(autoscheduler_fn)
