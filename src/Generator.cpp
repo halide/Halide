@@ -1157,18 +1157,6 @@ void execute_generator(const ExecuteGeneratorArgs &args_in) {
             const auto machine_params_string = get_gp("machine_params");
             const bool auto_schedule = auto_schedule_string == "true" || auto_schedule_string == "True";
             const MachineParams machine_params = !machine_params_string.empty() ? MachineParams(machine_params_string) : MachineParams::generic();
-#else
-            AutoSchedulerParams autoscheduler_params;
-            auto it = args.generator_params.find("autoscheduler.name");
-            if (it != args.generator_params.end()) {
-                // Will be handled in loop below.
-                // autoscheduler_params["name"] = it->second;
-                for (const auto &kv : args.generator_params) {
-                    if (starts_with(kv.first, "autoscheduler.")) {
-                        autoscheduler_params[kv.first.substr(14)] = kv.second;
-                    }
-                }
-            }
 #endif
             auto module_factory = [&](const std::string &function_name, const Target &target) -> Module {
             // Must re-create each time since each instance will have a different Target.
@@ -1183,9 +1171,9 @@ void execute_generator(const ExecuteGeneratorArgs &args_in) {
                     gen->set_generatorparam_value(kv.first, kv.second);
                 }
 #else
-                auto gen = args.create_generator(args.generator_name, GeneratorContext(target, autoscheduler_params));
+                auto gen = args.create_generator(args.generator_name, GeneratorContext(target));
                 for (const auto &kv : args.generator_params) {
-                    if (kv.first == "target" || starts_with(kv.first, "autoscheduler.")) {
+                    if (kv.first == "target") {
                         continue;
                     }
                     gen->set_generatorparam_value(kv.first, kv.second);
@@ -1244,6 +1232,10 @@ void GeneratorParamBase::fail_wrong_type(const char *type) {
 #ifdef HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
 // nothing
 #else
+GeneratorParam_AutoSchedulerParams::GeneratorParam_AutoSchedulerParams()
+    : GeneratorParamImpl<AutoSchedulerParams>("autoscheduler", {}) {
+}
+
 void GeneratorParam_AutoSchedulerParams::set_from_string(const std::string &new_value_string) {
     internal_error << "This method should never be called.";
 }
@@ -1262,6 +1254,19 @@ std::string GeneratorParam_AutoSchedulerParams::get_c_type() const {
     internal_error << "This method should never be called.";
     return "";
 }
+
+bool GeneratorParam_AutoSchedulerParams::try_set(const std::string &key, const std::string &value) {
+    const auto &n = this->name();
+    if (starts_with(key, n + ".")) {
+        const auto sub_key = key.substr(n.size() + 1);
+        user_assert(this->value_.count(sub_key) == 0) << "The GeneratorParam " << key << " cannot be set more than once.\n";
+        this->value_[sub_key] = value;
+        return true;
+    }
+
+    return false;
+}
+
 #endif
 
 /* static */
@@ -1421,9 +1426,9 @@ GeneratorContext GeneratorBase::context() const {
 #endif
 #else
 #ifdef HALIDE_ALLOW_GENERATOR_EXTERNAL_CODE
-    return GeneratorContext(target, autoscheduler_, externs_map);
+    return GeneratorContext(target, autoscheduler_.value(), externs_map);
 #else
-    return GeneratorContext(target, autoscheduler_);
+    return GeneratorContext(target, autoscheduler_.value());
 #endif
 #endif
 }
@@ -1596,8 +1601,9 @@ void GeneratorBase::set_generatorparam_value(const std::string &name, const std:
             << "The GeneratorParam named " << name << " cannot be set by set_generatorparam_value().\n";
     }
 #else
-    if (name == "target" || starts_with(name, "autoscheduler.")) {
-        user_error << "The GeneratorParam named " << name << " cannot be set by set_generatorparam_value().\n";
+    user_assert(name != "target") << "The GeneratorParam named " << name << " cannot be set by set_generatorparam_value().\n";
+    if (autoscheduler_.try_set(name, value)) {
+        return;
     }
 #endif
 

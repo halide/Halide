@@ -208,7 +208,7 @@
  *     };
  * \endcode
  *
- *  All Generators have three GeneratorParams that are implicitly provided
+ *  All Generators have two GeneratorParams that are implicitly provided
  *  by the base class:
  *
  *      GeneratorParam<Target> target{"target", Target()};
@@ -671,14 +671,17 @@ public:
 #else
 class GeneratorParam_AutoSchedulerParams : public GeneratorParamImpl<AutoSchedulerParams> {
 public:
-    GeneratorParam_AutoSchedulerParams()
-        : GeneratorParamImpl<AutoSchedulerParams>("autoscheduler", {}) {
-    }
+    GeneratorParam_AutoSchedulerParams();
 
     void set_from_string(const std::string &new_value_string) override;
     std::string get_default_value() const override;
     std::string call_to_string(const std::string &v) const override;
     std::string get_c_type() const override;
+
+private:
+    friend class GeneratorBase;
+
+    bool try_set(const std::string &key, const std::string &value);
 };
 #endif
 
@@ -3608,6 +3611,8 @@ protected:
 #ifdef HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
     GeneratorParam<bool> auto_schedule{"auto_schedule", false};
     GeneratorParam<MachineParams> machine_params{"machine_params", MachineParams::generic()};
+#else
+    GeneratorParam_AutoSchedulerParams autoscheduler_;
 #endif
 
 private:
@@ -3622,12 +3627,6 @@ private:
     const size_t size;
 #ifdef HALIDE_ALLOW_GENERATOR_EXTERNAL_CODE
     std::shared_ptr<GeneratorContext::ExternsMap> externs_map;
-#endif
-
-#ifdef HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
-    // nothing
-#else
-    GeneratorParam_AutoSchedulerParams autoscheduler_;
 #endif
 
     // Lazily-allocated-and-inited struct with info about our various Params.
