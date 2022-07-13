@@ -508,7 +508,7 @@ IntrusivePtr<State> optimal_schedule(FunctionDAG &dag,
 
         tick.clear();
 
-        if (aslog::aslog_level() == 0) {
+        if (aslog_level() == 0) {
             aslog(0) << "Pass " << i << " of " << num_passes << ", cost: " << pass->cost << ", time (ms): " << milli << "\n";
         } else {
             aslog(0) << "Pass " << i << " result: ";
@@ -576,7 +576,7 @@ void generate_schedule(const std::vector<Function> &outputs,
 
     // Analyse the Halide algorithm and construct our abstract representation of it
     FunctionDAG dag(outputs, params, target);
-    if (aslog::aslog_level() > 0) {
+    if (aslog_level() > 0) {
         dag.dump();
     }
 
@@ -602,13 +602,13 @@ void generate_schedule(const std::vector<Function> &outputs,
     aslog(1) << "** Optimal schedule:\n";
 
     // Just to get the debugging prints to fire
-    optimal->calculate_cost(dag, params, cost_model.get(), cache_options, memory_limit, aslog::aslog_level() > 0);
+    optimal->calculate_cost(dag, params, cost_model.get(), cache_options, memory_limit, aslog_level() > 0);
 
     // Apply the schedules to the pipeline
     optimal->apply_schedule(dag, params);
 
     // Print out the schedule
-    if (aslog::aslog_level() > 0) {
+    if (aslog_level() > 0) {
         optimal->dump();
     }
 

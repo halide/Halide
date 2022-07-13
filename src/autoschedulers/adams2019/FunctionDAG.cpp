@@ -1082,7 +1082,7 @@ void FunctionDAG::dump_internal(OS &os) const {
 }
 
 void FunctionDAG::dump() const {
-    auto os = aslog(0);
+    auto &os = aslog(0);
     dump_internal(os);
 }
 

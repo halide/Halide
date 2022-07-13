@@ -12,24 +12,44 @@
 namespace Halide {
 namespace Internal {
 
-class aslog {
-    const bool logging;
-
+class aslog_streambuf : public std::streambuf {
 public:
-    aslog(int verbosity)
-        : logging(verbosity <= aslog_level()) {
-    }
+    explicit aslog_streambuf(bool do_log): do_log_(do_log) {}
 
-    template<typename T>
-    aslog &operator<<(T &&x) {
-        if (logging) {
-            std::cerr << std::forward<T>(x);
+protected:
+    std::streamsize xsputn(const char_type* s, std::streamsize n) override {
+        if (do_log_) {
+            std::cerr.write(s, n);
         }
-        return *this;
+        return n; // returns the number of characters successfully written.
+    };
+
+    int_type overflow(int_type ch) override {
+        if (do_log_) {
+            std::cerr.put(ch);
+        }
+        return 1; // returns the number of characters successfully written.
     }
 
-    static int aslog_level();
+private:
+    const bool do_log_;
 };
+
+int aslog_level();
+
+class aslog_stream : private aslog_streambuf, public std::ostream {
+public:
+    explicit aslog_stream(int verbosity) : aslog_streambuf(verbosity <= aslog_level()), std::ostream(this) {}
+
+    // Not movable, not copyable.
+    aslog_stream() = delete;
+    aslog_stream(const aslog_stream &) = delete;
+    aslog_stream &operator=(const aslog_stream &) = delete;
+    aslog_stream(aslog_stream &&) = delete;
+    aslog_stream &operator=(aslog_stream &&) = delete;
+};
+
+aslog_stream &aslog(unsigned int verbosity);
 
 }  // namespace Internal
 }  // namespace Halide

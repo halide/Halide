@@ -158,7 +158,7 @@ struct PipelineFeatures {
         }
     }
     void dump() const {
-        auto os = aslog(0);
+        auto &os = aslog(0);
         dump(os);
     }
 };
@@ -357,7 +357,7 @@ struct ScheduleFeatures {
            << "    working_set_at_root:                   " << working_set_at_root << "\n";
     }
     void dump() const {
-        auto os = aslog(0);
+        auto &os = aslog(0);
         dump(os);
     }
 

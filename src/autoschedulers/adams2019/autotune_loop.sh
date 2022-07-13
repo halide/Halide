@@ -79,6 +79,12 @@ if [ $(uname -s) = "Darwin" ] && ! which $TIMEOUT_CMD 2>&1 >/dev/null; then
     fi
 fi
 
+if [ $(uname -s) = "Darwin" ]; then
+    SHARED_EXT=dylib
+else
+    SHARED_EXT=so
+fi
+
 # Build a single featurization of the pipeline with a random schedule
 make_featurization() {
     D=${1}
@@ -111,7 +117,7 @@ make_featurization() {
         target=${HL_TARGET} \
         auto_schedule=true \
         ${EXTRA_GENERATOR_ARGS} \
-        -p ${AUTOSCHED_BIN}/libautoschedule_adams2019.so \
+        -p ${AUTOSCHED_BIN}/libautoschedule_adams2019.${SHARED_EXT} \
         -s Adams2019 \
           2> ${D}/compile_log.txt || echo "Compilation failed or timed out for ${D}"
 

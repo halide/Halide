@@ -54,7 +54,7 @@ void State::compute_featurization(const FunctionDAG &dag, const MachineParams &p
                 l = consumer_site.compute;
             }
             if (!l) {
-                if (aslog::aslog_level() > 0) {
+                if (aslog_level() > 0) {
                     dump();
                 }
                 internal_error << e->producer->func.name() << " -> " << e->consumer->name << "\n";
