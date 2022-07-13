@@ -519,6 +519,13 @@ void IRPrinter::visit(const Cast *op) {
     stream << ")";
 }
 
+void IRPrinter::visit(const Reinterpret *op) {
+    // FIXME: should it be printed differently from the Cast?
+    stream << "reinterpret<" << op->type << ">(";
+    print(op->value);
+    stream << ")";
+}
+
 void IRPrinter::visit(const Variable *op) {
     if (!known_type.contains(op->name) &&
         (op->type != Int(32))) {

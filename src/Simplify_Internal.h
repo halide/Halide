@@ -309,6 +309,7 @@ public:
     Expr visit(const StringImm *op, ExprInfo *bounds);
     Expr visit(const Broadcast *op, ExprInfo *bounds);
     Expr visit(const Cast *op, ExprInfo *bounds);
+    Expr visit(const Reinterpret *op, ExprInfo *bounds);
     Expr visit(const Variable *op, ExprInfo *bounds);
     Expr visit(const Add *op, ExprInfo *bounds);
     Expr visit(const Sub *op, ExprInfo *bounds);

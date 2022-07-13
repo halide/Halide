@@ -1054,12 +1054,12 @@ Expr is_finite(Expr x);
  *  same sign as the original expression. Vectorizes cleanly. */
 Expr fract(const Expr &x);
 
-/** Reinterpret the bits of one value as another type. */
+// Thin wrapper for `reinterpret()`.
 Expr reinterpret(Type t, Expr e);
 
 template<typename T>
 Expr reinterpret(Expr e) {
-    return reinterpret(type_of<T>(), e);
+    return reinterpret(type_of<T>(), std::move(e));
 }
 
 /** Return the bitwise and of two expressions (which need not have the

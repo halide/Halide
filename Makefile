@@ -532,6 +532,7 @@ SOURCE_FILES = \
   Simplify_And.cpp \
   Simplify_Call.cpp \
   Simplify_Cast.cpp \
+  Simplify_Reinterpret.cpp \
   Simplify_Div.cpp \
   Simplify_EQ.cpp \
   Simplify_Exprs.cpp \

@@ -59,6 +59,18 @@ private:
         }
     }
 
+    Expr visit(const Reinterpret *op) override {
+        Expr value = mutate(op->value);
+        if (!value.defined()) {
+            return Expr();
+        }
+        if (value.same_as(op->value)) {
+            return op;
+        } else {
+            return Reinterpret::make(op->type, std::move(value));
+        }
+    }
+
     Expr visit(const Add *op) override {
         return mutate_binary_operator(op);
     }

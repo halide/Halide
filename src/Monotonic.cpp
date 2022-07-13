@@ -259,6 +259,10 @@ class DerivativeBounds : public IRVisitor {
         }
     }
 
+    void visit(const Reinterpret *op) override {
+        result = ConstantInterval::everything();
+    }
+
     void visit(const Variable *op) override {
         if (op->name == var) {
             result = ConstantInterval::single_point(1);
