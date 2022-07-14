@@ -1091,7 +1091,7 @@ const Bound &LoopNest::get_bounds(const FunctionDAG::Node *f) const {
 }
 
 // Recursively print a loop nest representation to stderr
-void LoopNest::dump(std::ostream &os, string prefix, const LoopNest *parent) const {
+void LoopNest::dumpz(std::ostream &os, string prefix, const LoopNest *parent) const {
     if (!is_root()) {
         // Non-root nodes always have parents.
         internal_assert(parent != nullptr);
@@ -1138,7 +1138,7 @@ void LoopNest::dump(std::ostream &os, string prefix, const LoopNest *parent) con
         os << prefix << "realize: " << p->func.name() << "\n";
     }
     for (size_t i = children.size(); i > 0; i--) {
-        children[i - 1]->dump(os, prefix, this);
+        children[i - 1]->dumpz(os, prefix, this);
     }
     for (auto it = inlined.begin(); it != inlined.end(); it++) {
         os << prefix << "inlined: " << it.key()->func.name() << " " << it.value() << "\n";
@@ -1504,7 +1504,7 @@ vector<IntrusivePtr<const LoopNest>> LoopNest::compute_in_tiles(const FunctionDA
         auto tilings = generate_tilings(size, (int)(size.size() - 1), 2, !in_realization);
 
         if (tilings.size() > 10000) {
-            aslog(0) << "Warning: lots of tilings: " << tilings.size() << "\n";
+            aslog(1) << "Warning: lots of tilings: " << tilings.size() << "\n";
         }
 
         for (auto t : tilings) {

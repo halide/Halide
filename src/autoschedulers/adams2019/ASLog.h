@@ -53,7 +53,7 @@ public:
     aslog_stream &operator=(aslog_stream &&) = delete;
 };
 
-aslog_stream &aslog(unsigned int verbosity);
+aslog_stream &aslog(int verbosity);
 
 }  // namespace Internal
 }  // namespace Halide

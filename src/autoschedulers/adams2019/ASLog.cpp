@@ -36,19 +36,19 @@ std::string get_env_variable(char const *env_var_name) {
     return "";
 }
 
-constexpr unsigned int kMaxLevel = 4;
+constexpr int kMaxLevel = 3;
 std::array<aslog_stream, kMaxLevel + 1> aslog_streams = {
     aslog_stream(0),
     aslog_stream(1),
     aslog_stream(2),
-    aslog_stream(3),
-    aslog_stream(4),
+    aslog_stream(3)
 };
 
 }  // namespace
 
-aslog_stream &aslog(unsigned int verbosity) {
-    return aslog_streams[std::min(verbosity, kMaxLevel)];
+aslog_stream &aslog(int verbosity) {
+    assert(verbosity <= kMaxLevel);
+    return aslog_streams[verbosity];
 }
 
 int aslog_level() {

@@ -333,16 +333,18 @@ void BoundContents::validate() const {
     for (int i = 0; i < layout->total_size; i++) {
         auto p = data()[i];
         if (p.max() < p.min()) {
-            aslog(0) << "Bad bounds object:\n";
+            std::ostringstream err;
+            err << "Bad bounds object:\n";
             for (int j = 0; j < layout->total_size; j++) {
                 if (i == j) {
-                    aslog(0) << "=> ";
+                    err << "=> ";
                 } else {
-                    aslog(0) << "   ";
+                    err << "   ";
                 }
-                aslog(0) << j << ": " << data()[j].min() << ", " << data()[j].max() << "\n";
+                err << j << ": " << data()[j].min() << ", " << data()[j].max() << "\n";
             }
-            internal_error << "Aborting";
+            err << "Aborting";
+            internal_error << err.str();
         }
     }
 }
@@ -1039,7 +1041,7 @@ void FunctionDAG::featurize() {
     }
 }
 
-void FunctionDAG::dump(std::ostream &os) const {
+void FunctionDAG::dumpz(std::ostream &os) const {
     for (const Node &n : nodes) {
         os << "Node: " << n.func.name() << "\n"
            << "  Symbolic region required: \n";
