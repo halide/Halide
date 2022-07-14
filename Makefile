@@ -471,6 +471,7 @@ SOURCE_FILES = \
   FuseGPUThreadLoops.cpp \
   FuzzFloatStores.cpp \
   Generator.cpp \
+  GetStmtHierarchy.cpp \
   HexagonOffload.cpp \
   HexagonOptimize.cpp \
   ImageParam.cpp \
@@ -512,6 +513,7 @@ SOURCE_FILES = \
   Pipeline.cpp \
   Prefetch.cpp \
   PrintLoopNest.cpp \
+  ProducerConsumerHierarchy.cpp \
   Profiling.cpp \
   PurifyIndexMath.cpp \
   PythonExtensionGen.cpp \
@@ -650,6 +652,7 @@ HEADER_FILES = \
   FuseGPUThreadLoops.h \
   FuzzFloatStores.h \
   Generator.h \
+  GetStmtHierarchy.h \
   HexagonOffload.h \
   HexagonOptimize.h \
   ImageParam.h \
@@ -694,6 +697,7 @@ HEADER_FILES = \
   PartitionLoops.h \
   Pipeline.h \
   Prefetch.h \
+  ProducerConsumerHierarchy.h \
   Profiling.h \
   PurifyIndexMath.h \
   PythonExtensionGen.h \

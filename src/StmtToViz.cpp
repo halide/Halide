@@ -1,7 +1,10 @@
 #include "StmtToViz.h"
+#include "FindStmtCost.h"
+#include "GetStmtHierarchy.h"
 #include "IROperator.h"
 #include "IRVisitor.h"
 #include "Module.h"
+#include "ProducerConsumerHierarchy.h"
 #include "Scope.h"
 #include "Util.h"
 
@@ -10,6 +13,10 @@
 #include <iostream>
 #include <iterator>
 #include <sstream>
+
+#define LOW_RANGE 0
+#define MEDIUM_RANGE 1
+#define HIGH_RANGE 2
 
 namespace Halide {
 namespace Internal {
@@ -24,7 +31,7 @@ std::string to_string(T value) {
     return os.str();
 }
 
-class StmtToHtml : public IRVisitor {
+class StmtToViz : public IRVisitor {
 
     static const std::string css, js;
 
@@ -66,6 +73,115 @@ private:
         return "</" + tag + ">";
     }
 
+    string tooltip(const string &hoverText, const string &hierarchyHTML, const string &tooltipText) {
+        std::stringstream s;
+        // onclick="openNewWindow('
+        s << open_span("tooltip");
+        s << "<button onclick=\"openNewWindow('";
+        s << hierarchyHTML;
+        // cout << "hierarchyHTML: " << hierarchyHTML << endl;
+        s << "')\">";
+        s << hoverText;
+        s << "</button> ";
+        s << open_span("tooltiptext");
+        s << tooltipText;
+        s << close_span();
+        s << close_span();
+
+        return s.str();
+    }
+
+    string cost_table_tooltip(const IRNode *op, const string &hierarchyHTML) {
+        int cost = findStmtCost.get_total_cost(op);
+        int depth = findStmtCost.get_depth(op);
+
+        std::stringstream tooltipText;
+
+        tooltipText << "<table>";
+
+        tooltipText << "<tr>";
+        tooltipText << "<td class = 'left-table'> Cost</ td>";
+        tooltipText << "<td class = 'right-table'> " << cost << "</ td>";
+        tooltipText << "</ tr>";
+
+        tooltipText << "<tr>";
+        tooltipText << "<td class = 'left-table'> Depth</ td>";
+        tooltipText << "<td class = 'right-table'> " << depth << "</ td>";
+        tooltipText << "</ tr>";
+
+        tooltipText << "</table>";
+
+        return tooltip("[i]", hierarchyHTML, tooltipText.str());
+    }
+
+    string hierarchy(const Stmt &op) {
+
+        string text = getStmtHierarchy.get_hierarchy_html(op);
+
+        return text;
+    }
+
+    string hierarchy(const Expr &op) {
+
+        string text = getStmtHierarchy.get_hierarchy_html(op);
+
+        return text;
+    }
+
+    // string hierarchy_tooltip(const IRNode *op, const string &hierarchyHTML) {
+    //     // int cost = findStmtCost.get_total_cost(op);
+    //     // int depth = findStmtCost.get_depth(op);
+
+    //     // std::stringstream tooltipText;
+
+    //     // string text = getStmtHierarchy.get_hierarchy(op);
+
+    //     // TODO: eventually call something like hiearchy.get_hierarchy(op);
+    //     string text = "<div class='tf-tree'> \
+    //                            <div class='tf-tree tf-gap-lg'> \
+    //                                <ul> \
+    //                                    <li> \
+    //                                        <span class='tf-nc'>1</span> \
+    //                                        <ul> \
+    //                                            <li> \
+    //                                                <span class='tf-nc'>2</span> \
+    //                                                <ul> \
+    //                                                    <li><span class='tf-nc'>4</span></li> \
+    //                                                    <li><span class='tf-nc'>5</span></li> \
+    //                                                </ul> \
+    //                                            </li> \
+    //                                            <li> \
+    //                                                <span class='tf-nc'>3</span> \
+    //                                                <ul> \
+    //                                                    <li><span class='tf-nc'>6</span></li> \
+    //                                                    <li><span class='tf-nc'>7</span></li> \
+    //                                                </ul> \
+    //                                            </li> \
+    //                                        </ul> \
+    //                                    </li> \
+    //                                </ul> \
+    //                            </div> \
+    //                            </div>";
+
+    //     // tooltipText << text;
+    //     return tooltip("[i] ", hierarchyHTML, text);
+    // }
+    string open_cost_span(const IRNode *op, const string &hierarchyHTML, const string &cls = "") {
+        int range = findStmtCost.get_range(op);
+
+        std::stringstream s;
+
+        if (range == LOW_RANGE)
+            s << open_span(cls + " LowCost");
+        else if (range == MEDIUM_RANGE)
+            s << open_span(cls + " MediumCost");
+        else if (range == HIGH_RANGE)
+            s << open_span(cls + " HighCost");
+
+        s << cost_table_tooltip(op, hierarchyHTML);
+        // s << hierarchy_tooltip(op);
+        return s.str();
+    }
     string open_span(const string &cls, int id = -1) {
         return open_tag("span", cls, id);
     }
@@ -80,6 +196,23 @@ private:
     }
     string matched(const string &body) {
         return span("Matched", body);
+    }
+
+    string open_cost_div(const IRNode *op, const string &hierarchyHTML, const string &cls) {
+        int range = findStmtCost.get_range(op);
+
+        std::stringstream s;
+
+        if (range == LOW_RANGE)
+            s << open_div(cls + " LowCost");
+        else if (range == MEDIUM_RANGE)
+            s << open_div(cls + " MediumCost");
+        else if (range == HIGH_RANGE)
+            s << open_div(cls + " HighCost");
+
+        s << cost_table_tooltip(op, hierarchyHTML);
+
+        return s.str();
     }
 
     string open_div(const string &cls, int id = -1) {
@@ -351,7 +484,14 @@ private:
         stream << var(op->name);
         stream << close_span();
         stream << " " << matched("Operator Assign", "=") << " ";
+        stream << open_cost_span(op->value.get(), hierarchy(op->value.get()));
+        // cout << endl
+        //      << endl
+        //      << "start: " << endl
+        //      << hierarchy(op->value);
+        // stream << hierarchy(op->value);
         print(op->value);
+        stream << close_span();
         stream << close_line();
         print(op->body);
         stream << close_div();
@@ -450,7 +590,9 @@ private:
         print(op->index);
         stream << matched("]");
         stream << " " << span("Operator Assign Matched", "=") << " ";
-        stream << open_span("StoreValue");
+        // stream << open_span("StoreValue");
+        stream << open_cost_span(op->value.get(), hierarchy(op->value), "StoreValue");
+        // stream << hierarchy(op->value);
         print(op->value);
         if (!is_const_one(op->predicate)) {
             stream << " " << keyword("if") << " ";
@@ -460,7 +602,8 @@ private:
         stream << close_div();
     }
     void visit(const Provide *op) override {
-        stream << open_div("Provide WrapLine");
+        // stream << open_cost_span(op);
+        stream << open_cost_div(op, hierarchy(op), "Provide WrapLine");
         stream << open_span("Matched");
         stream << var(op->name) << "(";
         stream << close_span();
@@ -473,8 +616,10 @@ private:
             print(op->values[0]);
         }
         stream << close_div();
+        // stream << close_span();
     }
     void visit(const Allocate *op) override {
+        // stream << open_cost_span(op);
         scope.push(op->name, unique_id());
         stream << open_div("Allocate");
         stream << open_span("Matched");
@@ -513,6 +658,7 @@ private:
 
         stream << close_div();
         scope.pop(op->name);
+        // stream << close_span();
     }
     void visit(const Free *op) override {
         stream << open_div("Free WrapLine");
@@ -726,6 +872,10 @@ private:
     }
 
 public:
+    FindStmtCost findStmtCost;                            // used for finding the cost of statements
+    GetStmtHierarchy getStmtHierarchy;                    // used for getting the hierarchy of statements
+    ProducerConsumerHierarchy producerConsumerHierarchy;  // used for getting the hierarchy of producer/consumer
+
     void print(const Expr &ir) {
         ir.accept(this);
     }
@@ -957,8 +1107,10 @@ public:
     }
 
     void print(const Module &m) {
+        cout << "Printing module " << m.name() << endl;
         scope.push(m.name(), unique_id());
         for (const auto &s : m.submodules()) {
+            cout << "Submodule: " << s.name() << endl;
             print(s);
         }
 
@@ -986,18 +1138,19 @@ public:
         scope.pop(m.name());
     }
 
-    StmtToHtml(const string &filename)
+    StmtToViz(const string &filename)
         : id_count(0), context_stack(1, 0) {
         stream.open(filename.c_str());
         stream << "<head>";
         stream << "<style type='text/css'>" << css << "</style>\n";
         stream << "<script language='javascript' type='text/javascript'>" + js + "</script>\n";
         stream << "<link href='http://maxcdn.bootstrapcdn.com/font-awesome/4.1.0/css/font-awesome.min.css' rel='stylesheet'>\n";
+        stream << "<link rel='stylesheet' href='https://unpkg.com/treeflex/dist/css/treeflex.css'>";
         stream << "<script src='http://code.jquery.com/jquery-1.10.2.js'></script>\n";
         stream << "</head>\n <body>\n";
     }
 
-    ~StmtToHtml() override {
+    ~StmtToViz() override {
         stream << "<script>\n"
                << "$( '.Matched' ).each( function() {\n"
                << "    this.onmouseover = function() { $('.Matched[id^=' + this.id.split('-')[0] + '-]').addClass('Highlight'); }\n"
@@ -1008,7 +1161,8 @@ public:
     }
 };
 
-const std::string StmtToHtml::css = "\n \
+// TODO: change colors for low, medium, and high cost backgrounds
+const std::string StmtToViz::css = "\n \
 body { font-family: Consolas, 'Liberation Mono', Menlo, Courier, monospace; font-size: 12px; background: #f8f8f8; margin-left:15px; } \n \
 a, a:hover, a:visited, a:active { color: inherit; text-decoration: none; } \n \
 b { font-weight: normal; }\n \
@@ -1016,6 +1170,9 @@ p.WrapLine { margin: 0px; margin-left: 30px; text-indent:-30px; } \n \
 div.WrapLine { margin-left: 30px; text-indent:-30px; } \n \
 div.Indent { padding-left: 15px; }\n \
 div.ShowHide { position:absolute; left:-12px; width:12px; height:12px; } \n \
+span.LowCost { background: rgba(10,10,10,0.1); }\n \
+span.MediumCost { background: rgba(10,10,10,0.2); }\n \
+span.HighCost { background: rgba(10,10,10,0.3); }\n \
 span.Comment { color: #998; font-style: italic; }\n \
 span.Keyword { color: #333; font-weight: bold; }\n \
 span.Assign { color: #d14; font-weight: bold; }\n \
@@ -1042,10 +1199,19 @@ span.Memory { color: #d22; font-weight: bold; }\n \
 span.Pred { background-color: #ffe8bd; font-weight: bold; }\n \
 span.Label { background-color: #bde4ff; font-weight: bold; }\n \
 code.ptx { tab-size: 26; white-space: pre; }\n \
-Hello Darya\n \
+.tooltip .tooltiptext { visibility: hidden; text-align: center; border-radius: 3px; padding: 5px; background: #FFFFFF; color: #313639; border: 1px solid #313639; border-radius: 8px; pointer-events: none; width: fit-content; position: absolute; z-index: 1; margin-top: -60px; margin-left: -120px; }\n \
+.tooltip:hover .tooltiptext { visibility: visible; }\n \
+.tooltip:hover { font-weight: bold; }\n \
+.left-table { text-align: right; color: grey; vertical-align: middle; font-size: 12px; }\n \
+.right-table { text-align: left; vertical-align: middle; font-size: 12px; font-weight: bold; padding-left: 3px; }\n \
+.tf-custom .tf-nc { border-radius: 5px; border: 1px solid; }\n \
+.tf-custom .tf-nc:before, .tf-custom .tf-nc:after { border-left-width: 1px; }\n \
+.tf-custom li li:before { border-top-width: 1px; }\n \
+.tf-custom .end-node { border-style: dashed; }\n \
+.tf-custom .children-node { background-color: lightgrey; }\n \
 ";
 
-const std::string StmtToHtml::js = "\n \
+const std::string StmtToViz::js = "\n \
 function toggle(id) { \n \
     e = document.getElementById(id); \n \
     show = document.getElementById(id + '-show'); \n \
@@ -1060,16 +1226,31 @@ function toggle(id) { \n \
         hide.style.display = 'block'; \n \
     } \n \
     return false; \n \
-}";
+}\n \
+function openNewWindow(innerHtml) { \n \
+    console.log('here!'); \n \
+    var newWindow = window.open('', '_blank'); \n \
+    newWindow.document.write(innerHtml); \n \
+}\n \
+";
 }  // namespace
 
 void print_to_viz(const string &filename, const Stmt &s) {
-    StmtToHtml sth(filename);
+
+    std::cout << "Here! 0" << std::endl;
+
+    StmtToViz sth(filename);
+    sth.findStmtCost.mutate(s);
     sth.print(s);
 }
 
 void print_to_viz(const string &filename, const Module &m) {
-    StmtToHtml sth(filename);
+    std::cout << "here! 1" << std::endl;
+
+    StmtToViz sth(filename);
+
+    sth.findStmtCost.traverse(m);
+    sth.producerConsumerHierarchy.generate_producer_consumer_html(m);
     sth.print(m);
 }
 
