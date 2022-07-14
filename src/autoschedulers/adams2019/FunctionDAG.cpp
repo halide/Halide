@@ -307,26 +307,26 @@ public:
 
 }  // namespace
 
-void LoadJacobian::dump(const char *prefix) const {
+void LoadJacobian::dump(std::ostream &os, const char *prefix) const {
     if (count() > 1) {
-        aslog(0) << prefix << count() << " x\n";
+        os << prefix << count() << " x\n";
     }
     for (size_t i = 0; i < producer_storage_dims(); i++) {
-        aslog(0) << prefix << "  [";
+        os << prefix << "  [";
 
         for (size_t j = 0; j < consumer_loop_dims(); j++) {
             const auto &c = (*this)(i, j);
             if (!c.exists) {
-                aslog(0) << " _  ";
+                os << " _  ";
             } else if (c.denominator == 1) {
-                aslog(0) << " " << c.numerator << "  ";
+                os << " " << c.numerator << "  ";
             } else {
-                aslog(0) << c.numerator << "/" << c.denominator << " ";
+                os << c.numerator << "/" << c.denominator << " ";
             }
         }
-        aslog(0) << "]\n";
+        os << "]\n";
     }
-    aslog(0) << "\n";
+    os << "\n";
 }
 
 void BoundContents::validate() const {
@@ -1039,8 +1039,7 @@ void FunctionDAG::featurize() {
     }
 }
 
-template<typename OS>
-void FunctionDAG::dump_internal(OS &os) const {
+void FunctionDAG::dump(std::ostream &os) const {
     for (const Node &n : nodes) {
         os << "Node: " << n.func.name() << "\n"
            << "  Symbolic region required: \n";
@@ -1076,19 +1075,9 @@ void FunctionDAG::dump_internal(OS &os) const {
 
         os << "  Load Jacobians:\n";
         for (const auto &jac : e.load_jacobians) {
-            jac.dump("  ");
+            jac.dump(os, "  ");
         }
     }
-}
-
-void FunctionDAG::dump() const {
-    auto &os = aslog(0);
-    dump_internal(os);
-}
-
-std::ostream &FunctionDAG::dump(std::ostream &os) const {
-    dump_internal(os);
-    return os;
 }
 
 }  // namespace Autoscheduler

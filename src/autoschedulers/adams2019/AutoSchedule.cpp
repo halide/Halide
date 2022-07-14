@@ -291,7 +291,7 @@ IntrusivePtr<State> optimal_schedule_pass(FunctionDAG &dag,
     std::function<void(IntrusivePtr<State> &&)> enqueue_new_children =
         [&](IntrusivePtr<State> &&s) {
             // aslog(0) << "\n** Generated child: ";
-            // s->dump();
+            // s->dump(aslog(0));
             // s->calculate_cost(dag, params, nullptr, true);
 
             // Each child should have one more decision made than its parent state.
@@ -441,7 +441,7 @@ IntrusivePtr<State> optimal_schedule_pass(FunctionDAG &dag,
             for (int choice_label = (int)q.size() - 1; choice_label >= 0; choice_label--) {
                 auto state = q[choice_label];
                 aslog(0) << "\n[" << choice_label << "]:\n";
-                state->dump();
+                state->dump(aslog(0));
                 state->calculate_cost(dag, params, cost_model, cache->options, memory_limit, true);
             }
             cost_model->evaluate_costs();
@@ -454,7 +454,7 @@ IntrusivePtr<State> optimal_schedule_pass(FunctionDAG &dag,
             }
 
             auto selected = q[selection];
-            selected->dump();
+            selected->dump(aslog(0));
             q.clear();
             q.emplace(std::move(selected));
         }
@@ -512,7 +512,7 @@ IntrusivePtr<State> optimal_schedule(FunctionDAG &dag,
             aslog(0) << "Pass " << i << " of " << num_passes << ", cost: " << pass->cost << ", time (ms): " << milli << "\n";
         } else {
             aslog(0) << "Pass " << i << " result: ";
-            pass->dump();
+            pass->dump(aslog(0));
         }
 
         if (i == 0 || pass->cost < best->cost) {
@@ -576,8 +576,8 @@ void generate_schedule(const std::vector<Function> &outputs,
 
     // Analyse the Halide algorithm and construct our abstract representation of it
     FunctionDAG dag(outputs, params, target);
-    if (aslog_level() > 0) {
-        dag.dump();
+    if (aslog_level() >= 1) {
+        dag.dump(aslog(1));
     }
 
     // Construct a cost model to use to evaluate states. Currently we
@@ -608,8 +608,8 @@ void generate_schedule(const std::vector<Function> &outputs,
     optimal->apply_schedule(dag, params);
 
     // Print out the schedule
-    if (aslog_level() > 0) {
-        optimal->dump();
+    if (aslog_level() >= 1) {
+        optimal->dump(aslog(1));
     }
 
     string schedule_file = get_env_variable("HL_SCHEDULE_FILE");

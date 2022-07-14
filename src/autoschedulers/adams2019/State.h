@@ -85,8 +85,8 @@ struct State {
                            std::function<void(IntrusivePtr<State> &&)> &accept_child,
                            Cache *cache) const;
 
-    // Dumps cost, the `root` LoopNest, and then `schedule_source` to `aslog(0)`.
-    void dump() const;
+    // Dumps cost, the `root` LoopNest, and then `schedule_source` to `os`.
+    void dump(std::ostream &os) const;
 
     // Apply the schedule represented by this state to a Halide
     // Pipeline. Also generate source code for the schedule for the

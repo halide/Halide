@@ -54,8 +54,8 @@ void State::compute_featurization(const FunctionDAG &dag, const MachineParams &p
                 l = consumer_site.compute;
             }
             if (!l) {
-                if (aslog_level() > 0) {
-                    dump();
+                if (aslog_level() >= 1) {
+                    dump(aslog(1));
                 }
                 internal_error << e->producer->func.name() << " -> " << e->consumer->name << "\n";
             }
@@ -136,7 +136,7 @@ bool State::calculate_cost(const FunctionDAG &dag, const MachineParams &params,
             const auto &stage = *(it.key());
             const auto &feat = it.value();
             aslog(0) << "Schedule features for " << stage.stage.name() << "\n";
-            feat.dump();
+            feat.dump(aslog(0));
         }
     }
 
@@ -244,7 +244,7 @@ void State::generate_children(const FunctionDAG &dag,
 
     if (!node->outgoing_edges.empty() && !root->calls(node)) {
         aslog(0) << "In state:\n";
-        dump();
+        dump(aslog(0));
         aslog(0) << node->func.name() << " is consumed by:\n";
         for (const auto *e : node->outgoing_edges) {
             aslog(0) << e->consumer->name << "\n";
@@ -522,16 +522,16 @@ void State::generate_children(const FunctionDAG &dag,
     if (num_children == 0) {
         aslog(0) << "Warning: Found no legal way to schedule "
                  << node->func.name() << " in the following State:\n";
-        dump();
+        dump(aslog(0));
         // All our children died. Maybe other states have had
         // children. Carry on.
     }
 }
 
-void State::dump() const {
-    aslog(0) << "State with cost " << cost << ":\n";
-    root->dump("", nullptr);
-    aslog(0) << schedule_source;
+void State::dump(std::ostream &os) const {
+    os << "State with cost " << cost << ":\n";
+    root->dump(os, "", nullptr);
+    os << schedule_source;
 }
 
 // Apply the schedule represented by this state to a Halide
