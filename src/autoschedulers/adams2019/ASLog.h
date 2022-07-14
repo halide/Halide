@@ -14,21 +14,23 @@ namespace Internal {
 
 class aslog_streambuf : public std::streambuf {
 public:
-    explicit aslog_streambuf(bool do_log): do_log_(do_log) {}
+    explicit aslog_streambuf(bool do_log)
+        : do_log_(do_log) {
+    }
 
 protected:
-    std::streamsize xsputn(const char_type* s, std::streamsize n) override {
+    std::streamsize xsputn(const char_type *s, std::streamsize n) override {
         if (do_log_) {
             std::cerr.write(s, n);
         }
-        return n; // returns the number of characters successfully written.
+        return n;  // returns the number of characters successfully written.
     };
 
     int_type overflow(int_type ch) override {
         if (do_log_) {
             std::cerr.put(ch);
         }
-        return 1; // returns the number of characters successfully written.
+        return 1;  // returns the number of characters successfully written.
     }
 
 private:
@@ -39,7 +41,9 @@ int aslog_level();
 
 class aslog_stream : private aslog_streambuf, public std::ostream {
 public:
-    explicit aslog_stream(int verbosity) : aslog_streambuf(verbosity <= aslog_level()), std::ostream(this) {}
+    explicit aslog_stream(int verbosity)
+        : aslog_streambuf(verbosity <= aslog_level()), std::ostream(this) {
+    }
 
     // Not movable, not copyable.
     aslog_stream() = delete;
