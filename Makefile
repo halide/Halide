@@ -1275,6 +1275,11 @@ clean_generator:
 
 time_compilation_tests: time_compilation_correctness time_compilation_performance time_compilation_generator
 
+# These are just aliases to the autoscheduler plugins to make Generator rules & deps a little terser
+BIN_ADAMS2019=$(BIN_DIR)/libautoschedule_adams2019.$(SHARED_EXT)
+BIN_LI2018=$(BIN_DIR)/libautoschedule_li2018.$(SHARED_EXT)
+BIN_MULLAPUDI2016=$(BIN_DIR)/libautoschedule_mullapudi2016.$(SHARED_EXT)
+
 $(BUILD_DIR)/GenGen.o: $(ROOT_DIR)/tools/GenGen.cpp $(INCLUDE_DIR)/Halide.h
 	@mkdir -p $(@D)
 	$(CXX) -c $< $(TEST_CXX_FLAGS) -I$(INCLUDE_DIR) -o $@
@@ -1545,6 +1550,10 @@ $(FILTERS_DIR)/stubtest.a: $(BIN_DIR)/stubtest.generator
 	@mkdir -p $(@D)
 	$(CURDIR)/$< -g stubtest -f stubtest $(GEN_AOT_OUTPUTS) -o $(CURDIR)/$(FILTERS_DIR) target=$(TARGET)-no_runtime $(STUBTEST_GENERATOR_ARGS)
 
+$(FILTERS_DIR)/stubuser_auto.a: $(BIN_DIR)/stubuser.generator $(BIN_MULLAPUDI2016)
+	@mkdir -p $(@D)
+	$(CURDIR)/$< -g stubuser $(GEN_AOT_OUTPUTS) -o $(CURDIR)/$(FILTERS_DIR) -f stubuser_auto target=$(TARGET)-no_runtime auto_schedule=true -s Mullapudi2016 -p $(BIN_MULLAPUDI2016)
+
 $(FILTERS_DIR)/external_code.a: $(BIN_DIR)/external_code.generator
 	@mkdir -p $(@D)
 	$(CURDIR)/$< -g external_code -e static_library,c_header,registration -o $(CURDIR)/$(FILTERS_DIR) target=$(TARGET)-no_runtime external_code_is_bitcode=true
@@ -1553,15 +1562,9 @@ $(FILTERS_DIR)/external_code.halide_generated.cpp: $(BIN_DIR)/external_code.gene
 	@mkdir -p $(@D)
 	$(CURDIR)/$< -g external_code -e c_source -o $(CURDIR)/$(FILTERS_DIR) target=$(TARGET)-no_runtime external_code_is_bitcode=false
 
-$(FILTERS_DIR)/autograd_grad.a: $(BIN_DIR)/autograd.generator $(DISTRIB_DIR)/lib/libautoschedule_mullapudi2016.$(SHARED_EXT)
+$(FILTERS_DIR)/autograd_grad.a: $(BIN_DIR)/autograd.generator $(BIN_MULLAPUDI2016)
 	@mkdir -p $(@D)
-	# FIXME: The autoscheduler looks for libHalide in the same
-	# directory, which is normally a distro. But the generator
-	# tests use bin/libHalide.so instead of a distro. For now,
-	# just copy the autoscheduler to a place where it won't
-	# confuse the linker.
-	cp $(DISTRIB_DIR)/lib/libautoschedule_mullapudi2016.$(SHARED_EXT) $(BIN_DIR)
-	$(CURDIR)/$< -g autograd $(GEN_AOT_OUTPUTS) -o $(CURDIR)/$(FILTERS_DIR) -f autograd_grad target=$(TARGET)-no_runtime auto_schedule=true -d 1 -p $(BIN_DIR)/libautoschedule_mullapudi2016.$(SHARED_EXT) -s Mullapudi2016
+	$(CURDIR)/$< -g autograd $(GEN_AOT_OUTPUTS) -o $(CURDIR)/$(FILTERS_DIR) -f autograd_grad target=$(TARGET)-no_runtime auto_schedule=true -s Mullapudi2016 -d 1 -p $(BIN_MULLAPUDI2016)
 
 # Usually, it's considered best practice to have one Generator per
 # .cpp file, with the generator-name and filename matching;
@@ -1662,6 +1665,11 @@ $(BIN_DIR)/$(TARGET)/generator_aotcpp_define_extern_opencl: $(ROOT_DIR)/test/gen
 $(BIN_DIR)/generator_jit_%: $(ROOT_DIR)/test/generator/%_jittest.cpp $(BIN_DIR)/libHalide.$(SHARED_EXT) $(INCLUDE_DIR)/Halide.h $(FILTERS_DIR)/%.stub.h $(BUILD_DIR)/%_generator.o
 	@mkdir -p $(@D)
 	$(CXX) -g $(TEST_CXX_FLAGS) $(filter %.cpp %.o %.a,$^) -I$(INCLUDE_DIR) -I$(FILTERS_DIR) -I $(ROOT_DIR)/apps/support $(TEST_LD_FLAGS) -o $@
+
+# stubuser is run with autoscheduling too
+$(BIN_DIR)/$(TARGET)/generator_aot_stubuser: $(ROOT_DIR)/test/generator/stubuser_aottest.cpp $(FILTERS_DIR)/stubuser.a $(FILTERS_DIR)/stubuser.h $(FILTERS_DIR)/stubuser_auto.a $(FILTERS_DIR)/stubuser_auto.h $(RUNTIME_EXPORTED_INCLUDES) $(BIN_DIR)/$(TARGET)/runtime.a
+	@mkdir -p $(@D)
+	$(CXX) $(GEN_AOT_CXX_FLAGS) $(filter %.cpp %.o %.a,$^) $(GEN_AOT_INCLUDES) $(GEN_AOT_LD_FLAGS) -o $@
 
 # generator_aot_multitarget is run multiple times, with different env vars.
 generator_aot_multitarget: $(BIN_DIR)/$(TARGET)/generator_aot_multitarget
@@ -1841,13 +1849,11 @@ $(BIN_DIR)/tutorial_lesson_21_auto_scheduler_generate: $(ROOT_DIR)/tutorial/less
 # ...in that order.
 LESSON_21_MACHINE_PARAMS = 32,16777216,40
 
-$(BIN_DIR)/tutorial_lesson_21_auto_scheduler_run: $(ROOT_DIR)/tutorial/lesson_21_auto_scheduler_run.cpp $(BIN_DIR)/tutorial_lesson_21_auto_scheduler_generate $(DISTRIB_DIR)/lib/libautoschedule_mullapudi2016.$(SHARED_EXT)
+$(BIN_DIR)/tutorial_lesson_21_auto_scheduler_run: $(ROOT_DIR)/tutorial/lesson_21_auto_scheduler_run.cpp $(BIN_DIR)/tutorial_lesson_21_auto_scheduler_generate $(BIN_MULLAPUDI2016)
 	@-mkdir -p $(TMP_DIR)
 	# Run the generator
-	$(BIN_DIR)/tutorial_lesson_21_auto_scheduler_generate -g auto_schedule_gen -o $(TMP_DIR) -e static_library,c_header,schedule -f auto_schedule_false target=host            auto_schedule=false
-	# FIXME: The relative path of the autoscheduler and libHalide must be preserved on OS X, or it tries to load the wrong libHalide.dylib
-	cp $(DISTRIB_DIR)/lib/libautoschedule_mullapudi2016.$(SHARED_EXT) $(BIN_DIR)
-	$(BIN_DIR)/tutorial_lesson_21_auto_scheduler_generate -g auto_schedule_gen -o $(TMP_DIR) -e static_library,c_header,schedule -f auto_schedule_true  target=host-no_runtime auto_schedule=true machine_params=$(LESSON_21_MACHINE_PARAMS) -p $(BIN_DIR)/libautoschedule_mullapudi2016.$(SHARED_EXT) -s Mullapudi2016
+	$(BIN_DIR)/tutorial_lesson_21_auto_scheduler_generate -g auto_schedule_gen -o $(TMP_DIR) -e static_library,c_header,schedule -f auto_schedule_false target=host
+	$(BIN_DIR)/tutorial_lesson_21_auto_scheduler_generate -g auto_schedule_gen -o $(TMP_DIR) -e static_library,c_header,schedule -f auto_schedule_true  target=host-no_runtime $(LESSON_21_AUTOSCHEDULER_PARAMS) -p $(BIN_MULLAPUDI2016)
 	# Compile the runner
 	$(CXX) $(TUTORIAL_CXX_FLAGS) $(IMAGE_IO_CXX_FLAGS) $(OPTIMIZE_FOR_BUILD_TIME) $< \
 	-I$(INCLUDE_DIR) -L$(BIN_DIR) -I $(TMP_DIR) $(TMP_DIR)/auto_schedule_*.a \
@@ -1934,9 +1940,9 @@ test_mullapudi2016: $(AUTO_SCHEDULE_TESTS:$(ROOT_DIR)/test/auto_schedule/%.cpp=a
 
 # These tests were written for the Mullapudi2016 autoscheduler.
 # TODO: either make them work with all autoschedulers or move them under src/autoschedulers/mullapudi2016
-auto_schedule_%: $(BIN_DIR)/auto_schedule_% $(BIN_DIR)/libautoschedule_mullapudi2016.$(SHARED_EXT)
+auto_schedule_%: $(BIN_DIR)/auto_schedule_% $(BIN_MULLAPUDI2016)
 	@-mkdir -p $(TMP_DIR)
-	cd $(TMP_DIR) ; $(CURDIR)/$< $(realpath $(BIN_DIR))/libautoschedule_mullapudi2016.$(SHARED_EXT)
+	cd $(TMP_DIR) ; $(CURDIR)/$< $(realpath $(BIN_MULLAPUDI2016))
 	@-echo
 
 # The other autoschedulers contain their own tests
@@ -2278,17 +2284,23 @@ ifeq ($(UNAME), Darwin)
 	install_name_tool -id @rpath/libHalide.$(SHARED_EXT) $(DISTRIB_DIR)/lib/libHalide.$(SHARED_EXT)
 endif
 
-$(DISTRIB_DIR)/lib/libautoschedule_%.$(SHARED_EXT): $(DISTRIB_DIR)/lib/libHalide.$(SHARED_EXT)
-	$(MAKE) -f $(SRC_DIR)/autoschedulers/$*/Makefile bin/libautoschedule_$*.$(SHARED_EXT) HALIDE_DISTRIB_PATH=$(CURDIR)/$(DISTRIB_DIR)
-	cp $(BIN_DIR)/libautoschedule_$*.$(SHARED_EXT) $(DISTRIB_DIR)/lib
+$(BIN_DIR)/libautoschedule_%.$(SHARED_EXT): $(DISTRIB_DIR)/lib/libHalide.$(SHARED_EXT)
+	$(MAKE) -f $(SRC_DIR)/autoschedulers/$*/Makefile $@ HALIDE_DISTRIB_PATH=$(CURDIR)/$(DISTRIB_DIR)
+ifeq ($(UNAME), Darwin)
+	install_name_tool -id @rpath/$(@F) $(CURDIR)/$@
+endif
+
+
+$(DISTRIB_DIR)/lib/libautoschedule_%.$(SHARED_EXT): $(BIN_DIR)/libautoschedule_%.$(SHARED_EXT)
+	cp $< $(DISTRIB_DIR)/lib
 ifeq ($(UNAME), Darwin)
 	install_name_tool -id @rpath/$(@F) $(CURDIR)/$@
 endif
 
 # Adams2019 also includes autotuning tools
-$(DISTRIB_DIR)/lib/libautoschedule_adams2019.$(SHARED_EXT): $(DISTRIB_DIR)/lib/libHalide.$(SHARED_EXT)
-	$(MAKE) -f $(SRC_DIR)/autoschedulers/adams2019/Makefile bin/libautoschedule_adams2019.$(SHARED_EXT) HALIDE_DISTRIB_PATH=$(CURDIR)/$(DISTRIB_DIR) bin/retrain_cost_model bin/featurization_to_sample bin/get_host_target
-	cp $(BIN_DIR)/libautoschedule_adams2019.$(SHARED_EXT) $(DISTRIB_DIR)/lib/
+$(DISTRIB_DIR)/lib/libautoschedule_adams2019.$(SHARED_EXT): $(BIN_DIR)/libautoschedule_adams2019.$(SHARED_EXT)
+	$(MAKE) -f $(SRC_DIR)/autoschedulers/adams2019/Makefile $(BIN_DIR)/retrain_cost_model $(BIN_DIR)/featurization_to_sample $(BIN_DIR)/get_host_target HALIDE_DISTRIB_PATH=$(CURDIR)/$(DISTRIB_DIR)
+	cp $< $(DISTRIB_DIR)/lib/
 	for TOOL in retrain_cost_model featurization_to_sample get_host_target; do \
 		cp $(BIN_DIR)/$${TOOL} $(DISTRIB_DIR)/bin/;  \
 	done

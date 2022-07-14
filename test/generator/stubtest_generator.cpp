@@ -92,8 +92,10 @@ public:
     }
 
     void schedule() {
-        intermediate.compute_at(intermediate_level);
-        intermediate.specialize(vectorize).vectorize(x, natural_vector_size<float>());
+        if (!auto_schedule) {
+            intermediate.compute_at(intermediate_level);
+            intermediate.specialize(vectorize).vectorize(x, natural_vector_size<float>());
+        }
     }
 
 private:
