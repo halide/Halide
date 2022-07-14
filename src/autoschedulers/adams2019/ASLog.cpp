@@ -41,7 +41,7 @@ std::array<aslog_stream, kMaxLevel + 1> aslog_streams = {
     aslog_stream(0),
     aslog_stream(1),
     aslog_stream(2),
-    aslog_stream(3)
+    aslog_stream(3),
 };
 
 }  // namespace
