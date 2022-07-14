@@ -4842,14 +4842,14 @@ llvm::Value *CodeGen_LLVM::fixed_to_scalable_vector_type(llvm::Value *fixed_arg)
     internal_assert(fixed->getElementType() == scalable->getElementType());
     internal_assert(lanes == (scalable->getMinNumElements() * effective_vscale));
 
-    // E.g. <vscale x 2 x i64> llvm.experimental.vector.insert.nxv2i64.v4i64(<vscale x 2 x i64>, <4 x i64>, i64)
+    // E.g. <vscale x 2 x i64> llvm.vector.insert.nxv2i64.v4i64(<vscale x 2 x i64>, <4 x i64>, i64)
     const char *type_designator;
     if (fixed->getElementType()->isIntegerTy()) {
         type_designator = "i";
     } else {
         type_designator = "f";
     }
-    std::string intrin = "llvm.experimental.vector.insert.nxv" + std::to_string(scalable->getMinNumElements());
+    std::string intrin = "llvm.vector.insert.nxv" + std::to_string(scalable->getMinNumElements());
     intrin += type_designator;
     std::string bits_designator = std::to_string(fixed->getScalarSizeInBits());
     intrin += bits_designator;
@@ -4877,7 +4877,7 @@ llvm::Value *CodeGen_LLVM::scalable_to_fixed_vector_type(llvm::Value *scalable_a
     internal_assert(fixed->getElementType() == scalable->getElementType());
     internal_assert(fixed->getNumElements() == (scalable->getMinNumElements() * effective_vscale));
 
-    // E.g. <64 x i8> @llvm.experimental.vector.extract.v64i8.nxv8i8(<vscale x 8 x i8> %vresult, i64 0)
+    // E.g. <64 x i8> @llvm.vector.extract.v64i8.nxv8i8(<vscale x 8 x i8> %vresult, i64 0)
     const char *type_designator;
     if (scalable->getElementType()->isIntegerTy()) {
         type_designator = "i";
@@ -4885,7 +4885,7 @@ llvm::Value *CodeGen_LLVM::scalable_to_fixed_vector_type(llvm::Value *scalable_a
         type_designator = "f";
     }
     std::string bits_designator = std::to_string(fixed->getScalarSizeInBits());
-    std::string intrin = "llvm.experimental.vector.extract.v" + std::to_string(fixed->getNumElements()) + type_designator + bits_designator;
+    std::string intrin = "llvm.vector.extract.v" + std::to_string(fixed->getNumElements()) + type_designator + bits_designator;
     intrin += ".nxv" + std::to_string(scalable->getMinNumElements()) + type_designator + bits_designator;
     std::vector<llvm::Value *> args;
     args.push_back(scalable_arg);
