@@ -123,36 +123,38 @@ struct ProgressBar {
             return;
         }
         const int pos = (int)(progress * 78);
-        aslog(0) << "[";
+        os << "[";
         for (int j = 0; j < 78; j++) {
             if (j < pos) {
-                aslog(0) << ".";
+                os << ".";
             } else if (j - 1 < pos) {
-                aslog(0) << "/-\\|"[(counter >> bits) % 4];
+                os << "/-\\|"[(counter >> bits) % 4];
             } else {
-                aslog(0) << " ";
+                os << " ";
             }
         }
-        aslog(0) << "]";
+        os << "]";
         for (int j = 0; j < 80; j++) {
-            aslog(0) << "\b";
+            os << "\b";
         }
     }
 
     void clear() {
         if (counter) {
             for (int j = 0; j < 80; j++) {
-                aslog(0) << " ";
+                os << " ";
             }
             for (int j = 0; j < 80; j++) {
-                aslog(0) << "\b";
+                os << "\b";
             }
         }
     }
 
 private:
     uint32_t counter = 0;
-    const bool draw_progress_bar = isatty(2);
+    static constexpr int ProgressBarLogLevel = 1;
+    const bool draw_progress_bar = isatty(2) && aslog_level() >= ProgressBarLogLevel;
+    std::ostream &os = aslog(ProgressBarLogLevel);
 };
 
 // Get the HL_RANDOM_DROPOUT environment variable. Purpose of this is described above.
