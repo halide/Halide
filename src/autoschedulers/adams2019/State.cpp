@@ -131,12 +131,12 @@ bool State::calculate_cost(const FunctionDAG &dag, const MachineParams &params,
 
     cost = 0.0f;
 
-    if (verbosity <= aslog_level()) {
+    if (verbosity <= aslog::aslog_level()) {
         for (auto it = features.begin(); it != features.end(); it++) {
             const auto &stage = *(it.key());
             const auto &feat = it.value();
             aslog(verbosity) << "Schedule features for " << stage.stage.name() << "\n";
-            feat.dump(aslog(verbosity));
+            feat.dump(aslog(verbosity).get_ostream());
         }
     }
 
@@ -524,7 +524,7 @@ void State::generate_children(const FunctionDAG &dag,
     if (num_children == 0) {
         aslog(1) << "Warning: Found no legal way to schedule "
                  << node->func.name() << " in the following State:\n";
-        dump(aslog(1));
+        dump(aslog(1).get_ostream());
         // All our children died. Maybe other states have had
         // children. Carry on.
     }

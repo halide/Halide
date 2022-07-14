@@ -117,6 +117,7 @@ struct ProgressBar {
         if (!draw_progress_bar) {
             return;
         }
+        auto &os = aslog(ProgressBarLogLevel).get_ostream();
         counter++;
         const int bits = 11;
         if (counter & ((1 << bits) - 1)) {
@@ -141,6 +142,7 @@ struct ProgressBar {
 
     void clear() {
         if (counter) {
+            auto &os = aslog(ProgressBarLogLevel).get_ostream();
             for (int j = 0; j < 80; j++) {
                 os << " ";
             }
@@ -153,8 +155,7 @@ struct ProgressBar {
 private:
     uint32_t counter = 0;
     static constexpr int ProgressBarLogLevel = 1;
-    const bool draw_progress_bar = isatty(2) && aslog_level() >= ProgressBarLogLevel;
-    std::ostream &os = aslog(ProgressBarLogLevel);
+    const bool draw_progress_bar = isatty(2) && aslog::aslog_level() >= ProgressBarLogLevel;
 };
 
 // Get the HL_RANDOM_DROPOUT environment variable. Purpose of this is described above.
@@ -507,7 +508,7 @@ IntrusivePtr<State> optimal_schedule(FunctionDAG &dag,
 
         tick.clear();
 
-        switch (aslog_level()) {
+        switch (aslog::aslog_level()) {
         case 0:
             // Silence
             break;
@@ -516,7 +517,7 @@ IntrusivePtr<State> optimal_schedule(FunctionDAG &dag,
             break;
         default:
             aslog(2) << "Pass " << i << " result: ";
-            pass->dump(aslog(2));
+            pass->dump(aslog(2).get_ostream());
         }
 
         if (i == 0 || pass->cost < best->cost) {
@@ -580,8 +581,8 @@ void generate_schedule(const std::vector<Function> &outputs,
 
     // Analyse the Halide algorithm and construct our abstract representation of it
     FunctionDAG dag(outputs, params, target);
-    if (aslog_level() >= 2) {
-        dag.dump(aslog(2));
+    if (aslog::aslog_level() >= 2) {
+        dag.dump(aslog(2).get_ostream());
     }
 
     // Construct a cost model to use to evaluate states. Currently we
@@ -612,8 +613,8 @@ void generate_schedule(const std::vector<Function> &outputs,
     optimal->apply_schedule(dag, params);
 
     // Print out the schedule
-    if (aslog_level() >= 2) {
-        optimal->dump(aslog(2));
+    if (aslog::aslog_level() >= 2) {
+        optimal->dump(aslog(2).get_ostream());
     }
 
     string schedule_file = get_env_variable("HL_SCHEDULE_FILE");

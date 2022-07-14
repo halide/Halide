@@ -1,8 +1,5 @@
 #include "ASLog.h"
 
-#include <array>
-#include <cassert>
-
 namespace Halide {
 namespace Internal {
 
@@ -37,22 +34,9 @@ std::string get_env_variable(char const *env_var_name) {
     return "";
 }
 
-constexpr int kMaxLevel = 3;
-std::array<aslog_stream, kMaxLevel + 1> aslog_streams = {
-    aslog_stream(0),
-    aslog_stream(1),
-    aslog_stream(2),
-    aslog_stream(3),
-};
-
 }  // namespace
 
-aslog_stream &aslog(int verbosity) {
-    assert(verbosity <= kMaxLevel);
-    return aslog_streams[verbosity];
-}
-
-int aslog_level() {
+int aslog::aslog_level() {
     static int cached_aslog_level = ([]() -> int {
         // If HL_DEBUG_AUTOSCHEDULE is defined, use that value.
         std::string lvl = get_env_variable("HL_DEBUG_AUTOSCHEDULE");
