@@ -92,7 +92,7 @@ public:
     }
 
     void schedule() {
-        if (!auto_schedule) {
+        if (!using_autoscheduler()) {
             intermediate.compute_at(intermediate_level);
             intermediate.specialize(vectorize).vectorize(x, natural_vector_size<float>());
         }
