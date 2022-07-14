@@ -1565,14 +1565,8 @@ $(FILTERS_DIR)/external_code.halide_generated.cpp: $(BIN_DIR)/external_code.gene
 	@mkdir -p $(@D)
 	$(CURDIR)/$< -g external_code -e c_source -o $(CURDIR)/$(FILTERS_DIR) target=$(TARGET)-no_runtime external_code_is_bitcode=false
 
-$(FILTERS_DIR)/autograd_grad.a: $(BIN_DIR)/autograd.generator $(DISTRIB_DIR)/lib/libautoschedule_mullapudi2016.$(SHARED_EXT)
+$(FILTERS_DIR)/autograd_grad.a: $(BIN_DIR)/autograd.generator autoschedulers
 	@mkdir -p $(@D)
-	# FIXME: The autoscheduler looks for libHalide in the same
-	# directory, which is normally a distro. But the generator
-	# tests use bin/libHalide.so instead of a distro. For now,
-	# just copy the autoscheduler to a place where it won't
-	# confuse the linker.
-	cp $(DISTRIB_DIR)/lib/libautoschedule_mullapudi2016.$(SHARED_EXT) $(BIN_DIR)
 	$(CURDIR)/$< -g autograd $(GEN_AOT_OUTPUTS) -o $(CURDIR)/$(FILTERS_DIR) -f autograd_grad target=$(TARGET)-no_runtime autoscheduler.name=Mullapudi2016 -d 1 -p $(BIN_DIR)/libautoschedule_mullapudi2016.$(SHARED_EXT)
 
 # Usually, it's considered best practice to have one Generator per
