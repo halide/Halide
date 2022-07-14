@@ -86,7 +86,7 @@ struct State {
                            Cache *cache) const;
 
     // Dumps cost, the `root` LoopNest, and then `schedule_source` to `os`.
-    void dumpz(std::ostream &os) const;
+    void dump(std::ostream &os) const;
 
     // Apply the schedule represented by this state to a Halide
     // Pipeline. Also generate source code for the schedule for the

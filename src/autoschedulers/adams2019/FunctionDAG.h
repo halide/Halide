@@ -565,7 +565,7 @@ struct FunctionDAG {
     // analysis. This is done once up-front before the tree search.
     FunctionDAG(const vector<Function> &outputs, const MachineParams &params, const Target &target);
 
-    void dumpz(std::ostream &os) const;
+    void dump(std::ostream &os) const;
 
 private:
     // Compute the featurization for the entire DAG

@@ -55,7 +55,7 @@ void State::compute_featurization(const FunctionDAG &dag, const MachineParams &p
             }
             if (!l) {
                 std::ostringstream err;
-                dumpz(err);
+                dump(err);
                 err << e->producer->func.name() << " -> " << e->consumer->name << "\n";
                 internal_error << err.str();
             }
@@ -245,7 +245,7 @@ void State::generate_children(const FunctionDAG &dag,
     if (!node->outgoing_edges.empty() && !root->calls(node)) {
         std::ostringstream err;
         err << "In state:\n";
-        dumpz(err);
+        dump(err);
         err << node->func.name() << " is consumed by:\n";
         for (const auto *e : node->outgoing_edges) {
             err << e->consumer->name << "\n";
@@ -524,15 +524,15 @@ void State::generate_children(const FunctionDAG &dag,
     if (num_children == 0) {
         aslog(1) << "Warning: Found no legal way to schedule "
                  << node->func.name() << " in the following State:\n";
-        dumpz(aslog(1));
+        dump(aslog(1));
         // All our children died. Maybe other states have had
         // children. Carry on.
     }
 }
 
-void State::dumpz(std::ostream &os) const {
+void State::dump(std::ostream &os) const {
     os << "State with cost " << cost << ":\n";
-    root->dumpz(os, "", nullptr);
+    root->dump(os, "", nullptr);
     os << schedule_source;
 }
 

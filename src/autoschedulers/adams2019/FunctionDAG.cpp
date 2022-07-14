@@ -1041,7 +1041,7 @@ void FunctionDAG::featurize() {
     }
 }
 
-void FunctionDAG::dumpz(std::ostream &os) const {
+void FunctionDAG::dump(std::ostream &os) const {
     for (const Node &n : nodes) {
         os << "Node: " << n.func.name() << "\n"
            << "  Symbolic region required: \n";

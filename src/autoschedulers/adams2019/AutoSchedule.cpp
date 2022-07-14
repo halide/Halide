@@ -439,7 +439,7 @@ IntrusivePtr<State> optimal_schedule_pass(FunctionDAG &dag,
             for (int choice_label = (int)q.size() - 1; choice_label >= 0; choice_label--) {
                 auto state = q[choice_label];
                 std::cout << "\n[" << choice_label << "]:\n";
-                state->dumpz(std::cout);
+                state->dump(std::cout);
                 constexpr int verbosity_level = 0;  // always
                 state->calculate_cost(dag, params, cost_model, cache->options, memory_limit, verbosity_level);
             }
@@ -453,7 +453,7 @@ IntrusivePtr<State> optimal_schedule_pass(FunctionDAG &dag,
             }
 
             auto selected = q[selection];
-            selected->dumpz(std::cout);
+            selected->dump(std::cout);
             q.clear();
             q.emplace(std::move(selected));
         }
@@ -516,7 +516,7 @@ IntrusivePtr<State> optimal_schedule(FunctionDAG &dag,
             break;
         default:
             aslog(2) << "Pass " << i << " result: ";
-            pass->dumpz(aslog(2));
+            pass->dump(aslog(2));
         }
 
         if (i == 0 || pass->cost < best->cost) {
@@ -581,7 +581,7 @@ void generate_schedule(const std::vector<Function> &outputs,
     // Analyse the Halide algorithm and construct our abstract representation of it
     FunctionDAG dag(outputs, params, target);
     if (aslog_level() >= 2) {
-        dag.dumpz(aslog(2));
+        dag.dump(aslog(2));
     }
 
     // Construct a cost model to use to evaluate states. Currently we
@@ -613,7 +613,7 @@ void generate_schedule(const std::vector<Function> &outputs,
 
     // Print out the schedule
     if (aslog_level() >= 2) {
-        optimal->dumpz(aslog(2));
+        optimal->dump(aslog(2));
     }
 
     string schedule_file = get_env_variable("HL_SCHEDULE_FILE");
