@@ -552,6 +552,7 @@ SOURCE_FILES = \
   SkipStages.cpp \
   SlidingWindow.cpp \
   Solve.cpp \
+  SpirvIR.cpp \
   SplitTuples.cpp \
   StmtToHtml.cpp \
   StorageFlattening.cpp \
@@ -717,6 +718,7 @@ HEADER_FILES = \
   SkipStages.h \
   SlidingWindow.h \
   Solve.h \
+  SpirvIR.h \
   SplitTuples.h \
   StmtToHtml.h \
   StorageFlattening.h \

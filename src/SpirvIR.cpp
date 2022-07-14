@@ -1,917 +1,360 @@
-#ifndef HALIDE_SPIRV_IR_H
-#define HALIDE_SPIRV_IR_H
+#include "SpirvIR.h"
 
-#include <stack>
-#include <vector>
-#include <unordered_map>
-
-#include "Type.h"
-#include "IntrusivePtr.h"
-
-#include "spirv/1.0/spirv.h"
+#ifdef TARGET_SPIRV
 
 namespace Halide {
 namespace Internal {
 
-class SpvModule;
-class SpvFunction;
-class SpvBlock;
-class SpvInstruction;
-class SpvBuilder;
-
-struct SpvModuleContents;
-struct SpvFunctionContents;
-struct SpvBlockContents;
-struct SpvInstructionContents;
-
-using SpvModuleContentsPtr = IntrusivePtr<SpvModuleContents>;
-using SpvFunctionContentsPtr = IntrusivePtr<SpvFunctionContents>;
-using SpvBlockContentsPtr = IntrusivePtr<SpvBlockContents>;
-using SpvInstructionContentsPtr = IntrusivePtr<SpvInstructionContents>;
-
-using SpvId = uint32_t;
-using SpvBinary = std::vector<uint32_t>;
-
-enum SpvPrecision {
-    SpvFullPrecision,
-    SpvRelaxedPrecision,
-};
-
-enum SpvPredefinedConstant {
-    SpvNullConstant,
-    SpvTrueConstant,
-    SpvFalseConstant,
-};
-
-enum SpvKind {
-    SpvInvalidItem,
-    SpvTypeId,
-    SpvVoidTypeId,
-    SpvBoolTypeId,
-    SpvIntTypeId,
-    SpvFloatTypeId,
-    SpvVectorTypeId,
-    SpvArrayTypeId,
-    SpvRuntimeArrayTypeId,
-    SpvStringTypeId,
-    SpvPointerTypeId,
-    SpvStructTypeId,
-    SpvFunctionTypeId,
-    SpvConstantId,
-    SpvBoolConstantId,
-    SpvIntConstantId,
-    SpvFloatConstantId,
-    SpvStringConstantId,
-    SpvCompositeConstantId,
-    SpvResultId,
-    SpvVariableId,
-    SpvInstructionId,
-    SpvFunctionId,
-    SpvBlockId,
-    SpvLabelId,
-    SpvParameterId,
-    SpvModuleId,
-    SpvUnknownItem,
-};
-
-static constexpr SpvId SpvInvalidId = SpvId(-1);
-static constexpr SpvId SpvNoResult = 0;
-static constexpr SpvId SpvNoType = 0;
-
-// --
-
-class SpvInstruction {
-public:
-
-    SpvInstruction() = default;
-    ~SpvInstruction() = default;
-
-    SpvInstruction(const SpvInstruction &) = default;
-    SpvInstruction &operator=(const SpvInstruction &) = default;
-    SpvInstruction(SpvInstruction &&) = default;
-    SpvInstruction &operator=(SpvInstruction &&) = default;
-
-    void set_block(SpvBlock block);
-    void set_result_id(SpvId id);
-    void set_type_id(SpvId id);
-    void set_op_code(SpvOp opcode);
-    void add_operand(SpvId id);
-    void add_immediate(SpvId id);
-    void add_data(uint32_t bytes, const void* data);
-    void add_string(const std::string& str);    
-    
-    SpvId result_id() const;
-    SpvId type_id() const;
-    SpvOp op_code() const;
-    SpvId operand(uint32_t index);
-
-    bool has_type(void) const;
-    bool has_result(void) const;
-    bool is_defined(void) const;
-    bool is_immediate(uint32_t index) const;
-    uint32_t length() const;
-    SpvBlock block() const;
-    
-    void encode(SpvBinary& binary) const;
-    
-    static SpvInstruction make(SpvOp op_code);
-
-protected:
-    SpvInstructionContentsPtr contents;
-};
-
 // -- Factory Methods for Specific Instructions
 
-struct SpvLabelInst {
-    static SpvInstruction make( SpvId result_id ) {
-        SpvInstruction inst = SpvInstruction::make(SpvOpLabel);
-        inst.set_result_id(result_id);
-        return inst;
+SpvInstruction SpvLabelInst::make( SpvId result_id ) {
+    SpvInstruction inst = SpvInstruction::make(SpvOpLabel);
+    inst.set_result_id(result_id);
+    return inst;
+}
+
+SpvInstruction SpvDecorateInst::make( SpvId target_id, SpvDecoration decoration_type, const SpvDecorateInst::Literals& literals) {
+    SpvInstruction inst = SpvInstruction::make(SpvOpDecorate);
+    inst.add_operand(target_id);
+    inst.add_immediate(decoration_type);
+    for( uint32_t l : literals) {
+        inst.add_immediate(l);
     }
-};
+    return inst;
+}
 
-struct SpvDecorateInst {
-    using Literals = std::vector<uint32_t>;
-    static SpvInstruction make( SpvId target_id, SpvDecoration decoration_type, const Literals& literals = {}) {
-        SpvInstruction inst = SpvInstruction::make(SpvOpDecorate);
-        inst.add_operand(target_id);
-        inst.add_immediate(decoration_type);
-        for( uint32_t l : literals) {
-            inst.add_immediate(l);
-        }
-        return inst;
+SpvInstruction SpvMemberDecorateInst::make( SpvId struct_type_id, uint32_t member_index, SpvDecoration decoration_type, const SpvMemberDecorateInst::Literals& literals) {
+    SpvInstruction inst = SpvInstruction::make(SpvOpMemberDecorate);
+    inst.add_operand(struct_type_id);
+    inst.add_immediate(decoration);
+    for( uint32_t l : literals) {
+        inst.add_immediate(l);
     }
-};
+    return inst;
+}
 
-struct SpvMemberDecorateInst {
-    using Literals = std::vector<uint32_t>;
-    static SpvInstruction make( SpvId struct_type_id, uint32_t member_index, SpvDecoration decoration_type, const Literals& literals = {}) {
-        SpvInstruction inst = SpvInstruction::make(SpvOpMemberDecorate);
-        inst.add_operand(struct_type_id);
-        inst.add_immediate(decoration);
-        for( uint32_t l : literals) {
-            inst.add_immediate(l);
-        }
-        return inst;
+SpvInstruction SpvUnaryOpInstruction::make(SpvOp op_code, SpvId type_id, SpvId result_id, SpvId src_id ) {
+    SpvInstruction inst = SpvInstruction::make(op_code);
+    inst.set_type_id(type_id);
+    inst.set_result_id(result_id);
+    inst.add_operand(src_id);
+    return inst;
+}
+
+SpvBinaryOpInstruction::make(SpvOp op_code, SpvId type_id, SpvId result_id, SpvId src_a_id, SpvId src_b_id  ) {
+    SpvInstruction inst = SpvInstruction::make(op_code);
+    inst.set_type_id(type_id);
+    inst.set_result_id(result_id);
+    inst.add_operand(src_a_id);
+    inst.add_operand(src_b_id);
+    return inst;
+}
+
+SpvInstruction SpvVectorInsertDynamicInst::make(SpvId result_id, SpvId vector_id, SpvId value_id, uint32_t index) {
+    SpvInstruction inst = SpvInstruction::make(SpvOpVectorInsertDynamic);
+    inst.set_type_id(SpvOpTypeVector);
+    inst.set_result_id(result_id);
+    inst.add_operand(vector_id);
+    inst.add_operand(value_id);
+    inst.add_immediate(index);
+    return inst;
+}
+
+SpvInstruction SpvConstantInst::make(SpvId type_id, SpvId result_id, size_t bytes, const void* data) {
+    SpvInstruction inst = SpvInstruction::make(SpvOpConstant);
+    inst.set_type_id(type_id);
+    inst.set_result_id(result_id);
+    inst.add_data(bytes, data);
+    return inst;
+}
+
+SpvInstruction SpvConstantNullInst::make(SpvId type_id, SpvId result_id) {
+    SpvInstruction inst = SpvInstruction::make(SpvOpConstantNull);
+    inst.set_type_id(type_id);
+    inst.set_result_id(result_id);
+    return inst;
+}
+
+SpvInstruction SpvConstantBoolInst::make(SpvId type_id, SpvId result_id, bool value) {
+    SpvOp op_code = value ? SpvOpConstantTrue : SpvOpConstantFalse;
+    SpvInstruction inst = SpvInstruction::make(op_code);
+    inst.set_type_id(type_id);
+    inst.set_result_id(result_id);
+    return inst;
+}
+
+SpvInstruction SpvConstantCompositeInst::make(SpvId type_id, SpvId result_id, const SpvConstantCompositeInst::Components& components) {
+    SpvInstruction inst = SpvInstruction::make(SpvOpConstantComposite);
+    inst.set_type_id(type_id);
+    inst.set_result_id(result_id);
+    for(SpvId scalar_id : components) {
+        inst.add_operand(scalar_id);
     }
-};
+    return inst;
+}
 
-struct SpvUnaryOpInstruction {
-    static SpvInstruction make(SpvOp op_code, SpvId type_id, SpvId result_id, SpvId src_id ) {
-        SpvInstruction inst = SpvInstruction::make(op_code);
-        inst.set_type_id(type_id);
-        inst.set_result_id(result_id);
-        inst.add_operand(src_id);
-        return inst;
+SpvInstruction SpvTypeVoidInst::make(SpvId void_type_id) {
+    SpvInstruction inst = SpvInstruction::make(SpvOpTypeVoid);
+    inst.set_result_id(void_type_id);
+    return inst;
+}
+
+SpvInstruction SpvTypeBoolInst::make(SpvId bool_type_id) {
+    SpvInstruction inst = SpvInstruction::make(SpvOpTypeBool);
+    inst.set_result_id(bool_type_id);
+    return inst;
+}
+
+SpvInstruction SpvTypeIntInst::make(SpvId int_type_id, uint32_t bits, uint32_t signedness) {
+    SpvInstruction inst = SpvInstruction::make(SpvOpTypeInt);
+    inst.set_result_id(int_type_id);
+    inst.add_immediate(bits);
+    inst.add_immediate(signedness);
+    return inst;
+}
+
+SpvInstruction SpvTypeFloatInst::make(SpvId float_type_id, uint32_t bits) {
+    SpvInstruction inst = SpvInstruction::make(SpvOpTypeFloat);
+    inst.set_result_id(float_type_id);
+    inst.add_immediate(bits);
+    return inst;
+}
+
+SpvInstruction SpvTypeVectorInst::make(SpvId vector_type_id, SpvId element_type_id, uint32_t vector_size) {
+    SpvInstruction inst = SpvInstruction::make(SpvOpTypeVector);
+    inst.set_result_id(vector_type_id);
+    inst.add_operand(element_type_id);
+    inst.add_immediate(vector_size);
+    return inst;
+}
+
+SpvInstruction SpvTypeArrayInst::make(SpvId array_type_id, SpvId element_type_id, uint32_t array_size) {
+    SpvInstruction inst = SpvInstruction::make(SpvOpTypeArray);
+    inst.set_result_id(array_type_id);
+    inst.add_operand(element_type_id);
+    inst.add_immediate(array_size);        
+    return inst;
+}
+
+SpvInstruction SpvTypeStructInst::make(SpvId result_id, const SpvTypeStructInst::MemberTypeIds& member_type_ids) {
+    SpvInstruction inst = SpvInstruction::make(SpvOpTypeStruct);
+    inst.set_result_id(result_id);
+    for(const SpvId member_type : member_type_ids) {
+        inst.add_operand(member_type);
     }
-};
+    return inst;
+}
 
-struct SpvBinaryOpInstruction {
-    static SpvInstruction make(SpvOp op_code, SpvId type_id, SpvId result_id, SpvId src_a_id, SpvId src_b_id  ) {
-        SpvInstruction inst = SpvInstruction::make(op_code);
-        inst.set_type_id(type_id);
-        inst.set_result_id(result_id);
-        inst.add_operand(src_a_id);
-        inst.add_operand(src_b_id);
-        return inst;
+SpvInstruction SpvTypeRuntimeArrayInst::make(SpvId result_type_id, SpvId base_type_id ) {
+    SpvInstruction inst = SpvInstruction::make(SpvOpTypeRuntimeArray);
+    inst.set_result_id(result_type_id);
+    inst.add_operand(base_type_id);
+    return inst;
+}
+
+SpvInstruction SpvTypePointerInst::make(SpvId pointer_type_id, SpvStorageClass storage_class, SpvId base_type_id ) {
+    SpvInstruction inst = SpvInstruction::make(SpvOpTypePointer);
+    inst.set_result_id(pointer_type_id);
+    inst.add_immediate(storage_class);
+    inst.add_operand(base_type_id);
+    return inst;
+}
+
+SpvInstruction SpvTypeFunctionInst::make(SpvId function_type_id, SpvId return_type_id, const SpvTypeFunctionInst::ParamTypes& param_type_ids) {
+    SpvInstruction inst = SpvInstruction::make(SpvOpTypeFunction);
+    inst.set_type_id(return_type_id);
+    inst.set_result_id(function_type_id);
+    for(SpvId type_id : param_type_ids) {
+        inst.add_operand(type_id);
     }
-};
+    return inst;
+}
 
-struct SpvVectorInsertDynamicInst {
-    static SpvInstruction make(SpvId result_id, SpvId vector_id, SpvId value_id, uint32_t index) {
-        SpvInstruction inst = SpvInstruction::make(SpvOpVectorInsertDynamic);
-        inst.set_type_id(SpvOpTypeVector);
-        inst.set_result_id(result_id);
-        inst.add_operand(vector_id);
-        inst.add_operand(value_id);
-        inst.add_immediate(index);
-        return inst;
+SpvInstruction SpvVariableInst::make(SpvId result_type_id, SpvId result_id, uint32 storage_class, SpvId initializer_id) {
+    SpvInstruction inst = SpvInstruction::make(SpvOpVariable);
+    inst.set_type_id(result_type_id);
+    inst.set_result_id(result_id);
+    inst.add_immediate(storage_class);
+    if(initializer_id != SpvInvalidId) {
+        inst.add_operand(initializer_id);
     }
-};
+    return inst;
+}
 
-struct SpvConstantInst {
-    static SpvInstruction make(SpvId type_id, SpvId result_id, size_t bytes, const void* data) {
-        SpvInstruction inst = SpvInstruction::make(SpvOpConstant);
-        inst.set_type_id(type_id);
-        inst.set_result_id(result_id);
-        inst.add_data(bytes, data);
-        return inst;
+SpvInstruction SpvFunctionInst::make(SpvId return_type_id, SpvId func_id, uint32_t control_mask, SpvId func_type_id) {
+    SpvInstruction inst = SpvInstruction::make(SpvOpFunction);
+    inst.set_type_id(return_type_id);
+    inst.set_result_id(func_id);
+    inst.add_immediate(control_mask);
+    inst.add_operand(func_type_id);
+    return inst;
+}
+
+SpvInstruction SpvFunctionParameterInst::make(SpvId param_type_id, SpvId param_id) {
+    SpvInstruction inst = SpvInstruction::make(SpvOpFunctionParameter);
+    inst.set_type_id(param_type_id);
+    inst.set_result_id(param_id);
+    return inst;
+}
+
+SpvInstruction SpvReturnInst::make(SpvId return_value_id = SpvInvalidId) {
+    SpvOp opcode = (return_value_id == SpvInvalidId) ? SpvOpReturn : SpvOpReturnValue;
+    SpvInstruction inst = SpvInstruction::make( opcode );
+    if(return_value_id != SpvInvalidId)
+        inst.add_operand(return_value_id);
+    return inst;
+}
+
+SpvInstruction SpvEntryPointInst::make(SpvId exec_model, SpvId func_id, const std::string& name, const SpvEntryPointInst::Variables& variables) {
+    SpvInstruction inst = SpvInstruction::make(SpvOpEntryPoint);
+    inst.add_immediate(exec_model);
+    inst.add_operand(func_id);
+    inst.add_string(name);
+    for(SpvId var : variables) {
+        inst.add_operand(var);
     }
-};
+    return inst;
+}
 
-struct SpvConstantNullInst {
-    static SpvInstruction make(SpvId type_id, SpvId result_id) {
-        SpvInstruction inst = SpvInstruction::make(SpvOpConstantNull);
-        inst.set_type_id(type_id);
-        inst.set_result_id(result_id);
-        return inst;
+SpvInstruction SpvMemoryModelInst::make(SpvAddressingModel addressing_model, SpvMemoryModel memory_model) {
+    SpvInstruction inst = SpvInstruction::make(SpvOpMemoryModel);
+    inst.add_immediate(addressing_model);
+    inst.add_immediate(memory_model);    
+    return inst;
+}
+
+SpvInstruction SpvExecutionModeLocalSizeInst::make(SpvId function_id, uint32_t wg_size_x, uint32_t wg_size_y, uint32_t wg_size_z) {
+    SpvInstruction inst = SpvInstruction::make(SpvOpExecutionMode);
+    inst.add_operand(function_id);
+    inst.add_immediate(SpvExecutionModeLocalSize);
+    inst.add_immediate(wg_size_x);
+    inst.add_immediate(wg_size_y);
+    inst.add_immediate(wg_size_z);
+    return inst;
+}
+
+SpvInstruction SpvControlBarrierInst::make(SpvId execution_scope_id, SpvId memory_scope_id, uint32_t semantics_mask ) {
+    SpvInstruction inst = SpvInstruction::make(SpvOpControlBarrier);
+    inst.add_operand(execution_scope_id);
+    inst.add_operand(memory_scope_id);
+    inst.add_immediate(semantics_mask);
+    return inst;
+}
+
+SpvInstruction SpvNotInst:make(SpvId type_id, SpvId result_id, SpvId src_id ) {
+    return SpvUnaryOpInstruction::make(SpvOpNot, type_id, result_id, src_id);
+}
+
+SpvInstruction SpvMulExtendedInst::make(SpvId type_id, SpvId result_id, SpvId src_a_id, SpvId src_b_id, bool is_signed ) {
+    return SpvBinaryOpInstruction::make(is_signed ? SpvOpSMulExtended : SpvOpUMulExtended, type_id, result_id, src_a_id, src_b_id);
+}
+
+SpvInstruction SpvSelectInst::make(SpvId type_id, SpvId result_id, SpvId condition_id, SpvId true_id, SpvId false_id ) {
+    SpvInstruction inst = SpvInstruction::make(SpvOpSelect);
+    inst.set_type_id(type_id);
+    inst.set_result_id(result_id);
+    inst.add_operand(condition_id);
+    inst.add_operand(true_id);
+    inst.add_operand(false_id);
+    return inst;
+}
+
+SpvInstruction SpvInBoundsAccessChainInst::make(SpvId type_id, SpvId result_id, SpvId base_id, SpvId element_id, const SpvInBoundsAccessChainInst::Indices& indices ) {
+    SpvInstruction inst = SpvInstruction::make(SpvOpInBoundsAccessChain);
+    inst.set_type_id(type_id);
+    inst.set_result_id(result_id);
+    inst.add_operand(base_id);
+    inst.add_operand(element_id);
+    for(SpvId i : indices) {
+        inst.add_operand(i);
     }
-};
+    return inst;
+}
 
-struct SpvConstantBoolInst {
-    static SpvInstruction make(SpvId type_id, SpvId result_id, bool value) {
-        SpvOp op_code = value ? SpvOpConstantTrue : SpvOpConstantFalse;
-        SpvInstruction inst = SpvInstruction::make(op_code);
-        inst.set_type_id(type_id);
-        inst.set_result_id(result_id);
-        return inst;
+SpvInstruction SpvLoadInst::make(SpvId type_id, SpvId result_id, SpvId ptr_id, uint32_t access_mask) {
+    SpvInstruction inst = SpvInstruction::make(SpvOpLoad);
+    inst.set_type_id(type_id);
+    inst.set_result_id(result_id);
+    inst.add_operand(ptr_id);
+    inst.add_immediate(access_mask);
+    return inst;
+}
+
+SpvInstruction SpvStoreInst::make(SpvId ptr_id, SpvId obj_id, uint32_t access_mask = 0x0) {
+    SpvInstruction inst = SpvInstruction::make(SpvOpStore);
+    inst.add_operand(ptr_id);
+    inst.add_operand(obj_id);
+    inst.add_immediate(access_mask);
+    return inst;
+}
+
+SpvInstruction SpvCompositeExtractInst::make(SpvId type_id, SpvId result_id, SpvId composite_id, const SpvCompositeExtractInst::Indices& indices ) {
+    SpvInstruction inst = SpvInstruction::make(SpvOpCompositeExtract);
+    inst.set_type_id(type_id);
+    inst.set_result_id(result_id);
+    inst.add_operand(composite_id);
+    for(SpvId i : indices) {
+        inst.add_immediate(i);
     }
-};
+    return inst;
+}
 
-struct SpvConstantCompositeInst {
-    using Components = std::vector<SpvId>;
-    static SpvInstruction make(SpvId type_id, SpvId result_id, const Components& components) {
-        SpvInstruction inst = SpvInstruction::make(SpvOpConstantComposite);
-        inst.set_type_id(type_id);
-        inst.set_result_id(result_id);
-        for(SpvId scalar_id : components) {
-            inst.add_operand(scalar_id);
-        }
-        return inst;
+SpvInstruction SpvBitcastInst::make(SpvId type_id, SpvId result_id, SpvId src_id ) {
+    SpvInstruction inst = SpvInstruction::make(SpvOpBitcast);
+    inst.set_type_id(type_id);
+    inst.set_result_id(result_id);
+    inst.add_operand(src_id);
+    return inst;
+}
+
+SpvInstruction SpvIAddInst::make(SpvId type_id, SpvId result_id, SpvId src_a_id, SpvId src_b_id  ) {
+    return SpvBinaryOpInstruction::make(SpvOpIAdd, type_id, result_id, src_a_id, src_b_id);
+}
+
+SpvInstruction SpvBranchInst::make( SpvId target_label_id ) {
+    SpvInstruction inst = SpvInstruction::make(SpvOpBranch);
+    inst.add_operand(target_label_id);
+    return inst;
+}
+
+SpvInstruction SpvBranchConditionalInst::make( SpvId condition_label_id, SpvId true_label_id, SpvId false_label_id, const SpvBranchConditionalInst::BranchWeights& weights = {} ) {
+    SpvInstruction inst = SpvInstruction::make(SpvOpBranch);
+    inst.add_operand(condition_label_id);
+    inst.add_operand(true_label_id);
+    inst.add_operand(false_label_id);
+    for( uint32_t w : weights) {
+        inst.add_immediate(w);
     }
-};
+    return inst;
+}
 
-struct SpvTypeVoidInst {
-    static SpvInstruction make(SpvId void_type_id) {
-        SpvInstruction inst = SpvInstruction::make(SpvOpTypeVoid);
-        inst.set_result_id(void_type_id);
-        return inst;
+SpvInstruction SpvLoopMergeInst::make( SpvId merge_label_id, SpvId continue_label_id, uint32_t loop_control_mask = SpvLoopControlMaskNone) {
+    SpvInstruction inst = SpvInstruction::make(SpvOpLoopMerge);
+    inst.add_operand(merge_label_id);
+    inst.add_operand(continue_label_id);
+    inst.add_immediate(loop_control_mask);
+    return inst;
+}
+
+SpvInstruction SpvSelectionMergeInst::make( SpvId merge_label_id, uint32_t selection_control_mask = SpvSelectionControlMaskNone) {
+    SpvInstruction inst = SpvInstruction::make(SpvOpSelectionMerge);
+    inst.add_operand(merge_label_id);
+    inst.add_immediate(selection_control_mask);
+    return inst;
+}
+
+SpvInstruction SpvOpPhiInst::make(SpvId type_id, SpvId result_id, const SpvOpPhiInst::BlockVariables& block_vars ) {
+    SpvInstruction inst = SpvInstruction::make(SpvOpPhi);
+    inst.set_type_id(type_id);
+    inst.set_result_id(result_id);
+    for( const VariableBlockIdPair& vb : block_vars) {
+        inst.add_operand(vb.first);     // variable id
+        inst.add_operand(vb.second);    // block id
     }
-};
+    return inst;
+}
 
-struct SpvTypeBoolInst {
-    static SpvInstruction make(SpvId bool_type_id) {
-        SpvInstruction inst = SpvInstruction::make(SpvOpTypeBool);
-        inst.set_result_id(bool_type_id);
-        return inst;
-    }
-};
-
-struct SpvTypeIntInst {
-    static SpvInstruction make(SpvId int_type_id, uint32_t bits, uint32_t signedness) {
-        SpvInstruction inst = SpvInstruction::make(SpvOpTypeInt);
-        inst.set_result_id(int_type_id);
-        inst.add_immediate(bits);
-        inst.add_immediate(signedness);
-        return inst;
-    }
-};
-
-struct SpvTypeFloatInst {
-    static SpvInstruction make(SpvId float_type_id, uint32_t bits) {
-        SpvInstruction inst = SpvInstruction::make(SpvOpTypeFloat);
-        inst.set_result_id(float_type_id);
-        inst.add_immediate(bits);
-        return inst;
-    }
-};
-
-struct SpvTypeVectorInst {
-    static SpvInstruction make(SpvId vector_type_id, SpvId element_type_id, uint32_t vector_size) {
-        SpvInstruction inst = SpvInstruction::make(SpvOpTypeVector);
-        inst.set_result_id(vector_type_id);
-        inst.add_operand(element_type_id);
-        inst.add_immediate(vector_size);
-        return inst;
-    }
-};
-
-struct SpvTypeArrayInst {
-    static SpvInstruction make(SpvId array_type_id, SpvId element_type_id, uint32_t array_size) {
-        SpvInstruction inst = SpvInstruction::make(SpvOpTypeArray);
-        inst.set_result_id(array_type_id);
-        inst.add_operand(element_type_id);
-        inst.add_immediate(array_size);        
-        return inst;
-    }
-};
-
-struct SpvTypeStructInst {
-    using MemberTypeIds = std::vector<SpvId>;
-    static SpvInstruction make(SpvId result_id, const MemberTypeIds& member_type_ids) {
-        SpvInstruction inst = SpvInstruction::make(SpvOpTypeStruct);
-        inst.set_result_id(result_id);
-        for(const SpvId member_type : member_type_ids) {
-            inst.add_operand(member_type);
-        }
-        return inst;
-    }
-};
-
-struct SpvTypeRuntimeArrayInst {
-    static SpvInstruction make(SpvId result_type_id, SpvId base_type_id ) {
-        SpvInstruction inst = SpvInstruction::make(SpvOpTypeRuntimeArray);
-        inst.set_result_id(result_type_id);
-        inst.add_operand(base_type_id);
-        return inst;
-    }
-};
-
-struct SpvTypePointerInst {
-    static SpvInstruction make(SpvId pointer_type_id, SpvStorageClass storage_class, SpvId base_type_id ) {
-        SpvInstruction inst = SpvInstruction::make(SpvOpTypePointer);
-        inst.set_result_id(pointer_type_id);
-        inst.add_immediate(storage_class);
-        inst.add_operand(base_type_id);
-        return inst;
-    }
-};
-
-struct SpvTypeFunctionInst {
-    using ParamTypes = std::vector<SpvId>;
-    static SpvInstruction make(SpvId function_type_id, SpvId return_type_id, const ParamTypes& param_type_ids) {
-        SpvInstruction inst = SpvInstruction::make(SpvOpTypeFunction);
-        inst.set_type_id(return_type_id);
-        inst.set_result_id(function_type_id);
-        for(SpvId type_id : param_type_ids) {
-            inst.add_operand(type_id);
-        }
-        return inst;
-    }
-};
-
-struct SpvVariableInst {
-    static SpvInstruction make(SpvId result_type_id, SpvId result_id, uint32 storage_class, SpvId initializer_id = SpvInvalidId) {
-        SpvInstruction inst = SpvInstruction::make(SpvOpVariable);
-        inst.set_type_id(result_type_id);
-        inst.set_result_id(result_id);
-        inst.add_immediate(storage_class);
-        if(initializer_id != SpvInvalidId) {
-            inst.add_operand(initializer_id);
-        }
-        return inst;
-    }
-};
-
-struct SpvFunctionInst {
-    static SpvInstruction make(SpvId return_type_id, SpvId func_id, uint32_t control_mask, SpvId func_type_id) {
-        SpvInstruction inst = SpvInstruction::make(SpvOpFunction);
-        inst.set_type_id(return_type_id);
-        inst.set_result_id(func_id);
-        inst.add_immediate(control_mask);
-        inst.add_operand(func_type_id);
-        return inst;
-    }
-};
-
-struct SpvFunctionParameterInst {
-    static SpvInstruction make(SpvId param_type_id, SpvId param_id) {
-        SpvInstruction inst = SpvInstruction::make(SpvOpFunctionParameter);
-        inst.set_type_id(param_type_id);
-        inst.set_result_id(param_id);
-        return inst;
-    }
-};
-
-struct SpvReturnInst {
-    static SpvInstruction make(SpvId return_value_id = SpvInvalidId) {
-        SpvOp opcode = (return_value_id == SpvInvalidId) ? SpvOpReturn : SpvOpReturnValue;
-        SpvInstruction inst = SpvInstruction::make( opcode );
-        if(return_value_id != SpvInvalidId)
-            inst.add_operand(return_value_id);
-        return inst;
-    }
-};
-
-struct SpvEntryPointInst {
-    using Variables = std::vector<SpvId>;
-    static SpvInstruction make(SpvId exec_model, SpvId func_id, const std::string& name, const Variables& variables) {
-        SpvInstruction inst = SpvInstruction::make(SpvOpEntryPoint);
-        inst.add_immediate(exec_model);
-        inst.add_operand(func_id);
-        inst.add_string(name);
-        for(SpvId var : variables) {
-            inst.add_operand(var);
-        }
-        return inst;
-    }
-};
-
-struct SpvMemoryModelInst {
-    static SpvInstruction make(SpvAddressingModel addressing_model, SpvMemoryModel memory_model) {
-        SpvInstruction inst = SpvInstruction::make(SpvOpMemoryModel);
-        inst.add_immediate(addressing_model);
-        inst.add_immediate(memory_model);    
-        return inst;
-    }
-};
-
-struct SpvExecutionModeLocalSizeInst {
-    static SpvInstruction make(SpvId function_id, uint32_t wg_size_x, uint32_t wg_size_y, uint32_t wg_size_z) {
-        SpvInstruction inst = SpvInstruction::make(SpvOpExecutionMode);
-        inst.add_operand(function_id);
-        inst.add_immediate(SpvExecutionModeLocalSize);
-        inst.add_immediate(wg_size_x);
-        inst.add_immediate(wg_size_y);
-        inst.add_immediate(wg_size_z);
-        return inst;
-    }
-};
-
-struct SpvControlBarrierInst {
-    static SpvInstruction make(SpvId execution_scope_id, SpvId memory_scope_id, uint32_t semantics_mask ) {
-        SpvInstruction inst = SpvInstruction::make(SpvOpControlBarrier);
-        inst.add_operand(execution_scope_id);
-        inst.add_operand(memory_scope_id);
-        inst.add_immediate(semantics_mask);
-        return inst;
-    }
-};
-
-struct SpvNotInst {
-    static SpvInstruction make(SpvId type_id, SpvId result_id, SpvId src_id ) {
-        return SpvUnaryOpInstruction::make(SpvOpNot, type_id, result_id, src_id);
-    }
-};
-
-struct SpvMulExtendedInst {
-    static SpvInstruction make(SpvId type_id, SpvId result_id, SpvId src_a_id, SpvId src_b_id, bool is_signed ) {
-        return SpvBinaryOpInstruction::make(is_signed ? SpvOpSMulExtended : SpvOpUMulExtended, type_id, result_id, src_a_id, src_b_id);
-    }
-};
-
-struct SpvSelectInst {
-    static SpvInstruction make(SpvId type_id, SpvId result_id, SpvId condition_id, SpvId true_id, SpvId false_id ) {
-        SpvInstruction inst = SpvInstruction::make(SpvOpSelect);
-        inst.set_type_id(type_id);
-        inst.set_result_id(result_id);
-        inst.add_operand(condition_id);
-        inst.add_operand(true_id);
-        inst.add_operand(false_id);
-        return inst;
-    }
-};
-
-struct SpvInBoundsAccessChainInst {
-    using Indices = std::vector<SpvId>;
-    static SpvInstruction make(SpvId type_id, SpvId result_id, SpvId base_id, SpvId element_id, const Indices& indices ) {
-        SpvInstruction inst = SpvInstruction::make(SpvOpInBoundsAccessChain);
-        inst.set_type_id(type_id);
-        inst.set_result_id(result_id);
-        inst.add_operand(base_id);
-        inst.add_operand(element_id);
-        for(SpvId i : indices) {
-            inst.add_operand(i);
-        }
-        return inst;
-    }
-};
-
-struct SpvLoadInst {
-    static SpvInstruction make(SpvId type_id, SpvId result_id, SpvId ptr_id, uint32_t access_mask = 0x0) {
-        SpvInstruction inst = SpvInstruction::make(SpvOpLoad);
-        inst.set_type_id(type_id);
-        inst.set_result_id(result_id);
-        inst.add_operand(ptr_id);
-        inst.add_immediate(access_mask);
-        return inst;
-    }
-};
-
-struct SpvStoreInst {
-    static SpvInstruction make(SpvId ptr_id, SpvId obj_id, uint32_t access_mask = 0x0) {
-        SpvInstruction inst = SpvInstruction::make(SpvOpStore);
-        inst.add_operand(ptr_id);
-        inst.add_operand(obj_id);
-        inst.add_immediate(access_mask);
-        return inst;
-    }
-};
-
-struct SpvCompositeExtractInst {
-    using Indices = std::vector<SpvId>;
-    static SpvInstruction make(SpvId type_id, SpvId result_id, SpvId composite_id, const Indices& indices ) {
-        SpvInstruction inst = SpvInstruction::make(SpvOpCompositeExtract);
-        inst.set_type_id(type_id);
-        inst.set_result_id(result_id);
-        inst.add_operand(composite_id);
-        for(SpvId i : indices) {
-            inst.add_immediate(i);
-        }
-        return inst;
-    }
-};
-
-struct SpvBitcastInst {
-    static SpvInstruction make(SpvId type_id, SpvId result_id, SpvId src_id ) {
-        SpvInstruction inst = SpvInstruction::make(SpvOpBitcast);
-        inst.set_type_id(type_id);
-        inst.set_result_id(result_id);
-        inst.add_operand(src_id);
-        return inst;
-    }
-};
-
-struct SpvIAddInst {
-    static SpvInstruction make(SpvId type_id, SpvId result_id, SpvId src_a_id, SpvId src_b_id  ) {
-        return SpvBinaryOpInstruction::make(SpvOpIAdd, type_id, result_id, src_a_id, src_b_id);
-    }
-};
-
-struct SpvBranchInst {
-    static SpvInstruction make( SpvId target_label_id ) {
-        SpvInstruction inst = SpvInstruction::make(SpvOpBranch);
-        inst.add_operand(target_label_id);
-        return inst;
-    }
-};
-
-struct SpvBranchConditionalInst {
-    using BranchWeights = std::vector<uint32_t>;
-    static SpvInstruction make( SpvId condition_label_id, SpvId true_label_id, SpvId false_label_id, const BranchWeights& weights = {} ) {
-        SpvInstruction inst = SpvInstruction::make(SpvOpBranch);
-        inst.add_operand(condition_label_id);
-        inst.add_operand(true_label_id);
-        inst.add_operand(false_label_id);
-        for( uint32_t w : weights) {
-            inst.add_immediate(w);
-        }
-        return inst;
-    }
-};
-
-struct SpvLoopMergeInst {
-    static SpvInstruction make( SpvId merge_label_id, SpvId continue_label_id, uint32_t loop_control_mask = SpvLoopControlMaskNone) {
-        SpvInstruction inst = SpvInstruction::make(SpvOpLoopMerge);
-        inst.add_operand(merge_label_id);
-        inst.add_operand(continue_label_id);
-        inst.add_immediate(loop_control_mask);
-        return inst;
-    }
-};
-
-struct SpvSelectionMergeInst {
-    static SpvInstruction make( SpvId merge_label_id, uint32_t selection_control_mask = SpvSelectionControlMaskNone) {
-        SpvInstruction inst = SpvInstruction::make(SpvOpSelectionMerge);
-        inst.add_operand(merge_label_id);
-        inst.add_immediate(selection_control_mask);
-        return inst;
-    }
-};
-
-struct SpvOpPhiInst {
-    using VariableBlockIdPair = std::pair<SpvId, SpvId>; // (Variable Id, Block Id)
-    using BlockVariables = std::vector<VariableBlockIdPair>;
-    static SpvInstruction make(SpvId type_id, SpvId result_id, const BlockVariables& block_vars ) {
-        SpvInstruction inst = SpvInstruction::make(SpvOpPhi);
-        inst.set_type_id(type_id);
-        inst.set_result_id(result_id);
-        for( const VariableBlockIdPair& vb : block_vars) {
-            inst.add_operand(vb.first);     // variable id
-            inst.add_operand(vb.second);    // block id
-        }
-        return inst;
-    }
-};
-
-// --
-
-class SpvBlock {
-public:
-    using Instructions = std::vector<SpvInstruction>;
-    using Variables = std::vector<SpvInstruction>;
-    using Blocks = std::vector<SpvBlock>;
-
-    SpvBlock() = default;
-    ~SpvBlock() = default;
-
-    SpvBlock(const SpvBlock &) = default;
-    SpvBlock &operator=(const SpvBlock &) = default;
-    SpvBlock(SpvBlock &&) = default;
-    SpvBlock &operator=(SpvBlock &&) = default;
-
-    void add_instruction(SpvInstruction inst);
-    void add_variable(SpvInstruction var);
-    void set_function(SpvFunction func);
-    const Instructions& instructions() const;
-    const Variables& variables() const;
-    SpvFunction function() const;
-    bool is_reachable() const;
-    bool is_terminated() const;
-    bool is_defined() const;
-    SpvId id() const;
-
-    void encode(SpvBinary& binary) const;
-
-    static SpvBlock make(SpvFunction func, SpvId id);
-
-protected:
-   
-    SpvBlockContentsPtr contents;
-};
-
-// --
-
-class SpvFunction {
-public:
-    SpvFunction() = default;
-    ~SpvFunction() = default;
-
-    SpvFunction(const SpvFunction &) = default;
-    SpvFunction &operator=(const SpvFunction &) = default;
-    SpvFunction(SpvFunction &&) = default;
-    SpvFunction &operator=(SpvFunction &&) = default;
-
-    void add_block(SpvBlock block);
-    void add_parameter(SpvInstruction param);
-    void set_module(SpvModule module);
-    void set_return_precision(SpvPrecision precision);
-    void set_parameter_precision(uint32_t index, SpvPrecision precision);
-    bool is_defined() const;
-
-    SpvBlock entry_block() const;
-    SpvPrecision return_precision() const;
-    SpvPrecision parameter_precision(uint32_t index) const;
-    uint32_t parameter_count() const;
-    uint32_t control_mask() const;
-    SpvInstruction declaration() const;
-    SpvModule module() const;
-    SpvId return_type_id() const;
-    SpvId type_id() const;
-    SpvId id() const;
-
-    void encode(SpvBinary& binary) const;
-
-    static SpvFunction make(SpvId func_id, SpvId func_type_id, SpvId return_type_id, uint32_t control_mask = SpvFunctionControlMaskNone);
-
-protected:
-    SpvFunctionContentsPtr contents;
-};
-
-// --
-
-class SpvModule {
-public:
-    using EntryPointNames = std::vector<std::string>;
-    using Instructions = std::vector<SpvInstruction>;
-
-    SpvModule() = default;
-    ~SpvModule() = default;
-
-    SpvModule(const SpvModule &) = default;
-    SpvModule &operator=(const SpvModule &) = default;
-    SpvModule(SpvModule &&) = default;
-    SpvModule &operator=(SpvModule &&) = default;
-
-    void add_debug(SpvInstruction val);    
-    void add_annotation(SpvInstruction val);    
-    void add_type(SpvInstruction val);
-    void add_constant(SpvInstruction val);
-    void add_global(SpvInstruction val);
-    void add_execution_mode(SpvInstruction val);
-    void add_function(SpvFunction val);
-    void add_instruction(SpvInstruction val);
-    void add_entry_point(const std::string& name, SpvInstruction entry_point);
-
-    void require_capability(SpvCapability val);
-    void require_extension(const std::string& val);    
-
-    void set_source_language(SpvSourceLanguage val);
-    void set_addressing_model(SpvAddressingModel val);
-    void set_memory_model(SpvMemoryModel val);
-    SpvSourceLanguage source_language() const;
-    SpvAddressingModel addressing_model() const;
-    SpvMemoryModel memory_model() const;
-    SpvInstruction entry_point(const std::string& name) const;    
-    EntryPointNames entry_point_names() const;
-    const Instructions& execution_modes() const;
-    SpvModule module() const;
-    
-    bool is_capability_required(SpvCapability val) const;
-    bool is_extension_required(const std::string& val) const;
-    bool is_defined() const;
-    SpvId id() const;
-
-    void encode(SpvBinary& binary) const;
-
-    static SpvModule make(SpvId module_id, 
-        SpvSourceLanguage source_language = SpvSourceLanguageUnknown,
-        SpvAddressingModel addressing_model = SpvAddressingModelLogical,
-        SpvMemoryModel memory_model = SpvMemoryModelSimple);
-
-protected:
-    SpvModuleContentsPtr contents;
-};
-
-// --
-
-class SpvBuilder {
-public:
-    using ParamTypes = std::vector<SpvId>;
-    using StructMemberTypes = std::vector<SpvId>;
-    using Variables = std::vector<SpvId>;
-    using Indices = std::vector<uint32_t>;
-    using Literals = std::vector<uint32_t>;
-
-    SpvBuilder();
-    ~SpvBuilder() = default;
-
-    SpvBuilder(const SpvBuilder &) = delete;
-    SpvBuilder &operator=(const SpvBuilder &) = delete;
-
-    SpvId reserve_id(SpvKind = SpvResultId);
-    SpvKind kind_of(SpvId id);
-
-    SpvId map_type(const Type& type, uint32_t array_size=1);
-    SpvId map_pointer_type(const Type& type, SpvStorageClass storage_class);
-    SpvId map_pointer_type(SpvId type_id, SpvStorageClass storage_class);
-    SpvId map_constant(const Type& type, const void* data);
-    SpvId map_null_constant(const Type& type);
-    SpvId map_bool_constant(bool value);
-    SpvId map_function_type(SpvId return_type, const ParamTypes& param_types = {});
-
-    SpvId declare_type(const Type& type, uint32_t array_size=1);
-    SpvId declare_struct(const StructMemberTypes& member_types);
-    SpvId declare_runtime_array(SpvId base_type_id);
-    SpvId declare_pointer_type(const Type& type, SpvStorageClass storage_class);
-    SpvId declare_pointer_type(SpvId base_type_id, SpvStorageClass storage_class);
-    SpvId declare_constant(const Type& type, const void* data);
-    SpvId declare_null_constant(const Type& type);
-    SpvId declare_bool_constant(bool value);
-    SpvId declare_string_constant(const std::string& str);
-    SpvId declare_scalar_constant(const Type& type, const void* data);
-    SpvId declare_vector_constant(const Type& type, const void* data);
-    SpvId declare_access_chain(SpvId ptr_type_id, SpvId base_id, SpvId element_id, const Indices& indices );
-    SpvId declare_function_type(SpvId return_type_id, const ParamTypes& param_type_ids);
-
-    SpvFunction add_function(SpvId return_type, const ParamTypes& param_types = {});
-    SpvId add_instruction(SpvInstruction val);
-    SpvId add_annotation( SpvId target_id, SpvDecoration decoration_type, const Literals& literals = {});
-    SpvId add_struct_annotation( SpvId struct_type_id, uint32_t member_index, SpvDecoration decoration_type, const Literals& literals = {});
-    
-    SpvId add_variable(SpvId type_id, uint32 storage_class, SpvId initializer_id = SpvInvalidId);
-    SpvId add_global_variable(SpvId type_id, uint32 storage_class, SpvId initializer_id = SpvInvalidId);
-
-    SpvId map_struct(const StructMemberTypes& member_types);
-
-    void add_entry_point(const std::string& name, 
-                         SpvId func_id, SpvExecutionModel exec_model,
-                         const Variables& variables = {});
-
-    void add_execution_mode_local_size(SpvId entry_point_id, uint32_t wg_size_x, uint32_t wg_size_y, uint32_t wg_size_z);
-
-    void set_source_language(SpvSourceLanguage val);
-    void set_addressing_model(SpvAddressingModel val);
-    void set_memory_model(SpvMemoryModel val);
-
-    SpvSourceLanguage source_language() const;
-    SpvAddressingModel addressing_model() const;
-    SpvMemoryModel memory_model() const;
-    
-    void enter_block(SpvBlock block);
-    SpvBlock current_block() const;
-    SpvBlock leave_block();
-
-    void enter_function(SpvFunction func_id);
-    SpvFunction current_function() const;
-    SpvFunction leave_function();
-    
-    void set_current_id(SpvId id);
-    SpvId current_id() const;
-
-    SpvModule current_module() const;
-
-    void require_extension(const std::string& extension);
-    void require_capability(SpvCapability);
-
-    bool is_extension_required(const std::string& extension) const;
-    bool is_capability_required(SpvCapability) const;
-
-    void append(SpvInstruction inst);
-    void encode(SpvBinary& binary) const;
-
-protected:
-
-    using TypeKey = std::string;
-    using TypeMap = std::unordered_map<TypeKey, SpvId>;
-    using KindMap = std::unordered_map<SpvId, SpvKind>;
-    using PointerTypeKey = std::pair<SpvId, SpvStorageClass>;
-    using PointerTypeMap = std::map<PointerTypeKey, SpvId>;
-    using ConstantKey = std::string;
-    using ConstantMap = std::unordered_map<ConstantKey, SpvId>;
-    using StringMap = std::unordered_map<ConstantKey, SpvId>;
-    using InstructionMap = std::unordered_map<SpvId, SpvInstruction>;
-    using FunctionTypeKey = std::string;
-    using FunctionTypeMap = std::unordered_map<FunctionTypeKey, SpvId>;
-    using FunctionMap = std::unordered_map<SpvId, SpvFunction>;
-    using FunctionStack = std::stack<SpvFunction>;
-    using BlockStack = std::stack<SpvBlock>;
-
-    SpvId declare_id(SpvKind kind);
-
-    TypeKey hash_type(const Type& type, uint32_t array_size=1) const;
-    SpvId lookup_type(const Type& type, uint32_t array_size=1) const;
-
-    TypeKey hash_struct(const StructMemberTypes& member_types) const;
-    SpvId lookup_struct(const StructMemberTypes& member_types) const;
-
-    PointerTypeKey hash_pointer_type(const Type& type, SpvStorageClass storage_class) const;
-    SpvId lookup_pointer_type(const Type& type, SpvStorageClass storage_class) const;
-
-    PointerTypeKey hash_pointer_type(SpvId base_type_id, SpvStorageClass storage_class) const;
-    SpvId lookup_pointer_type(SpvId base_type_id, SpvStorageClass storage_class) const;
-
-    ConstantKey hash_bool_constant(bool value) const;
-
-    ConstantKey hash_constant(const Type& type, const void* data) const;
-    SpvId lookup_constant(const Type& type, const void* data) const;
-
-    ConstantKey hash_null_constant(const Type& type) const;
-    SpvId lookup_null_constant(const Type& type) const;
-
-    SpvId map_instruction(SpvInstruction inst);
-    SpvInstruction lookup_instruction(SpvId result_id) const;
-    bool has_instruction(SpvId inst) const;
-
-    FunctionTypeKey hash_function_type(SpvId return_type_id, const ParamTypes& param_type_ids) const;
-    SpvId lookup_function_type(SpvId return_type_id, const ParamTypes& param_type_ids) const;
-
-    SpvId scope_id = SpvInvalidId;
-    SpvModule module;
-    KindMap kind_map;
-    TypeMap type_map;
-    TypeMap struct_map;
-    StringMap string_map;
-    ConstantMap constant_map;
-    FunctionMap function_map;
-    InstructionMap instruction_map;
-    PointerTypeMap pointer_type_map;
-    FunctionTypeMap function_type_map;
-    FunctionStack function_stack;
-    BlockStack block_stack;
-};
-
-// --
-
-struct SpvInstructionContents {
-    using Operands = std::vector<SpvId>;
-    using Immediates = std::vector<bool>;
-    mutable RefCount ref_count;
-    SpvOp op_code = SpvOpNop;
-    SpvId result_id = SpvNoResult;
-    SpvId type_id = SpvNoType;
-    Operands operands;
-    Immediates immediates;
-    SpvBlock block;
-};
-
-struct SpvBlockContents {
-    using Instructions = std::vector<SpvInstruction>;
-    using Variables = std::vector<SpvInstruction>;
-    using Blocks = std::vector<SpvBlock>;
-    mutable RefCount ref_count;
-    SpvId block_id = SpvInvalidId;
-    SpvFunction parent;
-    Instructions instructions;
-    Variables variables;
-    Blocks before;
-    Blocks after;
-    bool reachable = true;    
-};
-
-struct SpvFunctionContents {
-    using PrecisionMap = std::unordered_map<SpvId, SpvPrecision>;
-    using Parameters = std::vector<SpvInstruction>;
-    using Blocks = std::vector<SpvBlock>;
-    mutable RefCount ref_count;
-    SpvModule parent;
-    SpvId function_id;
-    SpvId function_type_id;
-    SpvId return_type_id;
-    uint32_t control_mask;
-    SpvInstruction declaration;
-    Parameters parameters;
-    PrecisionMap precision;
-    Blocks blocks; 
-};
-
-struct SpvModuleContents {
-    using Capabilities = std::set<SpvCapability>;
-    using Extensions = std::set<std::string>;
-    using Imports = std::set<std::string>;
-    using Functions = std::vector<SpvFunction>;
-    using Instructions = std::vector<SpvInstruction>;
-    using EntryPoints = std::unordered_map<std::string, SpvInstruction>;
-
-    mutable RefCount ref_count;
-    SpvId module_id = SpvInvalidId;
-    SpvSourceLanguage source_language = SpvSourceLanguageUnknown;
-    SpvAddressingModel addressing_model = SpvAddressingModelLogical;
-    SpvMemoryModel memory_model = SpvMemoryModelSimple;
-    Capabilities capabilities;
-    Extensions extensions;
-    Imports imports;
-    EntryPoints entry_points;    
-    Instructions execution_modes;
-    Instructions debug;
-    Instructions annotations;
-    Instructions types;
-    Instructions constants;
-    Instructions globals;
-    Functions functions;
-    Instructions instructions;
-};
-
+/** SpvInstruction implementation **/
 SpvInstruction SpvInstruction::make(SpvOp op_code) {
     SpvInstruction instance;
     instance.contents = SpvInstructionContentsPtr(new SpvInstructionContents);
@@ -1040,18 +483,6 @@ void SpvInstruction::encode(SpvBinary& binary) const {
 
 // --
 
-template<>
-RefCount &ref_count<SpvInstructionContents>(const SpvInstructionContents *c) noexcept {
-    return c->ref_count;
-}
-
-template<>
-void destroy<SpvInstructionContents>(const SpvInstructionContents *c) {
-    delete c;
-}
-
-// --
-
 SpvBlock SpvBlock::make(SpvFunction func, SpvId block_id) {
     SpvBlock instance;
     instance.contents = SpvBlockContentsPtr( new SpvBlockContents() );
@@ -1137,18 +568,6 @@ void SpvBlock::encode(SpvBinary& binary) const {
     for(const SpvInstruction& instruction : contents->instructions) {
         instruction.encode(binary);
     }
-}
-
-// --
-
-template<>
-RefCount &ref_count<SpvBlockContents>(const SpvBlockContents *c) noexcept {
-    return c->ref_count;
-}
-
-template<>
-void destroy<SpvBlockContents>(const SpvBlockContents *c) {
-    delete c;
 }
 
 // --
@@ -1264,18 +683,6 @@ void SpvFunction::encode(SpvBinary& binary) const {
 
     SpvInstruction inst = SpvInstruction::make(SpvOpFunctionEnd);
     inst.encode(binary);
-}
-
-// --
-
-template<>
-RefCount &ref_count<SpvFunctionContents>(const SpvFunctionContents *c) noexcept {
-    return c->ref_count;
-}
-
-template<>
-void destroy<SpvFunctionContents>(const SpvFunctionContents *c) {
-    delete c;
 }
 
 // --
@@ -1509,18 +916,6 @@ void SpvModule::encode(SpvBinary& binary) const {
     for(const SpvFunction& func : contents->functions) {
         func.encode(binary);
     }
-}
-
-// --
-
-template<>
-RefCount &ref_count<SpvModuleContents>(const SpvModuleContents *c) noexcept {
-    return c->ref_count;
-}
-
-template<>
-void destroy<SpvModuleContents>(const SpvModuleContents *c) {
-    delete c;
 }
 
 // --
@@ -2169,4 +1564,4 @@ void SpvBuilder::append(SpvInstruction inst) {
 
 }} // namespace: Halide::Internal
 
-#endif // HALIDE_SPIRV_IR_H
+#endif // TARGET_SPIRV
