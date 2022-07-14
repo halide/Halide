@@ -2072,7 +2072,7 @@ void CodeGen_C::visit(const Cast *op) {
 }
 
 void CodeGen_C::visit(const Reinterpret *op) {
-    id = print_reinterpret(op->type, op->value);
+    id = print_assignment(op->type, print_reinterpret(op->type, op->value));
 }
 
 void CodeGen_C::visit_binop(Type t, const Expr &a, const Expr &b, const char *op) {
