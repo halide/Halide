@@ -94,6 +94,18 @@ public:
                                                      extra_scalar,
                                                      cast<int8_t>(extra_dynamic_scalar)})
                          .output;
+
+        // Estimates (for autoscheduler):
+        constexpr int kSize = 32;
+        input.set_estimates({{0, kSize}, {0, kSize}, {0, 3}});
+        calculated_output.set_estimates({{0, kSize}, {0, kSize}, {0, 3}});
+        float32_buffer_output.set_estimates({{0, kSize}, {0, kSize}, {0, 3}});
+        int32_buffer_output.set_estimates({{0, kSize}, {0, kSize}, {0, 3}});
+        array_test_output.set_estimates({{0, kSize}, {0, kSize}, {0, 3}});
+        tupled_output.set_estimates({{0, kSize}, {0, kSize}, {0, 3}});
+        int_output.set_estimates({{0, kSize}, {0, kSize}, {0, 3}});
+        float16_output.set_estimates({{0, kSize}, {0, kSize}, {0, 3}});
+        bfloat16_output.set_estimates({{0, kSize}, {0, kSize}, {0, 3}});
     }
 };
 
