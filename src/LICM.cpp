@@ -228,8 +228,6 @@ class LICM : public IRMutator {
             return cost(sub->a, vars) + cost(sub->b, vars) + 1;
         } else if (const Mul *mul = e.as<Mul>()) {
             return cost(mul->a, vars) + cost(mul->b, vars) + 1;
-        } else if (const Call *call = e.as<Call>()) {
-            return 100;
         } else {
             return 100;
         }
