@@ -1,6 +1,7 @@
 #include "ASLog.h"
 
 #include <array>
+#include <cassert>
 
 namespace Halide {
 namespace Internal {
