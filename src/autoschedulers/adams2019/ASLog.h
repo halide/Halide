@@ -5,6 +5,7 @@
 // libHalide, so (despite the namespace) we are better off not
 // including Halide.h, lest we reference something we won't have available
 
+#include <cassert>
 #include <cstdlib>
 #include <iostream>
 #include <utility>
@@ -26,6 +27,12 @@ public:
             std::cerr << std::forward<T>(x);
         }
         return *this;
+    }
+
+    std::ostream &get_ostream() {
+        // It is an error to call this for an aslog() instance that cannot log.
+        assert(logging);
+        return std::cerr;
     }
 
     static int aslog_level();
