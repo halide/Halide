@@ -64,7 +64,7 @@ Tile<1> get_1d_tile_index(const Expr &e) {
 
         Expr patterns[] = {
             ((v1 * stride_var) + v2) * v3,
-            v3 * ((v1 * stride_var) + wild_i32),
+            v3 * ((v1 * stride_var) + v2),
             (v2 + (v1 * stride_var)) * v3,
             v3 * (v2 + (v1 * stride_var)),
         };
