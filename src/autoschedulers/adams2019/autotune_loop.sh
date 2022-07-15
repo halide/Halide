@@ -107,7 +107,6 @@ make_featurization() {
         HL_WEIGHTS_DIR=${WEIGHTS} \
         HL_RANDOM_DROPOUT=${dropout} \
         HL_BEAM_SIZE=${beam} \
-        HL_MACHINE_PARAMS=32,24000000,40 \
         ${TIMEOUT_CMD} -k ${COMPILATION_TIMEOUT} ${COMPILATION_TIMEOUT} \
         ${GENERATOR} \
         -g ${PIPELINE} \
@@ -115,11 +114,11 @@ make_featurization() {
         -o ${D} \
         -e stmt,assembly,static_library,c_header,registration,schedule,featurization \
         target=${HL_TARGET} \
-        auto_schedule=true \
         ${EXTRA_GENERATOR_ARGS} \
         -p ${AUTOSCHED_BIN}/libautoschedule_adams2019.${SHARED_EXT} \
-        -s Adams2019 \
-          2> ${D}/compile_log.txt || echo "Compilation failed or timed out for ${D}"
+        autoscheduler=Adams2019 \
+        autoscheduler.parallelism=32 \
+            2> ${D}/compile_log.txt || echo "Compilation failed or timed out for ${D}"
 
 
     # We don't need image I/O for this purpose,

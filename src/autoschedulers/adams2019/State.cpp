@@ -14,7 +14,7 @@ uint64_t State::structural_hash(int depth) const {
     return h;
 }
 
-void State::compute_featurization(const FunctionDAG &dag, const MachineParams &params,
+void State::compute_featurization(const FunctionDAG &dag, const Adams2019Params &params,
                                   StageMap<ScheduleFeatures> *features, const CachingOptions &cache_options) {
     StageMap<LoopNest::Sites> sites;
     sites.make_large(dag.nodes[0].stages[0].max_id);
@@ -93,7 +93,7 @@ void State::compute_featurization(const FunctionDAG &dag, const MachineParams &p
     }
 }
 
-void State::save_featurization(const FunctionDAG &dag, const MachineParams &params,
+void State::save_featurization(const FunctionDAG &dag, const Adams2019Params &params,
                                const CachingOptions &cache_options, std::ostream &out) {
     StageMap<ScheduleFeatures> features;
     compute_featurization(dag, params, &features, cache_options);
@@ -123,7 +123,7 @@ void State::save_featurization(const FunctionDAG &dag, const MachineParams &para
     }
 }
 
-bool State::calculate_cost(const FunctionDAG &dag, const MachineParams &params,
+bool State::calculate_cost(const FunctionDAG &dag, const Adams2019Params &params,
                            CostModel *cost_model, const CachingOptions &cache_options,
                            int64_t memory_limit, int verbosity) {
     StageMap<ScheduleFeatures> features;
@@ -200,7 +200,7 @@ IntrusivePtr<State> State::make_child() const {
 
 // Generate the successor states to this state
 void State::generate_children(const FunctionDAG &dag,
-                              const MachineParams &params,
+                              const Adams2019Params &params,
                               CostModel *cost_model,
                               int64_t memory_limit,
                               std::function<void(IntrusivePtr<State> &&)> &accept_child,
@@ -539,7 +539,7 @@ void State::dump(std::ostream &os) const {
 // Apply the schedule represented by this state to a Halide
 // Pipeline. Also generate source code for the schedule for the
 // user to copy-paste to freeze this schedule as permanent artifact.
-void State::apply_schedule(const FunctionDAG &dag, const MachineParams &params) {
+void State::apply_schedule(const FunctionDAG &dag, const Adams2019Params &params) {
     StageMap<std::unique_ptr<LoopNest::StageScheduleState>> state_map;
     root->apply(LoopLevel::root(), state_map, params.parallelism, 0, nullptr, nullptr);
 

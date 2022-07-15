@@ -281,7 +281,6 @@ function(add_halide_library TARGET)
     # Attach an autoscheduler if the user requested it
     ##
 
-    set(autoscheduler "")
     if (ARG_AUTOSCHEDULER)
         if ("${ARG_AUTOSCHEDULER}" MATCHES "::")
             if (NOT TARGET "${ARG_AUTOSCHEDULER}")
@@ -295,8 +294,7 @@ function(add_halide_library TARGET)
         elseif (NOT ARG_PLUGINS)
             message(AUTHOR_WARNING "AUTOSCHEDULER set to a scheduler name but no plugins were loaded")
         endif ()
-        set(autoscheduler -s "${ARG_AUTOSCHEDULER}")
-        list(PREPEND ARG_PARAMS auto_schedule=true)
+        list(PREPEND ARG_PARAMS "autoscheduler=${ARG_AUTOSCHEDULER}")
     endif ()
 
     ##
@@ -334,7 +332,6 @@ function(add_halide_library TARGET)
                        -f "${ARG_FUNCTION_NAME}"
                        -e "$<JOIN:${generator_outputs},$<COMMA>>"
                        ${generator_plugins}
-                       ${autoscheduler}
                        -o .
                        "target=$<JOIN:${ARG_TARGETS},$<COMMA>>"
                        ${ARG_PARAMS}

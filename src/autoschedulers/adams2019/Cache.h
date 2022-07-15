@@ -122,7 +122,7 @@ struct Cache {
                              const FunctionDAG::Node *node,
                              int &num_children,
                              const FunctionDAG &dag,
-                             const MachineParams &params,
+                             const Adams2019Params &params,
                              CostModel *cost_model,
                              int64_t memory_limit) const;
 

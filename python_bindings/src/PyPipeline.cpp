@@ -41,6 +41,32 @@ void define_pipeline(py::module &m) {
     // - set_custom_trace()
     // - set_custom_print()
 
+#ifdef HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
+// nothing
+#else
+    py::class_<AutoschedulerParams>(m, "AutoschedulerParams")
+        .def(py::init<>())
+        .def(py::init<std::string>(), py::arg("name"))
+        .def(py::init([](const std::string &name, const py::dict &extra) -> AutoschedulerParams {
+                 // Manually convert the dict:
+                 // we want to allow Python to pass in dicts that have non-string values for some keys;
+                 // PyBind will reject these as a type failure. We'll stringify them here explicitly.
+                 AutoschedulerParams asp(name);
+                 for (auto item : extra) {
+                     const std::string name = py::str(item.first).cast<std::string>();
+                     const std::string value = py::str(item.second).cast<std::string>();
+                     asp.extra[name] = value;
+                 }
+                 return asp;
+             }),
+             py::arg("target"), py::arg("autoscheduler_params"))
+        .def_readwrite("name", &AutoschedulerParams::name)
+        .def_readwrite("extra", &AutoschedulerParams::extra)
+        .def("__repr__", [](const AutoSchedulerResults &o) -> std::string {
+            return "<halide.AutoschedulerParams>";
+        });
+#endif
+
     auto pipeline_class =
         py::class_<Pipeline>(m, "Pipeline")
             .def(py::init<>())
@@ -49,6 +75,7 @@ void define_pipeline(py::module &m) {
 
             .def("outputs", &Pipeline::outputs)
 
+#ifdef HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
             .def("auto_schedule", (AutoSchedulerResults(Pipeline::*)(const std::string &, const Target &, const MachineParams &) const) & Pipeline::auto_schedule,
                  py::arg("autoscheduler_name"), py::arg("target"), py::arg("machine_params") = MachineParams::generic())
             .def("auto_schedule", (AutoSchedulerResults(Pipeline::*)(const Target &, const MachineParams &) const) & Pipeline::auto_schedule,
@@ -56,7 +83,10 @@ void define_pipeline(py::module &m) {
 
             .def_static("set_default_autoscheduler_name", &Pipeline::set_default_autoscheduler_name,
                         py::arg("autoscheduler_name"))
-
+#else
+            .def("apply_autoscheduler", (AutoSchedulerResults(Pipeline::*)(const Target &, const AutoschedulerParams &) const) & Pipeline::apply_autoscheduler,
+                 py::arg("target"), py::arg("autoscheduler_params"))
+#endif
             .def("get_func", &Pipeline::get_func,
                  py::arg("index"))
             .def("print_loop_nest", &Pipeline::print_loop_nest)

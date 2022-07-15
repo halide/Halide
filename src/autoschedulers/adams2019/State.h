@@ -52,20 +52,20 @@ struct State {
     // Compute the featurization of this state (based on `root`),
     // and store features in `features`. Defers to `root->compute_features()`.
     void compute_featurization(const FunctionDAG &dag,
-                               const MachineParams &params,
+                               const Adams2019Params &params,
                                StageMap<ScheduleFeatures> *features,
                                const CachingOptions &cache_options);
 
     // Calls `compute_featurization` and prints those features to `out`.
     void save_featurization(const FunctionDAG &dag,
-                            const MachineParams &params,
+                            const Adams2019Params &params,
                             const CachingOptions &cache_options,
                             std::ostream &out);
 
     // Performs some pruning to decide if this state is worth queuing in
     // the cost_model. If it is, calls `cost_model->enqueue` and returns true,
     // otherwise sets `cost` equal to a large value and returns false.
-    bool calculate_cost(const FunctionDAG &dag, const MachineParams &params,
+    bool calculate_cost(const FunctionDAG &dag, const Adams2019Params &params,
                         CostModel *cost_model, const CachingOptions &cache_options,
                         int64_t memory_limit, int verbosity = 99);
 
@@ -79,7 +79,7 @@ struct State {
     // If they are not pruned by `calculate_cost()`,
     // then calls `accept_child()` on them.
     void generate_children(const FunctionDAG &dag,
-                           const MachineParams &params,
+                           const Adams2019Params &params,
                            CostModel *cost_model,
                            int64_t memory_limit,
                            std::function<void(IntrusivePtr<State> &&)> &accept_child,
@@ -92,7 +92,7 @@ struct State {
     // Pipeline. Also generate source code for the schedule for the
     // user to copy-paste to freeze this schedule as permanent artifact.
     // Also fills `schedule_source`.
-    void apply_schedule(const FunctionDAG &dag, const MachineParams &params);
+    void apply_schedule(const FunctionDAG &dag, const Adams2019Params &params);
 };
 
 }  // namespace Autoscheduler

@@ -84,8 +84,7 @@ $(BIN)/%/add_float32.a: $(GENERATOR_BIN)/add.generator
 		-f add_float32 \
 		-e static_library,c_header,pytorch_wrapper \
 		-o $(@D) \
-		target=$* \
-		auto_schedule=false
+		target=$*
 
 $(BIN)/%/add_halidegrad_float32.a: $(GENERATOR_BIN)/add.generator
 	@mkdir -p $(@D)
@@ -95,11 +94,10 @@ $(BIN)/%/add_halidegrad_float32.a: $(GENERATOR_BIN)/add.generator
 		-f add_halidegrad_float32 \
 		-e static_library,c_header,pytorch_wrapper \
 		-p $(HALIDE_DISTRIB_PATH)/lib/libautoschedule_li2018.so \
-		-s Li2018 \
 		-o $(@D) \
 		-d 1 \
 		target=$* \
-		auto_schedule=true
+		autoscheduler=Li2018
 
 $(BIN)/%/add_grad_float32.a: $(GENERATOR_BIN)/add.generator
 	@mkdir -p $(@D)
@@ -109,8 +107,7 @@ $(BIN)/%/add_grad_float32.a: $(GENERATOR_BIN)/add.generator
 		-f add_grad_float32 \
 		-e static_library,c_header,pytorch_wrapper \
 		-o $(@D) \
-		target=$* \
-		auto_schedule=false
+		target=$*
 
 $(BIN)/%/add_float64.a: $(GENERATOR_BIN)/add.generator
 	@mkdir -p $(@D)
@@ -120,8 +117,7 @@ $(BIN)/%/add_float64.a: $(GENERATOR_BIN)/add.generator
 		-f add_float64 \
 		-e static_library,c_header,pytorch_wrapper \
 		-o $(@D) \
-		target=$* \
-		auto_schedule=false
+		target=$*
 
 $(BIN)/%/add_halidegrad_float64.a: $(GENERATOR_BIN)/add.generator
 	@mkdir -p $(@D)
@@ -132,11 +128,10 @@ $(BIN)/%/add_halidegrad_float64.a: $(GENERATOR_BIN)/add.generator
 		-e static_library,c_header,pytorch_wrapper \
 		-o $(@D) \
 		-p $(HALIDE_DISTRIB_PATH)/lib/libautoschedule_li2018.so \
-		-s Li2018 \
 		target=$* \
 		-d 1 \
 		target=$* \
-		auto_schedule=true
+		autoscheduler=Li2018
 
 $(BIN)/%/add_grad_float64.a: $(GENERATOR_BIN)/add.generator
 	@mkdir -p $(@D)
@@ -146,8 +141,7 @@ $(BIN)/%/add_grad_float64.a: $(GENERATOR_BIN)/add.generator
 		-f add_grad_float64 \
 		-e static_library,c_header,pytorch_wrapper \
 		-o $(@D) \
-		target=$* \
-		auto_schedule=false
+		target=$*
 
 # -----------------------------------------------------------------------------
 
@@ -160,8 +154,7 @@ $(BIN)/%/add_cuda_float32.a: $(GENERATOR_BIN)/add.generator
 		-f add_cuda_float32 \
 		-e static_library,c_header,pytorch_wrapper \
 		-o $(@D) \
-		target=$(CUDA_TARGET) \
-		auto_schedule=false
+		target=$(CUDA_TARGET)
 
 $(BIN)/%/add_halidegrad_cuda_float32.a: $(GENERATOR_BIN)/add.generator
 	@mkdir -p $(@D)
@@ -172,10 +165,9 @@ $(BIN)/%/add_halidegrad_cuda_float32.a: $(GENERATOR_BIN)/add.generator
 		-e static_library,c_header,pytorch_wrapper \
 		-o $(@D) \
 		-p $(HALIDE_DISTRIB_PATH)/lib/libautoschedule_li2018.so \
-		-s Li2018 \
 		-d 1 \
 		target=$(CUDA_TARGET) \
-		auto_schedule=true
+		autoscheduler=Li2018
 
 $(BIN)/%/add_grad_cuda_float32.a: $(GENERATOR_BIN)/add.generator
 	@mkdir -p $(@D)
@@ -185,8 +177,7 @@ $(BIN)/%/add_grad_cuda_float32.a: $(GENERATOR_BIN)/add.generator
 		-f add_grad_cuda_float32 \
 		-e static_library,c_header,pytorch_wrapper \
 		-o $(@D) \
-		target=$(CUDA_TARGET) \
-		auto_schedule=false
+		target=$(CUDA_TARGET)
 
 $(BIN)/%/add_cuda_float64.a: $(GENERATOR_BIN)/add.generator
 	@mkdir -p $(@D)
@@ -196,8 +187,7 @@ $(BIN)/%/add_cuda_float64.a: $(GENERATOR_BIN)/add.generator
 		-f add_cuda_float64 \
 		-e static_library,c_header,pytorch_wrapper \
 		-o $(@D) \
-		target=$(CUDA_TARGET) \
-		auto_schedule=false
+		target=$(CUDA_TARGET)
 
 $(BIN)/%/add_halidegrad_cuda_float64.a: $(GENERATOR_BIN)/add.generator
 	@mkdir -p $(@D)
@@ -208,10 +198,9 @@ $(BIN)/%/add_halidegrad_cuda_float64.a: $(GENERATOR_BIN)/add.generator
 		-e static_library,c_header,pytorch_wrapper \
 		-o $(@D) \
 		-p $(HALIDE_DISTRIB_PATH)/lib/libautoschedule_li2018.so \
-		-s Li2018 \
 		-d 1 \
 		target=$(CUDA_TARGET) \
-		auto_schedule=true
+		autoscheduler=Li2018
 
 $(BIN)/%/add_grad_cuda_float64.a: $(GENERATOR_BIN)/add.generator
 	@mkdir -p $(@D)
@@ -221,8 +210,7 @@ $(BIN)/%/add_grad_cuda_float64.a: $(GENERATOR_BIN)/add.generator
 		-f add_grad_cuda_float64 \
 		-e static_library,c_header,pytorch_wrapper \
 		-o $(@D) \
-		target=$(CUDA_TARGET) \
-		auto_schedule=false
+		target=$(CUDA_TARGET)
 
 # -----------------------------------------------------------------------------
 

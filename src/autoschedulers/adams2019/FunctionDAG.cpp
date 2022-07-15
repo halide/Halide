@@ -572,7 +572,7 @@ bool depends_on_estimate(const Expr &expr) {
     return dependency_checker.found_estimate;
 }
 
-FunctionDAG::FunctionDAG(const vector<Function> &outputs, const MachineParams &params, const Target &target) {
+FunctionDAG::FunctionDAG(const vector<Function> &outputs, const Target &target) {
     map<string, Function> env = build_environment(outputs);
 
     // A mutator to apply parameter estimates to the expressions

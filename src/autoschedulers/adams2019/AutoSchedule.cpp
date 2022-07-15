@@ -31,9 +31,6 @@
   Write out a training featurization for the selected schedule into this file.
   Needs to be converted to a sample file with the runtime using featurization_to_sample before it can be used to train.
 
-  HL_MACHINE_PARAMS
-  An architecture description string. Used by Halide master to configure the cost model. We only use the first term. Set it to the number of cores to target.
-
   HL_PERMIT_FAILED_UNROLL
   Set to 1 to tell Halide not to freak out if we try to unroll a loop that doesn't have a constant extent. Should generally not be necessary, but sometimes the autoscheduler's model for what will and will not turn into a constant during lowering is inaccurate, because Halide isn't perfect at constant-folding.
 
@@ -256,7 +253,7 @@ public:
 
 // Configure a cost model to process a specific pipeline.
 void configure_pipeline_features(const FunctionDAG &dag,
-                                 const MachineParams &params,
+                                 const Adams2019Params &params,
                                  CostModel *cost_model) {
     cost_model->reset();
     cost_model->set_pipeline_features(dag, params);
@@ -265,7 +262,7 @@ void configure_pipeline_features(const FunctionDAG &dag,
 // A single pass of coarse-to-fine beam search.
 IntrusivePtr<State> optimal_schedule_pass(FunctionDAG &dag,
                                           const vector<Function> &outputs,
-                                          const MachineParams &params,
+                                          const Adams2019Params &params,
                                           CostModel *cost_model,
                                           std::mt19937 &rng,
                                           int beam_size,
@@ -464,7 +461,7 @@ IntrusivePtr<State> optimal_schedule_pass(FunctionDAG &dag,
 // Performance coarse-to-fine beam search and return the best state found.
 IntrusivePtr<State> optimal_schedule(FunctionDAG &dag,
                                      const vector<Function> &outputs,
-                                     const MachineParams &params,
+                                     const Adams2019Params &params,
                                      CostModel *cost_model,
                                      std::mt19937 &rng,
                                      int beam_size,
@@ -543,7 +540,7 @@ int State::cost_calculations = 0;
 // The main entrypoint to generate a schedule for a pipeline.
 void generate_schedule(const std::vector<Function> &outputs,
                        const Target &target,
-                       const MachineParams &params,
+                       const Adams2019Params &params,
                        AutoSchedulerResults *auto_scheduler_results) {
     aslog(1) << "generate_schedule for target=" << target.to_string() << "\n";
 
@@ -580,7 +577,7 @@ void generate_schedule(const std::vector<Function> &outputs,
     int64_t memory_limit = memory_limit_str.empty() ? (uint64_t)(-1) : std::atoll(memory_limit_str.c_str());
 
     // Analyse the Halide algorithm and construct our abstract representation of it
-    FunctionDAG dag(outputs, params, target);
+    FunctionDAG dag(outputs, target);
     if (aslog::aslog_level() >= 2) {
         dag.dump(aslog(2).get_ostream());
     }
@@ -641,7 +638,9 @@ void generate_schedule(const std::vector<Function> &outputs,
     }
 
     if (auto_scheduler_results) {
+#ifdef HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
         auto_scheduler_results->scheduler_name = "Adams2019";
+#endif
         auto_scheduler_results->schedule_source = optimal->schedule_source;
         {
             std::ostringstream out;
@@ -653,13 +652,37 @@ void generate_schedule(const std::vector<Function> &outputs,
 }
 
 struct Adams2019 {
-    void operator()(const Pipeline &p, const Target &target, const MachineParams &params, AutoSchedulerResults *results) {
+#ifdef HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
+    void operator()(const Pipeline &p, const Target &target, const MachineParams &params_in, AutoSchedulerResults *results) {
         std::vector<Function> outputs;
         for (const Func &f : p.outputs()) {
             outputs.push_back(f.function());
         }
+        Adams2019Params params;
+        params.parallelism = params_in.parallelism;
         Autoscheduler::generate_schedule(outputs, target, params, results);
     }
+#else
+    void operator()(const Pipeline &p, const Target &target, const AutoschedulerParams &params_in, AutoSchedulerResults *results) {
+        internal_assert(params_in.name == "Adams2019");
+        // Verify that no unknown keys are set in params_in
+        const std::set<std::string> legal_keys = {"parallelism"};
+        for (const auto &it : params_in.extra) {
+            user_assert(legal_keys.count(it.first) == 1) << "The key " << it.first << " is not legal to use for the Adams2019 Autoscheduler.";
+        }
+
+        std::vector<Function> outputs;
+        for (const Func &f : p.outputs()) {
+            outputs.push_back(f.function());
+        }
+        Adams2019Params params;
+        if (params_in.extra.count("parallelism")) {
+            params.parallelism = std::stoi(params_in.extra.at("parallelism"));
+        }
+        Autoscheduler::generate_schedule(outputs, target, params, results);
+        results->autoscheduler_params = params_in;
+    }
+#endif
 };
 
 REGISTER_AUTOSCHEDULER(Adams2019)
@@ -667,7 +690,7 @@ REGISTER_AUTOSCHEDULER(Adams2019)
 // An alternative entrypoint for other uses
 void find_and_apply_schedule(FunctionDAG &dag,
                              const std::vector<Function> &outputs,
-                             const MachineParams &params,
+                             const Adams2019Params &params,
                              CostModel *cost_model,
                              int beam_size,
                              int64_t memory_limit,

@@ -74,7 +74,7 @@ public:
         output(d, x, y, b) = max(pointwise_convolved(d, x, y, b), 0.f);
 
         // The schedule.
-        if (auto_schedule) {
+        if (using_autoscheduler()) {
             // Second layer of MobileNet v2
             const int N = 4, CI = 32, CO = 16, CM = 1, W = 112, H = 112;
 
@@ -276,7 +276,7 @@ public:
                 .unroll(xi);
         }
 
-        if (!auto_schedule) {
+        if (!using_autoscheduler()) {
             // We're going to specialize both schedules for channel_multiplier = 1,
             // in which case it's nice to know that depthwise_filter
             // is dense across the second dimension.
