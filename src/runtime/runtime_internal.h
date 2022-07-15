@@ -1,8 +1,12 @@
 #ifndef HALIDE_RUNTIME_INTERNAL_H
 #define HALIDE_RUNTIME_INTERNAL_H
 
+#ifdef COMPILING_HALIDE_RUNTIME_TESTS
+// Only allowed if building Halide runtime tests ... since they use system compiler which may be GCC or MSVS
+#else
 #if __STDC_HOSTED__
 #error "Halide runtime files must be compiled with clang in freestanding mode."
+#endif
 #endif
 
 #ifdef __UINT8_TYPE__
@@ -92,6 +96,7 @@ int strncmp(const char *s, const char *t, size_t n);
 size_t strlen(const char *s);
 const char *strchr(const char *s, int c);
 void *memcpy(void *s1, const void *s2, size_t n);
+void *memmove(void *dest, const void *src, size_t n);
 int memcmp(const void *s1, const void *s2, size_t n);
 void *memset(void *s, int val, size_t n);
 // Use fopen+fileno+fclose instead of open+close - the value of the
