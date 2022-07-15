@@ -14,9 +14,10 @@ using namespace Internal;
 using namespace std;
 
 #define DEPTH_COST 3
-#define LOW_RANGE 0
-#define MEDIUM_RANGE 1
-#define HIGH_RANGE 2
+#define NUMBER_COST_COLORS 20
+// #define LOW_RANGE 0
+// #define MEDIUM_RANGE 1
+// #define HIGH_RANGE 2
 
 #define m_assert(expr, msg) assert((void(msg), (expr)))
 
@@ -60,32 +61,49 @@ public:
 
     // returns the ranges for low, medium, and high cost
     int get_range(const IRNode *op) const {
-
+        if (op == nullptr) {
+            cout << "OH NO ITS NULL!!!!! " << endl;
+            return -1;
+        }
+        // return 0;
         // get max value of cost in stmt_cost map
         int max_cost = 0;
+        // cout << "compiles to here 0" << endl;
         for (auto const &pair : stmt_cost) {
             if (calculate_cost(pair.second) > max_cost) {
                 max_cost = calculate_cost(pair.second);
             }
         }
-        // divide max cost by 3 and round up to get ranges
-        int range_size = (max_cost / 3) + 1;
-        int cost = get_total_cost(op);
+        // cout << "compiles to here 1" << endl;
 
-        if (0 <= cost && cost < range_size) {
-            return LOW_RANGE;
-        } else if (range_size <= cost && cost < 2 * range_size) {
-            return MEDIUM_RANGE;
-        } else if (2 * range_size <= cost && cost < 3 * range_size) {
-            return HIGH_RANGE;
-        } else {
-            throw runtime_error("cost out of range");
-        }
+        // divide max cost by 3 and round up to get ranges
+        // int range_size = (max_cost / 3) + 1;
+
+        // divide max cost by 8 and round up to get ranges
+        int range_size = (max_cost / NUMBER_COST_COLORS) + 1;
+        int cost = get_total_cost(op);
+        // cout << "compiles to here 2" << endl;
+        int range = cost / range_size;
+        // cout << "compiles to here 3" << endl;
+        return range;
+
+        // if (0 <= cost && cost < range_size) {
+        //     return 0;
+        // } else if (range_size <= cost && cost < 2 * range_size) {
+        //     return 1;
+        // } else if (2 * range_size <= cost && cost < 3 * range_size) {
+        //     return 2;
+        // } else if (3 * range_size <= cost && cost < 4 * range_size) {
+        //     return 3;
+        // } else {
+        //     throw runtime_error("cost out of range");
+        // }
     }
 
     // calculates the total cost of a stmt
     // int get_total_cost(const IRNode *node) const;
-    int get_total_cost(const IRNode *node) const {
+    int
+    get_total_cost(const IRNode *node) const {
         auto it = stmt_cost.find(node);
         if (it == stmt_cost.end()) {
             m_assert(false, "node not found in stmt_cost");
@@ -541,7 +559,9 @@ private:
         // op->value.accept(this);
         mutate(op->value);
         int tempVal = get_cost(op->value.get());
-        set_cost(op, tempVal);
+        int countCost = op->value.type().lanes() - 1;
+
+        set_cost(op, tempVal + countCost);
         // cout << "In Vector, with value: " << tempVal << endl;
         return op;
     }
@@ -578,7 +598,7 @@ private:
         // op->body.accept(this);
         mutate(op->body);
         int tempVal = get_cost(op->body.get());
-        set_cost(op, 1 + tempVal);
+        set_cost(op, tempVal);
         // cout << "In Producer, with value: " << 1 + tempVal << endl;
         return op;
     }
@@ -623,6 +643,15 @@ private:
         // op->semaphore.accept(this);
         // op->count.accept(this);
         // op->body.accept(this);
+        /*
+            TODO: change this
+
+                    * depends on contention (how many other accesses are there to this
+                      particular semaphore?)
+                    * need to have separate visitor that visits everything and accumulates
+                      the number of times each lock is accessed, and also keep track of the depth
+                      of said lock (the deeper, the more times it will be accessed)
+        */
         mutate(op->semaphore);
         mutate(op->count);
         mutate(op->body);
@@ -651,27 +680,38 @@ private:
     Stmt visit(const Provide *op) override {
         // cout << "In Provide" << endl;
         // print_map(stmt_cost);
-        m_assert(false, "Provide not implemented");
+        // m_assert(false, "Provide not implemented");
         // op->predicate.accept(this);
-        // int tempVal = get_cost(op->predicate.get());
-        // for (const auto &value : op->values) {
-        //     value.accept(this);
-        // mutate(value);
-        //     tempVal += get_cost(value.get());
-        // }
-        // for (const auto &arg : op->args) {
-        //     arg.accept(this);
-        // mutate(arg);
-        //     tempVal += get_cost(arg.get());
-        // }
-        // set_cost(op, 1 + tempVal);
-        // return op;
+        int tempVal = get_cost(op->predicate.get());
+        for (const auto &value : op->values) {
+            // value.accept(this);
+            mutate(value);
+            tempVal += get_cost(value.get());
+        }
+        for (const auto &arg : op->args) {
+            // arg.accept(this);
+            mutate(arg);
+            tempVal += get_cost(arg.get());
+        }
+        set_cost(op, tempVal);
+        return op;
     }
 
     Stmt visit(const Allocate *op) override {
         // cout << "In Allocate" << endl;
         // print_map(stmt_cost);
         // m_assert(false, "Allocate not implemented");
+        /*
+            TODO: treat this node differently
+
+                * loop depth is important
+                * type of allocation is especially important (heap vs stack)
+                      this can be found MemoryType of the Allocate node (might need
+                      some nesting to find the node with this type)
+                * could visit `extents` for costs, and `condition`
+                * (in case of GPUShared type) visualize size of allocation in case
+                  the size of shared memory and goes into main memory
+        */
         int tempVal = 0;
         for (const auto &extent : op->extents) {
             // extent.accept(this);
@@ -734,6 +774,10 @@ private:
         // print_map(stmt_cost);
         // m_assert(false, "Prefetch not implemented");
         // TODO: similar question as one above
+
+        /*
+            TODO: like caching? # of memory stores
+        */
         int tempVal = 0;
         for (const auto &bound : op->bounds) {
             // bound.min.accept(this);
@@ -828,6 +872,13 @@ private:
         // print_map(stmt_cost);
         // m_assert(false, "Atomic not implemented");
         // op->body.accept(this);
+
+        /*
+            TODO: change this
+
+                    * make it similar to acquire
+                    * parallel vs vector is important
+        */
         mutate(op->body);
         int tempVal = get_cost(op->body.get());
         set_cost(op, tempVal);

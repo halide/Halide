@@ -73,7 +73,7 @@ public:
         start_html();
         traverse(m);
         end_html();
-        cout << html.str() << endl;
+        // cout << html.str() << endl;
     }
 
 private:

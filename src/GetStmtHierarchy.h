@@ -4,6 +4,7 @@
 #include <set>
 
 #include "IRMutator.h"
+#include "IROperator.h"
 
 /** \file
  * Defines the base class for things that recursively walk over the IR
@@ -128,7 +129,6 @@ private:
 
     void visit_binary_op(const Expr &a, const Expr &b, const string &name) {
         open_node(name);
-        // cout << "in binary, name: " << name << ", a: " << a << ", b: " << b << endl;
         mutate(a);
         mutate(b);
         close_node();
@@ -238,11 +238,22 @@ private:
         return op;
     }
     Expr visit(const Let *op) override {
-        node_without_children("TODO: change Let");
+        open_node("Let");
+        open_node("=");
+        node_without_children(op->name);
+        mutate(op->value);
+        close_node();
+        open_node("body");
+        mutate(op->body);
+        close_node();
+        close_node();
         return op;
     }
     Stmt visit(const LetStmt *op) override {
-        node_without_children("TODO: change LetStmt");
+        open_node("=");
+        node_without_children(op->name);
+        mutate(op->value);
+        close_node();
         return op;
     }
     Stmt visit(const AssertStmt *op) override {
@@ -252,27 +263,76 @@ private:
         return op;
     }
     Stmt visit(const ProducerConsumer *op) override {
-        node_without_children("TODO: change ProducerConsumer");
+        m_assert(false, "shouldn't be visualizing ProducerConsumer");
         return op;
     }
     Stmt visit(const For *op) override {
-        node_without_children("TODO: change For");
+        m_assert(false, "shouldn't be visualizing For");
         return op;
     }
     Stmt visit(const Store *op) override {
+        open_node("=");
         stringstream index;
         index << op->index;
         stringstream value;
         value << op->value;
-        node_without_children(op->name + "[" + index.str() + "] = " + value.str());
+        // node_without_children(op->name + "[" + index.str() + "] = " + value.str());
+        node_without_children(op->name + "[" + index.str() + "]");
+        mutate(op->value);
+        close_node();
         return op;
     }
     Stmt visit(const Provide *op) override {
-        node_without_children("TODO: change Provide");
+        open_node("=");
+        open_node(op->name);
+        for (auto &arg : op->args) {
+            mutate(arg);
+        }
+        close_node();
+        for (auto &val : op->values) {
+            mutate(val);
+        }
+        close_node();
         return op;
     }
     Stmt visit(const Allocate *op) override {
-        node_without_children("TODO: change Allocate");
+        // stream << keyword("allocate") << " ";
+        // stream << var(op->name) << "[";
+        // stream << close_span();
+
+        // stream << open_span("Type");
+        // stream << op->type;
+        // stream << close_span();
+
+        // for (const auto &extent : op->extents) {
+        //     stream << " * ";
+        //     print(extent);
+        // }
+        // stream << matched("]");
+
+        open_node("allocate");
+        stringstream index;
+        index << op->type;
+
+        for (const auto &extent : op->extents) {
+            index << " * ";
+            index << extent;
+        }
+
+        node_without_children(op->name + "[" + index.str() + "]");
+
+        if (!is_const_one(op->condition)) {
+            m_assert(false, "visualizing Allocate: !is_const_one(op->condition) !! look into it");
+        }
+        if (op->new_expr.defined()) {
+            m_assert(false, "visualizing Allocate: op->new_expr.defined() !! look into it");
+        }
+        if (!op->free_function.empty()) {
+            m_assert(false, "visualizing Allocate: !op->free_function.empty() !! look into it");
+        }
+
+        close_node();
+
         return op;
     }
     Stmt visit(const Free *op) override {
@@ -282,11 +342,11 @@ private:
         return op;
     }
     Stmt visit(const Realize *op) override {
-        node_without_children("TODO: change Realize");
+        m_assert(false, "visualizing Realize !! look into it");
         return op;
     }
     Stmt visit(const Block *op) override {
-        node_without_children("TODO: change Block");
+        m_assert(false, "visualizing Block !! look into it");
         return op;
     }
     Stmt visit(const IfThenElse *op) override {
@@ -299,33 +359,94 @@ private:
         return op;
     }
     Stmt visit(const Evaluate *op) override {
-        open_node("Evaluate");
+        // open_node("Evaluate");
+        mutate(op->value);
+        // close_node();
+        return op;
+    }
+    Expr visit(const Shuffle *op) override {
+        if (op->is_concat()) {
+            open_node("concat_vectors");
+            for (auto &e : op->vectors) {
+                mutate(e);
+            }
+            close_node();
+        }
+
+        else if (op->is_interleave()) {
+            open_node("interleave_vectors");
+            for (auto &e : op->vectors) {
+                mutate(e);
+            }
+            close_node();
+        }
+
+        else if (op->is_extract_element()) {
+            std::vector<Expr> args = op->vectors;
+            args.emplace_back(op->slice_begin());
+            open_node("extract_element");
+            for (auto &e : args) {
+                mutate(e);
+            }
+            close_node();
+        }
+
+        else if (op->is_slice()) {
+            std::vector<Expr> args = op->vectors;
+            args.emplace_back(op->slice_begin());
+            args.emplace_back(op->slice_stride());
+            args.emplace_back(static_cast<int>(op->indices.size()));
+            open_node("slice_vectors");
+            for (auto &e : args) {
+                mutate(e);
+            }
+            close_node();
+        }
+
+        else {
+            std::vector<Expr> args = op->vectors;
+            for (int i : op->indices) {
+                args.emplace_back(i);
+            }
+            open_node("Shuffle");
+            for (auto &e : args) {
+                mutate(e);
+            }
+            close_node();
+        }
+        return op;
+    }
+    Expr visit(const VectorReduce *op) override {
+        open_node("vector_reduce");
+        mutate(op->op);
         mutate(op->value);
         close_node();
         return op;
     }
-    Expr visit(const Shuffle *op) override {
-        node_without_children("TODO: change Shuffle");
-        return op;
-    }
-    Expr visit(const VectorReduce *op) override {
-        node_without_children("TODO: change VectorReduce");
-        return op;
-    }
     Stmt visit(const Prefetch *op) override {
-        node_without_children("TODO: change Prefetch");
+        m_assert(false, "visualizing Prefetch !! look into it");
         return op;
     }
     Stmt visit(const Fork *op) override {
-        node_without_children("TODO: change Fork");
+        m_assert(false, "visualizing Fork !! look into it");
         return op;
     }
     Stmt visit(const Acquire *op) override {
-        node_without_children("TODO: change Acquire");
+        open_node("acquire");
+        mutate(op->semaphore);
+        mutate(op->count);
+        close_node();
         return op;
     }
     Stmt visit(const Atomic *op) override {
-        node_without_children("TODO: change Atomic");
+        if (op->mutex_name.empty()) {
+            node_without_children("atomic");
+        } else {
+            open_node("atomic");
+            node_without_children(op->mutex_name);
+            close_node();
+        }
+
         return op;
     }
 };

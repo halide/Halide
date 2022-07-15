@@ -33,7 +33,9 @@ std::string to_string(T value) {
 
 class StmtToViz : public IRVisitor {
 
-    static const std::string css, js;
+    static const std::string css, vizCss, oneTypeCSS, otherTypeCSS, js;
+    // static const std::string js;
+    // static std::stringstream css;
 
     // This allows easier access to individual elements.
     int id_count;
@@ -82,7 +84,10 @@ private:
         // cout << "hierarchyHTML: " << hierarchyHTML << endl;
         s << "')\">";
         s << hoverText;
-        s << "</button> ";
+        s << "</button>";
+        s << open_span("ButtonSpacer");
+        s << ".";
+        s << close_span();
         s << open_span("tooltiptext");
         s << tooltipText;
         s << close_span();
@@ -167,18 +172,18 @@ private:
     //     return tooltip("[i] ", hierarchyHTML, text);
     // }
     string open_cost_span(const IRNode *op, const string &hierarchyHTML, const string &cls = "") {
-        int range = findStmtCost.get_range(op);
+        // int range = findStmtCost.get_range(op);
 
         std::stringstream s;
-
-        if (range == LOW_RANGE)
-            s << open_span(cls + " LowCost");
-        else if (range == MEDIUM_RANGE)
-            s << open_span(cls + " MediumCost");
-        else if (range == HIGH_RANGE)
-            s << open_span(cls + " HighCost");
-
         s << cost_table_tooltip(op, hierarchyHTML);
+        s << open_span(cls + " Cost");
+
+        // if (range == LOW_RANGE)
+        // else if (range == MEDIUM_RANGE)
+        //     s << open_span(cls + " Cost");
+        // else if (range == HIGH_RANGE)
+        //     s << open_span(cls + " Cost");
+
         // s << hierarchy_tooltip(op);
         return s.str();
     }
@@ -198,20 +203,51 @@ private:
         return span("Matched", body);
     }
 
-    string open_cost_div(const IRNode *op, const string &hierarchyHTML, const string &cls) {
-        int range = findStmtCost.get_range(op);
+    // string open_cost_div(const IRNode *op, const string &hierarchyHTML, const string &cls) {
+    //     int range = findStmtCost.get_range(op);
 
+    //     std::stringstream s;
+
+    //     if (range == LOW_RANGE)
+    //         s << open_div(cls + " Cost");
+    //     else if (range == MEDIUM_RANGE)
+    //         s << open_div(cls + " Cost");
+    //     else if (range == HIGH_RANGE)
+    //         s << open_div(cls + " Cost");
+
+    //     s << cost_table_tooltip(op, hierarchyHTML);
+
+    //     return s.str();
+    // }
+
+    string cost_colors(const IRNode *op) {
         std::stringstream s;
+        int range = findStmtCost.get_range(op);
+        // cout << "recieved range: " << range << endl;
+        // cout << "got here" << endl;
+        // s << open_span("CostColor0");
+        s << open_span("CostOneType" + to_string(range));
+        // cout << "got here 1" << endl;
+        s << ".";
+        s << close_span();
+        s << open_span("CostColorSpacer");
+        // cout << "got here 2" << endl;
 
-        if (range == LOW_RANGE)
-            s << open_div(cls + " LowCost");
-        else if (range == MEDIUM_RANGE)
-            s << open_div(cls + " MediumCost");
-        else if (range == HIGH_RANGE)
-            s << open_div(cls + " HighCost");
+        s << ".";
+        s << close_span();
+        s << open_span("CostOtherType" + to_string(range));
+        // cout << "got here 3" << endl;
 
-        s << cost_table_tooltip(op, hierarchyHTML);
+        s << ".";
+        // cout << "got here 4.1" << endl;
+        s << close_span();
+        // cout << "got here 4.2" << endl;
+        s << open_span("CostColorSpacer");
+        // cout << "got here 4.3" << endl;
 
+        s << ".";
+        s << close_span();
+        // cout << "got here too" << endl;
         return s.str();
     }
 
@@ -463,7 +499,9 @@ private:
 
     void visit(const Let *op) override {
         scope.push(op->name, unique_id());
+        // stream << cost_colors();
         stream << open_span("Let");
+        // stream << open_cost_span(op, hierarchy(op), "Let");
         stream << open_span("Matched");
         stream << "(" << keyword("let") << " ";
         stream << var(op->name);
@@ -479,17 +517,14 @@ private:
     void visit(const LetStmt *op) override {
         scope.push(op->name, unique_id());
         stream << open_div("LetStmt") << open_line();
+        stream << cost_colors(op->value.get());
+
         stream << open_span("Matched");
         stream << keyword("let") << " ";
         stream << var(op->name);
         stream << close_span();
         stream << " " << matched("Operator Assign", "=") << " ";
         stream << open_cost_span(op->value.get(), hierarchy(op->value.get()));
-        // cout << endl
-        //      << endl
-        //      << "start: " << endl
-        //      << hierarchy(op->value);
-        // stream << hierarchy(op->value);
         print(op->value);
         stream << close_span();
         stream << close_line();
@@ -584,14 +619,18 @@ private:
 
     void visit(const Store *op) override {
         stream << open_div("Store WrapLine");
+
+        stream << cost_colors(op);
+        stream << open_cost_span(op, hierarchy(op));
+
         stream << open_span("Matched");
+
         stream << var(op->name) << "[";
         stream << close_span();
         print(op->index);
         stream << matched("]");
         stream << " " << span("Operator Assign Matched", "=") << " ";
-        // stream << open_span("StoreValue");
-        stream << open_cost_span(op->value.get(), hierarchy(op->value), "StoreValue");
+        stream << open_span("StoreValue");
         // stream << hierarchy(op->value);
         print(op->value);
         if (!is_const_one(op->predicate)) {
@@ -599,11 +638,10 @@ private:
             print(op->predicate);
         }
         stream << close_span();
+        stream << close_span();
         stream << close_div();
     }
     void visit(const Provide *op) override {
-        // stream << open_cost_span(op);
-        stream << open_cost_div(op, hierarchy(op), "Provide WrapLine");
         stream << open_span("Matched");
         stream << var(op->name) << "(";
         stream << close_span();
@@ -616,12 +654,13 @@ private:
             print(op->values[0]);
         }
         stream << close_div();
-        // stream << close_span();
     }
     void visit(const Allocate *op) override {
         // stream << open_cost_span(op);
         scope.push(op->name, unique_id());
         stream << open_div("Allocate");
+        stream << cost_colors(op);
+        stream << open_cost_span(op, hierarchy(op));
         stream << open_span("Matched");
         stream << keyword("allocate") << " ";
         stream << var(op->name) << "[";
@@ -651,6 +690,7 @@ private:
             stream << keyword("custom_delete") << "{ " << op->free_function << "(); ";
             stream << matched("}");
         }
+        stream << close_span();
 
         stream << open_div("AllocateBody");
         print(op->body);
@@ -815,7 +855,10 @@ private:
 
     void visit(const Evaluate *op) override {
         stream << open_div("Evaluate");
+        stream << cost_colors(op);
+        stream << open_cost_span(op, hierarchy(op));
         print(op->value);
+        stream << close_span();
         stream << close_div();
     }
 
@@ -1107,10 +1150,10 @@ public:
     }
 
     void print(const Module &m) {
-        cout << "Printing module " << m.name() << endl;
+        // cout << "Printing module " << m.name() << endl;
         scope.push(m.name(), unique_id());
         for (const auto &s : m.submodules()) {
-            cout << "Submodule: " << s.name() << endl;
+            // cout << "Submodule: " << s.name() << endl;
             print(s);
         }
 
@@ -1142,7 +1185,12 @@ public:
         : id_count(0), context_stack(1, 0) {
         stream.open(filename.c_str());
         stream << "<head>";
-        stream << "<style type='text/css'>" << css << "</style>\n";
+        stream << "<style type='text/css'>";
+        stream << css;
+        stream << vizCss;
+        stream << oneTypeCSS;
+        stream << otherTypeCSS;
+        stream << "</style>\n";
         stream << "<script language='javascript' type='text/javascript'>" + js + "</script>\n";
         stream << "<link href='http://maxcdn.bootstrapcdn.com/font-awesome/4.1.0/css/font-awesome.min.css' rel='stylesheet'>\n";
         stream << "<link rel='stylesheet' href='https://unpkg.com/treeflex/dist/css/treeflex.css'>";
@@ -1161,7 +1209,6 @@ public:
     }
 };
 
-// TODO: change colors for low, medium, and high cost backgrounds
 const std::string StmtToViz::css = "\n \
 body { font-family: Consolas, 'Liberation Mono', Menlo, Courier, monospace; font-size: 12px; background: #f8f8f8; margin-left:15px; } \n \
 a, a:hover, a:visited, a:active { color: inherit; text-decoration: none; } \n \
@@ -1170,9 +1217,6 @@ p.WrapLine { margin: 0px; margin-left: 30px; text-indent:-30px; } \n \
 div.WrapLine { margin-left: 30px; text-indent:-30px; } \n \
 div.Indent { padding-left: 15px; }\n \
 div.ShowHide { position:absolute; left:-12px; width:12px; height:12px; } \n \
-span.LowCost { background: rgba(10,10,10,0.1); }\n \
-span.MediumCost { background: rgba(10,10,10,0.2); }\n \
-span.HighCost { background: rgba(10,10,10,0.3); }\n \
 span.Comment { color: #998; font-style: italic; }\n \
 span.Keyword { color: #333; font-weight: bold; }\n \
 span.Assign { color: #d14; font-weight: bold; }\n \
@@ -1199,9 +1243,16 @@ span.Memory { color: #d22; font-weight: bold; }\n \
 span.Pred { background-color: #ffe8bd; font-weight: bold; }\n \
 span.Label { background-color: #bde4ff; font-weight: bold; }\n \
 code.ptx { tab-size: 26; white-space: pre; }\n \
-.tooltip .tooltiptext { visibility: hidden; text-align: center; border-radius: 3px; padding: 5px; background: #FFFFFF; color: #313639; border: 1px solid #313639; border-radius: 8px; pointer-events: none; width: fit-content; position: absolute; z-index: 1; margin-top: -60px; margin-left: -120px; }\n \
+";
+
+const std::string StmtToViz::vizCss = "\n \
+span.ButtonSpacer { width: 5px; color: transparent; display: inline-block; }\n \
+span.LowCost { background: rgba(10,10,10,0.1); }\n \
+span.Cost { background: rgba(10,10,10,0.1); }\n \
+span.MediumCost { background: rgba(10,10,10,0.2); }\n \
+span.HighCost { background: rgba(10,10,10,0.3); }\n \
+.tooltip .tooltiptext { visibility: hidden; text-align: center; border-radius: 3px; padding: 5px; background: #FFFFFF; color: #313639; border: 1px solid #313639; border-radius: 8px; pointer-events: none; width: fit-content; position: absolute; z-index: 1; margin-top: -60px; margin-left: -50px; }\n \
 .tooltip:hover .tooltiptext { visibility: visible; }\n \
-.tooltip:hover { font-weight: bold; }\n \
 .left-table { text-align: right; color: grey; vertical-align: middle; font-size: 12px; }\n \
 .right-table { text-align: left; vertical-align: middle; font-size: 12px; font-weight: bold; padding-left: 3px; }\n \
 .tf-custom .tf-nc { border-radius: 5px; border: 1px solid; }\n \
@@ -1209,6 +1260,53 @@ code.ptx { tab-size: 26; white-space: pre; }\n \
 .tf-custom li li:before { border-top-width: 1px; }\n \
 .tf-custom .end-node { border-style: dashed; }\n \
 .tf-custom .children-node { background-color: lightgrey; }\n \
+span.CostColorSpacer { width: 2px; color: transparent; display: inline-block; }\n \
+";
+
+const std::string StmtToViz::oneTypeCSS = "\n \
+span.CostOneType19 {margin-left: -30px; width: 13px; display: inline-block; background: rgb(130,31,27); color: transparent; } \n \
+span.CostOneType18 {margin-left: -30px; width: 13px; display: inline-block; background: rgb(145,33,30); color: transparent; } \n \
+span.CostOneType17 {margin-left: -30px; width: 13px; display: inline-block; background: rgb(160,33,32); color: transparent; } \n \
+span.CostOneType16 {margin-left: -30px; width: 13px; display: inline-block; background: rgb(176,34,34); color: transparent; } \n \
+span.CostOneType15 {margin-left: -30px; width: 13px; display: inline-block; background: rgb(185,47,32); color: transparent; } \n \
+span.CostOneType14 {margin-left: -30px; width: 13px; display: inline-block; background: rgb(193,59,30); color: transparent; } \n \
+span.CostOneType13 {margin-left: -30px; width: 13px; display: inline-block; background: rgb(202,71,27); color: transparent; } \n \
+span.CostOneType12 {margin-left: -30px; width: 13px; display: inline-block; background: rgb(210,82,22); color: transparent; } \n \
+span.CostOneType11 {margin-left: -30px; width: 13px; display: inline-block; background: rgb(218,93,16); color: transparent; } \n \
+span.CostOneType10 {margin-left: -30px; width: 13px; display: inline-block; background: rgb(226,104,6); color: transparent; } \n \
+span.CostOneType9 {margin-left: -30px; width: 13px; display: inline-block; background: rgb(229,118,9); color: transparent; } \n \
+span.CostOneType8 {margin-left: -30px; width: 13px; display: inline-block; background: rgb(230,132,15); color: transparent; } \n \
+span.CostOneType7 {margin-left: -30px; width: 13px; display: inline-block; background: rgb(231,146,20); color: transparent; } \n \
+span.CostOneType6 {margin-left: -30px; width: 13px; display: inline-block; background: rgb(232,159,25); color: transparent; } \n \
+span.CostOneType5 {margin-left: -30px; width: 13px; display: inline-block; background: rgb(233,172,30); color: transparent; } \n \
+span.CostOneType4 {margin-left: -30px; width: 13px; display: inline-block; background: rgb(233,185,35); color: transparent; } \n \
+span.CostOneType3 {margin-left: -30px; width: 13px; display: inline-block; background: rgb(233,198,40); color: transparent; } \n \
+span.CostOneType2 {margin-left: -30px; width: 13px; display: inline-block; background: rgb(232,211,45); color: transparent; } \n \
+span.CostOneType1 {margin-left: -30px; width: 13px; display: inline-block; background: rgb(231,223,50); color: transparent; } \n \
+span.CostOneType0 {margin-left: -30px; width: 13px; display: inline-block; background: rgb(236,233,89); color: transparent;  }  \n \
+";
+
+const std::string StmtToViz::otherTypeCSS = "\n \
+span.CostOtherType19 { width: 13px; display: inline-block; background: rgb(130,31,27); color: transparent; } \n \
+span.CostOtherType18 { width: 13px; display: inline-block; background: rgb(145,33,30); color: transparent; } \n \
+span.CostOtherType17 { width: 13px; display: inline-block; background: rgb(160,33,32); color: transparent; } \n \
+span.CostOtherType16 { width: 13px; display: inline-block; background: rgb(176,34,34); color: transparent; } \n \
+span.CostOtherType15 { width: 13px; display: inline-block; background: rgb(185,47,32); color: transparent; } \n \
+span.CostOtherType14 { width: 13px; display: inline-block; background: rgb(193,59,30); color: transparent; } \n \
+span.CostOtherType13 { width: 13px; display: inline-block; background: rgb(202,71,27); color: transparent; } \n \
+span.CostOtherType12 { width: 13px; display: inline-block; background: rgb(210,82,22); color: transparent; } \n \
+span.CostOtherType11 { width: 13px; display: inline-block; background: rgb(218,93,16); color: transparent; } \n \
+span.CostOtherType10 { width: 13px; display: inline-block; background: rgb(226,104,6); color: transparent; } \n \
+span.CostOtherType9 { width: 13px; display: inline-block; background: rgb(229,118,9); color: transparent; } \n \
+span.CostOtherType8 { width: 13px; display: inline-block; background: rgb(230,132,15); color: transparent; } \n \
+span.CostOtherType7 { width: 13px; display: inline-block; background: rgb(231,146,20); color: transparent; } \n \
+span.CostOtherType6 { width: 13px; display: inline-block; background: rgb(232,159,25); color: transparent; } \n \
+span.CostOtherType5 { width: 13px; display: inline-block; background: rgb(233,172,30); color: transparent; } \n \
+span.CostOtherType4 { width: 13px; display: inline-block; background: rgb(233,185,35); color: transparent; } \n \
+span.CostOtherType3 { width: 13px; display: inline-block; background: rgb(233,198,40); color: transparent; } \n \
+span.CostOtherType2 { width: 13px; display: inline-block; background: rgb(232,211,45); color: transparent; } \n \
+span.CostOtherType1 { width: 13px; display: inline-block; background: rgb(231,223,50); color: transparent; } \n \
+span.CostOtherType0 { width: 13px; display: inline-block; background: rgb(236,233,89); color: transparent; }  \n \
 ";
 
 const std::string StmtToViz::js = "\n \
@@ -1237,7 +1335,7 @@ function openNewWindow(innerHtml) { \n \
 
 void print_to_viz(const string &filename, const Stmt &s) {
 
-    std::cout << "Here! 0" << std::endl;
+    // std::cout << "Here! 0" << std::endl;
 
     StmtToViz sth(filename);
     sth.findStmtCost.mutate(s);
@@ -1245,7 +1343,7 @@ void print_to_viz(const string &filename, const Stmt &s) {
 }
 
 void print_to_viz(const string &filename, const Module &m) {
-    std::cout << "here! 1" << std::endl;
+    // std::cout << "here! 1" << std::endl;
 
     StmtToViz sth(filename);
 
