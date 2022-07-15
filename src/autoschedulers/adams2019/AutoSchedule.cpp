@@ -117,42 +117,45 @@ struct ProgressBar {
         if (!draw_progress_bar) {
             return;
         }
+        auto &os = aslog(ProgressBarLogLevel).get_ostream();
         counter++;
         const int bits = 11;
         if (counter & ((1 << bits) - 1)) {
             return;
         }
         const int pos = (int)(progress * 78);
-        aslog(0) << "[";
+        os << "[";
         for (int j = 0; j < 78; j++) {
             if (j < pos) {
-                aslog(0) << ".";
+                os << ".";
             } else if (j - 1 < pos) {
-                aslog(0) << "/-\\|"[(counter >> bits) % 4];
+                os << "/-\\|"[(counter >> bits) % 4];
             } else {
-                aslog(0) << " ";
+                os << " ";
             }
         }
-        aslog(0) << "]";
+        os << "]";
         for (int j = 0; j < 80; j++) {
-            aslog(0) << "\b";
+            os << "\b";
         }
     }
 
     void clear() {
         if (counter) {
+            auto &os = aslog(ProgressBarLogLevel).get_ostream();
             for (int j = 0; j < 80; j++) {
-                aslog(0) << " ";
+                os << " ";
             }
             for (int j = 0; j < 80; j++) {
-                aslog(0) << "\b";
+                os << "\b";
             }
         }
     }
 
 private:
     uint32_t counter = 0;
-    const bool draw_progress_bar = isatty(2);
+    static constexpr int ProgressBarLogLevel = 1;
+    const bool draw_progress_bar = isatty(2) && aslog::aslog_level() >= ProgressBarLogLevel;
 };
 
 // Get the HL_RANDOM_DROPOUT environment variable. Purpose of this is described above.
@@ -290,10 +293,6 @@ IntrusivePtr<State> optimal_schedule_pass(FunctionDAG &dag,
 
     std::function<void(IntrusivePtr<State> &&)> enqueue_new_children =
         [&](IntrusivePtr<State> &&s) {
-            // aslog(0) << "\n** Generated child: ";
-            // s->dump();
-            // s->calculate_cost(dag, params, nullptr, true);
-
             // Each child should have one more decision made than its parent state.
             internal_assert(s->num_decisions_made == s->parent->num_decisions_made + 1);
 
@@ -338,7 +337,7 @@ IntrusivePtr<State> optimal_schedule_pass(FunctionDAG &dag,
         }
 
         if ((int)pending.size() > beam_size * 10000) {
-            aslog(0) << "Warning: Huge number of states generated (" << pending.size() << ").\n";
+            aslog(1) << "*** Warning: Huge number of states generated (" << pending.size() << ").\n";
         }
 
         expanded = 0;
@@ -436,25 +435,26 @@ IntrusivePtr<State> optimal_schedule_pass(FunctionDAG &dag,
             // The user has set HL_CYOS, and wants to navigate the
             // search space manually.  Discard everything in the queue
             // except for the user-chosen option.
-            aslog(0) << "\n--------------------\n";
-            aslog(0) << "Select a schedule:\n";
+            std::cout << "\n--------------------\n";
+            std::cout << "Select a schedule:\n";
             for (int choice_label = (int)q.size() - 1; choice_label >= 0; choice_label--) {
                 auto state = q[choice_label];
-                aslog(0) << "\n[" << choice_label << "]:\n";
-                state->dump();
-                state->calculate_cost(dag, params, cost_model, cache->options, memory_limit, true);
+                std::cout << "\n[" << choice_label << "]:\n";
+                state->dump(std::cout);
+                constexpr int verbosity_level = 0;  // always
+                state->calculate_cost(dag, params, cost_model, cache->options, memory_limit, verbosity_level);
             }
             cost_model->evaluate_costs();
 
             // Select next partial schedule to expand.
             int selection = -1;
             while (selection < 0 || selection >= (int)q.size()) {
-                aslog(0) << "\nEnter selection: ";
+                std::cout << "\nEnter selection: ";
                 std::cin >> selection;
             }
 
             auto selected = q[selection];
-            selected->dump();
+            selected->dump(std::cout);
             q.clear();
             q.emplace(std::move(selected));
         }
@@ -508,11 +508,16 @@ IntrusivePtr<State> optimal_schedule(FunctionDAG &dag,
 
         tick.clear();
 
-        if (aslog::aslog_level() == 0) {
-            aslog(0) << "Pass " << i << " of " << num_passes << ", cost: " << pass->cost << ", time (ms): " << milli << "\n";
-        } else {
-            aslog(0) << "Pass " << i << " result: ";
-            pass->dump();
+        switch (aslog::aslog_level()) {
+        case 0:
+            // Silence
+            break;
+        case 1:
+            aslog(1) << "Pass " << i << " of " << num_passes << ", cost: " << pass->cost << ", time (ms): " << milli << "\n";
+            break;
+        default:
+            aslog(2) << "Pass " << i << " result: ";
+            pass->dump(aslog(2).get_ostream());
         }
 
         if (i == 0 || pass->cost < best->cost) {
@@ -522,11 +527,11 @@ IntrusivePtr<State> optimal_schedule(FunctionDAG &dag,
         }
     }
 
-    aslog(0) << "Best cost: " << best->cost << "\n";
+    aslog(1) << "Best cost: " << best->cost << "\n";
 
     if (options.cache_blocks) {
-        aslog(0) << "Cache (block) hits: " << cache.cache_hits << "\n";
-        aslog(0) << "Cache (block) misses: " << cache.cache_misses << "\n";
+        aslog(1) << "Cache (block) hits: " << cache.cache_hits << "\n";
+        aslog(1) << "Cache (block) misses: " << cache.cache_misses << "\n";
     }
 
     return best;
@@ -540,7 +545,7 @@ void generate_schedule(const std::vector<Function> &outputs,
                        const Target &target,
                        const MachineParams &params,
                        AutoSchedulerResults *auto_scheduler_results) {
-    aslog(0) << "generate_schedule for target=" << target.to_string() << "\n";
+    aslog(1) << "generate_schedule for target=" << target.to_string() << "\n";
 
     // Start a timer
     HALIDE_TIC;
@@ -554,7 +559,7 @@ void generate_schedule(const std::vector<Function> &outputs,
     if (!seed_str.empty()) {
         seed = atoi(seed_str.c_str());
     }
-    aslog(1) << "Dropout seed = " << seed << "\n";
+    aslog(2) << "Dropout seed = " << seed << "\n";
     std::mt19937 rng((uint32_t)seed);
 
     // Get the beam size
@@ -576,8 +581,8 @@ void generate_schedule(const std::vector<Function> &outputs,
 
     // Analyse the Halide algorithm and construct our abstract representation of it
     FunctionDAG dag(outputs, params, target);
-    if (aslog::aslog_level() > 0) {
-        dag.dump();
+    if (aslog::aslog_level() >= 2) {
+        dag.dump(aslog(2).get_ostream());
     }
 
     // Construct a cost model to use to evaluate states. Currently we
@@ -602,14 +607,14 @@ void generate_schedule(const std::vector<Function> &outputs,
     aslog(1) << "** Optimal schedule:\n";
 
     // Just to get the debugging prints to fire
-    optimal->calculate_cost(dag, params, cost_model.get(), cache_options, memory_limit, aslog::aslog_level() > 0);
+    optimal->calculate_cost(dag, params, cost_model.get(), cache_options, memory_limit, /*verbosity_level*/ 1);
 
     // Apply the schedules to the pipeline
     optimal->apply_schedule(dag, params);
 
     // Print out the schedule
-    if (aslog::aslog_level() > 0) {
-        optimal->dump();
+    if (aslog::aslog_level() >= 2) {
+        optimal->dump(aslog(2).get_ostream());
     }
 
     string schedule_file = get_env_variable("HL_SCHEDULE_FILE");

@@ -205,7 +205,7 @@ public:
         return result;
     }
 
-    void dump(const char *prefix) const;
+    void dump(std::ostream &os, const char *prefix) const;
 };
 
 // Classes to represent a concrete set of bounds for a Func. A Span is
@@ -565,15 +565,11 @@ struct FunctionDAG {
     // analysis. This is done once up-front before the tree search.
     FunctionDAG(const vector<Function> &outputs, const MachineParams &params, const Target &target);
 
-    void dump() const;
-    std::ostream &dump(std::ostream &os) const;
+    void dump(std::ostream &os) const;
 
 private:
     // Compute the featurization for the entire DAG
     void featurize();
-
-    template<typename OS>
-    void dump_internal(OS &os) const;
 
 public:
     // This class uses a lot of internal pointers, so we'll make it uncopyable/unmovable.

@@ -54,10 +54,10 @@ void State::compute_featurization(const FunctionDAG &dag, const MachineParams &p
                 l = consumer_site.compute;
             }
             if (!l) {
-                if (aslog::aslog_level() > 0) {
-                    dump();
-                }
-                internal_error << e->producer->func.name() << " -> " << e->consumer->name << "\n";
+                std::ostringstream err;
+                dump(err);
+                err << e->producer->func.name() << " -> " << e->consumer->name << "\n";
+                internal_error << err.str();
             }
             if (loop) {
                 loop = deepest_common_ancestor(parent, l, loop);
@@ -125,18 +125,18 @@ void State::save_featurization(const FunctionDAG &dag, const MachineParams &para
 
 bool State::calculate_cost(const FunctionDAG &dag, const MachineParams &params,
                            CostModel *cost_model, const CachingOptions &cache_options,
-                           int64_t memory_limit, bool verbose) {
+                           int64_t memory_limit, int verbosity) {
     StageMap<ScheduleFeatures> features;
     compute_featurization(dag, params, &features, cache_options);
 
     cost = 0.0f;
 
-    if (verbose) {
+    if (verbosity <= aslog::aslog_level()) {
         for (auto it = features.begin(); it != features.end(); it++) {
             const auto &stage = *(it.key());
             const auto &feat = it.value();
-            aslog(0) << "Schedule features for " << stage.stage.name() << "\n";
-            feat.dump();
+            aslog(verbosity) << "Schedule features for " << stage.stage.name() << "\n";
+            feat.dump(aslog(verbosity).get_ostream());
         }
     }
 
@@ -235,7 +235,7 @@ void State::generate_children(const FunctionDAG &dag,
         // We don't need to schedule nodes that represent inputs,
         // and there are no other decisions to be made about them
         // at this time.
-        // aslog(0) << "Skipping over scheduling input node: " << node->func.name() << "\n";
+        // aslog(1) << "Skipping over scheduling input node: " << node->func.name() << "\n";
         auto child = make_child();
         child->num_decisions_made++;
         accept_child(std::move(child));
@@ -243,17 +243,19 @@ void State::generate_children(const FunctionDAG &dag,
     }
 
     if (!node->outgoing_edges.empty() && !root->calls(node)) {
-        aslog(0) << "In state:\n";
-        dump();
-        aslog(0) << node->func.name() << " is consumed by:\n";
+        std::ostringstream err;
+        err << "In state:\n";
+        dump(err);
+        err << node->func.name() << " is consumed by:\n";
         for (const auto *e : node->outgoing_edges) {
-            aslog(0) << e->consumer->name << "\n";
-            aslog(0) << "Which in turn consumes:\n";
+            err << e->consumer->name << "\n";
+            err << "Which in turn consumes:\n";
             for (const auto *e2 : e->consumer->incoming_edges) {
-                aslog(0) << "  " << e2->producer->func.name() << "\n";
+                err << "  " << e2->producer->func.name() << "\n";
             }
         }
-        internal_error << "Pipeline so far doesn't use next Func: " << node->func.name() << "\n";
+        err << "Pipeline so far doesn't use next Func: " << node->func.name() << "\n";
+        internal_error << err.str();
     }
 
     int num_children = 0;
@@ -520,18 +522,18 @@ void State::generate_children(const FunctionDAG &dag,
     }
 
     if (num_children == 0) {
-        aslog(0) << "Warning: Found no legal way to schedule "
+        aslog(1) << "Warning: Found no legal way to schedule "
                  << node->func.name() << " in the following State:\n";
-        dump();
+        dump(aslog(1).get_ostream());
         // All our children died. Maybe other states have had
         // children. Carry on.
     }
 }
 
-void State::dump() const {
-    aslog(0) << "State with cost " << cost << ":\n";
-    root->dump("", nullptr);
-    aslog(0) << schedule_source;
+void State::dump(std::ostream &os) const {
+    os << "State with cost " << cost << ":\n";
+    root->dump(os, "", nullptr);
+    os << schedule_source;
 }
 
 // Apply the schedule represented by this state to a Halide

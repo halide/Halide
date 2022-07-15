@@ -67,7 +67,7 @@ struct State {
     // otherwise sets `cost` equal to a large value and returns false.
     bool calculate_cost(const FunctionDAG &dag, const MachineParams &params,
                         CostModel *cost_model, const CachingOptions &cache_options,
-                        int64_t memory_limit, bool verbose = false);
+                        int64_t memory_limit, int verbosity = 99);
 
     // Make a child copy of this state. The loop nest is const (we
     // make mutated copies of it, rather than mutating it), so we can
@@ -85,8 +85,8 @@ struct State {
                            std::function<void(IntrusivePtr<State> &&)> &accept_child,
                            Cache *cache) const;
 
-    // Dumps cost, the `root` LoopNest, and then `schedule_source` to `aslog(0)`.
-    void dump() const;
+    // Dumps cost, the `root` LoopNest, and then `schedule_source` to `os`.
+    void dump(std::ostream &os) const;
 
     // Apply the schedule represented by this state to a Halide
     // Pipeline. Also generate source code for the schedule for the
