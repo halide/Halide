@@ -57,6 +57,12 @@ inline float16_t value_cast<float16_t>(const py::object &value) {
     return float16_t(value.cast<double>());
 }
 
+// TODO: https://github.com/halide/Halide/issues/6849
+// template<>
+// inline bfloat16_t value_cast<bfloat16_t>(const py::object &value) {
+//     return bfloat16_t(value.cast<double>());
+// }
+
 template<typename T>
 inline std::string format_descriptor() {
     return py::format_descriptor<T>::format();
@@ -66,6 +72,12 @@ template<>
 inline std::string format_descriptor<float16_t>() {
     return "e";
 }
+
+// TODO: https://github.com/halide/Halide/issues/6849
+// template<>
+// inline std::string format_descriptor<bfloat16_t>() {
+//     return there-is-no-python-buffer-format-descriptor-for-bfloat16;
+// }
 
 void call_fill(Buffer<> &b, const py::object &value) {
 
@@ -84,6 +96,8 @@ void call_fill(Buffer<> &b, const py::object &value) {
     HANDLE_BUFFER_TYPE(int16_t)
     HANDLE_BUFFER_TYPE(int32_t)
     HANDLE_BUFFER_TYPE(int64_t)
+    // TODO: https://github.com/halide/Halide/issues/6849
+    // HANDLE_BUFFER_TYPE(bfloat16_t)
     HANDLE_BUFFER_TYPE(float16_t)
     HANDLE_BUFFER_TYPE(float)
     HANDLE_BUFFER_TYPE(double)
@@ -109,6 +123,8 @@ bool call_all_equal(Buffer<> &b, const py::object &value) {
     HANDLE_BUFFER_TYPE(int16_t)
     HANDLE_BUFFER_TYPE(int32_t)
     HANDLE_BUFFER_TYPE(int64_t)
+    // TODO: https://github.com/halide/Halide/issues/6849
+    // HANDLE_BUFFER_TYPE(bfloat16_t)
     HANDLE_BUFFER_TYPE(float16_t)
     HANDLE_BUFFER_TYPE(float)
     HANDLE_BUFFER_TYPE(double)
@@ -133,6 +149,8 @@ std::string type_to_format_descriptor(const Type &type) {
     HANDLE_BUFFER_TYPE(int16_t)
     HANDLE_BUFFER_TYPE(int32_t)
     HANDLE_BUFFER_TYPE(int64_t)
+    // TODO: https://github.com/halide/Halide/issues/6849
+    // HANDLE_BUFFER_TYPE(bfloat16_t)
     HANDLE_BUFFER_TYPE(float16_t)
     HANDLE_BUFFER_TYPE(float)
     HANDLE_BUFFER_TYPE(double)
@@ -159,6 +177,8 @@ Type format_descriptor_to_type(const std::string &fd) {
     HANDLE_BUFFER_TYPE(int16_t)
     HANDLE_BUFFER_TYPE(int32_t)
     HANDLE_BUFFER_TYPE(int64_t)
+    // TODO: https://github.com/halide/Halide/issues/6849
+    // HANDLE_BUFFER_TYPE(bfloat16_t)
     HANDLE_BUFFER_TYPE(float16_t)
     HANDLE_BUFFER_TYPE(float)
     HANDLE_BUFFER_TYPE(double)
@@ -196,6 +216,8 @@ py::object buffer_getitem_operator(Buffer<> &buf, const std::vector<int> &pos) {
     HANDLE_BUFFER_TYPE(int16_t)
     HANDLE_BUFFER_TYPE(int32_t)
     HANDLE_BUFFER_TYPE(int64_t)
+    // TODO: https://github.com/halide/Halide/issues/6849
+    // HANDLE_BUFFER_TYPE(bfloat16_t)
     HANDLE_BUFFER_TYPE(float16_t)
     HANDLE_BUFFER_TYPE(float)
     HANDLE_BUFFER_TYPE(double)
@@ -224,6 +246,8 @@ py::object buffer_setitem_operator(Buffer<> &buf, const std::vector<int> &pos, c
     HANDLE_BUFFER_TYPE(int16_t)
     HANDLE_BUFFER_TYPE(int32_t)
     HANDLE_BUFFER_TYPE(int64_t)
+    // TODO: https://github.com/halide/Halide/issues/6849
+    // HANDLE_BUFFER_TYPE(bfloat16_t)
     HANDLE_BUFFER_TYPE(float16_t)
     HANDLE_BUFFER_TYPE(float)
     HANDLE_BUFFER_TYPE(double)

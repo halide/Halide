@@ -95,7 +95,6 @@ tests(GROUPS correctness
       extern_reorder_storage.cpp
       extern_sort.cpp
       extern_stage_on_device.cpp
-      external_code.cpp
       failed_unroll.cpp
       fast_trigonometric.cpp
       fibonacci.cpp
@@ -243,6 +242,7 @@ tests(GROUPS correctness
       realize_larger_than_two_gigs.cpp
       realize_over_shifted_domain.cpp
       reduction_chain.cpp
+      reduction_predicate_racing.cpp
       reduction_non_rectangular.cpp
       reduction_schedule.cpp
       register_shuffle.cpp

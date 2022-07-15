@@ -78,6 +78,7 @@ tests(GROUPS error
       pointer_arithmetic.cpp
       race_condition.cpp
       rdom_undefined.cpp
+      rdom_where_races.cpp
       realization_with_too_many_outputs.cpp
       realize_constantly_larger_than_two_gigs.cpp
       reduction_bounds.cpp
