@@ -752,14 +752,15 @@ gengen
             ++i;
             continue;
         } else {
-#ifdef HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
-            // nothing
-#else
             if (!strcmp(argv[i], "-s")) {
+#ifdef HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
+                user_warning << "HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API is deprecated in Halide 15 "
+                                "(and will be removed in Halide 16).\n";
+#else
                 user_error << "-s is no longer supported for setting autoscheduler; specify autoschduler.name=NAME instead.\n"
                            << kUsage;
-            }
 #endif
+            }
             user_error << "Unknown flag: " << argv[i] << "\n"
                        << kUsage;
         }
