@@ -9,8 +9,10 @@
  * enabled as required for certain runtimes (eg Vulkan)
  */
 
-#ifdef TARGET_SPIRV
+#ifdef WITH_SPIRV
 
+#include <map>
+#include <set>
 #include <stack>
 #include <vector>
 #include <unordered_map>
@@ -18,7 +20,7 @@
 #include "Type.h"
 #include "IntrusivePtr.h"
 
-#include "spirv/1.0/spirv.h" // Use v1.0 spec as the minimal viable version (for maximum compatiblity)
+#include <spirv/1.0/spirv.h> // Use v1.0 spec as the minimal viable version (for maximum compatiblity)
 
 namespace Halide {
 namespace Internal {
@@ -51,6 +53,7 @@ enum SpvKind {
     SpvPointerTypeId,
     SpvStructTypeId,
     SpvFunctionTypeId,
+    SpvAccessChainId,
     SpvConstantId,
     SpvBoolConstantId,
     SpvIntConstantId,
@@ -95,19 +98,6 @@ using SpvFunctionContentsPtr = IntrusivePtr<SpvFunctionContents>;
 using SpvBlockContentsPtr = IntrusivePtr<SpvBlockContents>;
 using SpvInstructionContentsPtr = IntrusivePtr<SpvInstructionContents>;
 
-/** Contents of a SPIR-V Instruction */
-struct SpvInstructionContents {
-    using Operands = std::vector<SpvId>;
-    using Immediates = std::vector<bool>;
-    mutable RefCount ref_count;
-    SpvOp op_code = SpvOpNop;
-    SpvId result_id = SpvNoResult;
-    SpvId type_id = SpvNoType;
-    Operands operands;
-    Immediates immediates;
-    SpvBlock block;
-};
-
 /** General interface for representing a SPIR-V Instruction */
 class SpvInstruction {
 public:
@@ -149,31 +139,6 @@ protected:
     SpvInstructionContentsPtr contents;
 };
 
-template<>
-RefCount &ref_count<SpvInstructionContents>(const SpvInstructionContents *c) noexcept {
-    return c->ref_count;
-}
-
-template<>
-void destroy<SpvInstructionContents>(const SpvInstructionContents *c) {
-    delete c;
-}
-
-/** Contents of a SPIR-V code block */
-struct SpvBlockContents {
-    using Instructions = std::vector<SpvInstruction>;
-    using Variables = std::vector<SpvInstruction>;
-    using Blocks = std::vector<SpvBlock>;
-    mutable RefCount ref_count;
-    SpvId block_id = SpvInvalidId;
-    SpvFunction parent;
-    Instructions instructions;
-    Variables variables;
-    Blocks before;
-    Blocks after;
-    bool reachable = true;    
-};
-
 /** General interface for representing a SPIR-V Block */
 class SpvBlock {
 public:
@@ -206,33 +171,6 @@ public:
 
 protected:
     SpvBlockContentsPtr contents;
-};
-
-template<>
-RefCount &ref_count<SpvBlockContents>(const SpvBlockContents *c) noexcept {
-    return c->ref_count;
-}
-
-template<>
-void destroy<SpvBlockContents>(const SpvBlockContents *c) {
-    delete c;
-}
-
-/** Contents of a SPIR-V function */
-struct SpvFunctionContents {
-    using PrecisionMap = std::unordered_map<SpvId, SpvPrecision>;
-    using Parameters = std::vector<SpvInstruction>;
-    using Blocks = std::vector<SpvBlock>;
-    mutable RefCount ref_count;
-    SpvModule parent;
-    SpvId function_id;
-    SpvId function_type_id;
-    SpvId return_type_id;
-    uint32_t control_mask;
-    SpvInstruction declaration;
-    Parameters parameters;
-    PrecisionMap precision;
-    Blocks blocks; 
 };
 
 /** General interface for representing a SPIR-V Function */
@@ -270,44 +208,6 @@ public:
 
 protected:
     SpvFunctionContentsPtr contents;
-};
-
-template<>
-RefCount &ref_count<SpvFunctionContents>(const SpvFunctionContents *c) noexcept {
-    return c->ref_count;
-}
-
-template<>
-void destroy<SpvFunctionContents>(const SpvFunctionContents *c) {
-    delete c;
-}
-
-/** Contents of a SPIR-V code module */
-struct SpvModuleContents {
-    using Capabilities = std::set<SpvCapability>;
-    using Extensions = std::set<std::string>;
-    using Imports = std::set<std::string>;
-    using Functions = std::vector<SpvFunction>;
-    using Instructions = std::vector<SpvInstruction>;
-    using EntryPoints = std::unordered_map<std::string, SpvInstruction>;
-
-    mutable RefCount ref_count;
-    SpvId module_id = SpvInvalidId;
-    SpvSourceLanguage source_language = SpvSourceLanguageUnknown;
-    SpvAddressingModel addressing_model = SpvAddressingModelLogical;
-    SpvMemoryModel memory_model = SpvMemoryModelSimple;
-    Capabilities capabilities;
-    Extensions extensions;
-    Imports imports;
-    EntryPoints entry_points;    
-    Instructions execution_modes;
-    Instructions debug;
-    Instructions annotations;
-    Instructions types;
-    Instructions constants;
-    Instructions globals;
-    Functions functions;
-    Instructions instructions;
 };
 
 /** General interface for representing a SPIR-V code module */
@@ -364,17 +264,7 @@ protected:
     SpvModuleContentsPtr contents;
 };
 
-template<>
-RefCount &ref_count<SpvModuleContents>(const SpvModuleContents *c) noexcept {
-    return c->ref_count;
-}
-
-template<>
-void destroy<SpvModuleContents>(const SpvModuleContents *c) {
-    delete c;
-}
-
-/** Main interface for constructing a SPIR-V code module and 
+/** Builder interface for constructing a SPIR-V code module and 
  * all associated types, declarations, blocks, functions & 
  * instructions */
 class SpvBuilder {
@@ -418,11 +308,11 @@ public:
 
     SpvFunction add_function(SpvId return_type, const ParamTypes& param_types = {});
     SpvId add_instruction(SpvInstruction val);
-    SpvId add_annotation( SpvId target_id, SpvDecoration decoration_type, const Literals& literals = {});
-    SpvId add_struct_annotation( SpvId struct_type_id, uint32_t member_index, SpvDecoration decoration_type, const Literals& literals = {});
+    void add_annotation( SpvId target_id, SpvDecoration decoration_type, const Literals& literals = {});
+    void add_struct_annotation( SpvId struct_type_id, uint32_t member_index, SpvDecoration decoration_type, const Literals& literals = {});
     
-    SpvId add_variable(SpvId type_id, uint32 storage_class, SpvId initializer_id = SpvInvalidId);
-    SpvId add_global_variable(SpvId type_id, uint32 storage_class, SpvId initializer_id = SpvInvalidId);
+    SpvId add_variable(SpvId type_id, uint32_t storage_class, SpvId initializer_id = SpvInvalidId);
+    SpvId add_global_variable(SpvId type_id, uint32_t storage_class, SpvId initializer_id = SpvInvalidId);
 
     SpvId map_struct(const StructMemberTypes& member_types);
 
@@ -444,7 +334,8 @@ public:
     SpvBlock current_block() const;
     SpvBlock leave_block();
 
-    void enter_function(SpvFunction func_id);
+    void enter_function(SpvFunction func);
+    SpvFunction lookup_function(SpvId func_id) const;
     SpvFunction current_function() const;
     SpvFunction leave_function();
     
@@ -523,196 +414,192 @@ protected:
     BlockStack block_stack;
 };
 
-/** Factory Methods for Specific Instructions */
+/** Factory interface for constructing specific SPIR-V instructions */
 struct SpvFactory {
+    using Indices = std::vector<uint32_t>;
     using Literals = std::vector<uint32_t>;
-    SpvInstruction label(SpvId result_id);
-    SpvInstruction decorate(SpvId target_id, SpvDecoration decoration_type, const Literals& literals = {});
-    SpvInstruction member_decorate( SpvId struct_type_id, uint32_t member_index, SpvDecoration decoration_type, const Literals& literals = {});
-
-};
-
-struct SpvLabelInst {
-    static SpvInstruction make( SpvId result_id );
-};
-
-struct SpvDecorateInst {
-    using Literals = std::vector<uint32_t>;
-    static SpvInstruction make( SpvId target_id, SpvDecoration decoration_type, const Literals& literals = {});
-};
-
-struct SpvMemberDecorateInst {
-    using Literals = std::vector<uint32_t>;
-    static SpvInstruction make( SpvId struct_type_id, uint32_t member_index, SpvDecoration decoration_type, const Literals& literals = {});
-};
-
-struct SpvUnaryOpInstruction {
-    static SpvInstruction make(SpvOp op_code, SpvId type_id, SpvId result_id, SpvId src_id );
-};
-
-struct SpvBinaryOpInstruction {
-    static SpvInstruction make(SpvOp op_code, SpvId type_id, SpvId result_id, SpvId src_a_id, SpvId src_b_id  );
-};
-
-struct SpvVectorInsertDynamicInst {
-    static SpvInstruction make(SpvId result_id, SpvId vector_id, SpvId value_id, uint32_t index);
-};
-
-struct SpvConstantInst {
-    static SpvInstruction make(SpvId type_id, SpvId result_id, size_t bytes, const void* data);
-};
-
-struct SpvConstantNullInst {
-    static SpvInstruction make(SpvId type_id, SpvId result_id);
-};
-
-struct SpvConstantBoolInst {
-    static SpvInstruction make(SpvId type_id, SpvId result_id, bool value);
-};
-
-struct SpvConstantCompositeInst {
-    using Components = std::vector<SpvId>;
-    static SpvInstruction make(SpvId type_id, SpvId result_id, const Components& components);
-};
-
-struct SpvTypeVoidInst {
-    static SpvInstruction make(SpvId void_type_id);
-};
-
-struct SpvTypeBoolInst {
-    static SpvInstruction make(SpvId bool_type_id);
-};
-
-struct SpvTypeIntInst {
-    static SpvInstruction make(SpvId int_type_id, uint32_t bits, uint32_t signedness);
-};
-
-struct SpvTypeFloatInst {
-    static SpvInstruction make(SpvId float_type_id, uint32_t bits);
-};
-
-struct SpvTypeVectorInst {
-    static SpvInstruction make(SpvId vector_type_id, SpvId element_type_id, uint32_t vector_size);
-};
-
-struct SpvTypeArrayInst {
-    static SpvInstruction make(SpvId array_type_id, SpvId element_type_id, uint32_t array_size);
-};
-
-struct SpvTypeStructInst {
-    using MemberTypeIds = std::vector<SpvId>;
-    static SpvInstruction make(SpvId result_id, const MemberTypeIds& member_type_ids);
-};
-
-struct SpvTypeRuntimeArrayInst {
-    static SpvInstruction make(SpvId result_type_id, SpvId base_type_id );
-};
-
-struct SpvTypePointerInst {
-    static SpvInstruction make(SpvId pointer_type_id, SpvStorageClass storage_class, SpvId base_type_id );
-};
-
-struct SpvTypeFunctionInst {
-    using ParamTypes = std::vector<SpvId>;
-    static SpvInstruction make(SpvId function_type_id, SpvId return_type_id, const ParamTypes& param_type_ids);
-};
-
-struct SpvVariableInst {
-    static SpvInstruction make(SpvId result_type_id, SpvId result_id, uint32 storage_class, SpvId initializer_id = SpvInvalidId);
-};
-
-struct SpvFunctionInst {
-    static SpvInstruction make(SpvId return_type_id, SpvId func_id, uint32_t control_mask, SpvId func_type_id);
-};
-
-struct SpvFunctionParameterInst {
-    static SpvInstruction make(SpvId param_type_id, SpvId param_id);
-};
-
-struct SpvReturnInst {
-    static SpvInstruction make(SpvId return_value_id = SpvInvalidId);
-};
-
-struct SpvEntryPointInst {
-    using Variables = std::vector<SpvId>;
-    static SpvInstruction make(SpvId exec_model, SpvId func_id, const std::string& name, const Variables& variables);
-};
-
-struct SpvMemoryModelInst {
-    static SpvInstruction make(SpvAddressingModel addressing_model, SpvMemoryModel memory_model);
-};
-
-struct SpvExecutionModeLocalSizeInst {
-    static SpvInstruction make(SpvId function_id, uint32_t wg_size_x, uint32_t wg_size_y, uint32_t wg_size_z);
-};
-
-struct SpvControlBarrierInst {
-    static SpvInstruction make(SpvId execution_scope_id, SpvId memory_scope_id, uint32_t semantics_mask );
-};
-
-struct SpvNotInst {
-    static SpvInstruction make(SpvId type_id, SpvId result_id, SpvId src_id );
-};
-
-struct SpvMulExtendedInst {
-    static SpvInstruction make(SpvId type_id, SpvId result_id, SpvId src_a_id, SpvId src_b_id, bool is_signed );
-};
-
-struct SpvSelectInst {
-    static SpvInstruction make(SpvId type_id, SpvId result_id, SpvId condition_id, SpvId true_id, SpvId false_id );
-};
-
-struct SpvInBoundsAccessChainInst {
-    using Indices = std::vector<SpvId>;
-    static SpvInstruction make(SpvId type_id, SpvId result_id, SpvId base_id, SpvId element_id, const Indices& indices );
-};
-
-struct SpvLoadInst {
-    static SpvInstruction make(SpvId type_id, SpvId result_id, SpvId ptr_id, uint32_t access_mask = 0x0);
-};
-
-struct SpvStoreInst {
-    static SpvInstruction make(SpvId ptr_id, SpvId obj_id, uint32_t access_mask = 0x0);
-};
-
-struct SpvCompositeExtractInst {
-    using Indices = std::vector<SpvId>;
-    static SpvInstruction make(SpvId type_id, SpvId result_id, SpvId composite_id, const Indices& indices );
-};
-
-struct SpvBitcastInst {
-    static SpvInstruction make(SpvId type_id, SpvId result_id, SpvId src_id );
-};
-
-struct SpvIAddInst {
-    static SpvInstruction make(SpvId type_id, SpvId result_id, SpvId src_a_id, SpvId src_b_id  );
-};
-
-struct SpvBranchInst {
-    static SpvInstruction make( SpvId target_label_id );
-};
-
-struct SpvBranchConditionalInst {
     using BranchWeights = std::vector<uint32_t>;
-    static SpvInstruction make( SpvId condition_label_id, SpvId true_label_id, SpvId false_label_id, const BranchWeights& weights = {} );
-};
-
-struct SpvLoopMergeInst {
-    static SpvInstruction make( SpvId merge_label_id, SpvId continue_label_id, uint32_t loop_control_mask = SpvLoopControlMaskNone);
-};
-
-struct SpvSelectionMergeInst {
-    static SpvInstruction make( SpvId merge_label_id, uint32_t selection_control_mask = SpvSelectionControlMaskNone);
-};
-
-struct SpvOpPhiInst {
+    using Components = std::vector<SpvId>;
+    using ParamTypes = std::vector<SpvId>;
+    using MemberTypeIds = std::vector<SpvId>;
+    using Variables = std::vector<SpvId>;
     using VariableBlockIdPair = std::pair<SpvId, SpvId>; // (Variable Id, Block Id)
     using BlockVariables = std::vector<VariableBlockIdPair>;
-    static SpvInstruction make(SpvId type_id, SpvId result_id, const BlockVariables& block_vars );
+    
+    static SpvInstruction capability(const SpvCapability& capability );
+    static SpvInstruction extension(const std::string& extension);
+    static SpvInstruction import(const std::string& import);
+    static SpvInstruction label(SpvId result_id);
+    static SpvInstruction decorate(SpvId target_id, SpvDecoration decoration_type, const Literals& literals = {});
+    static SpvInstruction decorate_member( SpvId struct_type_id, uint32_t member_index, SpvDecoration decoration_type, const Literals& literals = {});
+    static SpvInstruction void_type(SpvId void_type_id);
+    static SpvInstruction bool_type(SpvId bool_type_id);
+    static SpvInstruction integer_type(SpvId int_type_id, uint32_t bits, uint32_t signedness);
+    static SpvInstruction float_type(SpvId float_type_id, uint32_t bits);
+    static SpvInstruction vector_type(SpvId vector_type_id, SpvId element_type_id, uint32_t vector_size);
+    static SpvInstruction array_type(SpvId array_type_id, SpvId element_type_id, uint32_t array_size);
+    static SpvInstruction struct_type(SpvId result_id, const MemberTypeIds& member_type_ids);
+    static SpvInstruction runtime_array_type(SpvId result_type_id, SpvId base_type_id );
+    static SpvInstruction pointer_type(SpvId pointer_type_id, SpvStorageClass storage_class, SpvId base_type_id );
+    static SpvInstruction function_type(SpvId function_type_id, SpvId return_type_id, const ParamTypes& param_type_ids);
+    static SpvInstruction constant(SpvId result_id, SpvId type_id, size_t bytes, const void* data);
+    static SpvInstruction null_constant(SpvId result_id, SpvId type_id);
+    static SpvInstruction bool_constant(SpvId result_id, SpvId type_id, bool value);
+    static SpvInstruction composite_constant(SpvId result_id, SpvId type_id, const Components& components);
+    static SpvInstruction variable(SpvId result_id, SpvId result_type_id, uint32_t storage_class, SpvId initializer_id = SpvInvalidId);
+    static SpvInstruction function(SpvId return_type_id, SpvId func_id, uint32_t control_mask, SpvId func_type_id);
+    static SpvInstruction function_parameter(SpvId param_type_id, SpvId param_id);
+    static SpvInstruction function_end();
+    static SpvInstruction return_stmt(SpvId return_value_id = SpvInvalidId);
+    static SpvInstruction entry_point(SpvId exec_model, SpvId func_id, const std::string& name, const Variables& variables);
+    static SpvInstruction memory_model(SpvAddressingModel addressing_model, SpvMemoryModel memory_model);
+    static SpvInstruction exec_mode_local_size(SpvId function_id, uint32_t wg_size_x, uint32_t wg_size_y, uint32_t wg_size_z);
+    static SpvInstruction control_barrier(SpvId execution_scope_id, SpvId memory_scope_id, uint32_t semantics_mask );
+    static SpvInstruction logical_not(SpvId type_id, SpvId result_id, SpvId src_id );
+    static SpvInstruction multiply_extended(SpvId type_id, SpvId result_id, SpvId src_a_id, SpvId src_b_id, bool is_signed );
+    static SpvInstruction select(SpvId type_id, SpvId result_id, SpvId condition_id, SpvId true_id, SpvId false_id );
+    static SpvInstruction in_bounds_access_chain(SpvId type_id, SpvId result_id, SpvId base_id, SpvId element_id, const Indices& indices );
+    static SpvInstruction load(SpvId type_id, SpvId result_id, SpvId ptr_id, uint32_t access_mask = 0x0);
+    static SpvInstruction store(SpvId ptr_id, SpvId obj_id, uint32_t access_mask = 0x0);
+    static SpvInstruction vector_insert_dynamic(SpvId result_id, SpvId vector_id, SpvId value_id, uint32_t index);
+    static SpvInstruction composite_extract(SpvId type_id, SpvId result_id, SpvId composite_id, const Indices& indices );
+    static SpvInstruction bitcast(SpvId type_id, SpvId result_id, SpvId src_id );
+    static SpvInstruction integer_add(SpvId type_id, SpvId result_id, SpvId src_a_id, SpvId src_b_id  );
+    static SpvInstruction branch( SpvId target_label_id );
+    static SpvInstruction conditional_branch( SpvId condition_label_id, SpvId true_label_id, SpvId false_label_id, const BranchWeights& weights = {} );
+    static SpvInstruction loop_merge( SpvId merge_label_id, SpvId continue_label_id, uint32_t loop_control_mask = SpvLoopControlMaskNone);
+    static SpvInstruction selection_merge( SpvId merge_label_id, uint32_t selection_control_mask = SpvSelectionControlMaskNone);
+    static SpvInstruction phi(SpvId type_id, SpvId result_id, const BlockVariables& block_vars );
+    static SpvInstruction unary_op(SpvOp op_code, SpvId type_id, SpvId result_id, SpvId src_id );
+    static SpvInstruction binary_op(SpvOp op_code, SpvId type_id, SpvId result_id, SpvId src_a_id, SpvId src_b_id );
 };
 
+/** Contents of a SPIR-V Instruction */
+struct SpvInstructionContents {
+    using Operands = std::vector<SpvId>;
+    using Immediates = std::vector<bool>;
+    mutable RefCount ref_count;
+    SpvOp op_code = SpvOpNop;
+    SpvId result_id = SpvNoResult;
+    SpvId type_id = SpvNoType;
+    Operands operands;
+    Immediates immediates;
+    SpvBlock block;
+};
+
+/** Contents of a SPIR-V code block */
+struct SpvBlockContents {
+    using Instructions = std::vector<SpvInstruction>;
+    using Variables = std::vector<SpvInstruction>;
+    using Blocks = std::vector<SpvBlock>;
+    mutable RefCount ref_count;
+    SpvId block_id = SpvInvalidId;
+    SpvFunction parent;
+    Instructions instructions;
+    Variables variables;
+    Blocks before;
+    Blocks after;
+    bool reachable = true;    
+};
+
+/** Contents of a SPIR-V function */
+struct SpvFunctionContents {
+    using PrecisionMap = std::unordered_map<SpvId, SpvPrecision>;
+    using Parameters = std::vector<SpvInstruction>;
+    using Blocks = std::vector<SpvBlock>;
+    mutable RefCount ref_count;
+    SpvModule parent;
+    SpvId function_id;
+    SpvId function_type_id;
+    SpvId return_type_id;
+    uint32_t control_mask;
+    SpvInstruction declaration;
+    Parameters parameters;
+    PrecisionMap precision;
+    Blocks blocks; 
+};
+
+/** Contents of a SPIR-V code module */
+struct SpvModuleContents {
+    using Capabilities = std::set<SpvCapability>;
+    using Extensions = std::set<std::string>;
+    using Imports = std::set<std::string>;
+    using Functions = std::vector<SpvFunction>;
+    using Instructions = std::vector<SpvInstruction>;
+    using EntryPoints = std::unordered_map<std::string, SpvInstruction>;
+
+    mutable RefCount ref_count;
+    SpvId module_id = SpvInvalidId;
+    SpvSourceLanguage source_language = SpvSourceLanguageUnknown;
+    SpvAddressingModel addressing_model = SpvAddressingModelLogical;
+    SpvMemoryModel memory_model = SpvMemoryModelSimple;
+    Capabilities capabilities;
+    Extensions extensions;
+    Imports imports;
+    EntryPoints entry_points;    
+    Instructions execution_modes;
+    Instructions debug;
+    Instructions annotations;
+    Instructions types;
+    Instructions constants;
+    Instructions globals;
+    Functions functions;
+    Instructions instructions;
+};
+
+/** Specializations for reference counted classes */
+template<>
+RefCount &ref_count<SpvInstructionContents>(const SpvInstructionContents *c) noexcept {
+    return c->ref_count;
+}
+
+template<>
+void destroy<SpvInstructionContents>(const SpvInstructionContents *c) {
+    delete c;
+}
+
+template<>
+RefCount &ref_count<SpvBlockContents>(const SpvBlockContents *c) noexcept {
+    return c->ref_count;
+}
+
+template<>
+void destroy<SpvBlockContents>(const SpvBlockContents *c) {
+    delete c;
+}
+
+template<>
+RefCount &ref_count<SpvFunctionContents>(const SpvFunctionContents *c) noexcept {
+    return c->ref_count;
+}
+
+template<>
+void destroy<SpvFunctionContents>(const SpvFunctionContents *c) {
+    delete c;
+}
+
+template<>
+RefCount &ref_count<SpvModuleContents>(const SpvModuleContents *c) noexcept {
+    return c->ref_count;
+}
+
+template<>
+void destroy<SpvModuleContents>(const SpvModuleContents *c) {
+    delete c;
+}
+
+// --
 
 }} // namespace: Halide::Internal
 
-#endif // TARGET_SPIRV
+#endif // WITH_SPIRV
+
+namespace Halide {
+namespace Internal {
+
+/** Internal test for SPIR-V IR **/
+void spirv_ir_test();
+
+}} // namespace: Halide::Internal
+
 #endif // HALIDE_SPIRV_IR_H

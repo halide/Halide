@@ -143,6 +143,7 @@ set(HEADER_FILES
     SkipStages.h
     SlidingWindow.h
     Solve.h
+    SpirvIR.h
     SplitTuples.h
     StmtToHtml.h
     StorageFlattening.h
@@ -320,6 +321,7 @@ set(SOURCE_FILES
     SkipStages.cpp
     SlidingWindow.cpp
     Solve.cpp
+    SpirvIR.cpp
     SplitTuples.cpp
     StmtToHtml.cpp
     StorageFlattening.cpp
@@ -412,6 +414,14 @@ endif ()
 if (TARGET Halide_V8)
     target_link_libraries(Halide PRIVATE Halide_V8)
     target_compile_definitions(Halide PRIVATE WITH_V8)
+endif ()
+
+if (TARGET Halide_SPIRV)
+    target_link_libraries(Halide PRIVATE Halide_SPIRV)
+    target_compile_definitions(Halide PRIVATE WITH_SPIRV)
+#    get_property(HALIDE_SPIRV_INCLUDE_DIR GLOBAL PROPERTY SPIRV_INCLUDE_DIR)    
+#    target_include_directories(Halide PRIVATE "${HALIDE_SPIRV_INCLUDE_DIR}")
+#    message(STATUS "Adding SPIR-V headers from ${HALIDE_SPIRV_INCLUDE_DIR}...")
 endif ()
 
 ##
@@ -521,6 +531,11 @@ endif ()
 option(TARGET_OPENGLCOMPUTE "Include OpenGLCompute target" ON)
 if (TARGET_OPENGLCOMPUTE)
     target_compile_definitions(Halide PRIVATE WITH_OPENGLCOMPUTE)
+endif ()
+
+option(TARGET_SPIRV "Include SPIR-V target" ON)
+if (TARGET_SPIRV)
+    target_compile_definitions(Halide PRIVATE WITH_SPIRV)
 endif ()
 
 ##
