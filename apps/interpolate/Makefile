@@ -16,7 +16,7 @@ $(BIN)/%/interpolate.a: $(GENERATOR_BIN)/interpolate.generator
 
 $(BIN)/%/interpolate_auto_schedule.a: $(GENERATOR_BIN)/interpolate.generator
 	@mkdir -p $(@D)
-	$< -g interpolate -e $(GENERATOR_OUTPUTS) -f interpolate_auto_schedule -o $(BIN)/$* target=$*-no_runtime autoscheduler.name=Mullapudi2016
+	$< -g interpolate -e $(GENERATOR_OUTPUTS) -f interpolate_auto_schedule -o $(BIN)/$* target=$*-no_runtime autoscheduler=Mullapudi2016
 
 $(BIN)/%/runtime.a: $(GENERATOR_BIN)/interpolate.generator
 	@mkdir -p $(@D)

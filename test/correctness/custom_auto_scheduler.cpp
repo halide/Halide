@@ -9,7 +9,7 @@ void inline_everything(const Pipeline &,
 #ifdef HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
                        const MachineParams &,
 #else
-                       const AutoSchedulerParams &,
+                       const AutoschedulerParams &,
 #endif
                        AutoSchedulerResults *) {
     call_count++;
@@ -38,7 +38,7 @@ int main(int argc, char **argv) {
     Pipeline::set_default_autoscheduler_name(kSchedulerName);
     Pipeline(g).auto_schedule(t);
 #else
-    AutoSchedulerParams autoscheduler_params{{"name", kSchedulerName}};
+    AutoschedulerParams autoscheduler_params(kSchedulerName);
     Pipeline(f).apply_autoscheduler(t, autoscheduler_params);
     Pipeline(g).apply_autoscheduler(t, autoscheduler_params);
 #endif

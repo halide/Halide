@@ -57,16 +57,12 @@ struct MachineParams {
     explicit MachineParams(const std::string &s);
 };
 #else
-/** Special the AutoScheduler to be used (if any), along with arbitrary
- * additional arguments specific to the given AutoScheduler.
+/** Special the Autoscheduler to be used (if any), along with arbitrary
+ * additional arguments specific to the given Autoscheduler.
  *
- * The map key "name" is reserved and always specifies the type of autoscheduler
- * to be used (e.g. adams2019, mullapudi2016). If this key is present, it must
- * be the name of a known autoscheduler (may not be empty).
- *
- * The map name "target" is reserved and must not be used, ever -- the Target
- * to be used for an autoscheduler should always be passed in separately
- * from this map.
+ * The 'name' field specifies the type of Autoscheduler
+ * to be used (e.g. Adams2019, Mullapudi2016). If this is an empty string,
+ * no autoscheduling will be done; if not, it mustbe the name of a known Autoscheduler.
  *
  * At this time, well-known autoschedulers include:
  *  "Mullapudi2016" -- heuristics-based; the first working autoscheduler; currently built in to libHalide
@@ -76,13 +72,23 @@ struct MachineParams {
  *  "Li2018"        -- aka "the gradient autoscheduler"; currently located in apps/gradient_autoscheduler.
  *                     see https://people.csail.mit.edu/tzumao/gradient_halide
  *
- * All other keys in the map defined on a per-autoscheduler basis. An autoscheduler
- * can have any number of required or optional keys.
- *
- * An empty map means "Do not use any autoscheduler."
- *
+ * The key/value pairs in 'extra' are defined on a per-autoscheduler basis.
+ * An autoscheduler can have any number of required or optional keys.
  */
-using AutoSchedulerParams = std::map<std::string, std::string>;
+struct AutoschedulerParams {
+    std::string name;
+    std::map<std::string, std::string> extra;
+
+    AutoschedulerParams() = default;
+    /*not-explicit*/ AutoschedulerParams(const std::string &name)
+        : name(name) {
+    }
+    AutoschedulerParams(const std::string &name, const std::map<std::string, std::string> &extra)
+        : name(name), extra(extra) {
+    }
+
+    std::string to_string() const;
+};
 #endif
 
 namespace Internal {
@@ -123,7 +129,7 @@ struct AutoSchedulerResults {
     std::string machine_params_string;  // MachineParams specified to the autoscheduler (in string form)
 #else
     Target target;                             // Target specified to the autoscheduler
-    AutoSchedulerParams autoscheduler_params;  // The autoscheduler used, along with its params
+    AutoschedulerParams autoscheduler_params;  // The autoscheduler used, along with its params
 #endif
     std::string schedule_source;         // The C++ source code of the generated schedule
     std::vector<uint8_t> featurization;  // The featurization of the pipeline (if any)
@@ -134,7 +140,7 @@ class Pipeline;
 #ifdef HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
 using AutoSchedulerFn = std::function<void(const Pipeline &, const Target &, const MachineParams &, AutoSchedulerResults *outputs)>;
 #else
-using AutoSchedulerFn = std::function<void(const Pipeline &, const Target &, const AutoSchedulerParams &, AutoSchedulerResults *outputs)>;
+using AutoSchedulerFn = std::function<void(const Pipeline &, const Target &, const AutoschedulerParams &, AutoSchedulerResults *outputs)>;
 #endif
 
 /** A class representing a Halide pipeline. Constructed from the Func
@@ -240,7 +246,7 @@ public:
 #else
     /** Generate a schedule for the pipeline using the specified autoscheduler. */
     AutoSchedulerResults apply_autoscheduler(const Target &target,
-                                             const AutoSchedulerParams &autoscheduler_params) const;
+                                             const AutoschedulerParams &autoscheduler_params) const;
 #endif
 
     /** Add a new the autoscheduler method with the given name. Does not affect the current default autoscheduler.

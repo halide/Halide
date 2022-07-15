@@ -3401,11 +3401,11 @@ struct Mullapudi2016 {
         *outputs = std::move(results);
     }
 #else
-    void operator()(const Pipeline &pipeline, const Target &target, const AutoSchedulerParams &params_in, AutoSchedulerResults *outputs) {
-        internal_assert(params_in.at("name") == "Mullapudi2016");
+    void operator()(const Pipeline &pipeline, const Target &target, const AutoschedulerParams &params_in, AutoSchedulerResults *outputs) {
+        internal_assert(params_in.name == "Mullapudi2016");
         // Verify that no unknown keys are set in params_in
-        const std::set<std::string> legal_keys = {"name", "parallelism", "last_level_cache_size", "balance"};
-        for (const auto &it : params_in) {
+        const std::set<std::string> legal_keys = {"parallelism", "last_level_cache_size", "balance"};
+        for (const auto &it : params_in.extra) {
             user_assert(legal_keys.count(it.first) == 1) << "The key " << it.first << " is not legal to use for the Mullapudi2016 Autoscheduler.";
         }
 
@@ -3419,14 +3419,14 @@ struct Mullapudi2016 {
         }
 
         ArchParams arch_params;
-        if (params_in.count("parallelism")) {
-            arch_params.parallelism = std::stoi(params_in.at("parallelism"));
+        if (params_in.extra.count("parallelism")) {
+            arch_params.parallelism = std::stoi(params_in.extra.at("parallelism"));
         }
-        if (params_in.count("last_level_cache_size")) {
-            arch_params.last_level_cache_size = (uint64_t)std::stol(params_in.at("last_level_cache_size"));
+        if (params_in.extra.count("last_level_cache_size")) {
+            arch_params.last_level_cache_size = (uint64_t)std::stol(params_in.extra.at("last_level_cache_size"));
         }
-        if (params_in.count("balance")) {
-            arch_params.balance = std::stoi(params_in.at("balance"));
+        if (params_in.extra.count("balance")) {
+            arch_params.balance = std::stoi(params_in.extra.at("balance"));
         }
         results.schedule_source = generate_schedules(pipeline_outputs, target, arch_params);
         results.autoscheduler_params = params_in;

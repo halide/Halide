@@ -16,7 +16,7 @@ $(BIN)/%/max_filter.a: $(GENERATOR_BIN)/max_filter.generator
 
 $(BIN)/%/max_filter_auto_schedule.a: $(GENERATOR_BIN)/max_filter.generator
 	@mkdir -p $(@D)
-	$< -g max_filter -f max_filter_auto_schedule -o $(BIN)/$* target=$*-no_runtime autoscheduler.name=Mullapudi2016
+	$< -g max_filter -f max_filter_auto_schedule -o $(BIN)/$* target=$*-no_runtime autoscheduler=Mullapudi2016
 
 $(BIN)/%/runtime.a: $(GENERATOR_BIN)/max_filter.generator
 	@mkdir -p $(@D)

@@ -14,7 +14,7 @@ $(BIN)/%/local_laplacian.a: $(GENERATOR_BIN)/local_laplacian.generator
 
 $(BIN)/%/local_laplacian_auto_schedule.a: $(GENERATOR_BIN)/local_laplacian.generator
 	@mkdir -p $(@D)
-	$^ -g local_laplacian -e $(GENERATOR_OUTPUTS) -o $(@D) -f local_laplacian_auto_schedule target=$*-no_runtime autoscheduler.name=Mullapudi2016
+	$^ -g local_laplacian -e $(GENERATOR_OUTPUTS) -o $(@D) -f local_laplacian_auto_schedule target=$*-no_runtime autoscheduler=Mullapudi2016
 
 $(BIN)/%/process: process.cpp $(BIN)/%/local_laplacian.a $(BIN)/%/local_laplacian_auto_schedule.a
 	@mkdir -p $(@D)

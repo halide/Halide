@@ -97,7 +97,7 @@ $(BIN)/%/add_halidegrad_float32.a: $(GENERATOR_BIN)/add.generator
 		-o $(@D) \
 		-d 1 \
 		target=$* \
-		autoscheduler.name=Li2018
+		autoscheduler=Li2018
 
 $(BIN)/%/add_grad_float32.a: $(GENERATOR_BIN)/add.generator
 	@mkdir -p $(@D)
@@ -131,7 +131,7 @@ $(BIN)/%/add_halidegrad_float64.a: $(GENERATOR_BIN)/add.generator
 		target=$* \
 		-d 1 \
 		target=$* \
-		autoscheduler.name=Li2018
+		autoscheduler=Li2018
 
 $(BIN)/%/add_grad_float64.a: $(GENERATOR_BIN)/add.generator
 	@mkdir -p $(@D)
@@ -167,7 +167,7 @@ $(BIN)/%/add_halidegrad_cuda_float32.a: $(GENERATOR_BIN)/add.generator
 		-p $(HALIDE_DISTRIB_PATH)/lib/libautoschedule_li2018.so \
 		-d 1 \
 		target=$(CUDA_TARGET) \
-		autoscheduler.name=Li2018
+		autoscheduler=Li2018
 
 $(BIN)/%/add_grad_cuda_float32.a: $(GENERATOR_BIN)/add.generator
 	@mkdir -p $(@D)
@@ -200,7 +200,7 @@ $(BIN)/%/add_halidegrad_cuda_float64.a: $(GENERATOR_BIN)/add.generator
 		-p $(HALIDE_DISTRIB_PATH)/lib/libautoschedule_li2018.so \
 		-d 1 \
 		target=$(CUDA_TARGET) \
-		autoscheduler.name=Li2018
+		autoscheduler=Li2018
 
 $(BIN)/%/add_grad_cuda_float64.a: $(GENERATOR_BIN)/add.generator
 	@mkdir -p $(@D)

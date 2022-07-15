@@ -12,7 +12,7 @@ $(BIN)/%/depthwise_separable_conv.a: $(GENERATOR_BIN)/depthwise_separable_conv.g
 
 $(BIN)/%/depthwise_separable_conv_auto_schedule.a: $(GENERATOR_BIN)/depthwise_separable_conv.generator
 	@mkdir -p $(@D)
-	$^ -g depthwise_separable_conv -e $(GENERATOR_OUTPUTS) -o $(@D) -f depthwise_separable_conv_auto_schedule target=$*-no_runtime autoscheduler.name=Mullapudi2016
+	$^ -g depthwise_separable_conv -e $(GENERATOR_OUTPUTS) -o $(@D) -f depthwise_separable_conv_auto_schedule target=$*-no_runtime autoscheduler=Mullapudi2016
 
 $(BIN)/%/process: process.cpp $(BIN)/%/depthwise_separable_conv.a $(BIN)/%/depthwise_separable_conv_auto_schedule.a
 	@-mkdir -p $(BIN)

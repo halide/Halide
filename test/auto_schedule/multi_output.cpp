@@ -50,7 +50,7 @@ int main(int argc, char **argv) {
 #ifdef HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
     p.auto_schedule(target);
 #else
-    p.apply_autoscheduler(target, {{"name", "Mullapudi2016"}});
+    p.apply_autoscheduler(target, {"Mullapudi2016"});
 #endif
 
     // Inspect the schedule

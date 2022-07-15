@@ -265,15 +265,12 @@ AutoSchedulerResults Pipeline::auto_schedule(const Target &target, const Machine
     return auto_schedule(get_default_autoscheduler_name(), target, arch_params);
 }
 #else
-AutoSchedulerResults Pipeline::apply_autoscheduler(const Target &target, const AutoSchedulerParams &autoscheduler_params) const {
-    internal_assert(!autoscheduler_params.empty());
+AutoSchedulerResults Pipeline::apply_autoscheduler(const Target &target, const AutoschedulerParams &autoscheduler_params) const {
+    user_assert(!autoscheduler_params.name.empty()) << "apply_autoscheduler was called with no Autoscheduler specified.";
 
-    user_assert(autoscheduler_params.count("name") == 1)
-        << "Some autoscheduler params were specified, but autoscheduler.name was not specified!";
-    const auto autoscheduler_name = autoscheduler_params.at("name");
-    auto autoscheduler_fn = find_autoscheduler(autoscheduler_name);
+    auto autoscheduler_fn = find_autoscheduler(autoscheduler_params.name);
     user_assert(autoscheduler_fn)
-        << "Could not find autoscheduler named '" << autoscheduler_name << "'.\n"
+        << "Could not find autoscheduler named '" << autoscheduler_params.name << "'.\n"
         << "Did you remember to load the plugin?";
 
     AutoSchedulerResults results;
@@ -1235,5 +1232,16 @@ MachineParams::MachineParams(const std::string &s) {
     balance = std::atof(v[2].c_str());
 }
 #endif
+
+std::string AutoschedulerParams::to_string() const {
+    std::ostringstream os;
+    if (!name.empty()) {
+        os << "autoscheduler=" << name;
+    }
+    for (const auto &kv : extra) {
+        os << " autoscheduler." << kv.first << "=" << kv.second;
+    }
+    return os.str();
+}
 
 }  // namespace Halide

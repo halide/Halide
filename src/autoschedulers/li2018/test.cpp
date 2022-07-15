@@ -14,7 +14,7 @@ int main(int argc, char **argv) {
 #ifdef HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
     MachineParams params(parallelism, 16000000, 40);
 #else
-    AutoSchedulerParams params = {{"name", "Li2018"}, {"parallelism", std::to_string(parallelism)}};
+    AutoschedulerParams params = {"Li2018", {{"parallelism", std::to_string(parallelism)}}};
 #endif
 
     Target target;

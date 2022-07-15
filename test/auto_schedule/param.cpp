@@ -26,7 +26,7 @@ void run_test_1() {
 #ifdef HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
     p.auto_schedule(target);
 #else
-    p.apply_autoscheduler(target, {{"name", "Mullapudi2016"}});
+    p.apply_autoscheduler(target, {"Mullapudi2016"});
 #endif
 
     // Inspect the schedule
@@ -57,7 +57,7 @@ void run_test_2() {
 #ifdef HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
     p.auto_schedule(target);
 #else
-    p.apply_autoscheduler(target, {{"name", "Mullapudi2016"}});
+    p.apply_autoscheduler(target, {"Mullapudi2016"});
 #endif
 
     // Inspect the schedule
@@ -88,7 +88,7 @@ void run_test_3() {
 #ifdef HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
     p.auto_schedule(target);
 #else
-    p.apply_autoscheduler(target, {{"name", "Mullapudi2016"}});
+    p.apply_autoscheduler(target, {"Mullapudi2016"});
 #endif
 
     // Inspect the schedule
@@ -122,7 +122,7 @@ void run_test_4() {
 #ifdef HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
     p.auto_schedule(target);
 #else
-    p.apply_autoscheduler(target, {{"name", "Mullapudi2016"}});
+    p.apply_autoscheduler(target, {"Mullapudi2016"});
 #endif
 
     // Inspect the schedule

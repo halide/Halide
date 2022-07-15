@@ -30,11 +30,10 @@ Module AbstractGenerator::build_module(const std::string &function_name) {
         auto_schedule_results = pipeline.auto_schedule(context.target(), context.machine_params());
     }
 #else
-    if (!context.autoscheduler_params().empty()) {
-        user_assert(context.autoscheduler_params().count("name") == 1)
-            << "Generator " << name() << " specifies some autoscheduler params, but not autoscheduler.name, which is illegal.";
-        debug(1) << "Applying autoscheduler " << context.autoscheduler_params().at("name") << " to Generator " << name() << " ...\n";
-        auto_schedule_results = pipeline.apply_autoscheduler(context.target(), context.autoscheduler_params());
+    const auto asp = context.autoscheduler_params();
+    if (!asp.name.empty()) {
+        debug(1) << "Applying autoscheduler " << asp.name << " to Generator " << name() << " ...\n";
+        auto_schedule_results = pipeline.apply_autoscheduler(context.target(), asp);
     } else {
         debug(1) << "Applying autoscheduler (NONE) to Generator " << name() << " ...\n";
     }
@@ -231,8 +230,9 @@ Module AbstractGenerator::build_gradient_module(const std::string &function_name
         auto_schedule_results = grad_pipeline.auto_schedule(context.target(), context.machine_params());
     }
 #else
-    if (!context.autoscheduler_params().empty()) {
-        auto_schedule_results = grad_pipeline.apply_autoscheduler(context.target(), context.autoscheduler_params());
+    const auto asp = context.autoscheduler_params();
+    if (!asp.name.empty()) {
+        auto_schedule_results = grad_pipeline.apply_autoscheduler(context.target(), asp);
     }
 #endif
     else {

@@ -17,7 +17,8 @@ def main():
     f_2.set_estimate(x, 0, 1000)
     p = hl.Pipeline(f_2)
     target = hl.Target()
-    result = p.apply_autoscheduler(target, {'name': 'Li2018', 'parallelism': 32})
+    asp = hl.AutoschedulerParams('Li2018', {'parallelism': 32})
+    result = p.apply_autoscheduler(target, asp)
     print('Schedule:')
     print(result.schedule_source)
 

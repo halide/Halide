@@ -51,7 +51,7 @@ int main(int argc, char **argv) {
 #ifdef HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
     AutoSchedulerResults results = p.auto_schedule(target);
 #else
-    AutoSchedulerResults results = p.apply_autoscheduler(target, {{"name", "Mullapudi2016"}});
+    AutoSchedulerResults results = p.apply_autoscheduler(target, {"Mullapudi2016"});
 #endif
 
     std::cout << "\n\n******************************************\nSCHEDULE:\n"

@@ -14,7 +14,7 @@ $(BIN)/%/unsharp.a: $(GENERATOR_BIN)/unsharp.generator
 
 $(BIN)/%/unsharp_auto_schedule.a: $(GENERATOR_BIN)/unsharp.generator
 	@mkdir -p $(@D)
-	$< -g unsharp -f unsharp_auto_schedule -o $(BIN)/$* target=$*-no_runtime autoscheduler.name=Mullapudi2016
+	$< -g unsharp -f unsharp_auto_schedule -o $(BIN)/$* target=$*-no_runtime autoscheduler=Mullapudi2016
 
 $(BIN)/%/runtime.a: $(GENERATOR_BIN)/unsharp.generator
 	@mkdir -p $(@D)

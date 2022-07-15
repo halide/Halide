@@ -20,7 +20,7 @@ $(BIN)/%/bgu.a: $(GENERATOR_BIN)/bgu.generator
 
 $(BIN)/%/bgu_auto_schedule.a: $(GENERATOR_BIN)/bgu.generator
 	@mkdir -p $(@D)
-	$< -g bgu -f bgu_auto_schedule -o $(BIN)/$* target=$*-no_runtime autoscheduler.name=Mullapudi2016
+	$< -g bgu -f bgu_auto_schedule -o $(BIN)/$* target=$*-no_runtime autoscheduler=Mullapudi2016
 
 $(BIN)/%/runtime.a: $(GENERATOR_BIN)/bgu.generator
 	@mkdir -p $(@D)

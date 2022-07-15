@@ -116,7 +116,7 @@ make_featurization() {
         target=${HL_TARGET} \
         ${EXTRA_GENERATOR_ARGS} \
         -p ${AUTOSCHED_BIN}/libautoschedule_adams2019.${SHARED_EXT} \
-        autoscheduler.name=Adams2019 \
+        autoscheduler=Adams2019 \
         autoscheduler.parallelism=32 \
             2> ${D}/compile_log.txt || echo "Compilation failed or timed out for ${D}"
 

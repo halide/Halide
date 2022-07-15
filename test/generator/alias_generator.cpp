@@ -32,7 +32,7 @@ HALIDE_REGISTER_GENERATOR_ALIAS(alias_with_offset_42, alias, {{"offset", "42"}})
 #else
 // Since autoscheduler-to-use is now an ordinary GeneratorParam, we can specify it in Aliases for convenience.
 // (Set unique offsets just to verify these are all separate calls.)
-HALIDE_REGISTER_GENERATOR_ALIAS(alias_Adams2019, alias, {{"autoscheduler.name", "Adams2019"}, {"offset", "2019"}})
-HALIDE_REGISTER_GENERATOR_ALIAS(alias_Li2018, alias, {{"autoscheduler.name", "Li2018"}, {"offset", "2018"}})
-HALIDE_REGISTER_GENERATOR_ALIAS(alias_Mullapudi2016, alias, {{"autoscheduler.name", "Mullapudi2016"}, {"offset", "2016"}})
+HALIDE_REGISTER_GENERATOR_ALIAS(alias_Adams2019, alias, {{"autoscheduler", "Adams2019"}, {"offset", "2019"}})
+HALIDE_REGISTER_GENERATOR_ALIAS(alias_Li2018, alias, {{"autoscheduler", "Li2018"}, {"offset", "2018"}})
+HALIDE_REGISTER_GENERATOR_ALIAS(alias_Mullapudi2016, alias, {{"autoscheduler", "Mullapudi2016"}, {"offset", "2016"}})
 #endif

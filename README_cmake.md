@@ -859,7 +859,7 @@ author warning will be issued.
 
 To use an autoscheduler, set the `AUTOSCHEDULER` argument to a target
 named like `Namespace::Scheduler`, for example `Halide::Adams19`. This will set
-the `autoscheduler.name` GeneratorParam on the generator command line to `Scheduler` and add the target to
+the `autoscheduler` GeneratorParam on the generator command line to `Scheduler` and add the target to
 the list of plugins. Additional plugins can be loaded by setting the `PLUGINS`
 argument. If the argument to `AUTOSCHEDULER` does not contain `::` or it does
 not name a target, it will be passed to the `-s` flag verbatim.

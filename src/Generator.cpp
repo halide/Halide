@@ -25,7 +25,7 @@ GeneratorContext::GeneratorContext(const Target &target,
                                    bool auto_schedule,
                                    const MachineParams &machine_params,
 #else
-                                   const AutoSchedulerParams &autoscheduler_params,
+                                   const AutoschedulerParams &autoscheduler_params,
 #endif
                                    std::shared_ptr<ExternsMap> externs_map)
     : target_(target),
@@ -54,7 +54,7 @@ GeneratorContext::GeneratorContext(const Target &target)
 }
 
 GeneratorContext::GeneratorContext(const Target &target,
-                                   const AutoSchedulerParams &autoscheduler_params)
+                                   const AutoschedulerParams &autoscheduler_params)
     : target_(target),
       autoscheduler_params_(autoscheduler_params) {
 }
@@ -257,8 +257,8 @@ void StubEmitter::emit_generator_params_struct() {
         std::string comma = "";
         for (auto *p : v) {
             std::string c_type = p->get_c_type();
-            if (c_type == "AutoSchedulerParams") {
-                c_type = "const AutoSchedulerParams&";
+            if (c_type == "AutoschedulerParams") {
+                c_type = "const AutoschedulerParams&";
             }
             stream << get_indent() << comma << c_type << " " << p->name() << "\n";
             comma = ", ";
@@ -781,7 +781,7 @@ gengen
     }
 #else
     if (args.generator_params.count("auto_schedule")) {
-        user_error << "auto_schedule=true is no longer supported for enabling autoscheduling; specify autoscheduler.name=NAME instead.\n"
+        user_error << "auto_schedule=true is no longer supported for enabling autoscheduling; specify autoscheduler=NAME instead.\n"
                    << kUsage;
     }
     if (args.generator_params.count("machine_params")) {
@@ -918,7 +918,7 @@ gengen
                 std::string quote = it.second.find(' ') != std::string::npos ? "\\\"" : "";
                 generator_args_string += sep + it.first + "=" + quote + it.second + quote;
                 sep = " ";
-                if (it.first == "autoscheduler.name") {
+                if (it.first == "autoscheduler") {
                     autoscheduler_name = it.second;
                 }
             }
@@ -1234,7 +1234,7 @@ void GeneratorParamBase::fail_wrong_type(const char *type) {
 // nothing
 #else
 GeneratorParam_AutoSchedulerParams::GeneratorParam_AutoSchedulerParams()
-    : GeneratorParamImpl<AutoSchedulerParams>("autoscheduler", {}) {
+    : GeneratorParamImpl<AutoschedulerParams>("autoscheduler", {}) {
 }
 
 void GeneratorParam_AutoSchedulerParams::set_from_string(const std::string &new_value_string) {
@@ -1258,14 +1258,18 @@ std::string GeneratorParam_AutoSchedulerParams::get_c_type() const {
 
 bool GeneratorParam_AutoSchedulerParams::try_set(const std::string &key, const std::string &value) {
     const auto &n = this->name();
-    if (starts_with(key, n + ".")) {
-        const auto sub_key = key.substr(n.size() + 1);
-        user_assert(this->value_.count(sub_key) == 0) << "The GeneratorParam " << key << " cannot be set more than once.\n";
-        this->value_[sub_key] = value;
+    if (key == n) {
+        user_assert(this->value_.name.empty()) << "The GeneratorParam " << key << " cannot be set more than once.\n";
+        this->value_.name = value;
         return true;
+    } else if (starts_with(key, n + ".")) {
+        const auto sub_key = key.substr(n.size() + 1);
+        user_assert(this->value_.extra.count(sub_key) == 0) << "The GeneratorParam " << key << " cannot be set more than once.\n";
+        this->value_.extra[sub_key] = value;
+        return true;
+    } else {
+        return false;
     }
-
-    return false;
 }
 
 #endif

@@ -943,11 +943,11 @@ struct Li2018 {
         generate_schedule(outputs, target, params, results);
     }
 #else
-    void operator()(const Pipeline &p, const Target &target, const AutoSchedulerParams &params_in, AutoSchedulerResults *results) {
-        internal_assert(params_in.at("name") == "Li2018");
+    void operator()(const Pipeline &p, const Target &target, const AutoschedulerParams &params_in, AutoSchedulerResults *results) {
+        internal_assert(params_in.name == "Li2018");
         // Verify that no unknown keys are set in params_in
-        const std::set<std::string> legal_keys = {"name", "parallelism"};
-        for (const auto &it : params_in) {
+        const std::set<std::string> legal_keys = {"parallelism"};
+        for (const auto &it : params_in.extra) {
             user_assert(legal_keys.count(it.first) == 1) << "The key " << it.first << " is not legal to use for the Li2018 Autoscheduler.";
         }
 
@@ -956,8 +956,8 @@ struct Li2018 {
             outputs.push_back(f.function());
         }
         GradientAutoschedulerParams params;
-        if (params_in.count("parallelism")) {
-            params.parallelism = std::stoi(params_in.at("parallelism"));
+        if (params_in.extra.count("parallelism")) {
+            params.parallelism = std::stoi(params_in.extra.at("parallelism"));
         }
         generate_schedule(outputs, target, params, results);
         results->autoscheduler_params = params_in;

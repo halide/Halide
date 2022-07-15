@@ -26,7 +26,7 @@ bool test_caching(Pipeline &p1, Pipeline &p2, const Target &target) {
 #ifdef HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
     MachineParams params(parallelism, 16000000, 40);
 #else
-    AutoSchedulerParams params = {{"name", "Adams2019"}, {"parallelism", std::to_string(parallelism)}};
+    AutoschedulerParams params = {"Adams2019", {{"parallelism", std::to_string(parallelism)}}};
 #endif
 
     // Turn off caching.

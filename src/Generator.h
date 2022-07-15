@@ -212,7 +212,7 @@
  *  by the base class:
  *
  *      GeneratorParam<Target> target{"target", Target()};
- *      GeneratorParam<AutoSchedulerParams> autoscheduler{"autoscheduler", {}}
+ *      GeneratorParam<AutoschedulerParams> autoscheduler{"autoscheduler", {}}
  *
  *  - 'target' is the Halide::Target for which the Generator is producing code.
  *    It is read-only during the Generator's lifetime, and must not be modified;
@@ -429,7 +429,7 @@ public:
 #ifdef HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
     HALIDE_GENERATOR_PARAM_TYPED_SETTER(MachineParams)
 #else
-    HALIDE_GENERATOR_PARAM_TYPED_SETTER(AutoSchedulerParams)
+    HALIDE_GENERATOR_PARAM_TYPED_SETTER(AutoschedulerParams)
 #endif
     HALIDE_GENERATOR_PARAM_TYPED_SETTER(Type)
     HALIDE_GENERATOR_PARAM_TYPED_SETTER(LoopLevel)
@@ -547,7 +547,7 @@ public:
 #ifdef HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
     HALIDE_GENERATOR_PARAM_TYPED_SETTER(MachineParams)
 #else
-    HALIDE_GENERATOR_PARAM_TYPED_SETTER(AutoSchedulerParams)
+    HALIDE_GENERATOR_PARAM_TYPED_SETTER(AutoschedulerParams)
 #endif
     HALIDE_GENERATOR_PARAM_TYPED_SETTER(Type)
     HALIDE_GENERATOR_PARAM_TYPED_SETTER(LoopLevel)
@@ -669,7 +669,7 @@ public:
     }
 };
 #else
-class GeneratorParam_AutoSchedulerParams : public GeneratorParamImpl<AutoSchedulerParams> {
+class GeneratorParam_AutoSchedulerParams : public GeneratorParamImpl<AutoschedulerParams> {
 public:
     GeneratorParam_AutoSchedulerParams();
 
@@ -3068,7 +3068,7 @@ public:
 #else
     explicit GeneratorContext(const Target &t);
     explicit GeneratorContext(const Target &t,
-                              const AutoSchedulerParams &autoscheduler_params);
+                              const AutoschedulerParams &autoscheduler_params);
 #endif
 
     GeneratorContext() = default;
@@ -3088,7 +3088,7 @@ public:
         return machine_params_;
     }
 #else
-    const AutoSchedulerParams &autoscheduler_params() const {
+    const AutoschedulerParams &autoscheduler_params() const {
         return autoscheduler_params_;
     }
 #endif
@@ -3130,7 +3130,7 @@ private:
     bool auto_schedule_ = false;
     MachineParams machine_params_ = MachineParams::generic();
 #else
-    AutoSchedulerParams autoscheduler_params_;
+    AutoschedulerParams autoscheduler_params_;
 #endif
 #ifdef HALIDE_ALLOW_GENERATOR_EXTERNAL_CODE
     std::shared_ptr<ExternsMap> externs_map_ = std::make_shared<ExternsMap>();
@@ -3142,7 +3142,7 @@ private:
                      bool auto_schedule,
                      const MachineParams &machine_params,
 #else
-                     const AutoSchedulerParams &autoscheduler_params,
+                     const AutoschedulerParams &autoscheduler_params,
 #endif
                      std::shared_ptr<ExternsMap> externs_map);
 #endif  // HALIDE_ALLOW_GENERATOR_EXTERNAL_CODE
@@ -3577,7 +3577,7 @@ protected:
     }
 #else
     bool using_autoscheduler() const {
-        return !autoscheduler_.value().empty();
+        return !autoscheduler_.value().name.empty();
     }
 #endif
 

@@ -67,7 +67,7 @@ double run_test(bool auto_schedule) {
 #ifdef HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
         p.auto_schedule(target);
 #else
-        p.apply_autoscheduler(target, {{"name", "Mullapudi2016"}});
+        p.apply_autoscheduler(target, {"Mullapudi2016"});
 #endif
     } else if (target.has_gpu_feature()) {
         Var xi("xi"), yi("yi");

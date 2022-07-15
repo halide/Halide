@@ -16,7 +16,7 @@ $(BIN)/%/hist.a: $(GENERATOR_BIN)/hist.generator
 
 $(BIN)/%/hist_auto_schedule.a: $(GENERATOR_BIN)/hist.generator
 	@mkdir -p $(@D)
-	$< -g hist -f hist_auto_schedule -o $(BIN)/$* target=$*-no_runtime autoscheduler.name=Mullapudi2016
+	$< -g hist -f hist_auto_schedule -o $(BIN)/$* target=$*-no_runtime autoscheduler=Mullapudi2016
 
 $(BIN)/%/runtime.a: $(GENERATOR_BIN)/hist.generator
 	@mkdir -p $(@D)

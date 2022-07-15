@@ -14,7 +14,7 @@ $(BIN)/%/iir_blur.a: $(GENERATOR_BIN)/iir_blur.generator
 
 $(BIN)/%/iir_blur_auto_schedule.a: $(GENERATOR_BIN)/iir_blur.generator
 	@mkdir -p $(@D)
-	$< -g iir_blur -f iir_blur_auto_schedule -o $(BIN)/$* target=$*-no_runtime autoscheduler.name=Mullapudi2016
+	$< -g iir_blur -f iir_blur_auto_schedule -o $(BIN)/$* target=$*-no_runtime autoscheduler=Mullapudi2016
 
 $(BIN)/%/runtime.a: $(GENERATOR_BIN)/iir_blur.generator
 	@mkdir -p $(@D)

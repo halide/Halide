@@ -687,18 +687,8 @@ void Module::compile(const std::map<OutputFileType, std::string> &output_files) 
         std::string machine_params = r ? r->machine_params_string : "(None)";
         emit_schedule_file(name(), {target()}, scheduler, machine_params, body, file);
 #else
-        std::string scheduler = r ? r->autoscheduler_params["name"] : "(None)";
-        std::string autoscheduler_params_string;
-        if (r) {
-            for (const auto &kv : r->autoscheduler_params) {
-                if (autoscheduler_params_string.empty()) {
-                    autoscheduler_params_string += " ";
-                }
-                autoscheduler_params_string += kv.first + "=" + kv.second;
-            }
-        } else {
-            autoscheduler_params_string = "(None)";
-        }
+        std::string scheduler = r ? r->autoscheduler_params.name : "(None)";
+        std::string autoscheduler_params_string = r ? r->autoscheduler_params.to_string() : "(None)";
         emit_schedule_file(name(), {target()}, scheduler, autoscheduler_params_string, body, file);
 #endif
     }
@@ -1041,17 +1031,8 @@ void compile_multitarget(const std::string &fn_name,
         }
 #else
         const auto &autoscheduler_params = auto_scheduler_results.front().autoscheduler_params;
-        std::string scheduler = autoscheduler_params.empty() ? "(None)" : autoscheduler_params.at("name");
-        std::string autoscheduler_params_string;
-        for (const auto &kv : autoscheduler_params) {
-            if (autoscheduler_params_string.empty()) {
-                autoscheduler_params_string += " ";
-            }
-            autoscheduler_params_string += kv.first + "=" + kv.second;
-        }
-        if (autoscheduler_params_string.empty()) {
-            autoscheduler_params_string = "(None)";
-        }
+        std::string scheduler = autoscheduler_params.name.empty() ? "(None)" : autoscheduler_params.name;
+        std::string autoscheduler_params_string = autoscheduler_params.name.empty() ? "(None)" : autoscheduler_params.to_string();
 #endif
 
         // Find the features that are unique to each stage (vs the baseline case).

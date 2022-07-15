@@ -663,11 +663,11 @@ struct Adams2019 {
         Autoscheduler::generate_schedule(outputs, target, params, results);
     }
 #else
-    void operator()(const Pipeline &p, const Target &target, const AutoSchedulerParams &params_in, AutoSchedulerResults *results) {
-        internal_assert(params_in.at("name") == "Adams2019");
+    void operator()(const Pipeline &p, const Target &target, const AutoschedulerParams &params_in, AutoSchedulerResults *results) {
+        internal_assert(params_in.name == "Adams2019");
         // Verify that no unknown keys are set in params_in
-        const std::set<std::string> legal_keys = {"name", "parallelism"};
-        for (const auto &it : params_in) {
+        const std::set<std::string> legal_keys = {"parallelism"};
+        for (const auto &it : params_in.extra) {
             user_assert(legal_keys.count(it.first) == 1) << "The key " << it.first << " is not legal to use for the Adams2019 Autoscheduler.";
         }
 
@@ -676,8 +676,8 @@ struct Adams2019 {
             outputs.push_back(f.function());
         }
         Adams2019Params params;
-        if (params_in.count("parallelism")) {
-            params.parallelism = std::stoi(params_in.at("parallelism"));
+        if (params_in.extra.count("parallelism")) {
+            params.parallelism = std::stoi(params_in.extra.at("parallelism"));
         }
         Autoscheduler::generate_schedule(outputs, target, params, results);
         results->autoscheduler_params = params_in;

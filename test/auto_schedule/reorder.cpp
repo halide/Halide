@@ -30,7 +30,7 @@ double run_test_1(bool auto_schedule) {
 #ifdef HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
         p.auto_schedule(target);
 #else
-        p.apply_autoscheduler(target, {{"name", "Mullapudi2016"}});
+        p.apply_autoscheduler(target, {"Mullapudi2016"});
 #endif
     } else {
         /*
@@ -86,7 +86,7 @@ double run_test_2(bool auto_schedule) {
 #ifdef HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
         p.auto_schedule(target);
 #else
-        p.apply_autoscheduler(target, {{"name", "Mullapudi2016"}});
+        p.apply_autoscheduler(target, {"Mullapudi2016"});
 #endif
     } else {
         Var t("t");
@@ -129,7 +129,7 @@ double run_test_3(bool auto_schedule) {
 #ifdef HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
         p.auto_schedule(target);
 #else
-        p.apply_autoscheduler(target, {{"name", "Mullapudi2016"}});
+        p.apply_autoscheduler(target, {"Mullapudi2016"});
 #endif
     } else {
         Var par("par");

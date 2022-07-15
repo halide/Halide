@@ -14,7 +14,7 @@ $(BIN)/%/harris.a: $(GENERATOR_BIN)/harris.generator
 
 $(BIN)/%/harris_auto_schedule.a: $(GENERATOR_BIN)/harris.generator
 	@mkdir -p $(@D)
-	$< -g harris -f harris_auto_schedule -o $(BIN)/$* target=$*-no_runtime autoscheduler.name=Mullapudi2016
+	$< -g harris -f harris_auto_schedule -o $(BIN)/$* target=$*-no_runtime autoscheduler=Mullapudi2016
 
 $(BIN)/%/runtime.a: $(GENERATOR_BIN)/harris.generator
 	@mkdir -p $(@D)

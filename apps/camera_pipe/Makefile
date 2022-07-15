@@ -16,7 +16,7 @@ $(BIN)/%/camera_pipe.a: $(GENERATOR_BIN)/camera_pipe.generator
 
 $(BIN)/%/camera_pipe_auto_schedule.a: $(GENERATOR_BIN)/camera_pipe.generator
 	@mkdir -p $(@D)
-	$^ -g camera_pipe -e $(GENERATOR_OUTPUTS) -o $(@D) -f camera_pipe_auto_schedule target=$*-no_runtime autoscheduler.name=Mullapudi2016
+	$^ -g camera_pipe -e $(GENERATOR_OUTPUTS) -o $(@D) -f camera_pipe_auto_schedule target=$*-no_runtime autoscheduler=Mullapudi2016
 
 $(BIN)/%/process: process.cpp $(BIN)/%/camera_pipe.a $(BIN)/%/camera_pipe_auto_schedule.a
 	@mkdir -p $(@D)

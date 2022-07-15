@@ -294,7 +294,7 @@ function(add_halide_library TARGET)
         elseif (NOT ARG_PLUGINS)
             message(AUTHOR_WARNING "AUTOSCHEDULER set to a scheduler name but no plugins were loaded")
         endif ()
-        list(PREPEND ARG_PARAMS "autoscheduler.name=${ARG_AUTOSCHEDULER}")
+        list(PREPEND ARG_PARAMS "autoscheduler=${ARG_AUTOSCHEDULER}")
     endif ()
 
     ##
