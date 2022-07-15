@@ -73,10 +73,16 @@ Tile<1> get_1d_tile_index(const Expr &e) {
         for (const auto &pattern : patterns) {
             if (expr_match(pattern, r1->base, matches)) {
                 auto stride = std::move(matches["stride"]);
-                if (!stride.as<IntImm>()) {
-                    return {};
+                // stride must be a constant in order to not be confused with v1
+                if (stride.as<IntImm>()) {
+                    return {true, r1->base, {std::move(stride)}, {r1->lanes}};
                 }
-                return {true, r1->base, {std::move(stride)}, {r1->lanes}};
+
+                // if stride wasn't a constant then v1 could possibly be the stride if constant
+                auto v1_expr = std::move(matches["v1"]);
+                if (v1_expr.as<IntImm>()) {
+                    return {true, r1->base, {std::move(v1_expr)}, {r1->lanes}};
+                }
             }
         }
     }
