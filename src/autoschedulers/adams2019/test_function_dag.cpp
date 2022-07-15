@@ -1,3 +1,4 @@
+#include "Featurization.h"
 #include "FunctionDAG.h"
 #include "Halide.h"
 #include <sstream>
@@ -31,7 +32,7 @@ extern "C" int mul_by_two(
     return 0;
 }
 
-void test_coeff_wise(const MachineParams &params, const Target &target) {
+void test_coeff_wise(const Target &target) {
     Var x("x"), y("y");
 
     std::ostringstream with_extern;
@@ -55,7 +56,7 @@ void test_coeff_wise(const MachineParams &params, const Target &target) {
         h.set_estimate(x, 0, 1000).set_estimate(y, 0, 1000);
         std::vector<Halide::Internal::Function> v;
         v.push_back(h.function());
-        Halide::Internal::Autoscheduler::FunctionDAG d(v, params, target);
+        Halide::Internal::Autoscheduler::FunctionDAG d(v, target);
 
         d.dump(with_extern);
     }
@@ -70,7 +71,7 @@ void test_coeff_wise(const MachineParams &params, const Target &target) {
         h.set_estimate(x, 0, 1000).set_estimate(y, 0, 1000);
         std::vector<Halide::Internal::Function> v;
         v.push_back(h.function());
-        Halide::Internal::Autoscheduler::FunctionDAG d(v, params, target);
+        Halide::Internal::Autoscheduler::FunctionDAG d(v, target);
 
         d.dump(without_extern);
     }
@@ -113,7 +114,7 @@ extern "C" int matmul(
     return 0;
 }
 
-void test_matmul(const MachineParams &params, const Target &target) {
+void test_matmul(const Target &target) {
     Var x("x"), y("y"), k("k");
     RDom r(0, 200);
     Halide::Buffer<float> input1(200, 200);
@@ -140,7 +141,7 @@ void test_matmul(const MachineParams &params, const Target &target) {
         h.set_estimate(x, 0, 200).set_estimate(y, 0, 200);
         std::vector<Halide::Internal::Function> v;
         v.push_back(h.function());
-        Halide::Internal::Autoscheduler::FunctionDAG d(v, params, target);
+        Halide::Internal::Autoscheduler::FunctionDAG d(v, target);
 
         d.dump(with_extern);
     }
@@ -153,7 +154,7 @@ void test_matmul(const MachineParams &params, const Target &target) {
         h.set_estimate(x, 0, 200).set_estimate(y, 0, 200);
         std::vector<Halide::Internal::Function> v;
         v.push_back(h.function());
-        Halide::Internal::Autoscheduler::FunctionDAG d(v, params, target);
+        Halide::Internal::Autoscheduler::FunctionDAG d(v, target);
 
         d.dump(without_extern);
     }
@@ -164,11 +165,10 @@ void test_matmul(const MachineParams &params, const Target &target) {
 
 int main(int argc, char **argv) {
     // Use a fixed target for the analysis to get consistent results from this test.
-    MachineParams params(32, 16000000, 40);
     Target target("x86-64-linux-sse41-avx-avx2");
 
-    test_coeff_wise(params, target);
-    test_matmul(params, target);
+    test_coeff_wise(target);
+    test_matmul(target);
 
     return 0;
 }

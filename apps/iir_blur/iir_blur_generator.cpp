@@ -145,10 +145,10 @@ public:
         Expr height = input.height();
 
         // First, blur the columns of the input.
-        Func blury_T = blur_cols_transpose(input, height, alpha, auto_schedule, get_target());
+        Func blury_T = blur_cols_transpose(input, height, alpha, using_autoscheduler(), get_target());
 
         // Blur the columns again (the rows of the original).
-        Func blur = blur_cols_transpose(blury_T, width, alpha, auto_schedule, get_target());
+        Func blur = blur_cols_transpose(blury_T, width, alpha, using_autoscheduler(), get_target());
 
         // Scheduling is done inside blur_cols_transpose.
         output = blur;

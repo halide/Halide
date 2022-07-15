@@ -677,8 +677,7 @@ autoscheduler:
 
 ```cmake
 add_halide_library(my_second_generator FROM my_generators
-                   AUTOSCHEDULER Halide::Adams2019
-                   PARAMS auto_schedule=true)
+                   AUTOSCHEDULER Halide::Adams2019)
 ```
 
 ### RunGenMain
@@ -858,9 +857,9 @@ being created. When `TARGETS` is empty and the `host` target would not
 cross-compile, then `host` will be used. Otherwise, `cmake` will be used and an
 author warning will be issued.
 
-To set the default autoscheduler, set the `AUTOSCHEDULER` argument to a target
+To use an autoscheduler, set the `AUTOSCHEDULER` argument to a target
 named like `Namespace::Scheduler`, for example `Halide::Adams19`. This will set
-the `-s` flag on the generator command line to `Scheduler` and add the target to
+the `autoscheduler` GeneratorParam on the generator command line to `Scheduler` and add the target to
 the list of plugins. Additional plugins can be loaded by setting the `PLUGINS`
 argument. If the argument to `AUTOSCHEDULER` does not contain `::` or it does
 not name a target, it will be passed to the `-s` flag verbatim.

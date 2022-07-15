@@ -49,7 +49,7 @@ public:
 
         bias.dim(0).set_bounds(0, CO).set_stride(1);
 
-        if (auto_schedule) {
+        if (using_autoscheduler()) {
             input.dim(0).set_estimate(0, CI);
             input.dim(1).set_estimate(0, W + 2);
             input.dim(2).set_estimate(0, H + 2);

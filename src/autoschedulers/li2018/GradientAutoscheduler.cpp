@@ -8,6 +8,11 @@ namespace Autoscheduler {
 
 namespace {
 
+struct GradientAutoschedulerParams {
+    /** Maximum level of parallelism available. */
+    int parallelism = 16;
+};
+
 std::map<std::string, Box> inference_bounds(const std::vector<Function> &functions,
                                             const std::vector<Box> &output_bounds) {
     std::vector<Func> funcs;
@@ -86,7 +91,7 @@ int natural_vector_size(const Target &target, const Type &t) {
 
 template<typename FuncOrStage>
 void parallelize_vars_and_rvars_gpu(
-    const MachineParams &params,
+    const GradientAutoschedulerParams &params,
     FuncOrStage func_or_stage,
     bool is_pure_def,
     const std::vector<Var> &vars,
@@ -324,7 +329,7 @@ void parallelize_vars_and_rvars_gpu(
 
 template<typename FuncOrStage>
 void parallelize_vars_and_rvars_cpu(
-    const MachineParams &params,
+    const GradientAutoschedulerParams &params,
     FuncOrStage func_or_stage,
     int natural_vector_size,
     bool is_pure_def,
@@ -528,7 +533,7 @@ void parallelize_vars_and_rvars_cpu(
 
 template<typename FuncOrStage>
 void parallelize_vars_and_rvars(
-    const MachineParams &params,
+    const GradientAutoschedulerParams &params,
     FuncOrStage func_or_stage,
     int natural_vector_size,
     bool is_pure_def,
@@ -565,7 +570,7 @@ void parallelize_vars_and_rvars(
     }
 }
 
-void apply_schedule(const MachineParams &params,
+void apply_schedule(const GradientAutoschedulerParams &params,
                     const Target &target,
                     Func func,
                     int update_id,
@@ -817,7 +822,7 @@ void apply_schedule(const MachineParams &params,
 
 void generate_schedule(const std::vector<Function> &outputs,
                        const Target &target,
-                       const MachineParams &params,
+                       const GradientAutoschedulerParams &params,
                        AutoSchedulerResults *auto_scheduler_results) {
     // The first few steps are the same as src/AutoSchedule.cpp
     // Make an environment map which is used throughout the auto scheduling process.
@@ -919,19 +924,45 @@ void generate_schedule(const std::vector<Function> &outputs,
         }
     }
 
+#ifdef HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
     auto_scheduler_results->scheduler_name = "Li2018";
+#endif
     auto_scheduler_results->schedule_source = schedule_source.str();
     debug(1) << schedule_source.str() << "\n";
 }
 
 struct Li2018 {
-    void operator()(const Pipeline &p, const Target &target, const MachineParams &params, AutoSchedulerResults *results) {
+#ifdef HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
+    void operator()(const Pipeline &p, const Target &target, const MachineParams &params_in, AutoSchedulerResults *results) {
         std::vector<Function> outputs;
         for (const Func &f : p.outputs()) {
             outputs.push_back(f.function());
         }
+        GradientAutoschedulerParams params;
+        params.parallelism = params_in.parallelism;
         generate_schedule(outputs, target, params, results);
     }
+#else
+    void operator()(const Pipeline &p, const Target &target, const AutoschedulerParams &params_in, AutoSchedulerResults *results) {
+        internal_assert(params_in.name == "Li2018");
+        // Verify that no unknown keys are set in params_in
+        const std::set<std::string> legal_keys = {"parallelism"};
+        for (const auto &it : params_in.extra) {
+            user_assert(legal_keys.count(it.first) == 1) << "The key " << it.first << " is not legal to use for the Li2018 Autoscheduler.";
+        }
+
+        std::vector<Function> outputs;
+        for (const Func &f : p.outputs()) {
+            outputs.push_back(f.function());
+        }
+        GradientAutoschedulerParams params;
+        if (params_in.extra.count("parallelism")) {
+            params.parallelism = std::stoi(params_in.extra.at("parallelism"));
+        }
+        generate_schedule(outputs, target, params, results);
+        results->autoscheduler_params = params_in;
+    }
+#endif
 };
 
 REGISTER_AUTOSCHEDULER(Li2018)

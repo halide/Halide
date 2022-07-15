@@ -142,7 +142,7 @@ int main(int argc, char **argv) {
         // from the specific inputs we provide, but for the JIT (and AOT) cases, there are
         // no such inputs available, so we must be explicit. (Note that these are the same
         // values specified in our Make/CMake files.)
-        const std::map<std::string, std::string> gp = {
+        const GeneratorParamsMap gp = {
             {"untyped_buffer_input.type", "uint8"},
             {"untyped_buffer_input.dim", "3"},
             {"simple_input.type", "float32"},
@@ -217,7 +217,7 @@ int main(int argc, char **argv) {
         // from the specific inputs we provide, but for the JIT (and AOT) cases, there are
         // no such inputs available, so we must be explicit. (Note that these are the same
         // values specified in our Make/CMake files.)
-        const std::map<std::string, std::string> gp = {
+        const GeneratorParamsMap gp = {
             {"untyped_buffer_input.type", "uint8"},
             {"untyped_buffer_input.dim", "3"},
             {"simple_input.type", "float32"},

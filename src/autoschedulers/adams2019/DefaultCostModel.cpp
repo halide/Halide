@@ -47,7 +47,7 @@ bool ends_with(const std::string &str, const std::string &suffix) {
 }  // namespace
 
 void DefaultCostModel::set_pipeline_features(const Internal::Autoscheduler::FunctionDAG &dag,
-                                             const MachineParams &params) {
+                                             const Internal::Autoscheduler::Adams2019Params &params) {
 
     const int pipeline_feat_size = head1_w * head1_h;
     // We ignore the first seven pipeline features in the cost
@@ -232,18 +232,18 @@ float DefaultCostModel::backprop(const Runtime::Buffer<const float> &true_runtim
         *(cost_ptrs(i)) = dst(i);
         if (std::isnan(dst(i))) {
             any_nans = true;
-            aslog(0) << "Prediction " << i << " is NaN. True runtime is " << true_runtimes(i) << "\n";
-            aslog(0) << "Checking pipeline features for NaNs...\n";
+            aslog(1) << "Prediction " << i << " is NaN. True runtime is " << true_runtimes(i) << "\n";
+            aslog(1) << "Checking pipeline features for NaNs...\n";
             pipeline_feat_queue.for_each_value([&](float f) { if (std::isnan(f)) abort(); });
-            aslog(0) << "None found\n";
-            aslog(0) << "Checking schedule features for NaNs...\n";
+            aslog(1) << "None found\n";
+            aslog(1) << "Checking schedule features for NaNs...\n";
             schedule_feat_queue.for_each_value([&](float f) { if (std::isnan(f)) abort(); });
-            aslog(0) << "None found\n";
-            aslog(0) << "Checking network weights for NaNs...\n";
+            aslog(1) << "None found\n";
+            aslog(1) << "Checking network weights for NaNs...\n";
             weights.for_each_buffer([&](const Runtime::Buffer<float> &buf) {
                 buf.for_each_value([&](float f) { if (std::isnan(f)) abort(); });
             });
-            aslog(0) << "None found\n";
+            aslog(1) << "None found\n";
         }
         internal_assert(true_runtimes(i) > 0);
     }

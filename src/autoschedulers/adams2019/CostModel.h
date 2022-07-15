@@ -3,6 +3,7 @@
 
 #include <string>
 
+#include "Featurization.h"
 #include "FunctionDAG.h"
 #include "HalideBuffer.h"
 #include "PerfectHashMap.h"
@@ -12,7 +13,14 @@ namespace Halide {
 
 namespace Internal {
 namespace Autoscheduler {
+
 typedef PerfectHashMap<FunctionDAG::Node::Stage, ScheduleFeatures> StageMapOfScheduleFeatures;
+
+struct Adams2019Params {
+    /** Maximum level of parallelism available. */
+    int parallelism = 16;
+};
+
 }  // namespace Autoscheduler
 }  // namespace Internal
 
@@ -22,7 +30,7 @@ public:
 
     // Configure the cost model for the algorithm to be scheduled.
     virtual void set_pipeline_features(const Internal::Autoscheduler::FunctionDAG &dag,
-                                       const MachineParams &params) = 0;
+                                       const Internal::Autoscheduler::Adams2019Params &params) = 0;
 
     // Enqueue a schedule to be evaluated. Will annotate the value located at cost_ptr when the evaluation takes place.
     // Note that the dag argument should correspond to the dag specified previously when calling set_pipeline_features.

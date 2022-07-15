@@ -37,7 +37,7 @@ struct IncludedScheduleFile : public Halide::Generator<IncludedScheduleFile> {
         relu.set_estimates({{0, CO}, {0, W}, {0, H}, {0, N}});
 
         // Schedule
-        if (auto_schedule) {
+        if (using_autoscheduler()) {
             // nothing
         } else {
 #if defined(GENERATING_SCHEDULE)

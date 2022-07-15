@@ -99,8 +99,7 @@ struct PipelineFeatures {
     // Each row sums to 1 or 0. Each column sums to 1. f(z, y, x, 4)
     int slice_accesses[(int)AccessType::NumAccessTypes][(int)ScalarType::NumScalarTypes] = {};
 
-    template<typename OS>
-    void dump(OS &os) const {
+    void dump(std::ostream &os) const {
         for (int i = 0; i < (int)ScalarType::NumScalarTypes; i++) {
             const char *type_names[] = {"Bool", "UInt8", "UInt16", "UInt32", "UInt64", "Float", "Double"};
             // Skip printing for types not used
@@ -156,10 +155,6 @@ struct PipelineFeatures {
                << slice_accesses[2][i] << " "
                << slice_accesses[3][i] << "\n";
         }
-    }
-    void dump() const {
-        auto os = aslog(0);
-        dump(os);
     }
 };
 
@@ -314,8 +309,7 @@ struct ScheduleFeatures {
     double working_set_at_realization = 0;
     double working_set_at_root = 0;
 
-    template<typename OS>
-    void dump(OS &os) const {
+    void dump(std::ostream &os) const {
         os << "    num_realizations:                      " << num_realizations << "\n"
            << "    num_productions:                       " << num_productions << "\n"
            << "    points_computed_per_realization:       " << points_computed_per_realization << "\n"
@@ -355,10 +349,6 @@ struct ScheduleFeatures {
            << "    working_set_at_production:             " << working_set_at_production << "\n"
            << "    working_set_at_realization:            " << working_set_at_realization << "\n"
            << "    working_set_at_root:                   " << working_set_at_root << "\n";
-    }
-    void dump() const {
-        auto os = aslog(0);
-        dump(os);
     }
 
     bool equal(const ScheduleFeatures &other) const {
