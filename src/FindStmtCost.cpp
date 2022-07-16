@@ -3,545 +3,565 @@
 using namespace Halide;
 using namespace Internal;
 
-// // calculates the total cost of a stmt
-// int FindStmtCost::get_total_cost(const IRNode *node) const {
-//     auto it = stmt_cost.find(node);
-//     if (it == stmt_cost.end()) {
-//         assert(false);
-//         return 0;
-//     }
-//     int cost = it->second.cost;
-//     int depth = it->second.depth;
+void FindStmtCost::traverse(const Module &m) {
+    // recursively traverse all submodules
+    for (const auto &s : m.submodules()) {
+        traverse(s);
+    }
 
-//     return cost + DEPTH_COST * depth;
-// }
+    // traverse all functions
+    for (const auto &f : m.functions()) {
+        mutate(f.body);
+    }
 
-// // TODO: decide if count of 1 or 0
-// Expr FindStmtCost::visit(const IntImm *op) {
-//     set_cost(op, 1);
-//     return op;
-// }
+    return;
+}
 
-// Expr FindStmtCost::visit(const UIntImm *op) {
-//     set_cost(op, 1);
-//     return op;
-// }
+Expr FindStmtCost::mutate(const Expr &expr) {
+    return IRMutator::mutate(expr);
+}
 
-// Expr FindStmtCost::visit(const FloatImm *op) {
-//     set_cost(op, 1);
-//     return op;
-// }
+Stmt FindStmtCost::mutate(const Stmt &stmt) {
+    return IRMutator::mutate(stmt);
+}
 
-// Expr FindStmtCost::visit(const StringImm *op) {
-//     set_cost(op, 1);
-//     return op;
-// }
+// returns the range of node based on its
+int FindStmtCost::get_range(const IRNode *op) const {
+    if (op == nullptr) {
+        cout << "OH NO ITS NULL!!!!! " << endl;
+        return -1;
+    }
 
-// Expr FindStmtCost::visit(const Cast *op) {
-//     // op->value.accept(this);
-//     FindStmtCost::mutate(op);
-//     int tempVal = get_cost(op->value.get());
-//     set_cost(op, 1 + tempVal);
-//     return op;
-// }
+    // get max value of cost in stmt_cost map
+    int max_cost = 0;
+    for (auto const &pair : stmt_cost) {
+        if (calculate_cost(pair.second) > max_cost) {
+            max_cost = calculate_cost(pair.second);
+        }
+    }
 
-// Expr FindStmtCost::visit(const Variable *op) {
-//     set_cost(op, 1);
-//     return op;
-// }
+    // divide max cost by 8 and round up to get ranges
+    int range_size = (max_cost / NUMBER_COST_COLORS) + 1;
+    int cost = get_total_cost(op);
+    int range = cost / range_size;
+    return range;
+}
 
-// Expr FindStmtCost::visit(const Add *op) {
-//     // op->a.accept(this);
-//     // op->b.accept(this);
-//     FindStmtCost::mutate(op->a);
-//     FindStmtCost::mutate(op->b);
-//     int tempVal = get_cost(op->a.get()) + get_cost(op->b.get());
-//     set_cost(op, 1 + tempVal);
-//     return op;
-// }
+int FindStmtCost::get_total_cost(const IRNode *node) const {
+    auto it = stmt_cost.find(node);
+    if (it == stmt_cost.end()) {
+        m_assert(false, "node not found in stmt_cost");
+        return 0;
+    }
 
-// Expr FindStmtCost::visit(const Sub *op) {
-//     // op->a.accept(this);
-//     // op->b.accept(this);
-//     FindStmtCost::mutate(op->a);
-//     FindStmtCost::mutate(op->b);
-//     int tempVal = get_cost(op->a.get()) + get_cost(op->b.get());
-//     set_cost(op, 1 + tempVal);
-//     return op;
-// }
+    StmtCost cost_node = it->second;
 
-// Expr FindStmtCost::visit(const Mul *op) {
-//     // op->a.accept(this);
-//     // op->b.accept(this);
-//     FindStmtCost::mutate(op->a);
-//     FindStmtCost::mutate(op->b);
-//     int tempVal = get_cost(op->a.get()) + get_cost(op->b.get());
-//     set_cost(op, 1 + tempVal);
-//     return op;
-// }
+    return calculate_cost(cost_node);
+}
 
-// Expr FindStmtCost::visit(const Div *op) {
-//     // op->a.accept(this);
-//     // op->b.accept(this);
-//     FindStmtCost::mutate(op->a);
-//     FindStmtCost::mutate(op->b);
-//     int tempVal = get_cost(op->a.get()) + get_cost(op->b.get());
-//     set_cost(op, 1 + tempVal);
-//     return op;
-// }
+int FindStmtCost::get_depth(const IRNode *node) const {
+    auto it = stmt_cost.find(node);
+    if (it == stmt_cost.end()) {
+        m_assert(false, "node not found in stmt_cost");
+        return 0;
+    }
 
-// Expr FindStmtCost::visit(const Mod *op) {
-//     // op->a.accept(this);
-//     // op->b.accept(this);
-//     FindStmtCost::mutate(op->a);
-//     FindStmtCost::mutate(op->b);
-//     int tempVal = get_cost(op->a.get()) + get_cost(op->b.get());
-//     set_cost(op, 1 + tempVal);
-//     return op;
-// }
+    StmtCost cost_node = it->second;
 
-// Expr FindStmtCost::visit(const Min *op) {
-//     // op->a.accept(this);
-//     // op->b.accept(this);
-//     FindStmtCost::mutate(op->a);
-//     FindStmtCost::mutate(op->b);
-//     int tempVal = get_cost(op->a.get()) + get_cost(op->b.get());
-//     set_cost(op, 1 + tempVal);
-//     return op;
-// }
+    return cost_node.depth;
+}
 
-// Expr FindStmtCost::visit(const Max *op) {
-//     // op->a.accept(this);
-//     // op->b.accept(this);
-//     FindStmtCost::mutate(op->a);
-//     FindStmtCost::mutate(op->b);
-//     int tempVal = get_cost(op->a.get()) + get_cost(op->b.get());
-//     set_cost(op, 1 + tempVal);
-//     return op;
-// }
+int FindStmtCost::get_cost(const IRNode *node) const {
+    auto it = stmt_cost.find(node);
+    if (it == stmt_cost.end()) {
+        m_assert(false, "node not found in stmt_cost");
+        return 0;
+    }
+    return it->second.cost;
+}
 
-// Expr FindStmtCost::visit(const EQ *op) {
-//     // op->a.accept(this);
-//     // op->b.accept(this);
-//     FindStmtCost::mutate(op->a);
-//     FindStmtCost::mutate(op->b);
-//     int tempVal = get_cost(op->a.get()) + get_cost(op->b.get());
-//     set_cost(op, 1 + tempVal);
-//     return op;
-// }
+void FindStmtCost::set_cost(const IRNode *node, int cost) {
+    auto it = stmt_cost.find(node);
+    if (it == stmt_cost.end()) {
+        stmt_cost.emplace(node, StmtCost{cost, current_loop_depth});
+    } else {
+        it->second.cost = cost;
+        it->second.depth = current_loop_depth;
+    }
+}
 
-// Expr FindStmtCost::visit(const NE *op) {
-//     // op->a.accept(this);
-//     // op->b.accept(this);
-//     FindStmtCost::mutate(op->a);
-//     FindStmtCost::mutate(op->b);
-//     int tempVal = get_cost(op->a.get()) + get_cost(op->b.get());
-//     set_cost(op, 1 + tempVal);
-//     return op;
-// }
+int FindStmtCost::calculate_cost(StmtCost cost_node) const {
+    int cost = cost_node.cost;
+    int depth = cost_node.depth;
 
-// Expr FindStmtCost::visit(const LT *op) {
-//     // op->a.accept(this);
-//     // op->b.accept(this);
-//     FindStmtCost::mutate(op->a);
-//     FindStmtCost::mutate(op->b);
-//     int tempVal = get_cost(op->a.get()) + get_cost(op->b.get());
-//     set_cost(op, 1 + tempVal);
-//     return op;
-// }
+    return cost + DEPTH_COST * depth;
+}
 
-// Expr FindStmtCost::visit(const LE *op) {
-//     // op->a.accept(this);
-//     // op->b.accept(this);
-//     FindStmtCost::mutate(op->a);
-//     FindStmtCost::mutate(op->b);
-//     int tempVal = get_cost(op->a.get()) + get_cost(op->b.get());
-//     set_cost(op, 1 + tempVal);
-//     return op;
-// }
+void FindStmtCost::print_map(unordered_map<const IRNode *, StmtCost> const &m) {
+    for (auto const &pair : m) {
+        cout << "{" << pair.first << ": " << pair.second.cost << "}\n";
+    }
+}
 
-// Expr FindStmtCost::visit(const GT *op) {
-//     // op->a.accept(this);
-//     // op->b.accept(this);
-//     FindStmtCost::mutate(op->a);
-//     FindStmtCost::mutate(op->b);
-//     int tempVal = get_cost(op->a.get()) + get_cost(op->b.get());
-//     set_cost(op, 1 + tempVal);
-//     return op;
-// }
+Expr FindStmtCost::visit(const IntImm *op) {
+    set_cost(op, 1);
+    return op;
+}
 
-// Expr FindStmtCost::visit(const GE *op) {
-//     // op->a.accept(this);
-//     // op->b.accept(this);
-//     FindStmtCost::mutate(op->a);
-//     FindStmtCost::mutate(op->b);
-//     int tempVal = get_cost(op->a.get()) + get_cost(op->b.get());
-//     set_cost(op, 1 + tempVal);
-//     return op;
-// }
+Expr FindStmtCost::visit(const UIntImm *op) {
+    set_cost(op, 1);
+    return op;
+}
 
-// Expr FindStmtCost::visit(const And *op) {
-//     // op->a.accept(this);
-//     // op->b.accept(this);
-//     FindStmtCost::mutate(op->a);
-//     FindStmtCost::mutate(op->b);
-//     int tempVal = get_cost(op->a.get()) + get_cost(op->b.get());
-//     set_cost(op, 1 + tempVal);
-//     return op;
-// }
+Expr FindStmtCost::visit(const FloatImm *op) {
+    set_cost(op, 1);
+    return op;
+}
 
-// Expr FindStmtCost::visit(const Or *op) {
-//     // op->a.accept(this);
-//     // op->b.accept(this);
-//     FindStmtCost::mutate(op->a);
-//     FindStmtCost::mutate(op->b);
-//     int tempVal = get_cost(op->a.get()) + get_cost(op->b.get());
-//     set_cost(op, 1 + tempVal);
-//     return op;
-// }
+Expr FindStmtCost::visit(const StringImm *op) {
+    set_cost(op, 1);
+    return op;
+}
 
-// Expr FindStmtCost::visit(const Not *op) {
-//     // op->a.accept(this);
-//     FindStmtCost::mutate(op->a);
-//     int tempVal = get_cost(op->a.get());
-//     set_cost(op, 1 + tempVal);
-//     return op;
-// }
+Expr FindStmtCost::visit(const Cast *op) {
+    mutate(op->value);
+    int tempVal = get_cost(op->value.get());
+    set_cost(op, 1 + tempVal);
+    return op;
+}
 
-// // TODO: do we agree on my counts?
-// Expr FindStmtCost::visit(const Select *op) {
-//     // op->condition.accept(this);
-//     // op->true_value.accept(this);
-//     // op->false_value.accept(this);
-//     FindStmtCost::mutate(op->condition);
-//     FindStmtCost::mutate(op->true_value);
-//     FindStmtCost::mutate(op->false_value);
+Expr FindStmtCost::visit(const Variable *op) {
+    set_cost(op, 1);
+    return op;
+}
 
-//     int tempVal = get_cost(op->condition.get()) + get_cost(op->true_value.get()) + get_cost(op->false_value.get());
-//     set_cost(op, 1 + tempVal);
-//     return op;
-// }
+Expr FindStmtCost::visit(const Add *op) {
+    mutate(op->a);
+    mutate(op->b);
+    int tempVal = get_cost(op->a.get()) + get_cost(op->b.get());
+    set_cost(op, 1 + tempVal);
+    return op;
+}
 
-// Expr FindStmtCost::visit(const Load *op) {
-//     assert(false);
-//     // op->predicate.accept(this);
-//     // op->index.accept(this);
-//     // FindStmtCost::mutate(op->predicate);
-//     // FindStmtCost::mutate(op->index);
-//     // int tempVal = get_cost(op->predicate.get()) + get_cost(op->index.get());
-//     // set_cost(op, 1 + tempVal);
-//     // return op;
-// }
+Expr FindStmtCost::visit(const Sub *op) {
+    mutate(op->a);
+    mutate(op->b);
+    int tempVal = get_cost(op->a.get()) + get_cost(op->b.get());
+    set_cost(op, 1 + tempVal);
+    return op;
+}
 
-// Expr FindStmtCost::visit(const Ramp *op) {
-//     assert(false);
-//     // op->base.accept(this);
-//     // op->stride.accept(this);
-//     // FindStmtCost::mutate(op->base);
-//     // FindStmtCost::mutate(op->stride);
-//     // int tempVal = get_cost(op->base.get()) + get_cost(op->stride.get());
-//     // set_cost(op, 1 + tempVal);
-//     // return op;
-// }
+Expr FindStmtCost::visit(const Mul *op) {
+    mutate(op->a);
+    mutate(op->b);
+    int tempVal = get_cost(op->a.get()) + get_cost(op->b.get());
+    set_cost(op, 1 + tempVal);
+    return op;
+}
 
-// Expr FindStmtCost::visit(const Broadcast *op) {
-//     assert(false);
-//     // op->value.accept(this);
-//     // FindStmtCost::mutate(op->value);
-//     // int tempVal = get_cost(op->value.get());
-//     // set_cost(op, 1 + tempVal);
-//     // return op;
-// }
+Expr FindStmtCost::visit(const Div *op) {
+    mutate(op->a);
+    mutate(op->b);
+    int tempVal = get_cost(op->a.get()) + get_cost(op->b.get());
+    set_cost(op, 1 + tempVal);
+    return op;
+}
 
-// Expr FindStmtCost::visit(const Call *op) {
-//     int tempVal = 0;
-//     for (const auto &arg : op->args) {
-//         // arg.accept(this);
-//         FindStmtCost::mutate(arg);
-//         tempVal += get_cost(arg.get());
-//     }
+Expr FindStmtCost::visit(const Mod *op) {
+    mutate(op->a);
+    mutate(op->b);
+    int tempVal = get_cost(op->a.get()) + get_cost(op->b.get());
+    set_cost(op, 1 + tempVal);
+    return op;
+}
 
-//     // Consider extern call args
-//     if (op->func.defined()) {
-//         Function f(op->func);
-//         if (op->call_type == Call::Halide && f.has_extern_definition()) {
-//             for (const auto &arg : f.extern_arguments()) {
-//                 if (arg.is_expr()) {
-//                     // arg.expr.accept(this);
-//                     FindStmtCost::mutate(arg.expr);
-//                     tempVal += get_cost(arg.expr.get());
-//                 }
-//             }
-//         }
-//     }
-//     set_cost(op, tempVal);
-//     return op;
-// }
+Expr FindStmtCost::visit(const Min *op) {
+    mutate(op->a);
+    mutate(op->b);
+    int tempVal = get_cost(op->a.get()) + get_cost(op->b.get());
+    set_cost(op, 1 + tempVal);
+    return op;
+}
 
-// Expr FindStmtCost::visit(const Let *op) {
-//     // op->value.accept(this);
-//     // op->body.accept(this);
-//     FindStmtCost::mutate(op->value);
-//     FindStmtCost::mutate(op->body);
-//     int tempVal = get_cost(op->value.get()) + get_cost(op->body.get());
-//     set_cost(op, tempVal);
-//     return op;
-// }
+Expr FindStmtCost::visit(const Max *op) {
+    mutate(op->a);
+    mutate(op->b);
+    int tempVal = get_cost(op->a.get()) + get_cost(op->b.get());
+    set_cost(op, 1 + tempVal);
+    return op;
+}
 
-// Expr FindStmtCost::visit(const Shuffle *op) {
-//     assert(false);
-//     // int tempVal = 0;
-//     // for (const Expr &i : op->vectors) {
-//     //     i.accept(this);
-//     // FindStmtCost::mutate(i);
-//     //     tempVal += get_cost(i.get());
-//     // }
-//     // set_cost(op, tempVal);
-//     // return op;
-// }
+Expr FindStmtCost::visit(const EQ *op) {
+    mutate(op->a);
+    mutate(op->b);
+    int tempVal = get_cost(op->a.get()) + get_cost(op->b.get());
+    set_cost(op, 1 + tempVal);
+    return op;
+}
 
-// Expr FindStmtCost::visit(const VectorReduce *op) {
-//     assert(false);
-//     // op->value.accept(this);
-//     // FindStmtCost::mutate(op->value);
-//     // int tempVal = get_cost(op->value.get());
-//     // set_cost(op, tempVal);
-//     // return op;
-// }
+Expr FindStmtCost::visit(const NE *op) {
+    mutate(op->a);
+    mutate(op->b);
+    int tempVal = get_cost(op->a.get()) + get_cost(op->b.get());
+    set_cost(op, 1 + tempVal);
+    return op;
+}
 
-// Stmt FindStmtCost::visit(const LetStmt *op) {
-//     // op->value.accept(this);
-//     // op->body.accept(this);
-//     FindStmtCost::mutate(op->value);
-//     FindStmtCost::mutate(op->body);
-//     int tempVal = get_cost(op->value.get()) + get_cost(op->body.get());
-//     set_cost(op, 1 + tempVal);
-//     return op;
-// }
+Expr FindStmtCost::visit(const LT *op) {
+    mutate(op->a);
+    mutate(op->b);
+    int tempVal = get_cost(op->a.get()) + get_cost(op->b.get());
+    set_cost(op, 1 + tempVal);
+    return op;
+}
 
-// Stmt FindStmtCost::visit(const AssertStmt *op) {
-//     // op->condition.accept(this);
-//     // op->message.accept(this);
-//     FindStmtCost::mutate(op->condition);
-//     FindStmtCost::mutate(op->message);
-//     int tempVal = get_cost(op->condition.get()) + get_cost(op->message.get());
-//     set_cost(op, 1 + tempVal);
-//     return op;
-// }
+Expr FindStmtCost::visit(const LE *op) {
+    mutate(op->a);
+    mutate(op->b);
+    int tempVal = get_cost(op->a.get()) + get_cost(op->b.get());
+    set_cost(op, 1 + tempVal);
+    return op;
+}
 
-// Stmt FindStmtCost::visit(const ProducerConsumer *op) {
-//     // op->body.accept(this);
-//     FindStmtCost::mutate(op->body);
-//     int tempVal = get_cost(op->body.get());
-//     set_cost(op, 1 + tempVal);
-//     return op;
-// }
+Expr FindStmtCost::visit(const GT *op) {
+    mutate(op->a);
+    mutate(op->b);
+    int tempVal = get_cost(op->a.get()) + get_cost(op->b.get());
+    set_cost(op, 1 + tempVal);
+    return op;
+}
 
-// Stmt FindStmtCost::visit(const For *op) {
-//     current_loop_depth += 1;
+Expr FindStmtCost::visit(const GE *op) {
+    mutate(op->a);
+    mutate(op->b);
+    int tempVal = get_cost(op->a.get()) + get_cost(op->b.get());
+    set_cost(op, 1 + tempVal);
+    return op;
+}
 
-//     // op->min.accept(this);
-//     // op->extent.accept(this);
-//     // op->body.accept(this);
-//     FindStmtCost::mutate(op->min);
-//     FindStmtCost::mutate(op->extent);
-//     FindStmtCost::mutate(op->body);
+Expr FindStmtCost::visit(const And *op) {
+    mutate(op->a);
+    mutate(op->b);
+    int tempVal = get_cost(op->a.get()) + get_cost(op->b.get());
+    set_cost(op, 1 + tempVal);
+    return op;
+}
 
-//     current_loop_depth -= 1;
+Expr FindStmtCost::visit(const Or *op) {
+    mutate(op->a);
+    mutate(op->b);
+    int tempVal = get_cost(op->a.get()) + get_cost(op->b.get());
+    set_cost(op, 1 + tempVal);
+    return op;
+}
 
-//     int bodyCost = get_cost(op->body.get());
+Expr FindStmtCost::visit(const Not *op) {
+    mutate(op->a);
+    int tempVal = get_cost(op->a.get());
+    set_cost(op, 1 + tempVal);
+    return op;
+}
 
-//     // TODO: how to take into account the different types of for loops?
-//     // if (op->for_type == ForType::Serial) {
+// TODO: do we agree on my counts?
+Expr FindStmtCost::visit(const Select *op) {
+    mutate(op->condition);
+    mutate(op->true_value);
+    mutate(op->false_value);
 
-//     // }
-//     if (op->for_type == ForType::Parallel) {
-//         assert(false);
-//     }
-//     if (op->for_type == ForType::Unrolled) {
-//         assert(false);
-//     }
-//     if (op->for_type == ForType::Vectorized) {
-//         assert(false);
-//     }
-//     set_cost(op, 1 + bodyCost);
-//     return op;
-// }
+    int tempVal = get_cost(op->condition.get()) + get_cost(op->true_value.get()) + get_cost(op->false_value.get());
+    set_cost(op, 1 + tempVal);
+    return op;
+}
 
-// Stmt FindStmtCost::visit(const Acquire *op) {
-//     // op->semaphore.accept(this);
-//     // op->count.accept(this);
-//     // op->body.accept(this);
-//     FindStmtCost::mutate(op->semaphore);
-//     FindStmtCost::mutate(op->count);
-//     FindStmtCost::mutate(op->body);
-//     int tempVal = get_cost(op->semaphore.get()) + get_cost(op->count.get()) + get_cost(op->body.get());
-//     set_cost(op, tempVal);
-//     return op;
-// }
+Expr FindStmtCost::visit(const Load *op) {
+    mutate(op->predicate);
+    mutate(op->index);
+    int tempVal = get_cost(op->predicate.get()) + get_cost(op->index.get());
+    set_cost(op, 1 + tempVal);
+    return op;
+}
 
-// Stmt FindStmtCost::visit(const Store *op) {
-//     // op->predicate.accept(this);
-//     // op->value.accept(this);
-//     // op->index.accept(this);
-//     FindStmtCost::mutate(op->predicate);
-//     FindStmtCost::mutate(op->value);
-//     FindStmtCost::mutate(op->index);
+Expr FindStmtCost::visit(const Ramp *op) {
+    mutate(op->base);
+    mutate(op->stride);
+    int tempVal = get_cost(op->base.get()) + get_cost(op->stride.get());
+    set_cost(op, 1 + tempVal);
+    return op;
+}
 
-//     int tempVal = get_cost(op->predicate.get()) + get_cost(op->value.get()) + get_cost(op->index.get());
-//     set_cost(op, 1 + tempVal);
-//     return op;
-// }
+Expr FindStmtCost::visit(const Broadcast *op) {
+    mutate(op->value);
+    int tempVal = get_cost(op->value.get());
+    set_cost(op, 1 + tempVal);
+    return op;
+}
 
-// Stmt FindStmtCost::visit(const Provide *op) {
-//     assert(false);
-//     // op->predicate.accept(this);
-//     // int tempVal = get_cost(op->predicate.get());
-//     // for (const auto &value : op->values) {
-//     //     value.accept(this);
-//     // FindStmtCost::mutate(value);
-//     //     tempVal += get_cost(value.get());
-//     // }
-//     // for (const auto &arg : op->args) {
-//     //     arg.accept(this);
-//     // FindStmtCost::mutate(arg);
-//     //     tempVal += get_cost(arg.get());
-//     // }
-//     // set_cost(op, 1 + tempVal);
-//     // return op;
-// }
+Expr FindStmtCost::visit(const Call *op) {
+    int tempVal = 0;
+    for (const auto &arg : op->args) {
+        mutate(arg);
+        tempVal += get_cost(arg.get());
+    }
 
-// Stmt FindStmtCost::visit(const Allocate *op) {
-//     assert(false);
-//     // int tempVal = 0;
-//     // for (const auto &extent : op->extents) {
-//     //     extent.accept(this);
-//     // FindStmtCost::mutate(extent);
-//     //     tempVal += get_cost(extent.get());
-//     // }
-//     // op->condition.accept(this);
-//     // tempVal += get_cost(op->condition.get());
+    // Consider extern call args
+    if (op->func.defined()) {
+        Function f(op->func);
+        if (op->call_type == Call::Halide && f.has_extern_definition()) {
+            for (const auto &arg : f.extern_arguments()) {
+                if (arg.is_expr()) {
+                    mutate(arg.expr);
+                    tempVal += get_cost(arg.expr.get());
+                }
+            }
+        }
+    }
+    set_cost(op, 1 + tempVal);
+    return op;
+}
 
-//     // if (op->new_expr.defined()) {
-//     //     op->new_expr.accept(this);
-//     //     tempVal += get_cost(op->new_expr.get());
-//     // }
-//     // op->body.accept(this);
-//     // tempVal += get_cost(op->body.get());
-//     // set_cost(op, tempVal);
-//     // return op;
-// }
+Expr FindStmtCost::visit(const Let *op) {
+    mutate(op->value);
+    mutate(op->body);
+    int tempVal = get_cost(op->value.get()) + get_cost(op->body.get());
+    set_cost(op, tempVal);
+    return op;
+}
 
-// Stmt FindStmtCost::visit(const Free *op) {
-//     // TODO: i feel like this should be more than cost 1, but the only
-//     //       vars it has is the name, which isn't helpful in determining
-//     //       the cost of the free
-//     set_cost(op, 1);
-//     return op;
-// }
+Expr FindStmtCost::visit(const Shuffle *op) {
+    int tempVal = 0;
+    for (const Expr &i : op->vectors) {
+        mutate(i);
+        tempVal += get_cost(i.get());
+    }
+    set_cost(op, tempVal);
+    return op;
+}
 
-// Stmt FindStmtCost::visit(const Realize *op) {
-//     assert(false);
-//     // TODO: is this the same logic as For, where I add the depth?
-//     // int tempVal = 0;
-//     // for (const auto &bound : op->bounds) {
-//     //     bound.min.accept(this);
-//     //     bound.extent.accept(this);
-//     // FindStmtCost::mutate(bound.min);
-//     // FindStmtCost::mutate(bound.extent);
-//     //     tempVal += get_cost(bound.min.get()) + get_cost(bound.extent.get());
-//     // }
-//     // op->condition.accept(this);
-//     // op->body.accept(this);
-//     // FindStmtCost::mutate(op->condition);
-//     // FindStmtCost::mutate(op->body);
-//     // tempVal += get_cost(op->condition.get()) + get_cost(op->body.get());
-//     // set_cost(op, tempVal);
-//     // return op;
-// }
+Expr FindStmtCost::visit(const VectorReduce *op) {
+    mutate(op->value);
+    int tempVal = get_cost(op->value.get());
+    int countCost = op->value.type().lanes() - 1;
 
-// Stmt FindStmtCost::visit(const Prefetch *op) {
-//     assert(false);
-//     // TODO: similar question as one above
-//     // int tempVal = 0;
-//     // for (const auto &bound : op->bounds) {
-//     //     bound.min.accept(this);
-//     //     bound.extent.accept(this);
-//     // FindStmtCost::mutate(bound.min);
-//     // FindStmtCost::mutate(bound.extent);
+    set_cost(op, tempVal + countCost);
+    return op;
+}
 
-//     //     tempVal += get_cost(bound.min.get()) + get_cost(bound.extent.get());
-//     // }
-//     // op->condition.accept(this);
-//     // op->body.accept(this);
-//     // FindStmtCost::mutate(op->condition);
-//     // FindStmtCost::mutate(op->body);
-//     // tempVal += get_cost(op->condition.get()) + get_cost(op->body.get());
-//     // set_cost(op, tempVal);
-//     // return op;
-// }
+Stmt FindStmtCost::visit(const LetStmt *op) {
+    mutate(op->value);
+    mutate(op->body);
+    int tempVal = get_cost(op->value.get());
+    set_cost(op, 1 + tempVal);
+    return op;
+}
 
-// Stmt FindStmtCost::visit(const Block *op) {
-//     assert(false);
-//     // int tempVal = 0;
-//     // op->first.accept(this);
-//     // FindStmtCost::mutate(op->first);
-//     // tempVal += get_cost(op->first.get());
-//     // if (op->rest.defined()) {
-//     //     op->rest.accept(this);
-//     //     FindStmtCost::mutate(op->rest);
-//     //     tempVal += get_cost(op->rest.get());
-//     // }
-//     // set_cost(op, tempVal);
-//     // return op;
-// }
+Stmt FindStmtCost::visit(const AssertStmt *op) {
+    mutate(op->condition);
+    mutate(op->message);
+    int tempVal = get_cost(op->condition.get()) + get_cost(op->message.get());
+    set_cost(op, 1 + tempVal);
+    return op;
+}
 
-// Stmt FindStmtCost::visit(const Fork *op) {
-//     assert(false);
-//     // int tempVal = 0;
-//     // op->first.accept(this);
-//     // FindStmtCost::mutate(op->first);
-//     // tempVal += get_cost(op->first.get());
-//     // if (op->rest.defined()) {
-//     //     op->rest.accept(this);
-//     //     FindStmtCost::mutate(op->rest);
-//     //     tempVal += get_cost(op->rest.get());
-//     // }
-//     // set_cost(op, tempVal);
-//     // return op;
-// }
+Stmt FindStmtCost::visit(const ProducerConsumer *op) {
+    mutate(op->body);
+    int tempVal = get_cost(op->body.get());
+    set_cost(op, tempVal);
+    return op;
+}
 
-// Stmt FindStmtCost::visit(const IfThenElse *op) {
-//     // TODO: is this correct, based on discussion about if-then-else, as
-//     //       compared to Select?
-//     // op->condition.accept(this);
-//     // op->then_case.accept(this);
-//     FindStmtCost::mutate(op->condition);
-//     FindStmtCost::mutate(op->then_case);
+Stmt FindStmtCost::visit(const For *op) {
+    current_loop_depth += 1;
 
-//     int tempVal = get_cost(op->condition.get()) + get_cost(op->then_case.get());
-//     if (op->else_case.defined()) {
-//         // op->else_case.accept(this);
-//         FindStmtCost::mutate(op->else_case);
-//         tempVal += get_cost(op->else_case.get());
-//     }
-//     set_cost(op, tempVal);
-//     return op;
-// }
+    mutate(op->min);
+    mutate(op->extent);
+    mutate(op->body);
 
-// Stmt FindStmtCost::visit(const Evaluate *op) {
-//     // op->value.accept(this);
-//     FindStmtCost::mutate(op->value);
-//     int tempVal = get_cost(op->value.get());
-//     set_cost(op, tempVal);
-//     return op;
-// }
+    current_loop_depth -= 1;
 
-// Stmt FindStmtCost::visit(const Atomic *op) {
-//     assert(false);
-//     // op->body.accept(this);
-//     // FindStmtCost::mutate(op->body);
-//     // int tempVal = get_cost(op->body.get());
-//     // set_cost(op, tempVal);
-//     // return op;
-// }
+    int bodyCost = get_cost(op->body.get());
+
+    // TODO: how to take into account the different types of for loops?
+    if (op->for_type == ForType::Parallel) {
+        m_assert(false, "Parallel for loops are not supported yet");
+    }
+    if (op->for_type == ForType::Unrolled) {
+        m_assert(false, "Unrolled for loops are not supported yet");
+    }
+    if (op->for_type == ForType::Vectorized) {
+        m_assert(false, "Vectorized for loops are not supported yet");
+    }
+    set_cost(op, 1 + bodyCost);
+    return op;
+}
+
+Stmt FindStmtCost::visit(const Acquire *op) {
+    /*
+        TODO: change this
+
+                * depends on contention (how many other accesses are there to this
+                  particular semaphore?)
+                * need to have separate FindStmtCost::visitor that FindStmtCost::visits everything and es
+                  the number of times each lock is accessed, and also keep track of the depth
+                  of said lock (the deeper, the more times it will be accessed)
+    */
+    mutate(op->semaphore);
+    mutate(op->count);
+    mutate(op->body);
+    int tempVal = get_cost(op->semaphore.get()) + get_cost(op->count.get()) + get_cost(op->body.get());
+    set_cost(op, tempVal);
+    return op;
+}
+
+Stmt FindStmtCost::visit(const Store *op) {
+    mutate(op->predicate);
+    mutate(op->value);
+    mutate(op->index);
+
+    int tempVal = get_cost(op->predicate.get()) + get_cost(op->value.get()) + get_cost(op->index.get());
+    set_cost(op, 1 + tempVal);
+    return op;
+}
+
+Stmt FindStmtCost::visit(const Provide *op) {
+    int tempVal = get_cost(op->predicate.get());
+    for (const auto &value : op->values) {
+        mutate(value);
+        tempVal += get_cost(value.get());
+    }
+    for (const auto &arg : op->args) {
+        mutate(arg);
+        tempVal += get_cost(arg.get());
+    }
+    set_cost(op, tempVal);
+    return op;
+}
+
+Stmt FindStmtCost::visit(const Allocate *op) {
+    /*
+        TODO: treat this node differently
+
+            * loop depth is important
+            * type of allocation is especially important (heap vs stack)
+                  this can be found MemoryType of the Allocate node (might need
+                  some nesting to find the node with this type)
+            * could FindStmtCost::visit `extents` for costs, and n`
+            * (in case of GPUShared type) visualize size of allocation in case
+              the size of shared memory and goes into main memory
+    */
+    int tempVal = 0;
+    for (const auto &extent : op->extents) {
+        mutate(extent);
+        tempVal += get_cost(extent.get());
+    }
+    mutate(op->condition);
+    tempVal += get_cost(op->condition.get());
+
+    if (op->new_expr.defined()) {
+        mutate(op->new_expr);
+        tempVal += get_cost(op->new_expr.get());
+    }
+    mutate(op->body);
+    tempVal += get_cost(op->body.get());
+    set_cost(op, tempVal);
+    return op;
+}
+
+Stmt FindStmtCost::visit(const Free *op) {
+    // TODO: i feel like this should be more than cost 1, but the only
+    //       vars it has is the name, which isn't helpful in determining
+    //       the cost of the free
+    set_cost(op, 1);
+    return op;
+}
+
+Stmt FindStmtCost::visit(const Realize *op) {
+    // TODO: is this the same logic as For, where I add the depth?
+    int tempVal = 0;
+    for (const auto &bound : op->bounds) {
+        mutate(bound.min);
+        mutate(bound.extent);
+        tempVal += get_cost(bound.min.get()) + get_cost(bound.extent.get());
+    }
+    mutate(op->condition);
+    mutate(op->body);
+    tempVal += get_cost(op->condition.get()) + get_cost(op->body.get());
+    set_cost(op, tempVal);
+    return op;
+}
+
+Stmt FindStmtCost::visit(const Prefetch *op) {
+    /*
+        TODO: like caching? # of memory stores
+    */
+    int tempVal = 0;
+    for (const auto &bound : op->bounds) {
+        mutate(bound.min);
+        mutate(bound.extent);
+
+        tempVal += get_cost(bound.min.get()) + get_cost(bound.extent.get());
+    }
+    mutate(op->condition);
+    mutate(op->body);
+    tempVal += get_cost(op->condition.get()) + get_cost(op->body.get());
+    set_cost(op, tempVal);
+    return op;
+}
+
+Stmt FindStmtCost::visit(const Block *op) {
+    // TODO: making this cost 1 is wrong - need to change this
+    int tempVal = 0;
+    mutate(op->first);
+    tempVal += get_cost(op->first.get());
+    if (op->rest.defined()) {
+        mutate(op->rest);
+        tempVal += get_cost(op->rest.get());
+    }
+    // set_cost(op, tempVal);
+    set_cost(op, 1);
+    return op;
+}
+
+Stmt FindStmtCost::visit(const Fork *op) {
+    int tempVal = 0;
+    mutate(op->first);
+    tempVal += get_cost(op->first.get());
+    if (op->rest.defined()) {
+        mutate(op->rest);
+        tempVal += get_cost(op->rest.get());
+    }
+    set_cost(op, tempVal);
+    return op;
+}
+
+Stmt FindStmtCost::visit(const IfThenElse *op) {
+    mutate(op->condition);
+    mutate(op->then_case);
+
+    int tempVal = get_cost(op->condition.get()) + get_cost(op->then_case.get());
+    if (op->else_case.defined()) {
+        mutate(op->else_case);
+        tempVal += get_cost(op->else_case.get());
+    }
+    set_cost(op, tempVal);
+    return op;
+}
+
+Stmt FindStmtCost::visit(const Evaluate *op) {
+    mutate(op->value);
+    int tempVal = get_cost(op->value.get());
+    set_cost(op, tempVal);
+    return op;
+}
+
+Stmt FindStmtCost::visit(const Atomic *op) {
+    /*
+        TODO: change this
+
+                * make it similar to acquire
+                * parallel vs vector is important
+    */
+    mutate(op->body);
+    int tempVal = get_cost(op->body.get());
+    set_cost(op, tempVal);
+    return op;
+}
