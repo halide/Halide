@@ -6,9 +6,6 @@
 #include "IRMutator.h"
 #include "IROperator.h"
 
-/** \file
- * Defines the base class for things that recursively walk over the IR
- */
 using namespace std;
 using namespace Halide;
 using namespace Internal;
