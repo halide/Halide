@@ -34,8 +34,10 @@ std::string to_string(T value) {
 class StmtToViz : public IRVisitor {
 
     static const std::string css, vizCss, oneTypeCSS, otherTypeCSS, js;
-    // static const std::string js;
-    // static std::stringstream css;
+
+    FindStmtCost findStmtCost;                            // used for finding the cost of statements
+    GetStmtHierarchy getStmtHierarchy;                    // used for getting the hierarchy of statements
+    ProducerConsumerHierarchy producerConsumerHierarchy;  // used for getting the hierarchy of producer/consumer
 
     // This allows easier access to individual elements.
     int id_count;
@@ -77,11 +79,9 @@ private:
 
     string tooltip(const string &hoverText, const string &hierarchyHTML, const string &tooltipText) {
         std::stringstream s;
-        // onclick="openNewWindow('
         s << open_span("tooltip");
         s << "<button onclick=\"openNewWindow('";
         s << hierarchyHTML;
-        // cout << "hierarchyHTML: " << hierarchyHTML << endl;
         s << "')\">";
         s << hoverText;
         s << "</button>";
@@ -120,73 +120,22 @@ private:
     }
 
     string hierarchy(const Stmt &op) {
-
-        string text = getStmtHierarchy.get_hierarchy_html(op);
-
-        return text;
+        return getStmtHierarchy.get_hierarchy_html(op);
     }
-
     string hierarchy(const Expr &op) {
-
-        string text = getStmtHierarchy.get_hierarchy_html(op);
-
-        return text;
+        return getStmtHierarchy.get_hierarchy_html(op);
     }
 
-    // string hierarchy_tooltip(const IRNode *op, const string &hierarchyHTML) {
-    //     // int cost = findStmtCost.get_total_cost(op);
-    //     // int depth = findStmtCost.get_depth(op);
-
-    //     // std::stringstream tooltipText;
-
-    //     // string text = getStmtHierarchy.get_hierarchy(op);
-
-    //     // TODO: eventually call something like hiearchy.get_hierarchy(op);
-    //     string text = "<div class='tf-tree'> \
-    //                            <div class='tf-tree tf-gap-lg'> \
-    //                                <ul> \
-    //                                    <li> \
-    //                                        <span class='tf-nc'>1</span> \
-    //                                        <ul> \
-    //                                            <li> \
-    //                                                <span class='tf-nc'>2</span> \
-    //                                                <ul> \
-    //                                                    <li><span class='tf-nc'>4</span></li> \
-    //                                                    <li><span class='tf-nc'>5</span></li> \
-    //                                                </ul> \
-    //                                            </li> \
-    //                                            <li> \
-    //                                                <span class='tf-nc'>3</span> \
-    //                                                <ul> \
-    //                                                    <li><span class='tf-nc'>6</span></li> \
-    //                                                    <li><span class='tf-nc'>7</span></li> \
-    //                                                </ul> \
-    //                                            </li> \
-    //                                        </ul> \
-    //                                    </li> \
-    //                                </ul> \
-    //                            </div> \
-    //                            </div>";
-
-    //     // tooltipText << text;
-    //     return tooltip("[i] ", hierarchyHTML, text);
-    // }
-    string open_cost_span(const IRNode *op, const string &hierarchyHTML, const string &cls = "") {
-        // int range = findStmtCost.get_range(op);
-
+    string open_cost_span(const IRNode *op, const string &hierarchyHTML) {
         std::stringstream s;
         s << cost_table_tooltip(op, hierarchyHTML);
-        s << open_span(cls + " Cost");
-
-        // if (range == LOW_RANGE)
-        // else if (range == MEDIUM_RANGE)
-        //     s << open_span(cls + " Cost");
-        // else if (range == HIGH_RANGE)
-        //     s << open_span(cls + " Cost");
-
-        // s << hierarchy_tooltip(op);
+        s << open_span("Cost");
         return s.str();
     }
+    string close_cost_span() {
+        return close_span();
+    }
+
     string open_span(const string &cls, int id = -1) {
         return open_tag("span", cls, id);
     }
@@ -203,51 +152,26 @@ private:
         return span("Matched", body);
     }
 
-    // string open_cost_div(const IRNode *op, const string &hierarchyHTML, const string &cls) {
-    //     int range = findStmtCost.get_range(op);
-
-    //     std::stringstream s;
-
-    //     if (range == LOW_RANGE)
-    //         s << open_div(cls + " Cost");
-    //     else if (range == MEDIUM_RANGE)
-    //         s << open_div(cls + " Cost");
-    //     else if (range == HIGH_RANGE)
-    //         s << open_div(cls + " Cost");
-
-    //     s << cost_table_tooltip(op, hierarchyHTML);
-
-    //     return s.str();
-    // }
-
     string cost_colors(const IRNode *op) {
+        // TODO: figure out how to get the div to be given size without needing
+        //       to put a `.` in it
         std::stringstream s;
         int range = findStmtCost.get_range(op);
-        // cout << "recieved range: " << range << endl;
-        // cout << "got here" << endl;
-        // s << open_span("CostColor0");
         s << open_span("CostOneType" + to_string(range));
-        // cout << "got here 1" << endl;
         s << ".";
         s << close_span();
         s << open_span("CostColorSpacer");
-        // cout << "got here 2" << endl;
 
         s << ".";
         s << close_span();
         s << open_span("CostOtherType" + to_string(range));
-        // cout << "got here 3" << endl;
 
         s << ".";
-        // cout << "got here 4.1" << endl;
         s << close_span();
-        // cout << "got here 4.2" << endl;
         s << open_span("CostColorSpacer");
-        // cout << "got here 4.3" << endl;
 
         s << ".";
         s << close_span();
-        // cout << "got here too" << endl;
         return s.str();
     }
 
@@ -499,9 +423,7 @@ private:
 
     void visit(const Let *op) override {
         scope.push(op->name, unique_id());
-        // stream << cost_colors();
         stream << open_span("Let");
-        // stream << open_cost_span(op, hierarchy(op), "Let");
         stream << open_span("Matched");
         stream << "(" << keyword("let") << " ";
         stream << var(op->name);
@@ -524,9 +446,11 @@ private:
         stream << var(op->name);
         stream << close_span();
         stream << " " << matched("Operator Assign", "=") << " ";
+
         stream << open_cost_span(op->value.get(), hierarchy(op->value.get()));
         print(op->value);
-        stream << close_span();
+        stream << close_cost_span();
+
         stream << close_line();
         print(op->body);
         stream << close_div();
@@ -624,21 +548,22 @@ private:
         stream << open_cost_span(op, hierarchy(op));
 
         stream << open_span("Matched");
-
         stream << var(op->name) << "[";
         stream << close_span();
+
         print(op->index);
         stream << matched("]");
         stream << " " << span("Operator Assign Matched", "=") << " ";
+
         stream << open_span("StoreValue");
-        // stream << hierarchy(op->value);
         print(op->value);
         if (!is_const_one(op->predicate)) {
             stream << " " << keyword("if") << " ";
             print(op->predicate);
         }
         stream << close_span();
-        stream << close_span();
+
+        stream << close_cost_span();
         stream << close_div();
     }
     void visit(const Provide *op) override {
@@ -656,11 +581,12 @@ private:
         stream << close_div();
     }
     void visit(const Allocate *op) override {
-        // stream << open_cost_span(op);
         scope.push(op->name, unique_id());
         stream << open_div("Allocate");
         stream << cost_colors(op);
+
         stream << open_cost_span(op, hierarchy(op));
+
         stream << open_span("Matched");
         stream << keyword("allocate") << " ";
         stream << var(op->name) << "[";
@@ -690,7 +616,7 @@ private:
             stream << keyword("custom_delete") << "{ " << op->free_function << "(); ";
             stream << matched("}");
         }
-        stream << close_span();
+        stream << close_cost_span();
 
         stream << open_div("AllocateBody");
         print(op->body);
@@ -698,7 +624,6 @@ private:
 
         stream << close_div();
         scope.pop(op->name);
-        // stream << close_span();
     }
     void visit(const Free *op) override {
         stream << open_div("Free WrapLine");
@@ -858,7 +783,7 @@ private:
         stream << cost_colors(op);
         stream << open_cost_span(op, hierarchy(op));
         print(op->value);
-        stream << close_span();
+        stream << close_cost_span();
         stream << close_div();
     }
 
@@ -915,9 +840,20 @@ private:
     }
 
 public:
-    FindStmtCost findStmtCost;                            // used for finding the cost of statements
-    GetStmtHierarchy getStmtHierarchy;                    // used for getting the hierarchy of statements
-    ProducerConsumerHierarchy producerConsumerHierarchy;  // used for getting the hierarchy of producer/consumer
+    void generate_costs(const Module &m) {
+        findStmtCost.traverse(m);
+    }
+    void generate_costs(const Stmt &s) {
+        findStmtCost.mutate(s);
+    }
+    void generate_producer_consumer_hierarchy(const Module &m) {
+        producerConsumerHierarchy.generate_producer_consumer_html(m);
+        producerConsumerHierarchy.print_hiararchy();
+    }
+    void generate_producer_consumer_hierarchy(const Stmt &s) {
+        producerConsumerHierarchy.generate_producer_consumer_html(s);
+        producerConsumerHierarchy.print_hiararchy();
+    }
 
     void print(const Expr &ir) {
         ir.accept(this);
@@ -1150,10 +1086,8 @@ public:
     }
 
     void print(const Module &m) {
-        // cout << "Printing module " << m.name() << endl;
         scope.push(m.name(), unique_id());
         for (const auto &s : m.submodules()) {
-            // cout << "Submodule: " << s.name() << endl;
             print(s);
         }
 
@@ -1335,20 +1269,21 @@ function openNewWindow(innerHtml) { \n \
 
 void print_to_viz(const string &filename, const Stmt &s) {
 
-    // std::cout << "Here! 0" << std::endl;
-
     StmtToViz sth(filename);
-    sth.findStmtCost.mutate(s);
+
+    sth.generate_costs(s);
+    sth.generate_producer_consumer_hierarchy(s);
+
     sth.print(s);
 }
 
 void print_to_viz(const string &filename, const Module &m) {
-    // std::cout << "here! 1" << std::endl;
 
     StmtToViz sth(filename);
 
-    sth.findStmtCost.traverse(m);
-    sth.producerConsumerHierarchy.generate_producer_consumer_html(m);
+    sth.generate_costs(m);
+    sth.generate_producer_consumer_hierarchy(m);
+
     sth.print(m);
 }
 

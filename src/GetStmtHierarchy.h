@@ -13,11 +13,8 @@ using namespace std;
 using namespace Halide;
 using namespace Internal;
 
-/** A base class for algorithms that need to recursively walk over the
- * IR. The default implementations just recursively walk over the
- * children. Override the ones you care about.
- */
 class GetStmtHierarchy : public IRMutator {
+
 public:
     GetStmtHierarchy() = default;
     ~GetStmtHierarchy() = default;
@@ -25,7 +22,6 @@ public:
     string get_hierarchy_html(const Expr &startNode) {
         start_html();
         start_tree();
-        // cout << "Start node: " << startNode << endl;
         mutate(startNode);
         end_tree();
         end_html();
@@ -36,13 +32,15 @@ public:
     string get_hierarchy_html(const Stmt &startNode) {
         start_html();
         start_tree();
-        // cout << "Start node: " << startNode << endl;
         mutate(startNode);
         end_tree();
         end_html();
 
         return html.str();
     }
+
+private:
+    std::stringstream html;
 
     Expr mutate(const Expr &expr) override {
         return IRMutator::mutate(expr);
@@ -51,9 +49,6 @@ public:
     Stmt mutate(const Stmt &stmt) override {
         return IRMutator::mutate(stmt);
     }
-
-private:
-    std::stringstream html;
 
     void start_html() {
         html.str(string());
@@ -276,7 +271,6 @@ private:
         index << op->index;
         stringstream value;
         value << op->value;
-        // node_without_children(op->name + "[" + index.str() + "] = " + value.str());
         node_without_children(op->name + "[" + index.str() + "]");
         mutate(op->value);
         close_node();
@@ -296,20 +290,6 @@ private:
         return op;
     }
     Stmt visit(const Allocate *op) override {
-        // stream << keyword("allocate") << " ";
-        // stream << var(op->name) << "[";
-        // stream << close_span();
-
-        // stream << open_span("Type");
-        // stream << op->type;
-        // stream << close_span();
-
-        // for (const auto &extent : op->extents) {
-        //     stream << " * ";
-        //     print(extent);
-        // }
-        // stream << matched("]");
-
         open_node("allocate");
         stringstream index;
         index << op->type;
@@ -359,9 +339,7 @@ private:
         return op;
     }
     Stmt visit(const Evaluate *op) override {
-        // open_node("Evaluate");
         mutate(op->value);
-        // close_node();
         return op;
     }
     Expr visit(const Shuffle *op) override {

@@ -97,3 +97,4 @@ src/.tags_sorted_by_file
 /cmake-build-*/
 
 .vscode
+null.d
