@@ -148,15 +148,24 @@ function(add_halide_library TARGET)
         message(FATAL_ERROR "Missing FROM argument specifying a Halide generator target")
     endif ()
 
-    if (NOT TARGET ${ARG_FROM})
-        # FROM is usually an unqualified name; if we are crosscompiling, we might need a
-        # fully-qualified name, so add the default package name and retry
-        set(FQ_ARG_FROM "${PROJECT_NAME}::halide_generators::${ARG_FROM}")
-        if (NOT TARGET ${FQ_ARG_FROM})
-            message(FATAL_ERROR "Unable to locate FROM as either ${ARG_FROM} or ${FQ_ARG_FROM}")
-        endif ()
-        set(ARG_FROM "${FQ_ARG_FROM}")
-    endif ()
+    if(ARG_FROM MATCHES ".py$")
+        make_shell_path(PYTHONPATH "$<TARGET_FILE_DIR:Halide::Python>")
+        # TODO: this is ugly, maybe there is a better way?
+        set(GENERATOR_CMD ${CMAKE_COMMAND} -E env PYTHONPATH=${PYTHONPATH} ${Python3_EXECUTABLE} $<SHELL_PATH:${CMAKE_CURRENT_SOURCE_DIR}/${ARG_FROM}>)
+        set(GENERATOR_CMD_DEPS ${ARG_FROM} Halide::Python)
+    else()
+        if (NOT TARGET ${ARG_FROM})
+            # FROM is usually an unqualified name; if we are crosscompiling, we might need a
+            # fully-qualified name, so add the default package name and retry
+            set(FQ_ARG_FROM "${PROJECT_NAME}::halide_generators::${ARG_FROM}")
+            if (NOT TARGET ${FQ_ARG_FROM})
+                message(FATAL_ERROR "Unable to locate FROM as either ${ARG_FROM} or ${FQ_ARG_FROM}")
+            endif ()
+            set(ARG_FROM "${FQ_ARG_FROM}")
+        endif()
+        set(GENERATOR_CMD "${ARG_FROM}")
+        set(GENERATOR_CMD_DEPS ${ARG_FROM})
+    endif()
 
     _Halide_place_dll(${ARG_FROM})
 
@@ -218,7 +227,9 @@ function(add_halide_library TARGET)
         set(ARG_USE_RUNTIME Halide::Runtime)
     elseif (NOT ARG_USE_RUNTIME)
         # If we're not using an existing runtime, create one.
-        _Halide_add_halide_runtime("${TARGET}.runtime" FROM ${ARG_FROM}
+        _Halide_add_halide_runtime("${TARGET}.runtime"
+                                   GENERATOR_CMD ${GENERATOR_CMD}
+                                   DEPENDS ${GENERATOR_CMD_DEPS}
                                    TARGETS ${ARG_TARGETS})
         set(ARG_USE_RUNTIME "${TARGET}.runtime")
     elseif (NOT TARGET ${ARG_USE_RUNTIME})
@@ -325,7 +336,7 @@ function(add_halide_library TARGET)
     endif ()
 
     add_custom_command(OUTPUT ${generator_output_files}
-                       COMMAND ${ARG_FROM}
+                       COMMAND ${GENERATOR_CMD}
                        -n "${TARGET}"
                        -d "${gradient_descent}"
                        -g "${ARG_GENERATOR}"
@@ -335,7 +346,7 @@ function(add_halide_library TARGET)
                        -o .
                        "target=$<JOIN:${ARG_TARGETS},$<COMMA>>"
                        ${ARG_PARAMS}
-                       DEPENDS "${ARG_FROM}" ${ARG_PLUGINS}
+                       DEPENDS ${GENERATOR_CMD_DEPS} ${ARG_PLUGINS}
                        VERBATIM)
 
     list(TRANSFORM generator_output_files PREPEND "${CMAKE_CURRENT_BINARY_DIR}/")
@@ -355,6 +366,10 @@ function(_Halide_place_dll GEN)
     if (NOT WIN32)
         return()
     endif ()
+
+    if(GEN MATCHES ".py$")
+        return()
+    endif()
 
     # Short circuit so that Halide::Halide isn't checked when importing a generator from another CMake project
     get_property(is_imported TARGET ${GEN} PROPERTY IMPORTED)
@@ -384,7 +399,7 @@ endfunction()
 ##
 
 function(_Halide_add_halide_runtime RT)
-    cmake_parse_arguments(ARG "" "FROM" "TARGETS" ${ARGN})
+    cmake_parse_arguments(ARG "" "" "DEPENDS;TARGETS;GENERATOR_CMD" ${ARGN})
     _Halide_get_platform_details(
             is_crosscompiling
             object_suffix
@@ -400,11 +415,12 @@ function(_Halide_add_halide_runtime RT)
     endif ()
 
     add_custom_command(OUTPUT ${GEN_OUTS}
-                       COMMAND ${ARG_FROM} -r "${TARGET}.runtime" -o . ${GEN_ARGS}
+                       COMMAND ${ARG_GENERATOR_CMD} -r "${TARGET}.runtime" -o . ${GEN_ARGS}
                        # Defers reading the list of targets for which to generate a common runtime to CMake _generation_ time.
                        # This prevents issues where a lower GCD is required by a later Halide library linking to this runtime.
                        target=$<JOIN:$<TARGET_PROPERTY:${TARGET}.runtime,Halide_RT_TARGETS>,$<COMMA>>
                        DEPENDS "${ARG_FROM}"
+                       DEPENDS "${ARG_DEPENDS}"
                        VERBATIM)
 
     if (is_crosscompiling)

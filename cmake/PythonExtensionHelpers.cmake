@@ -41,7 +41,7 @@ endfunction()
 function(add_python_aot_extension TARGET)
     set(options)
     set(oneValueArgs GENERATOR FUNCTION_NAME)
-    set(multiValueArgs SOURCES LINK_LIBRARIES FEATURES PARAMS)
+    set(multiValueArgs SOURCES LINK_LIBRARIES FEATURES PARAMS PLUGINS)
     cmake_parse_arguments(ARG "${options}" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
 
     if (NOT ARG_GENERATOR)
@@ -52,26 +52,41 @@ function(add_python_aot_extension TARGET)
         set(ARG_FUNCTION_NAME "${ARG_GENERATOR}")
     endif ()
 
-    # Create the Halide generator executable.
-    add_executable(${TARGET}.generator ${ARG_SOURCES})
-    target_link_libraries(${TARGET}.generator PRIVATE Halide::Generator ${ARG_LINK_LIBRARIES})
+    list(LENGTH ARG_SOURCES len)
+    if(len EQUAL 1 AND ARG_SOURCES MATCHES ".py$")
+        # Run the Generator to produce a static library of AOT code,
+        # plus the 'python_extension' code necessary to produce a useful
+        # AOT Extention for Python:
+        add_halide_library(aot_${TARGET}
+                           FROM ${ARG_SOURCES}
+                           GENERATOR ${ARG_GENERATOR}
+                           FUNCTION_NAME ${ARG_FUNCTION_NAME}
+                           PYTHON_EXTENSION ${TARGET}.py.cpp
+                           FEATURES ${ARG_FEATURES}
+                           PARAMS ${ARG_PARAMS}
+                           PLUGINS ${ARG_PLUGINS})
+    else()
+        # Create the Halide generator executable.
+        add_executable(${TARGET}.generator ${ARG_SOURCES})
+        target_link_libraries(${TARGET}.generator PRIVATE Halide::Generator ${ARG_LINK_LIBRARIES})
 
-    # TODO: this should work (and would be preferred to the code above)
-    # but CMake fails with "targets not yet defined"; investigate.
-    # add_halide_generator(${TARGET}.generator
-    #                      SOURCES ${ARG_SOURCES})
+        # TODO: this should work (and would be preferred to the code above)
+        # but CMake fails with "targets not yet defined"; investigate.
+        # add_halide_generator(${TARGET}.generator
+        #                      SOURCES ${ARG_SOURCES})
 
-    # Run the Generator to produce a static library of AOT code,
-    # plus the 'python_extension' code necessary to produce a useful
-    # AOT Extention for Python:
-    add_halide_library(aot_${TARGET}
-                       FROM ${TARGET}.generator
-                       GENERATOR ${ARG_GENERATOR}
-                       FUNCTION_NAME ${ARG_FUNCTION_NAME}
-                       PYTHON_EXTENSION ${TARGET}.py.cpp
-                       FEATURES ${ARG_FEATURES}
-                       PARAMS ${ARG_PARAMS}
-                       TARGETS cmake)
+        # Run the Generator to produce a static library of AOT code,
+        # plus the 'python_extension' code necessary to produce a useful
+        # AOT Extention for Python:
+        add_halide_library(aot_${TARGET}
+                           FROM ${TARGET}.generator
+                           GENERATOR ${ARG_GENERATOR}
+                           FUNCTION_NAME ${ARG_FUNCTION_NAME}
+                           PYTHON_EXTENSION ${TARGET}.py.cpp
+                           FEATURES ${ARG_FEATURES}
+                           PARAMS ${ARG_PARAMS}
+                           TARGETS cmake)
+    endif()
 
     # Take the native-code output of the Generator, add the Python-Extension
     # code (to make it callable from Python), and build it into the AOT Extension we need.
@@ -98,6 +113,10 @@ function(add_python_stub_extension TARGET)
     if (NOT ARG_GENERATOR)
         set(ARG_GENERATOR "${TARGET}")
     endif ()
+
+    if(ARG_GENERATOR MATCHES ".py$")
+        message(FATAL_ERROR "Python Generators cannot use (and do not need) the add_python_stub_extension() rule; they can be imported directly from Python.")
+    endif()
 
     if (NOT ARG_MODULE)
         set(ARG_MODULE "${TARGET}_stub")

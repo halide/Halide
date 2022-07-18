@@ -40,6 +40,7 @@ void define_image_param(py::module &m) {
             .def("width", &OutputImageParam::width)
             .def("height", &OutputImageParam::height)
             .def("channels", &OutputImageParam::channels)
+            .def("parameter", &OutputImageParam::parameter)
 
             .def("__repr__", [](const OutputImageParam &im) -> std::string {
                 std::ostringstream o;

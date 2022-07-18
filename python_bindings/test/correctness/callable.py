@@ -63,78 +63,70 @@ def test_simple():
     b_in = hl.Buffer(hl.UInt(8), [2, 2])
     b_in.fill(123)
 
-    # All inputs to a Callable must be fully realized, so any Func inputs
-    # that the Generator has implicitly become Buffer inputs of the same type
-    # and dimensionality.
-    f_in = hl.Buffer(hl.Int(32), [2, 2])
-    for xx in range(2):
-        for yy in range(2):
-                f_in[xx, yy] = xx + yy
-
     float_in = 3.5
 
     b_out = hl.Buffer(hl.Float(32), [2, 2])
 
     def _check(offset = 0):
-        assert b_out[0, 0] == float_in + 0 + offset + 123
-        assert b_out[0, 1] == float_in + 1 + offset + 123
-        assert b_out[1, 0] == float_in + 1 + offset + 123
-        assert b_out[1, 1] == float_in + 2 + offset + 123
+        assert b_out[0, 0] == float_in + offset + 123
+        assert b_out[0, 1] == float_in + offset + 123
+        assert b_out[1, 0] == float_in + offset + 123
+        assert b_out[1, 1] == float_in + offset + 123
 
-    gp = {"func_input.type": "int32"}
+    gp = {}
     simple = hl.create_callable_from_generator(target, "simple", gp)
 
     # ----------- Positional arguments
-    simple(b_in, f_in, float_in, b_out)
+    simple(b_in, float_in, b_out)
     _check()
 
     # ----------- Keyword arguments
     # Natural order
-    simple(buffer_input=b_in, func_input=f_in, float_arg=float_in, simple_output=b_out)
+    simple(buffer_input=b_in, float_arg=float_in, simple_output=b_out)
     _check()
 
     # Weird order
-    simple(float_arg=float_in, simple_output=b_out, buffer_input=b_in, func_input=f_in)
+    simple(float_arg=float_in, simple_output=b_out, buffer_input=b_in)
     _check()
 
     # ----------- Positional + Keywords
 
     # Natural order
-    simple(b_in, func_input=f_in, simple_output=b_out, float_arg=float_in)
+    simple(b_in, simple_output=b_out, float_arg=float_in)
     _check()
 
     # Weird order
-    simple(b_in, f_in, float_in, simple_output=b_out)
+    simple(b_in, float_in, simple_output=b_out)
     _check()
 
     # ----------- Above set again, w/ additional GeneratorParam mixed in
     k = 42
 
-    gp = {"func_input.type": "int32", "offset": str(k)}
+    gp = {"offset": str(k)}
     simple_42 = hl.create_callable_from_generator(target, "simple", gp)
-    simple_42(b_in, f_in, float_in, b_out)
+    simple_42(b_in, float_in, b_out)
     _check(k)
 
     # ----------- Test various failure modes
     try:
         # too many positional args
-        simple(b_in, f_in, float_in, 4, b_out)
+        simple(b_in, float_in, 4, b_out)
     except hl.HalideError as e:
-        assert 'Expected at most 4 positional arguments, but saw 5.' in str(e)
+        assert 'Expected at most 3 positional arguments, but saw 4.' in str(e)
     else:
         assert False, 'Did not see expected exception!'
 
     try:
         # too few positional args
-        simple(b_in, f_in)
+        simple(b_in)
     except hl.HalideError as e:
-        assert 'Expected exactly 4 positional arguments, but saw 2.' in str(e)
+        assert 'Expected exactly 3 positional arguments, but saw 1.' in str(e)
     else:
         assert False, 'Did not see expected exception!'
 
     try:
         # Inputs that can't be converted to what the receiver needs (positional)
-        simple(hl.f32(3.141592), "happy", k, b_out)
+        simple(hl.f32(3.141592), "happy", b_out)
     except hl.HalideError as e:
         assert 'is not an instance of' in str(e)
     else:
@@ -142,7 +134,7 @@ def test_simple():
 
     try:
         # Inputs that can't be converted to what the receiver needs (named)
-        simple(b_in, f_in, float_in, simple_output="bogus")
+        simple(b_in, float_in, simple_output="bogus")
     except hl.HalideError as e:
         assert 'is not an instance of' in str(e)
     else:
@@ -150,7 +142,7 @@ def test_simple():
 
     try:
         # Bad keyword argument
-        simple(buffer_input=b_in, float_arg=float_in, simple_output=b_out, funk_input=f_in)
+        simple(buffer_input=b_in, float_arg=float_in, funk_input=b_out)
     except hl.HalideError as e:
         assert "Unknown argument 'funk_input' specified via keyword." in str(e)
     else:
@@ -158,7 +150,7 @@ def test_simple():
 
     try:
         # too few keyword args
-        simple(float_arg=float_in, simple_output=b_out, func_input=f_in)
+        simple(float_arg=float_in, simple_output=b_out)
     except hl.HalideError as e:
         assert 'Argument buffer_input was not specified by either positional or keyword argument.' in str(e)
     else:
@@ -166,7 +158,7 @@ def test_simple():
 
     try:
         # Arg specified by pos + kw
-        simple(b_in, buffer_input=b_in, func_input=f_in, float_arg=float_in, simple_output=b_out)
+        simple(b_in, buffer_input=b_in, float_arg=float_in, simple_output=b_out)
     except hl.HalideError as e:
         assert 'Argument buffer_input specified multiple times.' in str(e)
     else:
