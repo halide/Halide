@@ -25,17 +25,30 @@ struct StmtCost {
     // add other costs later, like integer-ALU cost, float-ALU cost, memory cost, etc.
 };
 
+class CostPreProcessor : public IRMutator {
+public:
+    CostPreProcessor() = default;
+    ~CostPreProcessor() = default;
+
+    // starts the traveral based on Module
+    void traverse(const Module &m);
+
+    int get_count(const string name) const;
+
+private:
+    map<const string, int> lock_access_counts;
+
+    void increase_count(const string name);
+
+    Stmt visit(const Acquire *op) override;
+    Stmt visit(const Atomic *op) override;
+};
+
 class FindStmtCost : public IRMutator {
 
 public:
     FindStmtCost() = default;
     ~FindStmtCost() = default;
-
-    // starts the traveral based on Module
-    void traverse(const Module &m);
-
-    Expr mutate(const Expr &expr) override;
-    Stmt mutate(const Stmt &stmt) override;
 
     // returns the range of node based on its
     int get_range(const IRNode *op) const;
@@ -45,12 +58,21 @@ public:
 
     int get_depth(const IRNode *node) const;
 
+    void generate_costs(const Module &m);
+    void generate_costs(const Stmt &stmt);
+
 private:
     // create variable that will hold mapping of stmt to cost
     unordered_map<const IRNode *, StmtCost> stmt_cost;
 
+    // for Atomic and Acquire
+    CostPreProcessor cost_preprocessor;
+
     // stores current loop depth level
     int current_loop_depth = 0;
+
+    // starts the traveral based on Module
+    void traverse(const Module &m);
 
     // gets cost from `stmt_cost` map
     int get_cost(const IRNode *node) const;

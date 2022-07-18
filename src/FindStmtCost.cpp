@@ -3,6 +3,67 @@
 using namespace Halide;
 using namespace Internal;
 
+/*
+ * CostPreProcessor class
+ */
+void CostPreProcessor::traverse(const Module &m) {
+    // recursively traverse all submodules
+    for (const auto &s : m.submodules()) {
+        traverse(s);
+    }
+
+    // traverse all functions
+    for (const auto &f : m.functions()) {
+        mutate(f.body);
+    }
+}
+
+Stmt CostPreProcessor::visit(const Acquire *op) {
+    stringstream name;
+    name << op->semaphore;
+    increase_count(name.str());
+    return op;
+}
+
+Stmt CostPreProcessor::visit(const Atomic *op) {
+    stringstream name;
+    name << op->producer_name;
+    increase_count(name.str());
+    return op;
+}
+
+void CostPreProcessor::increase_count(const string name) {
+    auto it = lock_access_counts.find(name);
+    if (it == lock_access_counts.end()) {
+        lock_access_counts.emplace(name, 1);
+    } else {
+        it->second += 1;
+    }
+}
+
+int CostPreProcessor::get_count(const string name) const {
+    auto it = lock_access_counts.find(name);
+    if (it == lock_access_counts.end()) {
+        m_assert(false, "node not found in `lock_access_counts`");
+        return 0;
+    }
+    return it->second;
+}
+
+/*
+ * CostPreProcessor class
+ */
+void FindStmtCost::generate_costs(const Module &m) {
+
+    cost_preprocessor.traverse(m);
+    traverse(m);
+}
+void FindStmtCost::generate_costs(const Stmt &stmt) {
+
+    cost_preprocessor.mutate(stmt);
+    mutate(stmt);
+}
+
 void FindStmtCost::traverse(const Module &m) {
     // recursively traverse all submodules
     for (const auto &s : m.submodules()) {
@@ -15,14 +76,6 @@ void FindStmtCost::traverse(const Module &m) {
     }
 
     return;
-}
-
-Expr FindStmtCost::mutate(const Expr &expr) {
-    return IRMutator::mutate(expr);
-}
-
-Stmt FindStmtCost::mutate(const Stmt &stmt) {
-    return IRMutator::mutate(stmt);
 }
 
 // returns the range of node based on its
@@ -404,6 +457,14 @@ Stmt FindStmtCost::visit(const Acquire *op) {
                   the number of times each lock is accessed, and also keep track of the depth
                   of said lock (the deeper, the more times it will be accessed)
     */
+    m_assert(false, "reached Acquire! take a look at its use - visit(Acquire) is not fully implemented");
+
+    stringstream name;
+    name << op->semaphore;
+    int lock_cost = cost_preprocessor.get_count(name.str());
+    set_cost(op, lock_cost);  // this is to remove the error of unused variable
+    // TODO: do something with lock cost
+
     mutate(op->semaphore);
     mutate(op->count);
     mutate(op->body);
@@ -560,7 +621,15 @@ Stmt FindStmtCost::visit(const Atomic *op) {
                 * make it similar to acquire
                 * parallel vs vector is important
     */
+    m_assert(false, "reached Atomic! take a look at its use - visit(Atomic) is not fully implemented");
     mutate(op->body);
+
+    stringstream name;
+    name << op->producer_name;
+    int lock_cost = cost_preprocessor.get_count(name.str());
+    set_cost(op, lock_cost);  // this is to remove the error of unused variable
+    // TODO: do something with lock cost
+
     int tempVal = get_cost(op->body.get());
     set_cost(op, tempVal);
     return op;

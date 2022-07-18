@@ -841,10 +841,10 @@ private:
 
 public:
     void generate_costs(const Module &m) {
-        findStmtCost.traverse(m);
+        findStmtCost.generate_costs(m);
     }
     void generate_costs(const Stmt &s) {
-        findStmtCost.mutate(s);
+        findStmtCost.generate_costs(s);
     }
     void generate_producer_consumer_hierarchy(const Module &m) {
         producerConsumerHierarchy.generate_producer_consumer_html(m);

@@ -66,7 +66,13 @@ void ProducerConsumerHierarchy::start_html() {
     html << "</head>";
     html << "<style>";
     html << "body { font-family: Consolas, \\'Liberation Mono\\', Menlo, Courier, monospace;}";
-    html << "table, th, td { border: 1px solid black; border-collapse: collapse; padding: 15px; border-spacing: 15px; } ";
+    html << "table, th, td { ";
+    html << "border: 1px solid black;";
+    html << "border-collapse: collapse;";
+    html << "padding: 15px;";
+    html << "border-spacing: 15px;";
+    html << "background-color: rgba(150, 150, 150, 0.15);";
+    html << "} ";
     html << "</style>";
     html << "<body>";
 }
