@@ -24,14 +24,6 @@ string GetStmtHierarchy::get_hierarchy_html(const Stmt &startNode) {
     return html.str();
 }
 
-Expr GetStmtHierarchy::mutate(const Expr &expr) {
-    return IRMutator::mutate(expr);
-}
-
-Stmt GetStmtHierarchy::mutate(const Stmt &stmt) {
-    return IRMutator::mutate(stmt);
-}
-
 void GetStmtHierarchy::start_html() {
     html.str(string());
     html << "<html>";

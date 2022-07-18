@@ -25,10 +25,6 @@ public:
 private:
     std::stringstream html;
 
-    Expr mutate(const Expr &expr) override;
-
-    Stmt mutate(const Stmt &stmt) override;
-
     void start_html();
     void end_html();
 

@@ -25,13 +25,6 @@ void ProducerConsumerHierarchy::print_hiararchy() {
     cout << endl;
 }
 
-Expr ProducerConsumerHierarchy::mutate(const Expr &expr) {
-    return IRMutator::mutate(expr);
-}
-Stmt ProducerConsumerHierarchy::mutate(const Stmt &stmt) {
-    return IRMutator::mutate(stmt);
-}
-
 string ProducerConsumerHierarchy::get_hierarchy_html(const Expr &startNode) {
     start_html();
     mutate(startNode);

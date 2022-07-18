@@ -22,9 +22,6 @@ public:
 private:
     std::stringstream html;
 
-    Expr mutate(const Expr &expr) override;
-    Stmt mutate(const Stmt &stmt) override;
-
     string get_hierarchy_html(const Expr &startNode);
     string get_producer_consumer_html(const Stmt &startNode);
 
