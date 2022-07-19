@@ -1195,7 +1195,7 @@ span.LowCost { background: rgba(10,10,10,0.1); }\n \
 span.Cost { background: rgba(10,10,10,0.1); }\n \
 span.MediumCost { background: rgba(10,10,10,0.2); }\n \
 span.HighCost { background: rgba(10,10,10,0.3); }\n \
-.tooltip .tooltiptext { visibility: hidden; text-align: center; border-radius: 3px; padding: 5px; background: #FFFFFF; color: #313639; border: 1px solid #313639; border-radius: 8px; pointer-events: none; width: fit-content; position: absolute; z-index: 1; margin-top: -75px; margin-left: -100px; z-index: 1000; }\n \
+.tooltip .tooltiptext { visibility: hidden; text-align: center; border-radius: 3px; padding: 5px; background: #FFFFFF; color: #313639; border: 1px solid #313639; border-radius: 8px; pointer-events: none; width: fit-content; position: absolute; z-index: 1; margin-top: -75px; margin-left: -40px; z-index: 1000; }\n \
 .tooltip:hover .tooltiptext { visibility: visible; }\n \
 .left-table { text-align: right; color: grey; vertical-align: middle; font-size: 12px; }\n \
 .right-table { text-align: left; vertical-align: middle; font-size: 12px; font-weight: bold; padding-left: 3px; }\n \
