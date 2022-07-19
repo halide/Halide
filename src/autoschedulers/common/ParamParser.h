@@ -33,7 +33,9 @@ class ParamParser {
     }
 
 public:
-    explicit ParamParser(const std::map<std::string, std::string> &m) : extra(m) {}
+    explicit ParamParser(const std::map<std::string, std::string> &m)
+        : extra(m) {
+    }
 
     // If the given key is present in m, parse the result into *value and return true.
     // (If the string cannot be parsed as a valid "T", assert-fail.)
@@ -53,7 +55,7 @@ public:
         if (!extra.empty()) {
             std::ostringstream oss;
             oss << "Autoscheduler Params contain unknown keys:\n";
-            for (const auto & it : extra) {
+            for (const auto &it : extra) {
                 oss << "  " << it.first << "\n";
             }
             user_error << oss.str();
