@@ -1,4 +1,4 @@
-set(SOURCES
+set(native_sources
     PyArgument.cpp
     PyBoundaryConditions.cpp
     PyBuffer.cpp
@@ -29,13 +29,22 @@ set(SOURCES
     PyVar.cpp
     PyVarOrRVar.cpp
     )
-list(TRANSFORM SOURCES PREPEND "halide_/")
+list(TRANSFORM native_sources PREPEND "halide_/")
 
-pybind11_add_module(Halide_Python MODULE ${SOURCES})
+set(python_sources
+    __init__.py
+    )
+
+foreach(source IN LISTS python_sources)
+    configure_file("${source}" "${source}" COPYONLY)
+endforeach()
+
+
+pybind11_add_module(Halide_Python MODULE ${native_sources})
 add_library(Halide::Python ALIAS Halide_Python)
 set_target_properties(Halide_Python
                       PROPERTIES
-                      LIBRARY_OUTPUT_NAME halide
+                      LIBRARY_OUTPUT_NAME halide_
                       EXPORT_NAME Python)
 target_link_libraries(Halide_Python PRIVATE Halide::Halide)
 
