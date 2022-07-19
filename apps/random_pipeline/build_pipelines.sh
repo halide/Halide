@@ -5,12 +5,13 @@ SCHEDULES=${2:-32}
 START_FROM=${3:-0}
 HL_RANDOM_DROPOUT=${4:-1}
 HL_BEAM_SIZE=${5:-1}
+NUM_CORES=${6:-8}
 ADAMS2019_DIR=@adams2019_BINARY_DIR@
-INITIAL_WEIGHTS=${6:-$ADAMS2019_DIR/baseline.weights}
+INITIAL_WEIGHTS=${7:-$ADAMS2019_DIR/baseline.weights}
 PROGRAM_NAME=`basename $0 .sh`
-LOGFILEBASE=${7:-${PROGRAM_NAME}.log}
-TIME_ME=${8:-true}
-DATE=${9:-`date +'%F-%H-%M-%S'`}
+LOGFILEBASE=${8:-${PROGRAM_NAME}.log}
+TIME_ME=${9:-true}
+DATE=${10:-`date +'%F-%H-%M-%S'`}
 
 LOG_DIR="./logs"
 LOGFILE="$LOG_DIR/$LOGFILEBASE.$DATE"
@@ -19,7 +20,7 @@ TIME_TMP_LOG="$LOGFILEBASE.$DATE.tmp"
 if [ "$TIME_ME" = true ]; then
   time /usr/bin/time -f "\nreal\t%E\nuser\t%U\nsys\t%S" -o $TIME_TMP_LOG \
     $0 $PIPELINES $SCHEDULES $START_FROM $HL_RANDOM_DROPOUT $HL_BEAM_SIZE \
-       $INITIAL_WEIGHTS $LOGFILEBASE false $DATE
+       $NUM_CORES $INITIAL_WEIGHTS $LOGFILEBASE false $DATE
   cat $TIME_TMP_LOG >> $LOGFILE
   rm $TIME_TMP_LOG
   exit
@@ -40,9 +41,10 @@ printf "Running %s with the following parameters:\n\
         START_FROM=%d\n\
         HL_RANDOM_DROPOUT=%d\n\
         HL_BEAM_SIZE=%d\n\
+	NUM_CORES=%d\n\
         INITIAL_WEIGHTS=%s\n\
         LOGFILEBASE=%s\n " $PROGRAM_NAME $PIPELINES $SCHEDULES $START_FROM \
-                           $HL_RANDOM_DROPOUT $HL_BEAM_SIZE $INITIAL_WEIGHTS \
+                           $HL_RANDOM_DROPOUT $HL_BEAM_SIZE $NUM_CORES $INITIAL_WEIGHTS \
                            $LOGFILEBASE | tee -a $LOGFILE
 
 b=0
@@ -100,7 +102,7 @@ for ((p=$((FIRST+1));p<$((FIRST+PIPELINES+1));p++)); do
 
   echo Retraining weights | tee -a $LOGFILE
   cd bin/pipeline_${P}_${STAGES} 
-  find . -name "*.sample" | $ADAMS2019_DIR/retrain_cost_model  --epochs=4 --rates=0.001 --num_cores=8 \
+  find . -name "*.sample" | $ADAMS2019_DIR/retrain_cost_model  --epochs=4 --rates=0.001 --num_cores=$NUM_CORES \
      --initial_weights=$INITIAL_WEIGHTS --weights_out=$WEIGHTS_OUT --best_benchmark=./best.onnx.benchmark.txt \
      --best_schedule=./best.onnx.schedule.h --best_python_schedule=./best_onnx_schedule.py | tee -a ../../$LOGFILE
   INITIAL_WEIGHTS=`pwd`/updated.weights
