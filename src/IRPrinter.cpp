@@ -520,7 +520,6 @@ void IRPrinter::visit(const Cast *op) {
 }
 
 void IRPrinter::visit(const Reinterpret *op) {
-    // FIXME: should it be printed differently from the Cast?
     stream << "reinterpret<" << op->type << ">(";
     print(op->value);
     stream << ")";
