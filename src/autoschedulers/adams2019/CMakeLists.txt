@@ -43,7 +43,7 @@ add_autoscheduler(NAME Adams2019
                   Weights.cpp
                   ${WF_CPP})
 
-target_link_libraries(Halide_Adams2019 PRIVATE ASLog cost_model train_cost_model)
+target_link_libraries(Halide_Adams2019 PRIVATE ASLog ParamParser cost_model train_cost_model)
 
 ##
 # Tests and demos
