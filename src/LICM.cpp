@@ -90,7 +90,7 @@ class LiftLoopInvariants : public IRMutator {
             }
         }
         if (const Reinterpret *reinterpret = e.as<Reinterpret>()) {
-            // Don't lift these intrinsics. They're free.
+            // Don't lift Reinterpret nodes. They're free.
             return should_lift(reinterpret->value);
         }
         if (const Add *add = e.as<Add>()) {
