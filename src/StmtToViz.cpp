@@ -33,7 +33,9 @@ std::string to_string(T value) {
 
 class StmtToViz : public IRVisitor {
 
-    static const std::string css, vizCss, oneTypeCSS, otherTypeCSS, js;
+    static const std::string css, js;
+    static const std::string vizCss, computationCostCSS, movementCostCSS;
+    static const std::string formHTML, formCSS;
 
     FindStmtCost findStmtCost;                            // used for finding the cost of statements
     GetStmtHierarchy getStmtHierarchy;                    // used for getting the hierarchy of statements
@@ -97,23 +99,28 @@ private:
     }
 
     string cost_table_tooltip(const IRNode *op, const string &hierarchyHTML) {
-        int cost = findStmtCost.get_total_cost(op);
         int depth = findStmtCost.get_depth(op);
+        int computationCost = findStmtCost.get_computation_cost(op);
+        int dataMovementCost = findStmtCost.get_data_movement_cost(op);
 
         std::stringstream tooltipText;
 
         tooltipText << "<table>";
 
         tooltipText << "<tr>";
-        tooltipText << "<td class = 'left-table'> Cost</ td>";
-        tooltipText << "<td class = 'right-table'> " << cost << "</ td>";
-        tooltipText << "</ tr>";
-
-        tooltipText << "<tr>";
         tooltipText << "<td class = 'left-table'> Depth</ td>";
         tooltipText << "<td class = 'right-table'> " << depth << "</ td>";
         tooltipText << "</ tr>";
 
+        tooltipText << "<tr>";
+        tooltipText << "<td class = 'left-table'> Computation Cost</ td>";
+        tooltipText << "<td class = 'right-table'> " << computationCost << "</ td>";
+        tooltipText << "</ tr>";
+
+        tooltipText << "<tr>";
+        tooltipText << "<td class = 'left-table'> Data Movement Cost</ td>";
+        tooltipText << "<td class = 'right-table'> " << dataMovementCost << "</ td>";
+        tooltipText << "</ tr>";
         tooltipText << "</table>";
 
         return tooltip("[i]", hierarchyHTML, tooltipText.str());
@@ -156,15 +163,16 @@ private:
         // TODO: figure out how to get the div to be given size without needing
         //       to put a `.` in it
         std::stringstream s;
-        int range = findStmtCost.get_range(op);
-        s << open_span("CostOneType" + to_string(range));
+        int computation_range = findStmtCost.get_computation_range(op);
+        s << open_span("CostComputation" + to_string(computation_range));
         s << ".";
         s << close_span();
         s << open_span("CostColorSpacer");
 
+        int data_movement_range = findStmtCost.get_data_movement_range(op);
         s << ".";
         s << close_span();
-        s << open_span("CostOtherType" + to_string(range));
+        s << open_span("CostMovement" + to_string(data_movement_range));
 
         s << ".";
         s << close_span();
@@ -848,11 +856,11 @@ public:
     }
     void generate_producer_consumer_hierarchy(const Module &m) {
         producerConsumerHierarchy.generate_producer_consumer_html(m);
-        producerConsumerHierarchy.print_hiararchy();
+        // producerConsumerHierarchy.print_hiararchy();
     }
     void generate_producer_consumer_hierarchy(const Stmt &s) {
         producerConsumerHierarchy.generate_producer_consumer_html(s);
-        producerConsumerHierarchy.print_hiararchy();
+        // producerConsumerHierarchy.print_hiararchy();
     }
 
     void print(const Expr &ir) {
@@ -1122,14 +1130,16 @@ public:
         stream << "<style type='text/css'>";
         stream << css;
         stream << vizCss;
-        stream << oneTypeCSS;
-        stream << otherTypeCSS;
+        stream << computationCostCSS;
+        stream << movementCostCSS;
+        stream << formCSS;
         stream << "</style>\n";
         stream << "<script language='javascript' type='text/javascript'>" + js + "</script>\n";
         stream << "<link href='http://maxcdn.bootstrapcdn.com/font-awesome/4.1.0/css/font-awesome.min.css' rel='stylesheet'>\n";
         stream << "<link rel='stylesheet' href='https://unpkg.com/treeflex/dist/css/treeflex.css'>";
         stream << "<script src='http://code.jquery.com/jquery-1.10.2.js'></script>\n";
         stream << "</head>\n <body>\n";
+        stream << formHTML;
     }
 
     ~StmtToViz() override {
@@ -1185,7 +1195,7 @@ span.LowCost { background: rgba(10,10,10,0.1); }\n \
 span.Cost { background: rgba(10,10,10,0.1); }\n \
 span.MediumCost { background: rgba(10,10,10,0.2); }\n \
 span.HighCost { background: rgba(10,10,10,0.3); }\n \
-.tooltip .tooltiptext { visibility: hidden; text-align: center; border-radius: 3px; padding: 5px; background: #FFFFFF; color: #313639; border: 1px solid #313639; border-radius: 8px; pointer-events: none; width: fit-content; position: absolute; z-index: 1; margin-top: -60px; margin-left: -50px; }\n \
+.tooltip .tooltiptext { visibility: hidden; text-align: center; border-radius: 3px; padding: 5px; background: #FFFFFF; color: #313639; border: 1px solid #313639; border-radius: 8px; pointer-events: none; width: fit-content; position: absolute; z-index: 1; margin-top: -75px; margin-left: -100px; z-index: 1000; }\n \
 .tooltip:hover .tooltiptext { visibility: visible; }\n \
 .left-table { text-align: right; color: grey; vertical-align: middle; font-size: 12px; }\n \
 .right-table { text-align: left; vertical-align: middle; font-size: 12px; font-weight: bold; padding-left: 3px; }\n \
@@ -1197,50 +1207,82 @@ span.HighCost { background: rgba(10,10,10,0.3); }\n \
 span.CostColorSpacer { width: 2px; color: transparent; display: inline-block; }\n \
 ";
 
-const std::string StmtToViz::oneTypeCSS = "\n \
-span.CostOneType19 {margin-left: -30px; width: 13px; display: inline-block; background: rgb(130,31,27); color: transparent; } \n \
-span.CostOneType18 {margin-left: -30px; width: 13px; display: inline-block; background: rgb(145,33,30); color: transparent; } \n \
-span.CostOneType17 {margin-left: -30px; width: 13px; display: inline-block; background: rgb(160,33,32); color: transparent; } \n \
-span.CostOneType16 {margin-left: -30px; width: 13px; display: inline-block; background: rgb(176,34,34); color: transparent; } \n \
-span.CostOneType15 {margin-left: -30px; width: 13px; display: inline-block; background: rgb(185,47,32); color: transparent; } \n \
-span.CostOneType14 {margin-left: -30px; width: 13px; display: inline-block; background: rgb(193,59,30); color: transparent; } \n \
-span.CostOneType13 {margin-left: -30px; width: 13px; display: inline-block; background: rgb(202,71,27); color: transparent; } \n \
-span.CostOneType12 {margin-left: -30px; width: 13px; display: inline-block; background: rgb(210,82,22); color: transparent; } \n \
-span.CostOneType11 {margin-left: -30px; width: 13px; display: inline-block; background: rgb(218,93,16); color: transparent; } \n \
-span.CostOneType10 {margin-left: -30px; width: 13px; display: inline-block; background: rgb(226,104,6); color: transparent; } \n \
-span.CostOneType9 {margin-left: -30px; width: 13px; display: inline-block; background: rgb(229,118,9); color: transparent; } \n \
-span.CostOneType8 {margin-left: -30px; width: 13px; display: inline-block; background: rgb(230,132,15); color: transparent; } \n \
-span.CostOneType7 {margin-left: -30px; width: 13px; display: inline-block; background: rgb(231,146,20); color: transparent; } \n \
-span.CostOneType6 {margin-left: -30px; width: 13px; display: inline-block; background: rgb(232,159,25); color: transparent; } \n \
-span.CostOneType5 {margin-left: -30px; width: 13px; display: inline-block; background: rgb(233,172,30); color: transparent; } \n \
-span.CostOneType4 {margin-left: -30px; width: 13px; display: inline-block; background: rgb(233,185,35); color: transparent; } \n \
-span.CostOneType3 {margin-left: -30px; width: 13px; display: inline-block; background: rgb(233,198,40); color: transparent; } \n \
-span.CostOneType2 {margin-left: -30px; width: 13px; display: inline-block; background: rgb(232,211,45); color: transparent; } \n \
-span.CostOneType1 {margin-left: -30px; width: 13px; display: inline-block; background: rgb(231,223,50); color: transparent; } \n \
-span.CostOneType0 {margin-left: -30px; width: 13px; display: inline-block; background: rgb(236,233,89); color: transparent;  }  \n \
+const std::string StmtToViz::computationCostCSS = "\n \
+span.CostComputation19 {margin-left: -30px; width: 13px; display: inline-block; background: rgb(130,31,27); color: transparent; } \n \
+span.CostComputation18 {margin-left: -30px; width: 13px; display: inline-block; background: rgb(145,33,30); color: transparent; } \n \
+span.CostComputation17 {margin-left: -30px; width: 13px; display: inline-block; background: rgb(160,33,32); color: transparent; } \n \
+span.CostComputation16 {margin-left: -30px; width: 13px; display: inline-block; background: rgb(176,34,34); color: transparent; } \n \
+span.CostComputation15 {margin-left: -30px; width: 13px; display: inline-block; background: rgb(185,47,32); color: transparent; } \n \
+span.CostComputation14 {margin-left: -30px; width: 13px; display: inline-block; background: rgb(193,59,30); color: transparent; } \n \
+span.CostComputation13 {margin-left: -30px; width: 13px; display: inline-block; background: rgb(202,71,27); color: transparent; } \n \
+span.CostComputation12 {margin-left: -30px; width: 13px; display: inline-block; background: rgb(210,82,22); color: transparent; } \n \
+span.CostComputation11 {margin-left: -30px; width: 13px; display: inline-block; background: rgb(218,93,16); color: transparent; } \n \
+span.CostComputation10 {margin-left: -30px; width: 13px; display: inline-block; background: rgb(226,104,6); color: transparent; } \n \
+span.CostComputation9 {margin-left: -30px; width: 13px; display: inline-block; background: rgb(229,118,9); color: transparent; } \n \
+span.CostComputation8 {margin-left: -30px; width: 13px; display: inline-block; background: rgb(230,132,15); color: transparent; } \n \
+span.CostComputation7 {margin-left: -30px; width: 13px; display: inline-block; background: rgb(231,146,20); color: transparent; } \n \
+span.CostComputation6 {margin-left: -30px; width: 13px; display: inline-block; background: rgb(232,159,25); color: transparent; } \n \
+span.CostComputation5 {margin-left: -30px; width: 13px; display: inline-block; background: rgb(233,172,30); color: transparent; } \n \
+span.CostComputation4 {margin-left: -30px; width: 13px; display: inline-block; background: rgb(233,185,35); color: transparent; } \n \
+span.CostComputation3 {margin-left: -30px; width: 13px; display: inline-block; background: rgb(233,198,40); color: transparent; } \n \
+span.CostComputation2 {margin-left: -30px; width: 13px; display: inline-block; background: rgb(232,211,45); color: transparent; } \n \
+span.CostComputation1 {margin-left: -30px; width: 13px; display: inline-block; background: rgb(231,223,50); color: transparent; } \n \
+span.CostComputation0 {margin-left: -30px; width: 13px; display: inline-block; background: rgb(236,233,89); color: transparent;  }  \n \
 ";
 
-const std::string StmtToViz::otherTypeCSS = "\n \
-span.CostOtherType19 { width: 13px; display: inline-block; background: rgb(130,31,27); color: transparent; } \n \
-span.CostOtherType18 { width: 13px; display: inline-block; background: rgb(145,33,30); color: transparent; } \n \
-span.CostOtherType17 { width: 13px; display: inline-block; background: rgb(160,33,32); color: transparent; } \n \
-span.CostOtherType16 { width: 13px; display: inline-block; background: rgb(176,34,34); color: transparent; } \n \
-span.CostOtherType15 { width: 13px; display: inline-block; background: rgb(185,47,32); color: transparent; } \n \
-span.CostOtherType14 { width: 13px; display: inline-block; background: rgb(193,59,30); color: transparent; } \n \
-span.CostOtherType13 { width: 13px; display: inline-block; background: rgb(202,71,27); color: transparent; } \n \
-span.CostOtherType12 { width: 13px; display: inline-block; background: rgb(210,82,22); color: transparent; } \n \
-span.CostOtherType11 { width: 13px; display: inline-block; background: rgb(218,93,16); color: transparent; } \n \
-span.CostOtherType10 { width: 13px; display: inline-block; background: rgb(226,104,6); color: transparent; } \n \
-span.CostOtherType9 { width: 13px; display: inline-block; background: rgb(229,118,9); color: transparent; } \n \
-span.CostOtherType8 { width: 13px; display: inline-block; background: rgb(230,132,15); color: transparent; } \n \
-span.CostOtherType7 { width: 13px; display: inline-block; background: rgb(231,146,20); color: transparent; } \n \
-span.CostOtherType6 { width: 13px; display: inline-block; background: rgb(232,159,25); color: transparent; } \n \
-span.CostOtherType5 { width: 13px; display: inline-block; background: rgb(233,172,30); color: transparent; } \n \
-span.CostOtherType4 { width: 13px; display: inline-block; background: rgb(233,185,35); color: transparent; } \n \
-span.CostOtherType3 { width: 13px; display: inline-block; background: rgb(233,198,40); color: transparent; } \n \
-span.CostOtherType2 { width: 13px; display: inline-block; background: rgb(232,211,45); color: transparent; } \n \
-span.CostOtherType1 { width: 13px; display: inline-block; background: rgb(231,223,50); color: transparent; } \n \
-span.CostOtherType0 { width: 13px; display: inline-block; background: rgb(236,233,89); color: transparent; }  \n \
+const std::string StmtToViz::movementCostCSS = "\n \
+span.CostMovement19 { width: 13px; display: inline-block; background: rgb(130,31,27); color: transparent; } \n \
+span.CostMovement18 { width: 13px; display: inline-block; background: rgb(145,33,30); color: transparent; } \n \
+span.CostMovement17 { width: 13px; display: inline-block; background: rgb(160,33,32); color: transparent; } \n \
+span.CostMovement16 { width: 13px; display: inline-block; background: rgb(176,34,34); color: transparent; } \n \
+span.CostMovement15 { width: 13px; display: inline-block; background: rgb(185,47,32); color: transparent; } \n \
+span.CostMovement14 { width: 13px; display: inline-block; background: rgb(193,59,30); color: transparent; } \n \
+span.CostMovement13 { width: 13px; display: inline-block; background: rgb(202,71,27); color: transparent; } \n \
+span.CostMovement12 { width: 13px; display: inline-block; background: rgb(210,82,22); color: transparent; } \n \
+span.CostMovement11 { width: 13px; display: inline-block; background: rgb(218,93,16); color: transparent; } \n \
+span.CostMovement10 { width: 13px; display: inline-block; background: rgb(226,104,6); color: transparent; } \n \
+span.CostMovement9 { width: 13px; display: inline-block; background: rgb(229,118,9); color: transparent; } \n \
+span.CostMovement8 { width: 13px; display: inline-block; background: rgb(230,132,15); color: transparent; } \n \
+span.CostMovement7 { width: 13px; display: inline-block; background: rgb(231,146,20); color: transparent; } \n \
+span.CostMovement6 { width: 13px; display: inline-block; background: rgb(232,159,25); color: transparent; } \n \
+span.CostMovement5 { width: 13px; display: inline-block; background: rgb(233,172,30); color: transparent; } \n \
+span.CostMovement4 { width: 13px; display: inline-block; background: rgb(233,185,35); color: transparent; } \n \
+span.CostMovement3 { width: 13px; display: inline-block; background: rgb(233,198,40); color: transparent; } \n \
+span.CostMovement2 { width: 13px; display: inline-block; background: rgb(232,211,45); color: transparent; } \n \
+span.CostMovement1 { width: 13px; display: inline-block; background: rgb(231,223,50); color: transparent; } \n \
+span.CostMovement0 { width: 13px; display: inline-block; background: rgb(236,233,89); color: transparent; }  \n \
+";
+
+const std::string StmtToViz::formCSS = "\n \
+form { \n \
+    outline: solid 1px black; \n \
+    padding: 10px; \n \
+    font-size: 14px; \n \
+    font-weight: bold; \n \
+    position: fixed; \n \
+    width: 100%; \n \
+    background: white; \n \
+    left: 2px; \n \
+    top: 1px; \n \
+    z-index: 999;\n \
+} \n \
+";
+
+const std::string StmtToViz::formHTML = "\n \
+<form> \n \
+    <input type='checkbox' id='showAsserts' \n \
+        onclick='showAssertsClicked(this);' checked> \n \
+    <label for='showAsserts'> Show assert statements (not implemented \n \
+        yet)</label><br> \n \
+    <input type='checkbox' id='showMemAlloc' \n \
+        onclick='showMemAllocClicked(this);' checked> \n \
+    <label for='showMemAlloc'> Show memory allocation / \n \
+        de-allocation (not implemented yet)</label><br> \n \
+    <input type='checkbox' id='showCompute' \n \
+        onclick='showComputeClicked(this);' checked> \n \
+    <label for='showCompute'> Show compute (not implemented yet)</label><br> \n \
+</form> \n \
+<div style='height: 80px;'></div> \n \
 ";
 
 const std::string StmtToViz::js = "\n \

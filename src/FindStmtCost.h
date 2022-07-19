@@ -15,12 +15,15 @@ using namespace std;
 
 #define DEPTH_COST 3
 #define NUMBER_COST_COLORS 20
+#define LOAD_COST 2
+#define STORE_COST 3
 
 #define m_assert(expr, msg) assert((void(msg), (expr)))
 
 struct StmtCost {
-    int cost;   // per line
-    int depth;  // per nested loop
+    int depth;               // per nested loop
+    int computation_cost;    // per line
+    int data_movement_cost;  // per line
 
     // add other costs later, like integer-ALU cost, float-ALU cost, memory cost, etc.
 };
@@ -50,13 +53,14 @@ public:
     FindStmtCost() = default;
     ~FindStmtCost() = default;
 
-    // returns the range of node based on its
-    int get_range(const IRNode *op) const;
+    // returns the range of node based on its cost
+    int get_computation_range(const IRNode *op) const;
+    int get_data_movement_range(const IRNode *op) const;
 
-    // calculates the total cost of a stmt
-    int get_total_cost(const IRNode *node) const;
-
+    // calculates the total costs of a stmt
     int get_depth(const IRNode *node) const;
+    int get_computation_cost(const IRNode *node) const;
+    int get_data_movement_cost(const IRNode *node) const;
 
     void generate_costs(const Module &m);
     void generate_costs(const Stmt &stmt);
@@ -78,7 +82,7 @@ private:
     int get_cost(const IRNode *node) const;
 
     // sets cost & depth in `stmt_cost` map
-    void set_cost(const IRNode *node, int cost);
+    void set_costs(const IRNode *node, int computation_cost, int data_movement_cost);
 
     // calculates cost of a signle StmtCost object
     int calculate_cost(StmtCost cost_node) const;
