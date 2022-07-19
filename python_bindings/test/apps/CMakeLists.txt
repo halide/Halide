@@ -6,7 +6,7 @@ set(SCRIPTS
     local_laplacian.py)
 
 set(TEST_ENV
-    "PYTHONPATH=$<SHELL_PATH:$<TARGET_FILE_DIR:Halide::Python>>"
+    "PYTHONPATH=$<SHELL_PATH:$<TARGET_FILE_DIR:Halide::Python>/..>"
     "HL_TARGET=${Halide_TARGET}"
     "TEST_TMPDIR=$<SHELL_PATH:${CMAKE_CURRENT_BINARY_DIR}>"
     "TEST_IMAGES_DIR=$<SHELL_PATH:${CMAKE_CURRENT_SOURCE_DIR}/../../../apps/images>"

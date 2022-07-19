@@ -30,7 +30,7 @@ set(TESTS
 make_shell_path(PYTHONPATH
                 "$<TARGET_FILE_DIR:py_aot_bit>"
                 "$<TARGET_FILE_DIR:py_stub_bit>"
-                "$<TARGET_FILE_DIR:Halide::Python>"
+                "$<TARGET_FILE_DIR:Halide::Python>/.."
                 )
 
 foreach (TEST IN LISTS TESTS)

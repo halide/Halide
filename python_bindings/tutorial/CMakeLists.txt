@@ -16,7 +16,7 @@ set(TESTS
     lesson_14_types.py
     )
 
-make_shell_path(PYTHONPATH "$<TARGET_FILE_DIR:lesson_10_halide>" "$<TARGET_FILE_DIR:Halide::Python>")
+make_shell_path(PYTHONPATH "$<TARGET_FILE_DIR:lesson_10_halide>" "$<TARGET_FILE_DIR:Halide::Python>/..")
 
 foreach (TEST IN LISTS TESTS)
     get_filename_component(TEST_NAME ${TEST} NAME_WE)
