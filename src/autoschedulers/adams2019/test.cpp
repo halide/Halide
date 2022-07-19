@@ -15,18 +15,21 @@ void set_env_variable(const std::string &name, const std::string &value, int ove
 }
 
 bool test_caching(Pipeline &p1, Pipeline &p2, const Target &target) {
+    constexpr int parallelism = 32;
+#ifdef HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
+    MachineParams params(parallelism, 16000000, 40);
+
     static const std::string seed_value = Internal::get_env_variable("HL_SEED");
     if (seed_value.empty()) {
         // If HL_SEED is not set, then set seed for both autoscheduling executions.
         int seed = (int)time(nullptr);
         set_env_variable("HL_SEED", std::to_string(seed), /* overwrite */ 0);
     }
-
-    constexpr int parallelism = 32;
-#ifdef HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
-    MachineParams params(parallelism, 16000000, 40);
 #else
-    AutoschedulerParams params = {"Adams2019", {{"parallelism", std::to_string(parallelism)}}};
+    AutoschedulerParams params;
+    params.name = "Adams2019";
+    params.parallelism = parallelism;
+    params.random_dropout_seed = time(nullptr);
 #endif
 
     // Turn off caching.
@@ -47,11 +50,13 @@ bool test_caching(Pipeline &p1, Pipeline &p2, const Target &target) {
     auto results_with_caching = p2.apply_autoscheduler(target, params);
 #endif
 
+#ifdef HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
     // Reset environment variables to what they were before (memoization variables are reset in main).
     if (seed_value.empty()) {
         // Re-empty seed.
         set_env_variable("HL_SEED", "", /* overwrite */ 1);
     }
+#endif
 
     // Compare calculated features.
     if (results_without_caching.featurization.size() != results_with_caching.featurization.size()) {

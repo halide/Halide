@@ -20,29 +20,8 @@
 
   Environment variables used (directly or indirectly):
 
-  HL_BEAM_SIZE
-  Beam size to use in the beam search. Defaults to 32. Use 1 to get a greedy search instead.
-
-  HL_CYOS
-  "Choose-your-own-schedule". If set to 1, lets you navigate the search tree by hand in the terminal. Whee! This is for debugging the autoscheduler.
-
-  HL_FEATURE_FILE -> output
-  *** DEPRECATED *** use the 'featurization' output from Generator instead
-  Write out a training featurization for the selected schedule into this file.
-  Needs to be converted to a sample file with the runtime using featurization_to_sample before it can be used to train.
-
   HL_PERMIT_FAILED_UNROLL
   Set to 1 to tell Halide not to freak out if we try to unroll a loop that doesn't have a constant extent. Should generally not be necessary, but sometimes the autoscheduler's model for what will and will not turn into a constant during lowering is inaccurate, because Halide isn't perfect at constant-folding.
-
-  HL_SCHEDULE_FILE
-    *** DEPRECATED *** use the 'schedule' output from Generator instead
-    Write out a human-and-machine readable block of scheduling source code for the selected schedule into this file.
-
-  HL_RANDOM_DROPOUT
-  percent chance of accepting each state in the beam. Normalized by the number of decisions made, so 5 would be there's a 5 percent chance of never rejecting any states.
-
-  HL_SEED
-  Random seed used by the random dropout.
 
   HL_WEIGHTS_DIR
   When training or schedule, read weights from this directory or file
@@ -156,28 +135,54 @@ private:
     const bool draw_progress_bar = isatty(2) && aslog::aslog_level() >= ProgressBarLogLevel;
 };
 
-// Get the HL_RANDOM_DROPOUT environment variable. Purpose of this is described above.
-uint32_t get_dropout_threshold() {
-    string random_dropout_str = get_env_variable("HL_RANDOM_DROPOUT");
-    if (!random_dropout_str.empty()) {
-        return atoi(random_dropout_str.c_str());
-    } else {
-        return 100;
-    }
+int get_beam_size(const Adams2019Params &params) {
+#ifdef HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
+    static int cached_beam_size = ([]() -> int {
+        auto s = get_env_variable("HL_BEAM_SIZE");
+        return !s.empty() ? atoi(s.c_str()) : 32;
+    })();
+    return cached_beam_size;
+#else
+    return params.beam_size;
+#endif
+}
+
+int get_random_dropout(const Adams2019Params &params) {
+#ifdef HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
+    static int cached_random_dropout = ([]() -> int {
+        auto s = get_env_variable("HL_RANDOM_DROPOUT");
+        return !s.empty() ? atoi(s.c_str()) : 100;
+    })();
+    return cached_random_dropout;
+#else
+    return params.random_dropout;
+#endif
+}
+
+int get_random_dropout_seed(const Adams2019Params &params) {
+#ifdef HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
+    static int cached_random_dropout_seed = ([]() -> int {
+        auto s = get_env_variable("HL_SEED");
+        return !s.empty() ? atoi(s.c_str()) : (int)time(nullptr);
+    })();
+    return cached_random_dropout_seed;
+#else
+    return params.random_dropout_seed;
+#endif
 }
 
 // Decide whether or not to drop a beam search state. Used for
 // randomly exploring the search tree for autotuning and to generate
 // training data.
-bool random_dropout(std::mt19937 &rng, size_t num_decisions) {
-    static double random_dropout_threshold = get_dropout_threshold();
-    if (random_dropout_threshold >= 100) {
+bool random_dropout(const Adams2019Params &params, std::mt19937 &rng, size_t num_decisions) {
+    const int random_dropout = get_random_dropout(params);
+    if (random_dropout >= 100) {
         return false;
     }
 
     // The random dropout threshold is the chance that we operate
     // entirely greedily and never discard anything.
-    double t = random_dropout_threshold;
+    double t = random_dropout;
     t /= 100;
     t = std::pow(t, 1.0f / num_decisions);
     t *= 100;
@@ -305,7 +310,9 @@ IntrusivePtr<State> optimal_schedule_pass(FunctionDAG &dag,
             q.emplace(std::move(s));
         };
 
+#ifdef HALIDE_AUTOSCHEDULER_ALLOW_CYOS
     string cyos_str = get_env_variable("HL_CYOS");
+#endif
 
     // This loop is beam search over the sequence of decisions to make.
     for (int i = 0;; i++) {
@@ -381,7 +388,7 @@ IntrusivePtr<State> optimal_schedule_pass(FunctionDAG &dag,
             }
 
             // Random dropout
-            if (pending.size() > 1 && random_dropout(rng, dag.nodes.size() * 2)) {
+            if (pending.size() > 1 && random_dropout(params, rng, dag.nodes.size() * 2)) {
                 continue;
             }
 
@@ -429,6 +436,7 @@ IntrusivePtr<State> optimal_schedule_pass(FunctionDAG &dag,
             q.resort();
         }
 
+#ifdef HALIDE_AUTOSCHEDULER_ALLOW_CYOS
         if (cyos_str == "1") {
             // The user has set HL_CYOS, and wants to navigate the
             // search space manually.  Discard everything in the queue
@@ -456,6 +464,7 @@ IntrusivePtr<State> optimal_schedule_pass(FunctionDAG &dag,
             q.clear();
             q.emplace(std::move(selected));
         }
+#endif
     }
 }
 
@@ -465,7 +474,6 @@ IntrusivePtr<State> optimal_schedule(FunctionDAG &dag,
                                      const Adams2019Params &params,
                                      CostModel *cost_model,
                                      std::mt19937 &rng,
-                                     int beam_size,
                                      int64_t memory_limit,
                                      const CachingOptions &options) {
 
@@ -477,14 +485,17 @@ IntrusivePtr<State> optimal_schedule(FunctionDAG &dag,
     Cache cache(options, dag.nodes.size());
 
     // If the beam size is one, it's pointless doing multiple passes.
+    const int beam_size = get_beam_size(params);
     int num_passes = (beam_size == 1) ? 1 : 5;
 
+#ifdef HALIDE_AUTOSCHEDULER_ALLOW_CYOS
     string cyos_str = get_env_variable("HL_CYOS");
     if (cyos_str == "1") {
         // If the user is manually navigating the search space, don't
         // ask them to do more than one pass.
         num_passes = 1;
     }
+#endif
 
     string num_passes_str = get_env_variable("HL_NUM_PASSES");
     if (!num_passes_str.empty()) {
@@ -551,22 +562,10 @@ void generate_schedule(const std::vector<Function> &outputs,
     State::cost_calculations = 0;
 
     // Get the seed for random dropout
-    string seed_str = get_env_variable("HL_SEED");
-    // Or use the time, if not set.
-    int seed = (int)time(nullptr);
-    if (!seed_str.empty()) {
-        seed = atoi(seed_str.c_str());
-    }
+    int seed = get_random_dropout_seed(params);
+
     aslog(2) << "Dropout seed = " << seed << "\n";
     std::mt19937 rng((uint32_t)seed);
-
-    // Get the beam size
-    string beam_size_str = get_env_variable("HL_BEAM_SIZE");
-    // Defaults to 32
-    size_t beam_size = 32;
-    if (!beam_size_str.empty()) {
-        beam_size = atoi(beam_size_str.c_str());
-    }
 
     string weights_in_path = get_env_variable("HL_WEIGHTS_DIR");
     string weights_out_path;  // deliberately empty
@@ -595,7 +594,7 @@ void generate_schedule(const std::vector<Function> &outputs,
     CachingOptions cache_options = CachingOptions::MakeOptionsFromEnviron();
 
     // Run beam search
-    optimal = optimal_schedule(dag, outputs, params, cost_model.get(), rng, beam_size, memory_limit, cache_options);
+    optimal = optimal_schedule(dag, outputs, params, cost_model.get(), rng, memory_limit, cache_options);
 
     HALIDE_TOC;
 
@@ -613,29 +612,6 @@ void generate_schedule(const std::vector<Function> &outputs,
     // Print out the schedule
     if (aslog::aslog_level() >= 2) {
         optimal->dump(aslog(2).get_ostream());
-    }
-
-    string schedule_file = get_env_variable("HL_SCHEDULE_FILE");
-    if (!schedule_file.empty()) {
-        user_warning << "HL_SCHEDULE_FILE is deprecated; use the schedule output from Generator instead\n";
-        aslog(1) << "Writing schedule to " << schedule_file << "...\n";
-        std::ofstream f(schedule_file);
-        f << "// --- BEGIN machine-generated schedule\n"
-          << optimal->schedule_source
-          << "// --- END machine-generated schedule\n";
-        f.close();
-        internal_assert(!f.fail()) << "Failed to write " << schedule_file;
-    }
-
-    // Save the featurization, so that we can use this schedule as
-    // training data (once we've benchmarked it).
-    string feature_file = get_env_variable("HL_FEATURE_FILE");
-    if (!feature_file.empty()) {
-        user_warning << "HL_FEATURE_FILE is deprecated; use the featurization output from Generator instead\n";
-        std::ofstream binfile(feature_file, std::ios::binary | std::ios_base::trunc);
-        optimal->save_featurization(dag, params, cache_options, binfile);
-        binfile.close();
-        internal_assert(!binfile.fail()) << "Failed to write " << feature_file;
     }
 
     if (auto_scheduler_results) {
@@ -675,6 +651,13 @@ struct Adams2019 {
         {
             ParamParser parser(params_in.extra);
             parser.parse("parallelism", &params.parallelism);
+#ifdef HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
+            // nothing
+#else
+            parser.parse("beam_size", &params.beam_size);
+            parser.parse("random_dropout", &params.random_dropout);
+            parser.parse("random_dropout_seed", &params.random_dropout_seed);
+#endif
             parser.finish();
         }
         Autoscheduler::generate_schedule(outputs, target, params, results);
@@ -690,13 +673,12 @@ void find_and_apply_schedule(FunctionDAG &dag,
                              const std::vector<Function> &outputs,
                              const Adams2019Params &params,
                              CostModel *cost_model,
-                             int beam_size,
                              int64_t memory_limit,
                              StageMap<ScheduleFeatures> *schedule_features) {
 
     std::mt19937 rng(12345);
     CachingOptions cache_options = CachingOptions::MakeOptionsFromEnviron();
-    IntrusivePtr<State> optimal = optimal_schedule(dag, outputs, params, cost_model, rng, beam_size, memory_limit, cache_options);
+    IntrusivePtr<State> optimal = optimal_schedule(dag, outputs, params, cost_model, rng, memory_limit, cache_options);
 
     // Apply the schedules
     optimal->apply_schedule(dag, params);

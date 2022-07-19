@@ -19,6 +19,23 @@ typedef PerfectHashMap<FunctionDAG::Node::Stage, ScheduleFeatures> StageMapOfSch
 struct Adams2019Params {
     /** Maximum level of parallelism available. */
     int parallelism = 16;
+
+#ifdef HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
+    // nothing
+#else
+    /** Beam size to use in the beam search. Defaults to 32. Use 1 to get a greedy search instead.
+     * Formerly HL_BEAM_SIZE */
+    int beam_size = 32;
+
+    /** percent chance of accepting each state in the beam.
+     * Normalized by the number of decisions made, so 5 would be there's a 5 percent chance of never rejecting any states.
+     * Formerly HL_RANDOM_DROPOUT */
+    int random_dropout = 100;
+
+    /** Random seed used by the random dropout. If 0, use time().
+     * Formerly HL_SEED */
+    int random_dropout_seed = 0;
+#endif
 };
 
 }  // namespace Autoscheduler

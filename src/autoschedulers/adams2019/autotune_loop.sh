@@ -103,10 +103,7 @@ make_featurization() {
         dropout=1  # 1% chance of operating entirely greedily
         beam=1
     fi
-    HL_SEED=${SEED} \
-        HL_WEIGHTS_DIR=${WEIGHTS} \
-        HL_RANDOM_DROPOUT=${dropout} \
-        HL_BEAM_SIZE=${beam} \
+    HL_WEIGHTS_DIR=${WEIGHTS} \
         ${TIMEOUT_CMD} -k ${COMPILATION_TIMEOUT} ${COMPILATION_TIMEOUT} \
         ${GENERATOR} \
         -g ${PIPELINE} \
@@ -118,6 +115,9 @@ make_featurization() {
         -p ${AUTOSCHED_BIN}/libautoschedule_adams2019.${SHARED_EXT} \
         autoscheduler=Adams2019 \
         autoscheduler.parallelism=32 \
+        autoscheduler.beam_size=${beam} \
+        autoscheduler.random_dropout=${dropout} \
+        autoscheduler.random_dropout_seed=${SEED} \
             2> ${D}/compile_log.txt || echo "Compilation failed or timed out for ${D}"
 
 
