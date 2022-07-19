@@ -82,7 +82,7 @@ class ExprCost : public IRVisitor {
 
     void visit(const Reinterpret *op) override {
         op->value.accept(this);
-        arith += 1;
+        // `Reinterpret` is a no-op and does *not* incur any cost.
     }
 
     template<typename T>
