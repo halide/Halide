@@ -5,3 +5,6 @@ target_link_libraries(Halide_Plugin INTERFACE Halide::Halide)
 
 add_library(ASLog STATIC ASLog.cpp)
 target_include_directories(ASLog PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>)
+
+add_library(Parse STATIC Parse.cpp)
+target_include_directories(Parse PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>)
