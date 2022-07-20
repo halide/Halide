@@ -87,6 +87,9 @@ private:
     // calculates cost of a signle StmtCost object
     int calculate_cost(StmtCost cost_node) const;
 
+    // gets scaling factor for Load/Store based on lanes and bits
+    int get_scaling_factor(uint8_t bits, uint16_t lanes) const;
+
     void print_map(unordered_map<const IRNode *, StmtCost> const &m);
 
     Expr visit(const IntImm *op) override;

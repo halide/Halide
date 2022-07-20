@@ -181,6 +181,18 @@ int FindStmtCost::calculate_cost(StmtCost cost_node) const {
     return cost + DEPTH_COST * depth;
 }
 
+int FindStmtCost::get_scaling_factor(uint8_t bits, uint16_t lanes) const {
+    int bitsFactor = bits / 8;
+    int lanesFactor = lanes / 8;
+    if (bitsFactor == 0) {
+        bitsFactor = 1;
+    }
+    if (lanesFactor == 0) {
+        lanesFactor = 1;
+    }
+    return bitsFactor * lanesFactor;
+}
+
 void FindStmtCost::print_map(unordered_map<const IRNode *, StmtCost> const &m) {
     for (auto const &pair : m) {
         cout << "{" << pair.first << ": " << pair.second.computation_cost << "}\n";
@@ -224,7 +236,8 @@ Expr FindStmtCost::visit(const Add *op) {
     mutate(op->a);
     mutate(op->b);
     int tempVal = get_cost(op->a.get()) + get_cost(op->b.get());
-    int dataMovementCost = get_data_movement_cost(op->a.get()) + get_data_movement_cost(op->b.get());
+    int dataMovementCost =
+        get_data_movement_cost(op->a.get()) + get_data_movement_cost(op->b.get());
     set_costs(op, 1 + tempVal, dataMovementCost);
     return op;
 }
@@ -233,7 +246,8 @@ Expr FindStmtCost::visit(const Sub *op) {
     mutate(op->a);
     mutate(op->b);
     int tempVal = get_cost(op->a.get()) + get_cost(op->b.get());
-    int dataMovementCost = get_data_movement_cost(op->a.get()) + get_data_movement_cost(op->b.get());
+    int dataMovementCost =
+        get_data_movement_cost(op->a.get()) + get_data_movement_cost(op->b.get());
     set_costs(op, 1 + tempVal, dataMovementCost);
     return op;
 }
@@ -242,7 +256,8 @@ Expr FindStmtCost::visit(const Mul *op) {
     mutate(op->a);
     mutate(op->b);
     int tempVal = get_cost(op->a.get()) + get_cost(op->b.get());
-    int dataMovementCost = get_data_movement_cost(op->a.get()) + get_data_movement_cost(op->b.get());
+    int dataMovementCost =
+        get_data_movement_cost(op->a.get()) + get_data_movement_cost(op->b.get());
     set_costs(op, 1 + tempVal, dataMovementCost);
     return op;
 }
@@ -251,7 +266,8 @@ Expr FindStmtCost::visit(const Div *op) {
     mutate(op->a);
     mutate(op->b);
     int tempVal = get_cost(op->a.get()) + get_cost(op->b.get());
-    int dataMovementCost = get_data_movement_cost(op->a.get()) + get_data_movement_cost(op->b.get());
+    int dataMovementCost =
+        get_data_movement_cost(op->a.get()) + get_data_movement_cost(op->b.get());
     set_costs(op, 1 + tempVal, dataMovementCost);
     return op;
 }
@@ -260,7 +276,8 @@ Expr FindStmtCost::visit(const Mod *op) {
     mutate(op->a);
     mutate(op->b);
     int tempVal = get_cost(op->a.get()) + get_cost(op->b.get());
-    int dataMovementCost = get_data_movement_cost(op->a.get()) + get_data_movement_cost(op->b.get());
+    int dataMovementCost =
+        get_data_movement_cost(op->a.get()) + get_data_movement_cost(op->b.get());
     set_costs(op, 1 + tempVal, dataMovementCost);
     return op;
 }
@@ -269,7 +286,8 @@ Expr FindStmtCost::visit(const Min *op) {
     mutate(op->a);
     mutate(op->b);
     int tempVal = get_cost(op->a.get()) + get_cost(op->b.get());
-    int dataMovementCost = get_data_movement_cost(op->a.get()) + get_data_movement_cost(op->b.get());
+    int dataMovementCost =
+        get_data_movement_cost(op->a.get()) + get_data_movement_cost(op->b.get());
     set_costs(op, 1 + tempVal, dataMovementCost);
     return op;
 }
@@ -278,7 +296,8 @@ Expr FindStmtCost::visit(const Max *op) {
     mutate(op->a);
     mutate(op->b);
     int tempVal = get_cost(op->a.get()) + get_cost(op->b.get());
-    int dataMovementCost = get_data_movement_cost(op->a.get()) + get_data_movement_cost(op->b.get());
+    int dataMovementCost =
+        get_data_movement_cost(op->a.get()) + get_data_movement_cost(op->b.get());
     set_costs(op, 1 + tempVal, dataMovementCost);
     return op;
 }
@@ -287,7 +306,8 @@ Expr FindStmtCost::visit(const EQ *op) {
     mutate(op->a);
     mutate(op->b);
     int tempVal = get_cost(op->a.get()) + get_cost(op->b.get());
-    int dataMovementCost = get_data_movement_cost(op->a.get()) + get_data_movement_cost(op->b.get());
+    int dataMovementCost =
+        get_data_movement_cost(op->a.get()) + get_data_movement_cost(op->b.get());
     set_costs(op, 1 + tempVal, dataMovementCost);
     return op;
 }
@@ -296,7 +316,8 @@ Expr FindStmtCost::visit(const NE *op) {
     mutate(op->a);
     mutate(op->b);
     int tempVal = get_cost(op->a.get()) + get_cost(op->b.get());
-    int dataMovementCost = get_data_movement_cost(op->a.get()) + get_data_movement_cost(op->b.get());
+    int dataMovementCost =
+        get_data_movement_cost(op->a.get()) + get_data_movement_cost(op->b.get());
     set_costs(op, 1 + tempVal, dataMovementCost);
     return op;
 }
@@ -305,7 +326,8 @@ Expr FindStmtCost::visit(const LT *op) {
     mutate(op->a);
     mutate(op->b);
     int tempVal = get_cost(op->a.get()) + get_cost(op->b.get());
-    int dataMovementCost = get_data_movement_cost(op->a.get()) + get_data_movement_cost(op->b.get());
+    int dataMovementCost =
+        get_data_movement_cost(op->a.get()) + get_data_movement_cost(op->b.get());
     set_costs(op, 1 + tempVal, dataMovementCost);
     return op;
 }
@@ -314,7 +336,8 @@ Expr FindStmtCost::visit(const LE *op) {
     mutate(op->a);
     mutate(op->b);
     int tempVal = get_cost(op->a.get()) + get_cost(op->b.get());
-    int dataMovementCost = get_data_movement_cost(op->a.get()) + get_data_movement_cost(op->b.get());
+    int dataMovementCost =
+        get_data_movement_cost(op->a.get()) + get_data_movement_cost(op->b.get());
     set_costs(op, 1 + tempVal, dataMovementCost);
     return op;
 }
@@ -323,7 +346,8 @@ Expr FindStmtCost::visit(const GT *op) {
     mutate(op->a);
     mutate(op->b);
     int tempVal = get_cost(op->a.get()) + get_cost(op->b.get());
-    int dataMovementCost = get_data_movement_cost(op->a.get()) + get_data_movement_cost(op->b.get());
+    int dataMovementCost =
+        get_data_movement_cost(op->a.get()) + get_data_movement_cost(op->b.get());
     set_costs(op, 1 + tempVal, dataMovementCost);
     return op;
 }
@@ -332,7 +356,8 @@ Expr FindStmtCost::visit(const GE *op) {
     mutate(op->a);
     mutate(op->b);
     int tempVal = get_cost(op->a.get()) + get_cost(op->b.get());
-    int dataMovementCost = get_data_movement_cost(op->a.get()) + get_data_movement_cost(op->b.get());
+    int dataMovementCost =
+        get_data_movement_cost(op->a.get()) + get_data_movement_cost(op->b.get());
     set_costs(op, 1 + tempVal, dataMovementCost);
     return op;
 }
@@ -341,7 +366,8 @@ Expr FindStmtCost::visit(const And *op) {
     mutate(op->a);
     mutate(op->b);
     int tempVal = get_cost(op->a.get()) + get_cost(op->b.get());
-    int dataMovementCost = get_data_movement_cost(op->a.get()) + get_data_movement_cost(op->b.get());
+    int dataMovementCost =
+        get_data_movement_cost(op->a.get()) + get_data_movement_cost(op->b.get());
     set_costs(op, 1 + tempVal, dataMovementCost);
     return op;
 }
@@ -350,7 +376,8 @@ Expr FindStmtCost::visit(const Or *op) {
     mutate(op->a);
     mutate(op->b);
     int tempVal = get_cost(op->a.get()) + get_cost(op->b.get());
-    int dataMovementCost = get_data_movement_cost(op->a.get()) + get_data_movement_cost(op->b.get());
+    int dataMovementCost =
+        get_data_movement_cost(op->a.get()) + get_data_movement_cost(op->b.get());
     set_costs(op, 1 + tempVal, dataMovementCost);
     return op;
 }
@@ -369,18 +396,27 @@ Expr FindStmtCost::visit(const Select *op) {
     mutate(op->true_value);
     mutate(op->false_value);
 
-    int tempVal = get_cost(op->condition.get()) + get_cost(op->true_value.get()) + get_cost(op->false_value.get());
-    int dataMovementCost = get_data_movement_cost(op->condition.get()) + get_data_movement_cost(op->true_value.get()) + get_data_movement_cost(op->false_value.get());
+    int tempVal = get_cost(op->condition.get()) + get_cost(op->true_value.get()) +
+                  get_cost(op->false_value.get());
+    int dataMovementCost = get_data_movement_cost(op->condition.get()) +
+                           get_data_movement_cost(op->true_value.get()) +
+                           get_data_movement_cost(op->false_value.get());
     set_costs(op, 1 + tempVal, dataMovementCost);
     return op;
 }
 
 Expr FindStmtCost::visit(const Load *op) {
+    uint8_t bits = op->type.bits();
+    uint16_t lanes = op->type.lanes();
+    int scalingFactor = get_scaling_factor(bits, lanes);
+
     mutate(op->predicate);
     mutate(op->index);
     int tempVal = get_cost(op->predicate.get()) + get_cost(op->index.get());
-    int dataMovementCost = get_data_movement_cost(op->predicate.get()) + get_data_movement_cost(op->index.get());
+    int dataMovementCost =
+        get_data_movement_cost(op->predicate.get()) + get_data_movement_cost(op->index.get());
     dataMovementCost += LOAD_COST;
+    dataMovementCost *= scalingFactor;
     set_costs(op, 1 + tempVal, dataMovementCost);
     return op;
 }
@@ -389,7 +425,8 @@ Expr FindStmtCost::visit(const Ramp *op) {
     mutate(op->base);
     mutate(op->stride);
     int tempVal = get_cost(op->base.get()) + get_cost(op->stride.get());
-    int dataMovementCost = get_data_movement_cost(op->base.get()) + get_data_movement_cost(op->stride.get());
+    int dataMovementCost =
+        get_data_movement_cost(op->base.get()) + get_data_movement_cost(op->stride.get());
     set_costs(op, 1 + tempVal, dataMovementCost);
     return op;
 }
@@ -403,6 +440,14 @@ Expr FindStmtCost::visit(const Broadcast *op) {
 }
 
 Expr FindStmtCost::visit(const Call *op) {
+    /*
+        TODO: take into account this message from Maaz:
+
+                > there are instructions in Halide IR that are not compute instructions but
+                  data-movement instructions. Such as Shuffle::interleave or Shuffle::concatenate. I
+                  would ignore this for now but you should know about them.
+
+    */
     int tempVal = 0;
     int dataMovementCost = 0;
     for (const auto &arg : op->args) {
@@ -432,7 +477,8 @@ Expr FindStmtCost::visit(const Let *op) {
     mutate(op->value);
     mutate(op->body);
     int tempVal = get_cost(op->value.get()) + get_cost(op->body.get());
-    int dataMovementCost = get_data_movement_cost(op->value.get()) + get_data_movement_cost(op->body.get());
+    int dataMovementCost =
+        get_data_movement_cost(op->value.get()) + get_data_movement_cost(op->body.get());
     set_costs(op, tempVal, dataMovementCost);
     return op;
 }
@@ -472,7 +518,8 @@ Stmt FindStmtCost::visit(const AssertStmt *op) {
     mutate(op->condition);
     mutate(op->message);
     int tempVal = get_cost(op->condition.get()) + get_cost(op->message.get());
-    int dataMovementCost = get_data_movement_cost(op->condition.get()) + get_data_movement_cost(op->message.get());
+    int dataMovementCost =
+        get_data_movement_cost(op->condition.get()) + get_data_movement_cost(op->message.get());
     set_costs(op, 1 + tempVal, dataMovementCost);
     return op;
 }
@@ -517,13 +564,14 @@ Stmt FindStmtCost::visit(const Acquire *op) {
 
                 * depends on contention (how many other accesses are there to this
                   particular semaphore?)
-                * need to have separate FindStmtCost::visitor that FindStmtCost::visits everything and es
-                  the number of times each lock is accessed, and also keep track of the depth
-                  of said lock (the deeper, the more times it will be accessed)
+                * need to have separate FindStmtCost::visitor that FindStmtCost::visits everything
+       and es the number of times each lock is accessed, and also keep track of the depth of said
+       lock (the deeper, the more times it will be accessed)
 
                 * do we need to recurse on body???
     */
-    m_assert(false, "reached Acquire! take a look at its use - visit(Acquire) is not fully implemented");
+    m_assert(false,
+             "reached Acquire! take a look at its use - visit(Acquire) is not fully implemented");
 
     stringstream name;
     name << op->semaphore;
@@ -534,8 +582,11 @@ Stmt FindStmtCost::visit(const Acquire *op) {
     mutate(op->semaphore);
     mutate(op->count);
     mutate(op->body);
-    int tempVal = get_cost(op->semaphore.get()) + get_cost(op->count.get()) + get_cost(op->body.get());
-    int dataMovementCost = get_data_movement_cost(op->semaphore.get()) + get_data_movement_cost(op->count.get()) + get_data_movement_cost(op->body.get());
+    int tempVal =
+        get_cost(op->semaphore.get()) + get_cost(op->count.get()) + get_cost(op->body.get());
+    int dataMovementCost = get_data_movement_cost(op->semaphore.get()) +
+                           get_data_movement_cost(op->count.get()) +
+                           get_data_movement_cost(op->body.get());
     set_costs(op, tempVal, dataMovementCost);
     return op;
 }
@@ -545,9 +596,18 @@ Stmt FindStmtCost::visit(const Store *op) {
     mutate(op->value);
     mutate(op->index);
 
-    int tempVal = get_cost(op->predicate.get()) + get_cost(op->value.get()) + get_cost(op->index.get());
-    int dataMovementCost = get_data_movement_cost(op->predicate.get()) + get_data_movement_cost(op->value.get()) + get_data_movement_cost(op->index.get());
+    uint8_t bits = op->value.type().bits();
+    uint16_t lanes = op->value.type().lanes();
+    int scalingFactor = get_scaling_factor(bits, lanes);
+
+    int tempVal =
+        get_cost(op->predicate.get()) + get_cost(op->value.get()) + get_cost(op->index.get());
+    int dataMovementCost = get_data_movement_cost(op->predicate.get()) +
+                           get_data_movement_cost(op->value.get()) +
+                           get_data_movement_cost(op->index.get());
     dataMovementCost += STORE_COST;
+    dataMovementCost *= scalingFactor;
+
     set_costs(op, 1 + tempVal, dataMovementCost);
     return op;
 }
@@ -622,12 +682,14 @@ Stmt FindStmtCost::visit(const Realize *op) {
         mutate(bound.min);
         mutate(bound.extent);
         tempVal += get_cost(bound.min.get()) + get_cost(bound.extent.get());
-        dataMovementCost += get_data_movement_cost(bound.min.get()) + get_data_movement_cost(bound.extent.get());
+        dataMovementCost +=
+            get_data_movement_cost(bound.min.get()) + get_data_movement_cost(bound.extent.get());
     }
     mutate(op->condition);
     mutate(op->body);
     tempVal += get_cost(op->condition.get()) + get_cost(op->body.get());
-    dataMovementCost += get_data_movement_cost(op->condition.get()) + get_data_movement_cost(op->body.get());
+    dataMovementCost +=
+        get_data_movement_cost(op->condition.get()) + get_data_movement_cost(op->body.get());
     set_costs(op, tempVal, dataMovementCost);
     return op;
 }
@@ -643,12 +705,14 @@ Stmt FindStmtCost::visit(const Prefetch *op) {
         mutate(bound.extent);
 
         tempVal += get_cost(bound.min.get()) + get_cost(bound.extent.get());
-        dataMovementCost += get_data_movement_cost(bound.min.get()) + get_data_movement_cost(bound.extent.get());
+        dataMovementCost +=
+            get_data_movement_cost(bound.min.get()) + get_data_movement_cost(bound.extent.get());
     }
     mutate(op->condition);
     mutate(op->body);
     tempVal += get_cost(op->condition.get()) + get_cost(op->body.get());
-    dataMovementCost += get_data_movement_cost(op->condition.get()) + get_data_movement_cost(op->body.get());
+    dataMovementCost +=
+        get_data_movement_cost(op->condition.get()) + get_data_movement_cost(op->body.get());
     set_costs(op, tempVal, dataMovementCost);
     return op;
 }
@@ -689,7 +753,8 @@ Stmt FindStmtCost::visit(const IfThenElse *op) {
     mutate(op->then_case);
 
     int tempVal = get_cost(op->condition.get()) + get_cost(op->then_case.get());
-    int dataMovementCost = get_data_movement_cost(op->condition.get()) + get_data_movement_cost(op->then_case.get());
+    int dataMovementCost =
+        get_data_movement_cost(op->condition.get()) + get_data_movement_cost(op->then_case.get());
     if (op->else_case.defined()) {
         mutate(op->else_case);
         tempVal += get_cost(op->else_case.get());
@@ -714,7 +779,8 @@ Stmt FindStmtCost::visit(const Atomic *op) {
                 * make it similar to acquire
                 * parallel vs vector is important
     */
-    m_assert(false, "reached Atomic! take a look at its use - visit(Atomic) is not fully implemented");
+    m_assert(false,
+             "reached Atomic! take a look at its use - visit(Atomic) is not fully implemented");
     mutate(op->body);
 
     stringstream name;
