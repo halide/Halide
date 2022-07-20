@@ -476,7 +476,7 @@ protected:
     /** Create an LLVM shuffle vectors instruction. */
     virtual llvm::Value *shuffle_vectors(llvm::Value *a, llvm::Value *b,
                                          const std::vector<int> &indices);
-    /** Shorthand for shuffling a vector with an undef vector. */
+    /** Shorthand for shuffling a single vector. */
     llvm::Value *shuffle_vectors(llvm::Value *v, const std::vector<int> &indices);
 
     /** Go looking for a vector version of a runtime function. Will

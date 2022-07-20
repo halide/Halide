@@ -998,8 +998,8 @@ llvm::Function *CodeGen_Hexagon::define_hvx_intrinsic(llvm::Function *intrin,
 Value *CodeGen_Hexagon::create_bitcast(Value *v, llvm::Type *ty) {
     if (BitCastInst *c = dyn_cast<BitCastInst>(v)) {
         return create_bitcast(c->getOperand(0), ty);
-    } else if (isa<UndefValue>(v)) {
-        return UndefValue::get(ty);
+    } else if (isa<PoisonValue>(v)) {
+        return PoisonValue::get(ty);
     } else if (v->getType() != ty) {
         v = builder->CreateBitCast(v, ty);
     }
@@ -1178,7 +1178,7 @@ Value *CodeGen_Hexagon::shuffle_vectors(Value *a, Value *b,
                 i -= a_elements;
             }
         }
-        return shuffle_vectors(b, UndefValue::get(b->getType()), shifted_indices);
+        return shuffle_vectors(b, shifted_indices);
     }
 
     // Try to rewrite shuffles that only access the elements of a.
