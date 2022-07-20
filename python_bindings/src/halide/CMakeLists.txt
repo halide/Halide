@@ -31,15 +31,6 @@ set(native_sources
     )
 list(TRANSFORM native_sources PREPEND "halide_/")
 
-set(python_sources
-    __init__.py
-    )
-
-foreach(source IN LISTS python_sources)
-    configure_file("${source}" "${source}" COPYONLY)
-endforeach()
-
-
 pybind11_add_module(Halide_Python MODULE ${native_sources})
 add_library(Halide::Python ALIAS Halide_Python)
 set_target_properties(Halide_Python
