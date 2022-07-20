@@ -1478,58 +1478,14 @@ void CodeGen_LLVM::visit(const Cast *op) {
 
 void CodeGen_LLVM::visit(const Reinterpret *op) {
     Type dst = op->type;
-    Type src = op->value.type();
     llvm::Type *llvm_dst = llvm_type_of(dst);
     value = codegen(op->value);
-    if (src.is_handle() && !dst.is_handle()) {
-        internal_assert(dst.is_uint() && dst.bits() == 64);
-
-        // Handle -> UInt64
-        llvm::DataLayout d(module.get());
-        if (d.getPointerSize() == 4) {
-            llvm::Type *intermediate = llvm_type_of(UInt(32, dst.lanes()));
-            value = builder->CreatePtrToInt(value, intermediate);
-            value = builder->CreateZExt(value, llvm_dst);
-        } else if (d.getPointerSize() == 8) {
-            value = builder->CreatePtrToInt(value, llvm_dst);
-        } else {
-            internal_error << "Pointer size is neither 4 nor 8 bytes\n";
-        }
-
-    } else if (dst.is_handle() && !src.is_handle()) {
-        internal_assert(src.is_uint() && src.bits() == 64);
-
-        // UInt64 -> Handle
-        llvm::DataLayout d(module.get());
-        if (d.getPointerSize() == 4) {
-            llvm::Type *intermediate = llvm_type_of(UInt(32, src.lanes()));
-            value = builder->CreateTrunc(value, intermediate);
-            value = builder->CreateIntToPtr(value, llvm_dst);
-        } else if (d.getPointerSize() == 8) {
-            value = builder->CreateIntToPtr(value, llvm_dst);
-        } else {
-            internal_error << "Pointer size is neither 4 nor 8 bytes\n";
-        }
-
-    } else {
-        if (src.is_scalar() && dst.is_vector()) {
-            // If the source type is a scalar, we promote it to an
-            // equivalent vector of width one before doing the
-            // bitcast, because llvm's bitcast operator doesn't
-            // want to convert between scalars and vectors.
-            value = create_broadcast(value, 1);
-        }
-        if (src.is_vector() && dst.is_scalar()) {
-            // Similarly, if we're converting from a vector to a
-            // scalar, convert to a vector of width 1 first, and
-            // then extract the first lane.
-            llvm_dst = get_vector_type(llvm_dst, 1);
-        }
-        value = builder->CreateBitCast(value, llvm_dst);
-        if (src.is_vector() && dst.is_scalar()) {
-            value = builder->CreateExtractElement(value, (uint64_t)0);
-        }
-    }
+    // Our `Reinterpret` expr directly maps to LLVM IR bitcast/ptrtoint/inttoptr
+    // instructions with no additional handling required:
+    // * bitcast between vectors and scalars is well-formed.
+    // * ptrtoint/inttoptr implicitly truncates/zero-extends the integer
+    //   to match the pointer size.
+    value = builder->CreateBitOrPointerCast(value, llvm_dst);
 }
 
 void CodeGen_LLVM::visit(const Variable *op) {
