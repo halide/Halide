@@ -2558,6 +2558,8 @@ void CodeGen_C::visit(const Call *op) {
         user_error << "Signed integer overflow occurred during constant-folding. Signed"
                       " integer overflow for int32 and int64 is undefined behavior in"
                       " Halide.\n";
+    } else if (op->is_intrinsic(Call::undef)) {
+        user_error << "undef not eliminated before code generation. Please report this as a Halide bug.\n";
     } else if (op->is_intrinsic(Call::prefetch)) {
         user_assert((op->args.size() == 4) && is_const_one(op->args[2]))
             << "Only prefetch of 1 cache line is supported in C backend.\n";
