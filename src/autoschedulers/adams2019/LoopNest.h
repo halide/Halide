@@ -32,7 +32,9 @@ using StageMap = PerfectHashMap<FunctionDAG::Node::Stage, T>;
 std::vector<std::vector<int64_t>> generate_tilings(const vector<int64_t> &s, int d, int factor, bool allow_splits);
 
 struct LoopNest {
-    explicit LoopNest(bool may_subtile) : may_subtile(may_subtile) {}
+    explicit LoopNest(bool may_subtile)
+        : may_subtile(may_subtile) {
+    }
 
     mutable RefCount ref_count;
 

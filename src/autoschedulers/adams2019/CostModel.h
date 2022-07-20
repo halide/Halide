@@ -34,7 +34,7 @@ struct Adams2019Params {
     int random_dropout_seed = 0;
 
     /** When training or schedule, read weights from this directory or file.
-    * (If path ends in `.weights` it is written as a single file, otherwise a directory of files.)
+     * (If path ends in `.weights` it is written as a single file, otherwise a directory of files.)
      * Formerly HL_WEIGHTS_DIR */
     std::string weights_path;
 
