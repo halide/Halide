@@ -392,7 +392,6 @@ void PythonExtensionGen::compile(const LoweredFunc &f) {
     return Py_True;
 )INLINE_CODE";
     dest << "}\n";
-
 }
 
 }  // namespace Internal
