@@ -181,7 +181,7 @@ build: $(BIN)/$(HL_TARGET)/test \
 	$(BIN)/retrain_cost_model \
 	$(BIN)/libautoschedule_adams2019.$(SHARED_EXT)
 
-test: run_test #test_perfect_hash_map test_function_dag demo test_included_schedule_file autotune
+test: run_test test_perfect_hash_map test_function_dag demo test_included_schedule_file autotune
 
 clean:
 	rm -rf $(BIN)
