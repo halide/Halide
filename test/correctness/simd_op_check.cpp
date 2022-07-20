@@ -1449,7 +1449,7 @@ public:
                 constexpr int simd_vector_bits = 128;
                 if (Halide::Internal::get_llvm_version() >= 150 &&
                     ((vector_width * element_width) % (simd_vector_bits * 2)) == 0 &&
-                    shift_amt == element_width/2) {
+                    shift_amt == element_width / 2) {
                     return "uzp2";
                 }
                 return "shrn";
