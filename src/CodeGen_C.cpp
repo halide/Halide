@@ -2071,6 +2071,10 @@ void CodeGen_C::visit(const Cast *op) {
     id = print_cast_expr(op->type, op->value);
 }
 
+void CodeGen_C::visit(const Reinterpret *op) {
+    id = print_assignment(op->type, print_reinterpret(op->type, op->value));
+}
+
 void CodeGen_C::visit_binop(Type t, const Expr &a, const Expr &b, const char *op) {
     string sa = print_expr(a);
     string sb = print_expr(b);
@@ -2294,9 +2298,6 @@ void CodeGen_C::visit(const Call *op) {
     } else if (op->is_intrinsic(Call::bitwise_not)) {
         internal_assert(op->args.size() == 1);
         rhs << "~" << print_expr(op->args[0]);
-    } else if (op->is_intrinsic(Call::reinterpret)) {
-        internal_assert(op->args.size() == 1);
-        rhs << print_reinterpret(op->type, op->args[0]);
     } else if (op->is_intrinsic(Call::shift_left)) {
         internal_assert(op->args.size() == 2);
         if (op->args[1].type().is_uint()) {

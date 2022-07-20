@@ -818,6 +818,11 @@ FunctionDAG::FunctionDAG(const vector<Function> &outputs, const Target &target) 
                     check_type(op->type);
                 }
 
+                void visit(const Reinterpret *op) override {
+                    IRVisitor::visit(op);
+                    check_type(op->type);
+                }
+
                 void check_type(Type t) {
                     if (t.bits() > 1 &&
                         (!narrowest_type.bits() ||

@@ -322,6 +322,15 @@ private:
         }
     }
 
+    Expr visit(const Reinterpret *op) override {
+        if (op->type.is_scalar()) {
+            return op;
+        } else {
+            Type t = op->type.with_lanes(new_lanes);
+            return Reinterpret::make(t, mutate(op->value));
+        }
+    }
+
     Expr visit(const Call *op) override {
         Type t = op->type.with_lanes(new_lanes);
 

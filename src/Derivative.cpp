@@ -55,6 +55,7 @@ protected:
     void visit(const FloatImm *) override;
     void visit(const StringImm *) override;
     void visit(const Cast *op) override;
+    void visit(const Reinterpret *op) override;
     void visit(const Variable *op) override;
     void visit(const Add *op) override;
     void visit(const Sub *op) override;
@@ -836,6 +837,14 @@ void ReverseAccumulationVisitor::visit(const Cast *op) {
     }
 }
 
+void ReverseAccumulationVisitor::visit(const Reinterpret *op) {
+    internal_assert(expr_adjoints.find(op) != expr_adjoints.end());
+    Expr adjoint = expr_adjoints[op];
+
+    // bit manipulation -- has zero derivative.
+    accumulate(op->value, make_zero(op->type));
+}
+
 void ReverseAccumulationVisitor::visit(const Variable *op) {
     internal_assert(expr_adjoints.find(op) != expr_adjoints.end());
     Expr adjoint = expr_adjoints[op];
@@ -1169,8 +1178,7 @@ void ReverseAccumulationVisitor::visit(const Call *op) {
             accumulate(op->args[1], adjoint);
         } else if (op->is_intrinsic(Call::undef)) {
             // do nothing
-        } else if (op->is_intrinsic(Call::reinterpret) ||
-                   op->is_intrinsic(Call::bitwise_and) ||
+        } else if (op->is_intrinsic(Call::bitwise_and) ||
                    op->is_intrinsic(Call::bitwise_not) ||
                    op->is_intrinsic(Call::bitwise_or) ||
                    op->is_intrinsic(Call::bitwise_xor) ||
