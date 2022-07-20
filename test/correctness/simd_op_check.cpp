@@ -1444,12 +1444,22 @@ public:
             check(arm32 ? "vshr.u64" : "ushr", 2 * w, u64_1 / 16);
 
             // VSHRN    I       -       Shift Right Narrow
-            check(arm32 ? "vshrn.i16" : "shrn", 8 * w, i8(i16_1 / 256));
-            check(arm32 ? "vshrn.i32" : "shrn", 4 * w, i16(i32_1 / 65536));
-            check(arm32 ? "vshrn.i64" : "shrn", 2 * w, i32(i64_1 >> 32));
-            check(arm32 ? "vshrn.i16" : "shrn", 8 * w, u8(u16_1 / 256));
-            check(arm32 ? "vshrn.i32" : "shrn", 4 * w, u16(u32_1 / 65536));
-            check(arm32 ? "vshrn.i64" : "shrn", 2 * w, u32(u64_1 >> 32));
+            // LLVM15 emits UZP2 if the shift amount is half the width of the vector element.
+            const auto shrn_or_uzp2 = [&](int element_width, int shift_amt, int vector_width) {
+                constexpr int simd_vector_bits = 128;
+                if (Halide::Internal::get_llvm_version() >= 150 &&
+                    ((vector_width * element_width) % (simd_vector_bits * 2)) == 0 &&
+                    shift_amt == element_width / 2) {
+                    return "uzp2";
+                }
+                return "shrn";
+            };
+            check(arm32 ? "vshrn.i16" : shrn_or_uzp2(16, 8, 8 * w), 8 * w, i8(i16_1 / 256));
+            check(arm32 ? "vshrn.i32" : shrn_or_uzp2(32, 16, 4 * w), 4 * w, i16(i32_1 / 65536));
+            check(arm32 ? "vshrn.i64" : shrn_or_uzp2(64, 32, 2 * w), 2 * w, i32(i64_1 >> 32));
+            check(arm32 ? "vshrn.i16" : shrn_or_uzp2(16, 8, 8 * w), 8 * w, u8(u16_1 / 256));
+            check(arm32 ? "vshrn.i32" : shrn_or_uzp2(32, 16, 4 * w), 4 * w, u16(u32_1 / 65536));
+            check(arm32 ? "vshrn.i64" : shrn_or_uzp2(64, 32, 2 * w), 2 * w, u32(u64_1 >> 32));
             check(arm32 ? "vshrn.i16" : "shrn", 8 * w, i8(i16_1 / 16));
             check(arm32 ? "vshrn.i32" : "shrn", 4 * w, i16(i32_1 / 16));
             check(arm32 ? "vshrn.i64" : "shrn", 2 * w, i32(i64_1 / 16));
