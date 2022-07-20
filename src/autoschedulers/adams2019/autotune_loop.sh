@@ -103,8 +103,7 @@ make_featurization() {
         dropout=1  # 1% chance of operating entirely greedily
         beam=1
     fi
-    HL_WEIGHTS_DIR=${WEIGHTS} \
-        ${TIMEOUT_CMD} -k ${COMPILATION_TIMEOUT} ${COMPILATION_TIMEOUT} \
+    ${TIMEOUT_CMD} -k ${COMPILATION_TIMEOUT} ${COMPILATION_TIMEOUT} \
         ${GENERATOR} \
         -g ${PIPELINE} \
         -f ${FNAME} \
@@ -118,6 +117,7 @@ make_featurization() {
         autoscheduler.beam_size=${beam} \
         autoscheduler.random_dropout=${dropout} \
         autoscheduler.random_dropout_seed=${SEED} \
+        autoscheduler.weights_path=${WEIGHTS} \
             2> ${D}/compile_log.txt || echo "Compilation failed or timed out for ${D}"
 
 

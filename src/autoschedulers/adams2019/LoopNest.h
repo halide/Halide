@@ -23,8 +23,6 @@ using NodeMap = PerfectHashMap<FunctionDAG::Node, T>;
 template<typename T>
 using StageMap = PerfectHashMap<FunctionDAG::Node::Stage, T>;
 
-bool may_subtile();
-
 // Given a multi-dimensional box of dimensionality d, generate a list
 // of candidate tile sizes for it, logarithmically spacing the sizes
 // using the given factor. If 'allow_splits' is false, every dimension
@@ -34,6 +32,8 @@ bool may_subtile();
 std::vector<std::vector<int64_t>> generate_tilings(const vector<int64_t> &s, int d, int factor, bool allow_splits);
 
 struct LoopNest {
+    explicit LoopNest(bool may_subtile) : may_subtile(may_subtile) {}
+
     mutable RefCount ref_count;
 
     // The extents of this loop. Put another way, the number of tiles,
@@ -60,6 +60,8 @@ struct LoopNest {
 
     // The stage of the Func
     const FunctionDAG::Node::Stage *stage = nullptr;
+
+    const bool may_subtile = false;
 
     // Is this the innermost loop of this func (the SIMD loop)?
     bool innermost = false;

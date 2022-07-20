@@ -6,10 +6,6 @@ namespace Halide {
 namespace Internal {
 namespace Autoscheduler {
 
-bool use_memoized_features() {
-    return get_env_variable("HL_DISABLE_MEMOIZED_FEATURES") != "1";
-}
-
 bool is_memoize_blocks_enabled() {
     return get_env_variable("HL_DISABLE_MEMOIZED_BLOCKS") != "1";
 }
@@ -19,8 +15,7 @@ bool Cache::add_memoized_blocks(const State *state,
                                 const FunctionDAG::Node *node, int &num_children,
                                 const FunctionDAG &dag,
                                 const Adams2019Params &params,
-                                CostModel *cost_model,
-                                int64_t memory_limit) const {
+                                CostModel *cost_model) const {
     if (!options.cache_blocks || !memoized_compute_root_blocks.contains(node)) {
         // either memoization is turned off, or we haven't cached this node yet.
         return false;
@@ -46,10 +41,12 @@ bool Cache::add_memoized_blocks(const State *state,
 
     size_t num_stages = node->stages.size();
 
+    const bool may_subtile = (params.disable_subtiling == 0);
+
     for (size_t i = 0; i < blocks.size(); i += num_stages) {
         // Construct child from memoization.
         IntrusivePtr<State> child = state->make_child();
-        LoopNest *new_root = new LoopNest;
+        LoopNest *new_root = new LoopNest(may_subtile);
         new_root->copy_from(*(state->root));
         child->root = new_root;
         child->num_decisions_made++;
@@ -64,12 +61,12 @@ bool Cache::add_memoized_blocks(const State *state,
 
         // Copy all stages into new_root.
         for (size_t j = 0; j < num_stages; j++) {
-            LoopNest *new_block = new LoopNest;
+            LoopNest *new_block = new LoopNest(may_subtile);
             new_block->copy_from_including_features(*blocks[i + j]);
             new_root->children[block_index++] = new_block;
         }
 
-        if (child->calculate_cost(dag, params, cost_model, this->options, memory_limit)) {
+        if (child->calculate_cost(dag, params, cost_model, this->options, params.memory_limit)) {
             num_children++;
             accept_child(std::move(child));
             cache_hits++;
@@ -102,9 +99,9 @@ void Cache::memoize_blocks(const FunctionDAG::Node *node, LoopNest *new_root) {
 
     for (auto &child : new_root->children) {
         if (child->node == node) {
-            LoopNest *new_block = new LoopNest;
             // Need const reference for copy.
             const LoopNest *child_ptr = child.get();
+            LoopNest *new_block = new LoopNest(child->may_subtile);
             new_block->copy_from_including_features(*child_ptr);
             blocks.emplace_back(new_block);
             cache_misses++;

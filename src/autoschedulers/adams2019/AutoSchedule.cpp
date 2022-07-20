@@ -20,33 +20,13 @@
 
   Environment variables used (directly or indirectly):
 
-  HL_PERMIT_FAILED_UNROLL
-  Set to 1 to tell Halide not to freak out if we try to unroll a loop that doesn't have a constant extent. Should generally not be necessary, but sometimes the autoscheduler's model for what will and will not turn into a constant during lowering is inaccurate, because Halide isn't perfect at constant-folding.
-
-  HL_WEIGHTS_DIR
-  When training or schedule, read weights from this directory or file
-  (if path ends in `.weights` it is written as a single file, otherwise a directory of files)
-
-  HL_NO_SUBTILING
-  If set to 1, limits the search space to that of Mullapudi et al.
-
   HL_DEBUG_AUTOSCHEDULE
   If set, is used for the debug log level for auto-schedule generation (overriding the
   value of HL_DEBUG_CODEGEN, if any).
 
-  HL_AUTOSCHEDULE_MEMORY_LIMIT
-  If set, only consider schedules that allocate at most this much memory (measured in bytes).
+  HL_PERMIT_FAILED_UNROLL
+  Set to 1 to tell Halide not to freak out if we try to unroll a loop that doesn't have a constant extent. Should generally not be necessary, but sometimes the autoscheduler's model for what will and will not turn into a constant during lowering is inaccurate, because Halide isn't perfect at constant-folding.
 
-  HL_DISABLE_MEMOIZED_FEATURES
-  If set, features of possible schedules are always recalculated, and are not cached across passes.
-  (see Cache.h for more information)
-
-  HL_DISABLE_MEMOIZED_BLOCKS
-  If set, then tiling sizes are not cached across passes.
-  (see Cache.h for more information)
-
-  TODO: expose these settings by adding some means to pass args to
-  generator plugins instead of environment vars.
 */
 #include "HalidePlugin.h"
 
@@ -135,54 +115,32 @@ private:
     const bool draw_progress_bar = isatty(2) && aslog::aslog_level() >= ProgressBarLogLevel;
 };
 
-int get_beam_size(const Adams2019Params &params) {
 #ifdef HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
-    static int cached_beam_size = ([]() -> int {
-        auto s = get_env_variable("HL_BEAM_SIZE");
-        return !s.empty() ? atoi(s.c_str()) : 32;
-    })();
-    return cached_beam_size;
-#else
-    return params.beam_size;
-#endif
+template<typename T>
+T get_scalar_env_var(const char *nm, T def = T()) {
+    auto str = get_env_variable(nm);
+    if (str.empty()) {
+        return def;
+    }
+    std::istringstream iss(str);
+    T t;
+    iss >> t;
+    user_assert(!iss.fail() && iss.get() == EOF) << "Unable to parse: " << str;
+    return t;
 }
-
-int get_random_dropout(const Adams2019Params &params) {
-#ifdef HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
-    static int cached_random_dropout = ([]() -> int {
-        auto s = get_env_variable("HL_RANDOM_DROPOUT");
-        return !s.empty() ? atoi(s.c_str()) : 100;
-    })();
-    return cached_random_dropout;
-#else
-    return params.random_dropout;
 #endif
-}
-
-int get_random_dropout_seed(const Adams2019Params &params) {
-#ifdef HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
-    static int cached_random_dropout_seed = ([]() -> int {
-        auto s = get_env_variable("HL_SEED");
-        return !s.empty() ? atoi(s.c_str()) : (int)time(nullptr);
-    })();
-    return cached_random_dropout_seed;
-#else
-    return params.random_dropout_seed;
-#endif
-}
 
 // Decide whether or not to drop a beam search state. Used for
 // randomly exploring the search tree for autotuning and to generate
 // training data.
 bool random_dropout(const Adams2019Params &params, std::mt19937 &rng, size_t num_decisions) {
-    const int random_dropout = get_random_dropout(params);
-    if (random_dropout >= 100) {
+    if (params.random_dropout >= 100) {
         return false;
     }
 
     // The random dropout threshold is the chance that we operate
     // entirely greedily and never discard anything.
-    double t = random_dropout;
+    double t = params.random_dropout;
     t /= 100;
     t = std::pow(t, 1.0f / num_decisions);
     t *= 100;
@@ -271,8 +229,6 @@ IntrusivePtr<State> optimal_schedule_pass(FunctionDAG &dag,
                                           const Adams2019Params &params,
                                           CostModel *cost_model,
                                           std::mt19937 &rng,
-                                          int beam_size,
-                                          int64_t memory_limit,
                                           int pass_idx,
                                           int num_passes,
                                           ProgressBar &tick,
@@ -288,7 +244,7 @@ IntrusivePtr<State> optimal_schedule_pass(FunctionDAG &dag,
     // The initial state, with no decisions made
     {
         IntrusivePtr<State> initial{new State};
-        initial->root = new LoopNest;
+        initial->root = new LoopNest(params.disable_subtiling == 0);
         q.emplace(std::move(initial));
     }
 
@@ -299,8 +255,8 @@ IntrusivePtr<State> optimal_schedule_pass(FunctionDAG &dag,
             // Each child should have one more decision made than its parent state.
             internal_assert(s->num_decisions_made == s->parent->num_decisions_made + 1);
 
-            int progress = s->num_decisions_made * beam_size + expanded;
-            size_t max_progress = dag.nodes.size() * beam_size * 2;
+            int progress = s->num_decisions_made * params.beam_size + expanded;
+            size_t max_progress = dag.nodes.size() * params.beam_size * 2;
 
             // Update the progress bar
             tick.set(double(progress) / max_progress);
@@ -320,37 +276,37 @@ IntrusivePtr<State> optimal_schedule_pass(FunctionDAG &dag,
         q.swap(pending);
 
         if (pending.empty()) {
-            if ((false) && beam_size < 1000) {  // Intentional dead code. Extra parens to pacify clang-tidy.
+            if ((false) && params.beam_size < 1000) {  // Intentional dead code. Extra parens to pacify clang-tidy.
                 // Total mortality. Double the beam size and
                 // restart. Disabled for now because total mortality
                 // may indicate a bug.
+                Adams2019Params params2 = params;
+                params2.beam_size *= 2;
                 return optimal_schedule_pass(dag,
                                              outputs,
-                                             params,
+                                             params2,
                                              cost_model,
                                              rng,
-                                             beam_size * 2,
-                                             memory_limit,
                                              pass_idx,
                                              num_passes,
                                              tick,
                                              permitted_hashes,
                                              cache);
             } else {
-                internal_error << "Ran out of legal states with beam size " << beam_size << "\n";
+                internal_error << "Ran out of legal states with beam size " << params.beam_size << "\n";
             }
         }
 
-        if ((int)pending.size() > beam_size * 10000) {
+        if ((int)pending.size() > params.beam_size * 10000) {
             aslog(1) << "*** Warning: Huge number of states generated (" << pending.size() << ").\n";
         }
 
         expanded = 0;
-        while (expanded < beam_size && !pending.empty()) {
+        while (expanded < params.beam_size && !pending.empty()) {
 
             IntrusivePtr<State> state{pending.pop()};
 
-            if (beam_size > 1 && num_passes > 1) {
+            if (params.beam_size > 1 && num_passes > 1) {
                 // We are doing coarse-to-fine beam search using the
                 // hashing strategy mentioned in the paper.
                 //
@@ -405,7 +361,7 @@ IntrusivePtr<State> optimal_schedule_pass(FunctionDAG &dag,
                 // there are more coarse-to-fine passes yet to come.
                 if (pass_idx + 1 < num_passes) {
                     int blessed = 0;
-                    while (state->cost <= 1.2 * best->cost && blessed < beam_size) {
+                    while (state->cost <= 1.2 * best->cost && blessed < params.beam_size) {
                         const State *s = state.get();
                         while (s) {
                             uint64_t h1 = s->structural_hash(pass_idx);
@@ -423,7 +379,7 @@ IntrusivePtr<State> optimal_schedule_pass(FunctionDAG &dag,
                 return best;
             }
 
-            state->generate_children(dag, params, cost_model, memory_limit, enqueue_new_children, cache);
+            state->generate_children(dag, params, cost_model, enqueue_new_children, cache);
             expanded++;
         }
 
@@ -448,7 +404,7 @@ IntrusivePtr<State> optimal_schedule_pass(FunctionDAG &dag,
                 std::cout << "\n[" << choice_label << "]:\n";
                 state->dump(std::cout);
                 constexpr int verbosity_level = 0;  // always
-                state->calculate_cost(dag, params, cost_model, cache->options, memory_limit, verbosity_level);
+                state->calculate_cost(dag, params, cost_model, cache->options, verbosity_level);
             }
             cost_model->evaluate_costs();
 
@@ -474,7 +430,6 @@ IntrusivePtr<State> optimal_schedule(FunctionDAG &dag,
                                      const Adams2019Params &params,
                                      CostModel *cost_model,
                                      std::mt19937 &rng,
-                                     int64_t memory_limit,
                                      const CachingOptions &options) {
 
     IntrusivePtr<State> best;
@@ -485,8 +440,7 @@ IntrusivePtr<State> optimal_schedule(FunctionDAG &dag,
     Cache cache(options, dag.nodes.size());
 
     // If the beam size is one, it's pointless doing multiple passes.
-    const int beam_size = get_beam_size(params);
-    int num_passes = (beam_size == 1) ? 1 : 5;
+    int num_passes = (params.beam_size == 1) ? 1 : 5;
 
 #ifdef HALIDE_AUTOSCHEDULER_ALLOW_CYOS
     string cyos_str = get_env_variable("HL_CYOS");
@@ -509,8 +463,7 @@ IntrusivePtr<State> optimal_schedule(FunctionDAG &dag,
         Timer timer;
 
         auto pass = optimal_schedule_pass(dag, outputs, params, cost_model,
-                                          rng, beam_size, memory_limit,
-                                          i, num_passes, tick, permitted_hashes, &cache);
+                                          rng, i, num_passes, tick, permitted_hashes, &cache);
 
         std::chrono::duration<double> total_time = timer.elapsed();
         auto milli = std::chrono::duration_cast<std::chrono::milliseconds>(total_time).count();
@@ -555,26 +508,28 @@ void generate_schedule(const std::vector<Function> &outputs,
                        const Adams2019Params &params,
                        AutoSchedulerResults *auto_scheduler_results) {
     aslog(1) << "generate_schedule for target=" << target.to_string() << "\n";
+    aslog(1) << "Adams2019.parallelism:" << params.parallelism << "\n";
+    aslog(1) << "Adams2019.beam_size:" << params.beam_size << "\n";
+    aslog(1) << "Adams2019.random_dropout:" << params.random_dropout << "\n";
+    aslog(1) << "Adams2019.random_dropout_seed:" << params.random_dropout_seed << "\n";
+    aslog(1) << "Adams2019.weights_path:" << params.weights_path << "\n";
+    aslog(1) << "Adams2019.disable_subtiling:" << params.disable_subtiling << "\n";
+    aslog(1) << "Adams2019.disable_memoized_features:" << params.disable_memoized_features << "\n";
+    aslog(1) << "Adams2019.disable_memoized_blocks:" << params.disable_memoized_blocks << "\n";
+    aslog(1) << "Adams2019.memory_limit:" << params.memory_limit << "\n";
 
     // Start a timer
     HALIDE_TIC;
 
     State::cost_calculations = 0;
 
-    // Get the seed for random dropout
-    int seed = get_random_dropout_seed(params);
+    std::mt19937 rng((uint32_t)params.random_dropout_seed);
 
-    aslog(2) << "Dropout seed = " << seed << "\n";
-    std::mt19937 rng((uint32_t)seed);
-
-    string weights_in_path = get_env_variable("HL_WEIGHTS_DIR");
+    string weights_in_path = params.weights_path;
     string weights_out_path;  // deliberately empty
 
     string randomize_weights_str = get_env_variable("HL_RANDOMIZE_WEIGHTS");
     bool randomize_weights = randomize_weights_str == "1";
-
-    string memory_limit_str = get_env_variable("HL_AUTOSCHEDULE_MEMORY_LIMIT");
-    int64_t memory_limit = memory_limit_str.empty() ? (uint64_t)(-1) : std::atoll(memory_limit_str.c_str());
 
     // Analyse the Halide algorithm and construct our abstract representation of it
     FunctionDAG dag(outputs, target);
@@ -591,10 +546,10 @@ void generate_schedule(const std::vector<Function> &outputs,
     IntrusivePtr<State> optimal;
 
     // Options generated from environment variables, decide whether or not to cache features and/or tilings.
-    CachingOptions cache_options = CachingOptions::MakeOptionsFromEnviron();
+    CachingOptions cache_options = CachingOptions::MakeOptionsFromParams(params);
 
     // Run beam search
-    optimal = optimal_schedule(dag, outputs, params, cost_model.get(), rng, memory_limit, cache_options);
+    optimal = optimal_schedule(dag, outputs, params, cost_model.get(), rng, cache_options);
 
     HALIDE_TOC;
 
@@ -604,7 +559,7 @@ void generate_schedule(const std::vector<Function> &outputs,
     aslog(1) << "** Optimal schedule:\n";
 
     // Just to get the debugging prints to fire
-    optimal->calculate_cost(dag, params, cost_model.get(), cache_options, memory_limit, /*verbosity_level*/ 1);
+    optimal->calculate_cost(dag, params, cost_model.get(), cache_options, /*verbosity_level*/ 1);
 
     // Apply the schedules to the pipeline
     optimal->apply_schedule(dag, params);
@@ -637,6 +592,14 @@ struct Adams2019 {
         }
         Adams2019Params params;
         params.parallelism = params_in.parallelism;
+        params.beam_size = get_scalar_env_var<int>("HL_BEAM_SIZE", 32);
+        params.random_dropout = get_scalar_env_var<int>("HL_RANDOM_DROPOUT", 100);
+        params.random_dropout_seed = get_scalar_env_var<int>("HL_SEED", (int)time(nullptr));
+        params.weights_path = get_scalar_env_var<int>("HL_WEIGHTS_DIR");
+        params.disable_subtiling = get_scalar_env_var<int>("HL_NO_SUBTILING", 0);
+        params.disable_memoized_features = get_scalar_env_var<int>("HL_DISABLE_MEMOIZED_FEATURES", 0);
+        params.disable_memoized_blocks = get_scalar_env_var<int>("HL_DISABLE_MEMOIZED_BLOCKS", 0);
+        params.memory_limit = get_scalar_env_var<int64_t>("HL_AUTOSCHEDULE_MEMORY_LIMIT", -1);
         Autoscheduler::generate_schedule(outputs, target, params, results);
     }
 #else
@@ -651,13 +614,14 @@ struct Adams2019 {
         {
             ParamParser parser(params_in.extra);
             parser.parse("parallelism", &params.parallelism);
-#ifdef HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
-            // nothing
-#else
             parser.parse("beam_size", &params.beam_size);
             parser.parse("random_dropout", &params.random_dropout);
             parser.parse("random_dropout_seed", &params.random_dropout_seed);
-#endif
+            parser.parse("weights_path", &params.weights_path);
+            parser.parse("disable_subtiling", &params.disable_subtiling);
+            parser.parse("disable_memoized_features", &params.disable_memoized_features);
+            parser.parse("disable_memoized_blocks", &params.disable_memoized_blocks);
+            parser.parse("memory_limit", &params.memory_limit);
             parser.finish();
         }
         Autoscheduler::generate_schedule(outputs, target, params, results);
@@ -673,12 +637,11 @@ void find_and_apply_schedule(FunctionDAG &dag,
                              const std::vector<Function> &outputs,
                              const Adams2019Params &params,
                              CostModel *cost_model,
-                             int64_t memory_limit,
                              StageMap<ScheduleFeatures> *schedule_features) {
 
     std::mt19937 rng(12345);
-    CachingOptions cache_options = CachingOptions::MakeOptionsFromEnviron();
-    IntrusivePtr<State> optimal = optimal_schedule(dag, outputs, params, cost_model, rng, memory_limit, cache_options);
+    CachingOptions cache_options = CachingOptions::MakeOptionsFromParams(params);
+    IntrusivePtr<State> optimal = optimal_schedule(dag, outputs, params, cost_model, rng, cache_options);
 
     // Apply the schedules
     optimal->apply_schedule(dag, params);
