@@ -308,6 +308,11 @@ public:
                 RDom r2(0, 2);
                 check(check_pmaddubsw, 4 * w, saturating_sum(i16(in_u8(2 * x + r2)) * in_i8(2 * x + r2 + 32)));
                 check(check_pmaddubsw, 4 * w, saturating_sum(i16(in_i8(2 * x + r2)) * in_u8(2 * x + r2 + 32)));
+
+                // uint8 -> uint16 or int16 and int8 -> int16 horizontal widening adds should use pmaddubsw.
+                check(check_pmaddubsw, 4 * w, sum(u16(in_u8(2 * x + r2))));
+                check(check_pmaddubsw, 4 * w, sum(i16(in_u8(2 * x + r2))));
+                check(check_pmaddubsw, 4 * w, sum(i16(in_i8(2 * x + r2))));
             }
         }
 
