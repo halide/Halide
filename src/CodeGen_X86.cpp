@@ -185,9 +185,15 @@ const x86Intrinsic intrinsic_defs[] = {
     // LLVM does not provide an unmasked 128bit cvtneps2bf16 intrinsic, so provide a wrapper around the masked version.
     {"vcvtneps2bf16x4", BFloat(16, 4), "f32_to_bf16", {Float(32, 4)}, Target::AVX512_SapphireRapids},
 
-    // 2-way dot products
-    {"llvm.x86.avx2.pmadd.ub.sw", Int(16, 16), "saturating_dot_product", {UInt(8, 32), Int(8, 32)}, Target::AVX2},
-    {"llvm.x86.ssse3.pmadd.ub.sw.128", Int(16, 8), "saturating_dot_product", {UInt(8, 16), Int(8, 16)}, Target::SSE41},
+    // Horizontal adds that use (v)phadd(w | d).
+    {"phaddw_sse3", UInt(16, 8), "horizontal_add", {UInt(16, 16)}, Target::SSE41},
+    {"phaddw_sse3", Int(16, 8), "horizontal_add", {Int(16, 16)}, Target::SSE41},
+    {"phaddw_avx2", UInt(16, 16), "horizontal_add", {UInt(16, 32)}, Target::AVX2},
+    {"phaddw_avx2", Int(16, 16), "horizontal_add", {Int(16, 32)}, Target::AVX2},
+    {"phaddd_sse3", UInt(32, 4), "horizontal_add", {UInt(32, 8)}, Target::SSE41},
+    {"phaddd_sse3", Int(32, 4), "horizontal_add", {Int(32, 8)}, Target::SSE41},
+    {"phaddd_avx2", UInt(32, 8), "horizontal_add", {UInt(32, 16)}, Target::AVX2},
+    {"phaddd_avx2", Int(32, 8), "horizontal_add", {Int(32, 16)}, Target::AVX2},
 
     // Horizontal widening adds using 2-way dot products.
     {"hadd_pmadd_u8_sse3", UInt(16, 8), "horizontal_widening_add", {UInt(8, 16)}, Target::SSE41},
@@ -196,6 +202,12 @@ const x86Intrinsic intrinsic_defs[] = {
     {"hadd_pmadd_u8_avx2", UInt(16, 16), "horizontal_widening_add", {UInt(8, 32)}, Target::AVX2},
     {"hadd_pmadd_u8_avx2", Int(16, 16), "horizontal_widening_add", {UInt(8, 32)}, Target::AVX2},
     {"hadd_pmadd_i8_avx2", Int(16, 16), "horizontal_widening_add", {Int(8, 32)}, Target::AVX2},
+    {"hadd_pmadd_i16_sse2", Int(32, 4), "horizontal_widening_add", {Int(16, 8)}},
+    {"hadd_pmadd_i16_avx2", Int(32, 8), "horizontal_widening_add", {Int(16, 16)}, Target::AVX2},
+
+    // 2-way dot products
+    {"llvm.x86.avx2.pmadd.ub.sw", Int(16, 16), "saturating_dot_product", {UInt(8, 32), Int(8, 32)}, Target::AVX2},
+    {"llvm.x86.ssse3.pmadd.ub.sw.128", Int(16, 8), "saturating_dot_product", {UInt(8, 16), Int(8, 16)}, Target::SSE41},
 
     {"llvm.x86.avx512.pmaddw.d.512", Int(32, 16), "dot_product", {Int(16, 32), Int(16, 32)}, Target::AVX512_Skylake},
     {"llvm.x86.avx512.pmaddw.d.512", Int(32, 16), "dot_product", {Int(16, 32), Int(16, 32)}, Target::AVX512_Cannonlake},
@@ -639,6 +651,11 @@ void CodeGen_X86::codegen_vector_reduce(const VectorReduce *op, const Expr &init
         {VectorReduce::Add, 2, u16(wild_u8x_), "horizontal_widening_add", {}, Pattern::SingleArg},
         {VectorReduce::Add, 2, i16(wild_u8x_), "horizontal_widening_add", {}, Pattern::SingleArg},
         {VectorReduce::Add, 2, i16(wild_i8x_), "horizontal_widening_add", {}, Pattern::SingleArg},
+        {VectorReduce::Add, 2, i32(wild_i16x_), "horizontal_widening_add", {}, Pattern::SingleArg},
+        {VectorReduce::Add, 2, wild_u16x_, "horizontal_add", {}, Pattern::SingleArg},
+        {VectorReduce::Add, 2, wild_i16x_, "horizontal_add", {}, Pattern::SingleArg},
+        {VectorReduce::Add, 2, wild_u32x_, "horizontal_add", {}, Pattern::SingleArg},
+        {VectorReduce::Add, 2, wild_i32x_, "horizontal_add", {}, Pattern::SingleArg},
     };
     // clang-format on
 
