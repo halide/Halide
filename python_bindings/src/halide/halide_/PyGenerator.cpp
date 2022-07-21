@@ -2,9 +2,6 @@
 
 #include <pybind11/embed.h>
 
-extern "C" unsigned char builtin_helpers_src[];
-extern "C" int builtin_helpers_src_length;
-
 namespace Halide {
 namespace PythonBindings {
 
@@ -46,7 +43,7 @@ public:
     // by calling is_valid() later.
     explicit PyGeneratorBase(const GeneratorContext &context, const std::string &name)
         : name_(name),
-          class_(pybind11::module_::import("halide").import("halide_").attr("_find_python_generator_class")(name)),  // could be None!
+          class_(pybind11::module_::import("halide").import("_generator_helpers").attr("_find_python_generator_class")(name)),  // could be None!
           generator_(class_.is(py::none()) ? py::none() : class_(context)) {                                         // could be None!
     }
 
@@ -121,7 +118,7 @@ public:
     PyGeneratorFactoryProvider() = default;
 
     std::vector<std::string> enumerate() const override {
-        py::object f = pybind11::module_::import("halide").import("halide_").attr("_get_python_generator_names");
+        py::object f = pybind11::module_::import("halide").import("_generator_helpers").attr("_get_python_generator_names");
         return args_to_vector<std::string>(f());
     }
     AbstractGeneratorPtr create(const std::string &name,
@@ -169,9 +166,6 @@ void define_generator(py::module &m) {
                 o << "<halide.GeneratorContext " << context.target() << ">";
                 return o.str();
             });
-
-    py::object scope = m.attr("__dict__");
-    py::exec(py::str((const char *)builtin_helpers_src, builtin_helpers_src_length), scope);
 
     m.def("main", []() -> void {
         py::object argv_object = pybind11::module_::import("sys").attr("argv");

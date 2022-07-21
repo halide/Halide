@@ -32,12 +32,7 @@ set(SOURCES
     )
 list(TRANSFORM SOURCES PREPEND "halide_/")
 
-add_custom_command(OUTPUT builtin_helpers_src.cpp
-                   COMMAND binary2cpp builtin_helpers_src < "${CMAKE_CURRENT_SOURCE_DIR}/halide_/builtin_helpers_src.py" > builtin_helpers_src.cpp
-                   DEPENDS binary2cpp halide_/builtin_helpers_src.py
-                   VERBATIM)
-
-pybind11_add_module(Halide_Python MODULE ${SOURCES} builtin_helpers_src.cpp)
+pybind11_add_module(Halide_Python MODULE ${SOURCES})
 add_library(Halide::Python ALIAS Halide_Python)
 set_target_properties(Halide_Python
                       PROPERTIES
