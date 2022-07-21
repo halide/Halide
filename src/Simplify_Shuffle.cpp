@@ -96,11 +96,13 @@ Expr Simplify::visit(const Shuffle *op, ExprInfo *bounds) {
     // Try to collapse a shuffle of broadcasts into a single
     // broadcast. Note that it doesn't matter what the indices
     // are.
+    // FIXME: broadcast-of-vector is fine, but needs shuffle indice check.
     const Broadcast *b1 = new_vectors[0].as<Broadcast>();
-    if (b1) {
+    if (b1 && b1->value.type().lanes() == 1) {
         bool can_collapse = true;
         for (size_t i = 1; i < new_vectors.size() && can_collapse; i++) {
-            if (const Broadcast *b2 = new_vectors[i].as<Broadcast>()) {
+            if (const Broadcast *b2 = new_vectors[i].as<Broadcast>();
+                b2->value.type().lanes() == b1->value.type().lanes()) {
                 Expr check = mutate(b1->value - b2->value, nullptr);
                 can_collapse &= is_const_zero(check);
             } else {

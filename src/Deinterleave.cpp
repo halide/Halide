@@ -11,6 +11,8 @@
 #include "Scope.h"
 #include "Simplify.h"
 #include "Substitute.h"
+#include <numeric>
+#include <optional>
 
 namespace Halide {
 namespace Internal {
@@ -176,19 +178,313 @@ Stmt collect_strided_stores(const Stmt &stmt, const std::string &name, int strid
     return collect.mutate(stmt);
 }
 
+// Essentially, broadcast the mask, i.e. take each mask element, and repeat it
+// \p scale times, consequtively. No reordering of mask elements happens!
+std::vector<char> upscale_mask(const std::vector<char> &src_mask, int scale) {
+    internal_assert(scale > 1) << "Expected to at least double the mask.";
+    std::vector<char> mask;
+    mask.reserve(scale * src_mask.size());
+    for (char src_mask_elt : src_mask) {
+        std::fill_n(std::back_inserter(mask), /*count=*/scale,
+                    /*value=*/src_mask_elt);
+    }
+    return mask;
+}
+
+// Compute the elements of the specified ramp/linear space.
+std::vector<int> ramp_to_indices(int starting_lane, int lane_stride,
+                                 int new_lanes) {
+    std::vector<int> indices;
+    indices.reserve(new_lanes);
+    for (int i = 0; i < new_lanes; i++) {
+        indices.emplace_back(starting_lane + lane_stride * i);
+    }
+    return indices;
+}
+
+// What are the (in-order) demanded indices?
+std::vector<int> mask_to_indices(const std::vector<char> &mask) {
+    std::vector<int> indices;
+    indices.reserve(mask.size());
+    for (int src_lane = 0; src_lane != (int)mask.size(); ++src_lane) {
+        if (mask[src_lane]) {
+            indices.emplace_back(src_lane);
+        }
+    }
+    return indices;
+}
+
+// Which indices are demanded at all?
+template<typename T, typename UnaryOperation, typename UnaryPredicate>
+std::vector<char> indices_to_mask(const std::vector<T> &unordered_elts,
+                                  int index_end, UnaryOperation get_index,
+                                  UnaryPredicate pred) {
+    internal_assert(index_end > 0) << "Size should be positive";
+    std::vector<char> mask(index_end, 0);
+    for (const T &elt : unordered_elts) {
+        if (!pred(elt)) {
+            continue;
+        }
+        int index = get_index(elt);
+        internal_assert((unsigned)index < mask.size()) << "Wrong size hint.";
+        mask[index] = 1;
+    }
+    return mask;
+}
+
+std::vector<char> indices_to_mask(const std::vector<int> &indices,
+                                  int index_end) {
+    return indices_to_mask(
+        indices, index_end,
+        /*get_index=*/[](const int &index) { return index; },
+        /*pred=*/[](const int &) { return true; });
+}
+
+std::vector<char> indices_to_mask(const std::vector<int> &indices) {
+    internal_assert(!indices.empty()) << "No indices?";
+    return indices_to_mask(indices, 1 + indices.back());
+}
+
+// Suppose the \p indices are indices of 32-bit lanes. If we want to instead
+// have 16-bit lanes, we'll need to similarly adjust the index granularity.
+// NOTE: this operation is precise and not lossy.
+std::vector<int> upscale_indices(const std::vector<int> &src_indices,
+                                 int scale) {
+    std::vector<int> indices;
+    indices.reserve(scale * src_indices.size());
+    for (int src_index : src_indices) {
+        for (int subelt = 0; subelt != scale; ++subelt) {
+            indices.emplace_back(scale * src_index + subelt);
+        }
+    }
+    return indices;
+}
+
+struct IndexXFormMapping {
+    // WARNING: if you modify `indices`, you will need to
+    //          manually call `recompute_translation()`!
+    std::vector<int> indices;
+    std::vector<std::optional<int>> translation;
+
+    template<typename T, typename UnaryOperation, typename UnaryPredicate>
+    static IndexXFormMapping get(const std::vector<T> &unordered_elts,
+                                 int index_end, UnaryOperation get_index,
+                                 UnaryPredicate pred) {
+        std::vector<char> index_mask =
+            indices_to_mask(unordered_elts, index_end, get_index, pred);
+
+        IndexXFormMapping m{mask_to_indices(index_mask)};
+        m.recompute_translation();
+        return m;
+    }
+
+    void recompute_translation() {
+        translation.clear();
+        if (indices.empty()) {
+            return;
+        }
+        // An inverse of the `indices`, given original index, contains position
+        // of said index within `indices` vector, if present.
+        translation.resize(1 + indices.back(), 0);
+        for (int index_idx = 0; index_idx != (int)indices.size(); ++index_idx) {
+            translation[indices[index_idx]] = index_idx;
+        }
+    };
+
+    template<typename T, typename UnaryOperation>
+    static IndexXFormMapping get(const std::vector<T> &unordered_elts,
+                                 int index_end, UnaryOperation get_index) {
+        return IndexXFormMapping::get(unordered_elts, index_end, get_index,
+                                      /*pred=*/[](const T &) { return true; });
+    }
+};
+
+struct DecomposedIndex {
+    int outer, inner;
+};
+
+// How many lanes are there *before* the 0'th lane of the i'th vector?
+std::vector<int> get_num_lanes_total_in_preceding_vectors(
+    const std::vector<int> &vector_lengths) {
+    std::vector<int> accumulated_vector_length;
+    // This is not quite the `std::exclusive_scan()`, it produces one more elt,
+    // which is the total number of elements in all of the vectors.
+    accumulated_vector_length.reserve(1 + vector_lengths.size());
+    accumulated_vector_length.emplace_back(0);
+    for (int vector_length : vector_lengths) {
+        accumulated_vector_length.emplace_back(
+            accumulated_vector_length.back() + vector_length);
+    }
+    return accumulated_vector_length;
+};
+
+// Shuffle indices are specified as-if the src vectors are concatenated.
+// Decompose that into source vector index and lane within said vector.
+std::vector<DecomposedIndex>
+decompose_shuffle_indices(const std::vector<int> &vector_lengths,
+                          const std::vector<int> &indices) {
+    // How many lanes are there *before* the 0'th lane of the i'th vector?
+    const std::vector<int> num_lanes_total_in_preceding_vectors =
+        get_num_lanes_total_in_preceding_vectors(vector_lengths);
+
+    // Construct a lookup table, that is indexed by the index,
+    // and contains the (index of the) vector, to which this index belongs to.
+    std::vector<int> lane_to_vector_map;
+    lane_to_vector_map.reserve(num_lanes_total_in_preceding_vectors.back());
+    for (int vector_index = 0; vector_index != (int)vector_lengths.size();
+         ++vector_index) {
+        int vector_length = vector_lengths[vector_index];
+        std::fill_n(std::back_inserter(lane_to_vector_map),
+                    /*num=*/vector_length,
+                    /*value=*/vector_index);
+    }
+
+    std::vector<DecomposedIndex> decomposed_indices;
+    decomposed_indices.reserve(indices.size());
+    for (int index : indices) {
+        internal_assert((unsigned)index < lane_to_vector_map.size())
+            << "Shuffle mask out of bounds.\n";
+        DecomposedIndex &i = decomposed_indices.emplace_back();
+        i.outer = lane_to_vector_map[index];
+        i.inner = index - num_lanes_total_in_preceding_vectors[i.outer];
+    }
+
+    return decomposed_indices;
+}
+
+std::vector<int> recompose_shuffle_indices(
+    const std::vector<int> &vector_lengths,
+    const std::vector<DecomposedIndex> &decomposed_indices) {
+    // How many lanes are there *before* the 0'th lane of the i'th vector?
+    const std::vector<int> num_lanes_total_in_preceding_vectors =
+        get_num_lanes_total_in_preceding_vectors(vector_lengths);
+
+    // And *finally*, recompose the indices.
+    std::vector<int> indices;
+    indices.reserve(decomposed_indices.size());
+    for (const DecomposedIndex &i : decomposed_indices) {
+        internal_assert((unsigned)i.outer < vector_lengths.size())
+            << "Out of bounds vector index";
+        indices.emplace_back(i.inner +
+                             num_lanes_total_in_preceding_vectors[i.outer]);
+    }
+
+    return indices;
+}
+
+std::vector<int> get_vector_lane_counts(const std::vector<Expr> &vectors) {
+    std::vector<int> lanes;
+    lanes.reserve(vectors.size());
+    std::transform(vectors.begin(), vectors.end(), std::back_inserter(lanes),
+                   [](const Expr &vec) { return vec.type().lanes(); });
+    return lanes;
+}
+
+int minimal_adjacent_difference(const std::vector<int> &indices) {
+    int min_difference = std::numeric_limits<int>::max();
+    std::adjacent_find(indices.begin(), indices.end(),
+                       [&min_difference](int a, int b) {
+                           min_difference = std::min(min_difference, b - a);
+                           return false;
+                       });
+    return min_difference;
+}
+
+// Which 1-st order polynominal goes through all of the specified \p indices,
+// while going through the minimal amount of the indices *NOT* specified here?
+std::optional<std::pair<int /*base*/, int /*min_step*/>>
+fit_affine(const std::vector<int> &indices) {
+    if (indices.empty()) {
+        return {};
+    }
+    int base = indices.front();
+    int min_step =
+        indices.size() < 2 ? 1 : minimal_adjacent_difference(indices);
+    return std::make_pair(base, min_step);
+}
+
+// Return the 1-st order polynominal that exactly specifies \p indices.
+// Note: there might not be such a polynominal.
+std::optional<std::pair<int /*base*/, int /*step*/>>
+as_affine(const std::vector<int> &indices) {
+    if (indices.empty()) {
+        return {};
+    }
+    int base = indices.front();
+    int step = indices.size() < 2 ? 1 : indices[1] - indices[0];
+    auto step_mismatch = [step](int a, int b) {
+        int curr_step = b - a;
+        return curr_step != step;
+    };
+    if (std::adjacent_find(std::next(indices.begin()), indices.end(),
+                           step_mismatch) != indices.end()) {
+        return {};
+    }
+    return std::make_pair(base, step);
+}
+
+// Count of the elements in a linear space from \p a to \b with \p step.
+int compute_linspace_length(int a, int b, int step) {
+    int distance = b - a;
+    internal_assert(distance >= 0 && distance % step == 0)
+        << "Unexpected linear space.";
+    int num_hops = distance / step;
+    return 1 + num_hops;
+}
+
+struct DemandedLanes {
+    DemandedLanes(const std::vector<int> &indices_)
+        : indices(indices_) {
+    }
+
+    auto begin() const {
+        return indices.begin();
+    }
+    auto end() const {
+        return indices.end();
+    }
+    auto size() const {
+        return indices.size();
+    }
+    auto empty() const {
+        return indices.empty();
+    }
+    int operator[](int i) const {
+        return indices[i];
+    }
+
+    std::vector<int> indices;  // Do *NOT* mutate in-place!
+};
+
 class Deinterleaver : public IRGraphMutator {
 public:
-    Deinterleaver(int starting_lane, int lane_stride, int new_lanes, const Scope<> &lets)
-        : starting_lane(starting_lane),
-          lane_stride(lane_stride),
-          new_lanes(new_lanes),
-          external_lets(lets) {
+    Deinterleaver(DemandedLanes lanes_, const Scope<> &lets)
+        : lanes(std::move(lanes_)), external_lets(lets) {
+    }
+
+    using IRGraphMutator::mutate;
+
+    Expr mutate(const Expr &e) override {
+        // FIXME: is there really only always-on assertions?
+        internal_assert(true ||
+                        mask_to_indices(indices_to_mask(
+                            lanes.indices, /*index_end=*/e.type().lanes())) ==
+                            lanes.indices)
+            << "Invalid demanded lane 'mask'.";
+        internal_assert(!lanes.empty()) << "No lanes demanded from this Expr.";
+        // If all lanes are demanded, we're done.
+        if ((int)lanes.size() == e.type().lanes()) {
+            return e;
+        }
+        Type expected_type = e.type().with_lanes(lanes.size());
+        Expr m_e = IRGraphMutator::mutate(e);
+        internal_assert(m_e.type() == expected_type)
+            << "Mutated into an unexpected type.";
+        return m_e;
     }
 
 private:
-    int starting_lane;
-    int lane_stride;
-    int new_lanes;
+    DemandedLanes lanes;
 
     // lets for which we have even and odd lane specializations
     const Scope<> &external_lets;
@@ -196,204 +492,333 @@ private:
     using IRMutator::visit;
 
     Expr visit(const VectorReduce *op) override {
-        std::vector<int> input_lanes;
-        int factor = op->value.type().lanes() / op->type.lanes();
-        for (int i = starting_lane; i < op->type.lanes(); i += lane_stride) {
-            for (int j = 0; j < factor; j++) {
-                input_lanes.push_back(i * factor + j);
-            }
+        Expr in;
+        {
+            int factor = op->value.type().lanes() / op->type.lanes();
+            std::vector<int> input_lanes =
+                upscale_indices(lanes.indices, factor);
+            ScopedValue<DemandedLanes> old_lanes(lanes, input_lanes);
+            in = mutate(op->value);
         }
-        Expr in = Shuffle::make({op->value}, input_lanes);
-        return VectorReduce::make(op->op, in, new_lanes);
+        return VectorReduce::make(op->op, in, lanes.size());
     }
 
     Expr visit(const Broadcast *op) override {
-        if (new_lanes == 1) {
-            if (op->value.type().lanes() == 1) {
-                return op->value;
-            } else {
-                int old_starting_lane = starting_lane;
-                int old_lane_stride = lane_stride;
-                starting_lane = starting_lane % op->value.type().lanes();
-                lane_stride = op->value.type().lanes();
-                Expr e = mutate(op->value);
-                starting_lane = old_starting_lane;
-                lane_stride = old_lane_stride;
-                return e;
-            }
-        }
-        if (op->value.type().lanes() > 1) {
-            // There is probably a more efficient way to this.
-            return mutate(flatten_nested_ramps(op));
-        }
+        // `Broadcast` preservation is best-effort, in the sense that we don't
+        // want to keep the `Broadcast` if we will `Shuffle` it later, so just
+        // let the generic `Shuffle` handling deal with it.
+        return mutate(Shuffle::make_broadcast(op->value, op->lanes));
+    }
 
-        return Broadcast::make(op->value, new_lanes);
+    Expr visit(const Select *op) override {
+        Expr condition = op->condition;
+        if (!condition.type().is_scalar()) {
+            condition = mutate(condition);
+        }
+        return Select::make(condition, mutate(op->true_value),
+                            mutate(op->false_value));
     }
 
     Expr visit(const Load *op) override {
-        if (op->type.is_scalar()) {
-            return op;
-        } else {
-            Type t = op->type.with_lanes(new_lanes);
-            ModulusRemainder align = op->alignment;
-            // TODO: Figure out the alignment of every nth lane
-            if (starting_lane != 0) {
-                align = ModulusRemainder();
-            }
-            return Load::make(t, op->name, mutate(op->index), op->image, op->param, mutate(op->predicate), align);
+        Type t = op->type.with_lanes(lanes.size());
+        ModulusRemainder align = op->alignment;
+        // TODO: Figure out the alignment of every nth lane
+        std::optional<std::pair<int /*base*/, int /*step*/>> lanes_affine =
+            as_affine(lanes.indices);
+        if (!lanes_affine || lanes_affine->first != 0) {
+            align = ModulusRemainder();
         }
+        return Load::make(t, op->name, mutate(op->index), op->image, op->param,
+                          mutate(op->predicate), align);
     }
 
     Expr visit(const Ramp *op) override {
-        int base_lanes = op->base.type().lanes();
-        if (base_lanes > 1) {
-            if (new_lanes == 1) {
-                int index = starting_lane / base_lanes;
-                Expr expr = op->base + cast(op->base.type(), index) * op->stride;
-                ScopedValue<int> old_starting_lane(starting_lane, starting_lane % base_lanes);
-                ScopedValue<int> old_lane_stride(lane_stride, base_lanes);
-                expr = mutate(expr);
-                return expr;
-            } else if (base_lanes == lane_stride &&
-                       starting_lane < base_lanes) {
-                // Base class mutator actually works fine in this
-                // case, but we only want one lane from the base and
-                // one lane from the stride.
-                ScopedValue<int> old_new_lanes(new_lanes, 1);
-                return IRMutator::visit(op);
-            } else {
-                // There is probably a more efficient way to this by
-                // generalizing the two cases above.
-                return mutate(flatten_nested_ramps(op));
-            }
+        // How many lanes are there in the base/stride source vectors?
+        std::vector<int> input_vectors_lane_counts;
+        input_vectors_lane_counts.reserve(op->lanes);
+        std::fill_n(std::back_inserter(input_vectors_lane_counts),
+                    /*num=*/op->lanes, /*value=*/op->base.type().lanes());
+
+        // Shuffle indices are specified for the evaluated Ramp,
+        // with flattened vectors. Decompose that into the actual Ramp lane
+        // and lane within base/stride vectors.
+        std::vector<DecomposedIndex> decomposed_input_lanes =
+            decompose_shuffle_indices(input_vectors_lane_counts, lanes.indices);
+
+        // Which lanes of the base/stride source vector are demanded *at all*?
+        IndexXFormMapping input_lane_xform = IndexXFormMapping::get(
+            decomposed_input_lanes, op->base.type().lanes(),
+            [](const DecomposedIndex &i) { return i.inner; });
+
+        Expr base = op->base;
+        Expr stride = op->stride;
+
+        // Now that we know which lanes of the src vector are demanded, recurse.
+        for (Expr *e : {&base, &stride}) {
+            ScopedValue<DemandedLanes> old_lanes(lanes,
+                                                 input_lane_xform.indices);
+            *e = mutate(*e);
         }
-        Expr expr = op->base + cast(op->base.type(), starting_lane) * op->stride;
-        internal_assert(expr.type() == op->base.type());
-        if (new_lanes > 1) {
-            expr = Ramp::make(expr, op->stride * lane_stride, new_lanes);
+
+        // Which Ramp lanes are actually demanded?
+        IndexXFormMapping ramp_lanes_xform = IndexXFormMapping::get(
+            decomposed_input_lanes, op->lanes,
+            [](const DecomposedIndex &i) { return i.outer; });
+
+        // Which 1-st order polynominal best describes the demanded ramp lanes?
+        // This is an optimization problem, we want to minimize the number of
+        // to-be-discarded ramp lanes, by maximizing the step, as long as that
+        // does *NOT* lead to *NOT* computing actually-demanded ramp lanes...
+        std::pair<int /*base*/, int /*min_step*/> ramp_lanes_affine =
+            *fit_affine(ramp_lanes_xform.indices);
+
+        // And here's the catch. The best-fit 1-st order polynominal describing
+        // demanded ramp lanes may end up producing some ramp lanes that we
+        // did not originally demand. We must expect them to be there.
+        ramp_lanes_xform.indices = ramp_to_indices(
+            ramp_lanes_affine.first, ramp_lanes_affine.second,
+            compute_linspace_length(ramp_lanes_xform.indices.front(),
+                                    ramp_lanes_xform.indices.back(),
+                                    ramp_lanes_affine.second));
+        ramp_lanes_xform.recompute_translation();  // !!!
+
+        // Refresh vector lane count knowledge after mutating source vectors.
+        input_vectors_lane_counts.clear();
+        std::fill_n(std::back_inserter(input_vectors_lane_counts),
+                    /*num=*/ramp_lanes_xform.indices.size(),
+                    /*value=*/input_lane_xform.indices.size());
+
+        // Now that we (might have) dropped some of the ramp lanes
+        // of the source vector, and maybe mutated said source vector,
+        // update the decomposed shuffle mask.
+        for (DecomposedIndex &i : decomposed_input_lanes) {
+            i.outer = *ramp_lanes_xform.translation[i.outer];
+            i.inner = *input_lane_xform.translation[i.inner];
         }
-        return expr;
+
+        // If some of the ramp lanes aren't demanded at all,
+        // we shouldn't produce them.
+        if (int ramp_base = ramp_lanes_affine.first; ramp_base != 0) {
+            base += cast(base.type(), ramp_base) * stride;
+        }
+        if (int ramp_step = ramp_lanes_affine.second; ramp_step != 1) {
+            stride *= cast(stride.type(), ramp_step);
+        }
+
+        // Now that we are done with mutation, let's reconstruct the indices.
+        std::vector<int> new_lanes = recompose_shuffle_indices(
+            input_vectors_lane_counts, decomposed_input_lanes);
+
+        // Now, we can recreate the hopefully-smaller Ramp.
+        Expr in;
+        if (int lanes = ramp_lanes_xform.indices.size(); lanes != 1) {
+            in = Ramp::make(base, stride, lanes);
+        } else {
+            in = base;
+        }
+
+        // But, it is possible that we *still* don't demand all of the produced
+        // lanes, in which case we need a Shuffle after all.
+        if (in.type().lanes() != (int)new_lanes.size()) {
+            in = Shuffle::make({in}, new_lanes);
+        }
+
+        return in;
     }
 
     Expr visit(const Variable *op) override {
-        if (op->type.is_scalar()) {
-            return op;
-        } else {
-
-            Type t = op->type.with_lanes(new_lanes);
-            if (external_lets.contains(op->name) &&
-                starting_lane == 0 &&
-                lane_stride == 2) {
-                return Variable::make(t, op->name + ".even_lanes", op->image, op->param, op->reduction_domain);
-            } else if (external_lets.contains(op->name) &&
-                       starting_lane == 1 &&
-                       lane_stride == 2) {
-                return Variable::make(t, op->name + ".odd_lanes", op->image, op->param, op->reduction_domain);
-            } else if (external_lets.contains(op->name) &&
-                       starting_lane == 0 &&
-                       lane_stride == 3) {
-                return Variable::make(t, op->name + ".lanes_0_of_3", op->image, op->param, op->reduction_domain);
-            } else if (external_lets.contains(op->name) &&
-                       starting_lane == 1 &&
-                       lane_stride == 3) {
-                return Variable::make(t, op->name + ".lanes_1_of_3", op->image, op->param, op->reduction_domain);
-            } else if (external_lets.contains(op->name) &&
-                       starting_lane == 2 &&
-                       lane_stride == 3) {
-                return Variable::make(t, op->name + ".lanes_2_of_3", op->image, op->param, op->reduction_domain);
-            } else {
-                // Uh-oh, we don't know how to deinterleave this vector expression
-                // Make llvm do it
-                std::vector<int> indices;
-                for (int i = 0; i < new_lanes; i++) {
-                    indices.push_back(starting_lane + lane_stride * i);
-                }
-                return Shuffle::make({op}, indices);
+        if (std::optional<std::pair<int /*base*/, int /*step*/>> lanes_affine =
+                as_affine(lanes.indices);
+            external_lets.contains(op->name) && lanes_affine) {
+            Type t = op->type.with_lanes(lanes.size());
+            int starting_lane = lanes[0];
+            int lane_stride = lanes_affine->second;
+            if (starting_lane == 0 && lane_stride == 2) {
+                return Variable::make(t, op->name + ".even_lanes", op->image,
+                                      op->param, op->reduction_domain);
+            } else if (starting_lane == 1 && lane_stride == 2) {
+                return Variable::make(t, op->name + ".odd_lanes", op->image,
+                                      op->param, op->reduction_domain);
+            } else if (starting_lane == 0 && lane_stride == 3) {
+                return Variable::make(t, op->name + ".lanes_0_of_3", op->image,
+                                      op->param, op->reduction_domain);
+            } else if (starting_lane == 1 && lane_stride == 3) {
+                return Variable::make(t, op->name + ".lanes_1_of_3", op->image,
+                                      op->param, op->reduction_domain);
+            } else if (starting_lane == 2 && lane_stride == 3) {
+                return Variable::make(t, op->name + ".lanes_2_of_3", op->image,
+                                      op->param, op->reduction_domain);
             }
         }
+
+        // Uh-oh, we don't know how to deinterleave this vector expression.
+        // Make llvm do it.
+        return Shuffle::make({op}, lanes.indices);
     }
 
     Expr visit(const Cast *op) override {
-        if (op->type.is_scalar()) {
-            return op;
-        } else {
-            Type t = op->type.with_lanes(new_lanes);
-            return Cast::make(t, mutate(op->value));
-        }
+        Type t = op->type.with_lanes(lanes.size());
+        return Cast::make(t, mutate(op->value));
     }
 
+    // FIXME: Implement me.
     Expr visit(const Reinterpret *op) override {
         if (op->type.is_scalar()) {
             return op;
         } else {
-            Type t = op->type.with_lanes(new_lanes);
+            // FIXME: this is broken.
+            Type t = op->type.with_lanes(lanes.size());
             return Reinterpret::make(t, mutate(op->value));
         }
     }
 
     Expr visit(const Call *op) override {
-        Type t = op->type.with_lanes(new_lanes);
+        Type t = op->type.with_lanes(lanes.size());
 
-        // Don't mutate scalars
-        if (op->type.is_scalar()) {
-            return op;
+        // Vector calls are always parallel across the lanes, so we
+        // can just deinterleave the args.
+
+        // Beware of intrinsics for which this is not true!
+
+        std::vector<Expr> args;
+        args.reserve(op->args.size());
+
+        if (op->is_intrinsic(Call::signed_integer_overflow)) {
+            // Just keep the (scalar) argument.
+            args = op->args;
+        } else if (op->is_intrinsic(Call::unsafe_promise_clamped) ||
+                   op->is_intrinsic(Call::promise_clamped)) {
+            // Only mutate the non-scalar arguments for these.
+            for (Expr e : op->args) {
+                if (e.type().is_vector()) {
+                    e = mutate(e);
+                }
+                args.emplace_back(e);
+            }
         } else {
-
-            // Vector calls are always parallel across the lanes, so we
-            // can just deinterleave the args.
-
-            // Beware of intrinsics for which this is not true!
-            auto args = mutate(op->args);
-            return Call::make(t, op->name, args, op->call_type,
-                              op->func, op->value_index, op->image, op->param);
+            args = mutate(op->args);
         }
+        return Call::make(t, op->name, args, op->call_type, op->func,
+                          op->value_index, op->image, op->param);
     }
 
     Expr visit(const Shuffle *op) override {
-        if (op->is_interleave()) {
-            // Special case where we can discard some of the vector arguments entirely.
-            internal_assert(starting_lane >= 0 && starting_lane < lane_stride);
-            if ((int)op->vectors.size() == lane_stride) {
-                return op->vectors[starting_lane];
-            } else if ((int)op->vectors.size() % lane_stride == 0) {
-                // Pick up every lane-stride vector.
-                std::vector<Expr> new_vectors(op->vectors.size() / lane_stride);
-                for (size_t i = 0; i < new_vectors.size(); i++) {
-                    new_vectors[i] = op->vectors[i * lane_stride + starting_lane];
-                }
-                return Shuffle::make_interleave(new_vectors);
+        // NOTE: we don't try to deduplicate `op->vectors` here. It is unclear,
+        // however, whether or not doing so here would be beneficial.
+
+        // Backtransform the demanded lanes through the shuffle,
+        // what is the recomputed shuffle mask?
+        std::vector<int> input_lanes;
+        input_lanes.reserve(lanes.size());
+        std::transform(lanes.begin(), lanes.end(),
+                       std::back_inserter(input_lanes),
+                       [&](int lane) { return op->indices[lane]; });
+
+        // And how many lanes are there in each of the source vectors?
+        std::vector<int> input_vector_lane_counts =
+            get_vector_lane_counts(op->vectors);
+
+        // Shuffle indices are specified as-if the src vectors are concatenated.
+        // Decompose that into source vector index and lane within said vector.
+        std::vector<DecomposedIndex> decomposed_input_lanes =
+            decompose_shuffle_indices(input_vector_lane_counts, input_lanes);
+
+        // Preserving ordering, which source vectors are actually demanded?
+        IndexXFormMapping vector_xform = IndexXFormMapping::get(
+            decomposed_input_lanes, op->vectors.size(),
+            [](const DecomposedIndex &i) { return i.outer; });
+
+        // Preserving ordering, per each demanded source vector,
+        // which lanes of said vector are actually demanded?
+        std::vector<IndexXFormMapping> vectors_lane_xform;
+        vectors_lane_xform.reserve(vector_xform.indices.size());
+        for (int source_vector_index : vector_xform.indices) {
+            vectors_lane_xform.emplace_back(IndexXFormMapping::get(
+                decomposed_input_lanes,
+                input_vector_lane_counts[source_vector_index],
+                [](const DecomposedIndex &i) { return i.inner; },
+                [source_vector_index](const DecomposedIndex &i) {
+                    return i.outer == source_vector_index;
+                }));
+        }
+
+        // Now that we know which input vectors are demanded,
+        // and which lanes are demanded from them, recurse into them.
+        std::vector<Expr> input_vectors;
+        input_vectors.reserve(vector_xform.indices.size());
+        for (int vector_index = 0;
+             vector_index != (int)vector_xform.indices.size(); ++vector_index) {
+            int source_vector_index = vector_xform.indices[vector_index];
+            Expr source_vector = op->vectors[source_vector_index];
+            const std::vector<int> &source_vector_lanes =
+                vectors_lane_xform[vector_index].indices;
+            ScopedValue<DemandedLanes> old_lanes(lanes, source_vector_lanes);
+            input_vectors.emplace_back(mutate(source_vector));
+        }
+
+        // Refresh vector lane count knowledge after mutating input vectors.
+        input_vector_lane_counts = get_vector_lane_counts(input_vectors);
+
+        // Now that we (might have) dropped some of the source input vectors,
+        // and maybe mutated the others, update the decomposed shuffle mask.
+        for (DecomposedIndex &i : decomposed_input_lanes) {
+            i.outer = *vector_xform.translation[i.outer];
+            i.inner = *vectors_lane_xform[i.outer].translation[i.inner];
+        }
+
+        // Now that we are done with mutation, let's reconstruct the indices.
+        input_lanes = recompose_shuffle_indices(input_vector_lane_counts,
+                                                decomposed_input_lanes);
+
+        // ... and construct the new shuffle.
+        Expr in = Shuffle::make(input_vectors, input_lanes);
+        const auto *new_op = in.as<Shuffle>();
+
+        // If we ended up with just a single input vector, it's possible that
+        // the shuffle simplified into a no-op identity (concat) shuffle,
+        // in which case just directly return the only input vector.
+        if (new_op->vectors.size() == 1 && new_op->is_concat()) {
+            return new_op->vectors[0];
+        }
+
+        // Likewise, try to recognize simple variants of `Broadcast`-of-shuffle.
+        // This is mainly to recover from `visit(const Broadcast *op)`.
+        for (int num_lanes_to_broadcast = 1,
+                 lanes_total = (int)new_op->indices.size();
+             num_lanes_to_broadcast != lanes_total; ++num_lanes_to_broadcast) {
+            if (lanes_total % num_lanes_to_broadcast != 0) {
+                continue;  // Can't broadcast this number of lanes.
             }
-        }
-
-        // Keep the same set of vectors and extract every nth numeric
-        // arg to the shuffle.
-        std::vector<int> indices;
-        for (int i = 0; i < new_lanes; i++) {
-            int idx = i * lane_stride + starting_lane;
-            indices.push_back(op->indices[idx]);
-        }
-
-        // If this is extracting a single lane, try to recursively deinterleave rather
-        // than leaving behind a shuffle.
-        if (indices.size() == 1) {
-            int index = indices.front();
-            for (const auto &i : op->vectors) {
-                if (index < i.type().lanes()) {
-                    ScopedValue<int> lane(starting_lane, index);
-                    return mutate(i);
-                }
-                index -= i.type().lanes();
+            int broadcast_factor = lanes_total / num_lanes_to_broadcast;
+            // If we split `new_op->indices` into `broadcast_factor` chunks,
+            // are all chunks fully identical?
+            bool mismatch = false;
+            for (int replica = 1; !mismatch && replica != broadcast_factor;
+                 ++replica) {
+                mismatch |= !std::equal(
+                    new_op->indices.begin() + 0 * num_lanes_to_broadcast,
+                    new_op->indices.begin() + 1 * num_lanes_to_broadcast,
+                    new_op->indices.begin() + replica * num_lanes_to_broadcast);
             }
-            internal_error << "extract_lane index out of bounds: " << Expr(op) << " " << index << "\n";
+            if (mismatch) {
+                continue;  // Perhaps smaller broadcast factor will succeed?
+            }
+            std::vector<int> in_lanes(num_lanes_to_broadcast);
+            std::iota(in_lanes.begin(), in_lanes.end(), 0);
+            ScopedValue<DemandedLanes> old_lanes(lanes, in_lanes);
+            Expr vec_to_broadcast = mutate(in);
+            return Broadcast::make(vec_to_broadcast, broadcast_factor);
         }
 
-        return Shuffle::make(op->vectors, indices);
+        // We can't do anything more here, just return the new shuffle.
+        return in;
     }
 };
 
 Expr deinterleave(Expr e, int starting_lane, int lane_stride, int new_lanes, const Scope<> &lets) {
     e = substitute_in_all_lets(e);
-    Deinterleaver d(starting_lane, lane_stride, new_lanes, lets);
+    Deinterleaver d(ramp_to_indices(starting_lane, lane_stride, new_lanes),
+                    lets);
     e = d.mutate(e);
     e = common_subexpression_elimination(e);
     return simplify(e);
@@ -794,6 +1219,23 @@ Stmt rewrite_interleavings(const Stmt &s) {
 }
 
 namespace {
+
+template<typename UnaryFunction>
+void for_each_mask(UnaryFunction fun) {
+    int max_width = 8;
+    std::vector<char> mask;
+    mask.reserve(max_width);
+    for (int curr_width = 1; curr_width <= max_width; ++curr_width) {
+        mask.resize(curr_width);
+        for (unsigned pat = 0; (pat >> curr_width) == 0; ++pat) {
+            for (int bit = 0; bit < curr_width; ++bit) {
+                mask[bit] = (pat >> bit) != 0;
+            }
+            fun(mask);
+        }
+    }
+}
+
 void check(Expr a, const Expr &even, const Expr &odd) {
     a = simplify(a);
     Expr correct_even = extract_even_lanes(a);
@@ -808,16 +1250,31 @@ void check(Expr a, const Expr &even, const Expr &odd) {
 }  // namespace
 
 void deinterleave_vector_test() {
+    for_each_mask([](std::vector<char> mask) {
+        while (!mask.empty() && !mask.back()) {
+            mask.pop_back();
+        }
+        if (mask.empty()) {
+            return;
+        }
+        for (int scale = 2; scale <= 4; ++scale) {
+            const auto a =
+                indices_to_mask(upscale_indices(mask_to_indices(mask), scale));
+            const auto b = upscale_mask(mask, scale);
+            internal_assert(a == b) << "Not equivalent?";
+        }
+    });
+
     std::pair<Expr, Expr> result;
     Expr x = Variable::make(Int(32), "x");
     Expr ramp = Ramp::make(x + 4, 3, 8);
     Expr ramp_a = Ramp::make(x + 4, 6, 4);
     Expr ramp_b = Ramp::make(x + 7, 6, 4);
+    check(ramp, ramp_a, ramp_b);
+
     Expr broadcast = Broadcast::make(x + 4, 16);
     Expr broadcast_a = Broadcast::make(x + 4, 8);
     const Expr &broadcast_b = broadcast_a;
-
-    check(ramp, ramp_a, ramp_b);
     check(broadcast, broadcast_a, broadcast_b);
 
     check(Load::make(ramp.type(), "buf", ramp, Buffer<>(), Parameter(), const_true(ramp.type().lanes()), ModulusRemainder()),
@@ -827,8 +1284,257 @@ void deinterleave_vector_test() {
     Expr vec_x = Variable::make(Int(32, 4), "vec_x");
     Expr vec_y = Variable::make(Int(32, 4), "vec_y");
     check(Shuffle::make({vec_x, vec_y}, {0, 4, 2, 6, 4, 2, 3, 7, 1, 2, 3, 4}),
-          Shuffle::make({vec_x, vec_y}, {0, 2, 4, 3, 1, 3}),
-          Shuffle::make({vec_x, vec_y}, {4, 6, 2, 7, 2, 4}));
+          Shuffle::make({vec_x, Shuffle::make_extract_element(vec_y, 0)},
+                        {0, 2, 4, 3, 1, 3}),
+          Shuffle::make({Shuffle::make_extract_element(vec_x, 2),
+                         Shuffle::make({vec_y}, {0, 2, 3})},
+                        {1, 2, 0, 3, 0, 1}));
+
+    {
+        std::vector<Expr> v;
+        for (int i = 0; i != 8; ++i) {
+            v.emplace_back(Variable::make(Int(32), "v." + std::to_string(i)));
+        }
+        Expr x = Shuffle::make_concat(v);
+        x = VectorReduce::make(VectorReduce::Or, x, 4);
+        x = Shuffle::make({x}, {0, 0, 1, 2, 3, 3});
+        check(
+            x,
+            VectorReduce::make(
+                VectorReduce::Or,
+                Shuffle::make_concat({v[0], v[1], v[2], v[3], v[6], v[7]}), 3),
+            VectorReduce::make(
+                VectorReduce::Or,
+                Shuffle::make_concat({v[0], v[1], v[4], v[5], v[6], v[7]}), 3));
+    }
+
+    {
+        Expr v = Variable::make(Int(32), "v");
+        x = Broadcast::make(v, 4);
+        x = Shuffle::make({x}, {0, 0, 1, 2, 3, 3});
+        check(x, Broadcast::make(v, 3), Broadcast::make(v, 3));
+    }
+
+    {
+        std::vector<Expr> vars;
+        for (int i = 0; i != 3; ++i) {
+            vars.emplace_back(
+                Variable::make(Int(32), "v." + std::to_string(i)));
+        }
+        Expr v = Shuffle::make_concat(vars);
+        Expr x = Broadcast::make(v, 2);
+        x = Shuffle::make({x}, {0, 0, 1, 0, 2, 0, 0, 2, 1, 2, 2, 2});
+        check(x, Broadcast::make(v, 2),
+              Shuffle::make({Ramp::make(vars[0], vars[2] - vars[0], 2)},
+                            {0, 0, 0, 1, 1, 1}));
+    }
+
+    {
+        Expr c = Variable::make(Bool(), "c");
+
+        std::vector<Expr> true_vals;
+        for (int i = 0; i != 4; ++i) {
+            true_vals.emplace_back(
+                Variable::make(Int(32), "t." + std::to_string(i)));
+        }
+        Expr t = Shuffle::make_concat(true_vals);
+
+        std::vector<Expr> false_vals;
+        for (int i = 0; i != 4; ++i) {
+            false_vals.emplace_back(
+                Variable::make(Int(32), "f." + std::to_string(i)));
+        }
+        Expr f = Shuffle::make_concat(false_vals);
+
+        Expr x = Select::make(c, t, f);
+        x = Shuffle::make({x}, {0, 0, 1, 2, 3, 3});
+        check(x,
+              Select::make(c,
+                           Shuffle::make_concat(
+                               {true_vals[0], true_vals[1], true_vals[3]}),
+                           Shuffle::make_concat(
+                               {false_vals[0], false_vals[1], false_vals[3]})),
+              Select::make(c,
+                           Shuffle::make_concat(
+                               {true_vals[0], true_vals[2], true_vals[3]}),
+                           Shuffle::make_concat(
+                               {false_vals[0], false_vals[2], false_vals[3]})));
+    }
+
+    {
+        std::vector<Expr> cond_vals;
+        for (int i = 0; i != 4; ++i) {
+            cond_vals.emplace_back(
+                Variable::make(Bool(), "c." + std::to_string(i)));
+        }
+        Expr c = Shuffle::make_concat(cond_vals);
+
+        std::vector<Expr> true_vals;
+        for (int i = 0; i != 4; ++i) {
+            true_vals.emplace_back(
+                Variable::make(Int(32), "t." + std::to_string(i)));
+        }
+        Expr t = Shuffle::make_concat(true_vals);
+
+        std::vector<Expr> false_vals;
+        for (int i = 0; i != 4; ++i) {
+            false_vals.emplace_back(
+                Variable::make(Int(32), "f." + std::to_string(i)));
+        }
+        Expr f = Shuffle::make_concat(false_vals);
+
+        Expr x = Select::make(c, t, f);
+        x = Shuffle::make({x}, {0, 0, 1, 2, 3, 3});
+        check(x,
+              Select::make(Shuffle::make_concat(
+                               {cond_vals[0], cond_vals[1], cond_vals[3]}),
+                           Shuffle::make_concat(
+                               {true_vals[0], true_vals[1], true_vals[3]}),
+                           Shuffle::make_concat(
+                               {false_vals[0], false_vals[1], false_vals[3]})),
+              Select::make(Shuffle::make_concat(
+                               {cond_vals[0], cond_vals[2], cond_vals[3]}),
+                           Shuffle::make_concat(
+                               {true_vals[0], true_vals[2], true_vals[3]}),
+                           Shuffle::make_concat(
+                               {false_vals[0], false_vals[2], false_vals[3]})));
+    }
+
+    {
+        std::vector<Expr> indices;
+        for (int i = 0; i != 4; ++i) {
+            indices.emplace_back(
+                Variable::make(Int(32), "index." + std::to_string(i)));
+        }
+        Expr index = Shuffle::make_concat(indices);
+
+        std::vector<Expr> predicates;
+        for (int i = 0; i != 4; ++i) {
+            predicates.emplace_back(
+                Variable::make(Int(32), "predicate." + std::to_string(i)));
+        }
+        Expr predicate = Shuffle::make_concat(predicates);
+
+        Expr x = Load::make(Int(32, 4), {}, index, {}, {}, predicate, {});
+        x = Shuffle::make({x}, {0, 0, 1, 2, 3, 3});
+        check(x,
+              Load::make(
+                  Int(32, 3), {},
+                  Shuffle::make_concat({indices[0], indices[1], indices[3]}),
+                  {}, {},
+                  Shuffle::make_concat(
+                      {predicates[0], predicates[1], predicates[3]}),
+                  {}),
+              Load::make(
+                  Int(32, 3), {},
+                  Shuffle::make_concat({indices[0], indices[2], indices[3]}),
+                  {}, {},
+                  Shuffle::make_concat(
+                      {predicates[0], predicates[2], predicates[3]}),
+                  {}));
+    }
+
+    {
+        Expr base = Variable::make(Int(32), "base");
+        Expr stride = Variable::make(Int(32), "stride");
+        Expr x = Ramp::make(base, stride, 16);
+        x = Shuffle::make({x}, {3, 2, 5, 2, 9, 2, 11, 2});
+        check(x,
+              Shuffle::make({Ramp::make((stride * 3) + base, stride * 2, 5)},
+                            {0, 1, 3, 4}),
+              Broadcast::make((stride * 2) + base, 4));
+    }
+
+    {
+        std::vector<Expr> bases;
+        for (int i = 0; i != 4; ++i) {
+            bases.emplace_back(
+                Variable::make(Int(32), "base." + std::to_string(i)));
+        }
+        Expr base = Shuffle::make_concat(bases);
+
+        std::vector<Expr> strides;
+        for (int i = 0; i != 4; ++i) {
+            strides.emplace_back(
+                Variable::make(Int(32), "stride." + std::to_string(i)));
+        }
+        Expr stride = Shuffle::make_concat(strides);
+
+        Expr x = Ramp::make(base, stride, 2);
+        x = Shuffle::make({x}, {0, 0, 2, 1, 3, 3, 4, 4, 6, 5, 7, 7});
+        check(
+            x,
+            Ramp::make(
+                Shuffle::make_concat({bases[0], bases[2], bases[3]}),
+                Shuffle::make_concat({strides[0], strides[2], strides[3]}), 2),
+            Ramp::make(
+                Shuffle::make_concat({bases[0], bases[1], bases[3]}),
+                Shuffle::make_concat({strides[0], strides[1], strides[3]}), 2));
+    }
+
+    {
+        std::vector<Expr> bases;
+        for (int i = 0; i != 4; ++i) {
+            bases.emplace_back(
+                Variable::make(Int(32), "base." + std::to_string(i)));
+        }
+        Expr base = Shuffle::make_concat(bases);
+
+        std::vector<Expr> strides;
+        for (int i = 0; i != 4; ++i) {
+            strides.emplace_back(
+                Variable::make(Int(32), "stride." + std::to_string(i)));
+        }
+        Expr stride = Shuffle::make_concat(strides);
+
+        Expr x = Ramp::make(base, stride, 16);
+        x = Shuffle::make(
+            {x}, {1, 3, 2, 3, 4, 3, 6, 3, 8, 3, 9, 3, 16, 3, 17, 3, 18, 3});
+        check(
+            x,
+            Shuffle::make(
+                {Ramp::make(
+                    Shuffle::make_concat({bases[0], bases[1], bases[2]}),
+                    Shuffle::make_concat({strides[0], strides[1], strides[2]}),
+                    5)},
+                {1, 2, 3, 5, 6, 7, 12, 13, 14}),
+            Broadcast::make(bases[3], 9));
+    }
+
+    {
+        std::vector<Expr> vars;
+        for (int i = 0; i != 4; ++i) {
+            vars.emplace_back(
+                Variable::make(Int(32), "v." + std::to_string(i)));
+        }
+        Expr v = Shuffle::make_concat(vars);
+        x = Cast::make(Int(64, 4), v);
+        x = Shuffle::make({x}, {0, 0, 1, 2, 3, 3});
+        check(x,
+              Cast::make(Int(64, 3),
+                         Shuffle::make_concat({vars[0], vars[1], vars[3]})),
+              Cast::make(Int(64, 3),
+                         Shuffle::make_concat({vars[0], vars[2], vars[3]})));
+    }
+
+    {
+        std::vector<Expr> vars;
+        for (int i = 0; i != 4; ++i) {
+            vars.emplace_back(
+                Variable::make(Int(32), "v." + std::to_string(i)));
+        }
+        Expr v = Shuffle::make_concat(vars);
+        x = Call::make(Int(32, 4), Call::IntrinsicOp::abs, {v},
+                       Call::PureIntrinsic);
+        x = Shuffle::make({x}, {0, 0, 1, 2, 3, 3});
+        check(x,
+              Call::make(Int(32, 3), Call::IntrinsicOp::abs,
+                         {Shuffle::make_concat({vars[0], vars[1], vars[3]})},
+                         Call::PureIntrinsic),
+              Call::make(Int(32, 3), Call::IntrinsicOp::abs,
+                         {Shuffle::make_concat({vars[0], vars[2], vars[3]})},
+                         Call::PureIntrinsic));
+    }
 
     std::cout << "deinterleave_vector test passed" << std::endl;
 }
