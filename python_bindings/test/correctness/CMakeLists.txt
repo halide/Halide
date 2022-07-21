@@ -29,12 +29,14 @@ set(TESTS
     )
 
 # Use generator expressions to get the true output paths of these files.
-make_shell_path(PYTHONPATH
-                "${CMAKE_CURRENT_SOURCE_DIR}/../generators"
-                "$<TARGET_FILE_DIR:py_aot_bit>"
-                "$<TARGET_FILE_DIR:py_stub_bit>"
-                "$<TARGET_FILE_DIR:Halide::Python>"
-                )
+make_shell_path(
+    PY_CORRECTNESS_PYTHONPATH
+    "$<TARGET_FILE_DIR:py_aot_bit>"
+    "$<TARGET_FILE_DIR:py_stub_bit>"
+    "$<TARGET_FILE_DIR:Halide::Python>"
+    "${Halide_SOURCE_DIR}/python_bindings/src"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../generators"
+)
 
 foreach (TEST IN LISTS TESTS)
     get_filename_component(TEST_NAME ${TEST} NAME_WE)
@@ -45,5 +47,5 @@ foreach (TEST IN LISTS TESTS)
     set_tests_properties(python_correctness_${TEST_NAME} PROPERTIES
                          LABELS "python"
                          DEPENDS ${PYTHON_CORRECTNESS_GENERATOR_DEPS}
-                         ENVIRONMENT "PYTHONPATH=${PYTHONPATH};HL_TARGET=${Halide_TARGET}")
+                         ENVIRONMENT "PYTHONPATH=${PY_CORRECTNESS_PYTHONPATH};HL_TARGET=${Halide_TARGET}")
 endforeach ()

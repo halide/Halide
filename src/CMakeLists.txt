@@ -299,6 +299,7 @@ set(SOURCE_FILES
     Simplify_Add.cpp
     Simplify_And.cpp
     Simplify_Call.cpp
+    Simplify_Reinterpret.cpp
     Simplify_Cast.cpp
     Simplify_Div.cpp
     Simplify_EQ.cpp

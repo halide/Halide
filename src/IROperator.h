@@ -1059,7 +1059,7 @@ Expr reinterpret(Type t, Expr e);
 
 template<typename T>
 Expr reinterpret(Expr e) {
-    return reinterpret(type_of<T>(), e);
+    return reinterpret(type_of<T>(), std::move(e));
 }
 
 /** Return the bitwise and of two expressions (which need not have the

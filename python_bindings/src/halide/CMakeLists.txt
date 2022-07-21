@@ -30,6 +30,7 @@ set(SOURCES
     PyVar.cpp
     PyVarOrRVar.cpp
     )
+list(TRANSFORM SOURCES PREPEND "halide_/")
 
 add_custom_command(OUTPUT builtin_helpers_src.cpp
                    COMMAND binary2cpp builtin_helpers_src < "${CMAKE_CURRENT_SOURCE_DIR}/builtin_helpers_src.py" > builtin_helpers_src.cpp
@@ -40,7 +41,7 @@ pybind11_add_module(Halide_Python MODULE ${SOURCES} builtin_helpers_src.cpp)
 add_library(Halide::Python ALIAS Halide_Python)
 set_target_properties(Halide_Python
                       PROPERTIES
-                      LIBRARY_OUTPUT_NAME halide
+                      LIBRARY_OUTPUT_NAME halide_
                       EXPORT_NAME Python)
 target_link_libraries(Halide_Python PRIVATE Halide::Halide)
 
