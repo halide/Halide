@@ -33,7 +33,7 @@ struct StringUtils {
 
     // retuns true if s1 contains s2 (within n characters)
     static bool contains(const char *s1, const char *s2, size_t n) {
-        if(is_empty(s2)) { return true; } // s2 is empty ... return true to match strstr 
+        if (is_empty(s2)) { return true; }  // s2 is empty ... return true to match strstr
         char starts_with = *s2;
         for (size_t length = strlen(s2); length <= n; n--, s1++) {
             if (*s1 == starts_with) {
@@ -140,14 +140,14 @@ StringStorage &StringStorage::operator=(const StringStorage &other) {
 }
 
 bool StringStorage::contains(const char *str) const {
-    if(contents.empty()) { return false; }
+    if (contents.empty()) { return false; }
     const char *this_str = static_cast<const char *>(contents.data());
     return StringUtils::contains(this_str, str, contents.size());
 }
 
 bool StringStorage::contains(const StringStorage &other) const {
-    if(contents.empty()) { return false; }
-    if(other.contents.empty()) { return false; }
+    if (contents.empty()) { return false; }
+    if (other.contents.empty()) { return false; }
     const char *this_str = static_cast<const char *>(contents.data());
     const char *other_str = static_cast<const char *>(other.contents.data());
     return StringUtils::contains(this_str, other_str, contents.size());
@@ -222,7 +222,7 @@ void StringStorage::prepend(void *user_context, char ch) {
 }
 
 void StringStorage::terminate(void *user_context, size_t length) {
-    if(contents.data() && (length < contents.size())) {
+    if (contents.data() && (length < contents.size())) {
         char *end_ptr = static_cast<char *>(contents[length]);
         (*end_ptr) = '\0';
     }

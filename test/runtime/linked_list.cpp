@@ -65,7 +65,7 @@ int main(int argc, char **argv) {
         size_t count = 4 * 1024;
         for (size_t n = 0; n < count; ++n) {
             list.append(user_context, &n);
-        }        
+        }
         halide_abort_if_false(user_context, list.size() == count);
 
         list.destroy(user_context);
@@ -96,7 +96,7 @@ int main(int argc, char **argv) {
         halide_abort_if_false(user_context, e2.f32 == s2.f32);
 
         list.destroy(user_context);
-        halide_abort_if_false(user_context, allocated_system_memory == 0);       
+        halide_abort_if_false(user_context, allocated_system_memory == 0);
     }
 
     print(user_context) << "Success!\n";

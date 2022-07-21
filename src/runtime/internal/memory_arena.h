@@ -128,7 +128,7 @@ void MemoryArena::initialize(void *user_context,
 }
 
 void MemoryArena::destroy(void *user_context) {
-    if(!blocks.empty()) {
+    if (!blocks.empty()) {
         for (size_t i = blocks.size(); i--;) {
             Block *block = lookup_block(user_context, i);
             halide_abort_if_false(user_context, block != nullptr);

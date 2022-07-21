@@ -39,7 +39,7 @@ int main(int argc, char **argv) {
         SystemMemoryAllocatorFns test_allocator = {allocate_system, deallocate_system};
 
         MemoryArena::Config config = {sizeof(double), 32, 0};
-        MemoryArena* arena = MemoryArena::create(user_context, config, test_allocator);
+        MemoryArena *arena = MemoryArena::create(user_context, config, test_allocator);
 
         size_t count = 4 * 1024;
         void *pointers[count];

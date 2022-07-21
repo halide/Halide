@@ -62,7 +62,7 @@ private:
 // --
 
 StringTable::StringTable(const SystemMemoryAllocatorFns &sma)
-    : contents(nullptr, 0, sma), 
+    : contents(nullptr, 0, sma),
       pointers(nullptr, 0, sma) {
     // EMPTY!
 }
@@ -85,7 +85,7 @@ StringTable::~StringTable() {
 
 void StringTable::resize(void *user_context, size_t capacity) {
     pointers.resize(user_context, capacity);
-    while(contents.size() < capacity) {
+    while (contents.size() < capacity) {
         StringStorage *storage_ptr = StringStorage::create(user_context, contents.current_allocator());
         contents.append(user_context, storage_ptr);
     }
@@ -112,7 +112,7 @@ void StringTable::destroy(void *user_context) {
 }
 
 const char *StringTable::operator[](size_t index) const {
-    if(index < pointers.size()) {
+    if (index < pointers.size()) {
         return static_cast<const char *>(pointers[index]);
     }
     return nullptr;

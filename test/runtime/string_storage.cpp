@@ -34,7 +34,6 @@ int main(int argc, char **argv) {
 
         ss.destroy(user_context);
         halide_abort_if_false(user_context, allocated_system_memory == 0);
-
     }
 
     // test copy and equality
