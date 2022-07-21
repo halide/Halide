@@ -58,7 +58,7 @@ $(BIN)/cost_model/%.a: $(BIN)/cost_model.generator
 # is expected to be present (in the loading binary), so we explicitly make the symbols
 # undefined rather than dependent on libHalide.so.
 $(BIN)/libautoschedule_adams2019.$(SHARED_EXT): $(SRC)/AutoSchedule.cpp \
-				$(SRC)/ASLog.cpp \
+				$(COMMON_DIR)/ASLog.cpp \
 				$(SRC)/Cache.h \
 				$(SRC)/Cache.cpp \
 				$(SRC)/DefaultCostModel.h \
@@ -83,7 +83,7 @@ $(BIN)/libautoschedule_adams2019.$(SHARED_EXT): $(SRC)/AutoSchedule.cpp \
 	$(CXX) -shared $(USE_EXPORT_DYNAMIC) -fPIC -fvisibility=hidden -fvisibility-inlines-hidden $(CXXFLAGS) $(OPTIMIZE) -I $(BIN)/cost_model $(filter-out %.h $(LIBHALIDE_LDFLAGS),$^) -o $@ $(HALIDE_SYSTEM_LIBS) $(HALIDE_RPATH_FOR_LIB)
 
 $(BIN)/retrain_cost_model: $(SRC)/retrain_cost_model.cpp \
-				$(SRC)/ASLog.cpp \
+				$(COMMON_DIR)/ASLog.cpp \
 				$(SRC)/DefaultCostModel.h \
 				$(SRC)/DefaultCostModel.cpp \
 				$(SRC)/Weights.h \
@@ -145,7 +145,7 @@ $(BIN)/test_perfect_hash_map: $(SRC)/test_perfect_hash_map.cpp $(SRC)/PerfectHas
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) $< -o $@
 
-$(BIN)/test_function_dag: $(SRC)/test_function_dag.cpp $(SRC)/FunctionDAG.h $(SRC)/FunctionDAG.cpp $(SRC)/ASLog.h $(SRC)/ASLog.cpp
+$(BIN)/test_function_dag: $(SRC)/test_function_dag.cpp $(SRC)/FunctionDAG.h $(SRC)/FunctionDAG.cpp $(COMMON_DIR)/ASLog.h $(COMMON_DIR)/ASLog.cpp
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) $(USE_EXPORT_DYNAMIC) $(filter-out %.h,$^) -o $@ $(LIBHALIDE_LDFLAGS) $(HALIDE_SYSTEM_LIBS)
 

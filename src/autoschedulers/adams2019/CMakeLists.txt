@@ -22,12 +22,11 @@ add_halide_library(train_cost_model FROM cost_model.generator
 
 # retrain_cost_model
 add_executable(retrain_cost_model
-               ASLog.cpp
                DefaultCostModel.cpp
                Weights.cpp
                retrain_cost_model.cpp
                ${WF_CPP})
-target_link_libraries(retrain_cost_model PRIVATE cost_model train_cost_model Halide::Halide Halide::Plugin)
+target_link_libraries(retrain_cost_model PRIVATE ASLog cost_model train_cost_model Halide::Halide Halide::Plugin)
 
 ##
 # Main autoscheduler library
@@ -35,7 +34,6 @@ target_link_libraries(retrain_cost_model PRIVATE cost_model train_cost_model Hal
 
 add_autoscheduler(NAME Adams2019
                   SOURCES
-                  ASLog.cpp
                   AutoSchedule.cpp
                   Cache.cpp
                   DefaultCostModel.cpp
@@ -45,7 +43,7 @@ add_autoscheduler(NAME Adams2019
                   Weights.cpp
                   ${WF_CPP})
 
-target_link_libraries(Halide_Adams2019 PRIVATE cost_model train_cost_model)
+target_link_libraries(Halide_Adams2019 PRIVATE ASLog ParamParser cost_model train_cost_model)
 
 ##
 # Tests and demos
@@ -133,8 +131,8 @@ set_tests_properties(test_perfect_hash_map
 
 ##
 
-add_executable(test_function_dag test_function_dag.cpp FunctionDAG.cpp ASLog.cpp)
-target_link_libraries(test_function_dag PRIVATE Halide::Halide Halide::Tools Halide::Plugin)
+add_executable(test_function_dag test_function_dag.cpp FunctionDAG.cpp)
+target_link_libraries(test_function_dag PRIVATE ASLog Halide::Halide Halide::Tools Halide::Plugin)
 
 add_test(NAME test_function_dag COMMAND test_function_dag)
 set_tests_properties(test_function_dag

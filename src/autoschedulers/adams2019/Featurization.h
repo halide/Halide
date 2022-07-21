@@ -5,8 +5,6 @@
 #include <cstring>
 #include <iostream>
 
-#include "ASLog.h"
-
 namespace Halide {
 namespace Internal {
 
