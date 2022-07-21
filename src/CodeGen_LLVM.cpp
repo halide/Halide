@@ -3183,7 +3183,7 @@ void CodeGen_LLVM::visit(const Call *op) {
                       " integer overflow for int32 and int64 is undefined behavior in"
                       " Halide.\n";
     } else if (op->is_intrinsic(Call::undef)) {
-        value = UndefValue::get(llvm_type_of(op->type));
+        user_error << "undef not eliminated before code generation. Please report this as a Halide bug.\n";
     } else if (op->is_intrinsic(Call::size_of_halide_buffer_t)) {
         llvm::DataLayout d(module.get());
         value = ConstantInt::get(i32_t, (int)d.getTypeAllocSize(halide_buffer_t_type));
