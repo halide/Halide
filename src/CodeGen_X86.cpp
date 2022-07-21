@@ -189,6 +189,14 @@ const x86Intrinsic intrinsic_defs[] = {
     {"llvm.x86.avx2.pmadd.ub.sw", Int(16, 16), "saturating_dot_product", {UInt(8, 32), Int(8, 32)}, Target::AVX2},
     {"llvm.x86.ssse3.pmadd.ub.sw.128", Int(16, 8), "saturating_dot_product", {UInt(8, 16), Int(8, 16)}, Target::SSE41},
 
+    // Horizontal widening adds using 2-way dot products.
+    {"hadd_pmadd_u8_sse3", UInt(16, 8), "horizontal_widening_add", {UInt(8, 16)}, Target::SSE41},
+    {"hadd_pmadd_u8_sse3", Int(16, 8), "horizontal_widening_add", {UInt(8, 16)}, Target::SSE41},
+    {"hadd_pmadd_i8_sse3", Int(16, 8), "horizontal_widening_add", {Int(8, 16)}, Target::SSE41},
+    {"hadd_pmadd_u8_avx2", UInt(16, 16), "horizontal_widening_add", {UInt(8, 32)}, Target::AVX2},
+    {"hadd_pmadd_u8_avx2", Int(16, 16), "horizontal_widening_add", {UInt(8, 32)}, Target::AVX2},
+    {"hadd_pmadd_i8_avx2", Int(16, 16), "horizontal_widening_add", {Int(8, 32)}, Target::AVX2},
+
     {"llvm.x86.avx512.pmaddw.d.512", Int(32, 16), "dot_product", {Int(16, 32), Int(16, 32)}, Target::AVX512_Skylake},
     {"llvm.x86.avx512.pmaddw.d.512", Int(32, 16), "dot_product", {Int(16, 32), Int(16, 32)}, Target::AVX512_Cannonlake},
     {"llvm.x86.avx2.pmadd.wd", Int(32, 8), "dot_product", {Int(16, 16), Int(16, 16)}, Target::AVX2},
@@ -595,6 +603,7 @@ void CodeGen_X86::codegen_vector_reduce(const VectorReduce *op, const Expr &init
         enum {
             CombineInit = 1 << 0,
             SwapOperands = 1 << 1,
+            SingleArg = 1 << 2,
         };
     };
     // clang-format off
@@ -624,8 +633,12 @@ void CodeGen_X86::codegen_vector_reduce(const VectorReduce *op, const Expr &init
         {VectorReduce::Add, 2, wild_f32x_ * wild_f32x_, "dot_product", BFloat(16), Pattern::CombineInit},
 
         // One could do a horizontal widening addition with
-        // dot_product against a vector of ones. Currently disabled
-        // because I haven't found case where it's clearly better.
+        // other dot_products against a vector of ones. Currently disabled
+        // because I haven't found other cases where it's clearly better.
+
+        {VectorReduce::Add, 2, u16(wild_u8x_), "horizontal_widening_add", {}, Pattern::SingleArg},
+        {VectorReduce::Add, 2, i16(wild_u8x_), "horizontal_widening_add", {}, Pattern::SingleArg},
+        {VectorReduce::Add, 2, i16(wild_i8x_), "horizontal_widening_add", {}, Pattern::SingleArg},
     };
     // clang-format on
 
@@ -635,33 +648,61 @@ void CodeGen_X86::codegen_vector_reduce(const VectorReduce *op, const Expr &init
             continue;
         }
         if (expr_match(p.pattern, op->value, matches)) {
-            Expr a = matches[0];
-            Expr b = matches[1];
-            if (p.flags & Pattern::SwapOperands) {
-                std::swap(a, b);
-            }
-            if (p.narrow_type.bits() > 0) {
-                a = lossless_cast(p.narrow_type.with_lanes(a.type().lanes()), a);
-                b = lossless_cast(p.narrow_type.with_lanes(b.type().lanes()), b);
-            }
-            if (!a.defined() || !b.defined()) {
-                continue;
-            }
+            if (p.flags & Pattern::SingleArg) {
+                Expr a = matches[0];
 
-            if (init.defined() && (p.flags & Pattern::CombineInit)) {
-                value = call_overloaded_intrin(op->type, p.intrin, {init, a, b});
-                if (value) {
-                    return;
+                if (p.narrow_type.bits() > 0) {
+                    a = lossless_cast(p.narrow_type.with_lanes(a.type().lanes()), a);
+                }
+                if (!a.defined()) {
+                    continue;
+                }
+
+                if (init.defined() && (p.flags & Pattern::CombineInit)) {
+                    value = call_overloaded_intrin(op->type, p.intrin, {init, a});
+                    if (value) {
+                        return;
+                    }
+                } else {
+                    value = call_overloaded_intrin(op->type, p.intrin, {a});
+                    if (value) {
+                        if (init.defined()) {
+                            Value *x = value;
+                            Value *y = codegen(init);
+                            value = builder->CreateAdd(x, y);
+                        }
+                        return;
+                    }
                 }
             } else {
-                value = call_overloaded_intrin(op->type, p.intrin, {a, b});
-                if (value) {
-                    if (init.defined()) {
-                        Value *x = value;
-                        Value *y = codegen(init);
-                        value = builder->CreateAdd(x, y);
+                Expr a = matches[0];
+                Expr b = matches[1];
+                if (p.flags & Pattern::SwapOperands) {
+                    std::swap(a, b);
+                }
+                if (p.narrow_type.bits() > 0) {
+                    a = lossless_cast(p.narrow_type.with_lanes(a.type().lanes()), a);
+                    b = lossless_cast(p.narrow_type.with_lanes(b.type().lanes()), b);
+                }
+                if (!a.defined() || !b.defined()) {
+                    continue;
+                }
+
+                if (init.defined() && (p.flags & Pattern::CombineInit)) {
+                    value = call_overloaded_intrin(op->type, p.intrin, {init, a, b});
+                    if (value) {
+                        return;
                     }
-                    return;
+                } else {
+                    value = call_overloaded_intrin(op->type, p.intrin, {a, b});
+                    if (value) {
+                        if (init.defined()) {
+                            Value *x = value;
+                            Value *y = codegen(init);
+                            value = builder->CreateAdd(x, y);
+                        }
+                        return;
+                    }
                 }
             }
         }
