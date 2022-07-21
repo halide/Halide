@@ -46,8 +46,8 @@ public:
     // by calling is_valid() later.
     explicit PyGeneratorBase(const GeneratorContext &context, const std::string &name)
         : name_(name),
-          class_(py::module_::import("halide").import("halide_").attr("_find_python_generator_class")(name)),  // could be None!
-          generator_(class_.is(py::none()) ? py::none() : class_(context)) {                 // could be None!
+          class_(pybind11::module_::import("halide").import("halide_").attr("_find_python_generator_class")(name)),  // could be None!
+          generator_(class_.is(py::none()) ? py::none() : class_(context)) {                                         // could be None!
     }
 
     bool is_valid() const {
@@ -121,7 +121,7 @@ public:
     PyGeneratorFactoryProvider() = default;
 
     std::vector<std::string> enumerate() const override {
-        py::object f = py::module_::import("halide").import("halide_").attr("_get_python_generator_names");
+        py::object f = pybind11::module_::import("halide").import("halide_").attr("_get_python_generator_names");
         return args_to_vector<std::string>(f());
     }
     AbstractGeneratorPtr create(const std::string &name,
@@ -174,7 +174,7 @@ void define_generator(py::module &m) {
     py::exec(py::str((const char *)builtin_helpers_src, builtin_helpers_src_length), scope);
 
     m.def("main", []() -> void {
-        py::object argv_object = py::module_::import("sys").attr("argv");
+        py::object argv_object = pybind11::module_::import("sys").attr("argv");
         std::vector<std::string> argv_vector = args_to_vector<std::string>(argv_object);
         std::vector<char *> argv;
         argv.reserve(argv_vector.size());
