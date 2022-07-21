@@ -56,6 +56,7 @@ protected:
     virtual Expr visit(const FloatImm *);
     virtual Expr visit(const StringImm *);
     virtual Expr visit(const Cast *);
+    virtual Expr visit(const Reinterpret *);
     virtual Expr visit(const Variable *);
     virtual Expr visit(const Add *);
     virtual Expr visit(const Sub *);
