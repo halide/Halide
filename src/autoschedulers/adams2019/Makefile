@@ -152,7 +152,7 @@ $(BIN)/test_function_dag: $(SRC)/test_function_dag.cpp $(SRC)/FunctionDAG.h $(SR
 # Simple jit-based test
 $(BIN)/%/test: $(SRC)/test.cpp $(BIN)/libautoschedule_adams2019.$(SHARED_EXT)
 	@mkdir -p $(@D)
-	$(CXX) $(CXXFLAGS) $(USE_EXPORT_DYNAMIC) $^ -o $@ $(LIBHALIDE_LDFLAGS) $(HALIDE_SYSTEM_LIBS)
+	$(CXX) $(CXXFLAGS) $(USE_EXPORT_DYNAMIC) $< -o $@ $(LIBHALIDE_LDFLAGS) $(HALIDE_SYSTEM_LIBS)
 
 test_perfect_hash_map: $(BIN)/test_perfect_hash_map
 	$^

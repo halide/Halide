@@ -243,6 +243,20 @@ private:
         interval = Interval::single_point(op);
     }
 
+    void visit(const Reinterpret *op) override {
+        TRACK_BOUNDS_INTERVAL;
+
+        Type t = op->type.element_of();
+
+        if (t.is_handle()) {
+            interval = Interval::everything();
+            return;
+        }
+
+        // Just use the bounds of the type
+        bounds_of_type(t);
+    }
+
     void visit(const Cast *op) override {
         TRACK_BOUNDS_INTERVAL;
         op->value.accept(this);
