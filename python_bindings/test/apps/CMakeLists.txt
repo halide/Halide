@@ -12,15 +12,15 @@ make_shell_path(
     "$<TARGET_FILE_DIR:py_aot_bilateral_grid>"
 )
 
+set(PY_APPS_TEST_TMPDIR "$<SHELL_PATH:${CMAKE_CURRENT_BINARY_DIR}>")
+set(PY_APPS_TEST_IMAGES_DIR "$<SHELL_PATH:${CMAKE_CURRENT_SOURCE_DIR}/../../../apps/images>")
+
 set(TEST_ENV
     "PYTHONPATH=${PY_APPS_PYTHONPATH}"
     "HL_TARGET=${Halide_TARGET}"
     "TEST_TMPDIR=${PY_APPS_TEST_TMPDIR}"
     "TEST_IMAGES_DIR=${PY_APPS_TEST_IMAGES_DIR}"
 )
-
-set(PY_APPS_TEST_TMPDIR "$<SHELL_PATH:${CMAKE_CURRENT_BINARY_DIR}>")
-set(PY_APPS_TEST_IMAGES_DIR "$<SHELL_PATH:${CMAKE_CURRENT_SOURCE_DIR}/../../../apps/images>")
 
 set(PY_APPS_DEPS_bilateral_grid_shell py_aot_bilateral_grid)
 set(PY_APPS_ARGS_bilateral_grid_shell ${PY_APPS_TEST_IMAGES_DIR}/gray.png ${PY_APPS_TEST_TMPDIR}/out.png 0.1 10)

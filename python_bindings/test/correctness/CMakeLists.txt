@@ -35,6 +35,7 @@ make_shell_path(
     "$<TARGET_FILE_DIR:py_stub_bit>"
     "$<TARGET_FILE_DIR:Halide::Python>"
     "${Halide_SOURCE_DIR}/python_bindings/src"
+    # Needed only for pystub.py, but easier to include everywhere
     "${CMAKE_CURRENT_SOURCE_DIR}/../generators"
 )
 

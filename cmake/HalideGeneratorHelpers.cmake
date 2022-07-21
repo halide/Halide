@@ -149,7 +149,11 @@ function(add_halide_library TARGET)
     endif ()
 
     if(ARG_FROM MATCHES ".py$")
-        make_shell_path(PYTHONPATH "$<TARGET_FILE_DIR:Halide::Python>")
+        # TODO(srj|alexreinking): we almost certainly don't want a reference to "${Halide_SOURCE_DIR}/python_bindings/src" here,
+        # but is a necessity at the moment.
+        make_shell_path(PYTHONPATH
+            "$<TARGET_FILE_DIR:Halide::Python>"
+            "${Halide_SOURCE_DIR}/python_bindings/src")
         # TODO: this is ugly, maybe there is a better way?
         set(GENERATOR_CMD ${CMAKE_COMMAND} -E env PYTHONPATH=${PYTHONPATH} ${Python3_EXECUTABLE} $<SHELL_PATH:${CMAKE_CURRENT_SOURCE_DIR}/${ARG_FROM}>)
         set(GENERATOR_CMD_DEPS ${ARG_FROM} Halide::Python)
