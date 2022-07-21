@@ -277,10 +277,19 @@ public:
             check("movshdup", 1, sum(in_f32(RDom(0, 4) + 4 * x)));
             check("movshdup", 1, sum(in_f32(RDom(0, 16) + 16 * x)));
 
-            // The integer horizontal add operations are pretty
-            // terrible on all x86 variants, and LLVM does its best to
-            // avoid generating those too, so we won't test that here
-            // either.
+            // Integer horizontal add operations are cheaper in reductions
+            // than the permute + padd alternatives.
+            for (int w = 1; w <= 8; w++) {
+                const char *check_phaddw =
+                    (use_avx2 && w >= 4) ? "vphaddw" : "phaddw";
+                const char *check_phaddd =
+                    (use_avx2 && w >= 4) ? "vphaddd" : "phaddd";
+
+                const int factor = 2 * w;
+                RDom r2(0, factor);
+                check(check_phaddw, 4 * w, sum(in_i16(r2 + (factor * x))));
+                check(check_phaddd, 4 * w, sum(in_i32(r2 + (factor * x))));
+            }
 
             // Min reductions should use phminposuw when
             // possible. This only exists for u16. X86 is weird.
@@ -331,6 +340,9 @@ public:
 
             // Also generate for widening_mul
             check(check_pmaddwd, 2 * w, i32(i16_1) * i32(i16_2));
+
+            // Also generated for horizontal widening adds
+            check(check_pmaddwd, 2 * w, sum(i32(in_i16(RDom(0, 2) + (2 * x)))));
         }
 
         // llvm doesn't distinguish between signed and unsigned multiplies
