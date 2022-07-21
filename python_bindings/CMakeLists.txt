@@ -18,7 +18,7 @@ endif ()
 # Add our sources to this sub-tree.
 ##
 
-add_subdirectory(src)
+add_subdirectory(src/halide)
 add_subdirectory(stub)
 
 option(WITH_TEST_PYTHON "Build Python tests" ON)

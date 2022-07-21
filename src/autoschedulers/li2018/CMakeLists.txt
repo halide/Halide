@@ -44,7 +44,11 @@ if (WITH_PYTHON_BINDINGS)
         add_test(NAME gradient_autoscheduler_test_py
                  COMMAND Python3::Interpreter "${CMAKE_CURRENT_SOURCE_DIR}/test.py")
 
-        set(PYTHONPATH "$<SHELL_PATH:$<TARGET_FILE_DIR:Halide::Python>>")
+        make_shell_path(
+            PYTHONPATH
+            "$<TARGET_FILE_DIR:Halide::Python>"
+            "${Halide_SOURCE_DIR}/python_bindings/src"
+        )
 
         if (WIN32)
             set(SEP "\\$<SEMICOLON>")
