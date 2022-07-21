@@ -423,8 +423,7 @@ function(_Halide_add_halide_runtime RT)
                        # Defers reading the list of targets for which to generate a common runtime to CMake _generation_ time.
                        # This prevents issues where a lower GCD is required by a later Halide library linking to this runtime.
                        target=$<JOIN:$<TARGET_PROPERTY:${TARGET}.runtime,Halide_RT_TARGETS>,$<COMMA>>
-                       DEPENDS "${ARG_FROM}"
-                       DEPENDS "${ARG_DEPENDS}"
+                       DEPENDS "${ARG_FROM}" "${ARG_DEPENDS}"
                        VERBATIM)
 
     if (is_crosscompiling)
