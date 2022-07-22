@@ -23,6 +23,11 @@ add_subdirectory(stub)
 
 option(WITH_TEST_PYTHON "Build Python tests" ON)
 if (WITH_TESTS AND WITH_TEST_PYTHON)
-    add_subdirectory(test)
-    add_subdirectory(tutorial)
+    if (Halide_ENABLE_ASAN)
+        message(STATUS "Python tests are not yet supported under ASAN.")
+    else()
+        add_subdirectory(test)
+        add_subdirectory(tutorial)
+    endif()
 endif ()
+
