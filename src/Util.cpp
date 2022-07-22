@@ -718,7 +718,8 @@ void run_with_large_stack(const std::function<void()> &action) {
 #else
     // On posixy systems we have makecontext / swapcontext
 
-#if defined(__has_feature) && __has_feature(address_sanitizer)
+
+#ifdef __SANITIZE_ADDRESS__
     // ... unless we are compiling under ASAN, in which case we
     // will get a zillion warnings about ASAN not supporting makecontext/swapcontext
     // and the possibility of false positives. Just skip the extra stack space, I guess?
