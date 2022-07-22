@@ -677,7 +677,6 @@ void run_with_large_stack(const std::function<void()> &action) {
     }
 
 #if _WIN32
-
     // Only exists for its address, which is used to compute remaining stack space.
     ULONG_PTR approx_stack_pos;
 
@@ -718,6 +717,14 @@ void run_with_large_stack(const std::function<void()> &action) {
     }
 #else
     // On posixy systems we have makecontext / swapcontext
+
+#ifdef ADDRESS_SANITIZER
+    // ... unless we are compiling under ASAN, in which case we
+    // will get a zillion warnings about ASAN not supporting makecontext/swapcontext
+    // and the possibility of false positives. Just skip the extra stack space, I guess?
+    action();
+    return;
+#else
 
 #ifdef HALIDE_WITH_EXCEPTIONS
     struct Args {
@@ -782,6 +789,8 @@ void run_with_large_stack(const std::function<void()> &action) {
         std::rethrow_exception(args.exception);
     }
 #endif
+
+#endif // not ADDRESS_SANITIZER
 
 #endif
 }

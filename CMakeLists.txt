@@ -73,7 +73,7 @@ if (Halide_ENABLE_ASAN)
     message(STATUS "Enabling Address Sanitizer.")
     # Believe it or not, this flag also works with (recent) versions of MSVC.
     add_compile_options(-fsanitize=address)
-    add_link_options(-fsanitize=address)
+    add_link_options(-fsanitize=address $<$<CXX_COMPILER_ID:GNU>:-static-libasan>)
     # -fPIC required for some ASAN build configurations (generally .so)
     set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 endif()
