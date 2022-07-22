@@ -725,7 +725,6 @@ void run_with_large_stack(const std::function<void()> &action) {
 
 
 #if __has_feature(address_sanitizer) || defined(__SANITIZE_ADDRESS__)
-    #error
     // ... unless we are compiling under ASAN, in which case we
     // will get a zillion warnings about ASAN not supporting makecontext/swapcontext
     // and the possibility of false positives. Just skip the extra stack space, I guess?
