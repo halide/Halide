@@ -2361,15 +2361,7 @@ Expr fract(const Expr &x) {
 }
 
 Expr reinterpret(Type t, Expr e) {
-    user_assert(e.defined()) << "reinterpret of undefined Expr\n";
-    int from_bits = e.type().bits() * e.type().lanes();
-    int to_bits = t.bits() * t.lanes();
-    user_assert(from_bits == to_bits)
-        << "Reinterpret cast from type " << e.type()
-        << " which has " << from_bits
-        << " bits, to type " << t
-        << " which has " << to_bits << " bits\n";
-    return Internal::Call::make(t, Internal::Call::reinterpret, {std::move(e)}, Internal::Call::PureIntrinsic);
+    return Internal::Reinterpret::make(t, std::move(e));
 }
 
 Expr operator&(Expr x, Expr y) {

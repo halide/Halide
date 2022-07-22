@@ -1,6 +1,7 @@
 #include "Errors.h"
 #include "Halide.h"
 #include "HalidePlugin.h"
+#include "ParamParser.h"
 
 namespace Halide {
 namespace Internal {
@@ -945,19 +946,16 @@ struct Li2018 {
 #else
     void operator()(const Pipeline &p, const Target &target, const AutoschedulerParams &params_in, AutoSchedulerResults *results) {
         internal_assert(params_in.name == "Li2018");
-        // Verify that no unknown keys are set in params_in
-        const std::set<std::string> legal_keys = {"parallelism"};
-        for (const auto &it : params_in.extra) {
-            user_assert(legal_keys.count(it.first) == 1) << "The key " << it.first << " is not legal to use for the Li2018 Autoscheduler.";
-        }
 
         std::vector<Function> outputs;
         for (const Func &f : p.outputs()) {
             outputs.push_back(f.function());
         }
         GradientAutoschedulerParams params;
-        if (params_in.extra.count("parallelism")) {
-            params.parallelism = std::stoi(params_in.extra.at("parallelism"));
+        {
+            ParamParser parser(params_in.extra);
+            parser.parse("parallelism", &params.parallelism);
+            parser.finish();
         }
         generate_schedule(outputs, target, params, results);
         results->autoscheduler_params = params_in;

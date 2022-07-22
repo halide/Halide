@@ -29,12 +29,13 @@ set(SOURCES
     PyVar.cpp
     PyVarOrRVar.cpp
     )
+list(TRANSFORM SOURCES PREPEND "halide_/")
 
 pybind11_add_module(Halide_Python MODULE ${SOURCES})
 add_library(Halide::Python ALIAS Halide_Python)
 set_target_properties(Halide_Python
                       PROPERTIES
-                      LIBRARY_OUTPUT_NAME halide
+                      LIBRARY_OUTPUT_NAME halide_
                       EXPORT_NAME Python)
 target_link_libraries(Halide_Python PRIVATE Halide::Halide)
 
