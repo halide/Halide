@@ -661,6 +661,9 @@ size_t get_compiler_stack_size() {
 
 namespace Internal {
 
+#ifdef __SANITIZE_ADDRESS__
+// nothing
+#else
 namespace {
 // We can't reliably pass arguments through makecontext, because
 // the calling convention involves an invalid function pointer
@@ -668,6 +671,7 @@ namespace {
 // platforms, so we use a thread local to pass arguments.
 thread_local void *run_with_large_stack_arg = nullptr;
 }  // namespace
+#endif
 
 void run_with_large_stack(const std::function<void()> &action) {
     if (stack_size.size == 0) {
