@@ -661,8 +661,7 @@ size_t get_compiler_stack_size() {
 
 namespace Internal {
 
-// Clang uses __has_feature; GCC and MSVC use __SANITIZE_ADDRESS__
-#if __has_feature(address_sanitizer) || defined(__SANITIZE_ADDRESS__)
+#ifdef HALIDE_INTERNAL_USING_ASAN
 // nothing
 #else
 namespace {
@@ -724,7 +723,7 @@ void run_with_large_stack(const std::function<void()> &action) {
     // On posixy systems we have makecontext / swapcontext
 
 
-#if __has_feature(address_sanitizer) || defined(__SANITIZE_ADDRESS__)
+#ifdef HALIDE_INTERNAL_USING_ASAN
     // ... unless we are compiling under ASAN, in which case we
     // will get a zillion warnings about ASAN not supporting makecontext/swapcontext
     // and the possibility of false positives. Just skip the extra stack space, I guess?
