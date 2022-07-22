@@ -71,6 +71,7 @@ endif ()
 option(Halide_ENABLE_ASAN "Build everything with Address Sanitizer enabled." OFF)
 if (Halide_ENABLE_ASAN)
     message(STATUS "Enabling Address Sanitizer.")
+    # Believe it or not, this flag also works with (recent) versions of MSVC.
     add_compile_options(-fsanitize=address)
     add_link_options(-fsanitize=address)
 endif()
