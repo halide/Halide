@@ -1,6 +1,13 @@
 configure_file(images/gray.png images/gray.png COPYONLY)
 configure_file(images/rgb.png images/rgb.png COPYONLY)
 
+# If running under ASAN, we need to suppress some errors:
+# - detect_leaks, because circular Expr chains in Halide can indeed leak,
+#   but we don't care here
+# - detect_container_overflow, because this is a known false-positive
+#   if compiling with a non-ASAN build of LLVM (which is usually the case)
+set(ASAN_ENV "ASAN_OPTIONS=detect_leaks=0:detect_container_overflow=0")
+
 function(add_tutorial source_file)
     set(options WITH_IMAGE_IO WITH_OPENMP)
     set(oneValueArgs)
@@ -16,7 +23,7 @@ function(add_tutorial source_file)
     add_test(NAME tutorial_${name} COMMAND ${name})
     set_tests_properties(tutorial_${name}
                          PROPERTIES
-                         ENVIRONMENT "HL_TARGET=${Halide_TARGET};HL_JIT_TARGET=${Halide_TARGET}"
+                         ENVIRONMENT "HL_TARGET=${Halide_TARGET};HL_JIT_TARGET=${Halide_TARGET};${ASAN_ENV}"
                          LABELS "tutorial;${args_GROUPS}")
 
     if (args_WITH_IMAGE_IO)
@@ -56,13 +63,10 @@ if (TARGET_NVPTX)
         # so we can build the final executable.
         add_tutorial(lesson_10_aot_compilation_generate.cpp)
 
-        # LLVM may leak memory during Halide compilation. If projects are built with address sanitizer enabled,
-        # this may cause generators to fail, making it hard to use Halide and address sanitizer at the same time.
-        # To work around this, we execute generators with an environment setting to disable leak checking.
         set(FILTER_LIB "lesson_10_halide${CMAKE_STATIC_LIBRARY_SUFFIX}")
         add_custom_command(OUTPUT lesson_10_halide.h "${FILTER_LIB}"
                            DEPENDS lesson_10_aot_compilation_generate
-                           COMMAND ${CMAKE_COMMAND} -E env "ASAN_OPTIONS=detect_leaks=0" $<TARGET_FILE:lesson_10_aot_compilation_generate>
+                           COMMAND ${CMAKE_COMMAND} -E env "${ASAN_ENV}" $<TARGET_FILE:lesson_10_aot_compilation_generate>
                            VERBATIM)
         add_custom_target(exec_lesson_10_aot_compilation_generate
                           DEPENDS lesson_10_halide.h "${FILTER_LIB}")

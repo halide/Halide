@@ -49,9 +49,16 @@ function(add_halide_test TARGET)
              COMMAND ${args_COMMAND} ${args_ARGS}
              WORKING_DIRECTORY "${args_WORKING_DIRECTORY}")
 
+    # If running under ASAN, we need to suppress some errors:
+    # - detect_leaks, because circular Expr chains in Halide can indeed leak,
+    #   but we don't care here
+    # - detect_container_overflow, because this is a known false-positive
+    #   if compiling with a non-ASAN build of LLVM (which is usually the case)
+    set(ASAN_ENV "ASAN_OPTIONS=detect_leaks=0:detect_container_overflow=0")
+
     set_tests_properties(${TARGET} PROPERTIES
                          LABELS "${args_GROUPS}"
-                         ENVIRONMENT "HL_TARGET=${Halide_TARGET};HL_JIT_TARGET=${Halide_TARGET}"
+                         ENVIRONMENT "HL_TARGET=${Halide_TARGET};HL_JIT_TARGET=${Halide_TARGET};${ASAN_ENV}"
                          PASS_REGULAR_EXPRESSION "Success!"
                          SKIP_REGULAR_EXPRESSION "\\[SKIP\\]"
                          WILL_FAIL ${args_EXPECT_FAILURE})
