@@ -70,11 +70,11 @@ endif ()
 
 option(Halide_ENABLE_ASAN "Build everything with Address Sanitizer enabled." OFF)
 if (Halide_ENABLE_ASAN)
-    message(STATUS "Enabling Address Sanitizer.")
+    message(STATUS "Enabling Address Sanitizer. Be sure to test with ASAN_OPTIONS=detect_container_overflow=0 to avoid false positives against non-ASAN LLVM builds.")
     # Believe it or not, this flag also works with (recent) versions of MSVC.
     add_compile_options(-fsanitize=address)
     add_link_options(-fsanitize=address $<$<CXX_COMPILER_ID:GNU>:-static-libasan>)
-    # -fPIC required for some ASAN build configurations (generally .so)
+    # -fPIC required for some ASAN build configurations (generally .so), so just enable it unversally here
     set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 endif()
 
