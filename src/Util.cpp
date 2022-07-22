@@ -722,7 +722,6 @@ void run_with_large_stack(const std::function<void()> &action) {
 #else
     // On posixy systems we have makecontext / swapcontext
 
-
 #ifdef HALIDE_INTERNAL_USING_ASAN
     // ... unless we are compiling under ASAN, in which case we
     // will get a zillion warnings about ASAN not supporting makecontext/swapcontext
@@ -795,7 +794,7 @@ void run_with_large_stack(const std::function<void()> &action) {
     }
 #endif
 
-#endif // not ADDRESS_SANITIZER
+#endif  // not ADDRESS_SANITIZER
 
 #endif
 }

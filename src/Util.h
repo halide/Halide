@@ -48,19 +48,19 @@
 // Clang uses __has_feature() for sanitizers...
 #if defined(__has_feature)
 #if __has_feature(address_sanitizer)
-    #define HALIDE_INTERNAL_USING_ASAN
+#define HALIDE_INTERNAL_USING_ASAN
 #endif
 #if __has_feature(memory_sanitizer)
-    #define HALIDE_INTERNAL_USING_MSAN
+#define HALIDE_INTERNAL_USING_MSAN
 #endif
 #if __has_feature(thread_sanitizer)
-    #define HALIDE_INTERNAL_USING_TSAN
+#define HALIDE_INTERNAL_USING_TSAN
 #endif
 #if __has_feature(coverage_sanitizer)
-    #define HALIDE_INTERNAL_USING_COVSAN
+#define HALIDE_INTERNAL_USING_COVSAN
 #endif
 #if __has_feature(undefined_behavior_sanitizer)
-    #define HALIDE_INTERNAL_USING_UBSAN
+#define HALIDE_INTERNAL_USING_UBSAN
 #endif
 #endif
 
