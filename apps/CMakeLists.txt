@@ -13,6 +13,10 @@ endif ()
 
 enable_testing()
 
+include(HalideSanitizerHelpers)
+add_compile_options(${SANITIZER_COMPILE_OPTIONS})
+add_link_options(${SANITIZER_LINK_OPTIONS})
+
 # add_subdirectory(HelloAndroid)  # TODO(#5374): missing CMake build
 # add_subdirectory(HelloAndroidCamera2)  # TODO(#5374): missing CMake build
 # add_subdirectory(HelloPyTorch)  # TODO(#5374): missing CMake build
