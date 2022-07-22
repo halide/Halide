@@ -38,10 +38,12 @@ struct StringUtils {
         for (size_t length = strlen(s2); length <= n; n--, s1++) {
             if (*s1 == starts_with) {
                 for (size_t i = 1; i <= length; i++) {
-                    if (i == length)
+                    if (i == length) {
                         return true;
-                    if (s1[i] != s2[i])
+                    }
+                    if (s1[i] != s2[i]) {
                         break;
+                    }
                 }
             }
         }
