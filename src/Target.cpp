@@ -566,8 +566,8 @@ Target get_target_from_environment() {
 Target get_jit_target_from_environment() {
     Target host = get_host_target();
     host.set_feature(Target::JIT);
-#if defined(__has_feature)
-#if __has_feature(address_sanitizer)
+// Clang uses __has_feature; GCC and MSVC use __SANITIZE_ADDRESS__
+#if __has_feature(address_sanitizer) || defined(__SANITIZE_ADDRESS__)
     host.set_feature(Target::ASAN);
 #endif
 #if __has_feature(memory_sanitizer)
@@ -578,7 +578,6 @@ Target get_jit_target_from_environment() {
 #endif
 #if __has_feature(coverage_sanitizer)
     host.set_feature(Target::SanitizerCoverage);
-#endif
 #endif
     string target = Internal::get_env_variable("HL_JIT_TARGET");
     if (target.empty()) {
