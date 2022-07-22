@@ -2,7 +2,8 @@
 # Utilities for setting up Sanitizer settings
 ##
 
-option(Halide_ENABLE_ASAN "Build everything with Address Sanitizer enabled." OFF)
+message(STATUS "TODO: DEFAULTING TO ON FOR NOW FOR DRAFT PR, PLEASE IGNORE")
+option(Halide_ENABLE_ASAN "Build everything with Address Sanitizer enabled." ON)
 if (Halide_ENABLE_ASAN)
     message(STATUS "Enabling Address Sanitizer for project ${PROJECT_NAME}.")
     set(SANITIZER_COMPILE_OPTIONS -fsanitize=address)
