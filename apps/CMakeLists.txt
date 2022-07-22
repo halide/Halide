@@ -13,7 +13,7 @@ endif ()
 
 enable_testing()
 
-include(HalideSanitizerHelpers)
+include(${HalideHelpers_DIR}/HalideSanitizerHelpers.cmake)
 add_compile_options(${SANITIZER_COMPILE_OPTIONS})
 add_link_options(${SANITIZER_LINK_OPTIONS})
 
