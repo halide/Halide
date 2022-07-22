@@ -4,22 +4,6 @@
 
 using namespace Halide::Runtime::Internal;
 
-namespace {
-
-size_t counter = 0;
-
-void *allocate_system(void *user_context, size_t bytes) {
-    ++counter;
-    return native_system_malloc(user_context, bytes);
-}
-
-void deallocate_system(void *user_context, void *ptr) {
-    native_system_free(user_context, ptr);
-    --counter;
-}
-
-}  // namespace
-
 struct TestStruct {
     int8_t i8;
     uint16_t ui16;
@@ -36,18 +20,42 @@ int main(int argc, char **argv) {
         MemoryArena::Config config = {sizeof(int), 32, 0};
         MemoryArena arena(user_context, config, test_allocator);
         void *p1 = arena.reserve(user_context);
-        halide_abort_if_false(user_context, counter > 1);
+        halide_abort_if_false(user_context, allocated_system_memory >= (1 * sizeof(int)));
         halide_abort_if_false(user_context, p1 != nullptr);
 
         void *p2 = arena.reserve(user_context, true);
-        halide_abort_if_false(user_context, counter > 2);
+        halide_abort_if_false(user_context, allocated_system_memory >= (2 * sizeof(int)));
         halide_abort_if_false(user_context, p2 != nullptr);
         halide_abort_if_false(user_context, (*static_cast<int *>(p2)) == 0);
 
         arena.reclaim(user_context, p1);
         arena.destroy(user_context);
 
-        halide_abort_if_false(user_context, counter == 0);
+        halide_abort_if_false(user_context, allocated_system_memory == 0);
+    }
+
+    // test dyanmic construction
+    {
+        SystemMemoryAllocatorFns test_allocator = {allocate_system, deallocate_system};
+
+        MemoryArena::Config config = {sizeof(double), 32, 0};
+        MemoryArena *arena = MemoryArena::create(user_context, config, test_allocator);
+
+        size_t count = 4 * 1024;
+        void *pointers[count];
+        for (size_t n = 0; n < count; ++n) {
+            pointers[n] = arena->reserve(user_context, true);
+        }
+        halide_abort_if_false(user_context, allocated_system_memory >= (count * sizeof(int)));
+        for (size_t n = 0; n < count; ++n) {
+            void *ptr = pointers[n];
+            halide_abort_if_false(user_context, ptr != nullptr);
+            halide_abort_if_false(user_context, (*static_cast<double *>(ptr)) == 0.0);
+        }
+        arena->destroy(user_context);
+
+        MemoryArena::destroy(user_context, arena);
+        halide_abort_if_false(user_context, allocated_system_memory == 0);
     }
 
     // test struct allocations
@@ -57,7 +65,7 @@ int main(int argc, char **argv) {
         MemoryArena arena(user_context, config, test_allocator);
         void *s1 = arena.reserve(user_context, true);
         halide_abort_if_false(user_context, s1 != nullptr);
-        halide_abort_if_false(user_context, counter > 1);
+        halide_abort_if_false(user_context, allocated_system_memory >= (1 * sizeof(int)));
         halide_abort_if_false(user_context, ((TestStruct *)s1)->i8 == int8_t(0));
         halide_abort_if_false(user_context, ((TestStruct *)s1)->ui16 == uint16_t(0));
         halide_abort_if_false(user_context, ((TestStruct *)s1)->f32 == float(0));
@@ -80,7 +88,7 @@ int main(int argc, char **argv) {
 
         arena.destroy(user_context);
 
-        halide_abort_if_false(user_context, counter == 0);
+        halide_abort_if_false(user_context, allocated_system_memory == 0);
     }
 
     print(user_context) << "Success!\n";

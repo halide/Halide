@@ -18,10 +18,11 @@ T read_as(const LinkedList::EntryType *entry_ptr) {
 
 int main(int argc, char **argv) {
     void *user_context = (void *)1;
+    SystemMemoryAllocatorFns test_allocator = {allocate_system, deallocate_system};
 
     // test class interface
     {
-        LinkedList list(user_context, sizeof(int), 64);
+        LinkedList list(user_context, sizeof(int), 64, test_allocator);
         halide_abort_if_false(user_context, list.size() == 0);
 
         const int i0 = 12;
@@ -60,11 +61,20 @@ int main(int argc, char **argv) {
 
         list.clear(user_context);
         halide_abort_if_false(user_context, list.size() == 0);
+
+        size_t count = 4 * 1024;
+        for (size_t n = 0; n < count; ++n) {
+            list.append(user_context, &n);
+        }
+        halide_abort_if_false(user_context, list.size() == count);
+
+        list.destroy(user_context);
+        halide_abort_if_false(user_context, allocated_system_memory == 0);
     }
 
     // test struct storage
     {
-        LinkedList list(user_context, sizeof(TestStruct));
+        LinkedList list(user_context, sizeof(TestStruct), 32, test_allocator);
         halide_abort_if_false(user_context, list.size() == 0);
 
         TestStruct s1 = {8, 16, 32.0f};
@@ -84,6 +94,9 @@ int main(int argc, char **argv) {
         halide_abort_if_false(user_context, e2.i8 == s2.i8);
         halide_abort_if_false(user_context, e2.ui16 == s2.ui16);
         halide_abort_if_false(user_context, e2.f32 == s2.f32);
+
+        list.destroy(user_context);
+        halide_abort_if_false(user_context, allocated_system_memory == 0);
     }
 
     print(user_context) << "Success!\n";

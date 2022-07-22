@@ -31,9 +31,28 @@ struct StringUtils {
         return count;
     }
 
-    static size_t count_length(const char *str) {
+    // retuns true if s1 contains s2 (within n characters)
+    static bool contains(const char *s1, const char *s2, size_t n) {
+        if (is_empty(s2)) { return true; }  // s2 is empty ... return true to match strstr
+        char starts_with = *s2;
+        for (size_t length = strlen(s2); length <= n; n--, s1++) {
+            if (*s1 == starts_with) {
+                for (size_t i = 1; i <= length; i++) {
+                    if (i == length) {
+                        return true;
+                    }
+                    if (s1[i] != s2[i]) {
+                        break;
+                    }
+                }
+            }
+        }
+        return false;
+    }
+
+    static size_t count_length(const char *str, size_t max_chars) {
         const char *ptr = str;
-        while (!StringUtils::is_empty(ptr)) {
+        while (!StringUtils::is_empty(ptr) && ((size_t(ptr - str)) < max_chars)) {
             ++ptr;
         }
         return size_t(ptr - str);
@@ -49,6 +68,10 @@ public:
     StringStorage(void *user_context = nullptr, uint32_t capacity = 0, const SystemMemoryAllocatorFns &sma = default_allocator());
     StringStorage(const StringStorage &other) = default;
     ~StringStorage();
+
+    // Factory methods for creation / destruction
+    static StringStorage *create(void *user_context, const SystemMemoryAllocatorFns &ma);
+    static void destroy(void *user_context, StringStorage *string_storage);
 
     void initialize(void *user_context, uint32_t capacity = 0, const SystemMemoryAllocatorFns &sma = default_allocator());
     void destroy(void *user_context);
@@ -89,6 +112,28 @@ StringStorage::~StringStorage() {
     destroy(nullptr);
 }
 
+StringStorage *StringStorage::create(void *user_context, const SystemMemoryAllocatorFns &system_allocator) {
+    halide_abort_if_false(user_context, system_allocator.allocate != nullptr);
+    StringStorage *result = reinterpret_cast<StringStorage *>(
+        system_allocator.allocate(user_context, sizeof(StringStorage)));
+
+    if (result == nullptr) {
+        halide_error(user_context, "StringStorage: Failed to create instance! Out of memory!\n");
+        return nullptr;
+    }
+
+    result->initialize(user_context, 32, system_allocator);
+    return result;
+}
+
+void StringStorage::destroy(void *user_context, StringStorage *instance) {
+    halide_abort_if_false(user_context, instance != nullptr);
+    const SystemMemoryAllocatorFns &system_allocator = instance->current_allocator();
+    instance->destroy(user_context);
+    halide_abort_if_false(user_context, system_allocator.deallocate != nullptr);
+    system_allocator.deallocate(user_context, instance);
+}
+
 StringStorage &StringStorage::operator=(const StringStorage &other) {
     if (&other != this) {
         assign(nullptr, other.data(), other.length());
@@ -97,14 +142,17 @@ StringStorage &StringStorage::operator=(const StringStorage &other) {
 }
 
 bool StringStorage::contains(const char *str) const {
+    if (contents.empty()) { return false; }
     const char *this_str = static_cast<const char *>(contents.data());
-    return strstr(this_str, str) != nullptr;
+    return StringUtils::contains(this_str, str, contents.size());
 }
 
 bool StringStorage::contains(const StringStorage &other) const {
+    if (contents.empty()) { return false; }
+    if (other.contents.empty()) { return false; }
     const char *this_str = static_cast<const char *>(contents.data());
     const char *other_str = static_cast<const char *>(other.contents.data());
-    return strstr(this_str, other_str) != nullptr;
+    return StringUtils::contains(this_str, other_str, contents.size());
 }
 
 bool StringStorage::operator==(const StringStorage &other) const {
@@ -125,64 +173,72 @@ void StringStorage::reserve(void *user_context, size_t length) {
 }
 
 void StringStorage::assign(void *user_context, char ch) {
-    contents.resize(user_context, 1);
+    reserve(user_context, 1);
     char *ptr = static_cast<char *>(contents[0]);
     (*ptr) = ch;
+    terminate(user_context, 1);
 }
 
 void StringStorage::assign(void *user_context, const char *str, size_t length) {
     if (StringUtils::is_empty(str)) { return; }
     if (length == 0) { length = strlen(str); }
-    char *this_str = static_cast<char *>(contents.data());
     reserve(user_context, length);
-    memcpy(this_str, str, length);
+    contents.replace(user_context, 0, str, length);
     terminate(user_context, length);
 }
 
 void StringStorage::append(void *user_context, const char *str, size_t length) {
     if (StringUtils::is_empty(str)) { return; }
     if (length == 0) { length = strlen(str); }
-    const size_t old_size = contents.size();
-    size_t new_length = old_size + length;
-    char *this_str = static_cast<char *>(contents[old_size]);
-    reserve(user_context, length);
-    memcpy(this_str, str, length);
+    const size_t old_length = StringUtils::count_length(data(), contents.size());
+    size_t new_length = old_length + length;
+    reserve(user_context, new_length);
+    contents.insert(user_context, old_length, str, length);
     terminate(user_context, new_length);
 }
 
 void StringStorage::append(void *user_context, char ch) {
-    contents.append(user_context, &ch);
+    const size_t old_length = StringUtils::count_length(data(), contents.size());
+    size_t new_length = old_length + 1;
+    reserve(user_context, new_length);
+    contents.insert(user_context, old_length, &ch, 1);
+    terminate(user_context, new_length);
 }
 
 void StringStorage::prepend(void *user_context, const char *str, size_t length) {
     if (StringUtils::is_empty(str)) { return; }
     if (length == 0) { length = strlen(str); }
-    const size_t old_size = contents.size();
-    size_t new_length = old_size + length;
-    char *this_str = static_cast<char *>(contents.data());
+    const size_t old_length = StringUtils::count_length(data(), contents.size());
+    size_t new_length = old_length + length;
     reserve(user_context, new_length);
-    memcpy(this_str + length, this_str, old_size);
-    memcpy(this_str, str, length);
+    contents.insert(user_context, 0, str, length);
     terminate(user_context, new_length);
 }
 
 void StringStorage::prepend(void *user_context, char ch) {
+    const size_t old_length = StringUtils::count_length(data(), contents.size());
+    size_t new_length = old_length + 1;
+    reserve(user_context, new_length);
     contents.prepend(user_context, &ch);
+    terminate(user_context, new_length);
 }
 
 void StringStorage::terminate(void *user_context, size_t length) {
-    char *end_ptr = static_cast<char *>(contents[length]);
-    (*end_ptr) = '\0';
+    if (contents.data() && (length < contents.size())) {
+        char *end_ptr = static_cast<char *>(contents[length]);
+        (*end_ptr) = '\0';
+    }
 }
 
 void StringStorage::clear(void *user_context) {
     contents.clear(user_context);
-    if (contents.data()) { terminate(user_context, 0); }
+    terminate(user_context, 0);
 }
 
 void StringStorage::initialize(void *user_context, uint32_t capacity, const SystemMemoryAllocatorFns &sma) {
     contents.initialize(user_context, {sizeof(char), 32, 32}, sma);
-    if (capacity) { contents.reserve(user_context, capacity); }
+    reserve(user_context, capacity);
+    terminate(user_context, 0);
 }
 
 void StringStorage::destroy(void *user_context) {
@@ -190,7 +246,7 @@ void StringStorage::destroy(void *user_context) {
 }
 
 size_t StringStorage::length() const {
-    return StringUtils::count_length(data());
+    return StringUtils::count_length(data(), contents.size());
 }
 
 const char *StringStorage::data() const {

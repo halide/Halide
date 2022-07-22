@@ -7,11 +7,11 @@ using namespace Halide::Runtime::Internal;
 
 namespace {
 
-size_t allocated_block_memory = 0;
 size_t allocated_region_memory = 0;
+size_t allocated_block_memory = 0;
 
 void allocate_block(void *user_context, MemoryBlock *block) {
-    block->handle = native_system_malloc(user_context, block->size);
+    block->handle = allocate_system(user_context, block->size);
     allocated_block_memory += block->size;
 
     debug(user_context) << "Test : allocate_block ("
@@ -22,7 +22,7 @@ void allocate_block(void *user_context, MemoryBlock *block) {
 }
 
 void deallocate_block(void *user_context, MemoryBlock *block) {
-    native_system_free(user_context, block->handle);
+    deallocate_system(user_context, block->handle);
     allocated_block_memory -= block->size;
 
     debug(user_context) << "Test : deallocate_block ("
@@ -59,7 +59,7 @@ void deallocate_region(void *user_context, MemoryRegion *region) {
 int main(int argc, char **argv) {
     void *user_context = (void *)1;
 
-    SystemMemoryAllocatorFns system_allocator = {native_system_malloc, native_system_free};
+    SystemMemoryAllocatorFns system_allocator = {allocate_system, deallocate_system};
     MemoryBlockAllocatorFns block_allocator = {allocate_block, deallocate_block};
     MemoryRegionAllocatorFns region_allocator = {allocate_region, deallocate_region};
 
@@ -92,10 +92,21 @@ int main(int argc, char **argv) {
         halide_abort_if_false(user_context, allocated_region_memory == (1 * request.size));
 
         instance->destroy(user_context);
+        debug(user_context) << "Test : block_allocator::destroy ("
+                            << "allocated_block_memory=" << int32_t(allocated_block_memory) << " "
+                            << "allocated_region_memory=" << int32_t(allocated_region_memory) << " "
+                            << ") !\n";
+
         halide_abort_if_false(user_context, allocated_block_memory == 0);
         halide_abort_if_false(user_context, allocated_region_memory == 0);
 
         BlockAllocator::destroy(user_context, instance);
+
+        debug(user_context) << "Test : block_allocator::destroy ("
+                            << "allocated_system_memory=" << int32_t(allocated_system_memory) << " "
+                            << ") !\n";
+
+        halide_abort_if_false(user_context, allocated_system_memory == 0);
     }
 
     // stress test
@@ -129,10 +140,12 @@ int main(int argc, char **argv) {
         }
         halide_abort_if_false(user_context, allocated_region_memory == 0);
 
+        pointers.destroy(user_context);
         instance->destroy(user_context);
         halide_abort_if_false(user_context, allocated_block_memory == 0);
 
         BlockAllocator::destroy(user_context, instance);
+        halide_abort_if_false(user_context, allocated_system_memory == 0);
     }
 
     print(user_context) << "Success!\n";

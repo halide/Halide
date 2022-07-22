@@ -6,10 +6,11 @@ using namespace Halide::Runtime::Internal;
 
 int main(int argc, char **argv) {
     void *user_context = (void *)1;
+    SystemMemoryAllocatorFns test_allocator = {allocate_system, deallocate_system};
 
     // test class interface
     {
-        StringStorage ss;
+        StringStorage ss(user_context, 0, test_allocator);
         halide_abort_if_false(user_context, ss.length() == 0);
 
         const char *ts1 = "Testing!";
@@ -30,6 +31,9 @@ int main(int argc, char **argv) {
 
         ss.clear(user_context);
         halide_abort_if_false(user_context, ss.length() == 0);
+
+        ss.destroy(user_context);
+        halide_abort_if_false(user_context, allocated_system_memory == 0);
     }
 
     // test copy and equality
@@ -40,10 +44,10 @@ int main(int argc, char **argv) {
         const char *ts2 = "Test Two!";
         const size_t ts2_length = strlen(ts2);
 
-        StringStorage ss1;
+        StringStorage ss1(user_context, 0, test_allocator);
         ss1.assign(user_context, ts1, ts1_length);
 
-        StringStorage ss2;
+        StringStorage ss2(user_context, 0, test_allocator);
         ss2.assign(user_context, ts2, ts2_length);
 
         StringStorage ss3(ss1);
@@ -57,6 +61,11 @@ int main(int argc, char **argv) {
 
         ss2 = ss1;
         halide_abort_if_false(user_context, ss1 == ss2);
+
+        ss1.destroy(user_context);
+        ss2.destroy(user_context);
+        ss3.destroy(user_context);
+        halide_abort_if_false(user_context, allocated_system_memory == 0);
     }
     print(user_context) << "Success!\n";
     return 0;

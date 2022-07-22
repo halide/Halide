@@ -6,6 +6,7 @@ using namespace Halide::Runtime::Internal;
 
 int main(int argc, char **argv) {
     void *user_context = (void *)1;
+    SystemMemoryAllocatorFns test_allocator = {allocate_system, deallocate_system};
 
     // test class interface
     {
@@ -13,7 +14,7 @@ int main(int argc, char **argv) {
         const char *data[] = {
             "one", "two", "three", "four"};
 
-        StringTable st1;
+        StringTable st1(user_context, 0, test_allocator);
         halide_abort_if_false(user_context, st1.size() == 0);
 
         st1.fill(user_context, data, data_size);

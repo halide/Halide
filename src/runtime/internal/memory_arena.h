@@ -128,10 +128,12 @@ void MemoryArena::initialize(void *user_context,
 }
 
 void MemoryArena::destroy(void *user_context) {
-    for (size_t i = blocks.size(); i--;) {
-        Block *block = lookup_block(user_context, i);
-        halide_abort_if_false(user_context, block != nullptr);
-        destroy_block(user_context, block);
+    if (!blocks.empty()) {
+        for (size_t i = blocks.size(); i--;) {
+            Block *block = lookup_block(user_context, i);
+            halide_abort_if_false(user_context, block != nullptr);
+            destroy_block(user_context, block);
+        }
     }
     blocks.destroy(user_context);
 }
