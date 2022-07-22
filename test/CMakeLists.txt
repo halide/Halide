@@ -1,5 +1,9 @@
 include(HalideTestHelpers)
 
+if (TARGET_SPIRV)
+    add_compile_definitions(WITH_SPIRV)
+endif ()
+
 # Internal tests are a special case.
 # HalideTestHelpers depends on this test being present.
 add_executable(_test_internal internal.cpp)

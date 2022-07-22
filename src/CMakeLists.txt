@@ -419,9 +419,6 @@ endif ()
 if (TARGET Halide_SPIRV)
     target_link_libraries(Halide PRIVATE Halide_SPIRV)
     target_compile_definitions(Halide PRIVATE WITH_SPIRV)
-#    get_property(HALIDE_SPIRV_INCLUDE_DIR GLOBAL PROPERTY SPIRV_INCLUDE_DIR)    
-#    target_include_directories(Halide PRIVATE "${HALIDE_SPIRV_INCLUDE_DIR}")
-#    message(STATUS "Adding SPIR-V headers from ${HALIDE_SPIRV_INCLUDE_DIR}...")
 endif ()
 
 ##
