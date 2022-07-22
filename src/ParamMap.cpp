@@ -48,4 +48,9 @@ Internal::Parameter &ParamMap::map(Internal::Parameter &p, Buffer<> *&buf_out_pa
     }
 }
 
+/*static*/ const ParamMap &ParamMap::empty_map() {
+    static ParamMap empty_param_map;
+    return empty_param_map;
+}
+
 }  // namespace Halide

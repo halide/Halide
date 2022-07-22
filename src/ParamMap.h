@@ -101,10 +101,7 @@ public:
     /** A const ref to an empty ParamMap. Useful for default function
      * arguments, which would otherwise require a copy constructor
      * (with llvm in c++98 mode) */
-    static const ParamMap &empty_map() {
-        static ParamMap empty_param_map;
-        return empty_param_map;
-    }
+    static const ParamMap &empty_map();
 };
 
 }  // namespace Halide
