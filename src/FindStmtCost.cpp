@@ -54,12 +54,10 @@ int CostPreProcessor::get_count(const string name) const {
  * CostPreProcessor class
  */
 void FindStmtCost::generate_costs(const Module &m) {
-
     cost_preprocessor.traverse(m);
     traverse(m);
 }
 void FindStmtCost::generate_costs(const Stmt &stmt) {
-
     cost_preprocessor.mutate(stmt);
     mutate(stmt);
 }

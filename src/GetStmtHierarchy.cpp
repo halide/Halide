@@ -5,36 +5,163 @@ using namespace Halide;
 using namespace Internal;
 
 string GetStmtHierarchy::get_hierarchy_html(const Expr &startNode) {
-    GetStmtHierarchy::start_html();
-    GetStmtHierarchy::start_tree();
-    GetStmtHierarchy::mutate(startNode);
-    GetStmtHierarchy::end_tree();
-    GetStmtHierarchy::end_html();
+    start_html();
+
+    colorType = CC_TYPE;
+    start_tree();
+    mutate(startNode);
+    end_tree();
+
+    colorType = DMC_TYPE;
+    start_tree();
+    mutate(startNode);
+    end_tree();
+
+    end_html();
 
     return html.str();
 }
 
 string GetStmtHierarchy::get_hierarchy_html(const Stmt &startNode) {
     start_html();
+
+    colorType = CC_TYPE;
     start_tree();
     mutate(startNode);
     end_tree();
+
+    colorType = DMC_TYPE;
+    start_tree();
+    mutate(startNode);
+    end_tree();
+
     end_html();
 
     return html.str();
+}
+
+void GetStmtHierarchy::set_stmt_cost(const Module &m) {
+    findStmtCost.generate_costs(m);
+}
+void GetStmtHierarchy::set_stmt_cost(const Stmt &s) {
+    findStmtCost.generate_costs(s);
+}
+
+int GetStmtHierarchy::get_range(const IRNode *op) const {
+    if (colorType == CC_TYPE) {
+        return findStmtCost.get_computation_range(op);
+    } else if (colorType == DMC_TYPE) {
+        return findStmtCost.get_data_movement_range(op);
+    } else {
+        m_assert(false, "colorType is not set");
+    }
+}
+
+int GetStmtHierarchy::get_range_list(vector<Halide::Expr> exprs) const {
+    int maxValue = 0;
+    int retValue;
+    if (colorType == CC_TYPE) {
+        for (const Expr &e : exprs) {
+            retValue = findStmtCost.get_computation_range(e.get());
+            if (retValue > maxValue) {
+                maxValue = retValue;
+            }
+        }
+    } else if (colorType == DMC_TYPE) {
+        for (const Expr &e : exprs) {
+            retValue = findStmtCost.get_data_movement_range(e.get());
+            if (retValue > maxValue) {
+                maxValue = retValue;
+            }
+        }
+    } else {
+        m_assert(false, "colorType is not set");
+    }
+    return maxValue;
+}
+
+string GetStmtHierarchy::get_cost(const IRNode *node) const {
+    if (node == nullptr) {
+        return "";
+    }
+    stringstream cost;
+    cost << " (";
+    cost << "CC: " << findStmtCost.get_computation_cost(node);
+    cost << ", DMC: " << findStmtCost.get_data_movement_cost(node);
+    cost << ")";
+    return cost.str();
+}
+
+string GetStmtHierarchy::get_cost_list(vector<Halide::Expr> exprs) const {
+    int ccCount = 0;
+    int dmcCount = 0;
+    for (const auto &e : exprs) {
+        ccCount += findStmtCost.get_computation_cost(e.get());
+        dmcCount += findStmtCost.get_data_movement_cost(e.get());
+    }
+    stringstream cost;
+    cost << " (";
+    cost << "CC: " << ccCount;
+    cost << ", DMC: " << dmcCount;
+    cost << ")";
+    return cost.str();
 }
 
 void GetStmtHierarchy::start_html() {
     html.str(string());
     html << "<html>";
     html << "<head>";
-    html << "<link rel=\\'stylesheet\\' href=\\'https://unpkg.com/treeflex/dist/css/treeflex.css\\'>";
+    html << "<link rel=\\'stylesheet\\' "
+            "href=\\'https://unpkg.com/treeflex/dist/css/treeflex.css\\'>";
     html << "</head>";
     html << "<style>";
     html << ".tf-custom .tf-nc { border-radius: 5px; border: 1px solid; }";
     html << ".tf-custom .end-node { border-style: dashed; } ";
     html << ".tf-custom .tf-nc:before, .tf-custom .tf-nc:after { border-left-width: 1px; } ";
-    html << ".tf-custom li li:before { border-top-width: 1px; } .tf-custom .children-node { background-color: lightgrey; }";
+    html << ".tf-custom li li:before { border-top-width: 1px; }";
+
+    html << ".CostComputation19 { background-color: rgb(130,31,27);}";
+    html << ".CostComputation18 { background-color: rgb(145,33,30);}";
+    html << ".CostComputation17 { background-color: rgb(160,33,32);}";
+    html << ".CostComputation16 { background-color: rgb(176,34,34);}";
+    html << ".CostComputation15 { background-color: rgb(185,47,32);}";
+    html << ".CostComputation14 { background-color: rgb(193,59,30);}";
+    html << ".CostComputation13 { background-color: rgb(202,71,27);}";
+    html << ".CostComputation12 { background-color: rgb(210,82,22);}";
+    html << ".CostComputation11 { background-color: rgb(218,93,16);}";
+    html << ".CostComputation10 { background-color: rgb(226,104,6);}";
+    html << ".CostComputation9 { background-color: rgb(229,118,9);}";
+    html << ".CostComputation8 { background-color: rgb(230,132,15);}";
+    html << ".CostComputation7 { background-color: rgb(231,146,20);}";
+    html << ".CostComputation6 { background-color: rgb(232,159,25);}";
+    html << ".CostComputation5 { background-color: rgb(233,172,30);}";
+    html << ".CostComputation4 { background-color: rgb(233,185,35);}";
+    html << ".CostComputation3 { background-color: rgb(233,198,40);}";
+    html << ".CostComputation2 { background-color: rgb(232,211,45);}";
+    html << ".CostComputation1 { background-color: rgb(231,223,50);}";
+    html << ".CostComputation0 { background-color: rgb(236,233,89);}";
+
+    html << ".tf-custom .CostComputationBorder19 { border-color: rgb(130,31,27);}";
+    html << ".tf-custom .CostComputationBorder18 { border-color: rgb(145,33,30);}";
+    html << ".tf-custom .CostComputationBorder17 { border-color: rgb(160,33,32);}";
+    html << ".tf-custom .CostComputationBorder16 { border-color: rgb(176,34,34);}";
+    html << ".tf-custom .CostComputationBorder15 { border-color: rgb(185,47,32);}";
+    html << ".tf-custom .CostComputationBorder14 { border-color: rgb(193,59,30);}";
+    html << ".tf-custom .CostComputationBorder13 { border-color: rgb(202,71,27);}";
+    html << ".tf-custom .CostComputationBorder12 { border-color: rgb(210,82,22);}";
+    html << ".tf-custom .CostComputationBorder11 { border-color: rgb(218,93,16);}";
+    html << ".tf-custom .CostComputationBorder10 { border-color: rgb(226,104,6);}";
+    html << ".tf-custom .CostComputationBorder9 { border-color: rgb(229,118,9);}";
+    html << ".tf-custom .CostComputationBorder8 { border-color: rgb(230,132,15);}";
+    html << ".tf-custom .CostComputationBorder7 { border-color: rgb(231,146,20);}";
+    html << ".tf-custom .CostComputationBorder6 { border-color: rgb(232,159,25);}";
+    html << ".tf-custom .CostComputationBorder5 { border-color: rgb(233,172,30);}";
+    html << ".tf-custom .CostComputationBorder4 { border-color: rgb(233,185,35);}";
+    html << ".tf-custom .CostComputationBorder3 { border-color: rgb(233,198,40);}";
+    html << ".tf-custom .CostComputationBorder2 { border-color: rgb(232,211,45);}";
+    html << ".tf-custom .CostComputationBorder1 { border-color: rgb(231,223,50);}";
+    html << ".tf-custom .CostComputationBorder0 { border-color: rgb(236,233,89);} ";
+
     html << "body { font-family: Consolas, \\'Liberation Mono\\', Menlo, Courier, monospace;}";
     html << "</style>";
     html << "<body>";
@@ -53,12 +180,14 @@ void GetStmtHierarchy::end_tree() {
     html << "</div>";
 }
 
-void GetStmtHierarchy::node_without_children(string name) {
-    html << "<li><span class=\\'tf-nc end-node\\'>" << name << "</span></li>";
+void GetStmtHierarchy::node_without_children(string name, int colorCost) {
+    html << "<li><span class=\\'tf-nc end-node CostComputationBorder" << colorCost << "\\'>" << name
+         << "</span></li>";
 }
 
-void GetStmtHierarchy::open_node(string name) {
-    html << "<li><span class=\\'tf-nc children-node\\'>" << name << "</span>";
+void GetStmtHierarchy::open_node(string name, int colorCost) {
+    html << "<li><span class=\\'tf-nc children-node CostComputation" << colorCost << "\\'>" << name
+         << "</span>";
     html << "<ul>";
 }
 
@@ -68,110 +197,129 @@ void GetStmtHierarchy::close_node() {
 }
 
 Expr GetStmtHierarchy::visit(const IntImm *op) {
-    node_without_children(to_string(op->value));
+    node_without_children(to_string(op->value), get_range(op));
     return op;
 }
 Expr GetStmtHierarchy::visit(const UIntImm *op) {
-    node_without_children(to_string(op->value));
+    node_without_children(to_string(op->value), get_range(op));
     return op;
 }
 Expr GetStmtHierarchy::visit(const FloatImm *op) {
-    node_without_children(to_string(op->value));
+    node_without_children(to_string(op->value), get_range(op));
     return op;
 }
 Expr GetStmtHierarchy::visit(const StringImm *op) {
-    node_without_children(op->value);
+    node_without_children(op->value, get_range(op));
     return op;
 }
 Expr GetStmtHierarchy::visit(const Cast *op) {
     stringstream name;
     name << op->type;
-    open_node(name.str());
+    int computation_range = get_range(op);
+    open_node(name.str(), computation_range);
     mutate(op->value);
     close_node();
     return op;
 }
 Expr GetStmtHierarchy::visit(const Variable *op) {
-    node_without_children(op->name);
+    node_without_children(op->name, get_range(op));
     return op;
 }
 
-void GetStmtHierarchy::visit_binary_op(const Expr &a, const Expr &b, const string &name) {
-    open_node(name);
+void GetStmtHierarchy::visit_binary_op(const Expr &a, const Expr &b, const string &name,
+                                       int colorCost) {
+    open_node(name, colorCost);
     mutate(a);
     mutate(b);
     close_node();
 }
 
 Expr GetStmtHierarchy::visit(const Add *op) {
-    visit_binary_op(op->a, op->b, "+");
+    int computation_range = get_range(op);
+    visit_binary_op(op->a, op->b, "+", computation_range);
     return op;
 }
 Expr GetStmtHierarchy::visit(const Sub *op) {
-    visit_binary_op(op->a, op->b, "-");
+    int computation_range = get_range(op);
+    visit_binary_op(op->a, op->b, "-", computation_range);
     return op;
 }
 Expr GetStmtHierarchy::visit(const Mul *op) {
-    visit_binary_op(op->a, op->b, "*");
+    int computation_range = get_range(op);
+    visit_binary_op(op->a, op->b, "*", computation_range);
     return op;
 }
 Expr GetStmtHierarchy::visit(const Div *op) {
-    visit_binary_op(op->a, op->b, "/");
+    int computation_range = get_range(op);
+    visit_binary_op(op->a, op->b, "/", computation_range);
     return op;
 }
 Expr GetStmtHierarchy::visit(const Mod *op) {
-    visit_binary_op(op->a, op->b, "%");
+    int computation_range = get_range(op);
+    visit_binary_op(op->a, op->b, "%", computation_range);
     return op;
 }
 Expr GetStmtHierarchy::visit(const EQ *op) {
-    visit_binary_op(op->a, op->b, "==");
+    int computation_range = get_range(op);
+    visit_binary_op(op->a, op->b, "==", computation_range);
     return op;
 }
 Expr GetStmtHierarchy::visit(const NE *op) {
-    visit_binary_op(op->a, op->b, "!=");
+    int computation_range = get_range(op);
+    visit_binary_op(op->a, op->b, "!=", computation_range);
     return op;
 }
 Expr GetStmtHierarchy::visit(const LT *op) {
-    visit_binary_op(op->a, op->b, "<");
+    int computation_range = get_range(op);
+    visit_binary_op(op->a, op->b, "<", computation_range);
     return op;
 }
 Expr GetStmtHierarchy::visit(const LE *op) {
-    visit_binary_op(op->a, op->b, "<=");
+    int computation_range = get_range(op);
+    visit_binary_op(op->a, op->b, "<=", computation_range);
     return op;
 }
 Expr GetStmtHierarchy::visit(const GT *op) {
-    visit_binary_op(op->a, op->b, ">");
+    int computation_range = get_range(op);
+    visit_binary_op(op->a, op->b, ">", computation_range);
     return op;
 }
 Expr GetStmtHierarchy::visit(const GE *op) {
-    visit_binary_op(op->a, op->b, ">=");
+    int computation_range = get_range(op);
+    visit_binary_op(op->a, op->b, ">=", computation_range);
     return op;
 }
 Expr GetStmtHierarchy::visit(const And *op) {
-    visit_binary_op(op->a, op->b, "&amp;&amp;");
+    int computation_range = get_range(op);
+    visit_binary_op(op->a, op->b, "&amp;&amp;", computation_range);
     return op;
 }
 Expr GetStmtHierarchy::visit(const Or *op) {
-    visit_binary_op(op->a, op->b, "||");
+    int computation_range = get_range(op);
+    visit_binary_op(op->a, op->b, "||", computation_range);
     return op;
 }
 Expr GetStmtHierarchy::visit(const Min *op) {
-    visit_binary_op(op->a, op->b, "min");
+    int computation_range = get_range(op);
+    visit_binary_op(op->a, op->b, "min", computation_range);
     return op;
 }
 Expr GetStmtHierarchy::visit(const Max *op) {
-    visit_binary_op(op->a, op->b, "max");
+    int computation_range = get_range(op);
+    visit_binary_op(op->a, op->b, "max", computation_range);
     return op;
 }
 
 Expr GetStmtHierarchy::visit(const Not *op) {
-    open_node("!");
+    int computation_range = get_range(op);
+    open_node("!", computation_range);
     mutate(op->a);
     close_node();
     return op;
 }
 Expr GetStmtHierarchy::visit(const Select *op) {
-    open_node("Select");
+    int computation_range = get_range(op);
+    open_node("Select", computation_range);
     mutate(op->condition);
     mutate(op->true_value);
     mutate(op->false_value);
@@ -181,11 +329,12 @@ Expr GetStmtHierarchy::visit(const Select *op) {
 Expr GetStmtHierarchy::visit(const Load *op) {
     stringstream index;
     index << op->index;
-    node_without_children(op->name + "[" + index.str() + "]");
+    node_without_children(op->name + "[" + index.str() + "]", get_range(op));
     return op;
 }
 Expr GetStmtHierarchy::visit(const Ramp *op) {
-    open_node("Ramp");
+    int computation_range = get_range(op);
+    open_node("Ramp", computation_range);
     mutate(op->base);
     mutate(op->stride);
     mutate(Expr(op->lanes));
@@ -193,13 +342,15 @@ Expr GetStmtHierarchy::visit(const Ramp *op) {
     return op;
 }
 Expr GetStmtHierarchy::visit(const Broadcast *op) {
-    open_node("x" + to_string(op->lanes));
+    int computation_range = get_range(op);
+    open_node("x" + to_string(op->lanes), computation_range);
     mutate(op->value);
     close_node();
     return op;
 }
 Expr GetStmtHierarchy::visit(const Call *op) {
-    open_node(op->name);
+    int computation_range = get_range(op);
+    open_node(op->name, computation_range);
     for (auto &arg : op->args) {
         mutate(arg);
     }
@@ -207,26 +358,33 @@ Expr GetStmtHierarchy::visit(const Call *op) {
     return op;
 }
 Expr GetStmtHierarchy::visit(const Let *op) {
-    open_node("Let");
-    open_node("=");
-    node_without_children(op->name);
+    int computation_range = get_range(op);
+    open_node("Let", computation_range);
+
+    open_node("=", computation_range);
+    node_without_children(op->name, get_range(nullptr));
     mutate(op->value);
     close_node();
-    open_node("body");
+
+    int computation_range_body = get_range(op->body.get());
+    open_node("body", computation_range_body);
     mutate(op->body);
     close_node();
+
     close_node();
     return op;
 }
 Stmt GetStmtHierarchy::visit(const LetStmt *op) {
-    open_node("=");
-    node_without_children(op->name);
+    int computation_range = get_range(op);
+    open_node("=", computation_range);
+    node_without_children(op->name, get_range(nullptr));
     mutate(op->value);
     close_node();
     return op;
 }
 Stmt GetStmtHierarchy::visit(const AssertStmt *op) {
-    open_node("Assert");
+    int computation_range = get_range(op);
+    open_node("Assert", computation_range);
     mutate(op->condition);
     close_node();
     return op;
@@ -240,19 +398,20 @@ Stmt GetStmtHierarchy::visit(const For *op) {
     return op;
 }
 Stmt GetStmtHierarchy::visit(const Store *op) {
-    open_node("=");
+    int computation_range = get_range(op);
+    open_node("=", computation_range);
     stringstream index;
     index << op->index;
-    stringstream value;
-    value << op->value;
-    node_without_children(op->name + "[" + index.str() + "]");
+    node_without_children(op->name + "[" + index.str() + "]", get_range(op->index.get()));
     mutate(op->value);
     close_node();
     return op;
 }
 Stmt GetStmtHierarchy::visit(const Provide *op) {
-    open_node("=");
-    open_node(op->name);
+    m_assert(false, "check out provide!! " + op->name);
+    int computation_range = get_range(op);
+    open_node("=", computation_range);
+    open_node(op->name, computation_range);
     for (auto &arg : op->args) {
         mutate(arg);
     }
@@ -264,7 +423,8 @@ Stmt GetStmtHierarchy::visit(const Provide *op) {
     return op;
 }
 Stmt GetStmtHierarchy::visit(const Allocate *op) {
-    open_node("allocate");
+    int computation_range = get_range(op);
+    open_node("allocate", computation_range);
     stringstream index;
     index << op->type;
 
@@ -273,7 +433,7 @@ Stmt GetStmtHierarchy::visit(const Allocate *op) {
         index << extent;
     }
 
-    node_without_children(op->name + "[" + index.str() + "]");
+    node_without_children(op->name + "[" + index.str() + "]", get_range_list(op->extents));
 
     if (!is_const_one(op->condition)) {
         m_assert(false, "visualizing Allocate: !is_const_one(op->condition) !! look into it");
@@ -290,8 +450,9 @@ Stmt GetStmtHierarchy::visit(const Allocate *op) {
     return op;
 }
 Stmt GetStmtHierarchy::visit(const Free *op) {
-    open_node("Free");
-    node_without_children(op->name);
+    int computation_range = get_range(op);
+    open_node("Free", computation_range);
+    node_without_children(op->name, get_range(op));
     close_node();
     return op;
 }
@@ -304,7 +465,8 @@ Stmt GetStmtHierarchy::visit(const Block *op) {
     return op;
 }
 Stmt GetStmtHierarchy::visit(const IfThenElse *op) {
-    open_node("IfThenElse");
+    int computation_range = get_range(op);
+    open_node("IfThenElse", computation_range);
     mutate(op->condition);
     if (op->else_case.defined()) {
         mutate(op->else_case);
@@ -317,8 +479,9 @@ Stmt GetStmtHierarchy::visit(const Evaluate *op) {
     return op;
 }
 Expr GetStmtHierarchy::visit(const Shuffle *op) {
+    int computation_range = get_range(op);
     if (op->is_concat()) {
-        open_node("concat_vectors");
+        open_node("concat_vectors", computation_range);
         for (auto &e : op->vectors) {
             mutate(e);
         }
@@ -326,7 +489,7 @@ Expr GetStmtHierarchy::visit(const Shuffle *op) {
     }
 
     else if (op->is_interleave()) {
-        open_node("interleave_vectors");
+        open_node("interleave_vectors", computation_range);
         for (auto &e : op->vectors) {
             mutate(e);
         }
@@ -336,7 +499,7 @@ Expr GetStmtHierarchy::visit(const Shuffle *op) {
     else if (op->is_extract_element()) {
         std::vector<Expr> args = op->vectors;
         args.emplace_back(op->slice_begin());
-        open_node("extract_element");
+        open_node("extract_element", computation_range);
         for (auto &e : args) {
             mutate(e);
         }
@@ -348,7 +511,7 @@ Expr GetStmtHierarchy::visit(const Shuffle *op) {
         args.emplace_back(op->slice_begin());
         args.emplace_back(op->slice_stride());
         args.emplace_back(static_cast<int>(op->indices.size()));
-        open_node("slice_vectors");
+        open_node("slice_vectors", computation_range);
         for (auto &e : args) {
             mutate(e);
         }
@@ -360,7 +523,7 @@ Expr GetStmtHierarchy::visit(const Shuffle *op) {
         for (int i : op->indices) {
             args.emplace_back(i);
         }
-        open_node("Shuffle");
+        open_node("Shuffle", computation_range);
         for (auto &e : args) {
             mutate(e);
         }
@@ -369,7 +532,8 @@ Expr GetStmtHierarchy::visit(const Shuffle *op) {
     return op;
 }
 Expr GetStmtHierarchy::visit(const VectorReduce *op) {
-    open_node("vector_reduce");
+    int computation_range = get_range(op);
+    open_node("vector_reduce", computation_range);
     mutate(op->op);
     mutate(op->value);
     close_node();
@@ -384,7 +548,8 @@ Stmt GetStmtHierarchy::visit(const Fork *op) {
     return op;
 }
 Stmt GetStmtHierarchy::visit(const Acquire *op) {
-    open_node("acquire");
+    int computation_range = get_range(op);
+    open_node("acquire", computation_range);
     mutate(op->semaphore);
     mutate(op->count);
     close_node();
@@ -392,10 +557,11 @@ Stmt GetStmtHierarchy::visit(const Acquire *op) {
 }
 Stmt GetStmtHierarchy::visit(const Atomic *op) {
     if (op->mutex_name.empty()) {
-        node_without_children("atomic");
+        node_without_children("atomic", get_range(op));
     } else {
-        open_node("atomic");
-        node_without_children(op->mutex_name);
+        int computation_range = get_range(op);
+        open_node("atomic", computation_range);
+        node_without_children(op->mutex_name, get_range(nullptr));
         close_node();
     }
 

@@ -3,12 +3,16 @@
 
 #include <set>
 
+#include "FindStmtCost.h"
 #include "IRMutator.h"
 #include "IROperator.h"
 
 using namespace std;
 using namespace Halide;
 using namespace Internal;
+
+#define CC_TYPE 0
+#define DMC_TYPE 1
 
 #define m_assert(expr, msg) assert((void(msg), (expr)))
 
@@ -22,8 +26,19 @@ public:
 
     string get_hierarchy_html(const Stmt &startNode);
 
+    void set_stmt_cost(const Module &m);
+    void set_stmt_cost(const Stmt &s);
+
 private:
+    int colorType;
     std::stringstream html;
+    FindStmtCost findStmtCost;
+
+    string get_cost(const IRNode *node) const;
+    string get_cost_list(vector<Halide::Expr> exprs) const;
+
+    int get_range(const IRNode *op) const;
+    int get_range_list(vector<Halide::Expr> exprs) const;
 
     void start_html();
     void end_html();
@@ -31,11 +46,11 @@ private:
     void start_tree();
     void end_tree();
 
-    void node_without_children(string name);
-    void open_node(string name);
+    void node_without_children(string name, int colorCost);
+    void open_node(string name, int colorCost);
     void close_node();
 
-    void visit_binary_op(const Expr &a, const Expr &b, const string &name);
+    void visit_binary_op(const Expr &a, const Expr &b, const string &name, int colorCost);
 
     Expr visit(const IntImm *op) override;
     Expr visit(const UIntImm *op) override;

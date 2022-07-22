@@ -38,8 +38,10 @@ class StmtToViz : public IRVisitor {
     static const std::string formHTML, formCSS;
 
     FindStmtCost findStmtCost;                            // used for finding the cost of statements
-    GetStmtHierarchy getStmtHierarchy;                    // used for getting the hierarchy of statements
-    ProducerConsumerHierarchy producerConsumerHierarchy;  // used for getting the hierarchy of producer/consumer
+    GetStmtHierarchy getStmtHierarchy;                    // used for getting the hierarchy of
+                                                          // statements
+    ProducerConsumerHierarchy producerConsumerHierarchy;  // used for getting the hierarchy of
+                                                          // producer/consumer
 
     // This allows easier access to individual elements.
     int id_count;
@@ -79,7 +81,8 @@ private:
         return "</" + tag + ">";
     }
 
-    string tooltip(const string &hoverText, const string &hierarchyHTML, const string &tooltipText) {
+    string tooltip(const string &hoverText, const string &hierarchyHTML,
+                   const string &tooltipText) {
         std::stringstream s;
         s << open_span("tooltip");
         s << "<button onclick=\"openNewWindow('";
@@ -127,9 +130,11 @@ private:
     }
 
     string hierarchy(const Stmt &op) {
+        cout << getStmtHierarchy.get_hierarchy_html(op) << endl;
         return getStmtHierarchy.get_hierarchy_html(op);
     }
     string hierarchy(const Expr &op) {
+        cout << getStmtHierarchy.get_hierarchy_html(op) << endl;
         return getStmtHierarchy.get_hierarchy_html(op);
     }
 
@@ -302,8 +307,7 @@ private:
                 }
             }
         }
-        stream << "\""
-               << close_span();
+        stream << "\"" << close_span();
     }
 
     void visit(const Variable *op) override {
@@ -483,7 +487,8 @@ private:
         stream << close_expand_button() << " {";
         stream << close_span();
 
-        stream << open_div(op->is_producer ? "ProduceBody Indent" : "ConsumeBody Indent", produce_id);
+        stream << open_div(op->is_producer ? "ProduceBody Indent" : "ConsumeBody Indent",
+                           produce_id);
         print(op->body);
         stream << close_div();
         stream << matched("}");
@@ -850,9 +855,11 @@ private:
 public:
     void generate_costs(const Module &m) {
         findStmtCost.generate_costs(m);
+        getStmtHierarchy.set_stmt_cost(m);
     }
     void generate_costs(const Stmt &s) {
         findStmtCost.generate_costs(s);
+        getStmtHierarchy.set_stmt_cost(s);
     }
     void generate_producer_consumer_hierarchy(const Module &m) {
         producerConsumerHierarchy.generate_producer_consumer_html(m);
@@ -1103,7 +1110,8 @@ public:
         stream << open_expand_button(id);
         stream << open_div("Module");
         stream << open_span("Matched");
-        stream << keyword("module") << " name=" << m.name() << ", target=" << m.target().to_string();
+        stream << keyword("module") << " name=" << m.name()
+               << ", target=" << m.target().to_string();
         stream << close_span();
         stream << close_expand_button();
         stream << " " << matched("{");
@@ -1123,8 +1131,7 @@ public:
         scope.pop(m.name());
     }
 
-    StmtToViz(const string &filename)
-        : id_count(0), context_stack(1, 0) {
+    StmtToViz(const string &filename) : id_count(0), context_stack(1, 0) {
         stream.open(filename.c_str());
         stream << "<head>";
         stream << "<style type='text/css'>";
@@ -1135,7 +1142,9 @@ public:
         stream << formCSS;
         stream << "</style>\n";
         stream << "<script language='javascript' type='text/javascript'>" + js + "</script>\n";
-        stream << "<link href='http://maxcdn.bootstrapcdn.com/font-awesome/4.1.0/css/font-awesome.min.css' rel='stylesheet'>\n";
+        stream << "<link "
+                  "href='http://maxcdn.bootstrapcdn.com/font-awesome/4.1.0/css/"
+                  "font-awesome.min.css' rel='stylesheet'>\n";
         stream << "<link rel='stylesheet' href='https://unpkg.com/treeflex/dist/css/treeflex.css'>";
         stream << "<script src='http://code.jquery.com/jquery-1.10.2.js'></script>\n";
         stream << "</head>\n <body>\n";
@@ -1145,8 +1154,10 @@ public:
     ~StmtToViz() override {
         stream << "<script>\n"
                << "$( '.Matched' ).each( function() {\n"
-               << "    this.onmouseover = function() { $('.Matched[id^=' + this.id.split('-')[0] + '-]').addClass('Highlight'); }\n"
-               << "    this.onmouseout = function() { $('.Matched[id^=' + this.id.split('-')[0] + '-]').removeClass('Highlight'); }\n"
+               << "    this.onmouseover = function() { $('.Matched[id^=' + this.id.split('-')[0] + "
+                  "'-]').addClass('Highlight'); }\n"
+               << "    this.onmouseout = function() { $('.Matched[id^=' + this.id.split('-')[0] + "
+                  "'-]').removeClass('Highlight'); }\n"
                << "} );\n"
                << "</script>\n";
         stream << "</body>";
