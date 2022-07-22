@@ -76,7 +76,7 @@ if (Halide_ENABLE_ASAN)
     add_link_options(-fsanitize=address $<$<CXX_COMPILER_ID:GNU>:-static-libasan>)
     # -fPIC required for some ASAN build configurations (generally .so), so just enable it unversally here
     set(CMAKE_POSITION_INDEPENDENT_CODE ON)
-    # set(ENV{ASAN_OPTIONS} detect_container_overflow=0)
+    set(ENV{ASAN_OPTIONS} "detect_leaks=0:detect_container_overflow=0")
 endif()
 
 ##
