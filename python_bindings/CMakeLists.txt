@@ -23,6 +23,15 @@ add_subdirectory(stub)
 
 option(WITH_TEST_PYTHON "Build Python tests" ON)
 if (WITH_TESTS AND WITH_TEST_PYTHON)
-    add_subdirectory(test)
-    add_subdirectory(tutorial)
+    if (Halide_ENABLE_ASAN)
+        # Getting asan static-vs-shared library settings, LD_PRELOAD, etc.
+        # is necessary for asan stuff to work properly in loaded Python extensions;
+        # that isn't done yet, so just skip these for now.
+        # TODO(srj): add a tracking issue here, we should be able to enable these.
+        message(STATUS "Python tests are not yet supported under ASAN.")
+    else()
+        add_subdirectory(test)
+        add_subdirectory(tutorial)
+    endif()
 endif ()
+

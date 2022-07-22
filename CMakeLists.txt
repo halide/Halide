@@ -68,6 +68,11 @@ if (Halide_CCACHE_BUILD)
     endif ()
 endif ()
 
+add_compile_options(${SANITIZER_COMPILE_OPTIONS})
+add_link_options(${SANITIZER_LINK_OPTIONS})
+#     # -fPIC required for some ASAN build configurations (generally .so), so just enable it unversally here
+#     set(CMAKE_POSITION_INDEPENDENT_CODE ON)
+
 ##
 # Import dependencies
 ##

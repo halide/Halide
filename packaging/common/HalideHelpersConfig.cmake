@@ -8,5 +8,6 @@ set(THREADS_PREFER_PTHREAD_FLAG TRUE)
 find_dependency(Threads)
 
 include(${CMAKE_CURRENT_LIST_DIR}/Halide-Interfaces.cmake)
+include(${CMAKE_CURRENT_LIST_DIR}/HalideSanitizerHelpers.cmake)
 include(${CMAKE_CURRENT_LIST_DIR}/HalideTargetHelpers.cmake)
 include(${CMAKE_CURRENT_LIST_DIR}/HalideGeneratorHelpers.cmake)

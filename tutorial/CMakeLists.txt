@@ -16,7 +16,7 @@ function(add_tutorial source_file)
     add_test(NAME tutorial_${name} COMMAND ${name})
     set_tests_properties(tutorial_${name}
                          PROPERTIES
-                         ENVIRONMENT "HL_TARGET=${Halide_TARGET};HL_JIT_TARGET=${Halide_TARGET}"
+                         ENVIRONMENT "HL_TARGET=${Halide_TARGET};HL_JIT_TARGET=${Halide_TARGET};${SANITIZER_ENV_VARS}"
                          LABELS "tutorial;${args_GROUPS}")
 
     if (args_WITH_IMAGE_IO)
@@ -56,13 +56,10 @@ if (TARGET_NVPTX)
         # so we can build the final executable.
         add_tutorial(lesson_10_aot_compilation_generate.cpp)
 
-        # LLVM may leak memory during Halide compilation. If projects are built with address sanitizer enabled,
-        # this may cause generators to fail, making it hard to use Halide and address sanitizer at the same time.
-        # To work around this, we execute generators with an environment setting to disable leak checking.
         set(FILTER_LIB "lesson_10_halide${CMAKE_STATIC_LIBRARY_SUFFIX}")
         add_custom_command(OUTPUT lesson_10_halide.h "${FILTER_LIB}"
                            DEPENDS lesson_10_aot_compilation_generate
-                           COMMAND ${CMAKE_COMMAND} -E env "ASAN_OPTIONS=detect_leaks=0" $<TARGET_FILE:lesson_10_aot_compilation_generate>
+                           COMMAND ${CMAKE_COMMAND} -E env "${SANITIZER_ENV_VARS}" $<TARGET_FILE:lesson_10_aot_compilation_generate>
                            VERBATIM)
         add_custom_target(exec_lesson_10_aot_compilation_generate
                           DEPENDS lesson_10_halide.h "${FILTER_LIB}")
@@ -84,7 +81,7 @@ if (TARGET_NVPTX)
 
         target_include_directories(lesson_10_aot_compilation_run PRIVATE "${CMAKE_CURRENT_BINARY_DIR}")
 
-        add_test(NAME tutorial_lesson_10_aot_compilation_run COMMAND lesson_10_aot_compilation_run)
+        add_test(NAME tutorial_lesson_10_aot_compilation_run COMMAND $<TARGET_FILE:lesson_10_aot_compilation_run>)
         set_tests_properties(tutorial_lesson_10_aot_compilation_run PROPERTIES LABELS "tutorial;multithreaded")
     endif ()
 endif ()
@@ -177,7 +174,7 @@ else ()
                           Halide::ImageIO
                           Halide::Tools)
 
-    add_test(NAME tutorial_lesson_16_rgb_run COMMAND lesson_16_rgb_run)
+    add_test(NAME tutorial_lesson_16_rgb_run COMMAND $<TARGET_FILE:lesson_16_rgb_run>)
     set_tests_properties(tutorial_lesson_16_rgb_run PROPERTIES LABELS tutorial)
 endif ()
 
@@ -207,6 +204,6 @@ if (TARGET Halide::Mullapudi2016)
     target_link_libraries(lesson_21_auto_scheduler_run PRIVATE
                           auto_schedule_false auto_schedule_true Halide::Tools)
 
-    add_test(NAME tutorial_lesson_21_auto_scheduler_run COMMAND lesson_21_auto_scheduler_run)
+    add_test(NAME tutorial_lesson_21_auto_scheduler_run COMMAND $<TARGET_FILE:lesson_21_auto_scheduler_run>)
     set_tests_properties(tutorial_lesson_21_auto_scheduler_run PROPERTIES LABELS "tutorial;multithreaded")
 endif ()
