@@ -1073,6 +1073,16 @@ void IRPrinter::visit(const Shuffle *op) {
     }
 }
 
+void IRPrinter::visit(const VectorIntrinsic *op) {
+    stream << "("
+           << op->type
+           << ")vector_intrinsic(\""
+           << op->name
+           << "\", ";
+    print_list(op->args);
+    stream << ")";
+}
+
 void IRPrinter::visit(const VectorReduce *op) {
     stream << "("
            << op->type

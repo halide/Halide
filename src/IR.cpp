@@ -901,6 +901,17 @@ Stmt Atomic::make(const std::string &producer_name,
     return node;
 }
 
+Expr VectorIntrinsic::make(Type type, const std::string &name, const std::vector<Expr> &args) {
+    user_assert(!name.empty()) << "VectorIntrinsic without a name\n";
+    user_assert(!args.empty()) << "VectorInrinsic without arguments\n";
+
+    VectorIntrinsic *node = new VectorIntrinsic;
+    node->type = type;
+    node->name = name;
+    node->args = args;
+    return node;
+}
+
 Expr VectorReduce::make(VectorReduce::Operator op,
                         Expr vec,
                         int lanes) {
@@ -1079,6 +1090,10 @@ void ExprNode<Call>::accept(IRVisitor *v) const {
 template<>
 void ExprNode<Shuffle>::accept(IRVisitor *v) const {
     v->visit((const Shuffle *)this);
+}
+template<>
+void ExprNode<VectorIntrinsic>::accept(IRVisitor *v) const {
+    v->visit((const VectorIntrinsic *)this);
 }
 template<>
 void ExprNode<VectorReduce>::accept(IRVisitor *v) const {
@@ -1268,6 +1283,10 @@ Expr ExprNode<Call>::mutate_expr(IRMutator *v) const {
 template<>
 Expr ExprNode<Shuffle>::mutate_expr(IRMutator *v) const {
     return v->visit((const Shuffle *)this);
+}
+template<>
+Expr ExprNode<VectorIntrinsic>::mutate_expr(IRMutator *v) const {
+    return v->visit((const VectorIntrinsic *)this);
 }
 template<>
 Expr ExprNode<VectorReduce>::mutate_expr(IRMutator *v) const {

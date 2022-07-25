@@ -886,6 +886,15 @@ struct Atomic : public StmtNode<Atomic> {
     static const IRNodeType _node_type = IRNodeType::Atomic;
 };
 
+struct VectorIntrinsic : public ExprNode<VectorIntrinsic> {
+    std::string name;
+    std::vector<Expr> args;
+
+    static Expr make(Type type, const std::string &name, const std::vector<Expr> &args);
+
+    static const IRNodeType _node_type = IRNodeType::VectorIntrinsic;
+};
+
 /** Horizontally reduce a vector to a scalar or narrower vector using
  * the given commutative and associative binary operator. The reduction
  * factor is dictated by the number of lanes in the input and output

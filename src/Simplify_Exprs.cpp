@@ -59,6 +59,11 @@ Expr Simplify::visit(const Broadcast *op, ExprInfo *bounds) {
     }
 }
 
+Expr Simplify::visit(const VectorIntrinsic *op, ExprInfo *bounds) {
+    clear_bounds_info(bounds);
+    return op;
+}
+
 Expr Simplify::visit(const VectorReduce *op, ExprInfo *bounds) {
     Expr value = mutate(op->value, bounds);
 

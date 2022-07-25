@@ -98,6 +98,7 @@ private:
     void visit(const Shuffle *) override;
     void visit(const Prefetch *) override;
     void visit(const Atomic *) override;
+    void visit(const VectorIntrinsic *) override;
     void visit(const VectorReduce *) override;
 };
 
@@ -627,6 +628,13 @@ void IRComparer::visit(const Atomic *op) {
     compare_names(s->producer_name, op->producer_name);
     compare_names(s->mutex_name, op->mutex_name);
     compare_stmt(s->body, op->body);
+}
+
+void IRComparer::visit(const VectorIntrinsic *op) {
+    const VectorIntrinsic *e = expr.as<VectorIntrinsic>();
+
+    compare_names(e->name, op->name);
+    compare_expr_vector(e->args, op->args);
 }
 
 void IRComparer::visit(const VectorReduce *op) {

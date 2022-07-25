@@ -1110,6 +1110,11 @@ private:
         op->value.accept(this);
     }
 
+    void visit(const VectorIntrinsic *op) override {
+        // TODO(rootjalex): we may need to implement bounds queries.
+        internal_error << "Unexpected VectorIntrinsic in bounds query: " << Expr(op) << "\n";
+    }
+
     void visit(const Call *op) override {
         TRACK_BOUNDS_INTERVAL;
         TRACK_BOUNDS_INFO("name:", op->name);

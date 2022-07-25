@@ -712,6 +712,13 @@ private:
         stream << close_span();
     }
 
+    void visit(const VectorIntrinsic *op) override {
+        stream << open_span("VectoIntrinsic");
+        stream << open_span("Type") << op->type << close_span();
+        print_list(symbol("vector_intrinsic") + "(\"" + op->name + "\"", op->args, ")");
+        stream << close_span();
+    }
+
     void visit(const VectorReduce *op) override {
         stream << open_span("VectorReduce");
         stream << open_span("Type") << op->type << close_span();
