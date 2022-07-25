@@ -165,6 +165,7 @@ set(HEADER_FILES
     VectorizeLoops.h
     WasmExecutor.h
     WrapCalls.h
+    X86Optimize.h
     )
 
 set(SOURCE_FILES
@@ -342,6 +343,7 @@ set(SOURCE_FILES
     VectorizeLoops.cpp
     WasmExecutor.cpp
     WrapCalls.cpp
+    X86Optimize.cpp
     )
 
 ##

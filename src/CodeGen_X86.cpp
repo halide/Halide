@@ -7,6 +7,7 @@
 #include "LLVM_Headers.h"
 #include "Simplify.h"
 #include "Util.h"
+#include "X86Optimize.h"
 
 namespace Halide {
 namespace Internal {
@@ -20,30 +21,6 @@ using namespace llvm;
 #if defined(WITH_X86)
 
 namespace {
-
-// Populate feature flags in a target according to those implied by
-// existing flags, so that instruction patterns can just check for the
-// oldest feature flag that supports an instruction.
-Target complete_x86_target(Target t) {
-    if (t.has_feature(Target::AVX512_SapphireRapids)) {
-        t.set_feature(Target::AVX512_Cannonlake);
-    }
-    if (t.has_feature(Target::AVX512_Cannonlake)) {
-        t.set_feature(Target::AVX512_Skylake);
-    }
-    if (t.has_feature(Target::AVX512_Cannonlake) ||
-        t.has_feature(Target::AVX512_Skylake) ||
-        t.has_feature(Target::AVX512_KNL)) {
-        t.set_feature(Target::AVX2);
-    }
-    if (t.has_feature(Target::AVX2)) {
-        t.set_feature(Target::AVX);
-    }
-    if (t.has_feature(Target::AVX)) {
-        t.set_feature(Target::SSE41);
-    }
-    return t;
-}
 
 /** A code generator that emits x86 code from a given Halide stmt. */
 class CodeGen_X86 : public CodeGen_Posix {
@@ -69,10 +46,7 @@ protected:
 
     /** Nodes for which we want to emit specific sse/avx intrinsics */
     // @{
-    void visit(const Add *) override;
-    void visit(const Sub *) override;
     void visit(const Cast *) override;
-    void visit(const Call *) override;
     void visit(const GT *) override;
     void visit(const LT *) override;
     void visit(const LE *) override;
@@ -83,7 +57,7 @@ protected:
     void visit(const Allocate *) override;
     void visit(const Load *) override;
     void visit(const Store *) override;
-    void codegen_vector_reduce(const VectorReduce *, const Expr &init) override;
+    void visit(const VectorIntrinsic *) override;
     // @}
 
 private:
@@ -265,85 +239,6 @@ void CodeGen_X86::init_module() {
     }
 }
 
-// i32(i16_a)*i32(i16_b) +/- i32(i16_c)*i32(i16_d) can be done by
-// interleaving a, c, and b, d, and then using dot_product.
-bool should_use_dot_product(const Expr &a, const Expr &b, vector<Expr> &result) {
-    Type t = a.type();
-    internal_assert(b.type() == t);
-
-    if (!(t.is_int() && t.bits() == 32 && t.lanes() >= 4)) {
-        return false;
-    }
-
-    const Call *ma = Call::as_intrinsic(a, {Call::widening_mul});
-    const Call *mb = Call::as_intrinsic(b, {Call::widening_mul});
-    // dot_product can't handle mixed type widening muls.
-    if (ma && ma->args[0].type() != ma->args[1].type()) {
-        return false;
-    }
-    if (mb && mb->args[0].type() != mb->args[1].type()) {
-        return false;
-    }
-    // If the operands are widening shifts, we might be able to treat these as
-    // multiplies.
-    const Call *sa = Call::as_intrinsic(a, {Call::widening_shift_left});
-    const Call *sb = Call::as_intrinsic(b, {Call::widening_shift_left});
-    if (sa && !is_const(sa->args[1])) {
-        sa = nullptr;
-    }
-    if (sb && !is_const(sb->args[1])) {
-        sb = nullptr;
-    }
-    if ((ma || sa) && (mb || sb)) {
-        Expr a0 = ma ? ma->args[0] : sa->args[0];
-        Expr a1 = ma ? ma->args[1] : lossless_cast(sa->args[0].type(), simplify(make_const(sa->type, 1) << sa->args[1]));
-        Expr b0 = mb ? mb->args[0] : sb->args[0];
-        Expr b1 = mb ? mb->args[1] : lossless_cast(sb->args[0].type(), simplify(make_const(sb->type, 1) << sb->args[1]));
-        if (a1.defined() && b1.defined()) {
-            std::vector<Expr> args = {a0, a1, b0, b1};
-            result.swap(args);
-            return true;
-        }
-    }
-    return false;
-}
-
-void CodeGen_X86::visit(const Add *op) {
-    vector<Expr> matches;
-    if (should_use_dot_product(op->a, op->b, matches)) {
-        Expr ac = Shuffle::make_interleave({matches[0], matches[2]});
-        Expr bd = Shuffle::make_interleave({matches[1], matches[3]});
-        value = call_overloaded_intrin(op->type, "dot_product", {ac, bd});
-        if (value) {
-            return;
-        }
-    }
-    CodeGen_Posix::visit(op);
-}
-
-void CodeGen_X86::visit(const Sub *op) {
-    vector<Expr> matches;
-    if (should_use_dot_product(op->a, op->b, matches)) {
-        // Negate one of the factors in the second expression
-        Expr negative_2 = lossless_negate(matches[2]);
-        Expr negative_3 = lossless_negate(matches[3]);
-        if (negative_2.defined() || negative_3.defined()) {
-            if (negative_2.defined()) {
-                matches[2] = negative_2;
-            } else {
-                matches[3] = negative_3;
-            }
-            Expr ac = Shuffle::make_interleave({matches[0], matches[2]});
-            Expr bd = Shuffle::make_interleave({matches[1], matches[3]});
-            value = call_overloaded_intrin(op->type, "dot_product", {ac, bd});
-            if (value) {
-                return;
-            }
-        }
-    }
-    CodeGen_Posix::visit(op);
-}
-
 void CodeGen_X86::visit(const GT *op) {
     Type t = op->a.type();
 
@@ -450,41 +345,10 @@ void CodeGen_X86::visit(const Select *op) {
 }
 
 void CodeGen_X86::visit(const Cast *op) {
-
     if (!op->type.is_vector()) {
         // We only have peephole optimizations for vectors in here.
         CodeGen_Posix::visit(op);
         return;
-    }
-
-    struct Pattern {
-        string intrin;
-        Expr pattern;
-    };
-
-    // clang-format off
-    static Pattern patterns[] = {
-        // This isn't rounding_multiply_quantzied(i16, i16, 15) because it doesn't
-        // saturate the result.
-        {"pmulhrs", i16(rounding_shift_right(widening_mul(wild_i16x_, wild_i16x_), 15))},
-
-        {"saturating_narrow", i16_sat(wild_i32x_)},
-        {"saturating_narrow", u16_sat(wild_i32x_)},
-        {"saturating_narrow", i8_sat(wild_i16x_)},
-        {"saturating_narrow", u8_sat(wild_i16x_)},
-
-        {"f32_to_bf16", bf16(wild_f32x_)},
-    };
-    // clang-format on
-
-    vector<Expr> matches;
-    for (const Pattern &p : patterns) {
-        if (expr_match(p.pattern, op, matches)) {
-            value = call_overloaded_intrin(op->type, p.intrin, matches);
-            if (value) {
-                return;
-            }
-        }
     }
 
     if (const Call *mul = Call::as_intrinsic(op->value, {Call::widening_mul})) {
@@ -499,216 +363,6 @@ void CodeGen_X86::visit(const Cast *op) {
     }
 
     CodeGen_Posix::visit(op);
-}
-
-void CodeGen_X86::visit(const Call *op) {
-    if (!op->type.is_vector()) {
-        // We only have peephole optimizations for vectors in here.
-        CodeGen_Posix::visit(op);
-        return;
-    }
-
-    // A 16-bit mul-shift-right of less than 16 can sometimes be rounded up to a
-    // full 16 to use pmulh(u)w by left-shifting one of the operands. This is
-    // handled here instead of in the lowering of mul_shift_right because it's
-    // unlikely to be a good idea on platforms other than x86, as it adds an
-    // extra shift in the fully-lowered case.
-    if ((op->type.element_of() == UInt(16) ||
-         op->type.element_of() == Int(16)) &&
-        op->is_intrinsic(Call::mul_shift_right)) {
-        internal_assert(op->args.size() == 3);
-        const uint64_t *shift = as_const_uint(op->args[2]);
-        if (shift && *shift < 16 && *shift >= 8) {
-            Type narrow = op->type.with_bits(8);
-            Expr narrow_a = lossless_cast(narrow, op->args[0]);
-            Expr narrow_b = narrow_a.defined() ? Expr() : lossless_cast(narrow, op->args[1]);
-            int shift_left = 16 - (int)(*shift);
-            if (narrow_a.defined()) {
-                codegen(mul_shift_right(op->args[0] << shift_left, op->args[1], 16));
-                return;
-            } else if (narrow_b.defined()) {
-                codegen(mul_shift_right(op->args[0], op->args[1] << shift_left, 16));
-                return;
-            }
-        }
-    } else if (op->type.is_int() &&
-               op->type.bits() <= 16 &&
-               op->is_intrinsic(Call::rounding_halving_add)) {
-        // We can redirect signed rounding halving add to unsigned rounding
-        // halving add by adding 128 / 32768 to the result if the sign of the
-        // args differs.
-        internal_assert(op->args.size() == 2);
-        Type t = op->type.with_code(halide_type_uint);
-        Expr a = cast(t, op->args[0]);
-        Expr b = cast(t, op->args[1]);
-        codegen(cast(op->type, rounding_halving_add(a, b) + ((a ^ b) & (1 << (t.bits() - 1)))));
-        return;
-    } else if (op->is_intrinsic(Call::absd)) {
-        internal_assert(op->args.size() == 2);
-        if (op->args[0].type().is_uint()) {
-            // On x86, there are many 3-instruction sequences to compute absd of
-            // unsigned integers. This one consists solely of instructions with
-            // throughput of 3 ops per cycle on Cannon Lake.
-            //
-            // Solution due to Wojciech Mula:
-            // http://0x80.pl/notesen/2018-03-11-sse-abs-unsigned.html
-            codegen(saturating_sub(op->args[0], op->args[1]) | saturating_sub(op->args[1], op->args[0]));
-            return;
-        } else if (op->args[0].type().is_int()) {
-            codegen(Max::make(op->args[0], op->args[1]) - Min::make(op->args[0], op->args[1]));
-            return;
-        }
-    }
-
-    struct Pattern {
-        string intrin;
-        Expr pattern;
-    };
-
-    // clang-format off
-    static Pattern patterns[] = {
-        {"pmulh", mul_shift_right(wild_i16x_, wild_i16x_, 16)},
-        {"pmulh", mul_shift_right(wild_u16x_, wild_u16x_, 16)},
-        {"saturating_pmulhrs", rounding_mul_shift_right(wild_i16x_, wild_i16x_, 15)},
-    };
-    // clang-format on
-
-    vector<Expr> matches;
-    for (const auto &pattern : patterns) {
-        if (expr_match(pattern.pattern, op, matches)) {
-            value = call_overloaded_intrin(op->type, pattern.intrin, matches);
-            if (value) {
-                return;
-            }
-        }
-    }
-
-    CodeGen_Posix::visit(op);
-}
-
-void CodeGen_X86::codegen_vector_reduce(const VectorReduce *op, const Expr &init) {
-    if (op->op != VectorReduce::Add && op->op != VectorReduce::SaturatingAdd) {
-        CodeGen_Posix::codegen_vector_reduce(op, init);
-        return;
-    }
-    const int factor = op->value.type().lanes() / op->type.lanes();
-
-    struct Pattern {
-        VectorReduce::Operator reduce_op;
-        int factor;
-        Expr pattern;
-        const char *intrin;
-        Type narrow_type;
-        uint32_t flags = 0;
-        enum {
-            CombineInit = 1 << 0,
-            SwapOperands = 1 << 1,
-            SingleArg = 1 << 2,
-        };
-    };
-    // clang-format off
-    // These patterns are roughly sorted "best to worst", in case there are two
-    // patterns that match the expression.
-    static const Pattern patterns[] = {
-        // 4-way dot products
-        {VectorReduce::Add, 4, i32(widening_mul(wild_u8x_, wild_i8x_)), "dot_product", {}, Pattern::CombineInit},
-        {VectorReduce::Add, 4, i32(widening_mul(wild_i8x_, wild_u8x_)), "dot_product", {}, Pattern::CombineInit | Pattern::SwapOperands},
-        {VectorReduce::SaturatingAdd, 4, i32(widening_mul(wild_u8x_, wild_i8x_)), "saturating_dot_product", {}, Pattern::CombineInit},
-        {VectorReduce::SaturatingAdd, 4, i32(widening_mul(wild_i8x_, wild_u8x_)), "saturating_dot_product", {}, Pattern::CombineInit | Pattern::SwapOperands},
-
-        // 2-way dot products
-        {VectorReduce::Add, 2, i32(widening_mul(wild_i8x_, wild_i8x_)), "dot_product", Int(16)},
-        {VectorReduce::Add, 2, i32(widening_mul(wild_i8x_, wild_u8x_)), "dot_product", Int(16)},
-        {VectorReduce::Add, 2, i32(widening_mul(wild_u8x_, wild_i8x_)), "dot_product", Int(16)},
-        {VectorReduce::Add, 2, i32(widening_mul(wild_u8x_, wild_u8x_)), "dot_product", Int(16)},
-        {VectorReduce::SaturatingAdd, 2, i32(widening_mul(wild_u8x_, wild_i8x_)), "saturating_dot_product", {}, Pattern::CombineInit},
-        {VectorReduce::SaturatingAdd, 2, i32(widening_mul(wild_i8x_, wild_u8x_)), "saturating_dot_product", {}, Pattern::CombineInit | Pattern::SwapOperands},
-        {VectorReduce::SaturatingAdd, 2, widening_mul(wild_u8x_, wild_i8x_), "saturating_dot_product"},
-        {VectorReduce::SaturatingAdd, 2, widening_mul(wild_i8x_, wild_u8x_), "saturating_dot_product", {}, Pattern::SwapOperands},
-
-        {VectorReduce::Add, 2, i32(widening_mul(wild_i16x_, wild_i16x_)), "dot_product", {}, Pattern::CombineInit},
-        {VectorReduce::Add, 2, i32(widening_mul(wild_i16x_, wild_i16x_)), "dot_product", Int(16)},
-        {VectorReduce::SaturatingAdd, 2, i32(widening_mul(wild_i16x_, wild_i16x_)), "saturating_dot_product", {}, Pattern::CombineInit},
-
-        {VectorReduce::Add, 2, wild_f32x_ * wild_f32x_, "dot_product", BFloat(16), Pattern::CombineInit},
-
-        // One could do a horizontal widening addition with
-        // other dot_products against a vector of ones. Currently disabled
-        // because I haven't found other cases where it's clearly better.
-
-        {VectorReduce::Add, 2, u16(wild_u8x_), "horizontal_widening_add", {}, Pattern::SingleArg},
-        {VectorReduce::Add, 2, i16(wild_u8x_), "horizontal_widening_add", {}, Pattern::SingleArg},
-        {VectorReduce::Add, 2, i16(wild_i8x_), "horizontal_widening_add", {}, Pattern::SingleArg},
-    };
-    // clang-format on
-
-    std::vector<Expr> matches;
-    for (const Pattern &p : patterns) {
-        if (op->op != p.reduce_op || p.factor != factor) {
-            continue;
-        }
-        if (expr_match(p.pattern, op->value, matches)) {
-            if (p.flags & Pattern::SingleArg) {
-                Expr a = matches[0];
-
-                if (p.narrow_type.bits() > 0) {
-                    a = lossless_cast(p.narrow_type.with_lanes(a.type().lanes()), a);
-                }
-                if (!a.defined()) {
-                    continue;
-                }
-
-                if (init.defined() && (p.flags & Pattern::CombineInit)) {
-                    value = call_overloaded_intrin(op->type, p.intrin, {init, a});
-                    if (value) {
-                        return;
-                    }
-                } else {
-                    value = call_overloaded_intrin(op->type, p.intrin, {a});
-                    if (value) {
-                        if (init.defined()) {
-                            Value *x = value;
-                            Value *y = codegen(init);
-                            value = builder->CreateAdd(x, y);
-                        }
-                        return;
-                    }
-                }
-            } else {
-                Expr a = matches[0];
-                Expr b = matches[1];
-                if (p.flags & Pattern::SwapOperands) {
-                    std::swap(a, b);
-                }
-                if (p.narrow_type.bits() > 0) {
-                    a = lossless_cast(p.narrow_type.with_lanes(a.type().lanes()), a);
-                    b = lossless_cast(p.narrow_type.with_lanes(b.type().lanes()), b);
-                }
-                if (!a.defined() || !b.defined()) {
-                    continue;
-                }
-
-                if (init.defined() && (p.flags & Pattern::CombineInit)) {
-                    value = call_overloaded_intrin(op->type, p.intrin, {init, a, b});
-                    if (value) {
-                        return;
-                    }
-                } else {
-                    value = call_overloaded_intrin(op->type, p.intrin, {a, b});
-                    if (value) {
-                        if (init.defined()) {
-                            Value *x = value;
-                            Value *y = codegen(init);
-                            value = builder->CreateAdd(x, y);
-                        }
-                        return;
-                    }
-                }
-            }
-        }
-    }
-
-    CodeGen_Posix::codegen_vector_reduce(op, init);
 }
 
 void CodeGen_X86::visit(const Allocate *op) {
@@ -741,6 +395,11 @@ void CodeGen_X86::visit(const Store *op) {
         return;
     }
     CodeGen_Posix::visit(op);
+}
+
+void CodeGen_X86::visit(const VectorIntrinsic *op) {
+    value = call_overloaded_intrin(op->type, op->name, op->args);
+    internal_assert(value) << "CodeGen_X86 failed on " << Expr(op) << "\n";
 }
 
 string CodeGen_X86::mcpu_target() const {

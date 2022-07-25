@@ -2198,6 +2198,39 @@ HALIDE_ALWAYS_INLINE auto cast(halide_type_t t, A &&a) noexcept -> CastOp<declty
     return {t, pattern_arg(a)};
 }
 
+// A node for expressing type hints, when rules are ambiguously typed.
+template<typename A>
+struct TypeHint {
+    struct pattern_tag {};
+    Type type;
+    A a;
+
+    constexpr static uint32_t binds = bindings<A>::mask;
+
+    constexpr static IRNodeType min_node_type = IRNodeType::Cast;
+    constexpr static IRNodeType max_node_type = IRNodeType::Cast;
+    constexpr static bool canonical = A::canonical;
+
+    HALIDE_ALWAYS_INLINE
+    Expr make(MatcherState &state, halide_type_t type_hint) const {
+        return a.make(state, type);
+    }
+
+    constexpr static bool foldable = false;
+};
+
+template<typename A>
+std::ostream &operator<<(std::ostream &s, const TypeHint<A> &op) {
+    s << "typed(" << op.type << ", " << op.a << ")";
+    return s;
+}
+
+template<typename A>
+HALIDE_ALWAYS_INLINE auto typed(halide_type_t t, A &&a) noexcept -> TypeHint<decltype(pattern_arg(a))> {
+    assert_is_lvalue_if_expr<A>();
+    return {t, pattern_arg(a)};
+}
+
 template<typename A>
 struct Fold {
     struct pattern_tag {};
