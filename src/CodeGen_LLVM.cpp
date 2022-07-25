@@ -2021,15 +2021,11 @@ void CodeGen_LLVM::visit(const Load *op) {
                 Value *load_i = codegen_dense_vector_load(op->type.with_lanes(load_lanes_i), op->name, slice_base,
                                                           op->image, op->param, align, nullptr, false);
 
-                SmallVector<Constant *, 256> constants;
+                std::vector<int> constants;
                 for (int j = 0; j < lanes_i; j++) {
-                    Constant *constant = ConstantInt::get(i32_t, j * stride->value + offset);
-                    constants.push_back(constant);
+                    constants.push_back(j * stride->value + offset);
                 }
-                Constant *constantsV = ConstantVector::get(constants);
-                Value *undef = UndefValue::get(load_i->getType());
-                Value *shuffleInstr = builder->CreateShuffleVector(load_i, undef, constantsV);
-                results.push_back(shuffleInstr);
+                results.push_back(shuffle_vectors(load_i, constants));
             }
 
             // Concat the results
@@ -2056,7 +2052,7 @@ void CodeGen_LLVM::visit(const Load *op) {
             // Gather without generating the indices as a vector
             Value *ptr = codegen_buffer_pointer(op->name, op->type.element_of(), ramp->base);
             Value *stride = codegen(ramp->stride);
-            value = UndefValue::get(llvm_type_of(op->type));
+            value = PoisonValue::get(llvm_type_of(op->type));
             for (int i = 0; i < ramp->lanes; i++) {
                 Value *lane = ConstantInt::get(i32_t, i);
                 LoadInst *val = builder->CreateLoad(load_type, ptr);
@@ -2070,7 +2066,7 @@ void CodeGen_LLVM::visit(const Load *op) {
             // loads in it, and it's all int32.
 
             // Compute the index as scalars, and then do a gather
-            Value *vec = UndefValue::get(llvm_type_of(op->type));
+            Value *vec = PoisonValue::get(llvm_type_of(op->type));
             for (int i = 0; i < op->type.lanes(); i++) {
                 Expr idx = extract_lane(op->index, i);
                 Value *ptr = codegen_buffer_pointer(op->name, op->type.element_of(), idx);
@@ -2082,7 +2078,7 @@ void CodeGen_LLVM::visit(const Load *op) {
         } else {
             // General gathers
             Value *index = codegen(op->index);
-            Value *vec = UndefValue::get(llvm_type_of(op->type));
+            Value *vec = PoisonValue::get(llvm_type_of(op->type));
             for (int i = 0; i < op->type.lanes(); i++) {
                 Value *idx = builder->CreateExtractElement(index, ConstantInt::get(i32_t, i));
                 Value *ptr = codegen_buffer_pointer(op->name, op->type.element_of(), idx);
@@ -2117,7 +2113,7 @@ void CodeGen_LLVM::visit(const Ramp *op) {
         Value *base = codegen(op->base);
         Value *stride = codegen(op->stride);
 
-        value = UndefValue::get(llvm_type_of(op->type));
+        value = PoisonValue::get(llvm_type_of(op->type));
         for (int i = 0; i < op->type.lanes(); i++) {
             if (i > 0) {
                 if (op->type.is_float()) {
@@ -2134,11 +2130,11 @@ void CodeGen_LLVM::visit(const Ramp *op) {
 }
 
 llvm::Value *CodeGen_LLVM::create_broadcast(llvm::Value *v, int lanes) {
-    Constant *undef = UndefValue::get(get_vector_type(v->getType(), lanes));
+    Constant *poison = PoisonValue::get(get_vector_type(v->getType(), lanes));
     Constant *zero = ConstantInt::get(i32_t, 0);
-    v = builder->CreateInsertElement(undef, v, zero);
+    v = builder->CreateInsertElement(poison, v, zero);
     Constant *zeros = ConstantVector::getSplat(element_count(lanes), zero);
-    return builder->CreateShuffleVector(v, undef, zeros);
+    return builder->CreateShuffleVector(v, poison, zeros);
 }
 
 void CodeGen_LLVM::visit(const Broadcast *op) {
@@ -2220,7 +2216,7 @@ Value *CodeGen_LLVM::interleave_vectors(const std::vector<Value *> &vecs) {
 void CodeGen_LLVM::scalarize(const Expr &e) {
     llvm::Type *result_type = llvm_type_of(e.type());
 
-    Value *result = UndefValue::get(result_type);
+    Value *result = PoisonValue::get(result_type);
 
     for (int i = 0; i < e.type().lanes(); i++) {
         Value *v = codegen(extract_lane(e, i));
@@ -2701,8 +2697,8 @@ void CodeGen_LLVM::visit(const Call *op) {
         llvm::Function *fn = llvm::Intrinsic::getDeclaration(module.get(),
                                                              (op->is_intrinsic(Call::count_leading_zeros)) ? llvm::Intrinsic::ctlz : llvm::Intrinsic::cttz,
                                                              arg_type);
-        llvm::Value *is_const_zero_undef = llvm::ConstantInt::getFalse(*context);
-        llvm::Value *args[2] = {codegen(op->args[0]), is_const_zero_undef};
+        llvm::Value *is_const_zero_poison = llvm::ConstantInt::getFalse(*context);
+        llvm::Value *args[2] = {codegen(op->args[0]), is_const_zero_poison};
         CallInst *call = builder->CreateCall(fn, args);
         value = call;
     } else if (op->is_intrinsic(Call::return_second)) {
@@ -3399,7 +3395,7 @@ void CodeGen_LLVM::visit(const Call *op) {
 
                 // No vector version found. Scalarize. Extract each simd
                 // lane in turn and do one scalar call to the function.
-                value = UndefValue::get(result_type);
+                value = PoisonValue::get(result_type);
                 for (int i = 0; i < op->type.lanes(); i++) {
                     Value *idx = ConstantInt::get(i32_t, i);
                     vector<Value *> arg_lane(args.size());
@@ -4674,7 +4670,7 @@ Value *CodeGen_LLVM::shuffle_vectors(Value *a, Value *b,
         } else {
             // Only let -1 be undef.
             internal_assert(indices[i] == -1);
-            llvm_indices[i] = UndefValue::get(i32_t);
+            llvm_indices[i] = PoisonValue::get(i32_t);
         }
     }
     if (isa<llvm::ScalableVectorType>(a->getType())) {
@@ -4687,7 +4683,7 @@ Value *CodeGen_LLVM::shuffle_vectors(Value *a, Value *b,
 }
 
 Value *CodeGen_LLVM::shuffle_vectors(Value *a, const std::vector<int> &indices) {
-    Value *b = UndefValue::get(a->getType());
+    Value *b = PoisonValue::get(a->getType());
     return shuffle_vectors(a, b, indices);
 }
 
