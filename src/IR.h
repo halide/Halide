@@ -886,6 +886,9 @@ struct Atomic : public StmtNode<Atomic> {
     static const IRNodeType _node_type = IRNodeType::Atomic;
 };
 
+/** Represent a target-specific vector instruction.
+ *  Intrinsic may not be element-wise operation, i.e.
+ *  dot_products. */
 struct VectorIntrinsic : public ExprNode<VectorIntrinsic> {
     std::string name;
     std::vector<Expr> args;
