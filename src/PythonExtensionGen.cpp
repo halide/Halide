@@ -351,6 +351,13 @@ void PythonExtensionGen::compile(const LoweredFunc &f) {
     }
     dest << "    int result;\n";
     dest << "    Py_BEGIN_ALLOW_THREADS\n";
+    // Mark all input buffers as having a dirty host, so that the Halide call will
+    // do a lazy-copy-to-GPU if needed.
+    for (size_t i = 0; i < args.size(); i++) {
+        if (args[i].is_buffer() && args[i].is_input()) {
+            dest << "    buffer_" << arg_names[i] << ".set_host_dirty();\n";
+        }
+    }
     dest << "    result = " << f.name << "(";
     for (size_t i = 0; i < args.size(); i++) {
         if (i > 0) {
@@ -364,6 +371,14 @@ void PythonExtensionGen::compile(const LoweredFunc &f) {
     }
     dest << ");\n";
     dest << "    Py_END_ALLOW_THREADS\n";
+    // Since the Python Buffer protocol is host-memory-only, we *must*
+    // flush results back to host, otherwise the output buffer will contain
+    // random garbage. (We need a better solution for this, see https://github.com/halide/Halide/issues/6868)
+    for (size_t i = 0; i < args.size(); i++) {
+        if (args[i].is_buffer() && args[i].is_output()) {
+            dest << "    if (result == 0) result = halide_copy_to_host(nullptr, &buffer_" << arg_names[i] << ");\n";
+        }
+    }
     release_buffers();
     dest << R"INLINE_CODE(
     if (result != 0) {
