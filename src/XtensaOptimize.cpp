@@ -1884,10 +1884,10 @@ private:
             }
         }
 
+        const int total_lanes = op->type.lanes();
         int native_lanes = get_native_vector_lanes_num(op->type);
         std::set<std::string> skip_slicing = {"halide_xtensa_widening_load", "halide_xtensa_interleave_i16",
-                                              "halide_xtensa_narrow_i24_with_shift_i16", "halide_xtensa_narrow_i48_with_shift_i32",
-                                              "halide_xtensa_narrow_i48_with_shift_u32",
+                                              "halide_xtensa_narrow_i24_with_shift_i16",
                                               // TODO(vksnk): ugly to list them all.
                                               "halide_xtensa_reduce_add_x2_i8",
                                               "halide_xtensa_reduce_add_x2_i16",
@@ -1896,9 +1896,19 @@ private:
                                               "halide_xtensa_reduce_add_x4_i16",
                                               "halide_xtensa_reduce_add_x4_i32",
                                               "reinterpret"};
-        if (native_lanes > 0 && (skip_slicing.count(op->name) == 0)) {
-            const int total_lanes = op->type.lanes();
-            int split_to = op->type.lanes() / native_lanes;
+        // For some of the ops, it's better to slice into larger chunks. 
+        std::map<std::string, int> slicing_multipliers = {
+          // There is only interleaved version of this intrinsic, so 2x vectors are required.
+          {"halide_xtensa_narrow_i48_with_shift_i32", 2},
+          {"halide_xtensa_narrow_i48_with_shift_u32", 2}
+        };
+        int slicing_multiplier = 1;
+        if (slicing_multipliers.count(op->name) > 0) {
+          slicing_multiplier = slicing_multipliers[op->name];
+        }
+
+        if ((native_lanes > 0) && (native_lanes * slicing_multiplier < total_lanes) && (skip_slicing.count(op->name) == 0)) {
+            int split_to = op->type.lanes() / (native_lanes * slicing_multiplier);
             vector<Expr> args;
             for (const auto &arg : op->args) {
                 args.push_back(mutate(arg));
@@ -1916,15 +1926,15 @@ private:
                     } else if ((op->name == "halide_xtensa_dynamic_shuffle") && arg_index == 0) {
                         sliced_arg = args[arg_index];
                     } else {
-                        sliced_arg = Call::make(args[arg_index].type().with_lanes(native_lanes),
+                        sliced_arg = Call::make(args[arg_index].type().with_lanes(native_lanes * slicing_multiplier),
                                                 "halide_xtensa_slice_to_native",
-                                                {args[arg_index], ix, native_lanes, total_lanes},
+                                                {args[arg_index], ix, native_lanes * slicing_multiplier, total_lanes},
                                                 Call::PureExtern);
                     }
                     sliced_args.push_back(sliced_arg);
                 }
 
-                Expr r = Call::make(op->type.with_lanes(native_lanes), op->name, sliced_args, op->call_type);
+                Expr r = Call::make(op->type.with_lanes(native_lanes * slicing_multiplier), op->name, sliced_args, op->call_type);
                 concat_args.push_back(std::move(r));
             }
 
