@@ -2,7 +2,7 @@ include(FetchContent)
 include(CMakeDependentOption)
 
 cmake_dependent_option(
-    FETCH_SPIRV_HEADERS "Fetch SPIR-V headers from remote repo (disable and use SPIRV-Headers_SOURCE_DIR to use an existing checkout)." OFF
+    FETCH_SPIRV_HEADERS "Fetch SPIR-V headers from remote repo (disable and use SPIRV-Headers_SOURCE_DIR to use an existing checkout)." ON
     TARGET_SPIRV OFF
 )
 
