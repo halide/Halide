@@ -235,6 +235,7 @@ protected:
     void visit(const Fork *) override;
     void visit(const Acquire *) override;
     void visit(const Atomic *) override;
+    void visit(const VectorIntrinsic *) override;
     void visit(const VectorReduce *) override;
 
     void visit_binop(Type t, const Expr &a, const Expr &b, const char *op);

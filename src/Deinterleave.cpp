@@ -195,6 +195,11 @@ private:
 
     using IRMutator::visit;
 
+    Expr visit(const VectorIntrinsic *op) override {
+        internal_error << "Deinterleaver should never receive VectorIntrinsic node, received:\n"
+                       << Expr(op) << "\n";
+    }
+
     Expr visit(const VectorReduce *op) override {
         std::vector<int> input_lanes;
         int factor = op->value.type().lanes() / op->type.lanes();

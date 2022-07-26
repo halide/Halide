@@ -2829,6 +2829,11 @@ Expr CodeGen_C::scalarize_vector_reduce(const VectorReduce *op) {
     return Shuffle::make_concat(lanes);
 }
 
+void CodeGen_C::visit(const VectorIntrinsic *op) {
+    internal_error << "CodeGen_C should never receive a VectorIntrinsic, received:\n"
+                   << Expr(op) << "\n";
+}
+
 void CodeGen_C::visit(const VectorReduce *op) {
     stream << get_indent() << "// Vector reduce: " << op->op << "\n";
 
