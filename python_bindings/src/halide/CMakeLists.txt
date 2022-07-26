@@ -54,6 +54,7 @@ endif ()
 # Packaging
 ##
 
+include(CMakeDependentOption)
 include(GNUInstallDirs)
 
 set(Halide_INSTALL_PYTHONDIR "${CMAKE_INSTALL_LIBDIR}/python3/site-packages"
@@ -72,15 +73,18 @@ install(TARGETS Halide_Python
         COMPONENT Halide_Python
         NAMELINK_COMPONENT Halide_Python)
 
-# TODO: when we upgrade to CMake 3.22, replace with RUNTIME_DEPENDENCY_SET?
-# TODO: consider if there is a better alternative to this.
 get_property(halide_is_imported TARGET Halide::Halide PROPERTY IMPORTED)
 get_property(halide_type TARGET Halide::Halide PROPERTY TYPE)
-if (halide_is_imported AND halide_type STREQUAL "SHARED_LIBRARY")
+cmake_dependent_option(
+    Halide_Python_INSTALL_IMPORTED_DEPS "" OFF
+    "halide_is_imported;halide_type STREQUAL \"SHARED_LIBRARY\"" OFF
+)
+
+if (Halide_Python_INSTALL_IMPORTED_DEPS)
     # The following might be a bit confusing, but installing both libHalide
     # and its SONAME symbolic link causes the following bad behavior:
-    #   1. CMake does the right thing and installs libHalide.so.15.0.0
-    #      (TARGET_FILE) as a real file and libHalide.so.15
+    #   1. CMake does the right thing and installs libHalide.so.X.Y.Z
+    #      (TARGET_FILE) as a real file and libHalide.so.X
     #      (TARGET_SONAME_FILE_NAME) as a symbolic link to the former.
     #   2. Setuptools dutifully packs both of these into a Python wheel, which
     #      is a structured zip file. Zip files do not support symbolic links.
@@ -97,6 +101,7 @@ if (halide_is_imported AND halide_type STREQUAL "SHARED_LIBRARY")
         set(rename_arg "")
     endif ()
 
+    # TODO: when we upgrade to CMake 3.22, replace with RUNTIME_DEPENDENCY_SET?
     install(FILES "$<TARGET_FILE:Halide::Halide>"
             DESTINATION "${Halide_INSTALL_PYTHONDIR}/halide"
             COMPONENT Halide_Python
