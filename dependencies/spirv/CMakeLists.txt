@@ -20,7 +20,9 @@ if (FETCH_SPIRV_HEADERS)
     if (NOT SPIRV-Headers_POPULATED)
         FetchContent_Populate(SPIRV-Headers)
     endif ()
-    set(SPIRV_INCLUDE_DIR ${SPIRV-Headers_SOURCE_DIR}/include)    
+    if (EXISTS ${spirv-headers_SOURCE_DIR})
+        set(SPIRV_INCLUDE_DIR "${spirv-headers_SOURCE_DIR}/include")    
+    endif()
 else ()
     find_path(SPIRV_INCLUDE_DIR spirv/1.0/spirv.h)
 endif ()
@@ -30,7 +32,7 @@ if (NOT SPIRV_INCLUDE_DIR)
 endif ()
 
 message(STATUS "Using SPIR-V headers from ${SPIRV_INCLUDE_DIR}...")
-add_library(Halide_SPIRV INTERFACE IMPORTED)
-target_include_directories(Halide_SPIRV 
+add_library(Halide::SPIRV INTERFACE IMPORTED)
+target_include_directories(Halide::SPIRV 
                            SYSTEM # Use -isystem instead of -I; this is a trick so that clang-tidy won't analyze these includes
                            INTERFACE "${SPIRV_INCLUDE_DIR}")
