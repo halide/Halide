@@ -304,8 +304,7 @@ void PythonExtensionGen::compile(const LoweredFunc &f) {
             // TODO: Add support for handles and vectors.
             dest << indent << "PyErr_Format(PyExc_NotImplementedError, "
                  << "\"Can't convert argument " << arg.name << " from Python\");\n";
-            dest << indent << "Py_INCREF(Py_None);\n";
-            dest << indent << "return Py_None;\n";
+            dest << indent << "return nullptr;\n";
             dest << "}";
             return;
         }
@@ -313,6 +312,7 @@ void PythonExtensionGen::compile(const LoweredFunc &f) {
 
     // Some of these will always be null, but that's ok.
     dest << indent << "Py_buffer *active_py_buffers[" << args.size() << "] = {nullptr};\n";
+    dest << indent << "bool success = false;\n";
     dest << indent << "do {\n\n";
     indent.indent += 2;
 
@@ -395,7 +395,8 @@ void PythonExtensionGen::compile(const LoweredFunc &f) {
     dest << indent << "break;\n";
     indent.indent -= 2;
     dest << indent << "}\n";
-
+    dest << "\n";
+    dest << indent << "success = true;\n";
     dest << "\n";
     indent.indent -= 2;
     dest << indent << "} while(0);\n\n";
@@ -404,6 +405,8 @@ void PythonExtensionGen::compile(const LoweredFunc &f) {
     dest << indent << "    if (active_py_buffers[i]) { PyBuffer_Release(active_py_buffers[i]); }\n";
     dest << indent << "}\n";
 
+    dest << "\n";
+    dest << indent << "if (!success) return nullptr;\n";
     dest << "\n";
     dest << indent << "Py_INCREF(Py_None);\n";
     dest << indent << "return Py_None;\n";
