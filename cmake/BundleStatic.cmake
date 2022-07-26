@@ -184,7 +184,9 @@ function(transfer_locations)
 
             set(globs "")
             foreach (lang IN LISTS languages)
-                list(APPEND globs "${stage}/*${CMAKE_${lang}_OUTPUT_EXTENSION}")
+                if (DEFINED "CMAKE_${lang}_OUTPUT_EXTENSION")
+                    list(APPEND globs "${stage}/*${CMAKE_${lang}_OUTPUT_EXTENSION}")
+                endif ()
             endforeach ()
 
             file(GLOB_RECURSE objects ${globs})

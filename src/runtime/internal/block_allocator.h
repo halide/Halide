@@ -231,6 +231,7 @@ void BlockAllocator::destroy(void *user_context) {
         destroy_block_entry(user_context, block_entry);
         block_entry = prev_entry;
     }
+    block_list.destroy(user_context);
 }
 
 MemoryRegion *BlockAllocator::reserve_memory_region(void *user_context, RegionAllocator *allocator, const MemoryRequest &request) {
@@ -331,7 +332,6 @@ void BlockAllocator::destroy_region_allocator(void *user_context, RegionAllocato
                         << "region_allocator=" << (void *)(region_allocator) << ")...\n";
 #endif
     if (region_allocator == nullptr) { return; }
-    region_allocator->destroy(user_context);
     RegionAllocator::destroy(user_context, region_allocator);
 }
 

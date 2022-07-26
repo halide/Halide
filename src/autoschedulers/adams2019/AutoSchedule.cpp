@@ -93,6 +93,7 @@
 #include "Halide.h"
 #include "LoopNest.h"
 #include "NetworkSize.h"
+#include "ParamParser.h"
 #include "PerfectHashMap.h"
 #include "State.h"
 #include "Timer.h"
@@ -665,19 +666,16 @@ struct Adams2019 {
 #else
     void operator()(const Pipeline &p, const Target &target, const AutoschedulerParams &params_in, AutoSchedulerResults *results) {
         internal_assert(params_in.name == "Adams2019");
-        // Verify that no unknown keys are set in params_in
-        const std::set<std::string> legal_keys = {"parallelism"};
-        for (const auto &it : params_in.extra) {
-            user_assert(legal_keys.count(it.first) == 1) << "The key " << it.first << " is not legal to use for the Adams2019 Autoscheduler.";
-        }
 
         std::vector<Function> outputs;
         for (const Func &f : p.outputs()) {
             outputs.push_back(f.function());
         }
         Adams2019Params params;
-        if (params_in.extra.count("parallelism")) {
-            params.parallelism = std::stoi(params_in.extra.at("parallelism"));
+        {
+            ParamParser parser(params_in.extra);
+            parser.parse("parallelism", &params.parallelism);
+            parser.finish();
         }
         Autoscheduler::generate_schedule(outputs, target, params, results);
         results->autoscheduler_params = params_in;
