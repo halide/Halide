@@ -16,11 +16,11 @@ $(GENERATOR_BIN)/bgu.generator: bgu_generator.cpp $(GENERATOR_DEPS)
 
 $(BIN)/%/bgu.a: $(GENERATOR_BIN)/bgu.generator
 	@mkdir -p $(@D)
-	$< -g bgu -f bgu -o $(BIN)/$* target=$*-no_runtime auto_schedule=false
+	$< -g bgu -f bgu -o $(BIN)/$* target=$*-no_runtime
 
 $(BIN)/%/bgu_auto_schedule.a: $(GENERATOR_BIN)/bgu.generator
 	@mkdir -p $(@D)
-	$< -g bgu -f bgu_auto_schedule -o $(BIN)/$* target=$*-no_runtime auto_schedule=true
+	$< -g bgu -f bgu_auto_schedule -o $(BIN)/$* target=$*-no_runtime autoscheduler=Mullapudi2016
 
 $(BIN)/%/runtime.a: $(GENERATOR_BIN)/bgu.generator
 	@mkdir -p $(@D)

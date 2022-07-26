@@ -109,10 +109,17 @@ endif ()
 
 # alias_aottest.cpp
 # alias_generator.cpp
-halide_define_aot_test(alias EXTRA_LIBS alias_with_offset_42)
-add_halide_library(alias_with_offset_42
-                   FROM alias.generator
-                   GENERATOR alias_with_offset_42)
+set(ALIAS_LIBS alias_with_offset_42 alias_Adams2019 alias_Li2018 alias_Mullapudi2016)
+halide_define_aot_test(alias EXTRA_LIBS ${ALIAS_LIBS})
+foreach (LIB IN LISTS ALIAS_LIBS)
+    # We don't really need all the plugins at once here --
+    # It's just easier to specify them all (and adds a test that loading
+    # multiple plugins works)
+    add_halide_library(${LIB}
+                       FROM alias.generator
+                       GENERATOR ${LIB}
+                       PLUGINS Halide::Adams2019 Halide::Li2018 Halide::Mullapudi2016)
+endforeach ()
 
 # argvcall_aottest.cpp
 # argvcall_generator.cpp

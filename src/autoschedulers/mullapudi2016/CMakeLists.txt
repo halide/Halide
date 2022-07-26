@@ -1,1 +1,2 @@
 add_autoscheduler(NAME Mullapudi2016 SOURCES AutoSchedule.cpp)
+target_link_libraries(Halide_Mullapudi2016 PRIVATE ParamParser)

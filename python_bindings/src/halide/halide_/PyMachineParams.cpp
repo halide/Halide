@@ -1,3 +1,4 @@
+#ifdef HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
 #include "PyMachineParams.h"
 
 namespace Halide {
@@ -23,3 +24,4 @@ void define_machine_params(py::module &m) {
 
 }  // namespace PythonBindings
 }  // namespace Halide
+#endif

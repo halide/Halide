@@ -81,7 +81,7 @@ public:
      * used to register it.) */
     virtual std::string name() = 0;
 
-    /** Return the Target, autoscheduler flag, and MachineParams that this Generator
+    /** Return the Target and autoscheduler info that this Generator
      * was created with. Always legal to call on any AbstractGenerator instance,
      * regardless of what other methods have been called. (All AbstractGenerator instances
      * are expected to be created with immutable values for these, which can't be

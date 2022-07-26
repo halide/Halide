@@ -35,7 +35,7 @@ $(GENERATOR_BIN)/demo.generator: $(SRC)/demo_generator.cpp $(GENERATOR_DEPS)
 # Use the -p flag to the generator to load the autoscheduler as a plugin
 $(BIN)/%/demo.a: $(GENERATOR_BIN)/demo.generator $(BIN)/libautoschedule_li2018.$(SHARED_EXT)
 	@mkdir -p $(@D)
-	$(GENERATOR_BIN)/demo.generator -g demo -o $(@D) -f demo target=$* auto_schedule=true -p $(BIN)/libautoschedule_li2018.$(SHARED_EXT) -s Li2018
+	$(GENERATOR_BIN)/demo.generator -g demo -o $(@D) -f demo target=$* autoscheduler=Li2018 -p $(BIN)/libautoschedule_li2018.$(SHARED_EXT)
 
 $(BIN)/%/demo.rungen: $(BIN)/%/RunGenMain.o $(BIN)/%/demo.registration.cpp $(BIN)/%/demo.a
 	@mkdir -p $(@D)

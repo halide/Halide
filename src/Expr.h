@@ -33,6 +33,7 @@ enum class IRNodeType {
     StringImm,
     Broadcast,
     Cast,
+    Reinterpret,
     Variable,
     Add,
     Sub,

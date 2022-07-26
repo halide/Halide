@@ -227,7 +227,7 @@ void LoopNest::get_sites(StageMap<Sites> &sites,
 
 // Do a recursive walk over the loop nest computing features to feed the cost model.
 void LoopNest::compute_features(const FunctionDAG &dag,
-                                const MachineParams &params,
+                                const Adams2019Params &params,
                                 const StageMap<Sites> &sites,
                                 int64_t instances,
                                 int64_t parallelism,
@@ -1091,24 +1091,24 @@ const Bound &LoopNest::get_bounds(const FunctionDAG::Node *f) const {
 }
 
 // Recursively print a loop nest representation to stderr
-void LoopNest::dump(string prefix, const LoopNest *parent) const {
+void LoopNest::dump(std::ostream &os, string prefix, const LoopNest *parent) const {
     if (!is_root()) {
         // Non-root nodes always have parents.
         internal_assert(parent != nullptr);
 
-        aslog(0) << prefix << node->func.name();
+        os << prefix << node->func.name();
         prefix += " ";
 
         for (size_t i = 0; i < size.size(); i++) {
-            aslog(0) << " " << size[i];
+            os << " " << size[i];
             // The vectorized loop gets a 'v' suffix
             if (innermost && i == (size_t)vectorized_loop_index) {
-                aslog(0) << "v";
+                os << "v";
             }
             // Loops that have a known constant size get a
             // 'c'. Useful for knowing what we can unroll.
             if (parent->get_bounds(node)->loops(stage->index, i).constant_extent()) {
-                aslog(0) << "c";
+                os << "c";
             }
         }
 
@@ -1117,31 +1117,31 @@ void LoopNest::dump(string prefix, const LoopNest *parent) const {
             const auto &bounds = get_bounds(node);
             for (size_t i = 0; i < size.size(); i++) {
                 const auto &p = bounds->loops(stage->index, i);
-                aslog(0) << " [" << p.first << ", " << p.second << "]";
+                os << " [" << p.first << ", " << p.second << "]";
             }
         */
 
-        aslog(0) << " (" << vectorized_loop_index << ", " << vector_dim << ")";
+        os << " (" << vectorized_loop_index << ", " << vector_dim << ")";
     }
 
     if (tileable) {
-        aslog(0) << " t";
+        os << " t";
     }
     if (innermost) {
-        aslog(0) << " *\n";
+        os << " *\n";
     } else if (parallel) {
-        aslog(0) << " p\n";
+        os << " p\n";
     } else {
-        aslog(0) << "\n";
+        os << "\n";
     }
     for (const auto *p : store_at) {
-        aslog(0) << prefix << "realize: " << p->func.name() << "\n";
+        os << prefix << "realize: " << p->func.name() << "\n";
     }
     for (size_t i = children.size(); i > 0; i--) {
-        children[i - 1]->dump(prefix, this);
+        children[i - 1]->dump(os, prefix, this);
     }
     for (auto it = inlined.begin(); it != inlined.end(); it++) {
-        aslog(0) << prefix << "inlined: " << it.key()->func.name() << " " << it.value() << "\n";
+        os << prefix << "inlined: " << it.key()->func.name() << " " << it.value() << "\n";
     }
 }
 
@@ -1355,7 +1355,7 @@ void LoopNest::compute_here(const FunctionDAG::Node *f, bool tileable, int v) {
 }
 
 // Parallelize this loop according to the given tiling.
-IntrusivePtr<const LoopNest> LoopNest::parallelize_in_tiles(const MachineParams &params,
+IntrusivePtr<const LoopNest> LoopNest::parallelize_in_tiles(const Adams2019Params &params,
                                                             const vector<int64_t> &tiling,
                                                             const LoopNest *parent) const {
 
@@ -1423,7 +1423,7 @@ IntrusivePtr<const LoopNest> LoopNest::parallelize_in_tiles(const MachineParams 
 // this loop nest.
 vector<IntrusivePtr<const LoopNest>> LoopNest::compute_in_tiles(const FunctionDAG::Node *f,
                                                                 const LoopNest *parent,
-                                                                const MachineParams &params,
+                                                                const Adams2019Params &params,
                                                                 int v,
                                                                 bool in_realization) const {
     internal_assert(f);
@@ -1504,7 +1504,7 @@ vector<IntrusivePtr<const LoopNest>> LoopNest::compute_in_tiles(const FunctionDA
         auto tilings = generate_tilings(size, (int)(size.size() - 1), 2, !in_realization);
 
         if (tilings.size() > 10000) {
-            aslog(0) << "Warning: lots of tilings: " << tilings.size() << "\n";
+            aslog(1) << "Warning: lots of tilings: " << tilings.size() << "\n";
         }
 
         for (auto t : tilings) {

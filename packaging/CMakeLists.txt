@@ -52,8 +52,18 @@ endforeach ()
 if (WITH_PYTHON_BINDINGS)
     set(Halide_INSTALL_PYTHONDIR "${CMAKE_INSTALL_LIBDIR}/python3/site-packages"
         CACHE STRING "Path to Halide Python bindings folder")
+
+    install(DIRECTORY "${Halide_SOURCE_DIR}/python_bindings/src/halide"
+            DESTINATION "${Halide_INSTALL_PYTHONDIR}"
+            COMPONENT Halide_Python
+            FILES_MATCHING
+            PATTERN "*.py"
+            PATTERN "*/halide_" EXCLUDE
+            PATTERN "*/__pycache__" EXCLUDE)
+
     install(TARGETS Halide_Python
-            LIBRARY DESTINATION ${Halide_INSTALL_PYTHONDIR} COMPONENT Halide_Python
+            LIBRARY DESTINATION "${Halide_INSTALL_PYTHONDIR}/halide"
+            COMPONENT Halide_Python
             NAMELINK_COMPONENT Halide_Python)
 endif ()
 
@@ -99,6 +109,13 @@ if (TARGET Halide_Adams2019)
     install(TARGETS ${autoscheduler_utils}
             EXPORT Halide_Interfaces
             COMPONENT Halide_Development)
+endif ()
+
+if (TARGET Halide_Python AND NOT CMAKE_INSTALL_RPATH)
+    file(RELATIVE_PATH lib_dir
+        "${CMAKE_CURRENT_BINARY_DIR}/${Halide_INSTALL_PYTHONDIR}/halide"
+        "${CMAKE_CURRENT_BINARY_DIR}/${CMAKE_INSTALL_LIBDIR}")
+    set_target_properties(Halide_Python PROPERTIES INSTALL_RPATH "${rbase}/${lib_dir}")
 endif ()
 
 ##
@@ -266,6 +283,11 @@ cpack_add_component(Halide_Runtime
 cpack_add_component(Halide_Development
                     DISPLAY_NAME "Halide development"
                     DESCRIPTION "Static Halide libraries and CMake development files"
+                    DEPENDS Halide_Runtime)
+
+cpack_add_component(Halide_Python
+                    DISPLAY_NAME "Python bindings"
+                    DESCRIPTION "Python package providing bindings to Halide"
                     DEPENDS Halide_Runtime)
 
 cpack_add_component(Halide_Documentation

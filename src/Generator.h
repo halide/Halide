@@ -208,27 +208,27 @@
  *     };
  * \endcode
  *
- *  All Generators have three GeneratorParams that are implicitly provided
+ *  All Generators have two GeneratorParams that are implicitly provided
  *  by the base class:
  *
  *      GeneratorParam<Target> target{"target", Target()};
- *      GeneratorParam<bool> auto_schedule{"auto_schedule", false};
- *      GeneratorParam<MachineParams> machine_params{"machine_params", MachineParams::generic()};
+ *      GeneratorParam<AutoschedulerParams> autoscheduler{"autoscheduler", {}}
  *
  *  - 'target' is the Halide::Target for which the Generator is producing code.
  *    It is read-only during the Generator's lifetime, and must not be modified;
  *    its value should always be filled in by the calling code: either the Halide
  *    build system (for ahead-of-time compilation), or ordinary C++ code
  *    (for JIT compilation).
- *  - 'auto_schedule' indicates whether the auto-scheduler should be run for this
- *    Generator:
- *      - if 'false', the Generator should schedule its Funcs as it sees fit.
- *      - if 'true', the Generator should only provide estimate()s for its Funcs,
- *        and not call any other scheduling methods.
- *  - 'machine_params' is only used if auto_schedule is true; it is ignored
- *    if auto_schedule is false. It provides details about the machine architecture
- *    being targeted which may be used to enhance the automatically-generated
- *    schedule.
+ *  - 'autoscheduler' is a string-to-string map that is used to indicates whether
+ *    and how an auto-scheduler should be run for this Generator:
+ *      - if empty, the Generator should schedule its Funcs as it sees fit; no autoscheduler will be run.
+ *      - if the 'name' key is set, it should be one of the known autoschedulers
+ *        provided with this release of Halide, which will be used to schedule
+ *        the Funcs in the Generator. In this case, the Generator should only
+ *        provide estimate()s for its Funcs, and not call any other scheduling methods.
+ *      - Other keys may be specified in the params, on a per-autoscheduler
+ *        basis, to optimize or enhance the automatically-generated schedule.
+ *        See documentation for each autoscheduler for options.
  *
  * Generators are added to a global registry to simplify AOT build mechanics; this
  * is done by simply using the HALIDE_REGISTER_GENERATOR macro at global scope:
@@ -426,7 +426,11 @@ public:
     HALIDE_GENERATOR_PARAM_TYPED_SETTER(float)
     HALIDE_GENERATOR_PARAM_TYPED_SETTER(double)
     HALIDE_GENERATOR_PARAM_TYPED_SETTER(Target)
+#ifdef HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
     HALIDE_GENERATOR_PARAM_TYPED_SETTER(MachineParams)
+#else
+    HALIDE_GENERATOR_PARAM_TYPED_SETTER(AutoschedulerParams)
+#endif
     HALIDE_GENERATOR_PARAM_TYPED_SETTER(Type)
     HALIDE_GENERATOR_PARAM_TYPED_SETTER(LoopLevel)
 
@@ -540,7 +544,11 @@ public:
     HALIDE_GENERATOR_PARAM_TYPED_SETTER(float)
     HALIDE_GENERATOR_PARAM_TYPED_SETTER(double)
     HALIDE_GENERATOR_PARAM_TYPED_SETTER(Target)
+#ifdef HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
     HALIDE_GENERATOR_PARAM_TYPED_SETTER(MachineParams)
+#else
+    HALIDE_GENERATOR_PARAM_TYPED_SETTER(AutoschedulerParams)
+#endif
     HALIDE_GENERATOR_PARAM_TYPED_SETTER(Type)
     HALIDE_GENERATOR_PARAM_TYPED_SETTER(LoopLevel)
 
@@ -634,6 +642,7 @@ public:
     }
 };
 
+#ifdef HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
 template<typename T>
 class GeneratorParam_MachineParams : public GeneratorParamImpl<T> {
 public:
@@ -659,6 +668,22 @@ public:
         return "MachineParams";
     }
 };
+#else
+class GeneratorParam_AutoSchedulerParams : public GeneratorParamImpl<AutoschedulerParams> {
+public:
+    GeneratorParam_AutoSchedulerParams();
+
+    void set_from_string(const std::string &new_value_string) override;
+    std::string get_default_value() const override;
+    std::string call_to_string(const std::string &v) const override;
+    std::string get_c_type() const override;
+
+private:
+    friend class GeneratorBase;
+
+    bool try_set(const std::string &key, const std::string &value);
+};
+#endif
 
 class GeneratorParam_LoopLevel : public GeneratorParamImpl<LoopLevel> {
 public:
@@ -954,7 +979,9 @@ template<typename T>
 using GeneratorParamImplBase =
     typename select_type<
         cond<std::is_same<T, Target>::value, GeneratorParam_Target<T>>,
+#ifdef HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
         cond<std::is_same<T, MachineParams>::value, GeneratorParam_MachineParams<T>>,
+#endif
         cond<std::is_same<T, LoopLevel>::value, GeneratorParam_LoopLevel>,
         cond<std::is_same<T, std::string>::value, GeneratorParam_String<T>>,
         cond<std::is_same<T, Type>::value, GeneratorParam_Type<T>>,
@@ -3009,7 +3036,7 @@ private:
  * \endcode
  *
  * Note that all Generators embed a GeneratorContext, so if you are using a Stub
- * from within a Generator, you can just pass 'contex()' for the GeneratorContext:
+ * from within a Generator, you can just pass 'context()' for the GeneratorContext:
  * \code
  *  struct SomeGen : Generator<SomeGen> {
  *   void generate() {
@@ -3034,9 +3061,15 @@ public:
     using ExternsMap = std::map<std::string, ExternalCode>;
 #endif
 
+#ifdef HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
     explicit GeneratorContext(const Target &t,
                               bool auto_schedule = false,
                               const MachineParams &machine_params = MachineParams::generic());
+#else
+    explicit GeneratorContext(const Target &t);
+    explicit GeneratorContext(const Target &t,
+                              const AutoschedulerParams &autoscheduler_params);
+#endif
 
     GeneratorContext() = default;
     GeneratorContext(const GeneratorContext &) = default;
@@ -3047,17 +3080,24 @@ public:
     const Target &target() const {
         return target_;
     }
+#ifdef HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
     bool auto_schedule() const {
         return auto_schedule_;
     }
     const MachineParams &machine_params() const {
         return machine_params_;
     }
+#else
+    const AutoschedulerParams &autoscheduler_params() const {
+        return autoscheduler_params_;
+    }
+#endif
 
     HALIDE_ATTRIBUTE_DEPRECATED("Call GeneratorContext::target() instead of GeneratorContext::get_target().")
     const Target &get_target() const {
         return target_;
     }
+#ifdef HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
     HALIDE_ATTRIBUTE_DEPRECATED("Call GeneratorContext::auto_schedule() instead of GeneratorContext::get_auto_schedule().")
     bool get_auto_schedule() const {
         return auto_schedule_;
@@ -3066,6 +3106,7 @@ public:
     const MachineParams &get_machine_params() const {
         return machine_params_;
     }
+#endif
 
     // Return a copy of this GeneratorContext that uses the given Target.
     // This method is rarely needed; it's really provided as a convenience
@@ -3085,18 +3126,26 @@ public:
 
 private:
     Target target_;
+#ifdef HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
     bool auto_schedule_ = false;
     MachineParams machine_params_ = MachineParams::generic();
+#else
+    AutoschedulerParams autoscheduler_params_;
+#endif
 #ifdef HALIDE_ALLOW_GENERATOR_EXTERNAL_CODE
-    std::shared_ptr<ExternsMap> externs_map_;
+    std::shared_ptr<ExternsMap> externs_map_ = std::make_shared<ExternsMap>();
 #endif
 
 #ifdef HALIDE_ALLOW_GENERATOR_EXTERNAL_CODE
     GeneratorContext(const Target &target,
+#ifdef HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
                      bool auto_schedule,
                      const MachineParams &machine_params,
-                     std::shared_ptr<ExternsMap> externs_map);
+#else
+                     const AutoschedulerParams &autoscheduler_params,
 #endif
+                     std::shared_ptr<ExternsMap> externs_map);
+#endif  // HALIDE_ALLOW_GENERATOR_EXTERNAL_CODE
 };
 
 class NamesInterface {
@@ -3516,12 +3565,21 @@ protected:
     Target get_target() const {
         return target;
     }
+#ifdef HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
     bool get_auto_schedule() const {
         return auto_schedule;
     }
     MachineParams get_machine_params() const {
         return machine_params;
     }
+    bool using_autoscheduler() const {
+        return get_auto_schedule();
+    }
+#else
+    bool using_autoscheduler() const {
+        return !autoscheduler_.value().name.empty();
+    }
+#endif
 
 #ifdef HALIDE_ALLOW_GENERATOR_EXTERNAL_CODE
     /** Generators can register ExternalCode objects onto
@@ -3550,8 +3608,12 @@ protected:
 
     // These must remain here for legacy code that access the fields directly.
     GeneratorParam<Target> target{"target", Target()};
+#ifdef HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
     GeneratorParam<bool> auto_schedule{"auto_schedule", false};
     GeneratorParam<MachineParams> machine_params{"machine_params", MachineParams::generic()};
+#else
+    GeneratorParam_AutoSchedulerParams autoscheduler_;
+#endif
 
 private:
     friend void ::Halide::Internal::generator_test();

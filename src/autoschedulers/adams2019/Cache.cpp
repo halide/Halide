@@ -18,7 +18,7 @@ bool Cache::add_memoized_blocks(const State *state,
                                 std::function<void(IntrusivePtr<State> &&)> &accept_child,
                                 const FunctionDAG::Node *node, int &num_children,
                                 const FunctionDAG &dag,
-                                const MachineParams &params,
+                                const Adams2019Params &params,
                                 CostModel *cost_model,
                                 int64_t memory_limit) const {
     if (!options.cache_blocks || !memoized_compute_root_blocks.contains(node)) {

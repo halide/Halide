@@ -15,7 +15,9 @@
 #include "PyImageParam.h"
 #include "PyInlineReductions.h"
 #include "PyLambda.h"
+#ifdef HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
 #include "PyMachineParams.h"
+#endif
 #include "PyModule.h"
 #include "PyParam.h"
 #include "PyPipeline.h"
@@ -32,7 +34,7 @@ static_assert(PY_VERSION_HEX >= 0x03000000,
               "We appear to be compiling against Python 2.x rather than 3.x, which is not supported.");
 
 #ifndef HALIDE_PYBIND_MODULE_NAME
-#define HALIDE_PYBIND_MODULE_NAME halide
+#define HALIDE_PYBIND_MODULE_NAME halide_
 #endif
 
 PYBIND11_MODULE(HALIDE_PYBIND_MODULE_NAME, m) {
@@ -53,7 +55,9 @@ PYBIND11_MODULE(HALIDE_PYBIND_MODULE_NAME, m) {
     define_extern_func_argument(m);
     define_var(m);
     define_rdom(m);
+#ifdef HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
     define_machine_params(m);
+#endif
     define_module(m);
     define_callable(m);
     define_func(m);
