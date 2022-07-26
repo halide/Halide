@@ -32,9 +32,5 @@ if (NOT SPIRV_INCLUDE_DIR)
 endif ()
 
 message(STATUS "Using SPIR-V headers from ${SPIRV_INCLUDE_DIR}...")
-add_library(Halide_SPIRV INTERFACE IMPORTED)
-add_library(Halide::SPIRV ALIAS Halide_SPIRV)
-
-target_include_directories(Halide_SPIRV
-                           SYSTEM # Use -isystem instead of -I; this is a trick so that clang-tidy won't analyze these includes
-                           INTERFACE "${SPIRV_INCLUDE_DIR}")
+add_library(Halide_SPIRV INTERFACE)
+target_include_directories(Halide_SPIRV SYSTEM INTERFACE "${SPIRV_INCLUDE_DIR}")
