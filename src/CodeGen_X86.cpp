@@ -255,7 +255,7 @@ void CodeGen_X86::init_module() {
 // FIXME: This is nearly identical to CodeGen_LLVM, should re-factor this somehow.
 // Only difference is the call to `optimize_x86_instructions()`
 void CodeGen_X86::compile_func(const LoweredFunc &f, const std::string &simple_name,
-                                const std::string &extern_name) {
+                               const std::string &extern_name) {
     // Generate the function declaration and argument unpacking code.
     begin_func(f.linkage, simple_name, extern_name, f.args);
 
