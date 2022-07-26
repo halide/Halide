@@ -1948,10 +1948,10 @@ struct VectorIntrinOp {
 
         r_args[0] = std::get<0>(args).make(state, {});
         if constexpr (sizeof...(Args) > 1) {
-            r_args[1] = std::get<1>(args).make(state, {});
+            r_args[1] = std::get<const_min(1, sizeof...(Args) - 1)>(args).make(state, {});
         }
         if constexpr (sizeof...(Args) > 2) {
-            r_args[2] = std::get<2>(args).make(state, {});
+            r_args[2] = std::get<const_min(2, sizeof...(Args) - 1)>(args).make(state, {});
         }
 
         // for (int i = 0; i < sizeof...(Args); i++) {
