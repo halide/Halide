@@ -182,8 +182,8 @@ public:
     SpvFunction(SpvFunction &&) = default;
     SpvFunction &operator=(SpvFunction &&) = default;
 
-    void add_block(SpvBlock block);
-    void add_parameter(SpvInstruction param);
+    void add_block(const SpvBlock &block);
+    void add_parameter(const SpvInstruction &param);
     void set_module(SpvModule module);
     void set_return_precision(SpvPrecision precision);
     void set_parameter_precision(uint32_t index, SpvPrecision precision);
@@ -222,14 +222,14 @@ public:
     SpvModule(SpvModule &&) = default;
     SpvModule &operator=(SpvModule &&) = default;
 
-    void add_debug(SpvInstruction val);
-    void add_annotation(SpvInstruction val);
-    void add_type(SpvInstruction val);
-    void add_constant(SpvInstruction val);
-    void add_global(SpvInstruction val);
-    void add_execution_mode(SpvInstruction val);
+    void add_debug(const SpvInstruction &val);
+    void add_annotation(const SpvInstruction &val);
+    void add_type(const SpvInstruction &val);
+    void add_constant(const SpvInstruction &val);
+    void add_global(const SpvInstruction &val);
+    void add_execution_mode(const SpvInstruction &val);
     void add_function(SpvFunction val);
-    void add_instruction(SpvInstruction val);
+    void add_instruction(const SpvInstruction &val);
     void add_entry_point(const std::string &name, SpvInstruction entry_point);
 
     void require_capability(SpvCapability val);
@@ -328,11 +328,11 @@ public:
     SpvAddressingModel addressing_model() const;
     SpvMemoryModel memory_model() const;
 
-    void enter_block(SpvBlock block);
+    void enter_block(const SpvBlock &block);
     SpvBlock current_block() const;
     SpvBlock leave_block();
 
-    void enter_function(SpvFunction func);
+    void enter_function(const SpvFunction &func);
     SpvFunction lookup_function(SpvId func_id) const;
     SpvFunction current_function() const;
     SpvFunction leave_function();
@@ -389,7 +389,7 @@ protected:
     ConstantKey hash_null_constant(const Type &type) const;
     SpvId lookup_null_constant(const Type &type) const;
 
-    SpvId map_instruction(SpvInstruction inst);
+    SpvId map_instruction(const SpvInstruction &inst);
     SpvInstruction lookup_instruction(SpvId result_id) const;
     bool has_instruction(SpvId inst) const;
 
@@ -545,7 +545,13 @@ struct SpvModuleContents {
     Instructions instructions;
 };
 
-// --
+}  // namespace Internal
+}  // namespace Halide
+
+#endif  // WITH_SPIRV
+
+namespace Halide {
+namespace Internal {
 
 /** Internal test for SPIR-V IR **/
 void spirv_ir_test();
@@ -553,5 +559,4 @@ void spirv_ir_test();
 }  // namespace Internal
 }  // namespace Halide
 
-#endif  // WITH_SPIRV
 #endif  // HALIDE_SPIRV_IR_H

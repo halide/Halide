@@ -418,7 +418,6 @@ endif ()
 
 if (TARGET Halide_SPIRV)
     target_link_libraries(Halide PRIVATE Halide_SPIRV)
-    target_compile_definitions(Halide PRIVATE WITH_SPIRV)
 endif ()
 
 ##

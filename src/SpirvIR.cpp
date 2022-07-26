@@ -240,12 +240,12 @@ bool SpvFunction::is_defined() const {
     return contents.defined();
 }
 
-void SpvFunction::add_block(SpvBlock block) {
+void SpvFunction::add_block(const SpvBlock &block) {
     user_assert(is_defined()) << "An SpvFunction must be defined before accessing its properties\n";
-    contents->blocks.emplace_back(block);
+    contents->blocks.push_back(block);
 }
 
-void SpvFunction::add_parameter(SpvInstruction param) {
+void SpvFunction::add_parameter(const SpvInstruction &param) {
     user_assert(is_defined()) << "An SpvFunction must be defined before accessing its properties\n";
     contents->parameters.push_back(param);
 }
@@ -357,39 +357,39 @@ bool SpvModule::is_defined() const {
     return contents.defined();
 }
 
-void SpvModule::add_debug(SpvInstruction val) {
+void SpvModule::add_debug(const SpvInstruction &val) {
     user_assert(is_defined()) << "An SpvModule must be defined before accessing its properties\n";
-    contents->debug.emplace_back(val);
+    contents->debug.push_back(val);
 }
 
-void SpvModule::add_annotation(SpvInstruction val) {
+void SpvModule::add_annotation(const SpvInstruction &val) {
     user_assert(is_defined()) << "An SpvModule must be defined before accessing its properties\n";
-    contents->annotations.emplace_back(val);
+    contents->annotations.push_back(val);
 }
 
-void SpvModule::add_type(SpvInstruction val) {
+void SpvModule::add_type(const SpvInstruction &val) {
     user_assert(is_defined()) << "An SpvModule must be defined before accessing its properties\n";
-    contents->types.emplace_back(val);
+    contents->types.push_back(val);
 }
 
-void SpvModule::add_constant(SpvInstruction val) {
+void SpvModule::add_constant(const SpvInstruction &val) {
     user_assert(is_defined()) << "An SpvModule must be defined before accessing its properties\n";
-    contents->constants.emplace_back(val);
+    contents->constants.push_back(val);
 }
 
-void SpvModule::add_global(SpvInstruction val) {
+void SpvModule::add_global(const SpvInstruction &val) {
     user_assert(is_defined()) << "An SpvModule must be defined before accessing its properties\n";
-    contents->globals.emplace_back(val);
+    contents->globals.push_back(val);
 }
 
-void SpvModule::add_execution_mode(SpvInstruction val) {
+void SpvModule::add_execution_mode(const SpvInstruction &val) {
     user_assert(is_defined()) << "An SpvModule must be defined before accessing its properties\n";
-    contents->execution_modes.emplace_back(val);
+    contents->execution_modes.push_back(val);
 }
 
-void SpvModule::add_instruction(SpvInstruction val) {
+void SpvModule::add_instruction(const SpvInstruction &val) {
     user_assert(is_defined()) << "An SpvModule must be defined before accessing its properties\n";
-    contents->instructions.emplace_back(val);
+    contents->instructions.push_back(val);
 }
 
 void SpvModule::add_function(SpvFunction val) {
@@ -697,7 +697,7 @@ void SpvBuilder::add_execution_mode_local_size(SpvId func_id,
     module.add_execution_mode(exec_mode_inst);
 }
 
-void SpvBuilder::enter_block(SpvBlock block) {
+void SpvBuilder::enter_block(const SpvBlock &block) {
     block_stack.push(block);
 }
 
@@ -727,7 +727,7 @@ SpvFunction SpvBuilder::lookup_function(SpvId func_id) const {
     return func;
 }
 
-void SpvBuilder::enter_function(SpvFunction func) {
+void SpvBuilder::enter_function(const SpvFunction &func) {
     function_stack.push(func);
     enter_block(func.entry_block());
 }
@@ -1144,7 +1144,7 @@ SpvId SpvBuilder::declare_access_chain(SpvId ptr_type_id, SpvId base_id, SpvId e
     return access_chain_id;
 }
 
-SpvId SpvBuilder::map_instruction(SpvInstruction inst) {
+SpvId SpvBuilder::map_instruction(const SpvInstruction &inst) {
     const SpvId key = inst.result_id();
     if (instruction_map.find(key) == instruction_map.end()) {
         instruction_map.insert({key, inst});
@@ -1211,7 +1211,7 @@ SpvId SpvBuilder::declare_runtime_array(SpvId base_type_id) {
 
 void SpvBuilder::append(SpvInstruction inst) {
     if (!block_stack.empty()) {
-        current_block().add_instruction(inst);
+        current_block().add_instruction(std::move(inst));
     } else {
         internal_error << "SPIRV: Current block undefined! Unable to append!\n";
     }
@@ -1641,10 +1641,17 @@ void destroy<SpvModuleContents>(const SpvModuleContents *c) {
     delete c;
 }
 
-// --
+}  // namespace Internal
+}  // namespace Halide
+
+#endif  // WITH_SPIRV
+
+namespace Halide {
+namespace Internal {
 
 void spirv_ir_test() {
 
+#ifdef WITH_SPIRV
     SpvBinary binary;
     SpvInstruction label_inst = SpvFactory::label(777);
     assert(label_inst.result_id() == 777);
@@ -1693,9 +1700,10 @@ void spirv_ir_test() {
     builder.encode(binary);
 
     std::cout << "SpirV IR test passed" << std::endl;
+#else
+    std::cout << "SpirV IR test *disabled*" << std::endl;
+#endif
 }
 
 }  // namespace Internal
 }  // namespace Halide
-
-#endif  // WITH_SPIRV
