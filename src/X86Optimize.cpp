@@ -330,16 +330,16 @@ protected:
             //
             // Solution due to Wojciech Mula:
             // http://0x80.pl/notesen/2018-03-11-sse-abs-unsigned.html
-            (op->type.is_uint() &&
-             rewrite(
-                 absd(x, y),
-                 saturating_sub(x, y) | saturating_sub(y, x))) ||
+            rewrite(
+                absd(x, y),
+                saturating_sub(x, y) | saturating_sub(y, x),
+                is_uint(x) && is_uint(y)) ||
 
             // Current best way to lower absd on x86.
-            (op->type.is_int() &&
-             rewrite(
-                 absd(x, y),
-                 max(x, y) - min(x, y))) ||
+            rewrite(
+                absd(x, y),
+                max(x, y) - min(x, y),
+                is_int(x) && is_int(y)) ||
 
             // pmulh is always supported (via SSE2).
             ((op->type.is_int_or_uint() && bits == 16) &&
