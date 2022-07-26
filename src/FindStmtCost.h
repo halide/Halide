@@ -82,33 +82,12 @@ public:
     int get_computation_cost(const IRNode *node) const;
     int get_data_movement_cost(const IRNode *node) const;
 
-    bool requires_context(const IRNode *node, const string name) const;
-
     void generate_costs(const Module &m);
     void generate_costs(const Stmt &stmt);
-
-    // bool is_loop_variable(const string name) const {
-    //     return find(variables_in_loop.begin(), variables_in_loop.end(), name) !=
-    //            variables_in_loop.end();
-    // }
-    // void add_loop_variable(const string name) {
-    //     variables_in_loop.push_back(name);
-    // }
 
 private:
     // holds mapping of stmt to cost
     unordered_map<const IRNode *, StmtCost> stmt_cost;
-
-    // holds mapping of stmt to whether its in context or not
-    // unordered_map<const IRNode *, bool> requires_context_map;
-    // map<const string, bool> variable_map;
-    // TODO: change these variables so they don't all sound the same
-
-    // vector<string> curr_context;
-    // vector<string> loop_vars;
-
-    // TODO: remove once i know it's not needed anymore
-    bool in_loop;
 
     // for Atomic and Acquire
     CostPreProcessor cost_preprocessor;
@@ -116,22 +95,9 @@ private:
     // stores current loop depth level
     int current_loop_depth = 0;
 
-    // bool in_curr_context(const string name) const;
-    // void add_curr_context(const string name);
-    // // void remove_curr_context(const string name);
-    // void remove_curr_context(const vector<string> &curr_loop_vars);
-
     // gets/sets context from `requires_context_map` map
-    // TODO: remove this once i know it's not needed
     bool get_context(const IRNode *node, const string name) const;
     void set_context(const IRNode *node, bool context);
-
-    // bool is_loop_var(const string name) const;
-    // void add_loop_var(const string name);
-
-    // gets/sets variable context from `variable_map` map
-    // bool get_from_variable_map(const string name) const;
-    // void add_variable_map(const string name, bool context);
 
     // starts the traveral based on Module
     void traverse(const Module &m);
