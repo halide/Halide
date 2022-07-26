@@ -4244,7 +4244,6 @@ Expr CodeGen_LLVM::split_vector_reduce(const VectorReduce *op, const Expr &init)
 void CodeGen_LLVM::codegen_vector_reduce(const VectorReduce *op, const Expr &init) {
     Expr equiv = split_vector_reduce(op, init);
     equiv.accept(this);
-    return;
 }
 
 void CodeGen_LLVM::visit(const Atomic *op) {
