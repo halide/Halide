@@ -417,7 +417,7 @@ if (TARGET Halide_V8)
 endif ()
 
 if (TARGET Halide_SPIRV)
-    target_link_libraries(Halide PRIVATE Halide_SPIRV)
+    target_link_libraries(Halide PRIVATE Halide::SPIRV)
 endif ()
 
 ##
