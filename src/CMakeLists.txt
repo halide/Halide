@@ -530,7 +530,6 @@ if (TARGET_OPENGLCOMPUTE)
     target_compile_definitions(Halide PRIVATE WITH_OPENGLCOMPUTE)
 endif ()
 
-option(TARGET_SPIRV "Include SPIR-V target" ON)
 if (TARGET_SPIRV)
     target_compile_definitions(Halide PRIVATE WITH_SPIRV)
 endif ()
