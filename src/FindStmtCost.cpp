@@ -18,6 +18,46 @@ void CostPreProcessor::traverse(const Module &m) {
     }
 }
 
+int CostPreProcessor::get_count(const string name) const {
+    auto it = lock_access_counts.find(name);
+    if (it == lock_access_counts.end()) {
+        m_assert(false, "name not found in `lock_access_counts`");
+        return 0;
+    }
+    return it->second;
+}
+
+// bool CostPreProcessor::is_in_context(const string name) const {
+//     return find(variables_in_context.begin(), variables_in_context.end(), name) !=
+//            variables_in_context.end();
+// }
+
+// void CostPreProcessor::add_to_context(const string name) {
+//     variables_in_context.push_back(name);
+// }
+
+// void CostPreProcessor::remove_from_context(const string name) {
+//     variables_in_context.erase(
+//         find(variables_in_context.begin(), variables_in_context.end(), name));
+// }
+
+// bool CostPreProcessor::is_loop_variable(const string name) const {
+//     return find(variables_in_loop.begin(), variables_in_loop.end(), name) !=
+//            variables_in_loop.end();
+// }
+// void CostPreProcessor::add_to_loop(const string name) {
+//     variables_in_loop.push_back(name);
+// }
+
+void CostPreProcessor::increase_count(const string name) {
+    auto it = lock_access_counts.find(name);
+    if (it == lock_access_counts.end()) {
+        lock_access_counts.emplace(name, 1);
+    } else {
+        it->second += 1;
+    }
+}
+
 Stmt CostPreProcessor::visit(const Acquire *op) {
     stringstream name;
     name << op->semaphore;
@@ -32,26 +72,8 @@ Stmt CostPreProcessor::visit(const Atomic *op) {
     return op;
 }
 
-void CostPreProcessor::increase_count(const string name) {
-    auto it = lock_access_counts.find(name);
-    if (it == lock_access_counts.end()) {
-        lock_access_counts.emplace(name, 1);
-    } else {
-        it->second += 1;
-    }
-}
-
-int CostPreProcessor::get_count(const string name) const {
-    auto it = lock_access_counts.find(name);
-    if (it == lock_access_counts.end()) {
-        m_assert(false, "node not found in `lock_access_counts`");
-        return 0;
-    }
-    return it->second;
-}
-
 /*
- * CostPreProcessor class
+ * FindStmtCost class
  */
 void FindStmtCost::generate_costs(const Module &m) {
     cost_preprocessor.traverse(m);
@@ -78,7 +100,7 @@ void FindStmtCost::traverse(const Module &m) {
 
 int FindStmtCost::get_computation_range(const IRNode *op) const {
     if (op == nullptr) {
-        cout << "OH NO ITS NULL!!!!! " << endl;
+        cout << "OH NO ITS NULL!!!!! get_computation_range" << endl;
         return -1;
     }
 
@@ -99,7 +121,7 @@ int FindStmtCost::get_computation_range(const IRNode *op) const {
 
 int FindStmtCost::get_data_movement_range(const IRNode *op) const {
     if (op == nullptr) {
-        cout << "OH NO ITS NULL!!!!! " << endl;
+        cout << "OH NO ITS NULL!!!!! get_data_movement_range" << endl;
         return -1;
     }
 
@@ -139,6 +161,100 @@ int FindStmtCost::get_data_movement_cost(const IRNode *node) const {
 
     return it->second.data_movement_cost;
 }
+
+bool FindStmtCost::requires_context(const IRNode *node, const string name = "") const {
+    // auto it = in_context.find(node);
+
+    // if (node->node_type == IRNodeType::Variable && name != "") {
+    //     return get_from_variable_map(name);
+    // }
+
+    // if (node->node_type == IRNodeType::Variable) {
+    //     m_assert(false, "node is a variable but name is empty");
+    //     return false;
+    // }
+
+    // if (it == in_context.end()) {
+    //     // m_assert(false, "node not found in in_context");
+    //     // bool found = find(loop_vars.begin(), loop_vars.end(), name) != loop_vars.end();
+    //     // if (!found) {
+    //     //     m_assert(false, name + " not found in loop_vars");
+    //     // }
+    //     m_assert(false, "node not found in in_context");
+    //     return false;
+    // }
+    // return it->second;
+    return get_context(node, name);
+}
+
+// bool FindStmtCost::in_curr_context(const string name) const {
+//     return find(curr_context.begin(), curr_context.end(), name) != curr_context.end();
+// }
+
+// void FindStmtCost::add_curr_context(const string name) {
+//     curr_context.push_back(name);
+// }
+
+// void FindStmtCost::remove_curr_context(const vector<string> &curr_loop_vars) {
+//     for (auto const &name : curr_loop_vars) {
+//         curr_context.erase(find(curr_context.begin(), curr_context.end(), name));
+//     }
+//     // curr_context.erase(find(curr_context.begin(), curr_context.end(), name));
+// }
+
+bool FindStmtCost::get_context(const IRNode *node, const string name = "") const {
+
+    // check if node is Variable
+    // if (node->node_type == IRNodeType::Variable && name != "") {
+    //     return get_from_variable_map(name);
+    // }
+
+    // if (node->node_type == IRNodeType::Variable) {
+    //     m_assert(false, "node is a variable but name is empty");
+    //     return false;
+    // }
+
+    // auto it = requires_context_map.find(node);
+    // if (it == requires_context_map.end()) {
+    //     m_assert(false, "node not found in in_context");
+    //     return false;
+    // }
+    // return it->second;
+
+    return true;
+}
+void FindStmtCost::set_context(const IRNode *node, bool context) {
+    // auto it = requires_context_map.find(node);
+    // if (it == requires_context_map.end()) {
+    //     requires_context_map.emplace(node, context);
+    // } else {
+    //     // stringstream omg;
+    //     // omg << (*node.get());
+    //     it->second = context;
+    //     // m_assert(false, "node already found in in_context"));
+    // }
+    return;
+}
+
+// bool FindStmtCost::get_from_variable_map(const string name) const {
+//     auto it = variable_map.find(name);
+//     if (it == variable_map.end()) {
+//         cout << "?????? uh oh!!!! name not found in var_in_context: " << name << endl;
+//         // m_assert(false, "name above not found in var_in_context");
+//         return false;
+//     }
+//     return it->second;
+// }
+
+// void FindStmtCost::add_variable_map(const string name, bool context) {
+//     auto it = variable_map.find(name);
+//     if (it == variable_map.end()) {
+//         variable_map.emplace(name, context);
+//     } else {
+//         it->second = context;
+//         // m_assert(false, "name already found in var_in_context");
+//     }
+// }
 
 int FindStmtCost::get_depth(const IRNode *node) const {
     auto it = stmt_cost.find(node);
@@ -197,194 +313,281 @@ void FindStmtCost::print_map(unordered_map<const IRNode *, StmtCost> const &m) {
     }
 }
 
+void FindStmtCost::visit_binary_op(const IRNode *op, const Expr &a, const Expr &b) {
+    mutate(a);
+    mutate(b);
+
+    int tempVal = get_cost(a.get()) + get_cost(b.get());
+    int dataMovementCost = get_data_movement_cost(a.get()) + get_data_movement_cost(b.get());
+    set_costs(op, 1 + tempVal, dataMovementCost);
+
+    bool child_context = get_context(a.get()) || get_context(b.get());
+    set_context(op, child_context);
+}
+
 Expr FindStmtCost::visit(const IntImm *op) {
     set_costs(op, 1, 0);
+    set_context(op, false);
     return op;
 }
 
 Expr FindStmtCost::visit(const UIntImm *op) {
     set_costs(op, 1, 0);
+    set_context(op, false);
     return op;
 }
 
 Expr FindStmtCost::visit(const FloatImm *op) {
     set_costs(op, 1, 0);
+    set_context(op, false);
     return op;
 }
 
 Expr FindStmtCost::visit(const StringImm *op) {
     set_costs(op, 1, 0);
+    set_context(op, false);
     return op;
 }
 
 Expr FindStmtCost::visit(const Cast *op) {
     mutate(op->value);
+
     int tempVal = get_cost(op->value.get());
     int dataMovementCost = get_data_movement_cost(op->value.get());
     set_costs(op, 1 + tempVal, dataMovementCost);
+
+    bool child_context = get_context(op->value.get());
+    set_context(op, child_context);
+
     return op;
 }
 
 Expr FindStmtCost::visit(const Variable *op) {
     set_costs(op, 1, 0);
+
+    // if (in_loop && in_curr_context(op->name)) {
+    //     // set_context(op, true);
+    //     // add_variable_map(op->name, true);
+    //     // set_context(op, true);
+    // } else {
+    //     // set_context(op, false);
+    //     // add_variable_map(op->name, false);
+    // }
+
     return op;
 }
 
 Expr FindStmtCost::visit(const Add *op) {
-    mutate(op->a);
-    mutate(op->b);
-    int tempVal = get_cost(op->a.get()) + get_cost(op->b.get());
-    int dataMovementCost =
-        get_data_movement_cost(op->a.get()) + get_data_movement_cost(op->b.get());
-    set_costs(op, 1 + tempVal, dataMovementCost);
+    // mutate(op->a);
+    // mutate(op->b);
+
+    // int tempVal = get_cost(op->a.get()) + get_cost(op->b.get());
+    // int dataMovementCost =
+    //     get_data_movement_cost(op->a.get()) + get_data_movement_cost(op->b.get());
+    // set_costs(op, 1 + tempVal, dataMovementCost);
+
+    // bool child_context = get_context(op->a.get()) || get_context(op->b.get());
+    // set_context(op, child_context);
+
+    visit_binary_op(op, op->a, op->b);
+
     return op;
 }
 
 Expr FindStmtCost::visit(const Sub *op) {
-    mutate(op->a);
-    mutate(op->b);
-    int tempVal = get_cost(op->a.get()) + get_cost(op->b.get());
-    int dataMovementCost =
-        get_data_movement_cost(op->a.get()) + get_data_movement_cost(op->b.get());
-    set_costs(op, 1 + tempVal, dataMovementCost);
+    // mutate(op->a);
+    // mutate(op->b);
+
+    // int tempVal = get_cost(op->a.get()) + get_cost(op->b.get());
+    // int dataMovementCost =
+    //     get_data_movement_cost(op->a.get()) + get_data_movement_cost(op->b.get());
+    // set_costs(op, 1 + tempVal, dataMovementCost);
+
+    // bool child_context = get_context(op->a.get()) || get_context(op->b.get());
+    // set_context(op, child_context);
+    visit_binary_op(op, op->a, op->b);
+
     return op;
 }
 
 Expr FindStmtCost::visit(const Mul *op) {
-    mutate(op->a);
-    mutate(op->b);
-    int tempVal = get_cost(op->a.get()) + get_cost(op->b.get());
-    int dataMovementCost =
-        get_data_movement_cost(op->a.get()) + get_data_movement_cost(op->b.get());
-    set_costs(op, 1 + tempVal, dataMovementCost);
+    // mutate(op->a);
+    // mutate(op->b);
+
+    // int tempVal = get_cost(op->a.get()) + get_cost(op->b.get());
+    // int dataMovementCost =
+    //     get_data_movement_cost(op->a.get()) + get_data_movement_cost(op->b.get());
+    // set_costs(op, 1 + tempVal, dataMovementCost);
+
+    // bool child_context = get_context(op->a.get()) || get_context(op->b.get());
+    // set_context(op, child_context);
+    visit_binary_op(op, op->a, op->b);
+
     return op;
 }
 
 Expr FindStmtCost::visit(const Div *op) {
-    mutate(op->a);
-    mutate(op->b);
-    int tempVal = get_cost(op->a.get()) + get_cost(op->b.get());
-    int dataMovementCost =
-        get_data_movement_cost(op->a.get()) + get_data_movement_cost(op->b.get());
-    set_costs(op, 1 + tempVal, dataMovementCost);
+    // mutate(op->a);
+    // mutate(op->b);
+
+    // int tempVal = get_cost(op->a.get()) + get_cost(op->b.get());
+    // int dataMovementCost =
+    //     get_data_movement_cost(op->a.get()) + get_data_movement_cost(op->b.get());
+    // set_costs(op, 1 + tempVal, dataMovementCost);
+
+    // bool child_context = get_context(op->a.get()) || get_context(op->b.get());
+    // set_context(op, child_context);
+    visit_binary_op(op, op->a, op->b);
+
     return op;
 }
 
 Expr FindStmtCost::visit(const Mod *op) {
-    mutate(op->a);
-    mutate(op->b);
-    int tempVal = get_cost(op->a.get()) + get_cost(op->b.get());
-    int dataMovementCost =
-        get_data_movement_cost(op->a.get()) + get_data_movement_cost(op->b.get());
-    set_costs(op, 1 + tempVal, dataMovementCost);
+    // mutate(op->a);
+    // mutate(op->b);
+
+    // int tempVal = get_cost(op->a.get()) + get_cost(op->b.get());
+    // int dataMovementCost =
+    //     get_data_movement_cost(op->a.get()) + get_data_movement_cost(op->b.get());
+    // set_costs(op, 1 + tempVal, dataMovementCost);
+
+    // bool child_context = get_context(op->a.get()) || get_context(op->b.get());
+    // set_context(op, child_context);
+    visit_binary_op(op, op->a, op->b);
+
     return op;
 }
 
 Expr FindStmtCost::visit(const Min *op) {
-    mutate(op->a);
-    mutate(op->b);
-    int tempVal = get_cost(op->a.get()) + get_cost(op->b.get());
-    int dataMovementCost =
-        get_data_movement_cost(op->a.get()) + get_data_movement_cost(op->b.get());
-    set_costs(op, 1 + tempVal, dataMovementCost);
+    // mutate(op->a);
+    // mutate(op->b);
+    // int tempVal = get_cost(op->a.get()) + get_cost(op->b.get());
+    // int dataMovementCost =
+    //     get_data_movement_cost(op->a.get()) + get_data_movement_cost(op->b.get());
+    // set_costs(op, 1 + tempVal, dataMovementCost);
+    visit_binary_op(op, op->a, op->b);
+
     return op;
 }
 
 Expr FindStmtCost::visit(const Max *op) {
-    mutate(op->a);
-    mutate(op->b);
-    int tempVal = get_cost(op->a.get()) + get_cost(op->b.get());
-    int dataMovementCost =
-        get_data_movement_cost(op->a.get()) + get_data_movement_cost(op->b.get());
-    set_costs(op, 1 + tempVal, dataMovementCost);
+    // mutate(op->a);
+    // mutate(op->b);
+    // int tempVal = get_cost(op->a.get()) + get_cost(op->b.get());
+    // int dataMovementCost =
+    //     get_data_movement_cost(op->a.get()) + get_data_movement_cost(op->b.get());
+    // set_costs(op, 1 + tempVal, dataMovementCost);
+    visit_binary_op(op, op->a, op->b);
+
     return op;
 }
 
 Expr FindStmtCost::visit(const EQ *op) {
-    mutate(op->a);
-    mutate(op->b);
-    int tempVal = get_cost(op->a.get()) + get_cost(op->b.get());
-    int dataMovementCost =
-        get_data_movement_cost(op->a.get()) + get_data_movement_cost(op->b.get());
-    set_costs(op, 1 + tempVal, dataMovementCost);
+    // mutate(op->a);
+    // mutate(op->b);
+    // int tempVal = get_cost(op->a.get()) + get_cost(op->b.get());
+    // int dataMovementCost =
+    //     get_data_movement_cost(op->a.get()) + get_data_movement_cost(op->b.get());
+    // set_costs(op, 1 + tempVal, dataMovementCost);
+    visit_binary_op(op, op->a, op->b);
+
     return op;
 }
 
 Expr FindStmtCost::visit(const NE *op) {
-    mutate(op->a);
-    mutate(op->b);
-    int tempVal = get_cost(op->a.get()) + get_cost(op->b.get());
-    int dataMovementCost =
-        get_data_movement_cost(op->a.get()) + get_data_movement_cost(op->b.get());
-    set_costs(op, 1 + tempVal, dataMovementCost);
+    // mutate(op->a);
+    // mutate(op->b);
+    // int tempVal = get_cost(op->a.get()) + get_cost(op->b.get());
+    // int dataMovementCost =
+    //     get_data_movement_cost(op->a.get()) + get_data_movement_cost(op->b.get());
+    // set_costs(op, 1 + tempVal, dataMovementCost);
+    visit_binary_op(op, op->a, op->b);
+
     return op;
 }
 
 Expr FindStmtCost::visit(const LT *op) {
-    mutate(op->a);
-    mutate(op->b);
-    int tempVal = get_cost(op->a.get()) + get_cost(op->b.get());
-    int dataMovementCost =
-        get_data_movement_cost(op->a.get()) + get_data_movement_cost(op->b.get());
-    set_costs(op, 1 + tempVal, dataMovementCost);
+    // mutate(op->a);
+    // mutate(op->b);
+    // int tempVal = get_cost(op->a.get()) + get_cost(op->b.get());
+    // int dataMovementCost =
+    //     get_data_movement_cost(op->a.get()) + get_data_movement_cost(op->b.get());
+    // set_costs(op, 1 + tempVal, dataMovementCost);
+    visit_binary_op(op, op->a, op->b);
+
     return op;
 }
 
 Expr FindStmtCost::visit(const LE *op) {
-    mutate(op->a);
-    mutate(op->b);
-    int tempVal = get_cost(op->a.get()) + get_cost(op->b.get());
-    int dataMovementCost =
-        get_data_movement_cost(op->a.get()) + get_data_movement_cost(op->b.get());
-    set_costs(op, 1 + tempVal, dataMovementCost);
+    // mutate(op->a);
+    // mutate(op->b);
+    // int tempVal = get_cost(op->a.get()) + get_cost(op->b.get());
+    // int dataMovementCost =
+    //     get_data_movement_cost(op->a.get()) + get_data_movement_cost(op->b.get());
+    // set_costs(op, 1 + tempVal, dataMovementCost);
+    visit_binary_op(op, op->a, op->b);
+
     return op;
 }
 
 Expr FindStmtCost::visit(const GT *op) {
-    mutate(op->a);
-    mutate(op->b);
-    int tempVal = get_cost(op->a.get()) + get_cost(op->b.get());
-    int dataMovementCost =
-        get_data_movement_cost(op->a.get()) + get_data_movement_cost(op->b.get());
-    set_costs(op, 1 + tempVal, dataMovementCost);
+    // mutate(op->a);
+    // mutate(op->b);
+    // int tempVal = get_cost(op->a.get()) + get_cost(op->b.get());
+    // int dataMovementCost =
+    //     get_data_movement_cost(op->a.get()) + get_data_movement_cost(op->b.get());
+    // set_costs(op, 1 + tempVal, dataMovementCost);
+    visit_binary_op(op, op->a, op->b);
+
     return op;
 }
 
 Expr FindStmtCost::visit(const GE *op) {
-    mutate(op->a);
-    mutate(op->b);
-    int tempVal = get_cost(op->a.get()) + get_cost(op->b.get());
-    int dataMovementCost =
-        get_data_movement_cost(op->a.get()) + get_data_movement_cost(op->b.get());
-    set_costs(op, 1 + tempVal, dataMovementCost);
+    // mutate(op->a);
+    // mutate(op->b);
+    // int tempVal = get_cost(op->a.get()) + get_cost(op->b.get());
+    // int dataMovementCost =
+    //     get_data_movement_cost(op->a.get()) + get_data_movement_cost(op->b.get());
+    // set_costs(op, 1 + tempVal, dataMovementCost);
+    visit_binary_op(op, op->a, op->b);
+
     return op;
 }
 
 Expr FindStmtCost::visit(const And *op) {
-    mutate(op->a);
-    mutate(op->b);
-    int tempVal = get_cost(op->a.get()) + get_cost(op->b.get());
-    int dataMovementCost =
-        get_data_movement_cost(op->a.get()) + get_data_movement_cost(op->b.get());
-    set_costs(op, 1 + tempVal, dataMovementCost);
+    // mutate(op->a);
+    // mutate(op->b);
+    // int tempVal = get_cost(op->a.get()) + get_cost(op->b.get());
+    // int dataMovementCost =
+    //     get_data_movement_cost(op->a.get()) + get_data_movement_cost(op->b.get());
+    // set_costs(op, 1 + tempVal, dataMovementCost);
+    visit_binary_op(op, op->a, op->b);
+
     return op;
 }
 
 Expr FindStmtCost::visit(const Or *op) {
-    mutate(op->a);
-    mutate(op->b);
-    int tempVal = get_cost(op->a.get()) + get_cost(op->b.get());
-    int dataMovementCost =
-        get_data_movement_cost(op->a.get()) + get_data_movement_cost(op->b.get());
-    set_costs(op, 1 + tempVal, dataMovementCost);
+    // mutate(op->a);
+    // mutate(op->b);
+    // int tempVal = get_cost(op->a.get()) + get_cost(op->b.get());
+    // int dataMovementCost =
+    //     get_data_movement_cost(op->a.get()) + get_data_movement_cost(op->b.get());
+    // set_costs(op, 1 + tempVal, dataMovementCost);
+    visit_binary_op(op, op->a, op->b);
+
     return op;
 }
 
 Expr FindStmtCost::visit(const Not *op) {
     mutate(op->a);
+
     int tempVal = get_cost(op->a.get());
     int dataMovementCost = get_data_movement_cost(op->a.get());
     set_costs(op, 1 + tempVal, dataMovementCost);
+
+    bool child_context = get_context(op->a.get());
+    set_context(op, child_context);
+
     return op;
 }
 
@@ -400,6 +603,12 @@ Expr FindStmtCost::visit(const Select *op) {
                            get_data_movement_cost(op->true_value.get()) +
                            get_data_movement_cost(op->false_value.get());
     set_costs(op, 1 + tempVal, dataMovementCost);
+
+    bool child_context = get_context(op->condition.get()) || get_context(op->true_value.get()) ||
+                         get_context(op->false_value.get());
+
+    set_context(op, child_context);
+
     return op;
 }
 
@@ -410,30 +619,45 @@ Expr FindStmtCost::visit(const Load *op) {
 
     mutate(op->predicate);
     mutate(op->index);
+
     int tempVal = get_cost(op->predicate.get()) + get_cost(op->index.get());
     int dataMovementCost =
         get_data_movement_cost(op->predicate.get()) + get_data_movement_cost(op->index.get());
     dataMovementCost += LOAD_COST;
     dataMovementCost *= scalingFactor;
     set_costs(op, 1 + tempVal, dataMovementCost);
+
+    bool child_context = get_context(op->predicate.get()) || get_context(op->index.get());
+    set_context(op, child_context);
+
     return op;
 }
 
 Expr FindStmtCost::visit(const Ramp *op) {
     mutate(op->base);
     mutate(op->stride);
+
     int tempVal = get_cost(op->base.get()) + get_cost(op->stride.get());
     int dataMovementCost =
         get_data_movement_cost(op->base.get()) + get_data_movement_cost(op->stride.get());
     set_costs(op, 1 + tempVal, dataMovementCost);
+
+    bool child_context = get_context(op->base.get()) || get_context(op->stride.get());
+    set_context(op, child_context);
+
     return op;
 }
 
 Expr FindStmtCost::visit(const Broadcast *op) {
     mutate(op->value);
+
     int tempVal = get_cost(op->value.get());
     int dataMovementCost = get_data_movement_cost(op->value.get());
     set_costs(op, 1 + tempVal, dataMovementCost);
+
+    bool child_context = get_context(op->value.get());
+    set_context(op, child_context);
+
     return op;
 }
 
@@ -448,10 +672,13 @@ Expr FindStmtCost::visit(const Call *op) {
     */
     int tempVal = 0;
     int dataMovementCost = 0;
+    bool child_context = false;
+
     for (const auto &arg : op->args) {
         mutate(arg);
         tempVal += get_cost(arg.get());
         dataMovementCost += get_data_movement_cost(arg.get());
+        child_context |= get_context(arg.get());
     }
 
     // Consider extern call args
@@ -463,78 +690,134 @@ Expr FindStmtCost::visit(const Call *op) {
                     mutate(arg.expr);
                     tempVal += get_cost(arg.expr.get());
                     dataMovementCost += get_data_movement_cost(arg.expr.get());
+                    child_context |= get_context(arg.expr.get());
                 }
             }
         }
     }
+
     set_costs(op, 1 + tempVal, dataMovementCost);
+    set_context(op, child_context);
+
     return op;
 }
 
 Expr FindStmtCost::visit(const Let *op) {
+
+    // TODO: problem is that the variable in the let is not being tied to
+    //       the value of the let, so it's not getting its context correctly
+    //       set.
+
     mutate(op->value);
     mutate(op->body);
+
     int tempVal = get_cost(op->value.get()) + get_cost(op->body.get());
     int dataMovementCost =
         get_data_movement_cost(op->value.get()) + get_data_movement_cost(op->body.get());
     set_costs(op, tempVal, dataMovementCost);
+
+    bool child_context = get_context(op->value.get()) || get_context(op->body.get());
+    set_context(op, child_context);
+
+    // add_variable_map(op->name, get_context(op->value.get()));
+
     return op;
 }
 
 Expr FindStmtCost::visit(const Shuffle *op) {
     int tempVal = 0;
     int dataMovementCost = 0;
+    bool child_context = false;
+
     for (const Expr &i : op->vectors) {
         mutate(i);
         tempVal += get_cost(i.get());
         dataMovementCost += get_data_movement_cost(i.get());
+        child_context |= get_context(i.get());
     }
+
     set_costs(op, tempVal, dataMovementCost);
+    set_context(op, child_context);
+
     return op;
 }
 
 Expr FindStmtCost::visit(const VectorReduce *op) {
     mutate(op->value);
+
     int tempVal = get_cost(op->value.get());
     int countCost = op->value.type().lanes() - 1;
     int dataMovementCost = get_data_movement_cost(op->value.get());
-
     set_costs(op, tempVal + countCost, dataMovementCost);
+
+    bool child_context = get_context(op->value.get());
+    set_context(op, child_context);
+
     return op;
 }
 
 Stmt FindStmtCost::visit(const LetStmt *op) {
     mutate(op->value);
     mutate(op->body);
+
     int tempVal = get_cost(op->value.get());
     int dataMovementCost = get_data_movement_cost(op->value.get());
     set_costs(op, 1 + tempVal, dataMovementCost);
+
+    bool child_context = get_context(op->value.get()) || get_context(op->body.get());
+    set_context(op, child_context);
+
+    // add_variable_map(op->name, get_context(op->value.get()));
+
     return op;
 }
 
 Stmt FindStmtCost::visit(const AssertStmt *op) {
     mutate(op->condition);
     mutate(op->message);
+
     int tempVal = get_cost(op->condition.get()) + get_cost(op->message.get());
     int dataMovementCost =
         get_data_movement_cost(op->condition.get()) + get_data_movement_cost(op->message.get());
     set_costs(op, 1 + tempVal, dataMovementCost);
+
+    bool child_context = get_context(op->condition.get()) || get_context(op->message.get());
+    set_context(op, child_context);
+
     return op;
 }
 
 Stmt FindStmtCost::visit(const ProducerConsumer *op) {
     mutate(op->body);
+
     int tempVal = get_cost(op->body.get());
     int dataMovementCost = get_data_movement_cost(op->body.get());
     set_costs(op, tempVal, dataMovementCost);
+
+    bool child_context = get_context(op->body.get());
+    set_context(op, child_context);
+
     return op;
 }
 
 Stmt FindStmtCost::visit(const For *op) {
+    bool in_loop_before = in_loop;
+    vector<string> curr_loop_context;
+
+    // add_curr_context(op->name);
+    curr_loop_context.push_back(op->name);
+
+    // add_variable_map(op->name, true);
+    // loop_vars.push_back(op->name);
+    // add_loop_var(op->name);
+
     current_loop_depth += 1;
 
+    in_loop = false;
     mutate(op->min);
     mutate(op->extent);
+    in_loop = true;
+
     mutate(op->body);
 
     current_loop_depth -= 1;
@@ -553,6 +836,14 @@ Stmt FindStmtCost::visit(const For *op) {
         m_assert(false, "Vectorized for loops are not supported yet");
     }
     set_costs(op, 1 + bodyCost, dataMovementCost);
+
+    bool child_context = get_context(op->body.get());
+    set_context(op, child_context);
+
+    in_loop = in_loop_before;
+    // remove_curr_context(op->name);
+    // remove_curr_context(curr_loop_context);
+
     return op;
 }
 
@@ -586,6 +877,11 @@ Stmt FindStmtCost::visit(const Acquire *op) {
                            get_data_movement_cost(op->count.get()) +
                            get_data_movement_cost(op->body.get());
     set_costs(op, tempVal, dataMovementCost);
+
+    bool child_context = get_context(op->semaphore.get()) || get_context(op->count.get()) ||
+                         get_context(op->body.get());
+    set_context(op, child_context);
+
     return op;
 }
 
@@ -605,25 +901,36 @@ Stmt FindStmtCost::visit(const Store *op) {
                            get_data_movement_cost(op->index.get());
     dataMovementCost += STORE_COST;
     dataMovementCost *= scalingFactor;
-
     set_costs(op, 1 + tempVal, dataMovementCost);
+
+    bool child_context = get_context(op->predicate.get()) || get_context(op->value.get()) ||
+                         get_context(op->index.get());
+    set_context(op, child_context);
+
     return op;
 }
 
 Stmt FindStmtCost::visit(const Provide *op) {
     int tempVal = get_cost(op->predicate.get());
     int dataMovementCost = get_computation_cost(op->predicate.get());
+    bool child_context = get_context(op->predicate.get());
+
     for (const auto &value : op->values) {
         mutate(value);
         tempVal += get_cost(value.get());
         dataMovementCost += get_computation_cost(value.get());
+        child_context |= get_context(value.get());
     }
     for (const auto &arg : op->args) {
         mutate(arg);
         tempVal += get_cost(arg.get());
         dataMovementCost += get_computation_cost(arg.get());
+        child_context |= get_context(arg.get());
     }
+
     set_costs(op, tempVal, dataMovementCost);
+    set_context(op, child_context);
+
     return op;
 }
 
@@ -643,24 +950,35 @@ Stmt FindStmtCost::visit(const Allocate *op) {
     */
     int tempVal = 0;
     int dataMovementCost = 0;
+    bool child_context = false;
+
     for (const auto &extent : op->extents) {
         mutate(extent);
         tempVal += get_cost(extent.get());
         dataMovementCost += get_data_movement_cost(extent.get());
+        child_context |= get_context(extent.get());
     }
+
     mutate(op->condition);
     tempVal += get_cost(op->condition.get());
     dataMovementCost += get_data_movement_cost(op->condition.get());
+    child_context |= get_context(op->condition.get());
 
     if (op->new_expr.defined()) {
         mutate(op->new_expr);
         tempVal += get_cost(op->new_expr.get());
         dataMovementCost += get_data_movement_cost(op->new_expr.get());
+        child_context |= get_context(op->new_expr.get());
     }
+
     mutate(op->body);
     tempVal += get_cost(op->body.get());
     dataMovementCost += get_data_movement_cost(op->body.get());
+    child_context |= get_context(op->body.get());
+
     set_costs(op, tempVal, dataMovementCost);
+    set_context(op, child_context);
+
     return op;
 }
 
@@ -669,6 +987,7 @@ Stmt FindStmtCost::visit(const Free *op) {
     //       vars it has is the name, which isn't helpful in determining
     //       the cost of the free
     set_costs(op, 1, 0);
+    set_context(op, false);
     return op;
 }
 
@@ -676,19 +995,27 @@ Stmt FindStmtCost::visit(const Realize *op) {
     // TODO: is this the same logic as For, where I add the depth?
     int tempVal = 0;
     int dataMovementCost = 0;
+    bool child_context = false;
+
     for (const auto &bound : op->bounds) {
         mutate(bound.min);
         mutate(bound.extent);
         tempVal += get_cost(bound.min.get()) + get_cost(bound.extent.get());
         dataMovementCost +=
             get_data_movement_cost(bound.min.get()) + get_data_movement_cost(bound.extent.get());
+        child_context |= get_context(bound.min.get()) || get_context(bound.extent.get());
     }
+
     mutate(op->condition);
     mutate(op->body);
     tempVal += get_cost(op->condition.get()) + get_cost(op->body.get());
     dataMovementCost +=
         get_data_movement_cost(op->condition.get()) + get_data_movement_cost(op->body.get());
+    child_context |= get_context(op->condition.get()) || get_context(op->body.get());
+
     set_costs(op, tempVal, dataMovementCost);
+    set_context(op, child_context);
+
     return op;
 }
 
@@ -698,6 +1025,8 @@ Stmt FindStmtCost::visit(const Prefetch *op) {
     */
     int tempVal = 0;
     int dataMovementCost = 0;
+    bool child_context = false;
+
     for (const auto &bound : op->bounds) {
         mutate(bound.min);
         mutate(bound.extent);
@@ -705,13 +1034,19 @@ Stmt FindStmtCost::visit(const Prefetch *op) {
         tempVal += get_cost(bound.min.get()) + get_cost(bound.extent.get());
         dataMovementCost +=
             get_data_movement_cost(bound.min.get()) + get_data_movement_cost(bound.extent.get());
+        child_context |= get_context(bound.min.get()) || get_context(bound.extent.get());
     }
+
     mutate(op->condition);
     mutate(op->body);
     tempVal += get_cost(op->condition.get()) + get_cost(op->body.get());
     dataMovementCost +=
         get_data_movement_cost(op->condition.get()) + get_data_movement_cost(op->body.get());
+    child_context |= get_context(op->condition.get()) || get_context(op->body.get());
+
     set_costs(op, tempVal, dataMovementCost);
+    set_context(op, child_context);
+
     return op;
 }
 
@@ -719,30 +1054,47 @@ Stmt FindStmtCost::visit(const Block *op) {
     // TODO: making this cost 1 is wrong - need to change this
     int tempVal = 0;
     int dataMovementCost = 0;
+    bool child_context = false;
+
     mutate(op->first);
     tempVal += get_cost(op->first.get());
     dataMovementCost += get_data_movement_cost(op->first.get());
+    child_context |= get_context(op->first.get());
+
     if (op->rest.defined()) {
         mutate(op->rest);
         tempVal += get_cost(op->rest.get());
         dataMovementCost += get_data_movement_cost(op->rest.get());
+        child_context |= get_context(op->rest.get());
     }
+
     // set_costs(op, tempVal, dataMovementCost);
     set_costs(op, 1, 0);
+    set_context(op, child_context);
+
     return op;
 }
 
 Stmt FindStmtCost::visit(const Fork *op) {
     int tempVal = 0;
     int dataMovementCost = 0;
+    bool child_context = false;
+
     mutate(op->first);
     tempVal += get_cost(op->first.get());
+    dataMovementCost += get_data_movement_cost(op->first.get());
+    child_context |= get_context(op->first.get());
+
     if (op->rest.defined()) {
         mutate(op->rest);
         tempVal += get_cost(op->rest.get());
         dataMovementCost += get_data_movement_cost(op->rest.get());
+        child_context |= get_context(op->rest.get());
     }
+
     set_costs(op, tempVal, dataMovementCost);
+    set_context(op, child_context);
+
     return op;
 }
 
@@ -753,20 +1105,31 @@ Stmt FindStmtCost::visit(const IfThenElse *op) {
     int tempVal = get_cost(op->condition.get()) + get_cost(op->then_case.get());
     int dataMovementCost =
         get_data_movement_cost(op->condition.get()) + get_data_movement_cost(op->then_case.get());
+    bool child_context = get_context(op->condition.get()) || get_context(op->then_case.get());
+
     if (op->else_case.defined()) {
         mutate(op->else_case);
         tempVal += get_cost(op->else_case.get());
         dataMovementCost += get_data_movement_cost(op->else_case.get());
+        child_context |= get_context(op->else_case.get());
     }
+
     set_costs(op, tempVal, dataMovementCost);
+    set_context(op, child_context);
+
     return op;
 }
 
 Stmt FindStmtCost::visit(const Evaluate *op) {
     mutate(op->value);
+
     int tempVal = get_cost(op->value.get());
     int dataMovementCost = get_data_movement_cost(op->value.get());
     set_costs(op, tempVal, dataMovementCost);
+
+    bool child_context = get_context(op->value.get());
+    set_context(op, child_context);
+
     return op;
 }
 
@@ -790,5 +1153,9 @@ Stmt FindStmtCost::visit(const Atomic *op) {
     int tempVal = get_cost(op->body.get());
     int dataMovementCost = get_data_movement_cost(op->body.get());
     set_costs(op, tempVal, dataMovementCost);
+
+    bool child_context = get_context(op->body.get());
+    set_context(op, child_context);
+
     return op;
 }

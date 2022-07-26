@@ -49,6 +49,34 @@ class StmtToViz : public IRVisitor {
 private:
     std::ofstream stream;
 
+    // used for deciding which variables are in context vs not
+    vector<string> curr_context;
+    bool in_context;
+
+    void reset_context() {
+        curr_context.clear();
+        // in_context = false;
+    }
+
+    bool is_in_context(const string name) const {
+        for (auto &context : curr_context) {
+            if (context == name) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    // only removes if it's there
+    void remove_context(const string name) {
+        for (auto it = curr_context.begin(); it != curr_context.end(); ++it) {
+            if (*it == name) {
+                curr_context.erase(it);
+                return;
+            }
+        }
+    }
+
     int unique_id() {
         return ++id_count;
     }
@@ -130,11 +158,11 @@ private:
     }
 
     string hierarchy(const Stmt &op) {
-        cout << getStmtHierarchy.get_hierarchy_html(op) << endl;
+        // cout << getStmtHierarchy.get_hierarchy_html(op) << endl;
         return getStmtHierarchy.get_hierarchy_html(op);
     }
     string hierarchy(const Expr &op) {
-        cout << getStmtHierarchy.get_hierarchy_html(op) << endl;
+        // cout << getStmtHierarchy.get_hierarchy_html(op) << endl;
         return getStmtHierarchy.get_hierarchy_html(op);
     }
 
@@ -311,6 +339,26 @@ private:
     }
 
     void visit(const Variable *op) override {
+        // if (in_loop) {
+        //     if (is_in_context(op->name)) {
+        //         stream << "(in context) ";
+        //     } else {
+        //         stream << "(not in context) ";
+        //     }
+        // }
+        // cout << "checking for " << op->name << endl;
+
+        if (is_in_context(op->name)) {
+            stream << "[requires context] ";
+            in_context = true;
+        } else {
+            stream << "[doesn't require context] ";
+        }
+        // if (findStmtCost.requires_context(op, op->name)) {
+        //     stream << "[requires context] ";
+        // } else {
+        //     stream << "[doesn't require context] ";
+        // }
         stream << var(op->name);
     }
 
@@ -434,6 +482,9 @@ private:
     }
 
     void visit(const Let *op) override {
+        bool in_context_before = in_context;
+        in_context = false;
+
         scope.push(op->name, unique_id());
         stream << open_span("Let");
         stream << open_span("Matched");
@@ -442,13 +493,24 @@ private:
         stream << close_span();
         stream << " " << matched("Operator Assign", "=") << " ";
         print(op->value);
+
+        if (in_context) {
+            curr_context.push_back(op->name);
+        }
+        in_context = in_context_before;
+
         stream << " " << matched("Keyword", "in") << " ";
         print(op->body);
         stream << matched(")");
         stream << close_span();
         scope.pop(op->name);
+
+        remove_context(op->name);
     }
     void visit(const LetStmt *op) override {
+        bool in_context_before = in_context;
+        in_context = false;
+
         scope.push(op->name, unique_id());
         stream << open_div("LetStmt") << open_line();
         stream << cost_colors(op->value.get());
@@ -463,10 +525,17 @@ private:
         print(op->value);
         stream << close_cost_span();
 
+        if (in_context) {
+            curr_context.push_back(op->name);
+        }
+        in_context = in_context_before;
+
         stream << close_line();
         print(op->body);
         stream << close_div();
         scope.pop(op->name);
+
+        remove_context(op->name);
     }
     void visit(const AssertStmt *op) override {
         stream << open_div("AssertStmt WrapLine");
@@ -497,6 +566,15 @@ private:
     }
 
     void visit(const For *op) override {
+        // bool in_loop_before = in_loop;
+
+        // add_loop_variable(op->name);
+        // add_to_context(op->name);
+
+        vector<string> previous_context(curr_context);
+        reset_context();
+        curr_context.push_back(op->name);
+
         scope.push(op->name, unique_id());
         stream << open_div("For");
 
@@ -522,7 +600,11 @@ private:
         }
         stream << " (";
         stream << close_span();
+
+        // in_loop = false;
         print_list({Variable::make(Int(32), op->name), op->min, op->extent});
+        // in_loop = true;
+
         stream << matched(")");
         stream << close_expand_button();
         stream << " " << matched("{");
@@ -533,6 +615,10 @@ private:
 
         stream << close_div();
         scope.pop(op->name);
+
+        curr_context = previous_context;
+        // remove_from_context(op->name);
+        // in_loop = in_loop_before;
     }
 
     void visit(const Acquire *op) override {
@@ -1131,7 +1217,7 @@ public:
         scope.pop(m.name());
     }
 
-    StmtToViz(const string &filename) : id_count(0), context_stack(1, 0) {
+    StmtToViz(const string &filename) : id_count(0), /*in_loop(false),*/ context_stack(1, 0) {
         stream.open(filename.c_str());
         stream << "<head>";
         stream << "<style type='text/css'>";
