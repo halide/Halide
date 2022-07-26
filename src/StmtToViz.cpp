@@ -52,6 +52,9 @@ private:
     // used for deciding which variables are in context vs not
     vector<string> curr_context;
     bool in_context;
+    int curr_line_num;  // for accessing div of that line
+    stringstream script_stream;
+    bool in_loop;
 
     void reset_context() {
         curr_context.clear();
@@ -79,6 +82,13 @@ private:
 
     int unique_id() {
         return ++id_count;
+    }
+
+    void add_context_rule(const int line_num) {
+        string id = "ContextSpan" + to_string(line_num);
+        script_stream << "document.getElementById('" << id << "').style.backgroundColor = 'blue';"
+                      << endl;
+        script_stream << "console.log('changed color for ContextSpan" << id << "');" << endl;
     }
 
     // All spans and divs will have an id of the form "x-y", where x
@@ -192,27 +202,50 @@ private:
         return span("Matched", body);
     }
 
+    string cost_color_spacer() {
+        stringstream s;
+        s << open_span("CostColorSpacer");
+        s << ".";
+        s << close_span();
+        return s.str();
+    }
+
     string cost_colors(const IRNode *op) {
         // TODO: figure out how to get the div to be given size without needing
         //       to put a `.` in it
         std::stringstream s;
+
+        curr_line_num += 1;
+
+        s << "<span id='ContextSpan" << curr_line_num << "'";
+        s << "style='";
+        s << "margin-left: -45px;";
+        s << "width: 13px;";
+        s << "display: inline-block;";
+        // s << "background-color: blue;";
+        s << "color: transparent;";
+        s << "'>";
+        s << curr_line_num;
+        s << close_span();
+
+        s << cost_color_spacer();
+
         int computation_range = findStmtCost.get_computation_range(op);
         s << open_span("CostComputation" + to_string(computation_range));
         s << ".";
         s << close_span();
-        s << open_span("CostColorSpacer");
+
+        s << cost_color_spacer();
 
         int data_movement_range = findStmtCost.get_data_movement_range(op);
-        s << ".";
-        s << close_span();
         s << open_span("CostMovement" + to_string(data_movement_range));
-
         s << ".";
         s << close_span();
+
         s << open_span("CostColorSpacer");
-
         s << ".";
         s << close_span();
+
         return s.str();
     }
 
@@ -527,6 +560,8 @@ private:
 
         if (in_context) {
             curr_context.push_back(op->name);
+        } else if (in_loop) {
+            add_context_rule(curr_line_num);
         }
         in_context = in_context_before;
 
@@ -566,10 +601,7 @@ private:
     }
 
     void visit(const For *op) override {
-        // bool in_loop_before = in_loop;
-
-        // add_loop_variable(op->name);
-        // add_to_context(op->name);
+        bool in_loop_before = in_loop;
 
         vector<string> previous_context(curr_context);
         reset_context();
@@ -601,9 +633,8 @@ private:
         stream << " (";
         stream << close_span();
 
-        // in_loop = false;
         print_list({Variable::make(Int(32), op->name), op->min, op->extent});
-        // in_loop = true;
+        in_loop = true;
 
         stream << matched(")");
         stream << close_expand_button();
@@ -617,8 +648,7 @@ private:
         scope.pop(op->name);
 
         curr_context = previous_context;
-        // remove_from_context(op->name);
-        // in_loop = in_loop_before;
+        in_loop = in_loop_before;
     }
 
     void visit(const Acquire *op) override {
@@ -661,6 +691,10 @@ private:
             print(op->predicate);
         }
         stream << close_span();
+
+        if (!in_context && in_loop) {
+            add_context_rule(curr_line_num);
+        }
 
         stream << close_cost_span();
         stream << close_div();
@@ -716,6 +750,10 @@ private:
             stream << matched("}");
         }
         stream << close_cost_span();
+
+        if (!in_context && in_loop) {
+            add_context_rule(curr_line_num);
+        }
 
         stream << open_div("AllocateBody");
         print(op->body);
@@ -883,6 +921,11 @@ private:
         stream << open_cost_span(op, hierarchy(op));
         print(op->value);
         stream << close_cost_span();
+
+        if (!in_context && in_loop) {
+            add_context_rule(curr_line_num);
+        }
+
         stream << close_div();
     }
 
@@ -1217,7 +1260,7 @@ public:
         scope.pop(m.name());
     }
 
-    StmtToViz(const string &filename) : id_count(0), /*in_loop(false),*/ context_stack(1, 0) {
+    StmtToViz(const string &filename) : id_count(0), in_loop(false), context_stack(1, 0) {
         stream.open(filename.c_str());
         stream << "<head>";
         stream << "<style type='text/css'>";
@@ -1238,14 +1281,15 @@ public:
     }
 
     ~StmtToViz() override {
-        stream << "<script>\n"
-               << "$( '.Matched' ).each( function() {\n"
+        stream << "<script>\n";
+        stream << "$( '.Matched' ).each( function() {\n"
                << "    this.onmouseover = function() { $('.Matched[id^=' + this.id.split('-')[0] + "
                   "'-]').addClass('Highlight'); }\n"
                << "    this.onmouseout = function() { $('.Matched[id^=' + this.id.split('-')[0] + "
                   "'-]').removeClass('Highlight'); }\n"
-               << "} );\n"
-               << "</script>\n";
+               << "} );\n";
+        stream << script_stream.str();
+        stream << "</script>\n";
         stream << "</body>";
     }
 };
@@ -1305,27 +1349,49 @@ span.CostColorSpacer { width: 2px; color: transparent; display: inline-block; }\
 ";
 
 const std::string StmtToViz::computationCostCSS = "\n \
-span.CostComputation19 {margin-left: -30px; width: 13px; display: inline-block; background: rgb(130,31,27); color: transparent; } \n \
-span.CostComputation18 {margin-left: -30px; width: 13px; display: inline-block; background: rgb(145,33,30); color: transparent; } \n \
-span.CostComputation17 {margin-left: -30px; width: 13px; display: inline-block; background: rgb(160,33,32); color: transparent; } \n \
-span.CostComputation16 {margin-left: -30px; width: 13px; display: inline-block; background: rgb(176,34,34); color: transparent; } \n \
-span.CostComputation15 {margin-left: -30px; width: 13px; display: inline-block; background: rgb(185,47,32); color: transparent; } \n \
-span.CostComputation14 {margin-left: -30px; width: 13px; display: inline-block; background: rgb(193,59,30); color: transparent; } \n \
-span.CostComputation13 {margin-left: -30px; width: 13px; display: inline-block; background: rgb(202,71,27); color: transparent; } \n \
-span.CostComputation12 {margin-left: -30px; width: 13px; display: inline-block; background: rgb(210,82,22); color: transparent; } \n \
-span.CostComputation11 {margin-left: -30px; width: 13px; display: inline-block; background: rgb(218,93,16); color: transparent; } \n \
-span.CostComputation10 {margin-left: -30px; width: 13px; display: inline-block; background: rgb(226,104,6); color: transparent; } \n \
-span.CostComputation9 {margin-left: -30px; width: 13px; display: inline-block; background: rgb(229,118,9); color: transparent; } \n \
-span.CostComputation8 {margin-left: -30px; width: 13px; display: inline-block; background: rgb(230,132,15); color: transparent; } \n \
-span.CostComputation7 {margin-left: -30px; width: 13px; display: inline-block; background: rgb(231,146,20); color: transparent; } \n \
-span.CostComputation6 {margin-left: -30px; width: 13px; display: inline-block; background: rgb(232,159,25); color: transparent; } \n \
-span.CostComputation5 {margin-left: -30px; width: 13px; display: inline-block; background: rgb(233,172,30); color: transparent; } \n \
-span.CostComputation4 {margin-left: -30px; width: 13px; display: inline-block; background: rgb(233,185,35); color: transparent; } \n \
-span.CostComputation3 {margin-left: -30px; width: 13px; display: inline-block; background: rgb(233,198,40); color: transparent; } \n \
-span.CostComputation2 {margin-left: -30px; width: 13px; display: inline-block; background: rgb(232,211,45); color: transparent; } \n \
-span.CostComputation1 {margin-left: -30px; width: 13px; display: inline-block; background: rgb(231,223,50); color: transparent; } \n \
-span.CostComputation0 {margin-left: -30px; width: 13px; display: inline-block; background: rgb(236,233,89); color: transparent;  }  \n \
+span.CostComputation19 { width: 13px; display: inline-block; background: rgb(130,31,27); color: transparent; } \n \
+span.CostComputation18 { width: 13px; display: inline-block; background: rgb(145,33,30); color: transparent; } \n \
+span.CostComputation17 { width: 13px; display: inline-block; background: rgb(160,33,32); color: transparent; } \n \
+span.CostComputation16 { width: 13px; display: inline-block; background: rgb(176,34,34); color: transparent; } \n \
+span.CostComputation15 { width: 13px; display: inline-block; background: rgb(185,47,32); color: transparent; } \n \
+span.CostComputation14 { width: 13px; display: inline-block; background: rgb(193,59,30); color: transparent; } \n \
+span.CostComputation13 { width: 13px; display: inline-block; background: rgb(202,71,27); color: transparent; } \n \
+span.CostComputation12 { width: 13px; display: inline-block; background: rgb(210,82,22); color: transparent; } \n \
+span.CostComputation11 { width: 13px; display: inline-block; background: rgb(218,93,16); color: transparent; } \n \
+span.CostComputation10 { width: 13px; display: inline-block; background: rgb(226,104,6); color: transparent; } \n \
+span.CostComputation9 { width: 13px; display: inline-block; background: rgb(229,118,9); color: transparent; } \n \
+span.CostComputation8 { width: 13px; display: inline-block; background: rgb(230,132,15); color: transparent; } \n \
+span.CostComputation7 { width: 13px; display: inline-block; background: rgb(231,146,20); color: transparent; } \n \
+span.CostComputation6 { width: 13px; display: inline-block; background: rgb(232,159,25); color: transparent; } \n \
+span.CostComputation5 { width: 13px; display: inline-block; background: rgb(233,172,30); color: transparent; } \n \
+span.CostComputation4 { width: 13px; display: inline-block; background: rgb(233,185,35); color: transparent; } \n \
+span.CostComputation3 { width: 13px; display: inline-block; background: rgb(233,198,40); color: transparent; } \n \
+span.CostComputation2 { width: 13px; display: inline-block; background: rgb(232,211,45); color: transparent; } \n \
+span.CostComputation1 { width: 13px; display: inline-block; background: rgb(231,223,50); color: transparent; } \n \
+span.CostComputation0 { width: 13px; display: inline-block; background: rgb(236,233,89); color: transparent;  }  \n \
 ";
+// const std::string StmtToViz::computationCostCSS = "\n \
+// span.CostComputation19 {margin-left: -30px; width: 13px; display: inline-block; background: rgb(130,31,27); color: transparent; } \n \
+// span.CostComputation18 {margin-left: -30px; width: 13px; display: inline-block; background: rgb(145,33,30); color: transparent; } \n \
+// span.CostComputation17 {margin-left: -30px; width: 13px; display: inline-block; background: rgb(160,33,32); color: transparent; } \n \
+// span.CostComputation16 {margin-left: -30px; width: 13px; display: inline-block; background: rgb(176,34,34); color: transparent; } \n \
+// span.CostComputation15 {margin-left: -30px; width: 13px; display: inline-block; background: rgb(185,47,32); color: transparent; } \n \
+// span.CostComputation14 {margin-left: -30px; width: 13px; display: inline-block; background: rgb(193,59,30); color: transparent; } \n \
+// span.CostComputation13 {margin-left: -30px; width: 13px; display: inline-block; background: rgb(202,71,27); color: transparent; } \n \
+// span.CostComputation12 {margin-left: -30px; width: 13px; display: inline-block; background: rgb(210,82,22); color: transparent; } \n \
+// span.CostComputation11 {margin-left: -30px; width: 13px; display: inline-block; background: rgb(218,93,16); color: transparent; } \n \
+// span.CostComputation10 {margin-left: -30px; width: 13px; display: inline-block; background: rgb(226,104,6); color: transparent; } \n \
+// span.CostComputation9 {margin-left: -30px; width: 13px; display: inline-block; background: rgb(229,118,9); color: transparent; } \n \
+// span.CostComputation8 {margin-left: -30px; width: 13px; display: inline-block; background: rgb(230,132,15); color: transparent; } \n \
+// span.CostComputation7 {margin-left: -30px; width: 13px; display: inline-block; background: rgb(231,146,20); color: transparent; } \n \
+// span.CostComputation6 {margin-left: -30px; width: 13px; display: inline-block; background: rgb(232,159,25); color: transparent; } \n \
+// span.CostComputation5 {margin-left: -30px; width: 13px; display: inline-block; background: rgb(233,172,30); color: transparent; } \n \
+// span.CostComputation4 {margin-left: -30px; width: 13px; display: inline-block; background: rgb(233,185,35); color: transparent; } \n \
+// span.CostComputation3 {margin-left: -30px; width: 13px; display: inline-block; background: rgb(233,198,40); color: transparent; } \n \
+// span.CostComputation2 {margin-left: -30px; width: 13px; display: inline-block; background: rgb(232,211,45); color: transparent; } \n \
+// span.CostComputation1 {margin-left: -30px; width: 13px; display: inline-block; background: rgb(231,223,50); color: transparent; } \n \
+// span.CostComputation0 {margin-left: -30px; width: 13px; display: inline-block; background: rgb(236,233,89); color: transparent;  }  \n \
+// ";
 
 const std::string StmtToViz::movementCostCSS = "\n \
 span.CostMovement19 { width: 13px; display: inline-block; background: rgb(130,31,27); color: transparent; } \n \
