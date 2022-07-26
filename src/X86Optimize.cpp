@@ -357,9 +357,9 @@ protected:
             // be handled here?
 
             // int(8 | 16 | 32) -> uint is supported via SSE41
-            // float is always supported (via SSE2).
+            // float32 is always supported (via SSE2).
             (((target.has_feature(Target::SSE41) && bits <= 32) ||
-              op->type.is_float()) &&
+              (op->type.is_float() && bits == 32) &&
              rewrite(
                  abs(x),
                  v_intrin("abs", x))) ||
