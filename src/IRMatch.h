@@ -1449,6 +1449,8 @@ struct Intrin {
             return arg0 ^ arg1;
         } else if (intrin == Call::bitwise_and) {
             return arg0 & arg1;
+        } else if (intrin == Call::bitwise_or) {
+            return arg0 | arg1;
         }
 
         Expr arg2 = std::get<const_min(2, sizeof...(Args) - 1)>(args).make(state, type_hint);
