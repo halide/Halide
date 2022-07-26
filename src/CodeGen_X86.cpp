@@ -159,6 +159,16 @@ const x86Intrinsic intrinsic_defs[] = {
     // LLVM does not provide an unmasked 128bit cvtneps2bf16 intrinsic, so provide a wrapper around the masked version.
     {"vcvtneps2bf16x4", BFloat(16, 4), "f32_to_bf16", {Float(32, 4)}, Target::AVX512_SapphireRapids},
 
+    // Horizontal adds that use (v)phadd(w | d).
+    {"phaddw_sse3", UInt(16, 8), "horizontal_add", {UInt(16, 16)}, Target::SSE41},
+    {"phaddw_sse3", Int(16, 8), "horizontal_add", {Int(16, 16)}, Target::SSE41},
+    {"phaddw_avx2", UInt(16, 16), "horizontal_add", {UInt(16, 32)}, Target::AVX2},
+    {"phaddw_avx2", Int(16, 16), "horizontal_add", {Int(16, 32)}, Target::AVX2},
+    {"phaddd_sse3", UInt(32, 4), "horizontal_add", {UInt(32, 8)}, Target::SSE41},
+    {"phaddd_sse3", Int(32, 4), "horizontal_add", {Int(32, 8)}, Target::SSE41},
+    {"phaddd_avx2", UInt(32, 8), "horizontal_add", {UInt(32, 16)}, Target::AVX2},
+    {"phaddd_avx2", Int(32, 8), "horizontal_add", {Int(32, 16)}, Target::AVX2},
+
     // 2-way dot products
     {"llvm.x86.avx2.pmadd.ub.sw", Int(16, 16), "saturating_dot_product", {UInt(8, 32), Int(8, 32)}, Target::AVX2},
     {"llvm.x86.ssse3.pmadd.ub.sw.128", Int(16, 8), "saturating_dot_product", {UInt(8, 16), Int(8, 16)}, Target::SSE41},
