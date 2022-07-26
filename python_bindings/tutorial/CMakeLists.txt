@@ -71,3 +71,14 @@ set_tests_properties(python_tutorial_lesson_10_compile PROPERTIES
 
 set_tests_properties(python_tutorial_lesson_10_aot_compilation_run PROPERTIES
                      FIXTURES_REQUIRED py_lesson_10)
+
+##
+# Packaging
+##
+
+include(GNUInstallDirs)
+
+install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/
+        DESTINATION ${CMAKE_INSTALL_DOCDIR}/tutorial-python
+        COMPONENT Halide_Documentation
+        FILES_MATCHING PATTERN "*.py")
