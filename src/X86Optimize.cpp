@@ -101,6 +101,8 @@ protected:
         return type.is_vector();
     }
 
+    using IRMutator::visit;
+
     Expr visit(const Div *op) override {
         if (!should_peephole_optimize(op->type) || !op->type.is_int_or_uint()) {
             return IRMutator::visit(op);
