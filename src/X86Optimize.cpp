@@ -13,30 +13,6 @@
 namespace Halide {
 namespace Internal {
 
-// Populate feature flags in a target according to those implied by
-// existing flags, so that instruction patterns can just check for the
-// oldest feature flag that supports an instruction.
-Target complete_x86_target(Target t) {
-    if (t.has_feature(Target::AVX512_SapphireRapids)) {
-        t.set_feature(Target::AVX512_Cannonlake);
-    }
-    if (t.has_feature(Target::AVX512_Cannonlake)) {
-        t.set_feature(Target::AVX512_Skylake);
-    }
-    if (t.has_feature(Target::AVX512_Cannonlake) ||
-        t.has_feature(Target::AVX512_Skylake) ||
-        t.has_feature(Target::AVX512_KNL)) {
-        t.set_feature(Target::AVX2);
-    }
-    if (t.has_feature(Target::AVX2)) {
-        t.set_feature(Target::AVX);
-    }
-    if (t.has_feature(Target::AVX)) {
-        t.set_feature(Target::SSE41);
-    }
-    return t;
-}
-
 #if defined(WITH_X86)
 
 namespace {
@@ -89,8 +65,8 @@ class Optimize_X86 : public IRMutator {
 public:
     /** Create an x86 code optimizer. Processor features can be
      * enabled using the appropriate flags in the target struct. */
-    Optimize_X86(const Target &t)
-        : target(t) {
+    Optimize_X86(const Target &t, const CodeGen_LLVM *c)
+        : target(t), codegen(c) {
     }
 
 protected:
@@ -545,15 +521,21 @@ protected:
             break;
         }
 
-        // FIXME: We need to split up VectorReduce nodes in the same way that
-        //        CodeGen_LLVM::codegen_vector_reduce does, in order to do all
-        //        matching here.
+        return attempt_vector_split(op);
+    }
 
-        return IRMutator::visit(op);
+    Expr attempt_vector_split(const VectorReduce *op) {
+        Expr split = codegen->split_vector_reduce(op, Expr());
+        if (split.defined() && !split.same_as(op)) {
+            return mutate(split);
+        } else {
+            return IRMutator::visit(op);
+        }
     }
 
 private:
     const Target &target;
+    const CodeGen_LLVM *codegen;
 
     IRMatcher::Wild<0> x;
     IRMatcher::Wild<1> y;
@@ -562,11 +544,11 @@ private:
 
 }  // namespace
 
-Stmt optimize_x86_instructions(Stmt s, const Target &t) {
-    s = Optimize_X86(complete_x86_target(t)).mutate(s);
+Stmt optimize_x86_instructions(Stmt stmt, const Target &target, const CodeGen_LLVM *codegen) {
+    stmt = Optimize_X86(target, codegen).mutate(stmt);
     // Some of the rules above can introduce repeated sub-terms, so run CSE again.
-    s = common_subexpression_elimination(s);
-    return s;
+    stmt = common_subexpression_elimination(stmt);
+    return stmt;
 }
 
 #else  // WITH_X86

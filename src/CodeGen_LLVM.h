@@ -507,6 +507,15 @@ protected:
      * across backends. */
     virtual void codegen_vector_reduce(const VectorReduce *op, const Expr &init);
 
+    // TODO: this probably shouldn't be public, or should be moved where the rest of
+    //       the public methods are.
+public:
+    /** Split up a VectorReduce node if possible, or generate LLVM
+        intrinsics for full reductions. This is used in
+        `codegen_vector_reduce`. **/
+    virtual Expr split_vector_reduce(const VectorReduce *op, const Expr &init) const;
+
+protected:
     /** Are we inside an atomic node that uses mutex locks?
         This is used for detecting deadlocks from nested atomics & illegal vectorization. */
     bool inside_atomic_mutex_node;

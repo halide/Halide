@@ -22,6 +22,30 @@ using namespace llvm;
 
 namespace {
 
+// Populate feature flags in a target according to those implied by
+// existing flags, so that instruction patterns can just check for the
+// oldest feature flag that supports an instruction.
+Target complete_x86_target(Target t) {
+    if (t.has_feature(Target::AVX512_SapphireRapids)) {
+        t.set_feature(Target::AVX512_Cannonlake);
+    }
+    if (t.has_feature(Target::AVX512_Cannonlake)) {
+        t.set_feature(Target::AVX512_Skylake);
+    }
+    if (t.has_feature(Target::AVX512_Cannonlake) ||
+        t.has_feature(Target::AVX512_Skylake) ||
+        t.has_feature(Target::AVX512_KNL)) {
+        t.set_feature(Target::AVX2);
+    }
+    if (t.has_feature(Target::AVX2)) {
+        t.set_feature(Target::AVX);
+    }
+    if (t.has_feature(Target::AVX)) {
+        t.set_feature(Target::SSE41);
+    }
+    return t;
+}
+
 /** A code generator that emits x86 code from a given Halide stmt. */
 class CodeGen_X86 : public CodeGen_Posix {
 public:
@@ -278,7 +302,7 @@ void CodeGen_X86::compile_func(const LoweredFunc &f, const std::string &simple_n
     // Generate the function body.
     debug(1) << "Generating llvm bitcode for function " << f.name << "...\n";
     debug(1) << "X86: Optimizing vector instructions...\n";
-    Stmt body = optimize_x86_instructions(f.body, target);
+    Stmt body = optimize_x86_instructions(f.body, target, this);
     debug(2) << "X86: Lowering after vector instructions:\n"
              << body << "\n\n";
 
