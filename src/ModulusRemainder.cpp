@@ -215,7 +215,8 @@ void ComputeModulusRemainder::visit(const Shuffle *op) {
 }
 
 void ComputeModulusRemainder::visit(const VectorIntrinsic *op) {
-    internal_error << "modulus_remainder of VectorIntrinsic:\n" << Expr(op) << "\n";
+    internal_error << "modulus_remainder of VectorIntrinsic:\n"
+                   << Expr(op) << "\n";
     result = ModulusRemainder{};
 }
 
