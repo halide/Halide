@@ -1,4 +1,5 @@
 #include "SpirvIR.h"
+#include <iostream>
 
 #ifdef WITH_SPIRV
 
