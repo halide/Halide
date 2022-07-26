@@ -444,13 +444,6 @@ void lower_impl(const vector<Function> &output_funcs,
         debug(1) << "Skipping GPU offload...\n";
     }
 
-    if (t.arch == Target::X86) {
-        debug(1) << "Performing x86-specific vector instruction selection...\n";
-        s = optimize_x86_instructions(s, t);
-        debug(2) << "Lowering after performing x86-specific vector instruction selection:\n"
-                 << s << "\n\n";
-    }
-
     // TODO: This needs to happen before lowering parallel tasks, because global
     // images used inside parallel loops are rewritten from loads from images to
     // loads from closure parameters. Closure parameters are missing the Buffer<>

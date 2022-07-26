@@ -30,6 +30,9 @@ public:
     CodeGen_X86(Target);
 
 protected:
+    void compile_func(const LoweredFunc &f,
+                      const std::string &simple_name, const std::string &extern_name) override;
+
     string mcpu_target() const override;
     string mcpu_tune() const override;
     string mattrs() const override;
@@ -247,6 +250,42 @@ void CodeGen_X86::init_module() {
         }
         fn->addFnAttr(llvm::Attribute::NoUnwind);
     }
+}
+
+// FIXME: This is nearly identical to CodeGen_LLVM, should re-factor this somehow.
+// Only difference is the call to `optimize_x86_instructions()`
+void CodeGen_X86::compile_func(const LoweredFunc &f, const std::string &simple_name,
+                                const std::string &extern_name) {
+    // Generate the function declaration and argument unpacking code.
+    begin_func(f.linkage, simple_name, extern_name, f.args);
+
+    // If building with MSAN, ensure that calls to halide_msan_annotate_buffer_is_initialized()
+    // happen for every output buffer if the function succeeds.
+    if (f.linkage != LinkageType::Internal &&
+        target.has_feature(Target::MSAN)) {
+        llvm::Function *annotate_buffer_fn =
+            module->getFunction("halide_msan_annotate_buffer_is_initialized_as_destructor");
+        internal_assert(annotate_buffer_fn)
+            << "Could not find halide_msan_annotate_buffer_is_initialized_as_destructor in module\n";
+        annotate_buffer_fn->addParamAttr(0, Attribute::NoAlias);
+        for (const auto &arg : f.args) {
+            if (arg.kind == Argument::OutputBuffer) {
+                register_destructor(annotate_buffer_fn, sym_get(arg.name + ".buffer"), OnSuccess);
+            }
+        }
+    }
+
+    // Generate the function body.
+    debug(1) << "Generating llvm bitcode for function " << f.name << "...\n";
+    debug(1) << "X86: Optimizing vector instructions...\n";
+    Stmt body = optimize_x86_instructions(f.body, target);
+    debug(2) << "X86: Lowering after vector instructions:\n"
+             << body << "\n\n";
+
+    body.accept(this);
+
+    // Clean up and return.
+    end_func(f.args);
 }
 
 void CodeGen_X86::visit(const GT *op) {
