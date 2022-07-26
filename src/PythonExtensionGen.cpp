@@ -296,15 +296,16 @@ void PythonExtensionGen::compile(const LoweredFunc &f) {
 
     indent.indent += 2;
 
-    for (size_t i = 0; i < args.size(); i++) {
-        if (!can_convert(&args[i])) {
+    for (const auto &arg : args) {
+        if (!can_convert(&arg)) {
             /* Some arguments can't be converted to Python yet. In those
              * cases, just add a dummy function that always throws an
              * Exception. */
             // TODO: Add support for handles and vectors.
             dest << indent << "PyErr_Format(PyExc_NotImplementedError, "
-                 << "\"Can't convert argument " << args[i].name << " from Python\");\n";
-            dest << indent << "return nullptr;\n";
+                 << "\"Can't convert argument " << arg.name << " from Python\");\n";
+            dest << indent << "Py_INCREF(Py_None);\n";
+            dest << indent << "return Py_None;\n";
             dest << "}";
             return;
         }
