@@ -60,7 +60,7 @@ bool Cache::add_memoized_blocks(const State *state,
             new_root->children[block_index++] = new_block;
         }
 
-        if (child->calculate_cost(dag, params, cost_model, this->options, params.memory_limit)) {
+        if (child->calculate_cost(dag, params, cost_model, this->options)) {
             num_children++;
             accept_child(std::move(child));
             cache_hits++;
