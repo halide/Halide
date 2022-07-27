@@ -901,9 +901,9 @@ class IsUsedInStmt : public IRVisitor {
     }
 
 public:
-    bool result;
+    bool result = false;
     explicit IsUsedInStmt(const Function &f)
-        : func(f.name()), result(false) {
+        : func(f.name()) {
     }
 };
 
@@ -925,10 +925,10 @@ class IsRealizedInStmt : public IRVisitor {
     }
 
 public:
-    bool result;
+    bool result = false;
 
     explicit IsRealizedInStmt(const Function &f)
-        : func(f.name()), result(false) {
+        : func(f.name()) {
     }
 };
 
@@ -942,11 +942,11 @@ bool function_is_already_realized_in_stmt(const Function &f, const Stmt &s) {
 class InjectStmt : public IRMutator {
 public:
     const Stmt &injected_stmt;
-    bool found_level;
+    bool found_level = false;
     const LoopLevel &level;
 
     InjectStmt(const Stmt &s, const LoopLevel &level)
-        : injected_stmt(s), found_level(false), level(level) {
+        : injected_stmt(s), level(level) {
     }
 
 private:
@@ -1811,10 +1811,10 @@ public:
         LoopLevel loop_level;
     };
     vector<Site> sites_allowed;
-    bool found;
+    bool found = false;
 
     ComputeLegalSchedules(Function f, const map<string, Function> &env)
-        : found(false), func(std::move(f)), env(env) {
+        : func(std::move(f)), env(env) {
     }
 
 private:

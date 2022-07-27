@@ -255,14 +255,12 @@ class Context {
     void *user_context;
 
 public:
-    CUcontext context;
-    int error;
+    CUcontext context = nullptr;
+    int error = CUDA_SUCCESS;
 
     // Constructor sets 'error' if any occurs.
     ALWAYS_INLINE Context(void *user_context)
-        : user_context(user_context),
-          context(nullptr),
-          error(CUDA_SUCCESS) {
+        : user_context(user_context) {
 #ifdef DEBUG_RUNTIME
         halide_start_clock(user_context);
 #endif

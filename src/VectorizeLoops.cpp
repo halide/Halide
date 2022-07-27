@@ -374,8 +374,8 @@ class PredicateLoadStore : public IRMutator {
     string var;
     Expr vector_predicate;
     int lanes;
-    bool valid;
-    bool vectorized;
+    bool valid = true;
+    bool vectorized = false;
 
     using IRMutator::visit;
 
@@ -461,7 +461,7 @@ class PredicateLoadStore : public IRMutator {
 
 public:
     PredicateLoadStore(string v, const Expr &vpred)
-        : var(std::move(v)), vector_predicate(vpred), lanes(vpred.type().lanes()), valid(true), vectorized(false) {
+        : var(std::move(v)), vector_predicate(vpred), lanes(vpred.type().lanes()) {
         internal_assert(lanes > 1);
     }
 

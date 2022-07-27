@@ -81,11 +81,11 @@ class IsBufferConstant : public IRVisitor {
     }
 
 public:
-    bool result;
+    bool result = true;
     const std::string &buffer;
 
     IsBufferConstant(const std::string &b)
-        : result(true), buffer(b) {
+        : buffer(b) {
     }
 };
 }  // namespace

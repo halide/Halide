@@ -29,7 +29,7 @@ class StmtToHtml : public IRVisitor {
     static const std::string css, js;
 
     // This allows easier access to individual elements.
-    int id_count;
+    int id_count = 0;
 
 private:
     std::ofstream stream;
@@ -1000,7 +1000,7 @@ public:
     }
 
     StmtToHtml(const string &filename)
-        : id_count(0), context_stack(1, 0) {
+        : context_stack(1, 0) {
         stream.open(filename.c_str());
         stream << "<head>";
         stream << "<style type='text/css'>" << css << "</style>\n";

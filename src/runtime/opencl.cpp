@@ -252,16 +252,13 @@ class ClContext {
     void *user_context;
 
 public:
-    cl_context context;
-    cl_command_queue cmd_queue;
-    cl_int error_code;
+    cl_context context = nullptr;
+    cl_command_queue cmd_queue = nullptr;
+    cl_int error_code = CL_SUCCESS;
 
     // Constructor sets 'error_code' if any occurs.
     ALWAYS_INLINE ClContext(void *user_context)
-        : user_context(user_context),
-          context(nullptr),
-          cmd_queue(nullptr),
-          error_code(CL_SUCCESS) {
+        : user_context(user_context) {
         if (clCreateContext == nullptr) {
             load_libopencl(user_context);
         }

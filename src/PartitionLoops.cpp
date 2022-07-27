@@ -227,9 +227,9 @@ class ExprUsesInvalidBuffers : public IRVisitor {
 
 public:
     ExprUsesInvalidBuffers(const Scope<> &buffers)
-        : invalid_buffers(buffers), invalid(false) {
+        : invalid_buffers(buffers) {
     }
-    bool invalid;
+    bool invalid = false;
 };
 
 /** Check if any references to buffers in an expression is invalid. */

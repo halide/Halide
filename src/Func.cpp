@@ -2811,10 +2811,9 @@ Func::operator Stage() const {
 namespace {
 class CountImplicitVars : public Internal::IRGraphVisitor {
 public:
-    int count;
+    int count = 0;
 
-    CountImplicitVars(const vector<Expr> &exprs)
-        : count(0) {
+    CountImplicitVars(const vector<Expr> &exprs) {
         for (const auto &e : exprs) {
             e.accept(this);
         }
