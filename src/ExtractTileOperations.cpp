@@ -303,7 +303,9 @@ BaseStride get_rhs_tile_index(const Expr &index, int element_width, int tile_x, 
                 return {};
             }
 
-            // times 4 because of the rhs layout
+            // times 4 because of the rhs layout, each vector used by AMX is 4 bytes in size.
+            // For the 4 gets divided by the element width which means each vector has 4 elements in u8/i8 and
+            // 2 elements for bf16.
             return {true, rhs_tile1.base, rhs_tile1.stride[0] * (4 / element_width)};
         }
     } else {
