@@ -33,10 +33,13 @@ private:
     int colorType;
     std::stringstream html;
     FindStmtCost findStmtCost;
+
+    // for expanding/collapsing
     int currNodeID;
     int numNodes;
     int startCCNodeID;
     int startDMCNodeID;
+    int depth;
 
     void update_num_nodes();
 
@@ -54,7 +57,7 @@ private:
     void start_tree();
     void end_tree();
 
-    string generate_collapse_expand_js();
+    string generate_collapse_expand_js(int totalNodes);
 
     void node_without_children(string name, int colorCost);
     void open_node(string name, int colorCost);

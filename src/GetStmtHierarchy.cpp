@@ -7,12 +7,16 @@ using namespace Internal;
 string GetStmtHierarchy::get_hierarchy_html(const Expr &startNode) {
     start_html();
 
+    depth = 0;
     colorType = CC_TYPE;
+    startCCNodeID = numNodes;
     start_tree();
     mutate(startNode);
     end_tree();
 
+    depth = 0;
     colorType = DMC_TYPE;
+    startDMCNodeID = numNodes;
     start_tree();
     mutate(startNode);
     end_tree();
@@ -25,12 +29,14 @@ string GetStmtHierarchy::get_hierarchy_html(const Expr &startNode) {
 string GetStmtHierarchy::get_hierarchy_html(const Stmt &startNode) {
     start_html();
 
+    depth = 0;
     colorType = CC_TYPE;
     startCCNodeID = numNodes;
     start_tree();
     mutate(startNode);
     end_tree();
 
+    depth = 0;
     update_num_nodes();
     startDMCNodeID = numNodes;
     colorType = DMC_TYPE;
@@ -90,11 +96,11 @@ void GetStmtHierarchy::update_num_nodes() {
 
 string GetStmtHierarchy::get_node_class_name() {
     if (currNodeID == startCCNodeID) {
-        return "startCCNode";
+        return "startCCNode depth" + to_string(depth);
     } else if (currNodeID == startDMCNodeID) {
-        return "startDMCNode";
+        return "startDMCNode depth" + to_string(depth);
     } else {
-        return "node" + to_string(currNodeID) + "child";
+        return "node" + to_string(currNodeID) + "child depth" + to_string(depth);
     }
 }
 
@@ -129,6 +135,8 @@ void GetStmtHierarchy::start_html() {
     html.str(string());
     currNodeID = 0;
     numNodes = 0;
+    startCCNodeID = -1;
+    startDMCNodeID = -1;
 
     html << "<html>";
     html << "<head>";
@@ -191,7 +199,7 @@ void GetStmtHierarchy::start_html() {
 void GetStmtHierarchy::end_html() {
     html << "</body></html>";
     html << "<script>";
-    html << generate_collapse_expand_js();
+    html << generate_collapse_expand_js(numNodes);
     html << "</script>";
 }
 void GetStmtHierarchy::start_tree() {
@@ -207,8 +215,8 @@ void GetStmtHierarchy::end_tree() {
 void GetStmtHierarchy::node_without_children(string name, int colorCost) {
     string className = get_node_class_name();
     html << "<li class=\\'" << className << "\\'>";
-    html << "<span class=\\'tf-nc end-node CostComputationBorder" << colorCost << "\\'>" << name
-         << "</span></li>";
+    html << "<span class=\\'tf-nc end-node CostComputationBorder" << colorCost << "\\'>";
+    html << name << "</span></li>";
 }
 
 void GetStmtHierarchy::open_node(string name, int colorCost) {
@@ -217,15 +225,20 @@ void GetStmtHierarchy::open_node(string name, int colorCost) {
     html << "<li class=\\'" << className << "\\'>";
     html << "<span class=\\'tf-nc children-node CostComputation" << colorCost << "\\'>";
     html << name;
+
     update_num_nodes();
+
     html << " <button onclick=\\'handleClick(" << currNodeID << ")\\'>";
     html << "v";
     html << "</button>";
     html << "</span>";
     html << "<ul>";
+
+    depth++;
 }
 
 void GetStmtHierarchy::close_node() {
+    depth--;
     html << "</ul>";
     html << "</li>";
 }
@@ -356,12 +369,16 @@ Expr GetStmtHierarchy::visit(const Not *op) {
 Expr GetStmtHierarchy::visit(const Select *op) {
     int computation_range = get_range(op);
     open_node("Select", computation_range);
+
     int currNode = currNodeID;
     mutate(op->condition);
+
     currNodeID = currNode;
     mutate(op->true_value);
+
     currNodeID = currNode;
     mutate(op->false_value);
+
     close_node();
     return op;
 }
@@ -374,12 +391,16 @@ Expr GetStmtHierarchy::visit(const Load *op) {
 Expr GetStmtHierarchy::visit(const Ramp *op) {
     int computation_range = get_range(op);
     open_node("Ramp", computation_range);
+
     int currNode = currNodeID;
     mutate(op->base);
+
     currNodeID = currNode;
     mutate(op->stride);
+
     currNodeID = currNode;
     mutate(Expr(op->lanes));
+
     close_node();
     return op;
 }
@@ -634,41 +655,56 @@ Stmt GetStmtHierarchy::visit(const Atomic *op) {
     return op;
 }
 
-string GetStmtHierarchy::generate_collapse_expand_js() {
+string GetStmtHierarchy::generate_collapse_expand_js(int totalNodes) {
     stringstream js;
-    js << "const nodeExpanded = new Map();  ";
-    js << "function expandAllNodes(numNodes) {  ";
-    js << "for (let i = 1; i <= numNodes; i++) {  ";
-    js << "        expandNodeChildren(i);  ";
-    js << "        nodeExpanded.set(i, true);  ";
-    js << "}  ";
-    js << "}  ";
-    js << "function handleClick(nodeNum) {  ";
-    js << "if (nodeExpanded.get(nodeNum)) {  ";
-    js << "        collapseNodeChildren(nodeNum);  ";
-    js << "        nodeExpanded.set(nodeNum, false);  ";
-    js << "} else {  ";
-    js << "        expandNodeChildren(nodeNum);  ";
-    js << "        nodeExpanded.set(nodeNum, true);  ";
-    js << "}  ";
-    js << "}  ";
-    js << "function collapseNodeChildren(nodeNum) {  ";
-    js << "const children = document.getElementsByClassName(\\'node\\' + nodeNum + \\'child\\'); "
-          " ";
-    js << "for (const child of children) {  ";
-    js << "child.style.display = \\'none\\';  ";
-    js << "}  ";
-    js << " ";
-    js << "}  ";
-    js << "function expandNodeChildren(nodeNum) {  ";
-    js << "const children = document.getElementsByClassName(\\'node\\' + nodeNum + \\'child\\'); "
-          " ";
-    js << "for (const child of children) {  ";
-    js << "child.style.display = \\'\\';  ";
-    js << "}  ";
-    js << "}  ";
-    js << "expandAllNodes(100);  ";
+    js << "const nodeExpanded = new Map();";
+    js << "function collapseAllNodes(numNodes) {";
+    js << "    for (let i = 0; i < numNodes; i++) {";
+    js << "        collapseNodeChildren(i);";
+    js << "        nodeExpanded.set(i, false);";
+    js << "    }";
+    js << "}";
+    js << "function expandNodesUpToDepth(depth) {";
+    js << "    for (let i = 0; i < depth; i++) {";
+    js << "        const depthChildren = document.getElementsByClassName(\\'depth\\' + i);";
+    js << "        for (const child of depthChildren) {";
+    js << "            child.style.display = \\'\\';";
+    js << "            if (child.className.includes(\\'start\\')) {";
+    js << "                continue;";
+    js << "            }";
+    js << "            let parentNodeID = child.className.split("
+          ")[0];";
+    js << "            parentNodeID = parentNodeID.split(\\'node\\')[1];";
+    js << "            parentNodeID = parentNodeID.split(\\'child\\')[0];";
+    js << "            const parentNode = parseInt(parentNodeID);";
+    js << "            nodeExpanded.set(parentNode, true);";
+    js << "        }";
+    js << "    }";
+    js << "}";
+    js << "function handleClick(nodeNum) {";
+    js << "    if (nodeExpanded.get(nodeNum)) {";
+    js << "        collapseNodeChildren(nodeNum);";
+    js << "        nodeExpanded.set(nodeNum, false);";
+    js << "    } else {";
+    js << "        expandNodeChildren(nodeNum);";
+    js << "        nodeExpanded.set(nodeNum, true);";
+    js << "    }";
+    js << "}";
+    js << "function collapseNodeChildren(nodeNum) {";
+    js << "    const children = document.getElementsByClassName(\\'node\\' + nodeNum + "
+          "\\'child\\');";
+    js << "    for (const child of children) {";
+    js << "        child.style.display = \\'none\\';";
+    js << "    }";
+    js << "}";
+    js << "function expandNodeChildren(nodeNum) {";
+    js << "    const children = document.getElementsByClassName(\\'node\\' + nodeNum + "
+          "\\'child\\');";
+    js << "    for (const child of children) {";
+    js << "        child.style.display = \\'\\';";
+    js << "    }";
+    js << "}";
+    js << "collapseAllNodes(" << totalNodes << ");  ";
+    js << "expandNodesUpToDepth(4);";
     return js.str();
 }
-
-// TODO: update the variable that goes into expandAllNodes from above

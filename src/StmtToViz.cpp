@@ -88,7 +88,6 @@ private:
         string id = "ContextSpan" + to_string(line_num);
         script_stream << "document.getElementById('" << id << "').style.backgroundColor = 'blue';"
                       << endl;
-        script_stream << "console.log('changed color for ContextSpan" << id << "');" << endl;
     }
 
     // All spans and divs will have an id of the form "x-y", where x
@@ -168,11 +167,11 @@ private:
     }
 
     string hierarchy(const Stmt &op) {
-        cout << getStmtHierarchy.get_hierarchy_html(op) << endl;
+        // cout << getStmtHierarchy.get_hierarchy_html(op) << endl;
         return getStmtHierarchy.get_hierarchy_html(op);
     }
     string hierarchy(const Expr &op) {
-        cout << getStmtHierarchy.get_hierarchy_html(op) << endl;
+        // cout << getStmtHierarchy.get_hierarchy_html(op) << endl;
         return getStmtHierarchy.get_hierarchy_html(op);
     }
 
