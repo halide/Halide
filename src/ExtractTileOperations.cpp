@@ -384,12 +384,12 @@ Matmul convert_to_matmul(const Store *op, const string &new_name, AMXOpType op_t
     }
 
     if (rhs_cast) {
-        if (op_type == AMXOpType::Int8) {
-            if (!(rhs_cast->value.type().element_of() == Int(8) || rhs_cast->value.type().element_of() == UInt(8))) {
-                user_error << "Expected rhs cast of i8/u8, got " << rhs_cast->value.type();
-            }
-        } else {  // AMXOpType::Bfloat16
-            user_assert(rhs_cast->value.type().element_of() == BFloat(16)) << "Expected rhs cast of bf16";
+        bool is_i8_u8 = rhs_cast->value.type().element_of() == Int(8) || rhs_cast->value.type().element_of() == UInt(8);
+        bool is_bf16 = rhs_cast->value.type().element_of() == BFloat(16);
+
+        if ((op_type == AMXOpType::Int8 && !is_i8_u8) || (op_type == AMXOpType::Bfloat16 && !is_bf16)) {
+            user_error << "Expected rhs type of " << (op_type == AMXOpType::Int8 ? "i8/u8" : "bf16")
+                       << ", got " << rhs_cast->value.type() << " instead.\nIn Expression: " << Expr(rhs_cast);
         }
     } else {
         return {};
