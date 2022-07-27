@@ -32,10 +32,6 @@ using StageMap = PerfectHashMap<FunctionDAG::Node::Stage, T>;
 std::vector<std::vector<int64_t>> generate_tilings(const vector<int64_t> &s, int d, int factor, bool allow_splits);
 
 struct LoopNest {
-    explicit LoopNest(bool may_subtile)
-        : may_subtile(may_subtile) {
-    }
-
     mutable RefCount ref_count;
 
     // The extents of this loop. Put another way, the number of tiles,
@@ -62,8 +58,6 @@ struct LoopNest {
 
     // The stage of the Func
     const FunctionDAG::Node::Stage *stage = nullptr;
-
-    const bool may_subtile = false;
 
     // Is this the innermost loop of this func (the SIMD loop)?
     bool innermost = false;
@@ -190,7 +184,7 @@ struct LoopNest {
     void inline_func(const FunctionDAG::Node *f);
 
     // Compute a Func at this site.
-    void compute_here(const FunctionDAG::Node *f, bool tileable, int v);
+    void compute_here(const FunctionDAG::Node *f, bool tileable, int v, const Adams2019Params &params);
 
     // Parallelize this loop according to the given tiling.
     IntrusivePtr<const LoopNest> parallelize_in_tiles(const Adams2019Params &params,

@@ -244,7 +244,7 @@ IntrusivePtr<State> optimal_schedule_pass(FunctionDAG &dag,
     // The initial state, with no decisions made
     {
         IntrusivePtr<State> initial{new State};
-        initial->root = new LoopNest(params.disable_subtiling == 0);
+        initial->root = new LoopNest;
         q.emplace(std::move(initial));
     }
 

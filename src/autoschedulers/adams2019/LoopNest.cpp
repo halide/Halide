@@ -1230,7 +1230,7 @@ void LoopNest::inline_func(const FunctionDAG::Node *f) {
     // Inline it into the children
     for (auto &child : children) {
         if (child->calls(f)) {
-            auto new_child = std::make_unique<LoopNest>(child->may_subtile);
+            auto new_child = std::make_unique<LoopNest>();
             new_child->copy_from(*child);
             new_child->inline_func(f);
             child = new_child.release();
@@ -1255,9 +1255,10 @@ void LoopNest::inline_func(const FunctionDAG::Node *f) {
 }
 
 // Compute a Func at this site.
-void LoopNest::compute_here(const FunctionDAG::Node *f, bool tileable, int v) {
+void LoopNest::compute_here(const FunctionDAG::Node *f, bool tileable, int v, const Adams2019Params &params) {
     const auto &bounds = get_bounds(f);
 
+    const bool may_subtile = (params.disable_subtiling != 0);
     if (!may_subtile) {
         // If we are restricting ourselves to the Mullapudi et al
         // scheduling space, then once something is computed here
@@ -1266,7 +1267,7 @@ void LoopNest::compute_here(const FunctionDAG::Node *f, bool tileable, int v) {
     }
 
     for (int s = (int)f->stages.size() - 1; s >= 0; s--) {
-        LoopNest *node = new LoopNest(may_subtile);
+        LoopNest *node = new LoopNest;
         node->node = f;
         node->stage = &f->stages[s];
         node->innermost = true;
@@ -1320,7 +1321,7 @@ void LoopNest::compute_here(const FunctionDAG::Node *f, bool tileable, int v) {
             // Split off the single vector as an inner loop nest.
             node->innermost = false;
 
-            LoopNest *one_vector = new LoopNest(may_subtile);
+            LoopNest *one_vector = new LoopNest;
             one_vector->node = node->node;
             one_vector->stage = node->stage;
             one_vector->tileable = false;
@@ -1345,8 +1346,10 @@ IntrusivePtr<const LoopNest> LoopNest::parallelize_in_tiles(const Adams2019Param
                                                             const vector<int64_t> &tiling,
                                                             const LoopNest *parent) const {
 
+    const bool may_subtile = (params.disable_subtiling != 0);
+
     // Split this loop and move factors to the inner loop
-    LoopNest *inner = new LoopNest(may_subtile), *outer = new LoopNest(may_subtile);
+    LoopNest *inner = new LoopNest, *outer = new LoopNest;
     inner->node = outer->node = node;
     inner->stage = outer->stage = stage;
     inner->tileable = outer->tileable = tileable && may_subtile;
@@ -1412,6 +1415,8 @@ vector<IntrusivePtr<const LoopNest>> LoopNest::compute_in_tiles(const FunctionDA
                                                                 const Adams2019Params &params,
                                                                 int v,
                                                                 bool in_realization) const {
+    const bool may_subtile = (params.disable_subtiling != 0);
+
     internal_assert(f);
 
     vector<IntrusivePtr<const LoopNest>> result;
@@ -1466,9 +1471,9 @@ vector<IntrusivePtr<const LoopNest>> LoopNest::compute_in_tiles(const FunctionDA
          vector_dim == -1 ||
          size[vector_dim] == 1)) {
 
-        auto r = std::make_unique<LoopNest>(may_subtile);
+        auto r = std::make_unique<LoopNest>();
         r->copy_from(*this);
-        r->compute_here(f, true, v);
+        r->compute_here(f, true, v, params);
         if (!in_realization) {
             r->store_at.insert(f);
         } else {
@@ -1518,7 +1523,7 @@ vector<IntrusivePtr<const LoopNest>> LoopNest::compute_in_tiles(const FunctionDA
             }
 
             // Tile this loop and place the computation at some coarser granularity
-            LoopNest *inner = new LoopNest(may_subtile), *outer = new LoopNest(may_subtile);
+            LoopNest *inner = new LoopNest, *outer = new LoopNest;
             inner->node = outer->node = node;
             inner->stage = outer->stage = stage;
             inner->tileable = outer->tileable = tileable && may_subtile;
@@ -1582,7 +1587,7 @@ vector<IntrusivePtr<const LoopNest>> LoopNest::compute_in_tiles(const FunctionDA
                 // parallelism to the outer loop.
                 auto opts = inner->compute_in_tiles(f, outer, params, v, true);
                 for (IntrusivePtr<const LoopNest> &n : opts) {
-                    LoopNest *store_at_outer_compute_further_in = new LoopNest(may_subtile);
+                    LoopNest *store_at_outer_compute_further_in = new LoopNest;
                     store_at_outer_compute_further_in->copy_from(*outer);
                     store_at_outer_compute_further_in->children.pop_back();
                     store_at_outer_compute_further_in->children.emplace_back(std::move(n));
@@ -1591,7 +1596,7 @@ vector<IntrusivePtr<const LoopNest>> LoopNest::compute_in_tiles(const FunctionDA
             }
 
             // Site the computation inside the outer loop
-            outer->compute_here(f, true, v);
+            outer->compute_here(f, true, v, params);
             outer->tileable &= !in_realization;
             result.emplace_back(outer);
         }
@@ -1638,7 +1643,7 @@ vector<IntrusivePtr<const LoopNest>> LoopNest::compute_in_tiles(const FunctionDA
                 // (Only valid if one child calls f) Push the
                 // computation into the child. Possibly leaving
                 // the storage out here.
-                LoopNest *r = new LoopNest(may_subtile);
+                LoopNest *r = new LoopNest;
                 r->copy_from(*this);
                 if (store_here) {
                     r->store_at.insert(f);

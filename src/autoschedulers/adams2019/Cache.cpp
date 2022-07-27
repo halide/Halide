@@ -41,12 +41,10 @@ bool Cache::add_memoized_blocks(const State *state,
 
     size_t num_stages = node->stages.size();
 
-    const bool may_subtile = (params.disable_subtiling == 0);
-
     for (size_t i = 0; i < blocks.size(); i += num_stages) {
         // Construct child from memoization.
         IntrusivePtr<State> child = state->make_child();
-        LoopNest *new_root = new LoopNest(may_subtile);
+        LoopNest *new_root = new LoopNest;
         new_root->copy_from(*(state->root));
         child->root = new_root;
         child->num_decisions_made++;
@@ -61,7 +59,7 @@ bool Cache::add_memoized_blocks(const State *state,
 
         // Copy all stages into new_root.
         for (size_t j = 0; j < num_stages; j++) {
-            LoopNest *new_block = new LoopNest(may_subtile);
+            LoopNest *new_block = new LoopNest;
             new_block->copy_from_including_features(*blocks[i + j]);
             new_root->children[block_index++] = new_block;
         }
@@ -101,7 +99,7 @@ void Cache::memoize_blocks(const FunctionDAG::Node *node, LoopNest *new_root) {
         if (child->node == node) {
             // Need const reference for copy.
             const LoopNest *child_ptr = child.get();
-            LoopNest *new_block = new LoopNest(child->may_subtile);
+            LoopNest *new_block = new LoopNest;
             new_block->copy_from_including_features(*child_ptr);
             blocks.emplace_back(new_block);
             cache_misses++;

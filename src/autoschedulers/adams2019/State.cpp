@@ -265,7 +265,7 @@ void State::generate_children(const FunctionDAG &dag,
             // 1) Inline it
             if (node->stages.size() == 1 && !node->is_output) {
                 auto child = make_child();
-                LoopNest *new_root = new LoopNest(root->may_subtile);
+                LoopNest *new_root = new LoopNest;
                 new_root->copy_from(*root);
                 new_root->inline_func(node);
                 child->root = new_root;
@@ -480,7 +480,7 @@ void State::generate_children(const FunctionDAG &dag,
                 }
 
                 auto child = make_child();
-                LoopNest *new_root = new LoopNest(root->may_subtile);
+                LoopNest *new_root = new LoopNest;
                 new_root->copy_from(*root);
                 for (auto &c : new_root->children) {
                     if (c->node == node) {
