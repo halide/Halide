@@ -131,6 +131,11 @@ const x86Intrinsic intrinsic_defs[] = {
     {"llvm.ssub.sat.v16i16", Int(16, 16), "saturating_sub", {Int(16, 16), Int(16, 16)}, Target::AVX2},
     {"llvm.ssub.sat.v8i16", Int(16, 8), "saturating_sub", {Int(16, 8), Int(16, 8)}},
 
+    // Sum of absolute differences
+    {"llvm.x86.sse2.psad.bw", UInt(64, 2), "sum_of_absolute_differences", {UInt(8, 16), UInt(8, 16)}},
+    {"llvm.x86.avx2.psad.bw", UInt(64, 4), "sum_of_absolute_differences", {UInt(8, 32), UInt(8, 32)}, Target::AVX2},
+    {"llvm.x86.avx512.psad.bw.512", UInt(64, 8), "sum_of_absolute_differences", {UInt(8, 64), UInt(8, 64)}, Target::AVX512_Skylake},
+
     // Some of the instructions referred to below only appear with
     // AVX2, but LLVM generates better AVX code if you give it
     // full 256-bit vectors and let it do the slicing up into
@@ -635,10 +640,13 @@ void CodeGen_X86::codegen_vector_reduce(const VectorReduce *op, const Expr &init
         // One could do a horizontal widening addition with
         // other dot_products against a vector of ones. Currently disabled
         // because I haven't found other cases where it's clearly better.
-
         {VectorReduce::Add, 2, u16(wild_u8x_), "horizontal_widening_add", {}, Pattern::SingleArg},
         {VectorReduce::Add, 2, i16(wild_u8x_), "horizontal_widening_add", {}, Pattern::SingleArg},
         {VectorReduce::Add, 2, i16(wild_i8x_), "horizontal_widening_add", {}, Pattern::SingleArg},
+
+        // Sum of absolute differences
+        {VectorReduce::Add, 8, u64(absd(wild_u8x_, wild_u8x_)), "sum_of_absolute_differences", {}},
+
     };
     // clang-format on
 
@@ -705,6 +713,33 @@ void CodeGen_X86::codegen_vector_reduce(const VectorReduce *op, const Expr &init
                     }
                 }
             }
+        }
+    }
+
+    // Rewrite non-native sum-of-absolute-difference variants to the native
+    // op. We support reducing to various types. We could consider supporting
+    // multiple reduction factors too, but in general we don't handle non-native
+    // reduction factors for VectorReduce nodes (yet?).
+    if (op->op == VectorReduce::Add &&
+        factor == 8) {
+        const Cast *cast = op->value.as<Cast>();
+        const Call *call = cast ? cast->value.as<Call>() : nullptr;
+        if (call &&
+            call->is_intrinsic(Call::absd) &&
+            cast->type.element_of().can_represent(UInt(8)) &&
+            (cast->type.is_int() || cast->type.is_uint()) &&
+            call->args[0].type().element_of() == UInt(8)) {
+
+            internal_assert(cast->type.element_of() != UInt(64)) << "Should have pattern-matched above\n";
+
+            // Cast to uint64 instead
+            Expr equiv = Cast::make(UInt(64, cast->value.type().lanes()), cast->value);
+            // Reduce on that to hit psadbw
+            equiv = VectorReduce::make(VectorReduce::Add, equiv, op->type.lanes());
+            // Then cast that to the desired type
+            equiv = Cast::make(cast->type.with_lanes(equiv.type().lanes()), equiv);
+            codegen(equiv);
+            return;
         }
     }
 
