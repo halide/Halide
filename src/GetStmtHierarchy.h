@@ -33,6 +33,14 @@ private:
     int colorType;
     std::stringstream html;
     FindStmtCost findStmtCost;
+    int currNodeID;
+    int numNodes;
+    int startCCNodeID;
+    int startDMCNodeID;
+
+    void update_num_nodes();
+
+    string get_node_class_name();
 
     string get_cost(const IRNode *node) const;
     string get_cost_list(vector<Halide::Expr> exprs) const;
@@ -45,6 +53,8 @@ private:
 
     void start_tree();
     void end_tree();
+
+    string generate_collapse_expand_js();
 
     void node_without_children(string name, int colorCost);
     void open_node(string name, int colorCost);

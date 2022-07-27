@@ -168,11 +168,11 @@ private:
     }
 
     string hierarchy(const Stmt &op) {
-        // cout << getStmtHierarchy.get_hierarchy_html(op) << endl;
+        cout << getStmtHierarchy.get_hierarchy_html(op) << endl;
         return getStmtHierarchy.get_hierarchy_html(op);
     }
     string hierarchy(const Expr &op) {
-        // cout << getStmtHierarchy.get_hierarchy_html(op) << endl;
+        cout << getStmtHierarchy.get_hierarchy_html(op) << endl;
         return getStmtHierarchy.get_hierarchy_html(op);
     }
 

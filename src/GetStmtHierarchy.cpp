@@ -26,10 +26,13 @@ string GetStmtHierarchy::get_hierarchy_html(const Stmt &startNode) {
     start_html();
 
     colorType = CC_TYPE;
+    startCCNodeID = numNodes;
     start_tree();
     mutate(startNode);
     end_tree();
 
+    update_num_nodes();
+    startDMCNodeID = numNodes;
     colorType = DMC_TYPE;
     start_tree();
     mutate(startNode);
@@ -80,6 +83,21 @@ int GetStmtHierarchy::get_range_list(vector<Halide::Expr> exprs) const {
     return maxValue;
 }
 
+void GetStmtHierarchy::update_num_nodes() {
+    numNodes++;
+    currNodeID = numNodes;
+}
+
+string GetStmtHierarchy::get_node_class_name() {
+    if (currNodeID == startCCNodeID) {
+        return "startCCNode";
+    } else if (currNodeID == startDMCNodeID) {
+        return "startDMCNode";
+    } else {
+        return "node" + to_string(currNodeID) + "child";
+    }
+}
+
 string GetStmtHierarchy::get_cost(const IRNode *node) const {
     if (node == nullptr) {
         return "";
@@ -109,6 +127,9 @@ string GetStmtHierarchy::get_cost_list(vector<Halide::Expr> exprs) const {
 
 void GetStmtHierarchy::start_html() {
     html.str(string());
+    currNodeID = 0;
+    numNodes = 0;
+
     html << "<html>";
     html << "<head>";
     html << "<link rel=\\'stylesheet\\' "
@@ -169,6 +190,9 @@ void GetStmtHierarchy::start_html() {
 
 void GetStmtHierarchy::end_html() {
     html << "</body></html>";
+    html << "<script>";
+    html << generate_collapse_expand_js();
+    html << "</script>";
 }
 void GetStmtHierarchy::start_tree() {
     html << "<div class=\\'tf-tree tf-gap-sm tf-custom\\' style=\\'font-size: 15px;\\'>";
@@ -181,13 +205,23 @@ void GetStmtHierarchy::end_tree() {
 }
 
 void GetStmtHierarchy::node_without_children(string name, int colorCost) {
-    html << "<li><span class=\\'tf-nc end-node CostComputationBorder" << colorCost << "\\'>" << name
+    string className = get_node_class_name();
+    html << "<li class=\\'" << className << "\\'>";
+    html << "<span class=\\'tf-nc end-node CostComputationBorder" << colorCost << "\\'>" << name
          << "</span></li>";
 }
 
 void GetStmtHierarchy::open_node(string name, int colorCost) {
-    html << "<li><span class=\\'tf-nc children-node CostComputation" << colorCost << "\\'>" << name
-         << "</span>";
+    string className = get_node_class_name();
+
+    html << "<li class=\\'" << className << "\\'>";
+    html << "<span class=\\'tf-nc children-node CostComputation" << colorCost << "\\'>";
+    html << name;
+    update_num_nodes();
+    html << " <button onclick=\\'handleClick(" << currNodeID << ")\\'>";
+    html << "v";
+    html << "</button>";
+    html << "</span>";
     html << "<ul>";
 }
 
@@ -229,7 +263,9 @@ Expr GetStmtHierarchy::visit(const Variable *op) {
 void GetStmtHierarchy::visit_binary_op(const Expr &a, const Expr &b, const string &name,
                                        int colorCost) {
     open_node(name, colorCost);
+    int currNode = currNodeID;
     mutate(a);
+    currNodeID = currNode;
     mutate(b);
     close_node();
 }
@@ -320,8 +356,11 @@ Expr GetStmtHierarchy::visit(const Not *op) {
 Expr GetStmtHierarchy::visit(const Select *op) {
     int computation_range = get_range(op);
     open_node("Select", computation_range);
+    int currNode = currNodeID;
     mutate(op->condition);
+    currNodeID = currNode;
     mutate(op->true_value);
+    currNodeID = currNode;
     mutate(op->false_value);
     close_node();
     return op;
@@ -335,8 +374,11 @@ Expr GetStmtHierarchy::visit(const Load *op) {
 Expr GetStmtHierarchy::visit(const Ramp *op) {
     int computation_range = get_range(op);
     open_node("Ramp", computation_range);
+    int currNode = currNodeID;
     mutate(op->base);
+    currNodeID = currNode;
     mutate(op->stride);
+    currNodeID = currNode;
     mutate(Expr(op->lanes));
     close_node();
     return op;
@@ -351,7 +393,9 @@ Expr GetStmtHierarchy::visit(const Broadcast *op) {
 Expr GetStmtHierarchy::visit(const Call *op) {
     int computation_range = get_range(op);
     open_node(op->name, computation_range);
+    int currNode = currNodeID;
     for (auto &arg : op->args) {
+        currNodeID = currNode;
         mutate(arg);
     }
     close_node();
@@ -363,11 +407,13 @@ Expr GetStmtHierarchy::visit(const Let *op) {
 
     open_node("=", computation_range);
     node_without_children(op->name, get_range(nullptr));
+    int currNode = currNodeID;
     mutate(op->value);
     close_node();
 
     int computation_range_body = get_range(op->body.get());
     open_node("body", computation_range_body);
+    currNodeID = currNode;
     mutate(op->body);
     close_node();
 
@@ -411,12 +457,18 @@ Stmt GetStmtHierarchy::visit(const Provide *op) {
     m_assert(false, "check out provide!! " + op->name);
     int computation_range = get_range(op);
     open_node("=", computation_range);
+    int currNode0 = currNodeID;
+
     open_node(op->name, computation_range);
+    int currNode1 = currNodeID;
     for (auto &arg : op->args) {
+        currNodeID = currNode1;
         mutate(arg);
     }
     close_node();
+
     for (auto &val : op->values) {
+        currNodeID = currNode0;
         mutate(val);
     }
     close_node();
@@ -482,7 +534,9 @@ Expr GetStmtHierarchy::visit(const Shuffle *op) {
     int computation_range = get_range(op);
     if (op->is_concat()) {
         open_node("concat_vectors", computation_range);
+        int currNode = currNodeID;
         for (auto &e : op->vectors) {
+            currNodeID = currNode;
             mutate(e);
         }
         close_node();
@@ -490,7 +544,9 @@ Expr GetStmtHierarchy::visit(const Shuffle *op) {
 
     else if (op->is_interleave()) {
         open_node("interleave_vectors", computation_range);
+        int currNode = currNodeID;
         for (auto &e : op->vectors) {
+            currNodeID = currNode;
             mutate(e);
         }
         close_node();
@@ -500,7 +556,9 @@ Expr GetStmtHierarchy::visit(const Shuffle *op) {
         std::vector<Expr> args = op->vectors;
         args.emplace_back(op->slice_begin());
         open_node("extract_element", computation_range);
+        int currNode = currNodeID;
         for (auto &e : args) {
+            currNodeID = currNode;
             mutate(e);
         }
         close_node();
@@ -512,7 +570,9 @@ Expr GetStmtHierarchy::visit(const Shuffle *op) {
         args.emplace_back(op->slice_stride());
         args.emplace_back(static_cast<int>(op->indices.size()));
         open_node("slice_vectors", computation_range);
+        int currNode = currNodeID;
         for (auto &e : args) {
+            currNodeID = currNode;
             mutate(e);
         }
         close_node();
@@ -524,7 +584,9 @@ Expr GetStmtHierarchy::visit(const Shuffle *op) {
             args.emplace_back(i);
         }
         open_node("Shuffle", computation_range);
+        int currNode = currNodeID;
         for (auto &e : args) {
+            currNodeID = currNode;
             mutate(e);
         }
         close_node();
@@ -534,7 +596,9 @@ Expr GetStmtHierarchy::visit(const Shuffle *op) {
 Expr GetStmtHierarchy::visit(const VectorReduce *op) {
     int computation_range = get_range(op);
     open_node("vector_reduce", computation_range);
+    int currNode = currNodeID;
     mutate(op->op);
+    currNodeID = currNode;
     mutate(op->value);
     close_node();
     return op;
@@ -550,7 +614,9 @@ Stmt GetStmtHierarchy::visit(const Fork *op) {
 Stmt GetStmtHierarchy::visit(const Acquire *op) {
     int computation_range = get_range(op);
     open_node("acquire", computation_range);
+    int currNode = currNodeID;
     mutate(op->semaphore);
+    currNodeID = currNode;
     mutate(op->count);
     close_node();
     return op;
@@ -567,3 +633,42 @@ Stmt GetStmtHierarchy::visit(const Atomic *op) {
 
     return op;
 }
+
+string GetStmtHierarchy::generate_collapse_expand_js() {
+    stringstream js;
+    js << "const nodeExpanded = new Map();  ";
+    js << "function expandAllNodes(numNodes) {  ";
+    js << "for (let i = 1; i <= numNodes; i++) {  ";
+    js << "        expandNodeChildren(i);  ";
+    js << "        nodeExpanded.set(i, true);  ";
+    js << "}  ";
+    js << "}  ";
+    js << "function handleClick(nodeNum) {  ";
+    js << "if (nodeExpanded.get(nodeNum)) {  ";
+    js << "        collapseNodeChildren(nodeNum);  ";
+    js << "        nodeExpanded.set(nodeNum, false);  ";
+    js << "} else {  ";
+    js << "        expandNodeChildren(nodeNum);  ";
+    js << "        nodeExpanded.set(nodeNum, true);  ";
+    js << "}  ";
+    js << "}  ";
+    js << "function collapseNodeChildren(nodeNum) {  ";
+    js << "const children = document.getElementsByClassName(\\'node\\' + nodeNum + \\'child\\'); "
+          " ";
+    js << "for (const child of children) {  ";
+    js << "child.style.display = \\'none\\';  ";
+    js << "}  ";
+    js << " ";
+    js << "}  ";
+    js << "function expandNodeChildren(nodeNum) {  ";
+    js << "const children = document.getElementsByClassName(\\'node\\' + nodeNum + \\'child\\'); "
+          " ";
+    js << "for (const child of children) {  ";
+    js << "child.style.display = \\'\\';  ";
+    js << "}  ";
+    js << "}  ";
+    js << "expandAllNodes(100);  ";
+    return js.str();
+}
+
+// TODO: update the variable that goes into expandAllNodes from above
