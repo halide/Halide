@@ -374,6 +374,20 @@ Matmul convert_to_matmul(const Store *op, const string &new_name, AMXOpType op_t
 
     if (lhs_load && !rhs_broadcast) {
         // now working on a larger k dimension
+        // with a K dimension of 4 (or 2) with bf16 all the elements in the right-hand matrix are 
+        // layed out in a way that multiplying with a column can be done in a single dot product.
+        // Therefore the indexing can be reused with a broadcast,
+        // with higher K dimensions this can no longer be done and the broadcast won't exist.
+        // ┌──┐
+        // │1 │
+        // │2 │
+        // │3 │   ┌────────┐
+        // │4 │   │1234    │
+        // │5 │   │5678    │
+        // │6 │   └────────┘
+        // │7 │
+        // │8 │
+        // └──┘
         rhs_cast = matches[1].as<Cast>();
     } else {
         rhs_cast = rhs_broadcast->value.as<Cast>();
