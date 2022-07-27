@@ -534,7 +534,7 @@ class DerivativeBounds : public IRVisitor {
         result = ConstantInterval::single_point(0);
     }
 
-    void visit(const VectorIntrinsic *op) override {
+    void visit(const VectorInstruction *op) override {
         // TODO(rootjalex): Should this be an error?
         result = ConstantInterval::everything();
     }

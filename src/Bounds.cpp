@@ -1110,9 +1110,9 @@ private:
         op->value.accept(this);
     }
 
-    void visit(const VectorIntrinsic *op) override {
+    void visit(const VectorInstruction *op) override {
         // TODO(rootjalex): we may need to implement bounds queries.
-        internal_error << "Unexpected VectorIntrinsic in bounds query: " << Expr(op) << "\n";
+        internal_error << "Unexpected VectorInstruction in bounds query: " << Expr(op) << "\n";
     }
 
     void visit(const Call *op) override {

@@ -4000,8 +4000,8 @@ void CodeGen_LLVM::visit(const Shuffle *op) {
     }
 }
 
-void CodeGen_LLVM::visit(const VectorIntrinsic *op) {
-    internal_error << "CodeGen_LLVM received VectorIntrinsic node, should be handled by architecture-specific CodeGen class:\n"
+void CodeGen_LLVM::visit(const VectorInstruction *op) {
+    internal_error << "CodeGen_LLVM received VectorInstruction node, should be handled by architecture-specific CodeGen class:\n"
                    << Expr(op) << "\n";
 }
 

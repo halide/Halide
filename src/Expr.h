@@ -57,7 +57,7 @@ enum class IRNodeType {
     Call,
     Let,
     Shuffle,
-    VectorIntrinsic,
+    VectorInstruction,
     VectorReduce,
     // Stmts
     LetStmt,

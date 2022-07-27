@@ -327,12 +327,12 @@ Expr IRMutator::visit(const Shuffle *op) {
     return Shuffle::make(new_vectors, op->indices);
 }
 
-Expr IRMutator::visit(const VectorIntrinsic *op) {
+Expr IRMutator::visit(const VectorInstruction *op) {
     auto [new_args, changed] = mutate_with_changes(op->args);
     if (!changed) {
         return op;
     }
-    return VectorIntrinsic::make(op->type, op->name, new_args);
+    return VectorInstruction::make(op->type, op->op, new_args);
 }
 
 Expr IRMutator::visit(const VectorReduce *op) {

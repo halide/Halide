@@ -60,7 +60,7 @@ bool should_use_dot_product(const Expr &a, const Expr &b, std::vector<Expr> &res
     return false;
 }
 
-/** A top-down code optimizer that replaces Halide IR with VectorIntrinsics specific to x86. */
+/** A top-down code optimizer that replaces Halide IR with VectorInstructions specific to x86. */
 class Optimize_X86 : public IRMutator {
 public:
     /** Create an x86 code optimizer. Processor features can be
@@ -110,33 +110,33 @@ protected:
             // Accumulating pmaddubsw
             (rewrite(
                  x + h_add(cast(Int(32, lanes * 4), widening_mul(y, z)), lanes),
-                 v_intrin("dot_product", x, y, z),
+                 v_intrin(VectorInstruction::dot_product, x, y, z),
                  is_uint(y, 8) && is_int(z, 8)) ||
 
              rewrite(
                  x + h_add(cast(Int(32, lanes * 4), widening_mul(y, z)), lanes),
-                 v_intrin("dot_product", x, z, y),
+                 v_intrin(VectorInstruction::dot_product, x, z, y),
                  is_int(y, 8) && is_uint(z, 8)) ||
 
              rewrite(
                  h_add(cast(Int(32, lanes * 4), widening_mul(x, y)), lanes) + z,
-                 v_intrin("dot_product", z, x, y),
+                 v_intrin(VectorInstruction::dot_product, z, x, y),
                  is_uint(x, 8) && is_int(y, 8)) ||
 
              rewrite(
                  h_add(cast(Int(32, lanes * 4), widening_mul(x, y)), lanes) + z,
-                 v_intrin("dot_product", z, y, x),
+                 v_intrin(VectorInstruction::dot_product, z, y, x),
                  is_int(x, 8) && is_uint(y, 8)) ||
 
              // Accumulating pmaddwd.
              rewrite(
                  x + h_add(widening_mul(y, z), lanes),
-                 v_intrin("dot_product", x, y, z),
+                 v_intrin(VectorInstruction::dot_product, x, y, z),
                  is_int(y, 16, lanes * 2) && is_int(z, 16, lanes * 2)) ||
 
              rewrite(
                  h_add(widening_mul(x, y), lanes) + z,
-                 v_intrin("dot_product", z, x, y),
+                 v_intrin(VectorInstruction::dot_product, z, x, y),
                  is_int(x, 16, lanes * 2) && is_int(y, 16, lanes * 2)) ||
 
              false)) {
@@ -149,7 +149,7 @@ protected:
             // We have dot_products for every x86 arch (because SSE2 has it),
             // so this is `always` safe (as long as the output type lanes has
             // a factor of 4).
-            return mutate(VectorIntrinsic::make(op->type, "dot_product", {ac, bd}));
+            return mutate(VectorInstruction::make(op->type, VectorInstruction::dot_product, {ac, bd}));
         }
 
         return IRMutator::visit(op);
@@ -177,7 +177,7 @@ protected:
                 Expr ac = Shuffle::make_interleave({matches[0], matches[2]});
                 Expr bd = Shuffle::make_interleave({matches[1], matches[3]});
                 // Always safe, see comment in Add case above.
-                return mutate(VectorIntrinsic::make(op->type, "dot_product", {ac, bd}));
+                return mutate(VectorInstruction::make(op->type, VectorInstruction::dot_product, {ac, bd}));
             }
         }
 
@@ -208,38 +208,38 @@ protected:
             (target.has_feature(Target::SSE41) &&
              rewrite(
                  cast(Int(16, lanes), rounding_shift_right(widening_mul(x, y), 15)),
-                 v_intrin("pmulhrs", x, y),
+                 v_intrin(VectorInstruction::pmulhrs, x, y),
                  is_int(x, 16) && is_int(y, 16))) ||
 
             // saturating_narrow is always supported (via SSE2) for:
             //   int32 -> int16, int16 -> int8, int16 -> uint8
             rewrite(
                 cast(Int(16, lanes), max(min(x, i32_i16min), i32_i16min)),
-                v_intrin("saturating_narrow", x),
+                v_intrin(VectorInstruction::saturating_narrow, x),
                 is_int(x, 32)) ||
 
             rewrite(
                 cast(Int(8, lanes), max(min(x, i16_i8min), i16_i8min)),
-                v_intrin("saturating_narrow", x),
+                v_intrin(VectorInstruction::saturating_narrow, x),
                 is_int(x, 16)) ||
 
             rewrite(
                 cast(UInt(8, lanes), max(min(x, i16_u8min), i16_u8min)),
-                v_intrin("saturating_narrow", x),
+                v_intrin(VectorInstruction::saturating_narrow, x),
                 is_int(x, 16)) ||
 
             //   int32 -> uint16 is supported via SSE41
             (target.has_feature(Target::SSE41) &&
              rewrite(
                  cast(UInt(16, lanes), max(min(x, i32_u16min), i32_u16min)),
-                 v_intrin("saturating_narrow", x),
+                 v_intrin(VectorInstruction::saturating_narrow, x),
                  is_int(x, 32))) ||
 
             // f32_to_bf16 is supported only via Target::AVX512_SapphireRapids
             (target.has_feature(Target::AVX512_SapphireRapids) &&
              rewrite(
                  cast(BFloat(16, lanes), x),
-                 v_intrin("f32_to_bf16", x),
+                 v_intrin(VectorInstruction::f32_to_bf16, x),
                  is_float(x, 32))) ||
 
             false) {
@@ -285,6 +285,7 @@ protected:
         const int bits = op->type.bits();
 
         auto rewrite = IRMatcher::rewriter(op, op->type);
+        using IRMatcher::typed;
 
         Type unsigned_type = op->type.with_code(halide_type_uint);
         auto x_uint = cast(unsigned_type, x);
@@ -321,14 +322,17 @@ protected:
             ((op->type.is_int_or_uint() && bits == 16) &&
              rewrite(
                  mul_shift_right(x, y, 16),
-                 v_intrin("pmulh", x, y))) ||
+                 v_intrin(VectorInstruction::pmulh, x, y))) ||
 
             // saturating_pmulhrs is supported via SSE41
             ((target.has_feature(Target::SSE41) &&
               op->type.is_int() && bits == 16) &&
              rewrite(
                  rounding_mul_shift_right(x, y, 15),
-                 v_intrin("saturating_pmulhrs", x, y))) ||
+                 // saturating_pmulhrs
+                 select((x == typed(Int(16, lanes), -32768)) && (y == typed(Int(16, lanes), -32768)),
+                        typed(Int(16, lanes), 32767),
+                        v_intrin(VectorInstruction::pmulhrs, x, y)))) ||
 
             // TODO(rootjalex): The following intrinsics are
             // simply one-to-one mappings, should they even
@@ -340,29 +344,29 @@ protected:
               (op->type.is_float() && bits == 32)) &&
              rewrite(
                  abs(x),
-                 v_intrin("abs", x))) ||
+                 v_intrin(VectorInstruction::abs, x))) ||
 
             // saturating ops for 8 and 16 bits are always supported (via SSE2).
             ((bits == 8 || bits == 16) &&
              (rewrite(
                   saturating_add(x, y),
-                  v_intrin("saturating_add", x, y)) ||
+                  v_intrin(VectorInstruction::saturating_add, x, y)) ||
               rewrite(
                   saturating_sub(x, y),
-                  v_intrin("saturating_sub", x, y)))) ||
+                  v_intrin(VectorInstruction::saturating_sub, x, y)))) ||
 
             // pavg ops for 8 and 16 bits are always supported (via SSE2).
             ((op->type.is_uint() && (bits == 8 || bits == 16)) &&
              rewrite(
                  rounding_halving_add(x, y),
-                 v_intrin("rounding_halving_add", x, y))) ||
+                 v_intrin(VectorInstruction::rounding_halving_add, x, y))) ||
 
             // int16 -> int32 widening_mul has a (v)pmaddwd implementation.
             // always supported (via SSE2).
             ((op->type.is_int() && (bits == 32)) &&
              rewrite(
                  widening_mul(x, y),
-                 v_intrin("widening_mul", x, y),
+                 v_intrin(VectorInstruction::widening_mul, x, y),
                  is_int(x, 16) && is_int(y, 16))) ||
 
             (target.has_feature(Target::AVX512_SapphireRapids) &&
@@ -370,27 +374,27 @@ protected:
              // SapphireRapids accumulating dot products.
              (rewrite(
                   saturating_add(x, h_satadd(cast(Int(32, lanes * 4), widening_mul(y, z)), lanes)),
-                  v_intrin("saturating_dot_product", x, y, z),
+                  v_intrin(VectorInstruction::saturating_dot_product, x, y, z),
                   is_uint(y, 8) && is_int(z, 8)) ||
 
               rewrite(
                   saturating_add(x, h_satadd(cast(Int(32, lanes * 4), widening_mul(y, z)), lanes)),
-                  v_intrin("saturating_dot_product", x, z, y),
+                  v_intrin(VectorInstruction::saturating_dot_product, x, z, y),
                   is_int(y, 8) && is_uint(z, 8)) ||
 
               rewrite(
                   saturating_add(x, h_satadd(cast(Int(32, lanes * 2), widening_mul(y, z)), lanes)),
-                  v_intrin("saturating_dot_product", x, y, z),
+                  v_intrin(VectorInstruction::saturating_dot_product, x, y, z),
                   is_uint(y, 8) && is_int(z, 8)) ||
 
               rewrite(
                   saturating_add(x, h_satadd(cast(Int(32, lanes * 2), widening_mul(y, z)), lanes)),
-                  v_intrin("saturating_dot_product", x, z, y),
+                  v_intrin(VectorInstruction::saturating_dot_product, x, z, y),
                   is_int(y, 8) && is_uint(z, 8)) ||
 
               rewrite(
                   saturating_add(x, h_satadd(widening_mul(y, z), lanes)),
-                  v_intrin("saturating_dot_product", x, z, y),
+                  v_intrin(VectorInstruction::saturating_dot_product, x, z, y),
                   is_int(y, 16, lanes * 2) && is_int(z, 16, lanes * 2)) ||
 
               false)) ||
@@ -449,18 +453,18 @@ protected:
                 ((factor == 2) &&
                  (rewrite(
                       h_add(cast(Int(32, value_lanes), widening_mul(x, y)), lanes),
-                      v_intrin("dot_product", cast(Int(16, value_lanes), x), cast(Int(16, value_lanes), y)),
+                      v_intrin(VectorInstruction::dot_product, cast(Int(16, value_lanes), x), cast(Int(16, value_lanes), y)),
                       x_is_int_or_uint && y_is_int_or_uint) ||
 
                   // Horizontal widening add via pmaddwd
                   rewrite(
                       h_add(cast(Int(32, value_lanes), x), lanes),
-                      v_intrin("dot_product", x, make_const(Int(16, value_lanes), 1)),
+                      v_intrin(VectorInstruction::dot_product, x, make_const(Int(16, value_lanes), 1)),
                       is_int(x, 16)) ||
 
                   (rewrite(
                       h_add(widening_mul(x, y), lanes),
-                      v_intrin("dot_product", x, y),
+                      v_intrin(VectorInstruction::dot_product, x, y),
                       is_int(x, 16) && is_int(y, 16))) ||
 
                   // pmaddub supported via SSE41
@@ -468,23 +472,23 @@ protected:
                    // Horizontal widening adds using 2-way saturating dot products.
                    (rewrite(
                         h_add(cast(UInt(16, value_lanes), x), lanes),
-                        cast(UInt(16, lanes), typed(Int(16, lanes), v_intrin("saturating_dot_product", x, make_const(Int(8, value_lanes), 1)))),
+                        cast(UInt(16, lanes), typed(Int(16, lanes), v_intrin(VectorInstruction::saturating_dot_product, x, make_const(Int(8, value_lanes), 1)))),
                         is_uint(x, 8)) ||
 
                     rewrite(
                         h_add(cast(Int(16, value_lanes), x), lanes),
-                        v_intrin("saturating_dot_product", x, make_const(Int(8, value_lanes), 1)),
+                        v_intrin(VectorInstruction::saturating_dot_product, x, make_const(Int(8, value_lanes), 1)),
                         is_uint(x, 8)) ||
 
                     rewrite(
                         h_add(cast(Int(16, value_lanes), x), lanes),
-                        v_intrin("saturating_dot_product", make_const(UInt(8, value_lanes), 1), x),
+                        v_intrin(VectorInstruction::saturating_dot_product, make_const(UInt(8, value_lanes), 1), x),
                         is_int(x, 8)) ||
 
                     // SSE41 and AVX2 support horizontal_add via phadd intrinsics.
                     rewrite(
                         h_add(x, lanes),
-                        v_intrin("horizontal_add", x),
+                        v_intrin(VectorInstruction::horizontal_add, x),
                         is_int(x, 16, lanes * 2) || is_uint(x, 16, lanes * 2) ||
                             is_int(x, 32, lanes * 2) || is_uint(x, 32, lanes * 2)) ||
 
@@ -504,12 +508,12 @@ protected:
                 ((factor == 2) && target.has_feature(Target::SSE41) &&
                  (rewrite(
                       h_satadd(widening_mul(x, y), lanes),
-                      v_intrin("saturating_dot_product", x, y),
+                      v_intrin(VectorInstruction::saturating_dot_product, x, y),
                       is_uint(x, 8) && is_int(y, 8)) ||
 
                   rewrite(
                       h_satadd(widening_mul(x, y), lanes),
-                      v_intrin("saturating_dot_product", y, x),
+                      v_intrin(VectorInstruction::saturating_dot_product, y, x),
                       is_int(x, 8) && is_uint(y, 8)) ||
 
                   false))) {

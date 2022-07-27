@@ -1886,36 +1886,36 @@ HALIDE_ALWAYS_INLINE auto ramp(A &&a, B &&b, C &&c) noexcept -> RampOp<decltype(
 template<typename... Args>
 struct VectorIntrinOp {
     struct pattern_tag {};
-    const std::string &intrin_name;
+    const VectorInstruction::InstructionOp op;
     std::tuple<Args...> args;
 
     static constexpr uint32_t binds = bitwise_or_reduce((bindings<Args>::mask)...);
 
-    constexpr static IRNodeType min_node_type = IRNodeType::VectorIntrinsic;
-    constexpr static IRNodeType max_node_type = IRNodeType::VectorIntrinsic;
+    constexpr static IRNodeType min_node_type = IRNodeType::VectorInstruction;
+    constexpr static IRNodeType max_node_type = IRNodeType::VectorInstruction;
     constexpr static bool canonical = and_reduce((Args::canonical)...);
 
     template<int i,
              uint32_t bound,
              typename = typename std::enable_if<(i < sizeof...(Args))>::type>
-    HALIDE_ALWAYS_INLINE bool match_args(int, const VectorIntrinsic &v, MatcherState &state) const noexcept {
+    HALIDE_ALWAYS_INLINE bool match_args(int, const VectorInstruction &v, MatcherState &state) const noexcept {
         using T = decltype(std::get<i>(args));
         return (std::get<i>(args).template match<bound>(*v.args[i].get(), state) &&
                 match_args<i + 1, bound | bindings<T>::mask>(0, v, state));
     }
 
     template<int i, uint32_t binds>
-    HALIDE_ALWAYS_INLINE bool match_args(double, const VectorIntrinsic &v, MatcherState &state) const noexcept {
+    HALIDE_ALWAYS_INLINE bool match_args(double, const VectorInstruction &v, MatcherState &state) const noexcept {
         return true;
     }
 
     template<uint32_t bound>
     HALIDE_ALWAYS_INLINE bool match(const BaseExprNode &e, MatcherState &state) const noexcept {
-        if (e.node_type != IRNodeType::VectorIntrinsic) {
+        if (e.node_type != IRNodeType::VectorInstruction) {
             return false;
         }
-        const VectorIntrinsic &v = (const VectorIntrinsic &)e;
-        return (v.name == intrin_name && match_args<0, bound>(0, v, state));
+        const VectorInstruction &v = (const VectorInstruction &)e;
+        return (v.op == op && match_args<0, bound>(0, v, state));
     }
 
     template<int i,
@@ -1958,16 +1958,16 @@ struct VectorIntrinOp {
         //     // TODO(rootjalex): how do we do type-hints here?
         //     args[i] = std::get<i>(args).make(state, {});
         // }
-        return VectorIntrinsic::make(type_hint, intrin_name, r_args);
+        return VectorInstruction::make(type_hint, op, r_args);
     }
 
     constexpr static bool foldable = false;
 
     HALIDE_ALWAYS_INLINE
-    VectorIntrinOp(const std::string &name, Args... args) noexcept
-        : intrin_name(name), args(args...) {
+    VectorIntrinOp(const VectorInstruction::InstructionOp _op, Args... args) noexcept
+        : op(_op), args(args...) {
         static_assert(sizeof...(Args) > 0 && sizeof...(Args) <= 3,
-                      "VectorIntrinsicOp must have non-zero arguments, and update make() if more than 3 arguments.");
+                      "VectorInstructionOp must have non-zero arguments, and update make() if more than 3 arguments.");
     }
 };
 
@@ -1975,15 +1975,15 @@ template<typename... Args>
 std::ostream &operator<<(std::ostream &s, const VectorIntrinOp<Args...> &op) {
     // TODO(rootjalex): Should we print the type?
     s << "vector_intrin(\"";
-    s << op.intrin_name << "\", ";
+    s << op.op << "\", ";
     op.print_args(s);
     s << ")";
     return s;
 }
 
 template<typename... Args>
-HALIDE_ALWAYS_INLINE auto v_intrin(const std::string &name, Args... args) noexcept -> VectorIntrinOp<decltype(pattern_arg(args))...> {
-    return {name, pattern_arg(args)...};
+HALIDE_ALWAYS_INLINE auto v_intrin(const VectorInstruction::InstructionOp op, Args... args) noexcept -> VectorIntrinOp<decltype(pattern_arg(args))...> {
+    return {op, pattern_arg(args)...};
 }
 
 template<typename A, typename B, VectorReduce::Operator reduce_op>

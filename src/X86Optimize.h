@@ -12,7 +12,7 @@
 namespace Halide {
 namespace Internal {
 
-/** Perform vector instruction selection, inserting VectorIntrinsic nodes. */
+/** Perform vector instruction selection, inserting VectorInstruction nodes. */
 Stmt optimize_x86_instructions(Stmt stmt, const Target &target, const CodeGen_LLVM *codegen);
 
 }  // namespace Internal

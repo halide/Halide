@@ -195,8 +195,8 @@ private:
 
     using IRMutator::visit;
 
-    Expr visit(const VectorIntrinsic *op) override {
-        internal_error << "Deinterleaver should never receive VectorIntrinsic node, received:\n"
+    Expr visit(const VectorInstruction *op) override {
+        internal_error << "Deinterleaver should never receive VectorInstruction node, received:\n"
                        << Expr(op) << "\n";
         return Expr();
     }

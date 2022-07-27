@@ -84,7 +84,7 @@ protected:
     void visit(const Allocate *) override;
     void visit(const Load *) override;
     void visit(const Store *) override;
-    void visit(const VectorIntrinsic *) override;
+    void visit(const VectorInstruction *) override;
     // @}
 
 private:
@@ -470,8 +470,9 @@ void CodeGen_X86::visit(const Store *op) {
     CodeGen_Posix::visit(op);
 }
 
-void CodeGen_X86::visit(const VectorIntrinsic *op) {
-    value = call_overloaded_intrin(op->type, op->name, op->args);
+void CodeGen_X86::visit(const VectorInstruction *op) {
+    const std::string name = op->get_instruction_name();
+    value = call_overloaded_intrin(op->type, name, op->args);
     internal_assert(value) << "CodeGen_X86 failed on " << Expr(op) << "\n";
 }
 
