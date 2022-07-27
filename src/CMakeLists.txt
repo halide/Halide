@@ -5,6 +5,7 @@
 # The externally-visible header files that go into making Halide.h.
 # Don't include anything here that includes llvm headers.
 set(HEADER_FILES
+    AbstractGenerator.h
     AddAtomicMutex.h
     AddImageChecks.h
     AddParameterChecks.h
@@ -21,6 +22,7 @@ set(HEADER_FILES
     BoundsInference.h
     BoundSmallAllocations.h
     Buffer.h
+    Callable.h
     CanonicalizeGPUVars.h
     ClampUnsafeAccesses.h
     Closure.h
@@ -167,6 +169,7 @@ set(HEADER_FILES
     )
 
 set(SOURCE_FILES
+    AbstractGenerator.cpp
     AddAtomicMutex.cpp
     AddImageChecks.cpp
     AddParameterChecks.cpp
@@ -183,6 +186,7 @@ set(SOURCE_FILES
     BoundsInference.cpp
     BoundSmallAllocations.cpp
     Buffer.cpp
+    Callable.cpp
     CanonicalizeGPUVars.cpp
     ClampUnsafeAccesses.cpp
     Closure.cpp
@@ -298,6 +302,7 @@ set(SOURCE_FILES
     Simplify_Add.cpp
     Simplify_And.cpp
     Simplify_Call.cpp
+    Simplify_Reinterpret.cpp
     Simplify_Cast.cpp
     Simplify_Div.cpp
     Simplify_EQ.cpp

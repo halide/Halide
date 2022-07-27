@@ -2116,7 +2116,7 @@ void add_extern_callbacks(const Local<Context> &context,
             continue;
         }
 
-        TrampolineFn trampoline_fn;
+        TrampolineFn trampoline_fn = nullptr;
         std::vector<ExternArgType> arg_types;
         if (!build_extern_arg_types(fn_name, jit_externs, trampolines, trampoline_fn, arg_types)) {
             internal_error << "Missing fn_name " << fn_name;
@@ -2280,7 +2280,7 @@ struct WasmModuleContents {
         const std::map<std::string, Halide::JITExtern> &jit_externs,
         const std::vector<JITModule> &extern_deps);
 
-    int run(const void **args);
+    int run(const void *const *args);
 
     ~WasmModuleContents() = default;
 };
@@ -2517,7 +2517,7 @@ WasmModuleContents::WasmModuleContents(
 #endif
 }
 
-int WasmModuleContents::run(const void **args) {
+int WasmModuleContents::run(const void *const *args) {
 #if WITH_WABT
     const auto &module_desc = module->desc();
 
@@ -2726,7 +2726,7 @@ WasmModule WasmModule::compile(
 }
 
 /** Run generated previously compiled wasm code with a set of arguments. */
-int WasmModule::run(const void **args) {
+int WasmModule::run(const void *const *args) {
     internal_assert(contents.defined());
     return contents->run(args);
 }

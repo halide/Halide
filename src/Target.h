@@ -50,6 +50,11 @@ struct Target {
     /** The bit-width of the target machine. Must be 0 for unknown, or 32 or 64. */
     int bits = 0;
 
+    /** The bit-width of a vector register for targets where this is configurable and
+     * targeting a fixed size is desired. The default of 0 indicates no assumption of
+     * fixed size is allowed. */
+    int vector_bits = 0;
+
     /** The specific processor to be targeted, tuned for.
      * Corresponds to processor_name_map in Target.cpp.
      *
@@ -159,8 +164,9 @@ struct Target {
         FeatureEnd = halide_target_feature_end
     };
     Target() = default;
-    Target(OS o, Arch a, int b, Processor pt, const std::vector<Feature> &initial_features = std::vector<Feature>())
-        : os(o), arch(a), bits(b), processor_tune(pt) {
+    Target(OS o, Arch a, int b, Processor pt, const std::vector<Feature> &initial_features = std::vector<Feature>(),
+           int vb = 0)
+        : os(o), arch(a), bits(b), vector_bits(vb), processor_tune(pt) {
         for (const auto &f : initial_features) {
             set_feature(f);
         }

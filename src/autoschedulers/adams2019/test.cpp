@@ -14,7 +14,7 @@ void set_env_variable(const std::string &name, const std::string &value, int ove
 #endif
 }
 
-bool test_caching(Pipeline &p1, Pipeline &p2, const Target &target, const MachineParams &params) {
+bool test_caching(Pipeline &p1, Pipeline &p2, const Target &target) {
     static const std::string seed_value = Internal::get_env_variable("HL_SEED");
     if (seed_value.empty()) {
         // If HL_SEED is not set, then set seed for both autoscheduling executions.
@@ -22,15 +22,30 @@ bool test_caching(Pipeline &p1, Pipeline &p2, const Target &target, const Machin
         set_env_variable("HL_SEED", std::to_string(seed), /* overwrite */ 0);
     }
 
+    constexpr int parallelism = 32;
+#ifdef HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
+    MachineParams params(parallelism, 16000000, 40);
+#else
+    AutoschedulerParams params = {"Adams2019", {{"parallelism", std::to_string(parallelism)}}};
+#endif
+
     // Turn off caching.
     set_env_variable("HL_DISABLE_MEMOIZED_FEATURES", "1", /* overwrite */ 1);
     set_env_variable("HL_DISABLE_MEMOIZED_BLOCKS", "1", /* overwrite */ 1);
+#ifdef HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
     auto results_without_caching = p1.auto_schedule(target, params);
+#else
+    auto results_without_caching = p1.apply_autoscheduler(target, params);
+#endif
 
     // Turn on caching.
     set_env_variable("HL_DISABLE_MEMOIZED_FEATURES", "0", /* overwrite */ 1);
     set_env_variable("HL_DISABLE_MEMOIZED_BLOCKS", "0", /* overwrite */ 1);
+#ifdef HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
     auto results_with_caching = p2.auto_schedule(target, params);
+#else
+    auto results_with_caching = p2.apply_autoscheduler(target, params);
+#endif
 
     // Reset environment variables to what they were before (memoization variables are reset in main).
     if (seed_value.empty()) {
@@ -65,7 +80,6 @@ int main(int argc, char **argv) {
     const std::string cache_features = Internal::get_env_variable("HL_DISABLE_MEMOIZED_FEATURES");
     const std::string cache_blocks = Internal::get_env_variable("HL_DISABLE_MEMOIZED_BLOCKS");
 
-    MachineParams params(32, 16000000, 40);
     // Use a fixed target for the analysis to get consistent results from this test.
     Target target("x86-64-linux-sse41-avx-avx2");
 
@@ -90,7 +104,7 @@ int main(int argc, char **argv) {
             }
         }
 
-        if (!test_caching(p1, p2, target, params)) {
+        if (!test_caching(p1, p2, target)) {
             std::cerr << "Caching check failed on point-wise pipeline" << std::endl;
             return 1;
         }
@@ -123,7 +137,7 @@ int main(int argc, char **argv) {
             }
         }
 
-        if (!test_caching(p1, p2, target, params)) {
+        if (!test_caching(p1, p2, target)) {
             std::cerr << "Caching check failed on huge expensive stencils and low memory costs" << std::endl;
             return 1;
         }
@@ -149,7 +163,7 @@ int main(int argc, char **argv) {
             }
         }
 
-        if (!test_caching(p1, p2, target, params)) {
+        if (!test_caching(p1, p2, target)) {
             std::cerr << "Caching check failed on moderate isotropic stencils" << std::endl;
             return 1;
         }
@@ -175,7 +189,7 @@ int main(int argc, char **argv) {
             }
         }
 
-        if (!test_caching(p1, p2, target, params)) {
+        if (!test_caching(p1, p2, target)) {
             std::cerr << "Caching check failed on smaller footprint stencil" << std::endl;
             return 1;
         }
@@ -207,7 +221,7 @@ int main(int argc, char **argv) {
             }
         }
 
-        if (!test_caching(p1, p2, target, params)) {
+        if (!test_caching(p1, p2, target)) {
             std::cerr << "Caching check failed on stencil chain" << std::endl;
             return 1;
         }
@@ -231,7 +245,7 @@ int main(int argc, char **argv) {
             }
         }
 
-        if (!test_caching(p1, p2, target, params)) {
+        if (!test_caching(p1, p2, target)) {
             std::cerr << "Caching check failed on an outer product" << std::endl;
             return 1;
         }
@@ -263,7 +277,7 @@ int main(int argc, char **argv) {
             }
         }
 
-        if (!test_caching(p1, p2, target, params)) {
+        if (!test_caching(p1, p2, target)) {
             std::cerr << "Caching check failed on a separable downsample" << std::endl;
             return 1;
         }
@@ -295,7 +309,7 @@ int main(int argc, char **argv) {
             }
         }
 
-        if (!test_caching(p1, p2, target, params)) {
+        if (!test_caching(p1, p2, target)) {
             std::cerr << "Caching check failed on Func with multiple stages + loops" << std::endl;
             return 1;
         }
@@ -332,7 +346,7 @@ int main(int argc, char **argv) {
             }
         }
 
-        if (!test_caching(p1, p2, target, params)) {
+        if (!test_caching(p1, p2, target)) {
             std::cerr << "Caching check failed on scan with pointwise stages before and after" << std::endl;
             return 1;
         }
@@ -365,7 +379,7 @@ int main(int argc, char **argv) {
             }
         }
 
-        if (!test_caching(p1, p2, target, params)) {
+        if (!test_caching(p1, p2, target)) {
             std::cerr << "Caching check failed on bad vectorization" << std::endl;
             return 1;
         }
@@ -397,7 +411,7 @@ int main(int argc, char **argv) {
             }
         }
 
-        if (!test_caching(p1, p2, target, params)) {
+        if (!test_caching(p1, p2, target)) {
             std::cerr << "Caching check failed on matrix multiply + wrapper" << std::endl;
             return 1;
         }
@@ -440,7 +454,7 @@ int main(int argc, char **argv) {
             }
         }
 
-        if (!test_caching(pipeline1, pipeline2, target, params)) {
+        if (!test_caching(pipeline1, pipeline2, target)) {
             std::cerr << "Caching check failed on scan + downsample" << std::endl;
             return 1;
         }
@@ -473,7 +487,7 @@ int main(int argc, char **argv) {
             }
         }
 
-        if (!test_caching(p1, p2, target, params)) {
+        if (!test_caching(p1, p2, target)) {
             std::cerr << "Caching check failed on gather with LUT" << std::endl;
             return 1;
         }
@@ -501,7 +515,7 @@ int main(int argc, char **argv) {
             }
         }
 
-        if (!test_caching(p1, p2, target, params)) {
+        if (!test_caching(p1, p2, target)) {
             std::cerr << "Caching check failed on 'compute inside an rvar'" << std::endl;
             return 1;
         }
@@ -529,7 +543,7 @@ int main(int argc, char **argv) {
             }
         }
 
-        if (!test_caching(p1, p2, target, params)) {
+        if (!test_caching(p1, p2, target)) {
             std::cerr << "Caching check failed on alternating vectorized dimensions" << std::endl;
             return 1;
         }
@@ -560,7 +574,7 @@ int main(int argc, char **argv) {
             }
         }
 
-        if (!test_caching(p1, p2, target, params)) {
+        if (!test_caching(p1, p2, target)) {
             std::cerr << "Caching check failed on no-win scenario" << std::endl;
             return 1;
         }
@@ -585,7 +599,7 @@ int main(int argc, char **argv) {
             }
         }
 
-        if (!test_caching(p1, p2, target, params)) {
+        if (!test_caching(p1, p2, target)) {
             std::cerr << "Caching check failed on boring memcpy" << std::endl;
             return 1;
         }
@@ -609,7 +623,7 @@ int main(int argc, char **argv) {
             }
         }
 
-        if (!test_caching(p1, p2, target, params)) {
+        if (!test_caching(p1, p2, target)) {
             std::cerr << "Caching check failed on load from a tiny input image" << std::endl;
             return 1;
         }
@@ -640,7 +654,7 @@ int main(int argc, char **argv) {
             }
         }
 
-        if (!test_caching(p1, p2, target, params)) {
+        if (!test_caching(p1, p2, target)) {
             std::cerr << "Caching check failed on many-dimension func" << std::endl;
             return 1;
         }
@@ -673,7 +687,7 @@ int main(int argc, char **argv) {
             }
         }
 
-        if (!test_caching(p1, p2, target, params)) {
+        if (!test_caching(p1, p2, target)) {
             std::cerr << "Caching check failed on long transpose chain" << std::endl;
             return 1;
         }
@@ -711,7 +725,7 @@ int main(int argc, char **argv) {
             }
         }
 
-        if (!test_caching(p1, p2, target, params)) {
+        if (!test_caching(p1, p2, target)) {
             std::cerr << "Caching check failed on inlines + stencil chain" << std::endl;
             return 1;
         }
@@ -738,7 +752,7 @@ int main(int argc, char **argv) {
             }
         }
 
-        if (!test_caching(p1, p2, target, params)) {
+        if (!test_caching(p1, p2, target)) {
             std::cerr << "Caching check failed on alternating vectorized dimensions" << std::endl;
             return 1;
         }
@@ -766,7 +780,7 @@ int main(int argc, char **argv) {
             }
         }
 
-        if (!test_caching(p1, p2, target, params)) {
+        if (!test_caching(p1, p2, target)) {
             std::cerr << "Caching check failed on vectorizable with pure var using RoundUp" << std::endl;
             return 1;
         }
@@ -812,7 +826,7 @@ int main(int argc, char **argv) {
             }
         }
 
-        if (!test_caching(p1, p2, target, params)) {
+        if (!test_caching(p1, p2, target)) {
             std::cerr << "Caching check failed on convolution pyramid" << std::endl;
             return 1;
         }
@@ -844,7 +858,7 @@ int main(int argc, char **argv) {
             }
         }
 
-        if (!test_caching(p1, p2, target, params)) {
+        if (!test_caching(p1, p2, target)) {
             std::cerr << "Caching check failed on casted scan" << std::endl;
             return 1;
         }
@@ -874,7 +888,7 @@ int main(int argc, char **argv) {
             }
         }
 
-        if (!test_caching(p1, p2, target, params)) {
+        if (!test_caching(p1, p2, target)) {
             std::cerr << "Caching check failed on histogram" << std::endl;
             return 1;
         }

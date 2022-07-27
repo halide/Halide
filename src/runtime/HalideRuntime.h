@@ -55,6 +55,24 @@ extern "C" {
 #endif
 #endif
 
+// Annotation for AOT and JIT calls -- if undefined, use no annotation.
+// To ensure that all results are checked, do something like
+//
+//    -DHALIDE_FUNCTION_ATTRS=HALIDE_MUST_USE_RESULT
+//
+// in your C++ compiler options
+#ifndef HALIDE_FUNCTION_ATTRS
+#define HALIDE_FUNCTION_ATTRS
+#endif
+
+#ifndef HALIDE_EXPORT_SYMBOL
+#ifdef _MSC_VER
+#define HALIDE_EXPORT_SYMBOL __declspec(dllexport)
+#else
+#define HALIDE_EXPORT_SYMBOL __attribute__((visibility("default")))
+#endif
+#endif
+
 /** \file
  *
  * This file declares the routines used by Halide internally in its

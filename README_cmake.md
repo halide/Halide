@@ -311,24 +311,20 @@ standard types: `Debug`, `RelWithDebInfo`, `MinSizeRel`, or `Release`.
 
 ### CMake Presets
 
-If you are using CMake 3.19+, we provide several [presets][cmake_presets] to
+If you are using CMake 3.21+, we provide several [presets][cmake_presets] to
 make the above commands more convenient. The following CMake preset commands
 correspond to the longer ones above.
 
 ```
-> cmake --preset=msvc-release  # Ninja generator, MSVC compiler, Release build
-> cmake --preset=win64         # VS 2019 generator, 64-bit build
-> cmake --preset=win32         # VS 2019 generator, 32-bit build
-$ cmake --preset=gcc-release   # Ninja generator, GCC compiler, Release build
+> cmake --preset=win64    # VS 2019 generator, 64-bit build, vcpkg deps
+> cmake --preset=win32    # VS 2019 generator, 32-bit build, vcpkg deps
+> cmake --preset=release  # Release mode, any single-config generator / compiler
 
-$ cmake --list-presets         # Get full list of presets.
+$ cmake --list-presets    # Get full list of presets.
 ```
 
-The Windows and MSVC presets assume that the environment variable `VCPKG_ROOT`
-is set and points to the root of the vcpkg installation.
-
-Note that the GCC presets do not define `NDEBUG` in release configurations,
-departing from the usual CMake behavior.
+The Windows presets assume that the environment variable `VCPKG_ROOT` is set and
+points to the root of the vcpkg installation.
 
 ## Installing
 
@@ -681,8 +677,7 @@ autoscheduler:
 
 ```cmake
 add_halide_library(my_second_generator FROM my_generators
-                   AUTOSCHEDULER Halide::Adams2019
-                   PARAMS auto_schedule=true)
+                   AUTOSCHEDULER Halide::Adams2019)
 ```
 
 ### RunGenMain
@@ -862,9 +857,9 @@ being created. When `TARGETS` is empty and the `host` target would not
 cross-compile, then `host` will be used. Otherwise, `cmake` will be used and an
 author warning will be issued.
 
-To set the default autoscheduler, set the `AUTOSCHEDULER` argument to a target
+To use an autoscheduler, set the `AUTOSCHEDULER` argument to a target
 named like `Namespace::Scheduler`, for example `Halide::Adams19`. This will set
-the `-s` flag on the generator command line to `Scheduler` and add the target to
+the `autoscheduler` GeneratorParam on the generator command line to `Scheduler` and add the target to
 the list of plugins. Additional plugins can be loaded by setting the `PLUGINS`
 argument. If the argument to `AUTOSCHEDULER` does not contain `::` or it does
 not name a target, it will be passed to the `-s` flag verbatim.

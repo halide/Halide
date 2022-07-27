@@ -34,6 +34,15 @@ struct Cast : public ExprNode<Cast> {
     static const IRNodeType _node_type = IRNodeType::Cast;
 };
 
+/** Reinterpret a node as another type, without affecting any of the bits. */
+struct Reinterpret : public ExprNode<Reinterpret> {
+    Expr value;
+
+    static Expr make(Type t, Expr v);
+
+    static const IRNodeType _node_type = IRNodeType::Reinterpret;
+};
+
 /** The sum of two expressions */
 struct Add : public ExprNode<Add> {
     Expr a, b;
@@ -537,7 +546,6 @@ struct Call : public ExprNode<Call> {
         promise_clamped,
         random,
         register_destructor,
-        reinterpret,
         require,
         require_mask,
         return_second,

@@ -16,7 +16,12 @@ set(TESTS
     lesson_14_types.py
     )
 
-make_shell_path(PYTHONPATH "$<TARGET_FILE_DIR:lesson_10_halide>" "$<TARGET_FILE_DIR:Halide::Python>")
+make_shell_path(
+    PYTHONPATH
+    "$<TARGET_FILE_DIR:lesson_10_halide>"
+    "$<TARGET_FILE_DIR:Halide::Python>"
+    "${Halide_SOURCE_DIR}/python_bindings/src"
+)
 
 foreach (TEST IN LISTS TESTS)
     get_filename_component(TEST_NAME ${TEST} NAME_WE)
@@ -31,6 +36,11 @@ endforeach ()
 ## Add some hacks for getting CMake to delay compiling lesson_10_halide until after the test has run. The "better" way
 ## of doing this might be to treat lesson 10 like an app and give it its own CMakeLists.txt, but since this is a one-off
 ## it is probably less maintenance work to do it like this.
+
+# Note that the following tests that are mentioned below were created in the above foreach loop:
+#   1. python_tutorial_lesson_10_aot_compilation_generate
+#   2. python_tutorial_lesson_10_aot_compilation_run
+# The test `python_tutorial_lesson_10_compile` below is responsible for running (1) in service of (2).
 
 # This dummy command "generates" the files that the TEST python_tutorial_lesson_10_aot_compilation_generate will
 # actually generate as part of the fixture below.

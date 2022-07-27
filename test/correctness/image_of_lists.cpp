@@ -5,18 +5,12 @@
 
 using namespace Halide;
 
-#ifdef _WIN32
-#define DLLEXPORT __declspec(dllexport)
-#else
-#define DLLEXPORT
-#endif
-
-extern "C" DLLEXPORT std::list<int> *list_create(int) {
+extern "C" HALIDE_EXPORT_SYMBOL std::list<int> *list_create(int) {
     return new std::list<int>();
 }
 HalideExtern_1(std::list<int> *, list_create, int);
 
-extern "C" DLLEXPORT std::list<int> *list_maybe_insert(std::list<int> *list, bool insert, int value) {
+extern "C" HALIDE_EXPORT_SYMBOL std::list<int> *list_maybe_insert(std::list<int> *list, bool insert, int value) {
     if (insert) {
         list->push_back(value);
     }

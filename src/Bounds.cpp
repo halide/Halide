@@ -214,6 +214,20 @@ private:
         interval = Interval::single_point(op);
     }
 
+    void visit(const Reinterpret *op) override {
+        TRACK_BOUNDS_INTERVAL;
+
+        Type t = op->type.element_of();
+
+        if (t.is_handle()) {
+            interval = Interval::everything();
+            return;
+        }
+
+        // Just use the bounds of the type
+        bounds_of_type(t);
+    }
+
     void visit(const Cast *op) override {
         TRACK_BOUNDS_INTERVAL;
         op->value.accept(this);
@@ -2611,7 +2625,7 @@ private:
     void visit(const IfThenElse *op) override {
         TRACK_BOXES_TOUCHED;
         op->condition.accept(this);
-        if (expr_uses_vars(op->condition, scope)) {
+        if (expr_uses_vars(op->condition, scope) || !is_pure(op->condition)) {
             // We need to simplify the condition to get it into a
             // canonical form (e.g. (a < b) instead of !(a >= b))
             vector<pair<Expr, Stmt>> cases;

@@ -1,4 +1,5 @@
 add_autoscheduler(NAME Li2018 SOURCES GradientAutoscheduler.cpp)
+target_link_libraries(Halide_Li2018 PRIVATE ParamParser)
 
 # ==========================================================
 # TODO(#4053): move these to a separate folder since they're tests.
@@ -19,7 +20,7 @@ target_link_libraries(demo_gradient_autoscheduler PRIVATE demo_gradient Halide::
 add_test(NAME demo_gradient_autoscheduler
          COMMAND demo_gradient_autoscheduler --benchmarks=all --benchmark_min_time=1 --estimate_all)
 
-set_tests_properties(demo_gradient_autoscheduler PROPERTIES LABELS Li2018)
+set_tests_properties(demo_gradient_autoscheduler PROPERTIES LABELS "Li2018;multithreaded")
 
 ##
 
@@ -44,7 +45,11 @@ if (WITH_PYTHON_BINDINGS)
         add_test(NAME gradient_autoscheduler_test_py
                  COMMAND Python3::Interpreter "${CMAKE_CURRENT_SOURCE_DIR}/test.py")
 
-        set(PYTHONPATH "$<SHELL_PATH:$<TARGET_FILE_DIR:Halide::Python>>")
+        make_shell_path(
+            PYTHONPATH
+            "$<TARGET_FILE_DIR:Halide::Python>"
+            "${Halide_SOURCE_DIR}/python_bindings/src"
+        )
 
         if (WIN32)
             set(SEP "\\$<SEMICOLON>")

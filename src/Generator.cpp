@@ -7,9 +7,7 @@
 #include <unordered_map>
 #include <utility>
 
-#include "BoundaryConditions.h"
 #include "CompilerLogger.h"
-#include "Derivative.h"
 #include "Generator.h"
 #include "IRPrinter.h"
 #include "Module.h"
@@ -21,30 +19,61 @@
 
 namespace Halide {
 
+#ifdef HALIDE_ALLOW_GENERATOR_EXTERNAL_CODE
 GeneratorContext::GeneratorContext(const Target &target,
+#ifdef HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
                                    bool auto_schedule,
                                    const MachineParams &machine_params,
-                                   std::shared_ptr<ExternsMap> externs_map,
-                                   std::shared_ptr<Internal::ValueTracker> value_tracker)
+#else
+                                   const AutoschedulerParams &autoscheduler_params,
+#endif
+                                   std::shared_ptr<ExternsMap> externs_map)
     : target_(target),
+#ifdef HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
       auto_schedule_(auto_schedule),
       machine_params_(machine_params),
-      externs_map_(std::move(externs_map)),
-      value_tracker_(std::move(value_tracker)) {
+#else
+      autoscheduler_params_(autoscheduler_params),
+#endif
+      externs_map_(std::move(externs_map)) {
 }
+#endif  // HALIDE_ALLOW_GENERATOR_EXTERNAL_CODE
 
+#ifdef HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
 GeneratorContext::GeneratorContext(const Target &target,
                                    bool auto_schedule,
                                    const MachineParams &machine_params)
-    : GeneratorContext(target,
-                       auto_schedule,
-                       machine_params,
-                       std::make_shared<ExternsMap>(),
-                       std::make_shared<Internal::ValueTracker>()) {
+    : target_(target),
+      auto_schedule_(auto_schedule),
+      machine_params_(machine_params) {
+}
+#else
+GeneratorContext::GeneratorContext(const Target &target)
+    : target_(target),
+      autoscheduler_params_() {
 }
 
+GeneratorContext::GeneratorContext(const Target &target,
+                                   const AutoschedulerParams &autoscheduler_params)
+    : target_(target),
+      autoscheduler_params_(autoscheduler_params) {
+}
+#endif
+
 GeneratorContext GeneratorContext::with_target(const Target &t) const {
-    return GeneratorContext(t, auto_schedule_, machine_params_, externs_map_, value_tracker_);
+#ifdef HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
+#ifdef HALIDE_ALLOW_GENERATOR_EXTERNAL_CODE
+    return GeneratorContext(t, auto_schedule_, machine_params_, externs_map_);
+#else
+    return GeneratorContext(t, auto_schedule_, machine_params_);
+#endif
+#else
+#ifdef HALIDE_ALLOW_GENERATOR_EXTERNAL_CODE
+    return GeneratorContext(t, autoscheduler_params_, externs_map_);
+#else
+    return GeneratorContext(t, autoscheduler_params_);
+#endif
+#endif
 }
 
 namespace Internal {
@@ -103,14 +132,6 @@ std::map<OutputFileType, std::string> compute_output_files(const Target &target,
     return output_files;
 }
 
-Argument to_argument(const Internal::Parameter &param) {
-    return Argument(param.name(),
-                    param.is_buffer() ? Argument::InputBuffer : Argument::InputScalar,
-                    param.type(),
-                    param.dimensions(),
-                    param.get_argument_estimates());
-}
-
 Func make_param_func(const Parameter &p, const std::string &name) {
     internal_assert(p.is_buffer());
     Func f(p.type(), p.dimensions(), name + "_im");
@@ -142,106 +163,6 @@ std::vector<Type> parse_halide_type_list(const std::string &types) {
         result.push_back(it->second);
     }
     return result;
-}
-
-/**
- * ValueTracker is an internal utility class that attempts to track and flag certain
- * obvious Stub-related errors at Halide compile time: it tracks the constraints set
- * on any Parameter-based argument (i.e., Input<Buffer> and Output<Buffer>) to
- * ensure that incompatible values aren't set.
- *
- * e.g.: if a Generator A requires stride[0] == 1,
- * and Generator B uses Generator A via stub, but requires stride[0] == 4,
- * we should be able to detect this at Halide compilation time, and fail immediately,
- * rather than producing code that fails at runtime and/or runs slowly due to
- * vectorization being unavailable.
- *
- * We do this by tracking the active values at entrance and exit to all user-provided
- * Generator methods (generate()/schedule()); if we ever find more than two unique
- * values active, we know we have a potential conflict. ("two" here because the first
- * value is the default value for a given constraint.)
- *
- * Note that this won't catch all cases:
- * -- JIT compilation has no way to check for conflicts at the top-level
- * -- constraints that match the default value (e.g. if dim(0).set_stride(1) is the
- * first value seen by the tracker) will be ignored, so an explicit requirement set
- * this way can be missed
- *
- * Nevertheless, this is likely to be much better than nothing when composing multiple
- * layers of Stubs in a single fused result.
- */
-class ValueTracker {
-private:
-    std::map<std::string, std::vector<std::vector<Expr>>> values_history;
-    const size_t max_unique_values;
-
-public:
-    explicit ValueTracker(size_t max_unique_values = 2)
-        : max_unique_values(max_unique_values) {
-    }
-    void track_values(const std::string &name, const std::vector<Expr> &values);
-};
-
-void ValueTracker::track_values(const std::string &name, const std::vector<Expr> &values) {
-    std::vector<std::vector<Expr>> &history = values_history[name];
-    if (history.empty()) {
-        for (const auto &value : values) {
-            history.push_back({value});
-        }
-        return;
-    }
-
-    internal_assert(history.size() == values.size())
-        << "Expected values of size " << history.size()
-        << " but saw size " << values.size()
-        << " for name " << name << "\n";
-
-    // For each item, see if we have a new unique value
-    for (size_t i = 0; i < values.size(); ++i) {
-        Expr oldval = history[i].back();
-        Expr newval = values[i];
-        if (oldval.defined() && newval.defined()) {
-            if (can_prove(newval == oldval)) {
-                continue;
-            }
-        } else if (!oldval.defined() && !newval.defined()) {
-            // Expr::operator== doesn't work with undefined
-            // values, but they are equal for our purposes here.
-            continue;
-        }
-        history[i].push_back(newval);
-        // If we exceed max_unique_values, fail immediately.
-        // TODO: could be useful to log all the entries that
-        // overflow max_unique_values before failing.
-        // TODO: this could be more helpful about labeling the values
-        // that have multiple setttings.
-        if (history[i].size() > max_unique_values) {
-            std::ostringstream o;
-            o << "Saw too many unique values in ValueTracker[" + std::to_string(i) + "]; "
-              << "expected a maximum of " << max_unique_values << ":\n";
-            for (const auto &e : history[i]) {
-                o << "    " << e << "\n";
-            }
-            user_error << o.str();
-        }
-    }
-}
-
-std::vector<Expr> parameter_constraints(const Parameter &p) {
-    internal_assert(p.defined());
-    std::vector<Expr> values;
-    values.emplace_back(p.host_alignment());
-    if (p.is_buffer()) {
-        for (int i = 0; i < p.dimensions(); ++i) {
-            values.push_back(p.min_constraint(i));
-            values.push_back(p.extent_constraint(i));
-            values.push_back(p.stride_constraint(i));
-        }
-    } else {
-        values.push_back(p.min_value());
-        values.push_back(p.max_value());
-    }
-    return values;
 }
 
 class StubEmitter {
@@ -286,11 +207,18 @@ private:
         std::vector<Internal::GeneratorParamBase *> out;
         for (auto *p : in) {
             // These are always propagated specially.
+#ifdef HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
             if (p->name() == "target" ||
                 p->name() == "auto_schedule" ||
                 p->name() == "machine_params") {
                 continue;
             }
+#else
+            if (p->name() == "target" ||
+                p->name() == "autoscheduler") {
+                continue;
+            }
+#endif
             if (p->is_synthetic_param()) {
                 continue;
             }
@@ -328,7 +256,11 @@ void StubEmitter::emit_generator_params_struct() {
         indent_level++;
         std::string comma = "";
         for (auto *p : v) {
-            stream << get_indent() << comma << p->get_c_type() << " " << p->name() << "\n";
+            std::string c_type = p->get_c_type();
+            if (c_type == "AutoschedulerParams") {
+                c_type = "const AutoschedulerParams&";
+            }
+            stream << get_indent() << comma << c_type << " " << p->name() << "\n";
             comma = ", ";
         }
         indent_level--;
@@ -344,25 +276,6 @@ void StubEmitter::emit_generator_params_struct() {
         stream << get_indent() << "}\n";
         stream << "\n";
     }
-
-    stream << get_indent() << "inline HALIDE_NO_USER_CODE_INLINE Halide::Internal::GeneratorParamsMap to_generator_params_map() const {\n";
-    indent_level++;
-    stream << get_indent() << "return {\n";
-    indent_level++;
-    std::string comma = "";
-    for (auto *p : v) {
-        stream << get_indent() << comma << "{\"" << p->name() << "\", ";
-        if (p->is_looplevel_param()) {
-            stream << p->name() << "}\n";
-        } else {
-            stream << p->call_to_string(p->name()) << "}\n";
-        }
-        comma = ", ";
-    }
-    indent_level--;
-    stream << get_indent() << "};\n";
-    indent_level--;
-    stream << get_indent() << "}\n";
 
     indent_level--;
     stream << get_indent() << "};\n";
@@ -442,11 +355,17 @@ void StubEmitter::emit() {
     for (auto *output : outputs) {
         std::string c_type = output->get_c_type();
         const bool is_func = (c_type == "Func");
-        std::string getter = is_func ? "get_outputs" : "get_output_buffers<" + c_type + ">";
-        std::string getter_suffix = output->is_array() ? "" : ".at(0)";
+        std::string getter = "generator->output_func(\"" + output->name() + "\")";
+        if (!is_func) {
+            getter = c_type + "::to_output_buffers(" + getter + ", generator)";
+        }
+        if (!output->is_array()) {
+            getter = getter + ".at(0)";
+        }
+
         out_info.push_back({output->name(),
                             output->is_array() ? "std::vector<" + c_type + ">" : c_type,
-                            getter + "(\"" + output->name() + "\")" + getter_suffix});
+                            getter});
         if (c_type != "Func") {
             all_outputs_are_func = false;
         }
@@ -467,6 +386,7 @@ void StubEmitter::emit() {
     stream << "\n";
 
     stream << get_indent() << "#include <cassert>\n";
+    stream << get_indent() << "#include <iterator>\n";
     stream << get_indent() << "#include <map>\n";
     stream << get_indent() << "#include <memory>\n";
     stream << get_indent() << "#include <string>\n";
@@ -478,7 +398,7 @@ void StubEmitter::emit() {
 
     stream << "namespace halide_register_generator {\n";
     stream << "namespace " << generator_registered_name << "_ns {\n";
-    stream << "extern std::unique_ptr<Halide::Internal::GeneratorBase> factory(const Halide::GeneratorContext& context);\n";
+    stream << "extern std::unique_ptr<Halide::Internal::AbstractGenerator> factory(const Halide::GeneratorContext& context);\n";
     stream << "}  // namespace halide_register_generator\n";
     stream << "}  // namespace " << generator_registered_name << "\n";
     stream << "\n";
@@ -622,29 +542,48 @@ void StubEmitter::emit() {
     stream << get_indent() << ")\n";
     stream << get_indent() << "{\n";
     indent_level++;
-    stream << get_indent() << "using Stub = Halide::Internal::GeneratorStub;\n";
-    stream << get_indent() << "Stub stub(\n";
-    indent_level++;
-    stream << get_indent() << "context,\n";
-    stream << get_indent() << "halide_register_generator::" << generator_registered_name << "_ns::factory,\n";
-    stream << get_indent() << "generator_params.to_generator_params_map(),\n";
-    stream << get_indent() << "{\n";
-    indent_level++;
-    for (auto *input : inputs) {
-        stream << get_indent() << "Stub::to_stub_input_vector(inputs." << input->name() << ")";
-        stream << ",\n";
+    stream << get_indent() << "std::shared_ptr<Halide::Internal::AbstractGenerator> generator = halide_register_generator::" << generator_registered_name << "_ns::factory(context);\n";
+    for (auto *p : generator_params) {
+        stream << get_indent();
+        if (p->is_looplevel_param()) {
+            stream << "generator->set_generatorparam_value(";
+        } else {
+            stream << "generator->set_generatorparam_value(";
+        }
+        stream << "\"" << p->name() << "\", ";
+        if (p->is_looplevel_param()) {
+            stream << "generator_params." << p->name();
+        } else {
+            stream << p->call_to_string("generator_params." + p->name());
+        }
+        stream << ");\n";
     }
-    indent_level--;
-    stream << get_indent() << "}\n";
-    indent_level--;
-    stream << get_indent() << ");\n";
 
+    for (auto *p : inputs) {
+        stream << get_indent() << "generator->bind_input("
+               << "\"" << p->name() << "\", ";
+        if (p->kind() == ArgInfoKind::Buffer) {
+            stream << "Halide::Internal::StubInputBuffer<>::to_parameter_vector(inputs." << p->name() << ")";
+        } else {
+            // Func or Expr
+            if (!p->is_array()) {
+                stream << "{";
+            }
+            stream << "inputs." << p->name();
+            if (!p->is_array()) {
+                stream << "}";
+            }
+        }
+        stream << ");\n";
+    }
+
+    stream << get_indent() << "generator->build_pipeline();\n";
     stream << get_indent() << "return {\n";
     indent_level++;
     for (const auto &out : out_info) {
-        stream << get_indent() << "stub." << out.getter << ",\n";
+        stream << get_indent() << out.getter << ",\n";
     }
-    stream << get_indent() << "stub.generator->context().target()\n";
+    stream << get_indent() << "generator->context().target()\n";
     indent_level--;
     stream << get_indent() << "};\n";
     indent_level--;
@@ -693,55 +632,6 @@ void StubEmitter::emit() {
     stream << "\n";
 
     stream << get_indent() << "#endif  // " << guard.str() << "\n";
-}
-
-GeneratorStub::GeneratorStub(const GeneratorContext &context,
-                             const GeneratorFactory &generator_factory)
-    : generator(generator_factory(context)) {
-}
-
-GeneratorStub::GeneratorStub(const GeneratorContext &context,
-                             const GeneratorFactory &generator_factory,
-                             const GeneratorParamsMap &generator_params,
-                             const std::vector<std::vector<Internal::StubInput>> &inputs)
-    : GeneratorStub(context, generator_factory) {
-    generate(generator_params, inputs);
-}
-
-// Return a vector of all Outputs of this Generator; non-array outputs are returned
-// as a vector-of-size-1. This method is primarily useful for code that needs
-// to iterate through the outputs of unknown, arbitrary Generators (e.g.,
-// the Python bindings).
-std::vector<std::vector<Func>> GeneratorStub::generate(const GeneratorParamsMap &generator_params,
-                                                       const std::vector<std::vector<Internal::StubInput>> &inputs) {
-    generator->set_generator_param_values(generator_params);
-    generator->ensure_configure_has_been_called();
-    generator->set_inputs_vector(inputs);
-    Pipeline p = generator->build_pipeline();
-
-    std::vector<std::vector<Func>> v;
-    GeneratorParamInfo &pi = generator->param_info();
-    internal_assert(!pi.outputs().empty());
-    for (auto *output : pi.outputs()) {
-        v.push_back(get_outputs(output->name()));
-    }
-    return v;
-}
-
-GeneratorStub::Names GeneratorStub::get_names() const {
-    generator->ensure_configure_has_been_called();
-    auto &pi = generator->param_info();
-    Names names;
-    for (auto *o : pi.generator_params()) {
-        names.generator_params.push_back(o->name());
-    }
-    for (auto *o : pi.inputs()) {
-        names.inputs.push_back(o->name());
-    }
-    for (auto *o : pi.outputs()) {
-        names.outputs.push_back(o->name());
-    }
-    return names;
 }
 
 const std::map<std::string, Type> &get_halide_type_enum_map() {
@@ -828,8 +718,6 @@ gengen
      find one. Flags across all of the targets that do not affect runtime code
      generation, such as `no_asserts` and `no_runtime`, are ignored.
 
- -s  The name of an autoscheduler to set as the default.
-
  -t  Timeout for the Generator to run, in seconds; mainly useful to ensure that
      bugs and/or degenerate cases don't stall build systems. Defaults to 900
      (=15 minutes). Specify 0 to allow ~infinite time.
@@ -845,7 +733,9 @@ gengen
         {"-o", ""},
         {"-p", ""},
         {"-r", ""},
+#ifdef HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
         {"-s", ""},
+#endif
         {"-t", "900"},  // 15 minutes
     };
 
@@ -862,6 +752,15 @@ gengen
             ++i;
             continue;
         } else {
+            if (!strcmp(argv[i], "-s")) {
+#ifdef HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
+                user_warning << "HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API is deprecated in Halide 15 "
+                                "(and will be removed in Halide 16).\n";
+#else
+                user_error << "-s is no longer supported for setting autoscheduler; specify autoschduler.name=NAME instead.\n"
+                           << kUsage;
+#endif
+            }
             user_error << "Unknown flag: " << argv[i] << "\n"
                        << kUsage;
         }
@@ -875,10 +774,21 @@ gengen
         }
     }
 
+#ifdef HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
     const auto autoscheduler_name = flags_info["-s"];
     if (!autoscheduler_name.empty()) {
         Pipeline::set_default_autoscheduler_name(autoscheduler_name);
     }
+#else
+    if (args.generator_params.count("auto_schedule")) {
+        user_error << "auto_schedule=true is no longer supported for enabling autoscheduling; specify autoscheduler=NAME instead.\n"
+                   << kUsage;
+    }
+    if (args.generator_params.count("machine_params")) {
+        user_error << "machine_params is no longer supported as a GeneratorParam; specify autoscheduler.FIELD=VALUE instead.\n"
+                   << kUsage;
+    }
+#endif
 
     const auto &d_val = flags_info["-d"];
     user_assert(d_val == "1" || d_val == "0") << "-d must be 0 or 1\n"
@@ -886,7 +796,7 @@ gengen
 
     const std::vector<std::string> generator_names = generator_factory_provider.enumerate();
 
-    const auto create_generator = [&](const std::string &generator_name, const Halide::GeneratorContext &context) -> std::unique_ptr<GeneratorBase> {
+    const auto create_generator = [&](const std::string &generator_name, const Halide::GeneratorContext &context) -> AbstractGeneratorPtr {
         internal_assert(generator_name == args.generator_name);
         auto g = generator_factory_provider.create(generator_name, context);
         if (!g) {
@@ -904,7 +814,7 @@ gengen
     const auto build_target_strings = [](GeneratorParamsMap *gp) {
         std::vector<std::string> target_strings;
         if (gp->find("target") != gp->end()) {
-            target_strings = split_string((*gp)["target"].string_value, ",");
+            target_strings = split_string((*gp)["target"], ",");
             gp->erase("target");
         }
         return target_strings;
@@ -1000,14 +910,17 @@ gengen
     if (do_compiler_logging) {
         const bool obfuscate_compiler_logging = get_env_variable("HL_OBFUSCATE_COMPILER_LOGGER") == "1";
         args.compiler_logger_factory =
-            [obfuscate_compiler_logging, &args, &autoscheduler_name](const std::string &function_name, const Target &target) -> std::unique_ptr<CompilerLogger> {
+            [obfuscate_compiler_logging, &args](const std::string &function_name, const Target &target) -> std::unique_ptr<CompilerLogger> {
             // rebuild generator_args from the map so that they are always canonical
-            std::string generator_args_string;
+            std::string generator_args_string, autoscheduler_name;
             std::string sep;
             for (const auto &it : args.generator_params) {
-                std::string quote = it.second.string_value.find(' ') != std::string::npos ? "\\\"" : "";
-                generator_args_string += sep + it.first + "=" + quote + it.second.string_value + quote;
+                std::string quote = it.second.find(' ') != std::string::npos ? "\\\"" : "";
+                generator_args_string += sep + it.first + "=" + quote + it.second + quote;
                 sep = " ";
+                if (it.first == "autoscheduler") {
+                    autoscheduler_name = it.second;
+                }
             }
             std::unique_ptr<JSONCompilerLogger> t(new JSONCompilerLogger(
                 obfuscate_compiler_logging ? "" : args.generator_name,
@@ -1094,13 +1007,38 @@ public:
     std::vector<std::string> enumerate() const override {
         return GeneratorRegistry::enumerate();
     }
-    std::unique_ptr<GeneratorBase> create(const std::string &name,
-                                          const Halide::GeneratorContext &context) const override {
+
+    AbstractGeneratorPtr create(const std::string &name,
+                                const Halide::GeneratorContext &context) const override {
         return GeneratorRegistry::create(name, context);
     }
 };
 
 }  // namespace
+
+const GeneratorFactoryProvider &get_registered_generators() {
+    static GeneratorsFromRegistry g;
+    return g;
+}
+
+}  // namespace Internal
+
+Callable create_callable_from_generator(const GeneratorContext &context,
+                                        const std::string &name,
+                                        const GeneratorParamsMap &generator_params) {
+    auto g = Internal::get_registered_generators().create(name, context);
+    user_assert(g != nullptr) << "There is no Generator with the name '" << name << "' currently available.";
+    g->set_generatorparam_values(generator_params);
+    return g->compile_to_callable();
+}
+
+Callable create_callable_from_generator(const Target &target,
+                                        const std::string &name,
+                                        const GeneratorParamsMap &generator_params) {
+    return create_callable_from_generator(GeneratorContext(target), name, generator_params);
+}
+
+namespace Internal {
 
 #ifdef HALIDE_WITH_EXCEPTIONS
 int generate_filter_main(int argc, char **argv, const GeneratorFactoryProvider &generator_factory_provider) {
@@ -1125,7 +1063,7 @@ void execute_generator(const ExecuteGeneratorArgs &args_in) {
     const auto fix_defaults = [](const ExecuteGeneratorArgs &args_in) -> ExecuteGeneratorArgs {
         ExecuteGeneratorArgs args = args_in;
         if (!args.create_generator) {
-            args.create_generator = [](const std::string &generator_name, const GeneratorContext &context) -> std::unique_ptr<GeneratorBase> {
+            args.create_generator = [](const std::string &generator_name, const GeneratorContext &context) -> AbstractGeneratorPtr {
                 return GeneratorRegistry::create(generator_name, context);
             };
         }
@@ -1211,10 +1149,37 @@ void execute_generator(const ExecuteGeneratorArgs &args_in) {
         // Don't bother with this if we're just emitting a cpp_stub.
         if (!cpp_stub_only) {
             auto output_files = compute_output_files(args.targets[0], base_path, args.output_types);
+#ifdef HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
+            const auto get_gp = [&](const std::string &key) {
+                auto it = args.generator_params.find(key);
+                return it != args.generator_params.end() ? it->second : "";
+            };
+            const auto auto_schedule_string = get_gp("auto_schedule");
+            const auto machine_params_string = get_gp("machine_params");
+            const bool auto_schedule = auto_schedule_string == "true" || auto_schedule_string == "True";
+            const MachineParams machine_params = !machine_params_string.empty() ? MachineParams(machine_params_string) : MachineParams::generic();
+#endif
             auto module_factory = [&](const std::string &function_name, const Target &target) -> Module {
-                // Must re-create each time since each instance will have a different Target.
+            // Must re-create each time since each instance will have a different Target.
+#ifdef HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
+                auto gen = args.create_generator(args.generator_name, GeneratorContext(target, auto_schedule, machine_params));
+                for (const auto &kv : args.generator_params) {
+                    if (kv.first == "target" ||
+                        kv.first == "auto_schedule" ||
+                        kv.first == "machine_params") {
+                        continue;
+                    }
+                    gen->set_generatorparam_value(kv.first, kv.second);
+                }
+#else
                 auto gen = args.create_generator(args.generator_name, GeneratorContext(target));
-                gen->set_generator_param_values(args.generator_params);
+                for (const auto &kv : args.generator_params) {
+                    if (kv.first == "target") {
+                        continue;
+                    }
+                    gen->set_generatorparam_value(kv.first, kv.second);
+                }
+#endif
                 return args.build_mode == ExecuteGeneratorArgs::Gradient ?
                            gen->build_gradient_module(function_name) :
                            gen->build_module(function_name);
@@ -1236,11 +1201,18 @@ GeneratorParamBase::~GeneratorParamBase() {
 
 void GeneratorParamBase::check_value_readable() const {
     // These are always readable.
+#ifdef HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
     if (name() == "target" ||
         name() == "auto_schedule" ||
         name() == "machine_params") {
         return;
     }
+#else
+    if (name() == "target" ||
+        name() == "autoscheduler") {
+        return;
+    }
+#endif
     user_assert(generator && generator->phase >= GeneratorBase::ConfigureCalled)
         << "The GeneratorParam \"" << name() << "\" cannot be read before configure()/generate() is called.\n";
 }
@@ -1257,6 +1229,50 @@ void GeneratorParamBase::check_value_writable() const {
 void GeneratorParamBase::fail_wrong_type(const char *type) {
     user_error << "The GeneratorParam \"" << name() << "\" cannot be set with a value of type " << type << ".\n";
 }
+
+#ifdef HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
+// nothing
+#else
+GeneratorParam_AutoSchedulerParams::GeneratorParam_AutoSchedulerParams()
+    : GeneratorParamImpl<AutoschedulerParams>("autoscheduler", {}) {
+}
+
+void GeneratorParam_AutoSchedulerParams::set_from_string(const std::string &new_value_string) {
+    internal_error << "This method should never be called.";
+}
+
+std::string GeneratorParam_AutoSchedulerParams::get_default_value() const {
+    internal_error << "This method should never be called.";
+    return "";
+}
+
+std::string GeneratorParam_AutoSchedulerParams::call_to_string(const std::string &v) const {
+    internal_error << "This method should never be called.";
+    return "";
+}
+
+std::string GeneratorParam_AutoSchedulerParams::get_c_type() const {
+    internal_error << "This method should never be called.";
+    return "";
+}
+
+bool GeneratorParam_AutoSchedulerParams::try_set(const std::string &key, const std::string &value) {
+    const auto &n = this->name();
+    if (key == n) {
+        user_assert(this->value_.name.empty()) << "The GeneratorParam " << key << " cannot be set more than once.\n";
+        this->value_.name = value;
+        return true;
+    } else if (starts_with(key, n + ".")) {
+        const auto sub_key = key.substr(n.size() + 1);
+        user_assert(this->value_.extra.count(sub_key) == 0) << "The GeneratorParam " << key << " cannot be set more than once.\n";
+        this->value_.extra[sub_key] = value;
+        return true;
+    } else {
+        return false;
+    }
+}
+
+#endif
 
 /* static */
 GeneratorRegistry &GeneratorRegistry::get_registry() {
@@ -1285,8 +1301,8 @@ void GeneratorRegistry::unregister_factory(const std::string &name) {
 }
 
 /* static */
-std::unique_ptr<GeneratorBase> GeneratorRegistry::create(const std::string &name,
-                                                         const GeneratorContext &context) {
+AbstractGeneratorPtr GeneratorRegistry::create(const std::string &name,
+                                               const GeneratorContext &context) {
     GeneratorRegistry &registry = get_registry();
     std::lock_guard<std::mutex> lock(registry.mutex);
     auto it = registry.factories.find(name);
@@ -1294,7 +1310,7 @@ std::unique_ptr<GeneratorBase> GeneratorRegistry::create(const std::string &name
         return nullptr;
     }
     GeneratorFactory f = it->second;
-    std::unique_ptr<GeneratorBase> g = f(context);
+    AbstractGeneratorPtr g = f(context);
     // Do not assert! Just return nullptr.
     // internal_assert(g != nullptr);
     return g;
@@ -1333,7 +1349,7 @@ GeneratorParamInfo::GeneratorParamInfo(GeneratorBase *generator, const size_t si
         owned_synthetic_params.push_back(GeneratorParam_Synthetic<Type>::make(generator, gn, n + ".type", *gio, SyntheticParamType::Type, gio->gio_types_defined()));
         filter_generator_params.push_back(owned_synthetic_params.back().get());
 
-        if (gio->kind() != IOKind::Scalar) {
+        if (gio->kind() != ArgInfoKind::Scalar) {
             owned_synthetic_params.push_back(GeneratorParam_Synthetic<int>::make(generator, gn, n + ".dim", *gio, SyntheticParamType::Dim, gio->dims_defined()));
             filter_generator_params.push_back(owned_synthetic_params.back().get());
         }
@@ -1394,65 +1410,46 @@ GeneratorParamInfo &GeneratorBase::param_info() {
     return *param_info_ptr;
 }
 
-std::vector<Func> GeneratorBase::get_outputs(const std::string &n) {
-    check_min_phase(GenerateCalled);
-    auto *output = find_output_by_name(n);
-    // Call for the side-effect of asserting if the value isn't defined.
-    (void)output->array_size();
-    for (const auto &f : output->funcs()) {
-        user_assert(f.defined()) << "Output " << n << " was not fully defined.\n";
-    }
-    return output->funcs();
+GeneratorInputBase *GeneratorBase::find_input_by_name(const std::string &name) {
+    auto *t = GeneratorBase::find_by_name(name, param_info().inputs());
+    internal_assert(t != nullptr) << "Input " << name << " not found.";
+    return t;
 }
 
-// Find output by name. If not found, assert-fail. Never returns null.
 GeneratorOutputBase *GeneratorBase::find_output_by_name(const std::string &name) {
-    // There usually are very few outputs, so a linear search is fine
-    GeneratorParamInfo &pi = param_info();
-    for (GeneratorOutputBase *output : pi.outputs()) {
-        if (output->name() == name) {
-            return output;
-        }
-    }
-    internal_error << "Output " << name << " not found.";
-    return nullptr;  // not reached
-}
-
-void GeneratorBase::set_generator_param_values(const GeneratorParamsMap &params) {
-    GeneratorParamInfo &pi = param_info();
-
-    std::unordered_map<std::string, Internal::GeneratorParamBase *> generator_params_by_name;
-    for (auto *g : pi.generator_params()) {
-        generator_params_by_name[g->name()] = g;
-    }
-
-    for (const auto &key_value : params) {
-        auto gp = generator_params_by_name.find(key_value.first);
-        user_assert(gp != generator_params_by_name.end())
-            << "Generator " << generator_registered_name << " has no GeneratorParam named: " << key_value.first << "\n";
-        if (gp->second->is_looplevel_param()) {
-            if (!key_value.second.string_value.empty()) {
-                gp->second->set_from_string(key_value.second.string_value);
-            } else {
-                gp->second->set(key_value.second.loop_level);
-            }
-        } else {
-            gp->second->set_from_string(key_value.second.string_value);
-        }
-    }
+    auto *t = GeneratorBase::find_by_name(name, param_info().outputs());
+    internal_assert(t != nullptr) << "Output " << name << " not found.";
+    return t;
 }
 
 GeneratorContext GeneratorBase::context() const {
-    return GeneratorContext(target, auto_schedule, machine_params, externs_map, value_tracker);
+#ifdef HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
+#ifdef HALIDE_ALLOW_GENERATOR_EXTERNAL_CODE
+    return GeneratorContext(target, auto_schedule, machine_params, externs_map);
+#else
+    return GeneratorContext(target, auto_schedule, machine_params);
+#endif
+#else
+#ifdef HALIDE_ALLOW_GENERATOR_EXTERNAL_CODE
+    return GeneratorContext(target, autoscheduler_.value(), externs_map);
+#else
+    return GeneratorContext(target, autoscheduler_.value());
+#endif
+#endif
 }
 
 void GeneratorBase::init_from_context(const Halide::GeneratorContext &context) {
     target.set(context.target_);
+#ifdef HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
     auto_schedule.set(context.auto_schedule_);
     machine_params.set(context.machine_params_);
+#else
+    autoscheduler_.set(context.autoscheduler_params_);
+#endif
 
+#ifdef HALIDE_ALLOW_GENERATOR_EXTERNAL_CODE
     externs_map = context.externs_map_;
-    value_tracker = context.value_tracker_;
+#endif
 
     // pre-emptively build our param_info now
     internal_assert(param_info_ptr == nullptr);
@@ -1468,44 +1465,14 @@ void GeneratorBase::set_generator_names(const std::string &registered_name, cons
 }
 
 void GeneratorBase::set_inputs_vector(const std::vector<std::vector<StubInput>> &inputs) {
+    ensure_configure_has_been_called();
     advance_phase(InputsSet);
-    internal_assert(!inputs_set) << "set_inputs_vector() must be called at most once per Generator instance.\n";
     GeneratorParamInfo &pi = param_info();
     user_assert(inputs.size() == pi.inputs().size())
         << "Expected exactly " << pi.inputs().size()
         << " inputs but got " << inputs.size() << "\n";
     for (size_t i = 0; i < pi.inputs().size(); ++i) {
         pi.inputs()[i]->set_inputs(inputs[i]);
-    }
-    inputs_set = true;
-}
-
-void GeneratorBase::track_parameter_values(bool include_outputs) {
-    GeneratorParamInfo &pi = param_info();
-    for (auto *input : pi.inputs()) {
-        if (input->kind() == IOKind::Buffer) {
-            internal_assert(!input->parameters_.empty());
-            for (auto &p : input->parameters_) {
-                // This must use p.name(), *not* input->name()
-                value_tracker->track_values(p.name(), parameter_constraints(p));
-            }
-        }
-    }
-    if (include_outputs) {
-        for (auto *output : pi.outputs()) {
-            if (output->kind() == IOKind::Buffer) {
-                internal_assert(!output->funcs().empty());
-                for (const auto &f : output->funcs()) {
-                    user_assert(f.defined()) << "Output " << output->name() << " is not fully defined.";
-                    auto output_buffers = f.output_buffers();
-                    for (auto &o : output_buffers) {
-                        Parameter p = o.parameter();
-                        // This must use p.name(), *not* output->name()
-                        value_tracker->track_values(p.name(), parameter_constraints(p));
-                    }
-                }
-            }
-        }
     }
 }
 
@@ -1526,7 +1493,7 @@ void GeneratorBase::advance_phase(Phase new_phase) {
         internal_assert(phase == Created);
         break;
     case InputsSet:
-        internal_assert(phase == Created || phase == ConfigureCalled);
+        internal_assert(phase == Created || phase == ConfigureCalled || phase == InputsSet);
         break;
     case GenerateCalled:
         // It's OK to advance directly to GenerateCalled.
@@ -1559,29 +1526,22 @@ void GeneratorBase::pre_generate() {
     user_assert(!pi.outputs().empty()) << "Must use Output<> with generate() method.";
     user_assert(get_target() != Target()) << "The Generator target has not been set.";
 
-    if (!inputs_set) {
-        for (auto *input : pi.inputs()) {
-            input->init_internals();
-        }
-        inputs_set = true;
+    for (auto *input : pi.inputs()) {
+        input->init_internals();
     }
     for (auto *output : pi.outputs()) {
         output->init_internals();
     }
-    track_parameter_values(false);
 }
 
 void GeneratorBase::post_generate() {
-    track_parameter_values(true);
 }
 
 void GeneratorBase::pre_schedule() {
     advance_phase(ScheduleCalled);
-    track_parameter_values(true);
 }
 
 void GeneratorBase::post_schedule() {
-    track_parameter_values(true);
 }
 
 Pipeline GeneratorBase::get_pipeline() {
@@ -1618,223 +1578,6 @@ Pipeline GeneratorBase::get_pipeline() {
     return pipeline;
 }
 
-Module GeneratorBase::build_module(const std::string &function_name,
-                                   const LinkageType linkage_type) {
-    AutoSchedulerResults auto_schedule_results;
-    ensure_configure_has_been_called();
-    Pipeline pipeline = build_pipeline();
-    if (get_auto_schedule()) {
-        auto_schedule_results = pipeline.auto_schedule(get_target(), get_machine_params());
-    }
-
-    const GeneratorParamInfo &pi = param_info();
-    std::vector<Argument> filter_arguments;
-    for (const auto *input : pi.inputs()) {
-        for (const auto &p : input->parameters_) {
-            filter_arguments.push_back(to_argument(p));
-        }
-    }
-
-    Module result = pipeline.compile_to_module(filter_arguments, function_name, get_target(), linkage_type);
-    std::shared_ptr<GeneratorContext::ExternsMap> externs_map = get_externs_map();
-    for (const auto &map_entry : *externs_map) {
-        result.append(map_entry.second);
-    }
-
-    for (const auto *output : pi.outputs()) {
-        for (size_t i = 0; i < output->funcs().size(); ++i) {
-            auto from = output->funcs()[i].name();
-            auto to = output->array_name(i);
-            size_t tuple_size = output->gio_types_defined() ? output->gio_types().size() : 1;
-            for (size_t t = 0; t < tuple_size; ++t) {
-                std::string suffix = (tuple_size > 1) ? ("." + std::to_string(t)) : "";
-                result.remap_metadata_name(from + suffix, to + suffix);
-            }
-        }
-    }
-
-    result.set_auto_scheduler_results(auto_schedule_results);
-
-    return result;
-}
-
-Module GeneratorBase::build_gradient_module(const std::string &function_name) {
-    constexpr int DBG = 1;
-
-    // I doubt these ever need customizing; if they do, we can make them arguments to this function.
-    const std::string grad_input_pattern = "_grad_loss_for_$OUT$";
-    const std::string grad_output_pattern = "_grad_loss_$OUT$_wrt_$IN$";
-    const LinkageType linkage_type = LinkageType::ExternalPlusMetadata;
-
-    user_assert(!function_name.empty()) << "build_gradient_module(): function_name cannot be empty\n";
-
-    ensure_configure_has_been_called();
-    Pipeline original_pipeline = build_pipeline();
-    std::vector<Func> original_outputs = original_pipeline.outputs();
-
-    // Construct the adjoint pipeline, which has:
-    // - All the same inputs as the original, in the same order
-    // - Followed by one grad-input for each original output
-    // - Followed by one output for each unique pairing of original-output + original-input.
-
-    const GeneratorParamInfo &pi = param_info();
-
-    // Even though propagate_adjoints() supports Funcs-of-Tuples just fine,
-    // we aren't going to support them here (yet); AFAICT, neither PyTorch nor
-    // TF support Tensors with Tuples-as-values, so we'd have to split the
-    // tuples up into separate Halide inputs and outputs anyway; since Generator
-    // doesn't support Tuple-valued Inputs at all, and Tuple-valued Outputs
-    // are quite rare, we're going to just fail up front, with the assumption
-    // that the coder will explicitly adapt their code as needed. (Note that
-    // support for Tupled outputs could be added with some effort, so if this
-    // is somehow deemed critical, go for it)
-    for (const auto *input : pi.inputs()) {
-        const size_t tuple_size = input->gio_types_defined() ? input->gio_types().size() : 1;
-        // Note: this should never happen
-        internal_assert(tuple_size == 1) << "Tuple Inputs are not yet supported by build_gradient_module()";
-    }
-    for (const auto *output : pi.outputs()) {
-        const size_t tuple_size = output->gio_types_defined() ? output->gio_types().size() : 1;
-        internal_assert(tuple_size == 1) << "Tuple Outputs are not yet supported by build_gradient_module";
-    }
-
-    std::vector<Argument> gradient_inputs;
-
-    // First: the original inputs. Note that scalar inputs remain scalar,
-    // rather being promoted into zero-dimensional buffers.
-    for (const auto *input : pi.inputs()) {
-        // There can be multiple Funcs/Parameters per input if the
-        // input is an Array.
-        if (input->is_array()) {
-            internal_assert(input->parameters_.size() == input->funcs_.size());
-        }
-        for (const auto &p : input->parameters_) {
-            gradient_inputs.push_back(to_argument(p));
-            debug(DBG) << "    gradient copied input is: " << gradient_inputs.back().name << "\n";
-        }
-    }
-
-    // Next: add a grad-input for each *original* output; these will
-    // be the same shape as the output (so we should copy estimates from
-    // those outputs onto these estimates).
-    // - If an output is an Array, we'll have a separate input for each array element.
-
-    std::vector<ImageParam> d_output_imageparams;
-    for (const auto *output : pi.outputs()) {
-        for (size_t i = 0; i < output->funcs().size(); ++i) {
-            const Func &f = output->funcs()[i];
-            const std::string output_name = output->array_name(i);
-            // output_name is something like "funcname_i"
-            const std::string grad_in_name = replace_all(grad_input_pattern, "$OUT$", output_name);
-            // TODO(srj): does it make sense for gradient to be a non-float type?
-            // For now, assume it's always float32 (unless the output is already some float).
-            const Type grad_in_type = output->gio_type().is_float() ? output->gio_type() : Float(32);
-            const int grad_in_dimensions = f.dimensions();
-            const ArgumentEstimates grad_in_estimates = f.output_buffer().parameter().get_argument_estimates();
-            internal_assert((int)grad_in_estimates.buffer_estimates.size() == grad_in_dimensions);
-
-            ImageParam d_im(grad_in_type, grad_in_dimensions, grad_in_name);
-            for (int d = 0; d < grad_in_dimensions; d++) {
-                d_im.parameter().set_min_constraint_estimate(d, grad_in_estimates.buffer_estimates[i].min);
-                d_im.parameter().set_extent_constraint_estimate(d, grad_in_estimates.buffer_estimates[i].extent);
-            }
-            d_output_imageparams.push_back(d_im);
-            gradient_inputs.push_back(to_argument(d_im.parameter()));
-
-            debug(DBG) << "    gradient synthesized input is: " << gradient_inputs.back().name << "\n";
-        }
-    }
-
-    // Finally: define the output Func(s), one for each unique output/input pair.
-    // Note that original_outputs.size() != pi.outputs().size() if any outputs are arrays.
-    internal_assert(original_outputs.size() == d_output_imageparams.size());
-    std::vector<Func> gradient_outputs;
-    for (size_t i = 0; i < original_outputs.size(); ++i) {
-        const Func &original_output = original_outputs.at(i);
-        const ImageParam &d_output = d_output_imageparams.at(i);
-        Region bounds;
-        for (int i = 0; i < d_output.dimensions(); i++) {
-            bounds.emplace_back(d_output.dim(i).min(), d_output.dim(i).extent());
-        }
-        Func adjoint_func = BoundaryConditions::constant_exterior(d_output, make_zero(d_output.type()));
-        Derivative d = propagate_adjoints(original_output, adjoint_func, bounds);
-
-        const std::string &output_name = original_output.name();
-        for (const auto *input : pi.inputs()) {
-            for (size_t i = 0; i < input->funcs_.size(); ++i) {
-                const std::string input_name = input->array_name(i);
-                const auto &f = input->funcs_[i];
-                const auto &p = input->parameters_[i];
-
-                Func d_f = d(f);
-
-                std::string grad_out_name = replace_all(replace_all(grad_output_pattern, "$OUT$", output_name), "$IN$", input_name);
-                if (!d_f.defined()) {
-                    grad_out_name = "_dummy" + grad_out_name;
-                }
-
-                Func d_out_wrt_in(grad_out_name);
-                if (d_f.defined()) {
-                    d_out_wrt_in(Halide::_) = d_f(Halide::_);
-                } else {
-                    debug(DBG) << "    No Derivative found for output " << output_name << " wrt input " << input_name << "\n";
-                    // If there was no Derivative found, don't skip the output;
-                    // just replace with a dummy Func that is all zeros. This ensures
-                    // that the signature of the Pipeline we produce is always predictable.
-                    std::vector<Var> vars;
-                    for (int i = 0; i < d_output.dimensions(); i++) {
-                        vars.push_back(Var::implicit(i));
-                    }
-                    d_out_wrt_in(vars) = make_zero(d_output.type());
-                }
-
-                d_out_wrt_in.set_estimates(p.get_argument_estimates().buffer_estimates);
-
-                // Useful for debugging; ordinarily better to leave out
-                // debug(0) << "\n\n"
-                //          << "output:\n" << FuncWithDependencies(original_output) << "\n"
-                //          << "d_output:\n" << FuncWithDependencies(adjoint_func) << "\n"
-                //          << "input:\n" << FuncWithDependencies(f) << "\n"
-                //          << "d_out_wrt_in:\n" << FuncWithDependencies(d_out_wrt_in) << "\n";
-
-                gradient_outputs.push_back(d_out_wrt_in);
-                debug(DBG) << "    gradient output is: " << d_out_wrt_in.name() << "\n";
-            }
-        }
-    }
-
-    Pipeline grad_pipeline = Pipeline(gradient_outputs);
-
-    AutoSchedulerResults auto_schedule_results;
-    if (get_auto_schedule()) {
-        auto_schedule_results = grad_pipeline.auto_schedule(get_target(), get_machine_params());
-    } else {
-        user_warning << "Autoscheduling is not enabled in build_gradient_module(), so the resulting "
-                        "gradient module will be unscheduled; this is very unlikely to be what you want.\n";
-    }
-
-    Module result = grad_pipeline.compile_to_module(gradient_inputs, function_name, get_target(), linkage_type);
-    user_assert(get_externs_map()->empty())
-        << "Building a gradient-descent module for a Generator with ExternalCode is not supported.\n";
-
-    result.set_auto_scheduler_results(auto_schedule_results);
-
-    return result;
-}
-
-void GeneratorBase::emit_cpp_stub(const std::string &stub_file_path) {
-    user_assert(!generator_registered_name.empty() && !generator_stub_name.empty()) << "Generator has no name.\n";
-    // Make sure we call configure() so that extra inputs/outputs are added as necessary.
-    ensure_configure_has_been_called();
-    // StubEmitter will want to access the GP/SP values, so advance the phase to avoid assert-fails.
-    advance_phase(GenerateCalled);
-    advance_phase(ScheduleCalled);
-    GeneratorParamInfo &pi = param_info();
-    std::ofstream file(stub_file_path);
-    StubEmitter emit(file, generator_registered_name, generator_stub_name, pi.generator_params(), pi.inputs(), pi.outputs());
-    emit.emit();
-}
-
 void GeneratorBase::check_scheduled(const char *m) const {
     check_min_phase(ScheduleCalled);
 }
@@ -1849,14 +1592,152 @@ void GeneratorBase::check_input_is_array(Internal::GeneratorInputBase *in) {
         << "Input " << in->name() << " is not an array, and must not be set with a vector type.";
 }
 
-void GeneratorBase::check_input_kind(Internal::GeneratorInputBase *in, Internal::IOKind kind) {
+void GeneratorBase::check_input_kind(Internal::GeneratorInputBase *in, Internal::ArgInfoKind kind) {
     user_assert(in->kind() == kind)
         << "Input " << in->name() << " cannot be set with the type specified.";
 }
 
+void GeneratorBase::set_generatorparam_value(const std::string &name, const std::string &value) {
+#ifdef HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
+    if (name == "target" ||
+        name == "auto_schedule" ||
+        name == "machine_params") {
+        user_error
+            << "The GeneratorParam named " << name << " cannot be set by set_generatorparam_value().\n";
+    }
+#else
+    user_assert(name != "target") << "The GeneratorParam named " << name << " cannot be set by set_generatorparam_value().\n";
+    if (autoscheduler_.try_set(name, value)) {
+        return;
+    }
+#endif
+
+    GeneratorParamInfo &pi = param_info();
+
+    for (auto *g : pi.generator_params()) {
+        if (g->name() != name) {
+            continue;
+        }
+        g->set_from_string(value);
+        return;
+    }
+    user_error
+        << "Generator " << generator_registered_name << " has no GeneratorParam named: " << name << "\n";
+}
+
+void GeneratorBase::set_generatorparam_value(const std::string &name, const LoopLevel &value) {
+    GeneratorParamInfo &pi = param_info();
+    for (auto *g : pi.generator_params()) {
+        if (g->name() != name) {
+            continue;
+        }
+        user_assert(g->is_looplevel_param()) << "GeneratorParam " << name << " is not a LoopLevel and cannot be set this way.";
+        g->set(value);
+        return;
+    }
+    user_error
+        << "Generator " << generator_registered_name << " has no GeneratorParam named: " << name << "\n";
+}
+
+std::string GeneratorBase::name() {
+    return generator_registered_name;
+}
+
+std::vector<AbstractGenerator::ArgInfo> GeneratorBase::arginfos() {
+    ensure_configure_has_been_called();
+    std::vector<AbstractGenerator::ArgInfo> args;
+    args.reserve(param_info().inputs().size() + param_info().outputs().size());
+    GeneratorBase::get_arguments(args, ArgInfoDirection::Input, param_info().inputs());
+    GeneratorBase::get_arguments(args, ArgInfoDirection::Output, param_info().outputs());
+    return args;
+}
+
+std::vector<Parameter> GeneratorBase::input_parameter(const std::string &name) {
+    auto *input = find_input_by_name(name);
+
+    const size_t params_size = input->parameters_.size();
+    const bool is_buffer = input->kind() != ArgInfoKind::Scalar;
+    if (is_buffer) {
+        internal_assert(input->exprs_.empty() && input->funcs_.size() == params_size);
+    } else {
+        internal_assert(input->funcs_.empty() && input->exprs_.size() == params_size);
+    }
+
+    std::vector<Parameter> params;
+    params.reserve(params_size);
+
+    for (size_t i = 0; i < params_size; ++i) {
+        const auto &p = input->parameters_[i];
+        internal_assert(p.is_buffer() == is_buffer);
+        const auto name = input->array_name(i);
+        internal_assert(p.name() == name) << "input name was " << p.name() << " expected " << name;
+        const int expected_dimensions = is_buffer ? input->funcs_[i].dimensions() : 0;
+        internal_assert(p.dimensions() == expected_dimensions) << "input dimensions was " << p.dimensions() << " expected " << expected_dimensions;
+        internal_assert(p.type() == input->gio_type()) << "input type was " << p.type() << " expected " << input->gio_type();
+        params.push_back(p);
+    }
+    return params;
+}
+
+std::vector<Func> GeneratorBase::output_func(const std::string &n) {
+    check_min_phase(GenerateCalled);
+    auto *output = find_output_by_name(n);
+    // Call for the side-effect of asserting if the value isn't defined.
+    (void)output->array_size();
+    for (const auto &f : output->funcs()) {
+        user_assert(f.defined()) << "Output " << n << " was not fully defined.\n";
+    }
+    return output->funcs();
+}
+
+#ifdef HALIDE_ALLOW_GENERATOR_EXTERNAL_CODE
+ExternsMap GeneratorBase::external_code_map() {
+    // get_externs_map() returns a std::shared_ptr<ExternsMap>
+    return *get_externs_map();
+}
+#endif
+
+void GeneratorBase::bind_input(const std::string &name, const std::vector<Parameter> &v) {
+    ensure_configure_has_been_called();
+    advance_phase(InputsSet);
+    std::vector<StubInput> si;
+    std::copy(v.begin(), v.end(), std::back_inserter(si));
+    find_input_by_name(name)->set_inputs(si);
+}
+
+void GeneratorBase::bind_input(const std::string &name, const std::vector<Func> &v) {
+    ensure_configure_has_been_called();
+    advance_phase(InputsSet);
+    std::vector<StubInput> si;
+    std::copy(v.begin(), v.end(), std::back_inserter(si));
+    find_input_by_name(name)->set_inputs(si);
+}
+
+void GeneratorBase::bind_input(const std::string &name, const std::vector<Expr> &v) {
+    ensure_configure_has_been_called();
+    advance_phase(InputsSet);
+    std::vector<StubInput> si;
+    std::copy(v.begin(), v.end(), std::back_inserter(si));
+    find_input_by_name(name)->set_inputs(si);
+}
+
+bool GeneratorBase::emit_cpp_stub(const std::string &stub_file_path) {
+    user_assert(!generator_registered_name.empty() && !generator_stub_name.empty()) << "Generator has no name.\n";
+    // Make sure we call configure() so that extra inputs/outputs are added as necessary.
+    ensure_configure_has_been_called();
+    // StubEmitter will want to access the GP/SP values, so advance the phase to avoid assert-fails.
+    advance_phase(GenerateCalled);
+    advance_phase(ScheduleCalled);
+    GeneratorParamInfo &pi = param_info();
+    std::ofstream file(stub_file_path);
+    StubEmitter emit(file, generator_registered_name, generator_stub_name, pi.generator_params(), pi.inputs(), pi.outputs());
+    emit.emit();
+    return true;
+}
+
 GIOBase::GIOBase(size_t array_size,
                  const std::string &name,
-                 IOKind kind,
+                 ArgInfoKind kind,
                  const std::vector<Type> &types,
                  int dims)
     : array_size_(array_size), name_(name), kind_(kind), types_(types), dims_(dims) {
@@ -1881,7 +1762,7 @@ const std::string &GIOBase::name() const {
     return name_;
 }
 
-IOKind GIOBase::kind() const {
+ArgInfoKind GIOBase::kind() const {
     return kind_;
 }
 
@@ -1960,7 +1841,7 @@ const std::vector<Expr> &GIOBase::exprs() const {
 void GIOBase::verify_internals() {
     user_assert(dims_ >= 0) << "Generator Input/Output Dimensions must have positive values";
 
-    if (kind() != IOKind::Scalar) {
+    if (kind() != ArgInfoKind::Scalar) {
         for (const Func &f : funcs()) {
             user_assert(f.defined()) << "Input/Output " << name() << " is not defined.\n";
             user_assert(f.dimensions() == dims())
@@ -2042,14 +1923,14 @@ void GIOBase::check_matching_array_size(size_t size) const {
 
 GeneratorInputBase::GeneratorInputBase(size_t array_size,
                                        const std::string &name,
-                                       IOKind kind,
+                                       ArgInfoKind kind,
                                        const std::vector<Type> &t,
                                        int d)
     : GIOBase(array_size, name, kind, t, d) {
     ObjectInstanceRegistry::register_instance(this, 0, ObjectInstanceRegistry::GeneratorInput, this, nullptr);
 }
 
-GeneratorInputBase::GeneratorInputBase(const std::string &name, IOKind kind, const std::vector<Type> &t, int d)
+GeneratorInputBase::GeneratorInputBase(const std::string &name, ArgInfoKind kind, const std::vector<Type> &t, int d)
     : GeneratorInputBase(1, name, kind, t, d) {
     // nothing
 }
@@ -2075,12 +1956,16 @@ Parameter GeneratorInputBase::parameter() const {
 void GeneratorInputBase::verify_internals() {
     GIOBase::verify_internals();
 
-    const size_t expected = (kind() != IOKind::Scalar) ? funcs().size() : exprs().size();
+    const size_t expected = (kind() != ArgInfoKind::Scalar) ? funcs().size() : exprs().size();
     user_assert(parameters_.size() == expected) << "Expected parameters_.size() == "
                                                 << expected << ", saw " << parameters_.size() << " for " << name() << "\n";
 }
 
 void GeneratorInputBase::init_internals() {
+    if (inputs_set) {
+        return;
+    }
+
     // Call these for the side-effect of asserting if the values aren't defined.
     (void)array_size();
     (void)gio_types();
@@ -2091,9 +1976,9 @@ void GeneratorInputBase::init_internals() {
     funcs_.clear();
     for (size_t i = 0; i < array_size(); ++i) {
         auto name = array_name(i);
-        parameters_.emplace_back(gio_type(), kind() != IOKind::Scalar, dims(), name);
+        parameters_.emplace_back(gio_type(), kind() != ArgInfoKind::Scalar, dims(), name);
         auto &p = parameters_[i];
-        if (kind() != IOKind::Scalar) {
+        if (kind() != ArgInfoKind::Scalar) {
             internal_assert(dims() == p.dimensions());
             funcs_.push_back(make_param_func(p, name));
         } else {
@@ -2115,14 +2000,14 @@ void GeneratorInputBase::set_inputs(const std::vector<StubInput> &inputs) {
     for (size_t i = 0; i < inputs.size(); ++i) {
         const StubInput &in = inputs.at(i);
         user_assert(in.kind() == kind()) << "An input for " << name() << " is not of the expected kind.\n";
-        if (kind() == IOKind::Function) {
+        if (kind() == ArgInfoKind::Function) {
             auto f = in.func();
             user_assert(f.defined()) << "The input for " << name() << " is an undefined Func. Please define it.\n";
             check_matching_types(f.types());
             check_matching_dims(f.dimensions());
             funcs_.push_back(f);
             parameters_.emplace_back(f.types().at(0), true, f.dimensions(), array_name(i));
-        } else if (kind() == IOKind::Buffer) {
+        } else if (kind() == ArgInfoKind::Buffer) {
             auto p = in.parameter();
             user_assert(p.defined()) << "The input for " << name() << " is an undefined Buffer. Please define it.\n";
             check_matching_types({p.type()});
@@ -2141,6 +2026,7 @@ void GeneratorInputBase::set_inputs(const std::vector<StubInput> &inputs) {
 
     set_def_min_max();
     verify_internals();
+    inputs_set = true;
 }
 
 void GeneratorInputBase::set_estimate_impl(const Var &var, const Expr &min, const Expr &extent) {
@@ -2181,14 +2067,14 @@ void GeneratorInputBase::set_estimates_impl(const Region &estimates) {
     }
 }
 
-GeneratorOutputBase::GeneratorOutputBase(size_t array_size, const std::string &name, IOKind kind, const std::vector<Type> &t, int d)
+GeneratorOutputBase::GeneratorOutputBase(size_t array_size, const std::string &name, ArgInfoKind kind, const std::vector<Type> &t, int d)
     : GIOBase(array_size, name, kind, t, d) {
-    internal_assert(kind != IOKind::Scalar);
+    internal_assert(kind != ArgInfoKind::Scalar);
     ObjectInstanceRegistry::register_instance(this, 0, ObjectInstanceRegistry::GeneratorOutput,
                                               this, nullptr);
 }
 
-GeneratorOutputBase::GeneratorOutputBase(const std::string &name, IOKind kind, const std::vector<Type> &t, int d)
+GeneratorOutputBase::GeneratorOutputBase(const std::string &name, ArgInfoKind kind, const std::vector<Type> &t, int d)
     : GeneratorOutputBase(1, name, kind, t, d) {
     // nothing
 }
@@ -2224,12 +2110,8 @@ void GeneratorOutputBase::resize(size_t size) {
 
 StubOutputBufferBase::StubOutputBufferBase() = default;
 
-StubOutputBufferBase::StubOutputBufferBase(const Func &f, const std::shared_ptr<GeneratorBase> &generator)
+StubOutputBufferBase::StubOutputBufferBase(const Func &f, const std::shared_ptr<AbstractGenerator> &generator)
     : f(f), generator(generator) {
-}
-
-void StubOutputBufferBase::check_scheduled(const char *m) const {
-    generator->check_scheduled(m);
 }
 
 Realization StubOutputBufferBase::realize(std::vector<int32_t> sizes) {
@@ -2237,7 +2119,7 @@ Realization StubOutputBufferBase::realize(std::vector<int32_t> sizes) {
 }
 
 Target StubOutputBufferBase::get_target() const {
-    return generator->get_target();
+    return generator->context().target();
 }
 
 RegisterGenerator::RegisterGenerator(const char *registered_name, GeneratorFactory generator_factory) {

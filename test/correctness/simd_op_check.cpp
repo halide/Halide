@@ -158,9 +158,14 @@ public:
             check("pavgw", 4 * w, u16((u32(u16_1) + u32(u16_2) + 1) / 2));
             check("pavgw", 4 * w, u16((u32(u16_1) + u32(u16_2) + 1) >> 1));
 
-            // Rounding right shifts should also use pavg
+            // Rounding right shifts, halving subtracts, and signed rounding
+            // averages should also use pavg
             check("pavgb", 8 * w, rounding_shift_right(u8_1, 2));
             check("pavgw", 4 * w, rounding_shift_right(u16_1, 2));
+            check("pavgb", 8 * w, halving_sub(u8_1, u8_2));
+            check("pavgw", 4 * w, halving_sub(u16_1, u16_2));
+            check("pavgb", 8 * w, rounding_halving_add(i8_1, i8_2));
+            check("pavgw", 4 * w, rounding_halving_add(i16_1, i16_2));
 
             check("pmaxsw", 4 * w, max(i16_1, i16_2));
             check("pminsw", 4 * w, min(i16_1, i16_2));
@@ -303,6 +308,11 @@ public:
                 RDom r2(0, 2);
                 check(check_pmaddubsw, 4 * w, saturating_sum(i16(in_u8(2 * x + r2)) * in_i8(2 * x + r2 + 32)));
                 check(check_pmaddubsw, 4 * w, saturating_sum(i16(in_i8(2 * x + r2)) * in_u8(2 * x + r2 + 32)));
+
+                // uint8 -> uint16 or int16 and int8 -> int16 horizontal widening adds should use pmaddubsw.
+                check(check_pmaddubsw, 4 * w, sum(u16(in_u8(2 * x + r2))));
+                check(check_pmaddubsw, 4 * w, sum(i16(in_u8(2 * x + r2))));
+                check(check_pmaddubsw, 4 * w, sum(i16(in_i8(2 * x + r2))));
             }
         }
 
@@ -1439,12 +1449,22 @@ public:
             check(arm32 ? "vshr.u64" : "ushr", 2 * w, u64_1 / 16);
 
             // VSHRN    I       -       Shift Right Narrow
-            check(arm32 ? "vshrn.i16" : "shrn", 8 * w, i8(i16_1 / 256));
-            check(arm32 ? "vshrn.i32" : "shrn", 4 * w, i16(i32_1 / 65536));
-            check(arm32 ? "vshrn.i64" : "shrn", 2 * w, i32(i64_1 >> 32));
-            check(arm32 ? "vshrn.i16" : "shrn", 8 * w, u8(u16_1 / 256));
-            check(arm32 ? "vshrn.i32" : "shrn", 4 * w, u16(u32_1 / 65536));
-            check(arm32 ? "vshrn.i64" : "shrn", 2 * w, u32(u64_1 >> 32));
+            // LLVM15 emits UZP2 if the shift amount is half the width of the vector element.
+            const auto shrn_or_uzp2 = [&](int element_width, int shift_amt, int vector_width) {
+                constexpr int simd_vector_bits = 128;
+                if (Halide::Internal::get_llvm_version() >= 150 &&
+                    ((vector_width * element_width) % (simd_vector_bits * 2)) == 0 &&
+                    shift_amt == element_width / 2) {
+                    return "uzp2";
+                }
+                return "shrn";
+            };
+            check(arm32 ? "vshrn.i16" : shrn_or_uzp2(16, 8, 8 * w), 8 * w, i8(i16_1 / 256));
+            check(arm32 ? "vshrn.i32" : shrn_or_uzp2(32, 16, 4 * w), 4 * w, i16(i32_1 / 65536));
+            check(arm32 ? "vshrn.i64" : shrn_or_uzp2(64, 32, 2 * w), 2 * w, i32(i64_1 >> 32));
+            check(arm32 ? "vshrn.i16" : shrn_or_uzp2(16, 8, 8 * w), 8 * w, u8(u16_1 / 256));
+            check(arm32 ? "vshrn.i32" : shrn_or_uzp2(32, 16, 4 * w), 4 * w, u16(u32_1 / 65536));
+            check(arm32 ? "vshrn.i64" : shrn_or_uzp2(64, 32, 2 * w), 2 * w, u32(u64_1 >> 32));
             check(arm32 ? "vshrn.i16" : "shrn", 8 * w, i8(i16_1 / 16));
             check(arm32 ? "vshrn.i32" : "shrn", 4 * w, i16(i32_1 / 16));
             check(arm32 ? "vshrn.i64" : "shrn", 2 * w, i32(i64_1 / 16));
@@ -2247,7 +2267,6 @@ int main(int argc, char **argv) {
 
     if (argc > 1) {
         test.filter = argv[1];
-        test.set_num_threads(1);
     }
 
     if (getenv("HL_SIMD_OP_CHECK_FILTER")) {
@@ -2257,20 +2276,6 @@ int main(int argc, char **argv) {
     const int seed = argc > 2 ? atoi(argv[2]) : time(nullptr);
     std::cout << "simd_op_check test seed: " << seed << "\n";
     test.set_seed(seed);
-
-    // TODO: multithreading here is the cause of https://github.com/halide/Halide/issues/3669;
-    // the fundamental issue is that we make one set of ImageParams to construct many
-    // Exprs, then realize those Exprs on arbitrary threads; it is known that sharing
-    // one Func across multiple threads is not guaranteed to be safe, and indeed, TSAN
-    // reports data races, of which some are likely 'benign' (e.g. Function.freeze) but others
-    // are highly suspect (e.g. Function.lock_loop_levels). Since multithreading here
-    // was added just to avoid having this test be the last to finish, the expedient 'fix'
-    // for now is to remove the multithreading. A proper fix could be made by restructuring this
-    // test so that every Expr constructed for testing was guaranteed to share no Funcs
-    // (Function.deep_copy() perhaps). Of course, it would also be desirable to allow Funcs, Exprs, etc
-    // to be usable across multiple threads, but that is a major undertaking that is
-    // definitely not worthwhile for present Halide usage patterns.
-    test.set_num_threads(1);
 
     if (argc > 2) {
         // Don't forget: if you want to run the standard tests to a specific output

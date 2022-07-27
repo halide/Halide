@@ -116,6 +116,16 @@ public:
         }
     }
 
+    void visit(const Reinterpret *op) override {
+        const Reinterpret *e = expr.as<Reinterpret>();
+        if (result && e && types_match(op->type, e->type)) {
+            expr = e->value;
+            op->value.accept(this);
+        } else {
+            result = false;
+        }
+    }
+
     void visit(const Variable *op) override {
         if (!result) {
             return;
@@ -432,6 +442,11 @@ bool equal_helper(const BaseExprNode &a, const BaseExprNode &b) noexcept {
         // that the types of the values match, so use equal rather
         // than equal_helper.
         return equal(((const Cast &)a).value, ((const Cast &)b).value);
+    case IRNodeType::Reinterpret:
+        // While we know a and b have matching type, we don't know
+        // that the types of the values match, so use equal rather
+        // than equal_helper.
+        return equal(((const Reinterpret &)a).value, ((const Reinterpret &)b).value);
     case IRNodeType::Variable:
         return ((const Variable &)a).name == ((const Variable &)b).name;
     case IRNodeType::Add:

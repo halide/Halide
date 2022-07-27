@@ -80,6 +80,11 @@ class ExprCost : public IRVisitor {
         arith += 1;
     }
 
+    void visit(const Reinterpret *op) override {
+        op->value.accept(this);
+        // `Reinterpret` is a no-op and does *not* incur any cost.
+    }
+
     template<typename T>
     void visit_binary_operator(const T *op, int op_cost) {
         op->a.accept(this);
@@ -219,7 +224,7 @@ class ExprCost : public IRVisitor {
             // TODO: Improve the cost model. In some architectures (e.g. ARM or
             // NEON), count_leading_zeros should be as cheap as bitwise ops.
             // div_round_to_zero and mod_round_to_zero can also get fairly expensive.
-            if (call->is_intrinsic(Call::reinterpret) || call->is_intrinsic(Call::bitwise_and) ||
+            if (call->is_intrinsic(Call::bitwise_and) ||
                 call->is_intrinsic(Call::bitwise_not) || call->is_intrinsic(Call::bitwise_xor) ||
                 call->is_intrinsic(Call::bitwise_or) || call->is_intrinsic(Call::shift_left) ||
                 call->is_intrinsic(Call::shift_right) || call->is_intrinsic(Call::div_round_to_zero) ||
