@@ -940,7 +940,6 @@ const char *VectorInstruction::get_instruction_name() const {
     return instruction_op_names[op];
 }
 
-
 Expr VectorReduce::make(VectorReduce::Operator op,
                         Expr vec,
                         int lanes) {
