@@ -35,7 +35,7 @@
 
   For now, however, you can (instead) control these settings via env vars;
   doing so requires that you compile all of Halide with HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
-  defined. )Note that this ability is deprecated, and likely to be removed in Halide 16.)
+  defined. (Note that this ability is deprecated, and likely to be removed in Halide 16.)
 
   That said, here are the (legacy) env vars you can still use when HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
   is defined:
