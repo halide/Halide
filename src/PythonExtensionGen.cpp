@@ -132,10 +132,11 @@ namespace {
 
 template<int dimensions>
 struct PyHalideBuffer {
+    // Must allocate at least 1, even if d=0
     static constexpr int dims_to_allocate = (dimensions < 1) ? 1 : dimensions;
 
     Py_buffer py_buf;
-    halide_dimension_t halide_dim[dims_to_allocate];  // Must allocate at least 1, even if d=0
+    halide_dimension_t halide_dim[dims_to_allocate];
     halide_buffer_t halide_buf;
     bool py_buf_needs_release = false;
     bool halide_buf_valid = false;
