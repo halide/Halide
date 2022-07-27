@@ -528,7 +528,7 @@ endif ()
 
 if (TARGET_SPIRV)
     target_compile_definitions(Halide PRIVATE WITH_SPIRV)
-    target_include_directories(Halide PRIVATE "${SPIRV_INCLUDE_DIR}")
+    target_include_directories(Halide SYSTEM PRIVATE "${SPIRV_INCLUDE_DIR}")
 endif ()
 
 ##
