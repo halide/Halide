@@ -29,14 +29,6 @@ namespace Internal {
 // and the appropriate file extension for each output type. If you are
 // explicitly managing file extensions somewhere else, you are probably
 // doing it wrong; please prefer to use this table as the source of truth.
-//
-// Note that we deliberately default to ".py.cpp" (rather than .py.c) here for python_extension;
-// in theory, the Python extension file we generate can be compiled just
-// fine as a plain-C file... but if we are building with cpp-name-mangling
-// enabled in the target, we will include generated .h files that can't be compiled.
-// We really don't want to vary the file extensions based on target flags,
-// and in practice, it's extremely unlikely that anyone needs to rely on this
-// being pure C output (vs possibly C++).
 std::map<OutputFileType, const OutputInfo> get_output_info(const Target &target) {
     constexpr bool IsMulti = true;
     constexpr bool IsSingle = false;
