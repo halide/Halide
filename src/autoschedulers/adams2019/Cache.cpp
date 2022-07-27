@@ -6,10 +6,6 @@ namespace Halide {
 namespace Internal {
 namespace Autoscheduler {
 
-bool is_memoize_blocks_enabled() {
-    return get_env_variable("HL_DISABLE_MEMOIZED_BLOCKS") != "1";
-}
-
 bool Cache::add_memoized_blocks(const State *state,
                                 std::function<void(IntrusivePtr<State> &&)> &accept_child,
                                 const FunctionDAG::Node *node, int &num_children,
