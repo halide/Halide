@@ -23,8 +23,6 @@ using NodeMap = PerfectHashMap<FunctionDAG::Node, T>;
 template<typename T>
 using StageMap = PerfectHashMap<FunctionDAG::Node::Stage, T>;
 
-bool may_subtile();
-
 // Given a multi-dimensional box of dimensionality d, generate a list
 // of candidate tile sizes for it, logarithmically spacing the sizes
 // using the given factor. If 'allow_splits' is false, every dimension
@@ -186,7 +184,7 @@ struct LoopNest {
     void inline_func(const FunctionDAG::Node *f);
 
     // Compute a Func at this site.
-    void compute_here(const FunctionDAG::Node *f, bool tileable, int v);
+    void compute_here(const FunctionDAG::Node *f, bool tileable, int v, const Adams2019Params &params);
 
     // Parallelize this loop according to the given tiling.
     IntrusivePtr<const LoopNest> parallelize_in_tiles(const Adams2019Params &params,

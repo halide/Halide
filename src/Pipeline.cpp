@@ -1231,8 +1231,7 @@ MachineParams::MachineParams(const std::string &s) {
     last_level_cache_size = std::atoll(v[1].c_str());
     balance = std::atof(v[2].c_str());
 }
-#endif
-
+#else
 std::string AutoschedulerParams::to_string() const {
     std::ostringstream os;
     if (!name.empty()) {
@@ -1243,5 +1242,6 @@ std::string AutoschedulerParams::to_string() const {
     }
     return os.str();
 }
+#endif
 
 }  // namespace Halide

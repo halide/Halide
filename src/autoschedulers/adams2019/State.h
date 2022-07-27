@@ -67,7 +67,7 @@ struct State {
     // otherwise sets `cost` equal to a large value and returns false.
     bool calculate_cost(const FunctionDAG &dag, const Adams2019Params &params,
                         CostModel *cost_model, const CachingOptions &cache_options,
-                        int64_t memory_limit, int verbosity = 99);
+                        int verbosity = 99);
 
     // Make a child copy of this state. The loop nest is const (we
     // make mutated copies of it, rather than mutating it), so we can
@@ -81,7 +81,6 @@ struct State {
     void generate_children(const FunctionDAG &dag,
                            const Adams2019Params &params,
                            CostModel *cost_model,
-                           int64_t memory_limit,
                            std::function<void(IntrusivePtr<State> &&)> &accept_child,
                            Cache *cache) const;
 
