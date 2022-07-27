@@ -27,6 +27,63 @@
   HL_PERMIT_FAILED_UNROLL
   Set to 1 to tell Halide not to freak out if we try to unroll a loop that doesn't have a constant extent. Should generally not be necessary, but sometimes the autoscheduler's model for what will and will not turn into a constant during lowering is inaccurate, because Halide isn't perfect at constant-folding.
 
+#ifdef HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
+
+  Most of the settings in this Autoscheduler are controlled by the values specified via
+  an `autoscheduler.fieldname` GeneratorParam, as listed in the Adams2019Params struct;
+  this is the preferred way to set these.
+
+  For now, however, you can (instead) control these settings via env vars;
+  doing so requires that you compile all of Halide with HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
+  defined. )Note that this ability is deprecated, and likely to be removed in Halide 16.)
+
+  That said, here are the (legacy) env vars you can still use when HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
+  is defined:
+
+  HL_BEAM_SIZE
+  Beam size to use in the beam search. Defaults to 32. Use 1 to get a greedy search instead.
+
+  HL_CYOS
+  "Choose-your-own-schedule". If set to 1, lets you navigate the search tree by hand in the terminal. Whee! This is for debugging the autoscheduler.
+
+  HL_RANDOM_DROPOUT
+  percent chance of accepting each state in the beam. Normalized by the number of decisions made, so 5 would be there's a 5 percent chance of never rejecting any states.
+
+  HL_SEED
+  Random seed used by the random dropout.
+
+  HL_WEIGHTS_DIR
+  When training or schedule, read weights from this directory or file
+  (if path ends in `.weights` it is written as a single file, otherwise a directory of files)
+
+  HL_NO_SUBTILING
+  If set to 1, limits the search space to that of Mullapudi et al.
+
+  HL_AUTOSCHEDULE_MEMORY_LIMIT
+  If set, only consider schedules that allocate at most this much memory (measured in bytes).
+
+  HL_DISABLE_MEMOIZED_FEATURES
+  If set, features of possible schedules are always recalculated, and are not cached across passes.
+  (see Cache.h for more information)
+
+  HL_DISABLE_MEMOIZED_BLOCKS
+  If set, then tiling sizes are not cached across passes.
+  (see Cache.h for more information)
+
+#endif
+
+#ifdef HALIDE_AUTOSCHEDULER_ALLOW_CYOS
+
+  HL_CYOS
+  "Choose-your-own-schedule".
+
+  If set to 1, lets you navigate the search tree by hand in the terminal.
+  Whee! This is for debugging the autoscheduler. Since it is generally only
+  for use by developers/maintainers of this autoscheduler, it defaults
+  to being omitted entirely unless you build Halide with HALIDE_AUTOSCHEDULER_ALLOW_CYOS defined.
+  Even then, you must *also* set the env var to 1 to make use of it.
+
+#endif
 */
 #include "HalidePlugin.h"
 
