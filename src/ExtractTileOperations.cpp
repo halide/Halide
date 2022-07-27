@@ -5,6 +5,31 @@
 #include "IROperator.h"
 #include "Util.h"
 
+/** \file Support extraction of AMX instructions. */
+
+/**
+ * https://asciiflow.com/#/share/eJyVUkFugzAQ%2FMrKxwoRhdAkza23SmlySHvogQsBp7FkbGSbAoryiz6nr%2BlLugZDk6ghKvJhbXZmd2b3QEScUbIQBece4XFNFVmQQ0SqiCwegtCLSI1RMBtjZGhl8BIRAHh%2BeoFVbBSr4Pq36ZOiSOBpX5cDCEikSGhuipjzun0pmdnD4%2BqtwX9%2Ffg2cLmUcTML76WyO4VAtWJ%2Ff7kIkWMEJ6gbBae2%2F3q53OHBuFBz3TS1HodPqfvUO3%2F4wO7gQag07IXqVkCuZU4VzyApuWI5BAJkdZ0K1B2ZP2%2BwJ%2FEs%2BjhKY0EYViWFSaMAaO6kypBY1hLCtDRIvMTvsekmlsc2kiGgKMw2cxqkGIyEGjn%2FlzonoIMjPUibeQX5Q1bHGisbav%2FBh2kHW2ESzdlaZkqUltaFd9UZ25TnIrIOg%2Bb7vQykLnv661GysRSaSF1k78HkHcaSbntSReLAtTL%2FscOlaI9rxYaRzzgwUOTrZeOCokLzN0TDqRYvUqtFwB6Fvqco9S5r%2BBCiqsWmNLHabzny2Y7E4PyJHcvwBx0t%2BJw%3D%3D)
+ *
+ *   LHS Matrix                           RHS Matrix
+ *
+ *      K                            conceptually      with AMX
+ *  ┌────────┐
+ *  │12345678│                             N             N*4
+ *M │        │                            ┌──┐        ┌────────┐
+ *  └────────┘                            │1 │     K/4│1234    │
+ *                                        │2 │        │5678    │
+ * To properly multiply 2 matrices, the   │3 │        └────────┘
+ * AMX instructions perform many 4 byte  K│4 │
+ * dot products, this leads to a lot of   │5 │
+ * striding over 4 byte areas.            │6 │
+ * Normally the row of the LHS matrix,    │7 │
+ * 123... would multiply with the column  │8 │
+ * of the RHS matrix 123..., but with AMX └──┘
+ * this column is split up into a matrix of columns / 4 byte and rows * 4.
+ * which then results in K/4 dot products per row.
+ *
+ */
+
 namespace Halide {
 namespace Internal {
 
@@ -376,7 +401,7 @@ Matmul convert_to_matmul(const Store *op, const string &new_name, AMXOpType op_t
 
     if (lhs_load && !rhs_broadcast) {
         // now working on a larger k dimension
-        // with a K dimension of 4 (or 2) with bf16 all the elements in the right-hand matrix are 
+        // with a K dimension of 4 (or 2) with bf16 all the elements in the right-hand matrix are
         // layed out in a way that multiplying with a column can be done in a single dot product.
         // Therefore the indexing can be reused with a broadcast,
         // with higher K dimensions this can no longer be done and the broadcast won't exist.
