@@ -45,9 +45,6 @@ private:
 
     string get_node_class_name();
 
-    string get_cost(const IRNode *node) const;
-    string get_cost_list(vector<Halide::Expr> exprs) const;
-
     int get_range(const IRNode *op) const;
     int get_range_list(vector<Halide::Expr> exprs) const;
 

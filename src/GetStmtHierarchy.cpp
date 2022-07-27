@@ -59,16 +59,19 @@ void GetStmtHierarchy::set_stmt_cost(const Stmt &s) {
 int GetStmtHierarchy::get_range(const IRNode *op) const {
     if (colorType == CC_TYPE) {
         return findStmtCost.get_computation_range(op);
+
     } else if (colorType == DMC_TYPE) {
         return findStmtCost.get_data_movement_range(op);
+
     } else {
-        m_assert(false, "colorType is not set");
+        m_assert(false, "colorType is not set correctly in get_range");
     }
 }
 
 int GetStmtHierarchy::get_range_list(vector<Halide::Expr> exprs) const {
     int maxValue = 0;
     int retValue;
+
     if (colorType == CC_TYPE) {
         for (const Expr &e : exprs) {
             retValue = findStmtCost.get_computation_range(e.get());
@@ -76,16 +79,21 @@ int GetStmtHierarchy::get_range_list(vector<Halide::Expr> exprs) const {
                 maxValue = retValue;
             }
         }
-    } else if (colorType == DMC_TYPE) {
+    }
+
+    else if (colorType == DMC_TYPE) {
         for (const Expr &e : exprs) {
             retValue = findStmtCost.get_data_movement_range(e.get());
             if (retValue > maxValue) {
                 maxValue = retValue;
             }
         }
-    } else {
-        m_assert(false, "colorType is not set");
     }
+
+    else {
+        m_assert(false, "colorType is not set in get_range_list");
+    }
+
     return maxValue;
 }
 
@@ -97,38 +105,15 @@ void GetStmtHierarchy::update_num_nodes() {
 string GetStmtHierarchy::get_node_class_name() {
     if (currNodeID == startCCNodeID) {
         return "startCCNode depth" + to_string(depth);
-    } else if (currNodeID == startDMCNodeID) {
+    }
+
+    else if (currNodeID == startDMCNodeID) {
         return "startDMCNode depth" + to_string(depth);
-    } else {
+    }
+
+    else {
         return "node" + to_string(currNodeID) + "child depth" + to_string(depth);
     }
-}
-
-string GetStmtHierarchy::get_cost(const IRNode *node) const {
-    if (node == nullptr) {
-        return "";
-    }
-    stringstream cost;
-    cost << " (";
-    cost << "CC: " << findStmtCost.get_computation_cost(node);
-    cost << ", DMC: " << findStmtCost.get_data_movement_cost(node);
-    cost << ")";
-    return cost.str();
-}
-
-string GetStmtHierarchy::get_cost_list(vector<Halide::Expr> exprs) const {
-    int ccCount = 0;
-    int dmcCount = 0;
-    for (const auto &e : exprs) {
-        ccCount += findStmtCost.get_computation_cost(e.get());
-        dmcCount += findStmtCost.get_data_movement_cost(e.get());
-    }
-    stringstream cost;
-    cost << " (";
-    cost << "CC: " << ccCount;
-    cost << ", DMC: " << dmcCount;
-    cost << ")";
-    return cost.str();
 }
 
 void GetStmtHierarchy::start_html() {
@@ -276,10 +261,13 @@ Expr GetStmtHierarchy::visit(const Variable *op) {
 void GetStmtHierarchy::visit_binary_op(const Expr &a, const Expr &b, const string &name,
                                        int colorCost) {
     open_node(name, colorCost);
+
     int currNode = currNodeID;
     mutate(a);
+
     currNodeID = currNode;
     mutate(b);
+
     close_node();
 }
 
@@ -414,11 +402,13 @@ Expr GetStmtHierarchy::visit(const Broadcast *op) {
 Expr GetStmtHierarchy::visit(const Call *op) {
     int computation_range = get_range(op);
     open_node(op->name, computation_range);
+
     int currNode = currNodeID;
     for (auto &arg : op->args) {
         currNodeID = currNode;
         mutate(arg);
     }
+
     close_node();
     return op;
 }
@@ -467,15 +457,18 @@ Stmt GetStmtHierarchy::visit(const For *op) {
 Stmt GetStmtHierarchy::visit(const Store *op) {
     int computation_range = get_range(op);
     open_node("=", computation_range);
+
     stringstream index;
     index << op->index;
     node_without_children(op->name + "[" + index.str() + "]", get_range(op->index.get()));
+
     mutate(op->value);
     close_node();
     return op;
 }
 Stmt GetStmtHierarchy::visit(const Provide *op) {
     m_assert(false, "check out provide!! " + op->name);
+
     int computation_range = get_range(op);
     open_node("=", computation_range);
     int currNode0 = currNodeID;
@@ -498,6 +491,7 @@ Stmt GetStmtHierarchy::visit(const Provide *op) {
 Stmt GetStmtHierarchy::visit(const Allocate *op) {
     int computation_range = get_range(op);
     open_node("allocate", computation_range);
+
     stringstream index;
     index << op->type;
 
@@ -540,10 +534,12 @@ Stmt GetStmtHierarchy::visit(const Block *op) {
 Stmt GetStmtHierarchy::visit(const IfThenElse *op) {
     int computation_range = get_range(op);
     open_node("IfThenElse", computation_range);
+
     mutate(op->condition);
     if (op->else_case.defined()) {
         mutate(op->else_case);
     }
+
     close_node();
     return op;
 }
@@ -555,6 +551,7 @@ Expr GetStmtHierarchy::visit(const Shuffle *op) {
     int computation_range = get_range(op);
     if (op->is_concat()) {
         open_node("concat_vectors", computation_range);
+
         int currNode = currNodeID;
         for (auto &e : op->vectors) {
             currNodeID = currNode;
@@ -565,6 +562,7 @@ Expr GetStmtHierarchy::visit(const Shuffle *op) {
 
     else if (op->is_interleave()) {
         open_node("interleave_vectors", computation_range);
+
         int currNode = currNodeID;
         for (auto &e : op->vectors) {
             currNodeID = currNode;
@@ -577,6 +575,7 @@ Expr GetStmtHierarchy::visit(const Shuffle *op) {
         std::vector<Expr> args = op->vectors;
         args.emplace_back(op->slice_begin());
         open_node("extract_element", computation_range);
+
         int currNode = currNodeID;
         for (auto &e : args) {
             currNodeID = currNode;
@@ -591,6 +590,7 @@ Expr GetStmtHierarchy::visit(const Shuffle *op) {
         args.emplace_back(op->slice_stride());
         args.emplace_back(static_cast<int>(op->indices.size()));
         open_node("slice_vectors", computation_range);
+
         int currNode = currNodeID;
         for (auto &e : args) {
             currNodeID = currNode;
@@ -605,6 +605,7 @@ Expr GetStmtHierarchy::visit(const Shuffle *op) {
             args.emplace_back(i);
         }
         open_node("Shuffle", computation_range);
+
         int currNode = currNodeID;
         for (auto &e : args) {
             currNodeID = currNode;
@@ -617,10 +618,13 @@ Expr GetStmtHierarchy::visit(const Shuffle *op) {
 Expr GetStmtHierarchy::visit(const VectorReduce *op) {
     int computation_range = get_range(op);
     open_node("vector_reduce", computation_range);
+
     int currNode = currNodeID;
     mutate(op->op);
+
     currNodeID = currNode;
     mutate(op->value);
+
     close_node();
     return op;
 }
@@ -635,10 +639,13 @@ Stmt GetStmtHierarchy::visit(const Fork *op) {
 Stmt GetStmtHierarchy::visit(const Acquire *op) {
     int computation_range = get_range(op);
     open_node("acquire", computation_range);
+
     int currNode = currNodeID;
     mutate(op->semaphore);
+
     currNodeID = currNode;
     mutate(op->count);
+
     close_node();
     return op;
 }

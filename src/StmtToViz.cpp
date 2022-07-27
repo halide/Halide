@@ -58,7 +58,6 @@ private:
 
     void reset_context() {
         curr_context.clear();
-        // in_context = false;
     }
 
     bool is_in_context(const string name) const {
@@ -371,14 +370,6 @@ private:
     }
 
     void visit(const Variable *op) override {
-        // if (in_loop) {
-        //     if (is_in_context(op->name)) {
-        //         stream << "(in context) ";
-        //     } else {
-        //         stream << "(not in context) ";
-        //     }
-        // }
-        // cout << "checking for " << op->name << endl;
 
         if (is_in_context(op->name)) {
             stream << "[requires context] ";
@@ -386,11 +377,7 @@ private:
         } else {
             stream << "[doesn't require context] ";
         }
-        // if (findStmtCost.requires_context(op, op->name)) {
-        //     stream << "[requires context] ";
-        // } else {
-        //     stream << "[doesn't require context] ";
-        // }
+
         stream << var(op->name);
     }
 
@@ -1369,28 +1356,6 @@ span.CostComputation2 { width: 13px; display: inline-block; background: rgb(232,
 span.CostComputation1 { width: 13px; display: inline-block; background: rgb(231,223,50); color: transparent; } \n \
 span.CostComputation0 { width: 13px; display: inline-block; background: rgb(236,233,89); color: transparent;  }  \n \
 ";
-// const std::string StmtToViz::computationCostCSS = "\n \
-// span.CostComputation19 {margin-left: -30px; width: 13px; display: inline-block; background: rgb(130,31,27); color: transparent; } \n \
-// span.CostComputation18 {margin-left: -30px; width: 13px; display: inline-block; background: rgb(145,33,30); color: transparent; } \n \
-// span.CostComputation17 {margin-left: -30px; width: 13px; display: inline-block; background: rgb(160,33,32); color: transparent; } \n \
-// span.CostComputation16 {margin-left: -30px; width: 13px; display: inline-block; background: rgb(176,34,34); color: transparent; } \n \
-// span.CostComputation15 {margin-left: -30px; width: 13px; display: inline-block; background: rgb(185,47,32); color: transparent; } \n \
-// span.CostComputation14 {margin-left: -30px; width: 13px; display: inline-block; background: rgb(193,59,30); color: transparent; } \n \
-// span.CostComputation13 {margin-left: -30px; width: 13px; display: inline-block; background: rgb(202,71,27); color: transparent; } \n \
-// span.CostComputation12 {margin-left: -30px; width: 13px; display: inline-block; background: rgb(210,82,22); color: transparent; } \n \
-// span.CostComputation11 {margin-left: -30px; width: 13px; display: inline-block; background: rgb(218,93,16); color: transparent; } \n \
-// span.CostComputation10 {margin-left: -30px; width: 13px; display: inline-block; background: rgb(226,104,6); color: transparent; } \n \
-// span.CostComputation9 {margin-left: -30px; width: 13px; display: inline-block; background: rgb(229,118,9); color: transparent; } \n \
-// span.CostComputation8 {margin-left: -30px; width: 13px; display: inline-block; background: rgb(230,132,15); color: transparent; } \n \
-// span.CostComputation7 {margin-left: -30px; width: 13px; display: inline-block; background: rgb(231,146,20); color: transparent; } \n \
-// span.CostComputation6 {margin-left: -30px; width: 13px; display: inline-block; background: rgb(232,159,25); color: transparent; } \n \
-// span.CostComputation5 {margin-left: -30px; width: 13px; display: inline-block; background: rgb(233,172,30); color: transparent; } \n \
-// span.CostComputation4 {margin-left: -30px; width: 13px; display: inline-block; background: rgb(233,185,35); color: transparent; } \n \
-// span.CostComputation3 {margin-left: -30px; width: 13px; display: inline-block; background: rgb(233,198,40); color: transparent; } \n \
-// span.CostComputation2 {margin-left: -30px; width: 13px; display: inline-block; background: rgb(232,211,45); color: transparent; } \n \
-// span.CostComputation1 {margin-left: -30px; width: 13px; display: inline-block; background: rgb(231,223,50); color: transparent; } \n \
-// span.CostComputation0 {margin-left: -30px; width: 13px; display: inline-block; background: rgb(236,233,89); color: transparent;  }  \n \
-// ";
 
 const std::string StmtToViz::movementCostCSS = "\n \
 span.CostMovement19 { width: 13px; display: inline-block; background: rgb(130,31,27); color: transparent; } \n \
