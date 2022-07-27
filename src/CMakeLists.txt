@@ -417,10 +417,6 @@ if (TARGET Halide_V8)
     target_compile_definitions(Halide PRIVATE WITH_V8)
 endif ()
 
-if (TARGET Halide_SPIRV)
-    target_link_libraries(Halide PRIVATE Halide_SPIRV)
-endif ()
-
 ##
 # Set compiler options for libHalide
 ##
@@ -532,6 +528,7 @@ endif ()
 
 if (TARGET_SPIRV)
     target_compile_definitions(Halide PRIVATE WITH_SPIRV)
+    target_include_directories(Halide PRIVATE "${SPIRV_INCLUDE_DIR}")
 endif ()
 
 ##
