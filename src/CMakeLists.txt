@@ -143,7 +143,6 @@ set(HEADER_FILES
     SkipStages.h
     SlidingWindow.h
     Solve.h
-    SpirvIR.h
     SplitTuples.h
     StmtToHtml.h
     StorageFlattening.h
