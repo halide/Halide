@@ -99,36 +99,8 @@ std::pair<string, string> print_type(const LoweredArgument *arg) {
 
 }  // namespace
 
-void PythonExtensionGen::convert_buffer(const string &name, const LoweredArgument *arg) {
-    internal_assert(arg->is_buffer());
-    const int dims_to_use = arg->dimensions;
-    // Always allocate at least 1 halide_dimension_t, even for zero-dimensional buffers
-    const int dims_to_allocate = std::max(1, dims_to_use);
-    dest << "    halide_buffer_t buffer_" << name << ";\n";
-    dest << "    halide_dimension_t dimensions_" << name << "[" << dims_to_allocate << "];\n";
-    dest << "    Py_buffer view_" << name << ";\n";
-    dest << "    if (_convert_py_buffer_to_halide(";
-    dest << /*pyobj*/ "py_" << name << ", ";
-    dest << /*dimensions*/ (int)dims_to_use << ", ";
-    dest << /*flags*/ (arg->is_output() ? "PyBUF_WRITABLE" : "0") << ", ";
-    dest << /*dim*/ "dimensions_" << name << ", ";
-    dest << /*out*/ "&buffer_" << name << ", ";
-    dest << /*buf*/ "view_" << name << ", ";
-    dest << /*name*/ "\"" << name << "\"";
-    dest << ") < 0) {\n";
-    release_buffers("        ");
-    dest << "        return nullptr;\n";
-    dest << "    }\n";
-}
-
 PythonExtensionGen::PythonExtensionGen(std::ostream &dest)
     : dest(dest) {
-}
-
-void PythonExtensionGen::release_buffers(const string &prefix = "    ") {
-    for (auto &buffer_ref : buffer_refs) {
-        dest << prefix << "PyBuffer_Release(&" << buffer_ref << ");\n";
-    }
 }
 
 void PythonExtensionGen::compile(const Module &module) {
@@ -151,112 +123,126 @@ void PythonExtensionGen::compile(const Module &module) {
     dest << R"INLINE_CODE(
 /* Older Python versions don't set up PyMODINIT_FUNC correctly. */
 #if defined(_MSC_VER)
-#    define HALIDE_PYTHON_EXPORT __declspec(dllexport)
+#define HALIDE_PYTHON_EXPORT      __declspec(dllexport)
 #else
-#    define HALIDE_PYTHON_EXPORT __attribute__((visibility("default")))
+#define HALIDE_PYTHON_EXPORT      __attribute__((visibility("default")))
 #endif
 
-#ifdef __cplusplus
-extern "C" {
-#endif
+namespace {
 
-static
-#if !defined(_MSC_VER)
-__attribute__((unused))
-#endif
-int _convert_py_buffer_to_halide(
-        PyObject* pyobj, int dimensions, int flags,
-        halide_dimension_t* dim,  // array of >= size `dimensions`
-        halide_buffer_t* out, Py_buffer &buf, const char* name) {
-    int ret = PyObject_GetBuffer(
-      pyobj, &buf, PyBUF_FORMAT | PyBUF_STRIDED_RO | PyBUF_ANY_CONTIGUOUS | flags);
-    if (ret < 0) {
-      return ret;
-    }
-    if (dimensions && buf.ndim != dimensions) {
-      PyErr_Format(PyExc_ValueError, "Invalid argument %s: Expected %d dimensions, got %d",
-                   name, dimensions, buf.ndim);
-      PyBuffer_Release(&buf);
-      return -1;
-    }
-    /* We'll get a buffer that's either:
-     * C_CONTIGUOUS (last dimension varies the fastest, i.e., has stride=1) or
-     * F_CONTIGUOUS (first dimension varies the fastest, i.e., has stride=1).
-     * The latter is preferred, since it's already in the format that Halide
-     * needs. It can can be achieved in numpy by passing order='F' during array
-     * creation. However, if we do get a C_CONTIGUOUS buffer, flip the dimensions
-     * (transpose) so we can process it without having to reallocate.
-     */
-    int i, j, j_step;
-    if (PyBuffer_IsContiguous(&buf, 'F')) {
-      j = 0;
-      j_step = 1;
-    } else if (PyBuffer_IsContiguous(&buf, 'C')) {
-      j = buf.ndim - 1;
-      j_step = -1;
-    } else {
-      /* Python checks all dimensions and strides, so this typically indicates
-       * a bug in the array's buffer protocol. */
-      PyErr_Format(PyExc_ValueError, "Invalid buffer: neither C nor Fortran contiguous");
-      PyBuffer_Release(&buf);
-      return -1;
-    }
-    for (i = 0; i < buf.ndim; ++i, j += j_step) {
-        dim[i].min = 0;
-        dim[i].stride = (int)(buf.strides[j] / buf.itemsize); // strides is in bytes
-        dim[i].extent = (int)buf.shape[j];
-        dim[i].flags = 0;
-        if (buf.suboffsets && buf.suboffsets[i] >= 0) {
-            // Halide doesn't support arrays of pointers. But we should never see this
-            // anyway, since we specified PyBUF_STRIDED.
-            PyErr_Format(PyExc_ValueError, "Invalid buffer: suboffsets not supported");
-            PyBuffer_Release(&buf);
-            return -1;
+template<int dimensions>
+struct PyHalideBuffer {
+    // Must allocate at least 1, even if d=0
+    static constexpr int dims_to_allocate = (dimensions < 1) ? 1 : dimensions;
+
+    Py_buffer py_buf;
+    halide_dimension_t halide_dim[dims_to_allocate];
+    halide_buffer_t halide_buf;
+    bool py_buf_needs_release = false;
+    bool halide_buf_valid = false;
+
+    PyHalideBuffer(PyObject *py_obj, int flags, const char *name) {
+        memset(&py_buf, 0, sizeof(py_buf));
+        if (PyObject_GetBuffer(py_obj, &py_buf, PyBUF_FORMAT | PyBUF_STRIDED_RO | PyBUF_ANY_CONTIGUOUS | flags) < 0) {
+            PyErr_Format(PyExc_ValueError, "Invalid argument %s: Expected %d dimensions, got %d", name, dimensions, py_buf.ndim);
+            return;
         }
-    }
-    if (dim[buf.ndim - 1].extent * dim[buf.ndim - 1].stride * buf.itemsize != buf.len) {
-        PyErr_Format(PyExc_ValueError, "Invalid buffer: length %ld, but computed length %ld",
-                     buf.len, buf.shape[0] * buf.strides[0]);
-        PyBuffer_Release(&buf);
-        return -1;
-    }
-    *out = halide_buffer_t();
-    if (!buf.format) {
-        out->type.code = halide_type_uint;
-        out->type.bits = 8;
-    } else {
-        /* Convert struct type code. See
-         * https://docs.python.org/2/library/struct.html#module-struct */
-        char* p = buf.format;
-        while (strchr("@<>!=", *p)) {
-            p++;  // ignore little/bit endian (and alignment)
+        py_buf_needs_release = true;
+
+        if (dimensions && py_buf.ndim != dimensions) {
+            PyErr_Format(PyExc_ValueError, "Invalid argument %s: Expected %d dimensions, got %d", name, dimensions, py_buf.ndim);
+            return;
         }
-        if (*p == 'f' || *p == 'd') {
-            // 'f' and 'd' are float and double, respectively.
-            out->type.code = halide_type_float;
-        } else if (*p >= 'a' && *p <= 'z') {
-            // lowercase is signed int.
-            out->type.code = halide_type_int;
+        /* We'll get a buffer that's either:
+         * C_CONTIGUOUS (last dimension varies the fastest, i.e., has stride=1) or
+         * F_CONTIGUOUS (first dimension varies the fastest, i.e., has stride=1).
+         * The latter is preferred, since it's already in the format that Halide
+         * needs. It can can be achieved in numpy by passing order='F' during array
+         * creation. However, if we do get a C_CONTIGUOUS buffer, flip the dimensions
+         * (transpose) so we can process it without having to reallocate.
+         */
+        int i, j, j_step;
+        if (PyBuffer_IsContiguous(&py_buf, 'F')) {
+            j = 0;
+            j_step = 1;
+        } else if (PyBuffer_IsContiguous(&py_buf, 'C')) {
+            j = py_buf.ndim - 1;
+            j_step = -1;
         } else {
-            // uppercase is unsigned int.
-            out->type.code = halide_type_uint;
+            /* Python checks all dimensions and strides, so this typically indicates
+             * a bug in the array's buffer protocol. */
+            PyErr_Format(PyExc_ValueError, "Invalid buffer: neither C nor Fortran contiguous");
+            return;
         }
-        const char* type_codes = "bB?hHiIlLqQfd";  // integers and floats
-        if (strchr(type_codes, *p)) {
-            out->type.bits = (uint8_t)buf.itemsize * 8;
+        for (i = 0; i < py_buf.ndim; ++i, j += j_step) {
+            halide_dim[i].min = 0;
+            halide_dim[i].stride = (int)(py_buf.strides[j] / py_buf.itemsize);  // strides is in bytes
+            halide_dim[i].extent = (int)py_buf.shape[j];
+            halide_dim[i].flags = 0;
+            if (py_buf.suboffsets && py_buf.suboffsets[i] >= 0) {
+                // Halide doesn't support arrays of pointers. But we should never see this
+                // anyway, since we specified PyBUF_STRIDED.
+                PyErr_Format(PyExc_ValueError, "Invalid buffer: suboffsets not supported");
+                return;
+            }
+        }
+        if (halide_dim[py_buf.ndim - 1].extent * halide_dim[py_buf.ndim - 1].stride * py_buf.itemsize != py_buf.len) {
+            PyErr_Format(PyExc_ValueError, "Invalid buffer: length %ld, but computed length %ld",
+                         py_buf.len, py_buf.shape[0] * py_buf.strides[0]);
+            return;
+        }
+
+        memset(&halide_buf, 0, sizeof(halide_buf));
+        if (!py_buf.format) {
+            halide_buf.type.code = halide_type_uint;
+            halide_buf.type.bits = 8;
         } else {
-            // We don't handle 's' and 'p' (char[]) and 'P' (void*)
-            PyErr_Format(PyExc_ValueError, "Invalid data type for %s: %s", name, buf.format);
-            PyBuffer_Release(&buf);
-            return -1;
+            /* Convert struct type code. See
+             * https://docs.python.org/2/library/struct.html#module-struct */
+            char *p = py_buf.format;
+            while (strchr("@<>!=", *p)) {
+                p++;  // ignore little/bit endian (and alignment)
+            }
+            if (*p == 'f' || *p == 'd') {
+                // 'f' and 'd' are float and double, respectively.
+                halide_buf.type.code = halide_type_float;
+            } else if (*p >= 'a' && *p <= 'z') {
+                // lowercase is signed int.
+                halide_buf.type.code = halide_type_int;
+            } else {
+                // uppercase is unsigned int.
+                halide_buf.type.code = halide_type_uint;
+            }
+            const char *type_codes = "bB?hHiIlLqQfd";  // integers and floats
+            if (strchr(type_codes, *p)) {
+                halide_buf.type.bits = (uint8_t)py_buf.itemsize * 8;
+            } else {
+                // We don't handle 's' and 'p' (char[]) and 'P' (void*)
+                PyErr_Format(PyExc_ValueError, "Invalid data type for %s: %s", name, py_buf.format);
+                return;
+            }
+        }
+        halide_buf.type.lanes = 1;
+        halide_buf.dimensions = py_buf.ndim;
+        halide_buf.dim = halide_dim;
+        halide_buf.host = (uint8_t *)py_buf.buf;
+        halide_buf_valid = true;
+    }
+
+    ~PyHalideBuffer() {
+        if (py_buf_needs_release) {
+            PyBuffer_Release(&py_buf);
         }
     }
-    out->type.lanes = 1;
-    out->dimensions = buf.ndim;
-    out->dim = dim;
-    out->host = (uint8_t*)buf.buf;
-    return 0;
-}
+
+    PyHalideBuffer() = delete;
+    PyHalideBuffer(const PyHalideBuffer &other) = delete;
+    PyHalideBuffer &operator=(const PyHalideBuffer &other) = delete;
+    PyHalideBuffer(PyHalideBuffer &&other) = delete;
+    PyHalideBuffer &operator=(PyHalideBuffer &&other) = delete;
+};
+
+}  // namespace
 
 )INLINE_CODE";
 
@@ -267,7 +253,9 @@ int _convert_py_buffer_to_halide(
     }
 
     dest << "\n";
-    dest << "static PyMethodDef _methods[] = {\n";
+    dest << "namespace {\n";
+    dest << "\n";
+    dest << "PyMethodDef _methods[] = {\n";
     for (const auto &f : module.functions()) {
         if (f.linkage == LinkageType::ExternalPlusMetadata) {
             const string basename = remove_namespaces(f.name);
@@ -280,13 +268,19 @@ int _convert_py_buffer_to_halide(
 
     dest << R"INLINE_CODE(
 static_assert(PY_MAJOR_VERSION >= 3, "Python bindings for Halide require Python 3+");
-static struct PyModuleDef _moduledef = {
+
+struct PyModuleDef _moduledef = {
     PyModuleDef_HEAD_INIT,
     MODULE_NAME,
     nullptr,
     -1,
     _methods,
 };
+
+}  // namespace
+
+extern "C" {
+
 HALIDE_PYTHON_EXPORT PyObject* PyInit_)INLINE_CODE";
 
     dest << module.name() << "(void) {";
@@ -295,103 +289,137 @@ HALIDE_PYTHON_EXPORT PyObject* PyInit_)INLINE_CODE";
     return PyModule_Create(&_moduledef);
 }
 
-#ifdef __cplusplus
-}
-#endif
+}  // extern "C"
+
 )INLINE_CODE";
 }
 
 void PythonExtensionGen::compile(const LoweredFunc &f) {
     const std::vector<LoweredArgument> &args = f.args;
     const string basename = remove_namespaces(f.name);
+
     std::vector<string> arg_names(args.size());
-    dest << "// " << f.name << "\n";
-    dest << "static PyObject* _f_" << basename << "(PyObject* module, PyObject* args, PyObject* kwargs) {\n";
     for (size_t i = 0; i < args.size(); i++) {
         arg_names[i] = sanitize_name(args[i].name);
-        if (!can_convert(&args[i])) {
+    }
+
+    Indentation indent;
+    indent.indent = 0;
+
+    dest << "namespace {\n";
+    dest << "\n";
+
+    dest << indent << "const char* const _f_" << basename << "_kwlist[] = {\n";
+    indent.indent += 2;
+    for (size_t i = 0; i < args.size(); i++) {
+        dest << indent << "\"" << arg_names[i] << "\",\n";
+    }
+    dest << indent << "nullptr\n";
+    indent.indent -= 2;
+    dest << indent << "};\n\n";
+
+    dest << "// " << f.name << "\n";
+    dest << "PyObject* _f_" << basename << "(PyObject* module, PyObject* args, PyObject* kwargs) {\n";
+
+    indent.indent += 2;
+
+    for (const auto &arg : args) {
+        if (!can_convert(&arg)) {
             /* Some arguments can't be converted to Python yet. In those
              * cases, just add a dummy function that always throws an
              * Exception. */
             // TODO: Add support for handles and vectors.
-            dest << "    PyErr_Format(PyExc_NotImplementedError, "
-                 << "\"Can't convert argument " << args[i].name << " from Python\");\n";
-            dest << "    return nullptr;\n";
-            dest << "}";
+            // TODO: might make more sense to simply fail at Halide compile time!
+            dest << indent << "PyErr_Format(PyExc_NotImplementedError, "
+                 << "\"Can't convert argument " << arg.name << " from Python\");\n";
+            dest << indent << "return nullptr;\n";
+            dest << "}\n";
+            dest << "}  // namespace\n";
             return;
         }
     }
-    dest << "    static const char* const kwlist[] = {";
+
     for (size_t i = 0; i < args.size(); i++) {
-        dest << "\"" << arg_names[i] << "\", ";
+        dest << indent << print_type(&args[i]).second << " py_" << arg_names[i] << ";\n";
     }
-    dest << "nullptr};\n";
-    for (size_t i = 0; i < args.size(); i++) {
-        dest << "    " << print_type(&args[i]).second << " py_" << arg_names[i] << ";\n";
-    }
-    dest << "    if (!PyArg_ParseTupleAndKeywords(args, kwargs, \"";
+    dest << indent << "if (!PyArg_ParseTupleAndKeywords(args, kwargs, \"";
     for (const auto &arg : args) {
         dest << print_type(&arg).first;
     }
-    dest << "\", (char**)kwlist";
+    dest << "\", (char**)_f_" << basename << "_kwlist\n";
     for (size_t i = 0; i < args.size(); i++) {
-        dest << ", ";
-        dest << "&py_" << arg_names[i];
+        indent.indent += 2;
+        dest << indent << ", &py_" << arg_names[i] << "\n";
+        indent.indent -= 2;
     }
     dest << ")) {\n";
-    dest << "        return nullptr;\n";
-    dest << "    }\n";
+    indent.indent += 2;
+    dest << indent << "PyErr_Format(PyExc_ValueError, \"Internal error\");\n";
+    dest << indent << "return nullptr;\n";
+    indent.indent -= 2;
+    dest << indent << "}\n";
     for (size_t i = 0; i < args.size(); i++) {
         if (args[i].is_buffer()) {
-            convert_buffer(arg_names[i], &args[i]);
-            buffer_refs.push_back("view_" + arg_names[i]);
-        } else {
-            // Python already converted this.
-        }
+            const auto &name = arg_names[i];  // must use sanitized names here
+            dest << indent << "PyHalideBuffer<" << (int)args[i].dimensions << "> b_" << name << "("
+                 << "py_" << name << ", "
+                 << (args[i].is_output() ? "PyBUF_WRITABLE" : "0") << ", "
+                 << "_f_" << basename << "_kwlist[" << i << "]);\n";
+            dest << indent << "if (!b_" << name << ".halide_buf_valid) {\n";
+            indent.indent += 2;
+            dest << indent << "return nullptr;\n";
+            indent.indent -= 2;
+            dest << indent << "}\n";
+        }  // else Python already converted this.
     }
-    dest << "    int result;\n";
-    dest << "    Py_BEGIN_ALLOW_THREADS\n";
+    dest << "\n";
     // Mark all input buffers as having a dirty host, so that the Halide call will
     // do a lazy-copy-to-GPU if needed.
     for (size_t i = 0; i < args.size(); i++) {
         if (args[i].is_buffer() && args[i].is_input()) {
-            dest << "    buffer_" << arg_names[i] << ".set_host_dirty();\n";
+            dest << indent << "b_" << arg_names[i] << ".halide_buf.set_host_dirty();\n";
         }
     }
-    dest << "    result = " << f.name << "(";
+    dest << indent << "int result;\n";
+    dest << indent << "Py_BEGIN_ALLOW_THREADS\n";
+    dest << indent << "result = " << f.name << "(\n";
+    indent.indent += 2;
     for (size_t i = 0; i < args.size(); i++) {
-        if (i > 0) {
-            dest << ", ";
-        }
         if (args[i].is_buffer()) {
-            dest << "&buffer_" << arg_names[i];
+            dest << indent << "&b_" << arg_names[i] << ".halide_buf";
         } else {
-            dest << "py_" << arg_names[i];
+            dest << indent << "py_" << arg_names[i] << "";
         }
+        if (i < args.size() - 1) {
+            dest << ",";
+        }
+        dest << "\n";
     }
-    dest << ");\n";
-    dest << "    Py_END_ALLOW_THREADS\n";
+    indent.indent -= 2;
+    dest << indent << ");\n";
+    dest << indent << "Py_END_ALLOW_THREADS\n";
     // Since the Python Buffer protocol is host-memory-only, we *must*
     // flush results back to host, otherwise the output buffer will contain
     // random garbage. (We need a better solution for this, see https://github.com/halide/Halide/issues/6868)
     for (size_t i = 0; i < args.size(); i++) {
         if (args[i].is_buffer() && args[i].is_output()) {
-            dest << "    if (result == 0) result = halide_copy_to_host(nullptr, &buffer_" << arg_names[i] << ");\n";
+            dest << indent << "if (result == 0) result = halide_copy_to_host(nullptr, &b_" << arg_names[i] << ".halide_buf);\n";
         }
     }
-    release_buffers();
-    dest << R"INLINE_CODE(
-    if (result != 0) {
-        /* In the optimal case, we'd be generating an exception declared
-         * in python_bindings/src, but since we're self-contained,
-         * we don't have access to that API. */
-        PyErr_Format(PyExc_ValueError, "Halide error %d", result);
-        return nullptr;
-    }
-    Py_INCREF(Py_True);
-    return Py_True;
-)INLINE_CODE";
+    dest << indent << "if (result != 0) {\n";
+    indent.indent += 2;
+    dest << indent << "PyErr_Format(PyExc_ValueError, \"Halide error %d\", result);\n";
+    dest << indent << "return nullptr;\n";
+    indent.indent -= 2;
+    dest << indent << "}\n";
+    dest << "\n";
+
+    dest << indent << "Py_INCREF(Py_None);\n";
+    dest << indent << "return Py_None;\n";
+    indent.indent -= 2;
     dest << "}\n";
+    dest << "\n";
+    dest << "}  // namespace\n";
 }
 
 }  // namespace Internal
