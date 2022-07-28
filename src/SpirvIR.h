@@ -377,31 +377,31 @@ protected:
 
     SpvId declare_id(SpvKind kind);
 
-    TypeKey hash_type(const Type &type, uint32_t array_size = 1) const;
+    TypeKey make_type_key(const Type &type, uint32_t array_size = 1) const;
     SpvId lookup_type(const Type &type, uint32_t array_size = 1) const;
 
-    TypeKey hash_struct(const StructMemberTypes &member_types) const;
+    TypeKey make_struct_type_key(const StructMemberTypes &member_types) const;
     SpvId lookup_struct(const StructMemberTypes &member_types) const;
 
-    PointerTypeKey hash_pointer_type(const Type &type, SpvStorageClass storage_class) const;
+    PointerTypeKey make_pointer_type_key(const Type &type, SpvStorageClass storage_class) const;
     SpvId lookup_pointer_type(const Type &type, SpvStorageClass storage_class) const;
 
-    PointerTypeKey hash_pointer_type(SpvId base_type_id, SpvStorageClass storage_class) const;
+    PointerTypeKey make_pointer_type_key(SpvId base_type_id, SpvStorageClass storage_class) const;
     SpvId lookup_pointer_type(SpvId base_type_id, SpvStorageClass storage_class) const;
 
-    ConstantKey hash_bool_constant(bool value) const;
+    ConstantKey make_bool_constant_key(bool value) const;
 
-    ConstantKey hash_constant(const Type &type, const void *data) const;
+    ConstantKey make_constant_key(const Type &type, const void *data) const;
     SpvId lookup_constant(const Type &type, const void *data) const;
 
-    ConstantKey hash_null_constant(const Type &type) const;
+    ConstantKey make_null_constant_key(const Type &type) const;
     SpvId lookup_null_constant(const Type &type) const;
 
     SpvId map_instruction(const SpvInstruction &inst);
     SpvInstruction lookup_instruction(SpvId result_id) const;
     bool has_instruction(SpvId inst) const;
 
-    FunctionTypeKey hash_function_type(SpvId return_type_id, const ParamTypes &param_type_ids) const;
+    FunctionTypeKey make_function_type_key(SpvId return_type_id, const ParamTypes &param_type_ids) const;
     SpvId lookup_function_type(SpvId return_type_id, const ParamTypes &param_type_ids) const;
 
     SpvId scope_id = SpvInvalidId;

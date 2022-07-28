@@ -805,7 +805,7 @@ bool SpvBuilder::is_extension_required(const std::string &extension) const {
     return module.is_extension_required(extension);
 }
 
-SpvBuilder::TypeKey SpvBuilder::hash_type(const Type &type, uint32_t array_size) const {
+SpvBuilder::TypeKey SpvBuilder::make_type_key(const Type &type, uint32_t array_size) const {
     TypeKey key(4 + sizeof(uint32_t), ' ');
     key[0] = type.code();
     key[1] = type.bits();
@@ -819,7 +819,7 @@ SpvBuilder::TypeKey SpvBuilder::hash_type(const Type &type, uint32_t array_size)
 }
 
 SpvId SpvBuilder::lookup_type(const Type &type, uint32_t array_size) const {
-    SpvBuilder::TypeKey type_key = hash_type(type, array_size);
+    SpvBuilder::TypeKey type_key = make_type_key(type, array_size);
     TypeMap::const_iterator it = type_map.find(type_key);
     if (it == type_map.end()) {
         return SpvInvalidId;
@@ -828,7 +828,7 @@ SpvId SpvBuilder::lookup_type(const Type &type, uint32_t array_size) const {
 }
 
 SpvId SpvBuilder::declare_type(const Type &type, uint32_t array_size) {
-    SpvBuilder::TypeKey type_key = hash_type(type, array_size);
+    SpvBuilder::TypeKey type_key = make_type_key(type, array_size);
     TypeMap::const_iterator it = type_map.find(type_key);
     if (it != type_map.end()) {
         return it->second;
@@ -876,7 +876,7 @@ SpvId SpvBuilder::declare_type(const Type &type, uint32_t array_size) {
     return type_id;
 }
 
-SpvBuilder::TypeKey SpvBuilder::hash_struct(const StructMemberTypes &member_type_ids) const {
+SpvBuilder::TypeKey SpvBuilder::make_struct_type_key(const StructMemberTypes &member_type_ids) const {
     TypeKey key(member_type_ids.size() * sizeof(SpvId), ' ');
     uint32_t index = 0;
     for (SpvId type_id : member_type_ids) {
@@ -889,7 +889,7 @@ SpvBuilder::TypeKey SpvBuilder::hash_struct(const StructMemberTypes &member_type
 }
 
 SpvId SpvBuilder::lookup_struct(const StructMemberTypes &member_type_ids) const {
-    TypeKey key = hash_struct(member_type_ids);
+    TypeKey key = make_struct_type_key(member_type_ids);
     TypeMap::const_iterator it = struct_map.find(key);
     if (it != struct_map.end()) {
         return it->second;
@@ -898,7 +898,7 @@ SpvId SpvBuilder::lookup_struct(const StructMemberTypes &member_type_ids) const 
 }
 
 SpvId SpvBuilder::declare_struct(const StructMemberTypes &member_type_ids) {
-    TypeKey key = hash_struct(member_type_ids);
+    TypeKey key = make_struct_type_key(member_type_ids);
     TypeMap::const_iterator it = struct_map.find(key);
     if (it != struct_map.end()) {
         return it->second;
@@ -911,7 +911,7 @@ SpvId SpvBuilder::declare_struct(const StructMemberTypes &member_type_ids) {
     return struct_type_id;
 }
 
-SpvBuilder::PointerTypeKey SpvBuilder::hash_pointer_type(const Type &type, SpvStorageClass storage_class) const {
+SpvBuilder::PointerTypeKey SpvBuilder::make_pointer_type_key(const Type &type, SpvStorageClass storage_class) const {
     SpvId base_type_id = lookup_type(type);
     if (base_type_id == SpvInvalidId) {
         internal_error << "SPIRV: Attempted to declare pointer type for undeclared base type! " << type << "\n";
@@ -919,7 +919,7 @@ SpvBuilder::PointerTypeKey SpvBuilder::hash_pointer_type(const Type &type, SpvSt
     return std::make_pair(base_type_id, storage_class);
 }
 
-SpvBuilder::PointerTypeKey SpvBuilder::hash_pointer_type(SpvId base_type_id, SpvStorageClass storage_class) const {
+SpvBuilder::PointerTypeKey SpvBuilder::make_pointer_type_key(SpvId base_type_id, SpvStorageClass storage_class) const {
     return std::make_pair(base_type_id, storage_class);
 }
 
@@ -932,7 +932,7 @@ SpvId SpvBuilder::lookup_pointer_type(const Type &type, SpvStorageClass storage_
 }
 
 SpvId SpvBuilder::lookup_pointer_type(SpvId base_type_id, SpvStorageClass storage_class) const {
-    PointerTypeKey key = hash_pointer_type(base_type_id, storage_class);
+    PointerTypeKey key = make_pointer_type_key(base_type_id, storage_class);
     PointerTypeMap::const_iterator it = pointer_type_map.find(key);
     if (it != pointer_type_map.end()) {
         return it->second;
@@ -946,7 +946,7 @@ SpvId SpvBuilder::declare_pointer_type(const Type &type, SpvStorageClass storage
 }
 
 SpvId SpvBuilder::declare_pointer_type(SpvId base_type_id, SpvStorageClass storage_class) {
-    PointerTypeKey key = hash_pointer_type(base_type_id, storage_class);
+    PointerTypeKey key = make_pointer_type_key(base_type_id, storage_class);
     PointerTypeMap::const_iterator it = pointer_type_map.find(key);
     if (it != pointer_type_map.end()) {
         return it->second;
@@ -959,7 +959,7 @@ SpvId SpvBuilder::declare_pointer_type(SpvId base_type_id, SpvStorageClass stora
     return pointer_type_id;
 }
 
-SpvBuilder::ConstantKey SpvBuilder::hash_constant(const Type &type, const void *data) const {
+SpvBuilder::ConstantKey SpvBuilder::make_constant_key(const Type &type, const void *data) const {
     ConstantKey key(type.bytes() + 4, ' ');
     key[0] = type.code();
     key[1] = type.bits();
@@ -972,13 +972,13 @@ SpvBuilder::ConstantKey SpvBuilder::hash_constant(const Type &type, const void *
     return key;
 }
 
-SpvBuilder::ConstantKey SpvBuilder::hash_bool_constant(bool value) const {
+SpvBuilder::ConstantKey SpvBuilder::make_bool_constant_key(bool value) const {
     Type type = Bool();
     bool data = value;
-    return hash_constant(type, &data);
+    return make_constant_key(type, &data);
 }
 
-SpvBuilder::ConstantKey SpvBuilder::hash_null_constant(const Type &type) const {
+SpvBuilder::ConstantKey SpvBuilder::make_null_constant_key(const Type &type) const {
     ConstantKey key(type.bytes() + 4, ' ');
     key[0] = type.code();
     key[1] = type.bits();
@@ -991,7 +991,7 @@ SpvBuilder::ConstantKey SpvBuilder::hash_null_constant(const Type &type) const {
 }
 
 SpvId SpvBuilder::lookup_null_constant(const Type &type) const {
-    ConstantKey key = hash_null_constant(type);
+    ConstantKey key = make_null_constant_key(type);
     ConstantMap::const_iterator it = constant_map.find(key);
     if (it != constant_map.end()) {
         return it->second;
@@ -1000,7 +1000,7 @@ SpvId SpvBuilder::lookup_null_constant(const Type &type) const {
 }
 
 SpvId SpvBuilder::declare_null_constant(const Type &type) {
-    ConstantKey key = hash_null_constant(type);
+    ConstantKey key = make_null_constant_key(type);
     ConstantMap::const_iterator it = constant_map.find(key);
     if (it != constant_map.end()) {
         return it->second;
@@ -1015,7 +1015,7 @@ SpvId SpvBuilder::declare_null_constant(const Type &type) {
 }
 
 SpvId SpvBuilder::declare_bool_constant(bool value) {
-    const std::string key = hash_bool_constant(value);
+    const std::string key = make_bool_constant_key(value);
     ConstantMap::const_iterator it = constant_map.find(key);
     if (it != constant_map.end()) {
         return it->second;
@@ -1038,7 +1038,7 @@ SpvId SpvBuilder::declare_scalar_constant(const Type &scalar_type, const void *d
         return SpvInvalidId;
     }
 
-    const std::string constant_key = hash_constant(scalar_type, data);
+    const std::string constant_key = make_constant_key(scalar_type, data);
     ConstantMap::const_iterator it = constant_map.find(constant_key);
     if (it != constant_map.end()) {
         return it->second;
@@ -1076,14 +1076,14 @@ SpvId SpvBuilder::declare_vector_constant(const Type &type, const void *data) {
         return SpvInvalidId;
     }
 
-    const std::string key = hash_constant(type, data);
+    const std::string key = make_constant_key(type, data);
     ConstantMap::const_iterator it = constant_map.find(key);
     if (it != constant_map.end()) {
         return it->second;
     }
 
     Type scalar_type = type.with_lanes(1);
-    std::vector<SpvId> components.reserve(type.lanes());
+    std::vector<SpvId> components(type.lanes());
     if (scalar_type.is_float()) {
         if (type.bits() == 64) {
             const double *values = (const double *)data;
@@ -1137,7 +1137,7 @@ SpvId SpvBuilder::declare_vector_constant(const Type &type, const void *data) {
 }
 
 SpvId SpvBuilder::lookup_constant(const Type &type, const void *data) const {
-    ConstantKey key = hash_constant(type, data);
+    ConstantKey key = make_constant_key(type, data);
     ConstantMap::const_iterator it = constant_map.find(key);
     if (it != constant_map.end()) {
         return it->second;
@@ -1147,7 +1147,7 @@ SpvId SpvBuilder::lookup_constant(const Type &type, const void *data) const {
 
 SpvId SpvBuilder::declare_constant(const Type &type, const void *data) {
 
-    const std::string key = hash_constant(type, data);
+    const std::string key = make_constant_key(type, data);
     ConstantMap::const_iterator it = constant_map.find(key);
     if (it != constant_map.end()) {
         return it->second;
@@ -1185,7 +1185,7 @@ SpvInstruction SpvBuilder::lookup_instruction(SpvId result_id) const {
     return it->second;
 }
 
-SpvBuilder::FunctionTypeKey SpvBuilder::hash_function_type(SpvId return_type_id, const ParamTypes &param_type_ids) const {
+SpvBuilder::FunctionTypeKey SpvBuilder::make_function_type_key(SpvId return_type_id, const ParamTypes &param_type_ids) const {
     TypeKey key((1 + param_type_ids.size()) * sizeof(SpvId), ' ');
 
     uint32_t index = 0;
@@ -1203,7 +1203,7 @@ SpvBuilder::FunctionTypeKey SpvBuilder::hash_function_type(SpvId return_type_id,
 }
 
 SpvId SpvBuilder::lookup_function_type(SpvId return_type_id, const ParamTypes &param_type_ids) const {
-    FunctionTypeKey key = hash_function_type(return_type_id, param_type_ids);
+    FunctionTypeKey key = make_function_type_key(return_type_id, param_type_ids);
     FunctionTypeMap::const_iterator it = function_type_map.find(key);
     if (it != function_type_map.end()) {
         return it->second;
@@ -1212,7 +1212,7 @@ SpvId SpvBuilder::lookup_function_type(SpvId return_type_id, const ParamTypes &p
 }
 
 SpvId SpvBuilder::declare_function_type(SpvId return_type_id, const ParamTypes &param_type_ids) {
-    FunctionTypeKey func_type_key = hash_function_type(return_type_id, param_type_ids);
+    FunctionTypeKey func_type_key = make_function_type_key(return_type_id, param_type_ids);
     FunctionTypeMap::const_iterator it = function_type_map.find(func_type_key);
     if (it != function_type_map.end()) {
         return it->second;
