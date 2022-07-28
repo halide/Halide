@@ -328,13 +328,13 @@ Expr IRMutator::visit(const Shuffle *op) {
 }
 
 Expr IRMutator::visit(const VectorInstruction *op) {
-    internal_error << "Always implement VectorInstruction visitor for IRMutator subclass\n";
-    // auto [new_args, changed] = mutate_with_changes(op->args);
-    // if (!changed) {
-    //     return op;
-    // }
-    // return VectorInstruction::make(op->type, op->op, new_args);
-    return Expr();
+    // internal_error << "Always implement VectorInstruction visitor for IRMutator subclass\n";
+    auto [new_args, changed] = mutate_with_changes(op->args);
+    if (!changed) {
+        return op;
+    }
+    return VectorInstruction::make(op->type, op->op, new_args);
+    // return Expr();
 }
 
 Expr IRMutator::visit(const VectorReduce *op) {
