@@ -10,18 +10,17 @@ namespace Autoscheduler {
 
 using Clock = std::chrono::high_resolution_clock;
 
-template <typename T>
+template<typename T>
 struct ScopedStatistic {
-    const T& value;
+    const T &value;
     std::string msg;
 
-    ScopedStatistic(const T& value, const std::string& msg)
-        : value{value}
-        , msg{msg}
-    {}
+    ScopedStatistic(const T &value, const std::string &msg)
+        : value{value}, msg{msg} {
+    }
 
     ~ScopedStatistic() {
-        aslog(0) << msg << " = " <<  value << "\n";
+        aslog(0) << msg << " = " << value << "\n";
     }
 };
 
@@ -29,10 +28,8 @@ struct ScopedTimer {
     std::chrono::time_point<Clock> start;
     std::string msg;
 
-    ScopedTimer(const std::string& msg)
-        : start{Clock::now()}
-        , msg{msg}
-    {
+    ScopedTimer(const std::string &msg)
+        : start{Clock::now()}, msg{msg} {
         aslog(0) << "Start: " << msg << "\n";
     }
 
@@ -47,8 +44,7 @@ struct Timer {
     std::chrono::time_point<Clock> start;
 
     Timer()
-        : start{Clock::now()}
-    {
+        : start{Clock::now()} {
     }
 
     void restart() {
@@ -130,4 +126,4 @@ struct Statistics {
 }  // namespace Internal
 }  // namespace Halide
 
-#endif // STATISTICS_H
+#endif  // STATISTICS_H

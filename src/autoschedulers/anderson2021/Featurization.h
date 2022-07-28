@@ -344,79 +344,79 @@ struct ScheduleFeatures {
 
     template<typename OS>
     void dump(OS &os) const {
-        os  << "    num_realizations:                      " << num_realizations << "\n"
-            << "    num_productions:                       " << num_productions << "\n"
-            << "    points_computed_per_realization:       " << points_computed_per_realization << "\n"
-            << "    points_computed_per_production:        " << points_computed_per_production << "\n"
-            << "    points_computed_per_thread:            " << points_computed_per_thread << "\n"
-            << "    points_computed_total:                 " << points_computed_total << "\n"
-            << "    points_computed_minimum:               " << points_computed_minimum << "\n"
-            << "    innermost_loop_extent:                 " << innermost_loop_extent << "\n"
-            << "    innermost_pure_loop_extent:            " << innermost_pure_loop_extent << "\n"
-            << "    unrolled_loop_extent:                  " << unrolled_loop_extent << "\n"
-            << "    inner_parallelism:                     " << inner_parallelism << "\n"
-            << "    outer_parallelism:                     " << outer_parallelism << "\n"
-            << "    bytes_at_realization:                  " << bytes_at_realization << "\n"
-            << "    bytes_at_production:                   " << bytes_at_production << "\n"
-            << "    bytes_at_root:                         " << bytes_at_root << "\n"
-            << "    innermost_bytes_at_realization:        " << innermost_bytes_at_realization << "\n"
-            << "    innermost_bytes_at_production:         " << innermost_bytes_at_production << "\n"
-            << "    innermost_bytes_at_root:               " << innermost_bytes_at_root << "\n"
-            << "    inlined_calls:                         " << inlined_calls << "\n"
-            << " unique_global_bytes_read_per_realization: " << unique_global_bytes_read_per_realization << "\n"
-            << " unique_shared_bytes_read_per_realization: " << unique_shared_bytes_read_per_realization << "\n"
-            << " unique_register_bytes_read_per_realization:  " << unique_register_bytes_read_per_realization << "\n"
-            << " unique_global_lines_read_per_realization: " << unique_global_lines_read_per_realization << "\n"
-            << " unique_shared_lines_read_per_realization: " << unique_shared_lines_read_per_realization << "\n"
-            << " unique_register_lines_read_per_realization:  " << unique_register_lines_read_per_realization << "\n"
-            << " unique_global_bytes_read_per_thread:      " << unique_global_bytes_read_per_thread << "\n"
-            << " unique_shared_bytes_read_per_thread:      " << unique_shared_bytes_read_per_thread << "\n"
-            << " unique_register_bytes_read_per_thread:       " << unique_register_bytes_read_per_thread << "\n"
-            << " unique_global_lines_read_per_thread:      " << unique_global_lines_read_per_thread << "\n"
-            << " unique_shared_lines_read_per_thread:      " << unique_shared_lines_read_per_thread << "\n"
-            << " unique_register_lines_read_per_thread:       " << unique_register_lines_read_per_thread << "\n"
-            << " global_allocation_bytes_read_per_realization: " << global_allocation_bytes_read_per_realization << "\n"
-            << " shared_allocation_bytes_read_per_realization: " << shared_allocation_bytes_read_per_realization << "\n"
-            << " register_allocation_bytes_read_per_realization: " << register_allocation_bytes_read_per_realization << "\n"
-            << "    working_set:                           " << working_set << "\n"
-            << "    num_scalars:                           " << num_scalars << "\n"
-            << "    global_bytes_at_task:                  " << global_bytes_at_task << "\n"
-            << "    shared_bytes_at_task:                  " << shared_bytes_at_task << "\n"
-            << "    register_bytes_at_task:                " << register_bytes_at_task << "\n"
-            << "    global_innermost_bytes_at_task:        " << global_innermost_bytes_at_task << "\n"
-            << "    shared_innermost_bytes_at_task:        " << shared_innermost_bytes_at_task << "\n"
-            << "    register_innermost_bytes_at_task:      " << register_innermost_bytes_at_task << "\n"
-            << "    unique_bytes_read_per_point:          " << unique_bytes_read_per_point << "\n"
-            << "    unique_lines_read_per_point:          " << unique_lines_read_per_point << "\n"
-            << "    unique_bytes_read_per_task:            " << unique_bytes_read_per_task << "\n"
-            << "    unique_lines_read_per_task:            " << unique_lines_read_per_task << "\n"
-            << "    working_set_at_task:                   " << working_set_at_task << "\n"
-            << "    working_set_at_production:             " << working_set_at_production << "\n"
-            << "    working_set_at_realization:            " << working_set_at_realization << "\n"
-            << "    working_set_at_root:                   " << working_set_at_root << "\n"
-            << "    num_blocks:                            " << num_blocks << "\n"
-            << "    num_warps_per_block:                   " << num_warps_per_block << "\n"
-            << "    block_occupancy:                       " << block_occupancy << "\n"
-            << "    warp_lane_utilization:                 " << warp_lane_utilization << "\n"
-            << "    num_active_warps_per_block:      " << num_active_warps_per_block << "\n"
-            << "    warp_lane_utilization_at_block_y:      " << warp_lane_utilization_at_block_y << "\n"
-            << "    warp_lane_utilization_at_block_z:      " << warp_lane_utilization_at_block_z << "\n"
-            << "    idle_lane_wastage:                     " << idle_lane_wastage << "\n"
-            << "    num_shared_mem_loads_per_block:        " << num_shared_mem_loads_per_block << "\n"
-            << "    num_global_mem_loads_per_block:        " << num_global_mem_loads_per_block << "\n"
-            << "    num_shared_mem_stores_per_block:       " << num_shared_mem_stores_per_block << "\n"
-            << "    num_global_mem_stores_per_block:       " << num_global_mem_stores_per_block << "\n"
-            << "    shared_mem_store_efficiency:           " << shared_mem_store_efficiency << "\n"
-            << "    shared_mem_load_efficiency:            " << shared_mem_load_efficiency << "\n"
-            << "    global_mem_store_efficiency:           " << global_mem_store_efficiency << "\n"
-            << "    global_mem_load_efficiency:            " << global_mem_load_efficiency << "\n"
-            << "    working_set_at_thread:                 " << working_set_at_thread << "\n"
-            << "    shared_mem_occupancy:                  " << shared_mem_occupancy << "\n"
-            << "    shared_mem_block_limit_factor:         " << shared_mem_block_limit_factor << "\n"
-            << "    max_warp_occupancy:                    " << max_warp_occupancy << "\n"
-            << "    max_block_occupancy:                   " << max_block_occupancy << "\n"
-            << "    num_threads_per_block:                 " << num_threads_per_block << "\n"
-            << "    expr_branching:                        " << expr_branching << "\n";
+        os << "    num_realizations:                      " << num_realizations << "\n"
+           << "    num_productions:                       " << num_productions << "\n"
+           << "    points_computed_per_realization:       " << points_computed_per_realization << "\n"
+           << "    points_computed_per_production:        " << points_computed_per_production << "\n"
+           << "    points_computed_per_thread:            " << points_computed_per_thread << "\n"
+           << "    points_computed_total:                 " << points_computed_total << "\n"
+           << "    points_computed_minimum:               " << points_computed_minimum << "\n"
+           << "    innermost_loop_extent:                 " << innermost_loop_extent << "\n"
+           << "    innermost_pure_loop_extent:            " << innermost_pure_loop_extent << "\n"
+           << "    unrolled_loop_extent:                  " << unrolled_loop_extent << "\n"
+           << "    inner_parallelism:                     " << inner_parallelism << "\n"
+           << "    outer_parallelism:                     " << outer_parallelism << "\n"
+           << "    bytes_at_realization:                  " << bytes_at_realization << "\n"
+           << "    bytes_at_production:                   " << bytes_at_production << "\n"
+           << "    bytes_at_root:                         " << bytes_at_root << "\n"
+           << "    innermost_bytes_at_realization:        " << innermost_bytes_at_realization << "\n"
+           << "    innermost_bytes_at_production:         " << innermost_bytes_at_production << "\n"
+           << "    innermost_bytes_at_root:               " << innermost_bytes_at_root << "\n"
+           << "    inlined_calls:                         " << inlined_calls << "\n"
+           << " unique_global_bytes_read_per_realization: " << unique_global_bytes_read_per_realization << "\n"
+           << " unique_shared_bytes_read_per_realization: " << unique_shared_bytes_read_per_realization << "\n"
+           << " unique_register_bytes_read_per_realization:  " << unique_register_bytes_read_per_realization << "\n"
+           << " unique_global_lines_read_per_realization: " << unique_global_lines_read_per_realization << "\n"
+           << " unique_shared_lines_read_per_realization: " << unique_shared_lines_read_per_realization << "\n"
+           << " unique_register_lines_read_per_realization:  " << unique_register_lines_read_per_realization << "\n"
+           << " unique_global_bytes_read_per_thread:      " << unique_global_bytes_read_per_thread << "\n"
+           << " unique_shared_bytes_read_per_thread:      " << unique_shared_bytes_read_per_thread << "\n"
+           << " unique_register_bytes_read_per_thread:       " << unique_register_bytes_read_per_thread << "\n"
+           << " unique_global_lines_read_per_thread:      " << unique_global_lines_read_per_thread << "\n"
+           << " unique_shared_lines_read_per_thread:      " << unique_shared_lines_read_per_thread << "\n"
+           << " unique_register_lines_read_per_thread:       " << unique_register_lines_read_per_thread << "\n"
+           << " global_allocation_bytes_read_per_realization: " << global_allocation_bytes_read_per_realization << "\n"
+           << " shared_allocation_bytes_read_per_realization: " << shared_allocation_bytes_read_per_realization << "\n"
+           << " register_allocation_bytes_read_per_realization: " << register_allocation_bytes_read_per_realization << "\n"
+           << "    working_set:                           " << working_set << "\n"
+           << "    num_scalars:                           " << num_scalars << "\n"
+           << "    global_bytes_at_task:                  " << global_bytes_at_task << "\n"
+           << "    shared_bytes_at_task:                  " << shared_bytes_at_task << "\n"
+           << "    register_bytes_at_task:                " << register_bytes_at_task << "\n"
+           << "    global_innermost_bytes_at_task:        " << global_innermost_bytes_at_task << "\n"
+           << "    shared_innermost_bytes_at_task:        " << shared_innermost_bytes_at_task << "\n"
+           << "    register_innermost_bytes_at_task:      " << register_innermost_bytes_at_task << "\n"
+           << "    unique_bytes_read_per_point:          " << unique_bytes_read_per_point << "\n"
+           << "    unique_lines_read_per_point:          " << unique_lines_read_per_point << "\n"
+           << "    unique_bytes_read_per_task:            " << unique_bytes_read_per_task << "\n"
+           << "    unique_lines_read_per_task:            " << unique_lines_read_per_task << "\n"
+           << "    working_set_at_task:                   " << working_set_at_task << "\n"
+           << "    working_set_at_production:             " << working_set_at_production << "\n"
+           << "    working_set_at_realization:            " << working_set_at_realization << "\n"
+           << "    working_set_at_root:                   " << working_set_at_root << "\n"
+           << "    num_blocks:                            " << num_blocks << "\n"
+           << "    num_warps_per_block:                   " << num_warps_per_block << "\n"
+           << "    block_occupancy:                       " << block_occupancy << "\n"
+           << "    warp_lane_utilization:                 " << warp_lane_utilization << "\n"
+           << "    num_active_warps_per_block:      " << num_active_warps_per_block << "\n"
+           << "    warp_lane_utilization_at_block_y:      " << warp_lane_utilization_at_block_y << "\n"
+           << "    warp_lane_utilization_at_block_z:      " << warp_lane_utilization_at_block_z << "\n"
+           << "    idle_lane_wastage:                     " << idle_lane_wastage << "\n"
+           << "    num_shared_mem_loads_per_block:        " << num_shared_mem_loads_per_block << "\n"
+           << "    num_global_mem_loads_per_block:        " << num_global_mem_loads_per_block << "\n"
+           << "    num_shared_mem_stores_per_block:       " << num_shared_mem_stores_per_block << "\n"
+           << "    num_global_mem_stores_per_block:       " << num_global_mem_stores_per_block << "\n"
+           << "    shared_mem_store_efficiency:           " << shared_mem_store_efficiency << "\n"
+           << "    shared_mem_load_efficiency:            " << shared_mem_load_efficiency << "\n"
+           << "    global_mem_store_efficiency:           " << global_mem_store_efficiency << "\n"
+           << "    global_mem_load_efficiency:            " << global_mem_load_efficiency << "\n"
+           << "    working_set_at_thread:                 " << working_set_at_thread << "\n"
+           << "    shared_mem_occupancy:                  " << shared_mem_occupancy << "\n"
+           << "    shared_mem_block_limit_factor:         " << shared_mem_block_limit_factor << "\n"
+           << "    max_warp_occupancy:                    " << max_warp_occupancy << "\n"
+           << "    max_block_occupancy:                   " << max_block_occupancy << "\n"
+           << "    num_threads_per_block:                 " << num_threads_per_block << "\n"
+           << "    expr_branching:                        " << expr_branching << "\n";
     }
 
     void dump() const {
@@ -424,80 +424,8 @@ struct ScheduleFeatures {
         dump(os);
     }
 
-    bool equal(const ScheduleFeatures& other) const {
-        return num_realizations                      == other.num_realizations
-            && num_productions                       == other.num_productions
-            && points_computed_per_realization       == other.points_computed_per_realization
-            && points_computed_per_production        == other.points_computed_per_production
-            && points_computed_per_thread            == other.points_computed_per_thread
-            && points_computed_total                 == other.points_computed_total
-            && points_computed_minimum               == other.points_computed_minimum
-            && innermost_loop_extent                 == other.innermost_loop_extent
-            && innermost_pure_loop_extent            == other.innermost_pure_loop_extent
-            && unrolled_loop_extent                  == other.unrolled_loop_extent
-            && inner_parallelism                     == other.inner_parallelism
-            && outer_parallelism                     == other.outer_parallelism
-            && bytes_at_realization                  == other.bytes_at_realization
-            && bytes_at_production                   == other.bytes_at_production
-            && bytes_at_root                         == other.bytes_at_root
-            && innermost_bytes_at_realization        == other.innermost_bytes_at_realization
-            && innermost_bytes_at_production         == other.innermost_bytes_at_production
-            && innermost_bytes_at_root               == other.innermost_bytes_at_root
-            && inlined_calls                         == other.inlined_calls
-            && unique_global_bytes_read_per_realization     == other.unique_global_bytes_read_per_realization
-            && unique_shared_bytes_read_per_realization     == other.unique_shared_bytes_read_per_realization
-            && unique_register_bytes_read_per_realization     == other.unique_register_bytes_read_per_realization
-            && unique_global_lines_read_per_realization     == other.unique_global_lines_read_per_realization
-            && unique_shared_lines_read_per_realization     == other.unique_shared_lines_read_per_realization
-            && unique_register_lines_read_per_realization     == other.unique_register_lines_read_per_realization
-            && unique_global_bytes_read_per_thread   == other.unique_global_bytes_read_per_thread
-            && unique_shared_bytes_read_per_thread   == other.unique_shared_bytes_read_per_thread
-            && unique_register_bytes_read_per_thread    == other.unique_register_bytes_read_per_thread
-            && unique_global_lines_read_per_thread   == other.unique_global_lines_read_per_thread
-            && unique_shared_lines_read_per_thread   == other.unique_shared_lines_read_per_thread
-            && unique_register_lines_read_per_thread    == other.unique_register_lines_read_per_thread
-            && global_allocation_bytes_read_per_realization == other.global_allocation_bytes_read_per_realization
-            && shared_allocation_bytes_read_per_realization == other.shared_allocation_bytes_read_per_realization
-            && register_allocation_bytes_read_per_realization == other.register_allocation_bytes_read_per_realization
-            && working_set                           == other.working_set
-            && num_scalars                           == other.num_scalars
-            && global_bytes_at_task                  == other.global_bytes_at_task
-            && shared_bytes_at_task                  == other.shared_bytes_at_task
-            && register_bytes_at_task                   == other.register_bytes_at_task
-            && global_innermost_bytes_at_task        == other.global_innermost_bytes_at_task
-            && shared_innermost_bytes_at_task        == other.shared_innermost_bytes_at_task
-            && register_innermost_bytes_at_task         == other.register_innermost_bytes_at_task
-            && unique_bytes_read_per_point          == other.unique_bytes_read_per_point
-            && unique_lines_read_per_point          == other.unique_lines_read_per_point
-            && unique_bytes_read_per_task            == other.unique_bytes_read_per_task
-            && unique_lines_read_per_task            == other.unique_lines_read_per_task
-            && working_set_at_task                   == other.working_set_at_task
-            && working_set_at_production             == other.working_set_at_production
-            && working_set_at_realization            == other.working_set_at_realization
-            && working_set_at_root                   == other.working_set_at_root
-            && num_blocks                            == other.num_blocks
-            && num_warps_per_block                   == other.num_warps_per_block
-            && block_occupancy                       == other.block_occupancy
-            && warp_lane_utilization                 == other.warp_lane_utilization
-            && num_active_warps_per_block            == other.num_active_warps_per_block
-            && warp_lane_utilization_at_block_y      == other.warp_lane_utilization_at_block_y
-            && warp_lane_utilization_at_block_z      == other.warp_lane_utilization_at_block_z
-            && idle_lane_wastage                     == other.idle_lane_wastage
-            && num_shared_mem_loads_per_block        == other.num_shared_mem_loads_per_block
-            && num_global_mem_loads_per_block        == other.num_global_mem_loads_per_block
-            && num_shared_mem_stores_per_block       == other.num_shared_mem_stores_per_block
-            && num_global_mem_stores_per_block       == other.num_global_mem_stores_per_block
-            && shared_mem_store_efficiency           == other.shared_mem_store_efficiency
-            && shared_mem_load_efficiency            == other.shared_mem_load_efficiency
-            && global_mem_store_efficiency           == other.global_mem_store_efficiency
-            && global_mem_load_efficiency            == other.global_mem_load_efficiency
-            && working_set_at_thread                 == other.working_set_at_thread
-            && shared_mem_occupancy                  == other.shared_mem_occupancy
-            && shared_mem_block_limit_factor         == other.shared_mem_block_limit_factor
-            && max_warp_occupancy                    == other.max_warp_occupancy
-            && max_block_occupancy                   == other.max_block_occupancy
-            && num_threads_per_block                 == other.num_threads_per_block
-            && expr_branching                        == other.expr_branching;
+    bool equal(const ScheduleFeatures &other) const {
+        return num_realizations == other.num_realizations && num_productions == other.num_productions && points_computed_per_realization == other.points_computed_per_realization && points_computed_per_production == other.points_computed_per_production && points_computed_per_thread == other.points_computed_per_thread && points_computed_total == other.points_computed_total && points_computed_minimum == other.points_computed_minimum && innermost_loop_extent == other.innermost_loop_extent && innermost_pure_loop_extent == other.innermost_pure_loop_extent && unrolled_loop_extent == other.unrolled_loop_extent && inner_parallelism == other.inner_parallelism && outer_parallelism == other.outer_parallelism && bytes_at_realization == other.bytes_at_realization && bytes_at_production == other.bytes_at_production && bytes_at_root == other.bytes_at_root && innermost_bytes_at_realization == other.innermost_bytes_at_realization && innermost_bytes_at_production == other.innermost_bytes_at_production && innermost_bytes_at_root == other.innermost_bytes_at_root && inlined_calls == other.inlined_calls && unique_global_bytes_read_per_realization == other.unique_global_bytes_read_per_realization && unique_shared_bytes_read_per_realization == other.unique_shared_bytes_read_per_realization && unique_register_bytes_read_per_realization == other.unique_register_bytes_read_per_realization && unique_global_lines_read_per_realization == other.unique_global_lines_read_per_realization && unique_shared_lines_read_per_realization == other.unique_shared_lines_read_per_realization && unique_register_lines_read_per_realization == other.unique_register_lines_read_per_realization && unique_global_bytes_read_per_thread == other.unique_global_bytes_read_per_thread && unique_shared_bytes_read_per_thread == other.unique_shared_bytes_read_per_thread && unique_register_bytes_read_per_thread == other.unique_register_bytes_read_per_thread && unique_global_lines_read_per_thread == other.unique_global_lines_read_per_thread && unique_shared_lines_read_per_thread == other.unique_shared_lines_read_per_thread && unique_register_lines_read_per_thread == other.unique_register_lines_read_per_thread && global_allocation_bytes_read_per_realization == other.global_allocation_bytes_read_per_realization && shared_allocation_bytes_read_per_realization == other.shared_allocation_bytes_read_per_realization && register_allocation_bytes_read_per_realization == other.register_allocation_bytes_read_per_realization && working_set == other.working_set && num_scalars == other.num_scalars && global_bytes_at_task == other.global_bytes_at_task && shared_bytes_at_task == other.shared_bytes_at_task && register_bytes_at_task == other.register_bytes_at_task && global_innermost_bytes_at_task == other.global_innermost_bytes_at_task && shared_innermost_bytes_at_task == other.shared_innermost_bytes_at_task && register_innermost_bytes_at_task == other.register_innermost_bytes_at_task && unique_bytes_read_per_point == other.unique_bytes_read_per_point && unique_lines_read_per_point == other.unique_lines_read_per_point && unique_bytes_read_per_task == other.unique_bytes_read_per_task && unique_lines_read_per_task == other.unique_lines_read_per_task && working_set_at_task == other.working_set_at_task && working_set_at_production == other.working_set_at_production && working_set_at_realization == other.working_set_at_realization && working_set_at_root == other.working_set_at_root && num_blocks == other.num_blocks && num_warps_per_block == other.num_warps_per_block && block_occupancy == other.block_occupancy && warp_lane_utilization == other.warp_lane_utilization && num_active_warps_per_block == other.num_active_warps_per_block && warp_lane_utilization_at_block_y == other.warp_lane_utilization_at_block_y && warp_lane_utilization_at_block_z == other.warp_lane_utilization_at_block_z && idle_lane_wastage == other.idle_lane_wastage && num_shared_mem_loads_per_block == other.num_shared_mem_loads_per_block && num_global_mem_loads_per_block == other.num_global_mem_loads_per_block && num_shared_mem_stores_per_block == other.num_shared_mem_stores_per_block && num_global_mem_stores_per_block == other.num_global_mem_stores_per_block && shared_mem_store_efficiency == other.shared_mem_store_efficiency && shared_mem_load_efficiency == other.shared_mem_load_efficiency && global_mem_store_efficiency == other.global_mem_store_efficiency && global_mem_load_efficiency == other.global_mem_load_efficiency && working_set_at_thread == other.working_set_at_thread && shared_mem_occupancy == other.shared_mem_occupancy && shared_mem_block_limit_factor == other.shared_mem_block_limit_factor && max_warp_occupancy == other.max_warp_occupancy && max_block_occupancy == other.max_block_occupancy && num_threads_per_block == other.num_threads_per_block && expr_branching == other.expr_branching;
     }
 };
 

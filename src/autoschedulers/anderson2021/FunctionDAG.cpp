@@ -496,7 +496,7 @@ FunctionDAG::Edge::BoundInfo::BoundInfo(const Expr &e, const Node::Stage &consum
 }
 
 bool FunctionDAG::Edge::all_load_jacobian_coeffs_exist() const {
-    for (const auto& jac : load_jacobians) {
+    for (const auto &jac : load_jacobians) {
         if (!jac.all_coeffs_exist()) {
             return false;
         }
@@ -1209,7 +1209,7 @@ int ExprBranching::visit(const Load *op) {
     return visit_binary(op->predicate, op->index);
 }
 
-int ExprBranching::visit_nary(const std::vector<Expr>& exprs) {
+int ExprBranching::visit_nary(const std::vector<Expr> &exprs) {
     int total_branching = 0;
 
     for (Expr e : exprs) {
@@ -1229,7 +1229,7 @@ int ExprBranching::visit_nary(const std::vector<Expr>& exprs) {
 }
 
 int ExprBranching::visit(const Call *op) {
-    for (const auto& i : inlined) {
+    for (const auto &i : inlined) {
         if (op->name == i.first->func.name()) {
             return compute(i.first->func);
         }
@@ -1250,13 +1250,13 @@ int ExprBranching::visit(const VectorReduce *op) {
     return Super::dispatch(op->value);
 }
 
-int ExprBranching::compute(const Function& f) {
+int ExprBranching::compute(const Function &f) {
     Definition def = f.definition();
 
     std::vector<Expr> values;
     values.reserve(def.values().size());
     for (auto v : def.values()) {
-        values.push_back(common_subexpression_elimination(simplify(v))); // Get things into canonical form
+        values.push_back(common_subexpression_elimination(simplify(v)));  // Get things into canonical form
     }
 
     int branching = visit_nary(values);
@@ -1264,13 +1264,13 @@ int ExprBranching::compute(const Function& f) {
     std::vector<Expr> args;
     args.reserve(def.args().size());
     for (auto v : def.args()) {
-        args.push_back(common_subexpression_elimination(simplify(v))); // Get things into canonical form
+        args.push_back(common_subexpression_elimination(simplify(v)));  // Get things into canonical form
     }
 
     return std::max(branching, visit_nary(args));
 }
 
-void sanitize_names(std::string& str) {
+void sanitize_names(std::string &str) {
     bool in_quotes = false;
     for (auto &c : str) {
         in_quotes ^= (c == '"');

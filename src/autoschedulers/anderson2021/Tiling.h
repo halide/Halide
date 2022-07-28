@@ -10,16 +10,16 @@ namespace Halide {
 namespace Internal {
 namespace Autoscheduler {
 
-bool all_ones(const std::vector<int64_t>& nums);
+bool all_ones(const std::vector<int64_t> &nums);
 
-bool equal_to_existing_size(const std::vector<int64_t>& s, const std::vector<int64_t>& nums);
+bool equal_to_existing_size(const std::vector<int64_t> &s, const std::vector<int64_t> &nums);
 
 vector<vector<int64_t>> generate_serial_tilings(const vector<int64_t> &s, int d,
                                                 int last_d,
                                                 int vectorized_index,
                                                 const vector<int> &vec_dim_serial_sizes,
-                                                bool filter_small_outer_extents=false,
-                                                bool allow_inner_ones=false);
+                                                bool filter_small_outer_extents = false,
+                                                bool allow_inner_ones = false);
 
 // Given a multi-dimensional box of dimensionality d, generate a list
 // of candidate tile sizes for it, logarithmically spacing the sizes
@@ -32,7 +32,6 @@ vector<vector<int64_t>> generate_serial_tilings(const vector<int64_t> &s, int d,
 vector<vector<int64_t>> generate_tilings(const vector<int64_t> &s, int d, int factor,
                                          bool allow_splits,
                                          const vector<int> &inner_sizes = vector<int>());
-
 
 /** moves vectorized dimension first and also removes dimensions with size 1
     to reflect actual thread dimensions when loop nests are lowered **/
@@ -47,12 +46,12 @@ void lowered_dims(const vector<int64_t> &size, int vector_loop_i, vector<int64_t
 // max_s hold max gpu_thread counts of all siblings in each dimension. Used to make sure union of
 // thread counts is under 1024 threshold.
 vector<vector<int64_t>> generate_gpu_tilings(const vector<vector<int64_t>> &stage_sizes,
-        const vector<vector<int>> &pure_dims,
-        const vector<int64_t> &max_s,
-        int d, const vector<int> &vectorized_indices, bool serial_inner, bool is_compute_root_stage);
+                                             const vector<vector<int>> &pure_dims,
+                                             const vector<int64_t> &max_s,
+                                             int d, const vector<int> &vectorized_indices, bool serial_inner, bool is_compute_root_stage);
 
 }  // namespace Autoscheduler
 }  // namespace Internal
 }  // namespace Halide
 
-#endif // TILING_H
+#endif  // TILING_H

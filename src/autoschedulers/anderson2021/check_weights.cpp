@@ -1,7 +1,7 @@
 #include <cmath>
 #include <fstream>
-#include <string>
 #include <iostream>
+#include <string>
 
 #include "CostModel.h"
 #include "NetworkSize.h"

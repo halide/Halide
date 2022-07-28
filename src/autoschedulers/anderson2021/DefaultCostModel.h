@@ -13,7 +13,7 @@ private:
     Internal::Weights weights;
     Runtime::Buffer<float> schedule_feat_queue, pipeline_feat_queue, costs, costs_per_stage;
     Runtime::Buffer<double *> cost_ptrs;
-    std::vector<std::vector<double>*> cost_per_stage_ptrs;
+    std::vector<std::vector<double> *> cost_per_stage_ptrs;
     int cursor, num_stages, num_cores;
     int batch_id{0};
 
@@ -32,12 +32,11 @@ public:
     DefaultCostModel(const std::string &weights_in_path,
                      const std::string &weights_out_path,
                      bool randomize_weights,
-                     Internal::Autoscheduler::Statistics& stats)
+                     Internal::Autoscheduler::Statistics &stats)
         : weights_in_path(weights_in_path),
           weights_out_path(weights_out_path),
           randomize_weights(randomize_weights),
-          stats{stats}
-    {
+          stats{stats} {
         load_weights();
     }
     virtual ~DefaultCostModel() = default;
@@ -69,7 +68,7 @@ public:
     void load_weights();
 };
 
-std::unique_ptr<DefaultCostModel> make_default_cost_model(Internal::Autoscheduler::Statistics& stats,
+std::unique_ptr<DefaultCostModel> make_default_cost_model(Internal::Autoscheduler::Statistics &stats,
                                                           const std::string &weights_in_dir = "",
                                                           const std::string &weights_out_dir = "",
                                                           bool randomize_weights = false);

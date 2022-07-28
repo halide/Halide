@@ -29,7 +29,7 @@ public:
     virtual void enqueue(const Internal::Autoscheduler::FunctionDAG &dag,
                          const Halide::Internal::Autoscheduler::StageMapOfScheduleFeatures &schedule_feats,
                          double *cost_ptr,
-                         std::vector<double>* cost_per_stage_ptr) = 0;
+                         std::vector<double> *cost_per_stage_ptr) = 0;
 
     // Evaluate all schedules in the queue.
     virtual void evaluate_costs() = 0;

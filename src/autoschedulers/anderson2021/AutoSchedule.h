@@ -55,29 +55,28 @@ private:
     const bool draw_progress_bar = isatty(2);
 };
 
-
 typedef PerfectHashMap<FunctionDAG::Node::Stage, ScheduleFeatures> StageMapOfScheduleFeatures;
 
 struct AutoSchedule {
     const FunctionDAG &dag;
     const MachineParams &params;
     const Target &target;
-    const std::vector<Function>& outputs;
+    const std::vector<Function> &outputs;
     std::mt19937 &rng;
     CostModel *cost_model;
     Statistics &stats;
     SearchSpace &search_space;
-    const LoopNestParser* partial_schedule;
+    const LoopNestParser *partial_schedule;
 
     AutoSchedule(const FunctionDAG &dag,
                  const MachineParams &params,
                  const Target &target,
-                 const std::vector<Function>& outputs,
+                 const std::vector<Function> &outputs,
                  std::mt19937 &rng,
                  CostModel *cost_model,
                  Statistics &stats,
                  SearchSpace &search_space,
-                 const LoopNestParser* partial_schedule);
+                 const LoopNestParser *partial_schedule);
 
     bool use_partial_schedule() const {
         return partial_schedule;
@@ -93,10 +92,10 @@ struct AutoSchedule {
     IntrusivePtr<State> optimal_schedule(int beam_size);
 };
 
-void find_and_apply_schedule(FunctionDAG& dag, const std::vector<Function> &outputs, const MachineParams &params, const Target &target, CostModel* cost_model, int beam_size, StageMapOfScheduleFeatures* schedule_features);
+void find_and_apply_schedule(FunctionDAG &dag, const std::vector<Function> &outputs, const MachineParams &params, const Target &target, CostModel *cost_model, int beam_size, StageMapOfScheduleFeatures *schedule_features);
 
 }  // namespace Autoscheduler
 }  // namespace Internal
 }  // namespace Halide
 
-#endif // AUTO_SCHEDULE_H
+#endif  // AUTO_SCHEDULE_H

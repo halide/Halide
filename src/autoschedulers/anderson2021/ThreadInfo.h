@@ -38,7 +38,7 @@ struct ThreadTileOption {
 };
 
 struct ThreadInfo {
-    ThreadInfo(int vectorized_loop_index, const std::vector<int64_t>& size, const std::vector<FunctionDAG::Node::Loop>& loop, const std::vector<int64_t>& max_thread_counts) {
+    ThreadInfo(int vectorized_loop_index, const std::vector<int64_t> &size, const std::vector<FunctionDAG::Node::Loop> &loop, const std::vector<int64_t> &max_thread_counts) {
         init_threads_in_this_block(max_thread_counts);
 
         std::size_t num_thread_loops = 0;
@@ -83,8 +83,8 @@ struct ThreadInfo {
         count_num_active_warps_per_block();
     }
 
-    template <typename Fn>
-    void for_each_thread_id(const Fn& fn) const {
+    template<typename Fn>
+    void for_each_thread_id(const Fn &fn) const {
         int thread_id = 0;
         for (int z = 0; z < threads_in_this_block[2]; z++) {
             for (int y = 0; y < threads_in_this_block[1]; y++) {
@@ -96,9 +96,7 @@ struct ThreadInfo {
                     // for thread.x in [0, 5]:
                     //   ...
                     // For the 2nd loop, skip threads with x id >= 5
-                    bool active = x < threads[0]
-                        && y < threads[1]
-                        && z < threads[2];
+                    bool active = x < threads[0] && y < threads[1] && z < threads[2];
 
                     fn(thread_id, active, thread_id == num_threads_in_this_block - 1);
                     ++thread_id;
@@ -107,8 +105,8 @@ struct ThreadInfo {
         }
     }
 
-    template <typename Fn>
-    void for_each_thread_id_in_first_warp(Fn& fn) const {
+    template<typename Fn>
+    void for_each_thread_id_in_first_warp(Fn &fn) const {
         int thread_id = 0;
         for (int z = 0; z < threads_in_this_block[2]; z++) {
             for (int y = 0; y < threads_in_this_block[1]; y++) {
@@ -120,9 +118,7 @@ struct ThreadInfo {
                     // for thread.x in [0, 5]:
                     //   ...
                     // For the 2nd loop, skip threads with x id >= 5
-                    bool active = x < threads[0]
-                        && y < threads[1]
-                        && z < threads[2];
+                    bool active = x < threads[0] && y < threads[1] && z < threads[2];
 
                     bool last_thread = thread_id == 31;
                     fn(thread_id, x, y, z, active, last_thread);
@@ -136,8 +132,8 @@ struct ThreadInfo {
         }
     }
 
-    template <typename Fn>
-    void for_each_thread_id_in_tail_warp(Fn& fn) const {
+    template<typename Fn>
+    void for_each_thread_id_in_tail_warp(Fn &fn) const {
         int thread_id = final_warp_initial_thread_id;
         int last_thread_id = thread_id + num_threads_in_final_warp - 1;
 
@@ -150,16 +146,14 @@ struct ThreadInfo {
             internal_assert(y < threads_in_this_block[1]);
             internal_assert(x < threads_in_this_block[0]);
 
-            bool active = x < threads[0]
-                && y < threads[1]
-                && z < threads[2];
+            bool active = x < threads[0] && y < threads[1] && z < threads[2];
 
             fn(thread_id, x, y, z, active, thread_id == last_thread_id);
         }
     }
 
-    template <typename Fn>
-    void for_each_active_thread_id(const Fn& fn) const {
+    template<typename Fn>
+    void for_each_active_thread_id(const Fn &fn) const {
         for_each_thread_id([&](int thread_id, bool is_active, bool is_last_thread) {
             if (!is_active) {
                 return;
@@ -199,7 +193,7 @@ struct ThreadInfo {
     std::vector<std::string> loop_vars;
 
 private:
-    void init_threads_in_this_block(const std::vector<int64_t>& max_thread_counts) {
+    void init_threads_in_this_block(const std::vector<int64_t> &max_thread_counts) {
         int num_thread_loops = 0;
         for (auto c : max_thread_counts) {
             if (c == 1) {
@@ -272,4 +266,4 @@ private:
 }  // namespace Internal
 }  // namespace Halide
 
-#endif // THREAD_INFO_H
+#endif  // THREAD_INFO_H

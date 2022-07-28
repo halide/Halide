@@ -37,8 +37,8 @@ void State::compute_loop_nest_parents(map<const LoopNest *, pair<const LoopNest 
     }
 }
 
-const LoopNest *State::deepest_valid_compute_location(const map<const LoopNest *, pair<const LoopNest *, int>> &parent, const FunctionDAG::Node &node, const LoopNest *loop, const LoopNest *root, StageMap<int64_t>& total_shared_mem_alloc_sizes) const {
-    std::vector<const LoopNest*> ancestors;
+const LoopNest *State::deepest_valid_compute_location(const map<const LoopNest *, pair<const LoopNest *, int>> &parent, const FunctionDAG::Node &node, const LoopNest *loop, const LoopNest *root, StageMap<int64_t> &total_shared_mem_alloc_sizes) const {
+    std::vector<const LoopNest *> ancestors;
 
     // Innermost loop nests are never considered as compute locations
     if (!loop->innermost) {
@@ -168,12 +168,12 @@ const LoopNest *State::deepest_common_ancestor(const map<const LoopNest *, pair<
 }
 
 bool State::has_loop_nest_without_thread_loops() const {
-    for (const auto& c : root->children) {
+    for (const auto &c : root->children) {
         if (c->gpu_label != block) {
             continue;
         }
 
-        for (const auto& block_c : c->children) {
+        for (const auto &block_c : c->children) {
             if (!block_c->all_paths_to_leaves_have_thread_loop()) {
                 return true;
             }
@@ -184,7 +184,7 @@ bool State::has_loop_nest_without_thread_loops() const {
 }
 
 bool State::has_compute_root_loops_without_blocks() const {
-    for (const auto& c : root->children) {
+    for (const auto &c : root->children) {
         if (c->gpu_label == none) {
             return true;
         }
@@ -193,7 +193,7 @@ bool State::has_compute_root_loops_without_blocks() const {
     return false;
 }
 
-void State::FeatureLoopNestMutator::operator()(LoopNest* new_loop_nest) const {
+void State::FeatureLoopNestMutator::operator()(LoopNest *new_loop_nest) const {
     split_compute_root_loops(new_loop_nest);
     add_outer_thread_loops(new_loop_nest);
 }
@@ -202,13 +202,13 @@ void State::FeatureLoopNestMutator::operator()(LoopNest* new_loop_nest) const {
 // blocks, threads, and serial loops. To enable the cost model to make a
 // meaningful prediction on these pre-split loops, we assume a split into
 // blocks and threads with a single full warp (if possible)
-void State::FeatureLoopNestMutator::split_compute_root_loops(LoopNest* loop_nest) const {
+void State::FeatureLoopNestMutator::split_compute_root_loops(LoopNest *loop_nest) const {
     if (!loop_nest || !loop_nest->is_root()) {
         return;
     }
 
     for (auto it = loop_nest->children.rbegin(); it != loop_nest->children.rend(); ++it) {
-        auto& c = *it;
+        auto &c = *it;
         if (c->gpu_label != none) {
             continue;
         }
@@ -271,7 +271,7 @@ void State::FeatureLoopNestMutator::split_compute_root_loops(LoopNest* loop_nest
 
 // If a loop nest does not have thread loops, split the outermost serial
 // loops to create thread loops with extents 1
-void State::FeatureLoopNestMutator::add_outer_thread_loops(LoopNest* loop_nest) const {
+void State::FeatureLoopNestMutator::add_outer_thread_loops(LoopNest *loop_nest) const {
     if (!loop_nest) {
         return;
     }
@@ -283,7 +283,7 @@ void State::FeatureLoopNestMutator::add_outer_thread_loops(LoopNest* loop_nest) 
         //   all serial descendants
         //
         //  (a) should be surrounded by a thread loop
-        for (auto& c : loop_nest->children) {
+        for (auto &c : loop_nest->children) {
             if (c->has_thread_loop_descendant()) {
                 continue;
             }
@@ -304,7 +304,7 @@ void State::FeatureLoopNestMutator::add_outer_thread_loops(LoopNest* loop_nest) 
     if (loop_nest->gpu_label == serial) {
         bool has_child_with_thread_descendant = false;
 
-        for (const auto& c : loop_nest->children) {
+        for (const auto &c : loop_nest->children) {
             if (c->has_thread_loop_descendant()) {
                 has_child_with_thread_descendant = true;
                 break;
@@ -325,7 +325,7 @@ void State::FeatureLoopNestMutator::add_outer_thread_loops(LoopNest* loop_nest) 
         //  serial (a)
         //
         //  (a) should be surrounded by a thread loop
-        for (auto& c : loop_nest->children) {
+        for (auto &c : loop_nest->children) {
             if (c->has_thread_loop_descendant()) {
                 continue;
             }
@@ -338,11 +338,10 @@ void State::FeatureLoopNestMutator::add_outer_thread_loops(LoopNest* loop_nest) 
             c->gpu_label = thread;
             c = c->parallelize_in_tiles(params, tiling, loop_nest, target, false, true);
         }
-
     }
 }
 
-IntrusivePtr<const LoopNest> State::get_root_for_features(const MachineParams &params, const Target& target) const {
+IntrusivePtr<const LoopNest> State::get_root_for_features(const MachineParams &params, const Target &target) const {
     if (!has_compute_root_loops_without_blocks() && !has_loop_nest_without_thread_loops()) {
         return root;
     }
@@ -360,7 +359,7 @@ IntrusivePtr<const LoopNest> State::get_root_for_features(const MachineParams &p
     return new_root;
 }
 
-void State::set_gpu_store_site(const map<const LoopNest *, pair<const LoopNest *, int>>& parent, const LoopNest* loop, LoopNest::Sites& site) const {
+void State::set_gpu_store_site(const map<const LoopNest *, pair<const LoopNest *, int>> &parent, const LoopNest *loop, LoopNest::Sites &site) const {
     // If site.store is inside a block but outside a loop, the
     // GPU store site should instead be the block because the shared
     // mem allocation will be hoisted
@@ -392,7 +391,7 @@ void State::set_gpu_store_site(const map<const LoopNest *, pair<const LoopNest *
     internal_assert(type_has_been_set);
 }
 
-bool State::compute_featurization(const FunctionDAG &dag, const MachineParams &params, const Target& target, StageMap<ScheduleFeatures> *features, Statistics& stats, bool verbose) const {
+bool State::compute_featurization(const FunctionDAG &dag, const MachineParams &params, const Target &target, StageMap<ScheduleFeatures> *features, Statistics &stats, bool verbose) const {
     auto feature_root = get_root_for_features(params, target);
 
     StageMap<LoopNest::Sites> sites;
@@ -446,7 +445,7 @@ bool State::compute_featurization(const FunctionDAG &dag, const MachineParams &p
                 if (consumer_site.inlined) {
                     // If this func is inlined, find the deepest common ancestor
                     // of all its inlined locations
-                    for (const auto* innermost : consumer_site.inlined_innermosts) {
+                    for (const auto *innermost : consumer_site.inlined_innermosts) {
                         loop = deepest_common_ancestor(parent, innermost, loop);
                     }
                 } else {
@@ -457,7 +456,7 @@ bool State::compute_featurization(const FunctionDAG &dag, const MachineParams &p
                     bool first = true;
                     // If this func is inlined, find the deepest common ancestor
                     // of all its inlined locations
-                    for (const auto* innermost : consumer_site.inlined_innermosts) {
+                    for (const auto *innermost : consumer_site.inlined_innermosts) {
                         if (first) {
                             first = false;
                             loop = innermost;
@@ -492,7 +491,7 @@ bool State::compute_featurization(const FunctionDAG &dag, const MachineParams &p
         }
     }
 
-    for (const auto& c : feature_root->children) {
+    for (const auto &c : feature_root->children) {
         sites.get(c->stage).hash_of_producers_stored_at_root = c->compute_hash_of_producers_stored_at_root(sites);
     }
 
@@ -513,7 +512,7 @@ bool State::compute_featurization(const FunctionDAG &dag, const MachineParams &p
     return true;
 }
 
-void State::save_featurization(const FunctionDAG &dag, const MachineParams &params, const Target& target, std::ostream &out) const {
+void State::save_featurization(const FunctionDAG &dag, const MachineParams &params, const Target &target, std::ostream &out) const {
     StageMap<ScheduleFeatures> features;
     Statistics stats;
     compute_featurization(dag, params, target, &features, stats);
@@ -541,8 +540,8 @@ void State::save_featurization(const FunctionDAG &dag, const MachineParams &para
     }
 }
 
-bool State::contains_store_at(const set<const FunctionDAG::Node *>& outermost_store_at, const IntrusivePtr<const LoopNest>& parent) const {
-    for (const auto& c : parent->children) {
+bool State::contains_store_at(const set<const FunctionDAG::Node *> &outermost_store_at, const IntrusivePtr<const LoopNest> &parent) const {
+    for (const auto &c : parent->children) {
         if (c->store_at.size() > 0) {
             return true;
         }
@@ -566,8 +565,8 @@ bool State::contains_store_at(const set<const FunctionDAG::Node *>& outermost_st
 // store_ats further in will be hoisted and expanded, increasing the
 // amount of shared memory required.
 bool State::contains_store_at_further_in_than_outermost() const {
-    for (const auto& child : root->children) {
-        for (const auto& grandchild : child->children) {
+    for (const auto &child : root->children) {
+        for (const auto &grandchild : child->children) {
             if (contains_store_at(child->store_at, grandchild)) {
                 return true;
             }
@@ -575,7 +574,6 @@ bool State::contains_store_at_further_in_than_outermost() const {
     }
     return false;
 }
-
 
 bool State::has_dynamic_allocation_inside_thread() const {
     return root->has_dynamic_allocation_inside_thread(false);
@@ -589,7 +587,7 @@ bool State::exceeds_serial_extents_limit(const Target &target) const {
     return root->exceeds_serial_extents_limit(target, nullptr, false);
 }
 
-int64_t State::get_shared_mem_alloc_size(const LoopNest* block, const LoopNest* loop) const {
+int64_t State::get_shared_mem_alloc_size(const LoopNest *block, const LoopNest *loop) const {
     int64_t result = 0;
 
     if (loop->gpu_label == thread) {
@@ -610,7 +608,7 @@ int64_t State::get_shared_mem_alloc_size(const LoopNest* block, const LoopNest* 
         }
     }
 
-    for (const auto& c : loop->children) {
+    for (const auto &c : loop->children) {
         result += get_shared_mem_alloc_size(block, c.get());
     }
 
@@ -628,7 +626,7 @@ bool State::exceeds_shared_memory_limit(const Target &target) const {
         return false;
     }
 
-    for (const auto& c : root->children) {
+    for (const auto &c : root->children) {
         // If the working set is too large on the GPU, shared memory will be
         // exhausted, so reject any such schedules
         if (get_shared_mem_alloc_size(c.get(), c.get()) > limit) {
@@ -644,7 +642,7 @@ bool State::exceeds_local_memory_limit(const Target &target) const {
         return false;
     }
 
-    for (const auto& c : root->children) {
+    for (const auto &c : root->children) {
         if (c->get_total_constant_local_mem_alloc_size() > get_stack_memory_limit()) {
             return true;
         }
@@ -657,7 +655,7 @@ bool State::exceeds_local_memory_limit(const Target &target) const {
     return false;
 }
 
-bool State::calculate_cost(const FunctionDAG &dag, const MachineParams &params, const Target& target, CostModel *cost_model, Statistics& stats, bool verbose) {
+bool State::calculate_cost(const FunctionDAG &dag, const MachineParams &params, const Target &target, CostModel *cost_model, Statistics &stats, bool verbose) {
     Timer timer;
     if (!root->has_valid_thread_extents()) {
         Filter(root.get()) << "Invalid thread extents\n";
@@ -713,11 +711,11 @@ bool State::calculate_cost(const FunctionDAG &dag, const MachineParams &params, 
 
             if (feat.points_computed_total + feat.inlined_calls > 10 * feat.points_computed_minimum) {
                 Filter(root.get()) << "Excess recompute for " << it.key()->node->func.name() << " stage " << it.key()->index << "\n"
-                    << "points_computed_total = " << feat.points_computed_total << "\n"
-                    << "inlined_calls = " << feat.inlined_calls << "\n"
-                    << "points_computed_total + inlined_calls = " << feat.points_computed_total + feat.inlined_calls << "\n"
-                    << "points_computed_minimum = " << feat.points_computed_minimum << "\n"
-                    << "8 * points_computed_minimum = " << 8 * feat.points_computed_minimum << "\n";
+                                   << "points_computed_total = " << feat.points_computed_total << "\n"
+                                   << "inlined_calls = " << feat.inlined_calls << "\n"
+                                   << "points_computed_total + inlined_calls = " << feat.points_computed_total + feat.inlined_calls << "\n"
+                                   << "points_computed_minimum = " << feat.points_computed_minimum << "\n"
+                                   << "8 * points_computed_minimum = " << 8 * feat.points_computed_minimum << "\n";
                 cost = 1e50;
                 return false;
             }
@@ -761,10 +759,10 @@ void State::print_compute_locations() const {
     root->get_stages_computed_in_each_compute_root_loop(descendants);
 
     aslog(0) << "BEGIN compute locations\n";
-    for (const auto& d : descendants) {
+    for (const auto &d : descendants) {
         aslog(0) << d.first->sanitized_name << " -> ";
 
-        for (const auto& descendant : d.second) {
+        for (const auto &descendant : d.second) {
             aslog(0) << descendant.first->sanitized_name << " ";
         }
 
@@ -773,7 +771,7 @@ void State::print_compute_locations() const {
     aslog(0) << "END compute locations\n";
 }
 
-void State::fuse_gpu_blocks(LoopNest::StageScheduleState* state, Stage& stage, const vector<VarOrRVar>& parallel_vars, const vector<int64_t>& parallel_extents, const vector<int>& constant_extents) const {
+void State::fuse_gpu_blocks(LoopNest::StageScheduleState *state, Stage &stage, const vector<VarOrRVar> &parallel_vars, const vector<int64_t> &parallel_extents, const vector<int> &constant_extents) const {
     if (parallel_vars.empty() || parallel_extents.empty()) {
         return;
     }
@@ -810,8 +808,8 @@ void State::fuse_gpu_blocks(LoopNest::StageScheduleState* state, Stage& stage, c
             auto inner_i = block_var_assignments[block_i][0];
             auto outer_i = block_var_assignments[block_i][i];
             state->schedule_source << "\n    .fuse(" << parallel_vars[inner_i].name()
-                                      << ", " << parallel_vars[outer_i].name()
-                                      << ", " << parallel_vars[inner_i].name() << ")";
+                                   << ", " << parallel_vars[outer_i].name()
+                                   << ", " << parallel_vars[inner_i].name() << ")";
             stage.fuse(parallel_vars[inner_i],
                        parallel_vars[outer_i],
                        parallel_vars[inner_i]);
@@ -843,11 +841,11 @@ void State::fuse_gpu_blocks(LoopNest::StageScheduleState* state, Stage& stage, c
     }
 }
 
-void State::mark_gpu_blocks(LoopNest::StageScheduleState* state, Stage& stage, const vector<VarOrRVar>& parallel_vars, const vector<int64_t>& parallel_extents) const {
+void State::mark_gpu_blocks(LoopNest::StageScheduleState *state, Stage &stage, const vector<VarOrRVar> &parallel_vars, const vector<int64_t> &parallel_extents) const {
     int max_blocks[3] = {2147483647, 65535, 65535};
     uint8_t n_loops_tagged_gpu_blocks = 0;
 
-    for (auto& v : parallel_vars) {
+    for (auto &v : parallel_vars) {
         if (n_loops_tagged_gpu_blocks >= 3 || parallel_extents[n_loops_tagged_gpu_blocks] > max_blocks[n_loops_tagged_gpu_blocks]) {
             break;
         }
@@ -862,15 +860,15 @@ void State::mark_gpu_blocks(LoopNest::StageScheduleState* state, Stage& stage, c
     }
 }
 
-bool State::mark_gpu_threads(LoopNest::StageScheduleState* state, Stage& stage, std::unordered_set<std::string>& new_serial_vars, std::ostringstream& staged_funcs_schedule_source) const {
+bool State::mark_gpu_threads(LoopNest::StageScheduleState *state, Stage &stage, std::unordered_set<std::string> &new_serial_vars, std::ostringstream &staged_funcs_schedule_source) const {
     uint8_t num_loops_tagged_gpu_thread = 0;
     int64_t total_threads = 1;
     int max_threads[3] = {1024, 1024, 64};
 
     bool first = true;
 
-    for (const auto& v : state->vars) {
-        if (!v.exists || !v.gpu_threads || v.extent == 1)  {
+    for (const auto &v : state->vars) {
+        if (!v.exists || !v.gpu_threads || v.extent == 1) {
             continue;
         }
 
@@ -891,12 +889,12 @@ bool State::mark_gpu_threads(LoopNest::StageScheduleState* state, Stage& stage, 
 
             Func func(state->node->func);
 
-            for (const auto& to_be_staged : state->producers_to_be_staged) {
-                const auto* producer_node = to_be_staged.first;
+            for (const auto &to_be_staged : state->producers_to_be_staged) {
+                const auto *producer_node = to_be_staged.first;
 
-                for (const auto& cur_pair : to_be_staged.second) {
-                    const LoopNest* loop_nest = cur_pair.first;
-                    const std::vector<const FunctionDAG::Edge*>& edge_chain = cur_pair.second;
+                for (const auto &cur_pair : to_be_staged.second) {
+                    const LoopNest *loop_nest = cur_pair.first;
+                    const std::vector<const FunctionDAG::Edge *> &edge_chain = cur_pair.second;
 
                     internal_assert(edge_chain.at(0)->consumer == loop_nest->stage);
                     internal_assert(edge_chain.back()->producer == producer_node);
@@ -930,10 +928,10 @@ bool State::mark_gpu_threads(LoopNest::StageScheduleState* state, Stage& stage, 
                         << v.var.var.name()
                         << ")";
 
-                    const auto& bounds = loop_nest->get_bounds_along_edge_chain(producer_node, edge_chain);
+                    const auto &bounds = loop_nest->get_bounds_along_edge_chain(producer_node, edge_chain);
 
                     int i = 0;
-                    for (const auto& l : producer_node->stages[0].loop) {
+                    for (const auto &l : producer_node->stages[0].loop) {
                         Var unrolled_var(l.var);
 
                         int extent = bounds->region_required(i++).extent();
@@ -957,7 +955,7 @@ bool State::mark_gpu_threads(LoopNest::StageScheduleState* state, Stage& stage, 
     return num_loops_tagged_gpu_thread > 0;
 }
 
-bool State::can_fuse_gpu(const vector<int64_t>& parallel_extents) const {
+bool State::can_fuse_gpu(const vector<int64_t> &parallel_extents) const {
     int64_t total = 1;
     for (auto extent : parallel_extents) {
         total *= extent;
@@ -973,7 +971,7 @@ bool State::can_fuse_gpu(const vector<int64_t>& parallel_extents) const {
 // user to copy-paste to freeze this schedule as permanent artifact.
 void State::apply_schedule(const FunctionDAG &dag, const MachineParams &params, const Target &target) {
     StageMap<std::unique_ptr<LoopNest::StageScheduleState>> state_map;
-    std::vector<LoopNest::StageScheduleState*> ancestors;
+    std::vector<LoopNest::StageScheduleState *> ancestors;
 
     NodeMap<bool> all_inlined;
     root->collect_all_inlined(all_inlined);
@@ -1108,7 +1106,7 @@ void State::apply_schedule(const FunctionDAG &dag, const MachineParams &params, 
     std::ostringstream staged_funcs_schedule_source;
 
     if (target.has_gpu_feature()) {
-        std::set<const FunctionDAG::Node*> invalid;
+        std::set<const FunctionDAG::Node *> invalid;
         // Iterate from output backwards
         for (const auto &n : dag.nodes) {
             for (auto &p : state_map) {
@@ -1126,7 +1124,7 @@ void State::apply_schedule(const FunctionDAG &dag, const MachineParams &params, 
                 bool has_enclosing_parallel = p.second->parallel;
 
                 if (!has_enclosing_parallel) {
-                    for (auto* ancestor : p.second->ancestors) {
+                    for (auto *ancestor : p.second->ancestors) {
                         if (ancestor->parallel) {
                             has_enclosing_parallel = true;
                             break;
@@ -1150,9 +1148,9 @@ void State::apply_schedule(const FunctionDAG &dag, const MachineParams &params, 
                 // There is no outer loop marked as gpu_block.
                 // Split the outer loop to create a new outer var with
                 // extent = 1 and mark it gpu_blocks()
-                const auto& outer_var = p.second->ordered_vars.back();
+                const auto &outer_var = p.second->ordered_vars.back();
                 vector<VarOrRVar> vars;
-                for (const auto& v : p.second->ordered_vars) {
+                for (const auto &v : p.second->ordered_vars) {
                     vars.push_back(v.var);
                 }
 
@@ -1175,7 +1173,7 @@ void State::apply_schedule(const FunctionDAG &dag, const MachineParams &params, 
                 p.second->schedule_source << "\n    .reorder(";
                 bool first = true;
 
-                for (const auto& v : vars) {
+                for (const auto &v : vars) {
                     if (!first) {
                         p.second->schedule_source << ", ";
                     }
@@ -1196,7 +1194,7 @@ void State::apply_schedule(const FunctionDAG &dag, const MachineParams &params, 
         }
     }
 
-    for (const auto& v : new_serial_vars) {
+    for (const auto &v : new_serial_vars) {
         src << "Var " << v << "(\"" << v << "\");\n";
     }
 
@@ -1242,9 +1240,9 @@ void State::update_always_consider_inline_options(const FunctionDAG::Node *node)
         NodeMap<bool> currently_inlined;
         root->collect_all_inlined(currently_inlined);
 
-        std::unordered_set<const FunctionDAG::Node*> non_inlined_consumers;
+        std::unordered_set<const FunctionDAG::Node *> non_inlined_consumers;
         std::unordered_set<const FunctionDAG::Node *> done;
-        std::vector<const FunctionDAG::Node*> pending;
+        std::vector<const FunctionDAG::Node *> pending;
         pending.push_back(node);
 
         while (!pending.empty()) {

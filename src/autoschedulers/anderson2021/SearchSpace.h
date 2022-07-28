@@ -1,6 +1,7 @@
 #ifndef SEARCH_SPACE_H
 #define SEARCH_SPACE_H
 
+#include "ASLog.h"
 #include "CostModel.h"
 #include "DefaultCostModel.h"
 #include "Featurization.h"
@@ -8,12 +9,11 @@
 #include "LoopNest.h"
 #include "LoopNestParser.h"
 #include "PerfectHashMap.h"
-#include "ASLog.h"
 #include "SearchSpaceOptions.h"
 #include "State.h"
 #include <set>
-#include <unordered_set>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 namespace Halide {
@@ -30,7 +30,7 @@ struct SearchSpace {
     CostModel *cost_model;
     Statistics &stats;
     bool randomize_tilings;
-    const LoopNestParser* partial_schedule;
+    const LoopNestParser *partial_schedule;
 
     NodeMap<bool> inlined_nodes;
     NodeMap<std::vector<IntrusivePtr<const LoopNest>>> compute_root_nodes;
@@ -43,7 +43,7 @@ struct SearchSpace {
                 std::mt19937 &rng,
                 CostModel *cost_model,
                 Statistics &stats,
-                const LoopNestParser* partial_schedule);
+                const LoopNestParser *partial_schedule);
 
     // Sort / filter parallel tile options
     struct ParallelTileOption {
@@ -66,18 +66,17 @@ struct SearchSpace {
 
     vector<ParallelTileOption> filter_parallel_tile_options(IntrusivePtr<State> state,
                                                             const FunctionDAG::Node *node,
-                                                            vector<vector<int64_t>>& inner_tilings,
-                                                            const vector<int64_t>& pure_size) const;
+                                                            vector<vector<int64_t>> &inner_tilings,
+                                                            const vector<int64_t> &pure_size) const;
 
-    vector<ThreadTileOption> filter_thread_tile_options(vector<IntrusivePtr<const LoopNest>>& loop_nests) const;
+    vector<ThreadTileOption> filter_thread_tile_options(vector<IntrusivePtr<const LoopNest>> &loop_nests) const;
 
-    void memoize_blocks(const FunctionDAG::Node *node, LoopNest* new_root);
+    void memoize_blocks(const FunctionDAG::Node *node, LoopNest *new_root);
 
     bool add_states_from_memoized_blocks(IntrusivePtr<State> state,
                                          std::function<void(IntrusivePtr<State> &&)> &accept_child,
                                          const FunctionDAG::Node *node,
-                                         int& num_children) const;
-
+                                         int &num_children) const;
 
     // Generate successor states for given 'state'
     void generate_children(IntrusivePtr<State> state,
@@ -87,25 +86,23 @@ struct SearchSpace {
 
     void freeze_lowest_cost_stages(const IntrusivePtr<State> best);
 
-    vector<vector<int64_t>> generate_compute_root_serial_tilings(const IntrusivePtr<const LoopNest>& pure_stage, const FunctionDAG::Node *node) const;
+    vector<vector<int64_t>> generate_compute_root_serial_tilings(const IntrusivePtr<const LoopNest> &pure_stage, const FunctionDAG::Node *node) const;
 
-    bool add_child(const IntrusivePtr<State>& state,
-                   const IntrusivePtr<const LoopNest>& new_root,
+    bool add_child(const IntrusivePtr<State> &state,
+                   const IntrusivePtr<const LoopNest> &new_root,
                    std::function<void(IntrusivePtr<State> &&)> &accept_child) const;
 
-    void process_pending_states(std::unordered_map<uint64_t, StateVector>& primary_options,
-                                std::unordered_map<uint64_t, StateVector>& secondary_options,
+    void process_pending_states(std::unordered_map<uint64_t, StateVector> &primary_options,
+                                std::unordered_map<uint64_t, StateVector> &secondary_options,
                                 int &num_children,
                                 std::function<void(IntrusivePtr<State> &&)> &accept_child,
-                                const FunctionDAG::Node* node);
+                                const FunctionDAG::Node *node);
 
     bool is_in_partial_schedule(const FunctionDAG::Node *node) const;
 };
-
-
 
 }  // namespace Autoscheduler
 }  // namespace Internal
 }  // namespace Halide
 
-#endif // SEARCH_SPACE_H
+#endif  // SEARCH_SPACE_H

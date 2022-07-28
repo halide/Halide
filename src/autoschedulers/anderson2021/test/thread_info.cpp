@@ -1,6 +1,6 @@
-#include "test.h"
-#include "ThreadInfo.h"
 #include "LoopNest.h"
+#include "ThreadInfo.h"
+#include "test.h"
 
 using namespace Halide;
 using namespace Halide::Internal;
@@ -99,7 +99,6 @@ void test_thread_info() {
         }
     }
 }
-
 
 int main(int argc, char **argv) {
     test_thread_info();

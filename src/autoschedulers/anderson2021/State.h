@@ -1,13 +1,13 @@
 #ifndef STATE_H
 #define STATE_H
 
+#include "ASLog.h"
 #include "CostModel.h"
 #include "DefaultCostModel.h"
 #include "Featurization.h"
 #include "FunctionDAG.h"
 #include "LoopNest.h"
 #include "PerfectHashMap.h"
-#include "ASLog.h"
 #include <set>
 #include <unordered_set>
 #include <vector>
@@ -16,13 +16,11 @@ namespace Halide {
 namespace Internal {
 namespace Autoscheduler {
 
-using std::string;
-using std::vector;
 using std::map;
 using std::pair;
 using std::set;
-using std::unordered_set;
 using std::string;
+using std::unordered_set;
 using std::vector;
 
 bool verify_memoized_features();
@@ -31,7 +29,7 @@ bool is_memoize_blocks_enabled();
 
 double get_stack_memory_adjustment_factor();
 
-constexpr int kLocalMemoryLimit = 524288; // 512 KB
+constexpr int kLocalMemoryLimit = 524288;  // 512 KB
 
 // Stack memory limit = Total GPU Memory / (# of SMs * maximum threads per SM)
 //                    = 103232 bytes
@@ -44,15 +42,16 @@ bool use_adjusted_tilings();
 bool compute_root_and_inline_only();
 
 struct NoOpMutator {
-    void operator()(LoopNest* new_loop_nest) const {}
+    void operator()(LoopNest *new_loop_nest) const {
+    }
 };
 
-template <typename PostCreateMutator>
-void deep_copy_loop_nest(LoopNest* new_loop_nest, const LoopNest* new_loop_nest_parent, const IntrusivePtr<const LoopNest>& existing_loop_nest, const PostCreateMutator& post_create_mutator) {
+template<typename PostCreateMutator>
+void deep_copy_loop_nest(LoopNest *new_loop_nest, const LoopNest *new_loop_nest_parent, const IntrusivePtr<const LoopNest> &existing_loop_nest, const PostCreateMutator &post_create_mutator) {
     new_loop_nest->copy_from(*existing_loop_nest);
 
     for (std::size_t i = 0, N = new_loop_nest->children.size(); i < N; ++i) {
-        LoopNest* new_child = new LoopNest;
+        LoopNest *new_child = new LoopNest;
         new_loop_nest->children[i] = new_child;
         deep_copy_loop_nest(new_child, new_loop_nest, existing_loop_nest->children[i], post_create_mutator);
     }
@@ -60,9 +59,9 @@ void deep_copy_loop_nest(LoopNest* new_loop_nest, const LoopNest* new_loop_nest_
     post_create_mutator(new_loop_nest);
 }
 
-template <typename PostCreateMutator>
-LoopNest* deep_copy_loop_nest(const IntrusivePtr<const LoopNest>& loop_nest, const PostCreateMutator& post_create_mutator) {
-    LoopNest* new_loop_nest = new LoopNest;
+template<typename PostCreateMutator>
+LoopNest *deep_copy_loop_nest(const IntrusivePtr<const LoopNest> &loop_nest, const PostCreateMutator &post_create_mutator) {
+    LoopNest *new_loop_nest = new LoopNest;
     deep_copy_loop_nest(new_loop_nest, nullptr, loop_nest, post_create_mutator);
     return new_loop_nest;
 }
@@ -95,9 +94,9 @@ struct State {
 
     // We use the post_create_mutator so that the loop nests can be modified
     // before they become IntrusivePtr<const LoopNest> as children and cannot be modified
-    template <typename PostCreateMutator>
-    LoopNest* create_feature_root(const PostCreateMutator& post_create_mutator) const {
-        LoopNest* new_root = new LoopNest;
+    template<typename PostCreateMutator>
+    LoopNest *create_feature_root(const PostCreateMutator &post_create_mutator) const {
+        LoopNest *new_root = new LoopNest;
         deep_copy_loop_nest<PostCreateMutator>(new_root, nullptr, root, post_create_mutator);
         return new_root;
     }
@@ -107,31 +106,31 @@ struct State {
     bool has_compute_root_loops_without_blocks() const;
 
     struct FeatureLoopNestMutator {
-        const MachineParams& params;
-        const Target& target;
+        const MachineParams &params;
+        const Target &target;
 
-        void operator()(LoopNest* new_loop_nest) const;
+        void operator()(LoopNest *new_loop_nest) const;
 
         // In phase 2, any compute_root loop marked 'none' will be split into
         // blocks, threads, and serial loops. To enable the cost model to make a
         // meaningful prediction on these pre-split loops, we assume a split into
         // blocks and threads with a single full warp (if possible)
-        void split_compute_root_loops(LoopNest* loop_nest) const;
+        void split_compute_root_loops(LoopNest *loop_nest) const;
 
         // If a loop nest does not have thread loops, split the outermost serial
         // loops to create thread loops with extents 1
-        void add_outer_thread_loops(LoopNest* loop_nest) const;
+        void add_outer_thread_loops(LoopNest *loop_nest) const;
     };
 
-    IntrusivePtr<const LoopNest> get_root_for_features(const MachineParams &params, const Target& target) const;
+    IntrusivePtr<const LoopNest> get_root_for_features(const MachineParams &params, const Target &target) const;
 
-    void set_gpu_store_site(const map<const LoopNest *, pair<const LoopNest *, int>>& parent, const LoopNest* loop, LoopNest::Sites& site) const;
+    void set_gpu_store_site(const map<const LoopNest *, pair<const LoopNest *, int>> &parent, const LoopNest *loop, LoopNest::Sites &site) const;
 
-    bool compute_featurization(const FunctionDAG &dag, const MachineParams &params, const Target& target, StageMap<ScheduleFeatures> *features, Statistics& stats, bool verbose=false) const;
+    bool compute_featurization(const FunctionDAG &dag, const MachineParams &params, const Target &target, StageMap<ScheduleFeatures> *features, Statistics &stats, bool verbose = false) const;
 
-    void save_featurization(const FunctionDAG &dag, const MachineParams &params, const Target& target, std::ostream &out) const;
+    void save_featurization(const FunctionDAG &dag, const MachineParams &params, const Target &target, std::ostream &out) const;
 
-    bool contains_store_at(const set<const FunctionDAG::Node *>& outermost_store_at, const IntrusivePtr<const LoopNest>& parent) const;
+    bool contains_store_at(const set<const FunctionDAG::Node *> &outermost_store_at, const IntrusivePtr<const LoopNest> &parent) const;
 
     // For GPU, only allow store_at root or inside the outermost loop nest. Any
     // store_ats further in will be hoisted and expanded, increasing the
@@ -142,13 +141,13 @@ struct State {
 
     bool exceeds_serial_extents_limit(const Target &target) const;
 
-    int64_t get_shared_mem_alloc_size(const LoopNest* block, const LoopNest* loop) const;
+    int64_t get_shared_mem_alloc_size(const LoopNest *block, const LoopNest *loop) const;
 
     bool exceeds_shared_memory_limit(const Target &target) const;
 
     bool exceeds_local_memory_limit(const Target &target) const;
 
-    bool calculate_cost(const FunctionDAG &dag, const MachineParams &params, const Target& target, CostModel *cost_model, Statistics& stats, bool verbose = false);
+    bool calculate_cost(const FunctionDAG &dag, const MachineParams &params, const Target &target, CostModel *cost_model, Statistics &stats, bool verbose = false);
 
     // Make a child copy of this state. The loop nest is const (we
     // make mutated copies of it, rather than mutating it), so we can
@@ -160,13 +159,13 @@ struct State {
 
     void print_compute_locations() const;
 
-    void fuse_gpu_blocks(LoopNest::StageScheduleState* state, Stage& stage, const vector<VarOrRVar>& parallel_vars, const vector<int64_t>& parallel_extents, const vector<int>& constant_extents) const;
+    void fuse_gpu_blocks(LoopNest::StageScheduleState *state, Stage &stage, const vector<VarOrRVar> &parallel_vars, const vector<int64_t> &parallel_extents, const vector<int> &constant_extents) const;
 
-    void mark_gpu_blocks(LoopNest::StageScheduleState* state, Stage& stage, const vector<VarOrRVar>& parallel_vars, const vector<int64_t>& parallel_extents) const;
+    void mark_gpu_blocks(LoopNest::StageScheduleState *state, Stage &stage, const vector<VarOrRVar> &parallel_vars, const vector<int64_t> &parallel_extents) const;
 
-    bool mark_gpu_threads(LoopNest::StageScheduleState* state, Stage& stage, std::unordered_set<std::string>& new_serial_vars, std::ostringstream& staged_funcs_schedule_source) const;
+    bool mark_gpu_threads(LoopNest::StageScheduleState *state, Stage &stage, std::unordered_set<std::string> &new_serial_vars, std::ostringstream &staged_funcs_schedule_source) const;
 
-    bool can_fuse_gpu(const vector<int64_t>& parallel_extents) const;
+    bool can_fuse_gpu(const vector<int64_t> &parallel_extents) const;
 
     // Apply the schedule represented by this state to a Halide
     // Pipeline. Also generate source code for the schedule for the
@@ -177,7 +176,7 @@ struct State {
     void add_to_always_consider_inline_options(const FunctionDAG::Node *node);
     void update_always_consider_inline_options(const FunctionDAG::Node *node);
 
-    const LoopNest *deepest_valid_compute_location(const map<const LoopNest *, pair<const LoopNest *, int>> &parent, const FunctionDAG::Node &node, const LoopNest *loop, const LoopNest *root, StageMap<int64_t>& total_shared_mem_alloc_sizes) const;
+    const LoopNest *deepest_valid_compute_location(const map<const LoopNest *, pair<const LoopNest *, int>> &parent, const FunctionDAG::Node &node, const LoopNest *loop, const LoopNest *root, StageMap<int64_t> &total_shared_mem_alloc_sizes) const;
     int64_t total_loop_extents_of_ancestors(const map<const LoopNest *, pair<const LoopNest *, int>> &parent, const LoopNest *loop) const;
 };
 
@@ -250,4 +249,4 @@ public:
 }  // namespace Internal
 }  // namespace Halide
 
-#endif // STATE_H
+#endif  // STATE_H

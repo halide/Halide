@@ -101,7 +101,7 @@ bool are_valid_thread_extents(const vector<int64_t> &counts) {
     return true;
 }
 
-bool all(const vector<int>& v) {
+bool all(const vector<int> &v) {
     for (auto x : v) {
         if (!x) {
             return false;
@@ -322,7 +322,7 @@ GPUMemoryType LoopNest::get_gpu_memory_type(bool in_block, bool in_thread, bool 
     return GPUMemoryType::global;
 }
 
-std::vector<int> LoopNest::unrolled_loops(const Target& target, const LoopNest* parent, const LoopNest* grandparent) const {
+std::vector<int> LoopNest::unrolled_loops(const Target &target, const LoopNest *parent, const LoopNest *grandparent) const {
     internal_assert(innermost);
     const auto &grandparent_bounds = grandparent->get_bounds(node);
     std::vector<int> unrolled(parent->size.size(), 0);
@@ -348,8 +348,8 @@ std::vector<int> LoopNest::unrolled_loops(const Target& target, const LoopNest* 
     return unrolled;
 }
 
-bool accessed_at_constant_indices(const std::vector<int>& unrolled, const FunctionDAG::Edge* e) {
-    for (const auto& jac : e->load_jacobians) {
+bool accessed_at_constant_indices(const std::vector<int> &unrolled, const FunctionDAG::Edge *e) {
+    for (const auto &jac : e->load_jacobians) {
         for (size_t loop_index = 0; loop_index < unrolled.size(); ++loop_index) {
             for (int i = 0; i < e->producer->dimensions; ++i) {
                 // There are two ways for an index to be constant:
@@ -372,8 +372,8 @@ void LoopNest::get_allocs_that_can_be_promoted_to_registers(const Target &target
                                                             const LoopNest *grandparent,
                                                             const LoopNest *parent) const {
 
-    for (const auto* alloc_node : store_at) {
-        const auto& store_site = sites.get(&alloc_node->stages[0]);
+    for (const auto *alloc_node : store_at) {
+        const auto &store_site = sites.get(&alloc_node->stages[0]);
         if (store_site.gpu_store_memory_type != GPUMemoryType::local) {
             continue;
         }
@@ -388,7 +388,7 @@ void LoopNest::get_allocs_that_can_be_promoted_to_registers(const Target &target
     if (innermost) {
         auto unrolled = unrolled_loops(target, parent, grandparent);
 
-        for (const auto* e : stage->incoming_edges) {
+        for (const auto *e : stage->incoming_edges) {
             if (sites.get(&e->producer->stages[0]).gpu_store_memory_type != GPUMemoryType::local) {
                 continue;
             }
@@ -436,7 +436,7 @@ void LoopNest::get_sites(const Target &target,
             sites.get_or_create(&s).allocation_size = alloc.first;
             sites.get_or_create(&s).is_constant_allocation = alloc.second;
 
-            const LoopNest* store_site = sites.get_or_create(&s).store;
+            const LoopNest *store_site = sites.get_or_create(&s).store;
             if (store_site->gpu_label == block && s.index == 0) {
                 total_shared_mem_alloc_sizes.get_or_create(store_site->stage) += alloc.first;
             }
@@ -465,13 +465,12 @@ bool LoopNest::promote_allocs_to_registers(const Target &target, StageMap<Sites>
     NodeMap<bool> can_be_promoted_to_registers;
     get_allocs_that_can_be_promoted_to_registers(target, sites, can_be_promoted_to_registers, nullptr, nullptr);
 
-
-    for (auto& node : can_be_promoted_to_registers) {
+    for (auto &node : can_be_promoted_to_registers) {
         if (!node.second) {
             return false;
         }
 
-        for (auto& stage : node.first->stages) {
+        for (auto &stage : node.first->stages) {
             internal_assert(sites.get(&stage).gpu_store_memory_type == GPUMemoryType::local);
             sites.get(&stage).gpu_store_memory_type = GPUMemoryType::registers;
         }
@@ -642,7 +641,7 @@ bool LoopNest::can_vectorize_access_for_innermost_dim(const LoadJacobian &jac, c
     return true;
 }
 
-bool LoopNest::can_vectorize_store_access(const LoadJacobian &jac, const FunctionDAG::Node *accessed, bool accessed_has_been_scheduled, int innermost_dim, int loop_index, const GPUMemoryType& mem_type) const {
+bool LoopNest::can_vectorize_store_access(const LoadJacobian &jac, const FunctionDAG::Node *accessed, bool accessed_has_been_scheduled, int innermost_dim, int loop_index, const GPUMemoryType &mem_type) const {
     if (loop_index < 0 || mem_type != GPUMemoryType::shared) {
         return false;
     }
@@ -651,7 +650,7 @@ bool LoopNest::can_vectorize_store_access(const LoadJacobian &jac, const Functio
     return can_vectorize_access_for_innermost_dim(jac, accessed, innermost_dim, loop_index);
 }
 
-int LoopNest::vectorized_load_access_size(const LoadJacobian &jac, const FunctionDAG::Node *accessed, bool accessed_has_been_scheduled, int innermost_dim, const GPUMemoryType& mem_type, bool verbose) const {
+int LoopNest::vectorized_load_access_size(const LoadJacobian &jac, const FunctionDAG::Node *accessed, bool accessed_has_been_scheduled, int innermost_dim, const GPUMemoryType &mem_type, bool verbose) const {
     int vector_size = 1;
     if (mem_type != GPUMemoryType::shared) {
         return vector_size;
@@ -732,7 +731,7 @@ double LoopNest::compute_local_mem_stride(double stride, double bytes) const {
 
 // Get the stride over "node's" storage and its element-wise stride for a unit
 // increment in the given thread loops
-Strides LoopNest::compute_strides(const LoadJacobian &jac, int innermost_storage_dim, const FunctionDAG::Node *storage_node, const Bound &store_bounds, const ThreadInfo& thread_info, bool verbose) const {
+Strides LoopNest::compute_strides(const LoadJacobian &jac, int innermost_storage_dim, const FunctionDAG::Node *storage_node, const Bound &store_bounds, const ThreadInfo &thread_info, bool verbose) const {
     internal_assert(innermost_storage_dim >= 0);
 
     if (verbose) {
@@ -770,7 +769,7 @@ Strides LoopNest::compute_strides(const LoadJacobian &jac, int innermost_storage
     }
 
     Strides strides{storage_strides};
-    for (const auto& thread_loop_var : thread_info.loop_vars) {
+    for (const auto &thread_loop_var : thread_info.loop_vars) {
         int loop_index = stage->get_loop_index_from_var(thread_loop_var);
         bool loop_index_exists = loop_index >= 0;
 
@@ -852,7 +851,7 @@ int LoopNest::get_actual_vector_dim(const Bound &store_bounds) const {
     return vector_dim;
 }
 
-void LoopNest::compute_gpu_store_features(const LoadJacobian &jac, int consumer_innermost_dim, const FunctionDAG::Node *node, const Bound &consumer_store_bounds, const GPULoopInfo &gpu_loop_info, const std::vector<int64_t> &inner_serial_loop_extents, const Sites &consumer_site, ScheduleFeatures &feat, const LoopNest *parent, const LoopNest &root, GlobalMemInfo& global_mem_loads, SharedMemInfo& shared_mem_loads, LocalMemInfo& local_mem_loads, bool verbose) const {
+void LoopNest::compute_gpu_store_features(const LoadJacobian &jac, int consumer_innermost_dim, const FunctionDAG::Node *node, const Bound &consumer_store_bounds, const GPULoopInfo &gpu_loop_info, const std::vector<int64_t> &inner_serial_loop_extents, const Sites &consumer_site, ScheduleFeatures &feat, const LoopNest *parent, const LoopNest &root, GlobalMemInfo &global_mem_loads, SharedMemInfo &shared_mem_loads, LocalMemInfo &local_mem_loads, bool verbose) const {
     if (consumer_site.is_stored_in_registers()) {
         return;
     }
@@ -895,7 +894,7 @@ void LoopNest::compute_gpu_store_features(const LoadJacobian &jac, int consumer_
             mem_type = "local";
         }
         aslog(2) << "BEGIN MEM ACCESS " << mem_type << "_mem_" << type;
-        aslog(2) << ". consumer: " << consumer_name <<  "_s" << stage->index << "; producer: " << consumer_name << "\n";
+        aslog(2) << ". consumer: " << consumer_name << "_s" << stage->index << "; producer: " << consumer_name << "\n";
         aslog(2) << "total_serial_loop_extents = " << total_serial_loop_extents << "\n";
     }
 
@@ -911,8 +910,7 @@ void LoopNest::compute_gpu_store_features(const LoadJacobian &jac, int consumer_
             consumer_store_bounds,
             thread_info,
             total_serial_loop_extents,
-            verbose
-        );
+            verbose);
 
         feat.num_shared_mem_stores_per_block = shared_mem_info.num_transactions();
         if (stage->index > 0) {
@@ -934,8 +932,7 @@ void LoopNest::compute_gpu_store_features(const LoadJacobian &jac, int consumer_
             consumer_store_bounds,
             thread_info,
             total_serial_loop_extents,
-            verbose
-        );
+            verbose);
 
         feat.num_global_mem_stores_per_block = global_mem_info.num_transactions();
         if (stage->index > 0) {
@@ -953,8 +950,7 @@ void LoopNest::compute_gpu_store_features(const LoadJacobian &jac, int consumer_
             consumer_store_bounds,
             thread_info,
             total_serial_loop_extents,
-            verbose
-        );
+            verbose);
         //feat.num_local_mem_stores_per_block = local_mem_info.num_transactions();
         if (stage->index > 0) {
             local_mem_loads.add(local_mem_info);
@@ -978,13 +974,12 @@ void LoopNest::compute_gpu_store_features(const LoadJacobian &jac, int consumer_
         aslog(2) << "END MEM ACCESS " << mem_type << "_mem_" << type << ". consumer: " << consumer_name << "_s" << stage->index << "; producer: " << consumer_name;
         if (!jac.all_coeffs_exist()) {
             aslog(2) << " (not all coeffs exist)";
-
         }
         aslog(2) << "\n\n";
     }
 }
 
-template <typename T>
+template<typename T>
 void LoopNest::compute_num_mem_accesses_per_block(const LoadJacobian &jac, const FunctionDAG::Node *node, const Bound &store_bounds, const ThreadInfo &thread_info, int innermost_dim, double num_requests_per_warp, MemInfoType<T> &mem_info, bool verbose) const {
     Strides strides = compute_strides(jac, innermost_dim, node, store_bounds, thread_info, verbose);
 
@@ -1001,8 +996,7 @@ void LoopNest::compute_num_mem_accesses_per_block(const LoadJacobian &jac, const
         accumulator.add_access_info(
             num_requests,
             mem_info,
-            false
-        );
+            false);
 
         if (verbose) {
             aslog(2) << "num_requests_per_warp = " << num_requests_per_warp << "\n";
@@ -1025,21 +1019,18 @@ void LoopNest::compute_num_mem_accesses_per_block(const LoadJacobian &jac, const
     accumulator.add_access_info(
         num_requests_per_warp,
         mem_info,
-        true
-    );
+        true);
 
     if (verbose) {
         aslog(2) << "END tail warp\n\n";
     }
 }
 
-template
-void LoopNest::compute_num_mem_accesses_per_block<GlobalMem>(const LoadJacobian &jac, const FunctionDAG::Node *node, const Bound &store_bounds, const ThreadInfo &thread_info, int innermost_dim, double num_requests_per_warp, MemInfoType<GlobalMem> &mem_info, bool verbose) const;
+template void LoopNest::compute_num_mem_accesses_per_block<GlobalMem>(const LoadJacobian &jac, const FunctionDAG::Node *node, const Bound &store_bounds, const ThreadInfo &thread_info, int innermost_dim, double num_requests_per_warp, MemInfoType<GlobalMem> &mem_info, bool verbose) const;
 
-template
-void LoopNest::compute_num_mem_accesses_per_block<SharedMem>(const LoadJacobian &jac, const FunctionDAG::Node *node, const Bound &store_bounds, const ThreadInfo &thread_info, int innermost_dim, double num_requests_per_warp, MemInfoType<SharedMem> &mem_info, bool verbose) const;
+template void LoopNest::compute_num_mem_accesses_per_block<SharedMem>(const LoadJacobian &jac, const FunctionDAG::Node *node, const Bound &store_bounds, const ThreadInfo &thread_info, int innermost_dim, double num_requests_per_warp, MemInfoType<SharedMem> &mem_info, bool verbose) const;
 
-template <>
+template<>
 void LoopNest::compute_num_mem_accesses_per_block<LocalMem>(const LoadJacobian &jac, const FunctionDAG::Node *node, const Bound &store_bounds, const ThreadInfo &thread_info, int innermost_dim, double num_requests_per_warp, MemInfoType<LocalMem> &mem_info, bool verbose) const {
     int bytes_per_access = node->bytes_per_point;
 
@@ -1051,8 +1042,7 @@ void LoopNest::compute_num_mem_accesses_per_block<LocalMem>(const LoadJacobian &
         accumulator.add_access_info(
             num_requests,
             mem_info,
-            false
-        );
+            false);
 
         if (verbose) {
             aslog(2) << "num_requests_per_warp = " << num_requests_per_warp << "\n";
@@ -1075,8 +1065,7 @@ void LoopNest::compute_num_mem_accesses_per_block<LocalMem>(const LoadJacobian &
     accumulator.add_access_info(
         num_requests_per_warp,
         mem_info,
-        true
-    );
+        true);
 
     if (verbose) {
         aslog(2) << "END tail warp\n\n";
@@ -1097,21 +1086,19 @@ std::pair<double, double> LoopNest::compute_local_mem_store_features(const LoadJ
     return {accesses, 1.0 / stride};
 }
 
-template <typename T>
-MemInfoType<T> LoopNest::compute_mem_store_info(const LoadJacobian& jac, int consumer_innermost_dim, const FunctionDAG::Node* node, const Bound& consumer_store_bounds, const ThreadInfo& thread_info, double serial_loop_extents, bool verbose) const {
+template<typename T>
+MemInfoType<T> LoopNest::compute_mem_store_info(const LoadJacobian &jac, int consumer_innermost_dim, const FunctionDAG::Node *node, const Bound &consumer_store_bounds, const ThreadInfo &thread_info, double serial_loop_extents, bool verbose) const {
     MemInfoType<T> mem_info;
 
     compute_num_mem_accesses_per_block<T>(jac, node, consumer_store_bounds, thread_info, consumer_innermost_dim, serial_loop_extents, mem_info, verbose);
     return mem_info;
 }
 
-template
-MemInfoType<GlobalMem> LoopNest::compute_mem_store_info<GlobalMem>(const LoadJacobian& jac, int consumer_innermost_dim, const FunctionDAG::Node* node, const Bound& consumer_store_bounds, const ThreadInfo& thread_info, double serial_loop_extents, bool verbose) const;
+template MemInfoType<GlobalMem> LoopNest::compute_mem_store_info<GlobalMem>(const LoadJacobian &jac, int consumer_innermost_dim, const FunctionDAG::Node *node, const Bound &consumer_store_bounds, const ThreadInfo &thread_info, double serial_loop_extents, bool verbose) const;
 
-template
-MemInfoType<SharedMem> LoopNest::compute_mem_store_info<SharedMem>(const LoadJacobian& jac, int consumer_innermost_dim, const FunctionDAG::Node* node, const Bound& consumer_store_bounds, const ThreadInfo& thread_info, double serial_loop_extents, bool verbose) const;
+template MemInfoType<SharedMem> LoopNest::compute_mem_store_info<SharedMem>(const LoadJacobian &jac, int consumer_innermost_dim, const FunctionDAG::Node *node, const Bound &consumer_store_bounds, const ThreadInfo &thread_info, double serial_loop_extents, bool verbose) const;
 
-template <typename T>
+template<typename T>
 void LoopNest::compute_mem_load_features(const LoadJacobian &jac, int producer_innermost_dim, const FunctionDAG::Node *node, const Bound &producer_store_bounds, bool producer_has_been_scheduled, const ThreadInfo &thread_info, MemInfoType<T> &mem_info, double points_accessed_per_thread, bool verbose) const {
     if (producer_has_been_scheduled) {
         compute_num_mem_accesses_per_block<T>(jac, node, producer_store_bounds, thread_info, producer_innermost_dim, points_accessed_per_thread, mem_info, verbose);
@@ -1136,13 +1123,11 @@ void LoopNest::compute_mem_load_features(const LoadJacobian &jac, int producer_i
     mem_info.add(min_info);
 }
 
-template
-void LoopNest::compute_mem_load_features<GlobalMem>(const LoadJacobian &jac, int producer_innermost_dim, const FunctionDAG::Node *node, const Bound &producer_store_bounds, bool producer_has_been_scheduled, const ThreadInfo &thread_info, MemInfoType<GlobalMem> &mem_info, double points_accessed_per_thread, bool verbose) const;
+template void LoopNest::compute_mem_load_features<GlobalMem>(const LoadJacobian &jac, int producer_innermost_dim, const FunctionDAG::Node *node, const Bound &producer_store_bounds, bool producer_has_been_scheduled, const ThreadInfo &thread_info, MemInfoType<GlobalMem> &mem_info, double points_accessed_per_thread, bool verbose) const;
 
-template
-void LoopNest::compute_mem_load_features<SharedMem>(const LoadJacobian &jac, int producer_innermost_dim, const FunctionDAG::Node *node, const Bound &producer_store_bounds, bool producer_has_been_scheduled, const ThreadInfo &thread_info, MemInfoType<SharedMem> &mem_info, double points_accessed_per_thread, bool verbose) const;
+template void LoopNest::compute_mem_load_features<SharedMem>(const LoadJacobian &jac, int producer_innermost_dim, const FunctionDAG::Node *node, const Bound &producer_store_bounds, bool producer_has_been_scheduled, const ThreadInfo &thread_info, MemInfoType<SharedMem> &mem_info, double points_accessed_per_thread, bool verbose) const;
 
-template <>
+template<>
 void LoopNest::compute_mem_load_features<LocalMem>(const LoadJacobian &jac, int producer_innermost_dim, const FunctionDAG::Node *node, const Bound &producer_store_bounds, bool producer_has_been_scheduled, const ThreadInfo &thread_info, MemInfoType<LocalMem> &mem_info, double points_accessed_per_thread, bool verbose) const {
     compute_num_mem_accesses_per_block<LocalMem>(jac, node, producer_store_bounds, thread_info, producer_innermost_dim, points_accessed_per_thread, mem_info, verbose);
 }
@@ -1240,7 +1225,7 @@ void LoopNest::compute_warp_features(ScheduleFeatures &features, const GPULoopIn
 }
 
 // Assume that when a block is active, all its warps are active
-void LoopNest::compute_warp_and_block_occupancy(const MachineParams& params, ScheduleFeatures &feat, const GPULoopInfo &gpu_loop_info) const {
+void LoopNest::compute_warp_and_block_occupancy(const MachineParams &params, ScheduleFeatures &feat, const GPULoopInfo &gpu_loop_info) const {
     // Only compute these features for stage's that actually have a block
     // loop
     if (node != gpu_loop_info.current_block_loop->node) {
@@ -1310,7 +1295,7 @@ std::pair<const LoopNest *, const LoopNest *> LoopNest::find_innermost_and_paren
     return {child, parent};
 }
 
-int64_t LoopNest::points_accessed_per_thread(const MachineParams& params, const Target& target, const GPULoopInfo &gpu_loop_info, const std::vector<const FunctionDAG::Edge*>& edge_chain, const LoadJacobian& jac, const LoopNest* parent, const LoopNest* grandparent, int64_t n, const ScheduleFeatures &feat, const LoadJacobian& serial_jac, bool producer_has_been_scheduled, int producer_innermost_dim, const GPUMemoryType& mem_type, bool verbose) const {
+int64_t LoopNest::points_accessed_per_thread(const MachineParams &params, const Target &target, const GPULoopInfo &gpu_loop_info, const std::vector<const FunctionDAG::Edge *> &edge_chain, const LoadJacobian &jac, const LoopNest *parent, const LoopNest *grandparent, int64_t n, const ScheduleFeatures &feat, const LoadJacobian &serial_jac, bool producer_has_been_scheduled, int producer_innermost_dim, const GPUMemoryType &mem_type, bool verbose) const {
 
     std::unique_ptr<LoopNest> innermost_parent_clone = std::make_unique<LoopNest>();
     innermost_parent_clone->copy_from(*parent);
@@ -1332,7 +1317,7 @@ int64_t LoopNest::points_accessed_per_thread(const MachineParams& params, const 
     int64_t product_of_non_licm_non_unrolled_extents = 1;
     int64_t product_of_non_licm_extents = 1;
     int num_pure_loops = 0;
-    const FunctionDAG::Node* producer = edge_chain.back()->producer;
+    const FunctionDAG::Node *producer = edge_chain.back()->producer;
     for (size_t idx = 0; idx < parent->size.size(); idx++) {
         bool can_apply_licm = true;
         for (int i = 0; i < producer->dimensions; i++) {
@@ -1369,14 +1354,14 @@ int64_t LoopNest::points_accessed_per_thread(const MachineParams& params, const 
                 }
             }
         } else if (verbose) {
-             // Case 1
+            // Case 1
             aslog(2) << "loop idx = " << idx << ": apply licm = " << parent->size[idx] << "\n";
         }
     }
 
     IntrusivePtr<const LoopNest> innermost_parent = innermost_parent_clone->parallelize_in_tiles(params, tiling, grandparent, target, true, false, false, rvars_to_move_inward);
 
-    const auto& bounds = innermost_parent->get_bounds_along_edge_chain(producer, edge_chain);
+    const auto &bounds = innermost_parent->get_bounds_along_edge_chain(producer, edge_chain);
     int64_t num_points = 1;
     for (int i = 0; i < producer->dimensions; i++) {
         num_points *= bounds->region_required(i).extent();
@@ -1417,8 +1402,7 @@ int64_t LoopNest::points_accessed_per_thread(const MachineParams& params, const 
                 producer_has_been_scheduled,
                 producer_innermost_dim,
                 mem_type,
-                verbose
-            );
+                verbose);
 
             if (verbose) {
                 aslog(2) << "\n";
@@ -1495,7 +1479,7 @@ int64_t LoopNest::compute_licm_amortization(const LoopNest *innermost, const Loo
     return amortization;
 }
 
-void LoopNest::memoize_points_computed_minimum(StageMap<ScheduleFeatures>& memoized_features, const StageMap<ScheduleFeatures> *features) const {
+void LoopNest::memoize_points_computed_minimum(StageMap<ScheduleFeatures> &memoized_features, const StageMap<ScheduleFeatures> *features) const {
     for (auto it = inlined.begin(); it != inlined.end(); it++) {
         const auto *f = it.key();
         const auto &inlined_feat = features->get(&(f->stages[0]));
@@ -1532,9 +1516,9 @@ vector<pair<int, int>> LoopNest::collect_producers(const StageMap<Sites> &sites)
         done.insert(e->producer);
         const auto &site = sites.get(&(e->producer->stages[0]));
         if (site.store->is_root()) {
-            int vector_dim = (e->producer->is_input ? 0 :
-                                                      site.produce != nullptr ? site.produce->vector_dim :
-                                                                                -1);
+            int vector_dim = (e->producer->is_input   ? 0 :
+                              site.produce != nullptr ? site.produce->vector_dim :
+                                                        -1);
             producers.push_back({e->producer->id, vector_dim});
         } else if (site.produce != nullptr) {
             // Computation must be nested inside this task or inlined into it.
@@ -1553,12 +1537,12 @@ uint64_t LoopNest::compute_hash_of_producers_stored_at_root(const StageMap<Sites
     vector<pair<int, int>> producers = collect_producers(sites);
 
     // Sort them according to node id
-    std::sort(producers.begin(), producers.end(), [](const pair<int, int>& a, const pair<int, int>& b) {
+    std::sort(producers.begin(), producers.end(), [](const pair<int, int> &a, const pair<int, int> &b) {
         return a.first < b.first;
     });
 
     uint64_t store_root_hash = 0;
-    for (const auto& p : producers) {
+    for (const auto &p : producers) {
         hash_combine(store_root_hash, p.first);
         hash_combine(store_root_hash, p.second);
     }
@@ -1566,7 +1550,7 @@ uint64_t LoopNest::compute_hash_of_producers_stored_at_root(const StageMap<Sites
     return store_root_hash;
 }
 
-void LoopNest::collect_stages(std::set<const FunctionDAG::Node::Stage *>& stages) const {
+void LoopNest::collect_stages(std::set<const FunctionDAG::Node::Stage *> &stages) const {
     stages.insert(stage);
 
     for (const auto &c : children) {
@@ -1574,7 +1558,7 @@ void LoopNest::collect_stages(std::set<const FunctionDAG::Node::Stage *>& stages
     }
 }
 
-void LoopNest::memoize_features(StageMap<ScheduleFeatures>& memoized_features, const StageMap<ScheduleFeatures> *features) const {
+void LoopNest::memoize_features(StageMap<ScheduleFeatures> &memoized_features, const StageMap<ScheduleFeatures> *features) const {
     for (auto it = inlined.begin(); it != inlined.end(); it++) {
         const auto *f = it.key();
         if (memoized_features.contains(&(f->stages[0]))) {
@@ -1595,7 +1579,7 @@ void LoopNest::memoize_features(StageMap<ScheduleFeatures>& memoized_features, c
 }
 
 void LoopNest::compute_working_set_from_features(int64_t *working_set,
-                                    const StageMap<ScheduleFeatures> *features) const {
+                                                 const StageMap<ScheduleFeatures> *features) const {
     int64_t working_set_here = 0;
 
     for (const auto &c : children) {
@@ -1625,8 +1609,8 @@ void LoopNest::recompute_inlined_features(const StageMap<Sites> &sites, StageMap
         uint64_t hash_of_producers = sites.get(block->stage).hash_of_producers_stored_at_root;
 
         internal_assert(block->feature_intermediates.count(hash_of_producers) > 0);
-        auto& intermediate_map = block->feature_intermediates[hash_of_producers].get(&(f->stages[0]));
-        auto& intermediate = intermediate_map.get(stage);
+        auto &intermediate_map = block->feature_intermediates[hash_of_producers].get(&(f->stages[0]));
+        auto &intermediate = intermediate_map.get(stage);
 
         auto &inlined_feat = features->get(&(f->stages[0]));
         inlined_feat.inlined_calls += intermediate.inlined_calls;
@@ -1678,7 +1662,7 @@ void LoopNest::compute_features(const FunctionDAG &dag,
                                 GPULoopInfo gpu_loop_info,
                                 bool use_memoized_features,
                                 const StageMap<int64_t> &total_shared_mem_alloc_sizes,
-                                Statistics& stats,
+                                Statistics &stats,
                                 bool verbose) const {
 
     gpu_loop_info.update(target, this);
@@ -1790,7 +1774,7 @@ void LoopNest::compute_features(const FunctionDAG &dag,
                 if (c->features.count(hash_of_producers) > 0) {
                     ++stats.num_memoization_hits;
 
-                    const auto& entry = c->features.at(hash_of_producers);
+                    const auto &entry = c->features.at(hash_of_producers);
                     for (auto it = entry.begin(); it != entry.end(); it++) {
                         auto &stage = *(it.key());
                         const auto &feat = it.value();
@@ -2121,7 +2105,8 @@ void LoopNest::compute_features(const FunctionDAG &dag,
     int64_t global_bytes_loaded = 0, shared_bytes_loaded = 0, local_bytes_loaded = 0, register_bytes_loaded = 0;
     int64_t global_lines_loaded = 0, shared_lines_loaded = 0, local_lines_loaded = 0, register_lines_loaded = 0;
     int64_t global_bytes_loaded_per_thread = 0, shared_bytes_loaded_per_thread = 0, register_bytes_loaded_per_thread = 0;
-    int64_t global_lines_loaded_per_thread = 0, shared_lines_loaded_per_thread = 0, register_lines_loaded_per_thread = 0;;
+    int64_t global_lines_loaded_per_thread = 0, shared_lines_loaded_per_thread = 0, register_lines_loaded_per_thread = 0;
+    ;
     int64_t global_allocation_bytes_loaded = 0, shared_allocation_bytes_loaded = 0;
     GlobalMemInfo global_mem_loads;
     SharedMemInfo shared_mem_loads;
@@ -2155,8 +2140,7 @@ void LoopNest::compute_features(const FunctionDAG &dag,
                 global_mem_loads,
                 shared_mem_loads,
                 local_mem_loads,
-                verbose
-            );
+                verbose);
         }
 
         // The parallel loop of the consumer
@@ -2165,8 +2149,8 @@ void LoopNest::compute_features(const FunctionDAG &dag,
         int64_t consumer_instances = innermost ? instances : feat.num_realizations;
         internal_assert(consumer_instances != 0);
 
-        vector<pair<const FunctionDAG::Node::Stage *, vector<const FunctionDAG::Edge*>>> pending;
-        vector<const FunctionDAG::Edge*> edge_chain;
+        vector<pair<const FunctionDAG::Node::Stage *, vector<const FunctionDAG::Edge *>>> pending;
+        vector<const FunctionDAG::Edge *> edge_chain;
         pending.emplace_back(stage, edge_chain);
         vector<pair<LoadJacobian, FunctionDAG::Node *>> jacobians;
         vector<pair<LoadJacobian, FunctionDAG::Node *>> thread_jacobians;
@@ -2187,7 +2171,7 @@ void LoopNest::compute_features(const FunctionDAG &dag,
 
                 bool producer_has_been_scheduled = e->producer->is_input || (site.produce != nullptr);
 
-                std::vector<const FunctionDAG::Edge*> edge_chain = p_pair.second;
+                std::vector<const FunctionDAG::Edge *> edge_chain = p_pair.second;
                 edge_chain.push_back(e);
 
                 if (innermost) {
@@ -2293,7 +2277,7 @@ void LoopNest::compute_features(const FunctionDAG &dag,
                                 sanitize_names(consumer_name);
                                 std::string producer_name = e->producer->func.name();
                                 sanitize_names(producer_name);
-                                aslog(2) << "BEGIN MEM ACCESS shared_mem_load. consumer: " << consumer_name <<  "_s" << stage->index << "; producer: " << producer_name <<"\n";
+                                aslog(2) << "BEGIN MEM ACCESS shared_mem_load. consumer: " << consumer_name << "_s" << stage->index << "; producer: " << producer_name << "\n";
                             }
 
                             int64_t points_accessed = points_accessed_per_thread(params, target, gpu_loop_info, edge_chain, jac.first, parent, grandparent, n, feat, serial_jac.first, producer_has_been_scheduled, producer_innermost_dim, GPUMemoryType::shared, verbose);
@@ -2307,8 +2291,7 @@ void LoopNest::compute_features(const FunctionDAG &dag,
                                 *gpu_loop_info.thread_info,
                                 shared_mem_loads,
                                 points_accessed,
-                                verbose
-                            );
+                                verbose);
                             if (verbose) {
                                 aslog(2) << "num_blocks = " << gpu_loop_info.num_blocks << "\n";
                                 aslog(2) << "END MEM ACCESS shared_mem_load. consumer: " << node->func.name() << "; producer: " << e->producer->func.name();
@@ -2325,7 +2308,7 @@ void LoopNest::compute_features(const FunctionDAG &dag,
                                 sanitize_names(consumer_name);
                                 std::string producer_name = e->producer->func.name();
                                 sanitize_names(producer_name);
-                                aslog(2) << "BEGIN MEM ACCESS global_mem_load. consumer: " << consumer_name <<  "_s" << stage->index << "; producer: " << producer_name <<"\n";
+                                aslog(2) << "BEGIN MEM ACCESS global_mem_load. consumer: " << consumer_name << "_s" << stage->index << "; producer: " << producer_name << "\n";
                             }
 
                             int64_t points_accessed = points_accessed_per_thread(params, target, gpu_loop_info, edge_chain, jac.first, parent, grandparent, n, feat, serial_jac.first, producer_has_been_scheduled, producer_innermost_dim, GPUMemoryType::global, verbose);
@@ -2339,8 +2322,7 @@ void LoopNest::compute_features(const FunctionDAG &dag,
                                 *gpu_loop_info.thread_info,
                                 global_mem_loads,
                                 points_accessed,
-                                verbose
-                            );
+                                verbose);
 
                             if (verbose) {
                                 aslog(2) << "num_blocks = " << gpu_loop_info.num_blocks << "\n";
@@ -2364,7 +2346,7 @@ void LoopNest::compute_features(const FunctionDAG &dag,
                                 sanitize_names(consumer_name);
                                 std::string producer_name = e->producer->func.name();
                                 sanitize_names(producer_name);
-                                aslog(2) << "BEGIN MEM ACCESS local_mem_load. consumer: " << consumer_name <<  "_s" << stage->index << "; producer: " << producer_name <<"\n";
+                                aslog(2) << "BEGIN MEM ACCESS local_mem_load. consumer: " << consumer_name << "_s" << stage->index << "; producer: " << producer_name << "\n";
                             }
 
                             int64_t points_accessed = points_accessed_per_thread(params, target, gpu_loop_info, edge_chain, jac.first, parent, grandparent, n, feat, jac.first, producer_has_been_scheduled, producer_innermost_dim, GPUMemoryType::local, verbose);
@@ -2378,8 +2360,7 @@ void LoopNest::compute_features(const FunctionDAG &dag,
                                 *gpu_loop_info.thread_info,
                                 local_mem_loads,
                                 points_accessed,
-                                verbose
-                            );
+                                verbose);
 
                             if (verbose) {
                                 aslog(2) << "num_blocks = " << gpu_loop_info.num_blocks << "\n";
@@ -2399,7 +2380,6 @@ void LoopNest::compute_features(const FunctionDAG &dag,
                 }
 
                 done.insert(e->producer);
-
 
                 // Now look at the shapes of the regions read from
                 // the producer at various sites.
@@ -2464,9 +2444,7 @@ void LoopNest::compute_features(const FunctionDAG &dag,
 
                 if (!e->producer->is_input) {
                     const int64_t producer_store_instances =
-                        producer_has_been_scheduled
-                        ? features->get_or_create(&(e->producer->stages[0])).num_realizations
-                        : site.num_realizations;
+                        producer_has_been_scheduled ? features->get_or_create(&(e->producer->stages[0])).num_realizations : site.num_realizations;
 
                     internal_assert(producer_store_instances > 0);
 
@@ -2662,8 +2640,8 @@ void LoopNest::compute_features(const FunctionDAG &dag,
         if (use_memoized_features) {
             const auto &block = sites.get(stage).task;
             uint64_t hash_of_producers = sites.get(block->stage).hash_of_producers_stored_at_root;
-            auto& intermediate_map = block->feature_intermediates[hash_of_producers].get_or_create(&(f->stages[0]));
-            auto& intermediate = intermediate_map.get_or_create(stage);
+            auto &intermediate_map = block->feature_intermediates[hash_of_producers].get_or_create(&(f->stages[0]));
+            auto &intermediate = intermediate_map.get_or_create(stage);
             intermediate.inlined_calls = it.value() * subinstances;
             intermediate.num_scalars = it.value() * feat.num_scalars;
 
@@ -2700,7 +2678,7 @@ void LoopNest::compute_features(const FunctionDAG &dag,
 // required of 'g' should be 1 point for each point of 'out' but get_bounds()
 // will also include the edge 'g' -> 'f' and give the result 201 points for every point
 // of 'out')
-const Bound LoopNest::get_bounds_along_edge_chain(const FunctionDAG::Node *f, const vector<const FunctionDAG::Edge*>& edge_chain) const {
+const Bound LoopNest::get_bounds_along_edge_chain(const FunctionDAG::Node *f, const vector<const FunctionDAG::Edge *> &edge_chain) const {
     internal_assert(edge_chain.size() >= 1);
 
     internal_assert(edge_chain[0]->consumer == stage)
@@ -2712,17 +2690,17 @@ const Bound LoopNest::get_bounds_along_edge_chain(const FunctionDAG::Node *f, co
         << " not " << f->func.name();
 
     vector<Bound> bounds;
-    BoundContents* bound;
+    BoundContents *bound;
 
     // For the final consumer, we rely on get_bounds() (i.e. on the bounds for it to
     // satisfy all of its downstream consumers instead of just along a single edge). This should be
     // okay because it is computed in the current loop nest so its bounds need
     // to account for all its downstream consumers.
-    const auto& c_bounds = get_bounds(edge_chain[0]->consumer->node);
+    const auto &c_bounds = get_bounds(edge_chain[0]->consumer->node);
     Bound cur_consumer_bounds = c_bounds;
 
-    for (const auto* e : edge_chain) {
-        const auto* producer = e->producer;
+    for (const auto *e : edge_chain) {
+        const auto *producer = e->producer;
 
         bound = producer->make_bound();
         auto init = Span::empty_span();
@@ -2834,8 +2812,8 @@ std::string LoopNest::to_string() const {
 }
 
 // Recursively print a loop nest representation to the given stream
-template <typename T>
-void LoopNest::dump(T& stream, string prefix, const LoopNest *parent) const {
+template<typename T>
+void LoopNest::dump(T &stream, string prefix, const LoopNest *parent) const {
     if (!is_root()) {
         // Non-root nodes always have parents.
         internal_assert(parent != nullptr);
@@ -2913,11 +2891,9 @@ void LoopNest::dump(T& stream, string prefix, const LoopNest *parent) const {
     }
 }
 
-template
-void LoopNest::dump(aslog& stream, string prefix, const LoopNest *parent) const;
+template void LoopNest::dump(aslog &stream, string prefix, const LoopNest *parent) const;
 
-template
-void LoopNest::dump(std::ostringstream& stream, string prefix, const LoopNest *parent) const;
+template void LoopNest::dump(std::ostringstream &stream, string prefix, const LoopNest *parent) const;
 
 // Does this loop nest access the given Func
 bool LoopNest::calls(const FunctionDAG::Node *f) const {
@@ -3396,7 +3372,8 @@ vector<IntrusivePtr<const LoopNest>> LoopNest::compute_in_tiles(const FunctionDA
         (!in_realization ||
          size.empty() ||
          vector_dim == -1 ||
-         size[vector_dim] == 1) && can_compute_here) {
+         size[vector_dim] == 1) &&
+        can_compute_here) {
 
         std::unique_ptr<LoopNest> r{new LoopNest};
         r->copy_from(*this);
@@ -3466,7 +3443,7 @@ int64_t LoopNest::product_of_self_and_descendants(int loop_index) const {
 
 int64_t LoopNest::product_of_descendants(int loop_index) const {
     int64_t prod = 1;
-    const LoopNest* cur = this;
+    const LoopNest *cur = this;
     while (!cur->innermost) {
         bool found = false;
         for (const auto &c : cur->children) {
@@ -3486,8 +3463,8 @@ int64_t LoopNest::product_of_descendants(int loop_index) const {
     return prod;
 }
 
-bool LoopNest::has_constant_region_computed(const FunctionDAG::Node* node) const {
-    const auto& bounds = get_bounds(node);
+bool LoopNest::has_constant_region_computed(const FunctionDAG::Node *node) const {
+    const auto &bounds = get_bounds(node);
     for (int i = 0; i < node->dimensions; i++) {
         if (!bounds->region_computed(i).constant_extent()) {
             return false;
@@ -3496,8 +3473,8 @@ bool LoopNest::has_constant_region_computed(const FunctionDAG::Node* node) const
     return true;
 }
 
-bool LoopNest::has_constant_region_required(const FunctionDAG::Node* node) const {
-    const auto& bounds = get_bounds(node);
+bool LoopNest::has_constant_region_required(const FunctionDAG::Node *node) const {
+    const auto &bounds = get_bounds(node);
     for (int i = 0; i < node->dimensions; i++) {
         if (!bounds->region_required(i).constant_extent()) {
             return false;
@@ -3506,8 +3483,8 @@ bool LoopNest::has_constant_region_required(const FunctionDAG::Node* node) const
     return true;
 }
 
-bool LoopNest::other_stage_has_same_producer(const FunctionDAG::Node* producer) const {
-    for (const auto& other_stage : node->stages) {
+bool LoopNest::other_stage_has_same_producer(const FunctionDAG::Node *producer) const {
+    for (const auto &other_stage : node->stages) {
         if (stage->index == other_stage.index) {
             continue;
         }
@@ -3521,7 +3498,7 @@ bool LoopNest::other_stage_has_same_producer(const FunctionDAG::Node* producer) 
     return false;
 }
 
-int LoopNest::num_serial_loops(const FunctionDAG::Node::Stage* stage) const {
+int LoopNest::num_serial_loops(const FunctionDAG::Node::Stage *stage) const {
     int num_serial_loops = 0;
     for (const auto &child : children) {
         if (child->stage == stage) {
@@ -3545,7 +3522,7 @@ int LoopNest::num_serial_loops() const {
     return num_serial_loops(stage);
 }
 
-bool LoopNest::producer_computed_here_or_further_in(const FunctionDAG::Node* producer) const {
+bool LoopNest::producer_computed_here_or_further_in(const FunctionDAG::Node *producer) const {
     for (const auto &child : children) {
         if (child->node == producer) {
             return true;
@@ -3588,7 +3565,7 @@ void LoopNest::apply(LoopLevel here,
                      const LoopNest *compute_site,
                      const Target &target,
                      std::vector<StageScheduleState *> &ancestors,
-                     const NodeMap<bool>& all_inlined) const {
+                     const NodeMap<bool> &all_inlined) const {
     if (is_root()) {
         for (auto &c : children) {
             Func(c->node->func).compute_root();
@@ -3897,9 +3874,9 @@ void LoopNest::apply(LoopLevel here,
     }
 }
 
-void LoopNest::update_producers_to_be_staged(StageScheduleState& state, const NodeMap<bool>& all_inlined) const {
-    std::vector<pair<const FunctionDAG::Node::Stage*, vector<const FunctionDAG::Edge*>>> pending;
-    std::vector<const FunctionDAG::Edge*> edge_chain;
+void LoopNest::update_producers_to_be_staged(StageScheduleState &state, const NodeMap<bool> &all_inlined) const {
+    std::vector<pair<const FunctionDAG::Node::Stage *, vector<const FunctionDAG::Edge *>>> pending;
+    std::vector<const FunctionDAG::Edge *> edge_chain;
     pending.emplace_back(stage, edge_chain);
     NodeMap<bool> done;
 
@@ -3907,10 +3884,10 @@ void LoopNest::update_producers_to_be_staged(StageScheduleState& state, const No
         auto cur_pair = pending.back();
         pending.pop_back();
 
-        auto* s = cur_pair.first;
+        auto *s = cur_pair.first;
 
         for (const auto *e : s->incoming_edges) {
-            std::vector<const FunctionDAG::Edge*> edge_chain = cur_pair.second;
+            std::vector<const FunctionDAG::Edge *> edge_chain = cur_pair.second;
             edge_chain.push_back(e);
 
             // If the producer is inlined, then its producers should potentially be
@@ -3959,7 +3936,7 @@ double LoopNest::max_idle_lane_wastage(const Target &target, GPULoopInfo gpu_loo
 }
 
 bool LoopNest::has_valid_thread_extents() const {
-    for (const auto& c : children) {
+    for (const auto &c : children) {
         if (!are_valid_thread_extents(c->get_union_thread_counts(nullptr))) {
             return false;
         }
@@ -3968,7 +3945,7 @@ bool LoopNest::has_valid_thread_extents() const {
     return true;
 }
 
-void LoopNest::collect_nodes_that_should_be_inlined(const NodeMap<bool>& nodes_to_freeze, NodeMap<bool>& inlined_nodes) const {
+void LoopNest::collect_nodes_that_should_be_inlined(const NodeMap<bool> &nodes_to_freeze, NodeMap<bool> &inlined_nodes) const {
     if (innermost) {
         for (auto it = inlined.begin(); it != inlined.end(); it++) {
             const auto *f = it.key();
@@ -3979,12 +3956,12 @@ void LoopNest::collect_nodes_that_should_be_inlined(const NodeMap<bool>& nodes_t
         }
     }
 
-    for (const auto& c : children) {
+    for (const auto &c : children) {
         c->collect_nodes_that_should_be_inlined(nodes_to_freeze, inlined_nodes);
     }
 }
 
-void LoopNest::collect_all_inlined(NodeMap<bool>& all_inlined) const {
+void LoopNest::collect_all_inlined(NodeMap<bool> &all_inlined) const {
     if (innermost) {
         for (auto it = inlined.begin(); it != inlined.end(); it++) {
             const auto *f = it.key();
@@ -3992,7 +3969,7 @@ void LoopNest::collect_all_inlined(NodeMap<bool>& all_inlined) const {
         }
     }
 
-    for (const auto& c : children) {
+    for (const auto &c : children) {
         c->collect_all_inlined(all_inlined);
     }
 }

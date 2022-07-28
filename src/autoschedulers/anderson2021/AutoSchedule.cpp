@@ -104,8 +104,6 @@ namespace Halide {
 namespace Internal {
 namespace Autoscheduler {
 
-using std::string;
-using std::vector;
 using std::map;
 using std::pair;
 using std::set;
@@ -161,22 +159,13 @@ void configure_pipeline_features(const FunctionDAG &dag,
 AutoSchedule::AutoSchedule(const FunctionDAG &dag,
                            const MachineParams &params,
                            const Target &target,
-                           const std::vector<Function>& outputs,
+                           const std::vector<Function> &outputs,
                            std::mt19937 &rng,
                            CostModel *cost_model,
                            Statistics &stats,
                            SearchSpace &search_space,
-                           const LoopNestParser* partial_schedule)
-    : dag{dag}
-    , params{params}
-    , target{target}
-    , outputs{outputs}
-    , rng{rng}
-    , cost_model{cost_model}
-    , stats{stats}
-    , search_space{search_space}
-    , partial_schedule{partial_schedule}
-{
+                           const LoopNestParser *partial_schedule)
+    : dag{dag}, params{params}, target{target}, outputs{outputs}, rng{rng}, cost_model{cost_model}, stats{stats}, search_space{search_space}, partial_schedule{partial_schedule} {
     configure_pipeline_features(dag, params, cost_model);
 }
 
@@ -283,7 +272,7 @@ IntrusivePtr<State> AutoSchedule::optimal_schedule_pass(int beam_size,
                     if (penalty > 1) {
                         state->penalized = true;
                         state->cost *= penalty;
-                        for (auto& c : state->cost_per_stage) {
+                        for (auto &c : state->cost_per_stage) {
                             c *= penalty;
                         }
                         // After penalizing this state, if it's no
@@ -401,7 +390,6 @@ IntrusivePtr<State> AutoSchedule::optimal_schedule_pass(int beam_size,
                         break;
                     }
                 }
-
             }
 
             if (!cyos_from_file || !found) {
@@ -680,7 +668,7 @@ void find_and_apply_schedule(FunctionDAG &dag,
                              const std::vector<Function> &outputs,
                              const MachineParams &params,
                              const Target &target,
-                             CostModel* cost_model,
+                             CostModel *cost_model,
                              int beam_size,
                              StageMap<ScheduleFeatures> *schedule_features) {
 

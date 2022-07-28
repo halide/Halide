@@ -391,7 +391,7 @@ void DefaultCostModel::reset() {
     cursor = 0;
 }
 
-std::unique_ptr<DefaultCostModel> make_default_cost_model(Internal::Autoscheduler::Statistics& stats,
+std::unique_ptr<DefaultCostModel> make_default_cost_model(Internal::Autoscheduler::Statistics &stats,
                                                           const std::string &weights_in_path,
                                                           const std::string &weights_out_path,
                                                           bool randomize_weights) {

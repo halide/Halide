@@ -6,8 +6,8 @@ namespace Halide {
 namespace Internal {
 namespace Autoscheduler {
 
-bool all_ones(const std::vector<int64_t>& nums) {
-    for (const auto& n : nums) {
+bool all_ones(const std::vector<int64_t> &nums) {
+    for (const auto &n : nums) {
         if (n != 1) {
             return false;
         }
@@ -15,7 +15,7 @@ bool all_ones(const std::vector<int64_t>& nums) {
     return true;
 }
 
-bool equal_to_existing_size(const std::vector<int64_t>& s, const std::vector<int64_t>& nums) {
+bool equal_to_existing_size(const std::vector<int64_t> &s, const std::vector<int64_t> &nums) {
     for (size_t i = 0; i < s.size(); ++i) {
         if (s[i] != nums[i]) {
             return false;
@@ -328,4 +328,3 @@ vector<vector<int64_t>> generate_gpu_tilings(const vector<vector<int64_t>> &stag
 }  // namespace Autoscheduler
 }  // namespace Internal
 }  // namespace Halide
-

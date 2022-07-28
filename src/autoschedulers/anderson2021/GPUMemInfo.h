@@ -24,34 +24,34 @@ struct SharedAccessAccumulator;
 struct LocalMem;
 struct LocalAccessAccumulator;
 
-template <typename T>
+template<typename T>
 struct MemTraits;
 
-template <>
+template<>
 struct MemTraits<GlobalMem> {
     static constexpr double bytes_per_transaction = 32;
     using MemInfoType = GlobalMem;
     using Accumulator = GlobalAccessAccumulator;
 };
 
-template <>
+template<>
 struct MemTraits<SharedMem> {
     static constexpr double bytes_per_transaction = 128;
     using MemInfoType = SharedMem;
     using Accumulator = SharedAccessAccumulator;
 };
 
-template <>
+template<>
 struct MemTraits<LocalMem> {
     static constexpr double bytes_per_transaction = 32;
-    using MemInfoType = GlobalMem; // Local mem behaves similarly to global mem
+    using MemInfoType = GlobalMem;  // Local mem behaves similarly to global mem
     using Accumulator = LocalAccessAccumulator;
 };
 
-template <typename T>
+template<typename T>
 using Accumulator = typename MemTraits<T>::Accumulator;
 
-template <typename T>
+template<typename T>
 struct MemInfo {
     static constexpr double bytes_per_transaction = MemTraits<T>::bytes_per_transaction;
 
@@ -66,7 +66,7 @@ struct MemInfo {
         double total_bytes = total_transactions * bytes_per_transaction;
         double total_bytes_used = num_requests * num_bytes_used_per_request;
 
-        internal_assert(total_bytes_used <= total_bytes) 
+        internal_assert(total_bytes_used <= total_bytes)
             << "\ntotal_bytes_used = " << total_bytes_used
             << "\ntotal_bytes = " << total_bytes
             << "\ntotal_transactions = " << total_transactions
@@ -76,7 +76,7 @@ struct MemInfo {
         update_totals(total_transactions, total_bytes_used, total_bytes);
     }
 
-    void add(const MemInfo<T>& other) {
+    void add(const MemInfo<T> &other) {
         total_num_transactions += other.total_num_transactions;
         total_num_bytes_used += other.total_num_bytes_used;
         total_num_bytes += other.total_num_bytes;
@@ -104,7 +104,7 @@ private:
     double total_num_bytes = 0;
 };
 
-template <typename T>
+template<typename T>
 using MemInfoType = MemInfo<typename MemTraits<T>::MemInfoType>;
 
 using GlobalMemInfo = MemInfoType<GlobalMem>;
@@ -113,11 +113,11 @@ using LocalMemInfo = MemInfoType<LocalMem>;
 
 struct Strides {
 public:
-    Strides(const std::vector<int64_t>& storage_strides)
-        : storage_strides{storage_strides}
-    {}
+    Strides(const std::vector<int64_t> &storage_strides)
+        : storage_strides{storage_strides} {
+    }
 
-    void add_valid(const std::vector<double>& strides) {
+    void add_valid(const std::vector<double> &strides) {
         add(strides, true);
     }
 
@@ -140,7 +140,7 @@ public:
         return std::abs(result);
     }
 
-    void dump(bool verbose=false) {
+    void dump(bool verbose = false) {
         if (!verbose) {
             return;
         }
@@ -162,7 +162,7 @@ public:
     }
 
 private:
-    void add(const std::vector<double>& strides, bool e) {
+    void add(const std::vector<double> &strides, bool e) {
         index_strides.push_back(strides);
         is_valid.push_back(e);
     }
@@ -173,12 +173,9 @@ private:
 };
 
 struct GlobalAccessAccumulator {
-    GlobalAccessAccumulator(int bytes_per_access, size_t dimensions, const Strides& strides, bool verbose)
-        : bytes_per_access{bytes_per_access}
-        , dimensions{dimensions}
-        , strides{strides}
-        , verbose{verbose}
-    {}
+    GlobalAccessAccumulator(int bytes_per_access, size_t dimensions, const Strides &strides, bool verbose)
+        : bytes_per_access{bytes_per_access}, dimensions{dimensions}, strides{strides}, verbose{verbose} {
+    }
 
     void operator()(int thread_id, int x, int y, int z, int active, bool last_thread) {
         if (!active) {
@@ -186,7 +183,7 @@ struct GlobalAccessAccumulator {
         }
 
         if (verbose) {
-            aslog(2) << "thread_id: " << thread_id << " (" << x << ", " << y << ", " << z << ")\n"; 
+            aslog(2) << "thread_id: " << thread_id << " (" << x << ", " << y << ", " << z << ")\n";
         }
 
         int thread_ids[3] = {x, y, z};
@@ -218,7 +215,7 @@ struct GlobalAccessAccumulator {
         }
     }
 
-    void add_access_info(int num_requests, GlobalMemInfo& global_mem_info, bool is_tail_warp) const {
+    void add_access_info(int num_requests, GlobalMemInfo &global_mem_info, bool is_tail_warp) const {
         int num_transactions_per_request = sectors_accessed.size() + unknown_sectors;
 
         if (verbose) {
@@ -229,7 +226,7 @@ struct GlobalAccessAccumulator {
         }
 
         int num_bytes_used_per_request = 0;
-        for (const auto& sector : sectors_accessed) {
+        for (const auto &sector : sectors_accessed) {
             num_bytes_used_per_request += sector.second.size();
         }
 
@@ -245,8 +242,7 @@ struct GlobalAccessAccumulator {
         global_mem_info.add_access_info(
             num_requests,
             num_transactions_per_request,
-            num_bytes_used_per_request
-        );
+            num_bytes_used_per_request);
     }
 
 private:
@@ -259,12 +255,9 @@ private:
 };
 
 struct SharedAccessAccumulator {
-    SharedAccessAccumulator(int bytes_per_access, size_t dimensions, const Strides& strides, bool verbose)
-        : bytes_per_access{bytes_per_access}
-        , dimensions{dimensions}
-        , strides{strides}
-        , verbose{verbose}
-    {}
+    SharedAccessAccumulator(int bytes_per_access, size_t dimensions, const Strides &strides, bool verbose)
+        : bytes_per_access{bytes_per_access}, dimensions{dimensions}, strides{strides}, verbose{verbose} {
+    }
 
     void operator()(int thread_id, int x, int y, int z, int active, bool last_thread) {
         if (!active) {
@@ -272,7 +265,7 @@ struct SharedAccessAccumulator {
         }
 
         if (verbose) {
-            aslog(2) << "thread_id: " << thread_id << " (" << x << ", " << y << ", " << z << ")\n"; 
+            aslog(2) << "thread_id: " << thread_id << " (" << x << ", " << y << ", " << z << ")\n";
         }
 
         int thread_ids[3] = {x, y, z};
@@ -310,9 +303,9 @@ struct SharedAccessAccumulator {
         }
     }
 
-    void add_access_info(int num_requests, SharedMemInfo& shared_mem_info, bool is_tail_warp) const {
+    void add_access_info(int num_requests, SharedMemInfo &shared_mem_info, bool is_tail_warp) const {
         int num_transactions_per_request = 0;
-        for (const auto& bank : bank_to_words_accessed) {
+        for (const auto &bank : bank_to_words_accessed) {
             num_transactions_per_request = std::max(num_transactions_per_request, (int)bank.size());
         }
 
@@ -339,8 +332,7 @@ struct SharedAccessAccumulator {
         shared_mem_info.add_access_info(
             num_requests,
             num_transactions_per_request,
-            num_bytes_used_per_request
-        );
+            num_bytes_used_per_request);
     }
 
 private:
@@ -355,9 +347,8 @@ private:
 
 struct LocalAccessAccumulator {
     LocalAccessAccumulator(int bytes_per_access, bool verbose)
-        : bytes_per_access{bytes_per_access}
-        , verbose{verbose}
-    {}
+        : bytes_per_access{bytes_per_access}, verbose{verbose} {
+    }
 
     void operator()(int thread_id, int x, int y, int z, int active, bool last_thread) {
         if (!active) {
@@ -367,11 +358,11 @@ struct LocalAccessAccumulator {
         ++thread_count;
 
         if (verbose) {
-            aslog(2) << "thread_id: " << thread_id << " (" << x << ", " << y << ", " << z << ")\n"; 
+            aslog(2) << "thread_id: " << thread_id << " (" << x << ", " << y << ", " << z << ")\n";
         }
     }
 
-    void add_access_info(int num_requests, LocalMemInfo& local_mem_info, bool is_tail_warp) const {
+    void add_access_info(int num_requests, LocalMemInfo &local_mem_info, bool is_tail_warp) const {
         int num_bytes_used_per_request = thread_count * bytes_per_access;
         int sectors_accessed = std::ceil((float)num_bytes_used_per_request / (float)LocalMemInfo::bytes_per_transaction);
         int num_transactions_per_request = sectors_accessed;
@@ -393,8 +384,7 @@ struct LocalAccessAccumulator {
         local_mem_info.add_access_info(
             num_requests,
             num_transactions_per_request,
-            num_bytes_used_per_request
-        );
+            num_bytes_used_per_request);
     }
 
 private:
@@ -404,9 +394,8 @@ private:
     std::unordered_map<int64_t, std::unordered_set<int64_t>> sectors_accessed;
 };
 
-
 }  // namespace Autoscheduler
 }  // namespace Internal
 }  // namespace Halide
 
-#endif // GPU_MEM_INFO_H
+#endif  // GPU_MEM_INFO_H

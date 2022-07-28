@@ -1,5 +1,5 @@
-#include "test.h"
 #include "LoopNestParser.h"
+#include "test.h"
 
 using namespace Halide;
 using namespace Halide::Internal;

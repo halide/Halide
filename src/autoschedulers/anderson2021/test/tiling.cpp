@@ -1,7 +1,7 @@
 #include <set>
 
-#include "test.h"
 #include "Tiling.h"
+#include "test.h"
 
 using namespace Halide;
 using namespace Halide::Internal;
@@ -9,17 +9,17 @@ using namespace Halide::Internal::Autoscheduler;
 
 using tilings_t = vector<vector<int64_t>>;
 
-std::string to_string(const tilings_t& tilings) {
+std::string to_string(const tilings_t &tilings) {
     std::ostringstream s;
     s << "[\n";
     bool first_tiling = true;
-    for (const auto& t : tilings) {
+    for (const auto &t : tilings) {
         if (!first_tiling) {
             s << ",\n";
         }
         s << "  [";
         bool first = true;
-        for (const auto& x : t) {
+        for (const auto &x : t) {
             if (!first) {
                 s << ", ";
             }
@@ -34,8 +34,8 @@ std::string to_string(const tilings_t& tilings) {
     return s.str();
 }
 
-template <>
-void Halide::Internal::Autoscheduler::expect_eq(int line, const tilings_t& expected, const tilings_t& actual) {
+template<>
+void Halide::Internal::Autoscheduler::expect_eq(int line, const tilings_t &expected, const tilings_t &actual) {
     expect_eq(line, to_string(expected), to_string(actual));
 }
 

@@ -131,7 +131,7 @@ public:
     }
 
     bool all_coeffs_exist() const {
-        for (const auto& coeff : coeffs) {
+        for (const auto &coeff : coeffs) {
             if (!coeff.exists()) {
                 return false;
             }
@@ -152,7 +152,7 @@ public:
     }
 
     bool is_constant() const {
-        for (const auto& c : coeffs) {
+        for (const auto &c : coeffs) {
             if (!c.exists() || !(c == 0)) {
                 return false;
             }
@@ -496,9 +496,9 @@ struct FunctionDAG {
                 : stage(s) {
             }
 
-            int get_loop_index_from_var(const std::string& var) const {
+            int get_loop_index_from_var(const std::string &var) const {
                 int i = 0;
-                for (const auto& l : loop) {
+                for (const auto &l : loop) {
                     if (l.var == var) {
                         return i;
                     }
@@ -622,7 +622,7 @@ class ExprBranching : public VariadicVisitor<ExprBranching, int, int> {
     using Super = VariadicVisitor<ExprBranching, int, int>;
 
 private:
-    const NodeMap<int64_t>& inlined;
+    const NodeMap<int64_t> &inlined;
 
 public:
     int visit(const IntImm *op);
@@ -656,16 +656,16 @@ public:
     int visit(const Let *op);
     int visit(const VectorReduce *op);
     int visit_binary(const Expr &a, const Expr &b);
-    int visit_nary(const std::vector<Expr>& exprs);
+    int visit_nary(const std::vector<Expr> &exprs);
 
-    ExprBranching(const NodeMap<int64_t>& inlined)
-        : inlined{inlined}
-    {}
+    ExprBranching(const NodeMap<int64_t> &inlined)
+        : inlined{inlined} {
+    }
 
-    int compute(const Function& f);
+    int compute(const Function &f);
 };
 
-void sanitize_names(std::string& str);
+void sanitize_names(std::string &str);
 
 }  // namespace Autoscheduler
 }  // namespace Internal

@@ -164,7 +164,6 @@ int main(int argc, char **argv) {
         Pipeline(after[4]).auto_schedule(target, params);
     }
 
-
     if (1) {
         Buffer<float> im_a(1024, 1024, "a"), im_b(1024, 1024, "b");
         im_a.fill(0.0f);
@@ -248,7 +247,6 @@ int main(int argc, char **argv) {
 
         Pipeline(h).auto_schedule(target, params);
     }
-
 
     if (1) {
         // A no-win scenario in which a Func is going to be read from

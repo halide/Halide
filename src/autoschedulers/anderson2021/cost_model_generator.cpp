@@ -185,7 +185,7 @@ public:
         return 1 / (1 + exp(-e));
     }
 
-    Expr print_wrap(Expr e, const std::string& out, const Var& n, const Var& w) {
+    Expr print_wrap(Expr e, const std::string &out, const Var &n, const Var &w) {
         if (training || !enable_debug_output) {
             return e;
         }
@@ -344,8 +344,8 @@ public:
         // different cost to vectors and scalars, and a different cost
         // depending on whether we were inlined.
         Expr compute_cost = select(inlined_calls == 0,
-                                    num_scalars * relu1(1, w, n),
-                                    num_scalars * relu1(3, w, n));
+                                   num_scalars * relu1(1, w, n),
+                                   num_scalars * relu1(3, w, n));
 
         compute_cost = print_wrap(compute_cost, "compute_cost_initial", n, w);
 

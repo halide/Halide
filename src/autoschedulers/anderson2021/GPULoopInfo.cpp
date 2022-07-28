@@ -6,7 +6,7 @@ namespace Halide {
 namespace Internal {
 namespace Autoscheduler {
 
-void GPULoopInfo::update(const Target& target, const LoopNest* loop) {
+void GPULoopInfo::update(const Target &target, const LoopNest *loop) {
     if (loop->is_gpu_block(target)) {
         current_block_loop = loop;
         num_blocks = loop->get_block_and_serial_extents(loop).first;
@@ -45,7 +45,7 @@ bool GPULoopInfo::at_or_inside_thread() const {
     return current_thread_loop != nullptr;
 }
 
-std::vector<int64_t> GPULoopInfo::get_inner_serial_loop_extents(const LoopNest* loop_nest) const {
+std::vector<int64_t> GPULoopInfo::get_inner_serial_loop_extents(const LoopNest *loop_nest) const {
     internal_assert(at_or_inside_thread());
 
     std::vector<int64_t> extents;
@@ -72,10 +72,10 @@ std::vector<int64_t> GPULoopInfo::get_inner_serial_loop_extents(const LoopNest* 
 //    f 1 gpu_simd
 // This method will give the extents of the loops inside the thread level but
 // outside the given loop_nest's realization e.g. 8 for g above.
-int64_t GPULoopInfo::get_total_inner_serial_extents_outside_realization(const LoopNest* loop_nest) const {
+int64_t GPULoopInfo::get_total_inner_serial_extents_outside_realization(const LoopNest *loop_nest) const {
     int64_t extents = 1;
 
-    for (const auto* loop : inner_loop_stack) {
+    for (const auto *loop : inner_loop_stack) {
         if (loop->node == loop_nest->node) {
             break;
         }
@@ -97,8 +97,7 @@ std::unique_ptr<ThreadInfo> GPULoopInfo::create_thread_info() {
         current_thread_loop->vectorized_loop_index,
         current_thread_loop->size,
         current_thread_loop->stage->loop,
-        max_thread_counts
-    );
+        max_thread_counts);
     thread_info = new_thread_info.get();
     return new_thread_info;
 }

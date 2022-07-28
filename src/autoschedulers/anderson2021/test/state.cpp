@@ -1,6 +1,6 @@
-#include "test.h"
-#include "LoopNest.h"
 #include "State.h"
+#include "LoopNest.h"
+#include "test.h"
 
 using namespace Halide;
 using namespace Halide::Internal;
@@ -24,9 +24,9 @@ void test_state() {
         outputs.push_back(h.function());
         FunctionDAG dag(outputs, params, target);
 
-        const FunctionDAG::Node* node_h = &dag.nodes[0];
-        const FunctionDAG::Node* node_g = &dag.nodes[1];
-        const FunctionDAG::Node* node_f = &dag.nodes[2];
+        const FunctionDAG::Node *node_h = &dag.nodes[0];
+        const FunctionDAG::Node *node_g = &dag.nodes[1];
+        const FunctionDAG::Node *node_f = &dag.nodes[2];
 
         EXPECT_EQ(node_h->func.name(), std::string("h"));
         EXPECT_EQ(node_f->func.name(), std::string("f"));

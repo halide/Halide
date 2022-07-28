@@ -19,21 +19,12 @@ SearchSpace::SearchSpace(const FunctionDAG &dag,
                          std::mt19937 &rng,
                          CostModel *cost_model,
                          Statistics &stats,
-                         const LoopNestParser* partial_schedule)
-    : dag{dag}
-    , params{params}
-    , target{target}
-    , search_space_options{search_space_options}
-    , rng{rng}
-    , cost_model{cost_model}
-    , stats{stats}
-    , randomize_tilings{use_randomized_tilings()}
-    , partial_schedule{partial_schedule}
-{
+                         const LoopNestParser *partial_schedule)
+    : dag{dag}, params{params}, target{target}, search_space_options{search_space_options}, rng{rng}, cost_model{cost_model}, stats{stats}, randomize_tilings{use_randomized_tilings()}, partial_schedule{partial_schedule} {
     memoized_compute_root_blocks.make_large(dag.nodes.size());
 }
 
-void SearchSpace::memoize_blocks(const FunctionDAG::Node *node, LoopNest* new_root) {
+void SearchSpace::memoize_blocks(const FunctionDAG::Node *node, LoopNest *new_root) {
     int vector_dim = -1;
     bool loop_nest_found = false;
     for (auto &c : new_root->children) {
@@ -46,7 +37,7 @@ void SearchSpace::memoize_blocks(const FunctionDAG::Node *node, LoopNest* new_ro
 
     internal_assert(loop_nest_found);
 
-    auto& blocks = memoized_compute_root_blocks.get_or_create(node)[vector_dim];
+    auto &blocks = memoized_compute_root_blocks.get_or_create(node)[vector_dim];
 
     for (auto &c : new_root->children) {
         if (c->node == node) {
@@ -61,13 +52,13 @@ void SearchSpace::memoize_blocks(const FunctionDAG::Node *node, LoopNest* new_ro
 bool SearchSpace::add_states_from_memoized_blocks(IntrusivePtr<State> state,
                                                   std::function<void(IntrusivePtr<State> &&)> &accept_child,
                                                   const FunctionDAG::Node *node,
-                                                  int& num_children) const {
+                                                  int &num_children) const {
     if (!memoized_compute_root_blocks.contains(node)) {
         return false;
     }
 
     int vector_dim = -1;
-    for (const auto& c : state->root->children) {
+    for (const auto &c : state->root->children) {
         if (c->node == node && c->stage->index == 0) {
             vector_dim = c->vector_dim;
             break;
@@ -89,7 +80,7 @@ bool SearchSpace::add_states_from_memoized_blocks(IntrusivePtr<State> state,
         child->num_decisions_made++;
 
         int block_index = 0;
-        for (const auto& c : new_root->children) {
+        for (const auto &c : new_root->children) {
             if (c->node == node) {
                 break;
             }
@@ -97,7 +88,7 @@ bool SearchSpace::add_states_from_memoized_blocks(IntrusivePtr<State> state,
         }
 
         for (size_t j = 0; j < num_stages; ++j) {
-            LoopNest* new_block = new LoopNest;
+            LoopNest *new_block = new LoopNest;
             new_block->copy_from_including_features(*blocks[i + j]);
             new_root->children[block_index++] = new_block;
         }
@@ -113,9 +104,9 @@ bool SearchSpace::add_states_from_memoized_blocks(IntrusivePtr<State> state,
 }
 
 vector<SearchSpace::ParallelTileOption> SearchSpace::filter_parallel_tile_options(IntrusivePtr<State> state,
-                                                              const FunctionDAG::Node *node,
-                                                              vector<vector<int64_t>>& inner_tilings,
-                                                              const vector<int64_t>& pure_size) const {
+                                                                                  const FunctionDAG::Node *node,
+                                                                                  vector<vector<int64_t>> &inner_tilings,
+                                                                                  const vector<int64_t> &pure_size) const {
     vector<SearchSpace::ParallelTileOption> options;
     vector<SearchSpace::ParallelTileOption> insufficient_parallelism;
     for (size_t i = 0; i < inner_tilings.size(); i++) {
@@ -182,7 +173,7 @@ vector<SearchSpace::ParallelTileOption> SearchSpace::filter_parallel_tile_option
 
     int64_t parallelism_limit = params.parallelism;
     while (options.empty()) {
-        for (auto& o : insufficient_parallelism) {
+        for (auto &o : insufficient_parallelism) {
             if (o.min_parallelism >= parallelism_limit) {
                 options.emplace_back(std::move(o));
             }
@@ -196,9 +187,9 @@ vector<SearchSpace::ParallelTileOption> SearchSpace::filter_parallel_tile_option
     return options;
 }
 
-vector<ThreadTileOption> SearchSpace::filter_thread_tile_options(vector<IntrusivePtr<const LoopNest>>& loop_nests) const {
+vector<ThreadTileOption> SearchSpace::filter_thread_tile_options(vector<IntrusivePtr<const LoopNest>> &loop_nests) const {
     vector<ThreadTileOption> options;
-    for (const auto& loop_nest : loop_nests) {
+    for (const auto &loop_nest : loop_nests) {
         if (!loop_nest->has_valid_thread_extents()) {
             Filter(loop_nest.get()) << "Invalid thread extents\n";
             continue;
@@ -215,12 +206,12 @@ vector<ThreadTileOption> SearchSpace::filter_thread_tile_options(vector<Intrusiv
     return options;
 }
 
-void SearchSpace::process_pending_states(std::unordered_map<uint64_t, StateVector>& primary_options,
-                                         std::unordered_map<uint64_t, StateVector>& secondary_options,
+void SearchSpace::process_pending_states(std::unordered_map<uint64_t, StateVector> &primary_options,
+                                         std::unordered_map<uint64_t, StateVector> &secondary_options,
                                          int &num_children,
                                          std::function<void(IntrusivePtr<State> &&)> &accept_child,
-                                         const FunctionDAG::Node* node) {
-    for (auto& entry : primary_options) {
+                                         const FunctionDAG::Node *node) {
+    for (auto &entry : primary_options) {
         size_t N = entry.second.size();
         if (N > 1 && !is_in_partial_schedule(node)) {
             N = std::log2(entry.second.size());
@@ -243,7 +234,7 @@ void SearchSpace::process_pending_states(std::unordered_map<uint64_t, StateVecto
         return;
     }
 
-    for (auto& entry : secondary_options) {
+    for (auto &entry : secondary_options) {
         for (size_t i = 0; i < entry.second.size(); ++i) {
             if (entry.second[i]->calculate_cost(dag, params, target, cost_model, stats)) {
                 num_children++;
@@ -317,7 +308,6 @@ void SearchSpace::generate_children(IntrusivePtr<State> state,
 
     int num_children = 0;
 
-
     if (phase == 0) {
         // Injecting realizations
         {
@@ -352,8 +342,8 @@ void SearchSpace::generate_children(IntrusivePtr<State> state,
         // inlining it is legal, just inline it. This saves time
         // on long chains of pointwise things.
         must_inline = (node->is_pointwise &&
-                            (num_children > 0) &&
-                            (node->outgoing_edges.size() == 1));
+                       (num_children > 0) &&
+                       (node->outgoing_edges.size() == 1));
         if (must_inline) {
             for (const auto *e : node->stages[0].incoming_edges) {
                 must_inline &= e->producer->is_pointwise;
@@ -372,7 +362,7 @@ void SearchSpace::generate_children(IntrusivePtr<State> state,
             new_root->copy_from(*root);
             const auto &nodes = compute_root_nodes.get(node);
             for (const auto &n : nodes) {
-                const auto* compute_root_loop = deep_copy_loop_nest(n.get(), NoOpMutator{});
+                const auto *compute_root_loop = deep_copy_loop_nest(n.get(), NoOpMutator{});
                 new_root->children.push_back(compute_root_loop);
             }
             new_root->store_at.insert(node);
@@ -417,10 +407,10 @@ void SearchSpace::generate_children(IntrusivePtr<State> state,
             auto options = filter_thread_tile_options(tile_options);
             stats.filter_thread_tiles_time += timer.elapsed();
 
-            for (const auto& o : options) {
+            for (const auto &o : options) {
                 if (!randomize_tilings && num_children >= 1 && o.max_idle_lane_wastage > 0.5) {
                     Filter(o.loop_nest.get()) << "Excess idle lane wastage\n"
-                        << "max_idle_lane_wastage = " << o.max_idle_lane_wastage << "\n";
+                                              << "max_idle_lane_wastage = " << o.max_idle_lane_wastage << "\n";
                     break;
                 }
 
@@ -490,7 +480,7 @@ void SearchSpace::generate_children(IntrusivePtr<State> state,
 
         std::unordered_map<uint64_t, std::vector<IntrusivePtr<State>>> primary_options;
         std::unordered_map<uint64_t, std::vector<IntrusivePtr<State>>> secondary_options;
-        for (auto &parallel_t: parallel_tilings) {
+        for (auto &parallel_t : parallel_tilings) {
             LoopNest parallel_root;
             parallel_root.copy_from(*root);
 
@@ -509,7 +499,7 @@ void SearchSpace::generate_children(IntrusivePtr<State> state,
             // at root level sibling thread counts are in separate blocks, extents are irrelevant
             vector<int64_t> max_size((int)(stage_sizes[0].size()), 1);
 
-            auto block_tilings = generate_gpu_tilings(stage_sizes, pure_dims, max_size, node->dimensions-1, vectorized_indices, false, true);
+            auto block_tilings = generate_gpu_tilings(stage_sizes, pure_dims, max_size, node->dimensions - 1, vectorized_indices, false, true);
 
             // If no options, create a thread tiling as large as possible with block size (1,1,1).
             // This can happen if the loops are too small to generate desired gpu tiles.
@@ -591,7 +581,7 @@ void SearchSpace::generate_children(IntrusivePtr<State> state,
 }
 
 struct ClearInlinedMutator {
-    void operator()(LoopNest* new_loop_nest) const {
+    void operator()(LoopNest *new_loop_nest) const {
         new_loop_nest->inlined = {};
     }
 };
@@ -600,13 +590,13 @@ void SearchSpace::freeze_lowest_cost_stages(const IntrusivePtr<State> best) {
     std::vector<std::pair<int, double>> node_ids_and_costs;
     NodeMap<double> node_costs;
     size_t num_nodes = 0;
-    for (const auto& n : dag.nodes) {
+    for (const auto &n : dag.nodes) {
         if (n.is_input) {
             continue;
         }
 
         int i = 0;
-        for (const auto& s : n.stages) {
+        for (const auto &s : n.stages) {
             if (!node_costs.contains(dag.stage_id_to_node_map.at(s.id))) {
                 node_costs.get_or_create(dag.stage_id_to_node_map.at(s.id)) = 0;
             }
@@ -621,11 +611,11 @@ void SearchSpace::freeze_lowest_cost_stages(const IntrusivePtr<State> best) {
         node_ids_and_costs.push_back({it.key()->id, it.value()});
     }
 
-    for (const auto& n : node_ids_and_costs) {
+    for (const auto &n : node_ids_and_costs) {
         internal_assert(n.first >= 0);
     }
 
-    std::sort(node_ids_and_costs.begin(), node_ids_and_costs.end(), [](const std::pair<int, double>& a, const std::pair<int, double>& b) {
+    std::sort(node_ids_and_costs.begin(), node_ids_and_costs.end(), [](const std::pair<int, double> &a, const std::pair<int, double> &b) {
         return a.second < b.second;
     });
 
@@ -641,7 +631,7 @@ void SearchSpace::freeze_lowest_cost_stages(const IntrusivePtr<State> best) {
 
     ClearInlinedMutator mutator{};
 
-    for (const auto& c : best->root->children) {
+    for (const auto &c : best->root->children) {
         if (nodes_to_freeze.contains(c->node)) {
             auto new_loop_nest = deep_copy_loop_nest(c, mutator);
             compute_root_nodes.get_or_create(c->node).push_back(new_loop_nest);
@@ -650,7 +640,7 @@ void SearchSpace::freeze_lowest_cost_stages(const IntrusivePtr<State> best) {
     }
 }
 
-vector<vector<int64_t>> SearchSpace::generate_compute_root_serial_tilings(const IntrusivePtr<const LoopNest>& pure_stage, const FunctionDAG::Node *node) const {
+vector<vector<int64_t>> SearchSpace::generate_compute_root_serial_tilings(const IntrusivePtr<const LoopNest> &pure_stage, const FunctionDAG::Node *node) const {
     std::vector<int> vec_dim_serial_sizes;
     pure_stage->generate_vec_dim_serial_tilings(vec_dim_serial_sizes);
 
@@ -663,8 +653,8 @@ vector<vector<int64_t>> SearchSpace::generate_compute_root_serial_tilings(const 
                                    true);
 }
 
-bool SearchSpace::add_child(const IntrusivePtr<State>& state,
-                            const IntrusivePtr<const LoopNest>& new_root,
+bool SearchSpace::add_child(const IntrusivePtr<State> &state,
+                            const IntrusivePtr<const LoopNest> &new_root,
                             std::function<void(IntrusivePtr<State> &&)> &accept_child) const {
     auto child = state->make_child();
     child->root = std::move(new_root);

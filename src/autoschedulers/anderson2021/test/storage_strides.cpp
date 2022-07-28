@@ -1,5 +1,5 @@
-#include "test.h"
 #include "LoopNest.h"
+#include "test.h"
 
 using namespace Halide;
 using namespace Halide::Internal;
@@ -24,9 +24,9 @@ void test_bounds() {
         outputs.push_back(h.function());
         FunctionDAG dag(outputs, params, target);
 
-        const FunctionDAG::Node* node_h = &dag.nodes[0];
-        const FunctionDAG::Node* node_g = &dag.nodes[1];
-        const FunctionDAG::Node* node_f = &dag.nodes[2];
+        const FunctionDAG::Node *node_h = &dag.nodes[0];
+        const FunctionDAG::Node *node_g = &dag.nodes[1];
+        const FunctionDAG::Node *node_f = &dag.nodes[2];
 
         EXPECT_EQ(node_h->func.name(), std::string("h"));
         EXPECT_EQ(node_f->func.name(), std::string("f"));
@@ -46,10 +46,9 @@ void test_bounds() {
         // Thread loop
         root->children[0] = root->children[0]->parallelize_in_tiles(params, tiling, root.get(), target, true, false);
 
-
-        const auto& thread = root->children[0]->children[0];
-        const auto& thread_bounds_g = thread->get_bounds(node_g);
-        const auto& thread_bounds_f = thread->get_bounds(node_f);
+        const auto &thread = root->children[0]->children[0];
+        const auto &thread_bounds_g = thread->get_bounds(node_g);
+        const auto &thread_bounds_f = thread->get_bounds(node_f);
 
         EXPECT_EQ(thread_bounds_g->region_required(0).extent(), 1);
         EXPECT_EQ(thread_bounds_g->region_required(1).extent(), 1);
@@ -77,9 +76,9 @@ void test_bounds() {
         outputs.push_back(out.function());
         FunctionDAG dag(outputs, params, target);
 
-        const FunctionDAG::Node* node_out = &dag.nodes[0];
-        const FunctionDAG::Node* node_h = &dag.nodes[1];
-        const FunctionDAG::Node* node_g = &dag.nodes[2];
+        const FunctionDAG::Node *node_out = &dag.nodes[0];
+        const FunctionDAG::Node *node_h = &dag.nodes[1];
+        const FunctionDAG::Node *node_g = &dag.nodes[2];
 
         EXPECT_EQ(node_out->func.name(), out.name());
         EXPECT_EQ(node_h->func.name(), h.name());
@@ -102,9 +101,9 @@ void test_bounds() {
         std::unique_ptr<LoopNest> root_copy{new LoopNest};
         root_copy->copy_from(*root);
 
-        const auto& thread = root->children[0]->children[0];
-        const auto& thread_bounds_g = thread->get_bounds(node_g);
-        const auto& thread_bounds_h = thread->get_bounds(node_h);
+        const auto &thread = root->children[0]->children[0];
+        const auto &thread_bounds_g = thread->get_bounds(node_g);
+        const auto &thread_bounds_h = thread->get_bounds(node_h);
 
         EXPECT_EQ(thread_bounds_g->region_required(0).extent(), 3);
 
@@ -113,9 +112,9 @@ void test_bounds() {
         // If 'h' is inlined, the region_required should not change
         root_copy->inline_func(node_h);
         {
-            const auto& thread = root_copy->children[0]->children[0];
-            const auto& thread_bounds_g = thread->get_bounds(node_g);
-            const auto& thread_bounds_h = thread->get_bounds(node_h);
+            const auto &thread = root_copy->children[0]->children[0];
+            const auto &thread_bounds_g = thread->get_bounds(node_g);
+            const auto &thread_bounds_h = thread->get_bounds(node_h);
 
             EXPECT_EQ(thread_bounds_g->region_required(0).extent(), 3);
 
@@ -135,8 +134,8 @@ void test_bounds() {
         outputs.push_back(out.function());
         FunctionDAG dag(outputs, params, target);
 
-        const FunctionDAG::Node* node_out = &dag.nodes[0];
-        const FunctionDAG::Node* node_f = &dag.nodes[1];
+        const FunctionDAG::Node *node_out = &dag.nodes[0];
+        const FunctionDAG::Node *node_f = &dag.nodes[1];
 
         EXPECT_EQ(node_out->func.name(), out.name());
         EXPECT_EQ(node_f->func.name(), f.name());
@@ -158,16 +157,16 @@ void test_bounds() {
         std::unique_ptr<LoopNest> root_copy{new LoopNest};
         root_copy->copy_from(*root);
 
-        const auto& root_bounds_f = root->get_bounds(node_f);
+        const auto &root_bounds_f = root->get_bounds(node_f);
 
         EXPECT_EQ(root_bounds_f->region_required(0).extent(), 1024);
         EXPECT_EQ(1, (int)node_f->outgoing_edges.size());
         EXPECT_EQ(1, (int)node_f->outgoing_edges.front()->load_jacobians.size());
 
         ThreadInfo thread_info{0, {32}, node_out->stages[0].loop, {32}};
-        const auto& jac = node_f->outgoing_edges.front()->load_jacobians.front();
+        const auto &jac = node_f->outgoing_edges.front()->load_jacobians.front();
 
-        const auto& thread = root->children[0]->children[0];
+        const auto &thread = root->children[0]->children[0];
         Strides strides = thread->compute_strides(jac, 0, node_f, root_bounds_f, thread_info, verbose);
 
         GlobalAccessAccumulator accumulator{bytes_per_point, 1, strides, verbose};
@@ -178,8 +177,7 @@ void test_bounds() {
         accumulator.add_access_info(
             num_requests,
             mem_info,
-            false
-        );
+            false);
 
         EXPECT_EQ(4, mem_info.num_transactions());
     }
@@ -196,8 +194,8 @@ void test_bounds() {
         outputs.push_back(out.function());
         FunctionDAG dag(outputs, params, target);
 
-        const FunctionDAG::Node* node_out = &dag.nodes[0];
-        const FunctionDAG::Node* node_f = &dag.nodes[1];
+        const FunctionDAG::Node *node_out = &dag.nodes[0];
+        const FunctionDAG::Node *node_f = &dag.nodes[1];
 
         EXPECT_EQ(node_out->func.name(), out.name());
         EXPECT_EQ(node_f->func.name(), f.name());
@@ -219,16 +217,16 @@ void test_bounds() {
         std::unique_ptr<LoopNest> root_copy{new LoopNest};
         root_copy->copy_from(*root);
 
-        const auto& root_bounds_f = root->get_bounds(node_f);
+        const auto &root_bounds_f = root->get_bounds(node_f);
 
         EXPECT_EQ(root_bounds_f->region_required(0).extent(), 512);
         EXPECT_EQ(1, (int)node_f->outgoing_edges.size());
         EXPECT_EQ(1, (int)node_f->outgoing_edges.front()->load_jacobians.size());
 
         ThreadInfo thread_info{0, {32}, node_out->stages[0].loop, {32}};
-        const auto& jac = node_f->outgoing_edges.front()->load_jacobians.front();
+        const auto &jac = node_f->outgoing_edges.front()->load_jacobians.front();
 
-        const auto& thread = root->children[0]->children[0];
+        const auto &thread = root->children[0]->children[0];
         Strides strides = thread->compute_strides(jac, 0, node_f, root_bounds_f, thread_info, verbose);
 
         GlobalAccessAccumulator accumulator{bytes_per_point, 1, strides, verbose};
@@ -239,8 +237,7 @@ void test_bounds() {
         accumulator.add_access_info(
             num_requests,
             mem_info,
-            false
-        );
+            false);
 
         EXPECT_EQ(2, mem_info.num_transactions());
     }
@@ -258,8 +255,8 @@ void test_bounds() {
         outputs.push_back(out.function());
         FunctionDAG dag(outputs, params, target);
 
-        const FunctionDAG::Node* node_out = &dag.nodes[0];
-        const FunctionDAG::Node* node_f = &dag.nodes[1];
+        const FunctionDAG::Node *node_out = &dag.nodes[0];
+        const FunctionDAG::Node *node_f = &dag.nodes[1];
 
         EXPECT_EQ(node_out->func.name(), out.name());
         EXPECT_EQ(node_f->func.name(), f.name());
@@ -284,7 +281,7 @@ void test_bounds() {
         std::unique_ptr<LoopNest> root_copy{new LoopNest};
         root_copy->copy_from(*root);
 
-        const auto& root_bounds_f = root->get_bounds(node_f);
+        const auto &root_bounds_f = root->get_bounds(node_f);
 
         EXPECT_EQ(root_bounds_f->region_required(0).extent(), 1024);
         EXPECT_EQ(root_bounds_f->region_required(1).extent(), 512);
@@ -293,9 +290,9 @@ void test_bounds() {
         EXPECT_EQ(1, (int)node_f->outgoing_edges.front()->load_jacobians.size());
 
         ThreadInfo thread_info{1, {1, 32}, node_out->stages[0].loop, {1, 32}};
-        const auto& jac = node_f->outgoing_edges.front()->load_jacobians.front();
+        const auto &jac = node_f->outgoing_edges.front()->load_jacobians.front();
 
-        const auto& thread = root->children[0]->children[0];
+        const auto &thread = root->children[0]->children[0];
         Strides strides = thread->compute_strides(jac, 0, node_f, root_bounds_f, thread_info, verbose);
         strides.dump(true);
 
@@ -307,8 +304,7 @@ void test_bounds() {
         accumulator.add_access_info(
             num_requests,
             mem_info,
-            false
-        );
+            false);
 
         EXPECT_EQ(16, mem_info.num_transactions());
     }
@@ -327,9 +323,9 @@ void test_bounds() {
         outputs.push_back(out.function());
         FunctionDAG dag(outputs, params, target);
 
-        const FunctionDAG::Node* node_out = &dag.nodes[0];
-        const FunctionDAG::Node* node_f = &dag.nodes[1];
-        const FunctionDAG::Node* node_g = &dag.nodes[2];
+        const FunctionDAG::Node *node_out = &dag.nodes[0];
+        const FunctionDAG::Node *node_f = &dag.nodes[1];
+        const FunctionDAG::Node *node_g = &dag.nodes[2];
 
         EXPECT_EQ(node_out->func.name(), out.name());
         EXPECT_EQ(node_f->func.name(), f.name());
@@ -359,7 +355,7 @@ void test_bounds() {
         std::unique_ptr<LoopNest> root_copy{new LoopNest};
         root_copy->copy_from(*root);
 
-        const auto& root_bounds_f = root->get_bounds(node_f);
+        const auto &root_bounds_f = root->get_bounds(node_f);
 
         EXPECT_EQ(root_bounds_f->region_required(0).extent(), 1024);
 
@@ -367,10 +363,10 @@ void test_bounds() {
         EXPECT_EQ(1, (int)node_g->outgoing_edges.front()->load_jacobians.size());
 
         ThreadInfo thread_info{1, {32, 1}, node_out->stages[0].loop, {32, 1}};
-        const auto& jac = node_g->outgoing_edges.front()->load_jacobians.front();
+        const auto &jac = node_g->outgoing_edges.front()->load_jacobians.front();
 
-        const auto& thread = root->children[0]->children[0];
-        const auto& thread_bounds_g = thread->get_bounds(node_g);
+        const auto &thread = root->children[0]->children[0];
+        const auto &thread_bounds_g = thread->get_bounds(node_g);
         Strides strides = thread->compute_strides(jac, 0, node_g, thread_bounds_g, thread_info, verbose);
 
         GlobalAccessAccumulator accumulator{bytes_per_point, 1, strides, verbose};
@@ -381,8 +377,7 @@ void test_bounds() {
         accumulator.add_access_info(
             num_requests,
             mem_info,
-            false
-        );
+            false);
 
         EXPECT_EQ(4, mem_info.num_transactions());
     }

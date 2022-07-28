@@ -17,9 +17,8 @@ struct SearchSpaceOptions {
 
     std::bitset<4> options;
 
-    SearchSpaceOptions(const std::string& bit_str)
-        : options{bit_str}
-    {
+    SearchSpaceOptions(const std::string &bit_str)
+        : options{bit_str} {
         aslog(0) << "Search space options:\n";
         aslog(0) << "Input string: " << bit_str << "\n";
         aslog(0) << "Compute root: " << compute_root() << "\n";
@@ -65,4 +64,4 @@ struct SearchSpaceOptions {
 }  // namespace Internal
 }  // namespace Halide
 
-#endif // SEARCH_SPACE_OPTIONS_H
+#endif  // SEARCH_SPACE_OPTIONS_H

@@ -1,6 +1,6 @@
-#include "test.h"
-#include "Tiling.h"
 #include "LoopNest.h"
+#include "Tiling.h"
+#include "test.h"
 
 using namespace Halide;
 using namespace Halide::Internal;
@@ -23,9 +23,9 @@ void test_bounds() {
         outputs.push_back(h.function());
         FunctionDAG dag(outputs, params, target);
 
-        const FunctionDAG::Node* node_h = &dag.nodes[0];
-        const FunctionDAG::Node* node_g = &dag.nodes[1];
-        const FunctionDAG::Node* node_f = &dag.nodes[2];
+        const FunctionDAG::Node *node_h = &dag.nodes[0];
+        const FunctionDAG::Node *node_g = &dag.nodes[1];
+        const FunctionDAG::Node *node_f = &dag.nodes[2];
 
         EXPECT_EQ(node_h->func.name(), std::string("h"));
         EXPECT_EQ(node_f->func.name(), std::string("f"));
@@ -45,9 +45,9 @@ void test_bounds() {
         // Thread loop
         root->children[0] = root->children[0]->parallelize_in_tiles(params, tiling, root.get(), target, true, false);
 
-        const auto& thread = root->children[0]->children[0];
-        const auto& thread_bounds_g = thread->get_bounds(node_g);
-        const auto& thread_bounds_f = thread->get_bounds(node_f);
+        const auto &thread = root->children[0]->children[0];
+        const auto &thread_bounds_g = thread->get_bounds(node_g);
+        const auto &thread_bounds_f = thread->get_bounds(node_f);
 
         EXPECT_EQ(thread_bounds_g->region_required(0).extent(), 1);
 
@@ -67,9 +67,9 @@ void test_bounds() {
         outputs.push_back(out.function());
         FunctionDAG dag(outputs, params, target);
 
-        const FunctionDAG::Node* node_out = &dag.nodes[0];
-        const FunctionDAG::Node* node_f = &dag.nodes[2];
-        const FunctionDAG::Node* node_g = &dag.nodes[3];
+        const FunctionDAG::Node *node_out = &dag.nodes[0];
+        const FunctionDAG::Node *node_f = &dag.nodes[2];
+        const FunctionDAG::Node *node_g = &dag.nodes[3];
 
         std::unique_ptr<LoopNest> root = std::make_unique<LoopNest>();
 
@@ -85,9 +85,9 @@ void test_bounds() {
         // Thread loop
         root->children[0] = root->children[0]->parallelize_in_tiles(params, tiling, root.get(), target, true, false);
 
-        const auto& thread = root->children[0]->children[0];
-        const auto& thread_bounds_g = thread->get_bounds(node_g);
-        const auto& thread_bounds_f = thread->get_bounds(node_f);
+        const auto &thread = root->children[0]->children[0];
+        const auto &thread_bounds_g = thread->get_bounds(node_g);
+        const auto &thread_bounds_f = thread->get_bounds(node_f);
 
         EXPECT_EQ(thread_bounds_g->region_required(0).extent(), 515);
 
@@ -111,9 +111,9 @@ void test_bounds() {
         outputs.push_back(out.function());
         FunctionDAG dag(outputs, params, target);
 
-        const FunctionDAG::Node* node_out = &dag.nodes[0];
-        const FunctionDAG::Node* node_h = &dag.nodes[1];
-        const FunctionDAG::Node* node_g = &dag.nodes[2];
+        const FunctionDAG::Node *node_out = &dag.nodes[0];
+        const FunctionDAG::Node *node_h = &dag.nodes[1];
+        const FunctionDAG::Node *node_g = &dag.nodes[2];
 
         EXPECT_EQ(node_out->func.name(), out.name());
         EXPECT_EQ(node_h->func.name(), h.name());
@@ -136,9 +136,9 @@ void test_bounds() {
         std::unique_ptr<LoopNest> root_copy{new LoopNest};
         root_copy->copy_from(*root);
 
-        const auto& thread = root->children[0]->children[0];
-        const auto& thread_bounds_g = thread->get_bounds(node_g);
-        const auto& thread_bounds_h = thread->get_bounds(node_h);
+        const auto &thread = root->children[0]->children[0];
+        const auto &thread_bounds_g = thread->get_bounds(node_g);
+        const auto &thread_bounds_h = thread->get_bounds(node_h);
 
         EXPECT_EQ(thread_bounds_g->region_required(0).extent(), 3);
 
@@ -147,9 +147,9 @@ void test_bounds() {
         // If 'h' is inlined, the region_required should not change
         root_copy->inline_func(node_h);
         {
-            const auto& thread = root_copy->children[0]->children[0];
-            const auto& thread_bounds_g = thread->get_bounds(node_g);
-            const auto& thread_bounds_h = thread->get_bounds(node_h);
+            const auto &thread = root_copy->children[0]->children[0];
+            const auto &thread_bounds_g = thread->get_bounds(node_g);
+            const auto &thread_bounds_h = thread->get_bounds(node_h);
 
             EXPECT_EQ(thread_bounds_g->region_required(0).extent(), 3);
 
@@ -160,8 +160,8 @@ void test_bounds() {
     {
         Func f("f"), g("g"), out("out");
         g(x) = x;
-        f(x) = g(x - 100) + g(x + 100); // 201 points of g required for each point of f
-        out(x) = f(x) + g(x); // 1 point of g required for each point of out
+        f(x) = g(x - 100) + g(x + 100);  // 201 points of g required for each point of f
+        out(x) = f(x) + g(x);            // 1 point of g required for each point of out
 
         out.set_estimate(x, 0, 1024);
 
@@ -169,9 +169,9 @@ void test_bounds() {
         outputs.push_back(out.function());
         FunctionDAG dag(outputs, params, target);
 
-        const FunctionDAG::Node* node_out = &dag.nodes[0];
-        const FunctionDAG::Node* node_f = &dag.nodes[1];
-        const FunctionDAG::Node* node_g = &dag.nodes[2];
+        const FunctionDAG::Node *node_out = &dag.nodes[0];
+        const FunctionDAG::Node *node_f = &dag.nodes[1];
+        const FunctionDAG::Node *node_g = &dag.nodes[2];
 
         EXPECT_EQ(node_out->func.name(), out.name());
         EXPECT_EQ(node_g->func.name(), g.name());
@@ -194,10 +194,10 @@ void test_bounds() {
         std::unique_ptr<LoopNest> root_copy{new LoopNest};
         root_copy->copy_from(*root);
 
-        const auto& thread = root->children[0]->children[0];
-        const auto& thread_bounds_g = thread->get_bounds(node_g);
-        const auto& thread_bounds_f = thread->get_bounds(node_f);
-        const auto& thread_bounds_out = thread->get_bounds(node_out);
+        const auto &thread = root->children[0]->children[0];
+        const auto &thread_bounds_g = thread->get_bounds(node_g);
+        const auto &thread_bounds_f = thread->get_bounds(node_f);
+        const auto &thread_bounds_out = thread->get_bounds(node_out);
 
         EXPECT_EQ(thread_bounds_g->region_required(0).extent(), 201);
         EXPECT_EQ(thread_bounds_g->loops(0, 0).extent(), 201);
@@ -206,8 +206,7 @@ void test_bounds() {
 
         EXPECT_EQ(thread_bounds_f->region_required(0).extent(), 1);
 
-
-        vector<const FunctionDAG::Edge*> out_g_edge_chain;
+        vector<const FunctionDAG::Edge *> out_g_edge_chain;
         for (const auto *e : node_g->outgoing_edges) {
             if (e->consumer != thread->stage) {
                 continue;
@@ -218,7 +217,7 @@ void test_bounds() {
 
         EXPECT_EQ((int)out_g_edge_chain.size(), 1);
 
-        vector<const FunctionDAG::Edge*> out_f_g_edge_chain;
+        vector<const FunctionDAG::Edge *> out_f_g_edge_chain;
         for (const auto *e : node_f->outgoing_edges) {
             if (e->consumer != thread->stage) {
                 continue;
@@ -230,29 +229,29 @@ void test_bounds() {
         out_f_g_edge_chain.push_back(node_f->stages[0].incoming_edges.front());
         EXPECT_EQ((int)out_f_g_edge_chain.size(), 2);
 
-        const auto& thread_bounds_g_edge = thread->get_bounds_along_edge_chain(node_g, out_g_edge_chain);
+        const auto &thread_bounds_g_edge = thread->get_bounds_along_edge_chain(node_g, out_g_edge_chain);
 
         // This should only account for the edge from 'g' -> 'out' (and ignore the
         // edge from 'g' -> 'f')
         EXPECT_EQ(thread_bounds_g_edge->region_required(0).extent(), 1);
 
-        const auto& thread_bounds_f_g_edge = thread->get_bounds_along_edge_chain(node_g, out_f_g_edge_chain);
+        const auto &thread_bounds_f_g_edge = thread->get_bounds_along_edge_chain(node_g, out_f_g_edge_chain);
 
         EXPECT_EQ(thread_bounds_f_g_edge->region_required(0).extent(), 201);
 
         // If 'f' is inlined, the region_required should still produce valid results
         root_copy->inline_func(node_f);
         {
-            const auto& thread = root_copy->children[0]->children[0];
-            const auto& thread_bounds_g = thread->get_bounds(node_g);
+            const auto &thread = root_copy->children[0]->children[0];
+            const auto &thread_bounds_g = thread->get_bounds(node_g);
 
             EXPECT_EQ(thread_bounds_g->region_required(0).extent(), 201);
 
-            const auto& thread_bounds_g_edge = thread->get_bounds_along_edge_chain(node_g, out_g_edge_chain);
+            const auto &thread_bounds_g_edge = thread->get_bounds_along_edge_chain(node_g, out_g_edge_chain);
 
             EXPECT_EQ(thread_bounds_g_edge->region_required(0).extent(), 1);
 
-            const auto& thread_bounds_f_g_edge = thread->get_bounds_along_edge_chain(node_g, out_f_g_edge_chain);
+            const auto &thread_bounds_f_g_edge = thread->get_bounds_along_edge_chain(node_g, out_f_g_edge_chain);
 
             EXPECT_EQ(thread_bounds_f_g_edge->region_required(0).extent(), 201);
         }
@@ -261,8 +260,8 @@ void test_bounds() {
     {
         Func f("f"), g("g"), out("out");
         g(x) = x;
-        f(x) = g(x); // 1 point of g required for each point of f
-        out(x) = f(x) + g(x); // 1 point of g required for each point of out
+        f(x) = g(x);           // 1 point of g required for each point of f
+        out(x) = f(x) + g(x);  // 1 point of g required for each point of out
 
         out.set_estimate(x, 0, 1024);
 
@@ -270,9 +269,9 @@ void test_bounds() {
         outputs.push_back(out.function());
         FunctionDAG dag(outputs, params, target);
 
-        const FunctionDAG::Node* node_out = &dag.nodes[0];
-        const FunctionDAG::Node* node_f = &dag.nodes[1];
-        const FunctionDAG::Node* node_g = &dag.nodes[2];
+        const FunctionDAG::Node *node_out = &dag.nodes[0];
+        const FunctionDAG::Node *node_f = &dag.nodes[1];
+        const FunctionDAG::Node *node_g = &dag.nodes[2];
 
         EXPECT_EQ(node_out->func.name(), out.name());
         EXPECT_EQ(node_g->func.name(), g.name());
@@ -295,17 +294,17 @@ void test_bounds() {
         std::unique_ptr<LoopNest> root_copy{new LoopNest};
         root_copy->copy_from(*root);
 
-        const auto& thread = root->children[0]->children[0];
-        const auto& thread_bounds_g = thread->get_bounds(node_g);
-        const auto& thread_bounds_f = thread->get_bounds(node_f);
+        const auto &thread = root->children[0]->children[0];
+        const auto &thread_bounds_g = thread->get_bounds(node_g);
+        const auto &thread_bounds_f = thread->get_bounds(node_f);
 
         EXPECT_EQ(thread_bounds_g->region_required(0).extent(), 1);
         EXPECT_EQ(thread_bounds_f->region_required(0).extent(), 1);
 
         root_copy->inline_func(node_f);
         {
-            const auto& thread = root_copy->children[0]->children[0];
-            const auto& thread_bounds_g = thread->get_bounds(node_g);
+            const auto &thread = root_copy->children[0]->children[0];
+            const auto &thread_bounds_g = thread->get_bounds(node_g);
 
             EXPECT_EQ(thread_bounds_g->region_required(0).extent(), 1);
         }

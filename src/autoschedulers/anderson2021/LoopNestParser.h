@@ -15,9 +15,9 @@ namespace Internal {
 namespace Autoscheduler {
 
 class LoopNestParser {
-    void parse(const std::vector<std::string>& loop_nest) {
+    void parse(const std::vector<std::string> &loop_nest) {
         std::unordered_map<std::string, std::vector<std::string>> stage_to_loop_nest;
-        for (const auto& line : loop_nest) {
+        for (const auto &line : loop_nest) {
             if (line.empty()) {
                 continue;
             }
@@ -29,8 +29,7 @@ class LoopNestParser {
             std::istringstream iss(line);
             std::vector<std::string> tokens{
                 std::istream_iterator<std::string>(iss),
-                std::istream_iterator<std::string>()
-            };
+                std::istream_iterator<std::string>()};
 
             std::string stage = tokens.at(0);
             bool is_inlined = tokens.at(0) == "inlined:";
@@ -68,9 +67,9 @@ class LoopNestParser {
             }
         }
 
-        for (const auto& entry : stage_to_loop_nest) {
+        for (const auto &entry : stage_to_loop_nest) {
             std::string loop_nest = "";
-            for (const auto& line : entry.second) {
+            for (const auto &line : entry.second) {
                 loop_nest += line + "\n";
             }
 
@@ -79,13 +78,13 @@ class LoopNestParser {
 
         // If a stage appears in a 'realize: ' line but nowhere else, remove it
         std::vector<std::string> to_remove;
-        for (const auto& entry : compute_root_stages) {
+        for (const auto &entry : compute_root_stages) {
             if (entry.second == -1) {
                 to_remove.push_back(entry.first);
             }
         }
 
-        for (const auto& key : to_remove) {
+        for (const auto &key : to_remove) {
             compute_root_stages.erase(key);
             partially_scheduled.erase(key);
             all_stages.erase(key);
@@ -101,53 +100,52 @@ class LoopNestParser {
     std::unordered_set<std::string> all_stages;
 
 public:
-    LoopNestParser(const std::vector<std::string>& loop_nest)
-        : loop_nest{loop_nest}
-    {
+    LoopNestParser(const std::vector<std::string> &loop_nest)
+        : loop_nest{loop_nest} {
         parse(loop_nest);
     }
 
     void dump() const {
         aslog(0) << "All stages:\n";
-        for (const auto& s : all_stages) {
+        for (const auto &s : all_stages) {
             aslog(0) << s << "\n";
         }
 
         aslog(0) << "\ncompute_root stages:\n";
-        for (const auto& s : compute_root_stages) {
+        for (const auto &s : compute_root_stages) {
             aslog(0) << s.first << " with vector_dim = " << s.second << "\n";
         }
 
         aslog(0) << "\nPartially scheduled stages:\n";
-        for (const auto& s : partially_scheduled) {
+        for (const auto &s : partially_scheduled) {
             aslog(0) << s << " with vector_dim = " << compute_root_stages.at(s) << "\n";
         }
 
         aslog(0) << "\nInlined stages:\n";
-        for (const auto& s : inlined) {
+        for (const auto &s : inlined) {
             aslog(0) << s << "\n";
         }
 
         aslog(0) << "\nFull loop nest:\n";
-        for (const auto& s : loop_nest) {
+        for (const auto &s : loop_nest) {
             aslog(0) << s << "\n";
         }
         aslog(0) << "\n";
     }
 
-    bool is_in_partial_schedule(const FunctionDAG::Node* node) const {
+    bool is_in_partial_schedule(const FunctionDAG::Node *node) const {
         return node && all_stages.count(node->func.name()) > 0;
     }
 
-    bool contains_sub_loop_nest_for_shared_stages(const LoopNestParser& other) const {
+    bool contains_sub_loop_nest_for_shared_stages(const LoopNestParser &other) const {
         return contains_sub_loop_nest(other, true);
     }
 
-    // 'only_consider_shared_stages': check if 'other' is contained in this loop 
-    // nest, but ignore stages that are present in 'other' but not present in 
+    // 'only_consider_shared_stages': check if 'other' is contained in this loop
+    // nest, but ignore stages that are present in 'other' but not present in
     // this loop nest
-    bool contains_sub_loop_nest(const LoopNestParser& other, bool only_consider_shared_stages=false) const {
-        for (const auto& stage : other.all_stages) {
+    bool contains_sub_loop_nest(const LoopNestParser &other, bool only_consider_shared_stages = false) const {
+        for (const auto &stage : other.all_stages) {
             if (all_stages.count(stage) == 0) {
                 if (only_consider_shared_stages) {
                     continue;
@@ -180,7 +178,7 @@ public:
         return true;
     }
 
-    static LoopNestParser from_string(const std::string& str) {
+    static LoopNestParser from_string(const std::string &str) {
         std::istringstream in(str);
         std::string line;
         std::vector<std::string> loop_nest;
@@ -192,7 +190,7 @@ public:
         return LoopNestParser(loop_nest);
     }
 
-    static std::unique_ptr<LoopNestParser> from_file(const std::string& filename) {
+    static std::unique_ptr<LoopNestParser> from_file(const std::string &filename) {
         std::ifstream file(filename);
         std::string line;
         std::vector<std::string> loop_nest;
