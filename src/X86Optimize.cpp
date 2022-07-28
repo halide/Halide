@@ -563,16 +563,21 @@ private:
 
 }  // namespace
 
-Stmt optimize_x86_instructions(Stmt stmt, const Target &target, const CodeGen_LLVM *codegen) {
-    stmt = Optimize_X86(target, codegen).mutate(stmt);
+Stmt optimize_x86_instructions(const Stmt &s, const Target &target, const CodeGen_LLVM *codegen) {
+    Stmt stmt = Optimize_X86(target, codegen).mutate(s);
+
     // Some of the rules above can introduce repeated sub-terms, so run CSE again.
-    stmt = common_subexpression_elimination(stmt);
-    return stmt;
+    if (!stmt.same_as(s)) {
+        stmt = common_subexpression_elimination(stmt);
+        return stmt;
+    } else {
+        return s;
+    }
 }
 
 #else  // WITH_X86
 
-Stmt optimize_x86_instructions(Stmt s, const Target &t) {
+Stmt optimize_x86_instructions(const Stmt &s, const Target &t) {
     user_error << "x86 not enabled for this build of Halide.\n";
     return Stmt();
 }
