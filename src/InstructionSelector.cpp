@@ -2,11 +2,11 @@
 
 #include "CodeGen_Internal.h"
 
-
 namespace Halide {
 namespace Internal {
 
-InstructionSelector::InstructionSelector(const Target &t, const CodeGen_LLVM *c) : target(t), codegen(c) {
+InstructionSelector::InstructionSelector(const Target &t, const CodeGen_LLVM *c)
+    : target(t), codegen(c) {
 }
 
 Expr InstructionSelector::visit(const Div *op) {

@@ -2,11 +2,11 @@
 
 #include "CSE.h"
 #include "FindIntrinsics.h"
-#include "InstructionSelector.h"
 #include "IR.h"
 #include "IRMatch.h"
 #include "IRMutator.h"
 #include "IROperator.h"
+#include "InstructionSelector.h"
 #include "Simplify.h"
 
 namespace Halide {
@@ -490,40 +490,40 @@ protected:
                 // psadbw is always supported via SSE2.
                 ((factor == 8) &&
                  (rewrite(
-                    h_add(cast(UInt(64, value_lanes), absd(x, y)), lanes),
-                    v_intrin(VectorInstruction::sum_absd, x, y),
-                    is_uint(x, 8) && is_uint(y, 8)) ||
-                  
+                      h_add(cast(UInt(64, value_lanes), absd(x, y)), lanes),
+                      v_intrin(VectorInstruction::sum_absd, x, y),
+                      is_uint(x, 8) && is_uint(y, 8)) ||
+
                   // Rewrite non-native sum-of-absolute-difference variants to the native
                   // op. We support reducing to various types. We could consider supporting
                   // multiple reduction factors too, but in general we don't handle non-native
                   // reduction factors for VectorReduce nodes (yet?).
                   rewrite(
-                    h_add(cast(UInt(16, value_lanes), absd(x, y)), lanes),
-                    cast(UInt(16, lanes), typed(UInt(64, lanes), v_intrin(VectorInstruction::sum_absd, x, y))),
-                    is_uint(x, 8) && is_uint(y, 8)) ||
-                
-                  rewrite(
-                    h_add(cast(UInt(32, value_lanes), absd(x, y)), lanes),
-                    cast(UInt(32, lanes), typed(UInt(64, lanes), v_intrin(VectorInstruction::sum_absd, x, y))),
-                    is_uint(x, 8) && is_uint(y, 8)) ||
+                      h_add(cast(UInt(16, value_lanes), absd(x, y)), lanes),
+                      cast(UInt(16, lanes), typed(UInt(64, lanes), v_intrin(VectorInstruction::sum_absd, x, y))),
+                      is_uint(x, 8) && is_uint(y, 8)) ||
 
                   rewrite(
-                    h_add(cast(Int(16, value_lanes), absd(x, y)), lanes),
-                    cast(Int(16, lanes), typed(UInt(64, lanes), v_intrin(VectorInstruction::sum_absd, x, y))),
-                    is_uint(x, 8) && is_uint(y, 8)) ||
+                      h_add(cast(UInt(32, value_lanes), absd(x, y)), lanes),
+                      cast(UInt(32, lanes), typed(UInt(64, lanes), v_intrin(VectorInstruction::sum_absd, x, y))),
+                      is_uint(x, 8) && is_uint(y, 8)) ||
 
                   rewrite(
-                    h_add(cast(Int(32, value_lanes), absd(x, y)), lanes),
-                    cast(Int(32, lanes), typed(UInt(64, lanes), v_intrin(VectorInstruction::sum_absd, x, y))),
-                    is_uint(x, 8) && is_uint(y, 8)) ||
+                      h_add(cast(Int(16, value_lanes), absd(x, y)), lanes),
+                      cast(Int(16, lanes), typed(UInt(64, lanes), v_intrin(VectorInstruction::sum_absd, x, y))),
+                      is_uint(x, 8) && is_uint(y, 8)) ||
 
                   rewrite(
-                    h_add(cast(Int(64, value_lanes), absd(x, y)), lanes),
-                    cast(Int(64, lanes), typed(UInt(64, lanes), v_intrin(VectorInstruction::sum_absd, x, y))),
-                    is_uint(x, 8) && is_uint(y, 8)) ||
+                      h_add(cast(Int(32, value_lanes), absd(x, y)), lanes),
+                      cast(Int(32, lanes), typed(UInt(64, lanes), v_intrin(VectorInstruction::sum_absd, x, y))),
+                      is_uint(x, 8) && is_uint(y, 8)) ||
 
-                 false))) {
+                  rewrite(
+                      h_add(cast(Int(64, value_lanes), absd(x, y)), lanes),
+                      cast(Int(64, lanes), typed(UInt(64, lanes), v_intrin(VectorInstruction::sum_absd, x, y))),
+                      is_uint(x, 8) && is_uint(y, 8)) ||
+
+                  false))) {
                 return mutate(rewrite.result);
             }
             break;

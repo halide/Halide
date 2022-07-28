@@ -25,6 +25,7 @@ protected:
 
     Expr visit(const Div *) override;
     Expr visit(const VectorReduce *) override;
+
 public:
     InstructionSelector(const Target &target, const CodeGen_LLVM *codegen);
 };
