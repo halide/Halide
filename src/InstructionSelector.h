@@ -23,6 +23,7 @@ protected:
     const Target &target;
     const CodeGen_LLVM *codegen;
 
+    using IRGraphMutator::visit;
     Expr visit(const Div *) override;
     Expr visit(const VectorReduce *) override;
 
