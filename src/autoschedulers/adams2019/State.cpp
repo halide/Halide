@@ -125,7 +125,7 @@ void State::save_featurization(const FunctionDAG &dag, const Adams2019Params &pa
 
 bool State::calculate_cost(const FunctionDAG &dag, const Adams2019Params &params,
                            CostModel *cost_model, const CachingOptions &cache_options,
-                           int64_t memory_limit, int verbosity) {
+                           int verbosity) {
     StageMap<ScheduleFeatures> features;
     compute_featurization(dag, params, &features, cache_options);
 
@@ -160,7 +160,7 @@ bool State::calculate_cost(const FunctionDAG &dag, const Adams2019Params &params
     }
 
     // Apply the hard limit on memory use
-    if (memory_limit >= 0) {
+    if (params.memory_limit >= 0) {
         int64_t mem_used = (int64_t)features.begin().value().working_set_at_root;
         for (auto it = features.begin(); it != features.end(); it++) {
             if (it.key()->node->is_output ||
@@ -169,7 +169,7 @@ bool State::calculate_cost(const FunctionDAG &dag, const Adams2019Params &params
                 mem_used -= it.value().bytes_at_production;
             }
         }
-        if (mem_used > memory_limit) {
+        if (mem_used > params.memory_limit) {
             cost = 1e50;
             return false;
         }
@@ -202,7 +202,6 @@ IntrusivePtr<State> State::make_child() const {
 void State::generate_children(const FunctionDAG &dag,
                               const Adams2019Params &params,
                               CostModel *cost_model,
-                              int64_t memory_limit,
                               std::function<void(IntrusivePtr<State> &&)> &accept_child,
                               Cache *cache) const {
 
@@ -215,7 +214,7 @@ void State::generate_children(const FunctionDAG &dag,
     int next_node = num_decisions_made / 2;
     int phase = num_decisions_made % 2;
 
-    if (!may_subtile()) {
+    if (params.disable_subtiling) {
         // When emulating the older search space, we do all
         // parallelizing last, so that it is independent of the
         // tiling decisions.
@@ -271,7 +270,7 @@ void State::generate_children(const FunctionDAG &dag,
                 new_root->inline_func(node);
                 child->root = new_root;
                 child->num_decisions_made++;
-                if (child->calculate_cost(dag, params, cost_model, cache->options, memory_limit)) {
+                if (child->calculate_cost(dag, params, cost_model, cache->options)) {
                     num_children++;
                     accept_child(std::move(child));
                 }
@@ -353,7 +352,7 @@ void State::generate_children(const FunctionDAG &dag,
                 auto child = make_child();
                 child->root = std::move(n);
                 child->num_decisions_made++;
-                if (child->calculate_cost(dag, params, cost_model, cache->options, memory_limit)) {
+                if (child->calculate_cost(dag, params, cost_model, cache->options)) {
                     num_children++;
                     accept_child(std::move(child));
                 }
@@ -386,7 +385,7 @@ void State::generate_children(const FunctionDAG &dag,
         } else {
             internal_assert(pure_size);
 
-            if (cache->add_memoized_blocks(this, accept_child, node, num_children, dag, params, cost_model, memory_limit)) {
+            if (cache->add_memoized_blocks(this, accept_child, node, num_children, dag, params, cost_model)) {
                 return;  // successfully added cached states.
             }
 
@@ -474,7 +473,7 @@ void State::generate_children(const FunctionDAG &dag,
             }
 
             for (const auto &o : options) {
-                if (num_children >= 1 && (o.idle_core_wastage > 1.2 || !may_subtile())) {
+                if (num_children >= 1 && (o.idle_core_wastage > 1.2 || params.disable_subtiling)) {
                     // We have considered several options, and the
                     // remaining ones leave lots of cores idle.
                     break;
@@ -485,7 +484,7 @@ void State::generate_children(const FunctionDAG &dag,
                 new_root->copy_from(*root);
                 for (auto &c : new_root->children) {
                     if (c->node == node) {
-                        if (may_subtile()) {
+                        if (!params.disable_subtiling) {
                             c = c->parallelize_in_tiles(params, o.tiling, new_root);
                         } else {
                             // We're emulating the old
@@ -511,7 +510,7 @@ void State::generate_children(const FunctionDAG &dag,
                 }
                 child->root = new_root;
                 child->num_decisions_made++;
-                if (child->calculate_cost(dag, params, cost_model, cache->options, memory_limit)) {
+                if (child->calculate_cost(dag, params, cost_model, cache->options)) {
                     num_children++;
                     accept_child(std::move(child));
                     // Will early return if block caching is not enabled.
