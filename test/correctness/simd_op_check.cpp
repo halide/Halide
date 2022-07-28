@@ -242,6 +242,18 @@ public:
             check(std::string("packssdw") + check_suffix, 4 * w, i16_sat(i32_1));
             check(std::string("packsswb") + check_suffix, 8 * w, i8_sat(i16_1));
             check(std::string("packuswb") + check_suffix, 8 * w, u8_sat(i16_1));
+
+            // Sum-of-absolute-difference ops
+            {
+                const int f = 8;  // reduction factor.
+                RDom r(0, f);
+                check("psadbw", w, sum(u64(absd(in_u8(f * x + r), in_u8(f * x + r + 32)))));
+                check("psadbw", w, sum(u32(absd(in_u8(f * x + r), in_u8(f * x + r + 32)))));
+                check("psadbw", w, sum(u16(absd(in_u8(f * x + r), in_u8(f * x + r + 32)))));
+                check("psadbw", w, sum(i64(absd(in_u8(f * x + r), in_u8(f * x + r + 32)))));
+                check("psadbw", w, sum(i32(absd(in_u8(f * x + r), in_u8(f * x + r + 32)))));
+                check("psadbw", w, sum(i16(absd(in_u8(f * x + r), in_u8(f * x + r + 32)))));
+            }
         }
 
         // SSE 3 / SSSE 3
@@ -518,6 +530,18 @@ public:
             check("vpcmpeqq*ymm", 4, select(i64_1 == i64_2, i64(1), i64(2)));
             check("vpackusdw*ymm", 16, u16(clamp(i32_1, 0, max_u16)));
             check("vpcmpgtq*ymm", 4, select(i64_1 > i64_2, i64(1), i64(2)));
+
+            // Sum-of-absolute-difference ops
+            for (int w : {4, 8}) {
+                const int f = 8;  // reduction factor.
+                RDom r(0, f);
+                check("vpsadbw", w, sum(u64(absd(in_u8(f * x + r), in_u8(f * x + r + 32)))));
+                check("vpsadbw", w, sum(u32(absd(in_u8(f * x + r), in_u8(f * x + r + 32)))));
+                check("vpsadbw", w, sum(u16(absd(in_u8(f * x + r), in_u8(f * x + r + 32)))));
+                check("vpsadbw", w, sum(i64(absd(in_u8(f * x + r), in_u8(f * x + r + 32)))));
+                check("vpsadbw", w, sum(i32(absd(in_u8(f * x + r), in_u8(f * x + r + 32)))));
+                check("vpsadbw", w, sum(i16(absd(in_u8(f * x + r), in_u8(f * x + r + 32)))));
+            }
         }
 
         if (use_avx512) {
