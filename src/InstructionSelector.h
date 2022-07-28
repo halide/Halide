@@ -1,5 +1,5 @@
-#ifndef HALIDE_INSTR_SELECTOR_H
-#define HALIDE_INSTR_SELECTOR_H
+#ifndef HALIDE_INSTRUCTION_SELECTOR_H
+#define HALIDE_INSTRUCTION_SELECTOR_H
 
 /** \file
  * Defines a base class for VectorInstruction selection.

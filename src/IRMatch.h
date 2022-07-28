@@ -1884,7 +1884,7 @@ HALIDE_ALWAYS_INLINE auto ramp(A &&a, B &&b, C &&c) noexcept -> RampOp<decltype(
 }
 
 template<typename... Args>
-struct VectorInstrOp {
+struct VectorInstructionOp {
     struct pattern_tag {};
     const VectorInstruction::InstructionOp op;
     std::tuple<Args...> args;
@@ -1964,7 +1964,7 @@ struct VectorInstrOp {
     constexpr static bool foldable = false;
 
     HALIDE_ALWAYS_INLINE
-    VectorInstrOp(const VectorInstruction::InstructionOp _op, Args... args) noexcept
+    VectorInstructionOp(const VectorInstruction::InstructionOp _op, Args... args) noexcept
         : op(_op), args(args...) {
         static_assert(sizeof...(Args) > 0 && sizeof...(Args) <= 3,
                       "VectorInstructionOp must have non-zero arguments, and update make() if more than 3 arguments.");
@@ -1972,9 +1972,9 @@ struct VectorInstrOp {
 };
 
 template<typename... Args>
-std::ostream &operator<<(std::ostream &s, const VectorInstrOp<Args...> &op) {
+std::ostream &operator<<(std::ostream &s, const VectorInstructionOp<Args...> &op) {
     // TODO(rootjalex): Should we print the type?
-    s << "vector_intrin(\"";
+    s << "vector_instr(\"";
     s << op.op << "\", ";
     op.print_args(s);
     s << ")";
@@ -1982,7 +1982,7 @@ std::ostream &operator<<(std::ostream &s, const VectorInstrOp<Args...> &op) {
 }
 
 template<typename... Args>
-HALIDE_ALWAYS_INLINE auto v_instr(const VectorInstruction::InstructionOp op, Args... args) noexcept -> VectorInstrOp<decltype(pattern_arg(args))...> {
+HALIDE_ALWAYS_INLINE auto v_instr(const VectorInstruction::InstructionOp op, Args... args) noexcept -> VectorInstructionOp<decltype(pattern_arg(args))...> {
     return {op, pattern_arg(args)...};
 }
 
