@@ -277,7 +277,7 @@ void SearchSpace::generate_children(IntrusivePtr<State> state,
             << ", which is one of the consumers of " << node->func.name();
     }
 
-    //ScopedTimer scoped_timer{"generate_children() for " + node->func.name()};
+    // ScopedTimer scoped_timer{"generate_children() for " + node->func.name()};
     bool must_inline = inlined_nodes.contains(node);
     bool must_compute_root = compute_root_nodes.contains(node);
 

@@ -380,7 +380,7 @@ public:
 
         Expr register_block_occupancy = print_wrap(select(inlined_calls == 0, max_active_blocks / 32.f, 1.f), "register_block_occupancy", n, w);
 
-        //compute_cost *= select(inlined_calls == 0, 1.f / register_block_occupancy, 1.f);
+        // compute_cost *= select(inlined_calls == 0, 1.f / register_block_occupancy, 1.f);
         compute_cost = print_wrap(compute_cost, "compute_cost_after_register_block_occupancy", n, w);
 
         // Next comes a long list of plausible terms to capture the cost of loads.

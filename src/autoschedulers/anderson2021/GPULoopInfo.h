@@ -3,7 +3,7 @@
 
 /** \file
  *
- * Data structure containing information about the current GPU loop nest 
+ * Data structure containing information about the current GPU loop nest
  * hierarchy of blocks, threads, etc. Useful when computing GPU features
  */
 

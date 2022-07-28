@@ -951,13 +951,13 @@ void LoopNest::compute_gpu_store_features(const LoadJacobian &jac, int consumer_
             thread_info,
             total_serial_loop_extents,
             verbose);
-        //feat.num_local_mem_stores_per_block = local_mem_info.num_transactions();
+        // feat.num_local_mem_stores_per_block = local_mem_info.num_transactions();
         if (stage->index > 0) {
             local_mem_loads.add(local_mem_info);
         }
-        //feat.local_mem_store_efficiency = local_mem_info.efficiency();
+        // feat.local_mem_store_efficiency = local_mem_info.efficiency();
 
-        //internal_assert(in_range_zero_one(feat.local_mem_store_efficiency)) << "Invalid local mem store coalesce efficiency: " << feat.local_mem_store_efficiency << " for " << node->func.name();
+        // internal_assert(in_range_zero_one(feat.local_mem_store_efficiency)) << "Invalid local mem store coalesce efficiency: " << feat.local_mem_store_efficiency << " for " << node->func.name();
     }
 
     if (verbose) {
@@ -1754,8 +1754,8 @@ void LoopNest::compute_features(const FunctionDAG &dag,
                     feat.shared_bytes_at_task = feat.bytes_at_realization;
                     feat.shared_innermost_bytes_at_task = feat.innermost_bytes_at_realization;
                 } else if (site.is_stored_in_local_mem()) {
-                    //feat.local_bytes_at_task = feat.bytes_at_realization;
-                    //feat.local_innermost_bytes_at_task = feat.innermost_bytes_at_realization;
+                    // feat.local_bytes_at_task = feat.bytes_at_realization;
+                    // feat.local_innermost_bytes_at_task = feat.innermost_bytes_at_realization;
                 } else if (site.is_stored_in_registers()) {
                     feat.register_bytes_at_task = feat.bytes_at_realization;
                     feat.register_innermost_bytes_at_task = feat.innermost_bytes_at_realization;
@@ -1963,8 +1963,8 @@ void LoopNest::compute_features(const FunctionDAG &dag,
             feat.shared_bytes_at_task = bytes_at_task;
             feat.shared_innermost_bytes_at_task = innermost_bytes_at_task;
         } else if (site.is_stored_in_local_mem()) {
-            //feat.local_bytes_at_task = bytes_at_task;
-            //feat.local_innermost_bytes_at_task = innermost_bytes_at_task;
+            // feat.local_bytes_at_task = bytes_at_task;
+            // feat.local_innermost_bytes_at_task = innermost_bytes_at_task;
         } else {
             internal_assert(false);
         }
@@ -2572,9 +2572,9 @@ void LoopNest::compute_features(const FunctionDAG &dag,
                 feat.unique_shared_lines_read_per_realization += feat.bytes_at_production / feat.innermost_bytes_at_production;
                 feat.shared_allocation_bytes_read_per_realization += feat.bytes_at_production;
             } else if (consumer_site.is_stored_in_local_mem()) {
-                //feat.unique_local_bytes_read_per_realization += feat.bytes_at_production;
-                //feat.unique_local_lines_read_per_realization += feat.bytes_at_production / feat.innermost_bytes_at_production;
-                //feat.local_allocation_bytes_read_per_realization += feat.bytes_at_production;
+                // feat.unique_local_bytes_read_per_realization += feat.bytes_at_production;
+                // feat.unique_local_lines_read_per_realization += feat.bytes_at_production / feat.innermost_bytes_at_production;
+                // feat.local_allocation_bytes_read_per_realization += feat.bytes_at_production;
             } else if (consumer_site.is_stored_in_registers()) {
                 feat.unique_register_bytes_read_per_realization += feat.bytes_at_production;
                 feat.unique_register_lines_read_per_realization += feat.bytes_at_production / feat.innermost_bytes_at_production;
