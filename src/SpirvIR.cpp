@@ -69,15 +69,15 @@ SpvId SpvInstruction::operand(uint32_t index) {
 }
 
 bool SpvInstruction::has_type() const {
-    if (!is_defined()) { 
-        return false; 
+    if (!is_defined()) {
+        return false;
     }
     return contents->type_id != SpvNoType;
 }
 
 bool SpvInstruction::has_result() const {
-    if (!is_defined()) { 
-        return false; 
+    if (!is_defined()) {
+        return false;
     }
     return contents->result_id != SpvNoResult;
 }
