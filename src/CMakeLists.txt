@@ -4,6 +4,7 @@
 
 # The externally-visible header files that go into making Halide.h.
 # Don't include anything here that includes llvm headers.
+# Also *don't* include anything that's only used internally (eg SpirvIR.h).
 set(HEADER_FILES
     AbstractGenerator.h
     AddAtomicMutex.h
