@@ -138,8 +138,12 @@ void SpvInstruction::encode(SpvBinary &binary) const {
     // - high 16-bits indicate instruction length (number of 32-bit words)
     // - low 16-bits indicate op code
     binary.push_back(((word_count) << SpvWordCountShift) | contents->op_code);
-    if (has_type()) { binary.push_back(contents->type_id); }
-    if (has_result()) { binary.push_back(contents->result_id); }
+    if (has_type()) {
+        binary.push_back(contents->type_id);
+    }
+    if (has_result()) {
+        binary.push_back(contents->result_id);
+    }
     for (SpvId id : contents->operands) {
         binary.push_back(id);
     }
