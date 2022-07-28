@@ -17,54 +17,54 @@ SpvInstruction SpvInstruction::make(SpvOp op_code) {
 }
 
 void SpvInstruction::set_block(SpvBlock block) {
-    user_assert(is_defined()) << "An SpvInstruction must be defined before modifying its properties\n";
+    check_defined();
     contents->block = std::move(block);
 }
 
 void SpvInstruction::set_result_id(SpvId result_id) {
-    user_assert(is_defined()) << "An SpvInstruction must be defined before modifying its properties\n";
+    check_defined();
     contents->result_id = result_id;
 }
 
 void SpvInstruction::set_type_id(SpvId type_id) {
-    user_assert(is_defined()) << "An SpvInstruction must be defined before modifying its properties\n";
+    check_defined();
     contents->type_id = type_id;
 }
 
 void SpvInstruction::set_op_code(SpvOp op_code) {
-    user_assert(is_defined()) << "An SpvInstruction must be defined before modifying its properties\n";
+    check_defined();
     contents->op_code = op_code;
 }
 
 void SpvInstruction::add_operand(SpvId id) {
-    user_assert(is_defined()) << "An SpvInstruction must be defined before modifying its properties\n";
+    check_defined();
     contents->operands.push_back(id);
     contents->immediates.push_back(false);
 }
 
 void SpvInstruction::add_immediate(SpvId id) {
-    user_assert(is_defined()) << "An SpvInstruction must be defined before modifying its properties\n";
+    check_defined();
     contents->operands.push_back(id);
     contents->immediates.push_back(true);
 }
 
 SpvId SpvInstruction::result_id() const {
-    user_assert(is_defined()) << "An SpvInstruction must be defined before accessing its properties\n";
+    check_defined();
     return contents->result_id;
 }
 
 SpvId SpvInstruction::type_id() const {
-    user_assert(is_defined()) << "An SpvInstruction must be defined before accessing its properties\n";
+    check_defined();
     return contents->type_id;
 }
 
 SpvOp SpvInstruction::op_code() const {
-    user_assert(is_defined()) << "An SpvInstruction must be defined before accessing its properties\n";
+    check_defined();
     return contents->op_code;
 }
 
 SpvId SpvInstruction::operand(uint32_t index) {
-    user_assert(is_defined()) << "An SpvInstruction must be defined before accessing its properties\n";
+    check_defined();
     return contents->operands[index];
 }
 
@@ -83,21 +83,22 @@ bool SpvInstruction::is_defined() const {
 }
 
 bool SpvInstruction::is_immediate(uint32_t index) const {
-    user_assert(is_defined()) << "An SpvInstruction must be defined before modifying its properties\n";
+    check_defined();
     return contents->immediates[index];
 }
 
 uint32_t SpvInstruction::length() const {
-    user_assert(is_defined()) << "An SpvInstruction must be defined before modifying its properties\n";
+    check_defined();
     return (uint32_t)contents->operands.size();
 }
 
 SpvBlock SpvInstruction::block() const {
-    user_assert(is_defined()) << "An SpvInstruction must be defined before modifying its properties\n";
+    check_defined();
     return contents->block;
 }
 
 void SpvInstruction::add_data(uint32_t bytes, const void *data) {
+    check_defined();
     uint32_t extra_words = (bytes + 3) / 4;
     const uint8_t *ptr = (const uint8_t *)data;
     size_t bytes_copied = 0;
@@ -112,11 +113,16 @@ void SpvInstruction::add_data(uint32_t bytes, const void *data) {
 }
 
 void SpvInstruction::add_string(const std::string &str) {
+    check_defined();
     add_data(str.length() + 1, (const void *)str.c_str());
 }
 
-void SpvInstruction::encode(SpvBinary &binary) const {
+void SpvInstruction::check_defined() const {
     user_assert(is_defined()) << "An SpvInstruction must be defined before accessing its properties\n";
+}
+
+void SpvInstruction::encode(SpvBinary &binary) const {
+    check_defined();
 
     // Count the number of 32-bit words to represent the instruction
     uint32_t word_count = 1;
@@ -146,39 +152,39 @@ SpvBlock SpvBlock::make(SpvFunction func, SpvId block_id) {
 }
 
 void SpvBlock::add_instruction(SpvInstruction inst) {
-    user_assert(is_defined()) << "An SpvBlock must be defined before modifying its properties\n";
+    check_defined();
     inst.set_block(*this);
     contents->instructions.push_back(inst);
 }
 
 void SpvBlock::add_variable(SpvInstruction var) {
-    user_assert(is_defined()) << "An SpvBlock must be defined before modifying its properties\n";
+    check_defined();
     var.set_block(*this);
     contents->instructions.push_back(var);
 }
 
 void SpvBlock::set_function(SpvFunction func) {
-    user_assert(is_defined()) << "An SpvBlock must be defined before modifying its properties\n";
+    check_defined();
     contents->parent = std::move(func);
 }
 
 SpvFunction SpvBlock::function() const {
-    user_assert(is_defined()) << "An SpvBlock must be defined before accessing its properties\n";
+    check_defined();
     return contents->parent;
 }
 
 const SpvBlock::Instructions &SpvBlock::instructions() const {
-    user_assert(is_defined()) << "An SpvBlock must be defined before accessing its properties\n";
+    check_defined();
     return contents->instructions;
 }
 
 const SpvBlock::Variables &SpvBlock::variables() const {
-    user_assert(is_defined()) << "An SpvBlock must be defined before accessing its properties\n";
+    check_defined();
     return contents->variables;
 }
 
 bool SpvBlock::is_reachable() const {
-    user_assert(is_defined()) << "An SpvBlock must be defined before accessing its properties\n";
+    check_defined();
     return contents->reachable;
 }
 
@@ -187,7 +193,7 @@ bool SpvBlock::is_defined() const {
 }
 
 bool SpvBlock::is_terminated() const {
-    user_assert(is_defined()) << "An SpvBlock must be defined before accessing its properties\n";
+    check_defined();
     switch (contents->instructions.back().op_code()) {
     case SpvOpBranch:
     case SpvOpBranchConditional:
@@ -203,12 +209,16 @@ bool SpvBlock::is_terminated() const {
 }
 
 SpvId SpvBlock::id() const {
-    user_assert(is_defined()) << "An SpvBlock must be defined before accessing its properties\n";
+    check_defined();
     return contents->block_id;
 }
 
-void SpvBlock::encode(SpvBinary &binary) const {
+void SpvBlock::check_defined() const {
     user_assert(is_defined()) << "An SpvBlock must be defined before accessing its properties\n";
+}
+
+void SpvBlock::encode(SpvBinary &binary) const {
+    check_defined();
 
     // add a label for this block
     SpvInstruction label = SpvFactory::label(contents->block_id);
@@ -242,27 +252,27 @@ bool SpvFunction::is_defined() const {
 }
 
 void SpvFunction::add_block(const SpvBlock &block) {
-    user_assert(is_defined()) << "An SpvFunction must be defined before accessing its properties\n";
+    check_defined();
     contents->blocks.push_back(block);
 }
 
 void SpvFunction::add_parameter(const SpvInstruction &param) {
-    user_assert(is_defined()) << "An SpvFunction must be defined before accessing its properties\n";
+    check_defined();
     contents->parameters.push_back(param);
 }
 
 uint32_t SpvFunction::parameter_count() const {
-    user_assert(is_defined()) << "An SpvFunction must be defined before accessing its properties\n";
+    check_defined();
     return (uint32_t)contents->parameters.size();
 }
 
 SpvBlock SpvFunction::entry_block() const {
-    user_assert(is_defined()) << "An SpvFunction must be defined before accessing its properties\n";
+    check_defined();
     return contents->blocks.front();
 }
 
 SpvPrecision SpvFunction::return_precision() const {
-    user_assert(is_defined()) << "An SpvFunction must be defined before accessing its properties\n";
+    check_defined();
     SpvId return_id = contents->declaration.result_id();
     SpvFunctionContents::PrecisionMap::const_iterator it = contents->precision.find(return_id);
     if (it == contents->precision.end()) {
@@ -273,7 +283,7 @@ SpvPrecision SpvFunction::return_precision() const {
 }
 
 void SpvFunction::set_return_precision(SpvPrecision precision) {
-    user_assert(is_defined()) << "An SpvFunction must be defined before accessing its properties\n";
+    check_defined();
     SpvId return_id = contents->declaration.result_id();
     SpvFunctionContents::PrecisionMap::const_iterator it = contents->precision.find(return_id);
     if (it == contents->precision.end()) {
@@ -284,7 +294,7 @@ void SpvFunction::set_return_precision(SpvPrecision precision) {
 }
 
 SpvPrecision SpvFunction::parameter_precision(uint32_t index) const {
-    user_assert(is_defined()) << "An SpvFunction must be defined before accessing its properties\n";
+    check_defined();
     user_assert(contents->parameters.size() > index) << "Invalid parameter index specified!\n";
     SpvId param_id = contents->parameters[index].result_id();
     SpvFunctionContents::PrecisionMap::const_iterator it = contents->precision.find(param_id);
@@ -296,37 +306,41 @@ SpvPrecision SpvFunction::parameter_precision(uint32_t index) const {
 }
 
 void SpvFunction::set_module(SpvModule module) {
-    user_assert(is_defined()) << "An SpvFunction must be defined before accessing its properties\n";
+    check_defined();
     contents->parent = std::move(module);
 }
 
 SpvInstruction SpvFunction::declaration() const {
-    user_assert(is_defined()) << "An SpvFunction must be defined before accessing its properties\n";
+    check_defined();
     return contents->declaration;
 }
 
 SpvModule SpvFunction::module() const {
-    user_assert(is_defined()) << "An SpvFunction must be defined before accessing its properties\n";
+    check_defined();
     return contents->parent;
 }
 
 SpvId SpvFunction::return_type_id() const {
-    user_assert(is_defined()) << "An SpvFunction must be defined before accessing its properties\n";
+    check_defined();
     return contents->return_type_id;
 }
 
 SpvId SpvFunction::type_id() const {
-    user_assert(is_defined()) << "An SpvFunction must be defined before accessing its properties\n";
+    check_defined();
     return contents->function_type_id;
 }
 
 SpvId SpvFunction::id() const {
-    user_assert(is_defined()) << "An SpvFunction must be defined before accessing its properties\n";
+    check_defined();
     return contents->function_id;
 }
 
-void SpvFunction::encode(SpvBinary &binary) const {
+void SpvFunction::check_defined() const {
     user_assert(is_defined()) << "An SpvFunction must be defined before accessing its properties\n";
+}
+
+void SpvFunction::encode(SpvBinary &binary) const {
+    check_defined();
     contents->declaration.encode(binary);
     for (const SpvInstruction &param : contents->parameters) {
         param.encode(binary);
@@ -359,88 +373,88 @@ bool SpvModule::is_defined() const {
 }
 
 void SpvModule::add_debug(const SpvInstruction &val) {
-    user_assert(is_defined()) << "An SpvModule must be defined before accessing its properties\n";
+    check_defined();
     contents->debug.push_back(val);
 }
 
 void SpvModule::add_annotation(const SpvInstruction &val) {
-    user_assert(is_defined()) << "An SpvModule must be defined before accessing its properties\n";
+    check_defined();
     contents->annotations.push_back(val);
 }
 
 void SpvModule::add_type(const SpvInstruction &val) {
-    user_assert(is_defined()) << "An SpvModule must be defined before accessing its properties\n";
+    check_defined();
     contents->types.push_back(val);
 }
 
 void SpvModule::add_constant(const SpvInstruction &val) {
-    user_assert(is_defined()) << "An SpvModule must be defined before accessing its properties\n";
+    check_defined();
     contents->constants.push_back(val);
 }
 
 void SpvModule::add_global(const SpvInstruction &val) {
-    user_assert(is_defined()) << "An SpvModule must be defined before accessing its properties\n";
+    check_defined();
     contents->globals.push_back(val);
 }
 
 void SpvModule::add_execution_mode(const SpvInstruction &val) {
-    user_assert(is_defined()) << "An SpvModule must be defined before accessing its properties\n";
+    check_defined();
     contents->execution_modes.push_back(val);
 }
 
 void SpvModule::add_instruction(const SpvInstruction &val) {
-    user_assert(is_defined()) << "An SpvModule must be defined before accessing its properties\n";
+    check_defined();
     contents->instructions.push_back(val);
 }
 
 void SpvModule::add_function(SpvFunction val) {
-    user_assert(is_defined()) << "An SpvModule must be defined before accessing its properties\n";
+    check_defined();
     val.set_module(*this);
     contents->functions.emplace_back(val);
 }
 
 void SpvModule::add_entry_point(const std::string &name, SpvInstruction inst) {
-    user_assert(is_defined()) << "An SpvModule must be defined before accessing its properties\n";
+    check_defined();
     contents->entry_points[name] = std::move(inst);
 }
 
 void SpvModule::set_source_language(SpvSourceLanguage val) {
-    user_assert(is_defined()) << "An SpvModule must be defined before accessing its properties\n";
+    check_defined();
     contents->source_language = val;
 }
 
 void SpvModule::set_addressing_model(SpvAddressingModel val) {
-    user_assert(is_defined()) << "An SpvModule must be defined before accessing its properties\n";
+    check_defined();
     contents->addressing_model = val;
 }
 
 void SpvModule::set_memory_model(SpvMemoryModel val) {
-    user_assert(is_defined()) << "An SpvModule must be defined before accessing its properties\n";
+    check_defined();
     contents->memory_model = val;
 }
 
 SpvSourceLanguage SpvModule::source_language() const {
-    user_assert(is_defined()) << "An SpvModule must be defined before accessing its properties\n";
+    check_defined();
     return contents->source_language;
 }
 
 SpvAddressingModel SpvModule::addressing_model() const {
-    user_assert(is_defined()) << "An SpvModule must be defined before accessing its properties\n";
+    check_defined();
     return contents->addressing_model;
 }
 
 const SpvModule::Instructions &SpvModule::execution_modes() const {
-    user_assert(is_defined()) << "An SpvModule must be defined before accessing its properties\n";
+    check_defined();
     return contents->execution_modes;
 }
 
 SpvMemoryModel SpvModule::memory_model() const {
-    user_assert(is_defined()) << "An SpvModule must be defined before accessing its properties\n";
+    check_defined();
     return contents->memory_model;
 }
 
 SpvInstruction SpvModule::entry_point(const std::string &name) const {
-    user_assert(is_defined()) << "An SpvModule must be defined before accessing its properties\n";
+    check_defined();
     if (contents->entry_points.find(name) != contents->entry_points.end()) {
         return contents->entry_points[name];
     } else {
@@ -450,14 +464,14 @@ SpvInstruction SpvModule::entry_point(const std::string &name) const {
 }
 
 void SpvModule::require_extension(const std::string &extension) {
-    user_assert(is_defined()) << "An SpvModule must be defined before accessing its properties\n";
+    check_defined();
     if (contents->extensions.find(extension) == contents->extensions.end()) {
         contents->extensions.insert(extension);
     }
 }
 
 bool SpvModule::is_extension_required(const std::string &extension) const {
-    user_assert(is_defined()) << "An SpvModule must be defined before accessing its properties\n";
+    check_defined();
     if (contents->extensions.find(extension) != contents->extensions.end()) {
         return true;
     }
@@ -465,14 +479,14 @@ bool SpvModule::is_extension_required(const std::string &extension) const {
 }
 
 void SpvModule::require_capability(SpvCapability capability) {
-    user_assert(is_defined()) << "An SpvModule must be defined before accessing its properties\n";
+    check_defined();
     if (contents->capabilities.find(capability) == contents->capabilities.end()) {
         contents->capabilities.insert(capability);
     }
 }
 
 bool SpvModule::is_capability_required(SpvCapability capability) const {
-    user_assert(is_defined()) << "An SpvModule must be defined before accessing its properties\n";
+    check_defined();
     if (contents->capabilities.find(capability) != contents->capabilities.end()) {
         return true;
     }
@@ -480,7 +494,7 @@ bool SpvModule::is_capability_required(SpvCapability capability) const {
 }
 
 SpvModule::EntryPointNames SpvModule::entry_point_names() const {
-    user_assert(is_defined()) << "An SpvModule must be defined before accessing its properties\n";
+    check_defined();
     SpvModule::EntryPointNames entry_point_names(contents->entry_points.size());
     for (const SpvModuleContents::EntryPoints::value_type &v : contents->entry_points) {
         entry_point_names.push_back(v.first);
@@ -489,12 +503,16 @@ SpvModule::EntryPointNames SpvModule::entry_point_names() const {
 }
 
 SpvId SpvModule::id() const {
-    user_assert(is_defined()) << "An SpvModule must be defined before accessing its properties\n";
+    check_defined();
     return contents->module_id;
 }
 
-void SpvModule::encode(SpvBinary &binary) const {
+void SpvModule::check_defined() const {
     user_assert(is_defined()) << "An SpvModule must be defined before accessing its properties\n";
+}
+
+void SpvModule::encode(SpvBinary &binary) const {
+    check_defined();
 
     // 0. Encode the header
     binary.push_back(SpvMagicNumber);

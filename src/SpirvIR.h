@@ -128,9 +128,10 @@ public:
     bool is_immediate(uint32_t index) const;
     uint32_t length() const;
     SpvBlock block() const;
-
+    void check_defined() const; 
+    
     void encode(SpvBinary &binary) const;
-
+    
     static SpvInstruction make(SpvOp op_code);
 
 protected:
@@ -162,7 +163,8 @@ public:
     bool is_terminated() const;
     bool is_defined() const;
     SpvId id() const;
-
+    void check_defined() const; 
+    
     void encode(SpvBinary &binary) const;
 
     static SpvBlock make(SpvFunction func, SpvId id);
@@ -199,7 +201,8 @@ public:
     SpvId return_type_id() const;
     SpvId type_id() const;
     SpvId id() const;
-
+    void check_defined() const; 
+    
     void encode(SpvBinary &binary) const;
 
     static SpvFunction make(SpvId func_id, SpvId func_type_id, SpvId return_type_id, uint32_t control_mask = SpvFunctionControlMaskNone);
@@ -250,7 +253,8 @@ public:
     bool is_extension_required(const std::string &val) const;
     bool is_defined() const;
     SpvId id() const;
-
+    void check_defined() const; 
+    
     void encode(SpvBinary &binary) const;
 
     static SpvModule make(SpvId module_id,
