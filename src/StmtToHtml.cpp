@@ -715,7 +715,7 @@ private:
     void visit(const VectorInstruction *op) override {
         stream << open_span("VectorInstruction");
         stream << open_span("Type") << op->type << close_span();
-        print_list(symbol("vector_intrinsic") + "(\"" + op->get_instruction_name() + "\"", op->args, ")");
+        print_list(symbol("vector_instruction") + "(\"" + op->get_instruction_name() + "\"", op->args, ")");
         stream << close_span();
     }
 

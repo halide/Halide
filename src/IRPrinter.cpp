@@ -1076,7 +1076,7 @@ void IRPrinter::visit(const Shuffle *op) {
 void IRPrinter::visit(const VectorInstruction *op) {
     stream << "("
            << op->type
-           << ")vector_intrinsic(\""
+           << ")vector_instruction(\""
            << op->get_instruction_name()
            << "\", ";
     print_list(op->args);
