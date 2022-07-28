@@ -912,6 +912,7 @@ struct VectorInstruction : public ExprNode<VectorInstruction> {
         pmulh,
         pmulhrs,
         saturating_dot_product,
+        sum_absd,
 
         InstructionOpCount  // Sentinel: keep last.
     };

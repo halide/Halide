@@ -132,6 +132,11 @@ const x86Intrinsic intrinsic_defs[] = {
     {"llvm.ssub.sat.v16i16", Int(16, 16), "saturating_sub", {Int(16, 16), Int(16, 16)}, Target::AVX2},
     {"llvm.ssub.sat.v8i16", Int(16, 8), "saturating_sub", {Int(16, 8), Int(16, 8)}},
 
+    // Sum of absolute differences
+    {"llvm.x86.sse2.psad.bw", UInt(64, 2), "sum_absd", {UInt(8, 16), UInt(8, 16)}},
+    {"llvm.x86.avx2.psad.bw", UInt(64, 4), "sum_absd", {UInt(8, 32), UInt(8, 32)}, Target::AVX2},
+    {"llvm.x86.avx512.psad.bw.512", UInt(64, 8), "sum_absd", {UInt(8, 64), UInt(8, 64)}, Target::AVX512_Skylake},
+
     // Some of the instructions referred to below only appear with
     // AVX2, but LLVM generates better AVX code if you give it
     // full 256-bit vectors and let it do the slicing up into

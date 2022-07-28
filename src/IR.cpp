@@ -919,6 +919,7 @@ const char *const instruction_op_names[] = {
     "pmulh",
     "pmulhrs",
     "saturating_dot_product",
+    "sum_absd",
 };
 
 static_assert(sizeof(instruction_op_names) / sizeof(instruction_op_names[0]) == VectorInstruction::InstructionOpCount,
