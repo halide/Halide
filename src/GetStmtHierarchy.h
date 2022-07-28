@@ -22,40 +22,50 @@ public:
     GetStmtHierarchy() = default;
     ~GetStmtHierarchy() = default;
 
+    // returns the generated hierarchy's html
     string get_hierarchy_html(const Expr &startNode);
-
     string get_hierarchy_html(const Stmt &startNode);
 
+    // runs the findStmtCost algorithm on the given input node
     void set_stmt_cost(const Module &m);
     void set_stmt_cost(const Stmt &s);
 
 private:
-    int colorType;
-    std::stringstream html;
-    FindStmtCost findStmtCost;
+    int colorType;              // 0: CC (computation cost), 1: DMC (data movement cost)
+    std::stringstream html;     // html string
+    FindStmtCost findStmtCost;  // used to determine the color of each statement
 
     // for expanding/collapsing
-    int currNodeID;
-    int numNodes;
-    int startCCNodeID;
-    int startDMCNodeID;
-    int depth;
+    int currNodeID;      // ID of the current node in traversal
+    int numNodes;        // total number of nodes (across both trees in the hierarchy)
+    int startCCNodeID;   // ID of the start node in the CC tree
+    int startDMCNodeID;  // ID of the start node in the DMC tree
+    int depth;           // depth of the current node in the tree
 
+    // updates the currNodeID to be the next available node ID (numNodes)
+    // and increases numNodes by 1
     void update_num_nodes();
 
+    // returns the class name in format "node[parentID]child depth[depth]"
     string get_node_class_name();
 
-    int get_range(const IRNode *op) const;
-    int get_range_list(vector<Halide::Expr> exprs) const;
+    // gets the color range of the current node so that it can be colored
+    // appropriately in the html file
+    int get_color_range(const IRNode *op) const;
+    int get_color_range_list(vector<Halide::Expr> exprs) const;
 
+    // starts and ends the html file
     void start_html();
     void end_html();
 
+    // starts and ends a tree within the html file
     void start_tree();
     void end_tree();
 
+    // generates the JS that is needed to expand/collapse the tree
     string generate_collapse_expand_js(int totalNodes);
 
+    // opens and closes nodes, depending on number of children
     void node_without_children(string name, int colorCost);
     void open_node(string name, int colorCost);
     void close_node();

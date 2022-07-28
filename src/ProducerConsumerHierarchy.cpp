@@ -10,22 +10,21 @@ void ProducerConsumerHierarchy::generate_producer_consumer_html(const Module &m)
     traverse(m);
     end_html();
 }
-
 void ProducerConsumerHierarchy::generate_producer_consumer_html(const Stmt &stmt) {
     start_html();
     mutate(stmt);
     end_html();
 }
 
-void ProducerConsumerHierarchy::print_hiararchy() {
+void ProducerConsumerHierarchy::print_hierarchy() {
     cout << endl;
-    cout << "Hiararchy HTML: ";
+    cout << "Hierarchy HTML: ";
     cout << endl;
     cout << html.str();
     cout << endl;
 }
 
-string ProducerConsumerHierarchy::get_hierarchy_html(const Expr &startNode) {
+string ProducerConsumerHierarchy::get_producer_consumer_html(const Expr &startNode) {
     start_html();
     mutate(startNode);
     end_html();
@@ -55,7 +54,8 @@ void ProducerConsumerHierarchy::start_html() {
     html.str(string());
     html << "<html>";
     html << "<head>";
-    html << "<link rel=\\'stylesheet\\' href=\\'https://unpkg.com/treeflex/dist/css/treeflex.css\\'>";
+    html << "<link rel=\\'stylesheet\\' ";
+    html << "href=\\'https://unpkg.com/treeflex/dist/css/treeflex.css\\'>";
     html << "</head>";
     html << "<style>";
     html << "body { font-family: Consolas, \\'Liberation Mono\\', Menlo, Courier, monospace;}";
@@ -69,7 +69,6 @@ void ProducerConsumerHierarchy::start_html() {
     html << "</style>";
     html << "<body>";
 }
-
 void ProducerConsumerHierarchy::end_html() {
     html << "</body></html>";
 }
@@ -77,7 +76,6 @@ void ProducerConsumerHierarchy::end_html() {
 void ProducerConsumerHierarchy::open_table() {
     html << "<table>";
 }
-
 void ProducerConsumerHierarchy::close_table() {
     html << "</table>";
 }
@@ -90,7 +88,6 @@ void ProducerConsumerHierarchy::open_table_row() {
     html << "<tr>";
     html << "<td>";
 }
-
 void ProducerConsumerHierarchy::close_table_row() {
     html << "</td>";
     html << "</tr>";
