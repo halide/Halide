@@ -476,6 +476,7 @@ SOURCE_FILES = \
   InjectHostDevBufferCopies.cpp \
   Inline.cpp \
   InlineReductions.cpp \
+  InstructionSelector.cpp \
   IntegerDivisionTable.cpp \
   Interval.cpp \
   Introspection.cpp \
@@ -656,6 +657,7 @@ HEADER_FILES = \
   InjectHostDevBufferCopies.h \
   Inline.h \
   InlineReductions.h \
+  InstructionSelector.h \
   IntegerDivisionTable.h \
   Interval.h \
   Introspection.h \

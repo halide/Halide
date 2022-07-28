@@ -1,9 +1,8 @@
 #include "X86Optimize.h"
 
 #include "CSE.h"
-// FIXME: move lower_int_uint_div out of CodeGen_Internal to remove this dependency.
-#include "CodeGen_Internal.h"
 #include "FindIntrinsics.h"
+#include "InstructionSelector.h"
 #include "IR.h"
 #include "IRMatch.h"
 #include "IRMutator.h"
@@ -61,12 +60,12 @@ bool should_use_dot_product(const Expr &a, const Expr &b, std::vector<Expr> &res
 }
 
 /** A top-down code optimizer that replaces Halide IR with VectorInstructions specific to x86. */
-class Optimize_X86 : public IRMutator {
+class Optimize_X86 : public InstructionSelector {
 public:
     /** Create an x86 code optimizer. Processor features can be
      * enabled using the appropriate flags in the target struct. */
-    Optimize_X86(const Target &t, const CodeGen_LLVM *c)
-        : target(t), codegen(c) {
+    Optimize_X86(const Target &target, const CodeGen_LLVM *codegen)
+        : InstructionSelector(target, codegen) {
     }
 
 protected:
@@ -77,20 +76,12 @@ protected:
         return type.is_vector();
     }
 
-    using IRMutator::visit;
-
-    Expr visit(const Div *op) override {
-        if (!should_peephole_optimize(op->type) || !op->type.is_int_or_uint()) {
-            return IRMutator::visit(op);
-        }
-        // Lower division here in order to do pattern-matching on intrinsics.
-        return mutate(lower_int_uint_div(op->a, op->b));
-    }
+    using IRGraphMutator::visit;
 
     /** Nodes for which we want to emit specific sse/avx intrinsics */
     Expr visit(const Add *op) override {
         if (!should_peephole_optimize(op->type)) {
-            return IRMutator::visit(op);
+            return IRGraphMutator::visit(op);
         }
 
         std::vector<Expr> matches;
@@ -152,12 +143,12 @@ protected:
             return mutate(VectorInstruction::make(op->type, VectorInstruction::dot_product, {ac, bd}));
         }
 
-        return IRMutator::visit(op);
+        return IRGraphMutator::visit(op);
     }
 
     Expr visit(const Sub *op) override {
         if (!should_peephole_optimize(op->type)) {
-            return IRMutator::visit(op);
+            return IRGraphMutator::visit(op);
         }
 
         std::vector<Expr> matches;
@@ -181,12 +172,12 @@ protected:
             }
         }
 
-        return IRMutator::visit(op);
+        return IRGraphMutator::visit(op);
     }
 
     Expr visit(const Cast *op) override {
         if (!should_peephole_optimize(op->type)) {
-            return IRMutator::visit(op);
+            return IRGraphMutator::visit(op);
         }
 
         const int lanes = op->type.lanes();
@@ -248,12 +239,12 @@ protected:
 
         // TODO: should we handle CodeGen_X86's weird 8 -> 16 bit issue here?
 
-        return IRMutator::visit(op);
+        return IRGraphMutator::visit(op);
     }
 
     Expr visit(const Call *op) override {
         if (!should_peephole_optimize(op->type)) {
-            return IRMutator::visit(op);
+            return IRGraphMutator::visit(op);
         }
 
         // TODO: This optimization is hard to do via a rewrite-rule because of lossless_cast.
@@ -405,6 +396,7 @@ protected:
 
         // Fixed-point intrinsics should be lowered here.
         // This is safe because this mutator is top-down.
+        // FIXME: Should this be default behavior of the base InstructionSelector class?
         if (op->is_intrinsic({
                 Call::halving_add,
                 Call::halving_sub,
@@ -426,7 +418,7 @@ protected:
             return mutate(lower_intrinsic(op));
         }
 
-        return IRMutator::visit(op);
+        return IRGraphMutator::visit(op);
     }
 
     Expr visit(const VectorReduce *op) override {
@@ -435,7 +427,7 @@ protected:
         //        matching here.
         if ((op->op != VectorReduce::Add && op->op != VectorReduce::SaturatingAdd) ||
             !should_peephole_optimize(op->type)) {
-            return IRMutator::visit(op);
+            return InstructionSelector::visit(op);
         }
 
         const int lanes = op->type.lanes();
@@ -525,22 +517,10 @@ protected:
             break;
         }
 
-        return attempt_vector_split(op);
-    }
-
-    Expr attempt_vector_split(const VectorReduce *op) {
-        Expr split = codegen->split_vector_reduce(op, Expr());
-        if (split.defined() && !split.same_as(op)) {
-            return mutate(split);
-        } else {
-            return IRMutator::visit(op);
-        }
+        return InstructionSelector::visit(op);
     }
 
 private:
-    const Target &target;
-    const CodeGen_LLVM *codegen;
-
     IRMatcher::Wild<0> x;
     IRMatcher::Wild<1> y;
     IRMatcher::Wild<2> z;
