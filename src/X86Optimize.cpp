@@ -577,7 +577,7 @@ Stmt optimize_x86_instructions(const Stmt &s, const Target &target, const CodeGe
 
 #else  // WITH_X86
 
-Stmt optimize_x86_instructions(const Stmt &s, const Target &t) {
+Stmt optimize_x86_instructions(const Stmt &s, const Target &t, const CodeGen_LLVM *codegen) {
     user_error << "x86 not enabled for this build of Halide.\n";
     return Stmt();
 }
