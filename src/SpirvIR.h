@@ -6,7 +6,11 @@
  * format specification known as the Standard Portable Intermediate Representation
  * for Vulkan (SPIR-V). These class interfaces adopt Halide's conventions for its
  * own IR, but is implemented as a stand-alone optional component that can be
- * enabled as required for certain runtimes (eg Vulkan)
+ * enabled as required for certain runtimes (eg Vulkan).
+ * 
+ * NOTE: This file is only used internally for CodeGen! *DO NOT* add this file
+ * to the list of exported Halide headers in the src/CMakeFiles.txt or the
+ * top level Makefile.
  */
 #ifdef WITH_SPIRV
 

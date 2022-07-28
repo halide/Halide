@@ -69,12 +69,16 @@ SpvId SpvInstruction::operand(uint32_t index) {
 }
 
 bool SpvInstruction::has_type() const {
-    if (!is_defined()) { return false; }
+    if (!is_defined()) { 
+        return false; 
+    }
     return contents->type_id != SpvNoType;
 }
 
 bool SpvInstruction::has_result() const {
-    if (!is_defined()) { return false; }
+    if (!is_defined()) { 
+        return false; 
+    }
     return contents->result_id != SpvNoResult;
 }
 
@@ -1079,7 +1083,7 @@ SpvId SpvBuilder::declare_vector_constant(const Type &type, const void *data) {
     }
 
     Type scalar_type = type.with_lanes(1);
-    std::vector<SpvId> components;
+    std::vector<SpvId> components.reserve(type.lanes());
     if (scalar_type.is_float()) {
         if (type.bits() == 64) {
             const double *values = (const double *)data;
