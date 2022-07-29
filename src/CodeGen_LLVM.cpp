@@ -3377,7 +3377,6 @@ void CodeGen_LLVM::visit(const Call *op) {
             if (op->is_pure()) {
                 call->setDoesNotAccessMemory();
             }
-            call->setDoesNotThrow();
             value = call;
         } else {
 
@@ -3410,7 +3409,6 @@ void CodeGen_LLVM::visit(const Call *op) {
                     if (op->is_pure()) {
                         call->setDoesNotAccessMemory();
                     }
-                    call->setDoesNotThrow();
                     if (!call->getType()->isVoidTy()) {
                         value = builder->CreateInsertElement(value, call, idx);
                     }  // otherwise leave it as undef.
