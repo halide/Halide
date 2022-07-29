@@ -205,24 +205,24 @@ protected:
             // saturating_narrow is always supported (via SSE2) for:
             //   int32 -> int16, int16 -> int8, int16 -> uint8
             rewrite(
-                cast(Int(16, lanes), max(min(x, i32_i16min), i32_i16min)),
+                cast(Int(16, lanes), max(min(x, i32_i16max), i32_i16min)),
                 v_instr(VectorInstruction::saturating_narrow, x),
                 is_int(x, 32)) ||
 
             rewrite(
-                cast(Int(8, lanes), max(min(x, i16_i8min), i16_i8min)),
+                cast(Int(8, lanes), max(min(x, i16_i8max), i16_i8min)),
                 v_instr(VectorInstruction::saturating_narrow, x),
                 is_int(x, 16)) ||
 
             rewrite(
-                cast(UInt(8, lanes), max(min(x, i16_u8min), i16_u8min)),
+                cast(UInt(8, lanes), max(min(x, i16_u8max), i16_u8min)),
                 v_instr(VectorInstruction::saturating_narrow, x),
                 is_int(x, 16)) ||
 
             //   int32 -> uint16 is supported via SSE41
             (target.has_feature(Target::SSE41) &&
              rewrite(
-                 cast(UInt(16, lanes), max(min(x, i32_u16min), i32_u16min)),
+                 cast(UInt(16, lanes), max(min(x, i32_u16max), i32_u16min)),
                  v_instr(VectorInstruction::saturating_narrow, x),
                  is_int(x, 32))) ||
 
