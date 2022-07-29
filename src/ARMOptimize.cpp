@@ -935,9 +935,9 @@ protected:
                     // extra bit.
                     narrow = lossless_cast(narrow_type.with_code(Type::UInt), op->value);
                 }
-                if (narrow.defined()) {
+                if (narrow.defined() && op->type.is_int_or_uint()) {
                     return mutate(VectorInstruction::make(op->type, VectorInstruction::pairwise_widening_add, {narrow}));
-                } else {
+                } else if ((op->type.is_int_or_uint() && (op->type.bits() <= 32)) || (op->type.is_float() && !op->type.is_bfloat())) {
                     return mutate(VectorInstruction::make(op->type, VectorInstruction::pairwise_add, {op->value}));
                 }
             }
