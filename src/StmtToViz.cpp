@@ -69,7 +69,7 @@ private:
         return false;
     }
 
-    // only removes if it's there
+    // only removes it if it's there
     void remove_context(const string name) {
         for (auto it = curr_context.begin(); it != curr_context.end(); ++it) {
             if (*it == name) {
@@ -165,11 +165,11 @@ private:
         return tooltip("[i]", hierarchyHTML, tooltipText.str());
     }
 
-    string hierarchy(const Stmt &op) {
+    string get_stmt_hierarchy(const Stmt &op) {
         // cout << getStmtHierarchy.get_hierarchy_html(op) << endl;
         return getStmtHierarchy.get_hierarchy_html(op);
     }
-    string hierarchy(const Expr &op) {
+    string get_stmt_hierarchy(const Expr &op) {
         // cout << getStmtHierarchy.get_hierarchy_html(op) << endl;
         return getStmtHierarchy.get_hierarchy_html(op);
     }
@@ -220,7 +220,6 @@ private:
         s << "margin-left: -45px;";
         s << "width: 13px;";
         s << "display: inline-block;";
-        // s << "background-color: blue;";
         s << "color: transparent;";
         s << "'>";
         s << curr_line_num;
@@ -540,7 +539,7 @@ private:
         stream << close_span();
         stream << " " << matched("Operator Assign", "=") << " ";
 
-        stream << open_cost_span(op->value.get(), hierarchy(op->value.get()));
+        stream << open_cost_span(op->value.get(), get_stmt_hierarchy(op->value.get()));
         print(op->value);
         stream << close_cost_span();
 
@@ -660,7 +659,7 @@ private:
         stream << open_div("Store WrapLine");
 
         stream << cost_colors(op);
-        stream << open_cost_span(op, hierarchy(op));
+        stream << open_cost_span(op, get_stmt_hierarchy(op));
 
         stream << open_span("Matched");
         stream << var(op->name) << "[";
@@ -704,7 +703,7 @@ private:
         stream << open_div("Allocate");
         stream << cost_colors(op);
 
-        stream << open_cost_span(op, hierarchy(op));
+        stream << open_cost_span(op, get_stmt_hierarchy(op));
 
         stream << open_span("Matched");
         stream << keyword("allocate") << " ";
@@ -904,7 +903,7 @@ private:
     void visit(const Evaluate *op) override {
         stream << open_div("Evaluate");
         stream << cost_colors(op);
-        stream << open_cost_span(op, hierarchy(op));
+        stream << open_cost_span(op, get_stmt_hierarchy(op));
         print(op->value);
         stream << close_cost_span();
 
@@ -978,11 +977,11 @@ public:
     }
     void generate_producer_consumer_hierarchy(const Module &m) {
         producerConsumerHierarchy.generate_producer_consumer_html(m);
-        // producerConsumerHierarchy.print_hiararchy();
+        producerConsumerHierarchy.print_hierarchy();
     }
     void generate_producer_consumer_hierarchy(const Stmt &s) {
         producerConsumerHierarchy.generate_producer_consumer_html(s);
-        // producerConsumerHierarchy.print_hiararchy();
+        producerConsumerHierarchy.print_hierarchy();
     }
 
     void print(const Expr &ir) {

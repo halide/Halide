@@ -181,6 +181,11 @@ void GetStmtHierarchy::start_html() {
     html << ".tf-custom .CostComputationBorder1 { border-color: rgb(231,223,50);}";
     html << ".tf-custom .CostComputationBorder0 { border-color: rgb(236,233,89);} ";
 
+    html << ".arrow { border: solid rgb(125,125,125); border-width: 0 2px 2px 0; display: ";
+    html << "inline-block; padding: 3px; }";
+    html << ".down { transform: rotate(45deg); -webkit-transform: rotate(45deg); } ";
+    html << ".button {padding: 3px;}";
+
     html << "body { font-family: Consolas, \\'Liberation Mono\\', Menlo, Courier, monospace;}";
     html << "</style>";
     html << "<body>";
@@ -216,8 +221,8 @@ void GetStmtHierarchy::open_node(string name, int colorCost) {
 
     update_num_nodes();
 
-    html << " <button onclick=\\'handleClick(" << currNodeID << ")\\'>";
-    html << "v";
+    html << " <button class=\\'button\\' onclick=\\'handleClick(" << currNodeID << ")\\'>";
+    html << " <i class=\\'arrow down\\'></i> ";
     html << "</button>";
     html << "</span>";
     html << "<ul>";
@@ -417,16 +422,19 @@ Expr GetStmtHierarchy::visit(const Call *op) {
 Expr GetStmtHierarchy::visit(const Let *op) {
     int computation_range = get_color_range(op);
     open_node("Let", computation_range);
-
-    open_node("=", computation_range);
-    node_without_children(op->name, get_color_range(op));
     int currNode = currNodeID;
+
+    // "=" node
+    int value_range = get_color_range(op->value.get());
+    open_node("=", value_range);
+    node_without_children(op->name, 0);
     mutate(op->value);
     close_node();
 
+    // "body" node
     int computation_range_body = get_color_range(op->body.get());
-    open_node("body", computation_range_body);
     currNodeID = currNode;
+    open_node("body", computation_range_body);
     mutate(op->body);
     close_node();
 
@@ -434,10 +442,17 @@ Expr GetStmtHierarchy::visit(const Let *op) {
     return op;
 }
 Stmt GetStmtHierarchy::visit(const LetStmt *op) {
+    m_assert(false, "LetStmt is not supported for GetStmtHierarchy");
+
     int computation_range = get_color_range(op);
     open_node("=", computation_range);
-    node_without_children(op->name, get_color_range(op));
+
+    int currNode = currNodeID;
+    node_without_children(op->name, 0);
+
+    currNodeID = currNode;
     mutate(op->value);
+
     close_node();
     return op;
 }
@@ -657,7 +672,7 @@ Stmt GetStmtHierarchy::visit(const Atomic *op) {
     } else {
         int computation_range = get_color_range(op);
         open_node("atomic", computation_range);
-        node_without_children(op->mutex_name, get_color_range(op));
+        node_without_children(op->mutex_name, 0);
         close_node();
     }
 
