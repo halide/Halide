@@ -80,19 +80,15 @@ protected:
         return Expr();
     }
 
-    /** Nodes for which we want to emit specific sse/avx intrinsics */
     Expr visit(const Add *op) override {
         if (!should_peephole_optimize(op->type)) {
             return InstructionSelector::visit(op);
         }
 
-        // FIXME: probably need accumulating dot product patterns here.
-        //        and "pairwise_widening_add_accumulate" (arm32 only).
-
         const int lanes = op->type.lanes();
-
         auto rewrite = IRMatcher::rewriter(IRMatcher::add(op->a, op->b), op->type);
 
+        // Search for accumulating dot product instructions.
         if (target.has_feature(Target::ARMDotProd) &&
             (
              // SDOT
@@ -221,7 +217,6 @@ protected:
 
         // For shift_right_narrow instructions, aarch64 expectes UInt32 where arm32 expects a signed type.
         const Type shrn_type = target_arm32() ? Int(bits, lanes) : UInt(32, lanes);
-        // FIXME: need a way to strip the broadcasts from the RHS of the shift_right_narrow instrs.
 
         const Type uint8x_t = UInt(8, lanes);
         const Type uint16x_t = UInt(16, lanes);
@@ -721,7 +716,6 @@ protected:
                 v_instr(VectorInstruction::qrdmulh, x, y),
                 is_int(x, 32) && is_int(y, 32)) ||
 
-            // TODO: add basic intrinsics rewrites.
             rewrite(
                  abs(x),
                  v_instr(VectorInstruction::abs, x),
@@ -792,8 +786,7 @@ protected:
             return mutate(rewrite.result);
         }
 
-        // FIXME: this only works if we are top-down...
-
+        // FIXME: this only works if we are top-down.
         // Fixed-point intrinsics should be lowered here.
         // This is safe because this mutator is top-down.
         // FIXME: Should this be default behavior of the base InstructionSelector class?
@@ -830,9 +823,6 @@ protected:
             return InstructionSelector::visit(op);
         }
 
-        // FIXME: CodeGen_ARM has custom logic for splitting up VectorReduces, we need
-        //        to emulate that logic here as well.
-
         const int lanes = op->type.lanes();
         const int value_lanes = op->value.type().lanes();
         const int factor = value_lanes / lanes;
@@ -841,9 +831,7 @@ protected:
 
         switch (op->op) {
         case VectorReduce::Add: {
-            // TODO
             auto rewrite = IRMatcher::rewriter(IRMatcher::h_add(value, lanes), op->type);
-
             const Expr zero = make_zero(op->type);
 
             if (target.has_feature(Target::ARMDotProd) &&
