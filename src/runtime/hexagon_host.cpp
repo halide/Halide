@@ -755,10 +755,8 @@ WEAK uint64_t halide_hexagon_get_device_size(void *user_context, struct halide_b
     return handle->size;
 }
 
-WEAK void *halide_hexagon_get_module_state(void **host) {
-    if (host == nullptr) {
-        return nullptr;
-    }
+WEAK void *halide_hexagon_get_module_state(void *user_context, void **host) {
+    halide_abort_if_false(user_context, host != nullptr);
     return host[0];
 }
 

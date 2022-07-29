@@ -128,6 +128,7 @@ bool function_takes_user_context(const std::string &name) {
         "halide_hexagon_initialize_kernels",
         "halide_hexagon_run",
         "halide_hexagon_device_release",
+        "halide_hexagon_get_module_state",
         "halide_hexagon_power_hvx_on",
         "halide_hexagon_power_hvx_on_mode",
         "halide_hexagon_power_hvx_on_perf",
