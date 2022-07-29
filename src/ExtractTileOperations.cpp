@@ -213,6 +213,7 @@ Tile<3> get_3d_rhs_tile_index(const Expr &e, int element_width) {
     const Add *add_lhs = nullptr;
 
     // there's not always a sub pattern
+    // This depends on whether we have an ImageParam or a Buffer
     if (!sub) {
         add_lhs = e.as<Add>();
     } else {
@@ -223,13 +224,17 @@ Tile<3> get_3d_rhs_tile_index(const Expr &e, int element_width) {
         return {};
     }
 
+    // The right hand side of the add expression is used for retrieving the dimensions of the matrix.
     // obtain the x, y, r dimensions
+    // this expr looks like below, the shape of `add_lhs->a` can be seen further down below
+    // broadcast(ramp(0, 1, r), x*y) % broadcast(4, x*y*r) + broadcast(ramp(broadcast(_, r), broadcast(4, r), x) , y)
     const Add *dim_expr = add_lhs->b.as<Add>();
 
     if (!dim_expr) {
         return {};
     }
 
+    // broadcast(ramp(broadcast(_, r), broadcast(4, r), x), y)
     const Broadcast *base_stride_bc = dim_expr->b.as<Broadcast>();
 
     if (!base_stride_bc) {
@@ -238,12 +243,14 @@ Tile<3> get_3d_rhs_tile_index(const Expr &e, int element_width) {
 
     int tile_y = base_stride_bc->lanes;
 
+    // broadcast(ramp(0, 1, r), x*y) % broadcast(4, x*y*r)
     const Mod *mod = dim_expr->a.as<Mod>();
 
     if (!mod) {
         return {};
     }
 
+    // broadcast(ramp(0, 1, r), x*y)
     const Broadcast *bc_ramp = mod->a.as<Broadcast>();
 
     if (!bc_ramp) {
@@ -253,6 +260,7 @@ Tile<3> get_3d_rhs_tile_index(const Expr &e, int element_width) {
     int tile_xy = bc_ramp->lanes;
     int tile_x = tile_xy / tile_y;
 
+    // ramp(0, 1, r)
     const Ramp *r_ramp = bc_ramp->value.as<Ramp>();
 
     if (!r_ramp) {
@@ -262,12 +270,14 @@ Tile<3> get_3d_rhs_tile_index(const Expr &e, int element_width) {
     int tile_r = r_ramp->lanes;
 
     // get the base and stride
+    // ramp(broadcast(_, r), broadcast(4, r), x)
     const Ramp *base_stride_ramp = base_stride_bc->value.as<Ramp>();
 
     if (!base_stride_ramp) {
         return {};
     }
 
+    // broadcast(_, r)
     const Broadcast *base_bc = base_stride_ramp->base.as<Broadcast>();
 
     if (!base_bc) {
@@ -279,6 +289,10 @@ Tile<3> get_3d_rhs_tile_index(const Expr &e, int element_width) {
 
     bool found_stride = false;
 
+    // the following pattern will match the following shape
+    // broadcast(ramp(0, 1, k), x*y) / broadcast(4, x*y*k) * broadcast(_, x*y*k)
+    // where the stride is marked by _.
+
     // this stride pattern can occur if `tile_r` is the same size as `acc`
     auto stride_pattern = Broadcast::make(Ramp::make(0, 1, tile_r), tile_x * tile_y) / Broadcast::make((4 / element_width), tile_x * tile_y * tile_r) * Broadcast::make(wild_i32, tile_x * tile_y * tile_r);
 
@@ -288,6 +302,9 @@ Tile<3> get_3d_rhs_tile_index(const Expr &e, int element_width) {
         stride = std::move(results[0]);
     }
 
+    // This pattern is similar to the above except with an additional offset to iterate over the tiles in the k dimension
+    // (broadcast(ramp(0, 1, k), m * n) / broadcast(4, m*n*k) + _) * broadcast(_, m*n*k)
+    // here the first _ marks the base and the second _ the stride.
     if (!found_stride) {
         stride_pattern = (Broadcast::make(Ramp::make(0, 1, tile_r), tile_x * tile_y) / Broadcast::make((4 / element_width), tile_x * tile_y * tile_r) + wild_i32) * Broadcast::make(wild_i32, tile_x * tile_y * tile_r);
         if (expr_match(stride_pattern, add_lhs->a, results)) {
