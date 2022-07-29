@@ -68,7 +68,7 @@ add_test(NAME demo_apps_autoscheduler
 
 set_tests_properties(demo_apps_autoscheduler
                      PROPERTIES
-                     LABELS Adams2019
+                     LABELS "Adams2019;auto_schedule"
                      ENVIRONMENT "HL_TARGET=${Halide_TARGET}")
 
 # =================================================================
@@ -89,7 +89,7 @@ add_test(NAME demo_included_schedule_file
 
 set_tests_properties(demo_included_schedule_file
                      PROPERTIES
-                     LABELS Adams2019
+                     LABELS "Adams2019;auto_schedule"
                      ENVIRONMENT "HL_TARGET=${Halide_TARGET}")
 
 # ====================================================
@@ -112,10 +112,10 @@ if (BUILD_SHARED_LIBS)
     target_link_libraries(test_apps_autoscheduler PRIVATE Halide::Halide Halide::Tools ${CMAKE_DL_LIBS})
 
     add_test(NAME test_apps_autoscheduler
-             COMMAND test_apps_autoscheduler $<TARGET_FILE:Halide_Adams2019>)
+             COMMAND test_apps_autoscheduler $<TARGET_FILE:Halide_Adams2019> ${CMAKE_CURRENT_SOURCE_DIR}/baseline.weights)
 
     set_tests_properties(test_apps_autoscheduler PROPERTIES
-                         LABELS "Adams2019;multithreaded"
+                         LABELS "Adams2019;multithreaded;auto_schedule"
                          ENVIRONMENT "LD_LIBRARY_PATH=$<TARGET_FILE_DIR:Halide_Adams2019>:$ENV{LD_LIBRARY_PATH};HL_TARGET=${Halide_TARGET}")
 endif ()
 
@@ -126,7 +126,7 @@ add_executable(test_perfect_hash_map test_perfect_hash_map.cpp)
 add_test(NAME test_perfect_hash_map COMMAND test_perfect_hash_map)
 set_tests_properties(test_perfect_hash_map
                      PROPERTIES
-                     LABELS Adams2019
+                     LABELS "Adams2019;auto_schedule"
                      ENVIRONMENT "HL_TARGET=${Halide_TARGET}")
 
 ##
@@ -137,5 +137,5 @@ target_link_libraries(test_function_dag PRIVATE ASLog Halide::Halide Halide::Too
 add_test(NAME test_function_dag COMMAND test_function_dag)
 set_tests_properties(test_function_dag
                      PROPERTIES
-                     LABELS Adams2019
+                     LABELS "Adams2019;auto_schedule"
                      ENVIRONMENT "HL_TARGET=${Halide_TARGET}")
