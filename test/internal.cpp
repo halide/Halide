@@ -16,6 +16,7 @@
 #include "Monotonic.h"
 #include "Reduction.h"
 #include "Solve.h"
+#include "SpirvIR.h"
 #include "UniquifyVariableNames.h"
 
 using namespace Halide;
@@ -39,6 +40,7 @@ int main(int argc, const char **argv) {
     generator_test();
     propagate_estimate_test();
     uniquify_variable_names_test();
+    spirv_ir_test();
 
     printf("Success!\n");
     return 0;

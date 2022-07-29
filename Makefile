@@ -553,6 +553,7 @@ SOURCE_FILES = \
   SkipStages.cpp \
   SlidingWindow.cpp \
   Solve.cpp \
+  SpirvIR.cpp \
   SplitTuples.cpp \
   StmtToHtml.cpp \
   StorageFlattening.cpp \
@@ -577,6 +578,7 @@ SOURCE_FILES = \
 
 # The externally-visible header files that go into making Halide.h.
 # Don't include anything here that includes llvm headers.
+# Also *don't* include anything that's only used internally (eg SpirvIR.h).
 # Keep this list sorted in alphabetical order.
 HEADER_FILES = \
   AbstractGenerator.h \
