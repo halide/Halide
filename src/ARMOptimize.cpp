@@ -725,7 +725,7 @@ protected:
             rewrite(
                  abs(x),
                  v_instr(VectorInstruction::abs, x),
-                 x_is_small_int || is_float(x, 32) || is_float(x, 16)) ||
+                 x_is_small_int || is_float(x, 32) || (is_float(x, 16) && !is_bfloat(x))) ||
 
             // SABD, UABD - Absolute difference
             rewrite(

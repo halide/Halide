@@ -2520,6 +2520,52 @@ std::ostream &operator<<(std::ostream &s, const IsFloat<A> &op) {
 }
 
 template<typename A>
+struct IsBFloat {
+    struct pattern_tag {};
+    A a;
+    int bits;
+    int lanes;
+
+    constexpr static uint32_t binds = bindings<A>::mask;
+
+    // This rule is a boolean-valued predicate. Bools have type UIntImm.
+    constexpr static IRNodeType min_node_type = IRNodeType::UIntImm;
+    constexpr static IRNodeType max_node_type = IRNodeType::UIntImm;
+    constexpr static bool canonical = true;
+
+    constexpr static bool foldable = true;
+
+    HALIDE_ALWAYS_INLINE
+    void make_folded_const(halide_scalar_value_t &val, halide_type_t &ty, MatcherState &state) const {
+        // a is almost certainly a very simple pattern (e.g. a wild), so just inline the make method.
+        Type t = a.make(state, {}).type();
+        val.u.u64 = t.is_bfloat() && (bits == 0 || t.bits() == bits) && (lanes == 0 || t.lanes() == lanes);
+        ty.code = halide_type_uint;
+        ty.bits = 1;
+        ty.lanes = t.lanes();
+    }
+};
+
+template<typename A>
+HALIDE_ALWAYS_INLINE auto is_bfloat(A &&a, int bits = 0, int lanes = 0) noexcept -> IsBFloat<decltype(pattern_arg(a))> {
+    assert_is_lvalue_if_expr<A>();
+    return {pattern_arg(a), bits, lanes};
+}
+
+template<typename A>
+std::ostream &operator<<(std::ostream &s, const IsBFloat<A> &op) {
+    s << "is_bfloat(" << op.a;
+    if (op.bits > 0) {
+        s << ", " << op.bits;
+    }
+    if (op.lanes > 0) {
+        s << ", " << op.lanes;
+    }
+    s << ")";
+    return s;
+}
+
+template<typename A>
 struct IsInt {
     struct pattern_tag {};
     A a;
