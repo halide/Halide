@@ -425,7 +425,7 @@ protected:
                 is_int(x, 32)) ||
 
 
-            // SQSHRN, UQSHRN, SQRSHRUN Saturating narrowing shift right by an (by immediate in [1, output bits])
+            // SQSHRN, UQSHRN, SQSHRUN Saturating narrowing shift right by an (by immediate in [1, output bits])
             // SQSHRN
             rewrite(
                 // i8_sat(wild_i16x_ >> wild_u16_)
@@ -458,7 +458,7 @@ protected:
                 usat_cast(uint32x_t, uint64x_t, shift_right(x, c0)),
                 v_instr(VectorInstruction::saturating_shift_right_narrow, x, cast(shrn_type, c0)),
                 is_uint(x, 64) && c0_in_shrn_range) ||
-            // SQRSHRUN
+            // SQSHRUN
             rewrite(
                 // u8_sat(wild_i16x_ >> wild_u16_)
                 isat_cast(uint8x_t, int16x_t, shift_right(x, c0)),
@@ -792,9 +792,6 @@ protected:
             return mutate(rewrite.result);
         }
 
-
-        /*
-
         // FIXME: this only works if we are top-down...
 
         // Fixed-point intrinsics should be lowered here.
@@ -820,8 +817,6 @@ protected:
             // TODO: Should we have a base-class that does this + the VectorReduce lowering needed below?
             return mutate(lower_intrinsic(op));
         }
-
-        */
 
         return InstructionSelector::visit(op);
     }
@@ -1016,7 +1011,7 @@ private:
 
 }  // namespace
 
-Stmt optimize_ARM_instructions(const Stmt &s, const Target &target, const CodeGen_LLVM *codegen) {
+Stmt optimize_arm_instructions(const Stmt &s, const Target &target, const CodeGen_LLVM *codegen) {
     Stmt stmt = Optimize_ARM(target, codegen).mutate(s);
 
     if (!stmt.same_as(s)) {
@@ -1028,7 +1023,7 @@ Stmt optimize_ARM_instructions(const Stmt &s, const Target &target, const CodeGe
 
 #else  // WITH_ARM
 
-Stmt optimize_ARM_instructions(const Stmt &s, const Target &t, const CodeGen_LLVM *codegen) {
+Stmt optimize_arm_instructions(const Stmt &s, const Target &t, const CodeGen_LLVM *codegen) {
     user_error << "ARM not enabled for this build of Halide.\n";
     return Stmt();
 }

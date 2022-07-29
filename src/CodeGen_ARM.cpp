@@ -1,6 +1,7 @@
 #include <set>
 #include <sstream>
 
+#include "ARMOptimize.h"
 #include "CSE.h"
 #include "CodeGen_Internal.h"
 #include "CodeGen_Posix.h"
@@ -37,6 +38,8 @@ public:
     CodeGen_ARM(const Target &);
 
 protected:
+    void compile_func(const LoweredFunc &f,
+                      const std::string &simple_name, const std::string &extern_name) override;
     using CodeGen_Posix::visit;
 
     /** Assuming 'inner' is a function that takes two vector arguments, define a wrapper that
@@ -55,7 +58,7 @@ protected:
     void visit(const Call *) override;
     void visit(const LT *) override;
     void visit(const LE *) override;
-    void codegen_vector_reduce(const VectorReduce *, const Expr &) override;
+    void visit(const VectorInstruction *op) override;
     // @}
     Type upgrade_type_for_arithmetic(const Type &t) const override;
     Type upgrade_type_for_argument_passing(const Type &t) const override;
@@ -764,74 +767,43 @@ void CodeGen_ARM::init_module() {
     }
 }
 
-void CodeGen_ARM::visit(const Cast *op) {
-    if (!neon_intrinsics_disabled() && op->type.is_vector()) {
-        vector<Expr> matches;
-        for (const Pattern &pattern : casts) {
-            if (expr_match(pattern.pattern, op, matches)) {
-                if (pattern.intrin.find("shift_right_narrow") != string::npos) {
-                    // The shift_right_narrow patterns need the shift to be constant in [1, output_bits].
-                    const uint64_t *const_b = as_const_uint(matches[1]);
-                    if (!const_b || *const_b == 0 || (int)*const_b > op->type.bits()) {
-                        continue;
-                    }
-                }
-                if (target.bits == 32 && pattern.intrin.find("shift_right") != string::npos) {
-                    // The 32-bit ARM backend wants right shifts as negative values.
-                    matches[1] = simplify(-cast(matches[1].type().with_code(halide_type_int), matches[1]));
-                }
-                value = call_overloaded_intrin(op->type, pattern.intrin, matches);
-                if (value) {
-                    return;
-                }
-            }
-        }
+// FIXME: This is nearly identical to CodeGen_LLVM, should re-factor this somehow.
+// Only difference is the call to `optimize_arm_instructions()`
+void CodeGen_ARM::compile_func(const LoweredFunc &f, const std::string &simple_name,
+                               const std::string &extern_name) {
+    // Generate the function declaration and argument unpacking code.
+    begin_func(f.linkage, simple_name, extern_name, f.args);
 
-        // Catch signed widening of absolute difference.
-        // Catch widening of absolute difference
-        Type t = op->type;
-        if ((t.is_int() || t.is_uint()) &&
-            (op->value.type().is_int() || op->value.type().is_uint()) &&
-            t.bits() == op->value.type().bits() * 2) {
-            if (const Call *absd = Call::as_intrinsic(op->value, {Call::absd})) {
-                value = call_overloaded_intrin(t, "widening_absd", absd->args);
-                return;
-            }
-        }
-
-        // If we didn't find a pattern, try rewriting the cast.
-        static const vector<pair<Expr, Expr>> cast_rewrites = {
-            // Double or triple narrowing saturating casts are better expressed as
-            // regular narrowing casts.
-            {u8_sat(wild_u32x_), u8_sat(u16_sat(wild_u32x_))},
-            {u8_sat(wild_i32x_), u8_sat(i16_sat(wild_i32x_))},
-            {u8_sat(wild_f32x_), u8_sat(i16_sat(wild_f32x_))},
-            {i8_sat(wild_u32x_), i8_sat(u16_sat(wild_u32x_))},
-            {i8_sat(wild_i32x_), i8_sat(i16_sat(wild_i32x_))},
-            {i8_sat(wild_f32x_), i8_sat(i16_sat(wild_f32x_))},
-            {u16_sat(wild_u64x_), u16_sat(u32_sat(wild_u64x_))},
-            {u16_sat(wild_i64x_), u16_sat(i32_sat(wild_i64x_))},
-            {u16_sat(wild_f64x_), u16_sat(i32_sat(wild_f64x_))},
-            {i16_sat(wild_u64x_), i16_sat(u32_sat(wild_u64x_))},
-            {i16_sat(wild_i64x_), i16_sat(i32_sat(wild_i64x_))},
-            {i16_sat(wild_f64x_), i16_sat(i32_sat(wild_f64x_))},
-            {u8_sat(wild_u64x_), u8_sat(u16_sat(u32_sat(wild_u64x_)))},
-            {u8_sat(wild_i64x_), u8_sat(i16_sat(i32_sat(wild_i64x_)))},
-            {u8_sat(wild_f64x_), u8_sat(i16_sat(i32_sat(wild_f64x_)))},
-            {i8_sat(wild_u64x_), i8_sat(u16_sat(u32_sat(wild_u64x_)))},
-            {i8_sat(wild_i64x_), i8_sat(i16_sat(i32_sat(wild_i64x_)))},
-            {i8_sat(wild_f64x_), i8_sat(i16_sat(i32_sat(wild_f64x_)))},
-        };
-        for (const auto &i : cast_rewrites) {
-            if (expr_match(i.first, op, matches)) {
-                Expr replacement = substitute("*", matches[0], with_lanes(i.second, op->type.lanes()));
-                debug(3) << "rewriting cast to: " << replacement << " from " << Expr(op) << "\n";
-                value = codegen(replacement);
-                return;
+    // If building with MSAN, ensure that calls to halide_msan_annotate_buffer_is_initialized()
+    // happen for every output buffer if the function succeeds.
+    if (f.linkage != LinkageType::Internal &&
+        target.has_feature(Target::MSAN)) {
+        llvm::Function *annotate_buffer_fn =
+            module->getFunction("halide_msan_annotate_buffer_is_initialized_as_destructor");
+        internal_assert(annotate_buffer_fn)
+            << "Could not find halide_msan_annotate_buffer_is_initialized_as_destructor in module\n";
+        annotate_buffer_fn->addParamAttr(0, Attribute::NoAlias);
+        for (const auto &arg : f.args) {
+            if (arg.kind == Argument::OutputBuffer) {
+                register_destructor(annotate_buffer_fn, sym_get(arg.name + ".buffer"), OnSuccess);
             }
         }
     }
 
+    // Generate the function body.
+    debug(1) << "Generating llvm bitcode for function " << f.name << "...\n";
+    debug(1) << "ARM: Optimizing vector instructions...\n";
+    Stmt body = optimize_arm_instructions(f.body, target, this);
+    debug(2) << "ARM: Lowering after vector instructions:\n"
+             << body << "\n\n";
+
+    body.accept(this);
+
+    // Clean up and return.
+    end_func(f.args);
+}
+
+void CodeGen_ARM::visit(const Cast *op) {
     // LLVM fptoui generates fcvtzs if src is fp16 scalar else fcvtzu.
     // To avoid that, we use neon intrinsic explicitly.
     if (is_float16_and_has_feature(op->value.type())) {
@@ -850,16 +822,6 @@ void CodeGen_ARM::visit(const Sub *op) {
     if (neon_intrinsics_disabled()) {
         CodeGen_Posix::visit(op);
         return;
-    }
-
-    if (op->type.is_vector()) {
-        vector<Expr> matches;
-        for (const auto &i : negations) {
-            if (expr_match(i.pattern, op, matches)) {
-                value = call_overloaded_intrin(op->type, i.intrin, matches);
-                return;
-            }
-        }
     }
 
     // llvm will generate floating point negate instructions if we ask for (-0.0f)-x
@@ -1150,41 +1112,6 @@ void CodeGen_ARM::visit(const Load *op) {
 }
 
 void CodeGen_ARM::visit(const Call *op) {
-    if (op->is_intrinsic(Call::sorted_avg)) {
-        value = codegen(halving_add(op->args[0], op->args[1]));
-        return;
-    }
-
-    if (op->is_intrinsic(Call::rounding_shift_right)) {
-        // LLVM wants these as rounding_shift_left with a negative b instead.
-        Expr b = op->args[1];
-        if (!b.type().is_int()) {
-            b = Cast::make(b.type().with_code(halide_type_int), b);
-        }
-        value = codegen(rounding_shift_left(op->args[0], simplify(-b)));
-        return;
-    } else if (op->is_intrinsic(Call::widening_shift_right) && op->args[1].type().is_int()) {
-        // We want these as left shifts with a negative b instead.
-        value = codegen(widening_shift_left(op->args[0], simplify(-op->args[1])));
-        return;
-    } else if (op->is_intrinsic(Call::shift_right) && op->args[1].type().is_int()) {
-        // We want these as left shifts with a negative b instead.
-        value = codegen(op->args[0] << simplify(-op->args[1]));
-        return;
-    }
-
-    if (op->type.is_vector()) {
-        vector<Expr> matches;
-        for (const Pattern &pattern : calls) {
-            if (expr_match(pattern.pattern, op, matches)) {
-                value = call_overloaded_intrin(op->type, pattern.intrin, matches);
-                if (value) {
-                    return;
-                }
-            }
-        }
-    }
-
     if (target.has_feature(Target::ARMFp16)) {
         auto it = float16_transcendental_remapping.find(op->name);
         if (it != float16_transcendental_remapping.end()) {
@@ -1234,142 +1161,11 @@ void CodeGen_ARM::visit(const LE *op) {
     CodeGen_Posix::visit(op);
 }
 
-void CodeGen_ARM::codegen_vector_reduce(const VectorReduce *op, const Expr &init) {
-    if (neon_intrinsics_disabled() ||
-        op->op == VectorReduce::Or ||
-        op->op == VectorReduce::And ||
-        op->op == VectorReduce::Mul) {
-        CodeGen_Posix::codegen_vector_reduce(op, init);
-        return;
-    }
 
-    struct Pattern {
-        VectorReduce::Operator reduce_op;
-        int factor;
-        Expr pattern;
-        const char *intrin;
-        Target::Feature required_feature;
-        std::vector<int> extra_operands;
-    };
-    // clang-format off
-    static const Pattern patterns[] = {
-        {VectorReduce::Add, 4, i32(widening_mul(wild_i8x_, wild_i8x_)), "dot_product", Target::ARMDotProd},
-        {VectorReduce::Add, 4, i32(widening_mul(wild_u8x_, wild_u8x_)), "dot_product", Target::ARMDotProd},
-        {VectorReduce::Add, 4, u32(widening_mul(wild_u8x_, wild_u8x_)), "dot_product", Target::ARMDotProd},
-        // A sum is the same as a dot product with a vector of ones, and this appears to
-        // be a bit faster.
-        {VectorReduce::Add, 4, i32(wild_i8x_), "dot_product", Target::ARMDotProd, {1}},
-        {VectorReduce::Add, 4, i32(wild_u8x_), "dot_product", Target::ARMDotProd, {1}},
-        {VectorReduce::Add, 4, u32(wild_u8x_), "dot_product", Target::ARMDotProd, {1}},
-    };
-    // clang-format on
-
-    int factor = op->value.type().lanes() / op->type.lanes();
-    vector<Expr> matches;
-    for (const Pattern &p : patterns) {
-        if (op->op != p.reduce_op || factor % p.factor != 0) {
-            continue;
-        }
-        if (!target.has_feature(p.required_feature)) {
-            continue;
-        }
-        if (expr_match(p.pattern, op->value, matches)) {
-            if (factor != p.factor) {
-                Expr equiv = VectorReduce::make(op->op, op->value, op->value.type().lanes() / p.factor);
-                equiv = VectorReduce::make(op->op, equiv, op->type.lanes());
-                codegen_vector_reduce(equiv.as<VectorReduce>(), init);
-                return;
-            }
-
-            for (int i : p.extra_operands) {
-                matches.push_back(make_const(matches[0].type(), i));
-            }
-
-            Expr i = init;
-            if (!i.defined()) {
-                i = make_zero(op->type);
-            }
-            if (const Shuffle *s = matches[0].as<Shuffle>()) {
-                if (s->is_broadcast()) {
-                    // LLVM wants the broadcast as the second operand for the broadcasting
-                    // variant of udot/sdot.
-                    std::swap(matches[0], matches[1]);
-                }
-            }
-            value = call_overloaded_intrin(op->type, p.intrin, {i, matches[0], matches[1]});
-            if (value) {
-                return;
-            }
-        }
-    }
-
-    // TODO: Move this to be patterns? The patterns are pretty trivial, but some
-    // of the other logic is tricky.
-    const char *intrin = nullptr;
-    vector<Expr> intrin_args;
-    Expr accumulator = init;
-    if (op->op == VectorReduce::Add && factor == 2) {
-        Type narrow_type = op->type.narrow().with_lanes(op->value.type().lanes());
-        Expr narrow = lossless_cast(narrow_type, op->value);
-        if (!narrow.defined() && op->type.is_int()) {
-            // We can also safely accumulate from a uint into a
-            // wider int, because the addition uses at most one
-            // extra bit.
-            narrow = lossless_cast(narrow_type.with_code(Type::UInt), op->value);
-        }
-        if (narrow.defined()) {
-            if (init.defined() && target.bits == 32) {
-                // On 32-bit, we have an intrinsic for widening add-accumulate.
-                intrin = "pairwise_widening_add_accumulate";
-                intrin_args = {accumulator, narrow};
-                accumulator = Expr();
-            } else {
-                // On 64-bit, LLVM pattern matches widening add-accumulate if
-                // we give it the widening add.
-                intrin = "pairwise_widening_add";
-                intrin_args = {narrow};
-            }
-        } else {
-            intrin = "pairwise_add";
-            intrin_args = {op->value};
-        }
-    } else if (op->op == VectorReduce::Min && factor == 2) {
-        intrin = "pairwise_min";
-        intrin_args = {op->value};
-    } else if (op->op == VectorReduce::Max && factor == 2) {
-        intrin = "pairwise_max";
-        intrin_args = {op->value};
-    }
-
-    if (intrin) {
-        value = call_overloaded_intrin(op->type, intrin, intrin_args);
-        if (value) {
-            if (accumulator.defined()) {
-                // We still have an initial value to take care of
-                string n = unique_name('t');
-                sym_push(n, value);
-                Expr v = Variable::make(accumulator.type(), n);
-                switch (op->op) {
-                case VectorReduce::Add:
-                    accumulator += v;
-                    break;
-                case VectorReduce::Min:
-                    accumulator = min(accumulator, v);
-                    break;
-                case VectorReduce::Max:
-                    accumulator = max(accumulator, v);
-                    break;
-                default:
-                    internal_error << "unreachable";
-                }
-                codegen(accumulator);
-                sym_pop(n);
-            }
-            return;
-        }
-    }
-
-    CodeGen_Posix::codegen_vector_reduce(op, init);
+void CodeGen_ARM::visit(const VectorInstruction *op) {
+    const std::string name = op->get_instruction_name();
+    value = call_overloaded_intrin(op->type, name, op->args);
+    internal_assert(value) << "CodeGen_ARM failed on " << Expr(op) << "\n";
 }
 
 Type CodeGen_ARM::upgrade_type_for_arithmetic(const Type &t) const {
