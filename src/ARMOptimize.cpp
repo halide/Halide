@@ -73,7 +73,7 @@ protected:
                 // extra bit.
                 narrow = lossless_cast(narrow_type.with_code(Type::UInt), op->value);
             }
-            if (narrow.defined()) {
+            if (narrow.defined() && op->type.is_int_or_uint()) {
                 return VectorInstruction::make(op->type, VectorInstruction::pairwise_widening_add_accumulate, {b, narrow});
             }
         }
