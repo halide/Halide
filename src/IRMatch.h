@@ -1433,6 +1433,8 @@ struct Intrin {
             return saturating_sub(arg0, arg1);
         } else if (intrin == Call::halving_add) {
             return halving_add(arg0, arg1);
+        } else if (intrin == Call::sorted_avg) {
+            return sorted_avg(arg0, arg1);
         } else if (intrin == Call::halving_sub) {
             return halving_sub(arg0, arg1);
         } else if (intrin == Call::rounding_halving_add) {
@@ -1451,6 +1453,10 @@ struct Intrin {
             return arg0 & arg1;
         } else if (intrin == Call::bitwise_or) {
             return arg0 | arg1;
+        } else if (intrin == Call::widening_shift_left) {
+            return widening_shift_left(arg0, arg1);
+        } else if (intrin == Call::widening_shift_right) {
+            return widening_shift_right(arg0, arg1);
         }
 
         Expr arg2 = std::get<const_min(2, sizeof...(Args) - 1)>(args).make(state, type_hint);
@@ -1560,6 +1566,10 @@ auto halving_add(A &&a, B &&b) noexcept -> Intrin<decltype(pattern_arg(a)), decl
     return {Call::halving_add, pattern_arg(a), pattern_arg(b)};
 }
 template<typename A, typename B>
+auto sorted_avg(A &&a, B &&b) noexcept -> Intrin<decltype(pattern_arg(a)), decltype(pattern_arg(b))> {
+    return {Call::sorted_avg, pattern_arg(a), pattern_arg(b)};
+}
+template<typename A, typename B>
 auto halving_sub(A &&a, B &&b) noexcept -> Intrin<decltype(pattern_arg(a)), decltype(pattern_arg(b))> {
     return {Call::halving_sub, pattern_arg(a), pattern_arg(b)};
 }
@@ -1612,6 +1622,14 @@ HALIDE_ALWAYS_INLINE auto operator|(A &&a, B &&b) noexcept -> auto {
     assert_is_lvalue_if_expr<A>();
     assert_is_lvalue_if_expr<B>();
     return bitwise_or(a, b);
+}
+template<typename A, typename B>
+auto widening_shift_left(A &&a, B &&b) noexcept -> Intrin<decltype(pattern_arg(a)), decltype(pattern_arg(b))> {
+    return {Call::widening_shift_left, pattern_arg(a), pattern_arg(b)};
+}
+template<typename A, typename B>
+auto widening_shift_right(A &&a, B &&b) noexcept -> Intrin<decltype(pattern_arg(a)), decltype(pattern_arg(b))> {
+    return {Call::widening_shift_right, pattern_arg(a), pattern_arg(b)};
 }
 template<typename A, typename B, typename C>
 auto mul_shift_right(A &&a, B &&b, C &&c) noexcept -> Intrin<decltype(pattern_arg(a)), decltype(pattern_arg(b)), decltype(pattern_arg(c))> {

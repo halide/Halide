@@ -408,6 +408,7 @@ SOURCE_FILES = \
   AllocationBoundsInference.cpp \
   ApplySplit.cpp \
   Argument.cpp \
+  ARMOptimize.cpp \
   AssociativeOpsTable.cpp \
   Associativity.cpp \
   AsyncProducers.cpp \
@@ -589,6 +590,7 @@ HEADER_FILES = \
   AllocationBoundsInference.h \
   ApplySplit.h \
   Argument.h \
+  ARMOptimize.h \
   AssociativeOpsTable.h \
   Associativity.h \
   AsyncProducers.h \

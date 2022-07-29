@@ -911,6 +911,7 @@ const char *const instruction_op_names[] = {
     "saturating_add",
     "saturating_narrow",
     "saturating_sub",
+    "shift_left",
     "widening_mul",
 
     // x86-specific
@@ -920,6 +921,28 @@ const char *const instruction_op_names[] = {
     "pmulhrs",
     "saturating_dot_product",
     "sum_absd",
+
+    // ARM-specific
+    "absd",
+    "halving_add",
+    "halving_sub",
+    "pairwise_add",
+    "pairwise_max",
+    "pairwise_min",
+    "pairwise_widening_add",
+    "pairwise_widening_add_accumulate",
+    "qdmulh",
+    "qrdmulh",
+    "rounding_add_narrow",
+    "rounding_shift_left",
+    "rounding_shift_right_narrow",
+    "rounding_sub_narrow",
+    "saturating_negate",
+    "saturating_rounding_shift_right_narrow",
+    "saturating_shift_left",
+    "saturating_shift_right_narrow",
+    "widening_absd",
+
 };
 
 static_assert(sizeof(instruction_op_names) / sizeof(instruction_op_names[0]) == VectorInstruction::InstructionOpCount,

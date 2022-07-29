@@ -375,6 +375,8 @@ Expr halving_add(Expr a, Expr b);
 Expr rounding_halving_add(Expr a, Expr b);
 /** Compute narrow((widen(a) - widen(b)) / 2) */
 Expr halving_sub(Expr a, Expr b);
+/** Compute halving_add(a, b), assuming arg[0] < arg[1]. */
+Expr sorted_avg(Expr a, Expr b);
 
 /** Compute saturating_narrow(shift_right(widening_mul(a, b), q)) */
 Expr mul_shift_right(Expr a, Expr b, Expr q);
