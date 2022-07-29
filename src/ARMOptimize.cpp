@@ -221,90 +221,100 @@ protected:
 
         // For shift_right_narrow instructions, aarch64 expectes UInt32 where arm32 expects a signed type.
         const Type shrn_type = target_arm32() ? Int(bits, lanes) : UInt(32, lanes);
-
         // FIXME: need a way to strip the broadcasts from the RHS of the shift_right_narrow instrs.
+
+        const Type uint8x_t = UInt(8, lanes);
+        const Type uint16x_t = UInt(16, lanes);
+        const Type uint32x_t = UInt(32, lanes);
+        const Type uint64x_t = UInt(64, lanes);
+        const Type int8x_t = Int(8, lanes);
+        const Type int16x_t = Int(16, lanes);
+        const Type int32x_t = Int(32, lanes);
+        const Type int64x_t = Int(64, lanes);
+        const Type float32x_t = Float(32, lanes);
+        const Type float64x_t = Float(64, lanes);
 
         if (
             // RADDHN - Add and narrow with rounding
             // These must come before other narrowing rounding shift patterns.
             rewrite(
-                cast(Int(8, lanes), rounding_shift_right(x + y, 8)),
+                cast(int8x_t, rounding_shift_right(x + y, 8)),
                 v_instr(VectorInstruction::rounding_add_narrow, x, y),
                 is_int(x, 16) && is_int(y, 16)) ||
             rewrite(
-                cast(UInt(8, lanes), rounding_shift_right(x + y, 8)),
+                cast(uint8x_t, rounding_shift_right(x + y, 8)),
                 v_instr(VectorInstruction::rounding_add_narrow, x, y),
                 is_uint(x, 16) && is_uint(y, 16)) ||
             rewrite(
-                cast(Int(16, lanes), rounding_shift_right(x + y, 16)),
+                cast(int16x_t, rounding_shift_right(x + y, 16)),
                 v_instr(VectorInstruction::rounding_add_narrow, x, y),
                 is_int(x, 32) && is_int(y, 32)) ||
             rewrite(
-                cast(UInt(16, lanes), rounding_shift_right(x + y, 16)),
+                cast(uint16x_t, rounding_shift_right(x + y, 16)),
                 v_instr(VectorInstruction::rounding_add_narrow, x, y),
                 is_uint(x, 32) && is_uint(y, 32)) ||
             rewrite(
-                cast(Int(32, lanes), rounding_shift_right(x + y, 32)),
+                cast(int32x_t, rounding_shift_right(x + y, 32)),
                 v_instr(VectorInstruction::rounding_add_narrow, x, y),
                 is_int(x, 64) && is_int(y, 64)) ||
             rewrite(
-                cast(UInt(32, lanes), rounding_shift_right(x + y, 32)),
+                cast(uint32x_t, rounding_shift_right(x + y, 32)),
                 v_instr(VectorInstruction::rounding_add_narrow, x, y),
                 is_uint(x, 64) && is_uint(y, 64)) ||
 
             // RSUBHN - Add and narrow with rounding
             // These must come before other narrowing rounding shift patterns.
             rewrite(
-                cast(Int(8, lanes), rounding_shift_right(x - y, 8)),
+                cast(int8x_t, rounding_shift_right(x - y, 8)),
                 v_instr(VectorInstruction::rounding_sub_narrow, x, y),
                 is_int(x, 16) && is_int(y, 16)) ||
             rewrite(
-                cast(UInt(8, lanes), rounding_shift_right(x - y, 8)),
+                cast(uint8x_t, rounding_shift_right(x - y, 8)),
                 v_instr(VectorInstruction::rounding_sub_narrow, x, y),
                 is_uint(x, 16) && is_uint(y, 16)) ||
             rewrite(
-                cast(Int(16, lanes), rounding_shift_right(x - y, 16)),
+                cast(int16x_t, rounding_shift_right(x - y, 16)),
                 v_instr(VectorInstruction::rounding_sub_narrow, x, y),
                 is_int(x, 32) && is_int(y, 32)) ||
             rewrite(
-                cast(UInt(16, lanes), rounding_shift_right(x - y, 16)),
+                cast(uint16x_t, rounding_shift_right(x - y, 16)),
                 v_instr(VectorInstruction::rounding_sub_narrow, x, y),
                 is_uint(x, 32) && is_uint(y, 32)) ||
             rewrite(
-                cast(Int(32, lanes), rounding_shift_right(x - y, 32)),
+                cast(int32x_t, rounding_shift_right(x - y, 32)),
                 v_instr(VectorInstruction::rounding_sub_narrow, x, y),
                 is_int(x, 64) && is_int(y, 64)) ||
             rewrite(
-                cast(UInt(32, lanes), rounding_shift_right(x - y, 32)),
+                cast(uint32x_t, rounding_shift_right(x - y, 32)),
                 v_instr(VectorInstruction::rounding_sub_narrow, x, y),
                 is_uint(x, 64) && is_uint(y, 64)) ||
 
             // RSHRN - Rounding shift right narrow (by immediate in [1, output bits]).
             rewrite(
-                cast(Int(8, lanes), rounding_shift_right(x, c0)),
+                cast(int8x_t, rounding_shift_right(x, c0)),
                 v_instr(VectorInstruction::rounding_shift_right_narrow, x, cast(shrn_type, c0)),
                 is_int(x, 16) && c0_in_shrn_range) ||
             rewrite(
-                cast(UInt(8, lanes), rounding_shift_right(x, c0)),
+                cast(uint8x_t, rounding_shift_right(x, c0)),
                 v_instr(VectorInstruction::rounding_shift_right_narrow, x, cast(shrn_type, c0)),
                 is_uint(x, 16) && c0_in_shrn_range) ||
 
             // FIXME: CodeGen_ARM.cpp also has: u8(rounding_shift_right(wild_i16x_, wild_u16_)),
             //        and similarly others, but doesn't contain those type signatures in the intrinsics.
             rewrite(
-                cast(Int(16, lanes), rounding_shift_right(x, c0)),
+                cast(int16x_t, rounding_shift_right(x, c0)),
                 v_instr(VectorInstruction::rounding_shift_right_narrow, x, cast(shrn_type, c0)),
                 is_int(x, 32) && c0_in_shrn_range) ||
             rewrite(
-                cast(UInt(16, lanes), rounding_shift_right(x, c0)),
+                cast(uint16x_t, rounding_shift_right(x, c0)),
                 v_instr(VectorInstruction::rounding_shift_right_narrow, x, cast(shrn_type, c0)),
                 is_uint(x, 32) && c0_in_shrn_range) ||
             rewrite(
-                cast(Int(32, lanes), rounding_shift_right(x, c0)),
+                cast(int32x_t, rounding_shift_right(x, c0)),
                 v_instr(VectorInstruction::rounding_shift_right_narrow, x, cast(shrn_type, c0)),
                 is_int(x, 64) && c0_in_shrn_range) ||
             rewrite(
-                cast(UInt(32, lanes), rounding_shift_right(x, c0)),
+                cast(uint32x_t, rounding_shift_right(x, c0)),
                 v_instr(VectorInstruction::rounding_shift_right_narrow, x, cast(shrn_type, c0)),
                 is_uint(x, 64) && c0_in_shrn_range) ||
 
@@ -316,49 +326,49 @@ protected:
             // SQRSHRN
             rewrite(
                 // i8_sat(rounding_shift_right(wild_i16x_, wild_u16_))
-                isat_cast(Int(8, lanes), Int(16, lanes), rounding_shift_right(x, c0)),
+                isat_cast(int8x_t, int16x_t, rounding_shift_right(x, c0)),
                 v_instr(VectorInstruction::saturating_rounding_shift_right_narrow, x, cast(shrn_type, c0)),
                 is_int(x, 16) && c0_in_shrn_range) ||
             rewrite(
                 // i16_sat(rounding_shift_right(wild_i32x_, wild_u32_))
-                isat_cast(Int(16, lanes), Int(32, lanes), rounding_shift_right(x, c0)),
+                isat_cast(int16x_t, int32x_t, rounding_shift_right(x, c0)),
                 v_instr(VectorInstruction::saturating_rounding_shift_right_narrow, x, cast(shrn_type, c0)),
                 is_int(x, 32) && c0_in_shrn_range) ||
             rewrite(
                 // i32_sat(rounding_shift_right(wild_i64x_, wild_u64_))
-                isat_cast(Int(32, lanes), Int(64, lanes), rounding_shift_right(x, c0)),
+                isat_cast(int32x_t, int64x_t, rounding_shift_right(x, c0)),
                 v_instr(VectorInstruction::saturating_rounding_shift_right_narrow, x, cast(shrn_type, c0)),
                 is_int(x, 64) && c0_in_shrn_range) ||
             // UQRSHRN
             rewrite(
                 // u8_sat(rounding_shift_right(wild_u16x_, wild_u16_))
-                usat_cast(UInt(8, lanes), UInt(16, lanes), rounding_shift_right(x, c0)),
+                usat_cast(uint8x_t, uint16x_t, rounding_shift_right(x, c0)),
                 v_instr(VectorInstruction::saturating_rounding_shift_right_narrow, x, cast(shrn_type, c0)),
                 is_uint(x, 16) && c0_in_shrn_range) ||
             rewrite(
                 // u16_sat(rounding_shift_right(wild_u32x_, wild_u32_))
-                usat_cast(UInt(16, lanes), UInt(32, lanes), rounding_shift_right(x, c0)),
+                usat_cast(uint16x_t, uint32x_t, rounding_shift_right(x, c0)),
                 v_instr(VectorInstruction::saturating_rounding_shift_right_narrow, x, cast(shrn_type, c0)),
                 is_uint(x, 32) && c0_in_shrn_range) ||
             rewrite(
                 // u32_sat(rounding_shift_right(wild_u64x_, wild_u64_))
-                usat_cast(UInt(32, lanes), UInt(64, lanes), rounding_shift_right(x, c0)),
+                usat_cast(uint32x_t, uint64x_t, rounding_shift_right(x, c0)),
                 v_instr(VectorInstruction::saturating_rounding_shift_right_narrow, x, cast(shrn_type, c0)),
                 is_uint(x, 64) && c0_in_shrn_range) ||
             // SQRSHRUN
             rewrite(
                 // u8_sat(rounding_shift_right(wild_i16x_, wild_u16_))
-                isat_cast(UInt(8, lanes), Int(16, lanes), rounding_shift_right(x, c0)),
+                isat_cast(uint8x_t, int16x_t, rounding_shift_right(x, c0)),
                 v_instr(VectorInstruction::saturating_rounding_shift_right_narrow, x, cast(shrn_type, c0)),
                 is_int(x, 16) && c0_in_shrn_range) ||
             rewrite(
                 // u16_sat(rounding_shift_right(wild_i32x_, wild_u32_))
-                isat_cast(UInt(16, lanes), Int(32, lanes), rounding_shift_right(x, c0)),
+                isat_cast(uint16x_t, int32x_t, rounding_shift_right(x, c0)),
                 v_instr(VectorInstruction::saturating_rounding_shift_right_narrow, x, cast(shrn_type, c0)),
                 is_int(x, 32) && c0_in_shrn_range) ||
             rewrite(
                 // u32_sat(rounding_shift_right(wild_i64x_, wild_u64_))
-                isat_cast(UInt(32, lanes), Int(64, lanes), rounding_shift_right(x, c0)),
+                isat_cast(uint32x_t, int64x_t, rounding_shift_right(x, c0)),
                 v_instr(VectorInstruction::saturating_rounding_shift_right_narrow, x, cast(shrn_type, c0)),
                 is_int(x, 64) && c0_in_shrn_range) ||
 
@@ -368,49 +378,49 @@ protected:
             // SQSHL
             rewrite(
                 // i8_sat(widening_shift_left(wild_i8x_, rhs))
-                isat_cast(Int(8, lanes), Int(16, lanes), widening_shift_left(x, y)),
+                isat_cast(int8x_t, int16x_t, widening_shift_left(x, y)),
                 v_instr(VectorInstruction::saturating_shift_left, x, y),
                 is_int(x, 8)) ||
             rewrite(
                 // i16_sat(widening_shift_left(wild_i16x_, rhs))
-                isat_cast(Int(16, lanes), Int(32, lanes), widening_shift_left(x, y)),
+                isat_cast(int16x_t, int32x_t, widening_shift_left(x, y)),
                 v_instr(VectorInstruction::saturating_shift_left, x, y),
                 is_int(x, 16)) ||
             rewrite(
                 // i32_sat(widening_shift_left(wild_i23x_, rhs))
-                isat_cast(Int(32, lanes), Int(64, lanes), widening_shift_left(x, y)),
+                isat_cast(int32x_t, int64x_t, widening_shift_left(x, y)),
                 v_instr(VectorInstruction::saturating_shift_left, x, y),
                 is_int(x, 32)) ||
             // UQSHL
             rewrite(
                 // u8_sat(widening_shift_left(wild_u8x_, rhs))
-                usat_cast(UInt(8, lanes), UInt(16, lanes), widening_shift_left(x, y)),
+                usat_cast(uint8x_t, uint16x_t, widening_shift_left(x, y)),
                 v_instr(VectorInstruction::saturating_shift_left, x, y),
                 is_uint(x, 8)) ||
             rewrite(
                 // u16_sat(widening_shift_left(wild_u16x_, rhs))
-                usat_cast(UInt(16, lanes), UInt(32, lanes), widening_shift_left(x, y)),
+                usat_cast(uint16x_t, uint32x_t, widening_shift_left(x, y)),
                 v_instr(VectorInstruction::saturating_shift_left, x, y),
                 is_uint(x, 16)) ||
             rewrite(
                 // u32_sat(widening_shift_left(wild_u32x_, rhs))
-                usat_cast(UInt(32, lanes), UInt(64, lanes), widening_shift_left(x, y)),
+                usat_cast(uint32x_t, uint64x_t, widening_shift_left(x, y)),
                 v_instr(VectorInstruction::saturating_shift_left, x, y),
                 is_uint(x, 32)) ||
             // SQSHLU
             rewrite(
                 // u8_sat(widening_shift_left(wild_i8x_, rhs))
-                isat_cast(UInt(8, lanes), Int(16, lanes), widening_shift_left(x, y)),
+                isat_cast(uint8x_t, int16x_t, widening_shift_left(x, y)),
                 v_instr(VectorInstruction::saturating_shift_left, x, y),
                 is_int(x, 8)) ||
             rewrite(
                 // u16_sat(widening_shift_left(wild_i16x_, rhs))
-                isat_cast(UInt(16, lanes), Int(32, lanes), widening_shift_left(x, y)),
+                isat_cast(uint16x_t, int32x_t, widening_shift_left(x, y)),
                 v_instr(VectorInstruction::saturating_shift_left, x, y),
                 is_int(x, 16)) ||
             rewrite(
                 // u32_sat(widening_shift_left(wild_i32x_, rhs))
-                isat_cast(UInt(32, lanes), Int(64, lanes), widening_shift_left(x, y)),
+                isat_cast(uint32x_t, int64x_t, widening_shift_left(x, y)),
                 v_instr(VectorInstruction::saturating_shift_left, x, y),
                 is_int(x, 32)) ||
 
@@ -419,49 +429,49 @@ protected:
             // SQSHRN
             rewrite(
                 // i8_sat(wild_i16x_ >> wild_u16_)
-                isat_cast(Int(8, lanes), Int(16, lanes), shift_right(x, c0)),
+                isat_cast(int8x_t, int16x_t, shift_right(x, c0)),
                 v_instr(VectorInstruction::saturating_shift_right_narrow, x, cast(shrn_type, c0)),
                 is_int(x, 16) && c0_in_shrn_range) ||
             rewrite(
                 // i16_sat(wild_i32x_ >> wild_u32_)
-                isat_cast(Int(16, lanes), Int(32, lanes), shift_right(x, c0)),
+                isat_cast(int16x_t, int32x_t, shift_right(x, c0)),
                 v_instr(VectorInstruction::saturating_shift_right_narrow, x, cast(shrn_type, c0)),
                 is_int(x, 32) && c0_in_shrn_range) ||
             rewrite(
                 // i32_sat(wild_i64x_ >> wild_u64_)
-                isat_cast(Int(32, lanes), Int(64, lanes), shift_right(x, c0)),
+                isat_cast(int32x_t, int64x_t, shift_right(x, c0)),
                 v_instr(VectorInstruction::saturating_shift_right_narrow, x, cast(shrn_type, c0)),
                 is_int(x, 64) && c0_in_shrn_range) ||
             // UQSHRN
             rewrite(
                 // u8_sat(wild_u16x_ >> wild_u16_)
-                usat_cast(UInt(8, lanes), UInt(16, lanes), shift_right(x, c0)),
+                usat_cast(uint8x_t, uint16x_t, shift_right(x, c0)),
                 v_instr(VectorInstruction::saturating_shift_right_narrow, x, cast(shrn_type, c0)),
                 is_uint(x, 16) && c0_in_shrn_range) ||
             rewrite(
                 // u16_sat(wild_u32x_ >> wild_u32_)
-                usat_cast(UInt(16, lanes), UInt(32, lanes), shift_right(x, c0)),
+                usat_cast(uint16x_t, uint32x_t, shift_right(x, c0)),
                 v_instr(VectorInstruction::saturating_shift_right_narrow, x, cast(shrn_type, c0)),
                 is_uint(x, 32) && c0_in_shrn_range) ||
             rewrite(
                 // u32_sat(wild_u64x_ >> wild_u64_)
-                usat_cast(UInt(32, lanes), UInt(64, lanes), shift_right(x, c0)),
+                usat_cast(uint32x_t, uint64x_t, shift_right(x, c0)),
                 v_instr(VectorInstruction::saturating_shift_right_narrow, x, cast(shrn_type, c0)),
                 is_uint(x, 64) && c0_in_shrn_range) ||
             // SQRSHRUN
             rewrite(
                 // u8_sat(wild_i16x_ >> wild_u16_)
-                isat_cast(UInt(8, lanes), Int(16, lanes), shift_right(x, c0)),
+                isat_cast(uint8x_t, int16x_t, shift_right(x, c0)),
                 v_instr(VectorInstruction::saturating_shift_right_narrow, x, cast(shrn_type, c0)),
                 is_int(x, 16) && c0_in_shrn_range) ||
             rewrite(
                 // u16_sat(wild_i32x_ >> wild_u32_)
-                isat_cast(UInt(16, lanes), Int(32, lanes), shift_right(x, c0)),
+                isat_cast(uint16x_t, int32x_t, shift_right(x, c0)),
                 v_instr(VectorInstruction::saturating_shift_right_narrow, x, cast(shrn_type, c0)),
                 is_int(x, 32) && c0_in_shrn_range) ||
             rewrite(
                 // u32_sat(wild_i64x_ >> wild_u64_)
-                isat_cast(UInt(32, lanes), Int(64, lanes), shift_right(x, c0)),
+                isat_cast(uint32x_t, int64x_t, shift_right(x, c0)),
                 v_instr(VectorInstruction::saturating_shift_right_narrow, x, cast(shrn_type, c0)),
                 is_int(x, 64) && c0_in_shrn_range) ||
 
@@ -469,49 +479,49 @@ protected:
             // SQXTN
             rewrite(
                 // i8_sat(wild_i16x_)
-                isat_cast(Int(8, lanes), Int(16, lanes), x),
+                isat_cast(int8x_t, int16x_t, x),
                 v_instr(VectorInstruction::saturating_narrow, x),
                 is_int(x, 16)) ||
             rewrite(
                 // i16_sat(wild_i32x_)
-                isat_cast(Int(16, lanes), Int(32, lanes), x),
+                isat_cast(int16x_t, int32x_t, x),
                 v_instr(VectorInstruction::saturating_narrow, x),
                 is_int(x, 32)) ||
             rewrite(
                 // i32_sat(wild_i64x_)
-                isat_cast(Int(32, lanes), Int(64, lanes), x),
+                isat_cast(int32x_t, int64x_t, x),
                 v_instr(VectorInstruction::saturating_narrow, x),
                 is_int(x, 64)) ||
             // UQXTN
             rewrite(
                 // u8_sat(wild_u16x_)
-                usat_cast(UInt(8, lanes), UInt(16, lanes), x),
+                usat_cast(uint8x_t, uint16x_t, x),
                 v_instr(VectorInstruction::saturating_narrow, x),
                 is_uint(x, 16)) ||
             rewrite(
                 // u16_sat(wild_u32x_)
-                usat_cast(UInt(16, lanes), UInt(32, lanes), x),
+                usat_cast(uint16x_t, uint32x_t, x),
                 v_instr(VectorInstruction::saturating_narrow, x),
                 is_uint(x, 32)) ||
             rewrite(
                 // u32_sat(wild_u64x_)
-                usat_cast(UInt(32, lanes), UInt(64, lanes), x),
+                usat_cast(uint32x_t, uint64x_t, x),
                 v_instr(VectorInstruction::saturating_narrow, x),
                 is_uint(x, 64)) ||
             // SQXTUN
             rewrite(
                 // u8_sat(wild_i16x_)
-                isat_cast(UInt(8, lanes), Int(16, lanes), x),
+                isat_cast(uint8x_t, int16x_t, x),
                 v_instr(VectorInstruction::saturating_narrow, x),
                 is_int(x, 16)) ||
             rewrite(
                 // u16_sat(wild_i32x_)
-                isat_cast(UInt(16, lanes), Int(32, lanes), x),
+                isat_cast(uint16x_t, int32x_t, x),
                 v_instr(VectorInstruction::saturating_narrow, x),
                 is_int(x, 32)) ||
             rewrite(
                 // u32_sat(wild_i64x_)
-                isat_cast(UInt(32, lanes), Int(64, lanes), x),
+                isat_cast(uint32x_t, int64x_t, x),
                 v_instr(VectorInstruction::saturating_narrow, x),
                 is_int(x, 64)) ||
 
@@ -531,6 +541,100 @@ protected:
                 (is_int(x, bits / 2) || is_uint(x, bits / 2)) &&
                 (is_int(y, bits / 2) || is_uint(y, bits / 2)) &&
                 (is_int(x) == is_int(y))) ||
+
+            // If we didn't find a pattern, try rewriting the cast.
+            // Double or triple narrowing saturating casts are better expressed as
+            // regular narrowing casts.
+            rewrite(
+                // u8_sat(wild_u32x_) -> u8_sat(u16_sat(wild_u32x_))
+                usat_cast(uint8x_t, uint32x_t, x),
+                usat_cast(uint8x_t, uint16x_t, usat_cast(uint16x_t, uint32x_t, x)),
+                is_uint(x, 32)) ||
+            rewrite(
+                // u8_sat(wild_i32x_) -> u8_sat(i16_sat(wild_i32x_))
+                usat_cast(uint8x_t, int32x_t, x),
+                isat_cast(uint8x_t, int16x_t, isat_cast(int16x_t, int32x_t, x)),
+                is_int(x, 32)) ||
+            rewrite(
+                // u8_sat(wild_f32x_) -> u8_sat(i16_sat(wild_f32x_))
+                isat_cast(uint8x_t, float32x_t, x),
+                isat_cast(uint8x_t, int16x_t, isat_cast(int16x_t, float32x_t, x)),
+                is_float(x, 32)) ||
+            rewrite(
+                // i8_sat(wild_u32x_) -> i8_sat(u16_sat(wild_u32x_))
+                usat_cast(int8x_t, uint32x_t, x),
+                usat_cast(int8x_t, uint16x_t, usat_cast(uint16x_t, uint32x_t, x)),
+                is_uint(x, 32)) ||
+            rewrite(
+                // i8_sat(wild_i32x_) -> i8_sat(i16_sat(wild_i32x_))
+                isat_cast(int8x_t, int32x_t, x),
+                isat_cast(int8x_t, int16x_t, isat_cast(int16x_t, int32x_t, x)),
+                is_int(x, 32)) ||
+            rewrite(
+                // i8_sat(wild_f32x_) -> i8_sat(i16_sat(wild_f32x_))
+                isat_cast(int8x_t, float32x_t, x),
+                isat_cast(int8x_t, int16x_t, isat_cast(int16x_t, float32x_t, x)),
+                is_float(x, 32)) ||
+            rewrite(
+                // u16_sat(wild_u64x_) -> u16_sat(u32_sat(wild_u64x_))
+                usat_cast(uint16x_t, uint64x_t, x),
+                usat_cast(uint16x_t, uint32x_t, usat_cast(uint32x_t, uint64x_t, x)),
+                is_uint(x, 64)) ||
+            rewrite(
+                // u16_sat(wild_i64x_) -> u16_sat(i32_sat(wild_i64x_))
+                isat_cast(uint16x_t, int64x_t, x),
+                isat_cast(uint16x_t, int32x_t, isat_cast(int32x_t, int64x_t, x)),
+                is_int(x, 64)) ||
+            rewrite(
+                // u16_sat(wild_f64x_) -> u16_sat(i32_sat(wild_f64x_))
+                isat_cast(uint16x_t, float64x_t, x),
+                isat_cast(uint16x_t, int32x_t, isat_cast(int32x_t, float64x_t, x)),
+                is_float(x, 64)) ||
+            rewrite(
+                // i16_sat(wild_u64x_) -> i16_sat(u32_sat(wild_u64x_))
+                usat_cast(int16x_t, uint64x_t, x),
+                usat_cast(int16x_t, uint32x_t, usat_cast(uint32x_t, uint64x_t, x)),
+                is_uint(x, 64)) ||
+            rewrite(
+                // i16_sat(wild_i64x_) -> i16_sat(i32_sat(wild_i64x_))
+                isat_cast(int16x_t, int64x_t, x),
+                isat_cast(int16x_t, int32x_t, isat_cast(int32x_t, int64x_t, x)),
+                is_int(x, 64)) ||
+            rewrite(
+                // i16_sat(wild_f64x_) -> i16_sat(i32_sat(wild_f64x_))
+                isat_cast(int16x_t, float64x_t, x),
+                isat_cast(int16x_t, int32x_t, isat_cast(int32x_t, float64x_t, x)),
+                is_float(x, 64)) ||
+            rewrite(
+                // u8_sat(wild_u64x_) -> u8_sat(u16_sat(u32_sat(wild_u64x_)))
+                usat_cast(uint8x_t, uint64x_t, x),
+                usat_cast(uint8x_t, uint16x_t, usat_cast(uint16x_t, uint32x_t, usat_cast(uint32x_t, uint64x_t, x))),
+                is_uint(x, 64)) ||
+            rewrite(
+                // u8_sat(wild_i64x_) -> u8_sat(i16_sat(i32_sat(wild_i64x_)))
+                isat_cast(uint8x_t, int64x_t, x),
+                isat_cast(uint8x_t, int16x_t, isat_cast(int16x_t, int32x_t, isat_cast(int32x_t, int64x_t, x))),
+                is_int(x, 64)) ||
+            rewrite(
+                // u8_sat(wild_f64x_), u8_sat(i16_sat(i32_sat(wild_f64x_)))
+                isat_cast(uint8x_t, float64x_t, x),
+                isat_cast(uint8x_t, int16x_t, isat_cast(int16x_t, int32x_t, isat_cast(int32x_t, float64x_t, x))),
+                is_float(x, 64)) ||
+            rewrite(
+                // i8_sat(wild_u64x_) -> i8_sat(u16_sat(u32_sat(wild_u64x_)))
+                usat_cast(int8x_t, uint64x_t, x),
+                usat_cast(int8x_t, uint16x_t, usat_cast(uint16x_t, uint32x_t, usat_cast(uint32x_t, uint64x_t, x))),
+                is_uint(x, 64)) ||
+            rewrite(
+                // i8_sat(wild_i64x_) -> i8_sat(i16_sat(i32_sat(wild_i64x_)))
+                isat_cast(int8x_t, int64x_t, x),
+                isat_cast(int8x_t, int16x_t, isat_cast(int16x_t, int32x_t, isat_cast(int32x_t, int64x_t, x))),
+                is_int(x, 64)) ||
+            rewrite(
+                // i8_sat(wild_f64x_) -> i8_sat(i16_sat(i32_sat(wild_f64x_)))
+                isat_cast(int8x_t, float64x_t, x),
+                isat_cast(int8x_t, int16x_t, isat_cast(int16x_t, int32x_t, isat_cast(int32x_t, float64x_t, x))),
+                is_float(x, 64)) ||
 
             false) {
             return mutate(rewrite.result);
@@ -915,9 +1019,7 @@ private:
 Stmt optimize_ARM_instructions(const Stmt &s, const Target &target, const CodeGen_LLVM *codegen) {
     Stmt stmt = Optimize_ARM(target, codegen).mutate(s);
 
-    // Some of the rules above can introduce repeated sub-terms, so run CSE again.
     if (!stmt.same_as(s)) {
-        stmt = common_subexpression_elimination(stmt);
         return stmt;
     } else {
         return s;
