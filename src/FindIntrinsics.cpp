@@ -886,6 +886,48 @@ Expr lower_saturating_sub(const Expr &a, const Expr &b) {
     return simplify(clamp(a, a.type().min() + max(b, 0), a.type().max() + min(b, 0))) - b;
 }
 
+
+Expr lower_saturating_cast(const Type &t, const Expr &a) {
+    // For float to float, guarantee infinities are always pinned to range.
+    if (t.is_float() && a.type().is_float()) {
+        if (t.bits() < a.type().bits()) {
+            return cast(t, clamp(a, t.min(), t.max()));
+        } else {
+            return clamp(cast(t, a), t.min(), t.max());
+        }
+    } else if (a.type() != t) {
+        // Limits for Int(2^n) or UInt(2^n) are not exactly representable in Float(2^n)
+        if (a.type().is_float() && !t.is_float() && t.bits() >= a.type().bits()) {
+            Expr e = max(a, t.min());  // min values turn out to be always representable
+
+            // This line depends on t.max() rounding upward, which should always
+            // be the case as it is one less than a representable value, thus
+            // the one larger is always the closest.
+            e = select(e >= cast(e.type(), t.max()), t.max(), cast(t, e));
+            return e;
+        } else {
+            Expr min_bound;
+            if (!a.type().is_uint()) {
+                min_bound = lossless_cast(a.type(), t.min());
+            }
+            Expr max_bound = lossless_cast(a.type(), t.max());
+
+            Expr e;
+            if (min_bound.defined() && max_bound.defined()) {
+                e = clamp(a, min_bound, max_bound);
+            } else if (min_bound.defined()) {
+                e = max(a, min_bound);
+            } else if (max_bound.defined()) {
+                e = min(a, max_bound);
+            } else {
+                e = a;
+            }
+            return cast(t, std::move(e));
+        }
+    }
+    return a;
+}
+
 Expr lower_halving_add(const Expr &a, const Expr &b) {
     internal_assert(a.type() == b.type());
     // Borrowed from http://aggregate.org/MAGIC/#Average%20of%20Integers
@@ -1015,6 +1057,9 @@ Expr lower_intrinsic(const Call *op) {
     } else if (op->is_intrinsic(Call::saturating_sub)) {
         internal_assert(op->args.size() == 2);
         return lower_saturating_sub(op->args[0], op->args[1]);
+    } else if (op->is_intrinsic(Call::saturating_cast)) {
+        internal_assert(op->args.size() == 1);
+        return lower_saturating_cast(op->type, op->args[0]);
     } else if (op->is_intrinsic(Call::widening_shift_left)) {
         internal_assert(op->args.size() == 2);
         return lower_widening_shift_left(op->args[0], op->args[1]);
