@@ -886,7 +886,6 @@ Expr lower_saturating_sub(const Expr &a, const Expr &b) {
     return simplify(clamp(a, a.type().min() + max(b, 0), a.type().max() + min(b, 0))) - b;
 }
 
-
 Expr lower_saturating_cast(const Type &t, const Expr &a) {
     // For float to float, guarantee infinities are always pinned to range.
     if (t.is_float() && a.type().is_float()) {
