@@ -575,6 +575,29 @@ protected:
             return rewrite.result;
         }
 
+        const int bits = op->type.bits();
+        const auto is_x_same_int = op->type.is_int() && is_int(x, bits);
+        const auto is_x_same_uint = op->type.is_uint() && is_uint(x, bits);
+        const auto is_x_same_int_or_uint = is_x_same_int || is_x_same_uint;
+        auto x_y_same_sign = (is_int(x) == is_int(y)) || (is_uint(x) && is_uint(y));
+        Type unsigned_type = op->type.with_code(halide_type_uint);
+
+        if (rewrite(saturating_cast(op->type, widening_add(x, y)),
+                    saturating_add(x, y),
+                    is_x_same_int_or_uint) ||
+            rewrite(saturating_cast(op->type, widening_sub(x, y)),
+                    saturating_sub(x, y),
+                    is_x_same_int_or_uint) ||
+            rewrite(saturating_cast(op->type, shift_right(widening_mul(x, y), z)),
+                    mul_shift_right(x, y, cast(unsigned_type, z)),
+                    is_x_same_int_or_uint && x_y_same_sign && is_uint(z)) ||
+            rewrite(saturating_cast(op->type, rounding_shift_right(widening_mul(x, y), z)),
+                    rounding_mul_shift_right(x, y, cast(unsigned_type, z)),
+                    is_x_same_int_or_uint && x_y_same_sign && is_uint(z)) ||
+            false) {
+            return mutate(rewrite.result);
+        }
+
         if (no_overflow(op->type)) {
             // clang-format off
             if (rewrite(halving_add(x + y, 1), rounding_halving_add(x, y)) ||
