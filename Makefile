@@ -50,6 +50,7 @@ endif
 SHELL = bash
 CXX ?= g++
 PREFIX ?= /usr/local
+# LLVM_CONFIG ?= /opt/homebrew/opt/llvm/bin/llvm-config
 LLVM_CONFIG ?= llvm-config
 LLVM_COMPONENTS= $(shell $(LLVM_CONFIG) --components)
 LLVM_VERSION = $(shell $(LLVM_CONFIG) --version | sed 's/\([0-9][0-9]*\)\.\([0-9]\).*/\1.\2/')
@@ -448,6 +449,7 @@ SOURCE_FILES = \
   DebugToFile.cpp \
   Definition.cpp \
   Deinterleave.cpp \
+  DependencyGraph.cpp \
   Derivative.cpp \
   DerivativeUtils.cpp \
   DeviceArgument.cpp \
@@ -624,6 +626,7 @@ HEADER_FILES = \
   DebugToFile.h \
   Definition.h \
   Deinterleave.h \
+  DependencyGraph.h \
   Derivative.h \
   DerivativeUtils.h \
   DeviceAPI.h \

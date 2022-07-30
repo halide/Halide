@@ -1,4 +1,5 @@
 #include "StmtToViz.h"
+#include "DependencyGraph.h"
 #include "FindStmtCost.h"
 #include "GetStmtHierarchy.h"
 #include "IROperator.h"
@@ -6,6 +7,7 @@
 #include "Module.h"
 #include "ProducerConsumerHierarchy.h"
 #include "Scope.h"
+#include "Substitute.h"
 #include "Util.h"
 
 #include <cstdio>
@@ -42,6 +44,7 @@ class StmtToViz : public IRVisitor {
                                                           // statements
     ProducerConsumerHierarchy producerConsumerHierarchy;  // used for getting the hierarchy of
                                                           // producer/consumer
+    DependencyGraph dependencyGraph;                      // used for getting the dependency graph
 
     // This allows easier access to individual elements.
     int id_count;
@@ -371,11 +374,12 @@ private:
     void visit(const Variable *op) override {
 
         if (is_in_context(op->name)) {
-            stream << "[requires context] ";
+            // stream << "[requires context] ";
             in_context = true;
-        } else {
-            stream << "[doesn't require context] ";
         }
+        // else {
+        //     stream << "[doesn't require context] ";
+        // }
 
         stream << var(op->name);
     }
@@ -983,6 +987,16 @@ public:
         producerConsumerHierarchy.generate_producer_consumer_html(s);
         producerConsumerHierarchy.print_hierarchy();
     }
+    void generate_dependency_graph(const Module &m) {
+        dependencyGraph.generate_dependency_graph(m);
+    }
+    void generate_dependency_graph(const Stmt &s) {
+        cout << endl << endl << "uh" << endl;
+        m_assert(false, "Not implemented");
+
+        Stmt inlined_s = substitute_in_all_lets(s);
+        dependencyGraph.generate_dependency_graph(inlined_s);
+    }
 
     void print(const Expr &ir) {
         ir.accept(this);
@@ -1012,7 +1026,11 @@ public:
         stream << close_expand_button();
         stream << " " << matched("{");
         stream << open_div("FunctionBody Indent", id);
+
+        // Stmt inlined_body = substitute_in_all_lets(op.body);
+        // print(inlined_body);
         print(op.body);
+
         stream << close_div();
         stream << matched("}");
 
@@ -1440,7 +1458,8 @@ void print_to_viz(const string &filename, const Stmt &s) {
     StmtToViz sth(filename);
 
     sth.generate_costs(s);
-    sth.generate_producer_consumer_hierarchy(s);
+    // sth.generate_producer_consumer_hierarchy(s);
+    sth.generate_dependency_graph(s);
 
     sth.print(s);
 }
@@ -1450,7 +1469,8 @@ void print_to_viz(const string &filename, const Module &m) {
     StmtToViz sth(filename);
 
     sth.generate_costs(m);
-    sth.generate_producer_consumer_hierarchy(m);
+    // sth.generate_producer_consumer_hierarchy(m);
+    sth.generate_dependency_graph(m);
 
     sth.print(m);
 }
