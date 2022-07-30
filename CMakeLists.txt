@@ -68,6 +68,9 @@ if (Halide_CCACHE_BUILD)
     endif ()
 endif ()
 
+# Enable the SPIR-V target if requested (must declare before processing dependencies)
+option(TARGET_SPIRV "Include SPIR-V target" OFF)
+
 ##
 # Import dependencies
 ##
