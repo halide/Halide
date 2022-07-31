@@ -1054,7 +1054,8 @@ Expr is_finite(Expr x);
  *  same sign as the original expression. Vectorizes cleanly. */
 Expr fract(const Expr &x);
 
-/** Reinterpret the bits of one value as another type. */
+/** Reinterpret the bits of one value as another type.
+ * NOTE: little-endian vector layout is expected. */
 Expr reinterpret(Type t, Expr e);
 
 template<typename T>

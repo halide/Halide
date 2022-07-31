@@ -34,7 +34,8 @@ struct Cast : public ExprNode<Cast> {
     static const IRNodeType _node_type = IRNodeType::Cast;
 };
 
-/** Reinterpret a node as another type, without affecting any of the bits. */
+/** Reinterpret a node as another type, without affecting any of the bits.
+ * NOTE: little-endian vector layout is expected. */
 struct Reinterpret : public ExprNode<Reinterpret> {
     Expr value;
 

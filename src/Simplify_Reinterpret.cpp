@@ -4,6 +4,10 @@ namespace Halide {
 namespace Internal {
 
 Expr Simplify::visit(const Reinterpret *op, ExprInfo *bounds) {
+    if (const Reinterpret *reinterpret_value = op->value.as<Reinterpret>()) {
+        return mutate(reinterpret(op->type, reinterpret_value->value), bounds);
+    }
+
     Expr a = mutate(op->value, nullptr);
 
     int64_t ia;

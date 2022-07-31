@@ -661,15 +661,137 @@ private:
         return Cast::make(t, mutate(op->value));
     }
 
-    // FIXME: Implement me.
     Expr visit(const Reinterpret *op) override {
-        if (op->type.is_scalar()) {
-            return op;
-        } else {
-            // FIXME: this is broken.
-            Type t = op->type.with_lanes(lanes.size());
+        Type src_ty = op->value.type();
+        int src_lanes = src_ty.lanes();
+        Type tgt_ty = op->type;
+        int tgt_lanes = tgt_ty.lanes();
+
+        if (src_lanes == tgt_lanes) {
+            // If the number of lanes wasn't changing, just recurse further.
+            Type t = tgt_ty.with_lanes(lanes.size());
             return Reinterpret::make(t, mutate(op->value));
         }
+
+        // Otherwise, since `Reinterpret` never changes the total bit count,
+        // but the lane count change, so must the width of the lanes, and to
+        // simplify further logic, it is best to do so with 'uint'-typed lanes.
+        if (!src_ty.is_uint() || !tgt_ty.is_uint()) {
+            auto reinterpret = [](Expr e, Type t, halide_type_code_t code) {
+                t = t.with_code(code);
+                if (e.type() != t) {
+                    e = Reinterpret::make(t, e);
+                }
+                return e;
+            };
+
+            Expr in = op->value;
+            // Prepare - ensure that the type is `uint`.
+            in = reinterpret(in, in.type(), Type::UInt);
+            // Perform the actual lane splitting/merging, in `uint`.
+            in = reinterpret(in, tgt_ty, Type::UInt);
+            // Recover - convert to the expected output type.
+            in = reinterpret(in, tgt_ty, tgt_ty.code());
+            return mutate(in);
+        }
+
+        auto [min_lanes, max_lanes] = std::minmax(src_lanes, tgt_lanes);
+
+        // Likewise, we really need an integral scaling factor.
+        // If it is not, we, again, want to expand.
+        if (max_lanes % min_lanes != 0) {
+            // We want to avoid the precision loss when back-transforming the
+            // demanded bits @ tgt_ty into demanded bits @ src_ty, so we want
+            // such an immediate type, that has N times more lanes than tgt_ty,
+            // while *also* having M times more lanes than src_ty,
+            // while minimizing N and M.
+            int lanes_lcm = std::lcm(src_lanes, tgt_lanes);  // Optimal.
+            internal_assert(lanes_lcm % tgt_ty.lanes() == 0);
+            int lane_prescale = lanes_lcm / tgt_ty.lanes();
+            internal_assert(tgt_ty.bits() % lane_prescale == 0);
+            Type intermediate_ty =
+                tgt_ty.with_lanes(lane_prescale * tgt_ty.lanes())
+                    .with_bits(tgt_ty.bits() / lane_prescale);
+            internal_assert(intermediate_ty.lanes() == lanes_lcm &&
+                            lanes_lcm % src_lanes == 0 &&
+                            lanes_lcm % tgt_lanes == 0);
+
+            Expr in = op->value;  // of src_ty.
+            in = Reinterpret::make(intermediate_ty, in);
+            in = Reinterpret::make(tgt_ty, in);
+            return mutate(in);
+        }
+
+        int scale = max_lanes / min_lanes;
+
+        if (tgt_lanes < src_lanes) {
+            // Source vector's lanes are more fine-grained, which means,
+            // we only need to round-trip demanded lanes and recurse into it.
+            std::vector<int> input_lanes =
+                upscale_indices(lanes.indices, scale);
+            Type t =
+                op->type.with_lanes(lanes.size());  // Before `ScopedValue`!
+            ScopedValue<DemandedLanes> old_lanes(lanes, input_lanes);
+            Expr in = mutate(op->value);
+            return Reinterpret::make(t, in);
+        }
+
+        // The ugly case.
+        // We are reinterpreting from a vector with *less* fine-grained lanes,
+        // so round-trip of the demanded lanes is pessimistic, in the sense that
+        // if we only partially demand some of the (wider) lanes,
+        // we need to manually drop non-demanded (narrow) lanes.
+
+        // Into how many fine-grained lanes was each coarse-grained lane split?
+        std::vector<int> input_vector_lane_subpartition_count;
+        input_vector_lane_subpartition_count.reserve(src_lanes);
+        std::fill_n(std::back_inserter(input_vector_lane_subpartition_count),
+                    /*num=*/src_lanes, /*value=*/scale);
+
+        std::vector<DecomposedIndex> decomposed_input_lanes =
+            decompose_shuffle_indices(input_vector_lane_subpartition_count,
+                                      lanes.indices);
+
+        // Which coarse-grained lanes of the source vector are demanded at all?
+        IndexXFormMapping input_lane_xform = IndexXFormMapping::get(
+            decomposed_input_lanes, src_lanes,
+            [](const DecomposedIndex &i) { return i.outer; });
+
+        Expr in;
+        // Now that we know which lanes of input vector are demanded, recurse.
+        {
+            ScopedValue<DemandedLanes> old_lanes(lanes,
+                                                 input_lane_xform.indices);
+            in = mutate(op->value);
+        }
+
+        // Now that we (might've) dropped some of the lanes of the input vector,
+        // update the decomposed shuffle mask.
+        for (DecomposedIndex &i : decomposed_input_lanes) {
+            i.outer = *input_lane_xform.translation[i.outer];
+        }
+
+        // Refresh vector lane count knowledge after mutating input vector.
+        input_vector_lane_subpartition_count.clear();
+        std::fill_n(std::back_inserter(input_vector_lane_subpartition_count),
+                    /*num=*/in.type().lanes(), /*value=*/scale);
+
+        // Now that we are done with mutation, let's reconstruct the indices.
+        std::vector<int> input_lanes = recompose_shuffle_indices(
+            input_vector_lane_subpartition_count, decomposed_input_lanes);
+
+        Type t = in.type();
+        internal_assert(t.bits() % scale == 0);
+        t = t.with_lanes(scale * t.lanes()).with_bits(t.bits() / scale);
+        in = Reinterpret::make(t, in);
+
+        // But, it is possible that we *still* don't demand all of the produced
+        // lanes, in which case we need a Shuffle after all.
+        if (in.type().lanes() != (int)input_lanes.size()) {
+            in = Shuffle::make({in}, input_lanes);
+        }
+
+        return in;
     }
 
     Expr visit(const Call *op) override {
@@ -1515,6 +1637,108 @@ void deinterleave_vector_test() {
                          Shuffle::make_concat({vars[0], vars[1], vars[3]})),
               Cast::make(Int(64, 3),
                          Shuffle::make_concat({vars[0], vars[2], vars[3]})));
+    }
+
+    {
+        std::vector<Expr> vars;
+        for (int i = 0; i != 4; ++i) {
+            vars.emplace_back(
+                Variable::make(Int(32), "v." + std::to_string(i)));
+        }
+        Expr v = Shuffle::make_concat(vars);
+        x = Reinterpret::make(Float(32, 4), v);
+        x = Shuffle::make({x}, {0, 0, 1, 2, 3, 3});
+        check(x,
+              Reinterpret::make(Float(32, 3), Shuffle::make_concat(
+                                                  {vars[0], vars[1], vars[3]})),
+              Reinterpret::make(
+                  Float(32, 3),
+                  Shuffle::make_concat({vars[0], vars[2], vars[3]})));
+    }
+
+    {
+        std::vector<Expr> vars;
+        for (int i = 0; i != 8; ++i) {
+            vars.emplace_back(
+                Variable::make(Int(16), "v." + std::to_string(i)));
+        }
+        Expr v = Shuffle::make_concat(vars);
+        x = Reinterpret::make(Float(32, 4), v);
+        x = Shuffle::make({x}, {0, 0, 1, 2, 3, 3});
+        check(x,
+              Reinterpret::make(Float(32, 3), Shuffle::make_concat(
+                                                  {vars[0], vars[1], vars[2],
+                                                   vars[3], vars[6], vars[7]})),
+              Reinterpret::make(
+                  Float(32, 3),
+                  Shuffle::make_concat(
+                      {vars[0], vars[1], vars[4], vars[5], vars[6], vars[7]})));
+    }
+
+    {
+        std::vector<Expr> vars;
+        for (int i = 0; i != 9; ++i) {
+            vars.emplace_back(Variable::make(Int(8), "v." + std::to_string(i)));
+        }
+        Expr v = Shuffle::make_concat(vars);
+        x = Reinterpret::make(Int(12, 6), v);
+        x = Shuffle::make({x}, {0, 2, 1, 3});
+        check(x,
+              Reinterpret::make(Int(12, 2), Shuffle::make_concat(
+                                                {vars[0], vars[1], vars[2]})),
+              Reinterpret::make(Int(12, 2), Shuffle::make_concat(
+                                                {vars[3], vars[4], vars[5]})));
+    }
+
+    {
+        std::vector<Expr> vars;
+        for (int i = 0; i != 9; ++i) {
+            vars.emplace_back(Variable::make(Int(8), "v." + std::to_string(i)));
+        }
+        Expr v = Shuffle::make_concat(vars);
+        x = Reinterpret::make(Int(12, 6), v);
+        x = Shuffle::make({x}, {0, 1, 3, 2});
+        check(x,
+              Reinterpret::make(
+                  Int(12, 2),
+                  Shuffle::make(
+                      {Reinterpret::make(UInt(4, 8), Shuffle::make_concat(
+                                                         {vars[0], vars[1],
+                                                          vars[4], vars[5]}))},
+                      {0, 1, 2, 5, 6, 7})),
+              Reinterpret::make(
+                  Int(12, 2),
+                  Shuffle::make_slice(
+                      Reinterpret::make(
+                          UInt(4, 8), Shuffle::make_concat({vars[1], vars[2],
+                                                            vars[3], vars[4]})),
+                      1, 1, 6)));
+    }
+
+    {
+        std::vector<Expr> vars;
+        for (int i = 0; i != 6; ++i) {
+            vars.emplace_back(
+                Variable::make(Int(12), "v." + std::to_string(i)));
+        }
+        Expr v = Shuffle::make_concat(vars);
+        x = Reinterpret::make(Int(8, 9), v);
+        x = Shuffle::make({x}, {0, 2, 1, 3, 3, 4, 4, 5});
+        check(x,
+              Reinterpret::make(
+                  Int(8, 4),
+                  Shuffle::make(
+                      {Reinterpret::make(UInt(4, 12), Shuffle::make_concat(
+                                                          {vars[0], vars[1],
+                                                           vars[2], vars[3]}))},
+                      {0, 1, 2, 3, 6, 7, 8, 9})),
+              Reinterpret::make(
+                  Int(8, 4),
+                  Shuffle::make_slice(
+                      Reinterpret::make(
+                          UInt(4, 9),
+                          Shuffle::make_concat({vars[1], vars[2], vars[3]})),
+                      1, 1, 8)));
     }
 
     {
