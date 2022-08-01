@@ -15,6 +15,8 @@ endif
 
 CXXFLAGS += -I$(COMMON_DIR)
 
-$(BIN)/libautoschedule_mullapudi2016.$(SHARED_EXT): $(SRC)/AutoSchedule.cpp $(LIB_HALIDE)
+# Be sure *not* to include libHalide in the link steps here; that can cause misbehavior
+# on OSX systems in certain situations.
+$(BIN)/libautoschedule_mullapudi2016.$(PLUGIN_EXT): $(SRC)/AutoSchedule.cpp
 	@mkdir -p $(@D)
 	$(CXX) -shared $(USE_EXPORT_DYNAMIC) -fPIC -fvisibility=hidden -fvisibility-inlines-hidden $(CXXFLAGS) $(OPTIMIZE) $^ -o $@ $(HALIDE_RPATH_FOR_LIB)

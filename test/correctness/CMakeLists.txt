@@ -371,6 +371,13 @@ tests(GROUPS correctness multithreaded
       unroll_huge_mux.cpp
       )
 
+tests(GROUPS correctness
+      SOURCES
+      load_plugin.cpp
+      ARGS "$<TARGET_FILE:Halide::Adams2019>" "$<TARGET_FILE:Halide::Li2018>" "$<TARGET_FILE:Halide::Mullapudi2016>"
+      )
+add_dependencies(correctness_load_plugin Halide::Adams2019 Halide::Li2018 Halide::Mullapudi2016)
+
 # Make sure the test that needs image_io has it
 target_link_libraries(correctness_image_io PRIVATE Halide::ImageIO)
 
