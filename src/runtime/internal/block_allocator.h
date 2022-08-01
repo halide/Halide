@@ -188,7 +188,9 @@ MemoryRegion *BlockAllocator::reserve(void *user_context, const MemoryRequest &r
 void BlockAllocator::reclaim(void *user_context, MemoryRegion *memory_region) {
     halide_abort_if_false(user_context, memory_region != nullptr);
     RegionAllocator *allocator = RegionAllocator::find_allocator(user_context, memory_region);
-    if (allocator == nullptr) { return; }
+    if (allocator == nullptr) {
+        return;
+    }
     allocator->reclaim(user_context, memory_region);
 }
 
@@ -331,7 +333,9 @@ void BlockAllocator::destroy_region_allocator(void *user_context, RegionAllocato
                         << "user_context=" << (void *)(user_context) << " "
                         << "region_allocator=" << (void *)(region_allocator) << ")...\n";
 #endif
-    if (region_allocator == nullptr) { return; }
+    if (region_allocator == nullptr) {
+        return;
+    }
     RegionAllocator::destroy(user_context, region_allocator);
 }
 

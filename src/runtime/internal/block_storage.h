@@ -140,8 +140,12 @@ BlockStorage &BlockStorage::operator=(const BlockStorage &other) {
 }
 
 bool BlockStorage::operator==(const BlockStorage &other) const {
-    if (config.entry_size != other.config.entry_size) { return false; }
-    if (count != other.count) { return false; }
+    if (config.entry_size != other.config.entry_size) {
+        return false;
+    }
+    if (count != other.count) {
+        return false;
+    }
     return memcmp(this->ptr, other.ptr, this->size() * config.entry_size) == 0;
 }
 

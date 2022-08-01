@@ -70,7 +70,9 @@ StringTable::StringTable(const SystemMemoryAllocatorFns &sma)
 StringTable::StringTable(void *user_context, size_t capacity, const SystemMemoryAllocatorFns &sma)
     : contents(user_context, capacity, sma),
       pointers(user_context, capacity, sma) {
-    if (capacity) { resize(user_context, capacity); }
+    if (capacity) {
+        resize(user_context, capacity);
+    }
 }
 
 StringTable::StringTable(void *user_context, const char **array, size_t count, const SystemMemoryAllocatorFns &sma)
@@ -128,7 +130,9 @@ void StringTable::fill(void *user_context, const char **array, size_t count) {
 }
 
 void StringTable::assign(void *user_context, size_t index, const char *str, size_t length) {
-    if (length == 0) { length = strlen(str); }
+    if (length == 0) {
+        length = strlen(str);
+    }
     if (index < contents.size()) {
         StringStorage *storage_ptr = static_cast<StringStorage *>(contents[index]);
         storage_ptr->assign(user_context, str, length);
@@ -151,12 +155,16 @@ void StringTable::prepend(void *user_context, const char *str, size_t length) {
 }
 
 size_t StringTable::parse(void *user_context, const char *str, const char *delim) {
-    if (StringUtils::is_empty(str)) { return 0; }
+    if (StringUtils::is_empty(str)) {
+        return 0;
+    }
 
     size_t delim_length = strlen(delim);
     size_t total_length = strlen(str);
     size_t entry_count = StringUtils::count_tokens(str, delim);
-    if (entry_count < 1) { return 0; }
+    if (entry_count < 1) {
+        return 0;
+    }
 
     resize(user_context, entry_count);
 
@@ -179,7 +187,9 @@ size_t StringTable::parse(void *user_context, const char *str, const char *delim
 }
 
 bool StringTable::contains(const char *str) const {
-    if (StringUtils::is_empty(str)) { return false; }
+    if (StringUtils::is_empty(str)) {
+        return false;
+    }
     for (size_t n = 0; n < contents.size(); ++n) {
         StringStorage *storage_ptr = static_cast<StringStorage *>(contents[n]);
         if (storage_ptr->contains(str)) {

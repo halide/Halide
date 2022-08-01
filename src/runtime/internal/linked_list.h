@@ -100,8 +100,12 @@ void LinkedList::initialize(void *user_context, uint32_t entry_size, uint32_t ca
 
 void LinkedList::destroy(void *user_context) {
     clear(nullptr);
-    if (link_arena) { MemoryArena::destroy(nullptr, link_arena); }
-    if (data_arena) { MemoryArena::destroy(nullptr, data_arena); }
+    if (link_arena) {
+        MemoryArena::destroy(nullptr, link_arena);
+    }
+    if (data_arena) {
+        MemoryArena::destroy(nullptr, data_arena);
+    }
     link_arena = nullptr;
     data_arena = nullptr;
     front_ptr = nullptr;

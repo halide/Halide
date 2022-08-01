@@ -41,7 +41,9 @@ void *allocate_system(void *user_context, size_t bytes) {
     constexpr size_t header_size = 2 * sizeof(size_t);
     size_t alloc_size = bytes + header_size + (alignment - 1);
     void *raw_ptr = malloc(alloc_size);
-    if (raw_ptr == nullptr) { return nullptr; }
+    if (raw_ptr == nullptr) {
+        return nullptr;
+    }
     void *aligned_ptr = align_up(raw_ptr, header_size, alignment);
     size_t aligned_offset = (size_t)((size_t)aligned_ptr - (size_t)raw_ptr);
     *((size_t *)aligned_ptr - 1) = aligned_offset;
