@@ -77,7 +77,6 @@ $(BIN)/libautoschedule_adams2019.$(SHARED_EXT): $(SRC)/AutoSchedule.cpp \
 				$(SRC)/PerfectHashMap.h \
 				$(AUTOSCHED_WEIGHT_OBJECTS) \
 				$(AUTOSCHED_COST_MODEL_LIBS) \
-				$(GENERATOR_DEPS) \
 				$(BIN)/auto_schedule_runtime.a
 	@mkdir -p $(@D)
 	$(CXX) -shared $(USE_EXPORT_DYNAMIC) -fPIC -fvisibility=hidden -fvisibility-inlines-hidden $(CXXFLAGS) $(OPTIMIZE) -I $(BIN)/cost_model $(filter-out %.h $(LIBHALIDE_LDFLAGS),$^) -o $@ $(HALIDE_SYSTEM_LIBS) $(HALIDE_RPATH_FOR_LIB)

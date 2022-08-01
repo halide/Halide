@@ -15,6 +15,9 @@ endif
 
 CXXFLAGS += -I$(COMMON_DIR)
 
-$(BIN)/libautoschedule_mullapudi2016.$(SHARED_EXT): $(SRC)/AutoSchedule.cpp $(LIB_HALIDE)
+# It's important to use dynamic lookups for undefined symbols here: all of libHalide
+# is expected to be present (in the loading binary), so we explicitly make the symbols
+# undefined rather than dependent on libHalide.so.
+$(BIN)/libautoschedule_mullapudi2016.$(SHARED_EXT): $(SRC)/AutoSchedule.cpp
 	@mkdir -p $(@D)
 	$(CXX) -shared $(USE_EXPORT_DYNAMIC) -fPIC -fvisibility=hidden -fvisibility-inlines-hidden $(CXXFLAGS) $(OPTIMIZE) $^ -o $@ $(HALIDE_RPATH_FOR_LIB)

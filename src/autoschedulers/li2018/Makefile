@@ -18,7 +18,10 @@ else
 HALIDE_RPATH_FOR_LIB += '-Wl,-rpath,$$ORIGIN'
 endif
 
-$(BIN)/libautoschedule_li2018.$(SHARED_EXT): $(SRC)/GradientAutoscheduler.cpp $(LIB_HALIDE)
+# It's important to use dynamic lookups for undefined symbols here: all of libHalide
+# is expected to be present (in the loading binary), so we explicitly make the symbols
+# undefined rather than dependent on libHalide.so.
+$(BIN)/libautoschedule_li2018.$(SHARED_EXT): $(SRC)/GradientAutoscheduler.cpp
 	@mkdir -p $(@D)
 	$(CXX) -shared $(USE_EXPORT_DYNAMIC) -fPIC -fvisibility=hidden -fvisibility-inlines-hidden $(CXXFLAGS) $(OPTIMIZE) $^ -o $@ $(HALIDE_SYSTEM_LIBS) $(HALIDE_RPATH_FOR_LIB)
 
