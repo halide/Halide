@@ -1473,6 +1473,8 @@ void print_to_viz(const string &filename, const Module &m) {
     sth.generate_dependency_graph(m);
 
     sth.print(m);
+
+    cout << "TEST TEST\n\n\n";
 }
 
 }  // namespace Internal

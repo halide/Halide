@@ -46,6 +46,8 @@ public:
     int get_lock_access_count(const string name) const;
 
 private:
+    using IRMutator::visit;
+
     map<const string, int> lock_access_counts;  // key: lock name, value: number of accesses
 
     // increases the lock access count

@@ -23,6 +23,8 @@ public:
     void print_hierarchy();
 
 private:
+    using IRMutator::visit;
+
     std::stringstream html;  // main html string
 
     // starts the traversal of the tree and returns the generated html

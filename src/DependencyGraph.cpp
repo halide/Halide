@@ -25,7 +25,7 @@ void DependencyGraph::build_graph() {
         DependencyNode node;
         node.nodeID = dependency_graph.size();
         node.nodeName = kv.first;
-        node.nodeDependsOn = vector<const string>(kv.second);
+        node.nodeDependsOn = vector<string>(kv.second);
         dependency_graph.push_back(node);
     }
 }
@@ -40,7 +40,7 @@ DependencyNode DependencyGraph::get_node(const string &name) {
     DependencyNode node;
     node.nodeID = dependency_graph.size();
     node.nodeName = name;
-    node.nodeDependsOn = vector<const string>();
+    node.nodeDependsOn = vector<string>();
     dependency_graph.push_back(node);
     return node;
 }
@@ -105,6 +105,9 @@ string DependencyGraph::get_unique_name(const string &name) const {
 }
 
 void DependencyGraph::add_dependency(const string &variable, const string &dependency) {
+    if (variable == "") {
+        return;
+    }
     auto it = dependencies.find(variable);
     if (it == dependencies.end()) {
         m_assert(false, "current_variable should be already in the map");
@@ -115,13 +118,13 @@ void DependencyGraph::add_dependency(const string &variable, const string &depen
 void DependencyGraph::add_empty_dependency(const string &variable) {
     auto it = dependencies.find(variable);
     if (it == dependencies.end()) {
-        dependencies[variable] = vector<const string>{};
+        dependencies[variable] = vector<string>{};
     } else {
         m_assert(false, "variable already exists");
     }
 }
 
-vector<const string> DependencyGraph::get_dependencies(const string &variable) {
+vector<string> DependencyGraph::get_dependencies(const string &variable) {
     auto it = dependencies.find(variable);
     if (it == dependencies.end()) {
         m_assert(false, "variable not found in `dependencies`");
@@ -189,3 +192,18 @@ Stmt DependencyGraph::visit(const LetStmt *op) {
 
     return op;
 }
+
+/*Stmt DependencyGraph::visit(const Store *op) {
+    string previous_variable = current_variable;
+
+    current_variable = op->name;
+    auto it = dependencies.find(current_variable);
+    if (it == dependencies.end()) {
+        add_empty_dependency(current_variable);
+    }
+    mutate(op->value);
+
+    current_variable = previous_variable;
+
+    return op;
+}*/
