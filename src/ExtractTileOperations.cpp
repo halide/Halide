@@ -208,6 +208,18 @@ Tile<3> get_3d_tile_index(const Expr &e) {
     return {true, base, {x_stride, 0, r_stride}, {x_tile, y_tile, r_tile}};
 }
 
+/**
+ * \brief Get the 3d rhs tile index configuration
+ *
+ * \param e index expression
+ * \param element_width the width of the elements, 1 for u8/i8, 2 for bf16
+ * \return Tile<3> the tile configuration found
+ *
+ * The pattern which is getting matched looks roughly like
+ * `broadcast(ramp(0, 1, r), x*y) / broadcast(4, x*y*r) + optional(broadcast(base, x*y*r)) * broadcast(8, x*y*r) +
+ *  broadcast(ramp(0, 1, r), x*y) % broadcast(4, x*y*r) +
+ *  broadcast(ramp(broadcast(_, r), broadcast(4, r), x) , y)`
+ */
 Tile<3> get_3d_rhs_tile_index(const Expr &e, int element_width) {
     const auto *sub = e.as<Sub>();
     const Add *add_lhs = nullptr;
@@ -227,7 +239,7 @@ Tile<3> get_3d_rhs_tile_index(const Expr &e, int element_width) {
     // The right hand side of the add expression is used for retrieving the dimensions of the matrix.
     // obtain the x, y, r dimensions
     // this expr looks like below, the shape of `add_lhs->a` can be seen further down below
-    // broadcast(ramp(0, 1, r), x*y) % broadcast(4, x*y*r) + broadcast(ramp(broadcast(_, r), broadcast(4, r), x) , y)
+    // broadcast(ramp(0, 1, r), x*y) % broadcast(4, x*y*r) + broadcast(ramp(broadcast(base, r), broadcast(4, r), x) , y)
     const Add *dim_expr = add_lhs->b.as<Add>();
 
     if (!dim_expr) {
