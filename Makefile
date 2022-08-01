@@ -1915,6 +1915,15 @@ quiet_correctness_%: $(BIN_DIR)/correctness_%
 	@-mkdir -p $(TMP_DIR)
 	@cd $(TMP_DIR) ; ( $(CURDIR)/$< 2>stderr_$*.txt > stdout_$*.txt && echo -n . ) || ( echo ; echo FAILED TEST: $* ; cat stdout_$*.txt stderr_$*.txt ; false )
 
+quiet_correctness_load_plugin: $(BIN_DIR)/correctness_load_plugin autoschedulers
+	@-mkdir -p $(TMP_DIR)
+	@cd $(TMP_DIR) ; ( $(CURDIR)/$< \
+		$(ROOT_DIR)/$(DISTRIB_DIR)/lib/libautoschedule_adams2019.$(SHARED_EXT) \
+		$(ROOT_DIR)/$(DISTRIB_DIR)/lib/libautoschedule_li2018.$(SHARED_EXT) \
+		$(ROOT_DIR)/$(DISTRIB_DIR)/lib/libautoschedule_mullapudi2016.$(SHARED_EXT) \
+		2>stderr_$*.txt > stdout_$*.txt && echo -n . ) || ( echo ; echo FAILED TEST: $* ; cat stdout_$*.txt stderr_$*.txt ; false )
+	@-echo
+
 valgrind_%: $(BIN_DIR)/correctness_%
 	@-mkdir -p $(TMP_DIR)
 	cd $(TMP_DIR) ; valgrind --error-exitcode=-1 $(CURDIR)/$<
