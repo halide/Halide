@@ -135,8 +135,8 @@ void DefaultCostModel::enqueue(const Internal::Autoscheduler::FunctionDAG &dag,
 void DefaultCostModel::enqueue(int ns, Runtime::Buffer<float> *schedule_feats, double *cost_ptr) {
     num_stages = ns;
 
-    // We know the most stages that will ever be enqueued from the schedule features
-    internal_assert(pipeline_feat_queue.data() && "Call set_schedule_features before calling enqueue\n");
+    // We know the most stages that will ever be enqueued from the pipeline features
+    internal_assert(pipeline_feat_queue.data() && "Call set_pipeline_features before calling enqueue\n");
     const int max_num_stages = pipeline_feat_queue.dim(2).extent();
     internal_assert(num_stages <= max_num_stages)
         << "schedule features has more stages (" << num_stages

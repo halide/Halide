@@ -913,6 +913,30 @@ int main(int argc, char **argv) {
         }
     }
 
+    // A trivial pipeline that just loads from a LUT
+    if (true) {
+        Pipeline p1;
+        Pipeline p2;
+        for (int test_condition = 0; test_condition < 2; test_condition++) {
+            Buffer<uint8_t> lut(256);
+            Func f;
+            f(x) = lut(x);
+
+            f.set_estimate(x, 0, 256);
+
+            if (test_condition) {
+                p2 = Pipeline(f);
+            } else {
+                p1 = Pipeline(f);
+            }
+        }
+
+        if (!test_caching(p1, p2, target)) {
+            std::cerr << "Caching check failed on stencil chain" << std::endl;
+            return 1;
+        }
+    }
+
 #ifdef HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
     // Reset environment variables.
     set_env_variable("HL_DISABLE_MEMOIZED_FEATURES", cache_features, /* overwrite */ 1);
