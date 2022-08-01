@@ -12,7 +12,7 @@ int main(int argc, char **argv) {
     // Use a fixed target for the analysis to get consistent results from this test.
     Target target("x86-64-linux-sse41-avx-avx2");
 
-    const char* autoscheduler_names[3] = {
+    const char *autoscheduler_names[3] = {
         "Adams2019",
         "Li2018",
         "Mullapudi2016",
@@ -30,8 +30,8 @@ int main(int argc, char **argv) {
         f.set_estimates({{0, 256}, {0, 256}});
         Pipeline p(f);
 
-        printf("Loading: %s\n", argv[i+1]);
-        load_plugin(argv[i+1]);
+        printf("Loading: %s\n", argv[i + 1]);
+        load_plugin(argv[i + 1]);
 
         p.apply_autoscheduler(target, {autoscheduler_names[i], {}});
     }
