@@ -19,8 +19,9 @@ HALIDE_RPATH_FOR_LIB += '-Wl,-rpath,$$ORIGIN'
 endif
 
 # Be sure *not* to include libHalide in the link steps here; that can cause misbehavior
-# on OSX systems in certain situations.
-$(BIN)/libautoschedule_li2018.$(PLUGIN_EXT): $(SRC)/GradientAutoscheduler.cpp
+# on OSX systems in certain situations -- note that $(LIB_HALIDE) is an order-only dep,
+# to ensure that (eg) Halide.h is built before this.
+$(BIN)/libautoschedule_li2018.$(PLUGIN_EXT): $(SRC)/GradientAutoscheduler.cpp | $(LIB_HALIDE)
 	@mkdir -p $(@D)
 	$(CXX) -shared $(USE_EXPORT_DYNAMIC) -fPIC -fvisibility=hidden -fvisibility-inlines-hidden $(CXXFLAGS) $(OPTIMIZE) $^ -o $@ $(HALIDE_SYSTEM_LIBS) $(HALIDE_RPATH_FOR_LIB)
 

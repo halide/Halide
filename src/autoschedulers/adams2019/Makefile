@@ -59,9 +59,11 @@ $(BIN)/cost_model/%.a: $(BIN)/cost_model.generator
 # undefined rather than dependent on libHalide.so.
 #
 # Also, be sure *not* to include libHalide in the link steps here; that can cause misbehavior
-# on OSX systems in certain situations.
-$(BIN)/libautoschedule_adams2019.$(PLUGIN_EXT): $(SRC)/AutoSchedule.cpp \
+# on OSX systems in certain situations -- note that $(LIB_HALIDE) is an order-only dep,
+# to ensure that (eg) Halide.h is built before this.
+$(BIN)/libautoschedule_adams2019.$(PLUGIN_EXT): \
 				$(COMMON_DIR)/ASLog.cpp \
+				$(SRC)/AutoSchedule.cpp \
 				$(SRC)/Cache.h \
 				$(SRC)/Cache.cpp \
 				$(SRC)/DefaultCostModel.h \
@@ -80,7 +82,8 @@ $(BIN)/libautoschedule_adams2019.$(PLUGIN_EXT): $(SRC)/AutoSchedule.cpp \
 				$(SRC)/PerfectHashMap.h \
 				$(AUTOSCHED_WEIGHT_OBJECTS) \
 				$(AUTOSCHED_COST_MODEL_LIBS) \
-				$(BIN)/auto_schedule_runtime.a
+				$(BIN)/auto_schedule_runtime.a \
+				| $(LIB_HALIDE)
 	@mkdir -p $(@D)
 	$(CXX) -shared $(USE_EXPORT_DYNAMIC) -fPIC -fvisibility=hidden -fvisibility-inlines-hidden $(CXXFLAGS) $(OPTIMIZE) -I $(BIN)/cost_model $(filter-out %.h $(LIBHALIDE_LDFLAGS),$^) -o $@ $(HALIDE_SYSTEM_LIBS) $(HALIDE_RPATH_FOR_LIB)
 
