@@ -74,7 +74,9 @@ PointerTable::PointerTable(void *user_context, size_t initial_capacity, const Sy
     : allocator(sma) {
     halide_abort_if_false(user_context, allocator.allocate != nullptr);
     halide_abort_if_false(user_context, allocator.deallocate != nullptr);
-    if (initial_capacity) { reserve(user_context, initial_capacity); }
+    if (initial_capacity) {
+        reserve(user_context, initial_capacity);
+    }
 }
 
 PointerTable::PointerTable(const PointerTable &other)
@@ -122,7 +124,9 @@ PointerTable &PointerTable::operator=(const PointerTable &other) {
 }
 
 bool PointerTable::operator==(const PointerTable &other) const {
-    if (count != other.count) { return false; }
+    if (count != other.count) {
+        return false;
+    }
     return memcmp(this->ptr, other.ptr, this->size() * sizeof(void *)) == 0;
 }
 
