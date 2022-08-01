@@ -292,10 +292,21 @@ void CodeGen_LLVM::initialize_llvm() {
     });
 }
 
+void CodeGen_LLVM::irbuilder_inserter_callback(llvm::Instruction *I) {
+    if (auto *load = dyn_cast<LoadInst>(I)) {
+        // All loads are well-defined, do not have any undef bits,
+        // and are not poison in execution.
+        I->setMetadata(LLVMContext::MD_noundef,
+                       llvm::MDNode::get(I->getContext(), {}));
+    }
+}
+
 void CodeGen_LLVM::init_context() {
     // Ensure our IRBuilder is using the current context.
     delete builder;
-    builder = new IRBuilder<>(*context);
+    builder =
+        new IRBuilderTy(*context, ConstantFolder(),
+                        IRBuilderCallbackInserter(irbuilder_inserter_callback));
 
     // Branch weights for very likely branches
     llvm::MDBuilder md_builder(*context);
@@ -3184,7 +3195,7 @@ void CodeGen_LLVM::visit(const Call *op) {
         llvm::DataLayout d(module.get());
         value = ConstantInt::get(i32_t, (int)d.getTypeAllocSize(halide_buffer_t_type));
     } else if (op->is_intrinsic(Call::strict_float)) {
-        IRBuilder<llvm::ConstantFolder, llvm::IRBuilderDefaultInserter>::FastMathFlagGuard guard(*builder);
+        IRBuilderTy::FastMathFlagGuard guard(*builder);
         llvm::FastMathFlags safe_flags;
         safe_flags.clear();
         builder->setFastMathFlags(safe_flags);
@@ -3240,7 +3251,7 @@ void CodeGen_LLVM::visit(const Call *op) {
          * treated as strict. Note that compilation may still be in
          * fast-math mode due to global options, but that's ok due to
          * the aforementioned special casing. */
-        IRBuilder<llvm::ConstantFolder, llvm::IRBuilderDefaultInserter>::FastMathFlagGuard guard(*builder);
+        IRBuilderTy::FastMathFlagGuard guard(*builder);
         llvm::FastMathFlags safe_flags;
         safe_flags.clear();
         builder->setFastMathFlags(safe_flags);
@@ -3251,7 +3262,7 @@ void CodeGen_LLVM::visit(const Call *op) {
                (op->name == "is_inf_f32" || op->name == "is_inf_f64" || op->name == "is_inf_f16")) {
         internal_assert(op->args.size() == 1);
 
-        IRBuilder<llvm::ConstantFolder, llvm::IRBuilderDefaultInserter>::FastMathFlagGuard guard(*builder);
+        IRBuilderTy::FastMathFlagGuard guard(*builder);
         llvm::FastMathFlags safe_flags;
         safe_flags.clear();
         builder->setFastMathFlags(safe_flags);
@@ -3267,7 +3278,7 @@ void CodeGen_LLVM::visit(const Call *op) {
         internal_assert(op->args.size() == 1);
         internal_assert(op->args[0].type().is_float());
 
-        IRBuilder<llvm::ConstantFolder, llvm::IRBuilderDefaultInserter>::FastMathFlagGuard guard(*builder);
+        IRBuilderTy::FastMathFlagGuard guard(*builder);
         llvm::FastMathFlags safe_flags;
         safe_flags.clear();
         builder->setFastMathFlags(safe_flags);

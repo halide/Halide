@@ -19,7 +19,7 @@ namespace llvm {
 class ConstantFolder;
 class ElementCount;
 class Function;
-class IRBuilderDefaultInserter;
+class IRBuilderCallbackInserter;
 class LLVMContext;
 class Module;
 class StructType;

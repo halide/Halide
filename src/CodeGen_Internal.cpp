@@ -711,6 +711,16 @@ void set_function_attributes_from_halide_target_options(llvm::Function &fn) {
     // But asserts and external calls *might* abort.
     fn.setMustProgress();
 
+    // All parameters and return values are well-defined,
+    // do not have any undef bits, and are not poison in execution.
+    if (!fn.getReturnType()->isVoidTy())
+        fn.addRetAttr(Attribute::NoUndef);
+    for (Argument &A : fn.args()) {
+        if (!A.hasAttribute(Attribute::ImmArg)) {
+            A.addAttr(Attribute::NoUndef);
+        }
+    }
+
     // Turn off approximate reciprocals for division. It's too
     // inaccurate even for us.
     fn.addFnAttr("reciprocal-estimates", "none");

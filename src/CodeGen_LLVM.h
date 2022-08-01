@@ -12,7 +12,7 @@ class Value;
 class Module;
 class Function;
 class FunctionType;
-class IRBuilderDefaultInserter;
+class IRBuilderCallbackInserter;
 class ConstantFolder;
 template<typename, typename>
 class IRBuilder;
@@ -159,7 +159,10 @@ protected:
     std::unique_ptr<llvm::Module> module;
     llvm::Function *function;
     llvm::LLVMContext *context;
-    llvm::IRBuilder<llvm::ConstantFolder, llvm::IRBuilderDefaultInserter> *builder;
+    using IRBuilderTy =
+        llvm::IRBuilder<llvm::ConstantFolder, llvm::IRBuilderCallbackInserter>;
+    static void irbuilder_inserter_callback(llvm::Instruction *I);
+    IRBuilderTy *builder;
     llvm::Value *value;
     llvm::MDNode *very_likely_branch;
     llvm::MDNode *default_fp_math_md;
