@@ -1588,7 +1588,7 @@ auto bitwise_xor(A &&a, B &&b) noexcept -> Intrin<decltype(pattern_arg(a)), decl
     return {Call::bitwise_xor, pattern_arg(a), pattern_arg(b)};
 }
 template<typename A, typename B>
-HALIDE_ALWAYS_INLINE auto operator^(A &&a, B &&b) noexcept -> auto {
+HALIDE_ALWAYS_INLINE auto operator^(A &&a, B &&b) noexcept -> auto{
     assert_is_lvalue_if_expr<A>();
     assert_is_lvalue_if_expr<B>();
     return bitwise_xor(a, b);
@@ -1598,7 +1598,7 @@ auto bitwise_and(A &&a, B &&b) noexcept -> Intrin<decltype(pattern_arg(a)), decl
     return {Call::bitwise_and, pattern_arg(a), pattern_arg(b)};
 }
 template<typename A, typename B>
-HALIDE_ALWAYS_INLINE auto operator&(A &&a, B &&b) noexcept -> auto {
+HALIDE_ALWAYS_INLINE auto operator&(A &&a, B &&b) noexcept -> auto{
     assert_is_lvalue_if_expr<A>();
     assert_is_lvalue_if_expr<B>();
     return bitwise_and(a, b);
@@ -1608,7 +1608,7 @@ auto bitwise_or(A &&a, B &&b) noexcept -> Intrin<decltype(pattern_arg(a)), declt
     return {Call::bitwise_or, pattern_arg(a), pattern_arg(b)};
 }
 template<typename A, typename B>
-HALIDE_ALWAYS_INLINE auto operator|(A &&a, B &&b) noexcept -> auto {
+HALIDE_ALWAYS_INLINE auto operator|(A &&a, B &&b) noexcept -> auto{
     assert_is_lvalue_if_expr<A>();
     assert_is_lvalue_if_expr<B>();
     return bitwise_or(a, b);
