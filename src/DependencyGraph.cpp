@@ -10,14 +10,12 @@ string DependencyGraph::generate_dependency_graph(const Module &m) {
     traverse(m);
     generate_html();
 
-    cout << html.str() << endl << endl;
     return html.str();
 }
 string DependencyGraph::generate_dependency_graph(const Stmt &stmt) {
     mutate(stmt);
     generate_html();
 
-    cout << html.str() << endl << endl;
     return html.str();
 }
 

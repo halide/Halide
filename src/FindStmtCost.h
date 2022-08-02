@@ -76,7 +76,7 @@ public:
 
     // calculates the total costs and depth of a node
     int get_depth(const IRNode *node) const;
-    int get_computation_cost(const IRNode *node) const;
+    int calculate_computation_cost(const IRNode *node) const;
     int get_data_movement_cost(const IRNode *node) const;
 
 private:
@@ -88,7 +88,7 @@ private:
     void traverse(const Module &m);
 
     // gets/sets cost from `stmt_cost` map
-    int get_cost(const IRNode *node) const;
+    int get_computation_cost(const IRNode *node) const;
     void set_costs(const IRNode *node, int computation_cost, int data_movement_cost);
 
     // calculates cost of a single StmtCost object
@@ -148,6 +148,8 @@ private:
     Stmt visit(const IfThenElse *op) override;
     Stmt visit(const Evaluate *op) override;
     Stmt visit(const Atomic *op) override;
+
+    void print_node(const IRNode *node) const;
 };
 
 #endif  // FINDSTMTCOST_H

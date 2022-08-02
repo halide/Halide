@@ -21,6 +21,7 @@ void CostPreProcessor::traverse(const Module &m) {
 int CostPreProcessor::get_lock_access_count(const string name) const {
     auto it = lock_access_counts.find(name);
     if (it == lock_access_counts.end()) {
+        cout << "name: " << name << endl;
         m_assert(false, "name not found in `lock_access_counts`");
         return 0;
     }
@@ -74,7 +75,7 @@ int FindStmtCost::get_computation_range(const IRNode *op) const {
 
     // divide max cost by 8 and round up to get ranges
     int range_size = (max_cost / NUMBER_COST_COLORS) + 1;
-    int cost = get_computation_cost(op);
+    int cost = calculate_computation_cost(op);
     int range = cost / range_size;
     return range;
 }
@@ -98,30 +99,63 @@ int FindStmtCost::get_data_movement_range(const IRNode *op) const {
 int FindStmtCost::get_depth(const IRNode *node) const {
     auto it = stmt_cost.find(node);
     if (it == stmt_cost.end()) {
-        m_assert(false, "node not found in stmt_cost");
-        return 0;
+
+        // sometimes, these constant values are created on the whim in
+        // StmtToViz.cpp - return 1 to avoid crashing
+        // TODO: what should this depth be?
+        IRNodeType type = node->node_type;
+        if (type == IRNodeType::IntImm || type == IRNodeType::UIntImm ||
+            type == IRNodeType::FloatImm || type == IRNodeType::StringImm) {
+            return 1;
+        } else {
+            print_node(node);
+            m_assert(false, "node not found in stmt_cost");
+            return 0;
+        }
     }
 
     StmtCost cost_node = it->second;
 
     return cost_node.depth;
 }
-int FindStmtCost::get_computation_cost(const IRNode *node) const {
+int FindStmtCost::calculate_computation_cost(const IRNode *node) const {
     auto it = stmt_cost.find(node);
-    if (it == stmt_cost.end()) {
-        m_assert(false, "node not found in stmt_cost");
-        return 0;
-    }
+    StmtCost cost_node;
 
-    StmtCost cost_node = it->second;
+    if (it == stmt_cost.end()) {
+        // sometimes, these constant values are created on the whim in
+        // StmtToViz.cpp - set cost_node to be fresh StmtCost to avoid crashing
+        // TODO: what should this depth be?
+        IRNodeType type = node->node_type;
+        if (type == IRNodeType::IntImm || type == IRNodeType::UIntImm ||
+            type == IRNodeType::FloatImm || type == IRNodeType::StringImm) {
+            cost_node = StmtCost{1, 1, 0};
+        } else {
+            print_node(node);
+            m_assert(false, "node not found in stmt_cost");
+            return 0;
+        }
+    } else {
+        cost_node = it->second;
+    }
 
     return calculate_cost(cost_node);
 }
 int FindStmtCost::get_data_movement_cost(const IRNode *node) const {
     auto it = stmt_cost.find(node);
     if (it == stmt_cost.end()) {
-        m_assert(false, "node not found in stmt_cost");
-        return 0;
+
+        // sometimes, these constant values are created on the whim in
+        // StmtToViz.cpp - return 0 to avoid crashing
+        IRNodeType type = node->node_type;
+        if (type == IRNodeType::IntImm || type == IRNodeType::UIntImm ||
+            type == IRNodeType::FloatImm || type == IRNodeType::StringImm) {
+            return 0;
+        } else {
+            print_node(node);
+            m_assert(false, "node not found in stmt_cost");
+            return 0;
+        }
     }
 
     return it->second.data_movement_cost;
@@ -141,11 +175,21 @@ void FindStmtCost::traverse(const Module &m) {
     return;
 }
 
-int FindStmtCost::get_cost(const IRNode *node) const {
+int FindStmtCost::get_computation_cost(const IRNode *node) const {
     auto it = stmt_cost.find(node);
     if (it == stmt_cost.end()) {
-        m_assert(false, "node not found in stmt_cost");
-        return 0;
+
+        // sometimes, these constant values are created on the whim in
+        // StmtToViz.cpp - return 1 to avoid crashing
+        IRNodeType type = node->node_type;
+        if (type == IRNodeType::IntImm || type == IRNodeType::UIntImm ||
+            type == IRNodeType::FloatImm || type == IRNodeType::StringImm) {
+            return 1;
+        } else {
+            print_node(node);
+            m_assert(false, "node not found in stmt_cost");
+            return 0;
+        }
     }
     return it->second.computation_cost;
 }
@@ -189,7 +233,7 @@ void FindStmtCost::visit_binary_op(const IRNode *op, const Expr &a, const Expr &
     mutate(a);
     mutate(b);
 
-    int tempVal = get_cost(a.get()) + get_cost(b.get());
+    int tempVal = get_computation_cost(a.get()) + get_computation_cost(b.get());
     int dataMovementCost = get_data_movement_cost(a.get()) + get_data_movement_cost(b.get());
     set_costs(op, 1 + tempVal, dataMovementCost);
 }
@@ -217,7 +261,7 @@ Expr FindStmtCost::visit(const StringImm *op) {
 Expr FindStmtCost::visit(const Cast *op) {
     mutate(op->value);
 
-    int tempVal = get_cost(op->value.get());
+    int tempVal = get_computation_cost(op->value.get());
     int dataMovementCost = get_data_movement_cost(op->value.get());
     set_costs(op, 1 + tempVal, dataMovementCost);
 
@@ -308,7 +352,7 @@ Expr FindStmtCost::visit(const Or *op) {
 Expr FindStmtCost::visit(const Not *op) {
     mutate(op->a);
 
-    int tempVal = get_cost(op->a.get());
+    int tempVal = get_computation_cost(op->a.get());
     int dataMovementCost = get_data_movement_cost(op->a.get());
     set_costs(op, 1 + tempVal, dataMovementCost);
 
@@ -321,8 +365,9 @@ Expr FindStmtCost::visit(const Select *op) {
     mutate(op->true_value);
     mutate(op->false_value);
 
-    int tempVal = get_cost(op->condition.get()) + get_cost(op->true_value.get()) +
-                  get_cost(op->false_value.get());
+    int tempVal = get_computation_cost(op->condition.get()) +
+                  get_computation_cost(op->true_value.get()) +
+                  get_computation_cost(op->false_value.get());
     int dataMovementCost = get_data_movement_cost(op->condition.get()) +
                            get_data_movement_cost(op->true_value.get()) +
                            get_data_movement_cost(op->false_value.get());
@@ -339,7 +384,7 @@ Expr FindStmtCost::visit(const Load *op) {
     mutate(op->predicate);
     mutate(op->index);
 
-    int tempVal = get_cost(op->predicate.get()) + get_cost(op->index.get());
+    int tempVal = get_computation_cost(op->predicate.get()) + get_computation_cost(op->index.get());
     int dataMovementCost =
         get_data_movement_cost(op->predicate.get()) + get_data_movement_cost(op->index.get());
     dataMovementCost += LOAD_COST;
@@ -353,7 +398,7 @@ Expr FindStmtCost::visit(const Ramp *op) {
     mutate(op->base);
     mutate(op->stride);
 
-    int tempVal = get_cost(op->base.get()) + get_cost(op->stride.get());
+    int tempVal = get_computation_cost(op->base.get()) + get_computation_cost(op->stride.get());
     int dataMovementCost =
         get_data_movement_cost(op->base.get()) + get_data_movement_cost(op->stride.get());
     set_costs(op, 1 + tempVal, dataMovementCost);
@@ -364,7 +409,7 @@ Expr FindStmtCost::visit(const Ramp *op) {
 Expr FindStmtCost::visit(const Broadcast *op) {
     mutate(op->value);
 
-    int tempVal = get_cost(op->value.get());
+    int tempVal = get_computation_cost(op->value.get());
     int dataMovementCost = get_data_movement_cost(op->value.get());
     set_costs(op, 1 + tempVal, dataMovementCost);
 
@@ -376,8 +421,8 @@ Expr FindStmtCost::visit(const Call *op) {
         TODO: take into account this message from Maaz:
 
                 > there are instructions in Halide IR that are not compute instructions but
-                  data-movement instructions. Such as Shuffle::interleave or Shuffle::concatenate. I
-                  would ignore this for now but you should know about them.
+                  data-movement instructions. Such as Shuffle::interleave or
+       Shuffle::concatenate. I would ignore this for now but you should know about them.
 
     */
     int tempVal = 0;
@@ -385,7 +430,7 @@ Expr FindStmtCost::visit(const Call *op) {
 
     for (const auto &arg : op->args) {
         mutate(arg);
-        tempVal += get_cost(arg.get());
+        tempVal += get_computation_cost(arg.get());
         dataMovementCost += get_data_movement_cost(arg.get());
     }
 
@@ -396,7 +441,7 @@ Expr FindStmtCost::visit(const Call *op) {
             for (const auto &arg : f.extern_arguments()) {
                 if (arg.is_expr()) {
                     mutate(arg.expr);
-                    tempVal += get_cost(arg.expr.get());
+                    tempVal += get_computation_cost(arg.expr.get());
                     dataMovementCost += get_data_movement_cost(arg.expr.get());
                 }
             }
@@ -417,7 +462,7 @@ Expr FindStmtCost::visit(const Let *op) {
     mutate(op->value);
     mutate(op->body);
 
-    int tempVal = get_cost(op->value.get()) + get_cost(op->body.get());
+    int tempVal = get_computation_cost(op->value.get()) + get_computation_cost(op->body.get());
     int dataMovementCost =
         get_data_movement_cost(op->value.get()) + get_data_movement_cost(op->body.get());
     set_costs(op, tempVal, dataMovementCost);
@@ -433,7 +478,7 @@ Expr FindStmtCost::visit(const Shuffle *op) {
 
     for (const Expr &i : op->vectors) {
         mutate(i);
-        tempVal += get_cost(i.get());
+        tempVal += get_computation_cost(i.get());
         dataMovementCost += get_data_movement_cost(i.get());
     }
 
@@ -445,7 +490,7 @@ Expr FindStmtCost::visit(const Shuffle *op) {
 Expr FindStmtCost::visit(const VectorReduce *op) {
     mutate(op->value);
 
-    int tempVal = get_cost(op->value.get());
+    int tempVal = get_computation_cost(op->value.get());
     int countCost = op->value.type().lanes() - 1;
     int dataMovementCost = get_data_movement_cost(op->value.get());
     set_costs(op, tempVal + countCost, dataMovementCost);
@@ -457,7 +502,7 @@ Stmt FindStmtCost::visit(const LetStmt *op) {
     mutate(op->value);
     mutate(op->body);
 
-    int tempVal = get_cost(op->value.get());
+    int tempVal = get_computation_cost(op->value.get());
     int dataMovementCost = get_data_movement_cost(op->value.get());
     set_costs(op, 1 + tempVal, dataMovementCost);
 
@@ -468,7 +513,8 @@ Stmt FindStmtCost::visit(const AssertStmt *op) {
     mutate(op->condition);
     mutate(op->message);
 
-    int tempVal = get_cost(op->condition.get()) + get_cost(op->message.get());
+    int tempVal =
+        get_computation_cost(op->condition.get()) + get_computation_cost(op->message.get());
     int dataMovementCost =
         get_data_movement_cost(op->condition.get()) + get_data_movement_cost(op->message.get());
     set_costs(op, 1 + tempVal, dataMovementCost);
@@ -479,7 +525,7 @@ Stmt FindStmtCost::visit(const AssertStmt *op) {
 Stmt FindStmtCost::visit(const ProducerConsumer *op) {
     mutate(op->body);
 
-    int tempVal = get_cost(op->body.get());
+    int tempVal = get_computation_cost(op->body.get());
     int dataMovementCost = get_data_movement_cost(op->body.get());
     set_costs(op, tempVal, dataMovementCost);
 
@@ -497,7 +543,7 @@ Stmt FindStmtCost::visit(const For *op) {
 
     current_loop_depth -= 1;
 
-    int bodyCost = get_cost(op->body.get());
+    int bodyCost = get_computation_cost(op->body.get());
     int dataMovementCost = get_data_movement_cost(op->body.get());
 
     // TODO: how to take into account the different types of for loops?
@@ -521,9 +567,9 @@ Stmt FindStmtCost::visit(const Acquire *op) {
 
                 * depends on contention (how many other accesses are there to this
                   particular semaphore?)
-                * need to have separate FindStmtCost::visitor that FindStmtCost::visits everything
-       and es the number of times each lock is accessed, and also keep track of the depth of said
-       lock (the deeper, the more times it will be accessed)
+                * need to have separate FindStmtCost::visitor that FindStmtCost::visits
+       everything and es the number of times each lock is accessed, and also keep track of the
+       depth of said lock (the deeper, the more times it will be accessed)
 
                 * do we need to recurse on body???
     */
@@ -539,8 +585,8 @@ Stmt FindStmtCost::visit(const Acquire *op) {
     mutate(op->semaphore);
     mutate(op->count);
     mutate(op->body);
-    int tempVal =
-        get_cost(op->semaphore.get()) + get_cost(op->count.get()) + get_cost(op->body.get());
+    int tempVal = get_computation_cost(op->semaphore.get()) +
+                  get_computation_cost(op->count.get()) + get_computation_cost(op->body.get());
     int dataMovementCost = get_data_movement_cost(op->semaphore.get()) +
                            get_data_movement_cost(op->count.get()) +
                            get_data_movement_cost(op->body.get());
@@ -558,8 +604,8 @@ Stmt FindStmtCost::visit(const Store *op) {
     uint16_t lanes = op->value.type().lanes();
     int scalingFactor = get_scaling_factor(bits, lanes);
 
-    int tempVal =
-        get_cost(op->predicate.get()) + get_cost(op->value.get()) + get_cost(op->index.get());
+    int tempVal = get_computation_cost(op->predicate.get()) +
+                  get_computation_cost(op->value.get()) + get_computation_cost(op->index.get());
     int dataMovementCost = get_data_movement_cost(op->predicate.get()) +
                            get_data_movement_cost(op->value.get()) +
                            get_data_movement_cost(op->index.get());
@@ -571,18 +617,18 @@ Stmt FindStmtCost::visit(const Store *op) {
 }
 
 Stmt FindStmtCost::visit(const Provide *op) {
-    int tempVal = get_cost(op->predicate.get());
-    int dataMovementCost = get_computation_cost(op->predicate.get());
+    int tempVal = get_computation_cost(op->predicate.get());
+    int dataMovementCost = get_data_movement_cost(op->predicate.get());
 
     for (const auto &value : op->values) {
         mutate(value);
-        tempVal += get_cost(value.get());
-        dataMovementCost += get_computation_cost(value.get());
+        tempVal += get_computation_cost(value.get());
+        dataMovementCost += get_data_movement_cost(value.get());
     }
     for (const auto &arg : op->args) {
         mutate(arg);
-        tempVal += get_cost(arg.get());
-        dataMovementCost += get_computation_cost(arg.get());
+        tempVal += get_computation_cost(arg.get());
+        dataMovementCost += get_data_movement_cost(arg.get());
     }
 
     set_costs(op, tempVal, dataMovementCost);
@@ -609,22 +655,22 @@ Stmt FindStmtCost::visit(const Allocate *op) {
 
     for (const auto &extent : op->extents) {
         mutate(extent);
-        tempVal += get_cost(extent.get());
+        tempVal += get_computation_cost(extent.get());
         dataMovementCost += get_data_movement_cost(extent.get());
     }
 
     mutate(op->condition);
-    tempVal += get_cost(op->condition.get());
+    tempVal += get_computation_cost(op->condition.get());
     dataMovementCost += get_data_movement_cost(op->condition.get());
 
     if (op->new_expr.defined()) {
         mutate(op->new_expr);
-        tempVal += get_cost(op->new_expr.get());
+        tempVal += get_computation_cost(op->new_expr.get());
         dataMovementCost += get_data_movement_cost(op->new_expr.get());
     }
 
     mutate(op->body);
-    tempVal += get_cost(op->body.get());
+    tempVal += get_computation_cost(op->body.get());
     dataMovementCost += get_data_movement_cost(op->body.get());
 
     set_costs(op, tempVal, dataMovementCost);
@@ -648,14 +694,14 @@ Stmt FindStmtCost::visit(const Realize *op) {
     for (const auto &bound : op->bounds) {
         mutate(bound.min);
         mutate(bound.extent);
-        tempVal += get_cost(bound.min.get()) + get_cost(bound.extent.get());
+        tempVal += get_computation_cost(bound.min.get()) + get_computation_cost(bound.extent.get());
         dataMovementCost +=
             get_data_movement_cost(bound.min.get()) + get_data_movement_cost(bound.extent.get());
     }
 
     mutate(op->condition);
     mutate(op->body);
-    tempVal += get_cost(op->condition.get()) + get_cost(op->body.get());
+    tempVal += get_computation_cost(op->condition.get()) + get_computation_cost(op->body.get());
     dataMovementCost +=
         get_data_movement_cost(op->condition.get()) + get_data_movement_cost(op->body.get());
 
@@ -675,14 +721,14 @@ Stmt FindStmtCost::visit(const Prefetch *op) {
         mutate(bound.min);
         mutate(bound.extent);
 
-        tempVal += get_cost(bound.min.get()) + get_cost(bound.extent.get());
+        tempVal += get_computation_cost(bound.min.get()) + get_computation_cost(bound.extent.get());
         dataMovementCost +=
             get_data_movement_cost(bound.min.get()) + get_data_movement_cost(bound.extent.get());
     }
 
     mutate(op->condition);
     mutate(op->body);
-    tempVal += get_cost(op->condition.get()) + get_cost(op->body.get());
+    tempVal += get_computation_cost(op->condition.get()) + get_computation_cost(op->body.get());
     dataMovementCost +=
         get_data_movement_cost(op->condition.get()) + get_data_movement_cost(op->body.get());
 
@@ -697,12 +743,12 @@ Stmt FindStmtCost::visit(const Block *op) {
     int dataMovementCost = 0;
 
     mutate(op->first);
-    tempVal += get_cost(op->first.get());
+    tempVal += get_computation_cost(op->first.get());
     dataMovementCost += get_data_movement_cost(op->first.get());
 
     if (op->rest.defined()) {
         mutate(op->rest);
-        tempVal += get_cost(op->rest.get());
+        tempVal += get_computation_cost(op->rest.get());
         dataMovementCost += get_data_movement_cost(op->rest.get());
     }
 
@@ -717,12 +763,12 @@ Stmt FindStmtCost::visit(const Fork *op) {
     int dataMovementCost = 0;
 
     mutate(op->first);
-    tempVal += get_cost(op->first.get());
+    tempVal += get_computation_cost(op->first.get());
     dataMovementCost += get_data_movement_cost(op->first.get());
 
     if (op->rest.defined()) {
         mutate(op->rest);
-        tempVal += get_cost(op->rest.get());
+        tempVal += get_computation_cost(op->rest.get());
         dataMovementCost += get_data_movement_cost(op->rest.get());
     }
 
@@ -735,13 +781,14 @@ Stmt FindStmtCost::visit(const IfThenElse *op) {
     mutate(op->condition);
     mutate(op->then_case);
 
-    int tempVal = get_cost(op->condition.get()) + get_cost(op->then_case.get());
+    int tempVal =
+        get_computation_cost(op->condition.get()) + get_computation_cost(op->then_case.get());
     int dataMovementCost =
         get_data_movement_cost(op->condition.get()) + get_data_movement_cost(op->then_case.get());
 
     if (op->else_case.defined()) {
         mutate(op->else_case);
-        tempVal += get_cost(op->else_case.get());
+        tempVal += get_computation_cost(op->else_case.get());
         dataMovementCost += get_data_movement_cost(op->else_case.get());
     }
 
@@ -753,7 +800,7 @@ Stmt FindStmtCost::visit(const IfThenElse *op) {
 Stmt FindStmtCost::visit(const Evaluate *op) {
     mutate(op->value);
 
-    int tempVal = get_cost(op->value.get());
+    int tempVal = get_computation_cost(op->value.get());
     int dataMovementCost = get_data_movement_cost(op->value.get());
     set_costs(op, tempVal, dataMovementCost);
 
@@ -777,9 +824,111 @@ Stmt FindStmtCost::visit(const Atomic *op) {
     set_costs(op, lock_cost, 0);  // this is to remove the error of unused variable
     // TODO: do something with lock cost
 
-    int tempVal = get_cost(op->body.get());
+    int tempVal = get_computation_cost(op->body.get());
     int dataMovementCost = get_data_movement_cost(op->body.get());
     set_costs(op, tempVal, dataMovementCost);
 
     return op;
+}
+
+void FindStmtCost::print_node(const IRNode *node) const {
+    cout << "Crashing node has type: ";
+    IRNodeType type = node->node_type;
+    if (type == IRNodeType::IntImm) {
+        cout << "IntImm type" << endl;
+        auto node1 = dynamic_cast<const IntImm *>(node);
+        cout << "value: " << node1->value << endl;
+    } else if (type == IRNodeType::UIntImm) {
+        cout << "UIntImm type" << endl;
+    } else if (type == IRNodeType::FloatImm) {
+        cout << "FloatImm type" << endl;
+    } else if (type == IRNodeType::StringImm) {
+        cout << "StringImm type" << endl;
+    } else if (type == IRNodeType::Broadcast) {
+        cout << "Broadcast type" << endl;
+    } else if (type == IRNodeType::Cast) {
+        cout << "Cast type" << endl;
+    } else if (type == IRNodeType::Variable) {
+        cout << "Variable type" << endl;
+    } else if (type == IRNodeType::Add) {
+        cout << "Add type" << endl;
+    } else if (type == IRNodeType::Sub) {
+        cout << "Sub type" << endl;
+    } else if (type == IRNodeType::Mod) {
+        cout << "Mod type" << endl;
+    } else if (type == IRNodeType::Mul) {
+        cout << "Mul type" << endl;
+    } else if (type == IRNodeType::Div) {
+        cout << "Div type" << endl;
+    } else if (type == IRNodeType::Min) {
+        cout << "Min type" << endl;
+    } else if (type == IRNodeType::Max) {
+        cout << "Max type" << endl;
+    } else if (type == IRNodeType::EQ) {
+        cout << "EQ type" << endl;
+    } else if (type == IRNodeType::NE) {
+        cout << "NE type" << endl;
+    } else if (type == IRNodeType::LT) {
+        cout << "LT type" << endl;
+    } else if (type == IRNodeType::LE) {
+        cout << "LE type" << endl;
+    } else if (type == IRNodeType::GT) {
+        cout << "GT type" << endl;
+    } else if (type == IRNodeType::GE) {
+        cout << "GE type" << endl;
+    } else if (type == IRNodeType::And) {
+        cout << "And type" << endl;
+    } else if (type == IRNodeType::Or) {
+        cout << "Or type" << endl;
+    } else if (type == IRNodeType::Not) {
+        cout << "Not type" << endl;
+    } else if (type == IRNodeType::Select) {
+        cout << "Select type" << endl;
+    } else if (type == IRNodeType::Load) {
+        cout << "Load type" << endl;
+    } else if (type == IRNodeType::Ramp) {
+        cout << "Ramp type" << endl;
+    } else if (type == IRNodeType::Call) {
+        cout << "Call type" << endl;
+    } else if (type == IRNodeType::Let) {
+        cout << "Let type" << endl;
+    } else if (type == IRNodeType::Shuffle) {
+        cout << "Shuffle type" << endl;
+    } else if (type == IRNodeType::VectorReduce) {
+        cout << "VectorReduce type" << endl;
+    } else if (type == IRNodeType::LetStmt) {
+        cout << "LetStmt type" << endl;
+    } else if (type == IRNodeType::AssertStmt) {
+        cout << "AssertStmt type" << endl;
+    } else if (type == IRNodeType::ProducerConsumer) {
+        cout << "ProducerConsumer type" << endl;
+    } else if (type == IRNodeType::For) {
+        cout << "For type" << endl;
+    } else if (type == IRNodeType::Acquire) {
+        cout << "Acquire type" << endl;
+    } else if (type == IRNodeType::Store) {
+        cout << "Store type" << endl;
+    } else if (type == IRNodeType::Provide) {
+        cout << "Provide type" << endl;
+    } else if (type == IRNodeType::Allocate) {
+        cout << "Allocate type" << endl;
+    } else if (type == IRNodeType::Free) {
+        cout << "Free type" << endl;
+    } else if (type == IRNodeType::Realize) {
+        cout << "Realize type" << endl;
+    } else if (type == IRNodeType::Block) {
+        cout << "Block type" << endl;
+    } else if (type == IRNodeType::Fork) {
+        cout << "Fork type" << endl;
+    } else if (type == IRNodeType::IfThenElse) {
+        cout << "IfThenElse type" << endl;
+    } else if (type == IRNodeType::Evaluate) {
+        cout << "Evaluate type" << endl;
+    } else if (type == IRNodeType::Prefetch) {
+        cout << "Prefetch type" << endl;
+    } else if (type == IRNodeType::Atomic) {
+        cout << "Atomic type" << endl;
+    } else {
+        cout << "Unknown type" << endl;
+    }
 }

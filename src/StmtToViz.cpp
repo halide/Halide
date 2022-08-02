@@ -142,7 +142,7 @@ private:
 
     string cost_table_tooltip(const IRNode *op, const string &hierarchyHTML) {
         int depth = findStmtCost.get_depth(op);
-        int computationCost = findStmtCost.get_computation_cost(op);
+        int computationCost = findStmtCost.calculate_computation_cost(op);
         int dataMovementCost = findStmtCost.get_data_movement_cost(op);
 
         std::stringstream tooltipText;
@@ -1026,8 +1026,9 @@ public:
         cout << endl << endl << "uh" << endl;
         m_assert(false, "Not implemented");
 
-        Stmt inlined_s = substitute_in_all_lets(s);
-        string dependGraphHTML = dependencyGraph.generate_dependency_graph(inlined_s);
+        // Stmt inlined_s = substitute_in_all_lets(s);
+        // string dependGraphHTML = dependencyGraph.generate_dependency_graph(inlined_s);
+        string dependGraphHTML = dependencyGraph.generate_dependency_graph(s);
         stream << dependencyGraphButton(dependGraphHTML);
     }
 
