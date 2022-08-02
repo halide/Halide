@@ -1210,6 +1210,103 @@ private:
                     bounds_of_type(t);
                 }
             }
+        } else if (op->is_intrinsic(Call::saturating_cast)) {
+            internal_assert(op->args.size() == 1);
+
+            Expr a = op->args[0];
+            a.accept(this);
+            Interval a_interval = interval;
+
+            bounds_of_type(t);
+
+            // For float to float, guarantee infinities are always pinned to range.
+            if (t.is_float() && a.type().is_float()) {
+                if (t.bits() < a.type().bits()) {
+                    // Casting to a smaller float, so clamp and then cast.
+                    if (a_interval.has_lower_bound()) {
+                        // If representable in the type, then use, otherwise return bounds_of_type(t).min
+                        if (can_prove(a_interval.min >= t.min())) {
+                            interval.min = cast(t, a_interval.min);
+                        }
+                    }
+                    if (a_interval.has_upper_bound()) {
+                        if (can_prove(a_interval.max <= t.max())) {
+                            interval.max = cast(t, a_interval.max);
+                        }
+                    }
+                    return;
+                } else {
+                    // Casting to a wider float, so cast then clamp.
+                    if (a_interval.has_lower_bound()) {
+                        Expr casted_min = cast(t, a_interval.min);
+
+                        if (can_prove(casted_min >= t.min())) {
+                            interval.min = casted_min;
+                        }
+                    }
+                    if (a_interval.has_upper_bound()) {
+                        Expr casted_max = cast(t, a_interval.max);
+                        if (can_prove(casted_max <= t.max())) {
+                            interval.max = casted_max;
+                        }
+                    }
+                    return;
+                }
+            } else if (a.type() != t) {
+                // Limits for Int(2^n) or UInt(2^n) are not exactly representable in Float(2^n)
+                if (a.type().is_float() && !t.is_float() && t.bits() >= a.type().bits()) {
+                    if (a_interval.has_lower_bound()) {
+                        // min values turn out to be always representable
+                        if (can_prove(a_interval.min >= t.min())) {
+                            interval.min = cast(t, a_interval.min);
+                        }
+                    }
+                    if (a_interval.has_upper_bound()) {
+                        // This line depends on t.max() rounding upward, which should always
+                        // be the case as it is one less than a representable value, thus
+                        // the one larger is always the closest.
+                        if (can_prove(a_interval.max <= t.max())) {
+                            interval.max = cast(t, a_interval.max);
+                        }
+                    }
+                    return;
+                } else {
+                    if (a_interval.has_lower_bound()) {
+                        if (!a.type().is_uint()) {
+                            Expr min_bound = lossless_cast(a.type(), t.min());
+                            if (min_bound.defined()) {
+                                // Need to prove that cast is safe.
+                                if (can_prove(a_interval.min >= min_bound)) {
+                                    interval.min = cast(t, a_interval.min);
+                                }
+                            } else {
+                                // Type of arg cannot represent t.min() (i.e. uint16 -> int8)
+                                // Should be safe to not have the clamp.
+                                interval.min = cast(t, a_interval.min);
+                            }
+                        } else {
+                            // uints are bounded below by 0, so cast is safe.
+                            interval.min = cast(t, a_interval.min);
+                        }
+                    }
+                    if (a_interval.has_upper_bound()) {
+                        Expr max_bound = lossless_cast(a.type(), t.max());
+                        if (max_bound.defined()) {
+                            // Need to prove that cast is safe.
+                            if (can_prove(a_interval.max <= max_bound)) {
+                                interval.max = cast(t, a_interval.max);
+                            }
+                        } else {
+                            interval.max = cast(t, a_interval.max);
+                        }
+                    }
+                    return;
+                }
+            } else {
+                // a.type() == t
+                interval = a_interval;
+                return;
+            }
         } else if (op->is_intrinsic(Call::unsafe_promise_clamped) ||
                    op->is_intrinsic(Call::promise_clamped)) {
             // Unlike an explicit clamp, we are also permitted to
@@ -3571,6 +3668,22 @@ void bounds_test() {
     Expr u8_2 = cast<uint8_t>(Load::make(Int(8), "buf", x + 17, Buffer<>(), Parameter(), const_true(), ModulusRemainder()));
     check(scope, cast<uint16_t>(u8_1) + cast<uint16_t>(u8_2),
           u16(0), u16(255 * 2));
+
+    check(scope, saturating_cast<uint8_t>(clamp(x, 5, 10)), cast<uint8_t>(5), cast<uint8_t>(10));
+    {
+        Expr imax_p1 = make_const(UInt(32), 0x80000000ull);
+        scope.push("x", Interval(cast<uint32_t>(0), cast<uint32_t>(imax_p1)));
+        check(scope, saturating_cast<int32_t>(max(cast<uint32_t>(x), cast<uint32_t>(5))), cast<int32_t>(5), Interval::pos_inf());
+        scope.pop("x");
+    }
+    {
+        Expr z = Variable::make(Float(32), "z");
+        scope.push("z", Interval(cast<float>(-1), cast<float>(1)));
+        check(scope, saturating_cast<int32_t>(z), cast<int32_t>(-1), cast<int32_t>(1));
+        check(scope, saturating_cast<double>(z), cast<double>(-1), cast<double>(1));
+        check(scope, saturating_cast<float16_t>(z), cast<float16_t>(-1), cast<float16_t>(1));
+        check(scope, saturating_cast<uint8_t>(z), cast<uint8_t>(0), cast<uint8_t>(1));
+    }
 
     {
         Scope<Interval> scope;
