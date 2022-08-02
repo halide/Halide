@@ -3671,8 +3671,7 @@ void bounds_test() {
 
     check(scope, saturating_cast<uint8_t>(clamp(x, 5, 10)), cast<uint8_t>(5), cast<uint8_t>(10));
     {
-        Expr imax_p1 = make_const(UInt(32), 0x80000000ull);
-        scope.push("x", Interval(cast<uint32_t>(0), cast<uint32_t>(imax_p1)));
+        scope.push("x", Interval(cast<uint32_t>(0), UInt(32).max()));
         check(scope, saturating_cast<int32_t>(max(cast<uint32_t>(x), cast<uint32_t>(5))), cast<int32_t>(5), Interval::pos_inf());
         scope.pop("x");
     }
