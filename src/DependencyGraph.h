@@ -29,25 +29,29 @@ public:
     }
     ~DependencyGraph() = default;
 
-    void generate_dependency_graph(const Module &m);
-    void generate_dependency_graph(const Stmt &stmt);
+    string generate_dependency_graph(const Module &m);
+    string generate_dependency_graph(const Stmt &stmt);
 
 private:
     using IRMutator::visit;
 
     vector<DependencyNode> dependency_graph;
+    stringstream html;
 
-    map<const string, vector<string>> dependencies;  // key: variable name, value: vector of
-                                                           // dependencies
-    map<const string, int> duplicate_variable_counts;      // key: variable name, value: number of
-                                                           // duplicates
+    map<const string, vector<string>> dependencies;    // key: variable name, value: vector of
+                                                       // dependencies
+    map<const string, int> duplicate_variable_counts;  // key: variable name, value: number of
+                                                       // duplicates
     string current_variable;  // current variable name that is being processed
 
     string generate_unique_name(const string &name);
     string get_unique_name(const string &name) const;
 
     // TODO: change this name later
-    void print_stuff();
+    void generate_html();
+
+    void start_html();
+    void end_html();
 
     void build_graph();
     void generate_nodes();
@@ -64,6 +68,7 @@ private:
     Expr visit(const Let *op) override;
     Expr visit(const Variable *op) override;
     Stmt visit(const LetStmt *op) override;
+    Stmt visit(const Store *op) override;
 };
 
 #endif

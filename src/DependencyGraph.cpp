@@ -6,18 +6,86 @@ using namespace std;
 using namespace Halide;
 using namespace Internal;
 
-void DependencyGraph::generate_dependency_graph(const Module &m) {
+string DependencyGraph::generate_dependency_graph(const Module &m) {
     traverse(m);
-    print_stuff();
+    generate_html();
+
+    cout << html.str() << endl << endl;
+    return html.str();
 }
-void DependencyGraph::generate_dependency_graph(const Stmt &stmt) {
+string DependencyGraph::generate_dependency_graph(const Stmt &stmt) {
     mutate(stmt);
-    print_stuff();
+    generate_html();
+
+    cout << html.str() << endl << endl;
+    return html.str();
 }
 
-void DependencyGraph::print_stuff() {
+void DependencyGraph::generate_html() {
+    html.str(string());
+
     build_graph();
+    start_html();
     generate_nodes();
+    end_html();
+}
+
+void DependencyGraph::start_html() {
+    html << "<!DOCTYPE html>";
+    html << "<meta charset=\\'utf-8\\'>";
+    html << "<head>";
+    html << "<script src=\\'https://d3js.org/d3.v4.js\\'></script>";
+    html << "<script "
+            "src=\\'https://dagrejs.github.io/project/dagre-d3/latest/dagre-d3.min.js\\'></script>";
+    html << "</head>";
+    html << "<body>";
+    html << "<svg id=\\'myGraph\\' width=\\'10000\\'></svg>";
+    html << "<script>";
+    html << "var g = new dagreD3.graphlib.Graph()";
+    html << ".setGraph({})";
+    html << ".setDefaultEdgeLabel(function () { return {}; });";
+}
+
+void DependencyGraph::end_html() {
+
+    html << "g.nodes().forEach(function (v) {";
+    html << "var node = g.node(v);";
+    html << "node.rx = node.ry = 5;";
+    html << "});";
+    html << "var render = new dagreD3.render();";
+    html << "var svg = d3.select(\\'#myGraph\\'),";
+    html << "svgGroup = svg.append(\\'g\\');";
+    html << "render(svgGroup, g);";
+    html << "svg.attr(\\'width\\', g.graph().width + 40);";
+    html << "var xCenterOffset = (svg.attr(\\'width\\') - g.graph().width) / 2;";
+    html << "svgGroup.attr(\\'transform\\', \\'translate(\\' + xCenterOffset + \\', 20)\\');";
+    html << "svg.attr(\\'height\\', g.graph().height + 40);";
+    html << "</script>";
+    html << "<style>";
+    html << "g.type-TK>rect {";
+    html << "fill: #00ffd0;";
+    html << "}";
+    html << "text {";
+    html << "font-weight: 300;";
+    html << "font-family: \\'Helvetica Neue\\', Helvetica, Arial, sans-serif;";
+    html << "font-size: 14px;";
+    html << "}";
+    html << ".node rect {";
+    html << "stroke: #999;";
+    html << "fill: #fff;";
+    html << "stroke-width: 1.5px;";
+    html << "}";
+    html << ".edgePath path {";
+    html << "stroke: #333;";
+    html << "stroke-width: 3px;";
+    html << "}";
+    html << ".edgePath path:hover {";
+    html << "stroke: red;";
+    html << "stroke-width: 4px;";
+    html << "z-index: 9999;";
+    html << "}";
+    html << "</style>";
+    html << "</body>";
 }
 
 void DependencyGraph::build_graph() {
@@ -51,20 +119,18 @@ void DependencyGraph::generate_nodes() {
     // g.setEdge(3, 4);
     for (const auto &node : dependency_graph) {
         for (const auto &dependency : node.nodeDependsOn) {
-            setEdges << "g.setEdge(" << get_node(dependency).nodeID << ", " << node.nodeID << ");"
-                     << endl;
+            setEdges << "g.setEdge(" << get_node(dependency).nodeID << ", " << node.nodeID << ");";
         }
     }
 
     stringstream setNodes;
     // g.setNode(19, { label: "blur_y.s0.x.x" });
     for (const auto &node : dependency_graph) {
-        setNodes << "g.setNode(" << node.nodeID << ", { label: \"" << node.nodeName << "\" });"
-                 << endl;
+        setNodes << "g.setNode(" << node.nodeID << ", { label: \\'" << node.nodeName << "\\' });";
     }
 
-    cout << setNodes.str() << endl;
-    cout << setEdges.str() << endl;
+    html << setNodes.str();
+    html << setEdges.str();
 }
 
 string DependencyGraph::generate_unique_name(const string &name) {
@@ -120,6 +186,7 @@ void DependencyGraph::add_empty_dependency(const string &variable) {
     if (it == dependencies.end()) {
         dependencies[variable] = vector<string>{};
     } else {
+        cout << "attempting to add: " << variable << endl;
         m_assert(false, "variable already exists");
     }
 }
@@ -172,8 +239,6 @@ Expr DependencyGraph::visit(const Let *op) {
 }
 
 Expr DependencyGraph::visit(const Variable *op) {
-    // auto type = op->type;
-
     string unique_var_name = get_unique_name(op->name);
     add_dependency(current_variable, unique_var_name);
     return op;
@@ -193,10 +258,13 @@ Stmt DependencyGraph::visit(const LetStmt *op) {
     return op;
 }
 
-/*Stmt DependencyGraph::visit(const Store *op) {
+Stmt DependencyGraph::visit(const Store *op) {
     string previous_variable = current_variable;
 
     current_variable = op->name;
+    // TODO: the next couple lines are for duplicate
+    //       versions of the variable. is there
+    //       anything in particular we should do here?
     auto it = dependencies.find(current_variable);
     if (it == dependencies.end()) {
         add_empty_dependency(current_variable);
@@ -206,4 +274,4 @@ Stmt DependencyGraph::visit(const LetStmt *op) {
     current_variable = previous_variable;
 
     return op;
-}*/
+}

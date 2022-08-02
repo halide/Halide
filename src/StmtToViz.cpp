@@ -251,11 +251,31 @@ private:
 
     string producerConsumerButton(string prodConsHTML) {
         stringstream s;
+        s << endl;
+        s << "<br>";
         s << "<button onclick=\"openNewWindow('";
         s << prodConsHTML;
         s << "')\">";
         s << "Producer/Consumer Visualization";
         s << "</button>";
+        s << "<br>";
+        s << endl;
+
+        return s.str();
+    }
+
+    string dependencyGraphButton(string dependencyGraph) {
+        stringstream s;
+        s << endl;
+        s << "<br>";
+        s << "<button onclick=\"openNewWindow('";
+        s << dependencyGraph;
+        s << "')\">";
+        s << "Dependency Graph";
+        s << "</button>";
+        s << "<br>";
+        s << "<br>";
+        s << endl;
 
         return s.str();
     }
@@ -999,14 +1019,16 @@ public:
         stream << producerConsumerButton(prodConsHTML);
     }
     void generate_dependency_graph(const Module &m) {
-        dependencyGraph.generate_dependency_graph(m);
+        string dependGraphHTML = dependencyGraph.generate_dependency_graph(m);
+        stream << dependencyGraphButton(dependGraphHTML);
     }
     void generate_dependency_graph(const Stmt &s) {
         cout << endl << endl << "uh" << endl;
         m_assert(false, "Not implemented");
 
         Stmt inlined_s = substitute_in_all_lets(s);
-        dependencyGraph.generate_dependency_graph(inlined_s);
+        string dependGraphHTML = dependencyGraph.generate_dependency_graph(inlined_s);
+        stream << dependencyGraphButton(dependGraphHTML);
     }
 
     void print(const Expr &ir) {
@@ -1457,7 +1479,7 @@ function toggle(id) { \n \
     return false; \n \
 }\n \
 function openNewWindow(innerHtml) { \n \
-    console.log('here!'); \n \
+    // console.log('here!'); \n \
     var newWindow = window.open('', '_blank'); \n \
     newWindow.document.write(innerHtml); \n \
 }\n \
@@ -1470,7 +1492,7 @@ void print_to_viz(const string &filename, const Stmt &s) {
 
     sth.generate_costs(s);
     sth.generate_producer_consumer_hierarchy(s);
-    // sth.generate_dependency_graph(s);
+    sth.generate_dependency_graph(s);
 
     sth.print(s);
 }
@@ -1478,8 +1500,12 @@ void print_to_viz(const string &filename, const Stmt &s) {
 void print_to_viz(const string &filename, const Module &m) {
 
     if (m.functions().size() > 1) {
-        cout << "Warning: printing to viz only works for modules with "
+        cout << endl
+             << endl
+             << "Exiting early: printing to viz only works for modules with "
                 "one function"
+             << endl
+             << endl
              << endl;
         return;
     }
@@ -1488,11 +1514,9 @@ void print_to_viz(const string &filename, const Module &m) {
 
     sth.generate_costs(m);
     sth.generate_producer_consumer_hierarchy(m);
-    // sth.generate_dependency_graph(m);
+    sth.generate_dependency_graph(m);
 
     sth.print(m);
-
-    cout << "TEST TEST\n\n\n";
 }
 
 }  // namespace Internal
