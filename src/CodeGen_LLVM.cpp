@@ -2832,7 +2832,7 @@ void CodeGen_LLVM::visit(const Call *op) {
         internal_assert(op->args.size() == 2);
 
         // Try to fold the vector reduce for a call to saturating_add
-        const bool folded = try_to_fold_vector_reduce<Call>(op->args[0], op->args[1]);
+        const bool folded = op->is_intrinsic(Call::saturating_add) && try_to_fold_vector_reduce<Call>(op->args[0], op->args[1]);
 
         if (!folded) {
             std::string intrin;
@@ -3377,7 +3377,6 @@ void CodeGen_LLVM::visit(const Call *op) {
             if (op->is_pure()) {
                 call->setDoesNotAccessMemory();
             }
-            call->setDoesNotThrow();
             value = call;
         } else {
 
@@ -3410,7 +3409,6 @@ void CodeGen_LLVM::visit(const Call *op) {
                     if (op->is_pure()) {
                         call->setDoesNotAccessMemory();
                     }
-                    call->setDoesNotThrow();
                     if (!call->getType()->isVoidTy()) {
                         value = builder->CreateInsertElement(value, call, idx);
                     }  // otherwise leave it as undef.

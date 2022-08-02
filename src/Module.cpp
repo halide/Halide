@@ -20,8 +20,6 @@
 #include "PythonExtensionGen.h"
 #include "StmtToHtml.h"
 
-using Halide::Internal::debug;
-
 namespace Halide {
 namespace Internal {
 

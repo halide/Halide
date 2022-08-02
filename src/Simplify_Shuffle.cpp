@@ -192,6 +192,11 @@ Expr Simplify::visit(const Shuffle *op, ExprInfo *bounds) {
             }
         }
     } else if (op->is_concat()) {
+        // Bypass concat of a single vector (identity shuffle)
+        if (new_vectors.size() == 1) {
+            return new_vectors[0];
+        }
+
         // Try to collapse a concat of ramps into a single ramp.
         const Ramp *r = new_vectors[0].as<Ramp>();
         if (r) {
