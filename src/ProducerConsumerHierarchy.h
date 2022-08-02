@@ -35,6 +35,8 @@ public:
     bool are_bounds_set();
 
 private:
+    using IRMutator::visit;
+
     unordered_map<const IRNode *, StmtSize> stmt_sizes;
     bool bounds_set = false;
     bool in_producer = false;
@@ -66,6 +68,8 @@ public:
     string generate_producer_consumer_html(const Stmt &stmt);
 
 private:
+    using IRMutator::visit;
+
     std::stringstream html;   // main html string
     StmtSizes pre_processor;  // generates the sizes of the nodes
 
