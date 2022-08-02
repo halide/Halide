@@ -107,7 +107,6 @@ Stmt StmtSizes::visit(const Block *op) {
     return op;
 }
 Stmt StmtSizes::visit(const IfThenElse *op) {
-    cout << "IfThenElse" << endl;
     mutate(op->then_case);
     mutate(op->else_case);
     return op;

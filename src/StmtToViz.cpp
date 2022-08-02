@@ -1477,6 +1477,13 @@ void print_to_viz(const string &filename, const Stmt &s) {
 
 void print_to_viz(const string &filename, const Module &m) {
 
+    if (m.functions().size() > 1) {
+        cout << "Warning: printing to viz only works for modules with "
+                "one function"
+             << endl;
+        return;
+    }
+
     StmtToViz sth(filename);
 
     sth.generate_costs(m);
