@@ -249,6 +249,17 @@ private:
         return s.str();
     }
 
+    string producerConsumerButton(string prodConsHTML) {
+        stringstream s;
+        s << "<button onclick=\"openNewWindow('";
+        s << prodConsHTML;
+        s << "')\">";
+        s << "Producer/Consumer Visualization";
+        s << "</button>";
+
+        return s.str();
+    }
+
     string open_div(const string &cls, int id = -1) {
         return open_tag("div", cls, id) + "\n";
     }
@@ -980,12 +991,12 @@ public:
         getStmtHierarchy.set_stmt_cost(s);
     }
     void generate_producer_consumer_hierarchy(const Module &m) {
-        producerConsumerHierarchy.generate_producer_consumer_html(m);
-        producerConsumerHierarchy.print_hierarchy();
+        string prodConsHTML = producerConsumerHierarchy.generate_producer_consumer_html(m);
+        stream << producerConsumerButton(prodConsHTML);
     }
     void generate_producer_consumer_hierarchy(const Stmt &s) {
-        producerConsumerHierarchy.generate_producer_consumer_html(s);
-        producerConsumerHierarchy.print_hierarchy();
+        string prodConsHTML = producerConsumerHierarchy.generate_producer_consumer_html(s);
+        stream << producerConsumerButton(prodConsHTML);
     }
     void generate_dependency_graph(const Module &m) {
         dependencyGraph.generate_dependency_graph(m);
@@ -1458,8 +1469,8 @@ void print_to_viz(const string &filename, const Stmt &s) {
     StmtToViz sth(filename);
 
     sth.generate_costs(s);
-    // sth.generate_producer_consumer_hierarchy(s);
-    sth.generate_dependency_graph(s);
+    sth.generate_producer_consumer_hierarchy(s);
+    // sth.generate_dependency_graph(s);
 
     sth.print(s);
 }
@@ -1469,8 +1480,8 @@ void print_to_viz(const string &filename, const Module &m) {
     StmtToViz sth(filename);
 
     sth.generate_costs(m);
-    // sth.generate_producer_consumer_hierarchy(m);
-    sth.generate_dependency_graph(m);
+    sth.generate_producer_consumer_hierarchy(m);
+    // sth.generate_dependency_graph(m);
 
     sth.print(m);
 }

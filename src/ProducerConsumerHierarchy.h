@@ -3,10 +3,58 @@
 
 #include "IRMutator.h"
 
+#include <unordered_map>
+
 using namespace std;
 using namespace Halide;
 using namespace Internal;
 
+#define m_assert(expr, msg) assert((void(msg), (expr)))
+
+struct StmtSize {
+    uint16_t produce_size;
+    uint16_t consume_size;
+
+    bool empty() const {
+        return produce_size == 0 && consume_size == 0;
+    }
+};
+
+/*
+ * StmtSizes class
+ */
+class StmtSizes : public IRMutator {
+public:
+    StmtSizes() = default;
+    ~StmtSizes() = default;
+
+    void generate_sizes(const Module &m);
+    void generate_sizes(const Stmt &stmt);
+
+    StmtSize get_size(const IRNode *node) const;
+    bool are_bounds_set();
+
+private:
+    unordered_map<const IRNode *, StmtSize> stmt_sizes;
+    bool bounds_set = false;
+    bool in_producer = false;
+
+    void traverse(const Module &m);
+
+    void set_size(const IRNode *node, uint16_t produce_size, uint16_t consume_size);
+
+    Stmt visit(const LetStmt *op) override;
+    Stmt visit(const ProducerConsumer *op) override;
+    Stmt visit(const For *op) override;
+    Stmt visit(const Store *op) override;
+    Stmt visit(const Allocate *op) override;
+    Stmt visit(const Block *op) override;
+    Stmt visit(const IfThenElse *op) override;
+};
+
+/*
+ * ProducerConsumerHierarchy class
+ */
 class ProducerConsumerHierarchy : public IRMutator {
 
 public:
@@ -14,16 +62,12 @@ public:
     ~ProducerConsumerHierarchy() = default;
 
     // generates the html for the producer-consumer hierarchy
-    // (TODO: eventually, this will return something to StmtToViz so
-    // that it can get put into the html)
-    void generate_producer_consumer_html(const Module &m);
-    void generate_producer_consumer_html(const Stmt &stmt);
-
-    // prints the hierarchy to stdout
-    void print_hierarchy();
+    string generate_producer_consumer_html(const Module &m);
+    string generate_producer_consumer_html(const Stmt &stmt);
 
 private:
-    std::stringstream html;  // main html string
+    std::stringstream html;   // main html string
+    StmtSizes pre_processor;  // generates the sizes of the nodes
 
     // starts the traversal of the tree and returns the generated html
     string get_producer_consumer_html(const Expr &startNode);
@@ -41,13 +85,21 @@ private:
     void close_table();
 
     // creates a table header row with given header string
-    void table_header(const string &header);
+    void table_header(const string &header, StmtSize &size);
+    void prod_cons_table(StmtSize &size);
+    // void double_table_header(const string &header);
 
-    // opens and closes a normal row
+    // opens and closes a row
     void open_table_row();
     void close_table_row();
 
+    // opens and closes a data cell
+    void open_table_data();
+    void close_table_data();
+
     Stmt visit(const ProducerConsumer *op) override;
+    Stmt visit(const For *op) override;
+    Stmt visit(const IfThenElse *op) override;
 };
 
 #endif
