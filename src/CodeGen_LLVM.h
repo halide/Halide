@@ -45,6 +45,7 @@ class GlobalVariable;
 namespace Halide {
 
 struct ExternSignature;
+class InstructionSelector;
 
 namespace Internal {
 
@@ -507,9 +508,6 @@ protected:
      * across backends. */
     virtual void codegen_vector_reduce(const VectorReduce *op, const Expr &init);
 
-    // TODO: this probably shouldn't be public, or should be moved where the rest of
-    //       the public methods are.
-public:
     /** Split up a VectorReduce node if possible, or generate LLVM
         intrinsics for full reductions. This is used in
         `codegen_vector_reduce`. **/
@@ -604,6 +602,12 @@ private:
      * represents a unique struct type created by a closure or similar.
      */
     std::map<llvm::Value *, llvm::Type *> struct_type_recovery;
+
+    /** Instruction selection uses `split_vector_reduce` and
+     *  `upgrade_type_for_arithmetic`, so needs access to those
+     *  methods.
+     */
+    friend class InstructionSelector;
 };
 
 }  // namespace Internal
