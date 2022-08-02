@@ -79,11 +79,7 @@ if [ $(uname -s) = "Darwin" ] && ! which $TIMEOUT_CMD 2>&1 >/dev/null; then
     fi
 fi
 
-if [ $(uname -s) = "Darwin" ]; then
-    SHARED_EXT=dylib
-else
-    SHARED_EXT=so
-fi
+PLUGIN_EXT=so
 
 # Build a single featurization of the pipeline with a random schedule
 make_featurization() {
@@ -111,7 +107,7 @@ make_featurization() {
         -e stmt,assembly,static_library,c_header,registration,schedule,featurization \
         target=${HL_TARGET} \
         ${EXTRA_GENERATOR_ARGS} \
-        -p ${AUTOSCHED_BIN}/libautoschedule_adams2019.${SHARED_EXT} \
+        -p ${AUTOSCHED_BIN}/libautoschedule_adams2019.${PLUGIN_EXT} \
         autoscheduler=Adams2019 \
         autoscheduler.parallelism=32 \
         autoscheduler.beam_size=${beam} \

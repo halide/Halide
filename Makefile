@@ -29,6 +29,11 @@ else
 endif
 endif
 
+# We want to build Halide plugins as .so on all posixy systems, including OSX.
+# This is called out as a named var to make it clear that the use
+# is deliberate, not an accident.
+PLUGIN_EXT=so
+
 ifeq ($(UNAME), Darwin)
   # Anything that we us install_name_tool on needs these linker flags
   # to ensure there is enough padding for install_name_tool to use
@@ -1282,9 +1287,9 @@ clean_generator:
 time_compilation_tests: time_compilation_correctness time_compilation_performance time_compilation_generator
 
 # These are just aliases to the autoscheduler plugins to make Generator rules & deps a little terser
-BIN_ADAMS2019=$(BIN_DIR)/libautoschedule_adams2019.$(SHARED_EXT)
-BIN_LI2018=$(BIN_DIR)/libautoschedule_li2018.$(SHARED_EXT)
-BIN_MULLAPUDI2016=$(BIN_DIR)/libautoschedule_mullapudi2016.$(SHARED_EXT)
+BIN_ADAMS2019=$(BIN_DIR)/libautoschedule_adams2019.$(PLUGIN_EXT)
+BIN_LI2018=$(BIN_DIR)/libautoschedule_li2018.$(PLUGIN_EXT)
+BIN_MULLAPUDI2016=$(BIN_DIR)/libautoschedule_mullapudi2016.$(PLUGIN_EXT)
 
 $(BUILD_DIR)/GenGen.o: $(ROOT_DIR)/tools/GenGen.cpp $(INCLUDE_DIR)/Halide.h
 	@mkdir -p $(@D)
@@ -1456,15 +1461,15 @@ $(FILTERS_DIR)/alias_with_offset_42.a: $(BIN_DIR)/alias.generator
 
 $(FILTERS_DIR)/alias_Adams2019.a: $(BIN_DIR)/alias.generator autoschedulers
 	@mkdir -p $(@D)
-	$(CURDIR)/$< -g alias_Adams2019 -f alias_Adams2019 $(GEN_AOT_OUTPUTS) -o $(CURDIR)/$(FILTERS_DIR) target=$(TARGET)-no_runtime -p $(BIN_DIR)/libautoschedule_adams2019.$(SHARED_EXT)
+	$(CURDIR)/$< -g alias_Adams2019 -f alias_Adams2019 $(GEN_AOT_OUTPUTS) -o $(CURDIR)/$(FILTERS_DIR) target=$(TARGET)-no_runtime -p $(BIN_ADAMS2019)
 
 $(FILTERS_DIR)/alias_Li2018.a: $(BIN_DIR)/alias.generator autoschedulers
 	@mkdir -p $(@D)
-	$(CURDIR)/$< -g alias_Li2018 -f alias_Li2018 $(GEN_AOT_OUTPUTS) -o $(CURDIR)/$(FILTERS_DIR) target=$(TARGET)-no_runtime -p $(BIN_DIR)/libautoschedule_li2018.$(SHARED_EXT)
+	$(CURDIR)/$< -g alias_Li2018 -f alias_Li2018 $(GEN_AOT_OUTPUTS) -o $(CURDIR)/$(FILTERS_DIR) target=$(TARGET)-no_runtime -p $(BIN_LI2018)
 
 $(FILTERS_DIR)/alias_Mullapudi2016.a: $(BIN_DIR)/alias.generator autoschedulers
 	@mkdir -p $(@D)
-	$(CURDIR)/$< -g alias_Mullapudi2016 -f alias_Mullapudi2016 $(GEN_AOT_OUTPUTS) -o $(CURDIR)/$(FILTERS_DIR) target=$(TARGET)-no_runtime -p $(BIN_DIR)/libautoschedule_mullapudi2016.$(SHARED_EXT)
+	$(CURDIR)/$< -g alias_Mullapudi2016 -f alias_Mullapudi2016 $(GEN_AOT_OUTPUTS) -o $(CURDIR)/$(FILTERS_DIR) target=$(TARGET)-no_runtime -p $(BIN_MULLAPUDI2016)
 
 METADATA_TESTER_GENERATOR_ARGS=\
 	input.type=uint8 input.dim=3 \
@@ -2321,21 +2326,23 @@ ifeq ($(UNAME), Darwin)
 	install_name_tool -id @rpath/libHalide.$(SHARED_EXT) $(DISTRIB_DIR)/lib/libHalide.$(SHARED_EXT)
 endif
 
-$(BIN_DIR)/libautoschedule_%.$(SHARED_EXT): $(DISTRIB_DIR)/lib/libHalide.$(SHARED_EXT)
+$(BIN_DIR)/libautoschedule_%.$(PLUGIN_EXT): $(DISTRIB_DIR)/lib/libHalide.$(SHARED_EXT)
 	$(MAKE) -f $(SRC_DIR)/autoschedulers/$*/Makefile $@ HALIDE_DISTRIB_PATH=$(CURDIR)/$(DISTRIB_DIR)
 ifeq ($(UNAME), Darwin)
 	install_name_tool -id @rpath/$(@F) $(CURDIR)/$@
 endif
 
 
-$(DISTRIB_DIR)/lib/libautoschedule_%.$(SHARED_EXT): $(BIN_DIR)/libautoschedule_%.$(SHARED_EXT)
+$(DISTRIB_DIR)/lib/libautoschedule_%.$(PLUGIN_EXT): $(BIN_DIR)/libautoschedule_%.$(PLUGIN_EXT)
+	@mkdir -p $(@D)
 	cp $< $(DISTRIB_DIR)/lib
 ifeq ($(UNAME), Darwin)
 	install_name_tool -id @rpath/$(@F) $(CURDIR)/$@
 endif
 
 # Adams2019 also includes autotuning tools
-$(DISTRIB_DIR)/lib/libautoschedule_adams2019.$(SHARED_EXT): $(BIN_DIR)/libautoschedule_adams2019.$(SHARED_EXT)
+$(DISTRIB_DIR)/lib/libautoschedule_adams2019.$(PLUGIN_EXT): $(BIN_DIR)/libautoschedule_adams2019.$(PLUGIN_EXT)
+	@mkdir -p $(@D)
 	$(MAKE) -f $(SRC_DIR)/autoschedulers/adams2019/Makefile $(BIN_DIR)/retrain_cost_model $(BIN_DIR)/featurization_to_sample $(BIN_DIR)/get_host_target HALIDE_DISTRIB_PATH=$(CURDIR)/$(DISTRIB_DIR)
 	cp $< $(DISTRIB_DIR)/lib/
 	for TOOL in retrain_cost_model featurization_to_sample get_host_target; do \
@@ -2348,9 +2355,9 @@ endif
 
 .PHONY: autoschedulers
 autoschedulers: \
-$(DISTRIB_DIR)/lib/libautoschedule_mullapudi2016.$(SHARED_EXT) \
-$(DISTRIB_DIR)/lib/libautoschedule_li2018.$(SHARED_EXT) \
-$(DISTRIB_DIR)/lib/libautoschedule_adams2019.$(SHARED_EXT)
+$(DISTRIB_DIR)/lib/libautoschedule_mullapudi2016.$(PLUGIN_EXT) \
+$(DISTRIB_DIR)/lib/libautoschedule_li2018.$(PLUGIN_EXT) \
+$(DISTRIB_DIR)/lib/libautoschedule_adams2019.$(PLUGIN_EXT)
 
 .PHONY: distrib
 distrib: $(DISTRIB_DIR)/lib/libHalide.$(SHARED_EXT) autoschedulers
