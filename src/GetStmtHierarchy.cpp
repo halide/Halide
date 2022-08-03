@@ -189,6 +189,7 @@ void GetStmtHierarchy::start_html() {
     html << ".arrow { border: solid rgb(125,125,125); border-width: 0 2px 2px 0; display: ";
     html << "inline-block; padding: 3px; }";
     html << ".down { transform: rotate(45deg); -webkit-transform: rotate(45deg); } ";
+    html << ".up { transform: rotate(-135deg); -webkit-transform: rotate(-135deg); } ";
     html << ".button {padding: 3px;}";
 
     html << "body { font-family: Consolas, \\'Liberation Mono\\', Menlo, Courier, monospace;}";
@@ -227,7 +228,7 @@ void GetStmtHierarchy::open_node(string name, int colorCost) {
     update_num_nodes();
 
     html << " <button class=\\'button\\' onclick=\\'handleClick(" << currNodeID << ")\\'>";
-    html << " <i class=\\'arrow down\\'></i> ";
+    html << " <i id=\\'button" << currNodeID << "\\'></i> ";
     html << "</button>";
     html << "</span>";
     html << "<ul>";
@@ -705,6 +706,9 @@ string GetStmtHierarchy::generate_collapse_expand_js(int totalNodes) {
     js << "    for (let i = 0; i < numNodes; i++) {";
     js << "        collapseNodeChildren(i);";
     js << "        nodeExpanded.set(i, false);";
+    js << "        if (document.getElementById(\\'button\\' + i) != null) {";
+    js << "            document.getElementById(\\'button\\' + i).className = \\'arrow down\\';";
+    js << "        }";
     js << "    }";
     js << "}";
     js << "function expandNodesUpToDepth(depth) {";
@@ -721,6 +725,10 @@ string GetStmtHierarchy::generate_collapse_expand_js(int totalNodes) {
     js << "            parentNodeID = parentNodeID.split(\\'child\\')[0];";
     js << "            const parentNode = parseInt(parentNodeID);";
     js << "            nodeExpanded.set(parentNode, true);";
+    js << "            if (document.getElementById(\\'button\\' + parentNodeID) != null) {";
+    js << "                document.getElementById(\\'button\\' + parentNodeID).className = "
+          "\\'arrow up\\';";
+    js << "            }";
     js << "        }";
     js << "    }";
     js << "}";
@@ -736,6 +744,9 @@ string GetStmtHierarchy::generate_collapse_expand_js(int totalNodes) {
     js << "function collapseNodeChildren(nodeNum) {";
     js << "    const children = document.getElementsByClassName(\\'node\\' + nodeNum + "
           "\\'child\\');";
+    js << "    if (document.getElementById(\\'button\\' + nodeNum) != null) {";
+    js << "        document.getElementById(\\'button\\' + nodeNum).className = \\'arrow down\\';";
+    js << "    }";
     js << "    for (const child of children) {";
     js << "        child.style.display = \\'none\\';";
     js << "    }";
@@ -743,6 +754,9 @@ string GetStmtHierarchy::generate_collapse_expand_js(int totalNodes) {
     js << "function expandNodeChildren(nodeNum) {";
     js << "    const children = document.getElementsByClassName(\\'node\\' + nodeNum + "
           "\\'child\\');";
+    js << "    if (document.getElementById(\\'button\\' + nodeNum) != null) {";
+    js << "        document.getElementById(\\'button\\' + nodeNum).className = \\'arrow up\\';";
+    js << "    }";
     js << "    for (const child of children) {";
     js << "        child.style.display = \\'\\';";
     js << "    }";
