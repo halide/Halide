@@ -1271,34 +1271,39 @@ private:
                     }
                     return;
                 } else {
-                    if (a_interval.has_lower_bound()) {
-                        if (!a.type().is_uint()) {
-                            Expr min_bound = lossless_cast(a.type(), t.min());
-                            if (min_bound.defined()) {
-                                // Need to prove that cast is safe.
-                                if (can_prove(a_interval.min >= min_bound)) {
-                                    interval.min = cast(t, a_interval.min);
-                                }
-                            } else {
-                                // Type of arg cannot represent t.min() (i.e. uint16 -> int8)
-                                // Should be safe to not have the clamp.
-                                interval.min = cast(t, a_interval.min);
+                    // We can safely cast a_interval iff we can prove the values
+                    // are within the range of t.
+                    Expr min_bound = lossless_cast(a.type(), t.min());
+                    Expr max_bound = lossless_cast(a.type(), t.max());
+                    // If the inner type is not a uint and we can represent t.min() in a.type(),
+                    // then we need to check that value is >= t.min();
+                    const bool check_lower_bound = !a.type().is_uint() && min_bound.defined();
+                    // We should always check upper bounds if a.type() can represent t.max().
+                    const bool check_upper_bound = max_bound.defined();
+
+                    // Define a helper function for performing saturation.
+                    auto check_safe_cast = [&](const Expr &value, const Expr &base) {
+                        if (check_upper_bound && check_lower_bound) {
+                            if (can_prove((value >= min_bound) && (value <= max_bound))) {
+                                return cast(t, value);
                             }
-                        } else {
-                            // uints are bounded below by 0, so cast is safe.
-                            interval.min = cast(t, a_interval.min);
+                        } else if (check_upper_bound) {
+                            if (can_prove(value <= max_bound)) {
+                                return cast(t, value);
+                            }
+                        } else if (check_lower_bound) {
+                            if (can_prove(a_interval.min >= min_bound)) {
+                                return cast(t, value);
+                            }
                         }
+                        return base;
+                    };
+
+                    if (a_interval.has_lower_bound()) {
+                        interval.min = check_safe_cast(a_interval.min, interval.min);
                     }
                     if (a_interval.has_upper_bound()) {
-                        Expr max_bound = lossless_cast(a.type(), t.max());
-                        if (max_bound.defined()) {
-                            // Need to prove that cast is safe.
-                            if (can_prove(a_interval.max <= max_bound)) {
-                                interval.max = cast(t, a_interval.max);
-                            }
-                        } else {
-                            interval.max = cast(t, a_interval.max);
-                        }
+                        interval.max = check_safe_cast(a_interval.max, interval.max);
                     }
                     return;
                 }
@@ -3671,7 +3676,7 @@ void bounds_test() {
 
     check(scope, saturating_cast<uint8_t>(clamp(x, 5, 10)), cast<uint8_t>(5), cast<uint8_t>(10));
     {
-        scope.push("x", Interval(cast<uint32_t>(0), UInt(32).max()));
+        scope.push("x", Interval(UInt(32).min(), UInt(32).max()));
         check(scope, saturating_cast<int32_t>(max(cast<uint32_t>(x), cast<uint32_t>(5))), cast<int32_t>(5), Interval::pos_inf());
         scope.pop("x");
     }
@@ -3682,6 +3687,13 @@ void bounds_test() {
         check(scope, saturating_cast<double>(z), cast<double>(-1), cast<double>(1));
         check(scope, saturating_cast<float16_t>(z), cast<float16_t>(-1), cast<float16_t>(1));
         check(scope, saturating_cast<uint8_t>(z), cast<uint8_t>(0), cast<uint8_t>(1));
+        scope.pop("z");
+    }
+    {
+        Expr z = Variable::make(UInt(32), "z");
+        scope.push("z", Interval(UInt(32).max(), UInt(32).max()));
+        check(scope, saturating_cast<int32_t>(z), Interval::neg_inf(), Interval::pos_inf());
+        scope.pop("z");
     }
 
     {
