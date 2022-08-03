@@ -1,5 +1,6 @@
 #include "ExtractTileOperations.h"
 
+#include "IR.h"
 #include "IRMatch.h"
 #include "IRMutator.h"
 #include "IROperator.h"
@@ -37,6 +38,22 @@ using std::string;
 using std::vector;
 
 namespace {
+struct RequestPermission {
+    bool requires_amx_{false};
+
+    void enable_amx() {
+        requires_amx_ = true;
+    }
+
+    /// Inject a call to enable amx through a syscall if amx was detected
+    Stmt inject_request_amx(Stmt s) {
+        if (requires_amx_) {
+            return Block::make({Evaluate::make(Call::make(type_of<int>(), "halide_amx_req_perm", {}, Call::Extern)), std::move(s)});
+        } else {
+            return s;
+        }
+    }
+};
 
 template<int Dim>
 struct Tile {
@@ -379,7 +396,7 @@ struct Matmul {
     int tile_r;
 };
 
-Matmul convert_to_matmul(const Store *op, const string &new_name, AMXOpType op_type) {
+Matmul convert_to_matmul(const Store *op, RequestPermission &perm, const string &new_name, AMXOpType op_type) {
     // m[ramp(0, 1, S)] = VectorAdd(lhs[{XYR tile}] * xX(rhs[{YR tile}])) + m[ramp(0, 1, S)]
     const auto wild_i8x = Variable::make(Int(8, 0), "*");
     const auto wild_u8x = Variable::make(UInt(8, 0), "*");
@@ -522,7 +539,7 @@ Matmul convert_to_matmul(const Store *op, const string &new_name, AMXOpType op_t
     return {true, std::move(store), tile_x, tile_y, tile_r};
 }
 
-Stmt convert_to_zero(const Store *op, int tile_x, int tile_y, const string &new_name) {
+Stmt convert_to_zero(const Store *op, RequestPermission &perm, int tile_x, int tile_y, const string &new_name) {
     if (const auto *ramp = op->index.as<Ramp>()) {
         if (const auto *bcast = op->value.as<Broadcast>()) {
             if (is_const_one(ramp->stride) &&
@@ -534,6 +551,7 @@ Stmt convert_to_zero(const Store *op, int tile_x, int tile_y, const string &new_
                 const auto &store_type = op->value.type();
                 // will be f32 or i32
                 auto tile_zero_type = store_type.with_lanes(1024 / store_type.bytes());
+                perm.enable_amx();
                 auto val = Call::make(tile_zero_type, "tile_zero", {rows, colbytes}, Call::Intrinsic);
                 auto store = Store::make(new_name, std::move(val), Ramp::make(0, 1, 256), Parameter(), const_true(256), ModulusRemainder());
                 return store;
@@ -543,7 +561,7 @@ Stmt convert_to_zero(const Store *op, int tile_x, int tile_y, const string &new_
     return {};
 }
 
-Stmt convert_to_tile_store(const Store *op, const string &amx_name, int tile_x, int tile_y) {
+Stmt convert_to_tile_store(const Store *op, RequestPermission &perm, const string &amx_name, int tile_x, int tile_y) {
     auto tile = get_2d_tile_index(op->index);
     if (tile.result && tile.extent[0] == tile_x && tile.extent[1] == tile_y) {
         auto out = Variable::make(Handle(), op->name);
@@ -552,6 +570,7 @@ Stmt convert_to_tile_store(const Store *op, const string &amx_name, int tile_x, 
         auto bytes = op->value.type().bytes();
         internal_assert(bytes == 4) << "AMX store only supported for int32 and float32 output, not for " << op->value.type() << "\n";
         // {tile_x, tile_y, var, base, stride}
+        perm.enable_amx();
         auto store = Call::make(Int(32), "tile_store", {tile_x, tile_y * bytes, std::move(out), tile.base * bytes, tile.stride[0] * bytes, std::move(tile_val)}, Call::Intrinsic);
         return Evaluate::make(std::move(store));
     }
@@ -560,6 +579,8 @@ Stmt convert_to_tile_store(const Store *op, const string &amx_name, int tile_x, 
 
 class ExtractTileOperations : public IRMutator {
     using IRMutator::visit;
+
+    RequestPermission &perm;
 
     string tile_name;
     string amx_name;
@@ -570,6 +591,12 @@ class ExtractTileOperations : public IRMutator {
     int found_tile_r = -1;
     AMXOpType op_type;
 
+public:
+    ExtractTileOperations(RequestPermission &arp)
+        : perm(arp) {
+    }
+
+private:
     Stmt visit(const Allocate *op) override {
         if (op->memory_type == MemoryType::AMXTile) {
             user_assert(
@@ -634,12 +661,12 @@ class ExtractTileOperations : public IRMutator {
             if (!load || load->name != tile_name) {
                 return op;
             }
-            auto store = convert_to_tile_store(op, amx_name, found_tile_x, found_tile_y);
+            auto store = convert_to_tile_store(op, perm, amx_name, found_tile_x, found_tile_y);
             user_assert(store.defined()) << "Store to AMX tile allocation of a non-tile value";
             return store;
         }
 
-        auto matmul = convert_to_matmul(op, amx_name, op_type);
+        auto matmul = convert_to_matmul(op, perm, amx_name, op_type);
         if (matmul.result) {
             user_assert(
                 (found_tile_x < 0 || matmul.tile_x == found_tile_x) &&
@@ -658,7 +685,7 @@ class ExtractTileOperations : public IRMutator {
             return op;
         }
 
-        auto zero = convert_to_zero(op, found_tile_x, found_tile_y, amx_name);
+        auto zero = convert_to_zero(op, perm, found_tile_x, found_tile_y, amx_name);
         if (zero.defined()) {
             return zero;
         }
@@ -672,7 +699,10 @@ class ExtractTileOperations : public IRMutator {
 }  // namespace
 
 Stmt extract_tile_operations(const Stmt &s) {
-    return ExtractTileOperations().mutate(s);
+    RequestPermission perm;
+
+    Stmt s_extracted = ExtractTileOperations{perm}.mutate(s);
+    return perm.inject_request_amx(std::move(s_extracted));
 }
 }  // namespace Internal
 }  // namespace Halide
