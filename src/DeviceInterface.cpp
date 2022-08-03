@@ -102,6 +102,8 @@ const halide_device_interface_t *get_device_interface_for_device_api(DeviceAPI d
         name = "hexagon_dma";
     } else if (d == DeviceAPI::D3D12Compute) {
         name = "d3d12compute";
+    } else if (d == DeviceAPI::Vulkan) {
+        name = "vulkan";
     } else {
         if (error_site) {
             user_error
@@ -150,6 +152,8 @@ DeviceAPI get_default_device_api_for_target(const Target &target) {
         return DeviceAPI::OpenCL;
     } else if (target.has_feature(Target::CUDA)) {
         return DeviceAPI::CUDA;
+    } else if (target.has_feature(Target::Vulkan)) {
+        return DeviceAPI::Vulkan;
     } else if (target.has_feature(Target::OpenGLCompute)) {
         return DeviceAPI::OpenGLCompute;
     } else if (target.arch != Target::Hexagon && target.has_feature(Target::HVX)) {
@@ -195,6 +199,9 @@ Expr make_device_interface_call(DeviceAPI device_api, MemoryType memory_type) {
         break;
     case DeviceAPI::D3D12Compute:
         interface_name = "halide_d3d12compute_device_interface";
+        break;
+    case DeviceAPI::Vulkan:
+        interface_name = "halide_vulkan_device_interface";
         break;
     case DeviceAPI::Default_GPU:
         // Will be resolved later

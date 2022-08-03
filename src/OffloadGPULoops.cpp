@@ -7,6 +7,7 @@
 #include "CodeGen_OpenCL_Dev.h"
 #include "CodeGen_OpenGLCompute_Dev.h"
 #include "CodeGen_PTX_Dev.h"
+#include "CodeGen_Vulkan_Dev.h"
 #include "ExprUsesVar.h"
 #include "IRMutator.h"
 #include "IROperator.h"
@@ -267,6 +268,9 @@ public:
         }
         if (target.has_feature(Target::D3D12Compute)) {
             cgdev[DeviceAPI::D3D12Compute] = new_CodeGen_D3D12Compute_Dev(target);
+        }
+        if (target.has_feature(Target::Vulkan)) {
+            cgdev[DeviceAPI::Vulkan] = new_CodeGen_Vulkan_Dev(target);
         }
 
         internal_assert(!cgdev.empty()) << "Requested unknown GPU target: " << target.to_string() << "\n";
