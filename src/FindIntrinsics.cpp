@@ -410,6 +410,14 @@ protected:
                         saturating_sub(x, y),
                         op->type.is_uint() && is_x_same_uint) ||
 
+                // Saturating narrow patterns.
+                rewrite(max(min(x, upper), lower),
+                        saturating_cast(op->type, x)) ||
+
+                rewrite(min(x, upper),
+                        saturating_cast(op->type, x),
+                        is_uint(x)) ||
+
                 // Averaging patterns
                 //
                 // We have a slight preference for rounding_halving_add over
