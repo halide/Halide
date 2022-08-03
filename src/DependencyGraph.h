@@ -11,11 +11,6 @@ using namespace std;
 using namespace Halide;
 using namespace Internal;
 
-// #define CC_TYPE 0
-// #define DMC_TYPE 1
-
-#define m_assert(expr, msg) assert((void(msg), (expr)))
-
 struct DependencyNode {
     int nodeID;
     string nodeName;

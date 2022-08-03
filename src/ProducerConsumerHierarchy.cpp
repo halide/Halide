@@ -44,7 +44,8 @@ void StmtSizes::set_size(const IRNode *node, uint16_t produce_size, uint16_t con
     if (it == stmt_sizes.end()) {
         stmt_sizes[node] = StmtSize{produce_size, consume_size};
     } else {
-        m_assert(false, "StmtSizes::set_size: node already set");
+        internal_error << "\n"
+                       << "StmtSizes::set_size: node already exists\n\n";
         it->second.produce_size = produce_size;
         it->second.consume_size = consume_size;
     }

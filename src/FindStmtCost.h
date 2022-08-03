@@ -18,8 +18,6 @@ using namespace std;
 #define LOAD_COST 2
 #define STORE_COST 3
 
-#define m_assert(expr, msg) assert((void(msg), (expr)))
-
 /*
  * StmtCost struct
  */
@@ -149,7 +147,7 @@ private:
     Stmt visit(const Evaluate *op) override;
     Stmt visit(const Atomic *op) override;
 
-    void print_node(const IRNode *node) const;
+    string print_node(const IRNode *node) const;
 };
 
 #endif  // FINDSTMTCOST_H

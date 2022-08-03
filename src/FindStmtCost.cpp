@@ -1,4 +1,5 @@
 #include "FindStmtCost.h"
+#include "Error.h"
 
 using namespace Halide;
 using namespace Internal;
@@ -21,8 +22,11 @@ void CostPreProcessor::traverse(const Module &m) {
 int CostPreProcessor::get_lock_access_count(const string name) const {
     auto it = lock_access_counts.find(name);
     if (it == lock_access_counts.end()) {
-        cout << "name: " << name << endl;
-        m_assert(false, "name not found in `lock_access_counts`");
+        // cout << "name: " << name << endl;
+        internal_error << "\n"
+                       << "CostPreProcessor::get_lock_access_count: name (`" << name
+                       << "`) not found in `lock_access_counts`"
+                       << "\n\n";
         return 0;
     }
     return it->second;
@@ -108,8 +112,11 @@ int FindStmtCost::get_depth(const IRNode *node) const {
             type == IRNodeType::FloatImm || type == IRNodeType::StringImm) {
             return 1;
         } else {
-            print_node(node);
-            m_assert(false, "node not found in stmt_cost");
+            // print_node(node);
+            internal_error << "\n"
+                           << "FindStmtCost::get_depth: " << print_node(node)
+                           << "node not found in stmt_cost map"
+                           << "\n\n";
             return 0;
         }
     }
@@ -131,8 +138,10 @@ int FindStmtCost::calculate_computation_cost(const IRNode *node) const {
             type == IRNodeType::FloatImm || type == IRNodeType::StringImm) {
             cost_node = StmtCost{1, 1, 0};
         } else {
-            print_node(node);
-            m_assert(false, "node not found in stmt_cost");
+            internal_error << "\n"
+                           << "FindStmtCost::calculate_computation_cost: " << print_node(node)
+                           << "node not found in stmt_cost map"
+                           << "\n\n";
             return 0;
         }
     } else {
@@ -152,8 +161,10 @@ int FindStmtCost::get_data_movement_cost(const IRNode *node) const {
             type == IRNodeType::FloatImm || type == IRNodeType::StringImm) {
             return 0;
         } else {
-            print_node(node);
-            m_assert(false, "node not found in stmt_cost");
+            internal_error << "\n"
+                           << "FindStmtCost::get_data_movement_cost: " << print_node(node)
+                           << "node not found in stmt_cost map"
+                           << "\n\n";
             return 0;
         }
     }
@@ -186,8 +197,10 @@ int FindStmtCost::get_computation_cost(const IRNode *node) const {
             type == IRNodeType::FloatImm || type == IRNodeType::StringImm) {
             return 1;
         } else {
-            print_node(node);
-            m_assert(false, "node not found in stmt_cost");
+            internal_error << "\n"
+                           << "FindStmtCost::get_computation_cost: " << print_node(node)
+                           << "node not found in stmt_cost map"
+                           << "\n\n";
             return 0;
         }
     }
@@ -548,13 +561,19 @@ Stmt FindStmtCost::visit(const For *op) {
 
     // TODO: how to take into account the different types of for loops?
     if (op->for_type == ForType::Parallel) {
-        m_assert(false, "Parallel for loops are not supported yet");
+        internal_error << "\n"
+                       << "FindStmtCost::visit: Parallel for loops are not supported yet"
+                       << "\n\n";
     }
     if (op->for_type == ForType::Unrolled) {
-        m_assert(false, "Unrolled for loops are not supported yet");
+        internal_error << "\n"
+                       << "FindStmtCost::visit: Unrolled for loops are not supported yet"
+                       << "\n\n";
     }
     if (op->for_type == ForType::Vectorized) {
-        m_assert(false, "Vectorized for loops are not supported yet");
+        internal_error << "\n"
+                       << "FindStmtCost::visit: Vectorized for loops are not supported yet"
+                       << "\n\n";
     }
     set_costs(op, 1 + bodyCost, dataMovementCost);
 
@@ -573,8 +592,10 @@ Stmt FindStmtCost::visit(const Acquire *op) {
 
                 * do we need to recurse on body???
     */
-    m_assert(false,
-             "reached Acquire! take a look at its use - visit(Acquire) is not fully implemented");
+    internal_error
+        << "\n"
+        << "reached Acquire! take a look at its use - visit(Acquire) is not fully implemented yet"
+        << "\n\n";
 
     stringstream name;
     name << op->semaphore;
@@ -814,8 +835,11 @@ Stmt FindStmtCost::visit(const Atomic *op) {
                 * make it similar to acquire
                 * parallel vs vector is important
     */
-    m_assert(false,
-             "reached Atomic! take a look at its use - visit(Atomic) is not fully implemented");
+    internal_error
+        << "\n"
+        << "reached Atomic! take a look at its use - visit(Atomic) is not fully implemented"
+        << "\n\n";
+
     mutate(op->body);
 
     stringstream name;
@@ -831,104 +855,107 @@ Stmt FindStmtCost::visit(const Atomic *op) {
     return op;
 }
 
-void FindStmtCost::print_node(const IRNode *node) const {
-    cout << "Crashing node has type: ";
+string FindStmtCost::print_node(const IRNode *node) const {
+    stringstream s;
+    s << "Crashing node has type: ";
     IRNodeType type = node->node_type;
     if (type == IRNodeType::IntImm) {
-        cout << "IntImm type" << endl;
+        s << "IntImm type" << endl;
         auto node1 = dynamic_cast<const IntImm *>(node);
-        cout << "value: " << node1->value << endl;
+        s << "value: " << node1->value << endl;
     } else if (type == IRNodeType::UIntImm) {
-        cout << "UIntImm type" << endl;
+        s << "UIntImm type" << endl;
     } else if (type == IRNodeType::FloatImm) {
-        cout << "FloatImm type" << endl;
+        s << "FloatImm type" << endl;
     } else if (type == IRNodeType::StringImm) {
-        cout << "StringImm type" << endl;
+        s << "StringImm type" << endl;
     } else if (type == IRNodeType::Broadcast) {
-        cout << "Broadcast type" << endl;
+        s << "Broadcast type" << endl;
     } else if (type == IRNodeType::Cast) {
-        cout << "Cast type" << endl;
+        s << "Cast type" << endl;
     } else if (type == IRNodeType::Variable) {
-        cout << "Variable type" << endl;
+        s << "Variable type" << endl;
     } else if (type == IRNodeType::Add) {
-        cout << "Add type" << endl;
+        s << "Add type" << endl;
     } else if (type == IRNodeType::Sub) {
-        cout << "Sub type" << endl;
+        s << "Sub type" << endl;
     } else if (type == IRNodeType::Mod) {
-        cout << "Mod type" << endl;
+        s << "Mod type" << endl;
     } else if (type == IRNodeType::Mul) {
-        cout << "Mul type" << endl;
+        s << "Mul type" << endl;
     } else if (type == IRNodeType::Div) {
-        cout << "Div type" << endl;
+        s << "Div type" << endl;
     } else if (type == IRNodeType::Min) {
-        cout << "Min type" << endl;
+        s << "Min type" << endl;
     } else if (type == IRNodeType::Max) {
-        cout << "Max type" << endl;
+        s << "Max type" << endl;
     } else if (type == IRNodeType::EQ) {
-        cout << "EQ type" << endl;
+        s << "EQ type" << endl;
     } else if (type == IRNodeType::NE) {
-        cout << "NE type" << endl;
+        s << "NE type" << endl;
     } else if (type == IRNodeType::LT) {
-        cout << "LT type" << endl;
+        s << "LT type" << endl;
     } else if (type == IRNodeType::LE) {
-        cout << "LE type" << endl;
+        s << "LE type" << endl;
     } else if (type == IRNodeType::GT) {
-        cout << "GT type" << endl;
+        s << "GT type" << endl;
     } else if (type == IRNodeType::GE) {
-        cout << "GE type" << endl;
+        s << "GE type" << endl;
     } else if (type == IRNodeType::And) {
-        cout << "And type" << endl;
+        s << "And type" << endl;
     } else if (type == IRNodeType::Or) {
-        cout << "Or type" << endl;
+        s << "Or type" << endl;
     } else if (type == IRNodeType::Not) {
-        cout << "Not type" << endl;
+        s << "Not type" << endl;
     } else if (type == IRNodeType::Select) {
-        cout << "Select type" << endl;
+        s << "Select type" << endl;
     } else if (type == IRNodeType::Load) {
-        cout << "Load type" << endl;
+        s << "Load type" << endl;
     } else if (type == IRNodeType::Ramp) {
-        cout << "Ramp type" << endl;
+        s << "Ramp type" << endl;
     } else if (type == IRNodeType::Call) {
-        cout << "Call type" << endl;
+        s << "Call type" << endl;
     } else if (type == IRNodeType::Let) {
-        cout << "Let type" << endl;
+        s << "Let type" << endl;
     } else if (type == IRNodeType::Shuffle) {
-        cout << "Shuffle type" << endl;
+        s << "Shuffle type" << endl;
     } else if (type == IRNodeType::VectorReduce) {
-        cout << "VectorReduce type" << endl;
+        s << "VectorReduce type" << endl;
     } else if (type == IRNodeType::LetStmt) {
-        cout << "LetStmt type" << endl;
+        s << "LetStmt type" << endl;
     } else if (type == IRNodeType::AssertStmt) {
-        cout << "AssertStmt type" << endl;
+        s << "AssertStmt type" << endl;
     } else if (type == IRNodeType::ProducerConsumer) {
-        cout << "ProducerConsumer type" << endl;
+        s << "ProducerConsumer type" << endl;
     } else if (type == IRNodeType::For) {
-        cout << "For type" << endl;
+        s << "For type" << endl;
     } else if (type == IRNodeType::Acquire) {
-        cout << "Acquire type" << endl;
+        s << "Acquire type" << endl;
     } else if (type == IRNodeType::Store) {
-        cout << "Store type" << endl;
+        s << "Store type" << endl;
     } else if (type == IRNodeType::Provide) {
-        cout << "Provide type" << endl;
+        s << "Provide type" << endl;
     } else if (type == IRNodeType::Allocate) {
-        cout << "Allocate type" << endl;
+        s << "Allocate type" << endl;
     } else if (type == IRNodeType::Free) {
-        cout << "Free type" << endl;
+        s << "Free type" << endl;
     } else if (type == IRNodeType::Realize) {
-        cout << "Realize type" << endl;
+        s << "Realize type" << endl;
     } else if (type == IRNodeType::Block) {
-        cout << "Block type" << endl;
+        s << "Block type" << endl;
     } else if (type == IRNodeType::Fork) {
-        cout << "Fork type" << endl;
+        s << "Fork type" << endl;
     } else if (type == IRNodeType::IfThenElse) {
-        cout << "IfThenElse type" << endl;
+        s << "IfThenElse type" << endl;
     } else if (type == IRNodeType::Evaluate) {
-        cout << "Evaluate type" << endl;
+        s << "Evaluate type" << endl;
     } else if (type == IRNodeType::Prefetch) {
-        cout << "Prefetch type" << endl;
+        s << "Prefetch type" << endl;
     } else if (type == IRNodeType::Atomic) {
-        cout << "Atomic type" << endl;
+        s << "Atomic type" << endl;
     } else {
-        cout << "Unknown type" << endl;
+        s << "Unknown type" << endl;
     }
+
+    return s.str();
 }

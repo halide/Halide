@@ -14,8 +14,6 @@ using namespace Internal;
 #define CC_TYPE 0
 #define DMC_TYPE 1
 
-#define m_assert(expr, msg) assert((void(msg), (expr)))
-
 class GetStmtHierarchy : public IRMutator {
 
 public:

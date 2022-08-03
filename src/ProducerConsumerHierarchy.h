@@ -9,8 +9,6 @@ using namespace std;
 using namespace Halide;
 using namespace Internal;
 
-#define m_assert(expr, msg) assert((void(msg), (expr)))
-
 struct StmtSize {
     uint16_t produce_size;
     uint16_t consume_size;

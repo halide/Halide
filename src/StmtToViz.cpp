@@ -1,5 +1,6 @@
 #include "StmtToViz.h"
 #include "DependencyGraph.h"
+#include "Error.h"
 #include "FindStmtCost.h"
 #include "GetStmtHierarchy.h"
 #include "IROperator.h"
@@ -648,7 +649,8 @@ private:
         } else if (op->for_type == ForType::GPULane) {
             stream << keyword("gpu_lane");
         } else {
-            internal_error << "Unknown for type: " << ((int)op->for_type) << "\n";
+            internal_error << "\n"
+                           << "Unknown for type: " << ((int)op->for_type) << "\n\n";
         }
         stream << " (";
         stream << close_span();
@@ -1024,7 +1026,9 @@ public:
     }
     void generate_dependency_graph(const Stmt &s) {
         cout << endl << endl << "uh" << endl;
-        m_assert(false, "Not implemented");
+        internal_error << "\n"
+                       << "StmtToViz::generate_dependency_graph: Not implemented"
+                       << "\n\n";
 
         // Stmt inlined_s = substitute_in_all_lets(s);
         // string dependGraphHTML = dependencyGraph.generate_dependency_graph(inlined_s);

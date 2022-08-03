@@ -1,4 +1,5 @@
 #include "DependencyGraph.h"
+#include "Error.h"
 #include "Module.h"
 #include "Substitute.h"
 
@@ -174,7 +175,10 @@ void DependencyGraph::add_dependency(const string &variable, const string &depen
     }
     auto it = dependencies.find(variable);
     if (it == dependencies.end()) {
-        m_assert(false, "current_variable should be already in the map");
+        internal_error << "\n"
+                       << "DependencyGraph::add_dependency: `" << variable
+                       << "` not found - should already be in the map"
+                       << "\n\n";
     } else {
         it->second.push_back(dependency);
     }
@@ -184,15 +188,21 @@ void DependencyGraph::add_empty_dependency(const string &variable) {
     if (it == dependencies.end()) {
         dependencies[variable] = vector<string>{};
     } else {
-        cout << "attempting to add: " << variable << endl;
-        m_assert(false, "variable already exists");
+        internal_error << "\n"
+                       << "DependencyGraph::add_empty_dependency: `" << variable
+                       << "` already found - should not already be in the map"
+                       << "\n\n";
     }
 }
 
 vector<string> DependencyGraph::get_dependencies(const string &variable) {
     auto it = dependencies.find(variable);
     if (it == dependencies.end()) {
-        m_assert(false, "variable not found in `dependencies`");
+        internal_error << "\n"
+                       << "DependencyGraph::get_dependencies: `" << variable
+                       << "` not found - should already be in the map"
+                       << "\n\n";
+        return vector<string>{};
     } else {
         return it->second;
     }

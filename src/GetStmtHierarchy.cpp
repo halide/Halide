@@ -88,7 +88,10 @@ int GetStmtHierarchy::get_color_range(const IRNode *op) const {
         return findStmtCost.get_data_movement_range(op);
 
     } else {
-        m_assert(false, "colorType is not set correctly in get_color_range");
+        internal_error << "\n"
+                       << "GetStmtHierarchy::get_color_range: invalid color type"
+                       << "\n\n";
+        return 0;
     }
 }
 
@@ -115,7 +118,9 @@ int GetStmtHierarchy::get_color_range_list(vector<Halide::Expr> exprs) const {
     }
 
     else {
-        m_assert(false, "colorType is not set in get_color_range_list");
+        internal_error << "\n"
+                       << "GetStmtHierarchy::get_color_range_list: invalid color type"
+                       << "\n\n";
     }
 
     return maxValue;
@@ -442,7 +447,8 @@ Expr GetStmtHierarchy::visit(const Let *op) {
     return op;
 }
 Stmt GetStmtHierarchy::visit(const LetStmt *op) {
-    m_assert(false, "LetStmt is not supported for GetStmtHierarchy");
+    internal_error << "\n"
+                   << "GetStmtHierarchy: LetStmt is not supported.\n\n";
 
     int computation_range = get_color_range(op);
     open_node("=", computation_range);
@@ -464,11 +470,13 @@ Stmt GetStmtHierarchy::visit(const AssertStmt *op) {
     return op;
 }
 Stmt GetStmtHierarchy::visit(const ProducerConsumer *op) {
-    m_assert(false, "shouldn't be visualizing ProducerConsumer");
+    internal_error << "\n"
+                   << "GetStmtHierarchy: ProducerConsumer is not supported.\n\n";
     return op;
 }
 Stmt GetStmtHierarchy::visit(const For *op) {
-    m_assert(false, "shouldn't be visualizing For");
+    internal_error << "\n"
+                   << "GetStmtHierarchy: For is not supported.\n\n";
     return op;
 }
 Stmt GetStmtHierarchy::visit(const Store *op) {
@@ -484,7 +492,8 @@ Stmt GetStmtHierarchy::visit(const Store *op) {
     return op;
 }
 Stmt GetStmtHierarchy::visit(const Provide *op) {
-    m_assert(false, "check out provide!! " + op->name);
+    internal_error << "\n"
+                   << "GetStmtHierarchy: Provide is not supported. Look into it though!!! \n\n";
 
     int computation_range = get_color_range(op);
     open_node("=", computation_range);
@@ -520,13 +529,19 @@ Stmt GetStmtHierarchy::visit(const Allocate *op) {
     node_without_children(op->name + "[" + index.str() + "]", get_color_range_list(op->extents));
 
     if (!is_const_one(op->condition)) {
-        m_assert(false, "visualizing Allocate: !is_const_one(op->condition) !! look into it");
+        internal_error
+            << "\n"
+            << "GetStmtHierarchy: Allocate `!is_const_one(op->condition)` is not supported.\n\n";
     }
     if (op->new_expr.defined()) {
-        m_assert(false, "visualizing Allocate: op->new_expr.defined() !! look into it");
+        internal_error
+            << "\n"
+            << "GetStmtHierarchy: Allocate `op->new_expr.defined()` is not supported.\n\n";
     }
     if (!op->free_function.empty()) {
-        m_assert(false, "visualizing Allocate: !op->free_function.empty() !! look into it");
+        internal_error
+            << "\n"
+            << "GetStmtHierarchy: Allocate `!op->free_function.empty()` is not supported.\n\n";
     }
 
     close_node();
@@ -541,11 +556,13 @@ Stmt GetStmtHierarchy::visit(const Free *op) {
     return op;
 }
 Stmt GetStmtHierarchy::visit(const Realize *op) {
-    m_assert(false, "visualizing Realize !! look into it");
+    internal_error << "\n"
+                   << "GetStmtHierarchy: Realize is not supported. Look into it though!!! \n\n";
     return op;
 }
 Stmt GetStmtHierarchy::visit(const Block *op) {
-    m_assert(false, "visualizing Block !! look into it");
+    internal_error << "\n"
+                   << "GetStmtHierarchy: Block is not supported. Look into it though!!! \n\n";
     return op;
 }
 Stmt GetStmtHierarchy::visit(const IfThenElse *op) {
@@ -646,11 +663,13 @@ Expr GetStmtHierarchy::visit(const VectorReduce *op) {
     return op;
 }
 Stmt GetStmtHierarchy::visit(const Prefetch *op) {
-    m_assert(false, "visualizing Prefetch !! look into it");
+    internal_error << "\n"
+                   << "GetStmtHierarchy: Prefetch is not supported. Look into it though!!! \n\n";
     return op;
 }
 Stmt GetStmtHierarchy::visit(const Fork *op) {
-    m_assert(false, "visualizing Fork !! look into it");
+    internal_error << "\n"
+                   << "GetStmtHierarchy: Fork is not supported. Look into it though!!! \n\n";
     return op;
 }
 Stmt GetStmtHierarchy::visit(const Acquire *op) {
