@@ -31,7 +31,7 @@ namespace Autoscheduler {
   Important changes that caching impacts, outside of this file and Cache.cpp:
 
   - LoopNest::compute_features
-    If cache_features is enabled (i.e. HL_DISABLE_MEMOIZED_FEATURES!=1) then this function caches
+    If cache_features is enabled (i.e. disable_memoized_features==0) then this function caches
     the featurizations of its children, and if called again, reuses those cached featurizations.
     The features are saved in a LoopNest's member, std::map<> features_cache. Some features do not
     persist, and the FeaturesIntermediates struct (see Featurization.h) is used to cache useful
@@ -68,12 +68,6 @@ namespace Autoscheduler {
 
 struct State;
 
-// true unless HL_DISABLE_MEMOIZED_FEATURES=1
-bool use_memoized_features();
-
-// true unless HL_DISABLE_MEMOIZED_BLOCKS=1
-bool is_memoize_blocks_enabled();
-
 /*
 Object stores caching options for autoscheduling.
 cache_blocks: decides if tilings are cached for decisions related to parallelizing the loops of a Func.
@@ -83,10 +77,10 @@ struct CachingOptions {
     bool cache_blocks = false;
     bool cache_features = false;
 
-    static CachingOptions MakeOptionsFromEnviron() {
+    static CachingOptions MakeOptionsFromParams(const Adams2019Params &params) {
         CachingOptions options;
-        options.cache_blocks = is_memoize_blocks_enabled();
-        options.cache_features = use_memoized_features();
+        options.cache_blocks = params.disable_memoized_blocks == 0;
+        options.cache_features = params.disable_memoized_features == 0;
         return options;
     }
 };
@@ -123,8 +117,7 @@ struct Cache {
                              int &num_children,
                              const FunctionDAG &dag,
                              const Adams2019Params &params,
-                             CostModel *cost_model,
-                             int64_t memory_limit) const;
+                             CostModel *cost_model) const;
 
     // Generate tilings for a specific vector dimension and memoize them.
     void memoize_blocks(const FunctionDAG::Node *node, LoopNest *new_root);
