@@ -797,42 +797,6 @@ private:
             // Halving unsigned subtract.
             {"halide.hexagon.navg.vub.vub", i8(widening_sub(wild_u8x, wild_u8x) >> 1)},
 
-            // Saturating narrowing casts with rounding
-            {"halide.hexagon.trunc_satub_rnd.vh", u8_sat(rounding_shift_right(wild_i16x, 8)), Pattern::DeinterleaveOp0},
-            {"halide.hexagon.trunc_satb_rnd.vh", i8_sat(rounding_shift_right(wild_i16x, 8)), Pattern::DeinterleaveOp0},
-            {"halide.hexagon.trunc_satub_rnd.vuh", u8_sat(rounding_shift_right(wild_u16x, 8)), Pattern::DeinterleaveOp0},
-            {"halide.hexagon.trunc_satuh_rnd.vw", u16_sat(rounding_shift_right(wild_i32x, 16)), Pattern::DeinterleaveOp0},
-            {"halide.hexagon.trunc_sath_rnd.vw", i16_sat(rounding_shift_right(wild_i32x, 16)), Pattern::DeinterleaveOp0},
-            {"halide.hexagon.trunc_satuh_rnd.vuw", u16_sat(rounding_shift_right(wild_u32x, 16)), Pattern::DeinterleaveOp0},
-
-            // Saturating narrowing casts with rounding
-            {"halide.hexagon.trunc_satub_shr_rnd.vh", u8_sat(rounding_shift_right(wild_i16x, wild_u16)), Pattern::DeinterleaveOp0},
-            {"halide.hexagon.trunc_satb_shr_rnd.vh", i8_sat(rounding_shift_right(wild_i16x, wild_u16)), Pattern::DeinterleaveOp0},
-            {"halide.hexagon.trunc_satub_shr_rnd.vuh", u8_sat(rounding_shift_right(wild_u16x, wild_u16)), Pattern::DeinterleaveOp0 | Pattern::v65orLater},
-            {"halide.hexagon.trunc_satuh_shr_rnd.vw", u16_sat(rounding_shift_right(wild_i32x, wild_u32)), Pattern::DeinterleaveOp0},
-            {"halide.hexagon.trunc_sath_shr_rnd.vw", i16_sat(rounding_shift_right(wild_i32x, wild_u32)), Pattern::DeinterleaveOp0},
-            {"halide.hexagon.trunc_satuh_shr_rnd.vuw", u16_sat(rounding_shift_right(wild_u32x, wild_u32)), Pattern::DeinterleaveOp0},
-
-            // Saturating narrowing casts
-            {"halide.hexagon.trunc_satub_shr.vh.uh", u8_sat(wild_i16x >> wild_u16), Pattern::DeinterleaveOp0},
-            {"halide.hexagon.trunc_satuh_shr.vw.uw", u16_sat(wild_i32x >> wild_u32), Pattern::DeinterleaveOp0},
-            {"halide.hexagon.trunc_sath_shr.vw.uw", i16_sat(wild_i32x >> wild_u32), Pattern::DeinterleaveOp0},
-
-            // For some of the following narrowing casts, we have the choice of
-            // non-interleaving or interleaving instructions. Because we don't
-            // know which one we prefer during pattern matching, we match the
-            // non-interleaving versions for now and replace them with the
-            // instructions that interleave later if it makes sense.
-
-            // Saturating narrowing casts. These may interleave later with trunc_sat.
-            {"halide.hexagon.pack_satub.vh", u8_sat(wild_i16x)},
-            {"halide.hexagon.pack_satuh.vw", u16_sat(wild_i32x)},
-            {"halide.hexagon.pack_satb.vh", i8_sat(wild_i16x)},
-            {"halide.hexagon.pack_sath.vw", i16_sat(wild_i32x)},
-
-            // We don't have a vpack equivalent to this one, so we match it directly.
-            {"halide.hexagon.trunc_satuh.vuw", u16_sat(wild_u32x), Pattern::DeinterleaveOp0},
-
             // Narrowing casts. These may interleave later with trunclo.
             {"halide.hexagon.packhi.vh", u8(wild_u16x >> 8)},
             {"halide.hexagon.packhi.vh", u8(wild_i16x >> 8)},
@@ -872,12 +836,6 @@ private:
         // fall through to LLVM, which will generate large unoptimized
         // shuffles.
         static const vector<pair<Expr, Expr>> cast_rewrites = {
-            // Saturating narrowing
-            {u8_sat(wild_u32x), u8_sat(u16_sat(wild_u32x))},
-            {u8_sat(wild_i32x), u8_sat(i16_sat(wild_i32x))},
-            {i8_sat(wild_u32x), i8_sat(u16_sat(wild_u32x))},
-            {i8_sat(wild_i32x), i8_sat(i16_sat(wild_i32x))},
-
             // Narrowing
             {u8(wild_u32x), u8(u16(wild_u32x))},
             {u8(wild_i32x), u8(i16(wild_i32x))},
@@ -942,6 +900,42 @@ private:
         }
 
         static const vector<Pattern> calls = {
+            // Saturating narrowing casts with rounding
+            {"halide.hexagon.trunc_satub_rnd.vh", u8_sat(rounding_shift_right(wild_i16x, 8)), Pattern::DeinterleaveOp0},
+            {"halide.hexagon.trunc_satb_rnd.vh", i8_sat(rounding_shift_right(wild_i16x, 8)), Pattern::DeinterleaveOp0},
+            {"halide.hexagon.trunc_satub_rnd.vuh", u8_sat(rounding_shift_right(wild_u16x, 8)), Pattern::DeinterleaveOp0},
+            {"halide.hexagon.trunc_satuh_rnd.vw", u16_sat(rounding_shift_right(wild_i32x, 16)), Pattern::DeinterleaveOp0},
+            {"halide.hexagon.trunc_sath_rnd.vw", i16_sat(rounding_shift_right(wild_i32x, 16)), Pattern::DeinterleaveOp0},
+            {"halide.hexagon.trunc_satuh_rnd.vuw", u16_sat(rounding_shift_right(wild_u32x, 16)), Pattern::DeinterleaveOp0},
+
+            // Saturating narrowing casts with rounding
+            {"halide.hexagon.trunc_satub_shr_rnd.vh", u8_sat(rounding_shift_right(wild_i16x, wild_u16)), Pattern::DeinterleaveOp0},
+            {"halide.hexagon.trunc_satb_shr_rnd.vh", i8_sat(rounding_shift_right(wild_i16x, wild_u16)), Pattern::DeinterleaveOp0},
+            {"halide.hexagon.trunc_satub_shr_rnd.vuh", u8_sat(rounding_shift_right(wild_u16x, wild_u16)), Pattern::DeinterleaveOp0 | Pattern::v65orLater},
+            {"halide.hexagon.trunc_satuh_shr_rnd.vw", u16_sat(rounding_shift_right(wild_i32x, wild_u32)), Pattern::DeinterleaveOp0},
+            {"halide.hexagon.trunc_sath_shr_rnd.vw", i16_sat(rounding_shift_right(wild_i32x, wild_u32)), Pattern::DeinterleaveOp0},
+            {"halide.hexagon.trunc_satuh_shr_rnd.vuw", u16_sat(rounding_shift_right(wild_u32x, wild_u32)), Pattern::DeinterleaveOp0},
+
+            // Saturating narrowing casts
+            {"halide.hexagon.trunc_satub_shr.vh.uh", u8_sat(wild_i16x >> wild_u16), Pattern::DeinterleaveOp0},
+            {"halide.hexagon.trunc_satuh_shr.vw.uw", u16_sat(wild_i32x >> wild_u32), Pattern::DeinterleaveOp0},
+            {"halide.hexagon.trunc_sath_shr.vw.uw", i16_sat(wild_i32x >> wild_u32), Pattern::DeinterleaveOp0},
+
+            // For some of the following narrowing casts, we have the choice of
+            // non-interleaving or interleaving instructions. Because we don't
+            // know which one we prefer during pattern matching, we match the
+            // non-interleaving versions for now and replace them with the
+            // instructions that interleave later if it makes sense.
+
+            // Saturating narrowing casts. These may interleave later with trunc_sat.
+            {"halide.hexagon.pack_satub.vh", u8_sat(wild_i16x)},
+            {"halide.hexagon.pack_satuh.vw", u16_sat(wild_i32x)},
+            {"halide.hexagon.pack_satb.vh", i8_sat(wild_i16x)},
+            {"halide.hexagon.pack_sath.vw", i16_sat(wild_i32x)},
+
+            // We don't have a vpack equivalent to this one, so we match it directly.
+            {"halide.hexagon.trunc_satuh.vuw", u16_sat(wild_u32x), Pattern::DeinterleaveOp0},
+
             // Multiply keep high half.
             {"halide.hexagon.trunc_mpy.vw.vw", mul_shift_right(wild_i32x, wild_i32x, 32)},
 
@@ -980,10 +974,33 @@ private:
             {"halide.hexagon.mpy.vh.vuh", widening_mul(wild_u16x, wild_i16x), Pattern::InterleaveResult | Pattern::SwapOps01},
         };
 
+        // To hit more of the patterns we want, rewrite "double casts"
+        // as two stage casts. This also avoids letting vector casts
+        // fall through to LLVM, which will generate large unoptimized
+        // shuffles.
+        static const vector<pair<Expr, Expr>> cast_rewrites = {
+            // Saturating narrowing
+            {u8_sat(wild_u32x), u8_sat(u16_sat(wild_u32x))},
+            {u8_sat(wild_i32x), u8_sat(i16_sat(wild_i32x))},
+            {i8_sat(wild_u32x), i8_sat(u16_sat(wild_u32x))},
+            {i8_sat(wild_i32x), i8_sat(i16_sat(wild_i32x))},
+        };
+
         if (op->type.is_vector()) {
             Expr new_expr = apply_patterns(op, calls, target, this);
             if (!new_expr.same_as(op)) {
                 return new_expr;
+            }
+
+            // If we didn't find a pattern, try using one of the
+            // rewrites above.
+            vector<Expr> matches;
+            for (const auto &i : cast_rewrites) {
+                if (expr_match(i.first, op, matches)) {
+                    Expr replacement = substitute("*", matches[0], with_lanes(i.second, op->type.lanes()));
+                    debug(3) << "rewriting cast to: " << replacement << " from " << Expr(op) << "\n";
+                    return mutate(replacement);
+                }
             }
         }
 
