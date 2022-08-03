@@ -49,7 +49,6 @@ private:
     Stmt visit(const Store *op) override;
     Stmt visit(const Allocate *op) override;
     Stmt visit(const Block *op) override;
-    Stmt visit(const IfThenElse *op) override;
 };
 
 /*

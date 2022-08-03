@@ -406,12 +406,8 @@ private:
     void visit(const Variable *op) override {
 
         if (is_in_context(op->name)) {
-            // stream << "[requires context] ";
             in_context = true;
         }
-        // else {
-        //     stream << "[doesn't require context] ";
-        // }
 
         stream << var(op->name);
     }
@@ -1025,8 +1021,8 @@ public:
         stream << dependencyGraphButton(dependGraphHTML);
     }
     void generate_dependency_graph(const Stmt &s) {
-        cout << endl << endl << "uh" << endl;
         internal_error << "\n"
+                       << "\n"
                        << "StmtToViz::generate_dependency_graph: Not implemented"
                        << "\n\n";
 
@@ -1505,13 +1501,13 @@ void print_to_viz(const string &filename, const Stmt &s) {
 void print_to_viz(const string &filename, const Module &m) {
 
     if (m.functions().size() > 1) {
-        cout << endl
-             << endl
-             << "Exiting early: printing to viz only works for modules with "
-                "one function"
-             << endl
-             << endl
-             << endl;
+        internal_error << "\n"
+                       << "\n"
+                       << "Exiting early: printing to viz only works for modules with "
+                          "one function"
+                       << "\n"
+                       << "\n"
+                       << "\n";
         return;
     }
 

@@ -19,8 +19,8 @@ void StmtSizes::generate_sizes(const Stmt &stmt) {
 StmtSize StmtSizes::get_size(const IRNode *node) const {
     auto it = stmt_sizes.find(node);
     if (it == stmt_sizes.end()) {
-        return StmtSize{0, 0};
         // TODO: make sure this is what i want
+        return StmtSize{0, 0};
     }
     return it->second;
 }
@@ -84,6 +84,9 @@ Stmt StmtSizes::visit(const For *op) {
     }
 
     else {
+        internal_error << "\n"
+                       << "StmtSizes::visit(const For *op): min and extent are not of type IntImm. "
+                          "can't generate ProdCons hierarchy yet. \n\n";
         set_size(op, bodySize.produce_size, bodySize.consume_size);
     }
 
@@ -105,11 +108,6 @@ Stmt StmtSizes::visit(const Block *op) {
     StmtSize restSize = get_size(op->rest.get());
     set_size(op, firstSize.produce_size + restSize.produce_size,
              firstSize.consume_size + restSize.consume_size);
-    return op;
-}
-Stmt StmtSizes::visit(const IfThenElse *op) {
-    mutate(op->then_case);
-    mutate(op->else_case);
     return op;
 }
 Stmt StmtSizes::visit(const Allocate *op) {
