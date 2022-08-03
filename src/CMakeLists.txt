@@ -1,3 +1,4 @@
+
 ##
 # Lists of source files. Keep ALL lists sorted in alphabetical order.
 ##
@@ -39,6 +40,7 @@ set(HEADER_FILES
     CodeGen_PTX_Dev.h
     CodeGen_PyTorch.h
     CodeGen_Targets.h
+    CodeGen_Vulkan.h
     CompilerLogger.h
     ConciseCasts.h
     CPlusPlusMangle.h
@@ -206,6 +208,7 @@ set(SOURCE_FILES
     CodeGen_PTX_Dev.cpp
     CodeGen_PyTorch.cpp
     CodeGen_RISCV.cpp
+    CodeGen_Vulkan_Dev.cpp
     CodeGen_WebAssembly.cpp
     CodeGen_X86.cpp
     CompilerLogger.cpp
@@ -399,6 +402,13 @@ set_target_properties(Halide PROPERTIES
                       VERSION ${Halide_VERSION}
                       SOVERSION ${Halide_SOVERSION_OVERRIDE})
 
+target_compile_definitions(Halide PUBLIC 
+                           HALIDE_VERSION=${Halide_VERSION} 
+                           HALIDE_VERSION_MAJOR=${Halide_VERSION_MAJOR}
+                           HALIDE_VERSION_MINOR=${Halide_VERSION_MINOR}
+                           HALIDE_VERSION_PATCH=${Halide_VERSION_PATCH})
+
+
 target_include_directories(Halide INTERFACE "$<BUILD_INTERFACE:${Halide_BINARY_DIR}/include>")
 add_dependencies(Halide HalideIncludes)
 
@@ -525,6 +535,12 @@ option(TARGET_OPENGLCOMPUTE "Include OpenGLCompute target" ON)
 if (TARGET_OPENGLCOMPUTE)
     target_compile_definitions(Halide PRIVATE WITH_OPENGLCOMPUTE)
 endif ()
+
+cmake_dependent_option(TARGET_VULKAN "Include Vulkan target" ON TARGET_SPIRV OFF)
+if (TARGET_VULKAN)
+    message(STATUS "Enabling Vulkan target")
+    target_compile_definitions(Halide PRIVATE WITH_VULKAN)
+endif()
 
 if (TARGET_SPIRV)
     target_compile_definitions(Halide PRIVATE WITH_SPIRV)
