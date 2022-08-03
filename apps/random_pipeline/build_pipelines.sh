@@ -76,6 +76,7 @@ for ((p=$((FIRST+1));p<$((FIRST+PIPELINES+1));p++)); do
     echo "export HL_SEED=$s && \
     export HL_RANDOM_DROPOUT=$HL_RANDOM_DROPOUT && \
     export HL_BEAM_SIZE=$HL_BEAM_SIZE && \
+    export HL_WEIGHTS_DIR=$INITIAL_WEIGHTS && \
     mkdir -p $PIPELINE_DIR && \
     ./random_pipeline.generator -n random_pipeline -d 0 -g random_pipeline -f random_pipeline \
        -e c_header,object,schedule,python_schedule,static_library,registration,featurization \
