@@ -11,7 +11,7 @@
 #include "Scope.h"
 #include "Target.h"
 
-#include "spirv/spirv.h"
+#include <spirv/1.0/spirv.h> 
 
 // Temporary:
 #include <fstream>
@@ -560,7 +560,6 @@ void CodeGen_Vulkan_Dev::SPIRVEmitter::visit(const Call *op) {
         uint32_t arg_id = id;
         id = next_id++;
         add_instruction(SpvOpNot, { type_id, id, arg_id });
-    } else if (op->is_intrinsic(Call::reinterpret)) {
     } else if (op->is_intrinsic(Call::if_then_else)) {
         if (op->type.is_vector()) {
             scalarize(op);

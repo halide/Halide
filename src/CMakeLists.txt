@@ -40,7 +40,7 @@ set(HEADER_FILES
     CodeGen_PTX_Dev.h
     CodeGen_PyTorch.h
     CodeGen_Targets.h
-    CodeGen_Vulkan.h
+    CodeGen_Vulkan_Dev.h
     CompilerLogger.h
     ConciseCasts.h
     CPlusPlusMangle.h
