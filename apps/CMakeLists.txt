@@ -2,7 +2,7 @@
 # Test apps from the perspective of a consuming project.
 ##
 
-cmake_minimum_required(VERSION 3.16)
+cmake_minimum_required(VERSION 3.22)
 project(Halide_apps)
 
 if (WIN32)

@@ -46,7 +46,7 @@ we strongly suggest reading through the [CMake documentation][cmake-docs] first.
 
 ## Installing CMake
 
-Halide requires at least version 3.16, which was released in November 2019.
+Halide requires at least version 3.22, which was released in November 2021.
 Fortunately, getting a recent version of CMake couldn't be easier, and there are
 multiple good options on any system to do so. Generally, one should always have
 the most recent version of CMake installed system-wide. CMake is committed to
@@ -95,8 +95,8 @@ is also a viable option.
 
 There are a few good ways to install a modern CMake on Ubuntu:
 
-1. If you're on Ubuntu Linux 20.04 (focal), then simply running
-   `sudo apt install cmake` will get you CMake 3.16.
+1. If you're on Ubuntu Linux 22.04 (Jammy Jellyfish), then simply running
+   `sudo apt install cmake` will get you CMake 3.22.
 2. If you are on an older Ubuntu release or would like to use the newest CMake,
    try installing via the snap store: `snap install cmake`. Be sure you do not
    already have `cmake` installed via APT. The snap package automatically stays
@@ -542,7 +542,7 @@ No matter how you intend to use Halide, you will need some basic CMake
 boilerplate.
 
 ```cmake
-cmake_minimum_required(VERSION 3.16)
+cmake_minimum_required(VERSION 3.22)
 project(HalideExample)
 
 set(CMAKE_CXX_STANDARD 17)  # or newer
@@ -1009,7 +1009,7 @@ using [`install(FILES)`][install-files] and the
 # Contributing CMake code to Halide
 
 When contributing new CMake code to Halide, keep in mind that the minimum
-version is 3.16. Therefore, it is possible (and indeed required) to use modern
+version is 3.22. Therefore, it is possible (and indeed required) to use modern
 CMake best practices.
 
 Like any large and complex system with a dedication to preserving backwards
