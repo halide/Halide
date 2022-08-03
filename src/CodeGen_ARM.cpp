@@ -154,31 +154,31 @@ CodeGen_ARM::CodeGen_ARM(const Target &target)
 
     // SQSHL, UQSHL, SQSHLU - Saturating shift left by signed register.
     for (const Expr &rhs : {wild_i8x_, wild_u8x_}) {
-        casts.emplace_back("saturating_shift_left", i8_sat(widening_shift_left(wild_i8x_, rhs)));
-        casts.emplace_back("saturating_shift_left", u8_sat(widening_shift_left(wild_u8x_, rhs)));
-        casts.emplace_back("saturating_shift_left", u8_sat(widening_shift_left(wild_i8x_, rhs)));
+        calls.emplace_back("saturating_shift_left", i8_sat(widening_shift_left(wild_i8x_, rhs)));
+        calls.emplace_back("saturating_shift_left", u8_sat(widening_shift_left(wild_u8x_, rhs)));
+        calls.emplace_back("saturating_shift_left", u8_sat(widening_shift_left(wild_i8x_, rhs)));
     }
     for (const Expr &rhs : {wild_i16x_, wild_u16x_}) {
-        casts.emplace_back("saturating_shift_left", i16_sat(widening_shift_left(wild_i16x_, rhs)));
-        casts.emplace_back("saturating_shift_left", u16_sat(widening_shift_left(wild_u16x_, rhs)));
-        casts.emplace_back("saturating_shift_left", u16_sat(widening_shift_left(wild_i16x_, rhs)));
+        calls.emplace_back("saturating_shift_left", i16_sat(widening_shift_left(wild_i16x_, rhs)));
+        calls.emplace_back("saturating_shift_left", u16_sat(widening_shift_left(wild_u16x_, rhs)));
+        calls.emplace_back("saturating_shift_left", u16_sat(widening_shift_left(wild_i16x_, rhs)));
     }
     for (const Expr &rhs : {wild_i32x_, wild_u32x_}) {
-        casts.emplace_back("saturating_shift_left", i32_sat(widening_shift_left(wild_i32x_, rhs)));
-        casts.emplace_back("saturating_shift_left", u32_sat(widening_shift_left(wild_u32x_, rhs)));
-        casts.emplace_back("saturating_shift_left", u32_sat(widening_shift_left(wild_i32x_, rhs)));
+        calls.emplace_back("saturating_shift_left", i32_sat(widening_shift_left(wild_i32x_, rhs)));
+        calls.emplace_back("saturating_shift_left", u32_sat(widening_shift_left(wild_u32x_, rhs)));
+        calls.emplace_back("saturating_shift_left", u32_sat(widening_shift_left(wild_i32x_, rhs)));
     }
 
     // SQSHRN, UQSHRN, SQRSHRUN Saturating narrowing shift right by an (by immediate in [1, output bits])
-    casts.emplace_back("saturating_shift_right_narrow", i8_sat(wild_i16x_ >> wild_u16_));
-    casts.emplace_back("saturating_shift_right_narrow", u8_sat(wild_u16x_ >> wild_u16_));
-    casts.emplace_back("saturating_shift_right_narrow", u8_sat(wild_i16x_ >> wild_u16_));
-    casts.emplace_back("saturating_shift_right_narrow", i16_sat(wild_i32x_ >> wild_u32_));
-    casts.emplace_back("saturating_shift_right_narrow", u16_sat(wild_u32x_ >> wild_u32_));
-    casts.emplace_back("saturating_shift_right_narrow", u16_sat(wild_i32x_ >> wild_u32_));
-    casts.emplace_back("saturating_shift_right_narrow", i32_sat(wild_i64x_ >> wild_u64_));
-    casts.emplace_back("saturating_shift_right_narrow", u32_sat(wild_u64x_ >> wild_u64_));
-    casts.emplace_back("saturating_shift_right_narrow", u32_sat(wild_i64x_ >> wild_u64_));
+    calls.emplace_back("saturating_shift_right_narrow", i8_sat(wild_i16x_ >> wild_u16_));
+    calls.emplace_back("saturating_shift_right_narrow", u8_sat(wild_u16x_ >> wild_u16_));
+    calls.emplace_back("saturating_shift_right_narrow", u8_sat(wild_i16x_ >> wild_u16_));
+    calls.emplace_back("saturating_shift_right_narrow", i16_sat(wild_i32x_ >> wild_u32_));
+    calls.emplace_back("saturating_shift_right_narrow", u16_sat(wild_u32x_ >> wild_u32_));
+    calls.emplace_back("saturating_shift_right_narrow", u16_sat(wild_i32x_ >> wild_u32_));
+    calls.emplace_back("saturating_shift_right_narrow", i32_sat(wild_i64x_ >> wild_u64_));
+    calls.emplace_back("saturating_shift_right_narrow", u32_sat(wild_u64x_ >> wild_u64_));
+    calls.emplace_back("saturating_shift_right_narrow", u32_sat(wild_i64x_ >> wild_u64_));
 
     // SRSHL, URSHL - Rounding shift left (by signed vector)
     // These are already written as rounding_shift_left
@@ -190,15 +190,15 @@ CodeGen_ARM::CodeGen_ARM(const Target &target)
     // These patterns are almost identity, we just need to strip off the broadcast.
 
     // SQXTN, UQXTN, SQXTUN - Saturating narrow.
-    casts.emplace_back("saturating_narrow", i8_sat(wild_i16x_));
-    casts.emplace_back("saturating_narrow", u8_sat(wild_u16x_));
-    casts.emplace_back("saturating_narrow", u8_sat(wild_i16x_));
-    casts.emplace_back("saturating_narrow", i16_sat(wild_i32x_));
-    casts.emplace_back("saturating_narrow", u16_sat(wild_u32x_));
-    casts.emplace_back("saturating_narrow", u16_sat(wild_i32x_));
-    casts.emplace_back("saturating_narrow", i32_sat(wild_i64x_));
-    casts.emplace_back("saturating_narrow", u32_sat(wild_u64x_));
-    casts.emplace_back("saturating_narrow", u32_sat(wild_i64x_));
+    calls.emplace_back("saturating_narrow", i8_sat(wild_i16x_));
+    calls.emplace_back("saturating_narrow", u8_sat(wild_u16x_));
+    calls.emplace_back("saturating_narrow", u8_sat(wild_i16x_));
+    calls.emplace_back("saturating_narrow", i16_sat(wild_i32x_));
+    calls.emplace_back("saturating_narrow", u16_sat(wild_u32x_));
+    calls.emplace_back("saturating_narrow", u16_sat(wild_i32x_));
+    calls.emplace_back("saturating_narrow", i32_sat(wild_i64x_));
+    calls.emplace_back("saturating_narrow", u32_sat(wild_u64x_));
+    calls.emplace_back("saturating_narrow", u32_sat(wild_i64x_));
 
     // SQNEG - Saturating negate
     negations.emplace_back("saturating_negate", -max(wild_i8x_, -127));
@@ -798,38 +798,6 @@ void CodeGen_ARM::visit(const Cast *op) {
                 return;
             }
         }
-
-        // If we didn't find a pattern, try rewriting the cast.
-        static const vector<pair<Expr, Expr>> cast_rewrites = {
-            // Double or triple narrowing saturating casts are better expressed as
-            // regular narrowing casts.
-            {u8_sat(wild_u32x_), u8_sat(u16_sat(wild_u32x_))},
-            {u8_sat(wild_i32x_), u8_sat(i16_sat(wild_i32x_))},
-            {u8_sat(wild_f32x_), u8_sat(i16_sat(wild_f32x_))},
-            {i8_sat(wild_u32x_), i8_sat(u16_sat(wild_u32x_))},
-            {i8_sat(wild_i32x_), i8_sat(i16_sat(wild_i32x_))},
-            {i8_sat(wild_f32x_), i8_sat(i16_sat(wild_f32x_))},
-            {u16_sat(wild_u64x_), u16_sat(u32_sat(wild_u64x_))},
-            {u16_sat(wild_i64x_), u16_sat(i32_sat(wild_i64x_))},
-            {u16_sat(wild_f64x_), u16_sat(i32_sat(wild_f64x_))},
-            {i16_sat(wild_u64x_), i16_sat(u32_sat(wild_u64x_))},
-            {i16_sat(wild_i64x_), i16_sat(i32_sat(wild_i64x_))},
-            {i16_sat(wild_f64x_), i16_sat(i32_sat(wild_f64x_))},
-            {u8_sat(wild_u64x_), u8_sat(u16_sat(u32_sat(wild_u64x_)))},
-            {u8_sat(wild_i64x_), u8_sat(i16_sat(i32_sat(wild_i64x_)))},
-            {u8_sat(wild_f64x_), u8_sat(i16_sat(i32_sat(wild_f64x_)))},
-            {i8_sat(wild_u64x_), i8_sat(u16_sat(u32_sat(wild_u64x_)))},
-            {i8_sat(wild_i64x_), i8_sat(i16_sat(i32_sat(wild_i64x_)))},
-            {i8_sat(wild_f64x_), i8_sat(i16_sat(i32_sat(wild_f64x_)))},
-        };
-        for (const auto &i : cast_rewrites) {
-            if (expr_match(i.first, op, matches)) {
-                Expr replacement = substitute("*", matches[0], with_lanes(i.second, op->type.lanes()));
-                debug(3) << "rewriting cast to: " << replacement << " from " << Expr(op) << "\n";
-                value = codegen(replacement);
-                return;
-            }
-        }
     }
 
     // LLVM fptoui generates fcvtzs if src is fp16 scalar else fcvtzu.
@@ -1181,6 +1149,38 @@ void CodeGen_ARM::visit(const Call *op) {
                 if (value) {
                     return;
                 }
+            }
+        }
+
+        // If we didn't find a pattern, try rewriting any saturating casts.
+        static const vector<pair<Expr, Expr>> cast_rewrites = {
+            // Double or triple narrowing saturating casts are better expressed as
+            // regular narrowing casts.
+            {u8_sat(wild_u32x_), u8_sat(u16_sat(wild_u32x_))},
+            {u8_sat(wild_i32x_), u8_sat(i16_sat(wild_i32x_))},
+            {u8_sat(wild_f32x_), u8_sat(i16_sat(wild_f32x_))},
+            {i8_sat(wild_u32x_), i8_sat(u16_sat(wild_u32x_))},
+            {i8_sat(wild_i32x_), i8_sat(i16_sat(wild_i32x_))},
+            {i8_sat(wild_f32x_), i8_sat(i16_sat(wild_f32x_))},
+            {u16_sat(wild_u64x_), u16_sat(u32_sat(wild_u64x_))},
+            {u16_sat(wild_i64x_), u16_sat(i32_sat(wild_i64x_))},
+            {u16_sat(wild_f64x_), u16_sat(i32_sat(wild_f64x_))},
+            {i16_sat(wild_u64x_), i16_sat(u32_sat(wild_u64x_))},
+            {i16_sat(wild_i64x_), i16_sat(i32_sat(wild_i64x_))},
+            {i16_sat(wild_f64x_), i16_sat(i32_sat(wild_f64x_))},
+            {u8_sat(wild_u64x_), u8_sat(u16_sat(u32_sat(wild_u64x_)))},
+            {u8_sat(wild_i64x_), u8_sat(i16_sat(i32_sat(wild_i64x_)))},
+            {u8_sat(wild_f64x_), u8_sat(i16_sat(i32_sat(wild_f64x_)))},
+            {i8_sat(wild_u64x_), i8_sat(u16_sat(u32_sat(wild_u64x_)))},
+            {i8_sat(wild_i64x_), i8_sat(i16_sat(i32_sat(wild_i64x_)))},
+            {i8_sat(wild_f64x_), i8_sat(i16_sat(i32_sat(wild_f64x_)))},
+        };
+        for (const auto &i : cast_rewrites) {
+            if (expr_match(i.first, op, matches)) {
+                Expr replacement = substitute("*", matches[0], with_lanes(i.second, op->type.lanes()));
+                debug(3) << "rewriting cast to: " << replacement << " from " << Expr(op) << "\n";
+                value = codegen(replacement);
+                return;
             }
         }
     }
