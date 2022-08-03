@@ -24,14 +24,12 @@ public:
     }
     ~DependencyGraph() = default;
 
+    // returns the generated hierarchy's html
     string generate_dependency_graph(const Module &m);
     string generate_dependency_graph(const Stmt &stmt);
 
 private:
     using IRMutator::visit;
-
-    vector<DependencyNode> dependency_graph;
-    stringstream html;
 
     map<const string, vector<string>> dependencies;    // key: variable name, value: vector of
                                                        // dependencies
@@ -39,25 +37,39 @@ private:
                                                        // duplicates
     string current_variable;  // current variable name that is being processed
 
+    vector<DependencyNode> dependency_graph;  // stores list of nodes in the graph
+    stringstream html;                        // html string
+
+    // to avoid duplicates in the graph
+    // TODO: might remove this later (depending on convo with Maaz and Marcos)
     string generate_unique_name(const string &name);
     string get_unique_name(const string &name) const;
 
-    // TODO: change this name later
+    // generates the html string
     void generate_html();
 
+    // starts/ends the html string
     void start_html();
     void end_html();
 
+    // builds up the `dependency_graph` vector
     void build_graph();
-    void generate_nodes();
+
+    // generates the strings for the nodes in the html string
+    void generate_nodes_in_html();
+
+    // gets `DependencyNode` for the given variable name
     DependencyNode get_node(const string &name);
 
+    // adds/gets dependency to/from `dependencies` map
     void add_dependency(const string &variable, const string &dependency);
     void add_empty_dependency(const string &variable);
     vector<string> get_dependencies(const string &variable);
 
+    // traverses a Module
     void traverse(const Module &m);
 
+    // prints the dependency from `dependencies` list to the console
     void print_dependencies();
 
     Expr visit(const Let *op) override;

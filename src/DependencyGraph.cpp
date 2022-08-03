@@ -20,12 +20,48 @@ string DependencyGraph::generate_dependency_graph(const Stmt &stmt) {
     return html.str();
 }
 
+string DependencyGraph::generate_unique_name(const string &name) {
+    auto it = dependencies.find(name);
+
+    // no duplicate variable found
+    if (it == dependencies.end()) {
+        return name;
+    }
+
+    // need to create a new unique name
+    else {
+        auto it2 = duplicate_variable_counts.find(name);
+
+        // doesn't yet have duplicated name
+        if (it2 == duplicate_variable_counts.end()) {
+            duplicate_variable_counts[name] = 2;
+            return name + "_" + to_string(2);
+        }
+
+        // already has duplicated name
+        else {
+            it2->second++;
+            return name + "_" + to_string(it2->second);
+        }
+    }
+}
+string DependencyGraph::get_unique_name(const string &name) const {
+
+    auto it = duplicate_variable_counts.find(name);
+
+    if (it == duplicate_variable_counts.end()) {
+        return name;
+    } else {
+        return name + "_" + to_string(it->second);
+    }
+}
+
 void DependencyGraph::generate_html() {
     html.str(string());
 
     build_graph();
     start_html();
-    generate_nodes();
+    generate_nodes_in_html();
     end_html();
 }
 
@@ -97,22 +133,7 @@ void DependencyGraph::build_graph() {
     }
 }
 
-DependencyNode DependencyGraph::get_node(const string &name) {
-    for (const auto &node : dependency_graph) {
-        if (node.nodeName == name) {
-            return node;
-        }
-    }
-
-    DependencyNode node;
-    node.nodeID = dependency_graph.size();
-    node.nodeName = name;
-    node.nodeDependsOn = vector<string>();
-    dependency_graph.push_back(node);
-    return node;
-}
-
-void DependencyGraph::generate_nodes() {
+void DependencyGraph::generate_nodes_in_html() {
 
     stringstream setEdges;
     // g.setEdge(3, 4);
@@ -132,41 +153,19 @@ void DependencyGraph::generate_nodes() {
     html << setEdges.str();
 }
 
-string DependencyGraph::generate_unique_name(const string &name) {
-    auto it = dependencies.find(name);
-
-    // no duplicate variable found
-    if (it == dependencies.end()) {
-        return name;
-    }
-
-    // need to create a new unique name
-    else {
-        auto it2 = duplicate_variable_counts.find(name);
-
-        // doesn't yet have duplicated name
-        if (it2 == duplicate_variable_counts.end()) {
-            duplicate_variable_counts[name] = 2;
-            return name + "_" + to_string(2);
-        }
-
-        // already has duplicated name
-        else {
-            it2->second++;
-            return name + "_" + to_string(it2->second);
+DependencyNode DependencyGraph::get_node(const string &name) {
+    for (const auto &node : dependency_graph) {
+        if (node.nodeName == name) {
+            return node;
         }
     }
-}
 
-string DependencyGraph::get_unique_name(const string &name) const {
-
-    auto it = duplicate_variable_counts.find(name);
-
-    if (it == duplicate_variable_counts.end()) {
-        return name;
-    } else {
-        return name + "_" + to_string(it->second);
-    }
+    DependencyNode node;
+    node.nodeID = dependency_graph.size();
+    node.nodeName = name;
+    node.nodeDependsOn = vector<string>();
+    dependency_graph.push_back(node);
+    return node;
 }
 
 void DependencyGraph::add_dependency(const string &variable, const string &dependency) {
@@ -194,7 +193,6 @@ void DependencyGraph::add_empty_dependency(const string &variable) {
                        << "\n\n";
     }
 }
-
 vector<string> DependencyGraph::get_dependencies(const string &variable) {
     auto it = dependencies.find(variable);
     if (it == dependencies.end()) {
