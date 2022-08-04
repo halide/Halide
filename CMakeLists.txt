@@ -13,7 +13,6 @@ enable_testing()
 # Make our custom helpers available throughout the project via include().
 list(APPEND CMAKE_MODULE_PATH ${CMAKE_CURRENT_LIST_DIR}/cmake)
 include(HalideGeneratorHelpers)
-include(MakeShellPath)
 include(CMakeDependentOption)
 
 # Build Halide as a shared lib by default, but still honor command-line settings.

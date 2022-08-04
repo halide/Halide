@@ -16,21 +16,25 @@ set(TESTS
     lesson_14_types.py
     )
 
-make_shell_path(
+set(
     PYTHONPATH
     "$<TARGET_FILE_DIR:lesson_10_halide>"
     "$<TARGET_FILE_DIR:Halide::Python>"
     "${Halide_SOURCE_DIR}/python_bindings/src"
 )
+list(TRANSFORM PYTHONPATH PREPEND "PYTHONPATH=path_list_prepend:")
 
 foreach (TEST IN LISTS TESTS)
     get_filename_component(TEST_NAME ${TEST} NAME_WE)
     add_test(NAME python_tutorial_${TEST_NAME}
              COMMAND Python3::Interpreter "$<SHELL_PATH:${CMAKE_CURRENT_SOURCE_DIR}/${TEST}>")
 
-    set_tests_properties(python_tutorial_${TEST_NAME} PROPERTIES
-                         LABELS python
-                         ENVIRONMENT "PYTHONPATH=${PYTHONPATH};HL_TARGET=${Halide_TARGET}")
+    set_tests_properties(
+        python_tutorial_${TEST_NAME} PROPERTIES
+        LABELS python
+        ENVIRONMENT "HL_TARGET=${Halide_TARGET}"
+        ENVIRONMENT_MODIFICATION "${PYTHONPATH}"
+    )
 endforeach ()
 
 ## Add some hacks for getting CMake to delay compiling lesson_10_halide until after the test has run. The "better" way
