@@ -4,6 +4,7 @@
 
 # The externally-visible header files that go into making Halide.h.
 # Don't include anything here that includes llvm headers.
+# Also *don't* include anything that's only used internally (eg SpirvIR.h).
 set(HEADER_FILES
     AbstractGenerator.h
     AddAtomicMutex.h
@@ -321,6 +322,7 @@ set(SOURCE_FILES
     SkipStages.cpp
     SlidingWindow.cpp
     Solve.cpp
+    SpirvIR.cpp
     SplitTuples.cpp
     StmtToHtml.cpp
     StorageFlattening.cpp
@@ -522,6 +524,11 @@ endif ()
 option(TARGET_OPENGLCOMPUTE "Include OpenGLCompute target" ON)
 if (TARGET_OPENGLCOMPUTE)
     target_compile_definitions(Halide PRIVATE WITH_OPENGLCOMPUTE)
+endif ()
+
+if (TARGET_SPIRV)
+    target_compile_definitions(Halide PRIVATE WITH_SPIRV)
+    target_include_directories(Halide SYSTEM PRIVATE "${SPIRV_INCLUDE_DIR}")
 endif ()
 
 ##

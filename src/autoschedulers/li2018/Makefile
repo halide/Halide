@@ -18,12 +18,15 @@ else
 HALIDE_RPATH_FOR_LIB += '-Wl,-rpath,$$ORIGIN'
 endif
 
-$(BIN)/libautoschedule_li2018.$(SHARED_EXT): $(SRC)/GradientAutoscheduler.cpp $(LIB_HALIDE)
+# Be sure *not* to include libHalide in the link steps here; that can cause misbehavior
+# on OSX systems in certain situations -- note that $(LIB_HALIDE) is an order-only dep,
+# to ensure that (eg) Halide.h is built before this.
+$(BIN)/libautoschedule_li2018.$(PLUGIN_EXT): $(SRC)/GradientAutoscheduler.cpp | $(LIB_HALIDE)
 	@mkdir -p $(@D)
 	$(CXX) -shared $(USE_EXPORT_DYNAMIC) -fPIC -fvisibility=hidden -fvisibility-inlines-hidden $(CXXFLAGS) $(OPTIMIZE) $^ -o $@ $(HALIDE_SYSTEM_LIBS) $(HALIDE_RPATH_FOR_LIB)
 
 # Demonstrate a JIT-based use of gradient autoscheuler
-$(BIN)/test: $(SRC)/test.cpp $(BIN)/libautoschedule_li2018.$(SHARED_EXT)
+$(BIN)/test: $(SRC)/test.cpp $(BIN)/libautoschedule_li2018.$(PLUGIN_EXT)
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) $(USE_EXPORT_DYNAMIC) $(SRC)/test.cpp -o $@ $(LIBHALIDE_LDFLAGS) $(HALIDE_SYSTEM_LIBS)
 
@@ -33,9 +36,9 @@ $(GENERATOR_BIN)/demo.generator: $(SRC)/demo_generator.cpp $(GENERATOR_DEPS)
 	$(CXX) $(CXXFLAGS) $(USE_EXPORT_DYNAMIC) -g $(filter-out %.h,$^) -o $@ $(LIBHALIDE_LDFLAGS) $(HALIDE_SYSTEM_LIBS)
 
 # Use the -p flag to the generator to load the autoscheduler as a plugin
-$(BIN)/%/demo.a: $(GENERATOR_BIN)/demo.generator $(BIN)/libautoschedule_li2018.$(SHARED_EXT)
+$(BIN)/%/demo.a: $(GENERATOR_BIN)/demo.generator $(BIN)/libautoschedule_li2018.$(PLUGIN_EXT)
 	@mkdir -p $(@D)
-	$(GENERATOR_BIN)/demo.generator -g demo -o $(@D) -f demo target=$* autoscheduler=Li2018 -p $(BIN)/libautoschedule_li2018.$(SHARED_EXT)
+	$(GENERATOR_BIN)/demo.generator -g demo -o $(@D) -f demo target=$* autoscheduler=Li2018 -p $(BIN)/libautoschedule_li2018.$(PLUGIN_EXT)
 
 $(BIN)/%/demo.rungen: $(BIN)/%/RunGenMain.o $(BIN)/%/demo.registration.cpp $(BIN)/%/demo.a
 	@mkdir -p $(@D)
@@ -44,13 +47,13 @@ $(BIN)/%/demo.rungen: $(BIN)/%/RunGenMain.o $(BIN)/%/demo.registration.cpp $(BIN
 .PHONY: build test clean run_test_cpp test_generator
 
 # demonstrates single-shot use of the autoscheduler
-test_generator: $(BIN)/$(HL_TARGET)/demo.rungen $(BIN)/libautoschedule_li2018.$(SHARED_EXT)
+test_generator: $(BIN)/$(HL_TARGET)/demo.rungen $(BIN)/libautoschedule_li2018.$(PLUGIN_EXT)
 	$< --benchmarks=all --benchmark_min_time=1 --estimate_all
 
 run_test_cpp: $(BIN)/test
-	LD_LIBRARY_PATH=$(BIN) $< $(BIN)/libautoschedule_li2018.$(SHARED_EXT)
+	LD_LIBRARY_PATH=$(BIN) $< $(BIN)/libautoschedule_li2018.$(PLUGIN_EXT)
 
-\build: $(BIN)/test $(BIN)/$(HL_TARGET)/demo.rungen $(BIN)/libautoschedule_li2018.$(SHARED_EXT)
+build: $(BIN)/test $(BIN)/$(HL_TARGET)/demo.rungen $(BIN)/libautoschedule_li2018.$(PLUGIN_EXT)
 
 test: run_test_cpp test_generator
 

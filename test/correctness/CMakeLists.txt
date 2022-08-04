@@ -239,6 +239,7 @@ tests(GROUPS correctness
       pseudostack_shares_slots.cpp
       python_extension_gen.cpp
       pytorch.cpp
+      realize_condition_depends_on_tuple.cpp
       realize_larger_than_two_gigs.cpp
       realize_over_shifted_domain.cpp
       reduction_chain.cpp

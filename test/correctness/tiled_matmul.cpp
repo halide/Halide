@@ -62,12 +62,33 @@ struct make_int_t {
     }
 };
 
-template<typename LhsInt8, typename RhsInt8>
-bool matmul() {
-    constexpr int row = 16;
-    constexpr int col = 16;
-    constexpr int acc = 16;
+template<typename T>
+void print_mat(const Buffer<T> &buf, int rows, int cols) {
+    using cast_T = std::conditional_t<std::is_integral_v<T>, int, T>;
+    for (int j = 0; j != rows; ++j) {
+        for (int i = 0; i != cols; ++i) {
+            std::cout << static_cast<cast_T>(buf(i, j)) << " ";
+        }
+        std::cout << std::endl;
+    }
+}
 
+template<typename T>
+void print_mat_rhs(const Buffer<T> &buf, int rows, int cols) {
+    using cast_T = std::conditional_t<std::is_integral_v<T>, int, T>;
+    for (int j = 0; j != (rows / (4 / sizeof(T))); ++j) {
+        for (int k = 0; k != (4 / sizeof(T)); ++k) {
+            for (int i = 0; i != cols; ++i) {
+                std::cout << static_cast<cast_T>(buf(k, i, j)) << " ";
+            }
+
+            std::cout << std::endl;
+        }
+    }
+}
+
+template<typename LhsInt8, typename RhsInt8>
+bool matmul(int row, int col, int acc, int tile_x, int tile_y, int tile_r) {
     Buffer<LhsInt8> A_buf(acc, row);
     Buffer<RhsInt8> B_buf(4, col, acc / 4);
 
@@ -77,10 +98,6 @@ bool matmul() {
     Func mm("matmul");
     mm(x, y) = cast<int32_t>(0);
     mm(x, y) += cast<int32_t>(A_buf(r, y)) * cast<int32_t>(B_buf(r % 4, x, r / 4));
-
-    constexpr int tile_x = 8;
-    constexpr int tile_y = 8;
-    constexpr int tile_r = 4;
 
     Var rxi("rxi"), ryi("ryi");
     RVar rri("rri"), rro("rro");
@@ -118,6 +135,15 @@ bool matmul() {
 
     result.realize(out);
 
+    // uncomment to check the matrices
+    // std::cout << "Matrix A\n";
+    // print_mat(A_buf, row, acc);
+    // std::cout << "Matrix B\n";
+    // print_mat_rhs(B_buf, acc, col);
+
+    // std::cout << "result\n";
+    // print_mat(out, row, col);
+
     for (int j = 0; j < row; ++j) {
         for (int i = 0; i < col; ++i) {
             int32_t val = 0;
@@ -126,21 +152,18 @@ bool matmul() {
             }
             if (val != out(i, j)) {
                 std::cerr << "Invalid result at " << i << ", " << j << "\n"
-                          << out(i, j) << " != " << val << "\n";
+                          << out(i, j) << " != " << val << "\n"
+                          << "Matrix dims: " << row << "x" << col << "x" << acc << "\nTile dims: " << tile_x << "x" << tile_y << "x" << tile_r << "\n";
                 return false;
             }
         }
     }
 
+    std::cout << "Success!\n";
     return true;
 }
 
-bool matmul_bf16() {
-    // lhs: 32x16, rhs: 16x32
-    const int row = 32;
-    const int col = 32;
-    const int acc = 16;
-
+bool matmul_bf16(int row, int col, int acc, int tile_x, int tile_y, int tile_r) {
     Var x("x"), y("y");
     Buffer<bfloat16_t> A(acc, row);
     Buffer<bfloat16_t> B(2, col, acc / 2);
@@ -150,10 +173,6 @@ bool matmul_bf16() {
     Func mm("matmul");
     mm(x, y) = cast<float>(0);
     mm(x, y) += cast<float>(cast<float>(A(r.x, y))) * cast<float>(B(r.x % 2, x, r.x / 2));
-
-    int tile_x = 8;
-    int tile_y = 8;
-    int tile_r = 2;
 
     Var rxi("rxi"), ryi("ryi");
     RVar rri("rri"), rro("rro");
@@ -195,20 +214,31 @@ bool matmul_bf16() {
 
     result.realize(out);
 
+    // uncomment to check the matrices
+    // std::cout << "Matrix A\n";
+    // print_mat(A, row, acc);
+    // std::cout << "Matrix B\n";
+    // print_mat_rhs(B, acc, col);
+
+    // std::cout << "result\n";
+    // print_mat(out, row, col);
+
     for (int j = 0; j < row; ++j) {
         for (int i = 0; i < col; ++i) {
             float val = 0.f;
             for (int k = 0; k < acc; ++k) {
                 val += static_cast<float>(A(k, j)) * static_cast<float>(B(k % 2, i, k / 2));
             }
-            if (!equal_eps(val, out(i, j), 0.01f)) {
+            if (!equal_eps(val, out(i, j), 0.03f)) {
                 std::cerr << "Invalid result at " << i << ", " << j << "\n"
-                          << out(i, j) << " != " << val << "\n";
+                          << out(i, j) << " != " << val << "\n"
+                          << "Matrix dims: " << row << "x" << col << "x" << acc << "\nTile dims: " << tile_x << "x" << tile_y << "x" << tile_r << "\n";
                 return false;
             }
         }
     }
 
+    std::cout << "Success!\n";
     return true;
 }
 
@@ -216,6 +246,10 @@ auto matmul_ss = &matmul<int8_t, int8_t>;
 auto matmul_us = &matmul<uint8_t, int8_t>;
 auto matmul_su = &matmul<int8_t, uint8_t>;
 auto matmul_uu = &matmul<uint8_t, uint8_t>;
+
+bool run_tests(bool (*fn)(int, int, int, int, int, int), int element_width) {
+    return fn(2, 2, 16, 2, 2, 8 / element_width) && fn(4, 4, 8, 4, 4, 8 / element_width) && fn(32, 32, 32, 8, 8, 8 / element_width) && fn(32, 32, 32, 8, 8, 4 / element_width);
+}
 
 int main(int argc, char **argv) {
     Target t = get_jit_target_from_environment();
@@ -225,38 +259,29 @@ int main(int argc, char **argv) {
     }
 
     printf("Running AMX matmul (signed/signed)\n");
-    if (!matmul_ss()) {
+    if (!run_tests(matmul_ss, 1)) {
         return -1;
-    } else {
-        printf("Success!\n");
     }
 
     printf("Running AMX matmul (signed/unsigned)\n");
-    if (!matmul_su()) {
+    if (!run_tests(matmul_su, 1)) {
         return -1;
-    } else {
-        printf("Success!\n");
     }
 
     printf("Running AMX matmul (unsigned/signed)\n");
-    if (!matmul_us()) {
+    if (!run_tests(matmul_us, 1)) {
         return -1;
-    } else {
-        printf("Success!\n");
     }
 
     printf("Running AMX matmul (unsigned/unsigned)\n");
-    if (!matmul_uu()) {
+    if (!run_tests(matmul_uu, 1)) {
         return -1;
-    } else {
-        printf("Success!\n");
     }
 
     printf("Running AMX matmul (bf16)\n");
-    if (!matmul_bf16()) {
+    if (!run_tests(matmul_bf16, 2)) {
         return -1;
-    } else {
-        printf("Success!\n");
     }
+
     return 0;
 }

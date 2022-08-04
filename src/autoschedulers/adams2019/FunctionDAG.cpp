@@ -959,7 +959,7 @@ FunctionDAG::FunctionDAG(const vector<Function> &outputs, const Target &target) 
             }
 
             node.is_wrapper = node.func.is_wrapper();
-            node.is_input = !node.func.has_update_definition() && node.is_wrapper && !any_incoming_edges;
+            node.is_input = !node.is_output && !node.func.has_update_definition() && node.is_wrapper && !any_incoming_edges;
             node.dimensions = node.func.dimensions();
         }
     }
