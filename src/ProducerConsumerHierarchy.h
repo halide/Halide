@@ -30,7 +30,6 @@ public:
     void generate_sizes(const Stmt &stmt);
 
     StmtSize get_size(const IRNode *node) const;
-    bool are_bounds_set();
 
     string print_sizes() const;
     string print_produce_sizes(StmtSize &stmtSize) const;
@@ -40,7 +39,6 @@ private:
     using IRMutator::visit;
 
     unordered_map<const IRNode *, StmtSize> stmt_sizes;
-    bool bounds_set = false;
     bool in_producer = false;
     bool in_consumer = false;
     string curr_consumer;
@@ -60,6 +58,8 @@ private:
     Stmt visit(const Allocate *op) override;
     Stmt visit(const Block *op) override;
     Stmt visit(const IfThenElse *op) override;
+
+    string print_node(const IRNode *node) const;
 };
 
 /*

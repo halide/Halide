@@ -24,9 +24,6 @@ StmtSize StmtSizes::get_size(const IRNode *node) const {
     }
     return it->second;
 }
-bool StmtSizes::are_bounds_set() {
-    return bounds_set;
-}
 
 void StmtSizes::traverse(const Module &m) {
     // recursively traverse all submodules
@@ -149,37 +146,53 @@ Stmt StmtSizes::visit(const For *op) {
 
     // don't do anything if body is empty
     if (bodySize.empty()) {
-        // cout << "warning: empty body" << endl;
         return op;
     }
 
     Expr min = op->min;
     Expr extent = op->extent;
 
+    string loopIterator;
+
     // check if min and extend are of type IntImm
     if (min.node_type() == IRNodeType::IntImm && extent.node_type() == IRNodeType::IntImm) {
         int64_t minValue = min.as<IntImm>()->value;
         int64_t extentValue = extent.as<IntImm>()->value;
         uint16_t range = uint16_t(extentValue - minValue);
+        loopIterator = to_string(range);
+    }
 
-        for (const auto &produce_var : bodySize.produces) {
-            string bodyProduceSize = produce_var.second;
-            string opProduceSize = get_simplified_string(to_string(range), bodyProduceSize, "*");
-            set_produce_size(op, produce_var.first, opProduceSize);
-        }
-        for (const auto &consume_var : bodySize.consumes) {
-            string bodyConsumeSize = consume_var.second;
-            string opConsumeSize = get_simplified_string(to_string(range), bodyConsumeSize, "*");
-            set_consume_size(op, consume_var.first, opConsumeSize);
-        }
+    else if (min.node_type() == IRNodeType::IntImm && extent.node_type() == IRNodeType::Variable) {
+        int64_t minValue = min.as<IntImm>()->value;
+        string extentName = extent.as<Variable>()->name;
 
-        bounds_set = true;
+        // TODO: inline variable for extentName
+
+        if (minValue == 0) {
+            loopIterator = extentName;
+        } else {
+            loopIterator = "(" + extentName + " - " + to_string(minValue) + ")";
+        }
     }
 
     else {
-        internal_error << "\n"
-                       << "StmtSizes::visit(const For *op): min and extent are not of type IntImm. "
-                          "can't generate ProdCons hierarchy yet. \n\n";
+        internal_error
+            << "\n"
+            << print_node(op->min.get()) << "\n"
+            << "StmtSizes::visit(const For *op): min and extent are not of type (IntImm) "
+               "or (IntImm & Variable) - "
+               "can't generate ProdCons hierarchy yet. \n\n";
+    }
+
+    for (const auto &produce_var : bodySize.produces) {
+        string bodyProduceSize = produce_var.second;
+        string opProduceSize = get_simplified_string(loopIterator, bodyProduceSize, "*");
+        set_produce_size(op, produce_var.first, opProduceSize);
+    }
+    for (const auto &consume_var : bodySize.consumes) {
+        string bodyConsumeSize = consume_var.second;
+        string opConsumeSize = get_simplified_string(loopIterator, bodyConsumeSize, "*");
+        set_consume_size(op, consume_var.first, opConsumeSize);
     }
 
     return op;
@@ -531,7 +544,7 @@ Stmt ProducerConsumerHierarchy::visit(const ProducerConsumer *op) {
     open_table();
 
     stringstream header;
-    header << (op->is_producer ? "Produce" : "Consumer");
+    header << (op->is_producer ? "Produce" : "Consume");
     header << " " << op->name;
     StmtSize size = pre_processor.get_size(op);
 
@@ -552,15 +565,12 @@ Stmt ProducerConsumerHierarchy::visit(const ProducerConsumer *op) {
 
 Stmt ProducerConsumerHierarchy::visit(const For *op) {
     open_table();
-    stringstream header;
-    header << "For";
     StmtSize size;
 
-    if (pre_processor.are_bounds_set()) {
-        size = pre_processor.get_size(op);
-    } else {
-        // TODO: handle case where bounds are not set
-    }
+    size = pre_processor.get_size(op);
+
+    stringstream header;
+    header << "For (" << op->name << ")";
 
     open_table_row();
     table_header(header.str(), size);
@@ -597,7 +607,7 @@ Stmt ProducerConsumerHierarchy::visit(const IfThenElse *op) {
     table_header(ifHeader.str(), thenSize);
 
     stringstream elseHeader;
-    elseHeader << "if (! (" << op->condition << "))";
+    elseHeader << "else";
     table_header(elseHeader.str(), elseSize);
     close_table_row();
 
@@ -618,4 +628,109 @@ Stmt ProducerConsumerHierarchy::visit(const IfThenElse *op) {
     close_table();
 
     return op;
+}
+
+string StmtSizes::print_node(const IRNode *node) const {
+    stringstream s;
+    s << "Crashing node has type: ";
+    IRNodeType type = node->node_type;
+    if (type == IRNodeType::IntImm) {
+        s << "IntImm type" << endl;
+        auto node1 = dynamic_cast<const IntImm *>(node);
+        s << "value: " << node1->value << endl;
+    } else if (type == IRNodeType::UIntImm) {
+        s << "UIntImm type" << endl;
+    } else if (type == IRNodeType::FloatImm) {
+        s << "FloatImm type" << endl;
+    } else if (type == IRNodeType::StringImm) {
+        s << "StringImm type" << endl;
+    } else if (type == IRNodeType::Broadcast) {
+        s << "Broadcast type" << endl;
+    } else if (type == IRNodeType::Cast) {
+        s << "Cast type" << endl;
+    } else if (type == IRNodeType::Variable) {
+        s << "Variable type" << endl;
+    } else if (type == IRNodeType::Add) {
+        s << "Add type" << endl;
+    } else if (type == IRNodeType::Sub) {
+        s << "Sub type" << endl;
+    } else if (type == IRNodeType::Mod) {
+        s << "Mod type" << endl;
+    } else if (type == IRNodeType::Mul) {
+        s << "Mul type" << endl;
+    } else if (type == IRNodeType::Div) {
+        s << "Div type" << endl;
+    } else if (type == IRNodeType::Min) {
+        s << "Min type" << endl;
+    } else if (type == IRNodeType::Max) {
+        s << "Max type" << endl;
+    } else if (type == IRNodeType::EQ) {
+        s << "EQ type" << endl;
+    } else if (type == IRNodeType::NE) {
+        s << "NE type" << endl;
+    } else if (type == IRNodeType::LT) {
+        s << "LT type" << endl;
+    } else if (type == IRNodeType::LE) {
+        s << "LE type" << endl;
+    } else if (type == IRNodeType::GT) {
+        s << "GT type" << endl;
+    } else if (type == IRNodeType::GE) {
+        s << "GE type" << endl;
+    } else if (type == IRNodeType::And) {
+        s << "And type" << endl;
+    } else if (type == IRNodeType::Or) {
+        s << "Or type" << endl;
+    } else if (type == IRNodeType::Not) {
+        s << "Not type" << endl;
+    } else if (type == IRNodeType::Select) {
+        s << "Select type" << endl;
+    } else if (type == IRNodeType::Load) {
+        s << "Load type" << endl;
+    } else if (type == IRNodeType::Ramp) {
+        s << "Ramp type" << endl;
+    } else if (type == IRNodeType::Call) {
+        s << "Call type" << endl;
+    } else if (type == IRNodeType::Let) {
+        s << "Let type" << endl;
+    } else if (type == IRNodeType::Shuffle) {
+        s << "Shuffle type" << endl;
+    } else if (type == IRNodeType::VectorReduce) {
+        s << "VectorReduce type" << endl;
+    } else if (type == IRNodeType::LetStmt) {
+        s << "LetStmt type" << endl;
+    } else if (type == IRNodeType::AssertStmt) {
+        s << "AssertStmt type" << endl;
+    } else if (type == IRNodeType::ProducerConsumer) {
+        s << "ProducerConsumer type" << endl;
+    } else if (type == IRNodeType::For) {
+        s << "For type" << endl;
+    } else if (type == IRNodeType::Acquire) {
+        s << "Acquire type" << endl;
+    } else if (type == IRNodeType::Store) {
+        s << "Store type" << endl;
+    } else if (type == IRNodeType::Provide) {
+        s << "Provide type" << endl;
+    } else if (type == IRNodeType::Allocate) {
+        s << "Allocate type" << endl;
+    } else if (type == IRNodeType::Free) {
+        s << "Free type" << endl;
+    } else if (type == IRNodeType::Realize) {
+        s << "Realize type" << endl;
+    } else if (type == IRNodeType::Block) {
+        s << "Block type" << endl;
+    } else if (type == IRNodeType::Fork) {
+        s << "Fork type" << endl;
+    } else if (type == IRNodeType::IfThenElse) {
+        s << "IfThenElse type" << endl;
+    } else if (type == IRNodeType::Evaluate) {
+        s << "Evaluate type" << endl;
+    } else if (type == IRNodeType::Prefetch) {
+        s << "Prefetch type" << endl;
+    } else if (type == IRNodeType::Atomic) {
+        s << "Atomic type" << endl;
+    } else {
+        s << "Unknown type" << endl;
+    }
+
+    return s.str();
 }
