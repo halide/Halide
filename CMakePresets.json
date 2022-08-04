@@ -145,35 +145,6 @@
         "BUILD_SHARED_LIBS": "NO",
         "Halide_BUNDLE_LLVM": "YES"
       }
-    },
-    {
-      "name": "package-ubuntu-shared",
-      "inherits": "package-unix-shared",
-      "displayName": "Package shared Halide for Ubuntu",
-      "description": "Package shared Halide for Ubuntu, using system packages.",
-      "binaryDir": "shared-release",
-      "cacheVariables": {
-        "Halide_SHARED_LLVM": "YES",
-        "LLVM_DIR": "$env{LLVM_ROOT}/lib/cmake/llvm",
-        "Clang_DIR": "$env{LLVM_ROOT}/lib/cmake/clang",
-        "LLD_DIR": "$env{LLVM_ROOT}/lib/cmake/lld",
-        "CMAKE_INSTALL_INCLUDEDIR": "include/Halide",
-        "CMAKE_INSTALL_LIBDIR": "lib/x86_64-linux-gnu",
-        "Halide_INSTALL_PLUGINDIR": "lib/x86_64-linux-gnu/Halide",
-        "Halide_INSTALL_HELPERSDIR": "lib/cmake/HalideHelpers",
-        "CMAKE_STRIP": "${sourceDir}/packaging/ubuntu/extra-strip.sh"
-      }
-    },
-    {
-      "name": "package-ubuntu-static",
-      "inherits": "package-ubuntu-shared",
-      "displayName": "Package static Halide for Ubuntu",
-      "description": "Package static Halide for Ubuntu, using system packages.",
-      "binaryDir": "static-release",
-      "cacheVariables": {
-        "BUILD_SHARED_LIBS": "NO",
-        "WITH_DOCS": "NO"
-      }
     }
   ]
 }
