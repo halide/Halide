@@ -19,7 +19,7 @@ enable_testing()
 # add_subdirectory(HelloWasm)  # TODO(#5374): missing CMake build
 # add_subdirectory(HelloiOS)  # TODO(#5374): missing CMake build
 # add_subdirectory(auto_viz)  # TODO(#5374): missing CMake build
-if (Halide_ENABLE_ASAN)
+if (Halide_ASAN_ENABLED)
     message(STATUS "Skipping apps/bgu under ASAN")
 else()
     add_subdirectory(bgu)  # Requires too much stack space for ASAN
