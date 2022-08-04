@@ -50,9 +50,6 @@ if (WIN32 AND BUILD_SHARED_LIBS)
                        VERBATIM)
 endif ()
 
-# HALIDE_PYTHON_PATH is what you need to add to PYTHONPATH to use our bindings
-set(HALIDE_PYTHON_PATH "${HALIDE_PYTHON_PATH}")
-
 ##
 # Packaging
 ##
