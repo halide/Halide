@@ -61,6 +61,6 @@ if (WITH_PYTHON_BINDINGS)
         string(REPLACE ";" "${SEP}" _PATH "${_PATH}")
         set_tests_properties(gradient_autoscheduler_test_py PROPERTIES
                              LABELS "Li2018;auto_schedule"
-                             ENVIRONMENT "PYTHONPATH=${PYTHONPATH};PATH=${_PATH}")
+                             ENVIRONMENT "PYTHONPATH=${PYTHONPATH};PATH=${_PATH};${SANITIZER_ENV_VARS}")
     endif ()
 endif ()

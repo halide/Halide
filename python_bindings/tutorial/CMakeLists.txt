@@ -30,7 +30,7 @@ foreach (TEST IN LISTS TESTS)
 
     set_tests_properties(python_tutorial_${TEST_NAME} PROPERTIES
                          LABELS python
-                         ENVIRONMENT "PYTHONPATH=${PYTHONPATH};HL_TARGET=${Halide_TARGET}")
+                         ENVIRONMENT "PYTHONPATH=${PYTHONPATH};HL_TARGET=${Halide_TARGET};${SANITIZER_ENV_VARS}")
 endforeach ()
 
 ## Add some hacks for getting CMake to delay compiling lesson_10_halide until after the test has run. The "better" way

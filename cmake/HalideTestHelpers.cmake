@@ -51,7 +51,7 @@ function(add_halide_test TARGET)
 
     set_tests_properties(${TARGET} PROPERTIES
                          LABELS "${args_GROUPS}"
-                         ENVIRONMENT "HL_TARGET=${Halide_TARGET};HL_JIT_TARGET=${Halide_TARGET}"
+                         ENVIRONMENT "HL_TARGET=${Halide_TARGET};HL_JIT_TARGET=${Halide_TARGET};${SANITIZER_ENV_VARS}"
                          PASS_REGULAR_EXPRESSION "Success!"
                          SKIP_REGULAR_EXPRESSION "\\[SKIP\\]"
                          WILL_FAIL ${args_EXPECT_FAILURE})

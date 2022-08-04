@@ -3,6 +3,11 @@
 using namespace Halide;
 
 int main(int argc, char **argv) {
+#ifdef HALIDE_INTERNAL_USING_ASAN
+    printf("[SKIP] unroll_huge_mux requires set_compiler_stack_size() to work properly, which is disabled under ASAN.\n");
+    return 0;
+#endif
+
     Func f;
     Var x;
 

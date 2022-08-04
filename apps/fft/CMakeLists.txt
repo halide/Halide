@@ -48,5 +48,5 @@ foreach (i IN ITEMS 8 12 16 24 32 48)
     set_tests_properties(bench${i}x${i} 
                          PROPERTIES
                          LABELS fft
-                         ENVIRONMENT "PATH=$<SHELL_PATH:$<TARGET_FILE_DIR:Halide::Halide>>")
+                         ENVIRONMENT "PATH=$<SHELL_PATH:$<TARGET_FILE_DIR:Halide::Halide>>;${SANITIZER_ENV_VARS}")
 endforeach ()
