@@ -603,6 +603,7 @@ Stmt ProducerConsumerHierarchy::visit(const IfThenElse *op) {
     // THEN CASE | ELSE CASE
     open_table_row();
     stringstream ifHeader;
+    // TODO: inline condition
     ifHeader << "if (" << op->condition << ")";
     table_header(ifHeader.str(), thenSize);
 
