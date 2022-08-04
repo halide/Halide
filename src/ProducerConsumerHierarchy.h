@@ -10,11 +10,11 @@ using namespace Halide;
 using namespace Internal;
 
 struct StmtSize {
-    uint16_t produce_size;
-    uint16_t consume_size;
+    map<string, string> produces;
+    map<string, string> consumes;
 
     bool empty() const {
-        return produce_size == 0 && consume_size == 0;
+        return produces.size() == 0 && consumes.size() == 0;
     }
 };
 
@@ -32,23 +32,34 @@ public:
     StmtSize get_size(const IRNode *node) const;
     bool are_bounds_set();
 
+    string print_sizes() const;
+    string print_produce_sizes(StmtSize &stmtSize) const;
+    string print_consume_sizes(StmtSize &stmtSize) const;
+
 private:
     using IRMutator::visit;
 
     unordered_map<const IRNode *, StmtSize> stmt_sizes;
     bool bounds_set = false;
     bool in_producer = false;
+    bool in_consumer = false;
+    string curr_consumer;
 
     void traverse(const Module &m);
 
-    void set_size(const IRNode *node, uint16_t produce_size, uint16_t consume_size);
+    string get_simplified_string(string a, string b, string op);
+
+    void set_produce_size(const IRNode *node, string produce_var, string produce_size);
+    void set_consume_size(const IRNode *node, string consume_var, string consume_size);
 
     Stmt visit(const LetStmt *op) override;
     Stmt visit(const ProducerConsumer *op) override;
     Stmt visit(const For *op) override;
     Stmt visit(const Store *op) override;
+    Expr visit(const Load *op) override;
     Stmt visit(const Allocate *op) override;
     Stmt visit(const Block *op) override;
+    Stmt visit(const IfThenElse *op) override;
 };
 
 /*

@@ -20,7 +20,7 @@ StmtSize StmtSizes::get_size(const IRNode *node) const {
     auto it = stmt_sizes.find(node);
     if (it == stmt_sizes.end()) {
         // TODO: make sure this is what i want
-        return StmtSize{0, 0};
+        return StmtSize();
     }
     return it->second;
 }
@@ -39,36 +39,119 @@ void StmtSizes::traverse(const Module &m) {
     }
 }
 
-void StmtSizes::set_size(const IRNode *node, uint16_t produce_size, uint16_t consume_size) {
+string StmtSizes::get_simplified_string(string a, string b, string op) {
+    if (op == "+") {
+        return a + " + " + b;
+    }
+
+    else if (op == "*") {
+        // check if b contains "+"
+        if (b.find("+") != string::npos) {
+            return a + "*(" + b + ")";
+        } else {
+            return a + "*" + b;
+        }
+    }
+
+    else {
+        internal_error << "\n"
+                       << "Unsupported operator: " << op << "\n";
+        return "";
+    }
+}
+
+string StmtSizes::print_sizes() const {
+    stringstream ss;
+    for (const auto &it : stmt_sizes) {
+        ss << it.first << ":" << endl;
+        for (const auto &it2 : it.second.produces) {
+            ss << "    produces " << it2.first << ": " << it2.second << endl;
+        }
+        for (const auto &it2 : it.second.consumes) {
+            ss << "    consumes " << it2.first << ": " << it2.second << endl;
+        }
+    }
+    return ss.str();
+}
+string StmtSizes::print_produce_sizes(StmtSize &stmtSize) const {
+    stringstream ss;
+    for (const auto &it : stmtSize.produces) {
+        ss << "produces:" << it.first << ": " << it.second << "<br>";
+    }
+    return ss.str();
+}
+string StmtSizes::print_consume_sizes(StmtSize &stmtSize) const {
+    stringstream ss;
+    for (const auto &it : stmtSize.consumes) {
+        ss << "consumes:" << it.first << ": " << it.second << "<br>";
+    }
+    return ss.str();
+}
+
+void StmtSizes::set_produce_size(const IRNode *node, string produce_var, string produce_size) {
     auto it = stmt_sizes.find(node);
     if (it == stmt_sizes.end()) {
-        stmt_sizes[node] = StmtSize{produce_size, consume_size};
-    } else {
-        internal_error << "\n"
-                       << "StmtSizes::set_size: node already exists\n\n";
-        it->second.produce_size = produce_size;
-        it->second.consume_size = consume_size;
+        stmt_sizes[node] = StmtSize();
     }
+    stmt_sizes[node].produces[produce_var] = produce_size;
+}
+void StmtSizes::set_consume_size(const IRNode *node, string consume_var, string consume_size) {
+    auto it = stmt_sizes.find(node);
+    if (it == stmt_sizes.end()) {
+        stmt_sizes[node] = StmtSize();
+    }
+    stmt_sizes[node].consumes[consume_var] = consume_size;
 }
 
 Stmt StmtSizes::visit(const LetStmt *op) {
     mutate(op->body);
     StmtSize bodySize = get_size(op->body.get());
-    set_size(op, bodySize.produce_size, bodySize.consume_size);
+
+    // set all produces and consumes of the body
+    for (const auto &produce_var : bodySize.produces) {
+        set_produce_size(op, produce_var.first, produce_var.second);
+    }
+    for (const auto &consume_var : bodySize.consumes) {
+        set_consume_size(op, consume_var.first, consume_var.second);
+    }
+
     return op;
 }
 Stmt StmtSizes::visit(const ProducerConsumer *op) {
 
-    in_producer = op->is_producer;
+    bool previous_in_producer = in_producer;
+    bool previous_in_consumer = in_consumer;
+
+    if (op->is_producer) {
+        in_producer = true;
+    } else {
+        in_consumer = true;
+    }
 
     mutate(op->body);
     StmtSize bodySize = get_size(op->body.get());
-    set_size(op, bodySize.produce_size, bodySize.consume_size);
+
+    // set all produces and consumes of the body
+    for (const auto &produce_var : bodySize.produces) {
+        set_produce_size(op, produce_var.first, produce_var.second);
+    }
+    for (const auto &consume_var : bodySize.consumes) {
+        set_consume_size(op, consume_var.first, consume_var.second);
+    }
+
+    in_producer = previous_in_producer;
+    in_consumer = previous_in_consumer;
     return op;
 }
 Stmt StmtSizes::visit(const For *op) {
     mutate(op->body);
     StmtSize bodySize = get_size(op->body.get());
+
+    // don't do anything if body is empty
+    if (bodySize.empty()) {
+        // cout << "warning: empty body" << endl;
+        return op;
+    }
 
     Expr min = op->min;
     Expr extent = op->extent;
@@ -79,7 +162,17 @@ Stmt StmtSizes::visit(const For *op) {
         int64_t extentValue = extent.as<IntImm>()->value;
         uint16_t range = uint16_t(extentValue - minValue);
 
-        set_size(op, bodySize.produce_size * range, bodySize.consume_size * range);
+        for (const auto &produce_var : bodySize.produces) {
+            string bodyProduceSize = produce_var.second;
+            string opProduceSize = get_simplified_string(to_string(range), bodyProduceSize, "*");
+            set_produce_size(op, produce_var.first, opProduceSize);
+        }
+        for (const auto &consume_var : bodySize.consumes) {
+            string bodyConsumeSize = consume_var.second;
+            string opConsumeSize = get_simplified_string(to_string(range), bodyConsumeSize, "*");
+            set_consume_size(op, consume_var.first, opConsumeSize);
+        }
+
         bounds_set = true;
     }
 
@@ -87,18 +180,31 @@ Stmt StmtSizes::visit(const For *op) {
         internal_error << "\n"
                        << "StmtSizes::visit(const For *op): min and extent are not of type IntImm. "
                           "can't generate ProdCons hierarchy yet. \n\n";
-        set_size(op, bodySize.produce_size, bodySize.consume_size);
     }
 
     return op;
 }
 Stmt StmtSizes::visit(const Store *op) {
+
     uint16_t lanes = op->value.type().lanes();
+
     if (in_producer) {
-        set_size(op, lanes, 0);
-    } else {
-        set_size(op, 0, lanes);
+        set_produce_size(op, op->name, to_string(lanes));
     }
+
+    if (in_consumer) {
+        mutate(op->value);
+        set_consume_size(op, curr_consumer, to_string(lanes));
+    }
+    return op;
+}
+Expr StmtSizes::visit(const Load *op) {
+
+    // only set curr_consumer if in consumer
+    if (in_consumer) {
+        curr_consumer = op->name;
+    }
+
     return op;
 }
 Stmt StmtSizes::visit(const Block *op) {
@@ -106,14 +212,111 @@ Stmt StmtSizes::visit(const Block *op) {
     mutate(op->rest);
     StmtSize firstSize = get_size(op->first.get());
     StmtSize restSize = get_size(op->rest.get());
-    set_size(op, firstSize.produce_size + restSize.produce_size,
-             firstSize.consume_size + restSize.consume_size);
+
+    // copies over all produces and consumes from the first statement
+    for (const auto &produce_var : firstSize.produces) {
+        string firstProduceSize = produce_var.second;
+        set_produce_size(op, produce_var.first, firstProduceSize);
+    }
+    for (const auto &consume_var : firstSize.consumes) {
+        string firstConsumeSize = consume_var.second;
+        set_consume_size(op, consume_var.first, firstConsumeSize);
+    }
+
+    // copies over all produces and consumes from the rest statement - takes into
+    // account that the first might already have set some produces and consumes
+    for (const auto &produce_var : restSize.produces) {
+        string restProduceSize = produce_var.second;
+
+        // check if produce_var.first is in firstSize.consumes
+        auto it = firstSize.produces.find(produce_var.first);
+        if (it != firstSize.produces.end()) {
+            string firstProducesSize = it->second;
+            string opProduceSize = get_simplified_string(firstProducesSize, restProduceSize, "+");
+
+            set_produce_size(op, produce_var.first, opProduceSize);
+        } else {
+            set_produce_size(op, produce_var.first, restProduceSize);
+        }
+    }
+    for (const auto &consume_var : restSize.consumes) {
+        string restConsumeSize = consume_var.second;
+
+        // check if consume_var.first is in firstSize.produces
+        auto it = firstSize.consumes.find(consume_var.first);
+        if (it != firstSize.consumes.end()) {
+            string firstConsumeSize = it->second;
+            string opConsumeSize = get_simplified_string(firstConsumeSize, restConsumeSize, "+");
+
+            set_consume_size(op, consume_var.first, opConsumeSize);
+        } else {
+            set_consume_size(op, consume_var.first, restConsumeSize);
+        }
+    }
+
     return op;
 }
 Stmt StmtSizes::visit(const Allocate *op) {
     mutate(op->body);
     StmtSize bodySize = get_size(op->body.get());
-    set_size(op, bodySize.produce_size, bodySize.consume_size);
+
+    // set all produces and consumes of the body
+    for (const auto &produce_var : bodySize.produces) {
+        set_produce_size(op, produce_var.first, produce_var.second);
+    }
+    for (const auto &consume_var : bodySize.consumes) {
+        set_consume_size(op, consume_var.first, consume_var.second);
+    }
+
+    return op;
+}
+Stmt StmtSizes::visit(const IfThenElse *op) {
+    mutate(op->then_case);
+    mutate(op->else_case);
+
+    StmtSize thenSize = get_size(op->then_case.get());
+    StmtSize elseSize = get_size(op->else_case.get());
+
+    // copies over all produces and consumes from the then statement
+    for (const auto &produce_var : thenSize.produces) {
+        string thenProduceSize = produce_var.second;
+        set_produce_size(op, produce_var.first, thenProduceSize);
+    }
+    for (const auto &consume_var : thenSize.consumes) {
+        string thenConsumeSize = consume_var.second;
+        set_consume_size(op, consume_var.first, thenConsumeSize);
+    }
+
+    // copies over all produces and consumes from the else statement - takes into
+    // account that the then might already have set some produces and consumes
+    for (const auto &produce_var : elseSize.produces) {
+        string elseProduceSize = produce_var.second;
+
+        // check if produce_var.first is in thenSize.consumes
+        auto it = thenSize.produces.find(produce_var.first);
+        if (it != thenSize.produces.end()) {
+            string thenProducesSize = it->second;
+            string opProduceSize = get_simplified_string(thenProducesSize, elseProduceSize, "+");
+
+            set_produce_size(op, produce_var.first, opProduceSize);
+        } else {
+            set_produce_size(op, produce_var.first, elseProduceSize);
+        }
+    }
+    for (const auto &consume_var : elseSize.consumes) {
+        string elseConsumeSize = consume_var.second;
+
+        // check if consume_var.first is in thenSize.produces
+        auto it = thenSize.consumes.find(consume_var.first);
+        if (it != thenSize.consumes.end()) {
+            string thenConsumeSize = it->second;
+            string opConsumeSize = get_simplified_string(thenConsumeSize, elseConsumeSize, "+");
+
+            set_consume_size(op, consume_var.first, opConsumeSize);
+        } else {
+            set_consume_size(op, consume_var.first, elseConsumeSize);
+        }
+    }
 
     return op;
 }
@@ -206,6 +409,10 @@ void ProducerConsumerHierarchy::start_html() {
     html << "padding-right: 5px;";
     html << "}";
 
+    html << ".costTableHeader {";
+    html << "border-bottom: 1px solid black;";
+    html << "}";
+
     html << "</style>";
 
     html << "<body>";
@@ -235,28 +442,72 @@ void ProducerConsumerHierarchy::prod_cons_table(StmtSize &size) {
     // Prod | Cons
     html << "<tr>";
 
-    html << "<th class=\\'costTableHeader\\'>";
+    html << "<th colspan=\\'2\\' class=\\'costTableHeader\\'>";
     html << "Prod";
     html << "</th>";
 
-    html << "<th class=\\'costTableHeader\\'>";
+    html << "<th colspan=\\'2\\' class=\\'costTableHeader\\'>";
     html << "Cons";
     html << "</th>";
 
     html << "</tr>";
 
-    // produce_size | consume_size
-    html << "<tr>";
+    // TODO: add something if both are empty so that there are 2 empty cols
 
-    html << "<td class=\\'costTableData\\'>";
-    html << size.produce_size;
-    html << "</td>";
+    vector<string> rows;
+    for (const auto &produce_var : size.produces) {
+        stringstream ss;
+        ss << "<td class=\\'costTableData\\'>";
+        ss << produce_var.first;
+        ss << "</td>";
 
-    html << "<td class=\\'costTableData\\'>";
-    html << size.consume_size;
-    html << "</td>";
+        ss << "<td class=\\'costTableData\\'>";
+        ss << produce_var.second;
+        ss << "</td>";
 
-    html << "</tr>";
+        rows.push_back(ss.str());
+    }
+    unsigned long rowNum = 0;
+    for (const auto &consume_var : size.consumes) {
+        stringstream ss;
+        ss << "<td class=\\'costTableData\\'>";
+        ss << consume_var.first;
+        ss << "</td>";
+
+        ss << "<td class=\\'costTableData\\'>";
+        ss << consume_var.second;
+        ss << "</td>";
+
+        if (rowNum < rows.size()) {
+            rows[rowNum] += ss.str();
+        } else {
+            stringstream sEmpty;
+            sEmpty << "<td class=\\'costTableData\\'>";
+            sEmpty << "</td>";
+            sEmpty << "<td class=\\'costTableData\\'>";
+            sEmpty << "</td>";
+
+            rows.push_back(sEmpty.str() + ss.str());
+        }
+        rowNum++;
+    }
+    rowNum = size.consumes.size();
+    while (rowNum < size.produces.size()) {
+        stringstream sEmpty;
+        sEmpty << "<td class=\\'costTableData\\'>";
+        sEmpty << "</td>";
+        sEmpty << "<td class=\\'costTableData\\'>";
+        sEmpty << "</td>";
+
+        rows[rowNum] += sEmpty.str();
+        rowNum++;
+    }
+
+    for (const auto &row : rows) {
+        html << "<tr>";
+        html << row;
+        html << "</tr>";
+    }
 
     // close table
     html << "</table>";
