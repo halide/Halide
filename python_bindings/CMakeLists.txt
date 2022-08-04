@@ -56,6 +56,15 @@ endif ()
 add_subdirectory(src/halide)
 add_subdirectory(stub)
 
+if (Halide_ASAN_ENABLED)
+    # Getting asan to work in shared mode requires some LD_PRELOAD hackery
+    # in a lot of places; just skipping them for now.
+    if (WITH_TEST_PYTHON OR WITH_TUTORIALS)
+        message(STATUS "Python tests/tutorials are not yet supported under ASAN.")
+    endif()
+    return()
+endif()
+
 if (WITH_TEST_PYTHON)
     add_subdirectory(test)
 endif ()
