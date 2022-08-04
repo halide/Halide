@@ -53,7 +53,7 @@ endif ()
 # Add our sources to this sub-tree.
 ##
 
-add_subdirectory(src/halide)
+add_subdirectory(src)
 add_subdirectory(stub)
 
 if (WITH_TEST_PYTHON)

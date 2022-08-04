@@ -32,7 +32,6 @@ set(SOURCES
 list(TRANSFORM SOURCES PREPEND "halide_/")
 
 pybind11_add_module(Halide_Python MODULE ${SOURCES})
-add_library(Halide::Python ALIAS Halide_Python)
 set_target_properties(Halide_Python
                       PROPERTIES
                       LIBRARY_OUTPUT_NAME halide_
@@ -46,9 +45,13 @@ if (WIN32 AND BUILD_SHARED_LIBS)
     # Ref: https://bugs.python.org/issue36085
     # Ref: https://docs.python.org/3/whatsnew/3.8.html#bpo-36085-whatsnew
     add_custom_command(TARGET Halide_Python POST_BUILD
-                       COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_FILE:Halide::Halide> $<TARGET_FILE_DIR:Halide::Python>
+                       COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_FILE:Halide::Halide> $<TARGET_FILE_DIR:Halide_Python>
                        VERBATIM)
 endif ()
+
+# Copy our __init__.py file over so that we have a package laid out in the right fashion
+# (halide_.so has already been built in this dir)
+configure_file("__init__.py" "${CMAKE_CURRENT_BINARY_DIR}/__init__.py")
 
 ##
 # Packaging

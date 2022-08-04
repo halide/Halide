@@ -29,10 +29,9 @@ set(TESTS
 # Use generator expressions to get the true output paths of these files.
 make_shell_path(
     PYTHONPATH
+    "$<TARGET_FILE_DIR:Halide::Python>"
     "$<TARGET_FILE_DIR:py_aot_bit>"
     "$<TARGET_FILE_DIR:py_stub_bit>"
-    "$<TARGET_FILE_DIR:Halide::Python>"
-    "${Halide_SOURCE_DIR}/python_bindings/src"
 )
 
 foreach (TEST IN LISTS TESTS)

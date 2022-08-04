@@ -8,7 +8,6 @@ set(SCRIPTS
 make_shell_path(
     PYTHONPATH
     "$<TARGET_FILE_DIR:Halide::Python>"
-    "${Halide_SOURCE_DIR}/python_bindings/src"
 )
 
 set(TEST_ENV

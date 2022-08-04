@@ -18,9 +18,8 @@ set(TESTS
 
 make_shell_path(
     PYTHONPATH
-    "$<TARGET_FILE_DIR:lesson_10_halide>"
     "$<TARGET_FILE_DIR:Halide::Python>"
-    "${Halide_SOURCE_DIR}/python_bindings/src"
+    "$<TARGET_FILE_DIR:lesson_10_halide>"
 )
 
 foreach (TEST IN LISTS TESTS)

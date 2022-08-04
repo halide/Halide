@@ -48,7 +48,6 @@ if (WITH_PYTHON_BINDINGS)
         make_shell_path(
             PYTHONPATH
             "$<TARGET_FILE_DIR:Halide::Python>"
-            "${Halide_SOURCE_DIR}/python_bindings/src"
         )
 
         if (WIN32)

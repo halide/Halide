@@ -781,7 +781,7 @@ The following targets are not guaranteed to be available:
 
 | Imported target         | Description                                                                                                                              |
 |-------------------------|------------------------------------------------------------------------------------------------------------------------------------------|
-| `Halide::Python`        | this is a Python 3 module that can be referenced as `$<TARGET_FILE:Halide::Python>` when setting up Python tests or the like from CMake. |
+| `Halide::Python`        | this is a Python 3 package that can be referenced as `$<TARGET_FILE_DIR:Halide::Python>` when setting up PYTHONPATH for Python tests or the like from CMake. |
 | `Halide::Adams19`       | the Adams et.al. 2019 autoscheduler (no GPU support)                                                                                     |
 | `Halide::Li18`          | the Li et.al. 2018 gradient autoscheduler (limited GPU support)                                                                          |
 | `Halide::Mullapudi2016` | the Mullapudi et.al. 2016 autoscheduler (no GPU support)                                                                                 |
