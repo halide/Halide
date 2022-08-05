@@ -152,8 +152,6 @@ DeviceAPI get_default_device_api_for_target(const Target &target) {
         return DeviceAPI::OpenCL;
     } else if (target.has_feature(Target::CUDA)) {
         return DeviceAPI::CUDA;
-    } else if (target.has_feature(Target::Vulkan)) {
-        return DeviceAPI::Vulkan;
     } else if (target.has_feature(Target::OpenGLCompute)) {
         return DeviceAPI::OpenGLCompute;
     } else if (target.arch != Target::Hexagon && target.has_feature(Target::HVX)) {
@@ -162,6 +160,8 @@ DeviceAPI get_default_device_api_for_target(const Target &target) {
         return DeviceAPI::HexagonDma;
     } else if (target.has_feature(Target::D3D12Compute)) {
         return DeviceAPI::D3D12Compute;
+    } else if (target.has_feature(Target::Vulkan)) {
+        return DeviceAPI::Vulkan;
     } else {
         return DeviceAPI::Host;
     }
