@@ -92,6 +92,7 @@ set(RUNTIME_CPP
     windows_profiler
     windows_threads
     windows_threads_tsan
+    windows_vulkan
     windows_yield
     write_debug_image
     x86_cpu_features
