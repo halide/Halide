@@ -100,6 +100,13 @@ void StmtSizes::set_consume_size(const IRNode *node, string consume_var, string 
     stmt_sizes[node].consumes[consume_var] = consume_size;
 }
 
+string StmtSizes::string_span(string varName) const {
+    return "<span class=\\'stringType\\'>" + varName + "</span>";
+}
+string StmtSizes::int_span(int64_t intVal) const {
+    return "<span class=\\'intType\\'>" + to_string(intVal) + "</span>";
+}
+
 Stmt StmtSizes::visit(const LetStmt *op) {
     mutate(op->body);
     StmtSize bodySize = get_size(op->body.get());
@@ -159,19 +166,20 @@ Stmt StmtSizes::visit(const For *op) {
         int64_t minValue = min.as<IntImm>()->value;
         int64_t extentValue = extent.as<IntImm>()->value;
         uint16_t range = uint16_t(extentValue - minValue);
-        loopIterator = to_string(range);
+        loopIterator = int_span(range);
     }
 
     else if (min.node_type() == IRNodeType::IntImm && extent.node_type() == IRNodeType::Variable) {
         int64_t minValue = min.as<IntImm>()->value;
-        string extentName = extent.as<Variable>()->name;
+        string minName = int_span(minValue);
+        string extentName = string_span(extent.as<Variable>()->name);
 
         // TODO: inline variable for extentName
 
         if (minValue == 0) {
             loopIterator = extentName;
         } else {
-            loopIterator = "(" + extentName + " - " + to_string(minValue) + ")";
+            loopIterator = "(" + extentName + " - " + minName + ")";
         }
     }
 
@@ -202,12 +210,12 @@ Stmt StmtSizes::visit(const Store *op) {
     uint16_t lanes = op->value.type().lanes();
 
     if (in_producer) {
-        set_produce_size(op, op->name, to_string(lanes));
+        set_produce_size(op, op->name, int_span(lanes));
     }
 
     if (in_consumer) {
         mutate(op->value);
-        set_consume_size(op, curr_consumer, to_string(lanes));
+        set_consume_size(op, curr_consumer, int_span(lanes));
     }
     return op;
 }
@@ -421,6 +429,9 @@ void ProducerConsumerHierarchy::start_html() {
     html << "padding-left: 5px;";
     html << "padding-right: 5px;";
     html << "}";
+
+    html << "span.intType { color: #099; }";
+    html << "span.stringType { color: #990073; }";
 
     html << ".costTableHeader {";
     html << "border-bottom: 1px solid black;";

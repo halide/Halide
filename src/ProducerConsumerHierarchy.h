@@ -50,6 +50,9 @@ private:
     void set_produce_size(const IRNode *node, string produce_var, string produce_size);
     void set_consume_size(const IRNode *node, string consume_var, string consume_size);
 
+    string string_span(string varName) const;
+    string int_span(int64_t intVal) const;
+
     Stmt visit(const LetStmt *op) override;
     Stmt visit(const ProducerConsumer *op) override;
     Stmt visit(const For *op) override;
