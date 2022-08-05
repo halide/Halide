@@ -142,7 +142,7 @@ void BlockAllocator::initialize(void *user_context, const Config &cfg, const Mem
 }
 
 MemoryRegion *BlockAllocator::reserve(void *user_context, const MemoryRequest &request) {
-#ifdef DEBUG_RUNTIME
+#ifdef DEBUG_INTERNAL
     debug(user_context) << "BlockAllocator: Reserve ("
                         << "user_context=" << (void *)(user_context) << " "
                         << "offset=" << (uint32_t)request.offset << " "
@@ -239,7 +239,7 @@ void BlockAllocator::destroy(void *user_context) {
 MemoryRegion *BlockAllocator::reserve_memory_region(void *user_context, RegionAllocator *allocator, const MemoryRequest &request) {
     MemoryRegion *result = allocator->reserve(user_context, request);
     if (result == nullptr) {
-#ifdef DEBUG_RUNTIME
+#ifdef DEBUG_INTERNAL
         debug(user_context) << "BlockAllocator: Failed to allocate region of size ("
                             << (int32_t)(request.size) << " bytes)!\n";
 #endif
@@ -274,7 +274,7 @@ BlockAllocator::find_block_entry(void *user_context, const MemoryProperties &pro
 
         size_t available = (block->memory.size - block->reserved);
         if (available >= size) {
-#ifdef DEBUG_RUNTIME
+#ifdef DEBUG_INTERNAL
             debug(user_context) << "BlockAllocator: find_block_entry (FOUND) ("
                                 << "user_context=" << (void *)(user_context) << " "
                                 << "block_entry=" << (void *)(block_entry) << " "
@@ -310,7 +310,7 @@ BlockAllocator::reserve_block_entry(void *user_context, const MemoryProperties &
 
 RegionAllocator *
 BlockAllocator::create_region_allocator(void *user_context, BlockResource *block) {
-#ifdef DEBUG_RUNTIME
+#ifdef DEBUG_INTERNAL
     debug(user_context) << "BlockAllocator: Creating region allocator ("
                         << "user_context=" << (void *)(user_context) << " "
                         << "block_resource=" << (void *)(block) << ")...\n";
@@ -328,7 +328,7 @@ BlockAllocator::create_region_allocator(void *user_context, BlockResource *block
 }
 
 void BlockAllocator::destroy_region_allocator(void *user_context, RegionAllocator *region_allocator) {
-#ifdef DEBUG_RUNTIME
+#ifdef DEBUG_INTERNAL
     debug(user_context) << "BlockAllocator: Destroying region allocator ("
                         << "user_context=" << (void *)(user_context) << " "
                         << "region_allocator=" << (void *)(region_allocator) << ")...\n";
@@ -353,7 +353,7 @@ BlockAllocator::create_block_entry(void *user_context, const MemoryProperties &p
         return nullptr;
     }
 
-#ifdef DEBUG_RUNTIME
+#ifdef DEBUG_INTERNAL
     debug(user_context) << "BlockAllocator: Creating block entry ("
                         << "block_entry=" << (void *)(block_entry) << " "
                         << "block=" << (void *)(block_entry->value) << " "
@@ -371,7 +371,7 @@ BlockAllocator::create_block_entry(void *user_context, const MemoryProperties &p
 }
 
 void BlockAllocator::release_block_entry(void *user_context, BlockAllocator::BlockEntry *block_entry) {
-#ifdef DEBUG_RUNTIME
+#ifdef DEBUG_INTERNAL
     debug(user_context) << "BlockAllocator: Releasing block entry ("
                         << "block_entry=" << (void *)(block_entry) << " "
                         << "block=" << (void *)(block_entry->value) << ")...\n";
@@ -383,7 +383,7 @@ void BlockAllocator::release_block_entry(void *user_context, BlockAllocator::Blo
 }
 
 void BlockAllocator::destroy_block_entry(void *user_context, BlockAllocator::BlockEntry *block_entry) {
-#ifdef DEBUG_RUNTIME
+#ifdef DEBUG_INTERNAL
     debug(user_context) << "BlockAllocator: Destroying block entry ("
                         << "block_entry=" << (void *)(block_entry) << " "
                         << "block=" << (void *)(block_entry->value) << " "
@@ -399,7 +399,7 @@ void BlockAllocator::destroy_block_entry(void *user_context, BlockAllocator::Blo
 }
 
 void BlockAllocator::alloc_memory_block(void *user_context, BlockResource *block) {
-#ifdef DEBUG_RUNTIME
+#ifdef DEBUG_INTERNAL
     debug(user_context) << "BlockAllocator: Allocating block (ptr=" << (void *)block << " allocator=" << (void *)allocators.block.allocate << ")...\n";
 #endif
     halide_abort_if_false(user_context, allocators.block.allocate != nullptr);
@@ -409,7 +409,7 @@ void BlockAllocator::alloc_memory_block(void *user_context, BlockResource *block
 }
 
 void BlockAllocator::free_memory_block(void *user_context, BlockResource *block) {
-#ifdef DEBUG_RUNTIME
+#ifdef DEBUG_INTERNAL
     debug(user_context) << "BlockAllocator: Deallocating block (ptr=" << (void *)block << " allocator=" << (void *)allocators.block.deallocate << ")...\n";
 #endif
     halide_abort_if_false(user_context, allocators.block.deallocate != nullptr);

@@ -57,6 +57,8 @@ public:
     void destroy(void *user_context);
 
     bool empty() const;
+    bool full() const;
+    bool is_valid(size_t index) const;
     size_t stride() const;
     size_t size() const;
 
@@ -319,6 +321,14 @@ void BlockStorage::append(void *user_context, const void *array, size_t array_si
 
 bool BlockStorage::empty() const {
     return count == 0;
+}
+
+bool BlockStorage::full() const {
+    return (count >= capacity);
+}
+
+bool BlockStorage::is_valid(size_t index) const {
+    return (index < capacity);
 }
 
 size_t BlockStorage::size() const {

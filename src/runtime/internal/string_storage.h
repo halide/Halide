@@ -256,9 +256,11 @@ void StringStorage::prepend(void *user_context, char ch) {
 }
 
 void StringStorage::terminate(void *user_context, size_t length) {
-    if (contents.data() && (length < contents.size())) {
+    if (contents.is_valid(length)) {
         char *end_ptr = static_cast<char *>(contents[length]);
         (*end_ptr) = '\0';
+    } else {
+        halide_error(user_context, "StringStorage: Failed to terminate string! Out of bounds!\n");
     }
 }
 
