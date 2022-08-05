@@ -512,7 +512,9 @@ void vk_destroy_scalar_uniform_buffer(void *user_context, VulkanMemoryAllocator 
         << "scalar_args_region: " << (void *)scalar_args_region << ")\n";
 #endif
 
-    if (!scalar_args_region) { return; }
+    if (!scalar_args_region) {
+        return;
+    }
     allocator->reclaim(user_context, scalar_args_region);
 }
 

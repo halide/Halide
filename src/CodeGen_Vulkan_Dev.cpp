@@ -778,7 +778,9 @@ int thread_loop_workgroup_index(const std::string &name) {
                          ".__thread_id_y",
                          ".__thread_id_z"};
     for (size_t i = 0; i < sizeof(ids) / sizeof(std::string); i++) {
-        if (ends_with(name, ids[i])) { return i; }
+        if (ends_with(name, ids[i])) {
+            return i;
+        }
     }
     return -1;
 }

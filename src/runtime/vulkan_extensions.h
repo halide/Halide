@@ -45,7 +45,9 @@ void vk_set_layer_names_internal(const char *n) {
 const char *vk_get_layer_names_internal(void *user_context) {
     if (!layer_names_initialized) {
         const char *value = getenv("HL_VK_LAYERS");
-        if (value == nullptr) { value = getenv("VK_INSTANCE_LAYERS"); }
+        if (value == nullptr) {
+            value = getenv("VK_INSTANCE_LAYERS");
+        }
         vk_set_layer_names_internal(value);
     }
     return layer_names;
