@@ -536,7 +536,6 @@ if (TARGET_OPENGLCOMPUTE)
     target_compile_definitions(Halide PRIVATE WITH_OPENGLCOMPUTE)
 endif ()
 
-cmake_dependent_option(TARGET_VULKAN "Include Vulkan target" ON TARGET_SPIRV OFF)
 if (TARGET_VULKAN)
     message(STATUS "Enabling Vulkan target")
     target_compile_definitions(Halide PRIVATE WITH_VULKAN)
