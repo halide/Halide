@@ -125,6 +125,7 @@ WITH_OPENCL ?= not-empty
 WITH_METAL ?= not-empty
 WITH_OPENGLCOMPUTE ?= not-empty
 WITH_D3D12 ?= not-empty
+WITH_VULKAN ?= not-empty
 WITH_INTROSPECTION ?= not-empty
 WITH_EXCEPTIONS ?=
 WITH_LLVM_INSIDE_SHARED_LIBHALIDE ?= not-empty
@@ -177,6 +178,9 @@ EXCEPTIONS_CXX_FLAGS=$(if $(WITH_EXCEPTIONS), -DHALIDE_WITH_EXCEPTIONS -fexcepti
 HEXAGON_CXX_FLAGS=$(if $(WITH_HEXAGON), -DWITH_HEXAGON, )
 HEXAGON_LLVM_CONFIG_LIB=$(if $(WITH_HEXAGON), hexagon, )
 
+VULKAN_CXX_FLAGS=$(if $(WITH_VULKAN), -DWITH_VULKAN, )
+VULKAN_LLVM_CONFIG_LIB=$(if $(WITH_VULKAN), , )
+
 WEBASSEMBLY_CXX_FLAGS=$(if $(WITH_WEBASSEMBLY), -DWITH_WEBASSEMBLY, )
 WEBASSEMBLY_LLVM_CONFIG_LIB=$(if $(WITH_WEBASSEMBLY), webassembly, )
 
@@ -216,6 +220,7 @@ CXX_FLAGS += $(INTROSPECTION_CXX_FLAGS)
 CXX_FLAGS += $(EXCEPTIONS_CXX_FLAGS)
 CXX_FLAGS += $(AMDGPU_CXX_FLAGS)
 CXX_FLAGS += $(RISCV_CXX_FLAGS)
+CXX_FLAGS += $(VULKAN_CXX_FLAGS)
 CXX_FLAGS += $(WEBASSEMBLY_CXX_FLAGS)
 
 # This is required on some hosts like powerpc64le-linux-gnu because we may build
@@ -243,6 +248,7 @@ LLVM_STATIC_LIBFILES = \
 	$(POWERPC_LLVM_CONFIG_LIB) \
 	$(HEXAGON_LLVM_CONFIG_LIB) \
 	$(AMDGPU_LLVM_CONFIG_LIB) \
+	$(VULKAN_LLVM_CONFIG_LIB) \
 	$(WEBASSEMBLY_LLVM_CONFIG_LIB) \
 	$(RISCV_LLVM_CONFIG_LIB)
 
@@ -307,12 +313,21 @@ TEST_METAL = 1
 endif
 endif
 
+ifneq ($(WITH_VULKAN), )
+ifneq (,$(findstring vulkan,$(HL_TARGET)))
+TEST_VULKAN = 1
+endif
+endif
+
 ifeq ($(UNAME), Linux)
 ifneq ($(TEST_CUDA), )
 CUDA_LD_FLAGS ?= -L/usr/lib/nvidia-current -lcuda
 endif
 ifneq ($(TEST_OPENCL), )
 OPENCL_LD_FLAGS ?= -lOpenCL
+endif
+ifneq ($(TEST_VULKAN), )
+VULKAN_LD_FLAGS ?= -lvulkan
 endif
 OPENGL_LD_FLAGS ?= -lGL
 HOST_OS=linux
@@ -326,6 +341,10 @@ endif
 ifneq ($(TEST_OPENCL), )
 OPENCL_LD_FLAGS ?= -framework OpenCL
 endif
+ifneq ($(TEST_VULKAN), )
+# The Vulkan loader is distributed as a dylib on OSX (not a framework)
+VULKAN_LD_FLAGS ?= -lvulkan
+endif
 ifneq ($(TEST_METAL), )
 METAL_LD_FLAGS ?= -framework Metal -framework Foundation
 endif
@@ -335,6 +354,10 @@ endif
 
 ifneq ($(TEST_OPENCL), )
 TEST_CXX_FLAGS += -DTEST_OPENCL
+endif
+
+ifneq ($(TEST_VULKAN), )
+TEST_CXX_FLAGS += -DTEST_VULKAN
 endif
 
 ifneq ($(TEST_METAL), )
@@ -436,6 +459,7 @@ SOURCE_FILES = \
   CodeGen_Metal_Dev.cpp \
   CodeGen_MIPS.cpp \
   CodeGen_OpenCL_Dev.cpp \
+  CodeGen_Vulkan_Dev.cpp \
   CodeGen_OpenGLCompute_Dev.cpp \
   CodeGen_Posix.cpp \
   CodeGen_PowerPC.cpp \
@@ -614,6 +638,7 @@ HEADER_FILES = \
   CodeGen_LLVM.h \
   CodeGen_Metal_Dev.h \
   CodeGen_OpenCL_Dev.h \
+  CodeGen_Vulkan_Dev.h \
   CodeGen_OpenGLCompute_Dev.h \
   CodeGen_Posix.h \
   CodeGen_PTX_Dev.h \
@@ -838,8 +863,10 @@ RUNTIME_CPP_COMPONENTS = \
   windows_profiler \
   windows_threads \
   windows_threads_tsan \
+  windows_vulkan \
   windows_yield \
   write_debug_image \
+  vulkan \
   x86_cpu_features \
 
 RUNTIME_LL_COMPONENTS = \
@@ -869,6 +896,7 @@ RUNTIME_EXPORTED_INCLUDES = $(INCLUDE_DIR)/HalideRuntime.h \
                             $(INCLUDE_DIR)/HalideRuntimeOpenGLCompute.h \
                             $(INCLUDE_DIR)/HalideRuntimeMetal.h	\
                             $(INCLUDE_DIR)/HalideRuntimeQurt.h \
+                            $(INCLUDE_DIR)/HalideRuntimeVulkan.h \
                             $(INCLUDE_DIR)/HalideBuffer.h \
                             $(INCLUDE_DIR)/HalidePyTorchHelpers.h \
                             $(INCLUDE_DIR)/HalidePyTorchCudaHelpers.h
