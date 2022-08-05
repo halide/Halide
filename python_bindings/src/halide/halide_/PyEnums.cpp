@@ -14,6 +14,7 @@ void define_enums(py::module &m) {
         .value("Host", DeviceAPI::Host)
         .value("Default_GPU", DeviceAPI::Default_GPU)
         .value("CUDA", DeviceAPI::CUDA)
+        .value("Vulkan", DeviceAPI::Vulkan)
         .value("OpenCL", DeviceAPI::OpenCL)
         .value("OpenGLCompute", DeviceAPI::OpenGLCompute)
         .value("Metal", DeviceAPI::Metal)
@@ -175,6 +176,7 @@ void define_enums(py::module &m) {
         .value("SanitizerCoverage", Target::Feature::SanitizerCoverage)
         .value("ProfileByTimer", Target::Feature::ProfileByTimer)
         .value("SPIRV", Target::Feature::SPIRV)
+        .value("Vulkan", Target::Feature::Vulkan)
         .value("FeatureEnd", Target::Feature::FeatureEnd);
 
     py::enum_<halide_type_code_t>(m, "TypeCode")
