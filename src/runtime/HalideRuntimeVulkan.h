@@ -57,16 +57,16 @@ struct halide_vulkan_memory_allocator;
 extern int halide_vulkan_acquire_context(void *user_context,
                                          struct halide_vulkan_memory_allocator **allocator,
                                          struct VkInstance_T **instance,
-                                         struct VkDevice_T **device, 
+                                         struct VkDevice_T **device,
                                          struct VkPhysicalDevice_T **physical_device,
                                          uint64_t *command_pool,
                                          struct VkQueue_T **queue,
                                          uint32_t *queue_family_index,
                                          bool create = true);
 
-extern int halide_vulkan_release_context(void *user_context, 
-                                         struct VkInstance_T *instance, 
-                                         struct VkDevice_T *device, 
+extern int halide_vulkan_release_context(void *user_context,
+                                         struct VkInstance_T *instance,
+                                         struct VkDevice_T *device,
                                          struct VkQueue_T *queue);
 
 // --

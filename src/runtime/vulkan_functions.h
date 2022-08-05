@@ -1,4 +1,4 @@
-//VULKAN_FN(vkCreateInstance)
+// VULKAN_FN(vkCreateInstance)
 VULKAN_FN(vkDestroyInstance)
 VULKAN_FN(vkCreateDevice)
 VULKAN_FN(vkDestroyDevice)

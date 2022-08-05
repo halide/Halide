@@ -20,14 +20,14 @@ namespace {  // internalize
 
 // --------------------------------------------------------------------------
 
-VkResult vk_create_command_pool(void* user_context, VulkanMemoryAllocator *allocator, uint32_t queue_index,  VkCommandPool *command_pool) {
+VkResult vk_create_command_pool(void *user_context, VulkanMemoryAllocator *allocator, uint32_t queue_index, VkCommandPool *command_pool) {
 #ifdef DEBUG_RUNTIME
     debug(user_context)
         << "Vulkan: vk_create_command_pool (user_context: " << user_context << ", "
         << "allocator: " << (void *)allocator << ", "
         << "device: " << (void *)allocator->current_device() << ", "
         << "queue_index: " << queue_index << ")\n";
-#endif    
+#endif
 
     VkCommandPoolCreateInfo command_pool_info =
         {
@@ -39,21 +39,21 @@ VkResult vk_create_command_pool(void* user_context, VulkanMemoryAllocator *alloc
     return vkCreateCommandPool(allocator->current_device(), &command_pool_info, allocator->callbacks(), command_pool);
 }
 
-VkResult vk_destroy_command_pool(void* user_context, VulkanMemoryAllocator* allocator, VkCommandPool command_pool) {
+VkResult vk_destroy_command_pool(void *user_context, VulkanMemoryAllocator *allocator, VkCommandPool command_pool) {
 #ifdef DEBUG_RUNTIME
     debug(user_context)
         << "Vulkan: vk_destroy_command_pool (user_context: " << user_context << ", "
         << "allocator: " << (void *)allocator << ", "
         << "device: " << (void *)allocator->current_device() << ", "
         << "command_pool: " << (void *)command_pool << ")\n";
-#endif    
+#endif
     vkDestroyCommandPool(allocator->current_device(), command_pool, allocator->callbacks());
-    return VK_SUCCESS;    
+    return VK_SUCCESS;
 }
 
 // --
 
-VkResult vk_create_command_buffer(void* user_context, VulkanMemoryAllocator* allocator, VkCommandPool command_pool, VkCommandBuffer *command_buffer) {
+VkResult vk_create_command_buffer(void *user_context, VulkanMemoryAllocator *allocator, VkCommandPool command_pool, VkCommandBuffer *command_buffer) {
 #ifdef DEBUG_RUNTIME
     debug(user_context)
         << "Vulkan: vk_create_command_buffer (user_context: " << user_context << ", "
@@ -74,12 +74,12 @@ VkResult vk_create_command_buffer(void* user_context, VulkanMemoryAllocator* all
 }
 
 VkResult vk_fill_command_buffer_with_dispatch_call(void *user_context,
-                                                    VkDevice device,
-                                                    VkCommandBuffer command_buffer,
-                                                    VkPipeline compute_pipeline,
-                                                    VkPipelineLayout pipeline_layout,
-                                                    VkDescriptorSet descriptor_set,
-                                                    int blocksX, int blocksY, int blocksZ) {
+                                                   VkDevice device,
+                                                   VkCommandBuffer command_buffer,
+                                                   VkPipeline compute_pipeline,
+                                                   VkPipelineLayout pipeline_layout,
+                                                   VkDescriptorSet descriptor_set,
+                                                   int blocksX, int blocksY, int blocksZ) {
 
 #ifdef DEBUG_RUNTIME
     debug(user_context)
@@ -150,9 +150,9 @@ VkResult vk_submit_command_buffer(void *user_context, VkQueue queue, VkCommandBu
 // --
 
 uint32_t vk_count_bindings_for_descriptor_set(void *user_context,
-                                                   size_t arg_sizes[],
-                                                   void *args[],
-                                                   int8_t arg_is_buffer[]) {
+                                              size_t arg_sizes[],
+                                              void *args[],
+                                              int8_t arg_is_buffer[]) {
     int i = 0;
     uint32_t num_bindings = 1;  // first binding is for passing scalar parameters in a buffer
     while (arg_sizes[i] > 0) {
@@ -208,8 +208,7 @@ VkResult vk_create_descriptor_pool(void *user_context,
     return VK_SUCCESS;
 }
 
-
-VkResult vk_destroy_descriptor_pool(void* user_context, 
+VkResult vk_destroy_descriptor_pool(void *user_context,
                                     VulkanMemoryAllocator *allocator,
                                     VkDescriptorPool descriptor_pool) {
 #ifdef DEBUG_RUNTIME
@@ -295,7 +294,7 @@ VkResult vk_create_descriptor_set_layout(void *user_context,
     return VK_SUCCESS;
 }
 
-VkResult vk_destroy_descriptor_set_layout(void* user_context, 
+VkResult vk_destroy_descriptor_set_layout(void *user_context,
                                           VulkanMemoryAllocator *allocator,
                                           VkDescriptorSetLayout descriptor_set_layout) {
 
@@ -435,9 +434,9 @@ VkResult vk_update_descriptor_set(void *user_context,
 // --
 
 size_t vk_estimate_scalar_uniform_buffer_size(void *user_context,
-                                                   size_t arg_sizes[],
-                                                   void *args[],
-                                                   int8_t arg_is_buffer[]) {
+                                              size_t arg_sizes[],
+                                              void *args[],
+                                              int8_t arg_is_buffer[]) {
     int i = 0;
     int scalar_uniform_buffer_size = 0;
     while (arg_sizes[i] > 0) {
@@ -450,11 +449,10 @@ size_t vk_estimate_scalar_uniform_buffer_size(void *user_context,
 }
 
 MemoryRegion *vk_create_scalar_uniform_buffer(void *user_context,
-                                                   VulkanMemoryAllocator *allocator,
-                                                   size_t arg_sizes[],
-                                                   void *args[],
-                                                   int8_t arg_is_buffer[]) {
-
+                                              VulkanMemoryAllocator *allocator,
+                                              size_t arg_sizes[],
+                                              void *args[],
+                                              int8_t arg_is_buffer[]) {
 
     size_t scalar_buffer_size = vk_estimate_scalar_uniform_buffer_size(user_context,
                                                                        arg_sizes, args, arg_is_buffer);
@@ -504,7 +502,7 @@ MemoryRegion *vk_create_scalar_uniform_buffer(void *user_context,
 }
 
 void vk_destroy_scalar_uniform_buffer(void *user_context, VulkanMemoryAllocator *allocator,
-                                           MemoryRegion *scalar_args_region) {
+                                      MemoryRegion *scalar_args_region) {
 
 #ifdef DEBUG_RUNTIME
     debug(user_context)
@@ -552,7 +550,7 @@ VkResult vk_create_pipeline_layout(void *user_context,
     return VK_SUCCESS;
 }
 
-VkResult vk_destroy_pipeline_layout(void* user_context, 
+VkResult vk_destroy_pipeline_layout(void *user_context,
                                     VulkanMemoryAllocator *allocator,
                                     VkPipelineLayout pipeline_layout) {
 
@@ -594,7 +592,7 @@ VkResult vk_create_compute_pipeline(void *user_context,
             // VkPipelineShaderStageCreatInfo
             {
                 VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,  // structure type
-                nullptr,                                              //pointer to a structure extending this
+                nullptr,                                              // pointer to a structure extending this
                 0,                                                    // flags
                 VK_SHADER_STAGE_COMPUTE_BIT,                          // compute stage shader
                 shader_module,                                        // shader module
@@ -615,9 +613,9 @@ VkResult vk_create_compute_pipeline(void *user_context,
     return VK_SUCCESS;
 }
 
-VkResult vk_destroy_compute_pipeline(void* user_context, 
-                                    VulkanMemoryAllocator *allocator,
-                                    VkPipeline compute_pipeline) {
+VkResult vk_destroy_compute_pipeline(void *user_context,
+                                     VulkanMemoryAllocator *allocator,
+                                     VkPipeline compute_pipeline) {
 #ifdef DEBUG_RUNTIME
     debug(user_context)
         << "Vulkan: vk_destroy_compute_pipeline (user_context: " << user_context << ", "
@@ -632,13 +630,13 @@ VkResult vk_destroy_compute_pipeline(void* user_context,
 // --------------------------------------------------------------------------
 
 VkShaderModule *vk_compile_shader_module(void *user_context, VulkanMemoryAllocator *allocator,
-                                              const char *src, int size) {
+                                         const char *src, int size) {
 #ifdef DEBUG_RUNTIME
     debug(user_context)
         << "Vulkan: vk_compile_shader_module (user_context: " << user_context << ", "
         << "allocator: " << (void *)allocator << ", "
         << "device: " << (void *)allocator->current_device() << ", "
-        << "source: " << (void *)src  << ", "
+        << "source: " << (void *)src << ", "
         << "size: " << size << ")\n";
 
     uint64_t t_before = halide_current_time_ns(user_context);
@@ -654,10 +652,10 @@ VkShaderModule *vk_compile_shader_module(void *user_context, VulkanMemoryAllocat
 
     VkSystemAllocationScope alloc_scope = VkSystemAllocationScope::VK_SYSTEM_ALLOCATION_SCOPE_OBJECT;
     VkShaderModule *shader_module = (VkShaderModule *)vk_host_malloc(user_context, sizeof(VkShaderModule), 0, alloc_scope, allocator->callbacks());
-    if(shader_module == nullptr) {
+    if (shader_module == nullptr) {
         error(user_context) << "Vulkan: Failed to allocatoe shader module! Out of memory!\n";
         return nullptr;
-    } 
+    }
 
     VkResult result = vkCreateShaderModule(allocator->current_device(), &shader_info, allocator->callbacks(), shader_module);
     if ((result != VK_SUCCESS) || (shader_module == nullptr)) {
@@ -716,13 +714,13 @@ int vk_destroy_shader_modules(void *user_context, VulkanMemoryAllocator *allocat
 // --------------------------------------------------------------------------
 
 int vk_do_multidimensional_copy(void *user_context, VkCommandBuffer command_buffer,
-                             const device_copy &c, uint64_t src_offset, uint64_t dst_offset, int d) {
+                                const device_copy &c, uint64_t src_offset, uint64_t dst_offset, int d) {
     if (d == 0) {
 
         VkBufferCopy buffer_copy = {
-            c.src_begin + src_offset,       // srcOffset
-            dst_offset,                     // dstOffset
-            c.chunk_size                    // size
+            c.src_begin + src_offset,  // srcOffset
+            dst_offset,                // dstOffset
+            c.chunk_size               // size
         };
 
         VkBuffer *src_buffer = reinterpret_cast<VkBuffer *>(c.src);
@@ -731,7 +729,7 @@ int vk_do_multidimensional_copy(void *user_context, VkCommandBuffer command_buff
             error(user_context) << "Vulkan: Failed to retrieve buffer for device memory!\n";
             return -1;
         }
-        
+
         vkCmdCopyBuffer(command_buffer, *src_buffer, *dst_buffer, 1, &buffer_copy);
 
     } else {
@@ -752,10 +750,10 @@ int vk_do_multidimensional_copy(void *user_context, VkCommandBuffer command_buff
 
 // --------------------------------------------------------------------------
 
-}  // namespace: (anonymous)
-}  // namespace: Vulkan
-}  // namespace: Internal
-}  // namespace: Runtime
-}  // namespace: Halide
+}  // namespace
+}  // namespace Vulkan
+}  // namespace Internal
+}  // namespace Runtime
+}  // namespace Halide
 
 #endif  // HALIDE_RUNTIME_VULKAN_RESOURCES_H

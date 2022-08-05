@@ -56,12 +56,11 @@ void WEAK vk_load_vulkan_functions(VkInstance instance) {
 
 // --
 
-
 // --------------------------------------------------------------------------
 
-}  // namespace: Vulkan
-}  // namespace: Internal
-}  // namespace: Runtime
-}  // namespace: Halide
+}  // namespace Vulkan
+}  // namespace Internal
+}  // namespace Runtime
+}  // namespace Halide
 
 #endif  // HALIDE_RUNTIME_VULKAN_INTERFACE_H

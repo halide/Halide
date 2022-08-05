@@ -3,11 +3,11 @@
 #include "device_buffer_utils.h"
 #include "device_interface.h"
 #include "runtime_internal.h"
-#include "vulkan_resources.h"
 #include "vulkan_context.h"
 #include "vulkan_extensions.h"
 #include "vulkan_internal.h"
 #include "vulkan_memory.h"
+#include "vulkan_resources.h"
 
 using namespace Halide::Runtime::Internal::Vulkan;
 
@@ -32,7 +32,7 @@ extern "C" {
 WEAK int halide_vulkan_acquire_context(void *user_context,
                                        halide_vulkan_memory_allocator **allocator,
                                        VkInstance *instance,
-                                       VkDevice *device, 
+                                       VkDevice *device,
                                        VkPhysicalDevice *physical_device,
                                        VkCommandPool *command_pool,
                                        VkQueue *queue,
@@ -408,8 +408,8 @@ WEAK int halide_vulkan_copy_to_device(void *user_context, halide_buffer_t *halid
 
     //// 15. Reclaim the staging buffer
     ctx.allocator->reclaim(user_context, staging_region);
-    
- #ifdef DEBUG_RUNTIME
+
+#ifdef DEBUG_RUNTIME
     uint64_t t_after = halide_current_time_ns(user_context);
     debug(user_context) << "    Time: " << (t_after - t_before) / 1.0e6 << " ms\n";
 #endif
@@ -717,7 +717,7 @@ WEAK int halide_vulkan_run(void *user_context,
         return result;
     }
 
-    //// 10. Cleanup    
+    //// 10. Cleanup
     // Release all temporary objects for this run
     vk_destroy_scalar_uniform_buffer(user_context, ctx.allocator, scalar_args_region);
     vk_destroy_descriptor_set_layout(user_context, ctx.allocator, descriptor_set_layout);

@@ -218,8 +218,8 @@ uint32_t vk_get_supported_device_extensions(void *user_context, VkPhysicalDevice
 }
 
 bool vk_validate_required_extension_support(void *user_context,
-                                                 const StringTable &required_extensions,
-                                                 const StringTable &supported_extensions) {
+                                            const StringTable &required_extensions,
+                                            const StringTable &supported_extensions) {
     bool validated = true;
     for (uint32_t n = 0; n < required_extensions.size(); ++n) {
         const char *extension = required_extensions[n];
@@ -233,11 +233,11 @@ bool vk_validate_required_extension_support(void *user_context,
 
 // --------------------------------------------------------------------------
 
-}  // namespace: (anonymous)
-}  // namespace: Vulkan
-}  // namespace: Internal
-}  // namespace: Runtime
-}  // namespace: Halide
+}  // namespace
+}  // namespace Vulkan
+}  // namespace Internal
+}  // namespace Runtime
+}  // namespace Halide
 
 // --------------------------------------------------------------------------
 
