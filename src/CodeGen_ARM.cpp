@@ -1166,7 +1166,7 @@ void CodeGen_ARM::visit(const Call *op) {
         // If we didn't find a pattern, try rewriting any saturating casts.
         static const vector<pair<Expr, Expr>> cast_rewrites = {
             // Double or triple narrowing saturating casts are better expressed as
-            // regular narrowing casts.
+            // combinations of single narrowing saturating casts.
             {u8_sat(wild_u32x_), u8_sat(u16_sat(wild_u32x_))},
             {u8_sat(wild_i32x_), u8_sat(i16_sat(wild_i32x_))},
             {u8_sat(wild_f32x_), u8_sat(i16_sat(wild_f32x_))},

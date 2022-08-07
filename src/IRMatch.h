@@ -1358,6 +1358,9 @@ struct Intrin {
     struct pattern_tag {};
     Call::IntrinsicOp intrin;
     std::tuple<Args...> args;
+    // The type of the output of the intrinsic node.
+    // Only necessary in cases where it can't be inferred
+    // from the input types (e.g. saturating_cast).
     Type optional_type_hint;
 
     static constexpr uint32_t binds = bitwise_or_reduce((bindings<Args>::mask)...);
@@ -1386,7 +1389,9 @@ struct Intrin {
             return false;
         }
         const Call &c = (const Call &)e;
-        return (c.is_intrinsic(intrin) && match_args<0, bound>(0, c, state));
+        return (c.is_intrinsic(intrin) &&
+               ((optional_type_hint == Type()) || optional_type_hint == e.type) &&
+               match_args<0, bound>(0, c, state));
     }
 
     template<int i,
