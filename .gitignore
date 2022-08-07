@@ -136,6 +136,12 @@ a.out
 *.d
 *.dSYM
 
+# Package files
+*.deb
+*.tar.gz
+*.tgz
+*.zip
+
 ################################################################################
 ## Temporary and swap files
 
@@ -161,6 +167,11 @@ venv/
 # Python binary caches
 __pycache__
 *.py[cod]
+
+# Python package build artifacts
+*.egg-info/
+*.whl
+MANIFEST.in
 
 ################################################################################
 ## CMake
