@@ -1390,8 +1390,8 @@ struct Intrin {
         }
         const Call &c = (const Call &)e;
         return (c.is_intrinsic(intrin) &&
-               ((optional_type_hint == Type()) || optional_type_hint == e.type) &&
-               match_args<0, bound>(0, c, state));
+                ((optional_type_hint == Type()) || optional_type_hint == e.type) &&
+                match_args<0, bound>(0, c, state));
     }
 
     template<int i,
