@@ -1218,10 +1218,10 @@ private:
             Interval a_interval = interval;
             bounds_of_type(t);
             if (a_interval.has_lower_bound()) {
-                interval.min = saturating_cast(op->type, a_interval.min);
+                interval.min = saturating_cast(t, a_interval.min);
             }
             if (a_interval.has_upper_bound()) {
-                interval.max = saturating_cast(op->type, a_interval.max);
+                interval.max = saturating_cast(t, a_interval.max);
             }
             return;
         } else if (op->is_intrinsic(Call::unsafe_promise_clamped) ||
