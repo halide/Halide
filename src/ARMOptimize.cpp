@@ -364,7 +364,7 @@ protected:
                 rounding_shift_right(x, c0),
                 rounding_shift_left(x, fold(-c0)),
                 is_int(c0)) ||
-            // FIXME: we need to simplify the rhs
+            // FIXME: we need to simplify the rhs. We currently can't fold casts.
             rewrite(
                 rounding_shift_right(x, y),
                 rounding_shift_left(x, -cast(Int(bits, lanes), y))) ||
@@ -375,7 +375,7 @@ protected:
                 widening_shift_right(x, c0),
                 widening_shift_left(x, fold(-c0)),
                 is_int(c0)) ||
-            // FIXME: we need to simplify the rhs
+            // FIXME: we need to simplify the rhs.
             rewrite(
                 widening_shift_right(x, y),
                 widening_shift_left(x, -y),
@@ -386,7 +386,7 @@ protected:
                 shift_right(x, c0),
                 shift_left(x, fold(-c0)),
                 is_int(c0)) ||
-            // FIXME: we need to simplify the rhs
+            // FIXME: we need to simplify the rhs.
             rewrite(
                 shift_right(x, y),
                 shift_left(x, -y),
@@ -801,7 +801,7 @@ protected:
                 Call::widening_shift_right,
                 Call::widening_sub,
             })) {
-            // TODO: Should we have a base-class that does this + the VectorReduce lowering needed below?
+            // TODO: Should the base InstructionSelector class perform this lowering?
             return mutate(lower_intrinsic(op));
         }
 
@@ -995,9 +995,7 @@ private:
 }  // namespace
 
 Stmt optimize_arm_instructions(const Stmt &s, const Target &target, const CodeGen_LLVM *codegen) {
-    debug(0) << "Before ARM Optimization:\n" << s << "\n";
     Stmt stmt = Optimize_ARM(target, codegen).mutate(s);
-    debug(0) << "After ARM Optimization:\n" << stmt << "\n";
 
     if (!stmt.same_as(s)) {
         return stmt;
