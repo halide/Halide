@@ -219,21 +219,21 @@ void GetStmtHierarchy::node_without_children(string name, int colorCost) {
     html << name << "</span></li>";
 }
 void GetStmtHierarchy::open_node(string name, int colorCost) {
-    string className = get_node_class_name();
-
-    html << "<li class=\\'" << className << "\\'>";
-    html << "<span class=\\'tf-nc children-node CostComputation" << colorCost << "\\'>";
-    html << name;
+    string className = get_node_class_name() + " children-node";
 
     update_num_nodes();
+
+    html << "<li class=\\'" << className << "\\' id=\\'node" << currNodeID << "\\'>";
+    html << "<span class=\\'tf-nc CostComputation" << colorCost << "\\'>";
+    html << name;
 
     html << " <button class=\\'button\\' onclick=\\'handleClick(" << currNodeID << ")\\'>";
     html << " <i id=\\'button" << currNodeID << "\\'></i> ";
     html << "</button>";
     html << "</span>";
-    html << "<ul>";
 
     depth++;
+    html << "<ul id=\\'list" << currNodeID << "\\'>";
 }
 void GetStmtHierarchy::close_node() {
     depth--;
@@ -729,6 +729,11 @@ string GetStmtHierarchy::generate_collapse_expand_js(int totalNodes) {
     js << "                document.getElementById(\\'button\\' + parentNodeID).className = "
           "\\'arrow up\\';";
     js << "            }";
+    js << "            const dotdotdot = document.getElementById(\\'node\\' + parentNodeID + "
+          "\\'dotdotdot\\');";
+    js << "            if (dotdotdot != null) {";
+    js << "                dotdotdot.remove();";
+    js << "            }";
     js << "        }";
     js << "    }";
     js << "}";
@@ -750,6 +755,10 @@ string GetStmtHierarchy::generate_collapse_expand_js(int totalNodes) {
     js << "    for (const child of children) {";
     js << "        child.style.display = \\'none\\';";
     js << "    }";
+    js << "    const list = document.getElementById(\\'list\\' + nodeNum);";
+    js << "    if (list != null) {";
+    js << "        list.appendChild(addDotDotDotChild(nodeNum, 2));";
+    js << "    }";
     js << "}";
     js << "function expandNodeChildren(nodeNum) {";
     js << "    const children = document.getElementsByClassName(\\'node\\' + nodeNum + "
@@ -760,6 +769,18 @@ string GetStmtHierarchy::generate_collapse_expand_js(int totalNodes) {
     js << "    for (const child of children) {";
     js << "        child.style.display = \\'\\';";
     js << "    }";
+    js << "     const dotdotdot = document.getElementById(\\'node\\' + nodeNum + \\'dotdotdot\\');";
+    js << "     if (dotdotdot != null) {";
+    js << "         dotdotdot.remove();";
+    js << "     }";
+    js << "}";
+    js << "function addDotDotDotChild(nodeNum, colorCost) {";
+    js << "    var liDotDotDot = document.createElement(\\'li\\');";
+    js << "    liDotDotDot.id = \\'node\\' + nodeNum + \\'dotdotdot\\';";
+    js << "    const span =&quot;<span class=\\'tf-nc end-node CostComputationBorder&quot; + "
+          "colorCost +  &quot;\\'>...</span> &quot;;";
+    js << "    liDotDotDot.innerHTML = span;";
+    js << "    return liDotDotDot;";
     js << "}";
     js << "collapseAllNodes(" << totalNodes << ");  ";
     js << "expandNodesUpToDepth(4);";
