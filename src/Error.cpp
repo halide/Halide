@@ -40,7 +40,7 @@ Error::Error(const std::string &msg)
 }
 
 Error::~Error() {
-    delete [] what_;
+    delete[] what_;
 }
 
 const char *Error::what() const noexcept {
