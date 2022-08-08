@@ -214,30 +214,6 @@ protected:
                  v_instr(VectorInstruction::pmulhrs, x, y),
                  is_int(x, 16) && is_int(y, 16))) ||
 
-            // saturating_narrow is always supported (via SSE2) for:
-            //   int32 -> int16, int16 -> int8, int16 -> uint8
-            rewrite(
-                cast(Int(16, lanes), max(min(x, i32_i16max), i32_i16min)),
-                v_instr(VectorInstruction::saturating_narrow, x),
-                is_int(x, 32)) ||
-
-            rewrite(
-                cast(Int(8, lanes), max(min(x, i16_i8max), i16_i8min)),
-                v_instr(VectorInstruction::saturating_narrow, x),
-                is_int(x, 16)) ||
-
-            rewrite(
-                cast(UInt(8, lanes), max(min(x, i16_u8max), i16_u8min)),
-                v_instr(VectorInstruction::saturating_narrow, x),
-                is_int(x, 16)) ||
-
-            //   int32 -> uint16 is supported via SSE41
-            (target.has_feature(Target::SSE41) &&
-             rewrite(
-                 cast(UInt(16, lanes), max(min(x, i32_u16max), i32_u16min)),
-                 v_instr(VectorInstruction::saturating_narrow, x),
-                 is_int(x, 32))) ||
-
             // f32_to_bf16 is supported only via Target::AVX512_SapphireRapids
             (target.has_feature(Target::AVX512_SapphireRapids) &&
              rewrite(
@@ -295,6 +271,30 @@ protected:
         auto y_uint = cast(unsigned_type, y);
 
         if (
+            // saturating_narrow is always supported (via SSE2) for:
+            //   int32 -> int16, int16 -> int8, int16 -> uint8
+            rewrite(
+                saturating_cast(Int(16, lanes), x),
+                v_instr(VectorInstruction::saturating_narrow, x),
+                is_int(x, 32)) ||
+
+            rewrite(
+                saturating_cast(Int(8, lanes), x),
+                v_instr(VectorInstruction::saturating_narrow, x),
+                is_int(x, 16)) ||
+
+            rewrite(
+                saturating_cast(UInt(8, lanes), x),
+                v_instr(VectorInstruction::saturating_narrow, x),
+                is_int(x, 16)) ||
+
+            //   int32 -> uint16 is supported via SSE41
+            (target.has_feature(Target::SSE41) &&
+             rewrite(
+                 saturating_cast(UInt(16, lanes), x),
+                 v_instr(VectorInstruction::saturating_narrow, x),
+                 is_int(x, 32))) ||
+
             // We can redirect signed rounding halving add to unsigned rounding
             // halving add by adding 128 / 32768 to the result if the sign of the
             // args differs.
