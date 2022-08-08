@@ -46,28 +46,6 @@ foreach (dep IN ITEMS Halide_LLVM Halide_wabt)
 endforeach ()
 
 ##
-# Python bindings
-##
-
-if (WITH_PYTHON_BINDINGS)
-    set(Halide_INSTALL_PYTHONDIR "${CMAKE_INSTALL_LIBDIR}/python3/site-packages"
-        CACHE STRING "Path to Halide Python bindings folder")
-
-    install(DIRECTORY "${Halide_SOURCE_DIR}/python_bindings/src/halide"
-            DESTINATION "${Halide_INSTALL_PYTHONDIR}"
-            COMPONENT Halide_Python
-            FILES_MATCHING
-            PATTERN "*.py"
-            PATTERN "*/halide_" EXCLUDE
-            PATTERN "*/__pycache__" EXCLUDE)
-
-    install(TARGETS Halide_Python
-            LIBRARY DESTINATION "${Halide_INSTALL_PYTHONDIR}/halide"
-            COMPONENT Halide_Python
-            NAMELINK_COMPONENT Halide_Python)
-endif ()
-
-##
 # Library-type-agnostic interface targets
 ##
 
@@ -109,13 +87,6 @@ if (TARGET Halide_Adams2019)
     install(TARGETS ${autoscheduler_utils}
             EXPORT Halide_Interfaces
             COMPONENT Halide_Development)
-endif ()
-
-if (TARGET Halide_Python AND NOT CMAKE_INSTALL_RPATH)
-    file(RELATIVE_PATH lib_dir
-        "${CMAKE_CURRENT_BINARY_DIR}/${Halide_INSTALL_PYTHONDIR}/halide"
-        "${CMAKE_CURRENT_BINARY_DIR}/${CMAKE_INSTALL_LIBDIR}")
-    set_target_properties(Halide_Python PROPERTIES INSTALL_RPATH "${rbase}/${lib_dir}")
 endif ()
 
 ##
@@ -170,13 +141,6 @@ if (WITH_TUTORIALS)
             PATTERN "*.jpg"
             PATTERN "*.mp4"
             PATTERN "*.png")
-
-    if (WITH_PYTHON_BINDINGS)
-      install(DIRECTORY ${Halide_SOURCE_DIR}/python_bindings/tutorial/
-              DESTINATION ${CMAKE_INSTALL_DOCDIR}/tutorial-python
-              COMPONENT Halide_Documentation
-              FILES_MATCHING PATTERN "*.py")
-    endif ()
 endif ()
 
 ##

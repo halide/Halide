@@ -701,6 +701,16 @@ void set_function_attributes_from_halide_target_options(llvm::Function &fn) {
     fn.addFnAttr("tune-cpu", mcpu_tune);
     fn.addFnAttr("target-features", mattrs);
 
+    // Halide-generated IR is not exception-safe.
+    // No exception should unwind out of Halide functions.
+    // No exception should be thrown within Halide functions.
+    // All functions called by the Halide function must not unwind.
+    fn.setDoesNotThrow();
+
+    // Side-effect-free loops are undefined.
+    // But asserts and external calls *might* abort.
+    fn.setMustProgress();
+
     // Turn off approximate reciprocals for division. It's too
     // inaccurate even for us.
     fn.addFnAttr("reciprocal-estimates", "none");

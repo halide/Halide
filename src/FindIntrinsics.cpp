@@ -410,6 +410,14 @@ protected:
                         saturating_sub(x, y),
                         op->type.is_uint() && is_x_same_uint) ||
 
+                // Saturating narrow patterns.
+                rewrite(max(min(x, upper), lower),
+                        saturating_cast(op->type, x)) ||
+
+                rewrite(min(x, upper),
+                        saturating_cast(op->type, x),
+                        is_uint(x)) ||
+
                 // Averaging patterns
                 //
                 // We have a slight preference for rounding_halving_add over
@@ -573,6 +581,57 @@ protected:
         if (rewrite(intrin(Call::abs, widening_sub(x, y)), cast(op->type, intrin(Call::absd, x, y))) ||
             false) {
             return rewrite.result;
+        }
+
+        const int bits = op->type.bits();
+        const auto is_x_same_int = op->type.is_int() && is_int(x, bits);
+        const auto is_x_same_uint = op->type.is_uint() && is_uint(x, bits);
+        const auto is_x_same_int_or_uint = is_x_same_int || is_x_same_uint;
+        auto x_y_same_sign = (is_int(x) == is_int(y)) || (is_uint(x) && is_uint(y));
+        Type unsigned_type = op->type.with_code(halide_type_uint);
+        const auto is_x_wider_int_or_uint = (op->type.is_int() && is_int(x, 2 * bits)) || (op->type.is_uint() && is_uint(x, 2 * bits));
+        Type opposite_type = op->type.is_int() ? op->type.with_code(halide_type_uint) : op->type.with_code(halide_type_int);
+        const auto is_x_wider_opposite_int = (op->type.is_int() && is_uint(x, 2 * bits)) || (op->type.is_uint() && is_int(x, 2 * bits));
+
+        if (
+            // Saturating patterns.
+            rewrite(saturating_cast(op->type, widening_add(x, y)),
+                    saturating_add(x, y),
+                    is_x_same_int_or_uint) ||
+            rewrite(saturating_cast(op->type, widening_sub(x, y)),
+                    saturating_sub(x, y),
+                    is_x_same_int_or_uint) ||
+            rewrite(saturating_cast(op->type, shift_right(widening_mul(x, y), z)),
+                    mul_shift_right(x, y, cast(unsigned_type, z)),
+                    is_x_same_int_or_uint && x_y_same_sign && is_uint(z)) ||
+            rewrite(saturating_cast(op->type, rounding_shift_right(widening_mul(x, y), z)),
+                    rounding_mul_shift_right(x, y, cast(unsigned_type, z)),
+                    is_x_same_int_or_uint && x_y_same_sign && is_uint(z)) ||
+            // We can remove unnecessary widening if we are then performing a saturating narrow.
+            // This is similar to the logic inside `visit_min_or_max`.
+            (((bits <= 32) &&
+              // Examples:
+              // i8_sat(int16(i8)) -> i8
+              // u8_sat(uint16(u8)) -> u8
+              rewrite(saturating_cast(op->type, cast(op->type.widen(), x)),
+                      x,
+                      is_x_same_int_or_uint)) ||
+             ((bits <= 16) &&
+              // Examples:
+              // i8_sat(int32(i16)) -> i8_sat(i16)
+              // u8_sat(uint32(u16)) -> u8_sat(u16)
+              (rewrite(saturating_cast(op->type, cast(op->type.widen().widen(), x)),
+                       saturating_cast(op->type, x),
+                       is_x_wider_int_or_uint) ||
+               // Examples:
+               // i8_sat(uint32(u16)) -> i8_sat(u16)
+               // u8_sat(int32(i16)) -> i8_sat(i16)
+               rewrite(saturating_cast(op->type, cast(opposite_type.widen().widen(), x)),
+                       saturating_cast(op->type, x),
+                       is_x_wider_opposite_int) ||
+               false))) ||
+            false) {
+            return mutate(rewrite.result);
         }
 
         if (no_overflow(op->type)) {

@@ -10,15 +10,23 @@ namespace Internal {
 // Static utility functions for dealing with string data
 struct StringUtils {
     static bool is_empty(const char *str) {
-        if (str == nullptr) { return true; }
-        if (str[0] == '\0') { return true; }
+        if (str == nullptr) {
+            return true;
+        }
+        if (str[0] == '\0') {
+            return true;
+        }
         return false;
     }
 
     // count the number of delimited string tokens
     static size_t count_tokens(const char *str, const char *delim) {
-        if (StringUtils::is_empty(str)) { return 0; }
-        if (StringUtils::is_empty(delim)) { return 1; }  // no delim ... string is one token
+        if (StringUtils::is_empty(str)) {
+            return 0;
+        }
+        if (StringUtils::is_empty(delim)) {
+            return 1;
+        }  // no delim ... string is one token
 
         size_t count = 0;
         const char *ptr = str;
@@ -33,7 +41,9 @@ struct StringUtils {
 
     // retuns true if s1 contains s2 (within n characters)
     static bool contains(const char *s1, const char *s2, size_t n) {
-        if (is_empty(s2)) { return true; }  // s2 is empty ... return true to match strstr
+        if (is_empty(s2)) {
+            return true;
+        }  // s2 is empty ... return true to match strstr
         char starts_with = *s2;
         for (size_t length = strlen(s2); length <= n; n--, s1++) {
             if (*s1 == starts_with) {
@@ -105,7 +115,9 @@ private:
 
 StringStorage::StringStorage(void *user_context, uint32_t capacity, const SystemMemoryAllocatorFns &sma)
     : contents(user_context, {sizeof(char), 32, 32}, sma) {
-    if (capacity) { contents.reserve(user_context, capacity); }
+    if (capacity) {
+        contents.reserve(user_context, capacity);
+    }
 }
 
 StringStorage::~StringStorage() {
@@ -142,21 +154,29 @@ StringStorage &StringStorage::operator=(const StringStorage &other) {
 }
 
 bool StringStorage::contains(const char *str) const {
-    if (contents.empty()) { return false; }
+    if (contents.empty()) {
+        return false;
+    }
     const char *this_str = static_cast<const char *>(contents.data());
     return StringUtils::contains(this_str, str, contents.size());
 }
 
 bool StringStorage::contains(const StringStorage &other) const {
-    if (contents.empty()) { return false; }
-    if (other.contents.empty()) { return false; }
+    if (contents.empty()) {
+        return false;
+    }
+    if (other.contents.empty()) {
+        return false;
+    }
     const char *this_str = static_cast<const char *>(contents.data());
     const char *other_str = static_cast<const char *>(other.contents.data());
     return StringUtils::contains(this_str, other_str, contents.size());
 }
 
 bool StringStorage::operator==(const StringStorage &other) const {
-    if (contents.size() != other.contents.size()) { return false; }
+    if (contents.size() != other.contents.size()) {
+        return false;
+    }
     const char *this_str = static_cast<const char *>(contents.data());
     const char *other_str = static_cast<const char *>(other.contents.data());
     return strncmp(this_str, other_str, contents.size()) == 0;
@@ -180,16 +200,24 @@ void StringStorage::assign(void *user_context, char ch) {
 }
 
 void StringStorage::assign(void *user_context, const char *str, size_t length) {
-    if (StringUtils::is_empty(str)) { return; }
-    if (length == 0) { length = strlen(str); }
+    if (StringUtils::is_empty(str)) {
+        return;
+    }
+    if (length == 0) {
+        length = strlen(str);
+    }
     reserve(user_context, length);
     contents.replace(user_context, 0, str, length);
     terminate(user_context, length);
 }
 
 void StringStorage::append(void *user_context, const char *str, size_t length) {
-    if (StringUtils::is_empty(str)) { return; }
-    if (length == 0) { length = strlen(str); }
+    if (StringUtils::is_empty(str)) {
+        return;
+    }
+    if (length == 0) {
+        length = strlen(str);
+    }
     const size_t old_length = StringUtils::count_length(data(), contents.size());
     size_t new_length = old_length + length;
     reserve(user_context, new_length);
@@ -206,8 +234,12 @@ void StringStorage::append(void *user_context, char ch) {
 }
 
 void StringStorage::prepend(void *user_context, const char *str, size_t length) {
-    if (StringUtils::is_empty(str)) { return; }
-    if (length == 0) { length = strlen(str); }
+    if (StringUtils::is_empty(str)) {
+        return;
+    }
+    if (length == 0) {
+        length = strlen(str);
+    }
     const size_t old_length = StringUtils::count_length(data(), contents.size());
     size_t new_length = old_length + length;
     reserve(user_context, new_length);

@@ -214,7 +214,9 @@ BlockRegion *RegionAllocator::find_block_region(void *user_context, const Memory
 }
 
 bool RegionAllocator::can_coalesce(BlockRegion *block_region) {
-    if (block_region == nullptr) { return false; }
+    if (block_region == nullptr) {
+        return false;
+    }
     if (block_region->prev_ptr && (block_region->prev_ptr->status == AllocationStatus::Available)) {
         return true;
     }
