@@ -35,11 +35,19 @@ set(python_sources
     __init__.py
     )
 
+# It is technically still possible for a user to override the LIBRARY_OUTPUT_DIRECTORY by setting
+# CMAKE_LIBRARY_OUTPUT_DIRECTORY_<CONFIG>, but they do so at their own peril. If a user needs to
+# do this, they should use the CMAKE_PROJECT_Halide_Python_INCLUDE_BEFORE variable to override it
+# just for this project, rather than globally, and they should ensure that the last path component
+# is `halide`. Otherwise, the tests will break.
 pybind11_add_module(Halide_Python MODULE ${native_sources})
-set_target_properties(Halide_Python
-                      PROPERTIES
-                      LIBRARY_OUTPUT_NAME halide_
-                      EXPORT_NAME Python)
+set_target_properties(
+    Halide_Python
+    PROPERTIES
+    LIBRARY_OUTPUT_NAME halide_
+    LIBRARY_OUTPUT_DIRECTORY "$<CONFIG>/halide"
+    EXPORT_NAME Python
+)
 target_link_libraries(Halide_Python PRIVATE Halide::Halide)
 
 # TODO: There's precious little information about why Python only sometimes prevents DLLs from loading from the PATH
@@ -60,6 +68,7 @@ add_custom_command(
 )
 
 # Copy our Python source files over so that we have a valid package in the binary directory.
+# TODO: When upgrading to CMake 3.23 or beyond, investigate the FILE_SET feature.
 set(build_tree_pys "")
 foreach (pysrc IN LISTS python_sources)
     # TODO: CMake 3.22 still doesn't allow target-dependent genex in OUTPUT, but we can hack around this using a stamp
@@ -87,10 +96,8 @@ include(GNUInstallDirs)
 set(Halide_INSTALL_PYTHONDIR "${CMAKE_INSTALL_LIBDIR}/python3/site-packages"
     CACHE STRING "Path to the Python site-packages folder")
 
-# TODO: this is wrong for multi-config generators. It's not CMAKE_CURRENT_BINARY_DIR.
-#   we might need to lock down the directory structure by setting properties here.
-install(DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}"
-        DESTINATION "${Halide_INSTALL_PYTHONDIR}"
+install(DIRECTORY "$<TARGET_FILE_DIR:Halide_Python>/"
+        DESTINATION "${Halide_INSTALL_PYTHONDIR}/halide"
         COMPONENT Halide_Python
         FILES_MATCHING
         PATTERN "*.py"
@@ -100,8 +107,7 @@ install(DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}"
 
 install(TARGETS Halide_Python
         LIBRARY DESTINATION "${Halide_INSTALL_PYTHONDIR}/halide"
-        COMPONENT Halide_Python
-        NAMELINK_COMPONENT Halide_Python)
+        COMPONENT Halide_Python)
 
 get_property(halide_is_imported TARGET Halide::Halide PROPERTY IMPORTED)
 get_property(halide_type TARGET Halide::Halide PROPERTY TYPE)
