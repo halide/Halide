@@ -45,9 +45,10 @@ class GlobalVariable;
 namespace Halide {
 
 struct ExternSignature;
-class InstructionSelector;
 
 namespace Internal {
+
+class InstructionSelector;
 
 /** A code generator abstract base class. Actual code generators
  * (e.g. CodeGen_X86) inherit from this. This class is responsible
