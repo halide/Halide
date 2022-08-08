@@ -133,7 +133,9 @@ class SimplifyConcatBits : public IRMutator {
             for (int i = 0; ok && i < n; i++) {
                 const Load *li = op->args[i].as<Load>();
                 ok &= (li != nullptr);
-                if (!ok) break;
+                if (!ok) {
+                    break;
+                }
                 const Ramp *r = li->index.as<Ramp>();
                 Expr base = r ? r->base : li->index;
                 ok &= (is_const_one(li->predicate) &&
