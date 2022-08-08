@@ -513,7 +513,6 @@ protected:
         `codegen_vector_reduce`. **/
     virtual Expr split_vector_reduce(const VectorReduce *op, const Expr &init) const;
 
-protected:
     /** Are we inside an atomic node that uses mutex locks?
         This is used for detecting deadlocks from nested atomics & illegal vectorization. */
     bool inside_atomic_mutex_node;
