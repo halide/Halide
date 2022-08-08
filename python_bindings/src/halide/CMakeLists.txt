@@ -42,16 +42,22 @@ set_target_properties(Halide_Python
                       EXPORT_NAME Python)
 target_link_libraries(Halide_Python PRIVATE Halide::Halide)
 
-if (WIN32 AND BUILD_SHARED_LIBS)
-    # There's precious little information about why Python only sometimes prevents DLLs from loading from the PATH on Windows.
-    # This workaround places a copy of Halide.dll next to our Python module.
-    # Ref: https://stackoverflow.com/questions/59860465/pybind11-importerror-dll-not-found-when-trying-to-import-pyd-in-python-int
-    # Ref: https://bugs.python.org/issue36085
-    # Ref: https://docs.python.org/3/whatsnew/3.8.html#bpo-36085-whatsnew
-    add_custom_command(TARGET Halide_Python POST_BUILD
-                       COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_FILE:Halide::Halide> $<TARGET_FILE_DIR:Halide_Python>
-                       VERBATIM)
-endif ()
+# TODO: There's precious little information about why Python only sometimes prevents DLLs from loading from the PATH
+#   on Windows. This workaround places a copy of Halide.dll (and any other dependencies) next to our Python module.
+#   Ref: https://stackoverflow.com/questions/59860465/pybind11-importerror-dll-not-found-when-trying-to-import-pyd-in-python-int
+#   Ref: https://bugs.python.org/issue36085
+#   Ref: https://docs.python.org/3/whatsnew/3.8.html#bpo-36085-whatsnew
+# TODO: copying a dummy file here works around a CMake limitation. The issue is that if $<TARGET_RUNTIME_DLLS:...> is
+#   empty, then copy_if_different errors out, thinking it doesn't have enough arguments.
+#   Ref: https://gitlab.kitware.com/cmake/cmake/-/issues/23543
+set(dummy_file "${CMAKE_CURRENT_BINARY_DIR}/.dummy_file")
+file(TOUCH "${dummy_file}")
+add_custom_command(
+    TARGET Halide_Python POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different "${dummy_file}" $<TARGET_RUNTIME_DLLS:Halide_Python> $<TARGET_FILE_DIR:Halide_Python>
+    COMMAND_EXPAND_LISTS
+    VERBATIM
+)
 
 # Copy our Python source files over so that we have a valid package in the binary directory.
 set(build_tree_pys "")
