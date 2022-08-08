@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.16...3.23)
+cmake_minimum_required(VERSION 3.22...3.23)
 project(Halide
         VERSION 15.0.0
         DESCRIPTION "Halide compiler and libraries"
@@ -68,6 +68,9 @@ if (Halide_CCACHE_BUILD)
     endif ()
 endif ()
 
+# Enable the SPIR-V target if requested (must declare before processing dependencies)
+option(TARGET_SPIRV "Include SPIR-V target" OFF)
+
 ##
 # Import dependencies
 ##
@@ -94,20 +97,13 @@ if (CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
         message(STATUS "Building tests disabled")
     endif ()
 
-    option(WITH_PYTHON_BINDINGS "Build Python bindings" ON)
+    cmake_dependent_option(
+        WITH_PYTHON_BINDINGS "Build Python bindings" ON
+        "Halide_ENABLE_RTTI;Halide_ENABLE_EXCEPTIONS" OFF
+    )
     if (WITH_PYTHON_BINDINGS)
-        if (Halide_ENABLE_RTTI AND Halide_ENABLE_EXCEPTIONS)
-            message(STATUS "Building Python bindings enabled")
-            add_subdirectory(python_bindings)
-        else ()
-            if (NOT Halide_ENABLE_RTTI)
-                message(WARNING "Building Python bindings disabled: must compile with RTTI")
-            endif ()
-            if (NOT Halide_ENABLE_EXCEPTIONS)
-                message(WARNING "Building Python bindings disabled: must compile with exceptions")
-            endif ()
-            set(WITH_PYTHON_BINDINGS OFF CACHE BOOL "Build Python bindings" FORCE)
-        endif ()
+        message(STATUS "Building Python bindings enabled")
+        add_subdirectory(python_bindings)
     else ()
         message(STATUS "Building Python bindings disabled")
     endif ()
