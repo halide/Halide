@@ -1423,6 +1423,7 @@ struct Intrin {
         } else if (intrin == Call::abs) {
             return abs(arg0);
         } else if (intrin == Call::saturating_cast) {
+            // TODO: is there a better way?
             return saturating_cast(optional_type_hint, arg0);
         }
 
@@ -1571,6 +1572,7 @@ auto saturating_sub(A &&a, B &&b) noexcept -> Intrin<decltype(pattern_arg(a)), d
 }
 template<typename A>
 auto saturating_cast(const Type &t, A &&a) noexcept -> Intrin<decltype(pattern_arg(a))> {
+    // TODO: what to do with the type?
     Intrin<decltype(pattern_arg(a))> p = {Call::saturating_cast, pattern_arg(a)};
     p.optional_type_hint = t;
     return p;
@@ -2705,6 +2707,40 @@ HALIDE_ALWAYS_INLINE auto is_scalar(A &&a) noexcept -> IsScalar<decltype(pattern
 template<typename A>
 std::ostream &operator<<(std::ostream &s, const IsScalar<A> &op) {
     s << "is_scalar(" << op.a << ")";
+    return s;
+}
+
+template<typename A>
+struct AsScalar {
+    struct pattern_tag {};
+    A a;
+
+    constexpr static uint32_t binds = bindings<A>::mask;
+
+    // What is the weakest and strongest IR node this could possibly be
+    constexpr static IRNodeType min_node_type = IRNodeType::IntImm;
+    constexpr static IRNodeType max_node_type = IRNodeType::Shuffle;
+    constexpr static bool canonical = A::canonical;
+
+    constexpr static bool foldable = true;
+
+    HALIDE_ALWAYS_INLINE
+    void make_folded_const(halide_scalar_value_t &val, halide_type_t &ty, MatcherState &state) const {
+        // a is almost certainly a very simple pattern (e.g. a wild), so just inline the make method.
+        a.make_folded_const(val, ty, state);
+        ty.lanes = 1;
+    }
+};
+
+template<typename A>
+HALIDE_ALWAYS_INLINE auto as_scalar(A &&a) noexcept -> AsScalar<decltype(pattern_arg(a))> {
+    assert_is_lvalue_if_expr<A>();
+    return {pattern_arg(a)};
+}
+
+template<typename A>
+std::ostream &operator<<(std::ostream &s, const AsScalar<A> &op) {
+    s << "as_scalar(" << op.a << ")";
     return s;
 }
 
