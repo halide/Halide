@@ -395,9 +395,16 @@ void ProducerConsumerHierarchy::start_html() {
     html << "<html>";
 
     html << "<head>";
+    html << "<link rel=\\'stylesheet\\' "
+            "href=\\'https://unpkg.com/treeflex/dist/css/treeflex.css\\'>";
     html << "</head>";
 
     html << "<style>";
+
+    html << ".tf-custom .tf-nc { border-radius: 5px; border: 1px solid; font-size: 12px;}";
+    html << ".tf-custom .end-node { border-style: dashed; font-size: 12px; } ";
+    html << ".tf-custom .tf-nc:before, .tf-custom .tf-nc:after { border-left-width: 1px; } ";
+    html << ".tf-custom li li:before { border-top-width: 1px; }";
 
     html << "body {";
     html << "font-family: Consolas, \\'Liberation Mono\\', Menlo, Courier, monospace;";
@@ -435,6 +442,28 @@ void ProducerConsumerHierarchy::start_html() {
 
     html << ".costTableHeader {";
     html << "border-bottom: 1px solid black;";
+    html << "}";
+
+    // hierarchy tree
+    html << ".tf-custom .tf-nc {";
+    html << "border-radius: 5px;";
+    html << "border: 1px solid;";
+    html << "font-size: 12px;";
+    html << "padding: 5px;";
+    html << "}";
+    html << "";
+    html << ".tf-custom .end-node {";
+    html << "border-style: dashed;";
+    html << "font-size: 12px;";
+    html << "}";
+    html << "";
+    html << ".tf-custom .tf-nc:before,";
+    html << ".tf-custom .tf-nc:after {";
+    html << "border-left-width: 1px;";
+    html << "}";
+    html << "";
+    html << ".tf-custom li li:before {";
+    html << "border-top-width: 1px;";
     html << "}";
 
     html << "</style>";
@@ -476,65 +505,90 @@ void ProducerConsumerHierarchy::prod_cons_table(StmtSize &size) {
 
     html << "</tr>";
 
-    // TODO: add something if both are empty so that there are 2 empty cols
+    // produces and consumes are empty - add row with values 0
+    if (size.empty()) {
+        html << "<tr>";
+        html << "<td colspan=\\'2\\' class=\\'costTableData\\'>";
+        html << "0";
+        html << "</td>";
 
-    vector<string> rows;
-    for (const auto &produce_var : size.produces) {
-        stringstream ss;
-        ss << "<td class=\\'costTableData\\'>";
-        ss << produce_var.first;
-        ss << "</td>";
-
-        ss << "<td class=\\'costTableData\\'>";
-        ss << produce_var.second;
-        ss << "</td>";
-
-        rows.push_back(ss.str());
+        html << "<td colspan=\\'2\\' class=\\'costTableData\\'>";
+        html << "0";
+        html << "</td>";
+        html << "</tr>";
     }
-    unsigned long rowNum = 0;
-    for (const auto &consume_var : size.consumes) {
-        stringstream ss;
-        ss << "<td class=\\'costTableData\\'>";
-        ss << consume_var.first;
-        ss << "</td>";
 
-        ss << "<td class=\\'costTableData\\'>";
-        ss << consume_var.second;
-        ss << "</td>";
+    // produces and consumes aren't empty
+    else {
+        vector<string> rows;
 
-        if (rowNum < rows.size()) {
-            rows[rowNum] += ss.str();
-        } else {
+        for (const auto &produce_var : size.produces) {
+            stringstream ss;
+            ss << "<td class=\\'costTableData\\'>";
+            ss << produce_var.first;
+            ss << "</td>";
+
+            ss << "<td class=\\'costTableData\\'>";
+            ss << produce_var.second;
+            ss << "</td>";
+
+            rows.push_back(ss.str());
+        }
+        unsigned long rowNum = 0;
+        for (const auto &consume_var : size.consumes) {
+            stringstream ss;
+            ss << "<td class=\\'costTableData\\'>";
+            ss << consume_var.first;
+            ss << "</td>";
+
+            ss << "<td class=\\'costTableData\\'>";
+            ss << consume_var.second;
+            ss << "</td>";
+
+            if (rowNum < rows.size()) {
+                rows[rowNum] += ss.str();
+            } else {
+                stringstream sEmpty;
+                sEmpty << "<td class=\\'costTableData\\'>";
+                sEmpty << "</td>";
+                sEmpty << "<td class=\\'costTableData\\'>";
+                sEmpty << "</td>";
+
+                rows.push_back(sEmpty.str() + ss.str());
+            }
+            rowNum++;
+        }
+        rowNum = size.consumes.size();
+        while (rowNum < size.produces.size()) {
             stringstream sEmpty;
             sEmpty << "<td class=\\'costTableData\\'>";
             sEmpty << "</td>";
             sEmpty << "<td class=\\'costTableData\\'>";
             sEmpty << "</td>";
 
-            rows.push_back(sEmpty.str() + ss.str());
+            rows[rowNum] += sEmpty.str();
+            rowNum++;
         }
-        rowNum++;
-    }
-    rowNum = size.consumes.size();
-    while (rowNum < size.produces.size()) {
-        stringstream sEmpty;
-        sEmpty << "<td class=\\'costTableData\\'>";
-        sEmpty << "</td>";
-        sEmpty << "<td class=\\'costTableData\\'>";
-        sEmpty << "</td>";
 
-        rows[rowNum] += sEmpty.str();
-        rowNum++;
-    }
-
-    for (const auto &row : rows) {
-        html << "<tr>";
-        html << row;
-        html << "</tr>";
+        for (const auto &row : rows) {
+            html << "<tr>";
+            html << row;
+            html << "</tr>";
+        }
     }
 
     // close table
     html << "</table>";
+}
+void ProducerConsumerHierarchy::if_tree(const string &header, StmtSize &size) {
+    html << "<li>";
+    html << "<span class=\\'tf-nc\\'>";
+    html << header << "&nbsp&nbsp&nbsp";
+    prod_cons_table(size);
+    html << "<br><br><br><br>";
+}
+void ProducerConsumerHierarchy::close_if_tree() {
+    html << "</span>";
 }
 
 void ProducerConsumerHierarchy::open_table_row() {
@@ -597,9 +651,6 @@ Stmt ProducerConsumerHierarchy::visit(const For *op) {
 }
 
 Stmt ProducerConsumerHierarchy::visit(const IfThenElse *op) {
-    // TODO: change this to account for many if then elses
-    //       nested in "else_case". look at stmtToViz to
-    //       see how to do this
     StmtSize thenSize = pre_processor.get_size(op->then_case.get());
     StmtSize elseSize = pre_processor.get_size(op->else_case.get());
 
@@ -608,36 +659,69 @@ Stmt ProducerConsumerHierarchy::visit(const IfThenElse *op) {
         return op;
     }
 
-    // open table and set header
-    open_table();
+    // open main if tree
+    html << "<div class=\\'tf-tree tf-gap-sm tf-custom\\' style=\\'font-size: 12px;\\'>";
+    html << "<ul>";
+    html << "<li><span class=\\'tf-nc\\'>IF</span>";
+    html << "<ul>";
 
-    // THEN CASE | ELSE CASE
-    open_table_row();
-    stringstream ifHeader;
-    // TODO: inline condition
-    ifHeader << "if (" << op->condition << ")";
-    table_header(ifHeader.str(), thenSize);
+    if (!thenSize.empty()) {
+        // TODO: inline condition
 
-    stringstream elseHeader;
-    elseHeader << "else";
-    table_header(elseHeader.str(), elseSize);
-    close_table_row();
+        stringstream ifHeader;
+        ifHeader << "if (" << op->condition << ")";
+        if_tree(ifHeader.str(), thenSize);
 
-    // fill in the then and else cases
-    open_table_row();
+        // open table
+        open_table();
 
-    open_table_data();
-    mutate(op->then_case);
-    close_table_data();
+        // fill in the then and else cases
+        open_table_row();
 
-    open_table_data();
-    mutate(op->else_case);
-    close_table_data();
+        open_table_data();
+        mutate(op->then_case);
+        close_table_data();
 
-    close_table_row();
+        close_table_row();
 
-    // close table
-    close_table();
+        // close table
+        close_table();
+
+        close_if_tree();
+    }
+
+    if (!elseSize.empty()) {
+        // TODO: change this to account for many if then elses
+        //       nested in "else_case". look at stmtToViz to
+        //       see how to do this
+
+        stringstream elseHeader;
+        elseHeader << "else";
+        if_tree(elseHeader.str(), elseSize);
+
+        // open table
+        open_table();
+
+        // fill in the then and else cases
+        open_table_row();
+
+        open_table_data();
+        mutate(op->else_case);
+        close_table_data();
+
+        close_table_row();
+
+        // close table
+        close_table();
+
+        close_if_tree();
+    }
+
+    // close main if tree
+    html << "</ul>";
+    html << "</li>";
+    html << "</ul>";
+    html << "</div>";
 
     return op;
 }

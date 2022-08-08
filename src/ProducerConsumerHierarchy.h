@@ -102,6 +102,10 @@ private:
     // creates a table header row with given header string
     void table_header(const string &header, StmtSize &size);
     void prod_cons_table(StmtSize &size);
+
+    void if_tree(const string &header, StmtSize &size);
+    void close_if_tree();
+
     // void double_table_header(const string &header);
 
     // opens and closes a row
