@@ -45,22 +45,22 @@ if (WITH_PYTHON_BINDINGS)
         add_test(NAME gradient_autoscheduler_test_py
                  COMMAND Python3::Interpreter "${CMAKE_CURRENT_SOURCE_DIR}/test.py")
 
-        make_shell_path(
+        set(
             PYTHONPATH
             "$<TARGET_FILE_DIR:Halide::Python>"
             "${Halide_SOURCE_DIR}/python_bindings/src"
         )
+        list(TRANSFORM PYTHONPATH PREPEND "PYTHONPATH=path_list_prepend:")
 
-        if (WIN32)
-            set(SEP "\\$<SEMICOLON>")
-        else ()
-            set(SEP ":")
-        endif ()
+        set(
+            PATH
+            "$<TARGET_FILE_DIR:Halide_Li2018>"
+            "$<TARGET_FILE_DIR:Halide::Halide>"
+        )
+        list(TRANSFORM PATH PREPEND "PATH=path_list_prepend:")
 
-        set(_PATH "$<SHELL_PATH:$<TARGET_FILE_DIR:Halide_Li2018>>;$<SHELL_PATH:$<TARGET_FILE_DIR:Halide::Halide>>;$ENV{PATH}")
-        string(REPLACE ";" "${SEP}" _PATH "${_PATH}")
         set_tests_properties(gradient_autoscheduler_test_py PROPERTIES
                              LABELS "Li2018;auto_schedule"
-                             ENVIRONMENT "PYTHONPATH=${PYTHONPATH};PATH=${_PATH}")
+                             ENVIRONMENT_MODIFICATION "${PYTHONPATH};${PATH}")
     endif ()
 endif ()
