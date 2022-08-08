@@ -25,10 +25,10 @@ struct HALIDE_EXPORT_SYMBOL Error {
     // doesn't get separately instantiated in each compilation unit.
     explicit Error(const std::string &msg);
 
-    HALIDE_EXPORT_SYMBOL const char *what() const noexcept;
+    const char *what() const noexcept;
 
 private:
-    HALIDE_EXPORT_SYMBOL const std::string what_;
+    const std::string what_;
 };
 
 /** An error that occurs while running a JIT-compiled Halide pipeline. */
