@@ -25,7 +25,7 @@ struct HALIDE_EXPORT_SYMBOL Error {
     // doesn't get separately instantiated in each compilation unit.
     explicit Error(const std::string &msg);
 
-    const char *what() const noexcept;
+    HALIDE_EXPORT_SYMBOL const char *what() const noexcept;
 
 private:
     const std::string what_;
