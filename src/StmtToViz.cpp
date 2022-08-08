@@ -17,9 +17,9 @@
 #include <iterator>
 #include <sstream>
 
-#define LOW_RANGE 0
-#define MEDIUM_RANGE 1
-#define HIGH_RANGE 2
+#define PRINT_HIERARCHY false
+#define PRINT_DEPENDENCIES false
+#define PRINT_PROD_CONS false
 
 namespace Halide {
 namespace Internal {
@@ -170,11 +170,11 @@ private:
     }
 
     string get_stmt_hierarchy(const Stmt &op) {
-        // cout << getStmtHierarchy.get_hierarchy_html(op) << endl;
+        if (PRINT_HIERARCHY) cout << getStmtHierarchy.get_hierarchy_html(op) << endl;
         return getStmtHierarchy.get_hierarchy_html(op);
     }
     string get_stmt_hierarchy(const Expr &op) {
-        // cout << getStmtHierarchy.get_hierarchy_html(op) << endl;
+        if (PRINT_HIERARCHY) cout << getStmtHierarchy.get_hierarchy_html(op) << endl;
         return getStmtHierarchy.get_hierarchy_html(op);
     }
 
@@ -1010,14 +1010,17 @@ public:
     }
     void generate_producer_consumer_hierarchy(const Module &m) {
         string prodConsHTML = producerConsumerHierarchy.generate_producer_consumer_html(m);
+        if (PRINT_PROD_CONS) cout << prodConsHTML << endl;
         stream << producerConsumerButton(prodConsHTML);
     }
     void generate_producer_consumer_hierarchy(const Stmt &s) {
         string prodConsHTML = producerConsumerHierarchy.generate_producer_consumer_html(s);
+        if (PRINT_PROD_CONS) cout << prodConsHTML << endl;
         stream << producerConsumerButton(prodConsHTML);
     }
     void generate_dependency_graph(const Module &m) {
         string dependGraphHTML = dependencyGraph.generate_dependency_graph(m);
+        if (PRINT_DEPENDENCIES) cout << dependGraphHTML << endl;
         stream << dependencyGraphButton(dependGraphHTML);
     }
     void generate_dependency_graph(const Stmt &s) {
