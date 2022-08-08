@@ -95,6 +95,7 @@ tests(GROUPS correctness
       extern_reorder_storage.cpp
       extern_sort.cpp
       extern_stage_on_device.cpp
+      extract_concat_bits.cpp
       failed_unroll.cpp
       fast_trigonometric.cpp
       fibonacci.cpp
