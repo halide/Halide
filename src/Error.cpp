@@ -34,11 +34,17 @@ bool exceptions_enabled() {
 }
 
 Error::Error(const std::string &msg)
-    : what_(msg) {
+    : what_(new char[std::max(static_cast<size_t>(1), msg.size())]) {
+    internal_assert(what_ != nullptr);
+    strcpy(what_, msg.c_str());
+}
+
+Error::~Error() {
+    delete [] what_;
 }
 
 const char *Error::what() const noexcept {
-    return what_.c_str();
+    return what_;
 }
 
 CompileError::CompileError(const std::string &msg)

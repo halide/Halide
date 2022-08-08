@@ -24,11 +24,12 @@ struct HALIDE_EXPORT_SYMBOL Error {
     // Give each class a non-inlined constructor so that the type
     // doesn't get separately instantiated in each compilation unit.
     explicit Error(const std::string &msg);
+    ~Error();
 
     const char *what() const noexcept;
 
 private:
-    const std::string what_;
+    char *const what_;
 };
 
 /** An error that occurs while running a JIT-compiled Halide pipeline. */
