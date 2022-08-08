@@ -95,8 +95,8 @@ protected:
         if (
             // Only AVX512_SapphireRapids has accumulating dot products.
             target.has_feature(Target::AVX512_SapphireRapids) &&
-            // FIXME: add the float16 -> float32 versions as well.
-            (op->type.element_of() == Int(32)) &&
+            ((op->type.element_of() == Int(32)) ||
+             (op->type.element_of() == Float(32))) &&
 
             // Accumulating pmaddubsw
             (rewrite(
@@ -129,6 +129,18 @@ protected:
                  h_add(widening_mul(x, y), lanes) + z,
                  v_instr(VectorInstruction::dot_product, z, x, y),
                  is_int(x, 16, lanes * 2) && is_int(y, 16, lanes * 2)) ||
+
+             // Accumulating fp dot products.
+             // TODO(rootjalex): This would be more powerful with lossless_cast checking.
+             rewrite(
+                 x + h_add(cast(Float(32, lanes * 4), y) * cast(Float(32, lanes * 4), z), lanes),
+                 v_instr(VectorInstruction::dot_product, x, y, z),
+                 is_bfloat(y, 16) && is_bfloat(z, 16)) ||
+
+             rewrite(
+                 h_add(cast(Float(32, lanes * 4), x) * cast(Float(32, lanes * 4), y), lanes) + z,
+                 v_instr(VectorInstruction::dot_product, z, x, y),
+                 is_bfloat(x, 16) && is_bfloat(y, 16)) ||
 
              false)) {
             return mutate(rewrite.result);
@@ -414,7 +426,6 @@ protected:
                 Call::widening_shift_right,
                 Call::widening_sub,
             })) {
-            // TODO: Should we have a base-class that does this + the VectorReduce lowering needed below?
             return mutate(lower_intrinsic(op));
         }
 
@@ -485,6 +496,39 @@ protected:
                             is_int(x, 32, lanes * 2) || is_uint(x, 32, lanes * 2)) ||
 
                     false)) ||
+                  false)) ||
+
+                // We can use the AVX512_SapphireRapids accumulating dot products
+                // on pure VectorReduce nodes with 0 as the accumulator.
+                ((factor == 4) &&
+                 target.has_feature(Target::AVX512_SapphireRapids) &&
+                 ((op->type.element_of() == Int(32)) ||
+                  (op->type.element_of() == Float(32))) &&
+
+                 // Accumulating pmaddubsw
+                 (rewrite(
+                      h_add(cast(Int(32, lanes * 4), widening_mul(x, y)), lanes),
+                      v_instr(VectorInstruction::dot_product, make_zero(Int(32, lanes)), x, y),
+                      is_uint(x, 8) && is_int(y, 8)) ||
+
+                  rewrite(
+                      h_add(cast(Int(32, lanes * 4), widening_mul(x, y)), lanes),
+                      v_instr(VectorInstruction::dot_product, make_zero(Int(32, lanes)), y, x),
+                      is_int(x, 8) && is_uint(y, 8)) ||
+
+                  // Accumulating pmaddwd.
+                  rewrite(
+                      h_add(widening_mul(x, y), lanes),
+                      v_instr(VectorInstruction::dot_product, make_zero(Int(32, lanes)), x, y),
+                      is_int(x, 16, lanes * 2) && is_int(y, 16, lanes * 2)) ||
+
+                  // Accumulating fp dot products.
+                  // TODO(rootjalex): This would be more powerful with lossless_cast checking.
+                  rewrite(
+                      h_add(cast(Float(32, lanes * 4), x) * cast(Float(32, lanes * 4), y), lanes),
+                      v_instr(VectorInstruction::dot_product, make_zero(Float(32, lanes)), x, y),
+                      is_bfloat(x, 16) && is_bfloat(y, 16)) ||
+
                   false)) ||
 
                 // psadbw is always supported via SSE2.
