@@ -246,7 +246,7 @@ int main(int argc, char **argv) {
     check(narrow((u16(u8x) + 500) >> 4), narrow((u16(u8x) + 500) >> 4));
 
     check((u64(u32x) + 8) / 16, u64(rounding_shift_right(u32x, 4)));
-    check(u16(min((u64(u32x) + 8) / 16, 65535)), u16(min(rounding_shift_right(u32x, 4), 65535)));
+    check(u16(min((u64(u32x) + 8) / 16, 65535)), u16_sat(rounding_shift_right(u32x, 4)));
 
     // And with variable shifts.
     check(i8(widening_add(i8x, (i8(1) << u8y) / 2) >> u8y), rounding_shift_right(i8x, u8y));

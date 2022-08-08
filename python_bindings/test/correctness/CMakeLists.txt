@@ -1,7 +1,7 @@
 add_library(the_sort_function MODULE the_sort_function.c)
 target_link_libraries(the_sort_function PRIVATE Halide::Runtime)
 
-set(TESTS
+set(tests
     addconstant_test.py
     atomics.py
     autodiff.py
@@ -27,19 +27,23 @@ set(TESTS
     )
 
 # Use generator expressions to get the true output paths of these files.
-make_shell_path(
+set(
     PYTHONPATH
     "$<TARGET_FILE_DIR:py_aot_bit>"
     "$<TARGET_FILE_DIR:py_stub_bit>"
     "$<TARGET_FILE_DIR:Halide::Python>"
     "${Halide_SOURCE_DIR}/python_bindings/src"
 )
+list(TRANSFORM PYTHONPATH PREPEND "PYTHONPATH=path_list_prepend:")
 
-foreach (TEST IN LISTS TESTS)
-    get_filename_component(TEST_NAME ${TEST} NAME_WE)
-    add_test(NAME python_correctness_${TEST_NAME}
-             COMMAND Python3::Interpreter "$<SHELL_PATH:${CMAKE_CURRENT_SOURCE_DIR}/${TEST}>")
-    set_tests_properties(python_correctness_${TEST_NAME} PROPERTIES
-                         LABELS "python"
-                         ENVIRONMENT "PYTHONPATH=${PYTHONPATH};HL_TARGET=${Halide_TARGET}")
+foreach (test IN LISTS tests)
+    cmake_path(GET test STEM test_name)
+    add_test(NAME python_correctness_${test_name}
+             COMMAND Python3::Interpreter "$<SHELL_PATH:${CMAKE_CURRENT_SOURCE_DIR}/${test}>")
+    set_tests_properties(
+        python_correctness_${test_name} PROPERTIES
+        LABELS "python"
+        ENVIRONMENT "HL_TARGET=${Halide_TARGET}"
+        ENVIRONMENT_MODIFICATION "${PYTHONPATH}"
+    )
 endforeach ()
