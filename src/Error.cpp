@@ -34,7 +34,11 @@ bool exceptions_enabled() {
 }
 
 Error::Error(const std::string &msg)
-    : std::runtime_error(msg) {
+    : what_(msg) {
+}
+
+const char *Error::what() const noexcept {
+    return what_.c_str();
 }
 
 CompileError::CompileError(const std::string &msg)
@@ -96,11 +100,7 @@ ErrorReport::ErrorReport(const char *file, int line, const char *condition_strin
     }
 }
 
-ErrorReport::~ErrorReport()
-#if __cplusplus >= 201100 || _MSC_VER >= 1900
-    noexcept(false)
-#endif
-{
+ErrorReport::~ErrorReport() noexcept(false) {
     if (!msg.str().empty() && msg.str().back() != '\n') {
         msg << "\n";
     }
