@@ -17,6 +17,7 @@ string GetStmtHierarchy::get_hierarchy_html(const Expr &startNode) {
     depth = 0;
     colorType = DMC_TYPE;
     startDMCNodeID = numNodes;
+    currNodeID = numNodes;
     start_tree();
     mutate(startNode);
     end_tree();
@@ -139,8 +140,8 @@ void GetStmtHierarchy::start_html() {
             "href=\\'https://unpkg.com/treeflex/dist/css/treeflex.css\\'>";
     html << "</head>";
     html << "<style>";
-    html << ".tf-custom .tf-nc { border-radius: 5px; border: 1px solid; }";
-    html << ".tf-custom .end-node { border-style: dashed; } ";
+    html << ".tf-custom .tf-nc { border-radius: 5px; border: 1px solid; font-size: 12px;}";
+    html << ".tf-custom .end-node { border-style: dashed; font-size: 12px; } ";
     html << ".tf-custom .tf-nc:before, .tf-custom .tf-nc:after { border-left-width: 1px; } ";
     html << ".tf-custom li li:before { border-top-width: 1px; }";
 
@@ -204,7 +205,7 @@ void GetStmtHierarchy::end_html() {
 }
 
 void GetStmtHierarchy::start_tree() {
-    html << "<div class=\\'tf-tree tf-gap-sm tf-custom\\' style=\\'font-size: 15px;\\'>";
+    html << "<div class=\\'tf-tree tf-gap-sm tf-custom\\' style=\\'font-size: 12px;\\'>";
     html << "<ul>";
 }
 void GetStmtHierarchy::end_tree() {
@@ -701,7 +702,7 @@ Stmt GetStmtHierarchy::visit(const Atomic *op) {
 
 string GetStmtHierarchy::generate_collapse_expand_js(int totalNodes) {
     stringstream js;
-    js << "const nodeExpanded = new Map();";
+    js << "var nodeExpanded = new Map();";
     js << "function collapseAllNodes(numNodes) {";
     js << "    for (let i = 0; i < numNodes; i++) {";
     js << "        collapseNodeChildren(i);";
