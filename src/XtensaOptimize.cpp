@@ -1896,15 +1896,14 @@ private:
                                               "halide_xtensa_reduce_add_x4_i16",
                                               "halide_xtensa_reduce_add_x4_i32",
                                               "reinterpret"};
-        // For some of the ops, it's better to slice into larger chunks. 
+        // For some of the ops, it's better to slice into larger chunks.
         std::map<std::string, int> slicing_multipliers = {
-          // There is only interleaved version of this intrinsic, so 2x vectors are required.
-          {"halide_xtensa_narrow_i48_with_shift_i32", 2},
-          {"halide_xtensa_narrow_i48_with_shift_u32", 2}
-        };
+            // There is only interleaved version of this intrinsic, so 2x vectors are required.
+            {"halide_xtensa_narrow_i48_with_shift_i32", 2},
+            {"halide_xtensa_narrow_i48_with_shift_u32", 2}};
         int slicing_multiplier = 1;
         if (slicing_multipliers.count(op->name) > 0) {
-          slicing_multiplier = slicing_multipliers[op->name];
+            slicing_multiplier = slicing_multipliers[op->name];
         }
 
         if ((native_lanes > 0) && (native_lanes * slicing_multiplier < total_lanes) && (skip_slicing.count(op->name) == 0)) {
