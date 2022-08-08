@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.16)
+cmake_minimum_required(VERSION 3.22)
 
 ##
 # This module provides a utility for bundling a set of IMPORTED
@@ -22,7 +22,7 @@ cmake_minimum_required(VERSION 3.16)
 ##
 
 # All of the IMPORTED_ and INTERFACE_ properties should be accounted for below.
-# https://cmake.org/cmake/help/v3.16/manual/cmake-properties.7.html#properties-on-targets
+# https://cmake.org/cmake/help/v3.22/manual/cmake-properties.7.html#properties-on-targets
 
 # Irrelevant properties:
 # IMPORTED_IMPLIB(_<CONFIG>) # shared-only

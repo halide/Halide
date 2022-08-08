@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.16)
+cmake_minimum_required(VERSION 3.22)
 project(cuda_mat_mul)
 
 # This just checks whether CUDA is available ahead of time to allow

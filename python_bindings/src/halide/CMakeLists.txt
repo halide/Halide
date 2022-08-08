@@ -60,7 +60,7 @@ include(GNUInstallDirs)
 set(Halide_INSTALL_PYTHONDIR "${CMAKE_INSTALL_LIBDIR}/python3/site-packages"
     CACHE STRING "Path to the Python site-packages folder")
 
-install(DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/halide"
+install(DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
         DESTINATION "${Halide_INSTALL_PYTHONDIR}"
         COMPONENT Halide_Python
         FILES_MATCHING

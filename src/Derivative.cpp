@@ -740,7 +740,6 @@ void ReverseAccumulationVisitor::propagate_adjoints(
                                    update_args, i);
                 }
 
-                int count = 0;
                 // Traverse the expressions in reverse order
                 for (auto it = expr_list.rbegin(); it != expr_list.rend(); it++) {
                     if (it->type().is_handle()) {
@@ -749,7 +748,6 @@ void ReverseAccumulationVisitor::propagate_adjoints(
                     }
                     // Propagate adjoints
                     it->accept(this);
-                    count++;
                 }
             }
         }
