@@ -1210,6 +1210,20 @@ private:
                     bounds_of_type(t);
                 }
             }
+        } else if (op->is_intrinsic(Call::saturating_cast)) {
+            internal_assert(op->args.size() == 1);
+
+            Expr a = op->args[0];
+            a.accept(this);
+            Interval a_interval = interval;
+            bounds_of_type(t);
+            if (a_interval.has_lower_bound()) {
+                interval.min = saturating_cast(t, a_interval.min);
+            }
+            if (a_interval.has_upper_bound()) {
+                interval.max = saturating_cast(t, a_interval.max);
+            }
+            return;
         } else if (op->is_intrinsic(Call::unsafe_promise_clamped) ||
                    op->is_intrinsic(Call::promise_clamped)) {
             // Unlike an explicit clamp, we are also permitted to
@@ -3571,6 +3585,28 @@ void bounds_test() {
     Expr u8_2 = cast<uint8_t>(Load::make(Int(8), "buf", x + 17, Buffer<>(), Parameter(), const_true(), ModulusRemainder()));
     check(scope, cast<uint16_t>(u8_1) + cast<uint16_t>(u8_2),
           u16(0), u16(255 * 2));
+
+    check(scope, saturating_cast<uint8_t>(clamp(x, 5, 10)), cast<uint8_t>(5), cast<uint8_t>(10));
+    {
+        scope.push("x", Interval(UInt(32).min(), UInt(32).max()));
+        check(scope, saturating_cast<int32_t>(max(cast<uint32_t>(x), cast<uint32_t>(5))), cast<int32_t>(5), Int(32).max());
+        scope.pop("x");
+    }
+    {
+        Expr z = Variable::make(Float(32), "z");
+        scope.push("z", Interval(cast<float>(-1), cast<float>(1)));
+        check(scope, saturating_cast<int32_t>(z), cast<int32_t>(-1), cast<int32_t>(1));
+        check(scope, saturating_cast<double>(z), cast<double>(-1), cast<double>(1));
+        check(scope, saturating_cast<float16_t>(z), cast<float16_t>(-1), cast<float16_t>(1));
+        check(scope, saturating_cast<uint8_t>(z), cast<uint8_t>(0), cast<uint8_t>(1));
+        scope.pop("z");
+    }
+    {
+        Expr z = Variable::make(UInt(32), "z");
+        scope.push("z", Interval(UInt(32).max(), UInt(32).max()));
+        check(scope, saturating_cast<int32_t>(z), Int(32).max(), Int(32).max());
+        scope.pop("z");
+    }
 
     {
         Scope<Interval> scope;
