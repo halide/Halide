@@ -797,7 +797,7 @@ void embed_bitcode(llvm::Module *M, const string &halide_command) {
 
 Expr lower_concat_bits(const Call *op) {
     internal_assert(op->is_intrinsic(Call::concat_bits));
-    internal_assert(op->args.size() >= 1);
+    internal_assert(!op->args.empty());
 
     Expr result = make_zero(op->type);
     int shift = 0;
