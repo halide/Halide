@@ -1,7 +1,7 @@
 add_library(the_sort_function MODULE the_sort_function.c)
 target_link_libraries(the_sort_function PRIVATE Halide::Runtime)
 
-set(TESTS
+set(tests
     addconstant_test.py
     atomics.py
     autodiff.py
@@ -36,12 +36,12 @@ set(
 )
 list(TRANSFORM PYTHONPATH PREPEND "PYTHONPATH=path_list_prepend:")
 
-foreach (TEST IN LISTS TESTS)
-    get_filename_component(TEST_NAME ${TEST} NAME_WE)
-    add_test(NAME python_correctness_${TEST_NAME}
-             COMMAND Python3::Interpreter "$<SHELL_PATH:${CMAKE_CURRENT_SOURCE_DIR}/${TEST}>")
+foreach (test IN LISTS tests)
+    cmake_path(GET test STEM test_name)
+    add_test(NAME python_correctness_${test_name}
+             COMMAND Python3::Interpreter "$<SHELL_PATH:${CMAKE_CURRENT_SOURCE_DIR}/${test}>")
     set_tests_properties(
-        python_correctness_${TEST_NAME} PROPERTIES
+        python_correctness_${test_name} PROPERTIES
         LABELS "python"
         ENVIRONMENT "HL_TARGET=${Halide_TARGET}"
         ENVIRONMENT_MODIFICATION "${PYTHONPATH}"
