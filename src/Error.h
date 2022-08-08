@@ -28,7 +28,7 @@ struct HALIDE_EXPORT_SYMBOL Error {
     HALIDE_EXPORT_SYMBOL const char *what() const noexcept;
 
 private:
-    const std::string what_;
+    HALIDE_EXPORT_SYMBOL const std::string what_;
 };
 
 /** An error that occurs while running a JIT-compiled Halide pipeline. */
