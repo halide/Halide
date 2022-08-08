@@ -149,7 +149,7 @@ function(transfer_locations)
 
         get_property(lib TARGET ${ARG_FROM} PROPERTY "IMPORTED_LOCATION${cfg}")
         if (lib)
-            get_filename_component(stage "${lib}" NAME_WE)
+            cmake_path(GET lib STEM stage)
             set(stage "${CMAKE_CURRENT_BINARY_DIR}/${stage}.obj")
 
             if (NOT EXISTS "${stage}")
