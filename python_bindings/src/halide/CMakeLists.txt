@@ -1,4 +1,4 @@
-set(SOURCES
+set(native_sources
     PyArgument.cpp
     PyBoundaryConditions.cpp
     PyBuffer.cpp
@@ -29,9 +29,13 @@ set(SOURCES
     PyVar.cpp
     PyVarOrRVar.cpp
     )
-list(TRANSFORM SOURCES PREPEND "halide_/")
+list(TRANSFORM native_sources PREPEND "halide_/")
 
-pybind11_add_module(Halide_Python MODULE ${SOURCES})
+set(python_sources
+    __init__.py
+    )
+
+pybind11_add_module(Halide_Python MODULE ${native_sources})
 set_target_properties(Halide_Python
                       PROPERTIES
                       LIBRARY_OUTPUT_NAME halide_
@@ -49,9 +53,23 @@ if (WIN32 AND BUILD_SHARED_LIBS)
                        VERBATIM)
 endif ()
 
-# Copy our __init__.py file over so that we have a package laid out in the right fashion
-# (halide_.so has already been built in this dir)
-configure_file("__init__.py" "${CMAKE_CURRENT_BINARY_DIR}/__init__.py")
+# Copy our Python source files over so that we have a valid package in the binary directory.
+set(build_tree_pys "")
+foreach (pysrc IN LISTS python_sources)
+    # TODO: CMake 3.22 still doesn't allow target-dependent genex in OUTPUT, but we can hack around this using a stamp
+    #   file. Fix this hack up if and when they ever improve this feature.
+    set(stamp_file "${CMAKE_CURRENT_BINARY_DIR}/.${pysrc}.stamp")
+    add_custom_command(
+        OUTPUT "${stamp_file}"
+        COMMAND ${CMAKE_COMMAND} -E copy "${CMAKE_CURRENT_SOURCE_DIR}/${pysrc}" "$<TARGET_FILE_DIR:Halide_Python>/${pysrc}"
+        COMMAND ${CMAKE_COMMAND} -E touch "${stamp_file}"
+        DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/${pysrc}"
+        VERBATIM
+    )
+    list(APPEND build_tree_pys "${stamp_file}")
+endforeach ()
+add_custom_target(Halide_Python_sources ALL DEPENDS ${build_tree_pys})
+add_dependencies(Halide_Python Halide_Python_sources)
 
 ##
 # Packaging
@@ -63,12 +81,15 @@ include(GNUInstallDirs)
 set(Halide_INSTALL_PYTHONDIR "${CMAKE_INSTALL_LIBDIR}/python3/site-packages"
     CACHE STRING "Path to the Python site-packages folder")
 
-install(DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+# TODO: this is wrong for multi-config generators. It's not CMAKE_CURRENT_BINARY_DIR.
+#   we might need to lock down the directory structure by setting properties here.
+install(DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}"
         DESTINATION "${Halide_INSTALL_PYTHONDIR}"
         COMPONENT Halide_Python
         FILES_MATCHING
         PATTERN "*.py"
         PATTERN "*/halide_" EXCLUDE
+        PATTERN "*/CMakeFiles" EXCLUDE
         PATTERN "*/__pycache__" EXCLUDE)
 
 install(TARGETS Halide_Python
@@ -123,8 +144,8 @@ if (
     endif ()
 
     file(RELATIVE_PATH lib_dir
-        "${CMAKE_CURRENT_BINARY_DIR}/${Halide_INSTALL_PYTHONDIR}/halide"
-        "${CMAKE_CURRENT_BINARY_DIR}/${CMAKE_INSTALL_LIBDIR}")
+         "${CMAKE_CURRENT_BINARY_DIR}/${Halide_INSTALL_PYTHONDIR}/halide"
+         "${CMAKE_CURRENT_BINARY_DIR}/${CMAKE_INSTALL_LIBDIR}")
 
     set_target_properties(Halide_Python PROPERTIES INSTALL_RPATH "${rbase}/${lib_dir}")
 endif ()
