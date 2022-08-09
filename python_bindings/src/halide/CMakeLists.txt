@@ -95,8 +95,12 @@ set(fake_cpp_file "${CMAKE_CURRENT_BINARY_DIR}/.fake_cpp_file.cpp")
 file(WRITE "${fake_cpp_file}" "int halide_fake_unused_;\n")
 
 add_library(Halide_Python_Fake_Lib SHARED "${fake_cpp_file}")
-# Note that LIBRARY_OUTPUT_DIRECTORY is only used for SHARED, not STATIC
-set_target_properties(Halide_Python_Fake_Lib PROPERTIES LIBRARY_OUTPUT_DIRECTORY "$<CONFIG>")
+# Note that LIBRARY_OUTPUT_DIRECTORY is only used for SHARED, not STATIC,
+# and that the shared library won't get created on Windows if no symbols are exported.
+set_target_properties(Halide_Python_Fake_Lib
+                      PROPERTIES
+                      LIBRARY_OUTPUT_DIRECTORY "$<CONFIG>"
+                      WINDOWS_EXPORT_ALL_SYMBOLS TRUE)
 add_library(Halide::Python ALIAS Halide_Python_Fake_Lib)
 
 ##
