@@ -32,7 +32,7 @@ foreach (test IN LISTS tests)
     set_tests_properties(
         python_tutorial_${test_name} PROPERTIES
         LABELS python
-        ENVIRONMENT "HL_TARGET=${Halide_TARGET}"
+        ENVIRONMENT "HL_TARGET=${Halide_TARGET};${SANITIZER_ENV_VARS}"
         ENVIRONMENT_MODIFICATION "${PYTHONPATH}"
     )
 endforeach ()

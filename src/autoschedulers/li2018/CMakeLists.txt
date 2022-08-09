@@ -61,6 +61,7 @@ if (WITH_PYTHON_BINDINGS)
 
         set_tests_properties(gradient_autoscheduler_test_py PROPERTIES
                              LABELS "Li2018;auto_schedule"
-                             ENVIRONMENT_MODIFICATION "${PYTHONPATH};${PATH}")
+                             ENVIRONMENT_MODIFICATION "${PYTHONPATH};${PATH}"
+                             ENVIRONMENT "${SANITIZER_ENV_VARS}")
     endif ()
 endif ()
