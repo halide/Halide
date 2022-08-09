@@ -34,7 +34,7 @@ bool exceptions_enabled() {
 }
 
 Error::Error(const std::string &msg)
-    : what_(new char[std::max(static_cast<size_t>(1), msg.size())]) {
+    : what_(new char[msg.size() + 1]) {
     internal_assert(what_ != nullptr);
     strcpy(what_, msg.c_str());
 }
