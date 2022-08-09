@@ -489,6 +489,10 @@ void ProducerConsumerHierarchy::start_html() {
     html << "margin-right: auto;";
     html << "} ";
 
+    html << ".ifElseTable {";
+    html << "border: 0px;";
+    html << "} ";
+
     html << ".costTable {";
     html << "float: right;";
     html << "text-align: center;";
@@ -677,7 +681,7 @@ void ProducerConsumerHierarchy::if_tree(const string &header, StmtSize &size) {
     html << "<br>";
     html << "<table style=\\'";
     html << "\\' ";
-    html << "class=\\'center\\'";
+    html << "class=\\'center ifElseTable\\'";
     html << ">";
 
     open_table_row();
@@ -761,7 +765,8 @@ Stmt ProducerConsumerHierarchy::visit(const IfThenElse *op) {
     }
 
     // open main if tree
-    html << "<div class=\\'tf-tree tf-gap-sm tf-custom\\' style=\\'font-size: 12px;\\'>";
+    html << "<div class=\\'tf-tree tf-gap-sm tf-custom\\' style=\\'font-size: 12px; "
+            "justify-content: center;\\'>";
     html << "<ul>";
     html << "<li><span class=\\'tf-nc if-node\\'>IF</span>";
     html << "<ul>";
