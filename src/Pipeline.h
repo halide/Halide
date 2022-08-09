@@ -132,7 +132,10 @@ struct AutoSchedulerResults {
     AutoschedulerParams autoscheduler_params;  // The autoscheduler used, along with its params
 #endif
     std::string schedule_source;         // The C++ source code of the generated schedule
+    std::string python_schedule_source;  // The Python source code of the generated schedule
     std::vector<uint8_t> featurization;  // The featurization of the pipeline (if any)
+    std::string featurization_index;     // Index into featurization file
+    std::string path_featurization;  // The path_featurization of the pipeline (if any)
 };
 
 class Pipeline;
@@ -210,6 +213,8 @@ private:
     // Get the value of contents->jit_target, but reality-check that the contents
     // sensibly match the value. Return Target() if not jitted.
     Target get_compiled_jit_target() const;
+
+    AutoSchedulerResults autoscheduler_results; // saving them for future use.
 
     static Internal::JITCache compile_jit_cache(const Module &module,
                                                 std::vector<Argument> args,

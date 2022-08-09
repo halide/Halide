@@ -21,6 +21,8 @@ def main():
     result = p.apply_autoscheduler(target, asp)
     print('Schedule:')
     print(result.schedule_source)
+    print('Python Schedule:')
+    print(result.python_schedule_source)
 
     p.compile_jit() # compile
     buf = p.realize([1000]) # compute and get the buffer

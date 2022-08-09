@@ -32,7 +32,7 @@ install(TARGETS Halide Halide_Generator Halide_LanguageOptions
         INCLUDES DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
 
 if (TARGET Halide_Adams2019)
-    install(TARGETS Halide_Adams2019 Halide_Li2018 Halide_Mullapudi2016
+    install(TARGETS Halide_Adams2019 Halide_Li2018 Halide_Mullapudi2016 Halide_mcts
             EXPORT Halide_Targets
             LIBRARY DESTINATION ${Halide_INSTALL_PLUGINDIR} COMPONENT Halide_Runtime
             NAMELINK_COMPONENT Halide_Development)

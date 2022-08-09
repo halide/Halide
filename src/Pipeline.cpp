@@ -317,7 +317,9 @@ void Pipeline::compile_to(const std::map<OutputFileType, std::string> &output_fi
                           const vector<Argument> &args,
                           const string &fn_name,
                           const Target &target) {
-    compile_to_module(args, fn_name, target).compile(output_files);
+    auto m = compile_to_module(args, fn_name, target);
+    m.set_auto_scheduler_results(autoscheduler_results); // we do this so that we can output fully formed Python and C++ schedules
+    m.compile(output_files);
 }
 
 void Pipeline::compile_to_bitcode(const string &filename,

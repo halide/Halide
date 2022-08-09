@@ -154,7 +154,14 @@ void test_compile_to_everything(Func j, bool do_object) {
     std::vector<std::string> files;
 
     // single-file outputs
-    for (const char *ext : {".h", ".halide_generated.cpp", ".halide_compiler_log", ".py.cpp", ".pytorch.h", ".registration.cpp", ".schedule.h", a}) {
+    for (const char *ext : {".h",
+                            ".halide_generated.cpp",
+                            ".halide_compiler_log",
+                            ".py.cpp",
+                            ".pytorch.h",
+                            ".registration.cpp",
+                            ".schedule.h",
+                            "_schedule.py", a}) {
         if (do_object && !strcmp(ext, a)) continue;
         files.push_back(filename_prefix + ext);
     }
@@ -165,7 +172,7 @@ void test_compile_to_everything(Func j, bool do_object) {
 
     // multi-file outputs
     for (const auto &s : target_strings) {
-        for (const char *ext : {".s", ".bc", ".featurization", ".ll", ".stmt", ".stmt.html", o}) {
+        for (const char *ext : {".s", ".bc", ".featurization", ".path_featurization", ".ll", ".stmt", ".stmt.html", o}) {
             if (!do_object && !strcmp(ext, o)) continue;
             files.push_back(filename_prefix + "-" + s + ext);
         }
@@ -191,12 +198,14 @@ void test_compile_to_everything(Func j, bool do_object) {
         // even if you pass this in.
         // {OutputFileType::cpp_stub, filename_prefix + ".stub.h"},  // IsSingle
         {OutputFileType::featurization, filename_prefix + ".featurization"},    // IsMulti
+        {OutputFileType::path_featurization, filename_prefix + ".path_featurization"},    // IsMulti
         {OutputFileType::llvm_assembly, filename_prefix + ".ll"},               // IsMulti
         {OutputFileType::object, filename_prefix + o},                          // IsMulti
         {OutputFileType::python_extension, filename_prefix + ".py.cpp"},        // IsSingle
         {OutputFileType::pytorch_wrapper, filename_prefix + ".pytorch.h"},      // IsSingle
         {OutputFileType::registration, filename_prefix + ".registration.cpp"},  // IsSingle
         {OutputFileType::schedule, filename_prefix + ".schedule.h"},            // IsSingle
+        {OutputFileType::python_schedule, filename_prefix + "_schedule.py"},    // IsSingle
         {OutputFileType::static_library, filename_prefix + a},                  // IsSingle
         {OutputFileType::stmt, filename_prefix + ".stmt"},                      // IsMulti
         {OutputFileType::stmt_html, filename_prefix + ".stmt.html"},            // IsMulti
