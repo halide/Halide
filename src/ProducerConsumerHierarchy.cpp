@@ -5,6 +5,12 @@ using namespace std;
 using namespace Halide;
 using namespace Internal;
 
+// background colors for the different types of elements
+#define IF_COLOR "#f0dcb3"
+#define FOR_COLOR "#cdc1f2"
+#define PRODUCER_COLOR "#dfffe1"
+#define CONSUMER_COLOR "#9dadec"
+
 /*
  * StmtSizes class
  */
@@ -401,7 +407,12 @@ void ProducerConsumerHierarchy::start_html() {
 
     html << "<style>";
 
-    html << ".tf-custom .tf-nc { border-radius: 5px; border: 1px solid; font-size: 12px;}";
+    html << ".tf-custom .tf-nc { ";
+    html << "border-radius: 5px; ";
+    html << "border: 1px solid; ";
+    html << "font-size: 12px; ";
+    html << "background-color: " << IF_COLOR << ";";
+    html << "}";
     html << ".tf-custom .end-node { border-style: dashed; font-size: 12px; } ";
     html << ".tf-custom .tf-nc:before, .tf-custom .tf-nc:after { border-left-width: 1px; } ";
     html << ".tf-custom li li:before { border-top-width: 1px; }";
@@ -411,14 +422,15 @@ void ProducerConsumerHierarchy::start_html() {
     html << "}";
 
     html << "table, th, td { ";
-    html << "border-left: 1px solid black;";
-    html << "border-right: 1px solid black;";
+    // html << "border-left: 1px solid black;";
+    // html << "border-right: 1px solid black;";
     html << "padding: 10px;";
-    html << "background-color: rgba(150, 150, 150, 0.15);";
+    // html << "background-color: rgba(150, 150, 150, 0.15);";
     html << "} ";
 
     html << "table {";
-    html << "border: 1px solid black;";
+    // html << "border: 1px solid black;";
+    html << "border-radius: 5px;";
     html << "border-collapse: collapse;";
     html << "font-size: 12px";
     html << "}";
@@ -441,7 +453,7 @@ void ProducerConsumerHierarchy::start_html() {
     html << "span.stringType { color: #990073; }";
 
     html << ".costTableHeader {";
-    html << "border-bottom: 1px solid black;";
+    // html << "border-bottom: 1px solid black;";
     html << "}";
 
     // hierarchy tree
@@ -474,9 +486,9 @@ void ProducerConsumerHierarchy::end_html() {
     html << "</body></html>";
 }
 
-void ProducerConsumerHierarchy::open_table() {
+void ProducerConsumerHierarchy::open_table(string backgroundColor) {
     html << "<br>";
-    html << "<table>";
+    html << "<table style=\\'background-color: " << backgroundColor << "\\'>";
 }
 void ProducerConsumerHierarchy::close_table() {
     html << "</table>";
@@ -490,7 +502,7 @@ void ProducerConsumerHierarchy::table_header(const string &header, StmtSize &siz
 }
 void ProducerConsumerHierarchy::prod_cons_table(StmtSize &size) {
     // open table
-    html << "<table class=\\'costTable\\'>";
+    html << "<table class=\\'costTable\\' style=\\'background-color: rgba(150, 150, 150, 0.5)\\'>";
 
     // Prod | Cons
     html << "<tr>";
@@ -507,15 +519,9 @@ void ProducerConsumerHierarchy::prod_cons_table(StmtSize &size) {
 
     // produces and consumes are empty - add row with values 0
     if (size.empty()) {
-        html << "<tr>";
-        html << "<td colspan=\\'2\\' class=\\'costTableData\\'>";
-        html << "0";
-        html << "</td>";
-
-        html << "<td colspan=\\'2\\' class=\\'costTableData\\'>";
-        html << "0";
-        html << "</td>";
-        html << "</tr>";
+        internal_error << "\n\n"
+                       << "ProducerConsumerHierarchy::prod_cons_table - size is empty"
+                       << "\n";
     }
 
     // produces and consumes aren't empty
@@ -549,9 +555,9 @@ void ProducerConsumerHierarchy::prod_cons_table(StmtSize &size) {
                 rows[rowNum] += ss.str();
             } else {
                 stringstream sEmpty;
-                sEmpty << "<td class=\\'costTableData\\'>";
+                sEmpty << "<td colspan=\\'2\\' class=\\'costTableData\\'>";
                 sEmpty << "</td>";
-                sEmpty << "<td class=\\'costTableData\\'>";
+                sEmpty << "<td colspan=\\'2\\' class=\\'costTableData\\'>";
                 sEmpty << "</td>";
 
                 rows.push_back(sEmpty.str() + ss.str());
@@ -606,7 +612,7 @@ void ProducerConsumerHierarchy::close_table_data() {
 }
 
 Stmt ProducerConsumerHierarchy::visit(const ProducerConsumer *op) {
-    open_table();
+    open_table(op->is_producer ? PRODUCER_COLOR : CONSUMER_COLOR);
 
     stringstream header;
     header << (op->is_producer ? "Produce" : "Consume");
@@ -629,7 +635,7 @@ Stmt ProducerConsumerHierarchy::visit(const ProducerConsumer *op) {
 }
 
 Stmt ProducerConsumerHierarchy::visit(const For *op) {
-    open_table();
+    open_table(FOR_COLOR);
     StmtSize size;
 
     size = pre_processor.get_size(op);
@@ -672,20 +678,7 @@ Stmt ProducerConsumerHierarchy::visit(const IfThenElse *op) {
         ifHeader << "if (" << op->condition << ")";
         if_tree(ifHeader.str(), thenSize);
 
-        // open table
-        open_table();
-
-        // fill in the then and else cases
-        open_table_row();
-
-        open_table_data();
         mutate(op->then_case);
-        close_table_data();
-
-        close_table_row();
-
-        // close table
-        close_table();
 
         close_if_tree();
     }
@@ -699,20 +692,7 @@ Stmt ProducerConsumerHierarchy::visit(const IfThenElse *op) {
         elseHeader << "else";
         if_tree(elseHeader.str(), elseSize);
 
-        // open table
-        open_table();
-
-        // fill in the then and else cases
-        open_table_row();
-
-        open_table_data();
         mutate(op->else_case);
-        close_table_data();
-
-        close_table_row();
-
-        // close table
-        close_table();
 
         close_if_tree();
     }

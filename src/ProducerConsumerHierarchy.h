@@ -96,7 +96,7 @@ private:
     void end_html();
 
     // opens and closes a table
-    void open_table();
+    void open_table(string backgroundColor);
     void close_table();
 
     // creates a table header row with given header string
