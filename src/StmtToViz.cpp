@@ -60,6 +60,13 @@ private:
     stringstream script_stream;
     bool in_loop;
 
+    // used for getting anchor names
+    int ifCount = 0;
+    int producerConsumerCount = 0;
+    int forCount = 0;
+    int storeCount = 0;
+    int allocateCount = 0;
+
     void reset_context() {
         curr_context.clear();
     }
@@ -286,6 +293,13 @@ private:
     }
     string close_div() {
         return close_tag("div") + "\n";
+    }
+
+    string open_anchor(const string &anchorName) {
+        return "<a name=\"" + anchorName + "\"></a>";
+    }
+    string close_anchor() {
+        return "</a>";
     }
 
     string open_line() {
@@ -600,6 +614,11 @@ private:
     void visit(const ProducerConsumer *op) override {
         scope.push(op->name, unique_id());
         stream << open_div(op->is_producer ? "Produce" : "Consumer");
+
+        producerConsumerCount++;
+        string anchorName = "producerConsumer" + std::to_string(producerConsumerCount);
+        stream << open_anchor(anchorName);
+
         int produce_id = unique_id();
         stream << open_span("Matched");
         stream << open_expand_button(produce_id);
@@ -613,6 +632,9 @@ private:
         print(op->body);
         stream << close_div();
         stream << matched("}");
+
+        stream << close_anchor();
+
         stream << close_div();
         scope.pop(op->name);
     }
@@ -626,6 +648,10 @@ private:
 
         scope.push(op->name, unique_id());
         stream << open_div("For");
+
+        forCount++;
+        string anchorName = "for" + std::to_string(forCount);
+        stream << open_anchor(anchorName);
 
         int id = unique_id();
         stream << open_expand_button(id);
@@ -662,6 +688,8 @@ private:
         stream << close_div();
         stream << matched("}");
 
+        stream << close_anchor();
+
         stream << close_div();
         scope.pop(op->name);
 
@@ -691,6 +719,10 @@ private:
     void visit(const Store *op) override {
         stream << open_div("Store WrapLine");
 
+        storeCount++;
+        string anchorName = "store" + std::to_string(storeCount);
+        stream << open_anchor(anchorName);
+
         stream << cost_colors(op);
         stream << open_cost_span(op, get_stmt_hierarchy(op));
 
@@ -715,6 +747,9 @@ private:
         }
 
         stream << close_cost_span();
+
+        stream << close_anchor();
+
         stream << close_div();
     }
     void visit(const Provide *op) override {
@@ -734,6 +769,11 @@ private:
     void visit(const Allocate *op) override {
         scope.push(op->name, unique_id());
         stream << open_div("Allocate");
+
+        allocateCount++;
+        string anchorName = "allocate" + std::to_string(allocateCount);
+        stream << open_anchor(anchorName);
+
         stream << cost_colors(op);
 
         stream << open_cost_span(op, get_stmt_hierarchy(op));
@@ -776,6 +816,8 @@ private:
         stream << open_div("AllocateBody");
         print(op->body);
         stream << close_div();
+
+        stream << close_anchor();
 
         stream << close_div();
         scope.pop(op->name);
@@ -889,12 +931,19 @@ private:
 
     void visit(const IfThenElse *op) override {
         stream << open_div("IfThenElse");
+
         int id = unique_id();
         stream << open_expand_button(id);
         stream << open_span("Matched");
         stream << keyword("if") << " (";
         stream << close_span();
+
         while (true) {
+            ifCount++;
+            string anchorName = "if" + std::to_string(ifCount);
+            stream << open_anchor(anchorName);
+            close_anchor();
+
             print(op->condition);
             stream << matched(")");
             stream << close_expand_button() << " ";
@@ -1317,7 +1366,7 @@ public:
         stream << "<link rel='stylesheet' href='https://unpkg.com/treeflex/dist/css/treeflex.css'>";
         stream << "<script src='http://code.jquery.com/jquery-1.10.2.js'></script>\n";
         stream << "</head>\n <body>\n";
-        stream << formHTML;
+        // stream << formHTML;
     }
 
     ~StmtToViz() override {

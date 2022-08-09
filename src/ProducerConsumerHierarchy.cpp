@@ -558,8 +558,18 @@ void ProducerConsumerHierarchy::close_table() {
     html << "<br>";
 }
 
-void ProducerConsumerHierarchy::table_header(const string &header, StmtSize &size) {
+void ProducerConsumerHierarchy::table_header(const string &header, StmtSize &size,
+                                             string anchorName = "") {
     html << "<th>";
+
+    // button
+    html << "<button onclick=\\'";
+    html << "window.open(&quot;"
+         << "add_hvx128.stmt.viz.html#" << anchorName << "&quot;, &quot;_blank&quot;)";
+    html << "\\'>";
+    html << "see code";
+    html << "</button>";
+
     html << "<br>";
     html << "&nbsp;";
     html << header;
@@ -673,7 +683,8 @@ void ProducerConsumerHierarchy::prod_cons_table(StmtSize &size) {
     // close table
     html << "</table>";
 }
-void ProducerConsumerHierarchy::if_tree(const string &header, StmtSize &size) {
+void ProducerConsumerHierarchy::if_tree(const string &header, StmtSize &size,
+                                        string anchorName = "") {
     html << "<li>";
     html << "<span class=\\'tf-nc\\'>";
 
@@ -685,7 +696,7 @@ void ProducerConsumerHierarchy::if_tree(const string &header, StmtSize &size) {
     html << ">";
 
     open_table_row();
-    table_header(header, size);
+    table_header(header, size, anchorName);
     close_table_row();
 }
 void ProducerConsumerHierarchy::close_if_tree() {
@@ -712,13 +723,16 @@ void ProducerConsumerHierarchy::close_table_data() {
 Stmt ProducerConsumerHierarchy::visit(const ProducerConsumer *op) {
     open_table(op->is_producer ? PRODUCER_COLOR : CONSUMER_COLOR);
 
+    producerConsumerCount++;
+    string anchorName = "producerConsumer" + std::to_string(producerConsumerCount);
+
     stringstream header;
     header << (op->is_producer ? "Produce" : "Consume");
     header << " " << op->name;
     StmtSize size = pre_processor.get_size(op);
 
     open_table_row();
-    table_header(header.str(), size);
+    table_header(header.str(), size, anchorName);
     close_table_row();
 
     open_table_row();
@@ -735,13 +749,16 @@ Stmt ProducerConsumerHierarchy::visit(const ProducerConsumer *op) {
 Stmt ProducerConsumerHierarchy::visit(const For *op) {
     open_table(FOR_COLOR);
 
+    forCount++;
+    string anchorName = "for" + std::to_string(forCount);
+
     StmtSize size = pre_processor.get_size(op);
 
     stringstream header;
     header << "For (" << op->name << ")";
 
     open_table_row();
-    table_header(header.str(), size);
+    table_header(header.str(), size, anchorName);
     close_table_row();
 
     open_table_row();
@@ -759,50 +776,74 @@ Stmt ProducerConsumerHierarchy::visit(const IfThenElse *op) {
     StmtSize thenSize = pre_processor.get_size(op->then_case.get());
     StmtSize elseSize = pre_processor.get_size(op->else_case.get());
 
-    // don't draw anything if both cases are empty
-    if (thenSize.empty() && elseSize.empty()) {
-        return op;
-    }
+    // TODO: deal with case where if and else are empty - anchor name has to be updated
 
     // open main if tree
     html << "<div class=\\'tf-tree tf-gap-sm tf-custom\\' style=\\'font-size: 12px; "
             "justify-content: center;\\'>";
     html << "<ul>";
-    html << "<li><span class=\\'tf-nc if-node\\'>IF</span>";
+    html << "<li><span class=\\'tf-nc if-node\\'>";
+
+    html << "If";
+    html << "</span>";
     html << "<ul>";
 
-    if (!thenSize.empty()) {
-        // TODO: inline condition
+    stringstream ifHeader;
+    ifHeader << "if";
 
-        stringstream ifHeader;
-        ifHeader << "if (" << op->condition << ")";
-        if_tree(ifHeader.str(), thenSize);
+    while (true) {
 
-        open_table_row();
-        open_table_data();
-        mutate(op->then_case);
-        close_table_data();
-        close_table_row();
+        ifCount++;
+        string anchorName = "if" + std::to_string(ifCount);
 
-        close_if_tree();
-    }
+        thenSize = pre_processor.get_size(op->then_case.get());
 
-    if (!elseSize.empty()) {
-        // TODO: change this to account for many if then elses
-        //       nested in "else_case". look at stmtToViz to
-        //       see how to do this
+        if (!thenSize.empty()) {
+            // TODO: inline condition
+            ifHeader << "(" << op->condition << ")";
+            if_tree(ifHeader.str(), thenSize, anchorName);
 
-        stringstream elseHeader;
-        elseHeader << "else";
-        if_tree(elseHeader.str(), elseSize);
+            // then body
+            open_table_row();
+            open_table_data();
+            mutate(op->then_case);
+            close_table_data();
+            close_table_row();
 
-        open_table_row();
-        open_table_data();
-        mutate(op->else_case);
-        close_table_data();
-        close_table_row();
+            close_if_tree();
+        }
 
-        close_if_tree();
+        // if there is no else case, we are done
+        if (!op->else_case.defined()) {
+            break;
+        }
+
+        // if else case is another ifthenelse, recurse and reset op to else case
+        if (const IfThenElse *nested_if = op->else_case.as<IfThenElse>()) {
+            op = nested_if;
+            ifHeader.str("");
+            ifHeader << "else if";
+        }
+
+        // if else case is not another ifthenelse
+        else {
+            elseSize = pre_processor.get_size(op->else_case.get());
+
+            if (!elseSize.empty()) {
+                stringstream elseHeader;
+                elseHeader << "else";
+                if_tree(elseHeader.str(), elseSize);
+
+                open_table_row();
+                open_table_data();
+                mutate(op->else_case);
+                close_table_data();
+                close_table_row();
+
+                close_if_tree();
+            }
+            break;
+        }
     }
 
     // close main if tree
@@ -817,13 +858,16 @@ Stmt ProducerConsumerHierarchy::visit(const IfThenElse *op) {
 Stmt ProducerConsumerHierarchy::visit(const Store *op) {
     StmtSize size;
 
+    storeCount++;
+    string anchorName = "store" + std::to_string(storeCount);
+
     stringstream header;
     header << "Store " << op->name;
 
     open_table(STORE_COLOR);
 
     open_table_row();
-    table_header(header.str(), size);
+    table_header(header.str(), size, anchorName);
     close_table_row();
 
     mutate(op->value);
@@ -857,7 +901,10 @@ Expr ProducerConsumerHierarchy::visit(const Load *op) {
 Stmt ProducerConsumerHierarchy::visit(const Allocate *op) {
     open_table(ALLOCATE_COLOR);
 
-    StmtSize size;  // = pre_processor.get_size(op);
+    allocateCount++;
+    string anchorName = "allocate" + std::to_string(allocateCount);
+
+    StmtSize size;
     string allocationSize = pre_processor.get_allocation_size(op, op->name);
 
     stringstream header;
@@ -865,7 +912,7 @@ Stmt ProducerConsumerHierarchy::visit(const Allocate *op) {
     header << " [" << allocationSize << "]";
 
     open_table_row();
-    table_header(header.str(), size);
+    table_header(header.str(), size, anchorName);
     close_table_row();
 
     close_table();

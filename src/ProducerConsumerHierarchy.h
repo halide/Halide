@@ -90,6 +90,13 @@ private:
     std::stringstream html;   // main html string
     StmtSizes pre_processor;  // generates the sizes of the nodes
 
+    // used for getting anchor names
+    int ifCount = 0;
+    int producerConsumerCount = 0;
+    int forCount = 0;
+    int storeCount = 0;
+    int allocateCount = 0;
+
     // starts the traversal of the tree and returns the generated html
     string get_producer_consumer_html(const Expr &startNode);
     string get_producer_consumer_html(const Stmt &startNode);
@@ -106,10 +113,10 @@ private:
     void close_table();
 
     // creates a table header row with given header string
-    void table_header(const string &header, StmtSize &size);
+    void table_header(const string &header, StmtSize &size, string anchorName);
     void prod_cons_table(StmtSize &size);
 
-    void if_tree(const string &header, StmtSize &size);
+    void if_tree(const string &header, StmtSize &size, string anchorName);
     void close_if_tree();
 
     // opens and closes a row
