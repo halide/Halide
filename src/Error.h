@@ -30,8 +30,8 @@ struct HALIDE_EXPORT_SYMBOL Error {
 
     Error(const Error &);
     Error &operator=(const Error &);
-    Error(Error &&);
-    Error &operator=(Error &&);
+    Error(Error &&) noexcept;
+    Error &operator=(Error &&) noexcept;
 
     virtual ~Error();
 

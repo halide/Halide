@@ -55,12 +55,12 @@ Error &Error::operator=(const Error &that) {
     return *this;
 }
 
-Error::Error(Error &&that) {
+Error::Error(Error &&that) noexcept {
     this->what_ = that.what_;
     that.what_ = nullptr;
 }
 
-Error &Error::operator=(Error &&that) {
+Error &Error::operator=(Error &&that) noexcept {
     if (this != &that) {
         delete[] this->what_;
         this->what_ = that.what_;
