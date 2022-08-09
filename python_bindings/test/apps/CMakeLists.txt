@@ -8,6 +8,7 @@ set(scripts
 set(PYTHONPATH
     "$<TARGET_FILE_DIR:Halide::Python>"
 )
+list(TRANSFORM PYTHONPATH PREPEND "PYTHONPATH=path_list_prepend:")
 
 set(TEST_ENV
     "PYTHONPATH=${PYTHONPATH}"

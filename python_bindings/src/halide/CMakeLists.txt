@@ -86,6 +86,19 @@ endforeach ()
 add_custom_target(Halide_Python_sources ALL DEPENDS ${build_tree_pys})
 add_dependencies(Halide_Python Halide_Python_sources)
 
+# Now add a 'target' that exists just to conveniently give us a way to find this directory;
+# we can't use $<TARGET_FILE_DIR:Halide_Python> because we need `import halide` to see
+# $<CONFIG>, not $<CONFIG>/halide. This is surprisingly complex, in part because
+# $<CONFIG> is actually evaluated at build time (not config time), so we must
+# only use it in expressions that are deferred until build time...
+set(fake_cpp_file "${CMAKE_CURRENT_BINARY_DIR}/.fake_cpp_file.cpp")
+file(WRITE "${fake_cpp_file}" "int halide_fake_unused_;\n")
+
+add_library(Halide_Python_Fake_Lib SHARED "${fake_cpp_file}")
+# Note that LIBRARY_OUTPUT_DIRECTORY is only used for SHARED, not STATIC
+set_target_properties(Halide_Python_Fake_Lib PROPERTIES LIBRARY_OUTPUT_DIRECTORY "$<CONFIG>")
+add_library(Halide::Python ALIAS Halide_Python_Fake_Lib)
+
 ##
 # Packaging
 ##
