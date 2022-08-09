@@ -422,14 +422,10 @@ void ProducerConsumerHierarchy::start_html() {
     html << "}";
 
     html << "table, th, td { ";
-    // html << "border-left: 1px solid black;";
-    // html << "border-right: 1px solid black;";
     html << "padding: 10px;";
-    // html << "background-color: rgba(150, 150, 150, 0.15);";
     html << "} ";
 
     html << "table {";
-    // html << "border: 1px solid black;";
     html << "border-radius: 5px;";
     html << "border-collapse: collapse;";
     html << "font-size: 12px";
@@ -453,7 +449,9 @@ void ProducerConsumerHierarchy::start_html() {
     html << "span.stringType { color: #990073; }";
 
     html << ".costTableHeader {";
-    // html << "border-bottom: 1px solid black;";
+    html << "}";
+    html << ".middleCol {";
+    html << "border-right: 1px solid grey;";
     html << "}";
 
     // hierarchy tree
@@ -507,7 +505,7 @@ void ProducerConsumerHierarchy::prod_cons_table(StmtSize &size) {
     // Prod | Cons
     html << "<tr>";
 
-    html << "<th colspan=\\'2\\' class=\\'costTableHeader\\'>";
+    html << "<th colspan=\\'2\\' class=\\'costTableHeader middleCol\\'>";
     html << "Prod";
     html << "</th>";
 
@@ -528,18 +526,21 @@ void ProducerConsumerHierarchy::prod_cons_table(StmtSize &size) {
     else {
         vector<string> rows;
 
+        // fill in producer variables
         for (const auto &produce_var : size.produces) {
             stringstream ss;
             ss << "<td class=\\'costTableData\\'>";
-            ss << produce_var.first;
+            ss << produce_var.first << ": ";
             ss << "</td>";
 
-            ss << "<td class=\\'costTableData\\'>";
+            ss << "<td class=\\'costTableData middleCol\\'>";
             ss << produce_var.second;
             ss << "</td>";
 
             rows.push_back(ss.str());
         }
+
+        // fill in consumer variables
         unsigned long rowNum = 0;
         for (const auto &consume_var : size.consumes) {
             stringstream ss;
@@ -554,8 +555,9 @@ void ProducerConsumerHierarchy::prod_cons_table(StmtSize &size) {
             if (rowNum < rows.size()) {
                 rows[rowNum] += ss.str();
             } else {
+                // pad row with empty cells for produce
                 stringstream sEmpty;
-                sEmpty << "<td colspan=\\'2\\' class=\\'costTableData\\'>";
+                sEmpty << "<td colspan=\\'2\\' class=\\'costTableData middleCol\\'>";
                 sEmpty << "</td>";
                 sEmpty << "<td colspan=\\'2\\' class=\\'costTableData\\'>";
                 sEmpty << "</td>";
@@ -564,6 +566,8 @@ void ProducerConsumerHierarchy::prod_cons_table(StmtSize &size) {
             }
             rowNum++;
         }
+
+        // pad row with empty calls for consume
         rowNum = size.consumes.size();
         while (rowNum < size.produces.size()) {
             stringstream sEmpty;
@@ -576,6 +580,7 @@ void ProducerConsumerHierarchy::prod_cons_table(StmtSize &size) {
             rowNum++;
         }
 
+        // add rows to html
         for (const auto &row : rows) {
             html << "<tr>";
             html << row;
