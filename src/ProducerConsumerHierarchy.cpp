@@ -7,9 +7,12 @@ using namespace Internal;
 
 // background colors for the different types of elements
 #define IF_COLOR "#f0dcb3"
-#define FOR_COLOR "#cdc1f2"
+#define FOR_COLOR "#e4ddfa"
 #define PRODUCER_COLOR "#dfffe1"
-#define CONSUMER_COLOR "#9dadec"
+#define CONSUMER_COLOR "#d1d8f1"
+#define STORE_COLOR "#f4f8bf"
+#define ALLOCATE_COLOR STORE_COLOR
+#define IF_NODE_COLOR "#f9c763"
 
 /*
  * StmtSizes class
@@ -24,9 +27,23 @@ void StmtSizes::generate_sizes(const Stmt &stmt) {
 
 StmtSize StmtSizes::get_size(const IRNode *node) const {
     auto it = stmt_sizes.find(node);
+
+    // return empty size if not found (this just means it wasn't set)
     if (it == stmt_sizes.end()) {
-        // TODO: make sure this is what i want
         return StmtSize();
+    }
+
+    return it->second;
+}
+string StmtSizes::get_allocation_size(const IRNode *node, const string &name) const {
+    StmtSize size = get_size(node);
+
+    auto it = size.allocates.find(name);
+    if (it == size.allocates.end()) {
+        internal_error << "\n"
+                       << print_node(node) << "\n"
+                       << "StmtSizes::get_allocation_size - " << name << " not found in allocates\n"
+                       << "\n\n";
     }
     return it->second;
 }
@@ -104,6 +121,29 @@ void StmtSizes::set_consume_size(const IRNode *node, string consume_var, string 
         stmt_sizes[node] = StmtSize();
     }
     stmt_sizes[node].consumes[consume_var] = consume_size;
+}
+void StmtSizes::set_allocation_size(const IRNode *node, string allocate_var, string allocate_size) {
+    auto it = stmt_sizes.find(node);
+
+    // error if size found and allocate_var already exists
+    if (it != stmt_sizes.end()) {
+        auto it2 = it->second.allocates.find(allocate_var);
+        if (it2 != it->second.allocates.end()) {
+            internal_error << "\n"
+                           << print_node(node) << "\n"
+                           << "StmtSizes::set_allocation_size - " << allocate_var
+                           << " already found in allocates\n"
+                           << "\n\n";
+        }
+    }
+
+    // if size not found, create new entry
+    else {
+        stmt_sizes[node] = StmtSize();
+    }
+
+    // set allocation size
+    stmt_sizes[node].allocates[allocate_var] = allocate_size;
 }
 
 string StmtSizes::string_span(string varName) const {
@@ -284,6 +324,7 @@ Stmt StmtSizes::visit(const Block *op) {
     return op;
 }
 Stmt StmtSizes::visit(const Allocate *op) {
+
     mutate(op->body);
     StmtSize bodySize = get_size(op->body.get());
 
@@ -294,6 +335,17 @@ Stmt StmtSizes::visit(const Allocate *op) {
     for (const auto &consume_var : bodySize.consumes) {
         set_consume_size(op, consume_var.first, consume_var.second);
     }
+
+    // set allocate stuff
+    stringstream allocateSize;
+    allocateSize << "<span class=\\'intType\\'>" << op->type << "</span>";
+
+    for (const auto &extent : op->extents) {
+        allocateSize << " * ";
+        allocateSize << extent;
+    }
+
+    set_allocation_size(op, op->name, allocateSize.str());
 
     return op;
 }
@@ -407,6 +459,7 @@ void ProducerConsumerHierarchy::start_html() {
 
     html << "<style>";
 
+    // if-stmt hierarchy tree style
     html << ".tf-custom .tf-nc { ";
     html << "border-radius: 5px; ";
     html << "border: 1px solid; ";
@@ -416,24 +469,30 @@ void ProducerConsumerHierarchy::start_html() {
     html << ".tf-custom .end-node { border-style: dashed; font-size: 12px; } ";
     html << ".tf-custom .tf-nc:before, .tf-custom .tf-nc:after { border-left-width: 1px; } ";
     html << ".tf-custom li li:before { border-top-width: 1px; }";
+    html << ".tf-custom .tf-nc .if-node { background-color: " << IF_NODE_COLOR << "; }";
 
+    // producer consumer style
     html << "body {";
     html << "font-family: Consolas, \\'Liberation Mono\\', Menlo, Courier, monospace;";
     html << "}";
 
-    html << "table, th, td { ";
-    html << "padding: 10px;";
-    html << "} ";
-
     html << "table {";
     html << "border-radius: 5px;";
-    html << "border-collapse: collapse;";
-    html << "font-size: 12px";
+    html << "font-size: 12px;";
+    html << "border: 1px dashed grey;";
+    html << "border-collapse: separate;";
+    html << "border-spacing: 0;";
     html << "}";
+
+    html << ".center {";
+    html << "margin-left: auto;";
+    html << "margin-right: auto;";
+    html << "} ";
 
     html << ".costTable {";
     html << "float: right;";
     html << "text-align: center;";
+    html << "border: 0px;";
     html << "}";
 
     html << ".costTableHeader,";
@@ -448,10 +507,8 @@ void ProducerConsumerHierarchy::start_html() {
     html << "span.intType { color: #099; }";
     html << "span.stringType { color: #990073; }";
 
-    html << ".costTableHeader {";
-    html << "}";
     html << ".middleCol {";
-    html << "border-right: 1px solid grey;";
+    html << "border-right: 1px dashed grey;";
     html << "}";
 
     // hierarchy tree
@@ -486,17 +543,38 @@ void ProducerConsumerHierarchy::end_html() {
 
 void ProducerConsumerHierarchy::open_table(string backgroundColor) {
     html << "<br>";
-    html << "<table style=\\'background-color: " << backgroundColor << "\\'>";
+    html << "<table style=\\'";
+    html << "background-color: " << backgroundColor << "; ";
+    html << "\\' ";
+    html << "class=\\'center\\'";
+    html << ">";
 }
 void ProducerConsumerHierarchy::close_table() {
     html << "</table>";
+    html << "<br>";
 }
 
 void ProducerConsumerHierarchy::table_header(const string &header, StmtSize &size) {
     html << "<th>";
-    html << header << "&nbsp&nbsp&nbsp";
-    prod_cons_table(size);
+    html << "<br>";
+    html << "&nbsp;";
+    html << header;
+    html << "&nbsp;";
+    html << "<br><br>";
     html << "</th>";
+
+    if (!size.empty()) {
+        html << "<th>";
+        html << "<br>";
+        prod_cons_table(size);
+        html << "<br><br>";
+        html << "</th>";
+
+        // spacing
+        html << "<th>";
+        html << "&nbsp;";
+        html << "</th>";
+    }
 }
 void ProducerConsumerHierarchy::prod_cons_table(StmtSize &size) {
     // open table
@@ -594,12 +672,23 @@ void ProducerConsumerHierarchy::prod_cons_table(StmtSize &size) {
 void ProducerConsumerHierarchy::if_tree(const string &header, StmtSize &size) {
     html << "<li>";
     html << "<span class=\\'tf-nc\\'>";
-    html << header << "&nbsp&nbsp&nbsp";
-    prod_cons_table(size);
-    html << "<br><br><br><br>";
+
+    // open table
+    html << "<br>";
+    html << "<table style=\\'";
+    html << "\\' ";
+    html << "class=\\'center\\'";
+    html << ">";
+
+    open_table_row();
+    table_header(header, size);
+    close_table_row();
 }
 void ProducerConsumerHierarchy::close_if_tree() {
+    close_table();
+
     html << "</span>";
+    html << "</li>";
 }
 
 void ProducerConsumerHierarchy::open_table_row() {
@@ -609,8 +698,8 @@ void ProducerConsumerHierarchy::close_table_row() {
     html << "</tr>";
 }
 
-void ProducerConsumerHierarchy::open_table_data() {
-    html << "<td>";
+void ProducerConsumerHierarchy::open_table_data(string colSpan = "3") {
+    html << "<td colSpan=\\'" << colSpan << "\\'>";
 }
 void ProducerConsumerHierarchy::close_table_data() {
     html << "</td>";
@@ -641,9 +730,8 @@ Stmt ProducerConsumerHierarchy::visit(const ProducerConsumer *op) {
 
 Stmt ProducerConsumerHierarchy::visit(const For *op) {
     open_table(FOR_COLOR);
-    StmtSize size;
 
-    size = pre_processor.get_size(op);
+    StmtSize size = pre_processor.get_size(op);
 
     stringstream header;
     header << "For (" << op->name << ")";
@@ -657,7 +745,9 @@ Stmt ProducerConsumerHierarchy::visit(const For *op) {
     mutate(op->body);
     close_table_data();
     close_table_row();
+
     close_table();
+
     return op;
 }
 
@@ -673,7 +763,7 @@ Stmt ProducerConsumerHierarchy::visit(const IfThenElse *op) {
     // open main if tree
     html << "<div class=\\'tf-tree tf-gap-sm tf-custom\\' style=\\'font-size: 12px;\\'>";
     html << "<ul>";
-    html << "<li><span class=\\'tf-nc\\'>IF</span>";
+    html << "<li><span class=\\'tf-nc if-node\\'>IF</span>";
     html << "<ul>";
 
     if (!thenSize.empty()) {
@@ -683,7 +773,11 @@ Stmt ProducerConsumerHierarchy::visit(const IfThenElse *op) {
         ifHeader << "if (" << op->condition << ")";
         if_tree(ifHeader.str(), thenSize);
 
+        open_table_row();
+        open_table_data();
         mutate(op->then_case);
+        close_table_data();
+        close_table_row();
 
         close_if_tree();
     }
@@ -697,7 +791,11 @@ Stmt ProducerConsumerHierarchy::visit(const IfThenElse *op) {
         elseHeader << "else";
         if_tree(elseHeader.str(), elseSize);
 
+        open_table_row();
+        open_table_data();
         mutate(op->else_case);
+        close_table_data();
+        close_table_row();
 
         close_if_tree();
     }
@@ -711,6 +809,70 @@ Stmt ProducerConsumerHierarchy::visit(const IfThenElse *op) {
     return op;
 }
 
+Stmt ProducerConsumerHierarchy::visit(const Store *op) {
+    StmtSize size;
+
+    stringstream header;
+    header << "Store " << op->name;
+
+    open_table(STORE_COLOR);
+
+    open_table_row();
+    table_header(header.str(), size);
+    close_table_row();
+
+    mutate(op->value);
+
+    // spacing
+    open_table_row();
+    open_table_data();
+    html << "<br>";
+    close_table_data();
+    close_table_row();
+
+    close_table();
+
+    return op;
+}
+Expr ProducerConsumerHierarchy::visit(const Load *op) {
+    stringstream header;
+    header << "Load " << op->name;
+
+    open_table_row();
+    open_table_data();
+    html << "&nbsp;";
+    html << header.str();
+    html << "&nbsp;";
+    close_table_data();
+    close_table_row();
+
+    return op;
+}
+
+Stmt ProducerConsumerHierarchy::visit(const Allocate *op) {
+    open_table(ALLOCATE_COLOR);
+
+    StmtSize size;  // = pre_processor.get_size(op);
+    string allocationSize = pre_processor.get_allocation_size(op, op->name);
+
+    stringstream header;
+    header << "Allocate " << op->name;
+    header << " [" << allocationSize << "]";
+
+    open_table_row();
+    table_header(header.str(), size);
+    close_table_row();
+
+    close_table();
+
+    mutate(op->body);
+
+    return op;
+}
+
+/*
+ * PRINT NODE
+ */
 string StmtSizes::print_node(const IRNode *node) const {
     stringstream s;
     s << "Crashing node has type: ";

@@ -12,9 +12,13 @@ using namespace Internal;
 struct StmtSize {
     map<string, string> produces;
     map<string, string> consumes;
+    map<string, string> allocates;
 
     bool empty() const {
-        return produces.size() == 0 && consumes.size() == 0;
+        return produces.size() == 0 && consumes.size() == 0 && allocates.size() == 0;
+    }
+    bool emptyAllocated() const {
+        return allocates.size() == 0;
     }
 };
 
@@ -30,6 +34,7 @@ public:
     void generate_sizes(const Stmt &stmt);
 
     StmtSize get_size(const IRNode *node) const;
+    string get_allocation_size(const IRNode *node, const string &name) const;
 
     string print_sizes() const;
     string print_produce_sizes(StmtSize &stmtSize) const;
@@ -49,6 +54,7 @@ private:
 
     void set_produce_size(const IRNode *node, string produce_var, string produce_size);
     void set_consume_size(const IRNode *node, string consume_var, string consume_size);
+    void set_allocation_size(const IRNode *node, string allocate_var, string allocate_size);
 
     string string_span(string varName) const;
     string int_span(int64_t intVal) const;
@@ -106,19 +112,20 @@ private:
     void if_tree(const string &header, StmtSize &size);
     void close_if_tree();
 
-    // void double_table_header(const string &header);
-
     // opens and closes a row
     void open_table_row();
     void close_table_row();
 
     // opens and closes a data cell
-    void open_table_data();
+    void open_table_data(string colSpan);
     void close_table_data();
 
     Stmt visit(const ProducerConsumer *op) override;
     Stmt visit(const For *op) override;
     Stmt visit(const IfThenElse *op) override;
+    Stmt visit(const Store *op) override;
+    Expr visit(const Load *op) override;
+    Stmt visit(const Allocate *op) override;
 };
 
 #endif

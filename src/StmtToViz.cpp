@@ -1492,6 +1492,8 @@ function openNewWindow(innerHtml) { \n \
 
 void print_to_viz(const string &filename, const Stmt &s) {
 
+    cout << "Printing to " << filename << endl;
+
     StmtToViz sth(filename);
 
     sth.generate_costs(s);
@@ -1503,11 +1505,13 @@ void print_to_viz(const string &filename, const Stmt &s) {
 
 void print_to_viz(const string &filename, const Module &m) {
 
+    cout << "Printing to " << filename << endl;
+
     if (m.functions().size() > 1) {
         internal_error << "\n"
                        << "\n"
                        << "Exiting early: printing to viz only works for modules with "
-                          "one function"
+                          "one function (for now)"
                        << "\n"
                        << "\n"
                        << "\n";
