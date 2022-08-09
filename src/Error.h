@@ -29,6 +29,10 @@ struct HALIDE_EXPORT_SYMBOL Error {
     const char *what() const noexcept;
 
 private:
+    // Using a std::string here will cause MSVC to complain about the fact
+    // that class std::string isn't declared DLLEXPORT, even though the
+    // field is private; rather than suppress the warning, we'll just use
+    // an old-fashioned new-and-delete to keep it nice and clean.
     char *const what_;
 };
 
