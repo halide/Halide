@@ -99,7 +99,9 @@ add_library(Halide_Python_Fake_Lib SHARED "${fake_cpp_file}")
 # and that the shared library won't get created on Windows if no symbols are exported.
 set_target_properties(Halide_Python_Fake_Lib
                       PROPERTIES
+                      # Must set both of these for DLL systems to get it right
                       LIBRARY_OUTPUT_DIRECTORY "$<CONFIG>"
+                      RUNTIME_OUTPUT_DIRECTORY "$<CONFIG>"
                       WINDOWS_EXPORT_ALL_SYMBOLS TRUE)
 add_library(Halide::Python ALIAS Halide_Python_Fake_Lib)
 
