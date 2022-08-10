@@ -3,7 +3,7 @@ include(MakeShellPath)
 add_library(the_sort_function MODULE the_sort_function.c)
 target_link_libraries(the_sort_function PRIVATE Halide::Runtime)
 
-set(TESTS
+set(tests
     addconstant_test.py
     atomics.py
     autodiff.py
@@ -29,24 +29,27 @@ set(TESTS
     )
 
 # Use generator expressions to get the true output paths of these files.
-make_shell_path(
-    PY_CORRECTNESS_PYTHONPATH
+set(
+    PYTHONPATH
     "$<TARGET_FILE_DIR:py_aot_bit>"
     "$<TARGET_FILE_DIR:py_stub_bit>"
     "$<TARGET_FILE_DIR:Halide::Python>"
-    "${Halide_SOURCE_DIR}/python_bindings/src"
     # Needed only for pystub.py, but easier to include everywhere
     "${CMAKE_CURRENT_SOURCE_DIR}/../generators"
 )
+list(TRANSFORM PYTHONPATH PREPEND "PYTHONPATH=path_list_prepend:")
 
 foreach (TEST IN LISTS TESTS)
-    get_filename_component(TEST_NAME ${TEST} NAME_WE)
+    cmake_path(GET TEST STEM TEST_NAME)
     add_test(NAME python_correctness_${TEST_NAME}
              COMMAND Python3::Interpreter "$<SHELL_PATH:${CMAKE_CURRENT_SOURCE_DIR}/${TEST}>")
     # Ensure that everything in generators/ is built before us. This is dramatic overkill
     # but simplifies our build setup considerably.
-    set_tests_properties(python_correctness_${TEST_NAME} PROPERTIES
-                         LABELS "python"
-                         DEPENDS ${PYTHON_CORRECTNESS_GENERATOR_DEPS}
-                         ENVIRONMENT "PYTHONPATH=${PY_CORRECTNESS_PYTHONPATH};HL_TARGET=${Halide_TARGET}")
+    set_tests_properties(
+        python_correctness_${TEST_NAME} PROPERTIES
+        LABELS "python"
+        DEPENDS ${PYTHON_CORRECTNESS_GENERATOR_DEPS}
+        ENVIRONMENT "HL_TARGET=${Halide_TARGET}"
+        ENVIRONMENT_MODIFICATION "${PYTHONPATH}"
+    )
 endforeach ()

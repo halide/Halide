@@ -117,12 +117,8 @@ install(DIRECTORY ${Halide_SOURCE_DIR}/tools/
         PATTERN "build_halide_h.cpp" EXCLUDE
         PATTERN "find_inverse.cpp" EXCLUDE)
 
-install(FILES ${Halide_SOURCE_DIR}/src/autoschedulers/adams2019/autotune_loop.sh
+install(PROGRAMS ${Halide_SOURCE_DIR}/src/autoschedulers/adams2019/autotune_loop.sh
         DESTINATION ${Halide_INSTALL_TOOLSDIR}
-        PERMISSIONS
-        OWNER_READ OWNER_WRITE OWNER_EXECUTE
-        GROUP_READ GROUP_EXECUTE
-        WORLD_READ WORLD_EXECUTE
         COMPONENT Halide_Development)
 
 ##

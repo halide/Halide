@@ -1,7 +1,3 @@
-if (NOT CMAKE_GENERATOR MATCHES "Make|Ninja")
-    message(STATUS "Notice: ${CMAKE_GENERATOR} does not support depfile dependencies. Incremental builds may fail.")
-endif ()
-
 # Keep these lists in alphabetical order.
 set(RUNTIME_CPP
     aarch64_cpu_features
@@ -235,28 +231,7 @@ foreach (i IN LISTS RUNTIME_CPP)
             set(INITMOD "_initmod_${i}_${j}${SUFFIX}.cpp")
             set(SYMBOL "halide_internal_initmod_${i}_${j}${SUFFIX}")
 
-            set(clang_flags ${RUNTIME_CXX_FLAGS} ${fpic} ${fshort-wchar} ${RUNTIME_DEFINES${SUFFIX}} -m${j} -target ${TARGET} -emit-llvm -S)
-
-            set(ll_path "${LL}")
-            if (CMAKE_GENERATOR MATCHES "Ninja")
-                if (POLICY CMP0116)
-                    # CMake 3.20+ does the right thing here and transforms the depfiles for us
-                    list(APPEND clang_flags -MD -MF "${basename}.d")
-                    set(dep_args DEPFILE "${basename}.d")
-                else()
-                    # Dep-files are subtle and require clang to run using *just* the right
-                    # relative paths to the build root, NOT the Halide build root. This is
-                    # a perfect storm of bad behavior from CMake <3.20, Ninja, and Clang.
-                    file(RELATIVE_PATH ll_path "${CMAKE_BINARY_DIR}" "${CMAKE_CURRENT_BINARY_DIR}/${LL}")
-                    file(TO_NATIVE_PATH "${ll_path}" ll_path)
-                    list(APPEND clang_flags -MD -MF "$<SHELL_PATH:${CMAKE_CURRENT_BINARY_DIR}/${basename}.d>")
-                    set(dep_args
-                        WORKING_DIRECTORY "${CMAKE_BINARY_DIR}"
-                        DEPFILE "${CMAKE_CURRENT_BINARY_DIR}/${basename}.d")
-                endif()
-            elseif (CMAKE_GENERATOR MATCHES "Make")
-                set(dep_args IMPLICIT_DEPENDS CXX "${SOURCE}")
-            endif ()
+            set(clang_flags ${RUNTIME_CXX_FLAGS} ${fpic} ${fshort-wchar} ${RUNTIME_DEFINES${SUFFIX}} -m${j} -target ${TARGET} -emit-llvm -S -MD -MF "${basename}.d")
 
             if (Halide_CLANG_TIDY_BUILD)
                 # Create a 'fake' entry just so that clang-tidy will see a C++ compilation command
@@ -267,9 +242,9 @@ foreach (i IN LISTS RUNTIME_CPP)
                 target_compile_definitions(${basename} PRIVATE ${RUNTIME_DEFINES})
             else()
                 add_custom_command(OUTPUT "${LL}"
-                                   COMMAND ${CMAKE_C_COMPILER_LAUNCHER} $<TARGET_FILE:clang> ${clang_flags} -o "${ll_path}" "$<SHELL_PATH:${SOURCE}>"
+                                   COMMAND ${CMAKE_C_COMPILER_LAUNCHER} $<TARGET_FILE:clang> ${clang_flags} -o "${LL}" "$<SHELL_PATH:${SOURCE}>"
                                    DEPENDS "${SOURCE}"
-                                   ${dep_args}
+                                   DEPFILE "${basename}.d"
                                    VERBATIM)
             endif()
 

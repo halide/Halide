@@ -1358,6 +1358,10 @@ struct Intrin {
     struct pattern_tag {};
     Call::IntrinsicOp intrin;
     std::tuple<Args...> args;
+    // The type of the output of the intrinsic node.
+    // Only necessary in cases where it can't be inferred
+    // from the input types (e.g. saturating_cast).
+    Type optional_type_hint;
 
     static constexpr uint32_t binds = bitwise_or_reduce((bindings<Args>::mask)...);
 
@@ -1385,7 +1389,9 @@ struct Intrin {
             return false;
         }
         const Call &c = (const Call &)e;
-        return (c.is_intrinsic(intrin) && match_args<0, bound>(0, c, state));
+        return (c.is_intrinsic(intrin) &&
+                ((optional_type_hint == Type()) || optional_type_hint == e.type) &&
+                match_args<0, bound>(0, c, state));
     }
 
     template<int i,
@@ -1416,6 +1422,8 @@ struct Intrin {
             return likely_if_innermost(arg0);
         } else if (intrin == Call::abs) {
             return abs(arg0);
+        } else if (intrin == Call::saturating_cast) {
+            return saturating_cast(optional_type_hint, arg0);
         }
 
         Expr arg1 = std::get<const_min(1, sizeof...(Args) - 1)>(args).make(state, type_hint);
@@ -1540,6 +1548,12 @@ auto saturating_add(A &&a, B &&b) noexcept -> Intrin<decltype(pattern_arg(a)), d
 template<typename A, typename B>
 auto saturating_sub(A &&a, B &&b) noexcept -> Intrin<decltype(pattern_arg(a)), decltype(pattern_arg(b))> {
     return {Call::saturating_sub, pattern_arg(a), pattern_arg(b)};
+}
+template<typename A>
+auto saturating_cast(const Type &t, A &&a) noexcept -> Intrin<decltype(pattern_arg(a))> {
+    Intrin<decltype(pattern_arg(a))> p = {Call::saturating_cast, pattern_arg(a)};
+    p.optional_type_hint = t;
+    return p;
 }
 template<typename A, typename B>
 auto halving_add(A &&a, B &&b) noexcept -> Intrin<decltype(pattern_arg(a)), decltype(pattern_arg(b))> {
