@@ -47,3 +47,5 @@ set(SANITIZER_ENV_VARS "ASAN_OPTIONS=detect_leaks=0:detect_container_overflow=0"
 # Work around bug where "cmake -E env $FOO" gives error if FOO is empty
 set(SANITIZER_SET_ENV_VARS env ${SANITIZER_ENV_VARS})
 
+# The bgu app requires too much stack space for ASAN
+set(ENABLE_APPS_BGU OFF)
