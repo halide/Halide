@@ -71,7 +71,7 @@ function(add_python_test)
     set_tests_properties(
         "${test_name}"
         PROPERTIES
-        LABELS "python;${ARG_LABEL}"
+        LABELS "python"
         ENVIRONMENT "${ARG_ENVIRONMENT}"
         ENVIRONMENT_MODIFICATION "${ARG_PYTHONPATH}"
     )
