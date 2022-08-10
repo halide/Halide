@@ -36,12 +36,6 @@ set(CMAKE_FIND_ROOT_PATH_MODE_PACKAGE ONLY)
 # Set to empty string to indicate the resulting binaries can be natively executed
 set(CMAKE_CROSSCOMPILING_EMULATOR)
 
-# A few downstream build rules need to be able to sniff these:
-# - ASAN means we can't run with large stacks, so some things will overflow
-set(Halide_ASAN_ENABLED ON)
-# - Pretty much every sanitizer affects performance, so skip benchmarks
-set(Halide_ANY_SANITIZERS_ENABLED ON)
-
 # If running under ASAN, we need to suppress some errors:
 # - detect_leaks, because circular Expr chains in Halide can indeed leak,
 #   but we don't care here
