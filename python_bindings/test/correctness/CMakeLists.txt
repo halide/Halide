@@ -1,5 +1,3 @@
-include(MakeShellPath)
-
 add_library(the_sort_function MODULE the_sort_function.c)
 target_link_libraries(the_sort_function PRIVATE Halide::Runtime)
 
