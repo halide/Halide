@@ -1044,8 +1044,14 @@ namespace Internal {
 int generate_filter_main(int argc, char **argv, const GeneratorFactoryProvider &generator_factory_provider) {
     try {
         return generate_filter_main_inner(argc, argv, generator_factory_provider);
-    } catch (std::runtime_error &err) {
+    } catch (::Halide::Error &err) {
         user_error << "Unhandled exception: " << err.what() << "\n";
+        return -1;
+    } catch (std::exception &err) {
+        user_error << "Unhandled exception: " << err.what() << "\n";
+        return -1;
+    } catch (...) {
+        user_error << "Unhandled exception: (unknown)\n";
         return -1;
     }
 }
