@@ -47,8 +47,7 @@ if (WITH_PYTHON_BINDINGS)
 
         set(
             PYTHONPATH
-            "$<TARGET_FILE_DIR:Halide::Python>"
-            "${Halide_SOURCE_DIR}/python_bindings/src"
+            "$<TARGET_FILE_DIR:Halide::Python>/.."
         )
         list(TRANSFORM PYTHONPATH PREPEND "PYTHONPATH=path_list_prepend:")
 
