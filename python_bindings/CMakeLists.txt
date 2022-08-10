@@ -72,7 +72,7 @@ function(add_python_test)
         "${test_name}"
         PROPERTIES
         LABELS "python"
-        ENVIRONMENT "${ARG_ENVIRONMENT}"
+        ENVIRONMENT "${ARG_ENVIRONMENT};${SANITIZER_ENV_VARS}"
         ENVIRONMENT_MODIFICATION "${ARG_PYTHONPATH}"
     )
 endfunction()
