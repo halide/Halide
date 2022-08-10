@@ -74,7 +74,7 @@ public:
 
     // calculates the total costs and depth of a node
     int get_depth(const IRNode *node) const;
-    int calculate_computation_cost(const IRNode *node) const;
+    int get_calculated_computation_cost(const IRNode *node) const;
     int get_data_movement_cost(const IRNode *node) const;
 
 private:

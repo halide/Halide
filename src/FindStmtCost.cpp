@@ -79,7 +79,7 @@ int FindStmtCost::get_computation_range(const IRNode *op) const {
 
     // divide max cost by 8 and round up to get ranges
     int range_size = (max_cost / NUMBER_COST_COLORS) + 1;
-    int cost = calculate_computation_cost(op);
+    int cost = get_calculated_computation_cost(op);
     int range = cost / range_size;
     return range;
 }
@@ -125,7 +125,7 @@ int FindStmtCost::get_depth(const IRNode *node) const {
 
     return cost_node.depth;
 }
-int FindStmtCost::calculate_computation_cost(const IRNode *node) const {
+int FindStmtCost::get_calculated_computation_cost(const IRNode *node) const {
     auto it = stmt_cost.find(node);
     StmtCost cost_node;
 
@@ -519,6 +519,8 @@ Stmt FindStmtCost::visit(const LetStmt *op) {
     int dataMovementCost = get_data_movement_cost(op->value.get());
     set_costs(op, 1 + tempVal, dataMovementCost);
 
+    // TODO: should the cost of body also be added to the cost of the let?
+
     return op;
 }
 
@@ -759,7 +761,6 @@ Stmt FindStmtCost::visit(const Prefetch *op) {
 }
 
 Stmt FindStmtCost::visit(const Block *op) {
-    // TODO: making this cost 1 is wrong - need to change this
     int tempVal = 0;
     int dataMovementCost = 0;
 
@@ -773,6 +774,7 @@ Stmt FindStmtCost::visit(const Block *op) {
         dataMovementCost += get_data_movement_cost(op->rest.get());
     }
 
+    // TODO: making this cost 1 is wrong - need to change this
     // set_costs(op, tempVal, dataMovementCost);
     set_costs(op, 1, 0);
 

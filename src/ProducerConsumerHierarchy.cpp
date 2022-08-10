@@ -461,7 +461,7 @@ void ProducerConsumerHierarchy::generate_function_argument_consumes(const Lowere
         StmtSize size;
 
         open_table_row();
-        table_header(header.str(), size, "");
+        table_header(nullptr, header.str(), size, "");
         close_table_row();
 
         close_table();
@@ -490,6 +490,90 @@ void ProducerConsumerHierarchy::start_html() {
     html << ".tf-custom .tf-nc:before, .tf-custom .tf-nc:after { border-left-width: 1px; } ";
     html << ".tf-custom li li:before { border-top-width: 1px; }";
     html << ".tf-custom .tf-nc .if-node { background-color: " << IF_NODE_COLOR << "; }";
+
+    // cost colors
+    html << "span.CostComputation19 { width: 13px; display: inline-block; background: "
+            "rgb(130,31,27); color: transparent; }";
+    html << "span.CostComputation18 { width: 13px; display: inline-block; background: "
+            "rgb(145,33,30); color: transparent; }";
+    html << "span.CostComputation17 { width: 13px; display: inline-block; background: "
+            "rgb(160,33,32); color: transparent; }";
+    html << "span.CostComputation16 { width: 13px; display: inline-block; background: "
+            "rgb(176,34,34); color: transparent; }";
+    html << "span.CostComputation15 { width: 13px; display: inline-block; background: "
+            "rgb(185,47,32); color: transparent; }";
+    html << "span.CostComputation14 { width: 13px; display: inline-block; background: "
+            "rgb(193,59,30); color: transparent; }";
+    html << "span.CostComputation13 { width: 13px; display: inline-block; background: "
+            "rgb(202,71,27); color: transparent; }";
+    html << "span.CostComputation12 { width: 13px; display: inline-block; background: "
+            "rgb(210,82,22); color: transparent; }";
+    html << "span.CostComputation11 { width: 13px; display: inline-block; background: "
+            "rgb(218,93,16); color: transparent; }";
+    html << "span.CostComputation10 { width: 13px; display: inline-block; background: "
+            "rgb(226,104,6); color: transparent; }";
+    html << "span.CostComputation9 { width: 13px; display: inline-block; background: "
+            "rgb(229,118,9); color: transparent; }";
+    html << "span.CostComputation8 { width: 13px; display: inline-block; background: "
+            "rgb(230,132,15); color: transparent; }";
+    html << "span.CostComputation7 { width: 13px; display: inline-block; background: "
+            "rgb(231,146,20); color: transparent; }";
+    html << "span.CostComputation6 { width: 13px; display: inline-block; background: "
+            "rgb(232,159,25); color: transparent; }";
+    html << "span.CostComputation5 { width: 13px; display: inline-block; background: "
+            "rgb(233,172,30); color: transparent; }";
+    html << "span.CostComputation4 { width: 13px; display: inline-block; background: "
+            "rgb(233,185,35); color: transparent; }";
+    html << "span.CostComputation3 { width: 13px; display: inline-block; background: "
+            "rgb(233,198,40); color: transparent; }";
+    html << "span.CostComputation2 { width: 13px; display: inline-block; background: "
+            "rgb(232,211,45); color: transparent; }";
+    html << "span.CostComputation1 { width: 13px; display: inline-block; background: "
+            "rgb(231,223,50); color: transparent; }";
+    html << "span.CostComputation0 { width: 13px; display: inline-block; background: "
+            "rgb(236,233,89); color: transparent;  } ";
+    html << "span.CostMovement19 { width: 13px; display: inline-block; background: rgb(130,31,27); "
+            "color: transparent; }";
+    html << "span.CostMovement18 { width: 13px; display: inline-block; background: rgb(145,33,30); "
+            "color: transparent; }";
+    html << "span.CostMovement17 { width: 13px; display: inline-block; background: rgb(160,33,32); "
+            "color: transparent; }";
+    html << "span.CostMovement16 { width: 13px; display: inline-block; background: rgb(176,34,34); "
+            "color: transparent; }";
+    html << "span.CostMovement15 { width: 13px; display: inline-block; background: rgb(185,47,32); "
+            "color: transparent; }";
+    html << "span.CostMovement14 { width: 13px; display: inline-block; background: rgb(193,59,30); "
+            "color: transparent; }";
+    html << "span.CostMovement13 { width: 13px; display: inline-block; background: rgb(202,71,27); "
+            "color: transparent; }";
+    html << "span.CostMovement12 { width: 13px; display: inline-block; background: rgb(210,82,22); "
+            "color: transparent; }";
+    html << "span.CostMovement11 { width: 13px; display: inline-block; background: rgb(218,93,16); "
+            "color: transparent; }";
+    html << "span.CostMovement10 { width: 13px; display: inline-block; background: rgb(226,104,6); "
+            "color: transparent; }";
+    html << "span.CostMovement9 { width: 13px; display: inline-block; background: rgb(229,118,9); "
+            "color: transparent; }";
+    html << "span.CostMovement8 { width: 13px; display: inline-block; background: rgb(230,132,15); "
+            "color: transparent; }";
+    html << "span.CostMovement7 { width: 13px; display: inline-block; background: rgb(231,146,20); "
+            "color: transparent; }";
+    html << "span.CostMovement6 { width: 13px; display: inline-block; background: rgb(232,159,25); "
+            "color: transparent; }";
+    html << "span.CostMovement5 { width: 13px; display: inline-block; background: rgb(233,172,30); "
+            "color: transparent; }";
+    html << "span.CostMovement4 { width: 13px; display: inline-block; background: rgb(233,185,35); "
+            "color: transparent; }";
+    html << "span.CostMovement3 { width: 13px; display: inline-block; background: rgb(233,198,40); "
+            "color: transparent; }";
+    html << "span.CostMovement2 { width: 13px; display: inline-block; background: rgb(232,211,45); "
+            "color: transparent; }";
+    html << "span.CostMovement1 { width: 13px; display: inline-block; background: rgb(231,223,50); "
+            "color: transparent; }";
+    html << "span.CostMovement0 { width: 13px; display: inline-block; background: rgb(236,233,89); "
+            "color: transparent; } ";
+
+    html << "span.CostColorSpacer { width: 2px; color: transparent; display: inline-block;}";
 
     // producer consumer style
     html << "body {";
@@ -582,9 +666,14 @@ void ProducerConsumerHierarchy::close_table() {
     html << "<br>";
 }
 
-void ProducerConsumerHierarchy::table_header(const string &header, StmtSize &size,
+void ProducerConsumerHierarchy::table_header(const IRNode *op, const string &header, StmtSize &size,
                                              string anchorName = "") {
     html << "<th>";
+
+    // add cost color squares if op exists
+    if (op != nullptr) {
+        cost_colors(op);
+    }
 
     // add anchor button if anchorName is provided
     if (anchorName != "") {
@@ -711,7 +800,7 @@ void ProducerConsumerHierarchy::prod_cons_table(StmtSize &size) {
     // close table
     html << "</table>";
 }
-void ProducerConsumerHierarchy::if_tree(const string &header, StmtSize &size,
+void ProducerConsumerHierarchy::if_tree(const IRNode *op, const string &header, StmtSize &size,
                                         string anchorName = "") {
     html << "<li>";
     html << "<span class=\\'tf-nc\\'>";
@@ -724,7 +813,7 @@ void ProducerConsumerHierarchy::if_tree(const string &header, StmtSize &size,
     html << ">";
 
     open_table_row();
-    table_header(header, size, anchorName);
+    table_header(op, header, size, anchorName);
     close_table_row();
 }
 void ProducerConsumerHierarchy::close_if_tree() {
@@ -748,6 +837,37 @@ void ProducerConsumerHierarchy::close_table_data() {
     html << "</td>";
 }
 
+void ProducerConsumerHierarchy::open_span(string className) {
+    html << "<span class=\\'" << className << "\\'>";
+}
+void ProducerConsumerHierarchy::close_span() {
+    html << "</span>";
+}
+void ProducerConsumerHierarchy::cost_color_spacer() {
+    open_span("CostColorSpacer");
+    html << ".";
+    close_span();
+}
+void ProducerConsumerHierarchy::cost_colors(const IRNode *op) {
+    cost_color_spacer();
+
+    int computation_range = findStmtCost.get_computation_range(op);
+    open_span("CostComputation" + to_string(computation_range));
+    html << ".";
+    close_span();
+
+    cost_color_spacer();
+
+    int data_movement_range = findStmtCost.get_data_movement_range(op);
+    open_span("CostMovement" + to_string(data_movement_range));
+    html << ".";
+    close_span();
+
+    open_span("CostColorSpacer");
+    html << ".";
+    close_span();
+}
+
 Stmt ProducerConsumerHierarchy::visit(const ProducerConsumer *op) {
     open_table(op->is_producer ? PRODUCER_COLOR : CONSUMER_COLOR);
 
@@ -760,7 +880,7 @@ Stmt ProducerConsumerHierarchy::visit(const ProducerConsumer *op) {
     StmtSize size = pre_processor.get_size(op);
 
     open_table_row();
-    table_header(header.str(), size, anchorName);
+    table_header(op, header.str(), size, anchorName);
     close_table_row();
 
     open_table_row();
@@ -786,7 +906,7 @@ Stmt ProducerConsumerHierarchy::visit(const For *op) {
     header << "For (" << op->name << ")";
 
     open_table_row();
-    table_header(header.str(), size, anchorName);
+    table_header(op, header.str(), size, anchorName);
     close_table_row();
 
     open_table_row();
@@ -832,7 +952,7 @@ Stmt ProducerConsumerHierarchy::visit(const IfThenElse *op) {
         if (!thenSize.empty()) {
             // TODO: inline condition
             ifHeader << "(" << op->condition << ")";
-            if_tree(ifHeader.str(), thenSize, anchorName);
+            if_tree(op->then_case.get(), ifHeader.str(), thenSize, anchorName);
 
             // then body
             open_table_row();
@@ -863,7 +983,7 @@ Stmt ProducerConsumerHierarchy::visit(const IfThenElse *op) {
             if (!elseSize.empty()) {
                 stringstream elseHeader;
                 elseHeader << "else";
-                if_tree(elseHeader.str(), elseSize);
+                if_tree(op->else_case.get(), elseHeader.str(), elseSize);
 
                 open_table_row();
                 open_table_data();
@@ -898,7 +1018,7 @@ Stmt ProducerConsumerHierarchy::visit(const Store *op) {
     open_table(STORE_COLOR);
 
     open_table_row();
-    table_header(header.str(), size, anchorName);
+    table_header(op, header.str(), size, anchorName);
     close_table_row();
 
     mutate(op->value);
@@ -943,7 +1063,7 @@ Stmt ProducerConsumerHierarchy::visit(const Allocate *op) {
     header << " [" << allocationSize << "]";
 
     open_table_row();
-    table_header(header.str(), size, anchorName);
+    table_header(op, header.str(), size, anchorName);
     close_table_row();
 
     close_table();

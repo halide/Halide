@@ -120,10 +120,10 @@ private:
     void close_table();
 
     // creates a table header row with given header string
-    void table_header(const string &header, StmtSize &size, string anchorName);
+    void table_header(const IRNode *op, const string &header, StmtSize &size, string anchorName);
     void prod_cons_table(StmtSize &size);
 
-    void if_tree(const string &header, StmtSize &size, string anchorName);
+    void if_tree(const IRNode *op, const string &header, StmtSize &size, string anchorName);
     void close_if_tree();
 
     // opens and closes a row
@@ -133,6 +133,12 @@ private:
     // opens and closes a data cell
     void open_table_data(string colSpan);
     void close_table_data();
+
+    // for cost colors
+    void open_span(string className);
+    void close_span();
+    void cost_color_spacer();
+    void cost_colors(const IRNode *op);
 
     Stmt visit(const ProducerConsumer *op) override;
     Stmt visit(const For *op) override;

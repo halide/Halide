@@ -161,7 +161,7 @@ private:
 
     string cost_table_tooltip(const IRNode *op, const string &hierarchyHTML) {
         int depth = findStmtCost.get_depth(op);
-        int computationCost = findStmtCost.calculate_computation_cost(op);
+        int computationCost = findStmtCost.get_calculated_computation_cost(op);
         int dataMovementCost = findStmtCost.get_data_movement_cost(op);
 
         std::stringstream tooltipText;
@@ -233,6 +233,8 @@ private:
     string cost_colors(const IRNode *op) {
         // TODO: figure out how to get the div to be given size without needing
         //       to put a `.` in it
+        //
+        //       fix: ProducerConsumerHierarchy::cost_colors as well
         std::stringstream s;
 
         curr_line_num += 1;
