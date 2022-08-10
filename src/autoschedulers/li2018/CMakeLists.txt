@@ -49,6 +49,7 @@ if (WITH_PYTHON_BINDINGS)
             PYTHONPATH
             "$<TARGET_FILE_DIR:Halide::Python>"
         )
+        list(REMOVE_DUPLICATES PYTHONPATH)
         list(TRANSFORM PYTHONPATH PREPEND "PYTHONPATH=path_list_prepend:")
 
         set(
@@ -56,6 +57,7 @@ if (WITH_PYTHON_BINDINGS)
             "$<TARGET_FILE_DIR:Halide_Li2018>"
             "$<TARGET_FILE_DIR:Halide::Halide>"
         )
+        list(REMOVE_DUPLICATES PATH)
         list(TRANSFORM PATH PREPEND "PATH=path_list_prepend:")
 
         set_tests_properties(gradient_autoscheduler_test_py PROPERTIES

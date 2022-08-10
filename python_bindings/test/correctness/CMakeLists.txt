@@ -33,6 +33,7 @@ set(
     "$<TARGET_FILE_DIR:py_aot_bit>"
     "$<TARGET_FILE_DIR:py_stub_bit>"
 )
+list(REMOVE_DUPLICATES PYTHONPATH)
 list(TRANSFORM PYTHONPATH PREPEND "PYTHONPATH=path_list_prepend:")
 
 foreach (test IN LISTS tests)

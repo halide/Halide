@@ -21,6 +21,7 @@ set(
     "$<TARGET_FILE_DIR:Halide::Python>"
     "$<TARGET_FILE_DIR:lesson_10_halide>"
 )
+list(REMOVE_DUPLICATES PYTHONPATH)
 list(TRANSFORM PYTHONPATH PREPEND "PYTHONPATH=path_list_prepend:")
 
 foreach (test IN LISTS tests)
