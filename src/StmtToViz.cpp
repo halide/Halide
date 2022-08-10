@@ -615,9 +615,11 @@ private:
         scope.push(op->name, unique_id());
         stream << open_div(op->is_producer ? "Produce" : "Consumer");
 
+        // anchoring
         producerConsumerCount++;
         string anchorName = "producerConsumer" + std::to_string(producerConsumerCount);
         stream << open_anchor(anchorName);
+        stream << close_anchor();
 
         int produce_id = unique_id();
         stream << open_span("Matched");
@@ -632,9 +634,6 @@ private:
         print(op->body);
         stream << close_div();
         stream << matched("}");
-
-        stream << close_anchor();
-
         stream << close_div();
         scope.pop(op->name);
     }
@@ -649,9 +648,11 @@ private:
         scope.push(op->name, unique_id());
         stream << open_div("For");
 
+        // anchoring
         forCount++;
         string anchorName = "for" + std::to_string(forCount);
         stream << open_anchor(anchorName);
+        stream << close_anchor();
 
         int id = unique_id();
         stream << open_expand_button(id);
@@ -687,9 +688,6 @@ private:
         print(op->body);
         stream << close_div();
         stream << matched("}");
-
-        stream << close_anchor();
-
         stream << close_div();
         scope.pop(op->name);
 
@@ -719,9 +717,11 @@ private:
     void visit(const Store *op) override {
         stream << open_div("Store WrapLine");
 
+        // anchoring
         storeCount++;
         string anchorName = "store" + std::to_string(storeCount);
         stream << open_anchor(anchorName);
+        stream << close_anchor();
 
         stream << cost_colors(op);
         stream << open_cost_span(op, get_stmt_hierarchy(op));
@@ -747,9 +747,6 @@ private:
         }
 
         stream << close_cost_span();
-
-        stream << close_anchor();
-
         stream << close_div();
     }
     void visit(const Provide *op) override {
@@ -770,9 +767,11 @@ private:
         scope.push(op->name, unique_id());
         stream << open_div("Allocate");
 
+        // anchoring
         allocateCount++;
         string anchorName = "allocate" + std::to_string(allocateCount);
         stream << open_anchor(anchorName);
+        stream << close_anchor();
 
         stream << cost_colors(op);
 
@@ -816,9 +815,6 @@ private:
         stream << open_div("AllocateBody");
         print(op->body);
         stream << close_div();
-
-        stream << close_anchor();
-
         stream << close_div();
         scope.pop(op->name);
     }
@@ -939,6 +935,7 @@ private:
         stream << close_span();
 
         while (true) {
+            // anchoring
             ifCount++;
             string anchorName = "if" + std::to_string(ifCount);
             stream << open_anchor(anchorName);
