@@ -50,6 +50,35 @@ if (NOT Halide_ENABLE_RTTI OR NOT Halide_ENABLE_EXCEPTIONS)
 endif ()
 
 ##
+# A helper for creating tests with correct PYTHONPATH
+##
+
+function(add_python_test)
+    cmake_parse_arguments(ARG "" "FILE;LABEL" "PYTHONPATH;ENVIRONMENT" ${ARGN})
+
+    set(ARG_PYTHONPATH "$<TARGET_FILE_DIR:Halide::Python>/.." ${ARG_PYTHONPATH})
+    list(TRANSFORM ARG_PYTHONPATH PREPEND "PYTHONPATH=path_list_prepend:")
+
+    list(PREPEND ARG_ENVIRONMENT "HL_TARGET=${Halide_TARGET}")
+
+    cmake_path(GET ARG_FILE STEM test_name)
+    set(test_name "${ARG_LABEL}_${test_name}")
+
+    add_test(
+        NAME "${test_name}"
+        COMMAND Python3::Interpreter "$<SHELL_PATH:${CMAKE_CURRENT_SOURCE_DIR}/${ARG_FILE}>"
+    )
+    set_tests_properties(
+        "${test_name}"
+        PROPERTIES
+        LABELS "python;${ARG_LABEL}"
+        ENVIRONMENT "${ARG_ENVIRONMENT}"
+        ENVIRONMENT_MODIFICATION "${ARG_PYTHONPATH}"
+    )
+endfunction()
+
+
+##
 # Add our sources to this sub-tree.
 ##
 
