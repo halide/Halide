@@ -444,7 +444,27 @@ void ProducerConsumerHierarchy::traverse(const Module &m) {
     }
     // traverse all functions
     for (const auto &f : m.functions()) {
+        generate_function_argument_consumes(f);
         mutate(f.body);
+    }
+}
+
+void ProducerConsumerHierarchy::generate_function_argument_consumes(const LoweredFunc &op) {
+    for (size_t i = 0; i < op.args.size(); i++) {
+        // stream << var(op.args[i].name);
+
+        open_table(CONSUMER_COLOR);
+
+        stringstream header;
+        header << ("Consume");
+        header << " " << op.args[i].name;
+        StmtSize size;
+
+        open_table_row();
+        table_header(header.str(), size, "");
+        close_table_row();
+
+        close_table();
     }
 }
 
@@ -497,6 +517,10 @@ void ProducerConsumerHierarchy::start_html() {
     html << "float: right;";
     html << "text-align: center;";
     html << "border: 0px;";
+    html << "}";
+
+    html << ".costTable td {";
+    html << "border-top: 1px dashed grey;";
     html << "}";
 
     html << ".costTableHeader,";
@@ -562,14 +586,17 @@ void ProducerConsumerHierarchy::table_header(const string &header, StmtSize &siz
                                              string anchorName = "") {
     html << "<th>";
 
-    // button
-    html << "<button onclick=\\'";
-    html << "window.open(&quot;"
-         << "add_hvx128.stmt.viz.html#" << anchorName << "&quot;, &quot;_blank&quot;)";
-    html << "\\'>";
-    html << "see code";
-    html << "</button>";
+    // add anchor button if anchorName is provided
+    if (anchorName != "") {
+        html << "<button onclick=\\'";
+        html << "window.open(&quot;" << output_file_name << "#" << anchorName
+             << "&quot;, &quot;_blank&quot;)";
+        html << "\\'>";
+        html << "see code";
+        html << "</button>";
+    }
 
+    // header
     html << "<br>";
     html << "&nbsp;";
     html << header;
@@ -577,6 +604,7 @@ void ProducerConsumerHierarchy::table_header(const string &header, StmtSize &siz
     html << "<br><br>";
     html << "</th>";
 
+    // add producer consumer size if size is provided
     if (!size.empty()) {
         html << "<th>";
         html << "<br>";

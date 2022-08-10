@@ -77,7 +77,8 @@ private:
 class ProducerConsumerHierarchy : public IRMutator {
 
 public:
-    ProducerConsumerHierarchy() = default;
+    ProducerConsumerHierarchy(string fileName) : output_file_name(fileName) {
+    }
     ~ProducerConsumerHierarchy() = default;
 
     // generates the html for the producer-consumer hierarchy
@@ -89,6 +90,7 @@ private:
 
     std::stringstream html;   // main html string
     StmtSizes pre_processor;  // generates the sizes of the nodes
+    string output_file_name;  // used for anchoring
 
     // used for getting anchor names
     int ifCount = 0;
@@ -103,6 +105,8 @@ private:
 
     // for traversal of a Module object
     void traverse(const Module &m);
+
+    void generate_function_argument_consumes(const LoweredFunc &op);
 
     // starts and ends the html file
     void start_html();
