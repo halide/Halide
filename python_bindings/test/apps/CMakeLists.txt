@@ -6,7 +6,7 @@ set(scripts
     local_laplacian.py)
 
 set(PYTHONPATH
-    "$<TARGET_FILE_DIR:Halide::Python>"
+    "$<TARGET_FILE_DIR:Halide::Python>/.."
 )
 list(TRANSFORM PYTHONPATH PREPEND "PYTHONPATH=path_list_prepend:")
 

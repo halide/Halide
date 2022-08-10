@@ -29,7 +29,7 @@ set(tests
 # Use generator expressions to get the true output paths of these files.
 set(
     PYTHONPATH
-    "$<TARGET_FILE_DIR:Halide::Python>"
+    "$<TARGET_FILE_DIR:Halide::Python>/.."
     "$<TARGET_FILE_DIR:py_aot_bit>"
     "$<TARGET_FILE_DIR:py_stub_bit>"
 )

@@ -41,6 +41,7 @@ set(python_sources
 # just for this project, rather than globally, and they should ensure that the last path component
 # is `halide`. Otherwise, the tests will break.
 pybind11_add_module(Halide_Python MODULE ${native_sources})
+add_library(Halide::Python ALIAS Halide_Python)
 set_target_properties(
     Halide_Python
     PROPERTIES
@@ -85,25 +86,6 @@ foreach (pysrc IN LISTS python_sources)
 endforeach ()
 add_custom_target(Halide_Python_sources ALL DEPENDS ${build_tree_pys})
 add_dependencies(Halide_Python Halide_Python_sources)
-
-# Now add a 'target' that exists just to conveniently give us a way to find this directory;
-# we can't use $<TARGET_FILE_DIR:Halide_Python> because we need `import halide` to see
-# $<CONFIG>, not $<CONFIG>/halide. This is surprisingly complex, in part because
-# $<CONFIG> is actually evaluated at build time (not config time), so we must
-# only use it in expressions that are deferred until build time...
-set(fake_cpp_file "${CMAKE_CURRENT_BINARY_DIR}/.fake_cpp_file.cpp")
-file(WRITE "${fake_cpp_file}" "int halide_fake_unused_;\n")
-
-add_library(Halide_Python_Fake_Lib SHARED "${fake_cpp_file}")
-# Note that LIBRARY_OUTPUT_DIRECTORY is only used for SHARED, not STATIC,
-# and that the shared library won't get created on Windows if no symbols are exported.
-set_target_properties(Halide_Python_Fake_Lib
-                      PROPERTIES
-                      # Must set both of these for DLL systems to get it right
-                      LIBRARY_OUTPUT_DIRECTORY "$<CONFIG>"
-                      RUNTIME_OUTPUT_DIRECTORY "$<CONFIG>"
-                      WINDOWS_EXPORT_ALL_SYMBOLS TRUE)
-add_library(Halide::Python ALIAS Halide_Python_Fake_Lib)
 
 ##
 # Packaging

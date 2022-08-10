@@ -18,7 +18,7 @@ set(tests
 
 set(
     PYTHONPATH
-    "$<TARGET_FILE_DIR:Halide::Python>"
+    "$<TARGET_FILE_DIR:Halide::Python>/.."
     "$<TARGET_FILE_DIR:lesson_10_halide>"
 )
 list(TRANSFORM PYTHONPATH PREPEND "PYTHONPATH=path_list_prepend:")
