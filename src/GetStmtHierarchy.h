@@ -17,16 +17,13 @@ using namespace Internal;
 class GetStmtHierarchy : public IRMutator {
 
 public:
-    GetStmtHierarchy() = default;
+    GetStmtHierarchy(FindStmtCost findStmtCostPopulated) : findStmtCost(findStmtCostPopulated) {
+    }
     ~GetStmtHierarchy() = default;
 
     // returns the generated hierarchy's html
     string get_hierarchy_html(const Expr &startNode);
     string get_hierarchy_html(const Stmt &startNode);
-
-    // runs the findStmtCost algorithm on the given input node
-    void set_stmt_cost(const Module &m);
-    void set_stmt_cost(const Stmt &s);
 
 private:
     int colorType;              // 0: CC (computation cost), 1: DMC (data movement cost)

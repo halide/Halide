@@ -50,13 +50,6 @@ string GetStmtHierarchy::get_hierarchy_html(const Stmt &startNode) {
     return html.str();
 }
 
-void GetStmtHierarchy::set_stmt_cost(const Module &m) {
-    findStmtCost.generate_costs(m);
-}
-void GetStmtHierarchy::set_stmt_cost(const Stmt &s) {
-    findStmtCost.generate_costs(s);
-}
-
 void GetStmtHierarchy::update_num_nodes() {
     numNodes++;
     currNodeID = numNodes;

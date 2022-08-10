@@ -67,6 +67,17 @@ private:
     int storeCount = 0;
     int allocateCount = 0;
 
+    string get_file_name(string fileName) {
+        // remove leading directories from filename
+        string f = fileName;
+        size_t pos = f.find_last_of("/");
+        if (pos != string::npos) {
+            f = f.substr(pos + 1);
+        }
+        cout << "Printing to " << f << endl;
+        return f;
+    }
+
     void reset_context() {
         curr_context.clear();
     }
@@ -1046,13 +1057,13 @@ private:
     }
 
 public:
-    void generate_costs(const Module &m) {
+    FindStmtCost generate_costs(const Module &m) {
         findStmtCost.generate_costs(m);
-        getStmtHierarchy.set_stmt_cost(m);
+        return findStmtCost;
     }
-    void generate_costs(const Stmt &s) {
+    FindStmtCost generate_costs(const Stmt &s) {
         findStmtCost.generate_costs(s);
-        getStmtHierarchy.set_stmt_cost(s);
+        return findStmtCost;
     }
     void generate_producer_consumer_hierarchy(const Module &m) {
         string prodConsHTML = producerConsumerHierarchy.generate_producer_consumer_html(m);
@@ -1072,7 +1083,7 @@ public:
     void generate_dependency_graph(const Stmt &s) {
         internal_error << "\n"
                        << "\n"
-                       << "StmtToViz::generate_dependency_graph: Not implemented"
+                       << "StmtToViz::generate_dependency_graph(const Stmt &s): Not implemented"
                        << "\n\n";
 
         // Stmt inlined_s = substitute_in_all_lets(s);
@@ -1346,7 +1357,7 @@ public:
         scope.pop(m.name());
     }
 
-    StmtToViz(const string &filename) : id_count(0), in_loop(false), context_stack(1, 0) {
+    void start_stream(const string &filename) {
         stream.open(filename.c_str());
         stream << "<head>";
         stream << "<style type='text/css'>";
@@ -1364,6 +1375,28 @@ public:
         stream << "<script src='http://code.jquery.com/jquery-1.10.2.js'></script>\n";
         stream << "</head>\n <body>\n";
         // stream << formHTML;
+    }
+
+    StmtToViz(const string &filename, const Module &m)
+        : getStmtHierarchy(generate_costs(m)),
+          producerConsumerHierarchy(get_file_name(filename), findStmtCost), id_count(0),
+          in_loop(false), context_stack(1, 0) {
+
+        start_stream(filename);
+
+        generate_producer_consumer_hierarchy(m);
+        generate_dependency_graph(m);
+    }
+
+    StmtToViz(const string &filename, const Stmt &s)
+        : getStmtHierarchy(generate_costs(s)),
+          producerConsumerHierarchy(get_file_name(filename), findStmtCost), id_count(0),
+          in_loop(false), context_stack(1, 0) {
+
+        start_stream(filename);
+
+        generate_producer_consumer_hierarchy(s);
+        generate_dependency_graph(s);
     }
 
     ~StmtToViz() override {
@@ -1537,21 +1570,19 @@ function openNewWindow(innerHtml) { \n \
 }  // namespace
 
 void print_to_viz(const string &filename, const Stmt &s) {
+    internal_error << "\n"
+                   << "\n"
+                   << "Exiting early: print_to_viz is being run with a Stmt! how exciting"
+                   << "\n"
+                   << "\n"
+                   << "\n";
 
-    cout << "Printing to " << filename << endl;
-
-    StmtToViz sth(filename);
-
-    sth.generate_costs(s);
-    sth.generate_producer_consumer_hierarchy(s);
-    sth.generate_dependency_graph(s);
+    StmtToViz sth(filename, s);
 
     sth.print(s);
 }
 
 void print_to_viz(const string &filename, const Module &m) {
-
-    cout << "Printing to " << filename << endl;
 
     if (m.functions().size() > 1) {
         internal_error << "\n"
@@ -1564,11 +1595,7 @@ void print_to_viz(const string &filename, const Module &m) {
         return;
     }
 
-    StmtToViz sth(filename);
-
-    sth.generate_costs(m);
-    sth.generate_producer_consumer_hierarchy(m);
-    sth.generate_dependency_graph(m);
+    StmtToViz sth(filename, m);
 
     sth.print(m);
 }

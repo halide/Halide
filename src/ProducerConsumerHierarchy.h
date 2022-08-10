@@ -1,6 +1,7 @@
 #ifndef ProducerConsumerHierarchy_H
 #define ProducerConsumerHierarchy_H
 
+#include "FindStmtCost.h"
 #include "IRMutator.h"
 
 #include <unordered_map>
@@ -77,7 +78,8 @@ private:
 class ProducerConsumerHierarchy : public IRMutator {
 
 public:
-    ProducerConsumerHierarchy(string fileName) : output_file_name(fileName) {
+    ProducerConsumerHierarchy(string fileName, FindStmtCost findStmtCostPopulated)
+        : output_file_name(fileName), findStmtCost(findStmtCostPopulated) {
     }
     ~ProducerConsumerHierarchy() = default;
 
@@ -88,9 +90,10 @@ public:
 private:
     using IRMutator::visit;
 
-    std::stringstream html;   // main html string
-    StmtSizes pre_processor;  // generates the sizes of the nodes
-    string output_file_name;  // used for anchoring
+    std::stringstream html;     // main html string
+    StmtSizes pre_processor;    // generates the sizes of the nodes
+    string output_file_name;    // used for anchoring
+    FindStmtCost findStmtCost;  // used to determine the color of each statement
 
     // used for getting anchor names
     int ifCount = 0;
