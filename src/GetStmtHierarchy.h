@@ -30,7 +30,7 @@ private:
     std::stringstream html;     // html string
     FindStmtCost findStmtCost;  // used to determine the color of each statement
 
-    // for expanding/collapsing
+    // for expanding/collapsing nodes
     int currNodeID;      // ID of the current node in traversal
     int numNodes;        // total number of nodes (across both trees in the hierarchy)
     int startCCNodeID;   // ID of the start node in the CC tree
