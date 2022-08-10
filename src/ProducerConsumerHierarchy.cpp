@@ -776,17 +776,20 @@ Stmt ProducerConsumerHierarchy::visit(const IfThenElse *op) {
     StmtSize thenSize = pre_processor.get_size(op->then_case.get());
     StmtSize elseSize = pre_processor.get_size(op->else_case.get());
 
-    // TODO: deal with case where if and else are empty - anchor name has to be updated
-
-    // open main if tree
-    html << "<div class=\\'tf-tree tf-gap-sm tf-custom\\' style=\\'font-size: 12px; "
-            "justify-content: center;\\'>";
-    html << "<ul>";
-    html << "<li><span class=\\'tf-nc if-node\\'>";
-
-    html << "If";
-    html << "</span>";
-    html << "<ul>";
+    // only start the if-tree if either case is not empty
+    // (aka won't print if both cases are empty)
+    // (we can't just exit early though because we have to go through all if-stmts to
+    //  get accurate count for the anchor names)
+    if (!thenSize.empty() || !elseSize.empty()) {
+        // open main if tree
+        html << "<div class=\\'tf-tree tf-gap-sm tf-custom\\' style=\\'font-size: 12px; "
+                "justify-content: center;\\'>";
+        html << "<ul>";
+        html << "<li><span class=\\'tf-nc if-node\\'>";
+        html << "If";
+        html << "</span>";
+        html << "<ul>";
+    }
 
     stringstream ifHeader;
     ifHeader << "if";
