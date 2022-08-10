@@ -13,10 +13,8 @@
 set(CMAKE_SYSTEM_NAME Linux)
 set(CMAKE_SYSTEM_PROCESSOR i686)
 
-set(LLVM_INSTALL_DIR ${LLVM_DIR}/../../../)
-
-set(CMAKE_C_COMPILER ${LLVM_INSTALL_DIR}/bin/clang)
-set(CMAKE_CXX_COMPILER ${LLVM_INSTALL_DIR}/bin/clang++)
+set(CMAKE_C_COMPILER ${LLVM_ROOT}/bin/clang)
+set(CMAKE_CXX_COMPILER ${LLVM_ROOT}/bin/clang++)
 
 set(_ASAN_FLAGS "-fsanitize=address")
 # set(_ASAN_FLAGS "-fsanitize=address -shared-libasan")
@@ -42,7 +40,7 @@ set(CMAKE_CROSSCOMPILING_EMULATOR)
 # - detect_container_overflow, because this is a known false-positive
 #   if compiling with a non-ASAN build of LLVM (which is usually the case)
 set(SANITIZER_ENV_VARS "ASAN_OPTIONS=detect_leaks=0:detect_container_overflow=0")
-# set(SANITIZER_ENV_VARS "ASAN_OPTIONS=detect_leaks=0:detect_container_overflow=0;LD_PRELOAD=${LLVM_INSTALL_DIR}/lib/clang/16.0.0/lib/x86_64-unknown-linux-gnu/libclang_rt.asan.so")
+# set(SANITIZER_ENV_VARS "ASAN_OPTIONS=detect_leaks=0:detect_container_overflow=0;LD_PRELOAD=${LLVM_ROOT}/lib/clang/16.0.0/lib/x86_64-unknown-linux-gnu/libclang_rt.asan.so")
 
 # Work around bug where "cmake -E env $FOO" gives error if FOO is empty
 set(SANITIZER_SET_ENV_VARS env ${SANITIZER_ENV_VARS})
