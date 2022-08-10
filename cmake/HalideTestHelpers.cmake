@@ -81,7 +81,7 @@ function(tests)
 
     set(TEST_NAMES "")
     foreach (file IN LISTS args_SOURCES)
-        get_filename_component(name "${file}" NAME_WE)
+        cmake_path(GET file STEM name)
         set(TARGET "${PRIMARY_GROUP}_${name}")
 
         list(APPEND TEST_NAMES "${TARGET}")

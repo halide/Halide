@@ -473,11 +473,6 @@ void CodeGen_X86::visit(const Cast *op) {
         // saturate the result.
         {"pmulhrs", i16(rounding_shift_right(widening_mul(wild_i16x_, wild_i16x_), 15))},
 
-        {"saturating_narrow", i16_sat(wild_i32x_)},
-        {"saturating_narrow", u16_sat(wild_i32x_)},
-        {"saturating_narrow", i8_sat(wild_i16x_)},
-        {"saturating_narrow", u8_sat(wild_i16x_)},
-
         {"f32_to_bf16", bf16(wild_f32x_)},
     };
     // clang-format on
@@ -575,6 +570,10 @@ void CodeGen_X86::visit(const Call *op) {
         {"pmulh", mul_shift_right(wild_i16x_, wild_i16x_, 16)},
         {"pmulh", mul_shift_right(wild_u16x_, wild_u16x_, 16)},
         {"saturating_pmulhrs", rounding_mul_shift_right(wild_i16x_, wild_i16x_, 15)},
+        {"saturating_narrow", i16_sat(wild_i32x_)},
+        {"saturating_narrow", u16_sat(wild_i32x_)},
+        {"saturating_narrow", i8_sat(wild_i16x_)},
+        {"saturating_narrow", u8_sat(wild_i16x_)},
     };
     // clang-format on
 

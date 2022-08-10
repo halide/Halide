@@ -7,7 +7,7 @@ function(add_tutorial source_file)
     set(multiValueArgs SRCS GROUPS)
     cmake_parse_arguments(args "${options}" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
 
-    get_filename_component(name "${source_file}" NAME_WE)
+    cmake_path(GET source_file STEM name)
 
     add_executable("${name}" "${source_file}")
     target_link_libraries("${name}" PRIVATE Halide::Halide Halide::Tools)
