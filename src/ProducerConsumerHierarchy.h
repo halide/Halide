@@ -45,17 +45,25 @@ private:
     using IRMutator::visit;
 
     unordered_map<const IRNode *, StmtSize> stmt_sizes;
-    bool in_producer = false;
-    bool in_consumer = false;
-    string curr_consumer;
+    vector<string> curr_producer_names;
+    vector<string> curr_consumer_names;
+    map<string, int> curr_load_values;
+    vector<string> arguments;  // arguments of the main function in module
 
     void traverse(const Module &m);
 
     string get_simplified_string(string a, string b, string op);
 
+    void get_function_arguments(const LoweredFunc &op);
+
     void set_produce_size(const IRNode *node, string produce_var, string produce_size);
     void set_consume_size(const IRNode *node, string consume_var, string consume_size);
     void set_allocation_size(const IRNode *node, string allocate_var, string allocate_size);
+
+    bool in_producer(const string &name) const;
+    bool in_consumer(const string &name) const;
+    void remove_producer(const string &name);
+    void remove_consumer(const string &name);
 
     string string_span(string varName) const;
     string int_span(int64_t intVal) const;
@@ -64,6 +72,7 @@ private:
     Stmt visit(const ProducerConsumer *op) override;
     Stmt visit(const For *op) override;
     Stmt visit(const Store *op) override;
+    void add_load_value(const string &name, const int lanes);
     Expr visit(const Load *op) override;
     Stmt visit(const Allocate *op) override;
     Stmt visit(const Block *op) override;
@@ -108,8 +117,6 @@ private:
 
     // for traversal of a Module object
     void traverse(const Module &m);
-
-    void generate_function_argument_consumes(const LoweredFunc &op);
 
     // starts and ends the html file
     void start_html();

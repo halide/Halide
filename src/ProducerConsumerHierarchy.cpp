@@ -6,13 +6,12 @@ using namespace Halide;
 using namespace Internal;
 
 // background colors for the different types of elements
-#define IF_COLOR "#f0dcb3"
-#define FOR_COLOR "#e4ddfa"
-#define PRODUCER_COLOR "#dfffe1"
-#define CONSUMER_COLOR "#d1d8f1"
+#define IF_COLOR "#e6eeff"
+#define FOR_COLOR "#b3ccff"
+#define PRODUCER_COLOR "#99bbff"
+#define CONSUMER_COLOR PRODUCER_COLOR
 #define STORE_COLOR "#f4f8bf"
 #define ALLOCATE_COLOR STORE_COLOR
-#define IF_NODE_COLOR "#f9c763"
 
 /*
  * StmtSizes class
@@ -55,6 +54,7 @@ void StmtSizes::traverse(const Module &m) {
     }
     // traverse all functions
     for (const auto &f : m.functions()) {
+        get_function_arguments(f);
         mutate(f.body);
     }
 }
@@ -77,6 +77,12 @@ string StmtSizes::get_simplified_string(string a, string b, string op) {
         internal_error << "\n"
                        << "Unsupported operator: " << op << "\n";
         return "";
+    }
+}
+
+void StmtSizes::get_function_arguments(const LoweredFunc &op) {
+    for (size_t i = 0; i < op.args.size(); i++) {
+        arguments.push_back(op.args[i].name);
     }
 }
 
@@ -146,6 +152,43 @@ void StmtSizes::set_allocation_size(const IRNode *node, string allocate_var, str
     stmt_sizes[node].allocates[allocate_var] = allocate_size;
 }
 
+bool StmtSizes::in_producer(const string &name) const {
+    // check if name is in curr_producer_names
+    for (const auto &it : curr_producer_names) {
+        if (it == name) {
+            return true;
+        }
+    }
+    return false;
+}
+bool StmtSizes::in_consumer(const string &name) const {
+    // check if name is in curr_consumer_names
+    for (const auto &it : curr_consumer_names) {
+        if (it == name) {
+            return true;
+        }
+    }
+    return false;
+}
+void StmtSizes::remove_producer(const string &name) {
+    // remove name from curr_producer_names
+    for (size_t i = 0; i < curr_producer_names.size(); i++) {
+        if (curr_producer_names[i] == name) {
+            curr_producer_names.erase(curr_producer_names.begin() + i);
+            return;
+        }
+    }
+}
+void StmtSizes::remove_consumer(const string &name) {
+    // remove name from curr_consumer_names
+    for (size_t i = 0; i < curr_consumer_names.size(); i++) {
+        if (curr_consumer_names[i] == name) {
+            curr_consumer_names.erase(curr_consumer_names.begin() + i);
+            return;
+        }
+    }
+}
+
 string StmtSizes::string_span(string varName) const {
     return "<span class=\\'stringType\\'>" + varName + "</span>";
 }
@@ -169,13 +212,10 @@ Stmt StmtSizes::visit(const LetStmt *op) {
 }
 Stmt StmtSizes::visit(const ProducerConsumer *op) {
 
-    bool previous_in_producer = in_producer;
-    bool previous_in_consumer = in_consumer;
-
     if (op->is_producer) {
-        in_producer = true;
+        curr_producer_names.push_back(op->name);
     } else {
-        in_consumer = true;
+        curr_consumer_names.push_back(op->name);
     }
 
     mutate(op->body);
@@ -189,8 +229,13 @@ Stmt StmtSizes::visit(const ProducerConsumer *op) {
         set_consume_size(op, consume_var.first, consume_var.second);
     }
 
-    in_producer = previous_in_producer;
-    in_consumer = previous_in_consumer;
+    // remove name from curr_producer_names or curr_consumer_names
+    if (op->is_producer) {
+        remove_producer(op->name);
+    } else {
+        remove_consumer(op->name);
+    }
+
     return op;
 }
 Stmt StmtSizes::visit(const For *op) {
@@ -253,23 +298,50 @@ Stmt StmtSizes::visit(const For *op) {
 }
 Stmt StmtSizes::visit(const Store *op) {
 
-    uint16_t lanes = op->value.type().lanes();
+    // TODO: is this correct? should i be getting it from `index`?
+    uint16_t lanes = op->index.type().lanes();
+    // uint16_t lanes = op->type.lanes();
 
-    if (in_producer) {
+    if (in_producer(op->name)) {
         set_produce_size(op, op->name, int_span(lanes));
     }
 
-    if (in_consumer) {
-        mutate(op->value);
-        set_consume_size(op, curr_consumer, int_span(lanes));
+    // empty curr_load_values
+    curr_load_values.clear();
+    mutate(op->value);
+
+    for (const auto &load_var : curr_load_values) {
+        set_consume_size(op, load_var.first, int_span(load_var.second));
     }
+
     return op;
+}
+void StmtSizes::add_load_value(const string &name, const int lanes) {
+    auto it = curr_load_values.find(name);
+    if (it == curr_load_values.end()) {
+        curr_load_values[name] = lanes;
+    } else {
+        curr_load_values[name] += lanes;
+    }
 }
 Expr StmtSizes::visit(const Load *op) {
 
-    // only set curr_consumer if in consumer
-    if (in_consumer) {
-        curr_consumer = op->name;
+    // see if the variable is in the arguments variable
+    if (std::count(arguments.begin(), arguments.end(), op->name)) {
+        curr_consumer_names.push_back(op->name);
+    }
+
+    if (in_consumer(op->name)) {
+        int lanes;
+
+        if (op->index.as<Ramp>()) {
+            lanes = op->index.as<Ramp>()->lanes;
+        } else {
+            lanes = int(op->type.lanes());
+            cout << op->name << ": lanes - " << lanes << endl;
+        }
+
+        add_load_value(op->name, lanes);
     }
 
     return op;
@@ -444,27 +516,7 @@ void ProducerConsumerHierarchy::traverse(const Module &m) {
     }
     // traverse all functions
     for (const auto &f : m.functions()) {
-        generate_function_argument_consumes(f);
         mutate(f.body);
-    }
-}
-
-void ProducerConsumerHierarchy::generate_function_argument_consumes(const LoweredFunc &op) {
-    for (size_t i = 0; i < op.args.size(); i++) {
-        // stream << var(op.args[i].name);
-
-        open_table(CONSUMER_COLOR);
-
-        stringstream header;
-        header << ("Consume");
-        header << " " << op.args[i].name;
-        StmtSize size;
-
-        open_table_row();
-        table_header(nullptr, header.str(), size, "");
-        close_table_row();
-
-        close_table();
     }
 }
 
@@ -489,7 +541,7 @@ void ProducerConsumerHierarchy::start_html() {
     html << ".tf-custom .end-node { border-style: dashed; font-size: 12px; } ";
     html << ".tf-custom .tf-nc:before, .tf-custom .tf-nc:after { border-left-width: 1px; } ";
     html << ".tf-custom li li:before { border-top-width: 1px; }";
-    html << ".tf-custom .tf-nc .if-node { background-color: " << IF_NODE_COLOR << "; }";
+    html << ".tf-custom .tf-nc .if-node { background-color: " << IF_COLOR << "; }";
 
     // cost colors
     html << "span.CostComputation19 { width: 13px; display: inline-block; background: "
@@ -754,7 +806,7 @@ void ProducerConsumerHierarchy::prod_cons_table(StmtSize &size) {
         for (const auto &consume_var : size.consumes) {
             stringstream ss;
             ss << "<td class=\\'costTableData\\'>";
-            ss << consume_var.first;
+            ss << consume_var.first << ": ";
             ss << "</td>";
 
             ss << "<td class=\\'costTableData\\'>";
@@ -767,8 +819,6 @@ void ProducerConsumerHierarchy::prod_cons_table(StmtSize &size) {
                 // pad row with empty cells for produce
                 stringstream sEmpty;
                 sEmpty << "<td colspan=\\'2\\' class=\\'costTableData middleCol\\'>";
-                sEmpty << "</td>";
-                sEmpty << "<td colspan=\\'2\\' class=\\'costTableData\\'>";
                 sEmpty << "</td>";
 
                 rows.push_back(sEmpty.str() + ss.str());
