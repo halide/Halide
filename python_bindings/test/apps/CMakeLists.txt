@@ -7,6 +7,7 @@ set(SCRIPTS
 
 set(PYTHONPATH
     "$<TARGET_FILE_DIR:Halide::Python>"
+    "${Halide_SOURCE_DIR}/python_bindings/src"
     "$<TARGET_FILE_DIR:py_aot_bilateral_grid>")
 list(TRANSFORM PYTHONPATH PREPEND "PYTHONPATH=path_list_prepend:")
 
@@ -22,8 +23,8 @@ set(TEST_ENV
 set(PY_APPS_DEPS_bilateral_grid_shell py_aot_bilateral_grid)
 set(PY_APPS_ARGS_bilateral_grid_shell ${PY_APPS_TEST_IMAGES_DIR}/gray.png ${PY_APPS_TEST_TMPDIR}/out.png 0.1 10)
 
-foreach (script IN LISTS SCRIPTS)
-    cmake_path(GET script STEM BASE)
+foreach (SCRIPT IN LISTS SCRIPTS)
+    cmake_path(GET SCRIPT STEM BASE)
     add_test(NAME python_apps_${BASE}
              COMMAND Python3::Interpreter "$<SHELL_PATH:${CMAKE_CURRENT_SOURCE_DIR}/${SCRIPT}>" ${PY_APPS_ARGS_${BASE}})
     set_tests_properties(
