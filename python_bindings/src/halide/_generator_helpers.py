@@ -2,8 +2,8 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from enum import Enum
 from functools import total_ordering
-from halide_ import *
-from halide_ import _unique_name, _NoneType
+from .halide_ import *
+from .halide_ import _unique_name, _NoneType
 from inspect import isclass
 from typing import Any, Optional
 import sys

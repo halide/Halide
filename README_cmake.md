@@ -370,7 +370,7 @@ Halide's own CI infrastructure, or as escape hatches for third-party packagers.
 |-----------------------------|--------------------------------------------------------------------|------------------------------------------------------------------------------------------|
 | `Halide_CLANG_TIDY_BUILD`   | `OFF`                                                              | Used internally to generate fake compile jobs for runtime files when running clang-tidy. |
 | `Halide_CCACHE_BUILD`       | `OFF`                                                              | Use ccache with Halide-recommended settings to accelerate rebuilds.                      |
-| `Halide_CCACHE_PARAMS`      | `CCACHE_CPP2=yes CCACHE_HASHDIR=yes CCACHE_SLOPPINESS=pch_defines` | Options to pass to `ccache` when using `Halide_CCACHE_BUILD`.                            | 
+| `Halide_CCACHE_PARAMS`      | `CCACHE_CPP2=yes CCACHE_HASHDIR=yes CCACHE_SLOPPINESS=pch_defines` | Options to pass to `ccache` when using `Halide_CCACHE_BUILD`.                            |
 | `Halide_SOVERSION_OVERRIDE` | `${Halide_VERSION_MAJOR}`                                          | Override the SOVERSION for libHalide. Expects a positive integer (i.e. not a version).   |
 
 The following options are only available when building Halide directly, ie. not
@@ -779,12 +779,12 @@ Halide defines the following targets that are available to users:
 
 The following targets are not guaranteed to be available:
 
-| Imported target         | Description                                                                                                                              |
-|-------------------------|------------------------------------------------------------------------------------------------------------------------------------------|
-| `Halide::Python`        | this is a Python 3 module that can be referenced as `$<TARGET_FILE:Halide::Python>` when setting up Python tests or the like from CMake. |
-| `Halide::Adams19`       | the Adams et.al. 2019 autoscheduler (no GPU support)                                                                                     |
-| `Halide::Li18`          | the Li et.al. 2018 gradient autoscheduler (limited GPU support)                                                                          |
-| `Halide::Mullapudi2016` | the Mullapudi et.al. 2016 autoscheduler (no GPU support)                                                                                 |
+| Imported target         | Description                                                                                                                                                       |
+|-------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `Halide::Python`        | this is a Python 3 package that can be referenced as `$<TARGET_FILE_DIR:Halide::Python>/..` when setting up `PYTHONPATH` for Python tests or the like from CMake. |
+| `Halide::Adams19`       | the Adams et.al. 2019 autoscheduler (no GPU support)                                                                                                              |
+| `Halide::Li18`          | the Li et.al. 2018 gradient autoscheduler (limited GPU support)                                                                                                   |
+| `Halide::Mullapudi2016` | the Mullapudi et.al. 2016 autoscheduler (no GPU support)                                                                                                          |
 
 ### Functions
 
@@ -972,7 +972,7 @@ would call `add_halide_library` with no `TARGETS` option and set `FROM` equal to
 the name of the imported generator executable. Obviously, this is a significant
 increase in complexity over a typical CMake project.
 
-This is very compatible with the `add_halide_generator` strategy above. 
+This is very compatible with the `add_halide_generator` strategy above.
 
 ### Use `ExternalProject` directly
 

@@ -26,28 +26,16 @@ set(tests
     var.py
     )
 
-# Use generator expressions to get the true output paths of these files.
-set(
-    PYTHONPATH
-    "$<TARGET_FILE_DIR:py_aot_bit>"
-    "$<TARGET_FILE_DIR:py_stub_bit>"
-    "$<TARGET_FILE_DIR:Halide::Python>"
-    # Needed only for pystub.py, but easier to include everywhere
-    "${CMAKE_CURRENT_SOURCE_DIR}/../generators"
-)
-list(TRANSFORM PYTHONPATH PREPEND "PYTHONPATH=path_list_prepend:")
+set(PYPATH_pystub "${CMAKE_CURRENT_SOURCE_DIR}/../generators")
 
-foreach (TEST IN LISTS TESTS)
-    cmake_path(GET TEST STEM TEST_NAME)
-    add_test(NAME python_correctness_${TEST_NAME}
-             COMMAND Python3::Interpreter "$<SHELL_PATH:${CMAKE_CURRENT_SOURCE_DIR}/${TEST}>")
-    # Ensure that everything in generators/ is built before us. This is dramatic overkill
-    # but simplifies our build setup considerably.
-    set_tests_properties(
-        python_correctness_${TEST_NAME} PROPERTIES
-        LABELS "python"
+foreach (test IN LISTS tests)
+    cmake_path(GET test STEM test_name)
+    add_python_test(
+        FILE "${test}"
+        LABEL python_correctness
+        # Ensure that everything in generators/ is built before us.
+        # This is dramatic overkill but simplifies our build setup considerably.
         DEPENDS ${PYTHON_CORRECTNESS_GENERATOR_DEPS}
-        ENVIRONMENT "HL_TARGET=${Halide_TARGET}"
-        ENVIRONMENT_MODIFICATION "${PYTHONPATH}"
+        PYTHONPATH "$<TARGET_FILE_DIR:py_aot_bit>" "$<TARGET_FILE_DIR:py_stub_bit>" "${PYPATH_${test_name}}"
     )
 endforeach ()

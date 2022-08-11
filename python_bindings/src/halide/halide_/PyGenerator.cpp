@@ -43,7 +43,7 @@ public:
     // by calling is_valid() later.
     explicit PyGeneratorBase(const GeneratorContext &context, const std::string &name)
         : name_(name),
-          class_(py::module_::import("_generator_helpers").attr("_find_python_generator_class")(name)),  // could be None!
+          class_(py::module_::import("halide").attr("_find_python_generator_class")(name)),  // could be None!
           generator_(class_.is(py::none()) ? py::none() : class_(context)) {                             // could be None!
     }
 
@@ -118,7 +118,7 @@ public:
     PyGeneratorFactoryProvider() = default;
 
     std::vector<std::string> enumerate() const override {
-        py::object f = py::module_::import("_generator_helpers").attr("_get_python_generator_names");
+        py::object f = py::module_::import("halide").attr("_get_python_generator_names");
         return args_to_vector<std::string>(f());
     }
     AbstractGeneratorPtr create(const std::string &name,

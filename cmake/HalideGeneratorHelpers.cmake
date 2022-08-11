@@ -89,18 +89,6 @@ function(_Halide_try_load_generators)
     endif ()
 endfunction()
 
-function(_Halide_make_shell_path OUTVAR)
-    if (WIN32)
-        set(SEP "\\$<SEMICOLON>")
-    else ()
-        set(SEP ":")
-    endif ()
-
-    list(TRANSFORM ARGN REPLACE "^(.+)$" "$<SHELL_PATH:\\1>")
-    string(REPLACE ";" "${SEP}" ARGN "${ARGN}")
-    set(${OUTVAR} "${ARGN}" PARENT_SCOPE)
-endfunction()
-
 ##
 # Function to simplify writing the CMake rules for invoking a generator executable
 # and getting a usable CMake library out of it.
@@ -161,11 +149,7 @@ function(add_halide_library TARGET)
     endif ()
 
     if(ARG_FROM MATCHES ".py$")
-        # TODO(srj|alexreinking): we almost certainly don't want a reference to "${Halide_SOURCE_DIR}/python_bindings/src" here,
-        # but is a necessity at the moment.
-        _Halide_make_shell_path(PYTHONPATH
-            "$<TARGET_FILE_DIR:Halide::Python>"
-            "${Halide_SOURCE_DIR}/python_bindings/src")
+        set(PYTHONPATH "$<TARGET_FILE_DIR:Halide::Python>/..")
         # TODO: this is ugly, maybe there is a better way?
         set(GENERATOR_CMD ${CMAKE_COMMAND} -E env PYTHONPATH=${PYTHONPATH} ${Python3_EXECUTABLE} $<SHELL_PATH:${CMAKE_CURRENT_SOURCE_DIR}/${ARG_FROM}>)
         set(GENERATOR_CMD_DEPS ${ARG_FROM} Halide::Python)

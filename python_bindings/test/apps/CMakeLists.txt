@@ -1,37 +1,29 @@
-set(SCRIPTS
+set(tests
     bilateral_grid_shell.py
     blur.py
     erode.py
     interpolate.py
     local_laplacian.py)
 
-set(PYTHONPATH
-    "$<TARGET_FILE_DIR:Halide::Python>"
-    "${Halide_SOURCE_DIR}/python_bindings/src"
-    "$<TARGET_FILE_DIR:py_aot_bilateral_grid>")
-list(TRANSFORM PYTHONPATH PREPEND "PYTHONPATH=path_list_prepend:")
+set(TEST_TMPDIR "$<SHELL_PATH:${CMAKE_CURRENT_BINARY_DIR}>")
+set(TEST_IMAGES_DIR "$<SHELL_PATH:${CMAKE_CURRENT_SOURCE_DIR}/../../../apps/images>")
 
-set(PY_APPS_TEST_TMPDIR "$<SHELL_PATH:${CMAKE_CURRENT_BINARY_DIR}>")
-set(PY_APPS_TEST_IMAGES_DIR "$<SHELL_PATH:${CMAKE_CURRENT_SOURCE_DIR}/../../../apps/images>")
+set(DEPS_bilateral_grid_shell   py_aot_bilateral_grid)
+set(PYPATH_bilateral_grid_shell "$<TARGET_FILE_DIR:py_aot_bilateral_grid>")
+set(ARGS_bilateral_grid_shell   ${TEST_IMAGES_DIR}/gray.png ${TEST_TMPDIR}/out.png 0.1 10)
+    message(STATUS "PYPATH_bilateral_grid_shell" ${PYPATH_bilateral_grid_shell})
 
-set(TEST_ENV
-    "HL_TARGET=${Halide_TARGET}"
-    "TEST_TMPDIR=${PY_APPS_TEST_TMPDIR}"
-    "TEST_IMAGES_DIR=${PY_APPS_TEST_IMAGES_DIR}"
-)
-
-set(PY_APPS_DEPS_bilateral_grid_shell py_aot_bilateral_grid)
-set(PY_APPS_ARGS_bilateral_grid_shell ${PY_APPS_TEST_IMAGES_DIR}/gray.png ${PY_APPS_TEST_TMPDIR}/out.png 0.1 10)
-
-foreach (SCRIPT IN LISTS SCRIPTS)
-    cmake_path(GET SCRIPT STEM BASE)
-    add_test(NAME python_apps_${BASE}
-             COMMAND Python3::Interpreter "$<SHELL_PATH:${CMAKE_CURRENT_SOURCE_DIR}/${SCRIPT}>" ${PY_APPS_ARGS_${BASE}})
-    set_tests_properties(
-        python_apps_${BASE} PROPERTIES
-        LABELS python
-        DEPENDS "${PY_APPS_DEPS_${BASE}}"
-        ENVIRONMENT "${TEST_ENV}"
-        ENVIRONMENT_MODIFICATION "${PYTHONPATH}"
+foreach (test IN LISTS tests)
+    cmake_path(GET test STEM test_name)
+    message(STATUS "test ${test} has pypath" ${PYPATH_${test_name}})
+    add_python_test(
+        FILE "${test}"
+        TEST_ARGS ${ARGS_${test_name}}
+        LABEL python_apps
+        DEPENDS ${DEPS_${test_name}}
+        PYTHONPATH ${PYPATH_${test_name}}
+        ENVIRONMENT
+        "TEST_TMPDIR=${TEST_TMPDIR}"
+        "TEST_IMAGES_DIR=${TEST_IMAGES_DIR}"
     )
 endforeach ()
