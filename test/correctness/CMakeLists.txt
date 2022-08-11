@@ -196,6 +196,7 @@ tests(GROUPS correctness
       loop_level_generator_param.cpp
       lossless_cast.cpp
       lots_of_loop_invariants.cpp
+      low_bit_depth_noise.cpp
       make_struct.cpp
       many_dimensions.cpp
       many_small_extern_stages.cpp
