@@ -16,7 +16,7 @@ function(add_tutorial source_file)
     add_test(NAME tutorial_${name} COMMAND ${name})
     set_tests_properties(tutorial_${name}
                          PROPERTIES
-                         ENVIRONMENT "HL_TARGET=${Halide_TARGET};HL_JIT_TARGET=${Halide_TARGET};${SANITIZER_ENV_VARS}"
+                         ENVIRONMENT "HL_TARGET=${Halide_TARGET};HL_JIT_TARGET=${Halide_TARGET}"
                          LABELS "tutorial;${args_GROUPS}")
 
     if (args_WITH_IMAGE_IO)
@@ -59,7 +59,7 @@ if (TARGET_NVPTX)
         set(FILTER_LIB "lesson_10_halide${CMAKE_STATIC_LIBRARY_SUFFIX}")
         add_custom_command(OUTPUT lesson_10_halide.h "${FILTER_LIB}"
                            DEPENDS lesson_10_aot_compilation_generate
-                           COMMAND ${CMAKE_COMMAND} -E ${SANITIZER_SET_ENV_VARS} $<TARGET_FILE:lesson_10_aot_compilation_generate>
+                           COMMAND lesson_10_aot_compilation_generate
                            VERBATIM)
         add_custom_target(exec_lesson_10_aot_compilation_generate
                           DEPENDS lesson_10_halide.h "${FILTER_LIB}")

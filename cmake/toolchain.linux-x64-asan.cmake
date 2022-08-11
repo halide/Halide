@@ -31,16 +31,5 @@ set(CMAKE_FIND_ROOT_PATH_MODE_PACKAGE ONLY)
 
 set(CMAKE_CROSSCOMPILING_EMULATOR /usr/bin/env)
 
-# If running under ASAN, we need to suppress some errors:
-# - detect_leaks, because circular Expr chains in Halide can indeed leak,
-#   but we don't care here
-# - detect_container_overflow, because this is a known false-positive
-#   if compiling with a non-ASAN build of LLVM (which is usually the case)
-set(SANITIZER_ENV_VARS "ASAN_OPTIONS=detect_leaks=0:detect_container_overflow=0")
-# set(SANITIZER_ENV_VARS "ASAN_OPTIONS=detect_leaks=0:detect_container_overflow=0;LD_PRELOAD=${LLVM_ROOT}/lib/clang/16.0.0/lib/x86_64-unknown-linux-gnu/libclang_rt.asan.so")
-
-# Work around bug where "cmake -E env $FOO" gives error if FOO is empty
-set(SANITIZER_SET_ENV_VARS env ${SANITIZER_ENV_VARS})
-
 # The bgu app requires too much stack space for ASAN
 set(ENABLE_APPS_BGU OFF)
