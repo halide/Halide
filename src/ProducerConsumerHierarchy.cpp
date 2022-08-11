@@ -1,4 +1,5 @@
 #include "ProducerConsumerHierarchy.h"
+#include "IROperator.h"
 #include "Module.h"
 
 using namespace std;
@@ -274,12 +275,58 @@ Stmt StmtSizes::visit(const For *op) {
         }
     }
 
+    else if (min.node_type() == IRNodeType::IntImm && extent.node_type() == IRNodeType::Add) {
+        int64_t minValue = min.as<IntImm>()->value;
+        string minName = int_span(minValue);
+        string extentName = "(";
+
+        // deal with a
+        if (extent.as<Add>()->a.node_type() == IRNodeType::IntImm) {
+            int64_t extentValue = extent.as<Add>()->a.as<IntImm>()->value;
+            extentName += int_span(extentValue);
+        } else if (extent.as<Add>()->a.node_type() == IRNodeType::Variable) {
+            extentName += string_span(extent.as<Add>()->a.as<Variable>()->name);
+        } else {
+            internal_error << "\n"
+                           << "In for loop: " << op->name << "\n"
+                           << print_node(extent.as<Add>()->a.get()) << "\n"
+                           << "StmtSizes::visit(const For *op): add->a isn't IntImm or Variable - "
+                              "can't generate ProdCons hierarchy yet. \n\n";
+        }
+
+        extentName += "+";
+
+        // deal with b
+        if (extent.as<Add>()->b.node_type() == IRNodeType::IntImm) {
+            int64_t extentValue = extent.as<Add>()->b.as<IntImm>()->value;
+            extentName += int_span(extentValue);
+        } else if (extent.as<Add>()->b.node_type() == IRNodeType::Variable) {
+            extentName += string_span(extent.as<Add>()->b.as<Variable>()->name);
+        } else {
+            internal_error << "\n"
+                           << "In for loop: " << op->name << "\n"
+                           << print_node(extent.as<Add>()->b.get()) << "\n"
+                           << "StmtSizes::visit(const For *op): add->b isn't IntImm or Variable - "
+                              "can't generate ProdCons hierarchy yet. \n\n";
+        }
+        extentName += ")";
+
+        if (minValue == 0) {
+            loopIterator = extentName;
+        } else {
+            loopIterator = "(" + extentName + " - " + minName + ")";
+        }
+
+    }
+
     else {
         internal_error
             << "\n"
+            << "In for loop: " << op->name << "\n"
             << print_node(op->min.get()) << "\n"
+            << print_node(op->extent.get()) << "\n"
             << "StmtSizes::visit(const For *op): min and extent are not of type (IntImm) "
-               "or (IntImm & Variable) - "
+               "or (IntImm & Variable) or (IntImm & Add) - "
                "can't generate ProdCons hierarchy yet. \n\n";
     }
 
@@ -332,13 +379,13 @@ Expr StmtSizes::visit(const Load *op) {
     }
 
     if (in_consumer(op->name)) {
+        // TODO: make sure this logic is right
         int lanes;
 
         if (op->index.as<Ramp>()) {
             lanes = op->index.as<Ramp>()->lanes;
         } else {
             lanes = int(op->type.lanes());
-            cout << op->name << ": lanes - " << lanes << endl;
         }
 
         add_load_value(op->name, lanes);
@@ -974,6 +1021,9 @@ Stmt ProducerConsumerHierarchy::visit(const IfThenElse *op) {
     StmtSize thenSize = pre_processor.get_size(op->then_case.get());
     StmtSize elseSize = pre_processor.get_size(op->else_case.get());
 
+    int numberNestedIfs = 0;
+    // int numExtraIfs = 0;
+
     // only start the if-tree if either case is not empty
     // (aka won't print if both cases are empty)
     // (we can't just exit early though because we have to go through all if-stmts to
@@ -990,10 +1040,13 @@ Stmt ProducerConsumerHierarchy::visit(const IfThenElse *op) {
     }
 
     stringstream ifHeader;
-    ifHeader << "if";
+    ifHeader << "if ";
 
     while (true) {
 
+        numberNestedIfs++;
+
+        // anchor name
         ifCount++;
         string anchorName = "if" + std::to_string(ifCount);
 
@@ -1023,7 +1076,18 @@ Stmt ProducerConsumerHierarchy::visit(const IfThenElse *op) {
         if (const IfThenElse *nested_if = op->else_case.as<IfThenElse>()) {
             op = nested_if;
             ifHeader.str("");
-            ifHeader << "else if";
+            ifHeader << "else if ";
+
+            // create a new set of trees if there have been more than 3 nested ifs
+            // if (numberNestedIfs > 3) {
+
+            //     html << "<li><span class=\\'tf-nc if-node\\'>";
+            //     html << "else";
+            //     html << "</span>";
+            //     html << "<ul>";
+            //     numberNestedIfs = 0;
+            //     numExtraIfs++;
+            // }
         }
 
         // if else case is not another ifthenelse
@@ -1032,7 +1096,7 @@ Stmt ProducerConsumerHierarchy::visit(const IfThenElse *op) {
 
             if (!elseSize.empty()) {
                 stringstream elseHeader;
-                elseHeader << "else";
+                elseHeader << "else ";
                 if_tree(op->else_case.get(), elseHeader.str(), elseSize);
 
                 open_table_row();
@@ -1047,6 +1111,12 @@ Stmt ProducerConsumerHierarchy::visit(const IfThenElse *op) {
         }
     }
 
+    // close all extra ifs
+    // for (int i = 0; i < numExtraIfs; i++) {
+    //     html << "</ul>";
+    //     html << "</li>";
+    // }
+
     // close main if tree
     html << "</ul>";
     html << "</li>";
@@ -1057,7 +1127,7 @@ Stmt ProducerConsumerHierarchy::visit(const IfThenElse *op) {
 }
 
 Stmt ProducerConsumerHierarchy::visit(const Store *op) {
-    StmtSize size;
+    StmtSize size = pre_processor.get_size(op);
 
     storeCount++;
     string anchorName = "store" + std::to_string(storeCount);
@@ -1085,8 +1155,17 @@ Stmt ProducerConsumerHierarchy::visit(const Store *op) {
     return op;
 }
 Expr ProducerConsumerHierarchy::visit(const Load *op) {
+    int lanes;
+
+    // TODO: make sure this is right
+    if (op->index.as<Ramp>()) {
+        lanes = op->index.as<Ramp>()->lanes;
+    } else {
+        lanes = int(op->type.lanes());
+    }
+
     stringstream header;
-    header << "Load " << op->name;
+    header << "Load " << op->name << " (" << lanes << ")";
 
     open_table_row();
     open_table_data();
@@ -1111,6 +1190,19 @@ Stmt ProducerConsumerHierarchy::visit(const Allocate *op) {
     stringstream header;
     header << "Allocate " << op->name;
     header << " [" << allocationSize << "]";
+
+    // TODO: make sure this is right
+    if (!is_const_one(op->condition)) {
+        header << " if " << op->condition;
+    }
+    if (op->new_expr.defined()) {
+        internal_error << "\n"
+                       << "ProducerConsumerHierarchy: Allocate " << op->name
+                       << " `op->new_expr.defined()` is not supported.\n\n";
+    }
+    if (!op->free_function.empty()) {
+        header << " custom_delete {" << op->free_function << "}";
+    }
 
     open_table_row();
     table_header(op, header.str(), size, anchorName);
