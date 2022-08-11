@@ -7,7 +7,7 @@
   },
   "configurePresets": [
     {
-      "name": "default",
+      "name": "base",
       "hidden": true,
       "binaryDir": "build/${presetName}",
       "installDir": "install/${presetName}"
@@ -38,7 +38,7 @@
     },
     {
       "name": "debug",
-      "inherits": "default",
+      "inherits": "base",
       "displayName": "Debug",
       "description": "Debug build with no special settings",
       "cacheVariables": {
@@ -47,7 +47,7 @@
     },
     {
       "name": "release",
-      "inherits": "default",
+      "inherits": "base",
       "displayName": "Release",
       "description": "Release build with no special settings",
       "cacheVariables": {
@@ -76,7 +76,7 @@
       "name": "win32",
       "inherits": [
         "vs2019",
-        "default"
+        "base"
       ],
       "displayName": "Win32 (Visual Studio)",
       "description": "Visual Studio-based Win32 build with vcpkg dependencies.",
@@ -86,7 +86,7 @@
       "name": "win64",
       "inherits": [
         "vs2019",
-        "default"
+        "base"
       ],
       "displayName": "Win64 (Visual Studio)",
       "description": "Visual Studio-based x64 build with vcpkg dependencies.",
@@ -144,6 +144,40 @@
       "cacheVariables": {
         "BUILD_SHARED_LIBS": "NO",
         "Halide_BUNDLE_LLVM": "YES"
+      }
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "debug",
+      "configurePreset": "debug",
+      "displayName": "Debug",
+      "description": "Debug build with no special settings"
+    },
+    {
+      "name": "release",
+      "configurePreset": "release",
+      "displayName": "Release",
+      "description": "Release build with no special settings"
+    }
+  ],
+  "testPresets": [
+    {
+      "name": "debug",
+      "configurePreset": "debug",
+      "displayName": "Debug",
+      "description": "Test everything with Debug build",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "release",
+      "configurePreset": "release",
+      "displayName": "Release",
+      "description": "Test everything with Release build",
+      "output": {
+        "outputOnFailure": true
       }
     }
   ]
