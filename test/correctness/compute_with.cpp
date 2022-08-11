@@ -1,5 +1,6 @@
 #include "Halide.h"
 #include "check_call_graphs.h"
+#include "test_sharding.h"
 
 #include <cstdio>
 #include <map>
@@ -2206,152 +2207,58 @@ int two_compute_at_test() {
 }  // namespace
 
 int main(int argc, char **argv) {
-    printf("Running split reorder test\n");
-    if (split_test() != 0) {
-        return -1;
-    }
+    struct Task {
+        std::string desc;
+        std::function<int()> fn;
+    };
 
-    printf("Running fuse test\n");
-    if (fuse_test() != 0) {
-        return -1;
-    }
+    std::vector<Task> tasks = {
+        {"split reorder test", split_test},
+        {"fuse test", fuse_test},
+        {"multiple fuse group test", multiple_fuse_group_test},
+        {"multiple outputs test", multiple_outputs_test},
+        {"double split fuse test", double_split_fuse_test},
+        {"vectorize test", vectorize_test},
+        //
+        // Note: we are deprecating skipping parts of a fused group in favor of
+        //       cloning funcs in particular stages via a new (clone_)in overload.
+        // TODO: remove this code when the new clone_in is implemented.
+        //
+        // {"some are skipped test", some_are_skipped_test},
+        {"rgb to yuv420 test", rgb_yuv420_test},
+        {"with specialization test", with_specialization_test},
+        {"fuse compute at test", fuse_compute_at_test},
+        {"nested compute with test", nested_compute_with_test},
+        {"mixed tile factor test", mixed_tile_factor_test},
+        // NOTE: disabled because it generates OOB (see #4751 for discussion).
+        // {"only some are tiled test", only_some_are_tiled_test},
+        {"multiple outputs on gpu test", multiple_outputs_on_gpu_test},
+        {"multi tile mixed tile factor test", multi_tile_mixed_tile_factor_test},
+        {"update stage test", update_stage_test},
+        {"update stage2 test", update_stage2_test},
+        {"update stage3 test", update_stage3_test},
+        {"update stage pairwise test", update_stage_pairwise_test},
+        // I think this should work, but there is an overzealous check somewhere.
+        // {"update stage pairwise zigzag test", update_stage_pairwise_zigzag_test},
+        {"update stage diagonal test", update_stage_diagonal_test},
+        {"update stage rfactor test", update_stage_rfactor_test},
+        {"vectorize inlined test", vectorize_inlined_test},
+        {"mismatching splits test", mismatching_splits_test},
+        {"different arg number compute_at test", different_arg_num_compute_at_test},
+        {"store_at different levels test", store_at_different_levels_test},
+        {"rvar bounds test", rvar_bounds_test},
+        {"two_compute_at test", two_compute_at_test},
+    };
 
-    printf("Running multiple fuse group test\n");
-    if (multiple_fuse_group_test() != 0) {
-        return -1;
-    }
-
-    printf("Running multiple outputs test\n");
-    if (multiple_outputs_test() != 0) {
-        return -1;
-    }
-
-    printf("Running double split fuse test\n");
-    if (double_split_fuse_test() != 0) {
-        return -1;
-    }
-
-    printf("Running vectorize test\n");
-    if (vectorize_test() != 0) {
-        return -1;
-    }
-
-    /*
-     * Note: we are deprecating skipping parts of a fused group in favor of
-     *       cloning funcs in particular stages via a new (clone_)in overload.
-     * TODO: remove this code when the new clone_in is implemented.
-     */
-    //    printf("Running some are skipped test\n");
-    //    if (some_are_skipped_test() != 0) {
-    //        return -1;
-    //    }
-
-    printf("Running rgb to yuv420 test\n");
-    if (rgb_yuv420_test() != 0) {
-        return -1;
-    }
-
-    printf("Running with specialization test\n");
-    if (with_specialization_test() != 0) {
-        return -1;
-    }
-
-    printf("Running fuse compute at test\n");
-    if (fuse_compute_at_test() != 0) {
-        return -1;
-    }
-
-    printf("Running nested compute with test\n");
-    if (nested_compute_with_test() != 0) {
-        return -1;
-    }
-
-    printf("Running mixed tile factor test\n");
-    if (mixed_tile_factor_test() != 0) {
-        return -1;
-    }
-
-    // NOTE: disabled because it generates OOB (see #4751 for discussion).
-    /*
-    printf("Running only some are tiled test\n");
-    if (only_some_are_tiled_test() != 0) {
-        return -1;
-    }
-    */
-    printf("Running multiple outputs on gpu test\n");
-    if (multiple_outputs_on_gpu_test() != 0) {
-        return -1;
-    }
-
-    printf("Running multi tile mixed tile factor test\n");
-    if (multi_tile_mixed_tile_factor_test() != 0) {
-        return -1;
-    }
-
-    printf("Running update stage test\n");
-    if (update_stage_test() != 0) {
-        return -1;
-    }
-
-    printf("Running update stage2 test\n");
-    if (update_stage2_test() != 0) {
-        return -1;
-    }
-
-    printf("Running update stage3 test\n");
-    if (update_stage3_test() != 0) {
-        return -1;
-    }
-
-    printf("Running update stage pairwise test\n");
-    if (update_stage_pairwise_test() != 0) {
-        return -1;
-    }
-
-    // I think this should work, but there is an overzealous check somewhere.
-    // printf("Running update stage pairwise zigzag test\n");
-    // if (update_stage_pairwise_zigzag_test() != 0) {
-    //     return -1;
-    // }
-
-    printf("Running update stage diagonal test\n");
-    if (update_stage_diagonal_test() != 0) {
-        return -1;
-    }
-
-    printf("Running update stage rfactor test\n");
-    if (update_stage_rfactor_test() != 0) {
-        return -1;
-    }
-
-    printf("Running vectorize inlined test\n");
-    if (vectorize_inlined_test() != 0) {
-        return -1;
-    }
-
-    printf("Running mismatching splits test\n");
-    if (mismatching_splits_test() != 0) {
-        return -1;
-    }
-
-    printf("Running different arg number compute_at test\n");
-    if (different_arg_num_compute_at_test() != 0) {
-        return -1;
-    }
-
-    printf("Running store_at different levels test\n");
-    if (store_at_different_levels_test() != 0) {
-        return -1;
-    }
-
-    printf("Running rvar bounds test\n");
-    if (rvar_bounds_test() != 0) {
-        return -1;
-    }
-
-    printf("Running two_compute_at test\n");
-    if (two_compute_at_test() != 0) {
-        return -1;
+    using Sharder = Halide::Internal::Test::Sharder;
+    Sharder sharder;
+    for (size_t t = 0; t < tasks.size(); t++) {
+        if (!sharder.should_run(t)) continue;
+        const auto &task = tasks.at(t);
+        std::cout << task.desc << "\n";
+        if (task.fn() != 0) {
+            return -1;
+        }
     }
 
     printf("Success!\n");

@@ -1842,7 +1842,9 @@ void wasm_jit_malloc_callback(const v8::FunctionCallbackInfo<v8::Value> &args) {
 
     size_t size = args[0]->Int32Value(context).ToChecked() + kExtraMallocSlop;
     wasm32_ptr_t p = v8_WasmMemoryObject_malloc(context, size);
-    if (p) { p += kExtraMallocSlop; }
+    if (p) {
+        p += kExtraMallocSlop;
+    }
     args.GetReturnValue().Set(load_scalar(context, p));
 }
 
@@ -1851,7 +1853,9 @@ void wasm_jit_free_callback(const v8::FunctionCallbackInfo<v8::Value> &args) {
     HandleScope scope(isolate);
     Local<Context> context = isolate->GetCurrentContext();
     wasm32_ptr_t p = args[0]->Int32Value(context).ToChecked();
-    if (p) { p -= kExtraMallocSlop; }
+    if (p) {
+        p -= kExtraMallocSlop;
+    }
     v8_WasmMemoryObject_free(context, p);
 }
 
@@ -2116,7 +2120,7 @@ void add_extern_callbacks(const Local<Context> &context,
             continue;
         }
 
-        TrampolineFn trampoline_fn;
+        TrampolineFn trampoline_fn = nullptr;
         std::vector<ExternArgType> arg_types;
         if (!build_extern_arg_types(fn_name, jit_externs, trampolines, trampoline_fn, arg_types)) {
             internal_error << "Missing fn_name " << fn_name;
@@ -2280,7 +2284,7 @@ struct WasmModuleContents {
         const std::map<std::string, Halide::JITExtern> &jit_externs,
         const std::vector<JITModule> &extern_deps);
 
-    int run(const void **args);
+    int run(const void *const *args);
 
     ~WasmModuleContents() = default;
 };
@@ -2517,7 +2521,7 @@ WasmModuleContents::WasmModuleContents(
 #endif
 }
 
-int WasmModuleContents::run(const void **args) {
+int WasmModuleContents::run(const void *const *args) {
 #if WITH_WABT
     const auto &module_desc = module->desc();
 
@@ -2726,7 +2730,7 @@ WasmModule WasmModule::compile(
 }
 
 /** Run generated previously compiled wasm code with a set of arguments. */
-int WasmModule::run(const void **args) {
+int WasmModule::run(const void *const *args) {
     internal_assert(contents.defined());
     return contents->run(args);
 }

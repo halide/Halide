@@ -24,14 +24,8 @@ class CheckForFloatDivision : public IRMutator {
 
 // A mutator that injects code that counts floating point multiplies,
 // and an extern function that it calls out to for the accounting.
-#ifdef _WIN32
-#define DLLEXPORT __declspec(dllexport)
-#else
-#define DLLEXPORT
-#endif
-
 int multiply_count = 0;
-extern "C" DLLEXPORT float record_float_mul(float arg) {
+extern "C" HALIDE_EXPORT_SYMBOL float record_float_mul(float arg) {
     multiply_count++;
     return arg;
 }

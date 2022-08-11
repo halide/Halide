@@ -50,6 +50,11 @@ struct Target {
     /** The bit-width of the target machine. Must be 0 for unknown, or 32 or 64. */
     int bits = 0;
 
+    /** The bit-width of a vector register for targets where this is configurable and
+     * targeting a fixed size is desired. The default of 0 indicates no assumption of
+     * fixed size is allowed. */
+    int vector_bits = 0;
+
     /** The specific processor to be targeted, tuned for.
      * Corresponds to processor_name_map in Target.cpp.
      *
@@ -138,6 +143,9 @@ struct Target {
         CheckUnsafePromises = halide_target_feature_check_unsafe_promises,
         EmbedBitcode = halide_target_feature_embed_bitcode,
         EnableLLVMLoopOpt = halide_target_feature_enable_llvm_loop_opt,
+        // halide_target_feature_disable_llvm_loop_opt is deprecated in Halide 15
+        // (and will be removed in Halide 16). Halide 15 now defaults to disabling
+        // LLVM loop optimization, unless halide_target_feature_enable_llvm_loop_opt is set.
         DisableLLVMLoopOpt = halide_target_feature_disable_llvm_loop_opt,
         WasmSimd128 = halide_target_feature_wasm_simd128,
         WasmSignExt = halide_target_feature_wasm_signext,
@@ -153,11 +161,13 @@ struct Target {
         ARMv81a = halide_target_feature_armv81a,
         SanitizerCoverage = halide_target_feature_sanitizer_coverage,
         ProfileByTimer = halide_target_feature_profile_by_timer,
+        SPIRV = halide_target_feature_spirv,
         FeatureEnd = halide_target_feature_end
     };
     Target() = default;
-    Target(OS o, Arch a, int b, Processor pt, const std::vector<Feature> &initial_features = std::vector<Feature>())
-        : os(o), arch(a), bits(b), processor_tune(pt) {
+    Target(OS o, Arch a, int b, Processor pt, const std::vector<Feature> &initial_features = std::vector<Feature>(),
+           int vb = 0)
+        : os(o), arch(a), bits(b), vector_bits(vb), processor_tune(pt) {
         for (const auto &f : initial_features) {
             set_feature(f);
         }

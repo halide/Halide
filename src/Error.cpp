@@ -33,8 +33,48 @@ bool exceptions_enabled() {
 #endif
 }
 
+Error::Error(const char *msg)
+    : what_(new char[strlen(msg) + 1]) {
+    strcpy(what_, msg);
+}
+
 Error::Error(const std::string &msg)
-    : std::runtime_error(msg) {
+    : Error(msg.c_str()) {
+}
+
+Error::Error(const Error &that)
+    : Error(that.what_) {
+}
+
+Error &Error::operator=(const Error &that) {
+    if (this != &that) {
+        delete[] this->what_;
+        this->what_ = new char[strlen(that.what_) + 1];
+        strcpy(this->what_, that.what_);
+    }
+    return *this;
+}
+
+Error::Error(Error &&that) noexcept {
+    this->what_ = that.what_;
+    that.what_ = nullptr;
+}
+
+Error &Error::operator=(Error &&that) noexcept {
+    if (this != &that) {
+        delete[] this->what_;
+        this->what_ = that.what_;
+        that.what_ = nullptr;
+    }
+    return *this;
+}
+
+Error::~Error() {
+    delete[] what_;
+}
+
+const char *Error::what() const noexcept {
+    return what_;
 }
 
 CompileError::CompileError(const std::string &msg)
@@ -46,6 +86,18 @@ RuntimeError::RuntimeError(const std::string &msg)
 }
 
 InternalError::InternalError(const std::string &msg)
+    : Error(msg) {
+}
+
+CompileError::CompileError(const char *msg)
+    : Error(msg) {
+}
+
+RuntimeError::RuntimeError(const char *msg)
+    : Error(msg) {
+}
+
+InternalError::InternalError(const char *msg)
     : Error(msg) {
 }
 
@@ -96,11 +148,7 @@ ErrorReport::ErrorReport(const char *file, int line, const char *condition_strin
     }
 }
 
-ErrorReport::~ErrorReport()
-#if __cplusplus >= 201100 || _MSC_VER >= 1900
-    noexcept(false)
-#endif
-{
+ErrorReport::~ErrorReport() noexcept(false) {
     if (!msg.str().empty() && msg.str().back() != '\n') {
         msg << "\n";
     }

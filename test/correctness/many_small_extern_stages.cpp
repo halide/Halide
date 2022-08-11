@@ -1,19 +1,13 @@
 #include "Halide.h"
 #include <stdio.h>
 
-#ifdef _WIN32
-#define DLLEXPORT __declspec(dllexport)
-#else
-#define DLLEXPORT
-#endif
-
 void dump_buffer_shape(halide_buffer_t *b) {
     for (int i = 0; i < b->dimensions; i++) {
         printf(" %d %d %d\n", b->dim[i].min, b->dim[i].extent, b->dim[i].stride);
     }
 }
 
-extern "C" DLLEXPORT int copy(halide_buffer_t *in, halide_buffer_t *out) {
+extern "C" HALIDE_EXPORT_SYMBOL int copy(halide_buffer_t *in, halide_buffer_t *out) {
 
     /*
     printf("out:\n");

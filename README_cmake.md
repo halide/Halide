@@ -46,7 +46,7 @@ we strongly suggest reading through the [CMake documentation][cmake-docs] first.
 
 ## Installing CMake
 
-Halide requires at least version 3.16, which was released in November 2019.
+Halide requires at least version 3.22, which was released in November 2021.
 Fortunately, getting a recent version of CMake couldn't be easier, and there are
 multiple good options on any system to do so. Generally, one should always have
 the most recent version of CMake installed system-wide. CMake is committed to
@@ -95,8 +95,8 @@ is also a viable option.
 
 There are a few good ways to install a modern CMake on Ubuntu:
 
-1. If you're on Ubuntu Linux 20.04 (focal), then simply running
-   `sudo apt install cmake` will get you CMake 3.16.
+1. If you're on Ubuntu Linux 22.04 (Jammy Jellyfish), then simply running
+   `sudo apt install cmake` will get you CMake 3.22.
 2. If you are on an older Ubuntu release or would like to use the newest CMake,
    try installing via the snap store: `snap install cmake`. Be sure you do not
    already have `cmake` installed via APT. The snap package automatically stays
@@ -311,24 +311,20 @@ standard types: `Debug`, `RelWithDebInfo`, `MinSizeRel`, or `Release`.
 
 ### CMake Presets
 
-If you are using CMake 3.19+, we provide several [presets][cmake_presets] to
+If you are using CMake 3.21+, we provide several [presets][cmake_presets] to
 make the above commands more convenient. The following CMake preset commands
 correspond to the longer ones above.
 
 ```
-> cmake --preset=msvc-release  # Ninja generator, MSVC compiler, Release build
-> cmake --preset=win64         # VS 2019 generator, 64-bit build
-> cmake --preset=win32         # VS 2019 generator, 32-bit build
-$ cmake --preset=gcc-release   # Ninja generator, GCC compiler, Release build
+> cmake --preset=win64    # VS 2019 generator, 64-bit build, vcpkg deps
+> cmake --preset=win32    # VS 2019 generator, 32-bit build, vcpkg deps
+> cmake --preset=release  # Release mode, any single-config generator / compiler
 
-$ cmake --list-presets         # Get full list of presets.
+$ cmake --list-presets    # Get full list of presets.
 ```
 
-The Windows and MSVC presets assume that the environment variable `VCPKG_ROOT`
-is set and points to the root of the vcpkg installation.
-
-Note that the GCC presets do not define `NDEBUG` in release configurations,
-departing from the usual CMake behavior.
+The Windows presets assume that the environment variable `VCPKG_ROOT` is set and
+points to the root of the vcpkg installation.
 
 ## Installing
 
@@ -374,7 +370,7 @@ Halide's own CI infrastructure, or as escape hatches for third-party packagers.
 |-----------------------------|--------------------------------------------------------------------|------------------------------------------------------------------------------------------|
 | `Halide_CLANG_TIDY_BUILD`   | `OFF`                                                              | Used internally to generate fake compile jobs for runtime files when running clang-tidy. |
 | `Halide_CCACHE_BUILD`       | `OFF`                                                              | Use ccache with Halide-recommended settings to accelerate rebuilds.                      |
-| `Halide_CCACHE_PARAMS`      | `CCACHE_CPP2=yes CCACHE_HASHDIR=yes CCACHE_SLOPPINESS=pch_defines` | Options to pass to `ccache` when using `Halide_CCACHE_BUILD`.                            | 
+| `Halide_CCACHE_PARAMS`      | `CCACHE_CPP2=yes CCACHE_HASHDIR=yes CCACHE_SLOPPINESS=pch_defines` | Options to pass to `ccache` when using `Halide_CCACHE_BUILD`.                            |
 | `Halide_SOVERSION_OVERRIDE` | `${Halide_VERSION_MAJOR}`                                          | Override the SOVERSION for libHalide. Expects a positive integer (i.e. not a version).   |
 
 The following options are only available when building Halide directly, ie. not
@@ -546,7 +542,7 @@ No matter how you intend to use Halide, you will need some basic CMake
 boilerplate.
 
 ```cmake
-cmake_minimum_required(VERSION 3.16)
+cmake_minimum_required(VERSION 3.22)
 project(HalideExample)
 
 set(CMAKE_CXX_STANDARD 17)  # or newer
@@ -681,8 +677,7 @@ autoscheduler:
 
 ```cmake
 add_halide_library(my_second_generator FROM my_generators
-                   AUTOSCHEDULER Halide::Adams2019
-                   PARAMS auto_schedule=true)
+                   AUTOSCHEDULER Halide::Adams2019)
 ```
 
 ### RunGenMain
@@ -784,12 +779,12 @@ Halide defines the following targets that are available to users:
 
 The following targets are not guaranteed to be available:
 
-| Imported target         | Description                                                                                                                              |
-|-------------------------|------------------------------------------------------------------------------------------------------------------------------------------|
-| `Halide::Python`        | this is a Python 3 module that can be referenced as `$<TARGET_FILE:Halide::Python>` when setting up Python tests or the like from CMake. |
-| `Halide::Adams19`       | the Adams et.al. 2019 autoscheduler (no GPU support)                                                                                     |
-| `Halide::Li18`          | the Li et.al. 2018 gradient autoscheduler (limited GPU support)                                                                          |
-| `Halide::Mullapudi2016` | the Mullapudi et.al. 2016 autoscheduler (no GPU support)                                                                                 |
+| Imported target         | Description                                                                                                                                                       |
+|-------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `Halide::Python`        | this is a Python 3 package that can be referenced as `$<TARGET_FILE_DIR:Halide::Python>/..` when setting up `PYTHONPATH` for Python tests or the like from CMake. |
+| `Halide::Adams19`       | the Adams et.al. 2019 autoscheduler (no GPU support)                                                                                                              |
+| `Halide::Li18`          | the Li et.al. 2018 gradient autoscheduler (limited GPU support)                                                                                                   |
+| `Halide::Mullapudi2016` | the Mullapudi et.al. 2016 autoscheduler (no GPU support)                                                                                                          |
 
 ### Functions
 
@@ -862,9 +857,9 @@ being created. When `TARGETS` is empty and the `host` target would not
 cross-compile, then `host` will be used. Otherwise, `cmake` will be used and an
 author warning will be issued.
 
-To set the default autoscheduler, set the `AUTOSCHEDULER` argument to a target
+To use an autoscheduler, set the `AUTOSCHEDULER` argument to a target
 named like `Namespace::Scheduler`, for example `Halide::Adams19`. This will set
-the `-s` flag on the generator command line to `Scheduler` and add the target to
+the `autoscheduler` GeneratorParam on the generator command line to `Scheduler` and add the target to
 the list of plugins. Additional plugins can be loaded by setting the `PLUGINS`
 argument. If the argument to `AUTOSCHEDULER` does not contain `::` or it does
 not name a target, it will be passed to the `-s` flag verbatim.
@@ -977,7 +972,7 @@ would call `add_halide_library` with no `TARGETS` option and set `FROM` equal to
 the name of the imported generator executable. Obviously, this is a significant
 increase in complexity over a typical CMake project.
 
-This is very compatible with the `add_halide_generator` strategy above. 
+This is very compatible with the `add_halide_generator` strategy above.
 
 ### Use `ExternalProject` directly
 
@@ -1014,7 +1009,7 @@ using [`install(FILES)`][install-files] and the
 # Contributing CMake code to Halide
 
 When contributing new CMake code to Halide, keep in mind that the minimum
-version is 3.16. Therefore, it is possible (and indeed required) to use modern
+version is 3.22. Therefore, it is possible (and indeed required) to use modern
 CMake best practices.
 
 Like any large and complex system with a dedication to preserving backwards

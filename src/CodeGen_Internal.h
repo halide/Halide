@@ -37,12 +37,14 @@ struct Target;
 
 namespace Internal {
 
-/** Get the llvm type equivalent to a given halide type */
-llvm::Type *llvm_type_of(llvm::LLVMContext *context, Halide::Type t);
-
-/** Get the number of elements in an llvm vector type, or return 1 if
- * it's not a vector type. */
-int get_vector_num_elements(llvm::Type *);
+/** Get the llvm type equivalent to a given halide type. If
+ * effective_vscale is nonzero and the type is a vector type with lanes
+ * a multiple of effective_vscale, a scalable vector type is generated
+ * with total lanes divided by effective_vscale. That is a scalable
+ * vector intended to be used with a fixed vscale of effective_vscale.
+ */
+llvm::Type *llvm_type_of(llvm::LLVMContext *context, Halide::Type t,
+                         int effective_vscale);
 
 /** Get the scalar type of an llvm vector type. Returns the argument
  * if it's not a vector type. */
@@ -50,7 +52,7 @@ llvm::Type *get_vector_element_type(llvm::Type *);
 
 llvm::ElementCount element_count(int e);
 
-llvm::Type *get_vector_type(llvm::Type *, int);
+llvm::Type *get_vector_type(llvm::Type *, int n, bool scalable = false);
 
 /** Which built-in functions require a user-context first argument? */
 bool function_takes_user_context(const std::string &name);
@@ -92,8 +94,8 @@ Expr lower_signed_shift_right(const Expr &a, const Expr &b);
 /** Reduce a mux intrinsic to a select tree */
 Expr lower_mux(const Call *mux);
 
-/** Given an llvm::Module, set llvm:TargetOptions, cpu and attr information */
-void get_target_options(const llvm::Module &module, llvm::TargetOptions &options, std::string &mcpu, std::string &mattrs);
+/** Given an llvm::Module, set llvm:TargetOptions information */
+void get_target_options(const llvm::Module &module, llvm::TargetOptions &options);
 
 /** Given two llvm::Modules, clone target options from one to the other */
 void clone_target_options(const llvm::Module &from, llvm::Module &to);
@@ -101,8 +103,8 @@ void clone_target_options(const llvm::Module &from, llvm::Module &to);
 /** Given an llvm::Module, get or create an llvm:TargetMachine */
 std::unique_ptr<llvm::TargetMachine> make_target_machine(const llvm::Module &module);
 
-/** Set the appropriate llvm Function attributes given a Target. */
-void set_function_attributes_for_target(llvm::Function *, const Target &);
+/** Set the appropriate llvm Function attributes given the Halide Target. */
+void set_function_attributes_from_halide_target_options(llvm::Function &);
 
 /** Save a copy of the llvm IR currently represented by the module as
  * data in the __LLVM,__bitcode section. Emulates clang's

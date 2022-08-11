@@ -80,7 +80,7 @@ public:
         blury.set_estimate(z, 0, 12);
         bilateral_grid.set_estimates({{0, 1536}, {0, 2560}});
 
-        if (auto_schedule) {
+        if (using_autoscheduler()) {
             // nothing
         } else if (get_target().has_gpu_feature()) {
             // 0.50ms on an RTX 2060

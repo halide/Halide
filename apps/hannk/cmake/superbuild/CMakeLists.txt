@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.16...3.21)
+cmake_minimum_required(VERSION 3.22...3.23)
 project(hannk_superbuild LANGUAGES NONE)
 
 ##

@@ -715,6 +715,19 @@ public:
     /** Declare a new undefined function with the given name */
     explicit Func(const std::string &name);
 
+    /** Declare a new undefined function with the given name.
+     * The function will be constrained to represent Exprs of required_type.
+     * If required_dims is not AnyDims, the function will be constrained to exactly
+     * that many dimensions. */
+    explicit Func(const Type &required_type, int required_dims, const std::string &name);
+
+    /** Declare a new undefined function with the given name.
+     * If required_types is not empty, the function will be constrained to represent
+     * Tuples of the same arity and types. (If required_types is empty, there is no constraint.)
+     * If required_dims is not AnyDims, the function will be constrained to exactly
+     * that many dimensions. */
+    explicit Func(const std::vector<Type> &required_types, int required_dims, const std::string &name);
+
     /** Declare a new undefined function with an
      * automatically-generated unique name */
     Func();
@@ -1042,6 +1055,14 @@ public:
      * next time this Func is realized. */
     JITHandlers &jit_handlers();
 
+    /** Eagerly jit compile the function to machine code and return a callable
+     * struct that behaves like a function pointer. The calling convention
+     * will exactly match that of an AOT-compiled version of this Func
+     * with the same Argument list.
+     */
+    Callable compile_to_callable(const std::vector<Argument> &args,
+                                 const Target &target = get_jit_target_from_environment());
+
     /** Add a custom pass to be used during lowering. It is run after
      * all other lowering passes. Can be used to verify properties of
      * the lowered Stmt, instrument it with extra code, or otherwise
@@ -1190,22 +1211,42 @@ public:
                        DeviceAPI device_api = DeviceAPI::Host);
     // @}
 
-    /** Get the types of the outputs of this Func. */
+    /** Get the type(s) of the outputs of this Func.
+     *
+     * It is not legal to call type() unless the Func has non-Tuple elements.
+     *
+     * If the Func isn't yet defined, and was not specified with required types,
+     * a runtime error will occur.
+     *
+     * If the Func isn't yet defined, but *was* specified with required types,
+     * the requirements will be returned. */
     // @{
-    const Type &output_type() const;
-    const std::vector<Type> &output_types() const;
+    const Type &type() const;
+    const std::vector<Type> &types() const;
     // @}
 
+    HALIDE_ATTRIBUTE_DEPRECATED("Func::output_type() is deprecated; use Func::type() instead.")
+    const Type &output_type() const {
+        return type();
+    }
+    HALIDE_ATTRIBUTE_DEPRECATED("Func::output_types() is deprecated; use Func::types() instead.")
+    const std::vector<Type> &output_types() const {
+        return types();
+    }
+
     /** Get the number of outputs of this Func. Corresponds to the
-     * size of the Tuple this Func was defined to return. */
+     * size of the Tuple this Func was defined to return.
+     * If the Func isn't yet defined, but was specified with required types,
+     * the number of outputs specified in the requirements will be returned. */
     int outputs() const;
 
     /** Get the name of the extern function called for an extern
      * definition. */
     const std::string &extern_function_name() const;
 
-    /** The dimensionality (number of arguments) of this
-     * function. Zero if the function is not yet defined. */
+    /** The dimensionality (number of arguments) of this function.
+     * If the Func isn't yet defined, but was specified with required dimensionality,
+     * the dimensionality specified in the requirements will be returned. */
     int dimensions() const;
 
     /** Construct either the left-hand-side of a definition, or a call
@@ -1400,7 +1441,7 @@ public:
      * factor does not provably divide the extent. */
     Func &split(const VarOrRVar &old, const VarOrRVar &outer, const VarOrRVar &inner, const Expr &factor, TailStrategy tail = TailStrategy::Auto);
 
-    /** Join two dimensions into a single fused dimenion. The fused
+    /** Join two dimensions into a single fused dimension. The fused
      * dimension covers the product of the extents of the inner and
      * outer dimensions given. */
     Func &fuse(const VarOrRVar &inner, const VarOrRVar &outer, const VarOrRVar &fused);

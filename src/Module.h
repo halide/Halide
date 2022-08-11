@@ -13,7 +13,9 @@
 
 #include "Argument.h"
 #include "Expr.h"
+#ifdef HALIDE_ALLOW_GENERATOR_EXTERNAL_CODE
 #include "ExternalCode.h"
+#endif
 #include "Function.h"  // for NameMangling
 #include "ModulusRemainder.h"
 
@@ -131,6 +133,8 @@ class CompilerLogger;
 
 struct AutoSchedulerResults;
 
+using MetadataNameMap = std::map<std::string, std::string>;
+
 /** A halide module. This represents IR containing lowered function
  * definitions and buffers. */
 class Module {
@@ -159,7 +163,9 @@ public:
     const std::vector<Internal::LoweredFunc> &functions() const;
     std::vector<Internal::LoweredFunc> &functions();
     const std::vector<Module> &submodules() const;
+#ifdef HALIDE_ALLOW_GENERATOR_EXTERNAL_CODE
     const std::vector<ExternalCode> &external_code() const;
+#endif
     // @}
 
     /** Return the function with the given name. If no such function
@@ -171,7 +177,9 @@ public:
     void append(const Buffer<void> &buffer);
     void append(const Internal::LoweredFunc &function);
     void append(const Module &module);
+#ifdef HALIDE_ALLOW_GENERATOR_EXTERNAL_CODE
     void append(const ExternalCode &external_code);
+#endif
     // @}
 
     /** Compile a halide Module to variety of outputs, depending on
@@ -192,7 +200,7 @@ public:
     void remap_metadata_name(const std::string &from, const std::string &to) const;
 
     /** Retrieve the metadata name map. */
-    std::map<std::string, std::string> get_metadata_name_map() const;
+    MetadataNameMap get_metadata_name_map() const;
 
     /** Set the AutoSchedulerResults for the Module. It is an error to call this
      * multiple times for a given Module. */

@@ -11,13 +11,7 @@ using namespace Halide::Tools;
 
 std::atomic<int32_t> call_count{0};
 
-#ifdef _WIN32
-#define DLLEXPORT __declspec(dllexport)
-#else
-#define DLLEXPORT
-#endif
-
-extern "C" DLLEXPORT int five_ms(int arg) {
+extern "C" HALIDE_EXPORT_SYMBOL int five_ms(int arg) {
     call_count++;
     std::this_thread::sleep_for(std::chrono::milliseconds(5));
     return arg;

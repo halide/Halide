@@ -69,10 +69,11 @@ class SplitTuples : public IRMutator {
         if (op->types.size() > 1) {
             // Make a nested set of realize nodes for each tuple element
             Stmt body = mutate(op->body);
+            Expr condition = mutate(op->condition);
             for (int i = (int)op->types.size() - 1; i >= 0; i--) {
                 body = Realize::make(op->name + "." + std::to_string(i),
                                      {op->types[i]}, op->memory_type,
-                                     op->bounds, op->condition, body);
+                                     op->bounds, condition, body);
             }
             return body;
         } else {

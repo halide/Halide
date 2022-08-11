@@ -20,6 +20,22 @@ Expr Cast::make(Type t, Expr v) {
     return node;
 }
 
+Expr Reinterpret::make(Type t, Expr v) {
+    user_assert(v.defined()) << "reinterpret of undefined Expr\n";
+    int from_bits = v.type().bits() * v.type().lanes();
+    int to_bits = t.bits() * t.lanes();
+    user_assert(from_bits == to_bits)
+        << "Reinterpret cast from type " << v.type()
+        << " which has " << from_bits
+        << " bits, to type " << t
+        << " which has " << to_bits << " bits\n";
+
+    Reinterpret *node = new Reinterpret;
+    node->type = t;
+    node->value = std::move(v);
+    return node;
+}
+
 Expr Add::make(Expr a, Expr b) {
     internal_assert(a.defined()) << "Add of undefined\n";
     internal_assert(b.defined()) << "Add of undefined\n";
@@ -628,7 +644,6 @@ const char *const intrinsic_op_names[] = {
     "promise_clamped",
     "random",
     "register_destructor",
-    "reinterpret",
     "require",
     "require_mask",
     "return_second",
@@ -639,6 +654,7 @@ const char *const intrinsic_op_names[] = {
     "rounding_shift_right",
     "saturating_add",
     "saturating_sub",
+    "saturating_cast",
     "scatter_gather",
     "select_mask",
     "shift_left",
@@ -970,6 +986,10 @@ void ExprNode<Cast>::accept(IRVisitor *v) const {
     v->visit((const Cast *)this);
 }
 template<>
+void ExprNode<Reinterpret>::accept(IRVisitor *v) const {
+    v->visit((const Reinterpret *)this);
+}
+template<>
 void ExprNode<Variable>::accept(IRVisitor *v) const {
     v->visit((const Variable *)this);
 }
@@ -1153,6 +1173,10 @@ Expr ExprNode<StringImm>::mutate_expr(IRMutator *v) const {
 template<>
 Expr ExprNode<Cast>::mutate_expr(IRMutator *v) const {
     return v->visit((const Cast *)this);
+}
+template<>
+Expr ExprNode<Reinterpret>::mutate_expr(IRMutator *v) const {
+    return v->visit((const Reinterpret *)this);
 }
 template<>
 Expr ExprNode<Variable>::mutate_expr(IRMutator *v) const {

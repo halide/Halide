@@ -2,8 +2,10 @@
 
 #include "HalideBuffer.h"
 #include "HalideRuntime.h"
+#include "halide_benchmark.h"
 
 #include "stubuser.h"
+#include "stubuser_auto.h"
 
 using namespace Halide::Runtime;
 
@@ -62,15 +64,23 @@ int main(int argc, char **argv) {
     Buffer<void, 3> float16_output(halide_type_t(halide_type_float, 16), kSize, kSize, 3);
     Buffer<void, 3> bfloat16_output(halide_type_t(halide_type_bfloat, 16), kSize, kSize, 3);
 
-    stubuser(input, calculated_output, float32_buffer_output, int32_buffer_output,
-             array_test_output, tupled_output0, tupled_output1, int_output,
-             float16_output, bfloat16_output);
-    verify(input, kFloatArg, kIntArg, kOffset, calculated_output);
-    verify(input, 1.f, 0, 0.f, float32_buffer_output);
-    verify<uint8_t, int32_t>(input, 1.f, 0, 0.f, int32_buffer_output);
-    verify(input, 1.f, 0, 2, array_test_output);
-    verify(input, 1.f, 0, 0, tupled_output0);
-    verify(input, 1.f, 1, 3, int_output);
+    struct FnInfo {
+        decltype(&stubuser) f;
+        const char *const name;
+    };
+    FnInfo fns[2] = {{stubuser, "stubuser"}, {stubuser_auto, "stubuser_auto"}};
+    for (auto f : fns) {
+        printf("Testing %s...\n", f.name);
+        f.f(input, calculated_output, float32_buffer_output, int32_buffer_output,
+            array_test_output, tupled_output0, tupled_output1, int_output,
+            float16_output, bfloat16_output);
+        verify(input, kFloatArg, kIntArg, kOffset, calculated_output);
+        verify(input, 1.f, 0, 0.f, float32_buffer_output);
+        verify<uint8_t, int32_t>(input, 1.f, 0, 0.f, int32_buffer_output);
+        verify(input, 1.f, 0, 2, array_test_output);
+        verify(input, 1.f, 0, 0, tupled_output0);
+        verify(input, 1.f, 1, 3, int_output);
+    }
 
     printf("Success!\n");
     return 0;
