@@ -56,13 +56,10 @@ if (TARGET_NVPTX)
         # so we can build the final executable.
         add_tutorial(lesson_10_aot_compilation_generate.cpp)
 
-        # LLVM may leak memory during Halide compilation. If projects are built with address sanitizer enabled,
-        # this may cause generators to fail, making it hard to use Halide and address sanitizer at the same time.
-        # To work around this, we execute generators with an environment setting to disable leak checking.
         set(FILTER_LIB "lesson_10_halide${CMAKE_STATIC_LIBRARY_SUFFIX}")
         add_custom_command(OUTPUT lesson_10_halide.h "${FILTER_LIB}"
                            DEPENDS lesson_10_aot_compilation_generate
-                           COMMAND ${CMAKE_COMMAND} -E env "ASAN_OPTIONS=detect_leaks=0" $<TARGET_FILE:lesson_10_aot_compilation_generate>
+                           COMMAND lesson_10_aot_compilation_generate
                            VERBATIM)
         add_custom_target(exec_lesson_10_aot_compilation_generate
                           DEPENDS lesson_10_halide.h "${FILTER_LIB}")
