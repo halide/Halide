@@ -80,10 +80,11 @@ function(_Halide_try_load_generators)
         # Communicate found information to the caller
         set(${ARG_PACKAGE_NAME}_FOUND "${${ARG_PACKAGE_NAME}_FOUND}" PARENT_SCOPE)
 
-        if (NOT ${ARG_PACKAGE_NAME}_FOUND AND CMAKE_CROSSCOMPILING)
+        if (NOT ${ARG_PACKAGE_NAME}_FOUND AND CMAKE_CROSSCOMPILING AND NOT CMAKE_CROSSCOMPILING_EMULATOR)
             message(WARNING
-                    "${ARG_PACKAGE_NAME} were not found and it looks like you are cross-compiling. "
-                    "This is likely to fail. Please set -D${ARG_PACKAGE_NAME}_ROOT=... at the CMake "
+                    "'${ARG_PACKAGE_NAME}' was not found and it looks like you "
+                    "are cross-compiling without an emulator. This is likely to "
+                    "fail. Please set -D${ARG_PACKAGE_NAME}_ROOT=... at the CMake "
                     "command line to the build directory of a host-built ${PROJECT_NAME}.")
         endif ()
     endif ()

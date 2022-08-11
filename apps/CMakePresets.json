@@ -1,0 +1,60 @@
+{
+  "version": 3,
+  "cmakeMinimumRequired": {
+    "major": 3,
+    "minor": 22,
+    "patch": 0
+  },
+  "configurePresets": [
+    {
+      "name": "default",
+      "hidden": true,
+      "binaryDir": "build/${presetName}",
+      "installDir": "install/${presetName}"
+    },
+    {
+      "name": "ci",
+      "hidden": true,
+      "inherits": "default",
+      "toolchainFile": "${sourceDir}/../cmake/toolchain.${presetName}.cmake",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "RelWithDebInfo"
+      }
+    },
+    {
+      "name": "linux-x64-asan",
+      "inherits": "ci",
+      "displayName": "ASAN (Linux x64)",
+      "description": "Build everything with ASAN enabled",
+      "cacheVariables": {
+        "LLVM_ROOT": "$penv{LLVM_ROOT}",
+        "ENABLE_APPS_BGU": "OFF"
+      }
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "linux-x64-asan",
+      "configurePreset": "linux-x64-asan",
+      "displayName": "ASAN (Linux x64)",
+      "description": "Build everything with ASAN enabled",
+      "environment": {
+        "ASAN_OPTIONS": "detect_leaks=0:detect_container_overflow=0"
+      }
+    }
+  ],
+  "testPresets": [
+    {
+      "name": "linux-x64-asan",
+      "configurePreset": "linux-x64-asan",
+      "displayName": "ASAN (Linux x64)",
+      "description": "Test everything with ASAN enabled",
+      "environment": {
+        "ASAN_OPTIONS": "detect_leaks=0:detect_container_overflow=0"
+      },
+      "output": {
+        "outputOnFailure": true
+      }
+    }
+  ]
+}
