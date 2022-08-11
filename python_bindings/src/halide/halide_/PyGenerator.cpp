@@ -44,7 +44,7 @@ public:
     explicit PyGeneratorBase(const GeneratorContext &context, const std::string &name)
         : name_(name),
           class_(py::module_::import("halide").attr("_find_python_generator_class")(name)),  // could be None!
-          generator_(class_.is(py::none()) ? py::none() : class_(context)) {                             // could be None!
+          generator_(class_.is(py::none()) ? py::none() : class_(context)) {                 // could be None!
     }
 
     bool is_valid() const {
