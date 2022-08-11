@@ -81,7 +81,7 @@ if (TARGET_NVPTX)
 
         target_include_directories(lesson_10_aot_compilation_run PRIVATE "${CMAKE_CURRENT_BINARY_DIR}")
 
-        add_test(NAME tutorial_lesson_10_aot_compilation_run COMMAND $<TARGET_FILE:lesson_10_aot_compilation_run>)
+        add_test(NAME tutorial_lesson_10_aot_compilation_run COMMAND lesson_10_aot_compilation_run)
         set_tests_properties(tutorial_lesson_10_aot_compilation_run PROPERTIES LABELS "tutorial;multithreaded")
     endif ()
 endif ()
@@ -174,7 +174,7 @@ else ()
                           Halide::ImageIO
                           Halide::Tools)
 
-    add_test(NAME tutorial_lesson_16_rgb_run COMMAND $<TARGET_FILE:lesson_16_rgb_run>)
+    add_test(NAME tutorial_lesson_16_rgb_run COMMAND lesson_16_rgb_run)
     set_tests_properties(tutorial_lesson_16_rgb_run PROPERTIES LABELS tutorial)
 endif ()
 
@@ -204,6 +204,6 @@ if (TARGET Halide::Mullapudi2016)
     target_link_libraries(lesson_21_auto_scheduler_run PRIVATE
                           auto_schedule_false auto_schedule_true Halide::Tools)
 
-    add_test(NAME tutorial_lesson_21_auto_scheduler_run COMMAND $<TARGET_FILE:lesson_21_auto_scheduler_run>)
+    add_test(NAME tutorial_lesson_21_auto_scheduler_run COMMAND lesson_21_auto_scheduler_run)
     set_tests_properties(tutorial_lesson_21_auto_scheduler_run PROPERTIES LABELS "tutorial;multithreaded")
 endif ()
