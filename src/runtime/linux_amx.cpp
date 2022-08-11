@@ -6,7 +6,7 @@
 
 extern "C" int syscall(long sysno, ...) throw();
 
-extern "C" WEAK int halide_amx_req_perm() {
+extern "C" WEAK int halide_enable_amx() {
     constexpr int XFEATURE_XTILECFG = 17;
     constexpr int XFEATURE_XTILEDATA = 18;
     constexpr int ARCH_REQ_XCOMP_PERM = 0x1023;
