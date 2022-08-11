@@ -1,17 +1,5 @@
 include(PythonExtensionHelpers)
 
-# set(
-#     PYTHONPATH
-#     "$<TARGET_FILE_DIR:Halide::Python>"
-# )
-# list(TRANSFORM PYTHONPATH PREPEND "PYTHONPATH=path_list_prepend:")
-
-# set(TEST_ENV
-#     "HL_TARGET=${Halide_TARGET}"
-#     "TEST_TMPDIR=${PY_APPS_TEST_TMPDIR}"
-#     "TEST_IMAGES_DIR=${PY_APPS_TEST_IMAGES_DIR}"
-# )
-
 # Some Generators require extra Halide Target Features to be set.
 set(FEATURES_user_context user_context)
 

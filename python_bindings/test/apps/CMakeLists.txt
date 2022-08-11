@@ -11,11 +11,9 @@ set(TEST_IMAGES_DIR "$<SHELL_PATH:${CMAKE_CURRENT_SOURCE_DIR}/../../../apps/imag
 set(DEPS_bilateral_grid_shell   py_aot_bilateral_grid)
 set(PYPATH_bilateral_grid_shell "$<TARGET_FILE_DIR:py_aot_bilateral_grid>")
 set(ARGS_bilateral_grid_shell   ${TEST_IMAGES_DIR}/gray.png ${TEST_TMPDIR}/out.png 0.1 10)
-    message(STATUS "PYPATH_bilateral_grid_shell" ${PYPATH_bilateral_grid_shell})
 
 foreach (test IN LISTS tests)
     cmake_path(GET test STEM test_name)
-    message(STATUS "test ${test} has pypath" ${PYPATH_${test_name}})
     add_python_test(
         FILE "${test}"
         TEST_ARGS ${ARGS_${test_name}}

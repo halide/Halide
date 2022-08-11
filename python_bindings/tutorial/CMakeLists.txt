@@ -16,16 +16,23 @@ set(tests
     lesson_14_types.py
     )
 
+set(PYPATH_lesson_10_aot_compilation_generate "$<TARGET_FILE_DIR:lesson_10_halide>")
+
 foreach (test IN LISTS tests)
+    if (TARGET_WEBASSEMBLY AND Halide_TARGET MATCHES "wasm" AND test MATCHES "lesson_10")
+        message(WARNING "Not all tutorials build under WASM.")
+        continue()
+    endif ()
+
+    cmake_path(GET test STEM test_name)
     add_python_test(
         FILE "${test}"
         LABEL python_tutorial
-        PYTHONPATH "$<TARGET_FILE_DIR:lesson_10_halide>"
+        PYTHONPATH "${PYPATH_${test_name}}"
     )
 endforeach ()
 
 if (TARGET_WEBASSEMBLY AND Halide_TARGET MATCHES "wasm")
-    # TODO: Requires custom build rules to work under wasm.
     message(WARNING "Not all tutorials build under WASM.")
 else ()
     ## Add some hacks for getting CMake to delay compiling lesson_10_halide until after the test has run. The "better" way
@@ -66,7 +73,7 @@ else ()
 
     set_tests_properties(python_tutorial_lesson_10_aot_compilation_run PROPERTIES
                          FIXTURES_REQUIRED py_lesson_10)
-endif()
+endif ()
 
 ##
 # Packaging
