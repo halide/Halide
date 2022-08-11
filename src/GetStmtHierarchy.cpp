@@ -523,22 +523,21 @@ Stmt GetStmtHierarchy::visit(const Allocate *op) {
 
     node_without_children(op->name + "[" + index.str() + "]", get_color_range_list(op->extents));
 
+    stringstream name;
     if (!is_const_one(op->condition)) {
-        internal_error
-            << "\n"
-            << "GetStmtHierarchy: Allocate `!is_const_one(op->condition)` is not supported.\n\n";
-    }
-    if (op->new_expr.defined()) {
-        internal_error
-            << "\n"
-            << "GetStmtHierarchy: Allocate `op->new_expr.defined()` is not supported.\n\n";
-    }
-    if (!op->free_function.empty()) {
-        internal_error
-            << "\n"
-            << "GetStmtHierarchy: Allocate `!op->free_function.empty()` is not supported.\n\n";
+        name << " if " << op->condition;
     }
 
+    if (op->new_expr.defined()) {
+        internal_error << "\n"
+                       << "GetStmtHierarchy: Allocate " << op->name
+                       << " `op->new_expr.defined()` is not supported.\n\n";
+    }
+    if (!op->free_function.empty()) {
+        name << "custom_delete {" << op->free_function << "}";
+    }
+
+    node_without_children(name.str(), computation_range);
     close_node();
 
     return op;
