@@ -756,7 +756,6 @@ RUNTIME_CPP_COMPONENTS = \
   alignment_32 \
   allocation_cache \
   alignment_64 \
-  amx \
   android_clock \
   android_host_cpu_count \
   android_io \
@@ -782,6 +781,7 @@ RUNTIME_CPP_COMPONENTS = \
   hexagon_dma \
   hexagon_host \
   ios_io \
+  linux_amx \
   linux_clock \
   linux_host_cpu_count \
   linux_yield \

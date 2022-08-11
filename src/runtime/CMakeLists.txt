@@ -5,7 +5,6 @@ set(RUNTIME_CPP
     alignment_32
     alignment_64
     allocation_cache
-    amx
     android_clock
     android_host_cpu_count
     android_io
@@ -31,6 +30,7 @@ set(RUNTIME_CPP
     hexagon_dma_pool
     hexagon_host
     ios_io
+    linux_amx
     linux_clock
     linux_host_cpu_count
     linux_yield
