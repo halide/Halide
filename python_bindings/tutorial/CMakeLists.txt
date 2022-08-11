@@ -24,10 +24,11 @@ foreach (test IN LISTS tests)
         continue()
     endif ()
 
+    cmake_path(GET test STEM test_name)
     add_python_test(
         FILE "${test}"
         LABEL python_tutorial
-        PYTHONPATH "${PYPATH_${test}}"
+        PYTHONPATH "${PYPATH_${test_name}}"
     )
 endforeach ()
 
