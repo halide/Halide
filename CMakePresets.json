@@ -15,7 +15,7 @@
     {
       "name": "ci",
       "hidden": true,
-      "inherits": "default",
+      "inherits": "base",
       "toolchainFile": "${sourceDir}/cmake/toolchain.${presetName}.cmake",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "RelWithDebInfo"
@@ -167,28 +167,6 @@
   ],
   "buildPresets": [
     {
-      "name": "linux-x64-asan",
-      "configurePreset": "linux-x64-asan",
-      "displayName": "ASAN (Linux x64)",
-      "description": "Build everything with ASAN enabled"
-    }
-  ],
-  "testPresets": [
-    {
-      "name": "linux-x64-asan",
-      "configurePreset": "linux-x64-asan",
-      "displayName": "ASAN (Linux x64)",
-      "description": "Test everything with ASAN enabled",
-      "environment": {
-        "ASAN_OPTIONS": "detect_leaks=0:detect_container_overflow=0"
-      },
-      "output": {
-        "outputOnFailure": true
-      }
-    }
-  ],
-  "buildPresets": [
-    {
       "name": "debug",
       "configurePreset": "debug",
       "displayName": "Debug",
@@ -199,6 +177,12 @@
       "configurePreset": "release",
       "displayName": "Release",
       "description": "Release build with no special settings"
+    },
+    {
+      "name": "linux-x64-asan",
+      "configurePreset": "linux-x64-asan",
+      "displayName": "ASAN (Linux x64)",
+      "description": "Build everything with ASAN enabled"
     }
   ],
   "testPresets": [
@@ -216,6 +200,18 @@
       "configurePreset": "release",
       "displayName": "Release",
       "description": "Test everything with Release build",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "linux-x64-asan",
+      "configurePreset": "linux-x64-asan",
+      "displayName": "ASAN (Linux x64)",
+      "description": "Test everything with ASAN enabled",
+      "environment": {
+        "ASAN_OPTIONS": "detect_leaks=0:detect_container_overflow=0"
+      },
       "output": {
         "outputOnFailure": true
       }
