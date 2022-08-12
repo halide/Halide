@@ -2660,7 +2660,7 @@ Expr extract_bits(Type t, const Expr &e, const Expr &lsb) {
 
 Expr concat_bits(const std::vector<Expr> &e) {
     user_assert(!e.empty()) << "concat_bits requires at least one argument\n";
-    user_assert(e.size() & (e.size() - 1) == 0) << "concat_bits received " << e.size() << " arguments, which is not a power of two.\n";
+    user_assert((e.size() & (e.size() - 1)) == 0) << "concat_bits received " << e.size() << " arguments, which is not a power of two.\n";
     Type t = e[0].type();
     for (size_t i = 1; i < e.size(); i++) {
         user_assert(e[i].type() == t) << "All arguments to concat_bits must have the same type\n";
