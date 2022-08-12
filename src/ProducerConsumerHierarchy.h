@@ -4,6 +4,7 @@
 #include "FindStmtCost.h"
 #include "IRMutator.h"
 
+#include <set>
 #include <unordered_map>
 
 using namespace std;
@@ -51,6 +52,7 @@ private:
     vector<string> curr_consumer_names;
     map<string, int> curr_load_values;
     vector<string> arguments;  // arguments of the main function in module
+    map<string, vector<set<int>>> curr_loads;
 
     void traverse(const Module &m);
 
@@ -77,6 +79,7 @@ private:
     Stmt visit(const For *op) override;
     Stmt visit(const Store *op) override;
     void add_load_value(const string &name, const int lanes);
+    void add_load_value(const string &name, set<int> &load_values);
     Expr visit(const Load *op) override;
     Stmt visit(const Allocate *op) override;
     Stmt visit(const Block *op) override;
@@ -136,7 +139,7 @@ private:
 
     void allocate_table_header(const Allocate *op, const string &header, StmtSize &size,
                                string anchorName);
-    void allocate_table(string type, string rows, string cols);
+    void allocate_table(string type, string rows, string cols, string channels);
 
     void for_loop_table_header(const For *op, const string &header, StmtSize &size,
                                string anchorName);

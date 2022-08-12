@@ -373,10 +373,27 @@ Stmt StmtSizes::visit(const Store *op) {
 
     // empty curr_load_values
     curr_load_values.clear();
+    curr_loads.clear();
     mutate(op->value);
 
     for (const auto &load_var : curr_load_values) {
-        set_consume_size(op, load_var.first, int_span(load_var.second));
+        set_consume_size(op, load_var.first + "_load", int_span(load_var.second));
+    }
+
+    // iterate through curr_loads
+    for (const auto &load_var : curr_loads) {
+        string vectorName = load_var.first;
+        vector<set<int>> loadValues = load_var.second;
+        set<int> finalLoadValuesUnique;
+        cout << "vectorName: " << vectorName << endl;
+        for (const set<int> &loadValueSet : loadValues) {
+            finalLoadValuesUnique.insert(loadValueSet.begin(), loadValueSet.end());
+        }
+        for (const int &loadValue : finalLoadValuesUnique) {
+            cout << loadValue << ", ";
+        }
+        cout << endl;
+        set_consume_size(op, vectorName + "_unique", int_span(finalLoadValuesUnique.size()));
     }
 
     return op;
@@ -388,6 +405,9 @@ void StmtSizes::add_load_value(const string &name, const int lanes) {
     } else {
         curr_load_values[name] += lanes;
     }
+}
+void StmtSizes::add_load_value(const string &name, set<int> &load_values) {
+    curr_loads[name].push_back(load_values);
 }
 Expr StmtSizes::visit(const Load *op) {
 
@@ -402,7 +422,36 @@ Expr StmtSizes::visit(const Load *op) {
 
         if (op->index.as<Ramp>()) {
             lanes = op->index.as<Ramp>()->lanes;
+
+            if (op->index.as<Ramp>()->base.as<IntImm>() &&
+                op->index.as<Ramp>()->stride.as<IntImm>()) {
+                int64_t baseValue = op->index.as<Ramp>()->base.as<IntImm>()->value;
+                int64_t strideValue = op->index.as<Ramp>()->stride.as<IntImm>()->value;
+
+                cout << "load " << op->name << "[" << baseValue << ":" << strideValue << ":"
+                     << lanes << "]" << endl
+                     << "\t";
+                set<int> load_values;
+                for (int i = baseValue; i < baseValue + (lanes * strideValue); i += strideValue) {
+                    load_values.insert(i);
+                    cout << i << ", ";
+                }
+                cout << endl;
+                add_load_value(op->name, load_values);
+            } else {
+                cout << "StmtSizes::visit(const Load *op): base and stride aren't of type (IntImm)"
+                     << endl;
+                // internal_error
+                //     << "\n"
+                //     << "In Load: " << op->name << "\n"
+                //     << print_node(op->index.as<Ramp>()->base.get()) << "\n"
+                //     << print_node(op->index.as<Ramp>()->stride.get()) << "\n"
+                //     << "StmtSizes::visit(const Load *op): base and stride aren't of type "
+                //        "(IntImm) - "
+                //        "can't generate ProdCons hierarchy yet. \n\n";
+            }
         } else {
+            // TODO: make sure this variable hasn't been set yet
             lanes = int(op->type.lanes());
         }
 
@@ -475,12 +524,18 @@ Stmt StmtSizes::visit(const Allocate *op) {
 
     // set allocate stuff
     stringstream type;
-    type << "<span class=\\'stringtype\\'>" << op->type << "</span>";
+    type << "<span class=\\'stringType\\'>" << op->type << "</span>";
     set_allocation_size(op, type.str());
 
     for (const auto &extent : op->extents) {
+        // TODO: inline these as well if they are variables
         stringstream ss;
-        ss << "<span class=\\'intType\\'>" << extent << "</span>";
+        if (extent.as<IntImm>()) {
+            ss << "<span class=\\'intType\\'>" << extent << "</span>";
+        } else {
+            ss << "<span class=\\'stringType\\'>" << extent << "</span>";
+        }
+
         set_allocation_size(op, ss.str());
     }
 
@@ -946,24 +1001,29 @@ void ProducerConsumerHierarchy::allocate_table_header(const Allocate *op, const 
 
     string type = allocationSizes[0];
 
-    if (op->extents.size() > 2) {
+    if (op->extents.size() > 3) {
         internal_error
             << "\n\n"
-            << "ProducerConsumerHierarchy::allocate_table_header - extents.size() != 2 !!\n"
+            << "ProducerConsumerHierarchy::allocate_table_header - extents.size() != 3 !!\n"
             << "extents.size() = " << op->extents.size() << "\n"
             << "\n";
     }
 
+    // TODO: make sure that if there are 3 extents, that the third is channels
     string rows;
     string cols;
+    string channels;
 
     rows = allocationSizes[1];
 
-    if (op->extents.size() == 2) {
+    if (op->extents.size() >= 2) {
         cols = allocationSizes[2];
     }
+    if (op->extents.size() == 3) {
+        channels = allocationSizes[3];
+    }
 
-    allocate_table(type, rows, cols);
+    allocate_table(type, rows, cols, channels);
     html << "<br><br>";
     html << "</th>";
 
@@ -972,11 +1032,12 @@ void ProducerConsumerHierarchy::allocate_table_header(const Allocate *op, const 
     html << "&nbsp;";
     html << "</th>";
 }
-void ProducerConsumerHierarchy::allocate_table(string type, string rows, string cols) {
+void ProducerConsumerHierarchy::allocate_table(string type, string rows, string cols,
+                                               string channels) {
     // open table
     html << "<table class=\\'costTable\\' style=\\'background-color: rgba(150, 150, 150, 0.5)\\'>";
 
-    // Type | Rows | Cols
+    // Type | Rows | Cols | Channels
     html << "<tr>";
 
     html << "<th class=\\'costTableHeader middleCol\\'>";
@@ -992,8 +1053,18 @@ void ProducerConsumerHierarchy::allocate_table(string type, string rows, string 
     html << "</th>";
 
     if (cols != "") {
-        html << "<th class=\\'costTableHeader\\'>";
+        if (channels != "") {
+            html << "<th class=\\'costTableHeader middleCol\\'>";
+        } else {
+            html << "<th class=\\'costTableHeader\\'>";
+        }
         html << "Cols";
+        html << "</th>";
+    }
+
+    if (channels != "") {
+        html << "<th class=\\'costTableHeader\\'>";
+        html << "Channels";
         html << "</th>";
     }
 
@@ -1017,8 +1088,19 @@ void ProducerConsumerHierarchy::allocate_table(string type, string rows, string 
 
     // cols
     if (cols != "") {
-        html << "<td class=\\'costTableData\\'>";
+        if (channels != "") {
+            html << "<td class=\\'costTableData middleCol\\'>";
+        } else {
+            html << "<td class=\\'costTableData\\'>";
+        }
         html << cols;
+        html << "</td>";
+    }
+
+    // channels
+    if (channels != "") {
+        html << "<td class=\\'costTableData\\'>";
+        html << channels;
         html << "</td>";
     }
 
@@ -1376,6 +1458,9 @@ Stmt ProducerConsumerHierarchy::visit(const Allocate *op) {
 
     // TODO: make sure this is right
     if (!is_const_one(op->condition)) {
+        internal_error << "\n"
+                       << "ProducerConsumerHierarchy: Allocate " << op->name
+                       << " `!is_const_one(op->condition)` is not supported.\n\n";
         header << " if " << op->condition;
     }
     if (op->new_expr.defined()) {
@@ -1384,6 +1469,9 @@ Stmt ProducerConsumerHierarchy::visit(const Allocate *op) {
                        << " `op->new_expr.defined()` is not supported.\n\n";
     }
     if (!op->free_function.empty()) {
+        internal_error << "\n"
+                       << "ProducerConsumerHierarchy: Allocate " << op->name
+                       << " `!op->free_function.empty()` is not supported.\n\n";
         header << " custom_delete {" << op->free_function << "}";
     }
 
@@ -1430,14 +1518,29 @@ string StmtSizes::print_node(const IRNode *node) const {
         s << "Variable type" << endl;
     } else if (type == IRNodeType::Add) {
         s << "Add type" << endl;
+        auto node1 = dynamic_cast<const Add *>(node);
+        s << "a: " << print_node(node1->a.get()) << endl;
+        s << "b: " << print_node(node1->b.get()) << endl;
     } else if (type == IRNodeType::Sub) {
         s << "Sub type" << endl;
+        auto node1 = dynamic_cast<const Sub *>(node);
+        s << "a: " << print_node(node1->a.get()) << endl;
+        s << "b: " << print_node(node1->b.get()) << endl;
     } else if (type == IRNodeType::Mod) {
         s << "Mod type" << endl;
+        auto node1 = dynamic_cast<const Mod *>(node);
+        s << "a: " << print_node(node1->a.get()) << endl;
+        s << "b: " << print_node(node1->b.get()) << endl;
     } else if (type == IRNodeType::Mul) {
         s << "Mul type" << endl;
+        auto node1 = dynamic_cast<const Mul *>(node);
+        s << "a: " << print_node(node1->a.get()) << endl;
+        s << "b: " << print_node(node1->b.get()) << endl;
     } else if (type == IRNodeType::Div) {
         s << "Div type" << endl;
+        auto node1 = dynamic_cast<const Div *>(node);
+        s << "a: " << print_node(node1->a.get()) << endl;
+        s << "b: " << print_node(node1->b.get()) << endl;
     } else if (type == IRNodeType::Min) {
         s << "Min type" << endl;
     } else if (type == IRNodeType::Max) {
