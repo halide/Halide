@@ -163,7 +163,7 @@ void define_generator(py::module &m) {
                 auto _generatorcontext_enter = py::module_::import("halide").attr("_generatorcontext_enter");
                 return _generatorcontext_enter(context);
             })
-            .def("__exit__", [](const GeneratorContext &context, py::object exc_type, py::object exc_value, py::object exc_traceback) -> bool {
+            .def("__exit__", [](const GeneratorContext &context, const py::object &exc_type, const py::object &exc_value, const py::object &exc_traceback) -> bool {
                 auto _generatorcontext_exit = py::module_::import("halide").attr("_generatorcontext_exit");
                 _generatorcontext_exit(context);
                 return false;
