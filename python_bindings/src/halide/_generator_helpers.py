@@ -1,6 +1,5 @@
 from __future__ import annotations
 from abc import ABC, abstractmethod
-from contextlib import contextmanager
 from contextvars import ContextVar
 from enum import Enum
 from functools import total_ordering
@@ -373,19 +372,19 @@ def _unsorted_cls_dir(cls):
 
 _halide_generator_context = ContextVar('halide_generator_context', default=None)
 
-@contextmanager
-def set_context(context:GeneratorContext):
-    token = _halide_generator_context.set(context)
-    try:
-        yield context
-    finally:
-        _halide_generator_context.reset(token)
-
 def _get_generator_context() -> GeneratorContext:
     context = _halide_generator_context.get()
     _check(isinstance(context, GeneratorContext), "There is no active GeneratorContext")
     return context
 
+def _generatorcontext_enter(self: GeneratorContext) -> GeneratorContext:
+    if not hasattr(self, "_tokens"):
+        self._tokens = []
+    self._tokens.append(_halide_generator_context.set(self))
+    return self
+
+def _generatorcontext_exit(self: GeneratorContext) -> None:
+    _halide_generator_context.reset(self._tokens.pop())
 
 class Generator(ABC):
     """Base class for Halide Generators in Python"""
@@ -681,7 +680,7 @@ class Generator(ABC):
         # For most Generators this won't matter, but if the Generator
         # invokes SomeOtherGenerator.call(), it would be nice to have this
         # be the default, so that the end user doesn't have to mess with it.
-        with set_context(self.context()):
+        with self.context():
             self.generate()
 
         self._input_parameters = {n: getattr(self, n).parameter() for n in self._inputs_dict}

@@ -265,8 +265,7 @@ def test_complex(cls, extra_input_name = ""):
 
 if __name__ == "__main__":
     target = hl.get_jit_target_from_environment()
-    ctx = hl.GeneratorContext(target)
-    with hl.set_context(ctx):
+    with hl.GeneratorContext(target):
         test_simple(simple_pystub)
         test_complex(complex_pystub)
         test_complex(complex_pystub, extra_input_name = "foozz_input")

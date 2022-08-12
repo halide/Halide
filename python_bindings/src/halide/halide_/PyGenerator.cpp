@@ -143,8 +143,10 @@ void define_generator(py::module &m) {
             .def_readonly("types", &ArgInfo::types)
             .def_readonly("dimensions", &ArgInfo::dimensions);
 
+    // Note that we need py::dynamic_attr() here so that the Python code can add a token stack
+    // for __enter__ and __exit__ handling
     auto generatorcontext_class =
-        py::class_<GeneratorContext>(m, "GeneratorContext")
+        py::class_<GeneratorContext>(m, "GeneratorContext", py::dynamic_attr())
 #ifdef HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
             .def(py::init<const Target &, bool, const MachineParams &>(),
                  py::arg("target"), py::arg("auto_schedule") = false, py::arg("machine_params") = MachineParams::generic())
@@ -157,6 +159,15 @@ void define_generator(py::module &m) {
             .def("target", &GeneratorContext::target)
             .def("autoscheduler_params", &GeneratorContext::autoscheduler_params)
 #endif
+            .def("__enter__", [](const GeneratorContext &context) -> py::object {
+                auto _generatorcontext_enter = py::module_::import("halide").attr("_generatorcontext_enter");
+                return _generatorcontext_enter(context);
+            })
+            .def("__exit__", [](const GeneratorContext &context, py::object exc_type, py::object exc_value, py::object exc_traceback) -> bool {
+                auto _generatorcontext_exit = py::module_::import("halide").attr("_generatorcontext_exit");
+                _generatorcontext_exit(context);
+                return false;
+            })
             .def("__repr__", [](const GeneratorContext &context) -> std::string {
                 std::ostringstream o;
                 o << "<halide.GeneratorContext " << context.target() << ">";
