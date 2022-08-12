@@ -152,8 +152,8 @@ std::vector<T> to_input_vector(const py::object &value, const std::string &name)
 py::object call_impl(const GeneratorFactory &factory,
                      const py::args &args,
                      const py::kwargs &kwargs) {
-    auto _get_generator_context = py::module_::import("halide").attr("_get_generator_context");
-    auto context = _get_generator_context().cast<GeneratorContext>();
+    auto active_generator_context = py::module_::import("halide").attr("active_generator_context");
+    auto context = active_generator_context().cast<GeneratorContext>();
     auto generator = factory(context);
 
     // GeneratorParams are always specified as an optional named parameter
