@@ -14,6 +14,8 @@ struct StmtSize {
     map<string, string> produces;
     map<string, string> consumes;
     map<string, string> allocates;
+    string forLoopSize;
+    vector<string> allocationSizes;
 
     bool empty() const {
         return produces.size() == 0 && consumes.size() == 0 && allocates.size() == 0;
@@ -58,7 +60,9 @@ private:
 
     void set_produce_size(const IRNode *node, string produce_var, string produce_size);
     void set_consume_size(const IRNode *node, string consume_var, string consume_size);
-    void set_allocation_size(const IRNode *node, string allocate_var, string allocate_size);
+    void set_allocation_size_old(const IRNode *node, string allocate_var, string allocate_size);
+    void set_for_loop_size(const IRNode *node, string for_loop_size);
+    void set_allocation_size(const IRNode *node, string allocate_size);
 
     bool in_producer(const string &name) const;
     bool in_consumer(const string &name) const;
@@ -129,6 +133,14 @@ private:
     // creates a table header row with given header string
     void table_header(const IRNode *op, const string &header, StmtSize &size, string anchorName);
     void prod_cons_table(StmtSize &size);
+
+    void allocate_table_header(const Allocate *op, const string &header, StmtSize &size,
+                               string anchorName);
+    void allocate_table(string type, string rows, string cols);
+
+    void for_loop_table_header(const For *op, const string &header, StmtSize &size,
+                               string anchorName);
+    void for_loop_table(string loop_size);
 
     void if_tree(const IRNode *op, const string &header, StmtSize &size, string anchorName);
     void close_if_tree();

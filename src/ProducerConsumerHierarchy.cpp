@@ -14,6 +14,7 @@ using namespace Internal;
 #define STORE_COLOR "#f4f8bf"
 #define ALLOCATE_COLOR STORE_COLOR
 
+#define SHOW_CUMULATIVE_COST false
 /*
  * StmtSizes class
  */
@@ -129,7 +130,8 @@ void StmtSizes::set_consume_size(const IRNode *node, string consume_var, string 
     }
     stmt_sizes[node].consumes[consume_var] = consume_size;
 }
-void StmtSizes::set_allocation_size(const IRNode *node, string allocate_var, string allocate_size) {
+void StmtSizes::set_allocation_size_old(const IRNode *node, string allocate_var,
+                                        string allocate_size) {
     auto it = stmt_sizes.find(node);
 
     // error if size found and allocate_var already exists
@@ -151,6 +153,20 @@ void StmtSizes::set_allocation_size(const IRNode *node, string allocate_var, str
 
     // set allocation size
     stmt_sizes[node].allocates[allocate_var] = allocate_size;
+}
+void StmtSizes::set_for_loop_size(const IRNode *node, string for_loop_size) {
+    auto it = stmt_sizes.find(node);
+    if (it == stmt_sizes.end()) {
+        stmt_sizes[node] = StmtSize();
+    }
+    stmt_sizes[node].forLoopSize = for_loop_size;
+}
+void StmtSizes::set_allocation_size(const IRNode *node, string allocate_size) {
+    auto it = stmt_sizes.find(node);
+    if (it == stmt_sizes.end()) {
+        stmt_sizes[node] = StmtSize();
+    }
+    stmt_sizes[node].allocationSizes.push_back(allocate_size);
 }
 
 bool StmtSizes::in_producer(const string &name) const {
@@ -341,6 +357,8 @@ Stmt StmtSizes::visit(const For *op) {
         set_consume_size(op, consume_var.first, opConsumeSize);
     }
 
+    set_for_loop_size(op, loopIterator);
+
     return op;
 }
 Stmt StmtSizes::visit(const Store *op) {
@@ -456,15 +474,15 @@ Stmt StmtSizes::visit(const Allocate *op) {
     }
 
     // set allocate stuff
-    stringstream allocateSize;
-    allocateSize << "<span class=\\'intType\\'>" << op->type << "</span>";
+    stringstream type;
+    type << "<span class=\\'stringtype\\'>" << op->type << "</span>";
+    set_allocation_size(op, type.str());
 
     for (const auto &extent : op->extents) {
-        allocateSize << " * ";
-        allocateSize << extent;
+        stringstream ss;
+        ss << "<span class=\\'intType\\'>" << extent << "</span>";
+        set_allocation_size(op, ss.str());
     }
-
-    set_allocation_size(op, op->name, allocateSize.str());
 
     return op;
 }
@@ -897,6 +915,182 @@ void ProducerConsumerHierarchy::prod_cons_table(StmtSize &size) {
     // close table
     html << "</table>";
 }
+
+void ProducerConsumerHierarchy::allocate_table_header(const Allocate *op, const string &header,
+                                                      StmtSize &size, string anchorName) {
+    html << "<th>";
+
+    // add cost color squares
+    cost_colors(op);
+
+    // add anchor button
+    html << "<button onclick=\\'";
+    html << "window.open(&quot;" << output_file_name << "#" << anchorName
+         << "&quot;, &quot;_blank&quot;)";
+    html << "\\'>";
+    html << "see code";
+    html << "</button>";
+
+    // header
+    html << "<br>";
+    html << "&nbsp;";
+    html << header;
+    html << "&nbsp;";
+    html << "<br><br>";
+    html << "</th>";
+
+    html << "<th>";
+    html << "<br>";
+
+    vector<string> &allocationSizes = size.allocationSizes;
+
+    string type = allocationSizes[0];
+
+    if (op->extents.size() > 2) {
+        internal_error
+            << "\n\n"
+            << "ProducerConsumerHierarchy::allocate_table_header - extents.size() != 2 !!\n"
+            << "extents.size() = " << op->extents.size() << "\n"
+            << "\n";
+    }
+
+    string rows;
+    string cols;
+
+    rows = allocationSizes[1];
+
+    if (op->extents.size() == 2) {
+        cols = allocationSizes[2];
+    }
+
+    allocate_table(type, rows, cols);
+    html << "<br><br>";
+    html << "</th>";
+
+    // spacing
+    html << "<th>";
+    html << "&nbsp;";
+    html << "</th>";
+}
+void ProducerConsumerHierarchy::allocate_table(string type, string rows, string cols) {
+    // open table
+    html << "<table class=\\'costTable\\' style=\\'background-color: rgba(150, 150, 150, 0.5)\\'>";
+
+    // Type | Rows | Cols
+    html << "<tr>";
+
+    html << "<th class=\\'costTableHeader middleCol\\'>";
+    html << "Type";
+    html << "</th>";
+
+    if (cols != "") {
+        html << "<th class=\\'costTableHeader middleCol\\'>";
+    } else {
+        html << "<th class=\\'costTableHeader\\'>";
+    }
+    html << "Rows";
+    html << "</th>";
+
+    if (cols != "") {
+        html << "<th class=\\'costTableHeader\\'>";
+        html << "Cols";
+        html << "</th>";
+    }
+
+    html << "</tr>";
+
+    html << "<tr>";
+
+    // type
+    html << "<td class=\\'costTableData middleCol\\'>";
+    html << type;
+    html << "</td>";
+
+    // rows
+    if (cols != "") {
+        html << "<td class=\\'costTableData middleCol\\'>";
+    } else {
+        html << "<td class=\\'costTableData\\'>";
+    }
+    html << rows;
+    html << "</td>";
+
+    // cols
+    if (cols != "") {
+        html << "<td class=\\'costTableData\\'>";
+        html << cols;
+        html << "</td>";
+    }
+
+    html << "</tr>";
+
+    // close table
+    html << "</table>";
+}
+
+void ProducerConsumerHierarchy::for_loop_table_header(const For *op, const string &header,
+                                                      StmtSize &size, string anchorName) {
+    html << "<th>";
+
+    // add cost color squares
+    cost_colors(op);
+
+    // add anchor button
+    html << "<button onclick=\\'";
+    html << "window.open(&quot;" << output_file_name << "#" << anchorName
+         << "&quot;, &quot;_blank&quot;)";
+    html << "\\'>";
+    html << "see code";
+    html << "</button>";
+
+    // header
+    html << "<br>";
+    html << "&nbsp;";
+    html << header;
+    html << "&nbsp;";
+    html << "<br><br>";
+    html << "</th>";
+
+    html << "<th>";
+    html << "<br>";
+
+    string loopSize = pre_processor.get_size(op).forLoopSize;
+
+    for_loop_table(loopSize);
+    html << "<br><br>";
+    html << "</th>";
+
+    // spacing
+    html << "<th>";
+    html << "&nbsp;";
+    html << "</th>";
+}
+void ProducerConsumerHierarchy::for_loop_table(string loop_size) {
+    // open table
+    html << "<table class=\\'costTable\\' style=\\'background-color: rgba(150, 150, 150, 0.5)\\'>";
+
+    // Loop Size
+    html << "<tr>";
+
+    html << "<th class=\\'costTableHeader middleCol\\'>";
+    html << "Loop Size";
+    html << "</th>";
+
+    html << "</tr>";
+
+    html << "<tr>";
+
+    // loop size
+    html << "<td class=\\'costTableData\\'>";
+    html << loop_size;
+    html << "</td>";
+
+    html << "</tr>";
+
+    // close table
+    html << "</table>";
+}
+
 void ProducerConsumerHierarchy::if_tree(const IRNode *op, const string &header, StmtSize &size,
                                         string anchorName = "") {
     html << "<li>";
@@ -977,6 +1171,9 @@ Stmt ProducerConsumerHierarchy::visit(const ProducerConsumer *op) {
     StmtSize size = pre_processor.get_size(op);
 
     open_table_row();
+    if (!SHOW_CUMULATIVE_COST) {
+        size = StmtSize();
+    }
     table_header(op, header.str(), size, anchorName);
     close_table_row();
 
@@ -1003,7 +1200,11 @@ Stmt ProducerConsumerHierarchy::visit(const For *op) {
     header << "For (" << op->name << ")";
 
     open_table_row();
-    table_header(op, header.str(), size, anchorName);
+    if (SHOW_CUMULATIVE_COST) {
+        table_header(op, header.str(), size, anchorName);
+    } else {
+        for_loop_table_header(op, header.str(), size, anchorName);
+    }
     close_table_row();
 
     open_table_row();
@@ -1028,7 +1229,7 @@ Stmt ProducerConsumerHierarchy::visit(const IfThenElse *op) {
     if (!thenSize.empty() || !elseSize.empty()) {
         // open main if tree
         html << "<div class=\\'tf-tree tf-gap-sm tf-custom\\' style=\\'font-size: 12px; "
-                "justify-content: center;\\'>";
+                "display: flex; justify-content: center;\\'>";
         html << "<ul>";
         html << "<li><span class=\\'tf-nc if-node\\'>";
         html << "If";
@@ -1050,6 +1251,9 @@ Stmt ProducerConsumerHierarchy::visit(const IfThenElse *op) {
         if (!thenSize.empty()) {
             // TODO: inline condition
             ifHeader << "(" << op->condition << ")";
+            if (!SHOW_CUMULATIVE_COST) {
+                thenSize = StmtSize();
+            }
             if_tree(op->then_case.get(), ifHeader.str(), thenSize, anchorName);
 
             // then body
@@ -1081,6 +1285,9 @@ Stmt ProducerConsumerHierarchy::visit(const IfThenElse *op) {
             if (!elseSize.empty()) {
                 stringstream elseHeader;
                 elseHeader << "else ";
+                if (!SHOW_CUMULATIVE_COST) {
+                    elseSize = StmtSize();
+                }
                 if_tree(op->else_case.get(), elseHeader.str(), elseSize);
 
                 open_table_row();
@@ -1162,12 +1369,10 @@ Stmt ProducerConsumerHierarchy::visit(const Allocate *op) {
     allocateCount++;
     string anchorName = "allocate" + std::to_string(allocateCount);
 
-    StmtSize size;
-    string allocationSize = pre_processor.get_allocation_size(op, op->name);
+    StmtSize size = pre_processor.get_size(op);
 
     stringstream header;
     header << "Allocate " << op->name;
-    header << " [" << allocationSize << "]";
 
     // TODO: make sure this is right
     if (!is_const_one(op->condition)) {
@@ -1183,7 +1388,14 @@ Stmt ProducerConsumerHierarchy::visit(const Allocate *op) {
     }
 
     open_table_row();
-    table_header(op, header.str(), size, anchorName);
+    allocate_table_header(op, header.str(), size, anchorName);
+    close_table_row();
+
+    // spacing
+    open_table_row();
+    open_table_data();
+    html << "<br>";
+    close_table_data();
     close_table_row();
 
     close_table();
