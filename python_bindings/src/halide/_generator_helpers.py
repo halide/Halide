@@ -377,9 +377,7 @@ _halide_generator_context = ContextVar('halide_generator_context', default=None)
 def set_context(context:GeneratorContext):
     token = _halide_generator_context.set(context)
     try:
-        _print("activating context: ", context)
         yield context
-        _print("deactivating context: ", context)
     finally:
         _halide_generator_context.reset(token)
 
