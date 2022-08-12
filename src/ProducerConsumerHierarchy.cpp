@@ -1021,9 +1021,6 @@ Stmt ProducerConsumerHierarchy::visit(const IfThenElse *op) {
     StmtSize thenSize = pre_processor.get_size(op->then_case.get());
     StmtSize elseSize = pre_processor.get_size(op->else_case.get());
 
-    int numberNestedIfs = 0;
-    // int numExtraIfs = 0;
-
     // only start the if-tree if either case is not empty
     // (aka won't print if both cases are empty)
     // (we can't just exit early though because we have to go through all if-stmts to
@@ -1043,8 +1040,6 @@ Stmt ProducerConsumerHierarchy::visit(const IfThenElse *op) {
     ifHeader << "if ";
 
     while (true) {
-
-        numberNestedIfs++;
 
         // anchor name
         ifCount++;
@@ -1077,17 +1072,6 @@ Stmt ProducerConsumerHierarchy::visit(const IfThenElse *op) {
             op = nested_if;
             ifHeader.str("");
             ifHeader << "else if ";
-
-            // create a new set of trees if there have been more than 3 nested ifs
-            // if (numberNestedIfs > 3) {
-
-            //     html << "<li><span class=\\'tf-nc if-node\\'>";
-            //     html << "else";
-            //     html << "</span>";
-            //     html << "<ul>";
-            //     numberNestedIfs = 0;
-            //     numExtraIfs++;
-            // }
         }
 
         // if else case is not another ifthenelse
@@ -1110,12 +1094,6 @@ Stmt ProducerConsumerHierarchy::visit(const IfThenElse *op) {
             break;
         }
     }
-
-    // close all extra ifs
-    // for (int i = 0; i < numExtraIfs; i++) {
-    //     html << "</ul>";
-    //     html << "</li>";
-    // }
 
     // close main if tree
     html << "</ul>";
