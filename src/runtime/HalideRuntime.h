@@ -1406,6 +1406,16 @@ extern halide_can_use_target_features_t halide_set_custom_can_use_target_feature
  */
 extern int halide_default_can_use_target_features(int count, const uint64_t *features);
 
+/**
+ * @brief Enable AMX instructions
+ *
+ * This function needs to be called by the user to enable the usage of AMX instructions on Linux.
+ * Only a single call is required to enable the instructions for the entire process.
+ *
+ * @return int 0 on success, error otherwise
+ */
+extern int halide_enable_amx();
+
 typedef struct halide_dimension_t {
 #if (__cplusplus >= 201103L || _MSVC_LANG >= 201103L)
     int32_t min = 0, extent = 0, stride = 0;
