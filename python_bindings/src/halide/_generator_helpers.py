@@ -1,5 +1,6 @@
 from __future__ import annotations
 from abc import ABC, abstractmethod
+from contextvars import ContextVar
 from enum import Enum
 from functools import total_ordering
 from .halide_ import *
@@ -14,16 +15,16 @@ import sys
 
 # 'print()' is consumed by `halide.print()` which is implicitly present;
 # here's our quick-n-dirty wrapper for debugging:
-# def _print(*args):
+def _print(*args):
 
-#     def write(data):
-#         sys.stdout.write(str(data))
+    def write(data):
+        sys.stdout.write(str(data))
 
-#     for i, arg in enumerate(args):
-#         if i:
-#             write(" ")
-#         write(arg)
-#     write('\n')
+    for i, arg in enumerate(args):
+        if i:
+            write(" ")
+        write(arg)
+    write('\n')
 
 
 # Everything below here is implicitly in the `halide._generator_helpers` package
@@ -44,6 +45,9 @@ def _is_valid_name(name: str) -> bool:
     # -- initial _ is forbidden (rather than merely "reserved")
     # -- two underscores in a row is also forbidden
     if not name:
+        return False
+    # We forbid this to avoid ambiguity in arguments to call()
+    if name == "generator_params":
         return False
     # TODO: use regex instead?
     s = str(name)
@@ -366,6 +370,22 @@ def _unsorted_cls_dir(cls):
         yield (k, v)
 
 
+_halide_generator_context = ContextVar('halide_generator_context', default=None)
+
+def _get_generator_context() -> GeneratorContext:
+    context = _halide_generator_context.get()
+    _check(isinstance(context, GeneratorContext), "There is no active GeneratorContext")
+    return context
+
+def _generatorcontext_enter(self: GeneratorContext) -> GeneratorContext:
+    if not hasattr(self, "_tokens"):
+        self._tokens = []
+    self._tokens.append(_halide_generator_context.set(self))
+    return self
+
+def _generatorcontext_exit(self: GeneratorContext) -> None:
+    _halide_generator_context.reset(self._tokens.pop())
+
 class Generator(ABC):
     """Base class for Halide Generators in Python"""
 
@@ -385,9 +405,8 @@ class Generator(ABC):
         return self.target().natural_vector_size(type)
 
     @classmethod
-    def call(cls, context: GeneratorContext, *args, **kwargs):
-        _check(isinstance(context, GeneratorContext), "The first argument to call() must be a GeneratorContext")
-        generator = cls(context)
+    def call(cls, *args, **kwargs):
+        generator = cls()
 
         # First, fill in all the GeneratorParams
         # (in case some are tied to Inputs).
@@ -439,8 +458,8 @@ class Generator(ABC):
             raise AttributeError("Invalid write to field '%s'" % name)
         super().__setattr__(name, value)
 
-    def __init__(self, context: GeneratorContext):
-        _check(isinstance(context, GeneratorContext), "The first argument to Generator must be a GeneratorContext")
+    def __init__(self):
+        context = _get_generator_context()
 
         self._target = context.target()
         self._autoscheduler = context.autoscheduler_params()
@@ -657,7 +676,12 @@ class Generator(ABC):
         assert not self._input_parameters
         assert not self._output_funcs
 
-        self.generate()
+        # Ensure that the current context is the one in self.
+        # For most Generators this won't matter, but if the Generator
+        # invokes SomeOtherGenerator.call(), it would be nice to have this
+        # be the default, so that the end user doesn't have to mess with it.
+        with self.context():
+            self.generate()
 
         self._input_parameters = {n: getattr(self, n).parameter() for n in self._inputs_dict}
         self._output_funcs = {n: getattr(self, n) for n in self._outputs_dict}
@@ -702,6 +726,14 @@ def _get_python_generator_names() -> list[str]:
     return _python_generators.keys()
 
 
+def _create_python_generator(name: str, context: GeneratorContext):
+    cls = _python_generators.get(name, None)
+    if not isclass(cls):
+        return None
+    with context:
+        return cls()
+
+
 def _fqname(o):
     k = o
     m = k.__module__
@@ -709,13 +741,6 @@ def _fqname(o):
     if m == "__main__" or k == "builtins":
         return q
     return m + "." + q
-
-
-def _find_python_generator_class(name: str):
-    cls = _python_generators.get(name, None)
-    if not isclass(cls):
-        cls = None
-    return cls
 
 
 def alias(**kwargs):

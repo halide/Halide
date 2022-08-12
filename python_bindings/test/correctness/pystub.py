@@ -19,8 +19,6 @@ def _realize_and_check(f, offset=0):
 
 def test_simple(cls):
     x, y = hl.Var(), hl.Var()
-    target = hl.get_jit_target_from_environment()
-    ctx = hl.GeneratorContext(target)
 
     b_in = hl.Buffer(hl.UInt(8), [2, 2])
     b_in.fill(123)
@@ -29,14 +27,14 @@ def test_simple(cls):
             b_in[xx, yy] += xx + yy
 
     # ----------- Inputs by-position
-    f = cls.call(ctx, b_in, 3.5)
+    f = cls.call(b_in, 3.5)
     _realize_and_check(f)
 
     # ----------- Inputs by-name
-    f = cls.call(ctx, buffer_input=b_in, float_arg=3.5)
+    f = cls.call(buffer_input=b_in, float_arg=3.5)
     _realize_and_check(f)
 
-    f = cls.call(ctx, float_arg=3.5, buffer_input=b_in)
+    f = cls.call(float_arg=3.5, buffer_input=b_in)
     _realize_and_check(f)
 
     # ----------- Above set again, w/ GeneratorParam mixed in
@@ -45,29 +43,29 @@ def test_simple(cls):
     gp = {"offset": k}
 
     # (positional)
-    f = cls.call(ctx, b_in, 3.5, generator_params=gp)
+    f = cls.call(b_in, 3.5, generator_params=gp)
     _realize_and_check(f, k)
 
     # (keyword)
-    f = cls.call(ctx, generator_params=gp, buffer_input=b_in, float_arg=3.5)
+    f = cls.call(generator_params=gp, buffer_input=b_in, float_arg=3.5)
     _realize_and_check(f, k)
 
-    f = cls.call(ctx, buffer_input=b_in, generator_params=gp, float_arg=3.5)
+    f = cls.call(buffer_input=b_in, generator_params=gp, float_arg=3.5)
     _realize_and_check(f, k)
 
-    f = cls.call(ctx, buffer_input=b_in, generator_params=gp, float_arg=3.5)
+    f = cls.call(buffer_input=b_in, generator_params=gp, float_arg=3.5)
     _realize_and_check(f, k)
 
-    f = cls.call(ctx, buffer_input=b_in, float_arg=3.5, generator_params=gp)
+    f = cls.call(buffer_input=b_in, float_arg=3.5, generator_params=gp)
 
     # Inputs w/ mixed by-position and by-name should be ok
-    f = cls.call(ctx, b_in, float_arg=3.5, generator_params=gp)
+    f = cls.call(b_in, float_arg=3.5, generator_params=gp)
     _realize_and_check(f, k)
 
     # ----------- Test various failure modes
     try:
         # too many positional args
-        f = cls.call(ctx, b_in, 3.5, 4)
+        f = cls.call(b_in, 3.5, 4)
     except hl.HalideError as e:
         assert 'allows at most 2 positional args, but 3 were specified.' in str(e)
     else:
@@ -75,7 +73,7 @@ def test_simple(cls):
 
     try:
         # too few positional args
-        f = cls.call(ctx, b_in)
+        f = cls.call(b_in)
     except hl.HalideError as e:
         assert 'requires 2 args, but 1 were specified.' in str(e)
     else:
@@ -83,7 +81,7 @@ def test_simple(cls):
 
     try:
         # Inputs that can't be converted to what the receiver needs (positional)
-        f = cls.call(ctx, hl.f32(3.141592), "happy")
+        f = cls.call(hl.f32(3.141592), "happy")
     except hl.HalideError as e:
         assert 'Input buffer_input requires an ImageParam or Buffer argument' in str(e)
     else:
@@ -91,7 +89,7 @@ def test_simple(cls):
 
     try:
         # Inputs that can't be converted to what the receiver needs (named)
-        f = cls.call(ctx, b_in, float_arg="bogus")
+        f = cls.call(b_in, float_arg="bogus")
     except hl.HalideError as e:
         assert 'Input float_arg requires a Param (or scalar literal) argument when using call' in str(e)
     else:
@@ -99,7 +97,7 @@ def test_simple(cls):
 
     try:
         # Input specified by both pos and kwarg
-        f = cls.call(ctx, b_in, 3.5, float_arg=4.5)
+        f = cls.call(b_in, 3.5, float_arg=4.5)
     except hl.HalideError as e:
         assert "Input float_arg specified multiple times." in str(e)
     else:
@@ -107,7 +105,7 @@ def test_simple(cls):
 
     try:
         # generator_params is not a dict
-        f = cls.call(ctx, b_in, 3.5, generator_params=[1, 2, 3])
+        f = cls.call(b_in, 3.5, generator_params=[1, 2, 3])
     except hl.HalideError as e:
         assert "generator_params must be a dict" in str(e)
     else:
@@ -115,7 +113,7 @@ def test_simple(cls):
 
     try:
         # Bad gp name
-        f = cls.call(ctx, b_in, 3.5, generator_params={"foo": 0})
+        f = cls.call(b_in, 3.5, generator_params={"foo": 0})
     except hl.HalideError as e:
         assert "has no GeneratorParam" in str(e)
     else:
@@ -123,8 +121,7 @@ def test_simple(cls):
 
     try:
         # Bad input name
-        f = cls.call(ctx,
-                     buzzer_input=b_in,
+        f = cls.call(buzzer_input=b_in,
                      float_arg=3.5,
                      generator_params=gp)
     except hl.HalideError as e:
@@ -134,8 +131,7 @@ def test_simple(cls):
 
     try:
         # Bad gp name
-        f = cls.call(ctx,
-                     buffer_input=b_in,
+        f = cls.call(buffer_input=b_in,
                      float_arg=3.5,
                      generator_params=gp,
                      nonexistent_generator_param="wat")
@@ -161,8 +157,6 @@ def test_complex(cls, extra_input_name = ""):
     input.set(constant_image)
 
     x, y, c = hl.Var(), hl.Var(), hl.Var()
-    target = hl.get_jit_target_from_environment()
-    ctx = hl.GeneratorContext(target)
 
     float_arg = 1.25
     int_arg = 33
@@ -186,7 +180,7 @@ def test_complex(cls, extra_input_name = ""):
         gp["extra_input_name"] = extra_input_name
         kwargs[extra_input_name] = constant_image_u16
 
-    r = cls.call(ctx, **kwargs)
+    r = cls.call(**kwargs)
 
     # return value is a tuple; unpack separately to avoid
     # making the callsite above unreadable
@@ -270,9 +264,11 @@ def test_complex(cls, extra_input_name = ""):
 
 
 if __name__ == "__main__":
-    test_simple(simple_pystub)
-    test_complex(complex_pystub)
-    test_complex(complex_pystub, extra_input_name = "foozz_input")
-    test_simple(SimplePy)
-    test_complex(ComplexPy)
-    test_complex(ComplexPy, extra_input_name = "foo_input")
+    target = hl.get_jit_target_from_environment()
+    with hl.GeneratorContext(target):
+        test_simple(simple_pystub)
+        test_complex(complex_pystub)
+        test_complex(complex_pystub, extra_input_name = "foozz_input")
+        test_simple(SimplePy)
+        test_complex(ComplexPy)
+        test_complex(ComplexPy, extra_input_name = "foo_input")
