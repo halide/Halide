@@ -32,9 +32,6 @@ class PyGeneratorBase : public AbstractGenerator {
     // The name declared in the Python function's decorator
     const std::string name_;
 
-    // The Python class
-    const py::object class_;
-
     // The instance of the Python class
     py::object generator_;
 
@@ -43,12 +40,11 @@ public:
     // by calling is_valid() later.
     explicit PyGeneratorBase(const GeneratorContext &context, const std::string &name)
         : name_(name),
-          class_(py::module_::import("halide").attr("_find_python_generator_class")(name)),  // could be None!
-          generator_(class_.is(py::none()) ? py::none() : class_(context)) {                 // could be None!
+          generator_(py::module_::import("halide").attr("_create_python_generator")(name, context)) {  // could be None!
     }
 
     bool is_valid() const {
-        if (name_.empty() || class_.is(py::none()) || generator_.is(py::none())) {
+        if (name_.empty() || generator_.is(py::none())) {
             return false;
         }
         return true;
