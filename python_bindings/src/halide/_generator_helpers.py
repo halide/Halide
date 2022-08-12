@@ -372,11 +372,6 @@ def _unsorted_cls_dir(cls):
 
 _halide_generator_context = ContextVar('halide_generator_context', default=None)
 
-def _get_generator_context() -> GeneratorContext:
-    context = _halide_generator_context.get()
-    _check(isinstance(context, GeneratorContext), "There is no active GeneratorContext")
-    return context
-
 def _generatorcontext_enter(self: GeneratorContext) -> GeneratorContext:
     if not hasattr(self, "_tokens"):
         self._tokens = []
@@ -459,7 +454,7 @@ class Generator(ABC):
         super().__setattr__(name, value)
 
     def __init__(self):
-        context = _get_generator_context()
+        context = active_generator_context()
 
         self._target = context.target()
         self._autoscheduler = context.autoscheduler_params()
@@ -741,6 +736,12 @@ def _fqname(o):
     if m == "__main__" or k == "builtins":
         return q
     return m + "." + q
+
+
+def active_generator_context() -> GeneratorContext:
+    context = _halide_generator_context.get()
+    _check(isinstance(context, GeneratorContext), "There is no active GeneratorContext")
+    return context
 
 
 def alias(**kwargs):
