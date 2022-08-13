@@ -165,7 +165,6 @@ Stmt flatten_nested_ramps(const Stmt &s) {
 }
 
 Expr flatten_nested_ramps(const Expr &e) {
-    FlattenRamps flatten_ramps;
     return SimplifyConcatBits().mutate(FlattenRamps().mutate(e));
 }
 
