@@ -2349,7 +2349,7 @@ int main(int argc, char **argv) {
     }
 
     {
-        check(concat_bits(x), x);
+        check(concat_bits({x}), x);
     }
 
     // Check a bounds-related fuzz tester failure found in issue https://github.com/halide/Halide/issues/3764
