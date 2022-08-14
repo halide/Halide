@@ -34,7 +34,8 @@ struct Cast : public ExprNode<Cast> {
     static const IRNodeType _node_type = IRNodeType::Cast;
 };
 
-/** Reinterpret a node as another type, without affecting any of the bits. */
+/** Reinterpret value as another type, without affecting any of the bits
+ * (on little-endian systems). */
 struct Reinterpret : public ExprNode<Reinterpret> {
     Expr value;
 
@@ -510,15 +511,26 @@ struct Call : public ExprNode<Call> {
         bitwise_or,
         bitwise_xor,
         bool_to_mask,
-        bundle,  // Bundle multiple exprs together temporarily for analysis (e.g. CSE)
+
+        // Bundle multiple exprs together temporarily for analysis (e.g. CSE)
+        bundle,
         call_cached_indirect_function,
         cast_mask,
+
+        // Concatenate bits of the args, with least significant bits as the
+        // first arg (i.e. little-endian)
+        concat_bits,
         count_leading_zeros,
         count_trailing_zeros,
         debug_to_file,
         declare_box_touched,
         div_round_to_zero,
         dynamic_shuffle,
+
+        // Extract some contiguous slice of bits from the argument starting at
+        // the nth bit, counting from the least significant bit, with the number
+        // of bits determined by the return type.
+        extract_bits,
         extract_mask_element,
         get_user_context,
         gpu_thread_barrier,
@@ -563,7 +575,9 @@ struct Call : public ExprNode<Call> {
         shift_right,
         signed_integer_overflow,
         size_of_halide_buffer_t,
-        sorted_avg,  // Compute (arg[0] + arg[1]) / 2, assuming arg[0] < arg[1].
+
+        // Compute (arg[0] + arg[1]) / 2, assuming arg[0] < arg[1].
+        sorted_avg,
         strict_float,
         stringify,
         undef,
