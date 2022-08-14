@@ -656,24 +656,6 @@ void generate_schedule(const std::vector<Function> &outputs,
     aslog(1) << "Time taken for autoscheduler (s): " << std::chrono::duration_cast<std::chrono::milliseconds>(total_time).count() / 1000.0 << '\n';
 }
 
-// Halide uses a plugin architecture for registering custom
-// autoschedulers. We register our autoscheduler using a static
-// constructor.
-//struct RegisterAutoscheduler {
-    //RegisterAutoscheduler() {
-        //aslog(1) << "Registering autoscheduler 'Anderson2021'...\n";
-        //Pipeline::add_autoscheduler("Anderson2021", *this);
-    //}
-
-    //void operator()(const Pipeline &p, const Target &target, const MachineParams &params, AutoSchedulerResults *results) {
-        //std::vector<Function> outputs;
-        //for (const Func& f : p.outputs()) {
-            //outputs.push_back(f.function());
-        //}
-        //Autoscheduler::generate_schedule(outputs, target, params.parallelism, results);
-    //}
-//} register_auto_scheduler;
-
 struct Anderson2021 {
 #ifdef HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
     void operator()(const Pipeline &p, const Target &target, const MachineParams &params_in, AutoSchedulerResults *results) {
