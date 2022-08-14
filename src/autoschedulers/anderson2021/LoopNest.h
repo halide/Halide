@@ -149,7 +149,7 @@ struct LoopNest {
     }
 
     bool is_scalar() const {
-        return size.size() == 0;
+        return size.empty();
     }
 
     // given a newly inserted node f into this LoopNest, get union of thread counts in each dimension
@@ -172,11 +172,10 @@ struct LoopNest {
     // the newly inserted loop nests of f into a threads loop outside a serial loop.
     // V is the vectorized dimension of f. Adds loopnests created from each tiling option in result.
     bool add_gpu_thread_tilings(const FunctionDAG::Node *f,
-                                const MachineParams &params,
                                 const Target &target,
                                 int v,
                                 vector<IntrusivePtr<const LoopNest>> &result,
-                                vector<int64_t> max_size);
+                                const vector<int64_t> &max_size);
 
     void copy_from(const LoopNest &n);
     void copy_from_including_features(const LoopNest &n);
@@ -319,13 +318,13 @@ struct LoopNest {
     void compute_warp_features(ScheduleFeatures &features, const GPULoopInfo &gpu_loop_info) const;
 
     // Assume that when a block is active, all its warps are active
-    void compute_warp_and_block_occupancy(const MachineParams &params, ScheduleFeatures &feat, const GPULoopInfo &gpu_loop_info) const;
+    void compute_warp_and_block_occupancy(int parallelism, ScheduleFeatures &feat, const GPULoopInfo &gpu_loop_info) const;
 
     void compute_shared_mem_occupancy(const Target &target, int64_t total_shared_mem_alloc_size, ScheduleFeatures &feat) const;
 
     std::pair<const LoopNest *, const LoopNest *> find_innermost_and_parent() const;
 
-    int64_t points_accessed_per_thread(const MachineParams &params, const Target &target, const GPULoopInfo &gpu_loop_info, const std::vector<const FunctionDAG::Edge *> &edge_chain, const LoadJacobian &jac, const LoopNest *parent, const LoopNest *grandparent, int64_t n, const ScheduleFeatures &feat, const LoadJacobian &serial_jac, bool producer_has_been_scheduled, int producer_innermost_dim, const GPUMemoryType &mem_type, bool verbose = false) const;
+    int64_t points_accessed_per_thread(const Target &target, const GPULoopInfo &gpu_loop_info, const std::vector<const FunctionDAG::Edge *> &edge_chain, const LoadJacobian &jac, const LoopNest *parent, const LoopNest *grandparent, int64_t n, const ScheduleFeatures &feat, const LoadJacobian &serial_jac, bool producer_has_been_scheduled, int producer_innermost_dim, const GPUMemoryType &mem_type, bool verbose = false) const;
 
     int64_t compute_licm_amortization(const LoopNest *innermost, const LoopNest *parent, const ScheduleFeatures &feat, const LoadJacobian &jac, int producer_dims) const;
 
@@ -348,7 +347,7 @@ struct LoopNest {
 
     // Do a recursive walk over the loop nest computing features to feed the cost model.
     void compute_features(const FunctionDAG &dag,
-                          const MachineParams &params,
+                          int hardware_parallelism,
                           const Target &target,
                           const StageMap<Sites> &sites,
                           int64_t instances,
@@ -386,7 +385,7 @@ struct LoopNest {
     // consumers along the given edge chain), from which we know what region
     // would be computed if it were scheduled here and what its loop nest
     // would be.
-    const Bound get_bounds_along_edge_chain(const FunctionDAG::Node *f, const vector<const FunctionDAG::Edge *> &edge_chain) const;
+    Bound get_bounds_along_edge_chain(const FunctionDAG::Node *f, const vector<const FunctionDAG::Edge *> &edge_chain) const;
 
     void dump() const;
 
@@ -430,8 +429,7 @@ struct LoopNest {
                       const Target &target);
 
     // Parallelize this loop according to the given tiling.
-    IntrusivePtr<const LoopNest> parallelize_in_tiles(const MachineParams &params,
-                                                      const vector<int64_t> &tiling,
+    IntrusivePtr<const LoopNest> parallelize_in_tiles(const vector<int64_t> &tiling,
                                                       const LoopNest *parent,
                                                       const Target &target,
                                                       bool inner_tiling,
@@ -453,7 +451,7 @@ struct LoopNest {
     // loop marked gpu_threads, in which case f's loops cannot be gpu_threads
     vector<IntrusivePtr<const LoopNest>> compute_in_tiles(const FunctionDAG::Node *f,
                                                           const LoopNest *parent,
-                                                          const MachineParams &params,
+                                                          int hardware_parallelism,
                                                           const Target &target,
                                                           const SearchSpaceOptions &search_space_options,
                                                           int v,

@@ -121,7 +121,9 @@ class PerfectHashMap {
     int find_index_small(const K *n) const {
         int i;
         for (i = 0; i < (int)occupied; i++) {
-            if (storage_bucket(i).first == n) return i;
+            if (storage_bucket(i).first == n) {
+                return i;
+            }
         }
         return i;
     }
@@ -173,7 +175,9 @@ class PerfectHashMap {
     // Methods when the map is in the large state
     T &emplace_large(const K *n, T &&t) {
         auto &p = storage_bucket(n->id);
-        if (!p.first) occupied++;
+        if (!p.first) {
+            occupied++;
+        }
         p.first = n;
         p.second = std::move(t);
         return p.second;
@@ -380,11 +384,15 @@ public:
     };
 
     iterator begin() {
-        if (state == Empty) return end();
+        if (state == Empty) {
+            return end();
+        }
         iterator it;
         it.iter = storage.data();
         it.end = it.iter + storage.size();
-        if (it.key() == nullptr) it++;
+        if (it.key() == nullptr) {
+            it++;
+        }
         phm_assert(it.iter == it.end || it.key());
         return it;
     }
@@ -396,11 +404,15 @@ public:
     }
 
     const_iterator begin() const {
-        if (storage.empty()) return end();
+        if (storage.empty()) {
+            return end();
+        }
         const_iterator it;
         it.iter = storage.data();
         it.end = it.iter + storage.size();
-        if (it.key() == nullptr) it++;
+        if (it.key() == nullptr) {
+            it++;
+        }
         phm_assert(it.iter == it.end || it.key());
         return it;
     }

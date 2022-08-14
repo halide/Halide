@@ -1,7 +1,7 @@
 #ifndef TILING_H
 #define TILING_H
 
-#include <stdint.h>
+#include <cstdint>
 #include <vector>
 
 using std::vector;

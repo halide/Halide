@@ -102,8 +102,9 @@ struct Flags {
     std::vector<float> parse_floats(const std::string &s) {
         const char *c = s.c_str();
         std::vector<float> v;
-        while (isspace(*c))
+        while (isspace(*c)) {
             ++c;
+        }
         while (*c) {
             string f;
             while (*c && !isspace(*c)) {
@@ -153,10 +154,14 @@ uint64_t hash_floats(uint64_t h, const float *begin, const float *end) {
 }
 
 bool ends_with(const string &str, const string &suffix) {
-    if (str.size() < suffix.size()) return false;
+    if (str.size() < suffix.size()) {
+        return false;
+    }
     size_t off = str.size() - suffix.size();
     for (size_t i = 0; i < suffix.size(); i++) {
-        if (str[off + i] != suffix[i]) return false;
+        if (str[off + i] != suffix[i]) {
+            return false;
+        }
     }
     return true;
 }
@@ -297,8 +302,8 @@ size_t load_samples(map<int, PipelineSample> &training_set, map<int, PipelineSam
             sample.schedule_hash = schedule_hash;
             sample.filename = s;
             sample.runtimes.push_back(runtime);
-            for (int i = 0; i < kModels; i++) {
-                sample.prediction[i] = 0.0;
+            for (double &i : sample.prediction) {
+                i = 0.0;
             }
             sample.schedule_id = schedule_id;
             sample.schedule_features = Buffer<float>(head2_w, num_stages);
@@ -488,7 +493,7 @@ int main(int argc, char **argv) {
     std::cout.setf(std::ios::fixed, std::ios::floatfield);
     std::cout.precision(4);
 
-    auto seed = time(NULL);
+    auto seed = time(nullptr);
     std::mt19937 rng((uint32_t)seed);
 
     std::cout << "Iterating over " << samples.size() << " pipelines using seed = " << seed << "\n";
@@ -612,10 +617,12 @@ int main(int argc, char **argv) {
                             int good = 0, bad = 0;
                             for (auto &sched : sample.schedules) {
                                 auto &ref = sample.schedules[sample.fastest_schedule_hash];
-                                if (sched.second.prediction[model] == 0) continue;
+                                if (sched.second.prediction[model] == 0) { continue;
+}
                                 assert(sched.second.runtimes[0] >= ref.runtimes[0]);
                                 float runtime_ratio = sched.second.runtimes[0] / ref.runtimes[0];
-                                if (runtime_ratio <= 1.3f) continue;  // Within 30% of the runtime of the best
+                                if (runtime_ratio <= 1.3f) { continue;  // Within 30% of the runtime of the best
+}
                                 if (sched.second.prediction[model] >= ref.prediction[model]) {
                                     good++;
                                 } else {
@@ -654,7 +661,8 @@ int main(int argc, char **argv) {
             for (int model = 0; model < kModels; model++) {
                 std::cout << loss_sum[model] / loss_sum_counter[model] << " ";
             }
-            if (kModels > 1) std::cout << "\n";
+            if (kModels > 1) { std::cout << "\n";
+}
             std::cout << " Rate: ";
             int best_model = 0;
             float best_rate = 0;
@@ -678,7 +686,8 @@ int main(int argc, char **argv) {
                 }
             }
 
-            if (kModels > 1) std::cout << "\n";
+            if (kModels > 1) { std::cout << "\n";
+}
             if (!predict_only && samples.count(worst_miss_pipeline_id)) {
                 std::cout << " Worst: " << worst_miss << " " << leaf(samples[worst_miss_pipeline_id].schedules[worst_miss_schedule_id].filename) << " ";
             }

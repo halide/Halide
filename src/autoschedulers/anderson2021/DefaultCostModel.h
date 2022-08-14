@@ -39,11 +39,11 @@ public:
           stats{stats} {
         load_weights();
     }
-    virtual ~DefaultCostModel() = default;
+    ~DefaultCostModel() override = default;
 
     // Configure the cost model for the algorithm to be scheduled.
     void set_pipeline_features(const Internal::Autoscheduler::FunctionDAG &dag,
-                               const MachineParams &params) override;
+                               int hardware_parallelism) override;
     void set_pipeline_features(const Runtime::Buffer<float> &, int n);
 
     // Enqueue a schedule to be evaluated. The second version of this method returns a buffer of

@@ -34,7 +34,7 @@ public:
         Var xi, yi, xio, xii, yii, xo, yo, x_pair, xiio, ty;
         RVar rxo, rxi;
 
-        if (!auto_schedule) {
+        if (!using_autoscheduler()) {
             out.bound(x, 0, size)
                 .bound(y, 0, size)
                 .tile(x, y, xi, yi, 64, 16)

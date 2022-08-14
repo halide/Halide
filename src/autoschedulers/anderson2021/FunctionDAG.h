@@ -6,9 +6,10 @@
 #define FUNCTION_DAG_H
 
 #include <algorithm>
+#include <cstdint>
 #include <map>
-#include <stdint.h>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "Errors.h"
@@ -61,14 +62,20 @@ struct OptionalRational {
     }
 
     OptionalRational operator*(int64_t factor) const {
-        if ((*this) == 0) return *this;
+        if ((*this) == 0) {
+            return *this;
+        }
         int64_t num = numerator * factor;
         return OptionalRational{num, denominator};
     }
 
     OptionalRational operator*(const OptionalRational &other) const {
-        if ((*this) == 0) return *this;
-        if (other == 0) return other;
+        if ((*this) == 0) {
+            return *this;
+        }
+        if (other == 0) {
+            return other;
+        }
         int64_t num = numerator * other.numerator;
         int64_t den = denominator * other.denominator;
         return OptionalRational{num, den};
@@ -99,12 +106,16 @@ struct OptionalRational {
     }
 
     bool operator>(int x) const {
-        if (!exists()) return false;
+        if (!exists()) {
+            return false;
+        }
         return !((*this) <= x);
     }
 
     bool operator>=(int x) const {
-        if (!exists()) return false;
+        if (!exists()) {
+            return false;
+        }
         return !((*this) < x);
     }
 
@@ -183,9 +194,13 @@ public:
     // Try to merge another LoadJacobian into this one, increasing the
     // count if the coefficients match.
     bool merge(const LoadJacobian &other) {
-        if (other.rows != rows || other.cols != cols) return false;
+        if (other.rows != rows || other.cols != cols) {
+            return false;
+        }
         for (size_t i = 0; i < rows * cols; i++) {
-            if (!(other.coeffs[i] == coeffs[i])) return false;
+            if (!(other.coeffs[i] == coeffs[i])) {
+                return false;
+            }
         }
         c += other.count();
         return true;
@@ -318,7 +333,7 @@ struct BoundContents {
     }
 
     BoundContents *make_copy() const {
-        auto b = layout->make();
+        auto *b = layout->make();
         size_t bytes = sizeof(data()[0]) * layout->total_size;
         memcpy(b->data(), data(), bytes);
         return b;
@@ -493,7 +508,7 @@ struct FunctionDAG {
             };
 
             Stage(Halide::Stage s)
-                : stage(s) {
+                : stage(std::move(s)) {
             }
 
             int get_loop_index_from_var(const std::string &var) const {
@@ -598,18 +613,18 @@ struct FunctionDAG {
 
     // Create the function DAG, and do all the dependency and cost
     // analysis. This is done once up-front before the tree search.
-    FunctionDAG(const vector<Function> &outputs, const MachineParams &params, const Target &target);
+    FunctionDAG(const vector<Function> &outputs, const Target &target);
 
     void dump() const;
     std::ostream &dump(std::ostream &os) const;
 
-private:
-    // Compute the featurization for the entire DAG
-    void featurize();
-
     // This class uses a lot of internal pointers, so we'll hide the copy constructor.
     FunctionDAG(const FunctionDAG &other) = delete;
     void operator=(const FunctionDAG &other) = delete;
+
+private:
+    // Compute the featurization for the entire DAG
+    void featurize();
 
     template<typename OS>
     void dump_internal(OS &os) const;
@@ -625,6 +640,7 @@ private:
     const NodeMap<int64_t> &inlined;
 
 public:
+    int visit(const Reinterpret *op);
     int visit(const IntImm *op);
     int visit(const UIntImm *op);
     int visit(const FloatImm *op);

@@ -2,6 +2,8 @@
 // templated such that it can be compiled in either forward or
 // backwards mode, for inference or training respectively.
 
+#include <utility>
+
 #include "Halide.h"
 
 #include "NetworkSize.h"
@@ -21,12 +23,18 @@ struct ModelWeight<false> : public GeneratorInput<Buffer<float>> {
     ModelWeight(const std::string &name, int dim)
         : GeneratorInput<Buffer<float>>(name, dim) {
     }
-    void backprop(const Derivative &d, Expr learning_rate, Expr timestep) {
+    void backprop(const Derivative &d, const Expr& learning_rate, const Expr& timestep) {
     }
     void set_shape(int s0 = 0, int s1 = 0, int s2 = 0) {
-        if (s0) dim(0).set_bounds(0, s0);
-        if (s1) dim(1).set_bounds(0, s1);
-        if (s2) dim(2).set_bounds(0, s2);
+        if (s0) {
+            dim(0).set_bounds(0, s0);
+        }
+        if (s1) {
+            dim(1).set_bounds(0, s1);
+        }
+        if (s2) {
+            dim(2).set_bounds(0, s2);
+        }
     }
 };
 
@@ -37,10 +45,11 @@ struct ModelWeight<true> : public GeneratorInput<Buffer<float>> {
     ModelWeight(const std::string &name, int dim)
         : GeneratorInput<Buffer<float>>(name, dim), grad("updated_" + name, dim + 1) {
     }
-    void backprop(const Derivative &d, Expr learning_rate, Expr timestep) {
+    void backprop(const Derivative &d, Expr learning_rate, const Expr& timestep) {
         std::vector<Expr> args(dimensions() + 1);
-        for (auto &e : args)
+        for (auto &e : args) {
             e = Var();
+}
         grad(args) = undef<float>();
 
         // We'll report back the new weights and the loss gradients,
@@ -71,7 +80,7 @@ struct ModelWeight<true> : public GeneratorInput<Buffer<float>> {
         Expr smoothed_second_moment_correction = 1 / (1 - pow(0.999f, timestep + 1));
 
         // Update the weights
-        Expr step = learning_rate * smoothed_deriv * smoothed_deriv_correction;
+        Expr step = std::move(learning_rate) * smoothed_deriv * smoothed_deriv_correction;
         step /= sqrt(smoothed_second_moment * smoothed_second_moment_correction) + 1e-5f;
 
         new_weight = current_weight - step;
@@ -114,7 +123,7 @@ public:
     using Input = GeneratorInput<T>;
     template<typename T>
     using Output = GeneratorOutput<T>;
-    using Generator<CostModel<training>>::auto_schedule;
+    using Generator<CostModel<training>>::using_autoscheduler;
     using Generator<CostModel<training>>::get_pipeline;
 
     // Number of pipeline stages
@@ -169,20 +178,20 @@ public:
     Output<Buffer<float>> loss_output{"loss_output", 0};
 
     // Zero pad alone the last dimension of a Func
-    Func pad_stages(Func f, Expr stages) {
+    Func pad_stages(const Func& f, Expr stages) {
         Halide::Region bounds(f.dimensions());
         bounds[1].min = 0;
-        bounds[1].extent = stages;
+        bounds[1].extent = std::move(stages);
         return BoundaryConditions::constant_exterior(f, cast(f.value().type(), 0), bounds);
     }
 
-    Expr activation(Expr e) {
+    Expr activation(const Expr& e) {
         // leaky relu
         return max(e, 0) + min(e, 0) * 1e-10f;
     }
 
     Expr sigmoid(Expr e) {
-        return 1 / (1 + exp(-e));
+        return 1 / (1 + exp(-std::move(e)));
     }
 
     Expr print_wrap(Expr e, const std::string &out, const Var &n, const Var &w) {
@@ -592,9 +601,9 @@ public:
         true_runtime.set_estimates({{0, 80}});
 
         // SCHEDULE
-        if (training && !auto_schedule) {
+        if (training && !using_autoscheduler()) {
             do_cost_model_schedule(get_pipeline());
-        } else if (auto_schedule) {
+        } else if (using_autoscheduler()) {
             // Do nothing.
         } else {
             // We just write down a good schedule for
@@ -612,7 +621,7 @@ public:
             const int vec = 8;
 
             // A helper function for scheduling conv layers
-            auto schedule_conv = [&](Func conv, Func relu, RVar r_channels) {
+            auto schedule_conv = [&](Func conv, Func relu, const RVar& r_channels) {
                 Var ci("ci"), wi("wi");
                 if (!training) {
                     relu

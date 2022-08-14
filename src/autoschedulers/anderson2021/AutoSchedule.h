@@ -18,10 +18,14 @@ namespace Autoscheduler {
 
 struct ProgressBar {
     void set(double progress) {
-        if (!draw_progress_bar) return;
+        if (!draw_progress_bar) {
+            return;
+        }
         counter++;
         const int bits = 11;
-        if (counter & ((1 << bits) - 1)) return;
+        if (counter & ((1 << bits) - 1)) {
+            return;
+        }
         const int pos = (int)(progress * 78);
         aslog(0) << '[';
         for (int j = 0; j < 78; j++) {
@@ -59,7 +63,7 @@ typedef PerfectHashMap<FunctionDAG::Node::Stage, ScheduleFeatures> StageMapOfSch
 
 struct AutoSchedule {
     const FunctionDAG &dag;
-    const MachineParams &params;
+    int hardware_parallelism;
     const Target &target;
     const std::vector<Function> &outputs;
     std::mt19937 &rng;
@@ -69,7 +73,7 @@ struct AutoSchedule {
     const LoopNestParser *partial_schedule;
 
     AutoSchedule(const FunctionDAG &dag,
-                 const MachineParams &params,
+                 int hardware_parallelism,
                  const Target &target,
                  const std::vector<Function> &outputs,
                  std::mt19937 &rng,
@@ -92,7 +96,7 @@ struct AutoSchedule {
     IntrusivePtr<State> optimal_schedule(int beam_size);
 };
 
-void find_and_apply_schedule(FunctionDAG &dag, const std::vector<Function> &outputs, const MachineParams &params, const Target &target, CostModel *cost_model, int beam_size, StageMapOfScheduleFeatures *schedule_features);
+void find_and_apply_schedule(FunctionDAG &dag, const std::vector<Function> &outputs, int hardware_parallelism, const Target &target, CostModel *cost_model, int beam_size, StageMapOfScheduleFeatures *schedule_features);
 
 }  // namespace Autoscheduler
 }  // namespace Internal

@@ -1,5 +1,7 @@
 #include "FunctionDAG.h"
 
+#include <memory>
+
 #include "ASLog.h"
 
 namespace Halide {
@@ -353,7 +355,7 @@ BoundContents::Layout::~Layout() {
     for (auto *b : pool) {
         b->~BoundContents();
     }
-    for (auto b : blocks) {
+    for (auto *b : blocks) {
         free(b);
     }
 }
@@ -506,7 +508,9 @@ bool FunctionDAG::Edge::all_load_jacobian_coeffs_exist() const {
 
 void FunctionDAG::Edge::add_load_jacobian(LoadJacobian j1) {
     for (auto &j2 : load_jacobians) {
-        if (j2.merge(j1)) return;
+        if (j2.merge(j1)) {
+            return;
+        }
     }
     load_jacobians.emplace_back(std::move(j1));
 }
@@ -557,7 +561,7 @@ void FunctionDAG::Edge::expand_footprint(const Span *consumer_loop, Span *produc
     }
 }
 
-FunctionDAG::FunctionDAG(const vector<Function> &outputs, const MachineParams &params, const Target &target) {
+FunctionDAG::FunctionDAG(const vector<Function> &outputs, const Target &target) {
     map<string, Function> env = build_environment(outputs);
 
     // A mutator to apply parameter estimates to the expressions
@@ -710,7 +714,9 @@ FunctionDAG::FunctionDAG(const vector<Function> &outputs, const MachineParams &p
             for (size_t i = 0; i < sched.dims().size(); i++) {
                 const auto &d = sched.dims()[i];
                 // Skip synthetic loops like "__outermost"
-                if (!stage_scope_with_symbolic_rvar_bounds.contains(d.var)) continue;
+                if (!stage_scope_with_symbolic_rvar_bounds.contains(d.var)) {
+                    continue;
+                }
 
                 Node::Loop l;
                 l.var = d.var;
@@ -818,7 +824,7 @@ FunctionDAG::FunctionDAG(const vector<Function> &outputs, const MachineParams &p
                 int leaves = 0;
                 Type narrowest_type;
                 map<string, int> calls;
-                CheckTypes(Function f)
+                CheckTypes(const Function &f)
                     : func(f) {
                 }
             };
@@ -858,7 +864,7 @@ FunctionDAG::FunctionDAG(const vector<Function> &outputs, const MachineParams &p
             if (node.is_output) {
                 // Get the bounds estimate
                 map<string, Span> estimates;
-                for (auto b : consumer.schedule().estimates()) {
+                for (const auto &b : consumer.schedule().estimates()) {
                     int64_t i_min = *as_const_int(b.min);
                     int64_t i_extent = *as_const_int(b.extent);
 
@@ -881,7 +887,7 @@ FunctionDAG::FunctionDAG(const vector<Function> &outputs, const MachineParams &p
                         estimates[b.var] = Span(i_min, i_min + i_extent - 1, false);
                     }
                 }
-                for (auto b : consumer.schedule().bounds()) {
+                for (const auto &b : consumer.schedule().bounds()) {
                     const int64_t *i_min = as_const_int(b.min);
                     const int64_t *i_extent = as_const_int(b.extent);
                     if (i_min && i_extent) {
@@ -952,7 +958,7 @@ FunctionDAG::FunctionDAG(const vector<Function> &outputs, const MachineParams &p
 
     // Initialize the memory layouts for the bounds structs
     for (auto &n : nodes) {
-        n.bounds_memory_layout.reset(new BoundContents::Layout);
+        n.bounds_memory_layout = std::make_unique<BoundContents::Layout>();
         auto &l = *(n.bounds_memory_layout);
         l.computed_offset = n.func.dimensions();
         l.total_size = l.computed_offset + n.func.dimensions();
@@ -975,9 +981,9 @@ FunctionDAG::FunctionDAG(const vector<Function> &outputs, const MachineParams &p
         }
     }
 
-    for (size_t i = 0; i < edges.size(); i++) {
-        edges[i].producer->outgoing_edges.push_back(&(edges[i]));
-        edges[i].consumer->incoming_edges.push_back(&(edges[i]));
+    for (auto &edge : edges) {
+        edge.producer->outgoing_edges.push_back(&edge);
+        edge.consumer->incoming_edges.push_back(&edge);
     }
 
     // Compute transitive dependencies
@@ -1090,6 +1096,10 @@ void FunctionDAG::dump() const {
 std::ostream &FunctionDAG::dump(std::ostream &os) const {
     dump_internal(os);
     return os;
+}
+
+int ExprBranching::visit(const Reinterpret *op) {
+    return Super::dispatch(op->value);
 }
 
 int ExprBranching::visit(const IntImm *op) {
@@ -1212,7 +1222,7 @@ int ExprBranching::visit(const Load *op) {
 int ExprBranching::visit_nary(const std::vector<Expr> &exprs) {
     int total_branching = 0;
 
-    for (Expr e : exprs) {
+    for (const Expr &e : exprs) {
         int branching = Super::dispatch(e);
         if (branching == 0) {
             continue;
@@ -1255,7 +1265,7 @@ int ExprBranching::compute(const Function &f) {
 
     std::vector<Expr> values;
     values.reserve(def.values().size());
-    for (auto v : def.values()) {
+    for (const auto &v : def.values()) {
         values.push_back(common_subexpression_elimination(simplify(v)));  // Get things into canonical form
     }
 
@@ -1263,7 +1273,7 @@ int ExprBranching::compute(const Function &f) {
 
     std::vector<Expr> args;
     args.reserve(def.args().size());
-    for (auto v : def.args()) {
+    for (const auto &v : def.args()) {
         args.push_back(common_subexpression_elimination(simplify(v)));  // Get things into canonical form
     }
 
@@ -1274,7 +1284,9 @@ void sanitize_names(std::string &str) {
     bool in_quotes = false;
     for (auto &c : str) {
         in_quotes ^= (c == '"');
-        if (!in_quotes && c == '$') c = '_';
+        if (!in_quotes && c == '$') {
+            c = '_';
+        }
     }
 }
 

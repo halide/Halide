@@ -1,6 +1,5 @@
 #include "SearchSpace.h"
 
-using std::set;
 using std::vector;
 
 namespace Halide {
@@ -13,14 +12,14 @@ bool use_randomized_tilings() {
 }
 
 SearchSpace::SearchSpace(const FunctionDAG &dag,
-                         const MachineParams &params,
+                         int hardware_parallelism,
                          const Target &target,
                          const std::string &search_space_options,
                          std::mt19937 &rng,
                          CostModel *cost_model,
                          Statistics &stats,
                          const LoopNestParser *partial_schedule)
-    : dag{dag}, params{params}, target{target}, search_space_options{search_space_options}, rng{rng}, cost_model{cost_model}, stats{stats}, randomize_tilings{use_randomized_tilings()}, partial_schedule{partial_schedule} {
+    : dag{dag}, hardware_parallelism{hardware_parallelism}, target{target}, search_space_options{search_space_options}, rng{rng}, cost_model{cost_model}, stats{stats}, randomize_tilings{use_randomized_tilings()}, partial_schedule{partial_schedule} {
     memoized_compute_root_blocks.make_large(dag.nodes.size());
 }
 
@@ -42,14 +41,14 @@ void SearchSpace::memoize_blocks(const FunctionDAG::Node *node, LoopNest *new_ro
     for (auto &c : new_root->children) {
         if (c->node == node) {
             LoopNest *new_block = new LoopNest;
-            new_block->copy_from_including_features(*c.get());
-            blocks.push_back(new_block);
+            new_block->copy_from_including_features(*c);
+            blocks.emplace_back(new_block);
             ++stats.num_block_memoization_misses;
         }
     }
 }
 
-bool SearchSpace::add_states_from_memoized_blocks(IntrusivePtr<State> state,
+bool SearchSpace::add_states_from_memoized_blocks(const IntrusivePtr<State> &state,
                                                   std::function<void(IntrusivePtr<State> &&)> &accept_child,
                                                   const FunctionDAG::Node *node,
                                                   int &num_children) const {
@@ -93,7 +92,7 @@ bool SearchSpace::add_states_from_memoized_blocks(IntrusivePtr<State> state,
             new_root->children[block_index++] = new_block;
         }
 
-        if (child->calculate_cost(dag, params, target, cost_model, stats)) {
+        if (child->calculate_cost(dag, hardware_parallelism, target, cost_model, stats)) {
             num_children++;
             accept_child(std::move(child));
             ++stats.num_block_memoization_hits;
@@ -103,14 +102,13 @@ bool SearchSpace::add_states_from_memoized_blocks(IntrusivePtr<State> state,
     return true;
 }
 
-vector<SearchSpace::ParallelTileOption> SearchSpace::filter_parallel_tile_options(IntrusivePtr<State> state,
+vector<SearchSpace::ParallelTileOption> SearchSpace::filter_parallel_tile_options(const IntrusivePtr<State> &state,
                                                                                   const FunctionDAG::Node *node,
                                                                                   vector<vector<int64_t>> &inner_tilings,
                                                                                   const vector<int64_t> &pure_size) const {
     vector<SearchSpace::ParallelTileOption> options;
     vector<SearchSpace::ParallelTileOption> insufficient_parallelism;
-    for (size_t i = 0; i < inner_tilings.size(); i++) {
-        auto &t = inner_tilings[i];
+    for (auto &t : inner_tilings) {
         SearchSpace::ParallelTileOption o;
         o.inner_tiling = t;
 
@@ -127,7 +125,7 @@ vector<SearchSpace::ParallelTileOption> SearchSpace::filter_parallel_tile_option
             if (c->node == node) {
                 int64_t total = 1;
                 int64_t max_available = 1;
-                for (auto &l : c->stage->loop) {
+                for (const auto &l : c->stage->loop) {
                     if (!l.rvar) {
                         total *= o.outer_tiling[l.pure_dim];
                         max_available *= c->size[l.pure_dim];
@@ -136,18 +134,18 @@ vector<SearchSpace::ParallelTileOption> SearchSpace::filter_parallel_tile_option
                 max_total = std::max(max_total, total);
 
                 // If a stage does not have enough parallelism regardless of the
-                // tiling (i.e. its size is < params.parallelism * 2 before
+                // tiling (i.e. its size is < hardware_parallelism * 2 before
                 // splitting), then the only tiling worth considering is the
                 // one that retains the full extent in this dimension
                 // (outer_tiling == size). In that case, skip over updating
                 // min_total, otherwise it will be filtered out below
-                if (max_available >= params.parallelism * 2 || total != max_available) {
+                if (max_available >= hardware_parallelism * 2 || total != max_available) {
                     if (min_total != 0) {
                         min_total = std::min(min_total, total);
                     } else {
                         min_total = total;
                     }
-                    const double tasks_per_core = ((double)total) / params.parallelism;
+                    const double tasks_per_core = ((double)total) / hardware_parallelism;
                     o.idle_core_wastage = std::max(o.idle_core_wastage,
                                                    std::ceil(tasks_per_core) /
                                                        tasks_per_core);
@@ -160,8 +158,8 @@ vector<SearchSpace::ParallelTileOption> SearchSpace::filter_parallel_tile_option
 
         // Filter out the less useful options
         bool ok =
-            (min_total >= params.parallelism * 2 &&
-             (max_total <= params.parallelism * 16 || target.has_gpu_feature()));
+            (min_total >= hardware_parallelism * 2 &&
+             (max_total <= hardware_parallelism * 16 || target.has_gpu_feature()));
 
         if (!ok) {
             insufficient_parallelism.emplace_back(std::move(o));
@@ -171,7 +169,7 @@ vector<SearchSpace::ParallelTileOption> SearchSpace::filter_parallel_tile_option
         options.emplace_back(std::move(o));
     }
 
-    int64_t parallelism_limit = params.parallelism;
+    int64_t parallelism_limit = hardware_parallelism;
     while (options.empty()) {
         for (auto &o : insufficient_parallelism) {
             if (o.min_parallelism >= parallelism_limit) {
@@ -221,7 +219,7 @@ void SearchSpace::process_pending_states(std::unordered_map<uint64_t, StateVecto
 
         size_t accepted = 0;
         for (size_t i = 0; i < entry.second.size() && accepted < N; ++i) {
-            if (entry.second[i]->calculate_cost(dag, params, target, cost_model, stats)) {
+            if (entry.second[i]->calculate_cost(dag, hardware_parallelism, target, cost_model, stats)) {
                 num_children++;
                 accept_child(std::move(entry.second[i]));
                 accepted++;
@@ -235,10 +233,10 @@ void SearchSpace::process_pending_states(std::unordered_map<uint64_t, StateVecto
     }
 
     for (auto &entry : secondary_options) {
-        for (size_t i = 0; i < entry.second.size(); ++i) {
-            if (entry.second[i]->calculate_cost(dag, params, target, cost_model, stats)) {
+        for (auto &state : entry.second) {
+            if (state->calculate_cost(dag, hardware_parallelism, target, cost_model, stats)) {
                 num_children++;
-                accept_child(std::move(entry.second[i]));
+                accept_child(std::move(state));
                 stats.num_tilings_accepted++;
                 break;
             }
@@ -246,7 +244,7 @@ void SearchSpace::process_pending_states(std::unordered_map<uint64_t, StateVecto
     }
 }
 
-void SearchSpace::generate_children(IntrusivePtr<State> state,
+void SearchSpace::generate_children(const IntrusivePtr<State> &state,
                                     std::function<void(IntrusivePtr<State> &&)> &accept_child,
                                     int pass_idx,
                                     bool is_pre_pass) {
@@ -352,9 +350,9 @@ void SearchSpace::generate_children(IntrusivePtr<State> state,
                 must_inline &= (e->consumer->node->is_pointwise ||
                                 e->consumer->node->is_boundary_condition);
             }
-            if (must_inline) {
+
                 return;
-            }
+
         }
 
         if (must_compute_root) {
@@ -363,7 +361,7 @@ void SearchSpace::generate_children(IntrusivePtr<State> state,
             const auto &nodes = compute_root_nodes.get(node);
             for (const auto &n : nodes) {
                 const auto *compute_root_loop = deep_copy_loop_nest(n.get(), NoOpMutator{});
-                new_root->children.push_back(compute_root_loop);
+                new_root->children.emplace_back(compute_root_loop);
             }
             new_root->store_at.insert(node);
 
@@ -400,7 +398,7 @@ void SearchSpace::generate_children(IntrusivePtr<State> state,
         std::unordered_map<uint64_t, StateVector> secondary_options;
         for (int vector_dim : vector_dims) {
             Timer timer;
-            auto tile_options = root->compute_in_tiles(node, nullptr, params, target, search_space_options, vector_dim, false, false, is_pre_pass);
+            auto tile_options = root->compute_in_tiles(node, nullptr, hardware_parallelism, target, search_space_options, vector_dim, false, false, is_pre_pass);
             stats.compute_in_tiles_time += timer.elapsed();
 
             timer.restart();
@@ -424,7 +422,7 @@ void SearchSpace::generate_children(IntrusivePtr<State> state,
                 }
 
                 auto child = state->make_child();
-                child->root = std::move(o.loop_nest);
+                child->root = o.loop_nest;
                 child->num_decisions_made++;
                 uint64_t h = child->structural_hash(pass_idx);
 
@@ -446,8 +444,8 @@ void SearchSpace::generate_children(IntrusivePtr<State> state,
         bool should_parallelize = false;
         IntrusivePtr<const LoopNest> pure_stage;
 
-        if (params.parallelism > 1) {
-            for (auto &c : root->children) {
+        if (hardware_parallelism > 1) {
+            for (const auto &c : root->children) {
                 if (c->node == node && node->dimensions > 0) {
                     if (c->stage->index == 0) {
                         pure_stage = c;
@@ -476,7 +474,7 @@ void SearchSpace::generate_children(IntrusivePtr<State> state,
         // step 1) convert (none, SIMD) loops to (parallel, serial, SIMD) loops with specialized serial sizes
         auto parallel_tilings = generate_compute_root_serial_tilings(pure_stage, node);
 
-        internal_assert(parallel_tilings.size() > 0) << " zero parallel tilings\n";
+        internal_assert(!parallel_tilings.empty()) << " zero parallel tilings\n";
 
         std::unordered_map<uint64_t, std::vector<IntrusivePtr<State>>> primary_options;
         std::unordered_map<uint64_t, std::vector<IntrusivePtr<State>>> secondary_options;
@@ -487,7 +485,7 @@ void SearchSpace::generate_children(IntrusivePtr<State> state,
             // step 1) parallelize all loop nests for this node into (parallel, serial) with given serial tiles
             for (auto &c : parallel_root.children) {
                 if (c->node == node) {
-                    c = c->parallelize_in_tiles(params, parallel_t, &parallel_root, target, false, true);
+                    c = c->parallelize_in_tiles(parallel_t, &parallel_root, target, false, true);
                 }
             }
 
@@ -509,7 +507,7 @@ void SearchSpace::generate_children(IntrusivePtr<State> state,
                 for (auto &c : new_root->children) {
                     if (c->node == node) {
                         vector<int64_t> tiling((int)(c->size.size()), 1);
-                        c = c->parallelize_in_tiles(params, tiling, new_root, target, false, true);
+                        c = c->parallelize_in_tiles(tiling, new_root, target, false, true);
                     }
                 }
                 if (add_child(state, new_root, accept_child)) {
@@ -540,7 +538,7 @@ void SearchSpace::generate_children(IntrusivePtr<State> state,
 
                 for (auto &c : new_root->children) {
                     if (c->node == node) {
-                        c = c->parallelize_in_tiles(params, o.inner_tiling, new_root, target, true, false);
+                        c = c->parallelize_in_tiles(o.inner_tiling, new_root, target, true, false);
                     }
                 }
 
@@ -553,7 +551,7 @@ void SearchSpace::generate_children(IntrusivePtr<State> state,
                 }
 
                 auto child = state->make_child();
-                child->root = std::move(new_root);
+                child->root = new_root;
                 child->num_decisions_made++;
                 uint64_t h = child->structural_hash(pass_idx);
 
@@ -586,7 +584,7 @@ struct ClearInlinedMutator {
     }
 };
 
-void SearchSpace::freeze_lowest_cost_stages(const IntrusivePtr<State> best) {
+void SearchSpace::freeze_lowest_cost_stages(const IntrusivePtr<State> &best) {
     std::vector<std::pair<int, double>> node_ids_and_costs;
     NodeMap<double> node_costs;
     size_t num_nodes = 0;
@@ -608,7 +606,7 @@ void SearchSpace::freeze_lowest_cost_stages(const IntrusivePtr<State> best) {
     }
 
     for (auto it = node_costs.begin(); it != node_costs.end(); it++) {
-        node_ids_and_costs.push_back({it.key()->id, it.value()});
+        node_ids_and_costs.emplace_back(it.key()->id, it.value());
     }
 
     for (const auto &n : node_ids_and_costs) {
@@ -633,8 +631,8 @@ void SearchSpace::freeze_lowest_cost_stages(const IntrusivePtr<State> best) {
 
     for (const auto &c : best->root->children) {
         if (nodes_to_freeze.contains(c->node)) {
-            auto new_loop_nest = deep_copy_loop_nest(c, mutator);
-            compute_root_nodes.get_or_create(c->node).push_back(new_loop_nest);
+            auto *new_loop_nest = deep_copy_loop_nest(c, mutator);
+            compute_root_nodes.get_or_create(c->node).emplace_back(new_loop_nest);
             std::cerr << "Freezing as compute_root: " << c->node->func.name() << "\n";
         }
     }
@@ -657,9 +655,9 @@ bool SearchSpace::add_child(const IntrusivePtr<State> &state,
                             const IntrusivePtr<const LoopNest> &new_root,
                             std::function<void(IntrusivePtr<State> &&)> &accept_child) const {
     auto child = state->make_child();
-    child->root = std::move(new_root);
+    child->root = new_root;
     child->num_decisions_made++;
-    if (child->calculate_cost(dag, params, target, cost_model, stats)) {
+    if (child->calculate_cost(dag, hardware_parallelism, target, cost_model, stats)) {
         accept_child(std::move(child));
         return true;
     }

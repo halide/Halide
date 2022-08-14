@@ -67,8 +67,8 @@ struct ThreadInfo {
             loop_vars.push_back(loop[i].var);
         }
 
-        if (loop_indices.size() == 0) {
-            internal_assert(size.size() > 0);
+        if (loop_indices.empty()) {
+            internal_assert(!size.empty());
             ++num_thread_loops;
             loop_indices.push_back(0);
             loop_vars.push_back(loop[0].var);
@@ -77,8 +77,8 @@ struct ThreadInfo {
         internal_assert(num_threads <= num_threads_in_this_block);
         internal_assert(loop_indices.size() == num_thread_loops);
         internal_assert(loop_vars.size() == num_thread_loops);
-        internal_assert(loop_indices.size() > 0 && loop_indices.size() <= 3);
-        internal_assert(loop_vars.size() > 0 && loop_vars.size() <= 3);
+        internal_assert(!loop_indices.empty() && loop_indices.size() <= 3);
+        internal_assert(!loop_vars.empty() && loop_vars.size() <= 3);
 
         count_num_active_warps_per_block();
     }

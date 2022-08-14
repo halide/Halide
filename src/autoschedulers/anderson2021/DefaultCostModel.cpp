@@ -44,7 +44,7 @@ bool ends_with(const std::string &str, const std::string &suffix) {
 }  // namespace
 
 void DefaultCostModel::set_pipeline_features(const Internal::Autoscheduler::FunctionDAG &dag,
-                                             const MachineParams &params) {
+                                             int hardware_parallelism) {
 
     const int pipeline_feat_size = head1_w * head1_h;
     // We ignore the first seven pipeline features in the cost
@@ -74,8 +74,8 @@ void DefaultCostModel::set_pipeline_features(const Internal::Autoscheduler::Func
     }
     internal_assert(stage == num_stages);
     pipeline_feat_queue = pipeline_features;
-    internal_assert(params.parallelism > 0);
-    num_cores = params.parallelism;
+    internal_assert(hardware_parallelism > 0);
+    num_cores = hardware_parallelism;
 }
 
 void DefaultCostModel::set_pipeline_features(const Runtime::Buffer<float> &pipeline_feats, int n) {

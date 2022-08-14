@@ -7,7 +7,6 @@ using namespace Halide::Internal;
 using namespace Halide::Internal::Autoscheduler;
 
 void test_state() {
-    MachineParams params(80, 16000000, 40);
     Target target("host-cuda");
 
     // Test update_always_consider_inline_options
@@ -22,7 +21,7 @@ void test_state() {
 
         std::vector<Function> outputs;
         outputs.push_back(h.function());
-        FunctionDAG dag(outputs, params, target);
+        FunctionDAG dag(outputs, target);
 
         const FunctionDAG::Node *node_h = &dag.nodes[0];
         const FunctionDAG::Node *node_g = &dag.nodes[1];

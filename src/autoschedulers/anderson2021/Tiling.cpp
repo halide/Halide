@@ -32,7 +32,7 @@ vector<vector<int64_t>> generate_serial_tilings(const vector<int64_t> &s, int d,
                                                 bool allow_inner_ones) {
     vector<vector<int64_t>> result;
     if (d == -1) {
-        result.push_back(vector<int64_t>());
+        result.emplace_back();
     } else {
         vector<vector<int64_t>> v;
         v = generate_serial_tilings(s, d - 1, last_d, vectorized_index, vec_dim_serial_sizes, filter_small_outer_extents, allow_inner_ones);
@@ -40,7 +40,7 @@ vector<vector<int64_t>> generate_serial_tilings(const vector<int64_t> &s, int d,
             t.push_back(0);
             bool used_full_extent = false;
             // include odd serial sizes that encourage multiples of 16 as thread tile size
-            if (vec_dim_serial_sizes.size() > 0 && d == vectorized_index) {
+            if (!vec_dim_serial_sizes.empty() && d == vectorized_index) {
                 for (int inner : vec_dim_serial_sizes) {
                     int outer = (s[d] + inner - 1) / inner;
                     if (filter_small_outer_extents && outer < 16) {
@@ -95,7 +95,7 @@ vector<vector<int64_t>> generate_tilings(const vector<int64_t> &s, int d, int fa
                                          const vector<int> &inner_sizes) {
     vector<vector<int64_t>> result;
     if (d == -1) {
-        result.push_back(vector<int64_t>());
+        result.emplace_back();
     } else {
         vector<vector<int64_t>> v;
         v = generate_tilings(s, d - 1, factor, allow_splits);
@@ -130,8 +130,12 @@ vector<vector<int64_t>> generate_tilings(const vector<int64_t> &s, int d, int fa
                 if (!inner_sizes.empty()) {  // using fixed set of inner loop extents
                     for (int inner : inner_sizes) {
                         int outer = (s[d] + inner - 1) / inner;
-                        if (is_one && outer == 1) continue;
-                        if (is_full && outer == s[d]) continue;
+                        if (is_one && outer == 1) {
+                            continue;
+                        }
+                        if (is_full && outer == s[d]) {
+                            continue;
+                        }
                         t.back() = outer;
                         result.push_back(t);
                     }
@@ -139,10 +143,16 @@ vector<vector<int64_t>> generate_tilings(const vector<int64_t> &s, int d, int fa
                     int max_inner = 0;
                     for (int inner = 1; inner < s[d]; inner *= factor) {
                         int outer = (s[d] + inner - 1) / inner;
-                        if (is_one && outer == 1) continue;
-                        if (is_full && outer == s[d]) continue;
+                        if (is_one && outer == 1) {
+                            continue;
+                        }
+                        if (is_full && outer == s[d]) {
+                            continue;
+                        }
                         // Stop when we hit inner sizes that would do too much recompute
-                        if (inner > 1 && inner * outer * 7 > s[d] * 8) break;
+                        if (inner > 1 && inner * outer * 7 > s[d] * 8) {
+                            break;
+                        }
                         max_inner = inner;
                         t.back() = outer;
                         result.push_back(t);
@@ -150,12 +160,20 @@ vector<vector<int64_t>> generate_tilings(const vector<int64_t> &s, int d, int fa
 
                     for (int outer = 1; outer <= s[d]; outer *= factor) {
                         int inner = (s[d] + outer - 1) / outer;
-                        if (is_one && outer == 1) continue;
-                        if (is_full && outer == s[d]) continue;
+                        if (is_one && outer == 1) {
+                            continue;
+                        }
+                        if (is_full && outer == s[d]) {
+                            continue;
+                        }
                         // Stop when we get into the regime covered by the loop above.
-                        if (outer > 1 && inner < max_inner * 2) break;
+                        if (outer > 1 && inner < max_inner * 2) {
+                            break;
+                        }
                         // Or when the wasted compute gets too bad.
-                        if (inner * outer * 7 > s[d] * 8) break;
+                        if (inner * outer * 7 > s[d] * 8) {
+                            break;
+                        }
                         t.back() = outer;
                         result.push_back(t);
                     }
@@ -206,7 +224,7 @@ vector<vector<int64_t>> generate_gpu_tilings(const vector<vector<int64_t>> &stag
                                              int d, const vector<int> &vectorized_indices, bool serial_inner, bool is_compute_root_stage) {
     vector<vector<int64_t>> result;
     if (d == -1) {
-        result.push_back(vector<int64_t>());
+        result.emplace_back();
     } else {
         // set max thread count 64 for now in all dims
         int64_t max_threads_extent = 64, total_threads_limit = 1024;  // less than 1024 to limit states
@@ -235,9 +253,9 @@ vector<vector<int64_t>> generate_gpu_tilings(const vector<vector<int64_t>> &stag
                     vector<int64_t> new_max_s = max_s;
                     for (size_t stage = 0; stage < pure_dims.size(); stage++) {
                         vector<int64_t> stage_thread_t, stage_lowered_size;
-                        for (size_t i = 0; i < pure_dims[stage].size(); i++) {
-                            if (pure_dims[stage][i] >= 0) {
-                                stage_thread_t.push_back(thread_t[pure_dims[stage][i]]);
+                        for (int i : pure_dims[stage]) {
+                            if (i >= 0) {
+                                stage_thread_t.push_back(thread_t[i]);
                             } else {  // impure dims have extent 1
                                 stage_thread_t.push_back(1);
                             }
@@ -297,7 +315,9 @@ vector<vector<int64_t>> generate_gpu_tilings(const vector<vector<int64_t>> &stag
                     break;
                 }
                 int64_t other_ext = (stage_sizes[0][d] + threads_ext - 1) / threads_ext;
-                if (d != vectorized_indices[0] && threads_ext > 1 && threads_ext * other_ext * 7 > stage_sizes[0][d] * 8) break;
+                if (d != vectorized_indices[0] && threads_ext > 1 && threads_ext * other_ext * 7 > stage_sizes[0][d] * 8) {
+                    break;
+                }
                 t.back() = threads_ext;
                 validity valid_result = is_valid_tiling();
                 if (valid_result == serial_count_err) {

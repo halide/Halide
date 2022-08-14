@@ -6,7 +6,6 @@ using namespace Halide::Internal;
 using namespace Halide::Internal::Autoscheduler;
 
 void test_bounds() {
-    MachineParams params(80, 16000000, 40);
     Target target("host-cuda");
     bool verbose = false;
     int bytes_per_point = 4;
@@ -22,7 +21,7 @@ void test_bounds() {
 
         std::vector<Function> outputs;
         outputs.push_back(h.function());
-        FunctionDAG dag(outputs, params, target);
+        FunctionDAG dag(outputs, target);
 
         const FunctionDAG::Node *node_h = &dag.nodes[0];
         const FunctionDAG::Node *node_g = &dag.nodes[1];
@@ -41,10 +40,10 @@ void test_bounds() {
         std::vector<int64_t> tiling;
         tiling.push_back(1);
         // Serial loop
-        root->children[0] = root->children[0]->parallelize_in_tiles(params, tiling, root.get(), target, true, false);
+        root->children[0] = root->children[0]->parallelize_in_tiles(tiling, root.get(), target, true, false);
         tiling.back() = 32;
         // Thread loop
-        root->children[0] = root->children[0]->parallelize_in_tiles(params, tiling, root.get(), target, true, false);
+        root->children[0] = root->children[0]->parallelize_in_tiles(tiling, root.get(), target, true, false);
 
         const auto &thread = root->children[0]->children[0];
         const auto &thread_bounds_g = thread->get_bounds(node_g);
@@ -74,7 +73,7 @@ void test_bounds() {
 
         std::vector<Function> outputs;
         outputs.push_back(out.function());
-        FunctionDAG dag(outputs, params, target);
+        FunctionDAG dag(outputs, target);
 
         const FunctionDAG::Node *node_out = &dag.nodes[0];
         const FunctionDAG::Node *node_h = &dag.nodes[1];
@@ -93,10 +92,10 @@ void test_bounds() {
         std::vector<int64_t> tiling;
         tiling.push_back(1);
         // Serial loop
-        root->children[0] = root->children[0]->parallelize_in_tiles(params, tiling, root.get(), target, true, false);
+        root->children[0] = root->children[0]->parallelize_in_tiles(tiling, root.get(), target, true, false);
         tiling.back() = 32;
         // Thread loop
-        root->children[0] = root->children[0]->parallelize_in_tiles(params, tiling, root.get(), target, true, false);
+        root->children[0] = root->children[0]->parallelize_in_tiles(tiling, root.get(), target, true, false);
 
         std::unique_ptr<LoopNest> root_copy{new LoopNest};
         root_copy->copy_from(*root);
@@ -132,7 +131,7 @@ void test_bounds() {
 
         std::vector<Function> outputs;
         outputs.push_back(out.function());
-        FunctionDAG dag(outputs, params, target);
+        FunctionDAG dag(outputs, target);
 
         const FunctionDAG::Node *node_out = &dag.nodes[0];
         const FunctionDAG::Node *node_f = &dag.nodes[1];
@@ -149,10 +148,10 @@ void test_bounds() {
         std::vector<int64_t> tiling;
         tiling.push_back(1);
         // Serial loop
-        root->children[0] = root->children[0]->parallelize_in_tiles(params, tiling, root.get(), target, true, false);
+        root->children[0] = root->children[0]->parallelize_in_tiles(tiling, root.get(), target, true, false);
         tiling.back() = 32;
         // Thread loop
-        root->children[0] = root->children[0]->parallelize_in_tiles(params, tiling, root.get(), target, true, false);
+        root->children[0] = root->children[0]->parallelize_in_tiles(tiling, root.get(), target, true, false);
 
         std::unique_ptr<LoopNest> root_copy{new LoopNest};
         root_copy->copy_from(*root);
@@ -192,7 +191,7 @@ void test_bounds() {
 
         std::vector<Function> outputs;
         outputs.push_back(out.function());
-        FunctionDAG dag(outputs, params, target);
+        FunctionDAG dag(outputs, target);
 
         const FunctionDAG::Node *node_out = &dag.nodes[0];
         const FunctionDAG::Node *node_f = &dag.nodes[1];
@@ -209,10 +208,10 @@ void test_bounds() {
         std::vector<int64_t> tiling;
         tiling.push_back(1);
         // Serial loop
-        root->children[0] = root->children[0]->parallelize_in_tiles(params, tiling, root.get(), target, true, false);
+        root->children[0] = root->children[0]->parallelize_in_tiles(tiling, root.get(), target, true, false);
         tiling.back() = 32;
         // Thread loop
-        root->children[0] = root->children[0]->parallelize_in_tiles(params, tiling, root.get(), target, true, false);
+        root->children[0] = root->children[0]->parallelize_in_tiles(tiling, root.get(), target, true, false);
 
         std::unique_ptr<LoopNest> root_copy{new LoopNest};
         root_copy->copy_from(*root);
@@ -253,7 +252,7 @@ void test_bounds() {
 
         std::vector<Function> outputs;
         outputs.push_back(out.function());
-        FunctionDAG dag(outputs, params, target);
+        FunctionDAG dag(outputs, target);
 
         const FunctionDAG::Node *node_out = &dag.nodes[0];
         const FunctionDAG::Node *node_f = &dag.nodes[1];
@@ -271,12 +270,12 @@ void test_bounds() {
         tiling.push_back(1);
         tiling.push_back(1);
         // Serial loop
-        root->children[0] = root->children[0]->parallelize_in_tiles(params, tiling, root.get(), target, true, false);
+        root->children[0] = root->children[0]->parallelize_in_tiles(tiling, root.get(), target, true, false);
         tiling.clear();
         tiling.push_back(1);
         tiling.push_back(32);
         // Thread loop
-        root->children[0] = root->children[0]->parallelize_in_tiles(params, tiling, root.get(), target, true, false);
+        root->children[0] = root->children[0]->parallelize_in_tiles(tiling, root.get(), target, true, false);
 
         std::unique_ptr<LoopNest> root_copy{new LoopNest};
         root_copy->copy_from(*root);
@@ -321,7 +320,7 @@ void test_bounds() {
 
         std::vector<Function> outputs;
         outputs.push_back(out.function());
-        FunctionDAG dag(outputs, params, target);
+        FunctionDAG dag(outputs, target);
 
         const FunctionDAG::Node *node_out = &dag.nodes[0];
         const FunctionDAG::Node *node_f = &dag.nodes[1];
@@ -341,7 +340,7 @@ void test_bounds() {
         tiling.push_back(1);
         tiling.push_back(1);
         // Serial loop
-        auto thread_loop = root->children[0]->parallelize_in_tiles(params, tiling, root.get(), target, true, false);
+        auto thread_loop = root->children[0]->parallelize_in_tiles(tiling, root.get(), target, true, false);
         std::unique_ptr<LoopNest> thread_loop_copy{new LoopNest};
         thread_loop_copy->copy_from(*thread_loop);
         thread_loop_copy->compute_here(node_f, true, 0, false, target);
@@ -350,7 +349,7 @@ void test_bounds() {
         tiling.push_back(1);
         // Thread loop
         root->children[0] = thread_loop_copy.release();
-        root->children[0] = root->children[0]->parallelize_in_tiles(params, tiling, root.get(), target, true, false);
+        root->children[0] = root->children[0]->parallelize_in_tiles(tiling, root.get(), target, true, false);
 
         std::unique_ptr<LoopNest> root_copy{new LoopNest};
         root_copy->copy_from(*root);

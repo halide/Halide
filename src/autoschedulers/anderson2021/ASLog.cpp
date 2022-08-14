@@ -26,7 +26,9 @@ std::string get_env_variable(char const *env_var_name) {
     return lvl;
 #else
     char *lvl = getenv(env_var_name);
-    if (lvl) return std::string(lvl);
+    if (lvl) {
+        return std::string(lvl);
+    }
 #endif
 
     return "";

@@ -22,7 +22,7 @@ public:
 
     // Configure the cost model for the algorithm to be scheduled.
     virtual void set_pipeline_features(const Internal::Autoscheduler::FunctionDAG &dag,
-                                       const MachineParams &params) = 0;
+                                       int hardware_parallelism) = 0;
 
     // Enqueue a schedule to be evaluated. Will annotate the value located at cost_ptr when the evaluation takes place.
     // Note that the dag argument should correspond to the dag specified previously when calling set_pipeline_features.

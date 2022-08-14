@@ -191,7 +191,6 @@ make_featurization() {
         HL_BEAM_SIZE=${beam} \
         HL_SHARED_MEMORY_LIMIT=${shared_memory_limit} \
         HL_SHARED_MEMORY_SM_LIMIT=${shared_memory_sm_limit} \
-        HL_MACHINE_PARAMS=${HL_MACHINE_PARAMS} \
         HL_DEBUG_AUTOSCHEDULE=1 \
         HL_DEBUG_CODEGEN=1 \
         /bin/time -f 'Compile time (s): %e' ${TIMEOUT_CMD} -k ${COMPILATION_TIMEOUT} ${COMPILATION_TIMEOUT} \
@@ -201,10 +200,10 @@ make_featurization() {
         -o ${D} \
         -e stmt,assembly,static_library,c_header,registration,schedule,featurization \
         target=${HL_TARGET} \
-        auto_schedule=true \
         ${EXTRA_GENERATOR_ARGS} \
         -p ${AUTOSCHED_BIN}/libautoschedule_anderson2021.so \
-        -s Anderson2021 \
+        autoscheduler=Anderson2021 \
+        autoscheduler.parallelism=${HARDWARE_PARALLELISM}
         2> ${D}/compile_err.txt > ${D}/compile_log.txt"
 
     FAILED=0
