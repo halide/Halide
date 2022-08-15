@@ -332,7 +332,9 @@ void BlockAllocator::destroy_region_allocator(void *user_context, RegionAllocato
                         << "user_context=" << (void *)(user_context) << " "
                         << "region_allocator=" << (void *)(region_allocator) << ")...\n";
 #endif
-    if (region_allocator == nullptr) { return; }
+    if (region_allocator == nullptr) {
+        return;
+    }
     region_allocator->destroy(user_context);
     RegionAllocator::destroy(user_context, region_allocator);
 }

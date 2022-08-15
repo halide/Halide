@@ -132,7 +132,9 @@ void StringTable::fill(void *user_context, const char **array, size_t count) {
 }
 
 void StringTable::assign(void *user_context, size_t index, const char *str, size_t length) {
-    if (length == 0) { length = strlen(str); }
+    if (length == 0) {
+        length = strlen(str);
+    }
     LinkedList::EntryType *entry_ptr = contents.front();
     for (size_t n = 0; n < contents.size() && entry_ptr != nullptr; ++n) {
         if (n == index) {
@@ -196,7 +198,9 @@ size_t StringTable::parse(void *user_context, const char *str, const char *delim
 }
 
 bool StringTable::contains(const char *str) const {
-    if (StringUtils::is_empty(str)) { return false; }
+    if (StringUtils::is_empty(str)) {
+        return false;
+    }
 
     const LinkedList::EntryType *entry_ptr = contents.front();
     for (size_t n = 0; n < contents.size() && entry_ptr != nullptr; ++n) {

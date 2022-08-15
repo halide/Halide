@@ -143,8 +143,12 @@ void StringStorage::assign(void *user_context, char ch) {
 }
 
 void StringStorage::assign(void *user_context, const char *str, size_t length) {
-    if (StringUtils::is_empty(str)) { return; }
-    if (length == 0) { length = strlen(str); }
+    if (StringUtils::is_empty(str)) {
+        return;
+    }
+    if (length == 0) {
+        length = strlen(str);
+    }
     char *this_str = static_cast<char *>(contents.data());
     reserve(user_context, length);
     memcpy(this_str, str, length);
@@ -152,8 +156,12 @@ void StringStorage::assign(void *user_context, const char *str, size_t length) {
 }
 
 void StringStorage::append(void *user_context, const char *str, size_t length) {
-    if (StringUtils::is_empty(str)) { return; }
-    if (length == 0) { length = strlen(str); }
+    if (StringUtils::is_empty(str)) {
+        return;
+    }
+    if (length == 0) {
+        length = strlen(str);
+    }
     const size_t old_size = contents.size();
     size_t new_length = old_size + length;
     char *this_str = static_cast<char *>(contents[old_size]);
@@ -167,8 +175,12 @@ void StringStorage::append(void *user_context, char ch) {
 }
 
 void StringStorage::prepend(void *user_context, const char *str, size_t length) {
-    if (StringUtils::is_empty(str)) { return; }
-    if (length == 0) { length = strlen(str); }
+    if (StringUtils::is_empty(str)) {
+        return;
+    }
+    if (length == 0) {
+        length = strlen(str);
+    }
     const size_t old_size = contents.size();
     size_t new_length = old_size + length;
     char *this_str = static_cast<char *>(contents.data());
@@ -189,12 +201,16 @@ void StringStorage::terminate(void *user_context, size_t length) {
 
 void StringStorage::clear(void *user_context) {
     contents.clear(user_context);
-    if (contents.data()) { terminate(user_context, 0); }
+    if (contents.data()) {
+        terminate(user_context, 0);
+    }
 }
 
 void StringStorage::initialize(void *user_context, uint32_t capacity, const SystemMemoryAllocatorFns &sma) {
     contents.initialize(user_context, {sizeof(char), 32, 32}, sma);
-    if (capacity) { contents.reserve(user_context, capacity); }
+    if (capacity) {
+        contents.reserve(user_context, capacity);
+    }
 }
 
 void StringStorage::destroy(void *user_context) {
