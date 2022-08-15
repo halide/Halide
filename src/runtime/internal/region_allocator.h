@@ -338,7 +338,7 @@ void RegionAllocator::release_block_region(void *user_context, BlockRegion *bloc
                         << "user_context=" << (void *)(user_context) << " "
                         << "block_region=" << (void *)(block_region) << ") ...\n";
 #endif
-    block_region->status = AllocationStatus::Available;
+    free_block_region(user_context, block_region);
 }
 
 void RegionAllocator::destroy_block_region(void *user_context, BlockRegion *block_region) {
@@ -377,7 +377,6 @@ void RegionAllocator::free_block_region(void *user_context, BlockRegion *block_r
         MemoryRegion *memory_region = &(block_region->memory);
         allocators.region.deallocate(user_context, memory_region);
         block->reserved -= block_region->memory.size;
-        block_region->memory.size = 0;
     }
     block_region->status = AllocationStatus::Available;
 }
@@ -425,11 +424,9 @@ void RegionAllocator::destroy(void *user_context) {
             destroy_block_region(user_context, prev_region);
         }
     }
-    block->reserved = 0;
     block->regions = nullptr;
-    block->allocator = nullptr;
-    MemoryArena::destroy(user_context, arena);
-    arena = nullptr;
+    block->reserved = 0;
+    arena->destroy(user_context);
 }
 
 bool RegionAllocator::is_compatible_block_region(const BlockRegion *block_region, const MemoryProperties &properties) const {

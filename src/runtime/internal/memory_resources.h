@@ -13,7 +13,6 @@ enum class AllocationStatus {
     InvalidStatus,
     InUse,
     Available,
-    Purgeable,
     Dedicated
 };
 
