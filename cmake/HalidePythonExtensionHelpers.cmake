@@ -29,8 +29,12 @@ set(_STUB_DIR "${Halide_SOURCE_DIR}/python_bindings/stub")
 # would be welcome.)
 
 function(_target_export_single_symbol TARGET SYMBOL)
-    configure_file("${_STUB_DIR}/ext.ldscript.apple.in" "${CMAKE_CURRENT_BINARY_DIR}/${TARGET}.ldscript.apple")
-    configure_file("${_STUB_DIR}/ext.ldscript.linux.in" "${CMAKE_CURRENT_BINARY_DIR}/${TARGET}.ldscript")
+    file(WRITE
+         "${CMAKE_CURRENT_BINARY_DIR}/${TARGET}.ldscript.apple"
+         "_${SYMBOL}\n")
+    file(WRITE
+         "${CMAKE_CURRENT_BINARY_DIR}/${TARGET}.ldscript"
+         "{ global: ${SYMBOL}; local: *; };\n")
     target_export_script(
         ${TARGET}
         APPLE_LD "${CMAKE_CURRENT_BINARY_DIR}/${TARGET}.ldscript.apple"
@@ -86,7 +90,7 @@ function(add_python_aot_extension TARGET)
     Python3_add_library(${TARGET} MODULE ${abi_flags} ${${TARGET}.py.cpp})
     target_link_libraries(${TARGET} PRIVATE aot_${TARGET})
     set_target_properties(${TARGET} PROPERTIES OUTPUT_NAME ${ARG_FUNCTION_NAME})
-    _target_export_single_symbol(${TARGET} ${ARG_FUNCTION_NAME})
+    _target_export_single_symbol(${TARGET} PyInit_${ARG_FUNCTION_NAME})
 endfunction()
 
 function(add_python_stub_extension TARGET)
