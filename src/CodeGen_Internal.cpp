@@ -795,5 +795,34 @@ void embed_bitcode(llvm::Module *M, const string &halide_command) {
     }
 }
 
+Expr lower_concat_bits(const Call *op) {
+    internal_assert(op->is_intrinsic(Call::concat_bits));
+    internal_assert(!op->args.empty());
+
+    Expr result = make_zero(op->type);
+    int shift = 0;
+    for (const Expr &e : op->args) {
+        result = result | (cast(result.type(), e) << shift);
+        shift += e.type().bits();
+    }
+    return result;
+}
+
+Expr lower_extract_bits(const Call *op) {
+    Expr e = op->args[0];
+    // Do a shift-and-cast as a uint, which will zero-fill any out-of-range
+    // bits for us.
+    if (!e.type().is_uint()) {
+        e = reinterpret(e.type().with_code(halide_type_uint), e);
+    }
+    e = e >> op->args[1];
+    e = cast(op->type.with_code(halide_type_uint), e);
+    if (op->type != e.type()) {
+        e = reinterpret(op->type, e);
+    }
+    e = simplify(e);
+    return e;
+}
+
 }  // namespace Internal
 }  // namespace Halide

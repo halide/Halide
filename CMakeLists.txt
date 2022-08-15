@@ -10,10 +10,13 @@ enable_testing()
 # Set up project-wide properties
 ##
 
+# Import useful standard modules
+include(CMakeDependentOption)
+include(CheckCXXSymbolExists)
+
 # Make our custom helpers available throughout the project via include().
 list(APPEND CMAKE_MODULE_PATH ${CMAKE_CURRENT_LIST_DIR}/cmake)
 include(HalideGeneratorHelpers)
-include(CMakeDependentOption)
 
 # Build Halide as a shared lib by default, but still honor command-line settings.
 option(BUILD_SHARED_LIBS "Build shared libraries" ON)
@@ -65,6 +68,14 @@ if (Halide_CCACHE_BUILD)
     set(CMAKE_CXX_COMPILER_LAUNCHER ${CMAKE_COMMAND} -E env ${Halide_CCACHE_PARAMS} ${CCACHE_PROGRAM})
 
     message(STATUS "Enabling ccache usage for building.")
+endif ()
+
+# Detect whether or not ASAN is enabled
+check_cxx_symbol_exists(HALIDE_INTERNAL_USING_ASAN "${Halide_SOURCE_DIR}/src/Util.h" Halide_ASAN_ENABLED)
+if (Halide_ASAN_ENABLED)
+    set(Halide_ANY_SANITIZERS_ENABLED 1)
+else ()
+    set(Halide_ANY_SANITIZERS_ENABLED 0)
 endif ()
 
 # Enable the SPIR-V target if requested (must declare before processing dependencies)
