@@ -1009,21 +1009,8 @@ void ProducerConsumerHierarchy::allocate_table_header(const Allocate *op, const 
             << "\n";
     }
 
-    // TODO: make sure that if there are 3 extents, that the third is channels
-    string rows;
-    string cols;
-    string channels;
+    allocate_table(allocationSizes);
 
-    rows = allocationSizes[1];
-
-    if (op->extents.size() >= 2) {
-        cols = allocationSizes[2];
-    }
-    if (op->extents.size() == 3) {
-        channels = allocationSizes[3];
-    }
-
-    allocate_table(type, rows, cols, channels);
     html << "<br><br>";
     html << "</th>";
 
@@ -1032,79 +1019,50 @@ void ProducerConsumerHierarchy::allocate_table_header(const Allocate *op, const 
     html << "&nbsp;";
     html << "</th>";
 }
-void ProducerConsumerHierarchy::allocate_table(string type, string rows, string cols,
-                                               string channels) {
+void ProducerConsumerHierarchy::allocate_table(vector<string> &allocationSizes) {
     // open table
     html << "<table class=\\'costTable\\' style=\\'background-color: rgba(150, 150, 150, 0.5)\\'>";
 
-    // Type | Rows | Cols | Channels
-    html << "<tr>";
+    stringstream header;
+    stringstream data;
 
-    html << "<th class=\\'costTableHeader middleCol\\'>";
-    html << "Type";
-    html << "</th>";
+    // open header and data rows
+    header << "<tr>";
+    data << "<tr>";
 
-    if (cols != "") {
-        html << "<th class=\\'costTableHeader middleCol\\'>";
-    } else {
-        html << "<th class=\\'costTableHeader\\'>";
-    }
-    html << "Rows";
-    html << "</th>";
+    // iterate through all allocation sizes and add them to the header and data rows
+    for (unsigned long i = 0; i < allocationSizes.size(); i++) {
+        if (i == 0) {
+            header << "<th class=\\'costTableHeader middleCol\\'>";
+            header << "Type";
+            header << "</th>";
 
-    if (cols != "") {
-        if (channels != "") {
-            html << "<th class=\\'costTableHeader middleCol\\'>";
+            data << "<td class=\\'costTableHeader middleCol\\'>";
+            data << allocationSizes[0];
+            data << "</td>";
         } else {
-            html << "<th class=\\'costTableHeader\\'>";
+            if (i < allocationSizes.size() - 1) {
+                header << "<th class=\\'costTableHeader middleCol\\'>";
+                data << "<td class=\\'costTableHeader middleCol\\'>";
+            } else {
+                header << "<th class=\\'costTableHeader\\'>";
+                data << "<td class=\\'costTableHeader\\'>";
+            }
+            header << "Dim-" << i;
+            header << "</th>";
+
+            data << allocationSizes[i];
+            data << "</td>";
         }
-        html << "Cols";
-        html << "</th>";
     }
 
-    if (channels != "") {
-        html << "<th class=\\'costTableHeader\\'>";
-        html << "Channels";
-        html << "</th>";
-    }
+    // close header and data rows
+    header << "</tr>";
+    data << "</tr>";
 
-    html << "</tr>";
-
-    html << "<tr>";
-
-    // type
-    html << "<td class=\\'costTableData middleCol\\'>";
-    html << type;
-    html << "</td>";
-
-    // rows
-    if (cols != "") {
-        html << "<td class=\\'costTableData middleCol\\'>";
-    } else {
-        html << "<td class=\\'costTableData\\'>";
-    }
-    html << rows;
-    html << "</td>";
-
-    // cols
-    if (cols != "") {
-        if (channels != "") {
-            html << "<td class=\\'costTableData middleCol\\'>";
-        } else {
-            html << "<td class=\\'costTableData\\'>";
-        }
-        html << cols;
-        html << "</td>";
-    }
-
-    // channels
-    if (channels != "") {
-        html << "<td class=\\'costTableData\\'>";
-        html << channels;
-        html << "</td>";
-    }
-
-    html << "</tr>";
+    // add header and data rows to html
+    html << header.str();
+    html << data.str();
 
     // close table
     html << "</table>";

@@ -139,7 +139,7 @@ private:
 
     void allocate_table_header(const Allocate *op, const string &header, StmtSize &size,
                                string anchorName);
-    void allocate_table(string type, string rows, string cols, string channels);
+    void allocate_table(vector<string> &allocationSizes);
 
     void for_loop_table_header(const For *op, const string &header, StmtSize &size,
                                string anchorName);
