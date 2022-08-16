@@ -23,7 +23,7 @@ struct ModelWeight<false> : public GeneratorInput<Buffer<float>> {
     ModelWeight(const std::string &name, int dim)
         : GeneratorInput<Buffer<float>>(name, dim) {
     }
-    void backprop(const Derivative &d, const Expr& learning_rate, const Expr& timestep) {
+    void backprop(const Derivative &d, const Expr &learning_rate, const Expr &timestep) {
     }
     void set_shape(int s0 = 0, int s1 = 0, int s2 = 0) {
         if (s0) {
@@ -45,11 +45,11 @@ struct ModelWeight<true> : public GeneratorInput<Buffer<float>> {
     ModelWeight(const std::string &name, int dim)
         : GeneratorInput<Buffer<float>>(name, dim), grad("updated_" + name, dim + 1) {
     }
-    void backprop(const Derivative &d, Expr learning_rate, const Expr& timestep) {
+    void backprop(const Derivative &d, Expr learning_rate, const Expr &timestep) {
         std::vector<Expr> args(dimensions() + 1);
         for (auto &e : args) {
             e = Var();
-}
+        }
         grad(args) = undef<float>();
 
         // We'll report back the new weights and the loss gradients,
@@ -178,14 +178,14 @@ public:
     Output<Buffer<float>> loss_output{"loss_output", 0};
 
     // Zero pad alone the last dimension of a Func
-    Func pad_stages(const Func& f, Expr stages) {
+    Func pad_stages(const Func &f, Expr stages) {
         Halide::Region bounds(f.dimensions());
         bounds[1].min = 0;
         bounds[1].extent = std::move(stages);
         return BoundaryConditions::constant_exterior(f, cast(f.value().type(), 0), bounds);
     }
 
-    Expr activation(const Expr& e) {
+    Expr activation(const Expr &e) {
         // leaky relu
         return max(e, 0) + min(e, 0) * 1e-10f;
     }
@@ -621,7 +621,7 @@ public:
             const int vec = 8;
 
             // A helper function for scheduling conv layers
-            auto schedule_conv = [&](Func conv, Func relu, const RVar& r_channels) {
+            auto schedule_conv = [&](Func conv, Func relu, const RVar &r_channels) {
                 Var ci("ci"), wi("wi");
                 if (!training) {
                     relu

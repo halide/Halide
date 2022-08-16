@@ -351,8 +351,7 @@ void SearchSpace::generate_children(const IntrusivePtr<State> &state,
                                 e->consumer->node->is_boundary_condition);
             }
 
-                return;
-
+            return;
         }
 
         if (must_compute_root) {

@@ -815,7 +815,7 @@ void State::fuse_gpu_blocks(LoopNest::StageScheduleState *state, Stage &stage, c
     }
 
     bool marked = false;
-    for (auto & block_var_assignment : block_var_assignments) {
+    for (auto &block_var_assignment : block_var_assignments) {
         for (size_t i = 1; i < block_var_assignment.size(); ++i) {
             auto inner_i = block_var_assignment[0];
             auto outer_i = block_var_assignment[i];
@@ -1036,8 +1036,9 @@ void State::apply_schedule(const FunctionDAG &dag, int hardware_parallelism, con
     }
 
     for (auto &p : state_map) {
-        if (p.first->node->is_input) { continue;
-}
+        if (p.first->node->is_input) {
+            continue;
+        }
 
         Stage stage(p.first->stage);
 
@@ -1049,10 +1050,12 @@ void State::apply_schedule(const FunctionDAG &dag, int hardware_parallelism, con
         vector<int> constant_extents;
         bool any_parallel_vars = false, any_parallel_rvars = false;
         for (auto it = p.second->vars.rbegin(); it != p.second->vars.rend(); it++) {
-            if (!it->exists) { continue;
-}
-            if (!it->parallel) { break;
-}
+            if (!it->exists) {
+                continue;
+            }
+            if (!it->parallel) {
+                break;
+            }
             any_parallel_rvars |= it->var.is_rvar;
             any_parallel_vars |= !it->var.is_rvar;
             parallel_extents.push_back(it->extent);
@@ -1106,7 +1109,7 @@ void State::apply_schedule(const FunctionDAG &dag, int hardware_parallelism, con
             }
             p.second->schedule_source << "\n    .reorder_storage(";
             bool first = true;
-            for (const auto& v : storage_vars) {
+            for (const auto &v : storage_vars) {
                 if (!first) {
                     p.second->schedule_source << ", ";
                 }
@@ -1129,8 +1132,9 @@ void State::apply_schedule(const FunctionDAG &dag, int hardware_parallelism, con
                     continue;
                 }
 
-                if (p.first->node->is_input) { continue;
-}
+                if (p.first->node->is_input) {
+                    continue;
+                }
 
                 Stage stage(p.first->stage);
 
@@ -1215,8 +1219,9 @@ void State::apply_schedule(const FunctionDAG &dag, int hardware_parallelism, con
     }
 
     for (auto &p : state_map) {
-        if (p.first->node->is_input) { continue;
-}
+        if (p.first->node->is_input) {
+            continue;
+        }
 
         // Dump the schedule source string
         src << p.first->name

@@ -617,12 +617,14 @@ int main(int argc, char **argv) {
                             int good = 0, bad = 0;
                             for (auto &sched : sample.schedules) {
                                 auto &ref = sample.schedules[sample.fastest_schedule_hash];
-                                if (sched.second.prediction[model] == 0) { continue;
-}
+                                if (sched.second.prediction[model] == 0) {
+                                    continue;
+                                }
                                 assert(sched.second.runtimes[0] >= ref.runtimes[0]);
                                 float runtime_ratio = sched.second.runtimes[0] / ref.runtimes[0];
-                                if (runtime_ratio <= 1.3f) { continue;  // Within 30% of the runtime of the best
-}
+                                if (runtime_ratio <= 1.3f) {
+                                    continue;  // Within 30% of the runtime of the best
+                                }
                                 if (sched.second.prediction[model] >= ref.prediction[model]) {
                                     good++;
                                 } else {
@@ -661,8 +663,9 @@ int main(int argc, char **argv) {
             for (int model = 0; model < kModels; model++) {
                 std::cout << loss_sum[model] / loss_sum_counter[model] << " ";
             }
-            if (kModels > 1) { std::cout << "\n";
-}
+            if (kModels > 1) {
+                std::cout << "\n";
+            }
             std::cout << " Rate: ";
             int best_model = 0;
             float best_rate = 0;
@@ -686,8 +689,9 @@ int main(int argc, char **argv) {
                 }
             }
 
-            if (kModels > 1) { std::cout << "\n";
-}
+            if (kModels > 1) {
+                std::cout << "\n";
+            }
             if (!predict_only && samples.count(worst_miss_pipeline_id)) {
                 std::cout << " Worst: " << worst_miss << " " << leaf(samples[worst_miss_pipeline_id].schedules[worst_miss_schedule_id].filename) << " ";
             }
