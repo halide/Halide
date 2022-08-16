@@ -1045,13 +1045,17 @@ int generate_filter_main(int argc, char **argv, const GeneratorFactoryProvider &
     try {
         return generate_filter_main_inner(argc, argv, generator_factory_provider);
     } catch (::Halide::Error &err) {
-        user_error << "Unhandled exception: " << err.what() << "\n";
+        // Do *not* use user_error here (or elsewhere in this function): it
+        // will throw an exception, and since there is almost certainly no
+        // try/catch block in our caller, it will call std::terminate,
+        // swallowing all error messages.
+        std::cerr << "Unhandled exception: " << err.what() << "\n";
         return -1;
     } catch (std::exception &err) {
-        user_error << "Unhandled exception: " << err.what() << "\n";
+        std::cerr << "Unhandled exception: " << err.what() << "\n";
         return -1;
     } catch (...) {
-        user_error << "Unhandled exception: (unknown)\n";
+        std::cerr << "Unhandled exception: (unknown)\n";
         return -1;
     }
 }
