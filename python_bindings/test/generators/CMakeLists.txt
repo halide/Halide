@@ -1,4 +1,4 @@
-include(PythonExtensionHelpers)
+include(HalidePythonExtensionHelpers)
 
 set(GENERATORS
     addconstant

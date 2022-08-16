@@ -1,5 +1,7 @@
-include(HalideGeneratorHelpers)
-include(TargetExportScript)
+cmake_minimum_required(VERSION 3.22)
+
+include(${CMAKE_CURRENT_LIST_DIR}/HalideGeneratorHelpers.cmake)
+include(${CMAKE_CURRENT_LIST_DIR}/TargetExportScript.cmake)
 
 set(_STUB_DIR "${Halide_SOURCE_DIR}/python_bindings/stub")
 
@@ -28,9 +30,13 @@ set(_STUB_DIR "${Halide_SOURCE_DIR}/python_bindings/stub")
 # suffixed with "_stub" for Stub extensions. (TODO: this is unsatisfyingly hackish; better suggestions
 # would be welcome.)
 
-function(target_export_single_symbol TARGET SYMBOL)
-    configure_file("${_STUB_DIR}/ext.ldscript.apple.in" "${CMAKE_CURRENT_BINARY_DIR}/${TARGET}.ldscript.apple")
-    configure_file("${_STUB_DIR}/ext.ldscript.linux.in" "${CMAKE_CURRENT_BINARY_DIR}/${TARGET}.ldscript")
+function(_target_export_single_symbol TARGET SYMBOL)
+    file(WRITE
+         "${CMAKE_CURRENT_BINARY_DIR}/${TARGET}.ldscript.apple"
+         "_${SYMBOL}\n")
+    file(WRITE
+         "${CMAKE_CURRENT_BINARY_DIR}/${TARGET}.ldscript"
+         "{ global: ${SYMBOL}; local: *; };\n")
     target_export_script(
         ${TARGET}
         APPLE_LD "${CMAKE_CURRENT_BINARY_DIR}/${TARGET}.ldscript.apple"
@@ -73,20 +79,10 @@ function(add_python_aot_extension TARGET)
                        PARAMS ${ARG_PARAMS}
                        TARGETS cmake)
 
-    # Take the native-code output of the Generator, add the Python-Extension
-    # code (to make it callable from Python), and build it into the AOT Extension we need.
-    if (CMAKE_VERSION VERSION_GREATER_EQUAL 3.17)
-        # Add soabi info (like cpython-310-x86_64-linux-gnu)
-        # when CMake is new enough to know how to do it.
-        set(abi_flags WITH_SOABI)
-    else ()
-        set(abi_flags "")
-    endif ()
-
-    Python3_add_library(${TARGET} MODULE ${abi_flags} ${${TARGET}.py.cpp})
+    Python3_add_library(${TARGET} MODULE WITH_SOABI ${${TARGET}.py.cpp})
     target_link_libraries(${TARGET} PRIVATE aot_${TARGET})
     set_target_properties(${TARGET} PROPERTIES OUTPUT_NAME ${ARG_FUNCTION_NAME})
-    target_export_single_symbol(${TARGET} ${ARG_FUNCTION_NAME})
+    _target_export_single_symbol(${TARGET} "PyInit_${ARG_FUNCTION_NAME}")
 endfunction()
 
 function(add_python_stub_extension TARGET)
@@ -109,7 +105,7 @@ function(add_python_stub_extension TARGET)
     #
     # Note that we set HALIDE_PYSTUB_MODULE_NAME to $*_stub (e.g. foo_stub) but
     # set HALIDE_PYSTUB_GENERATOR_NAME to the unadorned name of the Generator.
-    Python3_add_library(${TARGET} MODULE ${_STUB_DIR}/PyStub.cpp ${ARG_SOURCES})
+    Python3_add_library(${TARGET} MODULE WITH_SOABI ${_STUB_DIR}/PyStub.cpp ${ARG_SOURCES})
     set_target_properties(${TARGET} PROPERTIES
                           CXX_VISIBILITY_PRESET hidden
                           VISIBILITY_INLINES_HIDDEN ON
@@ -119,5 +115,5 @@ function(add_python_stub_extension TARGET)
                                "HALIDE_PYSTUB_MODULE_NAME=${ARG_MODULE}")
     target_link_libraries(${TARGET} PRIVATE Halide::PyStubs ${ARG_LINK_LIBRARIES})
     set_target_properties(${TARGET} PROPERTIES OUTPUT_NAME ${ARG_MODULE})
-    target_export_single_symbol(${TARGET} ${ARG_MODULE})
+    _target_export_single_symbol(${TARGET} "PyInit_${ARG_MODULE}")
 endfunction()
