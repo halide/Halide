@@ -1,3 +1,5 @@
+cmake_minimum_required(VERSION 3.22)
+
 include(CheckLinkerFlag)
 
 function(target_export_script TARGET)

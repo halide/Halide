@@ -7,7 +7,7 @@
   },
   "configurePresets": [
     {
-      "name": "default",
+      "name": "base",
       "hidden": true,
       "binaryDir": "build/${presetName}",
       "installDir": "install/${presetName}"
@@ -15,10 +15,144 @@
     {
       "name": "ci",
       "hidden": true,
-      "inherits": "default",
-      "toolchainFile": "${sourceDir}/../cmake/toolchain.${presetName}.cmake",
+      "inherits": "base",
+      "toolchainFile": "${sourceDir}/cmake/toolchain.${presetName}.cmake",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "RelWithDebInfo"
+      }
+    },
+    {
+      "name": "windows-only",
+      "hidden": true,
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Windows"
+      }
+    },
+    {
+      "name": "vcpkg",
+      "hidden": true,
+      "toolchainFile": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake"
+    },
+    {
+      "name": "vs2019",
+      "hidden": true,
+      "inherits": [
+        "vcpkg",
+        "windows-only"
+      ],
+      "generator": "Visual Studio 16 2019",
+      "toolset": "host=x64"
+    },
+    {
+      "name": "debug",
+      "inherits": "base",
+      "displayName": "Debug",
+      "description": "Debug build with no special settings",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug"
+      }
+    },
+    {
+      "name": "release",
+      "inherits": "base",
+      "displayName": "Release",
+      "description": "Release build with no special settings",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release"
+      }
+    },
+    {
+      "name": "debian-debug",
+      "inherits": "debug",
+      "displayName": "Debian (Debug)",
+      "description": "Debug build assuming Debian-provided dependencies",
+      "cacheVariables": {
+        "Halide_SHARED_LLVM": "ON"
+      }
+    },
+    {
+      "name": "debian-release",
+      "inherits": "debian-debug",
+      "displayName": "Debian (Release)",
+      "description": "Release build assuming Debian-provided dependencies",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release"
+      }
+    },
+    {
+      "name": "win32",
+      "inherits": [
+        "vs2019",
+        "base"
+      ],
+      "displayName": "Win32 (Visual Studio)",
+      "description": "Visual Studio-based Win32 build with vcpkg dependencies.",
+      "architecture": "Win32"
+    },
+    {
+      "name": "win64",
+      "inherits": [
+        "vs2019",
+        "base"
+      ],
+      "displayName": "Win64 (Visual Studio)",
+      "description": "Visual Studio-based x64 build with vcpkg dependencies.",
+      "architecture": "x64"
+    },
+    {
+      "name": "package",
+      "hidden": true,
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "LLVM_DIR": "$env{LLVM_DIR}",
+        "Clang_DIR": "$env{Clang_DIR}",
+        "LLD_DIR": "$env{LLD_DIR}",
+        "WITH_TESTS": "NO",
+        "WITH_TUTORIALS": "NO",
+        "WITH_DOCS": "YES",
+        "WITH_UTILS": "NO",
+        "WITH_PYTHON_BINDINGS": "NO",
+        "CMAKE_INSTALL_DATADIR": "share/Halide"
+      }
+    },
+    {
+      "name": "package-windows",
+      "inherits": [
+        "package",
+        "vs2019"
+      ],
+      "displayName": "Package ZIP for Windows",
+      "description": "Build for packaging Windows shared libraries.",
+      "binaryDir": "${sourceDir}/build",
+      "cacheVariables": {
+        "BUILD_SHARED_LIBS": "YES",
+        "CMAKE_INSTALL_BINDIR": "bin/$<CONFIG>",
+        "CMAKE_INSTALL_LIBDIR": "lib/$<CONFIG>",
+        "Halide_INSTALL_CMAKEDIR": "lib/cmake/Halide",
+        "Halide_INSTALL_HELPERSDIR": "lib/cmake/HalideHelpers"
+      }
+    },
+    {
+      "name": "package-unix-shared",
+      "inherits": "package",
+      "displayName": "Package UNIX shared libs",
+      "description": "Build for packaging UNIX shared libraries.",
+      "binaryDir": "shared-Release",
+      "cacheVariables": {
+        "BUILD_SHARED_LIBS": "YES"
+      }
+    },
+    {
+      "name": "package-unix-static",
+      "inherits": "package",
+      "displayName": "Package UNIX static libs",
+      "description": "Build for packaging UNIX static libraries.",
+      "binaryDir": "static-Release",
+      "cacheVariables": {
+        "BUILD_SHARED_LIBS": "NO",
+        "Halide_BUNDLE_LLVM": "YES"
       }
     },
     {
@@ -27,23 +161,49 @@
       "displayName": "ASAN (Linux x64)",
       "description": "Build everything with ASAN enabled",
       "cacheVariables": {
-        "LLVM_ROOT": "$penv{LLVM_ROOT}",
-        "ENABLE_APPS_BGU": "OFF"
+        "LLVM_ROOT": "$penv{LLVM_ROOT}"
       }
     }
   ],
   "buildPresets": [
     {
+      "name": "debug",
+      "configurePreset": "debug",
+      "displayName": "Debug",
+      "description": "Debug build with no special settings"
+    },
+    {
+      "name": "release",
+      "configurePreset": "release",
+      "displayName": "Release",
+      "description": "Release build with no special settings"
+    },
+    {
       "name": "linux-x64-asan",
       "configurePreset": "linux-x64-asan",
       "displayName": "ASAN (Linux x64)",
-      "description": "Build everything with ASAN enabled",
-      "environment": {
-        "ASAN_OPTIONS": "detect_leaks=0:detect_container_overflow=0"
-      }
+      "description": "Build everything with ASAN enabled"
     }
   ],
   "testPresets": [
+    {
+      "name": "debug",
+      "configurePreset": "debug",
+      "displayName": "Debug",
+      "description": "Test everything with Debug build",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "release",
+      "configurePreset": "release",
+      "displayName": "Release",
+      "description": "Test everything with Release build",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
     {
       "name": "linux-x64-asan",
       "configurePreset": "linux-x64-asan",

@@ -1,5 +1,7 @@
-include(HalideGeneratorHelpers)
-include(TargetExportScript)
+cmake_minimum_required(VERSION 3.22)
+
+include(${CMAKE_CURRENT_LIST_DIR}/HalideGeneratorHelpers.cmake)
+include(${CMAKE_CURRENT_LIST_DIR}/TargetExportScript.cmake)
 
 set(_STUB_DIR "${Halide_SOURCE_DIR}/python_bindings/stub")
 
@@ -77,17 +79,7 @@ function(add_python_aot_extension TARGET)
                        PARAMS ${ARG_PARAMS}
                        TARGETS cmake)
 
-    # Take the native-code output of the Generator, add the Python-Extension
-    # code (to make it callable from Python), and build it into the AOT Extension we need.
-    if (CMAKE_VERSION VERSION_GREATER_EQUAL 3.17)
-        # Add soabi info (like cpython-310-x86_64-linux-gnu)
-        # when CMake is new enough to know how to do it.
-        set(abi_flags WITH_SOABI)
-    else ()
-        set(abi_flags "")
-    endif ()
-
-    Python3_add_library(${TARGET} MODULE ${abi_flags} ${${TARGET}.py.cpp})
+    Python3_add_library(${TARGET} MODULE WITH_SOABI ${${TARGET}.py.cpp})
     target_link_libraries(${TARGET} PRIVATE aot_${TARGET})
     set_target_properties(${TARGET} PROPERTIES OUTPUT_NAME ${ARG_FUNCTION_NAME})
     _target_export_single_symbol(${TARGET} "PyInit_${ARG_FUNCTION_NAME}")
@@ -107,23 +99,13 @@ function(add_python_stub_extension TARGET)
         set(ARG_MODULE "${TARGET}_stub")
     endif ()
 
-    # Take the native-code output of the Generator, add the Python-Extension
-    # code (to make it callable from Python), and build it into the AOT Extension we need.
-    if (CMAKE_VERSION VERSION_GREATER_EQUAL 3.17)
-        # Add soabi info (like cpython-310-x86_64-linux-gnu)
-        # when CMake is new enough to know how to do it.
-        set(abi_flags WITH_SOABI)
-    else ()
-        set(abi_flags "")
-    endif ()
-
     # Produce a Stub Extension for the same Generator:
     # Compiling PyStub.cpp, then linking with the generator's .o file, PyStubImpl.o,
     # plus the same libHalide being used by halide.so.
     #
     # Note that we set HALIDE_PYSTUB_MODULE_NAME to $*_stub (e.g. foo_stub) but
     # set HALIDE_PYSTUB_GENERATOR_NAME to the unadorned name of the Generator.
-    Python3_add_library(${TARGET} MODULE ${abi_flags} ${_STUB_DIR}/PyStub.cpp ${ARG_SOURCES})
+    Python3_add_library(${TARGET} MODULE WITH_SOABI ${_STUB_DIR}/PyStub.cpp ${ARG_SOURCES})
     set_target_properties(${TARGET} PROPERTIES
                           CXX_VISIBILITY_PRESET hidden
                           VISIBILITY_INLINES_HIDDEN ON
