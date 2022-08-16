@@ -1,4 +1,4 @@
-include(PythonExtensionHelpers)
+include(HalidePythonExtensionHelpers)
 
 # Some Generators require extra Halide Target Features to be set.
 set(FEATURES_user_context user_context)
