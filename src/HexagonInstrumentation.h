@@ -5,7 +5,7 @@
  * emits a report to logcat via adsprpc (Hexagon only).
  */
 
-#include "Halide.h"
+#include "IRMutator.h"
 #include <iostream>
 #include <iso646.h>
 #include <map>
@@ -15,10 +15,7 @@
 
 static_assert(__cplusplus >= 201703L, "requires c++17");
 
-namespace {
-using namespace Halide;
-using namespace Halide::Internal;
-
+namespace Halide::Internal {
 // Profiling code injection
 // Injects calls to:
 // 1. Record metadata (generator name, arguments, output dimensions, schedule) at program start
@@ -140,6 +137,7 @@ struct HexagonInstrumentation : IRMutator {
                                 IRMutator::visit(loop), loop_end_stmt()});
         }
     }
+    using IRMutator::visit;
 
     bool passed_entry_point = false;  // used to identify the entry block
     uint32_t node_id_generator = 0;   // used to generate unique identifiers for
@@ -201,46 +199,3 @@ private:  // Halide statements for accessing profiling library on DSP
     }
 };
 }  // namespace
-
-// Main class for profiling generated code
-template<class Gen>
-class InstrumentedGenerator : public Generator<Gen> {
-    // Gather metadata and perform code injection at generation-time
-    auto build_pipeline() -> Pipeline override {
-        // Intercept the base pipeline
-        auto pipeline = Generator<Gen>::build_pipeline();
-
-        // We obtain the generator name from the template argument of this class by extracting it from the _PRETTY_FUNCTION__ preprocessor directive
-        auto generator_name = std::regex_replace(
-            std::regex_replace(__PRETTY_FUNCTION__,
-                               std::regex(">::build_pipeline.*"), ""),
-            std::regex("virtual Halide::Pipeline InstrumentedGenerator<"), "");
-
-        // We leverage the `print_loop_nest` functionality to display the schedule by redirecting stderr into a stringstream
-        auto schedule_desc = [&] {
-            std::vector<std::string> lines;
-
-            std::stringstream buffer;
-
-            auto old_buffer =
-                std::shared_ptr<std::streambuf>{
-                    std::cerr.rdbuf(buffer.rdbuf()),           // redirect stderr into our stringstream
-                    [&](auto old) { std::cerr.rdbuf(old); }};  // restore original stderr on function exit
-
-            pipeline.print_loop_nest();  // now outputs to buffer instead of stderr
-
-            // copy captured output line-by-line
-            for (std::string line; std::getline(buffer, line);) {
-                lines.emplace_back(std::move(line));
-            }
-
-            return lines;
-        }();
-
-        pipeline.add_custom_lowering_pass(
-            new HexagonInstrumentation(generator_name, pipeline.infer_arguments(),
-                                       pipeline.outputs(), schedule_desc));
-
-        return pipeline;
-    }
-};

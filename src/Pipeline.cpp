@@ -16,6 +16,7 @@
 #include "PrintLoopNest.h"
 #include "RealizationOrder.h"
 #include "WasmExecutor.h"
+#include "HexagonInstrumentation.h"
 
 using namespace Halide::Internal;
 
@@ -514,6 +515,35 @@ Module Pipeline::compile_to_module(const vector<Argument> &args,
         for (const CustomLoweringPass &p : contents->custom_lowering_passes) {
             custom_passes.push_back(p.pass);
         }
+
+#ifdef WITH_HEXAGON_PROFILER
+        if(target.arch == Target::Hexagon) {
+            // We leverage the `print_loop_nest` functionality to display the schedule by redirecting stderr into a stringstream
+            auto schedule_desc = [this] {
+                std::vector<std::string> lines;
+
+                std::stringstream buffer;
+
+                auto old_buffer =
+                    std::shared_ptr<std::streambuf>{
+                        std::cerr.rdbuf(buffer.rdbuf()),           // redirect stderr into our stringstream
+                        [&](auto old) { std::cerr.rdbuf(old); }};  // restore original stderr on function exit
+
+                print_loop_nest();  // now outputs to buffer instead of stderr
+
+                // copy captured output line-by-line
+                for (std::string line; std::getline(buffer, line);) {
+                    lines.emplace_back(std::move(line));
+                }
+
+                return lines;
+            }();
+
+            custom_passes.push_back(
+                new HexagonInstrumentation{new_fn_name, args,
+                                           outputs(), schedule_desc)};
+        }
+#endif
 
         contents->module = lower(contents->outputs, new_fn_name, target, lowering_args,
                                  linkage_type, contents->requirements, contents->trace_pipeline,
