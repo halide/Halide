@@ -1458,9 +1458,9 @@ Stmt ProducerConsumerHierarchy::visit(const Allocate *op) {
 
     // TODO: make sure this is right
     if (!is_const_one(op->condition)) {
-        internal_error << "\n"
-                       << "ProducerConsumerHierarchy: Allocate " << op->name
-                       << " `!is_const_one(op->condition)` is not supported.\n\n";
+        // internal_error << "\n"
+        //                << "ProducerConsumerHierarchy: Allocate " << op->name
+        //                << " `!is_const_one(op->condition)` is not supported.\n\n";
         header << " if " << op->condition;
     }
     if (op->new_expr.defined()) {
