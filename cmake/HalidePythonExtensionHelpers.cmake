@@ -107,13 +107,23 @@ function(add_python_stub_extension TARGET)
         set(ARG_MODULE "${TARGET}_stub")
     endif ()
 
+    # Take the native-code output of the Generator, add the Python-Extension
+    # code (to make it callable from Python), and build it into the AOT Extension we need.
+    if (CMAKE_VERSION VERSION_GREATER_EQUAL 3.17)
+        # Add soabi info (like cpython-310-x86_64-linux-gnu)
+        # when CMake is new enough to know how to do it.
+        set(abi_flags WITH_SOABI)
+    else ()
+        set(abi_flags "")
+    endif ()
+
     # Produce a Stub Extension for the same Generator:
     # Compiling PyStub.cpp, then linking with the generator's .o file, PyStubImpl.o,
     # plus the same libHalide being used by halide.so.
     #
     # Note that we set HALIDE_PYSTUB_MODULE_NAME to $*_stub (e.g. foo_stub) but
     # set HALIDE_PYSTUB_GENERATOR_NAME to the unadorned name of the Generator.
-    Python3_add_library(${TARGET} MODULE ${_STUB_DIR}/PyStub.cpp ${ARG_SOURCES})
+    Python3_add_library(${TARGET} MODULE ${abi_flags} ${_STUB_DIR}/PyStub.cpp ${ARG_SOURCES})
     set_target_properties(${TARGET} PROPERTIES
                           CXX_VISIBILITY_PRESET hidden
                           VISIBILITY_INLINES_HIDDEN ON
