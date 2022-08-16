@@ -9,7 +9,7 @@
     {
       "name": "base",
       "hidden": true,
-      "binaryDir": "build/apps/${presetName}"
+      "binaryDir": "${sourceDir}/../build/apps/${presetName}"
     },
     {
       "name": "ci",
