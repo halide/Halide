@@ -35,11 +35,17 @@ protected:
         return target.bits == 32;
     }
 
+    // Some instructions are only enabled with FP16.
+    bool has_fp16() const {
+        return target.has_feature(Target::ARMFp16);
+    }
+
+
     bool should_peephole_optimize(const Type &type) const {
         // We only have peephole optimizations for vectors here.
         // FIXME: should we only optimize vectors that are multiples of the native vector width?
         //        when we do, we fail simd_op_check tests on weird vector sizes.
-        return type.is_vector() && !neon_intrinsics_disabled();
+        return type.is_vector() && !neon_intrinsics_disabled() && ((type.lanes() % 2)  == 0);
     }
 
     using InstructionSelector::visit;
@@ -415,7 +421,7 @@ protected:
             rewrite(
                  abs(x),
                  v_instr(VectorInstruction::abs, x),
-                 x_is_small_int || is_float(x, 32) || (is_float(x, 16) && !is_bfloat(x))) ||
+                 x_is_small_int || is_float(x, 32) || (has_fp16() && is_float(x, 16) && !is_bfloat(x))) ||
 
             // SABD, UABD - Absolute difference
             rewrite(
@@ -929,9 +935,14 @@ protected:
                     // extra bit.
                     narrow = lossless_cast(narrow_type.with_code(Type::UInt), op->value);
                 }
+                const bool use_float64_pwadd = !target_arm32() && op->type.element_of() == Float(64);
+                const bool use_float32_pwadd = op->type.element_of() == Float(32);
+                const bool use_float16_pwadd = has_fp16() && op->type.element_of() == Float(16);
+                const bool can_pairwise_add_float = use_float16_pwadd || use_float32_pwadd || use_float64_pwadd;
+                const bool can_pairwise_add_int = (op->type.is_int_or_uint() && (op->type.bits() <= 32));
                 if (narrow.defined() && op->type.is_int_or_uint()) {
                     return mutate(VectorInstruction::make(op->type, VectorInstruction::pairwise_widening_add, {narrow}));
-                } else if ((op->type.is_int_or_uint() && (op->type.bits() <= 32)) || (op->type.is_float() && !op->type.is_bfloat())) {
+                } else if (can_pairwise_add_int || can_pairwise_add_float) {
                     return mutate(VectorInstruction::make(op->type, VectorInstruction::pairwise_add, {op->value}));
                 }
             }
@@ -944,7 +955,7 @@ protected:
             // Supported for (u)int(8 | 16 | 32) and float(16 | 32)
             auto x_is_small_int_x2 = (is_int(x, 0, lanes * 2) && !is_int(x, 64));
             auto x_is_small_uint_x2 = (is_uint(x, 0, lanes * 2) && !is_uint(x, 64));
-            auto x_is_small_float_x2 = (is_float(x, 16, lanes * 2) || is_float(x, 32, lanes * 2));
+            auto x_is_small_float_x2 = (has_fp16() && is_float(x, 16, lanes * 2) && !is_bfloat(x)) || is_float(x, 32, lanes * 2);
 
             if (
                 // SMAXP, UMAXP, FMAXP - Pairwise max.
@@ -963,7 +974,7 @@ protected:
             auto rewrite = IRMatcher::rewriter(IRMatcher::h_min(value, lanes), op->type);
             auto x_is_small_int_x2 = (is_int(x, 0, lanes * 2) && !is_int(x, 64));
             auto x_is_small_uint_x2 = (is_uint(x, 0, lanes * 2) && !is_uint(x, 64));
-            auto x_is_small_float_x2 = (is_float(x, 16, lanes * 2) || is_float(x, 32, lanes * 2));
+            auto x_is_small_float_x2 = (has_fp16() && is_float(x, 16, lanes * 2) && !is_bfloat(x)) || is_float(x, 32, lanes * 2);
 
             if (
                 // SMINP, UMINP, FMINP - Pairwise min.
