@@ -1,8 +1,3 @@
-// Note that this deliberately does *not* include PyHalide.h,
-// or depend on any of the code in src: this is intended to be
-// a minimal, generic wrapper to expose an arbitrary Generator
-// for stub usage in Python.
-
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
 
@@ -284,7 +279,7 @@ void pystub_init(pybind11::module &m, const GeneratorFactory &factory) {
 }  // namespace PythonBindings
 }  // namespace Halide
 
-extern "C" PyObject *_halide_pystub_impl(const char *module_name, const Halide::Internal::GeneratorFactory &factory) {
+extern "C" HALIDE_EXPORT_SYMBOL PyObject *_halide_pystub_impl(const char *module_name, const Halide::Internal::GeneratorFactory &factory) {
     int major, minor;
     if (sscanf(Py_GetVersion(), "%i.%i", &major, &minor) != 2) {
         PyErr_SetString(PyExc_ImportError, "Can't parse Python version.");
