@@ -6,15 +6,6 @@ using namespace std;
 using namespace Halide;
 using namespace Internal;
 
-// background colors for the different types of elements
-#define IF_COLOR "#e6eeff"
-#define FOR_COLOR "#b3ccff"
-#define PRODUCER_COLOR "#99bbff"
-#define CONSUMER_COLOR PRODUCER_COLOR
-#define STORE_COLOR "#f4f8bf"
-#define ALLOCATE_COLOR STORE_COLOR
-
-#define SHOW_CUMULATIVE_COST false
 /*
  * StmtSizes class
  */
@@ -376,24 +367,24 @@ Stmt StmtSizes::visit(const Store *op) {
     curr_loads.clear();
     mutate(op->value);
 
+    // set consume (for now, read values)
     for (const auto &load_var : curr_load_values) {
-        set_consume_size(op, load_var.first + "_load", int_span(load_var.second));
+        set_consume_size(op, load_var.first, int_span(load_var.second));
     }
 
-    // iterate through curr_loads
+    // iterate through curr_loads to get unique loads
     for (const auto &load_var : curr_loads) {
         string vectorName = load_var.first;
         vector<set<int>> loadValues = load_var.second;
         set<int> finalLoadValuesUnique;
-        cout << "vectorName: " << vectorName << endl;
+
         for (const set<int> &loadValueSet : loadValues) {
             finalLoadValuesUnique.insert(loadValueSet.begin(), loadValueSet.end());
         }
-        for (const int &loadValue : finalLoadValuesUnique) {
-            cout << loadValue << ", ";
+
+        if (SHOW_UNIQUE_LOADS) {
+            set_consume_size(op, vectorName + "_unique", int_span(finalLoadValuesUnique.size()));
         }
-        cout << endl;
-        set_consume_size(op, vectorName + "_unique", int_span(finalLoadValuesUnique.size()));
     }
 
     return op;
@@ -406,7 +397,7 @@ void StmtSizes::add_load_value(const string &name, const int lanes) {
         curr_load_values[name] += lanes;
     }
 }
-void StmtSizes::add_load_value(const string &name, set<int> &load_values) {
+void StmtSizes::add_load_value_unique_loads(const string &name, set<int> &load_values) {
     curr_loads[name].push_back(load_values);
 }
 Expr StmtSizes::visit(const Load *op) {
@@ -423,35 +414,22 @@ Expr StmtSizes::visit(const Load *op) {
         if (op->index.as<Ramp>()) {
             lanes = op->index.as<Ramp>()->lanes;
 
+            // calculate unique loads if all args are concrete
             if (op->index.as<Ramp>()->base.as<IntImm>() &&
                 op->index.as<Ramp>()->stride.as<IntImm>()) {
                 int64_t baseValue = op->index.as<Ramp>()->base.as<IntImm>()->value;
                 int64_t strideValue = op->index.as<Ramp>()->stride.as<IntImm>()->value;
 
-                cout << "load " << op->name << "[" << baseValue << ":" << strideValue << ":"
-                     << lanes << "]" << endl
-                     << "\t";
                 set<int> load_values;
                 for (int i = baseValue; i < baseValue + (lanes * strideValue); i += strideValue) {
                     load_values.insert(i);
-                    cout << i << ", ";
                 }
-                cout << endl;
-                add_load_value(op->name, load_values);
-            } else {
-                cout << "StmtSizes::visit(const Load *op): base and stride aren't of type (IntImm)"
-                     << endl;
-                // internal_error
-                //     << "\n"
-                //     << "In Load: " << op->name << "\n"
-                //     << print_node(op->index.as<Ramp>()->base.get()) << "\n"
-                //     << print_node(op->index.as<Ramp>()->stride.get()) << "\n"
-                //     << "StmtSizes::visit(const Load *op): base and stride aren't of type "
-                //        "(IntImm) - "
-                //        "can't generate ProdCons hierarchy yet. \n\n";
+
+                if (SHOW_UNIQUE_LOADS) {
+                    add_load_value_unique_loads(op->name, load_values);
+                }
             }
         } else {
-            // TODO: make sure this variable hasn't been set yet
             lanes = int(op->type.lanes());
         }
 
@@ -842,8 +820,8 @@ void ProducerConsumerHierarchy::table_header(const IRNode *op, const string &hea
                                              string anchorName = "") {
     html << "<th>";
 
-    // add cost color squares if op exists
-    if (op != nullptr) {
+    // add cost color squares if op exists and if it's not a store node
+    if (op != nullptr && op->node_type != IRNodeType::Store) {
         cost_colors(op);
     }
 
@@ -887,11 +865,11 @@ void ProducerConsumerHierarchy::prod_cons_table(StmtSize &size) {
     html << "<tr>";
 
     html << "<th colspan=\\'2\\' class=\\'costTableHeader middleCol\\'>";
-    html << "Prod";
+    html << "Written";
     html << "</th>";
 
     html << "<th colspan=\\'2\\' class=\\'costTableHeader\\'>";
-    html << "Cons";
+    html << "Read";
     html << "</th>";
 
     html << "</tr>";
@@ -1000,14 +978,6 @@ void ProducerConsumerHierarchy::allocate_table_header(const Allocate *op, const 
     vector<string> &allocationSizes = size.allocationSizes;
 
     string type = allocationSizes[0];
-
-    if (op->extents.size() > 3) {
-        internal_error
-            << "\n\n"
-            << "ProducerConsumerHierarchy::allocate_table_header - extents.size() != 3 !!\n"
-            << "extents.size() = " << op->extents.size() << "\n"
-            << "\n";
-    }
 
     allocate_table(allocationSizes);
 
@@ -1291,6 +1261,9 @@ Stmt ProducerConsumerHierarchy::visit(const IfThenElse *op) {
         if (!thenSize.empty()) {
             // TODO: inline condition
             ifHeader << "(" << op->condition << ")";
+
+            // TODO: for condition, show it if it's small, and add hover text if it's large
+
             if (!SHOW_CUMULATIVE_COST) {
                 thenSize = StmtSize();
             }
@@ -1390,11 +1363,19 @@ Expr ProducerConsumerHierarchy::visit(const Load *op) {
     }
 
     stringstream header;
-    header << "Load " << op->name << " (" << lanes << ")";
+    header << "Load " << op->name << " (";
+    if (findStmtCost.is_local_variable(op->name)) {
+        header << "local var, load size: ";
+    } else {
+        header << "global var, load size: ";
+    }
+
+    header << lanes << ")";
 
     open_table_row();
     open_table_data();
     html << "&nbsp;";
+    cost_colors(op);
     html << header.str();
     html << "&nbsp;";
     close_table_data();
@@ -1403,6 +1384,32 @@ Expr ProducerConsumerHierarchy::visit(const Load *op) {
     return op;
 }
 
+string get_memory_type(MemoryType memType) {
+    if (memType == MemoryType::Auto) {
+        return "Auto";
+    } else if (memType == MemoryType::Heap) {
+        return "Heap";
+    } else if (memType == MemoryType::Stack) {
+        return "Stack";
+    } else if (memType == MemoryType::Register) {
+        return "Register";
+    } else if (memType == MemoryType::GPUShared) {
+        return "GPUShared";
+    } else if (memType == MemoryType::GPUTexture) {
+        return "GPUTexture";
+    } else if (memType == MemoryType::LockedCache) {
+        return "LockedCache";
+    } else if (memType == MemoryType::VTCM) {
+        return "VTCM";
+    } else if (memType == MemoryType::AMXTile) {
+        return "AMXTile";
+    } else {
+        internal_error << "\n\n"
+                       << "Unknown memory type"
+                       << "\n";
+        return "Unknown Memory Type";
+    }
+}
 Stmt ProducerConsumerHierarchy::visit(const Allocate *op) {
     open_table(ALLOCATE_COLOR);
 
@@ -1413,6 +1420,9 @@ Stmt ProducerConsumerHierarchy::visit(const Allocate *op) {
 
     stringstream header;
     header << "Allocate " << op->name;
+
+    // TODO: add information about memory_type to header
+    header << " (" << get_memory_type(op->memory_type) << ")";
 
     // TODO: make sure this is right
     if (!is_const_one(op->condition)) {

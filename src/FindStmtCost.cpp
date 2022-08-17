@@ -22,7 +22,6 @@ void CostPreProcessor::traverse(const Module &m) {
 int CostPreProcessor::get_lock_access_count(const string name) const {
     auto it = lock_access_counts.find(name);
     if (it == lock_access_counts.end()) {
-        // cout << "name: " << name << endl;
         internal_error << "\n"
                        << "CostPreProcessor::get_lock_access_count: name (`" << name
                        << "`) not found in `lock_access_counts`"
@@ -170,6 +169,15 @@ int FindStmtCost::get_data_movement_cost(const IRNode *node) const {
     }
 
     return it->second.data_movement_cost;
+}
+
+bool FindStmtCost::is_local_variable(const string &name) const {
+    for (auto const &allocate_name : allocate_variables) {
+        if (allocate_name == name) {
+            return true;
+        }
+    }
+    return false;
 }
 
 void FindStmtCost::traverse(const Module &m) {
@@ -394,6 +402,13 @@ Expr FindStmtCost::visit(const Load *op) {
     uint16_t lanes = op->type.lanes();
     int scalingFactor = get_scaling_factor(bits, lanes);
 
+    // see if op->name is a global variable or not, and adjust accordingly
+    if (is_local_variable(op->name)) {
+        scalingFactor *= LOAD_LOCAL_VAR_COST;
+    } else {
+        scalingFactor *= LOAD_GLOBAL_VAR_COST;
+    }
+
     mutate(op->predicate);
     mutate(op->index);
 
@@ -402,6 +417,7 @@ Expr FindStmtCost::visit(const Load *op) {
         get_data_movement_cost(op->predicate.get()) + get_data_movement_cost(op->index.get());
     dataMovementCost += LOAD_COST;
     dataMovementCost *= scalingFactor;
+
     set_costs(op, 1 + tempVal, dataMovementCost);
 
     return op;
@@ -623,18 +639,23 @@ Stmt FindStmtCost::visit(const Store *op) {
     mutate(op->value);
     mutate(op->index);
 
-    uint8_t bits = op->value.type().bits();
-    uint16_t lanes = op->value.type().lanes();
+    uint8_t bits = op->index.type().bits();
+    uint16_t lanes = op->index.type().lanes();
     int scalingFactor = get_scaling_factor(bits, lanes);
 
-    int tempVal = get_computation_cost(op->predicate.get()) +
-                  get_computation_cost(op->value.get()) + get_computation_cost(op->index.get());
-    int dataMovementCost = get_data_movement_cost(op->predicate.get()) +
-                           get_data_movement_cost(op->value.get()) +
-                           get_data_movement_cost(op->index.get());
-    dataMovementCost += STORE_COST;
-    dataMovementCost *= scalingFactor;
-    set_costs(op, 1 + tempVal, dataMovementCost);
+    // TODO: confirm changing this logic is correct
+    // int tempVal = get_computation_cost(op->predicate.get()) +
+    //               get_computation_cost(op->value.get()) + get_computation_cost(op->index.get());
+    // int dataMovementCost = get_data_movement_cost(op->predicate.get()) +
+    //                        get_data_movement_cost(op->value.get()) +
+    //                        get_data_movement_cost(op->index.get());
+    // dataMovementCost += STORE_COST;
+    // dataMovementCost *= scalingFactor;
+    // set_costs(op, 1 + tempVal, dataMovementCost);
+
+    int tempVal = 1;
+    int dataMovementCost = STORE_COST * scalingFactor;
+    set_costs(op, tempVal, dataMovementCost);
 
     return op;
 }
@@ -673,6 +694,8 @@ Stmt FindStmtCost::visit(const Allocate *op) {
 
             * do we need to recurse on body???
     */
+    allocate_variables.push_back(op->name);
+
     int tempVal = 0;
     int dataMovementCost = 0;
 

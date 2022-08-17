@@ -18,6 +18,9 @@ using namespace std;
 #define LOAD_COST 2
 #define STORE_COST 3
 
+#define LOAD_LOCAL_VAR_COST 3
+#define LOAD_GLOBAL_VAR_COST 10
+
 /*
  * StmtCost struct
  */
@@ -77,10 +80,13 @@ public:
     int get_calculated_computation_cost(const IRNode *node) const;
     int get_data_movement_cost(const IRNode *node) const;
 
+    bool is_local_variable(const string &name) const;
+
 private:
     unordered_map<const IRNode *, StmtCost> stmt_cost;  // key: node, value: StmtCost
     CostPreProcessor cost_preprocessor;                 // for Atomic and Acquire
     int current_loop_depth = 0;                         // stores current loop depth level
+    vector<string> allocate_variables;                  // stores all allocate variables
 
     // starts the traversal based on Module
     void traverse(const Module &m);

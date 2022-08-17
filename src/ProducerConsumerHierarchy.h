@@ -11,6 +11,17 @@ using namespace std;
 using namespace Halide;
 using namespace Internal;
 
+// background colors for the different types of elements
+#define IF_COLOR "#e6eeff"
+#define FOR_COLOR "#b3ccff"
+#define PRODUCER_COLOR "#99bbff"
+#define CONSUMER_COLOR PRODUCER_COLOR
+#define STORE_COLOR "#f4f8bf"
+#define ALLOCATE_COLOR STORE_COLOR
+
+#define SHOW_CUMULATIVE_COST false
+#define SHOW_UNIQUE_LOADS false
+
 struct StmtSize {
     map<string, string> produces;
     map<string, string> consumes;
@@ -79,7 +90,7 @@ private:
     Stmt visit(const For *op) override;
     Stmt visit(const Store *op) override;
     void add_load_value(const string &name, const int lanes);
-    void add_load_value(const string &name, set<int> &load_values);
+    void add_load_value_unique_loads(const string &name, set<int> &load_values);
     Expr visit(const Load *op) override;
     Stmt visit(const Allocate *op) override;
     Stmt visit(const Block *op) override;

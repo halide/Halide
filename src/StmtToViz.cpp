@@ -736,7 +736,7 @@ private:
         stream << open_anchor(anchorName);
         stream << close_anchor();
 
-        stream << cost_colors(op);
+        stream << cost_colors(op->value.get());
         stream << open_cost_span(op, get_stmt_hierarchy(op));
 
         stream << open_span("Matched");
