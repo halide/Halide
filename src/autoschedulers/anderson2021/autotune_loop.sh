@@ -203,7 +203,7 @@ make_featurization() {
         ${EXTRA_GENERATOR_ARGS} \
         -p ${AUTOSCHED_BIN}/libautoschedule_anderson2021.so \
         autoscheduler=Anderson2021 \
-        autoscheduler.parallelism=${HARDWARE_PARALLELISM}
+        autoscheduler.parallelism=${NUM_CORES}
         2> ${D}/compile_err.txt > ${D}/compile_log.txt"
 
     FAILED=0

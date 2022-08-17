@@ -150,7 +150,6 @@ demo: $(BIN)/$(HL_TARGET)/demo.rungen $(BIN)/libautoschedule_anderson2021.$(SHAR
 # demonstrates an autotuning loop
 # (using $(BIN) and $(SRC) here seems overkill, but makes copy-n-paste elsewhere easier)
 autotune: $(GENERATOR_BIN)/demo.generator $(BIN)/featurization_to_sample $(BIN)/get_host_target $(BIN)/retrain_cost_model $(BIN)/libautoschedule_anderson2021.$(SHARED_EXT) $(SRC)/autotune_loop.sh
-	HL_MACHINE_PARAMS=80,1,1 \
 	SAMPLES_DIR=test_autotuned_samples \
 	bash $(SRC)/autotune_loop.sh \
 		$(GENERATOR_BIN)/demo.generator \
