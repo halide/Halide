@@ -1,5 +1,34 @@
 # Halide Bindings for Python
 
+<!-- MarkdownTOC autolink="true" -->
+
+- [Python Requirements](#python-requirements)
+- [Compilation Instructions](#compilation-instructions)
+- [Documentation and Examples](#documentation-and-examples)
+- [Differences from C++ API](#differences-from-c-api)
+- [Example of Simple Usage](#example-of-simple-usage)
+- [Halide Generators In Python](#halide-generators-in-python)
+    - [Writing a Generator in Python](#writing-a-generator-in-python)
+        - [@hl.generator\("name"\)](#hlgeneratorname)
+        - [hl.GeneratorParam](#hlgeneratorparam)
+        - [hl.InputBuffer, hl.InputScalar](#hlinputbuffer-hlinputscalar)
+        - [hl.OutputBuffer, hl.OutputScalar](#hloutputbuffer-hloutputscalar)
+        - [Names](#names)
+        - [generate\(\) method](#generate-method)
+    - [Using a Generator for JIT compilation](#using-a-generator-for-jit-compilation)
+    - [Using a Generator for AOT compilation](#using-a-generator-for-aot-compilation)
+    - [Calling Generator-Produced code from Python](#calling-generator-produced-code-from-python)
+    - [Advanced Generator-Related Topics](#advanced-generator-related-topics)
+        - [Generator Aliases](#generator-aliases)
+        - [Dynamic Inputs and Outputs](#dynamic-inputs-and-outputs)
+        - [Calling a Generator Directly](#calling-a-generator-directly)
+        - [The Lifecycle Of A Generator](#the-lifecycle-of-a-generator)
+        - [Notable Differences Between C++ and Python Generators](#notable-differences-between-c-and-python-generators)
+- [Keeping Up To Date](#keeping-up-to-date)
+- [License](#license)
+
+<!-- /MarkdownTOC -->
+
 Halide provides Python bindings for most of its public API. Only Python 3.x is
 supported; at this time, Python 3.8 (or higher) is recommended. The Python
 bindings are supported on 64-bit Linux, OSX, and Windows systems.
@@ -11,7 +40,7 @@ integration (since no C++ metacompilation step is required).
 You can also use existing Halide Generators (written in C++) to produce Python
 extensions that can be used within Python code.
 
-## Python Requirements:
+## Python Requirements
 
 Before building, you should ensure you have prerequite packages installed in
 your local Python environment. The best way to get set up is to use a virtual
@@ -30,8 +59,7 @@ Build as part of the CMake build with `-DWITH_PYTHON_BINDINGS=ON` (this is the
 default). Note that this requires both Halide and LLVM to be built with RTTI and
 exceptions **enabled**, which is not the default for LLVM.
 
-> **TODO:** do we want to document `pip install
-> /path/to/Halide/python_bindings/`?
+> **TODO:** do we want to document `pip install /path/to/Halide/python_bindings/`?
 
 ## Documentation and Examples
 
@@ -143,7 +171,7 @@ target, and are present in the Halide install location at
 `$HALIDE_INSTALL/lib/python3/site-packages`; adding that to your `PYTHONPATH`
 should allow you to simply `import halide`:
 
-```python
+```
 # By convention, we import halide as 'hl' for terseness
 import halide as hl
 
@@ -216,6 +244,12 @@ import halide as hl
 x = hl.Var('x')
 y = hl.Var('y')
 
+_operators = {
+  'xor': lambda a, b: a ^ b,
+  'and': lambda a, b: a & b,
+  'or':  lambda a, b: a | b
+}
+
 # Apply a mask value to a 2D image using a logical operator that is selected at compile-time.
 @hl.generator(name = "logical_op_generator")
 class LogicalOpGenerator:
@@ -228,12 +262,8 @@ class LogicalOpGenerator:
 
     def generate(g):
         # Algorithm
-        if g.op == "xor":
-            g.output[x, y] = g.input[x, y] ^ g.mask
-        elif g.op == "and":
-            g.output[x, y] = g.input[x, y] & g.mask
-        else:
-            assert False, "'%s' is not an understood op" % g.op
+        operator = _operators[g.op]
+        g.output[x, y] = operator(g.input[x, y], g.mask)
 
         # Schedule
         v = g.natural_vector_size(hl.UInt(8))
@@ -341,10 +371,10 @@ It is required that the `generate()` method be defined by the Generator.
 `generate()` method to make the expression language terser; this is not in any
 way required, but is recommended.)
 
-### Using a Generator with JIT compilation
+### Using a Generator for JIT compilation
 
-You can use the `compile_to_callable()` method to JIT-compile a Generator into
-a `hl.Callable`, which is (essentially) just a dynamically-created function.
+You can use the `compile_to_callable()` method to JIT-compile a Generator into a
+`hl.Callable`, which is (essentially) just a dynamically-created function.
 
 ```
 import LogicalOpGenerator
@@ -352,9 +382,9 @@ import imageio
 import numpy as np
 
 # Instantiate a Generator, set the GeneratorParams, then compile it
-xor_op_generator = LogicalOpGenerator()
-xor_op_generator.set_generator_params({"op": "xor"})
-xor_filter = xor_op_generator.compile_to_callable()
+or_op_generator = LogicalOpGenerator()
+or_op_generator.set_generator_params({"op": "or"})
+or_filter = or_op_generator.compile_to_callable()
 
 # Read in some file for input
 input_buf = imageio.imread("/path/to/some/file.png")
@@ -364,111 +394,73 @@ assert input_buf.dtype == np.uint8
 output_buf = np.empty(input_buf.shape, dtype=input_buf.dtype)
 
 # Note, Python code throws exception for error conditions rather than returning an int
-xor_filter(input_buf, 0x7f, output_buf)
+or_filter(input_buf, 0x7f, output_buf)
 
 # Note also that we can use named arguments for any/all, in the Python manner:
-xor_filter(mask=0x7f, input=input_buf, output=output_buf)
+or_filter(mask=0x7f, input=input_buf, output=output_buf)
 
-imageio.imsave("/tmp/xored.png", output_buf)
+imageio.imsave("/tmp/or.png", output_buf)
 ```
 
-By default, a Generator will produce code targeted at `Target("host")` (or the value of the `HL_JIT_TARGET` environment variable, if set); you can override this behavior selectively by activating a `GeneratorContext` when the Generator is *created*:
+By default, a Generator will produce code targeted at `Target("host")` (or the
+value of the `HL_JIT_TARGET` environment variable, if set); you can override
+this behavior selectively by activating a `GeneratorContext` when the Generator
+is *created*:
 
 ```
 import LogicalOpGenerator
 
-# Maybe we always want to compile for plain x86-64, with no advanced SIMD enabled?
-t = hl.Target("x86-64-linux")
+# Compile with debugging enabled
+t = hl.Target("host-debug")
 with hl.GeneratorContext(t):
-    xor_op_generator = LogicalOpGenerator()
-    xor_op_generator.set_generator_params({"op": "xor"})
-    xor_filter = xor_op_generator.compile_to_callable()
+    or_op_generator = LogicalOpGenerator()
+    or_op_generator.set_generator_params({"op": "or"})
+    or_filter = or_op_generator.compile_to_callable()
 ```
 
-### Using a Generator with AOT compilation
+### Using a Generator for AOT compilation
 
-
-
-```
-import LogicalOpGenerator
-import imageio
-import numpy as np
-
-# Instantiate a Generator, set the GeneratorParams, then compile it
-xor_op_generator = LogicalOpGenerator()
-xor_op_generator.set_generator_params({"op": "xor"})
-xor_filter = xor_op_generator.compile_to_callable()
-
-# Read in some file for input
-input_buf = imageio.imread("/path/to/some/file.png")
-assert input_buf.dtype == np.uint8
-
-# create a Buffer-compatible object for the output; we'll use np.array
-output_buf = np.empty(input_buf.shape, dtype=input_buf.dtype)
-
-# Note, Python code throws exception for error conditions rather than returning an int
-xor_filter(input_buf, 0x7f, output_buf)
-
-# Note also that we can use named arguments for any/all, in the Python manner:
-xor_filter(mask=0x7f, input=input_buf, output=output_buf)
-
-imageio.imsave("/tmp/xored.png", output_buf)
-```
-
-
-### Compiling a C++ Generator for use with Python
-
-Let's look at the C++ equivalent of the `XorFilter` Generator we saw earlier:
+If you are using CMake, the simplest thing is to use `add_halide_library()`
+(defined in HalideGeneratorHelpers.cmake) with the `PYTHON_EXTENSION_LIBRARY`
+option:
 
 ```
-class LogicalOpFilter : public Halide::Generator<LogicalOpFilter> {
-public:
-    GeneratorParam<std::string> op{"op", "xor"};
-
-    Input<Buffer<uint8_t, 2>>   input{"input"};
-    Input<uint8_t>              mask{"mask"};
-
-    Output<Buffer<uint8_t, 2>>  output{"output"};
-
-    void generate() {
-        # Algorithm
-        if (op == "xor") {
-            output(x, y) = input(x, y) ^ mask;
-        } else if (op == "and") {
-            output(x, y) = input(x, y) & mask;
-        } else {
-            std::cerr << op << " is not a supported op\n";
-            abort();
-        }
-
-        # Schedule
-        int v = natural_vector_size<uint8_t>();
-        output.vectorize(x, v);
-    }
-};
-HALIDE_REGISTER_GENERATOR(LogicalOpFilter, logical_op_generator)
-```
-
-If you are using CMake, the simplest thing is to use
-`add_python_aot_extension()`, defined in PythonExtensionHelpers.cmake:
+add_halide_library(xor_filter
+                   GENERATOR logical_op_generator
+                   SOURCES logical_op_generator.py
+                   PARAMS op=xor
+                   PYTHON_EXTENSION_LIBRARY
+                   [ FEATURES ... ])
 
 ```
-add_python_aot_extension(xor_filter
-                         GENERATOR logical_op_generator
-                         SOURCES logical_op_generator.cpp
-                         PARAMS op=xor
-                         [ FEATURES ... ])
+
+(Note that this rule works for both C++ and Python Generators.)
+
+If you're not using CMake, you can "drive" a Generator directly from your build
+system via command-line flags. The most common, minimal set looks something like
+this:
+
+```
+python3 /path/to/my/generator.py -g <registered-name> \
+                                 -o <output-dir> \
+                                 target=<halide-target-string> \
+                                 [generator-param=value ...]
 ```
 
-This compiles the Generator code in `logical_op_generator.cpp` with the
-registered name `logical_op_generator` to produce the target `xor_filter`, which is
-a Python Extension in the form of a shared library (e.g.,
-`xor_filter.cpython-310-x86_64-linux-gnu.so`). Note that we explicitly specify
-the value of the `op` GeneratorParam, even though we don't need to, since `xor`
-is the default value. (We could of course produce an `and_filter` by just adding
-another build rule like the one above, but with `op=and`.)
+The argument to `-g` is the name supplied to the `@hl.generator` decorator. The
+argument to -o is a directory to use for the output files; by default, we'll
+produce a static library containing the object code, and a C++ header file with
+a forward declaration. `target` specifies a Halide `Target` string decribing the
+OS, architecture, features, etc that should be used for compilation. Any other
+arguments to the command line that don't begin with `-` are presumed to name
+`GeneratorParam` values to set.
 
-> **TODO:** add skeletal example of how to drive the Generator directly
+There are other flags and options too, of course; use `python3
+/path/to/my/generator.py -help` to see a list with explanations.
+
+(Unfortunately, there isn't (yet) a way to produce a Python Extension just by
+running a Generator; the logic for `PYTHON_EXTENSION_LIBRARY` is currently all
+in the CMake helper files.)
 
 ### Calling Generator-Produced code from Python
 
@@ -514,6 +506,125 @@ passing in an array constructed somewhere else, the easiest thing to do is to
 
 ### Advanced Generator-Related Topics
 
+#### Generator Aliases
+
+A Generator alias is a way to associate a Generator with one (or more) specific
+sets of GeneratorParams; the 'alias' is just another registered name. This
+offers a convenient alternative to specifying multiple sets of GeneratorParams
+via the build system. To define alias(es) for a Generator, just add the
+`@hl.alias` decorator before `@hl.generator` decorator:
+
+```
+@hl.alias(
+    xor_generator={"op": "xor"},
+    and_generator={"op": "and"},
+    or_generator={"op": "or"}
+)
+@hl.generator("logical_op_generator")
+class LogicalOpGenerator:
+    ...
+```
+
+#### Dynamic Inputs and Outputs
+
+If you need to build `Input` and/or `Output` dynamically, you can define a
+`configure()` method. It will always be called after all `GeneratorParam` values
+are valid, but before `generate()` is called. Let's take our example and add an
+option to pass an offset to be added after the logical operator is done:
+
+```
+import halide as hl
+
+x = hl.Var('x')
+y = hl.Var('y')
+
+_operators = {
+  'xor': lambda a, b: a ^ b,
+  'and': lambda a, b: a & b,
+  'or':  lambda a, b: a | b
+}
+
+# Apply a mask value to a 2D image using a logical operator that is selected at compile-time.
+@hl.generator(name = "logical_op_generator")
+class LogicalOpGenerator:
+    op = hl.GeneratorParam("xor")
+    with_offset = hl.GeneratorParam(False)
+
+    input = hl.InputBuffer(hl.UInt(8), 2)
+    mask = hl.InputScalar(hl.UInt(8))
+
+    output = hl.OutputBuffer(hl.UInt(8), 2)
+
+    def configure(g):
+        # If with_offset is specified, we
+        if g.with_offset:
+           g.add_input("offset", hl.InputScalar(hl.Int(32)))
+
+    def generate(g):
+        # Algorithm
+        operator = _operators[g.op]
+        if hasattr(g, "offset"):
+            g.output[x, y] = operator(g.input[x, y], g.mask) + g.offset
+        else:
+            g.output[x, y] = operator(g.input[x, y], g.mask)
+
+        # Schedule
+        v = g.natural_vector_size(hl.UInt(8))
+        g.output.vectorize(x, v)
+
+if __name__ == "__main__":
+    hl.main()
+```
+
+The only thing you can (usefully) do from `configure()` is to call `add_input()`
+or `add_output()`, which accept only the appropriate `Input` or `Output`
+classes. The resulting value is stored as a member variable with the name
+specified (if there is already a member with the given name, an exception is
+thrown).
+
+#### Calling a Generator Directly
+
+Each Generator has a class method (injected by `@hl.generator`) that allows you
+to "call" the Generator like an ordinary function; this allows you to directly
+take the Halide IR produced by the Generator and do anything you want to with
+it. This can be especially useful when writing library code, as you can
+'compose' more complex pipelines this way.
+
+This method is named `call()` and looks like this:
+
+```
+@classmethod
+def call(cls, *args, **kwargs):
+    ...
+```
+
+It takes the inputs (specified either by-name or by-position in the usual Python
+way). It also allows for an optional by-name-only argument, `generator_params`,
+which is a simple Python dict that allows for overriding `GeneratorParam`s. It
+returns a tuple of the Output values. For the earlier example, usage might be
+something like:
+
+```
+import LogicalOpFilter
+
+x, y = hl.Var(), hl.Var()
+
+input_buf = hl.Buffer(hl.UInt(8), [2, 2])
+mask_value = 0x7f
+
+# Inputs by-position
+func_out = LogicalOpFilter.call(input_buf, mask_value)
+
+# Inputs by-name
+func_out = LogicalOpFilter.call(mask=mask_value, input=input_buf)
+
+# Above again, but with generator_params
+func_out = LogicalOpFilter.call(input_buf, mask_value,
+                                generator_params = {"op": "and"})
+func_out = LogicalOpFilter.call(generator_params = {"op": and},
+                                input=input_buf, mask=mask_value)
+```
+
 #### The Lifecycle Of A Generator
 
 Whether being driven by a build system (for AOT use) or by another piece of
@@ -544,51 +655,44 @@ something like this:
 -   Finally, the Generator instance will be discarded, never to be used again.
 
 Note that almost all of the code doing the hand-wavy bits above is injected by
-the `@hl.generator` decorator – the Generator author
-doesn't need to know or care about the specific details, only that they happen.
+the `@hl.generator` decorator – the Generator author doesn't need to know or
+care about the specific details, only that they happen.
 
-All Halide Generators are **single-use** instances – that is, any given Generator instance should be used at most once. If
-a Generator is to be executed multiple times (e.g. for different
-`GeneratorParam` values, or a different `Target`), a new one must be constructed
-each time.
+All Halide Generators are **single-use** instances – that is, any given
+Generator instance should be used at most once. If a Generator is to be executed
+multiple times (e.g. for different `GeneratorParam` values, or a different
+`Target`), a new one must be constructed each time.
 
-#### Calling a Generator Directly
+#### Notable Differences Between C++ and Python Generators
 
-Each Generator has a class method (injected by `@hl.generator`) that allows you to "call" the Generator like an ordinary function; this allows you to directly take the Halide IR produced by the Generator and do anything you want to with it. This can be especially useful when writing library code, as you can 'compose' more complex pipelines this way.
+If you have written C++ Generators in Halide in the past, you might notice some
+features are missing and/or different for Python Generators. Among the
+differences are:
 
-This method is named `call()` and looks like this:
-
-
-```
-@classmethod
-def call(cls, *args, **kwargs):
-    ...
-```
-
-
-It takes the inputs (specified either by-name or by-position in the usual Python way). It also allows for an optional by-name-only argument, `generator_params`, which is a simple Python dict that allows for overriding `GeneratorParam`s. It returns a tuple of the Output values. For the earlier example, usage might be something like:
-
-
-```
-import LogicalOpFilter
-
-x, y = hl.Var(), hl.Var()
-
-input_buf = hl.Buffer(hl.UInt(8), [2, 2])
-mask_value = 0x7f
-
-# Inputs by-position
-func_out = LogicalOpFilter.call(input_buf, mask_value)
-
-# Inputs by-name
-func_out = LogicalOpFilter.call(mask=mask_value, input=input_buf)
-
-# Above again, but with generator_params
-func_out = LogicalOpFilter.call(input_buf, mask_value,
-                                generator_params = {"op": "and"})
-func_out = LogicalOpFilter.call(generator_params = {"op": and},
-                                input=input_buf, mask=mask_value)
-```
+-   Array Inputs/Outputs: in our experience, they are pretty rarely used, it
+    complicates the implementation in nontrivial ways, and the majority of use
+    cases for them can all be reasonably supported by dynamically adding inputs
+    or outputs (and saving the results in a local array).
+-   `Input<Func>` and `Output<Func>`: these were deliberately left out in order
+    to simplify Python Generators. It's possible that something similar might be
+    added in the future.
+-   GeneratorParams with LoopLevel types: these aren't useful without
+    `Input<Func>`/`Output<Func>`.
+-   GeneratorParams with Enum types: using a plain `str` type in Python is
+    arguably just as easy, if not easier.
+-   `get_externs_map()`: this allows registering ExternalCode objects to be
+    appended to the Generator's code. In our experience, this feature is very
+    rarely used. We consider adding this in the future if necessary.
+-   Lazy Binding of Unspecified Input/Output Types: for C++ Generators, if you
+    left an Output's type (or dimensionality) unspecified, you didn't always
+    have to specify a `GeneratorParam` to make it into a concrete type: if the
+    type was always fully specified by the contents of the `generate()` method,
+    that was good enough. In Python Generators, by contrast, **all** types and
+    dimensions must be **explicitly** specified by either code declaration or by
+    `GeneratorParam` setting. This simplifies the internal code in nontrivial
+    ways, and also allows for (arguably) more readable code, since there are no
+    longer cases that require the reader to execute the code in their head in
+    order to deduce the output types.
 
 ## Keeping Up To Date
 
