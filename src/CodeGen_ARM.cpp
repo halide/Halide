@@ -1037,7 +1037,6 @@ void CodeGen_ARM::visit(const LE *op) {
     CodeGen_Posix::visit(op);
 }
 
-
 void CodeGen_ARM::visit(const VectorInstruction *op) {
     const std::string name = op->get_instruction_name();
     value = call_overloaded_intrin(op->type, name, op->args);

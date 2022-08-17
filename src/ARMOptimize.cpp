@@ -40,19 +40,18 @@ protected:
         return target.has_feature(Target::ARMFp16);
     }
 
-
     bool should_peephole_optimize(const Type &type) const {
         // We only have peephole optimizations for vectors here.
         // FIXME: should we only optimize vectors that are multiples of the native vector width?
         //        when we do, we fail simd_op_check tests on weird vector sizes.
-        return type.is_vector() && !neon_intrinsics_disabled() && ((type.lanes() % 2)  == 0);
+        return type.is_vector() && !neon_intrinsics_disabled() && ((type.lanes() % 2) == 0);
     }
 
     using InstructionSelector::visit;
 
     Expr try_to_use_pwadd_acc(const VectorReduce *op, const Expr &b) const {
         if (!target_arm32()) {
-            return Expr(); // Only available on arm32.
+            return Expr();  // Only available on arm32.
         }
         // This is hard to express as a pattern due to the use of lossless_cast.
         const int factor = op->value.type().lanes() / op->type.lanes();
@@ -83,66 +82,66 @@ protected:
         // Search for accumulating dot product instructions.
         if (target.has_feature(Target::ARMDotProd) &&
             (
-             // SDOT
-             rewrite(
-                x + h_add(cast(Int(32, lanes * 4), widening_mul(y, z)), lanes),
-                v_instr(VectorInstruction::dot_product, x, y, z),
-                is_int(x, 32, lanes) && is_int(y, 8, lanes * 4) && is_int(z, 8, lanes * 4)) ||
-             rewrite(
-                h_add(cast(Int(32, lanes * 4), widening_mul(y, z)), lanes) + x,
-                v_instr(VectorInstruction::dot_product, x, y, z),
-                is_int(x, 32, lanes) && is_int(y, 8, lanes * 4) && is_int(z, 8, lanes * 4)) ||
-             // UDOT
-             rewrite(
-                x + h_add(cast(Int(32, lanes * 4), widening_mul(y, z)), lanes),
-                v_instr(VectorInstruction::dot_product, x, y, z),
-                is_int(x, 32, lanes) && is_uint(y, 8, lanes * 4) && is_uint(z, 8, lanes * 4)) ||
-             rewrite(
-                h_add(cast(Int(32, lanes * 4), widening_mul(y, z)), lanes) + x,
-                v_instr(VectorInstruction::dot_product, x, y, z),
-                is_int(x, 32, lanes) && is_uint(y, 8, lanes * 4) && is_uint(z, 8, lanes * 4)) ||
-             rewrite(
-                x + h_add(cast(UInt(32, lanes * 4), widening_mul(y, z)), lanes),
-                v_instr(VectorInstruction::dot_product, x, y, z),
-                is_uint(x, 32, lanes) && is_uint(y, 8, lanes * 4) && is_uint(z, 8, lanes * 4)) ||
-             rewrite(
-                h_add(cast(UInt(32, lanes * 4), widening_mul(y, z)), lanes) + x,
-                v_instr(VectorInstruction::dot_product, x, y, z),
-                is_uint(x, 32, lanes) && is_uint(y, 8, lanes * 4) && is_uint(z, 8, lanes * 4)) ||
+                // SDOT
+                rewrite(
+                    x + h_add(cast(Int(32, lanes * 4), widening_mul(y, z)), lanes),
+                    v_instr(VectorInstruction::dot_product, x, y, z),
+                    is_int(x, 32, lanes) && is_int(y, 8, lanes * 4) && is_int(z, 8, lanes * 4)) ||
+                rewrite(
+                    h_add(cast(Int(32, lanes * 4), widening_mul(y, z)), lanes) + x,
+                    v_instr(VectorInstruction::dot_product, x, y, z),
+                    is_int(x, 32, lanes) && is_int(y, 8, lanes * 4) && is_int(z, 8, lanes * 4)) ||
+                // UDOT
+                rewrite(
+                    x + h_add(cast(Int(32, lanes * 4), widening_mul(y, z)), lanes),
+                    v_instr(VectorInstruction::dot_product, x, y, z),
+                    is_int(x, 32, lanes) && is_uint(y, 8, lanes * 4) && is_uint(z, 8, lanes * 4)) ||
+                rewrite(
+                    h_add(cast(Int(32, lanes * 4), widening_mul(y, z)), lanes) + x,
+                    v_instr(VectorInstruction::dot_product, x, y, z),
+                    is_int(x, 32, lanes) && is_uint(y, 8, lanes * 4) && is_uint(z, 8, lanes * 4)) ||
+                rewrite(
+                    x + h_add(cast(UInt(32, lanes * 4), widening_mul(y, z)), lanes),
+                    v_instr(VectorInstruction::dot_product, x, y, z),
+                    is_uint(x, 32, lanes) && is_uint(y, 8, lanes * 4) && is_uint(z, 8, lanes * 4)) ||
+                rewrite(
+                    h_add(cast(UInt(32, lanes * 4), widening_mul(y, z)), lanes) + x,
+                    v_instr(VectorInstruction::dot_product, x, y, z),
+                    is_uint(x, 32, lanes) && is_uint(y, 8, lanes * 4) && is_uint(z, 8, lanes * 4)) ||
 
-             // TODO: SUDOT (see below).
+                // TODO: SUDOT (see below).
 
-             // A sum is the same as a dot product with a vector of ones, and this appears to
-             // be a bit faster.
-             // SDOT
-             rewrite(
-                x + h_add(cast(Int(32, lanes * 4), y), lanes),
-                v_instr(VectorInstruction::dot_product, x, y, make_const(Int(8, lanes * 4), 1)),
-                is_int(x, 32, lanes) && is_int(y, 8, lanes * 4)) ||
-             rewrite(
-                h_add(cast(Int(32, lanes * 4), y), lanes) + x,
-                v_instr(VectorInstruction::dot_product, x, y, make_const(Int(8, lanes * 4), 1)),
-                is_int(x, 32, lanes) && is_int(y, 8, lanes * 4)) ||
-             // UDOT
-             rewrite(
-                x + h_add(cast(Int(32, lanes * 4), y), lanes),
-                v_instr(VectorInstruction::dot_product, x, y, make_const(UInt(8, lanes * 4), 1)),
-                is_int(x, 32, lanes) && is_uint(y, 8, lanes * 4)) ||
-             rewrite(
-                h_add(cast(Int(32, lanes * 4), y), lanes) + x,
-                v_instr(VectorInstruction::dot_product, x, y, make_const(UInt(8, lanes * 4), 1)),
-                is_int(x, 32, lanes) && is_uint(y, 8, lanes * 4)) ||
-             rewrite(
-                x + h_add(cast(UInt(32, lanes * 4), y), lanes),
-                v_instr(VectorInstruction::dot_product, x, y, make_const(UInt(8, lanes * 4), 1)),
-                is_uint(x, 32, lanes) && is_uint(y, 8, lanes * 4)) ||
-             rewrite(
-                h_add(cast(UInt(32, lanes * 4), y), lanes) + x,
-                v_instr(VectorInstruction::dot_product, x, y, make_const(UInt(8, lanes * 4), 1)),
-                is_uint(x, 32, lanes) && is_uint(y, 8, lanes * 4)) ||
+                // A sum is the same as a dot product with a vector of ones, and this appears to
+                // be a bit faster.
+                // SDOT
+                rewrite(
+                    x + h_add(cast(Int(32, lanes * 4), y), lanes),
+                    v_instr(VectorInstruction::dot_product, x, y, make_const(Int(8, lanes * 4), 1)),
+                    is_int(x, 32, lanes) && is_int(y, 8, lanes * 4)) ||
+                rewrite(
+                    h_add(cast(Int(32, lanes * 4), y), lanes) + x,
+                    v_instr(VectorInstruction::dot_product, x, y, make_const(Int(8, lanes * 4), 1)),
+                    is_int(x, 32, lanes) && is_int(y, 8, lanes * 4)) ||
+                // UDOT
+                rewrite(
+                    x + h_add(cast(Int(32, lanes * 4), y), lanes),
+                    v_instr(VectorInstruction::dot_product, x, y, make_const(UInt(8, lanes * 4), 1)),
+                    is_int(x, 32, lanes) && is_uint(y, 8, lanes * 4)) ||
+                rewrite(
+                    h_add(cast(Int(32, lanes * 4), y), lanes) + x,
+                    v_instr(VectorInstruction::dot_product, x, y, make_const(UInt(8, lanes * 4), 1)),
+                    is_int(x, 32, lanes) && is_uint(y, 8, lanes * 4)) ||
+                rewrite(
+                    x + h_add(cast(UInt(32, lanes * 4), y), lanes),
+                    v_instr(VectorInstruction::dot_product, x, y, make_const(UInt(8, lanes * 4), 1)),
+                    is_uint(x, 32, lanes) && is_uint(y, 8, lanes * 4)) ||
+                rewrite(
+                    h_add(cast(UInt(32, lanes * 4), y), lanes) + x,
+                    v_instr(VectorInstruction::dot_product, x, y, make_const(UInt(8, lanes * 4), 1)),
+                    is_uint(x, 32, lanes) && is_uint(y, 8, lanes * 4)) ||
 
-            false)) {
-                return mutate(rewrite.result);
+                false)) {
+            return mutate(rewrite.result);
         }
 
         // This is hard to express as a pattern due to use of lossless_cast.
@@ -312,15 +311,15 @@ protected:
                 cast(UInt(bits, lanes), absd(x, y)),
                 v_instr(VectorInstruction::widening_absd, x, y),
                 (is_int(x, bits / 2) || is_uint(x, bits / 2)) &&
-                (is_int(y, bits / 2) || is_uint(y, bits / 2)) &&
-                (is_int(x) == is_int(y))) ||
+                    (is_int(y, bits / 2) || is_uint(y, bits / 2)) &&
+                    (is_int(x) == is_int(y))) ||
 
             rewrite(
                 cast(Int(bits, lanes), absd(x, y)),
                 v_instr(VectorInstruction::widening_absd, x, y),
                 (is_int(x, bits / 2) || is_uint(x, bits / 2)) &&
-                (is_int(y, bits / 2) || is_uint(y, bits / 2)) &&
-                (is_int(x) == is_int(y))) ||
+                    (is_int(y, bits / 2) || is_uint(y, bits / 2)) &&
+                    (is_int(x) == is_int(y))) ||
 
             false) {
             return mutate(rewrite.result);
@@ -332,7 +331,6 @@ protected:
         if (!should_peephole_optimize(op->type)) {
             return InstructionSelector::visit(op);
         }
-
 
         const int lanes = op->type.lanes();
         const int bits = op->type.bits();
@@ -374,7 +372,6 @@ protected:
             rewrite(
                 rounding_shift_right(x, y),
                 rounding_shift_left(x, -cast(Int(bits, lanes), y))) ||
-
 
             // We want these as left shifts with a negative b instead.
             rewrite(
@@ -419,71 +416,70 @@ protected:
                 is_int(x, 32) && is_int(y, 32)) ||
 
             rewrite(
-                 abs(x),
-                 v_instr(VectorInstruction::abs, x),
-                 x_is_small_int || is_float(x, 32) || (has_fp16() && is_float(x, 16) && !is_bfloat(x))) ||
+                abs(x),
+                v_instr(VectorInstruction::abs, x),
+                x_is_small_int || is_float(x, 32) || (has_fp16() && is_float(x, 16) && !is_bfloat(x))) ||
 
             // SABD, UABD - Absolute difference
             rewrite(
-                 absd(x, y),
-                 v_instr(VectorInstruction::absd, x, y),
-                 x_is_small_int_or_uint && y_is_small_int_or_uint) ||
+                absd(x, y),
+                v_instr(VectorInstruction::absd, x, y),
+                x_is_small_int_or_uint && y_is_small_int_or_uint) ||
 
             // SMULL, UMULL - Widening multiply
             rewrite(
-                 widening_mul(x, y),
-                 v_instr(VectorInstruction::widening_mul, x, y),
-                 x_is_small_int_or_uint && y_is_small_int_or_uint &&
-                 // Args must match sign.
-                 (is_int(x) == is_int(y))) ||
+                widening_mul(x, y),
+                v_instr(VectorInstruction::widening_mul, x, y),
+                x_is_small_int_or_uint && y_is_small_int_or_uint &&
+                    // Args must match sign.
+                    (is_int(x) == is_int(y))) ||
 
             // SQADD, UQADD - Saturating add
             rewrite(
-                 saturating_add(x, y),
-                 v_instr(VectorInstruction::saturating_add, x, y),
-                 x_is_small_int_or_uint && y_is_small_int_or_uint) ||
+                saturating_add(x, y),
+                v_instr(VectorInstruction::saturating_add, x, y),
+                x_is_small_int_or_uint && y_is_small_int_or_uint) ||
 
             // SQSUB, UQSUB - Saturating subtract
             rewrite(
-                 saturating_sub(x, y),
-                 v_instr(VectorInstruction::saturating_sub, x, y),
-                 x_is_small_int_or_uint && y_is_small_int_or_uint) ||
+                saturating_sub(x, y),
+                v_instr(VectorInstruction::saturating_sub, x, y),
+                x_is_small_int_or_uint && y_is_small_int_or_uint) ||
 
             // SHADD, UHADD - Halving add
             rewrite(
-                 halving_add(x, y),
-                 v_instr(VectorInstruction::halving_add, x, y),
-                 x_is_small_int_or_uint && y_is_small_int_or_uint) ||
+                halving_add(x, y),
+                v_instr(VectorInstruction::halving_add, x, y),
+                x_is_small_int_or_uint && y_is_small_int_or_uint) ||
 
             // SHSUB, UHSUB - Halving subtract
             rewrite(
-                 halving_sub(x, y),
-                 v_instr(VectorInstruction::halving_sub, x, y),
-                 x_is_small_int_or_uint && y_is_small_int_or_uint) ||
+                halving_sub(x, y),
+                v_instr(VectorInstruction::halving_sub, x, y),
+                x_is_small_int_or_uint && y_is_small_int_or_uint) ||
 
             // SRHADD, URHADD - Halving add with rounding
             rewrite(
-                 rounding_halving_add(x, y),
-                 v_instr(VectorInstruction::rounding_halving_add, x, y),
-                 x_is_small_int_or_uint && y_is_small_int_or_uint) ||
+                rounding_halving_add(x, y),
+                v_instr(VectorInstruction::rounding_halving_add, x, y),
+                x_is_small_int_or_uint && y_is_small_int_or_uint) ||
 
             // SRSHL, URSHL - Rounding shift left (by signed vector)
             rewrite(
-                 rounding_shift_left(x, y),
-                 v_instr(VectorInstruction::rounding_shift_left, x, y),
-                 is_int(y, bits)) ||
+                rounding_shift_left(x, y),
+                v_instr(VectorInstruction::rounding_shift_left, x, y),
+                is_int(y, bits)) ||
             // TODO: should the rounding_shift_right patterns above be rewritten to instructions?
             // TODO: is there a clean way to rewrite a rounding_shift_left with an unsigned rhs
             //       into this pattern (safely)?
 
             // SSHL, USHL - Shift left (by signed vector)
             rewrite(
-                 shift_left(x, y),
-                 v_instr(VectorInstruction::shift_left, x, y),
-                 is_int(y, bits)) ||
+                shift_left(x, y),
+                v_instr(VectorInstruction::shift_left, x, y),
+                is_int(y, bits)) ||
             // TODO: is there a clean way to rewrite a shift_left with an unsigned rhs
             //       into this pattern (safely)?
-
 
             // SQRSHRN, UQRSHRN, SQRSHRUN - Saturating rounding narrowing shift right narrow (by immediate in [1, output bits])
             // SQRSHRN
@@ -499,7 +495,7 @@ protected:
                 is_int(x, 32) && c0_in_shrn_range) ||
             rewrite(
                 // i32_sat(rounding_shift_right(wild_i64x_, wild_u64_))
-                saturating_cast(int32x_t,rounding_shift_right(x, c0)),
+                saturating_cast(int32x_t, rounding_shift_right(x, c0)),
                 v_instr(VectorInstruction::saturating_rounding_shift_right_narrow, x, shrn_c0),
                 is_int(x, 64) && c0_in_shrn_range) ||
             // UQRSHRN
@@ -535,7 +531,6 @@ protected:
                 v_instr(VectorInstruction::saturating_rounding_shift_right_narrow, x, shrn_c0),
                 is_int(x, 64) && c0_in_shrn_range) ||
 
-
             // SQSHL, UQSHL, SQSHLU - Saturating shift left by signed register.
             // There is also an immediate version of this - hopefully LLVM does this matching when appropriate.
             // SQSHL
@@ -551,7 +546,7 @@ protected:
                 is_int(x, 16)) ||
             rewrite(
                 // i32_sat(widening_shift_left(wild_i23x_, rhs))
-                saturating_cast(int32x_t,widening_shift_left(x, y)),
+                saturating_cast(int32x_t, widening_shift_left(x, y)),
                 v_instr(VectorInstruction::saturating_shift_left, x, y),
                 is_int(x, 32)) ||
             // UQSHL
@@ -587,7 +582,6 @@ protected:
                 v_instr(VectorInstruction::saturating_shift_left, x, y),
                 is_int(x, 32)) ||
 
-
             // SQSHRN, UQSHRN, SQSHRUN Saturating narrowing shift right by an (by immediate in [1, output bits])
             // SQSHRN
             rewrite(
@@ -602,7 +596,7 @@ protected:
                 is_int(x, 32) && c0_in_shrn_range) ||
             rewrite(
                 // i32_sat(wild_i64x_ >> wild_u64_)
-                saturating_cast(int32x_t,shift_right(x, c0)),
+                saturating_cast(int32x_t, shift_right(x, c0)),
                 v_instr(VectorInstruction::saturating_shift_right_narrow, x, shrn_c0),
                 is_int(x, 64) && c0_in_shrn_range) ||
             // UQSHRN
@@ -817,8 +811,7 @@ protected:
     Expr visit(const VectorReduce *op) override {
         if ((op->op != VectorReduce::Add &&
              op->op != VectorReduce::Min &&
-             op->op != VectorReduce::Max
-             ) ||
+             op->op != VectorReduce::Max) ||
             !should_peephole_optimize(op->type)) {
             return InstructionSelector::visit(op);
         }
@@ -828,56 +821,55 @@ protected:
         const int factor = value_lanes / lanes;
         Expr value = op->value;
 
-
         switch (op->op) {
         case VectorReduce::Add: {
             auto rewrite = IRMatcher::rewriter(IRMatcher::h_add(value, lanes), op->type);
             const Expr zero = make_zero(op->type);
 
             if (target.has_feature(Target::ARMDotProd) &&
-                 (
-                  // SDOT
-                  rewrite(
-                    h_add(cast(Int(32, lanes * 4), widening_mul(x, y)), lanes),
-                    v_instr(VectorInstruction::dot_product, zero, x, y),
-                    is_int(x, 8, lanes * 4) && is_int(y, 8, lanes * 4)) ||
-                  // UDOT
-                  rewrite(
-                    h_add(cast(Int(32, lanes * 4), widening_mul(x, y)), lanes),
-                    v_instr(VectorInstruction::dot_product, zero, x, y),
-                    is_uint(x, 8, lanes * 4) && is_uint(y, 8, lanes * 4)) ||
-                  rewrite(
-                    h_add(cast(UInt(32, lanes * 4), widening_mul(x, y)), lanes),
-                    v_instr(VectorInstruction::dot_product, zero, x, y),
-                    is_uint(x, 8, lanes * 4) && is_uint(y, 8, lanes * 4)) ||
+                (
+                    // SDOT
+                    rewrite(
+                        h_add(cast(Int(32, lanes * 4), widening_mul(x, y)), lanes),
+                        v_instr(VectorInstruction::dot_product, zero, x, y),
+                        is_int(x, 8, lanes * 4) && is_int(y, 8, lanes * 4)) ||
+                    // UDOT
+                    rewrite(
+                        h_add(cast(Int(32, lanes * 4), widening_mul(x, y)), lanes),
+                        v_instr(VectorInstruction::dot_product, zero, x, y),
+                        is_uint(x, 8, lanes * 4) && is_uint(y, 8, lanes * 4)) ||
+                    rewrite(
+                        h_add(cast(UInt(32, lanes * 4), widening_mul(x, y)), lanes),
+                        v_instr(VectorInstruction::dot_product, zero, x, y),
+                        is_uint(x, 8, lanes * 4) && is_uint(y, 8, lanes * 4)) ||
 
-                  // TODO: ARM also has sudot: https://developer.arm.com/documentation/ddi0602/2022-03/SIMD-FP-Instructions/SUDOT--by-element---Dot-product-with-signed-and-unsigned-integers--vector--by-element--
-                  //       Unfortunately, I only see LLVM intrinsics for the SVE version.
+                    // TODO: ARM also has sudot: https://developer.arm.com/documentation/ddi0602/2022-03/SIMD-FP-Instructions/SUDOT--by-element---Dot-product-with-signed-and-unsigned-integers--vector--by-element--
+                    //       Unfortunately, I only see LLVM intrinsics for the SVE version.
 
-                  // A sum is the same as a dot product with a vector of ones, and this appears to
-                  // be a bit faster.
-                  // SDOT
-                  rewrite(
-                    h_add(cast(Int(32, lanes * 4), x), lanes),
-                    v_instr(VectorInstruction::dot_product, zero, x, make_const(Int(8, lanes * 4), 1)),
-                    is_int(x, 8, lanes * 4)) ||
-                  // UDOT
-                  rewrite(
-                    h_add(cast(Int(32, lanes * 4), x), lanes),
-                    v_instr(VectorInstruction::dot_product, zero, x, make_const(UInt(8, lanes * 4), 1)),
-                    is_uint(x, 8, lanes * 4)) ||
-                  rewrite(
-                    h_add(cast(UInt(32, lanes * 4), x), lanes),
-                    v_instr(VectorInstruction::dot_product, zero, x, make_const(UInt(8, lanes * 4), 1)),
-                    is_uint(x, 8, lanes * 4)) ||
+                    // A sum is the same as a dot product with a vector of ones, and this appears to
+                    // be a bit faster.
+                    // SDOT
+                    rewrite(
+                        h_add(cast(Int(32, lanes * 4), x), lanes),
+                        v_instr(VectorInstruction::dot_product, zero, x, make_const(Int(8, lanes * 4), 1)),
+                        is_int(x, 8, lanes * 4)) ||
+                    // UDOT
+                    rewrite(
+                        h_add(cast(Int(32, lanes * 4), x), lanes),
+                        v_instr(VectorInstruction::dot_product, zero, x, make_const(UInt(8, lanes * 4), 1)),
+                        is_uint(x, 8, lanes * 4)) ||
+                    rewrite(
+                        h_add(cast(UInt(32, lanes * 4), x), lanes),
+                        v_instr(VectorInstruction::dot_product, zero, x, make_const(UInt(8, lanes * 4), 1)),
+                        is_uint(x, 8, lanes * 4)) ||
 
-                  false)) {
+                    false)) {
                 return mutate(rewrite.result);
             }
 
             // CodeGen_ARM had custom logic for splitting up VectorReduces, we need
             // to emulate that logic here as well.
-            const int dp_factor = 4; // All ARM dot_product instructions have factor=4.
+            const int dp_factor = 4;  // All ARM dot_product instructions have factor=4.
             if (target.has_feature(Target::ARMDotProd) && (factor % 4 == 0)) {
                 // Check for any of the above matching patterns.
 
@@ -919,7 +911,7 @@ protected:
                         h_add(h_add(op->value, reduce_factor), lanes),
                         is_uint(x, 8, value_lanes)) ||
 
-                  false) {
+                    false) {
                     return mutate(rewrite.result);
                 }
             }
