@@ -1,4 +1,4 @@
-set(SOURCES
+set(native_sources
     PyArgument.cpp
     PyBoundaryConditions.cpp
     PyBuffer.cpp
@@ -29,26 +29,63 @@ set(SOURCES
     PyVar.cpp
     PyVarOrRVar.cpp
     )
-list(TRANSFORM SOURCES PREPEND "halide_/")
+list(TRANSFORM native_sources PREPEND "halide_/")
 
-pybind11_add_module(Halide_Python MODULE ${SOURCES})
+set(python_sources
+    __init__.py
+    )
+
+# It is technically still possible for a user to override the LIBRARY_OUTPUT_DIRECTORY by setting
+# CMAKE_LIBRARY_OUTPUT_DIRECTORY_<CONFIG>, but they do so at their own peril. If a user needs to
+# do this, they should use the CMAKE_PROJECT_Halide_Python_INCLUDE_BEFORE variable to override it
+# just for this project, rather than globally, and they should ensure that the last path component
+# is `halide`. Otherwise, the tests will break.
+pybind11_add_module(Halide_Python MODULE ${native_sources})
 add_library(Halide::Python ALIAS Halide_Python)
-set_target_properties(Halide_Python
-                      PROPERTIES
-                      LIBRARY_OUTPUT_NAME halide_
-                      EXPORT_NAME Python)
+set_target_properties(
+    Halide_Python
+    PROPERTIES
+    LIBRARY_OUTPUT_NAME halide_
+    LIBRARY_OUTPUT_DIRECTORY "$<CONFIG>/halide"
+    EXPORT_NAME Python
+)
 target_link_libraries(Halide_Python PRIVATE Halide::Halide)
 
-if (WIN32 AND BUILD_SHARED_LIBS)
-    # There's precious little information about why Python only sometimes prevents DLLs from loading from the PATH on Windows.
-    # This workaround places a copy of Halide.dll next to our Python module.
-    # Ref: https://stackoverflow.com/questions/59860465/pybind11-importerror-dll-not-found-when-trying-to-import-pyd-in-python-int
-    # Ref: https://bugs.python.org/issue36085
-    # Ref: https://docs.python.org/3/whatsnew/3.8.html#bpo-36085-whatsnew
-    add_custom_command(TARGET Halide_Python POST_BUILD
-                       COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_FILE:Halide::Halide> $<TARGET_FILE_DIR:Halide::Python>
-                       VERBATIM)
-endif ()
+# TODO: There's precious little information about why Python only sometimes prevents DLLs from loading from the PATH
+#   on Windows. This workaround places a copy of Halide.dll (and any other dependencies) next to our Python module.
+#   Ref: https://stackoverflow.com/questions/59860465/pybind11-importerror-dll-not-found-when-trying-to-import-pyd-in-python-int
+#   Ref: https://bugs.python.org/issue36085
+#   Ref: https://docs.python.org/3/whatsnew/3.8.html#bpo-36085-whatsnew
+# TODO: copying a dummy file here works around a CMake limitation. The issue is that if $<TARGET_RUNTIME_DLLS:...> is
+#   empty, then copy_if_different errors out, thinking it doesn't have enough arguments.
+#   Ref: https://gitlab.kitware.com/cmake/cmake/-/issues/23543
+set(dummy_file "${CMAKE_CURRENT_BINARY_DIR}/.dummy_file")
+file(TOUCH "${dummy_file}")
+add_custom_command(
+    TARGET Halide_Python POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different "${dummy_file}" $<TARGET_RUNTIME_DLLS:Halide_Python> $<TARGET_FILE_DIR:Halide_Python>
+    COMMAND_EXPAND_LISTS
+    VERBATIM
+)
+
+# Copy our Python source files over so that we have a valid package in the binary directory.
+# TODO: When upgrading to CMake 3.23 or beyond, investigate the FILE_SET feature.
+set(build_tree_pys "")
+foreach (pysrc IN LISTS python_sources)
+    # TODO: CMake 3.22 still doesn't allow target-dependent genex in OUTPUT, but we can hack around this using a stamp
+    #   file. Fix this hack up if and when they ever improve this feature.
+    set(stamp_file "${CMAKE_CURRENT_BINARY_DIR}/.${pysrc}.stamp")
+    add_custom_command(
+        OUTPUT "${stamp_file}"
+        COMMAND ${CMAKE_COMMAND} -E copy "${CMAKE_CURRENT_SOURCE_DIR}/${pysrc}" "$<TARGET_FILE_DIR:Halide_Python>/${pysrc}"
+        COMMAND ${CMAKE_COMMAND} -E touch "${stamp_file}"
+        DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/${pysrc}"
+        VERBATIM
+    )
+    list(APPEND build_tree_pys "${stamp_file}")
+endforeach ()
+add_custom_target(Halide_Python_sources ALL DEPENDS ${build_tree_pys})
+add_dependencies(Halide_Python Halide_Python_sources)
 
 ##
 # Packaging
@@ -60,18 +97,18 @@ include(GNUInstallDirs)
 set(Halide_INSTALL_PYTHONDIR "${CMAKE_INSTALL_LIBDIR}/python3/site-packages"
     CACHE STRING "Path to the Python site-packages folder")
 
-install(DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
-        DESTINATION "${Halide_INSTALL_PYTHONDIR}"
+install(DIRECTORY "$<TARGET_FILE_DIR:Halide_Python>/"
+        DESTINATION "${Halide_INSTALL_PYTHONDIR}/halide"
         COMPONENT Halide_Python
         FILES_MATCHING
         PATTERN "*.py"
         PATTERN "*/halide_" EXCLUDE
+        PATTERN "*/CMakeFiles" EXCLUDE
         PATTERN "*/__pycache__" EXCLUDE)
 
 install(TARGETS Halide_Python
         LIBRARY DESTINATION "${Halide_INSTALL_PYTHONDIR}/halide"
-        COMPONENT Halide_Python
-        NAMELINK_COMPONENT Halide_Python)
+        COMPONENT Halide_Python)
 
 get_property(halide_is_imported TARGET Halide::Halide PROPERTY IMPORTED)
 get_property(halide_type TARGET Halide::Halide PROPERTY TYPE)
@@ -120,8 +157,8 @@ if (
     endif ()
 
     file(RELATIVE_PATH lib_dir
-        "${CMAKE_CURRENT_BINARY_DIR}/${Halide_INSTALL_PYTHONDIR}/halide"
-        "${CMAKE_CURRENT_BINARY_DIR}/${CMAKE_INSTALL_LIBDIR}")
+         "${CMAKE_CURRENT_BINARY_DIR}/${Halide_INSTALL_PYTHONDIR}/halide"
+         "${CMAKE_CURRENT_BINARY_DIR}/${CMAKE_INSTALL_LIBDIR}")
 
     set_target_properties(Halide_Python PROPERTIES INSTALL_RPATH "${rbase}/${lib_dir}")
 endif ()

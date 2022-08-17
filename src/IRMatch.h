@@ -1423,7 +1423,6 @@ struct Intrin {
         } else if (intrin == Call::abs) {
             return abs(arg0);
         } else if (intrin == Call::saturating_cast) {
-            // TODO: is there a better way?
             return saturating_cast(optional_type_hint, arg0);
         }
 
@@ -1572,7 +1571,6 @@ auto saturating_sub(A &&a, B &&b) noexcept -> Intrin<decltype(pattern_arg(a)), d
 }
 template<typename A>
 auto saturating_cast(const Type &t, A &&a) noexcept -> Intrin<decltype(pattern_arg(a))> {
-    // TODO: what to do with the type?
     Intrin<decltype(pattern_arg(a))> p = {Call::saturating_cast, pattern_arg(a)};
     p.optional_type_hint = t;
     return p;

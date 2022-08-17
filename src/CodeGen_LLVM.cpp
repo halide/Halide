@@ -3194,6 +3194,10 @@ void CodeGen_LLVM::visit(const Call *op) {
         value = codegen(lower_float16_transcendental_to_float32_equivalent(op));
     } else if (op->is_intrinsic(Call::mux)) {
         value = codegen(lower_mux(op));
+    } else if (op->is_intrinsic(Call::extract_bits)) {
+        value = codegen(lower_extract_bits(op));
+    } else if (op->is_intrinsic(Call::concat_bits)) {
+        value = codegen(lower_concat_bits(op));
     } else if (op->is_intrinsic()) {
         Expr lowered = lower_intrinsic(op);
         if (!lowered.defined()) {

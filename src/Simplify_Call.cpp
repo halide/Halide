@@ -776,6 +776,8 @@ Expr Simplify::visit(const Call *op, ExprInfo *bounds) {
         debug(2) << "Simplifier: unhandled PureExtern: " << op->name;
     } else if (op->is_intrinsic(Call::signed_integer_overflow)) {
         clear_bounds_info(bounds);
+    } else if (op->is_intrinsic(Call::concat_bits) && op->args.size() == 1) {
+        return mutate(op->args[0], bounds);
     }
 
     // No else: we want to fall thru from the PureExtern clause.

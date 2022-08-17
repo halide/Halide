@@ -45,6 +45,32 @@
 #define HALIDE_NO_USER_CODE_INLINE HALIDE_NEVER_INLINE
 #endif
 
+// Clang uses __has_feature() for sanitizers...
+#if defined(__has_feature)
+#if __has_feature(address_sanitizer)
+#define HALIDE_INTERNAL_USING_ASAN
+#endif
+#if __has_feature(memory_sanitizer)
+#define HALIDE_INTERNAL_USING_MSAN
+#endif
+#if __has_feature(thread_sanitizer)
+#define HALIDE_INTERNAL_USING_TSAN
+#endif
+#if __has_feature(coverage_sanitizer)
+#define HALIDE_INTERNAL_USING_COVSAN
+#endif
+#if __has_feature(undefined_behavior_sanitizer)
+#define HALIDE_INTERNAL_USING_UBSAN
+#endif
+#endif
+
+// ...but GCC/MSVC don't like __has_feature, so handle them separately.
+// (Only AddressSanitizer for now, not sure if any others are well-supported
+// outside of Clang.
+#if defined(__SANITIZE_ADDRESS__) && !defined(HALIDE_INTERNAL_USING_ASAN)
+#define HALIDE_INTERNAL_USING_ASAN
+#endif
+
 namespace Halide {
 
 /** Load a plugin in the form of a dynamic library (e.g. for custom autoschedulers).

@@ -1,4 +1,5 @@
 #include "Deinterleave.h"
+#include "IROperator.h"
 #include "Simplify_Internal.h"
 
 namespace Halide {
@@ -191,6 +192,28 @@ Expr Simplify::visit(const Shuffle *op, ExprInfo *bounds) {
                 }
             }
         }
+
+        // Try to collapse an interleave of a series of extract_bits into a vector reinterpret.
+        if (const Call *extract = new_vectors[0].as<Call>()) {
+            if (extract->is_intrinsic(Call::extract_bits) &&
+                is_const_zero(extract->args[1])) {
+                int n = (int)new_vectors.size();
+                Expr base = extract->args[0];
+                bool can_collapse = base.type().bits() == n * op->type.bits();
+                for (int i = 1; can_collapse && i < n; i++) {
+                    const Call *c = new_vectors[i].as<Call>();
+                    if (!(c->is_intrinsic(Call::extract_bits) &&
+                          is_const(c->args[1], i * op->type.bits()) &&
+                          equal(base, c->args[0]))) {
+                        can_collapse = false;
+                    }
+                }
+                if (can_collapse) {
+                    return Reinterpret::make(op->type, base);
+                }
+            }
+        }
+
     } else if (op->is_concat()) {
         // Bypass concat of a single vector (identity shuffle)
         if (new_vectors.size() == 1) {
