@@ -807,6 +807,7 @@ add_halide_library(<target> FROM <generator-target>
                    [PLUGINS plugin1 [plugin2 ...]]
                    [AUTOSCHEDULER scheduler-name]
                    [GRADIENT_DESCENT]
+                   [PYTHON_EXTENSION_LIBRARY]
                    [C_BACKEND]
                    [REGISTRATION OUTVAR]
                    [HEADER OUTVAR]
@@ -868,6 +869,13 @@ If `GRADIENT_DESCENT` is set, then the module will be built suitably for
 gradient descent calculation in TensorFlow or PyTorch. See
 `Generator::build_gradient_module()` for more documentation. This corresponds to
 passing `-d 1` at the generator command line.
+
+If `PYTHON_EXTENSION_LIBRARY` is set, then a Python Extension will be built that
+wraps the C/C++ call with CPython glue to allow use of the generated code from
+Python 3.x. The result will be a a shared library of the form
+`<target>.<soabi>.so`, where <soabi> describes the specific Python version and
+platform (e.g., `cpython-310-darwin` for Python 3.10 on OSX.) See
+`README_python.md` for examples of use.
 
 If the `C_BACKEND` option is set, this command will invoke the configured C++
 compiler on a generated source. Note that a `<target>.runtime` target is _not_
