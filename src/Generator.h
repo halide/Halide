@@ -4216,7 +4216,7 @@ struct halide_global_ns;
     namespace halide_register_generator::GEN_REGISTRY_NAME##_ns {                                                                              \
         extern std::unique_ptr<Halide::Internal::AbstractGenerator> factory(const Halide::GeneratorContext &context);                          \
     }                                                                                                                                          \
-    extern "C" HALIDE_EXPORT_SYMBOL PyObject *PyInit_##MODULE_NAME() {                                                                        \
+    extern "C" HALIDE_EXPORT_SYMBOL PyObject *PyInit_##MODULE_NAME() {                                                                         \
         const auto factory = halide_register_generator::GEN_REGISTRY_NAME##_ns::factory;                                                       \
         return _halide_pystub_impl(#MODULE_NAME, factory);                                                                                     \
     }
