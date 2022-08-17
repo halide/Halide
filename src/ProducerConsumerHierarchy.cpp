@@ -198,10 +198,10 @@ void StmtSizes::remove_consumer(const string &name) {
 }
 
 string StmtSizes::string_span(string varName) const {
-    return "<span class=\\'stringType\\'>" + varName + "</span>";
+    return "<span class='stringType'>" + varName + "</span>";
 }
 string StmtSizes::int_span(int64_t intVal) const {
-    return "<span class=\\'intType\\'>" + to_string(intVal) + "</span>";
+    return "<span class='intType'>" + to_string(intVal) + "</span>";
 }
 
 Stmt StmtSizes::visit(const LetStmt *op) {
@@ -502,16 +502,16 @@ Stmt StmtSizes::visit(const Allocate *op) {
 
     // set allocate stuff
     stringstream type;
-    type << "<span class=\\'stringType\\'>" << op->type << "</span>";
+    type << "<span class='stringType'>" << op->type << "</span>";
     set_allocation_size(op, type.str());
 
     for (const auto &extent : op->extents) {
         // TODO: inline these as well if they are variables
         stringstream ss;
         if (extent.as<IntImm>()) {
-            ss << "<span class=\\'intType\\'>" << extent << "</span>";
+            ss << "<span class='intType'>" << extent << "</span>";
         } else {
-            ss << "<span class=\\'stringType\\'>" << extent << "</span>";
+            ss << "<span class='stringType'>" << extent << "</span>";
         }
 
         set_allocation_size(op, ss.str());
@@ -576,33 +576,16 @@ Stmt StmtSizes::visit(const IfThenElse *op) {
 string ProducerConsumerHierarchy::generate_producer_consumer_html(const Module &m) {
     pre_processor.generate_sizes(m);
 
-    start_html();
+    html.str(string());
     traverse(m);
-    end_html();
 
     return html.str();
 }
 string ProducerConsumerHierarchy::generate_producer_consumer_html(const Stmt &stmt) {
     pre_processor.generate_sizes(stmt);
 
-    start_html();
+    html.str(string());
     mutate(stmt);
-    end_html();
-
-    return html.str();
-}
-
-string ProducerConsumerHierarchy::get_producer_consumer_html(const Expr &startNode) {
-    start_html();
-    mutate(startNode);
-    end_html();
-
-    return html.str();
-}
-string ProducerConsumerHierarchy::get_producer_consumer_html(const Stmt &startNode) {
-    start_html();
-    mutate(startNode);
-    end_html();
 
     return html.str();
 }
@@ -618,197 +601,12 @@ void ProducerConsumerHierarchy::traverse(const Module &m) {
     }
 }
 
-void ProducerConsumerHierarchy::start_html() {
-    html.str(string());
-    html << "<html>";
-
-    html << "<head>";
-    html << "<link rel=\\'stylesheet\\' "
-            "href=\\'https://unpkg.com/treeflex/dist/css/treeflex.css\\'>";
-    html << "</head>";
-
-    html << "<style>";
-
-    // if-stmt hierarchy tree style
-    html << ".tf-custom .tf-nc { ";
-    html << "border-radius: 5px; ";
-    html << "border: 1px solid; ";
-    html << "font-size: 12px; ";
-    html << "background-color: " << IF_COLOR << ";";
-    html << "}";
-    html << ".tf-custom .end-node { border-style: dashed; font-size: 12px; } ";
-    html << ".tf-custom .tf-nc:before, .tf-custom .tf-nc:after { border-left-width: 1px; } ";
-    html << ".tf-custom li li:before { border-top-width: 1px; }";
-    html << ".tf-custom .tf-nc .if-node { background-color: " << IF_COLOR << "; }";
-
-    // cost colors
-    html << "span.CostComputation19 { width: 13px; display: inline-block; background: "
-            "rgb(130,31,27); color: transparent; }";
-    html << "span.CostComputation18 { width: 13px; display: inline-block; background: "
-            "rgb(145,33,30); color: transparent; }";
-    html << "span.CostComputation17 { width: 13px; display: inline-block; background: "
-            "rgb(160,33,32); color: transparent; }";
-    html << "span.CostComputation16 { width: 13px; display: inline-block; background: "
-            "rgb(176,34,34); color: transparent; }";
-    html << "span.CostComputation15 { width: 13px; display: inline-block; background: "
-            "rgb(185,47,32); color: transparent; }";
-    html << "span.CostComputation14 { width: 13px; display: inline-block; background: "
-            "rgb(193,59,30); color: transparent; }";
-    html << "span.CostComputation13 { width: 13px; display: inline-block; background: "
-            "rgb(202,71,27); color: transparent; }";
-    html << "span.CostComputation12 { width: 13px; display: inline-block; background: "
-            "rgb(210,82,22); color: transparent; }";
-    html << "span.CostComputation11 { width: 13px; display: inline-block; background: "
-            "rgb(218,93,16); color: transparent; }";
-    html << "span.CostComputation10 { width: 13px; display: inline-block; background: "
-            "rgb(226,104,6); color: transparent; }";
-    html << "span.CostComputation9 { width: 13px; display: inline-block; background: "
-            "rgb(229,118,9); color: transparent; }";
-    html << "span.CostComputation8 { width: 13px; display: inline-block; background: "
-            "rgb(230,132,15); color: transparent; }";
-    html << "span.CostComputation7 { width: 13px; display: inline-block; background: "
-            "rgb(231,146,20); color: transparent; }";
-    html << "span.CostComputation6 { width: 13px; display: inline-block; background: "
-            "rgb(232,159,25); color: transparent; }";
-    html << "span.CostComputation5 { width: 13px; display: inline-block; background: "
-            "rgb(233,172,30); color: transparent; }";
-    html << "span.CostComputation4 { width: 13px; display: inline-block; background: "
-            "rgb(233,185,35); color: transparent; }";
-    html << "span.CostComputation3 { width: 13px; display: inline-block; background: "
-            "rgb(233,198,40); color: transparent; }";
-    html << "span.CostComputation2 { width: 13px; display: inline-block; background: "
-            "rgb(232,211,45); color: transparent; }";
-    html << "span.CostComputation1 { width: 13px; display: inline-block; background: "
-            "rgb(231,223,50); color: transparent; }";
-    html << "span.CostComputation0 { width: 13px; display: inline-block; background: "
-            "rgb(236,233,89); color: transparent;  } ";
-    html << "span.CostMovement19 { width: 13px; display: inline-block; background: rgb(130,31,27); "
-            "color: transparent; }";
-    html << "span.CostMovement18 { width: 13px; display: inline-block; background: rgb(145,33,30); "
-            "color: transparent; }";
-    html << "span.CostMovement17 { width: 13px; display: inline-block; background: rgb(160,33,32); "
-            "color: transparent; }";
-    html << "span.CostMovement16 { width: 13px; display: inline-block; background: rgb(176,34,34); "
-            "color: transparent; }";
-    html << "span.CostMovement15 { width: 13px; display: inline-block; background: rgb(185,47,32); "
-            "color: transparent; }";
-    html << "span.CostMovement14 { width: 13px; display: inline-block; background: rgb(193,59,30); "
-            "color: transparent; }";
-    html << "span.CostMovement13 { width: 13px; display: inline-block; background: rgb(202,71,27); "
-            "color: transparent; }";
-    html << "span.CostMovement12 { width: 13px; display: inline-block; background: rgb(210,82,22); "
-            "color: transparent; }";
-    html << "span.CostMovement11 { width: 13px; display: inline-block; background: rgb(218,93,16); "
-            "color: transparent; }";
-    html << "span.CostMovement10 { width: 13px; display: inline-block; background: rgb(226,104,6); "
-            "color: transparent; }";
-    html << "span.CostMovement9 { width: 13px; display: inline-block; background: rgb(229,118,9); "
-            "color: transparent; }";
-    html << "span.CostMovement8 { width: 13px; display: inline-block; background: rgb(230,132,15); "
-            "color: transparent; }";
-    html << "span.CostMovement7 { width: 13px; display: inline-block; background: rgb(231,146,20); "
-            "color: transparent; }";
-    html << "span.CostMovement6 { width: 13px; display: inline-block; background: rgb(232,159,25); "
-            "color: transparent; }";
-    html << "span.CostMovement5 { width: 13px; display: inline-block; background: rgb(233,172,30); "
-            "color: transparent; }";
-    html << "span.CostMovement4 { width: 13px; display: inline-block; background: rgb(233,185,35); "
-            "color: transparent; }";
-    html << "span.CostMovement3 { width: 13px; display: inline-block; background: rgb(233,198,40); "
-            "color: transparent; }";
-    html << "span.CostMovement2 { width: 13px; display: inline-block; background: rgb(232,211,45); "
-            "color: transparent; }";
-    html << "span.CostMovement1 { width: 13px; display: inline-block; background: rgb(231,223,50); "
-            "color: transparent; }";
-    html << "span.CostMovement0 { width: 13px; display: inline-block; background: rgb(236,233,89); "
-            "color: transparent; } ";
-
-    html << "span.CostColorSpacer { width: 2px; color: transparent; display: inline-block;}";
-
-    // producer consumer style
-    html << "body {";
-    html << "font-family: Consolas, \\'Liberation Mono\\', Menlo, Courier, monospace;";
-    html << "}";
-
-    html << "table {";
-    html << "border-radius: 5px;";
-    html << "font-size: 12px;";
-    html << "border: 1px dashed grey;";
-    html << "border-collapse: separate;";
-    html << "border-spacing: 0;";
-    html << "}";
-
-    html << ".center {";
-    html << "margin-left: auto;";
-    html << "margin-right: auto;";
-    html << "} ";
-
-    html << ".ifElseTable {";
-    html << "border: 0px;";
-    html << "} ";
-
-    html << ".costTable {";
-    html << "float: right;";
-    html << "text-align: center;";
-    html << "border: 0px;";
-    html << "}";
-
-    html << ".costTable td {";
-    html << "border-top: 1px dashed grey;";
-    html << "}";
-
-    html << ".costTableHeader,";
-    html << ".costTableData {";
-    html << "border-collapse: collapse;";
-    html << "padding-top: 1px;";
-    html << "padding-bottom: 1px;";
-    html << "padding-left: 5px;";
-    html << "padding-right: 5px;";
-    html << "}";
-
-    html << "span.intType { color: #099; }";
-    html << "span.stringType { color: #990073; }";
-
-    html << ".middleCol {";
-    html << "border-right: 1px dashed grey;";
-    html << "}";
-
-    // hierarchy tree
-    html << ".tf-custom .tf-nc {";
-    html << "border-radius: 5px;";
-    html << "border: 1px solid;";
-    html << "font-size: 12px;";
-    html << "padding: 5px;";
-    html << "}";
-    html << "";
-    html << ".tf-custom .end-node {";
-    html << "border-style: dashed;";
-    html << "font-size: 12px;";
-    html << "}";
-    html << "";
-    html << ".tf-custom .tf-nc:before,";
-    html << ".tf-custom .tf-nc:after {";
-    html << "border-left-width: 1px;";
-    html << "}";
-    html << "";
-    html << ".tf-custom li li:before {";
-    html << "border-top-width: 1px;";
-    html << "}";
-
-    html << "</style>";
-
-    html << "<body>";
-}
-void ProducerConsumerHierarchy::end_html() {
-    html << "</body></html>";
-}
-
 void ProducerConsumerHierarchy::open_table(string backgroundColor) {
     html << "<br>";
-    html << "<table style=\\'";
+    html << "<table style='";
     html << "background-color: " << backgroundColor << "; ";
-    html << "\\' ";
-    html << "class=\\'center\\'";
+    html << "' ";
+    html << "class='center'";
     html << ">";
 }
 void ProducerConsumerHierarchy::close_table() {
@@ -827,10 +625,9 @@ void ProducerConsumerHierarchy::table_header(const IRNode *op, const string &hea
 
     // add anchor button if anchorName is provided
     if (anchorName != "") {
-        html << "<button onclick=\\'";
-        html << "window.open(&quot;" << output_file_name << "#" << anchorName
-             << "&quot;, &quot;_blank&quot;)";
-        html << "\\'>";
+        html << "<button onclick='";
+        html << "window.open(\"" << output_file_name << "#" << anchorName << "\", \"_blank\")";
+        html << "'>";
         html << "see code";
         html << "</button>";
     }
@@ -859,16 +656,16 @@ void ProducerConsumerHierarchy::table_header(const IRNode *op, const string &hea
 }
 void ProducerConsumerHierarchy::prod_cons_table(StmtSize &size) {
     // open table
-    html << "<table class=\\'costTable\\' style=\\'background-color: rgba(150, 150, 150, 0.5)\\'>";
+    html << "<table class='costTable' style='background-color: rgba(150, 150, 150, 0.5)'>";
 
     // Prod | Cons
     html << "<tr>";
 
-    html << "<th colspan=\\'2\\' class=\\'costTableHeader middleCol\\'>";
+    html << "<th colspan='2' class='costTableHeader middleCol'>";
     html << "Written";
     html << "</th>";
 
-    html << "<th colspan=\\'2\\' class=\\'costTableHeader\\'>";
+    html << "<th colspan='2' class='costTableHeader'>";
     html << "Read";
     html << "</th>";
 
@@ -888,11 +685,11 @@ void ProducerConsumerHierarchy::prod_cons_table(StmtSize &size) {
         // fill in producer variables
         for (const auto &produce_var : size.produces) {
             stringstream ss;
-            ss << "<td class=\\'costTableData\\'>";
+            ss << "<td class='costTableData'>";
             ss << produce_var.first << ": ";
             ss << "</td>";
 
-            ss << "<td class=\\'costTableData middleCol\\'>";
+            ss << "<td class='costTableData middleCol'>";
             ss << produce_var.second;
             ss << "</td>";
 
@@ -903,11 +700,11 @@ void ProducerConsumerHierarchy::prod_cons_table(StmtSize &size) {
         unsigned long rowNum = 0;
         for (const auto &consume_var : size.consumes) {
             stringstream ss;
-            ss << "<td class=\\'costTableData\\'>";
+            ss << "<td class='costTableData'>";
             ss << consume_var.first << ": ";
             ss << "</td>";
 
-            ss << "<td class=\\'costTableData\\'>";
+            ss << "<td class='costTableData'>";
             ss << consume_var.second;
             ss << "</td>";
 
@@ -916,7 +713,7 @@ void ProducerConsumerHierarchy::prod_cons_table(StmtSize &size) {
             } else {
                 // pad row with empty cells for produce
                 stringstream sEmpty;
-                sEmpty << "<td colspan=\\'2\\' class=\\'costTableData middleCol\\'>";
+                sEmpty << "<td colspan='2' class='costTableData middleCol'>";
                 sEmpty << "</td>";
 
                 rows.push_back(sEmpty.str() + ss.str());
@@ -928,9 +725,9 @@ void ProducerConsumerHierarchy::prod_cons_table(StmtSize &size) {
         rowNum = size.consumes.size();
         while (rowNum < size.produces.size()) {
             stringstream sEmpty;
-            sEmpty << "<td class=\\'costTableData\\'>";
+            sEmpty << "<td class='costTableData'>";
             sEmpty << "</td>";
-            sEmpty << "<td class=\\'costTableData\\'>";
+            sEmpty << "<td class='costTableData'>";
             sEmpty << "</td>";
 
             rows[rowNum] += sEmpty.str();
@@ -957,10 +754,9 @@ void ProducerConsumerHierarchy::allocate_table_header(const Allocate *op, const 
     cost_colors(op);
 
     // add anchor button
-    html << "<button onclick=\\'";
-    html << "window.open(&quot;" << output_file_name << "#" << anchorName
-         << "&quot;, &quot;_blank&quot;)";
-    html << "\\'>";
+    html << "<button onclick='";
+    html << "window.open(\"" << output_file_name << "#" << anchorName << "\", \"_blank\")";
+    html << "'>";
     html << "see code";
     html << "</button>";
 
@@ -991,7 +787,7 @@ void ProducerConsumerHierarchy::allocate_table_header(const Allocate *op, const 
 }
 void ProducerConsumerHierarchy::allocate_table(vector<string> &allocationSizes) {
     // open table
-    html << "<table class=\\'costTable\\' style=\\'background-color: rgba(150, 150, 150, 0.5)\\'>";
+    html << "<table class='costTable' style='background-color: rgba(150, 150, 150, 0.5)'>";
 
     stringstream header;
     stringstream data;
@@ -1003,20 +799,20 @@ void ProducerConsumerHierarchy::allocate_table(vector<string> &allocationSizes) 
     // iterate through all allocation sizes and add them to the header and data rows
     for (unsigned long i = 0; i < allocationSizes.size(); i++) {
         if (i == 0) {
-            header << "<th class=\\'costTableHeader middleCol\\'>";
+            header << "<th class='costTableHeader middleCol'>";
             header << "Type";
             header << "</th>";
 
-            data << "<td class=\\'costTableHeader middleCol\\'>";
+            data << "<td class='costTableHeader middleCol'>";
             data << allocationSizes[0];
             data << "</td>";
         } else {
             if (i < allocationSizes.size() - 1) {
-                header << "<th class=\\'costTableHeader middleCol\\'>";
-                data << "<td class=\\'costTableHeader middleCol\\'>";
+                header << "<th class='costTableHeader middleCol'>";
+                data << "<td class='costTableHeader middleCol'>";
             } else {
-                header << "<th class=\\'costTableHeader\\'>";
-                data << "<td class=\\'costTableHeader\\'>";
+                header << "<th class='costTableHeader'>";
+                data << "<td class='costTableHeader'>";
             }
             header << "Dim-" << i;
             header << "</th>";
@@ -1046,10 +842,9 @@ void ProducerConsumerHierarchy::for_loop_table_header(const For *op, const strin
     cost_colors(op);
 
     // add anchor button
-    html << "<button onclick=\\'";
-    html << "window.open(&quot;" << output_file_name << "#" << anchorName
-         << "&quot;, &quot;_blank&quot;)";
-    html << "\\'>";
+    html << "<button onclick='";
+    html << "window.open(\"" << output_file_name << "#" << anchorName << "\", \"_blank\")";
+    html << "'>";
     html << "see code";
     html << "</button>";
 
@@ -1077,12 +872,12 @@ void ProducerConsumerHierarchy::for_loop_table_header(const For *op, const strin
 }
 void ProducerConsumerHierarchy::for_loop_table(string loop_size) {
     // open table
-    html << "<table class=\\'costTable\\' style=\\'background-color: rgba(150, 150, 150, 0.5)\\'>";
+    html << "<table class='costTable' style='background-color: rgba(150, 150, 150, 0.5)'>";
 
     // Loop Size
     html << "<tr>";
 
-    html << "<th class=\\'costTableHeader middleCol\\'>";
+    html << "<th class='costTableHeader middleCol'>";
     html << "Loop Size";
     html << "</th>";
 
@@ -1091,7 +886,7 @@ void ProducerConsumerHierarchy::for_loop_table(string loop_size) {
     html << "<tr>";
 
     // loop size
-    html << "<td class=\\'costTableData\\'>";
+    html << "<td class='costTableData'>";
     html << loop_size;
     html << "</td>";
 
@@ -1104,13 +899,13 @@ void ProducerConsumerHierarchy::for_loop_table(string loop_size) {
 void ProducerConsumerHierarchy::if_tree(const IRNode *op, const string &header, StmtSize &size,
                                         string anchorName = "") {
     html << "<li>";
-    html << "<span class=\\'tf-nc\\'>";
+    html << "<span class='tf-nc'>";
 
     // open table
     html << "<br>";
-    html << "<table style=\\'";
-    html << "\\' ";
-    html << "class=\\'center ifElseTable\\'";
+    html << "<table style='";
+    html << "' ";
+    html << "class='center ifElseTable'";
     html << ">";
 
     open_table_row();
@@ -1132,14 +927,14 @@ void ProducerConsumerHierarchy::close_table_row() {
 }
 
 void ProducerConsumerHierarchy::open_table_data(string colSpan = "3") {
-    html << "<td colSpan=\\'" << colSpan << "\\'>";
+    html << "<td colSpan='" << colSpan << "'>";
 }
 void ProducerConsumerHierarchy::close_table_data() {
     html << "</td>";
 }
 
 void ProducerConsumerHierarchy::open_span(string className) {
-    html << "<span class=\\'" << className << "\\'>";
+    html << "<span class='" << className << "'>";
 }
 void ProducerConsumerHierarchy::close_span() {
     html << "</span>";
@@ -1236,15 +1031,17 @@ Stmt ProducerConsumerHierarchy::visit(const IfThenElse *op) {
     // (aka won't print if both cases are empty)
     // (we can't just exit early though because we have to go through all if-stmts to
     //  get accurate count for the anchor names)
+    bool opened = false;
     if (!thenSize.empty() || !elseSize.empty()) {
         // open main if tree
-        html << "<div class=\\'tf-tree tf-gap-sm tf-custom\\' style=\\'font-size: 12px; "
-                "display: flex; justify-content: center;\\'>";
+        html << "<div class='tf-tree tf-gap-sm tf-custom' style='font-size: 12px; "
+                "display: flex; justify-content: center;'>";
         html << "<ul>";
-        html << "<li><span class=\\'tf-nc if-node\\'>";
+        html << "<li><span class='tf-nc if-node'>";
         html << "If";
         html << "</span>";
         html << "<ul>";
+        opened = true;
     }
 
     stringstream ifHeader;
@@ -1316,11 +1113,12 @@ Stmt ProducerConsumerHierarchy::visit(const IfThenElse *op) {
     }
 
     // close main if tree
-    html << "</ul>";
-    html << "</li>";
-    html << "</ul>";
-    html << "</div>";
-
+    if (opened) {
+        html << "</ul>";
+        html << "</li>";
+        html << "</ul>";
+        html << "</div>";
+    }
     return op;
 }
 

@@ -129,16 +129,8 @@ private:
     int storeCount = 0;
     int allocateCount = 0;
 
-    // starts the traversal of the tree and returns the generated html
-    string get_producer_consumer_html(const Expr &startNode);
-    string get_producer_consumer_html(const Stmt &startNode);
-
     // for traversal of a Module object
     void traverse(const Module &m);
-
-    // starts and ends the html file
-    void start_html();
-    void end_html();
 
     // opens and closes a table
     void open_table(string backgroundColor);

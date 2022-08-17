@@ -19,7 +19,7 @@
 
 #define PRINT_HIERARCHY false
 #define PRINT_DEPENDENCIES false
-#define PRINT_PROD_CONS false
+#define PRINT_PROD_CONS true
 
 namespace Halide {
 namespace Internal {
@@ -39,6 +39,8 @@ class StmtToViz : public IRVisitor {
     static const std::string css, js;
     static const std::string vizCss, computationCostCSS, movementCostCSS;
     static const std::string formHTML, formCSS;
+    static const std::string navigationHTML;
+    static const std::string prodConsCSS;
 
     FindStmtCost findStmtCost;                            // used for finding the cost of statements
     GetStmtHierarchy getStmtHierarchy;                    // used for getting the hierarchy of
@@ -198,7 +200,8 @@ private:
 
     string open_cost_span(const IRNode *op, const string &hierarchyHTML) {
         std::stringstream s;
-        s << cost_table_tooltip(op, hierarchyHTML);
+        // TODO: add tooltip back in once bootstrap is in
+        // s << cost_table_tooltip(op, hierarchyHTML);
         s << open_span("Cost");
         return s.str();
     }
@@ -266,37 +269,6 @@ private:
         s << open_span("CostColorSpacer");
         s << ".";
         s << close_span();
-
-        return s.str();
-    }
-
-    string producerConsumerButton(string prodConsHTML) {
-        stringstream s;
-        s << endl;
-        s << "<br>";
-        s << "<button onclick=\"openNewWindow('";
-        s << prodConsHTML;
-        s << "')\">";
-        s << "Producer/Consumer Visualization";
-        s << "</button>";
-        s << "<br>";
-        s << endl;
-
-        return s.str();
-    }
-
-    string dependencyGraphButton(string dependencyGraph) {
-        stringstream s;
-        s << endl;
-        s << "<br>";
-        s << "<button onclick=\"openNewWindow('";
-        s << dependencyGraph;
-        s << "')\">";
-        s << "Dependency Graph";
-        s << "</button>";
-        s << "<br>";
-        s << "<br>";
-        s << endl;
 
         return s.str();
     }
@@ -1068,19 +1040,38 @@ public:
         return findStmtCost;
     }
     void generate_producer_consumer_hierarchy(const Module &m) {
+        // open the prod cons div for navigation
+        stream << "<div class='tab-pane fade' id='ProdCons' role='tabpanel' "
+                  "aria-labelledby='ProdCons-tab'>\n";
+
         string prodConsHTML = producerConsumerHierarchy.generate_producer_consumer_html(m);
         if (PRINT_PROD_CONS) cout << prodConsHTML << endl;
-        stream << producerConsumerButton(prodConsHTML);
+
+        stream << prodConsHTML;
+        stream << "</div>\n";
     }
     void generate_producer_consumer_hierarchy(const Stmt &s) {
+        // open the prod cons div for navigation
+        stream << "<div class='tab-pane fade' id='ProdCons' role='tabpanel' "
+                  "aria-labelledby='ProdCons-tab'>\n";
+
         string prodConsHTML = producerConsumerHierarchy.generate_producer_consumer_html(s);
         if (PRINT_PROD_CONS) cout << prodConsHTML << endl;
-        stream << producerConsumerButton(prodConsHTML);
+
+        stream << prodConsHTML;
+        stream << "</div>\n";
     }
     void generate_dependency_graph(const Module &m) {
+        // open the dependency graph div for navigation
+        stream << "<div class='tab-pane fade' id='Dependency' role='tabpanel' "
+                  "aria-labelledby='Dependency-tab'>\n";
+
         string dependGraphHTML = dependencyGraph.generate_dependency_graph(m);
         if (PRINT_DEPENDENCIES) cout << dependGraphHTML << endl;
-        stream << dependencyGraphButton(dependGraphHTML);
+
+        // stream << dependGraphHTML;
+        stream << "In construction...\n";
+        stream << "</div>\n";
     }
     void generate_dependency_graph(const Stmt &s) {
         internal_error << "\n"
@@ -1091,7 +1082,6 @@ public:
         // Stmt inlined_s = substitute_in_all_lets(s);
         // string dependGraphHTML = dependencyGraph.generate_dependency_graph(inlined_s);
         string dependGraphHTML = dependencyGraph.generate_dependency_graph(s);
-        stream << dependencyGraphButton(dependGraphHTML);
     }
 
     void print(const Expr &ir) {
@@ -1362,12 +1352,25 @@ public:
     void start_stream(const string &filename) {
         stream.open(filename.c_str());
         stream << "<head>";
+
+        // bootstrap links
+        stream << "<link "
+                  "href='https://cdn.jsdelivr.net/npm/bootstrap@5.2.0/dist/css/bootstrap.min.css' "
+                  "rel='stylesheet' "
+                  "integrity='sha384-gH2yIJqKdNHPEq0n4Mqa/HGKIhSkIHeL5AyhkYV8i59U5AR6csBvApHHNl/"
+                  "vI1Bx' crossorigin='anonymous'>\n";
+        stream
+            << "<script "
+               "src='https://cdn.jsdelivr.net/npm/bootstrap@5.2.0/dist/js/bootstrap.bundle.min.js' "
+               "integrity='sha384-A3rJD856KowSb7dwlZdYEkO39Gagi7vIsF0jrRAoQmDKKtQBHUuLZ9AsSv4jD4Xa'"
+               " crossorigin='anonymous'></script>\n";
+
         stream << "<style type='text/css'>";
         stream << css;
         stream << vizCss;
         stream << computationCostCSS;
         stream << movementCostCSS;
-        stream << formCSS;
+        stream << prodConsCSS;
         stream << "</style>\n";
         stream << "<script language='javascript' type='text/javascript'>" + js + "</script>\n";
         stream << "<link "
@@ -1376,7 +1379,10 @@ public:
         stream << "<link rel='stylesheet' href='https://unpkg.com/treeflex/dist/css/treeflex.css'>";
         stream << "<script src='http://code.jquery.com/jquery-1.10.2.js'></script>\n";
         stream << "</head>\n <body>\n";
-        // stream << formHTML;
+        stream << navigationHTML;
+
+        // bootstrap stuff
+        stream << "<div class='tab-content' id='myTabContent'>\n";
     }
 
     StmtToViz(const string &filename, const Module &m)
@@ -1388,6 +1394,10 @@ public:
 
         generate_producer_consumer_hierarchy(m);
         generate_dependency_graph(m);
+
+        // open div for navigation
+        stream << "<div class='tab-pane fade show active' id='IRCode' role='tabpanel' "
+                  "aria-labelledby='IRCode-tab'>\n";
     }
 
     StmtToViz(const string &filename, const Stmt &s)
@@ -1399,9 +1409,16 @@ public:
 
         generate_producer_consumer_hierarchy(s);
         generate_dependency_graph(s);
+
+        // open div for navigation
+        stream << "<div class='tab-pane fade show active' id='IRCode' role='tabpanel' "
+                  "aria-labelledby='IRCode-tab'>\n";
     }
 
     ~StmtToViz() override {
+        stream << "</div>\n";  // close IRCode div
+        stream << "</div>\n";  // close bootstrap tab-content div
+
         stream << "<script>\n";
         stream << "$( '.Matched' ).each( function() {\n"
                << "    this.onmouseover = function() { $('.Matched[id^=' + this.id.split('-')[0] + "
@@ -1545,6 +1562,96 @@ const std::string StmtToViz::formHTML = "\n \
     <label for='showCompute'> Show compute (not implemented yet)</label><br> \n \
 </form> \n \
 <div style='height: 80px;'></div> \n \
+";
+
+const std::string StmtToViz::navigationHTML = "\n \
+<ul class='nav nav-tabs' id='myTab' role='tablist'> \n \
+    <li class='nav-item' role='presentation'> \n \
+        <button class='nav-link active' id='IRCode-tab' data-bs-toggle='tab' \n \
+            data-bs-target='#IRCode' type='button' role='tab' \n \
+            aria-controls='IRCode' aria-selected='true'>IR Code</button> \n \
+    </li> \n \
+    <li class='nav-item' role='presentation'> \n \
+        <button class='nav-link' id='ProdCons-tab' data-bs-toggle='tab' \n \
+            data-bs-target='#ProdCons' type='button' role='tab' \n \
+            aria-controls='ProdCons' aria-selected='false'>Producer/Consumer \n \
+            Visualization</button> \n \
+    </li> \n \
+    <li class='nav-item' role='presentation'> \n \
+        <button class='nav-link' id='Dependency-tab' data-bs-toggle='tab' \n \
+            data-bs-target='#Dependency' type='button' role='tab' \n \
+            aria-controls='Dependency' aria-selected='false'>Dependency \n \
+            Graph</button> \n \
+    </li> \n \
+</ul> \n \
+";
+
+const std::string StmtToViz::prodConsCSS = "\n \
+.tf-custom .tf-nc { \n \
+border-radius: 5px; \n \
+border: 1px solid; \n \
+font-size: 12px; \n \
+background-color: #e6eeff;\n \
+}\n \
+.tf-custom .end-node { border-style: dashed; font-size: 12px; } \n \
+.tf-custom .tf-nc:before, .tf-custom .tf-nc:after { border-left-width: 1px; } \n \
+.tf-custom li li:before { border-top-width: 1px; }\n \
+.tf-custom .tf-nc .if-node { background-color: #e6eeff; }\n \
+table { \n \
+border-radius: 5px; \n \
+font-size: 12px; \n \
+border: 1px dashed grey; \n \
+border-collapse: separate; \n \
+border-spacing: 0; \n \
+} \n \
+.center { \n \
+margin-left: auto; \n \
+margin-right: auto; \n \
+}  \n \
+.ifElseTable { \n \
+border: 0px; \n \
+}  \n \
+.costTable { \n \
+float: right; \n \
+text-align: center; \n \
+border: 0px; \n \
+} \n \
+.costTable td { \n \
+border-top: 1px dashed grey; \n \
+} \n \
+.costTableHeader, \n \
+.costTableData { \n \
+border-collapse: collapse; \n \
+padding-top: 1px; \n \
+padding-bottom: 1px; \n \
+padding-left: 5px; \n \
+padding-right: 5px; \n \
+} \n \
+span.intType { color: #099; } \n \
+span.stringType { color: #990073; } \n \
+.middleCol { \n \
+border-right: 1px dashed grey; \n \
+} \n \
+.tf-custom .tf-nc { \n \
+border-radius: 5px; \n \
+border: 1px solid; \n \
+font-size: 12px; \n \
+padding: 5px; \n \
+} \n \
+ \n \
+.tf-custom .end-node { \n \
+border-style: dashed; \n \
+font-size: 12px; \n \
+} \n \
+ \n \
+.tf-custom .tf-nc:before, \n \
+.tf-custom .tf-nc:after { \n \
+border-left-width: 1px; \n \
+} \n \
+ \n \
+.tf-custom li li:before { \n \
+border-top-width: 1px; \n \
+} \n \
 ";
 
 const std::string StmtToViz::js = "\n \
