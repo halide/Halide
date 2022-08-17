@@ -5,30 +5,6 @@ include(${CMAKE_CURRENT_LIST_DIR}/TargetExportScript.cmake)
 
 set(_STUB_DIR "${Halide_SOURCE_DIR}/python_bindings/stub")
 
-# There are two sorts of Python Extensions that we can produce for a Halide Generator
-# written in C++:
-#
-# - One that is essentially the 'native code' output of a Generator, wrapped with enough CPython
-#   glue code to make it callable from Python. This is analogous to the usual Generator output
-#   when building a C++ codebase, and is the usual mode used for distribution of final product;
-#   these correspond to 'ahead-of-time' (AOT) code generation. The resulting code has no dependency
-#   on libHalide. We'll refer to this sort of extension as an "AOT extension".
-#
-# - One that essentially *the Generator itself*, wrapped in CPython glue code to make it callable
-#   from Python at Halide compilation time. This is analogous to the (rarely used) GeneratorStub
-#   code that can be used to compose multiple Generators together. The resulting extension *does*
-#   depend on libHalide, and can be used in either JIT or AOT mode for compilation.
-#   We'll refer to this sort of extension as a "Stub extension".
-#
-# For testing purposes here, we don't bother using distutils/setuptools to produce a properly-packaged
-# Python extension; rather, we simply produce a .so file with the correct name exported, and ensure
-# it's in the PYTHONPATH when testing.
-#
-# In our build files here, we build both kinds of extension for every Generator in the generators/
-# directory (even though not all are used). As a simplistic way to distinguish between the two
-# sorts of extensions, we use the unadorned Generator name for AOT extensions, and the Generator name
-# suffixed with "_stub" for Stub extensions. (TODO: this is unsatisfyingly hackish; better suggestions
-# would be welcome.)
 
 function(_target_export_single_symbol TARGET SYMBOL)
     file(WRITE
@@ -42,47 +18,6 @@ function(_target_export_single_symbol TARGET SYMBOL)
         APPLE_LD "${CMAKE_CURRENT_BINARY_DIR}/${TARGET}.ldscript.apple"
         GNU_LD "${CMAKE_CURRENT_BINARY_DIR}/${TARGET}.ldscript"
     )
-endfunction()
-
-function(add_python_aot_extension TARGET)
-    set(options)
-    set(oneValueArgs GENERATOR FUNCTION_NAME)
-    set(multiValueArgs SOURCES LINK_LIBRARIES FEATURES PARAMS)
-    cmake_parse_arguments(ARG "${options}" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
-
-    if (NOT ARG_GENERATOR)
-        set(ARG_GENERATOR "${TARGET}")
-    endif ()
-
-    if (NOT ARG_FUNCTION_NAME)
-        set(ARG_FUNCTION_NAME "${ARG_GENERATOR}")
-    endif ()
-
-    # Create the Halide generator executable.
-    add_executable(${TARGET}.generator ${ARG_SOURCES})
-    target_link_libraries(${TARGET}.generator PRIVATE Halide::Generator ${ARG_LINK_LIBRARIES})
-
-    # TODO: this should work (and would be preferred to the code above)
-    # but CMake fails with "targets not yet defined"; investigate.
-    # add_halide_generator(${TARGET}.generator
-    #                      SOURCES ${ARG_SOURCES})
-
-    # Run the Generator to produce a static library of AOT code,
-    # plus the 'python_extension' code necessary to produce a useful
-    # AOT Extention for Python:
-    add_halide_library(aot_${TARGET}
-                       FROM ${TARGET}.generator
-                       GENERATOR ${ARG_GENERATOR}
-                       FUNCTION_NAME ${ARG_FUNCTION_NAME}
-                       PYTHON_EXTENSION ${TARGET}.py.cpp
-                       FEATURES ${ARG_FEATURES}
-                       PARAMS ${ARG_PARAMS}
-                       TARGETS cmake)
-
-    Python3_add_library(${TARGET} MODULE WITH_SOABI ${${TARGET}.py.cpp})
-    target_link_libraries(${TARGET} PRIVATE aot_${TARGET})
-    set_target_properties(${TARGET} PROPERTIES OUTPUT_NAME ${ARG_FUNCTION_NAME})
-    _target_export_single_symbol(${TARGET} "PyInit_${ARG_FUNCTION_NAME}")
 endfunction()
 
 function(add_python_stub_extension TARGET)

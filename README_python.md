@@ -172,7 +172,7 @@ objects without any explicit conversion necessary.
 
 ## Using Halide Generators from Python
 
-### Compiling a C++ Generator for Python
+### Using a C++ Generator from Python
 
 Let's say we have a very simple Generator:
 
@@ -192,12 +192,13 @@ HALIDE_REGISTER_GENERATOR(MyFilter, my_filter)
 ```
 
 If you are using CMake, the simplest thing is to use
-`add_python_aot_extension()`, defined in PythonExtensionHelpers.cmake:
+`add_halide_library()` (defined in HalideGeneratorHelpers.cmake) with the `PYTHON_EXTENSION_LIBRARY` option:
 
 ```
-add_python_aot_extension(my_filter
+add_halide_library(my_filter
                          GENERATOR my_filter_generator
                          SOURCES my_filter_generator.cpp
+                         PYTHON_EXTENSION_LIBRARY
                          [ FEATURES ... ]
                          [ PARAMS ... ])
 ```

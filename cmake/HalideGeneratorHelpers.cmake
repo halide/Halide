@@ -1,6 +1,7 @@
 cmake_minimum_required(VERSION 3.22)
 
 include(${CMAKE_CURRENT_LIST_DIR}/HalideTargetHelpers.cmake)
+include(${CMAKE_CURRENT_LIST_DIR}/TargetExportScript.cmake)
 
 define_property(TARGET PROPERTY Halide_RT_TARGETS
                 BRIEF_DOCS "On a Halide runtime target, lists the targets the runtime backs"
@@ -136,7 +137,7 @@ function(add_halide_library TARGET)
     # Parse the arguments and set defaults for missing values.
     ##
 
-    set(options C_BACKEND GRADIENT_DESCENT)
+    set(options C_BACKEND GRADIENT_DESCENT PYTHON_EXTENSION_LIBRARY)
     set(oneValueArgs FROM GENERATOR FUNCTION_NAME NAMESPACE USE_RUNTIME AUTOSCHEDULER HEADER ${extra_output_names})
     set(multiValueArgs TARGETS FEATURES PARAMS PLUGINS)
     cmake_parse_arguments(ARG "${options}" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
@@ -268,6 +269,14 @@ function(add_halide_library TARGET)
     endif ()
     list(APPEND generator_output_files ${generator_sources})
 
+    # If we're building an extension library, we also need the extension .cpp
+    # file, so quietly add it if it wasn't already specified
+    if (ARG_PYTHON_EXTENSION_LIBRARY)
+        if (NOT ARG_PYTHON_EXTENSION)
+            set(ARG_PYTHON_EXTENSION "${TARGET}.py.cpp")
+        endif()
+    endif ()
+
     # Add in extra outputs using the table defined at the start of this function
     foreach (out IN LISTS extra_output_names)
         if (ARG_${out})
@@ -346,6 +355,14 @@ function(add_halide_library TARGET)
 
     target_include_directories("${TARGET}" INTERFACE "$<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}>")
     target_link_libraries("${TARGET}" INTERFACE "${ARG_USE_RUNTIME}")
+
+    if (ARG_PYTHON_EXTENSION_LIBRARY)
+        Python3_add_library(${TARGET}_py_ext_lib MODULE WITH_SOABI ${ARG_PYTHON_EXTENSION})
+        target_link_libraries(${TARGET}_py_ext_lib PRIVATE ${TARGET})
+        set_target_properties(${TARGET}_py_ext_lib PROPERTIES OUTPUT_NAME ${ARG_FUNCTION_NAME})
+        _Halide_target_export_single_symbol(${TARGET}_py_ext_lib "PyInit_${ARG_FUNCTION_NAME}")
+    endif ()
+
 endfunction()
 
 ##
@@ -510,4 +527,18 @@ function(_Halide_fix_xcode TARGET)
         endif ()
         target_sources("${TARGET}" PRIVATE "${empty_file}")
     endif ()
+endfunction()
+
+function(_Halide_target_export_single_symbol TARGET SYMBOL)
+    file(WRITE
+         "${CMAKE_CURRENT_BINARY_DIR}/${TARGET}.ldscript.apple"
+         "_${SYMBOL}\n")
+    file(WRITE
+         "${CMAKE_CURRENT_BINARY_DIR}/${TARGET}.ldscript"
+         "{ global: ${SYMBOL}; local: *; };\n")
+    target_export_script(
+        ${TARGET}
+        APPLE_LD "${CMAKE_CURRENT_BINARY_DIR}/${TARGET}.ldscript.apple"
+        GNU_LD "${CMAKE_CURRENT_BINARY_DIR}/${TARGET}.ldscript"
+    )
 endfunction()
