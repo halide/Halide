@@ -177,11 +177,13 @@ install(EXPORT Halide_Interfaces
         FILE Halide-Interfaces.cmake
         COMPONENT Halide_Development)
 
-install(EXPORT Halide_Python
-        DESTINATION ${Halide_INSTALL_CMAKEDIR}
-        NAMESPACE Halide::
-        FILE Halide-${type}-targets.cmake
-        COMPONENT Halide_Development)
+if (WITH_PYTHON_BINDINGS)
+    install(EXPORT Halide_Python
+            DESTINATION ${Halide_INSTALL_CMAKEDIR}
+            NAMESPACE Halide::
+            FILE Halide-${type}-targets.cmake
+            COMPONENT Halide_Development)
+endif ()
 
 write_basic_package_version_file(HalideConfigVersion.cmake
                                  COMPATIBILITY SameMajorVersion)
