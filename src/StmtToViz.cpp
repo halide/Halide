@@ -1557,8 +1557,6 @@ div.ModuleBody:before {\n\
 }\n\
 ";
 
-// span.Cost { background: rgba(10,10,10,0.1); }\n \
-
 const std::string StmtToViz::vizCss = "\n \
 span.ButtonSpacer { width: 5px; color: transparent; display: inline-block; }\n \
 span.LowCost { background: rgba(10,10,10,0.1); }\n \
