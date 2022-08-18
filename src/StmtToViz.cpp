@@ -41,6 +41,7 @@ class StmtToViz : public IRVisitor {
     static const std::string formHTML, formCSS;
     static const std::string navigationHTML;
     static const std::string prodConsCSS;
+    static const std::string lineNumbersCSS;
 
     FindStmtCost findStmtCost;                            // used for finding the cost of statements
     GetStmtHierarchy getStmtHierarchy;                    // used for getting the hierarchy of
@@ -144,19 +145,20 @@ private:
     string tooltip(const string &hoverText, const string &hierarchyHTML,
                    const string &tooltipText) {
         std::stringstream s;
-        s << open_span("tooltip");
+        // TODO: fix this!
+        // s << open_span("tooltip");
         s << "<button onclick=\"openNewWindow('";
         s << hierarchyHTML;
         s << "')\">";
         s << hoverText;
         s << "</button>";
-        s << open_span("ButtonSpacer");
-        s << ".";
-        s << close_span();
-        s << open_span("tooltiptext");
-        s << tooltipText;
-        s << close_span();
-        s << close_span();
+        // s << open_span("ButtonSpacer");
+        // s << ".";
+        // s << close_span();
+        // s << open_span("tooltiptext");
+        // s << tooltipText;
+        // s << close_span();
+        // s << close_span();
 
         return s.str();
     }
@@ -200,8 +202,7 @@ private:
 
     string open_cost_span(const IRNode *op, const string &hierarchyHTML) {
         std::stringstream s;
-        // TODO: add tooltip back in once bootstrap is in
-        // s << cost_table_tooltip(op, hierarchyHTML);
+        s << cost_table_tooltip(op, hierarchyHTML);
         s << open_span("Cost");
         return s.str();
     }
@@ -238,9 +239,9 @@ private:
         //       to put a `.` in it
         //
         //       fix: ProducerConsumerHierarchy::cost_colors as well
-        std::stringstream s;
-
         curr_line_num += 1;
+
+        std::stringstream s;
 
         s << "<span id='ContextSpan" << curr_line_num << "'";
         s << "style='";
@@ -338,7 +339,7 @@ private:
     string open_expand_button(int id) {
         std::stringstream button;
         button << "<a class=ExpandButton onclick='return toggle(" << id << ");' href=_blank>"
-               << "<div style='position:relative; width:0; height:0;'>"
+               << "<div class='expandButton' style='position:relative; width:0; height:0;'>"
                << "<div class=ShowHide style='display:none;' id=" << id << "-show"
                << "><i class='fa fa-plus-square-o'></i></div>"
                << "<div class=ShowHide id=" << id << "-hide"
@@ -618,7 +619,9 @@ private:
                            produce_id);
         print(op->body);
         stream << close_div();
+        stream << open_div("ClosingBrace");
         stream << matched("}");
+        stream << close_div();
         stream << close_div();
         scope.pop(op->name);
     }
@@ -672,7 +675,9 @@ private:
         stream << open_div("ForBody Indent", id);
         print(op->body);
         stream << close_div();
+        stream << open_div("ClosingBrace");
         stream << matched("}");
+        stream << close_div();
         stream << close_div();
         scope.pop(op->name);
 
@@ -695,7 +700,9 @@ private:
         stream << open_div("Acquire Indent", id);
         print(op->body);
         stream << close_div();
+        stream << open_div("ClosingBrace");
         stream << matched("}");
+        stream << close_div();
         stream << close_div();
     }
 
@@ -784,12 +791,16 @@ private:
             stream << open_span("Matched");
             stream << keyword("custom_new") << "{";
             print(op->new_expr);
+            stream << open_div("ClosingBrace");
             stream << matched("}");
+            stream << close_div();
         }
         if (!op->free_function.empty()) {
             stream << open_span("Matched");
             stream << keyword("custom_delete") << "{ " << op->free_function << "(); ";
+            stream << open_div("ClosingBrace");
             stream << matched("}");
+            stream << close_div();
         }
         stream << close_cost_span();
 
@@ -834,7 +845,9 @@ private:
         stream << open_div("RealizeBody Indent", id);
         print(op->body);
         stream << close_div();
+        stream << open_div("ClosingBrace");
         stream << matched("}");
+        stream << close_div();
         stream << close_div();
         scope.pop(op->name);
     }
@@ -892,7 +905,9 @@ private:
             stream << open_div("ForkTask Indent", id);
             print(stmt);
             stream << close_div();
+            stream << open_div("ClosingBrace");
             stream << matched("}");
+            stream << close_div();
             stream << close_div();
         }
     }
@@ -906,7 +921,9 @@ private:
         visit_fork_stmt(op->first);
         visit_fork_stmt(op->rest);
         stream << close_div();
+        stream << open_div("ClosingBrace");
         stream << matched("}");
+        stream << close_div();
         stream << close_div();
     }
 
@@ -936,7 +953,9 @@ private:
             stream << close_div();  // close thenbody div
 
             if (!op->else_case.defined()) {
+                stream << open_div("ClosingBrace");
                 stream << matched("}");
+                stream << close_div();
                 break;
             }
 
@@ -1118,7 +1137,9 @@ public:
         print(op.body);
 
         stream << close_div();
+        stream << open_div("ClosingBrace");
         stream << matched("}");
+        stream << close_div();
 
         stream << close_div();
         scope.pop(op.name);
@@ -1344,7 +1365,9 @@ public:
         }
 
         stream << close_div();
+        stream << open_div("ClosingBrace");
         stream << matched("}");
+        stream << close_div();
         stream << close_div();
         scope.pop(m.name());
     }
@@ -1371,6 +1394,7 @@ public:
         stream << computationCostCSS;
         stream << movementCostCSS;
         stream << prodConsCSS;
+        stream << lineNumbersCSS;
         stream << "</style>\n";
         stream << "<script language='javascript' type='text/javascript'>" + js + "</script>\n";
         stream << "<link "
@@ -1398,6 +1422,7 @@ public:
         // open div for navigation
         stream << "<div class='tab-pane fade show active' id='IRCode' role='tabpanel' "
                   "aria-labelledby='IRCode-tab'>\n";
+        stream << "<div class='IRCode-code'>\n";
     }
 
     StmtToViz(const string &filename, const Stmt &s)
@@ -1413,9 +1438,11 @@ public:
         // open div for navigation
         stream << "<div class='tab-pane fade show active' id='IRCode' role='tabpanel' "
                   "aria-labelledby='IRCode-tab'>\n";
+        stream << "<div class='IRCode-code'>\n";
     }
 
     ~StmtToViz() override {
+        stream << "</div>\n";  // close IRCode-code div
         stream << "</div>\n";  // close IRCode div
         stream << "</div>\n";  // close bootstrap tab-content div
 
@@ -1466,6 +1493,54 @@ span.Memory { color: #d22; font-weight: bold; }\n \
 span.Pred { background-color: #ffe8bd; font-weight: bold; }\n \
 span.Label { background-color: #bde4ff; font-weight: bold; }\n \
 code.ptx { tab-size: 26; white-space: pre; }\n \
+";
+
+const std::string StmtToViz::lineNumbersCSS = "\n \
+div.IRCode-code { \n \
+    counter-reset: line; \n \
+    margin-left: 40px; \n \
+    margin-top: 20px; \n \
+} \n \
+p.WrapLine,\n\
+div.WrapLine,\n\
+div.Consumer,\n\
+div.Produce,\n\
+div.For,\n\
+div.IfThenElse,\n\
+div.Evaluate,\n\
+div.Allocate,\n\
+div.ClosingBrace,\n\
+div.Module,\n\
+div.ModuleBody {\n\
+    counter-increment: line;\n\
+}\n\
+p.WrapLine:before,\n\
+div.WrapLine:before {\n\
+    content: counter(line) '. ';\n\
+    display: inline-block;\n\
+    position: absolute;\n\
+    left: 40px;\n\
+    color: rgb(175, 175, 175);\n\
+    user-select: none;\n\
+    -webkit-user-select: none;\n\
+}\n\
+div.Consumer:before,\n\
+div.Produce:before,\n\
+div.For:before,\n\
+div.IfThenElse:before,\n\
+div.Evaluate:before,\n\
+div.Allocate:before, \n\
+div.ClosingBrace:before,\n\
+div.Module:before, \n\
+div.ModuleBody:before {\n\
+    content: counter(line) '. ';\n\
+    display: inline-block;\n\
+    position: absolute;\n\
+    left: 10px;\n\
+    color: rgb(175, 175, 175);\n\
+    user-select: none;\n\
+    -webkit-user-select: none;\n\
+}\n\
 ";
 
 const std::string StmtToViz::vizCss = "\n \
@@ -1659,19 +1734,19 @@ function toggle(id) { \n \
     e = document.getElementById(id); \n \
     show = document.getElementById(id + '-show'); \n \
     hide = document.getElementById(id + '-hide'); \n \
-    if (e.style.display != 'none') { \n \
-        e.style.display = 'none'; \n \
+    if (e.style.visibility != 'hidden') { \n \
+        e.style.height = '0px'; \n \
+        e.style.visibility = 'hidden'; \n \
         show.style.display = 'block'; \n \
         hide.style.display = 'none'; \n \
     } else { \n \
-        e.style.display = 'block'; \n \
+        e.style = ''; \n \
         show.style.display = 'none'; \n \
         hide.style.display = 'block'; \n \
     } \n \
     return false; \n \
 }\n \
 function openNewWindow(innerHtml) { \n \
-    // console.log('here!'); \n \
     var newWindow = window.open('', '_blank'); \n \
     newWindow.document.write(innerHtml); \n \
 }\n \
