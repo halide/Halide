@@ -8,8 +8,3 @@ set_target_properties(Halide_PyStubs PROPERTIES
                       CXX_VISIBILITY_PRESET hidden
                       VISIBILITY_INLINES_HIDDEN TRUE
                       POSITION_INDEPENDENT_CODE ON)
-
-install(TARGETS Halide_PyStubs
-        EXPORT Halide_Python
-        ARCHIVE DESTINATION "${CMAKE_INSTALL_LIBDIR}"
-        COMPONENT Halide_Python)

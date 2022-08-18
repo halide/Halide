@@ -23,12 +23,18 @@ set(Halide_INSTALL_TOOLSDIR "${CMAKE_INSTALL_DATADIR}/tools"
 
 target_sources(Halide_Generator INTERFACE $<INSTALL_INTERFACE:${Halide_INSTALL_TOOLSDIR}/GenGen.cpp>)
 
-install(TARGETS Halide Halide_Generator Halide_LanguageOptions
+set(extra_targets_to_export )
+if (WITH_PYTHON_BINDINGS)
+    set(extra_targets_to_export Halide_PyStubs)
+endif ()
+
+install(TARGETS Halide Halide_Generator Halide_LanguageOptions ${extra_targets_to_export}
         EXPORT Halide_Targets
         RUNTIME COMPONENT Halide_Runtime
         LIBRARY COMPONENT Halide_Runtime
         NAMELINK_COMPONENT Halide_Development
         ARCHIVE COMPONENT Halide_Development
+        LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
         INCLUDES DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
 
 if (TARGET Halide_Adams2019)
@@ -176,14 +182,6 @@ install(EXPORT Halide_Interfaces
         NAMESPACE Halide::
         FILE Halide-Interfaces.cmake
         COMPONENT Halide_Development)
-
-if (WITH_PYTHON_BINDINGS)
-    install(EXPORT Halide_Python
-            DESTINATION ${Halide_INSTALL_CMAKEDIR}
-            NAMESPACE Halide::
-            FILE Halide-${type}-targets.cmake
-            COMPONENT Halide_Development)
-endif ()
 
 write_basic_package_version_file(HalideConfigVersion.cmake
                                  COMPATIBILITY SameMajorVersion)
