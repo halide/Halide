@@ -625,11 +625,7 @@ void ProducerConsumerHierarchy::table_header(const IRNode *op, const string &hea
 
     // add anchor button if anchorName is provided
     if (anchorName != "") {
-        html << "<button onclick='";
-        html << "window.open(\"" << output_file_name << "#" << anchorName << "\", \"_blank\")";
-        html << "'>";
-        html << "see code";
-        html << "</button>";
+        see_code_button(anchorName);
     }
 
     // header
@@ -754,11 +750,7 @@ void ProducerConsumerHierarchy::allocate_table_header(const Allocate *op, const 
     cost_colors(op);
 
     // add anchor button
-    html << "<button onclick='";
-    html << "window.open(\"" << output_file_name << "#" << anchorName << "\", \"_blank\")";
-    html << "'>";
-    html << "see code";
-    html << "</button>";
+    see_code_button(anchorName);
 
     // header
     html << "<br>";
@@ -842,11 +834,7 @@ void ProducerConsumerHierarchy::for_loop_table_header(const For *op, const strin
     cost_colors(op);
 
     // add anchor button
-    html << "<button onclick='";
-    html << "window.open(\"" << output_file_name << "#" << anchorName << "\", \"_blank\")";
-    html << "'>";
-    html << "see code";
-    html << "</button>";
+    see_code_button(anchorName);
 
     // header
     html << "<br>";
@@ -917,6 +905,14 @@ void ProducerConsumerHierarchy::close_if_tree() {
 
     html << "</span>";
     html << "</li>";
+}
+
+void ProducerConsumerHierarchy::see_code_button(string anchorName) {
+    html << "<button class='see-code-button' onclick='";
+    html << "window.open(\"" << output_file_name << "#" << anchorName << "\", \"_blank\")";
+    html << "'>";
+    html << "<i class='bi bi-code-square'></i>";
+    html << "</button>";
 }
 
 void ProducerConsumerHierarchy::open_table_row() {

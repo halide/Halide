@@ -151,6 +151,8 @@ private:
     void if_tree(const IRNode *op, const string &header, StmtSize &size, string anchorName);
     void close_if_tree();
 
+    void see_code_button(string anchorName);
+
     // opens and closes a row
     void open_table_row();
     void close_table_row();

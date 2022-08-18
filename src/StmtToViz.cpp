@@ -142,8 +142,7 @@ private:
         return "</" + tag + ">";
     }
 
-    string tooltip(const string &hoverText, const string &hierarchyHTML,
-                   const string &tooltipText) {
+    string tooltip(const string &hierarchyHTML, const string &tooltipText) {
         std::stringstream s;
         // TODO: fix this!
         // s << open_span("tooltip");
@@ -157,7 +156,7 @@ private:
         s << "onmouseout='document.getElementById(\"Cost" << id_count
           << "\").style.background = \"transparent\";'";
         s << ">";
-        s << hoverText;
+        s << "<i class='bi bi-info'></i>";
         s << "</button>";
 
         // s << open_span("ButtonSpacer");
@@ -197,7 +196,7 @@ private:
         tooltipText << "</ tr>";
         tooltipText << "</table>";
 
-        return tooltip("(i)", hierarchyHTML, tooltipText.str());
+        return tooltip(hierarchyHTML, tooltipText.str());
     }
 
     string get_stmt_hierarchy(const Stmt &op) {
@@ -1396,6 +1395,12 @@ public:
                "src='https://cdn.jsdelivr.net/npm/bootstrap@5.2.0/dist/js/bootstrap.bundle.min.js' "
                "integrity='sha384-A3rJD856KowSb7dwlZdYEkO39Gagi7vIsF0jrRAoQmDKKtQBHUuLZ9AsSv4jD4Xa'"
                " crossorigin='anonymous'></script>\n";
+        stream
+            << "<link rel='stylesheet' "
+               "href='https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/css/bootstrap.min.css'>\n";
+        stream << "<link rel='stylesheet' "
+                  "href='https://cdn.jsdelivr.net/npm/bootstrap-icons@1.5.0/font/"
+                  "bootstrap-icons.css'>\n";
 
         stream << "<style type='text/css'>";
         stream << css;
@@ -1580,18 +1585,24 @@ span.CostColorSpacer { width: 2px; color: transparent; display: inline-block; }\
     text-align: center; \n \
     text-decoration: none; \n \
     -webkit-user-select: none; \n \
+    user-select: none; \n \
     touch-action: manipulation; \n \
     vertical-align: middle; \n \
     margin-right: 5px; \n \
-    font-size: 10px; \n \
+    font-size: 15px; \n \
 } \n \
-.info-button:hover { \n \
+.info-button:hover, .see-code-button:hover { \n \
     background-color: #f7fafa; \n \
 } \n \
-.info-button:focus { \n \
-    border-color: #008296; \n \
-    box-shadow: rgba(213, 217, 217, .5) 0 2px 5px 0; \n \
-    outline: 0; \n \
+.see-code-button { \n \
+    background-color: #fff; \n \
+    border: transparent; \n \
+    display: inline-block; \n \
+    position: relative; \n \
+    margin-left: 5px; \n \
+    font-size: 20px; \n \
+    padding: 5px; \n \
+    vertical-align: middle; \n \
 } \n \
 ";
 
