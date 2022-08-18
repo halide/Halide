@@ -203,7 +203,7 @@ build: $(BIN)/$(HL_TARGET)/test \
 	$(BIN)/retrain_cost_model \
 	$(BIN)/libautoschedule_anderson2021.$(SHARED_EXT)
 
-test: test_bounds test_tiling test_storage_strides test_parser test_state run_test test_perfect_hash_map test_function_dag demo included_schedule_file autotune
+test: test_bounds test_tiling test_storage_strides test_parser test_state test_thread_info run_test test_perfect_hash_map test_function_dag demo included_schedule_file autotune
 
 TEST_DIR=$(SRC)/test
 
@@ -240,6 +240,13 @@ $(BIN)/test_state: $(TEST_DIR)/state.cpp State.h State.cpp LoopNest.h LoopNest.c
 	$(CXX) $(OPTIMIZE) $(CXXFLAGS) $(USE_EXPORT_DYNAMIC) $(filter-out %.h,$^) -o $@ $(LIBHALIDE_LDFLAGS) $(HALIDE_SYSTEM_LIBS) -I$(SRC)
 
 test_state: $(BIN)/test_state
+	$^
+
+$(BIN)/test_thread_info: $(TEST_DIR)/thread_info.cpp LoopNest.h LoopNest.cpp FunctionDAG.cpp FunctionDAG.h ASLog.h ASLog.cpp GPULoopInfo.cpp GPULoopInfo.h GPUMemInfo.h Tiling.h Tiling.cpp
+	@mkdir -p $(@D)
+	$(CXX) $(OPTIMIZE) $(CXXFLAGS) $(USE_EXPORT_DYNAMIC) $(filter-out %.h,$^) -o $@ $(LIBHALIDE_LDFLAGS) $(HALIDE_SYSTEM_LIBS) -I$(SRC)
+
+test_thread_info: $(BIN)/test_thread_info
 	$^
 
 clean:

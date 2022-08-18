@@ -1,6 +1,7 @@
 #include "LoopNest.h"
 #include "ThreadInfo.h"
 #include "test.h"
+#include <iostream>
 
 using namespace Halide;
 using namespace Halide::Internal;
@@ -23,9 +24,6 @@ void test_thread_info() {
         // 16x8
         size.push_back(16);
         size.push_back(8);
-
-        //loop_extents.push_back(16);
-        //loop_extents.push_back(8);
 
         // 16x8
         max_thread_counts.push_back(16);
@@ -53,10 +51,6 @@ void test_thread_info() {
 
         // Smaller stage: its loop is smaller than the max thread loop and
         // cannot possibly achieve better utilization
-        //loop_extents.clear();
-        //loop_extents.push_back(8);
-        //loop_extents.push_back(8);
-
         {
             ThreadInfo info{vectorized_loop_index, size, loop, max_thread_counts};
             EXPECT_EQ(64, info.num_threads);
@@ -67,10 +61,6 @@ void test_thread_info() {
         size.push_back(11);
         size.push_back(11);
         size.push_back(2);
-        //loop_extents.clear();
-        //loop_extents.push_back(11);
-        //loop_extents.push_back(11);
-        //loop_extents.push_back(2);
         max_thread_counts.clear();
         max_thread_counts.push_back(16);
         max_thread_counts.push_back(16);
@@ -80,7 +70,7 @@ void test_thread_info() {
         {
             ThreadInfo info{vectorized_loop_index, size, loop, max_thread_counts};
             EXPECT_EQ(242, info.num_threads);
-            EXPECT_EQ(0.472656, info.warp_lane_utilization());
+            APPROX_EQ(0.630208, info.warp_lane_utilization(), 0.00001);
         }
     }
 }
