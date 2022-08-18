@@ -204,11 +204,14 @@ objects without any explicit conversion necessary.
 ## Halide Generators In Python
 
 In Halide, a "Generator" is a unit of encapsulation for Halide code. It is
-self-contained piece of code that can: - Produce a chunk of Halide IR (in the
-form of an `hl.Pipeline`) that is appropriate for compilation (via either JIT or
-AOT) - Expose itself to the build system in a discoverable way - Fully describe
+self-contained piece of code that can:
+-  Produce a chunk of Halide IR (in the form of an `hl.Pipeline`) that is appropriate for compilation (via either JIT or
+AOT)
+-  Expose itself to the build system in a discoverable way
+-  Fully describe
 itself for the build system with metadata for (at least) the type and number of
-inputs and outputs expected - Allow for build-time customization of
+inputs and outputs expected
+-  Allow for build-time customization of
 coder-specified parameters in a way that doesn't require editing of source code
 
 Originally, Halide only supported writing Generators in C++. In this document,

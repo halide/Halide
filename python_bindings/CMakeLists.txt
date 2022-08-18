@@ -44,7 +44,7 @@ else ()
     find_package(pybind11 ${PYBIND11_VER} REQUIRED)
 endif ()
 
-find_package(Halide REQUIRED)
+find_package(Halide REQUIRED Halide)
 if (NOT Halide_ENABLE_RTTI OR NOT Halide_ENABLE_EXCEPTIONS)
     message(FATAL_ERROR "Python bindings require RTTI and exceptions to be enabled.")
 endif ()

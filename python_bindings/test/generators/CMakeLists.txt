@@ -20,14 +20,26 @@ set(_ALL_DEPS)
 
 function(_add_python_aot_and_stub_extension)
     cmake_parse_arguments(ARG "" "" "GEN;SOURCES" ${ARGN})
+
+    list(GET ARG_GEN 0 GEN_NAME)
+    set(GEN_NAME py_gen_${GEN_NAME}.generator)
+    add_halide_generator(${GEN_NAME}
+                         SOURCES ${ARG_SOURCES})
+
     foreach (G IN LISTS ARG_GEN)
-        # We don't really need all the plugins at once here -- it's just easier to specify them all
-        add_python_aot_extension(py_aot_${G}
-                                 GENERATOR ${G}
-                                 FEATURES ${FEATURES_${G}}
-                                 PARAMS ${GENPARAMS_${G}}
-                                 PLUGINS Halide::Adams2019 Halide::Li2018 Halide::Mullapudi2016
-                                 SOURCES "${ARG_SOURCES}")
+        add_halide_library(py_aot_${G}
+                           FROM ${GEN_NAME}
+                           GENERATOR ${G}
+                           FUNCTION_NAME ${G}
+                           FEATURES ${FEATURES_${G}}
+                           PARAMS ${GENPARAMS_${G}}
+                           # Note that PYTHON_EXTENSION_LIBRARY doesn't take
+                           # an argument; it will always produce a file of the form
+                           # ${TARGET}.${Python3_SOABI}.so (or .pyd on Windows)
+                           PYTHON_EXTENSION_LIBRARY
+                           # We don't really need all the plugins at once here --
+                           # it's just easier to specify them all
+                           PLUGINS Halide::Adams2019 Halide::Li2018 Halide::Mullapudi2016)
         set(_ALL_DEPS "${_ALL_DEPS} py_aot_${G}" PARENT_SCOPE)
 
         if(NOT ARG_SOURCES MATCHES ".py$")
@@ -41,16 +53,23 @@ function(_add_python_aot_and_stub_extension)
 endfunction()
 
 _add_python_aot_and_stub_extension(SOURCES addconstant_generator.cpp
-                                   GEN addconstant addconstant_with_offset_42 addconstant_with_negative_offset)
+                                   GEN addconstant
+                                       addconstant_with_offset_42
+                                       addconstant_with_negative_offset)
 _add_python_aot_and_stub_extension(SOURCES bit_generator.cpp GEN bit)
 _add_python_aot_and_stub_extension(SOURCES complex_generator.cpp GEN complex)
 _add_python_aot_and_stub_extension(SOURCES simple_generator.cpp GEN simple)
 _add_python_aot_and_stub_extension(SOURCES user_context_generator.cpp GEN user_context)
 
 _add_python_aot_and_stub_extension(SOURCES addconstantpy_generator.py
-                                   GEN addconstantpy addconstantpy_with_offset_42 addconstantpy_with_negative_offset)
+                                   GEN addconstantpy
+                                       addconstantpy_with_offset_42
+                                       addconstantpy_with_negative_offset)
 _add_python_aot_and_stub_extension(SOURCES bilateral_grid_generator.py
-                                   GEN bilateral_grid bilateral_grid_Adams2019 bilateral_grid_Li2018 bilateral_grid_Mullapudi2016)
+                                   GEN bilateral_grid
+                                       bilateral_grid_Adams2019
+                                       bilateral_grid_Li2018
+                                       bilateral_grid_Mullapudi2016)
 _add_python_aot_and_stub_extension(SOURCES bitpy_generator.py GEN bitpy)
 _add_python_aot_and_stub_extension(SOURCES complexpy_generator.py GEN complexpy)
 _add_python_aot_and_stub_extension(SOURCES simplepy_generator.py GEN simplepy)
