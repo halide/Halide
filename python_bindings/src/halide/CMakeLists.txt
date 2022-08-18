@@ -52,13 +52,6 @@ set_target_properties(
 )
 target_link_libraries(Halide_Python PRIVATE Halide::Halide)
 
-if (MSVC)
-    # This target can choke the MSVC linker. Try limiting it to a single thread.
-    set_property(GLOBAL PROPERTY JOB_POOLS one_job=1)
-    set_property(TARGET Halide_Python PROPERTY JOB_POOL_LINK one_job)
-endif()
-
-
 # TODO: There's precious little information about why Python only sometimes prevents DLLs from loading from the PATH
 #   on Windows. This workaround places a copy of Halide.dll (and any other dependencies) next to our Python module.
 #   Ref: https://stackoverflow.com/questions/59860465/pybind11-importerror-dll-not-found-when-trying-to-import-pyd-in-python-int
