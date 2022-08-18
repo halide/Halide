@@ -83,7 +83,7 @@ function(add_halide_generator TARGET)
                               CXX_VISIBILITY_PRESET hidden
                               VISIBILITY_INLINES_HIDDEN ON
                               POSITION_INDEPENDENT_CODE ON)
-        target_link_libraries(${TARGET}_pystub PRIVATE Halide::Halide Halide::Python ${ARG_LINK_LIBRARIES})
+        target_link_libraries(${TARGET}_pystub PRIVATE Halide::Halide Halide::PyStubs ${ARG_LINK_LIBRARIES})
         set_target_properties(${TARGET}_pystub PROPERTIES OUTPUT_NAME ${MODULE_NAME})
         _Halide_target_export_single_symbol(${TARGET}_pystub "PyInit_${MODULE_NAME}")
     endif ()

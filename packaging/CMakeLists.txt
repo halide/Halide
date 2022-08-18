@@ -177,6 +177,12 @@ install(EXPORT Halide_Interfaces
         FILE Halide-Interfaces.cmake
         COMPONENT Halide_Development)
 
+# install(EXPORT Halide_Python
+#         DESTINATION ${CMAKE_INSTALL_LIBDIR}
+#         NAMESPACE Halide::
+#         FILE Halide-${type}-targets.cmake
+#         COMPONENT Halide_Development)
+
 write_basic_package_version_file(HalideConfigVersion.cmake
                                  COMPATIBILITY SameMajorVersion)
 

@@ -106,6 +106,7 @@ endfunction()
 ##
 
 add_subdirectory(src)
+add_subdirectory(stub)
 
 if (WITH_TEST_PYTHON)
     add_subdirectory(test)
