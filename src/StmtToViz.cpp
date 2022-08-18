@@ -19,7 +19,7 @@
 
 #define PRINT_HIERARCHY false
 #define PRINT_DEPENDENCIES false
-#define PRINT_PROD_CONS true
+#define PRINT_PROD_CONS false
 
 namespace Halide {
 namespace Internal {
@@ -147,19 +147,28 @@ private:
         std::stringstream s;
         // TODO: fix this!
         // s << open_span("tooltip");
-        s << "<button onclick=\"openNewWindow('";
+
+        s << "<button class='info-button' role='button'";
+        s << "onclick=\"openNewWindow('";
         s << hierarchyHTML;
-        s << "')\">";
+        s << "')\"";
+        s << "onmouseover='document.getElementById(\"Cost" << id_count
+          << "\").style.background = \"rgba(10,10,10,0.1)\";'";
+        s << "onmouseout='document.getElementById(\"Cost" << id_count
+          << "\").style.background = \"transparent\";'";
+        s << ">";
         s << hoverText;
         s << "</button>";
+
         // s << open_span("ButtonSpacer");
         // s << ".";
         // s << close_span();
+
         // s << open_span("tooltiptext");
         // s << tooltipText;
         // s << close_span();
-        // s << close_span();
 
+        // s << close_span();
         return s.str();
     }
 
@@ -188,7 +197,7 @@ private:
         tooltipText << "</ tr>";
         tooltipText << "</table>";
 
-        return tooltip("[i]", hierarchyHTML, tooltipText.str());
+        return tooltip("(i)", hierarchyHTML, tooltipText.str());
     }
 
     string get_stmt_hierarchy(const Stmt &op) {
@@ -203,7 +212,7 @@ private:
     string open_cost_span(const IRNode *op, const string &hierarchyHTML) {
         std::stringstream s;
         s << cost_table_tooltip(op, hierarchyHTML);
-        s << open_span("Cost");
+        s << "<span id='Cost" << id_count << "'>";
         return s.str();
     }
     string close_cost_span() {
@@ -1543,10 +1552,11 @@ div.ModuleBody:before {\n\
 }\n\
 ";
 
+// span.Cost { background: rgba(10,10,10,0.1); }\n \
+
 const std::string StmtToViz::vizCss = "\n \
 span.ButtonSpacer { width: 5px; color: transparent; display: inline-block; }\n \
 span.LowCost { background: rgba(10,10,10,0.1); }\n \
-span.Cost { background: rgba(10,10,10,0.1); }\n \
 span.MediumCost { background: rgba(10,10,10,0.2); }\n \
 span.HighCost { background: rgba(10,10,10,0.3); }\n \
 .tooltip .tooltiptext { visibility: hidden; text-align: center; border-radius: 3px; padding: 5px; background: #FFFFFF; color: #313639; border: 1px solid #313639; border-radius: 8px; pointer-events: none; width: fit-content; position: absolute; z-index: 1; margin-top: -75px; margin-left: -40px; z-index: 1000; }\n \
@@ -1559,6 +1569,30 @@ span.HighCost { background: rgba(10,10,10,0.3); }\n \
 .tf-custom .end-node { border-style: dashed; }\n \
 .tf-custom .children-node { background-color: lightgrey; }\n \
 span.CostColorSpacer { width: 2px; color: transparent; display: inline-block; }\n \
+.info-button { \n \
+    background-color: #fff; \n \
+    border: 1px solid #d5d9d9; \n \
+    border-radius: 8px; \n \
+    box-shadow: rgba(213, 217, 217, .5) 0 2px 5px 0; \n \
+    box-sizing: border-box; \n \
+    display: inline-block; \n \
+    position: relative; \n \
+    text-align: center; \n \
+    text-decoration: none; \n \
+    -webkit-user-select: none; \n \
+    touch-action: manipulation; \n \
+    vertical-align: middle; \n \
+    margin-right: 5px; \n \
+    font-size: 10px; \n \
+} \n \
+.info-button:hover { \n \
+    background-color: #f7fafa; \n \
+} \n \
+.info-button:focus { \n \
+    border-color: #008296; \n \
+    box-shadow: rgba(213, 217, 217, .5) 0 2px 5px 0; \n \
+    outline: 0; \n \
+} \n \
 ";
 
 const std::string StmtToViz::computationCostCSS = "\n \
