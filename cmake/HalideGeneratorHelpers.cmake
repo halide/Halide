@@ -11,6 +11,10 @@ define_property(TARGET PROPERTY Halide_GENERATOR_HAS_POST_BUILD
                 BRIEF_DOCS "On a Halide generator target, true if Halide.dll copy command has already been added."
                 FULL_DOCS "On a Halide generator target, true if Halide.dll copy command has already been added.")
 
+define_property(TARGET PROPERTY Halide_PYTHON_GENERATOR_SOURCE
+                BRIEF_DOCS "Used to store the source file(s) for a Python Generator"
+                FULL_DOCS "Used to store the source file(s) for a Python Generator")
+
 ##
 # Function to simplify writing the CMake rules for creating a generator executable
 # that follows our recommended cross-compiling workflow.
@@ -54,14 +58,32 @@ function(add_halide_generator TARGET)
             find_package(Halide REQUIRED)
         endif ()
 
-        add_executable(${TARGET} ${ARG_SOURCES})
-        add_executable(${gen} ALIAS ${TARGET})
-        target_link_libraries(${TARGET} PRIVATE Halide::Generator ${ARG_LINK_LIBRARIES})
+        if (ARG_SOURCES MATCHES ".py$")
+            if (ARG_LINK_LIBRARIES)
+                message(FATAL_ERROR "You cannot specify LINK_LIBRARIES in conjunction with Python source code.")
+            endif ()
 
-        add_dependencies("${ARG_PACKAGE_NAME}" ${TARGET})
-        export(TARGETS ${TARGET}
-               NAMESPACE ${ARG_PACKAGE_NAMESPACE}
-               APPEND FILE "${ARG_EXPORT_FILE}")
+            list(LENGTH ARG_SOURCES len)
+            if (NOT len EQUAL 1)
+                message(FATAL_ERROR "Python Generators must specify exactly one source file.")
+            endif()
+
+            # Make a fake target here that we can attach the Python source to,
+            # so that we can extract 'em in add_halide_library()
+            add_custom_target(${TARGET} ALL)
+            set_property(TARGET ${TARGET} PROPERTY Halide_PYTHON_GENERATOR_SOURCE "${CMAKE_CURRENT_SOURCE_DIR}/${ARG_SOURCES}")
+
+            # TODO: what do we need to do for PACKAGE_NAME PACKAGE_NAMESPACE EXPORT_FILE in this case?
+        else ()
+            add_executable(${TARGET} ${ARG_SOURCES})
+            add_executable(${gen} ALIAS ${TARGET})
+            target_link_libraries(${TARGET} PRIVATE Halide::Generator ${ARG_LINK_LIBRARIES})
+
+            add_dependencies("${ARG_PACKAGE_NAME}" ${TARGET})
+            export(TARGETS ${TARGET}
+                   NAMESPACE ${ARG_PACKAGE_NAMESPACE}
+                   APPEND FILE "${ARG_EXPORT_FILE}")
+        endif ()
     endif ()
 endfunction()
 
@@ -150,10 +172,10 @@ function(add_halide_library TARGET)
         message(FATAL_ERROR "Missing FROM argument specifying a Halide generator target")
     endif ()
 
-    if(ARG_FROM MATCHES ".py$")
+    get_property(py_src TARGET ${ARG_FROM} PROPERTY Halide_PYTHON_GENERATOR_SOURCE)
+    if (py_src)
         set(PYTHONPATH "$<TARGET_FILE_DIR:Halide::Python>/..")
-        # TODO: this is ugly, maybe there is a better way?
-        set(GENERATOR_CMD ${CMAKE_COMMAND} -E env PYTHONPATH=${PYTHONPATH} ${Python3_EXECUTABLE} $<SHELL_PATH:${CMAKE_CURRENT_SOURCE_DIR}/${ARG_FROM}>)
+        set(GENERATOR_CMD ${CMAKE_COMMAND} -E env PYTHONPATH=${PYTHONPATH} ${Python3_EXECUTABLE} $<SHELL_PATH:${py_src}>)
         set(GENERATOR_CMD_DEPS ${ARG_FROM} Halide::Python)
     else()
         if (NOT TARGET ${ARG_FROM})
