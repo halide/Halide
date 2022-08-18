@@ -189,9 +189,8 @@ function(add_halide_library TARGET)
         endif()
         set(GENERATOR_CMD "${ARG_FROM}")
         set(GENERATOR_CMD_DEPS ${ARG_FROM})
+        _Halide_place_dll(${ARG_FROM})
     endif()
-
-    _Halide_place_dll(${ARG_FROM})
 
     if (ARG_C_BACKEND)
         if (ARG_USE_RUNTIME)
@@ -406,10 +405,6 @@ function(_Halide_place_dll GEN)
     if (NOT WIN32)
         return()
     endif ()
-
-    if(GEN MATCHES ".py$")
-        return()
-    endif()
 
     # Short circuit so that Halide::Halide isn't checked when importing a generator from another CMake project
     get_property(is_imported TARGET ${GEN} PROPERTY IMPORTED)
