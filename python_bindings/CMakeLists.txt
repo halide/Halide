@@ -30,7 +30,7 @@ set(PYBIND11_VER 2.6.2 CACHE STRING "The pybind11 version to use (or download)")
 # Dependencies
 ##
 
-find_package(Python3 REQUIRED COMPONENTS Interpreter Development)
+find_package(Python3 REQUIRED COMPONENTS Interpreter Development.Module)
 
 if (PYBIND11_USE_FETCHCONTENT)
     include(FetchContent)

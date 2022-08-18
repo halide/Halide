@@ -40,7 +40,7 @@ if (WITH_PYTHON_BINDINGS)
     # TODO(#4053): rework this as an app under python_bindings.
     # TODO(#4876): Disabled due to issue #4876
     if (FALSE)
-        find_package(Python3 REQUIRED COMPONENTS Interpreter Development)
+        find_package(Python3 REQUIRED COMPONENTS Interpreter Development.Module)
 
         add_test(NAME gradient_autoscheduler_test_py
                  COMMAND Python3::Interpreter "${CMAKE_CURRENT_SOURCE_DIR}/test.py")
