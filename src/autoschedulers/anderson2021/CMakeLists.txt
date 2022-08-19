@@ -157,7 +157,7 @@ set_tests_properties(anderson2021-test_bounds
                      LABELS Anderson2021
                      ENVIRONMENT "HL_TARGET=${Halide_TARGET}")
 
-add_executable(anderson2021-test_parser test/parser.cpp ASLog.cpp)
+add_executable(anderson2021-test_parser test/parser.cpp)
 target_link_libraries(anderson2021-test_parser PRIVATE ASLog Halide::Halide Halide::Tools Halide::Plugin)
 
 add_test(NAME test_parser COMMAND anderson2021-test_parser)
@@ -166,7 +166,7 @@ set_tests_properties(test_parser
                      LABELS Anderson2021
                      ENVIRONMENT "HL_TARGET=${Halide_TARGET}")
 
-add_executable(anderson2021-test_state test/state.cpp ASLog.cpp FunctionDAG.cpp LoopNest.cpp GPULoopInfo.cpp State.cpp Tiling.cpp)
+add_executable(anderson2021-test_state test/state.cpp FunctionDAG.cpp LoopNest.cpp GPULoopInfo.cpp State.cpp Tiling.cpp)
 target_link_libraries(anderson2021-test_state PRIVATE ASLog Halide::Halide Halide::Tools Halide::Plugin)
 
 add_test(NAME test_state COMMAND anderson2021-test_state)
@@ -175,7 +175,7 @@ set_tests_properties(test_state
                      LABELS Anderson2021
                      ENVIRONMENT "HL_TARGET=${Halide_TARGET}")
 
-add_executable(anderson2021-test_storage_strides test/storage_strides.cpp ASLog.cpp FunctionDAG.cpp LoopNest.cpp GPULoopInfo.cpp State.cpp Tiling.cpp)
+add_executable(anderson2021-test_storage_strides test/storage_strides.cpp FunctionDAG.cpp LoopNest.cpp GPULoopInfo.cpp State.cpp Tiling.cpp)
 target_link_libraries(anderson2021-test_storage_strides PRIVATE ASLog Halide::Halide Halide::Tools Halide::Plugin)
 
 add_test(NAME test_storage_strides COMMAND anderson2021-test_storage_strides)

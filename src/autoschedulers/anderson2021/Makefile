@@ -64,7 +64,7 @@ $(BIN)/cost_model/%.a: $(BIN)/cost_model.generator
 # undefined rather than dependent on libHalide.so.
 $(BIN)/libautoschedule_anderson2021.$(SHARED_EXT): $(SRC)/AutoSchedule.cpp \
 		  							$(SRC)/AutoSchedule.h \
-		  							$(SRC)/ASLog.cpp \
+		  							$(COMMON_DIR)/ASLog.cpp \
 										$(SRC)/DefaultCostModel.h \
 										$(SRC)/DefaultCostModel.cpp \
 										$(SRC)/Weights.h \
@@ -97,7 +97,7 @@ $(BIN)/libautoschedule_anderson2021.$(SHARED_EXT): $(SRC)/AutoSchedule.cpp \
 	$(CXX) -shared $(USE_EXPORT_DYNAMIC) -fPIC -fvisibility=hidden -fvisibility-inlines-hidden $(CXXFLAGS) $(OPTIMIZE) -I $(BIN)/cost_model $(filter-out %.h $(LIBHALIDE_LDFLAGS),$^) -o $@ $(HALIDE_SYSTEM_LIBS)
 
 $(BIN)/retrain_cost_model: $(SRC)/retrain_cost_model.cpp \
-									$(SRC)/ASLog.cpp \
+									$(COMMON_DIR)/ASLog.cpp \
 									$(SRC)/DefaultCostModel.h \
 									$(SRC)/DefaultCostModel.cpp \
 									$(SRC)/Weights.h \
@@ -163,7 +163,7 @@ $(BIN)/test_perfect_hash_map: test_perfect_hash_map.cpp PerfectHashMap.h
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) $< -o $@
 
-$(BIN)/test_function_dag: test_function_dag.cpp FunctionDAG.h FunctionDAG.cpp ASLog.h ASLog.cpp
+$(BIN)/test_function_dag: test_function_dag.cpp FunctionDAG.h FunctionDAG.cpp $(COMMON_DIR)/ASLog.h $(COMMON_DIR)/ASLog.cpp
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) $(USE_EXPORT_DYNAMIC) $(filter-out %.h,$^) -o $@ $(LIBHALIDE_LDFLAGS) $(HALIDE_SYSTEM_LIBS)
 
@@ -207,7 +207,7 @@ test: test_bounds test_tiling test_storage_strides test_parser test_state test_t
 
 TEST_DIR=$(SRC)/test
 
-$(BIN)/test_bounds: $(TEST_DIR)/bounds.cpp LoopNest.h LoopNest.cpp FunctionDAG.cpp FunctionDAG.h ASLog.h ASLog.cpp GPULoopInfo.cpp GPULoopInfo.h GPUMemInfo.h Tiling.h Tiling.cpp
+$(BIN)/test_bounds: $(TEST_DIR)/bounds.cpp LoopNest.h LoopNest.cpp FunctionDAG.cpp FunctionDAG.h $(COMMON_DIR)/ASLog.h $(COMMON_DIR)/ASLog.cpp GPULoopInfo.cpp GPULoopInfo.h GPUMemInfo.h Tiling.h Tiling.cpp
 	@mkdir -p $(@D)
 	$(CXX) $(OPTIMIZE) $(CXXFLAGS) $(USE_EXPORT_DYNAMIC) $(filter-out %.h,$^) -o $@ $(LIBHALIDE_LDFLAGS) $(HALIDE_SYSTEM_LIBS) -I$(SRC)
 
@@ -221,28 +221,28 @@ $(BIN)/test_tiling: $(TEST_DIR)/tiling.cpp Tiling.h Tiling.cpp
 test_tiling: $(BIN)/test_tiling
 	$^
 
-$(BIN)/test_storage_strides: $(TEST_DIR)/storage_strides.cpp LoopNest.h LoopNest.cpp FunctionDAG.cpp FunctionDAG.h ASLog.h ASLog.cpp GPULoopInfo.cpp GPULoopInfo.h GPUMemInfo.h Tiling.h Tiling.cpp
+$(BIN)/test_storage_strides: $(TEST_DIR)/storage_strides.cpp LoopNest.h LoopNest.cpp FunctionDAG.cpp FunctionDAG.h $(COMMON_DIR)/ASLog.h $(COMMON_DIR)/ASLog.cpp GPULoopInfo.cpp GPULoopInfo.h GPUMemInfo.h Tiling.h Tiling.cpp
 	@mkdir -p $(@D)
 	$(CXX) $(OPTIMIZE) $(CXXFLAGS) $(USE_EXPORT_DYNAMIC) $(filter-out %.h,$^) -o $@ $(LIBHALIDE_LDFLAGS) $(HALIDE_SYSTEM_LIBS) -I$(SRC)
 
 test_storage_strides: $(BIN)/test_storage_strides
 	$^
 
-$(BIN)/test_parser: $(TEST_DIR)/parser.cpp LoopNestParser.h ASLog.h ASLog.cpp
+$(BIN)/test_parser: $(TEST_DIR)/parser.cpp LoopNestParser.h $(COMMON_DIR)/ASLog.h $(COMMON_DIR)/ASLog.cpp
 	@mkdir -p $(@D)
 	$(CXX) $(OPTIMIZE) $(CXXFLAGS) $(USE_EXPORT_DYNAMIC) $(filter-out %.h,$^) -o $@ $(LIBHALIDE_LDFLAGS) $(HALIDE_SYSTEM_LIBS) -I$(SRC)
 
 test_parser: $(BIN)/test_parser
 	$^
 
-$(BIN)/test_state: $(TEST_DIR)/state.cpp State.h State.cpp LoopNest.h LoopNest.cpp FunctionDAG.cpp FunctionDAG.h ASLog.h ASLog.cpp GPULoopInfo.cpp GPULoopInfo.h GPUMemInfo.h Tiling.h Tiling.cpp
+$(BIN)/test_state: $(TEST_DIR)/state.cpp State.h State.cpp LoopNest.h LoopNest.cpp FunctionDAG.cpp FunctionDAG.h $(COMMON_DIR)/ASLog.h $(COMMON_DIR)/ASLog.cpp GPULoopInfo.cpp GPULoopInfo.h GPUMemInfo.h Tiling.h Tiling.cpp
 	@mkdir -p $(@D)
 	$(CXX) $(OPTIMIZE) $(CXXFLAGS) $(USE_EXPORT_DYNAMIC) $(filter-out %.h,$^) -o $@ $(LIBHALIDE_LDFLAGS) $(HALIDE_SYSTEM_LIBS) -I$(SRC)
 
 test_state: $(BIN)/test_state
 	$^
 
-$(BIN)/test_thread_info: $(TEST_DIR)/thread_info.cpp LoopNest.h LoopNest.cpp FunctionDAG.cpp FunctionDAG.h ASLog.h ASLog.cpp GPULoopInfo.cpp GPULoopInfo.h GPUMemInfo.h Tiling.h Tiling.cpp
+$(BIN)/test_thread_info: $(TEST_DIR)/thread_info.cpp LoopNest.h LoopNest.cpp FunctionDAG.cpp FunctionDAG.h $(COMMON_DIR)/ASLog.h $(COMMON_DIR)/ASLog.cpp GPULoopInfo.cpp GPULoopInfo.h GPUMemInfo.h Tiling.h Tiling.cpp
 	@mkdir -p $(@D)
 	$(CXX) $(OPTIMIZE) $(CXXFLAGS) $(USE_EXPORT_DYNAMIC) $(filter-out %.h,$^) -o $@ $(LIBHALIDE_LDFLAGS) $(HALIDE_SYSTEM_LIBS) -I$(SRC)
 
