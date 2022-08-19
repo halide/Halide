@@ -1513,6 +1513,7 @@ public:
 };
 
 const std::string StmtToViz::css = "\n \
+/* Normal CSS */\n \
 body { font-family: Consolas, 'Liberation Mono', Menlo, Courier, monospace; font-size: 12px; background: #f8f8f8; margin-left:15px; } \n \
 a, a:hover, a:visited, a:active { color: inherit; text-decoration: none; } \n \
 b { font-weight: normal; }\n \
@@ -1549,6 +1550,7 @@ code.ptx { tab-size: 26; white-space: pre; }\n \
 ";
 
 const std::string StmtToViz::lineNumbersCSS = "\n \
+/* Line Numbers CSS */\n \
 div.IRCode-code { \n \
     counter-reset: line; \n \
     margin-left: 40px; \n \
@@ -1597,6 +1599,7 @@ div.ModuleBody:before {\n\
 ";
 
 const std::string StmtToViz::vizCss = "\n \
+/* Additional Code VIsualization CSS */\n \
 span.ButtonSpacer { width: 5px; color: transparent; display: inline-block; }\n \
 span.LowCost { background: rgba(10,10,10,0.1); }\n \
 span.MediumCost { background: rgba(10,10,10,0.2); }\n \
@@ -1643,6 +1646,7 @@ span.HighCost { background: rgba(10,10,10,0.3); }\n \
 ";
 
 const std::string StmtToViz::costColorsCSS = "\n \
+/* Cost Colors CSS */\n \
 span.CostColor19 { background: rgb(130,31,27); } \n \
 span.CostColor18 { background: rgb(145,33,30); } \n \
 span.CostColor17 { background: rgb(160,33,32); } \n \
@@ -1669,6 +1673,7 @@ span.CostMovement { width: 13px; display: inline-block;  color: transparent; } \
 ";
 
 const std::string StmtToViz::formCSS = "\n \
+/* Form CSS */\n \
 form { \n \
     outline: solid 1px black; \n \
     padding: 10px; \n \
@@ -1723,6 +1728,7 @@ const std::string StmtToViz::navigationHTML = "\n \
 ";
 
 const std::string StmtToViz::prodConsCSS = "\n \
+/* ProdCons CSS */\n \
 .tf-custom .tf-nc { \n \
 border-radius: 5px; \n \
 border: 1px solid; \n \
@@ -1739,6 +1745,16 @@ font-size: 12px; \n \
 border: 1px dashed grey; \n \
 border-collapse: separate; \n \
 border-spacing: 0; \n \
+} \n \
+div.box { \n \
+    border: 1px dashed grey; \n \
+    border-radius: 5px; \n \
+    margin: 10px; \n \
+} \n \
+div.boxHeader { \n \
+    padding: 5px; \n \
+    display: flex; \n \
+    flex-grow: 1; \n \
 } \n \
 .center { \n \
 margin-left: auto; \n \

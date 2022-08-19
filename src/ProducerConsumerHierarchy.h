@@ -105,6 +105,8 @@ private:
 class ProducerConsumerHierarchy : public IRMutator {
 
 public:
+    // TODO: eventually get rid of output_file_name (should be able to open file within the same
+    // file) - although, maybe want to print out what file is being generated to the screen
     ProducerConsumerHierarchy(string fileName, FindStmtCost findStmtCostPopulated)
         : output_file_name(fileName), findStmtCost(findStmtCostPopulated) {
     }
@@ -132,34 +134,34 @@ private:
     // for traversal of a Module object
     void traverse(const Module &m);
 
-    // opens and closes a table
-    void open_table(string backgroundColor);
-    void close_table();
+    // opens and closes divs
+    void open_box_div(string backgroundColor, string className);
+    void open_header_div();
+    void open_box_header_title_div();
+    void open_box_header_table_div();
+    void open_store_div();
+    void close_div();
 
-    // creates a table header row with given header string
-    void table_header(const IRNode *op, const string &header, StmtSize &size, string anchorName);
-    void prod_cons_table(StmtSize &size);
+    // header functions
+    void open_header(const IRNode *op, const string &header, bool costColors, string anchorName);
+    void close_header();
+    void div_header(const IRNode *op, const string &header, StmtSize &size, string anchorName);
+    void allocate_div_header(const Allocate *op, const string &header, StmtSize &size,
+                             string anchorName);
+    void for_loop_div_header(const For *op, const string &header, StmtSize &size,
+                             string anchorName);
 
-    void allocate_table_header(const Allocate *op, const string &header, StmtSize &size,
-                               string anchorName);
-    void allocate_table(vector<string> &allocationSizes);
-
-    void for_loop_table_header(const For *op, const string &header, StmtSize &size,
-                               string anchorName);
-    void for_loop_table(string loop_size);
-
+    // opens and closes an if-tree
     void if_tree(const IRNode *op, const string &header, StmtSize &size, string anchorName);
     void close_if_tree();
 
+    // different cost tables
+    void prod_cons_table(StmtSize &size);
+    void allocate_table(vector<string> &allocationSizes);
+    void for_loop_table(string loop_size);
+
+    // opens relative code links
     void see_code_button(string anchorName);
-
-    // opens and closes a row
-    void open_table_row();
-    void close_table_row();
-
-    // opens and closes a data cell
-    void open_table_data(string colSpan);
-    void close_table_data();
 
     // for cost colors
     void open_span(string className);
