@@ -944,20 +944,18 @@ void ProducerConsumerHierarchy::cost_colors(const IRNode *op) {
     cost_color_spacer();
 
     int computation_range = findStmtCost.get_computation_range(op);
-    open_span("CostComputation" + to_string(computation_range));
+    open_span("CostColor" + to_string(computation_range) + " CostComputation");
     html << ".";
     close_span();
 
     cost_color_spacer();
 
     int data_movement_range = findStmtCost.get_data_movement_range(op);
-    open_span("CostMovement" + to_string(data_movement_range));
+    open_span("CostColor" + to_string(data_movement_range) + " CostMovement");
     html << ".";
     close_span();
 
-    open_span("CostColorSpacer");
-    html << ".";
-    close_span();
+    cost_color_spacer();
 }
 
 Stmt ProducerConsumerHierarchy::visit(const ProducerConsumer *op) {
@@ -1094,7 +1092,7 @@ Stmt ProducerConsumerHierarchy::visit(const IfThenElse *op) {
                 if (!SHOW_CUMULATIVE_COST) {
                     elseSize = StmtSize();
                 }
-                if_tree(op->else_case.get(), elseHeader.str(), elseSize);
+                if_tree(op->else_case.get(), elseHeader.str(), elseSize, anchorName);
 
                 open_table_row();
                 open_table_data();

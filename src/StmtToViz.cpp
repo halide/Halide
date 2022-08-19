@@ -37,7 +37,8 @@ std::string to_string(T value) {
 class StmtToViz : public IRVisitor {
 
     static const std::string css, js;
-    static const std::string vizCss, computationCostCSS, movementCostCSS;
+    static const std::string vizCss;
+    static const std::string costColorsCSS;
     static const std::string formHTML, formCSS;
     static const std::string navigationHTML;
     static const std::string prodConsCSS;
@@ -159,10 +160,6 @@ private:
         s << "<i class='bi bi-info'></i>";
         s << "</button>";
 
-        // s << open_span("ButtonSpacer");
-        // s << ".";
-        // s << close_span();
-
         // s << open_span("tooltiptext");
         // s << tooltipText;
         // s << close_span();
@@ -264,20 +261,18 @@ private:
         s << cost_color_spacer();
 
         int computation_range = findStmtCost.get_computation_range(op);
-        s << open_span("CostComputation" + to_string(computation_range));
+        s << open_span("CostColor" + to_string(computation_range) + " CostComputation");
         s << ".";
         s << close_span();
 
         s << cost_color_spacer();
 
         int data_movement_range = findStmtCost.get_data_movement_range(op);
-        s << open_span("CostMovement" + to_string(data_movement_range));
+        s << open_span("CostColor" + to_string(data_movement_range) + " CostMovement");
         s << ".";
         s << close_span();
 
-        s << open_span("CostColorSpacer");
-        s << ".";
-        s << close_span();
+        s << cost_color_spacer();
 
         return s.str();
     }
@@ -1405,8 +1400,7 @@ public:
         stream << "<style type='text/css'>";
         stream << css;
         stream << vizCss;
-        stream << computationCostCSS;
-        stream << movementCostCSS;
+        stream << costColorsCSS;
         stream << prodConsCSS;
         stream << lineNumbersCSS;
         stream << "</style>\n";
@@ -1571,7 +1565,6 @@ span.HighCost { background: rgba(10,10,10,0.3); }\n \
 .tf-custom li li:before { border-top-width: 1px; }\n \
 .tf-custom .end-node { border-style: dashed; }\n \
 .tf-custom .children-node { background-color: lightgrey; }\n \
-span.CostColorSpacer { width: 2px; color: transparent; display: inline-block; }\n \
 .info-button { \n \
     background-color: #fff; \n \
     border: 1px solid #d5d9d9; \n \
@@ -1604,50 +1597,30 @@ span.CostColorSpacer { width: 2px; color: transparent; display: inline-block; }\
 } \n \
 ";
 
-const std::string StmtToViz::computationCostCSS = "\n \
-span.CostComputation19 { width: 13px; display: inline-block; background: rgb(130,31,27); color: transparent; } \n \
-span.CostComputation18 { width: 13px; display: inline-block; background: rgb(145,33,30); color: transparent; } \n \
-span.CostComputation17 { width: 13px; display: inline-block; background: rgb(160,33,32); color: transparent; } \n \
-span.CostComputation16 { width: 13px; display: inline-block; background: rgb(176,34,34); color: transparent; } \n \
-span.CostComputation15 { width: 13px; display: inline-block; background: rgb(185,47,32); color: transparent; } \n \
-span.CostComputation14 { width: 13px; display: inline-block; background: rgb(193,59,30); color: transparent; } \n \
-span.CostComputation13 { width: 13px; display: inline-block; background: rgb(202,71,27); color: transparent; } \n \
-span.CostComputation12 { width: 13px; display: inline-block; background: rgb(210,82,22); color: transparent; } \n \
-span.CostComputation11 { width: 13px; display: inline-block; background: rgb(218,93,16); color: transparent; } \n \
-span.CostComputation10 { width: 13px; display: inline-block; background: rgb(226,104,6); color: transparent; } \n \
-span.CostComputation9 { width: 13px; display: inline-block; background: rgb(229,118,9); color: transparent; } \n \
-span.CostComputation8 { width: 13px; display: inline-block; background: rgb(230,132,15); color: transparent; } \n \
-span.CostComputation7 { width: 13px; display: inline-block; background: rgb(231,146,20); color: transparent; } \n \
-span.CostComputation6 { width: 13px; display: inline-block; background: rgb(232,159,25); color: transparent; } \n \
-span.CostComputation5 { width: 13px; display: inline-block; background: rgb(233,172,30); color: transparent; } \n \
-span.CostComputation4 { width: 13px; display: inline-block; background: rgb(233,185,35); color: transparent; } \n \
-span.CostComputation3 { width: 13px; display: inline-block; background: rgb(233,198,40); color: transparent; } \n \
-span.CostComputation2 { width: 13px; display: inline-block; background: rgb(232,211,45); color: transparent; } \n \
-span.CostComputation1 { width: 13px; display: inline-block; background: rgb(231,223,50); color: transparent; } \n \
-span.CostComputation0 { width: 13px; display: inline-block; background: rgb(236,233,89); color: transparent;  }  \n \
-";
-
-const std::string StmtToViz::movementCostCSS = "\n \
-span.CostMovement19 { width: 13px; display: inline-block; background: rgb(130,31,27); color: transparent; } \n \
-span.CostMovement18 { width: 13px; display: inline-block; background: rgb(145,33,30); color: transparent; } \n \
-span.CostMovement17 { width: 13px; display: inline-block; background: rgb(160,33,32); color: transparent; } \n \
-span.CostMovement16 { width: 13px; display: inline-block; background: rgb(176,34,34); color: transparent; } \n \
-span.CostMovement15 { width: 13px; display: inline-block; background: rgb(185,47,32); color: transparent; } \n \
-span.CostMovement14 { width: 13px; display: inline-block; background: rgb(193,59,30); color: transparent; } \n \
-span.CostMovement13 { width: 13px; display: inline-block; background: rgb(202,71,27); color: transparent; } \n \
-span.CostMovement12 { width: 13px; display: inline-block; background: rgb(210,82,22); color: transparent; } \n \
-span.CostMovement11 { width: 13px; display: inline-block; background: rgb(218,93,16); color: transparent; } \n \
-span.CostMovement10 { width: 13px; display: inline-block; background: rgb(226,104,6); color: transparent; } \n \
-span.CostMovement9 { width: 13px; display: inline-block; background: rgb(229,118,9); color: transparent; } \n \
-span.CostMovement8 { width: 13px; display: inline-block; background: rgb(230,132,15); color: transparent; } \n \
-span.CostMovement7 { width: 13px; display: inline-block; background: rgb(231,146,20); color: transparent; } \n \
-span.CostMovement6 { width: 13px; display: inline-block; background: rgb(232,159,25); color: transparent; } \n \
-span.CostMovement5 { width: 13px; display: inline-block; background: rgb(233,172,30); color: transparent; } \n \
-span.CostMovement4 { width: 13px; display: inline-block; background: rgb(233,185,35); color: transparent; } \n \
-span.CostMovement3 { width: 13px; display: inline-block; background: rgb(233,198,40); color: transparent; } \n \
-span.CostMovement2 { width: 13px; display: inline-block; background: rgb(232,211,45); color: transparent; } \n \
-span.CostMovement1 { width: 13px; display: inline-block; background: rgb(231,223,50); color: transparent; } \n \
-span.CostMovement0 { width: 13px; display: inline-block; background: rgb(236,233,89); color: transparent; }  \n \
+const std::string StmtToViz::costColorsCSS = "\n \
+span.CostColor19 { background: rgb(130,31,27); } \n \
+span.CostColor18 { background: rgb(145,33,30); } \n \
+span.CostColor17 { background: rgb(160,33,32); } \n \
+span.CostColor16 { background: rgb(176,34,34); } \n \
+span.CostColor15 { background: rgb(185,47,32); } \n \
+span.CostColor14 { background: rgb(193,59,30); } \n \
+span.CostColor13 { background: rgb(202,71,27); } \n \
+span.CostColor12 { background: rgb(210,82,22); } \n \
+span.CostColor11 { background: rgb(218,93,16); } \n \
+span.CostColor10 { background: rgb(226,104,6); } \n \
+span.CostColor9 { background: rgb(229,118,9); } \n \
+span.CostColor8 { background: rgb(230,132,15); } \n \
+span.CostColor7 { background: rgb(231,146,20); } \n \
+span.CostColor6 { background: rgb(232,159,25); } \n \
+span.CostColor5 { background: rgb(233,172,30); } \n \
+span.CostColor4 { background: rgb(233,185,35); } \n \
+span.CostColor3 { background: rgb(233,198,40); } \n \
+span.CostColor2 { background: rgb(232,211,45); } \n \
+span.CostColor1 { background: rgb(231,223,50); } \n \
+span.CostColor0 { background: rgb(236,233,89); } \n \
+span.CostColorSpacer { width: 2px; color: transparent; display: inline-block; }\n \
+span.CostComputation { width: 13px; display: inline-block; color: transparent; } \n \
+span.CostMovement { width: 13px; display: inline-block;  color: transparent; } \n \
 ";
 
 const std::string StmtToViz::formCSS = "\n \
