@@ -100,7 +100,7 @@ set_tests_properties(demo_included_schedule_file
 
 add_executable(featurization_to_sample ${COMMON_DIR}/featurization_to_sample.cpp)
 
-add_executable(get_host_target get_host_target.cpp)
+add_executable(get_host_target ${COMMON_DIR}/get_host_target.cpp)
 target_link_libraries(get_host_target PRIVATE Halide::Halide)
 
 add_executable(weightsdir_to_weightsfile weightsdir_to_weightsfile.cpp Weights.cpp)

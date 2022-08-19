@@ -100,7 +100,7 @@ $(BIN)/featurization_to_sample: $(COMMON_DIR)/featurization_to_sample.cpp
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) $< $(OPTIMIZE) -o $@ 
 
-$(BIN)/get_host_target: $(SRC)/get_host_target.cpp $(LIB_HALIDE) $(HALIDE_DISTRIB_PATH)/include/Halide.h
+$(BIN)/get_host_target: $(COMMON_DIR)/get_host_target.cpp $(LIB_HALIDE) $(HALIDE_DISTRIB_PATH)/include/Halide.h
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) $(filter %.cpp,$^) $(LIBHALIDE_LDFLAGS) $(OPTIMIZE) -o $@ $(HALIDE_RPATH_FOR_BIN)
 $(BIN)/weightsdir_to_weightsfile: $(SRC)/weightsdir_to_weightsfile.cpp $(SRC)/Weights.cpp
