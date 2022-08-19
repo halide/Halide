@@ -118,7 +118,7 @@ $(BIN)/get_host_target: $(COMMON_DIR)/get_host_target.cpp $(LIB_HALIDE) $(HALIDE
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) $(filter %.cpp,$^) $(LIBHALIDE_LDFLAGS) $(OPTIMIZE) -o $@
 
-$(BIN)/weightsdir_to_weightsfile: $(SRC)/weightsdir_to_weightsfile.cpp $(SRC)/Weights.cpp
+$(BIN)/weightsdir_to_weightsfile: $(COMMON_DIR)/weightsdir_to_weightsfile.cpp $(SRC)/Weights.cpp
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) $^ $(OPTIMIZE) -o $@
 

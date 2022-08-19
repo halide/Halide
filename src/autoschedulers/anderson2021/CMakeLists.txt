@@ -110,7 +110,7 @@ add_executable(anderson2021-featurization_to_sample ${COMMON_DIR}/featurization_
 add_executable(anderson2021-get_host_target ${COMMON_DIR}/get_host_target.cpp)
 target_link_libraries(get_host_target PRIVATE Halide::Halide)
 
-add_executable(anderson2021-weightsdir_to_weightsfile weightsdir_to_weightsfile.cpp Weights.cpp)
+add_executable(anderson2021-weightsdir_to_weightsfile ${COMMON_DIR}/weightsdir_to_weightsfile.cpp Weights.cpp)
 target_link_libraries(weightsdir_to_weightsfile PRIVATE Halide::Runtime)
 
 # =================================================================
