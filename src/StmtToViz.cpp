@@ -146,7 +146,6 @@ private:
     string tooltip(const string &hierarchyHTML, const string &tooltipText) {
         std::stringstream s;
         // TODO: fix this!
-        // s << open_span("tooltip");
 
         s << "<button class='info-button' role='button'";
         s << "onclick=\"openNewWindow('";
@@ -158,13 +157,15 @@ private:
           << "\").style.background = \"transparent\";'";
         s << ">";
         s << "<i class='bi bi-info'></i>";
+        s << tooltipText;
         s << "</button>";
 
+        // s << open_span("tooltip");
         // s << open_span("tooltiptext");
         // s << tooltipText;
         // s << close_span();
-
         // s << close_span();
+
         return s.str();
     }
 
@@ -941,16 +942,16 @@ private:
         stream << open_span("IfSpan");
         stream << close_span();
 
+        // anchoring
+        ifCount++;
+        string anchorName = "if" + std::to_string(ifCount);
+        stream << open_anchor(anchorName);
+        close_anchor();
+
         stream << keyword("if") << " (";
         stream << close_span();
 
         while (true) {
-            // anchoring
-            ifCount++;
-            string anchorName = "if" + std::to_string(ifCount);
-            stream << open_anchor(anchorName);
-            close_anchor();
-
             print(op->condition);
             stream << matched(")");
             stream << close_expand_button() << " ";
@@ -981,6 +982,12 @@ private:
                 stream << open_span("IfSpan");
                 stream << close_span();
 
+                // anchoring
+                ifCount++;
+                string anchorName = "if" + std::to_string(ifCount);
+                stream << open_anchor(anchorName);
+                close_anchor();
+
                 stream << keyword("else if") << " (";
                 stream << close_span();
                 op = nested_if;
@@ -994,6 +1001,12 @@ private:
                 // for line numbers
                 stream << open_span("IfSpan");
                 stream << close_span();
+
+                // anchoring
+                ifCount++;
+                string anchorName = "if" + std::to_string(ifCount);
+                stream << open_anchor(anchorName);
+                close_anchor();
 
                 stream << keyword("else");
                 stream << close_expand_button() << "{";

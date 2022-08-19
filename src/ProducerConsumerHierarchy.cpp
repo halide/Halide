@@ -1041,11 +1041,11 @@ Stmt ProducerConsumerHierarchy::visit(const IfThenElse *op) {
     stringstream ifHeader;
     ifHeader << "if ";
 
-    while (true) {
+    // anchor name
+    ifCount++;
+    string anchorName = "if" + std::to_string(ifCount);
 
-        // anchor name
-        ifCount++;
-        string anchorName = "if" + std::to_string(ifCount);
+    while (true) {
 
         thenSize = pre_processor.get_size(op->then_case.get());
 
@@ -1080,6 +1080,11 @@ Stmt ProducerConsumerHierarchy::visit(const IfThenElse *op) {
             op = nested_if;
             ifHeader.str("");
             ifHeader << "else if ";
+
+            // anchor name
+            ifCount++;
+            anchorName = "if" + std::to_string(ifCount);
+
         }
 
         // if else case is not another ifthenelse
@@ -1089,6 +1094,11 @@ Stmt ProducerConsumerHierarchy::visit(const IfThenElse *op) {
             if (!elseSize.empty()) {
                 stringstream elseHeader;
                 elseHeader << "else ";
+
+                // anchor name
+                ifCount++;
+                anchorName = "if" + std::to_string(ifCount);
+
                 if (!SHOW_CUMULATIVE_COST) {
                     elseSize = StmtSize();
                 }
