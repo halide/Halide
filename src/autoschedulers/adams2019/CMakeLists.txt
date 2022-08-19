@@ -2,6 +2,8 @@
 # Resources for the autoscheduler library
 ##
 
+set(COMMON_DIR "${Halide_SOURCE_DIR}/src/autoschedulers/common/")
+
 # weights
 set(WF_CPP baseline.cpp)
 configure_file(baseline.weights baseline.weights COPYONLY)
@@ -131,7 +133,7 @@ set_tests_properties(test_perfect_hash_map
 
 ##
 
-add_executable(test_function_dag test_function_dag.cpp FunctionDAG.cpp)
+add_executable(test_function_dag ${COMMON_DIR}/test_function_dag.cpp FunctionDAG.cpp)
 target_link_libraries(test_function_dag PRIVATE ASLog Halide::Halide Halide::Tools Halide::Plugin)
 
 add_test(NAME test_function_dag COMMAND test_function_dag)

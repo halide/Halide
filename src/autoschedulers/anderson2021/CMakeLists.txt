@@ -4,8 +4,9 @@
 
 add_compile_definitions(HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API)
 
+set(COMMON_DIR "${Halide_SOURCE_DIR}/src/autoschedulers/common/")
 include_directories("${Halide_BINARY_DIR}/include/")
-include_directories("${Halide_SOURCE_DIR}/src/autoschedulers/common/")
+include_directories(${COMMON_DIR})
 include_directories("${Halide_SOURCE_DIR}/src/autoschedulers/anderson2021/")
 
 # weights
@@ -139,7 +140,7 @@ set_tests_properties(test_perfect_hash_map
 
 ##
 
-add_executable(anderson2021-test_function_dag test_function_dag.cpp FunctionDAG.cpp)
+add_executable(anderson2021-test_function_dag ${COMMON_DIR}/test_function_dag.cpp FunctionDAG.cpp)
 target_link_libraries(anderson2021-test_function_dag PRIVATE ASLog Halide::Halide Halide::Tools Halide::Plugin)
 
 add_test(NAME test_function_dag COMMAND test_function_dag)

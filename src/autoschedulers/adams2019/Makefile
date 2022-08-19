@@ -148,7 +148,7 @@ $(BIN)/test_perfect_hash_map: $(SRC)/test_perfect_hash_map.cpp $(COMMON_DIR)/Per
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) $< -o $@
 
-$(BIN)/test_function_dag: $(SRC)/test_function_dag.cpp $(SRC)/FunctionDAG.h $(SRC)/FunctionDAG.cpp $(COMMON_DIR)/ASLog.h $(COMMON_DIR)/ASLog.cpp
+$(BIN)/test_function_dag: $(COMMON_DIR)/test_function_dag.cpp $(SRC)/FunctionDAG.h $(SRC)/FunctionDAG.cpp $(COMMON_DIR)/ASLog.h $(COMMON_DIR)/ASLog.cpp
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) $(USE_EXPORT_DYNAMIC) $(filter-out %.h,$^) -o $@ $(LIBHALIDE_LDFLAGS) $(HALIDE_SYSTEM_LIBS)
 
