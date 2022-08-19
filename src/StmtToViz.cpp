@@ -936,6 +936,11 @@ private:
         int id = unique_id();
         stream << open_expand_button(id);
         stream << open_span("Matched");
+
+        // for line numbers
+        stream << open_span("IfSpan");
+        stream << close_span();
+
         stream << keyword("if") << " (";
         stream << close_span();
 
@@ -965,21 +970,40 @@ private:
             id = unique_id();
 
             if (const IfThenElse *nested_if = op->else_case.as<IfThenElse>()) {
-                stream << matched("}") << " ";
+                stream << open_div("ClosingBrace");
+                stream << matched("}");
+                stream << close_div();
+
                 stream << open_expand_button(id);
                 stream << open_span("Matched");
+
+                // for line numbers
+                stream << open_span("IfSpan");
+                stream << close_span();
+
                 stream << keyword("else if") << " (";
                 stream << close_span();
                 op = nested_if;
             } else {
-                stream << open_span("Matched") << "} ";
+                stream << open_div("ClosingBrace");
+                stream << matched("}");
+                stream << close_div();
+
                 stream << open_expand_button(id);
+
+                // for line numbers
+                stream << open_span("IfSpan");
+                stream << close_span();
+
                 stream << keyword("else");
                 stream << close_expand_button() << "{";
                 stream << close_span();
                 stream << open_div("ElseBody Indent", id);
                 print(op->else_case);
-                stream << close_div() << matched("}");
+                stream << close_div();
+                stream << open_div("ClosingBrace");
+                stream << matched("}");
+                stream << close_div();
                 break;
             }
         }
@@ -1048,7 +1072,10 @@ private:
         stream << close_span();
         stream << open_div("Atomic Body Indent", id);
         print(op->body);
-        stream << close_div() << matched("}");
+        stream << close_div();
+        stream << open_div("ClosingBrace");
+        stream << matched("}");
+        stream << close_div();
         stream << close_div();
     }
 
@@ -1337,7 +1364,12 @@ public:
             }
             stream << close_div();
 
-            stream << " " << matched("}");
+            stream << " ";
+            internal_error
+                << "\n\n\nlook at this line!!! make sure the closing brace is correct! \n\n\n";
+            stream << open_div("ClosingBrace");
+            stream << matched("}");
+            stream << close_div();
         }
         stream << close_div();
     }
@@ -1514,7 +1546,7 @@ div.WrapLine,\n\
 div.Consumer,\n\
 div.Produce,\n\
 div.For,\n\
-div.IfThenElse,\n\
+span.IfSpan,\n\
 div.Evaluate,\n\
 div.Allocate,\n\
 div.ClosingBrace,\n\
@@ -1535,7 +1567,7 @@ div.WrapLine:before {\n\
 div.Consumer:before,\n\
 div.Produce:before,\n\
 div.For:before,\n\
-div.IfThenElse:before,\n\
+span.IfSpan:before,\n\
 div.Evaluate:before,\n\
 div.Allocate:before, \n\
 div.ClosingBrace:before,\n\
