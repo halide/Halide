@@ -80,7 +80,7 @@ $(BIN)/libautoschedule_anderson2021.$(SHARED_EXT): $(SRC)/AutoSchedule.cpp \
 										$(SRC)/ThreadInfo.h \
 										$(SRC)/Featurization.h \
 										$(SRC)/CostModel.h \
-										$(SRC)/PerfectHashMap.h \
+										$(COMMON_DIR)/PerfectHashMap.h \
 										$(SRC)/SearchSpace.h \
 										$(SRC)/SearchSpace.cpp \
 										$(SRC)/SearchSpaceOptions.h \
@@ -159,7 +159,7 @@ autotune: $(GENERATOR_BIN)/demo.generator $(BIN)/featurization_to_sample $(BIN)/
 		$(BIN) \
 		0
 
-$(BIN)/test_perfect_hash_map: test_perfect_hash_map.cpp PerfectHashMap.h
+$(BIN)/test_perfect_hash_map: test_perfect_hash_map.cpp $(COMMON_DIR)/PerfectHashMap.h
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) $< -o $@
 

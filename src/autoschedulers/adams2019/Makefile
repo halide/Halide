@@ -74,7 +74,7 @@ $(BIN)/libautoschedule_adams2019.$(SHARED_EXT): $(SRC)/AutoSchedule.cpp \
 				$(SRC)/State.h \
 				$(SRC)/State.cpp \
 				$(SRC)/Timer.h \
-				$(SRC)/PerfectHashMap.h \
+				$(COMMON_DIR)/PerfectHashMap.h \
 				$(AUTOSCHED_WEIGHT_OBJECTS) \
 				$(AUTOSCHED_COST_MODEL_LIBS) \
 				$(GENERATOR_DEPS) \
@@ -144,7 +144,7 @@ autotune: $(GENERATOR_BIN)/demo.generator $(BIN)/featurization_to_sample $(BIN)/
 		$(HALIDE_DISTRIB_PATH) \
 		$(BIN)/samples
 
-$(BIN)/test_perfect_hash_map: $(SRC)/test_perfect_hash_map.cpp $(SRC)/PerfectHashMap.h
+$(BIN)/test_perfect_hash_map: $(SRC)/test_perfect_hash_map.cpp $(COMMON_DIR)/PerfectHashMap.h
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) $< -o $@
 
