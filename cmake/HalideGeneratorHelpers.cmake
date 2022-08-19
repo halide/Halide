@@ -83,13 +83,7 @@ function(add_halide_generator TARGET)
                               CXX_VISIBILITY_PRESET hidden
                               VISIBILITY_INLINES_HIDDEN ON
                               POSITION_INDEPENDENT_CODE ON)
-        target_link_libraries(${TARGET}_pystub PRIVATE Halide::PyStubs ${ARG_LINK_LIBRARIES})
-
-        # We don't want to add a link dependency for libHalide here --
-        # we just want to be able to include Halide.h.
-        get_target_property(HALIDE_INCLUDES Halide::Halide INTERFACE_INCLUDE_DIRECTORIES)
-        target_include_directories(${TARGET}_pystub PRIVATE "${HALIDE_INCLUDES}")
-
+        target_link_libraries(${TARGET}_pystub PRIVATE Halide::PyStubs Halide::Halide ${ARG_LINK_LIBRARIES})
         set_target_properties(${TARGET}_pystub PROPERTIES OUTPUT_NAME ${MODULE_NAME})
         _Halide_target_export_single_symbol(${TARGET}_pystub "PyInit_${MODULE_NAME}")
     endif ()
