@@ -909,31 +909,44 @@ add_halide_generator(
     [PACKAGE_NAME package-name]
     [PACKAGE_NAMESPACE namespace]
     [EXPORT_FILE export-file]
+    [PYSTUB generator-name]
     [[SOURCES] source1 ...]
 )
 ```
 
 Every named argument is optional, and the function uses the following default arguments:
 
-* If `PACKAGE_NAME` is not provided, it defaults to `${PROJECT_NAME}-halide_generators`.
-* If `PACKAGE_NAMESPACE` is not provided, it defaults to `${PROJECT_NAME}::halide_generators::`.
-* If `EXPORT_FILE` is not provided, it defaults to `${PROJECT_BINARY_DIR}/cmake/${ARG_PACKAGE_NAME}-config.cmake`
+- If `PACKAGE_NAME` is not provided, it defaults to `${PROJECT_NAME}-halide_generators`.
+- If `PACKAGE_NAMESPACE` is not provided, it defaults to `${PROJECT_NAME}::halide_generators::`.
+- If `EXPORT_FILE` is not provided, it defaults to `${PROJECT_BINARY_DIR}/cmake/${ARG_PACKAGE_NAME}-config.cmake`
 
-The `SOURCES` keyword marks the beginning of sources to be used to build `<target>`, if it is not loaded. All unparsed
-arguments will be interpreted as sources.
+The `SOURCES` keyword marks the beginning of sources to be used to build
+`<target>`, if it is not loaded. All unparsed arguments will be interpreted as
+sources.
 
-This function guarantees that a Halide generator target named `<namespace><target>` is available. It will first search
-for a package named `<package-name>` using `find_package`; if it is found, it is assumed that it provides the target.
-Otherwise, it will create an executable target named `target` and an `ALIAS` target `<namespace><target>`. This function
-also creates a custom target named `<package-name>` if it does not exist and `<target>` would exist. In this case,
-`<package-name>` will depend on `<target>`, this enables easy building of _just_ the Halide generators managed by this
-function.
+This function guarantees that a Halide generator target named
+`<namespace><target>` is available. It will first search for a package named
+`<package-name>` using `find_package`; if it is found, it is assumed that it
+provides the target. Otherwise, it will create an executable target named
+`target` and an `ALIAS` target `<namespace><target>`. This function also
+creates a custom target named `<package-name>` if it does not exist and
+`<target>` would exist. In this case, `<package-name>` will depend on
+`<target>`, this enables easy building of _just_ the Halide generators managed
+by this function.
 
-After the call, `<PACKAGE_NAME>_FOUND` will be set to true if the host generators were imported (and hence won't be
-built). Otherwise, it will be set to false. This variable may be used to conditionally set properties on `<target>`.
+After the call, `<PACKAGE_NAME>_FOUND` will be set to true if the host
+generators were imported (and hence won't be built). Otherwise, it will be set
+to false. This variable may be used to conditionally set properties on
+`<target>`.
 
 Please see [test/integration/xc](https://github.com/halide/Halide/tree/master/test/integration/xc) for a simple example
 and [apps/hannk](https://github.com/halide/Halide/tree/master/apps/hannk) for a complete app that uses it extensively.
+
+If `PYSTUB` is specified, then a Python Extension will be built that
+wraps the Generator with CPython glue to allow use of the Generator
+Python 3.x. The result will be a a shared library of the form
+`<target>_pystub.<soabi>.so`, where <soabi> describes the specific Python version and platform (e.g., `cpython-310-darwin` for Python 3.10 on OSX.) See
+`README_python.md` for examples of use.
 
 ## Cross compiling
 

@@ -30,8 +30,8 @@ set(PY_GENERATORS "${CMAKE_CURRENT_SOURCE_DIR}/../generators")
 
 set(PYPATH_addconstant_test    "$<TARGET_FILE_DIR:py_aot_addconstant>")
 set(PYPATH_bit_test            "$<TARGET_FILE_DIR:py_aot_bit>")
-set(PYPATH_callable            "$<TARGET_FILE_DIR:py_stub_simple>;${PY_GENERATORS}")
-set(PYPATH_pystub              "$<TARGET_FILE_DIR:py_stub_bit>;${PY_GENERATORS}")
+set(PYPATH_callable            "$<TARGET_FILE_DIR:py_gen_simple_pystub>;${PY_GENERATORS}")
+set(PYPATH_pystub              "$<TARGET_FILE_DIR:py_gen_bit_pystub>;${PY_GENERATORS}")
 set(PYPATH_user_context_test   "$<TARGET_FILE_DIR:py_aot_user_context>;${PY_GENERATORS}")
 
 foreach (test IN LISTS tests)
@@ -45,5 +45,3 @@ foreach (test IN LISTS tests)
         PYTHONPATH "${PYPATH_${test_name}}"
     )
 endforeach ()
-
-# "$<TARGET_FILE_DIR:py_aot_bit>" "$<TARGET_FILE_DIR:py_stub_bit>"

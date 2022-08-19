@@ -1,5 +1,3 @@
-include(HalidePythonExtensionHelpers)
-
 # Some Generators require extra Halide Target Features to be set.
 set(FEATURES_user_context user_context)
 
@@ -22,13 +20,14 @@ function(_add_python_aot_and_stub_extension)
     cmake_parse_arguments(ARG "" "" "GEN;SOURCES" ${ARGN})
 
     list(GET ARG_GEN 0 GEN_NAME)
-    set(GEN_NAME py_gen_${GEN_NAME}.generator)
-    add_halide_generator(${GEN_NAME}
-                         SOURCES ${ARG_SOURCES})
+    set(GEN_TARGET py_gen_${GEN_NAME})
+    add_halide_generator(${GEN_TARGET}
+                         SOURCES ${ARG_SOURCES}
+                         PYSTUB ${GEN_NAME})
 
     foreach (G IN LISTS ARG_GEN)
         add_halide_library(py_aot_${G}
-                           FROM ${GEN_NAME}
+                           FROM ${GEN_TARGET}
                            GENERATOR ${G}
                            FUNCTION_NAME ${G}
                            FEATURES ${FEATURES_${G}}
@@ -41,14 +40,6 @@ function(_add_python_aot_and_stub_extension)
                            # it's just easier to specify them all
                            PLUGINS Halide::Adams2019 Halide::Li2018 Halide::Mullapudi2016)
         set(_ALL_DEPS "${_ALL_DEPS} py_aot_${G}" PARENT_SCOPE)
-
-        if(NOT ARG_SOURCES MATCHES ".py$")
-            add_python_stub_extension(py_stub_${G}
-                                      SOURCES "${ARG_SOURCES}"
-                                      GENERATOR ${G}
-                                      MODULE ${G}_pystub)
-            set(_ALL_DEPS "${_ALL_DEPS} py_stub_${G}" PARENT_SCOPE)
-        endif()
     endforeach()
 endfunction()
 
