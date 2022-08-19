@@ -34,7 +34,6 @@ install(TARGETS Halide Halide_Generator Halide_LanguageOptions ${extra_targets_t
         LIBRARY COMPONENT Halide_Runtime
         NAMELINK_COMPONENT Halide_Development
         ARCHIVE COMPONENT Halide_Development
-        LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
         INCLUDES DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
 
 if (TARGET Halide_Adams2019)
