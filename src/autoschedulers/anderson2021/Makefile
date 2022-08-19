@@ -257,7 +257,7 @@ clean:
 #
 # We'll use the preprocessor (GENERATING_SCHEDULE) to distinguish between these two.
 
-$(GENERATOR_BIN)/included_schedule_file_none.generator: included_schedule_file_generator.cpp $(GENERATOR_DEPS)
+$(GENERATOR_BIN)/included_schedule_file_none.generator: $(COMMON_DIR)/included_schedule_file_generator.cpp $(GENERATOR_DEPS)
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) $(USE_EXPORT_DYNAMIC) -DGENERATING_SCHEDULE -g $(filter-out %.h,$^) -o $@ $(LIBHALIDE_LDFLAGS) $(HALIDE_SYSTEM_LIBS)
 

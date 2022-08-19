@@ -82,7 +82,7 @@ set_tests_properties(demo_apps_autoscheduler
 
 ## =================================================================
 
-add_executable(anderson2021-included_schedule_file.generator included_schedule_file_generator.cpp)
+add_executable(anderson2021-included_schedule_file.generator ${COMMON_DIR}/included_schedule_file_generator.cpp)
 target_link_libraries(included_schedule_file.generator PRIVATE Halide::Generator)
 
 add_halide_library(anderson2021-included_schedule_file FROM included_schedule_file.generator
