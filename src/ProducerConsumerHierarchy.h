@@ -135,7 +135,8 @@ private:
     void traverse(const Module &m);
 
     // opens and closes divs
-    void open_box_div(string backgroundColor, string className);
+    void open_box_div(string backgroundColor, string className, const IRNode *op);
+    void close_box_div();
     void open_header_div();
     void open_box_header_title_div();
     void open_box_header_table_div();
@@ -143,7 +144,7 @@ private:
     void close_div();
 
     // header functions
-    void open_header(const IRNode *op, const string &header, bool costColors, string anchorName);
+    void open_header(const IRNode *op, const string &header, string anchorName);
     void close_header();
     void div_header(const IRNode *op, const string &header, StmtSize &size, string anchorName);
     void allocate_div_header(const Allocate *op, const string &header, StmtSize &size,
@@ -163,7 +164,12 @@ private:
     // opens relative code links
     void see_code_button(string anchorName);
 
-    // for cost colors
+    // for cost colors - side bars
+    void generate_computation_cost_div(const IRNode *op);
+    void generate_memory_cost_div(const IRNode *op);
+    void open_content_div();
+
+    // for cost colors - side boxes
     void open_span(string className);
     void close_span();
     void cost_color_spacer();

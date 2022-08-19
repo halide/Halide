@@ -1729,81 +1729,74 @@ const std::string StmtToViz::navigationHTML = "\n \
 
 const std::string StmtToViz::prodConsCSS = "\n \
 /* ProdCons CSS */\n \
-.tf-custom .tf-nc { \n \
-border-radius: 5px; \n \
-border: 1px solid; \n \
-font-size: 12px; \n \
-background-color: #e6eeff;\n \
-}\n \
-.tf-custom .end-node { border-style: dashed; font-size: 12px; } \n \
-.tf-custom .tf-nc:before, .tf-custom .tf-nc:after { border-left-width: 1px; } \n \
-.tf-custom li li:before { border-top-width: 1px; }\n \
-.tf-custom .tf-nc .if-node { background-color: #e6eeff; }\n \
-table { \n \
-border-radius: 5px; \n \
-font-size: 12px; \n \
-border: 1px dashed grey; \n \
-border-collapse: separate; \n \
-border-spacing: 0; \n \
-} \n \
+.tf-custom .tf-nc { background-color: #e6eeff; }\n \
 div.box { \n \
     border: 1px dashed grey; \n \
     border-radius: 5px; \n \
     margin: 10px; \n \
+    display: flex; \n \
 } \n \
 div.boxHeader { \n \
     padding: 5px; \n \
     display: flex; \n \
+} \n \
+div.spacing { \n \
     flex-grow: 1; \n \
 } \n \
-.center { \n \
-margin-left: auto; \n \
-margin-right: auto; \n \
-}  \n \
+table { \n \
+    border-radius: 5px; \n \
+    font-size: 12px; \n \
+    border: 1px dashed grey; \n \
+    border-collapse: separate; \n \
+    border-spacing: 0; \n \
+} \n \
 .ifElseTable { \n \
-border: 0px; \n \
+    border: 0px; \n \
 }  \n \
 .costTable { \n \
-float: right; \n \
-text-align: center; \n \
-border: 0px; \n \
+    float: right; \n \
+    text-align: center; \n \
+    border: 0px; \n \
 } \n \
 .costTable td { \n \
-border-top: 1px dashed grey; \n \
+    border-top: 1px dashed grey; \n \
 } \n \
 .costTableHeader, \n \
 .costTableData { \n \
-border-collapse: collapse; \n \
-padding-top: 1px; \n \
-padding-bottom: 1px; \n \
-padding-left: 5px; \n \
-padding-right: 5px; \n \
+    border-collapse: collapse; \n \
+    padding-top: 1px; \n \
+    padding-bottom: 1px; \n \
+    padding-left: 5px; \n \
+    padding-right: 5px; \n \
 } \n \
 span.intType { color: #099; } \n \
 span.stringType { color: #990073; } \n \
 .middleCol { \n \
-border-right: 1px dashed grey; \n \
+    border-right: 1px dashed grey; \n \
 } \n \
-.tf-custom .tf-nc { \n \
-border-radius: 5px; \n \
-border: 1px solid; \n \
-font-size: 12px; \n \
-padding: 5px; \n \
+div.content { \n \
+    flex-grow: 1; \n \
 } \n \
- \n \
-.tf-custom .end-node { \n \
-border-style: dashed; \n \
-font-size: 12px; \n \
-} \n \
- \n \
-.tf-custom .tf-nc:before, \n \
-.tf-custom .tf-nc:after { \n \
-border-left-width: 1px; \n \
-} \n \
- \n \
-.tf-custom li li:before { \n \
-border-top-width: 1px; \n \
-} \n \
+div.CostColor19 { background: rgb(130,31,27); } \n \
+div.CostColor18 { background: rgb(145,33,30); } \n \
+div.CostColor17 { background: rgb(160,33,32); } \n \
+div.CostColor16 { background: rgb(176,34,34); } \n \
+div.CostColor15 { background: rgb(185,47,32); } \n \
+div.CostColor14 { background: rgb(193,59,30); } \n \
+div.CostColor13 { background: rgb(202,71,27); } \n \
+div.CostColor12 { background: rgb(210,82,22); } \n \
+div.CostColor11 { background: rgb(218,93,16); } \n \
+div.CostColor10 { background: rgb(226,104,6); } \n \
+div.CostColor9 { background: rgb(229,118,9); } \n \
+div.CostColor8 { background: rgb(230,132,15); } \n \
+div.CostColor7 { background: rgb(231,146,20); } \n \
+div.CostColor6 { background: rgb(232,159,25); } \n \
+div.CostColor5 { background: rgb(233,172,30); } \n \
+div.CostColor4 { background: rgb(233,185,35); } \n \
+div.CostColor3 { background: rgb(233,198,40); } \n \
+div.CostColor2 { background: rgb(232,211,45); } \n \
+div.CostColor1 { background: rgb(231,223,50); } \n \
+div.CostColor0 { background: rgb(236,233,89); } \n \
 ";
 
 const std::string StmtToViz::js = "\n \

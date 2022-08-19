@@ -601,12 +601,22 @@ void ProducerConsumerHierarchy::traverse(const Module &m) {
     }
 }
 
-void ProducerConsumerHierarchy::open_box_div(string backgroundColor, string className) {
+void ProducerConsumerHierarchy::open_box_div(string backgroundColor, string className,
+                                             const IRNode *op) {
     html << "<div style='";
     html << "background-color: " << backgroundColor << "; ";
     html << "' ";
     html << "class='box center " << className << "'";
     html << ">";
+
+    generate_computation_cost_div(op);
+    generate_memory_cost_div(op);
+
+    open_content_div();
+}
+void ProducerConsumerHierarchy::close_box_div() {
+    close_div();  // content div
+    close_div();  // main box div
 }
 void ProducerConsumerHierarchy::open_header_div() {
     html << "<div class='boxHeader'>";
@@ -624,35 +634,31 @@ void ProducerConsumerHierarchy::close_div() {
     html << "</div>";
 }
 
-void ProducerConsumerHierarchy::open_header(const IRNode *op, const string &header, bool costColors,
+void ProducerConsumerHierarchy::open_header(const IRNode *op, const string &header,
                                             string anchorName) {
     open_header_div();
 
     open_box_header_title_div();
-    if (costColors) {
-        cost_colors(op);
-    }
+
     html << header;
     if (anchorName != "") {
         see_code_button(anchorName);
     }
     close_div();
 
+    // spacing purposes
+    html << "<div class='spacing'></div>";
+
     open_box_header_table_div();
 }
 void ProducerConsumerHierarchy::close_header() {
-    close_div();  // header div
     close_div();  // header table div
+    close_div();  // header div
 }
 void ProducerConsumerHierarchy::div_header(const IRNode *op, const string &header, StmtSize &size,
                                            string anchorName) {
 
-    // add cost color squares if op exists and if it's not a store node
-    bool costColors = false;
-    if (op != nullptr && op->node_type != IRNodeType::Store) {
-        costColors = true;
-    }
-    open_header(op, header, costColors, anchorName);
+    open_header(op, header, anchorName);
 
     // add producer consumer size if size is provided
     if (!size.empty()) {
@@ -663,7 +669,7 @@ void ProducerConsumerHierarchy::div_header(const IRNode *op, const string &heade
 }
 void ProducerConsumerHierarchy::allocate_div_header(const Allocate *op, const string &header,
                                                     StmtSize &size, string anchorName) {
-    open_header(op, header, true, anchorName);
+    open_header(op, header, anchorName);
 
     vector<string> &allocationSizes = size.allocationSizes;
     allocate_table(allocationSizes);
@@ -672,7 +678,7 @@ void ProducerConsumerHierarchy::allocate_div_header(const Allocate *op, const st
 }
 void ProducerConsumerHierarchy::for_loop_div_header(const For *op, const string &header,
                                                     StmtSize &size, string anchorName) {
-    open_header(op, header, true, anchorName);
+    open_header(op, header, anchorName);
 
     string loopSize = pre_processor.get_size(op).forLoopSize;
     for_loop_table(loopSize);
@@ -683,13 +689,13 @@ void ProducerConsumerHierarchy::for_loop_div_header(const For *op, const string 
 void ProducerConsumerHierarchy::if_tree(const IRNode *op, const string &header, StmtSize &size,
                                         string anchorName = "") {
     html << "<li>";
-    html << "<span class='tf-nc'>";
+    html << "<span class='tf-nc if-node'>";
 
-    open_box_div(IF_COLOR, "IfBox");
+    open_box_div(IF_COLOR, "IfBox", op);
     div_header(op, header, size, anchorName);
 }
 void ProducerConsumerHierarchy::close_if_tree() {
-    close_div();
+    close_box_div();
     html << "</span>";
     html << "</li>";
 }
@@ -867,6 +873,33 @@ void ProducerConsumerHierarchy::see_code_button(string anchorName) {
     html << "</button>";
 }
 
+void ProducerConsumerHierarchy::generate_computation_cost_div(const IRNode *op) {
+    // skip if it's a store
+    if (op->node_type == IRNodeType::Store) return;
+
+    int computation_range = findStmtCost.get_computation_range(op);
+    string className = "computation-cost-div CostColor" + to_string(computation_range);
+    html << "<div class='" << className << "'";
+    html << "style='width: 10px;'>";
+
+    close_div();
+}
+void ProducerConsumerHierarchy::generate_memory_cost_div(const IRNode *op) {
+    // skip if it's a store
+    if (op->node_type == IRNodeType::Store) return;
+
+    // html << "<div class='memory-cost-div'>";
+    int memory_range = findStmtCost.get_data_movement_range(op);
+    string className = "memory-cost-div CostColor" + to_string(memory_range);
+    html << "<div class='" << className << "'";
+    html << "style='width: 10px;'>";
+
+    close_div();
+}
+void ProducerConsumerHierarchy::open_content_div() {
+    html << "<div class='content'>";
+}
+
 void ProducerConsumerHierarchy::open_span(string className) {
     html << "<span class='" << className << "'>";
 }
@@ -897,7 +930,7 @@ void ProducerConsumerHierarchy::cost_colors(const IRNode *op) {
 }
 
 Stmt ProducerConsumerHierarchy::visit(const ProducerConsumer *op) {
-    open_box_div(op->is_producer ? PRODUCER_COLOR : CONSUMER_COLOR, "ProducerConsumerBox");
+    open_box_div(op->is_producer ? PRODUCER_COLOR : CONSUMER_COLOR, "ProducerConsumerBox", op);
 
     producerConsumerCount++;
     string anchorName = "producerConsumer" + std::to_string(producerConsumerCount);
@@ -915,13 +948,13 @@ Stmt ProducerConsumerHierarchy::visit(const ProducerConsumer *op) {
 
     mutate(op->body);
 
-    close_div();
+    close_box_div();
 
     return op;
 }
 
 Stmt ProducerConsumerHierarchy::visit(const For *op) {
-    open_box_div(FOR_COLOR, "ForBox");
+    open_box_div(FOR_COLOR, "ForBox", op);
 
     forCount++;
     string anchorName = "for" + std::to_string(forCount);
@@ -939,7 +972,7 @@ Stmt ProducerConsumerHierarchy::visit(const For *op) {
 
     mutate(op->body);
 
-    close_div();
+    close_box_div();
 
     return op;
 }
@@ -955,8 +988,7 @@ Stmt ProducerConsumerHierarchy::visit(const IfThenElse *op) {
     bool opened = false;
     if (!thenSize.empty() || !elseSize.empty()) {
         // open main if tree
-        html << "<div class='tf-tree tf-gap-sm tf-custom' style='font-size: 12px; "
-                "display: flex; justify-content: center;'>";
+        html << "<div class='tf-tree tf-gap-sm tf-custom' style='font-size: 12px;'>";
         html << "<ul>";
         html << "<li><span class='tf-nc if-node'>";
         html << "If";
@@ -1054,13 +1086,13 @@ Stmt ProducerConsumerHierarchy::visit(const Store *op) {
     stringstream header;
     header << "Store " << op->name;
 
-    open_box_div(STORE_COLOR, "StoreBox");
+    open_box_div(STORE_COLOR, "StoreBox", op);
 
     div_header(op, header.str(), size, anchorName);
 
     mutate(op->value);
 
-    close_div();
+    close_box_div();
 
     return op;
 }
@@ -1119,7 +1151,7 @@ string get_memory_type(MemoryType memType) {
     }
 }
 Stmt ProducerConsumerHierarchy::visit(const Allocate *op) {
-    open_box_div(ALLOCATE_COLOR, "AllocateBox");
+    open_box_div(ALLOCATE_COLOR, "AllocateBox", op);
 
     allocateCount++;
     string anchorName = "allocate" + std::to_string(allocateCount);
@@ -1153,7 +1185,7 @@ Stmt ProducerConsumerHierarchy::visit(const Allocate *op) {
 
     allocate_div_header(op, header.str(), size, anchorName);
 
-    close_div();
+    close_box_div();
 
     mutate(op->body);
 
