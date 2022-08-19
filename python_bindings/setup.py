@@ -48,6 +48,8 @@ setup(
         "-DHalide_INSTALL_PYTHONDIR=src",
         "-DCMAKE_INSTALL_RPATH=$ORIGIN",
         "-DHalide_Python_INSTALL_IMPORTED_DEPS=ON",
+        "-DWITH_TESTS=NO",
+        "-DWITH_TUTORIALS=NO",
         "--no-warn-unused-cli",
     ],
 )
