@@ -2,7 +2,7 @@
 # Resources for the autoscheduler library
 ##
 
-set(COMMON_DIR "${Halide_SOURCE_DIR}/src/autoschedulers/common/")
+set(COMMON_DIR "${Halide_SOURCE_DIR}/src/autoschedulers/common")
 
 # weights
 set(WF_CPP baseline.cpp)
@@ -98,7 +98,7 @@ set_tests_properties(demo_included_schedule_file
 # Auto-tuning support utilities.
 # TODO(#4053): implement auto-tuning support in CMake?
 
-add_executable(featurization_to_sample featurization_to_sample.cpp)
+add_executable(featurization_to_sample ${COMMON_DIR}/featurization_to_sample.cpp)
 
 add_executable(get_host_target get_host_target.cpp)
 target_link_libraries(get_host_target PRIVATE Halide::Halide)

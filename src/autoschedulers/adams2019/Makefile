@@ -96,7 +96,7 @@ $(BIN)/retrain_cost_model: $(SRC)/retrain_cost_model.cpp \
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) -frtti -Wall -I ../support -I $(BIN)/cost_model $(OPTIMIZE) $(filter-out %.h,$^) -o $@ $(LIBHALIDE_LDFLAGS) $(USE_OPEN_MP) $(HALIDE_RPATH_FOR_BIN)
 
-$(BIN)/featurization_to_sample: $(SRC)/featurization_to_sample.cpp
+$(BIN)/featurization_to_sample: $(COMMON_DIR)/featurization_to_sample.cpp
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) $< $(OPTIMIZE) -o $@ 
 

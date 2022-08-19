@@ -4,7 +4,7 @@
 
 add_compile_definitions(HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API)
 
-set(COMMON_DIR "${Halide_SOURCE_DIR}/src/autoschedulers/common/")
+set(COMMON_DIR "${Halide_SOURCE_DIR}/src/autoschedulers/common")
 include_directories("${Halide_BINARY_DIR}/include/")
 include_directories(${COMMON_DIR})
 include_directories("${Halide_SOURCE_DIR}/src/autoschedulers/anderson2021/")
@@ -105,7 +105,7 @@ set_tests_properties(demo_included_schedule_file
 ## Auto-tuning support utilities.
 ## TODO(#4053): implement auto-tuning support in CMake?
 
-add_executable(anderson2021-featurization_to_sample featurization_to_sample.cpp)
+add_executable(anderson2021-featurization_to_sample ${COMMON_DIR}/featurization_to_sample.cpp)
 
 add_executable(anderson2021-get_host_target get_host_target.cpp)
 target_link_libraries(get_host_target PRIVATE Halide::Halide)
