@@ -18,7 +18,7 @@ define_property(TARGET PROPERTY Halide_GENERATOR_HAS_POST_BUILD
 
 function(add_halide_generator TARGET)
     set(options "")
-    set(oneValueArgs PACKAGE_NAME PACKAGE_NAMESPACE EXPORT_FILE)
+    set(oneValueArgs PACKAGE_NAME PACKAGE_NAMESPACE EXPORT_FILE PYSTUB)
     set(multiValueArgs SOURCES LINK_LIBRARIES)
     cmake_parse_arguments(ARG "${options}" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
 
@@ -62,6 +62,30 @@ function(add_halide_generator TARGET)
         export(TARGETS ${TARGET}
                NAMESPACE ${ARG_PACKAGE_NAMESPACE}
                APPEND FILE "${ARG_EXPORT_FILE}")
+    endif ()
+
+    if (ARG_PYSTUB)
+        set(GEN_NAME ${ARG_PYSTUB})
+        set(MODULE_NAME ${ARG_PYSTUB}_pystub)
+        # Generate a small C++ file that includes the boilerplate code needed to
+        # register a PyInit function that has the stub glue code.
+        string(CONCAT stub_text
+               "#include <Python.h>\n"
+               "#include \"Halide.h\"\n"
+               "HALIDE_GENERATOR_PYSTUB(${GEN_NAME}, ${MODULE_NAME})\n")
+
+        file(WRITE
+             "${CMAKE_CURRENT_BINARY_DIR}/${TARGET}.py_stub_generated.cpp"
+             "${stub_text}")
+
+        Python3_add_library(${TARGET}_pystub MODULE WITH_SOABI "${CMAKE_CURRENT_BINARY_DIR}/${TARGET}.py_stub_generated.cpp" ${ARG_SOURCES})
+        set_target_properties(${TARGET}_pystub PROPERTIES
+                              CXX_VISIBILITY_PRESET hidden
+                              VISIBILITY_INLINES_HIDDEN ON
+                              POSITION_INDEPENDENT_CODE ON)
+        target_link_libraries(${TARGET}_pystub PRIVATE Halide::PyStubs Halide::Halide ${ARG_LINK_LIBRARIES})
+        set_target_properties(${TARGET}_pystub PROPERTIES OUTPUT_NAME ${MODULE_NAME})
+        _Halide_target_export_single_symbol(${TARGET}_pystub "PyInit_${MODULE_NAME}")
     endif ()
 endfunction()
 

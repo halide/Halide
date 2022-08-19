@@ -107,6 +107,7 @@ install(DIRECTORY "$<TARGET_FILE_DIR:Halide_Python>/"
         PATTERN "*/__pycache__" EXCLUDE)
 
 install(TARGETS Halide_Python
+        EXPORT Halide_Targets
         LIBRARY DESTINATION "${Halide_INSTALL_PYTHONDIR}/halide"
         COMPONENT Halide_Python)
 
