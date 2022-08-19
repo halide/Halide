@@ -54,7 +54,7 @@ target_link_libraries(Halide_Adams2019 PRIVATE ASLog ParamParser cost_model trai
 
 # =================================================================
 
-add_executable(demo.generator demo_generator.cpp)
+add_executable(demo.generator ${COMMON_DIR}/demo_generator.cpp)
 target_link_libraries(demo.generator PRIVATE Halide::Generator)
 
 add_halide_library(demo FROM demo.generator

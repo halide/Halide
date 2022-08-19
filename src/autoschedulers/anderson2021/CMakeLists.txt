@@ -61,7 +61,7 @@ target_link_libraries(Halide_Anderson2021 PRIVATE ASLog ParamParser cost_model t
 
 # =================================================================
 
-add_executable(anderson2021-demo.generator demo_generator.cpp)
+add_executable(anderson2021-demo.generator ${COMMON_DIR}/demo_generator.cpp)
 target_link_libraries(demo.generator PRIVATE Halide::Generator)
 
 add_halide_library(anderson2021-demo FROM demo.generator

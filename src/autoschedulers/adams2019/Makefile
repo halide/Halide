@@ -110,7 +110,7 @@ $(BIN)/weightsdir_to_weightsfile: $(COMMON_DIR)/weightsdir_to_weightsfile.cpp $(
 # A sample generator to autoschedule. Note that if it statically links
 # to libHalide, then it must be build with $(USE_EXPORT_DYNAMIC), or the
 # autoscheduler can't find the libHalide symbols that it needs.
-$(GENERATOR_BIN)/demo.generator: $(SRC)/demo_generator.cpp $(GENERATOR_DEPS)
+$(GENERATOR_BIN)/demo.generator: $(COMMON_DIR)/demo_generator.cpp $(GENERATOR_DEPS)
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) $(USE_EXPORT_DYNAMIC) -g $(filter %.cpp,$^) -o $@ $(LIBHALIDE_LDFLAGS)
 
