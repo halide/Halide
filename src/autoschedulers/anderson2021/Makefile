@@ -122,10 +122,6 @@ $(BIN)/weightsdir_to_weightsfile: $(COMMON_DIR)/weightsdir_to_weightsfile.cpp $(
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) $^ $(OPTIMIZE) -o $@
 
-# This is the value that machine_params defaults to if no custom value is specified;
-# see MachineParams::generic()
-HL_MACHINE_PARAMS ?= 80,25165824,160
-
 # A sample generator to autoschedule. Note that if it statically links
 # to libHalide, then it must be build with $(USE_EXPORT_DYNAMIC), or the
 # autoscheduler can't find the libHalide symbols that it needs.

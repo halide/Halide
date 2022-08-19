@@ -31,9 +31,6 @@
   Write out a training featurization for the selected schedule into this file.
   Needs to be converted to a sample file with the runtime using featurization_to_sample before it can be used to train.
 
-  HL_MACHINE_PARAMS
-  An architecture description string. Used by Halide master to configure the cost model. We only use the first term. Set it to the number of SMs on the target GPU.
-
   HL_PERMIT_FAILED_UNROLL
   Set to 1 to tell Halide not to freak out if we try to unroll a loop that doesn't have a constant extent. Should generally not be necessary, but sometimes the autoscheduler's model for what will and will not turn into a constant during lowering is inaccurate, because Halide isn't perfect at constant-folding.
 
