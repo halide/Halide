@@ -130,7 +130,7 @@ endif ()
 
 ##
 
-add_executable(anderson2021-test_perfect_hash_map test_perfect_hash_map.cpp)
+add_executable(anderson2021-test_perfect_hash_map ${COMMON_DIR}/test_perfect_hash_map.cpp)
 
 add_test(NAME test_perfect_hash_map COMMAND test_perfect_hash_map)
 set_tests_properties(test_perfect_hash_map

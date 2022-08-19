@@ -144,7 +144,7 @@ autotune: $(GENERATOR_BIN)/demo.generator $(BIN)/featurization_to_sample $(BIN)/
 		$(HALIDE_DISTRIB_PATH) \
 		$(BIN)/samples
 
-$(BIN)/test_perfect_hash_map: $(SRC)/test_perfect_hash_map.cpp $(COMMON_DIR)/PerfectHashMap.h
+$(BIN)/test_perfect_hash_map: $(COMMON_DIR)/test_perfect_hash_map.cpp $(COMMON_DIR)/PerfectHashMap.h
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) $< -o $@
 
