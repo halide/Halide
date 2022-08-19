@@ -23,12 +23,7 @@ set(Halide_INSTALL_TOOLSDIR "${CMAKE_INSTALL_DATADIR}/tools"
 
 target_sources(Halide_Generator INTERFACE $<INSTALL_INTERFACE:${Halide_INSTALL_TOOLSDIR}/GenGen.cpp>)
 
-set(extra_targets_to_export )
-if (WITH_PYTHON_BINDINGS)
-    set(extra_targets_to_export Halide_PyStubs)
-endif ()
-
-install(TARGETS Halide Halide_Generator Halide_LanguageOptions ${extra_targets_to_export}
+install(TARGETS Halide Halide_Generator Halide_LanguageOptions
         EXPORT Halide_Targets
         RUNTIME COMPONENT Halide_Runtime
         LIBRARY COMPONENT Halide_Runtime
