@@ -22,6 +22,8 @@ using namespace Internal;
 #define SHOW_CUMULATIVE_COST false
 #define SHOW_UNIQUE_LOADS false
 
+#define MAX_CONDITION_LENGTH 30
+
 struct StmtSize {
     map<string, string> produces;
     map<string, string> consumes;

@@ -1010,9 +1010,17 @@ Stmt ProducerConsumerHierarchy::visit(const IfThenElse *op) {
 
         if (!thenSize.empty()) {
             // TODO: inline condition
-            ifHeader << "(" << op->condition << ")";
+            stringstream condition;
+            condition << op->condition;
 
-            // TODO: for condition, show it if it's small, and add hover text if it's large
+            // make condition smaller if it's too big
+            if (condition.str().size() > MAX_CONDITION_LENGTH) {
+                // TODO: add hover text here
+                condition.str("");
+                condition << "...";
+            }
+
+            ifHeader << "(" << condition.str() << ")";
 
             if (!SHOW_CUMULATIVE_COST) {
                 thenSize = StmtSize();
