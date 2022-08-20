@@ -67,8 +67,8 @@ $(BIN)/libautoschedule_anderson2021.$(SHARED_EXT): $(SRC)/AutoSchedule.cpp \
 		  							$(COMMON_DIR)/ASLog.cpp \
 										$(SRC)/DefaultCostModel.h \
 										$(SRC)/DefaultCostModel.cpp \
-										$(SRC)/Weights.h \
-										$(SRC)/Weights.cpp \
+										$(COMMON_DIR)/Weights.h \
+										$(COMMON_DIR)/Weights.cpp \
 										$(SRC)/FunctionDAG.h \
 										$(SRC)/FunctionDAG.cpp \
 										$(SRC)/LoopNest.h \
@@ -100,8 +100,8 @@ $(BIN)/retrain_cost_model: $(SRC)/retrain_cost_model.cpp \
 									$(COMMON_DIR)/ASLog.cpp \
 									$(SRC)/DefaultCostModel.h \
 									$(SRC)/DefaultCostModel.cpp \
-									$(SRC)/Weights.h \
-									$(SRC)/Weights.cpp \
+									$(COMMON_DIR)/Weights.h \
+									$(COMMON_DIR)/Weights.cpp \
 									$(SRC)/CostModel.h \
 									$(SRC)/NetworkSize.h \
 									$(AUTOSCHED_COST_MODEL_LIBS) \
@@ -118,7 +118,7 @@ $(BIN)/get_host_target: $(COMMON_DIR)/get_host_target.cpp $(LIB_HALIDE) $(HALIDE
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) $(filter %.cpp,$^) $(LIBHALIDE_LDFLAGS) $(OPTIMIZE) -o $@
 
-$(BIN)/weightsdir_to_weightsfile: $(COMMON_DIR)/weightsdir_to_weightsfile.cpp $(SRC)/Weights.cpp
+$(BIN)/weightsdir_to_weightsfile: $(COMMON_DIR)/weightsdir_to_weightsfile.cpp $(COMMON_DIR)/Weights.cpp
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) $^ $(OPTIMIZE) -o $@
 

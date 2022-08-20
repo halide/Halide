@@ -25,7 +25,7 @@ add_halide_library(train_cost_model FROM cost_model.generator
 # retrain_cost_model
 add_executable(retrain_cost_model
                DefaultCostModel.cpp
-               Weights.cpp
+               ${COMMON_DIR}/Weights.cpp
                retrain_cost_model.cpp
                ${WF_CPP})
 target_link_libraries(retrain_cost_model PRIVATE ASLog cost_model train_cost_model Halide::Halide Halide::Plugin)
@@ -42,7 +42,7 @@ add_autoscheduler(NAME Adams2019
                   FunctionDAG.cpp
                   LoopNest.cpp
                   State.cpp
-                  Weights.cpp
+                  ${COMMON_DIR}/Weights.cpp
                   ${WF_CPP})
 
 target_link_libraries(Halide_Adams2019 PRIVATE ASLog ParamParser cost_model train_cost_model)
@@ -103,7 +103,7 @@ add_executable(featurization_to_sample ${COMMON_DIR}/featurization_to_sample.cpp
 add_executable(get_host_target ${COMMON_DIR}/get_host_target.cpp)
 target_link_libraries(get_host_target PRIVATE Halide::Halide)
 
-add_executable(weightsdir_to_weightsfile ${COMMON_DIR}/weightsdir_to_weightsfile.cpp Weights.cpp)
+add_executable(weightsdir_to_weightsfile ${COMMON_DIR}/weightsdir_to_weightsfile.cpp ${COMMON_DIR}/Weights.cpp)
 target_link_libraries(weightsdir_to_weightsfile PRIVATE Halide::Runtime)
 
 # =================================================================

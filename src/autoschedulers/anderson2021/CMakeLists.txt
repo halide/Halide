@@ -30,7 +30,7 @@ add_halide_library(anderson2021-train_cost_model FROM cost_model.generator
 ## retrain_cost_model
 add_executable(anderson2021-retrain_cost_model
                DefaultCostModel.cpp
-               Weights.cpp
+               ${COMMON_DIR}/Weights.cpp
                retrain_cost_model.cpp
                ${WF_CPP})
 target_link_libraries(retrain_cost_model PRIVATE ASLog cost_model train_cost_model Halide::Halide Halide::Plugin)
@@ -49,7 +49,7 @@ add_autoscheduler(NAME Anderson2021
                   SearchSpace.cpp
                   State.cpp
                   Tiling.cpp
-                  Weights.cpp
+                  ${COMMON_DIR}/Weights.cpp
                   ${WF_CPP})
 
 target_link_libraries(Halide_Anderson2021 PRIVATE ASLog ParamParser cost_model train_cost_model)
@@ -110,7 +110,7 @@ add_executable(anderson2021-featurization_to_sample ${COMMON_DIR}/featurization_
 add_executable(anderson2021-get_host_target ${COMMON_DIR}/get_host_target.cpp)
 target_link_libraries(get_host_target PRIVATE Halide::Halide)
 
-add_executable(anderson2021-weightsdir_to_weightsfile ${COMMON_DIR}/weightsdir_to_weightsfile.cpp Weights.cpp)
+add_executable(anderson2021-weightsdir_to_weightsfile ${COMMON_DIR}/weightsdir_to_weightsfile.cpp ${COMMON_DIR}/Weights.cpp)
 target_link_libraries(weightsdir_to_weightsfile PRIVATE Halide::Runtime)
 
 # =================================================================

@@ -63,8 +63,8 @@ $(BIN)/libautoschedule_adams2019.$(SHARED_EXT): $(SRC)/AutoSchedule.cpp \
 				$(SRC)/Cache.cpp \
 				$(SRC)/DefaultCostModel.h \
 				$(SRC)/DefaultCostModel.cpp \
-				$(SRC)/Weights.h \
-				$(SRC)/Weights.cpp \
+				$(COMMON_DIR)/Weights.h \
+				$(COMMON_DIR)/Weights.cpp \
 				$(SRC)/FunctionDAG.h \
 				$(SRC)/FunctionDAG.cpp \
 				$(SRC)/LoopNest.h \
@@ -86,8 +86,8 @@ $(BIN)/retrain_cost_model: $(SRC)/retrain_cost_model.cpp \
 				$(COMMON_DIR)/ASLog.cpp \
 				$(SRC)/DefaultCostModel.h \
 				$(SRC)/DefaultCostModel.cpp \
-				$(SRC)/Weights.h \
-				$(SRC)/Weights.cpp \
+				$(COMMON_DIR)/Weights.h \
+				$(COMMON_DIR)/Weights.cpp \
 				$(SRC)/CostModel.h \
 				$(SRC)/NetworkSize.h \
 				$(AUTOSCHED_COST_MODEL_LIBS) \
@@ -103,7 +103,7 @@ $(BIN)/featurization_to_sample: $(COMMON_DIR)/featurization_to_sample.cpp
 $(BIN)/get_host_target: $(COMMON_DIR)/get_host_target.cpp $(LIB_HALIDE) $(HALIDE_DISTRIB_PATH)/include/Halide.h
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) $(filter %.cpp,$^) $(LIBHALIDE_LDFLAGS) $(OPTIMIZE) -o $@ $(HALIDE_RPATH_FOR_BIN)
-$(BIN)/weightsdir_to_weightsfile: $(COMMON_DIR)/weightsdir_to_weightsfile.cpp $(SRC)/Weights.cpp
+$(BIN)/weightsdir_to_weightsfile: $(COMMON_DIR)/weightsdir_to_weightsfile.cpp $(COMMON_DIR)/Weights.cpp
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) $^ $(OPTIMIZE) -o $@
 
