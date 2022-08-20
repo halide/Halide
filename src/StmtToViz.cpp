@@ -1105,28 +1105,33 @@ public:
         // open the prod cons div for navigation
         stream << "<div class='tab-pane fade' id='ProdCons' role='tabpanel' "
                   "aria-labelledby='ProdCons-tab'>\n";
+        stream << "<div class='ProducerConsumerViz'>\n";
 
         string prodConsHTML = producerConsumerHierarchy.generate_producer_consumer_html(m);
         if (PRINT_PROD_CONS) cout << prodConsHTML << endl;
 
         stream << prodConsHTML;
         stream << "</div>\n";
+        stream << "</div>\n";
     }
     void generate_producer_consumer_hierarchy(const Stmt &s) {
         // open the prod cons div for navigation
         stream << "<div class='tab-pane fade' id='ProdCons' role='tabpanel' "
                   "aria-labelledby='ProdCons-tab'>\n";
+        stream << "<div class='ProducerConsumerViz'>\n";
 
         string prodConsHTML = producerConsumerHierarchy.generate_producer_consumer_html(s);
         if (PRINT_PROD_CONS) cout << prodConsHTML << endl;
 
         stream << prodConsHTML;
         stream << "</div>\n";
+        stream << "</div>\n";
     }
     void generate_dependency_graph(const Module &m) {
         // open the dependency graph div for navigation
         stream << "<div class='tab-pane fade' id='Dependency' role='tabpanel' "
                   "aria-labelledby='Dependency-tab'>\n";
+        stream << "<div class='DependencyViz'>\n";
 
         string dependGraphHTML = dependencyGraph.generate_dependency_graph(m);
         if (PRINT_DEPENDENCIES) cout << dependGraphHTML << endl;
@@ -1134,12 +1139,15 @@ public:
         // stream << dependGraphHTML;
         stream << "In construction...\n";
         stream << "</div>\n";
+        stream << "</div>\n";
     }
     void generate_dependency_graph(const Stmt &s) {
         internal_error << "\n"
                        << "\n"
                        << "StmtToViz::generate_dependency_graph(const Stmt &s): Not implemented"
                        << "\n\n";
+
+        // TODO: fill this in
 
         // Stmt inlined_s = substitute_in_all_lets(s);
         // string dependGraphHTML = dependencyGraph.generate_dependency_graph(inlined_s);
@@ -1554,6 +1562,14 @@ const std::string StmtToViz::lineNumbersCSS = "\n \
 div.IRCode-code { \n \
     counter-reset: line; \n \
     margin-left: 40px; \n \
+    margin-top: 20px; \n \
+} \n \
+div.ProducerConsumerViz { \n \
+    margin-left: 20px; \n \
+    margin-top: 20px; \n \
+} \n \
+div.DependencyViz { \n \
+    margin-left: 20px; \n \
     margin-top: 20px; \n \
 } \n \
 p.WrapLine,\n\
