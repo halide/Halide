@@ -3,6 +3,7 @@
 ##
 
 set(COMMON_DIR "${Halide_SOURCE_DIR}/src/autoschedulers/common")
+include_directories("${Halide_SOURCE_DIR}/src/autoschedulers/adams2019")
 
 # weights
 set(WF_CPP baseline.cpp)

@@ -216,7 +216,7 @@ $(BIN)/%/included_schedule_file.schedule.h: $(GENERATOR_BIN)/included_schedule_f
 #    make bin/host/included_schedule_file.schedule.h
 #    cp bin/host/included_schedule_file.schedule.h included_schedule_file.schedule.h
 #
-$(GENERATOR_BIN)/included_schedule_file.generator: $(SRC)/included_schedule_file_generator.cpp $(SRC)/included_schedule_file.schedule.h $(GENERATOR_DEPS)
+$(GENERATOR_BIN)/included_schedule_file.generator: $(COMMON_DIR)/included_schedule_file_generator.cpp $(SRC)/included_schedule_file.schedule.h $(GENERATOR_DEPS)
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) $(USE_EXPORT_DYNAMIC) -g $(filter-out %.h,$^) -o $@ $(LIBHALIDE_LDFLAGS) $(HALIDE_SYSTEM_LIBS)
 

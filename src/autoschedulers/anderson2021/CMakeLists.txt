@@ -5,9 +5,9 @@
 add_compile_definitions(HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API)
 
 set(COMMON_DIR "${Halide_SOURCE_DIR}/src/autoschedulers/common")
-include_directories("${Halide_BINARY_DIR}/include/")
+include_directories("${Halide_BINARY_DIR}/include")
 include_directories(${COMMON_DIR})
-include_directories("${Halide_SOURCE_DIR}/src/autoschedulers/anderson2021/")
+include_directories("${Halide_SOURCE_DIR}/src/autoschedulers/anderson2021")
 
 # weights
 set(WF_CPP baseline.cpp)
