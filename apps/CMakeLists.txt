@@ -5,50 +5,56 @@
 cmake_minimum_required(VERSION 3.22)
 project(Halide_apps)
 
+enable_testing()
+
 if (WIN32)
     option(ENABLE_APPS_HANNK "Build apps/hannk" OFF)
 else ()
     option(ENABLE_APPS_HANNK "Build apps/hannk" ON)
 endif ()
 
-enable_testing()
+function(add_app app_name)
+    string(TOUPPER "ENABLE_APPS_${app_name}" opt)
+    option(${opt} "Build apps/${app_name}" ON)
+    if (${opt})
+        add_subdirectory(${app_name})
+    endif ()
+endfunction()
 
-# add_subdirectory(HelloAndroid)  # TODO(#5374): missing CMake build
-# add_subdirectory(HelloAndroidCamera2)  # TODO(#5374): missing CMake build
-# add_subdirectory(HelloPyTorch)  # TODO(#5374): missing CMake build
-# add_subdirectory(HelloWasm)  # TODO(#5374): missing CMake build
-# add_subdirectory(HelloiOS)  # TODO(#5374): missing CMake build
-# add_subdirectory(auto_viz)  # TODO(#5374): missing CMake build
-add_subdirectory(bgu)
-add_subdirectory(bilateral_grid)
-add_subdirectory(blur)
-add_subdirectory(c_backend)
-add_subdirectory(camera_pipe)
-add_subdirectory(conv_layer)
-add_subdirectory(cuda_mat_mul)
-add_subdirectory(depthwise_separable_conv)
-add_subdirectory(fft)
-if (ENABLE_APPS_HANNK)
-    add_subdirectory(hannk)
-endif ()
-add_subdirectory(harris)
-# add_subdirectory(hexagon_benchmarks)  # TODO(#5374): missing CMake build
-# add_subdirectory(hexagon_dma)  # TODO(#5374): missing CMake build
-add_subdirectory(hist)
-add_subdirectory(iir_blur)
-add_subdirectory(interpolate)
-add_subdirectory(lens_blur)
-add_subdirectory(linear_algebra)
-# add_subdirectory(linear_blur)  # TODO(#5374): missing CMake build
-add_subdirectory(local_laplacian)
-add_subdirectory(max_filter)
-add_subdirectory(nl_means)
-# add_subdirectory(nn_ops)  # TODO(#5374): missing CMake build
-# add_subdirectory(onnx)  # TODO(#5374): missing CMake build
-# add_subdirectory(openglcompute)  # TODO(#5374): missing CMake build
-add_subdirectory(resize)
-# add_subdirectory(resnet_50)  # TODO(#5374): missing CMake build
-# add_subdirectory(simd_op_check)  # TODO(#5374): missing CMake build
-add_subdirectory(stencil_chain)
-add_subdirectory(unsharp)
-add_subdirectory(wavelet)
+# add_app(HelloAndroid)  # TODO(#5374): missing CMake build
+# add_app(HelloAndroidCamera2)  # TODO(#5374): missing CMake build
+# add_app(HelloPyTorch)  # TODO(#5374): missing CMake build
+# add_app(HelloWasm)  # TODO(#5374): missing CMake build
+# add_app(HelloiOS)  # TODO(#5374): missing CMake build
+# add_app(auto_viz)  # TODO(#5374): missing CMake build
+add_app(bgu)
+add_app(bilateral_grid)
+add_app(blur)
+add_app(c_backend)
+add_app(camera_pipe)
+add_app(conv_layer)
+add_app(cuda_mat_mul)
+add_app(depthwise_separable_conv)
+add_app(fft)
+add_app(hannk)
+add_app(harris)
+# add_app(hexagon_benchmarks)  # TODO(#5374): missing CMake build
+# add_app(hexagon_dma)  # TODO(#5374): missing CMake build
+add_app(hist)
+add_app(iir_blur)
+add_app(interpolate)
+add_app(lens_blur)
+add_app(linear_algebra)
+# add_app(linear_blur)  # TODO(#5374): missing CMake build
+add_app(local_laplacian)
+add_app(max_filter)
+add_app(nl_means)
+# add_app(nn_ops)  # TODO(#5374): missing CMake build
+# add_app(onnx)  # TODO(#5374): missing CMake build
+# add_app(openglcompute)  # TODO(#5374): missing CMake build
+add_app(resize)
+# add_app(resnet_50)  # TODO(#5374): missing CMake build
+# add_app(simd_op_check)  # TODO(#5374): missing CMake build
+add_app(stencil_chain)
+add_app(unsharp)
+add_app(wavelet)

@@ -1,3 +1,9 @@
+if (Halide_ANY_SANITIZERS_ENABLED)
+    # All sanitizers impact performance, so don't even bother with this test suite
+    message(STATUS "Skipping all performance testing because at least one Sanitizer is enabled.")
+    return()
+endif()
+
 tests(GROUPS performance
       SOURCES
       async_gpu.cpp

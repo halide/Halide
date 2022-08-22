@@ -30,7 +30,11 @@ set(PYBIND11_VER 2.6.2 CACHE STRING "The pybind11 version to use (or download)")
 # Dependencies
 ##
 
-find_package(Python3 REQUIRED COMPONENTS Interpreter Development)
+# The plain Development component is the same as requesting both
+# Development.Module and Development.Embed. We don't need the Embed
+# part, so only requesting Module avoids failures when Embed is not
+# available, as is the case in the manylinux Docker images.
+find_package(Python3 REQUIRED COMPONENTS Interpreter Development.Module)
 
 if (PYBIND11_USE_FETCHCONTENT)
     include(FetchContent)
@@ -44,16 +48,68 @@ else ()
     find_package(pybind11 ${PYBIND11_VER} REQUIRED)
 endif ()
 
-find_package(Halide REQUIRED)
+find_package(Halide REQUIRED Halide)
 if (NOT Halide_ENABLE_RTTI OR NOT Halide_ENABLE_EXCEPTIONS)
     message(FATAL_ERROR "Python bindings require RTTI and exceptions to be enabled.")
 endif ()
 
 ##
+# A helper for creating tests with correct PYTHONPATH and sanitizer preloading
+##
+
+if (Halide_ASAN_ENABLED)
+    if (NOT DEFINED Halide_Python_ASAN_LIBRARY)
+        # TODO: this assumes clang-on-Linux, we could be smarter here and check
+        #   CMAKE_CXX_COMPILER_ID to behave differently on GNU, AppleClang, or
+        #   MSVC.
+        execute_process(
+            COMMAND ${CMAKE_CXX_COMPILER} "-print-file-name=libclang_rt.asan.so"
+            OUTPUT_VARIABLE Halide_Python_ASAN_LIBRARY
+            OUTPUT_STRIP_TRAILING_WHITESPACE
+        )
+    endif ()
+
+    set(Halide_Python_ASAN_LIBRARY "${Halide_Python_ASAN_LIBRARY}"
+        CACHE FILEPATH "Library to preload when running Python tests.")
+endif ()
+
+function(add_python_test)
+    cmake_parse_arguments(ARG "" "FILE;LABEL" "PYTHONPATH;ENVIRONMENT" ${ARGN})
+
+    list(PREPEND ARG_PYTHONPATH "$<TARGET_FILE_DIR:Halide::Python>/..")
+    list(TRANSFORM ARG_PYTHONPATH PREPEND "PYTHONPATH=path_list_prepend:")
+
+    list(PREPEND ARG_ENVIRONMENT "HL_TARGET=${Halide_TARGET}")
+    if (Halide_Python_ASAN_LIBRARY)
+        if (APPLE)
+            list(PREPEND ARG_ENVIRONMENT "DYLD_INSERT_LIBRARIES=${Halide_Python_ASAN_LIBRARY}")
+        else ()
+            list(PREPEND ARG_ENVIRONMENT "LD_PRELOAD=${Halide_Python_ASAN_LIBRARY}")
+        endif ()
+    endif ()
+
+    cmake_path(GET ARG_FILE STEM test_name)
+    set(test_name "${ARG_LABEL}_${test_name}")
+
+    add_test(
+        NAME "${test_name}"
+        COMMAND Python3::Interpreter "$<SHELL_PATH:${CMAKE_CURRENT_SOURCE_DIR}/${ARG_FILE}>"
+    )
+    set_tests_properties(
+        "${test_name}"
+        PROPERTIES
+        LABELS "python"
+        ENVIRONMENT "${ARG_ENVIRONMENT}"
+        ENVIRONMENT_MODIFICATION "${ARG_PYTHONPATH}"
+    )
+endfunction()
+
+
+##
 # Add our sources to this sub-tree.
 ##
 
-add_subdirectory(src/halide)
+add_subdirectory(src)
 add_subdirectory(stub)
 
 if (WITH_TEST_PYTHON)

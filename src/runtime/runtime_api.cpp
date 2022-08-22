@@ -99,6 +99,7 @@ extern "C" __attribute__((used)) void *halide_runtime_api_functions[] = {
     (void *)&halide_hexagon_device_release,
     (void *)&halide_hexagon_get_device_handle,
     (void *)&halide_hexagon_get_device_size,
+    (void *)&halide_hexagon_get_module_state,
     (void *)&halide_hexagon_initialize_kernels,
     (void *)&halide_hexagon_finalize_kernels,
     (void *)&halide_hexagon_power_hvx_off,
