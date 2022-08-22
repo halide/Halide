@@ -348,7 +348,7 @@ protected:
 
         auto c0_in_shrn_range = (is_uint(c0) || (is_int(c0) && (0 < c0))) && (c0 <= op->type.bits());
         // For shift_right_narrow instructions, aarch64 expectes UInt32 where arm32 expects a signed type.
-        const Type shrn_type = target_arm32() ? Int(bits, lanes) : UInt(32);
+        const Type shrn_type = target_arm32() ? Int(bits * 2, lanes) : UInt(32);
         const auto shrn_c0 = cast(shrn_type, fold(as_scalar(c0)));
 
         const Type uint8x_t = UInt(8, lanes);
