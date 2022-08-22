@@ -39,6 +39,7 @@ set(HEADER_FILES
     CodeGen_PTX_Dev.h
     CodeGen_PyTorch.h
     CodeGen_Targets.h
+    CodeGen_Xtensa.h
     CompilerLogger.h
     ConciseCasts.h
     CPlusPlusMangle.h
@@ -79,6 +80,7 @@ set(HEADER_FILES
     HexagonOptimize.h
     ImageParam.h
     InferArguments.h
+    InjectDmaTransfer.h
     InjectHostDevBufferCopies.h
     Inline.h
     InlineReductions.h
@@ -168,6 +170,7 @@ set(HEADER_FILES
     WasmExecutor.h
     WrapCalls.h
     X86Optimize.h
+    XtensaOptimize.h
     )
 
 set(SOURCE_FILES
@@ -210,6 +213,7 @@ set(SOURCE_FILES
     CodeGen_RISCV.cpp
     CodeGen_WebAssembly.cpp
     CodeGen_X86.cpp
+    CodeGen_Xtensa.cpp
     CompilerLogger.cpp
     CPlusPlusMangle.cpp
     CSE.cpp
@@ -244,6 +248,7 @@ set(SOURCE_FILES
     HexagonOptimize.cpp
     ImageParam.cpp
     InferArguments.cpp
+    InjectDmaTransfer.cpp
     InjectHostDevBufferCopies.cpp
     Inline.cpp
     InlineReductions.cpp
@@ -348,6 +353,7 @@ set(SOURCE_FILES
     WasmExecutor.cpp
     WrapCalls.cpp
     X86Optimize.cpp
+    XtensaOptimize.cpp
     )
 
 ##

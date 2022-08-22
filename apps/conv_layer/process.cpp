@@ -2,8 +2,9 @@
 #include <cstdio>
 
 #include "conv_layer.h"
+#ifndef SKIP_BENCHMARK
 #include "conv_layer_auto_schedule.h"
-
+#endif
 #include "HalideBuffer.h"
 #include "halide_benchmark.h"
 
@@ -43,6 +44,7 @@ int main(int argc, char **argv) {
 
     Buffer<float, 4> output(CO, W, H, N);
 
+#ifndef SKIP_BENCHMARK
 // This is necessary to get the PTX compiler to do a good
 // job. TODO: This should be a scheduling directive or a runtime
 // function.
@@ -51,11 +53,12 @@ int main(int argc, char **argv) {
 #else
     setenv("HL_CUDA_JIT_MAX_REGISTERS", "256", 1);
 #endif
+#endif
 
     conv_layer(input, filter, bias, output);
 
+#ifndef SKIP_BENCHMARK
     // Timing code
-
     // Manually-tuned version
     double min_t_manual = benchmark(10, 10, [&]() {
         conv_layer(input, filter, bias, output);
@@ -69,7 +72,7 @@ int main(int argc, char **argv) {
         output.device_sync();
     });
     printf("Auto-scheduled time: %gms\n", min_t_auto * 1e3);
-
+#endif
     printf("Success!\n");
     return 0;
 }

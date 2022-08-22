@@ -444,6 +444,7 @@ SOURCE_FILES = \
   CodeGen_RISCV.cpp \
   CodeGen_WebAssembly.cpp \
   CodeGen_X86.cpp \
+  CodeGen_Xtensa.cpp \
   CompilerLogger.cpp \
   CPlusPlusMangle.cpp \
   CSE.cpp \
@@ -478,6 +479,7 @@ SOURCE_FILES = \
   HexagonOptimize.cpp \
   ImageParam.cpp \
   InferArguments.cpp \
+  InjectDmaTransfer.cpp \
   InjectHostDevBufferCopies.cpp \
   Inline.cpp \
   InlineReductions.cpp \
@@ -581,7 +583,8 @@ SOURCE_FILES = \
   VectorizeLoops.cpp \
   WasmExecutor.cpp \
   WrapCalls.cpp \
-  X86Optimize.cpp
+  X86Optimize.cpp \
+  XtensaOptimize.cpp
 
 # The externally-visible header files that go into making Halide.h.
 # Don't include anything here that includes llvm headers.
@@ -621,6 +624,7 @@ HEADER_FILES = \
   CodeGen_PTX_Dev.h \
   CodeGen_PyTorch.h \
   CodeGen_Targets.h \
+  CodeGen_Xtensa.h \
   CompilerLogger.h \
   ConciseCasts.h \
   CPlusPlusMangle.h \
@@ -661,6 +665,7 @@ HEADER_FILES = \
   HexagonOptimize.h \
   ImageParam.h \
   InferArguments.h \
+  InjectDmaTransfer.h \
   InjectHostDevBufferCopies.h \
   Inline.h \
   InlineReductions.h \
@@ -749,7 +754,8 @@ HEADER_FILES = \
   Var.h \
   VectorizeLoops.h \
   WrapCalls.h \
-  X86Optimize.h
+  X86Optimize.h \
+  XtensaOptimize.h
 
 OBJECTS = $(SOURCE_FILES:%.cpp=$(BUILD_DIR)/%.o)
 HEADERS = $(HEADER_FILES:%.h=$(SRC_DIR)/%.h)
@@ -2365,6 +2371,25 @@ $(DISTRIB_DIR)/lib/libautoschedule_adams2019.$(PLUGIN_EXT)
 
 .PHONY: distrib
 distrib: $(DISTRIB_DIR)/lib/libHalide.$(SHARED_EXT) autoschedulers
+
+$(DISTRIB_DIR)/lib/libHalideRuntime-xtensa.a:
+	@mkdir -p $(@D)
+	@rm -f $(DISTRIB_DIR)/lib/libHalideRuntime-xtensa.a
+
+	XTENSA_CORE=Aurora_vp3_TCM_BA_RI20206 xt-clang++ -mlongcalls -c -std=c++11 -D COMPILING_HALIDE_RUNTIME -D BITS_64 -ffreestanding src/runtime/alignment_64.cpp -o $(BIN_DIR)/xtensa_runtime_alignment_64.o
+	XTENSA_CORE=Aurora_vp3_TCM_BA_RI20206 xt-clang++ -mlongcalls -c -std=c++11 -D COMPILING_HALIDE_RUNTIME -D BITS_64 -ffreestanding src/runtime/errors.cpp -o $(BIN_DIR)/xtensa_runtime_errors.o
+	XTENSA_CORE=Aurora_vp3_TCM_BA_RI20206 xt-clang++ -mlongcalls -c -std=c++11 -D COMPILING_HALIDE_RUNTIME -D BITS_64 -ffreestanding src/runtime/posix_allocator.cpp -o $(BIN_DIR)/xtensa_runtime_posix_allocator.o
+	XTENSA_CORE=Aurora_vp3_TCM_BA_RI20206 xt-clang++ -mlongcalls -c -std=c++11 -D COMPILING_HALIDE_RUNTIME -D BITS_64 -ffreestanding src/runtime/posix_error_handler.cpp -o $(BIN_DIR)/xtensa_runtime_posix_error_handler.o
+	XTENSA_CORE=Aurora_vp3_TCM_BA_RI20206 xt-clang++ -mlongcalls -c -std=c++11 -D COMPILING_HALIDE_RUNTIME -D BITS_64 -ffreestanding src/runtime/msan_stubs.cpp -o $(BIN_DIR)/xtensa_runtime_msan_stubs.o
+	XTENSA_CORE=Aurora_vp3_TCM_BA_RI20206 xt-clang++ -mlongcalls -c -std=c++11 -D COMPILING_HALIDE_RUNTIME -D BITS_64 -ffreestanding src/runtime/to_string.cpp -o $(BIN_DIR)/xtensa_runtime_to_string.o
+	XTENSA_CORE=Aurora_vp3_TCM_BA_RI20206 xt-clang++ -mlongcalls -c -std=c++11 -D COMPILING_HALIDE_RUNTIME -D BITS_64 -ffreestanding src/runtime/posix_print.cpp -o $(BIN_DIR)/xtensa_runtime_posix_print.o
+	XTENSA_CORE=Aurora_vp3_TCM_BA_RI20206 xt-clang++ -mlongcalls -c -std=c++11 -D COMPILING_HALIDE_RUNTIME -D BITS_64 -ffreestanding src/runtime/posix_io.cpp -o $(BIN_DIR)/xtensa_runtime_posix_io.o
+	XTENSA_CORE=Aurora_vp3_TCM_BA_RI20206 xt-clang++ -mlongcalls -c -std=c++11 -D COMPILING_HALIDE_RUNTIME -D BITS_64 -ffreestanding src/runtime/xtensa_allocator.cpp -o $(BIN_DIR)/xtensa_runtime_xtensa_allocator.o
+	XTENSA_CORE=Aurora_vp3_TCM_BA_RI20206 xt-clang++ -mlongcalls -c -std=c++11 -D COMPILING_HALIDE_RUNTIME -D BITS_64 -ffreestanding src/runtime/xtensa_dma_stubs.cpp -o $(BIN_DIR)/xtensa_runtime_xtensa_dma_stubs.o
+
+	XTENSA_CORE=Aurora_vp3_TCM_BA_RI20206 xt-ar rcs $@ $(BIN_DIR)/xtensa_runtime_alignment_64.o $(BIN_DIR)/xtensa_runtime_errors.o $(BIN_DIR)/xtensa_runtime_posix_error_handler.o $(BIN_DIR)/xtensa_runtime_posix_print.o $(BIN_DIR)/xtensa_runtime_posix_io.o $(BIN_DIR)/xtensa_runtime_msan_stubs.o $(BIN_DIR)/xtensa_runtime_to_string.o $(BIN_DIR)/xtensa_runtime_xtensa_allocator.o $(BIN_DIR)/xtensa_runtime_xtensa_dma_stubs.o
+
+xtensa-runtime: distrib $(DISTRIB_DIR)/lib/libHalideRuntime-xtensa.a
 
 $(DISTRIB_DIR)/halide.tgz: distrib
 	ln -sf $(DISTRIB_DIR) halide

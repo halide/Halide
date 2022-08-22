@@ -154,6 +154,14 @@ Buffer<uint16_t, 2> blur_halide(Buffer<uint16_t, 2> in) {
     return out;
 }
 
+#include "halide_blur_c.h"
+
+Buffer<uint16_t> blur_halide_c(Buffer<uint16_t> in) {
+    Buffer<uint16_t> out(in.width() - 8, in.height() - 2);
+    halide_blur_c(in, out);
+    return out;
+}
+
 int main(int argc, char **argv) {
     const auto *md = halide_blur_metadata();
     const bool is_hexagon = strstr(md->target, "hvx_128") || strstr(md->target, "hvx_64");
@@ -179,11 +187,13 @@ int main(int argc, char **argv) {
     Buffer<uint16_t, 2> halide = blur_halide(input);
     double halide_time = t;
 
+    Buffer<uint16_t> halide_c = blur_halide_c(input);
+
     printf("times: %f %f %f\n", slow_time, fast_time, halide_time);
 
     for (int y = 64; y < input.height() - 64; y++) {
         for (int x = 64; x < input.width() - 64; x++) {
-            if (blurry(x, y) != speedy(x, y) || blurry(x, y) != halide(x, y)) {
+            if (blurry(x, y) != speedy(x, y) || blurry(x, y) != halide(x, y) || blurry(x, y) != halide_c(x, y)) {
                 printf("difference at (%d,%d): %d %d %d\n", x, y, blurry(x, y), speedy(x, y), halide(x, y));
                 abort();
             }

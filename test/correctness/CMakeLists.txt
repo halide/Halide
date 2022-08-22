@@ -264,6 +264,7 @@ tests(GROUPS correctness
       side_effects.cpp
       simd_op_check.cpp
       simd_op_check_hvx.cpp
+      simd_op_check_xtensa.cpp
       simplified_away_embedded_image.cpp
       simplify.cpp
       skip_stages.cpp

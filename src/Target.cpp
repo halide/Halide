@@ -523,6 +523,7 @@ const std::map<std::string, Target::Feature> feature_name_map = {
     {"sve2", Target::SVE2},
     {"arm_dot_prod", Target::ARMDotProd},
     {"arm_fp16", Target::ARMFp16},
+    {"xtensa", Target::Xtensa},
     {"llvm_large_code_model", Target::LLVMLargeCodeModel},
     {"rvv", Target::RVV},
     {"armv81a", Target::ARMv81a},
@@ -1081,7 +1082,9 @@ int Target::natural_vector_size(const Halide::Type &t) const {
     const bool is_integer = t.is_int() || t.is_uint();
     const int data_size = t.bytes();
 
-    if (arch == Target::ARM) {
+    if (has_feature(Halide::Target::Xtensa)) {
+        return 64 / data_size;
+    } else if (arch == Target::ARM) {
         if (vector_bits != 0 &&
             (has_feature(Halide::Target::SVE2) ||
              (t.is_float() && has_feature(Halide::Target::SVE)))) {
