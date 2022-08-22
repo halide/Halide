@@ -109,3 +109,37 @@ else ()
         Halide_load_targets(shared)
     endif ()
 endif ()
+
+## Hide variables and helper macros that are not part of our API.
+
+# Delete internal component tracking
+foreach (comp IN LISTS Halide_known_components)
+  unset(Halide_comp_${comp})
+endforeach ()
+
+unset(Halide_components)
+unset(Halide_known_components)
+
+# Delete paths to generated CMake files
+unset(Halide_shared_deps)
+unset(Halide_shared_targets)
+unset(Halide_static_deps)
+unset(Halide_static_targets)
+
+# Delete internal macros -- CMake saves redefined macros and functions with a
+# single underscore prefixed so, for example, Halide_fail is still available as
+# _Halide_fail after one redefinition. Doing it twice overwrites both since the
+# saving behavior doesn't continue past the first.
+foreach (i RANGE 0 1)
+    macro(Halide_fail)
+        message(FATAL_ERROR "Cannot call internal API: Halide_fail")
+    endmacro()
+
+    macro(Halide_find_component_dependency)
+        message(FATAL_ERROR "Cannot call internal API: Halide_find_component_dependency")
+    endmacro()
+
+    macro(Halide_load_targets)
+        message(FATAL_ERROR "Cannot call internal API: Halide_load_targets")
+    endmacro()
+endforeach ()
