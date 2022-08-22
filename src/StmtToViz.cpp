@@ -168,7 +168,6 @@ private:
         s << "<span id='tooltip" << tooltipCount << "' class='tooltip' ";
         s << "role='tooltip" << tooltipCount << "'>";
         s << tooltipText;
-        s << "<span id='arrow" << tooltipCount << "' class='arrow'></span>";
         s << "</span>";
 
         return s.str();
@@ -181,7 +180,7 @@ private:
 
         std::stringstream tooltipText;
 
-        tooltipText << "<table>";
+        tooltipText << "<table class='tooltipTable'>";
 
         tooltipText << "<tr>";
         tooltipText << "<td class = 'left-table'> Depth</ td>";
@@ -1697,8 +1696,6 @@ span.ButtonSpacer { width: 5px; color: transparent; display: inline-block; }\n \
 span.LowCost { background: rgba(10,10,10,0.1); }\n \
 span.MediumCost { background: rgba(10,10,10,0.2); }\n \
 span.HighCost { background: rgba(10,10,10,0.3); }\n \
-.left-table { text-align: right; color: grey; vertical-align: middle; font-size: 12px; }\n \
-.right-table { text-align: left; vertical-align: middle; font-size: 12px; font-weight: bold; padding-left: 3px; }\n \
 .tf-custom .tf-nc { border-radius: 5px; border: 1px solid; }\n \
 .tf-custom .tf-nc:before, .tf-custom .tf-nc:after { border-left-width: 1px; }\n \
 .tf-custom li li:before { border-top-width: 1px; }\n \
@@ -1859,26 +1856,22 @@ div.CostColor0 { background: rgb(236,233,89); } \n \
 
 const std::string StmtToViz::tooltipCSS = "\n \
 /* Tooltip CSS */\n \
+.left-table { text-align: right; color: grey; vertical-align: middle; font-size: 12px; }\n \
+.right-table { text-align: left; vertical-align: middle; font-size: 12px; font-weight: bold; padding-left: 3px; }\n \
+.tooltipTable { border: 0px; } \n \
 .tooltip { \n \
     display: none; \n \
     position: absolute; \n \
     top: 0; \n \
     left: 0; \n \
-    background: #ddd; \n \
+    background: white; \n \
     padding: 5px; \n \
     font-size: 90%; \n \
     pointer-events: none; \n \
     border-radius: 5px; \n \
     border: 1px dashed #aaa; \n \
     z-index: 9999; \n \
-} \n \
-.arrow { \n \
-    position: absolute; \n \
-    background: #ddd; \n \
-    width: 8px; \n \
-    height: 8px; \n \
-    transform: rotate(45deg); \n \
-    z-index: 9999; \n \
+    box-shadow: rgba(100, 100, 100, 0.8) 0 2px 5px 0; \n \
 } \n \
 ";
 
