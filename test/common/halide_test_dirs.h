@@ -76,8 +76,18 @@ inline std::string get_test_tmp_dir() {
     // If TEST_TMPDIR is specified, we assume it is a valid absolute path
     std::string dir = Test::get_env_variable("TEST_TMPDIR");
     if (dir.empty()) {
-        // If not specified, use current dir.
-        dir = Test::get_current_directory();
+        // If not specified, use system tmp.
+#ifdef _WIN32
+        char p[MAX_PATH];
+        DWORD ret = GetTempPathA(MAX_PATH, p);
+        if (ret == 0) {
+            assert(false && "GetTempPathA() failed.");
+            return "/unlikely_path/";
+        }
+        dir = p;
+#else
+        dir = "/tmp";
+#endif
     }
     bool is_absolute = dir.size() >= 1 && dir[0] == '/';
     char sep = '/';
