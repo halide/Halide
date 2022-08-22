@@ -2206,6 +2206,48 @@ public:
     }
 };
 
+template<typename T>
+class GeneratorInput_Forbidden : public GeneratorInput_Scalar<T> {
+private:
+    using Super = GeneratorInput_Scalar<T>;
+
+protected:
+    using TBase = typename Super::TBase;
+
+public:
+    explicit GeneratorInput_Forbidden(const std::string &name)
+        : Super(name) {
+        user_error << type_of<T>() << " is not supported as a scalar Generator input. Use float instead.";
+    }
+    GeneratorInput_Forbidden(const std::string &name,
+                             const TBase &def)
+        : GeneratorInput_Forbidden(name) {
+    }
+    GeneratorInput_Forbidden(size_t array_size,
+                             const std::string &name)
+        : GeneratorInput_Forbidden(name) {
+    }
+    GeneratorInput_Forbidden(size_t array_size,
+                             const std::string &name,
+                             const TBase &def)
+        : GeneratorInput_Forbidden(name) {
+    }
+    GeneratorInput_Forbidden(const std::string &name,
+                             const TBase &def,
+                             const TBase &min,
+                             const TBase &max)
+        : GeneratorInput_Forbidden(name) {
+    }
+
+    GeneratorInput_Forbidden(size_t array_size,
+                             const std::string &name,
+                             const TBase &def,
+                             const TBase &min,
+                             const TBase &max)
+        : GeneratorInput_Forbidden(name) {
+    }
+};
+
 template<typename>
 struct type_sink { typedef void type; };
 
@@ -2221,6 +2263,8 @@ using GeneratorInputImplBase =
         cond<has_static_halide_type_method<TBase>::value, GeneratorInput_Buffer<T>>,
         cond<std::is_same<TBase, Func>::value, GeneratorInput_Func<T>>,
         cond<std::is_arithmetic<TBase>::value, GeneratorInput_Arithmetic<T>>,
+        cond<std::is_same<TBase, float16_t>::value, GeneratorInput_Forbidden<T>>,
+        cond<std::is_same<TBase, bfloat16_t>::value, GeneratorInput_Forbidden<T>>,
         cond<std::is_scalar<TBase>::value, GeneratorInput_Scalar<T>>,
         cond<std::is_same<TBase, Expr>::value, GeneratorInput_DynamicScalar<T>>>::type;
 
@@ -3189,6 +3233,9 @@ protected:
     }
     static inline Type Float(int bits, int lanes = 1) {
         return Halide::Float(bits, lanes);
+    }
+    static inline Type BFloat(int bits, int lanes = 1) {
+        return Halide::BFloat(bits, lanes);
     }
     static inline Type Int(int bits, int lanes = 1) {
         return Halide::Int(bits, lanes);

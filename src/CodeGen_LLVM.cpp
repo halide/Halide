@@ -183,7 +183,7 @@ CodeGen_LLVM::CodeGen_LLVM(const Target &t)
       target(t),
       void_t(nullptr), i1_t(nullptr), i8_t(nullptr),
       i16_t(nullptr), i32_t(nullptr), i64_t(nullptr),
-      f16_t(nullptr), f32_t(nullptr), f64_t(nullptr),
+      f16_t(nullptr), f32_t(nullptr), f64_t(nullptr), bf16_t(nullptr),
       halide_buffer_t_type(nullptr),
       metadata_t_type(nullptr),
       argument_t_type(nullptr),
@@ -326,6 +326,7 @@ void CodeGen_LLVM::init_context() {
     f16_t = llvm::Type::getHalfTy(*context);
     f32_t = llvm::Type::getFloatTy(*context);
     f64_t = llvm::Type::getDoubleTy(*context);
+    bf16_t = llvm::Type::getBFloatTy(*context);
 
     // Ensure no Value pointers carry over from previous context.
     struct_type_recovery.clear();

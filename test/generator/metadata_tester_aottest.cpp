@@ -65,6 +65,10 @@ struct typed_scalar {
             return value.u.u64 == that.value.u.u64;
         case halide_type_t(halide_type_handle, 64).as_u32():
             return value.u.handle == that.value.u.handle;
+        // Both float16 and bfloat16 are stored in the uint16 fields.
+        case halide_type_t(halide_type_float, 16).as_u32():
+        case halide_type_t(halide_type_bfloat, 16).as_u32():
+            return value.u.u16 == that.value.u.u16;
         default:
             std::cerr << "Unsupported type\n";
             exit(-1);
@@ -113,6 +117,13 @@ struct typed_scalar {
             break;
         case halide_type_t(halide_type_handle, 64).as_u32():
             o << (uint64_t)s.value.u.handle;
+            break;
+        // Both float16 and bfloat16 are stored in the uint16 fields.
+        case halide_type_t(halide_type_float, 16).as_u32():
+            o << "float16(" << s.value.u.u16 << ")";
+            break;
+        case halide_type_t(halide_type_bfloat, 16).as_u32():
+            o << "bfloat16(" << s.value.u.u16 << ")";
             break;
         default:
             std::cerr << "Unsupported type\n";
@@ -255,6 +266,65 @@ void verify(const Buffer<uint8_t, 3> &input,
     }
 }
 
+// Conversion routines to and from float cribbed from Christian Rau's
+// half library (half.sourceforge.net)
+halide_float16_t float_to_float16(float value) {
+    static constexpr int mantissa_bits = 10;
+    // static constexpr uint16_t sign_mask = 0x8000;  // unused
+    static constexpr uint16_t exponent_mask = 0x7c00;
+    static constexpr uint16_t mantissa_mask = 0x03ff;
+
+    // Start by copying over the sign bit
+    uint16_t bits = std::signbit(value) << 15;
+
+    // Check for special values
+    if (value == 0) {
+        return halide_float16_t(bits);
+    } else if (std::isnan(value)) {
+        return halide_float16_t(bits | exponent_mask | mantissa_mask);
+    } else if (std::isinf(value)) {
+        return halide_float16_t(bits | exponent_mask);
+    }
+
+    int exp;
+    // Get exponent, with bias already subtracted.
+    std::frexp(value, &exp);
+    if (exp > 16) {
+        // Too large, return infinity. Per initialization, bits only
+        // contains the sign bit, so this is +/-inf.
+        return halide_float16_t(bits | exponent_mask);
+    } else if (exp < -13) {
+        // Too small, clamp to 2^-24
+        value = std::ldexp(value, 24);
+    } else {
+        // Move the exponent from the float into the half.
+        value = std::ldexp(value, 11 - exp);
+        bits |= ((exp + 13) << mantissa_bits);
+    }
+
+    // We've normalized value as much as possible. Put the integer
+    // portion of it into the mantissa.
+    float ival;
+    float frac = std::modf(value, &ival);
+    bits += (uint16_t)(std::abs((int)ival));
+
+    // Now consider the fractional part. We round to nearest with ties
+    // going to even.
+    frac = std::abs(frac);
+    bits += (frac > 0.5f) | ((frac == 0.5f) & bits);
+
+    return halide_float16_t(bits);
+}
+
+// Similar routines for bfloat. It's somewhat simpler.
+halide_bfloat16_t float_to_bfloat16(float f) {
+    uint32_t ret;
+    memcpy(&ret, &f, sizeof(float));
+    // Round towards even
+    ret += 0x7fff + ((ret >> 16) & 1);
+    return halide_bfloat16_t(ret >> 16);
+}
+
 template<typename T>
 const halide_scalar_value_t *make_scalar(T v);
 
@@ -325,6 +395,36 @@ template<>
 const halide_scalar_value_t *make_scalar(float v) {
     halide_scalar_value_t *s = new halide_scalar_value_t();
     s->u.f32 = v;
+    return s;
+}
+
+// This case requires float as arg; use make_scalar_f16() instead
+// template<>
+// const halide_scalar_value_t *make_scalar(halide_float16_t v) {
+//     halide_scalar_value_t *s = new halide_scalar_value_t();
+//     s->u.uint16 = v.value;
+//     return s;
+// }
+
+const halide_scalar_value_t *make_scalar_f16(float f) {
+    halide_scalar_value_t *s = new halide_scalar_value_t();
+    // float16 is stored in the uint16 field for metadata
+    s->u.u16 = float_to_float16(f).value;
+    return s;
+}
+
+// This case requires float as arg; use make_scalar_bf16() instead
+// template<>
+// const halide_scalar_value_t *make_scalar(halide_bfloat16_t v) {
+//     halide_scalar_value_t *s = new halide_scalar_value_t();
+//     s->u.uint16 = v.value;
+//     return s;
+// }
+
+const halide_scalar_value_t *make_scalar_bf16(float f) {
+    halide_scalar_value_t *s = new halide_scalar_value_t();
+    // bfloat16 is stored in the uint16 field for metadata
+    s->u.u16 = float_to_bfloat16(f).value;
     return s;
 }
 
@@ -996,6 +1096,28 @@ void check_metadata(const halide_filter_metadata_t &md, bool expect_ucon_at_0) {
             nullptr,
         },
         {
+            "buffer_bf16_typed",
+            halide_argument_kind_input_buffer,
+            1,
+            halide_type_t(halide_type_bfloat, 16),
+            nullptr,
+            nullptr,
+            nullptr,
+            nullptr,
+            nullptr,
+        },
+        {
+            "buffer_bf16_untyped",
+            halide_argument_kind_input_buffer,
+            1,
+            halide_type_t(halide_type_bfloat, 16),
+            nullptr,
+            nullptr,
+            nullptr,
+            nullptr,
+            nullptr,
+        },
+        {
             "untyped_scalar_input",
             halide_argument_kind_input_scalar,
             0,
@@ -1356,9 +1478,8 @@ int main(int argc, char **argv) {
 
     Buffer<uint8_t, 3> input = make_image<uint8_t>();
     Buffer<float, 3> input_array[2] = {make_image<float>(), make_image<float>()};
-    // TODO: there is no runtime type for float16, so we'll declare this using a halide_type_t
-    const halide_type_t halide_type_float16 = halide_type_t(halide_type_float, 16, 1);
-    Buffer<> input_f16 = Buffer<>(halide_type_float16, kSize);
+    Buffer<halide_float16_t, 1> input_f16(kSize);
+    Buffer<halide_bfloat16_t, 1> input_bf16(kSize);
 
     Buffer<float, 3> output0(kSize, kSize, 3);
     Buffer<float, 3> output1(kSize, kSize, 3);
@@ -1419,6 +1540,8 @@ int main(int argc, char **argv) {
         input_array[0], input_array[1],                                          // Input<Buffer<float>[2]>
         input_f16,                                                               // Input<Buffer<float16>>
         input_f16,                                                               // Input<Buffer<float16>>
+        input_bf16,                                                              // Input<Buffer<bfloat16>>
+        input_bf16,                                                              // Input<Buffer<bfloat16>>
         1,                                                                       // Input<u8>
         output0, output1,                                                        // Output<Tuple(Func, Func)>
         typed_output_buffer,                                                     // Output<Buffer<float>>(3)
@@ -1481,6 +1604,8 @@ int main(int argc, char **argv) {
         input_array[0], input_array[1],                                          // Input<Buffer<float>[2]>
         input_f16,                                                               // Input<Buffer<float16>>
         input_f16,                                                               // Input<Buffer<float16>>
+        input_bf16,                                                              // Input<Buffer<bfloat16>>
+        input_bf16,                                                              // Input<Buffer<bfloat16>>
         1,                                                                       // Input<u8>
         output0, output1,                                                        // Output<Tuple(Func, Func)>
         typed_output_buffer,                                                     // Output<Buffer<float>>(3)

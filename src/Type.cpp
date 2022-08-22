@@ -243,14 +243,19 @@ std::string type_to_c_type(Type type, bool include_space, bool c_plus_plus) {
     ostringstream oss;
 
     if (type.is_bfloat()) {
-        oss << "bfloat" << type.bits() << "_t";
+        // Note that we are emitting the *runtime* type (from HalideRuntime.h),
+        // not the *compile* type (from Float16.h)
+        // Must check is_bfloat() *before* is_float(), since the latter returns true for float || bfloat
+        oss << "halide_bfloat" << type.bits() << "_t";
     } else if (type.is_float()) {
         if (type.bits() == 32) {
             oss << "float";
         } else if (type.bits() == 64) {
             oss << "double";
         } else {
-            oss << "float" << type.bits() << "_t";
+            // Note that we are emitting the *runtime* type (from HalideRuntime.h),
+            // not the *compile* type (from Float16.h)
+            oss << "halide_float" << type.bits() << "_t";
         }
         if (type.is_vector()) {
             oss << type.lanes();

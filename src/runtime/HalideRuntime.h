@@ -1960,6 +1960,35 @@ struct halide_device_allocation_pool {
  * global lifetime, and its next field will be clobbered. */
 extern void halide_register_device_allocation_pool(struct halide_device_allocation_pool *);
 
+// These are 'runtime' types for float16 and bfloat16, and are mostly
+// placeholders at this time; they allow us to specify a concrete type of the
+// correct size for code that expects these values as arguments, or (more typically)
+// as template arguments for halide_type_of<>(), Halide::Runtime::Buffer<>, etc.
+// They deliberately don't have any code for converting to/from other numeric types.
+//
+// Note that they deliberately have a `halide_` prefix to match other runtime-specific
+// types, and to disambiguate from the plain `float16_t` and `bfloat16_t` types that
+// exist at compiletime (but not runtime).
+struct halide_float16_t {
+    uint16_t value;
+
+#if (__cplusplus >= 201103L || _MSVC_LANG >= 201103L)
+    explicit halide_float16_t(int v = 0)
+        : value(v) {
+    }
+#endif
+};
+
+struct halide_bfloat16_t {
+    uint16_t value;
+
+#if (__cplusplus >= 201103L || _MSVC_LANG >= 201103L)
+    explicit halide_bfloat16_t(int v = 0)
+        : value(v) {
+    }
+#endif
+};
+
 #ifdef __cplusplus
 }  // End extern "C"
 #endif
@@ -1989,6 +2018,16 @@ HALIDE_ALWAYS_INLINE constexpr halide_type_t halide_type_of() {
     // even if those variables aren't used.)
     static_assert(check_is_pointer<T>::value, "Expected a pointer type here");
     return halide_type_t(halide_type_handle, 64);
+}
+
+template<>
+HALIDE_ALWAYS_INLINE constexpr halide_type_t halide_type_of<halide_bfloat16_t>() {
+    return halide_type_t(halide_type_bfloat, 16);
+}
+
+template<>
+HALIDE_ALWAYS_INLINE constexpr halide_type_t halide_type_of<halide_float16_t>() {
+    return halide_type_t(halide_type_float, 16);
 }
 
 template<>

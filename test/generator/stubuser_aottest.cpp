@@ -60,9 +60,8 @@ int main(int argc, char **argv) {
     Buffer<float, 3> tupled_output0(kSize, kSize, 3);
     Buffer<int32_t, 3> tupled_output1(kSize, kSize, 3);
     Buffer<int, 3> int_output(kSize, kSize, 3);
-    // TODO: see Issues #3709, #3967
-    Buffer<void, 3> float16_output(halide_type_t(halide_type_float, 16), kSize, kSize, 3);
-    Buffer<void, 3> bfloat16_output(halide_type_t(halide_type_bfloat, 16), kSize, kSize, 3);
+    Buffer<halide_float16_t, 3> float16_output(kSize, kSize, 3);
+    Buffer<halide_bfloat16_t, 3> bfloat16_output(kSize, kSize, 3);
 
     struct FnInfo {
         decltype(&stubuser) f;
