@@ -29,7 +29,7 @@ public:
         use_avx512 = (target.has_feature(Target::AVX512_Cannonlake) ||
                       target.has_feature(Target::AVX512_Skylake));
         if (target.has_feature(Target::AVX512) && !use_avx512) {
-            std::cerr << "Warning: This test is only configured for the skylake variant of avx512. Expect failures\n";
+            std::cerr << "Warning: This test is only configured for the skylake variant of avx512. Expect failures\n" << std::flush;
         }
         use_avx2 = use_avx512 || (target.has_feature(Target::AVX512) || target.has_feature(Target::AVX2));
         use_avx = use_avx2 || target.has_feature(Target::AVX);
@@ -2298,7 +2298,7 @@ int main(int argc, char **argv) {
     }
 
     const int seed = argc > 2 ? atoi(argv[2]) : time(nullptr);
-    std::cout << "simd_op_check test seed: " << seed << "\n";
+    std::cout << "simd_op_check test seed: " << seed << "\n" << std::flush;
     test.set_seed(seed);
 
     if (argc > 2) {

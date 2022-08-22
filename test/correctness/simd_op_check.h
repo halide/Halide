@@ -321,9 +321,9 @@ public:
             if (!sharder.should_run(t)) continue;
             const auto &task = tasks.at(t);
             auto result = check_one(task.op, task.name, task.vector_width, task.expr);
-            std::cout << result.op << "\n";
+            std::cout << result.op << "\n" << std::flush;
             if (!result.error_msg.empty()) {
-                std::cerr << result.error_msg;
+                std::cerr << result.error_msg << std::flush;
                 success = false;
             }
         }
