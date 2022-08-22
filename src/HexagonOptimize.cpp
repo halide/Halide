@@ -137,6 +137,8 @@ Expr as_mul(const Expr &a) {
             Expr b = make_one(s->type) << cast(UInt(s->type.bits()), (int)*log2_b);
             return simplify(Mul::make(cast(s->type, s->args[0]), b));
         }
+    } else if (const Call *wm = Call::as_intrinsic(a, {Call::widen_right_mul})) {
+        return simplify(Mul::make(wm->args[0], cast(wm->type, wm->args[1])));
     }
     return Expr();
 }
@@ -426,6 +428,11 @@ int find_mpy_ops(const Expr &op, Type a_ty, Type b_ty, int max_mpy_count,
         mpy_count += find_mpy_ops(cast(op.type(), add->args[0]), a_ty, b_ty, max_mpy_count, mpys, rest);
         mpy_count += find_mpy_ops(cast(op.type(), add->args[1]), a_ty, b_ty, max_mpy_count, mpys, rest);
         return mpy_count;
+    } else if (const Call *wadd = Call::as_intrinsic(op, {Call::widen_right_add})) {
+        int mpy_count = 0;
+        mpy_count += find_mpy_ops(wadd->args[0], a_ty, b_ty, max_mpy_count, mpys, rest);
+        mpy_count += find_mpy_ops(cast(op.type(), wadd->args[1]), a_ty, b_ty, max_mpy_count, mpys, rest);
+        return mpy_count;
     }
 
     // Attempt to pretend this op is multiplied by 1.
@@ -451,37 +458,7 @@ private:
     Scope<Interval> bounds;
     const Target &target;
 
-    Expr visit(const Mul *op) override {
-        static const vector<Pattern> scalar_muls = {
-            // Non-widening scalar multiplication.
-            {"halide.hexagon.mul.vh.b", wild_i16x * wild_i16, Pattern::NarrowOp1},
-            {"halide.hexagon.mul.vw.h", wild_i32x * wild_i32, Pattern::NarrowOp1},
-            // TODO: There's also mul.vw.b. We currently generate mul.vw.h
-            // instead. I'm not sure mul.vw.b is faster, it might even be
-            // slower due to the extra step in broadcasting the scalar up to
-            // 32 bits.
-        };
-
-        static const vector<Pattern> muls = {
-            // One operand widening multiplication.
-            {"halide.hexagon.mul.vw.vh", wild_i32x * wild_i32x, Pattern::ReinterleaveOp0 | Pattern::NarrowOp1},
-            {"halide.hexagon.mul.vw.vuh", wild_i32x * wild_i32x, Pattern::ReinterleaveOp0 | Pattern::NarrowUnsignedOp1},
-            {"halide.hexagon.mul.vuw.vuh", wild_u32x * wild_u32x, Pattern::ReinterleaveOp0 | Pattern::NarrowUnsignedOp1},
-        };
-
-        if (op->type.is_vector()) {
-            Expr new_expr = apply_commutative_patterns(op, scalar_muls, target, this);
-            if (!new_expr.same_as(op)) {
-                return new_expr;
-            }
-
-            new_expr = apply_commutative_patterns(op, muls, target, this);
-            if (!new_expr.same_as(op)) {
-                return new_expr;
-            }
-        }
-        return IRMutator::visit(op);
-    }
+    // Interesting muls are handled as widen_right_mul().
 
     // We'll try to sort the mpys based my mpys.first.
     // But, for this all the mpy.first exprs should either be
@@ -884,6 +861,14 @@ private:
                 return mpyadds;
             }
         }
+        if (op->is_intrinsic(Call::widen_right_add)) {
+            Expr mpyadds = find_mpyadds(Add::make(op->args[0], cast(op->type, op->args[1])));
+            if (mpyadds.defined()) {
+                return mpyadds;
+            }
+        }
+
+        // TODO: do widen_right_adds
 
         // These intrinsics should get the default lowering, and we need to recursively mutate the
         // result. We don't want to let these fall through to CodeGen_Hexagon and CodeGen_LLVM,
@@ -900,6 +885,18 @@ private:
         }
 
         static const vector<Pattern> calls = {
+            // Non-widening scalar multiplication.
+            {"halide.hexagon.mul.vh.b", widen_right_mul(wild_i16x, wild_i8)},
+            {"halide.hexagon.mul.vw.h", widen_right_mul(wild_i32x, wild_i16)},
+            // TODO: There's also mul.vw.b. We currently generate mul.vw.h
+            // instead. I'm not sure mul.vw.b is faster, it might even be
+            // slower due to the extra step in broadcasting the scalar up to
+            // 32 bits.
+
+            // One operand widening multiplication.
+            {"halide.hexagon.mul.vw.vh", widen_right_mul(wild_i32x, wild_i16x), Pattern::ReinterleaveOp0},
+            {"halide.hexagon.mul.vw.vuh", widen_right_mul(wild_u32x, wild_u16x), Pattern::ReinterleaveOp0},
+
             // Saturating narrowing casts with rounding
             {"halide.hexagon.trunc_satub_rnd.vh", u8_sat(rounding_shift_right(wild_i16x, 8)), Pattern::DeinterleaveOp0},
             {"halide.hexagon.trunc_satb_rnd.vh", i8_sat(rounding_shift_right(wild_i16x, 8)), Pattern::DeinterleaveOp0},

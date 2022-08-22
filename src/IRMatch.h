@@ -1429,6 +1429,12 @@ struct Intrin {
         Expr arg1 = std::get<const_min(1, sizeof...(Args) - 1)>(args).make(state, type_hint);
         if (intrin == Call::absd) {
             return absd(arg0, arg1);
+        } else if (intrin == Call::widen_right_add) {
+            return widen_right_add(arg0, arg1);
+        } else if (intrin == Call::widen_right_mul) {
+            return widen_right_mul(arg0, arg1);
+        } else if (intrin == Call::widen_right_sub) {
+            return widen_right_sub(arg0, arg1);
         } else if (intrin == Call::widening_add) {
             return widening_add(arg0, arg1);
         } else if (intrin == Call::widening_sub) {
@@ -1527,6 +1533,19 @@ std::ostream &operator<<(std::ostream &s, const Intrin<Args...> &op) {
 template<typename... Args>
 HALIDE_ALWAYS_INLINE auto intrin(Call::IntrinsicOp intrinsic_op, Args... args) noexcept -> Intrin<decltype(pattern_arg(args))...> {
     return {intrinsic_op, pattern_arg(args)...};
+}
+
+template<typename A, typename B>
+auto widen_right_add(A &&a, B &&b) noexcept -> Intrin<decltype(pattern_arg(a)), decltype(pattern_arg(b))> {
+    return {Call::widen_right_add, pattern_arg(a), pattern_arg(b)};
+}
+template<typename A, typename B>
+auto widen_right_mul(A &&a, B &&b) noexcept -> Intrin<decltype(pattern_arg(a)), decltype(pattern_arg(b))> {
+    return {Call::widen_right_mul, pattern_arg(a), pattern_arg(b)};
+}
+template<typename A, typename B>
+auto widen_right_sub(A &&a, B &&b) noexcept -> Intrin<decltype(pattern_arg(a)), decltype(pattern_arg(b))> {
+    return {Call::widen_right_sub, pattern_arg(a), pattern_arg(b)};
 }
 
 template<typename A, typename B>
@@ -1859,7 +1878,7 @@ struct VectorReduceOp {
     A a;
     B lanes;
 
-    constexpr static uint32_t binds = bindings<A>::mask;
+    constexpr static uint32_t binds = bindings<A>::mask | bindings<B>::mask;
 
     constexpr static IRNodeType min_node_type = IRNodeType::VectorReduce;
     constexpr static IRNodeType max_node_type = IRNodeType::VectorReduce;
@@ -2324,7 +2343,7 @@ template<typename A>
 struct IsInt {
     struct pattern_tag {};
     A a;
-    int bits;
+    int bits, lanes;
 
     constexpr static uint32_t binds = bindings<A>::mask;
 
@@ -2339,7 +2358,7 @@ struct IsInt {
     void make_folded_const(halide_scalar_value_t &val, halide_type_t &ty, MatcherState &state) const {
         // a is almost certainly a very simple pattern (e.g. a wild), so just inline the make method.
         Type t = a.make(state, {}).type();
-        val.u.u64 = t.is_int() && (bits == 0 || t.bits() == bits);
+        val.u.u64 = t.is_int() && (bits == 0 || t.bits() == bits) && (lanes == 0 || t.lanes() == lanes);
         ty.code = halide_type_uint;
         ty.bits = 1;
         ty.lanes = t.lanes();
@@ -2347,9 +2366,9 @@ struct IsInt {
 };
 
 template<typename A>
-HALIDE_ALWAYS_INLINE auto is_int(A &&a, int bits = 0) noexcept -> IsInt<decltype(pattern_arg(a))> {
+HALIDE_ALWAYS_INLINE auto is_int(A &&a, int bits = 0, int lanes = 0) noexcept -> IsInt<decltype(pattern_arg(a))> {
     assert_is_lvalue_if_expr<A>();
-    return {pattern_arg(a), bits};
+    return {pattern_arg(a), bits, lanes};
 }
 
 template<typename A>
@@ -2357,6 +2376,9 @@ std::ostream &operator<<(std::ostream &s, const IsInt<A> &op) {
     s << "is_int(" << op.a;
     if (op.bits > 0) {
         s << ", " << op.bits;
+    }
+    if (op.lanes > 0) {
+        s << ", " << op.lanes;
     }
     s << ")";
     return s;
@@ -2366,7 +2388,7 @@ template<typename A>
 struct IsUInt {
     struct pattern_tag {};
     A a;
-    int bits;
+    int bits, lanes;
 
     constexpr static uint32_t binds = bindings<A>::mask;
 
@@ -2381,7 +2403,7 @@ struct IsUInt {
     void make_folded_const(halide_scalar_value_t &val, halide_type_t &ty, MatcherState &state) const {
         // a is almost certainly a very simple pattern (e.g. a wild), so just inline the make method.
         Type t = a.make(state, {}).type();
-        val.u.u64 = t.is_uint() && (bits == 0 || t.bits() == bits);
+        val.u.u64 = t.is_uint() && (bits == 0 || t.bits() == bits) && (lanes == 0 || t.lanes() == lanes);
         ty.code = halide_type_uint;
         ty.bits = 1;
         ty.lanes = t.lanes();
@@ -2389,9 +2411,9 @@ struct IsUInt {
 };
 
 template<typename A>
-HALIDE_ALWAYS_INLINE auto is_uint(A &&a, int bits = 0) noexcept -> IsUInt<decltype(pattern_arg(a))> {
+HALIDE_ALWAYS_INLINE auto is_uint(A &&a, int bits = 0, int lanes = 0) noexcept -> IsUInt<decltype(pattern_arg(a))> {
     assert_is_lvalue_if_expr<A>();
-    return {pattern_arg(a), bits};
+    return {pattern_arg(a), bits, lanes};
 }
 
 template<typename A>
@@ -2399,6 +2421,9 @@ std::ostream &operator<<(std::ostream &s, const IsUInt<A> &op) {
     s << "is_uint(" << op.a;
     if (op.bits > 0) {
         s << ", " << op.bits;
+    }
+    if (op.lanes > 0) {
+        s << ", " << op.lanes;
     }
     s << ")";
     return s;
@@ -2522,6 +2547,43 @@ HALIDE_ALWAYS_INLINE auto is_min_value(A &&a) noexcept -> IsMinValue<decltype(pa
 template<typename A>
 std::ostream &operator<<(std::ostream &s, const IsMinValue<A> &op) {
     s << "is_min_value(" << op.a << ")";
+    return s;
+}
+
+template<typename A>
+struct HasEvenLanes {
+    struct pattern_tag {};
+    A a;
+
+    constexpr static uint32_t binds = bindings<A>::mask;
+
+    // This rule is a boolean-valued predicate. Bools have type UIntImm.
+    constexpr static IRNodeType min_node_type = IRNodeType::UIntImm;
+    constexpr static IRNodeType max_node_type = IRNodeType::UIntImm;
+    constexpr static bool canonical = true;
+
+    constexpr static bool foldable = true;
+
+    HALIDE_ALWAYS_INLINE
+    void make_folded_const(halide_scalar_value_t &val, halide_type_t &ty, MatcherState &state) const {
+        // a is almost certainly a very simple pattern (e.g. a wild), so just inline the make method.
+        Type t = a.make(state, {}).type();
+        val.u.u64 = (t.lanes() % 2 == 0);
+        ty.code = halide_type_uint;
+        ty.bits = 1;
+        ty.lanes = t.lanes();
+    }
+};
+
+template<typename A>
+HALIDE_ALWAYS_INLINE auto has_even_lanes(A &&a) noexcept -> HasEvenLanes<decltype(pattern_arg(a))> {
+    assert_is_lvalue_if_expr<A>();
+    return {pattern_arg(a)};
+}
+
+template<typename A>
+std::ostream &operator<<(std::ostream &s, const HasEvenLanes<A> &op) {
+    s << "has_even_lanes(" << op.a << ")";
     return s;
 }
 

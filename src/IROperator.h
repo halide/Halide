@@ -342,6 +342,13 @@ Expr requirement_failed_error(Expr condition, const std::vector<Expr> &args);
 
 Expr memoize_tag_helper(Expr result, const std::vector<Expr> &cache_key_values);
 
+/** Compute a + widen(b). */
+Expr widen_right_add(Expr a, Expr b);
+/** Compute a * widen(b). */
+Expr widen_right_mul(Expr a, Expr b);
+/** Compute a - widen(b). */
+Expr widen_right_sub(Expr a, Expr b);
+
 /** Compute widen(a) + widen(b). */
 Expr widening_add(Expr a, Expr b);
 /** Compute widen(a) * widen(b). a and b may have different signedness. */

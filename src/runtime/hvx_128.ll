@@ -145,18 +145,6 @@ define private <64 x i32> @vaslw.acc.dv.128B(<64 x i32> %a, <64 x i32> %l, i32 %
   ret <64 x i32> %s
 }
 
-define weak_odr <64 x i32> @halide.hexagon.mul.vuw.vuh(<64 x i32> %a, <64 x i16> %b) nounwind uwtable readnone alwaysinline {
-  %a_lo = call <32 x i32> @llvm.hexagon.V6.lo.128B(<64 x i32> %a)
-  %a_hi = call <32 x i32> @llvm.hexagon.V6.hi.128B(<64 x i32> %a)
-  %a_e = call <32 x i32> @llvm.hexagon.V6.vshufeh.128B(<32 x i32> %a_hi, <32 x i32> %a_lo)
-  %a_o = call <32 x i32> @llvm.hexagon.V6.vshufoh.128B(<32 x i32> %a_hi, <32 x i32> %a_lo)
-  %b_32 = bitcast <64 x i16> %b to <32 x i32>
-  %ab_e = call <64 x i32> @llvm.hexagon.V6.vmpyuhv.128B(<32 x i32> %a_e, <32 x i32> %b_32)
-  %ab_o = call <64 x i32> @llvm.hexagon.V6.vmpyuhv.128B(<32 x i32> %a_o, <32 x i32> %b_32)
-  %ab = call <64 x i32> @vaslw.acc.dv.128B(<64 x i32> %ab_e, <64 x i32> %ab_o, i32 16)
-  ret <64 x i32> %ab
-}
-
 define weak_odr <64 x i32> @halide.hexagon.mul.vuw.vuw(<64 x i32> %a, <64 x i32> %b) nounwind uwtable readnone alwaysinline {
   %a_lo = call <32 x i32> @llvm.hexagon.V6.lo.128B(<64 x i32> %a)
   %a_hi = call <32 x i32> @llvm.hexagon.V6.hi.128B(<64 x i32> %a)
