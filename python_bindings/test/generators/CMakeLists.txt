@@ -1,5 +1,3 @@
-include(HalidePythonExtensionHelpers)
-
 set(GENERATORS
     addconstant
     bit
@@ -27,14 +25,18 @@ set(GENPARAMS_simple
     func_input.type=uint8)
 
 foreach (GEN IN LISTS GENERATORS)
-    add_python_aot_extension(py_aot_${GEN}
-                             GENERATOR ${GEN}
-                             FEATURES ${FEATURES_${GEN}}
-                             PARAMS ${GENPARAMS_${GEN}}
-                             SOURCES ${GEN}_generator.cpp)
+    add_halide_generator(py_gen_${GEN}.generator
+                         SOURCES ${GEN}_generator.cpp
+                         PYSTUB ${GEN})
 
-    add_python_stub_extension(py_stub_${GEN}
-                              SOURCES ${GEN}_generator.cpp
-                              GENERATOR ${GEN}
-                              MODULE ${GEN}_pystub)
+    add_halide_library(py_aot_${GEN}
+                       FROM py_gen_${GEN}.generator
+                       GENERATOR ${GEN}
+                       FUNCTION_NAME ${GEN}
+                       # Note that PYTHON_EXTENSION_LIBRARY doesn't take
+                       # an argument; it will always produce a file of the form
+                       # ${TARGET}.${Python3_SOABI}.so (or .pyd on Windows)
+                       PYTHON_EXTENSION_LIBRARY
+                       FEATURES ${FEATURES_${GEN}}
+                       PARAMS ${GENPARAMS_${GEN}})
 endforeach ()

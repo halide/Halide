@@ -95,8 +95,8 @@ protected:
         if (
             // Only AVX512_SapphireRapids has accumulating dot products.
             target.has_feature(Target::AVX512_SapphireRapids) &&
-            // FIXME: add the float16 -> float32 versions as well.
-            (op->type.element_of() == Int(32)) &&
+            ((op->type.element_of() == Int(32)) ||
+             (op->type.element_of() == Float(32))) &&
 
             // Accumulating pmaddubsw
             (rewrite(
@@ -129,6 +129,18 @@ protected:
                  h_add(widening_mul(x, y), lanes) + z,
                  v_instr(VectorInstruction::dot_product, z, x, y),
                  is_int(x, 16, lanes * 2) && is_int(y, 16, lanes * 2)) ||
+
+             // Accumulating fp dot products.
+             // TODO(rootjalex): This would be more powerful with lossless_cast checking.
+             rewrite(
+                 x + h_add(cast(Float(32, lanes * 4), y) * cast(Float(32, lanes * 4), z), lanes),
+                 v_instr(VectorInstruction::dot_product, x, y, z),
+                 is_bfloat(y, 16) && is_bfloat(z, 16)) ||
+
+             rewrite(
+                 h_add(cast(Float(32, lanes * 4), x) * cast(Float(32, lanes * 4), y), lanes) + z,
+                 v_instr(VectorInstruction::dot_product, z, x, y),
+                 is_bfloat(x, 16) && is_bfloat(y, 16)) ||
 
              false)) {
             return mutate(rewrite.result);
@@ -202,30 +214,6 @@ protected:
                  v_instr(VectorInstruction::pmulhrs, x, y),
                  is_int(x, 16) && is_int(y, 16))) ||
 
-            // saturating_narrow is always supported (via SSE2) for:
-            //   int32 -> int16, int16 -> int8, int16 -> uint8
-            rewrite(
-                cast(Int(16, lanes), max(min(x, i32_i16max), i32_i16min)),
-                v_instr(VectorInstruction::saturating_narrow, x),
-                is_int(x, 32)) ||
-
-            rewrite(
-                cast(Int(8, lanes), max(min(x, i16_i8max), i16_i8min)),
-                v_instr(VectorInstruction::saturating_narrow, x),
-                is_int(x, 16)) ||
-
-            rewrite(
-                cast(UInt(8, lanes), max(min(x, i16_u8max), i16_u8min)),
-                v_instr(VectorInstruction::saturating_narrow, x),
-                is_int(x, 16)) ||
-
-            //   int32 -> uint16 is supported via SSE41
-            (target.has_feature(Target::SSE41) &&
-             rewrite(
-                 cast(UInt(16, lanes), max(min(x, i32_u16max), i32_u16min)),
-                 v_instr(VectorInstruction::saturating_narrow, x),
-                 is_int(x, 32))) ||
-
             // f32_to_bf16 is supported only via Target::AVX512_SapphireRapids
             (target.has_feature(Target::AVX512_SapphireRapids) &&
              rewrite(
@@ -283,6 +271,30 @@ protected:
         auto y_uint = cast(unsigned_type, y);
 
         if (
+            // saturating_narrow is always supported (via SSE2) for:
+            //   int32 -> int16, int16 -> int8, int16 -> uint8
+            rewrite(
+                saturating_cast(Int(16, lanes), x),
+                v_instr(VectorInstruction::saturating_narrow, x),
+                is_int(x, 32)) ||
+
+            rewrite(
+                saturating_cast(Int(8, lanes), x),
+                v_instr(VectorInstruction::saturating_narrow, x),
+                is_int(x, 16)) ||
+
+            rewrite(
+                saturating_cast(UInt(8, lanes), x),
+                v_instr(VectorInstruction::saturating_narrow, x),
+                is_int(x, 16)) ||
+
+            //   int32 -> uint16 is supported via SSE41
+            (target.has_feature(Target::SSE41) &&
+             rewrite(
+                 saturating_cast(UInt(16, lanes), x),
+                 v_instr(VectorInstruction::saturating_narrow, x),
+                 is_int(x, 32))) ||
+
             // We can redirect signed rounding halving add to unsigned rounding
             // halving add by adding 128 / 32768 to the result if the sign of the
             // args differs.
@@ -414,7 +426,6 @@ protected:
                 Call::widening_shift_right,
                 Call::widening_sub,
             })) {
-            // TODO: Should we have a base-class that does this + the VectorReduce lowering needed below?
             return mutate(lower_intrinsic(op));
         }
 
@@ -485,6 +496,39 @@ protected:
                             is_int(x, 32, lanes * 2) || is_uint(x, 32, lanes * 2)) ||
 
                     false)) ||
+                  false)) ||
+
+                // We can use the AVX512_SapphireRapids accumulating dot products
+                // on pure VectorReduce nodes with 0 as the accumulator.
+                ((factor == 4) &&
+                 target.has_feature(Target::AVX512_SapphireRapids) &&
+                 ((op->type.element_of() == Int(32)) ||
+                  (op->type.element_of() == Float(32))) &&
+
+                 // Accumulating pmaddubsw
+                 (rewrite(
+                      h_add(cast(Int(32, lanes * 4), widening_mul(x, y)), lanes),
+                      v_instr(VectorInstruction::dot_product, make_zero(Int(32, lanes)), x, y),
+                      is_uint(x, 8) && is_int(y, 8)) ||
+
+                  rewrite(
+                      h_add(cast(Int(32, lanes * 4), widening_mul(x, y)), lanes),
+                      v_instr(VectorInstruction::dot_product, make_zero(Int(32, lanes)), y, x),
+                      is_int(x, 8) && is_uint(y, 8)) ||
+
+                  // Accumulating pmaddwd.
+                  rewrite(
+                      h_add(widening_mul(x, y), lanes),
+                      v_instr(VectorInstruction::dot_product, make_zero(Int(32, lanes)), x, y),
+                      is_int(x, 16, lanes * 2) && is_int(y, 16, lanes * 2)) ||
+
+                  // Accumulating fp dot products.
+                  // TODO(rootjalex): This would be more powerful with lossless_cast checking.
+                  rewrite(
+                      h_add(cast(Float(32, lanes * 4), x) * cast(Float(32, lanes * 4), y), lanes),
+                      v_instr(VectorInstruction::dot_product, make_zero(Float(32, lanes)), x, y),
+                      is_bfloat(x, 16) && is_bfloat(y, 16)) ||
+
                   false)) ||
 
                 // psadbw is always supported via SSE2.

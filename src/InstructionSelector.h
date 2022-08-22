@@ -15,8 +15,8 @@ namespace Internal {
 
 /** A base class for vector instruction selection.
  *  The default implementation lowers int and uint
- *  division via `lower_int_uint_div` and splits
- *  VectorReduce nodes via CodeGen_LLVM::split_vector_reduce().
+ *  div and mod, and splits VectorReduce nodes via
+ *  CodeGen_LLVM::split_vector_reduce().
  */
 class InstructionSelector : public IRGraphMutator {
 protected:
@@ -25,6 +25,7 @@ protected:
 
     using IRGraphMutator::visit;
     Expr visit(const Div *) override;
+    Expr visit(const Mod *) override;
     Expr visit(const VectorReduce *) override;
 
 public:
