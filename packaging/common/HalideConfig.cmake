@@ -12,14 +12,9 @@ macro(Halide_find_component_dependency comp dep)
         set(Halide_quiet QUIET)
     endif ()
 
-    set(Halide_required)
-    if (${CMAKE_FIND_PACKAGE_NAME}_FIND_REQUIRED_${comp})
-        set(Halide_required REQUIRED)
-    endif ()
+    find_package(${dep} ${ARGN} ${Halide_quiet})
 
-    find_package(${dep} ${ARGN} ${Halide_quiet} ${Halide_required})
-
-    if (NOT ${dep}_FOUND)
+    if (NOT ${dep}_FOUND AND ${CMAKE_FIND_PACKAGE_NAME}_FIND_REQUIRED_${comp})
         Halide_fail("${CMAKE_FIND_PACKAGE_NAME} could not be found because dependency ${dep} could not be found.")
     endif ()
 endmacro()
