@@ -1,3 +1,5 @@
+cmake_minimum_required(VERSION 3.22)
+
 include(CheckLinkerFlag)
 
 function(target_export_script TARGET)
@@ -19,19 +21,19 @@ function(target_export_script TARGET)
     endif ()
 
     ## More linkers support the GNU syntax (ld, lld, gold), so try it first.
-    check_linker_flag(CXX "LINKER:--version-script=${ARG_GNU_LD}" LINKER_HAS_FLAG_VERSION_SCRIPT)
-
+    set(VERSION_SCRIPT_FLAG "LINKER:--version-script=${ARG_GNU_LD}")
+    check_linker_flag(CXX "${VERSION_SCRIPT_FLAG}" LINKER_HAS_FLAG_VERSION_SCRIPT)
     if (LINKER_HAS_FLAG_VERSION_SCRIPT)
-        target_link_options(${TARGET} PRIVATE "${version_script}")
+        target_link_options(${TARGET} PRIVATE "${VERSION_SCRIPT_FLAG}")
         set_property(TARGET ${TARGET} APPEND PROPERTY LINK_DEPENDS "${ARG_GNU_LD}")
         return()
     endif ()
 
     ## The Apple linker expects a different flag.
-    check_linker_flag(CXX "LINKER:-exported_symbols_list,${ARG_APPLE_LD}" LINKER_HAS_FLAG_EXPORTED_SYMBOLS_LIST)
-
+    set(EXPORTED_SYMBOLS_FLAG "LINKER:-exported_symbols_list,${ARG_APPLE_LD}")
+    check_linker_flag(CXX "${EXPORTED_SYMBOLS_FLAG}" LINKER_HAS_FLAG_EXPORTED_SYMBOLS_LIST)
     if (LINKER_HAS_FLAG_EXPORTED_SYMBOLS_LIST)
-        target_link_options(${TARGET} PRIVATE "${exported_symbols_list}")
+        target_link_options(${TARGET} PRIVATE "${EXPORTED_SYMBOLS_FLAG}")
         set_property(TARGET ${TARGET} APPEND PROPERTY LINK_DEPENDS "${ARG_APPLE_LD}")
         return()
     endif ()

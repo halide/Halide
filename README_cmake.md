@@ -807,6 +807,7 @@ add_halide_library(<target> FROM <generator-target>
                    [PLUGINS plugin1 [plugin2 ...]]
                    [AUTOSCHEDULER scheduler-name]
                    [GRADIENT_DESCENT]
+                   [PYTHON_EXTENSION_LIBRARY]
                    [C_BACKEND]
                    [REGISTRATION OUTVAR]
                    [HEADER OUTVAR]
@@ -869,6 +870,13 @@ gradient descent calculation in TensorFlow or PyTorch. See
 `Generator::build_gradient_module()` for more documentation. This corresponds to
 passing `-d 1` at the generator command line.
 
+If `PYTHON_EXTENSION_LIBRARY` is set, then a Python Extension will be built that
+wraps the C/C++ call with CPython glue to allow use of the generated code from
+Python 3.x. The result will be a a shared library of the form
+`<target>.<soabi>.so`, where <soabi> describes the specific Python version and
+platform (e.g., `cpython-310-darwin` for Python 3.10 on OSX.) See
+`README_python.md` for examples of use.
+
 If the `C_BACKEND` option is set, this command will invoke the configured C++
 compiler on a generated source. Note that a `<target>.runtime` target is _not_
 created in this case, and the `USE_RUNTIME` option is ignored. Other options
@@ -901,31 +909,44 @@ add_halide_generator(
     [PACKAGE_NAME package-name]
     [PACKAGE_NAMESPACE namespace]
     [EXPORT_FILE export-file]
+    [PYSTUB generator-name]
     [[SOURCES] source1 ...]
 )
 ```
 
 Every named argument is optional, and the function uses the following default arguments:
 
-* If `PACKAGE_NAME` is not provided, it defaults to `${PROJECT_NAME}-halide_generators`.
-* If `PACKAGE_NAMESPACE` is not provided, it defaults to `${PROJECT_NAME}::halide_generators::`.
-* If `EXPORT_FILE` is not provided, it defaults to `${PROJECT_BINARY_DIR}/cmake/${ARG_PACKAGE_NAME}-config.cmake`
+- If `PACKAGE_NAME` is not provided, it defaults to `${PROJECT_NAME}-halide_generators`.
+- If `PACKAGE_NAMESPACE` is not provided, it defaults to `${PROJECT_NAME}::halide_generators::`.
+- If `EXPORT_FILE` is not provided, it defaults to `${PROJECT_BINARY_DIR}/cmake/${ARG_PACKAGE_NAME}-config.cmake`
 
-The `SOURCES` keyword marks the beginning of sources to be used to build `<target>`, if it is not loaded. All unparsed
-arguments will be interpreted as sources.
+The `SOURCES` keyword marks the beginning of sources to be used to build
+`<target>`, if it is not loaded. All unparsed arguments will be interpreted as
+sources.
 
-This function guarantees that a Halide generator target named `<namespace><target>` is available. It will first search
-for a package named `<package-name>` using `find_package`; if it is found, it is assumed that it provides the target.
-Otherwise, it will create an executable target named `target` and an `ALIAS` target `<namespace><target>`. This function
-also creates a custom target named `<package-name>` if it does not exist and `<target>` would exist. In this case,
-`<package-name>` will depend on `<target>`, this enables easy building of _just_ the Halide generators managed by this
-function.
+This function guarantees that a Halide generator target named
+`<namespace><target>` is available. It will first search for a package named
+`<package-name>` using `find_package`; if it is found, it is assumed that it
+provides the target. Otherwise, it will create an executable target named
+`target` and an `ALIAS` target `<namespace><target>`. This function also
+creates a custom target named `<package-name>` if it does not exist and
+`<target>` would exist. In this case, `<package-name>` will depend on
+`<target>`, this enables easy building of _just_ the Halide generators managed
+by this function.
 
-After the call, `<PACKAGE_NAME>_FOUND` will be set to true if the host generators were imported (and hence won't be
-built). Otherwise, it will be set to false. This variable may be used to conditionally set properties on `<target>`.
+After the call, `<PACKAGE_NAME>_FOUND` will be set to true if the host
+generators were imported (and hence won't be built). Otherwise, it will be set
+to false. This variable may be used to conditionally set properties on
+`<target>`.
 
 Please see [test/integration/xc](https://github.com/halide/Halide/tree/master/test/integration/xc) for a simple example
 and [apps/hannk](https://github.com/halide/Halide/tree/master/apps/hannk) for a complete app that uses it extensively.
+
+If `PYSTUB` is specified, then a Python Extension will be built that
+wraps the Generator with CPython glue to allow use of the Generator
+Python 3.x. The result will be a a shared library of the form
+`<target>_pystub.<soabi>.so`, where <soabi> describes the specific Python version and platform (e.g., `cpython-310-darwin` for Python 3.10 on OSX.) See
+`README_python.md` for examples of use.
 
 ## Cross compiling
 
