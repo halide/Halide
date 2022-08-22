@@ -695,12 +695,6 @@ class InjectHexagonRpc : public IRMutator {
 
     Module &device_code;
 
-    Expr state_var(const std::string &name, Type type) {
-        return Let::make(name, state_var_ptr(name, type),
-                         Load::make(type_of<void *>(), name, 0,
-                                    Buffer<>(), Parameter(), const_true(), ModulusRemainder()));
-    }
-
     Expr state_var_ptr(const std::string &name, Type type) {
         Expr &buf = state_bufs[name];
         if (!buf.defined()) {
@@ -712,7 +706,7 @@ class InjectHexagonRpc : public IRMutator {
     }
 
     Expr module_state() {
-        return state_var("hexagon_module_state", type_of<void *>());
+        return Call::make(type_of<void *>(), "halide_hexagon_get_module_state", {state_var_ptr("hexagon_module_state", type_of<void *>())}, Call::Extern);
     }
 
     Expr module_state_ptr() {
