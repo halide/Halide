@@ -40,9 +40,11 @@ function(halide_define_aot_test NAME)
         add_wasm_halide_test("${TARGET}" GROUPS generator "${args_GROUPS}")
     else ()
         add_executable("${TARGET}" "${NAME}_aottest.cpp")
-        target_include_directories("${TARGET}" PRIVATE
+        target_include_directories(
+            "${TARGET}" PRIVATE
             "${Halide_SOURCE_DIR}/test/common"
-            "${Halide_SOURCE_DIR}/tools")
+            "${Halide_SOURCE_DIR}/tools"
+        )
         if (NOT args_OMIT_DEFAULT_GENERATOR)
             target_link_libraries(${TARGET} PRIVATE ${NAME})
         endif ()
@@ -80,7 +82,7 @@ if (NOT ${USING_WASM})
 endif ()
 
 if (TARGET_NVPTX AND Halide_TARGET MATCHES "cuda")
-    include(AddCudaToTarget)
+    find_package(CUDAToolkit REQUIRED)
 endif ()
 if (TARGET_NVPTX AND Halide_TARGET MATCHES "opencl")
     find_package(OpenCL REQUIRED)
@@ -95,7 +97,7 @@ endif ()
 # acquire_release_generator.cpp
 halide_define_aot_test(acquire_release)
 if (TARGET_NVPTX AND Halide_TARGET MATCHES "cuda")
-    add_cuda_to_target(generator_aot_acquire_release PRIVATE)
+    target_link_libraries(generator_aot_acquire_release PRIVATE CUDA::cuda_driver CUDA::cudart)
 endif ()
 if (TARGET_NVPTX AND Halide_TARGET MATCHES "opencl")
     target_link_libraries(generator_aot_acquire_release PRIVATE OpenCL::OpenCL)
@@ -239,23 +241,23 @@ halide_define_aot_test(float16_t)
 # gpu_multi_context_threaded_generator.cpp
 # (Doesn't build/link properly under wasm, and isn't useful there anyway)
 if (NOT Halide_TARGET MATCHES "wasm")
-  halide_define_aot_test(gpu_multi_context_threaded
-                         OMIT_DEFAULT_GENERATOR
-                         EXTRA_LIBS
-                         gpu_multi_context_threaded_add
-                         gpu_multi_context_threaded_mul)
+    halide_define_aot_test(gpu_multi_context_threaded
+                           OMIT_DEFAULT_GENERATOR
+                           EXTRA_LIBS
+                           gpu_multi_context_threaded_add
+                           gpu_multi_context_threaded_mul)
 
-  add_halide_library(gpu_multi_context_threaded_add FROM gpu_multi_context_threaded.generator
-                     FEATURES user_context)
-  add_halide_library(gpu_multi_context_threaded_mul FROM gpu_multi_context_threaded.generator
-                     FEATURES user_context)
+    add_halide_library(gpu_multi_context_threaded_add FROM gpu_multi_context_threaded.generator
+                       FEATURES user_context)
+    add_halide_library(gpu_multi_context_threaded_mul FROM gpu_multi_context_threaded.generator
+                       FEATURES user_context)
 
-  if (TARGET_NVPTX AND Halide_TARGET MATCHES "cuda")
-      add_cuda_to_target(generator_aot_gpu_multi_context_threaded PRIVATE)
-  endif ()
-  if (TARGET_NVPTX AND Halide_TARGET MATCHES "opencl")
-      target_link_libraries(generator_aot_gpu_multi_context_threaded PRIVATE OpenCL::OpenCL)
-  endif ()
+    if (TARGET_NVPTX AND Halide_TARGET MATCHES "cuda")
+        target_link_libraries(generator_aot_gpu_multi_context_threaded PRIVATE CUDA::cuda_driver CUDA::cudart)
+    endif ()
+    if (TARGET_NVPTX AND Halide_TARGET MATCHES "opencl")
+        target_link_libraries(generator_aot_gpu_multi_context_threaded PRIVATE OpenCL::OpenCL)
+    endif ()
 endif ()
 
 # gpu_object_lifetime_aottest.cpp
@@ -337,10 +339,10 @@ halide_define_aot_test(msan FEATURES msan
 
 # (Doesn't build/link properly on windows / under wasm)
 if (NOT Halide_TARGET MATCHES "windows" AND NOT CMAKE_SYSTEM_NAME MATCHES "Windows" AND NOT Halide_TARGET MATCHES "wasm")
-  # sanitizercoverage_aottest.cpp
-  # sanitizercoverage_generator.cpp
-  halide_define_aot_test(sanitizercoverage FEATURES sanitizer_coverage)
-endif()
+    # sanitizercoverage_aottest.cpp
+    # sanitizercoverage_generator.cpp
+    halide_define_aot_test(sanitizercoverage FEATURES sanitizer_coverage)
+endif ()
 
 # multitarget_aottest.cpp
 # multitarget_generator.cpp

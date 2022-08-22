@@ -275,6 +275,16 @@ private:
         return expr;
     }
 
+    Expr give_up_and_shuffle(const Expr &e) {
+        // Uh-oh, we don't know how to deinterleave this vector expression
+        // Make llvm do it
+        std::vector<int> indices;
+        for (int i = 0; i < new_lanes; i++) {
+            indices.push_back(starting_lane + lane_stride * i);
+        }
+        return Shuffle::make({e}, indices);
+    }
+
     Expr visit(const Variable *op) override {
         if (op->type.is_scalar()) {
             return op;
@@ -302,13 +312,7 @@ private:
                        lane_stride == 3) {
                 return Variable::make(t, op->name + ".lanes_2_of_3", op->image, op->param, op->reduction_domain);
             } else {
-                // Uh-oh, we don't know how to deinterleave this vector expression
-                // Make llvm do it
-                std::vector<int> indices;
-                for (int i = 0; i < new_lanes; i++) {
-                    indices.push_back(starting_lane + lane_stride * i);
-                }
-                return Shuffle::make({op}, indices);
+                return give_up_and_shuffle(op);
             }
         }
     }
@@ -325,6 +329,8 @@ private:
     Expr visit(const Reinterpret *op) override {
         if (op->type.is_scalar()) {
             return op;
+        } else if (op->type.bits() != op->value.type().bits()) {
+            return give_up_and_shuffle(op);
         } else {
             Type t = op->type.with_lanes(new_lanes);
             return Reinterpret::make(t, mutate(op->value));

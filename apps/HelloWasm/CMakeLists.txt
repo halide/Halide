@@ -10,10 +10,7 @@ set(CMAKE_CXX_EXTENSIONS NO)
 find_package(Halide REQUIRED)
 set(halide_includes "$<TARGET_PROPERTY:Halide::Runtime,INTERFACE_INCLUDE_DIRECTORIES>")
 
-find_program(EMCC emcc HINTS "$ENV{EMSDK}/upstream/emscripten")
-if (NOT EMCC)
-    message(FATAL_ERROR "Could not find emscripten/emcc!")
-endif ()
+find_program(EMCC emcc REQUIRED HINTS "$ENV{EMSDK}/upstream/emscripten")
 
 configure_file(index.html index.html COPYONLY)
 

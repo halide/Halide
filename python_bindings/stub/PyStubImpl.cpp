@@ -1,8 +1,3 @@
-// Note that this deliberately does *not* include PyHalide.h,
-// or depend on any of the code in src: this is intended to be
-// a minimal, generic wrapper to expose an arbitrary Generator
-// for stub usage in Python.
-
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
 

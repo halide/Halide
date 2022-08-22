@@ -17,7 +17,7 @@ def get_version():
         """
         cmake_minimum_required(VERSION 3.22)
         project(dummy)
-        find_package(Halide REQUIRED)
+        find_package(Halide REQUIRED Halide)
         file(WRITE halide_version.txt "${Halide_VERSION}")
         """
     )
@@ -38,7 +38,7 @@ setup(
     author="The Halide team",
     author_email="",
     description="",
-    long_description=Path("readme.md").read_text(),
+    long_description="",
     python_requires=">=3.6",
     packages=find_packages(where="src"),
     package_dir={"": "src"},
@@ -48,6 +48,8 @@ setup(
         "-DHalide_INSTALL_PYTHONDIR=src",
         "-DCMAKE_INSTALL_RPATH=$ORIGIN",
         "-DHalide_Python_INSTALL_IMPORTED_DEPS=ON",
+        "-DWITH_TESTS=NO",
+        "-DWITH_TUTORIALS=NO",
         "--no-warn-unused-cli",
     ],
 )

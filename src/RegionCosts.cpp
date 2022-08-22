@@ -234,7 +234,8 @@ class ExprCost : public IRVisitor {
             } else if (call->is_intrinsic(Call::abs) || call->is_intrinsic(Call::absd) ||
                        call->is_intrinsic(Call::lerp) || call->is_intrinsic(Call::random) ||
                        call->is_intrinsic(Call::count_leading_zeros) ||
-                       call->is_intrinsic(Call::count_trailing_zeros)) {
+                       call->is_intrinsic(Call::count_trailing_zeros) ||
+                       call->is_intrinsic(Call::saturating_cast)) {
                 arith += 5;
             } else if (Call::as_tag(call)) {
                 // Tags do not result in actual operations.

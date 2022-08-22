@@ -94,6 +94,12 @@ Expr lower_signed_shift_right(const Expr &a, const Expr &b);
 /** Reduce a mux intrinsic to a select tree */
 Expr lower_mux(const Call *mux);
 
+/** Reduce bit extraction and concatenation to bit ops */
+///@{
+Expr lower_extract_bits(const Call *c);
+Expr lower_concat_bits(const Call *c);
+///@}
+
 /** Given an llvm::Module, set llvm:TargetOptions information */
 void get_target_options(const llvm::Module &module, llvm::TargetOptions &options);
 
