@@ -1525,20 +1525,20 @@ public:
                << "} );\n";
         stream << content_rule_script_stream.str();
         stream << generatetooltipJS(tooltipCount);
+        stream << producerConsumerHierarchy.generate_condition_js();
         stream << "</script>\n";
         stream << "</body>";
     }
 
     string generatetooltipJS(int &tooltipCount) {
         stringstream tooltipJS;
-        tooltipJS << "function update(buttonElement, tooltipElement, arrowElement) { \n";
+        tooltipJS << "function update(buttonElement, tooltipElement) { \n";
         tooltipJS << "    window.FloatingUIDOM.computePosition(buttonElement, tooltipElement, { \n";
         tooltipJS << "        placement: 'top', \n";
         tooltipJS << "        middleware: [ \n";
         tooltipJS << "            window.FloatingUIDOM.offset(6), \n";
         tooltipJS << "            window.FloatingUIDOM.flip(), \n";
         tooltipJS << "            window.FloatingUIDOM.shift({ padding: 5 }), \n";
-        tooltipJS << "            window.FloatingUIDOM.arrow({ element: arrowElement }), \n";
         tooltipJS << "        ], \n";
         tooltipJS << "    }).then(({ x, y, placement, middlewareData }) => { \n";
         tooltipJS << "        Object.assign(tooltipElement.style, { \n";
@@ -1546,26 +1546,18 @@ public:
         tooltipJS << "            top: `${y}px`, \n";
         tooltipJS << "        }); \n";
         tooltipJS << "        // Accessing the data \n";
-        tooltipJS << "        const { x: arrowX, y: arrowY } = middlewareData.arrow; \n";
         tooltipJS << "        const staticSide = { \n";
         tooltipJS << "            top: 'bottom', \n";
         tooltipJS << "            right: 'left', \n";
         tooltipJS << "            bottom: 'top', \n";
         tooltipJS << "            left: 'right', \n";
         tooltipJS << "        }[placement.split('-')[0]]; \n";
-        tooltipJS << "        Object.assign(arrowElement.style, { \n";
-        tooltipJS << "            left: arrowX != null ? `${arrowX}px` : '', \n";
-        tooltipJS << "            top: arrowY != null ? `${arrowY}px` : '', \n";
-        tooltipJS << "            right: '', \n";
-        tooltipJS << "            bottom: '', \n";
-        tooltipJS << "            [staticSide]: '-4px', \n";
-        tooltipJS << "        }); \n";
         tooltipJS << "    }); \n";
         tooltipJS << "} \n";
-        tooltipJS << "function showTooltip(buttonElement, tooltipElement, arrowElement) { \n";
+        tooltipJS << "function showTooltip(buttonElement, tooltipElement) { \n";
         tooltipJS << "    tooltipElement.style.display = 'block'; \n";
         tooltipJS << "    tooltipElement.style.opacity = '1'; \n";
-        tooltipJS << "    update(buttonElement, tooltipElement, arrowElement); \n";
+        tooltipJS << "    update(buttonElement, tooltipElement); \n";
         tooltipJS << "} \n";
         tooltipJS << "function hideTooltip(tooltipElement) { \n";
         tooltipJS << "    tooltipElement.style.display = ''; \n";
@@ -1574,16 +1566,15 @@ public:
         tooltipJS << "for (let i = 1; i <= " << tooltipCount << "; i++) { \n";
         tooltipJS << "    const button = document.querySelector('#button' + i); \n";
         tooltipJS << "    const tooltip = document.querySelector('#tooltip' + i); \n";
-        tooltipJS << "    const arrow = document.querySelector('#arrow' + i); \n";
         tooltipJS << "    button.addEventListener('mouseenter', () => { \n";
-        tooltipJS << "        showTooltip(button, tooltip, arrow); \n";
+        tooltipJS << "        showTooltip(button, tooltip); \n";
         tooltipJS << "    }); \n";
         tooltipJS << "    button.addEventListener('mouseleave', () => { \n";
         tooltipJS << "        hideTooltip(tooltip); \n";
         tooltipJS << "    } \n";
         tooltipJS << "    ); \n";
         tooltipJS << "    tooltip.addEventListener('focus', () => { \n";
-        tooltipJS << "        showTooltip(button, tooltip, arrow); \n";
+        tooltipJS << "        showTooltip(button, tooltip); \n";
         tooltipJS << "    } \n";
         tooltipJS << "    ); \n";
         tooltipJS << "    tooltip.addEventListener('blur', () => { \n";
@@ -1872,6 +1863,10 @@ const std::string StmtToViz::tooltipCSS = "\n \
     border: 1px dashed #aaa; \n \
     z-index: 9999; \n \
     box-shadow: rgba(100, 100, 100, 0.8) 0 2px 5px 0; \n \
+} \n \
+.conditionTooltip { \n \
+    width: 300px; \n \
+    padding: 5px; \n \
 } \n \
 ";
 

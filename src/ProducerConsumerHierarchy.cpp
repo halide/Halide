@@ -846,7 +846,7 @@ void ProducerConsumerHierarchy::for_loop_table(string loop_size) {
     // Loop Size
     html << "<tr>";
 
-    html << "<th class='costTableHeader middleCol'>";
+    html << "<th class='costTableHeader'>";
     html << "Loop Size";
     html << "</th>";
 
@@ -1015,12 +1015,28 @@ Stmt ProducerConsumerHierarchy::visit(const IfThenElse *op) {
 
             // make condition smaller if it's too big
             if (condition.str().size() > MAX_CONDITION_LENGTH) {
-                // TODO: add hover text here
                 condition.str("");
-                condition << "...";
+                condition << "... ";
+
+                longConditionCount++;
+
+                // info-button
+                condition << "<button id='conditionButton" << longConditionCount << "' ";
+                condition << "aria-describedby='conditionTooltip" << longConditionCount << "' ";
+                condition << "class='info-button' role='button' ";
+                condition << ">";
+                condition << "<i class='bi bi-info'></i>";
+                condition << "</button>";
+
+                // tooltip span
+                condition << "<span id='conditionTooltip" << longConditionCount
+                          << "' class='tooltip conditionTooltip' ";
+                condition << "role='conditionTooltip" << longConditionCount << "'>";
+                condition << op->condition;
+                condition << "</span>";
             }
 
-            ifHeader << "(" << condition.str() << ")";
+            ifHeader << condition.str();
 
             if (!SHOW_CUMULATIVE_COST) {
                 thenSize = StmtSize();
@@ -1116,6 +1132,8 @@ Expr ProducerConsumerHierarchy::visit(const Load *op) {
 
     stringstream header;
     header << "Load " << op->name << " (";
+
+    // TODO: put this information into info box
     if (findStmtCost.is_local_variable(op->name)) {
         header << "local var, load size: ";
     } else {
@@ -1198,6 +1216,32 @@ Stmt ProducerConsumerHierarchy::visit(const Allocate *op) {
     mutate(op->body);
 
     return op;
+}
+
+string ProducerConsumerHierarchy::generate_condition_js() {
+    stringstream conditionJS;
+
+    conditionJS << "for (let i = 1; i <= " << longConditionCount << "; i++) { \n";
+    conditionJS << "    const button = document.querySelector('#conditionButton' + i); \n";
+    conditionJS << "    const tooltip = document.querySelector('#conditionTooltip' + i); \n";
+    conditionJS << "    button.addEventListener('mouseenter', () => { \n";
+    conditionJS << "        showTooltip(button, tooltip); \n";
+    conditionJS << "    }); \n";
+    conditionJS << "    button.addEventListener('mouseleave', () => { \n";
+    conditionJS << "        hideTooltip(tooltip); \n";
+    conditionJS << "    } \n";
+    conditionJS << "    ); \n";
+    conditionJS << "    tooltip.addEventListener('focus', () => { \n";
+    conditionJS << "        showTooltip(button, tooltip); \n";
+    conditionJS << "    } \n";
+    conditionJS << "    ); \n";
+    conditionJS << "    tooltip.addEventListener('blur', () => { \n";
+    conditionJS << "        hideTooltip(tooltip); \n";
+    conditionJS << "    } \n";
+    conditionJS << "    ); \n";
+    conditionJS << "} \n";
+
+    return conditionJS.str();
 }
 
 /*

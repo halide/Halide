@@ -118,6 +118,8 @@ public:
     string generate_producer_consumer_html(const Module &m);
     string generate_producer_consumer_html(const Stmt &stmt);
 
+    string generate_condition_js();
+
 private:
     using IRMutator::visit;
 
@@ -132,6 +134,9 @@ private:
     int forCount = 0;
     int storeCount = 0;
     int allocateCount = 0;
+
+    // for long conditionals
+    int longConditionCount = 0;
 
     // for traversal of a Module object
     void traverse(const Module &m);
