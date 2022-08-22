@@ -873,6 +873,31 @@ void ProducerConsumerHierarchy::see_code_button(string anchorName) {
     html << "</button>";
 }
 
+string ProducerConsumerHierarchy::info_tooltip(string toolTipText, string className = "") {
+    prodConsTooltipCount++;
+
+    stringstream ss;
+
+    // info-button
+    ss << "<button id='prodConsButton" << prodConsTooltipCount << "' ";
+    ss << "aria-describedby='prodConsTooltip" << prodConsTooltipCount << "' ";
+    ss << "class='info-button' role='button' ";
+    ss << ">";
+    ss << "<i class='bi bi-info'></i>";
+    ss << "</button>";
+
+    ss << "<span id='prodConsTooltip" << prodConsTooltipCount << "' class='tooltip prodConsTooltip";
+    if (className != "") {
+        ss << " " << className;
+    }
+    ss << "'";
+    ss << "role='prodConsTooltip" << prodConsTooltipCount << "'>";
+    ss << toolTipText;
+    ss << "</span>";
+
+    return ss.str();
+}
+
 void ProducerConsumerHierarchy::generate_computation_cost_div(const IRNode *op) {
     // skip if it's a store
     if (op->node_type == IRNodeType::Store) return;
@@ -1018,22 +1043,9 @@ Stmt ProducerConsumerHierarchy::visit(const IfThenElse *op) {
                 condition.str("");
                 condition << "... ";
 
-                longConditionCount++;
-
-                // info-button
-                condition << "<button id='conditionButton" << longConditionCount << "' ";
-                condition << "aria-describedby='conditionTooltip" << longConditionCount << "' ";
-                condition << "class='info-button' role='button' ";
-                condition << ">";
-                condition << "<i class='bi bi-info'></i>";
-                condition << "</button>";
-
-                // tooltip span
-                condition << "<span id='conditionTooltip" << longConditionCount
-                          << "' class='tooltip conditionTooltip' ";
-                condition << "role='conditionTooltip" << longConditionCount << "'>";
-                condition << op->condition;
-                condition << "</span>";
+                stringstream cond;
+                cond << op->condition;
+                condition << info_tooltip(cond.str(), "conditionTooltip");
             }
 
             ifHeader << condition.str();
@@ -1131,16 +1143,31 @@ Expr ProducerConsumerHierarchy::visit(const Load *op) {
     }
 
     stringstream header;
-    header << "Load " << op->name << " (";
+    header << "Load " << op->name << " ";
 
-    // TODO: put this information into info box
+    // tooltip table
+    stringstream tooltipTable;
+    tooltipTable << "<table class='tooltipTable'>";
+
+    tooltipTable << "<tr>";
+    tooltipTable << "<td class = 'left-table'> Variable Type</td>";
+    tooltipTable << "<td class = 'right-table'> ";
     if (findStmtCost.is_local_variable(op->name)) {
-        header << "local var, load size: ";
+        tooltipTable << "local var";
     } else {
-        header << "global var, load size: ";
+        tooltipTable << "global var";
     }
+    tooltipTable << "</td>";
+    tooltipTable << "</tr>";
 
-    header << lanes << ")";
+    tooltipTable << "<tr>";
+    tooltipTable << "<td class = 'left-table'> Load Size</td>";
+    tooltipTable << "<td class = 'right-table'> " << lanes << "</td>";
+    tooltipTable << "</tr>";
+
+    tooltipTable << "</table>";
+
+    header << info_tooltip(tooltipTable.str());
 
     open_store_div();
     cost_colors(op);
@@ -1185,29 +1212,46 @@ Stmt ProducerConsumerHierarchy::visit(const Allocate *op) {
     StmtSize size = pre_processor.get_size(op);
 
     stringstream header;
-    header << "Allocate " << op->name;
+    header << "Allocate " << op->name << " ";
 
-    // TODO: add information about memory_type to header
-    header << " (" << get_memory_type(op->memory_type) << ")";
+    // memory type tooltip table
+    stringstream tooltipTable;
+    tooltipTable << "<table class='tooltipTable'>";
+    tooltipTable << "<tr>";
+    tooltipTable << "<td class = 'left-table'> Memory Type</td>";
+    tooltipTable << "<td class = 'right-table'> " << get_memory_type(op->memory_type) << "</td>";
+    tooltipTable << "</tr>";
 
-    // TODO: make sure this is right
     if (!is_const_one(op->condition)) {
-        // internal_error << "\n"
-        //                << "ProducerConsumerHierarchy: Allocate " << op->name
-        //                << " `!is_const_one(op->condition)` is not supported.\n\n";
-        header << " if " << op->condition;
+        tooltipTable << "<tr>";
+        tooltipTable << "<td class = 'left-table'> Condition</td>";
+        tooltipTable << "<td class = 'right-table'> " << op->condition << "</td>";
+        tooltipTable << "</tr>";
     }
     if (op->new_expr.defined()) {
         internal_error << "\n"
                        << "ProducerConsumerHierarchy: Allocate " << op->name
                        << " `op->new_expr.defined()` is not supported.\n\n";
+
+        tooltipTable << "<tr>";
+        tooltipTable << "<td class = 'left-table'> New Expr</td>";
+        tooltipTable << "<td class = 'right-table'> " << op->new_expr << "</td>";
+        tooltipTable << "</tr>";
     }
     if (!op->free_function.empty()) {
         internal_error << "\n"
                        << "ProducerConsumerHierarchy: Allocate " << op->name
                        << " `!op->free_function.empty()` is not supported.\n\n";
-        header << " custom_delete {" << op->free_function << "}";
+
+        tooltipTable << "<tr>";
+        tooltipTable << "<td class = 'left-table'> Free Function</td>";
+        tooltipTable << "<td class = 'right-table'> " << op->free_function << "</td>";
+        tooltipTable << "</tr>";
     }
+
+    tooltipTable << "</table>";
+
+    header << info_tooltip(tooltipTable.str());
 
     allocate_div_header(op, header.str(), size, anchorName);
 
@@ -1221,9 +1265,9 @@ Stmt ProducerConsumerHierarchy::visit(const Allocate *op) {
 string ProducerConsumerHierarchy::generate_condition_js() {
     stringstream conditionJS;
 
-    conditionJS << "for (let i = 1; i <= " << longConditionCount << "; i++) { \n";
-    conditionJS << "    const button = document.querySelector('#conditionButton' + i); \n";
-    conditionJS << "    const tooltip = document.querySelector('#conditionTooltip' + i); \n";
+    conditionJS << "for (let i = 1; i <= " << prodConsTooltipCount << "; i++) { \n";
+    conditionJS << "    const button = document.querySelector('#prodConsButton' + i); \n";
+    conditionJS << "    const tooltip = document.querySelector('#prodConsTooltip' + i); \n";
     conditionJS << "    button.addEventListener('mouseenter', () => { \n";
     conditionJS << "        showTooltip(button, tooltip); \n";
     conditionJS << "    }); \n";

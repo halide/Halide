@@ -183,19 +183,19 @@ private:
         tooltipText << "<table class='tooltipTable'>";
 
         tooltipText << "<tr>";
-        tooltipText << "<td class = 'left-table'> Depth</ td>";
-        tooltipText << "<td class = 'right-table'> " << depth << "</ td>";
-        tooltipText << "</ tr>";
+        tooltipText << "<td class = 'left-table'> Depth</td>";
+        tooltipText << "<td class = 'right-table'> " << depth << "</td>";
+        tooltipText << "</tr>";
 
         tooltipText << "<tr>";
-        tooltipText << "<td class = 'left-table'> Computation Cost</ td>";
-        tooltipText << "<td class = 'right-table'> " << computationCost << "</ td>";
-        tooltipText << "</ tr>";
+        tooltipText << "<td class = 'left-table'> Computation Cost</td>";
+        tooltipText << "<td class = 'right-table'> " << computationCost << "</td>";
+        tooltipText << "</tr>";
 
         tooltipText << "<tr>";
-        tooltipText << "<td class = 'left-table'> Data Movement Cost</ td>";
-        tooltipText << "<td class = 'right-table'> " << dataMovementCost << "</ td>";
-        tooltipText << "</ tr>";
+        tooltipText << "<td class = 'left-table'> Data Movement Cost</td>";
+        tooltipText << "<td class = 'right-table'> " << dataMovementCost << "</td>";
+        tooltipText << "</tr>";
         tooltipText << "</table>";
 
         return tooltip(hierarchyHTML, tooltipText.str());
@@ -1682,11 +1682,8 @@ div.ModuleBody:before {\n\
 ";
 
 const std::string StmtToViz::vizCss = "\n \
-/* Additional Code VIsualization CSS */\n \
+/* Additional Code Visualization CSS */\n \
 span.ButtonSpacer { width: 5px; color: transparent; display: inline-block; }\n \
-span.LowCost { background: rgba(10,10,10,0.1); }\n \
-span.MediumCost { background: rgba(10,10,10,0.2); }\n \
-span.HighCost { background: rgba(10,10,10,0.3); }\n \
 .tf-custom .tf-nc { border-radius: 5px; border: 1px solid; }\n \
 .tf-custom .tf-nc:before, .tf-custom .tf-nc:after { border-left-width: 1px; }\n \
 .tf-custom li li:before { border-top-width: 1px; }\n \
@@ -1867,6 +1864,7 @@ const std::string StmtToViz::tooltipCSS = "\n \
 .conditionTooltip { \n \
     width: 300px; \n \
     padding: 5px; \n \
+    font-family: Consolas, 'Liberation Mono', Menlo, Courier, monospace; \n \
 } \n \
 ";
 

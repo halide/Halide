@@ -135,8 +135,8 @@ private:
     int storeCount = 0;
     int allocateCount = 0;
 
-    // for long conditionals
-    int longConditionCount = 0;
+    // tooltip count
+    int prodConsTooltipCount = 0;
 
     // for traversal of a Module object
     void traverse(const Module &m);
@@ -170,6 +170,9 @@ private:
 
     // opens relative code links
     void see_code_button(string anchorName);
+
+    // tooltip
+    string info_tooltip(string toolTipText, string className);
 
     // for cost colors - side bars
     void generate_computation_cost_div(const IRNode *op);
