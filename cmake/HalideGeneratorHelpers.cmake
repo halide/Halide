@@ -62,6 +62,9 @@ function(add_halide_generator TARGET)
             if (ARG_LINK_LIBRARIES)
                 message(FATAL_ERROR "You cannot specify LINK_LIBRARIES in conjunction with Python source code.")
             endif ()
+            if (ARG_PYSTUB)
+                message(FATAL_ERROR "You cannot specify PYSTUB in conjunction with Python source code (only C++ Generators can produce PyStubs).")
+            endif ()
 
             list(LENGTH ARG_SOURCES len)
             if (NOT len EQUAL 1)
@@ -96,11 +99,10 @@ function(add_halide_generator TARGET)
                "#include \"Halide.h\"\n"
                "HALIDE_GENERATOR_PYSTUB(${GEN_NAME}, ${MODULE_NAME})\n")
 
-        file(WRITE
-             "${CMAKE_CURRENT_BINARY_DIR}/${TARGET}.py_stub_generated.cpp"
-             "${stub_text}")
+        set(generated_cpp "${CMAKE_CURRENT_BINARY_DIR}/${TARGET}.py_stub_generated.cpp")
+        file(WRITE "${generated_cpp}" "${stub_text}")
 
-        Python3_add_library(${TARGET}_pystub MODULE WITH_SOABI "${CMAKE_CURRENT_BINARY_DIR}/${TARGET}.py_stub_generated.cpp" ${ARG_SOURCES})
+        Python3_add_library(${TARGET}_pystub MODULE WITH_SOABI "${generated_cpp}" ${ARG_SOURCES})
         set_target_properties(${TARGET}_pystub PROPERTIES
                               CXX_VISIBILITY_PRESET hidden
                               VISIBILITY_INLINES_HIDDEN ON

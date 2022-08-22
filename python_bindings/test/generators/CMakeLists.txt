@@ -21,9 +21,16 @@ function(_add_python_aot_and_stub_extension)
 
     list(GET ARG_GEN 0 GEN_NAME)
     set(GEN_TARGET py_gen_${GEN_NAME})
-    add_halide_generator(${GEN_TARGET}
-                         SOURCES ${ARG_SOURCES}
-                         PYSTUB ${GEN_NAME})
+
+    # It is illegal to specify PYSTUB for a Python Generator
+    if (ARG_SOURCES MATCHES ".py$")
+        add_halide_generator(${GEN_TARGET}
+                             SOURCES ${ARG_SOURCES})
+    else ()
+        add_halide_generator(${GEN_TARGET}
+                             PYSTUB ${GEN_NAME}
+                             SOURCES ${ARG_SOURCES})
+    endif ()
 
     foreach (G IN LISTS ARG_GEN)
         add_halide_library(py_aot_${G}
