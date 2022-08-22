@@ -48,9 +48,12 @@ if (Halide_comp_static AND Halide_comp_shared)
     Halide_fail("Halide `static` and `shared` components are mutually exclusive.")
 endif ()
 
-# Set configured variables
-set(Halide_ENABLE_EXCEPTIONS @Halide_ENABLE_EXCEPTIONS@)
-set(Halide_ENABLE_RTTI @Halide_ENABLE_RTTI@)
+# Inform downstreams of potential compatibility issues. For instance, exceptions
+# and RTTI must both be enabled to build Python bindings and ASAN builds should
+# not be mixed with non-ASAN builds.
+set(Halide_ENABLE_EXCEPTIONS "@Halide_ENABLE_EXCEPTIONS@")
+set(Halide_ENABLE_RTTI "@Halide_ENABLE_RTTI@")
+set(Halide_ASAN_ENABLED "@Halide_ASAN_ENABLED@")
 
 ##
 ## Find dependencies based on components
