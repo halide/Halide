@@ -172,6 +172,7 @@ ErrorReport::~ErrorReport() noexcept(false) {
     }
 
 #ifdef HALIDE_WITH_EXCEPTIONS
+    std::cerr << msg.str() << std::flush;
     if (std::uncaught_exceptions() > 0) {
         // This should never happen - evaluating one of the arguments
         // to the error message would have to throw an
