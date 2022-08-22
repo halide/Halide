@@ -115,7 +115,6 @@ Expr to_rounding_shift(const Call *c) {
         Expr a = c->args[0];
         Expr b = c->args[1];
 
-
         // Helper to make the appropriate shift.
         auto rounding_shift = [&](const Expr &a, const Expr &b) {
             if (c->is_intrinsic(Call::shift_right)) {
@@ -314,7 +313,6 @@ protected:
             return Add::make(a, negative_b);
         }
 
-
         // Run after the lossless_negate check, because we want that to turn into an widen_right_add if relevant.
         if (op->type.is_int_or_uint() && op->type.bits() > 8) {
             // Look for widen_right_sub intrinsics.
@@ -340,7 +338,6 @@ protected:
                 }
             }
         }
-
 
         if (a.same_as(op->a) && b.same_as(op->b)) {
             return op;
@@ -738,7 +735,6 @@ protected:
         Type opposite_type = op->type.is_int() ? op->type.with_code(halide_type_uint) : op->type.with_code(halide_type_int);
         const auto is_x_wider_opposite_int = (op->type.is_int() && is_uint(x, 2 * bits)) || (op->type.is_uint() && is_int(x, 2 * bits));
 
-
         if (
             // Simplify extending patterns.
             // (x + widen(y)) + widen(z) = x + widening_add(y, z).
@@ -1070,7 +1066,6 @@ Expr lower_widen_right_add(const Expr &a, const Expr &b) {
 Expr lower_widen_right_mul(const Expr &a, const Expr &b) {
     return a * widen(b);
 }
-
 
 Expr lower_widen_right_sub(const Expr &a, const Expr &b) {
     return a - widen(b);

@@ -1105,10 +1105,12 @@ Expr memoize_tag_helper(Expr result, const std::vector<Expr> &cache_key_values) 
 }
 
 Expr widen_right_add(Expr a, Expr b) {
-    user_assert(a.defined() && b.defined()) << "widen_right_add of undefined Expr\n" << a << ", " << b << "\n";
+    user_assert(a.defined() && b.defined()) << "widen_right_add of undefined Expr\n"
+                                            << a << ", " << b << "\n";
     user_assert(a.type().is_int_or_uint() && b.type().is_int_or_uint())
         << "widen_right_add only defined for integer types, received:\n " << a << "\n " << b << "\n";
-    user_assert(b.type().bits() <= 32) << "widen_right_add of large Expr\n" << a << ", " << b << "\n";
+    user_assert(b.type().bits() <= 32) << "widen_right_add of large Expr\n"
+                                       << a << ", " << b << "\n";
     match_lanes(a, b);
     Type wide_type = b.type().widen();
     user_assert(wide_type == a.type()) << "widen_right_add type mismatch\n " << a << "\n " << b << "\n";
@@ -1116,10 +1118,12 @@ Expr widen_right_add(Expr a, Expr b) {
 }
 
 Expr widen_right_mul(Expr a, Expr b) {
-    user_assert(a.defined() && b.defined()) << "widen_right_mul of undefined Expr\n" << a << ", " << b << "\n";
+    user_assert(a.defined() && b.defined()) << "widen_right_mul of undefined Expr\n"
+                                            << a << ", " << b << "\n";
     user_assert(a.type().is_int_or_uint() && b.type().is_int_or_uint())
         << "widen_right_mul only defined for integer types, received:\n " << a << "\n " << b << "\n";
-    user_assert(b.type().bits() <= 32) << "widen_right_mul of large Expr\n" << a << ", " << b << "\n";
+    user_assert(b.type().bits() <= 32) << "widen_right_mul of large Expr\n"
+                                       << a << ", " << b << "\n";
     match_lanes(a, b);
     Type wide_type = b.type().widen();
     user_assert(wide_type == a.type()) << "widen_right_mul type mismatch\n " << a << "\n " << b << "\n";
@@ -1127,16 +1131,18 @@ Expr widen_right_mul(Expr a, Expr b) {
 }
 
 Expr widen_right_sub(Expr a, Expr b) {
-    user_assert(a.defined() && b.defined()) << "widen_right_sub of undefined Expr\n" << a << ", " << b << "\n";
+    user_assert(a.defined() && b.defined()) << "widen_right_sub of undefined Expr\n"
+                                            << a << ", " << b << "\n";
     user_assert(a.type().is_int_or_uint() && b.type().is_int_or_uint())
         << "widen_right_sub only defined for integer types, received:\n " << a << "\n " << b << "\n";
-    user_assert(b.type().bits() <= 32) << "widen_right_sub of large Expr\n" << a << ", " << b << "\n";
+    user_assert(b.type().bits() <= 32) << "widen_right_sub of large Expr\n"
+                                       << a << ", " << b << "\n";
     match_lanes(a, b);
     Type wide_type = b.type().widen();
-    user_assert(wide_type == a.type()) << "widen_right_sub type mismatch\n" << a << ", " << b << "\n";
+    user_assert(wide_type == a.type()) << "widen_right_sub type mismatch\n"
+                                       << a << ", " << b << "\n";
     return Call::make(wide_type, Call::widen_right_sub, {std::move(a), std::move(b)}, Call::PureIntrinsic);
 }
-
 
 Expr widening_add(Expr a, Expr b) {
     user_assert(a.defined() && b.defined()) << "widening_add of undefined Expr\n";

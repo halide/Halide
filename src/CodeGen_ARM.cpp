@@ -1206,7 +1206,8 @@ void CodeGen_ARM::visit(const Call *op) {
     // Look for (S | U)ADALP patterns.
     // This would be much easier to do if we matched on reduction factors of
     // VectorReduce nodes instead of the output lanes.
-    if (// TODO: is there a way to not just undo what FindIntrinsics does here?
+    if (
+        // TODO: is there a way to not just undo what FindIntrinsics does here?
         rewrite(
             widen_right_add(x, h_add(y, lanes)),
             x + h_add(cast(op->type.with_lanes(lanes * 2), y), lanes),
