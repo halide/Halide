@@ -49,12 +49,6 @@ if (Halide_comp_static AND Halide_comp_shared)
 endif ()
 
 # Set configured variables
-set(Halide_VERSION @Halide_VERSION@)
-set(Halide_VERSION_MAJOR @Halide_VERSION_MAJOR@)
-set(Halide_VERSION_MINOR @Halide_VERSION_MINOR@)
-set(Halide_VERSION_PATCH @Halide_VERSION_PATCH@)
-set(Halide_VERSION_TWEAK @Halide_VERSION_TWEAK@)
-
 set(Halide_ENABLE_EXCEPTIONS @Halide_ENABLE_EXCEPTIONS@)
 set(Halide_ENABLE_RTTI @Halide_ENABLE_RTTI@)
 
