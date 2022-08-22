@@ -39,10 +39,10 @@ class StmtToViz : public IRVisitor {
     static const std::string css, js;
     static const std::string vizCss;
     static const std::string costColorsCSS;
-    static const std::string formHTML, formCSS;
     static const std::string navigationHTML;
     static const std::string prodConsCSS;
     static const std::string lineNumbersCSS;
+    static const std::string tooltipCSS;
 
     FindStmtCost findStmtCost;                            // used for finding the cost of statements
     GetStmtHierarchy getStmtHierarchy;                    // used for getting the hierarchy of
@@ -61,7 +61,7 @@ private:
     vector<string> curr_context;
     bool in_context;
     int curr_line_num;  // for accessing div of that line
-    stringstream script_stream;
+    stringstream content_rule_script_stream;
     bool in_loop;
 
     // used for getting anchor names
@@ -70,6 +70,9 @@ private:
     int forCount = 0;
     int storeCount = 0;
     int allocateCount = 0;
+
+    // used for tooltip stuff
+    int tooltipCount = 0;
 
     string get_file_name(string fileName) {
         // remove leading directories from filename
@@ -111,8 +114,8 @@ private:
 
     void add_context_rule(const int line_num) {
         string id = "ContextSpan" + to_string(line_num);
-        script_stream << "document.getElementById('" << id << "').style.backgroundColor = 'blue';"
-                      << endl;
+        content_rule_script_stream << "document.getElementById('" << id
+                                   << "').style.backgroundColor = 'blue';" << endl;
     }
 
     // All spans and divs will have an id of the form "x-y", where x
@@ -145,9 +148,11 @@ private:
 
     string tooltip(const string &hierarchyHTML, const string &tooltipText) {
         std::stringstream s;
-        // TODO: fix this!
+        tooltipCount++;
 
-        s << "<button class='info-button' role='button'";
+        s << "<button id='button" << tooltipCount << "' ";
+        s << "aria-describedby='tooltip" << tooltipCount << "' ";
+        s << "class='info-button' role='button' ";
         s << "onclick=\"openNewWindow('";
         s << hierarchyHTML;
         s << "')\"";
@@ -157,14 +162,14 @@ private:
           << "\").style.background = \"transparent\";'";
         s << ">";
         s << "<i class='bi bi-info'></i>";
-        s << tooltipText;
         s << "</button>";
 
-        // s << open_span("tooltip");
-        // s << open_span("tooltiptext");
-        // s << tooltipText;
-        // s << close_span();
-        // s << close_span();
+        // tooltip span
+        s << "<span id='tooltip" << tooltipCount << "' class='tooltip' ";
+        s << "role='tooltip" << tooltipCount << "'>";
+        s << tooltipText;
+        s << "<span id='arrow" << tooltipCount << "' class='arrow'></span>";
+        s << "</span>";
 
         return s.str();
     }
@@ -1450,12 +1455,17 @@ public:
                   "href='https://cdn.jsdelivr.net/npm/bootstrap-icons@1.5.0/font/"
                   "bootstrap-icons.css'>\n";
 
+        //   tooltip links
+        stream << "<script src='https://cdn.jsdelivr.net/npm/@floating-ui/core@1.0.1'></script>";
+        stream << "<script src='https://cdn.jsdelivr.net/npm/@floating-ui/dom@1.0.1'></script>";
+
         stream << "<style type='text/css'>";
         stream << css;
         stream << vizCss;
         stream << costColorsCSS;
         stream << prodConsCSS;
         stream << lineNumbersCSS;
+        stream << tooltipCSS;
         stream << "</style>\n";
         stream << "<script language='javascript' type='text/javascript'>" + js + "</script>\n";
         stream << "<link "
@@ -1514,9 +1524,76 @@ public:
                << "    this.onmouseout = function() { $('.Matched[id^=' + this.id.split('-')[0] + "
                   "'-]').removeClass('Highlight'); }\n"
                << "} );\n";
-        stream << script_stream.str();
+        stream << content_rule_script_stream.str();
+        stream << generatetooltipJS(tooltipCount);
         stream << "</script>\n";
         stream << "</body>";
+    }
+
+    string generatetooltipJS(int &tooltipCount) {
+        stringstream tooltipJS;
+        tooltipJS << "function update(buttonElement, tooltipElement, arrowElement) { \n";
+        tooltipJS << "    window.FloatingUIDOM.computePosition(buttonElement, tooltipElement, { \n";
+        tooltipJS << "        placement: 'top', \n";
+        tooltipJS << "        middleware: [ \n";
+        tooltipJS << "            window.FloatingUIDOM.offset(6), \n";
+        tooltipJS << "            window.FloatingUIDOM.flip(), \n";
+        tooltipJS << "            window.FloatingUIDOM.shift({ padding: 5 }), \n";
+        tooltipJS << "            window.FloatingUIDOM.arrow({ element: arrowElement }), \n";
+        tooltipJS << "        ], \n";
+        tooltipJS << "    }).then(({ x, y, placement, middlewareData }) => { \n";
+        tooltipJS << "        Object.assign(tooltipElement.style, { \n";
+        tooltipJS << "            left: `${x}px`, \n";
+        tooltipJS << "            top: `${y}px`, \n";
+        tooltipJS << "        }); \n";
+        tooltipJS << "        // Accessing the data \n";
+        tooltipJS << "        const { x: arrowX, y: arrowY } = middlewareData.arrow; \n";
+        tooltipJS << "        const staticSide = { \n";
+        tooltipJS << "            top: 'bottom', \n";
+        tooltipJS << "            right: 'left', \n";
+        tooltipJS << "            bottom: 'top', \n";
+        tooltipJS << "            left: 'right', \n";
+        tooltipJS << "        }[placement.split('-')[0]]; \n";
+        tooltipJS << "        Object.assign(arrowElement.style, { \n";
+        tooltipJS << "            left: arrowX != null ? `${arrowX}px` : '', \n";
+        tooltipJS << "            top: arrowY != null ? `${arrowY}px` : '', \n";
+        tooltipJS << "            right: '', \n";
+        tooltipJS << "            bottom: '', \n";
+        tooltipJS << "            [staticSide]: '-4px', \n";
+        tooltipJS << "        }); \n";
+        tooltipJS << "    }); \n";
+        tooltipJS << "} \n";
+        tooltipJS << "function showTooltip(buttonElement, tooltipElement, arrowElement) { \n";
+        tooltipJS << "    tooltipElement.style.display = 'block'; \n";
+        tooltipJS << "    tooltipElement.style.opacity = '1'; \n";
+        tooltipJS << "    update(buttonElement, tooltipElement, arrowElement); \n";
+        tooltipJS << "} \n";
+        tooltipJS << "function hideTooltip(tooltipElement) { \n";
+        tooltipJS << "    tooltipElement.style.display = ''; \n";
+        tooltipJS << "    tooltipElement.style.opacity = '0'; \n";
+        tooltipJS << "} \n";
+        tooltipJS << "for (let i = 1; i <= " << tooltipCount << "; i++) { \n";
+        tooltipJS << "    const button = document.querySelector('#button' + i); \n";
+        tooltipJS << "    const tooltip = document.querySelector('#tooltip' + i); \n";
+        tooltipJS << "    const arrow = document.querySelector('#arrow' + i); \n";
+        tooltipJS << "    button.addEventListener('mouseenter', () => { \n";
+        tooltipJS << "        showTooltip(button, tooltip, arrow); \n";
+        tooltipJS << "    }); \n";
+        tooltipJS << "    button.addEventListener('mouseleave', () => { \n";
+        tooltipJS << "        hideTooltip(tooltip); \n";
+        tooltipJS << "    } \n";
+        tooltipJS << "    ); \n";
+        tooltipJS << "    tooltip.addEventListener('focus', () => { \n";
+        tooltipJS << "        showTooltip(button, tooltip, arrow); \n";
+        tooltipJS << "    } \n";
+        tooltipJS << "    ); \n";
+        tooltipJS << "    tooltip.addEventListener('blur', () => { \n";
+        tooltipJS << "        hideTooltip(tooltip); \n";
+        tooltipJS << "    } \n";
+        tooltipJS << "    ); \n";
+        tooltipJS << "} \n";
+
+        return tooltipJS.str();
     }
 };
 
@@ -1620,8 +1697,6 @@ span.ButtonSpacer { width: 5px; color: transparent; display: inline-block; }\n \
 span.LowCost { background: rgba(10,10,10,0.1); }\n \
 span.MediumCost { background: rgba(10,10,10,0.2); }\n \
 span.HighCost { background: rgba(10,10,10,0.3); }\n \
-.tooltip .tooltiptext { visibility: hidden; text-align: center; border-radius: 3px; padding: 5px; background: #FFFFFF; color: #313639; border: 1px solid #313639; border-radius: 8px; pointer-events: none; width: fit-content; position: absolute; z-index: 1; margin-top: -75px; margin-left: -40px; z-index: 1000; }\n \
-.tooltip:hover .tooltiptext { visibility: visible; }\n \
 .left-table { text-align: right; color: grey; vertical-align: middle; font-size: 12px; }\n \
 .right-table { text-align: left; vertical-align: middle; font-size: 12px; font-weight: bold; padding-left: 3px; }\n \
 .tf-custom .tf-nc { border-radius: 5px; border: 1px solid; }\n \
@@ -1686,39 +1761,6 @@ span.CostColor0 { background: rgb(236,233,89); } \n \
 span.CostColorSpacer { width: 2px; color: transparent; display: inline-block; }\n \
 span.CostComputation { width: 13px; display: inline-block; color: transparent; } \n \
 span.CostMovement { width: 13px; display: inline-block;  color: transparent; } \n \
-";
-
-const std::string StmtToViz::formCSS = "\n \
-/* Form CSS */\n \
-form { \n \
-    outline: solid 1px black; \n \
-    padding: 10px; \n \
-    font-size: 14px; \n \
-    font-weight: bold; \n \
-    position: fixed; \n \
-    width: 100%; \n \
-    background: white; \n \
-    left: 2px; \n \
-    top: 1px; \n \
-    z-index: 999;\n \
-} \n \
-";
-
-const std::string StmtToViz::formHTML = "\n \
-<form> \n \
-    <input type='checkbox' id='showAsserts' \n \
-        onclick='showAssertsClicked(this);' checked> \n \
-    <label for='showAsserts'> Show assert statements (not implemented \n \
-        yet)</label><br> \n \
-    <input type='checkbox' id='showMemAlloc' \n \
-        onclick='showMemAllocClicked(this);' checked> \n \
-    <label for='showMemAlloc'> Show memory allocation / \n \
-        de-allocation (not implemented yet)</label><br> \n \
-    <input type='checkbox' id='showCompute' \n \
-        onclick='showComputeClicked(this);' checked> \n \
-    <label for='showCompute'> Show compute (not implemented yet)</label><br> \n \
-</form> \n \
-<div style='height: 80px;'></div> \n \
 ";
 
 const std::string StmtToViz::navigationHTML = "\n \
@@ -1813,6 +1855,31 @@ div.CostColor3 { background: rgb(233,198,40); } \n \
 div.CostColor2 { background: rgb(232,211,45); } \n \
 div.CostColor1 { background: rgb(231,223,50); } \n \
 div.CostColor0 { background: rgb(236,233,89); } \n \
+";
+
+const std::string StmtToViz::tooltipCSS = "\n \
+/* Tooltip CSS */\n \
+.tooltip { \n \
+    display: none; \n \
+    position: absolute; \n \
+    top: 0; \n \
+    left: 0; \n \
+    background: #ddd; \n \
+    padding: 5px; \n \
+    font-size: 90%; \n \
+    pointer-events: none; \n \
+    border-radius: 5px; \n \
+    border: 1px dashed #aaa; \n \
+    z-index: 9999; \n \
+} \n \
+.arrow { \n \
+    position: absolute; \n \
+    background: #ddd; \n \
+    width: 8px; \n \
+    height: 8px; \n \
+    transform: rotate(45deg); \n \
+    z-index: 9999; \n \
+} \n \
 ";
 
 const std::string StmtToViz::js = "\n \
