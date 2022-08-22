@@ -56,7 +56,10 @@ set(Halide_ASAN_ENABLED "@Halide_ASAN_ENABLED@")
 
 include(CMakeFindDependencyMacro)
 
-find_dependency(HalideHelpers "${Halide_VERSION}" EXACT)
+find_dependency(
+    HalideHelpers "@Halide_VERSION@" EXACT
+    HINTS "${CMAKE_CURRENT_LIST_DIR}/@HalideHelpers_HINT@"
+)
 
 if (Halide_comp_PNG)
     Halide_find_component_dependency(PNG PNG)
