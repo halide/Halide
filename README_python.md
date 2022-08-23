@@ -34,8 +34,9 @@ supported; at this time, Python 3.8 (or higher) is recommended. The Python
 bindings are supported on 64-bit Linux, OSX, and Windows systems.
 
 In addition to the ability to write just-in-time Halide code using Python, you
-can write Generators using the Python bindings, which can simplify build-system
-integration (since no C++ metacompilation step is required).
+can write [Generators](#halide-generators-in-python) using the Python bindings,
+which can simplify build-system integration (since no C++ metacompilation step
+is required).
 
 You can also use existing Halide Generators (written in C++) to produce Python
 extensions that can be used within Python code.
@@ -59,7 +60,8 @@ Build as part of the CMake build with `-DWITH_PYTHON_BINDINGS=ON` (this is the
 default). Note that this requires both Halide and LLVM to be built with RTTI and
 exceptions **enabled**, which is not the default for LLVM.
 
-> **TODO:** do we want to document `pip install /path/to/Halide/python_bindings/`?
+> **TODO:** do we want to document `pip install
+> /path/to/Halide/python_bindings/`?
 
 ## Documentation and Examples
 
@@ -204,14 +206,11 @@ objects without any explicit conversion necessary.
 ## Halide Generators In Python
 
 In Halide, a "Generator" is a unit of encapsulation for Halide code. It is
-self-contained piece of code that can:
--  Produce a chunk of Halide IR (in the form of an `hl.Pipeline`) that is appropriate for compilation (via either JIT or
-AOT)
--  Expose itself to the build system in a discoverable way
--  Fully describe
+self-contained piece of code that can: - Produce a chunk of Halide IR (in the
+form of an `hl.Pipeline`) that is appropriate for compilation (via either JIT or
+AOT) - Expose itself to the build system in a discoverable way - Fully describe
 itself for the build system with metadata for (at least) the type and number of
-inputs and outputs expected
--  Allow for build-time customization of
+inputs and outputs expected - Allow for build-time customization of
 coder-specified parameters in a way that doesn't require editing of source code
 
 Originally, Halide only supported writing Generators in C++. In this document,
