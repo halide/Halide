@@ -370,6 +370,10 @@ def _unsorted_cls_dir(cls):
         yield (k, v)
 
 
+def _exactly_one(values):
+    _check(len(values) == 1, "Too many values specified: %s" % values)
+    return values[0]
+
 _halide_generator_context = ContextVar('halide_generator_context', default=None)
 
 def _generatorcontext_enter(self: GeneratorContext) -> GeneratorContext:
@@ -444,6 +448,13 @@ class Generator(ABC):
             outputs.extend(generator._get_output_func(o.name))
 
         return outputs[0] if len(outputs) == 1 else tuple(outputs)
+
+    def compile_to_callable(self):
+        pipeline = self._build_pipeline()
+        arguments = [_exactly_one(self._get_input_parameter(a.name))._to_argument()
+                     for a in self._get_arginfos()
+                     if a.dir == ArgInfoDirection.Input]
+        return pipeline.compile_to_callable(arguments, self._target);
 
     # Make it hard for the user to overwrite any members that are GeneratorParams, Inputs, or Outputs
     def __setattr__(self, name, value):

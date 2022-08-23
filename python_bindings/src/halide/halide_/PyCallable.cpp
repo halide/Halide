@@ -51,7 +51,6 @@ T cast_to(const py::handle &h) {
 
 class PyCallable {
 public:
-    // TODO: support kwargs here too.
     static void call_impl(Callable &c, const py::args &args, const py::kwargs &kwargs) {
         const size_t argc = c.arguments().size();
         _halide_user_assert(argc > 0);
