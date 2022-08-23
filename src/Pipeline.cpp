@@ -71,13 +71,12 @@ std::string sanitize_function_name(const std::string &s) {
 }
 
 std::string strip_uniquifier(const std::string &s) {
-    size_t pos = s.find_last_of("$");
+    size_t pos = s.find_last_of('$');
     if (pos == std::string::npos) {
         return s;
     } else {
         return s.substr(0, pos);
     }
-
 }
 
 }  // namespace
