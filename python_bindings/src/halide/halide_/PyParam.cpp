@@ -49,6 +49,13 @@ void define_param(py::module &m) {
             .def("defined", &Parameter::defined)
             .def("type", &Parameter::type)
             .def("dimensions", &Parameter::dimensions)
+            .def("_to_argument", [](const Parameter &p) -> Argument {
+                return Argument(p.name(),
+                                p.is_buffer() ? Argument::InputBuffer : Argument::InputScalar,
+                                p.type(),
+                                p.dimensions(),
+                                p.get_argument_estimates());
+            })
             .def("__repr__", [](const Parameter &p) -> std::string {
                 std::ostringstream o;
                 // Don't leak any info but the name into the repr string.
