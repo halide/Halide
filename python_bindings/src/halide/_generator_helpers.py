@@ -372,14 +372,17 @@ def _unsorted_cls_dir(cls):
 
 _halide_generator_context = ContextVar('halide_generator_context', default=None)
 
+
 def _generatorcontext_enter(self: GeneratorContext) -> GeneratorContext:
     if not hasattr(self, "_tokens"):
         self._tokens = []
     self._tokens.append(_halide_generator_context.set(self))
     return self
 
+
 def _generatorcontext_exit(self: GeneratorContext) -> None:
     _halide_generator_context.reset(self._tokens.pop())
+
 
 class Generator(ABC):
     """Base class for Halide Generators in Python"""
@@ -447,10 +450,12 @@ class Generator(ABC):
 
     def compile_to_callable(self):
         pipeline = self._build_pipeline()
-        arguments = [self._get_input_parameter(a.name)._to_argument()
-                     for a in self._get_arginfos()
-                     if a.dir == ArgInfoDirection.Input]
-        return pipeline.compile_to_callable(arguments, self._target);
+        arguments = [
+            self._get_input_parameter(a.name)._to_argument()
+            for a in self._get_arginfos()
+            if a.dir == ArgInfoDirection.Input
+        ]
+        return pipeline.compile_to_callable(arguments, self._target)
 
     # Make it hard for the user to overwrite any members that are GeneratorParams, Inputs, or Outputs
     def __setattr__(self, name, value):
@@ -668,7 +673,8 @@ class Generator(ABC):
             self.autoscheduler().name = value
         elif name.startswith("autoscheduler."):
             sub_key = name[14:]
-            _check(not sub_key in self.autoscheduler().extra, "The GeneratorParam %s cannot be set more than once" % name)
+            _check(not sub_key in self.autoscheduler().extra,
+                   "The GeneratorParam %s cannot be set more than once" % name)
             self.autoscheduler().extra[sub_key] = value
         else:
             self._unhandled_generator_params[name] = value
