@@ -370,10 +370,6 @@ def _unsorted_cls_dir(cls):
         yield (k, v)
 
 
-def _exactly_one(values):
-    _check(len(values) == 1, "Too many values specified: %s" % values)
-    return values[0]
-
 _halide_generator_context = ContextVar('halide_generator_context', default=None)
 
 def _generatorcontext_enter(self: GeneratorContext) -> GeneratorContext:
@@ -445,13 +441,13 @@ class Generator(ABC):
 
         outputs = []
         for o in generator._arginfos_out:
-            outputs.extend(generator._get_output_func(o.name))
+            outputs.append(generator._get_output_func(o.name))
 
         return outputs[0] if len(outputs) == 1 else tuple(outputs)
 
     def compile_to_callable(self):
         pipeline = self._build_pipeline()
-        arguments = [_exactly_one(self._get_input_parameter(a.name))._to_argument()
+        arguments = [self._get_input_parameter(a.name)._to_argument()
                      for a in self._get_arginfos()
                      if a.dir == ArgInfoDirection.Input]
         return pipeline.compile_to_callable(arguments, self._target);
@@ -706,15 +702,15 @@ class Generator(ABC):
         self._stage = _Stage.pipeline_built
         return self._pipeline
 
-    def _get_input_parameter(self, name: str) -> list[InternalParameter]:
+    def _get_input_parameter(self, name: str) -> InternalParameter:
         assert self._stage == _Stage.pipeline_built
         _check(name in self._input_parameters, "Unknown input: %s" % name)
-        return [self._input_parameters[name]]
+        return self._input_parameters[name]
 
-    def _get_output_func(self, name: str) -> list[Func]:
+    def _get_output_func(self, name: str) -> Func:
         assert self._stage == _Stage.pipeline_built
         _check(name in self._output_funcs, "Unknown output: %s" % name)
-        return [self._output_funcs[name]]
+        return self._output_funcs[name]
 
     def _bind_input(self, name: str, values: list[object]):
         assert self._stage < _Stage.io_replaced

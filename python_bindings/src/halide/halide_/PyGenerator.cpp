@@ -75,11 +75,11 @@ public:
     }
 
     std::vector<Parameter> input_parameter(const std::string &name) override {
-        return args_to_vector<Parameter>(generator_.attr("_get_input_parameter")(name));
+        return {generator_.attr("_get_input_parameter")(name).cast<Parameter>()};
     }
 
     std::vector<Func> output_func(const std::string &name) override {
-        return args_to_vector<Func>(generator_.attr("_get_output_func")(name));
+        return {generator_.attr("_get_output_func")(name).cast<Func>()};
     }
 
 #ifdef HALIDE_ALLOW_GENERATOR_EXTERNAL_CODE
