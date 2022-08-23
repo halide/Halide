@@ -446,6 +446,13 @@ protected:
         const int factor = value_lanes / lanes;
         Expr value = op->value;
 
+        // Useful constants for some of the below rules.
+        Expr one_i16 = make_one(Int(16, value_lanes));
+        Expr one_i8 = make_one(Int(8, value_lanes));
+        Expr one_u8 = make_one(Int(8, value_lanes));
+        Expr zero_i32 = make_zero(Int(32, lanes));
+        Expr zero_f32 = make_zero(Float(32, lanes));
+
         switch (op->op) {
         case VectorReduce::Add: {
             auto rewrite = IRMatcher::rewriter(IRMatcher::h_add(value, lanes), op->type);
@@ -462,7 +469,7 @@ protected:
                   // Horizontal widening add via pmaddwd
                   rewrite(
                       h_add(cast(Int(32, value_lanes), x), lanes),
-                      v_instr(VectorInstruction::dot_product, x, make_const(Int(16, value_lanes), 1)),
+                      v_instr(VectorInstruction::dot_product, x, one_i16),
                       is_int(x, 16)) ||
 
                   (rewrite(
@@ -475,17 +482,17 @@ protected:
                    // Horizontal widening adds using 2-way saturating dot products.
                    (rewrite(
                         h_add(cast(UInt(16, value_lanes), x), lanes),
-                        cast(UInt(16, lanes), typed(Int(16, lanes), v_instr(VectorInstruction::saturating_dot_product, x, make_const(Int(8, value_lanes), 1)))),
+                        cast(UInt(16, lanes), typed(Int(16, lanes), v_instr(VectorInstruction::saturating_dot_product, x, one_i8))),
                         is_uint(x, 8)) ||
 
                     rewrite(
                         h_add(cast(Int(16, value_lanes), x), lanes),
-                        v_instr(VectorInstruction::saturating_dot_product, x, make_const(Int(8, value_lanes), 1)),
+                        v_instr(VectorInstruction::saturating_dot_product, x, one_i8),
                         is_uint(x, 8)) ||
 
                     rewrite(
                         h_add(cast(Int(16, value_lanes), x), lanes),
-                        v_instr(VectorInstruction::saturating_dot_product, make_const(UInt(8, value_lanes), 1), x),
+                        v_instr(VectorInstruction::saturating_dot_product, one_u8, x),
                         is_int(x, 8)) ||
 
                     // SSE41 and AVX2 support horizontal_add via phadd intrinsics.
@@ -508,25 +515,25 @@ protected:
                  // Accumulating pmaddubsw
                  (rewrite(
                       h_add(cast(Int(32, lanes * 4), widening_mul(x, y)), lanes),
-                      v_instr(VectorInstruction::dot_product, make_zero(Int(32, lanes)), x, y),
+                      v_instr(VectorInstruction::dot_product, zero_i32, x, y),
                       is_uint(x, 8) && is_int(y, 8)) ||
 
                   rewrite(
                       h_add(cast(Int(32, lanes * 4), widening_mul(x, y)), lanes),
-                      v_instr(VectorInstruction::dot_product, make_zero(Int(32, lanes)), y, x),
+                      v_instr(VectorInstruction::dot_product, zero_i32, y, x),
                       is_int(x, 8) && is_uint(y, 8)) ||
 
                   // Accumulating pmaddwd.
                   rewrite(
                       h_add(widening_mul(x, y), lanes),
-                      v_instr(VectorInstruction::dot_product, make_zero(Int(32, lanes)), x, y),
+                      v_instr(VectorInstruction::dot_product, zero_i32, x, y),
                       is_int(x, 16, lanes * 2) && is_int(y, 16, lanes * 2)) ||
 
                   // Accumulating fp dot products.
                   // TODO(rootjalex): This would be more powerful with lossless_cast checking.
                   rewrite(
                       h_add(cast(Float(32, lanes * 4), x) * cast(Float(32, lanes * 4), y), lanes),
-                      v_instr(VectorInstruction::dot_product, make_zero(Float(32, lanes)), x, y),
+                      v_instr(VectorInstruction::dot_product, zero_f32, x, y),
                       is_bfloat(x, 16) && is_bfloat(y, 16)) ||
 
                   false)) ||
