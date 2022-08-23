@@ -480,7 +480,7 @@ Expr lossless_cast(Type t, Expr e) {
         }
     }
 
-    if ((t.is_int() || t.is_uint()) && t.bits() >= 16) {
+    if (t.is_int_or_uint() && t.bits() >= 16) {
         if (const Add *add = e.as<Add>()) {
             // If we can losslessly narrow the args even more
             // aggressively, we're good.
