@@ -449,7 +449,7 @@ protected:
         // Useful constants for some of the below rules.
         Expr one_i16 = make_one(Int(16, value_lanes));
         Expr one_i8 = make_one(Int(8, value_lanes));
-        Expr one_u8 = make_one(Int(8, value_lanes));
+        Expr one_u8 = make_one(UInt(8, value_lanes));
         Expr zero_i32 = make_zero(Int(32, lanes));
         Expr zero_f32 = make_zero(Float(32, lanes));
 
