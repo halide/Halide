@@ -454,7 +454,6 @@ int find_mpy_ops(const Expr &op, Type a_ty, Type b_ty, int max_mpy_count,
 // Perform peephole optimizations on the IR, adding appropriate
 // interleave and deinterleave calls.
 class OptimizePatterns : public IRMutator {
-private:
     using IRMutator::visit;
 
     Scope<Interval> bounds;
@@ -863,6 +862,13 @@ private:
                 return mpyadds;
             }
         }
+        // TODO: There can be better instruction selection for these.
+        if (op->is_intrinsic(Call::widen_right_add)) {
+            Expr mpyadds = find_mpyadds(Add::make(op->args[0], cast(op->type, op->args[1])));
+            if (mpyadds.defined()) {
+                return mpyadds;
+            }
+        }
 
         // These intrinsics should get the default lowering, and we need to recursively mutate the
         // result. We don't want to let these fall through to CodeGen_Hexagon and CodeGen_LLVM,
@@ -890,15 +896,6 @@ private:
             // One operand widening multiplication.
             {"halide.hexagon.mul.vw.vh", widen_right_mul(wild_i32x, wild_i16x), Pattern::ReinterleaveOp0},
             {"halide.hexagon.mul.vw.vuh", widen_right_mul(wild_u32x, wild_u16x), Pattern::ReinterleaveOp0},
-
-            // Some bad patterns are currently generated for `vrmpy` instructions.
-            {"halide.hexagon.acc_add_4mpy.vw.vub.b", widen_right_add(wild_i32x, cast(Int(16, 0), halide_hexagon_add_4mpy(Int(32, 0), ".vub.b", wild_u8x, wild_i32)))},
-            {"halide.hexagon.acc_add_4mpy.vuw.vub.ub", widen_right_add(wild_u32x, cast(UInt(16, 0), halide_hexagon_add_4mpy(UInt(32, 0), ".vub.ub", wild_u8x, wild_u32)))},
-            {"halide.hexagon.acc_add_4mpy.vuw.vub.ub", widen_right_add(wild_i32x, cast(Int(16, 0), halide_hexagon_add_4mpy(Int(32, 0), ".vub.ub", wild_u8x, wild_u32)))},
-            {"halide.hexagon.acc_add_4mpy.vuw.vub.vub", widen_right_add(wild_u32x, cast(UInt(16, 0), halide_hexagon_add_4mpy(UInt(32, 0), ".vub.vub", wild_u8x, wild_u8x)))},
-            {"halide.hexagon.acc_add_4mpy.vuw.vub.vub", widen_right_add(wild_i32x, cast(Int(16, 0), halide_hexagon_add_4mpy(Int(32, 0), ".vub.vub", wild_u8x, wild_u8x)))},
-            {"halide.hexagon.acc_add_4mpy.vw.vub.vb", widen_right_add(wild_i32x, cast(Int(16, 0), halide_hexagon_add_4mpy(Int(32, 0), ".vub.vb", wild_u8x, wild_i8x)))},
-            {"halide.hexagon.acc_add_4mpy.vw.vb.vb", widen_right_add(wild_i32x, cast(Int(16, 0), halide_hexagon_add_4mpy(Int(32, 0), ".vb.vb", wild_i8x, wild_i8x)))},
 
             // Saturating narrowing casts with rounding
             {"halide.hexagon.trunc_satub_rnd.vh", u8_sat(rounding_shift_right(wild_i16x, 8)), Pattern::DeinterleaveOp0},
@@ -1001,15 +998,6 @@ private:
                     debug(3) << "rewriting cast to: " << replacement << " from " << Expr(op) << "\n";
                     return mutate(replacement);
                 }
-            }
-        }
-
-        // If we failed to match on one of the patterns above,
-        // then search for mpyadds.
-        if (op->is_intrinsic(Call::widen_right_add)) {
-            Expr mpyadds = find_mpyadds(Add::make(op->args[0], cast(op->type, op->args[1])));
-            if (mpyadds.defined()) {
-                return mpyadds;
             }
         }
 

@@ -232,8 +232,9 @@ protected:
             // and the opposite as well.
             for (halide_type_code_t code : {op->type.code(), halide_type_uint, halide_type_int}) {
                 Type narrow = op->type.narrow().with_code(code);
-                Expr narrow_a = lossless_cast(narrow, a);
-                Expr narrow_b = lossless_cast(narrow, b);
+                // Pulling casts out of VectorReduce nodes breaks too much codegen, skip for now.
+                Expr narrow_a = (a.node_type() == IRNodeType::VectorReduce) ? Expr() : lossless_cast(narrow, a);
+                Expr narrow_b = (b.node_type() == IRNodeType::VectorReduce) ? Expr() : lossless_cast(narrow, b);
 
                 // This case should have been handled by the above check for widening_add.
                 internal_assert(!(narrow_a.defined() && narrow_b.defined()))

@@ -1196,34 +1196,6 @@ void CodeGen_ARM::visit(const Call *op) {
         }
     }
 
-    auto rewrite = IRMatcher::rewriter(op, op->type);
-    IRMatcher::Wild<0> x;
-    IRMatcher::Wild<1> y;
-    const int bits = op->type.bits();
-    const int lanes = op->type.lanes();
-    auto y_2x = is_int(y, bits / 2, lanes * 2) || is_uint(y, bits / 2, lanes * 2);
-
-    // Look for (S | U)ADALP patterns.
-    // This would be much easier to do if we matched on reduction factors of
-    // VectorReduce nodes instead of the output lanes.
-    if (
-        // TODO: is there a way to not just undo what FindIntrinsics does here?
-        rewrite(
-            widen_right_add(x, h_add(y, lanes)),
-            x + h_add(cast(op->type.with_lanes(lanes * 2), y), lanes),
-            y_2x) ||
-
-        rewrite(
-            widen_right_add(x, h_add(y, lanes)),
-            x + h_add(cast(op->type.with_lanes(lanes * 2), h_add(y, lanes * 2)), lanes),
-            // y must be even to do this split.
-            has_even_lanes(y)) ||
-
-        false) {
-        value = codegen(rewrite.result);
-        return;
-    }
-
     if (target.has_feature(Target::ARMFp16)) {
         auto it = float16_transcendental_remapping.find(op->name);
         if (it != float16_transcendental_remapping.end()) {
