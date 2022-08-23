@@ -1436,9 +1436,9 @@ private:
                 // make two calls for the min and the max.
                 interval = Interval(
                     Call::make(t, op->name, {i.min}, op->call_type,
-                            op->func, op->value_index, op->image, op->param),
+                               op->func, op->value_index, op->image, op->param),
                     Call::make(t, op->name, {i.max}, op->call_type,
-                            op->func, op->value_index, op->image, op->param));
+                               op->func, op->value_index, op->image, op->param));
             } else {
                 bounds_of_type(t);
             }
