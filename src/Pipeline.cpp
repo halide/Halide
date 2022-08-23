@@ -70,6 +70,16 @@ std::string sanitize_function_name(const std::string &s) {
     return name;
 }
 
+std::string strip_uniquifier(const std::string &s) {
+    size_t pos = s.find_last_of("$");
+    if (pos == std::string::npos) {
+        return s;
+    } else {
+        return s.substr(0, pos);
+    }
+
+}
+
 }  // namespace
 
 namespace Internal {
@@ -665,7 +675,7 @@ Callable Pipeline::compile_to_callable(const std::vector<Argument> &args_in, con
 
     for (const auto &out : outputs) {
         for (Type t : out.output_types()) {
-            args.emplace_back(out.name(), Argument::OutputBuffer, t, out.dimensions(), ArgumentEstimates{});
+            args.emplace_back(strip_uniquifier(out.name()), Argument::OutputBuffer, t, out.dimensions(), ArgumentEstimates{});
         }
     }
 

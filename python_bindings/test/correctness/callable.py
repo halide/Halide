@@ -1,6 +1,7 @@
 import halide as hl
 import numpy as np
 
+from simplepy_generator import SimplePy
 import simplecpp_pystub  # Needed for create_callable_from_generator("simplecpp") to work
 
 def test_callable():
@@ -56,7 +57,7 @@ def test_callable():
     assert in1.dim(0).extent() == 10
     assert in1.dim(1).extent() == 10
 
-def test_simple():
+def test_simple(callable_factory):
     x, y = hl.Var(), hl.Var()
     target = hl.get_jit_target_from_environment()
 
@@ -73,8 +74,8 @@ def test_simple():
         assert b_out[1, 0] == float_in + offset + 123
         assert b_out[1, 1] == float_in + offset + 123
 
-    gp = {}
-    simple = hl.create_callable_from_generator(target, "simplecpp", gp)
+    generator_params = {}
+    simple = callable_factory(target, generator_params)
 
     # ----------- Positional arguments
     simple(b_in, float_in, b_out)
@@ -102,8 +103,8 @@ def test_simple():
     # ----------- Above set again, w/ additional GeneratorParam mixed in
     k = 42
 
-    gp = {"offset": str(k)}
-    simple_42 = hl.create_callable_from_generator(target, "simplecpp", gp)
+    generator_params = {"offset": str(k)}
+    simple_42 = callable_factory(target, generator_params)
     simple_42(b_in, float_in, b_out)
     _check(k)
 
@@ -165,5 +166,17 @@ def test_simple():
         assert False, 'Did not see expected exception!'
 
 if __name__ == "__main__":
-    test_callable()
-    test_simple()
+    # test_callable()
+
+    def via_simplecpp_pystub(target, generator_params):
+        return hl.create_callable_from_generator(target, "simplecpp", generator_params)
+
+    def via_simplepy(target, generator_params):
+        with hl.GeneratorContext(target):
+            g = SimplePy()
+            for k, v in generator_params.items():
+                g._set_generatorparam_value(k, v)
+            return g.compile_to_callable()
+
+    test_simple(via_simplecpp_pystub)
+    test_simple(via_simplepy)
