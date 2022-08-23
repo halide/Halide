@@ -289,6 +289,35 @@ void test_one_source() {
     test_one_source_concise<source_t>();
 }
 
+void test_int32_failure() {
+    // See https://github.com/halide/Halide/pull/6900#issuecomment-1222863288
+    Var x, y, c;
+
+    const int kLutSize = 256;
+    Func lut("lut");
+    lut(x) = u8(x);
+    lut.compute_root();
+
+    Func input;
+    input(x, y, c) = u16(x + y + c);
+    input.compute_root();
+
+    Func a;
+    a(x, y, c) = u16_sat((i32(input(x, y, 0)) * i16(c) +
+                          i32(input(x, y, 1)) * i16(c) +
+                          i32(input(x, y, 2)) * i16(c)));
+    a.compute_root();
+
+    Expr b = a(x, y, c);
+    const int kLutResampleRate = 1024 / kLutSize;
+    Expr x0 = u16(b / kLutResampleRate);
+
+    Func output;
+    output(x, y, c) = lut(x0);
+
+    auto foo = output.realize({16, 16, 3});
+}
+
 int main(int argc, char **argv) {
     test_one_source<int8_t>();
     test_one_source<uint8_t>();
@@ -304,6 +333,8 @@ int main(int argc, char **argv) {
     // do the saturating casts.
     test_one_source_saturating<float>();
     test_one_source_saturating<double>();
+
+    test_int32_failure();
 
     printf("Success!\n");
     return 0;
