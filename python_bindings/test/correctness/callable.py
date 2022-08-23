@@ -1,7 +1,7 @@
 import halide as hl
 import numpy as np
 
-import simple_pystub  # Needed for create_callable_from_generator("simple") to work
+import simplecpp_pystub  # Needed for create_callable_from_generator("simplecpp") to work
 
 def test_callable():
     p_int16 = hl.Param(hl.Int(16), 42)
@@ -74,7 +74,7 @@ def test_simple():
         assert b_out[1, 1] == float_in + offset + 123
 
     gp = {}
-    simple = hl.create_callable_from_generator(target, "simple", gp)
+    simple = hl.create_callable_from_generator(target, "simplecpp", gp)
 
     # ----------- Positional arguments
     simple(b_in, float_in, b_out)
@@ -103,7 +103,7 @@ def test_simple():
     k = 42
 
     gp = {"offset": str(k)}
-    simple_42 = hl.create_callable_from_generator(target, "simple", gp)
+    simple_42 = hl.create_callable_from_generator(target, "simplecpp", gp)
     simple_42(b_in, float_in, b_out)
     _check(k)
 

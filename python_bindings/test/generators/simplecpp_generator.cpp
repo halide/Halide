@@ -2,7 +2,7 @@
 
 namespace {
 
-class Simple : public Halide::Generator<Simple> {
+class SimpleCpp : public Halide::Generator<SimpleCpp> {
 public:
     GeneratorParam<int> offset{"offset", 0};
 
@@ -25,4 +25,4 @@ private:
 
 }  // namespace
 
-HALIDE_REGISTER_GENERATOR(Simple, simple)
+HALIDE_REGISTER_GENERATOR(SimpleCpp, simplecpp)

@@ -1,7 +1,7 @@
 import halide as hl
 
-import simple_pystub
-import complex_pystub
+import simplecpp_pystub
+import complexcpp_pystub
 
 from simplepy_generator import SimplePy
 from complexpy_generator import ComplexPy
@@ -266,9 +266,9 @@ def test_complex(cls, extra_input_name = ""):
 if __name__ == "__main__":
     target = hl.get_jit_target_from_environment()
     with hl.GeneratorContext(target):
-        test_simple(simple_pystub)
-        test_complex(complex_pystub)
-        test_complex(complex_pystub, extra_input_name = "foozz_input")
+        test_simple(simplecpp_pystub)
+        test_complex(complexcpp_pystub)
+        test_complex(complexcpp_pystub, extra_input_name = "foo_input")
         test_simple(SimplePy)
         test_complex(ComplexPy)
         test_complex(ComplexPy, extra_input_name = "foo_input")

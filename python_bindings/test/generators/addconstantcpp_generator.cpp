@@ -66,6 +66,6 @@ public:
     }
 };
 
-HALIDE_REGISTER_GENERATOR(AddConstantGenerator, addconstant)
-HALIDE_REGISTER_GENERATOR_ALIAS(addconstant_with_offset_42, addconstant, {{"extra_int", "42"}})
-HALIDE_REGISTER_GENERATOR_ALIAS(addconstant_with_negative_offset, addconstant, {{"extra_int", "-1"}})
+HALIDE_REGISTER_GENERATOR(AddConstantGenerator, addconstantcpp)
+HALIDE_REGISTER_GENERATOR_ALIAS(addconstantcpp_with_offset_42, addconstantcpp, {{"extra_int", "42"}})
+HALIDE_REGISTER_GENERATOR_ALIAS(addconstantcpp_with_negative_offset, addconstantcpp, {{"extra_int", "-1"}})

@@ -15,7 +15,7 @@ Halide::Buffer<Type, 3> make_image(int extra) {
     return im;
 }
 
-class Complex : public Halide::Generator<Complex> {
+class ComplexCpp : public Halide::Generator<ComplexCpp> {
 public:
     GeneratorParam<bool> vectorize{"vectorize", true};
     GeneratorParam<std::string> extra_input_name{"extra_input_name", ""};
@@ -81,4 +81,4 @@ private:
 
 }  // namespace
 
-HALIDE_REGISTER_GENERATOR(Complex, complex)
+HALIDE_REGISTER_GENERATOR(ComplexCpp, complexcpp)

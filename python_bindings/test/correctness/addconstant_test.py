@@ -1,14 +1,14 @@
-import addconstant, addconstantpy
-import addconstant_with_offset_42, addconstantpy_with_offset_42
-import addconstant_with_negative_offset, addconstantpy_with_negative_offset
+import addconstantcpp, addconstantpy
+import addconstantcpp_with_offset_42, addconstantpy_with_offset_42
+import addconstantcpp_with_negative_offset, addconstantpy_with_negative_offset
 import numpy
 
 TESTS_AND_OFFSETS = [
-    (addconstant.addconstant, 0),
+    (addconstantcpp.addconstantcpp, 0),
     (addconstantpy.addconstantpy, 0),
-    (addconstant_with_offset_42.addconstant_with_offset_42, 42),
+    (addconstantcpp_with_offset_42.addconstantcpp_with_offset_42, 42),
     (addconstantpy_with_offset_42.addconstantpy_with_offset_42, 42),
-    (addconstant_with_negative_offset.addconstant_with_negative_offset, -1),
+    (addconstantcpp_with_negative_offset.addconstantcpp_with_negative_offset, -1),
     (addconstantpy_with_negative_offset.addconstantpy_with_negative_offset, -1),
 ]
 

@@ -1,5 +1,5 @@
 import array
-import bit, bitpy
+import bitcpp, bitpy
 import sys
 
 
@@ -9,7 +9,7 @@ def test():
     output_u1 = array.array('B', [0, 1, 0, 1])
 
     try:
-        bit.bit(
+        bitcpp.bitcpp(
             input_u1, bool_constant, output_u1
         )
     except NotImplementedError:
