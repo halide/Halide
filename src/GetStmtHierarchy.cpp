@@ -127,89 +127,27 @@ void GetStmtHierarchy::start_html() {
     startCCNodeID = -1;
     startDMCNodeID = -1;
 
-    html << "<html>";
-    html << "<head>";
-    html << "<link rel=\\'stylesheet\\' "
-            "href=\\'https://unpkg.com/treeflex/dist/css/treeflex.css\\'>";
-    html << "</head>";
-    html << "<style>";
-    html << ".tf-custom .tf-nc { border-radius: 5px; border: 1px solid; font-size: 12px;}";
-    html << ".tf-custom .end-node { border-style: dashed; font-size: 12px; } ";
-    html << ".tf-custom .tf-nc:before, .tf-custom .tf-nc:after { border-left-width: 1px; } ";
-    html << ".tf-custom li li:before { border-top-width: 1px; }";
-
-    html << ".CostComputation19 { background-color: rgb(130,31,27);}";
-    html << ".CostComputation18 { background-color: rgb(145,33,30);}";
-    html << ".CostComputation17 { background-color: rgb(160,33,32);}";
-    html << ".CostComputation16 { background-color: rgb(176,34,34);}";
-    html << ".CostComputation15 { background-color: rgb(185,47,32);}";
-    html << ".CostComputation14 { background-color: rgb(193,59,30);}";
-    html << ".CostComputation13 { background-color: rgb(202,71,27);}";
-    html << ".CostComputation12 { background-color: rgb(210,82,22);}";
-    html << ".CostComputation11 { background-color: rgb(218,93,16);}";
-    html << ".CostComputation10 { background-color: rgb(226,104,6);}";
-    html << ".CostComputation9 { background-color: rgb(229,118,9);}";
-    html << ".CostComputation8 { background-color: rgb(230,132,15);}";
-    html << ".CostComputation7 { background-color: rgb(231,146,20);}";
-    html << ".CostComputation6 { background-color: rgb(232,159,25);}";
-    html << ".CostComputation5 { background-color: rgb(233,172,30);}";
-    html << ".CostComputation4 { background-color: rgb(233,185,35);}";
-    html << ".CostComputation3 { background-color: rgb(233,198,40);}";
-    html << ".CostComputation2 { background-color: rgb(232,211,45);}";
-    html << ".CostComputation1 { background-color: rgb(231,223,50);}";
-    html << ".CostComputation0 { background-color: rgb(236,233,89);}";
-
-    html << ".tf-custom .CostComputationBorder19 { border-color: rgb(130,31,27);}";
-    html << ".tf-custom .CostComputationBorder18 { border-color: rgb(145,33,30);}";
-    html << ".tf-custom .CostComputationBorder17 { border-color: rgb(160,33,32);}";
-    html << ".tf-custom .CostComputationBorder16 { border-color: rgb(176,34,34);}";
-    html << ".tf-custom .CostComputationBorder15 { border-color: rgb(185,47,32);}";
-    html << ".tf-custom .CostComputationBorder14 { border-color: rgb(193,59,30);}";
-    html << ".tf-custom .CostComputationBorder13 { border-color: rgb(202,71,27);}";
-    html << ".tf-custom .CostComputationBorder12 { border-color: rgb(210,82,22);}";
-    html << ".tf-custom .CostComputationBorder11 { border-color: rgb(218,93,16);}";
-    html << ".tf-custom .CostComputationBorder10 { border-color: rgb(226,104,6);}";
-    html << ".tf-custom .CostComputationBorder9 { border-color: rgb(229,118,9);}";
-    html << ".tf-custom .CostComputationBorder8 { border-color: rgb(230,132,15);}";
-    html << ".tf-custom .CostComputationBorder7 { border-color: rgb(231,146,20);}";
-    html << ".tf-custom .CostComputationBorder6 { border-color: rgb(232,159,25);}";
-    html << ".tf-custom .CostComputationBorder5 { border-color: rgb(233,172,30);}";
-    html << ".tf-custom .CostComputationBorder4 { border-color: rgb(233,185,35);}";
-    html << ".tf-custom .CostComputationBorder3 { border-color: rgb(233,198,40);}";
-    html << ".tf-custom .CostComputationBorder2 { border-color: rgb(232,211,45);}";
-    html << ".tf-custom .CostComputationBorder1 { border-color: rgb(231,223,50);}";
-    html << ".tf-custom .CostComputationBorder0 { border-color: rgb(236,233,89);} ";
-
-    html << ".arrow { border: solid rgb(125,125,125); border-width: 0 2px 2px 0; display: ";
-    html << "inline-block; padding: 3px; }";
-    html << ".down { transform: rotate(45deg); -webkit-transform: rotate(45deg); } ";
-    html << ".up { transform: rotate(-135deg); -webkit-transform: rotate(-135deg); } ";
-    html << ".button {padding: 3px;}";
-
-    html << "body { font-family: Consolas, \\'Liberation Mono\\', Menlo, Courier, monospace;}";
-    html << "</style>";
-    html << "<body>";
+    // TODO: add navigation maybe
 }
 void GetStmtHierarchy::end_html() {
-    html << "</body></html>";
-    html << "<script>";
-    html << generate_collapse_expand_js(numNodes);
-    html << "</script>";
+    // html << generate_collapse_expand_js(numNodes); // TODO: add this back in
 }
 
 void GetStmtHierarchy::start_tree() {
-    html << "<div class=\\'tf-tree tf-gap-sm tf-custom\\' style=\\'font-size: 12px;\\'>";
+    html << "<div class='treeDiv'>";
+    html << "<div class='tf-tree tf-gap-sm tf-custom-stmtHierarchy' style='font-size: 12px;'>";
     html << "<ul>";
 }
 void GetStmtHierarchy::end_tree() {
     html << "</ul>";
     html << "</div>";
+    html << "</div>";
 }
 
 void GetStmtHierarchy::node_without_children(string name, int colorCost) {
     string className = get_node_class_name();
-    html << "<li class=\\'" << className << "\\'>";
-    html << "<span class=\\'tf-nc end-node CostComputationBorder" << colorCost << "\\'>";
+    html << "<li class='" << className << "'>";
+    html << "<span class='tf-nc end-node CostComputationBorder" << colorCost << "'>";
     html << name << "</span></li>";
 }
 void GetStmtHierarchy::open_node(string name, int colorCost) {
@@ -217,17 +155,18 @@ void GetStmtHierarchy::open_node(string name, int colorCost) {
 
     update_num_nodes();
 
-    html << "<li class=\\'" << className << "\\' id=\\'node" << currNodeID << "\\'>";
-    html << "<span class=\\'tf-nc CostComputation" << colorCost << "\\'>";
+    html << "<li class='" << className << "' id='node" << currNodeID << "'>";
+    html << "<span class='tf-nc CostColor" << colorCost << "'>";
     html << name;
 
-    html << " <button class=\\'button\\' onclick=\\'handleClick(" << currNodeID << ")\\'>";
-    html << " <i id=\\'button" << currNodeID << "\\'></i> ";
+    html << " <button class='stmtHierarchyButton info-button' onclick='handleClick(" << currNodeID
+         << ")'>";
+    html << " <i id='stmtHierarchyButton" << currNodeID << "'></i> ";
     html << "</button>";
     html << "</span>";
 
     depth++;
-    html << "<ul id=\\'list" << currNodeID << "\\'>";
+    html << "<ul id='list" << currNodeID << "'>";
 }
 void GetStmtHierarchy::close_node() {
     depth--;
@@ -693,99 +632,107 @@ Stmt GetStmtHierarchy::visit(const Atomic *op) {
 }
 
 string GetStmtHierarchy::generate_collapse_expand_js(int totalNodes) {
+
     stringstream js;
-    js << "var nodeExpanded = new Map();";
-    js << "function collapseAllNodes(numNodes) {";
-    js << "    for (let i = 0; i < numNodes; i++) {";
-    js << "        collapseNodeChildren(i);";
-    js << "        nodeExpanded.set(i, false);";
-    js << "        if (document.getElementById(\\'button\\' + i) != null) {";
-    js << "            document.getElementById(\\'button\\' + i).className = \\'arrow down\\';";
-    js << "        }";
-    js << "    }";
-    js << "}";
-    js << "function expandNodesUpToDepth(depth) {";
-    js << "    for (let i = 0; i < depth; i++) {";
-    js << "        const depthChildren = document.getElementsByClassName(\\'depth\\' + i);";
-    js << "        for (const child of depthChildren) {";
-    js << "            child.style.display = \\'\\';";
-    js << "            if (child.className.includes(\\'start\\')) {";
-    js << "                continue;";
-    js << "            }";
+    // TODO: add new lines at the end of each line
+    js << "<script>\n";
+    js << "// collapse/expand js (stmt hierarchy)\n";
+    js << "var nodeExpanded = new Map();\n";
+    js << "function collapseAllNodes(numNodes) {\n";
+    js << "    for (let i = 0; i < numNodes; i++) {\n";
+    js << "        collapseNodeChildren(i);\n";
+    js << "        nodeExpanded.set(i, false);\n";
+    js << "        if (document.getElementById('stmtHierarchyButton' + i) != null) {\n";
+    js << "            document.getElementById('stmtHierarchyButton' + i).className = 'arrow "
+          "down';\n";
+    js << "        }\n";
+    js << "    }\n";
+    js << "}\n";
+    js << "function expandNodesUpToDepth(depth) {\n";
+    js << "    for (let i = 0; i < depth; i++) {\n";
+    js << "        const depthChildren = document.getElementsByClassName('depth' + i);\n";
+    js << "        for (const child of depthChildren) {\n";
+    js << "            child.style.display = '';\n";
+    js << "            if (child.className.includes('start')) {\n";
+    js << "                continue;\n";
+    js << "            }\n";
     js << "            let parentNodeID = child.className.split("
-          ")[0];";
-    js << "            parentNodeID = parentNodeID.split(\\'node\\')[1];";
-    js << "            parentNodeID = parentNodeID.split(\\'child\\')[0];";
-    js << "            const parentNode = parseInt(parentNodeID);";
-    js << "            nodeExpanded.set(parentNode, true);";
-    js << "            if (document.getElementById(\\'button\\' + parentNodeID) != null) {";
-    js << "                document.getElementById(\\'button\\' + parentNodeID).className = "
-          "\\'arrow up\\';";
-    js << "            }";
-    js << "            const dotdotdot = document.getElementById(\\'node\\' + parentNodeID + "
-          "\\'dotdotdot\\');";
-    js << "            if (dotdotdot != null) {";
-    js << "                dotdotdot.remove();";
-    js << "            }";
-    js << "        }";
-    js << "    }";
-    js << "}";
-    js << "function handleClick(nodeNum) {";
-    js << "    if (nodeExpanded.get(nodeNum)) {";
-    js << "        collapseNodeChildren(nodeNum);";
-    js << "        nodeExpanded.set(nodeNum, false);";
-    js << "    } else {";
-    js << "        expandNodeChildren(nodeNum);";
-    js << "        nodeExpanded.set(nodeNum, true);";
-    js << "    }";
-    js << "}";
-    js << "function collapseNodeChildren(nodeNum) {";
-    js << "    const children = document.getElementsByClassName(\\'node\\' + nodeNum + "
-          "\\'child\\');";
-    js << "    if (document.getElementById(\\'button\\' + nodeNum) != null) {";
-    js << "        document.getElementById(\\'button\\' + nodeNum).className = \\'arrow down\\';";
-    js << "    }";
-    js << "    for (const child of children) {";
-    js << "        child.style.display = \\'none\\';";
-    js << "    }";
-    js << "    const list = document.getElementById(\\'list\\' + nodeNum);";
-    js << "    const parentNode = document.getElementById(\\'node\\' + nodeNum);";
-    js << "    if (list != null && parentNode != null) {";
-    js << "        const span = parentNode.children[0];";
-    js << "        console.log(span);";
-    js << "        var computationNumber = span.className.split(\\'CostComputation\\')[1];";
-    js << "        if (computationNumber == null) {";
-    js << "            console.log(\\'cost computation number is null\\');";
-    js << "            computationNumber = 0;";
-    js << "        } else {";
-    js << "            computationNumber = parseInt(computationNumber);";
-    js << "        }";
-    js << "        list.appendChild(addDotDotDotChild(nodeNum, computationNumber));";
-    js << "    }";
-    js << "}";
-    js << "function expandNodeChildren(nodeNum) {";
-    js << "    const children = document.getElementsByClassName(\\'node\\' + nodeNum + "
-          "\\'child\\');";
-    js << "    if (document.getElementById(\\'button\\' + nodeNum) != null) {";
-    js << "        document.getElementById(\\'button\\' + nodeNum).className = \\'arrow up\\';";
-    js << "    }";
-    js << "    for (const child of children) {";
-    js << "        child.style.display = \\'\\';";
-    js << "    }";
-    js << "     const dotdotdot = document.getElementById(\\'node\\' + nodeNum + \\'dotdotdot\\');";
-    js << "     if (dotdotdot != null) {";
-    js << "         dotdotdot.remove();";
-    js << "     }";
-    js << "}";
-    js << "function addDotDotDotChild(nodeNum, colorCost) {";
-    js << "    var liDotDotDot = document.createElement(\\'li\\');";
-    js << "    liDotDotDot.id = \\'node\\' + nodeNum + \\'dotdotdot\\';";
-    js << "    const span =&quot;<span class=\\'tf-nc end-node CostComputationBorder&quot; + "
-          "colorCost +  &quot;\\'>...</span> &quot;;";
-    js << "    liDotDotDot.innerHTML = span;";
-    js << "    return liDotDotDot;";
-    js << "}";
-    js << "collapseAllNodes(" << totalNodes << ");  ";
-    js << "expandNodesUpToDepth(4);";
+          ")[0];\n";
+    js << "            parentNodeID = parentNodeID.split('node')[1];\n";
+    js << "            parentNodeID = parentNodeID.split('child')[0];\n";
+    js << "            const parentNode = parseInt(parentNodeID);\n";
+    js << "            nodeExpanded.set(parentNode, true);\n";
+    js << "            if (document.getElementById('stmtHierarchyButton' + parentNodeID) != null) "
+          "{\n";
+    js << "                document.getElementById('stmtHierarchyButton' + parentNodeID).className "
+          "= "
+          "'arrow up';\n";
+    js << "            }\n";
+    js << "            const dotdotdot = document.getElementById('node' + parentNodeID + "
+          "'dotdotdot');\n";
+    js << "            if (dotdotdot != null) {\n";
+    js << "                dotdotdot.remove();\n";
+    js << "            }\n";
+    js << "        }\n";
+    js << "    }\n";
+    js << "}\n";
+    js << "function handleClick(nodeNum) {\n";
+    js << "    if (nodeExpanded.get(nodeNum)) {\n";
+    js << "        collapseNodeChildren(nodeNum);\n";
+    js << "        nodeExpanded.set(nodeNum, false);\n";
+    js << "    } else {\n";
+    js << "        expandNodeChildren(nodeNum);\n";
+    js << "        nodeExpanded.set(nodeNum, true);\n";
+    js << "    }\n";
+    js << "}\n";
+    js << "function collapseNodeChildren(nodeNum) {\n";
+    js << "    const children = document.getElementsByClassName('node' + nodeNum + "
+          "'child');\n";
+    js << "    if (document.getElementById('stmtHierarchyButton' + nodeNum) != null) {\n";
+    js << "        document.getElementById('stmtHierarchyButton' + nodeNum).className = 'arrow "
+          "down';\n";
+    js << "    }\n";
+    js << "    for (const child of children) {\n";
+    js << "        child.style.display = 'none';\n";
+    js << "    }\n";
+    js << "    const list = document.getElementById('list' + nodeNum);\n";
+    js << "    const parentNode = document.getElementById('node' + nodeNum);\n";
+    js << "    if (list != null && parentNode != null) {\n";
+    js << "        const span = parentNode.children[0];\n";
+    js << "        var computationNumber = span.className.split('CostComputation')[1];\n";
+    js << "        if (computationNumber == null) {\n";
+    js << "            computationNumber = 0;\n";
+    js << "        } else {\n";
+    js << "            computationNumber = parseInt(computationNumber);\n";
+    js << "        }\n";
+    js << "        list.appendChild(addDotDotDotChild(nodeNum, computationNumber));\n";
+    js << "    }\n";
+    js << "}\n";
+    js << "function expandNodeChildren(nodeNum) {\n";
+    js << "    const children = document.getElementsByClassName('node' + nodeNum + "
+          "'child');\n";
+    js << "    if (document.getElementById('stmtHierarchyButton' + nodeNum) != null) {\n";
+    js << "        document.getElementById('stmtHierarchyButton' + nodeNum).className = 'arrow "
+          "up';\n";
+    js << "    }\n";
+    js << "    for (const child of children) {\n";
+    js << "        child.style.display = '';\n";
+    js << "    }\n";
+    js << "     const dotdotdot = document.getElementById('node' + nodeNum + 'dotdotdot');\n";
+    js << "     if (dotdotdot != null) {\n";
+    js << "         dotdotdot.remove();\n";
+    js << "     }\n";
+    js << "}\n";
+    js << "function addDotDotDotChild(nodeNum, colorCost) {\n";
+    js << "    var liDotDotDot = document.createElement('li');\n";
+    js << "    liDotDotDot.id = 'node' + nodeNum + 'dotdotdot';\n";
+    js << "    const span =\"<span class='tf-nc end-node CostComputationBorder\" + "
+          "colorCost +  \"'>...</span> \";\n";
+    js << "    liDotDotDot.innerHTML = span;\n";
+    js << "    return liDotDotDot;\n";
+    js << "}\n";
+    js << "collapseAllNodes(" << totalNodes << ");  \n";
+    js << "expandNodesUpToDepth(4);\n";
+    js << "</script>\n";
     return js.str();
 }

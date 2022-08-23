@@ -43,6 +43,7 @@ class StmtToViz : public IRVisitor {
     static const std::string prodConsCSS;
     static const std::string lineNumbersCSS;
     static const std::string tooltipCSS;
+    static const std::string stmtHierarchyCSS;
 
     FindStmtCost findStmtCost;                            // used for finding the cost of statements
     GetStmtHierarchy getStmtHierarchy;                    // used for getting the hierarchy of
@@ -73,6 +74,10 @@ private:
 
     // used for tooltip stuff
     int tooltipCount = 0;
+
+    // used for getStmtHierarchy popup stuff
+    int popupCount = 0;
+    stringstream popups;
 
     string get_file_name(string fileName) {
         // remove leading directories from filename
@@ -153,9 +158,7 @@ private:
         s << "<button id='button" << tooltipCount << "' ";
         s << "aria-describedby='tooltip" << tooltipCount << "' ";
         s << "class='info-button' role='button' ";
-        s << "onclick=\"openNewWindow('";
-        s << hierarchyHTML;
-        s << "')\"";
+        s << "data-bs-toggle='modal' data-bs-target='#stmtHierarchyModal" << popupCount << "' ";
         s << "onmouseover='document.getElementById(\"Cost" << id_count
           << "\").style.background = \"rgba(10,10,10,0.1)\";'";
         s << "onmouseout='document.getElementById(\"Cost" << id_count
@@ -163,6 +166,9 @@ private:
         s << ">";
         s << "<i class='bi bi-info'></i>";
         s << "</button>";
+
+        // popup window - will put them all at the end
+        popups << hierarchyHTML << endl;
 
         // tooltip span
         s << "<span id='tooltip" << tooltipCount << "' class='tooltip' ";
@@ -198,16 +204,46 @@ private:
         tooltipText << "</tr>";
         tooltipText << "</table>";
 
+        tooltipText << "<i>Click to see full hierarchy</i>";
+
         return tooltip(hierarchyHTML, tooltipText.str());
     }
 
     string get_stmt_hierarchy(const Stmt &op) {
-        if (PRINT_HIERARCHY) cout << getStmtHierarchy.get_hierarchy_html(op) << endl;
-        return getStmtHierarchy.get_hierarchy_html(op);
+        string hierarchyHTML = getStmtHierarchy.get_hierarchy_html(op);
+        if (PRINT_HIERARCHY) cout << hierarchyHTML << endl;
+        return generate_stmt_hierarchy_popup(hierarchyHTML);
     }
     string get_stmt_hierarchy(const Expr &op) {
-        if (PRINT_HIERARCHY) cout << getStmtHierarchy.get_hierarchy_html(op) << endl;
-        return getStmtHierarchy.get_hierarchy_html(op);
+        string hierarchyHTML = getStmtHierarchy.get_hierarchy_html(op);
+        if (PRINT_HIERARCHY) cout << hierarchyHTML << endl;
+        return generate_stmt_hierarchy_popup(hierarchyHTML);
+    }
+
+    string generate_stmt_hierarchy_popup(string hierarchyHTML) {
+        stringstream popup;
+
+        popupCount++;
+        popup << "<div class='modal fade' id='stmtHierarchyModal" << popupCount;
+        popup << "' tabindex='-1'\n";
+        popup << "    aria-labelledby='stmtHierarchyModalLabel' aria-hidden='true'>\n";
+        popup << "    <div class='modal-dialog modal-dialog-scrollable modal-xl'>\n";
+        popup << "        <div class='modal-content'>\n";
+        popup << "            <div class='modal-header'>\n";
+        popup << "                <h5 class='modal-title' id='stmtHierarchyModalLabel'>Statement\n";
+        popup << "                    Hierarchy\n";
+        popup << "                </h5>\n";
+        popup << "                <button type='button' class='btn-close'\n";
+        popup << "                    data-bs-dismiss='modal' aria-label='Close'></button>\n";
+        popup << "            </div>\n";
+        popup << "            <div class='modal-body'>\n";
+        popup << hierarchyHTML;
+        popup << "            </div>\n";
+        popup << "        </div>\n";
+        popup << "    </div>\n";
+        popup << "</div>\n";
+
+        return popup.str();
     }
 
     string open_cost_span(const IRNode *op, const string &hierarchyHTML) {
@@ -1437,6 +1473,7 @@ public:
         stream << "<head>";
 
         // bootstrap links
+        stream << "<!-- Bootstrap links -->\n";
         stream << "<link "
                   "href='https://cdn.jsdelivr.net/npm/bootstrap@5.2.0/dist/css/bootstrap.min.css' "
                   "rel='stylesheet' "
@@ -1453,10 +1490,26 @@ public:
         stream << "<link rel='stylesheet' "
                   "href='https://cdn.jsdelivr.net/npm/bootstrap-icons@1.5.0/font/"
                   "bootstrap-icons.css'>\n";
+        stream << "\n";
 
         //   tooltip links
+        stream << "<!-- Tooltip links -->\n";
         stream << "<script src='https://cdn.jsdelivr.net/npm/@floating-ui/core@1.0.1'></script>";
         stream << "<script src='https://cdn.jsdelivr.net/npm/@floating-ui/dom@1.0.1'></script>";
+        stream << "\n";
+
+        // hierarchy links
+        stream << "<!-- Hierarchy links -->\n";
+        stream << "<link rel='stylesheet' href='https://unpkg.com/treeflex/dist/css/treeflex.css'>";
+        stream << "\n";
+
+        // expand button links
+        stream << "<!-- Expand Button links -->\n";
+        stream << "<link "
+                  "href='http://maxcdn.bootstrapcdn.com/font-awesome/4.1.0/css/"
+                  "font-awesome.min.css' rel='stylesheet'>\n";
+        stream << "<script src='http://code.jquery.com/jquery-1.10.2.js'></script>\n";
+        stream << "\n";
 
         stream << "<style type='text/css'>";
         stream << css;
@@ -1465,13 +1518,9 @@ public:
         stream << prodConsCSS;
         stream << lineNumbersCSS;
         stream << tooltipCSS;
+        stream << stmtHierarchyCSS;
         stream << "</style>\n";
         stream << "<script language='javascript' type='text/javascript'>" + js + "</script>\n";
-        stream << "<link "
-                  "href='http://maxcdn.bootstrapcdn.com/font-awesome/4.1.0/css/"
-                  "font-awesome.min.css' rel='stylesheet'>\n";
-        stream << "<link rel='stylesheet' href='https://unpkg.com/treeflex/dist/css/treeflex.css'>";
-        stream << "<script src='http://code.jquery.com/jquery-1.10.2.js'></script>\n";
         stream << "</head>\n <body>\n";
         stream << navigationHTML;
 
@@ -1512,6 +1561,8 @@ public:
     }
 
     ~StmtToViz() override {
+        stream << popups.str();
+
         stream << "</div>\n";  // close IRCode-code div
         stream << "</div>\n";  // close IRCode div
         stream << "</div>\n";  // close bootstrap tab-content div
@@ -1525,13 +1576,15 @@ public:
                << "} );\n";
         stream << content_rule_script_stream.str();
         stream << generatetooltipJS(tooltipCount);
-        stream << producerConsumerHierarchy.generate_condition_js();
+        // stream << getStmtHierarchy.generate_collapse_expand_js();
+        stream << producerConsumerHierarchy.generate_prodCons_js();
         stream << "</script>\n";
         stream << "</body>";
     }
 
     string generatetooltipJS(int &tooltipCount) {
         stringstream tooltipJS;
+        tooltipJS << "\n// Tooltip JS\n";
         tooltipJS << "function update(buttonElement, tooltipElement) { \n";
         tooltipJS << "    window.FloatingUIDOM.computePosition(buttonElement, tooltipElement, { \n";
         tooltipJS << "        placement: 'top', \n";
@@ -1684,11 +1737,6 @@ div.ModuleBody:before {\n\
 const std::string StmtToViz::vizCss = "\n \
 /* Additional Code Visualization CSS */\n \
 span.ButtonSpacer { width: 5px; color: transparent; display: inline-block; }\n \
-.tf-custom .tf-nc { border-radius: 5px; border: 1px solid; }\n \
-.tf-custom .tf-nc:before, .tf-custom .tf-nc:after { border-left-width: 1px; }\n \
-.tf-custom li li:before { border-top-width: 1px; }\n \
-.tf-custom .end-node { border-style: dashed; }\n \
-.tf-custom .children-node { background-color: lightgrey; }\n \
 .info-button { \n \
     background-color: #fff; \n \
     border: 1px solid #d5d9d9; \n \
@@ -1718,31 +1766,38 @@ span.ButtonSpacer { width: 5px; color: transparent; display: inline-block; }\n \
     font-size: 20px; \n \
     padding: 5px; \n \
     vertical-align: middle; \n \
+    border-radius: 8px; \n \
+    box-shadow: rgba(213, 217, 217, .5) 0 2px 5px 0; \n \
+    box-sizing: border-box; \n \
+    text-align: center; \n \
+    -webkit-user-select: none; \n \
+    user-select: none; \n \
+    touch-action: manipulation; \n \
 } \n \
 ";
 
 const std::string StmtToViz::costColorsCSS = "\n \
 /* Cost Colors CSS */\n \
-span.CostColor19 { background: rgb(130,31,27); } \n \
-span.CostColor18 { background: rgb(145,33,30); } \n \
-span.CostColor17 { background: rgb(160,33,32); } \n \
-span.CostColor16 { background: rgb(176,34,34); } \n \
-span.CostColor15 { background: rgb(185,47,32); } \n \
-span.CostColor14 { background: rgb(193,59,30); } \n \
-span.CostColor13 { background: rgb(202,71,27); } \n \
-span.CostColor12 { background: rgb(210,82,22); } \n \
-span.CostColor11 { background: rgb(218,93,16); } \n \
-span.CostColor10 { background: rgb(226,104,6); } \n \
-span.CostColor9 { background: rgb(229,118,9); } \n \
-span.CostColor8 { background: rgb(230,132,15); } \n \
-span.CostColor7 { background: rgb(231,146,20); } \n \
-span.CostColor6 { background: rgb(232,159,25); } \n \
-span.CostColor5 { background: rgb(233,172,30); } \n \
-span.CostColor4 { background: rgb(233,185,35); } \n \
-span.CostColor3 { background: rgb(233,198,40); } \n \
-span.CostColor2 { background: rgb(232,211,45); } \n \
-span.CostColor1 { background: rgb(231,223,50); } \n \
-span.CostColor0 { background: rgb(236,233,89); } \n \
+span.CostColor19, div.CostColor19, .CostColor19 { background-color: rgb(130,31,27); } \n \
+span.CostColor18, div.CostColor18, .CostColor18 { background-color: rgb(145,33,30); } \n \
+span.CostColor17, div.CostColor17, .CostColor17 { background-color: rgb(160,33,32); } \n \
+span.CostColor16, div.CostColor16, .CostColor16 { background-color: rgb(176,34,34); } \n \
+span.CostColor15, div.CostColor15, .CostColor15 { background-color: rgb(185,47,32); } \n \
+span.CostColor14, div.CostColor14, .CostColor14 { background-color: rgb(193,59,30); } \n \
+span.CostColor13, div.CostColor13, .CostColor13 { background-color: rgb(202,71,27); } \n \
+span.CostColor12, div.CostColor12, .CostColor12 { background-color: rgb(210,82,22); } \n \
+span.CostColor11, div.CostColor11, .CostColor11 { background-color: rgb(218,93,16); } \n \
+span.CostColor10, div.CostColor10, .CostColor10 { background-color: rgb(226,104,6); } \n \
+span.CostColor9, div.CostColor9, .CostColor9 { background-color: rgb(229,118,9); } \n \
+span.CostColor8, div.CostColor8, .CostColor8 { background-color: rgb(230,132,15); } \n \
+span.CostColor7, div.CostColor7, .CostColor7 { background-color: rgb(231,146,20); } \n \
+span.CostColor6, div.CostColor6, .CostColor6 { background-color: rgb(232,159,25); } \n \
+span.CostColor5, div.CostColor5, .CostColor5 { background-color: rgb(233,172,30); } \n \
+span.CostColor4, div.CostColor4, .CostColor4 { background-color: rgb(233,185,35); } \n \
+span.CostColor3, div.CostColor3, .CostColor3 { background-color: rgb(233,198,40); } \n \
+span.CostColor2, div.CostColor2, .CostColor2 { background-color: rgb(232,211,45); } \n \
+span.CostColor1, div.CostColor1, .CostColor1 { background-color: rgb(231,223,50); } \n \
+span.CostColor0, div.CostColor0, .CostColor0 { background-color: rgb(236,233,89); } \n \
 span.CostColorSpacer { width: 2px; color: transparent; display: inline-block; }\n \
 span.CostComputation { width: 13px; display: inline-block; color: transparent; } \n \
 span.CostMovement { width: 13px; display: inline-block;  color: transparent; } \n \
@@ -1772,7 +1827,11 @@ const std::string StmtToViz::navigationHTML = "\n \
 
 const std::string StmtToViz::prodConsCSS = "\n \
 /* ProdCons CSS */\n \
-.tf-custom .tf-nc { background-color: #e6eeff; }\n \
+.tf-custom-prodCons .tf-nc { border-radius: 5px; border: 1px solid; }\n \
+.tf-custom-prodCons .tf-nc:before, .tf-custom-prodCons .tf-nc:after { border-left-width: 1px; }\n \
+.tf-custom-prodCons li li:before { border-top-width: 1px; }\n \
+.tf-custom-prodCons .end-node { border-style: dashed; }\n \
+.tf-custom-prodCons .tf-nc { background-color: #e6eeff; }\n \
 div.box { \n \
     border: 1px dashed grey; \n \
     border-radius: 5px; \n \
@@ -1820,26 +1879,6 @@ span.stringType { color: #990073; } \n \
 div.content { \n \
     flex-grow: 1; \n \
 } \n \
-div.CostColor19 { background: rgb(130,31,27); } \n \
-div.CostColor18 { background: rgb(145,33,30); } \n \
-div.CostColor17 { background: rgb(160,33,32); } \n \
-div.CostColor16 { background: rgb(176,34,34); } \n \
-div.CostColor15 { background: rgb(185,47,32); } \n \
-div.CostColor14 { background: rgb(193,59,30); } \n \
-div.CostColor13 { background: rgb(202,71,27); } \n \
-div.CostColor12 { background: rgb(210,82,22); } \n \
-div.CostColor11 { background: rgb(218,93,16); } \n \
-div.CostColor10 { background: rgb(226,104,6); } \n \
-div.CostColor9 { background: rgb(229,118,9); } \n \
-div.CostColor8 { background: rgb(230,132,15); } \n \
-div.CostColor7 { background: rgb(231,146,20); } \n \
-div.CostColor6 { background: rgb(232,159,25); } \n \
-div.CostColor5 { background: rgb(233,172,30); } \n \
-div.CostColor4 { background: rgb(233,185,35); } \n \
-div.CostColor3 { background: rgb(233,198,40); } \n \
-div.CostColor2 { background: rgb(232,211,45); } \n \
-div.CostColor1 { background: rgb(231,223,50); } \n \
-div.CostColor0 { background: rgb(236,233,89); } \n \
 ";
 
 const std::string StmtToViz::tooltipCSS = "\n \
@@ -1866,6 +1905,39 @@ const std::string StmtToViz::tooltipCSS = "\n \
     padding: 5px; \n \
     font-family: Consolas, 'Liberation Mono', Menlo, Courier, monospace; \n \
 } \n \
+";
+
+const std::string StmtToViz::stmtHierarchyCSS = "\n \
+/* StmtHierarchy CSS */\n \
+.arrow { border: solid rgb(125,125,125); border-width: 0 2px 2px 0; display:  \n \
+inline-block; padding: 3px; } \n \
+.down { transform: rotate(45deg); -webkit-transform: rotate(45deg); }  \n \
+.up { transform: rotate(-135deg); -webkit-transform: rotate(-135deg); }  \n \
+.stmtHierarchyButton {padding: 3px;} \n \
+.tf-custom-stmtHierarchy .tf-nc { border-radius: 5px; border: 1px solid; font-size: 12px;} \n \
+.tf-custom-stmtHierarchy .end-node { border-style: dashed; font-size: 12px; } \n \
+.tf-custom-stmtHierarchy .tf-nc:before, .tf-custom-stmtHierarchy .tf-nc:after { border-left-width: 1px; } \n \
+.tf-custom-stmtHierarchy li li:before { border-top-width: 1px; }\n \
+.tf-custom-stmtHierarchy .CostComputationBorder19 { border-color: rgb(130,31,27);} \n \
+.tf-custom-stmtHierarchy .CostComputationBorder18 { border-color: rgb(145,33,30);} \n \
+.tf-custom-stmtHierarchy .CostComputationBorder17 { border-color: rgb(160,33,32);} \n \
+.tf-custom-stmtHierarchy .CostComputationBorder16 { border-color: rgb(176,34,34);} \n \
+.tf-custom-stmtHierarchy .CostComputationBorder15 { border-color: rgb(185,47,32);} \n \
+.tf-custom-stmtHierarchy .CostComputationBorder14 { border-color: rgb(193,59,30);} \n \
+.tf-custom-stmtHierarchy .CostComputationBorder13 { border-color: rgb(202,71,27);} \n \
+.tf-custom-stmtHierarchy .CostComputationBorder12 { border-color: rgb(210,82,22);} \n \
+.tf-custom-stmtHierarchy .CostComputationBorder11 { border-color: rgb(218,93,16);} \n \
+.tf-custom-stmtHierarchy .CostComputationBorder10 { border-color: rgb(226,104,6);} \n \
+.tf-custom-stmtHierarchy .CostComputationBorder9 { border-color: rgb(229,118,9);} \n \
+.tf-custom-stmtHierarchy .CostComputationBorder8 { border-color: rgb(230,132,15);} \n \
+.tf-custom-stmtHierarchy .CostComputationBorder7 { border-color: rgb(231,146,20);} \n \
+.tf-custom-stmtHierarchy .CostComputationBorder6 { border-color: rgb(232,159,25);} \n \
+.tf-custom-stmtHierarchy .CostComputationBorder5 { border-color: rgb(233,172,30);} \n \
+.tf-custom-stmtHierarchy .CostComputationBorder4 { border-color: rgb(233,185,35);} \n \
+.tf-custom-stmtHierarchy .CostComputationBorder3 { border-color: rgb(233,198,40);} \n \
+.tf-custom-stmtHierarchy .CostComputationBorder2 { border-color: rgb(232,211,45);} \n \
+.tf-custom-stmtHierarchy .CostComputationBorder1 { border-color: rgb(231,223,50);} \n \
+.tf-custom-stmtHierarchy .CostComputationBorder0 { border-color: rgb(236,233,89);}  \n \
 ";
 
 const std::string StmtToViz::js = "\n \

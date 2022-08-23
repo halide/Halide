@@ -118,7 +118,7 @@ public:
     string generate_producer_consumer_html(const Module &m);
     string generate_producer_consumer_html(const Stmt &stmt);
 
-    string generate_condition_js();
+    string generate_prodCons_js();
 
 private:
     using IRMutator::visit;

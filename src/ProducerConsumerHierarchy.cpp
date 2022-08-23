@@ -1013,7 +1013,7 @@ Stmt ProducerConsumerHierarchy::visit(const IfThenElse *op) {
     bool opened = false;
     if (!thenSize.empty() || !elseSize.empty()) {
         // open main if tree
-        html << "<div class='tf-tree tf-gap-sm tf-custom' style='font-size: 12px;'>";
+        html << "<div class='tf-tree tf-gap-sm tf-custom-prodCons' style='font-size: 12px;'>";
         html << "<ul>";
         html << "<li><span class='tf-nc if-node'>";
         html << "If";
@@ -1262,30 +1262,31 @@ Stmt ProducerConsumerHierarchy::visit(const Allocate *op) {
     return op;
 }
 
-string ProducerConsumerHierarchy::generate_condition_js() {
-    stringstream conditionJS;
+string ProducerConsumerHierarchy::generate_prodCons_js() {
+    stringstream prodConsJS;
 
-    conditionJS << "for (let i = 1; i <= " << prodConsTooltipCount << "; i++) { \n";
-    conditionJS << "    const button = document.querySelector('#prodConsButton' + i); \n";
-    conditionJS << "    const tooltip = document.querySelector('#prodConsTooltip' + i); \n";
-    conditionJS << "    button.addEventListener('mouseenter', () => { \n";
-    conditionJS << "        showTooltip(button, tooltip); \n";
-    conditionJS << "    }); \n";
-    conditionJS << "    button.addEventListener('mouseleave', () => { \n";
-    conditionJS << "        hideTooltip(tooltip); \n";
-    conditionJS << "    } \n";
-    conditionJS << "    ); \n";
-    conditionJS << "    tooltip.addEventListener('focus', () => { \n";
-    conditionJS << "        showTooltip(button, tooltip); \n";
-    conditionJS << "    } \n";
-    conditionJS << "    ); \n";
-    conditionJS << "    tooltip.addEventListener('blur', () => { \n";
-    conditionJS << "        hideTooltip(tooltip); \n";
-    conditionJS << "    } \n";
-    conditionJS << "    ); \n";
-    conditionJS << "} \n";
+    prodConsJS << "// prodCons JS\n";
+    prodConsJS << "for (let i = 1; i <= " << prodConsTooltipCount << "; i++) { \n";
+    prodConsJS << "    const button = document.querySelector('#prodConsButton' + i); \n";
+    prodConsJS << "    const tooltip = document.querySelector('#prodConsTooltip' + i); \n";
+    prodConsJS << "    button.addEventListener('mouseenter', () => { \n";
+    prodConsJS << "        showTooltip(button, tooltip); \n";
+    prodConsJS << "    }); \n";
+    prodConsJS << "    button.addEventListener('mouseleave', () => { \n";
+    prodConsJS << "        hideTooltip(tooltip); \n";
+    prodConsJS << "    } \n";
+    prodConsJS << "    ); \n";
+    prodConsJS << "    tooltip.addEventListener('focus', () => { \n";
+    prodConsJS << "        showTooltip(button, tooltip); \n";
+    prodConsJS << "    } \n";
+    prodConsJS << "    ); \n";
+    prodConsJS << "    tooltip.addEventListener('blur', () => { \n";
+    prodConsJS << "        hideTooltip(tooltip); \n";
+    prodConsJS << "    } \n";
+    prodConsJS << "    ); \n";
+    prodConsJS << "} \n";
 
-    return conditionJS.str();
+    return prodConsJS.str();
 }
 
 /*
