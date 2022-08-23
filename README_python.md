@@ -221,19 +221,24 @@ neutral with respect to the implementation language/API.
 
 ### Writing a Generator in Python
 
-A Python Generator is a class that: - has the `@hl.generator` decorator applied
-to it - declares zero or more member fields that are initialized with values of
-`hl.InputBuffer` or `hl.InputScalar`, which specify the expected input(s) of the
-resulting `Pipeline`. - declares one or more member fields that are initialized
-with values of `hl.OutputBuffer` or `hl.OutputScalar`, which specify the
-expected output(s) of the resulting `Pipeline`. - declares zero or more member
-fields that are initialized with values of `hl.GeneratorParam`, which can be
-used to pass arbitrary information from the build system to the Generator. A
-GeneratorParam can carry a value of type `bool`, `int`, `float`, `str`, or
-`hl.Type`. - declares a `generate()` method that fill in the Halide IR needed to
-define all of the Outputs - optionally declares a `configure()` method to
-dynamically add Inputs or Outputs to the pipeline, based on (e.g.) the values of
-`GeneratorParam` values or other external inputs
+A Python Generator is a class that:
+
+-   has the `@hl.generator` decorator applied to it
+-   declares zero or more member fields that are initialized with values of
+    `hl.InputBuffer` or `hl.InputScalar`, which specify the expected input(s) of
+    the resulting `Pipeline`.
+-   declares one or more member fields that are initialized with values of
+    `hl.OutputBuffer` or `hl.OutputScalar`, which specify the expected output(s)
+    of the resulting `Pipeline`.
+-   declares zero or more member fields that are initialized with values of
+    `hl.GeneratorParam`, which can be used to pass arbitrary information from
+    the build system to the Generator. A GeneratorParam can carry a value of
+    type `bool`, `int`, `float`, `str`, or `hl.Type`.
+-   declares a `generate()` method that fill in the Halide IR needed to define
+    all of the Outputs
+-   optionally declares a `configure()` method to dynamically add Inputs or
+    Outputs to the pipeline, based on (e.g.) the values of `GeneratorParam`
+    values or other external inputs
 
 Let's look at a fairly simple example:
 
