@@ -460,7 +460,7 @@ class Generator(ABC):
             raise AttributeError("Invalid write to field '%s'" % name)
         super().__setattr__(name, value)
 
-    def __init__(self):
+    def __init__(self, generator_params: dict = {}):
         context = active_generator_context()
 
         self._target = context.target()
@@ -480,6 +480,10 @@ class Generator(ABC):
         self._in_configure = 0
 
         self._advance_to_gp_created()
+        if generator_params:
+            _check(isinstance(generator_params, dict), "generator_params must be a dict")
+            for k, v in generator_params.items():
+                self._set_generatorparam_value(k, v)
 
     def configure(self):
         pass
@@ -653,8 +657,6 @@ class Generator(ABC):
         )
         assert self._stage == _Stage.gp_created
         assert not self._pipeline
-        # assert not self._inputs
-        # assert not self._outputs
         if name in self._gp_dict:
             gp = self._gp_dict[name]
             assert isinstance(gp, GeneratorParam)

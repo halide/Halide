@@ -173,9 +173,7 @@ if __name__ == "__main__":
 
     def via_simplepy(target, generator_params):
         with hl.GeneratorContext(target):
-            g = SimplePy()
-            for k, v in generator_params.items():
-                g._set_generatorparam_value(k, v)
+            g = SimplePy(generator_params=generator_params)
             return g.compile_to_callable()
 
     test_simple(via_simplecpp_pystub)

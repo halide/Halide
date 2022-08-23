@@ -60,9 +60,6 @@ Build as part of the CMake build with `-DWITH_PYTHON_BINDINGS=ON` (this is the
 default). Note that this requires both Halide and LLVM to be built with RTTI and
 exceptions **enabled**, which is not the default for LLVM.
 
-> **TODO:** do we want to document `pip install
-> /path/to/Halide/python_bindings/`?
-
 ## Documentation and Examples
 
 As mentioned elsewhere, the Python API attempts to mimic the
@@ -388,9 +385,11 @@ import LogicalOpGenerator
 import imageio
 import numpy as np
 
-# Instantiate a Generator, set the GeneratorParams, then compile it
-or_op_generator = LogicalOpGenerator()
-or_op_generator.set_generator_params({"op": "or"})
+# Instantiate a Generator -- we can only set the GeneratorParams
+# by passing in a dict to the Generator's constructor
+or_op_generator = LogicalOpGenerator({"op": "or"})
+
+# Now compile the Generator into a Callable
 or_filter = or_op_generator.compile_to_callable()
 
 # Read in some file for input
@@ -420,8 +419,7 @@ import LogicalOpGenerator
 # Compile with debugging enabled
 t = hl.Target("host-debug")
 with hl.GeneratorContext(t):
-    or_op_generator = LogicalOpGenerator()
-    or_op_generator.set_generator_params({"op": "or"})
+    or_op_generator = LogicalOpGenerator({"op": "or"})
     or_filter = or_op_generator.compile_to_callable()
 ```
 
@@ -676,6 +674,11 @@ If you have written C++ Generators in Halide in the past, you might notice some
 features are missing and/or different for Python Generators. Among the
 differences are:
 
+-   In C++, you can create a Generator, then call `set_generatorparam_value()`
+    to alter the values of GeneratorParams. In Python, there is no public
+    method to alter a GeneratorParam after the Generator is created; instead,
+    you must pass a dict of GeneratorParam values to the constructor, after
+    which the values are immutable for that Generator instance.
 -   Array Inputs/Outputs: in our experience, they are pretty rarely used, it
     complicates the implementation in nontrivial ways, and the majority of use
     cases for them can all be reasonably supported by dynamically adding inputs
