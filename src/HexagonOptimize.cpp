@@ -234,8 +234,8 @@ bool process_match_flags(vector<Expr> &matches, int flags) {
     // The Pattern::Narrow*Op* flags are ordered such that the operand
     // corresponds to the bit (with operand 0 corresponding to the least
     // significant bit), so we can check for them all in a loop.
-    for (size_t i = 0; i < matches.size(); i++) {
-        if (!matches[i].defined()) {
+    for (const auto &match : matches) {
+        if (match.defined()) {
             return false;
         }
     }
