@@ -24,11 +24,9 @@
 namespace Halide {
 namespace Internal {
 
-using std::string;
-
 namespace {
 template<typename T>
-std::string to_string(T value) {
+string to_string(T value) {
     std::ostringstream os;
     os << value;
     return os.str();
@@ -36,14 +34,12 @@ std::string to_string(T value) {
 
 class StmtToViz : public IRVisitor {
 
-    static const std::string css, js;
-    static const std::string vizCss;
-    static const std::string costColorsCSS;
-    static const std::string navigationHTML;
-    static const std::string prodConsCSS;
-    static const std::string lineNumbersCSS;
-    static const std::string tooltipCSS;
-    static const std::string stmtHierarchyCSS;
+    static const string css, js;
+    static const string vizCss;
+    static const string costColorsCSS;
+    static const string navigationHTML;
+    static const string lineNumbersCSS;
+    static const string tooltipCSS;
 
     FindStmtCost findStmtCost;                            // used for finding the cost of statements
     GetStmtHierarchy getStmtHierarchy;                    // used for getting the hierarchy of
@@ -127,7 +123,7 @@ private:
     // is shared among all spans/divs in the same context, and y is unique.
     std::vector<int> context_stack;
     string open_tag(const string &tag, const string &cls, int id = -1) {
-        std::stringstream s;
+        stringstream s;
         s << "<" << tag << " class='" << cls << "' id='";
         if (id == -1) {
             s << context_stack.back() << "-";
@@ -140,7 +136,7 @@ private:
         return s.str();
     }
     string tag(const string &tag, const string &cls, const string &body, int id = -1) {
-        std::stringstream s;
+        stringstream s;
         s << open_tag(tag, cls, id);
         s << body;
         s << close_tag(tag);
@@ -152,7 +148,7 @@ private:
     }
 
     string tooltip(const string &hierarchyHTML, const string &tooltipText) {
-        std::stringstream s;
+        stringstream s;
         tooltipCount++;
 
         s << "<button id='button" << tooltipCount << "' ";
@@ -184,7 +180,7 @@ private:
         int computationCost = findStmtCost.get_calculated_computation_cost(op);
         int dataMovementCost = findStmtCost.get_data_movement_cost(op);
 
-        std::stringstream tooltipText;
+        stringstream tooltipText;
 
         tooltipText << "<table class='tooltipTable'>";
 
@@ -204,7 +200,8 @@ private:
         tooltipText << "</tr>";
         tooltipText << "</table>";
 
-        tooltipText << "<i>Click to see full hierarchy</i>";
+        tooltipText << "<i><span style='color: grey; margin-top: 5px;'>[Click to see full "
+                       "hierarchy]</span></i>";
 
         return tooltip(hierarchyHTML, tooltipText.str());
     }
@@ -247,7 +244,7 @@ private:
     }
 
     string open_cost_span(const IRNode *op, const string &hierarchyHTML) {
-        std::stringstream s;
+        stringstream s;
         s << cost_table_tooltip(op, hierarchyHTML);
         s << "<span id='Cost" << id_count << "'>";
         return s.str();
@@ -287,7 +284,7 @@ private:
         //       fix: ProducerConsumerHierarchy::cost_colors as well
         curr_line_num += 1;
 
-        std::stringstream s;
+        stringstream s;
 
         s << "<span id='ContextSpan" << curr_line_num << "'";
         s << "style='";
@@ -359,7 +356,7 @@ private:
             scope.push(x, id);
         }
 
-        std::stringstream s;
+        stringstream s;
         s << "<b class='Variable Matched' id='" << id << "-" << unique_id() << "'>";
         s << x;
         s << "</b>";
@@ -381,7 +378,7 @@ private:
     }
 
     string open_expand_button(int id) {
-        std::stringstream button;
+        stringstream button;
         button << "<a class=ExpandButton onclick='return toggle(" << id << ");' href=_blank>"
                << "<div class='expandButton' style='position:relative; width:0; height:0;'>"
                << "<div class=ShowHide style='display:none;' id=" << id << "-show"
@@ -1236,14 +1233,14 @@ public:
         scope.pop(op.name);
     }
 
-    void print_cuda_gpu_source_kernels(const std::string &str) {
+    void print_cuda_gpu_source_kernels(const string &str) {
         std::istringstream ss(str);
         int current_id = -1;
         stream << "<code class='ptx'>";
         bool in_braces = false;
         bool in_func_signature = false;
-        std::string current_kernel;
-        for (std::string line; std::getline(ss, line);) {
+        string current_kernel;
+        for (string line; std::getline(ss, line);) {
             if (line.empty()) {
                 stream << "\n";
                 continue;
@@ -1256,13 +1253,13 @@ public:
             line = replace_all(line, "'", "&#39;");
 
             if (starts_with(line, ".visible .entry")) {
-                std::vector<std::string> parts = split_string(line, " ");
+                std::vector<string> parts = split_string(line, " ");
                 if (parts.size() == 3) {
                     in_func_signature = true;
                     current_id = unique_id();
                     stream << open_expand_button(current_id);
 
-                    std::string kernel_name = parts[2].substr(0, parts[2].length() - 1);
+                    string kernel_name = parts[2].substr(0, parts[2].length() - 1);
                     line = keyword(".visible") + " " + keyword(".entry") + " ";
                     line += var(kernel_name) + " " + matched("(");
                     current_kernel = kernel_name;
@@ -1320,7 +1317,7 @@ public:
             line = replace_all(line, "st.", "<span class='Memory'>st</span>.");
 
             size_t idx;
-            if ((idx = line.find("&#x2F;&#x2F")) != std::string::npos) {
+            if ((idx = line.find("&#x2F;&#x2F")) != string::npos) {
                 line.insert(idx, "<span class='Comment'>");
                 line += "</span>";
             }
@@ -1328,30 +1325,30 @@ public:
             // Predicated instructions
             if (line.front() == '@' && indent) {
                 idx = line.find(' ');
-                std::string pred = line.substr(1, idx - 1);
+                string pred = line.substr(1, idx - 1);
                 line = "<span class='Pred'>@" + var(pred) + "</span>" + line.substr(idx);
             }
 
             // Labels
-            if (line.front() == 'L' && !indent && (idx = line.find(':')) != std::string::npos) {
-                std::string label = line.substr(0, idx);
+            if (line.front() == 'L' && !indent && (idx = line.find(':')) != string::npos) {
+                string label = line.substr(0, idx);
                 line = "<span class='Label'>" + var(label) + "</span>:" + line.substr(idx + 1);
             }
 
             // Highlight operands
-            if ((idx = line.find(" \t")) != std::string::npos && line.back() == ';') {
-                std::string operands_str = line.substr(idx + 2);
+            if ((idx = line.find(" \t")) != string::npos && line.back() == ';') {
+                string operands_str = line.substr(idx + 2);
                 operands_str = operands_str.substr(0, operands_str.length() - 1);
-                std::vector<std::string> operands = split_string(operands_str, ", ");
+                std::vector<string> operands = split_string(operands_str, ", ");
                 operands_str = "";
                 for (size_t opidx = 0; opidx < operands.size(); ++opidx) {
-                    std::string op = operands[opidx];
+                    string op = operands[opidx];
                     internal_assert(!op.empty());
                     if (opidx != 0) {
                         operands_str += ", ";
                     }
                     if (op.back() == '}') {
-                        std::string reg = op.substr(0, op.size() - 1);
+                        string reg = op.substr(0, op.size() - 1);
                         operands_str += var(reg) + '}';
                     } else if (op.front() == '%') {
                         operands_str += var(op);
@@ -1366,12 +1363,12 @@ public:
                         operands_str += close_span();
                     } else if (op.front() == '[' && op.back() == ']') {
                         size_t idx = op.find('+');
-                        if (idx == std::string::npos) {
-                            std::string reg = op.substr(1, op.size() - 2);
+                        if (idx == string::npos) {
+                            string reg = op.substr(1, op.size() - 2);
                             operands_str += '[' + var(reg) + ']';
                         } else {
-                            std::string reg = op.substr(1, idx - 1);
-                            std::string offset = op.substr(idx + 1);
+                            string reg = op.substr(1, idx - 1);
+                            string offset = op.substr(idx + 1);
                             offset = offset.substr(0, offset.size() - 1);
                             operands_str += '[' + var(reg) + "+";
                             operands_str += open_span("IntImm Imm");
@@ -1380,7 +1377,7 @@ public:
                             operands_str += ']';
                         }
                     } else if (op.front() == '{') {
-                        std::string reg = op.substr(1);
+                        string reg = op.substr(1);
                         operands_str += '{' + var(reg);
                     } else if (op.front() == 'L') {
                         // Labels
@@ -1415,7 +1412,7 @@ public:
             stream << matched("{");
             stream << close_expand_button();
             stream << open_div("BufferData Indent", id);
-            std::string str((const char *)op.data(), op.size_in_bytes());
+            string str((const char *)op.data(), op.size_in_bytes());
             if (starts_with(op.name(), "cuda_")) {
                 print_cuda_gpu_source_kernels(str);
             } else {
@@ -1515,10 +1512,10 @@ public:
         stream << css;
         stream << vizCss;
         stream << costColorsCSS;
-        stream << prodConsCSS;
+        stream << ProducerConsumerHierarchy::prodConsCSS;
         stream << lineNumbersCSS;
         stream << tooltipCSS;
-        stream << stmtHierarchyCSS;
+        stream << GetStmtHierarchy::stmtHierarchyCSS;
         stream << "</style>\n";
         stream << "<script language='javascript' type='text/javascript'>" + js + "</script>\n";
         stream << "</head>\n <body>\n";
@@ -1640,7 +1637,7 @@ public:
     }
 };
 
-const std::string StmtToViz::css = "\n \
+const string StmtToViz::css = "\n \
 /* Normal CSS */\n \
 body { font-family: Consolas, 'Liberation Mono', Menlo, Courier, monospace; font-size: 12px; background: #f8f8f8; margin-left:15px; } \n \
 a, a:hover, a:visited, a:active { color: inherit; text-decoration: none; } \n \
@@ -1677,7 +1674,7 @@ span.Label { background-color: #bde4ff; font-weight: bold; }\n \
 code.ptx { tab-size: 26; white-space: pre; }\n \
 ";
 
-const std::string StmtToViz::lineNumbersCSS = "\n \
+const string StmtToViz::lineNumbersCSS = "\n \
 /* Line Numbers CSS */\n \
 div.IRCode-code { \n \
     counter-reset: line; \n \
@@ -1734,7 +1731,7 @@ div.ModuleBody:before {\n\
 }\n\
 ";
 
-const std::string StmtToViz::vizCss = "\n \
+const string StmtToViz::vizCss = "\n \
 /* Additional Code Visualization CSS */\n \
 span.ButtonSpacer { width: 5px; color: transparent; display: inline-block; }\n \
 .info-button { \n \
@@ -1776,7 +1773,7 @@ span.ButtonSpacer { width: 5px; color: transparent; display: inline-block; }\n \
 } \n \
 ";
 
-const std::string StmtToViz::costColorsCSS = "\n \
+const string StmtToViz::costColorsCSS = "\n \
 /* Cost Colors CSS */\n \
 span.CostColor19, div.CostColor19, .CostColor19 { background-color: rgb(130,31,27); } \n \
 span.CostColor18, div.CostColor18, .CostColor18 { background-color: rgb(145,33,30); } \n \
@@ -1803,7 +1800,7 @@ span.CostComputation { width: 13px; display: inline-block; color: transparent; }
 span.CostMovement { width: 13px; display: inline-block;  color: transparent; } \n \
 ";
 
-const std::string StmtToViz::navigationHTML = "\n \
+const string StmtToViz::navigationHTML = "\n \
 <ul class='nav nav-tabs' id='myTab' role='tablist'> \n \
     <li class='nav-item' role='presentation'> \n \
         <button class='nav-link active' id='IRCode-tab' data-bs-toggle='tab' \n \
@@ -1825,63 +1822,7 @@ const std::string StmtToViz::navigationHTML = "\n \
 </ul> \n \
 ";
 
-const std::string StmtToViz::prodConsCSS = "\n \
-/* ProdCons CSS */\n \
-.tf-custom-prodCons .tf-nc { border-radius: 5px; border: 1px solid; }\n \
-.tf-custom-prodCons .tf-nc:before, .tf-custom-prodCons .tf-nc:after { border-left-width: 1px; }\n \
-.tf-custom-prodCons li li:before { border-top-width: 1px; }\n \
-.tf-custom-prodCons .end-node { border-style: dashed; }\n \
-.tf-custom-prodCons .tf-nc { background-color: #e6eeff; }\n \
-div.box { \n \
-    border: 1px dashed grey; \n \
-    border-radius: 5px; \n \
-    margin: 10px; \n \
-    display: flex; \n \
-} \n \
-div.boxHeader { \n \
-    padding: 5px; \n \
-    display: flex; \n \
-} \n \
-div.spacing { \n \
-    flex-grow: 1; \n \
-} \n \
-table { \n \
-    border-radius: 5px; \n \
-    font-size: 12px; \n \
-    border: 1px dashed grey; \n \
-    border-collapse: separate; \n \
-    border-spacing: 0; \n \
-} \n \
-.ifElseTable { \n \
-    border: 0px; \n \
-}  \n \
-.costTable { \n \
-    float: right; \n \
-    text-align: center; \n \
-    border: 0px; \n \
-} \n \
-.costTable td { \n \
-    border-top: 1px dashed grey; \n \
-} \n \
-.costTableHeader, \n \
-.costTableData { \n \
-    border-collapse: collapse; \n \
-    padding-top: 1px; \n \
-    padding-bottom: 1px; \n \
-    padding-left: 5px; \n \
-    padding-right: 5px; \n \
-} \n \
-span.intType { color: #099; } \n \
-span.stringType { color: #990073; } \n \
-.middleCol { \n \
-    border-right: 1px dashed grey; \n \
-} \n \
-div.content { \n \
-    flex-grow: 1; \n \
-} \n \
-";
-
-const std::string StmtToViz::tooltipCSS = "\n \
+const string StmtToViz::tooltipCSS = "\n \
 /* Tooltip CSS */\n \
 .left-table { text-align: right; color: grey; vertical-align: middle; font-size: 12px; }\n \
 .right-table { text-align: left; vertical-align: middle; font-size: 12px; font-weight: bold; padding-left: 3px; }\n \
@@ -1907,40 +1848,7 @@ const std::string StmtToViz::tooltipCSS = "\n \
 } \n \
 ";
 
-const std::string StmtToViz::stmtHierarchyCSS = "\n \
-/* StmtHierarchy CSS */\n \
-.arrow { border: solid rgb(125,125,125); border-width: 0 2px 2px 0; display:  \n \
-inline-block; padding: 3px; } \n \
-.down { transform: rotate(45deg); -webkit-transform: rotate(45deg); }  \n \
-.up { transform: rotate(-135deg); -webkit-transform: rotate(-135deg); }  \n \
-.stmtHierarchyButton {padding: 3px;} \n \
-.tf-custom-stmtHierarchy .tf-nc { border-radius: 5px; border: 1px solid; font-size: 12px;} \n \
-.tf-custom-stmtHierarchy .end-node { border-style: dashed; font-size: 12px; } \n \
-.tf-custom-stmtHierarchy .tf-nc:before, .tf-custom-stmtHierarchy .tf-nc:after { border-left-width: 1px; } \n \
-.tf-custom-stmtHierarchy li li:before { border-top-width: 1px; }\n \
-.tf-custom-stmtHierarchy .CostComputationBorder19 { border-color: rgb(130,31,27);} \n \
-.tf-custom-stmtHierarchy .CostComputationBorder18 { border-color: rgb(145,33,30);} \n \
-.tf-custom-stmtHierarchy .CostComputationBorder17 { border-color: rgb(160,33,32);} \n \
-.tf-custom-stmtHierarchy .CostComputationBorder16 { border-color: rgb(176,34,34);} \n \
-.tf-custom-stmtHierarchy .CostComputationBorder15 { border-color: rgb(185,47,32);} \n \
-.tf-custom-stmtHierarchy .CostComputationBorder14 { border-color: rgb(193,59,30);} \n \
-.tf-custom-stmtHierarchy .CostComputationBorder13 { border-color: rgb(202,71,27);} \n \
-.tf-custom-stmtHierarchy .CostComputationBorder12 { border-color: rgb(210,82,22);} \n \
-.tf-custom-stmtHierarchy .CostComputationBorder11 { border-color: rgb(218,93,16);} \n \
-.tf-custom-stmtHierarchy .CostComputationBorder10 { border-color: rgb(226,104,6);} \n \
-.tf-custom-stmtHierarchy .CostComputationBorder9 { border-color: rgb(229,118,9);} \n \
-.tf-custom-stmtHierarchy .CostComputationBorder8 { border-color: rgb(230,132,15);} \n \
-.tf-custom-stmtHierarchy .CostComputationBorder7 { border-color: rgb(231,146,20);} \n \
-.tf-custom-stmtHierarchy .CostComputationBorder6 { border-color: rgb(232,159,25);} \n \
-.tf-custom-stmtHierarchy .CostComputationBorder5 { border-color: rgb(233,172,30);} \n \
-.tf-custom-stmtHierarchy .CostComputationBorder4 { border-color: rgb(233,185,35);} \n \
-.tf-custom-stmtHierarchy .CostComputationBorder3 { border-color: rgb(233,198,40);} \n \
-.tf-custom-stmtHierarchy .CostComputationBorder2 { border-color: rgb(232,211,45);} \n \
-.tf-custom-stmtHierarchy .CostComputationBorder1 { border-color: rgb(231,223,50);} \n \
-.tf-custom-stmtHierarchy .CostComputationBorder0 { border-color: rgb(236,233,89);}  \n \
-";
-
-const std::string StmtToViz::js = "\n \
+const string StmtToViz::js = "\n \
 function toggle(id) { \n \
     e = document.getElementById(id); \n \
     show = document.getElementById(id + '-show'); \n \

@@ -107,6 +107,8 @@ private:
 class ProducerConsumerHierarchy : public IRMutator {
 
 public:
+    static const string prodConsCSS;
+
     // TODO: eventually get rid of output_file_name (should be able to open file within the same
     // file) - although, maybe want to print out what file is being generated to the screen
     ProducerConsumerHierarchy(string fileName, FindStmtCost findStmtCostPopulated)

@@ -1411,3 +1411,59 @@ string StmtSizes::print_node(const IRNode *node) const {
 
     return s.str();
 }
+
+const string ProducerConsumerHierarchy::prodConsCSS = "\n \
+/* ProdCons CSS */\n \
+.tf-custom-prodCons .tf-nc { border-radius: 5px; border: 1px solid; }\n \
+.tf-custom-prodCons .tf-nc:before, .tf-custom-prodCons .tf-nc:after { border-left-width: 1px; }\n \
+.tf-custom-prodCons li li:before { border-top-width: 1px; }\n \
+.tf-custom-prodCons .end-node { border-style: dashed; }\n \
+.tf-custom-prodCons .tf-nc { background-color: #e6eeff; }\n \
+div.box { \n \
+    border: 1px dashed grey; \n \
+    border-radius: 5px; \n \
+    margin: 10px; \n \
+    display: flex; \n \
+} \n \
+div.boxHeader { \n \
+    padding: 5px; \n \
+    display: flex; \n \
+} \n \
+div.spacing { \n \
+    flex-grow: 1; \n \
+} \n \
+table { \n \
+    border-radius: 5px; \n \
+    font-size: 12px; \n \
+    border: 1px dashed grey; \n \
+    border-collapse: separate; \n \
+    border-spacing: 0; \n \
+} \n \
+.ifElseTable { \n \
+    border: 0px; \n \
+}  \n \
+.costTable { \n \
+    float: right; \n \
+    text-align: center; \n \
+    border: 0px; \n \
+} \n \
+.costTable td { \n \
+    border-top: 1px dashed grey; \n \
+} \n \
+.costTableHeader, \n \
+.costTableData { \n \
+    border-collapse: collapse; \n \
+    padding-top: 1px; \n \
+    padding-bottom: 1px; \n \
+    padding-left: 5px; \n \
+    padding-right: 5px; \n \
+} \n \
+span.intType { color: #099; } \n \
+span.stringType { color: #990073; } \n \
+.middleCol { \n \
+    border-right: 1px dashed grey; \n \
+} \n \
+div.content { \n \
+    flex-grow: 1; \n \
+} \n \
+";

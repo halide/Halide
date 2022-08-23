@@ -736,3 +736,36 @@ string GetStmtHierarchy::generate_collapse_expand_js(int totalNodes) {
     js << "</script>\n";
     return js.str();
 }
+
+const string GetStmtHierarchy::stmtHierarchyCSS = "\n \
+/* StmtHierarchy CSS */\n \
+.arrow { border: solid rgb(125,125,125); border-width: 0 2px 2px 0; display:  \n \
+inline-block; padding: 3px; } \n \
+.down { transform: rotate(45deg); -webkit-transform: rotate(45deg); }  \n \
+.up { transform: rotate(-135deg); -webkit-transform: rotate(-135deg); }  \n \
+.stmtHierarchyButton {padding: 3px;} \n \
+.tf-custom-stmtHierarchy .tf-nc { border-radius: 5px; border: 1px solid; font-size: 12px;} \n \
+.tf-custom-stmtHierarchy .end-node { border-style: dashed; font-size: 12px; } \n \
+.tf-custom-stmtHierarchy .tf-nc:before, .tf-custom-stmtHierarchy .tf-nc:after { border-left-width: 1px; } \n \
+.tf-custom-stmtHierarchy li li:before { border-top-width: 1px; }\n \
+.tf-custom-stmtHierarchy .CostComputationBorder19 { border-color: rgb(130,31,27);} \n \
+.tf-custom-stmtHierarchy .CostComputationBorder18 { border-color: rgb(145,33,30);} \n \
+.tf-custom-stmtHierarchy .CostComputationBorder17 { border-color: rgb(160,33,32);} \n \
+.tf-custom-stmtHierarchy .CostComputationBorder16 { border-color: rgb(176,34,34);} \n \
+.tf-custom-stmtHierarchy .CostComputationBorder15 { border-color: rgb(185,47,32);} \n \
+.tf-custom-stmtHierarchy .CostComputationBorder14 { border-color: rgb(193,59,30);} \n \
+.tf-custom-stmtHierarchy .CostComputationBorder13 { border-color: rgb(202,71,27);} \n \
+.tf-custom-stmtHierarchy .CostComputationBorder12 { border-color: rgb(210,82,22);} \n \
+.tf-custom-stmtHierarchy .CostComputationBorder11 { border-color: rgb(218,93,16);} \n \
+.tf-custom-stmtHierarchy .CostComputationBorder10 { border-color: rgb(226,104,6);} \n \
+.tf-custom-stmtHierarchy .CostComputationBorder9 { border-color: rgb(229,118,9);} \n \
+.tf-custom-stmtHierarchy .CostComputationBorder8 { border-color: rgb(230,132,15);} \n \
+.tf-custom-stmtHierarchy .CostComputationBorder7 { border-color: rgb(231,146,20);} \n \
+.tf-custom-stmtHierarchy .CostComputationBorder6 { border-color: rgb(232,159,25);} \n \
+.tf-custom-stmtHierarchy .CostComputationBorder5 { border-color: rgb(233,172,30);} \n \
+.tf-custom-stmtHierarchy .CostComputationBorder4 { border-color: rgb(233,185,35);} \n \
+.tf-custom-stmtHierarchy .CostComputationBorder3 { border-color: rgb(233,198,40);} \n \
+.tf-custom-stmtHierarchy .CostComputationBorder2 { border-color: rgb(232,211,45);} \n \
+.tf-custom-stmtHierarchy .CostComputationBorder1 { border-color: rgb(231,223,50);} \n \
+.tf-custom-stmtHierarchy .CostComputationBorder0 { border-color: rgb(236,233,89);}  \n \
+";

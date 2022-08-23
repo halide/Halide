@@ -17,6 +17,8 @@ using namespace Internal;
 class GetStmtHierarchy : public IRMutator {
 
 public:
+    static const string stmtHierarchyCSS;
+
     GetStmtHierarchy(FindStmtCost findStmtCostPopulated) : findStmtCost(findStmtCostPopulated) {
     }
     ~GetStmtHierarchy() = default;
