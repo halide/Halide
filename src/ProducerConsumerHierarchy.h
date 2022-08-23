@@ -18,6 +18,7 @@ using namespace Internal;
 #define CONSUMER_COLOR PRODUCER_COLOR
 #define STORE_COLOR "#f4f8bf"
 #define ALLOCATE_COLOR STORE_COLOR
+#define FUNCTION_CALL_COLOR "#fabebe"
 
 #define SHOW_CUMULATIVE_COST false
 #define SHOW_UNIQUE_LOADS false
@@ -29,13 +30,51 @@ struct StmtSize {
     map<string, string> consumes;
     map<string, string> allocates;
     string forLoopSize;
+    vector<string> mainFunctionCalls;
     vector<string> allocationSizes;
 
     bool empty() const {
-        return produces.size() == 0 && consumes.size() == 0 && allocates.size() == 0;
+        return produces.size() == 0 && consumes.size() == 0 && allocates.size() == 0 &&
+               allocationSizes.size() == 0 && mainFunctionCalls.size() == 0;
     }
     bool emptyAllocated() const {
         return allocates.size() == 0;
+    }
+    string to_string() {
+        string result = "";
+        if (!empty()) {
+            result += "Produces: ";
+            for (auto it = produces.begin(); it != produces.end(); ++it) {
+                result += it->first + ": " + it->second + "\n";
+            }
+            result += "\n";
+            result += "Consumes: ";
+            for (auto it = consumes.begin(); it != consumes.end(); ++it) {
+                result += it->first + ": " + it->second + "\n";
+            }
+            result += "\n";
+            result += "Allocates: ";
+            for (auto it = allocates.begin(); it != allocates.end(); ++it) {
+                result += it->first + ": " + it->second + "\n";
+            }
+            result += "\n";
+            result += "Allocation sizes: ";
+            for (auto it = allocationSizes.begin(); it != allocationSizes.end(); ++it) {
+                result += *it + " ";
+            }
+            result += "\n";
+        }
+        if (!forLoopSize.empty()) {
+            result += "For loop size: " + forLoopSize + "\n";
+        }
+        if (!mainFunctionCalls.empty()) {
+            result += "Main function calls: ";
+            for (auto it = mainFunctionCalls.begin(); it != mainFunctionCalls.end(); ++it) {
+                result += *it + " ";
+            }
+            result += "\n";
+        }
+        return result;
     }
 };
 
@@ -44,6 +83,10 @@ struct StmtSize {
  */
 class StmtSizes : public IRMutator {
 public:
+    map<string, Stmt> main_function_bodies;  // TODO: maybe move back to private if don't
+                                             // use it outside of this class
+    string module_name;
+
     StmtSizes() = default;
     ~StmtSizes() = default;
 
@@ -87,8 +130,13 @@ private:
     string string_span(string varName) const;
     string int_span(int64_t intVal) const;
 
+    void bubble_up(const IRNode *from, const IRNode *to, string loopIterator);
+
+    Expr visit(const Call *op) override;
+    Expr visit(const Variable *op) override;
     Stmt visit(const LetStmt *op) override;
     Stmt visit(const ProducerConsumer *op) override;
+    string get_loop_iterator(const For *op) const;
     Stmt visit(const For *op) override;
     Stmt visit(const Store *op) override;
     void add_load_value(const string &name, const int lanes);
@@ -141,7 +189,7 @@ private:
     int prodConsTooltipCount = 0;
 
     // for traversal of a Module object
-    void traverse(const Module &m);
+    void startModuleTraversal();
 
     // opens and closes divs
     void open_box_div(string backgroundColor, string className, const IRNode *op);
@@ -187,6 +235,7 @@ private:
     void cost_color_spacer();
     void cost_colors(const IRNode *op);
 
+    Expr visit(const Variable *op) override;
     Stmt visit(const ProducerConsumer *op) override;
     Stmt visit(const For *op) override;
     Stmt visit(const IfThenElse *op) override;

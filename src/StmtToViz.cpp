@@ -1539,6 +1539,8 @@ public:
         stream << "<div class='tab-pane fade show active' id='IRCode' role='tabpanel' "
                   "aria-labelledby='IRCode-tab'>\n";
         stream << "<div class='IRCode-code'>\n";
+
+        cout << "done printing to viz" << endl;
     }
 
     StmtToViz(const string &filename, const Stmt &s)
@@ -1699,7 +1701,7 @@ div.Evaluate,\n\
 div.Allocate,\n\
 div.ClosingBrace,\n\
 div.Module,\n\
-div.ModuleBody {\n\
+div.Function {\n\
     counter-increment: line;\n\
 }\n\
 p.WrapLine:before,\n\
@@ -1720,7 +1722,7 @@ div.Evaluate:before,\n\
 div.Allocate:before, \n\
 div.ClosingBrace:before,\n\
 div.Module:before, \n\
-div.ModuleBody:before {\n\
+div.Function:before {\n\
     content: counter(line) '. ';\n\
     display: inline-block;\n\
     position: absolute;\n\
@@ -1886,17 +1888,6 @@ void print_to_viz(const string &filename, const Stmt &s) {
 }
 
 void print_to_viz(const string &filename, const Module &m) {
-
-    if (m.functions().size() > 1) {
-        internal_error << "\n"
-                       << "\n"
-                       << "Exiting early: printing to viz only works for modules with "
-                          "one function (for now)"
-                       << "\n"
-                       << "\n"
-                       << "\n";
-        return;
-    }
 
     StmtToViz sth(filename, m);
 

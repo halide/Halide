@@ -41,15 +41,27 @@ string StmtSizes::get_allocation_size(const IRNode *node, const string &name) co
 }
 
 void StmtSizes::traverse(const Module &m) {
+    module_name = m.name();
+
     // recursively traverse all submodules
     for (const auto &s : m.submodules()) {
         traverse(s);
     }
+
     // traverse all functions
     for (const auto &f : m.functions()) {
         get_function_arguments(f);
-        mutate(f.body);
+
+        main_function_bodies[f.name] = f.body;
     }
+
+    // start traversing the main function
+    auto it = main_function_bodies.find(module_name);
+    if (it == main_function_bodies.end()) {
+        internal_error << "\n\n\n"
+                       << "StmtSizes::traverse - main function not found\n\n\n";
+    }
+    mutate(it->second);
 }
 
 string StmtSizes::get_simplified_string(string a, string b, string op) {
@@ -204,22 +216,103 @@ string StmtSizes::int_span(int64_t intVal) const {
     return "<span class='intType'>" + to_string(intVal) + "</span>";
 }
 
-Stmt StmtSizes::visit(const LetStmt *op) {
-    mutate(op->body);
-    StmtSize bodySize = get_size(op->body.get());
+void StmtSizes::bubble_up(const IRNode *from, const IRNode *to, string loopIterator = "") {
+    StmtSize fromSize = get_size(from);
+    StmtSize toSize = get_size(to);
 
-    // set all produces and consumes of the body
-    for (const auto &produce_var : bodySize.produces) {
-        set_produce_size(op, produce_var.first, produce_var.second);
+    // produce sizes
+    for (const auto &produce_var : fromSize.produces) {
+        string fromVar = produce_var.first;
+        string fromProduceSize = produce_var.second;
+
+        // if there's loop iterator, add it to the produce var name
+        if (loopIterator != "") {
+            string toProduceSize = get_simplified_string(loopIterator, fromProduceSize, "*");
+            set_produce_size(to, fromVar, toProduceSize);
+        } else {
+            // check if fromVar is in toSize.consumes
+            auto it = toSize.produces.find(fromVar);
+            if (it != toSize.produces.end()) {
+                string currProduceSize = it->second;
+                string toProduceSize = get_simplified_string(currProduceSize, fromProduceSize, "+");
+
+                set_produce_size(to, fromVar, toProduceSize);
+            } else {
+                set_produce_size(to, fromVar, fromProduceSize);
+            }
+        }
     }
-    for (const auto &consume_var : bodySize.consumes) {
-        set_consume_size(op, consume_var.first, consume_var.second);
+
+    // consume sizes
+    for (const auto &consume_var : fromSize.consumes) {
+        string fromVar = consume_var.first;
+        string fromConsumeSize = consume_var.second;
+
+        // if there's loop iterator, add it to the consume var name
+        if (loopIterator != "") {
+            string toConsumeSize = get_simplified_string(loopIterator, fromConsumeSize, "*");
+            set_consume_size(to, fromVar, toConsumeSize);
+        } else {
+            // check if fromVar is in toSize.consumes
+            auto it = toSize.consumes.find(fromVar);
+            if (it != toSize.consumes.end()) {
+                string currConsumeSize = it->second;
+                string toConsumeSize = get_simplified_string(currConsumeSize, fromConsumeSize, "+");
+
+                set_consume_size(to, fromVar, toConsumeSize);
+            } else {
+                set_consume_size(to, fromVar, fromConsumeSize);
+            }
+        }
     }
+
+    // mainFunctionCalls
+    for (const auto &mainFunctionCall : fromSize.mainFunctionCalls) {
+        // only add if not already in toSize.mainFunctionCalls
+        if (!std::count(toSize.mainFunctionCalls.begin(), toSize.mainFunctionCalls.end(),
+                        mainFunctionCall)) {
+            toSize.mainFunctionCalls.push_back(mainFunctionCall);
+        }
+    }
+}
+
+Expr StmtSizes::visit(const Call *op) {
+    for (size_t i = 0; i < op->args.size(); i++) {
+        Expr arg = op->args[i];
+        mutate(arg);
+        bubble_up(arg.get(), op);
+    }
+    return op;
+}
+Expr StmtSizes::visit(const Variable *op) {
+    // if op->name starts with "::", remove "::"
+    string varName = op->name;
+    if (varName[0] == ':' && varName[1] == ':') {
+        varName = varName.substr(2);
+    }
+
+    auto it = main_function_bodies.find(varName);
+    if (it != main_function_bodies.end()) {
+        StmtSize size = StmtSize();
+        size.mainFunctionCalls.push_back(op->name);
+        stmt_sizes[op] = size;
+
+        mutate(it->second);
+
+        bubble_up(it->second.get(), op);
+    }
+    return op;
+}
+Stmt StmtSizes::visit(const LetStmt *op) {
+    mutate(op->value);
+    mutate(op->body);
+
+    bubble_up(op->value.get(), op);
+    bubble_up(op->body.get(), op);
 
     return op;
 }
 Stmt StmtSizes::visit(const ProducerConsumer *op) {
-
     if (op->is_producer) {
         curr_producer_names.push_back(op->name);
     } else {
@@ -227,15 +320,8 @@ Stmt StmtSizes::visit(const ProducerConsumer *op) {
     }
 
     mutate(op->body);
-    StmtSize bodySize = get_size(op->body.get());
 
-    // set all produces and consumes of the body
-    for (const auto &produce_var : bodySize.produces) {
-        set_produce_size(op, produce_var.first, produce_var.second);
-    }
-    for (const auto &consume_var : bodySize.consumes) {
-        set_consume_size(op, consume_var.first, consume_var.second);
-    }
+    bubble_up(op->body.get(), op);
 
     // remove name from curr_producer_names or curr_consumer_names
     if (op->is_producer) {
@@ -246,15 +332,7 @@ Stmt StmtSizes::visit(const ProducerConsumer *op) {
 
     return op;
 }
-Stmt StmtSizes::visit(const For *op) {
-    mutate(op->body);
-    StmtSize bodySize = get_size(op->body.get());
-
-    // don't do anything if body is empty
-    if (bodySize.empty()) {
-        return op;
-    }
-
+string StmtSizes::get_loop_iterator(const For *op) const {
     Expr min = op->min;
     Expr extent = op->extent;
 
@@ -337,16 +415,20 @@ Stmt StmtSizes::visit(const For *op) {
                "can't generate ProdCons hierarchy yet. \n\n";
     }
 
-    for (const auto &produce_var : bodySize.produces) {
-        string bodyProduceSize = produce_var.second;
-        string opProduceSize = get_simplified_string(loopIterator, bodyProduceSize, "*");
-        set_produce_size(op, produce_var.first, opProduceSize);
+    return loopIterator;
+}
+Stmt StmtSizes::visit(const For *op) {
+    mutate(op->body);
+    StmtSize bodySize = get_size(op->body.get());
+
+    // don't do anything if body is empty
+    if (bodySize.empty()) {
+        return op;
     }
-    for (const auto &consume_var : bodySize.consumes) {
-        string bodyConsumeSize = consume_var.second;
-        string opConsumeSize = get_simplified_string(loopIterator, bodyConsumeSize, "*");
-        set_consume_size(op, consume_var.first, opConsumeSize);
-    }
+
+    string loopIterator = get_loop_iterator(op);
+
+    bubble_up(op->body.get(), op, loopIterator);
 
     set_for_loop_size(op, loopIterator);
 
@@ -356,7 +438,6 @@ Stmt StmtSizes::visit(const Store *op) {
 
     // TODO: is this correct? should i be getting it from `index`?
     uint16_t lanes = op->index.type().lanes();
-    // uint16_t lanes = op->type.lanes();
 
     if (in_producer(op->name)) {
         set_produce_size(op, op->name, int_span(lanes));
@@ -441,49 +522,9 @@ Expr StmtSizes::visit(const Load *op) {
 Stmt StmtSizes::visit(const Block *op) {
     mutate(op->first);
     mutate(op->rest);
-    StmtSize firstSize = get_size(op->first.get());
-    StmtSize restSize = get_size(op->rest.get());
 
-    // copies over all produces and consumes from the first statement
-    for (const auto &produce_var : firstSize.produces) {
-        string firstProduceSize = produce_var.second;
-        set_produce_size(op, produce_var.first, firstProduceSize);
-    }
-    for (const auto &consume_var : firstSize.consumes) {
-        string firstConsumeSize = consume_var.second;
-        set_consume_size(op, consume_var.first, firstConsumeSize);
-    }
-
-    // copies over all produces and consumes from the rest statement - takes into
-    // account that the first might already have set some produces and consumes
-    for (const auto &produce_var : restSize.produces) {
-        string restProduceSize = produce_var.second;
-
-        // check if produce_var.first is in firstSize.consumes
-        auto it = firstSize.produces.find(produce_var.first);
-        if (it != firstSize.produces.end()) {
-            string firstProducesSize = it->second;
-            string opProduceSize = get_simplified_string(firstProducesSize, restProduceSize, "+");
-
-            set_produce_size(op, produce_var.first, opProduceSize);
-        } else {
-            set_produce_size(op, produce_var.first, restProduceSize);
-        }
-    }
-    for (const auto &consume_var : restSize.consumes) {
-        string restConsumeSize = consume_var.second;
-
-        // check if consume_var.first is in firstSize.produces
-        auto it = firstSize.consumes.find(consume_var.first);
-        if (it != firstSize.consumes.end()) {
-            string firstConsumeSize = it->second;
-            string opConsumeSize = get_simplified_string(firstConsumeSize, restConsumeSize, "+");
-
-            set_consume_size(op, consume_var.first, opConsumeSize);
-        } else {
-            set_consume_size(op, consume_var.first, restConsumeSize);
-        }
-    }
+    bubble_up(op->first.get(), op);
+    bubble_up(op->rest.get(), op);
 
     return op;
 }
@@ -492,13 +533,7 @@ Stmt StmtSizes::visit(const Allocate *op) {
     mutate(op->body);
     StmtSize bodySize = get_size(op->body.get());
 
-    // set all produces and consumes of the body
-    for (const auto &produce_var : bodySize.produces) {
-        set_produce_size(op, produce_var.first, produce_var.second);
-    }
-    for (const auto &consume_var : bodySize.consumes) {
-        set_consume_size(op, consume_var.first, consume_var.second);
-    }
+    bubble_up(op->body.get(), op);
 
     // set allocate stuff
     stringstream type;
@@ -523,48 +558,9 @@ Stmt StmtSizes::visit(const IfThenElse *op) {
     mutate(op->then_case);
     mutate(op->else_case);
 
-    StmtSize thenSize = get_size(op->then_case.get());
-    StmtSize elseSize = get_size(op->else_case.get());
-
-    // copies over all produces and consumes from the then statement
-    for (const auto &produce_var : thenSize.produces) {
-        string thenProduceSize = produce_var.second;
-        set_produce_size(op, produce_var.first, thenProduceSize);
-    }
-    for (const auto &consume_var : thenSize.consumes) {
-        string thenConsumeSize = consume_var.second;
-        set_consume_size(op, consume_var.first, thenConsumeSize);
-    }
-
-    // copies over all produces and consumes from the else statement - takes into
-    // account that the then might already have set some produces and consumes
-    for (const auto &produce_var : elseSize.produces) {
-        string elseProduceSize = produce_var.second;
-
-        // check if produce_var.first is in thenSize.consumes
-        auto it = thenSize.produces.find(produce_var.first);
-        if (it != thenSize.produces.end()) {
-            string thenProducesSize = it->second;
-            string opProduceSize = get_simplified_string(thenProducesSize, elseProduceSize, "+");
-
-            set_produce_size(op, produce_var.first, opProduceSize);
-        } else {
-            set_produce_size(op, produce_var.first, elseProduceSize);
-        }
-    }
-    for (const auto &consume_var : elseSize.consumes) {
-        string elseConsumeSize = consume_var.second;
-
-        // check if consume_var.first is in thenSize.produces
-        auto it = thenSize.consumes.find(consume_var.first);
-        if (it != thenSize.consumes.end()) {
-            string thenConsumeSize = it->second;
-            string opConsumeSize = get_simplified_string(thenConsumeSize, elseConsumeSize, "+");
-
-            set_consume_size(op, consume_var.first, opConsumeSize);
-        } else {
-            set_consume_size(op, consume_var.first, elseConsumeSize);
-        }
+    bubble_up(op->then_case.get(), op);
+    if (op->else_case.defined()) {
+        bubble_up(op->else_case.get(), op);
     }
 
     return op;
@@ -577,9 +573,10 @@ string ProducerConsumerHierarchy::generate_producer_consumer_html(const Module &
     pre_processor.generate_sizes(m);
 
     html.str(string());
-    traverse(m);
+    startModuleTraversal();
 
-    return html.str();
+    string html_string = html.str();
+    return html_string;
 }
 string ProducerConsumerHierarchy::generate_producer_consumer_html(const Stmt &stmt) {
     pre_processor.generate_sizes(stmt);
@@ -590,14 +587,30 @@ string ProducerConsumerHierarchy::generate_producer_consumer_html(const Stmt &st
     return html.str();
 }
 
-void ProducerConsumerHierarchy::traverse(const Module &m) {
-    // recursively traverse all submodules
-    for (const auto &s : m.submodules()) {
-        traverse(s);
+void ProducerConsumerHierarchy::startModuleTraversal() {
+
+    auto it = pre_processor.main_function_bodies.find(pre_processor.module_name);
+    if (it == pre_processor.main_function_bodies.end()) {
+        internal_error << "ProducerConsumerHierarchy::generate_producer_consumer_html - main "
+                          "function not found\n";
     }
-    // traverse all functions
-    for (const auto &f : m.functions()) {
-        mutate(f.body);
+
+    // start with the main function
+    html << "<a name=\"" << it->first << "\"></a>";
+    html << "<h3>" << it->first << "</h3>";
+    html << "<div class='functionViz'>";
+    mutate(it->second);
+    html << "</div>";
+
+    // mutate all other functions
+    for (const auto &func : pre_processor.main_function_bodies) {
+        if (func.first != pre_processor.module_name) {
+            html << "<a name=\"" << func.first << "\"></a>";
+            html << "<h3>" << func.first << "</h3>";
+            html << "<div class='functionViz'>";
+            mutate(func.second);
+            html << "</div>";
+        }
     }
 }
 
@@ -954,6 +967,38 @@ void ProducerConsumerHierarchy::cost_colors(const IRNode *op) {
     cost_color_spacer();
 }
 
+Expr ProducerConsumerHierarchy::visit(const Variable *op) {
+    // if op->name starts with "::", remove "::"
+    string varName = op->name;
+    if (varName[0] == ':' && varName[1] == ':') {
+        varName = varName.substr(2);
+    }
+
+    auto it = pre_processor.main_function_bodies.find(varName);
+    if (it != pre_processor.main_function_bodies.end()) {
+
+        StmtSize size = pre_processor.get_size(op);
+
+        if (!SHOW_CUMULATIVE_COST) {
+            size = StmtSize();
+        }
+
+        html << "<div class='box center FunctionCallBox' ";
+        html << "style='background-color: " << FUNCTION_CALL_COLOR << ";";
+        html << "padding: 5px;'>";
+
+        html << "Function Call";
+        html << "<button class='info-button' role='button' ";
+        html << "onclick=\"location.href='./" << output_file_name << "#" << varName << "'\">";
+        html << varName;
+        html << "</button>";
+
+        html << "</div>";
+
+        return op;
+    }
+    return op;
+}
 Stmt ProducerConsumerHierarchy::visit(const ProducerConsumer *op) {
     open_box_div(op->is_producer ? PRODUCER_COLOR : CONSUMER_COLOR, "ProducerConsumerBox", op);
 
@@ -1004,7 +1049,11 @@ Stmt ProducerConsumerHierarchy::visit(const For *op) {
 
 Stmt ProducerConsumerHierarchy::visit(const IfThenElse *op) {
     StmtSize thenSize = pre_processor.get_size(op->then_case.get());
-    StmtSize elseSize = pre_processor.get_size(op->else_case.get());
+    StmtSize elseSize;
+
+    if (op->else_case.defined()) {
+        elseSize = pre_processor.get_size(op->else_case.get());
+    }
 
     // only start the if-tree if either case is not empty
     // (aka won't print if both cases are empty)
@@ -1297,23 +1346,23 @@ string StmtSizes::print_node(const IRNode *node) const {
     s << "Crashing node has type: ";
     IRNodeType type = node->node_type;
     if (type == IRNodeType::IntImm) {
-        s << "IntImm type" << endl;
+        s << "IntImm type";
         auto node1 = dynamic_cast<const IntImm *>(node);
-        s << "value: " << node1->value << endl;
+        s << "value: " << node1->value;
     } else if (type == IRNodeType::UIntImm) {
-        s << "UIntImm type" << endl;
+        s << "UIntImm type";
     } else if (type == IRNodeType::FloatImm) {
-        s << "FloatImm type" << endl;
+        s << "FloatImm type";
     } else if (type == IRNodeType::StringImm) {
-        s << "StringImm type" << endl;
+        s << "StringImm type";
     } else if (type == IRNodeType::Broadcast) {
-        s << "Broadcast type" << endl;
+        s << "Broadcast type";
     } else if (type == IRNodeType::Cast) {
-        s << "Cast type" << endl;
+        s << "Cast type";
     } else if (type == IRNodeType::Variable) {
-        s << "Variable type" << endl;
+        s << "Variable type";
     } else if (type == IRNodeType::Add) {
-        s << "Add type" << endl;
+        s << "Add type";
         auto node1 = dynamic_cast<const Add *>(node);
         s << "a: " << print_node(node1->a.get()) << endl;
         s << "b: " << print_node(node1->b.get()) << endl;
@@ -1338,75 +1387,75 @@ string StmtSizes::print_node(const IRNode *node) const {
         s << "a: " << print_node(node1->a.get()) << endl;
         s << "b: " << print_node(node1->b.get()) << endl;
     } else if (type == IRNodeType::Min) {
-        s << "Min type" << endl;
+        s << "Min type";
     } else if (type == IRNodeType::Max) {
-        s << "Max type" << endl;
+        s << "Max type";
     } else if (type == IRNodeType::EQ) {
-        s << "EQ type" << endl;
+        s << "EQ type";
     } else if (type == IRNodeType::NE) {
-        s << "NE type" << endl;
+        s << "NE type";
     } else if (type == IRNodeType::LT) {
-        s << "LT type" << endl;
+        s << "LT type";
     } else if (type == IRNodeType::LE) {
-        s << "LE type" << endl;
+        s << "LE type";
     } else if (type == IRNodeType::GT) {
-        s << "GT type" << endl;
+        s << "GT type";
     } else if (type == IRNodeType::GE) {
-        s << "GE type" << endl;
+        s << "GE type";
     } else if (type == IRNodeType::And) {
-        s << "And type" << endl;
+        s << "And type";
     } else if (type == IRNodeType::Or) {
-        s << "Or type" << endl;
+        s << "Or type";
     } else if (type == IRNodeType::Not) {
-        s << "Not type" << endl;
+        s << "Not type";
     } else if (type == IRNodeType::Select) {
-        s << "Select type" << endl;
+        s << "Select type";
     } else if (type == IRNodeType::Load) {
-        s << "Load type" << endl;
+        s << "Load type";
     } else if (type == IRNodeType::Ramp) {
-        s << "Ramp type" << endl;
+        s << "Ramp type";
     } else if (type == IRNodeType::Call) {
-        s << "Call type" << endl;
+        s << "Call type";
     } else if (type == IRNodeType::Let) {
-        s << "Let type" << endl;
+        s << "Let type";
     } else if (type == IRNodeType::Shuffle) {
-        s << "Shuffle type" << endl;
+        s << "Shuffle type";
     } else if (type == IRNodeType::VectorReduce) {
-        s << "VectorReduce type" << endl;
+        s << "VectorReduce type";
     } else if (type == IRNodeType::LetStmt) {
-        s << "LetStmt type" << endl;
+        s << "LetStmt type";
     } else if (type == IRNodeType::AssertStmt) {
-        s << "AssertStmt type" << endl;
+        s << "AssertStmt type";
     } else if (type == IRNodeType::ProducerConsumer) {
-        s << "ProducerConsumer type" << endl;
+        s << "ProducerConsumer type";
     } else if (type == IRNodeType::For) {
-        s << "For type" << endl;
+        s << "For type";
     } else if (type == IRNodeType::Acquire) {
-        s << "Acquire type" << endl;
+        s << "Acquire type";
     } else if (type == IRNodeType::Store) {
-        s << "Store type" << endl;
+        s << "Store type";
     } else if (type == IRNodeType::Provide) {
-        s << "Provide type" << endl;
+        s << "Provide type";
     } else if (type == IRNodeType::Allocate) {
-        s << "Allocate type" << endl;
+        s << "Allocate type";
     } else if (type == IRNodeType::Free) {
-        s << "Free type" << endl;
+        s << "Free type";
     } else if (type == IRNodeType::Realize) {
-        s << "Realize type" << endl;
+        s << "Realize type";
     } else if (type == IRNodeType::Block) {
-        s << "Block type" << endl;
+        s << "Block type";
     } else if (type == IRNodeType::Fork) {
-        s << "Fork type" << endl;
+        s << "Fork type";
     } else if (type == IRNodeType::IfThenElse) {
-        s << "IfThenElse type" << endl;
+        s << "IfThenElse type";
     } else if (type == IRNodeType::Evaluate) {
-        s << "Evaluate type" << endl;
+        s << "Evaluate type";
     } else if (type == IRNodeType::Prefetch) {
-        s << "Prefetch type" << endl;
+        s << "Prefetch type";
     } else if (type == IRNodeType::Atomic) {
-        s << "Atomic type" << endl;
+        s << "Atomic type";
     } else {
-        s << "Unknown type" << endl;
+        s << "Unknown type";
     }
 
     return s.str();
