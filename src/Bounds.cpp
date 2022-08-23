@@ -193,6 +193,18 @@ private:
 #endif  // DO_TRACK_BOUNDS_INTERVALS
 
 private:
+    Interval get_interval(const Expr &expr) {
+        expr.accept(this);
+        Interval i = interval;
+        i.min = simplify(i.min);
+        i.max = simplify(i.max);
+        if (is_signed_integer_overflow(i.min) || is_signed_integer_overflow(i.max)) {
+            bounds_of_type(expr.type());
+            return interval;
+        }
+        return i;
+    }
+
     // Compute the intrinsic bounds of a function.
     void bounds_of_func(const string &name, int value_index, Type t) {
         // if we can't get a good bound from the function, fall back to the bounds of the type.
@@ -259,8 +271,7 @@ private:
 
     void visit(const Cast *op) override {
         TRACK_BOUNDS_INTERVAL;
-        op->value.accept(this);
-        Interval a = interval;
+        Interval a = get_interval(op->value);
 
         if (a.is_single_point(op->value)) {
             interval = Interval::single_point(op);
@@ -298,10 +309,10 @@ private:
                 // Then try to strip off junk mins and maxes.
                 bool old_constant_bound = const_bound;
                 const_bound = true;
-                a.min.accept(this);
-                Expr lower_bound = interval.has_lower_bound() ? interval.min : Expr();
-                a.max.accept(this);
-                Expr upper_bound = interval.has_upper_bound() ? interval.max : Expr();
+                Interval amin_interval = get_interval(a.min);
+                Expr lower_bound = amin_interval.has_lower_bound() ? amin_interval.min : Expr();
+                Interval amax_interval = get_interval(a.max);
+                Expr upper_bound = amax_interval.has_upper_bound() ? amax_interval.max : Expr();
                 const_bound = old_constant_bound;
 
                 if (lower_bound.defined() && upper_bound.defined()) {
@@ -409,10 +420,8 @@ private:
 
     void visit(const Add *op) override {
         TRACK_BOUNDS_INTERVAL;
-        op->a.accept(this);
-        Interval a = interval;
-        op->b.accept(this);
-        Interval b = interval;
+        Interval a = get_interval(op->a);
+        Interval b = get_interval(op->b);
 
         if (a.is_single_point(op->a) && b.is_single_point(op->b)) {
             interval = Interval::single_point(op);
@@ -449,10 +458,8 @@ private:
 
     void visit(const Sub *op) override {
         TRACK_BOUNDS_INTERVAL;
-        op->a.accept(this);
-        Interval a = interval;
-        op->b.accept(this);
-        Interval b = interval;
+        Interval a = get_interval(op->a);
+        Interval b = get_interval(op->b);
 
         if (a.is_single_point(op->a) && b.is_single_point(op->b)) {
             interval = Interval::single_point(op);
@@ -495,11 +502,8 @@ private:
 
     void visit(const Mul *op) override {
         TRACK_BOUNDS_INTERVAL;
-        op->a.accept(this);
-        Interval a = interval;
-
-        op->b.accept(this);
-        Interval b = interval;
+        Interval a = get_interval(op->a);
+        Interval b = get_interval(op->b);
 
         // Move constants to the right
         if (a.is_single_point() && !b.is_single_point()) {
@@ -576,11 +580,8 @@ private:
 
     void visit(const Div *op) override {
         TRACK_BOUNDS_INTERVAL;
-        op->a.accept(this);
-        Interval a = interval;
-
-        op->b.accept(this);
-        Interval b = interval;
+        Interval a = get_interval(op->a);
+        Interval b = get_interval(op->b);
 
         if (!b.is_bounded()) {
             // Integer division can only make things smaller in
@@ -691,11 +692,8 @@ private:
 
     void visit(const Mod *op) override {
         TRACK_BOUNDS_INTERVAL;
-        op->a.accept(this);
-        Interval a = interval;
-
-        op->b.accept(this);
-        Interval b = interval;
+        Interval a = get_interval(op->a);
+        Interval b = get_interval(op->b);
 
         if (a.is_single_point(op->a) && b.is_single_point(op->b)) {
             interval = Interval::single_point(op);
@@ -738,11 +736,8 @@ private:
 
     void visit(const Min *op) override {
         TRACK_BOUNDS_INTERVAL;
-        op->a.accept(this);
-        Interval a = interval;
-
-        op->b.accept(this);
-        Interval b = interval;
+        Interval a = get_interval(op->a);
+        Interval b = get_interval(op->b);
 
         if (a.is_single_point(op->a) && b.is_single_point(op->b)) {
             interval = Interval::single_point(op);
@@ -754,11 +749,8 @@ private:
 
     void visit(const Max *op) override {
         TRACK_BOUNDS_INTERVAL;
-        op->a.accept(this);
-        Interval a = interval;
-
-        op->b.accept(this);
-        Interval b = interval;
+        Interval a = get_interval(op->a);
+        Interval b = get_interval(op->b);
 
         if (a.is_single_point(op->a) && b.is_single_point(op->b)) {
             interval = Interval::single_point(op);
@@ -771,19 +763,17 @@ private:
     // only used for LT and LE - GT and GE normalize to LT and LTE
     template<typename Cmp>
     void visit_compare(const Expr &a_expr, const Expr &b_expr) {
-        a_expr.accept(this);
-        if (!interval.has_upper_bound() && !interval.has_lower_bound()) {
+        Interval a = get_interval(a_expr);
+        if (!a.has_upper_bound() && !a.has_lower_bound()) {
             bounds_of_type(Bool());
             return;
         }
-        Interval a = interval;
 
-        b_expr.accept(this);
-        if (!interval.has_upper_bound() && !interval.has_lower_bound()) {
+        Interval b = get_interval(b_expr);
+        if (!b.has_upper_bound() && !b.has_lower_bound()) {
             bounds_of_type(Bool());
             return;
         }
-        Interval b = interval;
 
         bounds_of_type(Bool());
 
@@ -831,11 +821,8 @@ private:
 
     void visit(const EQ *op) override {
         TRACK_BOUNDS_INTERVAL;
-        op->a.accept(this);
-        Interval a = interval;
-
-        op->b.accept(this);
-        Interval b = interval;
+        Interval a = get_interval(op->a);
+        Interval b = get_interval(op->b);
 
         if (a.is_single_point(op->a) && b.is_single_point(op->b)) {
             interval = Interval::single_point(op);
@@ -861,11 +848,8 @@ private:
 
     void visit(const NE *op) override {
         TRACK_BOUNDS_INTERVAL;
-        op->a.accept(this);
-        Interval a = interval;
-
-        op->b.accept(this);
-        Interval b = interval;
+        Interval a = get_interval(op->a);
+        Interval b = get_interval(op->b);
 
         if (a.is_single_point(op->a) && b.is_single_point(op->b)) {
             interval = Interval::single_point(op);
@@ -911,11 +895,8 @@ private:
 
     void visit(const And *op) override {
         TRACK_BOUNDS_INTERVAL;
-        op->a.accept(this);
-        Interval a = interval;
-
-        op->b.accept(this);
-        Interval b = interval;
+        Interval a = get_interval(op->a);
+        Interval b = get_interval(op->b);
 
         if (a.is_single_point(op->a) && b.is_single_point(op->b)) {
             interval = Interval::single_point(op);
@@ -946,11 +927,8 @@ private:
 
     void visit(const Or *op) override {
         TRACK_BOUNDS_INTERVAL;
-        op->a.accept(this);
-        Interval a = interval;
-
-        op->b.accept(this);
-        Interval b = interval;
+        Interval a = get_interval(op->a);
+        Interval b = get_interval(op->b);
 
         if (a.is_single_point(op->a) && b.is_single_point(op->b)) {
             interval = Interval::single_point(op);
@@ -975,8 +953,7 @@ private:
 
     void visit(const Not *op) override {
         TRACK_BOUNDS_INTERVAL;
-        op->a.accept(this);
-        Interval a = interval;
+        Interval a = get_interval(op->a);
 
         if (a.is_single_point(op->a)) {
             interval = Interval::single_point(op);
@@ -990,14 +967,9 @@ private:
 
     void visit(const Select *op) override {
         TRACK_BOUNDS_INTERVAL;
-        op->true_value.accept(this);
-        Interval a = interval;
-
-        op->false_value.accept(this);
-        Interval b = interval;
-
-        op->condition.accept(this);
-        Interval cond = interval;
+        Interval a = get_interval(op->true_value);
+        Interval b = get_interval(op->false_value);
+        Interval cond = get_interval(op->condition);
 
         if (cond.is_single_point()) {
             if (is_const_one(cond.min)) {
@@ -1074,12 +1046,12 @@ private:
 
     void visit(const Load *op) override {
         TRACK_BOUNDS_INTERVAL;
-        op->index.accept(this);
-        if (!const_bound && interval.is_single_point() && is_const_one(op->predicate)) {
+        Interval i = get_interval(op->index);
+        if (!const_bound && i.is_single_point() && is_const_one(op->predicate)) {
             // If the index is const and it is not a predicated load,
             // we can return the load of that index
             Expr load_min =
-                Load::make(op->type.element_of(), op->name, interval.min,
+                Load::make(op->type.element_of(), op->name, i.min,
                            op->image, op->param, const_true(), ModulusRemainder());
             interval = Interval::single_point(load_min);
         } else {
@@ -1150,9 +1122,9 @@ private:
             std::vector<Expr> new_args(op->args.size());
             bool const_args = true;
             for (size_t i = 0; i < op->args.size() && const_args; i++) {
-                op->args[i].accept(this);
-                if (interval.is_single_point()) {
-                    new_args[i] = interval.min;
+                Interval j = get_interval(op->args[i]);
+                if (j.is_single_point()) {
+                    new_args[i] = j.min;
                 } else {
                     const_args = false;
                 }
@@ -1167,8 +1139,7 @@ private:
         }
 
         if (op->is_intrinsic(Call::abs)) {
-            op->args[0].accept(this);
-            Interval a = interval;
+            Interval a = get_interval(op->args[0]);
             interval.min = make_zero(t);
             if (a.is_bounded()) {
                 if (equal(a.min, a.max)) {
@@ -1197,11 +1168,8 @@ private:
                 Expr b = op->args[1];
                 internal_assert(a.type() == b.type());
 
-                a.accept(this);
-                Interval a_interval = interval;
-
-                b.accept(this);
-                Interval b_interval = interval;
+                Interval a_interval = get_interval(a);
+                Interval b_interval = get_interval(b);
 
                 if (a_interval.is_bounded() && b_interval.is_bounded()) {
                     interval.min = make_zero(t);
@@ -1214,34 +1182,25 @@ private:
             internal_assert(op->args.size() == 1);
 
             Expr a = op->args[0];
-            a.accept(this);
-            Interval a_interval = interval;
+            Interval a_interval = get_interval(a);
             bounds_of_type(t);
             if (a_interval.has_lower_bound()) {
-                Expr e = simplify(a_interval.min);
-                if (!is_signed_integer_overflow(e)) {
-                    interval.min = saturating_cast(t, e);
-                }
+                interval.min = saturating_cast(t, a_interval.min);
             }
             if (a_interval.has_upper_bound()) {
-                Expr e = simplify(a_interval.max);
-                if (!is_signed_integer_overflow(e)) {
-                    interval.max = saturating_cast(t, e);
-                }
+                interval.max = saturating_cast(t, a_interval.max);
             }
             return;
         } else if (op->is_intrinsic(Call::unsafe_promise_clamped) ||
                    op->is_intrinsic(Call::promise_clamped)) {
             // Unlike an explicit clamp, we are also permitted to
             // assume the upper bound is greater than the lower bound.
-            op->args[1].accept(this);
-            Interval lower = interval;
-            op->args[2].accept(this);
-            Interval upper = interval;
-            op->args[0].accept(this);
+            Interval lower = get_interval(op->args[1]);
+            Interval upper = get_interval(op->args[2]);
+            Interval inner = get_interval(op->args[0]);
 
             if (op->is_intrinsic(Call::promise_clamped) &&
-                interval.is_single_point()) {
+                inner.is_single_point()) {
                 // It's not safe to lift a promise_clamped
                 // intrinsic. They make a claim that holds true at
                 // that specific point in the IR. But if it's a single
@@ -1254,7 +1213,7 @@ private:
             }
 
             if (op->is_intrinsic(Call::unsafe_promise_clamped) &&
-                interval.is_single_point(op->args[0]) &&
+                inner.is_single_point(op->args[0]) &&
                 lower.is_single_point(op->args[1]) &&
                 upper.is_single_point(op->args[2])) {
                 // It *is* safe to lift an
@@ -1268,8 +1227,8 @@ private:
                 return;
             }
 
-            interval.min = Interval::make_max(interval.min, lower.min);
-            interval.max = Interval::make_min(interval.max, upper.max);
+            interval.min = Interval::make_max(inner.min, lower.min);
+            interval.max = Interval::make_min(inner.max, upper.max);
         } else if (Call::as_tag(op)) {
             op->args[0].accept(this);
         } else if (op->is_intrinsic(Call::return_second)) {
@@ -1290,10 +1249,8 @@ private:
                    op->is_intrinsic(Call::bitwise_and) ||
                    op->is_intrinsic(Call::bitwise_or)) {
             Expr a = op->args[0], b = op->args[1];
-            a.accept(this);
-            Interval a_interval = interval;
-            b.accept(this);
-            Interval b_interval = interval;
+            Interval a_interval = get_interval(a);
+            Interval b_interval = get_interval(b);
             if (a_interval.is_single_point(a) && b_interval.is_single_point(b)) {
                 interval = Interval::single_point(op);
             } else if (a_interval.is_single_point() && b_interval.is_single_point()) {
@@ -1451,8 +1408,7 @@ private:
             // In 2's complement bitwise not inverts the ordering of
             // the space, without causing overflow (unlike negation),
             // so bitwise not is monotonic decreasing.
-            op->args[0].accept(this);
-            Interval a_interval = interval;
+            Interval a_interval = get_interval(op->args[0]);
             if (a_interval.is_single_point(op->args[0])) {
                 interval = Interval::single_point(op);
             } else if (a_interval.is_single_point()) {
@@ -1468,19 +1424,24 @@ private:
                     }
                 }
             }
-        } else if (op->args.size() == 1 && interval.is_bounded() &&
+        } else if (op->args.size() == 1 &&
                    (op->name == "ceil_f32" || op->name == "ceil_f64" ||
                     op->name == "floor_f32" || op->name == "floor_f64" ||
                     op->name == "round_f32" || op->name == "round_f64" ||
                     op->name == "exp_f32" || op->name == "exp_f64" ||
                     op->name == "log_f32" || op->name == "log_f64")) {
-            // For monotonic, pure, single-argument functions, we can
-            // make two calls for the min and the max.
-            interval = Interval(
-                Call::make(t, op->name, {interval.min}, op->call_type,
-                           op->func, op->value_index, op->image, op->param),
-                Call::make(t, op->name, {interval.max}, op->call_type,
-                           op->func, op->value_index, op->image, op->param));
+            Interval i = get_interval(op->args[0]);
+            if (i.is_bounded()) {
+                // For monotonic, pure, single-argument functions, we can
+                // make two calls for the min and the max.
+                interval = Interval(
+                    Call::make(t, op->name, {i.min}, op->call_type,
+                            op->func, op->value_index, op->image, op->param),
+                    Call::make(t, op->name, {i.max}, op->call_type,
+                            op->func, op->value_index, op->image, op->param));
+            } else {
+                bounds_of_type(t);
+            }
         } else if (op->is_intrinsic(Call::popcount) ||
                    op->is_intrinsic(Call::count_leading_zeros) ||
                    op->is_intrinsic(Call::count_trailing_zeros)) {
@@ -1491,8 +1452,7 @@ private:
             if (op->is_intrinsic(Call::count_leading_zeros)) {
                 // clz treats signed and unsigned ints the same way;
                 // cast all ints to uint to simplify this.
-                cast(op->type.with_code(halide_type_uint), op->args[0]).accept(this);
-                Interval a = interval;
+                Interval a = get_interval(cast(op->type.with_code(halide_type_uint), op->args[0]));
                 if (a.has_lower_bound()) {
                     max = cast(t, count_leading_zeros(a.min));
                 }
@@ -1508,16 +1468,16 @@ private:
             // Take the union of the args
             Interval result = Interval::nothing();
             for (const Expr &e : op->args) {
-                e.accept(this);
-                result.include(interval);
+                Interval i = get_interval(e);
+                result.include(i);
             }
             interval = result;
         } else if (op->is_intrinsic(Call::mux)) {
             // Take the union of all args but the first
             Interval result = Interval::nothing();
             for (size_t i = 1; i < op->args.size(); i++) {
-                op->args[i].accept(this);
-                result.include(interval);
+                Interval j = get_interval(op->args[i]);
+                result.include(j);
             }
             interval = result;
         } else if (op->call_type == Call::Halide) {
@@ -1530,8 +1490,7 @@ private:
 
     void visit(const Let *op) override {
         TRACK_BOUNDS_INTERVAL;
-        op->value.accept(this);
-        Interval val = interval;
+        Interval val = get_interval(op->value);
 
         // We'll either substitute the values in directly, or pass
         // them in as variables and add an outer let (to avoid
@@ -1562,60 +1521,62 @@ private:
             }
         }
 
+        Interval i;
         {
             ScopedBinding<Interval> p(scope, op->name, var);
-            op->body.accept(this);
+            i = get_interval(op->body);
         }
 
-        bool single_point = interval.is_single_point();
+        bool single_point = i.is_single_point();
 
-        if (interval.has_lower_bound()) {
+        if (i.has_lower_bound()) {
             if (val.min.defined() &&
-                expr_uses_var(interval.min, min_name)) {
-                interval.min = Let::make(min_name, val.min, interval.min);
+                expr_uses_var(i.min, min_name)) {
+                i.min = Let::make(min_name, val.min, i.min);
             }
             if (val.max.defined() &&
                 !val.is_single_point() &&
-                expr_uses_var(interval.min, max_name)) {
-                interval.min = Let::make(max_name, val.max, interval.min);
+                expr_uses_var(i.min, max_name)) {
+                i.min = Let::make(max_name, val.max, i.min);
             }
         }
 
         if (single_point) {
-            interval.max = interval.min;
-        } else if (interval.has_upper_bound()) {
+            i.max = i.min;
+        } else if (i.has_upper_bound()) {
             if (val.min.defined() &&
-                expr_uses_var(interval.max, min_name)) {
-                interval.max = Let::make(min_name, val.min, interval.max);
+                expr_uses_var(i.max, min_name)) {
+                i.max = Let::make(min_name, val.min, i.max);
             }
             if (val.max.defined() &&
                 !val.is_single_point() &&
-                expr_uses_var(interval.max, max_name)) {
-                interval.max = Let::make(max_name, val.max, interval.max);
+                expr_uses_var(i.max, max_name)) {
+                i.max = Let::make(max_name, val.max, i.max);
             }
         }
+        interval = i;
     }
 
     void visit(const Shuffle *op) override {
         TRACK_BOUNDS_INTERVAL;
         Interval result = Interval::nothing();
         for (const Expr &i : op->vectors) {
-            i.accept(this);
-            result.include(interval);
+            Interval j = get_interval(i);
+            result.include(j);
         }
         interval = result;
     }
 
     void visit(const VectorReduce *op) override {
         TRACK_BOUNDS_INTERVAL;
-        op->value.accept(this);
+        Interval i = get_interval(op->value);
         int factor = op->value.type().lanes() / op->type.lanes();
         switch (op->op) {
         case VectorReduce::Add:
-            if (interval.has_upper_bound()) {
+            if (i.has_upper_bound()) {
                 interval.max *= factor;
             }
-            if (interval.has_lower_bound()) {
+            if (i.has_lower_bound()) {
                 interval.min *= factor;
             }
             break;
