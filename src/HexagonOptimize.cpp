@@ -183,20 +183,8 @@ struct Pattern {
         // re-interleave the result.
         ReinterleaveOp0 = InterleaveResult | DeinterleaveOp0,
 
-        // TODO: All of these narrowing ops are now unused. Should we remove the flags?
-
-        NarrowOp0 = 1 << 10,  // Replace operand 0 with its half-width equivalent.
-        NarrowOp1 = 1 << 11,  // Same as above, but for operand 1.
-        NarrowOp2 = 1 << 12,
-        NarrowOps = NarrowOp0 | NarrowOp1 | NarrowOp2,
-
-        NarrowUnsignedOp0 = 1 << 15,  // Similar to the above, but narrow to an unsigned half width type.
-        NarrowUnsignedOp1 = 1 << 16,
-        NarrowUnsignedOp2 = 1 << 17,
-        NarrowUnsignedOps = NarrowUnsignedOp0 | NarrowUnsignedOp1 | NarrowUnsignedOp2,
-
-        v65orLater = 1 << 21,  // Pattern should be matched only for v65 target or later
-        v66orLater = 1 << 22,  // Pattern should be matched only for v66 target or later
+        v65orLater = 1 << 10,  // Pattern should be matched only for v65 target or later
+        v66orLater = 1 << 11,  // Pattern should be matched only for v66 target or later
     };
 
     string intrin;  // Name of the intrinsic
@@ -247,12 +235,6 @@ bool process_match_flags(vector<Expr> &matches, int flags) {
     // corresponds to the bit (with operand 0 corresponding to the least
     // significant bit), so we can check for them all in a loop.
     for (size_t i = 0; i < matches.size(); i++) {
-        Type t = matches[i].type();
-        if (flags & (Pattern::NarrowOp0 << i)) {
-            matches[i] = lossless_cast(t.narrow(), matches[i]);
-        } else if (flags & (Pattern::NarrowUnsignedOp0 << i)) {
-            matches[i] = lossless_cast(t.narrow().with_code(Type::UInt), matches[i]);
-        }
         if (!matches[i].defined()) {
             return false;
         }
