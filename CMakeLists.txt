@@ -23,7 +23,7 @@ option(BUILD_SHARED_LIBS "Build shared libraries" ON)
 
 # Warn if the user did not set a build type and is using a single-configuration generator.
 get_property(IS_MULTI_CONFIG GLOBAL PROPERTY GENERATOR_IS_MULTI_CONFIG)
-if (NOT IS_MULTI_CONFIG AND NOT CMAKE_BUILD_TYPE)
+if (NOT IS_MULTI_CONFIG AND NOT DEFINED CMAKE_BUILD_TYPE)
     message(WARNING "Single-configuration generators require CMAKE_BUILD_TYPE to be set.")
 endif ()
 
@@ -41,12 +41,12 @@ endif ()
 set(CMAKE_WINDOWS_EXPORT_ALL_SYMBOLS ON)
 
 # Require standard C++17
-if(NOT CMAKE_CXX_STANDARD)
-    set(CMAKE_CXX_STANDARD 17)
-    set(CMAKE_CXX_STANDARD_REQUIRED ON)
-    set(CMAKE_CXX_EXTENSIONS OFF)
-elseif(CMAKE_CXX_STANDARD LESS 17)
-    message(FATAL_ERROR "Halide requires C++17 or newer")
+set(CMAKE_CXX_STANDARD 17 CACHE STRING "The C++ standard to use. Halide requires 17 or higher.")
+option(CMAKE_CXX_STANDARD_REQUIRED "When enabled, the value of CMAKE_CXX_STANDARD is a requirement." ON)
+option(CMAKE_CXX_EXTENSIONS "When enabled, compiler-specific language extensions are enabled (e.g. -std=gnu++17)" OFF)
+
+if(CMAKE_CXX_STANDARD LESS 17)
+    message(FATAL_ERROR "Halide requires C++17 or newer but CMAKE_CXX_STANDARD=${CMAKE_CXX_STANDARD}")
 endif()
 
 # Build Halide with ccache if the package is present
@@ -98,65 +98,47 @@ add_subdirectory(tools)
 # Add tests, tutorials, etc. if we're not being imported into another CMake project.
 ##
 
-if (CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
-    option(WITH_TESTS "Build tests" ON)
-    if (WITH_TESTS)
-        message(STATUS "Building tests enabled")
-        add_subdirectory(test)
-    else ()
-        message(STATUS "Building tests disabled")
-    endif ()
-
-    cmake_dependent_option(
-        WITH_PYTHON_BINDINGS "Build Python bindings" ON
-        "Halide_ENABLE_RTTI;Halide_ENABLE_EXCEPTIONS" OFF
-    )
-    if (WITH_PYTHON_BINDINGS)
-        message(STATUS "Building Python bindings enabled")
-        add_subdirectory(python_bindings)
-    else ()
-        message(STATUS "Building Python bindings disabled")
-    endif ()
-
-    option(WITH_TUTORIALS "Build tutorials" ON)
-    if (WITH_TUTORIALS)
-        message(STATUS "Building tutorials enabled")
-        add_subdirectory(tutorial)
-    else ()
-        message(STATUS "Building tutorials disabled")
-    endif ()
-
-    option(WITH_DOCS "Build documentation" OFF)
-    if (WITH_DOCS)
-        message(STATUS "Building docs enabled")
-        add_subdirectory(doc)
-    else ()
-        message(STATUS "Building docs disabled")
-    endif ()
-
-    option(WITH_UTILS "Build utils" ON)
-    if (WITH_UTILS)
-        message(STATUS "Building utils enabled")
-        add_subdirectory(util)
-    else ()
-        message(STATUS "Building utils disabled")
-    endif ()
-
-    add_subdirectory(packaging)
-
-    add_custom_target(distrib
-                      COMMAND ${CMAKE_COMMAND} -E echo "\\'distrib\\' is not available under CMake. Use \\'package\\' instead.")
-
-    if (TARGET clang-format AND NOT WIN32)
-        add_custom_target(format COMMAND
-                          find
-                          "${Halide_SOURCE_DIR}/apps"
-                          "${Halide_SOURCE_DIR}/src"
-                          "${Halide_SOURCE_DIR}/tools"
-                          "${Halide_SOURCE_DIR}/test"
-                          "${Halide_SOURCE_DIR}/util"
-                          "${Halide_SOURCE_DIR}/python_bindings"
-                          -name *.cpp -o -name *.h -o -name *.c |
-                          xargs $<TARGET_FILE:clang-format> -i -style=file)
-    endif ()
+option(WITH_TESTS "Build tests" "${PROJECT_IS_TOP_LEVEL}")
+if (WITH_TESTS)
+    message(STATUS "Building tests enabled")
+    add_subdirectory(test)
+else ()
+    message(STATUS "Building tests disabled")
 endif ()
+
+cmake_dependent_option(
+    WITH_PYTHON_BINDINGS "Build Python bindings" "${PROJECT_IS_TOP_LEVEL}"
+    "Halide_ENABLE_RTTI AND Halide_ENABLE_EXCEPTIONS" OFF
+)
+if (WITH_PYTHON_BINDINGS)
+    message(STATUS "Building Python bindings enabled")
+    add_subdirectory(python_bindings)
+else ()
+    message(STATUS "Building Python bindings disabled")
+endif ()
+
+option(WITH_TUTORIALS "Build tutorials" "${PROJECT_IS_TOP_LEVEL}")
+if (WITH_TUTORIALS)
+    message(STATUS "Building tutorials enabled")
+    add_subdirectory(tutorial)
+else ()
+    message(STATUS "Building tutorials disabled")
+endif ()
+
+option(WITH_DOCS "Build documentation" OFF)
+if (WITH_DOCS)
+    message(STATUS "Building docs enabled")
+    add_subdirectory(doc)
+else ()
+    message(STATUS "Building docs disabled")
+endif ()
+
+option(WITH_UTILS "Build utils" "${PROJECT_IS_TOP_LEVEL}")
+if (WITH_UTILS)
+    message(STATUS "Building utils enabled")
+    add_subdirectory(util)
+else ()
+    message(STATUS "Building utils disabled")
+endif ()
+
+add_subdirectory(packaging)
