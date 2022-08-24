@@ -211,6 +211,8 @@ struct SpecificExpr {
     constexpr static IRNodeType max_node_type = IRNodeType::Shuffle;
     constexpr static bool canonical = true;
 
+    // Having SpecificExpr hold an Expr instead of a BaseExprNode reference
+    // is catastrophic for performance and stack space usage.
     const BaseExprNode &expr;
 
     template<uint32_t bound>

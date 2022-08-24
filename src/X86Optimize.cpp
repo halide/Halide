@@ -196,16 +196,6 @@ protected:
 
         auto rewrite = IRMatcher::rewriter(IRMatcher::cast(op->type, op->value), op->type);
 
-        // TODO: saturating casts should be intrinsics, and supported in IRMatch.h.
-        const Expr i32_i16max = cast(Int(32, lanes), Int(16).max());
-        const Expr i32_i16min = cast(Int(32, lanes), Int(16).min());
-        const Expr i16_i8max = cast(Int(16, lanes), Int(8).max());
-        const Expr i16_i8min = cast(Int(16, lanes), Int(8).min());
-        const Expr i16_u8max = cast(Int(16, lanes), UInt(8).max());
-        const Expr i16_u8min = cast(Int(16, lanes), UInt(8).min());
-        const Expr i32_u16max = cast(Int(32, lanes), UInt(16).max());
-        const Expr i32_u16min = cast(Int(32, lanes), UInt(16).min());
-
         if (
             // pmulhrs is supported via AVX2 and SSE41, so SSE41 is the LCD.
             (target.has_feature(Target::SSE41) &&
@@ -235,7 +225,7 @@ protected:
             return IRGraphMutator::visit(op);
         }
 
-        // TODO: This optimization is hard to do via a rewrite-rule because of lossless_cast.
+        // TODO(rootjalex): This optimization is hard to do via a rewrite-rule because of lossless_cast.
 
         // A 16-bit mul-shift-right of less than 16 can sometimes be rounded up to a
         // full 16 to use pmulh(u)w by left-shifting one of the operands. This is
@@ -336,10 +326,6 @@ protected:
                  select((x == typed(Int(16, lanes), -32768)) && (y == typed(Int(16, lanes), -32768)),
                         typed(Int(16, lanes), 32767),
                         v_instr(VectorInstruction::pmulhrs, x, y)))) ||
-
-            // TODO(rootjalex): The following intrinsics are
-            // simply one-to-one mappings, should they even
-            // be handled here?
 
             // int(8 | 16 | 32) -> uint is supported via SSE41
             // float32 is always supported (via SSE2).
