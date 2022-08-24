@@ -555,7 +555,7 @@ protected:
         VScale,  /// For use of scalable vectors.
     };
     llvm::Type *get_vector_type(llvm::Type *, int n,
-                                VectorTypeConstraint type_constraint = VectorTypeConstraint::None) const ;
+                                VectorTypeConstraint type_constraint = VectorTypeConstraint::None) const;
     // @}
     
     llvm::Constant *get_splat(int lanes, llvm::Constant *value,

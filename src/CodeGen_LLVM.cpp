@@ -4915,23 +4915,23 @@ llvm::Type *CodeGen_LLVM::llvm_type_of(LLVMContext *c, Halide::Type t,
 llvm::Type *CodeGen_LLVM::get_vector_type(llvm::Type *t, int n,
                                           VectorTypeConstraint type_constraint) const {
     bool scalable;
-  
+
     switch (type_constraint) {
-      case VectorTypeConstraint::None:
+    case VectorTypeConstraint::None:
         scalable = effective_vscale != 0 &&
                    ((n % effective_vscale) == 0);
         if (scalable) {
             n = n / effective_vscale;
         }
         break;
-      case VectorTypeConstraint::Fixed:
+    case VectorTypeConstraint::Fixed:
         scalable = false;
         break;
-      case VectorTypeConstraint::VScale:
+    case VectorTypeConstraint::VScale:
         scalable = true;
         break;
     }
-      
+
     return VectorType::get(t, n, scalable);
 }
 
@@ -4939,21 +4939,21 @@ llvm::Constant *CodeGen_LLVM::get_splat(int lanes, llvm::Constant *value,
                                         VectorTypeConstraint type_constraint) const {
     bool scalable = false;
     switch (type_constraint) {
-      case VectorTypeConstraint::None:
+    case VectorTypeConstraint::None:
         scalable = effective_vscale != 0 &&
                    ((lanes % effective_vscale) == 0);
         if (scalable) {
             lanes = lanes / effective_vscale;
         }
         break;
-      case VectorTypeConstraint::Fixed:
+    case VectorTypeConstraint::Fixed:
         scalable = false;
         break;
-      case VectorTypeConstraint::VScale:
+    case VectorTypeConstraint::VScale:
         scalable = true;
         break;
     }
-    
+
     llvm::ElementCount ec = scalable ? llvm::ElementCount::getScalable(lanes) :
                                        llvm::ElementCount::getFixed(lanes);
     return ConstantVector::getSplat(ec, value);
