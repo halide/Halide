@@ -70,8 +70,11 @@ if (Halide_CCACHE_BUILD)
     message(STATUS "Enabling ccache usage for building.")
 endif ()
 
-# Detect whether or not ASAN is enabled
+# Detect whether or not ASAN is enabled. Don't cache the result to ensure this
+# check happens every time we reconfigure.
+unset(Halide_ASAN_ENABLED CACHE)
 check_cxx_symbol_exists(HALIDE_INTERNAL_USING_ASAN "${Halide_SOURCE_DIR}/src/Util.h" Halide_ASAN_ENABLED)
+
 if (Halide_ASAN_ENABLED)
     set(Halide_ANY_SANITIZERS_ENABLED 1)
 else ()
