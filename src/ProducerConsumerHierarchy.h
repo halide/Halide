@@ -2,7 +2,7 @@
 #define ProducerConsumerHierarchy_H
 
 #include "FindStmtCost.h"
-#include "IRMutator.h"
+#include "IRVisitor.h"
 
 #include <set>
 #include <unordered_map>
@@ -81,7 +81,7 @@ struct StmtSize {
 /*
  * StmtSizes class
  */
-class StmtSizes : public IRMutator {
+class StmtSizes : public IRVisitor {
 public:
     map<string, Stmt> main_function_bodies;  // TODO: maybe move back to private if don't
                                              // use it outside of this class
@@ -101,7 +101,7 @@ public:
     string print_consume_sizes(StmtSize &stmtSize) const;
 
 private:
-    using IRMutator::visit;
+    using IRVisitor::visit;
 
     unordered_map<const IRNode *, StmtSize> stmt_sizes;
     vector<string> curr_producer_names;
@@ -132,19 +132,19 @@ private:
 
     void bubble_up(const IRNode *from, const IRNode *to, string loopIterator);
 
-    Expr visit(const Call *op) override;
-    Expr visit(const Variable *op) override;
-    Stmt visit(const LetStmt *op) override;
-    Stmt visit(const ProducerConsumer *op) override;
+    void visit(const Call *op) override;
+    void visit(const Variable *op) override;
+    void visit(const LetStmt *op) override;
+    void visit(const ProducerConsumer *op) override;
     string get_loop_iterator(const For *op) const;
-    Stmt visit(const For *op) override;
-    Stmt visit(const Store *op) override;
+    void visit(const For *op) override;
+    void visit(const Store *op) override;
     void add_load_value(const string &name, const int lanes);
     void add_load_value_unique_loads(const string &name, set<int> &load_values);
-    Expr visit(const Load *op) override;
-    Stmt visit(const Allocate *op) override;
-    Stmt visit(const Block *op) override;
-    Stmt visit(const IfThenElse *op) override;
+    void visit(const Load *op) override;
+    void visit(const Allocate *op) override;
+    void visit(const Block *op) override;
+    void visit(const IfThenElse *op) override;
 
     string print_node(const IRNode *node) const;
 };
@@ -152,7 +152,7 @@ private:
 /*
  * ProducerConsumerHierarchy class
  */
-class ProducerConsumerHierarchy : public IRMutator {
+class ProducerConsumerHierarchy : public IRVisitor {
 
 public:
     static const string prodConsCSS;
@@ -171,7 +171,7 @@ public:
     string generate_prodCons_js();
 
 private:
-    using IRMutator::visit;
+    using IRVisitor::visit;
 
     string html;                // main html string
     StmtSizes pre_processor;    // generates the sizes of the nodes
@@ -235,13 +235,13 @@ private:
     void cost_color_spacer();
     void cost_colors(const IRNode *op);
 
-    Expr visit(const Variable *op) override;
-    Stmt visit(const ProducerConsumer *op) override;
-    Stmt visit(const For *op) override;
-    Stmt visit(const IfThenElse *op) override;
-    Stmt visit(const Store *op) override;
-    Expr visit(const Load *op) override;
-    Stmt visit(const Allocate *op) override;
+    void visit(const Variable *op) override;
+    void visit(const ProducerConsumer *op) override;
+    void visit(const For *op) override;
+    void visit(const IfThenElse *op) override;
+    void visit(const Store *op) override;
+    void visit(const Load *op) override;
+    void visit(const Allocate *op) override;
 };
 
 #endif

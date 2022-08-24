@@ -21,7 +21,7 @@ void StmtSizes::generate_sizes(const Module &m) {
     traverse(m);
 }
 void StmtSizes::generate_sizes(const Stmt &stmt) {
-    mutate(stmt);
+    stmt.accept(this);
 }
 
 StmtSize StmtSizes::get_size(const IRNode *node) const {
@@ -68,7 +68,7 @@ void StmtSizes::traverse(const Module &m) {
         internal_error << "\n\n\n"
                        << "StmtSizes::traverse - main function not found\n\n\n";
     }
-    mutate(it->second);
+    it->second.accept(this);
 }
 
 string StmtSizes::get_simplified_string(string a, string b, string op) {
@@ -283,15 +283,14 @@ void StmtSizes::bubble_up(const IRNode *from, const IRNode *to, string loopItera
     }
 }
 
-Expr StmtSizes::visit(const Call *op) {
+void StmtSizes::visit(const Call *op) {
     for (size_t i = 0; i < op->args.size(); i++) {
         Expr arg = op->args[i];
-        mutate(arg);
+        arg.accept(this);
         bubble_up(arg.get(), op);
     }
-    return op;
 }
-Expr StmtSizes::visit(const Variable *op) {
+void StmtSizes::visit(const Variable *op) {
     // if op->name starts with "::", remove "::"
     string varName = op->name;
     if (varName[0] == ':' && varName[1] == ':') {
@@ -304,29 +303,26 @@ Expr StmtSizes::visit(const Variable *op) {
         size.mainFunctionCalls.push_back(op->name);
         stmt_sizes[op] = size;
 
-        mutate(it->second);
+        it->second.accept(this);
 
         bubble_up(it->second.get(), op);
     }
-    return op;
 }
-Stmt StmtSizes::visit(const LetStmt *op) {
-    mutate(op->value);
-    mutate(op->body);
+void StmtSizes::visit(const LetStmt *op) {
+    op->value.accept(this);
+    op->body.accept(this);
 
     bubble_up(op->value.get(), op);
     bubble_up(op->body.get(), op);
-
-    return op;
 }
-Stmt StmtSizes::visit(const ProducerConsumer *op) {
+void StmtSizes::visit(const ProducerConsumer *op) {
     if (op->is_producer) {
         curr_producer_names.push_back(op->name);
     } else {
         curr_consumer_names.push_back(op->name);
     }
 
-    mutate(op->body);
+    op->body.accept(this);
 
     bubble_up(op->body.get(), op);
 
@@ -336,8 +332,6 @@ Stmt StmtSizes::visit(const ProducerConsumer *op) {
     } else {
         remove_consumer(op->name);
     }
-
-    return op;
 }
 string StmtSizes::get_loop_iterator(const For *op) const {
     Expr min = op->min;
@@ -424,13 +418,13 @@ string StmtSizes::get_loop_iterator(const For *op) const {
 
     return loopIterator;
 }
-Stmt StmtSizes::visit(const For *op) {
-    mutate(op->body);
+void StmtSizes::visit(const For *op) {
+    op->body.accept(this);
     StmtSize bodySize = get_size(op->body.get());
 
     // don't do anything if body is empty
     if (bodySize.empty()) {
-        return op;
+        return;
     }
 
     string loopIterator = get_loop_iterator(op);
@@ -438,10 +432,8 @@ Stmt StmtSizes::visit(const For *op) {
     bubble_up(op->body.get(), op, loopIterator);
 
     set_for_loop_size(op, loopIterator);
-
-    return op;
 }
-Stmt StmtSizes::visit(const Store *op) {
+void StmtSizes::visit(const Store *op) {
 
     // TODO: is this correct? should i be getting it from `index`?
     uint16_t lanes = op->index.type().lanes();
@@ -453,7 +445,7 @@ Stmt StmtSizes::visit(const Store *op) {
     // empty curr_load_values
     curr_load_values.clear();
     curr_loads.clear();
-    mutate(op->value);
+    op->value.accept(this);
 
     // set consume (for now, read values)
     for (const auto &load_var : curr_load_values) {
@@ -474,8 +466,6 @@ Stmt StmtSizes::visit(const Store *op) {
             set_consume_size(op, vectorName + "_unique", int_span(finalLoadValuesUnique.size()));
         }
     }
-
-    return op;
 }
 void StmtSizes::add_load_value(const string &name, const int lanes) {
     auto it = curr_load_values.find(name);
@@ -488,7 +478,7 @@ void StmtSizes::add_load_value(const string &name, const int lanes) {
 void StmtSizes::add_load_value_unique_loads(const string &name, set<int> &load_values) {
     curr_loads[name].push_back(load_values);
 }
-Expr StmtSizes::visit(const Load *op) {
+void StmtSizes::visit(const Load *op) {
 
     // see if the variable is in the arguments variable
     if (std::count(arguments.begin(), arguments.end(), op->name)) {
@@ -523,21 +513,22 @@ Expr StmtSizes::visit(const Load *op) {
 
         add_load_value(op->name, lanes);
     }
-
-    return op;
 }
-Stmt StmtSizes::visit(const Block *op) {
-    mutate(op->first);
-    mutate(op->rest);
+void StmtSizes::visit(const Block *op) {
+    op->first.accept(this);
+    if (op->rest.defined()) {
+
+        op->rest.accept(this);
+    }
 
     bubble_up(op->first.get(), op);
-    bubble_up(op->rest.get(), op);
-
-    return op;
+    if (op->rest.defined()) {
+        bubble_up(op->rest.get(), op);
+    }
 }
-Stmt StmtSizes::visit(const Allocate *op) {
+void StmtSizes::visit(const Allocate *op) {
 
-    mutate(op->body);
+    op->body.accept(this);
     StmtSize bodySize = get_size(op->body.get());
 
     bubble_up(op->body.get(), op);
@@ -558,19 +549,15 @@ Stmt StmtSizes::visit(const Allocate *op) {
 
         set_allocation_size(op, ss);
     }
-
-    return op;
 }
-Stmt StmtSizes::visit(const IfThenElse *op) {
-    mutate(op->then_case);
-    mutate(op->else_case);
-
+void StmtSizes::visit(const IfThenElse *op) {
+    op->then_case.accept(this);
     bubble_up(op->then_case.get(), op);
+
     if (op->else_case.defined()) {
+        op->else_case.accept(this);
         bubble_up(op->else_case.get(), op);
     }
-
-    return op;
 }
 
 /*
@@ -588,7 +575,7 @@ string ProducerConsumerHierarchy::generate_producer_consumer_html(const Stmt &st
     pre_processor.generate_sizes(stmt);
 
     html = "";
-    mutate(stmt);
+    stmt.accept(this);
 
     return html.c_str();
 }
@@ -605,7 +592,7 @@ void ProducerConsumerHierarchy::startModuleTraversal() {
     html += "<a name=\"" + it->first + "\"></a>";
     html += "<h3>" + it->first + "</h3>";
     html += "<div class='functionViz'>";
-    mutate(it->second);
+    it->second.accept(this);
     html += "</div>";
 
     // mutate all other functions
@@ -614,7 +601,8 @@ void ProducerConsumerHierarchy::startModuleTraversal() {
             html += "<a name=\"" + func.first + "\"></a>";
             html += "<h3>" + func.first + "</h3>";
             html += "<div class='functionViz'>";
-            mutate(func.second);
+
+            func.second.accept(this);
             html += "</div>";
         }
     }
@@ -971,7 +959,7 @@ void ProducerConsumerHierarchy::cost_colors(const IRNode *op) {
     cost_color_spacer();
 }
 
-Expr ProducerConsumerHierarchy::visit(const Variable *op) {
+void ProducerConsumerHierarchy::visit(const Variable *op) {
     // if op->name starts with "::", remove "::"
     string varName = op->name;
     if (varName[0] == ':' && varName[1] == ':') {
@@ -999,12 +987,9 @@ Expr ProducerConsumerHierarchy::visit(const Variable *op) {
         html += "</button>";
 
         html += "</div>";
-
-        return op;
     }
-    return op;
 }
-Stmt ProducerConsumerHierarchy::visit(const ProducerConsumer *op) {
+void ProducerConsumerHierarchy::visit(const ProducerConsumer *op) {
     open_box_div(op->is_producer ? PRODUCER_COLOR : CONSUMER_COLOR, "ProducerConsumerBox", op);
 
     producerConsumerCount++;
@@ -1020,14 +1005,12 @@ Stmt ProducerConsumerHierarchy::visit(const ProducerConsumer *op) {
 
     div_header(op, header, size, anchorName);
 
-    mutate(op->body);
+    op->body.accept(this);
 
     close_box_div();
-
-    return op;
 }
 
-Stmt ProducerConsumerHierarchy::visit(const For *op) {
+void ProducerConsumerHierarchy::visit(const For *op) {
     open_box_div(FOR_COLOR, "ForBox", op);
 
     forCount++;
@@ -1043,14 +1026,12 @@ Stmt ProducerConsumerHierarchy::visit(const For *op) {
         for_loop_div_header(op, header, size, anchorName);
     }
 
-    mutate(op->body);
+    op->body.accept(this);
 
     close_box_div();
-
-    return op;
 }
 
-Stmt ProducerConsumerHierarchy::visit(const IfThenElse *op) {
+void ProducerConsumerHierarchy::visit(const IfThenElse *op) {
     StmtSize thenSize = pre_processor.get_size(op->then_case.get());
     StmtSize elseSize;
 
@@ -1105,7 +1086,7 @@ Stmt ProducerConsumerHierarchy::visit(const IfThenElse *op) {
             if_tree(op->then_case.get(), ifHeader, thenSize, anchorName);
 
             // then body
-            mutate(op->then_case);
+            op->then_case.accept(this);
 
             close_if_tree();
         }
@@ -1144,7 +1125,7 @@ Stmt ProducerConsumerHierarchy::visit(const IfThenElse *op) {
                 }
                 if_tree(op->else_case.get(), elseHeader, elseSize, anchorName);
 
-                mutate(op->else_case);
+                op->else_case.accept(this);
 
                 close_if_tree();
             }
@@ -1159,10 +1140,9 @@ Stmt ProducerConsumerHierarchy::visit(const IfThenElse *op) {
         html += "</ul>";
         html += "</div>";
     }
-    return op;
 }
 
-Stmt ProducerConsumerHierarchy::visit(const Store *op) {
+void ProducerConsumerHierarchy::visit(const Store *op) {
     StmtSize size = pre_processor.get_size(op);
 
     storeCount++;
@@ -1174,13 +1154,11 @@ Stmt ProducerConsumerHierarchy::visit(const Store *op) {
 
     div_header(op, header, size, anchorName);
 
-    mutate(op->value);
+    op->value.accept(this);
 
     close_box_div();
-
-    return op;
 }
-Expr ProducerConsumerHierarchy::visit(const Load *op) {
+void ProducerConsumerHierarchy::visit(const Load *op) {
     int lanes;
 
     // TODO: make sure this is right
@@ -1220,8 +1198,6 @@ Expr ProducerConsumerHierarchy::visit(const Load *op) {
     cost_colors(op);
     html += header;
     close_div();
-
-    return op;
 }
 
 string get_memory_type(MemoryType memType) {
@@ -1250,7 +1226,7 @@ string get_memory_type(MemoryType memType) {
         return "Unknown Memory Type";
     }
 }
-Stmt ProducerConsumerHierarchy::visit(const Allocate *op) {
+void ProducerConsumerHierarchy::visit(const Allocate *op) {
     open_box_div(ALLOCATE_COLOR, "AllocateBox", op);
 
     allocateCount++;
@@ -1303,9 +1279,7 @@ Stmt ProducerConsumerHierarchy::visit(const Allocate *op) {
 
     close_box_div();
 
-    mutate(op->body);
-
-    return op;
+    op->body.accept(this);
 }
 
 string ProducerConsumerHierarchy::generate_prodCons_js() {

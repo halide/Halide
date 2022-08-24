@@ -382,7 +382,7 @@ private:
     string open_expand_button(int id) {
         stringstream button;
         button << "<a class=ExpandButton onclick='return toggle(" << id << ");' href=_blank>"
-               << "<div class='expandButton' style='position:relative; width:0; height:0;'>"
+               << "<div style='position:relative; width:0; height:0;'>"
                << "<div class=ShowHide style='display:none;' id=" << id << "-show"
                << "><i class='fa fa-plus-square-o'></i></div>"
                << "<div class=ShowHide id=" << id << "-hide"
@@ -601,17 +601,18 @@ private:
         remove_context(op->name);
     }
     void visit(const LetStmt *op) override {
-        cout << op << ": before - " << op->name << endl;
         bool in_context_before = in_context;
         in_context = false;
 
-        scope.push(op->name, unique_id());
+        string scopeName = op->name;
+        scope.push(scopeName, unique_id());
+        // scope.push(op->name, unique_id());
         stream << open_div("LetStmt") << open_line();
         stream << cost_colors(op->value.get());
 
         stream << open_span("Matched");
         stream << keyword("let") << " ";
-        stream << var(op->name);
+        stream << var(scopeName);
         stream << close_span();
         stream << " " << matched("Operator Assign", "=") << " ";
 
@@ -620,7 +621,8 @@ private:
         stream << close_cost_span();
 
         if (in_context) {
-            curr_context.push_back(op->name);
+            curr_context.push_back(scopeName);
+            // curr_context.push_back(op->name);
         } else if (in_loop) {
             add_context_rule(curr_line_num);
         }
@@ -630,10 +632,11 @@ private:
         print(op->body);
         stream << close_div();
 
-        cout << op << ": after - " << op->name << endl;
-        scope.pop(op->name);
+        // scope.pop(op->name);
+        scope.pop(scopeName);
 
-        remove_context(op->name);
+        remove_context(scopeName);
+        // remove_context(op->name);
     }
     void visit(const AssertStmt *op) override {
         stream << open_div("AssertStmt WrapLine");
@@ -1197,11 +1200,19 @@ public:
     }
 
     void print(const Expr &ir) {
+        debug(0) << "entering: " << ir << "\n";
+        cout << "done entering" << endl;
         ir.accept(this);
+        debug(0) << "exiting: " << ir << "\n";
+        cout << "done exiting" << endl;
     }
 
     void print(const Stmt &ir) {
+        debug(0) << "entering: " << ir << "\n";
+        cout << "done entering" << endl;
         ir.accept(this);
+        debug(0) << "exiting: " << ir << "\n";
+        cout << "done exiting" << endl;
     }
 
     void print(const LoweredFunc &op) {
@@ -1576,6 +1587,7 @@ public:
     }
 
     ~StmtToViz() override {
+        cout << "in destructor" << endl;
         stream << popups;
 
         stream << "</div>\n";  // close IRCode-code div

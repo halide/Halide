@@ -4,8 +4,8 @@
 #include <set>
 
 #include "FindStmtCost.h"
-#include "IRMutator.h"
 #include "IROperator.h"
+#include "IRVisitor.h"
 
 using namespace std;
 using namespace Halide;
@@ -14,7 +14,7 @@ using namespace Internal;
 #define CC_TYPE 0
 #define DMC_TYPE 1
 
-class GetStmtHierarchy : public IRMutator {
+class GetStmtHierarchy : public IRVisitor {
 
 public:
     static const string stmtHierarchyCSS;
@@ -69,52 +69,52 @@ private:
 
     void visit_binary_op(const Expr &a, const Expr &b, const string &name, int colorCost);
 
-    Expr visit(const IntImm *op) override;
-    Expr visit(const UIntImm *op) override;
-    Expr visit(const FloatImm *op) override;
-    Expr visit(const StringImm *op) override;
-    Expr visit(const Cast *op) override;
-    Expr visit(const Variable *op) override;
-    Expr visit(const Add *op) override;
-    Expr visit(const Sub *op) override;
-    Expr visit(const Mul *op) override;
-    Expr visit(const Div *op) override;
-    Expr visit(const Mod *op) override;
-    Expr visit(const Min *op) override;
-    Expr visit(const Max *op) override;
-    Expr visit(const EQ *op) override;
-    Expr visit(const NE *op) override;
-    Expr visit(const LT *op) override;
-    Expr visit(const LE *op) override;
-    Expr visit(const GT *op) override;
-    Expr visit(const GE *op) override;
-    Expr visit(const And *op) override;
-    Expr visit(const Or *op) override;
-    Expr visit(const Not *op) override;
-    Expr visit(const Select *op) override;
-    Expr visit(const Load *op) override;
-    Expr visit(const Ramp *op) override;
-    Expr visit(const Broadcast *op) override;
-    Expr visit(const Call *op) override;
-    Expr visit(const Let *op) override;
-    Expr visit(const Shuffle *op) override;
-    Expr visit(const VectorReduce *op) override;
-    Stmt visit(const LetStmt *op) override;
-    Stmt visit(const AssertStmt *op) override;
-    Stmt visit(const ProducerConsumer *op) override;
-    Stmt visit(const For *op) override;
-    Stmt visit(const Acquire *op) override;
-    Stmt visit(const Store *op) override;
-    Stmt visit(const Provide *op) override;
-    Stmt visit(const Allocate *op) override;
-    Stmt visit(const Free *op) override;
-    Stmt visit(const Realize *op) override;
-    Stmt visit(const Prefetch *op) override;
-    Stmt visit(const Block *op) override;
-    Stmt visit(const Fork *op) override;
-    Stmt visit(const IfThenElse *op) override;
-    Stmt visit(const Evaluate *op) override;
-    Stmt visit(const Atomic *op) override;
+    void visit(const IntImm *op) override;
+    void visit(const UIntImm *op) override;
+    void visit(const FloatImm *op) override;
+    void visit(const StringImm *op) override;
+    void visit(const Cast *op) override;
+    void visit(const Variable *op) override;
+    void visit(const Add *op) override;
+    void visit(const Sub *op) override;
+    void visit(const Mul *op) override;
+    void visit(const Div *op) override;
+    void visit(const Mod *op) override;
+    void visit(const Min *op) override;
+    void visit(const Max *op) override;
+    void visit(const EQ *op) override;
+    void visit(const NE *op) override;
+    void visit(const LT *op) override;
+    void visit(const LE *op) override;
+    void visit(const GT *op) override;
+    void visit(const GE *op) override;
+    void visit(const And *op) override;
+    void visit(const Or *op) override;
+    void visit(const Not *op) override;
+    void visit(const Select *op) override;
+    void visit(const Load *op) override;
+    void visit(const Ramp *op) override;
+    void visit(const Broadcast *op) override;
+    void visit(const Call *op) override;
+    void visit(const Let *op) override;
+    void visit(const Shuffle *op) override;
+    void visit(const VectorReduce *op) override;
+    void visit(const LetStmt *op) override;
+    void visit(const AssertStmt *op) override;
+    void visit(const ProducerConsumer *op) override;
+    void visit(const For *op) override;
+    void visit(const Acquire *op) override;
+    void visit(const Store *op) override;
+    void visit(const Provide *op) override;
+    void visit(const Allocate *op) override;
+    void visit(const Free *op) override;
+    void visit(const Realize *op) override;
+    void visit(const Prefetch *op) override;
+    void visit(const Block *op) override;
+    void visit(const Fork *op) override;
+    void visit(const IfThenElse *op) override;
+    void visit(const Evaluate *op) override;
+    void visit(const Atomic *op) override;
 };
 
 #endif

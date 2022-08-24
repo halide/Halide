@@ -14,7 +14,7 @@ string DependencyGraph::generate_dependency_graph(const Module &m) {
     return html.str();
 }
 string DependencyGraph::generate_dependency_graph(const Stmt &stmt) {
-    mutate(stmt);
+    stmt.accept(this);
     generate_html();
 
     return html.str();
@@ -215,7 +215,7 @@ void DependencyGraph::traverse(const Module &m) {
     for (const auto &f : m.functions()) {
         Stmt inlined_s = substitute_in_all_lets(f.body);
 
-        mutate(inlined_s);
+        inlined_s.accept(this);
     }
 }
 
@@ -230,41 +230,36 @@ void DependencyGraph::print_dependencies() {
     }
 }
 
-Expr DependencyGraph::visit(const Let *op) {
+void DependencyGraph::visit(const Let *op) {
     string previous_variable = current_variable;
 
     string unique_var_name = generate_unique_name(op->name);
     current_variable = unique_var_name;
     add_empty_dependency(unique_var_name);
-    mutate(op->value);
+    op->value.accept(this);
 
     current_variable = previous_variable;
-    mutate(op->body);
-
-    return op;
+    op->body.accept(this);
 }
 
-Expr DependencyGraph::visit(const Variable *op) {
+void DependencyGraph::visit(const Variable *op) {
     string unique_var_name = get_unique_name(op->name);
     add_dependency(current_variable, unique_var_name);
-    return op;
 }
 
-Stmt DependencyGraph::visit(const LetStmt *op) {
+void DependencyGraph::visit(const LetStmt *op) {
     string previous_variable = current_variable;
 
     string unique_var_name = generate_unique_name(op->name);
     current_variable = unique_var_name;
     add_empty_dependency(unique_var_name);
-    mutate(op->value);
+    op->value.accept(this);
 
     current_variable = previous_variable;
-    mutate(op->body);
-
-    return op;
+    op->body.accept(this);
 }
 
-Stmt DependencyGraph::visit(const Store *op) {
+void DependencyGraph::visit(const Store *op) {
     string previous_variable = current_variable;
 
     current_variable = op->name;
@@ -275,9 +270,6 @@ Stmt DependencyGraph::visit(const Store *op) {
     if (it == dependencies.end()) {
         add_empty_dependency(current_variable);
     }
-    mutate(op->value);
 
     current_variable = previous_variable;
-
-    return op;
 }

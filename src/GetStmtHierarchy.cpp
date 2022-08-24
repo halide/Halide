@@ -11,7 +11,7 @@ string GetStmtHierarchy::get_hierarchy_html(const Expr &startNode) {
     colorType = CC_TYPE;
     startCCNodeID = numNodes;
     start_tree();
-    mutate(startNode);
+    startNode.accept(this);
     end_tree();
 
     depth = 0;
@@ -19,7 +19,7 @@ string GetStmtHierarchy::get_hierarchy_html(const Expr &startNode) {
     startDMCNodeID = numNodes;
     currNodeID = numNodes;
     start_tree();
-    mutate(startNode);
+    startNode.accept(this);
     end_tree();
 
     end_html();
@@ -34,7 +34,7 @@ string GetStmtHierarchy::get_hierarchy_html(const Stmt &startNode) {
     colorType = CC_TYPE;
     startCCNodeID = numNodes;
     start_tree();
-    mutate(startNode);
+    startNode.accept(this);
     end_tree();
 
     depth = 0;
@@ -42,7 +42,7 @@ string GetStmtHierarchy::get_hierarchy_html(const Stmt &startNode) {
     startDMCNodeID = numNodes;
     colorType = DMC_TYPE;
     start_tree();
-    mutate(startNode);
+    startNode.accept(this);
     end_tree();
 
     end_html();
@@ -174,34 +174,28 @@ void GetStmtHierarchy::close_node() {
     html << "</li>";
 }
 
-Expr GetStmtHierarchy::visit(const IntImm *op) {
+void GetStmtHierarchy::visit(const IntImm *op) {
     node_without_children(to_string(op->value), get_color_range(op));
-    return op;
 }
-Expr GetStmtHierarchy::visit(const UIntImm *op) {
+void GetStmtHierarchy::visit(const UIntImm *op) {
     node_without_children(to_string(op->value), get_color_range(op));
-    return op;
 }
-Expr GetStmtHierarchy::visit(const FloatImm *op) {
+void GetStmtHierarchy::visit(const FloatImm *op) {
     node_without_children(to_string(op->value), get_color_range(op));
-    return op;
 }
-Expr GetStmtHierarchy::visit(const StringImm *op) {
+void GetStmtHierarchy::visit(const StringImm *op) {
     node_without_children(op->value, get_color_range(op));
-    return op;
 }
-Expr GetStmtHierarchy::visit(const Cast *op) {
+void GetStmtHierarchy::visit(const Cast *op) {
     stringstream name;
     name << op->type;
     int computation_range = get_color_range(op);
     open_node(name.str(), computation_range);
-    mutate(op->value);
+    op->value.accept(this);
     close_node();
-    return op;
 }
-Expr GetStmtHierarchy::visit(const Variable *op) {
+void GetStmtHierarchy::visit(const Variable *op) {
     node_without_children(op->name, get_color_range(op));
-    return op;
 }
 
 void GetStmtHierarchy::visit_binary_op(const Expr &a, const Expr &b, const string &name,
@@ -209,156 +203,135 @@ void GetStmtHierarchy::visit_binary_op(const Expr &a, const Expr &b, const strin
     open_node(name, colorCost);
 
     int currNode = currNodeID;
-    mutate(a);
+    a.accept(this);
 
     currNodeID = currNode;
-    mutate(b);
+    b.accept(this);
 
     close_node();
 }
 
-Expr GetStmtHierarchy::visit(const Add *op) {
+void GetStmtHierarchy::visit(const Add *op) {
     int computation_range = get_color_range(op);
     visit_binary_op(op->a, op->b, "+", computation_range);
-    return op;
 }
-Expr GetStmtHierarchy::visit(const Sub *op) {
+void GetStmtHierarchy::visit(const Sub *op) {
     int computation_range = get_color_range(op);
     visit_binary_op(op->a, op->b, "-", computation_range);
-    return op;
 }
-Expr GetStmtHierarchy::visit(const Mul *op) {
+void GetStmtHierarchy::visit(const Mul *op) {
     int computation_range = get_color_range(op);
     visit_binary_op(op->a, op->b, "*", computation_range);
-    return op;
 }
-Expr GetStmtHierarchy::visit(const Div *op) {
+void GetStmtHierarchy::visit(const Div *op) {
     int computation_range = get_color_range(op);
     visit_binary_op(op->a, op->b, "/", computation_range);
-    return op;
 }
-Expr GetStmtHierarchy::visit(const Mod *op) {
+void GetStmtHierarchy::visit(const Mod *op) {
     int computation_range = get_color_range(op);
     visit_binary_op(op->a, op->b, "%", computation_range);
-    return op;
 }
-Expr GetStmtHierarchy::visit(const EQ *op) {
+void GetStmtHierarchy::visit(const EQ *op) {
     int computation_range = get_color_range(op);
     visit_binary_op(op->a, op->b, "==", computation_range);
-    return op;
 }
-Expr GetStmtHierarchy::visit(const NE *op) {
+void GetStmtHierarchy::visit(const NE *op) {
     int computation_range = get_color_range(op);
     visit_binary_op(op->a, op->b, "!=", computation_range);
-    return op;
 }
-Expr GetStmtHierarchy::visit(const LT *op) {
+void GetStmtHierarchy::visit(const LT *op) {
     int computation_range = get_color_range(op);
     visit_binary_op(op->a, op->b, "<", computation_range);
-    return op;
 }
-Expr GetStmtHierarchy::visit(const LE *op) {
+void GetStmtHierarchy::visit(const LE *op) {
     int computation_range = get_color_range(op);
     visit_binary_op(op->a, op->b, "<=", computation_range);
-    return op;
 }
-Expr GetStmtHierarchy::visit(const GT *op) {
+void GetStmtHierarchy::visit(const GT *op) {
     int computation_range = get_color_range(op);
     visit_binary_op(op->a, op->b, ">", computation_range);
-    return op;
 }
-Expr GetStmtHierarchy::visit(const GE *op) {
+void GetStmtHierarchy::visit(const GE *op) {
     int computation_range = get_color_range(op);
     visit_binary_op(op->a, op->b, ">=", computation_range);
-    return op;
 }
-Expr GetStmtHierarchy::visit(const And *op) {
+void GetStmtHierarchy::visit(const And *op) {
     int computation_range = get_color_range(op);
     visit_binary_op(op->a, op->b, "&amp;&amp;", computation_range);
-    return op;
 }
-Expr GetStmtHierarchy::visit(const Or *op) {
+void GetStmtHierarchy::visit(const Or *op) {
     int computation_range = get_color_range(op);
     visit_binary_op(op->a, op->b, "||", computation_range);
-    return op;
 }
-Expr GetStmtHierarchy::visit(const Min *op) {
+void GetStmtHierarchy::visit(const Min *op) {
     int computation_range = get_color_range(op);
     visit_binary_op(op->a, op->b, "min", computation_range);
-    return op;
 }
-Expr GetStmtHierarchy::visit(const Max *op) {
+void GetStmtHierarchy::visit(const Max *op) {
     int computation_range = get_color_range(op);
     visit_binary_op(op->a, op->b, "max", computation_range);
-    return op;
 }
 
-Expr GetStmtHierarchy::visit(const Not *op) {
+void GetStmtHierarchy::visit(const Not *op) {
     int computation_range = get_color_range(op);
     open_node("!", computation_range);
-    mutate(op->a);
+    op->a.accept(this);
     close_node();
-    return op;
 }
-Expr GetStmtHierarchy::visit(const Select *op) {
+void GetStmtHierarchy::visit(const Select *op) {
     int computation_range = get_color_range(op);
     open_node("Select", computation_range);
 
     int currNode = currNodeID;
-    mutate(op->condition);
+    op->condition.accept(this);
 
     currNodeID = currNode;
-    mutate(op->true_value);
+    op->true_value.accept(this);
 
     currNodeID = currNode;
-    mutate(op->false_value);
+    op->false_value.accept(this);
 
     close_node();
-    return op;
 }
-Expr GetStmtHierarchy::visit(const Load *op) {
+void GetStmtHierarchy::visit(const Load *op) {
     stringstream index;
     index << op->index;
     node_without_children(op->name + "[" + index.str() + "]", get_color_range(op));
-    return op;
 }
-Expr GetStmtHierarchy::visit(const Ramp *op) {
+void GetStmtHierarchy::visit(const Ramp *op) {
     int computation_range = get_color_range(op);
     open_node("Ramp", computation_range);
 
     int currNode = currNodeID;
-    mutate(op->base);
+    op->base.accept(this);
 
     currNodeID = currNode;
-    mutate(op->stride);
+    op->stride.accept(this);
 
     currNodeID = currNode;
-    mutate(Expr(op->lanes));
+    Expr(op->lanes).accept(this);
 
     close_node();
-    return op;
 }
-Expr GetStmtHierarchy::visit(const Broadcast *op) {
+void GetStmtHierarchy::visit(const Broadcast *op) {
     int computation_range = get_color_range(op);
     open_node("x" + to_string(op->lanes), computation_range);
-    mutate(op->value);
+    op->value.accept(this);
     close_node();
-    return op;
 }
-Expr GetStmtHierarchy::visit(const Call *op) {
+void GetStmtHierarchy::visit(const Call *op) {
     int computation_range = get_color_range(op);
     open_node(op->name, computation_range);
 
     int currNode = currNodeID;
     for (auto &arg : op->args) {
         currNodeID = currNode;
-        mutate(arg);
+        arg.accept(this);
     }
 
     close_node();
-    return op;
 }
-Expr GetStmtHierarchy::visit(const Let *op) {
+void GetStmtHierarchy::visit(const Let *op) {
     int computation_range = get_color_range(op);
     open_node("Let", computation_range);
     int currNode = currNodeID;
@@ -367,20 +340,19 @@ Expr GetStmtHierarchy::visit(const Let *op) {
     int value_range = get_color_range(op->value.get());
     open_node("=", value_range);
     node_without_children(op->name, 0);
-    mutate(op->value);
+    op->value.accept(this);
     close_node();
 
     // "body" node
     int computation_range_body = get_color_range(op->body.get());
     currNodeID = currNode;
     open_node("body", computation_range_body);
-    mutate(op->body);
+    op->body.accept(this);
     close_node();
 
     close_node();
-    return op;
 }
-Stmt GetStmtHierarchy::visit(const LetStmt *op) {
+void GetStmtHierarchy::visit(const LetStmt *op) {
     internal_error << "\n"
                    << "GetStmtHierarchy: LetStmt is not supported.\n\n";
 
@@ -391,29 +363,25 @@ Stmt GetStmtHierarchy::visit(const LetStmt *op) {
     node_without_children(op->name, 0);
 
     currNodeID = currNode;
-    mutate(op->value);
+    op->value.accept(this);
 
     close_node();
-    return op;
 }
-Stmt GetStmtHierarchy::visit(const AssertStmt *op) {
+void GetStmtHierarchy::visit(const AssertStmt *op) {
     int computation_range = get_color_range(op);
     open_node("Assert", computation_range);
-    mutate(op->condition);
+    op->condition.accept(this);
     close_node();
-    return op;
 }
-Stmt GetStmtHierarchy::visit(const ProducerConsumer *op) {
+void GetStmtHierarchy::visit(const ProducerConsumer *op) {
     internal_error << "\n"
                    << "GetStmtHierarchy: ProducerConsumer is not supported.\n\n";
-    return op;
 }
-Stmt GetStmtHierarchy::visit(const For *op) {
+void GetStmtHierarchy::visit(const For *op) {
     internal_error << "\n"
                    << "GetStmtHierarchy: For is not supported.\n\n";
-    return op;
 }
-Stmt GetStmtHierarchy::visit(const Store *op) {
+void GetStmtHierarchy::visit(const Store *op) {
     int computation_range = get_color_range(op);
     open_node("=", computation_range);
 
@@ -421,11 +389,10 @@ Stmt GetStmtHierarchy::visit(const Store *op) {
     index << op->index;
     node_without_children(op->name + "[" + index.str() + "]", get_color_range(op->index.get()));
 
-    mutate(op->value);
+    op->value.accept(this);
     close_node();
-    return op;
 }
-Stmt GetStmtHierarchy::visit(const Provide *op) {
+void GetStmtHierarchy::visit(const Provide *op) {
     internal_error << "\n"
                    << "GetStmtHierarchy: Provide is not supported. Look into it though!!! \n\n";
 
@@ -437,18 +404,17 @@ Stmt GetStmtHierarchy::visit(const Provide *op) {
     int currNode1 = currNodeID;
     for (auto &arg : op->args) {
         currNodeID = currNode1;
-        mutate(arg);
+        arg.accept(this);
     }
     close_node();
 
     for (auto &val : op->values) {
         currNodeID = currNode0;
-        mutate(val);
+        val.accept(this);
     }
     close_node();
-    return op;
 }
-Stmt GetStmtHierarchy::visit(const Allocate *op) {
+void GetStmtHierarchy::visit(const Allocate *op) {
     int computation_range = get_color_range(op);
     open_node("allocate", computation_range);
 
@@ -478,43 +444,36 @@ Stmt GetStmtHierarchy::visit(const Allocate *op) {
 
     node_without_children(name.str(), computation_range);
     close_node();
-
-    return op;
 }
-Stmt GetStmtHierarchy::visit(const Free *op) {
+void GetStmtHierarchy::visit(const Free *op) {
     int computation_range = get_color_range(op);
     open_node("Free", computation_range);
     node_without_children(op->name, get_color_range(op));
     close_node();
-    return op;
 }
-Stmt GetStmtHierarchy::visit(const Realize *op) {
+void GetStmtHierarchy::visit(const Realize *op) {
     internal_error << "\n"
                    << "GetStmtHierarchy: Realize is not supported. Look into it though!!! \n\n";
-    return op;
 }
-Stmt GetStmtHierarchy::visit(const Block *op) {
+void GetStmtHierarchy::visit(const Block *op) {
     internal_error << "\n"
                    << "GetStmtHierarchy: Block is not supported. Look into it though!!! \n\n";
-    return op;
 }
-Stmt GetStmtHierarchy::visit(const IfThenElse *op) {
+void GetStmtHierarchy::visit(const IfThenElse *op) {
     int computation_range = get_color_range(op);
     open_node("IfThenElse", computation_range);
 
-    mutate(op->condition);
+    op->condition.accept(this);
     if (op->else_case.defined()) {
-        mutate(op->else_case);
+        op->else_case.accept(this);
     }
 
     close_node();
-    return op;
 }
-Stmt GetStmtHierarchy::visit(const Evaluate *op) {
-    mutate(op->value);
-    return op;
+void GetStmtHierarchy::visit(const Evaluate *op) {
+    op->value.accept(this);
 }
-Expr GetStmtHierarchy::visit(const Shuffle *op) {
+void GetStmtHierarchy::visit(const Shuffle *op) {
     int computation_range = get_color_range(op);
     if (op->is_concat()) {
         open_node("concat_vectors", computation_range);
@@ -522,7 +481,7 @@ Expr GetStmtHierarchy::visit(const Shuffle *op) {
         int currNode = currNodeID;
         for (auto &e : op->vectors) {
             currNodeID = currNode;
-            mutate(e);
+            e.accept(this);
         }
         close_node();
     }
@@ -533,7 +492,7 @@ Expr GetStmtHierarchy::visit(const Shuffle *op) {
         int currNode = currNodeID;
         for (auto &e : op->vectors) {
             currNodeID = currNode;
-            mutate(e);
+            e.accept(this);
         }
         close_node();
     }
@@ -546,7 +505,7 @@ Expr GetStmtHierarchy::visit(const Shuffle *op) {
         int currNode = currNodeID;
         for (auto &e : args) {
             currNodeID = currNode;
-            mutate(e);
+            e.accept(this);
         }
         close_node();
     }
@@ -561,7 +520,7 @@ Expr GetStmtHierarchy::visit(const Shuffle *op) {
         int currNode = currNodeID;
         for (auto &e : args) {
             currNodeID = currNode;
-            mutate(e);
+            e.accept(this);
         }
         close_node();
     }
@@ -576,49 +535,49 @@ Expr GetStmtHierarchy::visit(const Shuffle *op) {
         int currNode = currNodeID;
         for (auto &e : args) {
             currNodeID = currNode;
-            mutate(e);
+            e.accept(this);
         }
         close_node();
     }
-    return op;
 }
-Expr GetStmtHierarchy::visit(const VectorReduce *op) {
+void GetStmtHierarchy::visit(const VectorReduce *op) {
+    internal_error
+        << "\n"
+        << "GetStmtHierarchy: VectorReduce is not supported. Look into it though!!! \n\n";
+
     int computation_range = get_color_range(op);
     open_node("vector_reduce", computation_range);
 
     int currNode = currNodeID;
-    mutate(op->op);
+    // op->op.accept(this);
+    // TODO: how to deal with op->op?
 
     currNodeID = currNode;
-    mutate(op->value);
+    op->value.accept(this);
 
     close_node();
-    return op;
 }
-Stmt GetStmtHierarchy::visit(const Prefetch *op) {
+void GetStmtHierarchy::visit(const Prefetch *op) {
     internal_error << "\n"
                    << "GetStmtHierarchy: Prefetch is not supported. Look into it though!!! \n\n";
-    return op;
 }
-Stmt GetStmtHierarchy::visit(const Fork *op) {
+void GetStmtHierarchy::visit(const Fork *op) {
     internal_error << "\n"
                    << "GetStmtHierarchy: Fork is not supported. Look into it though!!! \n\n";
-    return op;
 }
-Stmt GetStmtHierarchy::visit(const Acquire *op) {
+void GetStmtHierarchy::visit(const Acquire *op) {
     int computation_range = get_color_range(op);
     open_node("acquire", computation_range);
 
     int currNode = currNodeID;
-    mutate(op->semaphore);
+    op->semaphore.accept(this);
 
     currNodeID = currNode;
-    mutate(op->count);
+    op->count.accept(this);
 
     close_node();
-    return op;
 }
-Stmt GetStmtHierarchy::visit(const Atomic *op) {
+void GetStmtHierarchy::visit(const Atomic *op) {
     if (op->mutex_name.empty()) {
         node_without_children("atomic", get_color_range(op));
     } else {
@@ -627,8 +586,6 @@ Stmt GetStmtHierarchy::visit(const Atomic *op) {
         node_without_children(op->mutex_name, 0);
         close_node();
     }
-
-    return op;
 }
 
 string GetStmtHierarchy::generate_collapse_expand_js() {

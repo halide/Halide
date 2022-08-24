@@ -15,8 +15,11 @@ void CostPreProcessor::traverse(const Module &m) {
 
     // traverse all functions
     for (const auto &f : m.functions()) {
-        mutate(f.body);
+        f.body.accept(this);
     }
+}
+void CostPreProcessor::traverse(const Stmt &s) {
+    s.accept(this);
 }
 
 int CostPreProcessor::get_lock_access_count(const string name) const {
@@ -40,18 +43,16 @@ void CostPreProcessor::increase_count(const string name) {
     }
 }
 
-Stmt CostPreProcessor::visit(const Acquire *op) {
+void CostPreProcessor::visit(const Acquire *op) {
     stringstream name;
     name << op->semaphore;
     increase_count(name.str());
-    return op;
 }
 
-Stmt CostPreProcessor::visit(const Atomic *op) {
+void CostPreProcessor::visit(const Atomic *op) {
     stringstream name;
     name << op->producer_name;
     increase_count(name.str());
-    return op;
 }
 
 /*
@@ -63,8 +64,8 @@ void FindStmtCost::generate_costs(const Module &m) {
     set_max_costs();
 }
 void FindStmtCost::generate_costs(const Stmt &stmt) {
-    cost_preprocessor.mutate(stmt);
-    mutate(stmt);
+    cost_preprocessor.traverse(stmt);
+    stmt.accept(this);
     set_max_costs();
 }
 
@@ -172,7 +173,7 @@ void FindStmtCost::traverse(const Module &m) {
 
     // traverse all functions
     for (const auto &f : m.functions()) {
-        mutate(f.body);
+        f.body.accept(this);
     }
 
     return;
@@ -254,140 +255,115 @@ void FindStmtCost::print_map(unordered_map<const IRNode *, StmtCost> const &m) {
 }
 
 void FindStmtCost::visit_binary_op(const IRNode *op, const Expr &a, const Expr &b) {
-    mutate(a);
-    mutate(b);
+    a.accept(this);
+    b.accept(this);
 
     int tempVal = get_computation_cost(a.get()) + get_computation_cost(b.get());
     int dataMovementCost = get_data_movement_cost(a.get()) + get_data_movement_cost(b.get());
     set_costs(op, 1 + tempVal, dataMovementCost);
 }
 
-Expr FindStmtCost::visit(const IntImm *op) {
+void FindStmtCost::visit(const IntImm *op) {
     set_costs(op, 1, 0);
-    return op;
 }
 
-Expr FindStmtCost::visit(const UIntImm *op) {
+void FindStmtCost::visit(const UIntImm *op) {
     set_costs(op, 1, 0);
-    return op;
 }
 
-Expr FindStmtCost::visit(const FloatImm *op) {
+void FindStmtCost::visit(const FloatImm *op) {
     set_costs(op, 1, 0);
-    return op;
 }
 
-Expr FindStmtCost::visit(const StringImm *op) {
+void FindStmtCost::visit(const StringImm *op) {
     set_costs(op, 1, 0);
-    return op;
 }
 
-Expr FindStmtCost::visit(const Cast *op) {
-    mutate(op->value);
+void FindStmtCost::visit(const Cast *op) {
+    op->value.accept(this);
 
     int tempVal = get_computation_cost(op->value.get());
     int dataMovementCost = get_data_movement_cost(op->value.get());
     set_costs(op, 1 + tempVal, dataMovementCost);
-
-    return op;
 }
 
-Expr FindStmtCost::visit(const Variable *op) {
+void FindStmtCost::visit(const Variable *op) {
     set_costs(op, 1, 0);
-    return op;
 }
 
-Expr FindStmtCost::visit(const Add *op) {
+void FindStmtCost::visit(const Add *op) {
     visit_binary_op(op, op->a, op->b);
-    return op;
 }
 
-Expr FindStmtCost::visit(const Sub *op) {
+void FindStmtCost::visit(const Sub *op) {
     visit_binary_op(op, op->a, op->b);
-    return op;
 }
 
-Expr FindStmtCost::visit(const Mul *op) {
+void FindStmtCost::visit(const Mul *op) {
     visit_binary_op(op, op->a, op->b);
-    return op;
 }
 
-Expr FindStmtCost::visit(const Div *op) {
+void FindStmtCost::visit(const Div *op) {
     visit_binary_op(op, op->a, op->b);
-    return op;
 }
 
-Expr FindStmtCost::visit(const Mod *op) {
+void FindStmtCost::visit(const Mod *op) {
     visit_binary_op(op, op->a, op->b);
-    return op;
 }
 
-Expr FindStmtCost::visit(const Min *op) {
+void FindStmtCost::visit(const Min *op) {
     visit_binary_op(op, op->a, op->b);
-    return op;
 }
 
-Expr FindStmtCost::visit(const Max *op) {
+void FindStmtCost::visit(const Max *op) {
     visit_binary_op(op, op->a, op->b);
-    return op;
 }
 
-Expr FindStmtCost::visit(const EQ *op) {
+void FindStmtCost::visit(const EQ *op) {
     visit_binary_op(op, op->a, op->b);
-    return op;
 }
 
-Expr FindStmtCost::visit(const NE *op) {
+void FindStmtCost::visit(const NE *op) {
     visit_binary_op(op, op->a, op->b);
-    return op;
 }
 
-Expr FindStmtCost::visit(const LT *op) {
+void FindStmtCost::visit(const LT *op) {
     visit_binary_op(op, op->a, op->b);
-    return op;
 }
 
-Expr FindStmtCost::visit(const LE *op) {
+void FindStmtCost::visit(const LE *op) {
     visit_binary_op(op, op->a, op->b);
-    return op;
 }
 
-Expr FindStmtCost::visit(const GT *op) {
+void FindStmtCost::visit(const GT *op) {
     visit_binary_op(op, op->a, op->b);
-    return op;
 }
 
-Expr FindStmtCost::visit(const GE *op) {
+void FindStmtCost::visit(const GE *op) {
     visit_binary_op(op, op->a, op->b);
-    return op;
 }
 
-Expr FindStmtCost::visit(const And *op) {
+void FindStmtCost::visit(const And *op) {
     visit_binary_op(op, op->a, op->b);
-
-    return op;
 }
 
-Expr FindStmtCost::visit(const Or *op) {
+void FindStmtCost::visit(const Or *op) {
     visit_binary_op(op, op->a, op->b);
-    return op;
 }
 
-Expr FindStmtCost::visit(const Not *op) {
-    mutate(op->a);
+void FindStmtCost::visit(const Not *op) {
+    op->a.accept(this);
 
     int tempVal = get_computation_cost(op->a.get());
     int dataMovementCost = get_data_movement_cost(op->a.get());
     set_costs(op, 1 + tempVal, dataMovementCost);
-
-    return op;
 }
 
 // TODO: do we agree on my counts?
-Expr FindStmtCost::visit(const Select *op) {
-    mutate(op->condition);
-    mutate(op->true_value);
-    mutate(op->false_value);
+void FindStmtCost::visit(const Select *op) {
+    op->condition.accept(this);
+    op->true_value.accept(this);
+    op->false_value.accept(this);
 
     int tempVal = get_computation_cost(op->condition.get()) +
                   get_computation_cost(op->true_value.get()) +
@@ -396,11 +372,9 @@ Expr FindStmtCost::visit(const Select *op) {
                            get_data_movement_cost(op->true_value.get()) +
                            get_data_movement_cost(op->false_value.get());
     set_costs(op, 1 + tempVal, dataMovementCost);
-
-    return op;
 }
 
-Expr FindStmtCost::visit(const Load *op) {
+void FindStmtCost::visit(const Load *op) {
     uint8_t bits = op->type.bits();
     uint16_t lanes = op->type.lanes();
     int scalingFactor = get_scaling_factor(bits, lanes);
@@ -412,8 +386,8 @@ Expr FindStmtCost::visit(const Load *op) {
         scalingFactor *= LOAD_GLOBAL_VAR_COST;
     }
 
-    mutate(op->predicate);
-    mutate(op->index);
+    op->predicate.accept(this);
+    op->index.accept(this);
 
     int tempVal = get_computation_cost(op->predicate.get()) + get_computation_cost(op->index.get());
     int dataMovementCost =
@@ -422,33 +396,27 @@ Expr FindStmtCost::visit(const Load *op) {
     dataMovementCost *= scalingFactor;
 
     set_costs(op, 1 + tempVal, dataMovementCost);
-
-    return op;
 }
 
-Expr FindStmtCost::visit(const Ramp *op) {
-    mutate(op->base);
-    mutate(op->stride);
+void FindStmtCost::visit(const Ramp *op) {
+    op->base.accept(this);
+    op->stride.accept(this);
 
     int tempVal = get_computation_cost(op->base.get()) + get_computation_cost(op->stride.get());
     int dataMovementCost =
         get_data_movement_cost(op->base.get()) + get_data_movement_cost(op->stride.get());
     set_costs(op, 1 + tempVal, dataMovementCost);
-
-    return op;
 }
 
-Expr FindStmtCost::visit(const Broadcast *op) {
-    mutate(op->value);
+void FindStmtCost::visit(const Broadcast *op) {
+    op->value.accept(this);
 
     int tempVal = get_computation_cost(op->value.get());
     int dataMovementCost = get_data_movement_cost(op->value.get());
     set_costs(op, 1 + tempVal, dataMovementCost);
-
-    return op;
 }
 
-Expr FindStmtCost::visit(const Call *op) {
+void FindStmtCost::visit(const Call *op) {
     /*
         TODO: take into account this message from Maaz:
 
@@ -461,7 +429,7 @@ Expr FindStmtCost::visit(const Call *op) {
     int dataMovementCost = 0;
 
     for (const auto &arg : op->args) {
-        mutate(arg);
+        arg.accept(this);
         tempVal += get_computation_cost(arg.get());
         dataMovementCost += get_data_movement_cost(arg.get());
     }
@@ -472,7 +440,7 @@ Expr FindStmtCost::visit(const Call *op) {
         if (op->call_type == Call::Halide && f.has_extern_definition()) {
             for (const auto &arg : f.extern_arguments()) {
                 if (arg.is_expr()) {
-                    mutate(arg.expr);
+                    arg.expr.accept(this);
                     tempVal += get_computation_cost(arg.expr.get());
                     dataMovementCost += get_data_movement_cost(arg.expr.get());
                 }
@@ -481,18 +449,16 @@ Expr FindStmtCost::visit(const Call *op) {
     }
 
     set_costs(op, 1 + tempVal, dataMovementCost);
-
-    return op;
 }
 
-Expr FindStmtCost::visit(const Let *op) {
+void FindStmtCost::visit(const Let *op) {
 
     // TODO: problem is that the variable in the let is not being tied to
     //       the value of the let, so it's not getting its context correctly
     //       set.
 
-    mutate(op->value);
-    mutate(op->body);
+    op->value.accept(this);
+    op->body.accept(this);
 
     int tempVal = get_computation_cost(op->value.get()) + get_computation_cost(op->body.get());
     int dataMovementCost =
@@ -500,80 +466,67 @@ Expr FindStmtCost::visit(const Let *op) {
     set_costs(op, tempVal, dataMovementCost);
 
     // add_variable_map(op->name, get_context(op->value.get()));
-
-    return op;
 }
 
-Expr FindStmtCost::visit(const Shuffle *op) {
+void FindStmtCost::visit(const Shuffle *op) {
     int tempVal = 0;
     int dataMovementCost = 0;
 
     for (const Expr &i : op->vectors) {
-        mutate(i);
+        i.accept(this);
         tempVal += get_computation_cost(i.get());
         dataMovementCost += get_data_movement_cost(i.get());
     }
 
     set_costs(op, tempVal, dataMovementCost);
-
-    return op;
 }
 
-Expr FindStmtCost::visit(const VectorReduce *op) {
-    mutate(op->value);
+void FindStmtCost::visit(const VectorReduce *op) {
+    op->value.accept(this);
 
     int tempVal = get_computation_cost(op->value.get());
     int countCost = op->value.type().lanes() - 1;
     int dataMovementCost = get_data_movement_cost(op->value.get());
     set_costs(op, tempVal + countCost, dataMovementCost);
-
-    return op;
 }
 
-Stmt FindStmtCost::visit(const LetStmt *op) {
-    mutate(op->value);
-    mutate(op->body);
+void FindStmtCost::visit(const LetStmt *op) {
+    op->value.accept(this);
+    op->body.accept(this);
 
     int tempVal = get_computation_cost(op->value.get());
     int dataMovementCost = get_data_movement_cost(op->value.get());
     set_costs(op, 1 + tempVal, dataMovementCost);
 
     // TODO: should the cost of body also be added to the cost of the let?
-
-    return op;
 }
 
-Stmt FindStmtCost::visit(const AssertStmt *op) {
-    mutate(op->condition);
-    mutate(op->message);
+void FindStmtCost::visit(const AssertStmt *op) {
+    op->condition.accept(this);
+    op->message.accept(this);
 
     int tempVal =
         get_computation_cost(op->condition.get()) + get_computation_cost(op->message.get());
     int dataMovementCost =
         get_data_movement_cost(op->condition.get()) + get_data_movement_cost(op->message.get());
     set_costs(op, 1 + tempVal, dataMovementCost);
-
-    return op;
 }
 
-Stmt FindStmtCost::visit(const ProducerConsumer *op) {
-    mutate(op->body);
+void FindStmtCost::visit(const ProducerConsumer *op) {
+    op->body.accept(this);
 
     int tempVal = get_computation_cost(op->body.get());
     int dataMovementCost = get_data_movement_cost(op->body.get());
     set_costs(op, tempVal, dataMovementCost);
-
-    return op;
 }
 
-Stmt FindStmtCost::visit(const For *op) {
+void FindStmtCost::visit(const For *op) {
 
     current_loop_depth += 1;
 
-    mutate(op->min);
-    mutate(op->extent);
-
-    mutate(op->body);
+    op->min.accept(this);
+    op->extent.accept(this);
+    op->body.accept(this);
 
     current_loop_depth -= 1;
 
@@ -597,11 +550,9 @@ Stmt FindStmtCost::visit(const For *op) {
                        << "\n\n";
     }
     set_costs(op, 1 + bodyCost, dataMovementCost);
-
-    return op;
 }
 
-Stmt FindStmtCost::visit(const Acquire *op) {
+void FindStmtCost::visit(const Acquire *op) {
     /*
         TODO: change this
 
@@ -624,23 +575,23 @@ Stmt FindStmtCost::visit(const Acquire *op) {
     set_costs(op, lock_cost, 0);  // this is to remove the error of unused variable
     // TODO: do something with lock cost
 
-    mutate(op->semaphore);
-    mutate(op->count);
-    mutate(op->body);
+    op->semaphore.accept(this);
+    op->count.accept(this);
+    op->body.accept(this);
+
     int tempVal = get_computation_cost(op->semaphore.get()) +
                   get_computation_cost(op->count.get()) + get_computation_cost(op->body.get());
     int dataMovementCost = get_data_movement_cost(op->semaphore.get()) +
                            get_data_movement_cost(op->count.get()) +
                            get_data_movement_cost(op->body.get());
     set_costs(op, tempVal, dataMovementCost);
-
-    return op;
 }
 
-Stmt FindStmtCost::visit(const Store *op) {
-    mutate(op->predicate);
-    mutate(op->value);
-    mutate(op->index);
+void FindStmtCost::visit(const Store *op) {
+
+    op->predicate.accept(this);
+    op->value.accept(this);
+    op->index.accept(this);
 
     uint8_t bits = op->index.type().bits();
     uint16_t lanes = op->index.type().lanes();
@@ -659,31 +610,27 @@ Stmt FindStmtCost::visit(const Store *op) {
     int tempVal = 1;
     int dataMovementCost = STORE_COST * scalingFactor;
     set_costs(op, tempVal, dataMovementCost);
-
-    return op;
 }
 
-Stmt FindStmtCost::visit(const Provide *op) {
+void FindStmtCost::visit(const Provide *op) {
     int tempVal = get_computation_cost(op->predicate.get());
     int dataMovementCost = get_data_movement_cost(op->predicate.get());
 
     for (const auto &value : op->values) {
-        mutate(value);
+        value.accept(this);
         tempVal += get_computation_cost(value.get());
         dataMovementCost += get_data_movement_cost(value.get());
     }
     for (const auto &arg : op->args) {
-        mutate(arg);
+        arg.accept(this);
         tempVal += get_computation_cost(arg.get());
         dataMovementCost += get_data_movement_cost(arg.get());
     }
 
     set_costs(op, tempVal, dataMovementCost);
-
-    return op;
 }
 
-Stmt FindStmtCost::visit(const Allocate *op) {
+void FindStmtCost::visit(const Allocate *op) {
     /*
         TODO: treat this node differently
 
@@ -703,63 +650,58 @@ Stmt FindStmtCost::visit(const Allocate *op) {
     int dataMovementCost = 0;
 
     for (const auto &extent : op->extents) {
-        mutate(extent);
+        extent.accept(this);
         tempVal += get_computation_cost(extent.get());
         dataMovementCost += get_data_movement_cost(extent.get());
     }
 
-    mutate(op->condition);
+    op->condition.accept(this);
     tempVal += get_computation_cost(op->condition.get());
     dataMovementCost += get_data_movement_cost(op->condition.get());
 
     if (op->new_expr.defined()) {
-        mutate(op->new_expr);
+        op->new_expr.accept(this);
         tempVal += get_computation_cost(op->new_expr.get());
         dataMovementCost += get_data_movement_cost(op->new_expr.get());
     }
 
-    mutate(op->body);
+    op->body.accept(this);
     tempVal += get_computation_cost(op->body.get());
     dataMovementCost += get_data_movement_cost(op->body.get());
 
     set_costs(op, tempVal, dataMovementCost);
-
-    return op;
 }
 
-Stmt FindStmtCost::visit(const Free *op) {
+void FindStmtCost::visit(const Free *op) {
     // TODO: i feel like this should be more than cost 1, but the only
     //       vars it has is the name, which isn't helpful in determining
     //       the cost of the free
     set_costs(op, 1, 0);
-    return op;
 }
 
-Stmt FindStmtCost::visit(const Realize *op) {
+void FindStmtCost::visit(const Realize *op) {
     // TODO: is this the same logic as For, where I add the depth?
     int tempVal = 0;
     int dataMovementCost = 0;
 
     for (const auto &bound : op->bounds) {
-        mutate(bound.min);
-        mutate(bound.extent);
+        bound.min.accept(this);
+        bound.extent.accept(this);
         tempVal += get_computation_cost(bound.min.get()) + get_computation_cost(bound.extent.get());
         dataMovementCost +=
             get_data_movement_cost(bound.min.get()) + get_data_movement_cost(bound.extent.get());
     }
 
-    mutate(op->condition);
-    mutate(op->body);
+    op->condition.accept(this);
+    op->body.accept(this);
     tempVal += get_computation_cost(op->condition.get()) + get_computation_cost(op->body.get());
     dataMovementCost +=
         get_data_movement_cost(op->condition.get()) + get_data_movement_cost(op->body.get());
 
     set_costs(op, tempVal, dataMovementCost);
-
-    return op;
 }
 
-Stmt FindStmtCost::visit(const Prefetch *op) {
+void FindStmtCost::visit(const Prefetch *op) {
     /*
         TODO: like caching? # of memory stores
     */
@@ -767,35 +709,34 @@ Stmt FindStmtCost::visit(const Prefetch *op) {
     int dataMovementCost = 0;
 
     for (const auto &bound : op->bounds) {
-        mutate(bound.min);
-        mutate(bound.extent);
+        bound.min.accept(this);
+        bound.extent.accept(this);
 
         tempVal += get_computation_cost(bound.min.get()) + get_computation_cost(bound.extent.get());
         dataMovementCost +=
             get_data_movement_cost(bound.min.get()) + get_data_movement_cost(bound.extent.get());
     }
 
-    mutate(op->condition);
-    mutate(op->body);
+    op->condition.accept(this);
+    op->body.accept(this);
+
     tempVal += get_computation_cost(op->condition.get()) + get_computation_cost(op->body.get());
     dataMovementCost +=
         get_data_movement_cost(op->condition.get()) + get_data_movement_cost(op->body.get());
 
     set_costs(op, tempVal, dataMovementCost);
-
-    return op;
 }
 
-Stmt FindStmtCost::visit(const Block *op) {
+void FindStmtCost::visit(const Block *op) {
     int tempVal = 0;
     int dataMovementCost = 0;
 
-    mutate(op->first);
+    op->first.accept(this);
     tempVal += get_computation_cost(op->first.get());
     dataMovementCost += get_data_movement_cost(op->first.get());
 
     if (op->rest.defined()) {
-        mutate(op->rest);
+        op->rest.accept(this);
         tempVal += get_computation_cost(op->rest.get());
         dataMovementCost += get_data_movement_cost(op->rest.get());
     }
@@ -803,32 +744,28 @@ Stmt FindStmtCost::visit(const Block *op) {
     // TODO: making this cost 1 is wrong - need to change this
     // set_costs(op, tempVal, dataMovementCost);
     set_costs(op, 1, 0);
-
-    return op;
 }
 
-Stmt FindStmtCost::visit(const Fork *op) {
+void FindStmtCost::visit(const Fork *op) {
     int tempVal = 0;
     int dataMovementCost = 0;
 
-    mutate(op->first);
+    op->first.accept(this);
     tempVal += get_computation_cost(op->first.get());
     dataMovementCost += get_data_movement_cost(op->first.get());
 
     if (op->rest.defined()) {
-        mutate(op->rest);
+        op->rest.accept(this);
         tempVal += get_computation_cost(op->rest.get());
         dataMovementCost += get_data_movement_cost(op->rest.get());
     }
 
     set_costs(op, tempVal, dataMovementCost);
-
-    return op;
 }
 
-Stmt FindStmtCost::visit(const IfThenElse *op) {
-    mutate(op->condition);
-    mutate(op->then_case);
+void FindStmtCost::visit(const IfThenElse *op) {
+    op->condition.accept(this);
+    op->then_case.accept(this);
 
     int tempVal =
         get_computation_cost(op->condition.get()) + get_computation_cost(op->then_case.get());
@@ -836,27 +773,23 @@ Stmt FindStmtCost::visit(const IfThenElse *op) {
         get_data_movement_cost(op->condition.get()) + get_data_movement_cost(op->then_case.get());
 
     if (op->else_case.defined()) {
-        mutate(op->else_case);
+        op->else_case.accept(this);
         tempVal += get_computation_cost(op->else_case.get());
         dataMovementCost += get_data_movement_cost(op->else_case.get());
     }
 
     set_costs(op, tempVal, dataMovementCost);
-
-    return op;
 }
 
-Stmt FindStmtCost::visit(const Evaluate *op) {
-    mutate(op->value);
+void FindStmtCost::visit(const Evaluate *op) {
+    op->value.accept(this);
 
     int tempVal = get_computation_cost(op->value.get());
     int dataMovementCost = get_data_movement_cost(op->value.get());
     set_costs(op, tempVal, dataMovementCost);
-
-    return op;
 }
 
-Stmt FindStmtCost::visit(const Atomic *op) {
+void FindStmtCost::visit(const Atomic *op) {
     /*
         TODO: change this
 
@@ -868,7 +801,7 @@ Stmt FindStmtCost::visit(const Atomic *op) {
         << "reached Atomic! take a look at its use - visit(Atomic) is not fully implemented"
         << "\n\n";
 
-    mutate(op->body);
+    op->body.accept(this);
 
     stringstream name;
     name << op->producer_name;
@@ -879,8 +812,6 @@ Stmt FindStmtCost::visit(const Atomic *op) {
     int tempVal = get_computation_cost(op->body.get());
     int dataMovementCost = get_data_movement_cost(op->body.get());
     set_costs(op, tempVal, dataMovementCost);
-
-    return op;
 }
 
 string FindStmtCost::print_node(const IRNode *node) const {

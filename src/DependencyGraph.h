@@ -4,8 +4,10 @@
 #include <set>
 
 // #include "FindStmtCost.h"
-#include "IRMutator.h"
+#include "IRVisitor.h"
 // #include "IROperator.h"
+
+#include <map>
 
 using namespace std;
 using namespace Halide;
@@ -17,11 +19,10 @@ struct DependencyNode {
     vector<string> nodeDependsOn;
 };
 
-class DependencyGraph : public IRMutator {
+class DependencyGraph : public IRVisitor {
 
 public:
-    DependencyGraph() : current_variable("") {
-    }
+    DependencyGraph() = default;
     ~DependencyGraph() = default;
 
     // returns the generated hierarchy's html
@@ -29,7 +30,7 @@ public:
     string generate_dependency_graph(const Stmt &stmt);
 
 private:
-    using IRMutator::visit;
+    using IRVisitor::visit;
 
     map<const string, vector<string>> dependencies;    // key: variable name, value: vector of
                                                        // dependencies
@@ -72,10 +73,10 @@ private:
     // prints the dependency from `dependencies` list to the console
     void print_dependencies();
 
-    Expr visit(const Let *op) override;
-    Expr visit(const Variable *op) override;
-    Stmt visit(const LetStmt *op) override;
-    Stmt visit(const Store *op) override;
+    void visit(const Let *op) override;
+    void visit(const Variable *op) override;
+    void visit(const LetStmt *op) override;
+    void visit(const Store *op) override;
 };
 
 #endif
