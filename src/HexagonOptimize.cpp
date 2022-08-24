@@ -235,7 +235,7 @@ bool process_match_flags(vector<Expr> &matches, int flags) {
     // corresponds to the bit (with operand 0 corresponding to the least
     // significant bit), so we can check for them all in a loop.
     for (const auto &match : matches) {
-        if (match.defined()) {
+        if (!match.defined()) {
             return false;
         }
     }
