@@ -557,7 +557,7 @@ protected:
     llvm::Type *get_vector_type(llvm::Type *, int n,
                                 VectorTypeConstraint type_constraint = VectorTypeConstraint::None) const;
     // @}
-    
+
     llvm::Constant *get_splat(int lanes, llvm::Constant *value,
                               VectorTypeConstraint type_constraint = VectorTypeConstraint::None) const;
 
