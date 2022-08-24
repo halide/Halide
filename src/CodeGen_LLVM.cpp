@@ -2367,7 +2367,6 @@ llvm::Value *CodeGen_LLVM::codegen_dense_vector_load(const Type &type, const std
         int slice_lanes = std::min(native_lanes, load_lanes - i);
         Expr slice_base = simplify(base + i);
         Expr slice_stride = make_one(slice_base.type());
-
         Expr slice_index = slice_lanes == 1 ? slice_base : Ramp::make(slice_base, slice_stride, slice_lanes);
         llvm::Type *slice_type = get_vector_type(llvm_type_of(type.element_of()), slice_lanes);
         Value *elt_ptr = codegen_buffer_pointer(name, type.element_of(), slice_base);
