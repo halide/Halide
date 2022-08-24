@@ -7,6 +7,7 @@
 #include "Debug.h"
 #include "Deinterleave.h"
 #include "ExprUsesVar.h"
+#include "FindIntrinsics.h"
 #include "Func.h"
 #include "IR.h"
 #include "IREquality.h"
@@ -1213,16 +1214,8 @@ private:
         } else if (op->is_intrinsic(Call::saturating_cast)) {
             internal_assert(op->args.size() == 1);
 
-            Expr a = op->args[0];
+            Expr a = lower_saturating_cast(op->type, op->args[0]);
             a.accept(this);
-            Interval a_interval = interval;
-            bounds_of_type(t);
-            if (a_interval.has_lower_bound()) {
-                interval.min = saturating_cast(t, a_interval.min);
-            }
-            if (a_interval.has_upper_bound()) {
-                interval.max = saturating_cast(t, a_interval.max);
-            }
             return;
         } else if (op->is_intrinsic(Call::unsafe_promise_clamped) ||
                    op->is_intrinsic(Call::promise_clamped)) {
