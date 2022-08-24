@@ -16,16 +16,6 @@ using std::string;
 
 using namespace llvm;
 
-int get_vector_num_elements(llvm::Type *t) {
-    if (t->isVectorTy()) {
-        auto *vt = dyn_cast<llvm::FixedVectorType>(t);
-        internal_assert(vt) << "Called get_vector_num_elements on a scalable vector type\n";
-        return vt->getNumElements();
-    } else {
-        return 1;
-    }
-}
-
 llvm::Type *get_vector_element_type(llvm::Type *t) {
     if (t->isVectorTy()) {
         return dyn_cast<llvm::VectorType>(t)->getElementType();
