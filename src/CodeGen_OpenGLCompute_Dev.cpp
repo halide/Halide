@@ -468,9 +468,9 @@ void CodeGen_OpenGLCompute_C::visit(const Call *op) {
     } else if (op->is_intrinsic(Call::mod_round_to_zero)) {
         print_assignment(op->type, print_expr(op->args[0]) + " % " + print_expr(op->args[1]));
     } else if (op->is_intrinsic(Call::saturating_cast)) {
-         Expr e = lower_intrinsic(op);
-         print_expr(e);
-         return;
+        Expr e = lower_intrinsic(op);
+        print_expr(e);
+        return;
     } else {
         auto it = builtin.find(op->name);
         if (it == builtin.end()) {
