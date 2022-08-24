@@ -2042,7 +2042,7 @@ std::ostream &operator<<(std::ostream &s, const VectorInstructionOp<Args...> &op
 }
 
 template<typename... Args>
-HALIDE_ALWAYS_INLINE auto v_instr(const VectorInstruction::InstructionOp op, Args&&... args) noexcept -> VectorInstructionOp<decltype(pattern_arg(args))...> {
+HALIDE_ALWAYS_INLINE auto v_instr(const VectorInstruction::InstructionOp op, Args &&...args) noexcept -> VectorInstructionOp<decltype(pattern_arg(args))...> {
     static_assert(and_reduce((is_lvalue_if_expr<Args>())...), "All parameters to a VectorInstructionOp must be lvalues if Exprs");
     return {op, pattern_arg(args)...};
 }
