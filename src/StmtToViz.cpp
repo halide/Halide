@@ -1591,7 +1591,7 @@ public:
                << "} );\n";
         stream << content_rule_script_stream;
         stream << generatetooltipJS(tooltipCount);
-        // stream << getStmtHierarchy.generate_collapse_expand_js();
+        stream << getStmtHierarchy.generate_collapse_expand_js();
         stream << producerConsumerHierarchy.generate_prodCons_js();
         stream << "</script>\n";
         stream << "</body>";

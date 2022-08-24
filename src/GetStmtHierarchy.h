@@ -27,6 +27,9 @@ public:
     string get_hierarchy_html(const Expr &startNode);
     string get_hierarchy_html(const Stmt &startNode);
 
+    // generates the JS that is needed to expand/collapse the tree
+    string generate_collapse_expand_js();
+
 private:
     int colorType;              // 0: CC (computation cost), 1: DMC (data movement cost)
     std::stringstream html;     // html string
@@ -58,9 +61,6 @@ private:
     // starts and ends a tree within the html file
     void start_tree();
     void end_tree();
-
-    // generates the JS that is needed to expand/collapse the tree
-    string generate_collapse_expand_js(int totalNodes);
 
     // opens and closes nodes, depending on number of children
     void node_without_children(string name, int colorCost);

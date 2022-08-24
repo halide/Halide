@@ -122,8 +122,8 @@ int GetStmtHierarchy::get_color_range_list(vector<Halide::Expr> exprs) const {
 
 void GetStmtHierarchy::start_html() {
     html.str(string());
-    currNodeID = 0;
-    numNodes = 0;
+    numNodes++;
+    currNodeID = numNodes;
     startCCNodeID = -1;
     startDMCNodeID = -1;
 
@@ -631,11 +631,10 @@ Stmt GetStmtHierarchy::visit(const Atomic *op) {
     return op;
 }
 
-string GetStmtHierarchy::generate_collapse_expand_js(int totalNodes) {
+string GetStmtHierarchy::generate_collapse_expand_js() {
 
     stringstream js;
-    // TODO: add new lines at the end of each line
-    js << "<script>\n";
+
     js << "// collapse/expand js (stmt hierarchy)\n";
     js << "var nodeExpanded = new Map();\n";
     js << "function collapseAllNodes(numNodes) {\n";
@@ -731,9 +730,9 @@ string GetStmtHierarchy::generate_collapse_expand_js(int totalNodes) {
     js << "    liDotDotDot.innerHTML = span;\n";
     js << "    return liDotDotDot;\n";
     js << "}\n";
-    js << "collapseAllNodes(" << totalNodes << ");  \n";
+    js << "collapseAllNodes(" << numNodes << ");  \n";
     js << "expandNodesUpToDepth(4);\n";
-    js << "</script>\n";
+
     return js.str();
 }
 
