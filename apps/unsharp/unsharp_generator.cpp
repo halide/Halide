@@ -61,7 +61,7 @@ public:
         }
 
         // Schedule
-        if (!auto_schedule) {
+        if (!using_autoscheduler()) {
             // Some Intel Mac Minis have GPUs that require tile sizes smaller than 32x32
             // for this pipeline because they have too few registers. Drop to 16x16 to
             // avoid unexpected crashes in CI.

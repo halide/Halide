@@ -138,6 +138,7 @@ bool function_takes_user_context(const std::string &name) {
         "halide_hexagon_initialize_kernels",
         "halide_hexagon_run",
         "halide_hexagon_device_release",
+        "halide_hexagon_get_module_state",
         "halide_hexagon_power_hvx_on",
         "halide_hexagon_power_hvx_on_mode",
         "halide_hexagon_power_hvx_on_perf",
@@ -711,6 +712,16 @@ void set_function_attributes_from_halide_target_options(llvm::Function &fn) {
     fn.addFnAttr("tune-cpu", mcpu_tune);
     fn.addFnAttr("target-features", mattrs);
 
+    // Halide-generated IR is not exception-safe.
+    // No exception should unwind out of Halide functions.
+    // No exception should be thrown within Halide functions.
+    // All functions called by the Halide function must not unwind.
+    fn.setDoesNotThrow();
+
+    // Side-effect-free loops are undefined.
+    // But asserts and external calls *might* abort.
+    fn.setMustProgress();
+
     // Turn off approximate reciprocals for division. It's too
     // inaccurate even for us.
     fn.addFnAttr("reciprocal-estimates", "none");
@@ -793,6 +804,35 @@ void embed_bitcode(llvm::Module *M, const string &halide_command) {
             llvm::ConstantArray::get(ATy, used_array), "llvm.compiler.used");
         new_used->setSection("llvm.metadata");
     }
+}
+
+Expr lower_concat_bits(const Call *op) {
+    internal_assert(op->is_intrinsic(Call::concat_bits));
+    internal_assert(!op->args.empty());
+
+    Expr result = make_zero(op->type);
+    int shift = 0;
+    for (const Expr &e : op->args) {
+        result = result | (cast(result.type(), e) << shift);
+        shift += e.type().bits();
+    }
+    return result;
+}
+
+Expr lower_extract_bits(const Call *op) {
+    Expr e = op->args[0];
+    // Do a shift-and-cast as a uint, which will zero-fill any out-of-range
+    // bits for us.
+    if (!e.type().is_uint()) {
+        e = reinterpret(e.type().with_code(halide_type_uint), e);
+    }
+    e = e >> op->args[1];
+    e = cast(op->type.with_code(halide_type_uint), e);
+    if (op->type != e.type()) {
+        e = reinterpret(op->type, e);
+    }
+    e = simplify(e);
+    return e;
 }
 
 }  // namespace Internal

@@ -332,6 +332,7 @@ protected:
     void visit(const FloatImm *) override;
     void visit(const StringImm *) override;
     void visit(const Cast *) override;
+    void visit(const Reinterpret *) override;
     void visit(const Variable *) override;
     void visit(const Add *) override;
     void visit(const Sub *) override;
@@ -478,7 +479,7 @@ protected:
     /** Create an LLVM shuffle vectors instruction. */
     virtual llvm::Value *shuffle_vectors(llvm::Value *a, llvm::Value *b,
                                          const std::vector<int> &indices);
-    /** Shorthand for shuffling a vector with an undef vector. */
+    /** Shorthand for shuffling a single vector. */
     llvm::Value *shuffle_vectors(llvm::Value *v, const std::vector<int> &indices);
 
     /** Go looking for a vector version of a runtime function. Will

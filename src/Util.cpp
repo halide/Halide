@@ -661,6 +661,9 @@ size_t get_compiler_stack_size() {
 
 namespace Internal {
 
+#ifdef HALIDE_INTERNAL_USING_ASAN
+// nothing
+#else
 namespace {
 // We can't reliably pass arguments through makecontext, because
 // the calling convention involves an invalid function pointer
@@ -668,6 +671,7 @@ namespace {
 // platforms, so we use a thread local to pass arguments.
 thread_local void *run_with_large_stack_arg = nullptr;
 }  // namespace
+#endif
 
 void run_with_large_stack(const std::function<void()> &action) {
     if (stack_size.size == 0) {
@@ -677,7 +681,6 @@ void run_with_large_stack(const std::function<void()> &action) {
     }
 
 #if _WIN32
-
     // Only exists for its address, which is used to compute remaining stack space.
     ULONG_PTR approx_stack_pos;
 
@@ -718,6 +721,14 @@ void run_with_large_stack(const std::function<void()> &action) {
     }
 #else
     // On posixy systems we have makecontext / swapcontext
+
+#ifdef HALIDE_INTERNAL_USING_ASAN
+    // ... unless we are compiling under ASAN, in which case we
+    // will get a zillion warnings about ASAN not supporting makecontext/swapcontext
+    // and the possibility of false positives. Just skip the extra stack space, I guess?
+    action();
+    return;
+#else
 
 #ifdef HALIDE_WITH_EXCEPTIONS
     struct Args {
@@ -782,6 +793,8 @@ void run_with_large_stack(const std::function<void()> &action) {
         std::rethrow_exception(args.exception);
     }
 #endif
+
+#endif  // not ADDRESS_SANITIZER
 
 #endif
 }

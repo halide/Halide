@@ -1,5 +1,6 @@
 #include "Simplify_Internal.h"
 
+#include "FindIntrinsics.h"
 #include "Simplify.h"
 
 #ifdef _MSC_VER
@@ -282,25 +283,6 @@ Expr Simplify::visit(const Call *op, ExprInfo *bounds) {
         } else {
             return a ^ b;
         }
-    } else if (op->is_intrinsic(Call::reinterpret)) {
-        Expr a = mutate(op->args[0], nullptr);
-
-        int64_t ia;
-        uint64_t ua;
-        bool vector = op->type.is_vector() || a.type().is_vector();
-        if (op->type == a.type()) {
-            return a;
-        } else if (const_int(a, &ia) && op->type.is_uint() && !vector) {
-            // int -> uint
-            return make_const(op->type, (uint64_t)ia);
-        } else if (const_uint(a, &ua) && op->type.is_int() && !vector) {
-            // uint -> int
-            return make_const(op->type, (int64_t)ua);
-        } else if (a.same_as(op->args[0])) {
-            return op;
-        } else {
-            return reinterpret(op->type, a);
-        }
     } else if (op->is_intrinsic(Call::abs)) {
         // Constant evaluate abs(x).
         ExprInfo a_bounds;
@@ -369,6 +351,21 @@ Expr Simplify::visit(const Call *op, ExprInfo *bounds) {
             return op;
         } else {
             return absd(a, b);
+        }
+    } else if (op->is_intrinsic(Call::saturating_cast)) {
+        internal_assert(op->args.size() == 1);
+        ExprInfo a_bounds;
+        Expr a = mutate(op->args[0], &a_bounds);
+
+        // TODO(rootjalex): We could be intelligent about using a_bounds to remove saturating_casts;
+
+        if (is_const(a)) {
+            a = lower_saturating_cast(op->type, a);
+            return mutate(a, bounds);
+        } else if (!a.same_as(op->args[0])) {
+            return saturating_cast(op->type, a);
+        } else {
+            return op;
         }
     } else if (op->is_intrinsic(Call::stringify)) {
         // Eagerly concat constant arguments to a stringify.
@@ -779,6 +776,8 @@ Expr Simplify::visit(const Call *op, ExprInfo *bounds) {
         debug(2) << "Simplifier: unhandled PureExtern: " << op->name;
     } else if (op->is_intrinsic(Call::signed_integer_overflow)) {
         clear_bounds_info(bounds);
+    } else if (op->is_intrinsic(Call::concat_bits) && op->args.size() == 1) {
+        return mutate(op->args[0], bounds);
     }
 
     // No else: we want to fall thru from the PureExtern clause.

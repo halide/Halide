@@ -20,26 +20,31 @@
 
   Environment variables used (directly or indirectly):
 
+  HL_DEBUG_AUTOSCHEDULE
+  If set, is used for the debug log level for auto-schedule generation (overriding the
+  value of HL_DEBUG_CODEGEN, if any).
+
+  HL_PERMIT_FAILED_UNROLL
+  Set to 1 to tell Halide not to freak out if we try to unroll a loop that doesn't have a constant extent. Should generally not be necessary, but sometimes the autoscheduler's model for what will and will not turn into a constant during lowering is inaccurate, because Halide isn't perfect at constant-folding.
+
+#ifdef HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
+
+  Most of the settings in this Autoscheduler are controlled by the values specified via
+  an `autoscheduler.fieldname` GeneratorParam, as listed in the Adams2019Params struct;
+  this is the preferred way to set these.
+
+  For now, however, you can (instead) control these settings via env vars;
+  doing so requires that you compile all of Halide with HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
+  defined. (Note that this ability is deprecated, and likely to be removed in Halide 16.)
+
+  That said, here are the (legacy) env vars you can still use when HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
+  is defined:
+
   HL_BEAM_SIZE
   Beam size to use in the beam search. Defaults to 32. Use 1 to get a greedy search instead.
 
   HL_CYOS
   "Choose-your-own-schedule". If set to 1, lets you navigate the search tree by hand in the terminal. Whee! This is for debugging the autoscheduler.
-
-  HL_FEATURE_FILE -> output
-  *** DEPRECATED *** use the 'featurization' output from Generator instead
-  Write out a training featurization for the selected schedule into this file.
-  Needs to be converted to a sample file with the runtime using featurization_to_sample before it can be used to train.
-
-  HL_MACHINE_PARAMS
-  An architecture description string. Used by Halide master to configure the cost model. We only use the first term. Set it to the number of cores to target.
-
-  HL_PERMIT_FAILED_UNROLL
-  Set to 1 to tell Halide not to freak out if we try to unroll a loop that doesn't have a constant extent. Should generally not be necessary, but sometimes the autoscheduler's model for what will and will not turn into a constant during lowering is inaccurate, because Halide isn't perfect at constant-folding.
-
-  HL_SCHEDULE_FILE
-    *** DEPRECATED *** use the 'schedule' output from Generator instead
-    Write out a human-and-machine readable block of scheduling source code for the selected schedule into this file.
 
   HL_RANDOM_DROPOUT
   percent chance of accepting each state in the beam. Normalized by the number of decisions made, so 5 would be there's a 5 percent chance of never rejecting any states.
@@ -54,10 +59,6 @@
   HL_NO_SUBTILING
   If set to 1, limits the search space to that of Mullapudi et al.
 
-  HL_DEBUG_AUTOSCHEDULE
-  If set, is used for the debug log level for auto-schedule generation (overriding the
-  value of HL_DEBUG_CODEGEN, if any).
-
   HL_AUTOSCHEDULE_MEMORY_LIMIT
   If set, only consider schedules that allocate at most this much memory (measured in bytes).
 
@@ -69,8 +70,20 @@
   If set, then tiling sizes are not cached across passes.
   (see Cache.h for more information)
 
-  TODO: expose these settings by adding some means to pass args to
-  generator plugins instead of environment vars.
+#endif
+
+#ifdef HALIDE_AUTOSCHEDULER_ALLOW_CYOS
+
+  HL_CYOS
+  "Choose-your-own-schedule".
+
+  If set to 1, lets you navigate the search tree by hand in the terminal.
+  Whee! This is for debugging the autoscheduler. Since it is generally only
+  for use by developers/maintainers of this autoscheduler, it defaults
+  to being omitted entirely unless you build Halide with HALIDE_AUTOSCHEDULER_ALLOW_CYOS defined.
+  Even then, you must *also* set the env var to 1 to make use of it.
+
+#endif
 */
 #include "HalidePlugin.h"
 
@@ -96,6 +109,7 @@
 #include "Halide.h"
 #include "LoopNest.h"
 #include "NetworkSize.h"
+#include "ParamParser.h"
 #include "PerfectHashMap.h"
 #include "State.h"
 #include "Timer.h"
@@ -117,66 +131,73 @@ struct ProgressBar {
         if (!draw_progress_bar) {
             return;
         }
+        auto &os = aslog(ProgressBarLogLevel).get_ostream();
         counter++;
         const int bits = 11;
         if (counter & ((1 << bits) - 1)) {
             return;
         }
         const int pos = (int)(progress * 78);
-        aslog(0) << "[";
+        os << "[";
         for (int j = 0; j < 78; j++) {
             if (j < pos) {
-                aslog(0) << ".";
+                os << ".";
             } else if (j - 1 < pos) {
-                aslog(0) << "/-\\|"[(counter >> bits) % 4];
+                os << "/-\\|"[(counter >> bits) % 4];
             } else {
-                aslog(0) << " ";
+                os << " ";
             }
         }
-        aslog(0) << "]";
+        os << "]";
         for (int j = 0; j < 80; j++) {
-            aslog(0) << "\b";
+            os << "\b";
         }
     }
 
     void clear() {
         if (counter) {
+            auto &os = aslog(ProgressBarLogLevel).get_ostream();
             for (int j = 0; j < 80; j++) {
-                aslog(0) << " ";
+                os << " ";
             }
             for (int j = 0; j < 80; j++) {
-                aslog(0) << "\b";
+                os << "\b";
             }
         }
     }
 
 private:
     uint32_t counter = 0;
-    const bool draw_progress_bar = isatty(2);
+    static constexpr int ProgressBarLogLevel = 1;
+    const bool draw_progress_bar = isatty(2) && aslog::aslog_level() >= ProgressBarLogLevel;
 };
 
-// Get the HL_RANDOM_DROPOUT environment variable. Purpose of this is described above.
-uint32_t get_dropout_threshold() {
-    string random_dropout_str = get_env_variable("HL_RANDOM_DROPOUT");
-    if (!random_dropout_str.empty()) {
-        return atoi(random_dropout_str.c_str());
-    } else {
-        return 100;
+#ifdef HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
+template<typename T>
+T get_scalar_env_var(const char *nm, T def = T()) {
+    auto str = get_env_variable(nm);
+    if (str.empty()) {
+        return def;
     }
+    std::istringstream iss(str);
+    T t;
+    iss >> t;
+    user_assert(!iss.fail() && iss.get() == EOF) << "Unable to parse: " << str;
+    return t;
 }
+#endif
 
 // Decide whether or not to drop a beam search state. Used for
 // randomly exploring the search tree for autotuning and to generate
 // training data.
-bool random_dropout(std::mt19937 &rng, size_t num_decisions) {
-    static double random_dropout_threshold = get_dropout_threshold();
-    if (random_dropout_threshold >= 100) {
+bool random_dropout(const Adams2019Params &params, std::mt19937 &rng, size_t num_decisions) {
+    if (params.random_dropout >= 100) {
         return false;
     }
 
     // The random dropout threshold is the chance that we operate
     // entirely greedily and never discard anything.
-    double t = random_dropout_threshold;
+    double t = params.random_dropout;
     t /= 100;
     t = std::pow(t, 1.0f / num_decisions);
     t *= 100;
@@ -253,7 +274,7 @@ public:
 
 // Configure a cost model to process a specific pipeline.
 void configure_pipeline_features(const FunctionDAG &dag,
-                                 const MachineParams &params,
+                                 const Adams2019Params &params,
                                  CostModel *cost_model) {
     cost_model->reset();
     cost_model->set_pipeline_features(dag, params);
@@ -262,11 +283,9 @@ void configure_pipeline_features(const FunctionDAG &dag,
 // A single pass of coarse-to-fine beam search.
 IntrusivePtr<State> optimal_schedule_pass(FunctionDAG &dag,
                                           const vector<Function> &outputs,
-                                          const MachineParams &params,
+                                          const Adams2019Params &params,
                                           CostModel *cost_model,
                                           std::mt19937 &rng,
-                                          int beam_size,
-                                          int64_t memory_limit,
                                           int pass_idx,
                                           int num_passes,
                                           ProgressBar &tick,
@@ -290,15 +309,11 @@ IntrusivePtr<State> optimal_schedule_pass(FunctionDAG &dag,
 
     std::function<void(IntrusivePtr<State> &&)> enqueue_new_children =
         [&](IntrusivePtr<State> &&s) {
-            // aslog(0) << "\n** Generated child: ";
-            // s->dump();
-            // s->calculate_cost(dag, params, nullptr, true);
-
             // Each child should have one more decision made than its parent state.
             internal_assert(s->num_decisions_made == s->parent->num_decisions_made + 1);
 
-            int progress = s->num_decisions_made * beam_size + expanded;
-            size_t max_progress = dag.nodes.size() * beam_size * 2;
+            int progress = s->num_decisions_made * params.beam_size + expanded;
+            size_t max_progress = dag.nodes.size() * params.beam_size * 2;
 
             // Update the progress bar
             tick.set(double(progress) / max_progress);
@@ -308,7 +323,9 @@ IntrusivePtr<State> optimal_schedule_pass(FunctionDAG &dag,
             q.emplace(std::move(s));
         };
 
+#ifdef HALIDE_AUTOSCHEDULER_ALLOW_CYOS
     string cyos_str = get_env_variable("HL_CYOS");
+#endif
 
     // This loop is beam search over the sequence of decisions to make.
     for (int i = 0;; i++) {
@@ -316,37 +333,37 @@ IntrusivePtr<State> optimal_schedule_pass(FunctionDAG &dag,
         q.swap(pending);
 
         if (pending.empty()) {
-            if ((false) && beam_size < 1000) {  // Intentional dead code. Extra parens to pacify clang-tidy.
+            if ((false) && params.beam_size < 1000) {  // Intentional dead code. Extra parens to pacify clang-tidy.
                 // Total mortality. Double the beam size and
                 // restart. Disabled for now because total mortality
                 // may indicate a bug.
+                Adams2019Params params2 = params;
+                params2.beam_size *= 2;
                 return optimal_schedule_pass(dag,
                                              outputs,
-                                             params,
+                                             params2,
                                              cost_model,
                                              rng,
-                                             beam_size * 2,
-                                             memory_limit,
                                              pass_idx,
                                              num_passes,
                                              tick,
                                              permitted_hashes,
                                              cache);
             } else {
-                internal_error << "Ran out of legal states with beam size " << beam_size << "\n";
+                internal_error << "Ran out of legal states with beam size " << params.beam_size << "\n";
             }
         }
 
-        if ((int)pending.size() > beam_size * 10000) {
-            aslog(0) << "Warning: Huge number of states generated (" << pending.size() << ").\n";
+        if ((int)pending.size() > params.beam_size * 10000) {
+            aslog(1) << "*** Warning: Huge number of states generated (" << pending.size() << ").\n";
         }
 
         expanded = 0;
-        while (expanded < beam_size && !pending.empty()) {
+        while (expanded < params.beam_size && !pending.empty()) {
 
             IntrusivePtr<State> state{pending.pop()};
 
-            if (beam_size > 1 && num_passes > 1) {
+            if (params.beam_size > 1 && num_passes > 1) {
                 // We are doing coarse-to-fine beam search using the
                 // hashing strategy mentioned in the paper.
                 //
@@ -384,7 +401,7 @@ IntrusivePtr<State> optimal_schedule_pass(FunctionDAG &dag,
             }
 
             // Random dropout
-            if (pending.size() > 1 && random_dropout(rng, dag.nodes.size() * 2)) {
+            if (pending.size() > 1 && random_dropout(params, rng, dag.nodes.size() * 2)) {
                 continue;
             }
 
@@ -401,7 +418,7 @@ IntrusivePtr<State> optimal_schedule_pass(FunctionDAG &dag,
                 // there are more coarse-to-fine passes yet to come.
                 if (pass_idx + 1 < num_passes) {
                     int blessed = 0;
-                    while (state->cost <= 1.2 * best->cost && blessed < beam_size) {
+                    while (state->cost <= 1.2 * best->cost && blessed < params.beam_size) {
                         const State *s = state.get();
                         while (s) {
                             uint64_t h1 = s->structural_hash(pass_idx);
@@ -419,7 +436,7 @@ IntrusivePtr<State> optimal_schedule_pass(FunctionDAG &dag,
                 return best;
             }
 
-            state->generate_children(dag, params, cost_model, memory_limit, enqueue_new_children, cache);
+            state->generate_children(dag, params, cost_model, enqueue_new_children, cache);
             expanded++;
         }
 
@@ -432,43 +449,44 @@ IntrusivePtr<State> optimal_schedule_pass(FunctionDAG &dag,
             q.resort();
         }
 
+#ifdef HALIDE_AUTOSCHEDULER_ALLOW_CYOS
         if (cyos_str == "1") {
             // The user has set HL_CYOS, and wants to navigate the
             // search space manually.  Discard everything in the queue
             // except for the user-chosen option.
-            aslog(0) << "\n--------------------\n";
-            aslog(0) << "Select a schedule:\n";
+            std::cout << "\n--------------------\n";
+            std::cout << "Select a schedule:\n";
             for (int choice_label = (int)q.size() - 1; choice_label >= 0; choice_label--) {
                 auto state = q[choice_label];
-                aslog(0) << "\n[" << choice_label << "]:\n";
-                state->dump();
-                state->calculate_cost(dag, params, cost_model, cache->options, memory_limit, true);
+                std::cout << "\n[" << choice_label << "]:\n";
+                state->dump(std::cout);
+                constexpr int verbosity_level = 0;  // always
+                state->calculate_cost(dag, params, cost_model, cache->options, verbosity_level);
             }
             cost_model->evaluate_costs();
 
             // Select next partial schedule to expand.
             int selection = -1;
             while (selection < 0 || selection >= (int)q.size()) {
-                aslog(0) << "\nEnter selection: ";
+                std::cout << "\nEnter selection: ";
                 std::cin >> selection;
             }
 
             auto selected = q[selection];
-            selected->dump();
+            selected->dump(std::cout);
             q.clear();
             q.emplace(std::move(selected));
         }
+#endif
     }
 }
 
 // Performance coarse-to-fine beam search and return the best state found.
 IntrusivePtr<State> optimal_schedule(FunctionDAG &dag,
                                      const vector<Function> &outputs,
-                                     const MachineParams &params,
+                                     const Adams2019Params &params,
                                      CostModel *cost_model,
                                      std::mt19937 &rng,
-                                     int beam_size,
-                                     int64_t memory_limit,
                                      const CachingOptions &options) {
 
     IntrusivePtr<State> best;
@@ -479,14 +497,16 @@ IntrusivePtr<State> optimal_schedule(FunctionDAG &dag,
     Cache cache(options, dag.nodes.size());
 
     // If the beam size is one, it's pointless doing multiple passes.
-    int num_passes = (beam_size == 1) ? 1 : 5;
+    int num_passes = (params.beam_size == 1) ? 1 : 5;
 
+#ifdef HALIDE_AUTOSCHEDULER_ALLOW_CYOS
     string cyos_str = get_env_variable("HL_CYOS");
     if (cyos_str == "1") {
         // If the user is manually navigating the search space, don't
         // ask them to do more than one pass.
         num_passes = 1;
     }
+#endif
 
     string num_passes_str = get_env_variable("HL_NUM_PASSES");
     if (!num_passes_str.empty()) {
@@ -500,19 +520,23 @@ IntrusivePtr<State> optimal_schedule(FunctionDAG &dag,
         Timer timer;
 
         auto pass = optimal_schedule_pass(dag, outputs, params, cost_model,
-                                          rng, beam_size, memory_limit,
-                                          i, num_passes, tick, permitted_hashes, &cache);
+                                          rng, i, num_passes, tick, permitted_hashes, &cache);
 
         std::chrono::duration<double> total_time = timer.elapsed();
         auto milli = std::chrono::duration_cast<std::chrono::milliseconds>(total_time).count();
 
         tick.clear();
 
-        if (aslog::aslog_level() == 0) {
-            aslog(0) << "Pass " << i << " of " << num_passes << ", cost: " << pass->cost << ", time (ms): " << milli << "\n";
-        } else {
-            aslog(0) << "Pass " << i << " result: ";
-            pass->dump();
+        switch (aslog::aslog_level()) {
+        case 0:
+            // Silence
+            break;
+        case 1:
+            aslog(1) << "Pass " << i << " of " << num_passes << ", cost: " << pass->cost << ", time (ms): " << milli << "\n";
+            break;
+        default:
+            aslog(2) << "Pass " << i << " result: ";
+            pass->dump(aslog(2).get_ostream());
         }
 
         if (i == 0 || pass->cost < best->cost) {
@@ -522,11 +546,11 @@ IntrusivePtr<State> optimal_schedule(FunctionDAG &dag,
         }
     }
 
-    aslog(0) << "Best cost: " << best->cost << "\n";
+    aslog(1) << "Best cost: " << best->cost << "\n";
 
     if (options.cache_blocks) {
-        aslog(0) << "Cache (block) hits: " << cache.cache_hits << "\n";
-        aslog(0) << "Cache (block) misses: " << cache.cache_misses << "\n";
+        aslog(1) << "Cache (block) hits: " << cache.cache_hits << "\n";
+        aslog(1) << "Cache (block) misses: " << cache.cache_misses << "\n";
     }
 
     return best;
@@ -538,46 +562,36 @@ int State::cost_calculations = 0;
 // The main entrypoint to generate a schedule for a pipeline.
 void generate_schedule(const std::vector<Function> &outputs,
                        const Target &target,
-                       const MachineParams &params,
+                       const Adams2019Params &params,
                        AutoSchedulerResults *auto_scheduler_results) {
-    aslog(0) << "generate_schedule for target=" << target.to_string() << "\n";
+    aslog(1) << "generate_schedule for target=" << target.to_string() << "\n";
+    aslog(1) << "Adams2019.parallelism:" << params.parallelism << "\n";
+    aslog(1) << "Adams2019.beam_size:" << params.beam_size << "\n";
+    aslog(1) << "Adams2019.random_dropout:" << params.random_dropout << "\n";
+    aslog(1) << "Adams2019.random_dropout_seed:" << params.random_dropout_seed << "\n";
+    aslog(1) << "Adams2019.weights_path:" << params.weights_path << "\n";
+    aslog(1) << "Adams2019.disable_subtiling:" << params.disable_subtiling << "\n";
+    aslog(1) << "Adams2019.disable_memoized_features:" << params.disable_memoized_features << "\n";
+    aslog(1) << "Adams2019.disable_memoized_blocks:" << params.disable_memoized_blocks << "\n";
+    aslog(1) << "Adams2019.memory_limit:" << params.memory_limit << "\n";
 
     // Start a timer
     HALIDE_TIC;
 
     State::cost_calculations = 0;
 
-    // Get the seed for random dropout
-    string seed_str = get_env_variable("HL_SEED");
-    // Or use the time, if not set.
-    int seed = (int)time(nullptr);
-    if (!seed_str.empty()) {
-        seed = atoi(seed_str.c_str());
-    }
-    aslog(1) << "Dropout seed = " << seed << "\n";
-    std::mt19937 rng((uint32_t)seed);
+    std::mt19937 rng((uint32_t)params.random_dropout_seed);
 
-    // Get the beam size
-    string beam_size_str = get_env_variable("HL_BEAM_SIZE");
-    // Defaults to 32
-    size_t beam_size = 32;
-    if (!beam_size_str.empty()) {
-        beam_size = atoi(beam_size_str.c_str());
-    }
-
-    string weights_in_path = get_env_variable("HL_WEIGHTS_DIR");
+    string weights_in_path = params.weights_path;
     string weights_out_path;  // deliberately empty
 
     string randomize_weights_str = get_env_variable("HL_RANDOMIZE_WEIGHTS");
     bool randomize_weights = randomize_weights_str == "1";
 
-    string memory_limit_str = get_env_variable("HL_AUTOSCHEDULE_MEMORY_LIMIT");
-    int64_t memory_limit = memory_limit_str.empty() ? (uint64_t)(-1) : std::atoll(memory_limit_str.c_str());
-
     // Analyse the Halide algorithm and construct our abstract representation of it
-    FunctionDAG dag(outputs, params, target);
-    if (aslog::aslog_level() > 0) {
-        dag.dump();
+    FunctionDAG dag(outputs, target);
+    if (aslog::aslog_level() >= 2) {
+        dag.dump(aslog(2).get_ostream());
     }
 
     // Construct a cost model to use to evaluate states. Currently we
@@ -589,10 +603,10 @@ void generate_schedule(const std::vector<Function> &outputs,
     IntrusivePtr<State> optimal;
 
     // Options generated from environment variables, decide whether or not to cache features and/or tilings.
-    CachingOptions cache_options = CachingOptions::MakeOptionsFromEnviron();
+    CachingOptions cache_options = CachingOptions::MakeOptionsFromParams(params);
 
     // Run beam search
-    optimal = optimal_schedule(dag, outputs, params, cost_model.get(), rng, beam_size, memory_limit, cache_options);
+    optimal = optimal_schedule(dag, outputs, params, cost_model.get(), rng, cache_options);
 
     HALIDE_TOC;
 
@@ -602,41 +616,20 @@ void generate_schedule(const std::vector<Function> &outputs,
     aslog(1) << "** Optimal schedule:\n";
 
     // Just to get the debugging prints to fire
-    optimal->calculate_cost(dag, params, cost_model.get(), cache_options, memory_limit, aslog::aslog_level() > 0);
+    optimal->calculate_cost(dag, params, cost_model.get(), cache_options, /*verbosity_level*/ 1);
 
     // Apply the schedules to the pipeline
     optimal->apply_schedule(dag, params);
 
     // Print out the schedule
-    if (aslog::aslog_level() > 0) {
-        optimal->dump();
-    }
-
-    string schedule_file = get_env_variable("HL_SCHEDULE_FILE");
-    if (!schedule_file.empty()) {
-        user_warning << "HL_SCHEDULE_FILE is deprecated; use the schedule output from Generator instead\n";
-        aslog(1) << "Writing schedule to " << schedule_file << "...\n";
-        std::ofstream f(schedule_file);
-        f << "// --- BEGIN machine-generated schedule\n"
-          << optimal->schedule_source
-          << "// --- END machine-generated schedule\n";
-        f.close();
-        internal_assert(!f.fail()) << "Failed to write " << schedule_file;
-    }
-
-    // Save the featurization, so that we can use this schedule as
-    // training data (once we've benchmarked it).
-    string feature_file = get_env_variable("HL_FEATURE_FILE");
-    if (!feature_file.empty()) {
-        user_warning << "HL_FEATURE_FILE is deprecated; use the featurization output from Generator instead\n";
-        std::ofstream binfile(feature_file, std::ios::binary | std::ios_base::trunc);
-        optimal->save_featurization(dag, params, cache_options, binfile);
-        binfile.close();
-        internal_assert(!binfile.fail()) << "Failed to write " << feature_file;
+    if (aslog::aslog_level() >= 2) {
+        optimal->dump(aslog(2).get_ostream());
     }
 
     if (auto_scheduler_results) {
+#ifdef HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
         auto_scheduler_results->scheduler_name = "Adams2019";
+#endif
         auto_scheduler_results->schedule_source = optimal->schedule_source;
         {
             std::ostringstream out;
@@ -648,13 +641,50 @@ void generate_schedule(const std::vector<Function> &outputs,
 }
 
 struct Adams2019 {
-    void operator()(const Pipeline &p, const Target &target, const MachineParams &params, AutoSchedulerResults *results) {
+#ifdef HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
+    void operator()(const Pipeline &p, const Target &target, const MachineParams &params_in, AutoSchedulerResults *results) {
         std::vector<Function> outputs;
         for (const Func &f : p.outputs()) {
             outputs.push_back(f.function());
         }
+        Adams2019Params params;
+        params.parallelism = params_in.parallelism;
+        params.beam_size = get_scalar_env_var<int>("HL_BEAM_SIZE", 32);
+        params.random_dropout = get_scalar_env_var<int>("HL_RANDOM_DROPOUT", 100);
+        params.random_dropout_seed = get_scalar_env_var<int>("HL_SEED", (int)time(nullptr));
+        params.weights_path = get_scalar_env_var<int>("HL_WEIGHTS_DIR");
+        params.disable_subtiling = get_scalar_env_var<int>("HL_NO_SUBTILING", 0);
+        params.disable_memoized_features = get_scalar_env_var<int>("HL_DISABLE_MEMOIZED_FEATURES", 0);
+        params.disable_memoized_blocks = get_scalar_env_var<int>("HL_DISABLE_MEMOIZED_BLOCKS", 0);
+        params.memory_limit = get_scalar_env_var<int64_t>("HL_AUTOSCHEDULE_MEMORY_LIMIT", -1);
         Autoscheduler::generate_schedule(outputs, target, params, results);
     }
+#else
+    void operator()(const Pipeline &p, const Target &target, const AutoschedulerParams &params_in, AutoSchedulerResults *results) {
+        internal_assert(params_in.name == "Adams2019");
+
+        std::vector<Function> outputs;
+        for (const Func &f : p.outputs()) {
+            outputs.push_back(f.function());
+        }
+        Adams2019Params params;
+        {
+            ParamParser parser(params_in.extra);
+            parser.parse("parallelism", &params.parallelism);
+            parser.parse("beam_size", &params.beam_size);
+            parser.parse("random_dropout", &params.random_dropout);
+            parser.parse("random_dropout_seed", &params.random_dropout_seed);
+            parser.parse("weights_path", &params.weights_path);
+            parser.parse("disable_subtiling", &params.disable_subtiling);
+            parser.parse("disable_memoized_features", &params.disable_memoized_features);
+            parser.parse("disable_memoized_blocks", &params.disable_memoized_blocks);
+            parser.parse("memory_limit", &params.memory_limit);
+            parser.finish();
+        }
+        Autoscheduler::generate_schedule(outputs, target, params, results);
+        results->autoscheduler_params = params_in;
+    }
+#endif
 };
 
 REGISTER_AUTOSCHEDULER(Adams2019)
@@ -662,15 +692,13 @@ REGISTER_AUTOSCHEDULER(Adams2019)
 // An alternative entrypoint for other uses
 void find_and_apply_schedule(FunctionDAG &dag,
                              const std::vector<Function> &outputs,
-                             const MachineParams &params,
+                             const Adams2019Params &params,
                              CostModel *cost_model,
-                             int beam_size,
-                             int64_t memory_limit,
                              StageMap<ScheduleFeatures> *schedule_features) {
 
     std::mt19937 rng(12345);
-    CachingOptions cache_options = CachingOptions::MakeOptionsFromEnviron();
-    IntrusivePtr<State> optimal = optimal_schedule(dag, outputs, params, cost_model, rng, beam_size, memory_limit, cache_options);
+    CachingOptions cache_options = CachingOptions::MakeOptionsFromParams(params);
+    IntrusivePtr<State> optimal = optimal_schedule(dag, outputs, params, cost_model, rng, cache_options);
 
     // Apply the schedules
     optimal->apply_schedule(dag, params);

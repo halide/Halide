@@ -37,6 +37,7 @@ protected:
     bool use_pic() const override;
 
     void visit(const Cast *) override;
+    void visit(const Call *) override;
     void codegen_vector_reduce(const VectorReduce *, const Expr &) override;
 };
 
@@ -147,11 +148,6 @@ void CodeGen_WebAssembly::visit(const Cast *op) {
 
     // clang-format off
     static const Pattern patterns[] = {
-        {"q15mulr_sat_s", i16_sat(rounding_shift_right(widening_mul(wild_i16x_, wild_i16x_), u16(15))), Target::WasmSimd128},
-        {"saturating_narrow", i8_sat(wild_i16x_), Target::WasmSimd128},
-        {"saturating_narrow", u8_sat(wild_i16x_), Target::WasmSimd128},
-        {"saturating_narrow", i16_sat(wild_i32x_), Target::WasmSimd128},
-        {"saturating_narrow", u16_sat(wild_i32x_), Target::WasmSimd128},
         {"int_to_double", f64(wild_i32x_), Target::WasmSimd128},
         {"int_to_double", f64(wild_u32x_), Target::WasmSimd128},
 #if LLVM_VERSION == 130
@@ -163,6 +159,41 @@ void CodeGen_WebAssembly::visit(const Cast *op) {
         {"widen_integer", u32(wild_u16x_), Target::WasmSimd128},
         {"widen_integer", i64(wild_i32x_), Target::WasmSimd128},
         {"widen_integer", u64(wild_u32x_), Target::WasmSimd128},
+    };
+    // clang-format on
+
+    if (op->type.is_vector()) {
+        std::vector<Expr> matches;
+        for (const Pattern &p : patterns) {
+            if (!target.has_feature(p.required_feature)) {
+                continue;
+            }
+            if (expr_match(p.pattern, op, matches)) {
+                value = call_overloaded_intrin(op->type, p.intrin, matches);
+                if (value) {
+                    return;
+                }
+            }
+        }
+    }
+
+    CodeGen_Posix::visit(op);
+}
+
+void CodeGen_WebAssembly::visit(const Call *op) {
+    struct Pattern {
+        std::string intrin;  ///< Name of the intrinsic
+        Expr pattern;        ///< The pattern to match against
+        Target::Feature required_feature;
+    };
+
+    // clang-format off
+    static const Pattern patterns[] = {
+        {"q15mulr_sat_s", i16_sat(rounding_shift_right(widening_mul(wild_i16x_, wild_i16x_), u16(15))), Target::WasmSimd128},
+        {"saturating_narrow", i8_sat(wild_i16x_), Target::WasmSimd128},
+        {"saturating_narrow", u8_sat(wild_i16x_), Target::WasmSimd128},
+        {"saturating_narrow", i16_sat(wild_i32x_), Target::WasmSimd128},
+        {"saturating_narrow", u16_sat(wild_i32x_), Target::WasmSimd128},
     };
     // clang-format on
 

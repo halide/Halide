@@ -46,7 +46,7 @@ we strongly suggest reading through the [CMake documentation][cmake-docs] first.
 
 ## Installing CMake
 
-Halide requires at least version 3.16, which was released in November 2019.
+Halide requires at least version 3.22, which was released in November 2021.
 Fortunately, getting a recent version of CMake couldn't be easier, and there are
 multiple good options on any system to do so. Generally, one should always have
 the most recent version of CMake installed system-wide. CMake is committed to
@@ -95,8 +95,8 @@ is also a viable option.
 
 There are a few good ways to install a modern CMake on Ubuntu:
 
-1. If you're on Ubuntu Linux 20.04 (focal), then simply running
-   `sudo apt install cmake` will get you CMake 3.16.
+1. If you're on Ubuntu Linux 22.04 (Jammy Jellyfish), then simply running
+   `sudo apt install cmake` will get you CMake 3.22.
 2. If you are on an older Ubuntu release or would like to use the newest CMake,
    try installing via the snap store: `snap install cmake`. Be sure you do not
    already have `cmake` installed via APT. The snap package automatically stays
@@ -370,7 +370,7 @@ Halide's own CI infrastructure, or as escape hatches for third-party packagers.
 |-----------------------------|--------------------------------------------------------------------|------------------------------------------------------------------------------------------|
 | `Halide_CLANG_TIDY_BUILD`   | `OFF`                                                              | Used internally to generate fake compile jobs for runtime files when running clang-tidy. |
 | `Halide_CCACHE_BUILD`       | `OFF`                                                              | Use ccache with Halide-recommended settings to accelerate rebuilds.                      |
-| `Halide_CCACHE_PARAMS`      | `CCACHE_CPP2=yes CCACHE_HASHDIR=yes CCACHE_SLOPPINESS=pch_defines` | Options to pass to `ccache` when using `Halide_CCACHE_BUILD`.                            | 
+| `Halide_CCACHE_PARAMS`      | `CCACHE_CPP2=yes CCACHE_HASHDIR=yes CCACHE_SLOPPINESS=pch_defines` | Options to pass to `ccache` when using `Halide_CCACHE_BUILD`.                            |
 | `Halide_SOVERSION_OVERRIDE` | `${Halide_VERSION_MAJOR}`                                          | Override the SOVERSION for libHalide. Expects a positive integer (i.e. not a version).   |
 
 The following options are only available when building Halide directly, ie. not
@@ -542,7 +542,7 @@ No matter how you intend to use Halide, you will need some basic CMake
 boilerplate.
 
 ```cmake
-cmake_minimum_required(VERSION 3.16)
+cmake_minimum_required(VERSION 3.22)
 project(HalideExample)
 
 set(CMAKE_CXX_STANDARD 17)  # or newer
@@ -677,8 +677,7 @@ autoscheduler:
 
 ```cmake
 add_halide_library(my_second_generator FROM my_generators
-                   AUTOSCHEDULER Halide::Adams2019
-                   PARAMS auto_schedule=true)
+                   AUTOSCHEDULER Halide::Adams2019)
 ```
 
 ### RunGenMain
@@ -780,12 +779,12 @@ Halide defines the following targets that are available to users:
 
 The following targets are not guaranteed to be available:
 
-| Imported target         | Description                                                                                                                              |
-|-------------------------|------------------------------------------------------------------------------------------------------------------------------------------|
-| `Halide::Python`        | this is a Python 3 module that can be referenced as `$<TARGET_FILE:Halide::Python>` when setting up Python tests or the like from CMake. |
-| `Halide::Adams19`       | the Adams et.al. 2019 autoscheduler (no GPU support)                                                                                     |
-| `Halide::Li18`          | the Li et.al. 2018 gradient autoscheduler (limited GPU support)                                                                          |
-| `Halide::Mullapudi2016` | the Mullapudi et.al. 2016 autoscheduler (no GPU support)                                                                                 |
+| Imported target         | Description                                                                                                                                                       |
+|-------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `Halide::Python`        | this is a Python 3 package that can be referenced as `$<TARGET_FILE_DIR:Halide::Python>/..` when setting up `PYTHONPATH` for Python tests or the like from CMake. |
+| `Halide::Adams19`       | the Adams et.al. 2019 autoscheduler (no GPU support)                                                                                                              |
+| `Halide::Li18`          | the Li et.al. 2018 gradient autoscheduler (limited GPU support)                                                                                                   |
+| `Halide::Mullapudi2016` | the Mullapudi et.al. 2016 autoscheduler (no GPU support)                                                                                                          |
 
 ### Functions
 
@@ -808,6 +807,7 @@ add_halide_library(<target> FROM <generator-target>
                    [PLUGINS plugin1 [plugin2 ...]]
                    [AUTOSCHEDULER scheduler-name]
                    [GRADIENT_DESCENT]
+                   [PYTHON_EXTENSION_LIBRARY]
                    [C_BACKEND]
                    [REGISTRATION OUTVAR]
                    [HEADER OUTVAR]
@@ -858,9 +858,9 @@ being created. When `TARGETS` is empty and the `host` target would not
 cross-compile, then `host` will be used. Otherwise, `cmake` will be used and an
 author warning will be issued.
 
-To set the default autoscheduler, set the `AUTOSCHEDULER` argument to a target
+To use an autoscheduler, set the `AUTOSCHEDULER` argument to a target
 named like `Namespace::Scheduler`, for example `Halide::Adams19`. This will set
-the `-s` flag on the generator command line to `Scheduler` and add the target to
+the `autoscheduler` GeneratorParam on the generator command line to `Scheduler` and add the target to
 the list of plugins. Additional plugins can be loaded by setting the `PLUGINS`
 argument. If the argument to `AUTOSCHEDULER` does not contain `::` or it does
 not name a target, it will be passed to the `-s` flag verbatim.
@@ -869,6 +869,13 @@ If `GRADIENT_DESCENT` is set, then the module will be built suitably for
 gradient descent calculation in TensorFlow or PyTorch. See
 `Generator::build_gradient_module()` for more documentation. This corresponds to
 passing `-d 1` at the generator command line.
+
+If `PYTHON_EXTENSION_LIBRARY` is set, then a Python Extension will be built that
+wraps the C/C++ call with CPython glue to allow use of the generated code from
+Python 3.x. The result will be a a shared library of the form
+`<target>.<soabi>.so`, where <soabi> describes the specific Python version and
+platform (e.g., `cpython-310-darwin` for Python 3.10 on OSX.) See
+`README_python.md` for examples of use.
 
 If the `C_BACKEND` option is set, this command will invoke the configured C++
 compiler on a generated source. Note that a `<target>.runtime` target is _not_
@@ -902,31 +909,44 @@ add_halide_generator(
     [PACKAGE_NAME package-name]
     [PACKAGE_NAMESPACE namespace]
     [EXPORT_FILE export-file]
+    [PYSTUB generator-name]
     [[SOURCES] source1 ...]
 )
 ```
 
 Every named argument is optional, and the function uses the following default arguments:
 
-* If `PACKAGE_NAME` is not provided, it defaults to `${PROJECT_NAME}-halide_generators`.
-* If `PACKAGE_NAMESPACE` is not provided, it defaults to `${PROJECT_NAME}::halide_generators::`.
-* If `EXPORT_FILE` is not provided, it defaults to `${PROJECT_BINARY_DIR}/cmake/${ARG_PACKAGE_NAME}-config.cmake`
+- If `PACKAGE_NAME` is not provided, it defaults to `${PROJECT_NAME}-halide_generators`.
+- If `PACKAGE_NAMESPACE` is not provided, it defaults to `${PROJECT_NAME}::halide_generators::`.
+- If `EXPORT_FILE` is not provided, it defaults to `${PROJECT_BINARY_DIR}/cmake/${ARG_PACKAGE_NAME}-config.cmake`
 
-The `SOURCES` keyword marks the beginning of sources to be used to build `<target>`, if it is not loaded. All unparsed
-arguments will be interpreted as sources.
+The `SOURCES` keyword marks the beginning of sources to be used to build
+`<target>`, if it is not loaded. All unparsed arguments will be interpreted as
+sources.
 
-This function guarantees that a Halide generator target named `<namespace><target>` is available. It will first search
-for a package named `<package-name>` using `find_package`; if it is found, it is assumed that it provides the target.
-Otherwise, it will create an executable target named `target` and an `ALIAS` target `<namespace><target>`. This function
-also creates a custom target named `<package-name>` if it does not exist and `<target>` would exist. In this case,
-`<package-name>` will depend on `<target>`, this enables easy building of _just_ the Halide generators managed by this
-function.
+This function guarantees that a Halide generator target named
+`<namespace><target>` is available. It will first search for a package named
+`<package-name>` using `find_package`; if it is found, it is assumed that it
+provides the target. Otherwise, it will create an executable target named
+`target` and an `ALIAS` target `<namespace><target>`. This function also
+creates a custom target named `<package-name>` if it does not exist and
+`<target>` would exist. In this case, `<package-name>` will depend on
+`<target>`, this enables easy building of _just_ the Halide generators managed
+by this function.
 
-After the call, `<PACKAGE_NAME>_FOUND` will be set to true if the host generators were imported (and hence won't be
-built). Otherwise, it will be set to false. This variable may be used to conditionally set properties on `<target>`.
+After the call, `<PACKAGE_NAME>_FOUND` will be set to true if the host
+generators were imported (and hence won't be built). Otherwise, it will be set
+to false. This variable may be used to conditionally set properties on
+`<target>`.
 
 Please see [test/integration/xc](https://github.com/halide/Halide/tree/master/test/integration/xc) for a simple example
 and [apps/hannk](https://github.com/halide/Halide/tree/master/apps/hannk) for a complete app that uses it extensively.
+
+If `PYSTUB` is specified, then a Python Extension will be built that
+wraps the Generator with CPython glue to allow use of the Generator
+Python 3.x. The result will be a a shared library of the form
+`<target>_pystub.<soabi>.so`, where <soabi> describes the specific Python version and platform (e.g., `cpython-310-darwin` for Python 3.10 on OSX.) See
+`README_python.md` for examples of use.
 
 ## Cross compiling
 
@@ -973,7 +993,7 @@ would call `add_halide_library` with no `TARGETS` option and set `FROM` equal to
 the name of the imported generator executable. Obviously, this is a significant
 increase in complexity over a typical CMake project.
 
-This is very compatible with the `add_halide_generator` strategy above. 
+This is very compatible with the `add_halide_generator` strategy above.
 
 ### Use `ExternalProject` directly
 
@@ -1010,7 +1030,7 @@ using [`install(FILES)`][install-files] and the
 # Contributing CMake code to Halide
 
 When contributing new CMake code to Halide, keep in mind that the minimum
-version is 3.16. Therefore, it is possible (and indeed required) to use modern
+version is 3.22. Therefore, it is possible (and indeed required) to use modern
 CMake best practices.
 
 Like any large and complex system with a dedication to preserving backwards

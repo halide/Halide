@@ -5,6 +5,31 @@
 #include "IROperator.h"
 #include "Util.h"
 
+/** \file Support extraction of AMX instructions. */
+
+/**
+ * https://asciiflow.com/#/share/eJyVUkFugzAQ%2FMrKxwoRhdAkza23SmlySHvogQsBp7FkbGSbAoryiz6nr%2BlLugZDk6ghKvJhbXZmd2b3QEScUbIQBece4XFNFVmQQ0SqiCwegtCLSI1RMBtjZGhl8BIRAHh%2BeoFVbBSr4Pq36ZOiSOBpX5cDCEikSGhuipjzun0pmdnD4%2BqtwX9%2Ffg2cLmUcTML76WyO4VAtWJ%2Ff7kIkWMEJ6gbBae2%2F3q53OHBuFBz3TS1HodPqfvUO3%2F4wO7gQag07IXqVkCuZU4VzyApuWI5BAJkdZ0K1B2ZP2%2BwJ%2FEs%2BjhKY0EYViWFSaMAaO6kypBY1hLCtDRIvMTvsekmlsc2kiGgKMw2cxqkGIyEGjn%2FlzonoIMjPUibeQX5Q1bHGisbav%2FBh2kHW2ESzdlaZkqUltaFd9UZ25TnIrIOg%2Bb7vQykLnv661GysRSaSF1k78HkHcaSbntSReLAtTL%2FscOlaI9rxYaRzzgwUOTrZeOCokLzN0TDqRYvUqtFwB6Fvqco9S5r%2BBCiqsWmNLHabzny2Y7E4PyJHcvwBx0t%2BJw%3D%3D)
+ *
+ *   LHS Matrix                           RHS Matrix
+ *
+ *      K                            conceptually      with AMX
+ *  ┌────────┐
+ *  │12345678│                             N             N*4
+ *M │        │                            ┌──┐        ┌────────┐
+ *  └────────┘                            │1 │     K/4│1234    │
+ *                                        │2 │        │5678    │
+ * To properly multiply 2 matrices, the   │3 │        └────────┘
+ * AMX instructions perform many 4 byte  K│4 │
+ * dot products, this leads to a lot of   │5 │
+ * striding over 4 byte areas.            │6 │
+ * Normally the row of the LHS matrix,    │7 │
+ * 123... would multiply with the column  │8 │
+ * of the RHS matrix 123..., but with AMX └──┘
+ * this column is split up into a matrix of columns / 4 byte and rows * 4.
+ * which then results in K/4 dot products per row.
+ *
+ */
+
 namespace Halide {
 namespace Internal {
 
@@ -39,12 +64,52 @@ Type amx_op_type_result_type(AMXOpType op_ty) {
     }
 }
 
+int amx_op_type_size(AMXOpType op_ty) {
+    switch (op_ty) {
+    case AMXOpType::Int8:
+        return 1;
+    case AMXOpType::Bfloat16:
+        return 2;
+    default:
+        internal_error << "Unexpected";
+        return -1;
+    }
+}
+
 const auto wild_i32 = Variable::make(Int(32), "*");
 const auto wild_i32x = Variable::make(Int(32, 0), "*");
 
 Tile<1> get_1d_tile_index(const Expr &e) {
     if (const auto *r1 = e.as<Ramp>()) {
-        return {true, r1->base, {r1->stride}, {r1->lanes}};
+
+        const auto stride_var = Variable::make(Int(32), "stride");
+        const auto v1 = Variable::make(Int(32), "v1");
+        const auto v2 = Variable::make(Int(32), "v2");
+        const auto v3 = Variable::make(Int(32), "v3");
+
+        Expr patterns[] = {
+            ((v1 * stride_var) + v2) * v3,
+            v3 * ((v1 * stride_var) + v2),
+            (v2 + (v1 * stride_var)) * v3,
+            v3 * (v2 + (v1 * stride_var)),
+        };
+
+        std::map<std::string, Expr> matches;
+        for (const auto &pattern : patterns) {
+            if (expr_match(pattern, r1->base, matches)) {
+                auto stride = std::move(matches["stride"]);
+                // stride must be a constant in order to not be confused with v1
+                if (stride.as<IntImm>()) {
+                    return {true, r1->base, {std::move(stride)}, {r1->lanes}};
+                }
+
+                // if stride wasn't a constant then v1 could possibly be the stride if constant
+                auto v1_expr = std::move(matches["v1"]);
+                if (v1_expr.as<IntImm>()) {
+                    return {true, r1->base, {std::move(v1_expr)}, {r1->lanes}};
+                }
+            }
+        }
     }
 
     return {};
@@ -143,6 +208,169 @@ Tile<3> get_3d_tile_index(const Expr &e) {
     return {true, base, {x_stride, 0, r_stride}, {x_tile, y_tile, r_tile}};
 }
 
+/**
+ * \brief Get the 3d rhs tile index configuration
+ *
+ * \param e index expression
+ * \param element_width the width of the elements, 1 for u8/i8, 2 for bf16
+ * \return Tile<3> the tile configuration found
+ *
+ * The pattern which is getting matched looks roughly like
+ * `broadcast(ramp(0, 1, r), x*y) / broadcast(4, x*y*r) + optional(broadcast(base, x*y*r)) * broadcast(8, x*y*r) +
+ *  broadcast(ramp(0, 1, r), x*y) % broadcast(4, x*y*r) +
+ *  broadcast(ramp(broadcast(_, r), broadcast(4, r), x) , y)`
+ */
+Tile<3> get_3d_rhs_tile_index(const Expr &e, int element_width) {
+    const auto *sub = e.as<Sub>();
+    const Add *add_lhs = nullptr;
+
+    // there's not always a sub pattern
+    // This depends on whether we have an ImageParam or a Buffer
+    if (!sub) {
+        add_lhs = e.as<Add>();
+    } else {
+        add_lhs = sub->a.as<Add>();
+    }
+
+    if (!add_lhs) {
+        return {};
+    }
+
+    // The right hand side of the add expression is used for retrieving the dimensions of the matrix.
+    // obtain the x, y, r dimensions
+    // this expr looks like below, the shape of `add_lhs->a` can be seen further down below
+    // broadcast(ramp(0, 1, r), x*y) % broadcast(4, x*y*r) + broadcast(ramp(broadcast(base, r), broadcast(4, r), x) , y)
+    const Add *dim_expr = add_lhs->b.as<Add>();
+
+    if (!dim_expr) {
+        return {};
+    }
+
+    // broadcast(ramp(broadcast(_, r), broadcast(4, r), x), y)
+    const Broadcast *base_stride_bc = dim_expr->b.as<Broadcast>();
+
+    if (!base_stride_bc) {
+        return {};
+    }
+
+    int tile_y = base_stride_bc->lanes;
+
+    // broadcast(ramp(0, 1, r), x*y) % broadcast(4, x*y*r)
+    const Mod *mod = dim_expr->a.as<Mod>();
+
+    if (!mod) {
+        return {};
+    }
+
+    // broadcast(ramp(0, 1, r), x*y)
+    const Broadcast *bc_ramp = mod->a.as<Broadcast>();
+
+    if (!bc_ramp) {
+        return {};
+    }
+
+    int tile_xy = bc_ramp->lanes;
+    int tile_x = tile_xy / tile_y;
+
+    // ramp(0, 1, r)
+    const Ramp *r_ramp = bc_ramp->value.as<Ramp>();
+
+    if (!r_ramp) {
+        return {};
+    }
+
+    int tile_r = r_ramp->lanes;
+
+    // get the base and stride
+    // ramp(broadcast(_, r), broadcast(4, r), x)
+    const Ramp *base_stride_ramp = base_stride_bc->value.as<Ramp>();
+
+    if (!base_stride_ramp) {
+        return {};
+    }
+
+    // broadcast(_, r)
+    const Broadcast *base_bc = base_stride_ramp->base.as<Broadcast>();
+
+    if (!base_bc) {
+        return {};
+    }
+
+    Expr base = base_bc->value;
+    Expr stride;
+
+    bool found_stride = false;
+
+    // the following pattern will match the following shape
+    // broadcast(ramp(0, 1, k), x*y) / broadcast(4, x*y*k) * broadcast(_, x*y*k)
+    // where the stride is marked by _.
+
+    // this stride pattern can occur if `tile_r` is the same size as `acc`
+    auto stride_pattern = Broadcast::make(Ramp::make(0, 1, tile_r), tile_x * tile_y) / Broadcast::make((4 / element_width), tile_x * tile_y * tile_r) * Broadcast::make(wild_i32, tile_x * tile_y * tile_r);
+
+    std::vector<Expr> results{};
+    if (expr_match(stride_pattern, add_lhs->a, results)) {
+        found_stride = true;
+        stride = std::move(results[0]);
+    }
+
+    // This pattern is similar to the above except with an additional offset to iterate over the tiles in the k dimension
+    // (broadcast(ramp(0, 1, k), m * n) / broadcast(4, m*n*k) + _) * broadcast(_, m*n*k)
+    // here the first _ marks the base and the second _ the stride.
+    if (!found_stride) {
+        stride_pattern = (Broadcast::make(Ramp::make(0, 1, tile_r), tile_x * tile_y) / Broadcast::make((4 / element_width), tile_x * tile_y * tile_r) + wild_i32) * Broadcast::make(wild_i32, tile_x * tile_y * tile_r);
+        if (expr_match(stride_pattern, add_lhs->a, results)) {
+            found_stride = true;
+            stride = std::move(results[1]);
+            base = std::move(results[0]) * stride + base;
+        }
+    }
+
+    if (!found_stride) {
+        return {};
+    }
+
+    return {true, base, {stride, 0, 0}, {tile_x, tile_y, tile_r}};
+}
+
+struct BaseStride {
+    bool result{false};
+    Expr base{};
+    Expr stride{};
+};
+
+BaseStride get_rhs_tile_index(const Expr &index, int element_width, int tile_x, int tile_y, int tile_r) {
+    const auto rhs_tile2 = get_2d_tile_index(index);
+
+    if (!rhs_tile2.result) {
+        const auto rhs_tile1 = get_1d_tile_index(index);
+
+        if (!rhs_tile1.result) {
+            auto rhs_tile3 = get_3d_rhs_tile_index(index, element_width);
+            if (rhs_tile3.extent[0] != tile_x || rhs_tile3.extent[1] != tile_y || rhs_tile3.extent[2] != tile_r) {
+                return {};
+            }
+
+            return {true, rhs_tile3.base, rhs_tile3.stride[0] * element_width};
+        } else {
+            if (rhs_tile1.extent[0] != tile_y * tile_r) {
+                return {};
+            }
+
+            // times 4 because of the rhs layout, each vector used by AMX is 4 bytes in size.
+            // For the 4 gets divided by the element width which means each vector has 4 elements in u8/i8 and
+            // 2 elements for bf16.
+            return {true, rhs_tile1.base, rhs_tile1.stride[0] * (4 / element_width)};
+        }
+    } else {
+        if (tile_y != rhs_tile2.extent[0] || tile_r != rhs_tile2.extent[1]) {
+            return {};
+        }
+
+        return {true, rhs_tile2.base, rhs_tile2.stride[0]};
+    }
+}
+
 struct Matmul {
     bool result = false;
     Stmt stmt;
@@ -197,17 +425,41 @@ Matmul convert_to_matmul(const Store *op, const string &new_name, AMXOpType op_t
 
     const auto *lhs_load = matches[0].as<Load>();
     const auto *rhs_broadcast = matches[1].as<Broadcast>();
-    if (!lhs_load || !rhs_broadcast) {
+
+    const Cast *rhs_cast = nullptr;
+
+    if (lhs_load && !rhs_broadcast) {
+        // now working on a larger k dimension
+        // with a K dimension of 4 (or 2) with bf16 all the elements in the right-hand matrix are
+        // layed out in a way that multiplying with a column can be done in a single dot product.
+        // Therefore the indexing can be reused with a broadcast,
+        // with higher K dimensions this can no longer be done and the broadcast won't exist.
+        // ┌──┐
+        // │1 │
+        // │2 │
+        // │3 │   ┌────────┐
+        // │4 │   │1234    │
+        // │5 │   │5678    │
+        // │6 │   └────────┘
+        // │7 │
+        // │8 │
+        // └──┘
+        rhs_cast = matches[1].as<Cast>();
+    } else {
+        rhs_cast = rhs_broadcast->value.as<Cast>();
+    }
+
+    if (!lhs_load || !rhs_cast) {
         return {};
     }
-    const auto *rhs_cast = rhs_broadcast->value.as<Cast>();
+
     if (rhs_cast) {
-        if (op_type == AMXOpType::Int8) {
-            if (!(rhs_cast->value.type().element_of() == Int(8) || rhs_cast->value.type().element_of() == UInt(8))) {
-                user_assert(false) << "Expected rhs cast of i8/u8";
-            }
-        } else {  // AMXOpType::Bfloat16
-            user_assert(rhs_cast->value.type().element_of() == BFloat(16)) << "Expected rhs cast of bf16";
+        bool is_i8_u8 = rhs_cast->value.type().element_of() == Int(8) || rhs_cast->value.type().element_of() == UInt(8);
+        bool is_bf16 = rhs_cast->value.type().element_of() == BFloat(16);
+
+        if ((op_type == AMXOpType::Int8 && !is_i8_u8) || (op_type == AMXOpType::Bfloat16 && !is_bf16)) {
+            user_error << "Expected rhs type of " << (op_type == AMXOpType::Int8 ? "i8/u8" : "bf16")
+                       << ", got " << rhs_cast->value.type() << " instead.\nIn Expression: " << Expr(rhs_cast);
         }
     } else {
         return {};
@@ -232,28 +484,14 @@ Matmul convert_to_matmul(const Store *op, const string &new_name, AMXOpType op_t
     Expr rhs_base;
     Expr rhs_stride;
 
-    const auto rhs_tile2 = get_2d_tile_index(rhs_load->index);
-    if (!rhs_tile2.result) {
-        const auto rhs_tile1 = get_1d_tile_index(rhs_load->index);
+    auto opt_base_stride = get_rhs_tile_index(rhs_load->index, amx_op_type_size(op_type), tile_x, tile_y, tile_r);
 
-        if (!rhs_tile1.result) {
-            return {};
-        }
-
-        if (rhs_tile1.extent[0] != tile_y * tile_r) {
-            return {};
-        }
-
-        rhs_base = rhs_tile1.base;
-        rhs_stride = rhs_tile1.stride[0];
-    } else {
-        if (tile_y != rhs_tile2.extent[0] || tile_r != rhs_tile2.extent[1]) {
-            return {};
-        }
-
-        rhs_base = rhs_tile2.base;
-        rhs_stride = rhs_tile2.stride[0];
+    if (!opt_base_stride.result) {
+        return {};
     }
+
+    rhs_base = opt_base_stride.base;
+    rhs_stride = opt_base_stride.stride;
 
     if (op->index.type().lanes() != tile_x * tile_y ||
         factor != tile_r) {
@@ -270,7 +508,8 @@ Matmul convert_to_matmul(const Store *op, const string &new_name, AMXOpType op_t
     auto rhs_var = Variable::make(Handle(), rhs_load->name);
     const auto &rhs_load_type = rhs_load->type;
     auto rhs_type = rhs_load_type.with_lanes(1024 / element_width);
-    auto rhs = Call::make(rhs_type, "tile_load", {1, tile_y * tile_r * element_width, rhs_var, rhs_base * element_width, rhs_stride * tile_y * element_width}, Call::Intrinsic);
+
+    auto rhs = Call::make(rhs_type, "tile_load", {tile_r / (4 / element_width), tile_y * 4, rhs_var, rhs_base * element_width, rhs_stride}, Call::Intrinsic);
     auto res_type = amx_op_type_result_type(op_type);
 
     // {rows, colbytes, acc, out, lhs, rhs}
@@ -410,6 +649,7 @@ class ExtractTileOperations : public IRMutator {
             found_tile_x = matmul.tile_x;
             found_tile_y = matmul.tile_y;
             found_tile_r = matmul.tile_r;
+
             return matmul.stmt;
         }
 
@@ -424,7 +664,7 @@ class ExtractTileOperations : public IRMutator {
         }
 
         // Otherwise there is some other operation using the allocation, so we cannot use the AMX instructions
-        user_assert(false) << "Found non-tile operations for AMX tile allocation";
+        user_error << "Found non-tile operations for AMX tile allocation";
         return op;
     }
 };

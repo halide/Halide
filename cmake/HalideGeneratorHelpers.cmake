@@ -1,6 +1,9 @@
-cmake_minimum_required(VERSION 3.16)
+cmake_minimum_required(VERSION 3.22)
+
+option(Halide_NO_DEFAULT_FLAGS "When enabled, suppresses recommended flags in add_halide_generator" OFF)
 
 include(${CMAKE_CURRENT_LIST_DIR}/HalideTargetHelpers.cmake)
+include(${CMAKE_CURRENT_LIST_DIR}/TargetExportScript.cmake)
 
 define_property(TARGET PROPERTY Halide_RT_TARGETS
                 BRIEF_DOCS "On a Halide runtime target, lists the targets the runtime backs"
@@ -17,7 +20,7 @@ define_property(TARGET PROPERTY Halide_GENERATOR_HAS_POST_BUILD
 
 function(add_halide_generator TARGET)
     set(options "")
-    set(oneValueArgs PACKAGE_NAME PACKAGE_NAMESPACE EXPORT_FILE)
+    set(oneValueArgs PACKAGE_NAME PACKAGE_NAMESPACE EXPORT_FILE PYSTUB)
     set(multiValueArgs SOURCES LINK_LIBRARIES)
     cmake_parse_arguments(ARG "${options}" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
 
@@ -57,10 +60,46 @@ function(add_halide_generator TARGET)
         add_executable(${gen} ALIAS ${TARGET})
         target_link_libraries(${TARGET} PRIVATE Halide::Generator ${ARG_LINK_LIBRARIES})
 
+        if (NOT ARG_NO_DEFAULT_FLAGS AND NOT Halide_NO_DEFAULT_FLAGS)
+            # For crosscompiling builds, the Halide headers will be included using -isystem,
+            # which will cause all warnings to be ignored. This is not helpful, since
+            # we *want* deprecation warnings to be propagated. So we must set
+            # NO_SYSTEM_FROM_IMPORTED in order for it to be seen.
+            set_target_properties(${TARGET} PROPERTIES NO_SYSTEM_FROM_IMPORTED YES)
+            target_compile_options(${TARGET} PRIVATE
+                $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wdeprecated-declarations>
+                $<$<CXX_COMPILER_ID:MSVC>:/w14996>  # 4996: compiler encountered deprecated declaration
+            )
+        endif ()
+
         add_dependencies("${ARG_PACKAGE_NAME}" ${TARGET})
         export(TARGETS ${TARGET}
                NAMESPACE ${ARG_PACKAGE_NAMESPACE}
                APPEND FILE "${ARG_EXPORT_FILE}")
+    endif ()
+
+    if (ARG_PYSTUB)
+        set(GEN_NAME ${ARG_PYSTUB})
+        set(MODULE_NAME ${ARG_PYSTUB}_pystub)
+        # Generate a small C++ file that includes the boilerplate code needed to
+        # register a PyInit function that has the stub glue code.
+        string(CONCAT stub_text
+               "#include <Python.h>\n"
+               "#include \"Halide.h\"\n"
+               "HALIDE_GENERATOR_PYSTUB(${GEN_NAME}, ${MODULE_NAME})\n")
+
+        file(WRITE
+             "${CMAKE_CURRENT_BINARY_DIR}/${TARGET}.py_stub_generated.cpp"
+             "${stub_text}")
+
+        Python3_add_library(${TARGET}_pystub MODULE WITH_SOABI "${CMAKE_CURRENT_BINARY_DIR}/${TARGET}.py_stub_generated.cpp" ${ARG_SOURCES})
+        set_target_properties(${TARGET}_pystub PROPERTIES
+                              CXX_VISIBILITY_PRESET hidden
+                              VISIBILITY_INLINES_HIDDEN ON
+                              POSITION_INDEPENDENT_CODE ON)
+        target_link_libraries(${TARGET}_pystub PRIVATE Halide::PyStubs Halide::Halide ${ARG_LINK_LIBRARIES})
+        set_target_properties(${TARGET}_pystub PROPERTIES OUTPUT_NAME ${MODULE_NAME})
+        _Halide_target_export_single_symbol(${TARGET}_pystub "PyInit_${MODULE_NAME}")
     endif ()
 endfunction()
 
@@ -80,10 +119,11 @@ function(_Halide_try_load_generators)
         # Communicate found information to the caller
         set(${ARG_PACKAGE_NAME}_FOUND "${${ARG_PACKAGE_NAME}_FOUND}" PARENT_SCOPE)
 
-        if (NOT ${ARG_PACKAGE_NAME}_FOUND AND CMAKE_CROSSCOMPILING)
+        if (NOT ${ARG_PACKAGE_NAME}_FOUND AND CMAKE_CROSSCOMPILING AND NOT CMAKE_CROSSCOMPILING_EMULATOR)
             message(WARNING
-                    "${ARG_PACKAGE_NAME} were not found and it looks like you are cross-compiling. "
-                    "This is likely to fail. Please set -D${ARG_PACKAGE_NAME}_ROOT=... at the CMake "
+                    "'${ARG_PACKAGE_NAME}' was not found and it looks like you "
+                    "are cross-compiling without an emulator. This is likely to "
+                    "fail. Please set -D${ARG_PACKAGE_NAME}_ROOT=... at the CMake "
                     "command line to the build directory of a host-built ${PROJECT_NAME}.")
         endif ()
     endif ()
@@ -135,7 +175,7 @@ function(add_halide_library TARGET)
     # Parse the arguments and set defaults for missing values.
     ##
 
-    set(options C_BACKEND GRADIENT_DESCENT)
+    set(options C_BACKEND GRADIENT_DESCENT PYTHON_EXTENSION_LIBRARY)
     set(oneValueArgs FROM GENERATOR FUNCTION_NAME NAMESPACE USE_RUNTIME AUTOSCHEDULER HEADER ${extra_output_names})
     set(multiValueArgs TARGETS FEATURES PARAMS PLUGINS)
     cmake_parse_arguments(ARG "${options}" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
@@ -267,6 +307,14 @@ function(add_halide_library TARGET)
     endif ()
     list(APPEND generator_output_files ${generator_sources})
 
+    # If we're building an extension library, we also need the extension .cpp
+    # file, so quietly add it if it wasn't already specified
+    if (ARG_PYTHON_EXTENSION_LIBRARY)
+        if (NOT ARG_PYTHON_EXTENSION)
+            set(ARG_PYTHON_EXTENSION "${TARGET}.py.cpp")
+        endif()
+    endif ()
+
     # Add in extra outputs using the table defined at the start of this function
     foreach (out IN LISTS extra_output_names)
         if (ARG_${out})
@@ -281,7 +329,6 @@ function(add_halide_library TARGET)
     # Attach an autoscheduler if the user requested it
     ##
 
-    set(autoscheduler "")
     if (ARG_AUTOSCHEDULER)
         if ("${ARG_AUTOSCHEDULER}" MATCHES "::")
             if (NOT TARGET "${ARG_AUTOSCHEDULER}")
@@ -295,8 +342,7 @@ function(add_halide_library TARGET)
         elseif (NOT ARG_PLUGINS)
             message(AUTHOR_WARNING "AUTOSCHEDULER set to a scheduler name but no plugins were loaded")
         endif ()
-        set(autoscheduler -s "${ARG_AUTOSCHEDULER}")
-        list(PREPEND ARG_PARAMS auto_schedule=true)
+        list(PREPEND ARG_PARAMS "autoscheduler=${ARG_AUTOSCHEDULER}")
     endif ()
 
     ##
@@ -334,7 +380,6 @@ function(add_halide_library TARGET)
                        -f "${ARG_FUNCTION_NAME}"
                        -e "$<JOIN:${generator_outputs},$<COMMA>>"
                        ${generator_plugins}
-                       ${autoscheduler}
                        -o .
                        "target=$<JOIN:${ARG_TARGETS},$<COMMA>>"
                        ${ARG_PARAMS}
@@ -348,6 +393,14 @@ function(add_halide_library TARGET)
 
     target_include_directories("${TARGET}" INTERFACE "$<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}>")
     target_link_libraries("${TARGET}" INTERFACE "${ARG_USE_RUNTIME}")
+
+    if (ARG_PYTHON_EXTENSION_LIBRARY)
+        Python3_add_library(${TARGET}_py_ext_lib MODULE WITH_SOABI ${ARG_PYTHON_EXTENSION})
+        target_link_libraries(${TARGET}_py_ext_lib PRIVATE ${TARGET})
+        set_target_properties(${TARGET}_py_ext_lib PROPERTIES OUTPUT_NAME ${ARG_FUNCTION_NAME})
+        _Halide_target_export_single_symbol(${TARGET}_py_ext_lib "PyInit_${ARG_FUNCTION_NAME}")
+    endif ()
+
 endfunction()
 
 ##
@@ -491,19 +544,9 @@ function(_Halide_target_link_gpu_libs TARGET VISIBILITY)
     endif ()
 
     if ("${ARGN}" MATCHES "metal")
-        find_library(METAL_LIBRARY Metal)
-        if (NOT METAL_LIBRARY)
-            message(AUTHOR_WARNING "Metal framework dependency not found on system.")
-        else ()
-            target_link_libraries(${TARGET} ${VISIBILITY} "${METAL_LIBRARY}")
-        endif ()
-
-        find_library(FOUNDATION_LIBRARY Foundation)
-        if (NOT FOUNDATION_LIBRARY)
-            message(AUTHOR_WARNING "Foundation framework dependency not found on system.")
-        else ()
-            target_link_libraries(${TARGET} ${VISIBILITY} "${FOUNDATION_LIBRARY}")
-        endif ()
+        find_library(FOUNDATION_LIBRARY Foundation REQUIRED)
+        find_library(METAL_LIBRARY Metal REQUIRED)
+        target_link_libraries(${TARGET} ${VISIBILITY} "${FOUNDATION_LIBRARY}" "${METAL_LIBRARY}")
     endif ()
 endfunction()
 
@@ -522,4 +565,18 @@ function(_Halide_fix_xcode TARGET)
         endif ()
         target_sources("${TARGET}" PRIVATE "${empty_file}")
     endif ()
+endfunction()
+
+function(_Halide_target_export_single_symbol TARGET SYMBOL)
+    file(WRITE
+         "${CMAKE_CURRENT_BINARY_DIR}/${TARGET}.ldscript.apple"
+         "_${SYMBOL}\n")
+    file(WRITE
+         "${CMAKE_CURRENT_BINARY_DIR}/${TARGET}.ldscript"
+         "{ global: ${SYMBOL}; local: *; };\n")
+    target_export_script(
+        ${TARGET}
+        APPLE_LD "${CMAKE_CURRENT_BINARY_DIR}/${TARGET}.ldscript.apple"
+        GNU_LD "${CMAKE_CURRENT_BINARY_DIR}/${TARGET}.ldscript"
+    )
 endfunction()

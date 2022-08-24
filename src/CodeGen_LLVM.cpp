@@ -1487,6 +1487,18 @@ void CodeGen_LLVM::visit(const Cast *op) {
     }
 }
 
+void CodeGen_LLVM::visit(const Reinterpret *op) {
+    Type dst = op->type;
+    llvm::Type *llvm_dst = llvm_type_of(dst);
+    value = codegen(op->value);
+    // Our `Reinterpret` expr directly maps to LLVM IR bitcast/ptrtoint/inttoptr
+    // instructions with no additional handling required:
+    // * bitcast between vectors and scalars is well-formed.
+    // * ptrtoint/inttoptr implicitly truncates/zero-extends the integer
+    //   to match the pointer size.
+    value = builder->CreateBitOrPointerCast(value, llvm_dst);
+}
+
 void CodeGen_LLVM::visit(const Variable *op) {
     value = sym_get(op->name);
 }
@@ -2020,15 +2032,11 @@ void CodeGen_LLVM::visit(const Load *op) {
                 Value *load_i = codegen_dense_vector_load(op->type.with_lanes(load_lanes_i), op->name, slice_base,
                                                           op->image, op->param, align, nullptr, false);
 
-                SmallVector<Constant *, 256> constants;
+                std::vector<int> constants;
                 for (int j = 0; j < lanes_i; j++) {
-                    Constant *constant = ConstantInt::get(i32_t, j * stride->value + offset);
-                    constants.push_back(constant);
+                    constants.push_back(j * stride->value + offset);
                 }
-                Constant *constantsV = ConstantVector::get(constants);
-                Value *undef = UndefValue::get(load_i->getType());
-                Value *shuffleInstr = builder->CreateShuffleVector(load_i, undef, constantsV);
-                results.push_back(shuffleInstr);
+                results.push_back(shuffle_vectors(load_i, constants));
             }
 
             // Concat the results
@@ -2055,7 +2063,7 @@ void CodeGen_LLVM::visit(const Load *op) {
             // Gather without generating the indices as a vector
             Value *ptr = codegen_buffer_pointer(op->name, op->type.element_of(), ramp->base);
             Value *stride = codegen(ramp->stride);
-            value = UndefValue::get(llvm_type_of(op->type));
+            value = PoisonValue::get(llvm_type_of(op->type));
             for (int i = 0; i < ramp->lanes; i++) {
                 Value *lane = ConstantInt::get(i32_t, i);
                 LoadInst *val = builder->CreateLoad(load_type, ptr);
@@ -2069,7 +2077,7 @@ void CodeGen_LLVM::visit(const Load *op) {
             // loads in it, and it's all int32.
 
             // Compute the index as scalars, and then do a gather
-            Value *vec = UndefValue::get(llvm_type_of(op->type));
+            Value *vec = PoisonValue::get(llvm_type_of(op->type));
             for (int i = 0; i < op->type.lanes(); i++) {
                 Expr idx = extract_lane(op->index, i);
                 Value *ptr = codegen_buffer_pointer(op->name, op->type.element_of(), idx);
@@ -2081,7 +2089,7 @@ void CodeGen_LLVM::visit(const Load *op) {
         } else {
             // General gathers
             Value *index = codegen(op->index);
-            Value *vec = UndefValue::get(llvm_type_of(op->type));
+            Value *vec = PoisonValue::get(llvm_type_of(op->type));
             for (int i = 0; i < op->type.lanes(); i++) {
                 Value *idx = builder->CreateExtractElement(index, ConstantInt::get(i32_t, i));
                 Value *ptr = codegen_buffer_pointer(op->name, op->type.element_of(), idx);
@@ -2116,7 +2124,7 @@ void CodeGen_LLVM::visit(const Ramp *op) {
         Value *base = codegen(op->base);
         Value *stride = codegen(op->stride);
 
-        value = UndefValue::get(llvm_type_of(op->type));
+        value = PoisonValue::get(llvm_type_of(op->type));
         for (int i = 0; i < op->type.lanes(); i++) {
             if (i > 0) {
                 if (op->type.is_float()) {
@@ -2133,20 +2141,11 @@ void CodeGen_LLVM::visit(const Ramp *op) {
 }
 
 llvm::Value *CodeGen_LLVM::create_broadcast(llvm::Value *v, int lanes) {
+    Constant *poison = PoisonValue::get(get_vector_type(v->getType(), lanes));
     Constant *zero = ConstantInt::get(i32_t, 0);
-    Constant *undef;
-    Constant *zeros;
-    if (effective_vscale != 0 && ((lanes % effective_vscale) == 0)) {
-        int lanes_per_block = lanes / effective_vscale;
-        undef = UndefValue::get(get_vector_type(v->getType(), lanes_per_block, true));
-        v = builder->CreateInsertElement(undef, v, zero);
-        zeros = ConstantVector::getSplat(llvm::ElementCount::getScalable(lanes_per_block), zero);
-    } else {
-        undef = UndefValue::get(get_vector_type(v->getType(), lanes));
-        v = builder->CreateInsertElement(undef, v, zero);
-        zeros = ConstantVector::getSplat(element_count(lanes), zero);
-    }
-    return builder->CreateShuffleVector(v, undef, zeros);
+    v = builder->CreateInsertElement(poison, v, zero);
+    Constant *zeros = ConstantVector::getSplat(element_count(lanes), zero);
+    return builder->CreateShuffleVector(v, poison, zeros);
 }
 
 void CodeGen_LLVM::visit(const Broadcast *op) {
@@ -2228,7 +2227,7 @@ Value *CodeGen_LLVM::interleave_vectors(const std::vector<Value *> &vecs) {
 void CodeGen_LLVM::scalarize(const Expr &e) {
     llvm::Type *result_type = llvm_type_of(e.type());
 
-    Value *result = UndefValue::get(result_type);
+    Value *result = PoisonValue::get(result_type);
 
     for (int i = 0; i < e.type().lanes(); i++) {
         Value *v = codegen(extract_lane(e, i));
@@ -2613,61 +2612,6 @@ void CodeGen_LLVM::visit(const Call *op) {
         internal_assert(op->args.size() == 1);
         Value *a = codegen(op->args[0]);
         value = builder->CreateNot(a);
-    } else if (op->is_intrinsic(Call::reinterpret)) {
-        internal_assert(op->args.size() == 1);
-        Type dst = op->type;
-        Type src = op->args[0].type();
-        llvm::Type *llvm_dst = llvm_type_of(dst);
-        value = codegen(op->args[0]);
-        if (src.is_handle() && !dst.is_handle()) {
-            internal_assert(dst.is_uint() && dst.bits() == 64);
-
-            // Handle -> UInt64
-            llvm::DataLayout d(module.get());
-            if (d.getPointerSize() == 4) {
-                llvm::Type *intermediate = llvm_type_of(UInt(32, dst.lanes()));
-                value = builder->CreatePtrToInt(value, intermediate);
-                value = builder->CreateZExt(value, llvm_dst);
-            } else if (d.getPointerSize() == 8) {
-                value = builder->CreatePtrToInt(value, llvm_dst);
-            } else {
-                internal_error << "Pointer size is neither 4 nor 8 bytes\n";
-            }
-
-        } else if (dst.is_handle() && !src.is_handle()) {
-            internal_assert(src.is_uint() && src.bits() == 64);
-
-            // UInt64 -> Handle
-            llvm::DataLayout d(module.get());
-            if (d.getPointerSize() == 4) {
-                llvm::Type *intermediate = llvm_type_of(UInt(32, src.lanes()));
-                value = builder->CreateTrunc(value, intermediate);
-                value = builder->CreateIntToPtr(value, llvm_dst);
-            } else if (d.getPointerSize() == 8) {
-                value = builder->CreateIntToPtr(value, llvm_dst);
-            } else {
-                internal_error << "Pointer size is neither 4 nor 8 bytes\n";
-            }
-
-        } else {
-            if (src.is_scalar() && dst.is_vector()) {
-                // If the source type is a scalar, we promote it to an
-                // equivalent vector of width one before doing the
-                // bitcast, because llvm's bitcast operator doesn't
-                // want to convert between scalars and vectors.
-                value = create_broadcast(value, 1);
-            }
-            if (src.is_vector() && dst.is_scalar()) {
-                // Similarly, if we're converting from a vector to a
-                // scalar, convert to a vector of width 1 first, and
-                // then extract the first lane.
-                llvm_dst = get_vector_type(llvm_dst, 1);
-            }
-            value = builder->CreateBitCast(value, llvm_dst);
-            if (src.is_vector() && dst.is_scalar()) {
-                value = builder->CreateExtractElement(value, (uint64_t)0);
-            }
-        }
     } else if (op->is_intrinsic(Call::shift_left)) {
         internal_assert(op->args.size() == 2);
         if (op->args[1].type().is_uint()) {
@@ -2764,8 +2708,8 @@ void CodeGen_LLVM::visit(const Call *op) {
         llvm::Function *fn = llvm::Intrinsic::getDeclaration(module.get(),
                                                              (op->is_intrinsic(Call::count_leading_zeros)) ? llvm::Intrinsic::ctlz : llvm::Intrinsic::cttz,
                                                              arg_type);
-        llvm::Value *is_const_zero_undef = llvm::ConstantInt::getFalse(*context);
-        llvm::Value *args[2] = {codegen(op->args[0]), is_const_zero_undef};
+        llvm::Value *is_const_zero_poison = llvm::ConstantInt::getFalse(*context);
+        llvm::Value *args[2] = {codegen(op->args[0]), is_const_zero_poison};
         CallInst *call = builder->CreateCall(fn, args);
         value = call;
     } else if (op->is_intrinsic(Call::return_second)) {
@@ -2899,7 +2843,7 @@ void CodeGen_LLVM::visit(const Call *op) {
         internal_assert(op->args.size() == 2);
 
         // Try to fold the vector reduce for a call to saturating_add
-        const bool folded = try_to_fold_vector_reduce<Call>(op->args[0], op->args[1]);
+        const bool folded = op->is_intrinsic(Call::saturating_add) && try_to_fold_vector_reduce<Call>(op->args[0], op->args[1]);
 
         if (!folded) {
             std::string intrin;
@@ -3253,7 +3197,7 @@ void CodeGen_LLVM::visit(const Call *op) {
                       " integer overflow for int32 and int64 is undefined behavior in"
                       " Halide.\n";
     } else if (op->is_intrinsic(Call::undef)) {
-        value = UndefValue::get(llvm_type_of(op->type));
+        user_error << "undef not eliminated before code generation. Please report this as a Halide bug.\n";
     } else if (op->is_intrinsic(Call::size_of_halide_buffer_t)) {
         llvm::DataLayout d(module.get());
         value = ConstantInt::get(i32_t, (int)d.getTypeAllocSize(halide_buffer_t_type));
@@ -3268,6 +3212,10 @@ void CodeGen_LLVM::visit(const Call *op) {
         value = codegen(lower_float16_transcendental_to_float32_equivalent(op));
     } else if (op->is_intrinsic(Call::mux)) {
         value = codegen(lower_mux(op));
+    } else if (op->is_intrinsic(Call::extract_bits)) {
+        value = codegen(lower_extract_bits(op));
+    } else if (op->is_intrinsic(Call::concat_bits)) {
+        value = codegen(lower_concat_bits(op));
     } else if (op->is_intrinsic()) {
         Expr lowered = lower_intrinsic(op);
         if (!lowered.defined()) {
@@ -3451,7 +3399,6 @@ void CodeGen_LLVM::visit(const Call *op) {
             if (op->is_pure()) {
                 call->setDoesNotAccessMemory();
             }
-            call->setDoesNotThrow();
             value = call;
         } else {
 
@@ -3469,7 +3416,7 @@ void CodeGen_LLVM::visit(const Call *op) {
 
                 // No vector version found. Scalarize. Extract each simd
                 // lane in turn and do one scalar call to the function.
-                value = UndefValue::get(result_type);
+                value = PoisonValue::get(result_type);
                 for (int i = 0; i < op->type.lanes(); i++) {
                     Value *idx = ConstantInt::get(i32_t, i);
                     vector<Value *> arg_lane(args.size());
@@ -3484,7 +3431,6 @@ void CodeGen_LLVM::visit(const Call *op) {
                     if (op->is_pure()) {
                         call->setDoesNotAccessMemory();
                     }
-                    call->setDoesNotThrow();
                     if (!call->getType()->isVoidTy()) {
                         value = builder->CreateInsertElement(value, call, idx);
                     }  // otherwise leave it as undef.
@@ -4744,7 +4690,7 @@ Value *CodeGen_LLVM::shuffle_vectors(Value *a, Value *b,
         } else {
             // Only let -1 be undef.
             internal_assert(indices[i] == -1);
-            llvm_indices[i] = UndefValue::get(i32_t);
+            llvm_indices[i] = PoisonValue::get(i32_t);
         }
     }
     if (isa<llvm::ScalableVectorType>(a->getType())) {
@@ -4757,7 +4703,7 @@ Value *CodeGen_LLVM::shuffle_vectors(Value *a, Value *b,
 }
 
 Value *CodeGen_LLVM::shuffle_vectors(Value *a, const std::vector<int> &indices) {
-    Value *b = UndefValue::get(a->getType());
+    Value *b = PoisonValue::get(a->getType());
     return shuffle_vectors(a, b, indices);
 }
 

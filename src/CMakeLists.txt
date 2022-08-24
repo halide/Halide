@@ -4,6 +4,7 @@
 
 # The externally-visible header files that go into making Halide.h.
 # Don't include anything here that includes llvm headers.
+# Also *don't* include anything that's only used internally (eg SpirvIR.h).
 set(HEADER_FILES
     AbstractGenerator.h
     AddAtomicMutex.h
@@ -299,6 +300,7 @@ set(SOURCE_FILES
     Simplify_Add.cpp
     Simplify_And.cpp
     Simplify_Call.cpp
+    Simplify_Reinterpret.cpp
     Simplify_Cast.cpp
     Simplify_Div.cpp
     Simplify_EQ.cpp
@@ -320,6 +322,7 @@ set(SOURCE_FILES
     SkipStages.cpp
     SlidingWindow.cpp
     Solve.cpp
+    SpirvIR.cpp
     SplitTuples.cpp
     StmtToHtml.cpp
     StorageFlattening.cpp
@@ -431,8 +434,8 @@ target_compile_options(
 
         $<$<CXX_COMPILER_ID:Clang,AppleClang>:-Winconsistent-missing-destructor-override>
         $<$<CXX_COMPILER_ID:Clang,AppleClang>:-Winconsistent-missing-override>
+        $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wdeprecated-declarations>
 
-        $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wno-deprecated-declarations>
         $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wno-double-promotion>
         $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wno-float-conversion>
         $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wno-float-equal>
@@ -480,7 +483,9 @@ target_compile_options(
         $<$<CXX_COMPILER_ID:MSVC>:/wd4291>  # 4291: No matching operator delete found
         $<$<CXX_COMPILER_ID:MSVC>:/wd4503>  # 4503: disable "decorated name length exceeded, name was truncated"
         $<$<CXX_COMPILER_ID:MSVC>:/wd4800>  # 4800: forcing value to bool 'true' or 'false' (performance warning)
-        $<$<CXX_COMPILER_ID:MSVC>:/wd4996>  # 4996: compiler encountered deprecated declaration
+
+        # No: enable deprecation warnings
+        # $<$<CXX_COMPILER_ID:MSVC>:/wd4996>  # 4996: compiler encountered deprecated declaration
 )
 
 if (CMAKE_GENERATOR MATCHES "Visual Studio")
@@ -521,6 +526,13 @@ endif ()
 option(TARGET_OPENGLCOMPUTE "Include OpenGLCompute target" ON)
 if (TARGET_OPENGLCOMPUTE)
     target_compile_definitions(Halide PRIVATE WITH_OPENGLCOMPUTE)
+endif ()
+
+if (TARGET_SPIRV)
+    # Our vendored SPIRV headers are only used internally; users do not need
+    # them installed.
+    target_compile_definitions(Halide PRIVATE WITH_SPIRV)
+    target_link_libraries(Halide PRIVATE "$<BUILD_INTERFACE:Halide::SPIRV>")
 endif ()
 
 ##

@@ -527,6 +527,16 @@ class VectorSubs : public IRMutator {
         }
     }
 
+    Expr visit(const Reinterpret *op) override {
+        Expr value = mutate(op->value);
+        if (value.same_as(op->value)) {
+            return op;
+        } else {
+            Type t = op->type.with_lanes(value.type().lanes());
+            return Reinterpret::make(t, value);
+        }
+    }
+
     string get_widened_var_name(const string &name) {
         return name + ".widened." + vectorized_vars.back().name;
     }
