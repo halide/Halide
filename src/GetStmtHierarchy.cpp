@@ -76,10 +76,10 @@ int GetStmtHierarchy::get_color_range(const IRNode *op) const {
     }
 
     if (colorType == CC_TYPE) {
-        return findStmtCost.get_computation_range(op);
+        return findStmtCost.get_computation_color_range(op);
 
     } else if (colorType == DMC_TYPE) {
-        return findStmtCost.get_data_movement_range(op);
+        return findStmtCost.get_data_movement_color_range(op);
 
     } else {
         internal_error << "\n"
@@ -95,7 +95,7 @@ int GetStmtHierarchy::get_color_range_list(vector<Halide::Expr> exprs) const {
 
     if (colorType == CC_TYPE) {
         for (const Expr &e : exprs) {
-            retValue = findStmtCost.get_computation_range(e.get());
+            retValue = findStmtCost.get_computation_color_range(e.get());
             if (retValue > maxValue) {
                 maxValue = retValue;
             }
@@ -104,7 +104,7 @@ int GetStmtHierarchy::get_color_range_list(vector<Halide::Expr> exprs) const {
 
     else if (colorType == DMC_TYPE) {
         for (const Expr &e : exprs) {
-            retValue = findStmtCost.get_data_movement_range(e.get());
+            retValue = findStmtCost.get_data_movement_color_range(e.get());
             if (retValue > maxValue) {
                 maxValue = retValue;
             }

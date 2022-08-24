@@ -894,8 +894,6 @@ string ProducerConsumerHierarchy::info_tooltip(string toolTipText, string classN
 
     string ss;
 
-    cout << "cout (" << prodConsTooltipCount << "): " << toolTipText << endl;
-
     // info-button
     ss += "<button id='prodConsButton" + std::to_string(prodConsTooltipCount) + "' ";
     ss += "aria-describedby='prodConsTooltip" + std::to_string(prodConsTooltipCount) + "' ";
@@ -921,7 +919,7 @@ void ProducerConsumerHierarchy::generate_computation_cost_div(const IRNode *op) 
     // skip if it's a store
     if (op->node_type == IRNodeType::Store) return;
 
-    int computation_range = findStmtCost.get_computation_range(op);
+    int computation_range = findStmtCost.get_computation_color_range(op);
     string className = "computation-cost-div CostColor" + to_string(computation_range);
     html += "<div class='" + className + "'";
     html += "style='width: 10px;'>";
@@ -933,7 +931,7 @@ void ProducerConsumerHierarchy::generate_memory_cost_div(const IRNode *op) {
     if (op->node_type == IRNodeType::Store) return;
 
     // html += "<div class='memory-cost-div'>";
-    int memory_range = findStmtCost.get_data_movement_range(op);
+    int memory_range = findStmtCost.get_data_movement_color_range(op);
     string className = "memory-cost-div CostColor" + to_string(memory_range);
     html += "<div class='" + className + "'";
     html += "style='width: 10px;'>";
@@ -958,14 +956,14 @@ void ProducerConsumerHierarchy::cost_color_spacer() {
 void ProducerConsumerHierarchy::cost_colors(const IRNode *op) {
     cost_color_spacer();
 
-    int computation_range = findStmtCost.get_computation_range(op);
+    int computation_range = findStmtCost.get_computation_color_range(op);
     open_span("CostColor" + to_string(computation_range) + " CostComputation");
     html += ".";
     close_span();
 
     cost_color_spacer();
 
-    int data_movement_range = findStmtCost.get_data_movement_range(op);
+    int data_movement_range = findStmtCost.get_data_movement_color_range(op);
     open_span("CostColor" + to_string(data_movement_range) + " CostMovement");
     html += ".";
     close_span();
