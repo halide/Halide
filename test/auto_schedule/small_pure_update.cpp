@@ -28,8 +28,13 @@ int main(int argc, char **argv) {
     h.set_estimates({{0, 13}, {0, 17}});
     in_param.set_estimates({{0, 13}, {0, 17}});
 
+    Target target = get_target_from_environment();
     Pipeline p(h);
-    p.auto_schedule(Target("host"));
+#ifdef HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
+    p.auto_schedule(target);
+#else
+    p.apply_autoscheduler(target, {"Mullapudi2016"});
+#endif
 
     in_param.set(in);
 

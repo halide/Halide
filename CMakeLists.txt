@@ -1,37 +1,22 @@
-cmake_minimum_required(VERSION 3.16...3.20)
+cmake_minimum_required(VERSION 3.22...3.23)
 project(Halide
-        VERSION 14.0.0
+        VERSION 15.0.0
         DESCRIPTION "Halide compiler and libraries"
         HOMEPAGE_URL "https://halide-lang.org")
 
 enable_testing()
 
-find_package(Python3 REQUIRED COMPONENTS Interpreter Development)
-
-# Configure pybind11 to use the same interpreter version as was detected above.
-message(STATUS "Directing pybind11 to Python3 executable ${Python3_EXECUTABLE}")
-set(PYTHON_EXECUTABLE ${Python3_EXECUTABLE})
-
-# Keep the version in sync with requirements.txt and the Ubuntu 20.04 LTS package (python3-pybind11)
-set(PYBIND11_VER 2.6.1)
-find_package(pybind11 ${PYBIND11_VER} QUIET)
-if (NOT pybind11_FOUND)
-    include(FetchContent)
-    FetchContent_Declare(pybind11
-                         GIT_REPOSITORY https://github.com/pybind/pybind11.git
-                         GIT_TAG v${PYBIND11_VER})
-    FetchContent_MakeAvailable(pybind11)
-endif ()
-
 ##
 # Set up project-wide properties
 ##
 
+# Import useful standard modules
+include(CMakeDependentOption)
+include(CheckCXXSymbolExists)
+
 # Make our custom helpers available throughout the project via include().
 list(APPEND CMAKE_MODULE_PATH ${CMAKE_CURRENT_LIST_DIR}/cmake)
 include(HalideGeneratorHelpers)
-include(MakeShellPath)
-include(CMakeDependentOption)
 
 # Build Halide as a shared lib by default, but still honor command-line settings.
 option(BUILD_SHARED_LIBS "Build shared libraries" ON)
@@ -67,23 +52,34 @@ endif()
 # Build Halide with ccache if the package is present
 option(Halide_CCACHE_BUILD "Set to ON for a ccache enabled build" OFF)
 mark_as_advanced(Halide_CCACHE_BUILD)
+
 if (Halide_CCACHE_BUILD)
-    find_program(CCACHE_PROGRAM ccache)
-    if (CCACHE_PROGRAM)
-        # TODO: ccache recommends setting CCACHE_SLOPPINESS=pch_defines,time_macros to
-        # enable precompiled header caching. Our timing found it slightly faster with
-        # just CCACHE_SLOPPINESS=pch_defines, so that's what we're using. Maybe revisit
-        # if issues occur (but we don't use any of the time macros so should be irrelevant).
-        set(Halide_CCACHE_PARAMS CCACHE_CPP2=yes CCACHE_HASHDIR=yes CCACHE_SLOPPINESS=pch_defines
-            CACHE STRING "Parameters to pass through to ccache")
-        mark_as_advanced(Halide_CCACHE_PARAMS)
-        set(CMAKE_C_COMPILER_LAUNCHER ${CMAKE_COMMAND} -E env ${Halide_CCACHE_PARAMS} ${CCACHE_PROGRAM})
-        set(CMAKE_CXX_COMPILER_LAUNCHER ${CMAKE_COMMAND} -E env ${Halide_CCACHE_PARAMS} ${CCACHE_PROGRAM})
-        message(STATUS "Enabling ccache usage for building.")
-    else ()
-        message(FATAL_ERROR "Unable to find the program ccache. Set Halide_CCACHE_BUILD to OFF")
-    endif ()
+    find_program(CCACHE_PROGRAM ccache REQUIRED)
+
+    # TODO: ccache recommends setting CCACHE_SLOPPINESS=pch_defines,time_macros to
+    # enable precompiled header caching. Our timing found it slightly faster with
+    # just CCACHE_SLOPPINESS=pch_defines, so that's what we're using. Maybe revisit
+    # if issues occur (but we don't use any of the time macros so should be irrelevant).
+    set(Halide_CCACHE_PARAMS CCACHE_CPP2=yes CCACHE_HASHDIR=yes CCACHE_SLOPPINESS=pch_defines
+        CACHE STRING "Parameters to pass through to ccache")
+    mark_as_advanced(Halide_CCACHE_PARAMS)
+
+    set(CMAKE_C_COMPILER_LAUNCHER ${CMAKE_COMMAND} -E env ${Halide_CCACHE_PARAMS} ${CCACHE_PROGRAM})
+    set(CMAKE_CXX_COMPILER_LAUNCHER ${CMAKE_COMMAND} -E env ${Halide_CCACHE_PARAMS} ${CCACHE_PROGRAM})
+
+    message(STATUS "Enabling ccache usage for building.")
 endif ()
+
+# Detect whether or not ASAN is enabled
+check_cxx_symbol_exists(HALIDE_INTERNAL_USING_ASAN "${Halide_SOURCE_DIR}/src/Util.h" Halide_ASAN_ENABLED)
+if (Halide_ASAN_ENABLED)
+    set(Halide_ANY_SANITIZERS_ENABLED 1)
+else ()
+    set(Halide_ANY_SANITIZERS_ENABLED 0)
+endif ()
+
+# Enable the SPIR-V target if requested (must declare before processing dependencies)
+option(TARGET_SPIRV "Include SPIR-V target" OFF)
 
 ##
 # Import dependencies
@@ -111,20 +107,13 @@ if (CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
         message(STATUS "Building tests disabled")
     endif ()
 
-    option(WITH_PYTHON_BINDINGS "Build Python bindings" ON)
+    cmake_dependent_option(
+        WITH_PYTHON_BINDINGS "Build Python bindings" ON
+        "Halide_ENABLE_RTTI;Halide_ENABLE_EXCEPTIONS" OFF
+    )
     if (WITH_PYTHON_BINDINGS)
-        if (Halide_ENABLE_RTTI AND Halide_ENABLE_EXCEPTIONS)
-            message(STATUS "Building Python bindings enabled")
-            add_subdirectory(python_bindings)
-        else ()
-            if (NOT Halide_ENABLE_RTTI)
-                message(WARNING "Building Python bindings disabled: must compile with RTTI")
-            endif ()
-            if (NOT Halide_ENABLE_EXCEPTIONS)
-                message(WARNING "Building Python bindings disabled: must compile with exceptions")
-            endif ()
-            set(WITH_PYTHON_BINDINGS OFF CACHE BOOL "Build Python bindings" FORCE)
-        endif ()
+        message(STATUS "Building Python bindings enabled")
+        add_subdirectory(python_bindings)
     else ()
         message(STATUS "Building Python bindings disabled")
     endif ()

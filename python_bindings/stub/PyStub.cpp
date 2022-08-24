@@ -28,24 +28,16 @@ extern "C" PyObject *_halide_pystub_impl(const char *module_name, const Halide::
 #define _HALIDE_CONCAT(first, second) first##second
 #define HALIDE_CONCAT(first, second) _HALIDE_CONCAT(first, second)
 
-// Don't use HALIDE_EXPORT: Halide.h will already have defined it,
-// but it might be defined the wrong way (import rather than export).
-#if defined(WIN32) || defined(_WIN32)
-#define HALIDE_PLUGIN_EXPORT __declspec(dllexport)
-#else
-#define HALIDE_PLUGIN_EXPORT __attribute__((visibility("default")))
-#endif
-
 static_assert(PY_MAJOR_VERSION >= 3, "Python bindings for Halide require Python 3+");
 
-#define _HALIDE_PLUGIN_IMPL(name) extern "C" HALIDE_PLUGIN_EXPORT PyObject *PyInit_##name() /* NOLINT(bugprone-macro-parentheses) */
+#define _HALIDE_PLUGIN_IMPL(name) extern "C" HALIDE_EXPORT_SYMBOL PyObject *PyInit_##name() /* NOLINT(bugprone-macro-parentheses) */
 #define HALIDE_PLUGIN_IMPL(name) _HALIDE_PLUGIN_IMPL(name)
 
 // clang-format off
 
 namespace halide_register_generator {
 namespace HALIDE_CONCAT(HALIDE_PYSTUB_GENERATOR_NAME, _ns) {
-    extern std::unique_ptr<Halide::Internal::GeneratorBase> factory(const Halide::GeneratorContext &context);
+    extern std::unique_ptr<Halide::Internal::AbstractGenerator> factory(const Halide::GeneratorContext &context);
 }  // namespace HALIDE_CONCAT(HALIDE_PYSTUB_GENERATOR_NAME,_ns)
 }  // namespace halide_register_generator
 

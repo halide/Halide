@@ -19,14 +19,8 @@ void my_free(void *user_context, void *ptr) {
     free(((void **)ptr)[-1]);
 }
 
-#ifdef _WIN32
-#define DLLEXPORT __declspec(dllexport)
-#else
-#define DLLEXPORT
-#endif
-
 // An extern stage that copies input -> output
-extern "C" DLLEXPORT int simple_buffer_copy(halide_buffer_t *in, halide_buffer_t *out) {
+extern "C" HALIDE_EXPORT_SYMBOL int simple_buffer_copy(halide_buffer_t *in, halide_buffer_t *out) {
     if (in->is_bounds_query()) {
         memcpy(in->dim, out->dim, out->dimensions * sizeof(halide_dimension_t));
     } else {

@@ -64,7 +64,7 @@ public:
         }
 
         // Schedule
-        if (!auto_schedule) {
+        if (!using_autoscheduler()) {
             if (get_target().has_gpu_feature()) {
                 // 11.8ms on a 2060 RTX
 

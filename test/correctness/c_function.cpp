@@ -7,27 +7,21 @@ using namespace Halide;
 // This is not supported by the C backend.
 
 // On windows, you need to use declspec to do the same.
-#ifdef _WIN32
-#define DLLEXPORT __declspec(dllexport)
-#else
-#define DLLEXPORT
-#endif
-
 int call_counter = 0;
-extern "C" DLLEXPORT float my_func(int x, float y) {
+extern "C" HALIDE_EXPORT_SYMBOL float my_func(int x, float y) {
     call_counter++;
     return x * y;
 }
 HalideExtern_2(float, my_func, int, float);
 
 int call_counter2 = 0;
-extern "C" DLLEXPORT float my_func2(int x, float y) {
+extern "C" HALIDE_EXPORT_SYMBOL float my_func2(int x, float y) {
     call_counter2++;
     return x * y;
 }
 
 int call_counter3 = 0;
-extern "C" DLLEXPORT float my_func3(int x, float y) {
+extern "C" HALIDE_EXPORT_SYMBOL float my_func3(int x, float y) {
     call_counter3++;
     return x * y;
 }

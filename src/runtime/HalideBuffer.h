@@ -2286,7 +2286,11 @@ private:
     template<typename Fn,
              typename = decltype(std::declval<Fn>()((const int *)nullptr))>
     static void for_each_element(int, int dims, const for_each_element_task_dim *t, Fn &&f, int check = 0) {
-        int *pos = (int *)HALIDE_ALLOCA(dims * sizeof(int));
+        const int size = dims * sizeof(int);
+        int *pos = (int *)HALIDE_ALLOCA(size);
+        // At least one version of GCC will (incorrectly) report that pos "may be used uninitialized".
+        // Add this memset to silence it.
+        memset(pos, 0, size);
         for_each_element_array(dims - 1, t, std::forward<Fn>(f), pos);
     }
 

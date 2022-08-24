@@ -89,6 +89,10 @@ class LiftLoopInvariants : public IRMutator {
                 return false;
             }
         }
+        if (const Reinterpret *reinterpret = e.as<Reinterpret>()) {
+            // Don't lift Reinterpret nodes. They're free.
+            return should_lift(reinterpret->value);
+        }
         if (const Add *add = e.as<Add>()) {
             if (add->type == Int(32) &&
                 is_const(add->b)) {
@@ -97,8 +101,7 @@ class LiftLoopInvariants : public IRMutator {
             }
         }
         if (const Call *call = e.as<Call>()) {
-            if (Call::as_tag(call) ||
-                call->is_intrinsic(Call::reinterpret)) {
+            if (Call::as_tag(call)) {
                 // Don't lift these intrinsics. They're free.
                 return should_lift(call->args[0]);
             }
@@ -209,6 +212,8 @@ class LICM : public IRMutator {
     int cost(const Expr &e, const set<string> &vars) {
         if (is_const(e)) {
             return 0;
+        } else if (const Reinterpret *reinterpret = e.as<Reinterpret>()) {
+            return cost(reinterpret->value, vars);
         } else if (const Variable *var = e.as<Variable>()) {
             if (vars.count(var->name)) {
                 // We're loading this already
@@ -223,13 +228,6 @@ class LICM : public IRMutator {
             return cost(sub->a, vars) + cost(sub->b, vars) + 1;
         } else if (const Mul *mul = e.as<Mul>()) {
             return cost(mul->a, vars) + cost(mul->b, vars) + 1;
-        } else if (const Call *call = e.as<Call>()) {
-            if (call->is_intrinsic(Call::reinterpret)) {
-                internal_assert(call->args.size() == 1);
-                return cost(call->args[0], vars);
-            } else {
-                return 100;
-            }
         } else {
             return 100;
         }

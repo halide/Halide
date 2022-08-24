@@ -30,7 +30,7 @@ public:
         output.set_estimates({{0, kEdge}, {0, kEdge}, {0, kEdge}, {0, kEdge}});
 
         // Schedule
-        if (!auto_schedule) {
+        if (!using_autoscheduler()) {
             Var tx("tx"), xy("xy"), cn("cn"), allvars("allvars");
             if (get_target().has_gpu_feature()) {
                 output
@@ -84,7 +84,7 @@ public:
         d_input_b.set_estimates({{0, kEdge}, {0, kEdge}, {0, kEdge}, {0, kEdge}});
 
         // Schedule
-        if (!auto_schedule) {
+        if (!using_autoscheduler()) {
             Var tx("tx"), xy("xy"), cn("cn"), allvars("allvars");
 
             if (get_target().has_gpu_feature()) {

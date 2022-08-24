@@ -81,7 +81,7 @@ public:
         // Provide estimates on the output pipeline
         non_local_means.set_estimates({{0, 1536}, {0, 2560}, {0, 3}});
 
-        if (auto_schedule) {
+        if (using_autoscheduler()) {
             // nothing
         } else if (get_target().has_gpu_feature()) {
             // 22 ms on a 2060 RTX

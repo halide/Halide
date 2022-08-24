@@ -4,7 +4,9 @@
 
 # The externally-visible header files that go into making Halide.h.
 # Don't include anything here that includes llvm headers.
+# Also *don't* include anything that's only used internally (eg SpirvIR.h).
 set(HEADER_FILES
+    AbstractGenerator.h
     AddAtomicMutex.h
     AddImageChecks.h
     AddParameterChecks.h
@@ -21,6 +23,7 @@ set(HEADER_FILES
     BoundsInference.h
     BoundSmallAllocations.h
     Buffer.h
+    Callable.h
     CanonicalizeGPUVars.h
     ClampUnsafeAccesses.h
     Closure.h
@@ -101,7 +104,6 @@ set(HEADER_FILES
     LowerParallelTasks.h
     LowerWarpShuffles.h
     MainPage.h
-    MatlabWrapper.h
     Memoization.h
     Module.h
     ModulusRemainder.h
@@ -167,6 +169,7 @@ set(HEADER_FILES
     )
 
 set(SOURCE_FILES
+    AbstractGenerator.cpp
     AddAtomicMutex.cpp
     AddImageChecks.cpp
     AddParameterChecks.cpp
@@ -183,6 +186,7 @@ set(SOURCE_FILES
     BoundsInference.cpp
     BoundSmallAllocations.cpp
     Buffer.cpp
+    Callable.cpp
     CanonicalizeGPUVars.cpp
     ClampUnsafeAccesses.cpp
     Closure.cpp
@@ -261,7 +265,6 @@ set(SOURCE_FILES
     Lower.cpp
     LowerParallelTasks.cpp
     LowerWarpShuffles.cpp
-    MatlabWrapper.cpp
     Memoization.cpp
     Module.cpp
     ModulusRemainder.cpp
@@ -297,6 +300,7 @@ set(SOURCE_FILES
     Simplify_Add.cpp
     Simplify_And.cpp
     Simplify_Call.cpp
+    Simplify_Reinterpret.cpp
     Simplify_Cast.cpp
     Simplify_Div.cpp
     Simplify_EQ.cpp
@@ -318,6 +322,7 @@ set(SOURCE_FILES
     SkipStages.cpp
     SlidingWindow.cpp
     Solve.cpp
+    SpirvIR.cpp
     SplitTuples.cpp
     StmtToHtml.cpp
     StorageFlattening.cpp
@@ -459,13 +464,15 @@ target_compile_options(
         $<$<CXX_COMPILER_ID:Clang,AppleClang>:-Wno-missing-prototypes>
         $<$<CXX_COMPILER_ID:Clang,AppleClang>:-Wno-nonportable-system-include-path>
         $<$<CXX_COMPILER_ID:Clang,AppleClang>:-Wno-reserved-id-macro>
-        $<$<CXX_COMPILER_ID:Clang,AppleClang>:-Wno-return-std-move-in-c++11>
         $<$<CXX_COMPILER_ID:Clang,AppleClang>:-Wno-shadow-field-in-constructor>
         $<$<CXX_COMPILER_ID:Clang,AppleClang>:-Wno-shadow-field>
         $<$<CXX_COMPILER_ID:Clang,AppleClang>:-Wno-shorten-64-to-32>
         $<$<CXX_COMPILER_ID:Clang,AppleClang>:-Wno-undefined-func-template>
         $<$<CXX_COMPILER_ID:Clang,AppleClang>:-Wno-unused-member-function>
         $<$<CXX_COMPILER_ID:Clang,AppleClang>:-Wno-unused-template>
+
+        # This warning was removed in Clang 13
+        $<$<AND:$<CXX_COMPILER_ID:Clang,AppleClang>,$<VERSION_LESS:$<CXX_COMPILER_VERSION>,13.0>>:-Wno-return-std-move-in-c++11>
 
         $<$<CXX_COMPILER_ID:MSVC>:/W3>
         $<$<CXX_COMPILER_ID:MSVC>:/wd4018>  # 4018: disable "signed/unsigned mismatch"
@@ -517,6 +524,11 @@ endif ()
 option(TARGET_OPENGLCOMPUTE "Include OpenGLCompute target" ON)
 if (TARGET_OPENGLCOMPUTE)
     target_compile_definitions(Halide PRIVATE WITH_OPENGLCOMPUTE)
+endif ()
+
+if (TARGET_SPIRV)
+    target_compile_definitions(Halide PRIVATE WITH_SPIRV)
+    target_include_directories(Halide SYSTEM PRIVATE "${SPIRV_INCLUDE_DIR}")
 endif ()
 
 ##

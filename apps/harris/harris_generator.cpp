@@ -72,7 +72,7 @@ public:
         }
 
         // Schedule
-        if (!auto_schedule) {
+        if (!using_autoscheduler()) {
             Var xi("xi"), yi("yi");
             if (get_target().has_gpu_feature()) {
                 // 0.253ms on a 2060 RTX

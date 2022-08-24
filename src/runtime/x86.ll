@@ -31,25 +31,47 @@ declare <16 x i8> @llvm.x86.sse2.packuswb.128(<8 x i16>, <8 x i16>)
 declare <8 x i16> @llvm.x86.sse2.packssdw.128(<4 x i32>, <4 x i32>)
 
 define weak_odr <16 x i8>  @packsswbx16(<16 x i16> %arg) nounwind alwaysinline {
-  %1 = shufflevector <16 x i16> %arg, <16 x i16> undef, <8 x i32> <i32 0, i32 1, i32 2, i32 3, i32 4, i32 5, i32 6, i32 7>
-  %2 = shufflevector <16 x i16> %arg, <16 x i16> undef, <8 x i32> <i32 8, i32 9, i32 10, i32 11, i32 12, i32 13, i32 14, i32 15>
+  %1 = shufflevector <16 x i16> %arg, <16 x i16> poison, <8 x i32> <i32 0, i32 1, i32 2, i32 3, i32 4, i32 5, i32 6, i32 7>
+  %2 = shufflevector <16 x i16> %arg, <16 x i16> poison, <8 x i32> <i32 8, i32 9, i32 10, i32 11, i32 12, i32 13, i32 14, i32 15>
   %3 = tail call <16 x i8> @llvm.x86.sse2.packsswb.128(<8 x i16> %1, <8 x i16> %2)
   ret <16 x i8> %3
 }
 
 define weak_odr <16 x i8>  @packuswbx16(<16 x i16> %arg) nounwind alwaysinline {
-  %1 = shufflevector <16 x i16> %arg, <16 x i16> undef, <8 x i32> <i32 0, i32 1, i32 2, i32 3, i32 4, i32 5, i32 6, i32 7>
-  %2 = shufflevector <16 x i16> %arg, <16 x i16> undef, <8 x i32> <i32 8, i32 9, i32 10, i32 11, i32 12, i32 13, i32 14, i32 15>
+  %1 = shufflevector <16 x i16> %arg, <16 x i16> poison, <8 x i32> <i32 0, i32 1, i32 2, i32 3, i32 4, i32 5, i32 6, i32 7>
+  %2 = shufflevector <16 x i16> %arg, <16 x i16> poison, <8 x i32> <i32 8, i32 9, i32 10, i32 11, i32 12, i32 13, i32 14, i32 15>
   %3 = tail call <16 x i8> @llvm.x86.sse2.packuswb.128(<8 x i16> %1, <8 x i16> %2)
   ret <16 x i8> %3
 }
 
 define weak_odr <8 x i16>  @packssdwx8(<8 x i32> %arg) nounwind alwaysinline {
-  %1 = shufflevector <8 x i32> %arg, <8 x i32> undef, <4 x i32> <i32 0, i32 1, i32 2, i32 3>
-  %2 = shufflevector <8 x i32> %arg, <8 x i32> undef, <4 x i32> < i32 4, i32 5, i32 6, i32 7>
+  %1 = shufflevector <8 x i32> %arg, <8 x i32> poison, <4 x i32> <i32 0, i32 1, i32 2, i32 3>
+  %2 = shufflevector <8 x i32> %arg, <8 x i32> poison, <4 x i32> < i32 4, i32 5, i32 6, i32 7>
   %3 = tail call <8 x i16> @llvm.x86.sse2.packssdw.128(<4 x i32> %1, <4 x i32> %2)
   ret <8 x i16> %3
 }
+
+define weak_odr <8 x i32> @wmul_pmaddwd_avx2(<8 x i16> %a, <8 x i16> %b) nounwind alwaysinline {
+  %1 = zext <8 x i16> %a to <8 x i32>
+  %2 = zext <8 x i16> %b to <8 x i32>
+  %3 = bitcast <8 x i32> %1 to <16 x i16>
+  %4 = bitcast <8 x i32> %2 to <16 x i16>
+  %res = call <8 x i32> @llvm.x86.avx2.pmadd.wd(<16 x i16> %3, <16 x i16> %4)
+  ret <8 x i32> %res
+}
+
+declare <8 x i32> @llvm.x86.avx2.pmadd.wd(<16 x i16>, <16 x i16>) nounwind readnone
+
+define weak_odr <4 x i32> @wmul_pmaddwd_sse2(<4 x i16> %a, <4 x i16> %b) nounwind alwaysinline {
+  %1 = zext <4 x i16> %a to <4 x i32>
+  %2 = zext <4 x i16> %b to <4 x i32>
+  %3 = bitcast <4 x i32> %1 to <8 x i16>
+  %4 = bitcast <4 x i32> %2 to <8 x i16>
+  %res = call <4 x i32> @llvm.x86.sse2.pmadd.wd(<8 x i16> %3, <8 x i16> %4)
+  ret <4 x i32> %res
+}
+
+declare <4 x i32> @llvm.x86.sse2.pmadd.wd(<8 x i16>, <8 x i16>) nounwind readnone
 
 define weak_odr <4 x float> @sqrt_f32x4(<4 x float> %x) nounwind uwtable readnone alwaysinline {
   %1 = tail call <4 x float> @llvm.x86.sse.sqrt.ps(<4 x float> %x) nounwind
@@ -83,7 +105,7 @@ define weak_odr <2 x double> @abs_f64x2(<2 x double> %x) nounwind uwtable readno
 
 declare <4 x float> @llvm.x86.sse.rcp.ss(<4 x float>) nounwind readnone
 define weak_odr float @fast_inverse_f32(float %x) nounwind uwtable readnone alwaysinline {
-  %vec = insertelement <4 x float> undef, float %x, i32 0
+  %vec = insertelement <4 x float> poison, float %x, i32 0
   %approx = tail call <4 x float> @llvm.x86.sse.rcp.ss(<4 x float> %vec)
   %result = extractelement <4 x float> %approx, i32 0
   ret float %result
@@ -99,7 +121,7 @@ define weak_odr <4 x float> @fast_inverse_f32x4(<4 x float> %x) nounwind uwtable
 declare <4 x float> @llvm.x86.sse.rsqrt.ss(<4 x float>) nounwind readnone
 
 define weak_odr float @fast_inverse_sqrt_f32(float %x) nounwind uwtable readnone alwaysinline {
-  %vec = insertelement <4 x float> undef, float %x, i32 0
+  %vec = insertelement <4 x float> poison, float %x, i32 0
   %approx = tail call <4 x float> @llvm.x86.sse.rsqrt.ss(<4 x float> %vec)
   %result = extractelement <4 x float> %approx, i32 0
   ret float %result

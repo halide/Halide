@@ -10,7 +10,7 @@ namespace Halide {
 namespace Internal {
 namespace Autoscheduler {
 
-// void compute_featurization(const FunctionDAG *dag, const MachineParams *params, StageMap<ScheduleFeatures> *features) {
+// void compute_featurization(const FunctionDAG *dag, const MctsParams *params, StageMap<ScheduleFeatures> *features) {
 
 // }
 
@@ -682,7 +682,7 @@ void CPU_State::dump() const {
 }
 
 // This code is taken from the State::calculate_cost() code in the adams2019 autoscheduler.
-bool prunable(const FunctionDAG *dag_ptr, const MachineParams *params_ptr, const LoopNest *root_ptr,  StageMap<ScheduleFeatures> &features, int64_t memory_limit) {
+bool prunable(const FunctionDAG *dag_ptr, const MctsParams *params_ptr, const LoopNest *root_ptr,  StageMap<ScheduleFeatures> &features, int64_t memory_limit) {
     compute_featurization(dag_ptr, params_ptr, root_ptr, &features);
 
     // TODO(rootjalex): add a verbose dump
@@ -721,7 +721,7 @@ bool prunable(const FunctionDAG *dag_ptr, const MachineParams *params_ptr, const
 }
 
 // This is directly taken from State::compute_featurization.
-void compute_featurization(const FunctionDAG *dag_ptr, const MachineParams *params_ptr, const LoopNest *root_ptr, StageMap<ScheduleFeatures> *features) {
+void compute_featurization(const FunctionDAG *dag_ptr, const MctsParams *params_ptr, const LoopNest *root_ptr, StageMap<ScheduleFeatures> *features) {
     StageMap<LoopNest::Sites> sites;
     sites.make_large(dag_ptr->nodes[0].stages[0].max_id);
     features->make_large(dag_ptr->nodes[0].stages[0].max_id);
@@ -793,7 +793,7 @@ void compute_featurization(const FunctionDAG *dag_ptr, const MachineParams *para
 }
 
 // This is directly taken from State::save_featurization.
-void save_featurization(const FunctionDAG *dag_ptr, const MachineParams *params_ptr, const LoopNest *root_ptr, std::ostream &out) {
+void save_featurization(const FunctionDAG *dag_ptr, const MctsParams *params_ptr, const LoopNest *root_ptr, std::ostream &out) {
     StageMap<ScheduleFeatures> features;
     compute_featurization(dag_ptr, params_ptr, root_ptr, &features);
 

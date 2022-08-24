@@ -31,7 +31,7 @@
   Write out a training featurization for the selected schedule into this file.
   Needs to be converted to a sample file with the runtime using featurization_to_sample before it can be used to train.
 
-  HL_MACHINE_PARAMS
+  MctsParams
   An architecture description string. Used by Halide master to configure the cost model. We only use the first term. Set it to the number of cores to target.
 
   HL_PERMIT_FAILED_UNROLL
@@ -39,7 +39,7 @@
 
   HL_SCHEDULE_FILE
     *** DEPRECATED *** use the 'schedule' output from Generator instead
-    Write out a human-and-machine readable block of scheduling source code for the selected schedule into this file.
+    Write out a human-and-machine MctsParams block of scheduling source code for the selected schedule into this file.
 
   HL_RANDOM_DROPOUT
   percent chance of accepting each state in the beam. Normalized by the number of decisions made, so 5 would be there's a 5 percent chance of never rejecting any states.
@@ -88,11 +88,12 @@
 #include "LoopNest.h"
 #include "NetworkSize.h"
 #include "PerfectHashMap.h"
+#include "ParamParser.h"
 
-#include "MCTS.h"
 #include "CPU_State.h"
-#include "Timer.h"
 #include "CostPrinter.h"
+#include "MCTS.h"
+#include "Timer.h"
 
 #ifdef _WIN32
 #include <io.h>
@@ -100,104 +101,104 @@
 #endif
 
 namespace MCTS {
-    uint32_t get_dropout_threshold() {
-        std::string random_dropout_str = Halide::Internal::get_env_variable("HL_RANDOM_DROPOUT");
-        if (!random_dropout_str.empty()) {
-            return atoi(random_dropout_str.c_str());
-        } else {
-            return 100;
-        }
-    }
-
-    bool random_dropout(std::mt19937 &rng, size_t num_decisions) {
-        static double random_dropout_threshold = get_dropout_threshold();
-        if (random_dropout_threshold >= 100) {
-            return false;
-        }
-
-        // The random dropout threshold is the chance that we operate
-        // entirely greedily and never discard anything.
-        double t = random_dropout_threshold;
-        t /= 100;
-        t = std::pow(t, 1.0f / num_decisions);
-        t *= 100;
-
-        uint32_t r = rng();
-        bool drop_it = (r % 100) >= t;
-        return drop_it;
-    }
-
-    double get_exploration_percent() {
-        std::string exploration_str = Halide::Internal::get_env_variable("HL_MCTS_EXPLORATION");
-        if (!exploration_str.empty()) {
-            return std::stod(exploration_str.c_str());
-        } else {
-            return .025;
-        }
-    }
-
-    double get_exploitation_percent() {
-        std::string exploitation_str = Halide::Internal::get_env_variable("HL_MCTS_EXPLOITATION");
-        if (!exploitation_str.empty()) {
-            return std::stod(exploitation_str.c_str());
-        } else {
-            return .025;
-        }
-    }
-
-    uint32_t get_min_explore() {
-        std::string min_iters_str = Halide::Internal::get_env_variable("HL_MCTS_EXPLORE_MIN");
-        if (!min_iters_str.empty()) {
-            return atoi(min_iters_str.c_str());
-        } else {
-            return 4;
-        }
-    }
-
-    uint32_t get_min_exploit() {
-        std::string min_iters_str = Halide::Internal::get_env_variable("HL_MCTS_EXPLOIT_MIN");
-        if (!min_iters_str.empty()) {
-            return atoi(min_iters_str.c_str());
-        } else {
-            return 4;
-        }
-    }
-
-    uint32_t get_rollout_length() {
-        std::string rollout_str = Halide::Internal::get_env_variable("HL_MCTS_ROLLOUT_LENGTH");
-        if (!rollout_str.empty()) {
-            return atoi(rollout_str.c_str());
-        } else {
-            return 4;
-        }
-    }
-
-    uint32_t get_beam_size() {
-        std::string beam_str = Halide::Internal::get_env_variable("HL_MCTS_BEAM_SIZE");
-        if (!beam_str.empty()) {
-            return atoi(beam_str.c_str());
-        } else {
-            return 4;
-        }
-    }
-
-    bool use_beam() {
-        std::string beam_str = Halide::Internal::get_env_variable("HL_MCTS_DISABLE_BEAM");
-        return beam_str != "1";
-    }
-
-    void print_env_variables() {
-       // TODO: add to this if we add to the variables above
-       std::cerr << "export HL_RANDOM_DROPOUT=" << get_dropout_threshold() << ";  ";
-       std::cerr << "export HL_MCTS_EXPLORATION=" << get_exploration_percent() << ";  ";
-       std::cerr << "export HL_MCTS_EXPLOITATION=" << get_exploitation_percent() << ";  ";
-       std::cerr << "export HL_MCTS_EXPLORE_MIN=" << get_min_explore() << ";  ";
-       std::cerr << "export HL_MCTS_EXPLOIT_MIN=" << get_min_exploit() << ";  ";
-       std::cerr << "export HL_MCTS_ROLLOUT_LENGTH=" << get_rollout_length() << ";  ";
-       std::cerr << "export HL_MCTS_BEAM_SIZE=" << get_beam_size() << ";  ";
-       std::cerr << "export HL_MCTS_DISABLE_BEAM=" << !use_beam() << ";\n";
+uint32_t get_dropout_threshold() {
+    std::string random_dropout_str = Halide::Internal::get_env_variable("HL_RANDOM_DROPOUT");
+    if (!random_dropout_str.empty()) {
+        return atoi(random_dropout_str.c_str());
+    } else {
+        return 100;
     }
 }
+
+bool random_dropout(std::mt19937 &rng, size_t num_decisions) {
+    static double random_dropout_threshold = get_dropout_threshold();
+    if (random_dropout_threshold >= 100) {
+        return false;
+    }
+
+    // The random dropout threshold is the chance that we operate
+    // entirely greedily and never discard anything.
+    double t = random_dropout_threshold;
+    t /= 100;
+    t = std::pow(t, 1.0f / num_decisions);
+    t *= 100;
+
+    uint32_t r = rng();
+    bool drop_it = (r % 100) >= t;
+    return drop_it;
+}
+
+double get_exploration_percent() {
+    std::string exploration_str = Halide::Internal::get_env_variable("HL_MCTS_EXPLORATION");
+    if (!exploration_str.empty()) {
+        return std::stod(exploration_str.c_str());
+    } else {
+        return .025;
+    }
+}
+
+double get_exploitation_percent() {
+    std::string exploitation_str = Halide::Internal::get_env_variable("HL_MCTS_EXPLOITATION");
+    if (!exploitation_str.empty()) {
+        return std::stod(exploitation_str.c_str());
+    } else {
+        return .025;
+    }
+}
+
+uint32_t get_min_explore() {
+    std::string min_iters_str = Halide::Internal::get_env_variable("HL_MCTS_EXPLORE_MIN");
+    if (!min_iters_str.empty()) {
+        return atoi(min_iters_str.c_str());
+    } else {
+        return 4;
+    }
+}
+
+uint32_t get_min_exploit() {
+    std::string min_iters_str = Halide::Internal::get_env_variable("HL_MCTS_EXPLOIT_MIN");
+    if (!min_iters_str.empty()) {
+        return atoi(min_iters_str.c_str());
+    } else {
+        return 4;
+    }
+}
+
+uint32_t get_rollout_length() {
+    std::string rollout_str = Halide::Internal::get_env_variable("HL_MCTS_ROLLOUT_LENGTH");
+    if (!rollout_str.empty()) {
+        return atoi(rollout_str.c_str());
+    } else {
+        return 4;
+    }
+}
+
+uint32_t get_beam_size() {
+    std::string beam_str = Halide::Internal::get_env_variable("HL_MCTS_BEAM_SIZE");
+    if (!beam_str.empty()) {
+        return atoi(beam_str.c_str());
+    } else {
+        return 4;
+    }
+}
+
+bool use_beam() {
+    std::string beam_str = Halide::Internal::get_env_variable("HL_MCTS_DISABLE_BEAM");
+    return beam_str != "1";
+}
+
+void print_env_variables() {
+    // TODO: add to this if we add to the variables above
+    std::cerr << "export HL_RANDOM_DROPOUT=" << get_dropout_threshold() << ";  ";
+    std::cerr << "export HL_MCTS_EXPLORATION=" << get_exploration_percent() << ";  ";
+    std::cerr << "export HL_MCTS_EXPLOITATION=" << get_exploitation_percent() << ";  ";
+    std::cerr << "export HL_MCTS_EXPLORE_MIN=" << get_min_explore() << ";  ";
+    std::cerr << "export HL_MCTS_EXPLOIT_MIN=" << get_min_exploit() << ";  ";
+    std::cerr << "export HL_MCTS_ROLLOUT_LENGTH=" << get_rollout_length() << ";  ";
+    std::cerr << "export HL_MCTS_BEAM_SIZE=" << get_beam_size() << ";  ";
+    std::cerr << "export HL_MCTS_DISABLE_BEAM=" << !use_beam() << ";\n";
+}
+}  // namespace MCTS
 
 namespace Halide {
 namespace Internal {
@@ -253,17 +254,16 @@ private:
 
 // Configure a cost model to process a specific pipeline.
 void configure_pipeline_features(const FunctionDAG &dag,
-                                 const MachineParams &params,
+                                 const MctsParams &params,
                                  CostModel *cost_model) {
     cost_model->reset();
     cost_model->set_pipeline_features(dag, params);
 }
 
-
 // The main entrypoint to generate a schedule for a pipeline.
 void generate_schedule(const std::vector<Function> &outputs,
                        const Target &target,
-                       const MachineParams &params,
+                       const MctsParams &params,
                        AutoSchedulerResults *auto_scheduler_results) {
     aslog(0) << "generate_schedule for target=" << target.to_string() << "\n";
 
@@ -290,7 +290,7 @@ void generate_schedule(const std::vector<Function> &outputs,
     int64_t memory_limit = memory_limit_str.empty() ? (uint64_t)(-1) : std::atoll(memory_limit_str.c_str());
 
     // Analyse the Halide algorithm and construct our abstract representation of it
-    FunctionDAG dag(outputs, params, target);
+    FunctionDAG dag(outputs, target);
     if (aslog::aslog_level() > 0) {
         dag.dump();
     }
@@ -315,15 +315,15 @@ void generate_schedule(const std::vector<Function> &outputs,
     CPU_State start_state(&dag, &params, cost_model.get(), root, /* n_decisions */ 0, memory_limit);
     aslog(0) << "Starting\n";
     MCTS::state_count = 0;
-    std::shared_ptr<MCTS::TreeNode<CPU_State, CPU_Action> > best_action = nullptr;
+    std::shared_ptr<MCTS::TreeNode<CPU_State, CPU_Action>> best_action = nullptr;
     double cost = 0.0f;
     std::string schedule_source;
     std::string python_schedule_source;
 
     try {
-        CPU_State optimal = (MCTS::use_beam()) ? 
-                                                solver.solve_beam(start_state, /* n_decisions*/ dag.nodes.size() * 2, seed)
-                                                : solver.solve(start_state, /* n_decisions*/ dag.nodes.size() * 2, seed);
+        CPU_State optimal = (MCTS::use_beam()) ?
+                                solver.solve_beam(start_state, /* n_decisions*/ dag.nodes.size() * 2, seed) :
+                                solver.solve(start_state, /* n_decisions*/ dag.nodes.size() * 2, seed);
         cost = optimal.calculate_cost();
         schedule_source = optimal.apply_schedule(python_schedule_source);
         std::cerr << "is_terminal? " << optimal.is_terminal() << std::endl;
@@ -347,7 +347,7 @@ void generate_schedule(const std::vector<Function> &outputs,
         }
 
         if (auto_scheduler_results) {
-            auto_scheduler_results->scheduler_name = "mcts";
+            auto_scheduler_results->autoscheduler_params.name = "mcts";
             auto_scheduler_results->schedule_source = schedule_source;
             auto_scheduler_results->python_schedule_source = python_schedule_source;
             {
@@ -358,7 +358,7 @@ void generate_schedule(const std::vector<Function> &outputs,
             }
         }
 
-    } catch (const std::bad_alloc& e) {
+    } catch (const std::bad_alloc &e) {
         std::cerr << "Allocation failed: " << e.what() << std::endl;
     } catch (...) {
         std::cerr << "Some other exception?" << std::endl;
@@ -367,7 +367,7 @@ void generate_schedule(const std::vector<Function> &outputs,
     std::chrono::duration<double> total_time = timer.elapsed();
     auto milli = std::chrono::duration_cast<std::chrono::milliseconds>(total_time).count();
 
-    //aslog(0) << "Found Pipeline with cost: " << cost << "\n";
+    // aslog(0) << "Found Pipeline with cost: " << cost << "\n";
     aslog(0) << "Best cost: " << cost << "\n";
     aslog(0) << "Execution time: " << milli << " ms\n\n";
 
@@ -381,9 +381,9 @@ void generate_schedule(const std::vector<Function> &outputs,
         user_warning << "HL_SCHEDULE_FILE is deprecated; use the schedule output from Generator instead\n";
         aslog(1) << "Writing schedule to " << schedule_file << "...\n";
         std::ofstream f(schedule_file);
-        f << "// --- BEGIN machine-generated schedule\n"
+        f << "// --- BEGIN machine-MctsParams schedule\n"
           << schedule_source
-          << "// --- END machine-generated schedule\n";
+          << "// --- END machine-MctsParams schedule\n";
         f.close();
         internal_assert(!f.fail()) << "Failed to write " << schedule_file;
     }
@@ -393,22 +393,29 @@ void generate_schedule(const std::vector<Function> &outputs,
         user_warning << "HL_PYTHON_SCHEDULE_FILE is deprecated; use the schedule output from Generator instead\n";
         aslog(1) << "Writing schedule to " << python_schedule_file << "...\n";
         std::ofstream f(python_schedule_file);
-        f << "# --- BEGIN machine-generated schedule\n"
+        f << "# --- BEGIN machine-MctsParams schedule\n"
           << python_schedule_source
-          << "# --- END machine-generated schedule\n";
+          << "# --- END machine-MctsParams schedule\n";
         f.close();
         internal_assert(!f.fail()) << "Failed to write " << python_schedule_file;
     }
-
 }
 
 struct mcts {
-    void operator()(const Pipeline &p, const Target &target, const MachineParams &params, AutoSchedulerResults *results) {
+    void operator()(const Pipeline &p, const Target &target, const AutoschedulerParams &params_in, AutoSchedulerResults *results) {
         std::vector<Function> outputs;
         for (const Func &f : p.outputs()) {
             outputs.push_back(f.function());
         }
-        Autoscheduler::generate_schedule(outputs, target, params, results);
+        auto params = MctsParams::generic();
+        {
+            ParamParser parser(params_in.extra);
+            parser.parse("parallelism", &params.parallelism);
+            parser.parse("last_level_cache_size", &params.last_level_cache_size);
+            parser.parse("balance", &params.balance);
+            parser.finish();
+        }
+        Autoscheduler::generate_schedule(outputs, target, MctsParams::generic(), results);
     }
 };
 
@@ -417,7 +424,7 @@ REGISTER_AUTOSCHEDULER(mcts)
 // An alternative entrypoint for other uses
 // void find_and_apply_schedule(FunctionDAG &dag,
 //                              const std::vector<Function> &outputs,
-//                              const MachineParams &params,
+//                              const MctsParams &params,
 //                              CostModel *cost_model,
 //                              int beam_size,
 //                              int64_t memory_limit,

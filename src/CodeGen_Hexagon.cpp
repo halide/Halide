@@ -42,7 +42,8 @@ protected:
 
     void init_module() override;
 
-    std::string mcpu() const override;
+    std::string mcpu_target() const override;
+    std::string mcpu_tune() const override;
     std::string mattrs() const override;
     int isa_version;
     bool use_soft_float_abi() const override;
@@ -126,6 +127,9 @@ private:
 
     /** Generate a LUT (8/16 bit, max_index < 256) lookup using vlut instructions. */
     llvm::Value *vlut256(llvm::Value *lut, llvm::Value *indices, int min_index = 0, int max_index = 255);
+
+    /** Wrapper to create a vector populated with a constant value in each lane. */
+    Value *create_vector(llvm::Type *ty, int val);
 };
 
 CodeGen_Hexagon::CodeGen_Hexagon(const Target &t)
@@ -994,8 +998,8 @@ llvm::Function *CodeGen_Hexagon::define_hvx_intrinsic(llvm::Function *intrin,
 Value *CodeGen_Hexagon::create_bitcast(Value *v, llvm::Type *ty) {
     if (BitCastInst *c = dyn_cast<BitCastInst>(v)) {
         return create_bitcast(c->getOperand(0), ty);
-    } else if (isa<UndefValue>(v)) {
-        return UndefValue::get(ty);
+    } else if (isa<PoisonValue>(v)) {
+        return PoisonValue::get(ty);
     } else if (v->getType() != ty) {
         v = builder->CreateBitCast(v, ty);
     }
@@ -1174,7 +1178,7 @@ Value *CodeGen_Hexagon::shuffle_vectors(Value *a, Value *b,
                 i -= a_elements;
             }
         }
-        return shuffle_vectors(b, UndefValue::get(b->getType()), shifted_indices);
+        return shuffle_vectors(b, shifted_indices);
     }
 
     // Try to rewrite shuffles that only access the elements of a.
@@ -1613,7 +1617,7 @@ Value *CodeGen_Hexagon::vdelta(Value *lut, const vector<int> &indices) {
     return vlut(lut, indices);
 }
 
-Value *create_vector(llvm::Type *ty, int val) {
+Value *CodeGen_Hexagon::create_vector(llvm::Type *ty, int val) {
     llvm::Type *scalar_ty = ty->getScalarType();
     Constant *value = ConstantInt::get(scalar_ty, val);
     return ConstantVector::getSplat(element_count(get_vector_num_elements(ty)), value);
@@ -1788,7 +1792,7 @@ Value *CodeGen_Hexagon::call_intrin(llvm::Type *result_type, const string &name,
                                       fn, std::move(args));
 }
 
-string CodeGen_Hexagon::mcpu() const {
+string CodeGen_Hexagon::mcpu_target() const {
     if (target.has_feature(Halide::Target::HVX_v66)) {
         return "hexagonv66";
     } else if (target.has_feature(Halide::Target::HVX_v65)) {
@@ -1796,6 +1800,10 @@ string CodeGen_Hexagon::mcpu() const {
     } else {
         return "hexagonv62";
     }
+}
+
+string CodeGen_Hexagon::mcpu_tune() const {
+    return mcpu_target();
 }
 
 string CodeGen_Hexagon::mattrs() const {

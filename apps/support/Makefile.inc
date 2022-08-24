@@ -13,11 +13,6 @@ IMAGES ?= ../images
 UNAME ?= $(shell uname)
 SHELL = bash
 PYTHON ?= python3
-
-# TODO(srj): the python bindings need to be put into the distrib folders;
-# this is a hopefully-temporary workaround (https://github.com/halide/Halide/issues/4368)
-HALIDE_PYTHON_BINDINGS_PATH ?= $(realpath ../../bin/python3_bindings)
-
 BIN_DIR ?= bin
 
 # Most build outputs go into $(BIN)/$(HL_TARGET)/$(HL_TARGET)/, so that you can vary the test
@@ -103,6 +98,11 @@ else
 SHARED_EXT=so
 endif
 
+# We want to build Halide plugins as .so on all posixy systems, including OSX.
+# This is called out as a named var to make it clear that the use
+# is deliberate, not an accident.
+PLUGIN_EXT=so
+
 # We expect $ANDROID_NDK_ROOT to be defined by an env var.
 # We require at least NDK r19b or later.
 ANDROID_NDK_ROOT ?= /path/to/android_ndk_root
@@ -180,9 +180,9 @@ LIBHALIDE_LDFLAGS_STATIC ?= $(LIB_HALIDE_STATIC) $(LDFLAGS)
 # Autoschedulers. Mullapudi2016 is currently the default, because it's fast.
 AUTOSCHEDULER ?= mcts
 ifneq ($(AUTOSCHEDULER),)
-LIB_AUTOSCHEDULER ?= $(HALIDE_DISTRIB_PATH)/lib/libautoschedule_$(AUTOSCHEDULER).$(SHARED_EXT)
+LIB_AUTOSCHEDULER ?= $(HALIDE_DISTRIB_PATH)/lib/libautoschedule_$(AUTOSCHEDULER).$(PLUGIN_EXT)
 ifeq ($(UNAME), Darwin)
-LIBHALIDE_LDFLAGS +=  -Wl,-force_load $(HALIDE_DISTRIB_PATH)/lib/libautoschedule_$(AUTOSCHEDULER).$(SHARED_EXT)
+LIBHALIDE_LDFLAGS +=  -Wl,-force_load $(HALIDE_DISTRIB_PATH)/lib/libautoschedule_$(AUTOSCHEDULER).$(PLUGIN_EXT)
 else
 LIBHALIDE_LDFLAGS +=  -Wl,--no-as-needed -lautoschedule_$(AUTOSCHEDULER) -Wl,--as-needed
 endif

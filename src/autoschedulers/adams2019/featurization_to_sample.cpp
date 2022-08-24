@@ -3,62 +3,40 @@
 #include <fstream>
 #include <iostream>
 
-
-const int ERROR = -1;
-const int SUCCESS = 0;
-
-enum Args {
-    Executable,
-    InFeaturization,
-    Runtime,
-    PipelineId,
-    ScheduleId,
-    OutSample,
-    NumberOfArgs
-};
-
 // A sample is a featurization + a runtime + some ids, all together in one file.
 // This utility concats the runtime and ids onto a featurization to produce a sample.
-
-// Sample command line:
-// featurization_to_sample onnx_batch_0006_sample_0027.featurization 0.0022211699999999997 onnx 00060027 onnx_batch_0006_sample_0027.sample
 int main(int argc, char **argv) {
-    if (argc != NumberOfArgs) {
+    if (argc != 6) {
         std::cout << "Usage: featurization_to_sample in.featurization runtime pipeline_id schedule_id out.sample\n";
-        return ERROR;
+        return -1;
     }
 
-    // Processing in.featurization parameter
-    std::ifstream src(argv[InFeaturization], std::ios::binary);
+    std::ifstream src(argv[1], std::ios::binary);
     if (!src) {
-        std::cerr << "Unable to open input file: " << argv[InFeaturization] << "\n";
-        return ERROR;
+        std::cerr << "Unable to open input file: " << argv[1] << "\n";
+        return -1;
     }
 
-    // Processing out.sample parameter
-    std::ofstream dst(argv[OutSample], std::ios::binary);
+    std::ofstream dst(argv[5], std::ios::binary);
     if (!dst) {
-        std::cerr << "Unable to open output file: " << argv[OutSample] << "\n";
-        return ERROR;
+        std::cerr << "Unable to open output file: " << argv[5] << "\n";
+        return -1;
     }
 
     dst << src.rdbuf();
 
     // Input runtime value is presumed to be in seconds,
     // but sample file stores times in milliseconds.
-    // processing run time parameter
-    float runtime = atof(argv[Runtime]) * 1000.f;
-    // processing pipeline_id parameter
-    int32_t pipeline_id = atoi(argv[PipelineId]);
-    // processing schedule_id parameter
-    int32_t schedule_id = atoi(argv[ScheduleId]);
+    float r = atof(argv[2]) * 1000.f;
+    int32_t pid = atoi(argv[3]);
+    int32_t sid = atoi(argv[4]);
 
-    dst.write((const char *)&runtime, sizeof(float));
-    dst.write((const char *)&pipeline_id, sizeof(int32_t));
-    dst.write((const char *)&schedule_id, sizeof(int32_t));
+    dst.write((const char *)&r, 4);
+    dst.write((const char *)&pid, 4);
+    dst.write((const char *)&sid, 4);
 
     src.close();
     dst.close();
 
-    return SUCCESS;
+    return 0;
 }

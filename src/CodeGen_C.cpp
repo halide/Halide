@@ -191,11 +191,11 @@ template<typename T>
 inline T halide_cpp_min(const T &a, const T &b) {return (a < b) ? a : b;}
 
 template<typename T>
-inline void halide_unused(const T&) {}
+inline void halide_maybe_unused(const T&) {}
 
 template<typename A, typename B>
 const B &return_second(const A &a, const B &b) {
-    halide_unused(a);
+    halide_maybe_unused(a);
     return b;
 }
 
@@ -1523,7 +1523,7 @@ void CodeGen_C::emit_argv_wrapper(const std::string &function_name,
 
 void CodeGen_C::emit_metadata_getter(const std::string &function_name,
                                      const std::vector<LoweredArgument> &args,
-                                     const std::map<std::string, std::string> &metadata_name_map) {
+                                     const MetadataNameMap &metadata_name_map) {
     if (is_header_or_extern_decl()) {
         stream << "\nHALIDE_FUNCTION_ATTRS\nconst struct halide_filter_metadata_t *" << function_name << "_metadata();\n";
         return;
@@ -1751,6 +1751,7 @@ void CodeGen_C::compile(const Module &input) {
     stream << "\n";
 
     if (!is_header_or_extern_decl()) {
+#ifdef HALIDE_ALLOW_GENERATOR_EXTERNAL_CODE
         // Emit any external-code blobs that are C++.
         for (const ExternalCode &code_blob : input.external_code()) {
             if (code_blob.is_c_plus_plus_source()) {
@@ -1762,6 +1763,7 @@ void CodeGen_C::compile(const Module &input) {
                 stream << "\n";
             }
         }
+#endif
 
         add_vector_typedefs(type_info.vector_types_used);
 
@@ -1798,7 +1800,7 @@ void CodeGen_C::compile(const Module &input) {
     }
 }
 
-void CodeGen_C::compile(const LoweredFunc &f, const std::map<std::string, std::string> &metadata_name_map) {
+void CodeGen_C::compile(const LoweredFunc &f, const MetadataNameMap &metadata_name_map) {
     // Don't put non-external function declarations in headers.
     if (is_header_or_extern_decl() && f.linkage == LinkageType::Internal) {
         return;
@@ -1873,9 +1875,9 @@ void CodeGen_C::compile(const LoweredFunc &f, const std::map<std::string, std::s
                    << (have_user_context ? "const_cast<void *>(__user_context)" : "nullptr")
                    << ";\n";
 
-            if (target.has_feature(Target::NoAsserts)) {
-                stream << get_indent() << "halide_unused(_ucon);";
-            }
+            // Always declare it unused, since this could be a generated closure that doesn't
+            // use _ucon at all, regardless of NoAsserts.
+            stream << get_indent() << "halide_maybe_unused(_ucon);\n";
 
             // Emit the body
             print(f.body);
@@ -2067,6 +2069,10 @@ void CodeGen_C::visit(const Variable *op) {
 
 void CodeGen_C::visit(const Cast *op) {
     id = print_cast_expr(op->type, op->value);
+}
+
+void CodeGen_C::visit(const Reinterpret *op) {
+    id = print_assignment(op->type, print_reinterpret(op->type, op->value));
 }
 
 void CodeGen_C::visit_binop(Type t, const Expr &a, const Expr &b, const char *op) {
@@ -2292,9 +2298,6 @@ void CodeGen_C::visit(const Call *op) {
     } else if (op->is_intrinsic(Call::bitwise_not)) {
         internal_assert(op->args.size() == 1);
         rhs << "~" << print_expr(op->args[0]);
-    } else if (op->is_intrinsic(Call::reinterpret)) {
-        internal_assert(op->args.size() == 1);
-        rhs << print_reinterpret(op->type, op->args[0]);
     } else if (op->is_intrinsic(Call::shift_left)) {
         internal_assert(op->args.size() == 2);
         if (op->args[1].type().is_uint()) {
@@ -2555,6 +2558,8 @@ void CodeGen_C::visit(const Call *op) {
         user_error << "Signed integer overflow occurred during constant-folding. Signed"
                       " integer overflow for int32 and int64 is undefined behavior in"
                       " Halide.\n";
+    } else if (op->is_intrinsic(Call::undef)) {
+        user_error << "undef not eliminated before code generation. Please report this as a Halide bug.\n";
     } else if (op->is_intrinsic(Call::prefetch)) {
         user_assert((op->args.size() == 4) && is_const_one(op->args[2]))
             << "Only prefetch of 1 cache line is supported in C backend.\n";
@@ -2750,7 +2755,7 @@ void CodeGen_C::visit(const Let *op) {
         std::string name = print_name(op->name);
         stream << get_indent() << "auto "
                << name << " = " << id_value << ";\n";
-        stream << get_indent() << "halide_unused(" << name << ");\n";
+        stream << get_indent() << "halide_maybe_unused(" << name << ");\n";
     } else {
         Expr new_var = Variable::make(op->value.type(), id_value);
         body = substitute(op->name, new_var, body);
@@ -2845,7 +2850,7 @@ void CodeGen_C::visit(const LetStmt *op) {
         std::string name = print_name(op->name);
         stream << get_indent() << "auto "
                << name << " = " << id_value << ";\n";
-        stream << get_indent() << "halide_unused(" << name << ");\n";
+        stream << get_indent() << "halide_maybe_unused(" << name << ");\n";
     } else {
         Expr new_var = Variable::make(op->value.type(), id_value);
         body = substitute(op->name, new_var, body);
@@ -2862,7 +2867,7 @@ void CodeGen_C::create_assertion(const string &id_cond, const Expr &message) {
         << "Assertion result is not an int: " << message;
 
     if (target.has_feature(Target::NoAsserts)) {
-        stream << get_indent() << "halide_unused(" << id_cond << ");\n";
+        stream << get_indent() << "halide_maybe_unused(" << id_cond << ");\n";
         return;
     }
 
@@ -3152,7 +3157,7 @@ void CodeGen_C::visit(const Evaluate *op) {
         return;
     }
     string id = print_expr(op->value);
-    stream << get_indent() << "halide_unused(" << id << ");\n";
+    stream << get_indent() << "halide_maybe_unused(" << id << ");\n";
 }
 
 void CodeGen_C::visit(const Shuffle *op) {
@@ -3261,9 +3266,10 @@ extern "C" {
 HALIDE_FUNCTION_ATTRS
 int test1(struct halide_buffer_t *_buf_buffer, float _alpha, int32_t _beta, void const *__user_context) {
  void * const _ucon = const_cast<void *>(__user_context);
+ halide_maybe_unused(_ucon);
  auto *_0 = _halide_buffer_get_host(_buf_buffer);
  auto _buf = _0;
- halide_unused(_buf);
+ halide_maybe_unused(_buf);
  {
   int64_t _1 = 43;
   int64_t _2 = _1 * _beta;

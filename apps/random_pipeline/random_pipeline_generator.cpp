@@ -1052,7 +1052,7 @@ public:
             std::cout << "Approx size: " << stages.back().w << ", " << stages.back().h << ", " << stages.back().c << "\n";
             Stage next = random_stage(stages);
             stages.push_back(next);
-            if (!auto_schedule) {
+            if (!using_autoscheduler()) {
                 stages.back().func.compute_root().reorder(x, c, y).vectorize(x, 8).parallel(y, 8);
             }
         }
@@ -1064,11 +1064,11 @@ public:
         Stage casted = cast_stage(output.type(), tail);
         output = casted.func;
 
-        if (!auto_schedule) {
+        if (!using_autoscheduler()) {
             output.compute_root().reorder(x, c, y).vectorize(x, 8).parallel(y);
         }
 
-        if (auto_schedule) {
+        if (using_autoscheduler()) {
             input.dim(0).set_estimate(0, 2000)
                 .dim(1).set_estimate(0, 2000)
                 .dim(2).set_estimate(0, 3);

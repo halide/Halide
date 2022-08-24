@@ -9,8 +9,8 @@ tests(GROUPS error
       auto_schedule_no_parallel.cpp
       auto_schedule_no_reorder.cpp
       autodiff_unbounded.cpp
-      bad_bound_storage.cpp
       bad_bound.cpp
+      bad_bound_storage.cpp
       bad_compute_at.cpp
       bad_compute_with.cpp
       bad_compute_with_invalid_specialization.cpp
@@ -29,9 +29,15 @@ tests(GROUPS error
       bad_store_at.cpp
       broken_promise.cpp
       buffer_larger_than_two_gigs.cpp
+      callable_bad_arguments.cpp
+      callable_bad_values_passed.cpp
+      callable_typed_bad_arguments.cpp
+      callable_typed_bad_arguments_buffer_dims.cpp
+      callable_typed_bad_arguments_buffer_type.cpp
       clamp_out_of_range.cpp
       compute_with_crossing_edges1.cpp
       compute_with_crossing_edges2.cpp
+      compute_with_fuse_in_specialization.cpp
       constrain_wrong_output_buffer.cpp
       constraint_uses_non_param.cpp
       define_after_realize.cpp
@@ -44,18 +50,26 @@ tests(GROUPS error
       five_d_gpu_buffer.cpp
       float_arg.cpp
       forward_on_undefined_buffer.cpp
+      func_expr_dim_mismatch.cpp
+      func_expr_type_mismatch.cpp
+      func_expr_update_type_mismatch.cpp
+      func_extern_dim_mismatch.cpp
+      func_extern_type_mismatch.cpp
+      func_tuple_dim_mismatch.cpp
+      func_tuple_types_mismatch.cpp
+      func_tuple_update_types_mismatch.cpp
       implicit_args.cpp
       impossible_constraints.cpp
-      init_def_should_be_all_vars.cpp
       incomplete_target.cpp
+      init_def_should_be_all_vars.cpp
       inspect_loop_level.cpp
       lerp_float_weight_out_of_range.cpp
       lerp_mismatch.cpp
       lerp_signed_weight.cpp
       memoize_different_compute_store.cpp
       memoize_redefine_eviction_key.cpp
-      metal_vector_too_large.cpp
       metal_threads_too_large.cpp
+      metal_vector_too_large.cpp
       missing_args.cpp
       no_default_device.cpp
       nonexistent_update_stage.cpp
@@ -64,6 +78,7 @@ tests(GROUPS error
       pointer_arithmetic.cpp
       race_condition.cpp
       rdom_undefined.cpp
+      rdom_where_races.cpp
       realization_with_too_many_outputs.cpp
       realize_constantly_larger_than_two_gigs.cpp
       reduction_bounds.cpp
@@ -89,11 +104,11 @@ tests(GROUPS error
       undefined_pipeline_realize.cpp
       undefined_rdom_dimension.cpp
       unknown_target.cpp
+      vector_tile.cpp
       vectorize_dynamic.cpp
       vectorize_too_little.cpp
       vectorize_too_much.cpp
       vectorized_extern.cpp
-      vector_tile.cpp
       wrap_custom_after_shared.cpp
       wrap_frozen.cpp
       wrapper_never_used.cpp

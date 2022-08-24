@@ -1,8 +1,16 @@
 #include "Halide.h"
+#include "test_sharding.h"
 
 using namespace Halide;
 
-int main(int argc, char **argv) {
+namespace {
+
+struct Task {
+    Target target;
+    std::function<void()> fn;
+};
+
+void add_tasks(const Target &target, std::vector<Task> &tasks) {
     for (int dst_lanes : {1, 3}) {
         for (int reduce_factor : {2, 3, 4}) {
             std::vector<Type> types =
@@ -103,26 +111,96 @@ int main(int argc, char **argv) {
                             .vectorize(rx);
                         ref.compute_root();
 
-                        RDom c(0, 128);
-                        Expr err = cast<double>(maximum(absd(f(c), ref(c))));
+                        const auto fn = [=]() {
+                            // Useful for debugging; leave in (commented out)
+                            // std::cout << "Testing: "
+                            //           << " target: " << target
+                            //           << " dst_lanes: " << dst_lanes
+                            //           << " reduce_factor " << reduce_factor
+                            //           << " src_type " << src_type
+                            //           << " widen_factor " << widen_factor
+                            //           << " dst_type " << dst_type
+                            //           << " op " << op
+                            //           << "\n";
 
-                        double e = evaluate<double>(err);
+                            RDom c(0, 128);
 
-                        if (e > 1e-3) {
-                            std::cerr
-                                << "Horizontal reduction produced different output when vectorized!\n"
-                                << "Maximum error = " << e << "\n"
-                                << "Reducing from " << src_type.with_lanes(src_lanes)
-                                << " to " << dst_type.with_lanes(dst_lanes) << "\n"
-                                << "RHS: " << f.update_value() << "\n";
-                            exit(-1);
-                        }
+                            // Func.evaluate() doesn't let you specify a Target (!),
+                            // so let's use Func.realize() instead.
+                            Func err("err");
+                            err() = cast<double>(maximum(absd(f(c), ref(c))));
+                            Buffer<double, 0> err_im = err.realize({}, target);
+                            double e = err_im();
+
+                            if (e > 1e-3) {
+                                std::cerr
+                                    << "Horizontal reduction produced different output when vectorized!\n"
+                                    << "Maximum error = " << e << "\n"
+                                    << "Reducing from " << src_type.with_lanes(src_lanes)
+                                    << " to " << dst_type.with_lanes(dst_lanes) << "\n"
+                                    << "RHS: " << f.update_value() << "\n";
+                                exit(-1);
+                            }
+                        };
+                        tasks.push_back({target, fn});
                     }
                 }
             }
         }
     }
+}
 
-    printf("Success!\n");
+}  // namespace
+
+int main(int argc, char **argv) {
+    Target target = get_jit_target_from_environment();
+
+    std::vector<Task> tasks;
+    add_tasks(target, tasks);
+
+    if (target.arch == Target::X86) {
+        // LLVM has had SIMD codegen errors that we missed because we didn't test against
+        // multiple SIMD architectures, using just 'host' instead. To remedy this, we'll
+        // re-run this multiple times, downgrading the SIMD successively, to ensure we get
+        // test coverage. Note that this doesn't attempt to be exhaustive -- there are too
+        // many permutations to really test, especially with AVX512 -- but this way we
+        // can get at least baseline coverage for the major variants.
+        //
+        // (Note also that our codegen for x86 implicitly 'fills in' required prerequisites,
+        // e.g. if you specify a target with AVX2, the codegen will automatically include
+        // AVX and SSE41 as well.)
+        if (target.has_feature(Target::AVX512)) {
+            Target avx2_target(target.os, target.arch, target.bits, {Target::AVX2});
+            add_tasks(avx2_target, tasks);
+        }
+        if (target.has_feature(Target::AVX2)) {
+            Target sse41_target(target.os, target.arch, target.bits, {Target::AVX});
+            add_tasks(sse41_target, tasks);
+        }
+        if (target.has_feature(Target::AVX)) {
+            Target sse41_target(target.os, target.arch, target.bits, {Target::SSE41});
+            add_tasks(sse41_target, tasks);
+        }
+        if (target.has_feature(Target::SSE41)) {
+            // Halide assumes that all x86 targets have at least sse2
+            Target sse2_target(target.os, target.arch, target.bits);
+            add_tasks(sse2_target, tasks);
+        }
+    }
+
+    using Sharder = Halide::Internal::Test::Sharder;
+    Sharder sharder;
+    Target prev_target;
+    for (size_t t = 0; t < tasks.size(); t++) {
+        if (!sharder.should_run(t)) continue;
+        const auto &task = tasks.at(t);
+        if (task.target != prev_target) {
+            std::cout << "vector_reductions: Testing with " << task.target << "\n";
+            prev_target = task.target;
+        }
+        task.fn();
+    }
+
+    std::cout << "Success!\n";
     return 0;
 }

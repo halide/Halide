@@ -410,6 +410,14 @@ protected:
                         saturating_sub(x, y),
                         op->type.is_uint() && is_x_same_uint) ||
 
+                // Saturating narrow patterns.
+                rewrite(max(min(x, upper), lower),
+                        saturating_cast(op->type, x)) ||
+
+                rewrite(min(x, upper),
+                        saturating_cast(op->type, x),
+                        is_uint(x)) ||
+
                 // Averaging patterns
                 //
                 // We have a slight preference for rounding_halving_add over
@@ -447,16 +455,8 @@ protected:
                         rounding_halving_add(x, y),
                         is_x_same_int_or_uint) ||
 
-                rewrite(halving_add(widening_sub(x, y), 1),
-                        rounding_halving_sub(x, y),
-                        is_x_same_int_or_uint) ||
-
                 rewrite(rounding_shift_right(widening_add(x, y), 1),
                         rounding_halving_add(x, y),
-                        is_x_same_int_or_uint) ||
-
-                rewrite(rounding_shift_right(widening_sub(x, y), 1),
-                        rounding_halving_sub(x, y),
                         is_x_same_int_or_uint) ||
 
                 // Multiply-keep-high-bits patterns.
@@ -521,10 +521,6 @@ protected:
                         halving_sub(x, y),
                         is_x_same_int_or_uint) ||
 
-                rewrite(rounding_shift_right(cast(op_type_wide, widening_sub(x, y)), 1),
-                        rounding_halving_sub(x, y),
-                        is_x_same_int_or_uint) ||
-
                 false) {
                 internal_assert(rewrite.result.type() == op->type)
                     << "Rewrite changed type: " << Expr(op) << " -> " << rewrite.result << "\n";
@@ -587,18 +583,66 @@ protected:
             return rewrite.result;
         }
 
+        const int bits = op->type.bits();
+        const auto is_x_same_int = op->type.is_int() && is_int(x, bits);
+        const auto is_x_same_uint = op->type.is_uint() && is_uint(x, bits);
+        const auto is_x_same_int_or_uint = is_x_same_int || is_x_same_uint;
+        auto x_y_same_sign = (is_int(x) == is_int(y)) || (is_uint(x) && is_uint(y));
+        Type unsigned_type = op->type.with_code(halide_type_uint);
+        const auto is_x_wider_int_or_uint = (op->type.is_int() && is_int(x, 2 * bits)) || (op->type.is_uint() && is_uint(x, 2 * bits));
+        Type opposite_type = op->type.is_int() ? op->type.with_code(halide_type_uint) : op->type.with_code(halide_type_int);
+        const auto is_x_wider_opposite_int = (op->type.is_int() && is_uint(x, 2 * bits)) || (op->type.is_uint() && is_int(x, 2 * bits));
+
+        if (
+            // Saturating patterns.
+            rewrite(saturating_cast(op->type, widening_add(x, y)),
+                    saturating_add(x, y),
+                    is_x_same_int_or_uint) ||
+            rewrite(saturating_cast(op->type, widening_sub(x, y)),
+                    saturating_sub(x, y),
+                    is_x_same_int_or_uint) ||
+            rewrite(saturating_cast(op->type, shift_right(widening_mul(x, y), z)),
+                    mul_shift_right(x, y, cast(unsigned_type, z)),
+                    is_x_same_int_or_uint && x_y_same_sign && is_uint(z)) ||
+            rewrite(saturating_cast(op->type, rounding_shift_right(widening_mul(x, y), z)),
+                    rounding_mul_shift_right(x, y, cast(unsigned_type, z)),
+                    is_x_same_int_or_uint && x_y_same_sign && is_uint(z)) ||
+            // We can remove unnecessary widening if we are then performing a saturating narrow.
+            // This is similar to the logic inside `visit_min_or_max`.
+            (((bits <= 32) &&
+              // Examples:
+              // i8_sat(int16(i8)) -> i8
+              // u8_sat(uint16(u8)) -> u8
+              rewrite(saturating_cast(op->type, cast(op->type.widen(), x)),
+                      x,
+                      is_x_same_int_or_uint)) ||
+             ((bits <= 16) &&
+              // Examples:
+              // i8_sat(int32(i16)) -> i8_sat(i16)
+              // u8_sat(uint32(u16)) -> u8_sat(u16)
+              (rewrite(saturating_cast(op->type, cast(op->type.widen().widen(), x)),
+                       saturating_cast(op->type, x),
+                       is_x_wider_int_or_uint) ||
+               // Examples:
+               // i8_sat(uint32(u16)) -> i8_sat(u16)
+               // u8_sat(int32(i16)) -> i8_sat(i16)
+               rewrite(saturating_cast(op->type, cast(opposite_type.widen().widen(), x)),
+                       saturating_cast(op->type, x),
+                       is_x_wider_opposite_int) ||
+               false))) ||
+            false) {
+            return mutate(rewrite.result);
+        }
+
         if (no_overflow(op->type)) {
             // clang-format off
             if (rewrite(halving_add(x + y, 1), rounding_halving_add(x, y)) ||
                 rewrite(halving_add(x, y + 1), rounding_halving_add(x, y)) ||
                 rewrite(halving_add(x + 1, y), rounding_halving_add(x, y)) ||
-                rewrite(halving_add(x - y, 1), rounding_halving_sub(x, y)) ||
-                rewrite(halving_sub(x + 1, y), rounding_halving_sub(x, y)) ||
                 rewrite(halving_add(x, 1), rounding_shift_right(x, 1)) ||
                 rewrite(shift_right(x + y, 1), halving_add(x, y)) ||
                 rewrite(shift_right(x - y, 1), halving_sub(x, y)) ||
                 rewrite(rounding_shift_right(x + y, 1), rounding_halving_add(x, y)) ||
-                rewrite(rounding_shift_right(x - y, 1), rounding_halving_sub(x, y)) ||
                 false) {
                 return mutate(rewrite.result);
             }
@@ -901,6 +945,47 @@ Expr lower_saturating_sub(const Expr &a, const Expr &b) {
     return simplify(clamp(a, a.type().min() + max(b, 0), a.type().max() + min(b, 0))) - b;
 }
 
+Expr lower_saturating_cast(const Type &t, const Expr &a) {
+    // For float to float, guarantee infinities are always pinned to range.
+    if (t.is_float() && a.type().is_float()) {
+        if (t.bits() < a.type().bits()) {
+            return cast(t, clamp(a, t.min(), t.max()));
+        } else {
+            return clamp(cast(t, a), t.min(), t.max());
+        }
+    } else if (a.type() != t) {
+        // Limits for Int(2^n) or UInt(2^n) are not exactly representable in Float(2^n)
+        if (a.type().is_float() && !t.is_float() && t.bits() >= a.type().bits()) {
+            Expr e = max(a, t.min());  // min values turn out to be always representable
+
+            // This line depends on t.max() rounding upward, which should always
+            // be the case as it is one less than a representable value, thus
+            // the one larger is always the closest.
+            e = select(e >= cast(e.type(), t.max()), t.max(), cast(t, e));
+            return e;
+        } else {
+            Expr min_bound;
+            if (!a.type().is_uint()) {
+                min_bound = lossless_cast(a.type(), t.min());
+            }
+            Expr max_bound = lossless_cast(a.type(), t.max());
+
+            Expr e;
+            if (min_bound.defined() && max_bound.defined()) {
+                e = clamp(a, min_bound, max_bound);
+            } else if (min_bound.defined()) {
+                e = max(a, min_bound);
+            } else if (max_bound.defined()) {
+                e = min(a, max_bound);
+            } else {
+                e = a;
+            }
+            return cast(t, std::move(e));
+        }
+    }
+    return a;
+}
+
 Expr lower_halving_add(const Expr &a, const Expr &b) {
     internal_assert(a.type() == b.type());
     // Borrowed from http://aggregate.org/MAGIC/#Average%20of%20Integers
@@ -909,19 +994,30 @@ Expr lower_halving_add(const Expr &a, const Expr &b) {
 
 Expr lower_halving_sub(const Expr &a, const Expr &b) {
     internal_assert(a.type() == b.type());
-    return (a >> 1) - (b >> 1) - (((b & 1) - (a & 1) + 1) >> 1);
+    Expr e = rounding_halving_add(a, ~b);
+    if (a.type().is_uint()) {
+        // An explanation in 8-bit:
+        //   (x - y) / 2
+        // = (x + 256 - y) / 2 - 128
+        // = (x + (255 - y) + 1) / 2 - 128
+        // = (x + ~y + 1) / 2 - 128
+        // = rounding_halving_add(x, ~y) - 128
+        // = rounding_halving_add(x, ~y) + 128 (due to 2s-complement wrap-around)
+        return e + make_const(e.type(), (uint64_t)1 << (a.type().bits() - 1));
+    } else {
+        // For 2s-complement signed integers, negating is done by flipping the
+        // bits and adding one, so:
+        //   (x - y) / 2
+        // = (x + (-y)) / 2
+        // = (x + (~y + 1)) / 2
+        // = rounding_halving_add(x, ~y)
+        return e;
+    }
 }
 
-// TODO: These should using rounding_shift_right, but lowering that
-// results in double widening and the simplifier doesn't fix it.
 Expr lower_rounding_halving_add(const Expr &a, const Expr &b) {
     internal_assert(a.type() == b.type());
-    return (a >> 1) + (b >> 1) + (((a & 1) + (b & 1) + 1) >> 1);
-}
-
-Expr lower_rounding_halving_sub(const Expr &a, const Expr &b) {
-    internal_assert(a.type() == b.type());
-    return (a >> 1) - (b >> 1) + (((a & 1) - (b & 1) + 1) >> 1);
+    return halving_add(a, b) + ((a ^ b) & 1);
 }
 
 Expr lower_sorted_avg(const Expr &a, const Expr &b) {
@@ -1019,6 +1115,9 @@ Expr lower_intrinsic(const Call *op) {
     } else if (op->is_intrinsic(Call::saturating_sub)) {
         internal_assert(op->args.size() == 2);
         return lower_saturating_sub(op->args[0], op->args[1]);
+    } else if (op->is_intrinsic(Call::saturating_cast)) {
+        internal_assert(op->args.size() == 1);
+        return lower_saturating_cast(op->type, op->args[0]);
     } else if (op->is_intrinsic(Call::widening_shift_left)) {
         internal_assert(op->args.size() == 2);
         return lower_widening_shift_left(op->args[0], op->args[1]);
@@ -1040,9 +1139,6 @@ Expr lower_intrinsic(const Call *op) {
     } else if (op->is_intrinsic(Call::rounding_halving_add)) {
         internal_assert(op->args.size() == 2);
         return lower_rounding_halving_add(op->args[0], op->args[1]);
-    } else if (op->is_intrinsic(Call::rounding_halving_sub)) {
-        internal_assert(op->args.size() == 2);
-        return lower_rounding_halving_sub(op->args[0], op->args[1]);
     } else if (op->is_intrinsic(Call::rounding_mul_shift_right)) {
         internal_assert(op->args.size() == 3);
         return lower_rounding_mul_shift_right(op->args[0], op->args[1], op->args[2]);

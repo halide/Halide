@@ -44,10 +44,14 @@ int main(int argc, char **argv) {
     std::vector<Func> outs;
     outs.push_back(h);
     outs.push_back(g);
-    Pipeline test(outs);
+    Pipeline p(outs);
 
     Target target = get_jit_target_from_environment();
-    test.auto_schedule(target);
+#ifdef HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
+    p.auto_schedule(target);
+#else
+    p.apply_autoscheduler(target, {"Mullapudi2016"});
+#endif
 
     // Inspect the schedule
     h.print_loop_nest();
@@ -56,7 +60,7 @@ int main(int argc, char **argv) {
     Buffer<uint16_t> out_1(999, 999), out_2(999, 999);
 
     // Run the schedule
-    test.realize({out_1, out_2});
+    p.realize({out_1, out_2});
 
     printf("Success!\n");
     return 0;

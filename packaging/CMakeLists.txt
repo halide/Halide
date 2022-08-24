@@ -46,18 +46,6 @@ foreach (dep IN ITEMS Halide_LLVM Halide_wabt)
 endforeach ()
 
 ##
-# Python bindings
-##
-
-if (WITH_PYTHON_BINDINGS)
-    set(Halide_INSTALL_PYTHONDIR "${CMAKE_INSTALL_LIBDIR}/python3/site-packages"
-        CACHE STRING "Path to Halide Python bindings folder")
-    install(TARGETS Halide_Python
-            LIBRARY DESTINATION ${Halide_INSTALL_PYTHONDIR} COMPONENT Halide_Python
-            NAMELINK_COMPONENT Halide_Python)
-endif ()
-
-##
 # Library-type-agnostic interface targets
 ##
 
@@ -129,12 +117,8 @@ install(DIRECTORY ${Halide_SOURCE_DIR}/tools/
         PATTERN "build_halide_h.cpp" EXCLUDE
         PATTERN "find_inverse.cpp" EXCLUDE)
 
-install(FILES ${Halide_SOURCE_DIR}/src/autoschedulers/adams2019/autotune_loop.sh
+install(PROGRAMS ${Halide_SOURCE_DIR}/src/autoschedulers/adams2019/autotune_loop.sh
         DESTINATION ${Halide_INSTALL_TOOLSDIR}
-        PERMISSIONS
-        OWNER_READ OWNER_WRITE OWNER_EXECUTE
-        GROUP_READ GROUP_EXECUTE
-        WORLD_READ WORLD_EXECUTE
         COMPONENT Halide_Development)
 
 ##
@@ -153,13 +137,6 @@ if (WITH_TUTORIALS)
             PATTERN "*.jpg"
             PATTERN "*.mp4"
             PATTERN "*.png")
-
-    if (WITH_PYTHON_BINDINGS)
-      install(DIRECTORY ${Halide_SOURCE_DIR}/python_bindings/tutorial/
-              DESTINATION ${CMAKE_INSTALL_DOCDIR}/tutorial-python
-              COMPONENT Halide_Documentation
-              FILES_MATCHING PATTERN "*.py")
-    endif ()
 endif ()
 
 ##
@@ -266,6 +243,11 @@ cpack_add_component(Halide_Runtime
 cpack_add_component(Halide_Development
                     DISPLAY_NAME "Halide development"
                     DESCRIPTION "Static Halide libraries and CMake development files"
+                    DEPENDS Halide_Runtime)
+
+cpack_add_component(Halide_Python
+                    DISPLAY_NAME "Python bindings"
+                    DESCRIPTION "Python package providing bindings to Halide"
                     DEPENDS Halide_Runtime)
 
 cpack_add_component(Halide_Documentation

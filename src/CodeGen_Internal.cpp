@@ -16,7 +16,8 @@ using std::string;
 
 using namespace llvm;
 
-llvm::Type *llvm_type_of(LLVMContext *c, Halide::Type t) {
+llvm::Type *llvm_type_of(LLVMContext *c, Halide::Type t,
+                         int effective_vscale) {
     if (t.lanes() == 1) {
         if (t.is_float() && !t.is_bfloat()) {
             switch (t.bits()) {
@@ -36,18 +37,27 @@ llvm::Type *llvm_type_of(LLVMContext *c, Halide::Type t) {
             return llvm::Type::getIntNTy(*c, t.bits());
         }
     } else {
-        llvm::Type *element_type = llvm_type_of(c, t.element_of());
-        return get_vector_type(element_type, t.lanes());
-    }
-}
-
-int get_vector_num_elements(llvm::Type *t) {
-    if (t->isVectorTy()) {
-        auto *vt = dyn_cast<llvm::FixedVectorType>(t);
-        internal_assert(vt) << "Called get_vector_num_elements on a scalable vector type\n";
-        return vt->getNumElements();
-    } else {
-        return 1;
+        llvm::Type *element_type = llvm_type_of(c, t.element_of(), 0);
+        bool scalable = false;
+        int lanes = t.lanes();
+        if (effective_vscale != 0) {
+            int total_bits = t.bits() * t.lanes();
+            scalable = ((total_bits % effective_vscale) == 0);
+            if (scalable) {
+                lanes /= effective_vscale;
+            } else {
+                // TODO(zvookin): This error indicates that the requested number of vector lanes
+                // is not expressible exactly via vscale. This will be fairly unusual unless
+                // non-power of two, or very short, vector sizes are used in a schedule.
+                // It is made an error, instead of passing the fixed non-vscale vector type to LLVM,
+                // to catch the case early while developing vscale backends.
+                // We may need to change this to allow the case so if one hits this error in situation
+                // where it should pass through a fixed width vector type, please discuss.
+                internal_error << "Failed to make vscale vector type with bits " << t.bits() << " lanes " << t.lanes()
+                               << " effective_vscale " << effective_vscale << " total_bits " << total_bits << "\n";
+            }
+        }
+        return get_vector_type(element_type, lanes, scalable);
     }
 }
 
@@ -63,8 +73,8 @@ llvm::ElementCount element_count(int e) {
     return llvm::ElementCount::getFixed(e);
 }
 
-llvm::Type *get_vector_type(llvm::Type *t, int n) {
-    return VectorType::get(t, element_count(n));
+llvm::Type *get_vector_type(llvm::Type *t, int n, bool scalable) {
+    return VectorType::get(t, n, scalable);
 }
 
 // Returns true if the given function name is one of the Halide runtime
@@ -590,16 +600,15 @@ bool get_md_string(llvm::Metadata *value, std::string &result) {
     return false;
 }
 
-void get_target_options(const llvm::Module &module, llvm::TargetOptions &options, std::string &mcpu, std::string &mattrs) {
+void get_target_options(const llvm::Module &module, llvm::TargetOptions &options) {
     bool use_soft_float_abi = false;
     get_md_bool(module.getModuleFlag("halide_use_soft_float_abi"), use_soft_float_abi);
-    get_md_string(module.getModuleFlag("halide_mcpu"), mcpu);
-    get_md_string(module.getModuleFlag("halide_mattrs"), mattrs);
     std::string mabi;
     get_md_string(module.getModuleFlag("halide_mabi"), mabi);
     bool use_pic = true;
     get_md_bool(module.getModuleFlag("halide_use_pic"), use_pic);
 
+    // FIXME: can this be migrated into `set_function_attributes_from_halide_target_options()`?
     bool per_instruction_fast_math_flags = false;
     get_md_bool(module.getModuleFlag("halide_per_instruction_fast_math_flags"), per_instruction_fast_math_flags);
 
@@ -611,11 +620,6 @@ void get_target_options(const llvm::Module &module, llvm::TargetOptions &options
     options.HonorSignDependentRoundingFPMathOption = !per_instruction_fast_math_flags;
     options.NoZerosInBSS = false;
     options.GuaranteedTailCallOpt = false;
-#if LLVM_VERSION >= 130
-    // nothing
-#else
-    options.StackAlignmentOverride = 0;
-#endif
     options.FunctionSections = true;
     options.UseInitArray = true;
     options.FloatABIType =
@@ -634,9 +638,14 @@ void clone_target_options(const llvm::Module &from, llvm::Module &to) {
         to.addModuleFlag(llvm::Module::Warning, "halide_use_soft_float_abi", use_soft_float_abi ? 1 : 0);
     }
 
-    std::string mcpu;
-    if (get_md_string(from.getModuleFlag("halide_mcpu"), mcpu)) {
-        to.addModuleFlag(llvm::Module::Warning, "halide_mcpu", llvm::MDString::get(context, mcpu));
+    std::string mcpu_target;
+    if (get_md_string(from.getModuleFlag("halide_mcpu_target"), mcpu_target)) {
+        to.addModuleFlag(llvm::Module::Warning, "halide_mcpu_target", llvm::MDString::get(context, mcpu_target));
+    }
+
+    std::string mcpu_tune;
+    if (get_md_string(from.getModuleFlag("halide_mcpu_tune"), mcpu_tune)) {
+        to.addModuleFlag(llvm::Module::Warning, "halide_mcpu_tune", llvm::MDString::get(context, mcpu_tune));
     }
 
     std::string mattrs;
@@ -662,9 +671,7 @@ std::unique_ptr<llvm::TargetMachine> make_target_machine(const llvm::Module &mod
     internal_assert(llvm_target) << "Could not create LLVM target for " << triple.str() << "\n";
 
     llvm::TargetOptions options;
-    std::string mcpu = "";
-    std::string mattrs = "";
-    get_target_options(module, options, mcpu, mattrs);
+    get_target_options(module, options);
 
     bool use_pic = true;
     get_md_bool(module.getModuleFlag("halide_use_pic"), use_pic);
@@ -673,7 +680,7 @@ std::unique_ptr<llvm::TargetMachine> make_target_machine(const llvm::Module &mod
     get_md_bool(module.getModuleFlag("halide_use_large_code_model"), use_large_code_model);
 
     auto *tm = llvm_target->createTargetMachine(module.getTargetTriple(),
-                                                mcpu, mattrs,
+                                                /*CPU target=*/"", /*Features=*/"",
                                                 options,
                                                 use_pic ? llvm::Reloc::PIC_ : llvm::Reloc::Static,
                                                 use_large_code_model ? llvm::CodeModel::Large : llvm::CodeModel::Small,
@@ -681,20 +688,43 @@ std::unique_ptr<llvm::TargetMachine> make_target_machine(const llvm::Module &mod
     return std::unique_ptr<llvm::TargetMachine>(tm);
 }
 
-void set_function_attributes_for_target(llvm::Function *fn, const Target &t) {
+void set_function_attributes_from_halide_target_options(llvm::Function &fn) {
+    llvm::Module &module = *fn.getParent();
+
+    std::string mcpu_target, mcpu_tune, mattrs, vscale_range;
+    get_md_string(module.getModuleFlag("halide_mcpu_target"), mcpu_target);
+    get_md_string(module.getModuleFlag("halide_mcpu_tune"), mcpu_tune);
+    get_md_string(module.getModuleFlag("halide_mattrs"), mattrs);
+    get_md_string(module.getModuleFlag("halide_vscale_range"), vscale_range);
+
+    fn.addFnAttr("target-cpu", mcpu_target);
+    fn.addFnAttr("tune-cpu", mcpu_tune);
+    fn.addFnAttr("target-features", mattrs);
+
+    // Halide-generated IR is not exception-safe.
+    // No exception should unwind out of Halide functions.
+    // No exception should be thrown within Halide functions.
+    // All functions called by the Halide function must not unwind.
+    fn.setDoesNotThrow();
+
+    // Side-effect-free loops are undefined.
+    // But asserts and external calls *might* abort.
+    fn.setMustProgress();
+
     // Turn off approximate reciprocals for division. It's too
     // inaccurate even for us.
-    fn->addFnAttr("reciprocal-estimates", "none");
+    fn.addFnAttr("reciprocal-estimates", "none");
+
+    // If a fixed vscale is asserted, add it as an attribute on the function.
+    if (!vscale_range.empty()) {
+        fn.addFnAttr("vscale_range", vscale_range);
+    }
 }
 
 void embed_bitcode(llvm::Module *M, const string &halide_command) {
     // Save llvm.compiler.used and remote it.
     SmallVector<Constant *, 2> used_array;
-#if LLVM_VERSION >= 130
     SmallVector<GlobalValue *, 4> used_globals;
-#else
-    SmallPtrSet<GlobalValue *, 4> used_globals;
-#endif
     llvm::Type *used_element_type = llvm::Type::getInt8Ty(M->getContext())->getPointerTo(0);
     GlobalVariable *used = collectUsedGlobalVariables(*M, used_globals, true);
     for (auto *GV : used_globals) {
@@ -763,6 +793,35 @@ void embed_bitcode(llvm::Module *M, const string &halide_command) {
             llvm::ConstantArray::get(ATy, used_array), "llvm.compiler.used");
         new_used->setSection("llvm.metadata");
     }
+}
+
+Expr lower_concat_bits(const Call *op) {
+    internal_assert(op->is_intrinsic(Call::concat_bits));
+    internal_assert(!op->args.empty());
+
+    Expr result = make_zero(op->type);
+    int shift = 0;
+    for (const Expr &e : op->args) {
+        result = result | (cast(result.type(), e) << shift);
+        shift += e.type().bits();
+    }
+    return result;
+}
+
+Expr lower_extract_bits(const Call *op) {
+    Expr e = op->args[0];
+    // Do a shift-and-cast as a uint, which will zero-fill any out-of-range
+    // bits for us.
+    if (!e.type().is_uint()) {
+        e = reinterpret(e.type().with_code(halide_type_uint), e);
+    }
+    e = e >> op->args[1];
+    e = cast(op->type.with_code(halide_type_uint), e);
+    if (op->type != e.type()) {
+        e = reinterpret(op->type, e);
+    }
+    e = simplify(e);
+    return e;
 }
 
 }  // namespace Internal

@@ -563,7 +563,7 @@ struct FunctionDAG {
 
     // Create the function DAG, and do all the dependency and cost
     // analysis. This is done once up-front before the tree search.
-    FunctionDAG(const vector<Function> &outputs, const MachineParams &params, const Target &target);
+    FunctionDAG(const vector<Function> &outputs, const Target &target);
 
     void dump() const;
     std::ostream &dump(std::ostream &os) const;

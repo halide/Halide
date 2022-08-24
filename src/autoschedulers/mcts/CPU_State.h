@@ -123,7 +123,7 @@ class CPU_State {
     // TODO(rootjalex): should these be static members then?
 public:
     const FunctionDAG *dag_ptr;
-    const MachineParams *params_ptr;
+    const MctsParams *params_ptr;
     CostModel *model_ptr;
     int64_t memory_limit = 0;
 private:
@@ -146,7 +146,7 @@ public:
     CPU_State(const CPU_State &_state) = default;
     CPU_State(CPU_State &&_state) = default;
     CPU_State &operator=(const CPU_State &_state) = default;
-    CPU_State(const FunctionDAG *_dag_ptr, const MachineParams *_params_ptr,
+    CPU_State(const FunctionDAG *_dag_ptr, const MctsParams *_params_ptr,
               CostModel *_model_ptr, IntrusivePtr<const LoopNest> _root, int n_decisions, int64_t _memory_limit = 0) :
         root(_root), n_decisions_made(n_decisions), dag_ptr(_dag_ptr),
         params_ptr(_params_ptr), model_ptr(_model_ptr), memory_limit(_memory_limit) {
@@ -204,13 +204,13 @@ public:
 
 // This is used to early-out for certain prunable States.
 // Returns true if this LoopNest should not be a valid State.
-bool prunable(const FunctionDAG *dag_ptr, const MachineParams *params_ptr, const LoopNest *root_ptr, StageMap<ScheduleFeatures> &features, int64_t memory_limit);
+bool prunable(const FunctionDAG *dag_ptr, const MctsParams *params_ptr, const LoopNest *root_ptr, StageMap<ScheduleFeatures> &features, int64_t memory_limit);
 
 // Used by the above to check if a LoopNest is prunable.
-void compute_featurization(const FunctionDAG *dag_ptr, const MachineParams *params_ptr, const LoopNest *root_ptr, StageMap<ScheduleFeatures> *features);
+void compute_featurization(const FunctionDAG *dag_ptr, const MctsParams *params_ptr, const LoopNest *root_ptr, StageMap<ScheduleFeatures> *features);
 
 // Calls `compute_featurization` and prints those features to `out`.
-void save_featurization(const FunctionDAG *dag_ptr, const MachineParams *params_ptr, const LoopNest *root_ptr, std::ostream &out);
+void save_featurization(const FunctionDAG *dag_ptr, const MctsParams *params_ptr, const LoopNest *root_ptr, std::ostream &out);
 
 }  // namespace Autoscheduler
 }  // namespace Internal

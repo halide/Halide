@@ -13,20 +13,6 @@ namespace Autoscheduler {
 // registers.
 const int kUnrollLimit = 12;
 
-// Get the HL_NO_SUBTILING environment variable. Purpose described above.
-bool get_may_subtile() {
-    string no_subtiling_str = get_env_variable("HL_NO_SUBTILING");
-    if (no_subtiling_str == "1") {
-        return false;
-    } else {
-        return true;
-    }
-}
-bool may_subtile() {
-    static bool b = get_may_subtile();
-    return b;
-}
-
 // Given a multi-dimensional box of dimensionality d, generate a list
 // of candidate tile sizes for it, logarithmically spacing the sizes
 // using the given factor. If 'allow_splits' is false, every dimension
@@ -227,7 +213,7 @@ void LoopNest::get_sites(StageMap<Sites> &sites,
 
 // Do a recursive walk over the loop nest computing features to feed the cost model.
 void LoopNest::compute_features(const FunctionDAG &dag,
-                                const MachineParams &params,
+                                const Adams2019Params &params,
                                 const StageMap<Sites> &sites,
                                 int64_t instances,
                                 int64_t parallelism,
@@ -729,7 +715,6 @@ void LoopNest::compute_features(const FunctionDAG &dag,
                 int64_t footprint = e->producer->bytes_per_point;
                 int64_t compute_footprint = footprint;
                 int64_t store_footprint = footprint;
-                int64_t task_footprint = footprint;
                 int64_t line_footprint = 1;
                 int64_t compute_line_footprint = 1;
                 int64_t store_line_footprint = 1;
@@ -890,7 +875,6 @@ void LoopNest::compute_features(const FunctionDAG &dag,
                     footprint *= extent;
                     compute_footprint *= compute_extent;
                     store_footprint *= store_extent;
-                    task_footprint *= task_extent;
 
                     bool dense = ((e->producer->is_input && i == 0) ||
                                   (site.produce != nullptr && i == site.produce->vector_dim));
@@ -1093,24 +1077,24 @@ const Bound &LoopNest::get_bounds(const FunctionDAG::Node *f) const {
 }
 
 // Recursively print a loop nest representation to stderr
-void LoopNest::dump(string prefix, const LoopNest *parent) const {
+void LoopNest::dump(std::ostream &os, string prefix, const LoopNest *parent) const {
     if (!is_root()) {
         // Non-root nodes always have parents.
         internal_assert(parent != nullptr);
 
-        aslog(0) << prefix << node->func.name();
+        os << prefix << node->func.name();
         prefix += " ";
 
         for (size_t i = 0; i < size.size(); i++) {
-            aslog(0) << " " << size[i];
+            os << " " << size[i];
             // The vectorized loop gets a 'v' suffix
             if (innermost && i == (size_t)vectorized_loop_index) {
-                aslog(0) << "v";
+                os << "v";
             }
             // Loops that have a known constant size get a
             // 'c'. Useful for knowing what we can unroll.
             if (parent->get_bounds(node)->loops(stage->index, i).constant_extent()) {
-                aslog(0) << "c";
+                os << "c";
             }
         }
 
@@ -1119,88 +1103,32 @@ void LoopNest::dump(string prefix, const LoopNest *parent) const {
             const auto &bounds = get_bounds(node);
             for (size_t i = 0; i < size.size(); i++) {
                 const auto &p = bounds->loops(stage->index, i);
-                aslog(0) << " [" << p.min() << ", " << p.max() << "]";
+                os << " [" << p.first << ", " << p.second << "]";
             }
         */
 
-        aslog(0) << " (" << vectorized_loop_index << ", " << vector_dim << ")";
+        os << " (" << vectorized_loop_index << ", " << vector_dim << ")";
     }
 
     if (tileable) {
-        aslog(0) << " t";
+        os << " t";
     }
     if (innermost) {
-        aslog(0) << " *\n";
+        os << " *\n";
     } else if (parallel) {
-        aslog(0) << " p\n";
+        os << " p\n";
     } else {
-        aslog(0) << "\n";
+        os << "\n";
     }
     for (const auto *p : store_at) {
-        aslog(0) << prefix << "realize: " << p->func.name() << "\n";
+        os << prefix << "realize: " << p->func.name() << "\n";
     }
     for (size_t i = children.size(); i > 0; i--) {
-        children[i - 1]->dump(prefix, this);
+        children[i - 1]->dump(os, prefix, this);
     }
     for (auto it = inlined.begin(); it != inlined.end(); it++) {
-        aslog(0) << prefix << "inlined: " << it.key()->func.name() << " " << it.value() << "\n";
+        os << prefix << "inlined: " << it.key()->func.name() << " " << it.value() << "\n";
     }
-}
-
-string LoopNest::dump(string prefix, const LoopNest *parent, bool dummy) const {
-    string result;
-
-    if (!is_root()) {
-        // Non-root nodes always have parents.
-        internal_assert(parent != nullptr);
-        result += prefix;
-        prefix += ">";
-
-        for (size_t i = 0; i < size.size(); i++) {
-            result += (std::to_string(size[i]) + ",");
-            // The vectorized loop gets a 'v' suffix
-            if (innermost && i == (size_t)vectorized_loop_index) {
-                result += "v,";
-            }
-            // Loops that have a known constant size get a
-            // 'c'. Useful for knowing what we can unroll.
-            if (parent->get_bounds(node)->loops(stage->index, i).constant_extent()) {
-                result += "c,";
-            }
-        }
-
-        // Uncomment when debugging the representative loop bounds selected.
-        /*
-            const auto &bounds = get_bounds(node);
-            for (size_t i = 0; i < size.size(); i++) {
-                const auto &p = bounds->loops(stage->index, i);
-                aslog(0) << " [" << p.min() << ", " << p.max() << "]";
-            }
-        */
-
-        result += std::to_string(vectorized_loop_index) + "," + std::to_string(vector_dim) + ",";
-    }
-
-    if (tileable) {
-        result += "t,";
-    }
-    if (innermost) {
-        result += "i,\n";
-    } else if (parallel) {
-        result += "p,\n";
-    } else {
-        result += "\n";
-    }
-    for (const auto *p : store_at) {
-        //aslog(0) << prefix << "realize: " << p->func.name() << "\n";
-    }
-    for (size_t i = children.size(); i > 0; i--) {
-        result += children[i - 1]->dump(prefix, this, true);
-    }
-    for (auto it = inlined.begin(); it != inlined.end(); it++) {
-        //aslog(0) << prefix << "inlined: " << it.key()->func.name() << " " << it.value() << "\n";
-    }
-    return result;
 }
 
 // Does this loop nest access the given Func
@@ -1302,7 +1230,7 @@ void LoopNest::inline_func(const FunctionDAG::Node *f) {
     // Inline it into the children
     for (auto &child : children) {
         if (child->calls(f)) {
-            std::unique_ptr<LoopNest> new_child{new LoopNest};
+            auto new_child = std::make_unique<LoopNest>();
             new_child->copy_from(*child);
             new_child->inline_func(f);
             child = new_child.release();
@@ -1327,10 +1255,11 @@ void LoopNest::inline_func(const FunctionDAG::Node *f) {
 }
 
 // Compute a Func at this site.
-void LoopNest::compute_here(const FunctionDAG::Node *f, bool tileable, int v) {
+void LoopNest::compute_here(const FunctionDAG::Node *f, bool tileable, int v, const Adams2019Params &params) {
     const auto &bounds = get_bounds(f);
 
-    if (!may_subtile()) {
+    const bool may_subtile = (params.disable_subtiling != 0);
+    if (!may_subtile) {
         // If we are restricting ourselves to the Mullapudi et al
         // scheduling space, then once something is computed here
         // we may not subtile this loop.
@@ -1343,7 +1272,7 @@ void LoopNest::compute_here(const FunctionDAG::Node *f, bool tileable, int v) {
         node->stage = &f->stages[s];
         node->innermost = true;
         node->vectorized_loop_index = -1;
-        node->tileable = tileable && (is_root() || may_subtile());
+        node->tileable = tileable && (is_root() || may_subtile);
         // Set up a bound for the inside of the
         // loop. computed/required is still the full region, but
         // the loop nest will be a single representative point.
@@ -1351,13 +1280,11 @@ void LoopNest::compute_here(const FunctionDAG::Node *f, bool tileable, int v) {
         size_t loop_dim = f->stages[s].loop.size();
         node->size.resize(loop_dim);
 
-        int64_t total_extent = 1;
         int64_t vector_size = 1;
         for (size_t i = 0; i < loop_dim; i++) {
             const auto &l = bounds->loops(s, i);
             // Initialize the loop nest
             node->size[i] = l.extent();
-            total_extent *= node->size[i];
 
             // Use the first loop iteration to represent the inner
             // loop. We'll shift it to a later one once we decide
@@ -1415,21 +1342,23 @@ void LoopNest::compute_here(const FunctionDAG::Node *f, bool tileable, int v) {
 }
 
 // Parallelize this loop according to the given tiling.
-IntrusivePtr<const LoopNest> LoopNest::parallelize_in_tiles(const MachineParams &params,
+IntrusivePtr<const LoopNest> LoopNest::parallelize_in_tiles(const Adams2019Params &params,
                                                             const vector<int64_t> &tiling,
                                                             const LoopNest *parent) const {
+
+    const bool may_subtile = (params.disable_subtiling != 0);
 
     // Split this loop and move factors to the inner loop
     LoopNest *inner = new LoopNest, *outer = new LoopNest;
     inner->node = outer->node = node;
     inner->stage = outer->stage = stage;
-    inner->tileable = outer->tileable = tileable && may_subtile();
+    inner->tileable = outer->tileable = tileable && may_subtile;
     inner->vector_dim = outer->vector_dim = vector_dim;
     inner->vectorized_loop_index = outer->vectorized_loop_index = vectorized_loop_index;
     outer->size = size;
     outer->innermost = false;
     outer->parallel = true;
-    outer->tileable = may_subtile();
+    outer->tileable = may_subtile;
 
     // First make an inner loop representing a 1x1x1... tile
     inner->size.resize(size.size(), 1);
@@ -1483,9 +1412,11 @@ IntrusivePtr<const LoopNest> LoopNest::parallelize_in_tiles(const MachineParams 
 // this loop nest.
 vector<IntrusivePtr<const LoopNest>> LoopNest::compute_in_tiles(const FunctionDAG::Node *f,
                                                                 const LoopNest *parent,
-                                                                const MachineParams &params,
+                                                                const Adams2019Params &params,
                                                                 int v,
                                                                 bool in_realization) const {
+    const bool may_subtile = (params.disable_subtiling != 0);
+
     internal_assert(f);
 
     vector<IntrusivePtr<const LoopNest>> result;
@@ -1540,9 +1471,9 @@ vector<IntrusivePtr<const LoopNest>> LoopNest::compute_in_tiles(const FunctionDA
          vector_dim == -1 ||
          size[vector_dim] == 1)) {
 
-        std::unique_ptr<LoopNest> r{new LoopNest};
+        auto r = std::make_unique<LoopNest>();
         r->copy_from(*this);
-        r->compute_here(f, true, v);
+        r->compute_here(f, true, v, params);
         if (!in_realization) {
             r->store_at.insert(f);
         } else {
@@ -1564,7 +1495,7 @@ vector<IntrusivePtr<const LoopNest>> LoopNest::compute_in_tiles(const FunctionDA
         auto tilings = generate_tilings(size, (int)(size.size() - 1), 2, !in_realization);
 
         if (tilings.size() > 10000) {
-            aslog(0) << "Warning: lots of tilings: " << tilings.size() << "\n";
+            aslog(1) << "Warning: lots of tilings: " << tilings.size() << "\n";
         }
 
         for (auto t : tilings) {
@@ -1595,7 +1526,7 @@ vector<IntrusivePtr<const LoopNest>> LoopNest::compute_in_tiles(const FunctionDA
             LoopNest *inner = new LoopNest, *outer = new LoopNest;
             inner->node = outer->node = node;
             inner->stage = outer->stage = stage;
-            inner->tileable = outer->tileable = tileable && may_subtile();
+            inner->tileable = outer->tileable = tileable && may_subtile;
             inner->vector_dim = outer->vector_dim = vector_dim;
             inner->vectorized_loop_index = outer->vectorized_loop_index = vectorized_loop_index;
             outer->size = size;
@@ -1665,14 +1596,14 @@ vector<IntrusivePtr<const LoopNest>> LoopNest::compute_in_tiles(const FunctionDA
             }
 
             // Site the computation inside the outer loop
-            outer->compute_here(f, true, v);
+            outer->compute_here(f, true, v, params);
             outer->tileable &= !in_realization;
             result.emplace_back(outer);
         }
     }
 
     if (child >= 0 && !called_by_multiple_children && !in_realization &&
-        (may_subtile() || is_root())) {
+        (may_subtile || is_root())) {
         // Push the Func further inwards in the loop nest
 
         // See if it's appropriate to slide over this loop Can't
@@ -1740,7 +1671,6 @@ void LoopNest::apply(LoopLevel here,
             if (c->stage->index == 0) {
                 auto &state = state_map.get(c->stage);
                 state->schedule_source << "\n    .compute_root()";
-                state->python_schedule_source << " \\\n    .compute_root()";
                 // TODO: Omitting logic for printing store_root() assumes everything store_root is also compute root
             }
         }
@@ -1765,7 +1695,6 @@ void LoopNest::apply(LoopLevel here,
                 fv.var = VarOrRVar(l.var, !l.pure);
                 fv.orig = fv.var;
                 fv.accessor = l.accessor;
-                fv.python_accessor = l.python_accessor;
                 const auto &p = parent_bounds->loops(stage->index, i);
                 fv.extent = p.extent();
                 fv.constant_extent = p.constant_extent();
@@ -1806,7 +1735,6 @@ void LoopNest::apply(LoopLevel here,
                 // or stack as it likes.
                 Func(node->func).store_in(MemoryType::Stack);
                 state.schedule_source << "\n    .store_in(MemoryType::Stack)";
-                state.python_schedule_source << " \\\n    .store_in(hl.MemoryType.Stack)";
             }
         }
 
@@ -1840,9 +1768,7 @@ void LoopNest::apply(LoopLevel here,
                     internal_assert(v.innermost_pure_dim && v.exists) << v.var.name() << "\n";
                     // Is the result of a split
                     state.schedule_source
-                        << "\n    .vectorize(" << conform_name(v.var.name()) << ")";
-                    state.python_schedule_source
-                        << " \\\n    .vectorize(" << conform_name(v.var.name()) << ")";
+                        << "\n    .vectorize(" << v.var.name() << ")";
                     s.vectorize(v.var);
                 }
             } else {
@@ -1893,9 +1819,9 @@ void LoopNest::apply(LoopLevel here,
                         parent.exists = false;
                         parent.extent = 1;
                     } else {
-                        VarOrRVar inner(Var(conform_name(parent.var.name() + "i")));
+                        VarOrRVar inner(Var(parent.var.name() + "i"));
                         if (parent.var.is_rvar) {
-                            inner = RVar(conform_name(parent.var.name() + "i", "r"));
+                            inner = RVar(parent.var.name() + "i");
                         }
 
                         auto tail_strategy = pure_var_tail_strategy;
@@ -1912,24 +1838,16 @@ void LoopNest::apply(LoopLevel here,
                         s.split(parent.var, parent.var, inner, (int)factor, tail_strategy);
                         state.schedule_source
                             << "\n    .split("
-                            << conform_name(parent.var.name()) << ", "
-                            << conform_name(parent.var.name()) << ", "
+                            << parent.var.name() << ", "
+                            << parent.var.name() << ", "
                             << inner.name() << ", "
                             << factor << ", "
                             << "TailStrategy::" << tail_strategy << ")";
-                        state.python_schedule_source
-                            << " \\\n    .split("
-                            << conform_name(parent.var.name()) << ", "
-                            << conform_name(parent.var.name()) << ", "
-                            << inner.name() << ", "
-                            << factor << ", "
-                            << "hl.TailStrategy." << tail_strategy << ")";
                         v = parent;
                         parent.extent = size[parent.index];
                         v.constant_extent = (tail_strategy != TailStrategy::GuardWithIf);
                         v.var = inner;
                         v.accessor.clear();
-                        v.python_accessor.clear();
                         v.extent = factor;
                         v.parallel = false;
                         v.outermost = false;
@@ -1960,8 +1878,7 @@ void LoopNest::apply(LoopLevel here,
                         for (size_t i = 0; i < symbolic_loop.size(); i++) {
                             if (state.vars[i].pure && state.vars[i].exists && state.vars[i].extent > 1) {
                                 s.unroll(state.vars[i].var);
-                                state.schedule_source << "\n    .unroll(" << conform_name(state.vars[i].var.name()) << ")";
-                                state.python_schedule_source << " \\\n    .unroll(" << conform_name(state.vars[i].var.name()) << ")";
+                                state.schedule_source << "\n    .unroll(" << state.vars[i].var.name() << ")";
                             }
                         }
                     }
@@ -2000,7 +1917,7 @@ void LoopNest::apply(LoopLevel here,
         if (here.is_root()) {
             loop_level = "_root()";
         } else {
-            loop_level = "_at(" + conform_name(here.func()) + ", " + conform_name(here.var().name()) + ")";
+            loop_level = "_at(" + here.func() + ", " + here.var().name() + ")";
         }
         for (const auto &c : children) {
             if (c->node != node) {
@@ -2010,7 +1927,6 @@ void LoopNest::apply(LoopLevel here,
             if (c->node != node && c->stage->index == 0) {
                 auto &state = *(state_map.get(c->stage));
                 state.schedule_source << "\n    .compute" << loop_level;
-                state.python_schedule_source << " \\\n    .compute" << loop_level;
             }
         }
         for (const auto *f : store_at) {
@@ -2024,7 +1940,6 @@ void LoopNest::apply(LoopLevel here,
             if (!computed_here) {
                 auto &state = *(state_map.get(&(f->stages[0])));
                 state.schedule_source << "\n    .store" << loop_level;
-                state.python_schedule_source << " \\\n    .store" << loop_level;
             }
         }
     }

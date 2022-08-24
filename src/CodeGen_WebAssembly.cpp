@@ -29,13 +29,15 @@ protected:
 
     void init_module() override;
 
-    string mcpu() const override;
+    string mcpu_target() const override;
+    string mcpu_tune() const override;
     string mattrs() const override;
     bool use_soft_float_abi() const override;
     int native_vector_bits() const override;
     bool use_pic() const override;
 
     void visit(const Cast *) override;
+    void visit(const Call *) override;
     void codegen_vector_reduce(const VectorReduce *, const Expr &) override;
 };
 
@@ -61,17 +63,10 @@ const WasmIntrinsic intrinsic_defs[] = {
     {"llvm.uadd.sat.v16i8", UInt(8, 16), "saturating_add", {UInt(8, 16), UInt(8, 16)}, Target::WasmSimd128},
 
     // TODO: Are these really different than the standard llvm.*sub.sat.*?
-#if LLVM_VERSION >= 130
     {"llvm.wasm.sub.sat.signed.v16i8", Int(8, 16), "saturating_sub", {Int(8, 16), Int(8, 16)}, Target::WasmSimd128},
     {"llvm.wasm.sub.sat.unsigned.v16i8", UInt(8, 16), "saturating_sub", {UInt(8, 16), UInt(8, 16)}, Target::WasmSimd128},
     {"llvm.wasm.sub.sat.signed.v8i16", Int(16, 8), "saturating_sub", {Int(16, 8), Int(16, 8)}, Target::WasmSimd128},
     {"llvm.wasm.sub.sat.unsigned.v8i16", UInt(16, 8), "saturating_sub", {UInt(16, 8), UInt(16, 8)}, Target::WasmSimd128},
-#else
-    {"llvm.wasm.sub.saturate.signed.v16i8", Int(8, 16), "saturating_sub", {Int(8, 16), Int(8, 16)}, Target::WasmSimd128},
-    {"llvm.wasm.sub.saturate.unsigned.v16i8", UInt(8, 16), "saturating_sub", {UInt(8, 16), UInt(8, 16)}, Target::WasmSimd128},
-    {"llvm.wasm.sub.saturate.signed.v8i16", Int(16, 8), "saturating_sub", {Int(16, 8), Int(16, 8)}, Target::WasmSimd128},
-    {"llvm.wasm.sub.saturate.unsigned.v8i16", UInt(16, 8), "saturating_sub", {UInt(16, 8), UInt(16, 8)}, Target::WasmSimd128},
-#endif
 
     {"llvm.wasm.avgr.unsigned.v16i8", UInt(8, 16), "rounding_halving_add", {UInt(8, 16), UInt(8, 16)}, Target::WasmSimd128},
     {"llvm.wasm.avgr.unsigned.v8i16", UInt(16, 8), "rounding_halving_add", {UInt(16, 8), UInt(16, 8)}, Target::WasmSimd128},
@@ -80,7 +75,6 @@ const WasmIntrinsic intrinsic_defs[] = {
     {"float_to_double", Float(64, 4), "float_to_double", {Float(32, 4)}, Target::WasmSimd128},
 #endif
 
-#if LLVM_VERSION >= 130
     // With some work, some of these could possibly be adapted to work under earlier versions of LLVM.
     {"widening_mul_i8x16", Int(16, 16), "widening_mul", {Int(8, 16), Int(8, 16)}, Target::WasmSimd128},
     {"widening_mul_i16x8", Int(32, 8), "widening_mul", {Int(16, 8), Int(16, 8)}, Target::WasmSimd128},
@@ -118,7 +112,6 @@ const WasmIntrinsic intrinsic_defs[] = {
     {"extend_u16x8_to_u32x8", UInt(32, 8), "widen_integer", {UInt(16, 8)}, Target::WasmSimd128},
     {"extend_i32x4_to_i64x4", Int(64, 4), "widen_integer", {Int(32, 4)}, Target::WasmSimd128},
     {"extend_u32x4_to_u64x4", UInt(64, 4), "widen_integer", {UInt(32, 4)}, Target::WasmSimd128},
-#endif
 };
 // clang-format on
 
@@ -147,7 +140,6 @@ void CodeGen_WebAssembly::init_module() {
 }
 
 void CodeGen_WebAssembly::visit(const Cast *op) {
-#if LLVM_VERSION >= 130
     struct Pattern {
         std::string intrin;  ///< Name of the intrinsic
         Expr pattern;        ///< The pattern to match against
@@ -156,11 +148,6 @@ void CodeGen_WebAssembly::visit(const Cast *op) {
 
     // clang-format off
     static const Pattern patterns[] = {
-        {"q15mulr_sat_s", i16_sat(rounding_shift_right(widening_mul(wild_i16x_, wild_i16x_), u16(15))), Target::WasmSimd128},
-        {"saturating_narrow", i8_sat(wild_i16x_), Target::WasmSimd128},
-        {"saturating_narrow", u8_sat(wild_i16x_), Target::WasmSimd128},
-        {"saturating_narrow", i16_sat(wild_i32x_), Target::WasmSimd128},
-        {"saturating_narrow", u16_sat(wild_i32x_), Target::WasmSimd128},
         {"int_to_double", f64(wild_i32x_), Target::WasmSimd128},
         {"int_to_double", f64(wild_u32x_), Target::WasmSimd128},
 #if LLVM_VERSION == 130
@@ -189,13 +176,46 @@ void CodeGen_WebAssembly::visit(const Cast *op) {
             }
         }
     }
-#endif  // LLVM_VERSION >= 130
+
+    CodeGen_Posix::visit(op);
+}
+
+void CodeGen_WebAssembly::visit(const Call *op) {
+    struct Pattern {
+        std::string intrin;  ///< Name of the intrinsic
+        Expr pattern;        ///< The pattern to match against
+        Target::Feature required_feature;
+    };
+
+    // clang-format off
+    static const Pattern patterns[] = {
+        {"q15mulr_sat_s", i16_sat(rounding_shift_right(widening_mul(wild_i16x_, wild_i16x_), u16(15))), Target::WasmSimd128},
+        {"saturating_narrow", i8_sat(wild_i16x_), Target::WasmSimd128},
+        {"saturating_narrow", u8_sat(wild_i16x_), Target::WasmSimd128},
+        {"saturating_narrow", i16_sat(wild_i32x_), Target::WasmSimd128},
+        {"saturating_narrow", u16_sat(wild_i32x_), Target::WasmSimd128},
+    };
+    // clang-format on
+
+    if (op->type.is_vector()) {
+        std::vector<Expr> matches;
+        for (const Pattern &p : patterns) {
+            if (!target.has_feature(p.required_feature)) {
+                continue;
+            }
+            if (expr_match(p.pattern, op, matches)) {
+                value = call_overloaded_intrin(op->type, p.intrin, matches);
+                if (value) {
+                    return;
+                }
+            }
+        }
+    }
 
     CodeGen_Posix::visit(op);
 }
 
 void CodeGen_WebAssembly::codegen_vector_reduce(const VectorReduce *op, const Expr &init) {
-#if LLVM_VERSION >= 130
     struct Pattern {
         VectorReduce::Operator reduce_op;
         int factor;
@@ -264,13 +284,16 @@ void CodeGen_WebAssembly::codegen_vector_reduce(const VectorReduce *op, const Ex
             }
         }
     }
-#endif  // LLVM_VERSION >= 130
 
     CodeGen_Posix::codegen_vector_reduce(op, init);
 }
 
-string CodeGen_WebAssembly::mcpu() const {
+string CodeGen_WebAssembly::mcpu_target() const {
     return "";
+}
+
+string CodeGen_WebAssembly::mcpu_tune() const {
+    return mcpu_target();
 }
 
 string CodeGen_WebAssembly::mattrs() const {

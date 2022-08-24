@@ -55,6 +55,24 @@ extern "C" {
 #endif
 #endif
 
+// Annotation for AOT and JIT calls -- if undefined, use no annotation.
+// To ensure that all results are checked, do something like
+//
+//    -DHALIDE_FUNCTION_ATTRS=HALIDE_MUST_USE_RESULT
+//
+// in your C++ compiler options
+#ifndef HALIDE_FUNCTION_ATTRS
+#define HALIDE_FUNCTION_ATTRS
+#endif
+
+#ifndef HALIDE_EXPORT_SYMBOL
+#ifdef _MSC_VER
+#define HALIDE_EXPORT_SYMBOL __declspec(dllexport)
+#else
+#define HALIDE_EXPORT_SYMBOL __attribute__((visibility("default")))
+#endif
+#endif
+
 /** \file
  *
  * This file declares the routines used by Halide internally in its
@@ -1071,12 +1089,8 @@ enum halide_error_code_t {
      * violates a Halide invariant. */
     halide_error_code_no_device_interface = -19,
 
-    /** An error occurred when attempting to initialize the Matlab
-     * runtime. */
-    halide_error_code_matlab_init_failed = -20,
-
-    /** The type of an mxArray did not match the expected type. */
-    halide_error_code_matlab_bad_param_type = -21,
+    /* unused = -20, */
+    /* unused = -21, */
 
     /** There is a bug in the Halide compiler. */
     halide_error_code_internal_error = -22,
@@ -1295,8 +1309,6 @@ typedef enum halide_target_feature_t {
 
     halide_target_feature_user_context,  ///< Generated code takes a user_context pointer as first argument
 
-    halide_target_feature_matlab,  ///< Generate a mexFunction compatible with Matlab mex libraries. See tools/mex_halide.m.
-
     halide_target_feature_profile,     ///< Launch a sampling profiler alongside the Halide pipeline that monitors and reports the runtime used by each Func
     halide_target_feature_no_runtime,  ///< Do not include a copy of the Halide runtime in any generated object file or assembly
 
@@ -1332,6 +1344,9 @@ typedef enum halide_target_feature_t {
     halide_target_feature_hexagon_dma,            ///< Enable Hexagon DMA buffers.
     halide_target_feature_embed_bitcode,          ///< Emulate clang -fembed-bitcode flag.
     halide_target_feature_enable_llvm_loop_opt,   ///< Enable loop vectorization + unrolling in LLVM. Overrides halide_target_feature_disable_llvm_loop_opt. (Ignored for non-LLVM targets.)
+    // halide_target_feature_disable_llvm_loop_opt is deprecated in Halide 15
+    // (and will be removed in Halide 16). Halide 15 now defaults to disabling
+    // LLVM loop optimization, unless halide_target_feature_enable_llvm_loop_opt is set.
     halide_target_feature_disable_llvm_loop_opt,  ///< Disable loop vectorization + unrolling in LLVM. (Ignored for non-LLVM targets.)
     halide_target_feature_wasm_simd128,           ///< Enable +simd128 instructions for WebAssembly codegen.
     halide_target_feature_wasm_signext,           ///< Enable +sign-ext instructions for WebAssembly codegen.
@@ -1348,6 +1363,7 @@ typedef enum halide_target_feature_t {
     halide_target_feature_armv81a,                ///< Enable ARMv8.1-a instructions
     halide_target_feature_sanitizer_coverage,     ///< Enable hooks for SanitizerCoverage support.
     halide_target_feature_profile_by_timer,       ///< Alternative to halide_target_feature_profile using timer interrupt for systems without threads or applicartions that need to avoid them.
+    halide_target_feature_spirv,                  ///< Enable SPIR-V code generation support.
     halide_target_feature_end                     ///< A sentinel. Every target is considered to have this feature, and setting this feature does nothing.
 } halide_target_feature_t;
 

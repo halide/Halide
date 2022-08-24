@@ -307,42 +307,44 @@ public:
 
 }  // namespace
 
-void LoadJacobian::dump(const char *prefix) const {
+void LoadJacobian::dump(std::ostream &os, const char *prefix) const {
     if (count() > 1) {
-        aslog(0) << prefix << count() << " x\n";
+        os << prefix << count() << " x\n";
     }
     for (size_t i = 0; i < producer_storage_dims(); i++) {
-        aslog(0) << prefix << "  [";
+        os << prefix << "  [";
 
         for (size_t j = 0; j < consumer_loop_dims(); j++) {
             const auto &c = (*this)(i, j);
             if (!c.exists) {
-                aslog(0) << " _  ";
+                os << " _  ";
             } else if (c.denominator == 1) {
-                aslog(0) << " " << c.numerator << "  ";
+                os << " " << c.numerator << "  ";
             } else {
-                aslog(0) << c.numerator << "/" << c.denominator << " ";
+                os << c.numerator << "/" << c.denominator << " ";
             }
         }
-        aslog(0) << "]\n";
+        os << "]\n";
     }
-    aslog(0) << "\n";
+    os << "\n";
 }
 
 void BoundContents::validate() const {
     for (int i = 0; i < layout->total_size; i++) {
         auto p = data()[i];
         if (p.max() < p.min()) {
-            aslog(0) << "Bad bounds object:\n";
+            std::ostringstream err;
+            err << "Bad bounds object:\n";
             for (int j = 0; j < layout->total_size; j++) {
                 if (i == j) {
-                    aslog(0) << "=> ";
+                    err << "=> ";
                 } else {
-                    aslog(0) << "   ";
+                    err << "   ";
                 }
-                aslog(0) << j << ": " << data()[j].min() << ", " << data()[j].max() << "\n";
+                err << j << ": " << data()[j].min() << ", " << data()[j].max() << "\n";
             }
-            internal_error << "Aborting";
+            err << "Aborting";
+            internal_error << err.str();
         }
     }
 }
@@ -570,7 +572,7 @@ bool depends_on_estimate(const Expr &expr) {
     return dependency_checker.found_estimate;
 }
 
-FunctionDAG::FunctionDAG(const vector<Function> &outputs, const MachineParams &params, const Target &target) {
+FunctionDAG::FunctionDAG(const vector<Function> &outputs, const Target &target) {
     map<string, Function> env = build_environment(outputs);
 
     // A mutator to apply parameter estimates to the expressions
@@ -645,7 +647,7 @@ FunctionDAG::FunctionDAG(const vector<Function> &outputs, const MachineParams &p
         for (int s = 0; s <= (int)consumer.updates().size(); s++) {
             auto &stage = node.stages[s];
             stage.node = &node;
-            stage.name = conform_name(consumer.name());
+            stage.name = consumer.name();
             if (s > 0) {
                 stage.name += ".update(" + std::to_string(s - 1) + ")";
             }
@@ -727,7 +729,6 @@ FunctionDAG::FunctionDAG(const vector<Function> &outputs, const MachineParams &p
                 Node::Loop l;
                 l.var = d.var;
                 l.accessor = stage.name + ".get_schedule().dims()[" + std::to_string(i) + "].var";
-                l.python_accessor = stage.name + ".get_schedule_dim_var_name(" + std::to_string(i) + ")"; // Python index same as C++
 
                 // We already have the right variable names in the stage scope
                 Interval in = stage_scope_with_concrete_rvar_bounds.get(l.var);
@@ -813,6 +814,11 @@ FunctionDAG::FunctionDAG(const vector<Function> &outputs, const MachineParams &p
                 }
 
                 void visit(const Cast *op) override {
+                    IRVisitor::visit(op);
+                    check_type(op->type);
+                }
+
+                void visit(const Reinterpret *op) override {
                     IRVisitor::visit(op);
                     check_type(op->type);
                 }
@@ -953,7 +959,7 @@ FunctionDAG::FunctionDAG(const vector<Function> &outputs, const MachineParams &p
             }
 
             node.is_wrapper = node.func.is_wrapper();
-            node.is_input = !node.func.has_update_definition() && node.is_wrapper && !any_incoming_edges;
+            node.is_input = !node.is_output && !node.func.has_update_definition() && node.is_wrapper && !any_incoming_edges;
             node.dimensions = node.func.dimensions();
         }
     }
@@ -1040,8 +1046,7 @@ void FunctionDAG::featurize() {
     }
 }
 
-template<typename OS>
-void FunctionDAG::dump_internal(OS &os) const {
+void FunctionDAG::dump(std::ostream &os) const {
     for (const Node &n : nodes) {
         os << "Node: " << n.func.name() << "\n"
            << "  Symbolic region required: \n";
@@ -1077,19 +1082,9 @@ void FunctionDAG::dump_internal(OS &os) const {
 
         os << "  Load Jacobians:\n";
         for (const auto &jac : e.load_jacobians) {
-            jac.dump("  ");
+            jac.dump(os, "  ");
         }
     }
-}
-
-void FunctionDAG::dump() const {
-    auto os = aslog(0);
-    dump_internal(os);
-}
-
-std::ostream &FunctionDAG::dump(std::ostream &os) const {
-    dump_internal(os);
-    return os;
 }
 
 }  // namespace Autoscheduler

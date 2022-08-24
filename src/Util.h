@@ -45,6 +45,32 @@
 #define HALIDE_NO_USER_CODE_INLINE HALIDE_NEVER_INLINE
 #endif
 
+// Clang uses __has_feature() for sanitizers...
+#if defined(__has_feature)
+#if __has_feature(address_sanitizer)
+#define HALIDE_INTERNAL_USING_ASAN
+#endif
+#if __has_feature(memory_sanitizer)
+#define HALIDE_INTERNAL_USING_MSAN
+#endif
+#if __has_feature(thread_sanitizer)
+#define HALIDE_INTERNAL_USING_TSAN
+#endif
+#if __has_feature(coverage_sanitizer)
+#define HALIDE_INTERNAL_USING_COVSAN
+#endif
+#if __has_feature(undefined_behavior_sanitizer)
+#define HALIDE_INTERNAL_USING_UBSAN
+#endif
+#endif
+
+// ...but GCC/MSVC don't like __has_feature, so handle them separately.
+// (Only AddressSanitizer for now, not sure if any others are well-supported
+// outside of Clang.
+#if defined(__SANITIZE_ADDRESS__) && !defined(HALIDE_INTERNAL_USING_ASAN)
+#define HALIDE_INTERNAL_USING_ASAN
+#endif
+
 namespace Halide {
 
 /** Load a plugin in the form of a dynamic library (e.g. for custom autoschedulers).
@@ -208,8 +234,8 @@ struct all_are_convertible : meta_and<std::is_convertible<Args, To>...> {};
 /** Returns base name and fills in namespaces, outermost one first in vector. */
 std::string extract_namespaces(const std::string &name, std::vector<std::string> &namespaces);
 
-/** Overload that returns base name only */
-std::string extract_namespaces(const std::string &name);
+/** Like extract_namespaces(), but strip and discard the namespaces, returning base name only */
+std::string strip_namespaces(const std::string &name);
 
 struct FileStat {
     uint64_t file_size;
@@ -370,14 +396,13 @@ void halide_toc_impl(const char *file, int line);
 // regarding 'bool' in some compliation configurations.
 template<typename TO>
 struct StaticCast {
-    template<typename FROM, typename TO2 = TO, typename std::enable_if<!std::is_same<TO2, bool>::value>::type * = nullptr>
-    inline constexpr static TO2 value(const FROM &from) {
-        return static_cast<TO2>(from);
-    }
-
-    template<typename FROM, typename TO2 = TO, typename std::enable_if<std::is_same<TO2, bool>::value>::type * = nullptr>
-    inline constexpr static TO2 value(const FROM &from) {
-        return from != 0;
+    template<typename FROM>
+    inline constexpr static TO value(const FROM &from) {
+        if constexpr (std::is_same<TO, bool>::value) {
+            return from != 0;
+        } else {
+            return static_cast<TO>(from);
+        }
     }
 };
 
@@ -386,19 +411,21 @@ struct StaticCast {
 // or dropping of fractional parts).
 template<typename TO>
 struct IsRoundtrippable {
-    template<typename FROM, typename TO2 = TO, typename std::enable_if<!std::is_convertible<FROM, TO>::value>::type * = nullptr>
+    template<typename FROM>
     inline constexpr static bool value(const FROM &from) {
-        return false;
-    }
-
-    template<typename FROM, typename TO2 = TO, typename std::enable_if<std::is_convertible<FROM, TO>::value && std::is_arithmetic<TO>::value && std::is_arithmetic<FROM>::value && !std::is_same<TO, FROM>::value>::type * = nullptr>
-    inline constexpr static bool value(const FROM &from) {
-        return StaticCast<FROM>::value(StaticCast<TO>::value(from)) == from;
-    }
-
-    template<typename FROM, typename TO2 = TO, typename std::enable_if<std::is_convertible<FROM, TO>::value && !(std::is_arithmetic<TO>::value && std::is_arithmetic<FROM>::value && !std::is_same<TO, FROM>::value)>::type * = nullptr>
-    inline constexpr static bool value(const FROM &from) {
-        return true;
+        if constexpr (std::is_convertible<FROM, TO>::value) {
+            if constexpr (std::is_arithmetic<TO>::value &&
+                          std::is_arithmetic<FROM>::value &&
+                          !std::is_same<TO, FROM>::value) {
+                const TO to = static_cast<TO>(from);
+                const FROM roundtripped = static_cast<FROM>(to);
+                return roundtripped == from;
+            } else {
+                return true;
+            }
+        } else {
+            return false;
+        }
     }
 };
 

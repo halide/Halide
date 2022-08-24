@@ -222,6 +222,19 @@ private:
         stream << close_span();
     }
 
+    void visit(const Reinterpret *op) override {
+        stream << open_span("Reinterpret");
+
+        stream << open_span("Matched");
+        stream << open_span("Type") << op->type << close_span();
+        stream << "(";
+        stream << close_span();
+        print(op->value);
+        stream << matched(")");
+
+        stream << close_span();
+    }
+
     void visit_binary_op(const Expr &a, const Expr &b, const char *op) {
         stream << open_span("BinaryOp");
 

@@ -140,8 +140,8 @@ bool matmul(Halide::Target target) {
     Func result = mm.in();
 
     // Uncomment to check the asm
-    //result.compile_to_llvm_assembly(Internal::get_test_tmp_dir() + "tiled_matmul.ll", {A, B}, target);
-    //result.compile_to_assembly(Internal::get_test_tmp_dir() + "tiled_matmul.s", {A, B}, target);
+    // result.compile_to_llvm_assembly(Internal::get_test_tmp_dir() + "tiled_matmul.ll", {A, B}, target);
+    // result.compile_to_assembly(Internal::get_test_tmp_dir() + "tiled_matmul.s", {A, B}, target);
 
     auto time = Tools::benchmark(20, 20, [&]() {
         result.realize(out);
@@ -222,8 +222,8 @@ bool matmul_bf16(Halide::Target target) {
     Buffer<float> out(col, row);
 
     // Uncomment to check the asm
-    //result.compile_to_llvm_assembly(Internal::get_test_tmp_dir() + "tiled_matmul_bf16.ll", {A, B}, target);
-    //result.compile_to_assembly(Internal::get_test_tmp_dir() + "tiled_matmul.s", {A, B}, target);
+    // result.compile_to_llvm_assembly(Internal::get_test_tmp_dir() + "tiled_matmul_bf16.ll", {A, B}, target);
+    // result.compile_to_assembly(Internal::get_test_tmp_dir() + "tiled_matmul.s", {A, B}, target);
 
     auto time = Tools::benchmark(20, 20, [&]() {
         result.realize(out);

@@ -12,3 +12,4 @@
 ./tutorial
 # hexagon_remote/bin/src is also special
 ./src/runtime/hexagon_remote/bin/src
+./dependencies/spirv

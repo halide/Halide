@@ -13,7 +13,9 @@
 
 #include "Argument.h"
 #include "Expr.h"
+#ifdef HALIDE_ALLOW_GENERATOR_EXTERNAL_CODE
 #include "ExternalCode.h"
+#endif
 #include "Function.h"  // for NameMangling
 #include "ModulusRemainder.h"
 
@@ -44,42 +46,6 @@ enum class OutputFileType {
     stmt,
     stmt_html,
 };
-
-class HALIDE_ATTRIBUTE_DEPRECATED("Use OutputFileType instead of Output") Output {
-public:
-    HALIDE_ATTRIBUTE_DEPRECATED("Use OutputFileType instead of Output")
-    static constexpr OutputFileType assembly = OutputFileType::assembly;
-    HALIDE_ATTRIBUTE_DEPRECATED("Use OutputFileType instead of Output")
-    static constexpr OutputFileType bitcode = OutputFileType::bitcode;
-    HALIDE_ATTRIBUTE_DEPRECATED("Use OutputFileType instead of Output")
-    static constexpr OutputFileType c_header = OutputFileType::c_header;
-    HALIDE_ATTRIBUTE_DEPRECATED("Use OutputFileType instead of Output")
-    static constexpr OutputFileType c_source = OutputFileType::c_source;
-    HALIDE_ATTRIBUTE_DEPRECATED("Use OutputFileType instead of Output")
-    static constexpr OutputFileType compiler_log = OutputFileType::compiler_log;
-    HALIDE_ATTRIBUTE_DEPRECATED("Use OutputFileType instead of Output")
-    static constexpr OutputFileType cpp_stub = OutputFileType::cpp_stub;
-    HALIDE_ATTRIBUTE_DEPRECATED("Use OutputFileType instead of Output")
-    static constexpr OutputFileType featurization = OutputFileType::featurization;
-    HALIDE_ATTRIBUTE_DEPRECATED("Use OutputFileType instead of Output")
-    static constexpr OutputFileType llvm_assembly = OutputFileType::llvm_assembly;
-    HALIDE_ATTRIBUTE_DEPRECATED("Use OutputFileType instead of Output")
-    static constexpr OutputFileType object = OutputFileType::object;
-    HALIDE_ATTRIBUTE_DEPRECATED("Use OutputFileType instead of Output")
-    static constexpr OutputFileType python_extension = OutputFileType::python_extension;
-    HALIDE_ATTRIBUTE_DEPRECATED("Use OutputFileType instead of Output")
-    static constexpr OutputFileType pytorch_wrapper = OutputFileType::pytorch_wrapper;
-    HALIDE_ATTRIBUTE_DEPRECATED("Use OutputFileType instead of Output")
-    static constexpr OutputFileType registration = OutputFileType::registration;
-    HALIDE_ATTRIBUTE_DEPRECATED("Use OutputFileType instead of Output")
-    static constexpr OutputFileType schedule = OutputFileType::schedule;
-    HALIDE_ATTRIBUTE_DEPRECATED("Use OutputFileType instead of Output")
-    static constexpr OutputFileType static_library = OutputFileType::static_library;
-    HALIDE_ATTRIBUTE_DEPRECATED("Use OutputFileType instead of Output")
-    static constexpr OutputFileType stmt = OutputFileType::stmt;
-    HALIDE_ATTRIBUTE_DEPRECATED("Use OutputFileType instead of Output")
-    static constexpr OutputFileType stmt_html = OutputFileType::stmt_html;
-};  // namespace Output
 
 /** Type of linkage a function in a lowered Halide module can have.
     Also controls whether auxiliary functions and metadata are generated. */
@@ -169,6 +135,8 @@ class CompilerLogger;
 
 struct AutoSchedulerResults;
 
+using MetadataNameMap = std::map<std::string, std::string>;
+
 /** A halide module. This represents IR containing lowered function
  * definitions and buffers. */
 class Module {
@@ -197,7 +165,9 @@ public:
     const std::vector<Internal::LoweredFunc> &functions() const;
     std::vector<Internal::LoweredFunc> &functions();
     const std::vector<Module> &submodules() const;
+#ifdef HALIDE_ALLOW_GENERATOR_EXTERNAL_CODE
     const std::vector<ExternalCode> &external_code() const;
+#endif
     // @}
 
     /** Return the function with the given name. If no such function
@@ -209,7 +179,9 @@ public:
     void append(const Buffer<void> &buffer);
     void append(const Internal::LoweredFunc &function);
     void append(const Module &module);
+#ifdef HALIDE_ALLOW_GENERATOR_EXTERNAL_CODE
     void append(const ExternalCode &external_code);
+#endif
     // @}
 
     /** Compile a halide Module to variety of outputs, depending on
@@ -230,7 +202,7 @@ public:
     void remap_metadata_name(const std::string &from, const std::string &to) const;
 
     /** Retrieve the metadata name map. */
-    std::map<std::string, std::string> get_metadata_name_map() const;
+    MetadataNameMap get_metadata_name_map() const;
 
     /** Set the AutoSchedulerResults for the Module. It is an error to call this
      * multiple times for a given Module. */

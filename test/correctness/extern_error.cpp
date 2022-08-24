@@ -3,20 +3,14 @@
 
 using namespace Halide;
 
-#ifdef _WIN32
-#define DLLEXPORT __declspec(dllexport)
-#else
-#define DLLEXPORT
-#endif
-
 bool extern_error_called = false;
-extern "C" DLLEXPORT int extern_error(JITUserContext *user_context, halide_buffer_t *out) {
+extern "C" HALIDE_EXPORT_SYMBOL int extern_error(JITUserContext *user_context, halide_buffer_t *out) {
     extern_error_called = true;
     return -1;
 }
 
 bool error_occurred = false;
-extern "C" DLLEXPORT void my_halide_error(JITUserContext *user_context, const char *msg) {
+extern "C" HALIDE_EXPORT_SYMBOL void my_halide_error(JITUserContext *user_context, const char *msg) {
     printf("Expected: %s\n", msg);
     error_occurred = true;
 }

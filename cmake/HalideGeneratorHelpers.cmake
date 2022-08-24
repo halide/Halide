@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.16)
+cmake_minimum_required(VERSION 3.22)
 
 include(${CMAKE_CURRENT_LIST_DIR}/HalideTargetHelpers.cmake)
 
@@ -80,10 +80,11 @@ function(_Halide_try_load_generators)
         # Communicate found information to the caller
         set(${ARG_PACKAGE_NAME}_FOUND "${${ARG_PACKAGE_NAME}_FOUND}" PARENT_SCOPE)
 
-        if (NOT ${ARG_PACKAGE_NAME}_FOUND AND CMAKE_CROSSCOMPILING)
+        if (NOT ${ARG_PACKAGE_NAME}_FOUND AND CMAKE_CROSSCOMPILING AND NOT CMAKE_CROSSCOMPILING_EMULATOR)
             message(WARNING
-                    "${ARG_PACKAGE_NAME} were not found and it looks like you are cross-compiling. "
-                    "This is likely to fail. Please set -D${ARG_PACKAGE_NAME}_ROOT=... at the CMake "
+                    "'${ARG_PACKAGE_NAME}' was not found and it looks like you "
+                    "are cross-compiling without an emulator. This is likely to "
+                    "fail. Please set -D${ARG_PACKAGE_NAME}_ROOT=... at the CMake "
                     "command line to the build directory of a host-built ${PROJECT_NAME}.")
         endif ()
     endif ()
@@ -284,7 +285,6 @@ function(add_halide_library TARGET)
     # Attach an autoscheduler if the user requested it
     ##
 
-    set(autoscheduler "")
     if (ARG_AUTOSCHEDULER)
         if ("${ARG_AUTOSCHEDULER}" MATCHES "::")
             if (NOT TARGET "${ARG_AUTOSCHEDULER}")
@@ -298,8 +298,7 @@ function(add_halide_library TARGET)
         elseif (NOT ARG_PLUGINS)
             message(AUTHOR_WARNING "AUTOSCHEDULER set to a scheduler name but no plugins were loaded")
         endif ()
-        set(autoscheduler -s "${ARG_AUTOSCHEDULER}")
-        list(PREPEND ARG_PARAMS auto_schedule=true)
+        list(PREPEND ARG_PARAMS "autoscheduler=${ARG_AUTOSCHEDULER}")
     endif ()
 
     ##
@@ -324,7 +323,9 @@ function(add_halide_library TARGET)
         foreach (p IN LISTS ARG_PLUGINS)
             list(APPEND generator_plugins "$<TARGET_FILE:${p}>")
         endforeach ()
-        set(generator_plugins -p "$<JOIN:${generator_plugins},$<COMMA>>")
+        # $<JOIN:> gets confused about quoting. Just use list(JOIN) here instead.
+        list(JOIN generator_plugins $<COMMA> generator_plugins_list)
+        set(generator_plugins -p ${generator_plugins_list})
     endif ()
 
     add_custom_command(OUTPUT ${generator_output_files}
@@ -335,7 +336,6 @@ function(add_halide_library TARGET)
                        -f "${ARG_FUNCTION_NAME}"
                        -e "$<JOIN:${generator_outputs},$<COMMA>>"
                        ${generator_plugins}
-                       ${autoscheduler}
                        -o .
                        "target=$<JOIN:${ARG_TARGETS},$<COMMA>>"
                        ${ARG_PARAMS}
@@ -492,19 +492,9 @@ function(_Halide_target_link_gpu_libs TARGET VISIBILITY)
     endif ()
 
     if ("${ARGN}" MATCHES "metal")
-        find_library(METAL_LIBRARY Metal)
-        if (NOT METAL_LIBRARY)
-            message(AUTHOR_WARNING "Metal framework dependency not found on system.")
-        else ()
-            target_link_libraries(${TARGET} ${VISIBILITY} "${METAL_LIBRARY}")
-        endif ()
-
-        find_library(FOUNDATION_LIBRARY Foundation)
-        if (NOT FOUNDATION_LIBRARY)
-            message(AUTHOR_WARNING "Foundation framework dependency not found on system.")
-        else ()
-            target_link_libraries(${TARGET} ${VISIBILITY} "${FOUNDATION_LIBRARY}")
-        endif ()
+        find_library(FOUNDATION_LIBRARY Foundation REQUIRED)
+        find_library(METAL_LIBRARY Metal REQUIRED)
+        target_link_libraries(${TARGET} ${VISIBILITY} "${FOUNDATION_LIBRARY}" "${METAL_LIBRARY}")
     endif ()
 endfunction()
 
