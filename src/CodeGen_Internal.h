@@ -37,22 +37,9 @@ struct Target;
 
 namespace Internal {
 
-/** Get the llvm type equivalent to a given halide type. If
- * effective_vscale is nonzero and the type is a vector type with lanes
- * a multiple of effective_vscale, a scalable vector type is generated
- * with total lanes divided by effective_vscale. That is a scalable
- * vector intended to be used with a fixed vscale of effective_vscale.
- */
-llvm::Type *llvm_type_of(llvm::LLVMContext *context, Halide::Type t,
-                         int effective_vscale);
-
 /** Get the scalar type of an llvm vector type. Returns the argument
  * if it's not a vector type. */
 llvm::Type *get_vector_element_type(llvm::Type *);
-
-llvm::ElementCount element_count(int e);
-
-llvm::Type *get_vector_type(llvm::Type *, int n, bool scalable = false);
 
 /** Which built-in functions require a user-context first argument? */
 bool function_takes_user_context(const std::string &name);
