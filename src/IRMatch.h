@@ -2027,7 +2027,7 @@ struct VectorInstructionOp {
     VectorInstructionOp(const VectorInstruction::InstructionOp _op, Args... args) noexcept
         : op(_op), args(args...) {
         static_assert(sizeof...(Args) > 0 && sizeof...(Args) <= 3,
-                        "VectorInstructionOp must have non-zero arguments, and update make() if more than 3 arguments.");
+                      "VectorInstructionOp must have non-zero arguments, and update make() if more than 3 arguments.");
     }
 };
 
