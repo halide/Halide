@@ -1,3 +1,4 @@
+
 #include <set>
 #include <sstream>
 
@@ -77,12 +78,10 @@ protected:
     string mattrs() const override;
     bool use_soft_float_abi() const override;
     int native_vector_bits() const override;
-    int target_vscale() const override;
 
-    // NEON can be disabled for older processors and if SVE is used with longer vectors.
+    // NEON can be disabled for older processors.
     bool neon_intrinsics_disabled() {
-        return target.has_feature(Target::NoNEON) ||
-               (target.features_any_of({Target::SVE, Target::SVE2}) && target.vector_bits != 128);
+        return target.has_feature(Target::NoNEON);
     }
 
     bool is_float16_and_has_feature(const Type &t) const {
@@ -1483,24 +1482,7 @@ bool CodeGen_ARM::use_soft_float_abi() const {
 }
 
 int CodeGen_ARM::native_vector_bits() const {
-    if (target.vector_bits != 0 &&
-        (target.has_feature(Target::SVE) ||
-         target.has_feature(Target::SVE2))) {
-        return target.vector_bits;
-    }
-
     return 128;
-}
-
-int CodeGen_ARM::target_vscale() const {
-    if (target.vector_bits != 0 &&
-        (target.has_feature(Target::SVE) ||
-         target.has_feature(Target::SVE2))) {
-        internal_assert((target.vector_bits % 128) == 0);
-        return target.vector_bits / 128;
-    }
-
-    return 0;
 }
 
 bool CodeGen_ARM::supports_call_as_float16(const Call *op) const {
