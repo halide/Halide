@@ -60,40 +60,26 @@ Stmt CostPreProcessor::visit(const Atomic *op) {
 void FindStmtCost::generate_costs(const Module &m) {
     cost_preprocessor.traverse(m);
     traverse(m);
+    set_max_costs();
 }
 void FindStmtCost::generate_costs(const Stmt &stmt) {
     cost_preprocessor.mutate(stmt);
     mutate(stmt);
+    set_max_costs();
 }
 
-int FindStmtCost::get_computation_range(const IRNode *op) const {
+int FindStmtCost::get_computation_color_range(const IRNode *op) const {
 
-    // get max value of cost in stmt_cost map
-    int max_cost = 0;
-    for (auto const &pair : stmt_cost) {
-        if (calculate_cost(pair.second) > max_cost) {
-            max_cost = calculate_cost(pair.second);
-        }
-    }
-
-    // divide max cost by 8 and round up to get ranges
-    int range_size = (max_cost / NUMBER_COST_COLORS) + 1;
+    // divide max cost by NUMBER_COST_COLORS and round up to get range size
+    int range_size = (max_computation_cost / NUMBER_COST_COLORS) + 1;
     int cost = get_calculated_computation_cost(op);
     int range = cost / range_size;
     return range;
 }
-int FindStmtCost::get_data_movement_range(const IRNode *op) const {
+int FindStmtCost::get_data_movement_color_range(const IRNode *op) const {
 
-    // get max value of cost in stmt_cost map
-    int max_cost = 0;
-    for (auto const &pair : stmt_cost) {
-        if (pair.second.data_movement_cost > max_cost) {
-            max_cost = pair.second.data_movement_cost;
-        }
-    }
-
-    // divide max cost by 8 and round up to get ranges
-    int range_size = (max_cost / NUMBER_COST_COLORS) + 1;
+    // divide max cost by NUMBER_COST_COLORS and round up to get range size
+    int range_size = (max_data_movement_cost / NUMBER_COST_COLORS) + 1;
     int cost = get_data_movement_cost(op);
     int range = cost / range_size;
     return range;
@@ -105,7 +91,6 @@ int FindStmtCost::get_depth(const IRNode *node) const {
 
         // sometimes, these constant values are created on the whim in
         // StmtToViz.cpp - return 1 to avoid crashing
-        // TODO: what should this depth be?
         IRNodeType type = node->node_type;
         if (type == IRNodeType::IntImm || type == IRNodeType::UIntImm ||
             type == IRNodeType::FloatImm || type == IRNodeType::StringImm) {
@@ -131,7 +116,6 @@ int FindStmtCost::get_calculated_computation_cost(const IRNode *node) const {
     if (it == stmt_cost.end()) {
         // sometimes, these constant values are created on the whim in
         // StmtToViz.cpp - set cost_node to be fresh StmtCost to avoid crashing
-        // TODO: what should this depth be?
         IRNodeType type = node->node_type;
         if (type == IRNodeType::IntImm || type == IRNodeType::UIntImm ||
             type == IRNodeType::FloatImm || type == IRNodeType::StringImm) {
@@ -230,6 +214,25 @@ int FindStmtCost::calculate_cost(StmtCost cost_node) const {
     int depth = cost_node.depth;
 
     return cost + DEPTH_COST * depth;
+}
+
+void FindStmtCost::set_max_costs() {
+    int max_cost = 0;
+    for (auto const &pair : stmt_cost) {
+        if (calculate_cost(pair.second) > max_cost) {
+            max_cost = calculate_cost(pair.second);
+        }
+    }
+    max_computation_cost = max_cost;
+
+    // get max value of cost in stmt_cost map
+    max_cost = 0;
+    for (auto const &pair : stmt_cost) {
+        if (pair.second.data_movement_cost > max_cost) {
+            max_cost = pair.second.data_movement_cost;
+        }
+    }
+    max_data_movement_cost = max_cost;
 }
 
 int FindStmtCost::get_scaling_factor(uint8_t bits, uint16_t lanes) const {

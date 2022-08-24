@@ -72,8 +72,8 @@ public:
     void generate_costs(const Stmt &stmt);
 
     // returns the range of the node's cost based on the other nodes' costs
-    int get_computation_range(const IRNode *op) const;
-    int get_data_movement_range(const IRNode *op) const;
+    int get_computation_color_range(const IRNode *op) const;
+    int get_data_movement_color_range(const IRNode *op) const;
 
     // calculates the total costs and depth of a node
     int get_depth(const IRNode *node) const;
@@ -87,6 +87,8 @@ private:
     CostPreProcessor cost_preprocessor;                 // for Atomic and Acquire
     int current_loop_depth = 0;                         // stores current loop depth level
     vector<string> allocate_variables;                  // stores all allocate variables
+    int max_computation_cost = 0;                       // stores the maximum computation cost
+    int max_data_movement_cost = 0;                     // stores the maximum data movement cost
 
     // starts the traversal based on Module
     void traverse(const Module &m);
@@ -97,6 +99,9 @@ private:
 
     // calculates cost of a single StmtCost object
     int calculate_cost(StmtCost cost_node) const;
+
+    // gets max computation cost and max data movement cost
+    void set_max_costs();
 
     // gets scaling factor for Load/Store based on lanes and bits
     int get_scaling_factor(uint8_t bits, uint16_t lanes) const;

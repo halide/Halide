@@ -300,14 +300,14 @@ private:
 
         s << cost_color_spacer();
 
-        int computation_range = findStmtCost.get_computation_range(op);
+        int computation_range = findStmtCost.get_computation_color_range(op);
         s << open_span("CostColor" + to_string(computation_range) + " CostComputation");
         s << ".";
         s << close_span();
 
         s << cost_color_spacer();
 
-        int data_movement_range = findStmtCost.get_data_movement_range(op);
+        int data_movement_range = findStmtCost.get_data_movement_color_range(op);
         s << open_span("CostColor" + to_string(data_movement_range) + " CostMovement");
         s << ".";
         s << close_span();
