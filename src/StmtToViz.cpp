@@ -58,7 +58,7 @@ private:
     vector<string> curr_context;
     bool in_context;
     int curr_line_num;  // for accessing div of that line
-    stringstream content_rule_script_stream;
+    string content_rule_script_stream;
     bool in_loop;
 
     // used for getting anchor names
@@ -73,7 +73,7 @@ private:
 
     // used for getStmtHierarchy popup stuff
     int popupCount = 0;
-    stringstream popups;
+    string popups;
 
     string get_file_name(string fileName) {
         // remove leading directories from filename
@@ -115,8 +115,8 @@ private:
 
     void add_context_rule(const int line_num) {
         string id = "ContextSpan" + to_string(line_num);
-        content_rule_script_stream << "document.getElementById('" << id
-                                   << "').style.backgroundColor = 'blue';" << endl;
+        content_rule_script_stream +=
+            "document.getElementById('" + id + "').style.backgroundColor = 'blue';" + "\n";
     }
 
     // All spans and divs will have an id of the form "x-y", where x
@@ -164,7 +164,7 @@ private:
         s << "</button>";
 
         // popup window - will put them all at the end
-        popups << hierarchyHTML << endl;
+        popups += hierarchyHTML + "\n";
 
         // tooltip span
         s << "<span id='tooltip" << tooltipCount << "' class='tooltip' ";
@@ -203,7 +203,9 @@ private:
         tooltipText << "<i><span style='color: grey; margin-top: 5px;'>[Click to see full "
                        "hierarchy]</span></i>";
 
-        return tooltip(hierarchyHTML, tooltipText.str());
+        string tooltipTextStr = tooltipText.str();
+
+        return tooltip(hierarchyHTML, tooltipTextStr);
     }
 
     string get_stmt_hierarchy(const Stmt &op) {
@@ -599,6 +601,7 @@ private:
         remove_context(op->name);
     }
     void visit(const LetStmt *op) override {
+        cout << op << ": before - " << op->name << endl;
         bool in_context_before = in_context;
         in_context = false;
 
@@ -626,6 +629,8 @@ private:
         stream << close_line();
         print(op->body);
         stream << close_div();
+
+        cout << op << ": after - " << op->name << endl;
         scope.pop(op->name);
 
         remove_context(op->name);
@@ -1453,8 +1458,19 @@ public:
         for (const auto &b : m.buffers()) {
             print(b);
         }
+
+        // print main function first
         for (const auto &f : m.functions()) {
-            print(f);
+            if (f.name == m.name()) {
+                print(f);
+            }
+        }
+
+        // print the rest of the functions
+        for (const auto &f : m.functions()) {
+            if (f.name != m.name()) {
+                print(f);
+            }
         }
 
         stream << close_div();
@@ -1560,7 +1576,7 @@ public:
     }
 
     ~StmtToViz() override {
-        stream << popups.str();
+        stream << popups;
 
         stream << "</div>\n";  // close IRCode-code div
         stream << "</div>\n";  // close IRCode div
@@ -1573,7 +1589,7 @@ public:
                << "    this.onmouseout = function() { $('.Matched[id^=' + this.id.split('-')[0] + "
                   "'-]').removeClass('Highlight'); }\n"
                << "} );\n";
-        stream << content_rule_script_stream.str();
+        stream << content_rule_script_stream;
         stream << generatetooltipJS(tooltipCount);
         // stream << getStmtHierarchy.generate_collapse_expand_js();
         stream << producerConsumerHierarchy.generate_prodCons_js();

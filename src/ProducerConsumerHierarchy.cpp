@@ -6,6 +6,13 @@ using namespace std;
 using namespace Halide;
 using namespace Internal;
 
+template<typename T>
+string to_string(T value) {
+    std::ostringstream os;
+    os << value;
+    return os.str();
+}
+
 /*
  * StmtSizes class
  */
@@ -536,20 +543,20 @@ Stmt StmtSizes::visit(const Allocate *op) {
     bubble_up(op->body.get(), op);
 
     // set allocate stuff
-    stringstream type;
-    type << "<span class='stringType'>" << op->type << "</span>";
-    set_allocation_size(op, type.str());
+    string type;
+    type += "<span class='stringType'>" + to_string(op->type) + "</span>";
+    set_allocation_size(op, type);
 
     for (const auto &extent : op->extents) {
         // TODO: inline these as well if they are variables
-        stringstream ss;
+        string ss;
         if (extent.as<IntImm>()) {
-            ss << "<span class='intType'>" << extent << "</span>";
+            ss += "<span class='intType'>" + to_string(extent) + "</span>";
         } else {
-            ss << "<span class='stringType'>" << extent << "</span>";
+            ss += "<span class='stringType'>" + to_string(extent) + "</span>";
         }
 
-        set_allocation_size(op, ss.str());
+        set_allocation_size(op, ss);
     }
 
     return op;
@@ -572,19 +579,18 @@ Stmt StmtSizes::visit(const IfThenElse *op) {
 string ProducerConsumerHierarchy::generate_producer_consumer_html(const Module &m) {
     pre_processor.generate_sizes(m);
 
-    html.str(string());
+    html = "";
     startModuleTraversal();
 
-    string html_string = html.str();
-    return html_string;
+    return html.c_str();
 }
 string ProducerConsumerHierarchy::generate_producer_consumer_html(const Stmt &stmt) {
     pre_processor.generate_sizes(stmt);
 
-    html.str(string());
+    html = "";
     mutate(stmt);
 
-    return html.str();
+    return html.c_str();
 }
 
 void ProducerConsumerHierarchy::startModuleTraversal() {
@@ -596,31 +602,31 @@ void ProducerConsumerHierarchy::startModuleTraversal() {
     }
 
     // start with the main function
-    html << "<a name=\"" << it->first << "\"></a>";
-    html << "<h3>" << it->first << "</h3>";
-    html << "<div class='functionViz'>";
+    html += "<a name=\"" + it->first + "\"></a>";
+    html += "<h3>" + it->first + "</h3>";
+    html += "<div class='functionViz'>";
     mutate(it->second);
-    html << "</div>";
+    html += "</div>";
 
     // mutate all other functions
     for (const auto &func : pre_processor.main_function_bodies) {
         if (func.first != pre_processor.module_name) {
-            html << "<a name=\"" << func.first << "\"></a>";
-            html << "<h3>" << func.first << "</h3>";
-            html << "<div class='functionViz'>";
+            html += "<a name=\"" + func.first + "\"></a>";
+            html += "<h3>" + func.first + "</h3>";
+            html += "<div class='functionViz'>";
             mutate(func.second);
-            html << "</div>";
+            html += "</div>";
         }
     }
 }
 
 void ProducerConsumerHierarchy::open_box_div(string backgroundColor, string className,
                                              const IRNode *op) {
-    html << "<div style='";
-    html << "background-color: " << backgroundColor << "; ";
-    html << "' ";
-    html << "class='box center " << className << "'";
-    html << ">";
+    html += "<div style='";
+    html += "background-color: " + backgroundColor + "; ";
+    html += "' ";
+    html += "class='box center " + className + "'";
+    html += ">";
 
     generate_computation_cost_div(op);
     generate_memory_cost_div(op);
@@ -632,19 +638,19 @@ void ProducerConsumerHierarchy::close_box_div() {
     close_div();  // main box div
 }
 void ProducerConsumerHierarchy::open_header_div() {
-    html << "<div class='boxHeader'>";
+    html += "<div class='boxHeader'>";
 }
 void ProducerConsumerHierarchy::open_box_header_title_div() {
-    html << "<div class='boxHeaderTitle'>";
+    html += "<div class='boxHeaderTitle'>";
 }
 void ProducerConsumerHierarchy::open_box_header_table_div() {
-    html << "<div class='boxHeaderTable'>";
+    html += "<div class='boxHeaderTable'>";
 }
 void ProducerConsumerHierarchy::open_store_div() {
-    html << "<div class='store'>";
+    html += "<div class='store'>";
 }
 void ProducerConsumerHierarchy::close_div() {
-    html << "</div>";
+    html += "</div>";
 }
 
 void ProducerConsumerHierarchy::open_header(const IRNode *op, const string &header,
@@ -653,14 +659,14 @@ void ProducerConsumerHierarchy::open_header(const IRNode *op, const string &head
 
     open_box_header_title_div();
 
-    html << header;
+    html += header;
     if (anchorName != "") {
         see_code_button(anchorName);
     }
     close_div();
 
     // spacing purposes
-    html << "<div class='spacing'></div>";
+    html += "<div class='spacing'></div>";
 
     open_box_header_table_div();
 }
@@ -701,34 +707,34 @@ void ProducerConsumerHierarchy::for_loop_div_header(const For *op, const string 
 
 void ProducerConsumerHierarchy::if_tree(const IRNode *op, const string &header, StmtSize &size,
                                         string anchorName = "") {
-    html << "<li>";
-    html << "<span class='tf-nc if-node'>";
+    html += "<li>";
+    html += "<span class='tf-nc if-node'>";
 
     open_box_div(IF_COLOR, "IfBox", op);
     div_header(op, header, size, anchorName);
 }
 void ProducerConsumerHierarchy::close_if_tree() {
     close_box_div();
-    html << "</span>";
-    html << "</li>";
+    html += "</span>";
+    html += "</li>";
 }
 
 void ProducerConsumerHierarchy::prod_cons_table(StmtSize &size) {
     // open table
-    html << "<table class='costTable' style='background-color: rgba(150, 150, 150, 0.5)'>";
+    html += "<table class='costTable' style='background-color: rgba(150, 150, 150, 0.5)'>";
 
     // Prod | Cons
-    html << "<tr>";
+    html += "<tr>";
 
-    html << "<th colspan='2' class='costTableHeader middleCol'>";
-    html << "Written";
-    html << "</th>";
+    html += "<th colspan='2' class='costTableHeader middleCol'>";
+    html += "Written";
+    html += "</th>";
 
-    html << "<th colspan='2' class='costTableHeader'>";
-    html << "Read";
-    html << "</th>";
+    html += "<th colspan='2' class='costTableHeader'>";
+    html += "Read";
+    html += "</th>";
 
-    html << "</tr>";
+    html += "</tr>";
 
     // produces and consumes are empty - add row with values 0
     if (size.empty()) {
@@ -743,39 +749,39 @@ void ProducerConsumerHierarchy::prod_cons_table(StmtSize &size) {
 
         // fill in producer variables
         for (const auto &produce_var : size.produces) {
-            stringstream ss;
-            ss << "<td class='costTableData'>";
-            ss << produce_var.first << ": ";
-            ss << "</td>";
+            string ss;
+            ss += "<td class='costTableData'>";
+            ss += produce_var.first + ": ";
+            ss += "</td>";
 
-            ss << "<td class='costTableData middleCol'>";
-            ss << produce_var.second;
-            ss << "</td>";
+            ss += "<td class='costTableData middleCol'>";
+            ss += produce_var.second;
+            ss += "</td>";
 
-            rows.push_back(ss.str());
+            rows.push_back(ss);
         }
 
         // fill in consumer variables
         unsigned long rowNum = 0;
         for (const auto &consume_var : size.consumes) {
-            stringstream ss;
-            ss << "<td class='costTableData'>";
-            ss << consume_var.first << ": ";
-            ss << "</td>";
+            string ss;
+            ss += "<td class='costTableData'>";
+            ss += consume_var.first + ": ";
+            ss += "</td>";
 
-            ss << "<td class='costTableData'>";
-            ss << consume_var.second;
-            ss << "</td>";
+            ss += "<td class='costTableData'>";
+            ss += consume_var.second;
+            ss += "</td>";
 
             if (rowNum < rows.size()) {
-                rows[rowNum] += ss.str();
+                rows[rowNum] += ss;
             } else {
                 // pad row with empty cells for produce
-                stringstream sEmpty;
-                sEmpty << "<td colspan='2' class='costTableData middleCol'>";
-                sEmpty << "</td>";
+                string sEmpty;
+                sEmpty += "<td colspan='2' class='costTableData middleCol'>";
+                sEmpty += "</td>";
 
-                rows.push_back(sEmpty.str() + ss.str());
+                rows.push_back(sEmpty + ss);
             }
             rowNum++;
         }
@@ -783,132 +789,132 @@ void ProducerConsumerHierarchy::prod_cons_table(StmtSize &size) {
         // pad row with empty calls for consume
         rowNum = size.consumes.size();
         while (rowNum < size.produces.size()) {
-            stringstream sEmpty;
-            sEmpty << "<td class='costTableData'>";
-            sEmpty << "</td>";
-            sEmpty << "<td class='costTableData'>";
-            sEmpty << "</td>";
+            string sEmpty;
+            sEmpty += "<td class='costTableData'>";
+            sEmpty += "</td>";
+            sEmpty += "<td class='costTableData'>";
+            sEmpty += "</td>";
 
-            rows[rowNum] += sEmpty.str();
+            rows[rowNum] += sEmpty;
             rowNum++;
         }
 
         // add rows to html
         for (const auto &row : rows) {
-            html << "<tr>";
-            html << row;
-            html << "</tr>";
+            html += "<tr>";
+            html += row;
+            html += "</tr>";
         }
     }
 
     // close table
-    html << "</table>";
+    html += "</table>";
 }
 void ProducerConsumerHierarchy::allocate_table(vector<string> &allocationSizes) {
     // open table
-    html << "<table class='costTable' style='background-color: rgba(150, 150, 150, 0.5)'>";
-
-    stringstream header;
-    stringstream data;
+    html += "<table class='costTable' style='background-color: rgba(150, 150, 150, 0.5)'>";
 
     // open header and data rows
-    header << "<tr>";
-    data << "<tr>";
+    string header = "<tr>";
+    string data = "<tr>";
 
     // iterate through all allocation sizes and add them to the header and data rows
     for (unsigned long i = 0; i < allocationSizes.size(); i++) {
         if (i == 0) {
-            header << "<th class='costTableHeader middleCol'>";
-            header << "Type";
-            header << "</th>";
+            header += "<th class='costTableHeader middleCol'>";
+            header += "Type";
+            header += "</th>";
 
-            data << "<td class='costTableHeader middleCol'>";
-            data << allocationSizes[0];
-            data << "</td>";
+            data += "<td class='costTableHeader middleCol'>";
+            data += allocationSizes[0];
+            data += "</td>";
         } else {
             if (i < allocationSizes.size() - 1) {
-                header << "<th class='costTableHeader middleCol'>";
-                data << "<td class='costTableHeader middleCol'>";
+                header += "<th class='costTableHeader middleCol'>";
+                data += "<td class='costTableHeader middleCol'>";
             } else {
-                header << "<th class='costTableHeader'>";
-                data << "<td class='costTableHeader'>";
+                header += "<th class='costTableHeader'>";
+                data += "<td class='costTableHeader'>";
             }
-            header << "Dim-" << i;
-            header << "</th>";
+            header += "Dim-" + std::to_string(i);
+            header += "</th>";
 
-            data << allocationSizes[i];
-            data << "</td>";
+            data += allocationSizes[i];
+            data += "</td>";
         }
     }
 
     // close header and data rows
-    header << "</tr>";
-    data << "</tr>";
+    header += "</tr>";
+    data += "</tr>";
 
     // add header and data rows to html
-    html << header.str();
-    html << data.str();
+    html += header;
+    html += data;
 
     // close table
-    html << "</table>";
+    html += "</table>";
 }
 void ProducerConsumerHierarchy::for_loop_table(string loop_size) {
     // open table
-    html << "<table class='costTable' style='background-color: rgba(150, 150, 150, 0.5)'>";
+    html += "<table class='costTable' style='background-color: rgba(150, 150, 150, 0.5)'>";
 
     // Loop Size
-    html << "<tr>";
+    html += "<tr>";
 
-    html << "<th class='costTableHeader'>";
-    html << "Loop Size";
-    html << "</th>";
+    html += "<th class='costTableHeader'>";
+    html += "Loop Size";
+    html += "</th>";
 
-    html << "</tr>";
+    html += "</tr>";
 
-    html << "<tr>";
+    html += "<tr>";
 
     // loop size
-    html << "<td class='costTableData'>";
-    html << loop_size;
-    html << "</td>";
+    html += "<td class='costTableData'>";
+    html += loop_size;
+    html += "</td>";
 
-    html << "</tr>";
+    html += "</tr>";
 
     // close table
-    html << "</table>";
+    html += "</table>";
 }
 
 void ProducerConsumerHierarchy::see_code_button(string anchorName) {
-    html << "<button class='see-code-button' onclick='";
-    html << "window.open(\"" << output_file_name << "#" << anchorName << "\", \"_blank\")";
-    html << "' style='margin-left: 5px'>";
-    html << "<i class='bi bi-code-square'></i>";
-    html << "</button>";
+    html += "<button class='see-code-button' onclick='";
+    html += "window.open(\"" + output_file_name + "#" + anchorName + "\", \"_blank\")";
+    html += "' style='margin-left: 5px'>";
+    html += "<i class='bi bi-code-square'></i>";
+    html += "</button>";
 }
 
 string ProducerConsumerHierarchy::info_tooltip(string toolTipText, string className = "") {
     prodConsTooltipCount++;
 
-    stringstream ss;
+    string ss;
+
+    cout << "cout (" << prodConsTooltipCount << "): " << toolTipText << endl;
 
     // info-button
-    ss << "<button id='prodConsButton" << prodConsTooltipCount << "' ";
-    ss << "aria-describedby='prodConsTooltip" << prodConsTooltipCount << "' ";
-    ss << "class='info-button' role='button' ";
-    ss << ">";
-    ss << "<i class='bi bi-info'></i>";
-    ss << "</button>";
+    ss += "<button id='prodConsButton" + std::to_string(prodConsTooltipCount) + "' ";
+    ss += "aria-describedby='prodConsTooltip" + std::to_string(prodConsTooltipCount) + "' ";
+    ss += "class='info-button' role='button' ";
+    ss += ">";
+    ss += "<i class='bi bi-info'></i>";
+    ss += "</button>";
 
-    ss << "<span id='prodConsTooltip" << prodConsTooltipCount << "' class='tooltip prodConsTooltip";
+    ss += "<span id='prodConsTooltip" + std::to_string(prodConsTooltipCount) + "' ";
+    ss += "class='tooltip prodConsTooltip";
     if (className != "") {
-        ss << " " << className;
+        ss += " " + className;
     }
-    ss << "'";
-    ss << "role='prodConsTooltip" << prodConsTooltipCount << "'>";
-    ss << toolTipText;
-    ss << "</span>";
+    ss += "'";
+    ss += "role='prodConsTooltip" + std::to_string(prodConsTooltipCount) + "'>";
+    ss += toolTipText;
+    ss += "</span>";
 
-    return ss.str();
+    return ss;
 }
 
 void ProducerConsumerHierarchy::generate_computation_cost_div(const IRNode *op) {
@@ -917,8 +923,8 @@ void ProducerConsumerHierarchy::generate_computation_cost_div(const IRNode *op) 
 
     int computation_range = findStmtCost.get_computation_range(op);
     string className = "computation-cost-div CostColor" + to_string(computation_range);
-    html << "<div class='" << className << "'";
-    html << "style='width: 10px;'>";
+    html += "<div class='" + className + "'";
+    html += "style='width: 10px;'>";
 
     close_div();
 }
@@ -926,27 +932,27 @@ void ProducerConsumerHierarchy::generate_memory_cost_div(const IRNode *op) {
     // skip if it's a store
     if (op->node_type == IRNodeType::Store) return;
 
-    // html << "<div class='memory-cost-div'>";
+    // html += "<div class='memory-cost-div'>";
     int memory_range = findStmtCost.get_data_movement_range(op);
     string className = "memory-cost-div CostColor" + to_string(memory_range);
-    html << "<div class='" << className << "'";
-    html << "style='width: 10px;'>";
+    html += "<div class='" + className + "'";
+    html += "style='width: 10px;'>";
 
     close_div();
 }
 void ProducerConsumerHierarchy::open_content_div() {
-    html << "<div class='content'>";
+    html += "<div class='content'>";
 }
 
 void ProducerConsumerHierarchy::open_span(string className) {
-    html << "<span class='" << className << "'>";
+    html += "<span class='" + className + "'>";
 }
 void ProducerConsumerHierarchy::close_span() {
-    html << "</span>";
+    html += "</span>";
 }
 void ProducerConsumerHierarchy::cost_color_spacer() {
     open_span("CostColorSpacer");
-    html << ".";
+    html += ".";
     close_span();
 }
 void ProducerConsumerHierarchy::cost_colors(const IRNode *op) {
@@ -954,14 +960,14 @@ void ProducerConsumerHierarchy::cost_colors(const IRNode *op) {
 
     int computation_range = findStmtCost.get_computation_range(op);
     open_span("CostColor" + to_string(computation_range) + " CostComputation");
-    html << ".";
+    html += ".";
     close_span();
 
     cost_color_spacer();
 
     int data_movement_range = findStmtCost.get_data_movement_range(op);
     open_span("CostColor" + to_string(data_movement_range) + " CostMovement");
-    html << ".";
+    html += ".";
     close_span();
 
     cost_color_spacer();
@@ -983,17 +989,18 @@ Expr ProducerConsumerHierarchy::visit(const Variable *op) {
             size = StmtSize();
         }
 
-        html << "<div class='box center FunctionCallBox' ";
-        html << "style='background-color: " << FUNCTION_CALL_COLOR << ";";
-        html << "padding: 5px;'>";
+        html += "<div class='box center FunctionCallBox' ";
+        string color = FUNCTION_CALL_COLOR;
+        html += "style='background-color: " + color + ";";
+        html += "padding: 5px;'>";
 
-        html << "Function Call";
-        html << "<button class='info-button' role='button' ";
-        html << "onclick=\"location.href='./" << output_file_name << "#" << varName << "'\">";
-        html << varName;
-        html << "</button>";
+        html += "Function Call";
+        html += "<button class='info-button' role='button' ";
+        html += "onclick=\"location.href='./" + output_file_name + "#" + varName + "'\">";
+        html += varName;
+        html += "</button>";
 
-        html << "</div>";
+        html += "</div>";
 
         return op;
     }
@@ -1005,16 +1012,15 @@ Stmt ProducerConsumerHierarchy::visit(const ProducerConsumer *op) {
     producerConsumerCount++;
     string anchorName = "producerConsumer" + std::to_string(producerConsumerCount);
 
-    stringstream header;
-    header << (op->is_producer ? "Produce" : "Consume");
-    header << " " << op->name;
+    string header = (op->is_producer ? "Produce" : "Consume");
+    header += " " + op->name;
     StmtSize size = pre_processor.get_size(op);
 
     if (!SHOW_CUMULATIVE_COST) {
         size = StmtSize();
     }
 
-    div_header(op, header.str(), size, anchorName);
+    div_header(op, header, size, anchorName);
 
     mutate(op->body);
 
@@ -1031,13 +1037,12 @@ Stmt ProducerConsumerHierarchy::visit(const For *op) {
 
     StmtSize size = pre_processor.get_size(op);
 
-    stringstream header;
-    header << "For (" << op->name << ")";
+    string header = "For (" + op->name + ")";
 
     if (SHOW_CUMULATIVE_COST) {
-        div_header(op, header.str(), size, anchorName);
+        div_header(op, header, size, anchorName);
     } else {
-        for_loop_div_header(op, header.str(), size, anchorName);
+        for_loop_div_header(op, header, size, anchorName);
     }
 
     mutate(op->body);
@@ -1062,17 +1067,17 @@ Stmt ProducerConsumerHierarchy::visit(const IfThenElse *op) {
     bool opened = false;
     if (!thenSize.empty() || !elseSize.empty()) {
         // open main if tree
-        html << "<div class='tf-tree tf-gap-sm tf-custom-prodCons' style='font-size: 12px;'>";
-        html << "<ul>";
-        html << "<li><span class='tf-nc if-node'>";
-        html << "If";
-        html << "</span>";
-        html << "<ul>";
+        html += "<div class='tf-tree tf-gap-sm tf-custom-prodCons' style='font-size: 12px;'>";
+        html += "<ul>";
+        html += "<li><span class='tf-nc if-node'>";
+        html += "If";
+        html += "</span>";
+        html += "<ul>";
         opened = true;
     }
 
-    stringstream ifHeader;
-    ifHeader << "if ";
+    string ifHeader;
+    ifHeader += "if ";
 
     // anchor name
     ifCount++;
@@ -1084,25 +1089,22 @@ Stmt ProducerConsumerHierarchy::visit(const IfThenElse *op) {
 
         if (!thenSize.empty()) {
             // TODO: inline condition
-            stringstream condition;
-            condition << op->condition;
+            string condition;
+            condition += to_string(op->condition);
 
             // make condition smaller if it's too big
-            if (condition.str().size() > MAX_CONDITION_LENGTH) {
-                condition.str("");
-                condition << "... ";
-
-                stringstream cond;
-                cond << op->condition;
-                condition << info_tooltip(cond.str(), "conditionTooltip");
+            if (condition.size() > MAX_CONDITION_LENGTH) {
+                condition = "";
+                condition += "... ";
+                condition += info_tooltip(to_string(op->condition), "conditionTooltip");
             }
 
-            ifHeader << condition.str();
+            ifHeader += condition;
 
             if (!SHOW_CUMULATIVE_COST) {
                 thenSize = StmtSize();
             }
-            if_tree(op->then_case.get(), ifHeader.str(), thenSize, anchorName);
+            if_tree(op->then_case.get(), ifHeader, thenSize, anchorName);
 
             // then body
             mutate(op->then_case);
@@ -1118,8 +1120,8 @@ Stmt ProducerConsumerHierarchy::visit(const IfThenElse *op) {
         // if else case is another ifthenelse, recurse and reset op to else case
         if (const IfThenElse *nested_if = op->else_case.as<IfThenElse>()) {
             op = nested_if;
-            ifHeader.str("");
-            ifHeader << "else if ";
+            ifHeader = "";
+            ifHeader += "else if ";
 
             // anchor name
             ifCount++;
@@ -1132,8 +1134,8 @@ Stmt ProducerConsumerHierarchy::visit(const IfThenElse *op) {
             elseSize = pre_processor.get_size(op->else_case.get());
 
             if (!elseSize.empty()) {
-                stringstream elseHeader;
-                elseHeader << "else ";
+                string elseHeader;
+                elseHeader += "else ";
 
                 // anchor name
                 ifCount++;
@@ -1142,7 +1144,7 @@ Stmt ProducerConsumerHierarchy::visit(const IfThenElse *op) {
                 if (!SHOW_CUMULATIVE_COST) {
                     elseSize = StmtSize();
                 }
-                if_tree(op->else_case.get(), elseHeader.str(), elseSize, anchorName);
+                if_tree(op->else_case.get(), elseHeader, elseSize, anchorName);
 
                 mutate(op->else_case);
 
@@ -1154,10 +1156,10 @@ Stmt ProducerConsumerHierarchy::visit(const IfThenElse *op) {
 
     // close main if tree
     if (opened) {
-        html << "</ul>";
-        html << "</li>";
-        html << "</ul>";
-        html << "</div>";
+        html += "</ul>";
+        html += "</li>";
+        html += "</ul>";
+        html += "</div>";
     }
     return op;
 }
@@ -1168,12 +1170,11 @@ Stmt ProducerConsumerHierarchy::visit(const Store *op) {
     storeCount++;
     string anchorName = "store" + std::to_string(storeCount);
 
-    stringstream header;
-    header << "Store " << op->name;
+    string header = "Store " + op->name;
 
     open_box_div(STORE_COLOR, "StoreBox", op);
 
-    div_header(op, header.str(), size, anchorName);
+    div_header(op, header, size, anchorName);
 
     mutate(op->value);
 
@@ -1191,36 +1192,35 @@ Expr ProducerConsumerHierarchy::visit(const Load *op) {
         lanes = int(op->type.lanes());
     }
 
-    stringstream header;
-    header << "Load " << op->name << " ";
+    string header = "Load " + op->name + " ";
 
     // tooltip table
-    stringstream tooltipTable;
-    tooltipTable << "<table class='tooltipTable'>";
+    string tooltipTable;
+    tooltipTable += "<table class='tooltipTable'>";
 
-    tooltipTable << "<tr>";
-    tooltipTable << "<td class = 'left-table'> Variable Type</td>";
-    tooltipTable << "<td class = 'right-table'> ";
+    tooltipTable += "<tr>";
+    tooltipTable += "<td class = 'left-table'> Variable Type</td>";
+    tooltipTable += "<td class = 'right-table'> ";
     if (findStmtCost.is_local_variable(op->name)) {
-        tooltipTable << "local var";
+        tooltipTable += "local var";
     } else {
-        tooltipTable << "global var";
+        tooltipTable += "global var";
     }
-    tooltipTable << "</td>";
-    tooltipTable << "</tr>";
+    tooltipTable += "</td>";
+    tooltipTable += "</tr>";
 
-    tooltipTable << "<tr>";
-    tooltipTable << "<td class = 'left-table'> Load Size</td>";
-    tooltipTable << "<td class = 'right-table'> " << lanes << "</td>";
-    tooltipTable << "</tr>";
+    tooltipTable += "<tr>";
+    tooltipTable += "<td class = 'left-table'> Load Size</td>";
+    tooltipTable += "<td class = 'right-table'> " + std::to_string(lanes) + "</td>";
+    tooltipTable += "</tr>";
 
-    tooltipTable << "</table>";
+    tooltipTable += "</table>";
 
-    header << info_tooltip(tooltipTable.str());
+    header += info_tooltip(tooltipTable);
 
     open_store_div();
     cost_colors(op);
-    html << header.str();
+    html += header;
     close_div();
 
     return op;
@@ -1260,49 +1260,48 @@ Stmt ProducerConsumerHierarchy::visit(const Allocate *op) {
 
     StmtSize size = pre_processor.get_size(op);
 
-    stringstream header;
-    header << "Allocate " << op->name << " ";
+    string header = "Allocate " + op->name + " ";
 
     // memory type tooltip table
-    stringstream tooltipTable;
-    tooltipTable << "<table class='tooltipTable'>";
-    tooltipTable << "<tr>";
-    tooltipTable << "<td class = 'left-table'> Memory Type</td>";
-    tooltipTable << "<td class = 'right-table'> " << get_memory_type(op->memory_type) << "</td>";
-    tooltipTable << "</tr>";
+    string tooltipTable;
+    tooltipTable += "<table class='tooltipTable'>";
+    tooltipTable += "<tr>";
+    tooltipTable += "<td class = 'left-table'> Memory Type</td>";
+    tooltipTable += "<td class = 'right-table'> " + get_memory_type(op->memory_type) + "</td>";
+    tooltipTable += "</tr>";
 
     if (!is_const_one(op->condition)) {
-        tooltipTable << "<tr>";
-        tooltipTable << "<td class = 'left-table'> Condition</td>";
-        tooltipTable << "<td class = 'right-table'> " << op->condition << "</td>";
-        tooltipTable << "</tr>";
+        tooltipTable += "<tr>";
+        tooltipTable += "<td class = 'left-table'> Condition</td>";
+        tooltipTable += "<td class = 'right-table'> " + to_string(op->condition) + "</td>";
+        tooltipTable += "</tr>";
     }
     if (op->new_expr.defined()) {
         internal_error << "\n"
                        << "ProducerConsumerHierarchy: Allocate " << op->name
                        << " `op->new_expr.defined()` is not supported.\n\n";
 
-        tooltipTable << "<tr>";
-        tooltipTable << "<td class = 'left-table'> New Expr</td>";
-        tooltipTable << "<td class = 'right-table'> " << op->new_expr << "</td>";
-        tooltipTable << "</tr>";
+        tooltipTable += "<tr>";
+        tooltipTable += "<td class = 'left-table'> New Expr</td>";
+        tooltipTable += "<td class = 'right-table'> " + to_string(op->new_expr) + "</td>";
+        tooltipTable += "</tr>";
     }
     if (!op->free_function.empty()) {
         internal_error << "\n"
                        << "ProducerConsumerHierarchy: Allocate " << op->name
                        << " `!op->free_function.empty()` is not supported.\n\n";
 
-        tooltipTable << "<tr>";
-        tooltipTable << "<td class = 'left-table'> Free Function</td>";
-        tooltipTable << "<td class = 'right-table'> " << op->free_function << "</td>";
-        tooltipTable << "</tr>";
+        tooltipTable += "<tr>";
+        tooltipTable += "<td class = 'left-table'> Free Function</td>";
+        tooltipTable += "<td class = 'right-table'> " + to_string(op->free_function) + "</td>";
+        tooltipTable += "</tr>";
     }
 
-    tooltipTable << "</table>";
+    tooltipTable += "</table>";
 
-    header << info_tooltip(tooltipTable.str());
+    header += info_tooltip(tooltipTable);
 
-    allocate_div_header(op, header.str(), size, anchorName);
+    allocate_div_header(op, header, size, anchorName);
 
     close_box_div();
 
@@ -1312,30 +1311,30 @@ Stmt ProducerConsumerHierarchy::visit(const Allocate *op) {
 }
 
 string ProducerConsumerHierarchy::generate_prodCons_js() {
-    stringstream prodConsJS;
+    string prodConsJS;
 
-    prodConsJS << "// prodCons JS\n";
-    prodConsJS << "for (let i = 1; i <= " << prodConsTooltipCount << "; i++) { \n";
-    prodConsJS << "    const button = document.querySelector('#prodConsButton' + i); \n";
-    prodConsJS << "    const tooltip = document.querySelector('#prodConsTooltip' + i); \n";
-    prodConsJS << "    button.addEventListener('mouseenter', () => { \n";
-    prodConsJS << "        showTooltip(button, tooltip); \n";
-    prodConsJS << "    }); \n";
-    prodConsJS << "    button.addEventListener('mouseleave', () => { \n";
-    prodConsJS << "        hideTooltip(tooltip); \n";
-    prodConsJS << "    } \n";
-    prodConsJS << "    ); \n";
-    prodConsJS << "    tooltip.addEventListener('focus', () => { \n";
-    prodConsJS << "        showTooltip(button, tooltip); \n";
-    prodConsJS << "    } \n";
-    prodConsJS << "    ); \n";
-    prodConsJS << "    tooltip.addEventListener('blur', () => { \n";
-    prodConsJS << "        hideTooltip(tooltip); \n";
-    prodConsJS << "    } \n";
-    prodConsJS << "    ); \n";
-    prodConsJS << "} \n";
+    prodConsJS += "// prodCons JS\n";
+    prodConsJS += "for (let i = 1; i <= " + std::to_string(prodConsTooltipCount) + "; i++) { \n";
+    prodConsJS += "    const button = document.querySelector('#prodConsButton' + i); \n";
+    prodConsJS += "    const tooltip = document.querySelector('#prodConsTooltip' + i); \n";
+    prodConsJS += "    button.addEventListener('mouseenter', () => { \n";
+    prodConsJS += "        showTooltip(button, tooltip); \n";
+    prodConsJS += "    }); \n";
+    prodConsJS += "    button.addEventListener('mouseleave', () => { \n";
+    prodConsJS += "        hideTooltip(tooltip); \n";
+    prodConsJS += "    } \n";
+    prodConsJS += "    ); \n";
+    prodConsJS += "    tooltip.addEventListener('focus', () => { \n";
+    prodConsJS += "        showTooltip(button, tooltip); \n";
+    prodConsJS += "    } \n";
+    prodConsJS += "    ); \n";
+    prodConsJS += "    tooltip.addEventListener('blur', () => { \n";
+    prodConsJS += "        hideTooltip(tooltip); \n";
+    prodConsJS += "    } \n";
+    prodConsJS += "    ); \n";
+    prodConsJS += "} \n";
 
-    return prodConsJS.str();
+    return prodConsJS;
 }
 
 /*

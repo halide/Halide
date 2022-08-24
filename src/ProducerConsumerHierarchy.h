@@ -173,7 +173,7 @@ public:
 private:
     using IRMutator::visit;
 
-    std::stringstream html;     // main html string
+    string html;                // main html string
     StmtSizes pre_processor;    // generates the sizes of the nodes
     string output_file_name;    // used for anchoring
     FindStmtCost findStmtCost;  // used to determine the color of each statement
