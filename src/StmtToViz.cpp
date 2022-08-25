@@ -20,6 +20,7 @@
 #define PRINT_HIERARCHY false
 #define PRINT_DEPENDENCIES false
 #define PRINT_PROD_CONS false
+#define NAVIGATION_STYLE false  // change in ProduceConsumerHierarchy.cpp as well
 
 namespace Halide {
 namespace Internal {
@@ -38,6 +39,7 @@ class StmtToViz : public IRVisitor {
     static const string vizCss;
     static const string costColorsCSS;
     static const string navigationHTML;
+    static const string scrollToCSS, navigationCSS;
     static const string lineNumbersCSS;
     static const string tooltipCSS;
 
@@ -325,10 +327,10 @@ private:
     }
 
     string open_anchor(const string &anchorName) {
-        return "<a name=\"" + anchorName + "\"></a>";
+        return "<span class='navigationAnchor' id=\"" + anchorName + "\">";
     }
     string close_anchor() {
-        return "</a>";
+        return "</span>";
     }
 
     string open_line() {
@@ -653,16 +655,16 @@ private:
         // anchoring
         producerConsumerCount++;
         string anchorName = "producerConsumer" + std::to_string(producerConsumerCount);
-        stream << open_anchor(anchorName);
-        stream << close_anchor();
 
         int produce_id = unique_id();
         stream << open_span("Matched");
         stream << open_expand_button(produce_id);
+        stream << open_anchor(anchorName);
         stream << keyword(op->is_producer ? "produce" : "consume") << " ";
         stream << var(op->name);
         stream << close_expand_button() << " {";
         stream << close_span();
+        stream << close_anchor();
 
         stream << open_div(op->is_producer ? "ProduceBody Indent" : "ConsumeBody Indent",
                            produce_id);
@@ -688,11 +690,10 @@ private:
         // anchoring
         forCount++;
         string anchorName = "for" + std::to_string(forCount);
-        stream << open_anchor(anchorName);
-        stream << close_anchor();
 
         int id = unique_id();
         stream << open_expand_button(id);
+        stream << open_anchor(anchorName);
         stream << open_span("Matched");
         if (op->for_type == ForType::Serial) {
             stream << keyword("for");
@@ -721,6 +722,7 @@ private:
         stream << matched(")");
         stream << close_expand_button();
         stream << " " << matched("{");
+        stream << close_anchor();
         stream << open_div("ForBody Indent", id);
         print(op->body);
         stream << close_div();
@@ -762,7 +764,6 @@ private:
         storeCount++;
         string anchorName = "store" + std::to_string(storeCount);
         stream << open_anchor(anchorName);
-        stream << close_anchor();
 
         stream << cost_colors(op->value.get());
         stream << open_cost_span(op, get_stmt_hierarchy(op));
@@ -773,6 +774,7 @@ private:
 
         print(op->index);
         stream << matched("]");
+        stream << close_anchor();
         stream << " " << span("Operator Assign Matched", "=") << " ";
 
         stream << open_span("StoreValue");
@@ -812,7 +814,6 @@ private:
         allocateCount++;
         string anchorName = "allocate" + std::to_string(allocateCount);
         stream << open_anchor(anchorName);
-        stream << close_anchor();
 
         stream << cost_colors(op);
 
@@ -856,6 +857,7 @@ private:
         if (!in_context && in_loop) {
             add_context_rule(curr_line_num);
         }
+        stream << close_anchor();
 
         stream << open_div("AllocateBody");
         print(op->body);
@@ -979,19 +981,18 @@ private:
     void visit(const IfThenElse *op) override {
         stream << open_div("IfThenElse");
 
+        // anchoring
+        ifCount++;
+        string anchorName = "if" + std::to_string(ifCount);
+
         int id = unique_id();
         stream << open_expand_button(id);
+        stream << open_anchor(anchorName);
         stream << open_span("Matched");
 
         // for line numbers
         stream << open_span("IfSpan");
         stream << close_span();
-
-        // anchoring
-        ifCount++;
-        string anchorName = "if" + std::to_string(ifCount);
-        stream << open_anchor(anchorName);
-        close_anchor();
 
         stream << keyword("if") << " (";
         stream << close_span();
@@ -1001,6 +1002,7 @@ private:
             stream << matched(")");
             stream << close_expand_button() << " ";
             stream << matched("{");  // close if (or else if) span
+            close_anchor();
 
             stream << open_div("ThenBody Indent", id);
             print(op->then_case);
@@ -1031,7 +1033,6 @@ private:
                 ifCount++;
                 string anchorName = "if" + std::to_string(ifCount);
                 stream << open_anchor(anchorName);
-                close_anchor();
 
                 stream << keyword("else if") << " (";
                 stream << close_span();
@@ -1051,10 +1052,10 @@ private:
                 ifCount++;
                 string anchorName = "if" + std::to_string(ifCount);
                 stream << open_anchor(anchorName);
-                close_anchor();
 
                 stream << keyword("else");
                 stream << close_expand_button() << "{";
+                close_anchor();
                 stream << close_span();
                 stream << open_div("ElseBody Indent", id);
                 print(op->else_case);
@@ -1147,44 +1148,26 @@ public:
         return findStmtCost;
     }
     void generate_producer_consumer_hierarchy(const Module &m) {
-        // open the prod cons div for navigation
-        stream << "<div class='tab-pane fade' id='ProdCons' role='tabpanel' "
-                  "aria-labelledby='ProdCons-tab'>\n";
-        stream << "<div class='ProducerConsumerViz'>\n";
 
         string prodConsHTML = producerConsumerHierarchy.generate_producer_consumer_html(m);
         if (PRINT_PROD_CONS) cout << prodConsHTML << endl;
 
         stream << prodConsHTML;
-        stream << "</div>\n";
-        stream << "</div>\n";
     }
     void generate_producer_consumer_hierarchy(const Stmt &s) {
-        // open the prod cons div for navigation
-        stream << "<div class='tab-pane fade' id='ProdCons' role='tabpanel' "
-                  "aria-labelledby='ProdCons-tab'>\n";
-        stream << "<div class='ProducerConsumerViz'>\n";
 
         string prodConsHTML = producerConsumerHierarchy.generate_producer_consumer_html(s);
         if (PRINT_PROD_CONS) cout << prodConsHTML << endl;
 
         stream << prodConsHTML;
-        stream << "</div>\n";
-        stream << "</div>\n";
     }
     void generate_dependency_graph(const Module &m) {
-        // open the dependency graph div for navigation
-        stream << "<div class='tab-pane fade' id='Dependency' role='tabpanel' "
-                  "aria-labelledby='Dependency-tab'>\n";
-        stream << "<div class='DependencyViz'>\n";
 
         string dependGraphHTML = dependencyGraph.generate_dependency_graph(m);
         if (PRINT_DEPENDENCIES) cout << dependGraphHTML << endl;
 
         // stream << dependGraphHTML;
         stream << "In construction...\n";
-        stream << "</div>\n";
-        stream << "</div>\n";
     }
     void generate_dependency_graph(const Stmt &s) {
         internal_error << "\n"
@@ -1540,59 +1523,22 @@ public:
         stream << vizCss;
         stream << costColorsCSS;
         stream << ProducerConsumerHierarchy::prodConsCSS;
+        if (NAVIGATION_STYLE) stream << navigationCSS;
+        else
+            stream << scrollToCSS;
         stream << lineNumbersCSS;
         stream << tooltipCSS;
         stream << GetStmtHierarchy::stmtHierarchyCSS;
         stream << "</style>\n";
         stream << "<script language='javascript' type='text/javascript'>" + js + "</script>\n";
         stream << "</head>\n <body>\n";
-        stream << navigationHTML;
-
-        // bootstrap stuff
-        stream << "<div class='tab-content' id='myTabContent'>\n";
+        if (NAVIGATION_STYLE) stream << navigationHTML;
     }
 
-    StmtToViz(const string &filename, const Module &m)
-        : getStmtHierarchy(generate_costs(m)),
-          producerConsumerHierarchy(get_file_name(filename), findStmtCost), id_count(0),
-          in_loop(false), context_stack(1, 0) {
-
-        start_stream(filename);
-
-        generate_producer_consumer_hierarchy(m);
-        generate_dependency_graph(m);
-
-        // open div for navigation
-        stream << "<div class='tab-pane fade show active' id='IRCode' role='tabpanel' "
-                  "aria-labelledby='IRCode-tab'>\n";
-        stream << "<div class='IRCode-code'>\n";
-
-        cout << "done printing to viz" << endl;
-    }
-
-    StmtToViz(const string &filename, const Stmt &s)
-        : getStmtHierarchy(generate_costs(s)),
-          producerConsumerHierarchy(get_file_name(filename), findStmtCost), id_count(0),
-          in_loop(false), context_stack(1, 0) {
-
-        start_stream(filename);
-
-        generate_producer_consumer_hierarchy(s);
-        generate_dependency_graph(s);
-
-        // open div for navigation
-        stream << "<div class='tab-pane fade show active' id='IRCode' role='tabpanel' "
-                  "aria-labelledby='IRCode-tab'>\n";
-        stream << "<div class='IRCode-code'>\n";
-    }
-
-    ~StmtToViz() override {
+    void end_stream() {
         cout << "in destructor" << endl;
         stream << popups;
-
-        stream << "</div>\n";  // close IRCode-code div
-        stream << "</div>\n";  // close IRCode div
-        stream << "</div>\n";  // close bootstrap tab-content div
+        cout << "here" << endl;
 
         stream << "<script>\n";
         stream << "$( '.Matched' ).each( function() {\n"
@@ -1601,13 +1547,121 @@ public:
                << "    this.onmouseout = function() { $('.Matched[id^=' + this.id.split('-')[0] + "
                   "'-]').removeClass('Highlight'); }\n"
                << "} );\n";
+
+        cout << "here5" << endl;
         stream << content_rule_script_stream;
+        cout << "here6" << endl;
         stream << generatetooltipJS(tooltipCount);
+        cout << "here7" << endl;
         stream << getStmtHierarchy.generate_collapse_expand_js();
+        cout << "here8" << endl;
         stream << producerConsumerHierarchy.generate_prodCons_js();
+        cout << "here9" << endl;
+        stream << ProducerConsumerHierarchy::scrollToFunctionJS;
+        cout << "here10" << endl;
         stream << "</script>\n";
+        cout << "here11" << endl;
         stream << "</body>";
+        cout << "here12" << endl;
     }
+
+    void navigation_header() {
+        stream << "<div class='tab-content' id='myTabContent'>\n";
+    }
+    void navigation_footer() {
+        stream << "</div>\n";
+    }
+    void open_code_navigation() {
+        stream << "<div class='tab-pane fade show active' id='IRCode' role='tabpanel' "
+                  "aria-labelledby='IRCode-tab'>\n";
+    }
+    void close_code_navigation() {
+        stream << "</div>\n";
+    }
+
+    void open_prod_cons_navigation() {
+        stream << "<div class='tab-pane fade' id='ProdCons' role='tabpanel' "
+                  "aria-labelledby='ProdCons-tab'>\n";
+    }
+    void close_prod_cons_navigation() {
+        stream << "</div>\n";
+    }
+    void open_dependency_navigation() {
+        stream << "<div class='tab-pane fade' id='Dependency' role='tabpanel' "
+                  "aria-labelledby='Dependency-tab'>\n";
+    }
+    void close_dependency_navigation() {
+        stream << "</div>\n";
+    }
+
+    void generate_html(const string &filename, const Module &m) {
+        // opening parts of the html
+        start_stream(filename);
+
+        if (NAVIGATION_STYLE) navigation_header();
+        else {
+            stream << "<div class='outerDiv'>\n";
+
+            stream << "<div class='buttons'>\n";
+            stream << "<button class='info-button'>Expand Code</button>\n";
+            stream << "<button class='info-button'>Expand Visualization</button>\n";
+            stream << "</div>\n";
+
+            stream << "<div class='mainContent'>\n";
+        }
+
+        // print main html page
+        if (NAVIGATION_STYLE) open_code_navigation();
+        stream << "<div class='IRCode-code' id='IRCode-code'>\n";
+        print(m);
+        stream << "</div>\n";  // close IRCode-code div
+        if (NAVIGATION_STYLE) close_code_navigation();
+
+        if (NAVIGATION_STYLE) open_prod_cons_navigation();
+        stream << "<div class='ProducerConsumerViz'>\n";
+        generate_producer_consumer_hierarchy(m);
+        stream << "</div>\n";  // close ProducerConsumerViz div
+        if (NAVIGATION_STYLE) close_prod_cons_navigation();
+
+        if (NAVIGATION_STYLE) open_dependency_navigation();
+        if (NAVIGATION_STYLE) stream << "<div class='DependencyViz'>\n";
+        if (NAVIGATION_STYLE) generate_dependency_graph(m);
+        if (NAVIGATION_STYLE) stream << "</div>\n";  // close DependencyViz div
+        if (NAVIGATION_STYLE) close_dependency_navigation();
+
+        if (NAVIGATION_STYLE) navigation_footer();
+        else {
+            stream << "</div>\n";  // close mainContent div
+            stream << "</div>\n";  // close outerDiv div
+        }
+
+        // closing parts of the html
+        end_stream();
+    }
+
+    StmtToViz(const string &filename, const Module &m)
+        : getStmtHierarchy(generate_costs(m)),
+          producerConsumerHierarchy(get_file_name(filename), findStmtCost), id_count(0),
+          in_loop(false), context_stack(1, 0) {
+    }
+
+    StmtToViz(const string &filename, const Stmt &s)
+        : getStmtHierarchy(generate_costs(s)),
+          producerConsumerHierarchy(get_file_name(filename), findStmtCost), id_count(0),
+          in_loop(false), context_stack(1, 0) {
+
+        // start_stream(filename);
+
+        // generate_producer_consumer_hierarchy(s);
+        // generate_dependency_graph(s);
+
+        // // open div for navigation
+        // stream << "<div class='tab-pane fade show active' id='IRCode' role='tabpanel' "
+        //           "aria-labelledby='IRCode-tab'>\n";
+        // stream << "<div class='IRCode-code'>\n";
+    }
+
+    ~StmtToViz() = default;
 
     string generatetooltipJS(int &tooltipCount) {
         stringstream tooltipJS;
@@ -1704,8 +1758,41 @@ span.Label { background-color: #bde4ff; font-weight: bold; }\n \
 code.ptx { tab-size: 26; white-space: pre; }\n \
 ";
 
-const string StmtToViz::lineNumbersCSS = "\n \
-/* Line Numbers CSS */\n \
+const string StmtToViz::scrollToCSS = "\n \
+/* Scroll to CSS */\n \
+div.buttons { \n \
+    padding-left: 20px; \n \
+    padding-top: 20px; \n \
+    padding-bottom: 10px; \n \
+} \n \
+div.outerDiv { \n \
+    height: 100vh; \n \
+    display: flex; \n \
+    flex-direction: column; \n \
+} \n \
+div.mainContent { \n \
+    display: flex; \n \
+    flex-grow: 1; \n \
+    width: 100%; \n \
+    overflow: hidden; \n \
+} \n \
+div.IRCode-code { \n \
+    counter-reset: line; \n \
+    padding-left: 40px; \n \
+    padding-top: 20px; \n \
+    flex: 0 50%; \n \
+    overflow-y: scroll; \n \
+    position: relative; \n \
+ \n \
+} \n \
+div.ProducerConsumerViz { \n \
+    flex: 0 50%; \n \
+    overflow-y: scroll; \n \
+    padding-top: 20px; \n \
+} \n \
+";
+
+const string StmtToViz::navigationCSS = "\n \
 div.IRCode-code { \n \
     counter-reset: line; \n \
     margin-left: 40px; \n \
@@ -1719,6 +1806,10 @@ div.DependencyViz { \n \
     margin-left: 20px; \n \
     margin-top: 20px; \n \
 } \n \
+";
+
+const string StmtToViz::lineNumbersCSS = "\n \
+/* Line Numbers CSS */\n \
 p.WrapLine,\n\
 div.WrapLine,\n\
 div.Consumer,\n\
@@ -1919,7 +2010,8 @@ void print_to_viz(const string &filename, const Module &m) {
 
     StmtToViz sth(filename, m);
 
-    sth.print(m);
+    sth.generate_html(filename, m);
+    cout << "Donezoooooooo printing to " << filename << endl;
 }
 
 }  // namespace Internal

@@ -6,6 +6,8 @@ using namespace std;
 using namespace Halide;
 using namespace Internal;
 
+#define NAVIGATION_STYLE false
+
 template<typename T>
 string to_string(T value) {
     std::ostringstream os;
@@ -870,8 +872,11 @@ void ProducerConsumerHierarchy::for_loop_table(string loop_size) {
 }
 
 void ProducerConsumerHierarchy::see_code_button(string anchorName) {
-    html += "<button class='see-code-button' onclick='";
-    html += "window.open(\"" + output_file_name + "#" + anchorName + "\", \"_blank\")";
+    html += "<button class='see-code-button'";
+    if (NAVIGATION_STYLE)
+        html += "onclick='window.open(\"" + output_file_name + "#" + anchorName + "\", \"_blank\")";
+    else
+        html += "onclick='scrollToFunction(\"" + anchorName + "\")'";
     html += "' style='margin-left: 5px'>";
     html += "<i class='bi bi-code-square'></i>";
     html += "</button>";
@@ -1431,6 +1436,29 @@ string StmtSizes::print_node(const IRNode *node) const {
 
     return s.str();
 }
+
+const string ProducerConsumerHierarchy::scrollToFunctionJS = "\n \
+// scroll to function\n \
+function scrollToFunction(id) { \n \
+    var container = document.getElementById('IRCode-code'); \n \
+    var scrollToObject = document.getElementById(id); \n \
+    console.log(container); \n \
+    console.log(scrollToObject); \n \
+    container.scrollTo({ \n \
+        top: scrollToObject.offsetTop, \n \
+        behavior: 'smooth' \n \
+    }); \n \
+    scrollToObject.style.backgroundColor = 'yellow'; \n \
+    scrollToObject.style.fontSize = '20px'; \n \
+ \n \
+ \n \
+    // change content for 1 second  \n \
+    setTimeout(function () { \n \
+        scrollToObject.style.backgroundColor = 'transparent'; \n \
+        scrollToObject.style.fontSize = '12px'; \n \
+    }, 1000); \n \
+}  \n \
+";
 
 const string ProducerConsumerHierarchy::prodConsCSS = "\n \
 /* ProdCons CSS */\n \

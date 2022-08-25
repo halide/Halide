@@ -155,7 +155,7 @@ private:
 class ProducerConsumerHierarchy : public IRVisitor {
 
 public:
-    static const string prodConsCSS;
+    static const string prodConsCSS, scrollToFunctionJS;
 
     // TODO: eventually get rid of output_file_name (should be able to open file within the same
     // file) - although, maybe want to print out what file is being generated to the screen
