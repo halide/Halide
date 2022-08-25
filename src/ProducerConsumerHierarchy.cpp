@@ -1442,10 +1442,8 @@ const string ProducerConsumerHierarchy::scrollToFunctionJS = "\n \
 function scrollToFunction(id) { \n \
     var container = document.getElementById('IRCode-code'); \n \
     var scrollToObject = document.getElementById(id); \n \
-    console.log(container); \n \
-    console.log(scrollToObject); \n \
     container.scrollTo({ \n \
-        top: scrollToObject.offsetTop, \n \
+        top: scrollToObject.offsetTop - 10, \n \
         behavior: 'smooth' \n \
     }); \n \
     scrollToObject.style.backgroundColor = 'yellow'; \n \

@@ -42,6 +42,7 @@ class StmtToViz : public IRVisitor {
     static const string scrollToCSS, navigationCSS;
     static const string lineNumbersCSS;
     static const string tooltipCSS;
+    static const string expandCodeJS;
 
     FindStmtCost findStmtCost;                            // used for finding the cost of statements
     GetStmtHierarchy getStmtHierarchy;                    // used for getting the hierarchy of
@@ -1558,6 +1559,7 @@ public:
         stream << producerConsumerHierarchy.generate_prodCons_js();
         cout << "here9" << endl;
         stream << ProducerConsumerHierarchy::scrollToFunctionJS;
+        stream << expandCodeJS;
         cout << "here10" << endl;
         stream << "</script>\n";
         cout << "here11" << endl;
@@ -1603,8 +1605,11 @@ public:
             stream << "<div class='outerDiv'>\n";
 
             stream << "<div class='buttons'>\n";
-            stream << "<button class='info-button'>Expand Code</button>\n";
-            stream << "<button class='info-button'>Expand Visualization</button>\n";
+            stream
+                << "<button class='info-button' onclick='expandCodeDiv()'>Expand Code</button>\n";
+            stream << "<button class='info-button' onclick='expandVizDiv()'>";
+            stream << "Expand Visualization</button>\n";
+            stream << "<button class='info-button' onclick='resetRatio()'>Reset Ratio</button>\n";
             stream << "</div>\n";
 
             stream << "<div class='mainContent'>\n";
@@ -1618,7 +1623,7 @@ public:
         if (NAVIGATION_STYLE) close_code_navigation();
 
         if (NAVIGATION_STYLE) open_prod_cons_navigation();
-        stream << "<div class='ProducerConsumerViz'>\n";
+        stream << "<div class='ProducerConsumerViz' id='ProducerConsumerViz'>\n";
         generate_producer_consumer_hierarchy(m);
         stream << "</div>\n";  // close ProducerConsumerViz div
         if (NAVIGATION_STYLE) close_prod_cons_navigation();
@@ -1649,16 +1654,6 @@ public:
         : getStmtHierarchy(generate_costs(s)),
           producerConsumerHierarchy(get_file_name(filename), findStmtCost), id_count(0),
           in_loop(false), context_stack(1, 0) {
-
-        // start_stream(filename);
-
-        // generate_producer_consumer_hierarchy(s);
-        // generate_dependency_graph(s);
-
-        // // open div for navigation
-        // stream << "<div class='tab-pane fade show active' id='IRCode' role='tabpanel' "
-        //           "aria-labelledby='IRCode-tab'>\n";
-        // stream << "<div class='IRCode-code'>\n";
     }
 
     ~StmtToViz() = default;
@@ -1764,6 +1759,7 @@ div.buttons { \n \
     padding-left: 20px; \n \
     padding-top: 20px; \n \
     padding-bottom: 10px; \n \
+    border-bottom: grey dashed 1px; \n \
 } \n \
 div.outerDiv { \n \
     height: 100vh; \n \
@@ -1969,7 +1965,32 @@ const string StmtToViz::tooltipCSS = "\n \
 } \n \
 ";
 
+const string StmtToViz::expandCodeJS = "\n \
+/* expand code div */\n \
+function expandCodeDiv() { \n \
+    var codeDiv = document.getElementById('IRCode-code'); \n \
+    var prodConsDiv = document.getElementById('ProducerConsumerViz'); \n \
+    codeDiv.style.flex = '0 75%'; \n \
+    prodConsDiv.style.flex = '0 25%'; \n \
+} \n \
+function expandVizDiv() { \n \
+    var codeDiv = document.getElementById('IRCode-code'); \n \
+    var prodConsDiv = document.getElementById('ProducerConsumerViz'); \n \
+    console.log(codeDiv.style.flex); \n \
+    codeDiv.style.flex = '0 25%'; \n \
+    prodConsDiv.style.flex = '0 75%'; \n \
+} \n \
+function resetRatio() { \n \
+    var codeDiv = document.getElementById('IRCode-code'); \n \
+    var prodConsDiv = document.getElementById('ProducerConsumerViz'); \n \
+    codeDiv.style.flex = '0 50%'; \n \
+    prodConsDiv.style.flex = '0 50%'; \n \
+} \n \
+resetRatio(); \n \
+";
+
 const string StmtToViz::js = "\n \
+/* Expand/Collapse buttons */\n \
 function toggle(id) { \n \
     e = document.getElementById(id); \n \
     show = document.getElementById(id + '-show'); \n \
