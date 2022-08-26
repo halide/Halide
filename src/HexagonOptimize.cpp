@@ -846,10 +846,11 @@ class OptimizePatterns : public IRMutator {
         }
         // TODO: There can be better instruction selection for these.
         if (op->is_intrinsic(Call::widen_right_add)) {
-            Expr mpyadds = find_mpyadds(Add::make(op->args[0], cast(op->type, op->args[1])));
-            if (mpyadds.defined()) {
-                return mpyadds;
-            }
+            Expr lowered = Add::make(op->args[0], cast(op->type, op->args[1]));
+            return mutate(lowered);
+        } else if (op->is_intrinsic(Call::widen_right_sub)) {
+            Expr lowered = Sub::make(op->args[0], cast(op->type, op->args[1]));
+            return mutate(lowered);
         }
 
         // These intrinsics should get the default lowering, and we need to recursively mutate the
