@@ -464,6 +464,10 @@ function(add_halide_python_extension_library TARGET)
                           CXX_VISIBILITY_PRESET hidden
                           VISIBILITY_INLINES_HIDDEN ON
                           POSITION_INDEPENDENT_CODE ON)
+    # The use of "$<BUILD_INTERFACE:Python3::Module>" here isn't for linkage at all,
+    # but solely to get <Python.h> in the include path for this library.
+    # (target_include_directories seems like it should work, but fails with
+    # inscrutable errors regarding relative paths.)
     target_link_libraries(${TARGET}_module_definition PRIVATE Halide::Runtime "$<BUILD_INTERFACE:Python3::Module>")
     # Compile it with the right preprocessor definitions to provide the module defs,
     # but not the function implementations
