@@ -28,6 +28,9 @@ set(GENPARAMS_simple
 # Python extension library, they must share the same Halide runtime.
 # Since none of these use features that require custom runtimes,
 # we'll just have user_context use the runtime we build for simple.
+#
+# TODO: replace this hackery with appropriate use of add_halide_runtime()
+# (See https://github.com/halide/Halide/issues/6981)
 set(RUNTIME_user_context py_aot_simple.runtime)
 
 foreach (GEN IN LISTS GENERATORS)
