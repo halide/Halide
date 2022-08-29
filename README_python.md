@@ -192,7 +192,7 @@ HALIDE_REGISTER_GENERATOR(MyFilter, my_filter)
 ```
 
 If you are using CMake, the simplest thing is to use
-`add_halide_library` and `add_halide_python_extension_library()` (defined in HalideGeneratorHelpers.cmake):
+`add_halide_library` and `add_halide_python_extension_library()`:
 
 ```
 # Build a Halide library as you usually would, but be sure to include `PYTHON_EXTENSION`
