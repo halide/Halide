@@ -22,6 +22,10 @@ void IRVisitor::visit(const Cast *op) {
     op->value.accept(this);
 }
 
+void IRVisitor::visit(const Reinterpret *op) {
+    op->value.accept(this);
+}
+
 void IRVisitor::visit(const Variable *) {
 }
 
@@ -290,6 +294,10 @@ void IRGraphVisitor::visit(const StringImm *) {
 }
 
 void IRGraphVisitor::visit(const Cast *op) {
+    include(op->value);
+}
+
+void IRGraphVisitor::visit(const Reinterpret *op) {
     include(op->value);
 }
 

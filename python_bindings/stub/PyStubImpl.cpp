@@ -1,8 +1,3 @@
-// Note that this deliberately does *not* include PyHalide.h,
-// or depend on any of the code in src: this is intended to be
-// a minimal, generic wrapper to expose an arbitrary Generator
-// for stub usage in Python.
-
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
 
@@ -120,7 +115,7 @@ std::string cast_error_string<Expr>::operator()(const py::handle &h, const std::
 template<typename T>
 T cast_to(const py::handle &h, const std::string &name) {
     // We want to ensure that the error thrown is one that will be translated
-    // to `hl.Error` in Python.
+    // to `hl.HalideError` in Python.
     try {
         return h.cast<T>();
     } catch (const std::exception &e) {

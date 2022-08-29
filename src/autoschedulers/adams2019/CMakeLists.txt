@@ -10,6 +10,8 @@ add_custom_command(OUTPUT ${WF_CPP}
                    DEPENDS baseline.weights binary2cpp
                    VERBATIM)
 
+add_library(Adams2019_weights_obj OBJECT ${WF_CPP})
+
 # cost_model, train_cost_model
 add_executable(cost_model.generator cost_model_generator.cpp)
 target_link_libraries(cost_model.generator PRIVATE Halide::Generator)
@@ -22,12 +24,11 @@ add_halide_library(train_cost_model FROM cost_model.generator
 
 # retrain_cost_model
 add_executable(retrain_cost_model
-               ASLog.cpp
                DefaultCostModel.cpp
                Weights.cpp
                retrain_cost_model.cpp
-               ${WF_CPP})
-target_link_libraries(retrain_cost_model PRIVATE cost_model train_cost_model Halide::Halide Halide::Plugin)
+               $<TARGET_OBJECTS:Adams2019_weights_obj>)
+target_link_libraries(retrain_cost_model PRIVATE ASLog cost_model train_cost_model Halide::Halide Halide::Plugin)
 
 ##
 # Main autoscheduler library
@@ -35,7 +36,6 @@ target_link_libraries(retrain_cost_model PRIVATE cost_model train_cost_model Hal
 
 add_autoscheduler(NAME Adams2019
                   SOURCES
-                  ASLog.cpp
                   AutoSchedule.cpp
                   Cache.cpp
                   DefaultCostModel.cpp
@@ -43,9 +43,9 @@ add_autoscheduler(NAME Adams2019
                   LoopNest.cpp
                   State.cpp
                   Weights.cpp
-                  ${WF_CPP})
+                  $<TARGET_OBJECTS:Adams2019_weights_obj>)
 
-target_link_libraries(Halide_Adams2019 PRIVATE cost_model train_cost_model)
+target_link_libraries(Halide_Adams2019 PRIVATE ASLog ParamParser cost_model train_cost_model)
 
 ##
 # Tests and demos
@@ -70,7 +70,7 @@ add_test(NAME demo_apps_autoscheduler
 
 set_tests_properties(demo_apps_autoscheduler
                      PROPERTIES
-                     LABELS Adams2019
+                     LABELS "Adams2019;auto_schedule"
                      ENVIRONMENT "HL_TARGET=${Halide_TARGET}")
 
 # =================================================================
@@ -91,7 +91,7 @@ add_test(NAME demo_included_schedule_file
 
 set_tests_properties(demo_included_schedule_file
                      PROPERTIES
-                     LABELS Adams2019
+                     LABELS "Adams2019;auto_schedule"
                      ENVIRONMENT "HL_TARGET=${Halide_TARGET}")
 
 # ====================================================
@@ -114,10 +114,10 @@ if (BUILD_SHARED_LIBS)
     target_link_libraries(test_apps_autoscheduler PRIVATE Halide::Halide Halide::Tools ${CMAKE_DL_LIBS})
 
     add_test(NAME test_apps_autoscheduler
-             COMMAND test_apps_autoscheduler $<TARGET_FILE:Halide_Adams2019>)
+             COMMAND test_apps_autoscheduler $<TARGET_FILE:Halide_Adams2019> ${CMAKE_CURRENT_SOURCE_DIR}/baseline.weights)
 
     set_tests_properties(test_apps_autoscheduler PROPERTIES
-                         LABELS Adams2019
+                         LABELS "Adams2019;multithreaded;auto_schedule"
                          ENVIRONMENT "LD_LIBRARY_PATH=$<TARGET_FILE_DIR:Halide_Adams2019>:$ENV{LD_LIBRARY_PATH};HL_TARGET=${Halide_TARGET}")
 endif ()
 
@@ -128,16 +128,16 @@ add_executable(test_perfect_hash_map test_perfect_hash_map.cpp)
 add_test(NAME test_perfect_hash_map COMMAND test_perfect_hash_map)
 set_tests_properties(test_perfect_hash_map
                      PROPERTIES
-                     LABELS Adams2019
+                     LABELS "Adams2019;auto_schedule"
                      ENVIRONMENT "HL_TARGET=${Halide_TARGET}")
 
 ##
 
-add_executable(test_function_dag test_function_dag.cpp FunctionDAG.cpp ASLog.cpp)
-target_link_libraries(test_function_dag PRIVATE Halide::Halide Halide::Tools Halide::Plugin)
+add_executable(test_function_dag test_function_dag.cpp FunctionDAG.cpp)
+target_link_libraries(test_function_dag PRIVATE ASLog Halide::Halide Halide::Tools Halide::Plugin)
 
 add_test(NAME test_function_dag COMMAND test_function_dag)
 set_tests_properties(test_function_dag
                      PROPERTIES
-                     LABELS Adams2019
+                     LABELS "Adams2019;auto_schedule"
                      ENVIRONMENT "HL_TARGET=${Halide_TARGET}")

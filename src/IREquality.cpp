@@ -57,6 +57,7 @@ private:
     void visit(const FloatImm *) override;
     void visit(const StringImm *) override;
     void visit(const Cast *) override;
+    void visit(const Reinterpret *) override;
     void visit(const Variable *) override;
     void visit(const Add *) override;
     void visit(const Sub *) override;
@@ -352,6 +353,10 @@ void IRComparer::visit(const StringImm *op) {
 
 void IRComparer::visit(const Cast *op) {
     compare_expr(expr.as<Cast>()->value, op->value);
+}
+
+void IRComparer::visit(const Reinterpret *op) {
+    compare_expr(expr.as<Reinterpret>()->value, op->value);
 }
 
 void IRComparer::visit(const Variable *op) {

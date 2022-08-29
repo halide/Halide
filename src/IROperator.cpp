@@ -1430,40 +1430,7 @@ Expr require(Expr condition, const std::vector<Expr> &args) {
 }
 
 Expr saturating_cast(Type t, Expr e) {
-    // For float to float, guarantee infinities are always pinned to range.
-    if (t.is_float() && e.type().is_float()) {
-        if (t.bits() < e.type().bits()) {
-            e = cast(t, clamp(std::move(e), t.min(), t.max()));
-        } else {
-            e = clamp(cast(t, std::move(e)), t.min(), t.max());
-        }
-    } else if (e.type() != t) {
-        // Limits for Int(2^n) or UInt(2^n) are not exactly representable in Float(2^n)
-        if (e.type().is_float() && !t.is_float() && t.bits() >= e.type().bits()) {
-            e = max(std::move(e), t.min());  // min values turn out to be always representable
-
-            // This line depends on t.max() rounding upward, which should always
-            // be the case as it is one less than a representable value, thus
-            // the one larger is always the closest.
-            e = select(e >= cast(e.type(), t.max()), t.max(), cast(t, e));
-        } else {
-            Expr min_bound;
-            if (!e.type().is_uint()) {
-                min_bound = lossless_cast(e.type(), t.min());
-            }
-            Expr max_bound = lossless_cast(e.type(), t.max());
-
-            if (min_bound.defined() && max_bound.defined()) {
-                e = clamp(std::move(e), min_bound, max_bound);
-            } else if (min_bound.defined()) {
-                e = max(std::move(e), min_bound);
-            } else if (max_bound.defined()) {
-                e = min(std::move(e), max_bound);
-            }
-            e = cast(t, std::move(e));
-        }
-    }
-    return e;
+    return Internal::Call::make(t, Internal::Call::saturating_cast, {std::move(e)}, Internal::Call::PureIntrinsic);
 }
 
 Expr select(Expr condition, Expr true_value, Expr false_value) {
@@ -2361,15 +2328,7 @@ Expr fract(const Expr &x) {
 }
 
 Expr reinterpret(Type t, Expr e) {
-    user_assert(e.defined()) << "reinterpret of undefined Expr\n";
-    int from_bits = e.type().bits() * e.type().lanes();
-    int to_bits = t.bits() * t.lanes();
-    user_assert(from_bits == to_bits)
-        << "Reinterpret cast from type " << e.type()
-        << " which has " << from_bits
-        << " bits, to type " << t
-        << " which has " << to_bits << " bits\n";
-    return Internal::Call::make(t, Internal::Call::reinterpret, {std::move(e)}, Internal::Call::PureIntrinsic);
+    return Internal::Reinterpret::make(t, std::move(e));
 }
 
 Expr operator&(Expr x, Expr y) {
@@ -2660,6 +2619,20 @@ Expr scatter(const std::vector<Expr> &args) {
 
 Expr gather(const std::vector<Expr> &args) {
     return make_scatter_gather(args);
+}
+
+Expr extract_bits(Type t, const Expr &e, const Expr &lsb) {
+    return Internal::Call::make(t, Internal::Call::extract_bits, {e, lsb}, Internal::Call::Intrinsic);
+}
+
+Expr concat_bits(const std::vector<Expr> &e) {
+    user_assert(!e.empty()) << "concat_bits requires at least one argument\n";
+    user_assert((e.size() & (e.size() - 1)) == 0) << "concat_bits received " << e.size() << " arguments, which is not a power of two.\n";
+    Type t = e[0].type();
+    for (size_t i = 1; i < e.size(); i++) {
+        user_assert(e[i].type() == t) << "All arguments to concat_bits must have the same type\n";
+    }
+    return Internal::Call::make(t.with_bits(t.bits() * (int)e.size()), Internal::Call::concat_bits, e, Internal::Call::Intrinsic);
 }
 
 }  // namespace Halide

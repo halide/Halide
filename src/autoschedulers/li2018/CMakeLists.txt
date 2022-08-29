@@ -1,4 +1,5 @@
 add_autoscheduler(NAME Li2018 SOURCES GradientAutoscheduler.cpp)
+target_link_libraries(Halide_Li2018 PRIVATE ParamParser)
 
 # ==========================================================
 # TODO(#4053): move these to a separate folder since they're tests.
@@ -19,7 +20,7 @@ target_link_libraries(demo_gradient_autoscheduler PRIVATE demo_gradient Halide::
 add_test(NAME demo_gradient_autoscheduler
          COMMAND demo_gradient_autoscheduler --benchmarks=all --benchmark_min_time=1 --estimate_all)
 
-set_tests_properties(demo_gradient_autoscheduler PROPERTIES LABELS Li2018)
+set_tests_properties(demo_gradient_autoscheduler PROPERTIES LABELS "Li2018;multithreaded;auto_schedule")
 
 ##
 
@@ -30,7 +31,7 @@ if (BUILD_SHARED_LIBS)
     add_test(NAME gradient_autoscheduler_test_cpp
              COMMAND gradient_autoscheduler_test_cpp $<TARGET_FILE:Halide_Li2018>)
 
-    set_tests_properties(gradient_autoscheduler_test_cpp PROPERTIES LABELS Li2018)
+    set_tests_properties(gradient_autoscheduler_test_cpp PROPERTIES LABELS "Li2018;auto_schedule")
 endif ()
 
 ##
@@ -39,23 +40,26 @@ if (WITH_PYTHON_BINDINGS)
     # TODO(#4053): rework this as an app under python_bindings.
     # TODO(#4876): Disabled due to issue #4876
     if (FALSE)
-        find_package(Python3 REQUIRED COMPONENTS Interpreter Development)
+        find_package(Python3 REQUIRED COMPONENTS Interpreter Development.Module)
 
         add_test(NAME gradient_autoscheduler_test_py
                  COMMAND Python3::Interpreter "${CMAKE_CURRENT_SOURCE_DIR}/test.py")
 
-        set(PYTHONPATH "$<SHELL_PATH:$<TARGET_FILE_DIR:Halide::Python>>")
+        set(
+            PYTHONPATH
+            "$<TARGET_FILE_DIR:Halide::Python>/.."
+        )
+        list(TRANSFORM PYTHONPATH PREPEND "PYTHONPATH=path_list_prepend:")
 
-        if (WIN32)
-            set(SEP "\\$<SEMICOLON>")
-        else ()
-            set(SEP ":")
-        endif ()
+        set(
+            PATH
+            "$<TARGET_FILE_DIR:Halide_Li2018>"
+            "$<TARGET_FILE_DIR:Halide::Halide>"
+        )
+        list(TRANSFORM PATH PREPEND "PATH=path_list_prepend:")
 
-        set(_PATH "$<SHELL_PATH:$<TARGET_FILE_DIR:Halide_Li2018>>;$<SHELL_PATH:$<TARGET_FILE_DIR:Halide::Halide>>;$ENV{PATH}")
-        string(REPLACE ";" "${SEP}" _PATH "${_PATH}")
         set_tests_properties(gradient_autoscheduler_test_py PROPERTIES
-                             LABELS Li2018
-                             ENVIRONMENT "PYTHONPATH=${PYTHONPATH};PATH=${_PATH}")
+                             LABELS "Li2018;auto_schedule"
+                             ENVIRONMENT_MODIFICATION "${PYTHONPATH};${PATH}")
     endif ()
 endif ()

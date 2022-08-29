@@ -25,9 +25,19 @@ Module AbstractGenerator::build_module(const std::string &function_name) {
 
     AutoSchedulerResults auto_schedule_results;
     const auto context = this->context();
+#ifdef HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
     if (context.auto_schedule()) {
         auto_schedule_results = pipeline.auto_schedule(context.target(), context.machine_params());
     }
+#else
+    const auto &asp = context.autoscheduler_params();
+    if (!asp.name.empty()) {
+        debug(1) << "Applying autoscheduler " << asp.name << " to Generator " << name() << " ...\n";
+        auto_schedule_results = pipeline.apply_autoscheduler(context.target(), asp);
+    } else {
+        debug(1) << "Applying autoscheduler (NONE) to Generator " << name() << " ...\n";
+    }
+#endif
 
     std::vector<Argument> filter_arguments;
     const auto arg_infos = arginfos();
@@ -41,9 +51,11 @@ Module AbstractGenerator::build_module(const std::string &function_name) {
     }
 
     Module result = pipeline.compile_to_module(filter_arguments, function_name, context.target(), linkage_type);
+#ifdef HALIDE_ALLOW_GENERATOR_EXTERNAL_CODE
     for (const auto &map_entry : external_code_map()) {
         result.append(map_entry.second);
     }
+#endif
 
     for (const auto &a : arg_infos) {
         if (a.dir != ArgInfoDirection::Output) {
@@ -213,19 +225,65 @@ Module AbstractGenerator::build_gradient_module(const std::string &function_name
 
     AutoSchedulerResults auto_schedule_results;
     const auto context = this->context();
+#ifdef HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
     if (context.auto_schedule()) {
         auto_schedule_results = grad_pipeline.auto_schedule(context.target(), context.machine_params());
-    } else {
+    }
+#else
+    const auto &asp = context.autoscheduler_params();
+    if (!asp.name.empty()) {
+        auto_schedule_results = grad_pipeline.apply_autoscheduler(context.target(), asp);
+    }
+#endif
+    else {
         user_warning << "Autoscheduling is not enabled in build_gradient_module(), so the resulting "
                         "gradient module will be unscheduled; this is very unlikely to be what you want.\n";
     }
 
     Module result = grad_pipeline.compile_to_module(gradient_inputs, function_name, context.target(), linkage_type);
+#ifdef HALIDE_ALLOW_GENERATOR_EXTERNAL_CODE
     user_assert(external_code_map().empty())
         << "Building a gradient-descent module for a Generator with ExternalCode is not supported.\n";
+#endif
 
     result.set_auto_scheduler_results(auto_schedule_results);
     return result;
+}
+
+Callable AbstractGenerator::compile_to_callable(const JITHandlers *jit_handlers,
+                                                const std::map<std::string, JITExtern> *jit_externs) {
+    Pipeline pipeline = build_pipeline();
+
+    std::vector<Argument> arguments;
+    const auto arg_infos = arginfos();
+    for (const auto &a : arg_infos) {
+        if (a.dir != ArgInfoDirection::Input) {
+            continue;
+        }
+        for (const auto &p : input_parameter(a.name)) {
+            arguments.push_back(to_argument(p));
+        }
+    }
+    if (jit_handlers != nullptr) {
+        pipeline.jit_handlers() = *jit_handlers;
+    }
+    if (jit_externs != nullptr) {
+        pipeline.set_jit_externs(*jit_externs);
+    }
+    return pipeline.compile_to_callable(arguments, context().target());
+}
+
+void AbstractGenerator::set_generatorparam_values(const GeneratorParamsMap &m) {
+    for (const auto &c : m) {
+#ifdef HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
+        user_assert(c.first != "target" && c.first != "auto_schedule" && c.first != "machine_params")
+            << "The GeneratorParam '" << c.first << "' cannot be specified via string here; use GeneratorContext instead.";
+#else
+        user_assert(c.first != "target" && c.first != "auto_scheduler")
+            << "The GeneratorParam '" << c.first << "' cannot be specified via string here; use GeneratorContext instead.";
+#endif
+        set_generatorparam_value(c.first, c.second);
+    }
 }
 
 }  // namespace Internal

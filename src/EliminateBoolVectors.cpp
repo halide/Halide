@@ -136,6 +136,8 @@ private:
         }
     }
 
+    // FIXME: what about Reinterpret?
+
     Stmt visit(const Store *op) override {
         Expr predicate = op->predicate;
         if (!is_const_one(predicate)) {

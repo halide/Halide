@@ -98,7 +98,7 @@ public:
         output.set_estimates({{0, 1536}, {0, 2560}, {0, 3}});
 
         /* THE SCHEDULE */
-        if (auto_schedule) {
+        if (using_autoscheduler()) {
             // Nothing.
         } else if (get_target().has_gpu_feature()) {
             // GPU schedule.

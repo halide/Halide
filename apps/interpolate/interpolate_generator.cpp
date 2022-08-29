@@ -72,7 +72,7 @@ public:
         normalize(x, y, c) = interpolated[0](x, y, c) / interpolated[0](x, y, 3);
 
         // Schedule
-        if (auto_schedule) {
+        if (using_autoscheduler()) {
             output = normalize;
         } else {
             // 0.86ms on a 2060 RTX
