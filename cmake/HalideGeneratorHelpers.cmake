@@ -468,15 +468,15 @@ function(add_halide_python_extension_library TARGET)
     # Compile it with the right preprocessor definitions to provide the module defs,
     # but not the function implementations
     target_compile_definitions(${TARGET}_module_definition PRIVATE
-                               -DHALIDE_PYTHON_EXTENSION_OMIT_FUNCTION_DEFINITIONS=1
-                               -DHALIDE_PYTHON_EXTENSION_MODULE=${ARG_MODULE_NAME}
-                               -DHALIDE_PYTHON_EXTENSION_FUNCTIONS=${function_names})
+                               HALIDE_PYTHON_EXTENSION_OMIT_FUNCTION_DEFINITIONS
+                               HALIDE_PYTHON_EXTENSION_MODULE=${ARG_MODULE_NAME}
+                               HALIDE_PYTHON_EXTENSION_FUNCTIONS=${function_names})
 
     # Now compile all the pycpps to build the function implementations (but not the module def)
     Python3_add_library(${TARGET} MODULE WITH_SOABI ${pycpps})
     target_link_libraries(${TARGET} PRIVATE ${ARG_HALIDE_LIBRARIES} ${TARGET}_module_definition)
     target_compile_definitions(${TARGET} PRIVATE
-                               -DHALIDE_PYTHON_EXTENSION_OMIT_MODULE_DEFINITION=1)
+                               HALIDE_PYTHON_EXTENSION_OMIT_MODULE_DEFINITION)
     set_target_properties(${TARGET} PROPERTIES OUTPUT_NAME ${ARG_MODULE_NAME})
     _Halide_target_export_single_symbol(${TARGET} "PyInit_${ARG_MODULE_NAME}")
 
