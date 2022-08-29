@@ -204,6 +204,8 @@ add_halide_library(my_filter
                    [ PARAMS ... ])
 
 # Now wrap the generated code with a Python extension.
+# (Note that module name defaults to match the target name; we only
+# need to specify MODULE_NAME if we need a name that may differ)
 add_halide_python_extension_library(my_extension
                                     MODULE_NAME my_module
                                     HALIDE_LIBRARIES my_filter)
