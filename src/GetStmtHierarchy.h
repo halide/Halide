@@ -74,6 +74,7 @@ private:
     void visit(const FloatImm *op) override;
     void visit(const StringImm *op) override;
     void visit(const Cast *op) override;
+    void visit(const Reinterpret *) override;
     void visit(const Variable *op) override;
     void visit(const Add *op) override;
     void visit(const Sub *op) override;

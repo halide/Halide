@@ -8,19 +8,10 @@ string GetStmtHierarchy::get_hierarchy_html(const Expr &startNode) {
     start_html();
 
     depth = 0;
-    // colorType = CC_TYPE;
     startCCNodeID = numNodes;
     start_tree();
     startNode.accept(this);
     end_tree();
-
-    // depth = 0;
-    // colorType = DMC_TYPE;
-    // startDMCNodeID = numNodes;
-    // currNodeID = numNodes;
-    // start_tree();
-    // startNode.accept(this);
-    // end_tree();
 
     end_html();
 
@@ -31,16 +22,7 @@ string GetStmtHierarchy::get_hierarchy_html(const Stmt &startNode) {
     start_html();
 
     depth = 0;
-    colorType = CC_TYPE;
     startCCNodeID = numNodes;
-    start_tree();
-    startNode.accept(this);
-    end_tree();
-
-    depth = 0;
-    update_num_nodes();
-    startDMCNodeID = numNodes;
-    colorType = DMC_TYPE;
     start_tree();
     startNode.accept(this);
     end_tree();
@@ -242,6 +224,14 @@ void GetStmtHierarchy::visit(const Cast *op) {
     stringstream name;
     name << op->type;
     // int computation_range = get_color_range(op);
+    open_node(op, name.str());
+    op->value.accept(this);
+    close_node();
+}
+void GetStmtHierarchy::visit(const Reinterpret *op) {
+    stringstream name;
+    name << "reinterpret ";
+    name << op->type;
     open_node(op, name.str());
     op->value.accept(this);
     close_node();

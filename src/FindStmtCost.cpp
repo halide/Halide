@@ -287,6 +287,13 @@ void FindStmtCost::visit(const Cast *op) {
     set_costs(op, 1 + tempVal, dataMovementCost);
 }
 
+void FindStmtCost::visit(const Reinterpret *op) {
+    op->value.accept(this);
+
+    int tempVal = get_computation_cost(op->value.get());
+    int dataMovementCost = get_data_movement_cost(op->value.get());
+    set_costs(op, 1 + tempVal, dataMovementCost);
+}
 void FindStmtCost::visit(const Variable *op) {
     set_costs(op, 1, 0);
 }
@@ -912,6 +919,8 @@ string FindStmtCost::print_node(const IRNode *node) const {
         s << "Prefetch type" << endl;
     } else if (type == IRNodeType::Atomic) {
         s << "Atomic type" << endl;
+    } else if (type == IRNodeType::Reinterpret) {
+        s << "Reinterpret type" << endl;
     } else {
         s << "Unknown type" << endl;
     }
