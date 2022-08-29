@@ -20,7 +20,7 @@
 #define PRINT_HIERARCHY false
 #define PRINT_DEPENDENCIES false
 #define PRINT_PROD_CONS false
-#define NAVIGATION_STYLE false  // change in ProduceConsumerHierarchy.cpp as well
+#define NAVIGATION_STYLE true  // change in ProduceConsumerHierarchy.cpp as well
 
 namespace Halide {
 namespace Internal {
@@ -211,13 +211,34 @@ private:
         return tooltip(hierarchyHTML, tooltipTextStr);
     }
 
+    /*
+        <div style="display: flex; ">
+            <div class="CostColor0"
+                style="width: 7px;"></div>
+            <div class="CostColor18"
+                style="width: 7px;"></div>
+            <div style="padding-left: 5px;">
+                _halide_buffer_get_dimensions
+                <button
+                    class='stmtHierarchyButton info-button'
+                    onclick='handleClick(42)'>
+                    <i
+                        id='stmtHierarchyButton42'></i>
+                </button>
+            </div>
+        </div>
+    */
     string get_stmt_hierarchy(const Stmt &op) {
+        cout << "before" << endl;
         string hierarchyHTML = getStmtHierarchy.get_hierarchy_html(op);
+        cout << "after" << endl;
         if (PRINT_HIERARCHY) cout << hierarchyHTML << endl;
         return generate_stmt_hierarchy_popup(hierarchyHTML);
     }
     string get_stmt_hierarchy(const Expr &op) {
+        cout << "before" << endl;
         string hierarchyHTML = getStmtHierarchy.get_hierarchy_html(op);
+        cout << "after" << endl;
         if (PRINT_HIERARCHY) cout << hierarchyHTML << endl;
         return generate_stmt_hierarchy_popup(hierarchyHTML);
     }
@@ -1184,19 +1205,19 @@ public:
     }
 
     void print(const Expr &ir) {
-        debug(0) << "entering: " << ir << "\n";
-        cout << "done entering" << endl;
+        // debug(0) << "entering: " << ir << "\n";
+        // cout << "done entering" << endl;
         ir.accept(this);
-        debug(0) << "exiting: " << ir << "\n";
-        cout << "done exiting" << endl;
+        // debug(0) << "exiting: " << ir << "\n";
+        // cout << "done exiting" << endl;
     }
 
     void print(const Stmt &ir) {
-        debug(0) << "entering: " << ir << "\n";
-        cout << "done entering" << endl;
+        // debug(0) << "entering: " << ir << "\n";
+        // cout << "done entering" << endl;
         ir.accept(this);
-        debug(0) << "exiting: " << ir << "\n";
-        cout << "done exiting" << endl;
+        // debug(0) << "exiting: " << ir << "\n";
+        // cout << "done exiting" << endl;
     }
 
     void print(const LoweredFunc &op) {
@@ -1559,7 +1580,7 @@ public:
         stream << producerConsumerHierarchy.generate_prodCons_js();
         cout << "here9" << endl;
         stream << ProducerConsumerHierarchy::scrollToFunctionJS;
-        stream << expandCodeJS;
+        if (NAVIGATION_STYLE) stream << expandCodeJS;
         cout << "here10" << endl;
         stream << "</script>\n";
         cout << "here11" << endl;

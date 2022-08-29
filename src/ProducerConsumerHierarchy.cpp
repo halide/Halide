@@ -6,7 +6,7 @@ using namespace std;
 using namespace Halide;
 using namespace Internal;
 
-#define NAVIGATION_STYLE false
+#define NAVIGATION_STYLE true
 
 template<typename T>
 string to_string(T value) {
@@ -915,7 +915,7 @@ void ProducerConsumerHierarchy::generate_computation_cost_div(const IRNode *op) 
     int computation_range = findStmtCost.get_computation_color_range(op);
     string className = "computation-cost-div CostColor" + to_string(computation_range);
     html += "<div class='" + className + "'";
-    html += "style='width: 10px;'>";
+    html += "style='width: 7px;'>";
 
     close_div();
 }
@@ -927,7 +927,7 @@ void ProducerConsumerHierarchy::generate_memory_cost_div(const IRNode *op) {
     int memory_range = findStmtCost.get_data_movement_color_range(op);
     string className = "memory-cost-div CostColor" + to_string(memory_range);
     html += "<div class='" + className + "'";
-    html += "style='width: 10px;'>";
+    html += "style='width: 7px;'>";
 
     close_div();
 }

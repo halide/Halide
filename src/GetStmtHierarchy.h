@@ -63,11 +63,11 @@ private:
     void end_tree();
 
     // opens and closes nodes, depending on number of children
-    void node_without_children(string name, int colorCost);
-    void open_node(string name, int colorCost);
+    void node_without_children(const IRNode *op, string name);
+    void open_node(const IRNode *op, string name);
     void close_node();
 
-    void visit_binary_op(const Expr &a, const Expr &b, const string &name, int colorCost);
+    void visit_binary_op(const IRNode *op, const Expr &a, const Expr &b, const string &name);
 
     void visit(const IntImm *op) override;
     void visit(const UIntImm *op) override;

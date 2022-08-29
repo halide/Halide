@@ -8,19 +8,19 @@ string GetStmtHierarchy::get_hierarchy_html(const Expr &startNode) {
     start_html();
 
     depth = 0;
-    colorType = CC_TYPE;
+    // colorType = CC_TYPE;
     startCCNodeID = numNodes;
     start_tree();
     startNode.accept(this);
     end_tree();
 
-    depth = 0;
-    colorType = DMC_TYPE;
-    startDMCNodeID = numNodes;
-    currNodeID = numNodes;
-    start_tree();
-    startNode.accept(this);
-    end_tree();
+    // depth = 0;
+    // colorType = DMC_TYPE;
+    // startDMCNodeID = numNodes;
+    // currNodeID = numNodes;
+    // start_tree();
+    // startNode.accept(this);
+    // end_tree();
 
     end_html();
 
@@ -71,7 +71,6 @@ string GetStmtHierarchy::get_node_class_name() {
 
 int GetStmtHierarchy::get_color_range(const IRNode *op) const {
     if (op == nullptr) {
-        cout << "it's null! confused why i did this lol" << endl;
         return 0;
     }
 
@@ -144,25 +143,78 @@ void GetStmtHierarchy::end_tree() {
     html << "</div>";
 }
 
-void GetStmtHierarchy::node_without_children(string name, int colorCost) {
+void GetStmtHierarchy::node_without_children(const IRNode *op, string name) {
+
+    colorType = CC_TYPE;
+    int colorRange = get_color_range(op);
+    colorType = DMC_TYPE;
+    int dmcColorRange = get_color_range(op);
+
     string className = get_node_class_name();
     html << "<li class='" << className << "'>";
-    html << "<span class='tf-nc end-node CostComputationBorder" << colorCost << "'>";
-    html << name << "</span></li>";
+    html << "<span class='tf-nc end-node'>";
+    // html << name << "</span></li>";
+    html << "<div style='display: flex; '>";
+    html << "<div class='CostColor" << colorRange << "' style='width: 7px;'></div>";
+    html << "<div class='CostColor" << dmcColorRange << "' style='width: 7px;'></div>";
+    html << "<div style='padding-left: 5px;'>";
+    html << name;
+    html << "</div>";
+    html << "</div>";
+    html << "</span>";
+    html << "</li>";
 }
-void GetStmtHierarchy::open_node(string name, int colorCost) {
+void GetStmtHierarchy::open_node(const IRNode *op, string name) {
+
+    colorType = CC_TYPE;
+    int colorRange = get_color_range(op);
+    colorType = DMC_TYPE;
+    int dmcColorRange = get_color_range(op);
+
     string className = get_node_class_name() + " children-node";
 
     update_num_nodes();
 
+    /*
+        <div style="display: flex; ">
+            <div class="CostColor0"
+                style="width: 7px;"></div>
+            <div class="CostColor18"
+                style="width: 7px;"></div>
+            <div style="padding-left: 5px;">
+                _halide_buffer_get_dimensions
+                <button
+                    class='stmtHierarchyButton info-button'
+                    onclick='handleClick(42)'>
+                    <i
+                        id='stmtHierarchyButton42'></i>
+                </button>
+            </div>
+        </div>
+    */
     html << "<li class='" << className << "' id='node" << currNodeID << "'>";
-    html << "<span class='tf-nc CostColor" << colorCost << "'>";
-    html << name;
+    html << "<span class='tf-nc'>";
 
+    html << "<div style='display: flex; '>";
+    html << "<div class='CostColor" << colorRange << "' style='width: 7px;'></div>";
+    html << "<div class='CostColor" << dmcColorRange << "' style='width: 7px;'></div>";
+    html << "<div style='padding-left: 5px;'>";
+    html << name;
     html << " <button class='stmtHierarchyButton info-button' onclick='handleClick(" << currNodeID
          << ")'>";
     html << " <i id='stmtHierarchyButton" << currNodeID << "'></i> ";
     html << "</button>";
+    html << "</div>";
+    html << "</div>";
+
+    // html << "<span class='tf-nc CostColor" << colorCost << "'>";
+    // html << name;
+
+    // html << " <button class='stmtHierarchyButton info-button' onclick='handleClick(" <<
+    // currNodeID
+    //      << ")'>";
+    // html << " <i id='stmtHierarchyButton" << currNodeID << "'></i> ";
+    // html << "</button>";
     html << "</span>";
 
     depth++;
@@ -175,32 +227,32 @@ void GetStmtHierarchy::close_node() {
 }
 
 void GetStmtHierarchy::visit(const IntImm *op) {
-    node_without_children(to_string(op->value), get_color_range(op));
+    node_without_children(op, to_string(op->value) /*, get_color_range(op)*/);
 }
 void GetStmtHierarchy::visit(const UIntImm *op) {
-    node_without_children(to_string(op->value), get_color_range(op));
+    node_without_children(op, to_string(op->value) /*, get_color_range(op)*/);
 }
 void GetStmtHierarchy::visit(const FloatImm *op) {
-    node_without_children(to_string(op->value), get_color_range(op));
+    node_without_children(op, to_string(op->value) /*, get_color_range(op)*/);
 }
 void GetStmtHierarchy::visit(const StringImm *op) {
-    node_without_children(op->value, get_color_range(op));
+    node_without_children(op, op->value /*, get_color_range(op)*/);
 }
 void GetStmtHierarchy::visit(const Cast *op) {
     stringstream name;
     name << op->type;
-    int computation_range = get_color_range(op);
-    open_node(name.str(), computation_range);
+    // int computation_range = get_color_range(op);
+    open_node(op, name.str());
     op->value.accept(this);
     close_node();
 }
 void GetStmtHierarchy::visit(const Variable *op) {
-    node_without_children(op->name, get_color_range(op));
+    node_without_children(op, op->name /*, get_color_range(op)*/);
 }
 
-void GetStmtHierarchy::visit_binary_op(const Expr &a, const Expr &b, const string &name,
-                                       int colorCost) {
-    open_node(name, colorCost);
+void GetStmtHierarchy::visit_binary_op(const IRNode *op, const Expr &a, const Expr &b,
+                                       const string &name) {
+    open_node(op, name);
 
     int currNode = currNodeID;
     a.accept(this);
@@ -212,75 +264,77 @@ void GetStmtHierarchy::visit_binary_op(const Expr &a, const Expr &b, const strin
 }
 
 void GetStmtHierarchy::visit(const Add *op) {
-    int computation_range = get_color_range(op);
-    visit_binary_op(op->a, op->b, "+", computation_range);
+    // int computation_range = get_color_range(op);
+    visit_binary_op(op, op->a, op->b, "+");
 }
 void GetStmtHierarchy::visit(const Sub *op) {
-    int computation_range = get_color_range(op);
-    visit_binary_op(op->a, op->b, "-", computation_range);
+    // int computation_range = get_color_range(op);
+    visit_binary_op(op, op->a, op->b, "-");
 }
 void GetStmtHierarchy::visit(const Mul *op) {
-    int computation_range = get_color_range(op);
-    visit_binary_op(op->a, op->b, "*", computation_range);
+    // int computation_range = get_color_range(op);
+    visit_binary_op(op, op->a, op->b, "*");
 }
 void GetStmtHierarchy::visit(const Div *op) {
-    int computation_range = get_color_range(op);
-    visit_binary_op(op->a, op->b, "/", computation_range);
+    // int computation_range = get_color_range(op);
+    visit_binary_op(op, op->a, op->b, "/");
 }
 void GetStmtHierarchy::visit(const Mod *op) {
-    int computation_range = get_color_range(op);
-    visit_binary_op(op->a, op->b, "%", computation_range);
+    // int computation_range = get_color_range(op);
+    visit_binary_op(op, op->a, op->b, "%");
 }
 void GetStmtHierarchy::visit(const EQ *op) {
-    int computation_range = get_color_range(op);
-    visit_binary_op(op->a, op->b, "==", computation_range);
+    // int computation_range = get_color_range(op);
+    visit_binary_op(op, op->a, op->b, "==");
 }
 void GetStmtHierarchy::visit(const NE *op) {
-    int computation_range = get_color_range(op);
-    visit_binary_op(op->a, op->b, "!=", computation_range);
+    // int computation_range = get_color_range(op);
+    visit_binary_op(op, op->a, op->b, "!=");
 }
 void GetStmtHierarchy::visit(const LT *op) {
-    int computation_range = get_color_range(op);
-    visit_binary_op(op->a, op->b, "<", computation_range);
+    // int computation_range = get_color_range(op);
+    visit_binary_op(op, op->a, op->b, "<");
 }
 void GetStmtHierarchy::visit(const LE *op) {
-    int computation_range = get_color_range(op);
-    visit_binary_op(op->a, op->b, "<=", computation_range);
+    // int computation_range = get_color_range(op);
+    visit_binary_op(op, op->a, op->b, "<=");
 }
 void GetStmtHierarchy::visit(const GT *op) {
-    int computation_range = get_color_range(op);
-    visit_binary_op(op->a, op->b, ">", computation_range);
+    // int computation_range = get_color_range(op);
+    visit_binary_op(op, op->a, op->b, ">");
 }
 void GetStmtHierarchy::visit(const GE *op) {
-    int computation_range = get_color_range(op);
-    visit_binary_op(op->a, op->b, ">=", computation_range);
+    // int computation_range = get_color_range(op);
+    visit_binary_op(op, op->a, op->b, ">=");
 }
 void GetStmtHierarchy::visit(const And *op) {
-    int computation_range = get_color_range(op);
-    visit_binary_op(op->a, op->b, "&amp;&amp;", computation_range);
+    // int computation_range = get_color_range(op);
+    visit_binary_op(op, op->a, op->b, "&amp;&amp;");
 }
 void GetStmtHierarchy::visit(const Or *op) {
-    int computation_range = get_color_range(op);
-    visit_binary_op(op->a, op->b, "||", computation_range);
+    // int computation_range = get_color_range(op);
+    visit_binary_op(op, op->a, op->b, "||");
 }
 void GetStmtHierarchy::visit(const Min *op) {
-    int computation_range = get_color_range(op);
-    visit_binary_op(op->a, op->b, "min", computation_range);
+    // int computation_range = get_color_range(op);
+    visit_binary_op(op, op->a, op->b, "min");
 }
 void GetStmtHierarchy::visit(const Max *op) {
-    int computation_range = get_color_range(op);
-    visit_binary_op(op->a, op->b, "max", computation_range);
+    // int computation_range = get_color_range(op);
+    visit_binary_op(op, op->a, op->b, "max");
 }
 
 void GetStmtHierarchy::visit(const Not *op) {
-    int computation_range = get_color_range(op);
-    open_node("!", computation_range);
+    // int computation_range = get_color_range(op);
+    // open_node("!", computation_range);
+    open_node(op, "!");
     op->a.accept(this);
     close_node();
 }
 void GetStmtHierarchy::visit(const Select *op) {
-    int computation_range = get_color_range(op);
-    open_node("Select", computation_range);
+    // int computation_range = get_color_range(op);
+    // open_node("Select", computation_range);
+    open_node(op, "Select");
 
     int currNode = currNodeID;
     op->condition.accept(this);
@@ -296,11 +350,13 @@ void GetStmtHierarchy::visit(const Select *op) {
 void GetStmtHierarchy::visit(const Load *op) {
     stringstream index;
     index << op->index;
-    node_without_children(op->name + "[" + index.str() + "]", get_color_range(op));
+    // node_without_children(op->name + "[" + index.str() + "]"/*, get_color_range(op)*/));
+    node_without_children(op, op->name + "[" + index.str() + "]");
 }
 void GetStmtHierarchy::visit(const Ramp *op) {
-    int computation_range = get_color_range(op);
-    open_node("Ramp", computation_range);
+    // int computation_range = get_color_range(op);
+    // open_node("Ramp", computation_range);
+    open_node(op, "Ramp");
 
     int currNode = currNodeID;
     op->base.accept(this);
@@ -314,14 +370,16 @@ void GetStmtHierarchy::visit(const Ramp *op) {
     close_node();
 }
 void GetStmtHierarchy::visit(const Broadcast *op) {
-    int computation_range = get_color_range(op);
-    open_node("x" + to_string(op->lanes), computation_range);
+    // int computation_range = get_color_range(op);
+    // open_node("x" + to_string(op->lanes), computation_range);
+    open_node(op, "x" + to_string(op->lanes));
     op->value.accept(this);
     close_node();
 }
 void GetStmtHierarchy::visit(const Call *op) {
-    int computation_range = get_color_range(op);
-    open_node(op->name, computation_range);
+    // int computation_range = get_color_range(op);
+    // open_node(op->name, computation_range);
+    open_node(op, op->name);
 
     int currNode = currNodeID;
     for (auto &arg : op->args) {
@@ -332,21 +390,25 @@ void GetStmtHierarchy::visit(const Call *op) {
     close_node();
 }
 void GetStmtHierarchy::visit(const Let *op) {
-    int computation_range = get_color_range(op);
-    open_node("Let", computation_range);
+    // int computation_range = get_color_range(op);
+    // open_node("Let", computation_range);
+    open_node(op, "Let");
     int currNode = currNodeID;
 
     // "=" node
-    int value_range = get_color_range(op->value.get());
-    open_node("=", value_range);
-    node_without_children(op->name, 0);
+    // int value_range = get_color_range(op->value.get());
+    // open_node("=", value_range);
+    open_node(op->value.get(), "=");
+    // node_without_children(op->name, 0);
+    node_without_children(nullptr, op->name);
     op->value.accept(this);
     close_node();
 
     // "body" node
-    int computation_range_body = get_color_range(op->body.get());
+    // int computation_range_body = get_color_range(op->body.get());
     currNodeID = currNode;
-    open_node("body", computation_range_body);
+    // open_node("body", computation_range_body);
+    open_node(op->body.get(), "body");
     op->body.accept(this);
     close_node();
 
@@ -356,11 +418,13 @@ void GetStmtHierarchy::visit(const LetStmt *op) {
     internal_error << "\n"
                    << "GetStmtHierarchy: LetStmt is not supported.\n\n";
 
-    int computation_range = get_color_range(op);
-    open_node("=", computation_range);
+    // int computation_range = get_color_range(op);
+    // open_node("=", computation_range);
+    open_node(op, "=");
 
     int currNode = currNodeID;
-    node_without_children(op->name, 0);
+    // node_without_children(op->name, 0);
+    node_without_children(nullptr, op->name);
 
     currNodeID = currNode;
     op->value.accept(this);
@@ -368,8 +432,9 @@ void GetStmtHierarchy::visit(const LetStmt *op) {
     close_node();
 }
 void GetStmtHierarchy::visit(const AssertStmt *op) {
-    int computation_range = get_color_range(op);
-    open_node("Assert", computation_range);
+    // int computation_range = get_color_range(op);
+    // open_node("Assert", computation_range);
+    open_node(op, "Assert");
     op->condition.accept(this);
     close_node();
 }
@@ -382,12 +447,14 @@ void GetStmtHierarchy::visit(const For *op) {
                    << "GetStmtHierarchy: For is not supported.\n\n";
 }
 void GetStmtHierarchy::visit(const Store *op) {
-    int computation_range = get_color_range(op);
-    open_node("=", computation_range);
+    // int computation_range = get_color_range(op);
+    // open_node("=", computation_range);
+    open_node(op, "=");
 
     stringstream index;
     index << op->index;
-    node_without_children(op->name + "[" + index.str() + "]", get_color_range(op->index.get()));
+    // node_without_children(op->name + "[" + index.str() + "]", get_color_range(op->index.get()));
+    node_without_children(op->index.get(), op->name + "[" + index.str() + "]");
 
     op->value.accept(this);
     close_node();
@@ -396,11 +463,13 @@ void GetStmtHierarchy::visit(const Provide *op) {
     internal_error << "\n"
                    << "GetStmtHierarchy: Provide is not supported. Look into it though!!! \n\n";
 
-    int computation_range = get_color_range(op);
-    open_node("=", computation_range);
+    // int computation_range = get_color_range(op);
+    // open_node("=", computation_range);
+    open_node(op, "=");
     int currNode0 = currNodeID;
 
-    open_node(op->name, computation_range);
+    // open_node(op->name, computation_range);
+    open_node(op, op->name);
     int currNode1 = currNodeID;
     for (auto &arg : op->args) {
         currNodeID = currNode1;
@@ -415,8 +484,9 @@ void GetStmtHierarchy::visit(const Provide *op) {
     close_node();
 }
 void GetStmtHierarchy::visit(const Allocate *op) {
-    int computation_range = get_color_range(op);
-    open_node("allocate", computation_range);
+    // int computation_range = get_color_range(op);
+    // open_node("allocate", computation_range);
+    open_node(op, "allocate");
 
     stringstream index;
     index << op->type;
@@ -426,7 +496,8 @@ void GetStmtHierarchy::visit(const Allocate *op) {
         index << extent;
     }
 
-    node_without_children(op->name + "[" + index.str() + "]", get_color_range_list(op->extents));
+    // node_without_children(op->name + "[" + index.str() + "]", get_color_range_list(op->extents));
+    node_without_children(op, op->name + "[" + index.str() + "]");
 
     stringstream name;
     if (!is_const_one(op->condition)) {
@@ -442,13 +513,16 @@ void GetStmtHierarchy::visit(const Allocate *op) {
         name << "custom_delete {" << op->free_function << "}";
     }
 
-    node_without_children(name.str(), computation_range);
+    // node_without_children(name.str(), computation_range);
+    node_without_children(op, name.str());
     close_node();
 }
 void GetStmtHierarchy::visit(const Free *op) {
-    int computation_range = get_color_range(op);
-    open_node("Free", computation_range);
-    node_without_children(op->name, get_color_range(op));
+    // int computation_range = get_color_range(op);
+    // open_node("Free", computation_range);
+    open_node(op, "Free");
+    // node_without_children(op->name, get_color_range(op));
+    node_without_children(op, op->name);
     close_node();
 }
 void GetStmtHierarchy::visit(const Realize *op) {
@@ -460,8 +534,9 @@ void GetStmtHierarchy::visit(const Block *op) {
                    << "GetStmtHierarchy: Block is not supported. Look into it though!!! \n\n";
 }
 void GetStmtHierarchy::visit(const IfThenElse *op) {
-    int computation_range = get_color_range(op);
-    open_node("IfThenElse", computation_range);
+    // int computation_range = get_color_range(op);
+    // open_node("IfThenElse", computation_range);
+    open_node(op, "IfThenElse");
 
     op->condition.accept(this);
     if (op->else_case.defined()) {
@@ -474,9 +549,10 @@ void GetStmtHierarchy::visit(const Evaluate *op) {
     op->value.accept(this);
 }
 void GetStmtHierarchy::visit(const Shuffle *op) {
-    int computation_range = get_color_range(op);
+    // int computation_range = get_color_range(op);
     if (op->is_concat()) {
-        open_node("concat_vectors", computation_range);
+        // open_node("concat_vectors", computation_range);
+        open_node(op, "concat_vectors");
 
         int currNode = currNodeID;
         for (auto &e : op->vectors) {
@@ -487,7 +563,8 @@ void GetStmtHierarchy::visit(const Shuffle *op) {
     }
 
     else if (op->is_interleave()) {
-        open_node("interleave_vectors", computation_range);
+        // open_node("interleave_vectors", computation_range);
+        open_node(op, "interleave_vectors");
 
         int currNode = currNodeID;
         for (auto &e : op->vectors) {
@@ -500,7 +577,8 @@ void GetStmtHierarchy::visit(const Shuffle *op) {
     else if (op->is_extract_element()) {
         std::vector<Expr> args = op->vectors;
         args.emplace_back(op->slice_begin());
-        open_node("extract_element", computation_range);
+        // open_node("extract_element", computation_range);
+        open_node(op, "extract_element");
 
         int currNode = currNodeID;
         for (auto &e : args) {
@@ -515,7 +593,8 @@ void GetStmtHierarchy::visit(const Shuffle *op) {
         args.emplace_back(op->slice_begin());
         args.emplace_back(op->slice_stride());
         args.emplace_back(static_cast<int>(op->indices.size()));
-        open_node("slice_vectors", computation_range);
+        // open_node("slice_vectors", computation_range);
+        open_node(op, "slice_vectors");
 
         int currNode = currNodeID;
         for (auto &e : args) {
@@ -530,7 +609,8 @@ void GetStmtHierarchy::visit(const Shuffle *op) {
         for (int i : op->indices) {
             args.emplace_back(i);
         }
-        open_node("Shuffle", computation_range);
+        // open_node("Shuffle", computation_range);
+        open_node(op, "Shuffle");
 
         int currNode = currNodeID;
         for (auto &e : args) {
@@ -545,8 +625,9 @@ void GetStmtHierarchy::visit(const VectorReduce *op) {
         << "\n"
         << "GetStmtHierarchy: VectorReduce is not supported. Look into it though!!! \n\n";
 
-    int computation_range = get_color_range(op);
-    open_node("vector_reduce", computation_range);
+    // int computation_range = get_color_range(op);
+    // open_node("vector_reduce", computation_range);
+    open_node(op, "vector_reduce");
 
     int currNode = currNodeID;
     // op->op.accept(this);
@@ -566,8 +647,9 @@ void GetStmtHierarchy::visit(const Fork *op) {
                    << "GetStmtHierarchy: Fork is not supported. Look into it though!!! \n\n";
 }
 void GetStmtHierarchy::visit(const Acquire *op) {
-    int computation_range = get_color_range(op);
-    open_node("acquire", computation_range);
+    // int computation_range = get_color_range(op);
+    // open_node("acquire", computation_range);
+    open_node(op, "acquire");
 
     int currNode = currNodeID;
     op->semaphore.accept(this);
@@ -579,11 +661,14 @@ void GetStmtHierarchy::visit(const Acquire *op) {
 }
 void GetStmtHierarchy::visit(const Atomic *op) {
     if (op->mutex_name.empty()) {
-        node_without_children("atomic", get_color_range(op));
+        // node_without_children("atomic", get_color_range(op));
+        node_without_children(op, "atomic");
     } else {
-        int computation_range = get_color_range(op);
-        open_node("atomic", computation_range);
-        node_without_children(op->mutex_name, 0);
+        // int computation_range = get_color_range(op);
+        // open_node("atomic", computation_range);
+        // node_without_children(op->mutex_name, 0);
+        open_node(op, "atomic");
+        node_without_children(nullptr, op->mutex_name);
         close_node();
     }
 }
