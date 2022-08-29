@@ -219,12 +219,28 @@ platform (e.g., `cpython-310-darwin` for Python 3.10 on OSX.)
 
 Note that you can combine multiple Halide libraries into a single Python module;
 this is convenient for packagaing, but also because all the libraries in a single
-extension module share the same Halide runtime (and thus, the same caches, thread pools, etc.):
+extension module share the same Halide runtime (and thus, the same caches, thread pools, etc.).
 
 ```
 add_halide_library(my_filter1 ...)
 add_halide_library(my_filter2 ...)
 add_halide_library(my_filter3 ...)
+
+add_halide_python_extension_library(my_extension
+                                    MODULE_NAME my_module
+                                    HALIDE_LIBRARIES my_filter my_filter2 my_filter3)
+```
+
+Note that you must take care to ensure that all of the `add_halide_library` targets
+specified use the same Halide runtime; it may be necessary to use `add_halide_runtime`
+to define an explicit runtime that is shared by all of the targets:
+
+```
+add_halide_runtime(my_runtime)
+
+add_halide_library(my_filter1 USE_RUNTIME my_runtime ...)
+add_halide_library(my_filter2 USE_RUNTIME my_runtime ...)
+add_halide_library(my_filter3 USE_RUNTIME my_runtime ...)
 
 add_halide_python_extension_library(my_extension
                                     MODULE_NAME my_module
