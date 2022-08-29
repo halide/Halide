@@ -457,16 +457,12 @@ function(add_halide_python_extension_library TARGET)
 
     # Module def code is the same in all of them, so arbitrarily choose the first
     list(GET pycpps 0 module_definition_cpp)
-    add_library(${TARGET}_module_definition STATIC ${module_definition_cpp})
+    add_library(${TARGET}_module_definition OBJECT ${module_definition_cpp})
     set_target_properties(${TARGET}_module_definition PROPERTIES
                           CXX_VISIBILITY_PRESET hidden
                           VISIBILITY_INLINES_HIDDEN ON
                           POSITION_INDEPENDENT_CODE ON)
-    # The use of "$<BUILD_INTERFACE:Python3::Module>" here isn't for linkage at all,
-    # but solely to get <Python.h> in the include path for this library.
-    # (target_include_directories seems like it should work, but fails with
-    # inscrutable errors regarding relative paths.)
-    target_link_libraries(${TARGET}_module_definition PRIVATE Halide::Runtime "$<BUILD_INTERFACE:Python3::Module>")
+    target_link_libraries(${TARGET}_module_definition PRIVATE Halide::Runtime Python3::Module)
     # Compile it with the right preprocessor definitions to provide the module defs,
     # but not the function implementations
     target_compile_definitions(${TARGET}_module_definition PRIVATE
@@ -475,8 +471,8 @@ function(add_halide_python_extension_library TARGET)
                                "HALIDE_PYTHON_EXTENSION_FUNCTIONS=${function_names}")
 
     # Now compile all the pycpps to build the function implementations (but not the module def)
-    Python3_add_library(${TARGET} MODULE WITH_SOABI ${pycpps})
-    target_link_libraries(${TARGET} PRIVATE ${ARG_HALIDE_LIBRARIES} ${TARGET}_module_definition)
+    Python3_add_library(${TARGET} MODULE WITH_SOABI ${pycpps} $<TARGET_OBJECTS:${TARGET}_module_definition>)
+    target_link_libraries(${TARGET} PRIVATE ${ARG_HALIDE_LIBRARIES})
     target_compile_definitions(${TARGET} PRIVATE
                                HALIDE_PYTHON_EXTENSION_OMIT_MODULE_DEFINITION)
     set_target_properties(${TARGET} PROPERTIES OUTPUT_NAME ${ARG_MODULE_NAME})
