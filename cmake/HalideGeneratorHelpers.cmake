@@ -422,7 +422,7 @@ function(add_halide_python_extension_library TARGET)
 
     set(runtimes "")
     set(pycpps "")
-    set(function_names "")
+    set(function_names "")  # space-separated X-macros
     foreach (lib IN LISTS ARG_HALIDE_LIBRARIES)
         if (NOT TARGET "${lib}")
             message(FATAL_ERROR "${lib} is not a valid target")
