@@ -937,7 +937,7 @@ and [apps/hannk](https://github.com/halide/Halide/tree/master/apps/hannk) for a 
 If `PYSTUB` is specified, then a Python Extension will be built that
 wraps the Generator with CPython glue to allow use of the Generator
 Python 3.x. The result will be a a shared library of the form
-`<target>_pystub.<soabi>.so`, where <soabi> describes the specific Python version and platform (e.g., `cpython-310-darwin` for Python 3.10 on OSX.) See
+`<target>_pystub.<soabi>.so`, where <soabi> describes the specific Python version and platform (e.g., `cpython-310-darwin` for Python 3.10 on macOS.) See
 `README_python.md` for examples of use.
 
 #### `add_halide_python_extension_library`
@@ -962,7 +962,7 @@ the `PYTHON_EXTENSION` keyword specified, and all libraries must use the same Ha
 
 The result will be a a shared library of the form
 `<target>.<soabi>.so`, where <soabi> describes the specific Python version and
-platform (e.g., `cpython-310-darwin` for Python 3.10 on OSX.)
+platform (e.g., `cpython-310-darwin` for Python 3.10 on macOS.)
 
 ## Cross compiling
 
