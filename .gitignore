@@ -98,3 +98,5 @@ src/.tags_sorted_by_file
 
 .vscode
 null.d
+
+src/ignore*
