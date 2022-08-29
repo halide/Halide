@@ -20,7 +20,7 @@
 #define PRINT_HIERARCHY false
 #define PRINT_DEPENDENCIES false
 #define PRINT_PROD_CONS false
-#define NAVIGATION_STYLE true  // change in ProduceConsumerHierarchy.cpp as well
+#define NAVIGATION_STYLE false  // change in ProduceConsumerHierarchy.cpp as well
 
 namespace Halide {
 namespace Internal {
@@ -272,7 +272,7 @@ private:
         return s.str();
     }
     string close_cost_span() {
-        return close_span();
+        return "<!-- closing_cost_span --></span>";
     }
 
     string open_span(const string &cls, int id = -1) {
@@ -348,7 +348,7 @@ private:
         return "<span class='navigationAnchor' id=\"" + anchorName + "\">";
     }
     string close_anchor() {
-        return "</span>";
+        return "<!-- close_anchor --></span>";
     }
 
     string open_line() {
@@ -643,13 +643,13 @@ private:
         stream << open_div("LetStmt") << open_line();
         stream << cost_colors(op->value.get());
 
+        stream << open_cost_span(op->value.get(), get_stmt_hierarchy(op->value.get()));
         stream << open_span("Matched");
         stream << keyword("let") << " ";
         stream << var(scopeName);
         stream << close_span();
         stream << " " << matched("Operator Assign", "=") << " ";
 
-        stream << open_cost_span(op->value.get(), get_stmt_hierarchy(op->value.get()));
         print(op->value);
         stream << close_cost_span();
 
@@ -676,7 +676,10 @@ private:
         std::vector<Expr> args;
         args.push_back(op->condition);
         args.push_back(op->message);
+        stream << cost_colors(op);
+        stream << open_cost_span(op, get_stmt_hierarchy(op));
         print_list(symbol("assert") + "(", args, ")");
+        stream << close_cost_span();
         stream << close_div();
     }
     void visit(const ProducerConsumer *op) override {
@@ -794,10 +797,10 @@ private:
         // anchoring
         storeCount++;
         string anchorName = "store" + std::to_string(storeCount);
-        stream << open_anchor(anchorName);
 
         stream << cost_colors(op->value.get());
         stream << open_cost_span(op, get_stmt_hierarchy(op));
+        stream << open_anchor(anchorName);
 
         stream << open_span("Matched");
         stream << var(op->name) << "[";
@@ -1582,7 +1585,7 @@ public:
         stream << getStmtHierarchy.generate_collapse_expand_js();
         stream << producerConsumerHierarchy.generate_prodCons_js();
         stream << ProducerConsumerHierarchy::scrollToFunctionJS;
-        if (NAVIGATION_STYLE) stream << expandCodeJS;
+        if (!NAVIGATION_STYLE) stream << expandCodeJS;
         stream << "</script>\n";
         stream << "</body>";
     }

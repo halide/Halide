@@ -425,7 +425,12 @@ void GetStmtHierarchy::visit(const AssertStmt *op) {
     // int computation_range = get_color_range(op);
     // open_node("Assert", computation_range);
     open_node(op, "Assert");
+    // TODO: add in op->message as well
+    int currNode = currNodeID;
     op->condition.accept(this);
+
+    currNodeID = currNode;
+    op->message.accept(this);
     close_node();
 }
 void GetStmtHierarchy::visit(const ProducerConsumer *op) {

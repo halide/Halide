@@ -6,7 +6,7 @@ using namespace std;
 using namespace Halide;
 using namespace Internal;
 
-#define NAVIGATION_STYLE true
+#define NAVIGATION_STYLE false
 
 template<typename T>
 string to_string(T value) {
