@@ -877,7 +877,7 @@ void ProducerConsumerHierarchy::see_code_button(string anchorName) {
         html += "onclick='window.open(\"" + output_file_name + "#" + anchorName + "\", \"_blank\")";
     else
         html += "onclick='scrollToFunction(\"" + anchorName + "\")'";
-    html += "' style='margin-left: 5px'>";
+    html += " style='margin-left: 5px'>";
     html += "<i class='bi bi-code-square'></i>";
     html += "</button>";
 }

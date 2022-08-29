@@ -39,7 +39,7 @@ class StmtToViz : public IRVisitor {
     static const string vizCss;
     static const string costColorsCSS;
     static const string navigationHTML;
-    static const string scrollToCSS, navigationCSS;
+    static const string scrollToCSS, resizeBarJS, navigationCSS;
     static const string lineNumbersCSS;
     static const string tooltipCSS;
     static const string expandCodeJS;
@@ -1560,6 +1560,7 @@ public:
         if (NAVIGATION_STYLE) stream << navigationCSS;
         else
             stream << scrollToCSS;
+        stream << resizeBarJS;
         stream << lineNumbersCSS;
         stream << tooltipCSS;
         stream << GetStmtHierarchy::stmtHierarchyCSS;
@@ -1618,6 +1619,14 @@ public:
     void close_dependency_navigation() {
         stream << "</div>\n";
     }
+    void resizeBar() {
+        stream << "<div class='ResizeBar' id='ResizeBar'>\n";
+        stream << "<div class='collapseButtons'>\n";
+        stream << "<button onclick='collapseViz()'>c</button>\n";
+        stream << "<button onclick='collapseCode()'>v</button>\n";
+        stream << "</div>\n";
+        stream << "</div>\n";
+    }
 
     void generate_html(const string &filename, const Module &m) {
         // opening parts of the html
@@ -1627,13 +1636,14 @@ public:
         else {
             stream << "<div class='outerDiv'>\n";
 
-            stream << "<div class='buttons'>\n";
-            stream
-                << "<button class='info-button' onclick='expandCodeDiv()'>Expand Code</button>\n";
-            stream << "<button class='info-button' onclick='expandVizDiv()'>";
-            stream << "Expand Visualization</button>\n";
-            stream << "<button class='info-button' onclick='resetRatio()'>Reset Ratio</button>\n";
-            stream << "</div>\n";
+            // stream << "<div class='buttons'>\n";
+            // stream
+            //     << "<button class='info-button' onclick='expandCodeDiv()'>Expand
+            //     Code</button>\n";
+            // stream << "<button class='info-button' onclick='expandVizDiv()'>";
+            // stream << "Expand Visualization</button>\n";
+            // stream << "<button class='info-button' onclick='resetRatio()'>Reset
+            // Ratio</button>\n"; stream << "</div>\n";
 
             stream << "<div class='mainContent'>\n";
         }
@@ -1644,6 +1654,9 @@ public:
         print(m);
         stream << "</div>\n";  // close IRCode-code div
         if (NAVIGATION_STYLE) close_code_navigation();
+
+        // for resizing the code and visualization divs
+        resizeBar();
 
         if (NAVIGATION_STYLE) open_prod_cons_navigation();
         stream << "<div class='ProducerConsumerViz' id='ProducerConsumerViz'>\n";
@@ -1778,12 +1791,6 @@ code.ptx { tab-size: 26; white-space: pre; }\n \
 
 const string StmtToViz::scrollToCSS = "\n \
 /* Scroll to CSS */\n \
-div.buttons { \n \
-    padding-left: 20px; \n \
-    padding-top: 20px; \n \
-    padding-bottom: 10px; \n \
-    border-bottom: grey dashed 1px; \n \
-} \n \
 div.outerDiv { \n \
     height: 100vh; \n \
     display: flex; \n \
@@ -1799,15 +1806,25 @@ div.IRCode-code { \n \
     counter-reset: line; \n \
     padding-left: 40px; \n \
     padding-top: 20px; \n \
-    flex: 0 50%; \n \
     overflow-y: scroll; \n \
     position: relative; \n \
  \n \
 } \n \
 div.ProducerConsumerViz { \n \
-    flex: 0 50%; \n \
     overflow-y: scroll; \n \
     padding-top: 20px; \n \
+} \n \
+";
+
+const string StmtToViz::resizeBarJS = "\n \
+/* Resize Bar CSS */\n \
+div.ResizeBar { \n \
+    background: rgb(201, 231, 190); \n \
+    cursor: col-resize; \n \
+} \n \
+div.collapseButtons { \n \
+    position: relative; \n \
+    top: 50%; \n \
 } \n \
 ";
 
@@ -1990,26 +2007,34 @@ const string StmtToViz::tooltipCSS = "\n \
 
 const string StmtToViz::expandCodeJS = "\n \
 // expand code div\n \
-function expandCodeDiv() { \n \
-    var codeDiv = document.getElementById('IRCode-code'); \n \
-    var prodConsDiv = document.getElementById('ProducerConsumerViz'); \n \
-    codeDiv.style.flex = '0 75%'; \n \
-    prodConsDiv.style.flex = '0 25%'; \n \
+var codeDiv = document.getElementById('IRCode-code'); \n \
+var prodConsDiv = document.getElementById('ProducerConsumerViz'); \n \
+var resizeBar = document.getElementById('ResizeBar'); \n \
+codeDiv.style.flexGrow = '0'; \n \
+prodConsDiv.style.flexGrow = '0'; \n \
+resizeBar.style.flexGrow = '0'; \n \
+codeDiv.style.flexBasis = 'calc(50% - 16px)'; \n \
+resizeBar.style.flexBasis = '16px'; \n \
+prodConsDiv.style.flexBasis = 'calc(50% - 8px)'; \n \
+resizeBar.addEventListener('mousedown', (event) => { \n \
+    document.addEventListener('mousemove', resize, false); \n \
+    document.addEventListener('mouseup', () => { \n \
+        document.removeEventListener('mousemove', resize, false); \n \
+    }, false); \n \
+}); \n \
+function resize(e) { \n \
+    const size = `${e.x}px`; \n \
+    codeDiv.style.flexBasis = 'calc(' + size + ' - 24px)'; \n \
+    prodConsDiv.style.flexBasis = 'calc(100% - ' + size + ' + 8px)'; \n \
 } \n \
-function expandVizDiv() { \n \
-    var codeDiv = document.getElementById('IRCode-code'); \n \
-    var prodConsDiv = document.getElementById('ProducerConsumerViz'); \n \
-    console.log(codeDiv.style.flex); \n \
-    codeDiv.style.flex = '0 25%'; \n \
-    prodConsDiv.style.flex = '0 75%'; \n \
+function collapseCode() { \n \
+    codeDiv.style.flexBasis = '0px'; \n \
+    prodConsDiv.style.flexBasis = '100% + 16px'; \n \
 } \n \
-function resetRatio() { \n \
-    var codeDiv = document.getElementById('IRCode-code'); \n \
-    var prodConsDiv = document.getElementById('ProducerConsumerViz'); \n \
-    codeDiv.style.flex = '0 50%'; \n \
-    prodConsDiv.style.flex = '0 50%'; \n \
+function collapseViz() { \n \
+    prodConsDiv.style.flexBasis = '0px'; \n \
+    codeDiv.style.flexBasis = 'calc(100% - 16px)'; \n \
 } \n \
-resetRatio(); \n \
 ";
 
 const string StmtToViz::js = "\n \
