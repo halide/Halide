@@ -1290,7 +1290,7 @@ void ProducerConsumerHierarchy::visit(const Allocate *op) {
 string ProducerConsumerHierarchy::generate_prodCons_js() {
     string prodConsJS;
 
-    prodConsJS += "// prodCons JS\n";
+    prodConsJS += "\n// prodCons JS\n";
     prodConsJS += "for (let i = 1; i <= " + std::to_string(prodConsTooltipCount) + "; i++) { \n";
     prodConsJS += "    const button = document.querySelector('#prodConsButton' + i); \n";
     prodConsJS += "    const tooltip = document.querySelector('#prodConsTooltip' + i); \n";

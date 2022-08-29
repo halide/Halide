@@ -229,16 +229,12 @@ private:
         </div>
     */
     string get_stmt_hierarchy(const Stmt &op) {
-        cout << "before" << endl;
         string hierarchyHTML = getStmtHierarchy.get_hierarchy_html(op);
-        cout << "after" << endl;
         if (PRINT_HIERARCHY) cout << hierarchyHTML << endl;
         return generate_stmt_hierarchy_popup(hierarchyHTML);
     }
     string get_stmt_hierarchy(const Expr &op) {
-        cout << "before" << endl;
         string hierarchyHTML = getStmtHierarchy.get_hierarchy_html(op);
-        cout << "after" << endl;
         if (PRINT_HIERARCHY) cout << hierarchyHTML << endl;
         return generate_stmt_hierarchy_popup(hierarchyHTML);
     }
@@ -1571,9 +1567,7 @@ public:
     }
 
     void end_stream() {
-        cout << "in destructor" << endl;
         stream << popups;
-        cout << "here" << endl;
 
         stream << "<script>\n";
         stream << "$( '.Matched' ).each( function() {\n"
@@ -1583,22 +1577,14 @@ public:
                   "'-]').removeClass('Highlight'); }\n"
                << "} );\n";
 
-        cout << "here5" << endl;
         stream << content_rule_script_stream;
-        cout << "here6" << endl;
         stream << generatetooltipJS(tooltipCount);
-        cout << "here7" << endl;
         stream << getStmtHierarchy.generate_collapse_expand_js();
-        cout << "here8" << endl;
         stream << producerConsumerHierarchy.generate_prodCons_js();
-        cout << "here9" << endl;
         stream << ProducerConsumerHierarchy::scrollToFunctionJS;
         if (NAVIGATION_STYLE) stream << expandCodeJS;
-        cout << "here10" << endl;
         stream << "</script>\n";
-        cout << "here11" << endl;
         stream << "</body>";
-        cout << "here12" << endl;
     }
 
     void navigation_header() {
@@ -2000,7 +1986,7 @@ const string StmtToViz::tooltipCSS = "\n \
 ";
 
 const string StmtToViz::expandCodeJS = "\n \
-/* expand code div */\n \
+// expand code div\n \
 function expandCodeDiv() { \n \
     var codeDiv = document.getElementById('IRCode-code'); \n \
     var prodConsDiv = document.getElementById('ProducerConsumerViz'); \n \
