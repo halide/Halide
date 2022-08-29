@@ -404,8 +404,6 @@ function(add_halide_library TARGET)
     if ("python_extension" IN_LIST generator_outputs)
         set_property(TARGET "${TARGET}" PROPERTY Halide_LIBRARY_PYTHON_EXTENSION_CPP "${CMAKE_CURRENT_BINARY_DIR}/${TARGET}.py.cpp")
     endif ()
-
-
 endfunction()
 
 function(add_halide_python_extension_library TARGET)
@@ -483,7 +481,6 @@ function(add_halide_python_extension_library TARGET)
                                HALIDE_PYTHON_EXTENSION_OMIT_MODULE_DEFINITION)
     set_target_properties(${TARGET} PROPERTIES OUTPUT_NAME ${ARG_MODULE_NAME})
     _Halide_target_export_single_symbol(${TARGET} "PyInit_${ARG_MODULE_NAME}")
-
 endfunction()
 
 ##
