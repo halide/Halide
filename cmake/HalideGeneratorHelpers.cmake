@@ -440,7 +440,7 @@ function(add_halide_python_extension_library TARGET)
         endif ()
         # Strip C++ namespace(s), if any
         string(REGEX REPLACE ".*::(.*)" "\\1" function_name "${function_name}")
-        set(function_names "${function_names} X(${function_name})")
+        string(APPEND function_names " X(${function_name})")
 
         get_property(pycpp TARGET ${lib} PROPERTY Halide_LIBRARY_PYTHON_EXTENSION_CPP)
         if (NOT pycpp)
