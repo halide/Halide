@@ -58,3 +58,15 @@ endforeach ()
 add_halide_python_extension_library(pyext_multi_method_module
                                     MODULE_NAME multi_method_module
                                     HALIDE_LIBRARIES py_aot_simple py_aot_user_context)
+
+# Add a test to verify that Python extensions export exactly one symbol (the PyInit symbol)
+# TODO: _Halide_target_export_single_symbol() isn't implemented for MSVC, and even if it was,
+# this test wouldn't work for it, but for Posixy systems (Linux, OSX, etc) this is fine.
+# See https://github.com/halide/Halide/issues/6982
+if(NOT MSVC)
+    # Verify that only one symbol is exported, and that symbol is the one we expect
+    add_test(NAME test_export_single_symbol
+             COMMAND $ENV{SHELL} -c "[ $(nm $<TARGET_FILE:pyext_multi_method_module> | grep ' T ' | wc -l) -eq 1 ] && \
+                                     [ $(nm $<TARGET_FILE:pyext_multi_method_module> | grep ' T ' | grep PyInit_multi_method_module | wc -l) -eq 1 ]"
+             VERBATIM)
+endif ()
