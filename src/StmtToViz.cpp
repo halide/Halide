@@ -20,7 +20,6 @@
 #define PRINT_HIERARCHY false
 #define PRINT_DEPENDENCIES false
 #define PRINT_PROD_CONS false
-#define NAVIGATION_STYLE false  // change in ProduceConsumerHierarchy.cpp as well
 
 namespace Halide {
 namespace Internal {
@@ -38,8 +37,7 @@ class StmtToViz : public IRVisitor {
     static const string css, js;
     static const string vizCss;
     static const string costColorsCSS;
-    static const string navigationHTML;
-    static const string scrollToCSS, resizeBarJS, navigationCSS;
+    static const string scrollToCSS, resizeBarJS;
     static const string lineNumbersCSS;
     static const string tooltipCSS;
     static const string expandCodeJS;
@@ -1557,9 +1555,7 @@ public:
         stream << vizCss;
         stream << costColorsCSS;
         stream << ProducerConsumerHierarchy::prodConsCSS;
-        if (NAVIGATION_STYLE) stream << navigationCSS;
-        else
-            stream << scrollToCSS;
+        stream << scrollToCSS;
         stream << resizeBarJS;
         stream << lineNumbersCSS;
         stream << tooltipCSS;
@@ -1567,7 +1563,6 @@ public:
         stream << "</style>\n";
         stream << "<script language='javascript' type='text/javascript'>" + js + "</script>\n";
         stream << "</head>\n <body>\n";
-        if (NAVIGATION_STYLE) stream << navigationHTML;
     }
 
     void end_stream() {
@@ -1586,39 +1581,11 @@ public:
         stream << getStmtHierarchy.generate_collapse_expand_js();
         stream << producerConsumerHierarchy.generate_prodCons_js();
         stream << ProducerConsumerHierarchy::scrollToFunctionJS;
-        if (!NAVIGATION_STYLE) stream << expandCodeJS;
+        stream << expandCodeJS;
         stream << "</script>\n";
         stream << "</body>";
     }
 
-    void navigation_header() {
-        stream << "<div class='tab-content' id='myTabContent'>\n";
-    }
-    void navigation_footer() {
-        stream << "</div>\n";
-    }
-    void open_code_navigation() {
-        stream << "<div class='tab-pane fade show active' id='IRCode' role='tabpanel' "
-                  "aria-labelledby='IRCode-tab'>\n";
-    }
-    void close_code_navigation() {
-        stream << "</div>\n";
-    }
-
-    void open_prod_cons_navigation() {
-        stream << "<div class='tab-pane fade' id='ProdCons' role='tabpanel' "
-                  "aria-labelledby='ProdCons-tab'>\n";
-    }
-    void close_prod_cons_navigation() {
-        stream << "</div>\n";
-    }
-    void open_dependency_navigation() {
-        stream << "<div class='tab-pane fade' id='Dependency' role='tabpanel' "
-                  "aria-labelledby='Dependency-tab'>\n";
-    }
-    void close_dependency_navigation() {
-        stream << "</div>\n";
-    }
     void resizeBar() {
         stream << "<div class='ResizeBar' id='ResizeBar'>\n";
         stream << "<div class='collapseButtons'>\n";
@@ -1632,49 +1599,24 @@ public:
         // opening parts of the html
         start_stream(filename);
 
-        if (NAVIGATION_STYLE) navigation_header();
-        else {
-            stream << "<div class='outerDiv'>\n";
+        stream << "<div class='outerDiv'>\n";
 
-            // stream << "<div class='buttons'>\n";
-            // stream
-            //     << "<button class='info-button' onclick='expandCodeDiv()'>Expand
-            //     Code</button>\n";
-            // stream << "<button class='info-button' onclick='expandVizDiv()'>";
-            // stream << "Expand Visualization</button>\n";
-            // stream << "<button class='info-button' onclick='resetRatio()'>Reset
-            // Ratio</button>\n"; stream << "</div>\n";
-
-            stream << "<div class='mainContent'>\n";
-        }
+        stream << "<div class='mainContent'>\n";
 
         // print main html page
-        if (NAVIGATION_STYLE) open_code_navigation();
         stream << "<div class='IRCode-code' id='IRCode-code'>\n";
         print(m);
         stream << "</div>\n";  // close IRCode-code div
-        if (NAVIGATION_STYLE) close_code_navigation();
 
         // for resizing the code and visualization divs
         resizeBar();
 
-        if (NAVIGATION_STYLE) open_prod_cons_navigation();
         stream << "<div class='ProducerConsumerViz' id='ProducerConsumerViz'>\n";
         generate_producer_consumer_hierarchy(m);
         stream << "</div>\n";  // close ProducerConsumerViz div
-        if (NAVIGATION_STYLE) close_prod_cons_navigation();
 
-        if (NAVIGATION_STYLE) open_dependency_navigation();
-        if (NAVIGATION_STYLE) stream << "<div class='DependencyViz'>\n";
-        if (NAVIGATION_STYLE) generate_dependency_graph(m);
-        if (NAVIGATION_STYLE) stream << "</div>\n";  // close DependencyViz div
-        if (NAVIGATION_STYLE) close_dependency_navigation();
-
-        if (NAVIGATION_STYLE) navigation_footer();
-        else {
-            stream << "</div>\n";  // close mainContent div
-            stream << "</div>\n";  // close outerDiv div
-        }
+        stream << "</div>\n";  // close mainContent div
+        stream << "</div>\n";  // close outerDiv div
 
         // closing parts of the html
         end_stream();
@@ -1828,22 +1770,6 @@ div.collapseButtons { \n \
 } \n \
 ";
 
-const string StmtToViz::navigationCSS = "\n \
-div.IRCode-code { \n \
-    counter-reset: line; \n \
-    margin-left: 40px; \n \
-    margin-top: 20px; \n \
-} \n \
-div.ProducerConsumerViz { \n \
-    margin-left: 20px; \n \
-    margin-top: 20px; \n \
-} \n \
-div.DependencyViz { \n \
-    margin-left: 20px; \n \
-    margin-top: 20px; \n \
-} \n \
-";
-
 const string StmtToViz::lineNumbersCSS = "\n \
 /* Line Numbers CSS */\n \
 p.WrapLine,\n\
@@ -1957,28 +1883,6 @@ span.CostComputation { width: 13px; display: inline-block; color: transparent; }
 span.CostMovement { width: 13px; display: inline-block;  color: transparent; } \n \
 ";
 
-const string StmtToViz::navigationHTML = "\n \
-<ul class='nav nav-tabs' id='myTab' role='tablist'> \n \
-    <li class='nav-item' role='presentation'> \n \
-        <button class='nav-link active' id='IRCode-tab' data-bs-toggle='tab' \n \
-            data-bs-target='#IRCode' type='button' role='tab' \n \
-            aria-controls='IRCode' aria-selected='true'>IR Code</button> \n \
-    </li> \n \
-    <li class='nav-item' role='presentation'> \n \
-        <button class='nav-link' id='ProdCons-tab' data-bs-toggle='tab' \n \
-            data-bs-target='#ProdCons' type='button' role='tab' \n \
-            aria-controls='ProdCons' aria-selected='false'>Producer/Consumer \n \
-            Visualization</button> \n \
-    </li> \n \
-    <li class='nav-item' role='presentation'> \n \
-        <button class='nav-link' id='Dependency-tab' data-bs-toggle='tab' \n \
-            data-bs-target='#Dependency' type='button' role='tab' \n \
-            aria-controls='Dependency' aria-selected='false'>Dependency \n \
-            Graph</button> \n \
-    </li> \n \
-</ul> \n \
-";
-
 const string StmtToViz::tooltipCSS = "\n \
 /* Tooltip CSS */\n \
 .left-table { text-align: right; color: grey; vertical-align: middle; font-size: 12px; }\n \
@@ -2029,7 +1933,7 @@ function resize(e) { \n \
 } \n \
 function collapseCode() { \n \
     codeDiv.style.flexBasis = '0px'; \n \
-    prodConsDiv.style.flexBasis = '100% + 16px'; \n \
+    prodConsDiv.style.flexBasis = 'calc(100%)'; \n \
 } \n \
 function collapseViz() { \n \
     prodConsDiv.style.flexBasis = '0px'; \n \

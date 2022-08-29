@@ -6,8 +6,6 @@ using namespace std;
 using namespace Halide;
 using namespace Internal;
 
-#define NAVIGATION_STYLE false
-
 template<typename T>
 string to_string(T value) {
     std::ostringstream os;
@@ -873,10 +871,7 @@ void ProducerConsumerHierarchy::for_loop_table(string loop_size) {
 
 void ProducerConsumerHierarchy::see_code_button(string anchorName) {
     html += "<button class='see-code-button'";
-    if (NAVIGATION_STYLE)
-        html += "onclick='window.open(\"" + output_file_name + "#" + anchorName + "\", \"_blank\")";
-    else
-        html += "onclick='scrollToFunction(\"" + anchorName + "\")'";
+    html += "onclick='scrollToFunction(\"" + anchorName + "\")'";
     html += " style='margin-left: 5px'>";
     html += "<i class='bi bi-code-square'></i>";
     html += "</button>";
