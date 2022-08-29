@@ -128,7 +128,7 @@ class CanonicalizeGPUVars : public IRMutator {
             (op->for_type == ForType::GPULane)) {
 
             vector<string> v = split_string(op->name, ".");
-            internal_assert(v.size() > 2);
+            internal_assert(v.size() >= 2);
 
             CountGPUBlocksThreads counter(v[0] + "." + v[1]);
             op->body.accept(&counter);
