@@ -807,7 +807,6 @@ add_halide_library(<target> FROM <generator-target>
                    [PLUGINS plugin1 [plugin2 ...]]
                    [AUTOSCHEDULER scheduler-name]
                    [GRADIENT_DESCENT]
-                   [PYTHON_EXTENSION_LIBRARY]
                    [C_BACKEND]
                    [REGISTRATION OUTVAR]
                    [HEADER OUTVAR]
@@ -869,13 +868,6 @@ If `GRADIENT_DESCENT` is set, then the module will be built suitably for
 gradient descent calculation in TensorFlow or PyTorch. See
 `Generator::build_gradient_module()` for more documentation. This corresponds to
 passing `-d 1` at the generator command line.
-
-If `PYTHON_EXTENSION_LIBRARY` is set, then a Python Extension will be built that
-wraps the C/C++ call with CPython glue to allow use of the generated code from
-Python 3.x. The result will be a a shared library of the form
-`<target>.<soabi>.so`, where <soabi> describes the specific Python version and
-platform (e.g., `cpython-310-darwin` for Python 3.10 on OSX.) See
-`README_python.md` for examples of use.
 
 If the `C_BACKEND` option is set, this command will invoke the configured C++
 compiler on a generated source. Note that a `<target>.runtime` target is _not_
@@ -945,8 +937,32 @@ and [apps/hannk](https://github.com/halide/Halide/tree/master/apps/hannk) for a 
 If `PYSTUB` is specified, then a Python Extension will be built that
 wraps the Generator with CPython glue to allow use of the Generator
 Python 3.x. The result will be a a shared library of the form
-`<target>_pystub.<soabi>.so`, where <soabi> describes the specific Python version and platform (e.g., `cpython-310-darwin` for Python 3.10 on OSX.) See
+`<target>_pystub.<soabi>.so`, where <soabi> describes the specific Python version and platform (e.g., `cpython-310-darwin` for Python 3.10 on macOS.) See
 `README_python.md` for examples of use.
+
+#### `add_halide_python_extension_library`
+
+This function wraps the outputs of one or more `add_halide_library` targets with glue code to produce
+a Python Extension library.
+
+```
+add_halide_python_extension_library(
+    target
+    [MODULE_NAME module-name]
+    HALIDE_LIBRARIES library1 ...
+)
+```
+
+The `MODULE_NAME` argument specifies the name of the Python module that will be created. If omitted,
+it defaults to `target`.
+
+`HALIDE_LIBRARIES` is a list of one of more `add_halide_library` targets. Each will be added to the
+extension as a callable method of the module. Note that every library specified must be built with
+the `PYTHON_EXTENSION` keyword specified, and all libraries must use the same Halide runtime.
+
+The result will be a a shared library of the form
+`<target>.<soabi>.so`, where <soabi> describes the specific Python version and
+platform (e.g., `cpython-310-darwin` for Python 3.10 on macOS.)
 
 ## Cross compiling
 

@@ -192,21 +192,44 @@ HALIDE_REGISTER_GENERATOR(MyFilter, my_filter)
 ```
 
 If you are using CMake, the simplest thing is to use
-`add_halide_library()` (defined in HalideGeneratorHelpers.cmake) with the `PYTHON_EXTENSION_LIBRARY` option:
+`add_halide_library` and `add_halide_python_extension_library()`:
 
 ```
+# Build a Halide library as you usually would, but be sure to include `PYTHON_EXTENSION`
 add_halide_library(my_filter
-                         GENERATOR my_filter_generator
-                         SOURCES my_filter_generator.cpp
-                         PYTHON_EXTENSION_LIBRARY
-                         [ FEATURES ... ]
-                         [ PARAMS ... ])
+                   GENERATOR my_filter_generator
+                   SOURCES my_filter_generator.cpp
+                   PYTHON_EXTENSION output_path_var
+                   [ FEATURES ... ]
+                   [ PARAMS ... ])
+
+# Now wrap the generated code with a Python extension.
+# (Note that module name defaults to match the target name; we only
+# need to specify MODULE_NAME if we need a name that may differ)
+add_halide_python_extension_library(my_extension
+                                    MODULE_NAME my_module
+                                    HALIDE_LIBRARIES my_filter)
 ```
 
 This compiles the Generator code in `my_filter_generator.cpp` with the
-registered name `my_filter` to produce the target `my_filter`, which is a Python
-Extension in the form of a shared library (e.g.,
-`foo.cpython-310-x86_64-linux-gnu.so`).
+registered name `my_filter` to produce the target `my_filter`, and then wraps
+the compiled output with a Python extension. The result will be a shared library of the form
+`<target>.<soabi>.so`, where <soabi> describes the specific Python version and
+platform (e.g., `cpython-310-darwin` for Python 3.10 on OSX.)
+
+Note that you can combine multiple Halide libraries into a single Python module;
+this is convenient for packagaing, but also because all the libraries in a single
+extension module share the same Halide runtime (and thus, the same caches, thread pools, etc.):
+
+```
+add_halide_library(my_filter1 ...)
+add_halide_library(my_filter2 ...)
+add_halide_library(my_filter3 ...)
+
+add_halide_python_extension_library(my_extension
+                                    MODULE_NAME my_module
+                                    HALIDE_LIBRARIES my_filter my_filter2 my_filter3)
+```
 
 ### Calling a C++ Generator from Python
 
@@ -214,7 +237,7 @@ As long as the shared library is in `PYTHONPATH`, it can be imported and used
 directly. For the example above:
 
 ```
-from my_filter import my_filter
+from my_module import my_filter
 import imageio
 import numpy as np
 

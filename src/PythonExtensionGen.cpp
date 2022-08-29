@@ -104,7 +104,7 @@ PythonExtensionGen::PythonExtensionGen(std::ostream &dest)
 }
 
 void PythonExtensionGen::compile(const Module &module) {
-    dest << "#include \"Python.h\"\n";
+    dest << "#include <Python.h>\n";
     dest << "#include \"HalideRuntime.h\"\n\n";
 
     // Emit extern decls of the Halide-generated functions we use directly
@@ -118,16 +118,7 @@ void PythonExtensionGen::compile(const Module &module) {
         extern_decl_gen.compile(module);
     }
 
-    dest << "#define MODULE_NAME \"" << module.name() << "\"\n";
-
     dest << R"INLINE_CODE(
-/* Older Python versions don't set up PyMODINIT_FUNC correctly. */
-#if defined(_MSC_VER)
-#define HALIDE_PYTHON_EXPORT      __declspec(dllexport)
-#else
-#define HALIDE_PYTHON_EXPORT      __attribute__((visibility("default")))
-#endif
-
 namespace {
 
 template<int dimensions>
@@ -246,51 +237,75 @@ struct PyHalideBuffer {
 
 )INLINE_CODE";
 
+    std::vector<std::string> fnames;
     for (const auto &f : module.functions()) {
         if (f.linkage == LinkageType::ExternalPlusMetadata) {
             compile(f);
+            fnames.push_back(remove_namespaces(f.name));
         }
     }
 
     dest << "\n";
-    dest << "namespace {\n";
+    dest << "#ifndef HALIDE_PYTHON_EXTENSION_OMIT_MODULE_DEFINITION\n";
     dest << "\n";
-    dest << "PyMethodDef _methods[] = {\n";
-    for (const auto &f : module.functions()) {
-        if (f.linkage == LinkageType::ExternalPlusMetadata) {
-            const string basename = remove_namespaces(f.name);
-            dest << "    {\"" << basename << "\", (PyCFunction)_f_" << basename
-                 << ", METH_VARARGS|METH_KEYWORDS, nullptr},\n";
-        }
+    dest << "#ifndef HALIDE_PYTHON_EXTENSION_MODULE\n";
+    dest << "#define HALIDE_PYTHON_EXTENSION_MODULE " << module.name() << "\n";
+    dest << "#endif  // HALIDE_PYTHON_EXTENSION_MODULE\n";
+    dest << "\n";
+    dest << "#ifndef HALIDE_PYTHON_EXTENSION_FUNCTIONS\n";
+    dest << "#define HALIDE_PYTHON_EXTENSION_FUNCTIONS";
+    for (const auto &fname : fnames) {
+        dest << " X(" << fname << ")";
     }
-    dest << "    {0, 0, 0, nullptr},  // sentinel\n";
-    dest << "};\n";
-
+    dest << "\n";
+    dest << "#endif  // HALIDE_PYTHON_EXTENSION_FUNCTIONS\n";
+    dest << "\n";
     dest << R"INLINE_CODE(
 static_assert(PY_MAJOR_VERSION >= 3, "Python bindings for Halide require Python 3+");
 
-struct PyModuleDef _moduledef = {
-    PyModuleDef_HEAD_INIT,
-    MODULE_NAME,
-    nullptr,
-    -1,
-    _methods,
+namespace Halide::PythonExtensions {
+#define X(name) extern PyObject *name(PyObject *module, PyObject *args, PyObject *kwargs);
+      HALIDE_PYTHON_EXTENSION_FUNCTIONS
+#undef X
+}  // namespace Halide::PythonExtensions
+
+namespace {
+
+#define _HALIDE_STRINGIFY(x)            #x
+#define _HALIDE_EXPAND_AND_STRINGIFY(x) _HALIDE_STRINGIFY(x)
+#define _HALIDE_CONCAT(x, y)            x##y
+#define _HALIDE_EXPAND_AND_CONCAT(x, y) _HALIDE_CONCAT(x, y)
+
+PyMethodDef _methods[] = {
+  #define X(name) {#name, reinterpret_cast<PyCFunction>(Halide::PythonExtensions::name), METH_VARARGS | METH_KEYWORDS, nullptr},
+  HALIDE_PYTHON_EXTENSION_FUNCTIONS
+  #undef X
+  {0, 0, 0, nullptr},  // sentinel
+};
+
+PyModuleDef _moduledef = {
+    PyModuleDef_HEAD_INIT,                                          // base
+    _HALIDE_EXPAND_AND_STRINGIFY(HALIDE_PYTHON_EXTENSION_MODULE),   // name
+    nullptr,                                                        // doc
+    -1,                                                             // size
+    _methods,                                                       // methods
+    nullptr,                                                        // slots
+    nullptr,                                                        // traverse
+    nullptr,                                                        // clear
+    nullptr,                                                        // free
 };
 
 }  // namespace
 
 extern "C" {
 
-HALIDE_PYTHON_EXPORT PyObject* PyInit_)INLINE_CODE";
-
-    dest << module.name() << "(void) {";
-
-    dest << R"INLINE_CODE(
+HALIDE_EXPORT_SYMBOL PyObject *_HALIDE_EXPAND_AND_CONCAT(PyInit_, HALIDE_PYTHON_EXTENSION_MODULE)() {
     return PyModule_Create(&_moduledef);
 }
 
 }  // extern "C"
 
+#endif  //HALIDE_PYTHON_EXTENSION_OMIT_MODULE_DEFINITION
 )INLINE_CODE";
 }
 
@@ -306,20 +321,26 @@ void PythonExtensionGen::compile(const LoweredFunc &f) {
     Indentation indent;
     indent.indent = 0;
 
-    dest << "namespace {\n";
+    dest << "#ifndef HALIDE_PYTHON_EXTENSION_OMIT_FUNCTION_DEFINITIONS\n";
+    dest << "\n";
+    dest << "namespace Halide::PythonExtensions {\n";
     dest << "\n";
 
-    dest << indent << "const char* const _f_" << basename << "_kwlist[] = {\n";
+    dest << "namespace {\n";
+    dest << "\n";
+    dest << indent << "const char* const " << basename << "_kwlist[] = {\n";
     indent.indent += 2;
     for (size_t i = 0; i < args.size(); i++) {
         dest << indent << "\"" << arg_names[i] << "\",\n";
     }
     dest << indent << "nullptr\n";
     indent.indent -= 2;
-    dest << indent << "};\n\n";
-
+    dest << indent << "};\n";
+    dest << "\n";
+    dest << "}  // namespace\n";
+    dest << "\n";
     dest << "// " << f.name << "\n";
-    dest << "PyObject* _f_" << basename << "(PyObject* module, PyObject* args, PyObject* kwargs) {\n";
+    dest << "PyObject *" << basename << "(PyObject *module, PyObject *args, PyObject *kwargs) {\n";
 
     indent.indent += 2;
 
@@ -334,7 +355,8 @@ void PythonExtensionGen::compile(const LoweredFunc &f) {
                  << "\"Can't convert argument " << arg.name << " from Python\");\n";
             dest << indent << "return nullptr;\n";
             dest << "}\n";
-            dest << "}  // namespace\n";
+            dest << "}  // namespace Halide::PythonExtensions\n";
+            dest << "#endif  // HALIDE_PYTHON_EXTENSION_OMIT_FUNCTION_DEFINITIONS\n";
             return;
         }
     }
@@ -346,7 +368,7 @@ void PythonExtensionGen::compile(const LoweredFunc &f) {
     for (const auto &arg : args) {
         dest << print_type(&arg).first;
     }
-    dest << "\", (char**)_f_" << basename << "_kwlist\n";
+    dest << "\", (char**)" << basename << "_kwlist\n";
     for (size_t i = 0; i < args.size(); i++) {
         indent.indent += 2;
         dest << indent << ", &py_" << arg_names[i] << "\n";
@@ -364,7 +386,7 @@ void PythonExtensionGen::compile(const LoweredFunc &f) {
             dest << indent << "PyHalideBuffer<" << (int)args[i].dimensions << "> b_" << name << "("
                  << "py_" << name << ", "
                  << (args[i].is_output() ? "PyBUF_WRITABLE" : "0") << ", "
-                 << "_f_" << basename << "_kwlist[" << i << "]);\n";
+                 << basename << "_kwlist[" << i << "]);\n";
             dest << indent << "if (!b_" << name << ".halide_buf_valid) {\n";
             indent.indent += 2;
             dest << indent << "return nullptr;\n";
@@ -419,7 +441,9 @@ void PythonExtensionGen::compile(const LoweredFunc &f) {
     indent.indent -= 2;
     dest << "}\n";
     dest << "\n";
-    dest << "}  // namespace\n";
+    dest << "}  // namespace Halide::PythonExtensions\n";
+    dest << "\n";
+    dest << "#endif  // HALIDE_PYTHON_EXTENSION_OMIT_FUNCTION_DEFINITIONS\n";
 }
 
 }  // namespace Internal
