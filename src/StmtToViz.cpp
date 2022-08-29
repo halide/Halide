@@ -499,7 +499,6 @@ private:
         stream << open_span("Type") << op->type << close_span();
         stream << "(";
         stream << close_span();
-        stream << "OMG!!!! ";
         print(op->value);
         stream << matched(")");
 
