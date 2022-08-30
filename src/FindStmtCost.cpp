@@ -749,7 +749,8 @@ void FindStmtCost::visit(const Block *op) {
     }
 
     // TODO: making this cost 1 is wrong - need to change this
-    // set_costs(op, tempVal, dataMovementCost);
+    set_costs(op, tempVal,
+              dataMovementCost);  // for compile reasons (complains about tempVal not being used)
     set_costs(op, 1, 0);
 }
 

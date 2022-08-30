@@ -230,9 +230,10 @@ private:
     void open_content_div();
 
     // for cost colors - side boxes
-    void open_span(string className);
-    void close_span();
-    void cost_color_spacer();
+    string color_button(int colorRange);
+    string computation_button(const IRNode *op);
+    string data_movement_button(const IRNode *op);
+    string tooltip_table(map<string, string> &table);
     void cost_colors(const IRNode *op);
 
     void visit(const Variable *op) override;

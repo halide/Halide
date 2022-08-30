@@ -116,8 +116,9 @@ private:
 
     void add_context_rule(const int line_num) {
         string id = "ContextSpan" + to_string(line_num);
-        content_rule_script_stream +=
-            "document.getElementById('" + id + "').style.backgroundColor = 'blue';" + "\n";
+        content_rule_script_stream += "document.getElementById('" + id +
+                                      "').classList.add('hoverContextButton');\n" +
+                                      "document.getElementById('" + id + "').disabled = false;\n";
     }
 
     // All spans and divs will have an id of the form "x-y", where x
@@ -148,84 +149,6 @@ private:
         return "</" + tag + ">";
     }
 
-    string tooltip(const string &hierarchyHTML, const string &tooltipText) {
-        stringstream s;
-        tooltipCount++;
-
-        s << "<button id='button" << tooltipCount << "' ";
-        s << "aria-describedby='tooltip" << tooltipCount << "' ";
-        s << "class='info-button' role='button' ";
-        s << "data-bs-toggle='modal' data-bs-target='#stmtHierarchyModal" << popupCount << "' ";
-        s << "onmouseover='document.getElementById(\"Cost" << id_count
-          << "\").style.background = \"rgba(10,10,10,0.1)\";'";
-        s << "onmouseout='document.getElementById(\"Cost" << id_count
-          << "\").style.background = \"transparent\";'";
-        s << ">";
-        s << "<i class='bi bi-info'></i>";
-        s << "</button>";
-
-        // popup window - will put them all at the end
-        popups += hierarchyHTML + "\n";
-
-        // tooltip span
-        s << "<span id='tooltip" << tooltipCount << "' class='tooltip' ";
-        s << "role='tooltip" << tooltipCount << "'>";
-        s << tooltipText;
-        s << "</span>";
-
-        return s.str();
-    }
-
-    string cost_table_tooltip(const IRNode *op, const string &hierarchyHTML) {
-        int depth = findStmtCost.get_depth(op);
-        int computationCost = findStmtCost.get_calculated_computation_cost(op);
-        int dataMovementCost = findStmtCost.get_data_movement_cost(op);
-
-        stringstream tooltipText;
-
-        tooltipText << "<table class='tooltipTable'>";
-
-        tooltipText << "<tr>";
-        tooltipText << "<td class = 'left-table'> Depth</td>";
-        tooltipText << "<td class = 'right-table'> " << depth << "</td>";
-        tooltipText << "</tr>";
-
-        tooltipText << "<tr>";
-        tooltipText << "<td class = 'left-table'> Computation Cost</td>";
-        tooltipText << "<td class = 'right-table'> " << computationCost << "</td>";
-        tooltipText << "</tr>";
-
-        tooltipText << "<tr>";
-        tooltipText << "<td class = 'left-table'> Data Movement Cost</td>";
-        tooltipText << "<td class = 'right-table'> " << dataMovementCost << "</td>";
-        tooltipText << "</tr>";
-        tooltipText << "</table>";
-
-        tooltipText << "<i><span style='color: grey; margin-top: 5px;'>[Click to see full "
-                       "hierarchy]</span></i>";
-
-        string tooltipTextStr = tooltipText.str();
-
-        return tooltip(hierarchyHTML, tooltipTextStr);
-    }
-
-    /*
-        <div style="display: flex; ">
-            <div class="CostColor0"
-                style="width: 7px;"></div>
-            <div class="CostColor18"
-                style="width: 7px;"></div>
-            <div style="padding-left: 5px;">
-                _halide_buffer_get_dimensions
-                <button
-                    class='stmtHierarchyButton info-button'
-                    onclick='handleClick(42)'>
-                    <i
-                        id='stmtHierarchyButton42'></i>
-                </button>
-            </div>
-        </div>
-    */
     string get_stmt_hierarchy(const Stmt &op) {
         string hierarchyHTML = getStmtHierarchy.get_hierarchy_html(op);
         if (PRINT_HIERARCHY) cout << hierarchyHTML << endl;
@@ -265,7 +188,18 @@ private:
 
     string open_cost_span(const IRNode *op, const string &hierarchyHTML) {
         stringstream s;
-        s << cost_table_tooltip(op, hierarchyHTML);
+
+        // only do value if it's LetStmt
+        if (op->node_type == IRNodeType::LetStmt) {
+            s << cost_colors(((const LetStmt *)op)->value.get(), hierarchyHTML);
+        } else if (op->node_type == IRNodeType::Store) {  // TODO: if we want it to be for entire
+                                                          // store, change cost of store in
+                                                          // StmtCost.cpp
+            s << cost_colors(((const Store *)op)->value.get(), hierarchyHTML);
+        } else {
+            s << cost_colors(op, hierarchyHTML);
+        }
+
         s << "<span id='Cost" << id_count << "'>";
         return s.str();
     }
@@ -289,49 +223,127 @@ private:
         return span("Matched", body);
     }
 
-    string cost_color_spacer() {
+    string color_button(int colorRange) {
         stringstream s;
-        s << open_span("CostColorSpacer");
-        s << ".";
-        s << close_span();
+
+        tooltipCount++;
+        s << "<button id='button" << tooltipCount << "' ";
+        s << "aria-describedby='tooltip" << tooltipCount << "' ";
+        s << "class='colorButton CostColor" + to_string(colorRange) + "' role='button' ";
+        s << "data-bs-toggle='modal' data-bs-target='#stmtHierarchyModal" << popupCount << "' ";
+        s << "onmouseover='document.getElementById(\"Cost" << id_count
+          << "\").style.background = \"rgba(10,10,10,0.1)\";'";
+        s << "onmouseout='document.getElementById(\"Cost" << id_count
+          << "\").style.background = \"transparent\";'";
+        s << ">";
+        s << "</button>";
+
         return s.str();
     }
+    string context_button(const IRNode *op) {
+        int depth = findStmtCost.get_depth(op);
 
-    string cost_colors(const IRNode *op) {
-        // TODO: figure out how to get the div to be given size without needing
-        //       to put a `.` in it
-        //
-        //       fix: ProducerConsumerHierarchy::cost_colors as well
+        stringstream s;
+        s << "<button class='ContextButton' id='ContextSpan" << curr_line_num
+          << "' disabled></button>";
+
+        stringstream tooltipText;
+
+        tooltipText << "<span style='color:red;'>";
+        tooltipText
+            << "This variable isn't required in this loop. Can be moved outside of the loop.";
+        tooltipText << "</span>";
+
+        map<string, string> attrs;
+        attrs["Depth"] = to_string(depth);
+
+        tooltipText << tooltip_table(attrs);
+
+        // tooltip span
+        s << "<span id='tooltip" << tooltipCount << "' class='tooltip' ";
+        s << "role='tooltip" << tooltipCount << "'>";
+        s << tooltipText.str();
+        s << "</span>";
+
+        return s.str();
+    }
+    string computation_button(const IRNode *op) {
+        int depth = findStmtCost.get_depth(op);
+        int computation_range = findStmtCost.get_computation_color_range(op);
+
+        stringstream s;
+        s << color_button(computation_range);
+
+        stringstream tooltipText;
+
+        map<string, string> attrs;
+        attrs["Depth"] = to_string(depth);
+        attrs["Computation Cost"] = to_string(computation_range);
+        tooltipText << tooltip_table(attrs);
+
+        // tooltip span
+        s << "<span id='tooltip" << tooltipCount << "' class='tooltip' ";
+        s << "role='tooltip" << tooltipCount << "'>";
+        s << tooltipText.str();
+        s << "</span>";
+
+        return s.str();
+    }
+    string data_movement_button(const IRNode *op) {
+        int depth = findStmtCost.get_depth(op);
+        int data_movement_range = findStmtCost.get_data_movement_color_range(op);
+        stringstream s;
+        s << color_button(data_movement_range);
+
+        stringstream tooltipText;
+
+        map<string, string> attrs;
+        attrs["Depth"] = to_string(depth);
+        attrs["Data Movement Cost"] = to_string(data_movement_range);
+        tooltipText << tooltip_table(attrs);
+
+        // tooltip span
+        s << "<span id='tooltip" << tooltipCount << "' class='tooltip' ";
+        s << "role='tooltip" << tooltipCount << "'>";
+        s << tooltipText.str();
+        s << "</span>";
+
+        return s.str();
+    }
+    string cost_colors(const IRNode *op, const string &hierarchyHTML) {
         curr_line_num += 1;
 
         stringstream s;
 
-        s << "<span id='ContextSpan" << curr_line_num << "'";
-        s << "style='";
-        s << "margin-left: -45px;";
-        s << "width: 13px;";
-        s << "display: inline-block;";
-        s << "color: transparent;";
-        s << "'>";
-        s << curr_line_num;
-        s << close_span();
+        if (op->node_type == IRNodeType::Allocate || op->node_type == IRNodeType::Evaluate)
+            s << "<span style='position: absolute;left: 30px;'>";
+        else
+            s << "<span style='position: absolute;left: 60px;'>";
 
-        s << cost_color_spacer();
+        // popup window - will put them all at the end
+        popups += hierarchyHTML + "\n";
 
-        int computation_range = findStmtCost.get_computation_color_range(op);
-        s << open_span("CostColor" + to_string(computation_range) + " CostComputation");
-        s << ".";
-        s << close_span();
+        s << computation_button(op);
+        s << data_movement_button(op);
+        s << context_button(op);
 
-        s << cost_color_spacer();
+        s << "</span>";
 
-        int data_movement_range = findStmtCost.get_data_movement_color_range(op);
-        s << open_span("CostColor" + to_string(data_movement_range) + " CostMovement");
-        s << ".";
-        s << close_span();
+        return s.str();
+    }
 
-        s << cost_color_spacer();
-
+    string tooltip_table(map<string, string> &table) {
+        stringstream s;
+        s << "<table class='tooltipTable'>";
+        for (auto &row : table) {
+            s << "<tr>";
+            s << "<td class = 'left-table'>" << row.first << "</td>";
+            s << "<td class = 'right-table'> " << row.second << "</td>";
+            s << "</tr>";
+        }
+        s << "</table>";
+        s << "<i><span style='color: grey; margin-top: 5px;'>[Click to see full "
+             "hierarchy]</span></i>";
         return s.str();
     }
 
@@ -639,7 +651,6 @@ private:
         scope.push(scopeName, unique_id());
         // scope.push(op->name, unique_id());
         stream << open_div("LetStmt") << open_line();
-        stream << cost_colors(op->value.get());
 
         stream << open_cost_span(op->value.get(), get_stmt_hierarchy(op->value.get()));
         stream << open_span("Matched");
@@ -674,7 +685,6 @@ private:
         std::vector<Expr> args;
         args.push_back(op->condition);
         args.push_back(op->message);
-        stream << cost_colors(op);
         stream << open_cost_span(op, get_stmt_hierarchy(op));
         print_list(symbol("assert") + "(", args, ")");
         stream << close_cost_span();
@@ -796,7 +806,6 @@ private:
         storeCount++;
         string anchorName = "store" + std::to_string(storeCount);
 
-        stream << cost_colors(op->value.get());
         stream << open_cost_span(op, get_stmt_hierarchy(op));
         stream << open_anchor(anchorName);
 
@@ -846,8 +855,6 @@ private:
         allocateCount++;
         string anchorName = "allocate" + std::to_string(allocateCount);
         stream << open_anchor(anchorName);
-
-        stream << cost_colors(op);
 
         stream << open_cost_span(op, get_stmt_hierarchy(op));
 
@@ -1103,7 +1110,6 @@ private:
 
     void visit(const Evaluate *op) override {
         stream << open_div("Evaluate");
-        stream << cost_colors(op);
         stream << open_cost_span(op, get_stmt_hierarchy(op));
         print(op->value);
         stream << close_cost_span();
@@ -1746,15 +1752,15 @@ div.mainContent { \n \
 } \n \
 div.IRCode-code { \n \
     counter-reset: line; \n \
-    padding-left: 40px; \n \
+    padding-left: 50px; \n \
     padding-top: 20px; \n \
     overflow-y: scroll; \n \
     position: relative; \n \
- \n \
 } \n \
 div.ProducerConsumerViz { \n \
     overflow-y: scroll; \n \
     padding-top: 20px; \n \
+    padding-left: 20px; \n \
 } \n \
 ";
 
@@ -1763,6 +1769,8 @@ const string StmtToViz::resizeBarJS = "\n \
 div.ResizeBar { \n \
     background: rgb(201, 231, 190); \n \
     cursor: col-resize; \n \
+    border-left: 1px solid rgb(0, 0, 0); \n \
+    border-right: 1px solid rgb(0, 0, 0); \n \
 } \n \
 div.collapseButtons { \n \
     position: relative; \n \
@@ -1790,7 +1798,7 @@ div.WrapLine:before {\n\
     content: counter(line) '. ';\n\
     display: inline-block;\n\
     position: absolute;\n\
-    left: 40px;\n\
+    left: 30px;\n\
     color: rgb(175, 175, 175);\n\
     user-select: none;\n\
     -webkit-user-select: none;\n\
@@ -1807,7 +1815,7 @@ div.Function:before {\n\
     content: counter(line) '. ';\n\
     display: inline-block;\n\
     position: absolute;\n\
-    left: 10px;\n\
+    left: 0px;\n\
     color: rgb(175, 175, 175);\n\
     user-select: none;\n\
     -webkit-user-select: none;\n\
@@ -1853,6 +1861,29 @@ span.ButtonSpacer { width: 5px; color: transparent; display: inline-block; }\n \
     -webkit-user-select: none; \n \
     user-select: none; \n \
     touch-action: manipulation; \n \
+} \n \
+.colorButton { \n \
+    height: 15px; \n \
+    width: 5px; \n \
+    margin-right: 2px; \n \
+    border: 1px solid rgba(0, 0, 0, 0); \n \
+} \n \
+.colorButton:hover { \n \
+    border: 1px solid grey; \n \
+} \n \
+.ContextButton { \n \
+    height: 15px; \n \
+    width: 5px; \n \
+    border: 1px solid rgba(0, 0, 0, 0); \n \
+    background: transparent; \n \
+    margin-right: 2px; \n \
+} \n \
+.hoverContextButton { \n \
+    background: rgb(133, 133, 233); \n \
+} \n \
+.hoverContextButton:hover { \n \
+    border: 1px solid black; \n \
+    background: rgb(93, 93, 224); \n \
 } \n \
 ";
 
@@ -1901,6 +1932,7 @@ const string StmtToViz::tooltipCSS = "\n \
     border: 1px dashed #aaa; \n \
     z-index: 9999; \n \
     box-shadow: rgba(100, 100, 100, 0.8) 0 2px 5px 0; \n \
+    width: 160px; \n \
 } \n \
 .conditionTooltip { \n \
     width: 300px; \n \

@@ -878,11 +878,11 @@ void ProducerConsumerHierarchy::see_code_button(string anchorName) {
 }
 
 string ProducerConsumerHierarchy::info_tooltip(string toolTipText, string className = "") {
-    prodConsTooltipCount++;
 
     string ss;
 
     // info-button
+    prodConsTooltipCount++;
     ss += "<button id='prodConsButton" + std::to_string(prodConsTooltipCount) + "' ";
     ss += "aria-describedby='prodConsTooltip" + std::to_string(prodConsTooltipCount) + "' ";
     ss += "class='info-button' role='button' ";
@@ -930,33 +930,79 @@ void ProducerConsumerHierarchy::open_content_div() {
     html += "<div class='content'>";
 }
 
-void ProducerConsumerHierarchy::open_span(string className) {
-    html += "<span class='" + className + "'>";
+string ProducerConsumerHierarchy::color_button(int colorRange) {
+    stringstream s;
+
+    prodConsTooltipCount++;
+    s << "<button id='prodConsButton" << prodConsTooltipCount << "' ";
+    s << "aria-describedby='prodConsTooltip" << prodConsTooltipCount << "' ";
+    s << "class='prodConsColorButton CostColor" + to_string(colorRange) + "' role='button' ";
+    s << ">";
+    s << "</button>";
+
+    return s.str();
 }
-void ProducerConsumerHierarchy::close_span() {
-    html += "</span>";
+
+string ProducerConsumerHierarchy::computation_button(const IRNode *op) {
+    int depth = findStmtCost.get_depth(op);
+    int computation_range = findStmtCost.get_computation_color_range(op);
+
+    stringstream s;
+    s << color_button(computation_range);
+
+    stringstream tooltipText;
+
+    map<string, string> attrs;
+    attrs["Depth"] = to_string(depth);
+    attrs["Computation Cost"] = to_string(computation_range);
+    tooltipText << tooltip_table(attrs);
+
+    // tooltip span
+    s << "<span id='prodConsTooltip" << prodConsTooltipCount << "' class='tooltip' ";
+    s << "role='prodConsTooltip" << prodConsTooltipCount << "'>";
+    s << tooltipText.str();
+    s << "</span>";
+
+    return s.str();
 }
-void ProducerConsumerHierarchy::cost_color_spacer() {
-    open_span("CostColorSpacer");
-    html += ".";
-    close_span();
+string ProducerConsumerHierarchy::data_movement_button(const IRNode *op) {
+    int depth = findStmtCost.get_depth(op);
+    int data_movement_range = findStmtCost.get_data_movement_color_range(op);
+    stringstream s;
+    s << color_button(data_movement_range);
+
+    stringstream tooltipText;
+
+    map<string, string> attrs;
+    attrs["Depth"] = to_string(depth);
+    attrs["Data Movement Cost"] = to_string(data_movement_range);
+    tooltipText << tooltip_table(attrs);
+
+    // tooltip span
+    s << "<span id='prodConsTooltip" << prodConsTooltipCount << "' class='tooltip' ";
+    s << "role='prodConsTooltip" << prodConsTooltipCount << "'>";
+    s << tooltipText.str();
+    s << "</span>";
+
+    return s.str();
+}
+string ProducerConsumerHierarchy::tooltip_table(map<string, string> &table) {
+    stringstream s;
+    s << "<table class='tooltipTable'>";
+    for (auto &row : table) {
+        s << "<tr>";
+        s << "<td class = 'left-table'>" << row.first << "</td>";
+        s << "<td class = 'right-table'> " << row.second << "</td>";
+        s << "</tr>";
+    }
+    s << "</table>";
+    s << "<i><span style='color: grey; margin-top: 5px;'>[Click to see full "
+         "hierarchy]</span></i>";
+    return s.str();
 }
 void ProducerConsumerHierarchy::cost_colors(const IRNode *op) {
-    cost_color_spacer();
-
-    int computation_range = findStmtCost.get_computation_color_range(op);
-    open_span("CostColor" + to_string(computation_range) + " CostComputation");
-    html += ".";
-    close_span();
-
-    cost_color_spacer();
-
-    int data_movement_range = findStmtCost.get_data_movement_color_range(op);
-    open_span("CostColor" + to_string(data_movement_range) + " CostMovement");
-    html += ".";
-    close_span();
-
-    cost_color_spacer();
+    html += computation_button(op);
+    html += data_movement_button(op);
 }
 
 void ProducerConsumerHierarchy::visit(const Variable *op) {
@@ -1506,5 +1552,16 @@ span.stringType { color: #990073; } \n \
 } \n \
 div.content { \n \
     flex-grow: 1; \n \
+} \n \
+.prodConsColorButton { \n \
+    height: 15px; \n \
+    width: 10px; \n \
+    margin-right: 1px; \n \
+    margin-left: 1px; \n \
+    border: 1px solid rgba(0, 0, 0, 0); \n \
+    vertical-align: middle; \n \
+} \n \
+.prodConsColorButton:hover { \n \
+    border: 1px solid grey; \n \
 } \n \
 ";
