@@ -189,12 +189,9 @@ private:
     string open_cost_span(const IRNode *op, const string &hierarchyHTML) {
         stringstream s;
 
-        // only do value if it's LetStmt
-        if (op->node_type == IRNodeType::LetStmt) {
-            s << cost_colors(((const LetStmt *)op)->value.get(), hierarchyHTML);
-        } else if (op->node_type == IRNodeType::Store) {  // TODO: if we want it to be for entire
-                                                          // store, change cost of store in
-                                                          // StmtCost.cpp
+        if (op->node_type == IRNodeType::Store) {  // TODO: if we want it to be for entire
+                                                   // store, change cost of store in
+                                                   // StmtCost.cpp∂
             s << cost_colors(((const Store *)op)->value.get(), hierarchyHTML);
         } else {
             s << cost_colors(op, hierarchyHTML);
@@ -652,7 +649,7 @@ private:
         // scope.push(op->name, unique_id());
         stream << open_div("LetStmt") << open_line();
 
-        stream << open_cost_span(op->value.get(), get_stmt_hierarchy(op->value.get()));
+        stream << open_cost_span(op, get_stmt_hierarchy(op));
         stream << open_span("Matched");
         stream << keyword("let") << " ";
         stream << var(scopeName);
