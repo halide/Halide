@@ -201,8 +201,8 @@ private:
     void close_div();
 
     // header functions
-    void open_header(const IRNode *op, const string &header, string anchorName);
-    void close_header();
+    void open_header(const IRNode *op, const string &header);
+    void close_header(string anchorName);
     void div_header(const IRNode *op, const string &header, StmtSize &size, string anchorName);
     void allocate_div_header(const Allocate *op, const string &header, StmtSize &size,
                              string anchorName);

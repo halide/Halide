@@ -1592,8 +1592,10 @@ public:
     void resizeBar() {
         stream << "<div class='ResizeBar' id='ResizeBar'>\n";
         stream << "<div class='collapseButtons'>\n";
-        stream << "<button onclick='collapseViz()'>c</button>\n";
-        stream << "<button onclick='collapseCode()'>v</button>\n";
+        stream << "<button class='icon-button' onclick='collapseViz()'>";
+        stream << "<i class='bi bi-arrow-bar-right'></i></button>\n";
+        stream << "<button class='icon-button' onclick='collapseCode()'>";
+        stream << "<i class='bi bi-arrow-bar-left'></i></button>\n";
         stream << "</div>\n";
         stream << "</div>\n";
     }
@@ -1839,25 +1841,8 @@ span.ButtonSpacer { width: 5px; color: transparent; display: inline-block; }\n \
     margin-right: 5px; \n \
     font-size: 15px; \n \
 } \n \
-.info-button:hover, .see-code-button:hover { \n \
+.info-button:hover { \n \
     background-color: #f7fafa; \n \
-} \n \
-.see-code-button { \n \
-    background-color: #fff; \n \
-    border: transparent; \n \
-    display: inline-block; \n \
-    position: relative; \n \
-    margin-left: 5px; \n \
-    font-size: 20px; \n \
-    padding: 5px; \n \
-    vertical-align: middle; \n \
-    border-radius: 8px; \n \
-    box-shadow: rgba(213, 217, 217, .5) 0 2px 5px 0; \n \
-    box-sizing: border-box; \n \
-    text-align: center; \n \
-    -webkit-user-select: none; \n \
-    user-select: none; \n \
-    touch-action: manipulation; \n \
 } \n \
 .colorButton { \n \
     height: 15px; \n \
@@ -1881,6 +1866,16 @@ span.ButtonSpacer { width: 5px; color: transparent; display: inline-block; }\n \
 .hoverContextButton:hover { \n \
     border: 1px solid black; \n \
     background: rgb(93, 93, 224); \n \
+} \n \
+.icon-button { \n \
+    border: 0px; \n \
+    background: transparent; \n \
+    font-size: 20px; \n \
+    display: inline-block; \n \
+    vertical-align: middle; \n \
+} \n \
+.icon-button:hover { \n \
+    color: blue; \n \
 } \n \
 ";
 

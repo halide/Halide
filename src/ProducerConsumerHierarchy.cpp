@@ -641,16 +641,13 @@ void ProducerConsumerHierarchy::close_div() {
     html += "</div>";
 }
 
-void ProducerConsumerHierarchy::open_header(const IRNode *op, const string &header,
-                                            string anchorName) {
+void ProducerConsumerHierarchy::open_header(const IRNode *op, const string &header) {
     open_header_div();
 
     open_box_header_title_div();
 
     html += header;
-    if (anchorName != "") {
-        see_code_button(anchorName);
-    }
+
     close_div();
 
     // spacing purposes
@@ -658,39 +655,44 @@ void ProducerConsumerHierarchy::open_header(const IRNode *op, const string &head
 
     open_box_header_table_div();
 }
-void ProducerConsumerHierarchy::close_header() {
+void ProducerConsumerHierarchy::close_header(string anchorName) {
+
     close_div();  // header table div
+
+    if (anchorName != "") {
+        see_code_button(anchorName);
+    }
     close_div();  // header div
 }
 void ProducerConsumerHierarchy::div_header(const IRNode *op, const string &header, StmtSize &size,
                                            string anchorName) {
 
-    open_header(op, header, anchorName);
+    open_header(op, header);
 
     // add producer consumer size if size is provided
     if (!size.empty()) {
         prod_cons_table(size);
     }
 
-    close_header();
+    close_header(anchorName);
 }
 void ProducerConsumerHierarchy::allocate_div_header(const Allocate *op, const string &header,
                                                     StmtSize &size, string anchorName) {
-    open_header(op, header, anchorName);
+    open_header(op, header);
 
     vector<string> &allocationSizes = size.allocationSizes;
     allocate_table(allocationSizes);
 
-    close_header();
+    close_header(anchorName);
 }
 void ProducerConsumerHierarchy::for_loop_div_header(const For *op, const string &header,
                                                     StmtSize &size, string anchorName) {
-    open_header(op, header, anchorName);
+    open_header(op, header);
 
     string loopSize = pre_processor.get_size(op).forLoopSize;
     for_loop_table(loopSize);
 
-    close_header();
+    close_header(anchorName);
 }
 
 void ProducerConsumerHierarchy::if_tree(const IRNode *op, const string &header, StmtSize &size,
@@ -870,11 +872,13 @@ void ProducerConsumerHierarchy::for_loop_table(string loop_size) {
 }
 
 void ProducerConsumerHierarchy::see_code_button(string anchorName) {
-    html += "<button class='see-code-button'";
+    html += "<div>";
+    html += "<button class='icon-button'";
     html += "onclick='scrollToFunction(\"" + anchorName + "\")'";
     html += " style='margin-left: 5px'>";
     html += "<i class='bi bi-code-square'></i>";
     html += "</button>";
+    html += "</div>";
 }
 
 string ProducerConsumerHierarchy::info_tooltip(string toolTipText, string className = "") {
@@ -913,10 +917,10 @@ void ProducerConsumerHierarchy::generate_computation_cost_div(const IRNode *op) 
     int computation_range = findStmtCost.get_computation_color_range(op);
     stringstream s;
 
-    map<string, string> attrs;
-    attrs["Depth"] = to_string(depth);
-    attrs["Computation Cost"] = to_string(computation_range);
-    string tooltipText = tooltip_table(attrs);
+    map<string, string> tableRows;
+    tableRows["Depth"] = to_string(depth);
+    tableRows["Computation Cost"] = to_string(computation_range);
+    string tooltipText = tooltip_table(tableRows);
 
     // tooltip span
     html +=
@@ -943,10 +947,10 @@ void ProducerConsumerHierarchy::generate_memory_cost_div(const IRNode *op) {
     int data_movement_range = findStmtCost.get_data_movement_color_range(op);
     stringstream s;
 
-    map<string, string> attrs;
-    attrs["Depth"] = to_string(depth);
-    attrs["Computation Cost"] = to_string(data_movement_range);
-    string tooltipText = tooltip_table(attrs);
+    map<string, string> tableRows;
+    tableRows["Depth"] = to_string(depth);
+    tableRows["Data Movement Cost"] = to_string(data_movement_range);
+    string tooltipText = tooltip_table(tableRows);
 
     // tooltip span
     html +=
@@ -987,10 +991,10 @@ string ProducerConsumerHierarchy::computation_button(const IRNode *op) {
     stringstream s;
     s << color_button(computation_range);
 
-    map<string, string> attrs;
-    attrs["Depth"] = to_string(depth);
-    attrs["Computation Cost"] = to_string(computation_range);
-    string tooltipText = tooltip_table(attrs);
+    map<string, string> tableRows;
+    tableRows["Depth"] = to_string(depth);
+    tableRows["Computation Cost"] = to_string(computation_range);
+    string tooltipText = tooltip_table(tableRows);
 
     // tooltip span
     s << "<span id='prodConsTooltip" << prodConsTooltipCount << "' class='tooltip' ";
@@ -1007,10 +1011,10 @@ string ProducerConsumerHierarchy::data_movement_button(const IRNode *op) {
     stringstream s;
     s << color_button(data_movement_range);
 
-    map<string, string> attrs;
-    attrs["Depth"] = to_string(depth);
-    attrs["Data Movement Cost"] = to_string(data_movement_range);
-    string tooltipText = tooltip_table(attrs);
+    map<string, string> tableRows;
+    tableRows["Depth"] = to_string(depth);
+    tableRows["Data Movement Cost"] = to_string(data_movement_range);
+    string tooltipText = tooltip_table(tableRows);
 
     // tooltip span
     s << "<span id='prodConsTooltip" << prodConsTooltipCount << "' class='tooltip' ";
@@ -1581,5 +1585,8 @@ div.content { \n \
 } \n \
 .prodConsColorButton:hover { \n \
     border: 1px solid grey; \n \
+} \n \
+div.boxHeaderTitle { \n \
+    font-weight: bold; \n \
 } \n \
 ";
