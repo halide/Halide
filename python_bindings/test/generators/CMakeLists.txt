@@ -26,12 +26,12 @@ set(GENPARAMS_simple
 
 # Since simple and user_context are going to be bound into a single
 # Python extension library, they must share the same Halide runtime.
-# Since none of these use features that require custom runtimes,
-# we'll just have user_context use the runtime we build for simple.
-#
-# TODO: replace this hackery with appropriate use of add_halide_runtime()
-# (See https://github.com/halide/Halide/issues/6981)
-set(RUNTIME_user_context py_aot_simple.runtime)
+# Note that by leaving out the TARGETS argument, we default to whatever
+# ${Halide_TARGET} was set to at configure time.
+add_halide_runtime(multi_lib_runtime)
+
+set(RUNTIME_simple multi_lib_runtime)
+set(RUNTIME_user_context multi_lib_runtime)
 
 foreach (GEN IN LISTS GENERATORS)
     add_halide_generator(py_gen_${GEN}.generator

@@ -270,8 +270,7 @@ function(add_halide_library TARGET)
         set(ARG_USE_RUNTIME Halide::Runtime)
     elseif (NOT ARG_USE_RUNTIME)
         # If we're not using an existing runtime, create one.
-        _Halide_add_halide_runtime("${TARGET}.runtime" FROM ${ARG_FROM}
-                                   TARGETS ${ARG_TARGETS})
+        add_halide_runtime("${TARGET}.runtime" TARGETS ${ARG_TARGETS})
         set(ARG_USE_RUNTIME "${TARGET}.runtime")
     elseif (NOT TARGET ${ARG_USE_RUNTIME})
         message(FATAL_ERROR "Invalid runtime target ${ARG_USE_RUNTIME}")
@@ -515,8 +514,28 @@ endfunction()
 # Function for creating a standalone runtime from a generator.
 ##
 
-function(_Halide_add_halide_runtime RT)
-    cmake_parse_arguments(ARG "" "FROM" "TARGETS" ${ARGN})
+function(add_halide_runtime RT)
+    set(options "")
+    set(oneValueArgs "")
+    set(multiValueArgs TARGETS)
+    cmake_parse_arguments(ARG "${options}" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
+
+
+    # If no TARGETS argument, use Halide_TARGET instead
+    if (NOT ARG_TARGETS)
+        set(ARG_TARGETS "${Halide_TARGET}")
+    endif ()
+
+    # Ensure all targets are tagged with "no_runtime",
+    # so that GCD calculation doesn't get confused.
+    list(TRANSFORM ARG_TARGETS APPEND "-no_runtime")
+
+    # Create a Generator that is GenGen.cpp and nothing else; all it can do is generate a runtime.
+    if (NOT TARGET _Halide_gengen)
+        add_executable(_Halide_gengen )
+        target_link_libraries(_Halide_gengen PRIVATE Halide::Generator)
+    endif ()
+
     _Halide_get_platform_details(
             is_crosscompiling
             object_suffix
@@ -532,11 +551,11 @@ function(_Halide_add_halide_runtime RT)
     endif ()
 
     add_custom_command(OUTPUT ${GEN_OUTS}
-                       COMMAND ${ARG_FROM} -r "${TARGET}.runtime" -o . ${GEN_ARGS}
+                       COMMAND _Halide_gengen -r "${RT}" -o . ${GEN_ARGS}
                        # Defers reading the list of targets for which to generate a common runtime to CMake _generation_ time.
                        # This prevents issues where a lower GCD is required by a later Halide library linking to this runtime.
-                       target=$<JOIN:$<TARGET_PROPERTY:${TARGET}.runtime,Halide_RT_TARGETS>,$<COMMA>>
-                       DEPENDS "${ARG_FROM}"
+                       target=$<JOIN:$<TARGET_PROPERTY:${RT},Halide_RT_TARGETS>,$<COMMA>>
+                       DEPENDS _Halide_gengen
                        VERBATIM)
 
     if (is_crosscompiling)
