@@ -1890,11 +1890,29 @@ span.ButtonSpacer { width: 5px; color: transparent; display: inline-block; }\n \
     user-select: none; \n \
     touch-action: manipulation; \n \
     vertical-align: middle; \n \
-    margin-right: 5px; \n \
+    margin-left: 5px; \n \
     font-size: 15px; \n \
 } \n \
-.info-button:hover { \n \
+.info-button:hover, function-scroll-button:hover { \n \
     background-color: #f7fafa; \n \
+} \n \
+.function-scroll-button { \n \
+    background-color: #fff; \n \
+    border: 1px solid #d5d9d9; \n \
+    border-radius: 8px; \n \
+    box-shadow: rgba(213, 217, 217, .5) 0 2px 5px 0; \n \
+    box-sizing: border-box; \n \
+    display: inline-block; \n \
+    position: relative; \n \
+    text-align: center; \n \
+    text-decoration: none; \n \
+    -webkit-user-select: none; \n \
+    user-select: none; \n \
+    touch-action: manipulation; \n \
+    vertical-align: middle; \n \
+    margin-left: 5px; \n \
+    font-size: 15px; \n \
+    padding: 3px; \n \
 } \n \
 .colorButton { \n \
     height: 15px; \n \

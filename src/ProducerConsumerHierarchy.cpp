@@ -589,8 +589,9 @@ void ProducerConsumerHierarchy::startModuleTraversal() {
     }
 
     // start with the main function
-    html += "<a name=\"" + it->first + "\"></a>";
-    html += "<h3>" + it->first + "</h3>";
+    html += "<span id='" + it->first + "'>";
+    html += "<h4>" + it->first + "</h4>";
+    html += "</span>";
     html += "<div class='functionViz'>";
     it->second.accept(this);
     html += "</div>";
@@ -598,8 +599,10 @@ void ProducerConsumerHierarchy::startModuleTraversal() {
     // mutate all other functions
     for (const auto &func : pre_processor.main_function_bodies) {
         if (func.first != pre_processor.module_name) {
-            html += "<a name=\"" + func.first + "\"></a>";
-            html += "<h3>" + func.first + "</h3>";
+            html += "<hr>";
+            html += "<span id='" + func.first + "'>";
+            html += "<h4>" + func.first + "</h4>";
+            html += "</span>";
             html += "<div class='functionViz'>";
 
             func.second.accept(this);
@@ -1063,8 +1066,9 @@ void ProducerConsumerHierarchy::visit(const Variable *op) {
         html += "padding: 5px;'>";
 
         html += "Function Call";
-        html += "<button class='info-button' role='button' ";
-        html += "onclick=\"location.href='./" + output_file_name + "#" + varName + "'\">";
+        html += "<button class='function-scroll-button' role='button' ";
+        html += "onclick='scrollToFunctionCodeToViz(\"" + varName + "\")'>";
+
         html += varName;
         html += "</button>";
 
@@ -1216,7 +1220,7 @@ void ProducerConsumerHierarchy::visit(const Store *op) {
     storeCount++;
     string anchorName = "store" + std::to_string(storeCount);
 
-    string header = "Store " + op->name + " ";
+    string header = "Store " + op->name;
 
     map<string, string> tableRows;
 
@@ -1234,7 +1238,7 @@ void ProducerConsumerHierarchy::visit(const Store *op) {
     close_box_div();
 }
 void ProducerConsumerHierarchy::visit(const Load *op) {
-    string header = "Load " + op->name + " ";
+    string header = "Load " + op->name;
 
     map<string, string> tableRows;
 
@@ -1291,7 +1295,7 @@ void ProducerConsumerHierarchy::visit(const Allocate *op) {
     allocateCount++;
     string anchorName = "allocate" + std::to_string(allocateCount);
 
-    string header = "Allocate " + op->name + " ";
+    string header = "Allocate " + op->name;
 
     map<string, string> tableRows;
     tableRows["Memory Type"] = get_memory_type(op->memory_type);
