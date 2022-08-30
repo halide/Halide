@@ -641,12 +641,15 @@ void ProducerConsumerHierarchy::close_div() {
     html += "</div>";
 }
 
-void ProducerConsumerHierarchy::open_header(const IRNode *op, const string &header) {
+void ProducerConsumerHierarchy::open_header(const IRNode *op, const string &header,
+                                            string anchorName) {
     open_header_div();
 
     open_box_header_title_div();
 
+    html += "<span id='" + anchorName + "_viz'>";
     html += header;
+    html += "</span>";
 
     close_div();
 
@@ -658,16 +661,13 @@ void ProducerConsumerHierarchy::open_header(const IRNode *op, const string &head
 void ProducerConsumerHierarchy::close_header(string anchorName) {
 
     close_div();  // header table div
-
-    if (anchorName != "") {
-        see_code_button(anchorName);
-    }
+    see_code_button_div(anchorName);
     close_div();  // header div
 }
 void ProducerConsumerHierarchy::div_header(const IRNode *op, const string &header, StmtSize &size,
                                            string anchorName) {
 
-    open_header(op, header);
+    open_header(op, header, anchorName);
 
     // add producer consumer size if size is provided
     if (!size.empty()) {
@@ -678,7 +678,7 @@ void ProducerConsumerHierarchy::div_header(const IRNode *op, const string &heade
 }
 void ProducerConsumerHierarchy::allocate_div_header(const Allocate *op, const string &header,
                                                     StmtSize &size, string anchorName) {
-    open_header(op, header);
+    open_header(op, header, anchorName);
 
     vector<string> &allocationSizes = size.allocationSizes;
     allocate_table(allocationSizes);
@@ -687,7 +687,7 @@ void ProducerConsumerHierarchy::allocate_div_header(const Allocate *op, const st
 }
 void ProducerConsumerHierarchy::for_loop_div_header(const For *op, const string &header,
                                                     StmtSize &size, string anchorName) {
-    open_header(op, header);
+    open_header(op, header, anchorName);
 
     string loopSize = pre_processor.get_size(op).forLoopSize;
     for_loop_table(loopSize);
@@ -696,7 +696,7 @@ void ProducerConsumerHierarchy::for_loop_div_header(const For *op, const string 
 }
 
 void ProducerConsumerHierarchy::if_tree(const IRNode *op, const string &header, StmtSize &size,
-                                        string anchorName = "") {
+                                        string anchorName) {
     html += "<li>";
     html += "<span class='tf-nc if-node'>";
 
@@ -871,10 +871,10 @@ void ProducerConsumerHierarchy::for_loop_table(string loop_size) {
     html += "</table>";
 }
 
-void ProducerConsumerHierarchy::see_code_button(string anchorName) {
+void ProducerConsumerHierarchy::see_code_button_div(string anchorName) {
     html += "<div>";
     html += "<button class='icon-button'";
-    html += "onclick='scrollToFunction(\"" + anchorName + "\")'";
+    html += "onclick='scrollToFunctionVizToCode(\"" + anchorName + "\")'";
     html += " style='margin-left: 5px'>";
     html += "<i class='bi bi-code-square'></i>";
     html += "</button>";
@@ -1121,21 +1121,13 @@ void ProducerConsumerHierarchy::visit(const IfThenElse *op) {
         elseSize = pre_processor.get_size(op->else_case.get());
     }
 
-    // only start the if-tree if either case is not empty
-    // (aka won't print if both cases are empty)
-    // (we can't just exit early though because we have to go through all if-stmts to
-    //  get accurate count for the anchor names)
-    bool opened = false;
-    if (!thenSize.empty() || !elseSize.empty()) {
-        // open main if tree
-        html += "<div class='tf-tree tf-gap-sm tf-custom-prodCons' style='font-size: 12px;'>";
-        html += "<ul>";
-        html += "<li><span class='tf-nc if-node'>";
-        html += "If";
-        html += "</span>";
-        html += "<ul>";
-        opened = true;
-    }
+    // open main if tree
+    html += "<div class='tf-tree tf-gap-sm tf-custom-prodCons' style='font-size: 12px;'>";
+    html += "<ul>";
+    html += "<li><span class='tf-nc if-node'>";
+    html += "If";
+    html += "</span>";
+    html += "<ul>";
 
     string ifHeader;
     ifHeader += "if ";
@@ -1148,30 +1140,28 @@ void ProducerConsumerHierarchy::visit(const IfThenElse *op) {
 
         thenSize = pre_processor.get_size(op->then_case.get());
 
-        if (!thenSize.empty()) {
-            // TODO: inline condition
-            string condition;
-            condition += to_string(op->condition);
+        // TODO: inline condition
+        string condition;
+        condition += to_string(op->condition);
 
-            // make condition smaller if it's too big
-            if (condition.size() > MAX_CONDITION_LENGTH) {
-                condition = "";
-                condition += "... ";
-                condition += info_tooltip(to_string(op->condition), "conditionTooltip");
-            }
-
-            ifHeader += condition;
-
-            if (!SHOW_CUMULATIVE_COST) {
-                thenSize = StmtSize();
-            }
-            if_tree(op->then_case.get(), ifHeader, thenSize, anchorName);
-
-            // then body
-            op->then_case.accept(this);
-
-            close_if_tree();
+        // make condition smaller if it's too big
+        if (condition.size() > MAX_CONDITION_LENGTH) {
+            condition = "";
+            condition += "... ";
+            condition += info_tooltip(to_string(op->condition), "conditionTooltip");
         }
+
+        ifHeader += condition;
+
+        if (!SHOW_CUMULATIVE_COST) {
+            thenSize = StmtSize();
+        }
+        if_tree(op->then_case.get(), ifHeader, thenSize, anchorName);
+
+        // then body
+        op->then_case.accept(this);
+
+        close_if_tree();
 
         // if there is no else case, we are done
         if (!op->else_case.defined()) {
@@ -1194,34 +1184,30 @@ void ProducerConsumerHierarchy::visit(const IfThenElse *op) {
         else {
             elseSize = pre_processor.get_size(op->else_case.get());
 
-            if (!elseSize.empty()) {
-                string elseHeader;
-                elseHeader += "else ";
+            string elseHeader;
+            elseHeader += "else ";
 
-                // anchor name
-                ifCount++;
-                anchorName = "if" + std::to_string(ifCount);
+            // anchor name
+            ifCount++;
+            anchorName = "if" + std::to_string(ifCount);
 
-                if (!SHOW_CUMULATIVE_COST) {
-                    elseSize = StmtSize();
-                }
-                if_tree(op->else_case.get(), elseHeader, elseSize, anchorName);
-
-                op->else_case.accept(this);
-
-                close_if_tree();
+            if (!SHOW_CUMULATIVE_COST) {
+                elseSize = StmtSize();
             }
+            if_tree(op->else_case.get(), elseHeader, elseSize, anchorName);
+
+            op->else_case.accept(this);
+
+            close_if_tree();
             break;
         }
     }
 
     // close main if tree
-    if (opened) {
-        html += "</ul>";
-        html += "</li>";
-        html += "</ul>";
-        html += "</div>";
-    }
+    html += "</ul>";
+    html += "</li>";
+    html += "</ul>";
+    html += "</div>";
 }
 
 void ProducerConsumerHierarchy::visit(const Store *op) {
@@ -1491,9 +1477,9 @@ string StmtSizes::print_node(const IRNode *node) const {
     return s.str();
 }
 
-const string ProducerConsumerHierarchy::scrollToFunctionJS = "\n \
-// scroll to function\n \
-function scrollToFunction(id) { \n \
+const string ProducerConsumerHierarchy::scrollToFunctionJSVizToCode = "\n \
+// scroll to function - viz to code\n \
+function scrollToFunctionVizToCode(id) { \n \
     var container = document.getElementById('IRCode-code'); \n \
     var scrollToObject = document.getElementById(id); \n \
     container.scrollTo({ \n \

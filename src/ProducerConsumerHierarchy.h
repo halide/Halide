@@ -155,7 +155,7 @@ private:
 class ProducerConsumerHierarchy : public IRVisitor {
 
 public:
-    static const string prodConsCSS, scrollToFunctionJS;
+    static const string prodConsCSS, scrollToFunctionJSVizToCode;
 
     // TODO: eventually get rid of output_file_name (should be able to open file within the same
     // file) - although, maybe want to print out what file is being generated to the screen
@@ -201,7 +201,7 @@ private:
     void close_div();
 
     // header functions
-    void open_header(const IRNode *op, const string &header);
+    void open_header(const IRNode *op, const string &header, string anchorName);
     void close_header(string anchorName);
     void div_header(const IRNode *op, const string &header, StmtSize &size, string anchorName);
     void allocate_div_header(const Allocate *op, const string &header, StmtSize &size,
@@ -219,7 +219,7 @@ private:
     void for_loop_table(string loop_size);
 
     // opens relative code links
-    void see_code_button(string anchorName);
+    void see_code_button_div(string anchorName);
 
     // tooltip
     string info_tooltip(string toolTipText, string className);

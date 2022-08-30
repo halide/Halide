@@ -37,7 +37,8 @@ class StmtToViz : public IRVisitor {
     static const string css, js;
     static const string vizCss;
     static const string costColorsCSS;
-    static const string scrollToCSS, resizeBarJS;
+    static const string scrollToCSS, resizeBarCSS;
+    static const string scrollToFunctionJSCodeToViz;
     static const string lineNumbersCSS;
     static const string tooltipCSS;
     static const string expandCodeJS;
@@ -352,10 +353,21 @@ private:
     }
 
     string open_anchor(const string &anchorName) {
-        return "<span class='navigationAnchor' id=\"" + anchorName + "\">";
+        return "<span class='navigationAnchor' id='" + anchorName + "'>";
     }
     string close_anchor() {
         return "<!-- close_anchor --></span>";
+    }
+
+    string see_viz_button(const string &anchorName) {
+        stringstream s;
+
+        s << "<button class='icon-button' ";
+        s << "onclick='scrollToFunctionCodeToViz(\"" + anchorName + "_viz\")'>";
+        s << "<i class='bi bi-arrow-right-square'></i>";
+        s << "</button>";
+
+        return s.str();
     }
 
     string open_line() {
@@ -704,6 +716,7 @@ private:
         stream << close_expand_button() << " {";
         stream << close_span();
         stream << close_anchor();
+        stream << see_viz_button(anchorName);
 
         stream << open_div(op->is_producer ? "ProduceBody Indent" : "ConsumeBody Indent",
                            produce_id);
@@ -762,6 +775,8 @@ private:
         stream << close_expand_button();
         stream << " " << matched("{");
         stream << close_anchor();
+        stream << see_viz_button(anchorName);
+
         stream << open_div("ForBody Indent", id);
         print(op->body);
         stream << close_div();
@@ -812,7 +827,7 @@ private:
 
         print(op->index);
         stream << matched("]");
-        stream << close_anchor();
+
         stream << " " << span("Operator Assign Matched", "=") << " ";
 
         stream << open_span("StoreValue");
@@ -826,8 +841,9 @@ private:
         if (!in_context && in_loop) {
             add_context_rule(curr_line_num);
         }
-
+        stream << close_anchor();
         stream << close_cost_span();
+        stream << see_viz_button(anchorName);
         stream << close_div();
     }
     void visit(const Provide *op) override {
@@ -894,6 +910,7 @@ private:
             add_context_rule(curr_line_num);
         }
         stream << close_anchor();
+        stream << see_viz_button(anchorName);
 
         stream << open_div("AllocateBody");
         print(op->body);
@@ -1039,6 +1056,7 @@ private:
             stream << close_expand_button() << " ";
             stream << matched("{");  // close if (or else if) span
             close_anchor();
+            stream << see_viz_button(anchorName);
 
             stream << open_div("ThenBody Indent", id);
             print(op->then_case);
@@ -1092,6 +1110,8 @@ private:
                 stream << keyword("else");
                 stream << close_expand_button() << "{";
                 close_anchor();
+                stream << see_viz_button(anchorName);
+
                 stream << close_span();
                 stream << open_div("ElseBody Indent", id);
                 print(op->else_case);
@@ -1559,9 +1579,9 @@ public:
         stream << costColorsCSS;
         stream << ProducerConsumerHierarchy::prodConsCSS;
         stream << scrollToCSS;
-        stream << resizeBarJS;
         stream << lineNumbersCSS;
         stream << tooltipCSS;
+        stream << resizeBarCSS;
         stream << GetStmtHierarchy::stmtHierarchyCSS;
         stream << "</style>\n";
         stream << "<script language='javascript' type='text/javascript'>" + js + "</script>\n";
@@ -1583,7 +1603,8 @@ public:
         stream << generatetooltipJS(tooltipCount);
         stream << getStmtHierarchy.generate_collapse_expand_js();
         stream << producerConsumerHierarchy.generate_prodCons_js();
-        stream << ProducerConsumerHierarchy::scrollToFunctionJS;
+        stream << ProducerConsumerHierarchy::scrollToFunctionJSVizToCode;
+        stream << scrollToFunctionJSCodeToViz;
         stream << expandCodeJS;
         stream << "</script>\n";
         stream << "</body>";
@@ -1734,6 +1755,7 @@ span.Memory { color: #d22; font-weight: bold; }\n \
 span.Pred { background-color: #ffe8bd; font-weight: bold; }\n \
 span.Label { background-color: #bde4ff; font-weight: bold; }\n \
 code.ptx { tab-size: 26; white-space: pre; }\n \
+.tf-tree { overflow: unset; }\n \
 ";
 
 const string StmtToViz::scrollToCSS = "\n \
@@ -1760,10 +1782,11 @@ div.ProducerConsumerViz { \n \
     overflow-y: scroll; \n \
     padding-top: 20px; \n \
     padding-left: 20px; \n \
+    position: relative; \n \
 } \n \
 ";
 
-const string StmtToViz::resizeBarJS = "\n \
+const string StmtToViz::resizeBarCSS = "\n \
 /* Resize Bar CSS */\n \
 div.ResizeBar { \n \
     background: rgb(201, 231, 190); \n \
@@ -1774,6 +1797,35 @@ div.ResizeBar { \n \
 div.collapseButtons { \n \
     position: relative; \n \
     top: 50%; \n \
+} \n \
+";
+
+const string StmtToViz::scrollToFunctionJSCodeToViz = "\n \
+function getOffsetTop(element) { \n \
+    if (!element) return 0; \n \
+    if (element.id == 'ProducerConsumerViz') return 0; \n \
+    return getOffsetTop(element.offsetParent) + element.offsetTop; \n \
+} \n \
+function getOffsetLeft(element) { \n \
+    if (!element) return 0; \n \
+    if (element.id == 'ProducerConsumerViz') return 0; \n \
+    return getOffsetLeft(element.offsetParent) + element.offsetLeft; \n \
+} \n \
+function scrollToFunctionCodeToViz(id) { \n \
+    var container = document.getElementById('ProducerConsumerViz'); \n \
+    var scrollToObject = document.getElementById(id); \n \
+    container.scrollTo({ \n \
+        top: getOffsetTop(scrollToObject) - 20, \n \
+        left: getOffsetLeft(scrollToObject) - 40, \n \
+        behavior: 'smooth' \n \
+    }); \n \
+    scrollToObject.style.backgroundColor = 'yellow'; \n \
+    scrollToObject.style.fontSize = '20px'; \n \
+    // change content for 1 second   \n \
+    setTimeout(function () { \n \
+        scrollToObject.style.backgroundColor = 'transparent'; \n \
+        scrollToObject.style.fontSize = '12px'; \n \
+    }, 1000); \n \
 } \n \
 ";
 
