@@ -907,9 +907,28 @@ void ProducerConsumerHierarchy::generate_computation_cost_div(const IRNode *op) 
     // skip if it's a store
     if (op->node_type == IRNodeType::Store) return;
 
+    prodConsTooltipCount++;
+
+    int depth = findStmtCost.get_depth(op);
     int computation_range = findStmtCost.get_computation_color_range(op);
+    stringstream s;
+
+    map<string, string> attrs;
+    attrs["Depth"] = to_string(depth);
+    attrs["Computation Cost"] = to_string(computation_range);
+    string tooltipText = tooltip_table(attrs);
+
+    // tooltip span
+    html +=
+        "<span id='prodConsTooltip" + std::to_string(prodConsTooltipCount) + "' class='tooltip' ";
+    html += "role='prodConsTooltip" + std::to_string(prodConsTooltipCount) + "'>";
+    html += tooltipText;
+    html += "</span>";
+
     string className = "computation-cost-div CostColor" + to_string(computation_range);
-    html += "<div class='" + className + "'";
+    html += "<div id='prodConsButton" + std::to_string(prodConsTooltipCount) + "' ";
+    html += "aria-describedby='prodConsTooltip" + std::to_string(prodConsTooltipCount) + "' ";
+    html += "class='" + className + "'";
     html += "style='width: 7px;'>";
 
     close_div();
@@ -918,10 +937,28 @@ void ProducerConsumerHierarchy::generate_memory_cost_div(const IRNode *op) {
     // skip if it's a store
     if (op->node_type == IRNodeType::Store) return;
 
-    // html += "<div class='memory-cost-div'>";
-    int memory_range = findStmtCost.get_data_movement_color_range(op);
-    string className = "memory-cost-div CostColor" + to_string(memory_range);
-    html += "<div class='" + className + "'";
+    prodConsTooltipCount++;
+
+    int depth = findStmtCost.get_depth(op);
+    int data_movement_range = findStmtCost.get_data_movement_color_range(op);
+    stringstream s;
+
+    map<string, string> attrs;
+    attrs["Depth"] = to_string(depth);
+    attrs["Computation Cost"] = to_string(data_movement_range);
+    string tooltipText = tooltip_table(attrs);
+
+    // tooltip span
+    html +=
+        "<span id='prodConsTooltip" + std::to_string(prodConsTooltipCount) + "' class='tooltip' ";
+    html += "role='prodConsTooltip" + std::to_string(prodConsTooltipCount) + "'>";
+    html += tooltipText;
+    html += "</span>";
+
+    string className = "memory-cost-div CostColor" + to_string(data_movement_range);
+    html += "<div id='prodConsButton" + std::to_string(prodConsTooltipCount) + "' ";
+    html += "aria-describedby='prodConsTooltip" + std::to_string(prodConsTooltipCount) + "' ";
+    html += "class='" + className + "'";
     html += "style='width: 7px;'>";
 
     close_div();
@@ -966,6 +1003,7 @@ string ProducerConsumerHierarchy::computation_button(const IRNode *op) {
 string ProducerConsumerHierarchy::data_movement_button(const IRNode *op) {
     int depth = findStmtCost.get_depth(op);
     int data_movement_range = findStmtCost.get_data_movement_color_range(op);
+
     stringstream s;
     s << color_button(data_movement_range);
 
@@ -1487,6 +1525,14 @@ div.box { \n \
 div.boxHeader { \n \
     padding: 5px; \n \
     display: flex; \n \
+} \n \
+div.memory-cost-div, \n \
+div.computation-cost-div { \n \
+    border: 1px solid rgba(0, 0, 0, 0); \n \
+} \n \
+div.memory-cost-div:hover, \n \
+div.computation-cost-div:hover { \n \
+    border: 1px solid grey; \n \
 } \n \
 div.spacing { \n \
     flex-grow: 1; \n \
