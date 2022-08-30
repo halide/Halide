@@ -950,17 +950,15 @@ string ProducerConsumerHierarchy::computation_button(const IRNode *op) {
     stringstream s;
     s << color_button(computation_range);
 
-    stringstream tooltipText;
-
     map<string, string> attrs;
     attrs["Depth"] = to_string(depth);
     attrs["Computation Cost"] = to_string(computation_range);
-    tooltipText << tooltip_table(attrs);
+    string tooltipText = tooltip_table(attrs);
 
     // tooltip span
     s << "<span id='prodConsTooltip" << prodConsTooltipCount << "' class='tooltip' ";
     s << "role='prodConsTooltip" << prodConsTooltipCount << "'>";
-    s << tooltipText.str();
+    s << tooltipText;
     s << "</span>";
 
     return s.str();
@@ -971,17 +969,15 @@ string ProducerConsumerHierarchy::data_movement_button(const IRNode *op) {
     stringstream s;
     s << color_button(data_movement_range);
 
-    stringstream tooltipText;
-
     map<string, string> attrs;
     attrs["Depth"] = to_string(depth);
     attrs["Data Movement Cost"] = to_string(data_movement_range);
-    tooltipText << tooltip_table(attrs);
+    string tooltipText = tooltip_table(attrs);
 
     // tooltip span
     s << "<span id='prodConsTooltip" << prodConsTooltipCount << "' class='tooltip' ";
     s << "role='prodConsTooltip" << prodConsTooltipCount << "'>";
-    s << tooltipText.str();
+    s << tooltipText;
     s << "</span>";
 
     return s.str();
@@ -996,8 +992,6 @@ string ProducerConsumerHierarchy::tooltip_table(map<string, string> &table) {
         s << "</tr>";
     }
     s << "</table>";
-    s << "<i><span style='color: grey; margin-top: 5px;'>[Click to see full "
-         "hierarchy]</span></i>";
     return s.str();
 }
 void ProducerConsumerHierarchy::cost_colors(const IRNode *op) {
@@ -1194,7 +1188,14 @@ void ProducerConsumerHierarchy::visit(const Store *op) {
     storeCount++;
     string anchorName = "store" + std::to_string(storeCount);
 
-    string header = "Store " + op->name;
+    string header = "Store " + op->name + " ";
+
+    map<string, string> tableRows;
+
+    tableRows["Vector Size"] = to_string(op->index.type().lanes());
+    tableRows["Bit Size"] = to_string(op->index.type().bits());
+
+    header += info_tooltip(tooltip_table(tableRows));
 
     open_box_div(STORE_COLOR, "StoreBox", op);
 
@@ -1205,40 +1206,24 @@ void ProducerConsumerHierarchy::visit(const Store *op) {
     close_box_div();
 }
 void ProducerConsumerHierarchy::visit(const Load *op) {
-    int lanes;
-
-    // TODO: make sure this is right
-    if (op->index.as<Ramp>()) {
-        lanes = op->index.as<Ramp>()->lanes;
-    } else {
-        lanes = int(op->type.lanes());
-    }
-
     string header = "Load " + op->name + " ";
 
-    // tooltip table
-    string tooltipTable;
-    tooltipTable += "<table class='tooltipTable'>";
+    map<string, string> tableRows;
 
-    tooltipTable += "<tr>";
-    tooltipTable += "<td class = 'left-table'> Variable Type</td>";
-    tooltipTable += "<td class = 'right-table'> ";
     if (findStmtCost.is_local_variable(op->name)) {
-        tooltipTable += "local var";
+        tableRows["Variable Type"] = "local var";
     } else {
-        tooltipTable += "global var";
+        tableRows["Variable Type"] = "global var";
     }
-    tooltipTable += "</td>";
-    tooltipTable += "</tr>";
 
-    tooltipTable += "<tr>";
-    tooltipTable += "<td class = 'left-table'> Load Size</td>";
-    tooltipTable += "<td class = 'right-table'> " + std::to_string(lanes) + "</td>";
-    tooltipTable += "</tr>";
+    tableRows["Bit Size"] = to_string(op->index.type().bits());
+    tableRows["Vector Size"] = to_string(op->index.type().lanes());
 
-    tooltipTable += "</table>";
+    if (op->param.defined()) {
+        tableRows["Parameter"] = op->param.name();
+    }
 
-    header += info_tooltip(tooltipTable);
+    header += info_tooltip(tooltip_table(tableRows));
 
     open_store_div();
     cost_colors(op);
@@ -1278,49 +1263,35 @@ void ProducerConsumerHierarchy::visit(const Allocate *op) {
     allocateCount++;
     string anchorName = "allocate" + std::to_string(allocateCount);
 
-    StmtSize size = pre_processor.get_size(op);
-
     string header = "Allocate " + op->name + " ";
 
-    // memory type tooltip table
-    string tooltipTable;
-    tooltipTable += "<table class='tooltipTable'>";
-    tooltipTable += "<tr>";
-    tooltipTable += "<td class = 'left-table'> Memory Type</td>";
-    tooltipTable += "<td class = 'right-table'> " + get_memory_type(op->memory_type) + "</td>";
-    tooltipTable += "</tr>";
+    map<string, string> tableRows;
+    tableRows["Memory Type"] = get_memory_type(op->memory_type);
 
     if (!is_const_one(op->condition)) {
-        tooltipTable += "<tr>";
-        tooltipTable += "<td class = 'left-table'> Condition</td>";
-        tooltipTable += "<td class = 'right-table'> " + to_string(op->condition) + "</td>";
-        tooltipTable += "</tr>";
+        tableRows["Condition"] = to_string(op->condition);
     }
     if (op->new_expr.defined()) {
         internal_error << "\n"
                        << "ProducerConsumerHierarchy: Allocate " << op->name
                        << " `op->new_expr.defined()` is not supported.\n\n";
 
-        tooltipTable += "<tr>";
-        tooltipTable += "<td class = 'left-table'> New Expr</td>";
-        tooltipTable += "<td class = 'right-table'> " + to_string(op->new_expr) + "</td>";
-        tooltipTable += "</tr>";
+        tableRows["New Expr"] = to_string(op->new_expr);
     }
     if (!op->free_function.empty()) {
         internal_error << "\n"
                        << "ProducerConsumerHierarchy: Allocate " << op->name
                        << " `!op->free_function.empty()` is not supported.\n\n";
 
-        tooltipTable += "<tr>";
-        tooltipTable += "<td class = 'left-table'> Free Function</td>";
-        tooltipTable += "<td class = 'right-table'> " + to_string(op->free_function) + "</td>";
-        tooltipTable += "</tr>";
+        tableRows["Free Function"] = to_string(op->free_function);
     }
 
-    tooltipTable += "</table>";
+    tableRows["Bit Size"] = to_string(op->type.bits());
+    tableRows["Vector Size"] = to_string(op->type.lanes());
 
-    header += info_tooltip(tooltipTable);
+    header += info_tooltip(tooltip_table(tableRows));
 
+    StmtSize size = pre_processor.get_size(op);
     allocate_div_header(op, header, size, anchorName);
 
     close_box_div();
@@ -1509,7 +1480,8 @@ const string ProducerConsumerHierarchy::prodConsCSS = "\n \
 div.box { \n \
     border: 1px dashed grey; \n \
     border-radius: 5px; \n \
-    margin: 10px; \n \
+    margin: 5px; \n \
+    padding: 5px; \n \
     display: flex; \n \
 } \n \
 div.boxHeader { \n \

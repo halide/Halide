@@ -251,10 +251,10 @@ private:
             << "This variable isn't required in this loop. Can be moved outside of the loop.";
         tooltipText << "</span>";
 
-        map<string, string> attrs;
-        attrs["Depth"] = to_string(depth);
+        map<string, string> tableRows;
+        tableRows["Depth"] = to_string(depth);
 
-        tooltipText << tooltip_table(attrs);
+        tooltipText << tooltip_table(tableRows);
 
         // tooltip span
         s << "<span id='tooltip" << tooltipCount << "' class='tooltip' ";
@@ -273,10 +273,10 @@ private:
 
         stringstream tooltipText;
 
-        map<string, string> attrs;
-        attrs["Depth"] = to_string(depth);
-        attrs["Computation Cost"] = to_string(computation_range);
-        tooltipText << tooltip_table(attrs);
+        map<string, string> tableRows;
+        tableRows["Depth"] = to_string(depth);
+        tableRows["Computation Cost"] = to_string(computation_range);
+        tooltipText << tooltip_table(tableRows);
 
         // tooltip span
         s << "<span id='tooltip" << tooltipCount << "' class='tooltip' ";
@@ -294,10 +294,10 @@ private:
 
         stringstream tooltipText;
 
-        map<string, string> attrs;
-        attrs["Depth"] = to_string(depth);
-        attrs["Data Movement Cost"] = to_string(data_movement_range);
-        tooltipText << tooltip_table(attrs);
+        map<string, string> tableRows;
+        tableRows["Depth"] = to_string(depth);
+        tableRows["Data Movement Cost"] = to_string(data_movement_range);
+        tooltipText << tooltip_table(tableRows);
 
         // tooltip span
         s << "<span id='tooltip" << tooltipCount << "' class='tooltip' ";
