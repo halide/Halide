@@ -31,7 +31,21 @@ def test_user_context():
     multi_method_module.user_context(None, ord('q'), output)
     assert output == bytearray("qqqq", "ascii")
 
+def test_aot_call_failure_throws_exception():
+    buffer_input = np.zeros([2, 2], dtype=np.uint8)
+    func_input = np.zeros([2, 2], dtype=np.float32)  # wrong type
+    float_arg = 3.5
+    simple_output = np.zeros([2, 2], dtype=np.float32)
+
+    try:
+        multi_method_module.simple(buffer_input, func_input, float_arg, simple_output)
+    except RuntimeError as e:
+        assert 'Halide Runtime Error: -3 (Input buffer func_input has type uint8 but type of the buffer passed in is float32)' in str(e), str(e)
+    else:
+        assert False, 'Did not see expected exception, saw: ' + str(e)
 
 if __name__ == "__main__":
     test_simple()
     test_user_context()
+    test_aot_call_failure_throws_exception()
+
