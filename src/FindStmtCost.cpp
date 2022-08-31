@@ -87,6 +87,11 @@ int FindStmtCost::get_data_movement_color_range(const IRNode *op) const {
 }
 
 int FindStmtCost::get_depth(const IRNode *node) const {
+    if (node == nullptr) {
+        internal_error << "\n"
+                       << "FindStmtCost::get_depth: node is nullptr"
+                       << "\n\n";
+    }
     auto it = stmt_cost.find(node);
     if (it == stmt_cost.end()) {
 
@@ -111,6 +116,11 @@ int FindStmtCost::get_depth(const IRNode *node) const {
     return cost_node.depth;
 }
 int FindStmtCost::get_calculated_computation_cost(const IRNode *node) const {
+    if (node == nullptr) {
+        internal_error << "\n"
+                       << "FindStmtCost::get_calculated_computation_cost: node is nullptr"
+                       << "\n\n";
+    }
     auto it = stmt_cost.find(node);
     StmtCost cost_node;
 
@@ -135,6 +145,11 @@ int FindStmtCost::get_calculated_computation_cost(const IRNode *node) const {
     return calculate_cost(cost_node);
 }
 int FindStmtCost::get_data_movement_cost(const IRNode *node) const {
+    if (node == nullptr) {
+        internal_error << "\n"
+                       << "FindStmtCost::get_data_movement_cost: node is nullptr"
+                       << "\n\n";
+    }
     auto it = stmt_cost.find(node);
     if (it == stmt_cost.end()) {
 

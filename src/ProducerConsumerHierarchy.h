@@ -87,9 +87,6 @@ public:
                                              // use it outside of this class
     string module_name;
 
-    StmtSizes() = default;
-    ~StmtSizes() = default;
-
     void generate_sizes(const Module &m);
     void generate_sizes(const Stmt &stmt);
 
@@ -162,7 +159,6 @@ public:
     ProducerConsumerHierarchy(string fileName, FindStmtCost findStmtCostPopulated)
         : output_file_name(fileName), findStmtCost(findStmtCostPopulated) {
     }
-    ~ProducerConsumerHierarchy() = default;
 
     // generates the html for the producer-consumer hierarchy
     string generate_producer_consumer_html(const Module &m);

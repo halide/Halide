@@ -37,9 +37,6 @@ struct StmtCost {
  */
 class CostPreProcessor : public IRVisitor {
 public:
-    CostPreProcessor() = default;
-    ~CostPreProcessor() = default;
-
     // starts the traversal based on Module
     void traverse(const Module &m);
     void traverse(const Stmt &s);
@@ -65,9 +62,6 @@ private:
 class FindStmtCost : public IRVisitor {
 
 public:
-    FindStmtCost() = default;
-    ~FindStmtCost() = default;
-
     // starts the traversal of the given node
     void generate_costs(const Module &m);
     void generate_costs(const Stmt &stmt);

@@ -11,17 +11,14 @@ using namespace std;
 using namespace Halide;
 using namespace Internal;
 
-#define CC_TYPE 0
-#define DMC_TYPE 1
-
 class GetStmtHierarchy : public IRVisitor {
 
 public:
     static const string stmtHierarchyCSS;
 
-    GetStmtHierarchy(FindStmtCost findStmtCostPopulated) : findStmtCost(findStmtCostPopulated) {
+    GetStmtHierarchy(FindStmtCost findStmtCostPopulated)
+        : findStmtCost(findStmtCostPopulated), currNodeID(0), numNodes(0) {
     }
-    ~GetStmtHierarchy() = default;
 
     // returns the generated hierarchy's html
     string get_hierarchy_html(const Expr &startNode);
@@ -29,18 +26,20 @@ public:
 
     // generates the JS that is needed to expand/collapse the tree
     string generate_collapse_expand_js();
+    string generate_stmtHierarchy_js();
 
 private:
-    int colorType;              // 0: CC (computation cost), 1: DMC (data movement cost)
-    std::stringstream html;     // html string
+    string html;                // html string
     FindStmtCost findStmtCost;  // used to determine the color of each statement
 
     // for expanding/collapsing nodes
-    int currNodeID;      // ID of the current node in traversal
-    int numNodes;        // total number of nodes (across both trees in the hierarchy)
-    int startCCNodeID;   // ID of the start node in the CC tree
-    int startDMCNodeID;  // ID of the start node in the DMC tree
-    int depth;           // depth of the current node in the tree
+    uint32_t currNodeID;      // ID of the current node in traversal
+    uint32_t numNodes;        // total number of nodes (across both trees in the hierarchy)
+    uint32_t startCCNodeID;   // ID of the start node in the CC tree
+    uint32_t startDMCNodeID;  // ID of the start node in the DMC tree
+    int depth;                // depth of the current node in the tree
+
+    int stmtHierarchyTooltipCount = 0;  // tooltip count
 
     // updates the currNodeID to be the next available node ID (numNodes)
     // and increases numNodes by 1
@@ -49,11 +48,6 @@ private:
     // returns the class name in format "node[parentID]child depth[depth]"
     string get_node_class_name();
 
-    // gets the color range of the current node so that it can be colored
-    // appropriately in the html file
-    int get_color_range(const IRNode *op) const;
-    int get_color_range_list(vector<Halide::Expr> exprs) const;
-
     // starts and ends the html file
     void start_html();
     void end_html();
@@ -61,6 +55,11 @@ private:
     // starts and ends a tree within the html file
     void start_tree();
     void end_tree();
+
+    // creating color divs with tooltips
+    void generate_computation_cost_div(const IRNode *op);
+    void generate_memory_cost_div(const IRNode *op);
+    string tooltip_table(map<string, string> &table);
 
     // opens and closes nodes, depending on number of children
     void node_without_children(const IRNode *op, string name);

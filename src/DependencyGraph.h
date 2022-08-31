@@ -22,9 +22,6 @@ struct DependencyNode {
 class DependencyGraph : public IRVisitor {
 
 public:
-    DependencyGraph() = default;
-    ~DependencyGraph() = default;
-
     // returns the generated hierarchy's html
     string generate_dependency_graph(const Module &m);
     string generate_dependency_graph(const Stmt &stmt);

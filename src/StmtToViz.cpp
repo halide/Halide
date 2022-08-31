@@ -1,11 +1,15 @@
 #include "StmtToViz.h"
+// #include "DependencyGraph.cpp"
 #include "DependencyGraph.h"
 #include "Error.h"
+// #include "FindStmtCost.cpp"
 #include "FindStmtCost.h"
+// #include "GetStmtHierarchy.cpp"
 #include "GetStmtHierarchy.h"
 #include "IROperator.h"
 #include "IRVisitor.h"
 #include "Module.h"
+// #include "ProducerConsumerHierarchy.cpp"
 #include "ProducerConsumerHierarchy.h"
 #include "Scope.h"
 #include "Substitute.h"
@@ -37,7 +41,7 @@ class StmtToViz : public IRVisitor {
     static const string css, js;
     static const string vizCss;
     static const string costColorsCSS;
-    static const string scrollToCSS, resizeBarCSS;
+    static const string flexboxDivCSS;
     static const string scrollToFunctionJSCodeToViz;
     static const string lineNumbersCSS;
     static const string tooltipCSS;
@@ -1578,10 +1582,9 @@ public:
         stream << vizCss;
         stream << costColorsCSS;
         stream << ProducerConsumerHierarchy::prodConsCSS;
-        stream << scrollToCSS;
+        stream << flexboxDivCSS;
         stream << lineNumbersCSS;
         stream << tooltipCSS;
-        stream << resizeBarCSS;
         stream << GetStmtHierarchy::stmtHierarchyCSS;
         stream << "</style>\n";
         stream << "<script language='javascript' type='text/javascript'>" + js + "</script>\n";
@@ -1602,6 +1605,7 @@ public:
         stream << content_rule_script_stream;
         stream << generatetooltipJS(tooltipCount);
         stream << getStmtHierarchy.generate_collapse_expand_js();
+        stream << getStmtHierarchy.generate_stmtHierarchy_js();
         stream << producerConsumerHierarchy.generate_prodCons_js();
         stream << ProducerConsumerHierarchy::scrollToFunctionJSVizToCode;
         stream << scrollToFunctionJSCodeToViz;
@@ -1659,8 +1663,6 @@ public:
           producerConsumerHierarchy(get_file_name(filename), findStmtCost), id_count(0),
           in_loop(false), context_stack(1, 0) {
     }
-
-    ~StmtToViz() = default;
 
     string generatetooltipJS(int &tooltipCount) {
         stringstream tooltipJS;
@@ -1758,8 +1760,8 @@ code.ptx { tab-size: 26; white-space: pre; }\n \
 .tf-tree { overflow: unset; }\n \
 ";
 
-const string StmtToViz::scrollToCSS = "\n \
-/* Scroll to CSS */\n \
+const string StmtToViz::flexboxDivCSS = "\n \
+/* Flexbox Div Styling CSS */ \n \
 div.outerDiv { \n \
     height: 100vh; \n \
     display: flex; \n \
@@ -1784,10 +1786,6 @@ div.ProducerConsumerViz { \n \
     padding-left: 20px; \n \
     position: relative; \n \
 } \n \
-";
-
-const string StmtToViz::resizeBarCSS = "\n \
-/* Resize Bar CSS */\n \
 div.ResizeBar { \n \
     background: rgb(201, 231, 190); \n \
     cursor: col-resize; \n \
@@ -2009,12 +2007,14 @@ const string StmtToViz::expandCodeJS = "\n \
 var codeDiv = document.getElementById('IRCode-code'); \n \
 var prodConsDiv = document.getElementById('ProducerConsumerViz'); \n \
 var resizeBar = document.getElementById('ResizeBar'); \n \
+\n \
 codeDiv.style.flexGrow = '0'; \n \
 prodConsDiv.style.flexGrow = '0'; \n \
 resizeBar.style.flexGrow = '0'; \n \
 codeDiv.style.flexBasis = 'calc(50% - 16px)'; \n \
 resizeBar.style.flexBasis = '16px'; \n \
 prodConsDiv.style.flexBasis = 'calc(50% - 8px)'; \n \
+\n \
 resizeBar.addEventListener('mousedown', (event) => { \n \
     document.addEventListener('mousemove', resize, false); \n \
     document.addEventListener('mouseup', () => { \n \
