@@ -1877,8 +1877,9 @@ const string StmtToViz::vizCss = "\n \
 /* Additional Code Visualization CSS */\n \
 span.ButtonSpacer { width: 5px; color: transparent; display: inline-block; }\n \
 .info-button { \n \
-    background-color: #fff; \n \
-    border: 1px solid #d5d9d9; \n \
+    background-color: rgba(113, 113, 113, 0.1); \n \
+    border: 1px solid rgb(113, 113, 113); \n \
+    color: rgb(113, 113, 113); \n \
     border-radius: 8px; \n \
     box-shadow: rgba(213, 217, 217, .5) 0 2px 5px 0; \n \
     box-sizing: border-box; \n \
@@ -1893,7 +1894,7 @@ span.ButtonSpacer { width: 5px; color: transparent; display: inline-block; }\n \
     margin-left: 5px; \n \
     font-size: 15px; \n \
 } \n \
-.info-button:hover, function-scroll-button:hover { \n \
+.info-button:hover, .function-scroll-button:hover { \n \
     background-color: #f7fafa; \n \
 } \n \
 .function-scroll-button { \n \
