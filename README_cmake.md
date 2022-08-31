@@ -837,7 +837,7 @@ and a compatible list of targets. This runtime target is an INTERFACE dependency
 of `<target>`. If multiple runtime targets need to be linked together, setting
 `USE_RUNTIME` to another Halide library, `<target2>` will prevent the generation
 of `<target>.runtime` and instead use `<target2>.runtime`. This argument is
-most commonly used in conjunction with (`add_halide_runtime`)[#add_halide_runtime].
+most commonly used in conjunction with [`add_halide_runtime`](#add_halide_runtime).
 
 Parameters can be passed to a generator via the `PARAMS` argument. Parameters
 should be space-separated. Similarly, `TARGETS` is a space-separated list of
@@ -982,7 +982,7 @@ add_halide_runtime(
 ```
 
 The `TARGETS` argument has identical semantics to the argument of the same name
-for ( `add_halide_library`)[#add_halide_library].
+for [`add_halide_library`](#add_halide_library).
 
 ## Cross compiling
 
