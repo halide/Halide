@@ -851,6 +851,7 @@ private:
         stream << close_div();
     }
     void visit(const Provide *op) override {
+        stream << open_div("Provide WrapLine");
         stream << open_span("Matched");
         stream << var(op->name) << "(";
         stream << close_span();
@@ -1481,8 +1482,8 @@ public:
             stream << close_div();
 
             stream << " ";
-            internal_error
-                << "\n\n\nlook at this line!!! make sure the closing brace is correct! \n\n\n";
+            internal_error << "\n\n\nvoid print(const Buffer<> &op): look at this line!!! make "
+                              "sure the closing brace is correct! \n\n\n";
             stream << open_div("ClosingBrace");
             stream << matched("}");
             stream << close_div();
