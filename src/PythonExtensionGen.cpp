@@ -104,6 +104,7 @@ PythonExtensionGen::PythonExtensionGen(std::ostream &dest)
 }
 
 void PythonExtensionGen::compile(const Module &module) {
+    dest << "#include <string>\n";
     dest << "#include <Python.h>\n";
     dest << "#include \"HalideRuntime.h\"\n\n";
 
@@ -269,6 +270,10 @@ namespace Halide::PythonExtensions {
 #undef X
 }  // namespace Halide::PythonExtensions
 
+namespace Halide::PythonRuntime {
+      thread_local std::string current_error;
+}  // namespace Halide::PythonRuntime
+
 namespace {
 
 #define _HALIDE_STRINGIFY(x)            #x
@@ -299,8 +304,30 @@ PyModuleDef _moduledef = {
 
 extern "C" {
 
+void halide_error(void *user_context, const char *msg) {
+    using Halide::PythonRuntime::current_error;
+    if (current_error.empty()) {
+        // fprintf(stderr, "Setting current_error=(%s)\n", msg);
+        current_error = msg;
+    } else {
+        // fprintf(stderr, "Warning: error (%s) ignored because current_error=(%s)\n", msg, current_error.c_str());
+    }
+}
+
+void halide_print(void *user_context, const char *msg) {
+    PySys_FormatStdout("%s", msg);
+}
+
+#ifdef HALIDE_PYTHON_EXTENSION_INCLUDE_RUNTIME_SUBMODULE
+extern PyObject *_halide_runtime_submodule_impl(PyObject *module);
+#endif
+
 HALIDE_EXPORT_SYMBOL PyObject *_HALIDE_EXPAND_AND_CONCAT(PyInit_, HALIDE_PYTHON_EXTENSION_MODULE)() {
-    return PyModule_Create(&_moduledef);
+    PyObject *m = PyModule_Create(&_moduledef);
+#ifdef HALIDE_PYTHON_EXTENSION_INCLUDE_RUNTIME_SUBMODULE
+    (void)_halide_runtime_submodule_impl(m);
+#endif
+    return m;
 }
 
 }  // extern "C"
@@ -323,9 +350,12 @@ void PythonExtensionGen::compile(const LoweredFunc &f) {
 
     dest << "#ifndef HALIDE_PYTHON_EXTENSION_OMIT_FUNCTION_DEFINITIONS\n";
     dest << "\n";
+    dest << "namespace Halide::PythonRuntime {\n";
+    dest << "extern thread_local std::string current_error;\n";
+    dest << "}  // namespace Halide::PythonRuntime\n";
+    dest << "\n";
     dest << "namespace Halide::PythonExtensions {\n";
     dest << "\n";
-
     dest << "namespace {\n";
     dest << "\n";
     dest << indent << "const char* const " << basename << "_kwlist[] = {\n";
@@ -369,12 +399,12 @@ void PythonExtensionGen::compile(const LoweredFunc &f) {
         dest << print_type(&arg).first;
     }
     dest << "\", (char**)" << basename << "_kwlist\n";
+    indent.indent += 2;
     for (size_t i = 0; i < args.size(); i++) {
-        indent.indent += 2;
         dest << indent << ", &py_" << arg_names[i] << "\n";
-        indent.indent -= 2;
     }
-    dest << ")) {\n";
+    indent.indent -= 2;
+    dest << indent << ")) {\n";
     indent.indent += 2;
     dest << indent << "PyErr_Format(PyExc_ValueError, \"Internal error\");\n";
     dest << indent << "return nullptr;\n";
@@ -430,7 +460,9 @@ void PythonExtensionGen::compile(const LoweredFunc &f) {
     }
     dest << indent << "if (result != 0) {\n";
     indent.indent += 2;
-    dest << indent << "PyErr_Format(PyExc_ValueError, \"Halide error %d\", result);\n";
+    dest << indent << "std::string take;\n";
+    dest << indent << "std::swap(take, Halide::PythonRuntime::current_error);\n";
+    dest << indent << "PyErr_Format(PyExc_RuntimeError, \"Halide Runtime Error: %d (%s)\", result, take.c_str());\n";
     dest << indent << "return nullptr;\n";
     indent.indent -= 2;
     dest << indent << "}\n";
