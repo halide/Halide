@@ -318,15 +318,8 @@ void _module_halide_print(void *user_context, const char *msg) {
 
 extern "C" {
 
-#ifdef HALIDE_PYTHON_EXTENSION_INCLUDE_RUNTIME_SUBMODULE
-extern PyObject *_halide_runtime_submodule_impl(PyObject *module);
-#endif
-
 HALIDE_EXPORT_SYMBOL PyObject *_HALIDE_EXPAND_AND_CONCAT(PyInit_, HALIDE_PYTHON_EXTENSION_MODULE)() {
     PyObject *m = PyModule_Create(&_moduledef);
-#ifdef HALIDE_PYTHON_EXTENSION_INCLUDE_RUNTIME_SUBMODULE
-    (void)_halide_runtime_submodule_impl(m);
-#endif
     halide_set_error_handler(_module_halide_error);
     halide_set_custom_print(_module_halide_print);
     return m;
@@ -334,7 +327,7 @@ HALIDE_EXPORT_SYMBOL PyObject *_HALIDE_EXPAND_AND_CONCAT(PyInit_, HALIDE_PYTHON_
 
 }  // extern "C"
 
-#endif  //HALIDE_PYTHON_EXTENSION_OMIT_MODULE_DEFINITION
+#endif  // HALIDE_PYTHON_EXTENSION_OMIT_MODULE_DEFINITION
 )INLINE_CODE";
 }
 
