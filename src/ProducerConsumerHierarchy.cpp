@@ -589,6 +589,7 @@ void ProducerConsumerHierarchy::startModuleTraversal() {
     }
 
     // start with the main function
+    html += "<hr>";
     html += "<span id='" + it->first + "'>";
     html += "<h4>" + it->first + "</h4>";
     html += "</span>";

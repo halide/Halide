@@ -1891,6 +1891,7 @@ span.ButtonSpacer { width: 5px; color: transparent; display: inline-block; }\n \
     touch-action: manipulation; \n \
     vertical-align: middle; \n \
     margin-left: 5px; \n \
+    margin-right: 5px; \n \
     font-size: 15px; \n \
 } \n \
 .info-button:hover, .function-scroll-button:hover { \n \
