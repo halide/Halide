@@ -300,11 +300,7 @@ PyModuleDef _moduledef = {
     nullptr,                                                        // free
 };
 
-}  // namespace
-
-extern "C" {
-
-void halide_error(void *user_context, const char *msg) {
+void _module_halide_error(void *user_context, const char *msg) {
     using Halide::PythonRuntime::current_error;
     if (current_error.empty()) {
         // fprintf(stderr, "Setting current_error=(%s)\n", msg);
@@ -314,9 +310,13 @@ void halide_error(void *user_context, const char *msg) {
     }
 }
 
-void halide_print(void *user_context, const char *msg) {
+void _module_halide_print(void *user_context, const char *msg) {
     PySys_FormatStdout("%s", msg);
 }
+
+}  // namespace
+
+extern "C" {
 
 #ifdef HALIDE_PYTHON_EXTENSION_INCLUDE_RUNTIME_SUBMODULE
 extern PyObject *_halide_runtime_submodule_impl(PyObject *module);
@@ -327,6 +327,8 @@ HALIDE_EXPORT_SYMBOL PyObject *_HALIDE_EXPAND_AND_CONCAT(PyInit_, HALIDE_PYTHON_
 #ifdef HALIDE_PYTHON_EXTENSION_INCLUDE_RUNTIME_SUBMODULE
     (void)_halide_runtime_submodule_impl(m);
 #endif
+    halide_set_error_handler(_module_halide_error);
+    halide_set_custom_print(_module_halide_print);
     return m;
 }
 
