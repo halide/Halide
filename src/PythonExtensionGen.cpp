@@ -270,9 +270,11 @@ namespace Halide::PythonExtensions {
 #undef X
 }  // namespace Halide::PythonExtensions
 
+#ifndef HALIDE_PYTHON_EXTENSION_OMIT_ERROR_AND_PRINT_HANDLERS
 namespace Halide::PythonRuntime {
       thread_local std::string current_error;
 }  // namespace Halide::PythonRuntime
+#endif  // HALIDE_PYTHON_EXTENSION_OMIT_ERROR_AND_PRINT_HANDLERS
 
 namespace {
 
@@ -300,6 +302,7 @@ PyModuleDef _moduledef = {
     nullptr,                                                        // free
 };
 
+#ifndef HALIDE_PYTHON_EXTENSION_OMIT_ERROR_AND_PRINT_HANDLERS
 void _module_halide_error(void *user_context, const char *msg) {
     using Halide::PythonRuntime::current_error;
     if (current_error.empty()) {
@@ -313,6 +316,7 @@ void _module_halide_error(void *user_context, const char *msg) {
 void _module_halide_print(void *user_context, const char *msg) {
     PySys_FormatStdout("%s", msg);
 }
+#endif  // HALIDE_PYTHON_EXTENSION_OMIT_ERROR_AND_PRINT_HANDLERS
 
 }  // namespace
 
@@ -320,8 +324,10 @@ extern "C" {
 
 HALIDE_EXPORT_SYMBOL PyObject *_HALIDE_EXPAND_AND_CONCAT(PyInit_, HALIDE_PYTHON_EXTENSION_MODULE)() {
     PyObject *m = PyModule_Create(&_moduledef);
+    #ifndef HALIDE_PYTHON_EXTENSION_OMIT_ERROR_AND_PRINT_HANDLERS
     halide_set_error_handler(_module_halide_error);
     halide_set_custom_print(_module_halide_print);
+    #endif  // HALIDE_PYTHON_EXTENSION_OMIT_ERROR_AND_PRINT_HANDLERS
     return m;
 }
 
@@ -345,9 +351,11 @@ void PythonExtensionGen::compile(const LoweredFunc &f) {
 
     dest << "#ifndef HALIDE_PYTHON_EXTENSION_OMIT_FUNCTION_DEFINITIONS\n";
     dest << "\n";
+    dest << "#ifndef HALIDE_PYTHON_EXTENSION_OMIT_ERROR_AND_PRINT_HANDLERS\n";
     dest << "namespace Halide::PythonRuntime {\n";
     dest << "extern thread_local std::string current_error;\n";
     dest << "}  // namespace Halide::PythonRuntime\n";
+    dest << "#endif  // HALIDE_PYTHON_EXTENSION_OMIT_ERROR_AND_PRINT_HANDLERS\n";
     dest << "\n";
     dest << "namespace Halide::PythonExtensions {\n";
     dest << "\n";
@@ -455,9 +463,13 @@ void PythonExtensionGen::compile(const LoweredFunc &f) {
     }
     dest << indent << "if (result != 0) {\n";
     indent.indent += 2;
+    dest << indent << "#ifndef HALIDE_PYTHON_EXTENSION_OMIT_ERROR_AND_PRINT_HANDLERS\n";
     dest << indent << "std::string take;\n";
     dest << indent << "std::swap(take, Halide::PythonRuntime::current_error);\n";
     dest << indent << "PyErr_Format(PyExc_RuntimeError, \"Halide Runtime Error: %d (%s)\", result, take.c_str());\n";
+    dest << indent << "#else\n";
+    dest << indent << "PyErr_Format(PyExc_ValueError, \"Halide error %d\", result);\n";
+    dest << indent << "#endif  // HALIDE_PYTHON_EXTENSION_OMIT_ERROR_AND_PRINT_HANDLERS\n";
     dest << indent << "return nullptr;\n";
     indent.indent -= 2;
     dest << indent << "}\n";
