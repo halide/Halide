@@ -265,7 +265,7 @@ protected:
                         result = widen_right_add(a, narrow_b);
                     }
                     internal_assert(result.type() == op->type);
-                    return result;
+                    return mutate(result);
                 }
             }
         }
@@ -335,7 +335,7 @@ protected:
                         result = widen_right_sub(a, narrow_b);
                     }
                     internal_assert(result.type() == op->type);
-                    return result;
+                    return mutate(result);
                 }
             }
         }
@@ -430,7 +430,7 @@ protected:
                         result = widen_right_mul(a, narrow_b);
                     }
                     internal_assert(result.type() == op->type);
-                    return result;
+                    return mutate(result);
                 }
             }
         }
