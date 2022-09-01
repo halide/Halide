@@ -31,6 +31,8 @@ The following sections cover each in detail.
     - [Functions](#functions)
       - [`add_halide_library`](#add_halide_library)
       - [`add_halide_generator`](#add_halide_generator)
+      - [`add_halide_python_extension_library`](#add_halide_python_extension_library)
+      - [`add_halide_runtime`](#add_halide_runtime)
 - [Contributing CMake code to Halide](#contributing-cmake-code-to-halide)
   - [General guidelines and best practices](#general-guidelines-and-best-practices)
     - [Prohibited commands list](#prohibited-commands-list)
@@ -807,7 +809,6 @@ add_halide_library(<target> FROM <generator-target>
                    [PLUGINS plugin1 [plugin2 ...]]
                    [AUTOSCHEDULER scheduler-name]
                    [GRADIENT_DESCENT]
-                   [PYTHON_EXTENSION_LIBRARY]
                    [C_BACKEND]
                    [REGISTRATION OUTVAR]
                    [HEADER OUTVAR]
@@ -835,14 +836,16 @@ called `<target>.runtime` which corresponds to running the generator with `-r`
 and a compatible list of targets. This runtime target is an INTERFACE dependency
 of `<target>`. If multiple runtime targets need to be linked together, setting
 `USE_RUNTIME` to another Halide library, `<target2>` will prevent the generation
-of `<target>.runtime` and instead use `<target2>.runtime`.
+of `<target>.runtime` and instead use `<target2>.runtime`. This argument is
+most commonly used in conjunction with [`add_halide_runtime`](#add_halide_runtime).
 
 Parameters can be passed to a generator via the `PARAMS` argument. Parameters
 should be space-separated. Similarly, `TARGETS` is a space-separated list of
 targets for which to generate code in a single function. They must all share the
 same platform/bits/os triple (eg. `arm-32-linux`). Features that are in common
 among all targets, including device libraries (like `cuda`) should go in
-`FEATURES`.
+`FEATURES`. If `TARGETS` is not specified, the value of `Halide_TARGET` specified
+at configure time will be used.
 
 Every element of `TARGETS` must begin with the same `arch-bits-os` triple. This
 function understands two _meta-triples_, `host` and `cmake`. The meta-triple
@@ -869,13 +872,6 @@ If `GRADIENT_DESCENT` is set, then the module will be built suitably for
 gradient descent calculation in TensorFlow or PyTorch. See
 `Generator::build_gradient_module()` for more documentation. This corresponds to
 passing `-d 1` at the generator command line.
-
-If `PYTHON_EXTENSION_LIBRARY` is set, then a Python Extension will be built that
-wraps the C/C++ call with CPython glue to allow use of the generated code from
-Python 3.x. The result will be a a shared library of the form
-`<target>.<soabi>.so`, where <soabi> describes the specific Python version and
-platform (e.g., `cpython-310-darwin` for Python 3.10 on OSX.) See
-`README_python.md` for examples of use.
 
 If the `C_BACKEND` option is set, this command will invoke the configured C++
 compiler on a generated source. Note that a `<target>.runtime` target is _not_
@@ -945,8 +941,48 @@ and [apps/hannk](https://github.com/halide/Halide/tree/master/apps/hannk) for a 
 If `PYSTUB` is specified, then a Python Extension will be built that
 wraps the Generator with CPython glue to allow use of the Generator
 Python 3.x. The result will be a a shared library of the form
-`<target>_pystub.<soabi>.so`, where <soabi> describes the specific Python version and platform (e.g., `cpython-310-darwin` for Python 3.10 on OSX.) See
+`<target>_pystub.<soabi>.so`, where <soabi> describes the specific Python version and platform (e.g., `cpython-310-darwin` for Python 3.10 on macOS.) See
 `README_python.md` for examples of use.
+
+#### `add_halide_python_extension_library`
+
+This function wraps the outputs of one or more `add_halide_library` targets with glue code to produce
+a Python Extension library.
+
+```
+add_halide_python_extension_library(
+    target
+    [MODULE_NAME module-name]
+    HALIDE_LIBRARIES library1 ...
+)
+```
+
+`FROM` specifies any valid Generator target. If omitted,
+
+`HALIDE_LIBRARIES` is a list of one of more `add_halide_library` targets. Each will be added to the
+extension as a callable method of the module. Note that every library specified must be built with
+the `PYTHON_EXTENSION` keyword specified, and all libraries must use the same Halide runtime.
+
+The result will be a a shared library of the form
+`<target>.<soabi>.so`, where <soabi> describes the specific Python version and
+platform (e.g., `cpython-310-darwin` for Python 3.10 on macOS.)
+
+#### `add_halide_runtime`
+
+This function generates a library containing a Halide runtime. Most user code will never
+need to use this, as `add_halide_library()` will call it for you if necessary. The most common
+use case is usually in conjunction with `add_halide_python_extension_library()`, as a way to
+ensure that all the halide libraries share an identical runtime.
+
+```
+add_halide_runtime(
+    target
+    [TARGETS target1 [target2 ...]]
+)
+```
+
+The `TARGETS` argument has identical semantics to the argument of the same name
+for [`add_halide_library`](#add_halide_library).
 
 ## Cross compiling
 
