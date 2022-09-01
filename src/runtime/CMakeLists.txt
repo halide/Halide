@@ -59,6 +59,7 @@ set(RUNTIME_CPP
     posix_threads
     posix_threads_tsan
     posix_timer_profiler
+    posix_tls_ucon
     powerpc_cpu_features
     prefetch
     profiler
@@ -99,6 +100,7 @@ set(RUNTIME_LL
     hvx_128
     mips
     posix_math
+    posix_tls_ucon_ll
     powerpc
     ptx_dev
     wasm_math
