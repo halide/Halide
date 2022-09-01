@@ -1083,7 +1083,7 @@ llvm::Function *CodeGen_LLVM::embed_metadata_getter(const std::string &metadata_
 }
 
 llvm::Type *CodeGen_LLVM::llvm_type_of(const Type &t) const {
-    return Internal::llvm_type_of(context, t, effective_vscale);
+    return llvm_type_of(context, t, effective_vscale);
 }
 
 void CodeGen_LLVM::optimize_module() {
@@ -1321,10 +1321,18 @@ Value *CodeGen_LLVM::codegen(const Expr &e) {
     // implementation of prefetch.
     // See https://github.com/halide/Halide/issues/4211.
     const bool is_prefetch = Call::as_intrinsic(e, {Call::prefetch});
-    internal_assert(is_bool_vector || is_prefetch ||
-                    e.type().is_handle() ||
-                    value->getType()->isVoidTy() ||
-                    value->getType() == llvm_type_of(e.type()))
+    bool types_match = is_bool_vector || is_prefetch ||
+                       e.type().is_handle() ||
+                       value->getType()->isVoidTy() ||
+                       value->getType() == llvm_type_of(e.type());
+    if (!types_match && debug::debug_level() > 0) {
+        debug(1) << "Unexpected LLVM type for generated expression. Expected (llvm_type_of(e.type())): ";
+        llvm_type_of(e.type())->print(dbgs(), true);
+        debug(1) << " got (value->getType()): ";
+        value->print(dbgs(), true);
+        debug(1) << "\n";
+    }
+    internal_assert(types_match)
         << "Codegen of Expr " << e
         << " of type " << e.type()
         << " did not produce llvm IR of the corresponding llvm type.\n";
@@ -2133,7 +2141,7 @@ llvm::Value *CodeGen_LLVM::create_broadcast(llvm::Value *v, int lanes) {
     Constant *poison = PoisonValue::get(get_vector_type(v->getType(), lanes));
     Constant *zero = ConstantInt::get(i32_t, 0);
     v = builder->CreateInsertElement(poison, v, zero);
-    Constant *zeros = ConstantVector::getSplat(element_count(lanes), zero);
+    Constant *zeros = get_splat(lanes, zero);
     return builder->CreateShuffleVector(v, poison, zeros);
 }
 
@@ -2849,7 +2857,14 @@ void CodeGen_LLVM::visit(const Call *op) {
                 intrin += "sub.sat.";
             }
             if (op->type.lanes() > 1) {
-                intrin += "v" + std::to_string(op->type.lanes());
+                int lanes = op->type.lanes();
+                llvm::Type *llvm_type = llvm_type_of(op->type);
+                if (isa<ScalableVectorType>(llvm_type)) {
+                    internal_assert((effective_vscale != 0) && ((lanes % effective_vscale) == 0));
+                    intrin += "nx";
+                    lanes /= effective_vscale;
+                }
+                intrin += "v" + std::to_string(lanes);
             }
             intrin += "i" + std::to_string(op->type.bits());
             value = call_intrin(op->type, op->type.lanes(), intrin, op->args);
@@ -4455,7 +4470,7 @@ Value *CodeGen_LLVM::call_intrin(const Type &result_type, int intrin_lanes,
 
     return call_intrin(t,
                        intrin_lanes,
-                       name, arg_values);
+                       name, arg_values, isa<llvm::ScalableVectorType>(t));
 }
 
 Value *CodeGen_LLVM::call_intrin(const Type &result_type, int intrin_lanes,
@@ -4486,10 +4501,10 @@ Value *CodeGen_LLVM::call_intrin(const llvm::Type *result_type, int intrin_lanes
         if (intrin_lanes > 1) {
             if (scalable_vector_result && effective_vscale != 0) {
                 intrinsic_result_type = get_vector_type(result_type->getScalarType(),
-                                                        intrin_lanes / effective_vscale, true);
+                                                        intrin_lanes / effective_vscale, VectorTypeConstraint::VScale);
             } else {
                 intrinsic_result_type = get_vector_type(result_type->getScalarType(),
-                                                        intrin_lanes);
+                                                        intrin_lanes, VectorTypeConstraint::Fixed);
             }
         }
         FunctionType *func_t = FunctionType::get(intrinsic_result_type, arg_types, false);
@@ -4768,20 +4783,20 @@ llvm::Value *CodeGen_LLVM::fixed_to_scalable_vector_type(llvm::Value *fixed_arg)
     auto lanes = fixed->getNumElements();
 
     const llvm::ScalableVectorType *scalable = cast<llvm::ScalableVectorType>(get_vector_type(fixed->getElementType(),
-                                                                                              lanes / effective_vscale, true));
+                                                                                              lanes / effective_vscale, VectorTypeConstraint::VScale));
     internal_assert(fixed != nullptr);
 
     internal_assert(fixed->getElementType() == scalable->getElementType());
     internal_assert(lanes == (scalable->getMinNumElements() * effective_vscale));
 
-    // E.g. <vscale x 2 x i64> llvm.experimental.vector.insert.nxv2i64.v4i64(<vscale x 2 x i64>, <4 x i64>, i64)
+    // E.g. <vscale x 2 x i64> llvm.vector.insert.nxv2i64.v4i64(<vscale x 2 x i64>, <4 x i64>, i64)
     const char *type_designator;
     if (fixed->getElementType()->isIntegerTy()) {
         type_designator = "i";
     } else {
         type_designator = "f";
     }
-    std::string intrin = "llvm.experimental.vector.insert.nxv" + std::to_string(scalable->getMinNumElements());
+    std::string intrin = "llvm.vector.insert.nxv" + std::to_string(scalable->getMinNumElements());
     intrin += type_designator;
     std::string bits_designator = std::to_string(fixed->getScalarSizeInBits());
     intrin += bits_designator;
@@ -4803,13 +4818,13 @@ llvm::Value *CodeGen_LLVM::scalable_to_fixed_vector_type(llvm::Value *scalable_a
     internal_assert(scalable != nullptr);
 
     const llvm::FixedVectorType *fixed = cast<llvm::FixedVectorType>(get_vector_type(scalable->getElementType(),
-                                                                                     scalable->getMinNumElements() * effective_vscale, false));
+                                                                                     scalable->getMinNumElements() * effective_vscale, VectorTypeConstraint::Fixed));
     internal_assert(fixed != nullptr);
 
     internal_assert(fixed->getElementType() == scalable->getElementType());
     internal_assert(fixed->getNumElements() == (scalable->getMinNumElements() * effective_vscale));
 
-    // E.g. <64 x i8> @llvm.experimental.vector.extract.v64i8.nxv8i8(<vscale x 8 x i8> %vresult, i64 0)
+    // E.g. <64 x i8> @llvm.vector.extract.v64i8.nxv8i8(<vscale x 8 x i8> %vresult, i64 0)
     const char *type_designator;
     if (scalable->getElementType()->isIntegerTy()) {
         type_designator = "i";
@@ -4817,7 +4832,7 @@ llvm::Value *CodeGen_LLVM::scalable_to_fixed_vector_type(llvm::Value *scalable_a
         type_designator = "f";
     }
     std::string bits_designator = std::to_string(fixed->getScalarSizeInBits());
-    std::string intrin = "llvm.experimental.vector.extract.v" + std::to_string(fixed->getNumElements()) + type_designator + bits_designator;
+    std::string intrin = "llvm.vector.extract.v" + std::to_string(fixed->getNumElements()) + type_designator + bits_designator;
     intrin += ".nxv" + std::to_string(scalable->getMinNumElements()) + type_designator + bits_designator;
     std::vector<llvm::Value *> args;
     args.push_back(scalable_arg);
@@ -4837,6 +4852,99 @@ int CodeGen_LLVM::get_vector_num_elements(const llvm::Type *t) {
     } else {
         return 1;
     }
+}
+
+llvm::Type *CodeGen_LLVM::llvm_type_of(LLVMContext *c, Halide::Type t,
+                                       int effective_vscale) const {
+    if (t.lanes() == 1) {
+        if (t.is_float() && !t.is_bfloat()) {
+            switch (t.bits()) {
+            case 16:
+                return llvm::Type::getHalfTy(*c);
+            case 32:
+                return llvm::Type::getFloatTy(*c);
+            case 64:
+                return llvm::Type::getDoubleTy(*c);
+            default:
+                internal_error << "There is no llvm type matching this floating-point bit width: " << t << "\n";
+                return nullptr;
+            }
+        } else if (t.is_handle()) {
+            return llvm::Type::getInt8PtrTy(*c);
+        } else {
+            return llvm::Type::getIntNTy(*c, t.bits());
+        }
+    } else {
+        llvm::Type *element_type = llvm_type_of(c, t.element_of(), 0);
+        bool scalable = false;
+        int lanes = t.lanes();
+        if (effective_vscale != 0) {
+            int total_bits = t.bits() * t.lanes();
+            scalable = ((total_bits % effective_vscale) == 0);
+            if (scalable) {
+                lanes /= effective_vscale;
+            } else {
+                // TODO(zvookin): This error indicates that the requested number of vector lanes
+                // is not expressible exactly via vscale. This will be fairly unusual unless
+                // non-power of two, or very short, vector sizes are used in a schedule.
+                // It is made an error, instead of passing the fixed non-vscale vector type to LLVM,
+                // to catch the case early while developing vscale backends.
+                // We may need to change this to allow the case so if one hits this error in situation
+                // where it should pass through a fixed width vector type, please discuss.
+                internal_error << "Failed to make vscale vector type with bits " << t.bits() << " lanes " << t.lanes()
+                               << " effective_vscale " << effective_vscale << " total_bits " << total_bits << "\n";
+            }
+        }
+        return get_vector_type(element_type, lanes,
+                               scalable ? VectorTypeConstraint::VScale : VectorTypeConstraint::Fixed);
+    }
+}
+
+llvm::Type *CodeGen_LLVM::get_vector_type(llvm::Type *t, int n,
+                                          VectorTypeConstraint type_constraint) const {
+    bool scalable;
+
+    switch (type_constraint) {
+    case VectorTypeConstraint::None:
+        scalable = effective_vscale != 0 &&
+                   ((n % effective_vscale) == 0);
+        if (scalable) {
+            n = n / effective_vscale;
+        }
+        break;
+    case VectorTypeConstraint::Fixed:
+        scalable = false;
+        break;
+    case VectorTypeConstraint::VScale:
+        scalable = true;
+        break;
+    }
+
+    return VectorType::get(t, n, scalable);
+}
+
+llvm::Constant *CodeGen_LLVM::get_splat(int lanes, llvm::Constant *value,
+                                        VectorTypeConstraint type_constraint) const {
+    bool scalable = false;
+    switch (type_constraint) {
+    case VectorTypeConstraint::None:
+        scalable = effective_vscale != 0 &&
+                   ((lanes % effective_vscale) == 0);
+        if (scalable) {
+            lanes = lanes / effective_vscale;
+        }
+        break;
+    case VectorTypeConstraint::Fixed:
+        scalable = false;
+        break;
+    case VectorTypeConstraint::VScale:
+        scalable = true;
+        break;
+    }
+
+    llvm::ElementCount ec = scalable ? llvm::ElementCount::getScalable(lanes) :
+                                       llvm::ElementCount::getFixed(lanes);
+    return ConstantVector::getSplat(ec, value);
 }
 
 }  // namespace Internal

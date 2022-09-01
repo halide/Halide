@@ -425,21 +425,64 @@ with hl.GeneratorContext(t):
 
 ### Using a Generator for AOT compilation
 
-If you are using CMake, the simplest thing is to use `add_halide_library()`
-(defined in HalideGeneratorHelpers.cmake) with the `PYTHON_EXTENSION_LIBRARY`
-option:
+If you are using CMake, the simplest thing is to use
+`add_halide_library` and `add_halide_python_extension_library()`:
 
 ```
+# Build a Halide library as you usually would, but be sure to include `PYTHON_EXTENSION`
 add_halide_library(xor_filter
                    GENERATOR logical_op_generator
                    SOURCES logical_op_generator.py
                    PARAMS op=xor
-                   PYTHON_EXTENSION_LIBRARY
-                   [ FEATURES ... ])
+                   PYTHON_EXTENSION output_path_var
+                   [ FEATURES ... ]
+                   [ PARAMS ... ])
 
+# Now wrap the generated code with a Python extension.
+# (Note that module name defaults to match the target name; we only
+# need to specify MODULE_NAME if we need a name that may differ)
+add_halide_python_extension_library(my_extension
+                                    MODULE_NAME my_module
+                                    HALIDE_LIBRARIES xor_filter)
 ```
 
 (Note that this rule works for both C++ and Python Generators.)
+
+This compiles the Generator code in `logical_op_generator.py` with the
+registered name `logical_op_generator` to produce the target `xor_filter`, and then wraps
+the compiled output with a Python extension. The result will be a shared library of the form
+`<target>.<soabi>.so`, where <soabi> describes the specific Python version and
+platform (e.g., `cpython-310-darwin` for Python 3.10 on OSX.)
+
+Note that you can combine multiple Halide libraries into a single Python module;
+this is convenient for packagaing, but also because all the libraries in a single
+extension module share the same Halide runtime (and thus, the same caches, thread pools, etc.).
+
+```
+add_halide_library(xor_filter ...)
+add_halide_library(and_filter ...)
+add_halide_library(or_filter ...)
+
+add_halide_python_extension_library(my_extension
+                                    MODULE_NAME my_module
+                                    HALIDE_LIBRARIES xor_filter and_filter or_filter)
+```
+
+Note that you must take care to ensure that all of the `add_halide_library` targets
+specified use the same Halide runtime; it may be necessary to use `add_halide_runtime`
+to define an explicit runtime that is shared by all of the targets:
+
+```
+add_halide_runtime(my_runtime)
+
+add_halide_library(xor_filter USE_RUNTIME my_runtime ...)
+add_halide_library(and_filter USE_RUNTIME my_runtime ...)
+add_halide_library(or_filter USE_RUNTIME my_runtime ...)
+
+add_halide_python_extension_library(my_extension
+                                    MODULE_NAME my_module
+                                    HALIDE_LIBRARIES xor_filter and_filter or_filter)
+```
 
 If you're not using CMake, you can "drive" a Generator directly from your build
 system via command-line flags. The most common, minimal set looks something like
@@ -464,7 +507,7 @@ There are other flags and options too, of course; use `python3
 /path/to/my/generator.py -help` to see a list with explanations.
 
 (Unfortunately, there isn't (yet) a way to produce a Python Extension just by
-running a Generator; the logic for `PYTHON_EXTENSION_LIBRARY` is currently all
+running a Generator; the logic for `add_halide_python_extension_library` is currently all
 in the CMake helper files.)
 
 ### Calling Generator-Produced code from Python
@@ -473,7 +516,7 @@ As long as the shared library is in `PYTHONPATH`, it can be imported and used
 directly. For the example above:
 
 ```
-from xor_filter import xor_filter
+from my_module import xor_filter
 import imageio
 import numpy as np
 

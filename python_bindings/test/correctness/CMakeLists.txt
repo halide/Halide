@@ -15,6 +15,7 @@ set(tests
     extern.py
     float_precision_test.py
     iroperator.py
+    multi_method_module_test.py
     multipass_constraints.py
     pystub.py
     rdom.py

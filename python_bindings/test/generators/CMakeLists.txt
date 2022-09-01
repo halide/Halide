@@ -14,7 +14,16 @@ set(GENPARAMS_complexcpp
 
 set(GENPARAMS_complexpy ${GENPARAMS_complexcpp})
 
-set(_ALL_DEPS)
+# Since simplecpp and user_context are going to be bound into a single
+# Python extension library, they must share the same Halide runtime.
+# Note that by leaving out the TARGETS argument, we default to whatever
+# ${Halide_TARGET} was set to at configure time.
+add_halide_runtime(multi_lib_runtime)
+
+set(RUNTIME_simplecpp multi_lib_runtime)
+set(RUNTIME_user_context multi_lib_runtime)
+
+set(_ALL_DEPS "")
 
 function(_add_python_aot_and_stub_extension)
     cmake_parse_arguments(ARG "" "" "GENERATORS;SOURCES" ${ARGN})
@@ -37,16 +46,19 @@ function(_add_python_aot_and_stub_extension)
                            FROM ${GEN_TARGET}
                            GENERATOR ${G}
                            FUNCTION_NAME ${G}
+                           USE_RUNTIME ${RUNTIME_${G}}
+                           PYTHON_EXTENSION _ignored_result
                            FEATURES ${FEATURES_${G}}
                            PARAMS ${GENPARAMS_${G}}
-                           # Note that PYTHON_EXTENSION_LIBRARY doesn't take
-                           # an argument; it will always produce a file of the form
-                           # ${TARGET}.${Python3_SOABI}.so (or .pyd on Windows)
-                           PYTHON_EXTENSION_LIBRARY
                            # We don't really need all the plugins at once here --
                            # it's just easier to specify them all
                            PLUGINS Halide::Adams2019 Halide::Li2018 Halide::Mullapudi2016)
-        set(_ALL_DEPS "${_ALL_DEPS} py_aot_${G}" PARENT_SCOPE)
+
+        add_halide_python_extension_library(pyext_${G}
+                                            MODULE_NAME ${G}
+                                            HALIDE_LIBRARIES py_aot_${G})
+
+        set(_ALL_DEPS "${_ALL_DEPS} py_aot_${G} pyext_${G}" PARENT_SCOPE)
     endforeach()
 endfunction()
 
@@ -71,5 +83,24 @@ _add_python_aot_and_stub_extension(SOURCES bilateral_grid_generator.py
 _add_python_aot_and_stub_extension(SOURCES bitpy_generator.py GENERATORS bitpy)
 _add_python_aot_and_stub_extension(SOURCES complexpy_generator.py GENERATORS complexpy)
 _add_python_aot_and_stub_extension(SOURCES simplepy_generator.py GENERATORS simplepy)
+
+# Bind several libraries into a single python extension;
+# they will be in the same module (and share the same Halide runtime)
+add_halide_python_extension_library(pyext_multi_method_module
+                                    MODULE_NAME multi_method_module
+                                    HALIDE_LIBRARIES py_aot_simplecpp py_aot_user_context)
+set(_ALL_DEPS "${_ALL_DEPS} pyext_multi_method_module")
+
+# Add a test to verify that Python extensions export exactly one symbol (the PyInit symbol)
+# TODO: _Halide_target_export_single_symbol() isn't implemented for MSVC, and even if it was,
+# this test wouldn't work for it, but for Posixy systems (Linux, OSX, etc) this is fine.
+# See https://github.com/halide/Halide/issues/6982
+if(NOT MSVC)
+    # Verify that only one symbol is exported, and that symbol is the one we expect
+    add_test(NAME test_export_single_symbol
+             COMMAND $ENV{SHELL} -c "[ $(nm $<TARGET_FILE:pyext_multi_method_module> | grep ' T ' | wc -l) -eq 1 ] && \
+                                     [ $(nm $<TARGET_FILE:pyext_multi_method_module> | grep ' T ' | grep PyInit_multi_method_module | wc -l) -eq 1 ]"
+             VERBATIM)
+endif ()
 
 set(PYTHON_CORRECTNESS_GENERATOR_DEPS ${_ALL_DEPS} PARENT_SCOPE)
