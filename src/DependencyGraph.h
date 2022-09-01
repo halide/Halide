@@ -3,9 +3,7 @@
 
 #include <set>
 
-// #include "FindStmtCost.h"
 #include "IRVisitor.h"
-// #include "IROperator.h"
 
 #include <map>
 
