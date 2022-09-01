@@ -567,7 +567,7 @@ string ProducerConsumerHierarchy::generate_producer_consumer_html(const Module &
     pre_processor.generate_sizes(m);
 
     html = "";
-    startModuleTraversal();
+    startModuleTraversal(m);
 
     return html.c_str();
 }
@@ -580,7 +580,7 @@ string ProducerConsumerHierarchy::generate_producer_consumer_html(const Stmt &st
     return html.c_str();
 }
 
-void ProducerConsumerHierarchy::startModuleTraversal() {
+void ProducerConsumerHierarchy::startModuleTraversal(const Module &m) {
 
     auto it = pre_processor.main_function_bodies.find(pre_processor.module_name);
     if (it == pre_processor.main_function_bodies.end()) {
@@ -588,26 +588,17 @@ void ProducerConsumerHierarchy::startModuleTraversal() {
                           "function not found\n";
     }
 
-    // start with the main function
-    html += "<hr>";
-    html += "<span id='" + it->first + "'>";
-    html += "<h4>" + it->first + "</h4>";
-    html += "</span>";
-    html += "<div class='functionViz'>";
-    it->second.accept(this);
-    html += "</div>";
+    // print main function first
+    for (const auto &f : m.functions()) {
+        if (f.name == m.name()) {
+            visit_function(f);
+        }
+    }
 
-    // mutate all other functions
-    for (const auto &func : pre_processor.main_function_bodies) {
-        if (func.first != pre_processor.module_name) {
-            html += "<hr>";
-            html += "<span id='" + func.first + "'>";
-            html += "<h4>" + func.first + "</h4>";
-            html += "</span>";
-            html += "<div class='functionViz'>";
-
-            func.second.accept(this);
-            html += "</div>";
+    // print the rest of the functions
+    for (const auto &f : m.functions()) {
+        if (f.name != m.name()) {
+            visit_function(f);
         }
     }
 }
@@ -620,8 +611,10 @@ void ProducerConsumerHierarchy::open_box_div(string backgroundColor, string clas
     html += "class='box center " + className + "'";
     html += ">";
 
-    generate_computation_cost_div(op);
-    generate_memory_cost_div(op);
+    if (op != nullptr) {
+        generate_computation_cost_div(op);
+        generate_memory_cost_div(op);
+    }
 
     open_content_div();
 }
@@ -645,8 +638,7 @@ void ProducerConsumerHierarchy::close_div() {
     html += "</div>";
 }
 
-void ProducerConsumerHierarchy::open_header(const IRNode *op, const string &header,
-                                            string anchorName) {
+void ProducerConsumerHierarchy::open_header(const string &header, string anchorName) {
     open_header_div();
 
     open_box_header_title_div();
@@ -668,10 +660,10 @@ void ProducerConsumerHierarchy::close_header(string anchorName) {
     see_code_button_div(anchorName);
     close_div();  // header div
 }
-void ProducerConsumerHierarchy::div_header(const IRNode *op, const string &header, StmtSize &size,
+void ProducerConsumerHierarchy::div_header(const string &header, StmtSize &size,
                                            string anchorName) {
 
-    open_header(op, header, anchorName);
+    open_header(header, anchorName);
 
     // add producer consumer size if size is provided
     if (!size.empty()) {
@@ -682,7 +674,7 @@ void ProducerConsumerHierarchy::div_header(const IRNode *op, const string &heade
 }
 void ProducerConsumerHierarchy::allocate_div_header(const Allocate *op, const string &header,
                                                     StmtSize &size, string anchorName) {
-    open_header(op, header, anchorName);
+    open_header(header, anchorName);
 
     vector<string> &allocationSizes = size.allocationSizes;
     allocate_table(allocationSizes);
@@ -691,7 +683,7 @@ void ProducerConsumerHierarchy::allocate_div_header(const Allocate *op, const st
 }
 void ProducerConsumerHierarchy::for_loop_div_header(const For *op, const string &header,
                                                     StmtSize &size, string anchorName) {
-    open_header(op, header, anchorName);
+    open_header(header, anchorName);
 
     string loopSize = pre_processor.get_size(op).forLoopSize;
     for_loop_table(loopSize);
@@ -705,7 +697,7 @@ void ProducerConsumerHierarchy::if_tree(const IRNode *op, const string &header, 
     html += "<span class='tf-nc if-node'>";
 
     open_box_div(IF_COLOR, "IfBox", op);
-    div_header(op, header, size, anchorName);
+    div_header(header, size, anchorName);
 }
 void ProducerConsumerHierarchy::close_if_tree() {
     close_box_div();
@@ -1045,6 +1037,24 @@ void ProducerConsumerHierarchy::cost_colors(const IRNode *op) {
     html += data_movement_button(op);
 }
 
+void ProducerConsumerHierarchy::visit_function(const LoweredFunc &func) {
+    open_box_div(FUNCTION_BOX_COLOR, "FunctionBox", nullptr);
+
+    functionCount++;
+    string anchorName = "loweredFunc" + to_string(functionCount);
+
+    string header = "<span id='" + func.name + "'>" + "Func: " + func.name + "</span>";
+
+    StmtSize size;
+    div_header(header, size, anchorName);
+
+    // html += "<hr>";
+    html += "<div class='functionViz'>";
+    func.body.accept(this);
+    html += "</div>";
+
+    close_box_div();
+}
 void ProducerConsumerHierarchy::visit(const Variable *op) {
     // if op->name starts with "::", remove "::"
     string varName = op->name;
@@ -1090,7 +1100,7 @@ void ProducerConsumerHierarchy::visit(const ProducerConsumer *op) {
         size = StmtSize();
     }
 
-    div_header(op, header, size, anchorName);
+    div_header(header, size, anchorName);
 
     op->body.accept(this);
 
@@ -1108,7 +1118,7 @@ void ProducerConsumerHierarchy::visit(const For *op) {
     string header = "For (" + op->name + ")";
 
     if (SHOW_CUMULATIVE_COST) {
-        div_header(op, header, size, anchorName);
+        div_header(header, size, anchorName);
     } else {
         for_loop_div_header(op, header, size, anchorName);
     }
@@ -1232,7 +1242,7 @@ void ProducerConsumerHierarchy::visit(const Store *op) {
 
     open_box_div(STORE_COLOR, "StoreBox", op);
 
-    div_header(op, header, size, anchorName);
+    div_header(header, size, anchorName);
 
     op->value.accept(this);
 

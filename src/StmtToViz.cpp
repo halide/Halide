@@ -73,6 +73,7 @@ private:
     int forCount = 0;
     int storeCount = 0;
     int allocateCount = 0;
+    int functionCount = 0;
 
     // used for tooltip stuff
     int tooltipCount = 0;
@@ -1262,8 +1263,13 @@ public:
         scope.push(op.name, unique_id());
         stream << open_div("Function");
 
+        // anchoring
+        functionCount++;
+        string anchorName = "loweredFunc" + std::to_string(functionCount);
+
         int id = unique_id();
         stream << open_expand_button(id);
+        stream << open_anchor(anchorName);
         stream << open_span("Matched");
         stream << keyword("func");
         stream << " " << op.name << "(";
@@ -1275,8 +1281,11 @@ public:
             stream << var(op.args[i].name);
         }
         stream << matched(")");
+        stream << close_anchor();
         stream << close_expand_button();
         stream << " " << matched("{");
+        stream << see_viz_button(anchorName);
+
         stream << open_div("FunctionBody Indent", id);
 
         // Stmt inlined_body = substitute_in_all_lets(op.body);

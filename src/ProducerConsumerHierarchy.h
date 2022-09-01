@@ -19,6 +19,7 @@ using namespace Internal;
 #define STORE_COLOR "#f4f8bf"
 #define ALLOCATE_COLOR STORE_COLOR
 #define FUNCTION_CALL_COLOR "#fabebe"
+#define FUNCTION_BOX_COLOR "#f0f0f0"
 
 #define SHOW_CUMULATIVE_COST false
 #define SHOW_UNIQUE_LOADS false
@@ -85,6 +86,8 @@ class StmtSizes : public IRVisitor {
 public:
     map<string, Stmt> main_function_bodies;  // TODO: maybe move back to private if don't
                                              // use it outside of this class
+                                             // TODO: remove this entirely, if possible (don't need
+                                             // to store Stmt)
     string module_name;
 
     void generate_sizes(const Module &m);
@@ -180,12 +183,13 @@ private:
     int forCount = 0;
     int storeCount = 0;
     int allocateCount = 0;
+    int functionCount = 0;
 
     // tooltip count
     int prodConsTooltipCount = 0;
 
     // for traversal of a Module object
-    void startModuleTraversal();
+    void startModuleTraversal(const Module &m);
 
     // opens and closes divs
     void open_box_div(string backgroundColor, string className, const IRNode *op);
@@ -197,9 +201,9 @@ private:
     void close_div();
 
     // header functions
-    void open_header(const IRNode *op, const string &header, string anchorName);
+    void open_header(const string &header, string anchorName);
     void close_header(string anchorName);
-    void div_header(const IRNode *op, const string &header, StmtSize &size, string anchorName);
+    void div_header(const string &header, StmtSize &size, string anchorName);
     void allocate_div_header(const Allocate *op, const string &header, StmtSize &size,
                              string anchorName);
     void for_loop_div_header(const For *op, const string &header, StmtSize &size,
@@ -232,6 +236,7 @@ private:
     string tooltip_table(map<string, string> &table);
     void cost_colors(const IRNode *op);
 
+    void visit_function(const LoweredFunc &func);
     void visit(const Variable *op) override;
     void visit(const ProducerConsumer *op) override;
     void visit(const For *op) override;
