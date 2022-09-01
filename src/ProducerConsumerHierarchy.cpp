@@ -603,12 +603,8 @@ void ProducerConsumerHierarchy::startModuleTraversal(const Module &m) {
     }
 }
 
-void ProducerConsumerHierarchy::open_box_div(string backgroundColor, string className,
-                                             const IRNode *op) {
-    html += "<div style='";
-    html += "background-color: " + backgroundColor + "; ";
-    html += "' ";
-    html += "class='box center " + className + "'";
+void ProducerConsumerHierarchy::open_box_div(string className, const IRNode *op) {
+    html += "<div class='box center " + className + "'";
     html += ">";
 
     if (op != nullptr) {
@@ -696,7 +692,7 @@ void ProducerConsumerHierarchy::if_tree(const IRNode *op, const string &header, 
     html += "<li>";
     html += "<span class='tf-nc if-node'>";
 
-    open_box_div(IF_COLOR, "IfBox", op);
+    open_box_div("IfBox", op);
     div_header(header, size, anchorName);
 }
 void ProducerConsumerHierarchy::close_if_tree() {
@@ -707,7 +703,7 @@ void ProducerConsumerHierarchy::close_if_tree() {
 
 void ProducerConsumerHierarchy::prod_cons_table(StmtSize &size) {
     // open table
-    html += "<table class='costTable' style='background-color: rgba(150, 150, 150, 0.5)'>";
+    html += "<table class='costTable'>";
 
     // Prod | Cons
     html += "<tr>";
@@ -798,7 +794,7 @@ void ProducerConsumerHierarchy::prod_cons_table(StmtSize &size) {
 }
 void ProducerConsumerHierarchy::allocate_table(vector<string> &allocationSizes) {
     // open table
-    html += "<table class='costTable' style='background-color: rgba(150, 150, 150, 0.5)'>";
+    html += "<table class='costTable'>";
 
     // open header and data rows
     string header = "<tr>";
@@ -843,7 +839,7 @@ void ProducerConsumerHierarchy::allocate_table(vector<string> &allocationSizes) 
 }
 void ProducerConsumerHierarchy::for_loop_table(string loop_size) {
     // open table
-    html += "<table class='costTable' style='background-color: rgba(150, 150, 150, 0.5)'>";
+    html += "<table class='costTable'>";
 
     // Loop Size
     html += "<tr>";
@@ -870,8 +866,7 @@ void ProducerConsumerHierarchy::for_loop_table(string loop_size) {
 void ProducerConsumerHierarchy::see_code_button_div(string anchorName) {
     html += "<div>";
     html += "<button class='icon-button'";
-    html += "onclick='scrollToFunctionVizToCode(\"" + anchorName + "\")'";
-    html += " style='margin-left: 5px'>";
+    html += "onclick='scrollToFunctionVizToCode(\"" + anchorName + "\")'>";
     html += "<i class='bi bi-code-square'></i>";
     html += "</button>";
     html += "</div>";
@@ -928,8 +923,7 @@ void ProducerConsumerHierarchy::generate_computation_cost_div(const IRNode *op) 
     string className = "computation-cost-div CostColor" + to_string(computation_range);
     html += "<div id='prodConsButton" + std::to_string(prodConsTooltipCount) + "' ";
     html += "aria-describedby='prodConsTooltip" + std::to_string(prodConsTooltipCount) + "' ";
-    html += "class='" + className + "'";
-    html += "style='width: 7px;'>";
+    html += "class='" + className + "'>";
 
     close_div();
 }
@@ -958,8 +952,7 @@ void ProducerConsumerHierarchy::generate_memory_cost_div(const IRNode *op) {
     string className = "memory-cost-div CostColor" + to_string(data_movement_range);
     html += "<div id='prodConsButton" + std::to_string(prodConsTooltipCount) + "' ";
     html += "aria-describedby='prodConsTooltip" + std::to_string(prodConsTooltipCount) + "' ";
-    html += "class='" + className + "'";
-    html += "style='width: 7px;'>";
+    html += "class='" + className + "'>";
 
     close_div();
 }
@@ -1038,7 +1031,7 @@ void ProducerConsumerHierarchy::cost_colors(const IRNode *op) {
 }
 
 void ProducerConsumerHierarchy::visit_function(const LoweredFunc &func) {
-    open_box_div(FUNCTION_BOX_COLOR, "FunctionBox", nullptr);
+    open_box_div("FunctionBox", nullptr);
 
     functionCount++;
     string anchorName = "loweredFunc" + to_string(functionCount);
@@ -1072,9 +1065,6 @@ void ProducerConsumerHierarchy::visit(const Variable *op) {
         }
 
         html += "<div class='box center FunctionCallBox' ";
-        string color = FUNCTION_CALL_COLOR;
-        html += "style='background-color: " + color + ";";
-        html += "padding: 5px;'>";
 
         html += "Function Call";
         html += "<button class='function-scroll-button' role='button' ";
@@ -1087,7 +1077,7 @@ void ProducerConsumerHierarchy::visit(const Variable *op) {
     }
 }
 void ProducerConsumerHierarchy::visit(const ProducerConsumer *op) {
-    open_box_div(op->is_producer ? PRODUCER_COLOR : CONSUMER_COLOR, "ProducerConsumerBox", op);
+    open_box_div("ProducerConsumerBox", op);
 
     producerConsumerCount++;
     string anchorName = "producerConsumer" + std::to_string(producerConsumerCount);
@@ -1108,7 +1098,7 @@ void ProducerConsumerHierarchy::visit(const ProducerConsumer *op) {
 }
 
 void ProducerConsumerHierarchy::visit(const For *op) {
-    open_box_div(FOR_COLOR, "ForBox", op);
+    open_box_div("ForBox", op);
 
     forCount++;
     string anchorName = "for" + std::to_string(forCount);
@@ -1137,7 +1127,7 @@ void ProducerConsumerHierarchy::visit(const IfThenElse *op) {
     }
 
     // open main if tree
-    html += "<div class='tf-tree tf-gap-sm tf-custom-prodCons' style='font-size: 12px;'>";
+    html += "<div class='tf-tree tf-gap-sm tf-custom-prodCons'>";
     html += "<ul>";
     html += "<li><span class='tf-nc if-node'>";
     html += "If";
@@ -1240,7 +1230,7 @@ void ProducerConsumerHierarchy::visit(const Store *op) {
 
     header += info_tooltip(tooltip_table(tableRows));
 
-    open_box_div(STORE_COLOR, "StoreBox", op);
+    open_box_div("StoreBox", op);
 
     div_header(header, size, anchorName);
 
@@ -1311,7 +1301,7 @@ string get_memory_type(MemoryType memType) {
     }
 }
 void ProducerConsumerHierarchy::visit(const Allocate *op) {
-    open_box_div(ALLOCATE_COLOR, "AllocateBox", op);
+    open_box_div("AllocateBox", op);
 
     allocateCount++;
     string anchorName = "allocate" + std::to_string(allocateCount);
@@ -1530,6 +1520,7 @@ const string ProducerConsumerHierarchy::prodConsCSS = "\n \
 .tf-custom-prodCons li li:before { border-top-width: 1px; }\n \
 .tf-custom-prodCons .end-node { border-style: dashed; }\n \
 .tf-custom-prodCons .tf-nc { background-color: #e6eeff; }\n \
+.tf-custom-prodCons { font-size: 12px; } \n \
 div.box { \n \
     border: 1px dashed grey; \n \
     border-radius: 5px; \n \
@@ -1544,6 +1535,28 @@ div.boxHeader { \n \
 div.memory-cost-div, \n \
 div.computation-cost-div { \n \
     border: 1px solid rgba(0, 0, 0, 0); \n \
+     width: 7px; \n \
+} \n \
+div.FunctionCallBox { \n \
+    background-color: #fabebe; \n \
+} \n \
+div.FunctionBox { \n \
+    background-color: #f0f0f0; \n \
+} \n \
+div.ProducerConsumerBox { \n \
+    background-color: #99bbff; \n \
+} \n \
+div.ForBox { \n \
+    background-color: #b3ccff; \n \
+} \n \
+div.StoreBox { \n \
+    background-color: #f4f8bf; \n \
+} \n \
+div.AllocateBox { \n \
+    background-color: #f4f8bf; \n \
+} \n \
+div.IfBox { \n \
+    background-color: #e6eeff; \n \
 } \n \
 div.memory-cost-div:hover, \n \
 div.computation-cost-div:hover { \n \
@@ -1566,6 +1579,7 @@ table { \n \
     float: right; \n \
     text-align: center; \n \
     border: 0px; \n \
+    background-color: rgba(150, 150, 150, 0.5); \n \
 } \n \
 .costTable td { \n \
     border-top: 1px dashed grey; \n \

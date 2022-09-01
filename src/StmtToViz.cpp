@@ -319,9 +319,9 @@ private:
         stringstream s;
 
         if (op->node_type == IRNodeType::Allocate || op->node_type == IRNodeType::Evaluate)
-            s << "<span style='position: absolute;left: 30px;'>";
+            s << "<span class='smallColorIndent'>";
         else
-            s << "<span style='position: absolute;left: 60px;'>";
+            s << "<span class='bigColorIndent'>";
 
         // popup window - will put them all at the end
         popups += hierarchyHTML + "\n";
@@ -345,8 +345,8 @@ private:
             s << "</tr>";
         }
         s << "</table>";
-        s << "<i><span style='color: grey; margin-top: 5px;'>[Click to see full "
-             "hierarchy]</span></i>";
+        s << "<i><span class='tooltipHelperText'>";
+        s << "[Click to see full hierarchy]</span></i>";
         return s.str();
     }
 
@@ -1953,6 +1953,8 @@ span.ButtonSpacer { width: 5px; color: transparent; display: inline-block; }\n \
     font-size: 20px; \n \
     display: inline-block; \n \
     vertical-align: middle; \n \
+    margin-right: 5px; \n \
+    margin-left: 5px; \n \
 } \n \
 .icon-button:hover { \n \
     color: blue; \n \
@@ -1984,6 +1986,8 @@ span.CostColor0, div.CostColor0, .CostColor0 { background-color: rgb(236,233,89)
 span.CostColorSpacer { width: 2px; color: transparent; display: inline-block; }\n \
 span.CostComputation { width: 13px; display: inline-block; color: transparent; } \n \
 span.CostMovement { width: 13px; display: inline-block;  color: transparent; } \n \
+span.smallColorIndent { position: absolute; left: 30px; } \n \
+span.bigColorIndent { position: absolute; left: 60px; } \n \
 ";
 
 const string StmtToViz::tooltipCSS = "\n \
@@ -2010,6 +2014,10 @@ const string StmtToViz::tooltipCSS = "\n \
     width: 300px; \n \
     padding: 5px; \n \
     font-family: Consolas, 'Liberation Mono', Menlo, Courier, monospace; \n \
+} \n \
+span.tooltipHelperText { \n \
+    color: grey; \n \
+    margin-top: 5px; \n \
 } \n \
 ";
 

@@ -64,7 +64,7 @@ void GetStmtHierarchy::end_html() {
 }
 void GetStmtHierarchy::start_tree() {
     html += "<div class='treeDiv'>";
-    html += "<div class='tf-tree tf-gap-sm tf-custom-stmtHierarchy' style='font-size: 12px;'>";
+    html += "<div class='tf-tree tf-gap-sm tf-custom-stmtHierarchy'>";
     html += "<ul>";
 }
 void GetStmtHierarchy::end_tree() {
@@ -76,8 +76,7 @@ void GetStmtHierarchy::generate_computation_cost_div(const IRNode *op) {
 
     // add color div with cost 0
     if (op == nullptr) {
-        html += "<div class='computation-cost-div CostColor0' ";
-        html += "style='width: 7px;'>";
+        html += "<div class='computation-cost-div CostColor0'>";
         html += "</div>";
         return;
     }
@@ -104,16 +103,13 @@ void GetStmtHierarchy::generate_computation_cost_div(const IRNode *op) {
         "<div id='stmtHierarchyButtonTooltip" + std::to_string(stmtHierarchyTooltipCount) + "' ";
     html +=
         "aria-describedby='stmtHierarchyTooltip" + std::to_string(stmtHierarchyTooltipCount) + "' ";
-    html += "class='" + className + "'";
-    html += "style='width: 7px;'>";
-
+    html += "class='" + className + "'>";
     html += "</div>";
 }
 void GetStmtHierarchy::generate_memory_cost_div(const IRNode *op) {
     // add color div with cost 0
     if (op == nullptr) {
-        html += "<div class='computation-cost-div CostColor0' ";
-        html += "style='width: 7px;'>";
+        html += "<div class='computation-cost-div CostColor0'>";
         html += "</div>";
         return;
     }
@@ -142,9 +138,7 @@ void GetStmtHierarchy::generate_memory_cost_div(const IRNode *op) {
         "<div id='stmtHierarchyButtonTooltip" + std::to_string(stmtHierarchyTooltipCount) + "' ";
     html +=
         "aria-describedby='stmtHierarchyTooltip" + std::to_string(stmtHierarchyTooltipCount) + "' ";
-    html += "class='" + className + "'";
-    html += "style='width: 7px;'>";
-
+    html += "class='" + className + "'>";
     html += "</div>";
 }
 string GetStmtHierarchy::tooltip_table(map<string, string> &table) {
@@ -165,10 +159,10 @@ void GetStmtHierarchy::node_without_children(const IRNode *op, string name) {
     string className = get_node_class_name();
     html += "<li class='" + className + "'>";
     html += "<span class='tf-nc end-node'>";
-    html += "<div style='display: flex; '>";
+    html += "<div class='nodeContent'>";
     generate_computation_cost_div(op);
     generate_memory_cost_div(op);
-    html += "<div style='padding-left: 5px;'>";
+    html += "<div class='nodeName'>";
     html += name;
     html += "</div>";
     html += "</div>";
@@ -184,11 +178,11 @@ void GetStmtHierarchy::open_node(const IRNode *op, string name) {
     html += "<li class='" + className + "' id='node" + std::to_string(currNodeID) + "'>";
     html += "<span class='tf-nc'>";
 
-    html += "<div style='display: flex; '>";
+    html += "<div class='nodeContent'>";
     generate_computation_cost_div(op);
     generate_memory_cost_div(op);
 
-    html += "<div style='padding-left: 5px;'>";
+    html += "<div class='nodeName'>";
     html += name;
     html += " <button class='stmtHierarchyButton info-button' onclick='handleClick(" +
             std::to_string(currNodeID) + ")'>";
@@ -738,4 +732,7 @@ inline-block; padding: 3px; } \n \
 .tf-custom-stmtHierarchy .end-node { border-style: dashed; font-size: 12px; } \n \
 .tf-custom-stmtHierarchy .tf-nc:before, .tf-custom-stmtHierarchy .tf-nc:after { border-left-width: 1px; border-color: rgb(200, 200, 200);} \n \
 .tf-custom-stmtHierarchy li li:before { border-top-width: 1px; border-color: rgb(200, 200, 200);}\n \
+.tf-custom-stmtHierarchy { font-size: 12px; } \n \
+div.nodeContent { display: flex; } \n \
+div.nodeName { padding-left: 5px; } \n \
 ";

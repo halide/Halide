@@ -11,16 +11,6 @@ using namespace std;
 using namespace Halide;
 using namespace Internal;
 
-// background colors for the different types of elements
-#define IF_COLOR "#e6eeff"
-#define FOR_COLOR "#b3ccff"
-#define PRODUCER_COLOR "#99bbff"
-#define CONSUMER_COLOR PRODUCER_COLOR
-#define STORE_COLOR "#f4f8bf"
-#define ALLOCATE_COLOR STORE_COLOR
-#define FUNCTION_CALL_COLOR "#fabebe"
-#define FUNCTION_BOX_COLOR "#f0f0f0"
-
 #define SHOW_CUMULATIVE_COST false
 #define SHOW_UNIQUE_LOADS false
 
@@ -192,7 +182,7 @@ private:
     void startModuleTraversal(const Module &m);
 
     // opens and closes divs
-    void open_box_div(string backgroundColor, string className, const IRNode *op);
+    void open_box_div(string className, const IRNode *op);
     void close_box_div();
     void open_header_div();
     void open_box_header_title_div();
