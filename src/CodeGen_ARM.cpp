@@ -849,7 +849,7 @@ void CodeGen_ARM::visit(const Sub *op) {
         Value *b = codegen(op->b);
 
         if (op->type.lanes() > 1) {
-            a = ConstantVector::getSplat(element_count(op->type.lanes()), a);
+            a = get_splat(op->type.lanes(), a);
         }
         value = builder->CreateFSub(a, b);
         return;
