@@ -549,15 +549,12 @@ void GetStmtHierarchy::visit(const Shuffle *op) {
     }
 }
 void GetStmtHierarchy::visit(const VectorReduce *op) {
-    internal_error
-        << "\n"
-        << "GetStmtHierarchy: VectorReduce is not supported. Look into it though!!! \n\n";
-
     open_node(op, "vector_reduce");
 
     uint32_t currNode = currNodeID;
-    // op->op.accept(this);
-    // TODO: how to deal with op->op?
+    stringstream opOp;
+    opOp << op->op;
+    node_without_children(nullptr, opOp.str());
 
     currNodeID = currNode;
     op->value.accept(this);
