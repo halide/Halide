@@ -661,15 +661,13 @@ private:
         bool in_context_before = in_context;
         in_context = false;
 
-        string scopeName = op->name;
-        scope.push(scopeName, unique_id());
-        // scope.push(op->name, unique_id());
+        scope.push(op->name, unique_id());
         stream << open_div("LetStmt") << open_line();
 
         stream << open_cost_span(op, get_stmt_hierarchy(op));
         stream << open_span("Matched");
         stream << keyword("let") << " ";
-        stream << var(scopeName);
+        stream << var(op->name);
         stream << close_span();
         stream << " " << matched("Operator Assign", "=") << " ";
 
@@ -677,8 +675,7 @@ private:
         stream << close_cost_span();
 
         if (in_context) {
-            curr_context.push_back(scopeName);
-            // curr_context.push_back(op->name);
+            curr_context.push_back(op->name);
         } else if (in_loop) {
             add_context_rule(curr_line_num);
         }
@@ -688,11 +685,9 @@ private:
         print(op->body);
         stream << close_div();
 
-        // scope.pop(op->name);
-        scope.pop(scopeName);
+        scope.pop(op->name);
 
-        remove_context(scopeName);
-        // remove_context(op->name);
+        remove_context(op->name);
     }
     void visit(const AssertStmt *op) override {
         stream << open_div("AssertStmt WrapLine");
