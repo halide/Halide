@@ -1064,7 +1064,7 @@ void ProducerConsumerHierarchy::visit(const Variable *op) {
             size = StmtSize();
         }
 
-        html += "<div class='box center FunctionCallBox' ";
+        html += "<div class='box center FunctionCallBox'>";
 
         html += "Function Call";
         html += "<button class='function-scroll-button' role='button' ";
@@ -1494,9 +1494,24 @@ string StmtSizes::print_node(const IRNode *node) const {
 
 const string ProducerConsumerHierarchy::scrollToFunctionJSVizToCode = "\n \
 // scroll to function - viz to code\n \
+function makeVisible(element) { \n \
+    if (!element) return; \n \
+    if (element.className == 'mainContent') return; \n \
+    if (element.style.visibility == 'hidden') { \n \
+        element.style = ''; \n \
+        show = document.getElementById(element.id + '-show'); \n \
+        hide = document.getElementById(element.id + '-hide'); \n \
+        show.style.display = 'none'; \n \
+        hide.style.display = 'block'; \n \
+        return; \n \
+    } \n \
+    makeVisible(element.parentNode); \n \
+} \n \
+ \n \
 function scrollToFunctionVizToCode(id) { \n \
     var container = document.getElementById('IRCode-code'); \n \
     var scrollToObject = document.getElementById(id); \n \
+    makeVisible(scrollToObject); \n \
     container.scrollTo({ \n \
         top: scrollToObject.offsetTop - 10, \n \
         behavior: 'smooth' \n \
@@ -1504,13 +1519,12 @@ function scrollToFunctionVizToCode(id) { \n \
     scrollToObject.style.backgroundColor = 'yellow'; \n \
     scrollToObject.style.fontSize = '20px'; \n \
  \n \
- \n \
-    // change content for 1 second  \n \
+    // change content for 1 second   \n \
     setTimeout(function () { \n \
         scrollToObject.style.backgroundColor = 'transparent'; \n \
         scrollToObject.style.fontSize = '12px'; \n \
     }, 1000); \n \
-}  \n \
+} \n \
 ";
 
 const string ProducerConsumerHierarchy::prodConsCSS = "\n \
