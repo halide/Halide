@@ -849,7 +849,7 @@ void ProducerConsumerHierarchy::for_loop_table(string loop_size) {
     html += "<tr>";
 
     html += "<th class='costTableHeader'>";
-    html += "Loop Size";
+    html += "Loop Span";
     html += "</th>";
 
     html += "</tr>";
@@ -1043,7 +1043,7 @@ void ProducerConsumerHierarchy::visit_function(const LoweredFunc &func) {
     functionCount++;
     string anchorName = "loweredFunc" + to_string(functionCount);
 
-    string header = "<span id='" + func.name + "'>" + "Func: " + func.name + "</span>";
+    string header = "<span id='" + func.name + "'><h4>" + "Func: " + func.name + "</h4></span>";
 
     StmtSize size;
     div_header(header, size, anchorName);
@@ -1249,7 +1249,17 @@ void ProducerConsumerHierarchy::visit(const Store *op) {
     close_box_div();
 }
 void ProducerConsumerHierarchy::visit(const Load *op) {
-    string header = "Load " + op->name;
+    string header;
+
+    if (op->type.is_scalar()) {
+        header = "Scalar ";
+    } else if (op->type.is_vector()) {
+        header = "Vector ";
+    } else {
+        internal_error << "\n\nUnsupported type for Load: " << op->type << "\n\n";
+    }
+
+    header += "Load " + op->name;
 
     map<string, string> tableRows;
 
