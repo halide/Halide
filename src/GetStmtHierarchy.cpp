@@ -83,12 +83,13 @@ void GetStmtHierarchy::generate_computation_cost_div(const IRNode *op) {
     stmtHierarchyTooltipCount++;
 
     int depth = findStmtCost.get_depth(op);
-    int computation_range = findStmtCost.get_computation_color_range(op);
+    int computation_range = findStmtCost.get_computation_color_range(op, true);
+    int computation_cost = findStmtCost.get_computation_cost(op, true);
     stringstream s;
 
     map<string, string> tableRows;
     tableRows["Depth"] = to_string(depth);
-    tableRows["Computation Cost"] = to_string(computation_range);
+    tableRows["Computation Cost"] = to_string(computation_cost);
     string tooltipText = tooltip_table(tableRows);
 
     // tooltip span
@@ -118,12 +119,13 @@ void GetStmtHierarchy::generate_memory_cost_div(const IRNode *op) {
 
     // colorType = DMC_TYPE;
     int depth = findStmtCost.get_depth(op);
-    int data_movement_range = findStmtCost.get_data_movement_color_range(op);
+    int data_movement_range = findStmtCost.get_data_movement_color_range(op, true);
+    int data_movement_cost = findStmtCost.get_data_movement_cost(op, true);
     stringstream s;
 
     map<string, string> tableRows;
     tableRows["Depth"] = to_string(depth);
-    tableRows["Data Movement Cost"] = to_string(data_movement_range);
+    tableRows["Data Movement Cost"] = to_string(data_movement_cost);
     string tooltipText = tooltip_table(tableRows);
 
     // tooltip span

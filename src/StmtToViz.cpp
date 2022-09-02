@@ -191,13 +191,7 @@ private:
     string open_cost_span(const IRNode *op, const string &hierarchyHTML) {
         stringstream s;
 
-        if (op->node_type == IRNodeType::Store) {  // TODO: if we want it to be for entire
-                                                   // store, change cost of store in
-                                                   // StmtCost.cpp∂
-            s << cost_colors(((const Store *)op)->value.get(), hierarchyHTML);
-        } else {
-            s << cost_colors(op, hierarchyHTML);
-        }
+        s << cost_colors(op, hierarchyHTML);
 
         s << "<span id='Cost" << id_count << "'>";
         return s.str();
@@ -268,7 +262,8 @@ private:
     }
     string computation_button(const IRNode *op) {
         int depth = findStmtCost.get_depth(op);
-        int computation_range = findStmtCost.get_computation_color_range(op);
+        int computation_range = findStmtCost.get_computation_color_range(op, false);
+        int computation_cost = findStmtCost.get_computation_cost(op, false);
 
         stringstream s;
         s << color_button(computation_range);
@@ -277,7 +272,7 @@ private:
 
         map<string, string> tableRows;
         tableRows["Depth"] = to_string(depth);
-        tableRows["Computation Cost"] = to_string(computation_range);
+        tableRows["Computation Cost"] = to_string(computation_cost);
         tooltipText << tooltip_table(tableRows);
 
         // tooltip span
@@ -290,7 +285,9 @@ private:
     }
     string data_movement_button(const IRNode *op) {
         int depth = findStmtCost.get_depth(op);
-        int data_movement_range = findStmtCost.get_data_movement_color_range(op);
+        int data_movement_range = findStmtCost.get_data_movement_color_range(op, false);
+        int data_movement_cost = findStmtCost.get_data_movement_cost(op, false);
+
         stringstream s;
         s << color_button(data_movement_range);
 
@@ -298,7 +295,7 @@ private:
 
         map<string, string> tableRows;
         tableRows["Depth"] = to_string(depth);
-        tableRows["Data Movement Cost"] = to_string(data_movement_range);
+        tableRows["Data Movement Cost"] = to_string(data_movement_cost);
         tooltipText << tooltip_table(tableRows);
 
         // tooltip span

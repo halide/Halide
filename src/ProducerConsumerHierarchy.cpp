@@ -905,12 +905,14 @@ void ProducerConsumerHierarchy::generate_computation_cost_div(const IRNode *op) 
     prodConsTooltipCount++;
 
     int depth = findStmtCost.get_depth(op);
-    int computation_range = findStmtCost.get_computation_color_range(op);
+    int computation_range = findStmtCost.get_computation_color_range(op, true);
+    int computation_cost = findStmtCost.get_computation_cost(op, true);
+
     stringstream s;
 
     map<string, string> tableRows;
     tableRows["Depth"] = to_string(depth);
-    tableRows["Computation Cost"] = to_string(computation_range);
+    tableRows["Computation Cost"] = to_string(computation_cost);
     string tooltipText = tooltip_table(tableRows);
 
     // tooltip span
@@ -934,12 +936,13 @@ void ProducerConsumerHierarchy::generate_memory_cost_div(const IRNode *op) {
     prodConsTooltipCount++;
 
     int depth = findStmtCost.get_depth(op);
-    int data_movement_range = findStmtCost.get_data_movement_color_range(op);
+    int data_movement_range = findStmtCost.get_data_movement_color_range(op, true);
+    int data_movement_cost = findStmtCost.get_data_movement_cost(op, true);
     stringstream s;
 
     map<string, string> tableRows;
     tableRows["Depth"] = to_string(depth);
-    tableRows["Data Movement Cost"] = to_string(data_movement_range);
+    tableRows["Data Movement Cost"] = to_string(data_movement_cost);
     string tooltipText = tooltip_table(tableRows);
 
     // tooltip span
@@ -975,14 +978,16 @@ string ProducerConsumerHierarchy::color_button(int colorRange) {
 
 string ProducerConsumerHierarchy::computation_button(const IRNode *op) {
     int depth = findStmtCost.get_depth(op);
-    int computation_range = findStmtCost.get_computation_color_range(op);
+    // want exclusive cost (so that the colors match up with exclusive costs)
+    int computation_range = findStmtCost.get_computation_color_range(op, false);
+    int computation_cost = findStmtCost.get_computation_cost(op, false);
 
     stringstream s;
     s << color_button(computation_range);
 
     map<string, string> tableRows;
     tableRows["Depth"] = to_string(depth);
-    tableRows["Computation Cost"] = to_string(computation_range);
+    tableRows["Computation Cost"] = to_string(computation_cost);
     string tooltipText = tooltip_table(tableRows);
 
     // tooltip span
@@ -995,14 +1000,16 @@ string ProducerConsumerHierarchy::computation_button(const IRNode *op) {
 }
 string ProducerConsumerHierarchy::data_movement_button(const IRNode *op) {
     int depth = findStmtCost.get_depth(op);
-    int data_movement_range = findStmtCost.get_data_movement_color_range(op);
+    // want exclusive cost (so that the colors match up with exclusive costs)
+    int data_movement_range = findStmtCost.get_data_movement_color_range(op, false);
+    int data_movement_cost = findStmtCost.get_data_movement_cost(op, false);
 
     stringstream s;
     s << color_button(data_movement_range);
 
     map<string, string> tableRows;
     tableRows["Depth"] = to_string(depth);
-    tableRows["Data Movement Cost"] = to_string(data_movement_range);
+    tableRows["Data Movement Cost"] = to_string(data_movement_cost);
     string tooltipText = tooltip_table(tableRows);
 
     // tooltip span
@@ -1337,9 +1344,9 @@ void ProducerConsumerHierarchy::visit(const Allocate *op) {
     StmtSize size = pre_processor.get_size(op);
     allocate_div_header(op, header, size, anchorName);
 
-    close_box_div();
-
     op->body.accept(this);
+
+    close_box_div();
 }
 
 string ProducerConsumerHierarchy::generate_prodCons_js() {
@@ -1374,7 +1381,7 @@ string ProducerConsumerHierarchy::generate_prodCons_js() {
  */
 string StmtSizes::print_node(const IRNode *node) const {
     stringstream s;
-    s << "Crashing node has type: ";
+    s << "Node in question has type: ";
     IRNodeType type = node->node_type;
     if (type == IRNodeType::IntImm) {
         s << "IntImm type";
