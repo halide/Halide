@@ -82,15 +82,7 @@ void GetStmtHierarchy::generate_computation_cost_div(const IRNode *op) {
     }
     stmtHierarchyTooltipCount++;
 
-    int depth = findStmtCost.get_depth(op);
-    int computation_range = findStmtCost.get_computation_color_range(op, true);
-    int computation_cost = findStmtCost.get_computation_cost(op, true);
-    stringstream s;
-
-    map<string, string> tableRows;
-    tableRows["Depth"] = to_string(depth);
-    tableRows["Computation Cost"] = to_string(computation_cost);
-    string tooltipText = tooltip_table(tableRows);
+    string tooltipText = findStmtCost.generate_computation_cost_tooltip(op, true, "");
 
     // tooltip span
     html += "<span id='stmtHierarchyTooltip" + std::to_string(stmtHierarchyTooltipCount) +
@@ -99,6 +91,7 @@ void GetStmtHierarchy::generate_computation_cost_div(const IRNode *op) {
     html += tooltipText;
     html += "</span>";
 
+    int computation_range = findStmtCost.get_computation_color_range(op, true);
     string className = "computation-cost-div CostColor" + to_string(computation_range);
     html +=
         "<div id='stmtHierarchyButtonTooltip" + std::to_string(stmtHierarchyTooltipCount) + "' ";
@@ -117,16 +110,7 @@ void GetStmtHierarchy::generate_memory_cost_div(const IRNode *op) {
 
     stmtHierarchyTooltipCount++;
 
-    // colorType = DMC_TYPE;
-    int depth = findStmtCost.get_depth(op);
-    int data_movement_range = findStmtCost.get_data_movement_color_range(op, true);
-    int data_movement_cost = findStmtCost.get_data_movement_cost(op, true);
-    stringstream s;
-
-    map<string, string> tableRows;
-    tableRows["Depth"] = to_string(depth);
-    tableRows["Data Movement Cost"] = to_string(data_movement_cost);
-    string tooltipText = tooltip_table(tableRows);
+    string tooltipText = findStmtCost.generate_data_movement_cost_tooltip(op, true, "");
 
     // tooltip span
     html += "<span id='stmtHierarchyTooltip" + std::to_string(stmtHierarchyTooltipCount) +
@@ -135,6 +119,7 @@ void GetStmtHierarchy::generate_memory_cost_div(const IRNode *op) {
     html += tooltipText;
     html += "</span>";
 
+    int data_movement_range = findStmtCost.get_data_movement_color_range(op, true);
     string className = "memory-cost-div CostColor" + to_string(data_movement_range);
     html +=
         "<div id='stmtHierarchyButtonTooltip" + std::to_string(stmtHierarchyTooltipCount) + "' ";
@@ -142,18 +127,6 @@ void GetStmtHierarchy::generate_memory_cost_div(const IRNode *op) {
         "aria-describedby='stmtHierarchyTooltip" + std::to_string(stmtHierarchyTooltipCount) + "' ";
     html += "class='" + className + "'>";
     html += "</div>";
-}
-string GetStmtHierarchy::tooltip_table(map<string, string> &table) {
-    stringstream s;
-    s << "<table class='tooltipTable'>";
-    for (auto &row : table) {
-        s << "<tr>";
-        s << "<td class = 'left-table'>" << row.first << "</td>";
-        s << "<td class = 'right-table'> " << row.second << "</td>";
-        s << "</tr>";
-    }
-    s << "</table>";
-    return s.str();
 }
 
 void GetStmtHierarchy::node_without_children(const IRNode *op, string name) {

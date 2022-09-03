@@ -69,14 +69,13 @@ public:
     void generate_costs(const Module &m);
     void generate_costs(const Stmt &stmt);
 
+    // generates tooltip information based on given node
+    string generate_computation_cost_tooltip(const IRNode *op, bool inclusive, string extraNote);
+    string generate_data_movement_cost_tooltip(const IRNode *op, bool inclusive, string extraNote);
+
     // returns the range of the node's cost based on the other nodes' costs
     int get_computation_color_range(const IRNode *op, bool inclusive) const;
     int get_data_movement_color_range(const IRNode *op, bool inclusive) const;
-
-    // calculates the total costs and depth of a node
-    int get_depth(const IRNode *node) const;
-    int get_computation_cost(const IRNode *node, bool inclusive) const;
-    int get_data_movement_cost(const IRNode *node, bool inclusive) const;
 
     // is local (defined in Allocate block) or not
     bool is_local_variable(const string &name) const;
@@ -95,7 +94,12 @@ private:
     // starts the traversal based on Module
     void traverse(const Module &m);
 
-    // gets raw costs from `stmt_cost` map
+    // calculates the total costs and depth of a node
+    int get_depth(const IRNode *node) const;
+    int get_computation_cost(const IRNode *node, bool inclusive) const;
+    int get_data_movement_cost(const IRNode *node, bool inclusive) const;
+
+    // gets costs from `stmt_cost` map
     vector<int> get_costs_children(const IRNode *parent, vector<const IRNode *> children,
                                    bool inclusive) const;
 
@@ -107,6 +111,9 @@ private:
 
     // gets max computation cost and max data movement cost
     void set_max_costs();
+
+    // TODO: comment
+    string tooltip_table(map<string, string> &table, string extraNote);
 
     // gets scaling factor for Load/Store based on lanes and bits
     int get_scaling_factor(uint8_t bits, uint16_t lanes) const;

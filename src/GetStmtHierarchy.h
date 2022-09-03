@@ -59,7 +59,6 @@ private:
     // creating color divs with tooltips
     void generate_computation_cost_div(const IRNode *op);
     void generate_memory_cost_div(const IRNode *op);
-    string tooltip_table(map<string, string> &table);
 
     // opens and closes nodes, depending on number of children
     void node_without_children(const IRNode *op, string name);

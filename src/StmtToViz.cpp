@@ -234,7 +234,7 @@ private:
         return s.str();
     }
     string context_button(const IRNode *op) {
-        int depth = findStmtCost.get_depth(op);
+        int depth = 0;  // findStmtCost.get_depth(op);
 
         stringstream s;
         s << "<button class='ContextButton' id='ContextSpan" << curr_line_num
@@ -250,7 +250,7 @@ private:
         map<string, string> tableRows;
         tableRows["Depth"] = to_string(depth);
 
-        tooltipText << tooltip_table(tableRows);
+        // tooltipText << tooltip_table(tableRows);
 
         // tooltip span
         s << "<span id='tooltip" << tooltipCount << "' class='tooltip' ";
@@ -261,47 +261,33 @@ private:
         return s.str();
     }
     string computation_button(const IRNode *op) {
-        int depth = findStmtCost.get_depth(op);
         int computation_range = findStmtCost.get_computation_color_range(op, false);
-        int computation_cost = findStmtCost.get_computation_cost(op, false);
-
         stringstream s;
         s << color_button(computation_range);
 
-        stringstream tooltipText;
-
-        map<string, string> tableRows;
-        tableRows["Depth"] = to_string(depth);
-        tableRows["Computation Cost"] = to_string(computation_cost);
-        tooltipText << tooltip_table(tableRows);
+        string tooltipText = findStmtCost.generate_computation_cost_tooltip(
+            op, false, "[Click to see full hierarchy]");
 
         // tooltip span
         s << "<span id='tooltip" << tooltipCount << "' class='tooltip' ";
         s << "role='tooltip" << tooltipCount << "'>";
-        s << tooltipText.str();
+        s << tooltipText;
         s << "</span>";
 
         return s.str();
     }
     string data_movement_button(const IRNode *op) {
-        int depth = findStmtCost.get_depth(op);
         int data_movement_range = findStmtCost.get_data_movement_color_range(op, false);
-        int data_movement_cost = findStmtCost.get_data_movement_cost(op, false);
-
         stringstream s;
         s << color_button(data_movement_range);
 
-        stringstream tooltipText;
-
-        map<string, string> tableRows;
-        tableRows["Depth"] = to_string(depth);
-        tableRows["Data Movement Cost"] = to_string(data_movement_cost);
-        tooltipText << tooltip_table(tableRows);
+        string tooltipText = findStmtCost.generate_data_movement_cost_tooltip(
+            op, false, "[Click to see full hierarchy]");
 
         // tooltip span
         s << "<span id='tooltip" << tooltipCount << "' class='tooltip' ";
         s << "role='tooltip" << tooltipCount << "'>";
-        s << tooltipText.str();
+        s << tooltipText;
         s << "</span>";
 
         return s.str();
@@ -325,21 +311,6 @@ private:
 
         s << "</span>";
 
-        return s.str();
-    }
-
-    string tooltip_table(map<string, string> &table) {
-        stringstream s;
-        s << "<table class='tooltipTable'>";
-        for (auto &row : table) {
-            s << "<tr>";
-            s << "<td class = 'left-table'>" << row.first << "</td>";
-            s << "<td class = 'right-table'> " << row.second << "</td>";
-            s << "</tr>";
-        }
-        s << "</table>";
-        s << "<i><span class='tooltipHelperText'>";
-        s << "[Click to see full hierarchy]</span></i>";
         return s.str();
     }
 
@@ -1996,7 +1967,7 @@ const string StmtToViz::tooltipCSS = "\n \
     border: 1px dashed #aaa; \n \
     z-index: 9999; \n \
     box-shadow: rgba(100, 100, 100, 0.8) 0 2px 5px 0; \n \
-    width: 160px; \n \
+    width: 240px; \n \
 } \n \
 .conditionTooltip { \n \
     width: 300px; \n \

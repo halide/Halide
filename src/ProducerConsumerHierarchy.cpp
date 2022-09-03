@@ -904,16 +904,7 @@ void ProducerConsumerHierarchy::generate_computation_cost_div(const IRNode *op) 
 
     prodConsTooltipCount++;
 
-    int depth = findStmtCost.get_depth(op);
-    int computation_range = findStmtCost.get_computation_color_range(op, true);
-    int computation_cost = findStmtCost.get_computation_cost(op, true);
-
-    stringstream s;
-
-    map<string, string> tableRows;
-    tableRows["Depth"] = to_string(depth);
-    tableRows["Computation Cost"] = to_string(computation_cost);
-    string tooltipText = tooltip_table(tableRows);
+    string tooltipText = findStmtCost.generate_computation_cost_tooltip(op, true, "");
 
     // tooltip span
     html +=
@@ -922,6 +913,7 @@ void ProducerConsumerHierarchy::generate_computation_cost_div(const IRNode *op) 
     html += tooltipText;
     html += "</span>";
 
+    int computation_range = findStmtCost.get_computation_color_range(op, true);
     string className = "computation-cost-div CostColor" + to_string(computation_range);
     html += "<div id='prodConsButton" + std::to_string(prodConsTooltipCount) + "' ";
     html += "aria-describedby='prodConsTooltip" + std::to_string(prodConsTooltipCount) + "' ";
@@ -935,15 +927,7 @@ void ProducerConsumerHierarchy::generate_memory_cost_div(const IRNode *op) {
 
     prodConsTooltipCount++;
 
-    int depth = findStmtCost.get_depth(op);
-    int data_movement_range = findStmtCost.get_data_movement_color_range(op, true);
-    int data_movement_cost = findStmtCost.get_data_movement_cost(op, true);
-    stringstream s;
-
-    map<string, string> tableRows;
-    tableRows["Depth"] = to_string(depth);
-    tableRows["Data Movement Cost"] = to_string(data_movement_cost);
-    string tooltipText = tooltip_table(tableRows);
+    string tooltipText = findStmtCost.generate_data_movement_cost_tooltip(op, true, "");
 
     // tooltip span
     html +=
@@ -952,6 +936,7 @@ void ProducerConsumerHierarchy::generate_memory_cost_div(const IRNode *op) {
     html += tooltipText;
     html += "</span>";
 
+    int data_movement_range = findStmtCost.get_data_movement_color_range(op, true);
     string className = "memory-cost-div CostColor" + to_string(data_movement_range);
     html += "<div id='prodConsButton" + std::to_string(prodConsTooltipCount) + "' ";
     html += "aria-describedby='prodConsTooltip" + std::to_string(prodConsTooltipCount) + "' ";
@@ -977,18 +962,13 @@ string ProducerConsumerHierarchy::color_button(int colorRange) {
 }
 
 string ProducerConsumerHierarchy::computation_button(const IRNode *op) {
-    int depth = findStmtCost.get_depth(op);
     // want exclusive cost (so that the colors match up with exclusive costs)
     int computation_range = findStmtCost.get_computation_color_range(op, false);
-    int computation_cost = findStmtCost.get_computation_cost(op, false);
 
     stringstream s;
     s << color_button(computation_range);
 
-    map<string, string> tableRows;
-    tableRows["Depth"] = to_string(depth);
-    tableRows["Computation Cost"] = to_string(computation_cost);
-    string tooltipText = tooltip_table(tableRows);
+    string tooltipText = findStmtCost.generate_computation_cost_tooltip(op, false, "");
 
     // tooltip span
     s << "<span id='prodConsTooltip" << prodConsTooltipCount << "' class='tooltip' ";
@@ -999,18 +979,13 @@ string ProducerConsumerHierarchy::computation_button(const IRNode *op) {
     return s.str();
 }
 string ProducerConsumerHierarchy::data_movement_button(const IRNode *op) {
-    int depth = findStmtCost.get_depth(op);
     // want exclusive cost (so that the colors match up with exclusive costs)
     int data_movement_range = findStmtCost.get_data_movement_color_range(op, false);
-    int data_movement_cost = findStmtCost.get_data_movement_cost(op, false);
 
     stringstream s;
     s << color_button(data_movement_range);
 
-    map<string, string> tableRows;
-    tableRows["Depth"] = to_string(depth);
-    tableRows["Data Movement Cost"] = to_string(data_movement_cost);
-    string tooltipText = tooltip_table(tableRows);
+    string tooltipText = findStmtCost.generate_data_movement_cost_tooltip(op, false, "");
 
     // tooltip span
     s << "<span id='prodConsTooltip" << prodConsTooltipCount << "' class='tooltip' ";

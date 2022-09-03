@@ -69,6 +69,49 @@ void FindStmtCost::generate_costs(const Stmt &stmt) {
     set_max_costs();
 }
 
+string FindStmtCost::generate_computation_cost_tooltip(const IRNode *op, bool inclusive,
+                                                       string extraNote) {
+    int depth = get_depth(op);
+    int computation_cost_exclusive = get_computation_cost(op, false);
+    int computation_cost_inclusive = get_computation_cost(op, true);
+
+    map<string, string> tableRows;
+    tableRows["Depth"] = to_string(depth);
+    tableRows["Data Movement Cost (Exclusive)"] = to_string(computation_cost_exclusive);
+    tableRows["Data Movement Cost (Inclusive)"] = to_string(computation_cost_inclusive);
+
+    return tooltip_table(tableRows, extraNote);
+}
+string FindStmtCost::generate_data_movement_cost_tooltip(const IRNode *op, bool inclusive,
+                                                         string extraNote) {
+    int depth = get_depth(op);
+    int data_movement_cost_exclusive = get_data_movement_cost(op, false);
+    int data_movement_cost_inclusive = get_data_movement_cost(op, true);
+
+    map<string, string> tableRows;
+    tableRows["Depth"] = to_string(depth);
+    tableRows["Data Movement Cost (Exclusive)"] = to_string(data_movement_cost_exclusive);
+    tableRows["Data Movement Cost (Inclusive)"] = to_string(data_movement_cost_inclusive);
+
+    return tooltip_table(tableRows, extraNote);
+}
+
+string FindStmtCost::tooltip_table(map<string, string> &table, string extraNote) {
+    stringstream s;
+    s << "<table class='tooltipTable'>";
+    for (auto &row : table) {
+        s << "<tr>";
+        s << "<td class = 'left-table'>" << row.first << "</td>";
+        s << "<td class = 'right-table'> " << row.second << "</td>";
+        s << "</tr>";
+    }
+    s << "</table>";
+    if (extraNote != "") {
+        s << "<i><span class='tooltipHelperText'>" << extraNote << "</span></i>";
+    }
+    return s.str();
+}
+
 int FindStmtCost::get_computation_color_range(const IRNode *op, bool inclusive) const {
     int range_size;
     int cost;
