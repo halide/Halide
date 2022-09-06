@@ -143,7 +143,7 @@ struct Rel {
     const addr_t r_info;
 
     uint32_t r_type() const {
-        if constexpr (sizeof(addr_t) == 8) {
+        if (sizeof(addr_t) == 8) {
             return r_info & 0xffffffff;
         } else {
             return r_info & 0xff;
@@ -151,7 +151,7 @@ struct Rel {
     }
 
     uint32_t r_sym() const {
-        if constexpr (sizeof(addr_t) == 8) {
+        if (sizeof(addr_t) == 8) {
             return (uint64_t)r_info >> 32;
         } else {
             return r_info >> 8;
@@ -168,7 +168,7 @@ struct Rel {
 
 private:
     static addr_t make_info(uint32_t type, uint32_t sym) {
-        if constexpr (sizeof(addr_t) == 8) {
+        if (sizeof(addr_t) == 8) {
             return (uint64_t)type | ((uint64_t)sym << 32);
         } else {
             return (type & 0xff) | (sym << 8);
