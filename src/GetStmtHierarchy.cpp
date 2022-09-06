@@ -17,7 +17,6 @@ string GetStmtHierarchy::get_hierarchy_html(const Expr &startNode) {
 
     return html.c_str();
 }
-
 string GetStmtHierarchy::get_hierarchy_html(const Stmt &startNode) {
     start_html();
 
@@ -25,6 +24,20 @@ string GetStmtHierarchy::get_hierarchy_html(const Stmt &startNode) {
     startCCNodeID = numNodes;
     start_tree();
     startNode.accept(this);
+    end_tree();
+
+    end_html();
+
+    return html.c_str();
+}
+
+string GetStmtHierarchy::get_else_hierarchy_html() {
+    start_html();
+
+    depth = 0;
+    startCCNodeID = numNodes;
+    start_tree();
+    node_without_children(nullptr, "else");
     end_tree();
 
     end_html();
@@ -75,7 +88,7 @@ void GetStmtHierarchy::end_tree() {
 void GetStmtHierarchy::generate_computation_cost_div(const IRNode *op) {
     stmtHierarchyTooltipCount++;
 
-    string tooltipText = findStmtCost.generate_computation_cost_tooltip(op, true, "");
+    string tooltipText = findStmtCost.generate_computation_cost_tooltip(op, false, "");
 
     // tooltip span
     html += "<span id='stmtHierarchyTooltip" + std::to_string(stmtHierarchyTooltipCount) +
@@ -85,7 +98,7 @@ void GetStmtHierarchy::generate_computation_cost_div(const IRNode *op) {
     html += "</span>";
 
     // color div
-    int computation_range = findStmtCost.get_computation_color_range(op, true);
+    int computation_range = findStmtCost.get_computation_color_range(op, false);
     string className = "computation-cost-div CostColor" + to_string(computation_range);
     html +=
         "<div id='stmtHierarchyButtonTooltip" + std::to_string(stmtHierarchyTooltipCount) + "' ";
@@ -97,7 +110,7 @@ void GetStmtHierarchy::generate_computation_cost_div(const IRNode *op) {
 void GetStmtHierarchy::generate_memory_cost_div(const IRNode *op) {
     stmtHierarchyTooltipCount++;
 
-    string tooltipText = findStmtCost.generate_data_movement_cost_tooltip(op, true, "");
+    string tooltipText = findStmtCost.generate_data_movement_cost_tooltip(op, false, "");
 
     // tooltip span
     html += "<span id='stmtHierarchyTooltip" + std::to_string(stmtHierarchyTooltipCount) +
@@ -107,7 +120,7 @@ void GetStmtHierarchy::generate_memory_cost_div(const IRNode *op) {
     html += "</span>";
 
     // color div
-    int data_movement_range = findStmtCost.get_data_movement_color_range(op, true);
+    int data_movement_range = findStmtCost.get_data_movement_color_range(op, false);
     string className = "memory-cost-div CostColor" + to_string(data_movement_range);
     html +=
         "<div id='stmtHierarchyButtonTooltip" + std::to_string(stmtHierarchyTooltipCount) + "' ";
@@ -313,8 +326,7 @@ void GetStmtHierarchy::visit(const Let *op) {
     open_node(op, "Let");
     uint32_t currNode = currNodeID;
 
-    // "=" node
-    open_node(op->value.get(), "=");
+    open_node(op->value.get(), "Let");
     node_without_children(nullptr, op->name);
     op->value.accept(this);
     close_node();
@@ -328,7 +340,7 @@ void GetStmtHierarchy::visit(const Let *op) {
     close_node();
 }
 void GetStmtHierarchy::visit(const LetStmt *op) {
-    open_node(op, "=");
+    open_node(op, "Let");
 
     uint32_t currNode = currNodeID;
     node_without_children(nullptr, op->name);
@@ -340,7 +352,7 @@ void GetStmtHierarchy::visit(const LetStmt *op) {
 }
 void GetStmtHierarchy::visit(const AssertStmt *op) {
     open_node(op, "Assert");
-    // TODO: add in op->message as well
+
     uint32_t currNode = currNodeID;
     op->condition.accept(this);
 
@@ -357,7 +369,7 @@ void GetStmtHierarchy::visit(const For *op) {
                    << "GetStmtHierarchy: For is not supported.\n\n";
 }
 void GetStmtHierarchy::visit(const Store *op) {
-    open_node(op, "=");
+    open_node(op, "Store");
 
     stringstream index;
     index << op->index;
@@ -370,7 +382,7 @@ void GetStmtHierarchy::visit(const Provide *op) {
     internal_error << "\n"
                    << "GetStmtHierarchy: Provide is not supported. Look into it though!!! \n\n";
 
-    open_node(op, "=");
+    open_node(op, "Provide");
     uint32_t currNode0 = currNodeID;
 
     open_node(op, op->name);
@@ -433,12 +445,11 @@ void GetStmtHierarchy::visit(const Block *op) {
                    << "GetStmtHierarchy: Block is not supported. Look into it though!!! \n\n";
 }
 void GetStmtHierarchy::visit(const IfThenElse *op) {
-    open_node(op, "IfThenElse");
+    open_node(op, "If");
 
     op->condition.accept(this);
-    if (op->else_case.defined()) {
-        op->else_case.accept(this);
-    }
+
+    // don't visualize else case because that will be visualized later as another IfThenElse block
 
     close_node();
 }

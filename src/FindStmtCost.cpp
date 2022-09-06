@@ -187,7 +187,15 @@ int FindStmtCost::get_depth(const IRNode *node) const {
         if (type == IRNodeType::IntImm || type == IRNodeType::UIntImm ||
             type == IRNodeType::FloatImm || type == IRNodeType::StringImm) {
             return 1;
-        } else {
+        }
+
+        // this case is when building IfThenElse for visualizing else case in HTML page
+        else if (type == IRNodeType::IfThenElse) {
+            Stmt then_case = ((const IfThenElse *)node)->then_case;
+            return get_depth(then_case.get());
+        }
+
+        else {
             internal_error << "\n"
                            << "FindStmtCost::get_depth: " << print_node(node)
                            << "node not found in stmt_cost map"
@@ -216,7 +224,18 @@ int FindStmtCost::get_computation_cost(const IRNode *node, bool inclusive) const
         if (type == IRNodeType::IntImm || type == IRNodeType::UIntImm ||
             type == IRNodeType::FloatImm || type == IRNodeType::StringImm) {
             cost_node = StmtCost{0, 1, 0, 1, 0};  // TODO: confirm this
-        } else {
+        }
+
+        // this case is when building IfThenElse for visualizing else case in HTML page
+        else if (type == IRNodeType::IfThenElse) {
+            Stmt then_case = ((const IfThenElse *)node)->then_case;
+            cost_node = StmtCost{get_depth(then_case.get()),
+                                 get_computation_cost(then_case.get(), inclusive),
+                                 get_data_movement_cost(then_case.get(), inclusive), 1, 0};
+        }
+
+        // else, error
+        else {
             internal_error << "\n"
                            << "FindStmtCost::get_computation_cost: " << print_node(node)
                            << "node not found in stmt_cost map"
@@ -266,7 +285,18 @@ int FindStmtCost::get_data_movement_cost(const IRNode *node, bool inclusive) con
         if (type == IRNodeType::IntImm || type == IRNodeType::UIntImm ||
             type == IRNodeType::FloatImm || type == IRNodeType::StringImm) {
             cost_node = StmtCost{0, 1, 0, 1, 0};  // TODO: confirm this
-        } else {
+        }
+
+        // this case is when building IfThenElse for visualizing else case in HTML page
+        else if (type == IRNodeType::IfThenElse) {
+            Stmt then_case = ((const IfThenElse *)node)->then_case;
+            cost_node = StmtCost{get_depth(then_case.get()),
+                                 get_computation_cost(then_case.get(), inclusive),
+                                 get_data_movement_cost(then_case.get(), inclusive), 1, 0};
+        }
+
+        // else, error
+        else {
             internal_error << "\n"
                            << "FindStmtCost::get_data_movement_cost: " << print_node(node)
                            << "node not found in stmt_cost map"

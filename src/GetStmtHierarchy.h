@@ -24,6 +24,9 @@ public:
     string get_hierarchy_html(const Expr &startNode);
     string get_hierarchy_html(const Stmt &startNode);
 
+    // special case for else case (node with just "else")
+    string get_else_hierarchy_html();
+
     // generates the JS that is needed to expand/collapse the tree
     string generate_collapse_expand_js();
     string generate_stmtHierarchy_js();

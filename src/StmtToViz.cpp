@@ -199,6 +199,34 @@ private:
     string close_cost_span() {
         return "<!-- closing_cost_span --></span>";
     }
+    string open_cost_span_else_case(Stmt else_case) {
+        Stmt new_node = IfThenElse::make(Variable::make(Int(32), "true"), else_case, nullptr);
+
+        string hierarchyHTML = getStmtHierarchy.get_else_hierarchy_html();
+        string popup = generate_stmt_hierarchy_popup(hierarchyHTML);
+
+        // popup window - will put them all at the end
+        popups += popup + "\n";
+
+        stringstream s;
+
+        curr_line_num += 1;
+
+        s << "<span class='smallColorIndent'>";
+
+        // popup window - will put them all at the end
+        popups += hierarchyHTML + "\n";
+
+        s << computation_button(new_node.get());
+        s << data_movement_button(new_node.get());
+
+        s << "</span>";
+
+        return s.str();
+
+        s << "<span id='Cost" << id_count << "'>";
+        return s.str();
+    }
 
     string open_span(const string &cls, int id = -1) {
         return open_tag("span", cls, id);
@@ -297,7 +325,8 @@ private:
 
         stringstream s;
 
-        if (op->node_type == IRNodeType::Allocate || op->node_type == IRNodeType::Evaluate)
+        if (op->node_type == IRNodeType::Allocate || op->node_type == IRNodeType::Evaluate ||
+            op->node_type == IRNodeType::IfThenElse)
             s << "<span class='smallColorIndent'>";
         else
             s << "<span class='bigColorIndent'>";
@@ -1004,6 +1033,7 @@ private:
         string anchorName = "if" + std::to_string(ifCount);
 
         int id = unique_id();
+        stream << open_cost_span(op, get_stmt_hierarchy(op));
         stream << open_expand_button(id);
         stream << open_anchor(anchorName);
         stream << open_span("Matched");
@@ -1020,6 +1050,7 @@ private:
             stream << matched(")");
             stream << close_expand_button() << " ";
             stream << matched("{");  // close if (or else if) span
+            stream << close_cost_span();
             close_anchor();
             stream << see_viz_button(anchorName);
 
@@ -1041,6 +1072,7 @@ private:
                 stream << matched("}");
                 stream << close_div();
 
+                stream << open_cost_span(nested_if, get_stmt_hierarchy(nested_if));
                 stream << open_expand_button(id);
                 stream << open_span("Matched");
 
@@ -1061,6 +1093,7 @@ private:
                 stream << matched("}");
                 stream << close_div();
 
+                stream << open_cost_span_else_case(op->else_case);
                 stream << open_expand_button(id);
 
                 // for line numbers
@@ -1074,6 +1107,7 @@ private:
 
                 stream << keyword("else");
                 stream << close_expand_button() << "{";
+                stream << close_cost_span();
                 close_anchor();
                 stream << see_viz_button(anchorName);
 
