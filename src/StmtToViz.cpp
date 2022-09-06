@@ -56,12 +56,7 @@ class StmtToViz : public IRVisitor {
 private:
     std::ofstream stream;
 
-    // used for deciding which variables are in context vs not
-    vector<string> curr_context;
-    bool in_context;
     int curr_line_num;  // for accessing div of that line
-    string content_rule_script_stream;
-    bool in_loop;
 
     // used for getting anchor names
     int ifCount = 0;
@@ -89,38 +84,8 @@ private:
         return f;
     }
 
-    void reset_context() {
-        curr_context.clear();
-    }
-
-    bool is_in_context(const string name) const {
-        for (auto &context : curr_context) {
-            if (context == name) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    // only removes it if it's there
-    void remove_context(const string name) {
-        for (auto it = curr_context.begin(); it != curr_context.end(); ++it) {
-            if (*it == name) {
-                curr_context.erase(it);
-                return;
-            }
-        }
-    }
-
     int unique_id() {
         return ++id_count;
-    }
-
-    void add_context_rule(const int line_num) {
-        string id = "ContextSpan" + to_string(line_num);
-        content_rule_script_stream += "document.getElementById('" + id +
-                                      "').classList.add('hoverContextButton');\n" +
-                                      "document.getElementById('" + id + "').disabled = false;\n";
     }
 
     // All spans and divs will have an id of the form "x-y", where x
@@ -270,33 +235,7 @@ private:
 
         return s.str();
     }
-    string context_button(const IRNode *op) {
-        int depth = 0;
 
-        stringstream s;
-        s << "<button class='ContextButton' id='ContextSpan" << curr_line_num
-          << "' disabled></button>";
-
-        stringstream tooltipText;
-
-        tooltipText << "<span style='color:red;'>";
-        tooltipText
-            << "This variable isn't required in this loop. Can be moved outside of the loop.";
-        tooltipText << "</span>";
-
-        map<string, string> tableRows;
-        tableRows["Depth"] = to_string(depth);
-
-        // tooltipText << tooltip_table(tableRows);
-
-        // tooltip span
-        s << "<span id='tooltip" << tooltipCount << "' class='tooltip' ";
-        s << "role='tooltip" << tooltipCount << "'>";
-        s << tooltipText.str();
-        s << "</span>";
-
-        return s.str();
-    }
     string computation_button(const IRNode *op) {
         stringstream s;
         s << color_button(op, true);
@@ -345,7 +284,6 @@ private:
 
         s << computation_button(op);
         s << data_movement_button(op);
-        s << context_button(op);
 
         s << "</span>";
 
@@ -495,10 +433,6 @@ private:
 
     void visit(const Variable *op) override {
 
-        if (is_in_context(op->name)) {
-            in_context = true;
-        }
-
         stream << var(op->name);
     }
 
@@ -635,8 +569,8 @@ private:
     }
 
     void visit(const Let *op) override {
-        bool in_context_before = in_context;
-        in_context = false;
+        // bool in_context_before = in_context;
+        // in_context = false;
 
         scope.push(op->name, unique_id());
         stream << open_span("Let");
@@ -647,22 +581,13 @@ private:
         stream << " " << matched("Operator Assign", "=") << " ";
         print(op->value);
 
-        if (in_context) {
-            curr_context.push_back(op->name);
-        }
-        in_context = in_context_before;
-
         stream << " " << matched("Keyword", "in") << " ";
         print(op->body);
         stream << matched(")");
         stream << close_span();
         scope.pop(op->name);
-
-        remove_context(op->name);
     }
     void visit(const LetStmt *op) override {
-        bool in_context_before = in_context;
-        in_context = false;
 
         scope.push(op->name, unique_id());
         stream << open_div("LetStmt") << open_line();
@@ -677,20 +602,11 @@ private:
         print(op->value);
         stream << close_cost_span();
 
-        if (in_context) {
-            curr_context.push_back(op->name);
-        } else if (in_loop) {
-            add_context_rule(curr_line_num);
-        }
-        in_context = in_context_before;
-
         stream << close_line();
         print(op->body);
         stream << close_div();
 
         scope.pop(op->name);
-
-        remove_context(op->name);
     }
     void visit(const AssertStmt *op) override {
         stream << open_div("AssertStmt WrapLine");
@@ -736,11 +652,6 @@ private:
     }
 
     void visit(const For *op) override {
-        bool in_loop_before = in_loop;
-
-        vector<string> previous_context(curr_context);
-        reset_context();
-        curr_context.push_back(op->name);
 
         scope.push(op->name, unique_id());
         stream << open_div("For");
@@ -776,7 +687,6 @@ private:
         stream << close_span();
 
         print_list({Variable::make(Int(32), op->name), op->min, op->extent});
-        in_loop = true;
 
         stream << matched(")");
         stream << close_expand_button();
@@ -793,9 +703,6 @@ private:
         stream << close_div();
         stream << close_div();
         scope.pop(op->name);
-
-        curr_context = previous_context;
-        in_loop = in_loop_before;
     }
 
     void visit(const Acquire *op) override {
@@ -846,9 +753,6 @@ private:
         }
         stream << close_span();
 
-        if (!in_context && in_loop) {
-            add_context_rule(curr_line_num);
-        }
         stream << close_anchor();
         stream << close_cost_span();
         stream << see_viz_button(anchorName);
@@ -915,9 +819,6 @@ private:
         }
         stream << close_cost_span();
 
-        if (!in_context && in_loop) {
-            add_context_rule(curr_line_num);
-        }
         stream << close_anchor();
         stream << see_viz_button(anchorName);
 
@@ -1144,10 +1045,6 @@ private:
         stream << open_cost_span(op, get_stmt_hierarchy(op));
         print(op->value);
         stream << close_cost_span();
-
-        if (!in_context && in_loop) {
-            add_context_rule(curr_line_num);
-        }
 
         stream << close_div();
     }
@@ -1620,7 +1517,6 @@ public:
                   "'-]').removeClass('Highlight'); }\n"
                << "} );\n";
 
-        stream << content_rule_script_stream;
         stream << generatetooltipJS(tooltipCount);
         stream << getStmtHierarchy.generate_collapse_expand_js();
         stream << getStmtHierarchy.generate_stmtHierarchy_js();
@@ -1673,13 +1569,13 @@ public:
     StmtToViz(const string &filename, const Module &m)
         : getStmtHierarchy(generate_costs(m)),
           producerConsumerHierarchy(get_file_name(filename), findStmtCost), id_count(0),
-          in_loop(false), context_stack(1, 0) {
+          context_stack(1, 0) {
     }
 
     StmtToViz(const string &filename, const Stmt &s)
         : getStmtHierarchy(generate_costs(s)),
           producerConsumerHierarchy(get_file_name(filename), findStmtCost), id_count(0),
-          in_loop(false), context_stack(1, 0) {
+          context_stack(1, 0) {
     }
 
     string generatetooltipJS(int &tooltipCount) {
@@ -1940,20 +1836,6 @@ span.ButtonSpacer { width: 5px; color: transparent; display: inline-block; }\n \
 } \n \
 .colorButton:hover { \n \
     border: 1px solid grey; \n \
-} \n \
-.ContextButton { \n \
-    height: 15px; \n \
-    width: 5px; \n \
-    border: 1px solid rgba(0, 0, 0, 0); \n \
-    background: transparent; \n \
-    margin-right: 2px; \n \
-} \n \
-.hoverContextButton { \n \
-    background: rgb(133, 133, 233); \n \
-} \n \
-.hoverContextButton:hover { \n \
-    border: 1px solid black; \n \
-    background: rgb(93, 93, 224); \n \
 } \n \
 .icon-button { \n \
     border: 0px; \n \
