@@ -214,9 +214,6 @@ private:
 
         s << "<span class='smallColorIndent'>";
 
-        // popup window - will put them all at the end
-        popups += hierarchyHTML + "\n";
-
         s << computation_button(new_node.get());
         s << data_movement_button(new_node.get());
 
@@ -326,10 +323,12 @@ private:
         stringstream s;
 
         if (op->node_type == IRNodeType::Allocate || op->node_type == IRNodeType::Evaluate ||
-            op->node_type == IRNodeType::IfThenElse)
+            op->node_type == IRNodeType::IfThenElse || op->node_type == IRNodeType::For ||
+            op->node_type == IRNodeType::ProducerConsumer) {
             s << "<span class='smallColorIndent'>";
-        else
+        } else {
             s << "<span class='bigColorIndent'>";
+        }
 
         // popup window - will put them all at the end
         popups += hierarchyHTML + "\n";
@@ -701,6 +700,8 @@ private:
         string anchorName = "producerConsumer" + std::to_string(producerConsumerCount);
 
         int produce_id = unique_id();
+
+        stream << open_cost_span(op, get_stmt_hierarchy(op));
         stream << open_span("Matched");
         stream << open_expand_button(produce_id);
         stream << open_anchor(anchorName);
@@ -708,6 +709,7 @@ private:
         stream << var(op->name);
         stream << close_expand_button() << " {";
         stream << close_span();
+        stream << close_cost_span();
         stream << close_anchor();
         stream << see_viz_button(anchorName);
 
@@ -737,6 +739,7 @@ private:
         string anchorName = "for" + std::to_string(forCount);
 
         int id = unique_id();
+        stream << open_cost_span(op, get_stmt_hierarchy(op));
         stream << open_expand_button(id);
         stream << open_anchor(anchorName);
         stream << open_span("Matched");
@@ -767,6 +770,7 @@ private:
         stream << matched(")");
         stream << close_expand_button();
         stream << " " << matched("{");
+        stream << close_cost_span();
         stream << close_anchor();
         stream << see_viz_button(anchorName);
 
@@ -1105,7 +1109,7 @@ private:
                 string anchorName = "if" + std::to_string(ifCount);
                 stream << open_anchor(anchorName);
 
-                stream << keyword("else");
+                stream << keyword("else ");
                 stream << close_expand_button() << "{";
                 stream << close_cost_span();
                 close_anchor();

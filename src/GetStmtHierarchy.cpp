@@ -361,12 +361,24 @@ void GetStmtHierarchy::visit(const AssertStmt *op) {
     close_node();
 }
 void GetStmtHierarchy::visit(const ProducerConsumer *op) {
-    internal_error << "\n"
-                   << "GetStmtHierarchy: ProducerConsumer is not supported.\n\n";
+    string nodeName = op->is_producer ? "Produce" : "Consume";
+    nodeName += " " + op->name;
+    node_without_children(op, nodeName);
 }
 void GetStmtHierarchy::visit(const For *op) {
-    internal_error << "\n"
-                   << "GetStmtHierarchy: For is not supported.\n\n";
+    open_node(op, "For");
+
+    uint32_t currNode = currNodeID;
+    open_node(op->min.get(), "min");
+    op->min.accept(this);
+    close_node();
+
+    currNodeID = currNode;
+    open_node(op->extent.get(), "extent");
+    op->extent.accept(this);
+    close_node();
+
+    close_node();
 }
 void GetStmtHierarchy::visit(const Store *op) {
     open_node(op, "Store");
@@ -447,7 +459,9 @@ void GetStmtHierarchy::visit(const Block *op) {
 void GetStmtHierarchy::visit(const IfThenElse *op) {
     open_node(op, "If");
 
+    open_node(op->condition.get(), "condition");
     op->condition.accept(this);
+    close_node();
 
     // don't visualize else case because that will be visualized later as another IfThenElse block
 
