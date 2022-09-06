@@ -77,6 +77,10 @@ public:
     int get_computation_color_range(const IRNode *op, bool inclusive) const;
     int get_data_movement_color_range(const IRNode *op, bool inclusive) const;
 
+    // for when blocks are collapsed in code viz
+    int get_combined_computation_color_range(const IRNode *op) const;
+    int get_combined_data_movement_color_range(const IRNode *op) const;
+
     // is local (defined in Allocate block) or not
     bool is_local_variable(const string &name) const;
 

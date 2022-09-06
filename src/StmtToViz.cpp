@@ -241,25 +241,37 @@ private:
         return span("Matched", body);
     }
 
-    string color_button(int colorRange) {
-        stringstream s;
+    string color_button(const IRNode *op, bool is_computation) {
 
+        int colorRangeInclusive, colorRangeExclusive;
+
+        if (is_computation) {
+            colorRangeInclusive = findStmtCost.get_combined_computation_color_range(op);
+            colorRangeExclusive = findStmtCost.get_computation_color_range(op, false);
+        } else {
+            colorRangeInclusive = findStmtCost.get_combined_data_movement_color_range(op);
+            colorRangeExclusive = findStmtCost.get_data_movement_color_range(op, false);
+        }
         tooltipCount++;
+
+        stringstream s;
         s << "<button id='button" << tooltipCount << "' ";
         s << "aria-describedby='tooltip" << tooltipCount << "' ";
-        s << "class='colorButton CostColor" + to_string(colorRange) + "' role='button' ";
+        s << "class='colorButton CostColor" + to_string(colorRangeExclusive) + "' role='button' ";
         s << "data-bs-toggle='modal' data-bs-target='#stmtHierarchyModal" << popupCount << "' ";
         s << "onmouseover='document.getElementById(\"Cost" << id_count
           << "\").style.background = \"rgba(10,10,10,0.1)\";'";
         s << "onmouseout='document.getElementById(\"Cost" << id_count
           << "\").style.background = \"transparent\";'";
+        s << "inclusiverange='" << colorRangeInclusive << "' ";
+        s << "exclusiverange='" << colorRangeExclusive << "' ";
         s << ">";
         s << "</button>";
 
         return s.str();
     }
     string context_button(const IRNode *op) {
-        int depth = 0;  // findStmtCost.get_depth(op);
+        int depth = 0;
 
         stringstream s;
         s << "<button class='ContextButton' id='ContextSpan" << curr_line_num
@@ -286,9 +298,8 @@ private:
         return s.str();
     }
     string computation_button(const IRNode *op) {
-        int computation_range = findStmtCost.get_computation_color_range(op, false);
         stringstream s;
-        s << color_button(computation_range);
+        s << color_button(op, true);
 
         string tooltipText = findStmtCost.generate_computation_cost_tooltip(
             op, false, "[Click to see full hierarchy]");
@@ -302,9 +313,8 @@ private:
         return s.str();
     }
     string data_movement_button(const IRNode *op) {
-        int data_movement_range = findStmtCost.get_data_movement_color_range(op, false);
         stringstream s;
-        s << color_button(data_movement_range);
+        s << color_button(op, false);
 
         string tooltipText = findStmtCost.generate_data_movement_cost_tooltip(
             op, false, "[Click to see full hierarchy]");
@@ -417,7 +427,8 @@ private:
 
     string open_expand_button(int id) {
         stringstream button;
-        button << "<a class=ExpandButton onclick='return toggle(" << id << ");' href=_blank>"
+        button << "<a class=ExpandButton onclick='return toggle(" << id << ", " << tooltipCount
+               << ");' href=_blank>"
                << "<div style='position:relative; width:0; height:0;'>"
                << "<div class=ShowHide style='display:none;' id=" << id << "-show"
                << "><i class='fa fa-plus-square-o'></i></div>"
@@ -2056,22 +2067,38 @@ function collapseViz() { \n \
 
 const string StmtToViz::js = "\n \
 /* Expand/Collapse buttons */\n \
-function toggle(id) { \n \
+function toggle(id, buttonId) { \n \
     e = document.getElementById(id); \n \
     show = document.getElementById(id + '-show'); \n \
     hide = document.getElementById(id + '-hide'); \n \
+    button1 = document.getElementById('button' + buttonId); \n \
+    button2 = document.getElementById('button' + (buttonId - 1)); \n \
     if (e.style.visibility != 'hidden') { \n \
         e.style.height = '0px'; \n \
         e.style.visibility = 'hidden'; \n \
         show.style.display = 'block'; \n \
         hide.style.display = 'none'; \n \
+        // make inclusive  \n \
+        inclusiverange1 = button1.getAttribute('inclusiverange'); \n \
+        newClassName = button1.className.replace(/CostColor\\d+/, 'CostColor' + inclusiverange1); \n \
+        button1.className = newClassName; \n \
+        inclusiverange2 = button2.getAttribute('inclusiverange'); \n \
+        newClassName = button2.className.replace(/CostColor\\d+/, 'CostColor' + inclusiverange2); \n \
+        button2.className = newClassName; \n \
     } else { \n \
         e.style = ''; \n \
         show.style.display = 'none'; \n \
         hide.style.display = 'block'; \n \
+        // make exclusive  \n \
+        exclusiverange1 = button1.getAttribute('exclusiverange'); \n \
+        newClassName = button1.className.replace(/CostColor\\d+/, 'CostColor' + exclusiverange1); \n \
+        button1.className = newClassName; \n \
+        exclusiverange2 = button2.getAttribute('exclusiverange'); \n \
+        newClassName = button2.className.replace(/CostColor\\d+/, 'CostColor' + exclusiverange2); \n \
+        button2.className = newClassName; \n \
     } \n \
     return false; \n \
-}\n \
+} \n \
 function openNewWindow(innerHtml) { \n \
     var newWindow = window.open('', '_blank'); \n \
     newWindow.document.write(innerHtml); \n \

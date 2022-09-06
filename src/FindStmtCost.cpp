@@ -171,6 +171,34 @@ int FindStmtCost::get_data_movement_color_range(const IRNode *op, bool inclusive
     }
     return range;
 }
+int FindStmtCost::get_combined_computation_color_range(const IRNode *op) const {
+    if (op == nullptr) {
+        return 0;
+    }
+
+    // divide max cost by NUMBER_COST_COLORS and round up to get range size
+    int range_size = (max_computation_cost_exclusive / NUMBER_COST_COLORS) + 1;
+    int cost = get_computation_cost(op, true);
+    int range = cost / range_size;
+
+    if (range > NUMBER_COST_COLORS) range = NUMBER_COST_COLORS - 1;
+
+    return range;
+}
+int FindStmtCost::get_combined_data_movement_color_range(const IRNode *op) const {
+    if (op == nullptr) {
+        return 0;
+    }
+
+    // divide max cost by NUMBER_COST_COLORS and round up to get range size
+    int range_size = (max_data_movement_cost_exclusive / NUMBER_COST_COLORS) + 1;
+    int cost = get_data_movement_cost(op, true);
+    int range = cost / range_size;
+
+    if (range > NUMBER_COST_COLORS) range = NUMBER_COST_COLORS - 1;
+
+    return range;
+}
 
 int FindStmtCost::get_depth(const IRNode *node) const {
     if (node == nullptr) {
@@ -428,19 +456,20 @@ void FindStmtCost::set_exclusive_costs(const IRNode *node, vector<const IRNode *
 
 void FindStmtCost::set_max_costs() {
     int max_cost;
-    const IRNode *max_cost_node;
+    // const IRNode *max_cost_node;
+
     // max_computation_cost_inclusive
     max_cost = 0;
     for (auto const &pair : stmt_cost) {
         int cost = get_computation_cost(pair.first, true);
         if (cost > max_cost) {
             max_cost = cost;
-            max_cost_node = pair.first;
+            // max_cost_node = pair.first;
         }
     }
     max_computation_cost_inclusive = max_cost;
-    cout << "max_computation_cost_inclusive: " << max_computation_cost_inclusive << endl;
-    cout << "max_computation_cost_inclusive node: " << print_node(max_cost_node) << endl;
+    // cout << "max_computation_cost_inclusive: " << max_computation_cost_inclusive << endl;
+    // cout << "max_computation_cost_inclusive node: " << print_node(max_cost_node) << endl;
 
     // max_data_movement_cost_inclusive
     max_cost = 0;
@@ -448,12 +477,12 @@ void FindStmtCost::set_max_costs() {
         int cost = get_data_movement_cost(pair.first, true);
         if (cost > max_cost) {
             max_cost = cost;
-            max_cost_node = pair.first;
+            // max_cost_node = pair.first;
         }
     }
     max_data_movement_cost_inclusive = max_cost;
-    cout << "max_data_movement_cost_inclusive: " << max_data_movement_cost_inclusive << endl;
-    cout << "max_data_movement_cost_inclusive node: " << print_node(max_cost_node) << endl;
+    // cout << "max_data_movement_cost_inclusive: " << max_data_movement_cost_inclusive << endl;
+    // cout << "max_data_movement_cost_inclusive node: " << print_node(max_cost_node) << endl;
 
     // max_computation_cost_exclusive
     max_cost = 0;
@@ -461,12 +490,12 @@ void FindStmtCost::set_max_costs() {
         int cost = get_computation_cost(pair.first, false);
         if (cost > max_cost) {
             max_cost = cost;
-            max_cost_node = pair.first;
+            // max_cost_node = pair.first;
         }
     }
     max_computation_cost_exclusive = max_cost;
-    cout << "max_computation_cost_exclusive: " << max_computation_cost_exclusive << endl;
-    cout << "max_computation_cost_exclusive node: " << print_node(max_cost_node) << endl;
+    // cout << "max_computation_cost_exclusive: " << max_computation_cost_exclusive << endl;
+    // cout << "max_computation_cost_exclusive node: " << print_node(max_cost_node) << endl;
 
     // max_data_movement_cost_exclusive
     max_cost = 0;
@@ -474,12 +503,12 @@ void FindStmtCost::set_max_costs() {
         int cost = get_data_movement_cost(pair.first, false);
         if (cost > max_cost) {
             max_cost = cost;
-            max_cost_node = pair.first;
+            // max_cost_node = pair.first;
         }
     }
     max_data_movement_cost_exclusive = max_cost;
-    cout << "max_data_movement_cost_exclusive: " << max_data_movement_cost_exclusive << endl;
-    cout << "max_data_movement_cost_exclusive node: " << print_node(max_cost_node) << endl;
+    // cout << "max_data_movement_cost_exclusive: " << max_data_movement_cost_exclusive << endl;
+    // cout << "max_data_movement_cost_exclusive node: " << print_node(max_cost_node) << endl;
 }
 int FindStmtCost::get_scaling_factor(uint8_t bits, uint16_t lanes) const {
     int bitsFactor = bits / 8;
