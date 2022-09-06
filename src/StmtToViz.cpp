@@ -269,7 +269,7 @@ private:
             op, false, "[Click to see full hierarchy]");
 
         // tooltip span
-        s << "<span id='tooltip" << tooltipCount << "' class='tooltip' ";
+        s << "<span id='tooltip" << tooltipCount << "' class='tooltip CostTooltip' ";
         s << "role='tooltip" << tooltipCount << "'>";
         s << tooltipText;
         s << "</span>";
@@ -285,7 +285,7 @@ private:
             op, false, "[Click to see full hierarchy]");
 
         // tooltip span
-        s << "<span id='tooltip" << tooltipCount << "' class='tooltip' ";
+        s << "<span id='tooltip" << tooltipCount << "' class='tooltip CostTooltip' ";
         s << "role='tooltip" << tooltipCount << "'>";
         s << tooltipText;
         s << "</span>";
@@ -1967,6 +1967,8 @@ const string StmtToViz::tooltipCSS = "\n \
     border: 1px dashed #aaa; \n \
     z-index: 9999; \n \
     box-shadow: rgba(100, 100, 100, 0.8) 0 2px 5px 0; \n \
+} \n \
+.CostTooltip { \n \
     width: 240px; \n \
 } \n \
 .conditionTooltip { \n \
@@ -1975,7 +1977,7 @@ const string StmtToViz::tooltipCSS = "\n \
     font-family: Consolas, 'Liberation Mono', Menlo, Courier, monospace; \n \
 } \n \
 span.tooltipHelperText { \n \
-    color: grey; \n \
+    color: red; \n \
     margin-top: 5px; \n \
 } \n \
 ";

@@ -73,24 +73,18 @@ void GetStmtHierarchy::end_tree() {
     html += "</div>";
 }
 void GetStmtHierarchy::generate_computation_cost_div(const IRNode *op) {
-
-    // add color div with cost 0
-    if (op == nullptr) {
-        html += "<div class='computation-cost-div CostColor0'>";
-        html += "</div>";
-        return;
-    }
     stmtHierarchyTooltipCount++;
 
     string tooltipText = findStmtCost.generate_computation_cost_tooltip(op, true, "");
 
     // tooltip span
     html += "<span id='stmtHierarchyTooltip" + std::to_string(stmtHierarchyTooltipCount) +
-            "' class='tooltip' ";
+            "' class='tooltip CostTooltip' ";
     html += "role='stmtHierarchyTooltip" + std::to_string(stmtHierarchyTooltipCount) + "'>";
     html += tooltipText;
     html += "</span>";
 
+    // color div
     int computation_range = findStmtCost.get_computation_color_range(op, true);
     string className = "computation-cost-div CostColor" + to_string(computation_range);
     html +=
@@ -101,24 +95,18 @@ void GetStmtHierarchy::generate_computation_cost_div(const IRNode *op) {
     html += "</div>";
 }
 void GetStmtHierarchy::generate_memory_cost_div(const IRNode *op) {
-    // add color div with cost 0
-    if (op == nullptr) {
-        html += "<div class='computation-cost-div CostColor0'>";
-        html += "</div>";
-        return;
-    }
-
     stmtHierarchyTooltipCount++;
 
     string tooltipText = findStmtCost.generate_data_movement_cost_tooltip(op, true, "");
 
     // tooltip span
     html += "<span id='stmtHierarchyTooltip" + std::to_string(stmtHierarchyTooltipCount) +
-            "' class='tooltip' ";
+            "' class='tooltip CostTooltip' ";
     html += "role='stmtHierarchyTooltip" + std::to_string(stmtHierarchyTooltipCount) + "'>";
     html += tooltipText;
     html += "</span>";
 
+    // color div
     int data_movement_range = findStmtCost.get_data_movement_color_range(op, true);
     string className = "memory-cost-div CostColor" + to_string(data_movement_range);
     html +=

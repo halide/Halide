@@ -221,8 +221,8 @@ private:
 
     // for cost colors - side boxes
     string color_button(int colorRange);
-    string computation_button(const IRNode *op);
-    string data_movement_button(const IRNode *op);
+    string computation_div(const IRNode *op);
+    string data_movement_div(const IRNode *op);
     string tooltip_table(map<string, string> &table);
     void cost_colors(const IRNode *op);
 

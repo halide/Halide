@@ -71,22 +71,38 @@ void FindStmtCost::generate_costs(const Stmt &stmt) {
 
 string FindStmtCost::generate_computation_cost_tooltip(const IRNode *op, bool inclusive,
                                                        string extraNote) {
-    int depth = get_depth(op);
-    int computation_cost_exclusive = get_computation_cost(op, false);
-    int computation_cost_inclusive = get_computation_cost(op, true);
+    int depth, computation_cost_exclusive, computation_cost_inclusive;
+
+    if (op == nullptr) {
+        depth = 0;
+        computation_cost_exclusive = NORMAL_NODE_CC;
+        computation_cost_inclusive = NORMAL_NODE_CC;
+    } else {
+        depth = get_depth(op);
+        computation_cost_exclusive = get_computation_cost(op, false);
+        computation_cost_inclusive = get_computation_cost(op, true);
+    }
 
     map<string, string> tableRows;
     tableRows["Depth"] = to_string(depth);
-    tableRows["Data Movement Cost (Exclusive)"] = to_string(computation_cost_exclusive);
-    tableRows["Data Movement Cost (Inclusive)"] = to_string(computation_cost_inclusive);
+    tableRows["Computation Cost (Exclusive)"] = to_string(computation_cost_exclusive);
+    tableRows["Computation Cost (Inclusive)"] = to_string(computation_cost_inclusive);
 
     return tooltip_table(tableRows, extraNote);
 }
 string FindStmtCost::generate_data_movement_cost_tooltip(const IRNode *op, bool inclusive,
                                                          string extraNote) {
-    int depth = get_depth(op);
-    int data_movement_cost_exclusive = get_data_movement_cost(op, false);
-    int data_movement_cost_inclusive = get_data_movement_cost(op, true);
+    int depth, data_movement_cost_exclusive, data_movement_cost_inclusive;
+
+    if (op == nullptr) {
+        depth = 0;
+        data_movement_cost_exclusive = NORMAL_NODE_DMC;
+        data_movement_cost_inclusive = NORMAL_NODE_DMC;
+    } else {
+        depth = get_depth(op);
+        data_movement_cost_exclusive = get_data_movement_cost(op, false);
+        data_movement_cost_inclusive = get_data_movement_cost(op, true);
+    }
 
     map<string, string> tableRows;
     tableRows["Depth"] = to_string(depth);
@@ -106,6 +122,7 @@ string FindStmtCost::tooltip_table(map<string, string> &table, string extraNote)
         s << "</tr>";
     }
     s << "</table>";
+
     if (extraNote != "") {
         s << "<i><span class='tooltipHelperText'>" << extraNote << "</span></i>";
     }
@@ -113,6 +130,10 @@ string FindStmtCost::tooltip_table(map<string, string> &table, string extraNote)
 }
 
 int FindStmtCost::get_computation_color_range(const IRNode *op, bool inclusive) const {
+    if (op == nullptr) {
+        return 0;
+    }
+
     int range_size;
     int cost;
     int range;
@@ -122,7 +143,6 @@ int FindStmtCost::get_computation_color_range(const IRNode *op, bool inclusive) 
         range_size = (max_computation_cost_inclusive / NUMBER_COST_COLORS) + 1;
         cost = get_computation_cost(op, true);
         range = cost / range_size;
-
     } else {
         range_size = (max_computation_cost_exclusive / NUMBER_COST_COLORS) + 1;
         cost = get_computation_cost(op, false);
@@ -131,6 +151,10 @@ int FindStmtCost::get_computation_color_range(const IRNode *op, bool inclusive) 
     return range;
 }
 int FindStmtCost::get_data_movement_color_range(const IRNode *op, bool inclusive) const {
+    if (op == nullptr) {
+        return 0;
+    }
+
     int range_size;
     int cost;
     int range;

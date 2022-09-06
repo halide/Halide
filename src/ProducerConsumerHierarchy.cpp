@@ -885,8 +885,9 @@ string ProducerConsumerHierarchy::info_tooltip(string toolTipText, string classN
     ss += "<i class='bi bi-info'></i>";
     ss += "</button>";
 
+    // tooltip span
     ss += "<span id='prodConsTooltip" + std::to_string(prodConsTooltipCount) + "' ";
-    ss += "class='tooltip prodConsTooltip";
+    ss += "class='tooltip";
     if (className != "") {
         ss += " " + className;
     }
@@ -907,8 +908,8 @@ void ProducerConsumerHierarchy::generate_computation_cost_div(const IRNode *op) 
     string tooltipText = findStmtCost.generate_computation_cost_tooltip(op, true, "");
 
     // tooltip span
-    html +=
-        "<span id='prodConsTooltip" + std::to_string(prodConsTooltipCount) + "' class='tooltip' ";
+    html += "<span id='prodConsTooltip" + std::to_string(prodConsTooltipCount) +
+            "' class='tooltip CostTooltip' ";
     html += "role='prodConsTooltip" + std::to_string(prodConsTooltipCount) + "'>";
     html += tooltipText;
     html += "</span>";
@@ -930,8 +931,8 @@ void ProducerConsumerHierarchy::generate_memory_cost_div(const IRNode *op) {
     string tooltipText = findStmtCost.generate_data_movement_cost_tooltip(op, true, "");
 
     // tooltip span
-    html +=
-        "<span id='prodConsTooltip" + std::to_string(prodConsTooltipCount) + "' class='tooltip' ";
+    html += "<span id='prodConsTooltip" + std::to_string(prodConsTooltipCount) +
+            "' class='tooltip CostTooltip' ";
     html += "role='prodConsTooltip" + std::to_string(prodConsTooltipCount) + "'>";
     html += tooltipText;
     html += "</span>";
@@ -961,7 +962,7 @@ string ProducerConsumerHierarchy::color_button(int colorRange) {
     return s.str();
 }
 
-string ProducerConsumerHierarchy::computation_button(const IRNode *op) {
+string ProducerConsumerHierarchy::computation_div(const IRNode *op) {
     // want exclusive cost (so that the colors match up with exclusive costs)
     int computation_range = findStmtCost.get_computation_color_range(op, false);
 
@@ -971,14 +972,14 @@ string ProducerConsumerHierarchy::computation_button(const IRNode *op) {
     string tooltipText = findStmtCost.generate_computation_cost_tooltip(op, false, "");
 
     // tooltip span
-    s << "<span id='prodConsTooltip" << prodConsTooltipCount << "' class='tooltip' ";
+    s << "<span id='prodConsTooltip" << prodConsTooltipCount << "' class='tooltip CostTooltip' ";
     s << "role='prodConsTooltip" << prodConsTooltipCount << "'>";
     s << tooltipText;
     s << "</span>";
 
     return s.str();
 }
-string ProducerConsumerHierarchy::data_movement_button(const IRNode *op) {
+string ProducerConsumerHierarchy::data_movement_div(const IRNode *op) {
     // want exclusive cost (so that the colors match up with exclusive costs)
     int data_movement_range = findStmtCost.get_data_movement_color_range(op, false);
 
@@ -988,7 +989,7 @@ string ProducerConsumerHierarchy::data_movement_button(const IRNode *op) {
     string tooltipText = findStmtCost.generate_data_movement_cost_tooltip(op, false, "");
 
     // tooltip span
-    s << "<span id='prodConsTooltip" << prodConsTooltipCount << "' class='tooltip' ";
+    s << "<span id='prodConsTooltip" << prodConsTooltipCount << "' class='tooltip CostTooltip' ";
     s << "role='prodConsTooltip" << prodConsTooltipCount << "'>";
     s << tooltipText;
     s << "</span>";
@@ -1008,8 +1009,8 @@ string ProducerConsumerHierarchy::tooltip_table(map<string, string> &table) {
     return s.str();
 }
 void ProducerConsumerHierarchy::cost_colors(const IRNode *op) {
-    html += computation_button(op);
-    html += data_movement_button(op);
+    html += computation_div(op);
+    html += data_movement_div(op);
 }
 
 void ProducerConsumerHierarchy::visit_function(const LoweredFunc &func) {
