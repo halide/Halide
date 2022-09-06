@@ -14,22 +14,22 @@ using namespace Internal;
 #define MAX_CONDITION_LENGTH 30
 
 struct StmtSize {
-    map<string, string> produces;
-    map<string, string> consumes;
+    map<string, string> writes;
+    map<string, string> reads;
     bool empty() const {
-        return produces.size() == 0 && consumes.size() == 0;
+        return writes.size() == 0 && reads.size() == 0;
     }
 
     string to_string() {
         string result = "";
         if (!empty()) {
-            result += "Produces: ";
-            for (auto it = produces.begin(); it != produces.end(); ++it) {
+            result += "Writes: ";
+            for (auto it = writes.begin(); it != writes.end(); ++it) {
                 result += it->first + ": " + it->second + "\n";
             }
             result += "\n";
-            result += "Consumes: ";
-            for (auto it = consumes.begin(); it != consumes.end(); ++it) {
+            result += "Reads: ";
+            for (auto it = reads.begin(); it != reads.end(); ++it) {
                 result += it->first + ": " + it->second + "\n";
             }
         }
@@ -65,8 +65,8 @@ private:
 
     string get_simplified_string(string a, string b, string op);
 
-    void set_produce_size(const IRNode *node, string produce_var, string produce_size);
-    void set_consume_size(const IRNode *node, string consume_var, string consume_size);
+    void set_write_size(const IRNode *node, string write_var, string write_size);
+    void set_read_size(const IRNode *node, string read_var, string read_size);
 
     void visit(const Store *op) override;
     void add_load_value(const string &name, const int lanes);
@@ -137,7 +137,7 @@ private:
     void close_if_tree();
 
     // different cost tables
-    void prod_cons_table(StmtSize &size);
+    void read_write_table(StmtSize &size);
     void allocate_table(vector<string> &allocationSizes);
     void for_loop_table(string loop_size);
 

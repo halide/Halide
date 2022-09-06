@@ -77,26 +77,26 @@ string StmtSizes::get_simplified_string(string a, string b, string op) {
     }
 }
 
-void StmtSizes::set_produce_size(const IRNode *node, string produce_var, string produce_size) {
+void StmtSizes::set_write_size(const IRNode *node, string write_var, string write_size) {
     auto it = stmt_sizes.find(node);
     if (it == stmt_sizes.end()) {
         stmt_sizes[node] = StmtSize();
     }
-    stmt_sizes[node].produces[produce_var] = produce_size;
+    stmt_sizes[node].writes[write_var] = write_size;
 }
-void StmtSizes::set_consume_size(const IRNode *node, string consume_var, string consume_size) {
+void StmtSizes::set_read_size(const IRNode *node, string read_var, string read_size) {
     auto it = stmt_sizes.find(node);
     if (it == stmt_sizes.end()) {
         stmt_sizes[node] = StmtSize();
     }
-    stmt_sizes[node].consumes[consume_var] = consume_size;
+    stmt_sizes[node].reads[read_var] = read_size;
 }
 void StmtSizes::visit(const Store *op) {
 
     // TODO: is this correct? should i be getting it from `index`?
     uint16_t lanes = op->index.type().lanes();
 
-    set_produce_size(op, op->name, int_span(lanes));
+    set_write_size(op, op->name, int_span(lanes));
 
     // empty curr_load_values
     curr_load_values.clear();
@@ -104,7 +104,7 @@ void StmtSizes::visit(const Store *op) {
 
     // set consume (for now, read values)
     for (const auto &load_var : curr_load_values) {
-        set_consume_size(op, load_var.first, int_span(load_var.second));
+        set_read_size(op, load_var.first, int_span(load_var.second));
     }
 }
 void StmtSizes::add_load_value(const string &name, const int lanes) {
@@ -220,7 +220,7 @@ void ProducerConsumerHierarchy::div_header(const string &header, StmtSize *size,
 
     // add producer consumer size if size is provided
     if (size != nullptr) {
-        prod_cons_table(*size);
+        read_write_table(*size);
     }
 
     close_header(anchorName);
@@ -279,7 +279,7 @@ void ProducerConsumerHierarchy::close_if_tree() {
     html += "</li>";
 }
 
-void ProducerConsumerHierarchy::prod_cons_table(StmtSize &size) {
+void ProducerConsumerHierarchy::read_write_table(StmtSize &size) {
     // open table
     html += "<table class='costTable'>";
 
@@ -299,7 +299,7 @@ void ProducerConsumerHierarchy::prod_cons_table(StmtSize &size) {
     // produces and consumes are empty
     if (size.empty()) {
         internal_error << "\n\n"
-                       << "ProducerConsumerHierarchy::prod_cons_table - size is empty"
+                       << "ProducerConsumerHierarchy::read_write_table - size is empty"
                        << "\n";
     }
 
@@ -308,7 +308,7 @@ void ProducerConsumerHierarchy::prod_cons_table(StmtSize &size) {
         vector<string> rows;
 
         // fill in producer variables
-        for (const auto &produce_var : size.produces) {
+        for (const auto &produce_var : size.writes) {
             string ss;
             ss += "<td class='costTableData'>";
             ss += produce_var.first + ": ";
@@ -323,7 +323,7 @@ void ProducerConsumerHierarchy::prod_cons_table(StmtSize &size) {
 
         // fill in consumer variables
         unsigned long rowNum = 0;
-        for (const auto &consume_var : size.consumes) {
+        for (const auto &consume_var : size.reads) {
             string ss;
             ss += "<td class='costTableData'>";
             ss += consume_var.first + ": ";
@@ -347,8 +347,8 @@ void ProducerConsumerHierarchy::prod_cons_table(StmtSize &size) {
         }
 
         // pad row with empty calls for consume
-        rowNum = size.consumes.size();
-        while (rowNum < size.produces.size()) {
+        rowNum = size.reads.size();
+        while (rowNum < size.writes.size()) {
             string sEmpty;
             sEmpty += "<td class='costTableData'>";
             sEmpty += "</td>";
