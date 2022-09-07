@@ -871,6 +871,9 @@ class SubstituteInWideningLets : public IRMutator {
 }  // namespace
 
 Stmt find_intrinsics(const Stmt &s) {
+    if (get_env_variable("HL_DISABLE_LIFTING") == "1") {
+        return s;
+    }
     Stmt stmt = SubstituteInWideningLets().mutate(s);
     stmt = FindIntrinsics().mutate(stmt);
     // In case we want to hoist widening ops back out
@@ -879,6 +882,9 @@ Stmt find_intrinsics(const Stmt &s) {
 }
 
 Expr find_intrinsics(const Expr &e) {
+    if (get_env_variable("HL_DISABLE_LIFTING") == "1") {
+        return e;
+    }
     Expr expr = SubstituteInWideningLets().mutate(e);
     expr = FindIntrinsics().mutate(expr);
     expr = common_subexpression_elimination(expr);

@@ -1514,6 +1514,15 @@ private:
             interval = result;
         } else if (op->call_type == Call::Halide) {
             bounds_of_func(op->name, op->value_index, op->type);
+        } else if (op->is_intrinsic({Call::widening_add,
+                                     Call::widening_mul,
+                                     Call::widening_shift_left,
+                                     Call::widening_shift_right,
+                                     Call::widening_sub})) {
+            // Each of these can be cleanly lowered to exact semantic definitions.
+            Expr a = lower_intrinsic(op);
+            a.accept(this);
+            return;
         } else {
             // Just use the bounds of the type
             bounds_of_type(t);

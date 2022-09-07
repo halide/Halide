@@ -12,6 +12,7 @@
 #include <string>
 
 #include "Argument.h"
+#include "Bounds.h"
 #include "Expr.h"
 #ifdef HALIDE_ALLOW_GENERATOR_EXTERNAL_CODE
 #include "ExternalCode.h"
@@ -108,6 +109,8 @@ struct LoweredFunc {
     /** The linkage of this function. */
     LinkageType linkage;
 
+    FuncValueBounds func_value_bounds;
+
     /** The name-mangling choice for the function. Defaults to using
      * the Target. */
     NameMangling name_mangling;
@@ -116,11 +119,13 @@ struct LoweredFunc {
                 const std::vector<LoweredArgument> &args,
                 Stmt body,
                 LinkageType linkage,
+                FuncValueBounds fvb = empty_func_value_bounds(),
                 NameMangling mangling = NameMangling::Default);
     LoweredFunc(const std::string &name,
                 const std::vector<Argument> &args,
                 Stmt body,
                 LinkageType linkage,
+                FuncValueBounds fvb = empty_func_value_bounds(),
                 NameMangling mangling = NameMangling::Default);
 };
 

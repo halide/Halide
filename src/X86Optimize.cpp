@@ -61,11 +61,13 @@ bool should_use_dot_product(const Expr &a, const Expr &b, std::vector<Expr> &res
 
 /** A top-down code optimizer that replaces Halide IR with VectorInstructions specific to x86. */
 class Optimize_X86 : public InstructionSelector {
+private:
+    const FuncValueBounds &fvb;
 public:
     /** Create an x86 code optimizer. Processor features can be
      * enabled using the appropriate flags in the target struct. */
-    Optimize_X86(const Target &target, const CodeGen_LLVM *codegen)
-        : InstructionSelector(target, codegen) {
+    Optimize_X86(const Target &target, const CodeGen_LLVM *codegen, const FuncValueBounds &_fvb)
+        : InstructionSelector(target, codegen), fvb(_fvb) {
     }
 
 protected:
@@ -392,6 +394,26 @@ protected:
             return mutate(rewrite.result);
         }
 
+        // TODO: make this a rule.
+        if (op->is_intrinsic(Call::saturating_cast) && op->type.element_of() == UInt(8)) {
+            internal_assert(op->args.size() == 1);
+            Expr a = op->args[0];
+            if (a.type().element_of() == UInt(16)) {
+                const int lanes = a.type().lanes();
+                // Check bounds.
+                // TODO: should this use constant bounds?
+                // TODO: should we have scope? probably for let statements.
+                Expr upper_bound = bounds_of_expr_in_scope(a, Scope<Interval>::empty_scope(), fvb).max;
+                Expr int16_max = cast(UInt(16), Int(16).max());
+                if (can_prove(upper_bound <= int16_max)) {
+                    a = reinterpret(Int(16, lanes), a);
+                    return mutate(VectorInstruction::make(UInt(8, lanes), VectorInstruction::saturating_narrow, {a}));
+                }
+            }
+        }
+
+        // TODO: double-narrowing saturating narrows should be split here.
+
         // Fixed-point intrinsics should be lowered here.
         // This is safe because this mutator is top-down.
         // FIXME: Should this be default behavior of the base InstructionSelector class?
@@ -404,6 +426,7 @@ protected:
                 Call::rounding_shift_left,
                 Call::rounding_shift_right,
                 Call::saturating_add,
+                Call::saturating_cast,
                 Call::saturating_sub,
                 Call::sorted_avg,
                 Call::widening_add,
@@ -600,8 +623,11 @@ private:
 
 }  // namespace
 
-Stmt optimize_x86_instructions(const Stmt &s, const Target &target, const CodeGen_LLVM *codegen) {
-    Stmt stmt = Optimize_X86(target, codegen).mutate(s);
+Stmt optimize_x86_instructions(const Stmt &s, const Target &target, const CodeGen_LLVM *codegen, const FuncValueBounds &fvb) {
+    if (get_env_variable("HL_DISABLE_X86_LOWERING") == "1") {
+        return s;
+    }
+    Stmt stmt = Optimize_X86(target, codegen, fvb).mutate(s);
 
     // Some of the rules above can introduce repeated sub-terms, so run CSE again.
     if (!stmt.same_as(s)) {
@@ -614,7 +640,7 @@ Stmt optimize_x86_instructions(const Stmt &s, const Target &target, const CodeGe
 
 #else  // WITH_X86
 
-Stmt optimize_x86_instructions(const Stmt &s, const Target &t, const CodeGen_LLVM *codegen) {
+Stmt optimize_x86_instructions(const Stmt &s, const Target &t, const CodeGen_LLVM *codegen, const FuncValueBounds &fvb) {
     user_error << "x86 not enabled for this build of Halide.\n";
     return Stmt();
 }

@@ -545,7 +545,7 @@ void lower_impl(const vector<Function> &output_funcs,
     };
     s = StrengthenRefs().mutate(s);
 
-    LoweredFunc main_func(pipeline_name, public_args, s, linkage_type);
+    LoweredFunc main_func(pipeline_name, public_args, s, linkage_type, func_bounds);
 
     // If we're in debug mode, add code that prints the args.
     if (t.has_feature(Target::Debug)) {
