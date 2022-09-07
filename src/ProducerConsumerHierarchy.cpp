@@ -664,7 +664,6 @@ string ProducerConsumerHierarchy::get_loop_iterator(const For *op) const {
         string minName = pre_processor.int_span(minValue);
         string extentName = pre_processor.string_span(extent.as<Variable>()->name);
 
-        // TODO: inline variable for extentName
         if (minValue == 0) {
             loopIterator = extentName;
         } else {
@@ -763,8 +762,6 @@ void ProducerConsumerHierarchy::visit(const IfThenElse *op) {
     string anchorName = "if" + std::to_string(ifCount);
 
     while (true) {
-
-        // TODO: inline condition
         string condition;
         condition += to_string(op->condition);
 
