@@ -538,6 +538,7 @@ function(add_halide_runtime RT)
     if (NOT TARGET _Halide_gengen)
         add_executable(_Halide_gengen )
         target_link_libraries(_Halide_gengen PRIVATE Halide::Generator)
+        _Halide_place_dll(_Halide_gengen)
     endif ()
 
     _Halide_get_platform_details(
