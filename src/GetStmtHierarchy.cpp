@@ -369,6 +369,11 @@ void GetStmtHierarchy::visit(const For *op) {
     open_node(op, "For");
 
     uint32_t currNode = currNodeID;
+    open_node(nullptr, "loop var");
+    node_without_children(nullptr, op->name);
+    close_node();
+
+    currNodeID = currNode;
     open_node(op->min.get(), "min");
     op->min.accept(this);
     close_node();
