@@ -11,6 +11,13 @@ using namespace std;
 using namespace Halide;
 using namespace Internal;
 
+struct StmtHierarchyInfo {
+    string html;     // html code for the node
+    int viz_num;     // id for that visualization
+    int start_node;  // start node for the visualization
+    int end_node;    // end node for the visualization
+};
+
 class GetStmtHierarchy : public IRVisitor {
 
 public:
@@ -21,11 +28,11 @@ public:
     }
 
     // returns the generated hierarchy's html
-    string get_hierarchy_html(const Expr &startNode);
-    string get_hierarchy_html(const Stmt &startNode);
+    StmtHierarchyInfo get_hierarchy_html(const Expr &node);
+    StmtHierarchyInfo get_hierarchy_html(const Stmt &node);
 
     // special case for else case (node with just "else")
-    string get_else_hierarchy_html();
+    StmtHierarchyInfo get_else_hierarchy_html();
 
     // generates the JS that is needed to expand/collapse the tree
     string generate_collapse_expand_js();
@@ -36,12 +43,11 @@ private:
     FindStmtCost findStmtCost;  // used to determine the color of each statement
 
     // for expanding/collapsing nodes
-    uint32_t currNodeID;      // ID of the current node in traversal
-    uint32_t numNodes;        // total number of nodes (across both trees in the hierarchy)
-    uint32_t startCCNodeID;   // ID of the start node in the CC tree
-    uint32_t startDMCNodeID;  // ID of the start node in the DMC tree
-    int depth;                // depth of the current node in the tree
-
+    int currNodeID;      // ID of the current node in traversal
+    int numNodes;        // total number of nodes (across both trees in the hierarchy)
+    int startNodeID;     // ID of the start node of the current tree
+    int depth;           // depth of the current node in the tree
+    int vizCounter = 0;  // counter for the number of visualizations
     int stmtHierarchyTooltipCount = 0;  // tooltip count
 
     // updates the currNodeID to be the next available node ID (numNodes)
@@ -51,9 +57,8 @@ private:
     // returns the class name in format "node[parentID]child depth[depth]"
     string get_node_class_name();
 
-    // starts and ends the html file
-    void start_html();
-    void end_html();
+    // resets all the variables to start a new tree
+    void reset_variables();
 
     // starts and ends a tree within the html file
     void start_tree();

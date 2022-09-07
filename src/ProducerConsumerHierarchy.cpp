@@ -974,8 +974,8 @@ string ProducerConsumerHierarchy::generate_prodCons_js() {
 
     prodConsJS += "\n// prodCons JS\n";
     prodConsJS += "for (let i = 1; i <= " + std::to_string(prodConsTooltipCount) + "; i++) { \n";
-    prodConsJS += "    const button = document.querySelector('#prodConsButton' + i); \n";
-    prodConsJS += "    const tooltip = document.querySelector('#prodConsTooltip' + i); \n";
+    prodConsJS += "    const button = document.getElementById('prodConsButton' + i); \n";
+    prodConsJS += "    const tooltip = document.getElementById('prodConsTooltip' + i); \n";
     prodConsJS += "    button.addEventListener('mouseenter', () => { \n";
     prodConsJS += "        showTooltip(button, tooltip); \n";
     prodConsJS += "    }); \n";

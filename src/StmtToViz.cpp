@@ -116,15 +116,21 @@ private:
         return "</" + tag + ">";
     }
 
-    string get_stmt_hierarchy(const Stmt &op) {
-        string hierarchyHTML = getStmtHierarchy.get_hierarchy_html(op);
-        if (PRINT_HIERARCHY) cout << hierarchyHTML << endl;
-        return generate_stmt_hierarchy_popup(hierarchyHTML);
+    StmtHierarchyInfo get_stmt_hierarchy(const Stmt &op) {
+        StmtHierarchyInfo stmtHierarchyInfo = getStmtHierarchy.get_hierarchy_html(op);
+        string &html = stmtHierarchyInfo.html;
+        string popup = generate_stmt_hierarchy_popup(html);
+        stmtHierarchyInfo.html = popup;
+
+        return stmtHierarchyInfo;
     }
-    string get_stmt_hierarchy(const Expr &op) {
-        string hierarchyHTML = getStmtHierarchy.get_hierarchy_html(op);
-        if (PRINT_HIERARCHY) cout << hierarchyHTML << endl;
-        return generate_stmt_hierarchy_popup(hierarchyHTML);
+    StmtHierarchyInfo get_stmt_hierarchy(const Expr &op) {
+        StmtHierarchyInfo stmtHierarchyInfo = getStmtHierarchy.get_hierarchy_html(op);
+        string &html = stmtHierarchyInfo.html;
+        string popup = generate_stmt_hierarchy_popup(html);
+        stmtHierarchyInfo.html = popup;
+
+        return stmtHierarchyInfo;
     }
 
     string generate_stmt_hierarchy_popup(string hierarchyHTML) {
@@ -153,22 +159,43 @@ private:
         return popup.str();
     }
 
-    string open_cost_span(const IRNode *op, const string &hierarchyHTML) {
+    string open_cost_span(const Stmt &op) {
+
+        StmtHierarchyInfo stmtHierarchyInfo = get_stmt_hierarchy(op);
+
         stringstream s;
 
-        s << cost_colors(op, hierarchyHTML);
+        s << cost_colors(op.get(), stmtHierarchyInfo);
+
+        // popup window - will put them all at the end
+        popups += stmtHierarchyInfo.html + "\n";
 
         s << "<span id='Cost" << id_count << "'>";
         return s.str();
     }
+    string open_cost_span(const Expr &op) {
+
+        StmtHierarchyInfo stmtHierarchyInfo = get_stmt_hierarchy(op);
+
+        stringstream s;
+
+        s << cost_colors(op.get(), stmtHierarchyInfo);
+
+        // popup window - will put them all at the end
+        popups += stmtHierarchyInfo.html + "\n";
+
+        s << "<span id='Cost" << id_count << "'>";
+        return s.str();
+    }
+
     string close_cost_span() {
         return "<!-- closing_cost_span --></span>";
     }
     string open_cost_span_else_case(Stmt else_case) {
         Stmt new_node = IfThenElse::make(Variable::make(Int(32), "true"), else_case, nullptr);
 
-        string hierarchyHTML = getStmtHierarchy.get_else_hierarchy_html();
-        string popup = generate_stmt_hierarchy_popup(hierarchyHTML);
+        StmtHierarchyInfo stmtHierarchyInfo = getStmtHierarchy.get_else_hierarchy_html();
+        string popup = generate_stmt_hierarchy_popup(stmtHierarchyInfo.html);
 
         // popup window - will put them all at the end
         popups += popup + "\n";
@@ -179,12 +206,10 @@ private:
 
         s << "<span class='smallColorIndent'>";
 
-        s << computation_button(new_node.get());
-        s << data_movement_button(new_node.get());
+        s << computation_button(new_node.get(), stmtHierarchyInfo);
+        s << data_movement_button(new_node.get(), stmtHierarchyInfo);
 
         s << "</span>";
-
-        return s.str();
 
         s << "<span id='Cost" << id_count << "'>";
         return s.str();
@@ -206,7 +231,8 @@ private:
         return span("Matched", body);
     }
 
-    string color_button(const IRNode *op, bool is_computation) {
+    string color_button(const IRNode *op, bool is_computation,
+                        const StmtHierarchyInfo &stmtHierarchyInfo) {
 
         int colorRangeInclusive, colorRangeExclusive;
 
@@ -220,25 +246,42 @@ private:
         tooltipCount++;
 
         stringstream s;
-        s << "<button id='button" << tooltipCount << "' ";
+        s << "<button ";
+
+        // tooltip information
+        s << "id='button" << tooltipCount << "' ";
         s << "aria-describedby='tooltip" << tooltipCount << "' ";
+
+        // cost colors
         s << "class='colorButton CostColor" + to_string(colorRangeExclusive) + "' role='button' ";
+
+        // showing StmtHierarchy popup
         s << "data-bs-toggle='modal' data-bs-target='#stmtHierarchyModal" << popupCount << "' ";
+
+        // for collapsing and expanding StmtHierarchy nodes
+        s << "onclick='collapseAllNodes(" << stmtHierarchyInfo.start_node << ", "
+          << stmtHierarchyInfo.end_node << "); expandNodesUpToDepth(4, "
+          << stmtHierarchyInfo.viz_num << ");'";
+
+        // highlighting selected line in grey
         s << "onmouseover='document.getElementById(\"Cost" << id_count
           << "\").style.background = \"rgba(10,10,10,0.1)\";'";
         s << "onmouseout='document.getElementById(\"Cost" << id_count
           << "\").style.background = \"transparent\";'";
+
+        // for collapsing and expanding and adjusting colors accordingly
         s << "inclusiverange='" << colorRangeInclusive << "' ";
         s << "exclusiverange='" << colorRangeExclusive << "' ";
+
         s << ">";
         s << "</button>";
 
         return s.str();
     }
 
-    string computation_button(const IRNode *op) {
+    string computation_button(const IRNode *op, const StmtHierarchyInfo &stmtHierarchyInfo) {
         stringstream s;
-        s << color_button(op, true);
+        s << color_button(op, true, stmtHierarchyInfo);
 
         string tooltipText = findStmtCost.generate_computation_cost_tooltip(
             op, false, "[Click to see full hierarchy]");
@@ -251,9 +294,9 @@ private:
 
         return s.str();
     }
-    string data_movement_button(const IRNode *op) {
+    string data_movement_button(const IRNode *op, const StmtHierarchyInfo &stmtHierarchyInfo) {
         stringstream s;
-        s << color_button(op, false);
+        s << color_button(op, false, stmtHierarchyInfo);
 
         string tooltipText = findStmtCost.generate_data_movement_cost_tooltip(
             op, false, "[Click to see full hierarchy]");
@@ -266,7 +309,7 @@ private:
 
         return s.str();
     }
-    string cost_colors(const IRNode *op, const string &hierarchyHTML) {
+    string cost_colors(const IRNode *op, const StmtHierarchyInfo &stmtHierarchyInfo) {
         curr_line_num += 1;
 
         stringstream s;
@@ -279,11 +322,8 @@ private:
             s << "<span class='bigColorIndent'>";
         }
 
-        // popup window - will put them all at the end
-        popups += hierarchyHTML + "\n";
-
-        s << computation_button(op);
-        s << data_movement_button(op);
+        s << computation_button(op, stmtHierarchyInfo);
+        s << data_movement_button(op, stmtHierarchyInfo);
 
         s << "</span>";
 
@@ -592,7 +632,7 @@ private:
         scope.push(op->name, unique_id());
         stream << open_div("LetStmt") << open_line();
 
-        stream << open_cost_span(op, get_stmt_hierarchy(op));
+        stream << open_cost_span(op);
         stream << open_span("Matched");
         stream << keyword("let") << " ";
         stream << var(op->name);
@@ -613,7 +653,7 @@ private:
         std::vector<Expr> args;
         args.push_back(op->condition);
         args.push_back(op->message);
-        stream << open_cost_span(op, get_stmt_hierarchy(op));
+        stream << open_cost_span(op);
         print_list(symbol("assert") + "(", args, ")");
         stream << close_cost_span();
         stream << close_div();
@@ -628,7 +668,7 @@ private:
 
         int produce_id = unique_id();
 
-        stream << open_cost_span(op, get_stmt_hierarchy(op));
+        stream << open_cost_span(op);
         stream << open_span("Matched");
         stream << open_expand_button(produce_id);
         stream << open_anchor(anchorName);
@@ -661,7 +701,7 @@ private:
         string anchorName = "for" + std::to_string(forCount);
 
         int id = unique_id();
-        stream << open_cost_span(op, get_stmt_hierarchy(op));
+        stream << open_cost_span(op);
         stream << open_expand_button(id);
         stream << open_anchor(anchorName);
         stream << open_span("Matched");
@@ -733,7 +773,7 @@ private:
         storeCount++;
         string anchorName = "store" + std::to_string(storeCount);
 
-        stream << open_cost_span(op, get_stmt_hierarchy(op));
+        stream << open_cost_span(op);
         stream << open_anchor(anchorName);
 
         stream << open_span("Matched");
@@ -782,7 +822,7 @@ private:
         string anchorName = "allocate" + std::to_string(allocateCount);
         stream << open_anchor(anchorName);
 
-        stream << open_cost_span(op, get_stmt_hierarchy(op));
+        stream << open_cost_span(op);
 
         stream << open_span("Matched");
         stream << keyword("allocate") << " ";
@@ -949,7 +989,7 @@ private:
         string anchorName = "if" + std::to_string(ifCount);
 
         int id = unique_id();
-        stream << open_cost_span(op, get_stmt_hierarchy(op));
+        stream << open_cost_span(op);
         stream << open_expand_button(id);
         stream << open_anchor(anchorName);
         stream << open_span("Matched");
@@ -988,7 +1028,7 @@ private:
                 stream << matched("}");
                 stream << close_div();
 
-                stream << open_cost_span(nested_if, get_stmt_hierarchy(nested_if));
+                stream << open_cost_span(nested_if);
                 stream << open_expand_button(id);
                 stream << open_span("Matched");
 
@@ -1042,7 +1082,7 @@ private:
 
     void visit(const Evaluate *op) override {
         stream << open_div("Evaluate");
-        stream << open_cost_span(op, get_stmt_hierarchy(op));
+        stream << open_cost_span(op);
         print(op->value);
         stream << close_cost_span();
 
@@ -1613,8 +1653,8 @@ public:
         tooltipJS << "    tooltipElement.style.opacity = '0'; \n";
         tooltipJS << "} \n";
         tooltipJS << "for (let i = 1; i <= " << tooltipCount << "; i++) { \n";
-        tooltipJS << "    const button = document.querySelector('#button' + i); \n";
-        tooltipJS << "    const tooltip = document.querySelector('#tooltip' + i); \n";
+        tooltipJS << "    const button = document.getElementById('button' + i); \n";
+        tooltipJS << "    const tooltip = document.getElementById('tooltip' + i); \n";
         tooltipJS << "    button.addEventListener('mouseenter', () => { \n";
         tooltipJS << "        showTooltip(button, tooltip); \n";
         tooltipJS << "    }); \n";
