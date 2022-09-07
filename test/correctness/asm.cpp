@@ -172,8 +172,11 @@ void test_lifting_sobel() {
     }
 }
 
-void run_sobel(const std::string &name, const Target &target) {
-    ImageParam input(UInt(8), 2);
+void run_sobel(const std::string &name) {
+    Target target = get_host_target();
+    std::cout << target << "\n";
+    // ImageParam input(UInt(8), 2);
+    Buffer<uint8_t> input(1536, 2560);
     Var x("x"), y("y");
 
     Func sobel_x_avg{ "sobel_x_avg" }, sobel_y_avg{ "sobel_y_avg" };
@@ -210,13 +213,13 @@ void run_sobel(const std::string &name, const Target &target) {
     // of the gradient.
     output(x, y) = cast<uint8_t>(clamp(sobel_x(x, y) + sobel_y(x, y), 0, 255));
 
-    input.dim(0).set_min(0);
-    input.dim(1).set_min(0);
+    // input.dim(0).set_min(0);
+    // input.dim(1).set_min(0);
 
     Var xi{"xi"}, yi{"yi"};
 
-    input.dim(0).set_min(0);
-    input.dim(1).set_min(0);
+    // input.dim(0).set_min(0);
+    // input.dim(1).set_min(0);
 
     if (target.arch == Target::Hexagon) {
         const int vector_size = 128;
@@ -251,21 +254,25 @@ void run_sobel(const std::string &name, const Target &target) {
     output.compile_to_lowered_stmt(test_name + ".stmt", output.infer_arguments(), Text, target);
     output.compile_to_llvm_assembly(test_name + ".ll", output.infer_arguments(), target);
 
-    if (get_host_target().arch == target.arch) {
-        Buffer<uint8_t> input(1536, 2560);
+    Buffer<uint8_t> output_(input.width(), input.height());
 
-        Buffer<uint8_t> output_(input.width(), input.height());
+    output.realize(output_);
 
+    const int timing_iterations = 100;
+
+    double min_t_manual = benchmark(timing_iterations, 10, [&]() {
         output.realize(output_);
+        output_.device_sync();
+    });
+    printf("Runtime time: %gms\n", min_t_manual * 1e3);
+}
 
-        const int timing_iterations = 100;
-
-        double min_t_manual = benchmark(timing_iterations, 10, [&]() {
-            output.realize(output_);
-            output_.device_sync();
-        });
-        printf("Runtime time: %gms\n", min_t_manual * 1e3);
-    }
+void set_env_variable(const std::string &name, const std::string &value, int overwrite) {
+#ifdef _MSC_VER
+    _putenv_s(name.c_str(), value.c_str());
+#else
+    setenv(name.c_str(), value.c_str(), overwrite);
+#endif
 }
 
 int main(int argc, char **argv) {
@@ -280,9 +287,12 @@ int main(int argc, char **argv) {
 
     // test_lifting_sobel();
 
-    Target x86("x86-64-noos-no_bounds_query-no_asserts-sse41-avx-avx2");
+    // Target x86("x86-64-noos-no_bounds_query-no_asserts-sse41-avx-avx2");
 
-    run_sobel("x86_opt", x86);
+    run_sobel("x86_opt");
+    set_env_variable("HL_DISABLE_LIFTING", "1", /* overwrite */ 1);
+    set_env_variable("HL_DISABLE_X86_LOWERING", "1", /* overwrite */ 1);
+    run_sobel("x86_disabled");
 
 
 
