@@ -181,7 +181,7 @@ int FindStmtCost::get_combined_computation_color_range(const IRNode *op) const {
     int cost = get_computation_cost(op, true);
     int range = cost / range_size;
 
-    if (range > NUMBER_COST_COLORS) range = NUMBER_COST_COLORS - 1;
+    if (range >= NUMBER_COST_COLORS) range = NUMBER_COST_COLORS - 1;
 
     return range;
 }
@@ -195,7 +195,7 @@ int FindStmtCost::get_combined_data_movement_color_range(const IRNode *op) const
     int cost = get_data_movement_cost(op, true);
     int range = cost / range_size;
 
-    if (range > NUMBER_COST_COLORS) range = NUMBER_COST_COLORS - 1;
+    if (range >= NUMBER_COST_COLORS) range = NUMBER_COST_COLORS - 1;
 
     return range;
 }
