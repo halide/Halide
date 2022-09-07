@@ -855,9 +855,28 @@ void ProducerConsumerHierarchy::visit(const Load *op) {
 
     if (op->type.is_scalar()) {
         header = "Scalar ";
-    } else if (op->type.is_vector()) {
-        header = "Vector ";
-    } else {
+    }
+
+    else if (op->type.is_vector()) {
+        if (op->index.node_type() == IRNodeType::Ramp) {
+            const Ramp *ramp = op->index.as<Ramp>();
+            if (ramp->stride.node_type() == IRNodeType::IntImm) {
+                int64_t stride = ramp->stride.as<IntImm>()->value;
+                if (stride == 1) {
+                    header = "Dense Vector ";
+                } else {
+                    header = "Strided Vector ";
+                    cout << "strided vector!!!! check it out!!! Load " << op->name << endl;
+                }
+            } else {
+                header = "Dense Vector ";
+            }
+        } else {
+            header = "Dense Vector ";
+        }
+    }
+
+    else {
         internal_error << "\n\nUnsupported type for Load: " << op->type << "\n\n";
     }
 
@@ -1228,8 +1247,7 @@ div.content { \n \
 .prodConsColorButton { \n \
     height: 15px; \n \
     width: 10px; \n \
-    margin-right: 1px; \n \
-    margin-left: 1px; \n \
+    margin-right: 2px; \n \
     border: 1px solid rgba(0, 0, 0, 0); \n \
     vertical-align: middle; \n \
 } \n \
