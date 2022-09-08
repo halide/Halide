@@ -32,6 +32,12 @@ string to_string(T value) {
     return os.str();
 }
 
+struct AssemblyLabel {
+    string codeString;  // what to look up in the assembly file
+    string label;       // span label name
+    // IRNodeType type;    // type of node
+};
+
 class StmtToViz : public IRVisitor {
 
     static const string css, js;
@@ -42,6 +48,13 @@ class StmtToViz : public IRVisitor {
     static const string lineNumbersCSS;
     static const string tooltipCSS;
     static const string expandCodeJS;
+    static const string assemblyCodeJS;
+
+    // This allows easier access to individual elements.
+    int id_count;
+
+private:
+    std::ofstream stream;
 
     FindStmtCost findStmtCost;                            // used for finding the cost of statements
     GetStmtHierarchy getStmtHierarchy;                    // used for getting the hierarchy of
@@ -49,12 +62,6 @@ class StmtToViz : public IRVisitor {
     ProducerConsumerHierarchy producerConsumerHierarchy;  // used for getting the hierarchy of
                                                           // producer/consumer
     DependencyGraph dependencyGraph;                      // used for getting the dependency graph
-
-    // This allows easier access to individual elements.
-    int id_count;
-
-private:
-    std::ofstream stream;
 
     int curr_line_num;  // for accessing div of that line
 
@@ -72,6 +79,9 @@ private:
     // used for getStmtHierarchy popup stuff
     int popupCount = 0;
     string popups;
+
+    // for keeping track of labels in assembly code
+    vector<AssemblyLabel> assemblyLabels;
 
     string get_file_name(string fileName) {
         // remove leading directories from filename
@@ -604,13 +614,23 @@ private:
     }
     void visit(const Call *op) override {
         stream << open_span("Call");
+
+        // for assembly
+        string codeString = op->name;
+        string label = "call_" + op->name + "_label";
+
+        AssemblyLabel assemblyLabelObj;
+        assemblyLabelObj.codeString = codeString;
+        assemblyLabelObj.label = label;
+
+        assemblyLabels.push_back(assemblyLabelObj);
+        stream << "<button onclick='openAssembly(\"" << label << "\");'>Open Assembly</button>\n";
+
         print_list(symbol(op->name) + "(", op->args, ")");
         stream << close_span();
     }
 
     void visit(const Let *op) override {
-        // bool in_context_before = in_context;
-        // in_context = false;
 
         scope.push(op->name, unique_id());
         stream << open_span("Let");
@@ -666,6 +686,18 @@ private:
         producerConsumerCount++;
         string anchorName = "producerConsumer" + std::to_string(producerConsumerCount);
 
+        // for assembly
+        string codeString = op->is_producer ? "produce " : "consume ";
+        codeString += op->name;
+        string label = op->is_producer ? "produce" : "consumer";
+        label += "_" + op->name + "_label";
+
+        AssemblyLabel assemblyLabelObj;
+        assemblyLabelObj.codeString = codeString;
+        assemblyLabelObj.label = label;
+
+        assemblyLabels.push_back(assemblyLabelObj);
+
         int produce_id = unique_id();
 
         stream << open_cost_span(op);
@@ -699,6 +731,16 @@ private:
         // anchoring
         forCount++;
         string anchorName = "for" + std::to_string(forCount);
+
+        // for assembly
+        string codeString = "for " + op->name;
+        string label = "for_" + op->name + "_label";
+
+        AssemblyLabel assemblyLabelObj;
+        assemblyLabelObj.codeString = codeString;
+        assemblyLabelObj.label = label;
+
+        assemblyLabels.push_back(assemblyLabelObj);
 
         int id = unique_id();
         stream << open_cost_span(op);
@@ -1212,6 +1254,16 @@ public:
         functionCount++;
         string anchorName = "loweredFunc" + std::to_string(functionCount);
 
+        // for assembly
+        string codeString = op.name + ":";
+        string label = "function_" + op.name + "_label";
+
+        AssemblyLabel assemblyLabelObj;
+        assemblyLabelObj.codeString = codeString;
+        assemblyLabelObj.label = label;
+
+        assemblyLabels.push_back(assemblyLabelObj);
+
         int id = unique_id();
         stream << open_expand_button(id);
         stream << open_anchor(anchorName);
@@ -1547,7 +1599,9 @@ public:
     }
 
     void end_stream() {
+        stream << "<div class='popups'>\n";
         stream << popups;
+        stream << "</div>\n";
 
         stream << "<script>\n";
         stream << "$( '.Matched' ).each( function() {\n"
@@ -1564,6 +1618,7 @@ public:
         stream << ProducerConsumerHierarchy::scrollToFunctionJSVizToCode;
         stream << scrollToFunctionJSCodeToViz;
         stream << expandCodeJS;
+        stream << assemblyCodeJS;
         stream << "</script>\n";
         stream << "</body>";
     }
@@ -1579,6 +1634,41 @@ public:
         stream << "</div>\n";
     }
 
+    string getAssemblyFileName(const string &filename) {
+        string assemblyFileName = "./" + filename;
+        assemblyFileName.replace(assemblyFileName.find(".stmt.viz.html"), 15, ".s");
+        return assemblyFileName;
+    }
+    string convertAssemblyLine(string &line) {
+        // go through assemblyLabels and see if any of them are in the line
+        for (const auto &labelObj : assemblyLabels) {
+            string codeString = labelObj.codeString;
+            if (line.find(codeString) != string::npos) {
+                return "<span id='" + labelObj.label + "'>" + line + "</span>";
+            }
+        }
+        return line;
+    }
+    void putAssemblyCodeInDiv(const string &filename) {
+        stream << "<div id='assemblyContent' style='display: none;'>\n";
+        stream << "<pre>\n";
+
+        ifstream assemblyFile;
+        string assemblyFileName = getAssemblyFileName(filename);
+        assemblyFile.open(assemblyFileName, ios::in);
+
+        if (assemblyFile.is_open()) {
+            cout << "Assembly file opened successfully" << endl;
+            string assemblyLine;
+            while (getline(assemblyFile, assemblyLine)) {
+                stream << convertAssemblyLine(assemblyLine) << "\n";
+            }
+            assemblyFile.close();  // close the file object.
+        }
+        stream << "</pre>\n";
+        stream << "</div>\n";
+    }
+
     void generate_html(const string &filename, const Module &m) {
         // opening parts of the html
         start_stream(filename);
@@ -1589,6 +1679,7 @@ public:
 
         // print main html page
         stream << "<div class='IRCode-code' id='IRCode-code'>\n";
+        stream << "<button onclick='openAssembly();'>Open Assembly</button>\n";
         print(m);
         stream << "</div>\n";  // close IRCode-code div
 
@@ -1602,19 +1693,22 @@ public:
         stream << "</div>\n";  // close mainContent div
         stream << "</div>\n";  // close outerDiv div
 
+        // put assembly code in a div
+        putAssemblyCodeInDiv(filename);
+
         // closing parts of the html
         end_stream();
     }
 
     StmtToViz(const string &filename, const Module &m)
-        : getStmtHierarchy(generate_costs(m)),
-          producerConsumerHierarchy(get_file_name(filename), findStmtCost), id_count(0),
+        : id_count(0), getStmtHierarchy(generate_costs(m)),
+          producerConsumerHierarchy(get_file_name(filename), findStmtCost),
           context_stack(1, 0) {
     }
 
     StmtToViz(const string &filename, const Stmt &s)
-        : getStmtHierarchy(generate_costs(s)),
-          producerConsumerHierarchy(get_file_name(filename), findStmtCost), id_count(0),
+        : id_count(0), getStmtHierarchy(generate_costs(s)),
+          producerConsumerHierarchy(get_file_name(filename), findStmtCost),
           context_stack(1, 0) {
     }
 
@@ -1984,6 +2078,20 @@ function collapseCode() { \n \
 function collapseViz() { \n \
     prodConsDiv.style.flexBasis = '0px'; \n \
     codeDiv.style.flexBasis = 'calc(100% - 16px)'; \n \
+} \n \
+";
+
+const string StmtToViz::assemblyCodeJS = "\n \
+// open assembly code  \n \
+function openAssembly(id) { \n \
+    var assembly = document.getElementById('assemblyContent'); \n \
+    console.log(assembly); \n \
+    var innerHTML = assembly.innerHTML; \n \
+    var scriptScroll = document.createElement('script'); \n \
+    scriptScroll.innerHTML = 'document.getElementById(\\' + id + \\').scrollIntoView({behavior: \\'smooth\\'}, true);'; \n \
+    var newWindow = window.open('', '_blank'); \n \
+    newWindow.document.write(innerHTML); \n \
+    newWindow.document.head.appendChild(scriptScroll); \n \
 } \n \
 ";
 
