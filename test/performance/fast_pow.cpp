@@ -13,8 +13,14 @@ extern "C" HALIDE_EXPORT_SYMBOL float pow_ref(float x, float y) {
 HalideExtern_2(float, pow_ref, float, float);
 
 int main(int argc, char **argv) {
-    Target target = get_jit_target_from_environment();
-    if (target.arch == Target::WebAssembly) {
+    Target host = get_host_target();
+    Target hl_target = get_target_from_environment();
+    Target hl_jit_target = get_jit_target_from_environment();
+    printf("host is:          %s\n", host.to_string().c_str());
+    printf("HL_TARGET is:     %s\n", hl_target.to_string().c_str());
+    printf("HL_JIT_TARGET is: %s\n", hl_jit_target.to_string().c_str());
+
+    if (hl_jit_target.arch == Target::WebAssembly) {
         printf("[SKIP] Performance tests are meaningless and/or misleading under WebAssembly interpreter.\n");
         return 0;
     }
