@@ -175,6 +175,16 @@ void ProducerConsumerHierarchy::close_box_div() {
     close_div();  // content div
     close_div();  // main box div
 }
+void ProducerConsumerHierarchy::open_function_box_div() {
+    html += "<div class='center FunctionBox'";
+    html += ">";
+
+    html += "<div class='functionContent'>";
+}
+void ProducerConsumerHierarchy::close_function_box_div() {
+    close_div();  // content div
+    close_div();  // main box div
+}
 void ProducerConsumerHierarchy::open_header_div() {
     html += "<div class='boxHeader'>";
 }
@@ -224,6 +234,20 @@ void ProducerConsumerHierarchy::div_header(const string &header, StmtSize *size,
     }
 
     close_header(anchorName);
+}
+void ProducerConsumerHierarchy::function_div_header(const string &functionName, string anchorName) {
+
+    html += "<div class='functionHeader'>";
+
+    html += "<span id='" + functionName + "'>";
+    html += "<span id='" + anchorName + "_viz' style='display: inline-block;'>";
+    html += "<h4 style='margin-bottom: 0px;'> Func: " + functionName + "</h4>";
+    html += "</span>";
+    html += "</span>";
+
+    see_code_button_div(anchorName, false);
+
+    html += "</div>";
 }
 vector<string> ProducerConsumerHierarchy::get_allocation_sizes(const Allocate *op) const {
     vector<string> sizes;
@@ -441,13 +465,13 @@ void ProducerConsumerHierarchy::for_loop_table(string loop_size) {
     html += "</table>";
 }
 
-void ProducerConsumerHierarchy::see_code_button_div(string anchorName) {
-    html += "<div>";
+void ProducerConsumerHierarchy::see_code_button_div(string anchorName, bool putDiv) {
+    if (putDiv) html += "<div>";
     html += "<button class='icon-button'";
     html += "onclick='scrollToFunctionVizToCode(\"" + anchorName + "\")'>";
     html += "<i class='bi bi-code-square'></i>";
     html += "</button>";
-    html += "</div>";
+    if (putDiv) html += "</div>";
 }
 
 string ProducerConsumerHierarchy::info_tooltip(string toolTipText, string className = "") {
@@ -592,20 +616,18 @@ void ProducerConsumerHierarchy::cost_colors(const IRNode *op) {
 }
 
 void ProducerConsumerHierarchy::visit_function(const LoweredFunc &func) {
-    open_box_div("FunctionBox", nullptr);
+    open_function_box_div();
 
     functionCount++;
     string anchorName = "loweredFunc" + to_string(functionCount);
 
-    string header = "<span id='" + func.name + "'><h4>" + "Func: " + func.name + "</h4></span>";
-
-    div_header(header, nullptr, anchorName);
+    function_div_header(func.name, anchorName);
 
     html += "<div class='functionViz'>";
     func.body.accept(this);
     html += "</div>";
 
-    close_box_div();
+    close_function_box_div();
 }
 void ProducerConsumerHierarchy::visit(const Variable *op) {
     // if op->name starts with "::", remove "::"
@@ -1183,6 +1205,15 @@ div.FunctionCallBox { \n \
 } \n \
 div.FunctionBox { \n \
     background-color: #f0f0f0; \n \
+    border: 1px dashed grey; \n \
+    border-radius: 5px; \n \
+    margin-bottom: 15px; \n \
+    padding: 5px; \n \
+    width: max-content; \n \
+} \n \
+div.functionHeader { \n \
+    display: flex; \n \
+    margin-bottom: 10px; \n \
 } \n \
 div.ProducerConsumerBox { \n \
     background-color: #99bbff; \n \

@@ -118,6 +118,8 @@ private:
     // opens and closes divs
     void open_box_div(string className, const IRNode *op);
     void close_box_div();
+    void open_function_box_div();
+    void close_function_box_div();
     void open_header_div();
     void open_box_header_title_div();
     void open_box_header_table_div();
@@ -128,6 +130,7 @@ private:
     void open_header(const string &header, string anchorName);
     void close_header(string anchorName);
     void div_header(const string &header, StmtSize *size, string anchorName);
+    void function_div_header(const string &functionName, string anchorName);
     vector<string> get_allocation_sizes(const Allocate *op) const;
     void allocate_div_header(const Allocate *op, const string &header, string anchorName);
     void for_loop_div_header(const For *op, const string &header, string anchorName);
@@ -142,7 +145,7 @@ private:
     void for_loop_table(string loop_size);
 
     // opens relative code links
-    void see_code_button_div(string anchorName);
+    void see_code_button_div(string anchorName, bool putDiv = true);
 
     // tooltip
     string info_tooltip(string toolTipText, string className);

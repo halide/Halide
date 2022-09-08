@@ -406,7 +406,7 @@ private:
     string open_expand_button(int id) {
         stringstream button;
         button << "<a class=ExpandButton onclick='return toggle(" << id << ", " << tooltipCount
-               << ");' href=_blank>"
+               << ");'>"
                << "<div style='position:relative; width:0; height:0;'>"
                << "<div class=ShowHide style='display:none;' id=" << id << "-show"
                << "><i class='fa fa-plus-square-o'></i></div>"
@@ -1916,8 +1916,8 @@ span.CostColor0, div.CostColor0, .CostColor0 { background-color: rgb(236,233,89)
 span.CostColorSpacer { width: 2px; color: transparent; display: inline-block; }\n \
 span.CostComputation { width: 13px; display: inline-block; color: transparent; } \n \
 span.CostMovement { width: 13px; display: inline-block;  color: transparent; } \n \
-span.smallColorIndent { position: absolute; left: 30px; } \n \
-span.bigColorIndent { position: absolute; left: 60px; } \n \
+span.smallColorIndent { position: absolute; left: 35px; } \n \
+span.bigColorIndent { position: absolute; left: 65px; } \n \
 ";
 
 const string StmtToViz::tooltipCSS = "\n \
@@ -2001,30 +2001,30 @@ function toggle(id, buttonId) { \n \
         show.style.display = 'block'; \n \
         hide.style.display = 'none'; \n \
         // make inclusive  \n \
-        inclusiverange1 = button1.getAttribute('inclusiverange'); \n \
-        newClassName = button1.className.replace(/CostColor\\d+/, 'CostColor' + inclusiverange1); \n \
-        button1.className = newClassName; \n \
-        inclusiverange2 = button2.getAttribute('inclusiverange'); \n \
-        newClassName = button2.className.replace(/CostColor\\d+/, 'CostColor' + inclusiverange2); \n \
-        button2.className = newClassName; \n \
+        if (button1 != null && button2 != null) { \n \
+            inclusiverange1 = button1.getAttribute('inclusiverange'); \n \
+            newClassName = button1.className.replace(/CostColor\\d+/, 'CostColor' + inclusiverange1); \n \
+            button1.className = newClassName; \n \
+            inclusiverange2 = button2.getAttribute('inclusiverange'); \n \
+            newClassName = button2.className.replace(/CostColor\\d+/, 'CostColor' + inclusiverange2); \n \
+            button2.className = newClassName; \n \
+        } \n \
     } else { \n \
         e.style = ''; \n \
         show.style.display = 'none'; \n \
         hide.style.display = 'block'; \n \
         // make exclusive  \n \
-        exclusiverange1 = button1.getAttribute('exclusiverange'); \n \
-        newClassName = button1.className.replace(/CostColor\\d+/, 'CostColor' + exclusiverange1); \n \
-        button1.className = newClassName; \n \
-        exclusiverange2 = button2.getAttribute('exclusiverange'); \n \
-        newClassName = button2.className.replace(/CostColor\\d+/, 'CostColor' + exclusiverange2); \n \
-        button2.className = newClassName; \n \
+        if (button1 != null && button2 != null) { \n \
+            exclusiverange1 = button1.getAttribute('exclusiverange'); \n \
+            newClassName = button1.className.replace(/CostColor\\d+/, 'CostColor' + exclusiverange1); \n \
+            button1.className = newClassName; \n \
+            exclusiverange2 = button2.getAttribute('exclusiverange'); \n \
+            newClassName = button2.className.replace(/CostColor\\d+/, 'CostColor' + exclusiverange2); \n \
+            button2.className = newClassName; \n \
+        } \n \
     } \n \
     return false; \n \
 } \n \
-function openNewWindow(innerHtml) { \n \
-    var newWindow = window.open('', '_blank'); \n \
-    newWindow.document.write(innerHtml); \n \
-}\n \
 ";
 }  // namespace
 
