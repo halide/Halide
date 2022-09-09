@@ -4,7 +4,7 @@ from contextvars import ContextVar
 from enum import Enum
 from functools import total_ordering
 from .halide_ import *
-from .halide_ import _unique_name, _NoneType
+from .halide_ import _unique_name, _UnspecifiedType
 from inspect import isclass
 from typing import Any, Optional
 import sys
@@ -70,11 +70,11 @@ def _check_valid_name(name: str) -> str:
 
 
 def _normalize_type_list(types: object) -> list[Type]:
-    # Always treat _NoneType as a non-type
+    # Always treat _UnspecifiedType as a non-type
     if types is None:
         types = []
     elif isinstance(types, Type):
-        if types == _NoneType():
+        if types == _UnspecifiedType():
             types = []
         else:
             types = [types]
@@ -206,7 +206,7 @@ class InputBuffer(ImageParam):
 
     def __init__(self, type: Optional[Type], dimensions: Optional[int]):
         if type is None:
-            type = _NoneType()
+            type = _UnspecifiedType()
         if dimensions is None:
             dimensions = -1
         ImageParam.__init__(self, type, dimensions, _unique_name())
@@ -242,7 +242,7 @@ class InputScalar(Param):
 
     def __init__(self, type: Optional[Type]):
         if type is None:
-            type = _NoneType()
+            type = _UnspecifiedType()
         Param.__init__(self, type, _unique_name())
 
     def _get_types_and_dimensions(self) -> (list[Type], int):
