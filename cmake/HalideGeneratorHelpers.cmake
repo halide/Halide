@@ -234,7 +234,7 @@ function(add_halide_library TARGET)
         endif ()
         set(PYTHONPATH "$<TARGET_FILE_DIR:Halide::Python>/..")
         set(GENERATOR_CMD ${CMAKE_COMMAND} -E env PYTHONPATH=${PYTHONPATH} ${Python3_EXECUTABLE} $<SHELL_PATH:${py_src}>)
-        set(GENERATOR_CMD_DEPS ${ARG_FROM} Halide::Python)
+        set(GENERATOR_CMD_DEPS ${ARG_FROM} Halide::Python ${py_src})
     else()
         if (NOT TARGET ${ARG_FROM})
             # FROM is usually an unqualified name; if we are crosscompiling, we might need a
