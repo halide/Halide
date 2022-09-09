@@ -12,8 +12,9 @@ function(halide_define_aot_test NAME)
         return()
     endif ()
 
-    add_executable("${NAME}.generator" "${NAME}_generator.cpp")
-    target_link_libraries("${NAME}.generator" PRIVATE Halide::Generator ${args_GEN_DEPS})
+    add_halide_generator("${NAME}.generator"
+                         SOURCES "${NAME}_generator.cpp"
+                         LINK_LIBRARIES ${args_GEN_DEPS})
 
     set(TARGET "generator_aot_${NAME}")
     set(DEPS ${args_EXTRA_LIBS})
