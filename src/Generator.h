@@ -4202,4 +4202,18 @@ struct halide_global_ns;
     static_assert(std::is_same<::halide_register_generator::halide_global_ns, halide_register_generator::halide_global_ns>::value,  \
                   "HALIDE_REGISTER_GENERATOR_ALIAS must be used at global scope");
 
+// The HALIDE_GENERATOR_PYSTUB macro is used to produce "PyStubs" -- i.e., CPython wrappers to let a C++ Generator
+// be called from Python. It shouldn't be necessary to use by anything but the build system in most cases.
+
+#define HALIDE_GENERATOR_PYSTUB(GEN_REGISTRY_NAME, MODULE_NAME)                                                           \
+    static_assert(PY_MAJOR_VERSION >= 3, "Python bindings for Halide require Python 3+");                                 \
+    extern "C" PyObject *_halide_pystub_impl(const char *module_name, const Halide::Internal::GeneratorFactory &factory); \
+    namespace halide_register_generator::GEN_REGISTRY_NAME##_ns {                                                         \
+        extern std::unique_ptr<Halide::Internal::AbstractGenerator> factory(const Halide::GeneratorContext &context);     \
+    }                                                                                                                     \
+    extern "C" HALIDE_EXPORT_SYMBOL PyObject *PyInit_##MODULE_NAME() {                                                    \
+        const auto factory = halide_register_generator::GEN_REGISTRY_NAME##_ns::factory;                                  \
+        return _halide_pystub_impl(#MODULE_NAME, factory);                                                                \
+    }
+
 #endif  // HALIDE_GENERATOR_H_

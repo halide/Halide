@@ -80,7 +80,7 @@ else ()
 endif ()
 
 if (TARGET Halide_Adams2019)
-    set(autoscheduler_utils retrain_cost_model featurization_to_sample get_host_target weightsdir_to_weightsfile)
+    set(autoscheduler_utils adams2019_retrain_cost_model adams2019_featurization_to_sample adams2019_get_host_target adams2019_weightsdir_to_weightsfile)
     if (NOT CMAKE_INSTALL_RPATH)
         set_target_properties(${autoscheduler_utils} PROPERTIES INSTALL_RPATH "${rbase};${rbase}/${lib_dir}")
     endif ()
@@ -184,6 +184,12 @@ write_basic_package_version_file(HalideHelpersConfigVersion.cmake
                                  COMPATIBILITY SameMajorVersion
                                  ARCH_INDEPENDENT)
 
+# Compute a hint to make it easier to find HalideHelpers from find_package(Halide)
+# This is read by configure_file below.
+file(RELATIVE_PATH HalideHelpers_HINT
+     "${CMAKE_CURRENT_BINARY_DIR}/${Halide_INSTALL_CMAKEDIR}"
+     "${CMAKE_CURRENT_BINARY_DIR}/${Halide_INSTALL_HELPERSDIR}")
+
 configure_file(common/HalideConfig.cmake HalideConfig.cmake @ONLY)
 configure_file(common/HalideHelpersConfig.cmake HalideHelpersConfig.cmake @ONLY)
 
@@ -198,7 +204,6 @@ install(FILES
         ${CMAKE_CURRENT_BINARY_DIR}/HalideHelpersConfigVersion.cmake
         ${Halide_SOURCE_DIR}/cmake/HalideGeneratorHelpers.cmake
         ${Halide_SOURCE_DIR}/cmake/HalideTargetHelpers.cmake
-        ${Halide_SOURCE_DIR}/cmake/HalidePythonExtensionHelpers.cmake
         ${Halide_SOURCE_DIR}/cmake/TargetExportScript.cmake
         DESTINATION ${Halide_INSTALL_HELPERSDIR}
         COMPONENT Halide_Development)

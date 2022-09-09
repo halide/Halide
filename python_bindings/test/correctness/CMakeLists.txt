@@ -15,6 +15,7 @@ set(tests
     extern.py
     float_precision_test.py
     iroperator.py
+    multi_method_module_test.py
     multipass_constraints.py
     pystub.py
     rdom.py
@@ -30,6 +31,6 @@ foreach (test IN LISTS tests)
     add_python_test(
         FILE "${test}"
         LABEL python_correctness
-        PYTHONPATH "$<TARGET_FILE_DIR:py_aot_bit>" "$<TARGET_FILE_DIR:py_stub_bit>"
+        PYTHONPATH "$<TARGET_FILE_DIR:py_aot_bit>" "$<TARGET_FILE_DIR:py_gen_bit.generator>"
     )
 endforeach ()

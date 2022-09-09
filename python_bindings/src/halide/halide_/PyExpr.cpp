@@ -51,7 +51,11 @@ void define_expr(py::module &m) {
             .def("defined", &Expr::defined)
             .def("__repr__", [](const Expr &e) -> std::string {
                 std::ostringstream o;
-                o << "<halide.Expr of type " << halide_type_to_string(e.type()) << ": " << e << ">";
+                if (e.defined()) {
+                    o << "<halide.Expr of type " << halide_type_to_string(e.type()) << ": " << e << ">";
+                } else {
+                    o << "<undefined halide.Expr>";
+                }
                 return o.str();
             });
 
