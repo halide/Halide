@@ -44,7 +44,7 @@ bool ends_with(const std::string &str, const std::string &suffix) {
 }  // namespace
 
 void DefaultCostModel::set_pipeline_features(const Internal::Autoscheduler::FunctionDAG &dag,
-                                             int hardware_parallelism) {
+                                             const Internal::Autoscheduler::Anderson2021Params &params) {
 
     const int pipeline_feat_size = head1_w * head1_h;
     // We ignore the first seven pipeline features in the cost
@@ -74,8 +74,8 @@ void DefaultCostModel::set_pipeline_features(const Internal::Autoscheduler::Func
     }
     internal_assert(stage == num_stages);
     pipeline_feat_queue = pipeline_features;
-    internal_assert(hardware_parallelism > 0);
-    num_cores = hardware_parallelism;
+    internal_assert(params.parallelism > 0);
+    num_cores = params.parallelism;
 }
 
 void DefaultCostModel::set_pipeline_features(const Runtime::Buffer<float> &pipeline_feats, int n) {
@@ -215,7 +215,7 @@ float DefaultCostModel::backprop(const Runtime::Buffer<const float> &true_runtim
         }
     }
 
-    int result = anderson2021_train_cost_model(num_stages,
+    int result = train_cost_model(num_stages,
                                   cursor,
                                   num_cores,
                                   batch_id,
@@ -286,7 +286,7 @@ void DefaultCostModel::evaluate_costs() {
 
     auto loss = Runtime::Buffer<float>::make_scalar();
 
-    int result = anderson2021_cost_model(num_stages,
+    int result = cost_model(num_stages,
                             cursor,
                             num_cores,
                             batch_id++,

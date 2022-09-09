@@ -8,6 +8,7 @@ using namespace Halide::Internal::Autoscheduler;
 
 void test_state() {
     Target target("host-cuda");
+    Anderson2021Params params;
 
     // Test update_always_consider_inline_options
     Var x("x"), y("y");
@@ -34,7 +35,7 @@ void test_state() {
         std::unique_ptr<LoopNest> root = std::make_unique<LoopNest>();
 
         // Compute h at root
-        root->compute_here(node_h, true, 0, false, target);
+        root->compute_here(node_h, true, 0, false, params, target);
 
         std::unique_ptr<State> state = std::make_unique<State>();
         state->root = root.release();

@@ -15,62 +15,27 @@ namespace Autoscheduler {
 // entirely unroll the thing
 const int kUnrollLimitGPU = 16;
 
-// Get the HL_NO_SUBTILING environment variable. Purpose described above.
-bool get_may_subtile() {
-    string no_subtiling_str = get_env_variable("HL_NO_SUBTILING");
-    if (no_subtiling_str == "1") {
-        return false;
-    } else {
-        return true;
-    }
-}
-
-bool may_subtile() {
-    static bool b = get_may_subtile();
-    return b;
+bool may_subtile(const Anderson2021Params &params) {
+    return params.disable_subtiling == 0;
 }
 
 // Shared memory limit per block for the target GPU
-int64_t get_shared_memory_limit() {
-    // HL_SHARED_MEMORY_LIMIT is in KB
-    std::string limit = get_env_variable("HL_SHARED_MEMORY_LIMIT");
-    if (limit.empty()) {
-        return 48 * 1024;
-    }
-    return atoi(limit.c_str()) * 1024;  // Convert to bytes
+int64_t get_shared_memory_limit(const Anderson2021Params &params) {
+    return (int64_t)params.shared_memory_limit_kb * 1024;  // Convert to bytes
 }
 
-// Shared memory limit per SM for the target GPU
-int64_t get_shared_memory_sm_limit_helper() {
-    // HL_SHARED_MEMORY_SM_LIMIT is in KB
-    std::string limit = get_env_variable("HL_SHARED_MEMORY_SM_LIMIT");
-    if (limit.empty()) {
-        return 96 * 1024;
-    }
-    return atoi(limit.c_str()) * 1024;  // Convert to bytes
-}
-
-int64_t get_shared_memory_sm_limit() {
-    static int64_t limit = get_shared_memory_sm_limit_helper();
-    return limit;
+int64_t get_shared_memory_sm_limit(const Anderson2021Params &params) {
+    return (int64_t)params.shared_memory_sm_limit_kb * 1024;  // Convert to bytes
 }
 
 // Maximum number of active blocks for the target GPU
-int64_t get_active_block_hardware_limit() {
-    std::string limit = get_env_variable("HL_ACTIVE_BLOCK_LIMIT");
-    if (limit.empty()) {
-        return 32;
-    }
-    return atoi(limit.c_str());
+int64_t get_active_block_hardware_limit(const Anderson2021Params &params) {
+    return params.active_block_limit;
 }
 
 // Maximum number of active warps for the target GPU
-int64_t get_active_warp_hardware_limit() {
-    std::string limit = get_env_variable("HL_ACTIVE_WARP_LIMIT");
-    if (limit.empty()) {
-        return 64;
-    }
-    return atoi(limit.c_str());
+int64_t get_active_warp_hardware_limit(const Anderson2021Params &params) {
+    return params.active_warp_limit;
 }
 
 int get_unroll_limit(const Target &target) {
@@ -182,6 +147,7 @@ void LoopNest::generate_vec_dim_serial_tilings(vector<int> &serial_sizes) const 
 // the newly inserted loop nests of f into a threads loop outside a serial loop.
 // V is the vectorized dimension of f. Adds loopnests created from each tiling option in result.
 bool LoopNest::add_gpu_thread_tilings(const FunctionDAG::Node *f,
+                                      const Anderson2021Params &params,
                                       const Target &target,
                                       int v,
                                       vector<IntrusivePtr<const LoopNest>> &result,
@@ -198,7 +164,7 @@ bool LoopNest::add_gpu_thread_tilings(const FunctionDAG::Node *f,
         new_parent->copy_from(*(this));
         for (auto &c : new_parent->children) {
             if (c->node == f) {
-                c = c->parallelize_in_tiles(t, new_parent, target, false, false);
+                c = c->parallelize_in_tiles(t, new_parent, params, target, false, false);
             }
         }
         result.emplace_back(new_parent);
@@ -1227,19 +1193,19 @@ void LoopNest::compute_warp_features(ScheduleFeatures &features, const GPULoopIn
 }
 
 // Assume that when a block is active, all its warps are active
-void LoopNest::compute_warp_and_block_occupancy(int hardware_parallelism, ScheduleFeatures &feat, const GPULoopInfo &gpu_loop_info) const {
+void LoopNest::compute_warp_and_block_occupancy(const Anderson2021Params &params, ScheduleFeatures &feat, const GPULoopInfo &gpu_loop_info) const {
     // Only compute these features for stage's that actually have a block
     // loop
     if (node != gpu_loop_info.current_block_loop->node) {
         return;
     }
 
-    auto active_block_hardware_limit = get_active_block_hardware_limit();
-    auto active_warp_hardware_limit = get_active_warp_hardware_limit();
+    auto active_block_hardware_limit = get_active_block_hardware_limit(params);
+    auto active_warp_hardware_limit = get_active_warp_hardware_limit(params);
 
     int64_t num_warps_per_block = gpu_loop_info.thread_info->num_warps_per_block;
 
-    int64_t num_blocks = std::ceil(gpu_loop_info.num_blocks / (double)hardware_parallelism);
+    int64_t num_blocks = std::ceil(gpu_loop_info.num_blocks / (double)params.parallelism);
 
     auto max_theoretical_active_blocks = std::min(active_block_hardware_limit, num_blocks);
     auto max_active_warps = std::min(active_warp_hardware_limit, max_theoretical_active_blocks * num_warps_per_block);
@@ -1250,14 +1216,14 @@ void LoopNest::compute_warp_and_block_occupancy(int hardware_parallelism, Schedu
     feat.max_block_occupancy = (double)max_active_blocks / (double)active_block_hardware_limit;
 }
 
-void LoopNest::compute_shared_mem_occupancy(const Target &target, int64_t total_shared_mem_alloc_size, ScheduleFeatures &feat) const {
+void LoopNest::compute_shared_mem_occupancy(const Anderson2021Params &params, const Target &target, int64_t total_shared_mem_alloc_size, ScheduleFeatures &feat) const {
     if (!is_gpu_block(target)) {
         return;
     }
 
-    static auto shared_mem_limit = get_shared_memory_limit();
-    static auto shared_mem_sm_limit = get_shared_memory_sm_limit();
-    static auto active_block_hardware_limit = get_active_block_hardware_limit();
+    auto shared_mem_limit = get_shared_memory_limit(params);
+    auto shared_mem_sm_limit = get_shared_memory_sm_limit(params);
+    auto active_block_hardware_limit = get_active_block_hardware_limit(params);
 
     feat.shared_mem_occupancy = (double)total_shared_mem_alloc_size / (double)shared_mem_limit;
     internal_assert(feat.shared_mem_occupancy <= 1) << "Invalid shared mem occupancy: " << feat.shared_mem_occupancy;
@@ -1297,7 +1263,7 @@ std::pair<const LoopNest *, const LoopNest *> LoopNest::find_innermost_and_paren
     return {child, parent};
 }
 
-int64_t LoopNest::points_accessed_per_thread(const Target &target, const GPULoopInfo &gpu_loop_info, const std::vector<const FunctionDAG::Edge *> &edge_chain, const LoadJacobian &jac, const LoopNest *parent, const LoopNest *grandparent, int64_t n, const ScheduleFeatures &feat, const LoadJacobian &serial_jac, bool producer_has_been_scheduled, int producer_innermost_dim, const GPUMemoryType &mem_type, bool verbose) const {
+int64_t LoopNest::points_accessed_per_thread(const Anderson2021Params &params, const Target &target, const GPULoopInfo &gpu_loop_info, const std::vector<const FunctionDAG::Edge *> &edge_chain, const LoadJacobian &jac, const LoopNest *parent, const LoopNest *grandparent, int64_t n, const ScheduleFeatures &feat, const LoadJacobian &serial_jac, bool producer_has_been_scheduled, int producer_innermost_dim, const GPUMemoryType &mem_type, bool verbose) const {
 
     std::unique_ptr<LoopNest> innermost_parent_clone = std::make_unique<LoopNest>();
     innermost_parent_clone->copy_from(*parent);
@@ -1361,7 +1327,7 @@ int64_t LoopNest::points_accessed_per_thread(const Target &target, const GPULoop
         }
     }
 
-    IntrusivePtr<const LoopNest> innermost_parent = innermost_parent_clone->parallelize_in_tiles(tiling, grandparent, target, true, false, false, rvars_to_move_inward);
+    IntrusivePtr<const LoopNest> innermost_parent = innermost_parent_clone->parallelize_in_tiles(tiling, grandparent, params, target, true, false, false, rvars_to_move_inward);
 
     const auto &bounds = innermost_parent->get_bounds_along_edge_chain(producer, edge_chain);
     int64_t num_points = 1;
@@ -1651,7 +1617,7 @@ std::pair<int64_t, bool> LoopNest::compute_alloc_size_of_node_here(const Functio
 
 // Do a recursive walk over the loop nest computing features to feed the cost model.
 void LoopNest::compute_features(const FunctionDAG &dag,
-                                int hardware_parallelism,
+                                const Anderson2021Params &params,
                                 const Target &target,
                                 const StageMap<Sites> &sites,
                                 int64_t instances,
@@ -1686,8 +1652,8 @@ void LoopNest::compute_features(const FunctionDAG &dag,
         size_t i = size[idx];
         loop_instances *= i;
         if (stage->loop[idx].pure && !in_impure) {
-            if (hardware_parallelism > 1 &&
-                (parallel || (parent->is_root() && parallel_tasks < hardware_parallelism))) {
+            if (params.parallelism > 1 &&
+                (parallel || (parent->is_root() && parallel_tasks < params.parallelism))) {
                 // Either we've picked our parallel tiling, or
                 // it's not yet determined. Assume we'll not split
                 // any loops and just stop after we hit the
@@ -1696,9 +1662,9 @@ void LoopNest::compute_features(const FunctionDAG &dag,
                 // If we haven't picked out parallel tiling yet,
                 // assume that we'll target 8*cores when we do,
                 // which is a common rule of thumb.
-                if (!parallel && parallel_tasks > hardware_parallelism * 8) {
+                if (!parallel && parallel_tasks > params.parallelism * 8) {
                     // We would split this loop
-                    parallel_tasks = hardware_parallelism * 8;
+                    parallel_tasks = params.parallelism * 8;
                 }
             }
         } else if (i != 1) {
@@ -1799,7 +1765,7 @@ void LoopNest::compute_features(const FunctionDAG &dag,
                 ++stats.num_memoization_misses;
             }
 
-            c->compute_features(dag, hardware_parallelism, target, sites, subinstances, parallelism, this, parent, root, &working_set_here, &working_set_here_local_constant, &working_set_here_local_dynamic, features, gpu_loop_info, use_memoized_features, total_shared_mem_alloc_sizes, stats, verbose);
+            c->compute_features(dag, params, target, sites, subinstances, parallelism, this, parent, root, &working_set_here, &working_set_here_local_constant, &working_set_here_local_dynamic, features, gpu_loop_info, use_memoized_features, total_shared_mem_alloc_sizes, stats, verbose);
 
             if (use_memoized_features) {
                 c->features[hash_of_producers].make_large(dag.nodes[0].stages[0].max_id);
@@ -1955,7 +1921,7 @@ void LoopNest::compute_features(const FunctionDAG &dag,
         } else {
             // How this loop will be parallelized is not yet
             // determined. Use optimistic values for the features.
-            bytes_at_task = (feat.bytes_at_realization + hardware_parallelism - 1) / hardware_parallelism;
+            bytes_at_task = (feat.bytes_at_realization + params.parallelism - 1) / params.parallelism;
             innermost_bytes_at_task = std::min(bytes_at_task, feat.innermost_bytes_at_realization);
         }
 
@@ -2051,7 +2017,7 @@ void LoopNest::compute_features(const FunctionDAG &dag,
 
     // Recurse inwards
     for (const auto &c : children) {
-        c->compute_features(dag, hardware_parallelism, target, sites, subinstances, subparallelism, this, parent, root, &working_set_here, &working_set_here_local_constant, &working_set_here_local_dynamic, features, gpu_loop_info, use_memoized_features, total_shared_mem_alloc_sizes, stats, verbose);
+        c->compute_features(dag, params, target, sites, subinstances, subparallelism, this, parent, root, &working_set_here, &working_set_here_local_constant, &working_set_here_local_dynamic, features, gpu_loop_info, use_memoized_features, total_shared_mem_alloc_sizes, stats, verbose);
     }
     for (const auto *node : store_at) {
         auto &feat = features->get(&(node->stages[0]));
@@ -2288,7 +2254,7 @@ void LoopNest::compute_features(const FunctionDAG &dag,
                                 aslog(2) << "BEGIN MEM ACCESS shared_mem_load. consumer: " << consumer_name << "_s" << stage->index << "; producer: " << producer_name << "\n";
                             }
 
-                            int64_t points_accessed = points_accessed_per_thread(target, gpu_loop_info, edge_chain, jac.first, parent, grandparent, n, feat, serial_jac.first, producer_has_been_scheduled, producer_innermost_dim, GPUMemoryType::shared, verbose);
+                            int64_t points_accessed = points_accessed_per_thread(params, target, gpu_loop_info, edge_chain, jac.first, parent, grandparent, n, feat, serial_jac.first, producer_has_been_scheduled, producer_innermost_dim, GPUMemoryType::shared, verbose);
 
                             compute_mem_load_features<SharedMem>(
                                 jac.first,
@@ -2319,7 +2285,7 @@ void LoopNest::compute_features(const FunctionDAG &dag,
                                 aslog(2) << "BEGIN MEM ACCESS global_mem_load. consumer: " << consumer_name << "_s" << stage->index << "; producer: " << producer_name << "\n";
                             }
 
-                            int64_t points_accessed = points_accessed_per_thread(target, gpu_loop_info, edge_chain, jac.first, parent, grandparent, n, feat, serial_jac.first, producer_has_been_scheduled, producer_innermost_dim, GPUMemoryType::global, verbose);
+                            int64_t points_accessed = points_accessed_per_thread(params, target, gpu_loop_info, edge_chain, jac.first, parent, grandparent, n, feat, serial_jac.first, producer_has_been_scheduled, producer_innermost_dim, GPUMemoryType::global, verbose);
 
                             compute_mem_load_features<GlobalMem>(
                                 jac.first,
@@ -2359,7 +2325,7 @@ void LoopNest::compute_features(const FunctionDAG &dag,
                                 aslog(2) << "BEGIN MEM ACCESS local_mem_load. consumer: " << consumer_name << "_s" << stage->index << "; producer: " << producer_name << "\n";
                             }
 
-                            int64_t points_accessed = points_accessed_per_thread(target, gpu_loop_info, edge_chain, jac.first, parent, grandparent, n, feat, jac.first, producer_has_been_scheduled, producer_innermost_dim, GPUMemoryType::local, verbose);
+                            int64_t points_accessed = points_accessed_per_thread(params, target, gpu_loop_info, edge_chain, jac.first, parent, grandparent, n, feat, jac.first, producer_has_been_scheduled, producer_innermost_dim, GPUMemoryType::local, verbose);
 
                             compute_mem_load_features<LocalMem>(
                                 jac.first,
@@ -2664,12 +2630,12 @@ void LoopNest::compute_features(const FunctionDAG &dag,
         }
     }
 
-    compute_shared_mem_occupancy(target, total_shared_mem_alloc_sizes.get(stage), feat);
+    compute_shared_mem_occupancy(params, target, total_shared_mem_alloc_sizes.get(stage), feat);
 
     if (innermost && !is_scalar()) {
         compute_warp_features(feat, gpu_loop_info);
 
-        compute_warp_and_block_occupancy(hardware_parallelism, feat, gpu_loop_info);
+        compute_warp_and_block_occupancy(params, feat, gpu_loop_info);
     }
 }
 
@@ -3033,10 +2999,11 @@ bool LoopNest::compute_here(const FunctionDAG::Node *f,
                             bool tileable,
                             int v,
                             bool in_threads_loop,
+                            const Anderson2021Params &params,
                             const Target &target) {
     const auto &bounds = get_bounds(f);
 
-    if (!may_subtile()) {
+    if (!may_subtile(params)) {
         // If we are restricting ourselves to the Mullapudi et al
         // scheduling space, then once something is computed here
         // we may not subtile this loop.
@@ -3051,7 +3018,7 @@ bool LoopNest::compute_here(const FunctionDAG::Node *f,
         node->stage = &f->stages[s];
         node->innermost = true;
         node->vectorized_loop_index = -1;
-        node->tileable = tileable && (is_root() || may_subtile());
+        node->tileable = tileable && (is_root() || may_subtile(params));
 
         // always set gpu_label as thread if legal.
         // if !in_threads_loop we are computing either at root level or inside a serial loop
@@ -3156,6 +3123,7 @@ bool LoopNest::compute_here(const FunctionDAG::Node *f,
 // Parallelize this loop according to the given tiling.
 IntrusivePtr<const LoopNest> LoopNest::parallelize_in_tiles(const vector<int64_t> &tiling,
                                                             const LoopNest *parent,
+                                                            const Anderson2021Params &params,
                                                             const Target &target,
                                                             bool inner_tiling,
                                                             bool adjust_tiling,
@@ -3166,7 +3134,7 @@ IntrusivePtr<const LoopNest> LoopNest::parallelize_in_tiles(const vector<int64_t
     LoopNest *inner = new LoopNest, *outer = new LoopNest;
     inner->node = outer->node = node;
     inner->stage = outer->stage = stage;
-    inner->tileable = outer->tileable = tileable && may_subtile();
+    inner->tileable = outer->tileable = tileable && may_subtile(params);
     inner->vector_dim = outer->vector_dim = vector_dim;
     inner->vectorized_loop_index = outer->vectorized_loop_index = vectorized_loop_index;
 
@@ -3199,7 +3167,7 @@ IntrusivePtr<const LoopNest> LoopNest::parallelize_in_tiles(const vector<int64_t
         outer->parallel = true;
     }
 
-    outer->tileable = may_subtile();
+    outer->tileable = may_subtile(params);
 
     // First make an inner loop representing a 1x1x1... tile
     inner->size.resize(size.size(), 1);
@@ -3341,7 +3309,7 @@ bool LoopNest::region_computed_shrinks(const FunctionDAG::Node *f, const LoopNes
 // loop marked gpu_threads, in which case f's loops cannot be gpu_threads
 vector<IntrusivePtr<const LoopNest>> LoopNest::compute_in_tiles(const FunctionDAG::Node *f,
                                                                 const LoopNest *parent,
-                                                                int hardware_parallelism,
+                                                                const Anderson2021Params &params,
                                                                 const Target &target,
                                                                 const SearchSpaceOptions &search_space_options,
                                                                 int v,
@@ -3407,7 +3375,7 @@ vector<IntrusivePtr<const LoopNest>> LoopNest::compute_in_tiles(const FunctionDA
 
         std::unique_ptr<LoopNest> r{new LoopNest};
         r->copy_from(*this);
-        r->compute_here(f, true, v, in_threads_loop, target);
+        r->compute_here(f, true, v, in_threads_loop, params, target);
         if (!in_realization) {
             r->store_at.insert(f);
         } else {
@@ -3416,7 +3384,7 @@ vector<IntrusivePtr<const LoopNest>> LoopNest::compute_in_tiles(const FunctionDA
 
         // if GPU and creating a threads loop INSIDE a block loop, create child for each thread tiling
         if (!is_root() && !in_threads_loop && target.has_gpu_feature()) {
-            bool made_child = r->add_gpu_thread_tilings(f, target, v, result, union_counts);
+            bool made_child = r->add_gpu_thread_tilings(f, params, target, v, result, union_counts);
             if (!made_child) {  // no good thread tilings, just keep r with the untiled loop inserted as serial
                 result.emplace_back(r.release());
             }
@@ -3432,7 +3400,7 @@ vector<IntrusivePtr<const LoopNest>> LoopNest::compute_in_tiles(const FunctionDA
         return result;
     }
 
-    if (child >= 0 && !called_by_multiple_children && !in_realization && (may_subtile() || is_root())) {
+    if (child >= 0 && !called_by_multiple_children && !in_realization && (may_subtile(params) || is_root())) {
         // Push the Func further inwards in the loop nest
 
         const auto &c = children[child];
@@ -3442,14 +3410,14 @@ vector<IntrusivePtr<const LoopNest>> LoopNest::compute_in_tiles(const FunctionDA
         }
 
         for (int store_here = 0; store_here < 1; store_here++) {
-            if (is_root() && num_ones == (int)c->size.size() && hardware_parallelism > 1) {
+            if (is_root() && num_ones == (int)c->size.size() && params.parallelism > 1) {
                 // Don't fuse into serial loops, or we could never parallelize this Func.
                 continue;
             }
 
             in_threads_loop |= (children[child]->gpu_label == thread);
             // we must pass down union thread count constraints computed at block level when computing further in
-            auto opts = children[child]->compute_in_tiles(f, this, hardware_parallelism, target, search_space_options, v, store_here, in_threads_loop, false, union_counts);
+            auto opts = children[child]->compute_in_tiles(f, this, params, target, search_space_options, v, store_here, in_threads_loop, false, union_counts);
             for (IntrusivePtr<const LoopNest> &n : opts) {
                 // (Only valid if one child calls f) Push the
                 // computation into the child. Possibly leaving

@@ -8,12 +8,6 @@
 
 using namespace Halide;
 
-std::string getenv_safe(const char *key) {
-    const char *value = getenv(key);
-    if (!value) value = "";
-    return value;
-}
-
 int check_weights(const std::string &filename, const std::vector<int> &shape) {
     Runtime::Buffer<float> buf(shape);
 
@@ -36,13 +30,13 @@ int check_weights(const std::string &filename, const std::vector<int> &shape) {
 int main(int argc, char **argv) {
     using std::string;
 
-    string weights_dir = getenv_safe("HL_WEIGHTS_DIR");
+    string weights_dir = argc > 1 ? argv[1] : "";
     if (weights_dir.empty()) {
         std::cout << "No weights_dir specified. Exiting.\n";
         return 0;
     }
 
-    std::cout << "Checking weights...\n";
+    std::cout << "Checking weights from " << weights_dir << " ...\n";
 
     int num_nans = check_weights(weights_dir + "/head1_conv1_weight.data", {head1_channels, head1_w, head1_h});
     num_nans = check_weights(weights_dir + "/head1_conv1_bias.data", {head1_channels});

@@ -2,7 +2,10 @@
 # Resources for the autoscheduler library
 ##
 
-add_compile_definitions(HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API)
+# TODO(someone): `TARGETS cmake` cannot possibly be right for most of
+# the cases here, as it is just the arch-bits-os of the current `Halide_TARGET`,
+# so no GPU features will ever be present. I've commented out usages
+# that seem obviously wrong to me.
 
 set(COMMON_DIR "${Halide_SOURCE_DIR}/src/autoschedulers/common")
 include_directories("${Halide_BINARY_DIR}/include")
@@ -18,24 +21,26 @@ add_custom_command(OUTPUT ${WF_CPP}
                    VERBATIM)
 
 # cost_model, train_cost_model
-add_executable(anderson2021-cost_model.generator cost_model_generator.cpp)
-target_link_libraries(anderson2021-cost_model.generator PRIVATE Halide::Halide Halide::Generator)
+add_executable(anderson2021_cost_model.generator cost_model_generator.cpp)
+target_link_libraries(anderson2021_cost_model.generator PRIVATE Halide::Halide Halide::Generator)
 
-add_halide_library(anderson2021_cost_model FROM anderson2021-cost_model.generator
-    GENERATOR cost_model
+add_halide_library(anderson2021_cost_model FROM anderson2021_cost_model.generator
+                   GENERATOR cost_model
+                   FUNCTION_NAME cost_model
                    TARGETS cmake)
-add_halide_library(anderson2021_train_cost_model FROM anderson2021-cost_model.generator
-    GENERATOR train_cost_model
+add_halide_library(anderson2021_train_cost_model FROM anderson2021_cost_model.generator
+                   GENERATOR train_cost_model
+                   FUNCTION_NAME train_cost_model
                    TARGETS cmake
                    USE_RUNTIME anderson2021_cost_model.runtime)
 
 ## retrain_cost_model
-add_executable(anderson2021-retrain_cost_model
+add_executable(anderson2021_retrain_cost_model
                DefaultCostModel.cpp
                ${COMMON_DIR}/Weights.cpp
                retrain_cost_model.cpp
                ${WF_CPP})
-target_link_libraries(anderson2021-retrain_cost_model PRIVATE ASLog anderson2021_cost_model
+target_link_libraries(anderson2021_retrain_cost_model PRIVATE ASLog anderson2021_cost_model
     anderson2021_train_cost_model Halide::Halide Halide::Plugin)
 
 ###
@@ -65,150 +70,142 @@ target_link_libraries(Halide_Anderson2021 PRIVATE ASLog ParamParser
 
 # =================================================================
 
-add_executable(anderson2021-demo.generator ${COMMON_DIR}/demo_generator.cpp)
-target_link_libraries(anderson2021-demo.generator PRIVATE Halide::Halide Halide::Generator)
+add_executable(anderson2021_demo.generator ${COMMON_DIR}/demo_generator.cpp)
+target_link_libraries(anderson2021_demo.generator PRIVATE Halide::Halide Halide::Generator)
 
-add_halide_library(anderson2021-demo FROM demo.generator
+add_halide_library(anderson2021_demo FROM demo.generator
                     GENERATOR demo
-                   TARGETS cmake
+                    FUNCTION_NAME demo
+                   # TODO(someone)
+                   # TARGETS cmake
                    AUTOSCHEDULER Halide::Anderson2021
                    REGISTRATION DEMO_REGISTRATION_FILE)
 
-add_executable(anderson2021-demo_apps_autoscheduler ${DEMO_REGISTRATION_FILE})
-target_link_libraries(anderson2021-demo_apps_autoscheduler PRIVATE demo Halide::RunGenMain)
+add_executable(anderson2021_demo_apps_autoscheduler ${DEMO_REGISTRATION_FILE})
+target_link_libraries(anderson2021_demo_apps_autoscheduler PRIVATE demo Halide::RunGenMain)
 
-add_test(NAME demo_apps_autoscheduler
-         COMMAND demo_apps_autoscheduler --benchmarks=all --benchmark_min_time=1 --estimate_all)
-
-set_tests_properties(demo_apps_autoscheduler
+add_test(NAME anderson2021_demo_apps_autoscheduler
+         COMMAND anderson2021_demo_apps_autoscheduler --benchmarks=all --benchmark_min_time=1 --estimate_all)
+set_tests_properties(anderson2021_demo_apps_autoscheduler
                      PROPERTIES
-                     LABELS Anderson2021
-                     ENVIRONMENT "HL_TARGET=${Halide_TARGET}")
+                     LABELS Anderson2021)
 
 ## =================================================================
 
-add_executable(anderson2021-included_schedule_file.generator ${COMMON_DIR}/included_schedule_file_generator.cpp)
-target_link_libraries(anderson2021-included_schedule_file.generator PRIVATE
+add_executable(anderson2021_included_schedule_file.generator ${COMMON_DIR}/included_schedule_file_generator.cpp)
+target_link_libraries(anderson2021_included_schedule_file.generator PRIVATE
     Halide::Halide Halide::Generator)
 
-add_halide_library(anderson2021-included_schedule_file FROM
-    anderson2021-included_schedule_file.generator
+add_halide_library(anderson2021_included_schedule_file FROM
+    anderson2021_included_schedule_file.generator
                     GENERATOR included_schedule_file
-                   TARGETS cmake
+                    FUNCTION_NAME included_schedule_file
+                   # TODO(someone)
+                   # TARGETS cmake
                    AUTOSCHEDULER Halide::Anderson2021
                    REGISTRATION included_schedule_reg)
 
-add_executable(anderson2021-demo_included_schedule_file ${included_schedule_reg})
-target_link_libraries(anderson2021-demo_included_schedule_file PRIVATE included_schedule_file Halide::RunGenMain)
+add_executable(anderson2021_demo_included_schedule_file ${included_schedule_reg})
+target_link_libraries(anderson2021_demo_included_schedule_file PRIVATE included_schedule_file Halide::RunGenMain)
 
-add_test(NAME demo_included_schedule_file
-         COMMAND demo_included_schedule_file --benchmarks=all --benchmark_min_time=1 --estimate_all)
-
-set_tests_properties(demo_included_schedule_file
+add_test(NAME anderson2021_demo_included_schedule_file
+         COMMAND anderson2021_demo_included_schedule_file --benchmarks=all --benchmark_min_time=1 --estimate_all)
+set_tests_properties(anderson2021_demo_included_schedule_file
                      PROPERTIES
-                     LABELS Anderson2021
-                     ENVIRONMENT "HL_TARGET=${Halide_TARGET}")
+                     LABELS Anderson2021)
 
 ## ====================================================
 ## Auto-tuning support utilities.
 ## TODO(#4053): implement auto-tuning support in CMake?
 
-add_executable(anderson2021-featurization_to_sample ${COMMON_DIR}/featurization_to_sample.cpp)
+add_executable(anderson2021_featurization_to_sample ${COMMON_DIR}/featurization_to_sample.cpp)
 
-add_executable(anderson2021-get_host_target ${COMMON_DIR}/get_host_target.cpp)
-target_link_libraries(anderson2021-get_host_target PRIVATE Halide::Halide)
+add_executable(anderson2021_get_host_target ${COMMON_DIR}/get_host_target.cpp)
+target_link_libraries(anderson2021_get_host_target PRIVATE Halide::Halide)
 
-add_executable(anderson2021-weightsdir_to_weightsfile ${COMMON_DIR}/weightsdir_to_weightsfile.cpp ${COMMON_DIR}/Weights.cpp)
-target_link_libraries(anderson2021-weightsdir_to_weightsfile PRIVATE Halide::Runtime)
+add_executable(anderson2021_weightsdir_to_weightsfile ${COMMON_DIR}/weightsdir_to_weightsfile.cpp ${COMMON_DIR}/Weights.cpp)
+target_link_libraries(anderson2021_weightsdir_to_weightsfile PRIVATE Halide::Runtime)
 
 # =================================================================
 # Smaller tests
 
 if (BUILD_SHARED_LIBS)
-    add_executable(anderson2021-test_apps_autoscheduler test.cpp)
-    target_link_libraries(anderson2021-test_apps_autoscheduler PRIVATE
+    add_executable(anderson2021_test_apps_autoscheduler test.cpp)
+    target_link_libraries(anderson2021_test_apps_autoscheduler PRIVATE
         Halide::Halide Halide::Tools ${CMAKE_DL_LIBS})
 
-    add_test(NAME test_apps_autoscheduler
-             COMMAND test_apps_autoscheduler $<TARGET_FILE:Halide_Anderson2021>)
+    add_test(NAME anderson2021_test_apps_autoscheduler
+             COMMAND anderson2021_test_apps_autoscheduler $<TARGET_FILE:Halide_Anderson2021>)
 
-    set_tests_properties(test_apps_autoscheduler PROPERTIES
+    set_tests_properties(anderson2021_test_apps_autoscheduler PROPERTIES
                          LABELS "Anderson2021;multithreaded"
                          ENVIRONMENT "LD_LIBRARY_PATH=$<TARGET_FILE_DIR:Halide_Anderson2021>:$ENV{LD_LIBRARY_PATH};HL_TARGET=${Halide_TARGET}")
 endif ()
 
 ##
 
-add_executable(anderson2021-test_perfect_hash_map ${COMMON_DIR}/test_perfect_hash_map.cpp)
+add_executable(anderson2021_test_perfect_hash_map ${COMMON_DIR}/test_perfect_hash_map.cpp)
 
-add_test(NAME test_perfect_hash_map COMMAND test_perfect_hash_map)
-set_tests_properties(test_perfect_hash_map
+add_test(NAME anderson2021_test_perfect_hash_map COMMAND test_perfect_hash_map)
+set_tests_properties(anderson2021_test_perfect_hash_map
                      PROPERTIES
-                     LABELS Anderson2021
-                     ENVIRONMENT "HL_TARGET=${Halide_TARGET}")
+                     LABELS Anderson2021)
 
 ##
 
-add_executable(anderson2021-test_function_dag ${COMMON_DIR}/test_function_dag.cpp FunctionDAG.cpp)
-target_link_libraries(anderson2021-test_function_dag PRIVATE ASLog Halide::Halide Halide::Tools Halide::Plugin)
+add_executable(anderson2021_test_function_dag ${COMMON_DIR}/test_function_dag.cpp FunctionDAG.cpp)
+target_link_libraries(anderson2021_test_function_dag PRIVATE ASLog Halide::Halide Halide::Tools Halide::Plugin)
 
-add_test(NAME test_function_dag COMMAND test_function_dag)
-set_tests_properties(test_function_dag
+add_test(NAME anderson2021_test_function_dag COMMAND anderson2021_test_function_dag)
+set_tests_properties(anderson2021_test_function_dag
                      PROPERTIES
-                     LABELS Anderson2021
-                     ENVIRONMENT "HL_TARGET=${Halide_TARGET}")
+                     LABELS Anderson2021)
 
-add_executable(anderson2021-test_bounds test/bounds.cpp FunctionDAG.cpp LoopNest.cpp GPULoopInfo.cpp Tiling.cpp)
-target_link_libraries(anderson2021-test_bounds PRIVATE ASLog Halide::Halide Halide::Tools Halide::Plugin)
+add_executable(anderson2021_test_bounds test/bounds.cpp FunctionDAG.cpp LoopNest.cpp GPULoopInfo.cpp Tiling.cpp)
+target_link_libraries(anderson2021_test_bounds PRIVATE ASLog Halide::Halide Halide::Tools Halide::Plugin)
 
-add_test(NAME anderson2021-test_bounds COMMAND test_bounds)
-set_tests_properties(anderson2021-test_bounds
+add_test(NAME anderson2021_test_bounds COMMAND anderson2021_test_bounds)
+set_tests_properties(anderson2021_test_bounds
                      PROPERTIES
-                     LABELS Anderson2021
-                     ENVIRONMENT "HL_TARGET=${Halide_TARGET}")
+                     LABELS Anderson2021)
 
-add_executable(anderson2021-test_parser test/parser.cpp)
-target_link_libraries(anderson2021-test_parser PRIVATE ASLog Halide::Halide Halide::Tools Halide::Plugin)
+add_executable(anderson2021_test_parser test/parser.cpp)
+target_link_libraries(anderson2021_test_parser PRIVATE ASLog Halide::Halide Halide::Tools Halide::Plugin)
 
-add_test(NAME test_parser COMMAND anderson2021-test_parser)
-set_tests_properties(test_parser
+add_test(NAME anderson2021_test_parser COMMAND anderson2021_test_parser)
+set_tests_properties(anderson2021_test_parser
                      PROPERTIES
-                     LABELS Anderson2021
-                     ENVIRONMENT "HL_TARGET=${Halide_TARGET}")
+                     LABELS Anderson2021)
 
-add_executable(anderson2021-test_state test/state.cpp FunctionDAG.cpp LoopNest.cpp GPULoopInfo.cpp State.cpp Tiling.cpp)
-target_link_libraries(anderson2021-test_state PRIVATE ASLog Halide::Halide Halide::Tools Halide::Plugin)
+add_executable(anderson2021_test_state test/state.cpp FunctionDAG.cpp LoopNest.cpp GPULoopInfo.cpp State.cpp Tiling.cpp)
+target_link_libraries(anderson2021_test_state PRIVATE ASLog Halide::Halide Halide::Tools Halide::Plugin)
 
-add_test(NAME test_state COMMAND anderson2021-test_state)
-set_tests_properties(test_state
+add_test(NAME anderson2021_test_state COMMAND anderson2021_test_state)
+set_tests_properties(anderson2021_test_state
                      PROPERTIES
-                     LABELS Anderson2021
-                     ENVIRONMENT "HL_TARGET=${Halide_TARGET}")
+                     LABELS Anderson2021)
 
-add_executable(anderson2021-test_storage_strides test/storage_strides.cpp FunctionDAG.cpp LoopNest.cpp GPULoopInfo.cpp State.cpp Tiling.cpp)
-target_link_libraries(anderson2021-test_storage_strides PRIVATE ASLog Halide::Halide Halide::Tools Halide::Plugin)
+add_executable(anderson2021_test_storage_strides test/storage_strides.cpp FunctionDAG.cpp LoopNest.cpp GPULoopInfo.cpp State.cpp Tiling.cpp)
+target_link_libraries(anderson2021_test_storage_strides PRIVATE ASLog Halide::Halide Halide::Tools Halide::Plugin)
 
-add_test(NAME test_storage_strides COMMAND anderson2021-test_storage_strides)
-set_tests_properties(test_storage_strides
+add_test(NAME anderson2021_test_storage_strides COMMAND anderson2021_test_storage_strides)
+set_tests_properties(anderson2021_test_storage_strides
                      PROPERTIES
-                     LABELS Anderson2021
-                     ENVIRONMENT "HL_TARGET=${Halide_TARGET}")
+                     LABELS Anderson2021)
 
-add_executable(anderson2021-test_thread_info test/thread_info.cpp LoopNest.cpp
+add_executable(anderson2021_test_thread_info test/thread_info.cpp LoopNest.cpp
     FunctionDAG.cpp GPULoopInfo.cpp Tiling.cpp)
-target_link_libraries(anderson2021-test_thread_info PRIVATE ASLog Halide::Halide Halide::Tools Halide::Plugin)
+target_link_libraries(anderson2021_test_thread_info PRIVATE ASLog Halide::Halide Halide::Tools Halide::Plugin)
 
-add_test(NAME test_thread_info COMMAND anderson2021-test_thread_info)
-set_tests_properties(test_thread_info
+add_test(NAME anderson2021_test_thread_info COMMAND anderson2021_test_thread_info)
+set_tests_properties(anderson2021_test_thread_info
                      PROPERTIES
-                     LABELS Anderson2021
-                     ENVIRONMENT "HL_TARGET=${Halide_TARGET}")
+                     LABELS Anderson2021)
 
-add_executable(anderson2021-test_tiling test/tiling.cpp Tiling.cpp)
-target_link_libraries(anderson2021-test_tiling PRIVATE ASLog Halide::Halide Halide::Tools Halide::Plugin)
+add_executable(anderson2021_test_tiling test/tiling.cpp Tiling.cpp)
+target_link_libraries(anderson2021_test_tiling PRIVATE ASLog Halide::Halide Halide::Tools Halide::Plugin)
 
-add_test(NAME test_tiling COMMAND anderson2021-test_tiling)
-set_tests_properties(test_tiling
+add_test(NAME anderson2021_test_tiling COMMAND anderson2021_test_tiling)
+set_tests_properties(anderson2021_test_tiling
                      PROPERTIES
-                     LABELS Anderson2021
-                     ENVIRONMENT "HL_TARGET=${Halide_TARGET}")
+                     LABELS Anderson2021)

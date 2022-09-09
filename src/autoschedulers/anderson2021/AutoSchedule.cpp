@@ -20,23 +20,28 @@
 
   Environment variables used (directly or indirectly):
 
-  HL_BEAM_SIZE
-  Beam size to use in the beam search. Defaults to 32. Use 1 to get a greedy search instead.
-
-  HL_CYOS
-  "Choose-your-own-schedule". If set to 1, lets you navigate the search tree by hand in the terminal. Whee! This is for debugging the autoscheduler.
-
-  HL_FEATURE_FILE -> output
-  *** DEPRECATED *** use the 'featurization' output from Generator instead
-  Write out a training featurization for the selected schedule into this file.
-  Needs to be converted to a sample file with the runtime using featurization_to_sample before it can be used to train.
+  HL_DEBUG_AUTOSCHEDULE
+  If set, is used for the debug log level for auto-schedule generation (overriding the
+  value of HL_DEBUG_CODEGEN, if any).
 
   HL_PERMIT_FAILED_UNROLL
   Set to 1 to tell Halide not to freak out if we try to unroll a loop that doesn't have a constant extent. Should generally not be necessary, but sometimes the autoscheduler's model for what will and will not turn into a constant during lowering is inaccurate, because Halide isn't perfect at constant-folding.
 
-  HL_SCHEDULE_FILE
-  *** DEPRECATED *** use the 'schedule' output from Generator instead
-  Write out a human-and-machine readable block of scheduling source code for the selected schedule into this file.
+#ifdef HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
+
+  Most of the settings in this Autoscheduler are controlled by the values specified via
+  an `autoscheduler.fieldname` GeneratorParam, as listed in the Anderson2021Params struct;
+  this is the preferred way to set these.
+
+  For now, however, you can (instead) control these settings via env vars;
+  doing so requires that you compile all of Halide with HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
+  defined. (Note that this ability is deprecated, and likely to be removed in Halide 16.)
+
+  That said, here are the (legacy) env vars you can still use when HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
+  is defined:
+
+  HL_BEAM_SIZE
+  Beam size to use in the beam search. Defaults to 32. Use 1 to get a greedy search instead.
 
   HL_RANDOM_DROPOUT
   percent chance of accepting each state in the beam. Normalized by the number of decisions made, so 5 would be there's a 5 percent chance of never rejecting any states.
@@ -51,10 +56,6 @@
   HL_NO_SUBTILING
   If set to 1, limits the search space to that of Mullapudi et al.
 
-  HL_DEBUG_AUTOSCHEDULE
-  If set, is used for the debug log level for auto-schedule generation (overriding the
-  value of HL_DEBUG_CODEGEN, if any).
-
   HL_SEARCH_SPACE_OPTIONS
   Allow/disallow search space options to be considered by the autoscheduler.
   Expects a string of four 0/1 values that allow/disallow the following options: compute root, inline, compute at the block level, compute at the thread level e.g. 1000 would allow compute root only
@@ -63,10 +64,23 @@
   If set, only a random subset of the generated tilings for each stage will be accepted into the beam
 
   HL_FREEZE_INLINE_COMPUTE_ROOT
-  If set, run a pre-pass where only compute_root and inline scheduling options are considered. The cheapest stages (according to the cost model) have these decisions 'frozen' for the remaining autoscheduling passes
+  If set, run a pre-pass where only compute_root and inline scheduling options are considered.
+  The cheapest stages (according to the cost model) have these decisions 'frozen' for the remaining autoscheduling passes.
 
-  TODO: expose these settings by adding some means to pass args to
-  generator plugins instead of environment vars.
+#endif
+
+#ifdef HALIDE_AUTOSCHEDULER_ALLOW_CYOS
+
+  HL_CYOS
+  "Choose-your-own-schedule".
+
+  If set to 1, lets you navigate the search tree by hand in the terminal.
+  Whee! This is for debugging the autoscheduler. Since it is generally only
+  for use by developers/maintainers of this autoscheduler, it defaults
+  to being omitted entirely unless you build Halide with HALIDE_AUTOSCHEDULER_ALLOW_CYOS defined.
+  Even then, you must *also* set the env var to 1 to make use of it.
+
+#endif
 */
 #include <algorithm>
 #include <chrono>
@@ -103,64 +117,136 @@ namespace Halide {
 namespace Internal {
 namespace Autoscheduler {
 
-struct Anderson2021Params {
-    /* Maximum level of parallelism available i.e. number of SMs on target GPU */
-    int parallelism = 80;
-};
-
 using std::string;
 using std::vector;
 
-// Get the HL_RANDOM_DROPOUT environment variable. Purpose of this is described above.
-double get_dropout_threshold() {
-    string random_dropout_str = get_env_variable("HL_RANDOM_DROPOUT");
-    if (!random_dropout_str.empty()) {
-        return atof(random_dropout_str.c_str());
-    } else {
-        return 100;
+struct ProgressBar {
+    void set(double progress) {
+        if (!draw_progress_bar) {
+            return;
+        }
+        auto &os = aslog(ProgressBarLogLevel).get_ostream();
+        counter++;
+        const int bits = 11;
+        if (counter & ((1 << bits) - 1)) {
+            return;
+        }
+        const int pos = (int)(progress * 78);
+        os << "[";
+        for (int j = 0; j < 78; j++) {
+            if (j < pos) {
+                os << ".";
+            } else if (j - 1 < pos) {
+                os << "/-\\|"[(counter >> bits) % 4];
+            } else {
+                os << " ";
+            }
+        }
+        os << "]";
+        for (int j = 0; j < 80; j++) {
+            os << "\b";
+        }
     }
+
+    void clear() {
+        if (counter) {
+            auto &os = aslog(ProgressBarLogLevel).get_ostream();
+            for (int j = 0; j < 80; j++) {
+                os << " ";
+            }
+            for (int j = 0; j < 80; j++) {
+                os << "\b";
+            }
+        }
+    }
+
+private:
+    uint32_t counter = 0;
+    static constexpr int ProgressBarLogLevel = 1;
+    const bool draw_progress_bar = isatty(2) && aslog::aslog_level() >= ProgressBarLogLevel;
+};
+
+// TODO: this is scary as heck, can we be sure all these references don't go stale?
+struct AutoSchedule {
+    const FunctionDAG &dag;
+    Anderson2021Params params;
+    const Target &target;
+    const std::vector<Function> &outputs;
+    std::mt19937 &rng;
+    CostModel *cost_model;
+    Statistics &stats;
+    SearchSpace &search_space;
+    const LoopNestParser *partial_schedule;
+
+    AutoSchedule(const FunctionDAG &dag,
+                 const Anderson2021Params &params,
+                 const Target &target,
+                 const std::vector<Function> &outputs,
+                 std::mt19937 &rng,
+                 CostModel *cost_model,
+                 Statistics &stats,
+                 SearchSpace &search_space,
+                 const LoopNestParser *partial_schedule);
+
+    bool use_partial_schedule() const {
+        return partial_schedule;
+    }
+
+    IntrusivePtr<State> optimal_schedule_pass(int beam_size,
+                                              int pass_idx,
+                                              int num_passes,
+                                              ProgressBar &tick,
+                                              std::unordered_set<uint64_t> &permitted_hashes);
+
+    // Performance coarse-to-fine beam search and return the best state found.
+    IntrusivePtr<State> optimal_schedule(int beam_size);
+};
+
+#ifdef HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
+template<typename T>
+T get_scalar_env_var(const char *nm, T def = T()) {
+    auto str = get_env_variable(nm);
+    if (str.empty()) {
+        return def;
+    }
+    std::istringstream iss(str);
+    T t;
+    iss >> t;
+    user_assert(!iss.fail() && iss.get() == EOF) << "Unable to parse: " << str;
+    return t;
 }
+#endif
 
 // Decide whether or not to drop a beam search state. Used for
 // randomly exploring the search tree for autotuning and to generate
 // training data.
-bool random_dropout(std::mt19937 &rng, size_t num_decisions) {
-    static double random_dropout_threshold = std::max(0.0, get_dropout_threshold());
-    if (random_dropout_threshold >= 100) {
+bool random_dropout(const Anderson2021Params &params, std::mt19937 &rng, size_t num_decisions) {
+    if (params.random_dropout >= 100) {
         return false;
     }
 
     // The random dropout threshold is the chance that we operate
     // entirely greedily and never discard anything.
-    double t = random_dropout_threshold;
+    double t = params.random_dropout;
     t /= 100;
     t = std::pow(t, 1.0f / num_decisions);
     t *= 100;
 
-    double r = rng() % 100;
-    bool drop_it = r >= t;
+    uint32_t r = rng();
+    bool drop_it = (r % 100) >= t;
     return drop_it;
-}
-
-// Get the HL_SEARCH_SPACE_OPTIONS environment variable. Described above
-std::string get_search_space_options() {
-    std::string options = get_env_variable("HL_SEARCH_SPACE_OPTIONS");
-    if (options.empty()) {
-        return "1111";
-    }
-    return options;
 }
 
 // Configure a cost model to process a specific pipeline.
 void configure_pipeline_features(const FunctionDAG &dag,
-                                 int hardware_parallelism,
+                                 const Anderson2021Params &params,
                                  CostModel *cost_model) {
     cost_model->reset();
-    cost_model->set_pipeline_features(dag, hardware_parallelism);
+    cost_model->set_pipeline_features(dag, params);
 }
 
 AutoSchedule::AutoSchedule(const FunctionDAG &dag,
-                           int hardware_parallelism,
+                           const Anderson2021Params &params,
                            const Target &target,
                            const std::vector<Function> &outputs,
                            std::mt19937 &rng,
@@ -168,8 +254,8 @@ AutoSchedule::AutoSchedule(const FunctionDAG &dag,
                            Statistics &stats,
                            SearchSpace &search_space,
                            const LoopNestParser *partial_schedule)
-    : dag{dag}, hardware_parallelism{hardware_parallelism}, target{target}, outputs{outputs}, rng{rng}, cost_model{cost_model}, stats{stats}, search_space{search_space}, partial_schedule{partial_schedule} {
-    configure_pipeline_features(dag, hardware_parallelism, cost_model);
+    : dag{dag}, params{params}, target{target}, outputs{outputs}, rng{rng}, cost_model{cost_model}, stats{stats}, search_space{search_space}, partial_schedule{partial_schedule} {
+    configure_pipeline_features(dag, params, cost_model);
 }
 
 // A single pass of coarse-to-fine beam search.
@@ -211,15 +297,17 @@ IntrusivePtr<State> AutoSchedule::optimal_schedule_pass(int beam_size,
             q.emplace(std::move(s));
         };
 
+    std::unique_ptr<LoopNestParser> target_loop_nest;
+
+#ifdef HALIDE_AUTOSCHEDULER_ALLOW_CYOS
     string cyos_str = get_env_variable("HL_CYOS");
     string cyos_from_file_str = get_env_variable("HL_CYOS_FROM_FILE");
     bool cyos_from_file = !cyos_from_file_str.empty();
     bool cyos_is_enabled = cyos_from_file || cyos_str == "1";
-
-    std::unique_ptr<LoopNestParser> target_loop_nest;
     if (cyos_from_file) {
         target_loop_nest = LoopNestParser::from_file(cyos_from_file_str);
     }
+#endif
 
     // This loop is beam search over the sequence of decisions to make.
     for (int i = 0;; i++) {
@@ -291,7 +379,7 @@ IntrusivePtr<State> AutoSchedule::optimal_schedule_pass(int beam_size,
             }
 
             // Random dropout
-            if (pending.size() > 1 && random_dropout(rng, dag.nodes.size() * 2)) {
+            if (pending.size() > 1 && random_dropout(params, rng, dag.nodes.size() * 2)) {
                 continue;
             }
 
@@ -380,6 +468,7 @@ IntrusivePtr<State> AutoSchedule::optimal_schedule_pass(int beam_size,
             q.resort();
         }
 
+#ifdef HALIDE_AUTOSCHEDULER_ALLOW_CYOS
         if (cyos_is_enabled) {
             int selection = -1;
             bool found = false;
@@ -434,6 +523,7 @@ IntrusivePtr<State> AutoSchedule::optimal_schedule_pass(int beam_size,
             q.clear();
             q.emplace(std::move(selected));
         }
+#endif  // HALIDE_AUTOSCHEDULER_ALLOW_CYOS
     }
 }
 
@@ -446,6 +536,7 @@ IntrusivePtr<State> AutoSchedule::optimal_schedule(int beam_size) {
     // If the beam size is one, it's pointless doing multiple passes.
     int num_passes = (beam_size == 1) ? 1 : 5;
 
+#ifdef HALIDE_AUTOSCHEDULER_ALLOW_CYOS
     string cyos_str = get_env_variable("HL_CYOS");
     string cyos_from_file_str = get_env_variable("HL_CYOS_FROM_FILE");
     if (!cyos_from_file_str.empty()) {
@@ -456,14 +547,14 @@ IntrusivePtr<State> AutoSchedule::optimal_schedule(int beam_size) {
         // ask them to do more than one pass.
         num_passes = 1;
     }
+#endif  // HALIDE_AUTOSCHEDULER_ALLOW_CYOS
 
-    string num_passes_str = get_env_variable("HL_NUM_PASSES");
-    if (!num_passes_str.empty()) {
+    if (params.num_passes != 0) {
         // The user has requested a non-standard number of passes.
-        num_passes = std::atoi(num_passes_str.c_str());
+        num_passes = params.num_passes;
     }
 
-    bool use_pre_pass = get_env_variable("HL_FREEZE_INLINE_COMPUTE_ROOT") == "1";
+    bool use_pre_pass = params.freeze_inline_compute_root != 0;
     int pass_idx = 0;
 
     if (use_pre_pass && num_passes > 1) {
@@ -504,40 +595,37 @@ IntrusivePtr<State> AutoSchedule::optimal_schedule(int beam_size) {
 // The main entrypoint to generate a schedule for a pipeline.
 void generate_schedule(const std::vector<Function> &outputs,
                        const Target &target,
-                       int hardware_parallelism,
+                       const Anderson2021Params &params,
                        AutoSchedulerResults *auto_scheduler_results) {
     internal_assert(target.has_gpu_feature()) << "Specified target (" << target.to_string() << ") does not support GPU";
 
     Timer timer;
-    aslog(0) << "generate_schedule for target=" << target.to_string() << "\n";
-    aslog(0) << "hardware_parallelism = " << hardware_parallelism << "\n";
+    aslog(1) << "generate_schedule for target=" << target.to_string() << "\n";
+    aslog(1) << "Anderson2021Params.parallelism:" << params.parallelism << "\n";
+    aslog(1) << "Anderson2021Params.beam_size:" << params.beam_size << "\n";
+    aslog(1) << "Anderson2021Params.random_dropout:" << params.random_dropout << "\n";
+    aslog(1) << "Anderson2021Params.random_dropout_seed:" << params.random_dropout_seed << "\n";
+    aslog(1) << "Anderson2021Params.weights_path:" << params.weights_path << "\n";
+    aslog(1) << "Anderson2021Params.disable_subtiling:" << params.disable_subtiling << "\n";
+    aslog(1) << "Anderson2021Params.randomize_tilings:" << params.randomize_tilings << "\n";
+    aslog(1) << "Anderson2021Params.search_space_options:" << params.search_space_options << "\n";
+    aslog(1) << "Anderson2021Params.freeze_inline_compute_root:" << params.freeze_inline_compute_root << "\n";
+    aslog(1) << "Anderson2021Params.partial_schedule_path:" << params.partial_schedule_path << "\n";
+    aslog(1) << "Anderson2021Params.num_passes:" << params.num_passes << "\n";
+    aslog(1) << "Anderson2021Params.stack_factor:" << params.stack_factor << "\n";
+    aslog(1) << "Anderson2021Params.shared_memory_limit_kb:" << params.shared_memory_limit_kb << "\n";
+    aslog(1) << "Anderson2021Params.shared_memory_sm_limit_kb:" << params.shared_memory_sm_limit_kb << "\n";
+    aslog(1) << "Anderson2021Params.active_block_limit:" << params.active_block_limit << "\n";
+    aslog(1) << "Anderson2021Params.active_warp_limit:" << params.active_warp_limit << "\n";
 
     // Start a timer
     HALIDE_TIC;
 
-    // Get the seed for random dropout
-    string seed_str = get_env_variable("HL_SEED");
-    // Or use the time, if not set.
-    int seed = (int)time(nullptr);
-    if (!seed_str.empty()) {
-        seed = atoi(seed_str.c_str());
-    }
-
-    aslog(1) << "Dropout seed = " << seed << "\n";
-
-    // Get the beam size
-    string beam_size_str = get_env_variable("HL_BEAM_SIZE");
-    // Defaults to 32
-    size_t beam_size = 32;
-    if (!beam_size_str.empty()) {
-        beam_size = atoi(beam_size_str.c_str());
-    }
-
-    string weights_in_path = get_env_variable("HL_WEIGHTS_DIR");
-    string weights_out_path;  // deliberately empty
-
     string randomize_weights_str = get_env_variable("HL_RANDOMIZE_WEIGHTS");
     bool randomize_weights = randomize_weights_str == "1";
+
+    string weights_in_path = params.weights_path;
+    string weights_out_path;  // deliberately empty
 
     // Analyse the Halide algorithm and construct our abstract representation of it
     FunctionDAG dag(outputs, target);
@@ -555,23 +643,22 @@ void generate_schedule(const std::vector<Function> &outputs,
 
     IntrusivePtr<State> optimal;
 
-    string partial_schedule_filename = get_env_variable("PARTIAL_SCHEDULE");
     std::unique_ptr<LoopNestParser> partial_schedule;
-    if (!partial_schedule_filename.empty()) {
-        aslog(0) << "Loading partial schedule from " << partial_schedule_filename << "\n";
-        partial_schedule = LoopNestParser::from_file(partial_schedule_filename);
+    if (!params.partial_schedule_path.empty()) {
+        aslog(0) << "Loading partial schedule from " << params.partial_schedule_path << "\n";
+        partial_schedule = LoopNestParser::from_file(params.partial_schedule_path);
         aslog(0) << "Partial schedule:\n";
         partial_schedule->dump();
         aslog(0) << "\n";
     }
 
-    std::mt19937 rng{(uint32_t)seed};
-    SearchSpace search_space{dag, hardware_parallelism, target, get_search_space_options(), rng, cost_model.get(), stats, partial_schedule.get()};
+    std::mt19937 rng{(uint32_t)params.random_dropout_seed};
+    SearchSpace search_space{dag, params, target, rng, cost_model.get(), stats, partial_schedule.get()};
 
-    AutoSchedule autoschedule{dag, hardware_parallelism, target, outputs, rng, cost_model.get(), stats, search_space, partial_schedule.get()};
+    AutoSchedule autoschedule{dag, params, target, outputs, rng, cost_model.get(), stats, search_space, partial_schedule.get()};
 
     // Run beam search
-    optimal = autoschedule.optimal_schedule(beam_size);
+    optimal = autoschedule.optimal_schedule(params.beam_size);
 
     HALIDE_TOC;
 
@@ -579,10 +666,10 @@ void generate_schedule(const std::vector<Function> &outputs,
     aslog(1) << "** Optimal schedule:\n";
 
     // Just to get the debugging prints to fire
-    optimal->calculate_cost(dag, hardware_parallelism, target, cost_model.get(), stats, aslog::aslog_level() > 0);
+    optimal->calculate_cost(dag, params, target, cost_model.get(), stats, aslog::aslog_level() > 0);
 
     // Apply the schedules to the pipeline
-    optimal->apply_schedule(dag, hardware_parallelism, target);
+    optimal->apply_schedule(dag, params, target);
 
     // Print out the schedule
     if (aslog::aslog_level() > 0) {
@@ -592,29 +679,6 @@ void generate_schedule(const std::vector<Function> &outputs,
         optimal->print_compute_locations();
     }
 
-    string schedule_file = get_env_variable("HL_SCHEDULE_FILE");
-    if (!schedule_file.empty()) {
-        user_warning << "HL_SCHEDULE_FILE is deprecated; use the schedule output from Generator instead\n";
-        aslog(1) << "Writing schedule to " << schedule_file << "...\n";
-        std::ofstream f(schedule_file);
-        f << "// --- BEGIN machine-generated schedule\n"
-          << optimal->schedule_source
-          << "// --- END machine-generated schedule\n";
-        f.close();
-        internal_assert(!f.fail()) << "Failed to write " << schedule_file;
-    }
-
-    // Save the featurization, so that we can use this schedule as
-    // training data (once we've benchmarked it).
-    string feature_file = get_env_variable("HL_FEATURE_FILE");
-    if (!feature_file.empty()) {
-        user_warning << "HL_FEATURE_FILE is deprecated; use the featurization output from Generator instead\n";
-        std::ofstream binfile(feature_file, std::ios::binary | std::ios_base::trunc);
-        optimal->save_featurization(dag, hardware_parallelism, target, binfile);
-        binfile.close();
-        internal_assert(!binfile.fail()) << "Failed to write " << feature_file;
-    }
-
     if (auto_scheduler_results) {
 #ifdef HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
         auto_scheduler_results->scheduler_name = "Anderson2021";
@@ -622,7 +686,7 @@ void generate_schedule(const std::vector<Function> &outputs,
         auto_scheduler_results->schedule_source = optimal->schedule_source;
         {
             std::ostringstream out;
-            optimal->save_featurization(dag, hardware_parallelism, target, out);
+            optimal->save_featurization(dag, params, target, out);
             auto_scheduler_results->featurization.resize(out.str().size());
             memcpy(auto_scheduler_results->featurization.data(), out.str().data(), out.str().size());
         }
@@ -662,7 +726,22 @@ struct Anderson2021 {
         }
         Anderson2021Params params;
         params.parallelism = params_in.parallelism;
-        Autoscheduler::generate_schedule(outputs, target, params.parallelism, results);
+        params.beam_size = get_scalar_env_var<int>("HL_BEAM_SIZE", 32);
+        params.random_dropout = get_scalar_env_var<int>("HL_RANDOM_DROPOUT", 100);
+        params.random_dropout_seed = get_scalar_env_var<int>("HL_SEED", (int)time(nullptr));
+        params.weights_path = get_scalar_env_var<std::string>("HL_WEIGHTS_DIR");
+        params.disable_subtiling = get_scalar_env_var<int>("HL_NO_SUBTILING", 0);
+        params.randomize_tilings = get_scalar_env_var<int>("HL_RANDOMIZE_TILINGS", 0);
+        params.search_space_options = get_scalar_env_var<std::string>("HL_DISABLE_MEMOIZED_FEATURES", "1111");
+        params.freeze_inline_compute_root = get_scalar_env_var<int>("HL_AUTOSCHEDULE_MEMORY_LIMIT", 0);
+        params.partial_schedule_path = get_scalar_env_var<std::string>("PARTIAL_SCHEDULE", "");
+        params.num_passes = get_scalar_env_var<int>("HL_NUM_PASSES", 0);
+        params.stack_factor = get_scalar_env_var<double>("HL_STACK_FACTOR", 0.95f);
+        params.shared_memory_limit_kb = get_scalar_env_var<int>("HL_SHARED_MEMORY_LIMIT", 48);
+        params.shared_memory_sm_limit_kb = get_scalar_env_var<int>("HL_SHARED_MEMORY_SM_LIMIT", 96);
+        params.active_block_limit = get_scalar_env_var<int>("HL_ACTIVE_BLOCK_LIMIT", 32);
+        params.active_warp_limit = get_scalar_env_var<int>("HL_ACTIVE_WARP_LIMIT", 64);
+        Autoscheduler::generate_schedule(outputs, target, params, results);
     }
 #else
     void operator()(const Pipeline &p, const Target &target, const AutoschedulerParams &params_in, AutoSchedulerResults *results) {
@@ -676,9 +755,24 @@ struct Anderson2021 {
         {
             ParamParser parser(params_in.extra);
             parser.parse("parallelism", &params.parallelism);
+            parser.parse("beam_size", &params.beam_size);
+            parser.parse("random_dropout", &params.random_dropout);
+            parser.parse("random_dropout_seed", &params.random_dropout_seed);
+            parser.parse("weights_path", &params.weights_path);
+            parser.parse("disable_subtiling", &params.disable_subtiling);
+            parser.parse("randomize_tilings", &params.randomize_tilings);
+            parser.parse("search_space_options", &params.search_space_options);
+            parser.parse("freeze_inline_compute_root", &params.freeze_inline_compute_root);
+            parser.parse("partial_schedule_path", &params.partial_schedule_path);
+            parser.parse("num_passes", &params.num_passes);
+            parser.parse("stack_factor", &params.stack_factor);
+            parser.parse("shared_memory_limit_kb", &params.shared_memory_limit_kb);
+            parser.parse("shared_memory_sm_limit_kb", &params.shared_memory_sm_limit_kb);
+            parser.parse("active_block_limit", &params.active_block_limit);
+            parser.parse("active_warp_limit", &params.active_warp_limit);
             parser.finish();
         }
-        Autoscheduler::generate_schedule(outputs, target, params.parallelism, results);
+        Autoscheduler::generate_schedule(outputs, target, params, results);
         results->autoscheduler_params = params_in;
     }
 #endif
@@ -689,7 +783,7 @@ REGISTER_AUTOSCHEDULER(Anderson2021)
 // An alternative entrypoint for other uses
 void find_and_apply_schedule(FunctionDAG &dag,
                              const std::vector<Function> &outputs,
-                             int hardware_parallelism,
+                             const Anderson2021Params &params,
                              const Target &target,
                              CostModel *cost_model,
                              int beam_size,
@@ -698,26 +792,25 @@ void find_and_apply_schedule(FunctionDAG &dag,
     Statistics stats;
     std::mt19937 rng{(uint32_t)12345};
 
-    string partial_schedule_filename = get_env_variable("PARTIAL_SCHEDULE");
     std::unique_ptr<LoopNestParser> partial_schedule;
-    if (!partial_schedule_filename.empty()) {
-        aslog(0) << "Loading partial schedule from " << partial_schedule_filename << "\n";
-        partial_schedule = LoopNestParser::from_file(partial_schedule_filename);
+    if (!params.partial_schedule_path.empty()) {
+        aslog(0) << "Loading partial schedule from " << params.partial_schedule_path << "\n";
+        partial_schedule = LoopNestParser::from_file(params.partial_schedule_path);
         aslog(0) << "Partial schedule:\n";
         partial_schedule->dump();
         aslog(0) << "\n";
     }
 
-    SearchSpace search_space{dag, hardware_parallelism, target, get_env_variable("HL_SEARCH_SPACE_OPTIONS"), rng, cost_model, stats, partial_schedule.get()};
-    AutoSchedule autoschedule{dag, hardware_parallelism, target, outputs, rng, cost_model, stats, search_space, partial_schedule.get()};
+    SearchSpace search_space{dag, params, target, rng, cost_model, stats, partial_schedule.get()};
+    AutoSchedule autoschedule{dag, params, target, outputs, rng, cost_model, stats, search_space, partial_schedule.get()};
 
     IntrusivePtr<State> optimal = autoschedule.optimal_schedule(beam_size);
 
     // Apply the schedules
-    optimal->apply_schedule(dag, hardware_parallelism, target);
+    optimal->apply_schedule(dag, params, target);
 
     if (schedule_features) {
-        optimal->compute_featurization(dag, hardware_parallelism, target, schedule_features, stats);
+        optimal->compute_featurization(dag, params, target, schedule_features, stats);
     }
 }
 

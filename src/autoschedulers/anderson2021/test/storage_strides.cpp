@@ -7,6 +7,7 @@ using namespace Halide::Internal::Autoscheduler;
 
 void test_bounds() {
     Target target("host-cuda");
+    Anderson2021Params params;
     bool verbose = false;
     int bytes_per_point = 4;
 
@@ -34,16 +35,16 @@ void test_bounds() {
         std::unique_ptr<LoopNest> root = std::make_unique<LoopNest>();
 
         // Compute h at root
-        root->compute_here(node_h, true, 0, false, target);
+        root->compute_here(node_h, true, 0, false, params, target);
 
         // Tile h
         std::vector<int64_t> tiling;
         tiling.push_back(1);
         // Serial loop
-        root->children[0] = root->children[0]->parallelize_in_tiles(tiling, root.get(), target, true, false);
+        root->children[0] = root->children[0]->parallelize_in_tiles(tiling, root.get(), params, target, true, false);
         tiling.back() = 32;
         // Thread loop
-        root->children[0] = root->children[0]->parallelize_in_tiles(tiling, root.get(), target, true, false);
+        root->children[0] = root->children[0]->parallelize_in_tiles(tiling, root.get(), params, target, true, false);
 
         const auto &thread = root->children[0]->children[0];
         const auto &thread_bounds_g = thread->get_bounds(node_g);
@@ -86,16 +87,16 @@ void test_bounds() {
         std::unique_ptr<LoopNest> root = std::make_unique<LoopNest>();
 
         // Compute out at root
-        root->compute_here(node_out, true, 0, false, target);
+        root->compute_here(node_out, true, 0, false, params, target);
 
         // Tile out
         std::vector<int64_t> tiling;
         tiling.push_back(1);
         // Serial loop
-        root->children[0] = root->children[0]->parallelize_in_tiles(tiling, root.get(), target, true, false);
+        root->children[0] = root->children[0]->parallelize_in_tiles(tiling, root.get(), params, target, true, false);
         tiling.back() = 32;
         // Thread loop
-        root->children[0] = root->children[0]->parallelize_in_tiles(tiling, root.get(), target, true, false);
+        root->children[0] = root->children[0]->parallelize_in_tiles(tiling, root.get(), params, target, true, false);
 
         std::unique_ptr<LoopNest> root_copy{new LoopNest};
         root_copy->copy_from(*root);
@@ -142,16 +143,16 @@ void test_bounds() {
         std::unique_ptr<LoopNest> root = std::make_unique<LoopNest>();
 
         // Compute out at root
-        root->compute_here(node_out, true, 0, false, target);
+        root->compute_here(node_out, true, 0, false, params, target);
 
         // Tile out
         std::vector<int64_t> tiling;
         tiling.push_back(1);
         // Serial loop
-        root->children[0] = root->children[0]->parallelize_in_tiles(tiling, root.get(), target, true, false);
+        root->children[0] = root->children[0]->parallelize_in_tiles(tiling, root.get(), params, target, true, false);
         tiling.back() = 32;
         // Thread loop
-        root->children[0] = root->children[0]->parallelize_in_tiles(tiling, root.get(), target, true, false);
+        root->children[0] = root->children[0]->parallelize_in_tiles(tiling, root.get(), params, target, true, false);
 
         std::unique_ptr<LoopNest> root_copy{new LoopNest};
         root_copy->copy_from(*root);
@@ -202,16 +203,16 @@ void test_bounds() {
         std::unique_ptr<LoopNest> root = std::make_unique<LoopNest>();
 
         // Compute out at root
-        root->compute_here(node_out, true, 0, false, target);
+        root->compute_here(node_out, true, 0, false, params, target);
 
         // Tile out
         std::vector<int64_t> tiling;
         tiling.push_back(1);
         // Serial loop
-        root->children[0] = root->children[0]->parallelize_in_tiles(tiling, root.get(), target, true, false);
+        root->children[0] = root->children[0]->parallelize_in_tiles(tiling, root.get(), params, target, true, false);
         tiling.back() = 32;
         // Thread loop
-        root->children[0] = root->children[0]->parallelize_in_tiles(tiling, root.get(), target, true, false);
+        root->children[0] = root->children[0]->parallelize_in_tiles(tiling, root.get(), params, target, true, false);
 
         std::unique_ptr<LoopNest> root_copy{new LoopNest};
         root_copy->copy_from(*root);
@@ -263,19 +264,19 @@ void test_bounds() {
         std::unique_ptr<LoopNest> root = std::make_unique<LoopNest>();
 
         // Compute out at root
-        root->compute_here(node_out, true, 0, false, target);
+        root->compute_here(node_out, true, 0, false, params, target);
 
         // Tile out
         std::vector<int64_t> tiling;
         tiling.push_back(1);
         tiling.push_back(1);
         // Serial loop
-        root->children[0] = root->children[0]->parallelize_in_tiles(tiling, root.get(), target, true, false);
+        root->children[0] = root->children[0]->parallelize_in_tiles(tiling, root.get(), params, target, true, false);
         tiling.clear();
         tiling.push_back(1);
         tiling.push_back(32);
         // Thread loop
-        root->children[0] = root->children[0]->parallelize_in_tiles(tiling, root.get(), target, true, false);
+        root->children[0] = root->children[0]->parallelize_in_tiles(tiling, root.get(), params, target, true, false);
 
         std::unique_ptr<LoopNest> root_copy{new LoopNest};
         root_copy->copy_from(*root);
@@ -333,23 +334,23 @@ void test_bounds() {
         std::unique_ptr<LoopNest> root = std::make_unique<LoopNest>();
 
         // Compute out at root
-        root->compute_here(node_out, true, 0, false, target);
+        root->compute_here(node_out, true, 0, false, params, target);
 
         // Tile out
         std::vector<int64_t> tiling;
         tiling.push_back(1);
         tiling.push_back(1);
         // Serial loop
-        auto thread_loop = root->children[0]->parallelize_in_tiles(tiling, root.get(), target, true, false);
+        auto thread_loop = root->children[0]->parallelize_in_tiles(tiling, root.get(), params, target, true, false);
         std::unique_ptr<LoopNest> thread_loop_copy{new LoopNest};
         thread_loop_copy->copy_from(*thread_loop);
-        thread_loop_copy->compute_here(node_f, true, 0, false, target);
+        thread_loop_copy->compute_here(node_f, true, 0, false, params, target);
         tiling.clear();
         tiling.push_back(32);
         tiling.push_back(1);
         // Thread loop
         root->children[0] = thread_loop_copy.release();
-        root->children[0] = root->children[0]->parallelize_in_tiles(tiling, root.get(), target, true, false);
+        root->children[0] = root->children[0]->parallelize_in_tiles(tiling, root.get(), params, target, true, false);
 
         std::unique_ptr<LoopNest> root_copy{new LoopNest};
         root_copy->copy_from(*root);

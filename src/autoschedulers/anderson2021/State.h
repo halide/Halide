@@ -106,7 +106,7 @@ struct State {
     bool has_compute_root_loops_without_blocks() const;
 
     struct FeatureLoopNestMutator {
-        int hardware_parallelism;
+        const Anderson2021Params &params;
         const Target &target;
 
         void operator()(LoopNest *new_loop_nest) const;
@@ -122,13 +122,13 @@ struct State {
         void add_outer_thread_loops(LoopNest *loop_nest) const;
     };
 
-    IntrusivePtr<const LoopNest> get_root_for_features(int hardware_parallelism, const Target &target) const;
+    IntrusivePtr<const LoopNest> get_root_for_features(const Anderson2021Params &params, const Target &target) const;
 
     void set_gpu_store_site(const map<const LoopNest *, pair<const LoopNest *, int>> &parent, const LoopNest *loop, LoopNest::Sites &site) const;
 
-    bool compute_featurization(const FunctionDAG &dag, int hardware_parallelism, const Target &target, StageMap<ScheduleFeatures> *features, Statistics &stats, bool verbose = false) const;
+    bool compute_featurization(const FunctionDAG &dag, const Anderson2021Params &params, const Target &target, StageMap<ScheduleFeatures> *features, Statistics &stats, bool verbose = false) const;
 
-    void save_featurization(const FunctionDAG &dag, int hardware_parallelism, const Target &target, std::ostream &out) const;
+    void save_featurization(const FunctionDAG &dag, const Anderson2021Params &params, const Target &target, std::ostream &out) const;
 
     bool contains_store_at(const set<const FunctionDAG::Node *> &outermost_store_at, const IntrusivePtr<const LoopNest> &parent) const;
 
@@ -143,11 +143,11 @@ struct State {
 
     int64_t get_shared_mem_alloc_size(const LoopNest *block, const LoopNest *loop) const;
 
-    bool exceeds_shared_memory_limit(const Target &target) const;
+    bool exceeds_shared_memory_limit(const Anderson2021Params &params, const Target &target) const;
 
-    bool exceeds_local_memory_limit(const Target &target) const;
+    bool exceeds_local_memory_limit(const Anderson2021Params &params, const Target &target) const;
 
-    bool calculate_cost(const FunctionDAG &dag, int hardware_parallelism, const Target &target, CostModel *cost_model, Statistics &stats, bool verbose = false);
+    bool calculate_cost(const FunctionDAG &dag, const Anderson2021Params &params, const Target &target, CostModel *cost_model, Statistics &stats, bool verbose = false);
 
     // Make a child copy of this state. The loop nest is const (we
     // make mutated copies of it, rather than mutating it), so we can
@@ -170,13 +170,13 @@ struct State {
     // Apply the schedule represented by this state to a Halide
     // Pipeline. Also generate source code for the schedule for the
     // user to copy-paste to freeze this schedule as permanent artifact.
-    void apply_schedule(const FunctionDAG &dag, int hardware_parallelism, const Target &target);
+    void apply_schedule(const FunctionDAG &dag, const Anderson2021Params &params, const Target &target);
 
     bool should_always_consider_inline(const FunctionDAG::Node *node) const;
     void add_to_always_consider_inline_options(const FunctionDAG::Node *node);
     void update_always_consider_inline_options(const FunctionDAG::Node *node);
 
-    const LoopNest *deepest_valid_compute_location(const map<const LoopNest *, pair<const LoopNest *, int>> &parent, const FunctionDAG::Node &node, const LoopNest *loop, const LoopNest *root, StageMap<int64_t> &total_shared_mem_alloc_sizes) const;
+    const LoopNest *deepest_valid_compute_location(const Anderson2021Params &params, const map<const LoopNest *, pair<const LoopNest *, int>> &parent, const FunctionDAG::Node &node, const LoopNest *loop, const LoopNest *root, StageMap<int64_t> &total_shared_mem_alloc_sizes) const;
     int64_t total_loop_extents_of_ancestors(const map<const LoopNest *, pair<const LoopNest *, int>> &parent, const LoopNest *loop) const;
 };
 

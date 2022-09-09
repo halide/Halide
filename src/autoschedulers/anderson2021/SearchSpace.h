@@ -23,13 +23,12 @@ namespace Autoscheduler {
 struct SearchSpace {
     using StateVector = std::vector<IntrusivePtr<State>>;
     const FunctionDAG &dag;
-    int hardware_parallelism;
+    const Anderson2021Params &params;
     const Target &target;
     SearchSpaceOptions search_space_options;
     std::mt19937 &rng;
     CostModel *cost_model;
     Statistics &stats;
-    bool randomize_tilings;
     const LoopNestParser *partial_schedule;
 
     NodeMap<bool> inlined_nodes;
@@ -37,9 +36,8 @@ struct SearchSpace {
     NodeMap<std::map<int, std::vector<IntrusivePtr<const LoopNest>>>> memoized_compute_root_blocks;
 
     SearchSpace(const FunctionDAG &dag,
-                int hardware_parallelism,
+                const Anderson2021Params &params,
                 const Target &target,
-                const std::string &search_space_options,
                 std::mt19937 &rng,
                 CostModel *cost_model,
                 Statistics &stats,
