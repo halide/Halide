@@ -70,15 +70,6 @@ std::string sanitize_function_name(const std::string &s) {
     return name;
 }
 
-std::string strip_uniquifier(const std::string &s) {
-    size_t pos = s.find_last_of('$');
-    if (pos == std::string::npos) {
-        return s;
-    } else {
-        return s.substr(0, pos);
-    }
-}
-
 }  // namespace
 
 namespace Internal {
@@ -674,7 +665,12 @@ Callable Pipeline::compile_to_callable(const std::vector<Argument> &args_in, con
 
     for (const auto &out : outputs) {
         for (Type t : out.output_types()) {
-            args.emplace_back(strip_uniquifier(out.name()), Argument::OutputBuffer, t, out.dimensions(), ArgumentEstimates{});
+            // Note carefully: out.name() could well be a uniquified name with "$6" or similar tacked onto the end.
+            // For most downstream purposes, this is irrelevant, but for at least one case (parsing kwargs
+            // from Python) these will have to be stripped. We're deliberately *not* stripping here, to avoid
+            // injecting possible hard-to-debug issues from name collisions with "creative" uses; the downstream
+            // code must take care to strip any suffixes as needed.
+            args.emplace_back(out.name(), Argument::OutputBuffer, t, out.dimensions(), ArgumentEstimates{});
         }
     }
 
