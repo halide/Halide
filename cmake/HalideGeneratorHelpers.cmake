@@ -494,6 +494,10 @@ function(add_halide_python_extension_library TARGET)
                           VISIBILITY_INLINES_HIDDEN ON
                           POSITION_INDEPENDENT_CODE ON)
     target_link_libraries(${TARGET}_module_definition PRIVATE Halide::Runtime Python3::Module)
+
+    list(GET ARG_HALIDE_LIBRARIES 0 module_definition_lib)
+    add_dependencies(${TARGET}_module_definition ${module_definition_lib})
+
     # Compile it with the right preprocessor definitions to provide the module defs,
     # but not the function implementations
     target_compile_definitions(${TARGET}_module_definition PRIVATE
@@ -566,6 +570,7 @@ function(add_halide_runtime RT)
     if (NOT TARGET _Halide_gengen)
         add_executable(_Halide_gengen )
         target_link_libraries(_Halide_gengen PRIVATE Halide::Generator)
+        _Halide_place_dll(_Halide_gengen)
     endif ()
 
     _Halide_get_platform_details(
