@@ -69,17 +69,31 @@ def _check_valid_name(name: str) -> str:
     return name
 
 
+# Transmute 'None' into our internal "UnspecifiedType" as a placeholder;
+# also add some syntactic sugar, to allow users to alias
+# bool -> UInt(1), int -> Int(32), float -> Float(32)
+def _sanitize_type(t: object) -> Type:
+    if t is None:
+        return _UnspecifiedType()
+    elif t is bool:
+        return UInt(1)
+    elif t is int:
+        return Int(32)
+    elif t is float:
+        return Float(32)
+    else:
+        _check(isinstance(t, Type), "Expected a Halide Type, but saw: %s" % t)
+        return t
+
 def _normalize_type_list(types: object) -> list[Type]:
     # Always treat _UnspecifiedType as a non-type
     if types is None:
         types = []
-    elif isinstance(types, Type):
-        if types == _UnspecifiedType():
-            types = []
-        else:
-            types = [types]
-    for t in types:
-        _check(isinstance(t, Type), "List-of-Type contains non-type item %s" % t)
+    elif isinstance(types, Type) and types == _UnspecifiedType():
+        types = []
+    if not type(types) is list:
+        types = [types];
+    types = [_sanitize_type(t) for t in types]
     return types
 
 
@@ -205,8 +219,7 @@ class GeneratorParam:
 class InputBuffer(ImageParam):
 
     def __init__(self, type: Optional[Type], dimensions: Optional[int]):
-        if type is None:
-            type = _UnspecifiedType()
+        type = _sanitize_type(type)
         if dimensions is None:
             dimensions = -1
         ImageParam.__init__(self, type, dimensions, _unique_name())
@@ -241,8 +254,7 @@ class InputBuffer(ImageParam):
 class InputScalar(Param):
 
     def __init__(self, type: Optional[Type]):
-        if type is None:
-            type = _UnspecifiedType()
+        type = _sanitize_type(type)
         Param.__init__(self, type, _unique_name())
 
     def _get_types_and_dimensions(self) -> (list[Type], int):

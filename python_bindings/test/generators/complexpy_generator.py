@@ -13,7 +13,8 @@ class ComplexPy:
     untyped_buffer_input = hl.InputBuffer(None, 3)
     simple_input = hl.InputBuffer(None, 3)
     float_arg = hl.InputScalar(hl.Float(32))
-    int_arg = hl.InputScalar(hl.Int(32))
+    # We can use `int` as an alias for `hl.Int(32)` if we like
+    int_arg = hl.InputScalar(int)
 
     simple_output = hl.OutputBuffer(hl.Float(32), 3)
     tuple_output = hl.OutputBuffer(None, 3)
