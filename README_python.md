@@ -29,17 +29,17 @@
 
 <!-- /MarkdownTOC -->
 
-Halide provides Python bindings for most of its public API. Only Python 3.x is
-supported; at this time, Python 3.8 (or higher) is recommended. The Python
-bindings are supported on 64-bit Linux, OSX, and Windows systems.
+Halide provides Python bindings for most of its public API. Python 3.8 (or
+higher) is required. The Python bindings are supported on 64-bit Linux, OSX,
+and Windows systems.
 
 In addition to the ability to write just-in-time Halide code using Python, you
 can write [Generators](#halide-generators-in-python) using the Python bindings,
 which can simplify build-system integration (since no C++ metacompilation step
 is required).
 
-You can also use existing Halide Generators (written in C++) to produce Python
-extensions that can be used within Python code.
+You can also use existing Halide Generators (written in either C++ or Python)
+to produce Python extensions that can be used within Python code.
 
 ## Python Requirements
 
@@ -83,7 +83,7 @@ from the Halide build directory.
 The Python bindings attempt to mimic the Halide C++ API as closely as possible,
 with some differences where the C++ idiom is either inappropriate or impossible:
 
--   Most APIs that take a variadic argumentlist of ints in C++ take an explicit
+-   Most APIs that take a variadic argument list of ints in C++ take an explicit
     list in Python. For instance, the usual version of the `Buffer` ctor in C++
     offers both variadic and list versions:
 
@@ -122,7 +122,10 @@ with some differences where the C++ idiom is either inappropriate or impossible:
 -   Only things in the `Halide` namespace are supported; classes and methods
     that involve using the `Halide::Internal` namespace are not provided.
 
--   No mechanism is provided for overriding any runtime functions from Python.
+-   No mechanism is provided for overriding any runtime functions from Python
+    for JIT-compiled code. (Runtime functions for AOT-compiled code can be
+    overridden by building and linking a custom runtime, but not currently
+    via any runtime API, e.g. halide_set_custom_print() does not exist.)
 
 -   No mechanism is provided for supporting `Func::define_extern`.
 
@@ -202,13 +205,16 @@ objects without any explicit conversion necessary.
 
 ## Halide Generators In Python
 
-In Halide, a "Generator" is a unit of encapsulation for Halide code. It is
-self-contained piece of code that can: - Produce a chunk of Halide IR (in the
-form of an `hl.Pipeline`) that is appropriate for compilation (via either JIT or
-AOT) - Expose itself to the build system in a discoverable way - Fully describe
-itself for the build system with metadata for (at least) the type and number of
-inputs and outputs expected - Allow for build-time customization of
-coder-specified parameters in a way that doesn't require editing of source code
+In Halide, a "Generator" is a unit of encapsulation for Halide code. It is a
+self-contained piece of code that can:
+
+-   Produce a chunk of Halide IR (in the form of an `hl.Pipeline`) that is
+    appropriate for compilation (via either JIT or AOT)
+-   Expose itself to the build system in a discoverable way
+-   Fully describe itself for the build system with metadata for (at least) the
+    type and number of inputs and outputs expected
+-   Allow for build-time customization of coder-specified parameters in a way
+    that doesn't require editing of source code
 
 Originally, Halide only supported writing Generators in C++. In this document,
 we'll use the term "C++ Generator" to mean "Generator written in C++ using the
@@ -373,7 +379,7 @@ It is required that the `generate()` method be defined by the Generator.
 
 (Note that, by convention, Halide Generators use `g` instead of `self` in their
 `generate()` method to make the expression language terser; this is not in any
-way required, but is recommended.)
+way required, but is recommended to improve readability.)
 
 ### Using a Generator for JIT compilation
 
@@ -608,6 +614,7 @@ class LogicalOpGenerator:
         if g.with_offset:
            g.add_input("offset", hl.InputScalar(hl.Int(32)))
 
+    # See note the use of 'g' instead of 'self' here
     def generate(g):
         # Algorithm
         operator = _operators[g.op]
@@ -735,7 +742,7 @@ differences are:
     arguably just as easy, if not easier.
 -   `get_externs_map()`: this allows registering ExternalCode objects to be
     appended to the Generator's code. In our experience, this feature is very
-    rarely used. We consider adding this in the future if necessary.
+    rarely used. We will consider adding this in the future if necessary.
 -   Lazy Binding of Unspecified Input/Output Types: for C++ Generators, if you
     left an Output's type (or dimensionality) unspecified, you didn't always
     have to specify a `GeneratorParam` to make it into a concrete type: if the
