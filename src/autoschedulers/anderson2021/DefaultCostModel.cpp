@@ -14,8 +14,8 @@
 #include "DefaultCostModel.h"
 #include "HalideBuffer.h"
 #include "NetworkSize.h"
-#include "cost_model.h"
-#include "train_cost_model.h"
+#include "anderson2021_cost_model.h"
+#include "anderson2021_train_cost_model.h"
 
 // This is an embedded version of `baseline.weights`.
 // The embedding is done using binary2cpp.
@@ -215,7 +215,7 @@ float DefaultCostModel::backprop(const Runtime::Buffer<const float> &true_runtim
         }
     }
 
-    int result = train_cost_model(num_stages,
+    int result = anderson2021_train_cost_model(num_stages,
                                   cursor,
                                   num_cores,
                                   batch_id,
@@ -286,7 +286,7 @@ void DefaultCostModel::evaluate_costs() {
 
     auto loss = Runtime::Buffer<float>::make_scalar();
 
-    int result = cost_model(num_stages,
+    int result = anderson2021_cost_model(num_stages,
                             cursor,
                             num_cores,
                             batch_id++,

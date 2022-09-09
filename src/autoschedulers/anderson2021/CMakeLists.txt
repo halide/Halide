@@ -19,13 +19,15 @@ add_custom_command(OUTPUT ${WF_CPP}
 
 # cost_model, train_cost_model
 add_executable(anderson2021-cost_model.generator cost_model_generator.cpp)
-target_link_libraries(cost_model.generator PRIVATE Halide::Halide Halide::Generator)
+target_link_libraries(anderson2021-cost_model.generator PRIVATE Halide::Halide Halide::Generator)
 
-add_halide_library(anderson2021-cost_model FROM cost_model.generator
+add_halide_library(anderson2021_cost_model FROM anderson2021-cost_model.generator
+    GENERATOR cost_model
                    TARGETS cmake)
-add_halide_library(anderson2021-train_cost_model FROM cost_model.generator
+add_halide_library(anderson2021_train_cost_model FROM anderson2021-cost_model.generator
+    GENERATOR train_cost_model
                    TARGETS cmake
-                   USE_RUNTIME cost_model.runtime)
+                   USE_RUNTIME anderson2021_cost_model.runtime)
 
 ## retrain_cost_model
 add_executable(anderson2021-retrain_cost_model
@@ -33,7 +35,8 @@ add_executable(anderson2021-retrain_cost_model
                ${COMMON_DIR}/Weights.cpp
                retrain_cost_model.cpp
                ${WF_CPP})
-target_link_libraries(retrain_cost_model PRIVATE ASLog cost_model train_cost_model Halide::Halide Halide::Plugin)
+target_link_libraries(anderson2021-retrain_cost_model PRIVATE ASLog anderson2021_cost_model
+    anderson2021_train_cost_model Halide::Halide Halide::Plugin)
 
 ###
 ## Main autoscheduler library
@@ -52,7 +55,8 @@ add_autoscheduler(NAME Anderson2021
                   ${COMMON_DIR}/Weights.cpp
                   ${WF_CPP})
 
-target_link_libraries(Halide_Anderson2021 PRIVATE ASLog ParamParser cost_model train_cost_model)
+target_link_libraries(Halide_Anderson2021 PRIVATE ASLog ParamParser
+    anderson2021_cost_model anderson2021_train_cost_model)
 
 ##
 # Tests and demos
@@ -62,15 +66,16 @@ target_link_libraries(Halide_Anderson2021 PRIVATE ASLog ParamParser cost_model t
 # =================================================================
 
 add_executable(anderson2021-demo.generator ${COMMON_DIR}/demo_generator.cpp)
-target_link_libraries(demo.generator PRIVATE Halide::Generator)
+target_link_libraries(anderson2021-demo.generator PRIVATE Halide::Halide Halide::Generator)
 
 add_halide_library(anderson2021-demo FROM demo.generator
+                    GENERATOR demo
                    TARGETS cmake
                    AUTOSCHEDULER Halide::Anderson2021
                    REGISTRATION DEMO_REGISTRATION_FILE)
 
 add_executable(anderson2021-demo_apps_autoscheduler ${DEMO_REGISTRATION_FILE})
-target_link_libraries(demo_apps_autoscheduler PRIVATE demo Halide::RunGenMain)
+target_link_libraries(anderson2021-demo_apps_autoscheduler PRIVATE demo Halide::RunGenMain)
 
 add_test(NAME demo_apps_autoscheduler
          COMMAND demo_apps_autoscheduler --benchmarks=all --benchmark_min_time=1 --estimate_all)
@@ -83,15 +88,18 @@ set_tests_properties(demo_apps_autoscheduler
 ## =================================================================
 
 add_executable(anderson2021-included_schedule_file.generator ${COMMON_DIR}/included_schedule_file_generator.cpp)
-target_link_libraries(included_schedule_file.generator PRIVATE Halide::Generator)
+target_link_libraries(anderson2021-included_schedule_file.generator PRIVATE
+    Halide::Halide Halide::Generator)
 
-add_halide_library(anderson2021-included_schedule_file FROM included_schedule_file.generator
+add_halide_library(anderson2021-included_schedule_file FROM
+    anderson2021-included_schedule_file.generator
+                    GENERATOR included_schedule_file
                    TARGETS cmake
                    AUTOSCHEDULER Halide::Anderson2021
                    REGISTRATION included_schedule_reg)
 
 add_executable(anderson2021-demo_included_schedule_file ${included_schedule_reg})
-target_link_libraries(demo_included_schedule_file PRIVATE included_schedule_file Halide::RunGenMain)
+target_link_libraries(anderson2021-demo_included_schedule_file PRIVATE included_schedule_file Halide::RunGenMain)
 
 add_test(NAME demo_included_schedule_file
          COMMAND demo_included_schedule_file --benchmarks=all --benchmark_min_time=1 --estimate_all)
@@ -108,17 +116,18 @@ set_tests_properties(demo_included_schedule_file
 add_executable(anderson2021-featurization_to_sample ${COMMON_DIR}/featurization_to_sample.cpp)
 
 add_executable(anderson2021-get_host_target ${COMMON_DIR}/get_host_target.cpp)
-target_link_libraries(get_host_target PRIVATE Halide::Halide)
+target_link_libraries(anderson2021-get_host_target PRIVATE Halide::Halide)
 
 add_executable(anderson2021-weightsdir_to_weightsfile ${COMMON_DIR}/weightsdir_to_weightsfile.cpp ${COMMON_DIR}/Weights.cpp)
-target_link_libraries(weightsdir_to_weightsfile PRIVATE Halide::Runtime)
+target_link_libraries(anderson2021-weightsdir_to_weightsfile PRIVATE Halide::Runtime)
 
 # =================================================================
 # Smaller tests
 
 if (BUILD_SHARED_LIBS)
     add_executable(anderson2021-test_apps_autoscheduler test.cpp)
-    target_link_libraries(test_apps_autoscheduler PRIVATE Halide::Halide Halide::Tools ${CMAKE_DL_LIBS})
+    target_link_libraries(anderson2021-test_apps_autoscheduler PRIVATE
+        Halide::Halide Halide::Tools ${CMAKE_DL_LIBS})
 
     add_test(NAME test_apps_autoscheduler
              COMMAND test_apps_autoscheduler $<TARGET_FILE:Halide_Anderson2021>)
@@ -185,7 +194,8 @@ set_tests_properties(test_storage_strides
                      LABELS Anderson2021
                      ENVIRONMENT "HL_TARGET=${Halide_TARGET}")
 
-add_executable(anderson2021-test_thread_info test/thread_info.cpp LoopNest.cpp)
+add_executable(anderson2021-test_thread_info test/thread_info.cpp LoopNest.cpp
+    FunctionDAG.cpp GPULoopInfo.cpp Tiling.cpp)
 target_link_libraries(anderson2021-test_thread_info PRIVATE ASLog Halide::Halide Halide::Tools Halide::Plugin)
 
 add_test(NAME test_thread_info COMMAND anderson2021-test_thread_info)
