@@ -12,7 +12,7 @@ class BitGenerator:
 
     def generate(self):
         g = self
-        g.bit_output[x] = g.bit_input[x] + g.bit_constant;
+        g.bit_output[x] = g.bit_input[x] | g.bit_constant;
 
 if __name__ == "__main__":
     hl.main()
