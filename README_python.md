@@ -437,8 +437,7 @@ If you are using CMake, the simplest thing is to use
 ```
 # Build a Halide library as you usually would, but be sure to include `PYTHON_EXTENSION`
 add_halide_library(xor_filter
-                   GENERATOR logical_op_generator
-                   SOURCES logical_op_generator.py
+                   FROM logical_op_generator
                    PARAMS op=xor
                    PYTHON_EXTENSION output_path_var
                    [ FEATURES ... ]
