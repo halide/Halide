@@ -2,6 +2,7 @@
 #include "DependencyGraph.h"
 #include "Error.h"
 #include "FindStmtCost.h"
+#include "GetAssemblyInfoViz.cpp"
 #include "GetStmtHierarchy.h"
 #include "IROperator.h"
 #include "IRVisitor.h"
@@ -32,12 +33,6 @@ string to_string(T value) {
     return os.str();
 }
 
-struct AssemblyLabel {
-    string codeString;  // what to look up in the assembly file
-    string label;       // span label name
-    // IRNodeType type;    // type of node
-};
-
 class StmtToViz : public IRVisitor {
 
     static const string css, js;
@@ -62,6 +57,7 @@ private:
     ProducerConsumerHierarchy producerConsumerHierarchy;  // used for getting the hierarchy of
                                                           // producer/consumer
     DependencyGraph dependencyGraph;                      // used for getting the dependency graph
+    GetAssemblyInfoViz getAssemblyInfoViz;  // used for getting the assembly line numbers
 
     int curr_line_num;  // for accessing div of that line
 
@@ -80,9 +76,6 @@ private:
     int popupCount = 0;
     string popups;
 
-    // for keeping track of labels in assembly code
-    vector<AssemblyLabel> assemblyLabels;
-
     string get_file_name(string fileName) {
         // remove leading directories from filename
         string f = fileName;
@@ -90,7 +83,6 @@ private:
         if (pos != string::npos) {
             f = f.substr(pos + 1);
         }
-        cout << "Printing to " << f << endl;
         return f;
     }
 
@@ -615,17 +607,6 @@ private:
     void visit(const Call *op) override {
         stream << open_span("Call");
 
-        // for assembly
-        string codeString = op->name;
-        string label = "call_" + op->name + "_label";
-
-        AssemblyLabel assemblyLabelObj;
-        assemblyLabelObj.codeString = codeString;
-        assemblyLabelObj.label = label;
-
-        assemblyLabels.push_back(assemblyLabelObj);
-        stream << "<button onclick='openAssembly(\"" << label << "\");'>Open Assembly</button>\n";
-
         print_list(symbol(op->name) + "(", op->args, ")");
         stream << close_span();
     }
@@ -687,16 +668,14 @@ private:
         string anchorName = "producerConsumer" + std::to_string(producerConsumerCount);
 
         // for assembly
-        string codeString = op->is_producer ? "produce " : "consume ";
-        codeString += op->name;
-        string label = op->is_producer ? "produce" : "consumer";
-        label += "_" + op->name + "_label";
+        string label = op->is_producer ? "producer" : "consumer";
+        label += "_" + op->name + "_" + std::to_string(producerConsumerCount) + "_label";
 
-        AssemblyLabel assemblyLabelObj;
-        assemblyLabelObj.codeString = codeString;
-        assemblyLabelObj.label = label;
-
-        assemblyLabels.push_back(assemblyLabelObj);
+        int assemblyLineNum = getAssemblyInfoViz.get_line_number(op);
+        if (assemblyLineNum != -1) {
+            stream << "<button onclick='openAssembly(" << assemblyLineNum
+                   << ");'>Open Assembly</button>\n";
+        }
 
         int produce_id = unique_id();
 
@@ -733,14 +712,13 @@ private:
         string anchorName = "for" + std::to_string(forCount);
 
         // for assembly
-        string codeString = "for " + op->name;
-        string label = "for_" + op->name + "_label";
+        string label = "for_" + op->name + "_" + std::to_string(forCount) + "_label";
 
-        AssemblyLabel assemblyLabelObj;
-        assemblyLabelObj.codeString = codeString;
-        assemblyLabelObj.label = label;
-
-        assemblyLabels.push_back(assemblyLabelObj);
+        int assemblyLineNum = getAssemblyInfoViz.get_line_number(op);
+        if (assemblyLineNum != -1) {
+            stream << "<button onclick='openAssembly(" << assemblyLineNum
+                   << ");'>Open Assembly</button>\n";
+        }
 
         int id = unique_id();
         stream << open_cost_span(op);
@@ -1254,16 +1232,6 @@ public:
         functionCount++;
         string anchorName = "loweredFunc" + std::to_string(functionCount);
 
-        // for assembly
-        string codeString = op.name + ":";
-        string label = "function_" + op.name + "_label";
-
-        AssemblyLabel assemblyLabelObj;
-        assemblyLabelObj.codeString = codeString;
-        assemblyLabelObj.label = label;
-
-        assemblyLabels.push_back(assemblyLabelObj);
-
         int id = unique_id();
         stream << open_expand_button(id);
         stream << open_anchor(anchorName);
@@ -1573,7 +1541,8 @@ public:
 
         // hierarchy links
         stream << "<!-- Hierarchy links -->\n";
-        stream << "<link rel='stylesheet' href='https://unpkg.com/treeflex/dist/css/treeflex.css'>";
+        stream
+            << "<link rel='stylesheet' href='https://unpkg.com/treeflex/dist/css/treeflex.css'>\n";
         stream << "\n";
 
         // expand button links
@@ -1634,42 +1603,9 @@ public:
         stream << "</div>\n";
     }
 
-    string getAssemblyFileName(const string &filename) {
-        string assemblyFileName = "./" + filename;
-        assemblyFileName.replace(assemblyFileName.find(".stmt.viz.html"), 15, ".s");
-        return assemblyFileName;
-    }
-    string convertAssemblyLine(string &line) {
-        // go through assemblyLabels and see if any of them are in the line
-        for (const auto &labelObj : assemblyLabels) {
-            string codeString = labelObj.codeString;
-            if (line.find(codeString) != string::npos) {
-                return "<span id='" + labelObj.label + "'>" + line + "</span>";
-            }
-        }
-        return line;
-    }
-    void putAssemblyCodeInDiv(const string &filename) {
-        stream << "<div id='assemblyContent' style='display: none;'>\n";
-        stream << "<pre>\n";
-
-        ifstream assemblyFile;
-        string assemblyFileName = getAssemblyFileName(filename);
-        assemblyFile.open(assemblyFileName, ios::in);
-
-        if (assemblyFile.is_open()) {
-            cout << "Assembly file opened successfully" << endl;
-            string assemblyLine;
-            while (getline(assemblyFile, assemblyLine)) {
-                stream << convertAssemblyLine(assemblyLine) << "\n";
-            }
-            assemblyFile.close();  // close the file object.
-        }
-        stream << "</pre>\n";
-        stream << "</div>\n";
-    }
-
     void generate_html(const string &filename, const Module &m) {
+        getAssemblyInfoViz.generate_assembly_information(m, filename);
+
         // opening parts of the html
         start_stream(filename);
 
@@ -1679,22 +1615,21 @@ public:
 
         // print main html page
         stream << "<div class='IRCode-code' id='IRCode-code'>\n";
-        stream << "<button onclick='openAssembly();'>Open Assembly</button>\n";
         print(m);
-        stream << "</div>\n";  // close IRCode-code div
+        stream << "</div>\n";
 
         // for resizing the code and visualization divs
         resizeBar();
 
         stream << "<div class='ProducerConsumerViz' id='ProducerConsumerViz'>\n";
         generate_producer_consumer_hierarchy(m);
-        stream << "</div>\n";  // close ProducerConsumerViz div
+        stream << "</div>\n";
 
         stream << "</div>\n";  // close mainContent div
         stream << "</div>\n";  // close outerDiv div
 
         // put assembly code in a div
-        putAssemblyCodeInDiv(filename);
+        stream << getAssemblyInfoViz.get_assembly_html();
 
         // closing parts of the html
         end_stream();
@@ -1702,14 +1637,12 @@ public:
 
     StmtToViz(const string &filename, const Module &m)
         : id_count(0), getStmtHierarchy(generate_costs(m)),
-          producerConsumerHierarchy(get_file_name(filename), findStmtCost),
-          context_stack(1, 0) {
+          producerConsumerHierarchy(get_file_name(filename), findStmtCost), context_stack(1, 0) {
     }
 
     StmtToViz(const string &filename, const Stmt &s)
         : id_count(0), getStmtHierarchy(generate_costs(s)),
-          producerConsumerHierarchy(get_file_name(filename), findStmtCost),
-          context_stack(1, 0) {
+          producerConsumerHierarchy(get_file_name(filename), findStmtCost), context_stack(1, 0) {
     }
 
     string generatetooltipJS(int &tooltipCount) {
@@ -2083,16 +2016,50 @@ function collapseViz() { \n \
 
 const string StmtToViz::assemblyCodeJS = "\n \
 // open assembly code  \n \
-function openAssembly(id) { \n \
-    var assembly = document.getElementById('assemblyContent'); \n \
-    console.log(assembly); \n \
-    var innerHTML = assembly.innerHTML; \n \
-    var scriptScroll = document.createElement('script'); \n \
-    scriptScroll.innerHTML = 'document.getElementById(\\' + id + \\').scrollIntoView({behavior: \\'smooth\\'}, true);'; \n \
-    var newWindow = window.open('', '_blank'); \n \
-    newWindow.document.write(innerHTML); \n \
-    newWindow.document.head.appendChild(scriptScroll); \n \
-} \n \
+function openAssembly(lineNum) {\n \
+    var innerHTML = '<head><link rel=\\'stylesheet\\'' +\n \
+        'href=\\'https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.52.2/codemirror.min.css\\'>' +\n \
+        '</link>' +\n \
+        '<scr' + 'ipt' +\n \
+        '	src=\\'https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.52.2/codemirror.min.js\\'></scr' + 'ipt>' +\n \
+        '<scri' + 'pt' +\n \
+        '	src=\\'https://cdnjs.cloudflare.com/ajax/libs/codemirror/6.65.7/mode/z80/z80.min.js\\'></scr' + 'ipt>' +\n \
+        '<scri' + 'pt' +\n \
+        '	src=\\'https://cdnjs.cloudflare.com/ajax/libs/codemirror/6.65.7/addon/selection/mark-selection.min.js\\'></scri' + 'pt>' +\n \
+        '</head>';\n \
+\n \
+    innerHTML += '<style>' +\n \
+        '    .CodeMirror {' +\n \
+        '        height: 100%;' +\n \
+        '        width: 100%;' +\n \
+        '    }' +\n \
+        '    .styled-background {' +\n \
+        '        background-color: #ff7;' +\n \
+        '    }' +\n \
+        '</style>';\n \
+\n \
+    var assembly = document.getElementById('assemblyContent');\n \
+    console.log(assembly);\n \
+    innerHTML += '<div id=\\'codeValue\\' style=\\'display: none\\'>' + assembly.innerHTML + '</div>';\n \
+    innerHTML += '<scr' + 'ipt>' +\n \
+        'var codeHTML = document.getElementById(\\'codeValue\\'); ' +\n \
+        'var code = codeHTML.textContent; ' +\n \
+        'code = code.trimLeft(); ' +\n \
+        'var myCodeMirror = CodeMirror(document.body, {value: code, lineNumbers: true, mode: \\'z80\\', readOnly: true,});' +\n \
+        'function jumpToLine(i) {' +\n \
+        '	i -= 1;' +\n \
+        '	var t = myCodeMirror.charCoords({ line: i, ch: 0 }, \\'local\\').top;' +\n \
+        '	var middleHeight = myCodeMirror.getScrollerElement().offsetHeight / 2;' +\n \
+        '	myCodeMirror.scrollIntoView({ line: i+20, ch: 0 });' +\n \
+        '	myCodeMirror.markText({ line: i, ch: 0 }, { line: i, ch: 200 }, { className: \\'styled-background\\' });' +\n \
+        '}' +\n \
+        'jumpToLine('+lineNum+');' +\n \
+\n \
+        '</scri' + 'pt>';\n \
+\n \
+    var newWindow = window.open('', '_blank');\n \
+    newWindow.document.write(innerHTML);\n \
+}\n \
 ";
 
 const string StmtToViz::js = "\n \

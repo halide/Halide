@@ -477,6 +477,7 @@ SOURCE_FILES = \
   FuseGPUThreadLoops.cpp \
   FuzzFloatStores.cpp \
   Generator.cpp \
+  GetAssemblyInfoViz.cpp \
   GetStmtHierarchy.cpp \
   HexagonOffload.cpp \
   HexagonOptimize.cpp \
