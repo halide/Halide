@@ -46,28 +46,6 @@ foreach (dep IN ITEMS Halide_LLVM Halide_wabt)
 endforeach ()
 
 ##
-# Python bindings
-##
-
-if (WITH_PYTHON_BINDINGS)
-    set(Halide_INSTALL_PYTHONDIR "${CMAKE_INSTALL_LIBDIR}/python3/site-packages"
-        CACHE STRING "Path to Halide Python bindings folder")
-
-    install(DIRECTORY "${Halide_SOURCE_DIR}/python_bindings/src/halide"
-            DESTINATION "${Halide_INSTALL_PYTHONDIR}"
-            COMPONENT Halide_Python
-            FILES_MATCHING
-            PATTERN "*.py"
-            PATTERN "*/halide_" EXCLUDE
-            PATTERN "*/__pycache__" EXCLUDE)
-
-    install(TARGETS Halide_Python
-            LIBRARY DESTINATION "${Halide_INSTALL_PYTHONDIR}/halide"
-            COMPONENT Halide_Python
-            NAMELINK_COMPONENT Halide_Python)
-endif ()
-
-##
 # Library-type-agnostic interface targets
 ##
 
@@ -111,13 +89,6 @@ if (TARGET Halide_Adams2019)
             COMPONENT Halide_Development)
 endif ()
 
-if (TARGET Halide_Python AND NOT CMAKE_INSTALL_RPATH)
-    file(RELATIVE_PATH lib_dir
-        "${CMAKE_CURRENT_BINARY_DIR}/${Halide_INSTALL_PYTHONDIR}/halide"
-        "${CMAKE_CURRENT_BINARY_DIR}/${CMAKE_INSTALL_LIBDIR}")
-    set_target_properties(Halide_Python PROPERTIES INSTALL_RPATH "${rbase}/${lib_dir}")
-endif ()
-
 ##
 # READMEs and other top-level documentation
 ##
@@ -146,12 +117,8 @@ install(DIRECTORY ${Halide_SOURCE_DIR}/tools/
         PATTERN "build_halide_h.cpp" EXCLUDE
         PATTERN "find_inverse.cpp" EXCLUDE)
 
-install(FILES ${Halide_SOURCE_DIR}/src/autoschedulers/adams2019/autotune_loop.sh
+install(PROGRAMS ${Halide_SOURCE_DIR}/src/autoschedulers/adams2019/autotune_loop.sh
         DESTINATION ${Halide_INSTALL_TOOLSDIR}
-        PERMISSIONS
-        OWNER_READ OWNER_WRITE OWNER_EXECUTE
-        GROUP_READ GROUP_EXECUTE
-        WORLD_READ WORLD_EXECUTE
         COMPONENT Halide_Development)
 
 ##
@@ -170,13 +137,6 @@ if (WITH_TUTORIALS)
             PATTERN "*.jpg"
             PATTERN "*.mp4"
             PATTERN "*.png")
-
-    if (WITH_PYTHON_BINDINGS)
-      install(DIRECTORY ${Halide_SOURCE_DIR}/python_bindings/tutorial/
-              DESTINATION ${CMAKE_INSTALL_DOCDIR}/tutorial-python
-              COMPONENT Halide_Documentation
-              FILES_MATCHING PATTERN "*.py")
-    endif ()
 endif ()
 
 ##
@@ -224,6 +184,12 @@ write_basic_package_version_file(HalideHelpersConfigVersion.cmake
                                  COMPATIBILITY SameMajorVersion
                                  ARCH_INDEPENDENT)
 
+# Compute a hint to make it easier to find HalideHelpers from find_package(Halide)
+# This is read by configure_file below.
+file(RELATIVE_PATH HalideHelpers_HINT
+     "${CMAKE_CURRENT_BINARY_DIR}/${Halide_INSTALL_CMAKEDIR}"
+     "${CMAKE_CURRENT_BINARY_DIR}/${Halide_INSTALL_HELPERSDIR}")
+
 configure_file(common/HalideConfig.cmake HalideConfig.cmake @ONLY)
 configure_file(common/HalideHelpersConfig.cmake HalideHelpersConfig.cmake @ONLY)
 
@@ -238,6 +204,7 @@ install(FILES
         ${CMAKE_CURRENT_BINARY_DIR}/HalideHelpersConfigVersion.cmake
         ${Halide_SOURCE_DIR}/cmake/HalideGeneratorHelpers.cmake
         ${Halide_SOURCE_DIR}/cmake/HalideTargetHelpers.cmake
+        ${Halide_SOURCE_DIR}/cmake/TargetExportScript.cmake
         DESTINATION ${Halide_INSTALL_HELPERSDIR}
         COMPONENT Halide_Development)
 

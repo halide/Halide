@@ -7,10 +7,19 @@
   },
   "configurePresets": [
     {
-      "name": "default",
+      "name": "base",
       "hidden": true,
       "binaryDir": "build/${presetName}",
       "installDir": "install/${presetName}"
+    },
+    {
+      "name": "ci",
+      "hidden": true,
+      "inherits": "base",
+      "toolchainFile": "${sourceDir}/cmake/toolchain.${presetName}.cmake",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "RelWithDebInfo"
+      }
     },
     {
       "name": "windows-only",
@@ -38,7 +47,7 @@
     },
     {
       "name": "debug",
-      "inherits": "default",
+      "inherits": "base",
       "displayName": "Debug",
       "description": "Debug build with no special settings",
       "cacheVariables": {
@@ -47,7 +56,7 @@
     },
     {
       "name": "release",
-      "inherits": "default",
+      "inherits": "base",
       "displayName": "Release",
       "description": "Release build with no special settings",
       "cacheVariables": {
@@ -76,7 +85,7 @@
       "name": "win32",
       "inherits": [
         "vs2019",
-        "default"
+        "base"
       ],
       "displayName": "Win32 (Visual Studio)",
       "description": "Visual Studio-based Win32 build with vcpkg dependencies.",
@@ -86,7 +95,7 @@
       "name": "win64",
       "inherits": [
         "vs2019",
-        "default"
+        "base"
       ],
       "displayName": "Win64 (Visual Studio)",
       "description": "Visual Studio-based x64 build with vcpkg dependencies.",
@@ -147,32 +156,64 @@
       }
     },
     {
-      "name": "package-ubuntu-shared",
-      "inherits": "package-unix-shared",
-      "displayName": "Package shared Halide for Ubuntu",
-      "description": "Package shared Halide for Ubuntu, using system packages.",
-      "binaryDir": "shared-release",
+      "name": "linux-x64-asan",
+      "inherits": "ci",
+      "displayName": "ASAN (Linux x64)",
+      "description": "Build everything with ASAN enabled",
       "cacheVariables": {
-        "Halide_SHARED_LLVM": "YES",
-        "LLVM_DIR": "$env{LLVM_ROOT}/lib/cmake/llvm",
-        "Clang_DIR": "$env{LLVM_ROOT}/lib/cmake/clang",
-        "LLD_DIR": "$env{LLVM_ROOT}/lib/cmake/lld",
-        "CMAKE_INSTALL_INCLUDEDIR": "include/Halide",
-        "CMAKE_INSTALL_LIBDIR": "lib/x86_64-linux-gnu",
-        "Halide_INSTALL_PLUGINDIR": "lib/x86_64-linux-gnu/Halide",
-        "Halide_INSTALL_HELPERSDIR": "lib/cmake/HalideHelpers",
-        "CMAKE_STRIP": "${sourceDir}/packaging/ubuntu/extra-strip.sh"
+        "LLVM_ROOT": "$penv{LLVM_ROOT}"
+      }
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "debug",
+      "configurePreset": "debug",
+      "displayName": "Debug",
+      "description": "Debug build with no special settings"
+    },
+    {
+      "name": "release",
+      "configurePreset": "release",
+      "displayName": "Release",
+      "description": "Release build with no special settings"
+    },
+    {
+      "name": "linux-x64-asan",
+      "configurePreset": "linux-x64-asan",
+      "displayName": "ASAN (Linux x64)",
+      "description": "Build everything with ASAN enabled"
+    }
+  ],
+  "testPresets": [
+    {
+      "name": "debug",
+      "configurePreset": "debug",
+      "displayName": "Debug",
+      "description": "Test everything with Debug build",
+      "output": {
+        "outputOnFailure": true
       }
     },
     {
-      "name": "package-ubuntu-static",
-      "inherits": "package-ubuntu-shared",
-      "displayName": "Package static Halide for Ubuntu",
-      "description": "Package static Halide for Ubuntu, using system packages.",
-      "binaryDir": "static-release",
-      "cacheVariables": {
-        "BUILD_SHARED_LIBS": "NO",
-        "WITH_DOCS": "NO"
+      "name": "release",
+      "configurePreset": "release",
+      "displayName": "Release",
+      "description": "Test everything with Release build",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "linux-x64-asan",
+      "configurePreset": "linux-x64-asan",
+      "displayName": "ASAN (Linux x64)",
+      "description": "Test everything with ASAN enabled",
+      "environment": {
+        "ASAN_OPTIONS": "detect_leaks=0:detect_container_overflow=0"
+      },
+      "output": {
+        "outputOnFailure": true
       }
     }
   ]

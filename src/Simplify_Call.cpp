@@ -1,5 +1,6 @@
 #include "Simplify_Internal.h"
 
+#include "FindIntrinsics.h"
 #include "Simplify.h"
 
 #ifdef _MSC_VER
@@ -350,6 +351,21 @@ Expr Simplify::visit(const Call *op, ExprInfo *bounds) {
             return op;
         } else {
             return absd(a, b);
+        }
+    } else if (op->is_intrinsic(Call::saturating_cast)) {
+        internal_assert(op->args.size() == 1);
+        ExprInfo a_bounds;
+        Expr a = mutate(op->args[0], &a_bounds);
+
+        // TODO(rootjalex): We could be intelligent about using a_bounds to remove saturating_casts;
+
+        if (is_const(a)) {
+            a = lower_saturating_cast(op->type, a);
+            return mutate(a, bounds);
+        } else if (!a.same_as(op->args[0])) {
+            return saturating_cast(op->type, a);
+        } else {
+            return op;
         }
     } else if (op->is_intrinsic(Call::stringify)) {
         // Eagerly concat constant arguments to a stringify.
@@ -760,6 +776,8 @@ Expr Simplify::visit(const Call *op, ExprInfo *bounds) {
         debug(2) << "Simplifier: unhandled PureExtern: " << op->name;
     } else if (op->is_intrinsic(Call::signed_integer_overflow)) {
         clear_bounds_info(bounds);
+    } else if (op->is_intrinsic(Call::concat_bits) && op->args.size() == 1) {
+        return mutate(op->args[0], bounds);
     }
 
     // No else: we want to fall thru from the PureExtern clause.

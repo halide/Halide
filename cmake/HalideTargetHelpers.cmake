@@ -1,3 +1,5 @@
+cmake_minimum_required(VERSION 3.22)
+
 ##
 # Utilities for manipulating Halide target triples
 ##
@@ -27,22 +29,16 @@ function(_Halide_cmake_target OUTVAR)
     set(${OUTVAR} "${arch}-${bits}-${os}" PARENT_SCOPE)
 endfunction()
 
-function(_Halide_cache var val doc)
-    if (DEFINED ${var})
-        set(${var} "${${var}}" CACHE STRING "${doc}")
-    else ()
-        set(${var} "${val}" CACHE STRING "${doc}")
-    endif ()
-endfunction()
-
 ##
 # Set Halide `host` and `cmake` meta-target values
 ##
 
 _Halide_cmake_target(_active_triple)
 
-_Halide_cache(Halide_HOST_TARGET "${_active_triple}" "Halide target triple matching the Halide library")
-_Halide_cache(Halide_CMAKE_TARGET "${_active_triple}" "Halide target triple matching the CMake target")
+set(Halide_HOST_TARGET "${_active_triple}"
+    CACHE STRING "Halide target triple matching the Halide library")
+set(Halide_CMAKE_TARGET "${_active_triple}"
+    CACHE STRING "Halide target triple matching the CMake target")
 
 unset(_active_triple)
 
@@ -58,7 +54,8 @@ else ()
     set(_default_target "${Halide_CMAKE_TARGET}")
 endif ()
 
-_Halide_cache(Halide_TARGET "${_default_target}" "The default target to use when AOT compiling")
+set(Halide_TARGET "${_default_target}"
+    CACHE STRING "The default target to use when AOT compiling")
 
 unset(_default_target)
 

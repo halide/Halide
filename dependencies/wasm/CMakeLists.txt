@@ -87,11 +87,7 @@ function(add_wasm_executable TARGET)
     #     target_link_libraries(${TARGET} PRIVATE ${args_DEPS})
     # endif ()
 
-    find_program(EMCC emcc HINTS "$ENV{EMSDK}/upstream/emscripten")
-
-    if (NOT EMCC)
-        message(FATAL_ERROR "Building tests or apps for WASM requires that EMSDK point to a valid Emscripten install.")
-    endif ()
+    find_program(EMCC emcc REQUIRED HINTS "$ENV{EMSDK}/upstream/emscripten")
 
     # TODO: this is currently hardcoded to settings that are sensible for most of Halide's
     # internal purposes. Consider adding ways to customize this as appropriate.
@@ -155,12 +151,7 @@ function(add_wasm_halide_test TARGET)
 endfunction()
 
 function(find_node_js)
-    find_program(NODE_JS_EXECUTABLE node nodejs)
-
-    # TODO: when we eventually upgrade to CMake >= 3.18, replace with REQUIRED in find_program
-    if (NOT NODE_JS_EXECUTABLE)
-        message(FATAL_ERROR "Could not find nodejs. Please set NODE_JS_EXECUTABLE on the CMake command line.")
-    endif ()
+    find_program(NODE_JS_EXECUTABLE node nodejs REQUIRED)
 
     execute_process(COMMAND "${NODE_JS_EXECUTABLE}" --version
                     OUTPUT_VARIABLE NODE_JS_VERSION_RAW

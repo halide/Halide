@@ -1842,7 +1842,9 @@ void wasm_jit_malloc_callback(const v8::FunctionCallbackInfo<v8::Value> &args) {
 
     size_t size = args[0]->Int32Value(context).ToChecked() + kExtraMallocSlop;
     wasm32_ptr_t p = v8_WasmMemoryObject_malloc(context, size);
-    if (p) { p += kExtraMallocSlop; }
+    if (p) {
+        p += kExtraMallocSlop;
+    }
     args.GetReturnValue().Set(load_scalar(context, p));
 }
 
@@ -1851,7 +1853,9 @@ void wasm_jit_free_callback(const v8::FunctionCallbackInfo<v8::Value> &args) {
     HandleScope scope(isolate);
     Local<Context> context = isolate->GetCurrentContext();
     wasm32_ptr_t p = args[0]->Int32Value(context).ToChecked();
-    if (p) { p -= kExtraMallocSlop; }
+    if (p) {
+        p -= kExtraMallocSlop;
+    }
     v8_WasmMemoryObject_free(context, p);
 }
 

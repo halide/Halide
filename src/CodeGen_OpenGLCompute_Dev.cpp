@@ -4,6 +4,7 @@
 #include "CodeGen_GPU_Dev.h"
 #include "Debug.h"
 #include "Deinterleave.h"
+#include "FindIntrinsics.h"
 #include "IRMatch.h"
 #include "IRMutator.h"
 #include "IROperator.h"
@@ -466,6 +467,10 @@ void CodeGen_OpenGLCompute_C::visit(const Call *op) {
         print_assignment(op->type, print_expr(op->args[0]) + " / " + print_expr(op->args[1]));
     } else if (op->is_intrinsic(Call::mod_round_to_zero)) {
         print_assignment(op->type, print_expr(op->args[0]) + " % " + print_expr(op->args[1]));
+    } else if (op->is_intrinsic(Call::saturating_cast)) {
+        Expr e = lower_intrinsic(op);
+        print_expr(e);
+        return;
     } else {
         auto it = builtin.find(op->name);
         if (it == builtin.end()) {
