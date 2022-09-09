@@ -43,7 +43,7 @@ foreach (test IN LISTS tests)
         LABEL python_correctness
         # Ensure that everything in generators/ is built before us.
         # This is dramatic overkill but simplifies our build setup considerably.
-        DEPENDS ${PYTHON_CORRECTNESS_GENERATOR_DEPS}
+        DEPENDS PythonCorrectnessGenerators
         PYTHONPATH "${PYPATH_${test_name}}"
     )
 endforeach ()

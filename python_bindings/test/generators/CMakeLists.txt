@@ -23,7 +23,7 @@ add_halide_runtime(multi_lib_runtime)
 set(RUNTIME_simplecpp multi_lib_runtime)
 set(RUNTIME_user_context multi_lib_runtime)
 
-set(_ALL_DEPS "")
+add_custom_target(PythonCorrectnessGenerators)
 
 function(_add_python_aot_and_stub_extension)
     cmake_parse_arguments(ARG "" "" "GENERATORS;SOURCES" ${ARGN})
@@ -58,7 +58,7 @@ function(_add_python_aot_and_stub_extension)
                                             MODULE_NAME ${G}
                                             HALIDE_LIBRARIES py_aot_${G})
 
-        set(_ALL_DEPS "${_ALL_DEPS} py_aot_${G} pyext_${G}" PARENT_SCOPE)
+        add_dependencies(PythonCorrectnessGenerators "py_aot_${G}" "pyext_${G}")
     endforeach()
 endfunction()
 
@@ -89,7 +89,7 @@ _add_python_aot_and_stub_extension(SOURCES simplepy_generator.py GENERATORS simp
 add_halide_python_extension_library(pyext_multi_method_module
                                     MODULE_NAME multi_method_module
                                     HALIDE_LIBRARIES py_aot_simplecpp py_aot_user_context)
-set(_ALL_DEPS "${_ALL_DEPS} pyext_multi_method_module")
+add_dependencies(PythonCorrectnessGenerators "pyext_multi_method_module")
 
 # Add a test to verify that Python extensions export exactly one symbol (the PyInit symbol)
 # TODO: _Halide_target_export_single_symbol() isn't implemented for MSVC, and even if it was,
@@ -102,5 +102,3 @@ if(NOT MSVC)
                                      [ $(nm $<TARGET_FILE:pyext_multi_method_module> | grep ' T ' | grep PyInit_multi_method_module | wc -l) -eq 1 ]"
              VERBATIM)
 endif ()
-
-set(PYTHON_CORRECTNESS_GENERATOR_DEPS ${_ALL_DEPS} PARENT_SCOPE)
