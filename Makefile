@@ -1012,7 +1012,26 @@ RUNTIME_TRIPLE_WIN_GENERIC_64 = "le64-unknown-windows-unknown"
 # standard but still skip threadsafe guards for static initialization in our runtime code)
 #
 # `-fno-rtti` is necessary to allow us to use classes with virtual functions in the runtime code
-RUNTIME_CXX_FLAGS = -std=c++17 -O3 -fno-vectorize -ffreestanding -fno-blocks -fno-exceptions -fno-unwind-tables -fno-threadsafe-statics -fno-rtti
+RUNTIME_CXX_FLAGS = \
+    -O3 \
+    -std=c++17 \
+    -ffreestanding \
+    -fno-blocks \
+    -fno-exceptions \
+    -fno-unwind-tables \
+    -fno-vectorize \
+    -fno-threadsafe-statics \
+    -fno-rtti \
+    -Wall \
+    -Wcast-qual \
+    -Werror \
+    -Wignored-qualifiers \
+    -Wno-comment \
+    -Wno-psabi \
+    -Wno-unknown-warning-option \
+    -Wno-unused-function \
+    -Wvla \
+    -Wsign-compare
 
 $(BUILD_DIR)/initmod.windows_%_x86_32.ll: $(SRC_DIR)/runtime/windows_%_x86.cpp $(BUILD_DIR)/clang_ok
 	@mkdir -p $(@D)
