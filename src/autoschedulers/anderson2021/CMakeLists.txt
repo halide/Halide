@@ -73,7 +73,7 @@ target_link_libraries(Halide_Anderson2021 PRIVATE ASLog ParamParser
 add_executable(anderson2021_demo.generator ${COMMON_DIR}/demo_generator.cpp)
 target_link_libraries(anderson2021_demo.generator PRIVATE Halide::Halide Halide::Generator)
 
-add_halide_library(anderson2021_demo FROM demo.generator
+add_halide_library(anderson2021_demo FROM anderson2021_demo.generator
                     GENERATOR demo
                     FUNCTION_NAME demo
                    # TODO(someone)
