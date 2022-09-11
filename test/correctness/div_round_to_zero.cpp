@@ -94,5 +94,6 @@ int main(int argc, char **argv) {
     test<int8_t>();
     test<int16_t>();
     test<int32_t>();
+    printf("Success!\n");
     return 0;
 }
