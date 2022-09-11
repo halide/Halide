@@ -11,7 +11,7 @@ public:
     Var x, y, z;
 
     void generate() {
-        bit_output(x) = bit_input(x) + bit_constant;
+        bit_output(x) = bit_input(x) | bit_constant;
     }
 
     void schedule() {
