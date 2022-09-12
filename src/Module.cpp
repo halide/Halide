@@ -729,7 +729,10 @@ std::map<OutputFileType, std::string> compile_standalone_runtime(const std::map<
     // For runtime, it only makes sense to output object files or static_library, so ignore
     // everything else.
     std::map<OutputFileType, std::string> actual_outputs;
-    for (auto key : {OutputFileType::object, OutputFileType::static_library}) {
+    // If the python_extension output is specified, we'll generate just the module-registration code,
+    // with no functions at all. This is useful when gluing together multiple Halide functions
+    // into the same Python extension.
+    for (auto key : {OutputFileType::object, OutputFileType::static_library, OutputFileType::python_extension}) {
         auto it = output_files.find(key);
         if (it != output_files.end()) {
             actual_outputs[key] = it->second;
