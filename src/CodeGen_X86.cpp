@@ -305,7 +305,7 @@ void CodeGen_X86::compile_func(const LoweredFunc &f, const std::string &simple_n
     // Generate the function body.
     debug(1) << "Generating llvm bitcode for function " << f.name << "...\n";
     debug(1) << "X86: Optimizing vector instructions...\n";
-    Stmt body = optimize_x86_instructions(f.body, target, this);
+    Stmt body = optimize_x86_instructions(f.body, target, this, f.func_value_bounds);
     debug(2) << "X86: Lowering after vector instructions:\n"
              << body << "\n\n";
 

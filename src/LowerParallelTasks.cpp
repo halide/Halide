@@ -298,7 +298,7 @@ struct LowerParallelTasks : public IRMutator {
 
                 // TODO(zvookin): Figure out how we want to handle name mangling of closures.
                 // For now, the C++ backend makes them extern "C" so they have to be NameMangling::C.
-                LoweredFunc closure_func{new_function_name, closure_args, std::move(wrapped_body), LinkageType::Internal, NameMangling::C};
+                LoweredFunc closure_func{new_function_name, closure_args, std::move(wrapped_body), LinkageType::Internal, empty_func_value_bounds(), NameMangling::C};
                 if (target.has_feature(Target::Debug)) {
                     debug_arguments(&closure_func, target);
                 }

@@ -7,7 +7,9 @@
 
 #include "CodeGen_LLVM.h"
 #include "IR.h"
+#include "IREquality.h"
 #include "IRMutator.h"
+#include "Scope.h"
 #include "Target.h"
 
 namespace Halide {
@@ -29,7 +31,21 @@ protected:
     Expr visit(const VectorReduce *) override;
 
 public:
-    InstructionSelector(const Target &target, const CodeGen_LLVM *codegen);
+    InstructionSelector(const Target &target, const CodeGen_LLVM *codegen, const FuncValueBounds &fvb);
+
+    // Very expensive bounds queries. Cached for performance.
+    // Used in IRMatch.h predicate wrappers.
+    bool is_upper_bounded(const Expr &expr, const int64_t bound);
+    bool is_upper_bounded(const Expr &expr, const uint64_t bound);
+    bool is_lower_bounded(const Expr &expr, const int64_t bound);
+    bool is_lower_bounded(const Expr &expr, const uint64_t bound);
+
+private:
+    const FuncValueBounds &func_value_bounds;
+    Scope<Interval> scope;
+    std::map<Expr, Interval, IRDeepCompare> cache;
+
+    Interval cached_get_interval(const Expr &expr);
 };
 
 }  // namespace Internal

@@ -21,8 +21,8 @@ class Optimize_ARM : public InstructionSelector {
 public:
     /** Create an ARM code optimizer. Processor features can be
      * enabled using the appropriate flags in the target struct. */
-    Optimize_ARM(const Target &target, const CodeGen_LLVM *codegen)
-        : InstructionSelector(target, codegen) {
+    Optimize_ARM(const Target &target, const CodeGen_LLVM *codegen, const FuncValueBounds &fvb)
+        : InstructionSelector(target, codegen, fvb) {
     }
 
 protected:
@@ -997,7 +997,7 @@ private:
 
 }  // namespace
 
-Stmt optimize_arm_instructions(const Stmt &s, const Target &target, const CodeGen_LLVM *codegen) {
+Stmt optimize_arm_instructions(const Stmt &s, const Target &target, const CodeGen_LLVM *codegen, const FuncValueBounds &fvb) {
     Stmt stmt = Optimize_ARM(target, codegen).mutate(s);
 
     if (!stmt.same_as(s)) {
@@ -1009,7 +1009,7 @@ Stmt optimize_arm_instructions(const Stmt &s, const Target &target, const CodeGe
 
 #else  // WITH_ARM
 
-Stmt optimize_arm_instructions(const Stmt &s, const Target &t, const CodeGen_LLVM *codegen) {
+Stmt optimize_arm_instructions(const Stmt &s, const Target &t, const CodeGen_LLVM *codegen, const FuncValueBounds &fvb) {
     user_error << "ARM not enabled for this build of Halide.\n";
     return Stmt();
 }

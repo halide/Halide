@@ -64,8 +64,8 @@ class Optimize_X86 : public InstructionSelector {
 public:
     /** Create an x86 code optimizer. Processor features can be
      * enabled using the appropriate flags in the target struct. */
-    Optimize_X86(const Target &target, const CodeGen_LLVM *codegen)
-        : InstructionSelector(target, codegen) {
+    Optimize_X86(const Target &target, const CodeGen_LLVM *codegen, const FuncValueBounds &fvb)
+        : InstructionSelector(target, codegen, fvb) {
     }
 
 protected:
@@ -600,8 +600,8 @@ private:
 
 }  // namespace
 
-Stmt optimize_x86_instructions(const Stmt &s, const Target &target, const CodeGen_LLVM *codegen) {
-    Stmt stmt = Optimize_X86(target, codegen).mutate(s);
+Stmt optimize_x86_instructions(const Stmt &s, const Target &target, const CodeGen_LLVM *codegen, const FuncValueBounds &fvb) {
+    Stmt stmt = Optimize_X86(target, codegen, fvb).mutate(s);
 
     // Some of the rules above can introduce repeated sub-terms, so run CSE again.
     if (!stmt.same_as(s)) {
@@ -614,7 +614,7 @@ Stmt optimize_x86_instructions(const Stmt &s, const Target &target, const CodeGe
 
 #else  // WITH_X86
 
-Stmt optimize_x86_instructions(const Stmt &s, const Target &t, const CodeGen_LLVM *codegen) {
+Stmt optimize_x86_instructions(const Stmt &s, const Target &t, const CodeGen_LLVM *codegen, const FuncValueBounds &fvb) {
     user_error << "x86 not enabled for this build of Halide.\n";
     return Stmt();
 }

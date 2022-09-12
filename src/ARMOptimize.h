@@ -13,7 +13,7 @@ namespace Halide {
 namespace Internal {
 
 /** Perform vector instruction selection, inserting VectorInstruction nodes. */
-Stmt optimize_arm_instructions(const Stmt &stmt, const Target &target, const CodeGen_LLVM *codegen);
+Stmt optimize_arm_instructions(const Stmt &stmt, const Target &target, const CodeGen_LLVM *codegen, const FuncValueBounds &fvb);
 
 }  // namespace Internal
 }  // namespace Halide
