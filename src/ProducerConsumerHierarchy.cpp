@@ -796,7 +796,7 @@ void ProducerConsumerHierarchy::visit(const IfThenElse *op) {
 
         ifHeader += condition;
 
-        if_tree(op->then_case.get(), ifHeader, anchorName);
+        if_tree(op, ifHeader, anchorName);
 
         // then body
         op->then_case.accept(this);

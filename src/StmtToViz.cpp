@@ -161,13 +161,12 @@ private:
         return popup.str();
     }
 
-    string open_cost_span(const Stmt &op) {
-
-        StmtHierarchyInfo stmtHierarchyInfo = get_stmt_hierarchy(op);
+    string open_cost_span(const Stmt &stmt_op) {
+        StmtHierarchyInfo stmtHierarchyInfo = get_stmt_hierarchy(stmt_op);
 
         stringstream s;
 
-        s << cost_colors(op.get(), stmtHierarchyInfo);
+        s << cost_colors(stmt_op.get(), stmtHierarchyInfo);
 
         // popup window - will put them all at the end
         popups += stmtHierarchyInfo.html + "\n";
@@ -175,13 +174,12 @@ private:
         s << "<span id='Cost" << id_count << "'>";
         return s.str();
     }
-    string open_cost_span(const Expr &op) {
-
-        StmtHierarchyInfo stmtHierarchyInfo = get_stmt_hierarchy(op);
+    string open_cost_span(const Expr &stmt_op) {
+        StmtHierarchyInfo stmtHierarchyInfo = get_stmt_hierarchy(stmt_op);
 
         stringstream s;
 
-        s << cost_colors(op.get(), stmtHierarchyInfo);
+        s << cost_colors(stmt_op.get(), stmtHierarchyInfo);
 
         // popup window - will put them all at the end
         popups += stmtHierarchyInfo.html + "\n";
@@ -194,7 +192,8 @@ private:
         return "<!-- closing_cost_span --></span>";
     }
     string open_cost_span_else_case(Stmt else_case) {
-        Stmt new_node = IfThenElse::make(Variable::make(Int(32), "true"), else_case, nullptr);
+        Stmt new_node =
+            IfThenElse::make(Variable::make(Int(32), "canIgnoreVariableName"), else_case, nullptr);
 
         StmtHierarchyInfo stmtHierarchyInfo = getStmtHierarchy.get_else_hierarchy_html();
         string popup = generate_stmt_hierarchy_popup(stmtHierarchyInfo.html);

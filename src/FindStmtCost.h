@@ -102,6 +102,12 @@ private:
     int get_depth(const IRNode *node) const;
     int get_computation_cost(const IRNode *node, bool inclusive) const;
     int get_data_movement_cost(const IRNode *node, bool inclusive) const;
+    int get_cost(const IRNode *node, bool inclusive, bool isComputation) const;
+    int get_if_node_cost(const IRNode *op, bool inclusive, bool isComputation) const;
+
+    // get percentages
+    int get_computation_cost_percentage(const IRNode *node, bool inclusive) const;
+    int get_data_movement_cost_percentage(const IRNode *node, bool inclusive) const;
 
     // gets costs from `stmt_cost` map
     vector<int> get_costs_children(const IRNode *parent, vector<const IRNode *> children,
@@ -114,9 +120,9 @@ private:
                              int node_dmc, int scalingFactor_dmc);
 
     // gets max computation cost and max data movement cost
-    void set_max_costs();
+    void set_max_costs(const Module &m);
 
-    // TODO: comment
+    // builds the tooltip cost table based on given input table
     string tooltip_table(map<string, string> &table, string extraNote);
 
     // gets scaling factor for Load/Store based on lanes and bits
