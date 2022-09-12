@@ -1512,6 +1512,16 @@ private:
                 result.include(interval);
             }
             interval = result;
+        } else if (op->is_intrinsic({Call::widening_add,
+                                     Call::widening_mul,
+                                     Call::widening_shift_left,
+                                     Call::widening_shift_right,
+                                     Call::widening_sub})) {
+            // Each of these can be cleanly lowered to exact semantic definitions.
+            // TODO: which other intrinsics can/should we lower?
+            Expr a = lower_intrinsic(op);
+            a.accept(this);
+            return;
         } else if (op->call_type == Call::Halide) {
             bounds_of_func(op->name, op->value_index, op->type);
         } else {
