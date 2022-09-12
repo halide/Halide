@@ -126,7 +126,7 @@ add_executable(adams2019_featurization_to_sample ${COMMON_DIR}/featurization_to_
 add_executable(adams2019_get_host_target ${COMMON_DIR}/get_host_target.cpp)
 target_link_libraries(adams2019_get_host_target PRIVATE Halide::Halide)
 
-add_executable(adams2019_weightsdir_to_weightsfile ${COMMON_DIR}/weightsdir_to_weightsfile.cpp Weights.cpp)
+add_executable(adams2019_weightsdir_to_weightsfile ${COMMON_DIR}/weightsdir_to_weightsfile.cpp ${COMMON_DIR}/Weights.cpp)
 target_link_libraries(adams2019_weightsdir_to_weightsfile PRIVATE Halide::Runtime)
 
 # =================================================================
