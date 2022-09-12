@@ -43,45 +43,5 @@ Interval InstructionSelector::cached_get_interval(const Expr &expr) {
     return iter->second;
 }
 
-bool InstructionSelector::is_upper_bounded(const Expr &expr, const int64_t bound) {
-    internal_assert(expr.type().element_of().can_represent(bound))
-        << "Type of expr cannot represent upper bound:\n " << expr << "\n " << bound << "\n";
-
-    Expr e = make_const(expr.type().element_of(), bound);
-    const Interval i = cached_get_interval(expr);
-    // TODO: see above - we could get rid of can_prove if we use constant bounds queries instead.
-    return can_prove(i.max <= e);
-}
-
-bool InstructionSelector::is_upper_bounded(const Expr &expr, const uint64_t bound) {
-    internal_assert(expr.type().element_of().can_represent(bound))
-        << "Type of expr cannot represent upper bound:\n " << expr << "\n " << bound << "\n";
-
-    Expr e = make_const(expr.type().element_of(), bound);
-    const Interval i = cached_get_interval(expr);
-    // TODO: see above - we could get rid of can_prove if we use constant bounds queries instead.
-    return can_prove(i.max <= e);
-}
-
-bool InstructionSelector::is_lower_bounded(const Expr &expr, const int64_t bound) {
-    internal_assert(expr.type().element_of().can_represent(bound))
-        << "Type of expr cannot represent lower bound:\n " << expr << "\n " << bound << "\n";
-
-    Expr e = make_const(expr.type().element_of(), bound);
-    const Interval i = cached_get_interval(expr);
-    // TODO: see above - we could get rid of can_prove if we use constant bounds queries instead.
-    return can_prove(i.min >= e);
-}
-
-bool InstructionSelector::is_lower_bounded(const Expr &expr, const uint64_t bound) {
-    internal_assert(expr.type().element_of().can_represent(bound))
-        << "Type of expr cannot represent lower bound:\n " << expr << "\n " << bound << "\n";
-
-    Expr e = make_const(expr.type().element_of(), bound);
-    const Interval i = cached_get_interval(expr);
-    // TODO: see above - we could get rid of can_prove if we use constant bounds queries instead.
-    return can_prove(i.min >= e);
-}
-
 }  // namespace Internal
 }  // namespace Halide

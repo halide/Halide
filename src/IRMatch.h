@@ -2281,6 +2281,52 @@ HALIDE_ALWAYS_INLINE auto cast(halide_type_t t, A &&a) noexcept -> CastOp<declty
     return {t, pattern_arg(a)};
 }
 
+template<typename A>
+struct ReinterpretOp {
+    struct pattern_tag {};
+    Type t;
+    A a;
+
+    constexpr static uint32_t binds = bindings<A>::mask;
+
+    constexpr static IRNodeType min_node_type = IRNodeType::Reinterpret;
+    constexpr static IRNodeType max_node_type = IRNodeType::Reinterpret;
+    constexpr static bool canonical = A::canonical;
+
+    template<uint32_t bound>
+    HALIDE_ALWAYS_INLINE bool match(const BaseExprNode &e, MatcherState &state) const noexcept {
+        if (e.node_type != Reinterpret::_node_type) {
+            return false;
+        }
+        const Reinterpret &op = (const Reinterpret &)e;
+        return (e.type == t &&
+                a.template match<bound>(*op.value.get(), state));
+    }
+    template<uint32_t bound, typename A2>
+    HALIDE_ALWAYS_INLINE bool match(const ReinterpretOp<A2> &op, MatcherState &state) const noexcept {
+        return t == op.t && a.template match<bound>(unwrap(op.a), state);
+    }
+
+    HALIDE_ALWAYS_INLINE
+    Expr make(MatcherState &state, halide_type_t type_hint) const {
+        return reinterpret(t, a.make(state, {}));
+    }
+
+    constexpr static bool foldable = false;
+};
+
+template<typename A>
+std::ostream &operator<<(std::ostream &s, const ReinterpretOp<A> &op) {
+    s << "reinterpret(" << op.t << ", " << op.a << ")";
+    return s;
+}
+
+template<typename A>
+HALIDE_ALWAYS_INLINE auto reinterpret(Type t, A &&a) noexcept -> ReinterpretOp<decltype(pattern_arg(a))> {
+    assert_is_lvalue_if_expr<A>();
+    return {t, pattern_arg(a)};
+}
+
 // A node for expressing type hints, when rules are ambiguously typed.
 template<typename A>
 struct TypeHint {
@@ -2533,6 +2579,82 @@ HALIDE_ALWAYS_INLINE auto can_prove(A &&a, Prover *p) noexcept -> CanProve<declt
 template<typename A, typename Prover>
 std::ostream &operator<<(std::ostream &s, const CanProve<A, Prover> &op) {
     s << "can_prove(" << op.a << ")";
+    return s;
+}
+
+template<typename A, typename B, typename Prover>
+struct UpperBounded {
+    struct pattern_tag {};
+    A a;
+    B bound;
+    Prover *prover;  // An existing InstructionSelector object.
+
+    constexpr static uint32_t binds = bindings<A>::mask;
+
+    // This rule is a boolean-valued predicate. Bools have type UIntImm.
+    constexpr static IRNodeType min_node_type = IRNodeType::UIntImm;
+    constexpr static IRNodeType max_node_type = IRNodeType::UIntImm;
+    constexpr static bool canonical = true;
+
+    constexpr static bool foldable = true;
+
+    // Includes a raw call to an inlined make method, so don't inline.
+    HALIDE_NEVER_INLINE void make_folded_const(halide_scalar_value_t &val, halide_type_t &ty, MatcherState &state) const {
+        Expr expr = a.make(state, {});
+        val.u.u64 = prover->is_upper_bounded(expr, bound);
+        ty.code = halide_type_uint;
+        ty.bits = 1;
+        ty.lanes = expr.type().lanes();
+    }
+};
+
+template<typename A, typename B, typename Prover>
+HALIDE_ALWAYS_INLINE auto upper_bounded(A &&a, B bound, Prover *p) noexcept -> UpperBounded<decltype(pattern_arg(a)), B, Prover> {
+    assert_is_lvalue_if_expr<A>();
+    return {pattern_arg(a), bound, p};
+}
+
+template<typename A, typename B, typename Prover>
+std::ostream &operator<<(std::ostream &s, const UpperBounded<A, B, Prover> &op) {
+    s << "upper_bounded(" << op.a << ", " << op.bound << ")";
+    return s;
+}
+
+template<typename A, typename B, typename Prover>
+struct LowerBounded {
+    struct pattern_tag {};
+    A a;
+    B bound;
+    Prover *prover;  // An existing InstructionSelector object.
+
+    constexpr static uint32_t binds = bindings<A>::mask;
+
+    // This rule is a boolean-valued predicate. Bools have type UIntImm.
+    constexpr static IRNodeType min_node_type = IRNodeType::UIntImm;
+    constexpr static IRNodeType max_node_type = IRNodeType::UIntImm;
+    constexpr static bool canonical = true;
+
+    constexpr static bool foldable = true;
+
+    // Includes a raw call to an inlined make method, so don't inline.
+    HALIDE_NEVER_INLINE void make_folded_const(halide_scalar_value_t &val, halide_type_t &ty, MatcherState &state) const {
+        Expr expr = a.make(state, {});
+        val.u.u64 = prover->is_lower_bounded(expr, bound);
+        ty.code = halide_type_uint;
+        ty.bits = 1;
+        ty.lanes = expr.type().lanes();
+    }
+};
+
+template<typename A, typename B, typename Prover>
+HALIDE_ALWAYS_INLINE auto lower_bounded(A &&a, B bound, Prover *p) noexcept -> LowerBounded<decltype(pattern_arg(a)), B, Prover> {
+    assert_is_lvalue_if_expr<A>();
+    return {pattern_arg(a), bound, p};
+}
+
+template<typename A, typename B, typename Prover>
+std::ostream &operator<<(std::ostream &s, const LowerBounded<A, B, Prover> &op) {
+    s << "lower_bounded(" << op.a << ", " << op.bound << ")";
     return s;
 }
 
