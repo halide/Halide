@@ -84,6 +84,7 @@ set(HEADER_FILES
     InjectHostDevBufferCopies.h
     Inline.h
     InlineReductions.h
+    InstructionSelector.h
     IntegerDivisionTable.h
     Interval.h
     Introspection.h
@@ -169,6 +170,7 @@ set(HEADER_FILES
     WasmExecutor.h
     WrapCalls.h
     XtensaOptimize.h
+    X86Optimize.h
     )
 
 set(SOURCE_FILES
@@ -250,6 +252,7 @@ set(SOURCE_FILES
     InjectHostDevBufferCopies.cpp
     Inline.cpp
     InlineReductions.cpp
+    InstructionSelector.cpp
     IntegerDivisionTable.cpp
     Interval.cpp
     Introspection.cpp
@@ -350,6 +353,7 @@ set(SOURCE_FILES
     WasmExecutor.cpp
     WrapCalls.cpp
     XtensaOptimize.cpp
+    X86Optimize.cpp
     )
 
 ##

@@ -904,6 +904,46 @@ Stmt Atomic::make(const std::string &producer_name,
     return node;
 }
 
+namespace {
+
+const char *const instruction_op_names[] = {
+    // Shared:
+    "abs",
+    "dot_product",
+    "rounding_halving_add",
+    "saturating_add",
+    "saturating_narrow",
+    "saturating_sub",
+    "widening_mul",
+
+    // x86-specific
+    "f32_to_bf16",
+    "horizontal_add",
+    "pmulh",
+    "pmulhrs",
+    "saturating_dot_product",
+    "sum_absd",
+};
+
+static_assert(sizeof(instruction_op_names) / sizeof(instruction_op_names[0]) == VectorInstruction::InstructionOpCount,
+              "instruction_op_names needs attention");
+
+}  // namespace
+
+Expr VectorInstruction::make(Type type, InstructionOp op, const std::vector<Expr> &args) {
+    user_assert(!args.empty()) << "VectorInrinsic without arguments\n";
+
+    VectorInstruction *node = new VectorInstruction;
+    node->type = type;
+    node->op = op;
+    node->args = args;
+    return node;
+}
+
+const char *VectorInstruction::get_instruction_name() const {
+    return instruction_op_names[op];
+}
+
 Expr VectorReduce::make(VectorReduce::Operator op,
                         Expr vec,
                         int lanes) {
@@ -1082,6 +1122,10 @@ void ExprNode<Call>::accept(IRVisitor *v) const {
 template<>
 void ExprNode<Shuffle>::accept(IRVisitor *v) const {
     v->visit((const Shuffle *)this);
+}
+template<>
+void ExprNode<VectorInstruction>::accept(IRVisitor *v) const {
+    v->visit((const VectorInstruction *)this);
 }
 template<>
 void ExprNode<VectorReduce>::accept(IRVisitor *v) const {
@@ -1271,6 +1315,10 @@ Expr ExprNode<Call>::mutate_expr(IRMutator *v) const {
 template<>
 Expr ExprNode<Shuffle>::mutate_expr(IRMutator *v) const {
     return v->visit((const Shuffle *)this);
+}
+template<>
+Expr ExprNode<VectorInstruction>::mutate_expr(IRMutator *v) const {
+    return v->visit((const VectorInstruction *)this);
 }
 template<>
 Expr ExprNode<VectorReduce>::mutate_expr(IRMutator *v) const {

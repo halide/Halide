@@ -72,16 +72,6 @@ define weak_odr <4 x i32> @abs_i32x4(<4 x i32> %x) nounwind uwtable readnone alw
   ret <4 x i32> %3
 }
 
-define weak_odr <8 x i16> @saturating_pmulhrswx8(<8 x i16> %a, <8 x i16> %b) nounwind uwtable readnone alwaysinline {
-  %1 = tail call <8 x i16> @llvm.x86.ssse3.pmul.hr.sw.128(<8 x i16> %a, <8 x i16> %b)
-  %2 = icmp eq <8 x i16> %a, <i16 -32768, i16 -32768, i16 -32768, i16 -32768, i16 -32768, i16 -32768, i16 -32768, i16 -32768>
-  %3 = icmp eq <8 x i16> %b, <i16 -32768, i16 -32768, i16 -32768, i16 -32768, i16 -32768, i16 -32768, i16 -32768, i16 -32768>
-  %4 = and <8 x i1> %2, %3
-  %5 = select <8 x i1> %4, <8 x i16> <i16 32767, i16 32767, i16 32767, i16 32767, i16 32767, i16 32767, i16 32767, i16 32767>, <8 x i16> %1
-  ret <8 x i16> %5
-}
-declare <8 x i16> @llvm.x86.ssse3.pmul.hr.sw.128(<8 x i16>, <8 x i16>) nounwind readnone
-
 define weak_odr <8 x i16> @hadd_pmadd_u8_sse3(<16 x i8> %a) nounwind alwaysinline {
   %1 = tail call <8 x i16> @llvm.x86.ssse3.pmadd.ub.sw.128(<16 x i8> %a, <16 x i8> <i8 1, i8 1, i8 1, i8 1, i8 1, i8 1, i8 1, i8 1, i8 1, i8 1, i8 1, i8 1, i8 1, i8 1, i8 1, i8 1>)
   ret <8 x i16> %1
@@ -92,3 +82,19 @@ define weak_odr <8 x i16> @hadd_pmadd_i8_sse3(<16 x i8> %a) nounwind alwaysinlin
   ret <8 x i16> %1
 }
 declare <8 x i16> @llvm.x86.ssse3.pmadd.ub.sw.128(<16 x i8>, <16 x i8>) nounwind readnone
+
+define weak_odr <8 x i16> @phaddw_sse3(<16 x i16> %a) nounwind alwaysinline {
+   %1 = shufflevector <16 x i16> %a, <16 x i16> poison, <8 x i32> <i32 0, i32 1, i32 2, i32 3, i32 4, i32 5, i32 6, i32 7>
+   %2 = shufflevector <16 x i16> %a, <16 x i16> poison, <8 x i32> <i32 8, i32 9, i32 10, i32 11, i32 12, i32 13, i32 14, i32 15>
+   %3 = tail call <8 x i16> @llvm.x86.ssse3.phadd.w.128(<8 x i16> %1, <8 x i16> %2)
+   ret <8 x i16> %3
+ }
+ declare <8 x i16> @llvm.x86.ssse3.phadd.w.128(<8 x i16>, <8 x i16>) nounwind readnone
+
+ define weak_odr <4 x i32> @phaddd_sse3(<8 x i32> %a) nounwind alwaysinline {
+   %1 = shufflevector <8 x i32> %a, <8 x i32> poison, <4 x i32> <i32 0, i32 1, i32 2, i32 3>
+   %2 = shufflevector <8 x i32> %a, <8 x i32> poison, <4 x i32> <i32 4, i32 5, i32 6, i32 7>
+   %3 = tail call <4 x i32> @llvm.x86.ssse3.phadd.d.128(<4 x i32> %1, <4 x i32> %2)
+   ret <4 x i32> %3
+ }
+ declare <4 x i32> @llvm.x86.ssse3.phadd.d.128(<4 x i32>, <4 x i32>) nounwind readnone

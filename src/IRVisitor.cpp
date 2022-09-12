@@ -257,6 +257,12 @@ void IRVisitor::visit(const Shuffle *op) {
     }
 }
 
+void IRVisitor::visit(const VectorInstruction *op) {
+    for (const auto &arg : op->args) {
+        arg.accept(this);
+    }
+}
+
 void IRVisitor::visit(const VectorReduce *op) {
     op->value.accept(this);
 }
@@ -512,6 +518,12 @@ void IRGraphVisitor::visit(const Evaluate *op) {
 void IRGraphVisitor::visit(const Shuffle *op) {
     for (const Expr &i : op->vectors) {
         include(i);
+    }
+}
+
+void IRGraphVisitor::visit(const VectorInstruction *op) {
+    for (const auto &arg : op->args) {
+        include(arg);
     }
 }
 

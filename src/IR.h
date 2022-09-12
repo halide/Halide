@@ -901,6 +901,47 @@ struct Atomic : public StmtNode<Atomic> {
     static const IRNodeType _node_type = IRNodeType::Atomic;
 };
 
+/** Represent a length-agnostic and target-specific
+ *  vector instruction. Intrinsic may not be element-wise
+ *  operation, i.e. dot_products. Should only be generated
+ *  and consumed during CodeGen. */
+struct VectorInstruction : public ExprNode<VectorInstruction> {
+    // enums for vector instructions. Name is recovered via get_instruction_name()
+    // Specific enum values are *not* guaranteed to be stable across time.
+    // Please keep this list sorted via target architecture (with a shared section).
+    // This last will become more complete as we add Optimize passes for more backends.
+    // If you add an instruction here, update `instruction_op_names` in IR.cpp.
+    enum InstructionOp {
+        // Shared:
+        abs,
+        dot_product,
+        rounding_halving_add,
+        saturating_add,
+        saturating_narrow,
+        saturating_sub,
+        widening_mul,
+
+        // x86-specific
+        f32_to_bf16,
+        horizontal_add,
+        pmulh,
+        pmulhrs,
+        saturating_dot_product,
+        sum_absd,
+
+        InstructionOpCount  // Sentinel: keep last.
+    };
+
+    InstructionOp op;
+    std::vector<Expr> args;
+
+    static Expr make(Type type, InstructionOp op, const std::vector<Expr> &args);
+
+    static const IRNodeType _node_type = IRNodeType::VectorInstruction;
+
+    const char *get_instruction_name() const;
+};
+
 /** Horizontally reduce a vector to a scalar or narrower vector using
  * the given commutative and associative binary operator. The reduction
  * factor is dictated by the number of lanes in the input and output

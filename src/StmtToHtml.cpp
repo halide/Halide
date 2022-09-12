@@ -712,6 +712,13 @@ private:
         stream << close_span();
     }
 
+    void visit(const VectorInstruction *op) override {
+        stream << open_span("VectorInstruction");
+        stream << open_span("Type") << op->type << close_span();
+        print_list(symbol("vector_instruction") + "(\"" + op->get_instruction_name() + "\"", op->args, ")");
+        stream << close_span();
+    }
+
     void visit(const VectorReduce *op) override {
         stream << open_span("VectorReduce");
         stream << open_span("Type") << op->type << close_span();
