@@ -38,8 +38,6 @@ public:
         if (it != nodeToLineNumber.end()) {
             return it->second;
         } else {
-            cout << "\nGetAssemblyInfoViz::get_line_number(const IRNode *op): Could not "
-                 << "find line number for node: " << print_node(op) << "\n";
             return -1;
         }
     }
@@ -84,8 +82,6 @@ private:
                     claimedNodes.end()) {
                     claimedNodes.push_back(label.node);
                     nodeToLineNumber[label.node] = lineNumber;
-                    cout << "Found label " << print_node(label.node) << " at line " << lineNumber
-                         << endl;
                     return;
                 }
             }
@@ -115,8 +111,6 @@ private:
         std::regex regex("(\")" + codeString + "[0-9]*\"");
         string regexString = codeString + "[0-9]*\"";
 
-        cout << "regex: " << regexString << endl;
-
         AssemblyInfo info;
         info.regex = regex;
         info.node = op;
@@ -134,8 +128,6 @@ private:
 
         std::regex regex(codeString + "(.preheader)*[0-9]*\"");
         string regexString = codeString + "(.preheader)*[0-9]*\"";
-
-        cout << "regex: " << regexString << endl;
 
         AssemblyInfo info;
         info.regex = regex;

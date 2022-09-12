@@ -467,7 +467,7 @@ void ProducerConsumerHierarchy::for_loop_table(string loop_size) {
 
 void ProducerConsumerHierarchy::see_code_button_div(string anchorName, bool putDiv) {
     if (putDiv) html += "<div>";
-    html += "<button class='icon-button'";
+    html += "<button class='iconButton'";
     html += "onclick='scrollToFunctionVizToCode(\"" + anchorName + "\")'>";
     html += "<i class='bi bi-code-square'></i>";
     html += "</button>";

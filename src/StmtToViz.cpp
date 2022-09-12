@@ -349,10 +349,41 @@ private:
     string see_viz_button(const string &anchorName) {
         stringstream s;
 
-        s << "<button class='icon-button' ";
+        s << "<button class='iconButton' ";
         s << "onclick='scrollToFunctionCodeToViz(\"" + anchorName + "_viz\")'>";
         s << "<i class='bi bi-arrow-right-square'></i>";
         s << "</button>";
+
+        return s.str();
+    }
+
+    string see_assembly_button(const int &assemblyLineNum) {
+        stringstream s;
+
+        tooltipCount++;
+        s << "<button class='iconButton assemblyIcon' ";
+        s << "id='button" << tooltipCount << "' ";
+        s << "aria-describedby='tooltip" << tooltipCount << "' ";
+        s << "onclick='openAssembly(" << assemblyLineNum << ");'>";
+        s << "<svg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='currentColor' "
+             "class='bi bi-filetype-raw' viewBox='0 0 16 16'>";
+        s << "<path fill-rule='evenodd' d='M14 4.5V14a2 2 0 0 1-2 2v-1a1 1 0 0 0 1-1V4.5h-2A1.5 "
+             "1.5 0 0 1 9.5 3V1H4a1 1 0 0 0-1 1v9H2V2a2 2 0 0 1 2-2h5.5L14 4.5ZM1.597 "
+             "11.85H0v3.999h.782v-1.491h.71l.7 1.491h1.651l.313-1.028h1.336l.314 1.028h.84L5.31 "
+             "11.85h-.925l-1.329 3.96-.783-1.572A1.18 1.18 0 0 0 3 "
+             "13.116c0-.256-.056-.479-.167-.668a1.098 1.098 0 0 0-.478-.44 1.669 1.669 0 0 "
+             "0-.758-.158Zm-.815 1.913v-1.292h.7a.74.74 0 0 1 .507.17c.13.113.194.276.194.49 0 "
+             ".21-.065.368-.194.474-.127.105-.3.158-.518.158H.782Zm4.063-1.148.489 "
+             "1.617H4.32l.49-1.617h.035Zm4.006.445-.74 2.789h-.73L6.326 11.85h.855l.601 "
+             "2.903h.038l.706-2.903h.683l.706 2.903h.04l.596-2.903h.858l-1.055 "
+             "3.999h-.73l-.74-2.789H8.85Z'/></svg>";
+        s << "</button>";
+
+        // tooltip span
+        s << "<span id='tooltip" << tooltipCount << "' class='tooltip' ";
+        s << "role='tooltip" << tooltipCount << "'>";
+        s << "Click to see assembly code";
+        s << "</span>";
 
         return s.str();
     }
@@ -668,14 +699,7 @@ private:
         string anchorName = "producerConsumer" + std::to_string(producerConsumerCount);
 
         // for assembly
-        string label = op->is_producer ? "producer" : "consumer";
-        label += "_" + op->name + "_" + std::to_string(producerConsumerCount) + "_label";
-
         int assemblyLineNum = getAssemblyInfoViz.get_line_number(op);
-        if (assemblyLineNum != -1) {
-            stream << "<button onclick='openAssembly(" << assemblyLineNum
-                   << ");'>Open Assembly</button>\n";
-        }
 
         int produce_id = unique_id();
 
@@ -689,6 +713,7 @@ private:
         stream << close_span();
         stream << close_cost_span();
         stream << close_anchor();
+        if (assemblyLineNum != -1) stream << see_assembly_button(assemblyLineNum);
         stream << see_viz_button(anchorName);
 
         stream << open_div(op->is_producer ? "ProduceBody Indent" : "ConsumeBody Indent",
@@ -712,13 +737,7 @@ private:
         string anchorName = "for" + std::to_string(forCount);
 
         // for assembly
-        string label = "for_" + op->name + "_" + std::to_string(forCount) + "_label";
-
         int assemblyLineNum = getAssemblyInfoViz.get_line_number(op);
-        if (assemblyLineNum != -1) {
-            stream << "<button onclick='openAssembly(" << assemblyLineNum
-                   << ");'>Open Assembly</button>\n";
-        }
 
         int id = unique_id();
         stream << open_cost_span(op);
@@ -753,6 +772,7 @@ private:
         stream << " " << matched("{");
         stream << close_cost_span();
         stream << close_anchor();
+        if (assemblyLineNum != -1) stream << see_assembly_button(assemblyLineNum);
         stream << see_viz_button(anchorName);
 
         stream << open_div("ForBody Indent", id);
@@ -1592,12 +1612,55 @@ public:
         stream << "</body>";
     }
 
+    string informationPopup() {
+        stringstream popup;
+
+        popupCount++;
+        popup << "<div class='modal fade' id='stmtHierarchyModal" << popupCount;
+        popup << "' tabindex='-1'\n";
+        popup << "    aria-labelledby='stmtHierarchyModalLabel' aria-hidden='true'>\n";
+        popup << "    <div class='modal-dialog modal-dialog-scrollable modal-xl'>\n";
+        popup << "        <div class='modal-content'>\n";
+        popup << "            <div class='modal-header'>\n";
+        popup << "                <h5 class='modal-title' id='stmtHierarchyModalLabel'>Statement\n";
+        popup << "                    Hierarchy\n";
+        popup << "                </h5>\n";
+        popup << "                <button type='button' class='btn-close'\n";
+        popup << "                    data-bs-dismiss='modal' aria-label='Close'></button>\n";
+        popup << "            </div>\n";
+        popup << "            <div class='modal-body'>\n";
+        popup << "               TODO";
+        popup << "            </div>\n";
+        popup << "        </div>\n";
+        popup << "    </div>\n";
+        popup << "</div>\n";
+
+        return popup.str();
+    }
+
+    void informationBar(const Module &m) {
+        popups += informationPopup();
+
+        stream << "<div class='informationBar'>\n";
+        stream << "<div class='title'>\n";
+        stream << "<h3>" << m.name() << "</h3>\n";
+        stream << "</div>\n";
+        stream << "<div class='spacing'></div>\n";
+        stream << "<div class='button'>\n";
+        stream << "<h3><button class='informationBarButton'><i\n";
+        stream << "class='bi bi-info-square' data-bs-toggle='modal'\n";
+        stream << "data-bs-target='#stmtHierarchyModal" << popupCount << "'></i></button>\n";
+        stream << "</h3>\n";
+        stream << "</div>\n";
+        stream << "</div>\n";
+    }
+
     void resizeBar() {
         stream << "<div class='ResizeBar' id='ResizeBar'>\n";
         stream << "<div class='collapseButtons'>\n";
-        stream << "<button class='icon-button' onclick='collapseViz()'>";
+        stream << "<button class='iconButton' onclick='collapseViz()'>";
         stream << "<i class='bi bi-arrow-bar-right'></i></button>\n";
-        stream << "<button class='icon-button' onclick='collapseCode()'>";
+        stream << "<button class='iconButton' onclick='collapseCode()'>";
         stream << "<i class='bi bi-arrow-bar-left'></i></button>\n";
         stream << "</div>\n";
         stream << "</div>\n";
@@ -1610,6 +1673,8 @@ public:
         start_stream(filename);
 
         stream << "<div class='outerDiv'>\n";
+
+        informationBar(m);
 
         stream << "<div class='mainContent'>\n";
 
@@ -1748,11 +1813,15 @@ div.outerDiv { \n \
     display: flex; \n \
     flex-direction: column; \n \
 } \n \
+div.informationBar { \n \
+    display: flex; \n \
+} \n \
 div.mainContent { \n \
     display: flex; \n \
     flex-grow: 1; \n \
     width: 100%; \n \
     overflow: hidden; \n \
+    border-top: 1px solid rgb(200,200,200) \n \
 } \n \
 div.IRCode-code { \n \
     counter-reset: line; \n \
@@ -1904,7 +1973,7 @@ span.ButtonSpacer { width: 5px; color: transparent; display: inline-block; }\n \
 .colorButton:hover { \n \
     border: 1px solid grey; \n \
 } \n \
-.icon-button { \n \
+.iconButton { \n \
     border: 0px; \n \
     background: transparent; \n \
     font-size: 20px; \n \
@@ -1913,8 +1982,25 @@ span.ButtonSpacer { width: 5px; color: transparent; display: inline-block; }\n \
     margin-right: 5px; \n \
     margin-left: 5px; \n \
 } \n \
-.icon-button:hover { \n \
+.iconButton:hover { \n \
     color: blue; \n \
+} \n \
+.assemblyIcon { \n \
+    color: red; \n \
+} \n \
+.informationBarButton { \n \
+    border: 0px; \n \
+    background: transparent; \n \
+    display: inline-block; \n \
+    vertical-align: middle; \n \
+    margin-right: 5px; \n \
+    margin-top: 5px; \n \
+} \n \
+.informationBarButton:hover { \n \
+    color: blue; \n \
+} \n \
+.assemblyIcon { \n \
+    color: red; \n \
 } \n \
 ";
 
