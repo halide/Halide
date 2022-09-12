@@ -278,6 +278,11 @@ protected:
                 v_instr(VectorInstruction::saturating_narrow, x),
                 is_int(x, 16)) ||
 
+            rewrite(
+                saturating_cast(UInt(8, lanes), x),
+                v_instr(VectorInstruction::saturating_narrow, reinterpret(Int(16, lanes), x)),
+                is_uint(x, 16) && upper_bounded(x, (int64_t)std::numeric_limits<int16_t>::max(), this)) ||
+
             //   int32 -> uint16 is supported via SSE41
             (target.has_feature(Target::SSE41) &&
              rewrite(
