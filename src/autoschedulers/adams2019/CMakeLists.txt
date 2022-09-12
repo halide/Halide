@@ -10,6 +10,8 @@ add_custom_command(OUTPUT ${WF_CPP}
                    DEPENDS baseline.weights binary2cpp
                    VERBATIM)
 
+add_library(Adams2019_weights_obj OBJECT ${WF_CPP})
+
 # cost_model, train_cost_model
 add_executable(cost_model.generator cost_model_generator.cpp)
 target_link_libraries(cost_model.generator PRIVATE Halide::Generator)
@@ -25,7 +27,7 @@ add_executable(retrain_cost_model
                DefaultCostModel.cpp
                Weights.cpp
                retrain_cost_model.cpp
-               ${WF_CPP})
+               $<TARGET_OBJECTS:Adams2019_weights_obj>)
 target_link_libraries(retrain_cost_model PRIVATE ASLog cost_model train_cost_model Halide::Halide Halide::Plugin)
 
 ##
@@ -41,7 +43,7 @@ add_autoscheduler(NAME Adams2019
                   LoopNest.cpp
                   State.cpp
                   Weights.cpp
-                  ${WF_CPP})
+                  $<TARGET_OBJECTS:Adams2019_weights_obj>)
 
 target_link_libraries(Halide_Adams2019 PRIVATE ASLog ParamParser cost_model train_cost_model)
 

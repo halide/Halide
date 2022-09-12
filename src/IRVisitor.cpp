@@ -258,7 +258,6 @@ void IRVisitor::visit(const Shuffle *op) {
 }
 
 void IRVisitor::visit(const VectorInstruction *op) {
-    // internal_error << "Always implement VectorInstruction visitor for IRVisitor subclass\n";
     for (const auto &arg : op->args) {
         arg.accept(this);
     }
@@ -523,7 +522,6 @@ void IRGraphVisitor::visit(const Shuffle *op) {
 }
 
 void IRGraphVisitor::visit(const VectorInstruction *op) {
-    // internal_error << "Always implement VectorInstruction visitor for IRGraphVisitor subclass\n";
     for (const auto &arg : op->args) {
         include(arg);
     }

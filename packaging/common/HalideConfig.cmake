@@ -12,14 +12,9 @@ macro(Halide_find_component_dependency comp dep)
         set(Halide_quiet QUIET)
     endif ()
 
-    set(Halide_required)
-    if (${CMAKE_FIND_PACKAGE_NAME}_FIND_REQUIRED_${comp})
-        set(Halide_required REQUIRED)
-    endif ()
+    find_package(${dep} ${ARGN} ${Halide_quiet})
 
-    find_package(${dep} ${ARGN} ${Halide_quiet} ${Halide_required})
-
-    if (NOT ${dep}_FOUND)
+    if (NOT ${dep}_FOUND AND ${CMAKE_FIND_PACKAGE_NAME}_FIND_REQUIRED_${comp})
         Halide_fail("${CMAKE_FIND_PACKAGE_NAME} could not be found because dependency ${dep} could not be found.")
     endif ()
 endmacro()
@@ -48,15 +43,12 @@ if (Halide_comp_static AND Halide_comp_shared)
     Halide_fail("Halide `static` and `shared` components are mutually exclusive.")
 endif ()
 
-# Set configured variables
-set(Halide_VERSION @Halide_VERSION@)
-set(Halide_VERSION_MAJOR @Halide_VERSION_MAJOR@)
-set(Halide_VERSION_MINOR @Halide_VERSION_MINOR@)
-set(Halide_VERSION_PATCH @Halide_VERSION_PATCH@)
-set(Halide_VERSION_TWEAK @Halide_VERSION_TWEAK@)
-
-set(Halide_ENABLE_EXCEPTIONS @Halide_ENABLE_EXCEPTIONS@)
-set(Halide_ENABLE_RTTI @Halide_ENABLE_RTTI@)
+# Inform downstreams of potential compatibility issues. For instance, exceptions
+# and RTTI must both be enabled to build Python bindings and ASAN builds should
+# not be mixed with non-ASAN builds.
+set(Halide_ENABLE_EXCEPTIONS "@Halide_ENABLE_EXCEPTIONS@")
+set(Halide_ENABLE_RTTI "@Halide_ENABLE_RTTI@")
+set(Halide_ASAN_ENABLED "@Halide_ASAN_ENABLED@")
 
 ##
 ## Find dependencies based on components
@@ -64,7 +56,10 @@ set(Halide_ENABLE_RTTI @Halide_ENABLE_RTTI@)
 
 include(CMakeFindDependencyMacro)
 
-find_dependency(HalideHelpers "${Halide_VERSION}" EXACT)
+find_dependency(
+    HalideHelpers "@Halide_VERSION@" EXACT
+    HINTS "${CMAKE_CURRENT_LIST_DIR}/@HalideHelpers_HINT@"
+)
 
 if (Halide_comp_PNG)
     Halide_find_component_dependency(PNG PNG)
@@ -114,3 +109,37 @@ else ()
         Halide_load_targets(shared)
     endif ()
 endif ()
+
+## Hide variables and helper macros that are not part of our API.
+
+# Delete internal component tracking
+foreach (comp IN LISTS Halide_known_components)
+  unset(Halide_comp_${comp})
+endforeach ()
+
+unset(Halide_components)
+unset(Halide_known_components)
+
+# Delete paths to generated CMake files
+unset(Halide_shared_deps)
+unset(Halide_shared_targets)
+unset(Halide_static_deps)
+unset(Halide_static_targets)
+
+# Delete internal macros -- CMake saves redefined macros and functions with a
+# single underscore prefixed so, for example, Halide_fail is still available as
+# _Halide_fail after one redefinition. Doing it twice overwrites both since the
+# saving behavior doesn't continue past the first.
+foreach (i RANGE 0 1)
+    macro(Halide_fail)
+        message(FATAL_ERROR "Cannot call internal API: Halide_fail")
+    endmacro()
+
+    macro(Halide_find_component_dependency)
+        message(FATAL_ERROR "Cannot call internal API: Halide_find_component_dependency")
+    endmacro()
+
+    macro(Halide_load_targets)
+        message(FATAL_ERROR "Cannot call internal API: Halide_load_targets")
+    endmacro()
+endforeach ()

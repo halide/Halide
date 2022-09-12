@@ -46,7 +46,7 @@ setup(
         f"-Dpybind11_ROOT={pybind11.get_cmake_dir()}",
         "-DCMAKE_REQUIRE_FIND_PACKAGE_pybind11=YES",
         "-DHalide_INSTALL_PYTHONDIR=src",
-        "-DCMAKE_INSTALL_RPATH=$ORIGIN",
+        "-DCMAKE_INSTALL_RPATH=$<IF:$<PLATFORM_ID:Darwin>,@loader_path,$ORIGIN>",
         "-DHalide_Python_INSTALL_IMPORTED_DEPS=ON",
         "-DWITH_TESTS=NO",
         "-DWITH_TUTORIALS=NO",

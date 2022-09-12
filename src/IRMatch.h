@@ -211,6 +211,8 @@ struct SpecificExpr {
     constexpr static IRNodeType max_node_type = IRNodeType::Shuffle;
     constexpr static bool canonical = true;
 
+    // Having SpecificExpr hold an Expr instead of a BaseExprNode reference
+    // is catastrophic for performance and stack space usage.
     const BaseExprNode &expr;
 
     template<uint32_t bound>
@@ -585,8 +587,13 @@ IntLiteral pattern_arg(int64_t x) {
 }
 
 template<typename T>
-HALIDE_ALWAYS_INLINE void assert_is_lvalue_if_expr() {
-    static_assert(!std::is_same<typename std::decay<T>::type, Expr>::value || std::is_lvalue_reference<T>::value,
+static constexpr bool is_lvalue_if_expr() {
+    return !std::is_same<typename std::decay<T>::type, Expr>::value || std::is_lvalue_reference<T>::value;
+}
+
+template<typename T>
+HALIDE_ALWAYS_INLINE static constexpr void assert_is_lvalue_if_expr() {
+    static_assert(is_lvalue_if_expr<T>(),
                   "Exprs are captured by reference by IRMatcher objects and so must be lvalues");
 }
 
@@ -1543,40 +1550,56 @@ HALIDE_ALWAYS_INLINE auto intrin(Call::IntrinsicOp intrinsic_op, Args... args) n
 
 template<typename A>
 auto abs(A &&a) noexcept -> Intrin<decltype(pattern_arg(a))> {
+    assert_is_lvalue_if_expr<A>();
     return {Call::abs, pattern_arg(a)};
 }
 template<typename A, typename B>
 auto absd(A &&a, B &&b) noexcept -> Intrin<decltype(pattern_arg(a)), decltype(pattern_arg(b))> {
+    assert_is_lvalue_if_expr<A>();
+    assert_is_lvalue_if_expr<B>();
     return {Call::absd, pattern_arg(a), pattern_arg(b)};
 }
 template<typename A, typename B>
 auto widening_add(A &&a, B &&b) noexcept -> Intrin<decltype(pattern_arg(a)), decltype(pattern_arg(b))> {
+    assert_is_lvalue_if_expr<A>();
+    assert_is_lvalue_if_expr<B>();
     return {Call::widening_add, pattern_arg(a), pattern_arg(b)};
 }
 template<typename A, typename B>
 auto widening_sub(A &&a, B &&b) noexcept -> Intrin<decltype(pattern_arg(a)), decltype(pattern_arg(b))> {
+    assert_is_lvalue_if_expr<A>();
+    assert_is_lvalue_if_expr<B>();
     return {Call::widening_sub, pattern_arg(a), pattern_arg(b)};
 }
 template<typename A, typename B>
 auto widening_mul(A &&a, B &&b) noexcept -> Intrin<decltype(pattern_arg(a)), decltype(pattern_arg(b))> {
+    assert_is_lvalue_if_expr<A>();
+    assert_is_lvalue_if_expr<B>();
     return {Call::widening_mul, pattern_arg(a), pattern_arg(b)};
 }
 template<typename A, typename B>
 auto saturating_add(A &&a, B &&b) noexcept -> Intrin<decltype(pattern_arg(a)), decltype(pattern_arg(b))> {
+    assert_is_lvalue_if_expr<A>();
+    assert_is_lvalue_if_expr<B>();
     return {Call::saturating_add, pattern_arg(a), pattern_arg(b)};
 }
 template<typename A, typename B>
 auto saturating_sub(A &&a, B &&b) noexcept -> Intrin<decltype(pattern_arg(a)), decltype(pattern_arg(b))> {
+    assert_is_lvalue_if_expr<A>();
+    assert_is_lvalue_if_expr<B>();
     return {Call::saturating_sub, pattern_arg(a), pattern_arg(b)};
 }
 template<typename A>
 auto saturating_cast(const Type &t, A &&a) noexcept -> Intrin<decltype(pattern_arg(a))> {
+    assert_is_lvalue_if_expr<A>();
     Intrin<decltype(pattern_arg(a))> p = {Call::saturating_cast, pattern_arg(a)};
     p.optional_type_hint = t;
     return p;
 }
 template<typename A, typename B>
 auto halving_add(A &&a, B &&b) noexcept -> Intrin<decltype(pattern_arg(a)), decltype(pattern_arg(b))> {
+    assert_is_lvalue_if_expr<A>();
+    assert_is_lvalue_if_expr<B>();
     return {Call::halving_add, pattern_arg(a), pattern_arg(b)};
 }
 template<typename A, typename B>
@@ -1585,30 +1608,44 @@ auto sorted_avg(A &&a, B &&b) noexcept -> Intrin<decltype(pattern_arg(a)), declt
 }
 template<typename A, typename B>
 auto halving_sub(A &&a, B &&b) noexcept -> Intrin<decltype(pattern_arg(a)), decltype(pattern_arg(b))> {
+    assert_is_lvalue_if_expr<A>();
+    assert_is_lvalue_if_expr<B>();
     return {Call::halving_sub, pattern_arg(a), pattern_arg(b)};
 }
 template<typename A, typename B>
 auto rounding_halving_add(A &&a, B &&b) noexcept -> Intrin<decltype(pattern_arg(a)), decltype(pattern_arg(b))> {
+    assert_is_lvalue_if_expr<A>();
+    assert_is_lvalue_if_expr<B>();
     return {Call::rounding_halving_add, pattern_arg(a), pattern_arg(b)};
 }
 template<typename A, typename B>
 auto shift_left(A &&a, B &&b) noexcept -> Intrin<decltype(pattern_arg(a)), decltype(pattern_arg(b))> {
+    assert_is_lvalue_if_expr<A>();
+    assert_is_lvalue_if_expr<B>();
     return {Call::shift_left, pattern_arg(a), pattern_arg(b)};
 }
 template<typename A, typename B>
 auto shift_right(A &&a, B &&b) noexcept -> Intrin<decltype(pattern_arg(a)), decltype(pattern_arg(b))> {
+    assert_is_lvalue_if_expr<A>();
+    assert_is_lvalue_if_expr<B>();
     return {Call::shift_right, pattern_arg(a), pattern_arg(b)};
 }
 template<typename A, typename B>
 auto rounding_shift_left(A &&a, B &&b) noexcept -> Intrin<decltype(pattern_arg(a)), decltype(pattern_arg(b))> {
+    assert_is_lvalue_if_expr<A>();
+    assert_is_lvalue_if_expr<B>();
     return {Call::rounding_shift_left, pattern_arg(a), pattern_arg(b)};
 }
 template<typename A, typename B>
 auto rounding_shift_right(A &&a, B &&b) noexcept -> Intrin<decltype(pattern_arg(a)), decltype(pattern_arg(b))> {
+    assert_is_lvalue_if_expr<A>();
+    assert_is_lvalue_if_expr<B>();
     return {Call::rounding_shift_right, pattern_arg(a), pattern_arg(b)};
 }
 template<typename A, typename B>
 auto bitwise_xor(A &&a, B &&b) noexcept -> Intrin<decltype(pattern_arg(a)), decltype(pattern_arg(b))> {
+    assert_is_lvalue_if_expr<A>();
+    assert_is_lvalue_if_expr<B>();
     return {Call::bitwise_xor, pattern_arg(a), pattern_arg(b)};
 }
 template<typename A, typename B>
@@ -1619,6 +1656,8 @@ HALIDE_ALWAYS_INLINE auto operator^(A &&a, B &&b) noexcept -> auto{
 }
 template<typename A, typename B>
 auto bitwise_and(A &&a, B &&b) noexcept -> Intrin<decltype(pattern_arg(a)), decltype(pattern_arg(b))> {
+    assert_is_lvalue_if_expr<A>();
+    assert_is_lvalue_if_expr<B>();
     return {Call::bitwise_and, pattern_arg(a), pattern_arg(b)};
 }
 template<typename A, typename B>
@@ -1629,6 +1668,8 @@ HALIDE_ALWAYS_INLINE auto operator&(A &&a, B &&b) noexcept -> auto{
 }
 template<typename A, typename B>
 auto bitwise_or(A &&a, B &&b) noexcept -> Intrin<decltype(pattern_arg(a)), decltype(pattern_arg(b))> {
+    assert_is_lvalue_if_expr<A>();
+    assert_is_lvalue_if_expr<B>();
     return {Call::bitwise_or, pattern_arg(a), pattern_arg(b)};
 }
 template<typename A, typename B>
@@ -1647,10 +1688,16 @@ auto widening_shift_right(A &&a, B &&b) noexcept -> Intrin<decltype(pattern_arg(
 }
 template<typename A, typename B, typename C>
 auto mul_shift_right(A &&a, B &&b, C &&c) noexcept -> Intrin<decltype(pattern_arg(a)), decltype(pattern_arg(b)), decltype(pattern_arg(c))> {
+    assert_is_lvalue_if_expr<A>();
+    assert_is_lvalue_if_expr<B>();
+    assert_is_lvalue_if_expr<C>();
     return {Call::mul_shift_right, pattern_arg(a), pattern_arg(b), pattern_arg(c)};
 }
 template<typename A, typename B, typename C>
 auto rounding_mul_shift_right(A &&a, B &&b, C &&c) noexcept -> Intrin<decltype(pattern_arg(a)), decltype(pattern_arg(b)), decltype(pattern_arg(c))> {
+    assert_is_lvalue_if_expr<A>();
+    assert_is_lvalue_if_expr<B>();
+    assert_is_lvalue_if_expr<C>();
     return {Call::rounding_mul_shift_right, pattern_arg(a), pattern_arg(b), pattern_arg(c)};
 }
 
@@ -1846,6 +1893,7 @@ inline std::ostream &operator<<(std::ostream &s, const BroadcastOp<A, B> &op) {
 template<typename A, typename B>
 HALIDE_ALWAYS_INLINE auto broadcast(A &&a, B lanes) noexcept -> BroadcastOp<decltype(pattern_arg(a)), decltype(pattern_arg(lanes))> {
     assert_is_lvalue_if_expr<A>();
+    assert_is_lvalue_if_expr<B>();
     return {pattern_arg(a), pattern_arg(lanes)};
 }
 
@@ -2014,7 +2062,8 @@ std::ostream &operator<<(std::ostream &s, const VectorInstructionOp<Args...> &op
 }
 
 template<typename... Args>
-HALIDE_ALWAYS_INLINE auto v_instr(const VectorInstruction::InstructionOp op, Args... args) noexcept -> VectorInstructionOp<decltype(pattern_arg(args))...> {
+HALIDE_ALWAYS_INLINE auto v_instr(const VectorInstruction::InstructionOp op, Args &&...args) noexcept -> VectorInstructionOp<decltype(pattern_arg(args))...> {
+    static_assert(and_reduce((is_lvalue_if_expr<Args>())...), "All parameters to a VectorInstructionOp must be lvalues if Exprs");
     return {op, pattern_arg(args)...};
 }
 

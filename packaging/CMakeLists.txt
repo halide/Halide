@@ -184,6 +184,12 @@ write_basic_package_version_file(HalideHelpersConfigVersion.cmake
                                  COMPATIBILITY SameMajorVersion
                                  ARCH_INDEPENDENT)
 
+# Compute a hint to make it easier to find HalideHelpers from find_package(Halide)
+# This is read by configure_file below.
+file(RELATIVE_PATH HalideHelpers_HINT
+     "${CMAKE_CURRENT_BINARY_DIR}/${Halide_INSTALL_CMAKEDIR}"
+     "${CMAKE_CURRENT_BINARY_DIR}/${Halide_INSTALL_HELPERSDIR}")
+
 configure_file(common/HalideConfig.cmake HalideConfig.cmake @ONLY)
 configure_file(common/HalideHelpersConfig.cmake HalideHelpersConfig.cmake @ONLY)
 
