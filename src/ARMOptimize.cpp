@@ -79,6 +79,9 @@ protected:
         const int lanes = op->type.lanes();
         auto rewrite = IRMatcher::rewriter(IRMatcher::add(op->a, op->b), op->type);
 
+        const Expr i8_1 = make_const(Int(8, lanes * 4), 1);
+        const Expr u8_1 = make_const(UInt(8, lanes * 4), 1);
+
         // Search for accumulating dot product instructions.
         if (target.has_feature(Target::ARMDotProd) &&
             (
@@ -116,28 +119,28 @@ protected:
                 // SDOT
                 rewrite(
                     x + h_add(cast(Int(32, lanes * 4), y), lanes),
-                    v_instr(VectorInstruction::dot_product, x, y, make_const(Int(8, lanes * 4), 1)),
+                    v_instr(VectorInstruction::dot_product, x, y, i8_1),
                     is_int(x, 32, lanes) && is_int(y, 8, lanes * 4)) ||
                 rewrite(
                     h_add(cast(Int(32, lanes * 4), y), lanes) + x,
-                    v_instr(VectorInstruction::dot_product, x, y, make_const(Int(8, lanes * 4), 1)),
+                    v_instr(VectorInstruction::dot_product, x, y, i8_1),
                     is_int(x, 32, lanes) && is_int(y, 8, lanes * 4)) ||
                 // UDOT
                 rewrite(
                     x + h_add(cast(Int(32, lanes * 4), y), lanes),
-                    v_instr(VectorInstruction::dot_product, x, y, make_const(UInt(8, lanes * 4), 1)),
+                    v_instr(VectorInstruction::dot_product, x, y, u8_1),
                     is_int(x, 32, lanes) && is_uint(y, 8, lanes * 4)) ||
                 rewrite(
                     h_add(cast(Int(32, lanes * 4), y), lanes) + x,
-                    v_instr(VectorInstruction::dot_product, x, y, make_const(UInt(8, lanes * 4), 1)),
+                    v_instr(VectorInstruction::dot_product, x, y, u8_1),
                     is_int(x, 32, lanes) && is_uint(y, 8, lanes * 4)) ||
                 rewrite(
                     x + h_add(cast(UInt(32, lanes * 4), y), lanes),
-                    v_instr(VectorInstruction::dot_product, x, y, make_const(UInt(8, lanes * 4), 1)),
+                    v_instr(VectorInstruction::dot_product, x, y, u8_1),
                     is_uint(x, 32, lanes) && is_uint(y, 8, lanes * 4)) ||
                 rewrite(
                     h_add(cast(UInt(32, lanes * 4), y), lanes) + x,
-                    v_instr(VectorInstruction::dot_product, x, y, make_const(UInt(8, lanes * 4), 1)),
+                    v_instr(VectorInstruction::dot_product, x, y, u8_1),
                     is_uint(x, 32, lanes) && is_uint(y, 8, lanes * 4)) ||
 
                 false)) {
@@ -821,6 +824,9 @@ protected:
         const int factor = value_lanes / lanes;
         Expr value = op->value;
 
+        const Expr i8_1 = make_const(Int(8, lanes * 4), 1);
+        const Expr u8_1 = make_const(UInt(8, lanes * 4), 1);
+
         switch (op->op) {
         case VectorReduce::Add: {
             auto rewrite = IRMatcher::rewriter(IRMatcher::h_add(value, lanes), op->type);
@@ -851,16 +857,16 @@ protected:
                     // SDOT
                     rewrite(
                         h_add(cast(Int(32, lanes * 4), x), lanes),
-                        v_instr(VectorInstruction::dot_product, zero, x, make_const(Int(8, lanes * 4), 1)),
+                        v_instr(VectorInstruction::dot_product, zero, x, i8_1),
                         is_int(x, 8, lanes * 4)) ||
                     // UDOT
                     rewrite(
                         h_add(cast(Int(32, lanes * 4), x), lanes),
-                        v_instr(VectorInstruction::dot_product, zero, x, make_const(UInt(8, lanes * 4), 1)),
+                        v_instr(VectorInstruction::dot_product, zero, x, u8_1),
                         is_uint(x, 8, lanes * 4)) ||
                     rewrite(
                         h_add(cast(UInt(32, lanes * 4), x), lanes),
-                        v_instr(VectorInstruction::dot_product, zero, x, make_const(UInt(8, lanes * 4), 1)),
+                        v_instr(VectorInstruction::dot_product, zero, x, u8_1),
                         is_uint(x, 8, lanes * 4)) ||
 
                     false)) {
