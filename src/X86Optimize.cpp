@@ -308,7 +308,8 @@ protected:
             // Current best way to lower absd on x86.
             rewrite(
                 absd(x, y),
-                max(x, y) - min(x, y),
+                // Cast is a no-op reinterpret.
+                cast(op->type, max(x, y) - min(x, y)),
                 is_int(x) && is_int(y)) ||
 
             // pmulh is always supported (via SSE2).
