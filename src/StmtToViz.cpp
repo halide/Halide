@@ -76,16 +76,6 @@ private:
     int popupCount = 0;
     string popups;
 
-    string get_file_name(string fileName) {
-        // remove leading directories from filename
-        string f = fileName;
-        size_t pos = f.find_last_of("/");
-        if (pos != string::npos) {
-            f = f.substr(pos + 1);
-        }
-        return f;
-    }
-
     int unique_id() {
         return ++id_count;
     }
@@ -1843,13 +1833,13 @@ public:
     }
 
     StmtToViz(const string &filename, const Module &m)
-        : id_count(0), getStmtHierarchy(generate_costs(m)),
-          producerConsumerHierarchy(get_file_name(filename), findStmtCost), context_stack(1, 0) {
+        : id_count(0), getStmtHierarchy(generate_costs(m)), producerConsumerHierarchy(findStmtCost),
+          context_stack(1, 0) {
     }
 
     StmtToViz(const string &filename, const Stmt &s)
-        : id_count(0), getStmtHierarchy(generate_costs(s)),
-          producerConsumerHierarchy(get_file_name(filename), findStmtCost), context_stack(1, 0) {
+        : id_count(0), getStmtHierarchy(generate_costs(s)), producerConsumerHierarchy(findStmtCost),
+          context_stack(1, 0) {
     }
 
     string generatetooltipJS(int &tooltipCount) {

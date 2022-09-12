@@ -81,10 +81,8 @@ class ProducerConsumerHierarchy : public IRVisitor {
 public:
     static const string prodConsCSS, scrollToFunctionJSVizToCode;
 
-    // TODO: eventually get rid of output_file_name (should be able to open file within the same
-    // file) - although, maybe want to print out what file is being generated to the screen
-    ProducerConsumerHierarchy(string fileName, FindStmtCost findStmtCostPopulated)
-        : output_file_name(fileName), findStmtCost(findStmtCostPopulated) {
+    ProducerConsumerHierarchy(FindStmtCost findStmtCostPopulated)
+        : findStmtCost(findStmtCostPopulated) {
     }
 
     // generates the html for the producer-consumer hierarchy
@@ -98,7 +96,6 @@ private:
 
     string html;                // main html string
     StmtSizes pre_processor;    // generates the sizes of the nodes
-    string output_file_name;    // used for anchoring
     FindStmtCost findStmtCost;  // used to determine the color of each statement
 
     // used for getting anchor names
