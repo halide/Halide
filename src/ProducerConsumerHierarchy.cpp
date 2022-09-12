@@ -1278,6 +1278,7 @@ div.content { \n \
     margin-right: 2px; \n \
     border: 1px solid rgba(0, 0, 0, 0); \n \
     vertical-align: middle; \n \
+    border-radius: 2px; \n \
 } \n \
 .prodConsColorButton:hover { \n \
     border: 1px solid grey; \n \

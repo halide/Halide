@@ -1613,6 +1613,7 @@ public:
     }
 
     string informationPopup() {
+
         stringstream popup;
 
         popupCount++;
@@ -1622,14 +1623,156 @@ public:
         popup << "    <div class='modal-dialog modal-dialog-scrollable modal-xl'>\n";
         popup << "        <div class='modal-content'>\n";
         popup << "            <div class='modal-header'>\n";
-        popup << "                <h5 class='modal-title' id='stmtHierarchyModalLabel'>Statement\n";
-        popup << "                    Hierarchy\n";
+        popup << "                <h5 class='modal-title' id='stmtHierarchyModalLabel'>How to read "
+                 "this document\n";
         popup << "                </h5>\n";
         popup << "                <button type='button' class='btn-close'\n";
         popup << "                    data-bs-dismiss='modal' aria-label='Close'></button>\n";
         popup << "            </div>\n";
         popup << "            <div class='modal-body'>\n";
-        popup << "               TODO";
+        popup << "<p style='font-size: 20px;'><b\n";
+        popup << "        style='font-weight: bold;'>Two Columns</b>\n";
+        popup << "</p>\n";
+        popup << "<p>There are 2 columns on this page:</p>\n";
+        popup << "<ul>\n";
+        popup << "    <li><b style='font-weight: bold;'>Left side:</b>\n";
+        popup << "        Halide Intermediate Representation (IR) - the\n";
+        popup << "        code that\n";
+        popup << "        Halide generates.</li>\n";
+        popup << "    <li><b style='font-weight: bold;'>Right side:</b>\n";
+        popup << "        Visualization - represents, at\n";
+        popup << "        a high level, the structure of the IR.</li>\n";
+        popup << "</ul>\n";
+        popup << "<p>You can adjust the size of the columns using the\n";
+        popup << "    green resize bar in the middle of the 2. The buttons\n";
+        popup << "    in the middle of this bar will also expand either\n";
+        popup << "    left or right column completely.</p>\n";
+        popup << "<p style='font-size: 20px;'><b\n";
+        popup << "        style='font-weight: bold;'>Left Column\n";
+        popup << "        Functionality</b>\n";
+        popup << "</p>\n";
+        popup << "<p>Here are the different features of the left column:\n";
+        popup << "</p>\n";
+        popup << "<ul>\n";
+
+        tooltipCount++;
+        popup << "<span id='tooltip" << tooltipCount << "' class='tooltip CostTooltip' ";
+        popup << "role='tooltip" << tooltipCount << "'>";
+        popup << "Costs will be shown here. Click to see statement hierarchy.";
+        popup << "</span>";
+
+        popup << "    <li><button id='button" << tooltipCount << "' aria-describedby='tooltip"
+              << tooltipCount << "'\n";
+        popup << "            class='colorButton CostColor0' role='button'\n";
+        popup << "            inclusiverange='0'\n";
+        popup << "            exclusiverange='0'></button>";
+        popup << "<b\n";
+        popup << "            style='font-weight: bold;'>Cost\n";
+        popup << "            Colors:</b>\n";
+        popup << "            Next to every line, there are 2 buttons that are\n";
+        popup << "            colored based on the cost of the line.\n";
+        popup << "            Hovering over them will give more information\n";
+        popup << "            about the cost of that line. If you click on the\n";
+        popup << "            button, a hierarchy of that line will appear,\n";
+        popup << "            which you can explore to see the contents of the\n";
+        popup << "            line. There are 2 buttons because they each\n";
+        popup << "            represent a different type of color:\n";
+        popup << "            <ul>\n";
+        popup << "                <li><b style='font-weight: bold;'>Computation\n";
+        popup << "                        Cost:</b> This is the cost\n";
+        popup << "                    associated with how much computation\n";
+        popup << "                    went\n";
+        popup << "                    into that line of code.</li>\n";
+        popup << "                <li><b style='font-weight: bold;'>Data\n";
+        popup << "                        Movement Cost:</b> This is the\n";
+        popup << "                    cost associated with how much data was\n";
+        popup << "                    moved\n";
+        popup << "                    around in that line of code\n";
+        popup << "                    (read/written).</li>\n";
+        popup << "            </ul>\n";
+        popup << "    </li>\n";
+        popup << "    <br>\n";
+        popup << "    <li>\n";
+        popup << "        <button class='iconButton'><i\n";
+        popup << "                class='bi bi-arrow-right-square'></i></button><b\n";
+        popup << "        style='font-weight: bold;'>See\n";
+        popup << "            Visualization:</b>\n";
+        popup << "        If you click this button, the right column will\n";
+        popup << "        scroll to the related block of that line of\n";
+        popup << "        code.\n";
+        popup << "    </li>\n";
+        popup << "    <li>\n";
+        popup << "        <button class='iconButton assemblyIcon'>";
+        popup
+            << "<svg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='currentColor' "
+               "class='bi bi-filetype-raw' viewBox='0 0 16 16'> <path fill-rule='evenodd' d='M14 "
+               "4.5V14a2 2 0 0 1-2 2v-1a1 1 0 0 0 1-1V4.5h-2A1.5 "
+               "1.5 0 0 1 9.5 3V1H4a1 1 0 0 0-1 1v9H2V2a2 2 0 0 1 2-2h5.5L14 4.5ZM1.597 "
+               "11.85H0v3.999h.782v-1.491h.71l.7 1.491h1.651l.313-1.028h1.336l.314 1.028h.84L5.31 "
+               "11.85h-.925l-1.329 3.96-.783-1.572A1.18 1.18 0 0 0 3 "
+               "13.116c0-.256-.056-.479-.167-.668a1.098 1.098 0 0 0-.478-.44 1.669 1.669 0 0 "
+               "0-.758-.158Zm-.815 1.913v-1.292h.7a.74.74 0 0 1 .507.17c.13.113.194.276.194.49 0 "
+               ".21-.065.368-.194.474-.127.105-.3.158-.518.158H.782Zm4.063-1.148.489 "
+               "1.617H4.32l.49-1.617h.035Zm4.006.445-.74 2.789h-.73L6.326 11.85h.855l.601 "
+               "2.903h.038l.706-2.903h.683l.706 2.903h.04l.596-2.903h.858l-1.055 "
+               "3.999h-.73l-.74-2.789H8.85Z'/></svg>";
+        popup << "</button><b \n";
+        popup << "        style='font-weight: bold;'>See Assembly:</b>\n";
+        popup << "        If you click this button, a new tab will open\n";
+        popup << "        with the assembly scrolled to the related\n";
+        popup << "        assembly instruction of that line of code.\n";
+        popup << "    </li>\n";
+        popup << "</ul>\n";
+        popup << "<p style='font-size: 20px;'><b\n";
+        popup << "        style='font-weight: bold;'>Right Column\n";
+        popup << "        Functionality</b>\n";
+        popup << "</p>\n";
+        popup << "<p>Here are the different features of the right column:\n";
+        popup << "</p>\n";
+        popup << "<ul>\n";
+
+        tooltipCount++;
+        popup << "<span id='tooltip" << tooltipCount << "' class='tooltip' ";
+        popup << "role='tooltip" << tooltipCount << "'>";
+        popup << "Costs will be shown here.";
+        popup << "</span>";
+
+        popup << "    <li><button id='button" << tooltipCount << "' aria-describedby='tooltip"
+              << tooltipCount << "'\n";
+        popup << "            class='colorButton CostColor0' role='button'\n";
+        popup << "            inclusiverange='0'\n";
+        popup << "            exclusiverange='0'></button><b ";
+        popup << "    style='font-weight: bold;'>Cost Colors:</b>\n";
+        popup << "        Cost colors on the right work the same way as\n";
+        popup << "        they do on the left - hovering over them will give\n";
+        popup << "        information about the cost.\n";
+        popup << "    </li>\n";
+        popup << "    <li>\n";
+        popup << "        <button class='iconButton'><i\n";
+        popup << "                class='bi bi-code-square'></i></button><b\n";
+        popup << "        style='font-weight: bold;'>See\n";
+        popup << "            Code:</b>\n";
+        popup << "        If you click this button, the left column will\n";
+        popup << "        scroll to the related line of code of that block\n";
+        popup << "        in the visualization.\n";
+        popup << "    </li>\n";
+        popup << "    <li>\n";
+
+        tooltipCount++;
+        popup << "<span id='tooltip" << tooltipCount << "' class='tooltip' ";
+        popup << "role='tooltip" << tooltipCount << "'>";
+        popup << "More information about the node will appear here.";
+        popup << "</span>";
+
+        popup << "        <button class='info-button' id='button" << tooltipCount
+              << "' aria-describedby='tooltip" << tooltipCount << "'><i\n";
+        popup << "                class='bi bi-info'></i></button><b \n";
+        popup << "        style='font-weight: bold;'>Info Button:</b>\n";
+        popup << "        If you hover over these buttons, they will\n";
+        popup << "        offer more information about that block (eg.\n";
+        popup << "        load/store size, allocation type, etc.)\n";
+        popup << "    </li>\n";
+        popup << "</ul>        \n";
         popup << "            </div>\n";
         popup << "        </div>\n";
         popup << "    </div>\n";
@@ -1969,6 +2112,8 @@ span.ButtonSpacer { width: 5px; color: transparent; display: inline-block; }\n \
     width: 5px; \n \
     margin-right: 2px; \n \
     border: 1px solid rgba(0, 0, 0, 0); \n \
+    vertical-align: middle; \n \
+    border-radius: 2px; \n \
 } \n \
 .colorButton:hover { \n \
     border: 1px solid grey; \n \
