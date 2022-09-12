@@ -278,17 +278,43 @@ protected:
                 v_instr(VectorInstruction::saturating_narrow, x),
                 is_int(x, 16)) ||
 
+            // u16 -> u8 can be done if the MSB is 0.
             rewrite(
                 saturating_cast(UInt(8, lanes), x),
                 v_instr(VectorInstruction::saturating_narrow, reinterpret(Int(16, lanes), x)),
                 is_uint(x, 16) && upper_bounded(x, (int64_t)std::numeric_limits<int16_t>::max(), this)) ||
 
-            //   int32 -> uint16 is supported via SSE41
+            // u16 -> i8 can be done if MSB is 0.
+            rewrite(
+                saturating_cast(Int(8, lanes), x),
+                v_instr(VectorInstruction::saturating_narrow, reinterpret(Int(16, lanes), x)),
+                is_uint(x, 16) && upper_bounded(x, (int64_t)std::numeric_limits<int16_t>::max(), this)) ||
+
+            // u32 -> i16 can be done if the MSB is 0.
+            rewrite(
+                saturating_cast(Int(16, lanes), x),
+                v_instr(VectorInstruction::saturating_narrow, reinterpret(Int(32, lanes), x)),
+                is_uint(x, 32) && upper_bounded(x, (int64_t)std::numeric_limits<int32_t>::max(), this)) ||
+
+            // TODO: is it worth doing u32 -> u16 this way?
+            // i32 -> u16 is supported via SSE41
             (target.has_feature(Target::SSE41) &&
              rewrite(
                  saturating_cast(UInt(16, lanes), x),
                  v_instr(VectorInstruction::saturating_narrow, x),
                  is_int(x, 32))) ||
+
+            // Rewrite double saturating casts for supported types.
+            // int32 -> uint8 and int32 -> int8 are always possible.
+            rewrite(
+                saturating_cast(Int(8, lanes), x),
+                saturating_cast(Int(8, lanes), saturating_cast(Int(16, lanes), x)),
+                is_int(x, 32)) ||
+
+            rewrite(
+                saturating_cast(UInt(8, lanes), x),
+                saturating_cast(UInt(8, lanes), saturating_cast(Int(16, lanes), x)),
+                is_int(x, 32)) ||
 
             // We can redirect signed rounding halving add to unsigned rounding
             // halving add by adding 128 / 32768 to the result if the sign of the
