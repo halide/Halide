@@ -669,7 +669,7 @@ void CodeGen_ARM::compile_func(const LoweredFunc &f, const std::string &simple_n
     // Generate the function body.
     debug(1) << "Generating llvm bitcode for function " << f.name << "...\n";
     debug(1) << "ARM: Optimizing vector instructions...\n";
-    Stmt body = optimize_arm_instructions(f.body, target, this);
+    Stmt body = optimize_arm_instructions(f.body, target, this, f.func_value_bounds);
     debug(2) << "ARM: Lowering after vector instructions:\n"
              << body << "\n\n";
 

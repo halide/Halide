@@ -1004,7 +1004,7 @@ private:
 }  // namespace
 
 Stmt optimize_arm_instructions(const Stmt &s, const Target &target, const CodeGen_LLVM *codegen, const FuncValueBounds &fvb) {
-    Stmt stmt = Optimize_ARM(target, codegen).mutate(s);
+    Stmt stmt = Optimize_ARM(target, codegen, fvb).mutate(s);
 
     if (!stmt.same_as(s)) {
         return stmt;
