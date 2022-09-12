@@ -1045,14 +1045,16 @@ void FindStmtCost::visit(const Fork *op) {
 }
 
 void FindStmtCost::visit(const IfThenElse *op) {
-    vector<const IRNode *> children;
+    vector<const IRNode *> main_node_children;
+
+    const IfThenElse *original_op = op;
 
     while (true) {
         op->condition.accept(this);
         op->then_case.accept(this);
 
-        children.push_back(op->condition.get());
-        children.push_back(op->then_case.get());
+        main_node_children.push_back(op->condition.get());
+        main_node_children.push_back(op->then_case.get());
 
         // if there is no else case, we are done
         if (!op->else_case.defined()) {
@@ -1060,7 +1062,7 @@ void FindStmtCost::visit(const IfThenElse *op) {
         }
 
         op->else_case.accept(this);
-        children.push_back(op->else_case.get());
+        main_node_children.push_back(op->else_case.get());
 
         // if else case is another ifthenelse, recurse and reset op to else case
         if (const IfThenElse *nested_if = op->else_case.as<IfThenElse>()) {
@@ -1075,8 +1077,8 @@ void FindStmtCost::visit(const IfThenElse *op) {
     }
 
     // set op costs - for entire if-statement, inclusive and exclusive costs are the same
-    set_exclusive_costs(op, children);
-    set_inclusive_costs(op, children);
+    set_exclusive_costs(original_op, main_node_children);
+    set_inclusive_costs(original_op, main_node_children);
 }
 
 void FindStmtCost::visit(const Evaluate *op) {
@@ -1210,7 +1212,8 @@ string FindStmtCost::print_node(const IRNode *node) const {
     } else if (type == IRNodeType::Fork) {
         s << "Fork type" << endl;
     } else if (type == IRNodeType::IfThenElse) {
-        s << "IfThenElse type" << endl;
+        auto node1 = dynamic_cast<const IfThenElse *>(node);
+        s << "IfThenElse type - cond: " << node1->condition << endl;
     } else if (type == IRNodeType::Evaluate) {
         s << "Evaluate type" << endl;
     } else if (type == IRNodeType::Prefetch) {
