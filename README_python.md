@@ -15,6 +15,7 @@
         - [hl.OutputBuffer, hl.OutputScalar](#hloutputbuffer-hloutputscalar)
         - [Names](#names)
         - [generate\(\) method](#generate-method)
+        - [Types for Inputs and Outputs](#types-for-inputs-and-outputs)
     - [Using a Generator for JIT compilation](#using-a-generator-for-jit-compilation)
     - [Using a Generator for AOT compilation](#using-a-generator-for-aot-compilation)
     - [Calling Generator-Produced code from Python](#calling-generator-produced-code-from-python)
@@ -380,6 +381,13 @@ It is required that the `generate()` method be defined by the Generator.
 (Note that, by convention, Halide Generators use `g` instead of `self` in their
 `generate()` method to make the expression language terser; this is not in any
 way required, but is recommended to improve readability.)
+
+#### Types for Inputs and Outputs
+
+For all of the Input and Output fields of Generators, you can specify native
+Python types (instead of `hl.Type`) for certain cases that are unambiguous. At
+present, we allow `bool` as an alias for `hl.Bool()`, `int` as an alias for
+`hl.Int(32)`, and `float` as an alias for `hl.Float(32)`.
 
 ### Using a Generator for JIT compilation
 

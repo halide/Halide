@@ -5,8 +5,9 @@ y = hl.Var('y')
 
 @hl.generator(name = "bitpy")
 class BitGenerator:
-    bit_input = hl.InputBuffer(hl.Bool(), 1)
-    bit_constant = hl.InputScalar(hl.Bool())
+    # We can use `bool` as an alias for `hl.Bool()` if we like
+    bit_input = hl.InputBuffer(bool, 1)
+    bit_constant = hl.InputScalar(bool)
 
     bit_output = hl.OutputBuffer(hl.Bool(), 1)
 

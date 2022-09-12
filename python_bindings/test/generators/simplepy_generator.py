@@ -8,7 +8,9 @@ class SimplePy:
     offset = hl.GeneratorParam(0)
 
     buffer_input = hl.InputBuffer(hl.UInt(8), 2)
-    float_arg = hl.InputScalar(hl.Float(32))
+
+    # We can use `float` as an alias for `hl.Float(32)` if we like.
+    float_arg = hl.InputScalar(float)
 
     simple_output = hl.OutputBuffer(hl.Float(32), 2)
 
