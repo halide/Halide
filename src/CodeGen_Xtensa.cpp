@@ -348,6 +348,7 @@ using uint32x128_t = MultipleOfNativeVector<uint32x16_t, 8>;
 using int32x192_t = MultipleOfNativeVector<int32x16_t, 12>;
 using int32x256_t = MultipleOfNativeVector<int32x16_t, 16>;
 using int48x64_t = MultipleOfNativeVector<int48x32_t, 2>;
+using int64x32_t = MultipleOfNativeVector<int64x16_t, 2>;
 using float32x32_t = MultipleOfNativeVector<float32x16_t, 2>;
 using float32x64_t = MultipleOfNativeVector<float32x16_t, 4>;
 
@@ -1661,6 +1662,15 @@ HALIDE_ALWAYS_INLINE int48x32_t halide_xtensa_widen_add_u48(const int48x32_t& a,
   return r;
 }
 
+HALIDE_ALWAYS_INLINE uint32x32_t convert_to_uint32x32_t_from_uint16x32_t(const uint16x32_t& src);
+HALIDE_ALWAYS_INLINE int64x32_t halide_xtensa_widen_right_mul_i64(const uint32x32_t& a, const uint16x32_t &b) {
+  uint32x32_t b32 = convert_to_uint32x32_t_from_uint16x32_t(b);
+
+  return int64x32_t(int64x32_t::from_native_vector,
+    IVP_MULUSN_2X32(a.native_vector[0], xb_vecN_2x32Uv_rtor_xb_vecN_2x32v(b32.native_vector[0])),
+    IVP_MULUSN_2X32(a.native_vector[1], xb_vecN_2x32Uv_rtor_xb_vecN_2x32v(b32.native_vector[1])));
+}
+
 HALIDE_ALWAYS_INLINE int48x32_t halide_xtensa_widen_pair_add_u48(const int48x32_t& a, const uint16x32_t& b, const uint16x32_t& c) {
   int48x32_t r = a;
   IVP_ADDWUANX16U(r, b, c);
@@ -1909,6 +1919,10 @@ HALIDE_ALWAYS_INLINE uint16x32_t convert_to_uint16x32_t_from_uint32x32_t(const u
                        IVP_SELI_16B_EXTRACT_1_OF_2_OFF_0);
 }
 
+HALIDE_ALWAYS_INLINE uint32x16_t convert_to_uint32x16_t_from_int64x16_t(const int64x16_t& src) {
+  return IVP_PACKLN_2X64W(src);
+}
+
 HALIDE_ALWAYS_INLINE int32x16_t convert_to_int32x16_t_from_uint1x16_t(const uint1x16_t& src) {
   xb_vecN_2x32v r = 0;
   IVP_INJBIN_2X32(r, src, 0);
@@ -2134,6 +2148,11 @@ HALIDE_ALWAYS_INLINE int32x16_t halide_xtensa_sat_narrow_with_rounding_shift_i32
 HALIDE_ALWAYS_INLINE int16x32_t halide_xtensa_rounding_mul_shift_right_i16(const int16x32_t& a, const int16x32_t& b, uint16_t shift) {
   xb_vecNx48 wide = a * b;
   return IVP_PACKVRNRNX48(wide, shift);
+}
+
+HALIDE_ALWAYS_INLINE int16x32_t halide_xtensa_rounding_shift_right_i16(const int16x32_t& a, uint32_t shift) {
+  xb_vecNx48 wide = a * (int16x32_t)1;
+  return IVP_PACKVRNX48(wide, shift);
 }
 
 HALIDE_ALWAYS_INLINE int32x16_t halide_xtensa_rounding_shift_right_i32(const int32x16_t& a, uint32_t shift) {
@@ -3371,6 +3390,21 @@ void CodeGen_Xtensa::visit(const Cast *op) {
     } else {
         id = print_assignment(t, "(" + type + ")(" + value + ")");
     }
+}
+
+void CodeGen_Xtensa::visit(const Reinterpret *op) {
+  if (is_native_vector_type(op->type) && is_native_vector_type(op->value.type())) {
+    string value = print_expr(op->value);
+    string op_name = "unsupported_reinterpet";
+    if (is_native_xtensa_vector<int32_t>(op->type) && is_native_xtensa_vector<uint32_t>(op->value.type())) {
+      op_name = "xb_vecN_2x32Uv_rtor_xb_vecN_2x32v";
+    } else if (is_native_xtensa_vector<uint32_t>(op->type) && is_native_xtensa_vector<int32_t>(op->value.type())) {
+      op_name = "xb_vecN_2x32v_rtor_xb_vecN_2x32Uv";
+    }
+    id = print_assignment(op->type, op_name + "(" + value + ")");
+    return ;
+  }
+  CodeGen_C::visit(op);
 }
 
 void CodeGen_Xtensa::visit(const For *op) {

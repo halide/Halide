@@ -49,6 +49,7 @@ protected:
     void visit(const LT *op) override;
     void visit(const GT *op) override;
     void visit(const Or *op) override;
+    void visit(const Reinterpret *op) override;
     void visit(const Store *op) override;
     void visit(const Select *op) override;
     void visit(const Shuffle *op) override;

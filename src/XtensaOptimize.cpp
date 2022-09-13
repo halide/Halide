@@ -99,6 +99,9 @@ bool is_double_native_vector_type(const Type &t) {
 }
 
 Type get_native_xtensa_vector(const Type &t) {
+    if (t.bits() == 64) {
+      return t.with_lanes(16);
+    }
     if (t.bits() == 24 || t.bits() == 48) {
         return t.with_lanes(1536 / t.bits());
     }
@@ -1116,6 +1119,8 @@ private:
             {"halide_xtensa_widen_add_u48", widening_add(wild_u16x, wild_u16x), Pattern::AccumulatorOutput48},
             {"halide_xtensa_widen_add_i48", widening_add(wild_i16x, wild_i16x), Pattern::AccumulatorOutput48},
 
+            {"halide_xtensa_widen_right_mul_u64", widen_right_mul(wild_u32x, wild_u16x), Pattern::AccumulatorOutput64},
+
             {"halide_xtensa_widen_zzzzz", halide_xtensa_widen_mul_u24(wild_u8x256, wild_u8)},
             {"halide_xtensa_widen_zzzzz", halide_xtensa_widen_mul_u24(concat({wild_u8x64, wild_u8x64, wild_u8x64, wild_u8x64}), repeat_each_element(wild_u8x4, 64))},
             {"halide_xtensa_widen_zzzzz", halide_xtensa_widen_mul_u24(repeat_each_element(wild_u8x4, 64), wild_u8x256), Pattern::SwapOps01},
@@ -1736,6 +1741,34 @@ private:
         return IRMutator::visit(op);
     }
 
+    Expr visit(const Reinterpret *op) override {
+        int to_native_lanes = get_native_vector_lanes_num(op->type);
+        int from_native_lanes = get_native_vector_lanes_num(op->value.type());
+        int native_lanes = std::max(to_native_lanes, from_native_lanes);
+
+        if ((to_native_lanes > 0) && (from_native_lanes > 0) && (native_lanes < op->type.lanes())) {
+            const int total_lanes = op->type.lanes();
+            int split_to = op->type.lanes() / native_lanes;
+
+            Expr value = mutate(op->value);
+
+            std::vector<Expr> concat_args;
+            for (int ix = 0; ix < split_to; ix++) {
+                Expr sliced = Call::make(value.type().with_lanes(native_lanes),
+                                         "halide_xtensa_slice_to_native",
+                                         {value, ix, native_lanes, total_lanes},
+                                         Call::PureExtern);
+                Expr r = Reinterpret::make(op->type.with_lanes(native_lanes), sliced);
+                concat_args.push_back(std::move(r));
+            }
+            return Call::make(op->type,
+                              "halide_xtensa_concat_from_native",
+                              concat_args, Call::PureExtern);
+        }
+
+        return IRMutator::visit(op);
+    }
+
     template<typename Op>
     Expr visit_binop(const Op *op) {
         int native_lanes = get_native_vector_lanes_num(op->a.type());
@@ -1900,7 +1933,9 @@ private:
         std::map<std::string, int> slicing_multipliers = {
             // There is only interleaved version of this intrinsic, so 2x vectors are required.
             {"halide_xtensa_narrow_i48_with_shift_i32", 2},
-            {"halide_xtensa_narrow_i48_with_shift_u32", 2}};
+            {"halide_xtensa_narrow_i48_with_shift_u32", 2},
+            {"halide_xtensa_widen_right_mul_i64", 2}
+        };
         int slicing_multiplier = 1;
         if (slicing_multipliers.count(op->name) > 0) {
             slicing_multiplier = slicing_multipliers[op->name];
