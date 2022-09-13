@@ -243,7 +243,7 @@ int main(int argc, char **argv) {
     check(narrow((u32(u16x) + 15) >> 4), rounding_halving_add(u16x, u16(14)) >> u16(3));
 
     // But not if the constant can't fit in the narrower type
-    check(narrow((u16(u8x) + 500) >> 4), narrow((u16(u8x) + 500) >> 4));
+    check(narrow((u16(u8x) + 500) >> 4), narrow((widen_right_add(cast<uint16_t>(500), u8x)) >> 4));
 
     check((u64(u32x) + 8) / 16, u64(rounding_shift_right(u32x, 4)));
     check(u16(min((u64(u32x) + 8) / 16, 65535)), u16_sat(rounding_shift_right(u32x, 4)));
