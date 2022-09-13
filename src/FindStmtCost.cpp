@@ -84,10 +84,12 @@ string FindStmtCost::generate_computation_cost_tooltip(const IRNode *op, bool in
         computation_cost_inclusive = get_computation_cost_percentage(op, true);
     }
 
-    map<string, string> tableRows;
-    tableRows["Depth"] = to_string(depth);
-    tableRows["Computation Cost (Exclusive)"] = to_string(computation_cost_exclusive) + "%";
-    tableRows["Computation Cost (Inclusive)"] = to_string(computation_cost_inclusive) + "%";
+    vector<pair<string, string>> tableRows;
+    tableRows.push_back({"Depth", to_string(depth)});
+    tableRows.push_back(
+        {"Computation Cost (Inclusive)", to_string(computation_cost_inclusive) + "%"});
+    tableRows.push_back(
+        {"Computation Cost (Exclusive)", to_string(computation_cost_exclusive) + "%"});
 
     return tooltip_table(tableRows, extraNote);
 }
@@ -105,15 +107,17 @@ string FindStmtCost::generate_data_movement_cost_tooltip(const IRNode *op, bool 
         data_movement_cost_inclusive = get_data_movement_cost_percentage(op, true);
     }
 
-    map<string, string> tableRows;
-    tableRows["Depth"] = to_string(depth);
-    tableRows["Data Movement Cost (Exclusive)"] = to_string(data_movement_cost_exclusive) + "%";
-    tableRows["Data Movement Cost (Inclusive)"] = to_string(data_movement_cost_inclusive) + "%";
+    vector<pair<string, string>> tableRows;
+    tableRows.push_back({"Depth", to_string(depth)});
+    tableRows.push_back(
+        {"Data Movement Cost (Inclusive)", to_string(data_movement_cost_inclusive) + "%"});
+    tableRows.push_back(
+        {"Data Movement Cost (Exclusive)", to_string(data_movement_cost_exclusive) + "%"});
 
     return tooltip_table(tableRows, extraNote);
 }
 
-string FindStmtCost::tooltip_table(map<string, string> &table, string extraNote) {
+string FindStmtCost::tooltip_table(vector<pair<string, string>> &table, string extraNote) {
     stringstream s;
     s << "<table class='tooltipTable'>";
     for (auto &row : table) {

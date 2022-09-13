@@ -123,7 +123,7 @@ private:
     void set_max_costs(const Module &m);
 
     // builds the tooltip cost table based on given input table
-    string tooltip_table(map<string, string> &table, string extraNote);
+    string tooltip_table(vector<pair<string, string>> &table, string extraNote);
 
     // gets scaling factor for Load/Store based on lanes and bits
     int get_scaling_factor(uint8_t bits, uint16_t lanes) const;
