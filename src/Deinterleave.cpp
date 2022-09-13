@@ -407,6 +407,12 @@ Expr deinterleave(Expr e, int starting_lane, int lane_stride, int new_lanes, con
     Deinterleaver d(starting_lane, lane_stride, new_lanes, lets);
     e = d.mutate(e);
     e = common_subexpression_elimination(e);
+    if (const Shuffle *shuffle = e.as<Shuffle>()) {
+        if (shuffle->is_extract_element() && shuffle->vectors.size() == 1) {
+            // calling `simplify` here will produce an infinite recursive loop.
+            return e;
+        }
+    }
     return simplify(e);
 }
 }  // namespace
