@@ -100,11 +100,12 @@ function(add_halide_generator TARGET)
                "#include \"Halide.h\"\n"
                "HALIDE_GENERATOR_PYSTUB(${GEN_NAME}, ${MODULE_NAME})\n")
 
-        file(WRITE
-             "${CMAKE_CURRENT_BINARY_DIR}/${TARGET}.py_stub_generated.cpp"
-             "${stub_text}")
+        set(stub_file "${CMAKE_CURRENT_BINARY_DIR}/${TARGET}.${GEN_NAME}.${MODULE_NAME}.py_stub_generated.cpp")
+        if (NOT EXISTS "${stub_file}")
+            file(WRITE "${stub_file}" "${stub_text}")
+        endif()
 
-        Python3_add_library(${TARGET}_pystub MODULE WITH_SOABI "${CMAKE_CURRENT_BINARY_DIR}/${TARGET}.py_stub_generated.cpp" ${ARG_SOURCES})
+        Python3_add_library(${TARGET}_pystub MODULE WITH_SOABI "${stub_file}" ${ARG_SOURCES})
         set_target_properties(${TARGET}_pystub PROPERTIES
                               CXX_VISIBILITY_PRESET hidden
                               VISIBILITY_INLINES_HIDDEN ON
@@ -656,16 +657,20 @@ function(_Halide_fix_xcode TARGET)
 endfunction()
 
 function(_Halide_target_export_single_symbol TARGET SYMBOL)
-    file(WRITE
-         "${CMAKE_CURRENT_BINARY_DIR}/${TARGET}.ldscript.apple"
-         "_${SYMBOL}\n")
-    file(WRITE
-         "${CMAKE_CURRENT_BINARY_DIR}/${TARGET}.ldscript"
-         "{ global: ${SYMBOL}; local: *; };\n")
+    if (NOT EXISTS "${CMAKE_CURRENT_BINARY_DIR}/${TARGET}.${SYMBOL}.ldscript.apple")
+        file(WRITE
+             "${CMAKE_CURRENT_BINARY_DIR}/${TARGET}.${SYMBOL}.ldscript.apple"
+             "_${SYMBOL}\n")
+    endif()
+    if (NOT EXISTS "${CMAKE_CURRENT_BINARY_DIR}/${TARGET}.${SYMBOL}.ldscript")
+        file(WRITE
+             "${CMAKE_CURRENT_BINARY_DIR}/${TARGET}.${SYMBOL}.ldscript"
+             "{ global: ${SYMBOL}; local: *; };\n")
+    endif ()
     target_export_script(
         ${TARGET}
-        APPLE_LD "${CMAKE_CURRENT_BINARY_DIR}/${TARGET}.ldscript.apple"
-        GNU_LD "${CMAKE_CURRENT_BINARY_DIR}/${TARGET}.ldscript"
+        APPLE_LD "${CMAKE_CURRENT_BINARY_DIR}/${TARGET}.${SYMBOL}.ldscript.apple"
+        GNU_LD "${CMAKE_CURRENT_BINARY_DIR}/${TARGET}.${SYMBOL}.ldscript"
     )
 endfunction()
 
@@ -677,7 +682,9 @@ function(_Halide_gengen_ensure)
         # configs (e.g. Xcode), because, uh, reasons, so we'll create
         # an empty one here to satisfy it
         set(empty "${CMAKE_CURRENT_BINARY_DIR}/_Halide_gengen.empty.cpp")
-        file(WRITE "${empty}" "/* nothing */\n")
+        if (NOT EXISTS "${empty}")
+            file(WRITE "${empty}" "/* nothing */\n")
+        endif ()
 
         add_executable(_Halide_gengen "${empty}")
         target_link_libraries(_Halide_gengen PRIVATE Halide::Generator)
