@@ -1957,6 +1957,20 @@ div.collapseButtons { \n \
 ";
 
 const string StmtToViz::scrollToFunctionJSCodeToViz = "\n \
+// scroll to function - code to viz \n \
+function makeVisibleViz(element) { \n \
+    if (!element) return; \n \
+    if (element.className == 'mainContent') return; \n \
+    if (element.style.visibility == 'hidden') { \n \
+        element.style = ''; \n \
+        show = document.getElementById(element.id + '-show'); \n \
+        hide = document.getElementById(element.id + '-hide'); \n \
+        show.style.display = 'none'; \n \
+        hide.style.display = 'block'; \n \
+        return; \n \
+    } \n \
+    makeVisibleViz(element.parentNode); \n \
+} \n \
 function getOffsetTop(element) { \n \
     if (!element) return 0; \n \
     if (element.id == 'ProducerConsumerViz') return 0; \n \
@@ -1970,6 +1984,7 @@ function getOffsetLeft(element) { \n \
 function scrollToFunctionCodeToViz(id) { \n \
     var container = document.getElementById('ProducerConsumerViz'); \n \
     var scrollToObject = document.getElementById(id); \n \
+    makeVisibleViz(scrollToObject); \n \
     container.scrollTo({ \n \
         top: getOffsetTop(scrollToObject) - 20, \n \
         left: getOffsetLeft(scrollToObject) - 40, \n \

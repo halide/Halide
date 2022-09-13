@@ -130,6 +130,7 @@ string ProducerConsumerHierarchy::generate_producer_consumer_html(const Module &
     pre_processor.generate_sizes(m);
 
     html = "";
+    numOfNodes = 0;
     startModuleTraversal(m);
 
     return html.c_str();
@@ -172,6 +173,7 @@ void ProducerConsumerHierarchy::open_box_div(string className, const IRNode *op)
     open_content_div();
 }
 void ProducerConsumerHierarchy::close_box_div() {
+    close_div();  // body div (opened at end of close_header())
     close_div();  // content div
     close_div();  // main box div
 }
@@ -204,6 +206,22 @@ void ProducerConsumerHierarchy::close_div() {
 void ProducerConsumerHierarchy::open_header(const string &header, string anchorName) {
     open_header_div();
 
+    numOfNodes++;
+
+    // buttons div
+    html += "<div class='collapseExpandButtons'>";
+    // expand button - hidden to start
+    html += "<button id='prodCons" + std::to_string(numOfNodes) +
+            "-show' class='iconButton prodConsToggle' onclick='toggleCollapse(" +
+            std::to_string(numOfNodes) +
+            ")' style='display: none;'><i class='bi "
+            "bi-chevron-bar-down'></i></button>";
+    // collapse button
+    html += "<button id='prodCons" + std::to_string(numOfNodes) +
+            "-hide' class='iconButton prodConsToggle' onclick='toggleCollapse(" +
+            std::to_string(numOfNodes) + ")' ><i class='bi bi-chevron-bar-up'></i></button>";
+    html += "</div>";
+
     open_box_header_title_div();
 
     html += "<span id='" + anchorName + "_viz'>";
@@ -222,6 +240,9 @@ void ProducerConsumerHierarchy::close_header(string anchorName) {
     close_div();  // header table div
     see_code_button_div(anchorName);
     close_div();  // header div
+
+    // open body div
+    html += "<div id='prodCons" + std::to_string(numOfNodes) + "' class='boxBody'>";
 }
 void ProducerConsumerHierarchy::div_header(const string &header, StmtSize *size,
                                            string anchorName) {
@@ -767,7 +788,6 @@ void ProducerConsumerHierarchy::visit(const For *op) {
 }
 
 void ProducerConsumerHierarchy::visit(const IfThenElse *op) {
-
     // open main if tree
     html += "<div class='tf-tree tf-gap-sm tf-custom-prodCons'>";
     html += "<ul>";
@@ -1013,6 +1033,22 @@ string ProducerConsumerHierarchy::generate_prodCons_js() {
     prodConsJS += "    } \n";
     prodConsJS += "    ); \n";
     prodConsJS += "} \n";
+    prodConsJS += "function toggleCollapse(id) {\n ";
+    prodConsJS += "    var buttonShow = document.getElementById('prodCons' + id + '-show');\n";
+    prodConsJS += "    var buttonHide = document.getElementById('prodCons' + id + '-hide');\n";
+    prodConsJS += "    var body = document.getElementById('prodCons' + id);\n";
+    prodConsJS += "    if (body.style.visibility != 'hidden') {\n";
+    prodConsJS += "        body.style.visibility = 'hidden';\n";
+    prodConsJS += "        body.style.height = '0px';\n";
+    prodConsJS += "        body.style.width = '0px';\n";
+    prodConsJS += "        buttonShow.style.display = 'block';\n";
+    prodConsJS += "        buttonHide.style.display = 'none';\n";
+    prodConsJS += "    } else {\n";
+    prodConsJS += "        body.style = '';\n";
+    prodConsJS += "        buttonShow.style.display = 'none';\n";
+    prodConsJS += "        buttonHide.style.display = 'block';\n";
+    prodConsJS += "    }\n";
+    prodConsJS += "}\n ";
 
     return prodConsJS;
 }
@@ -1189,6 +1225,7 @@ div.box { \n \
     margin: 5px; \n \
     padding: 5px; \n \
     display: flex; \n \
+    width: max-content; \n \
 } \n \
 div.boxHeader { \n \
     padding: 5px; \n \
@@ -1284,5 +1321,8 @@ div.content { \n \
 } \n \
 div.boxHeaderTitle { \n \
     font-weight: bold; \n \
+} \n \
+.prodConsToggle { \n \
+    margin-right: 5px; \n \
 } \n \
 ";

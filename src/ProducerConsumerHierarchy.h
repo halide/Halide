@@ -11,7 +11,8 @@ using namespace std;
 using namespace Halide;
 using namespace Internal;
 
-#define MAX_CONDITION_LENGTH 30
+#define MAX_CONDITION_LENGTH 35
+#define MAX_NUMBER_OF_NODES 15
 
 struct StmtSize {
     map<string, string> writes;
@@ -97,6 +98,7 @@ private:
     string html;                // main html string
     StmtSizes pre_processor;    // generates the sizes of the nodes
     FindStmtCost findStmtCost;  // used to determine the color of each statement
+    int numOfNodes;             // used when deciding whether to show all nodes or not
 
     // used for getting anchor names
     int ifCount = 0;
