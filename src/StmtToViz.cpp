@@ -2211,16 +2211,24 @@ resizeBar.addEventListener('mousedown', (event) => { \n \
     }, false); \n \
 }); \n \
 function resize(e) { \n \
+    if (e.x < 25) { \n \
+        collapseCode(); \n \
+        return; \n \
+    } \n \
     const size = `${e.x}px`; \n \
+    codeDiv.style.display = 'block'; \n \
+    prodConsDiv.style.display = 'block'; \n \
     codeDiv.style.flexBasis = 'calc(' + size + ' - 24px)'; \n \
     prodConsDiv.style.flexBasis = 'calc(100% - ' + size + ' + 8px)'; \n \
 } \n \
 function collapseCode() { \n \
-    codeDiv.style.flexBasis = '0px'; \n \
+    codeDiv.style.display = 'none'; \n \
+    prodConsDiv.style.display = 'block'; \n \
     prodConsDiv.style.flexBasis = 'calc(100%)'; \n \
 } \n \
 function collapseViz() { \n \
-    prodConsDiv.style.flexBasis = '0px'; \n \
+    prodConsDiv.style.display = 'none'; \n \
+    codeDiv.style.display = 'block'; \n \
     codeDiv.style.flexBasis = 'calc(100% - 16px)'; \n \
 } \n \
 ";
@@ -2237,6 +2245,8 @@ function openAssembly(lineNum) {\n \
         '	src=\\'https://cdnjs.cloudflare.com/ajax/libs/codemirror/6.65.7/mode/z80/z80.min.js\\'></scr' + 'ipt>' +\n \
         '<scri' + 'pt' +\n \
         '	src=\\'https://cdnjs.cloudflare.com/ajax/libs/codemirror/6.65.7/addon/selection/mark-selection.min.js\\'></scri' + 'pt>' +\n \
+        '<scri' + 'pt src=\\'https://cdnjs.cloudflare.com/ajax/libs/codemirror/6.65.7/addon/search/searchcursor.min.js\\'></scri' + 'pt>' + \n \
+        '<scr' + 'ipt src=\\'https://cdnjs.cloudflare.com/ajax/libs/codemirror/6.65.7/addon/search/search.min.js\\'></scri' + 'pt>' + \n \
         '</head>';\n \
 \n \
     innerHTML += '<style>' +\n \
