@@ -14,8 +14,8 @@
 #include "DefaultCostModel.h"
 #include "HalideBuffer.h"
 #include "NetworkSize.h"
-#include "cost_model.h"
-#include "train_cost_model.h"
+#include "adams2019_cost_model.h"
+#include "adams2019_train_cost_model.h"
 
 // This is an embedded version of `baseline.weights`.
 // The embedding is done using binary2cpp.

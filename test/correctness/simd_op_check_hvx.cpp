@@ -458,7 +458,7 @@ public:
         check("vmpyi(v*.h,v*.h)", hvx_width / 2, i16_1 * i16_2);
         check("vmpyio(v*.w,v*.h)", hvx_width / 2, i32_1 * i32(i16_1));
         check("vmpyie(v*.w,v*.uh)", hvx_width / 2, i32_1 * i32(u16_1));
-        check("vmpy(v*.uh,v*.uh)", hvx_width / 2, u32_1 * u32(u16_1));
+        check("vmpyie(v*.w,v*.uh)", hvx_width / 2, u32_1 * u32(u16_1));
         check("vmpyieo(v*.h,v*.h)", hvx_width / 4, i32_1 * i32_2);
         // The inconsistency in the expected instructions here is
         // correct. For bytes, the unsigned value is first, for half
@@ -514,6 +514,7 @@ public:
         check("v*.h += vmpy(v*.ub,r*.b)", hvx_width / 1, i16_1 + 127 * i16(u8_1));
         check("v*.uw += vmpy(v*.uh,r*.uh)", hvx_width / 2, u32_1 + 65535 * u32(u16_1));
 
+        check("v*.h += vmpy(v*.b,v*.b)", hvx_width / 1, i16_1 + 2 * i16(i8_1));
         check("v*.h += vmpy(v*.ub,r*.b)", hvx_width / 1, i16_1 - i16(u8_1) * -127);
         check("v*.h += vmpyi(v*.h,r*.b)", hvx_width / 2, i16_1 - i16_2 * -127);
 

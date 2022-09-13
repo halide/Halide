@@ -1436,6 +1436,12 @@ struct Intrin {
         Expr arg1 = std::get<const_min(1, sizeof...(Args) - 1)>(args).make(state, type_hint);
         if (intrin == Call::absd) {
             return absd(arg0, arg1);
+        } else if (intrin == Call::widen_right_add) {
+            return widen_right_add(arg0, arg1);
+        } else if (intrin == Call::widen_right_mul) {
+            return widen_right_mul(arg0, arg1);
+        } else if (intrin == Call::widen_right_sub) {
+            return widen_right_sub(arg0, arg1);
         } else if (intrin == Call::widening_add) {
             return widening_add(arg0, arg1);
         } else if (intrin == Call::widening_sub) {
@@ -1553,6 +1559,19 @@ auto absd(A &&a, B &&b) noexcept -> Intrin<decltype(pattern_arg(a)), decltype(pa
     assert_is_lvalue_if_expr<B>();
     return {Call::absd, pattern_arg(a), pattern_arg(b)};
 }
+template<typename A, typename B>
+auto widen_right_add(A &&a, B &&b) noexcept -> Intrin<decltype(pattern_arg(a)), decltype(pattern_arg(b))> {
+    return {Call::widen_right_add, pattern_arg(a), pattern_arg(b)};
+}
+template<typename A, typename B>
+auto widen_right_mul(A &&a, B &&b) noexcept -> Intrin<decltype(pattern_arg(a)), decltype(pattern_arg(b))> {
+    return {Call::widen_right_mul, pattern_arg(a), pattern_arg(b)};
+}
+template<typename A, typename B>
+auto widen_right_sub(A &&a, B &&b) noexcept -> Intrin<decltype(pattern_arg(a)), decltype(pattern_arg(b))> {
+    return {Call::widen_right_sub, pattern_arg(a), pattern_arg(b)};
+}
+
 template<typename A, typename B>
 auto widening_add(A &&a, B &&b) noexcept -> Intrin<decltype(pattern_arg(a)), decltype(pattern_arg(b))> {
     assert_is_lvalue_if_expr<A>();
@@ -2055,7 +2074,7 @@ struct VectorReduceOp {
     A a;
     B lanes;
 
-    constexpr static uint32_t binds = bindings<A>::mask;
+    constexpr static uint32_t binds = bindings<A>::mask | bindings<B>::mask;
 
     constexpr static IRNodeType min_node_type = IRNodeType::VectorReduce;
     constexpr static IRNodeType max_node_type = IRNodeType::VectorReduce;
@@ -2820,6 +2839,43 @@ HALIDE_ALWAYS_INLINE auto is_min_value(A &&a) noexcept -> IsMinValue<decltype(pa
 template<typename A>
 std::ostream &operator<<(std::ostream &s, const IsMinValue<A> &op) {
     s << "is_min_value(" << op.a << ")";
+    return s;
+}
+
+template<typename A>
+struct HasEvenLanes {
+    struct pattern_tag {};
+    A a;
+
+    constexpr static uint32_t binds = bindings<A>::mask;
+
+    // This rule is a boolean-valued predicate. Bools have type UIntImm.
+    constexpr static IRNodeType min_node_type = IRNodeType::UIntImm;
+    constexpr static IRNodeType max_node_type = IRNodeType::UIntImm;
+    constexpr static bool canonical = true;
+
+    constexpr static bool foldable = true;
+
+    HALIDE_ALWAYS_INLINE
+    void make_folded_const(halide_scalar_value_t &val, halide_type_t &ty, MatcherState &state) const {
+        // a is almost certainly a very simple pattern (e.g. a wild), so just inline the make method.
+        Type t = a.make(state, {}).type();
+        val.u.u64 = (t.lanes() % 2 == 0);
+        ty.code = halide_type_uint;
+        ty.bits = 1;
+        ty.lanes = t.lanes();
+    }
+};
+
+template<typename A>
+HALIDE_ALWAYS_INLINE auto has_even_lanes(A &&a) noexcept -> HasEvenLanes<decltype(pattern_arg(a))> {
+    assert_is_lvalue_if_expr<A>();
+    return {pattern_arg(a)};
+}
+
+template<typename A>
+std::ostream &operator<<(std::ostream &s, const HasEvenLanes<A> &op) {
+    s << "has_even_lanes(" << op.a << ")";
     return s;
 }
 

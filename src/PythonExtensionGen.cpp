@@ -54,10 +54,6 @@ bool can_convert(const LoweredArgument *arg) {
     if (arg->type.is_float() && arg->type.bits() != 32 && arg->type.bits() != 64) {
         return false;
     }
-    if (arg->is_buffer() && arg->type.bits() == 1) {
-        // The Python buffer API doesn't support bit arrays.
-        return false;
-    }
     if ((arg->type.is_int() || arg->type.is_uint()) &&
         arg->type.bits() != 1 &&
         arg->type.bits() != 8 && arg->type.bits() != 16 &&
@@ -329,8 +325,12 @@ bool unpack_buffer(PyObject *py_obj,
             // uppercase is unsigned int.
             halide_buf.type.code = halide_type_uint;
         }
-        const char *type_codes = "bB?hHiIlLqQfd";  // integers and floats
-        if (strchr(type_codes, *p)) {
+        const char *type_codes = "bBhHiIlLqQfd";  // integers and floats
+        if (*p == '?') {
+            // Special-case bool, so that it is a distinct type vs uint8_t
+            // (even though the memory layout is identical)
+            halide_buf.type.bits = 1;
+        } else if (strchr(type_codes, *p)) {
             halide_buf.type.bits = (uint8_t)py_buf.itemsize * 8;
         } else {
             // We don't handle 's' and 'p' (char[]) and 'P' (void*)
