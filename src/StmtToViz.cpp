@@ -2236,45 +2236,45 @@ function collapseViz() { \n \
 const string StmtToViz::assemblyCodeJS = "\n \
 // open assembly code  \n \
 function openAssembly(lineNum) {\n \
-    var innerHTML = '<head><link rel=\\'stylesheet\\'' +\n \
-        'href=\\'https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.52.2/codemirror.min.css\\'>' +\n \
-        '</link>' +\n \
-        '<scr' + 'ipt' +\n \
-        '	src=\\'https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.52.2/codemirror.min.js\\'></scr' + 'ipt>' +\n \
-        '<scri' + 'pt' +\n \
-        '	src=\\'https://cdnjs.cloudflare.com/ajax/libs/codemirror/6.65.7/mode/z80/z80.min.js\\'></scr' + 'ipt>' +\n \
-        '<scri' + 'pt' +\n \
-        '	src=\\'https://cdnjs.cloudflare.com/ajax/libs/codemirror/6.65.7/addon/selection/mark-selection.min.js\\'></scri' + 'pt>' +\n \
+    var innerHTML = '<head><link rel=\\'stylesheet\\'' + \n \
+        'href=\\'https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.52.2/codemirror.min.css\\'>' + \n \
+        '</link>' + \n \
+        '<scr' + 'ipt' + \n \
+        '	src=\\'https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.52.2/codemirror.min.js\\'></scr' + 'ipt>' + \n \
+        '<scri' + 'pt src=\\'https://cdnjs.cloudflare.com/ajax/libs/codemirror/6.65.7/mode/gas/gas.min.js\\'></scr' + 'ipt>' + \n \
+ \n \
+        '<scri' + 'pt' + \n \
+        '	src=\\'https://cdnjs.cloudflare.com/ajax/libs/codemirror/6.65.7/addon/selection/mark-selection.min.js\\'></scri' + 'pt>' + \n \
         '<scri' + 'pt src=\\'https://cdnjs.cloudflare.com/ajax/libs/codemirror/6.65.7/addon/search/searchcursor.min.js\\'></scri' + 'pt>' + \n \
         '<scr' + 'ipt src=\\'https://cdnjs.cloudflare.com/ajax/libs/codemirror/6.65.7/addon/search/search.min.js\\'></scri' + 'pt>' + \n \
-        '</head>';\n \
-\n \
-    innerHTML += '<style>' +\n \
-        '    .CodeMirror {' +\n \
-        '        height: 100%;' +\n \
-        '        width: 100%;' +\n \
-        '    }' +\n \
-        '    .styled-background {' +\n \
-        '        background-color: #ff7;' +\n \
-        '    }' +\n \
-        '</style>';\n \
-\n \
-    var assembly = document.getElementById('assemblyContent');\n \
-    console.log(assembly);\n \
-    innerHTML += '<div id=\\'codeValue\\' style=\\'display: none\\'>' + assembly.innerHTML + '</div>';\n \
-    innerHTML += '<scr' + 'ipt>' +\n \
-        'var codeHTML = document.getElementById(\\'codeValue\\'); ' +\n \
-        'var code = codeHTML.textContent; ' +\n \
-        'code = code.trimLeft(); ' +\n \
-        'var myCodeMirror = CodeMirror(document.body, {value: code, lineNumbers: true, mode: \\'z80\\', readOnly: true,});' +\n \
-        'function jumpToLine(i) {' +\n \
-        '	i -= 1;' +\n \
-        '	var t = myCodeMirror.charCoords({ line: i, ch: 0 }, \\'local\\').top;' +\n \
-        '	var middleHeight = myCodeMirror.getScrollerElement().offsetHeight / 2;' +\n \
-        '	myCodeMirror.scrollIntoView({ line: i+20, ch: 0 });' +\n \
-        '	myCodeMirror.markText({ line: i, ch: 0 }, { line: i, ch: 200 }, { className: \\'styled-background\\' });' +\n \
-        '}' +\n \
-        'jumpToLine('+lineNum+');' +\n \
+        '</head>'; \n \
+    innerHTML += '<style>' + \n \
+        '    .CodeMirror {' + \n \
+        '        height: 100%;' + \n \
+        '        width: 100%;' + \n \
+        '    }' + \n \
+        '    .styled-background {' + \n \
+        '        background-color: #ff7;' + \n \
+        '    }' + \n \
+        '</style>'; \n \
+    var assembly = document.getElementById('assemblyContent'); \n \
+    console.log(assembly); \n \
+    innerHTML += '<div id=\\'codeValue\\' style=\\'display: none\\'>' + assembly.innerHTML + '</div>'; \n \
+    innerHTML += '<scr' + 'ipt>' + \n \
+        'var codeHTML = document.getElementById(\\'codeValue\\'); ' + \n \
+        'var code = codeHTML.textContent; ' + \n \
+        'code = code.trimLeft(); ' + \n \
+        'var myCodeMirror = CodeMirror(document.body, {value: code, lineNumbers: true, mode: {name: \\'gas\\', architecture: \\'ARMv6\\'}, readOnly: true,});' + \n \
+        'function jumpToLine(i) {' + \n \
+        '	i -= 1;' + \n \
+        '	var t = myCodeMirror.charCoords({ line: i, ch: 0 }, \\'local\\').top;' + \n \
+        '	var middleHeight = myCodeMirror.getScrollerElement().offsetHeight / 2;' + \n \
+        '	myCodeMirror.scrollIntoView({ line: i+20, ch: 0 });' + \n \
+        '	myCodeMirror.markText({ line: i, ch: 0 }, { line: i, ch: 200 }, { className: \\'styled-background\\' });' + \n \
+        '   myCodeMirror.focus();' + \n \
+        '   myCodeMirror.setCursor({line: i, ch: 0});' + \n \
+        '}' + \n \
+        'jumpToLine(' + lineNum + ');' + \n \
 \n \
         '</scri' + 'pt>';\n \
 \n \
