@@ -11,6 +11,9 @@ namespace Halide {
 namespace Internal {
 
 /** Implement intrinsics with non-intrinsic using equivalents. */
+Expr lower_widen_right_add(const Expr &a, const Expr &b);
+Expr lower_widen_right_mul(const Expr &a, const Expr &b);
+Expr lower_widen_right_sub(const Expr &a, const Expr &b);
 Expr lower_widening_add(const Expr &a, const Expr &b);
 Expr lower_widening_mul(const Expr &a, const Expr &b);
 Expr lower_widening_sub(const Expr &a, const Expr &b);
