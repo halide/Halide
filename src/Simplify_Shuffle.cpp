@@ -9,6 +9,10 @@ using std::vector;
 
 Expr Simplify::visit(const Shuffle *op, ExprInfo *bounds) {
     if (op->is_extract_element()) {
+        if (op->vectors.size() == 1) {
+            // We cannot simplify this further.
+            return op;
+        }
         int index = op->indices[0];
         internal_assert(index >= 0);
         for (const Expr &vector : op->vectors) {
