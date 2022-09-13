@@ -598,7 +598,7 @@ string ProducerConsumerHierarchy::data_movement_div(const IRNode *op) {
 
     return s.str();
 }
-string ProducerConsumerHierarchy::tooltip_table(map<string, string> &table) {
+string ProducerConsumerHierarchy::tooltip_table(vector<pair<string, string>> &table) {
     stringstream s;
     s << "<table class='tooltipTable'>";
     for (auto &row : table) {
@@ -854,10 +854,9 @@ void ProducerConsumerHierarchy::visit(const Store *op) {
 
     string header = "Store " + op->name;
 
-    map<string, string> tableRows;
-
-    tableRows["Vector Size"] = to_string(op->index.type().lanes());
-    tableRows["Bit Size"] = to_string(op->index.type().bits());
+    vector<pair<string, string>> tableRows;
+    tableRows.push_back({"Vector Size", to_string(op->index.type().lanes())});
+    tableRows.push_back({"Bit Size", to_string(op->index.type().bits())});
 
     header += info_tooltip(tooltip_table(tableRows));
 
@@ -901,19 +900,19 @@ void ProducerConsumerHierarchy::visit(const Load *op) {
 
     header += "Load " + op->name;
 
-    map<string, string> tableRows;
+    vector<pair<string, string>> tableRows;
 
     if (findStmtCost.is_local_variable(op->name)) {
-        tableRows["Variable Type"] = "local var";
+        tableRows.push_back({"Variable Type", "local var"});
     } else {
-        tableRows["Variable Type"] = "global var";
+        tableRows.push_back({"Variable Type", "global var"});
     }
 
-    tableRows["Bit Size"] = to_string(op->index.type().bits());
-    tableRows["Vector Size"] = to_string(op->index.type().lanes());
+    tableRows.push_back({"Bit Size", to_string(op->index.type().bits())});
+    tableRows.push_back({"Vector Size", to_string(op->index.type().lanes())});
 
     if (op->param.defined()) {
-        tableRows["Parameter"] = op->param.name();
+        tableRows.push_back({"Parameter", op->param.name()});
     }
 
     header += info_tooltip(tooltip_table(tableRows));
@@ -958,29 +957,29 @@ void ProducerConsumerHierarchy::visit(const Allocate *op) {
 
     string header = "Allocate " + op->name;
 
-    map<string, string> tableRows;
-    tableRows["Memory Type"] = get_memory_type(op->memory_type);
+    vector<pair<string, string>> tableRows;
+    tableRows.push_back({"Memory Type", get_memory_type(op->memory_type)});
 
     if (!is_const_one(op->condition)) {
-        tableRows["Condition"] = to_string(op->condition);
+        tableRows.push_back({"Condition", to_string(op->condition)});
     }
     if (op->new_expr.defined()) {
         internal_error << "\n"
                        << "ProducerConsumerHierarchy: Allocate " << op->name
                        << " `op->new_expr.defined()` is not supported.\n\n";
 
-        tableRows["New Expr"] = to_string(op->new_expr);
+        tableRows.push_back({"New Expr", to_string(op->new_expr)});
     }
     if (!op->free_function.empty()) {
         internal_error << "\n"
                        << "ProducerConsumerHierarchy: Allocate " << op->name
                        << " `!op->free_function.empty()` is not supported.\n\n";
 
-        tableRows["Free Function"] = to_string(op->free_function);
+        tableRows.push_back({"Free Function", to_string(op->free_function)});
     }
 
-    tableRows["Bit Size"] = to_string(op->type.bits());
-    tableRows["Vector Size"] = to_string(op->type.lanes());
+    tableRows.push_back({"Bit Size", to_string(op->type.bits())});
+    tableRows.push_back({"Vector Size", to_string(op->type.lanes())});
 
     header += info_tooltip(tooltip_table(tableRows));
 

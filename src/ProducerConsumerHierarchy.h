@@ -156,7 +156,7 @@ private:
     string color_button(int colorRange);
     string computation_div(const IRNode *op);
     string data_movement_div(const IRNode *op);
-    string tooltip_table(map<string, string> &table);
+    string tooltip_table(vector<pair<string, string>> &table);
     void cost_colors(const IRNode *op);
 
     void visit_function(const LoweredFunc &func);
