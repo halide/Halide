@@ -68,6 +68,7 @@ const string headers = R"INLINE_CODE(
 #include <stdio.h>
 #include <string.h>
 #include <type_traits>
+#include <fenv.h>
 )INLINE_CODE";
 
 // We now add definitions of things in the runtime which are
