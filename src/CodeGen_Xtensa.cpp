@@ -1663,7 +1663,7 @@ HALIDE_ALWAYS_INLINE int48x32_t halide_xtensa_widen_add_u48(const int48x32_t& a,
 }
 
 HALIDE_ALWAYS_INLINE uint32x32_t convert_to_uint32x32_t_from_uint16x32_t(const uint16x32_t& src);
-HALIDE_ALWAYS_INLINE int64x32_t halide_xtensa_widen_right_mul_i64(const uint32x32_t& a, const uint16x32_t &b) {
+HALIDE_ALWAYS_INLINE int64x32_t halide_xtensa_widen_right_mul_u64(const uint32x32_t& a, const uint16x32_t &b) {
   uint32x32_t b32 = convert_to_uint32x32_t_from_uint16x32_t(b);
 
   return int64x32_t(int64x32_t::from_native_vector,

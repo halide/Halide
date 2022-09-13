@@ -1934,7 +1934,8 @@ private:
             // There is only interleaved version of this intrinsic, so 2x vectors are required.
             {"halide_xtensa_narrow_i48_with_shift_i32", 2},
             {"halide_xtensa_narrow_i48_with_shift_u32", 2},
-            {"halide_xtensa_widen_right_mul_i64", 2}
+            {"halide_xtensa_widen_right_mul_i64", 2},
+            {"halide_xtensa_widen_right_mul_u64", 2}
         };
         int slicing_multiplier = 1;
         if (slicing_multipliers.count(op->name) > 0) {
