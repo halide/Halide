@@ -2248,12 +2248,7 @@ Expr floor(Expr x) {
         return Internal::Call::make(t, "floor_f16", {std::move(x)}, Internal::Call::PureExtern);
     } else {
         t = Float(32, t.lanes());
-        if (t.is_int() || t.is_uint()) {
-            // Already an integer
-            return cast(t, std::move(x));
-        } else {
-            return Internal::Call::make(t, "floor_f32", {cast(t, std::move(x))}, Internal::Call::PureExtern);
-        }
+        return Internal::Call::make(t, "floor_f32", {cast(t, std::move(x))}, Internal::Call::PureExtern);
     }
 }
 
@@ -2266,12 +2261,7 @@ Expr ceil(Expr x) {
         return Internal::Call::make(t, "ceil_f16", {std::move(x)}, Internal::Call::PureExtern);
     } else {
         t = Float(32, t.lanes());
-        if (t.is_int() || t.is_uint()) {
-            // Already an integer
-            return cast(t, std::move(x));
-        } else {
-            return Internal::Call::make(t, "ceil_f32", {cast(t, std::move(x))}, Internal::Call::PureExtern);
-        }
+        return Internal::Call::make(t, "ceil_f32", {cast(t, std::move(x))}, Internal::Call::PureExtern);
     }
 }
 
@@ -2284,12 +2274,7 @@ Expr round(Expr x) {
         return Internal::Call::make(t, "round_f16", {std::move(x)}, Internal::Call::PureExtern);
     } else {
         t = Float(32, t.lanes());
-        if (t.is_int() || t.is_uint()) {
-            // Already an integer
-            return cast(t, std::move(x));
-        } else {
-            return Internal::Call::make(t, "round_f32", {cast(t, std::move(x))}, Internal::Call::PureExtern);
-        }
+        return Internal::Call::make(t, "round_f32", {cast(t, std::move(x))}, Internal::Call::PureExtern);
     }
 }
 
@@ -2302,12 +2287,7 @@ Expr trunc(Expr x) {
         return Internal::Call::make(t, "trunc_f16", {std::move(x)}, Internal::Call::PureExtern);
     } else {
         t = Float(32, t.lanes());
-        if (t.is_int() || t.is_uint()) {
-            // Already an integer
-            return cast(t, std::move(x));
-        } else {
-            return Internal::Call::make(t, "trunc_f32", {cast(t, std::move(x))}, Internal::Call::PureExtern);
-        }
+        return Internal::Call::make(t, "trunc_f32", {cast(t, std::move(x))}, Internal::Call::PureExtern);
     }
 }
 
