@@ -68,6 +68,13 @@ public:
         : InstructionSelector(target, codegen) {
     }
 
+    using IRGraphMutator::mutate;
+    Expr mutate(const Expr &e) override {
+        Expr expr = IRGraphMutator::mutate(e);
+        internal_assert(expr.type() == e.type()) << "(X86Optimize) Found type mismatch: " << e << " -> " << expr << "\n";
+        return expr;
+    }
+
 protected:
     bool should_peephole_optimize(const Type &type) {
         // We only have peephole optimizations for vectors here.
