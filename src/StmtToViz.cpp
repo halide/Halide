@@ -1,5 +1,4 @@
 #include "StmtToViz.h"
-#include "DependencyGraph.h"
 #include "Error.h"
 #include "FindStmtCost.h"
 #include "GetAssemblyInfoViz.cpp"
@@ -56,7 +55,6 @@ private:
                                                           // statements
     ProducerConsumerHierarchy producerConsumerHierarchy;  // used for getting the hierarchy of
                                                           // producer/consumer
-    DependencyGraph dependencyGraph;                      // used for getting the dependency graph
     GetAssemblyInfoViz getAssemblyInfoViz;  // used for getting the assembly line numbers
 
     int curr_line_num;  // for accessing div of that line
@@ -1196,26 +1194,6 @@ public:
 
         stream << prodConsHTML;
     }
-    void generate_dependency_graph(const Module &m) {
-
-        string dependGraphHTML = dependencyGraph.generate_dependency_graph(m);
-        if (PRINT_DEPENDENCIES) cout << dependGraphHTML << endl;
-
-        // stream << dependGraphHTML;
-        stream << "In construction...\n";
-    }
-    void generate_dependency_graph(const Stmt &s) {
-        internal_error << "\n"
-                       << "\n"
-                       << "StmtToViz::generate_dependency_graph(const Stmt &s): Not implemented"
-                       << "\n\n";
-
-        // TODO: fill this in
-
-        // Stmt inlined_s = substitute_in_all_lets(s);
-        // string dependGraphHTML = dependencyGraph.generate_dependency_graph(inlined_s);
-        string dependGraphHTML = dependencyGraph.generate_dependency_graph(s);
-    }
 
     void print(const Expr &ir) {
         // debug(0) << "entering: " << ir << "\n";
@@ -1262,8 +1240,6 @@ public:
 
         stream << open_div("FunctionBody Indent", id);
 
-        // Stmt inlined_body = substitute_in_all_lets(op.body);
-        // print(inlined_body);
         print(op.body);
 
         stream << close_div();
