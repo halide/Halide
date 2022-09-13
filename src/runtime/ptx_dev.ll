@@ -156,16 +156,17 @@ define weak_odr double @ceil_f64(double %x) nounwind uwtable readnone alwaysinli
        ret double %y
 }
 
-declare float @__nv_rintf(float) nounwind readnone
-declare double @__nv_rint(double) nounwind readnone
+; In ptx, rint rounds ties to nearest even
+declare float @llvm.rint.f32(float) nounwind readnone
+declare double @llvm.rint.f64(double) nounwind readnone
 
 define weak_odr float @round_f32(float %x) nounwind uwtable readnone alwaysinline {
-       %y = tail call float @__nv_rintf(float %x) nounwind readnone
+       %y = tail call float @llvm.rint.f32(float %x) nounwind readnone
        ret float %y
 }
 
 define weak_odr double @round_f64(double %x) nounwind uwtable readnone alwaysinline {
-       %y = tail call double @__nv_rint(double %x) nounwind readnone
+       %y = tail call double @llvm.rint.f64(double %x) nounwind readnone
        ret double %y
 }
 
