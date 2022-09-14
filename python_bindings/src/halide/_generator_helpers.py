@@ -695,7 +695,7 @@ class Generator(ABC):
         funcs = []
         for name, f in self._output_funcs.items():
             _check(f.defined(), "Output '%s' was not defined." % name)
-            self._requirements[name]._check_types_and_dimensions(f.output_types(), f.dimensions())
+            self._requirements[name]._check_types_and_dimensions(f.types(), f.dimensions())
             funcs.append(f)
 
         self._pipeline = Pipeline(funcs)
