@@ -79,7 +79,6 @@ public:
 
     // generates the html for the producer-consumer hierarchy
     string generate_producer_consumer_html(const Module &m);
-    string generate_producer_consumer_html(const Stmt &stmt);
 
     string generate_prodCons_js();
 

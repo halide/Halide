@@ -18,9 +18,6 @@ void CostPreProcessor::traverse(const Module &m) {
         f.body.accept(this);
     }
 }
-void CostPreProcessor::traverse(const Stmt &s) {
-    s.accept(this);
-}
 
 int CostPreProcessor::get_lock_access_count(const string name) const {
     auto it = lock_access_counts.find(name);
@@ -62,12 +59,6 @@ void FindStmtCost::generate_costs(const Module &m) {
     cost_preprocessor.traverse(m);
     traverse(m);
     set_max_costs(m);
-}
-void FindStmtCost::generate_costs(const Stmt &stmt) {
-    cost_preprocessor.traverse(stmt);
-    stmt.accept(this);
-    cout << "here!!! " << endl;
-    // set_max_costs();
 }
 
 string FindStmtCost::generate_computation_cost_tooltip(const IRNode *op, bool inclusive,

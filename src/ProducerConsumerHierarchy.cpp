@@ -138,14 +138,6 @@ string ProducerConsumerHierarchy::generate_producer_consumer_html(const Module &
 
     return html;
 }
-string ProducerConsumerHierarchy::generate_producer_consumer_html(const Stmt &stmt) {
-    pre_processor.generate_sizes(stmt);
-
-    html = "";
-    stmt.accept(this);
-
-    return html;
-}
 
 void ProducerConsumerHierarchy::startModuleTraversal(const Module &m) {
 

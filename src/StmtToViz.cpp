@@ -1179,20 +1179,10 @@ public:
         findStmtCost.generate_costs(m);
         return findStmtCost;
     }
-    FindStmtCost generate_costs(const Stmt &s) {
-        findStmtCost.generate_costs(s);
-        return findStmtCost;
-    }
+
     void generate_producer_consumer_hierarchy(const Module &m) {
 
         string prodConsHTML = producerConsumerHierarchy.generate_producer_consumer_html(m);
-        if (PRINT_PROD_CONS) cout << prodConsHTML << endl;
-
-        stream << prodConsHTML;
-    }
-    void generate_producer_consumer_hierarchy(const Stmt &s) {
-
-        string prodConsHTML = producerConsumerHierarchy.generate_producer_consumer_html(s);
         if (PRINT_PROD_CONS) cout << prodConsHTML << endl;
 
         stream << prodConsHTML;
@@ -1806,12 +1796,6 @@ public:
 
     StmtToViz(const string &filename, const Module &m)
         : id_count(0), getStmtHierarchy(generate_costs(m)), producerConsumerHierarchy(findStmtCost),
-          ifCount(0), producerConsumerCount(0), forCount(0), storeCount(0), allocateCount(0),
-          functionCount(0), tooltipCount(0), popupCount(0), context_stack(1, 0) {
-    }
-
-    StmtToViz(const string &filename, const Stmt &s)
-        : id_count(0), getStmtHierarchy(generate_costs(s)), producerConsumerHierarchy(findStmtCost),
           ifCount(0), producerConsumerCount(0), forCount(0), storeCount(0), allocateCount(0),
           functionCount(0), tooltipCount(0), popupCount(0), context_stack(1, 0) {
     }

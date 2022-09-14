@@ -42,7 +42,6 @@ class CostPreProcessor : public IRVisitor {
 public:
     // starts the traversal based on Module
     void traverse(const Module &m);
-    void traverse(const Stmt &s);
 
     // returns the number of lock accesses of the given lock name
     int get_lock_access_count(const string name) const;
@@ -72,7 +71,6 @@ public:
     }
     // starts the traversal of the given node
     void generate_costs(const Module &m);
-    void generate_costs(const Stmt &stmt);
 
     // generates tooltip information based on given node
     string generate_computation_cost_tooltip(const IRNode *op, bool inclusive, string extraNote);
