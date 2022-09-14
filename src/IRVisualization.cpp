@@ -1,4 +1,4 @@
-#include "ProducerConsumerHierarchy.h"
+#include "IRVisualization.h"
 #include "IROperator.h"
 #include "Module.h"
 
@@ -19,9 +19,6 @@ string to_string(T value) {
 
 void StmtSizes::generate_sizes(const Module &m) {
     traverse(m);
-}
-void StmtSizes::generate_sizes(const Stmt &stmt) {
-    stmt.accept(this);
 }
 
 StmtSize StmtSizes::get_size(const IRNode *node) const {
@@ -127,9 +124,9 @@ void StmtSizes::visit(const Load *op) {
 }
 
 /*
- * ProducerConsumerHierarchy class
+ * IRVisualization class
  */
-string ProducerConsumerHierarchy::generate_producer_consumer_html(const Module &m) {
+string IRVisualization::generate_ir_visualization_html(const Module &m) {
     pre_processor.generate_sizes(m);
 
     html = "";
@@ -139,7 +136,7 @@ string ProducerConsumerHierarchy::generate_producer_consumer_html(const Module &
     return html;
 }
 
-void ProducerConsumerHierarchy::startModuleTraversal(const Module &m) {
+void IRVisualization::startModuleTraversal(const Module &m) {
 
     // print main function first
     for (const auto &f : m.functions()) {
@@ -156,7 +153,7 @@ void ProducerConsumerHierarchy::startModuleTraversal(const Module &m) {
     }
 }
 
-void ProducerConsumerHierarchy::open_box_div(string className, const IRNode *op) {
+void IRVisualization::open_box_div(string className, const IRNode *op) {
     html += "<div class='box center " + className + "'";
     html += ">";
 
@@ -167,36 +164,36 @@ void ProducerConsumerHierarchy::open_box_div(string className, const IRNode *op)
 
     open_content_div();
 }
-void ProducerConsumerHierarchy::close_box_div() {
+void IRVisualization::close_box_div() {
     close_div();  // body div (opened at end of close_header())
     close_div();  // content div
     close_div();  // main box div
 }
-void ProducerConsumerHierarchy::open_function_box_div() {
+void IRVisualization::open_function_box_div() {
     html += "<div class='center FunctionBox'>";
     html += "<div class='functionContent'>";
 }
-void ProducerConsumerHierarchy::close_function_box_div() {
+void IRVisualization::close_function_box_div() {
     close_div();  // content div
     close_div();  // main box div
 }
-void ProducerConsumerHierarchy::open_header_div() {
+void IRVisualization::open_header_div() {
     html += "<div class='boxHeader'>";
 }
-void ProducerConsumerHierarchy::open_box_header_title_div() {
+void IRVisualization::open_box_header_title_div() {
     html += "<div class='boxHeaderTitle'>";
 }
-void ProducerConsumerHierarchy::open_box_header_table_div() {
+void IRVisualization::open_box_header_table_div() {
     html += "<div class='boxHeaderTable'>";
 }
-void ProducerConsumerHierarchy::open_store_div() {
+void IRVisualization::open_store_div() {
     html += "<div class='store'>";
 }
-void ProducerConsumerHierarchy::close_div() {
+void IRVisualization::close_div() {
     html += "</div>";
 }
 
-void ProducerConsumerHierarchy::open_header(const string &header, string anchorName) {
+void IRVisualization::open_header(const string &header, string anchorName) {
     open_header_div();
 
     numOfNodes++;
@@ -204,14 +201,14 @@ void ProducerConsumerHierarchy::open_header(const string &header, string anchorN
     // buttons div
     html += "<div class='collapseExpandButtons'>";
     // expand button - hidden to start
-    html += "<button id='prodCons" + std::to_string(numOfNodes) +
-            "-show' class='iconButton prodConsToggle' onclick='toggleCollapse(" +
+    html += "<button id='irViz" + std::to_string(numOfNodes) +
+            "-show' class='iconButton irVizToggle' onclick='toggleCollapse(" +
             std::to_string(numOfNodes) +
             ")' style='display: none;'><i class='bi "
             "bi-chevron-bar-down'></i></button>";
     // collapse button
-    html += "<button id='prodCons" + std::to_string(numOfNodes) +
-            "-hide' class='iconButton prodConsToggle' onclick='toggleCollapse(" +
+    html += "<button id='irViz" + std::to_string(numOfNodes) +
+            "-hide' class='iconButton irVizToggle' onclick='toggleCollapse(" +
             std::to_string(numOfNodes) + ")' ><i class='bi bi-chevron-bar-up'></i></button>";
     html += "</div>";
 
@@ -228,17 +225,16 @@ void ProducerConsumerHierarchy::open_header(const string &header, string anchorN
 
     open_box_header_table_div();
 }
-void ProducerConsumerHierarchy::close_header(string anchorName) {
+void IRVisualization::close_header(string anchorName) {
 
     close_div();  // header table div
     see_code_button_div(anchorName);
     close_div();  // header div
 
     // open body div
-    html += "<div id='prodCons" + std::to_string(numOfNodes) + "' class='boxBody'>";
+    html += "<div id='irViz" + std::to_string(numOfNodes) + "' class='boxBody'>";
 }
-void ProducerConsumerHierarchy::div_header(const string &header, StmtSize *size,
-                                           string anchorName) {
+void IRVisualization::div_header(const string &header, StmtSize *size, string anchorName) {
 
     open_header(header, anchorName);
 
@@ -249,7 +245,7 @@ void ProducerConsumerHierarchy::div_header(const string &header, StmtSize *size,
 
     close_header(anchorName);
 }
-void ProducerConsumerHierarchy::function_div_header(const string &functionName, string anchorName) {
+void IRVisualization::function_div_header(const string &functionName, string anchorName) {
 
     html += "<div class='functionHeader'>";
 
@@ -263,7 +259,7 @@ void ProducerConsumerHierarchy::function_div_header(const string &functionName, 
 
     html += "</div>";
 }
-vector<string> ProducerConsumerHierarchy::get_allocation_sizes(const Allocate *op) const {
+vector<string> IRVisualization::get_allocation_sizes(const Allocate *op) const {
     vector<string> sizes;
 
     string type;
@@ -285,8 +281,8 @@ vector<string> ProducerConsumerHierarchy::get_allocation_sizes(const Allocate *o
 
     return sizes;
 }
-void ProducerConsumerHierarchy::allocate_div_header(const Allocate *op, const string &header,
-                                                    string anchorName) {
+void IRVisualization::allocate_div_header(const Allocate *op, const string &header,
+                                          string anchorName) {
     open_header(header, anchorName);
 
     vector<string> allocationSizes = get_allocation_sizes(op);
@@ -294,8 +290,7 @@ void ProducerConsumerHierarchy::allocate_div_header(const Allocate *op, const st
 
     close_header(anchorName);
 }
-void ProducerConsumerHierarchy::for_loop_div_header(const For *op, const string &header,
-                                                    string anchorName) {
+void IRVisualization::for_loop_div_header(const For *op, const string &header, string anchorName) {
     open_header(header, anchorName);
 
     string loopSize = get_loop_iterator(op);
@@ -304,20 +299,20 @@ void ProducerConsumerHierarchy::for_loop_div_header(const For *op, const string 
     close_header(anchorName);
 }
 
-void ProducerConsumerHierarchy::if_tree(const IRNode *op, const string &header, string anchorName) {
+void IRVisualization::if_tree(const IRNode *op, const string &header, string anchorName) {
     html += "<li>";
     html += "<span class='tf-nc if-node'>";
 
     open_box_div("IfBox", op);
     div_header(header, nullptr, anchorName);
 }
-void ProducerConsumerHierarchy::close_if_tree() {
+void IRVisualization::close_if_tree() {
     close_box_div();
     html += "</span>";
     html += "</li>";
 }
 
-void ProducerConsumerHierarchy::read_write_table(StmtSize &size) {
+void IRVisualization::read_write_table(StmtSize &size) {
     // open table
     html += "<table class='costTable'>";
 
@@ -337,7 +332,7 @@ void ProducerConsumerHierarchy::read_write_table(StmtSize &size) {
     // produces and consumes are empty
     if (size.empty()) {
         internal_error << "\n\n"
-                       << "ProducerConsumerHierarchy::read_write_table - size is empty"
+                       << "IRVisualization::read_write_table - size is empty"
                        << "\n";
     }
 
@@ -408,7 +403,7 @@ void ProducerConsumerHierarchy::read_write_table(StmtSize &size) {
     // close table
     html += "</table>";
 }
-void ProducerConsumerHierarchy::allocate_table(vector<string> &allocationSizes) {
+void IRVisualization::allocate_table(vector<string> &allocationSizes) {
     // open table
     html += "<table class='costTable'>";
 
@@ -453,7 +448,7 @@ void ProducerConsumerHierarchy::allocate_table(vector<string> &allocationSizes) 
     // close table
     html += "</table>";
 }
-void ProducerConsumerHierarchy::for_loop_table(string loop_size) {
+void IRVisualization::for_loop_table(string loop_size) {
     // open table
     html += "<table class='costTable'>";
 
@@ -479,7 +474,7 @@ void ProducerConsumerHierarchy::for_loop_table(string loop_size) {
     html += "</table>";
 }
 
-void ProducerConsumerHierarchy::see_code_button_div(string anchorName, bool putDiv) {
+void IRVisualization::see_code_button_div(string anchorName, bool putDiv) {
     if (putDiv) html += "<div>";
     html += "<button class='iconButton'";
     html += "onclick='scrollToFunctionVizToCode(\"" + anchorName + "\")'>";
@@ -488,96 +483,96 @@ void ProducerConsumerHierarchy::see_code_button_div(string anchorName, bool putD
     if (putDiv) html += "</div>";
 }
 
-string ProducerConsumerHierarchy::info_tooltip(string toolTipText, string className = "") {
+string IRVisualization::info_tooltip(string toolTipText, string className = "") {
     string ss;
 
     // info-button
-    prodConsTooltipCount++;
-    ss += "<button id='prodConsButton" + std::to_string(prodConsTooltipCount) + "' ";
-    ss += "aria-describedby='prodConsTooltip" + std::to_string(prodConsTooltipCount) + "' ";
+    irVizTooltipCount++;
+    ss += "<button id='irVizButton" + std::to_string(irVizTooltipCount) + "' ";
+    ss += "aria-describedby='irVizTooltip" + std::to_string(irVizTooltipCount) + "' ";
     ss += "class='info-button' role='button' ";
     ss += ">";
     ss += "<i class='bi bi-info'></i>";
     ss += "</button>";
 
     // tooltip span
-    ss += "<span id='prodConsTooltip" + std::to_string(prodConsTooltipCount) + "' ";
+    ss += "<span id='irVizTooltip" + std::to_string(irVizTooltipCount) + "' ";
     ss += "class='tooltip";
     if (className != "") {
         ss += " " + className;
     }
     ss += "'";
-    ss += "role='prodConsTooltip" + std::to_string(prodConsTooltipCount) + "'>";
+    ss += "role='irVizTooltip" + std::to_string(irVizTooltipCount) + "'>";
     ss += toolTipText;
     ss += "</span>";
 
     return ss;
 }
 
-void ProducerConsumerHierarchy::generate_computation_cost_div(const IRNode *op) {
+void IRVisualization::generate_computation_cost_div(const IRNode *op) {
     // skip if it's a store
     if (op->node_type == IRNodeType::Store) return;
 
-    prodConsTooltipCount++;
+    irVizTooltipCount++;
 
     string tooltipText = findStmtCost.generate_computation_cost_tooltip(op, true, "");
 
     // tooltip span
-    html += "<span id='prodConsTooltip" + std::to_string(prodConsTooltipCount) +
+    html += "<span id='irVizTooltip" + std::to_string(irVizTooltipCount) +
             "' class='tooltip CostTooltip' ";
-    html += "role='prodConsTooltip" + std::to_string(prodConsTooltipCount) + "'>";
+    html += "role='irVizTooltip" + std::to_string(irVizTooltipCount) + "'>";
     html += tooltipText;
     html += "</span>";
 
     int computation_range = findStmtCost.get_computation_color_range(op, true);
     string className = "computation-cost-div CostColor" + to_string(computation_range);
-    html += "<div id='prodConsButton" + std::to_string(prodConsTooltipCount) + "' ";
-    html += "aria-describedby='prodConsTooltip" + std::to_string(prodConsTooltipCount) + "' ";
+    html += "<div id='irVizButton" + std::to_string(irVizTooltipCount) + "' ";
+    html += "aria-describedby='irVizTooltip" + std::to_string(irVizTooltipCount) + "' ";
     html += "class='" + className + "'>";
 
     close_div();
 }
-void ProducerConsumerHierarchy::generate_memory_cost_div(const IRNode *op) {
+void IRVisualization::generate_memory_cost_div(const IRNode *op) {
     // skip if it's a store
     if (op->node_type == IRNodeType::Store) return;
 
-    prodConsTooltipCount++;
+    irVizTooltipCount++;
 
     string tooltipText = findStmtCost.generate_data_movement_cost_tooltip(op, true, "");
 
     // tooltip span
-    html += "<span id='prodConsTooltip" + std::to_string(prodConsTooltipCount) +
+    html += "<span id='irVizTooltip" + std::to_string(irVizTooltipCount) +
             "' class='tooltip CostTooltip' ";
-    html += "role='prodConsTooltip" + std::to_string(prodConsTooltipCount) + "'>";
+    html += "role='irVizTooltip" + std::to_string(irVizTooltipCount) + "'>";
     html += tooltipText;
     html += "</span>";
 
     int data_movement_range = findStmtCost.get_data_movement_color_range(op, true);
     string className = "memory-cost-div CostColor" + to_string(data_movement_range);
-    html += "<div id='prodConsButton" + std::to_string(prodConsTooltipCount) + "' ";
-    html += "aria-describedby='prodConsTooltip" + std::to_string(prodConsTooltipCount) + "' ";
+    html += "<div id='irVizButton" + std::to_string(irVizTooltipCount) + "' ";
+    html += "aria-describedby='irVizTooltip" + std::to_string(irVizTooltipCount) + "' ";
     html += "class='" + className + "'>";
 
     close_div();
 }
-void ProducerConsumerHierarchy::open_content_div() {
+void IRVisualization::open_content_div() {
     html += "<div class='content'>";
 }
 
-string ProducerConsumerHierarchy::color_button(int colorRange) {
+string IRVisualization::color_button(int colorRange) {
     stringstream s;
 
-    prodConsTooltipCount++;
-    s << "<button id='prodConsButton" << prodConsTooltipCount << "' ";
-    s << "aria-describedby='prodConsTooltip" << prodConsTooltipCount << "' ";
-    s << "class='prodConsColorButton CostColor" + to_string(colorRange) + "' role='button' ";
+    irVizTooltipCount++;
+    s << "<button id='irVizButton" << irVizTooltipCount << "' ";
+    s << "aria-describedby='irVizTooltip" << irVizTooltipCount << "' ";
+    s << "class='irVizColorButton CostColor" + to_string(colorRange) + "' role='button' ";
     s << ">";
     s << "</button>";
 
     return s.str();
 }
 
-string ProducerConsumerHierarchy::computation_div(const IRNode *op) {
+string IRVisualization::computation_div(const IRNode *op) {
     // want exclusive cost (so that the colors match up with exclusive costs)
     int computation_range = findStmtCost.get_computation_color_range(op, false);
 
@@ -587,14 +582,14 @@ string ProducerConsumerHierarchy::computation_div(const IRNode *op) {
     string tooltipText = findStmtCost.generate_computation_cost_tooltip(op, false, "");
 
     // tooltip span
-    s << "<span id='prodConsTooltip" << prodConsTooltipCount << "' class='tooltip CostTooltip' ";
-    s << "role='prodConsTooltip" << prodConsTooltipCount << "'>";
+    s << "<span id='irVizTooltip" << irVizTooltipCount << "' class='tooltip CostTooltip' ";
+    s << "role='irVizTooltip" << irVizTooltipCount << "'>";
     s << tooltipText;
     s << "</span>";
 
     return s.str();
 }
-string ProducerConsumerHierarchy::data_movement_div(const IRNode *op) {
+string IRVisualization::data_movement_div(const IRNode *op) {
     // want exclusive cost (so that the colors match up with exclusive costs)
     int data_movement_range = findStmtCost.get_data_movement_color_range(op, false);
 
@@ -604,14 +599,14 @@ string ProducerConsumerHierarchy::data_movement_div(const IRNode *op) {
     string tooltipText = findStmtCost.generate_data_movement_cost_tooltip(op, false, "");
 
     // tooltip span
-    s << "<span id='prodConsTooltip" << prodConsTooltipCount << "' class='tooltip CostTooltip' ";
-    s << "role='prodConsTooltip" << prodConsTooltipCount << "'>";
+    s << "<span id='irVizTooltip" << irVizTooltipCount << "' class='tooltip CostTooltip' ";
+    s << "role='irVizTooltip" << irVizTooltipCount << "'>";
     s << tooltipText;
     s << "</span>";
 
     return s.str();
 }
-string ProducerConsumerHierarchy::tooltip_table(vector<pair<string, string>> &table) {
+string IRVisualization::tooltip_table(vector<pair<string, string>> &table) {
     stringstream s;
     s << "<table class='tooltipTable'>";
     for (auto &row : table) {
@@ -623,12 +618,12 @@ string ProducerConsumerHierarchy::tooltip_table(vector<pair<string, string>> &ta
     s << "</table>";
     return s.str();
 }
-void ProducerConsumerHierarchy::cost_colors(const IRNode *op) {
+void IRVisualization::cost_colors(const IRNode *op) {
     html += computation_div(op);
     html += data_movement_div(op);
 }
 
-void ProducerConsumerHierarchy::visit_function(const LoweredFunc &func) {
+void IRVisualization::visit_function(const LoweredFunc &func) {
     open_function_box_div();
 
     functionCount++;
@@ -642,7 +637,7 @@ void ProducerConsumerHierarchy::visit_function(const LoweredFunc &func) {
 
     close_function_box_div();
 }
-void ProducerConsumerHierarchy::visit(const Variable *op) {
+void IRVisualization::visit(const Variable *op) {
     // if op->name starts with "::", remove "::"
     string varName = op->name;
     if (varName[0] == ':' && varName[1] == ':') {
@@ -665,7 +660,7 @@ void ProducerConsumerHierarchy::visit(const Variable *op) {
         html += "</div>";
     }
 }
-void ProducerConsumerHierarchy::visit(const ProducerConsumer *op) {
+void IRVisualization::visit(const ProducerConsumer *op) {
     open_box_div("ProducerConsumerBox", op);
 
     producerConsumerCount++;
@@ -680,7 +675,7 @@ void ProducerConsumerHierarchy::visit(const ProducerConsumer *op) {
 
     close_box_div();
 }
-string ProducerConsumerHierarchy::get_loop_iterator(const For *op) const {
+string IRVisualization::get_loop_iterator(const For *op) const {
     Expr min = op->min;
     Expr extent = op->extent;
 
@@ -722,7 +717,7 @@ string ProducerConsumerHierarchy::get_loop_iterator(const For *op) const {
                            << "In for loop: " << op->name << "\n"
                            << pre_processor.print_node(extent.as<Add>()->a.get()) << "\n"
                            << "StmtSizes::visit(const For *op): add->a isn't IntImm or Variable - "
-                              "can't generate ProdCons hierarchy yet. \n\n";
+                              "can't generate irViz hierarchy yet. \n\n";
         }
 
         extentName += "+";
@@ -738,7 +733,7 @@ string ProducerConsumerHierarchy::get_loop_iterator(const For *op) const {
                            << "In for loop: " << op->name << "\n"
                            << pre_processor.print_node(extent.as<Add>()->b.get()) << "\n"
                            << "StmtSizes::visit(const For *op): add->b isn't IntImm or Variable - "
-                              "can't generate ProdCons hierarchy yet. \n\n";
+                              "can't generate irViz hierarchy yet. \n\n";
         }
         extentName += ")";
 
@@ -758,12 +753,12 @@ string ProducerConsumerHierarchy::get_loop_iterator(const For *op) const {
             << pre_processor.print_node(op->extent.get()) << "\n"
             << "StmtSizes::visit(const For *op): min and extent are not of type (IntImm) "
                "or (IntImm & Variable) or (IntImm & Add) - "
-               "can't generate ProdCons hierarchy yet. \n\n";
+               "can't generate irViz hierarchy yet. \n\n";
     }
 
     return loopIterator;
 }
-void ProducerConsumerHierarchy::visit(const For *op) {
+void IRVisualization::visit(const For *op) {
     open_box_div("ForBox", op);
 
     forCount++;
@@ -777,9 +772,9 @@ void ProducerConsumerHierarchy::visit(const For *op) {
 
     close_box_div();
 }
-void ProducerConsumerHierarchy::visit(const IfThenElse *op) {
+void IRVisualization::visit(const IfThenElse *op) {
     // open main if tree
-    html += "<div class='tf-tree tf-gap-sm tf-custom-prodCons'>";
+    html += "<div class='tf-tree tf-gap-sm tf-custom-irViz'>";
     html += "<ul>";
     html += "<li><span class='tf-nc if-node'>";
     html += "If";
@@ -855,7 +850,7 @@ void ProducerConsumerHierarchy::visit(const IfThenElse *op) {
     html += "</ul>";
     html += "</div>";
 }
-void ProducerConsumerHierarchy::visit(const Store *op) {
+void IRVisualization::visit(const Store *op) {
     StmtSize size = pre_processor.get_size(op);
 
     storeCount++;
@@ -877,7 +872,7 @@ void ProducerConsumerHierarchy::visit(const Store *op) {
 
     close_box_div();
 }
-void ProducerConsumerHierarchy::visit(const Load *op) {
+void IRVisualization::visit(const Load *op) {
     string header;
     vector<pair<string, string>> tableRows;
 
@@ -934,7 +929,7 @@ void ProducerConsumerHierarchy::visit(const Load *op) {
     html += header;
     close_div();
 }
-string ProducerConsumerHierarchy::get_memory_type(MemoryType memType) const {
+string IRVisualization::get_memory_type(MemoryType memType) const {
     if (memType == MemoryType::Auto) {
         return "Auto";
     } else if (memType == MemoryType::Heap) {
@@ -960,7 +955,7 @@ string ProducerConsumerHierarchy::get_memory_type(MemoryType memType) const {
         return "Unknown Memory Type";
     }
 }
-void ProducerConsumerHierarchy::visit(const Allocate *op) {
+void IRVisualization::visit(const Allocate *op) {
     open_box_div("AllocateBox", op);
 
     allocateCount++;
@@ -976,14 +971,14 @@ void ProducerConsumerHierarchy::visit(const Allocate *op) {
     }
     if (op->new_expr.defined()) {
         internal_error << "\n"
-                       << "ProducerConsumerHierarchy: Allocate " << op->name
+                       << "IRVisualization: Allocate " << op->name
                        << " `op->new_expr.defined()` is not supported.\n\n";
 
         tableRows.push_back({"New Expr", to_string(op->new_expr)});
     }
     if (!op->free_function.empty()) {
         internal_error << "\n"
-                       << "ProducerConsumerHierarchy: Allocate " << op->name
+                       << "IRVisualization: Allocate " << op->name
                        << " `!op->free_function.empty()` is not supported.\n\n";
 
         tableRows.push_back({"Free Function", to_string(op->free_function)});
@@ -1001,47 +996,47 @@ void ProducerConsumerHierarchy::visit(const Allocate *op) {
     close_box_div();
 }
 
-string ProducerConsumerHierarchy::generate_prodCons_js() {
-    string prodConsJS;
+string IRVisualization::generate_irViz_js() {
+    string irVizJS;
 
-    prodConsJS += "\n// prodCons JS\n";
-    prodConsJS += "for (let i = 1; i <= " + std::to_string(prodConsTooltipCount) + "; i++) { \n";
-    prodConsJS += "    const button = document.getElementById('prodConsButton' + i); \n";
-    prodConsJS += "    const tooltip = document.getElementById('prodConsTooltip' + i); \n";
-    prodConsJS += "    button.addEventListener('mouseenter', () => { \n";
-    prodConsJS += "        showTooltip(button, tooltip); \n";
-    prodConsJS += "    }); \n";
-    prodConsJS += "    button.addEventListener('mouseleave', () => { \n";
-    prodConsJS += "        hideTooltip(tooltip); \n";
-    prodConsJS += "    } \n";
-    prodConsJS += "    ); \n";
-    prodConsJS += "    tooltip.addEventListener('focus', () => { \n";
-    prodConsJS += "        showTooltip(button, tooltip); \n";
-    prodConsJS += "    } \n";
-    prodConsJS += "    ); \n";
-    prodConsJS += "    tooltip.addEventListener('blur', () => { \n";
-    prodConsJS += "        hideTooltip(tooltip); \n";
-    prodConsJS += "    } \n";
-    prodConsJS += "    ); \n";
-    prodConsJS += "} \n";
-    prodConsJS += "function toggleCollapse(id) {\n ";
-    prodConsJS += "    var buttonShow = document.getElementById('prodCons' + id + '-show');\n";
-    prodConsJS += "    var buttonHide = document.getElementById('prodCons' + id + '-hide');\n";
-    prodConsJS += "    var body = document.getElementById('prodCons' + id);\n";
-    prodConsJS += "    if (body.style.visibility != 'hidden') {\n";
-    prodConsJS += "        body.style.visibility = 'hidden';\n";
-    prodConsJS += "        body.style.height = '0px';\n";
-    prodConsJS += "        body.style.width = '0px';\n";
-    prodConsJS += "        buttonShow.style.display = 'block';\n";
-    prodConsJS += "        buttonHide.style.display = 'none';\n";
-    prodConsJS += "    } else {\n";
-    prodConsJS += "        body.style = '';\n";
-    prodConsJS += "        buttonShow.style.display = 'none';\n";
-    prodConsJS += "        buttonHide.style.display = 'block';\n";
-    prodConsJS += "    }\n";
-    prodConsJS += "}\n ";
+    irVizJS += "\n// irViz JS\n";
+    irVizJS += "for (let i = 1; i <= " + std::to_string(irVizTooltipCount) + "; i++) { \n";
+    irVizJS += "    const button = document.getElementById('irVizButton' + i); \n";
+    irVizJS += "    const tooltip = document.getElementById('irVizTooltip' + i); \n";
+    irVizJS += "    button.addEventListener('mouseenter', () => { \n";
+    irVizJS += "        showTooltip(button, tooltip); \n";
+    irVizJS += "    }); \n";
+    irVizJS += "    button.addEventListener('mouseleave', () => { \n";
+    irVizJS += "        hideTooltip(tooltip); \n";
+    irVizJS += "    } \n";
+    irVizJS += "    ); \n";
+    irVizJS += "    tooltip.addEventListener('focus', () => { \n";
+    irVizJS += "        showTooltip(button, tooltip); \n";
+    irVizJS += "    } \n";
+    irVizJS += "    ); \n";
+    irVizJS += "    tooltip.addEventListener('blur', () => { \n";
+    irVizJS += "        hideTooltip(tooltip); \n";
+    irVizJS += "    } \n";
+    irVizJS += "    ); \n";
+    irVizJS += "} \n";
+    irVizJS += "function toggleCollapse(id) {\n ";
+    irVizJS += "    var buttonShow = document.getElementById('irViz' + id + '-show');\n";
+    irVizJS += "    var buttonHide = document.getElementById('irViz' + id + '-hide');\n";
+    irVizJS += "    var body = document.getElementById('irViz' + id);\n";
+    irVizJS += "    if (body.style.visibility != 'hidden') {\n";
+    irVizJS += "        body.style.visibility = 'hidden';\n";
+    irVizJS += "        body.style.height = '0px';\n";
+    irVizJS += "        body.style.width = '0px';\n";
+    irVizJS += "        buttonShow.style.display = 'block';\n";
+    irVizJS += "        buttonHide.style.display = 'none';\n";
+    irVizJS += "    } else {\n";
+    irVizJS += "        body.style = '';\n";
+    irVizJS += "        buttonShow.style.display = 'none';\n";
+    irVizJS += "        buttonHide.style.display = 'block';\n";
+    irVizJS += "    }\n";
+    irVizJS += "}\n ";
 
-    return prodConsJS;
+    return irVizJS;
 }
 
 /*
@@ -1167,7 +1162,7 @@ string StmtSizes::print_node(const IRNode *node) const {
     return s.str();
 }
 
-const string ProducerConsumerHierarchy::scrollToFunctionJSVizToCode = "\n \
+const string IRVisualization::scrollToFunctionJSVizToCode = "\n \
 // scroll to function - viz to code\n \
 function makeVisible(element) { \n \
     if (!element) return; \n \
@@ -1202,14 +1197,14 @@ function scrollToFunctionVizToCode(id) { \n \
 } \n \
 ";
 
-const string ProducerConsumerHierarchy::prodConsCSS = "\n \
-/* ProdCons CSS */\n \
-.tf-custom-prodCons .tf-nc { border-radius: 5px; border: 1px solid; }\n \
-.tf-custom-prodCons .tf-nc:before, .tf-custom-prodCons .tf-nc:after { border-left-width: 1px; }\n \
-.tf-custom-prodCons li li:before { border-top-width: 1px; }\n \
-.tf-custom-prodCons .end-node { border-style: dashed; }\n \
-.tf-custom-prodCons .tf-nc { background-color: #e6eeff; }\n \
-.tf-custom-prodCons { font-size: 12px; } \n \
+const string IRVisualization::irVizCSS = "\n \
+/* irViz CSS */\n \
+.tf-custom-irViz .tf-nc { border-radius: 5px; border: 1px solid; }\n \
+.tf-custom-irViz .tf-nc:before, .tf-custom-irViz .tf-nc:after { border-left-width: 1px; }\n \
+.tf-custom-irViz li li:before { border-top-width: 1px; }\n \
+.tf-custom-irViz .end-node { border-style: dashed; }\n \
+.tf-custom-irViz .tf-nc { background-color: #e6eeff; }\n \
+.tf-custom-irViz { font-size: 12px; } \n \
 div.box { \n \
     border: 1px dashed grey; \n \
     border-radius: 5px; \n \
@@ -1299,7 +1294,7 @@ span.stringType { color: #990073; } \n \
 div.content { \n \
     flex-grow: 1; \n \
 } \n \
-.prodConsColorButton { \n \
+.irVizColorButton { \n \
     height: 15px; \n \
     width: 10px; \n \
     margin-right: 2px; \n \
@@ -1307,13 +1302,13 @@ div.content { \n \
     vertical-align: middle; \n \
     border-radius: 2px; \n \
 } \n \
-.prodConsColorButton:hover { \n \
+.irVizColorButton:hover { \n \
     border: 1px solid grey; \n \
 } \n \
 div.boxHeaderTitle { \n \
     font-weight: bold; \n \
 } \n \
-.prodConsToggle { \n \
+.irVizToggle { \n \
     margin-right: 5px; \n \
 } \n \
 ";

@@ -495,6 +495,7 @@ SOURCE_FILES = \
   IROperator.cpp \
   IRPrinter.cpp \
   IRVisitor.cpp \
+  IRVisualization.cpp \
   JITModule.cpp \
   Lambda.cpp \
   Lerp.cpp \
@@ -519,7 +520,6 @@ SOURCE_FILES = \
   Pipeline.cpp \
   Prefetch.cpp \
   PrintLoopNest.cpp \
-  ProducerConsumerHierarchy.cpp \
   Profiling.cpp \
   PurifyIndexMath.cpp \
   PythonExtensionGen.cpp \
@@ -681,6 +681,7 @@ HEADER_FILES = \
   IROperator.h \
   IRPrinter.h \
   IRVisitor.h \
+  IRVisualization.h \
   WasmExecutor.h \
   JITModule.h \
   Lambda.h \
@@ -707,7 +708,6 @@ HEADER_FILES = \
   PartitionLoops.h \
   Pipeline.h \
   Prefetch.h \
-  ProducerConsumerHierarchy.h \
   Profiling.h \
   PurifyIndexMath.h \
   PythonExtensionGen.h \

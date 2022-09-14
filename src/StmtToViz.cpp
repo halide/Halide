@@ -5,8 +5,8 @@
 #include "GetStmtHierarchy.h"
 #include "IROperator.h"
 #include "IRVisitor.h"
+#include "IRVisualization.h"
 #include "Module.h"
-#include "ProducerConsumerHierarchy.h"
 #include "Scope.h"
 #include "Substitute.h"
 #include "Util.h"
@@ -16,10 +16,6 @@
 #include <iostream>
 #include <iterator>
 #include <sstream>
-
-#define PRINT_HIERARCHY false
-#define PRINT_DEPENDENCIES false
-#define PRINT_PROD_CONS false
 
 namespace Halide {
 namespace Internal {
@@ -50,11 +46,10 @@ class StmtToViz : public IRVisitor {
 private:
     std::ofstream stream;
 
-    FindStmtCost findStmtCost;                            // used for finding the cost of statements
-    GetStmtHierarchy getStmtHierarchy;                    // used for getting the hierarchy of
-                                                          // statements
-    ProducerConsumerHierarchy producerConsumerHierarchy;  // used for getting the hierarchy of
-                                                          // producer/consumer
+    FindStmtCost findStmtCost;              // used for finding the cost of statements
+    GetStmtHierarchy getStmtHierarchy;      // used for getting the hierarchy of
+                                            // statements
+    IRVisualization irVisualization;        // used for getting the IR visualization
     GetAssemblyInfoViz getAssemblyInfoViz;  // used for getting the assembly line numbers
 
     int curr_line_num;  // for accessing div of that line
@@ -1180,12 +1175,10 @@ public:
         return findStmtCost;
     }
 
-    void generate_producer_consumer_hierarchy(const Module &m) {
+    void generate_ir_visualization(const Module &m) {
 
-        string prodConsHTML = producerConsumerHierarchy.generate_producer_consumer_html(m);
-        if (PRINT_PROD_CONS) cout << prodConsHTML << endl;
-
-        stream << prodConsHTML;
+        string irVizHTML = irVisualization.generate_ir_visualization_html(m);
+        stream << irVizHTML;
     }
 
     void print(const Expr &ir) {
@@ -1527,7 +1520,7 @@ public:
         stream << css;
         stream << vizCss;
         stream << costColorsCSS;
-        stream << ProducerConsumerHierarchy::prodConsCSS;
+        stream << IRVisualization::irVizCSS;
         stream << flexboxDivCSS;
         stream << lineNumbersCSS;
         stream << tooltipCSS;
@@ -1554,8 +1547,8 @@ public:
         stream << generatetooltipJS(tooltipCount);
         stream << getStmtHierarchy.generate_collapse_expand_js();
         stream << getStmtHierarchy.generate_stmtHierarchy_js();
-        stream << producerConsumerHierarchy.generate_prodCons_js();
-        stream << ProducerConsumerHierarchy::scrollToFunctionJSVizToCode;
+        stream << irVisualization.generate_irViz_js();
+        stream << IRVisualization::scrollToFunctionJSVizToCode;
         stream << scrollToFunctionJSCodeToViz;
         stream << expandCodeJS;
         stream << assemblyCodeJS;
@@ -1780,8 +1773,8 @@ public:
         // for resizing the code and visualization divs
         resizeBar();
 
-        stream << "<div class='ProducerConsumerViz' id='ProducerConsumerViz'>\n";
-        generate_producer_consumer_hierarchy(m);
+        stream << "<div class='IRVisualization' id='IRVisualization'>\n";
+        generate_ir_visualization(m);
         stream << "</div>\n";
 
         stream << "</div>\n";  // close mainContent div
@@ -1795,7 +1788,7 @@ public:
     }
 
     StmtToViz(const string &filename, const Module &m)
-        : id_count(0), getStmtHierarchy(generate_costs(m)), producerConsumerHierarchy(findStmtCost),
+        : id_count(0), getStmtHierarchy(generate_costs(m)), irVisualization(findStmtCost),
           ifCount(0), producerConsumerCount(0), forCount(0), storeCount(0), allocateCount(0),
           functionCount(0), tooltipCount(0), popupCount(0), context_stack(1, 0) {
     }
@@ -1920,7 +1913,7 @@ div.IRCode-code { \n \
     overflow-y: scroll; \n \
     position: relative; \n \
 } \n \
-div.ProducerConsumerViz { \n \
+div.IRVisualization { \n \
     overflow-y: scroll; \n \
     padding-top: 20px; \n \
     padding-left: 20px; \n \
@@ -1955,16 +1948,16 @@ function makeVisibleViz(element) { \n \
 } \n \
 function getOffsetTop(element) { \n \
     if (!element) return 0; \n \
-    if (element.id == 'ProducerConsumerViz') return 0; \n \
+    if (element.id == 'IRVisualization') return 0; \n \
     return getOffsetTop(element.offsetParent) + element.offsetTop; \n \
 } \n \
 function getOffsetLeft(element) { \n \
     if (!element) return 0; \n \
-    if (element.id == 'ProducerConsumerViz') return 0; \n \
+    if (element.id == 'IRVisualization') return 0; \n \
     return getOffsetLeft(element.offsetParent) + element.offsetLeft; \n \
 } \n \
 function scrollToFunctionCodeToViz(id) { \n \
-    var container = document.getElementById('ProducerConsumerViz'); \n \
+    var container = document.getElementById('IRVisualization'); \n \
     var scrollToObject = document.getElementById(id); \n \
     makeVisibleViz(scrollToObject); \n \
     container.scrollTo({ \n \
@@ -2176,15 +2169,15 @@ span.tooltipHelperText { \n \
 const string StmtToViz::expandCodeJS = "\n \
 // expand code div\n \
 var codeDiv = document.getElementById('IRCode-code'); \n \
-var prodConsDiv = document.getElementById('ProducerConsumerViz'); \n \
+var irVizDiv = document.getElementById('IRVisualization'); \n \
 var resizeBar = document.getElementById('ResizeBar'); \n \
 \n \
 codeDiv.style.flexGrow = '0'; \n \
-prodConsDiv.style.flexGrow = '0'; \n \
+irVizDiv.style.flexGrow = '0'; \n \
 resizeBar.style.flexGrow = '0'; \n \
 codeDiv.style.flexBasis = 'calc(50% - 16px)'; \n \
 resizeBar.style.flexBasis = '16px'; \n \
-prodConsDiv.style.flexBasis = 'calc(50% - 8px)'; \n \
+irVizDiv.style.flexBasis = 'calc(50% - 8px)'; \n \
 \n \
 resizeBar.addEventListener('mousedown', (event) => { \n \
     document.addEventListener('mousemove', resize, false); \n \
@@ -2199,17 +2192,17 @@ function resize(e) { \n \
     } \n \
     const size = `${e.x}px`; \n \
     codeDiv.style.display = 'block'; \n \
-    prodConsDiv.style.display = 'block'; \n \
+    irVizDiv.style.display = 'block'; \n \
     codeDiv.style.flexBasis = 'calc(' + size + ' - 24px)'; \n \
-    prodConsDiv.style.flexBasis = 'calc(100% - ' + size + ' + 8px)'; \n \
+    irVizDiv.style.flexBasis = 'calc(100% - ' + size + ' + 8px)'; \n \
 } \n \
 function collapseCode() { \n \
     codeDiv.style.display = 'none'; \n \
-    prodConsDiv.style.display = 'block'; \n \
-    prodConsDiv.style.flexBasis = 'calc(100%)'; \n \
+    irVizDiv.style.display = 'block'; \n \
+    irVizDiv.style.flexBasis = 'calc(100%)'; \n \
 } \n \
 function collapseViz() { \n \
-    prodConsDiv.style.display = 'none'; \n \
+    irVizDiv.style.display = 'none'; \n \
     codeDiv.style.display = 'block'; \n \
     codeDiv.style.flexBasis = 'calc(100% - 16px)'; \n \
 } \n \

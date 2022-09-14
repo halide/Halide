@@ -1,5 +1,5 @@
-#ifndef ProducerConsumerHierarchy_H
-#define ProducerConsumerHierarchy_H
+#ifndef IRVVISUALIZATION_H
+#define IRVVISUALIZATION_H
 
 #include "FindStmtCost.h"
 #include "IRVisitor.h"
@@ -32,7 +32,6 @@ public:
 
     // generates the reads/writes for the module
     void generate_sizes(const Module &m);
-    void generate_sizes(const Stmt &stmt);
 
     // returns the reads/writes for the given node
     StmtSize get_size(const IRNode *node) const;
@@ -65,22 +64,22 @@ private:
 };
 
 /*
- * ProducerConsumerHierarchy class
+ * IRVisualization class
  */
-class ProducerConsumerHierarchy : public IRVisitor {
+class IRVisualization : public IRVisitor {
 
 public:
-    static const string prodConsCSS, scrollToFunctionJSVizToCode;
+    static const string irVizCSS, scrollToFunctionJSVizToCode;
 
-    ProducerConsumerHierarchy(FindStmtCost findStmtCostPopulated)
-        : findStmtCost(findStmtCostPopulated), prodConsTooltipCount(0), ifCount(0),
+    IRVisualization(FindStmtCost findStmtCostPopulated)
+        : findStmtCost(findStmtCostPopulated), irVizTooltipCount(0), ifCount(0),
           producerConsumerCount(0), forCount(0), storeCount(0), allocateCount(0), functionCount(0) {
     }
 
-    // generates the html for the producer-consumer hierarchy
-    string generate_producer_consumer_html(const Module &m);
+    // generates the html for the IR Visualization
+    string generate_ir_visualization_html(const Module &m);
 
-    string generate_prodCons_js();
+    string generate_irViz_js();
 
 private:
     using IRVisitor::visit;
@@ -89,7 +88,7 @@ private:
     StmtSizes pre_processor;    // generates the sizes of the nodes
     FindStmtCost findStmtCost;  // used to determine the color of each statement
     int numOfNodes;             // keeps track of the number of nodes in the visualization
-    int prodConsTooltipCount;   // tooltip count
+    int irVizTooltipCount;      // tooltip count
 
     // used for getting anchor names
     int ifCount;
