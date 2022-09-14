@@ -7,25 +7,11 @@ from .halide_ import *
 from .halide_ import _unique_name, _UnspecifiedType
 from inspect import isclass
 from typing import Any, Optional
+import builtins
 import sys
 
 # Formatted with:
 # yapf --style="{based_on_style: google, column_limit: 120, indent_width: 4}"
-
-
-# 'print()' is consumed by `halide.print()` which is implicitly present;
-# here's our quick-n-dirty wrapper for debugging:
-def _print(*args):
-
-    def write(data):
-        sys.stdout.write(str(data))
-
-    for i, arg in enumerate(args):
-        if i:
-            write(" ")
-        write(arg)
-    write('\n')
-
 
 # Everything below here is implicitly in the `halide._generator_helpers` package
 
@@ -790,7 +776,6 @@ def generator(name=""):
     # This code relies on dicts preserving key-insertion order, which is only
     # guaranteed for all Python implementations as of v3.7.
     assert sys.version_info >= (3, 7), "Halide Generators require Python 3.7 or later."
-
     def generator_impl(cls):
         n = name if name else _fqname(cls)
         _check(not n in _python_generators, "The Generator name %s is already in use." % n)
