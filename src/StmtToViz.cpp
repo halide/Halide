@@ -81,6 +81,7 @@ private:
     // All spans and divs will have an id of the form "x-y", where x
     // is shared among all spans/divs in the same context, and y is unique.
     std::vector<int> context_stack;
+    std::vector<string> context_stack_tags;
     string open_tag(const string &tag, const string &cls, int id = -1) {
         stringstream s;
         s << "<" << tag << " class='" << cls << "' id='";
@@ -92,6 +93,7 @@ private:
         }
         s << "'>";
         context_stack.push_back(unique_id());
+        context_stack_tags.push_back(tag);
         return s.str();
     }
     string tag(const string &tag, const string &cls, const string &body, int id = -1) {
@@ -102,7 +104,9 @@ private:
         return s.str();
     }
     string close_tag(const string &tag) {
+        internal_assert(!context_stack.empty() && tag == context_stack_tags.back());
         context_stack.pop_back();
+        context_stack_tags.pop_back();
         return "</" + tag + ">";
     }
 
@@ -330,7 +334,7 @@ private:
         return "<span class='navigationAnchor' id='" + anchorName + "'>";
     }
     string close_anchor() {
-        return "<!-- close_anchor --></span>";
+        return "</span>";
     }
 
     string see_viz_button(const string &anchorName) {
@@ -698,8 +702,8 @@ private:
         stream << var(op->name);
         stream << close_expand_button() << " {";
         stream << close_span();
-        stream << close_cost_span();
         stream << close_anchor();
+        stream << close_cost_span();
         if (assemblyLineNum != -1) stream << see_assembly_button(assemblyLineNum);
         stream << see_viz_button(anchorName);
 
@@ -757,8 +761,8 @@ private:
         stream << matched(")");
         stream << close_expand_button();
         stream << " " << matched("{");
-        stream << close_cost_span();
         stream << close_anchor();
+        stream << close_cost_span();
         if (assemblyLineNum != -1) stream << see_assembly_button(assemblyLineNum);
         stream << see_viz_button(anchorName);
 
@@ -1032,9 +1036,9 @@ private:
             print(op->condition);
             stream << matched(")");
             stream << close_expand_button() << " ";
-            stream << matched("{");  // close if (or else if) span
+            stream << matched("{");
+            stream << close_anchor();
             stream << close_cost_span();
-            close_anchor();
             stream << see_viz_button(anchorName);
 
             stream << open_div("ThenBody Indent", id);
@@ -1090,11 +1094,10 @@ private:
 
                 stream << keyword("else ");
                 stream << close_expand_button() << "{";
+                stream << close_anchor();
                 stream << close_cost_span();
-                close_anchor();
                 stream << see_viz_button(anchorName);
 
-                stream << close_span();
                 stream << open_div("ElseBody Indent", id);
                 print(op->else_case);
                 stream << close_div();
@@ -2322,14 +2325,11 @@ function toggle(id, buttonId) { \n \
 void print_to_viz(const string &filename, const Stmt &s) {
     internal_error << "\n"
                    << "\n"
-                   << "Exiting early: print_to_viz is being run with a Stmt! how exciting"
+                   << "Exiting early: print_to_viz cannot be called from a Stmt node - it must be "
+                      "called from a Module node.\n"
                    << "\n"
                    << "\n"
                    << "\n";
-
-    StmtToViz sth(filename, s);
-
-    sth.print(s);
 }
 
 void print_to_viz(const string &filename, const Module &m) {
