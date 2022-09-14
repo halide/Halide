@@ -27,8 +27,10 @@ void StmtSizes::generate_sizes(const Stmt &stmt) {
 StmtSize StmtSizes::get_size(const IRNode *node) const {
     auto it = stmt_sizes.find(node);
 
-    // return empty size if not found (this just means it wasn't set)
+    // errors if node is not found
     if (it == stmt_sizes.end()) {
+        internal_error << "\n\nStmtSizes::get_size - Node not found in StmtSizes: "
+                       << print_node(node) << "\n\n";
         return StmtSize();
     }
 
@@ -72,7 +74,7 @@ string StmtSizes::get_simplified_string(string a, string b, string op) {
 
     else {
         internal_error << "\n"
-                       << "Unsupported operator: " << op << "\n";
+                       << "StmtSizes::get_simplified_string - Unsupported operator: " << op << "\n";
         return "";
     }
 }
@@ -91,9 +93,10 @@ void StmtSizes::set_read_size(const IRNode *node, string read_var, string read_s
     }
     stmt_sizes[node].reads[read_var] = read_size;
 }
+
 void StmtSizes::visit(const Store *op) {
 
-    // TODO: is this correct? should i be getting it from `index`?
+    // TODO: is this correct?
     uint16_t lanes = op->index.type().lanes();
 
     set_write_size(op, op->name, int_span(lanes));
@@ -133,7 +136,7 @@ string ProducerConsumerHierarchy::generate_producer_consumer_html(const Module &
     numOfNodes = 0;
     startModuleTraversal(m);
 
-    return html.c_str();
+    return html;
 }
 string ProducerConsumerHierarchy::generate_producer_consumer_html(const Stmt &stmt) {
     pre_processor.generate_sizes(stmt);
@@ -141,7 +144,7 @@ string ProducerConsumerHierarchy::generate_producer_consumer_html(const Stmt &st
     html = "";
     stmt.accept(this);
 
-    return html.c_str();
+    return html;
 }
 
 void ProducerConsumerHierarchy::startModuleTraversal(const Module &m) {
@@ -178,9 +181,7 @@ void ProducerConsumerHierarchy::close_box_div() {
     close_div();  // main box div
 }
 void ProducerConsumerHierarchy::open_function_box_div() {
-    html += "<div class='center FunctionBox'";
-    html += ">";
-
+    html += "<div class='center FunctionBox'>";
     html += "<div class='functionContent'>";
 }
 void ProducerConsumerHierarchy::close_function_box_div() {
@@ -496,7 +497,6 @@ void ProducerConsumerHierarchy::see_code_button_div(string anchorName, bool putD
 }
 
 string ProducerConsumerHierarchy::info_tooltip(string toolTipText, string className = "") {
-
     string ss;
 
     // info-button
@@ -771,7 +771,6 @@ string ProducerConsumerHierarchy::get_loop_iterator(const For *op) const {
 
     return loopIterator;
 }
-
 void ProducerConsumerHierarchy::visit(const For *op) {
     open_box_div("ForBox", op);
 
@@ -786,7 +785,6 @@ void ProducerConsumerHierarchy::visit(const For *op) {
 
     close_box_div();
 }
-
 void ProducerConsumerHierarchy::visit(const IfThenElse *op) {
     // open main if tree
     html += "<div class='tf-tree tf-gap-sm tf-custom-prodCons'>";
@@ -865,7 +863,6 @@ void ProducerConsumerHierarchy::visit(const IfThenElse *op) {
     html += "</ul>";
     html += "</div>";
 }
-
 void ProducerConsumerHierarchy::visit(const Store *op) {
     StmtSize size = pre_processor.get_size(op);
 
@@ -890,6 +887,7 @@ void ProducerConsumerHierarchy::visit(const Store *op) {
 }
 void ProducerConsumerHierarchy::visit(const Load *op) {
     string header;
+    vector<pair<string, string>> tableRows;
 
     if (op->type.is_scalar()) {
         header = "Scalar ";
@@ -898,19 +896,23 @@ void ProducerConsumerHierarchy::visit(const Load *op) {
     else if (op->type.is_vector()) {
         if (op->index.node_type() == IRNodeType::Ramp) {
             const Ramp *ramp = op->index.as<Ramp>();
+
+            tableRows.push_back({"Ramp lanes", to_string(ramp->lanes)});
+            tableRows.push_back({"Ramp stride", to_string(ramp->stride)});
+
             if (ramp->stride.node_type() == IRNodeType::IntImm) {
                 int64_t stride = ramp->stride.as<IntImm>()->value;
                 if (stride == 1) {
-                    header = "Dense Vector ";
+                    header = "Dense vector ";
                 } else {
-                    header = "Strided Vector ";
+                    header = "Strided vector ";
                     cout << "strided vector!!!! check it out!!! Load " << op->name << endl;
                 }
             } else {
-                header = "Dense Vector ";
+                header = "Dense vector ";
             }
         } else {
-            header = "Dense Vector ";
+            header = "Dense vector ";
         }
     }
 
@@ -918,9 +920,7 @@ void ProducerConsumerHierarchy::visit(const Load *op) {
         internal_error << "\n\nUnsupported type for Load: " << op->type << "\n\n";
     }
 
-    header += "Load " + op->name;
-
-    vector<pair<string, string>> tableRows;
+    header += "load " + op->name;
 
     if (findStmtCost.is_local_variable(op->name)) {
         tableRows.push_back({"Variable Type", "local var"});
@@ -942,8 +942,7 @@ void ProducerConsumerHierarchy::visit(const Load *op) {
     html += header;
     close_div();
 }
-
-string get_memory_type(MemoryType memType) {
+string ProducerConsumerHierarchy::get_memory_type(MemoryType memType) const {
     if (memType == MemoryType::Auto) {
         return "Auto";
     } else if (memType == MemoryType::Heap) {

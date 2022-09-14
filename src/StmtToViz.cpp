@@ -60,18 +60,18 @@ private:
     int curr_line_num;  // for accessing div of that line
 
     // used for getting anchor names
-    int ifCount = 0;
-    int producerConsumerCount = 0;
-    int forCount = 0;
-    int storeCount = 0;
-    int allocateCount = 0;
-    int functionCount = 0;
+    int ifCount;
+    int producerConsumerCount;
+    int forCount;
+    int storeCount;
+    int allocateCount;
+    int functionCount;
 
     // used for tooltip stuff
-    int tooltipCount = 0;
+    int tooltipCount;
 
     // used for getStmtHierarchy popup stuff
-    int popupCount = 0;
+    int popupCount;
     string popups;
 
     int unique_id() {
@@ -177,7 +177,7 @@ private:
     }
 
     string close_cost_span() {
-        return "<!-- closing_cost_span --></span>";
+        return "</span>";
     }
     string open_cost_span_else_case(Stmt else_case) {
         Stmt new_node =
@@ -1196,19 +1196,11 @@ public:
     }
 
     void print(const Expr &ir) {
-        // debug(0) << "entering: " << ir << "\n";
-        // cout << "done entering" << endl;
         ir.accept(this);
-        // debug(0) << "exiting: " << ir << "\n";
-        // cout << "done exiting" << endl;
     }
 
     void print(const Stmt &ir) {
-        // debug(0) << "entering: " << ir << "\n";
-        // cout << "done entering" << endl;
         ir.accept(this);
-        // debug(0) << "exiting: " << ir << "\n";
-        // cout << "done exiting" << endl;
     }
 
     void print(const LoweredFunc &op) {
@@ -1549,7 +1541,8 @@ public:
         stream << GetStmtHierarchy::stmtHierarchyCSS;
         stream << "</style>\n";
         stream << "<script language='javascript' type='text/javascript'>" + js + "</script>\n";
-        stream << "</head>\n <body>\n";
+        stream << "</head>\n";
+        stream << "<body>\n";
     }
 
     void end_stream() {
@@ -1810,12 +1803,14 @@ public:
 
     StmtToViz(const string &filename, const Module &m)
         : id_count(0), getStmtHierarchy(generate_costs(m)), producerConsumerHierarchy(findStmtCost),
-          context_stack(1, 0) {
+          ifCount(0), producerConsumerCount(0), forCount(0), storeCount(0), allocateCount(0),
+          functionCount(0), tooltipCount(0), popupCount(0), context_stack(1, 0) {
     }
 
     StmtToViz(const string &filename, const Stmt &s)
         : id_count(0), getStmtHierarchy(generate_costs(s)), producerConsumerHierarchy(findStmtCost),
-          context_stack(1, 0) {
+          ifCount(0), producerConsumerCount(0), forCount(0), storeCount(0), allocateCount(0),
+          functionCount(0), tooltipCount(0), popupCount(0), context_stack(1, 0) {
     }
 
     string generatetooltipJS(int &tooltipCount) {
@@ -2342,7 +2337,7 @@ void print_to_viz(const string &filename, const Module &m) {
     StmtToViz sth(filename, m);
 
     sth.generate_html(filename, m);
-    cout << "Donezoooooooo printing to " << filename << endl;
+    cout << "Done generating HTML IR Visualization - printed to: " << filename << endl;
 }
 
 }  // namespace Internal

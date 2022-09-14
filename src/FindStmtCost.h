@@ -29,8 +29,8 @@ using namespace std;
  */
 struct StmtCost {
     int depth;                         // per nested loop
-    int computation_cost_inclusive;    // per line
-    int data_movement_cost_inclusive;  // per line
+    int computation_cost_inclusive;    // per entire node (includes cost of body)
+    int data_movement_cost_inclusive;  // per entire node (includes cost of body)
     int computation_cost_exclusive;    // per line
     int data_movement_cost_exclusive;  // per line
 };
@@ -65,6 +65,11 @@ private:
 class FindStmtCost : public IRVisitor {
 
 public:
+    FindStmtCost()
+        : current_loop_depth(0), max_computation_cost_inclusive(0),
+          max_data_movement_cost_inclusive(0), max_computation_cost_exclusive(0),
+          max_data_movement_cost_exclusive(0) {
+    }
     // starts the traversal of the given node
     void generate_costs(const Module &m);
     void generate_costs(const Stmt &stmt);
@@ -85,15 +90,16 @@ public:
     bool is_local_variable(const string &name) const;
 
 private:
-    unordered_map<const IRNode *, StmtCost> stmt_cost;  // key: node, value: StmtCost
+    unordered_map<const IRNode *, StmtCost> stmt_cost;  // key: node, value: cost
     CostPreProcessor cost_preprocessor;                 // for Atomic and Acquire
-    int current_loop_depth = 0;                         // stores current loop depth level
+    int current_loop_depth;                             // stores current loop depth level
     vector<string> allocate_variables;                  // stores all allocate variables
 
-    int max_computation_cost_inclusive = 0;    // stores the maximum computation cost (inclusive)
-    int max_data_movement_cost_inclusive = 0;  // stores the maximum data movement cost (inclusive)
-    int max_computation_cost_exclusive = 0;    // stores the maximum computation cost (exclusive)
-    int max_data_movement_cost_exclusive = 0;  // stores the maximum data movement cost (exclusive)
+    // these are used for determining the range of the cost
+    int max_computation_cost_inclusive;
+    int max_data_movement_cost_inclusive;
+    int max_computation_cost_exclusive;
+    int max_data_movement_cost_exclusive;
 
     // starts the traversal based on Module
     void traverse(const Module &m);
@@ -102,24 +108,30 @@ private:
     int get_depth(const IRNode *node) const;
     int get_computation_cost(const IRNode *node, bool inclusive) const;
     int get_data_movement_cost(const IRNode *node, bool inclusive) const;
+
+    // checks if node is IfThenElse or something else - will call get_if_node_cost if it is,
+    // get_computation_cost/get_data_movement_cost otherwise
     int get_cost(const IRNode *node, bool inclusive, bool isComputation) const;
+
+    // treats if nodes differently when visualizing cost - will have cost be:
+    //      cost of condition + cost of then_case
     int get_if_node_cost(const IRNode *op, bool inclusive, bool isComputation) const;
 
     // get percentages
     int get_computation_cost_percentage(const IRNode *node, bool inclusive) const;
     int get_data_movement_cost_percentage(const IRNode *node, bool inclusive) const;
 
-    // gets costs from `stmt_cost` map
+    // gets costs from `stmt_cost` map of children nodes and sum them up accordingly
     vector<int> get_costs_children(const IRNode *parent, vector<const IRNode *> children,
                                    bool inclusive) const;
 
-    // sets costs
+    // sets inclusive/exclusive costs
     void set_inclusive_costs(const IRNode *node, vector<const IRNode *> children, int node_cc,
                              int node_dmc, int scalingFactor_dmc);
     void set_exclusive_costs(const IRNode *node, vector<const IRNode *> children, int node_cc,
                              int node_dmc, int scalingFactor_dmc);
 
-    // gets max computation cost and max data movement cost
+    // sets max computation cost and max data movement cost (inclusive and exclusive)
     void set_max_costs(const Module &m);
 
     // builds the tooltip cost table based on given input table

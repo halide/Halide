@@ -17,24 +17,9 @@ using namespace Internal;
 struct StmtSize {
     map<string, string> writes;
     map<string, string> reads;
+
     bool empty() const {
         return writes.size() == 0 && reads.size() == 0;
-    }
-
-    string to_string() {
-        string result = "";
-        if (!empty()) {
-            result += "Writes: ";
-            for (auto it = writes.begin(); it != writes.end(); ++it) {
-                result += it->first + ": " + it->second + "\n";
-            }
-            result += "\n";
-            result += "Reads: ";
-            for (auto it = reads.begin(); it != reads.end(); ++it) {
-                result += it->first + ": " + it->second + "\n";
-            }
-        }
-        return result;
     }
 };
 
@@ -45,9 +30,11 @@ class StmtSizes : public IRVisitor {
 public:
     vector<string> function_names;  // used for figuring out whether variable is a function call
 
+    // generates the reads/writes for the module
     void generate_sizes(const Module &m);
     void generate_sizes(const Stmt &stmt);
 
+    // returns the reads/writes for the given node
     StmtSize get_size(const IRNode *node) const;
 
     // for coloring
@@ -59,13 +46,16 @@ public:
 private:
     using IRVisitor::visit;
 
-    unordered_map<const IRNode *, StmtSize> stmt_sizes;
-    map<string, int> curr_load_values;
+    unordered_map<const IRNode *, StmtSize> stmt_sizes;  // stores the sizes
+    map<string, int> curr_load_values;                   // used when calculating store reads
 
+    // starts traversal of the module
     void traverse(const Module &m);
 
+    // used to simplify expressions with + and *, to not have too many parentheses
     string get_simplified_string(string a, string b, string op);
 
+    // sets reads/writes for the given node
     void set_write_size(const IRNode *node, string write_var, string write_size);
     void set_read_size(const IRNode *node, string read_var, string read_size);
 
@@ -83,7 +73,8 @@ public:
     static const string prodConsCSS, scrollToFunctionJSVizToCode;
 
     ProducerConsumerHierarchy(FindStmtCost findStmtCostPopulated)
-        : findStmtCost(findStmtCostPopulated) {
+        : findStmtCost(findStmtCostPopulated), prodConsTooltipCount(0), ifCount(0),
+          producerConsumerCount(0), forCount(0), storeCount(0), allocateCount(0), functionCount(0) {
     }
 
     // generates the html for the producer-consumer hierarchy
@@ -98,18 +89,16 @@ private:
     string html;                // main html string
     StmtSizes pre_processor;    // generates the sizes of the nodes
     FindStmtCost findStmtCost;  // used to determine the color of each statement
-    int numOfNodes;             // used when deciding whether to show all nodes or not
+    int numOfNodes;             // keeps track of the number of nodes in the visualization
+    int prodConsTooltipCount;   // tooltip count
 
     // used for getting anchor names
-    int ifCount = 0;
-    int producerConsumerCount = 0;
-    int forCount = 0;
-    int storeCount = 0;
-    int allocateCount = 0;
-    int functionCount = 0;
-
-    // tooltip count
-    int prodConsTooltipCount = 0;
+    int ifCount;
+    int producerConsumerCount;
+    int forCount;
+    int storeCount;
+    int allocateCount;
+    int functionCount;
 
     // for traversal of a Module object
     void startModuleTraversal(const Module &m);
@@ -143,7 +132,7 @@ private:
     void allocate_table(vector<string> &allocationSizes);
     void for_loop_table(string loop_size);
 
-    // opens relative code links
+    // generates code for button that will scroll to associated IR code line
     void see_code_button_div(string anchorName, bool putDiv = true);
 
     // tooltip
@@ -169,6 +158,7 @@ private:
     void visit(const IfThenElse *op) override;
     void visit(const Store *op) override;
     void visit(const Load *op) override;
+    string get_memory_type(MemoryType memType) const;
     void visit(const Allocate *op) override;
 };
 

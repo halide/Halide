@@ -24,7 +24,8 @@ public:
     static const string stmtHierarchyCSS;
 
     GetStmtHierarchy(FindStmtCost findStmtCostPopulated)
-        : findStmtCost(findStmtCostPopulated), currNodeID(0), numNodes(0) {
+        : findStmtCost(findStmtCostPopulated), currNodeID(0), numNodes(0), vizCounter(0),
+          stmtHierarchyTooltipCount(0) {
     }
 
     // returns the generated hierarchy's html
@@ -43,12 +44,12 @@ private:
     FindStmtCost findStmtCost;  // used to determine the color of each statement
 
     // for expanding/collapsing nodes
-    int currNodeID;      // ID of the current node in traversal
-    int numNodes;        // total number of nodes (across both trees in the hierarchy)
-    int startNodeID;     // ID of the start node of the current tree
-    int depth;           // depth of the current node in the tree
-    int vizCounter = 0;  // counter for the number of visualizations
-    int stmtHierarchyTooltipCount = 0;  // tooltip count
+    int currNodeID;                 // ID of the current node in traversal
+    int numNodes;                   // total number of nodes (across all generated trees in the IR)
+    int startNodeID;                // ID of the start node of the current tree
+    int depth;                      // depth of the current node in the tree
+    int vizCounter;                 // counter for the number of visualizations
+    int stmtHierarchyTooltipCount;  // tooltip count
 
     // updates the currNodeID to be the next available node ID (numNodes)
     // and increases numNodes by 1

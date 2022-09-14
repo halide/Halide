@@ -48,11 +48,21 @@ private:
     string assemblyHTML;
     vector<const IRNode *> claimedNodes;
 
-    string get_assembly_file_name(const string &filename) {
-        string assemblyFileName = "./" + filename;
-        assemblyFileName.replace(assemblyFileName.find(".stmt.viz.html"), 15, ".s");
-        return assemblyFileName;
+    // traverses the module to generate the assembly labels
+    void traverse(const Module &m) {
+        // recursively traverse all submodules
+        for (const auto &s : m.submodules()) {
+            traverse(s);
+        }
+
+        // traverse all functions
+        for (const auto &f : m.functions()) {
+            f.body.accept(this);
+        }
     }
+
+    // generates the assembly html and line numbers from the loaded assembly file
+    // and generated labels
     void generate_assembly_html_and_line_numbers(const string &filename) {
         assemblyHTML += "<div id='assemblyContent' style='display: none;'>\n";
         assemblyHTML += "<pre>\n";
@@ -69,11 +79,22 @@ private:
                 assemblyHTML += assemblyLine + "\n";
                 add_line_number(assemblyLine, lineNumber);
             }
-            assemblyFile.close();  // close the file object.
+            assemblyFile.close();
         }
+
         assemblyHTML += "</pre>\n";
         assemblyHTML += "</div>\n";
     }
+
+    // gets assembly file from stmt.viz.html file
+    string get_assembly_file_name(const string &filename) {
+        string assemblyFileName = "./" + filename;
+        assemblyFileName.replace(assemblyFileName.find(".stmt.viz.html"), 15, ".s");
+        return assemblyFileName;
+    }
+
+    //  checks if there is a label that matches the assembly line, and if so, adds the line
+    // number and node to map, signifying a match
     void add_line_number(string &assemblyLine, int lineNumber) {
         for (auto &label : labels) {
             if (std::regex_search(assemblyLine, label.regex)) {
@@ -88,17 +109,6 @@ private:
         }
     }
 
-    void traverse(const Module &m) {
-        // recursively traverse all submodules
-        for (const auto &s : m.submodules()) {
-            traverse(s);
-        }
-
-        // traverse all functions
-        for (const auto &f : m.functions()) {
-            f.body.accept(this);
-        }
-    }
     void visit(const ProducerConsumer *op) override {
         string codeString;
         codeString += op->is_producer ? "produce " : "consume ";

@@ -14,7 +14,7 @@ StmtHierarchyInfo GetStmtHierarchy::get_hierarchy_html(const Expr &node) {
     int endNode = numNodes;
 
     StmtHierarchyInfo info;
-    info.html = html.c_str();
+    info.html = html;
     info.viz_num = vizCounter;
     info.start_node = startNode;
     info.end_node = endNode;
@@ -31,7 +31,7 @@ StmtHierarchyInfo GetStmtHierarchy::get_hierarchy_html(const Stmt &node) {
     int endNode = numNodes;
 
     StmtHierarchyInfo info;
-    info.html = html.c_str();
+    info.html = html;
     info.viz_num = vizCounter;
     info.start_node = startNode;
     info.end_node = endNode;
@@ -93,6 +93,7 @@ void GetStmtHierarchy::end_tree() {
     html += "</div>";
     html += "</div>";
 }
+
 void GetStmtHierarchy::generate_computation_cost_div(const IRNode *op) {
     stmtHierarchyTooltipCount++;
 
@@ -477,6 +478,7 @@ void GetStmtHierarchy::visit(const IfThenElse *op) {
     close_node();
 
     // don't visualize else case because that will be visualized later as another IfThenElse block
+    // in StmtToViz.cpp
 
     close_node();
 }
