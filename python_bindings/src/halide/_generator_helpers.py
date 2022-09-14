@@ -53,7 +53,7 @@ def _check_valid_name(name: str) -> str:
 # also add some syntactic sugar, to allow users to alias
 # bool -> UInt(1), int -> Int(32), float -> Float(32)
 def _sanitize_type(t: object) -> Type:
-    if t is None:
+    if t is None or t is type(None):
         return _UnspecifiedType()
     elif t is bool:
         return UInt(1)
