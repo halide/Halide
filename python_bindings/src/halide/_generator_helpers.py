@@ -8,6 +8,7 @@ from .halide_ import _unique_name, _UnspecifiedType
 from inspect import isclass
 from typing import Any, Optional
 import builtins
+import re
 import sys
 
 # Formatted with:
@@ -24,27 +25,20 @@ def _check(cond: bool, msg: str):
     if not cond:
         _fail(msg)
 
+# Basically, a valid C identifier, except:
+#
+# -- initial _ is forbidden (rather than merely "reserved")
+# -- two underscores in a row is also forbidden
+_NAME_RE = re.compile(r"^(?!.*__)[A-Za-z0-9][A-Za-z0-9_]*$")
 
 def _is_valid_name(name: str) -> bool:
-    # Basically, a valid C identifier, except:
-    #
-    # -- initial _ is forbidden (rather than merely "reserved")
-    # -- two underscores in a row is also forbidden
     if not name:
         return False
     # We forbid this to avoid ambiguity in arguments to call()
     if name == "generator_params":
         return False
-    # TODO: use regex instead?
-    s = str(name)
-    if "__" in s:
-        return False
-    if not s[0].isalpha():
-        return False
-    for c in s[1:]:
-        if not (c.isalnum() or c == "_"):
-            return False
-    return True
+
+    return _NAME_RE.search(name)
 
 
 def _check_valid_name(name: str) -> str:
