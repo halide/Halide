@@ -228,6 +228,7 @@ function(add_halide_library TARGET)
 
     get_property(py_src TARGET ${ARG_FROM} PROPERTY Halide_PYTHON_GENERATOR_SOURCE)
     if (py_src)
+        # TODO: Python Generators need work to support crosscompiling (https://github.com/halide/Halide/issues/7014)
         if (NOT TARGET Halide::Python)
             message(FATAL_ERROR "This version of Halide was built without support for Python bindings; rebuild using WITH_PYTHON_BINDINGS=ON to use this rule with Python Generators.")
         endif ()
