@@ -664,7 +664,7 @@ class Generator(ABC):
             _check(not self.autoscheduler().name, "The GeneratorParam %s cannot be set more than once" % name)
             self.autoscheduler().name = value
         elif name.startswith("autoscheduler."):
-            sub_key = name[14:]
+            sub_key = name[len("autoscheduler."):]
             _check(not sub_key in self.autoscheduler().extra,
                    "The GeneratorParam %s cannot be set more than once" % name)
             self.autoscheduler().extra[sub_key] = value
