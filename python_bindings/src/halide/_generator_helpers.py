@@ -202,7 +202,7 @@ class InputBuffer(ImageParam):
         type = _sanitize_type(type)
         if dimensions is None:
             dimensions = -1
-        ImageParam.__init__(self, type, dimensions, _unique_name())
+        super().__init__(type, dimensions, _unique_name())
 
     def _get_types_and_dimensions(self) -> (list[Type], int):
         return _normalize_type_list(self.type()), self.dimensions()
@@ -235,7 +235,7 @@ class InputScalar(Param):
 
     def __init__(self, type: Optional[Type]):
         type = _sanitize_type(type)
-        Param.__init__(self, type, _unique_name())
+        super().__init__(type, _unique_name())
 
     def _get_types_and_dimensions(self) -> (list[Type], int):
         return _normalize_type_list(self.type()), 0
@@ -272,7 +272,7 @@ class OutputBuffer(Func):
         types = _normalize_type_list(types)
         if dimensions is None:
             dimensions = -1
-        Func.__init__(self, types, dimensions, _unique_name())
+        super().__init__(types, dimensions, _unique_name())
         self._types = types
         self._dimensions = dimensions
 
@@ -314,7 +314,7 @@ class OutputBuffer(Func):
 class OutputScalar(OutputBuffer):
 
     def __init__(self, types: Optional[Type]):
-        OutputBuffer.__init__(self, types, 0)
+        super().__init__(types, 0)
 
     def _make_replacement(self, value: Any, r: Requirement) -> Func:
         assert _is_valid_name(r._name) and len(r._types) > 0 and r._dimensions == 0
