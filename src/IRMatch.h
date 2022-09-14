@@ -208,7 +208,7 @@ struct SpecificExpr {
 
     // What is the weakest and strongest IR node this could possibly be
     constexpr static IRNodeType min_node_type = IRNodeType::IntImm;
-    constexpr static IRNodeType max_node_type = IRNodeType::Shuffle;
+    constexpr static IRNodeType max_node_type = StrongestExprNodeType;
     constexpr static bool canonical = true;
 
     // Having SpecificExpr hold an Expr instead of a BaseExprNode reference
@@ -2888,7 +2888,7 @@ struct AsScalar {
 
     // What is the weakest and strongest IR node this could possibly be
     constexpr static IRNodeType min_node_type = IRNodeType::IntImm;
-    constexpr static IRNodeType max_node_type = IRNodeType::Shuffle;
+    constexpr static IRNodeType max_node_type = StrongestExprNodeType;
     constexpr static bool canonical = A::canonical;
 
     constexpr static bool foldable = true;
@@ -2996,6 +2996,115 @@ std::ostream &operator<<(std::ostream &s, const IsMinValue<A> &op) {
     s << "is_min_value(" << op.a << ")";
     return s;
 }
+
+template<typename... Args>
+struct InterleaveOp {
+    struct pattern_tag {};
+    // TODO: can we generalize to further shuffle nodes?
+    std::tuple<Args...> args;
+
+    static constexpr uint32_t binds = bitwise_or_reduce((bindings<Args>::mask)...);
+
+    constexpr static IRNodeType min_node_type = IRNodeType::Shuffle;
+    constexpr static IRNodeType max_node_type = IRNodeType::Shuffle;
+    constexpr static bool canonical = and_reduce((Args::canonical)...);
+
+    template<int i,
+             uint32_t bound,
+             typename = typename std::enable_if<(i < sizeof...(Args))>::type>
+    HALIDE_ALWAYS_INLINE bool match_args(int, const Shuffle &v, MatcherState &state) const noexcept {
+        using T = decltype(std::get<i>(args));
+        return (std::get<i>(args).template match<bound>(*v.vectors[i].get(), state) &&
+                match_args<i + 1, bound | bindings<T>::mask>(0, v, state));
+    }
+
+    template<int i, uint32_t binds>
+    HALIDE_ALWAYS_INLINE bool match_args(double, const Shuffle &v, MatcherState &state) const noexcept {
+        return true;
+    }
+
+    template<uint32_t bound>
+    HALIDE_ALWAYS_INLINE bool match(const BaseExprNode &e, MatcherState &state) const noexcept {
+        if (e.node_type != IRNodeType::Shuffle) {
+            return false;
+        }
+        const Shuffle &v = (const Shuffle &)e;
+        return (v.is_interleave() && (sizeof...(Args) == v.vectors.size()) && match_args<0, bound>(0, v, state));
+    }
+
+    template<int i,
+             typename = typename std::enable_if<(i < sizeof...(Args))>::type>
+    HALIDE_ALWAYS_INLINE void print_args(int, std::ostream &s) const {
+        s << std::get<i>(args);
+        if (i + 1 < sizeof...(Args)) {
+            s << ", ";
+        }
+        print_args<i + 1>(0, s);
+    }
+
+    template<int i>
+    HALIDE_ALWAYS_INLINE void print_args(double, std::ostream &s) const {
+    }
+
+    HALIDE_ALWAYS_INLINE
+    void print_args(std::ostream &s) const {
+        print_args<0>(0, s);
+    }
+
+    HALIDE_ALWAYS_INLINE
+    Expr make(MatcherState &state, halide_type_t type_hint) const {
+        std::vector<Expr> r_args(sizeof...(Args));
+        // TODO(rootjalex): How do we do type hints for the args?
+        // TODO(rootjalex): Is there a way to do basically an unrolled
+        // loop of the below? this is ugly.
+        // Supposedly C++20 will have constexpr std::transform, perhaps
+        // we can use that when Halide upgrades.
+
+        r_args[0] = std::get<0>(args).make(state, {});
+        if constexpr (sizeof...(Args) > 1) {
+            r_args[1] = std::get<const_min(1, sizeof...(Args) - 1)>(args).make(state, {});
+        }
+        if constexpr (sizeof...(Args) > 2) {
+            r_args[2] = std::get<const_min(2, sizeof...(Args) - 1)>(args).make(state, {});
+        }
+        if constexpr (sizeof...(Args) > 3) {
+            r_args[3] = std::get<const_min(3, sizeof...(Args) - 1)>(args).make(state, {});
+        }
+        if constexpr (sizeof...(Args) > 4) {
+            r_args[4] = std::get<const_min(4, sizeof...(Args) - 1)>(args).make(state, {});
+        }
+
+        // for (int i = 0; i < sizeof...(Args); i++) {
+        //     // TODO(rootjalex): how do we do type-hints here?
+        //     args[i] = std::get<i>(args).make(state, {});
+        // }
+        return Shuffle::make_interleave(r_args);
+    }
+
+    constexpr static bool foldable = false;
+
+    HALIDE_ALWAYS_INLINE
+    InterleaveOp(Args... args) noexcept
+        : args(args...) {
+        static_assert(sizeof...(Args) > 0 && sizeof...(Args) <= 5,
+                      "InterleaveOp must have non-zero arguments, and update make() if more than 5 arguments.");
+    }
+};
+
+
+template<typename... Args>
+std::ostream &operator<<(std::ostream &s, const InterleaveOp<Args...> &op) {
+    s << "interleave(";
+    op.print_args(s);
+    s << ")";
+    return s;
+}
+
+template<typename... Args>
+HALIDE_ALWAYS_INLINE auto interleave(Args... args) noexcept -> InterleaveOp<decltype(pattern_arg(args))...> {
+    return {pattern_arg(args)...};
+}
+
 
 // Verify properties of each rewrite rule. Currently just fuzz tests them.
 template<typename Before,
