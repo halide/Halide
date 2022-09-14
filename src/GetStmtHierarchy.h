@@ -46,7 +46,7 @@ private:
     int currNodeID;                 // ID of the current node in traversal
     int numNodes;                   // total number of nodes (across all generated trees in the IR)
     int startNodeID;                // ID of the start node of the current tree
-    int depth;                      // depth of the current node in the tree
+    int nodeDepth;                  // depth of the current node in the tree
     int vizCounter;                 // counter for the number of visualizations
     int stmtHierarchyTooltipCount;  // tooltip count
 
@@ -61,17 +61,17 @@ private:
     void reset_variables();
 
     // starts and ends a tree within the html file
-    void start_tree();
-    void end_tree();
+    string start_tree() const;
+    string end_tree() const;
 
     // creating color divs with tooltips
-    void generate_computation_cost_div(const IRNode *op);
-    void generate_memory_cost_div(const IRNode *op);
+    string generate_computation_cost_div(const IRNode *op);
+    string generate_memory_cost_div(const IRNode *op);
 
     // opens and closes nodes, depending on number of children
-    void node_without_children(const IRNode *op, string name);
-    void open_node(const IRNode *op, string name);
-    void close_node();
+    string node_without_children(const IRNode *op, string name);
+    string open_node(const IRNode *op, string name);
+    string close_node();
 
     void visit_binary_op(const IRNode *op, const Expr &a, const Expr &b, const string &name);
 

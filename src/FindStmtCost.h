@@ -87,6 +87,9 @@ public:
     // is local (defined in Allocate block) or not
     bool is_local_variable(const string &name) const;
 
+    // prints node type
+    string print_node(const IRNode *node) const;
+
 private:
     unordered_map<const IRNode *, StmtCost> stmt_cost;  // key: node, value: cost
     CostPreProcessor cost_preprocessor;                 // for Atomic and Acquire
@@ -187,8 +190,6 @@ private:
     void visit(const IfThenElse *op) override;
     void visit(const Evaluate *op) override;
     void visit(const Atomic *op) override;
-
-    string print_node(const IRNode *node) const;
 };
 
 #endif  // FINDSTMTCOST_H

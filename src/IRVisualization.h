@@ -102,51 +102,51 @@ private:
     void startModuleTraversal(const Module &m);
 
     // opens and closes divs
-    void open_box_div(string className, const IRNode *op);
-    void close_box_div();
-    void open_function_box_div();
-    void close_function_box_div();
-    void open_header_div();
-    void open_box_header_title_div();
-    void open_box_header_table_div();
-    void open_store_div();
-    void close_div();
+    string open_box_div(string className, const IRNode *op);
+    string close_box_div() const;
+    string open_function_box_div() const;
+    string close_function_box_div() const;
+    string open_header_div() const;
+    string open_box_header_title_div() const;
+    string open_box_header_table_div() const;
+    string open_store_div() const;
+    string close_div() const;
 
     // header functions
-    void open_header(const string &header, string anchorName);
-    void close_header(string anchorName);
-    void div_header(const string &header, StmtSize *size, string anchorName);
-    void function_div_header(const string &functionName, string anchorName);
+    string open_header(const string &header, string anchorName);
+    string close_header(string anchorName) const;
+    string div_header(const string &header, StmtSize *size, string anchorName);
+    string function_div_header(const string &functionName, string anchorName) const;
     vector<string> get_allocation_sizes(const Allocate *op) const;
-    void allocate_div_header(const Allocate *op, const string &header, string anchorName);
-    void for_loop_div_header(const For *op, const string &header, string anchorName);
+    string allocate_div_header(const Allocate *op, const string &header, string anchorName);
+    string for_loop_div_header(const For *op, const string &header, string anchorName);
 
     // opens and closes an if-tree
-    void if_tree(const IRNode *op, const string &header, string anchorName);
-    void close_if_tree();
+    string if_tree(const IRNode *op, const string &header, string anchorName);
+    string close_if_tree() const;
 
     // different cost tables
-    void read_write_table(StmtSize &size);
-    void allocate_table(vector<string> &allocationSizes);
-    void for_loop_table(string loop_size);
+    string read_write_table(StmtSize &size) const;
+    string allocate_table(vector<string> &allocationSizes) const;
+    string for_loop_table(string loop_size) const;
 
     // generates code for button that will scroll to associated IR code line
-    void see_code_button_div(string anchorName, bool putDiv = true);
+    string see_code_button_div(string anchorName, bool putDiv = true) const;
 
     // tooltip
     string info_tooltip(string toolTipText, string className);
 
     // for cost colors - side bars
-    void generate_computation_cost_div(const IRNode *op);
-    void generate_memory_cost_div(const IRNode *op);
-    void open_content_div();
+    string generate_computation_cost_div(const IRNode *op);
+    string generate_memory_cost_div(const IRNode *op);
+    string open_content_div() const;
 
     // for cost colors - side boxes
     string color_button(int colorRange);
     string computation_div(const IRNode *op);
     string data_movement_div(const IRNode *op);
-    string tooltip_table(vector<pair<string, string>> &table);
-    void cost_colors(const IRNode *op);
+    string tooltip_table(vector<pair<string, string>> &table) const;
+    string cost_colors(const IRNode *op);
 
     void visit_function(const LoweredFunc &func);
     void visit(const Variable *op) override;

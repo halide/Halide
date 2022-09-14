@@ -8,9 +8,9 @@ StmtHierarchyInfo GetStmtHierarchy::get_hierarchy_html(const Expr &node) {
     reset_variables();
 
     int startNode = currNodeID;
-    start_tree();
+    html << start_tree();
     node.accept(this);
-    end_tree();
+    html << end_tree();
     int endNode = numNodes;
 
     StmtHierarchyInfo info;
@@ -25,9 +25,9 @@ StmtHierarchyInfo GetStmtHierarchy::get_hierarchy_html(const Stmt &node) {
     reset_variables();
 
     int startNode = currNodeID;
-    start_tree();
+    html << start_tree();
     node.accept(this);
-    end_tree();
+    html << end_tree();
     int endNode = numNodes;
 
     StmtHierarchyInfo info;
@@ -43,9 +43,9 @@ StmtHierarchyInfo GetStmtHierarchy::get_else_hierarchy_html() {
     reset_variables();
 
     int startNode = currNodeID;
-    start_tree();
-    node_without_children(nullptr, "else");
-    end_tree();
+    html << start_tree();
+    html << node_without_children(nullptr, "else");
+    html << end_tree();
     int endNode = numNodes;
 
     StmtHierarchyInfo info;
@@ -65,9 +65,9 @@ void GetStmtHierarchy::update_num_nodes() {
 string GetStmtHierarchy::get_node_class_name() {
     stringstream className;
     if (currNodeID == startNodeID) {
-        className << "viz" << vizCounter << " startNode depth" << depth;
+        className << "viz" << vizCounter << " startNode depth" << nodeDepth;
     } else {
-        className << "viz" << vizCounter << " node" << currNodeID << "child depth" << depth;
+        className << "viz" << vizCounter << " node" << currNodeID << "child depth" << nodeDepth;
     }
     return className.str();
 }
@@ -77,145 +77,158 @@ void GetStmtHierarchy::reset_variables() {
     numNodes++;
     currNodeID = numNodes;
     startNodeID = -1;
-    depth = 0;
+    nodeDepth = 0;
     startNodeID = numNodes;
     vizCounter++;
 }
 
-void GetStmtHierarchy::start_tree() {
-    html << "<div class='treeDiv'>";
-    html << "<div class='tf-tree tf-gap-sm tf-custom-stmtHierarchy'>";
-    html << "<ul>";
+string GetStmtHierarchy::start_tree() const {
+    stringstream ss;
+    ss << "<div class='treeDiv'>";
+    ss << "<div class='tf-tree tf-gap-sm tf-custom-stmtHierarchy'>";
+    ss << "<ul>";
+    return ss.str();
 }
-void GetStmtHierarchy::end_tree() {
-    html << "</ul>";
-    html << "</div>";
-    html << "</div>";
+string GetStmtHierarchy::end_tree() const {
+    stringstream ss;
+    ss << "</ul>";
+    ss << "</div>";
+    ss << "</div>";
+    return ss.str();
 }
 
-void GetStmtHierarchy::generate_computation_cost_div(const IRNode *op) {
+string GetStmtHierarchy::generate_computation_cost_div(const IRNode *op) {
     stmtHierarchyTooltipCount++;
 
+    stringstream ss;
     string tooltipText = findStmtCost.generate_computation_cost_tooltip(op, false, "");
 
     // tooltip span
-    html << "<span id='stmtHierarchyTooltip" << stmtHierarchyTooltipCount
-         << "' class='tooltip CostTooltip' ";
-    html << "role='stmtHierarchyTooltip" << stmtHierarchyTooltipCount << "'>";
-    html << tooltipText;
-    html << "</span>";
+    ss << "<span id='stmtHierarchyTooltip" << stmtHierarchyTooltipCount
+       << "' class='tooltip CostTooltip' "
+       << "role='stmtHierarchyTooltip" << stmtHierarchyTooltipCount << "'>" << tooltipText
+       << "</span>";
 
     // color div
     int computation_range = findStmtCost.get_computation_color_range(op, false);
     string className = "computation-cost-div CostColor" + std::to_string(computation_range);
-    html << "<div id='stmtHierarchyButtonTooltip" << stmtHierarchyTooltipCount << "' ";
-    html << "aria-describedby='stmtHierarchyTooltip" << stmtHierarchyTooltipCount << "' ";
-    html << "class='" << className << "'>";
-    html << "</div>";
+    ss << "<div id='stmtHierarchyButtonTooltip" << stmtHierarchyTooltipCount << "' ";
+    ss << "aria-describedby='stmtHierarchyTooltip" << stmtHierarchyTooltipCount << "' ";
+    ss << "class='" << className << "'>";
+    ss << "</div>";
+
+    return ss.str();
 }
-void GetStmtHierarchy::generate_memory_cost_div(const IRNode *op) {
+string GetStmtHierarchy::generate_memory_cost_div(const IRNode *op) {
     stmtHierarchyTooltipCount++;
 
+    stringstream ss;
     string tooltipText = findStmtCost.generate_data_movement_cost_tooltip(op, false, "");
 
     // tooltip span
-    html << "<span id='stmtHierarchyTooltip" << stmtHierarchyTooltipCount
-         << "' class='tooltip CostTooltip' ";
-    html << "role='stmtHierarchyTooltip" << stmtHierarchyTooltipCount << "'>";
-    html << tooltipText;
-    html << "</span>";
+    ss << "<span id='stmtHierarchyTooltip" << stmtHierarchyTooltipCount
+       << "' class='tooltip CostTooltip' "
+       << "role='stmtHierarchyTooltip" << stmtHierarchyTooltipCount << "'>" << tooltipText
+       << "</span>";
 
     // color div
     int data_movement_range = findStmtCost.get_data_movement_color_range(op, false);
     string className = "memory-cost-div CostColor" + std::to_string(data_movement_range);
-    html << "<div id='stmtHierarchyButtonTooltip" << stmtHierarchyTooltipCount << "' ";
-    html << "aria-describedby='stmtHierarchyTooltip" << stmtHierarchyTooltipCount << "' ";
-    html << "class='" << className << "'>";
-    html << "</div>";
+    ss << "<div id='stmtHierarchyButtonTooltip" << stmtHierarchyTooltipCount << "' "
+       << "aria-describedby='stmtHierarchyTooltip" << stmtHierarchyTooltipCount << "' "
+       << "class='" << className << "'>"
+       << "</div>";
+
+    return ss.str();
 }
 
-void GetStmtHierarchy::node_without_children(const IRNode *op, string name) {
+string GetStmtHierarchy::node_without_children(const IRNode *op, string name) {
+    stringstream ss;
 
     string className = get_node_class_name();
-    html << "<li class='" << className << "'>";
-    html << "<span class='tf-nc end-node'>";
-    html << "<div class='nodeContent'>";
-    generate_computation_cost_div(op);
-    generate_memory_cost_div(op);
-    html << "<div class='nodeName'>";
-    html << name;
-    html << "</div>";
-    html << "</div>";
-    html << "</span>";
-    html << "</li>";
-}
-void GetStmtHierarchy::open_node(const IRNode *op, string name) {
+    ss << "<li class='" << className << "'>"
+       << "<span class='tf-nc end-node'>";
 
+    ss << "<div class='nodeContent'>";
+    ss << generate_computation_cost_div(op);
+    ss << generate_memory_cost_div(op);
+
+    ss << "<div class='nodeName'>" << name << "</div>"
+       << "</div>"
+       << "</span>"
+       << "</li>";
+
+    return ss.str();
+}
+string GetStmtHierarchy::open_node(const IRNode *op, string name) {
+    stringstream ss;
     string className = get_node_class_name() + " children-node";
 
     update_num_nodes();
 
-    html << "<li class='" << className << "' id='node" << currNodeID << "'>";
-    html << "<span class='tf-nc'>";
+    ss << "<li class='" << className << "' id='node" << currNodeID << "'>";
+    ss << "<span class='tf-nc'>";
 
-    html << "<div class='nodeContent'>";
-    generate_computation_cost_div(op);
-    generate_memory_cost_div(op);
+    ss << "<div class='nodeContent'>";
+    ss << generate_computation_cost_div(op);
+    ss << generate_memory_cost_div(op);
 
-    html << "<div class='nodeName'>";
-    html << name;
-    html << " <button class='stmtHierarchyButton info-button' onclick='handleClick(" << currNodeID
-         << ")'>";
-    html << " <i id='stmtHierarchyButton" << currNodeID << "'></i> ";
-    html << "</button>";
-    html << "</div>";
-    html << "</div>";
+    ss << "<div class='nodeName'>" << name
+       << "<button class='stmtHierarchyButton info-button' onclick='handleClick(" << currNodeID
+       << ")'>"
+       << "<i id='stmtHierarchyButton" << currNodeID << "'></i> "
+       << "</button>"
+       << "</div>"
+       << "</div>"
+       << "</span>";
 
-    html << "</span>";
+    nodeDepth++;
+    ss << "<ul id='list" << currNodeID << "'>";
 
-    depth++;
-    html << "<ul id='list" << currNodeID << "'>";
+    return ss.str();
 }
-void GetStmtHierarchy::close_node() {
-    depth--;
-    html << "</ul>";
-    html << "</li>";
+string GetStmtHierarchy::close_node() {
+    nodeDepth--;
+    stringstream ss;
+    ss << "</ul>";
+    ss << "</li>";
+    return ss.str();
 }
 
 void GetStmtHierarchy::visit(const IntImm *op) {
-    node_without_children(op, std::to_string(op->value));
+    html << node_without_children(op, std::to_string(op->value));
 }
 void GetStmtHierarchy::visit(const UIntImm *op) {
-    node_without_children(op, std::to_string(op->value));
+    html << node_without_children(op, std::to_string(op->value));
 }
 void GetStmtHierarchy::visit(const FloatImm *op) {
-    node_without_children(op, std::to_string(op->value));
+    html << node_without_children(op, std::to_string(op->value));
 }
 void GetStmtHierarchy::visit(const StringImm *op) {
-    node_without_children(op, op->value);
+    html << node_without_children(op, op->value);
 }
 void GetStmtHierarchy::visit(const Cast *op) {
     stringstream name;
     name << op->type;
-    open_node(op, name.str());
+    html << open_node(op, name.str());
     op->value.accept(this);
-    close_node();
+    html << close_node();
 }
 void GetStmtHierarchy::visit(const Reinterpret *op) {
     stringstream name;
     name << "reinterpret ";
     name << op->type;
-    open_node(op, name.str());
+    html << open_node(op, name.str());
     op->value.accept(this);
-    close_node();
+    html << close_node();
 }
 void GetStmtHierarchy::visit(const Variable *op) {
-    node_without_children(op, op->name);
+    html << node_without_children(op, op->name);
 }
 
 void GetStmtHierarchy::visit_binary_op(const IRNode *op, const Expr &a, const Expr &b,
                                        const string &name) {
-    open_node(op, name);
+    html << open_node(op, name);
 
     int currNode = currNodeID;
     a.accept(this);
@@ -223,7 +236,7 @@ void GetStmtHierarchy::visit_binary_op(const IRNode *op, const Expr &a, const Ex
     currNodeID = currNode;
     b.accept(this);
 
-    close_node();
+    html << close_node();
 }
 
 void GetStmtHierarchy::visit(const Add *op) {
@@ -273,12 +286,12 @@ void GetStmtHierarchy::visit(const Max *op) {
 }
 
 void GetStmtHierarchy::visit(const Not *op) {
-    open_node(op, "!");
+    html << open_node(op, "!");
     op->a.accept(this);
-    close_node();
+    html << close_node();
 }
 void GetStmtHierarchy::visit(const Select *op) {
-    open_node(op, "Select");
+    html << open_node(op, "Select");
 
     int currNode = currNodeID;
     op->condition.accept(this);
@@ -289,15 +302,15 @@ void GetStmtHierarchy::visit(const Select *op) {
     currNodeID = currNode;
     op->false_value.accept(this);
 
-    close_node();
+    html << close_node();
 }
 void GetStmtHierarchy::visit(const Load *op) {
     stringstream index;
     index << op->index;
-    node_without_children(op, op->name + "[" + index.str() + "]");
+    html << node_without_children(op, op->name + "[" + index.str() + "]");
 }
 void GetStmtHierarchy::visit(const Ramp *op) {
-    open_node(op, "Ramp");
+    html << open_node(op, "Ramp");
 
     int currNode = currNodeID;
     op->base.accept(this);
@@ -308,15 +321,15 @@ void GetStmtHierarchy::visit(const Ramp *op) {
     currNodeID = currNode;
     Expr(op->lanes).accept(this);
 
-    close_node();
+    html << close_node();
 }
 void GetStmtHierarchy::visit(const Broadcast *op) {
-    open_node(op, "x" + std::to_string(op->lanes));
+    html << open_node(op, "x" + std::to_string(op->lanes));
     op->value.accept(this);
-    close_node();
+    html << close_node();
 }
 void GetStmtHierarchy::visit(const Call *op) {
-    open_node(op, op->name);
+    html << open_node(op, op->name);
 
     int currNode = currNodeID;
     for (auto &arg : op->args) {
@@ -324,104 +337,104 @@ void GetStmtHierarchy::visit(const Call *op) {
         arg.accept(this);
     }
 
-    close_node();
+    html << close_node();
 }
 void GetStmtHierarchy::visit(const Let *op) {
-    open_node(op, "Let");
+    html << open_node(op, "Let");
     int currNode = currNodeID;
 
-    open_node(op->value.get(), "Let");
-    node_without_children(nullptr, op->name);
+    html << open_node(op->value.get(), "Let");
+    html << node_without_children(nullptr, op->name);
     op->value.accept(this);
-    close_node();
+    html << close_node();
 
     // "body" node
     currNodeID = currNode;
-    open_node(op->body.get(), "body");
+    html << open_node(op->body.get(), "body");
     op->body.accept(this);
-    close_node();
+    html << close_node();
 
-    close_node();
+    html << close_node();
 }
 void GetStmtHierarchy::visit(const LetStmt *op) {
-    open_node(op, "Let");
+    html << open_node(op, "Let");
 
     int currNode = currNodeID;
-    node_without_children(nullptr, op->name);
+    html << node_without_children(nullptr, op->name);
 
     currNodeID = currNode;
     op->value.accept(this);
 
-    close_node();
+    html << close_node();
 }
 void GetStmtHierarchy::visit(const AssertStmt *op) {
-    open_node(op, "Assert");
+    html << open_node(op, "Assert");
 
     int currNode = currNodeID;
     op->condition.accept(this);
 
     currNodeID = currNode;
     op->message.accept(this);
-    close_node();
+    html << close_node();
 }
 void GetStmtHierarchy::visit(const ProducerConsumer *op) {
     string nodeName = op->is_producer ? "Produce" : "Consume";
     nodeName += " " + op->name;
-    node_without_children(op, nodeName);
+    html << node_without_children(op, nodeName);
 }
 void GetStmtHierarchy::visit(const For *op) {
-    open_node(op, "For");
+    html << open_node(op, "For");
 
     int currNode = currNodeID;
-    open_node(nullptr, "loop var");
-    node_without_children(nullptr, op->name);
-    close_node();
+    html << open_node(nullptr, "loop var");
+    html << node_without_children(nullptr, op->name);
+    html << close_node();
 
     currNodeID = currNode;
-    open_node(op->min.get(), "min");
+    html << open_node(op->min.get(), "min");
     op->min.accept(this);
-    close_node();
+    html << close_node();
 
     currNodeID = currNode;
-    open_node(op->extent.get(), "extent");
+    html << open_node(op->extent.get(), "extent");
     op->extent.accept(this);
-    close_node();
+    html << close_node();
 
-    close_node();
+    html << close_node();
 }
 void GetStmtHierarchy::visit(const Store *op) {
-    open_node(op, "Store");
+    html << open_node(op, "Store");
 
     stringstream index;
     index << op->index;
-    node_without_children(op->index.get(), op->name + "[" + index.str() + "]");
+    html << node_without_children(op->index.get(), op->name + "[" + index.str() + "]");
 
     op->value.accept(this);
-    close_node();
+    html << close_node();
 }
 void GetStmtHierarchy::visit(const Provide *op) {
     internal_error << "\n"
                    << "GetStmtHierarchy: Provide is not supported. Look into it though!!! \n\n";
 
-    open_node(op, "Provide");
+    html << open_node(op, "Provide");
     int currNode0 = currNodeID;
 
-    open_node(op, op->name);
+    html << open_node(op, op->name);
     int currNode1 = currNodeID;
     for (auto &arg : op->args) {
         currNodeID = currNode1;
         arg.accept(this);
     }
-    close_node();
+    html << close_node();
 
     for (auto &val : op->values) {
         currNodeID = currNode0;
         val.accept(this);
     }
-    close_node();
+    html << close_node();
 }
 void GetStmtHierarchy::visit(const Allocate *op) {
-    open_node(op, "allocate");
+    html << open_node(op, "allocate");
 
     stringstream index;
     index << op->type;
@@ -431,7 +444,7 @@ void GetStmtHierarchy::visit(const Allocate *op) {
         index << extent;
     }
 
-    node_without_children(op, op->name + "[" + index.str() + "]");
+    html << node_without_children(op, op->name + "[" + index.str() + "]");
 
     stringstream name;
     if (!is_const_one(op->condition)) {
@@ -447,13 +460,13 @@ void GetStmtHierarchy::visit(const Allocate *op) {
         name << "custom_delete {" << op->free_function << "}";
     }
 
-    if (name.str() != "") node_without_children(op, name.str());
-    close_node();
+    if (name.str() != "") html << node_without_children(op, name.str());
+    html << close_node();
 }
 void GetStmtHierarchy::visit(const Free *op) {
-    open_node(op, "Free");
-    node_without_children(op, op->name);
-    close_node();
+    html << open_node(op, "Free");
+    html << node_without_children(op, op->name);
+    html << close_node();
 }
 void GetStmtHierarchy::visit(const Realize *op) {
     internal_error << "\n"
@@ -464,54 +477,54 @@ void GetStmtHierarchy::visit(const Block *op) {
                    << "GetStmtHierarchy: Block is not supported. Look into it though!!! \n\n";
 }
 void GetStmtHierarchy::visit(const IfThenElse *op) {
-    open_node(op, "If");
+    html << open_node(op, "If");
 
-    open_node(op->condition.get(), "condition");
+    html << open_node(op->condition.get(), "condition");
     op->condition.accept(this);
-    close_node();
+    html << close_node();
 
     // don't visualize else case because that will be visualized later as another IfThenElse block
     // in StmtToViz.cpp
 
-    close_node();
+    html << close_node();
 }
 void GetStmtHierarchy::visit(const Evaluate *op) {
     op->value.accept(this);
 }
 void GetStmtHierarchy::visit(const Shuffle *op) {
     if (op->is_concat()) {
-        open_node(op, "concat_vectors");
+        html << open_node(op, "concat_vectors");
 
         int currNode = currNodeID;
         for (auto &e : op->vectors) {
             currNodeID = currNode;
             e.accept(this);
         }
-        close_node();
+        html << close_node();
     }
 
     else if (op->is_interleave()) {
-        open_node(op, "interleave_vectors");
+        html << open_node(op, "interleave_vectors");
 
         int currNode = currNodeID;
         for (auto &e : op->vectors) {
             currNodeID = currNode;
             e.accept(this);
         }
-        close_node();
+        html << close_node();
     }
 
     else if (op->is_extract_element()) {
         std::vector<Expr> args = op->vectors;
         args.emplace_back(op->slice_begin());
-        open_node(op, "extract_element");
+        html << open_node(op, "extract_element");
 
         int currNode = currNodeID;
         for (auto &e : args) {
             currNodeID = currNode;
             e.accept(this);
         }
-        close_node();
+        html << close_node();
     }
 
     else if (op->is_slice()) {
@@ -519,14 +532,14 @@ void GetStmtHierarchy::visit(const Shuffle *op) {
         args.emplace_back(op->slice_begin());
         args.emplace_back(op->slice_stride());
         args.emplace_back(static_cast<int>(op->indices.size()));
-        open_node(op, "slice_vectors");
+        html << open_node(op, "slice_vectors");
 
         int currNode = currNodeID;
         for (auto &e : args) {
             currNodeID = currNode;
             e.accept(this);
         }
-        close_node();
+        html << close_node();
     }
 
     else {
@@ -534,28 +547,28 @@ void GetStmtHierarchy::visit(const Shuffle *op) {
         for (int i : op->indices) {
             args.emplace_back(i);
         }
-        open_node(op, "Shuffle");
+        html << open_node(op, "Shuffle");
 
         int currNode = currNodeID;
         for (auto &e : args) {
             currNodeID = currNode;
             e.accept(this);
         }
-        close_node();
+        html << close_node();
     }
 }
 void GetStmtHierarchy::visit(const VectorReduce *op) {
-    open_node(op, "vector_reduce");
+    html << open_node(op, "vector_reduce");
 
     int currNode = currNodeID;
     stringstream opOp;
     opOp << op->op;
-    node_without_children(nullptr, opOp.str());
+    html << node_without_children(nullptr, opOp.str());
 
     currNodeID = currNode;
     op->value.accept(this);
 
-    close_node();
+    html << close_node();
 }
 void GetStmtHierarchy::visit(const Prefetch *op) {
     internal_error << "\n"
@@ -566,7 +579,7 @@ void GetStmtHierarchy::visit(const Fork *op) {
                    << "GetStmtHierarchy: Fork is not supported. Look into it though!!! \n\n";
 }
 void GetStmtHierarchy::visit(const Acquire *op) {
-    open_node(op, "acquire");
+    html << open_node(op, "acquire");
 
     int currNode = currNodeID;
     op->semaphore.accept(this);
@@ -574,15 +587,15 @@ void GetStmtHierarchy::visit(const Acquire *op) {
     currNodeID = currNode;
     op->count.accept(this);
 
-    close_node();
+    html << close_node();
 }
 void GetStmtHierarchy::visit(const Atomic *op) {
     if (op->mutex_name.empty()) {
-        node_without_children(op, "atomic");
+        html << node_without_children(op, "atomic");
     } else {
-        open_node(op, "atomic");
-        node_without_children(nullptr, op->mutex_name);
-        close_node();
+        html << open_node(op, "atomic");
+        html << node_without_children(nullptr, op->mutex_name);
+        html << close_node();
     }
 }
 
