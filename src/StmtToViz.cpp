@@ -1175,10 +1175,8 @@ public:
         return findStmtCost;
     }
 
-    void generate_ir_visualization(const Module &m) {
-
-        string irVizHTML = irVisualization.generate_ir_visualization_html(m);
-        stream << irVizHTML;
+    string generate_ir_visualization(const Module &m) {
+        return irVisualization.generate_ir_visualization_html(m);
     }
 
     void print(const Expr &ir) {
@@ -1545,7 +1543,7 @@ public:
                << "} );\n";
 
         stream << generatetooltipJS(tooltipCount);
-        stream << getStmtHierarchy.generate_collapse_expand_js();
+        stream << GetStmtHierarchy::stmtHierarchyCollapseExpandJS;
         stream << getStmtHierarchy.generate_stmtHierarchy_js();
         stream << irVisualization.generate_irViz_js();
         stream << IRVisualization::scrollToFunctionJSVizToCode;
@@ -1561,93 +1559,92 @@ public:
         stringstream popup;
 
         popupCount++;
-        popup << "<div class='modal fade' id='stmtHierarchyModal" << popupCount;
-        popup << "' tabindex='-1'\n";
-        popup << "    aria-labelledby='stmtHierarchyModalLabel' aria-hidden='true'>\n";
-        popup << "    <div class='modal-dialog modal-dialog-scrollable modal-xl'>\n";
-        popup << "        <div class='modal-content'>\n";
-        popup << "            <div class='modal-header'>\n";
-        popup << "                <h5 class='modal-title' id='stmtHierarchyModalLabel'>How to read "
-                 "this document\n";
-        popup << "                </h5>\n";
-        popup << "                <button type='button' class='btn-close'\n";
-        popup << "                    data-bs-dismiss='modal' aria-label='Close'></button>\n";
-        popup << "            </div>\n";
-        popup << "            <div class='modal-body'>\n";
-        popup << "<p style='font-size: 20px;'><b\n";
-        popup << "        style='font-weight: bold;'>Two Columns</b>\n";
-        popup << "</p>\n";
-        popup << "<p>There are 2 columns on this page:</p>\n";
-        popup << "<ul>\n";
-        popup << "    <li><b style='font-weight: bold;'>Left side:</b>\n";
-        popup << "        Halide Intermediate Representation (IR) - the\n";
-        popup << "        code that\n";
-        popup << "        Halide generates.</li>\n";
-        popup << "    <li><b style='font-weight: bold;'>Right side:</b>\n";
-        popup << "        Visualization - represents, at\n";
-        popup << "        a high level, the structure of the IR.</li>\n";
-        popup << "</ul>\n";
-        popup << "<p>You can adjust the size of the columns using the\n";
-        popup << "    green resize bar in the middle of the 2. The buttons\n";
-        popup << "    in the middle of this bar will also expand either\n";
-        popup << "    left or right column completely.</p>\n";
-        popup << "<p style='font-size: 20px;'><b\n";
-        popup << "        style='font-weight: bold;'>Left Column\n";
-        popup << "        Functionality</b>\n";
-        popup << "</p>\n";
-        popup << "<p>Here are the different features of the left column:\n";
-        popup << "</p>\n";
-        popup << "<ul>\n";
+        popup << "<div class='modal fade' id='stmtHierarchyModal" << popupCount
+              << "' tabindex='-1'\n"
+              << "    aria-labelledby='stmtHierarchyModalLabel' aria-hidden='true'>\n"
+              << "    <div class='modal-dialog modal-dialog-scrollable modal-xl'>\n"
+              << "        <div class='modal-content'>\n"
+              << "            <div class='modal-header'>\n"
+              << "                <h5 class='modal-title' id='stmtHierarchyModalLabel'>How to read "
+                 "this document\n"
+              << "                </h5>\n"
+              << "                <button type='button' class='btn-close'\n"
+              << "                    data-bs-dismiss='modal' aria-label='Close'></button>\n"
+              << "            </div>\n"
+              << "            <div class='modal-body'>\n"
+              << "<p style='font-size: 20px;'><b\n"
+              << "        style='font-weight: bold;'>Two Columns</b>\n"
+              << "</p>\n"
+              << "<p>There are 2 columns on this page:</p>\n"
+              << "<ul>\n"
+              << "    <li><b style='font-weight: bold;'>Left side:</b>\n"
+              << "        Halide Intermediate Representation (IR) - the\n"
+              << "        code that\n"
+              << "        Halide generates.</li>\n"
+              << "    <li><b style='font-weight: bold;'>Right side:</b>\n"
+              << "        Visualization - represents, at\n"
+              << "        a high level, the structure of the IR.</li>\n"
+              << "</ul>\n"
+              << "<p>You can adjust the size of the columns using the\n"
+              << "    green resize bar in the middle of the 2. The buttons\n"
+              << "    in the middle of this bar will also expand either\n"
+              << "    left or right column completely.</p>\n"
+              << "<p style='font-size: 20px;'><b\n"
+              << "        style='font-weight: bold;'>Left Column\n"
+              << "        Functionality</b>\n"
+              << "</p>\n"
+              << "<p>Here are the different features of the left column:\n"
+              << "</p>\n"
+              << "<ul>\n";
 
         tooltipCount++;
-        popup << "<span id='tooltip" << tooltipCount << "' class='tooltip CostTooltip' ";
-        popup << "role='tooltip" << tooltipCount << "'>";
-        popup << "Costs will be shown here. Click to see statement hierarchy.";
-        popup << "</span>";
-
-        popup << "    <li><button id='button" << tooltipCount << "' aria-describedby='tooltip"
-              << tooltipCount << "'\n";
-        popup << "            class='colorButton CostColor0' role='button'\n";
-        popup << "            inclusiverange='0'\n";
-        popup << "            exclusiverange='0'></button>";
-        popup << "<b\n";
-        popup << "            style='font-weight: bold;'>Cost\n";
-        popup << "            Colors:</b>\n";
-        popup << "            Next to every line, there are 2 buttons that are\n";
-        popup << "            colored based on the cost of the line.\n";
-        popup << "            Hovering over them will give more information\n";
-        popup << "            about the cost of that line. If you click on the\n";
-        popup << "            button, a hierarchy of that line will appear,\n";
-        popup << "            which you can explore to see the contents of the\n";
-        popup << "            line. There are 2 buttons because they each\n";
-        popup << "            represent a different type of color:\n";
-        popup << "            <ul>\n";
-        popup << "                <li><b style='font-weight: bold;'>Computation\n";
-        popup << "                        Cost:</b> This is the cost\n";
-        popup << "                    associated with how much computation\n";
-        popup << "                    went\n";
-        popup << "                    into that line of code.</li>\n";
-        popup << "                <li><b style='font-weight: bold;'>Data\n";
-        popup << "                        Movement Cost:</b> This is the\n";
-        popup << "                    cost associated with how much data was\n";
-        popup << "                    moved\n";
-        popup << "                    around in that line of code\n";
-        popup << "                    (read/written).</li>\n";
-        popup << "            </ul>\n";
-        popup << "    </li>\n";
-        popup << "    <br>\n";
-        popup << "    <li>\n";
-        popup << "        <button class='iconButton'><i\n";
-        popup << "                class='bi bi-arrow-right-square'></i></button><b\n";
-        popup << "        style='font-weight: bold;'>See\n";
-        popup << "            Visualization:</b>\n";
-        popup << "        If you click this button, the right column will\n";
-        popup << "        scroll to the related block of that line of\n";
-        popup << "        code.\n";
-        popup << "    </li>\n";
-        popup << "    <li>\n";
-        popup << "        <button class='iconButton assemblyIcon'>";
         popup
+            << "<span id='tooltip" << tooltipCount << "' class='tooltip CostTooltip' "
+            << "role='tooltip" << tooltipCount << "'>"
+            << "Costs will be shown here. Click to see statement hierarchy."
+            << "</span>"
+            << "    <li><button id='button" << tooltipCount << "' aria-describedby='tooltip"
+            << tooltipCount << "'\n"
+            << "            class='colorButton CostColor0' role='button'\n"
+            << "            inclusiverange='0'\n"
+            << "            exclusiverange='0'></button>"
+            << "<b\n"
+            << "            style='font-weight: bold;'>Cost\n"
+            << "            Colors:</b>\n"
+            << "            Next to every line, there are 2 buttons that are\n"
+            << "            colored based on the cost of the line.\n"
+            << "            Hovering over them will give more information\n"
+            << "            about the cost of that line. If you click on the\n"
+            << "            button, a hierarchy of that line will appear,\n"
+            << "            which you can explore to see the contents of the\n"
+            << "            line. There are 2 buttons because they each\n"
+            << "            represent a different type of color:\n"
+            << "            <ul>\n"
+            << "                <li><b style='font-weight: bold;'>Computation\n"
+            << "                        Cost:</b> This is the cost\n"
+            << "                    associated with how much computation\n"
+            << "                    went\n"
+            << "                    into that line of code.</li>\n"
+            << "                <li><b style='font-weight: bold;'>Data\n"
+            << "                        Movement Cost:</b> This is the\n"
+            << "                    cost associated with how much data was\n"
+            << "                    moved\n"
+            << "                    around in that line of code\n"
+            << "                    (read/written).</li>\n"
+            << "            </ul>\n"
+            << "    </li>\n"
+            << "    <br>\n"
+            << "    <li>\n"
+            << "        <button class='iconButton'><i\n"
+            << "                class='bi bi-arrow-right-square'></i></button><b\n"
+            << "        style='font-weight: bold;'>See\n"
+            << "            Visualization:</b>\n"
+            << "        If you click this button, the right column will\n"
+            << "        scroll to the related block of that line of\n"
+            << "        code.\n"
+            << "    </li>\n"
+            << "    <li>\n"
+            << "        <button class='iconButton assemblyIcon'>"
             << "<svg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='currentColor' "
                "class='bi bi-filetype-raw' viewBox='0 0 16 16'> <path fill-rule='evenodd' d='M14 "
                "4.5V14a2 2 0 0 1-2 2v-1a1 1 0 0 0 1-1V4.5h-2A1.5 "
@@ -1659,98 +1656,106 @@ public:
                ".21-.065.368-.194.474-.127.105-.3.158-.518.158H.782Zm4.063-1.148.489 "
                "1.617H4.32l.49-1.617h.035Zm4.006.445-.74 2.789h-.73L6.326 11.85h.855l.601 "
                "2.903h.038l.706-2.903h.683l.706 2.903h.04l.596-2.903h.858l-1.055 "
-               "3.999h-.73l-.74-2.789H8.85Z'/></svg>";
-        popup << "</button><b \n";
-        popup << "        style='font-weight: bold;'>See Assembly:</b>\n";
-        popup << "        If you click this button, a new tab will open\n";
-        popup << "        with the assembly scrolled to the related\n";
-        popup << "        assembly instruction of that line of code.\n";
-        popup << "    </li>\n";
-        popup << "</ul>\n";
-        popup << "<p style='font-size: 20px;'><b\n";
-        popup << "        style='font-weight: bold;'>Right Column\n";
-        popup << "        Functionality</b>\n";
-        popup << "</p>\n";
-        popup << "<p>Here are the different features of the right column:\n";
-        popup << "</p>\n";
-        popup << "<ul>\n";
+               "3.999h-.73l-.74-2.789H8.85Z'/></svg>"
+            << "</button><b \n"
+            << "        style='font-weight: bold;'>See Assembly:</b>\n"
+            << "        If you click this button, a new tab will open\n"
+            << "        with the assembly scrolled to the related\n"
+            << "        assembly instruction of that line of code.\n"
+            << "    </li>\n"
+            << "</ul>\n"
+            << "<p style='font-size: 20px;'><b\n"
+            << "        style='font-weight: bold;'>Right Column\n"
+            << "        Functionality</b>\n"
+            << "</p>\n"
+            << "<p>Here are the different features of the right column:\n"
+            << "</p>\n"
+            << "<ul>\n";
 
         tooltipCount++;
-        popup << "<span id='tooltip" << tooltipCount << "' class='tooltip' ";
-        popup << "role='tooltip" << tooltipCount << "'>";
-        popup << "Costs will be shown here.";
-        popup << "</span>";
+        popup << "<span id='tooltip" << tooltipCount << "' class='tooltip' "
+              << "role='tooltip" << tooltipCount << "'>"
+              << "Costs will be shown here."
+              << "</span>";
 
         popup << "    <li><button id='button" << tooltipCount << "' aria-describedby='tooltip"
-              << tooltipCount << "'\n";
-        popup << "            class='colorButton CostColor0' role='button'\n";
-        popup << "            inclusiverange='0'\n";
-        popup << "            exclusiverange='0'></button><b ";
-        popup << "    style='font-weight: bold;'>Cost Colors:</b>\n";
-        popup << "        Cost colors on the right work the same way as\n";
-        popup << "        they do on the left - hovering over them will give\n";
-        popup << "        information about the cost.\n";
-        popup << "    </li>\n";
-        popup << "    <li>\n";
-        popup << "        <button class='iconButton'><i\n";
-        popup << "                class='bi bi-code-square'></i></button><b\n";
-        popup << "        style='font-weight: bold;'>See\n";
-        popup << "            Code:</b>\n";
-        popup << "        If you click this button, the left column will\n";
-        popup << "        scroll to the related line of code of that block\n";
-        popup << "        in the visualization.\n";
-        popup << "    </li>\n";
-        popup << "    <li>\n";
+              << tooltipCount << "'\n"
+              << "            class='colorButton CostColor0' role='button'\n"
+              << "            inclusiverange='0'\n"
+              << "            exclusiverange='0'></button><b "
+              << "    style='font-weight: bold;'>Cost Colors:</b>\n"
+              << "        Cost colors on the right work the same way as\n"
+              << "        they do on the left - hovering over them will give\n"
+              << "        information about the cost.\n"
+              << "    </li>\n"
+              << "    <li>\n"
+              << "        <button class='iconButton'><i\n"
+              << "                class='bi bi-code-square'></i></button><b\n"
+              << "        style='font-weight: bold;'>See\n"
+              << "            Code:</b>\n"
+              << "        If you click this button, the left column will\n"
+              << "        scroll to the related line of code of that block\n"
+              << "        in the visualization.\n"
+              << "    </li>\n"
+              << "    <li>\n";
 
         tooltipCount++;
-        popup << "<span id='tooltip" << tooltipCount << "' class='tooltip' ";
-        popup << "role='tooltip" << tooltipCount << "'>";
-        popup << "More information about the node will appear here.";
-        popup << "</span>";
+        popup << "<span id='tooltip" << tooltipCount << "' class='tooltip' "
+              << "role='tooltip" << tooltipCount << "'>"
+              << "More information about the node will appear here."
+              << "</span>";
 
         popup << "        <button class='info-button' id='button" << tooltipCount
-              << "' aria-describedby='tooltip" << tooltipCount << "'><i\n";
-        popup << "                class='bi bi-info'></i></button><b \n";
-        popup << "        style='font-weight: bold;'>Info Button:</b>\n";
-        popup << "        If you hover over these buttons, they will\n";
-        popup << "        offer more information about that block (eg.\n";
-        popup << "        load/store size, allocation type, etc.)\n";
-        popup << "    </li>\n";
-        popup << "</ul>        \n";
-        popup << "            </div>\n";
-        popup << "        </div>\n";
-        popup << "    </div>\n";
-        popup << "</div>\n";
+              << "' aria-describedby='tooltip" << tooltipCount << "'><i\n"
+              << "                class='bi bi-info'></i></button><b \n"
+              << "        style='font-weight: bold;'>Info Button:</b>\n"
+              << "        If you hover over these buttons, they will\n"
+              << "        offer more information about that block (eg.\n"
+              << "        load/store size, allocation type, etc.)\n"
+              << "    </li>\n"
+              << "</ul>        \n"
+              << "            </div>\n"
+              << "        </div>\n"
+              << "    </div>\n"
+              << "</div>\n";
 
         return popup.str();
     }
 
-    void informationBar(const Module &m) {
+    string informationBar(const Module &m) {
         popups += informationPopup();
 
-        stream << "<div class='informationBar'>\n";
-        stream << "<div class='title'>\n";
-        stream << "<h3>" << m.name() << "</h3>\n";
-        stream << "</div>\n";
-        stream << "<div class='spacing'></div>\n";
-        stream << "<div class='button'>\n";
-        stream << "<h3><button class='informationBarButton'><i\n";
-        stream << "class='bi bi-info-square' data-bs-toggle='modal'\n";
-        stream << "data-bs-target='#stmtHierarchyModal" << popupCount << "'></i></button>\n";
-        stream << "</h3>\n";
-        stream << "</div>\n";
-        stream << "</div>\n";
+        stringstream infoBar;
+
+        infoBar << "<div class='informationBar'>\n"
+                << "<div class='title'>\n"
+                << "<h3>" << m.name() << "</h3>\n"
+                << "</div>\n"
+                << "<div class='spacing'></div>\n"
+                << "<div class='button'>\n"
+                << "<h3><button class='informationBarButton'><i\n"
+                << "class='bi bi-info-square' data-bs-toggle='modal'\n"
+                << "data-bs-target='#stmtHierarchyModal" << popupCount << "'></i></button>\n"
+                << "</h3>\n"
+                << "</div>\n"
+                << "</div>\n";
+
+        return infoBar.str();
     }
 
-    void resizeBar() {
-        stream << "<div class='ResizeBar' id='ResizeBar'>\n";
-        stream << "<div class='collapseButtons'>\n";
-        stream << "<button class='iconButton' onclick='collapseViz()'>";
-        stream << "<i class='bi bi-arrow-bar-right'></i></button>\n";
-        stream << "<button class='iconButton' onclick='collapseCode()'>";
-        stream << "<i class='bi bi-arrow-bar-left'></i></button>\n";
-        stream << "</div>\n";
-        stream << "</div>\n";
+    string resizeBar() {
+        stringstream resizeBar;
+
+        resizeBar << "<div class='ResizeBar' id='ResizeBar'>\n"
+                  << "<div class='collapseButtons'>\n"
+                  << "<button class='iconButton' onclick='collapseViz()'>"
+                  << "<i class='bi bi-arrow-bar-right'></i></button>\n"
+                  << "<button class='iconButton' onclick='collapseCode()'>"
+                  << "<i class='bi bi-arrow-bar-left'></i></button>\n"
+                  << "</div>\n"
+                  << "</div>\n";
+
+        return resizeBar.str();
     }
 
     void generate_html(const string &filename, const Module &m) {
@@ -1761,7 +1766,7 @@ public:
 
         stream << "<div class='outerDiv'>\n";
 
-        informationBar(m);
+        stream << informationBar(m);
 
         stream << "<div class='mainContent'>\n";
 
@@ -1771,10 +1776,10 @@ public:
         stream << "</div>\n";
 
         // for resizing the code and visualization divs
-        resizeBar();
+        stream << resizeBar();
 
         stream << "<div class='IRVisualization' id='IRVisualization'>\n";
-        generate_ir_visualization(m);
+        stream << generate_ir_visualization(m);
         stream << "</div>\n";
 
         stream << "</div>\n";  // close mainContent div
@@ -1795,57 +1800,57 @@ public:
 
     string generatetooltipJS(int &tooltipCount) {
         stringstream tooltipJS;
-        tooltipJS << "\n// Tooltip JS\n";
-        tooltipJS << "function update(buttonElement, tooltipElement) { \n";
-        tooltipJS << "    window.FloatingUIDOM.computePosition(buttonElement, tooltipElement, { \n";
-        tooltipJS << "        placement: 'top', \n";
-        tooltipJS << "        middleware: [ \n";
-        tooltipJS << "            window.FloatingUIDOM.offset(6), \n";
-        tooltipJS << "            window.FloatingUIDOM.flip(), \n";
-        tooltipJS << "            window.FloatingUIDOM.shift({ padding: 5 }), \n";
-        tooltipJS << "        ], \n";
-        tooltipJS << "    }).then(({ x, y, placement, middlewareData }) => { \n";
-        tooltipJS << "        Object.assign(tooltipElement.style, { \n";
-        tooltipJS << "            left: `${x}px`, \n";
-        tooltipJS << "            top: `${y}px`, \n";
-        tooltipJS << "        }); \n";
-        tooltipJS << "        // Accessing the data \n";
-        tooltipJS << "        const staticSide = { \n";
-        tooltipJS << "            top: 'bottom', \n";
-        tooltipJS << "            right: 'left', \n";
-        tooltipJS << "            bottom: 'top', \n";
-        tooltipJS << "            left: 'right', \n";
-        tooltipJS << "        }[placement.split('-')[0]]; \n";
-        tooltipJS << "    }); \n";
-        tooltipJS << "} \n";
-        tooltipJS << "function showTooltip(buttonElement, tooltipElement) { \n";
-        tooltipJS << "    tooltipElement.style.display = 'block'; \n";
-        tooltipJS << "    tooltipElement.style.opacity = '1'; \n";
-        tooltipJS << "    update(buttonElement, tooltipElement); \n";
-        tooltipJS << "} \n";
-        tooltipJS << "function hideTooltip(tooltipElement) { \n";
-        tooltipJS << "    tooltipElement.style.display = ''; \n";
-        tooltipJS << "    tooltipElement.style.opacity = '0'; \n";
-        tooltipJS << "} \n";
-        tooltipJS << "for (let i = 1; i <= " << tooltipCount << "; i++) { \n";
-        tooltipJS << "    const button = document.getElementById('button' + i); \n";
-        tooltipJS << "    const tooltip = document.getElementById('tooltip' + i); \n";
-        tooltipJS << "    button.addEventListener('mouseenter', () => { \n";
-        tooltipJS << "        showTooltip(button, tooltip); \n";
-        tooltipJS << "    }); \n";
-        tooltipJS << "    button.addEventListener('mouseleave', () => { \n";
-        tooltipJS << "        hideTooltip(tooltip); \n";
-        tooltipJS << "    } \n";
-        tooltipJS << "    ); \n";
-        tooltipJS << "    tooltip.addEventListener('focus', () => { \n";
-        tooltipJS << "        showTooltip(button, tooltip); \n";
-        tooltipJS << "    } \n";
-        tooltipJS << "    ); \n";
-        tooltipJS << "    tooltip.addEventListener('blur', () => { \n";
-        tooltipJS << "        hideTooltip(tooltip); \n";
-        tooltipJS << "    } \n";
-        tooltipJS << "    ); \n";
-        tooltipJS << "} \n";
+        tooltipJS << "\n// Tooltip JS\n"
+                  << "function update(buttonElement, tooltipElement) { \n"
+                  << "    window.FloatingUIDOM.computePosition(buttonElement, tooltipElement, { \n"
+                  << "        placement: 'top', \n"
+                  << "        middleware: [ \n"
+                  << "            window.FloatingUIDOM.offset(6), \n"
+                  << "            window.FloatingUIDOM.flip(), \n"
+                  << "            window.FloatingUIDOM.shift({ padding: 5 }), \n"
+                  << "        ], \n"
+                  << "    }).then(({ x, y, placement, middlewareData }) => { \n"
+                  << "        Object.assign(tooltipElement.style, { \n"
+                  << "            left: `${x}px`, \n"
+                  << "            top: `${y}px`, \n"
+                  << "        }); \n"
+                  << "        // Accessing the data \n"
+                  << "        const staticSide = { \n"
+                  << "            top: 'bottom', \n"
+                  << "            right: 'left', \n"
+                  << "            bottom: 'top', \n"
+                  << "            left: 'right', \n"
+                  << "        }[placement.split('-')[0]]; \n"
+                  << "    }); \n"
+                  << "} \n"
+                  << "function showTooltip(buttonElement, tooltipElement) { \n"
+                  << "    tooltipElement.style.display = 'block'; \n"
+                  << "    tooltipElement.style.opacity = '1'; \n"
+                  << "    update(buttonElement, tooltipElement); \n"
+                  << "} \n"
+                  << "function hideTooltip(tooltipElement) { \n"
+                  << "    tooltipElement.style.display = ''; \n"
+                  << "    tooltipElement.style.opacity = '0'; \n"
+                  << "} \n"
+                  << "for (let i = 1; i <= " << tooltipCount << "; i++) { \n"
+                  << "    const button = document.getElementById('button' + i); \n"
+                  << "    const tooltip = document.getElementById('tooltip' + i); \n"
+                  << "    button.addEventListener('mouseenter', () => { \n"
+                  << "        showTooltip(button, tooltip); \n"
+                  << "    }); \n"
+                  << "    button.addEventListener('mouseleave', () => { \n"
+                  << "        hideTooltip(tooltip); \n"
+                  << "    } \n"
+                  << "    ); \n"
+                  << "    tooltip.addEventListener('focus', () => { \n"
+                  << "        showTooltip(button, tooltip); \n"
+                  << "    } \n"
+                  << "    ); \n"
+                  << "    tooltip.addEventListener('blur', () => { \n"
+                  << "        hideTooltip(tooltip); \n"
+                  << "    } \n"
+                  << "    ); \n"
+                  << "} \n";
 
         return tooltipJS.str();
     }

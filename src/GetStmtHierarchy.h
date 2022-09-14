@@ -21,7 +21,7 @@ struct StmtHierarchyInfo {
 class GetStmtHierarchy : public IRVisitor {
 
 public:
-    static const string stmtHierarchyCSS;
+    static const string stmtHierarchyCSS, stmtHierarchyCollapseExpandJS;
 
     GetStmtHierarchy(FindStmtCost findStmtCostPopulated)
         : findStmtCost(findStmtCostPopulated), currNodeID(0), numNodes(0), vizCounter(0),
@@ -35,12 +35,11 @@ public:
     // special case for else case (node with just "else")
     StmtHierarchyInfo get_else_hierarchy_html();
 
-    // generates the JS that is needed to expand/collapse the tree
-    string generate_collapse_expand_js();
+    // generates the JS that is needed to add the tooltips
     string generate_stmtHierarchy_js();
 
 private:
-    string html;                // html string
+    stringstream html;          // html string
     FindStmtCost findStmtCost;  // used to determine the color of each statement
 
     // for expanding/collapsing nodes

@@ -14,7 +14,7 @@ StmtHierarchyInfo GetStmtHierarchy::get_hierarchy_html(const Expr &node) {
     int endNode = numNodes;
 
     StmtHierarchyInfo info;
-    info.html = html;
+    info.html = html.str();
     info.viz_num = vizCounter;
     info.start_node = startNode;
     info.end_node = endNode;
@@ -31,7 +31,7 @@ StmtHierarchyInfo GetStmtHierarchy::get_hierarchy_html(const Stmt &node) {
     int endNode = numNodes;
 
     StmtHierarchyInfo info;
-    info.html = html;
+    info.html = html.str();
     info.viz_num = vizCounter;
     info.start_node = startNode;
     info.end_node = endNode;
@@ -49,7 +49,7 @@ StmtHierarchyInfo GetStmtHierarchy::get_else_hierarchy_html() {
     int endNode = numNodes;
 
     StmtHierarchyInfo info;
-    info.html = html.c_str();
+    info.html = html.str();
     info.viz_num = vizCounter;
     info.start_node = startNode;
     info.end_node = endNode;
@@ -63,18 +63,17 @@ void GetStmtHierarchy::update_num_nodes() {
 }
 
 string GetStmtHierarchy::get_node_class_name() {
+    stringstream className;
     if (currNodeID == startNodeID) {
-        return "viz" + std::to_string(vizCounter) + " startNode depth" + std::to_string(depth);
+        className << "viz" << vizCounter << " startNode depth" << depth;
+    } else {
+        className << "viz" << vizCounter << " node" << currNodeID << "child depth" << depth;
     }
-
-    else {
-        return "viz" + std::to_string(vizCounter) + " node" + std::to_string(currNodeID) +
-               "child depth" + std::to_string(depth);
-    }
+    return className.str();
 }
 
 void GetStmtHierarchy::reset_variables() {
-    html = "";
+    html.str("");
     numNodes++;
     currNodeID = numNodes;
     startNodeID = -1;
@@ -84,14 +83,14 @@ void GetStmtHierarchy::reset_variables() {
 }
 
 void GetStmtHierarchy::start_tree() {
-    html += "<div class='treeDiv'>";
-    html += "<div class='tf-tree tf-gap-sm tf-custom-stmtHierarchy'>";
-    html += "<ul>";
+    html << "<div class='treeDiv'>";
+    html << "<div class='tf-tree tf-gap-sm tf-custom-stmtHierarchy'>";
+    html << "<ul>";
 }
 void GetStmtHierarchy::end_tree() {
-    html += "</ul>";
-    html += "</div>";
-    html += "</div>";
+    html << "</ul>";
+    html << "</div>";
+    html << "</div>";
 }
 
 void GetStmtHierarchy::generate_computation_cost_div(const IRNode *op) {
@@ -100,21 +99,19 @@ void GetStmtHierarchy::generate_computation_cost_div(const IRNode *op) {
     string tooltipText = findStmtCost.generate_computation_cost_tooltip(op, false, "");
 
     // tooltip span
-    html += "<span id='stmtHierarchyTooltip" + std::to_string(stmtHierarchyTooltipCount) +
-            "' class='tooltip CostTooltip' ";
-    html += "role='stmtHierarchyTooltip" + std::to_string(stmtHierarchyTooltipCount) + "'>";
-    html += tooltipText;
-    html += "</span>";
+    html << "<span id='stmtHierarchyTooltip" << stmtHierarchyTooltipCount
+         << "' class='tooltip CostTooltip' ";
+    html << "role='stmtHierarchyTooltip" << stmtHierarchyTooltipCount << "'>";
+    html << tooltipText;
+    html << "</span>";
 
     // color div
     int computation_range = findStmtCost.get_computation_color_range(op, false);
-    string className = "computation-cost-div CostColor" + to_string(computation_range);
-    html +=
-        "<div id='stmtHierarchyButtonTooltip" + std::to_string(stmtHierarchyTooltipCount) + "' ";
-    html +=
-        "aria-describedby='stmtHierarchyTooltip" + std::to_string(stmtHierarchyTooltipCount) + "' ";
-    html += "class='" + className + "'>";
-    html += "</div>";
+    string className = "computation-cost-div CostColor" + std::to_string(computation_range);
+    html << "<div id='stmtHierarchyButtonTooltip" << stmtHierarchyTooltipCount << "' ";
+    html << "aria-describedby='stmtHierarchyTooltip" << stmtHierarchyTooltipCount << "' ";
+    html << "class='" << className << "'>";
+    html << "</div>";
 }
 void GetStmtHierarchy::generate_memory_cost_div(const IRNode *op) {
     stmtHierarchyTooltipCount++;
@@ -122,37 +119,35 @@ void GetStmtHierarchy::generate_memory_cost_div(const IRNode *op) {
     string tooltipText = findStmtCost.generate_data_movement_cost_tooltip(op, false, "");
 
     // tooltip span
-    html += "<span id='stmtHierarchyTooltip" + std::to_string(stmtHierarchyTooltipCount) +
-            "' class='tooltip CostTooltip' ";
-    html += "role='stmtHierarchyTooltip" + std::to_string(stmtHierarchyTooltipCount) + "'>";
-    html += tooltipText;
-    html += "</span>";
+    html << "<span id='stmtHierarchyTooltip" << stmtHierarchyTooltipCount
+         << "' class='tooltip CostTooltip' ";
+    html << "role='stmtHierarchyTooltip" << stmtHierarchyTooltipCount << "'>";
+    html << tooltipText;
+    html << "</span>";
 
     // color div
     int data_movement_range = findStmtCost.get_data_movement_color_range(op, false);
-    string className = "memory-cost-div CostColor" + to_string(data_movement_range);
-    html +=
-        "<div id='stmtHierarchyButtonTooltip" + std::to_string(stmtHierarchyTooltipCount) + "' ";
-    html +=
-        "aria-describedby='stmtHierarchyTooltip" + std::to_string(stmtHierarchyTooltipCount) + "' ";
-    html += "class='" + className + "'>";
-    html += "</div>";
+    string className = "memory-cost-div CostColor" + std::to_string(data_movement_range);
+    html << "<div id='stmtHierarchyButtonTooltip" << stmtHierarchyTooltipCount << "' ";
+    html << "aria-describedby='stmtHierarchyTooltip" << stmtHierarchyTooltipCount << "' ";
+    html << "class='" << className << "'>";
+    html << "</div>";
 }
 
 void GetStmtHierarchy::node_without_children(const IRNode *op, string name) {
 
     string className = get_node_class_name();
-    html += "<li class='" + className + "'>";
-    html += "<span class='tf-nc end-node'>";
-    html += "<div class='nodeContent'>";
+    html << "<li class='" << className << "'>";
+    html << "<span class='tf-nc end-node'>";
+    html << "<div class='nodeContent'>";
     generate_computation_cost_div(op);
     generate_memory_cost_div(op);
-    html += "<div class='nodeName'>";
-    html += name;
-    html += "</div>";
-    html += "</div>";
-    html += "</span>";
-    html += "</li>";
+    html << "<div class='nodeName'>";
+    html << name;
+    html << "</div>";
+    html << "</div>";
+    html << "</span>";
+    html << "</li>";
 }
 void GetStmtHierarchy::open_node(const IRNode *op, string name) {
 
@@ -160,41 +155,41 @@ void GetStmtHierarchy::open_node(const IRNode *op, string name) {
 
     update_num_nodes();
 
-    html += "<li class='" + className + "' id='node" + std::to_string(currNodeID) + "'>";
-    html += "<span class='tf-nc'>";
+    html << "<li class='" << className << "' id='node" << currNodeID << "'>";
+    html << "<span class='tf-nc'>";
 
-    html += "<div class='nodeContent'>";
+    html << "<div class='nodeContent'>";
     generate_computation_cost_div(op);
     generate_memory_cost_div(op);
 
-    html += "<div class='nodeName'>";
-    html += name;
-    html += " <button class='stmtHierarchyButton info-button' onclick='handleClick(" +
-            std::to_string(currNodeID) + ")'>";
-    html += " <i id='stmtHierarchyButton" + std::to_string(currNodeID) + "'></i> ";
-    html += "</button>";
-    html += "</div>";
-    html += "</div>";
+    html << "<div class='nodeName'>";
+    html << name;
+    html << " <button class='stmtHierarchyButton info-button' onclick='handleClick(" << currNodeID
+         << ")'>";
+    html << " <i id='stmtHierarchyButton" << currNodeID << "'></i> ";
+    html << "</button>";
+    html << "</div>";
+    html << "</div>";
 
-    html += "</span>";
+    html << "</span>";
 
     depth++;
-    html += "<ul id='list" + std::to_string(currNodeID) + "'>";
+    html << "<ul id='list" << currNodeID << "'>";
 }
 void GetStmtHierarchy::close_node() {
     depth--;
-    html += "</ul>";
-    html += "</li>";
+    html << "</ul>";
+    html << "</li>";
 }
 
 void GetStmtHierarchy::visit(const IntImm *op) {
-    node_without_children(op, to_string(op->value));
+    node_without_children(op, std::to_string(op->value));
 }
 void GetStmtHierarchy::visit(const UIntImm *op) {
-    node_without_children(op, to_string(op->value));
+    node_without_children(op, std::to_string(op->value));
 }
 void GetStmtHierarchy::visit(const FloatImm *op) {
-    node_without_children(op, to_string(op->value));
+    node_without_children(op, std::to_string(op->value));
 }
 void GetStmtHierarchy::visit(const StringImm *op) {
     node_without_children(op, op->value);
@@ -316,7 +311,7 @@ void GetStmtHierarchy::visit(const Ramp *op) {
     close_node();
 }
 void GetStmtHierarchy::visit(const Broadcast *op) {
-    open_node(op, "x" + to_string(op->lanes));
+    open_node(op, "x" + std::to_string(op->lanes));
     op->value.accept(this);
     close_node();
 }
@@ -438,11 +433,9 @@ void GetStmtHierarchy::visit(const Allocate *op) {
 
     node_without_children(op, op->name + "[" + index.str() + "]");
 
-    string name = "";
+    stringstream name;
     if (!is_const_one(op->condition)) {
-        stringstream cond;
-        cond << op->condition;
-        name += " if " + cond.str();
+        name << " if " << op->condition;
     }
 
     if (op->new_expr.defined()) {
@@ -451,10 +444,10 @@ void GetStmtHierarchy::visit(const Allocate *op) {
                        << " `op->new_expr.defined()` is not supported.\n\n";
     }
     if (!op->free_function.empty()) {
-        name += "custom_delete {" + op->free_function + "}";
+        name << "custom_delete {" << op->free_function << "}";
     }
 
-    if (name != "") node_without_children(op, name);
+    if (name.str() != "") node_without_children(op, name.str());
     close_node();
 }
 void GetStmtHierarchy::visit(const Free *op) {
@@ -594,133 +587,31 @@ void GetStmtHierarchy::visit(const Atomic *op) {
 }
 
 string GetStmtHierarchy::generate_stmtHierarchy_js() {
-    string stmtHierarchyJS;
+    stringstream stmtHierarchyJS;
 
-    stmtHierarchyJS += "\n// stmtHierarchy JS\n";
-    stmtHierarchyJS +=
-        "for (let i = 1; i <= " + std::to_string(stmtHierarchyTooltipCount) + "; i++) { \n";
-    stmtHierarchyJS +=
-        "    const button = document.getElementById('stmtHierarchyButtonTooltip' + i); \n";
-    stmtHierarchyJS +=
-        "    const tooltip = document.getElementById('stmtHierarchyTooltip' + i); \n";
-    stmtHierarchyJS += "    button.addEventListener('mouseenter', () => { \n";
-    stmtHierarchyJS += "        showTooltip(button, tooltip); \n";
-    stmtHierarchyJS += "    }); \n";
-    stmtHierarchyJS += "    button.addEventListener('mouseleave', () => { \n";
-    stmtHierarchyJS += "        hideTooltip(tooltip); \n";
-    stmtHierarchyJS += "    } \n";
-    stmtHierarchyJS += "    ); \n";
-    stmtHierarchyJS += "    tooltip.addEventListener('focus', () => { \n";
-    stmtHierarchyJS += "        showTooltip(button, tooltip); \n";
-    stmtHierarchyJS += "    } \n";
-    stmtHierarchyJS += "    ); \n";
-    stmtHierarchyJS += "    tooltip.addEventListener('blur', () => { \n";
-    stmtHierarchyJS += "        hideTooltip(tooltip); \n";
-    stmtHierarchyJS += "    } \n";
-    stmtHierarchyJS += "    ); \n";
-    stmtHierarchyJS += "} \n";
+    stmtHierarchyJS
+        << "\n// stmtHierarchy JS\n"
+        << "for (let i = 1; i <= " << stmtHierarchyTooltipCount << "; i++) { \n"
+        << "    const button = document.getElementById('stmtHierarchyButtonTooltip' + i); \n"
+        << "    const tooltip = document.getElementById('stmtHierarchyTooltip' + i); \n"
+        << "    button.addEventListener('mouseenter', () => { \n"
+        << "        showTooltip(button, tooltip); \n"
+        << "    }); \n"
+        << "    button.addEventListener('mouseleave', () => { \n"
+        << "        hideTooltip(tooltip); \n"
+        << "    } \n"
+        << "    ); \n"
+        << "    tooltip.addEventListener('focus', () => { \n"
+        << "        showTooltip(button, tooltip); \n"
+        << "    } \n"
+        << "    ); \n"
+        << "    tooltip.addEventListener('blur', () => { \n"
+        << "        hideTooltip(tooltip); \n"
+        << "    } \n"
+        << "    ); \n"
+        << "} \n";
 
-    return stmtHierarchyJS;
-}
-
-string GetStmtHierarchy::generate_collapse_expand_js() {
-
-    stringstream js;
-
-    js << "\n// collapse/expand js (stmt hierarchy)\n";
-    js << "var nodeExpanded = new Map();\n";
-    js << "var alreadyAddedDotDotDot = [];\n";
-    js << "function collapseAllNodes(startNode, endNode) {\n";
-    js << "    for (let i = startNode; i <= endNode; i++) {\n";
-    js << "        collapseNodeChildren(i);\n";
-    js << "        nodeExpanded.set(i, false);\n";
-    js << "        if (document.getElementById('stmtHierarchyButton' + i) != null) {\n";
-    js << "            document.getElementById('stmtHierarchyButton' + i).className = 'arrow "
-          "down';\n";
-    js << "        }\n";
-    js << "    }\n";
-    js << "}\n";
-    js << "function expandNodesUpToDepth(depth, vizNum) {\n";
-    js << "    for (let i = 0; i < depth; i++) {\n";
-    js << "        const depthChildren = document.getElementsByClassName('viz' + vizNum + ' depth' "
-          "+ i);\n";
-    js << "        for (const child of depthChildren) {\n";
-    js << "            child.style.display = '';\n";
-    js << "            if (child.className.includes('start')) {\n";
-    js << "                continue;\n";
-    js << "            }\n";
-    js << "            let parentNodeID = child.className.split()[0];\n";
-    js << "            parentNodeID = parentNodeID.split('node')[1];\n";
-    js << "            parentNodeID = parentNodeID.split('child')[0];\n";
-    js << "            const parentNode = parseInt(parentNodeID);\n";
-    js << "            nodeExpanded.set(parentNode, true);\n";
-    js << "            if (document.getElementById('stmtHierarchyButton' + parentNodeID) != null) "
-          "{\n";
-    js << "                document.getElementById('stmtHierarchyButton' + parentNodeID).className "
-          "= 'arrow up';\n";
-    js << "            }\n";
-    js << "            const dotdotdot = document.getElementById('node' + parentNodeID + "
-          "'dotdotdot');\n";
-    js << "            if (dotdotdot != null) {\n";
-    js << "                dotdotdot.remove();\n";
-    js << "            }\n";
-    js << "        }\n";
-    js << "    }\n";
-    js << "}\n";
-    js << "function handleClick(nodeNum) {\n";
-    js << "    if (nodeExpanded.get(nodeNum)) {\n";
-    js << "        collapseNodeChildren(nodeNum);\n";
-    js << "        nodeExpanded.set(nodeNum, false);\n";
-    js << "    } else {\n";
-    js << "        expandNodeChildren(nodeNum);\n";
-    js << "        nodeExpanded.set(nodeNum, true);\n";
-    js << "    }\n";
-    js << "}\n";
-    js << "function collapseNodeChildren(nodeNum) {\n";
-    js << "    const children = document.getElementsByClassName('node' + nodeNum + "
-          "'child');\n";
-    js << "    if (document.getElementById('stmtHierarchyButton' + nodeNum) != null) {\n";
-    js << "        document.getElementById('stmtHierarchyButton' + nodeNum).className = 'arrow "
-          "down';\n";
-    js << "    }\n";
-    js << "    for (const child of children) {\n";
-    js << "        child.style.display = 'none';\n";
-    js << "    }\n";
-    js << "    if (alreadyAddedDotDotDot.includes(nodeNum)) {\n";
-    js << "        return;\n";
-    js << "    }\n";
-    js << "    const list = document.getElementById('list' + nodeNum);\n";
-    js << "    const parentNode = document.getElementById('node' + nodeNum);\n";
-    js << "    if (list != null && parentNode != null) {\n";
-    js << "        const span = parentNode.children[0];\n";
-    js << "        list.appendChild(addDotDotDotChild(nodeNum));\n";
-    js << "        alreadyAddedDotDotDot.push(nodeNum);\n";
-    js << "    }\n";
-    js << "}\n";
-    js << "function expandNodeChildren(nodeNum) {\n";
-    js << "    const children = document.getElementsByClassName('node' + nodeNum + "
-          "'child');\n";
-    js << "    if (document.getElementById('stmtHierarchyButton' + nodeNum) != null) {\n";
-    js << "        document.getElementById('stmtHierarchyButton' + nodeNum).className = 'arrow "
-          "up';\n";
-    js << "    }\n";
-    js << "    for (const child of children) {\n";
-    js << "        child.style.display = '';\n";
-    js << "    }\n";
-    js << "     const dotdotdot = document.getElementById('node' + nodeNum + 'dotdotdot');\n";
-    js << "     if (dotdotdot != null) {\n";
-    js << "         dotdotdot.remove();\n";
-    js << "     }\n";
-    js << "}\n";
-    js << "function addDotDotDotChild(nodeNum, colorCost) {\n";
-    js << "    var liDotDotDot = document.createElement('li');\n";
-    js << "    liDotDotDot.id = 'node' + nodeNum + 'dotdotdot';\n";
-    js << "    const span =\"<span class='tf-nc end-node'>...</span> \";\n";
-    js << "    liDotDotDot.innerHTML = span;\n";
-    js << "    return liDotDotDot;\n";
-    js << "}\n";
-
-    return js.str();
+    return stmtHierarchyJS.str();
 }
 
 const string GetStmtHierarchy::stmtHierarchyCSS = "\n \
@@ -737,4 +628,90 @@ inline-block; padding: 3px; } \n \
 .tf-custom-stmtHierarchy { font-size: 12px; } \n \
 div.nodeContent { display: flex; } \n \
 div.nodeName { padding-left: 5px; } \n \
+";
+
+const string GetStmtHierarchy::stmtHierarchyCollapseExpandJS = "\n \
+// collapse/expand js (stmt hierarchy) \n \
+var nodeExpanded = new Map(); \n \
+var alreadyAddedDotDotDot = []; \n \
+function collapseAllNodes(startNode, endNode) { \n \
+    for (let i = startNode; i <= endNode; i++) { \n \
+        collapseNodeChildren(i); \n \
+        nodeExpanded.set(i, false); \n \
+        if (document.getElementById('stmtHierarchyButton' + i) != null) { \n \
+            document.getElementById('stmtHierarchyButton' + i).className = 'arrow down'; \n \
+        } \n \
+    } \n \
+} \n \
+function expandNodesUpToDepth(depth, vizNum) { \n \
+    for (let i = 0; i < depth; i++) { \n \
+        const depthChildren = document.getElementsByClassName('viz' + vizNum + ' depth' + i); \n \
+        for (const child of depthChildren) { \n \
+            child.style.display = ''; \n \
+            if (child.className.includes('start')) { \n \
+                continue; \n \
+            } \n \
+            let parentNodeID = child.className.split()[0]; \n \
+            parentNodeID = parentNodeID.split('node')[1]; \n \
+            parentNodeID = parentNodeID.split('child')[0]; \n \
+            const parentNode = parseInt(parentNodeID); \n \
+            nodeExpanded.set(parentNode, true); \n \
+            if (document.getElementById('stmtHierarchyButton' + parentNodeID) != null) { \n \
+                document.getElementById('stmtHierarchyButton' + parentNodeID).className = 'arrow up'; \n \
+            } \n \
+            const dotdotdot = document.getElementById('node' + parentNodeID + 'dotdotdot'); \n \
+            if (dotdotdot != null) { \n \
+                dotdotdot.remove(); \n \
+            } \n \
+        } \n \
+    } \n \
+} \n \
+function handleClick(nodeNum) { \n \
+    if (nodeExpanded.get(nodeNum)) { \n \
+        collapseNodeChildren(nodeNum); \n \
+        nodeExpanded.set(nodeNum, false); \n \
+    } else { \n \
+        expandNodeChildren(nodeNum); \n \
+        nodeExpanded.set(nodeNum, true); \n \
+    } \n \
+} \n \
+function collapseNodeChildren(nodeNum) { \n \
+    const children = document.getElementsByClassName('node' + nodeNum + 'child'); \n \
+    if (document.getElementById('stmtHierarchyButton' + nodeNum) != null) { \n \
+        document.getElementById('stmtHierarchyButton' + nodeNum).className = 'arrow down'; \n \
+    } \n \
+    for (const child of children) { \n \
+        child.style.display = 'none'; \n \
+    } \n \
+    if (alreadyAddedDotDotDot.includes(nodeNum)) { \n \
+        return; \n \
+    } \n \
+    const list = document.getElementById('list' + nodeNum); \n \
+    const parentNode = document.getElementById('node' + nodeNum); \n \
+    if (list != null && parentNode != null) { \n \
+        const span = parentNode.children[0]; \n \
+        list.appendChild(addDotDotDotChild(nodeNum)); \n \
+        alreadyAddedDotDotDot.push(nodeNum); \n \
+    } \n \
+} \n \
+function expandNodeChildren(nodeNum) { \n \
+    const children = document.getElementsByClassName('node' + nodeNum + 'child'); \n \
+    if (document.getElementById('stmtHierarchyButton' + nodeNum) != null) { \n \
+        document.getElementById('stmtHierarchyButton' + nodeNum).className = 'arrow up'; \n \
+    } \n \
+    for (const child of children) { \n \
+        child.style.display = ''; \n \
+    } \n \
+     const dotdotdot = document.getElementById('node' + nodeNum + 'dotdotdot'); \n \
+     if (dotdotdot != null) { \n \
+         dotdotdot.remove(); \n \
+     } \n \
+} \n \
+function addDotDotDotChild(nodeNum, colorCost) { \n \
+    var liDotDotDot = document.createElement('li'); \n \
+    liDotDotDot.id = 'node' + nodeNum + 'dotdotdot'; \n \
+    const span =\"<span class='tf-nc end-node'>...</span> \"; \n \
+    liDotDotDot.innerHTML = span; \n \
+    return liDotDotDot; \n \
+} \n \
 ";

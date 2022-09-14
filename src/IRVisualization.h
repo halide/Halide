@@ -84,7 +84,7 @@ public:
 private:
     using IRVisitor::visit;
 
-    string html;                // main html string
+    stringstream html;          // main html string
     StmtSizes pre_processor;    // generates the sizes of the nodes
     FindStmtCost findStmtCost;  // used to determine the color of each statement
     int numOfNodes;             // keeps track of the number of nodes in the visualization

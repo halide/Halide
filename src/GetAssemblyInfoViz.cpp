@@ -30,7 +30,7 @@ public:
     }
 
     string get_assembly_html() {
-        return assemblyHTML;
+        return assemblyHTML.str();
     }
 
     int get_line_number(const IRNode *op) {
@@ -45,7 +45,7 @@ public:
 private:
     unordered_map<const IRNode *, int> nodeToLineNumber;
     vector<AssemblyInfo> labels;
-    string assemblyHTML;
+    stringstream assemblyHTML;
     vector<const IRNode *> claimedNodes;
 
     // traverses the module to generate the assembly labels
@@ -64,8 +64,8 @@ private:
     // generates the assembly html and line numbers from the loaded assembly file
     // and generated labels
     void generate_assembly_html_and_line_numbers(const string &filename) {
-        assemblyHTML += "<div id='assemblyContent' style='display: none;'>\n";
-        assemblyHTML += "<pre>\n";
+        assemblyHTML << "<div id='assemblyContent' style='display: none;'>\n";
+        assemblyHTML << "<pre>\n";
 
         ifstream assemblyFile;
         string assemblyFileName = get_assembly_file_name(filename);
@@ -76,14 +76,14 @@ private:
             int lineNumber = 0;
             while (getline(assemblyFile, assemblyLine)) {
                 lineNumber++;
-                assemblyHTML += assemblyLine + "\n";
+                assemblyHTML << assemblyLine << "\n";
                 add_line_number(assemblyLine, lineNumber);
             }
             assemblyFile.close();
         }
 
-        assemblyHTML += "</pre>\n";
-        assemblyHTML += "</div>\n";
+        assemblyHTML << "</pre>\n";
+        assemblyHTML << "</div>\n";
     }
 
     // gets assembly file from stmt.viz.html file
@@ -119,7 +119,6 @@ private:
         codeString = std::regex_replace(codeString, dollar, "\\$");
 
         std::regex regex("(\")" + codeString + "[0-9]*\"");
-        string regexString = codeString + "[0-9]*\"";
 
         AssemblyInfo info;
         info.regex = regex;
@@ -137,7 +136,6 @@ private:
         codeString = std::regex_replace(codeString, dollar, "\\$");
 
         std::regex regex(codeString + "(.preheader)*[0-9]*\"");
-        string regexString = codeString + "(.preheader)*[0-9]*\"";
 
         AssemblyInfo info;
         info.regex = regex;
