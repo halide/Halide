@@ -1884,6 +1884,19 @@ void CodeGen_Hexagon::visit(const Call *op) {
         {Call::get_intrinsic_name(Call::saturating_sub), {"halide.hexagon.sat_sub", true}},
     };
 
+    if (op->call_type == Call::PureExtern && (op->name == "round_f32" || op->name == "round_f64")) {
+        // Workaround for issue https://github.com/halide/Halide/issues/7017
+
+        // Reimplement round with ties to even using floor
+        internal_assert(op->args.size() == 1);
+        Expr a = floor(op->args[0] + 0.5f);
+        Expr b = ceil(op->args[0] - 0.5f);
+        // If they differ, pick the even one
+        Expr equiv = select(a % 2 == 0, a, b);
+        codegen(equiv);
+        return;
+    }
+
     if (is_native_interleave(op)) {
         internal_assert(
             op->type.lanes() % (native_vector_bits() * 2 / op->type.bits()) == 0);
