@@ -769,7 +769,7 @@ def alias(**kwargs):
 def generator(name=""):
     # This code relies on dicts preserving key-insertion order, which is only
     # guaranteed for all Python implementations as of v3.7.
-    assert sys.version_info >= (3, 7), "Halide Generators require Python 3.7 or later."
+    _check(sys.version_info >= (3, 7), "Halide Generators require Python 3.7 or later.")
     def generator_impl(cls):
         n = name if name else _fqname(cls)
         _check(not n in _python_generators, "The Generator name %s is already in use." % n)
