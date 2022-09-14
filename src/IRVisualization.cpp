@@ -893,7 +893,6 @@ void IRVisualization::visit(const Load *op) {
                     header = "Dense vector ";
                 } else {
                     header = "Strided vector ";
-                    cout << "strided vector!!!! check it out!!! Load " << op->name << endl;
                 }
             } else {
                 header = "Dense vector ";
