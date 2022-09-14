@@ -9,14 +9,19 @@ template<class T>
 bool test(Expr e, const char *funcname, int vector_width, int N, Buffer<T> &input, T *result) {
     Func f;
     f(x) = e;
-    if (get_jit_target_from_environment().has_gpu_feature()) {
+    Target t = get_jit_target_from_environment();
+    if (t.has_gpu_feature()) {
+        if (e.type() == Float(64) &&
+            t.has_feature(Target::OpenCL) &&
+            !t.has_feature(Target::CLDoubles)) {
+            return true;
+        }
         f.gpu_single_thread();
     } else if (vector_width > 1) {
         f.vectorize(x, vector_width);
     }
 
     Buffer<T> im = f.realize({N});
-    im.copy_to_host();
 
     printf("Testing %s (%s x %d)\n", funcname, type_of<T>() == Float(32) ? "float" : "double", vector_width);
     bool ok = true;
