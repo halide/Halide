@@ -30,7 +30,9 @@ enum class ArgInfoKind { Scalar,
 enum class ArgInfoDirection { Input,
                               Output };
 
+#ifdef HALIDE_ALLOW_GENERATOR_EXTERNAL_CODE
 using ExternsMap = std::map<std::string, ExternalCode>;
+#endif
 
 /**
  * AbstractGenerator is an ABC that defines the API a Generator must provide
@@ -79,7 +81,7 @@ public:
      * used to register it.) */
     virtual std::string name() = 0;
 
-    /** Return the Target, autoscheduler flag, and MachineParams that this Generator
+    /** Return the Target and autoscheduler info that this Generator
      * was created with. Always legal to call on any AbstractGenerator instance,
      * regardless of what other methods have been called. (All AbstractGenerator instances
      * are expected to be created with immutable values for these, which can't be
@@ -151,12 +153,14 @@ public:
      */
     virtual std::vector<Func> output_func(const std::string &name) = 0;
 
+#ifdef HALIDE_ALLOW_GENERATOR_EXTERNAL_CODE
     /** Return the ExternsMap for the Generator, if any.
      *
      * CALL-AFTER: build_pipeline()
      * CALL-BEFORE: n/a
      */
     virtual ExternsMap external_code_map() = 0;
+#endif
 
     /** Rebind a specified Input to refer to the given piece of IR, replacing the
      * default ImageParam / Param in place for that Input. Basic type-checking is

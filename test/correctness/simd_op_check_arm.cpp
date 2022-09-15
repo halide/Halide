@@ -486,8 +486,18 @@ private:
                 add_all_vec(sel_op("vshr.u", "ushr", "lsr"), u_1 / 16);
 
                 // VSHRN    I       -       Shift Right Narrow
-                add_16_32_64_narrow(sel_op("vshrn.i", "shrn"), narrow_i(i_1 >> (bits / 2)));
-                add_16_32_64_narrow(sel_op("vshrn.i", "shrn"), narrow_u(u_1 >> (bits / 2)));
+                // LLVM15 emits UZP2 if the shift amount is half the width of the vector element.
+                const auto shrn_or_uzp2 = [&](int element_width, int shift_amt, int vector_width) {
+                    constexpr int simd_vector_bits = 128;
+                    if (Halide::Internal::get_llvm_version() >= 150 &&
+                        ((vector_width * element_width) % (simd_vector_bits * 2)) == 0 &&
+                        shift_amt == element_width / 2) {
+                        return "uzp2";
+                    }
+                    return "shrn";
+                };
+                add_16_32_64_narrow(sel_op("vshrn.i", shrn_or_uzp2(bits, bits / 2, vf * 2)), narrow_i(i_1 >> (bits / 2)));
+                add_16_32_64_narrow(sel_op("vshrn.i", shrn_or_uzp2(bits, bits / 2, vf * 2)), narrow_u(u_1 >> (bits / 2)));
 
                 add_16_32_64_narrow(sel_op("vshrn.i", "shrn"), narrow_i(i_1 / 16));
                 add_16_32_64_narrow(sel_op("vshrn.i", "shrn"), narrow_u(u_1 / 16));

@@ -998,8 +998,8 @@ llvm::Function *CodeGen_Hexagon::define_hvx_intrinsic(llvm::Function *intrin,
 Value *CodeGen_Hexagon::create_bitcast(Value *v, llvm::Type *ty) {
     if (BitCastInst *c = dyn_cast<BitCastInst>(v)) {
         return create_bitcast(c->getOperand(0), ty);
-    } else if (isa<UndefValue>(v)) {
-        return UndefValue::get(ty);
+    } else if (isa<PoisonValue>(v)) {
+        return PoisonValue::get(ty);
     } else if (v->getType() != ty) {
         v = builder->CreateBitCast(v, ty);
     }
@@ -1178,7 +1178,7 @@ Value *CodeGen_Hexagon::shuffle_vectors(Value *a, Value *b,
                 i -= a_elements;
             }
         }
-        return shuffle_vectors(b, UndefValue::get(b->getType()), shifted_indices);
+        return shuffle_vectors(b, shifted_indices);
     }
 
     // Try to rewrite shuffles that only access the elements of a.
@@ -1620,7 +1620,7 @@ Value *CodeGen_Hexagon::vdelta(Value *lut, const vector<int> &indices) {
 Value *CodeGen_Hexagon::create_vector(llvm::Type *ty, int val) {
     llvm::Type *scalar_ty = ty->getScalarType();
     Constant *value = ConstantInt::get(scalar_ty, val);
-    return ConstantVector::getSplat(element_count(get_vector_num_elements(ty)), value);
+    return get_splat(get_vector_num_elements(ty), value);
 }
 
 Value *CodeGen_Hexagon::vlut(Value *lut, Value *idx, int min_index, int max_index) {

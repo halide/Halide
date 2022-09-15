@@ -166,7 +166,6 @@ protected:
     llvm::MDNode *default_fp_math_md;
     llvm::MDNode *strict_fp_math_md;
     std::vector<LoweredArgument> current_function_args;
-    //@}
 
     /** The target we're generating code for */
     Halide::Target target;
@@ -178,8 +177,10 @@ protected:
      * multiple related modules (e.g. multiple device kernels). */
     virtual void init_module();
 
+#ifdef HALIDE_ALLOW_GENERATOR_EXTERNAL_CODE
     /** Add external_code entries to llvm module. */
     void add_external_code(const Module &halide_module);
+#endif
 
     /** Run all of llvm's optimization passes on the module. */
     void optimize_module();
@@ -328,6 +329,7 @@ protected:
     void visit(const FloatImm *) override;
     void visit(const StringImm *) override;
     void visit(const Cast *) override;
+    void visit(const Reinterpret *) override;
     void visit(const Variable *) override;
     void visit(const Add *) override;
     void visit(const Sub *) override;
@@ -391,17 +393,14 @@ protected:
      * current context. */
     virtual llvm::Type *llvm_type_of(const Type &) const;
 
-    /** Represents the number of elements in a vector,
-     * either fixed size or min size of scalable vector */
-    llvm::ElementCount element_count(int e) const;
-
-    /** Return llvm vector type with actual lanes = n.
-     * In case of scalable vector, effective_vscale is taken into account and applied to n. */
-    llvm::Type *get_vector_type(llvm::Value *vec_or_scalar, int n) const;
-    llvm::Type *get_vector_type(llvm::Type *ty, int n) const;
-
-    /** Return true if scalable vector, false if scalar or fixed sized vector */
-    bool is_scalable_vector(llvm::Value *v) const;
+    /** Get the llvm type equivalent to a given halide type. If
+     * effective_vscale is nonzero and the type is a vector type with lanes
+     * a multiple of effective_vscale, a scalable vector type is generated
+     * with total lanes divided by effective_vscale. That is a scalable
+     * vector intended to be used with a fixed vscale of effective_vscale.
+     */
+    llvm::Type *llvm_type_of(llvm::LLVMContext *context, Halide::Type t,
+                             int effective_vscale) const;
 
     /** Perform an alloca at the function entrypoint. Will be cleaned
      * on function exit. */
@@ -508,7 +507,7 @@ protected:
     /** Create an LLVM shuffle vectors instruction. */
     virtual llvm::Value *shuffle_vectors(llvm::Value *a, llvm::Value *b,
                                          const std::vector<int> &indices);
-    /** Shorthand for shuffling a vector with an undef vector. */
+    /** Shorthand for shuffling a single vector. */
     llvm::Value *shuffle_vectors(llvm::Value *v, const std::vector<int> &indices);
 
     /** Go looking for a vector version of a runtime function. Will
@@ -566,6 +565,32 @@ protected:
 
     /** Get number of vector elements, taking into account scalable vectors. Returns 1 for scalars. */
     int get_vector_num_elements(const llvm::Type *t);
+
+    /** Interface to abstract vector code generation as LLVM is now
+     * providing multiple options to express even simple vector
+     * operations. Specifically traditional fixed length vectors, vscale
+     * based variable length vectors, and the vector predicate based approach
+     * where an explict length is passed with each instruction.
+     */
+    // @{
+    enum class VectorTypeConstraint {
+        None,    /// Use default for current target.
+        Fixed,   /// Force use of fixed size vectors.
+        VScale,  /// For use of scalable vectors.
+    };
+    llvm::Type *get_vector_type(llvm::Type *, int n,
+                                VectorTypeConstraint type_constraint = VectorTypeConstraint::None) const;
+    // @}
+
+    /** Get LLVM vector type which has the same element type as the given value */
+    llvm::Type *get_vector_type(llvm::Value *vec_or_scalar, int n,
+                                VectorTypeConstraint type_constraint = VectorTypeConstraint::None) const;
+
+    llvm::Constant *get_splat(int lanes, llvm::Constant *value,
+                              VectorTypeConstraint type_constraint = VectorTypeConstraint::None) const;
+
+    /** Return true if scalable vector, false if scalar or fixed sized vector */
+    bool is_scalable_vector(llvm::Value *v) const;
 
     bool is_power_of_two(int x) const;
     int next_power_of_two(int x) const;

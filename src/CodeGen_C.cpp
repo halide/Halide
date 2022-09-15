@@ -1751,6 +1751,7 @@ void CodeGen_C::compile(const Module &input) {
     stream << "\n";
 
     if (!is_header_or_extern_decl()) {
+#ifdef HALIDE_ALLOW_GENERATOR_EXTERNAL_CODE
         // Emit any external-code blobs that are C++.
         for (const ExternalCode &code_blob : input.external_code()) {
             if (code_blob.is_c_plus_plus_source()) {
@@ -1762,6 +1763,7 @@ void CodeGen_C::compile(const Module &input) {
                 stream << "\n";
             }
         }
+#endif
 
         add_vector_typedefs(type_info.vector_types_used);
 
@@ -2069,6 +2071,10 @@ void CodeGen_C::visit(const Cast *op) {
     id = print_cast_expr(op->type, op->value);
 }
 
+void CodeGen_C::visit(const Reinterpret *op) {
+    id = print_assignment(op->type, print_reinterpret(op->type, op->value));
+}
+
 void CodeGen_C::visit_binop(Type t, const Expr &a, const Expr &b, const char *op) {
     string sa = print_expr(a);
     string sb = print_expr(b);
@@ -2292,9 +2298,6 @@ void CodeGen_C::visit(const Call *op) {
     } else if (op->is_intrinsic(Call::bitwise_not)) {
         internal_assert(op->args.size() == 1);
         rhs << "~" << print_expr(op->args[0]);
-    } else if (op->is_intrinsic(Call::reinterpret)) {
-        internal_assert(op->args.size() == 1);
-        rhs << print_reinterpret(op->type, op->args[0]);
     } else if (op->is_intrinsic(Call::shift_left)) {
         internal_assert(op->args.size() == 2);
         if (op->args[1].type().is_uint()) {
@@ -2555,6 +2558,8 @@ void CodeGen_C::visit(const Call *op) {
         user_error << "Signed integer overflow occurred during constant-folding. Signed"
                       " integer overflow for int32 and int64 is undefined behavior in"
                       " Halide.\n";
+    } else if (op->is_intrinsic(Call::undef)) {
+        user_error << "undef not eliminated before code generation. Please report this as a Halide bug.\n";
     } else if (op->is_intrinsic(Call::prefetch)) {
         user_assert((op->args.size() == 4) && is_const_one(op->args[2]))
             << "Only prefetch of 1 cache line is supported in C backend.\n";

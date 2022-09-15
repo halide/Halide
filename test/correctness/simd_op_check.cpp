@@ -156,9 +156,14 @@ public:
             check("pavgw", 4 * w, u16((u32(u16_1) + u32(u16_2) + 1) / 2));
             check("pavgw", 4 * w, u16((u32(u16_1) + u32(u16_2) + 1) >> 1));
 
-            // Rounding right shifts should also use pavg
+            // Rounding right shifts, halving subtracts, and signed rounding
+            // averages should also use pavg
             check("pavgb", 8 * w, rounding_shift_right(u8_1, 2));
             check("pavgw", 4 * w, rounding_shift_right(u16_1, 2));
+            check("pavgb", 8 * w, halving_sub(u8_1, u8_2));
+            check("pavgw", 4 * w, halving_sub(u16_1, u16_2));
+            check("pavgb", 8 * w, rounding_halving_add(i8_1, i8_2));
+            check("pavgw", 4 * w, rounding_halving_add(i16_1, i16_2));
 
             check("pmaxsw", 4 * w, max(i16_1, i16_2));
             check("pminsw", 4 * w, min(i16_1, i16_2));
@@ -235,6 +240,18 @@ public:
             check(std::string("packssdw") + check_suffix, 4 * w, i16_sat(i32_1));
             check(std::string("packsswb") + check_suffix, 8 * w, i8_sat(i16_1));
             check(std::string("packuswb") + check_suffix, 8 * w, u8_sat(i16_1));
+
+            // Sum-of-absolute-difference ops
+            {
+                const int f = 8;  // reduction factor.
+                RDom r(0, f);
+                check("psadbw", w, sum(u64(absd(in_u8(f * x + r), in_u8(f * x + r + 32)))));
+                check("psadbw", w, sum(u32(absd(in_u8(f * x + r), in_u8(f * x + r + 32)))));
+                check("psadbw", w, sum(u16(absd(in_u8(f * x + r), in_u8(f * x + r + 32)))));
+                check("psadbw", w, sum(i64(absd(in_u8(f * x + r), in_u8(f * x + r + 32)))));
+                check("psadbw", w, sum(i32(absd(in_u8(f * x + r), in_u8(f * x + r + 32)))));
+                check("psadbw", w, sum(i16(absd(in_u8(f * x + r), in_u8(f * x + r + 32)))));
+            }
         }
 
         // SSE 3 / SSSE 3
@@ -301,6 +318,11 @@ public:
                 RDom r2(0, 2);
                 check(check_pmaddubsw, 4 * w, saturating_sum(i16(in_u8(2 * x + r2)) * in_i8(2 * x + r2 + 32)));
                 check(check_pmaddubsw, 4 * w, saturating_sum(i16(in_i8(2 * x + r2)) * in_u8(2 * x + r2 + 32)));
+
+                // uint8 -> uint16 or int16 and int8 -> int16 horizontal widening adds should use pmaddubsw.
+                check(check_pmaddubsw, 4 * w, sum(u16(in_u8(2 * x + r2))));
+                check(check_pmaddubsw, 4 * w, sum(i16(in_u8(2 * x + r2))));
+                check(check_pmaddubsw, 4 * w, sum(i16(in_i8(2 * x + r2))));
             }
         }
 
@@ -506,6 +528,18 @@ public:
             check("vpcmpeqq*ymm", 4, select(i64_1 == i64_2, i64(1), i64(2)));
             check("vpackusdw*ymm", 16, u16(clamp(i32_1, 0, max_u16)));
             check("vpcmpgtq*ymm", 4, select(i64_1 > i64_2, i64(1), i64(2)));
+
+            // Sum-of-absolute-difference ops
+            for (int w : {4, 8}) {
+                const int f = 8;  // reduction factor.
+                RDom r(0, f);
+                check("vpsadbw", w, sum(u64(absd(in_u8(f * x + r), in_u8(f * x + r + 32)))));
+                check("vpsadbw", w, sum(u32(absd(in_u8(f * x + r), in_u8(f * x + r + 32)))));
+                check("vpsadbw", w, sum(u16(absd(in_u8(f * x + r), in_u8(f * x + r + 32)))));
+                check("vpsadbw", w, sum(i64(absd(in_u8(f * x + r), in_u8(f * x + r + 32)))));
+                check("vpsadbw", w, sum(i32(absd(in_u8(f * x + r), in_u8(f * x + r + 32)))));
+                check("vpsadbw", w, sum(i16(absd(in_u8(f * x + r), in_u8(f * x + r + 32)))));
+            }
         }
 
         if (use_avx512) {

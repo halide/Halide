@@ -7,7 +7,7 @@ function(add_tutorial source_file)
     set(multiValueArgs SRCS GROUPS)
     cmake_parse_arguments(args "${options}" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
 
-    get_filename_component(name "${source_file}" NAME_WE)
+    cmake_path(GET source_file STEM name)
 
     add_executable("${name}" "${source_file}")
     target_link_libraries("${name}" PRIVATE Halide::Halide Halide::Tools)
@@ -56,13 +56,10 @@ if (TARGET_NVPTX)
         # so we can build the final executable.
         add_tutorial(lesson_10_aot_compilation_generate.cpp)
 
-        # LLVM may leak memory during Halide compilation. If projects are built with address sanitizer enabled,
-        # this may cause generators to fail, making it hard to use Halide and address sanitizer at the same time.
-        # To work around this, we execute generators with an environment setting to disable leak checking.
         set(FILTER_LIB "lesson_10_halide${CMAKE_STATIC_LIBRARY_SUFFIX}")
         add_custom_command(OUTPUT lesson_10_halide.h "${FILTER_LIB}"
                            DEPENDS lesson_10_aot_compilation_generate
-                           COMMAND ${CMAKE_COMMAND} -E env "ASAN_OPTIONS=detect_leaks=0" $<TARGET_FILE:lesson_10_aot_compilation_generate>
+                           COMMAND lesson_10_aot_compilation_generate
                            VERBATIM)
         add_custom_target(exec_lesson_10_aot_compilation_generate
                           DEPENDS lesson_10_halide.h "${FILTER_LIB}")
@@ -194,11 +191,14 @@ if (TARGET Halide::Mullapudi2016)
 
     add_halide_library(auto_schedule_false FROM lesson_21_auto_scheduler_generate
                        TARGETS cmake
-                       GENERATOR auto_schedule_gen PARAMS auto_schedule=false)
+                       GENERATOR auto_schedule_gen)
     add_halide_library(auto_schedule_true FROM lesson_21_auto_scheduler_generate
                        TARGETS cmake
                        AUTOSCHEDULER Halide::Mullapudi2016
-                       GENERATOR auto_schedule_gen PARAMS machine_params=32,16777216,40)
+                       GENERATOR auto_schedule_gen
+                       PARAMS autoscheduler.parallelism=32
+                              autoscheduler.last_level_cache_size=16777216
+                              autoscheduler.balance=40)
 
     add_executable(lesson_21_auto_scheduler_run lesson_21_auto_scheduler_run.cpp)
     target_link_libraries(lesson_21_auto_scheduler_run PRIVATE

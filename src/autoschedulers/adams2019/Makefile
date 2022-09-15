@@ -36,8 +36,8 @@ $(BIN)/baseline_weights.o: $(BIN)/baseline_weights.cpp
 	$(CXX) -c $< -o $@
 
 AUTOSCHED_COST_MODEL_LIBS=\
-$(BIN)/cost_model/cost_model.a \
-$(BIN)/cost_model/train_cost_model.a \
+$(BIN)/cost_model/adams2019_cost_model.a \
+$(BIN)/cost_model/adams2019_train_cost_model.a \
 
 $(BIN)/cost_model.generator: $(SRC)/cost_model_generator.cpp \
 				$(SRC)/cost_model_schedule.h \
@@ -50,15 +50,20 @@ $(BIN)/auto_schedule_runtime.a: $(BIN)/cost_model.generator
 	@mkdir -p $(@D)
 	$^ -r auto_schedule_runtime -o $(BIN) target=$(HL_TARGET)
 
-$(BIN)/cost_model/%.a: $(BIN)/cost_model.generator
+$(BIN)/cost_model/adams2019_%.a: $(BIN)/cost_model.generator
 	@mkdir -p $(@D)
-	$^ -g $* -o $(BIN)/cost_model -f $* target=$(HL_TARGET)-no_runtime auto_schedule=false -e stmt,static_library,h,assembly
+	$^ -g $* -o $(BIN)/cost_model -f $* -n adams2019_$* target=$(HL_TARGET)-no_runtime -e stmt,static_library,h,assembly
 
 # It's important to use dynamic lookups for undefined symbols here: all of libHalide
 # is expected to be present (in the loading binary), so we explicitly make the symbols
 # undefined rather than dependent on libHalide.so.
-$(BIN)/libautoschedule_adams2019.$(SHARED_EXT): $(SRC)/AutoSchedule.cpp \
-				$(SRC)/ASLog.cpp \
+#
+# Also, be sure *not* to include libHalide in the link steps here; that can cause misbehavior
+# on OSX systems in certain situations -- note that $(LIB_HALIDE) is an order-only dep,
+# to ensure that (eg) Halide.h is built before this.
+$(BIN)/libautoschedule_adams2019.$(PLUGIN_EXT): \
+				$(COMMON_DIR)/ASLog.cpp \
+				$(SRC)/AutoSchedule.cpp \
 				$(SRC)/Cache.h \
 				$(SRC)/Cache.cpp \
 				$(SRC)/DefaultCostModel.h \
@@ -77,13 +82,13 @@ $(BIN)/libautoschedule_adams2019.$(SHARED_EXT): $(SRC)/AutoSchedule.cpp \
 				$(SRC)/PerfectHashMap.h \
 				$(AUTOSCHED_WEIGHT_OBJECTS) \
 				$(AUTOSCHED_COST_MODEL_LIBS) \
-				$(GENERATOR_DEPS) \
-				$(BIN)/auto_schedule_runtime.a
+				$(BIN)/auto_schedule_runtime.a \
+				| $(LIB_HALIDE)
 	@mkdir -p $(@D)
 	$(CXX) -shared $(USE_EXPORT_DYNAMIC) -fPIC -fvisibility=hidden -fvisibility-inlines-hidden $(CXXFLAGS) $(OPTIMIZE) -I $(BIN)/cost_model $(filter-out %.h $(LIBHALIDE_LDFLAGS),$^) -o $@ $(HALIDE_SYSTEM_LIBS) $(HALIDE_RPATH_FOR_LIB)
 
 $(BIN)/retrain_cost_model: $(SRC)/retrain_cost_model.cpp \
-				$(SRC)/ASLog.cpp \
+				$(COMMON_DIR)/ASLog.cpp \
 				$(SRC)/DefaultCostModel.h \
 				$(SRC)/DefaultCostModel.cpp \
 				$(SRC)/Weights.h \
@@ -107,11 +112,6 @@ $(BIN)/weightsdir_to_weightsfile: $(SRC)/weightsdir_to_weightsfile.cpp $(SRC)/We
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) $^ $(OPTIMIZE) -o $@
 
-# This is the value that machine_params defaults to if no custom value is specified;
-# see MachineParams::generic()
-HL_MACHINE_PARAMS ?= 32,25165824,160
-
-
 # A sample generator to autoschedule. Note that if it statically links
 # to libHalide, then it must be build with $(USE_EXPORT_DYNAMIC), or the
 # autoscheduler can't find the libHalide symbols that it needs.
@@ -120,22 +120,25 @@ $(GENERATOR_BIN)/demo.generator: $(SRC)/demo_generator.cpp $(GENERATOR_DEPS)
 	$(CXX) $(CXXFLAGS) $(USE_EXPORT_DYNAMIC) -g $(filter %.cpp,$^) -o $@ $(LIBHALIDE_LDFLAGS)
 
 # To use the autoscheduler, set a few environment variables and use the -p flag to the generator to load the autoscheduler as a plugin
-$(BIN)/%/demo.a: $(GENERATOR_BIN)/demo.generator $(BIN)/libautoschedule_adams2019.$(SHARED_EXT)
+$(BIN)/%/demo.a: $(GENERATOR_BIN)/demo.generator $(BIN)/libautoschedule_adams2019.$(PLUGIN_EXT)
 	@mkdir -p $(@D)
-	HL_WEIGHTS_DIR=$(SRC)/baseline.weights \
-	$(GENERATOR_BIN)/demo.generator -g demo -o $(@D) -f demo target=$* auto_schedule=true -p $(BIN)/libautoschedule_adams2019.$(SHARED_EXT) -s Adams2019
+	$(GENERATOR_BIN)/demo.generator -g demo -o $(@D) -f demo target=$* \
+		autoscheduler=Adams2019 \
+		autoscheduler.parallelism=32 \
+		autoscheduler.weights_path=$(SRC)/baseline.weights \
+		-p $(BIN)/libautoschedule_adams2019.$(PLUGIN_EXT)
 
 $(BIN)/%/demo.rungen: $(BIN)/%/RunGenMain.o $(BIN)/%/demo.registration.cpp $(BIN)/%/demo.a
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) -I$(BIN)/$* $^ -o $@ $(HALIDE_SYSTEM_LIBS) $(IMAGE_IO_FLAGS)
 
 # demonstrates single-shot use of the autoscheduler
-demo: $(BIN)/$(HL_TARGET)/demo.rungen $(BIN)/libautoschedule_adams2019.$(SHARED_EXT)
+demo: $(BIN)/$(HL_TARGET)/demo.rungen $(BIN)/libautoschedule_adams2019.$(PLUGIN_EXT)
 	$< --benchmarks=all --benchmark_min_time=1 --estimate_all
 
 # demonstrates an autotuning loop
 # (using $(BIN) and $(SRC) here seems overkill, but makes copy-n-paste elsewhere easier)
-autotune: $(GENERATOR_BIN)/demo.generator $(BIN)/featurization_to_sample $(BIN)/get_host_target $(BIN)/retrain_cost_model $(BIN)/libautoschedule_adams2019.$(SHARED_EXT) $(SRC)/autotune_loop.sh
+autotune: $(GENERATOR_BIN)/demo.generator $(BIN)/featurization_to_sample $(BIN)/get_host_target $(BIN)/retrain_cost_model $(BIN)/libautoschedule_adams2019.$(PLUGIN_EXT) $(SRC)/autotune_loop.sh
 	@mkdir -p $(@D)
 	bash $(SRC)/autotune_loop.sh \
 		$(GENERATOR_BIN)/demo.generator \
@@ -150,14 +153,14 @@ $(BIN)/test_perfect_hash_map: $(SRC)/test_perfect_hash_map.cpp $(SRC)/PerfectHas
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) $< -o $@
 
-$(BIN)/test_function_dag: $(SRC)/test_function_dag.cpp $(SRC)/FunctionDAG.h $(SRC)/FunctionDAG.cpp $(SRC)/ASLog.h $(SRC)/ASLog.cpp
+$(BIN)/test_function_dag: $(SRC)/test_function_dag.cpp $(SRC)/FunctionDAG.h $(SRC)/FunctionDAG.cpp $(COMMON_DIR)/ASLog.h $(COMMON_DIR)/ASLog.cpp
 	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) $(USE_EXPORT_DYNAMIC) $(filter-out %.h,$^) -o $@ $(LIBHALIDE_LDFLAGS) $(HALIDE_SYSTEM_LIBS)
 
 # Simple jit-based test
-$(BIN)/%/test: $(SRC)/test.cpp $(BIN)/libautoschedule_adams2019.$(SHARED_EXT)
+$(BIN)/%/test: $(SRC)/test.cpp $(BIN)/libautoschedule_adams2019.$(PLUGIN_EXT)
 	@mkdir -p $(@D)
-	$(CXX) $(CXXFLAGS) $(USE_EXPORT_DYNAMIC) $^ -o $@ $(LIBHALIDE_LDFLAGS) $(HALIDE_SYSTEM_LIBS)
+	$(CXX) $(CXXFLAGS) $(USE_EXPORT_DYNAMIC) $< -o $@ $(LIBHALIDE_LDFLAGS) $(HALIDE_SYSTEM_LIBS)
 
 test_perfect_hash_map: $(BIN)/test_perfect_hash_map
 	$^
@@ -166,7 +169,7 @@ test_function_dag: $(BIN)/test_function_dag
 	$^
 
 run_test: $(BIN)/$(HL_TARGET)/test
-	HL_WEIGHTS_DIR=$(SRC)/baseline.weights LD_LIBRARY_PATH=$(BIN):$(LD_LIBRARY_PATH) $< $(BIN)/libautoschedule_adams2019.$(SHARED_EXT)
+	LD_LIBRARY_PATH=$(BIN):$(LD_LIBRARY_PATH) $< $(BIN)/libautoschedule_adams2019.$(PLUGIN_EXT) $(SRC)/baseline.weights
 
 .PHONY: test clean
 
@@ -181,7 +184,7 @@ build: $(BIN)/$(HL_TARGET)/test \
 	$(BIN)/featurization_to_sample \
 	$(BIN)/get_host_target \
 	$(BIN)/retrain_cost_model \
-	$(BIN)/libautoschedule_adams2019.$(SHARED_EXT)
+	$(BIN)/libautoschedule_adams2019.$(PLUGIN_EXT)
 
 test: run_test test_perfect_hash_map test_function_dag demo test_included_schedule_file autotune
 
@@ -204,10 +207,13 @@ $(GENERATOR_BIN)/included_schedule_file_none.generator: $(SRC)/included_schedule
 # This is the target you build to (re)generate the schedule file.
 # (Note that we only need the schedule output, so we pass `-e schedule` to
 # the Generator so that it can skip producing other outputs.)
-$(BIN)/%/included_schedule_file.schedule.h: $(GENERATOR_BIN)/included_schedule_file_none.generator $(BIN)/libautoschedule_adams2019.$(SHARED_EXT)
+$(BIN)/%/included_schedule_file.schedule.h: $(GENERATOR_BIN)/included_schedule_file_none.generator $(BIN)/libautoschedule_adams2019.$(PLUGIN_EXT)
 	@mkdir -p $(@D)
-	HL_WEIGHTS_DIR=$(SRC)/baseline.weights \
-	$< -g included_schedule_file -o $(@D) -f included_schedule_file target=$* auto_schedule=true -p $(BIN)/libautoschedule_adams2019.$(SHARED_EXT) -s Adams2019 -e schedule
+	$< -g included_schedule_file -o $(@D) -f included_schedule_file target=$* \
+		autoscheduler=Adams2019 \
+		autoscheduler.parallelism=32 \
+		autoscheduler.weights_path=$(SRC)/baseline.weights \
+		-p $(BIN)/libautoschedule_adams2019.$(PLUGIN_EXT) -e schedule
 
 # Note that this depends on included_schedule_file.schedule.h rather than $(BIN)/%/included_schedule_file.schedule.h --
 # the former should be generated by something like

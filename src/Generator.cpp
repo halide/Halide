@@ -19,30 +19,61 @@
 
 namespace Halide {
 
+#ifdef HALIDE_ALLOW_GENERATOR_EXTERNAL_CODE
 GeneratorContext::GeneratorContext(const Target &target,
+#ifdef HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
                                    bool auto_schedule,
                                    const MachineParams &machine_params,
-                                   std::shared_ptr<ExternsMap> externs_map,
-                                   std::shared_ptr<Internal::ValueTracker> value_tracker)
+#else
+                                   const AutoschedulerParams &autoscheduler_params,
+#endif
+                                   std::shared_ptr<ExternsMap> externs_map)
     : target_(target),
+#ifdef HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
       auto_schedule_(auto_schedule),
       machine_params_(machine_params),
-      externs_map_(std::move(externs_map)),
-      value_tracker_(std::move(value_tracker)) {
+#else
+      autoscheduler_params_(autoscheduler_params),
+#endif
+      externs_map_(std::move(externs_map)) {
 }
+#endif  // HALIDE_ALLOW_GENERATOR_EXTERNAL_CODE
 
+#ifdef HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
 GeneratorContext::GeneratorContext(const Target &target,
                                    bool auto_schedule,
                                    const MachineParams &machine_params)
-    : GeneratorContext(target,
-                       auto_schedule,
-                       machine_params,
-                       std::make_shared<ExternsMap>(),
-                       std::make_shared<Internal::ValueTracker>()) {
+    : target_(target),
+      auto_schedule_(auto_schedule),
+      machine_params_(machine_params) {
+}
+#else
+GeneratorContext::GeneratorContext(const Target &target)
+    : target_(target),
+      autoscheduler_params_() {
 }
 
+GeneratorContext::GeneratorContext(const Target &target,
+                                   const AutoschedulerParams &autoscheduler_params)
+    : target_(target),
+      autoscheduler_params_(autoscheduler_params) {
+}
+#endif
+
 GeneratorContext GeneratorContext::with_target(const Target &t) const {
-    return GeneratorContext(t, auto_schedule_, machine_params_, externs_map_, value_tracker_);
+#ifdef HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
+#ifdef HALIDE_ALLOW_GENERATOR_EXTERNAL_CODE
+    return GeneratorContext(t, auto_schedule_, machine_params_, externs_map_);
+#else
+    return GeneratorContext(t, auto_schedule_, machine_params_);
+#endif
+#else
+#ifdef HALIDE_ALLOW_GENERATOR_EXTERNAL_CODE
+    return GeneratorContext(t, autoscheduler_params_, externs_map_);
+#else
+    return GeneratorContext(t, autoscheduler_params_);
+#endif
+#endif
 }
 
 namespace Internal {
@@ -134,106 +165,6 @@ std::vector<Type> parse_halide_type_list(const std::string &types) {
     return result;
 }
 
-/**
- * ValueTracker is an internal utility class that attempts to track and flag certain
- * obvious Stub-related errors at Halide compile time: it tracks the constraints set
- * on any Parameter-based argument (i.e., Input<Buffer> and Output<Buffer>) to
- * ensure that incompatible values aren't set.
- *
- * e.g.: if a Generator A requires stride[0] == 1,
- * and Generator B uses Generator A via stub, but requires stride[0] == 4,
- * we should be able to detect this at Halide compilation time, and fail immediately,
- * rather than producing code that fails at runtime and/or runs slowly due to
- * vectorization being unavailable.
- *
- * We do this by tracking the active values at entrance and exit to all user-provided
- * Generator methods (generate()/schedule()); if we ever find more than two unique
- * values active, we know we have a potential conflict. ("two" here because the first
- * value is the default value for a given constraint.)
- *
- * Note that this won't catch all cases:
- * -- JIT compilation has no way to check for conflicts at the top-level
- * -- constraints that match the default value (e.g. if dim(0).set_stride(1) is the
- * first value seen by the tracker) will be ignored, so an explicit requirement set
- * this way can be missed
- *
- * Nevertheless, this is likely to be much better than nothing when composing multiple
- * layers of Stubs in a single fused result.
- */
-class ValueTracker {
-private:
-    std::map<std::string, std::vector<std::vector<Expr>>> values_history;
-    const size_t max_unique_values;
-
-public:
-    explicit ValueTracker(size_t max_unique_values = 2)
-        : max_unique_values(max_unique_values) {
-    }
-    void track_values(const std::string &name, const std::vector<Expr> &values);
-};
-
-void ValueTracker::track_values(const std::string &name, const std::vector<Expr> &values) {
-    std::vector<std::vector<Expr>> &history = values_history[name];
-    if (history.empty()) {
-        for (const auto &value : values) {
-            history.push_back({value});
-        }
-        return;
-    }
-
-    internal_assert(history.size() == values.size())
-        << "Expected values of size " << history.size()
-        << " but saw size " << values.size()
-        << " for name " << name << "\n";
-
-    // For each item, see if we have a new unique value
-    for (size_t i = 0; i < values.size(); ++i) {
-        Expr oldval = history[i].back();
-        Expr newval = values[i];
-        if (oldval.defined() && newval.defined()) {
-            if (can_prove(newval == oldval)) {
-                continue;
-            }
-        } else if (!oldval.defined() && !newval.defined()) {
-            // Expr::operator== doesn't work with undefined
-            // values, but they are equal for our purposes here.
-            continue;
-        }
-        history[i].push_back(newval);
-        // If we exceed max_unique_values, fail immediately.
-        // TODO: could be useful to log all the entries that
-        // overflow max_unique_values before failing.
-        // TODO: this could be more helpful about labeling the values
-        // that have multiple setttings.
-        if (history[i].size() > max_unique_values) {
-            std::ostringstream o;
-            o << "Saw too many unique values in ValueTracker[" + std::to_string(i) + "]; "
-              << "expected a maximum of " << max_unique_values << ":\n";
-            for (const auto &e : history[i]) {
-                o << "    " << e << "\n";
-            }
-            user_error << o.str();
-        }
-    }
-}
-
-std::vector<Expr> parameter_constraints(const Parameter &p) {
-    internal_assert(p.defined());
-    std::vector<Expr> values;
-    values.emplace_back(p.host_alignment());
-    if (p.is_buffer()) {
-        for (int i = 0; i < p.dimensions(); ++i) {
-            values.push_back(p.min_constraint(i));
-            values.push_back(p.extent_constraint(i));
-            values.push_back(p.stride_constraint(i));
-        }
-    } else {
-        values.push_back(p.min_value());
-        values.push_back(p.max_value());
-    }
-    return values;
-}
-
 class StubEmitter {
 public:
     StubEmitter(std::ostream &dest,
@@ -276,11 +207,18 @@ private:
         std::vector<Internal::GeneratorParamBase *> out;
         for (auto *p : in) {
             // These are always propagated specially.
+#ifdef HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
             if (p->name() == "target" ||
                 p->name() == "auto_schedule" ||
                 p->name() == "machine_params") {
                 continue;
             }
+#else
+            if (p->name() == "target" ||
+                p->name() == "autoscheduler") {
+                continue;
+            }
+#endif
             if (p->is_synthetic_param()) {
                 continue;
             }
@@ -318,7 +256,11 @@ void StubEmitter::emit_generator_params_struct() {
         indent_level++;
         std::string comma = "";
         for (auto *p : v) {
-            stream << get_indent() << comma << p->get_c_type() << " " << p->name() << "\n";
+            std::string c_type = p->get_c_type();
+            if (c_type == "AutoschedulerParams") {
+                c_type = "const AutoschedulerParams&";
+            }
+            stream << get_indent() << comma << c_type << " " << p->name() << "\n";
             comma = ", ";
         }
         indent_level--;
@@ -776,8 +718,6 @@ gengen
      find one. Flags across all of the targets that do not affect runtime code
      generation, such as `no_asserts` and `no_runtime`, are ignored.
 
- -s  The name of an autoscheduler to set as the default.
-
  -t  Timeout for the Generator to run, in seconds; mainly useful to ensure that
      bugs and/or degenerate cases don't stall build systems. Defaults to 900
      (=15 minutes). Specify 0 to allow ~infinite time.
@@ -793,7 +733,9 @@ gengen
         {"-o", ""},
         {"-p", ""},
         {"-r", ""},
+#ifdef HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
         {"-s", ""},
+#endif
         {"-t", "900"},  // 15 minutes
     };
 
@@ -810,6 +752,15 @@ gengen
             ++i;
             continue;
         } else {
+            if (!strcmp(argv[i], "-s")) {
+#ifdef HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
+                user_warning << "HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API is deprecated in Halide 15 "
+                                "(and will be removed in Halide 16).\n";
+#else
+                user_error << "-s is no longer supported for setting autoscheduler; specify autoschduler.name=NAME instead.\n"
+                           << kUsage;
+#endif
+            }
             user_error << "Unknown flag: " << argv[i] << "\n"
                        << kUsage;
         }
@@ -823,10 +774,21 @@ gengen
         }
     }
 
+#ifdef HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
     const auto autoscheduler_name = flags_info["-s"];
     if (!autoscheduler_name.empty()) {
         Pipeline::set_default_autoscheduler_name(autoscheduler_name);
     }
+#else
+    if (args.generator_params.count("auto_schedule")) {
+        user_error << "auto_schedule=true is no longer supported for enabling autoscheduling; specify autoscheduler=NAME instead.\n"
+                   << kUsage;
+    }
+    if (args.generator_params.count("machine_params")) {
+        user_error << "machine_params is no longer supported as a GeneratorParam; specify autoscheduler.FIELD=VALUE instead.\n"
+                   << kUsage;
+    }
+#endif
 
     const auto &d_val = flags_info["-d"];
     user_assert(d_val == "1" || d_val == "0") << "-d must be 0 or 1\n"
@@ -948,14 +910,17 @@ gengen
     if (do_compiler_logging) {
         const bool obfuscate_compiler_logging = get_env_variable("HL_OBFUSCATE_COMPILER_LOGGER") == "1";
         args.compiler_logger_factory =
-            [obfuscate_compiler_logging, &args, &autoscheduler_name](const std::string &function_name, const Target &target) -> std::unique_ptr<CompilerLogger> {
+            [obfuscate_compiler_logging, &args](const std::string &function_name, const Target &target) -> std::unique_ptr<CompilerLogger> {
             // rebuild generator_args from the map so that they are always canonical
-            std::string generator_args_string;
+            std::string generator_args_string, autoscheduler_name;
             std::string sep;
             for (const auto &it : args.generator_params) {
                 std::string quote = it.second.find(' ') != std::string::npos ? "\\\"" : "";
                 generator_args_string += sep + it.first + "=" + quote + it.second + quote;
                 sep = " ";
+                if (it.first == "autoscheduler") {
+                    autoscheduler_name = it.second;
+                }
             }
             std::unique_ptr<JSONCompilerLogger> t(new JSONCompilerLogger(
                 obfuscate_compiler_logging ? "" : args.generator_name,
@@ -1079,8 +1044,18 @@ namespace Internal {
 int generate_filter_main(int argc, char **argv, const GeneratorFactoryProvider &generator_factory_provider) {
     try {
         return generate_filter_main_inner(argc, argv, generator_factory_provider);
-    } catch (std::runtime_error &err) {
-        user_error << "Unhandled exception: " << err.what() << "\n";
+    } catch (::Halide::Error &err) {
+        // Do *not* use user_error here (or elsewhere in this function): it
+        // will throw an exception, and since there is almost certainly no
+        // try/catch block in our caller, it will call std::terminate,
+        // swallowing all error messages.
+        std::cerr << "Unhandled exception: " << err.what() << "\n";
+        return -1;
+    } catch (std::exception &err) {
+        std::cerr << "Unhandled exception: " << err.what() << "\n";
+        return -1;
+    } catch (...) {
+        std::cerr << "Unhandled exception: (unknown)\n";
         return -1;
     }
 }
@@ -1184,6 +1159,7 @@ void execute_generator(const ExecuteGeneratorArgs &args_in) {
         // Don't bother with this if we're just emitting a cpp_stub.
         if (!cpp_stub_only) {
             auto output_files = compute_output_files(args.targets[0], base_path, args.output_types);
+#ifdef HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
             const auto get_gp = [&](const std::string &key) {
                 auto it = args.generator_params.find(key);
                 return it != args.generator_params.end() ? it->second : "";
@@ -1192,8 +1168,10 @@ void execute_generator(const ExecuteGeneratorArgs &args_in) {
             const auto machine_params_string = get_gp("machine_params");
             const bool auto_schedule = auto_schedule_string == "true" || auto_schedule_string == "True";
             const MachineParams machine_params = !machine_params_string.empty() ? MachineParams(machine_params_string) : MachineParams::generic();
+#endif
             auto module_factory = [&](const std::string &function_name, const Target &target) -> Module {
-                // Must re-create each time since each instance will have a different Target.
+            // Must re-create each time since each instance will have a different Target.
+#ifdef HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
                 auto gen = args.create_generator(args.generator_name, GeneratorContext(target, auto_schedule, machine_params));
                 for (const auto &kv : args.generator_params) {
                     if (kv.first == "target" ||
@@ -1203,6 +1181,15 @@ void execute_generator(const ExecuteGeneratorArgs &args_in) {
                     }
                     gen->set_generatorparam_value(kv.first, kv.second);
                 }
+#else
+                auto gen = args.create_generator(args.generator_name, GeneratorContext(target));
+                for (const auto &kv : args.generator_params) {
+                    if (kv.first == "target") {
+                        continue;
+                    }
+                    gen->set_generatorparam_value(kv.first, kv.second);
+                }
+#endif
                 return args.build_mode == ExecuteGeneratorArgs::Gradient ?
                            gen->build_gradient_module(function_name) :
                            gen->build_module(function_name);
@@ -1224,11 +1211,18 @@ GeneratorParamBase::~GeneratorParamBase() {
 
 void GeneratorParamBase::check_value_readable() const {
     // These are always readable.
+#ifdef HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
     if (name() == "target" ||
         name() == "auto_schedule" ||
         name() == "machine_params") {
         return;
     }
+#else
+    if (name() == "target" ||
+        name() == "autoscheduler") {
+        return;
+    }
+#endif
     user_assert(generator && generator->phase >= GeneratorBase::ConfigureCalled)
         << "The GeneratorParam \"" << name() << "\" cannot be read before configure()/generate() is called.\n";
 }
@@ -1245,6 +1239,50 @@ void GeneratorParamBase::check_value_writable() const {
 void GeneratorParamBase::fail_wrong_type(const char *type) {
     user_error << "The GeneratorParam \"" << name() << "\" cannot be set with a value of type " << type << ".\n";
 }
+
+#ifdef HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
+// nothing
+#else
+GeneratorParam_AutoSchedulerParams::GeneratorParam_AutoSchedulerParams()
+    : GeneratorParamImpl<AutoschedulerParams>("autoscheduler", {}) {
+}
+
+void GeneratorParam_AutoSchedulerParams::set_from_string(const std::string &new_value_string) {
+    internal_error << "This method should never be called.";
+}
+
+std::string GeneratorParam_AutoSchedulerParams::get_default_value() const {
+    internal_error << "This method should never be called.";
+    return "";
+}
+
+std::string GeneratorParam_AutoSchedulerParams::call_to_string(const std::string &v) const {
+    internal_error << "This method should never be called.";
+    return "";
+}
+
+std::string GeneratorParam_AutoSchedulerParams::get_c_type() const {
+    internal_error << "This method should never be called.";
+    return "";
+}
+
+bool GeneratorParam_AutoSchedulerParams::try_set(const std::string &key, const std::string &value) {
+    const auto &n = this->name();
+    if (key == n) {
+        user_assert(this->value_.name.empty()) << "The GeneratorParam " << key << " cannot be set more than once.\n";
+        this->value_.name = value;
+        return true;
+    } else if (starts_with(key, n + ".")) {
+        const auto sub_key = key.substr(n.size() + 1);
+        user_assert(this->value_.extra.count(sub_key) == 0) << "The GeneratorParam " << key << " cannot be set more than once.\n";
+        this->value_.extra[sub_key] = value;
+        return true;
+    } else {
+        return false;
+    }
+}
+
+#endif
 
 /* static */
 GeneratorRegistry &GeneratorRegistry::get_registry() {
@@ -1395,16 +1433,33 @@ GeneratorOutputBase *GeneratorBase::find_output_by_name(const std::string &name)
 }
 
 GeneratorContext GeneratorBase::context() const {
-    return GeneratorContext(target, auto_schedule, machine_params, externs_map, value_tracker);
+#ifdef HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
+#ifdef HALIDE_ALLOW_GENERATOR_EXTERNAL_CODE
+    return GeneratorContext(target, auto_schedule, machine_params, externs_map);
+#else
+    return GeneratorContext(target, auto_schedule, machine_params);
+#endif
+#else
+#ifdef HALIDE_ALLOW_GENERATOR_EXTERNAL_CODE
+    return GeneratorContext(target, autoscheduler_.value(), externs_map);
+#else
+    return GeneratorContext(target, autoscheduler_.value());
+#endif
+#endif
 }
 
 void GeneratorBase::init_from_context(const Halide::GeneratorContext &context) {
     target.set(context.target_);
+#ifdef HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
     auto_schedule.set(context.auto_schedule_);
     machine_params.set(context.machine_params_);
+#else
+    autoscheduler_.set(context.autoscheduler_params_);
+#endif
 
+#ifdef HALIDE_ALLOW_GENERATOR_EXTERNAL_CODE
     externs_map = context.externs_map_;
-    value_tracker = context.value_tracker_;
+#endif
 
     // pre-emptively build our param_info now
     internal_assert(param_info_ptr == nullptr);
@@ -1428,35 +1483,6 @@ void GeneratorBase::set_inputs_vector(const std::vector<std::vector<StubInput>> 
         << " inputs but got " << inputs.size() << "\n";
     for (size_t i = 0; i < pi.inputs().size(); ++i) {
         pi.inputs()[i]->set_inputs(inputs[i]);
-    }
-}
-
-void GeneratorBase::track_parameter_values(bool include_outputs) {
-    GeneratorParamInfo &pi = param_info();
-    for (auto *input : pi.inputs()) {
-        if (input->kind() == ArgInfoKind::Buffer) {
-            internal_assert(!input->parameters_.empty());
-            for (auto &p : input->parameters_) {
-                // This must use p.name(), *not* input->name()
-                value_tracker->track_values(p.name(), parameter_constraints(p));
-            }
-        }
-    }
-    if (include_outputs) {
-        for (auto *output : pi.outputs()) {
-            if (output->kind() == ArgInfoKind::Buffer) {
-                internal_assert(!output->funcs().empty());
-                for (const auto &f : output->funcs()) {
-                    user_assert(f.defined()) << "Output " << output->name() << " is not fully defined.";
-                    auto output_buffers = f.output_buffers();
-                    for (auto &o : output_buffers) {
-                        Parameter p = o.parameter();
-                        // This must use p.name(), *not* output->name()
-                        value_tracker->track_values(p.name(), parameter_constraints(p));
-                    }
-                }
-            }
-        }
     }
 }
 
@@ -1516,20 +1542,16 @@ void GeneratorBase::pre_generate() {
     for (auto *output : pi.outputs()) {
         output->init_internals();
     }
-    track_parameter_values(false);
 }
 
 void GeneratorBase::post_generate() {
-    track_parameter_values(true);
 }
 
 void GeneratorBase::pre_schedule() {
     advance_phase(ScheduleCalled);
-    track_parameter_values(true);
 }
 
 void GeneratorBase::post_schedule() {
-    track_parameter_values(true);
 }
 
 Pipeline GeneratorBase::get_pipeline() {
@@ -1586,12 +1608,19 @@ void GeneratorBase::check_input_kind(Internal::GeneratorInputBase *in, Internal:
 }
 
 void GeneratorBase::set_generatorparam_value(const std::string &name, const std::string &value) {
+#ifdef HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
     if (name == "target" ||
         name == "auto_schedule" ||
         name == "machine_params") {
         user_error
             << "The GeneratorParam named " << name << " cannot be set by set_generatorparam_value().\n";
     }
+#else
+    user_assert(name != "target") << "The GeneratorParam named " << name << " cannot be set by set_generatorparam_value().\n";
+    if (autoscheduler_.try_set(name, value)) {
+        return;
+    }
+#endif
 
     GeneratorParamInfo &pi = param_info();
 
@@ -1671,10 +1700,12 @@ std::vector<Func> GeneratorBase::output_func(const std::string &n) {
     return output->funcs();
 }
 
+#ifdef HALIDE_ALLOW_GENERATOR_EXTERNAL_CODE
 ExternsMap GeneratorBase::external_code_map() {
     // get_externs_map() returns a std::shared_ptr<ExternsMap>
     return *get_externs_map();
 }
+#endif
 
 void GeneratorBase::bind_input(const std::string &name, const std::vector<Parameter> &v) {
     ensure_configure_has_been_called();

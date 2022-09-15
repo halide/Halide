@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.16)
+cmake_minimum_required(VERSION 3.22)
 project(hannk)
 
 # We need to set this for some of the subprojects pulled in by TFLite (eg flatbuffers)

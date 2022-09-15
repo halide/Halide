@@ -202,43 +202,43 @@ CodeGen_ARM::CodeGen_ARM(const Target &target)
     // TODO: We need to match rounding shift right, and negate the RHS.
 
     // SQRSHRN, SQRSHRUN, UQRSHRN - Saturating rounding narrowing shift right narrow (by immediate in [1, output bits])
-    casts.emplace_back("saturating_rounding_shift_right_narrow", i8_sat(rounding_shift_right(wild_i16x_, wild_u16_)));
-    casts.emplace_back("saturating_rounding_shift_right_narrow", u8_sat(rounding_shift_right(wild_u16x_, wild_u16_)));
-    casts.emplace_back("saturating_rounding_shift_right_narrow", u8_sat(rounding_shift_right(wild_i16x_, wild_u16_)));
-    casts.emplace_back("saturating_rounding_shift_right_narrow", i16_sat(rounding_shift_right(wild_i32x_, wild_u32_)));
-    casts.emplace_back("saturating_rounding_shift_right_narrow", u16_sat(rounding_shift_right(wild_u32x_, wild_u32_)));
-    casts.emplace_back("saturating_rounding_shift_right_narrow", u16_sat(rounding_shift_right(wild_i32x_, wild_u32_)));
-    casts.emplace_back("saturating_rounding_shift_right_narrow", i32_sat(rounding_shift_right(wild_i64x_, wild_u64_)));
-    casts.emplace_back("saturating_rounding_shift_right_narrow", u32_sat(rounding_shift_right(wild_u64x_, wild_u64_)));
-    casts.emplace_back("saturating_rounding_shift_right_narrow", u32_sat(rounding_shift_right(wild_i64x_, wild_u64_)));
+    calls.emplace_back("saturating_rounding_shift_right_narrow", i8_sat(rounding_shift_right(wild_i16x_, wild_u16_)));
+    calls.emplace_back("saturating_rounding_shift_right_narrow", u8_sat(rounding_shift_right(wild_u16x_, wild_u16_)));
+    calls.emplace_back("saturating_rounding_shift_right_narrow", u8_sat(rounding_shift_right(wild_i16x_, wild_u16_)));
+    calls.emplace_back("saturating_rounding_shift_right_narrow", i16_sat(rounding_shift_right(wild_i32x_, wild_u32_)));
+    calls.emplace_back("saturating_rounding_shift_right_narrow", u16_sat(rounding_shift_right(wild_u32x_, wild_u32_)));
+    calls.emplace_back("saturating_rounding_shift_right_narrow", u16_sat(rounding_shift_right(wild_i32x_, wild_u32_)));
+    calls.emplace_back("saturating_rounding_shift_right_narrow", i32_sat(rounding_shift_right(wild_i64x_, wild_u64_)));
+    calls.emplace_back("saturating_rounding_shift_right_narrow", u32_sat(rounding_shift_right(wild_u64x_, wild_u64_)));
+    calls.emplace_back("saturating_rounding_shift_right_narrow", u32_sat(rounding_shift_right(wild_i64x_, wild_u64_)));
 
     // SQSHL, UQSHL, SQSHLU - Saturating shift left by signed register.
     for (const Expr &rhs : {wild_i8x_, wild_u8x_}) {
-        casts.emplace_back("saturating_shift_left", i8_sat(widening_shift_left(wild_i8x_, rhs)));
-        casts.emplace_back("saturating_shift_left", u8_sat(widening_shift_left(wild_u8x_, rhs)));
-        casts.emplace_back("saturating_shift_left", u8_sat(widening_shift_left(wild_i8x_, rhs)));
+        calls.emplace_back("saturating_shift_left", i8_sat(widening_shift_left(wild_i8x_, rhs)));
+        calls.emplace_back("saturating_shift_left", u8_sat(widening_shift_left(wild_u8x_, rhs)));
+        calls.emplace_back("saturating_shift_left", u8_sat(widening_shift_left(wild_i8x_, rhs)));
     }
     for (const Expr &rhs : {wild_i16x_, wild_u16x_}) {
-        casts.emplace_back("saturating_shift_left", i16_sat(widening_shift_left(wild_i16x_, rhs)));
-        casts.emplace_back("saturating_shift_left", u16_sat(widening_shift_left(wild_u16x_, rhs)));
-        casts.emplace_back("saturating_shift_left", u16_sat(widening_shift_left(wild_i16x_, rhs)));
+        calls.emplace_back("saturating_shift_left", i16_sat(widening_shift_left(wild_i16x_, rhs)));
+        calls.emplace_back("saturating_shift_left", u16_sat(widening_shift_left(wild_u16x_, rhs)));
+        calls.emplace_back("saturating_shift_left", u16_sat(widening_shift_left(wild_i16x_, rhs)));
     }
     for (const Expr &rhs : {wild_i32x_, wild_u32x_}) {
-        casts.emplace_back("saturating_shift_left", i32_sat(widening_shift_left(wild_i32x_, rhs)));
-        casts.emplace_back("saturating_shift_left", u32_sat(widening_shift_left(wild_u32x_, rhs)));
-        casts.emplace_back("saturating_shift_left", u32_sat(widening_shift_left(wild_i32x_, rhs)));
+        calls.emplace_back("saturating_shift_left", i32_sat(widening_shift_left(wild_i32x_, rhs)));
+        calls.emplace_back("saturating_shift_left", u32_sat(widening_shift_left(wild_u32x_, rhs)));
+        calls.emplace_back("saturating_shift_left", u32_sat(widening_shift_left(wild_i32x_, rhs)));
     }
 
     // SQSHRN, UQSHRN, SQRSHRUN Saturating narrowing shift right by an (by immediate in [1, output bits])
-    casts.emplace_back("saturating_shift_right_narrow", i8_sat(wild_i16x_ >> wild_u16_));
-    casts.emplace_back("saturating_shift_right_narrow", u8_sat(wild_u16x_ >> wild_u16_));
-    casts.emplace_back("saturating_shift_right_narrow", u8_sat(wild_i16x_ >> wild_u16_));
-    casts.emplace_back("saturating_shift_right_narrow", i16_sat(wild_i32x_ >> wild_u32_));
-    casts.emplace_back("saturating_shift_right_narrow", u16_sat(wild_u32x_ >> wild_u32_));
-    casts.emplace_back("saturating_shift_right_narrow", u16_sat(wild_i32x_ >> wild_u32_));
-    casts.emplace_back("saturating_shift_right_narrow", i32_sat(wild_i64x_ >> wild_u64_));
-    casts.emplace_back("saturating_shift_right_narrow", u32_sat(wild_u64x_ >> wild_u64_));
-    casts.emplace_back("saturating_shift_right_narrow", u32_sat(wild_i64x_ >> wild_u64_));
+    calls.emplace_back("saturating_shift_right_narrow", i8_sat(wild_i16x_ >> wild_u16_));
+    calls.emplace_back("saturating_shift_right_narrow", u8_sat(wild_u16x_ >> wild_u16_));
+    calls.emplace_back("saturating_shift_right_narrow", u8_sat(wild_i16x_ >> wild_u16_));
+    calls.emplace_back("saturating_shift_right_narrow", i16_sat(wild_i32x_ >> wild_u32_));
+    calls.emplace_back("saturating_shift_right_narrow", u16_sat(wild_u32x_ >> wild_u32_));
+    calls.emplace_back("saturating_shift_right_narrow", u16_sat(wild_i32x_ >> wild_u32_));
+    calls.emplace_back("saturating_shift_right_narrow", i32_sat(wild_i64x_ >> wild_u64_));
+    calls.emplace_back("saturating_shift_right_narrow", u32_sat(wild_u64x_ >> wild_u64_));
+    calls.emplace_back("saturating_shift_right_narrow", u32_sat(wild_i64x_ >> wild_u64_));
 
     // SRSHL, URSHL - Rounding shift left (by signed vector)
     // These are already written as rounding_shift_left
@@ -250,15 +250,15 @@ CodeGen_ARM::CodeGen_ARM(const Target &target)
     // These patterns are almost identity, we just need to strip off the broadcast.
 
     // SQXTN, UQXTN, SQXTUN - Saturating narrow.
-    casts.emplace_back("saturating_narrow", i8_sat(wild_i16x_));
-    casts.emplace_back("saturating_narrow", u8_sat(wild_u16x_));
-    casts.emplace_back("saturating_narrow", u8_sat(wild_i16x_));
-    casts.emplace_back("saturating_narrow", i16_sat(wild_i32x_));
-    casts.emplace_back("saturating_narrow", u16_sat(wild_u32x_));
-    casts.emplace_back("saturating_narrow", u16_sat(wild_i32x_));
-    casts.emplace_back("saturating_narrow", i32_sat(wild_i64x_));
-    casts.emplace_back("saturating_narrow", u32_sat(wild_u64x_));
-    casts.emplace_back("saturating_narrow", u32_sat(wild_i64x_));
+    calls.emplace_back("saturating_narrow", i8_sat(wild_i16x_));
+    calls.emplace_back("saturating_narrow", u8_sat(wild_u16x_));
+    calls.emplace_back("saturating_narrow", u8_sat(wild_i16x_));
+    calls.emplace_back("saturating_narrow", i16_sat(wild_i32x_));
+    calls.emplace_back("saturating_narrow", u16_sat(wild_u32x_));
+    calls.emplace_back("saturating_narrow", u16_sat(wild_i32x_));
+    calls.emplace_back("saturating_narrow", i32_sat(wild_i64x_));
+    calls.emplace_back("saturating_narrow", u32_sat(wild_u64x_));
+    calls.emplace_back("saturating_narrow", u32_sat(wild_i64x_));
 
     // SQNEG - Saturating negate
     negations.emplace_back("saturating_negate", -max(wild_i8x_, -127));
@@ -1024,38 +1024,6 @@ void CodeGen_ARM::visit(const Cast *op) {
                 }
             }
         }
-
-        // If we didn't find a pattern, try rewriting the cast.
-        static const vector<pair<Expr, Expr>> cast_rewrites = {
-            // Double or triple narrowing saturating casts are better expressed as
-            // regular narrowing casts.
-            {u8_sat(wild_u32x_), u8_sat(u16_sat(wild_u32x_))},
-            {u8_sat(wild_i32x_), u8_sat(i16_sat(wild_i32x_))},
-            {u8_sat(wild_f32x_), u8_sat(i16_sat(wild_f32x_))},
-            {i8_sat(wild_u32x_), i8_sat(u16_sat(wild_u32x_))},
-            {i8_sat(wild_i32x_), i8_sat(i16_sat(wild_i32x_))},
-            {i8_sat(wild_f32x_), i8_sat(i16_sat(wild_f32x_))},
-            {u16_sat(wild_u64x_), u16_sat(u32_sat(wild_u64x_))},
-            {u16_sat(wild_i64x_), u16_sat(i32_sat(wild_i64x_))},
-            {u16_sat(wild_f64x_), u16_sat(i32_sat(wild_f64x_))},
-            {i16_sat(wild_u64x_), i16_sat(u32_sat(wild_u64x_))},
-            {i16_sat(wild_i64x_), i16_sat(i32_sat(wild_i64x_))},
-            {i16_sat(wild_f64x_), i16_sat(i32_sat(wild_f64x_))},
-            {u8_sat(wild_u64x_), u8_sat(u16_sat(u32_sat(wild_u64x_)))},
-            {u8_sat(wild_i64x_), u8_sat(i16_sat(i32_sat(wild_i64x_)))},
-            {u8_sat(wild_f64x_), u8_sat(i16_sat(i32_sat(wild_f64x_)))},
-            {i8_sat(wild_u64x_), i8_sat(u16_sat(u32_sat(wild_u64x_)))},
-            {i8_sat(wild_i64x_), i8_sat(i16_sat(i32_sat(wild_i64x_)))},
-            {i8_sat(wild_f64x_), i8_sat(i16_sat(i32_sat(wild_f64x_)))},
-        };
-        for (const auto &i : cast_rewrites) {
-            if (expr_match(i.first, op, matches)) {
-                Expr replacement = substitute("*", matches[0], with_lanes(i.second, op->type.lanes()));
-                debug(3) << "rewriting cast to: " << replacement << " from " << Expr(op) << "\n";
-                value = codegen(replacement);
-                return;
-            }
-        }
     }
 
     // LLVM fptoui generates fcvtzs or fcvtzu in inconsistent way
@@ -1141,7 +1109,7 @@ void CodeGen_ARM::visit(const Sub *op) {
                 Value *b = codegen(op->b);
 
                 if (op->type.lanes() > 1) {
-                    a = ConstantVector::getSplat(element_count(op->type.lanes()), a);
+                    a = get_splat(op->type.lanes(), a);
                 }
                 value = builder->CreateFSub(a, b);
                 return;
@@ -1807,10 +1775,53 @@ void CodeGen_ARM::visit(const Call *op) {
         vector<Expr> matches;
         for (const Pattern &pattern : calls) {
             if (expr_match(pattern.pattern, op, matches)) {
+                if (pattern.intrin.find("shift_right_narrow") != string::npos) {
+                    // The shift_right_narrow patterns need the shift to be constant in [1, output_bits].
+                    const uint64_t *const_b = as_const_uint(matches[1]);
+                    if (!const_b || *const_b == 0 || (int)*const_b > op->type.bits()) {
+                        continue;
+                    }
+                }
+                if (target.bits == 32 && pattern.intrin.find("shift_right") != string::npos) {
+                    // The 32-bit ARM backend wants right shifts as negative values.
+                    matches[1] = simplify(-cast(matches[1].type().with_code(halide_type_int), matches[1]));
+                }
                 if (Value *v = call_overloaded_intrin(op->type, pattern.intrin, matches)) {
                     value = v;
                     return;
                 }
+            }
+        }
+
+        // If we didn't find a pattern, try rewriting any saturating casts.
+        static const vector<pair<Expr, Expr>> cast_rewrites = {
+            // Double or triple narrowing saturating casts are better expressed as
+            // combinations of single narrowing saturating casts.
+            {u8_sat(wild_u32x_), u8_sat(u16_sat(wild_u32x_))},
+            {u8_sat(wild_i32x_), u8_sat(i16_sat(wild_i32x_))},
+            {u8_sat(wild_f32x_), u8_sat(i16_sat(wild_f32x_))},
+            {i8_sat(wild_u32x_), i8_sat(u16_sat(wild_u32x_))},
+            {i8_sat(wild_i32x_), i8_sat(i16_sat(wild_i32x_))},
+            {i8_sat(wild_f32x_), i8_sat(i16_sat(wild_f32x_))},
+            {u16_sat(wild_u64x_), u16_sat(u32_sat(wild_u64x_))},
+            {u16_sat(wild_i64x_), u16_sat(i32_sat(wild_i64x_))},
+            {u16_sat(wild_f64x_), u16_sat(i32_sat(wild_f64x_))},
+            {i16_sat(wild_u64x_), i16_sat(u32_sat(wild_u64x_))},
+            {i16_sat(wild_i64x_), i16_sat(i32_sat(wild_i64x_))},
+            {i16_sat(wild_f64x_), i16_sat(i32_sat(wild_f64x_))},
+            {u8_sat(wild_u64x_), u8_sat(u16_sat(u32_sat(wild_u64x_)))},
+            {u8_sat(wild_i64x_), u8_sat(i16_sat(i32_sat(wild_i64x_)))},
+            {u8_sat(wild_f64x_), u8_sat(i16_sat(i32_sat(wild_f64x_)))},
+            {i8_sat(wild_u64x_), i8_sat(u16_sat(u32_sat(wild_u64x_)))},
+            {i8_sat(wild_i64x_), i8_sat(i16_sat(i32_sat(wild_i64x_)))},
+            {i8_sat(wild_f64x_), i8_sat(i16_sat(i32_sat(wild_f64x_)))},
+        };
+        for (const auto &i : cast_rewrites) {
+            if (expr_match(i.first, op, matches)) {
+                Expr replacement = substitute("*", matches[0], with_lanes(i.second, op->type.lanes()));
+                debug(3) << "rewriting cast to: " << replacement << " from " << Expr(op) << "\n";
+                value = codegen(replacement);
+                return;
             }
         }
     }
@@ -2239,14 +2250,14 @@ void CodeGen_ARM::visit(const Shuffle *op) {
                 // Safe to use llvm vanilla intrinsic
                 Value *val_0 = codegen(op->vectors[0]);
                 Value *val_1_scalar = codegen(bc_1->value);
-                Value *padding = builder->CreateVectorSplat(element_count(total_lanes), val_1_scalar);
+                Value *padding = create_broadcast(val_1_scalar, total_lanes);
                 value = insert_scalable_vector(padding, val_0, 0);
                 return;
             } else if (total_lanes <= natural_lanes) {
                 // Codegen with arm intrinsic, SEL and WHILELT
                 Value *val_0 = codegen(op->vectors[0]);
                 Value *val_1_scalar = codegen(bc_1->value);
-                Value *padding = builder->CreateVectorSplat(element_count(natural_lanes), val_1_scalar);
+                Value *padding = create_broadcast(val_1_scalar, natural_lanes);
 
                 Value *pred = codegen_whilelt(natural_lanes, 0, lanes_0);
                 Value *val_0_aligned = extend_scalable_vector(val_0, natural_lanes);
@@ -2400,7 +2411,7 @@ Value *CodeGen_ARM::shuffle_vectors(Value *a, Value *b, const std::vector<int> &
         // Scalarize, as there is no intrinsic for general shuffle for scalable vector as of LLVM 14
         const int arg_lanes = get_vector_num_elements(a->getType());
         llvm::Type *dst_type = get_vector_type(a->getType()->getScalarType(), indices.size());
-        Value *dst = UndefValue::get(dst_type);
+        Value *dst = PoisonValue::get(dst_type);
         for (size_t i = 0; i < indices.size(); ++i) {
             Value *src = a;
             Value *index = ConstantInt::get(i32_t, indices[i]);
@@ -2408,7 +2419,7 @@ Value *CodeGen_ARM::shuffle_vectors(Value *a, Value *b, const std::vector<int> &
                 src = b;
                 index = ConstantInt::get(i32_t, indices[i] - arg_lanes);
             } else if (indices[i] == -1) {
-                index = UndefValue::get(i32_t);
+                index = PoisonValue::get(i32_t);
             }
             Value *extracted = builder->CreateExtractElement(src, index);
             dst = builder->CreateInsertElement(dst, extracted, i);
@@ -2503,14 +2514,14 @@ Value *CodeGen_ARM::codegen_shuffle_indices(int bits, const std::vector<int> &in
     std::vector<Constant *> llvm_indices(lanes);
     for (int i = 0; i < lanes; i++) {
         int idx = indices[i];
-        llvm_indices[i] = idx >= 0 ? ConstantInt::get(index_type, idx) : UndefValue::get(index_type);
+        llvm_indices[i] = idx >= 0 ? ConstantInt::get(index_type, idx) : PoisonValue::get(index_type);
     }
     Value *v = ConstantVector::get(llvm_indices);
     // Convert fixed sized vector into scalable vector.
     // As of LLVM 14, this works only with natural_lanes.
     // https://github.com/llvm/llvm-project/issues/55412
     internal_assert(lanes == target.natural_vector_size(Int(bits)));
-    v = builder->CreateInsertVector(index_vec_type, UndefValue::get(index_vec_type),
+    v = builder->CreateInsertVector(index_vec_type, PoisonValue::get(index_vec_type),
                                     v, ConstantInt::get(i64_t, 0));
     return v;
 }
@@ -2615,8 +2626,8 @@ Value *CodeGen_ARM::try_to_decompose_into_sub_shuffles(Value *a, Value *b, const
         // Now generate all the sub shuffles
         std::vector<Value *> val_sub_shuffles;
         for (auto &ss : sub_shuffles) {
-            Value *val_ss_a = UndefValue::get(get_vector_type(elt, natural_lanes));
-            Value *val_ss_b = UndefValue::get(get_vector_type(elt, natural_lanes));
+            Value *val_ss_a = PoisonValue::get(get_vector_type(elt, natural_lanes));
+            Value *val_ss_b = PoisonValue::get(get_vector_type(elt, natural_lanes));
             if (!ss.src_vectors.empty()) {
                 val_ss_a = slice_vector(ss.src_vectors[0].base, ss.src_vectors[0].start, natural_lanes);
             }

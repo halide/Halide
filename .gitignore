@@ -136,6 +136,12 @@ a.out
 *.d
 *.dSYM
 
+# Package files
+*.deb
+*.tar.gz
+*.tgz
+*.zip
+
 ################################################################################
 ## Temporary and swap files
 
@@ -162,6 +168,11 @@ venv/
 __pycache__
 *.py[cod]
 
+# Python package build artifacts
+*.egg-info/
+*.whl
+MANIFEST.in
+
 ################################################################################
 ## CMake
 
@@ -187,6 +198,7 @@ CMakeFiles/
 compile_commands.json
 CPack*.cmake
 CTest*.cmake
+CTest*.txt
 install_manifest.txt
 
 # Ninja files

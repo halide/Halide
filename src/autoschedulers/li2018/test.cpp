@@ -10,7 +10,13 @@ int main(int argc, char **argv) {
 
     load_plugin(argv[1]);
 
-    MachineParams params(32, 16000000, 40);
+    constexpr int parallelism = 32;
+#ifdef HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
+    MachineParams params(parallelism, 16000000, 40);
+#else
+    AutoschedulerParams params = {"Li2018", {{"parallelism", std::to_string(parallelism)}}};
+#endif
+
     Target target;
 
     Var x("x"), y("y");
@@ -27,8 +33,11 @@ int main(int argc, char **argv) {
 
         f2.set_estimate(x, 0, 10000);
 
-        AutoSchedulerResults result =
-            Pipeline(f2).auto_schedule(target, params);
+#ifdef HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
+        AutoSchedulerResults result = Pipeline(f2).auto_schedule(target, params);
+#else
+        AutoSchedulerResults result = Pipeline(f2).apply_autoscheduler(target, params);
+#endif
         std::cout << "Schedule for 1D pointwise operations:\n"
                   << result.schedule_source << "\n\n";
     }
@@ -46,8 +55,11 @@ int main(int argc, char **argv) {
         f2.set_estimate(x, 0, 1000)
             .set_estimate(y, 0, 1000);
 
-        AutoSchedulerResults result =
-            Pipeline(f2).auto_schedule(target, params);
+#ifdef HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
+        AutoSchedulerResults result = Pipeline(f2).auto_schedule(target, params);
+#else
+        AutoSchedulerResults result = Pipeline(f2).apply_autoscheduler(target, params);
+#endif
         std::cout << "Schedule for 2D pointwise operations:\n"
                   << result.schedule_source << "\n\n";
     }
@@ -61,8 +73,11 @@ int main(int argc, char **argv) {
 
         f0.set_estimate(x, 0, 1000);
 
-        AutoSchedulerResults result =
-            Pipeline(f0).auto_schedule(target, params);
+#ifdef HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
+        AutoSchedulerResults result = Pipeline(f0).auto_schedule(target, params);
+#else
+        AutoSchedulerResults result = Pipeline(f0).apply_autoscheduler(target, params);
+#endif
         std::cout << "Schedule for 1D convolution:\n"
                   << result.schedule_source << "\n\n";
     }
@@ -77,8 +92,11 @@ int main(int argc, char **argv) {
         f0.set_estimate(x, 0, 1000)
             .set_estimate(y, 0, 1000);
 
-        AutoSchedulerResults result =
-            Pipeline(f0).auto_schedule(target, params);
+#ifdef HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
+        AutoSchedulerResults result = Pipeline(f0).auto_schedule(target, params);
+#else
+        AutoSchedulerResults result = Pipeline(f0).apply_autoscheduler(target, params);
+#endif
         std::cout << "Schedule for 2D convolution:\n"
                   << result.schedule_source << "\n\n";
     }
@@ -93,8 +111,11 @@ int main(int argc, char **argv) {
 
         hist.set_estimate(x, 0, 10);
 
-        AutoSchedulerResults result =
-            Pipeline(hist).auto_schedule(target, params);
+#ifdef HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
+        AutoSchedulerResults result = Pipeline(hist).auto_schedule(target, params);
+#else
+        AutoSchedulerResults result = Pipeline(hist).apply_autoscheduler(target, params);
+#endif
         std::cout << "Schedule for 1D histogram:\n"
                   << result.schedule_source << "\n\n";
     }
@@ -109,8 +130,11 @@ int main(int argc, char **argv) {
 
         hist.set_estimate(x, 0, 10);
 
-        AutoSchedulerResults result =
-            Pipeline(hist).auto_schedule(target, params);
+#ifdef HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
+        AutoSchedulerResults result = Pipeline(hist).auto_schedule(target, params);
+#else
+        AutoSchedulerResults result = Pipeline(hist).apply_autoscheduler(target, params);
+#endif
         std::cout << "Schedule for 2D histogram:\n"
                   << result.schedule_source << "\n\n";
     }
@@ -125,8 +149,11 @@ int main(int argc, char **argv) {
 
         hist.set_estimate(x, 0, 10000);
 
-        AutoSchedulerResults result =
-            Pipeline(hist).auto_schedule(target, params);
+#ifdef HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
+        AutoSchedulerResults result = Pipeline(hist).auto_schedule(target, params);
+#else
+        AutoSchedulerResults result = Pipeline(hist).apply_autoscheduler(target, params);
+#endif
         std::cout << "Schedule for 2D histogram with larger domain:\n"
                   << result.schedule_source << "\n\n";
     }
@@ -146,8 +173,11 @@ int main(int argc, char **argv) {
         f2.set_estimate(y, 0, 1024)
             .set_estimate(x, 0, 4);
 
-        AutoSchedulerResults result =
-            Pipeline(f2).auto_schedule(target, params);
+#ifdef HALIDE_ALLOW_LEGACY_AUTOSCHEDULER_API
+        AutoSchedulerResults result = Pipeline(f2).auto_schedule(target, params);
+#else
+        AutoSchedulerResults result = Pipeline(f2).apply_autoscheduler(target, params);
+#endif
         std::cout << "Schedule for 2D pointwise operations with small x dimension:\n"
                   << result.schedule_source << "\n\n";
     }

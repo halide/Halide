@@ -430,7 +430,7 @@ public:
             b(2, 2) += weighted_lambda * gain;
 
             // Now solve Ax = b
-            Matrix<3, 4> result = transpose(solve_symmetric(A, b, line, x, auto_schedule, get_target()));
+            Matrix<3, 4> result = transpose(solve_symmetric(A, b, line, x, using_autoscheduler(), get_target()));
 
             // Pack the resulting matrix into the output Func.
             line(x, y, z, c) = pack_channels(c, {result(0, 0),
@@ -509,7 +509,7 @@ public:
         output = slice;
 
         // Schedule
-        if (!auto_schedule) {
+        if (!using_autoscheduler()) {
             if (!get_target().has_gpu_feature()) {
                 // 7.09 ms on an Intel i9-9960X using 16 threads
                 //

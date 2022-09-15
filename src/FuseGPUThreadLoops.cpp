@@ -1188,7 +1188,7 @@ public:
 
     Stmt rewrap(Stmt body, const string &loop_var) {
         for (RegisterAllocation &alloc : allocations) {
-            if ((!loop_var.empty() && ends_with(alloc.loop_var, loop_var)) |
+            if ((!loop_var.empty() && ends_with(alloc.loop_var, loop_var)) ||
                 (loop_var.empty() && alloc.loop_var.empty())) {
                 body = Allocate::make(alloc.name, alloc.type, alloc.memory_type, {alloc.size}, const_true(), body);
             }

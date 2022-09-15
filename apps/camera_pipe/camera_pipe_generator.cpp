@@ -154,7 +154,7 @@ public:
     void schedule() {
         Pipeline p(output);
 
-        if (auto_schedule) {
+        if (using_autoscheduler()) {
             // blank
         } else if (get_target().has_gpu_feature()) {
             Var xi, yi;
@@ -270,7 +270,7 @@ Func CameraPipe::color_correct(Func input) {
     Expr val = (matrix_3200(x, y) * alpha + matrix_7000(x, y) * (1 - alpha));
     matrix(x, y) = cast<int16_t>(val * 256.0f);  // Q8.8 fixed point
 
-    if (!auto_schedule) {
+    if (!using_autoscheduler()) {
         matrix.compute_root();
         if (get_target().has_gpu_feature()) {
             matrix.gpu_single_thread();
@@ -331,7 +331,7 @@ Func CameraPipe::apply_curve(Func input) {
     // makeLUT add guard band outside of (minRaw, maxRaw]:
     curve(x) = select(x <= minRaw, 0, select(x > maxRaw, 255, val));
 
-    if (!auto_schedule) {
+    if (!using_autoscheduler()) {
         // It's a LUT, compute it once ahead of time.
         curve.compute_root();
         if (get_target().has_gpu_feature()) {
@@ -370,7 +370,7 @@ Func CameraPipe::sharpen(Func input) {
     // Convert the sharpening strength to 2.5 fixed point. This allows sharpening in the range [0, 4].
     Func sharpen_strength_x32("sharpen_strength_x32");
     sharpen_strength_x32() = u8_sat(sharpen_strength * 32);
-    if (!auto_schedule) {
+    if (!using_autoscheduler()) {
         sharpen_strength_x32.compute_root();
         if (get_target().has_gpu_feature()) {
             sharpen_strength_x32.gpu_single_thread();
@@ -439,12 +439,12 @@ void CameraPipe::generate() {
     processed.set_estimates({{0, 2592}, {0, 1968}, {0, 3}});
 
     // Schedule
-    if (auto_schedule) {
+    if (using_autoscheduler()) {
         // nothing
     } else if (get_target().has_gpu_feature()) {
 
         // We can generate slightly better code if we know the output is even-sized
-        if (!auto_schedule) {
+        if (!using_autoscheduler()) {
             // TODO: The autoscheduler really ought to be able to
             // accommodate bounds on the output Func.
             Expr out_width = processed.width();

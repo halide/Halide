@@ -12,29 +12,58 @@ namespace Halide {
 /** Query whether Halide was compiled with exceptions. */
 bool exceptions_enabled();
 
-/** A base class for Halide errors. */
-struct HALIDE_EXPORT_SYMBOL Error : public std::runtime_error {
+/** A base class for Halide errors.
+ *
+ * Note that this deliberately does *not* descend from std::runtime_error, or
+ * even std::exception; unfortunately, std::runtime_error is not marked as
+ * DLLEXPORT on Windows, but Error needs to be marked as such, and mismatching
+ * DLLEXPORT annotations in a class inheritance hierarchy in this way can lead
+ * to ODR violations. Instead, we just attempt to replicate the API of
+ * runtime_error here. */
+struct HALIDE_EXPORT_SYMBOL Error {
+    Error() = delete;
+
     // Give each class a non-inlined constructor so that the type
     // doesn't get separately instantiated in each compilation unit.
-    Error(const std::string &msg);
+    explicit Error(const char *msg);
+    explicit Error(const std::string &msg);
+
+    Error(const Error &);
+    Error &operator=(const Error &);
+    Error(Error &&) noexcept;
+    Error &operator=(Error &&) noexcept;
+
+    virtual ~Error();
+
+    virtual const char *what() const noexcept;
+
+private:
+    // Using a std::string here will cause MSVC to complain about the fact
+    // that class std::string isn't declared DLLEXPORT, even though the
+    // field is private; rather than suppress the warning, we'll just use
+    // an old-fashioned new-and-delete to keep it nice and clean.
+    char *what_;
 };
 
 /** An error that occurs while running a JIT-compiled Halide pipeline. */
 struct HALIDE_EXPORT_SYMBOL RuntimeError : public Error {
-    RuntimeError(const std::string &msg);
+    explicit RuntimeError(const char *msg);
+    explicit RuntimeError(const std::string &msg);
 };
 
 /** An error that occurs while compiling a Halide pipeline that Halide
  * attributes to a user error. */
 struct HALIDE_EXPORT_SYMBOL CompileError : public Error {
-    CompileError(const std::string &msg);
+    explicit CompileError(const char *msg);
+    explicit CompileError(const std::string &msg);
 };
 
 /** An error that occurs while compiling a Halide pipeline that Halide
  * attributes to an internal compiler bug, or to an invalid use of
  * Halide's internals. */
 struct HALIDE_EXPORT_SYMBOL InternalError : public Error {
-    InternalError(const std::string &msg);
+    explicit InternalError(const char *msg);
+    explicit InternalError(const std::string &msg);
 };
 
 /** CompileTimeErrorReporter is used at compile time (*not* runtime) when
