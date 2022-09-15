@@ -214,8 +214,7 @@ void CodeGen_WebAssembly::visit(const Call *op) {
 
     if (op->call_type == Call::PureExtern &&
         (op->name == "round_f32" ||
-         op->name == "round_f64" ||
-         op->name == "round_f16")) {
+         op->name == "round_f64")) {
         // As of LLVM version 8273ca1421a6144286698a61b41cd8901c131850, from
         // 9/14/2022, the LLVM wasm backend doesn't implement
         // llvm.roundeven. Instead it compiles llvm.nearbyint and llvm.rint to a

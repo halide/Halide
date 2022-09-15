@@ -310,7 +310,6 @@ define weak_odr <4 x i64> @extend_u32x4_to_u64x4(<4 x i32> %x) nounwind alwaysin
 
 declare float @llvm.nearbyint.f32(float) nounwind readnone
 declare double @llvm.nearbyint.f64(double) nounwind readnone
-declare half @llvm.nearbyint.f16(half) nounwind readnone
 
 define weak_odr float @wasm_round_f32(float %x) nounwind uwtable readnone alwaysinline {
        %y = tail call float @llvm.nearbyint.f32(float %x) nounwind readnone
@@ -320,9 +319,4 @@ define weak_odr float @wasm_round_f32(float %x) nounwind uwtable readnone always
 define weak_odr double @wasm_round_f64(double %x) nounwind uwtable readnone alwaysinline {
        %y = tail call double @llvm.nearbyint.f64(double %x) nounwind readnone
        ret double %y
-}
-
-define weak_odr half @wasm_round_f16(half %x) nounwind uwtable readnone alwaysinline {
-       %y = tail call half @llvm.nearbyint.f16(half %x) nounwind readnone
-       ret half %y
 }
