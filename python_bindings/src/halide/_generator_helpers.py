@@ -11,12 +11,6 @@ import builtins
 import re
 import sys
 
-# Formatted with:
-# yapf --style="{based_on_style: google, column_limit: 120, indent_width: 4}"
-
-# Everything below here is implicitly in the `halide._generator_helpers` package
-
-
 def _fail(msg: str):
     raise HalideError(msg)
 
@@ -152,6 +146,12 @@ class Requirement:
 
 # GeneratorParam is a string, int, float, bool, Type
 class GeneratorParam:
+    # This tells PyType that we dynamically set attributes
+    # on this object. (We don't, actually, but it defeats
+    # PyType's complaints about using len(), arithmetic operators, etc.
+    # on GeneratorParam fields, since they are replaced at runtime.)
+    _HAS_DYNAMIC_ATTRIBUTES:bool = True
+
     _name: str = ""
     _value: Any = None
 
@@ -766,7 +766,7 @@ def alias(**kwargs):
     return alias_impl
 
 
-def generator(name=""):
+def generator(name:str=""):
     # This code relies on dicts preserving key-insertion order, which is only
     # guaranteed for all Python implementations as of v3.7.
     _check(sys.version_info >= (3, 7), "Halide Generators require Python 3.7 or later.")
