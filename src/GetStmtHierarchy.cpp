@@ -647,7 +647,6 @@ div.nodeName { padding-left: 5px; } \n \
 const string GetStmtHierarchy::stmt_hierarchy_collapse_expand_JS = "\n \
 // collapse/expand js (stmt hierarchy) \n \
 var nodeExpanded = new Map(); \n \
-var alreadyAddedDotDotDot = []; \n \
 function collapseAllNodes(startNode, endNode) { \n \
     for (let i = startNode; i <= endNode; i++) { \n \
         collapseNodeChildren(i); \n \
@@ -697,15 +696,11 @@ function collapseNodeChildren(nodeNum) { \n \
     for (const child of children) { \n \
         child.style.display = 'none'; \n \
     } \n \
-    if (alreadyAddedDotDotDot.includes(nodeNum)) { \n \
-        return; \n \
-    } \n \
     const list = document.getElementById('list' + nodeNum); \n \
     const parentNode = document.getElementById('node' + nodeNum); \n \
     if (list != null && parentNode != null) { \n \
         const span = parentNode.children[0]; \n \
         list.appendChild(addDotDotDotChild(nodeNum)); \n \
-        alreadyAddedDotDotDot.push(nodeNum); \n \
     } \n \
 } \n \
 function expandNodeChildren(nodeNum) { \n \
