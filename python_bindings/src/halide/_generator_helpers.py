@@ -765,7 +765,6 @@ def alias(**kwargs):
 
     return alias_impl
 
-
 def generator(name:str=""):
     # This code relies on dicts preserving key-insertion order, which is only
     # guaranteed for all Python implementations as of v3.7.
@@ -775,10 +774,10 @@ def generator(name:str=""):
         _check(not n in _python_generators, "The Generator name %s is already in use." % n)
         _check(isclass(cls), "@generator can only be used on classes.")
         _check(
-            not issubclass(cls, Generator),
-            "Please use the @generator decorator instead of inheriting from hl.Generator",
+            issubclass(cls, Generator),
+            "The @generator decorator can only be used on subclasses of hl.Generator.",
         )
-        new_cls = type(cls.__name__, (cls, Generator), {"_halide_registered_name": n})
+        new_cls = type(cls.__name__, (cls,), {"_halide_registered_name": n})
         _python_generators[n] = new_cls
         return new_cls
 

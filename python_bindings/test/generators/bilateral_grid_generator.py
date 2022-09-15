@@ -10,7 +10,7 @@ import halide as hl
     bilateral_grid_Li2018={'autoscheduler':'Li2018'},
 )
 @hl.generator()
-class bilateral_grid:
+class bilateral_grid(hl.Generator):
     s_sigma = hl.GeneratorParam(8)
 
     input_buf = hl.InputBuffer(hl.Float(32), 2)

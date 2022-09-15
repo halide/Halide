@@ -9,7 +9,7 @@ z = hl.Var('z')
     addconstantpy_with_negative_offset={'extra_int': -1}
 )
 @hl.generator(name = "addconstantpy")
-class AddConstantGenerator:
+class AddConstantGenerator(hl.Generator):
     extra_int = hl.GeneratorParam(0)
 
     scalar_uint1 = hl.InputScalar(hl.Bool())

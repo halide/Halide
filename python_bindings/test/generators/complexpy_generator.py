@@ -5,7 +5,7 @@ y = hl.Var('y')
 c = hl.Var('c')
 
 @hl.generator(name = "complexpy")
-class ComplexPy:
+class ComplexPy(hl.Generator):
     vectorize = hl.GeneratorParam(True)
     extra_input_name = hl.GeneratorParam("")
 
