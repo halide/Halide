@@ -1494,12 +1494,23 @@ void CodeGen_LLVM::visit(const Reinterpret *op) {
     Type dst = op->type;
     llvm::Type *llvm_dst = llvm_type_of(dst);
     value = codegen(op->value);
-    // Our `Reinterpret` expr directly maps to LLVM IR bitcast/ptrtoint/inttoptr
-    // instructions with no additional handling required:
-    // * bitcast between vectors and scalars is well-formed.
-    // * ptrtoint/inttoptr implicitly truncates/zero-extends the integer
-    //   to match the pointer size.
-    value = builder->CreateBitOrPointerCast(value, llvm_dst);
+
+    // Bitcast between ScalableVector and scalar is invalid in LLVM
+    if (isa<ScalableVectorType>(value->getType()) && dst.is_scalar()) {
+        value = scalable_to_fixed_vector_type(value);
+        value = builder->CreateBitOrPointerCast(value, llvm_dst);
+    } else if (isa<ScalableVectorType>(llvm_dst) && op->value.type().is_scalar()) {
+        llvm::Type *llvm_dst_fixed = llvm_type_of(context, dst, 0);
+        value = builder->CreateBitOrPointerCast(value, llvm_dst_fixed);
+        value = fixed_to_scalable_vector_type(value);
+    } else {
+        // Our `Reinterpret` expr directly maps to LLVM IR bitcast/ptrtoint/inttoptr
+        // instructions with no additional handling required:
+        // * bitcast between vectors and scalars is well-formed.
+        // * ptrtoint/inttoptr implicitly truncates/zero-extends the integer
+        //   to match the pointer size.
+        value = builder->CreateBitOrPointerCast(value, llvm_dst);
+    }
 }
 
 void CodeGen_LLVM::visit(const Variable *op) {
