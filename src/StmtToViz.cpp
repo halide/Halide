@@ -31,14 +31,14 @@ string to_string(T value) {
 class StmtToViz : public IRVisitor {
 
     static const string css, js;
-    static const string vizCss;
-    static const string costColorsCSS;
-    static const string flexboxDivCSS;
-    static const string scrollToFunctionJSCodeToViz;
-    static const string lineNumbersCSS;
-    static const string tooltipCSS;
-    static const string expandCodeJS;
-    static const string assemblyCodeJS;
+    static const string viz_css;
+    static const string cost_colors_css;
+    static const string flexbox_div_css;
+    static const string scroll_to_function_code_to_viz_js;
+    static const string line_numbers_css;
+    static const string tooltip_css;
+    static const string expand_code_js;
+    static const string assembly_code_js;
 
     // This allows easier access to individual elements.
     int id_count;
@@ -46,27 +46,27 @@ class StmtToViz : public IRVisitor {
 private:
     std::ofstream stream;
 
-    FindStmtCost findStmtCost;              // used for finding the cost of statements
-    GetStmtHierarchy getStmtHierarchy;      // used for getting the hierarchy of
-                                            // statements
-    IRVisualization irVisualization;        // used for getting the IR visualization
-    GetAssemblyInfoViz getAssemblyInfoViz;  // used for getting the assembly line numbers
+    FindStmtCost find_stmt_cost;               // used for finding the cost of statements
+    GetStmtHierarchy get_stmt_hierarchy;       // used for getting the hierarchy of
+                                               // statements
+    IRVisualization ir_visualization;          // used for getting the IR visualization
+    GetAssemblyInfoViz get_assembly_info_viz;  // used for getting the assembly line numbers
 
     int curr_line_num;  // for accessing div of that line
 
     // used for getting anchor names
-    int ifCount;
-    int producerConsumerCount;
-    int forCount;
-    int storeCount;
-    int allocateCount;
+    int if_count;
+    int producer_consumer_count;
+    int for_count;
+    int store_count;
+    int allocate_count;
     int functionCount;
 
     // used for tooltip stuff
-    int tooltipCount;
+    int tooltip_count;
 
-    // used for getStmtHierarchy popup stuff
-    int popupCount;
+    // used for get_stmt_hierarchy popup stuff
+    int popup_count;
     string popups;
 
     int unique_id() {
@@ -105,28 +105,28 @@ private:
         return "</" + tag + ">";
     }
 
-    StmtHierarchyInfo get_stmt_hierarchy(const Stmt &op) {
-        StmtHierarchyInfo stmtHierarchyInfo = getStmtHierarchy.get_hierarchy_html(op);
-        string &html = stmtHierarchyInfo.html;
+    StmtHierarchyInfo get_stmt_hierarchy_html(const Stmt &op) {
+        StmtHierarchyInfo stmt_hierarchy_info = get_stmt_hierarchy.get_hierarchy_html(op);
+        string &html = stmt_hierarchy_info.html;
         string popup = generate_stmt_hierarchy_popup(html);
-        stmtHierarchyInfo.html = popup;
+        stmt_hierarchy_info.html = popup;
 
-        return stmtHierarchyInfo;
+        return stmt_hierarchy_info;
     }
-    StmtHierarchyInfo get_stmt_hierarchy(const Expr &op) {
-        StmtHierarchyInfo stmtHierarchyInfo = getStmtHierarchy.get_hierarchy_html(op);
-        string &html = stmtHierarchyInfo.html;
+    StmtHierarchyInfo get_stmt_hierarchy_html(const Expr &op) {
+        StmtHierarchyInfo stmt_hierarchy_info = get_stmt_hierarchy.get_hierarchy_html(op);
+        string &html = stmt_hierarchy_info.html;
         string popup = generate_stmt_hierarchy_popup(html);
-        stmtHierarchyInfo.html = popup;
+        stmt_hierarchy_info.html = popup;
 
-        return stmtHierarchyInfo;
+        return stmt_hierarchy_info;
     }
 
-    string generate_stmt_hierarchy_popup(string hierarchyHTML) {
+    string generate_stmt_hierarchy_popup(string hierarchy_HTML) {
         stringstream popup;
 
-        popupCount++;
-        popup << "<div class='modal fade' id='stmtHierarchyModal" << popupCount;
+        popup_count++;
+        popup << "<div class='modal fade' id='stmtHierarchyModal" << popup_count;
         popup << "' tabindex='-1'\n";
         popup << "    aria-labelledby='stmtHierarchyModalLabel' aria-hidden='true'>\n";
         popup << "    <div class='modal-dialog modal-dialog-scrollable modal-xl'>\n";
@@ -139,7 +139,7 @@ private:
         popup << "                    data-bs-dismiss='modal' aria-label='Close'></button>\n";
         popup << "            </div>\n";
         popup << "            <div class='modal-body'>\n";
-        popup << hierarchyHTML;
+        popup << hierarchy_HTML;
         popup << "            </div>\n";
         popup << "        </div>\n";
         popup << "    </div>\n";
@@ -149,27 +149,27 @@ private:
     }
 
     string open_cost_span(const Stmt &stmt_op) {
-        StmtHierarchyInfo stmtHierarchyInfo = get_stmt_hierarchy(stmt_op);
+        StmtHierarchyInfo stmt_hierarchy_info = get_stmt_hierarchy_html(stmt_op);
 
         stringstream s;
 
-        s << cost_colors(stmt_op.get(), stmtHierarchyInfo);
+        s << cost_colors(stmt_op.get(), stmt_hierarchy_info);
 
         // popup window - will put them all at the end
-        popups += stmtHierarchyInfo.html + "\n";
+        popups += stmt_hierarchy_info.html + "\n";
 
         s << "<span id='Cost" << id_count << "'>";
         return s.str();
     }
     string open_cost_span(const Expr &stmt_op) {
-        StmtHierarchyInfo stmtHierarchyInfo = get_stmt_hierarchy(stmt_op);
+        StmtHierarchyInfo stmt_hierarchy_info = get_stmt_hierarchy_html(stmt_op);
 
         stringstream s;
 
-        s << cost_colors(stmt_op.get(), stmtHierarchyInfo);
+        s << cost_colors(stmt_op.get(), stmt_hierarchy_info);
 
         // popup window - will put them all at the end
-        popups += stmtHierarchyInfo.html + "\n";
+        popups += stmt_hierarchy_info.html + "\n";
 
         s << "<span id='Cost" << id_count << "'>";
         return s.str();
@@ -182,8 +182,8 @@ private:
         Stmt new_node =
             IfThenElse::make(Variable::make(Int(32), "canIgnoreVariableName"), else_case, nullptr);
 
-        StmtHierarchyInfo stmtHierarchyInfo = getStmtHierarchy.get_else_hierarchy_html();
-        string popup = generate_stmt_hierarchy_popup(stmtHierarchyInfo.html);
+        StmtHierarchyInfo stmt_hierarchy_info = get_stmt_hierarchy.get_else_hierarchy_html();
+        string popup = generate_stmt_hierarchy_popup(stmt_hierarchy_info.html);
 
         // popup window - will put them all at the end
         popups += popup + "\n";
@@ -194,8 +194,8 @@ private:
 
         s << "<span class='smallColorIndent'>";
 
-        s << computation_button(new_node.get(), stmtHierarchyInfo);
-        s << data_movement_button(new_node.get(), stmtHierarchyInfo);
+        s << computation_button(new_node.get(), stmt_hierarchy_info);
+        s << data_movement_button(new_node.get(), stmt_hierarchy_info);
 
         s << "</span>";
 
@@ -220,36 +220,36 @@ private:
     }
 
     string color_button(const IRNode *op, bool is_computation,
-                        const StmtHierarchyInfo &stmtHierarchyInfo) {
+                        const StmtHierarchyInfo &stmt_hierarchy_info) {
 
-        int colorRangeInclusive, colorRangeExclusive;
+        int color_range_inclusive, color_range_exclusive;
 
         if (is_computation) {
-            colorRangeInclusive = findStmtCost.get_combined_computation_color_range(op);
-            colorRangeExclusive = findStmtCost.get_computation_color_range(op, false);
+            color_range_inclusive = find_stmt_cost.get_combined_computation_color_range(op);
+            color_range_exclusive = find_stmt_cost.get_computation_color_range(op, false);
         } else {
-            colorRangeInclusive = findStmtCost.get_combined_data_movement_color_range(op);
-            colorRangeExclusive = findStmtCost.get_data_movement_color_range(op, false);
+            color_range_inclusive = find_stmt_cost.get_combined_data_movement_color_range(op);
+            color_range_exclusive = find_stmt_cost.get_data_movement_color_range(op, false);
         }
-        tooltipCount++;
+        tooltip_count++;
 
         stringstream s;
         s << "<button ";
 
         // tooltip information
-        s << "id='button" << tooltipCount << "' ";
-        s << "aria-describedby='tooltip" << tooltipCount << "' ";
+        s << "id='button" << tooltip_count << "' ";
+        s << "aria-describedby='tooltip" << tooltip_count << "' ";
 
         // cost colors
-        s << "class='colorButton CostColor" + to_string(colorRangeExclusive) + "' role='button' ";
+        s << "class='colorButton CostColor" + to_string(color_range_exclusive) + "' role='button' ";
 
         // showing StmtHierarchy popup
-        s << "data-bs-toggle='modal' data-bs-target='#stmtHierarchyModal" << popupCount << "' ";
+        s << "data-bs-toggle='modal' data-bs-target='#stmtHierarchyModal" << popup_count << "' ";
 
         // for collapsing and expanding StmtHierarchy nodes
-        s << "onclick='collapseAllNodes(" << stmtHierarchyInfo.start_node << ", "
-          << stmtHierarchyInfo.end_node << "); expandNodesUpToDepth(4, "
-          << stmtHierarchyInfo.viz_num << ");'";
+        s << "onclick='collapseAllNodes(" << stmt_hierarchy_info.start_node << ", "
+          << stmt_hierarchy_info.end_node << "); expandNodesUpToDepth(4, "
+          << stmt_hierarchy_info.viz_num << ");'";
 
         // highlighting selected line in grey
         s << "onmouseover='document.getElementById(\"Cost" << id_count
@@ -258,8 +258,8 @@ private:
           << "\").style.background = \"transparent\";'";
 
         // for collapsing and expanding and adjusting colors accordingly
-        s << "inclusiverange='" << colorRangeInclusive << "' ";
-        s << "exclusiverange='" << colorRangeExclusive << "' ";
+        s << "inclusiverange='" << color_range_inclusive << "' ";
+        s << "exclusiverange='" << color_range_exclusive << "' ";
 
         s << ">";
         s << "</button>";
@@ -267,37 +267,37 @@ private:
         return s.str();
     }
 
-    string computation_button(const IRNode *op, const StmtHierarchyInfo &stmtHierarchyInfo) {
+    string computation_button(const IRNode *op, const StmtHierarchyInfo &stmt_hierarchy_info) {
         stringstream s;
-        s << color_button(op, true, stmtHierarchyInfo);
+        s << color_button(op, true, stmt_hierarchy_info);
 
-        string tooltipText = findStmtCost.generate_computation_cost_tooltip(
+        string tooltip_text = find_stmt_cost.generate_computation_cost_tooltip(
             op, false, "[Click to see full hierarchy]");
 
         // tooltip span
-        s << "<span id='tooltip" << tooltipCount << "' class='tooltip CostTooltip' ";
-        s << "role='tooltip" << tooltipCount << "'>";
-        s << tooltipText;
+        s << "<span id='tooltip" << tooltip_count << "' class='tooltip CostTooltip' ";
+        s << "role='tooltip" << tooltip_count << "'>";
+        s << tooltip_text;
         s << "</span>";
 
         return s.str();
     }
-    string data_movement_button(const IRNode *op, const StmtHierarchyInfo &stmtHierarchyInfo) {
+    string data_movement_button(const IRNode *op, const StmtHierarchyInfo &stmt_hierarchy_info) {
         stringstream s;
-        s << color_button(op, false, stmtHierarchyInfo);
+        s << color_button(op, false, stmt_hierarchy_info);
 
-        string tooltipText = findStmtCost.generate_data_movement_cost_tooltip(
+        string tooltip_text = find_stmt_cost.generate_data_movement_cost_tooltip(
             op, false, "[Click to see full hierarchy]");
 
         // tooltip span
-        s << "<span id='tooltip" << tooltipCount << "' class='tooltip CostTooltip' ";
-        s << "role='tooltip" << tooltipCount << "'>";
-        s << tooltipText;
+        s << "<span id='tooltip" << tooltip_count << "' class='tooltip CostTooltip' ";
+        s << "role='tooltip" << tooltip_count << "'>";
+        s << tooltip_text;
         s << "</span>";
 
         return s.str();
     }
-    string cost_colors(const IRNode *op, const StmtHierarchyInfo &stmtHierarchyInfo) {
+    string cost_colors(const IRNode *op, const StmtHierarchyInfo &stmt_hierarchy_info) {
         curr_line_num += 1;
 
         stringstream s;
@@ -310,8 +310,8 @@ private:
             s << "<span class='bigColorIndent'>";
         }
 
-        s << computation_button(op, stmtHierarchyInfo);
-        s << data_movement_button(op, stmtHierarchyInfo);
+        s << computation_button(op, stmt_hierarchy_info);
+        s << data_movement_button(op, stmt_hierarchy_info);
 
         s << "</span>";
 
@@ -325,32 +325,32 @@ private:
         return close_tag("div") + "\n";
     }
 
-    string open_anchor(const string &anchorName) {
-        return "<span class='navigationAnchor' id='" + anchorName + "'>";
+    string open_anchor(const string &anchor_name) {
+        return "<span class='navigationAnchor' id='" + anchor_name + "'>";
     }
     string close_anchor() {
         return "</span>";
     }
 
-    string see_viz_button(const string &anchorName) {
+    string see_viz_button(const string &anchor_name) {
         stringstream s;
 
         s << "<button class='iconButton' ";
-        s << "onclick='scrollToFunctionCodeToViz(\"" + anchorName + "_viz\")'>";
+        s << "onclick='scrollToFunctionCodeToViz(\"" + anchor_name + "_viz\")'>";
         s << "<i class='bi bi-arrow-right-square'></i>";
         s << "</button>";
 
         return s.str();
     }
 
-    string see_assembly_button(const int &assemblyLineNum) {
+    string see_assembly_button(const int &assembly_line_num) {
         stringstream s;
 
-        tooltipCount++;
+        tooltip_count++;
         s << "<button class='iconButton assemblyIcon' ";
-        s << "id='button" << tooltipCount << "' ";
-        s << "aria-describedby='tooltip" << tooltipCount << "' ";
-        s << "onclick='openAssembly(" << assemblyLineNum << ");'>";
+        s << "id='button" << tooltip_count << "' ";
+        s << "aria-describedby='tooltip" << tooltip_count << "' ";
+        s << "onclick='openAssembly(" << assembly_line_num << ");'>";
         s << "<svg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='currentColor' "
              "class='bi bi-filetype-raw' viewBox='0 0 16 16'>";
         s << "<path fill-rule='evenodd' d='M14 4.5V14a2 2 0 0 1-2 2v-1a1 1 0 0 0 1-1V4.5h-2A1.5 "
@@ -366,8 +366,8 @@ private:
         s << "</button>";
 
         // tooltip span
-        s << "<span id='tooltip" << tooltipCount << "' class='tooltip' ";
-        s << "role='tooltip" << tooltipCount << "'>";
+        s << "<span id='tooltip" << tooltip_count << "' class='tooltip' ";
+        s << "role='tooltip" << tooltip_count << "'>";
         s << "Click to see assembly code";
         s << "</span>";
 
@@ -424,7 +424,7 @@ private:
 
     string open_expand_button(int id) {
         stringstream button;
-        button << "<a class=ExpandButton onclick='return toggle(" << id << ", " << tooltipCount
+        button << "<a class=ExpandButton onclick='return toggle(" << id << ", " << tooltip_count
                << ");'>"
                << "<div style='position:relative; width:0; height:0;'>"
                << "<div class=ShowHide style='display:none;' id=" << id << "-show"
@@ -681,26 +681,26 @@ private:
         stream << open_div(op->is_producer ? "Produce" : "Consumer");
 
         // anchoring
-        producerConsumerCount++;
-        string anchorName = "producerConsumer" + std::to_string(producerConsumerCount);
+        producer_consumer_count++;
+        string anchor_name = "producerConsumer" + std::to_string(producer_consumer_count);
 
         // for assembly
-        int assemblyLineNum = getAssemblyInfoViz.get_line_number(op);
+        int assembly_line_num = get_assembly_info_viz.get_line_number(op);
 
         int produce_id = unique_id();
 
         stream << open_cost_span(op);
         stream << open_span("Matched");
         stream << open_expand_button(produce_id);
-        stream << open_anchor(anchorName);
+        stream << open_anchor(anchor_name);
         stream << keyword(op->is_producer ? "produce" : "consume") << " ";
         stream << var(op->name);
         stream << close_expand_button() << " {";
         stream << close_span();
         stream << close_anchor();
         stream << close_cost_span();
-        if (assemblyLineNum != -1) stream << see_assembly_button(assemblyLineNum);
-        stream << see_viz_button(anchorName);
+        if (assembly_line_num != -1) stream << see_assembly_button(assembly_line_num);
+        stream << see_viz_button(anchor_name);
 
         stream << open_div(op->is_producer ? "ProduceBody Indent" : "ConsumeBody Indent",
                            produce_id);
@@ -719,16 +719,16 @@ private:
         stream << open_div("For");
 
         // anchoring
-        forCount++;
-        string anchorName = "for" + std::to_string(forCount);
+        for_count++;
+        string anchor_name = "for" + std::to_string(for_count);
 
         // for assembly
-        int assemblyLineNum = getAssemblyInfoViz.get_line_number(op);
+        int assembly_line_num = get_assembly_info_viz.get_line_number(op);
 
         int id = unique_id();
         stream << open_cost_span(op);
         stream << open_expand_button(id);
-        stream << open_anchor(anchorName);
+        stream << open_anchor(anchor_name);
         stream << open_span("Matched");
         if (op->for_type == ForType::Serial) {
             stream << keyword("for");
@@ -758,8 +758,8 @@ private:
         stream << " " << matched("{");
         stream << close_anchor();
         stream << close_cost_span();
-        if (assemblyLineNum != -1) stream << see_assembly_button(assemblyLineNum);
-        stream << see_viz_button(anchorName);
+        if (assembly_line_num != -1) stream << see_assembly_button(assembly_line_num);
+        stream << see_viz_button(anchor_name);
 
         stream << open_div("ForBody Indent", id);
         print(op->body);
@@ -796,11 +796,11 @@ private:
         stream << open_div("Store WrapLine");
 
         // anchoring
-        storeCount++;
-        string anchorName = "store" + std::to_string(storeCount);
+        store_count++;
+        string anchor_name = "store" + std::to_string(store_count);
 
         stream << open_cost_span(op);
-        stream << open_anchor(anchorName);
+        stream << open_anchor(anchor_name);
 
         stream << open_span("Matched");
         stream << var(op->name) << "[";
@@ -821,7 +821,7 @@ private:
 
         stream << close_anchor();
         stream << close_cost_span();
-        stream << see_viz_button(anchorName);
+        stream << see_viz_button(anchor_name);
         stream << close_div();
     }
     void visit(const Provide *op) override {
@@ -844,9 +844,9 @@ private:
         stream << open_div("Allocate");
 
         // anchoring
-        allocateCount++;
-        string anchorName = "allocate" + std::to_string(allocateCount);
-        stream << open_anchor(anchorName);
+        allocate_count++;
+        string anchor_name = "allocate" + std::to_string(allocate_count);
+        stream << open_anchor(anchor_name);
 
         stream << open_cost_span(op);
 
@@ -886,7 +886,7 @@ private:
         stream << close_cost_span();
 
         stream << close_anchor();
-        stream << see_viz_button(anchorName);
+        stream << see_viz_button(anchor_name);
 
         stream << open_div("AllocateBody");
         print(op->body);
@@ -1011,13 +1011,13 @@ private:
         stream << open_div("IfThenElse");
 
         // anchoring
-        ifCount++;
-        string anchorName = "if" + std::to_string(ifCount);
+        if_count++;
+        string anchor_name = "if" + std::to_string(if_count);
 
         int id = unique_id();
         stream << open_cost_span(op);
         stream << open_expand_button(id);
-        stream << open_anchor(anchorName);
+        stream << open_anchor(anchor_name);
         stream << open_span("Matched");
 
         // for line numbers
@@ -1034,7 +1034,7 @@ private:
             stream << matched("{");
             stream << close_anchor();
             stream << close_cost_span();
-            stream << see_viz_button(anchorName);
+            stream << see_viz_button(anchor_name);
 
             stream << open_div("ThenBody Indent", id);
             print(op->then_case);
@@ -1063,9 +1063,9 @@ private:
                 stream << close_span();
 
                 // anchoring
-                ifCount++;
-                string anchorName = "if" + std::to_string(ifCount);
-                stream << open_anchor(anchorName);
+                if_count++;
+                string anchor_name = "if" + std::to_string(if_count);
+                stream << open_anchor(anchor_name);
 
                 stream << keyword("else if") << " (";
                 stream << close_span();
@@ -1083,15 +1083,15 @@ private:
                 stream << close_span();
 
                 // anchoring
-                ifCount++;
-                string anchorName = "if" + std::to_string(ifCount);
-                stream << open_anchor(anchorName);
+                if_count++;
+                string anchor_name = "if" + std::to_string(if_count);
+                stream << open_anchor(anchor_name);
 
                 stream << keyword("else ");
                 stream << close_expand_button() << "{";
                 stream << close_anchor();
                 stream << close_cost_span();
-                stream << see_viz_button(anchorName);
+                stream << see_viz_button(anchor_name);
 
                 stream << open_div("ElseBody Indent", id);
                 print(op->else_case);
@@ -1171,12 +1171,12 @@ private:
 
 public:
     FindStmtCost generate_costs(const Module &m) {
-        findStmtCost.generate_costs(m);
-        return findStmtCost;
+        find_stmt_cost.generate_costs(m);
+        return find_stmt_cost;
     }
 
     string generate_ir_visualization(const Module &m) {
-        return irVisualization.generate_ir_visualization_html(m);
+        return ir_visualization.generate_ir_visualization_html(m);
     }
 
     void print(const Expr &ir) {
@@ -1193,11 +1193,11 @@ public:
 
         // anchoring
         functionCount++;
-        string anchorName = "loweredFunc" + std::to_string(functionCount);
+        string anchor_name = "loweredFunc" + std::to_string(functionCount);
 
         int id = unique_id();
         stream << open_expand_button(id);
-        stream << open_anchor(anchorName);
+        stream << open_anchor(anchor_name);
         stream << open_span("Matched");
         stream << keyword("func");
         stream << " " << op.name << "(";
@@ -1212,7 +1212,7 @@ public:
         stream << close_anchor();
         stream << close_expand_button();
         stream << " " << matched("{");
-        stream << see_viz_button(anchorName);
+        stream << see_viz_button(anchor_name);
 
         stream << open_div("FunctionBody Indent", id);
 
@@ -1516,13 +1516,13 @@ public:
 
         stream << "<style type='text/css'>";
         stream << css;
-        stream << vizCss;
-        stream << costColorsCSS;
-        stream << IRVisualization::irVizCSS;
-        stream << flexboxDivCSS;
-        stream << lineNumbersCSS;
-        stream << tooltipCSS;
-        stream << GetStmtHierarchy::stmtHierarchyCSS;
+        stream << viz_css;
+        stream << cost_colors_css;
+        stream << IRVisualization::ir_viz_CSS;
+        stream << flexbox_div_css;
+        stream << line_numbers_css;
+        stream << tooltip_css;
+        stream << GetStmtHierarchy::stmt_hierarchy_css;
         stream << "</style>\n";
         stream << "<script language='javascript' type='text/javascript'>" + js + "</script>\n";
         stream << "</head>\n";
@@ -1542,24 +1542,24 @@ public:
                   "'-]').removeClass('Highlight'); }\n"
                << "} );\n";
 
-        stream << generatetooltipJS(tooltipCount);
-        stream << GetStmtHierarchy::stmtHierarchyCollapseExpandJS;
-        stream << getStmtHierarchy.generate_stmtHierarchy_js();
-        stream << irVisualization.generate_irViz_js();
-        stream << IRVisualization::scrollToFunctionJSVizToCode;
-        stream << scrollToFunctionJSCodeToViz;
-        stream << expandCodeJS;
-        stream << assemblyCodeJS;
+        stream << generate_tooltip_JS(tooltip_count);
+        stream << GetStmtHierarchy::stmt_hierarchy_collapse_expand_JS;
+        stream << get_stmt_hierarchy.generate_stmtHierarchy_js();
+        stream << ir_visualization.generate_irViz_js();
+        stream << IRVisualization::scroll_to_function_JS_viz_to_code;
+        stream << scroll_to_function_code_to_viz_js;
+        stream << expand_code_js;
+        stream << assembly_code_js;
         stream << "</script>\n";
         stream << "</body>";
     }
 
-    string informationPopup() {
+    string information_popup() {
 
         stringstream popup;
 
-        popupCount++;
-        popup << "<div class='modal fade' id='stmtHierarchyModal" << popupCount
+        popup_count++;
+        popup << "<div class='modal fade' id='stmtHierarchyModal" << popup_count
               << "' tabindex='-1'\n"
               << "    aria-labelledby='stmtHierarchyModalLabel' aria-hidden='true'>\n"
               << "    <div class='modal-dialog modal-dialog-scrollable modal-xl'>\n"
@@ -1597,14 +1597,14 @@ public:
               << "</p>\n"
               << "<ul>\n";
 
-        tooltipCount++;
+        tooltip_count++;
         popup
-            << "<span id='tooltip" << tooltipCount << "' class='tooltip CostTooltip' "
-            << "role='tooltip" << tooltipCount << "'>"
+            << "<span id='tooltip" << tooltip_count << "' class='tooltip CostTooltip' "
+            << "role='tooltip" << tooltip_count << "'>"
             << "Costs will be shown here. Click to see statement hierarchy."
             << "</span>"
-            << "    <li><button id='button" << tooltipCount << "' aria-describedby='tooltip"
-            << tooltipCount << "'\n"
+            << "    <li><button id='button" << tooltip_count << "' aria-describedby='tooltip"
+            << tooltip_count << "'\n"
             << "            class='colorButton CostColor0' role='button'\n"
             << "            inclusiverange='0'\n"
             << "            exclusiverange='0'></button>"
@@ -1672,14 +1672,14 @@ public:
             << "</p>\n"
             << "<ul>\n";
 
-        tooltipCount++;
-        popup << "<span id='tooltip" << tooltipCount << "' class='tooltip' "
-              << "role='tooltip" << tooltipCount << "'>"
+        tooltip_count++;
+        popup << "<span id='tooltip" << tooltip_count << "' class='tooltip' "
+              << "role='tooltip" << tooltip_count << "'>"
               << "Costs will be shown here."
               << "</span>";
 
-        popup << "    <li><button id='button" << tooltipCount << "' aria-describedby='tooltip"
-              << tooltipCount << "'\n"
+        popup << "    <li><button id='button" << tooltip_count << "' aria-describedby='tooltip"
+              << tooltip_count << "'\n"
               << "            class='colorButton CostColor0' role='button'\n"
               << "            inclusiverange='0'\n"
               << "            exclusiverange='0'></button><b "
@@ -1699,14 +1699,14 @@ public:
               << "    </li>\n"
               << "    <li>\n";
 
-        tooltipCount++;
-        popup << "<span id='tooltip" << tooltipCount << "' class='tooltip' "
-              << "role='tooltip" << tooltipCount << "'>"
+        tooltip_count++;
+        popup << "<span id='tooltip" << tooltip_count << "' class='tooltip' "
+              << "role='tooltip" << tooltip_count << "'>"
               << "More information about the node will appear here."
               << "</span>";
 
-        popup << "        <button class='info-button' id='button" << tooltipCount
-              << "' aria-describedby='tooltip" << tooltipCount << "'><i\n"
+        popup << "        <button class='info-button' id='button" << tooltip_count
+              << "' aria-describedby='tooltip" << tooltip_count << "'><i\n"
               << "                class='bi bi-info'></i></button><b \n"
               << "        style='font-weight: bold;'>Info Button:</b>\n"
               << "        If you hover over these buttons, they will\n"
@@ -1722,51 +1722,51 @@ public:
         return popup.str();
     }
 
-    string informationBar(const Module &m) {
-        popups += informationPopup();
+    string information_bar(const Module &m) {
+        popups += information_popup();
 
-        stringstream infoBar;
+        stringstream info_bar_ss;
 
-        infoBar << "<div class='informationBar'>\n"
-                << "<div class='title'>\n"
-                << "<h3>" << m.name() << "</h3>\n"
-                << "</div>\n"
-                << "<div class='spacing'></div>\n"
-                << "<div class='button'>\n"
-                << "<h3><button class='informationBarButton'><i\n"
-                << "class='bi bi-info-square' data-bs-toggle='modal'\n"
-                << "data-bs-target='#stmtHierarchyModal" << popupCount << "'></i></button>\n"
-                << "</h3>\n"
-                << "</div>\n"
-                << "</div>\n";
+        info_bar_ss << "<div class='informationBar'>\n"
+                    << "<div class='title'>\n"
+                    << "<h3>" << m.name() << "</h3>\n"
+                    << "</div>\n"
+                    << "<div class='spacing'></div>\n"
+                    << "<div class='button'>\n"
+                    << "<h3><button class='informationBarButton'><i\n"
+                    << "class='bi bi-info-square' data-bs-toggle='modal'\n"
+                    << "data-bs-target='#stmtHierarchyModal" << popup_count << "'></i></button>\n"
+                    << "</h3>\n"
+                    << "</div>\n"
+                    << "</div>\n";
 
-        return infoBar.str();
+        return info_bar_ss.str();
     }
 
-    string resizeBar() {
-        stringstream resizeBar;
+    string resize_bar() {
+        stringstream resize_bar_ss;
 
-        resizeBar << "<div class='ResizeBar' id='ResizeBar'>\n"
-                  << "<div class='collapseButtons'>\n"
-                  << "<button class='iconButton' onclick='collapseViz()'>"
-                  << "<i class='bi bi-arrow-bar-right'></i></button>\n"
-                  << "<button class='iconButton' onclick='collapseCode()'>"
-                  << "<i class='bi bi-arrow-bar-left'></i></button>\n"
-                  << "</div>\n"
-                  << "</div>\n";
+        resize_bar_ss << "<div class='ResizeBar' id='ResizeBar'>\n"
+                      << "<div class='collapseButtons'>\n"
+                      << "<button class='iconButton' onclick='collapseViz()'>"
+                      << "<i class='bi bi-arrow-bar-right'></i></button>\n"
+                      << "<button class='iconButton' onclick='collapseCode()'>"
+                      << "<i class='bi bi-arrow-bar-left'></i></button>\n"
+                      << "</div>\n"
+                      << "</div>\n";
 
-        return resizeBar.str();
+        return resize_bar_ss.str();
     }
 
     void generate_html(const string &filename, const Module &m) {
-        getAssemblyInfoViz.generate_assembly_information(m, filename);
+        get_assembly_info_viz.generate_assembly_information(m, filename);
 
         // opening parts of the html
         start_stream(filename);
 
         stream << "<div class='outerDiv'>\n";
 
-        stream << informationBar(m);
+        stream << information_bar(m);
 
         stream << "<div class='mainContent'>\n";
 
@@ -1776,7 +1776,7 @@ public:
         stream << "</div>\n";
 
         // for resizing the code and visualization divs
-        stream << resizeBar();
+        stream << resize_bar();
 
         stream << "<div class='IRVisualization' id='IRVisualization'>\n";
         stream << generate_ir_visualization(m);
@@ -1786,73 +1786,73 @@ public:
         stream << "</div>\n";  // close outerDiv div
 
         // put assembly code in a div
-        stream << getAssemblyInfoViz.get_assembly_html();
+        stream << get_assembly_info_viz.get_assembly_html();
 
         // closing parts of the html
         end_stream();
     }
 
     StmtToViz(const string &filename, const Module &m)
-        : id_count(0), getStmtHierarchy(generate_costs(m)), irVisualization(findStmtCost),
-          ifCount(0), producerConsumerCount(0), forCount(0), storeCount(0), allocateCount(0),
-          functionCount(0), tooltipCount(0), popupCount(0), context_stack(1, 0) {
+        : id_count(0), get_stmt_hierarchy(generate_costs(m)), ir_visualization(find_stmt_cost),
+          if_count(0), producer_consumer_count(0), for_count(0), store_count(0), allocate_count(0),
+          functionCount(0), tooltip_count(0), popup_count(0), context_stack(1, 0) {
     }
 
-    string generatetooltipJS(int &tooltipCount) {
-        stringstream tooltipJS;
-        tooltipJS << "\n// Tooltip JS\n"
-                  << "function update(buttonElement, tooltipElement) { \n"
-                  << "    window.FloatingUIDOM.computePosition(buttonElement, tooltipElement, { \n"
-                  << "        placement: 'top', \n"
-                  << "        middleware: [ \n"
-                  << "            window.FloatingUIDOM.offset(6), \n"
-                  << "            window.FloatingUIDOM.flip(), \n"
-                  << "            window.FloatingUIDOM.shift({ padding: 5 }), \n"
-                  << "        ], \n"
-                  << "    }).then(({ x, y, placement, middlewareData }) => { \n"
-                  << "        Object.assign(tooltipElement.style, { \n"
-                  << "            left: `${x}px`, \n"
-                  << "            top: `${y}px`, \n"
-                  << "        }); \n"
-                  << "        // Accessing the data \n"
-                  << "        const staticSide = { \n"
-                  << "            top: 'bottom', \n"
-                  << "            right: 'left', \n"
-                  << "            bottom: 'top', \n"
-                  << "            left: 'right', \n"
-                  << "        }[placement.split('-')[0]]; \n"
-                  << "    }); \n"
-                  << "} \n"
-                  << "function showTooltip(buttonElement, tooltipElement) { \n"
-                  << "    tooltipElement.style.display = 'block'; \n"
-                  << "    tooltipElement.style.opacity = '1'; \n"
-                  << "    update(buttonElement, tooltipElement); \n"
-                  << "} \n"
-                  << "function hideTooltip(tooltipElement) { \n"
-                  << "    tooltipElement.style.display = ''; \n"
-                  << "    tooltipElement.style.opacity = '0'; \n"
-                  << "} \n"
-                  << "for (let i = 1; i <= " << tooltipCount << "; i++) { \n"
-                  << "    const button = document.getElementById('button' + i); \n"
-                  << "    const tooltip = document.getElementById('tooltip' + i); \n"
-                  << "    button.addEventListener('mouseenter', () => { \n"
-                  << "        showTooltip(button, tooltip); \n"
-                  << "    }); \n"
-                  << "    button.addEventListener('mouseleave', () => { \n"
-                  << "        hideTooltip(tooltip); \n"
-                  << "    } \n"
-                  << "    ); \n"
-                  << "    tooltip.addEventListener('focus', () => { \n"
-                  << "        showTooltip(button, tooltip); \n"
-                  << "    } \n"
-                  << "    ); \n"
-                  << "    tooltip.addEventListener('blur', () => { \n"
-                  << "        hideTooltip(tooltip); \n"
-                  << "    } \n"
-                  << "    ); \n"
-                  << "} \n";
+    string generate_tooltip_JS(int &tooltip_count) {
+        stringstream tooltip_JS;
+        tooltip_JS << "\n// Tooltip JS\n"
+                   << "function update(buttonElement, tooltipElement) { \n"
+                   << "    window.FloatingUIDOM.computePosition(buttonElement, tooltipElement, { \n"
+                   << "        placement: 'top', \n"
+                   << "        middleware: [ \n"
+                   << "            window.FloatingUIDOM.offset(6), \n"
+                   << "            window.FloatingUIDOM.flip(), \n"
+                   << "            window.FloatingUIDOM.shift({ padding: 5 }), \n"
+                   << "        ], \n"
+                   << "    }).then(({ x, y, placement, middlewareData }) => { \n"
+                   << "        Object.assign(tooltipElement.style, { \n"
+                   << "            left: `${x}px`, \n"
+                   << "            top: `${y}px`, \n"
+                   << "        }); \n"
+                   << "        // Accessing the data \n"
+                   << "        const staticSide = { \n"
+                   << "            top: 'bottom', \n"
+                   << "            right: 'left', \n"
+                   << "            bottom: 'top', \n"
+                   << "            left: 'right', \n"
+                   << "        }[placement.split('-')[0]]; \n"
+                   << "    }); \n"
+                   << "} \n"
+                   << "function showTooltip(buttonElement, tooltipElement) { \n"
+                   << "    tooltipElement.style.display = 'block'; \n"
+                   << "    tooltipElement.style.opacity = '1'; \n"
+                   << "    update(buttonElement, tooltipElement); \n"
+                   << "} \n"
+                   << "function hideTooltip(tooltipElement) { \n"
+                   << "    tooltipElement.style.display = ''; \n"
+                   << "    tooltipElement.style.opacity = '0'; \n"
+                   << "} \n"
+                   << "for (let i = 1; i <= " << tooltip_count << "; i++) { \n"
+                   << "    const button = document.getElementById('button' + i); \n"
+                   << "    const tooltip = document.getElementById('tooltip' + i); \n"
+                   << "    button.addEventListener('mouseenter', () => { \n"
+                   << "        showTooltip(button, tooltip); \n"
+                   << "    }); \n"
+                   << "    button.addEventListener('mouseleave', () => { \n"
+                   << "        hideTooltip(tooltip); \n"
+                   << "    } \n"
+                   << "    ); \n"
+                   << "    tooltip.addEventListener('focus', () => { \n"
+                   << "        showTooltip(button, tooltip); \n"
+                   << "    } \n"
+                   << "    ); \n"
+                   << "    tooltip.addEventListener('blur', () => { \n"
+                   << "        hideTooltip(tooltip); \n"
+                   << "    } \n"
+                   << "    ); \n"
+                   << "} \n";
 
-        return tooltipJS.str();
+        return tooltip_JS.str();
     }
 };
 
@@ -1894,7 +1894,7 @@ code.ptx { tab-size: 26; white-space: pre; }\n \
 .tf-tree { overflow: unset; }\n \
 ";
 
-const string StmtToViz::flexboxDivCSS = "\n \
+const string StmtToViz::flexbox_div_css = "\n \
 /* Flexbox Div Styling CSS */ \n \
 div.outerDiv { \n \
     height: 100vh; \n \
@@ -1936,7 +1936,7 @@ div.collapseButtons { \n \
 } \n \
 ";
 
-const string StmtToViz::scrollToFunctionJSCodeToViz = "\n \
+const string StmtToViz::scroll_to_function_code_to_viz_js = "\n \
 // scroll to function - code to viz \n \
 function makeVisibleViz(element) { \n \
     if (!element) return; \n \
@@ -1980,7 +1980,7 @@ function scrollToFunctionCodeToViz(id) { \n \
 } \n \
 ";
 
-const string StmtToViz::lineNumbersCSS = "\n \
+const string StmtToViz::line_numbers_css = "\n \
 /* Line Numbers CSS */\n \
 p.WrapLine,\n\
 div.WrapLine,\n\
@@ -2024,7 +2024,7 @@ div.Function:before {\n\
 }\n\
 ";
 
-const string StmtToViz::vizCss = "\n \
+const string StmtToViz::viz_css = "\n \
 /* Additional Code Visualization CSS */\n \
 span.ButtonSpacer { width: 5px; color: transparent; display: inline-block; }\n \
 .info-button { \n \
@@ -2109,7 +2109,7 @@ span.ButtonSpacer { width: 5px; color: transparent; display: inline-block; }\n \
 } \n \
 ";
 
-const string StmtToViz::costColorsCSS = "\n \
+const string StmtToViz::cost_colors_css = "\n \
 /* Cost Colors CSS */\n \
 span.CostColor19, div.CostColor19, .CostColor19 { background-color: rgb(130,31,27); } \n \
 span.CostColor18, div.CostColor18, .CostColor18 { background-color: rgb(145,33,30); } \n \
@@ -2138,7 +2138,7 @@ span.smallColorIndent { position: absolute; left: 35px; } \n \
 span.bigColorIndent { position: absolute; left: 65px; } \n \
 ";
 
-const string StmtToViz::tooltipCSS = "\n \
+const string StmtToViz::tooltip_css = "\n \
 /* Tooltip CSS */\n \
 .left-table { text-align: right; color: grey; vertical-align: middle; font-size: 12px; }\n \
 .right-table { text-align: left; vertical-align: middle; font-size: 12px; font-weight: bold; padding-left: 3px; }\n \
@@ -2171,7 +2171,7 @@ span.tooltipHelperText { \n \
 } \n \
 ";
 
-const string StmtToViz::expandCodeJS = "\n \
+const string StmtToViz::expand_code_js = "\n \
 // expand code div\n \
 var codeDiv = document.getElementById('IRCode-code'); \n \
 var irVizDiv = document.getElementById('IRVisualization'); \n \
@@ -2213,7 +2213,7 @@ function collapseViz() { \n \
 } \n \
 ";
 
-const string StmtToViz::assemblyCodeJS = "\n \
+const string StmtToViz::assembly_code_js = "\n \
 // open assembly code  \n \
 function openAssembly(lineNum) {\n \
     var innerHTML = '<head><link rel=\\'stylesheet\\'' + \n \

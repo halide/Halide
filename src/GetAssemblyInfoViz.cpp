@@ -22,20 +22,20 @@ struct AssemblyInfo {
 class GetAssemblyInfoViz : public IRVisitor {
 
 public:
-    void generate_assembly_information(const Module &m, const string &assemblyFileName) {
+    void generate_assembly_information(const Module &m, const string &assembly_filename) {
         // traverse the module to get the assembly labels
         traverse(m);
 
-        generate_assembly_html_and_line_numbers(assemblyFileName);
+        generate_assembly_html_and_line_numbers(assembly_filename);
     }
 
     string get_assembly_html() {
-        return assemblyHTML.str();
+        return assembly_HTML.str();
     }
 
     int get_line_number(const IRNode *op) {
-        auto it = nodeToLineNumber.find(op);
-        if (it != nodeToLineNumber.end()) {
+        auto it = node_to_line_number.find(op);
+        if (it != node_to_line_number.end()) {
             return it->second;
         } else {
             return -1;
@@ -43,10 +43,10 @@ public:
     }
 
 private:
-    unordered_map<const IRNode *, int> nodeToLineNumber;
+    unordered_map<const IRNode *, int> node_to_line_number;
     vector<AssemblyInfo> labels;
-    stringstream assemblyHTML;
-    vector<const IRNode *> claimedNodes;
+    stringstream assembly_HTML;
+    vector<const IRNode *> claimed_nodes;
 
     // traverses the module to generate the assembly labels
     void traverse(const Module &m) {
@@ -64,45 +64,45 @@ private:
     // generates the assembly html and line numbers from the loaded assembly file
     // and generated labels
     void generate_assembly_html_and_line_numbers(const string &filename) {
-        assemblyHTML << "<div id='assemblyContent' style='display: none;'>\n";
-        assemblyHTML << "<pre>\n";
+        assembly_HTML << "<div id='assemblyContent' style='display: none;'>\n";
+        assembly_HTML << "<pre>\n";
 
-        ifstream assemblyFile;
-        string assemblyFileName = get_assembly_file_name(filename);
-        assemblyFile.open(assemblyFileName, ios::in);
+        ifstream assembly_file;
+        string assembly_filename = get_assembly_filename(filename);
+        assembly_file.open(assembly_filename, ios::in);
 
-        if (assemblyFile.is_open()) {
-            string assemblyLine;
-            int lineNumber = 0;
-            while (getline(assemblyFile, assemblyLine)) {
-                lineNumber++;
-                assemblyHTML << assemblyLine << "\n";
-                add_line_number(assemblyLine, lineNumber);
+        if (assembly_file.is_open()) {
+            string assembly_line;
+            int line_number = 0;
+            while (getline(assembly_file, assembly_line)) {
+                line_number++;
+                assembly_HTML << assembly_line << "\n";
+                add_line_number(assembly_line, line_number);
             }
-            assemblyFile.close();
+            assembly_file.close();
         }
 
-        assemblyHTML << "</pre>\n";
-        assemblyHTML << "</div>\n";
+        assembly_HTML << "</pre>\n";
+        assembly_HTML << "</div>\n";
     }
 
     // gets assembly file from stmt.viz.html file
-    string get_assembly_file_name(const string &filename) {
-        string assemblyFileName = "./" + filename;
-        assemblyFileName.replace(assemblyFileName.find(".stmt.viz.html"), 15, ".s");
-        return assemblyFileName;
+    string get_assembly_filename(const string &filename) {
+        string assembly_filename = "./" + filename;
+        assembly_filename.replace(assembly_filename.find(".stmt.viz.html"), 15, ".s");
+        return assembly_filename;
     }
 
     //  checks if there is a label that matches the assembly line, and if so, adds the line
     // number and node to map, signifying a match
-    void add_line_number(string &assemblyLine, int lineNumber) {
+    void add_line_number(string &assembly_line, int line_number) {
         for (auto &label : labels) {
-            if (std::regex_search(assemblyLine, label.regex)) {
+            if (std::regex_search(assembly_line, label.regex)) {
                 // only add if the label.op isn't already claimed by another line
-                if (std::find(claimedNodes.begin(), claimedNodes.end(), label.node) ==
-                    claimedNodes.end()) {
-                    claimedNodes.push_back(label.node);
-                    nodeToLineNumber[label.node] = lineNumber;
+                if (std::find(claimed_nodes.begin(), claimed_nodes.end(), label.node) ==
+                    claimed_nodes.end()) {
+                    claimed_nodes.push_back(label.node);
+                    node_to_line_number[label.node] = line_number;
                     return;
                 }
             }
@@ -110,15 +110,15 @@ private:
     }
 
     void visit(const ProducerConsumer *op) override {
-        string codeString;
-        codeString += op->is_producer ? "produce " : "consume ";
-        codeString += op->name;
+        string code_string;
+        code_string += op->is_producer ? "produce " : "consume ";
+        code_string += op->name;
 
         // replace all $ with \$
         std::regex dollar("\\$");
-        codeString = std::regex_replace(codeString, dollar, "\\$");
+        code_string = std::regex_replace(code_string, dollar, "\\$");
 
-        std::regex regex("(\")" + codeString + "[0-9]*\"");
+        std::regex regex("(\")" + code_string + "[0-9]*\"");
 
         AssemblyInfo info;
         info.regex = regex;
@@ -129,13 +129,13 @@ private:
         op->body.accept(this);
     }
     void visit(const For *op) override {
-        string codeString = "%\"for " + op->name;
+        string code_string = "%\"for " + op->name;
 
         // replace all $ with \$
         std::regex dollar("\\$");
-        codeString = std::regex_replace(codeString, dollar, "\\$");
+        code_string = std::regex_replace(code_string, dollar, "\\$");
 
-        std::regex regex(codeString + "(.preheader)*[0-9]*\"");
+        std::regex regex(code_string + "(.preheader)*[0-9]*\"");
 
         AssemblyInfo info;
         info.regex = regex;

@@ -112,11 +112,11 @@ private:
 
     // checks if node is IfThenElse or something else - will call get_if_node_cost if it is,
     // get_computation_cost/get_data_movement_cost otherwise
-    int get_cost(const IRNode *node, bool inclusive, bool isComputation) const;
+    int get_cost(const IRNode *node, bool inclusive, bool is_computation) const;
 
     // treats if nodes differently when visualizing cost - will have cost be:
     //      cost of condition + cost of then_case
-    int get_if_node_cost(const IRNode *op, bool inclusive, bool isComputation) const;
+    int get_if_node_cost(const IRNode *op, bool inclusive, bool is_computation) const;
 
     // get percentages
     int get_computation_cost_percentage(const IRNode *node, bool inclusive) const;
@@ -128,15 +128,15 @@ private:
 
     // sets inclusive/exclusive costs
     void set_inclusive_costs(const IRNode *node, vector<const IRNode *> children, int node_cc,
-                             int node_dmc, int scalingFactor_dmc);
+                             int node_dmc, int scaling_factor_dmc);
     void set_exclusive_costs(const IRNode *node, vector<const IRNode *> children, int node_cc,
-                             int node_dmc, int scalingFactor_dmc);
+                             int node_dmc, int scaling_factor_dmc);
 
     // sets max computation cost and max data movement cost (inclusive and exclusive)
     void set_max_costs(const Module &m);
 
     // builds the tooltip cost table based on given input table
-    string tooltip_table(vector<pair<string, string>> &table, string extraNote);
+    string tooltip_table(vector<pair<string, string>> &table, string extra_note);
 
     // gets scaling factor for Load/Store based on lanes and bits
     int get_scaling_factor(uint8_t bits, uint16_t lanes) const;

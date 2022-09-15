@@ -37,8 +37,8 @@ public:
     StmtSize get_size(const IRNode *node) const;
 
     // for coloring
-    string string_span(string varName) const;
-    string int_span(int64_t intVal) const;
+    string string_span(string var_name) const;
+    string int_span(int64_t int_val) const;
 
     string print_node(const IRNode *node) const;
 
@@ -69,11 +69,12 @@ private:
 class IRVisualization : public IRVisitor {
 
 public:
-    static const string irVizCSS, scrollToFunctionJSVizToCode;
+    static const string ir_viz_CSS, scroll_to_function_JS_viz_to_code;
 
-    IRVisualization(FindStmtCost findStmtCostPopulated)
-        : findStmtCost(findStmtCostPopulated), irVizTooltipCount(0), ifCount(0),
-          producerConsumerCount(0), forCount(0), storeCount(0), allocateCount(0), functionCount(0) {
+    IRVisualization(FindStmtCost find_stmt_cost_populated)
+        : find_stmt_cost(find_stmt_cost_populated), ir_viz_tooltip_count(0), if_count(0),
+          producer_consumer_count(0), for_count(0), store_count(0), allocate_count(0),
+          function_count(0) {
     }
 
     // generates the html for the IR Visualization
@@ -84,25 +85,25 @@ public:
 private:
     using IRVisitor::visit;
 
-    stringstream html;          // main html string
-    StmtSizes pre_processor;    // generates the sizes of the nodes
-    FindStmtCost findStmtCost;  // used to determine the color of each statement
-    int numOfNodes;             // keeps track of the number of nodes in the visualization
-    int irVizTooltipCount;      // tooltip count
+    stringstream html;            // main html string
+    StmtSizes pre_processor;      // generates the sizes of the nodes
+    FindStmtCost find_stmt_cost;  // used to determine the color of each statement
+    int num_of_nodes;             // keeps track of the number of nodes in the visualization
+    int ir_viz_tooltip_count;     // tooltip count
 
     // used for getting anchor names
-    int ifCount;
-    int producerConsumerCount;
-    int forCount;
-    int storeCount;
-    int allocateCount;
-    int functionCount;
+    int if_count;
+    int producer_consumer_count;
+    int for_count;
+    int store_count;
+    int allocate_count;
+    int function_count;
 
     // for traversal of a Module object
-    void startModuleTraversal(const Module &m);
+    void start_module_traversal(const Module &m);
 
     // opens and closes divs
-    string open_box_div(string className, const IRNode *op);
+    string open_box_div(string class_name, const IRNode *op);
     string close_box_div() const;
     string open_function_box_div() const;
     string close_function_box_div() const;
@@ -113,28 +114,28 @@ private:
     string close_div() const;
 
     // header functions
-    string open_header(const string &header, string anchorName);
-    string close_header(string anchorName) const;
-    string div_header(const string &header, StmtSize *size, string anchorName);
-    string function_div_header(const string &functionName, string anchorName) const;
+    string open_header(const string &header, string anchor_name);
+    string close_header(string anchor_name) const;
+    string div_header(const string &header, StmtSize *size, string anchor_name);
+    string function_div_header(const string &function_name, string anchor_name) const;
     vector<string> get_allocation_sizes(const Allocate *op) const;
-    string allocate_div_header(const Allocate *op, const string &header, string anchorName);
-    string for_loop_div_header(const For *op, const string &header, string anchorName);
+    string allocate_div_header(const Allocate *op, const string &header, string anchor_name);
+    string for_loop_div_header(const For *op, const string &header, string anchor_name);
 
     // opens and closes an if-tree
-    string if_tree(const IRNode *op, const string &header, string anchorName);
+    string if_tree(const IRNode *op, const string &header, string anchor_name);
     string close_if_tree() const;
 
     // different cost tables
     string read_write_table(StmtSize &size) const;
-    string allocate_table(vector<string> &allocationSizes) const;
+    string allocate_table(vector<string> &allocation_sizes) const;
     string for_loop_table(string loop_size) const;
 
     // generates code for button that will scroll to associated IR code line
-    string see_code_button_div(string anchorName, bool putDiv = true) const;
+    string see_code_button_div(string anchor_name, bool put_div = true) const;
 
     // tooltip
-    string info_tooltip(string toolTipText, string className);
+    string info_tooltip(string tooltip_text, string class_name);
 
     // for cost colors - side bars
     string generate_computation_cost_div(const IRNode *op);
@@ -142,7 +143,7 @@ private:
     string open_content_div() const;
 
     // for cost colors - side boxes
-    string color_button(int colorRange);
+    string color_button(int color_range);
     string computation_div(const IRNode *op);
     string data_movement_div(const IRNode *op);
     string tooltip_table(vector<pair<string, string>> &table) const;
@@ -156,7 +157,7 @@ private:
     void visit(const IfThenElse *op) override;
     void visit(const Store *op) override;
     void visit(const Load *op) override;
-    string get_memory_type(MemoryType memType) const;
+    string get_memory_type(MemoryType mem_type) const;
     void visit(const Allocate *op) override;
 };
 

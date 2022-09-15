@@ -21,11 +21,11 @@ struct StmtHierarchyInfo {
 class GetStmtHierarchy : public IRVisitor {
 
 public:
-    static const string stmtHierarchyCSS, stmtHierarchyCollapseExpandJS;
+    static const string stmt_hierarchy_css, stmt_hierarchy_collapse_expand_JS;
 
-    GetStmtHierarchy(FindStmtCost findStmtCostPopulated)
-        : findStmtCost(findStmtCostPopulated), currNodeID(0), numNodes(0), vizCounter(0),
-          stmtHierarchyTooltipCount(0) {
+    GetStmtHierarchy(FindStmtCost find_stmt_cost_populated)
+        : find_stmt_cost(find_stmt_cost_populated), curr_node_ID(0), num_nodes(0), viz_counter(0),
+          stmt_hierarchy_tooltip_count(0) {
     }
 
     // returns the generated hierarchy's html
@@ -39,19 +39,19 @@ public:
     string generate_stmtHierarchy_js();
 
 private:
-    stringstream html;          // html string
-    FindStmtCost findStmtCost;  // used to determine the color of each statement
+    stringstream html;            // html string
+    FindStmtCost find_stmt_cost;  // used to determine the color of each statement
 
     // for expanding/collapsing nodes
-    int currNodeID;                 // ID of the current node in traversal
-    int numNodes;                   // total number of nodes (across all generated trees in the IR)
-    int startNodeID;                // ID of the start node of the current tree
-    int nodeDepth;                  // depth of the current node in the tree
-    int vizCounter;                 // counter for the number of visualizations
-    int stmtHierarchyTooltipCount;  // tooltip count
+    int curr_node_ID;   // ID of the current node in traversal
+    int num_nodes;      // total number of nodes (across all generated trees in the IR)
+    int start_node_id;  // ID of the start node of the current tree
+    int node_depth;     // depth of the current node in the tree
+    int viz_counter;    // counter for the number of visualizations
+    int stmt_hierarchy_tooltip_count;  // tooltip count
 
-    // updates the currNodeID to be the next available node ID (numNodes)
-    // and increases numNodes by 1
+    // updates the curr_node_ID to be the next available node ID (num_nodes)
+    // and increases num_nodes by 1
     void update_num_nodes();
 
     // returns the class name in format "node[parentID]child depth[depth]"
