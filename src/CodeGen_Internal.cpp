@@ -174,7 +174,12 @@ Expr lower_int_uint_div(const Expr &a, const Expr &b, bool round_to_zero) {
         Type num_as_uint_t = num.type().with_code(Type::UInt);
         Expr sign = cast(num_as_uint_t, num >> make_const(UInt(t.bits()), t.bits() - 1));
 
-        if (!round_to_zero) {
+        // If the numerator is negative, we want to either flip the bits (when
+        // rounding to negative infinity), or negate the numerator (when
+        // rounding to zero).
+        if (round_to_zero) {
+            num = abs(num);
+        } else {
             // Flip the numerator bits if the mask is high.
             num = cast(num_as_uint_t, num);
             num = num ^ sign;
@@ -182,15 +187,14 @@ Expr lower_int_uint_div(const Expr &a, const Expr &b, bool round_to_zero) {
 
         // Multiply and keep the high half of the
         // result, and then apply the shift.
+        internal_assert(num.type().can_represent(multiplier));
         Expr mult = make_const(num.type(), multiplier);
         num = mul_shift_right(num, mult, shift + num.type().bits());
 
+        // Maybe flip the bits back or negate again.
+        num = cast(a.type(), num ^ sign);
         if (round_to_zero) {
-            // Add one if the numerator was negative
             num -= sign;
-        } else {
-            // Maybe flip the bits back again.
-            num = cast(a.type(), num ^ sign);
         }
 
         return num;
