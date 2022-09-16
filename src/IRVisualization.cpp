@@ -36,11 +36,6 @@ string StmtSizes::int_span(int64_t int_val) const {
 
 void StmtSizes::traverse(const Module &m) {
 
-    // recursively traverse all submodules
-    for (const auto &s : m.submodules()) {
-        traverse(s);
-    }
-
     // traverse all functions
     for (const auto &f : m.functions()) {
         function_names.push_back(f.name);

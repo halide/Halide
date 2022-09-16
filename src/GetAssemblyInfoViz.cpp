@@ -50,10 +50,6 @@ private:
 
     // traverses the module to generate the assembly labels
     void traverse(const Module &m) {
-        // recursively traverse all submodules
-        for (const auto &s : m.submodules()) {
-            traverse(s);
-        }
 
         // traverse all functions
         for (const auto &f : m.functions()) {

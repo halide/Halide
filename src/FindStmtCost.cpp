@@ -8,10 +8,6 @@ using namespace Internal;
  * CostPreProcessor class
  */
 void CostPreProcessor::traverse(const Module &m) {
-    // recursively traverse all submodules
-    for (const auto &s : m.submodules()) {
-        traverse(s);
-    }
 
     // traverse all functions
     for (const auto &f : m.functions()) {
@@ -192,10 +188,6 @@ bool FindStmtCost::is_local_variable(const string &name) const {
 }
 
 void FindStmtCost::traverse(const Module &m) {
-    // recursively traverse all submodules
-    for (const auto &s : m.submodules()) {
-        traverse(s);
-    }
 
     // traverse all functions
     for (const auto &f : m.functions()) {
