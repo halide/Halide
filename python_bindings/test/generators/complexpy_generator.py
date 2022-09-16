@@ -4,6 +4,12 @@ x = hl.Var('x')
 y = hl.Var('y')
 c = hl.Var('c')
 
+# Note that this Generator explicitly inherits from hl.Generator;
+# this isn't necessary (the decorator will inject the base class for you),
+# but is allowed for better compatibility with static type checkers such
+# as pytype. Thus, this is left here as a test to verify that this option
+# remains functional.
+
 @hl.generator(name = "complexpy")
 class ComplexPy(hl.Generator):
     vectorize = hl.GeneratorParam(True)

@@ -4,7 +4,7 @@ x = hl.Var('x')
 y = hl.Var('y')
 
 @hl.generator(name = "bitpy")
-class BitGenerator(hl.Generator):
+class BitGenerator:
     # We can use `bool` as an alias for `hl.Bool()` if we like
     bit_input = hl.InputBuffer(bool, 1)
     bit_constant = hl.InputScalar(bool)

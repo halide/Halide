@@ -4,7 +4,7 @@ x = hl.Var('x')
 y = hl.Var('y')
 
 @hl.generator(name = "simplepy")
-class SimplePy(hl.Generator):
+class SimplePy:
     offset = hl.GeneratorParam(0)
 
     buffer_input = hl.InputBuffer(hl.UInt(8), 2)
