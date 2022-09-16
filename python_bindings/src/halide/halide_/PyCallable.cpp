@@ -51,7 +51,6 @@ T cast_to(const py::handle &h) {
 
 class PyCallable {
 public:
-    // TODO: support kwargs here too.
     static void call_impl(Callable &c, const py::args &args, const py::kwargs &kwargs) {
         const size_t argc = c.arguments().size();
         _halide_user_assert(argc > 0);
@@ -138,9 +137,12 @@ public:
         }
 
         if (!kwargs.empty()) {
+            std::string trimmed_name;
+
             // Also process kwargs.
             for (auto kw : kwargs) {
                 const std::string name = cast_to<std::string>(kw.first);
+
                 const py::handle value = kw.second;
 
                 // Find the slot with this name.
@@ -150,7 +152,15 @@ public:
                 // of arguments a linear search is probably faster.
                 for (size_t slot = 1; slot < argc; slot++) {
                     const auto &c_arg = c_args[slot];
-                    if (c_arg.name == name) {
+                    const std::string *c_arg_name = &c_arg.name;
+                    // The names in Arguments might be uniquified due to Func reuse.
+                    // Check and trim off any residue and match just the previous part.
+                    const size_t pos = c_arg_name->find_first_of('$');
+                    if (pos != std::string::npos) {
+                        trimmed_name = c_arg_name->substr(0, pos);
+                        c_arg_name = &trimmed_name;
+                    }
+                    if (*c_arg_name == name) {
                         _halide_user_assert(argv[slot] == nullptr) << "Argument " << name << " specified multiple times.";
                         define_one_arg(c_arg, value, slot);
                         goto found_kw_arg;

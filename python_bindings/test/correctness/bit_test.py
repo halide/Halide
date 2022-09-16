@@ -1,8 +1,8 @@
-import bit
+import bitcpp, bitpy
 import numpy as np
 
 
-def test():
+def test(fn):
     # Note that in Halide, Buffer<bool> and Buffer<uint8> have identical memory
     # layout -- a bool takes an entire byte in a buffer -- but distinct types,
     # so we must construct a Buffer here that has that correct type. (If we
@@ -16,13 +16,14 @@ def test():
     for i in range(0, 4):
         input_bools[i] = (i & 1) != 0
 
-    bit.bit(input_bools, True, output_bools)
+    fn(input_bools, True, output_bools)
     for i in range(0, 4):
         assert output_bools[i] == True
 
-    bit.bit(input_bools, False, output_bools)
+    fn(input_bools, False, output_bools)
     for i in range(0, 4):
         assert output_bools[i] == ((i & 1) != 0)
 
 if __name__ == "__main__":
-    test()
+    test(bitcpp.bitcpp)
+    test(bitpy.bitpy)

@@ -18,4 +18,4 @@ public:
     }
 };
 
-HALIDE_REGISTER_GENERATOR(BitGenerator, bit)
+HALIDE_REGISTER_GENERATOR(BitGenerator, bitcpp)
