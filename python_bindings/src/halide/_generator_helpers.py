@@ -773,11 +773,13 @@ def generator(name:str=""):
         n = name if name else _fqname(cls)
         _check(not n in _python_generators, "The Generator name %s is already in use." % n)
         _check(isclass(cls), "@generator can only be used on classes.")
-        _check(
-            issubclass(cls, Generator),
-            "The @generator decorator can only be used on subclasses of hl.Generator.",
-        )
-        new_cls = type(cls.__name__, (cls,), {"_halide_registered_name": n})
+        # Allow (but don't require) explicit inheritance from hl.Generator;
+        # static type checkers (e.g. pytype) can complain that the decorated class
+        # uses inherited methods since it can't correctly infer the inheritance.
+        if issubclass(cls, Generator):
+            new_cls = type(cls.__name__, (cls,), {"_halide_registered_name": n})
+        else:
+            new_cls = type(cls.__name__, (cls, Generator), {"_halide_registered_name": n})
         _python_generators[n] = new_cls
         return new_cls
 
