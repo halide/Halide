@@ -687,7 +687,7 @@ void IRVisualization::visit_function(const LoweredFunc &func) {
     func.body.accept(this);
     html << "</div>";
 
-    close_function_box_div();
+    html << close_function_box_div();
 }
 void IRVisualization::visit(const Variable *op) {
     // if op->name starts with "::", remove "::"
