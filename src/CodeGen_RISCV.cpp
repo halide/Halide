@@ -25,10 +25,13 @@ protected:
     string mabi() const override;
     bool use_soft_float_abi() const override;
     int native_vector_bits() const override;
+    int maximum_vector_bits() const override;
+    int target_vscale() const override;
 };
 
 CodeGen_RISCV::CodeGen_RISCV(const Target &t)
     : CodeGen_Posix(t) {
+    use_llvm_vp_intrinsics = true;
 }
 
 string CodeGen_RISCV::mcpu_target() const {
@@ -50,7 +53,7 @@ string CodeGen_RISCV::mattrs() const {
     string arch_flags = "+m,+a,+f,+d,+c";
 
     if (target.has_feature(Target::RVV)) {
-        arch_flags += ",+experimental-v";
+        arch_flags += ",+v";
     }
     return arch_flags;
 }
@@ -73,7 +76,24 @@ bool CodeGen_RISCV::use_soft_float_abi() const {
 }
 
 int CodeGen_RISCV::native_vector_bits() const {
-    return 128;
+    if (target.vector_bits != 0 &&
+        target.has_feature(Target::RVV)) {
+        return target.vector_bits;
+    }
+    return 0;
+}
+
+int CodeGen_RISCV::maximum_vector_bits() const {
+    return native_vector_bits() * 8;
+}
+  
+int CodeGen_RISCV::target_vscale() const {
+    if (target.vector_bits != 0 &&
+        target.has_feature(Target::RVV)) {
+        internal_assert((target.vector_bits % 64) == 0);
+        return target.vector_bits / 64;
+    }
+    return 0;
 }
 
 }  // namespace
