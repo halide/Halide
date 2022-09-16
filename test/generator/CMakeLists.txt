@@ -12,8 +12,7 @@ function(halide_define_aot_test NAME)
         return()
     endif ()
 
-    add_executable("${NAME}.generator" "${NAME}_generator.cpp")
-    target_link_libraries("${NAME}.generator" PRIVATE Halide::Generator ${args_GEN_DEPS})
+    add_halide_generator("${NAME}.generator" SOURCES "${NAME}_generator.cpp")
 
     set(TARGET "generator_aot_${NAME}")
     set(DEPS ${args_EXTRA_LIBS})
@@ -133,6 +132,10 @@ halide_define_aot_test(async_parallel
                        # Requires threading support, not yet available for wasm tests
                        ENABLE_IF NOT ${USING_WASM}
                        GROUPS multithreaded)
+
+add_executable(async_parallel_tls async_parallel_tls_aottest.cpp)
+target_link_libraries(async_parallel_tls PRIVATE async_parallel)
+add_halide_test(async_parallel_tls GROUPS generator multithreaded)
 
 # autograd_aottest.cpp
 # autograd_generator.cpp

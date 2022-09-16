@@ -1,5 +1,6 @@
 #include "HalideRuntime.h"
 #include "runtime_internal.h"
+#include "printer.h"
 
 constexpr int MAX_THREADS = 256;
 
@@ -35,6 +36,19 @@ extern int pthread_key_create(pthread_key_t *key, void (*destructor)(void *));
 extern int pthread_setspecific(pthread_key_t key, const void *value);
 extern void *pthread_getspecific(pthread_key_t key);
 
+extern pthread_t pthread_self();
+extern int pthread_threadid_np(pthread_t thread, uint64_t *thread_id);
+
+namespace {
+uint64_t _gettid() {
+    uint64_t id = 0xdeadbeef;
+    (void) pthread_threadid_np(pthread_self(), &id);
+    return id;
+}
+}  // namespace
+
+#define _log_message(stuff) do { debug(nullptr) << _gettid() << ": " << stuff << "\n"; } while (0)
+
 }  // extern "C"
 
 namespace Halide {
@@ -48,6 +62,7 @@ struct spawned_thread {
 };
 WEAK void *spawn_thread_helper(void *arg) {
     spawned_thread *t = (spawned_thread *)arg;
+    _log_message("SPAWN worker thread");
     t->f(t->closure);
     return nullptr;
 }
@@ -70,6 +85,7 @@ WEAK struct halide_thread *halide_spawn_thread(void (*f)(void *), void *closure)
 }
 
 WEAK void halide_join_thread(struct halide_thread *thread_arg) {
+    _log_message("JOIN worker thread\n");
     spawned_thread *t = (spawned_thread *)thread_arg;
     void *ret = nullptr;
     pthread_join(t->handle, &ret);
@@ -142,4 +158,5 @@ struct thread_parker {
 
 #include "synchronization_common.h"
 
+#define USE_TID_HERE
 #include "thread_pool_common.h"

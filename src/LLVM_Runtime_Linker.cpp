@@ -90,6 +90,7 @@ DECLARE_CPP_INITMOD(device_interface)
 DECLARE_CPP_INITMOD(errors)
 DECLARE_CPP_INITMOD(fake_get_symbol)
 DECLARE_CPP_INITMOD(fake_thread_pool)
+DECLARE_CPP_INITMOD(fake_tls)
 DECLARE_CPP_INITMOD(float16_t)
 DECLARE_CPP_INITMOD(force_include_types)
 DECLARE_CPP_INITMOD(fuchsia_clock)
@@ -123,6 +124,7 @@ DECLARE_CPP_INITMOD(posix_io)
 DECLARE_CPP_INITMOD(posix_print)
 DECLARE_CPP_INITMOD(posix_threads)
 DECLARE_CPP_INITMOD(posix_threads_tsan)
+DECLARE_CPP_INITMOD(posix_tls)
 DECLARE_CPP_INITMOD(prefetch)
 DECLARE_CPP_INITMOD(profiler)
 DECLARE_CPP_INITMOD(timer_profiler)
@@ -771,6 +773,7 @@ std::unique_ptr<llvm::Module> link_with_wasm_jit_runtime(llvm::LLVMContext *c, c
     vector<std::unique_ptr<llvm::Module>> modules;
     modules.push_back(std::move(extra_module));
     modules.push_back(get_initmod_fake_thread_pool(c, bits_64, debug));
+    modules.push_back(get_initmod_fake_tls(c, bits_64, debug));
     modules.push_back(get_initmod_posix_allocator(c, bits_64, debug));
     modules.push_back(get_initmod_halide_buffer_t(c, bits_64, debug));
     modules.push_back(get_initmod_destructors(c, bits_64, debug));
@@ -849,6 +852,7 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
                 } else {
                     modules.push_back(get_initmod_posix_threads(c, bits_64, debug));
                 }
+                modules.push_back(get_initmod_posix_tls(c, bits_64, debug));
                 modules.push_back(get_initmod_posix_get_symbol(c, bits_64, debug));
             } else if (t.os == Target::WebAssemblyRuntime) {
                 modules.push_back(get_initmod_posix_allocator(c, bits_64, debug));
@@ -861,8 +865,10 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
                 if (t.has_feature(Target::WasmThreads)) {
                     // Assume that the wasm libc will be providing pthreads
                     modules.push_back(get_initmod_posix_threads(c, bits_64, debug));
+                    modules.push_back(get_initmod_posix_tls(c, bits_64, debug));
                 } else {
                     modules.push_back(get_initmod_fake_thread_pool(c, bits_64, debug));
+                    modules.push_back(get_initmod_fake_tls(c, bits_64, debug));
                 }
                 modules.push_back(get_initmod_fake_get_symbol(c, bits_64, debug));
             } else if (t.os == Target::OSX) {
@@ -878,6 +884,7 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
                 } else {
                     modules.push_back(get_initmod_posix_threads(c, bits_64, debug));
                 }
+                modules.push_back(get_initmod_posix_tls(c, bits_64, debug));
                 modules.push_back(get_initmod_osx_get_symbol(c, bits_64, debug));
                 modules.push_back(get_initmod_osx_host_cpu_count(c, bits_64, debug));
             } else if (t.os == Target::Android) {
@@ -897,6 +904,7 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
                 } else {
                     modules.push_back(get_initmod_posix_threads(c, bits_64, debug));
                 }
+                modules.push_back(get_initmod_posix_tls(c, bits_64, debug));
                 modules.push_back(get_initmod_posix_get_symbol(c, bits_64, debug));
             } else if (t.os == Target::Windows) {
                 modules.push_back(get_initmod_posix_allocator(c, bits_64, debug));
@@ -924,6 +932,7 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
                 } else {
                     modules.push_back(get_initmod_posix_threads(c, bits_64, debug));
                 }
+                modules.push_back(get_initmod_posix_tls(c, bits_64, debug));
             } else if (t.os == Target::QuRT) {
                 modules.push_back(get_initmod_qurt_allocator(c, bits_64, debug));
                 modules.push_back(get_initmod_qurt_yield(c, bits_64, debug));
@@ -942,6 +951,7 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
                     modules.push_back(get_initmod_qurt_allocator(c, bits_64, debug));
                 }
                 modules.push_back(get_initmod_fake_thread_pool(c, bits_64, debug));
+                modules.push_back(get_initmod_fake_tls(c, bits_64, debug));
             } else if (t.os == Target::Fuchsia) {
                 modules.push_back(get_initmod_posix_allocator(c, bits_64, debug));
                 modules.push_back(get_initmod_posix_error_handler(c, bits_64, debug));
@@ -955,6 +965,7 @@ std::unique_ptr<llvm::Module> get_initial_module_for_target(Target t, llvm::LLVM
                 } else {
                     modules.push_back(get_initmod_posix_threads(c, bits_64, debug));
                 }
+                modules.push_back(get_initmod_posix_tls(c, bits_64, debug));
                 modules.push_back(get_initmod_posix_get_symbol(c, bits_64, debug));
             }
         }

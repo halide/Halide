@@ -1,16 +1,15 @@
 #define EXTENDED_DEBUG 0
 
 #if EXTENDED_DEBUG
-// This code is currently setup for Linux debugging. Switch to using pthread_self on e.g. Mac OS X.
-extern "C" int syscall(int);
+
 
 namespace {
-int gettid() {
-#ifdef BITS_32
-    return syscall(224);
-#else
-    return syscall(186);
+uint64_t gettid() {
+    uint64_t id = 0xdeadbeef;
+#ifdef USE_TID_HERE
+    (void) pthread_threadid_np(pthread_self(), &id);
 #endif
+    return id;
 }
 }  // namespace
 
@@ -30,6 +29,43 @@ namespace Halide {
 namespace Runtime {
 namespace Internal {
 
+struct tls_info_wrapper {
+    halide_tls_info_t *info = nullptr;
+
+    tls_info_wrapper() = default;
+
+    void get_current() {
+        clear();
+        info = halide_get_current_tls_info();  // no AddRef necessary, this call does one implicitly
+    }
+
+    void clear() {
+        if (info) halide_tls_info_release(info);
+        info = nullptr;
+    }
+    tls_info_wrapper(const tls_info_wrapper &copy) {
+        if (copy.info) halide_tls_info_addref(copy.info);
+        if (info) halide_tls_info_release(info);
+        info = copy.info;
+    }
+    tls_info_wrapper &operator=(const tls_info_wrapper &copy) {
+        if (this != &copy) {
+            if (copy.info) halide_tls_info_addref(copy.info);
+            if (info) halide_tls_info_release(info);
+            info = copy.info;
+        }
+        return *this;
+    }
+
+    tls_info_wrapper(tls_info_wrapper &&move) = delete;
+    tls_info_wrapper &operator=(tls_info_wrapper &&move) = delete;
+
+    ~tls_info_wrapper() {
+        clear();
+    }
+};
+
+
 struct work {
     halide_parallel_task_t task;
 
@@ -44,6 +80,7 @@ struct work {
     int threads_reserved;
 
     void *user_context;
+    tls_info_wrapper parent_tls_info;  // addref'ed, must be released!
     int active_workers;
     int exit_status;
     int next_semaphore;
@@ -207,6 +244,7 @@ WEAK void worker_thread_already_locked(work *owned_job) {
     const int max_spin_count = 40;
 
     while (owned_job ? owned_job->running() : !work_queue.shutdown) {
+        log_message("worker_thread_already_locked loop START\n");
         work *job = work_queue.jobs;
         work **prev_ptr = &work_queue.jobs;
 
@@ -332,6 +370,16 @@ WEAK void worker_thread_already_locked(work *owned_job) {
             log_message("Reserved " << job->task.min_threads << " on " << job->parent_job->task.name << " for " << job->task.name << " giving " << job->parent_job->threads_reserved << " of " << job->parent_job->task.min_threads);
         }
 
+        // Ensure this worker thread has its parent's tls info.
+        if (job->parent_tls_info.info == nullptr) {
+            log_message("job->parent_tls_info.info == nullptr!\n");
+            abort();
+        }
+        halide_set_current_tls_info(job->parent_tls_info.info);
+
+        // job->parent_tls_info.clear();
+        // log_message("CLEAR job->parent_tls_info.info!\n");
+
         int result = 0;
 
         if (job->task.serial) {
@@ -439,6 +487,7 @@ WEAK void worker_thread_already_locked(work *owned_job) {
 
 WEAK void worker_thread(void *arg) {
     halide_mutex_lock(&work_queue.mutex);
+log_message("WORKER THREAD\n");
     worker_thread_already_locked((work *)arg);
     halide_mutex_unlock(&work_queue.mutex);
 }
@@ -622,6 +671,7 @@ WEAK int halide_default_do_par_for(void *user_context, halide_task_t f,
     job.task.name = nullptr;
     job.task_fn = f;
     job.user_context = user_context;
+    job.parent_tls_info.get_current();
     job.exit_status = 0;
     job.active_workers = 0;
     job.next_semaphore = 0;
@@ -650,6 +700,7 @@ WEAK int halide_default_do_parallel_tasks(void *user_context, int num_tasks,
         jobs[i].task = *tasks++;
         jobs[i].task_fn = nullptr;
         jobs[i].user_context = user_context;
+        jobs[i].parent_tls_info.get_current();
         jobs[i].exit_status = 0;
         jobs[i].active_workers = 0;
         jobs[i].next_semaphore = 0;
@@ -673,6 +724,11 @@ WEAK int halide_default_do_parallel_tasks(void *user_context, int num_tasks,
         }
     }
     halide_mutex_unlock(&work_queue.mutex);
+
+    for (int i = 0; i < num_tasks; i++) {
+        jobs[i].parent_tls_info.clear();
+    }
+
     return exit_status;
 }
 

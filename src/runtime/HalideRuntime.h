@@ -1960,6 +1960,79 @@ struct halide_device_allocation_pool {
  * global lifetime, and its next field will be clobbered. */
 extern void halide_register_device_allocation_pool(struct halide_device_allocation_pool *);
 
+/** A halide_tls_key_t is a pointer-sized key used to reference a thread-local
+ * storage value that can be used for arbitrary purposes by user code and/or
+ * a user-supplied override of some/all of the Halide Runtime. These can be
+ * used instead of user_context as a way to safely pass information across
+ * a halide runtime implementation.
+ *
+ * The key differentiator between using halide_tls_key_t and using a C++ thread_local
+ * variable is that values stored via a halide_tls_key_t are correctly propagated
+ * to all child threads, so any calls into the runtime fom parallel or async code
+ * will always correctly inherit the values for all halide_tls_key_t's set by the
+ * calling thread. (Note, this is accomplished by TODO; if you replace halide_do_par_for
+ * or halide_do_parallel_tasks, you'll have to TODO)
+ *
+ * No valid halide_tls_key_t will ever be nullptr, but otherwise,
+ * the bit content is arbitrary.
+ */
+struct halide_tls_key_t_;
+typedef struct halide_tls_key_t_ *halide_tls_key_t;
+
+/** Allocate a new key to use with the Halide Runtime's TLS lookup.
+ * The runtime only supports a small number (16 at present); it will return nullptr
+ * if no more TLS keys are available. */
+extern halide_tls_key_t halide_allocate_tls_key();
+
+/** Free a TLS key, so that it can be re-used by future calls to halide_allocate_tls_key.
+ * If the key passed in is not a valid, allocated key, a nonzero error will be returned. */
+extern int halide_free_tls_key(halide_tls_key_t key);
+
+/** Get the value associated with the TLS key in this thread. If it has never been set for the current
+ * thread, return nullptr. (Invalid keys will also return nullptr.) */
+extern void *halide_get_tls(halide_tls_key_t key);
+
+/** Set the value associated with the TLS key in this thread. If successful, return 0.
+ * If the key is invalid, return a nonzero value. */
+extern int halide_set_tls(halide_tls_key_t key, void *value);
+
+// Contents hidden
+struct halide_tls_info_t;
+
+/** Return a reference to the current set of TLS key(s) for this thread.
+ * This should never return null. The caller must balance this call with
+ * a call to halide_tls_info_release(). If the caller stores a copy of
+ * the returned value (e.g. to transmit it across threads), it should AddRef
+ * and Release the value to ensure it remains valid.
+ *
+ * Unless you are implementing a custom thread pool, you should never
+ * need to use this call. */
+extern halide_tls_info_t *halide_get_current_tls_info();
+
+/** Replace the current thread's TLS info with the given info.
+ * It is legal to call this with nullptr.
+ *
+ * Returns a nonzero value if an error occurs.
+ *
+ * Unless you are implementing a custom thread pool, you should never
+ * need to use this call. */
+extern int halide_set_current_tls_info(halide_tls_info_t *info);
+
+/** Add 1 to the reference count for the TLS info. The argument
+ * must not be null.
+ *
+ * Unless you are implementing a custom thread pool, you should never
+ * need to use this call. */
+extern void halide_tls_info_addref(halide_tls_info_t *info);
+
+/** Subtract 1 from the reference count for the TLS info. If the
+ * reference count goes to zero, destroy the TLS info. The argument
+ * must not be null.
+ *
+ * Unless you are implementing a custom thread pool, you should never
+ * need to use this call. */
+extern void halide_tls_info_release(halide_tls_info_t *info);
+
 #ifdef __cplusplus
 }  // End extern "C"
 #endif

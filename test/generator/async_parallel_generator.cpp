@@ -27,9 +27,9 @@ public:
         output(x, y, z) = Ext::sleeper(7, x, y, z, consumer_2(x, y, z));
 
         consumer_2.compute_at(output, z);
-        producer_2.store_at(consumer_2, y).compute_at(consumer_2, x).async();
-        consumer_1.store_at(output, z).compute_at(consumer_2, y).async();
-        producer_1.store_at(consumer_2, y).compute_at(consumer_1, x).async();
+        producer_2.store_at(consumer_2, y).compute_at(consumer_2, x).parallel(z);//.async();
+        consumer_1.store_at(output, z).compute_at(consumer_2, y);//.async();
+        producer_1.store_at(consumer_2, y).compute_at(consumer_1, x);//.async();
         output.parallel(z);
     }
 };

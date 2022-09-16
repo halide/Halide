@@ -768,6 +768,7 @@ RUNTIME_CPP_COMPONENTS = \
   errors \
   fake_get_symbol \
   fake_thread_pool \
+  fake_tls \
   float16_t \
   force_include_types \
   fuchsia_clock \
@@ -809,6 +810,7 @@ RUNTIME_CPP_COMPONENTS = \
   posix_print \
   posix_threads \
   posix_threads_tsan \
+  posix_tls \
   posix_timer_profiler \
   powerpc_cpu_features \
   prefetch \
@@ -1534,6 +1536,12 @@ $(FILTERS_DIR)/metadata_tester_ucon.a: $(BIN_DIR)/metadata_tester.generator
 $(BIN_DIR)/$(TARGET)/generator_aot_metadata_tester: $(FILTERS_DIR)/metadata_tester_ucon.a
 
 $(BIN_DIR)/$(TARGET)/generator_aotcpp_metadata_tester: $(FILTERS_DIR)/metadata_tester_ucon.halide_generated.cpp
+
+$(BIN_DIR)/$(TARGET)/generator_aot_async_parallel_tls: $(ROOT_DIR)/test/generator/async_parallel_tls_aottest.cpp $(FILTERS_DIR)/async_parallel.a $(FILTERS_DIR)/async_parallel.h $(RUNTIME_EXPORTED_INCLUDES) $(BIN_DIR)/$(TARGET)/runtime.a
+	@mkdir -p $(@D)
+	$(CXX) $(GEN_AOT_CXX_FLAGS) $(filter %.cpp %.o %.a,$^) $(GEN_AOT_INCLUDES) $(GEN_AOT_LD_FLAGS) -o $@
+
+$(BIN_DIR)/$(TARGET)/generator_aot_async_parallel_tls: $(BIN_DIR)/$(TARGET)/generator_aot_async_parallel
 
 $(FILTERS_DIR)/multitarget.a: $(BIN_DIR)/multitarget.generator
 	@mkdir -p $(@D)

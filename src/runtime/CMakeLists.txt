@@ -17,6 +17,7 @@ set(RUNTIME_CPP
     errors
     fake_get_symbol
     fake_thread_pool
+    fake_tls
     float16_t
     force_include_types
     fuchsia_clock
@@ -59,6 +60,7 @@ set(RUNTIME_CPP
     posix_threads
     posix_threads_tsan
     posix_timer_profiler
+    posix_tls
     powerpc_cpu_features
     prefetch
     profiler
