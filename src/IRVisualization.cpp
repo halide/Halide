@@ -1319,6 +1319,9 @@ div.computation-cost-div:hover { \n \
 div.spacing { \n \
     flex-grow: 1; \n \
 } \n \
+div.boxBody { \n \
+    margin-left: 5px; \n \
+} \n \
 table { \n \
     border-radius: 5px; \n \
     font-size: 12px; \n \
