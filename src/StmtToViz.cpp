@@ -1757,10 +1757,33 @@ public:
 
         resize_bar_ss << "<div class='ResizeBar' id='ResizeBar'>\n"
                       << "<div class='collapseButtons'>\n"
-                      << "<button class='iconButton' onclick='collapseViz()'>"
-                      << "<i class='bi bi-arrow-bar-right'></i></button>\n"
-                      << "<button class='iconButton' onclick='collapseCode()'>"
-                      << "<i class='bi bi-arrow-bar-left'></i></button>\n"
+                      << "<div>\n"
+                      << "<button class='iconButton resizeButton' onclick='collapseViz()'>"
+                      << "<i class='bi bi-arrow-bar-right'></i></button>"
+                      << "</div>\n"
+                      << "<div>\n"
+                      << "<button class='iconButton resizeButton' onclick='collapseCode()'>"
+                      << "<i class='bi bi-arrow-bar-left'></i></button>"
+                      << "</div>\n"
+                      << "</div>\n"
+                      << "</div>\n";
+
+        return resize_bar_ss.str();
+    }
+
+    string resize_bar_assembly() {
+        stringstream resize_bar_ss;
+
+        resize_bar_ss << "<div class='ResizeBar' id='ResizeBarAssembly'>\n"
+                      << "<div class='collapseButtons'>\n"
+                      << "<div>\n"
+                      << "<button class='iconButton resizeButton' onclick='collapseAssembly()'>"
+                      << "<i class='bi bi-arrow-bar-right'></i></button>"
+                      << "</div>\n"
+                      << "<div>\n"
+                      << "<button class='iconButton resizeButton' onclick='collapseVizAssembly()'>"
+                      << "<i class='bi bi-arrow-bar-left'></i></button>"
+                      << "</div>\n"
                       << "</div>\n"
                       << "</div>\n";
 
@@ -1791,10 +1814,19 @@ public:
         stream << generate_ir_visualization(m);
         stream << "</div>\n";
 
+        // for resizing the visualization and assembly code divs
+        stream << resize_bar_assembly();
+
+        // assembly content
+        // TODO:
+        stream << "<div id='changeThisLater'>\n";
+        stream << "HIIIIIIIIII \n";
+        stream << "</div>\n";
+
         stream << "</div>\n";  // close mainContent div
         stream << "</div>\n";  // close outerDiv div
 
-        // put assembly code in a div
+        // put assembly code in an invisible div
         stream << get_assembly_info_viz.get_assembly_html();
 
         // closing parts of the html
@@ -2099,6 +2131,9 @@ span.ButtonSpacer { width: 5px; color: transparent; display: inline-block; }\n \
 .iconButton:hover { \n \
     color: blue; \n \
 } \n \
+.resizeButton { \n \
+    margin: 0px; \n \
+} \n \
 .assemblyIcon { \n \
     color: red; \n \
 } \n \
@@ -2183,20 +2218,35 @@ span.tooltipHelperText { \n \
 const string StmtToViz::expand_code_js = "\n \
 // expand code div\n \
 var codeDiv = document.getElementById('IRCode-code'); \n \
-var irVizDiv = document.getElementById('IRVisualization'); \n \
 var resizeBar = document.getElementById('ResizeBar'); \n \
-\n \
+var irVizDiv = document.getElementById('IRVisualization'); \n \
+var resizeBarAssembly = document.getElementById('ResizeBarAssembly'); \n \
+var assemblyCodeDiv = document.getElementById('changeThisLater'); \n \
+ \n \
 codeDiv.style.flexGrow = '0'; \n \
-irVizDiv.style.flexGrow = '0'; \n \
 resizeBar.style.flexGrow = '0'; \n \
-codeDiv.style.flexBasis = 'calc(50% - 16px)'; \n \
-resizeBar.style.flexBasis = '16px'; \n \
-irVizDiv.style.flexBasis = 'calc(50% - 8px)'; \n \
-\n \
+irVizDiv.style.flexGrow = '0'; \n \
+resizeBarAssembly.style.flexGrow = '0'; \n \
+assemblyCodeDiv.style.flexGrow = '0'; \n \
+ \n \
+collapseAssembly(); \n \
+ \n \
+codeDiv.style.flexBasis = 'calc(50% - 6px)'; \n \
+resizeBar.style.flexBasis = '6px'; \n \
+irVizDiv.style.flexBasis = 'calc(50% - 3px)'; \n \
+resizeBarAssembly.style.flexBasis = '6px'; \n \
+ \n \
 resizeBar.addEventListener('mousedown', (event) => { \n \
     document.addEventListener('mousemove', resize, false); \n \
     document.addEventListener('mouseup', () => { \n \
         document.removeEventListener('mousemove', resize, false); \n \
+    }, false); \n \
+}); \n \
+ \n \
+resizeBarAssembly.addEventListener('mousedown', (event) => { \n \
+    document.addEventListener('mousemove', resizeAssembly, false); \n \
+    document.addEventListener('mouseup', () => { \n \
+        document.removeEventListener('mousemove', resizeAssembly, false); \n \
     }, false); \n \
 }); \n \
 function resize(e) { \n \
@@ -2204,11 +2254,34 @@ function resize(e) { \n \
         collapseCode(); \n \
         return; \n \
     } \n \
+ \n \
     const size = `${e.x}px`; \n \
+    var rect = resizeBarAssembly.getBoundingClientRect(); \n \
+ \n \
+    if (e.x > rect.left) { \n \
+        collapseViz(); \n \
+        return; \n \
+    } \n \
+ \n \
     codeDiv.style.display = 'block'; \n \
     irVizDiv.style.display = 'block'; \n \
-    codeDiv.style.flexBasis = 'calc(' + size + ' - 24px)'; \n \
-    irVizDiv.style.flexBasis = 'calc(100% - ' + size + ' + 8px)'; \n \
+    codeDiv.style.flexBasis = size; \n \
+    irVizDiv.style.flexBasis = `calc(${rect.right}px - ${size})`; \n \
+} \n \
+function resizeAssembly(e) { \n \
+    if (e.x > screen.width - 25) { \n \
+        collapseAssembly(); \n \
+        return; \n \
+    } \n \
+ \n \
+    var rect = resizeBar.getBoundingClientRect(); \n \
+ \n \
+    const size = `${e.x}px`; \n \
+    irVizDiv.style.display = 'block'; \n \
+    assemblyCodeDiv.style.display = 'block'; \n \
+    irVizDiv.style.flexBasis = `calc(${size} - ${rect.right}px)`; \n \
+    assemblyCodeDiv.style.flexBasis = `calc(100% - ${size})`; \n \
+ \n \
 } \n \
 function collapseCode() { \n \
     codeDiv.style.display = 'none'; \n \
@@ -2218,7 +2291,17 @@ function collapseCode() { \n \
 function collapseViz() { \n \
     irVizDiv.style.display = 'none'; \n \
     codeDiv.style.display = 'block'; \n \
-    codeDiv.style.flexBasis = 'calc(100% - 16px)'; \n \
+    codeDiv.style.flexBasis = '100%'; \n \
+} \n \
+function collapseVizAssembly() { \n \
+    irVizDiv.style.display = 'none'; \n \
+    assemblyCodeDiv.style.display = 'block'; \n \
+    assemblyCodeDiv.style.flexBasis = '100%'; \n \
+} \n \
+function collapseAssembly() { \n \
+    assemblyCodeDiv.style.display = 'none'; \n \
+    irVizDiv.style.display = 'block'; \n \
+    irVizDiv.style.flexBasis = '100%'; \n \
 } \n \
 ";
 
@@ -2247,7 +2330,6 @@ function openAssembly(lineNumStart, lineNumberEnd) {\n \
         '    }' + \n \
         '</style>'; \n \
     var assembly = document.getElementById('assemblyContent'); \n \
-    console.log(assembly); \n \
     innerHTML += '<div id=\\'codeValue\\' style=\\'display: none\\'>' + assembly.innerHTML + '</div>'; \n \
     innerHTML += '<scr' + 'ipt>' + \n \
         'var codeHTML = document.getElementById(\\'codeValue\\'); ' + \n \
