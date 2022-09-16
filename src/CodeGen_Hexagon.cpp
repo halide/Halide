@@ -1886,14 +1886,8 @@ void CodeGen_Hexagon::visit(const Call *op) {
 
     if (op->call_type == Call::PureExtern && (op->name == "round_f32" || op->name == "round_f64")) {
         // Workaround for issue https://github.com/halide/Halide/issues/7017
-
-        // Reimplement round with ties to even using floor
         internal_assert(op->args.size() == 1);
-        Expr a = floor(op->args[0] + 0.5f);
-        Expr b = ceil(op->args[0] - 0.5f);
-        // If they differ, pick the even one
-        Expr equiv = select(a % 2 == 0, a, b);
-        codegen(equiv);
+        codegen(lower_round_to_nearest_ties_to_even(op->args[0]));
         return;
     }
 

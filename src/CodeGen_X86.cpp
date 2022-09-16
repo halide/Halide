@@ -1,3 +1,4 @@
+#include "CodeGen_Internal.h"
 #include "CodeGen_Posix.h"
 #include "ConciseCasts.h"
 #include "Debug.h"
@@ -502,8 +503,19 @@ void CodeGen_X86::visit(const Cast *op) {
 }
 
 void CodeGen_X86::visit(const Call *op) {
+    if (op->call_type == Call::PureExtern &&
+        !target.has_feature(Target::SSE41) &&
+        (op->name == "round_f32" || op->name == "round_f64" || op->name == "round_f16")) {
+        // The roundss/roundps instruction only appeared in sse 4.1. Prior to
+        // that we would call llvm.roundeven, but on x86 that forwards to a
+        // standard library function roundevenf which seems to be missing on all
+        // platforms other than linux. Even on linux it's probably better to
+        // lower it to primitive operations, because they vectorize cleanly.
+        codegen(lower_round_to_nearest_ties_to_even(op->args[0]));
+    }
+
     if (!op->type.is_vector()) {
-        // We only have peephole optimizations for vectors in here.
+        // We only have peephole optimizations for vectors beyond this point.
         CodeGen_Posix::visit(op);
         return;
     }
