@@ -1436,6 +1436,12 @@ struct Intrin {
         Expr arg1 = std::get<const_min(1, sizeof...(Args) - 1)>(args).make(state, type_hint);
         if (intrin == Call::absd) {
             return absd(arg0, arg1);
+        } else if (intrin == Call::widen_right_add) {
+            return widen_right_add(arg0, arg1);
+        } else if (intrin == Call::widen_right_mul) {
+            return widen_right_mul(arg0, arg1);
+        } else if (intrin == Call::widen_right_sub) {
+            return widen_right_sub(arg0, arg1);
         } else if (intrin == Call::widening_add) {
             return widening_add(arg0, arg1);
         } else if (intrin == Call::widening_sub) {
@@ -1559,6 +1565,19 @@ auto absd(A &&a, B &&b) noexcept -> Intrin<decltype(pattern_arg(a)), decltype(pa
     assert_is_lvalue_if_expr<B>();
     return {Call::absd, pattern_arg(a), pattern_arg(b)};
 }
+template<typename A, typename B>
+auto widen_right_add(A &&a, B &&b) noexcept -> Intrin<decltype(pattern_arg(a)), decltype(pattern_arg(b))> {
+    return {Call::widen_right_add, pattern_arg(a), pattern_arg(b)};
+}
+template<typename A, typename B>
+auto widen_right_mul(A &&a, B &&b) noexcept -> Intrin<decltype(pattern_arg(a)), decltype(pattern_arg(b))> {
+    return {Call::widen_right_mul, pattern_arg(a), pattern_arg(b)};
+}
+template<typename A, typename B>
+auto widen_right_sub(A &&a, B &&b) noexcept -> Intrin<decltype(pattern_arg(a)), decltype(pattern_arg(b))> {
+    return {Call::widen_right_sub, pattern_arg(a), pattern_arg(b)};
+}
+
 template<typename A, typename B>
 auto widening_add(A &&a, B &&b) noexcept -> Intrin<decltype(pattern_arg(a)), decltype(pattern_arg(b))> {
     assert_is_lvalue_if_expr<A>();
@@ -2073,7 +2092,7 @@ struct VectorReduceOp {
     A a;
     B lanes;
 
-    constexpr static uint32_t binds = bindings<A>::mask;
+    constexpr static uint32_t binds = bindings<A>::mask | bindings<B>::mask;
 
     constexpr static IRNodeType min_node_type = IRNodeType::VectorReduce;
     constexpr static IRNodeType max_node_type = IRNodeType::VectorReduce;
@@ -2997,114 +3016,42 @@ std::ostream &operator<<(std::ostream &s, const IsMinValue<A> &op) {
     return s;
 }
 
-template<typename... Args>
-struct InterleaveOp {
+template<typename A>
+struct HasEvenLanes {
     struct pattern_tag {};
-    // TODO: can we generalize to further shuffle nodes?
-    std::tuple<Args...> args;
+    A a;
 
-    static constexpr uint32_t binds = bitwise_or_reduce((bindings<Args>::mask)...);
+    constexpr static uint32_t binds = bindings<A>::mask;
 
-    constexpr static IRNodeType min_node_type = IRNodeType::Shuffle;
-    constexpr static IRNodeType max_node_type = IRNodeType::Shuffle;
-    constexpr static bool canonical = and_reduce((Args::canonical)...);
+    // This rule is a boolean-valued predicate. Bools have type UIntImm.
+    constexpr static IRNodeType min_node_type = IRNodeType::UIntImm;
+    constexpr static IRNodeType max_node_type = IRNodeType::UIntImm;
+    constexpr static bool canonical = true;
 
-    template<int i,
-             uint32_t bound,
-             typename = typename std::enable_if<(i < sizeof...(Args))>::type>
-    HALIDE_ALWAYS_INLINE bool match_args(int, const Shuffle &v, MatcherState &state) const noexcept {
-        using T = decltype(std::get<i>(args));
-        return (std::get<i>(args).template match<bound>(*v.vectors[i].get(), state) &&
-                match_args<i + 1, bound | bindings<T>::mask>(0, v, state));
-    }
-
-    template<int i, uint32_t binds>
-    HALIDE_ALWAYS_INLINE bool match_args(double, const Shuffle &v, MatcherState &state) const noexcept {
-        return true;
-    }
-
-    template<uint32_t bound>
-    HALIDE_ALWAYS_INLINE bool match(const BaseExprNode &e, MatcherState &state) const noexcept {
-        if (e.node_type != IRNodeType::Shuffle) {
-            return false;
-        }
-        const Shuffle &v = (const Shuffle &)e;
-        return (v.is_interleave() && (sizeof...(Args) == v.vectors.size()) && match_args<0, bound>(0, v, state));
-    }
-
-    template<int i,
-             typename = typename std::enable_if<(i < sizeof...(Args))>::type>
-    HALIDE_ALWAYS_INLINE void print_args(int, std::ostream &s) const {
-        s << std::get<i>(args);
-        if (i + 1 < sizeof...(Args)) {
-            s << ", ";
-        }
-        print_args<i + 1>(0, s);
-    }
-
-    template<int i>
-    HALIDE_ALWAYS_INLINE void print_args(double, std::ostream &s) const {
-    }
+    constexpr static bool foldable = true;
 
     HALIDE_ALWAYS_INLINE
-    void print_args(std::ostream &s) const {
-        print_args<0>(0, s);
-    }
-
-    HALIDE_ALWAYS_INLINE
-    Expr make(MatcherState &state, halide_type_t type_hint) const {
-        std::vector<Expr> r_args(sizeof...(Args));
-        // TODO(rootjalex): How do we do type hints for the args?
-        // TODO(rootjalex): Is there a way to do basically an unrolled
-        // loop of the below? this is ugly.
-        // Supposedly C++20 will have constexpr std::transform, perhaps
-        // we can use that when Halide upgrades.
-
-        r_args[0] = std::get<0>(args).make(state, {});
-        if constexpr (sizeof...(Args) > 1) {
-            r_args[1] = std::get<const_min(1, sizeof...(Args) - 1)>(args).make(state, {});
-        }
-        if constexpr (sizeof...(Args) > 2) {
-            r_args[2] = std::get<const_min(2, sizeof...(Args) - 1)>(args).make(state, {});
-        }
-        if constexpr (sizeof...(Args) > 3) {
-            r_args[3] = std::get<const_min(3, sizeof...(Args) - 1)>(args).make(state, {});
-        }
-        if constexpr (sizeof...(Args) > 4) {
-            r_args[4] = std::get<const_min(4, sizeof...(Args) - 1)>(args).make(state, {});
-        }
-
-        // for (int i = 0; i < sizeof...(Args); i++) {
-        //     // TODO(rootjalex): how do we do type-hints here?
-        //     args[i] = std::get<i>(args).make(state, {});
-        // }
-        return Shuffle::make_interleave(r_args);
-    }
-
-    constexpr static bool foldable = false;
-
-    HALIDE_ALWAYS_INLINE
-    InterleaveOp(Args... args) noexcept
-        : args(args...) {
-        static_assert(sizeof...(Args) > 0 && sizeof...(Args) <= 5,
-                      "InterleaveOp must have non-zero arguments, and update make() if more than 5 arguments.");
+    void make_folded_const(halide_scalar_value_t &val, halide_type_t &ty, MatcherState &state) const {
+        // a is almost certainly a very simple pattern (e.g. a wild), so just inline the make method.
+        Type t = a.make(state, {}).type();
+        val.u.u64 = (t.lanes() % 2 == 0);
+        ty.code = halide_type_uint;
+        ty.bits = 1;
+        ty.lanes = t.lanes();
     }
 };
 
+template<typename A>
+HALIDE_ALWAYS_INLINE auto has_even_lanes(A &&a) noexcept -> HasEvenLanes<decltype(pattern_arg(a))> {
+    assert_is_lvalue_if_expr<A>();
+    return {pattern_arg(a)};
+}
 
-template<typename... Args>
-std::ostream &operator<<(std::ostream &s, const InterleaveOp<Args...> &op) {
-    s << "interleave(";
-    op.print_args(s);
-    s << ")";
+template<typename A>
+std::ostream &operator<<(std::ostream &s, const HasEvenLanes<A> &op) {
+    s << "has_even_lanes(" << op.a << ")";
     return s;
 }
-
-template<typename... Args>
-HALIDE_ALWAYS_INLINE auto interleave(Args... args) noexcept -> InterleaveOp<decltype(pattern_arg(args))...> {
-    return {pattern_arg(args)...};
-}
-
 
 // Verify properties of each rewrite rule. Currently just fuzz tests them.
 template<typename Before,

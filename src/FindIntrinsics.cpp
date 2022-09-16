@@ -74,7 +74,7 @@ bool is_safe_for_add(const Expr &e, int max_depth) {
         } else if (cast->type.bits() == cast->value.type().bits()) {
             return is_safe_for_add(cast->value, max_depth);
         }
-    } else if (Call::as_intrinsic(e, {Call::widening_add, Call::widening_sub})) {
+    } else if (Call::as_intrinsic(e, {Call::widening_add, Call::widening_sub, Call::widen_right_add, Call::widen_right_sub})) {
         return true;
     }
     return false;
@@ -131,17 +131,44 @@ Expr to_rounding_shift(const Call *c) {
         }
         Expr round;
         if (c->is_intrinsic(Call::shift_right)) {
-            round = simplify((make_one(round_type) << max(cast(b.type().with_bits(round_type.bits()), b), 0)) / 2);
+            round = (make_one(round_type) << max(cast(b.type().with_bits(round_type.bits()), b), 0)) / 2;
         } else {
-            round = simplify((make_one(round_type) >> min(cast(b.type().with_bits(round_type.bits()), b), 0)) / 2);
+            round = (make_one(round_type) >> min(cast(b.type().with_bits(round_type.bits()), b), 0)) / 2;
         }
+        // Input expressions are simplified before running find_intrinsics, but b
+        // has been lifted here so we need to lower_intrinsics before simplifying
+        // and re-lifting. Should we move this code into the FindIntrinsics class
+        // to make it easier to lift round?
+        round = lower_intrinsics(round);
+        round = simplify(round);
+        round = find_intrinsics(round);
 
         // We can always handle widening adds.
         if (const Call *add = Call::as_intrinsic(a, {Call::widening_add})) {
-            if (can_prove(lower_intrinsics(add->args[0]) == round)) {
+            if (can_prove(lower_intrinsics(add->args[0] == round))) {
                 return rounding_shift(cast(add->type, add->args[1]), b);
-            } else if (can_prove(lower_intrinsics(add->args[1]) == round)) {
+            } else if (can_prove(lower_intrinsics(add->args[1] == round))) {
                 return rounding_shift(cast(add->type, add->args[0]), b);
+            }
+        }
+
+        if (const Call *add = Call::as_intrinsic(a, {Call::widen_right_add})) {
+            if (can_prove(lower_intrinsics(add->args[1] == round))) {
+                return rounding_shift(cast(add->type, add->args[0]), b);
+            }
+        }
+        // Also need to handle the annoying case of a reinterpret wrapping a widen_right_add
+        // TODO: this pattern makes me want to change the semantics of this op.
+        if (const Reinterpret *reinterp = a.as<Reinterpret>()) {
+            if (reinterp->type.bits() == reinterp->value.type().bits()) {
+                if (const Call *add = Call::as_intrinsic(reinterp->value, {Call::widen_right_add})) {
+                    if (can_prove(lower_intrinsics(add->args[1] == round))) {
+                        // We expect the first operand to be a reinterpet.
+                        const Reinterpret *reinterp_a = add->args[0].as<Reinterpret>();
+                        internal_assert(reinterp_a) << "Failed: " << add->args[0] << "\n";
+                        return rounding_shift(reinterp_a->value, b);
+                    }
+                }
             }
         }
 
@@ -199,6 +226,53 @@ protected:
             }
         }
 
+        if (op->type.is_int_or_uint() && op->type.bits() > 8) {
+            // Look for widen_right_add intrinsics.
+            // Yes we do an duplicate code, but we want to check the op->type.code() first,
+            // and the opposite as well.
+            for (halide_type_code_t code : {op->type.code(), halide_type_uint, halide_type_int}) {
+                Type narrow = op->type.narrow().with_code(code);
+                // Pulling casts out of VectorReduce nodes breaks too much codegen, skip for now.
+                Expr narrow_a = (a.node_type() == IRNodeType::VectorReduce) ? Expr() : lossless_cast(narrow, a);
+                Expr narrow_b = (b.node_type() == IRNodeType::VectorReduce) ? Expr() : lossless_cast(narrow, b);
+
+                // This case should have been handled by the above check for widening_add.
+                internal_assert(!(narrow_a.defined() && narrow_b.defined()))
+                    << "find_intrinsics failed to find a widening_add: " << a << " + " << b << "\n";
+
+                if (narrow_a.defined()) {
+                    Expr result;
+                    if (b.type().code() != narrow_a.type().code()) {
+                        // Need to do a safe reinterpret.
+                        Type t = b.type().with_code(code);
+                        result = widen_right_add(reinterpret(t, b), narrow_a);
+                        internal_assert(result.type() != op->type);
+                        result = reinterpret(op->type, result);
+                    } else {
+                        result = widen_right_add(b, narrow_a);
+                    }
+                    internal_assert(result.type() == op->type);
+                    return result;
+                } else if (narrow_b.defined()) {
+                    Expr result;
+                    if (a.type().code() != narrow_b.type().code()) {
+                        // Need to do a safe reinterpret.
+                        Type t = a.type().with_code(code);
+                        result = widen_right_add(reinterpret(t, a), narrow_b);
+                        internal_assert(result.type() != op->type);
+                        result = reinterpret(op->type, result);
+                    } else {
+                        result = widen_right_add(a, narrow_b);
+                    }
+                    internal_assert(result.type() == op->type);
+                    return mutate(result);
+                }
+            }
+        }
+
+        // TODO: there can be widen_right_add + widen_right_add simplification rules.
+        // i.e. widen_right_add(a, b) + widen_right_add(c, d) = (a + c) + widening_add(b, d)
+
         if (a.same_as(op->a) && b.same_as(op->b)) {
             return op;
         } else {
@@ -238,6 +312,32 @@ protected:
         Expr negative_b = lossless_negate(b);
         if (negative_b.defined()) {
             return Add::make(a, negative_b);
+        }
+
+        // Run after the lossless_negate check, because we want that to turn into an widen_right_add if relevant.
+        if (op->type.is_int_or_uint() && op->type.bits() > 8) {
+            // Look for widen_right_sub intrinsics.
+            // Yes we do an duplicate code, but we want to check the op->type.code() first,
+            // and the opposite as well.
+            for (halide_type_code_t code : {op->type.code(), halide_type_uint, halide_type_int}) {
+                Type narrow = op->type.narrow().with_code(code);
+                Expr narrow_b = lossless_cast(narrow, b);
+
+                if (narrow_b.defined()) {
+                    Expr result;
+                    if (a.type().code() != narrow_b.type().code()) {
+                        // Need to do a safe reinterpret.
+                        Type t = a.type().with_code(code);
+                        result = widen_right_sub(reinterpret(t, a), narrow_b);
+                        internal_assert(result.type() != op->type);
+                        result = reinterpret(op->type, result);
+                    } else {
+                        result = widen_right_sub(a, narrow_b);
+                    }
+                    internal_assert(result.type() == op->type);
+                    return mutate(result);
+                }
+            }
         }
 
         if (a.same_as(op->a) && b.same_as(op->b)) {
@@ -290,6 +390,49 @@ protected:
                 result = Cast::make(op->type, result);
             }
             return mutate(result);
+        }
+
+        if (op->type.is_int_or_uint() && op->type.bits() > 8) {
+            // Look for widen_right_mul intrinsics.
+            // Yes we do an duplicate code, but we want to check the op->type.code() first,
+            // and the opposite as well.
+            for (halide_type_code_t code : {op->type.code(), halide_type_uint, halide_type_int}) {
+                Type narrow = op->type.narrow().with_code(code);
+                Expr narrow_a = lossless_cast(narrow, a);
+                Expr narrow_b = lossless_cast(narrow, b);
+
+                // This case should have been handled by the above check for widening_mul.
+                internal_assert(!(narrow_a.defined() && narrow_b.defined()))
+                    << "find_intrinsics failed to find a widening_mul: " << a << " + " << b << "\n";
+
+                if (narrow_a.defined()) {
+                    Expr result;
+                    if (b.type().code() != narrow_a.type().code()) {
+                        // Need to do a safe reinterpret.
+                        Type t = b.type().with_code(code);
+                        result = widen_right_mul(reinterpret(t, b), narrow_a);
+                        internal_assert(result.type() != op->type);
+                        result = reinterpret(op->type, result);
+                    } else {
+                        result = widen_right_mul(b, narrow_a);
+                    }
+                    internal_assert(result.type() == op->type);
+                    return result;
+                } else if (narrow_b.defined()) {
+                    Expr result;
+                    if (a.type().code() != narrow_b.type().code()) {
+                        // Need to do a safe reinterpret.
+                        Type t = a.type().with_code(code);
+                        result = widen_right_mul(reinterpret(t, a), narrow_b);
+                        internal_assert(result.type() != op->type);
+                        result = reinterpret(op->type, result);
+                    } else {
+                        result = widen_right_mul(a, narrow_b);
+                    }
+                    internal_assert(result.type() == op->type);
+                    return mutate(result);
+                }
+            }
         }
 
         if (a.same_as(op->a) && b.same_as(op->b)) {
@@ -594,6 +737,37 @@ protected:
         const auto is_x_wider_opposite_int = (op->type.is_int() && is_uint(x, 2 * bits)) || (op->type.is_uint() && is_int(x, 2 * bits));
 
         if (
+            // Simplify extending patterns.
+            // (x + widen(y)) + widen(z) = x + widening_add(y, z).
+            rewrite(widen_right_add(widen_right_add(x, y), z),
+                    x + widening_add(y, z),
+                    // We only care about integers, this should be trivially true.
+                    is_x_same_int_or_uint) ||
+
+            // (x - widen(y)) - widen(z) = x - widening_add(y, z).
+            rewrite(widen_right_sub(widen_right_sub(x, y), z),
+                    x - widening_add(y, z),
+                    // We only care about integers, this should be trivially true.
+                    is_x_same_int_or_uint) ||
+
+            // (x + widen(y)) - widen(z) = x + cast(t, widening_sub(y, z))
+            // cast (reinterpret) is needed only for uints.
+            rewrite(widen_right_sub(widen_right_add(x, y), z),
+                    x + widening_sub(y, z),
+                    is_x_same_int) ||
+            rewrite(widen_right_sub(widen_right_add(x, y), z),
+                    x + cast(op->type, widening_sub(y, z)),
+                    is_x_same_uint) ||
+
+            // (x - widen(y)) + widen(z) = x + cast(t, widening_sub(z, y))
+            // cast (reinterpret) is needed only for uints.
+            rewrite(widen_right_add(widen_right_sub(x, y), z),
+                    x + widening_sub(z, y),
+                    is_x_same_int) ||
+            rewrite(widen_right_add(widen_right_sub(x, y), z),
+                    x + cast(op->type, widening_sub(z, y)),
+                    is_x_same_uint) ||
+
             // Saturating patterns.
             rewrite(saturating_cast(op->type, widening_add(x, y)),
                     saturating_add(x, y),
@@ -679,6 +853,7 @@ protected:
                 }
             }
         }
+        // TODO: do we want versions of widen_right_add here?
 
         if (op->is_intrinsic(Call::shift_right) || op->is_intrinsic(Call::shift_left)) {
             // Try to turn this into a widening shift.
@@ -883,6 +1058,18 @@ Expr find_intrinsics(const Expr &e) {
     expr = FindIntrinsics().mutate(expr);
     expr = common_subexpression_elimination(expr);
     return expr;
+}
+
+Expr lower_widen_right_add(const Expr &a, const Expr &b) {
+    return a + widen(b);
+}
+
+Expr lower_widen_right_mul(const Expr &a, const Expr &b) {
+    return a * widen(b);
+}
+
+Expr lower_widen_right_sub(const Expr &a, const Expr &b) {
+    return a - widen(b);
 }
 
 Expr lower_widening_add(const Expr &a, const Expr &b) {
@@ -1100,7 +1287,16 @@ Expr lower_rounding_mul_shift_right(const Expr &a, const Expr &b, const Expr &q)
 }
 
 Expr lower_intrinsic(const Call *op) {
-    if (op->is_intrinsic(Call::widening_add)) {
+    if (op->is_intrinsic(Call::widen_right_add)) {
+        internal_assert(op->args.size() == 2);
+        return lower_widen_right_add(op->args[0], op->args[1]);
+    } else if (op->is_intrinsic(Call::widen_right_mul)) {
+        internal_assert(op->args.size() == 2);
+        return lower_widen_right_mul(op->args[0], op->args[1]);
+    } else if (op->is_intrinsic(Call::widen_right_sub)) {
+        internal_assert(op->args.size() == 2);
+        return lower_widen_right_sub(op->args[0], op->args[1]);
+    } else if (op->is_intrinsic(Call::widening_add)) {
         internal_assert(op->args.size() == 2);
         return lower_widening_add(op->args[0], op->args[1]);
     } else if (op->is_intrinsic(Call::widening_mul)) {

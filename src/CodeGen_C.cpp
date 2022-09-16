@@ -1272,14 +1272,20 @@ public:
 
 void CodeGen_C::set_name_mangling_mode(NameMangling mode) {
     if (extern_c_open && mode != NameMangling::C) {
-        stream << "\n#ifdef __cplusplus\n";
-        stream << "}  // extern \"C\"\n";
-        stream << "#endif\n\n";
+        stream << R"INLINE_CODE(
+#ifdef __cplusplus
+}  // extern "C"
+#endif
+
+)INLINE_CODE";
         extern_c_open = false;
     } else if (!extern_c_open && mode == NameMangling::C) {
-        stream << "\n#ifdef __cplusplus\n";
-        stream << "extern \"C\" {\n";
-        stream << "#endif\n\n";
+        stream << R"INLINE_CODE(
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+)INLINE_CODE";
         extern_c_open = true;
     }
 }
