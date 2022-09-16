@@ -1,7 +1,7 @@
 #include "StmtToViz.h"
 #include "Error.h"
 #include "FindStmtCost.h"
-#include "GetAssemblyInfoViz.cpp"
+#include "GetAssemblyInfoViz.h"
 #include "GetStmtHierarchy.h"
 #include "IROperator.h"
 #include "IRVisitor.h"
@@ -343,14 +343,16 @@ private:
         return s.str();
     }
 
-    string see_assembly_button(const int &assembly_line_num) {
+    string see_assembly_button(const int &assembly_line_num_start,
+                               const int &assembly_line_num_end = -1) {
         stringstream s;
 
         tooltip_count++;
         s << "<button class='iconButton assemblyIcon' ";
         s << "id='button" << tooltip_count << "' ";
         s << "aria-describedby='tooltip" << tooltip_count << "' ";
-        s << "onclick='openAssembly(" << assembly_line_num << ");'>";
+        s << "onclick='openAssembly(" << assembly_line_num_start << ", " << assembly_line_num_end
+          << ");'>";
         s << "<svg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='currentColor' "
              "class='bi bi-filetype-raw' viewBox='0 0 16 16'>";
         s << "<path fill-rule='evenodd' d='M14 4.5V14a2 2 0 0 1-2 2v-1a1 1 0 0 0 1-1V4.5h-2A1.5 "
@@ -685,7 +687,7 @@ private:
         string anchor_name = "producerConsumer" + std::to_string(producer_consumer_count);
 
         // for assembly
-        int assembly_line_num = get_assembly_info_viz.get_line_number(op);
+        int assembly_line_num = get_assembly_info_viz.get_line_number_prod_cons(op);
 
         int produce_id = unique_id();
 
@@ -723,7 +725,9 @@ private:
         string anchor_name = "for" + std::to_string(for_count);
 
         // for assembly
-        int assembly_line_num = get_assembly_info_viz.get_line_number(op);
+        ForLoopLineNumber assembly_line_info = get_assembly_info_viz.get_line_numbers_for_loops(op);
+        int assembly_line_num_start = assembly_line_info.start_line;
+        int assembly_line_num_end = assembly_line_info.end_line;
 
         int id = unique_id();
         stream << open_cost_span(op);
@@ -758,7 +762,8 @@ private:
         stream << " " << matched("{");
         stream << close_anchor();
         stream << close_cost_span();
-        if (assembly_line_num != -1) stream << see_assembly_button(assembly_line_num);
+        if (assembly_line_num_start != -1)
+            stream << see_assembly_button(assembly_line_num_start, assembly_line_num_end);
         stream << see_viz_button(anchor_name);
 
         stream << open_div("ForBody Indent", id);
@@ -2219,7 +2224,7 @@ function collapseViz() { \n \
 
 const string StmtToViz::assembly_code_js = "\n \
 // open assembly code  \n \
-function openAssembly(lineNum) {\n \
+function openAssembly(lineNumStart, lineNumberEnd) {\n \
     var innerHTML = '<head><link rel=\\'stylesheet\\'' + \n \
         'href=\\'https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.52.2/codemirror.min.css\\'>' + \n \
         '</link>' + \n \
@@ -2249,16 +2254,21 @@ function openAssembly(lineNum) {\n \
         'var code = codeHTML.textContent; ' + \n \
         'code = code.trimLeft(); ' + \n \
         'var myCodeMirror = CodeMirror(document.body, {value: code, lineNumbers: true, mode: {name: \\'gas\\', architecture: \\'ARMv6\\'}, readOnly: true,});' + \n \
-        'function jumpToLine(i) {' + \n \
-        '	i -= 1;' + \n \
-        '	var t = myCodeMirror.charCoords({ line: i, ch: 0 }, \\'local\\').top;' + \n \
+        'function jumpToLine(start, end) {' + \n \
+        '	start -= 1;' + \n \
+        '   end -= 1;' + \n \
+        '	var t = myCodeMirror.charCoords({ line: start, ch: 0 }, \\'local\\').top;' + \n \
         '	var middleHeight = myCodeMirror.getScrollerElement().offsetHeight / 2;' + \n \
-        '	myCodeMirror.scrollIntoView({ line: i+20, ch: 0 });' + \n \
-        '	myCodeMirror.markText({ line: i, ch: 0 }, { line: i, ch: 200 }, { className: \\'styled-background\\' });' + \n \
+        '	myCodeMirror.scrollIntoView({ line: start+40, ch: 0 });' + \n \
+        '   for(var i = start; i <= end; i++) {' + \n \
+        '		myCodeMirror.markText({ line: i, ch: 0 }, { line: i, ch: 200 }, { className: \\'styled-background\\' });' + \n \
+        '	}' + \n \
+        '   myCodeMirror.markText({ line: start, ch: 0 }, { line: start, ch: 200 }, { className: \\'styled-background\\' });' + \n \
+        '	myCodeMirror.markText({ line: end, ch: 0 }, { line: end, ch: 200 }, { className: \\'styled-background\\' });' + \n \
         '   myCodeMirror.focus();' + \n \
-        '   myCodeMirror.setCursor({line: i, ch: 0});' + \n \
+        '   myCodeMirror.setCursor({line: start, ch: 0});' + \n \
         '}' + \n \
-        'jumpToLine(' + lineNum + ');' + \n \
+        'jumpToLine(' + lineNumStart + ', ' + lineNumberEnd + ');' + \n \
 \n \
         '</scri' + 'pt>';\n \
 \n \

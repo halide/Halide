@@ -558,6 +558,10 @@ protected:
                               VectorTypeConstraint type_constraint = VectorTypeConstraint::None) const;
 
 private:
+    // used for mapping IR nodes to llvm markers in StmtToViz.cpp
+    int producer_consumer_count = 0;
+    int for_loop_count = 0;
+
     /** All the values in scope at the current code location during
      * codegen. Use sym_push and sym_pop to access. */
     Scope<llvm::Value *> symbol_table;

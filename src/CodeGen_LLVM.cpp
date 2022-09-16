@@ -3547,11 +3547,13 @@ void CodeGen_LLVM::return_with_error_code(llvm::Value *error_code) {
 }
 
 void CodeGen_LLVM::visit(const ProducerConsumer *op) {
+    producer_consumer_count++;
+
     string name;
     if (op->is_producer) {
-        name = std::string("produce ") + op->name;
+        name = std::to_string(producer_consumer_count) + std::string("_produce ") + op->name;
     } else {
-        name = std::string("consume ") + op->name;
+        name = std::to_string(producer_consumer_count) + std::string("_consume ") + op->name;
     }
     BasicBlock *produce = BasicBlock::Create(*context, name, function);
     builder->CreateBr(produce);
@@ -3560,6 +3562,8 @@ void CodeGen_LLVM::visit(const ProducerConsumer *op) {
 }
 
 void CodeGen_LLVM::visit(const For *op) {
+    for_loop_count++;
+
     Value *min = codegen(op->min);
     Value *extent = codegen(op->extent);
     const Acquire *acquire = op->body.as<Acquire>();
@@ -3577,9 +3581,11 @@ void CodeGen_LLVM::visit(const For *op) {
         BasicBlock *preheader_bb = builder->GetInsertBlock();
 
         // Make a new basic block for the loop
-        BasicBlock *loop_bb = BasicBlock::Create(*context, std::string("for ") + op->name, function);
+        BasicBlock *loop_bb = BasicBlock::Create(
+            *context, std::to_string(for_loop_count) + std::string("_for ") + op->name, function);
         // Create the block that comes after the loop
-        BasicBlock *after_bb = BasicBlock::Create(*context, std::string("end for ") + op->name, function);
+        BasicBlock *after_bb = BasicBlock::Create(
+            *context, std::to_string(for_loop_count) + std::string("_end for ") + op->name, function);
 
         // If min < max, fall through to the loop bb
         Value *enter_condition = builder->CreateICmpSLT(min, max);
