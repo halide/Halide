@@ -92,6 +92,7 @@ void GetAssemblyInfoViz::add_line_number_for_loop(string &assembly_line,
         if (it == node_to_line_numbers_for_loops.end()) {
             ForLoopLineNumber for_loop_line_number;
             for_loop_line_number.start_line = line_number;
+            for_loop_line_number.end_line = -1;
             node_to_line_numbers_for_loops[marker.node] = for_loop_line_number;
         } else {
             it->second.start_line = line_number;
@@ -106,6 +107,7 @@ void GetAssemblyInfoViz::add_line_number_for_loop(string &assembly_line,
         if (it == node_to_line_numbers_for_loops.end()) {
             ForLoopLineNumber for_loop_line_number;
             for_loop_line_number.end_line = line_number;
+            for_loop_line_number.start_line = -1;
             node_to_line_numbers_for_loops[marker.node] = for_loop_line_number;
         } else {
             it->second.end_line = line_number;

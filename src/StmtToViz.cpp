@@ -38,7 +38,7 @@ class StmtToViz : public IRVisitor {
     static const string line_numbers_css;
     static const string tooltip_css;
     static const string expand_code_js;
-    static const string assembly_code_js;
+    static const string code_mirror_css, code_mirror_js;
 
     // This allows easier access to individual elements.
     int id_count;
@@ -351,8 +351,8 @@ private:
         s << "<button class='iconButton assemblyIcon' ";
         s << "id='button" << tooltip_count << "' ";
         s << "aria-describedby='tooltip" << tooltip_count << "' ";
-        s << "onclick='openAssembly(" << assembly_line_num_start << ", " << assembly_line_num_end
-          << ");'>";
+        s << "onclick='populateCodeMirror(" << assembly_line_num_start << ", "
+          << assembly_line_num_end << ");'>";
         s << "<svg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='currentColor' "
              "class='bi bi-filetype-raw' viewBox='0 0 16 16'>";
         s << "<path fill-rule='evenodd' d='M14 4.5V14a2 2 0 0 1-2 2v-1a1 1 0 0 0 1-1V4.5h-2A1.5 "
@@ -1523,7 +1523,28 @@ public:
         stream << "<script src='http://code.jquery.com/jquery-1.10.2.js'></script>\n";
         stream << "\n";
 
-        stream << "<style type='text/css'>";
+        // assembly code links
+        stream << "<!-- Assembly Code links -->\n";
+        stream << "<link rel='stylesheet' "
+                  "href='https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.52.2/"
+                  "codemirror.min.css'></link>\n";
+        stream << "<script "
+                  "src='https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.52.2/"
+                  "codemirror.min.js'></script>\n";
+        stream << "<script "
+                  "src='https://cdnjs.cloudflare.com/ajax/libs/codemirror/6.65.7/mode/gas/"
+                  "gas.min.js'></script>\n";
+        stream << "<script "
+                  "src='https://cdnjs.cloudflare.com/ajax/libs/codemirror/6.65.7/addon/selection/"
+                  "mark-selection.min.js'></script>\n";
+        stream << "<script "
+                  "src='https://cdnjs.cloudflare.com/ajax/libs/codemirror/6.65.7/addon/search/"
+                  "searchcursor.min.js'></script>\n";
+        stream << "<script "
+                  "src='https://cdnjs.cloudflare.com/ajax/libs/codemirror/6.65.7/addon/search/"
+                  "search.min.js'></script>\n";
+
+        stream << "\n<style type='text/css'>";
         stream << css;
         stream << viz_css;
         stream << cost_colors_css;
@@ -1532,6 +1553,7 @@ public:
         stream << line_numbers_css;
         stream << tooltip_css;
         stream << GetStmtHierarchy::stmt_hierarchy_css;
+        stream << code_mirror_css;
         stream << "</style>\n";
         stream << "<script language='javascript' type='text/javascript'>" + js + "</script>\n";
         stream << "</head>\n";
@@ -1558,7 +1580,7 @@ public:
         stream << IRVisualization::scroll_to_function_JS_viz_to_code;
         stream << scroll_to_function_code_to_viz_js;
         stream << expand_code_js;
-        stream << assembly_code_js;
+        stream << code_mirror_js;
         stream << "</script>\n";
         stream << "</body>";
     }
@@ -1818,9 +1840,7 @@ public:
         stream << resize_bar_assembly();
 
         // assembly content
-        // TODO:
-        stream << "<div id='changeThisLater'>\n";
-        stream << "HIIIIIIIIII \n";
+        stream << "<div id='assemblyCode'>\n";
         stream << "</div>\n";
 
         stream << "</div>\n";  // close mainContent div
@@ -2221,7 +2241,7 @@ var codeDiv = document.getElementById('IRCode-code'); \n \
 var resizeBar = document.getElementById('ResizeBar'); \n \
 var irVizDiv = document.getElementById('IRVisualization'); \n \
 var resizeBarAssembly = document.getElementById('ResizeBarAssembly'); \n \
-var assemblyCodeDiv = document.getElementById('changeThisLater'); \n \
+var assemblyCodeDiv = document.getElementById('assemblyCode'); \n \
  \n \
 codeDiv.style.flexGrow = '0'; \n \
 resizeBar.style.flexGrow = '0'; \n \
@@ -2305,58 +2325,43 @@ function collapseAssembly() { \n \
 } \n \
 ";
 
-const string StmtToViz::assembly_code_js = "\n \
-// open assembly code  \n \
-function openAssembly(lineNumStart, lineNumberEnd) {\n \
-    var innerHTML = '<head><link rel=\\'stylesheet\\'' + \n \
-        'href=\\'https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.52.2/codemirror.min.css\\'>' + \n \
-        '</link>' + \n \
-        '<scr' + 'ipt' + \n \
-        '	src=\\'https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.52.2/codemirror.min.js\\'></scr' + 'ipt>' + \n \
-        '<scri' + 'pt src=\\'https://cdnjs.cloudflare.com/ajax/libs/codemirror/6.65.7/mode/gas/gas.min.js\\'></scr' + 'ipt>' + \n \
- \n \
-        '<scri' + 'pt' + \n \
-        '	src=\\'https://cdnjs.cloudflare.com/ajax/libs/codemirror/6.65.7/addon/selection/mark-selection.min.js\\'></scri' + 'pt>' + \n \
-        '<scri' + 'pt src=\\'https://cdnjs.cloudflare.com/ajax/libs/codemirror/6.65.7/addon/search/searchcursor.min.js\\'></scri' + 'pt>' + \n \
-        '<scr' + 'ipt src=\\'https://cdnjs.cloudflare.com/ajax/libs/codemirror/6.65.7/addon/search/search.min.js\\'></scri' + 'pt>' + \n \
-        '</head>'; \n \
-    innerHTML += '<style>' + \n \
-        '    .CodeMirror {' + \n \
-        '        height: 100%;' + \n \
-        '        width: 100%;' + \n \
-        '    }' + \n \
-        '    .styled-background {' + \n \
-        '        background-color: #ff7;' + \n \
-        '    }' + \n \
-        '</style>'; \n \
-    var assembly = document.getElementById('assemblyContent'); \n \
-    innerHTML += '<div id=\\'codeValue\\' style=\\'display: none\\'>' + assembly.innerHTML + '</div>'; \n \
-    innerHTML += '<scr' + 'ipt>' + \n \
-        'var codeHTML = document.getElementById(\\'codeValue\\'); ' + \n \
-        'var code = codeHTML.textContent; ' + \n \
-        'code = code.trimLeft(); ' + \n \
-        'var myCodeMirror = CodeMirror(document.body, {value: code, lineNumbers: true, mode: {name: \\'gas\\', architecture: \\'ARMv6\\'}, readOnly: true,});' + \n \
-        'function jumpToLine(start, end) {' + \n \
-        '	start -= 1;' + \n \
-        '   end -= 1;' + \n \
-        '	var t = myCodeMirror.charCoords({ line: start, ch: 0 }, \\'local\\').top;' + \n \
-        '	var middleHeight = myCodeMirror.getScrollerElement().offsetHeight / 2;' + \n \
-        '	myCodeMirror.scrollIntoView({ line: start+40, ch: 0 });' + \n \
-        '   for(var i = start; i <= end; i++) {' + \n \
-        '		myCodeMirror.markText({ line: i, ch: 0 }, { line: i, ch: 200 }, { className: \\'styled-background\\' });' + \n \
-        '	}' + \n \
-        '   myCodeMirror.markText({ line: start, ch: 0 }, { line: start, ch: 200 }, { className: \\'styled-background\\' });' + \n \
-        '	myCodeMirror.markText({ line: end, ch: 0 }, { line: end, ch: 200 }, { className: \\'styled-background\\' });' + \n \
-        '   myCodeMirror.focus();' + \n \
-        '   myCodeMirror.setCursor({line: start, ch: 0});' + \n \
-        '}' + \n \
-        'jumpToLine(' + lineNumStart + ', ' + lineNumberEnd + ');' + \n \
-\n \
-        '</scri' + 'pt>';\n \
-\n \
-    var newWindow = window.open('', '_blank');\n \
-    newWindow.document.write(innerHTML);\n \
+const string StmtToViz::code_mirror_css = "\n \
+/* CodeMirror */ \n \
+.CodeMirror { \n \
+    height: 100%; \n \
+    width: 100%; \n \
+} \n \
+.styled-background { \n \
+    background-color: #ff7; \n \
+} \n \
+";
+
+const string StmtToViz::code_mirror_js = "\n \
+// CodeMirror \n \
+function jumpToLine(myCodeMirror, start, end) {\n \
+    start -= 1;\n \
+    end -= 1;\n \
+    var t = myCodeMirror.charCoords({ line: start, ch: 0 }, 'local').top;\n \
+    var middleHeight = myCodeMirror.getScrollerElement().offsetHeight / 2;\n \
+    myCodeMirror.scrollIntoView({ line: start+40, ch: 0 });\n \
+    for(var i = start; i <= end; i++) {\n \
+        myCodeMirror.markText({ line: i, ch: 0 }, { line: i, ch: 200 }, { className: 'styled-background' });\n \
+    }\n \
+    myCodeMirror.markText({ line: start, ch: 0 }, { line: start, ch: 200 }, { className: 'styled-background' });\n \
+    myCodeMirror.markText({ line: end, ch: 0 }, { line: end, ch: 200 }, { className: 'styled-background' });\n \
+    myCodeMirror.focus();\n \
+    myCodeMirror.setCursor({line: start, ch: 0});\n \
 }\n \
+function populateCodeMirror(lineNumStart, lineNumberEnd) { \n \
+    assemblyCodeDiv.style.display = 'block'; \n \
+    var codeHTML = document.getElementById('assemblyContent'); \n \
+    var code = codeHTML.textContent; \n \
+    code = code.trimLeft(); \n \
+    document.getElementById('assemblyCode').innerHTML = ''; \n \
+    var myCodeMirror = CodeMirror(document.getElementById('assemblyCode'), { value: code, lineNumbers: true, mode: { name: 'gas', architecture: 'ARMv6' }, readOnly: true, }); \n \
+    jumpToLine(myCodeMirror, lineNumStart, lineNumberEnd); \n \
+    document.getElementsByClassName('CodeMirror-sizer')[0].style.minWidth = '0px'; \n \
+} \n \
 ";
 
 const string StmtToViz::js = "\n \
