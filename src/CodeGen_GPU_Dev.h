@@ -101,6 +101,7 @@ public:
 protected:
     using CodeGen_C::visit;
     void visit(const Shuffle *op) override;
+    void visit(const Call *op) override;
 
     VectorDeclarationStyle vector_declaration_style = VectorDeclarationStyle::CLikeSyntax;
 };

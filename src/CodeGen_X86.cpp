@@ -120,6 +120,11 @@ const x86Intrinsic intrinsic_defs[] = {
     {"abs_i32x4", UInt(32, 4), "abs", {Int(32, 4)}, Target::SSE41},
     {"abs_f32x4", Float(32, 4), "abs", {Float(32, 4)}},
 
+    {"round_f32x4", Float(32, 4), "round", {Float(32, 4)}, Target::SSE41},
+    {"round_f64x2", Float(64, 2), "round", {Float(64, 2)}, Target::SSE41},
+    {"round_f32x8", Float(32, 8), "round", {Float(32, 8)}, Target::AVX},
+    {"round_f64x4", Float(64, 4), "round", {Float(64, 4)}, Target::AVX},
+
     {"llvm.sadd.sat.v32i8", Int(8, 32), "saturating_add", {Int(8, 32), Int(8, 32)}, Target::AVX2},
     {"llvm.sadd.sat.v16i8", Int(8, 16), "saturating_add", {Int(8, 16), Int(8, 16)}},
     {"llvm.sadd.sat.v8i8", Int(8, 8), "saturating_add", {Int(8, 8), Int(8, 8)}},
@@ -503,15 +508,11 @@ void CodeGen_X86::visit(const Cast *op) {
 }
 
 void CodeGen_X86::visit(const Call *op) {
-    if (op->call_type == Call::PureExtern &&
-        !target.has_feature(Target::SSE41) &&
-        (op->name == "round_f32" || op->name == "round_f64" || op->name == "round_f16")) {
-        // The roundss/roundps instruction only appeared in sse 4.1. Prior to
-        // that we would call llvm.roundeven, but on x86 that forwards to a
-        // standard library function roundevenf which seems to be missing on all
-        // platforms other than linux. Even on linux it's probably better to
-        // lower it to primitive operations, because they vectorize cleanly.
-        codegen(lower_round_to_nearest_ties_to_even(op->args[0]));
+    if (op->is_intrinsic(Call::round)) {
+        value = call_overloaded_intrin(op->type, "round", op->args);
+        if (value) {
+            return;
+        }
     }
 
     if (!op->type.is_vector()) {

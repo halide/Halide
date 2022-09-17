@@ -112,6 +112,9 @@ const WasmIntrinsic intrinsic_defs[] = {
     {"extend_u16x8_to_u32x8", UInt(32, 8), "widen_integer", {UInt(16, 8)}, Target::WasmSimd128},
     {"extend_i32x4_to_i64x4", Int(64, 4), "widen_integer", {Int(32, 4)}, Target::WasmSimd128},
     {"extend_u32x4_to_u64x4", UInt(64, 4), "widen_integer", {UInt(32, 4)}, Target::WasmSimd128},
+
+    {"llvm.rint.f32", Float(32), "rint", {Float(32)}},
+    {"llvm.rint.f64", Float(64), "rint", {Float(64)}},
 };
 // clang-format on
 
@@ -212,19 +215,12 @@ void CodeGen_WebAssembly::visit(const Call *op) {
         }
     }
 
-    if (op->call_type == Call::PureExtern &&
-        (op->name == "round_f32" ||
-         op->name == "round_f64")) {
-        // As of LLVM version 8273ca1421a6144286698a61b41cd8901c131850, from
-        // 9/14/2022, the LLVM wasm backend doesn't implement
-        // llvm.roundeven. Instead it compiles llvm.nearbyint and llvm.rint to a
-        // round-to-even wasm instruction, even though in other llvm backends
-        // those calls have a behavior that depends on the current rounding
-        // mode. We work around the oddness here by redirecting to a
-        // differently-named inlined runtime function.
-        internal_assert(op->args.size() == 1);
-        codegen(Call::make(op->type, "wasm_" + op->name, op->args, op->call_type));
-        return;
+    if (op->is_intrinsic(Call::round)) {
+        // For webassembly, llvm.rint compiles to f32.nearest, which gives us the semantics we want.
+        value = call_overloaded_intrin(op->type, "rint", op->args);
+        if (value) {
+            return;
+        }
     }
 
     CodeGen_Posix::visit(op);

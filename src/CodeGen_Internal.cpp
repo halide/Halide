@@ -532,11 +532,13 @@ Expr lower_round_to_nearest_ties_to_even(const Expr &x) {
 
     // Make one half with the same sign as x
     Expr sign_bit = reinterpret(bits_type, x) & (cast(bits_type, 1) << (x.type().bits() - 1));
-    Expr one_half = reinterpret(x.type(), reinterpret(bits_type, cast(x.type(), 0.5f)) | sign_bit);
+    Expr one_half = reinterpret(bits_type, cast(x.type(), 0.5f)) | sign_bit;
+    Expr just_under_one_half = reinterpret(x.type(), one_half - 1);
+    one_half = reinterpret(x.type(), one_half);
     // Do the same for the constant one.
     Expr one = reinterpret(bits_type, cast(x.type(), 1)) | sign_bit;
-    // Round to nearest, with ties going away from zero
-    Expr ix = cast(int_type, x + one_half);
+    // Round to nearest, with ties going towards zero
+    Expr ix = cast(int_type, x + just_under_one_half);
     Expr a = cast(x.type(), ix);
     // Get the residual
     Expr diff = a - x;
@@ -544,9 +546,8 @@ Expr lower_round_to_nearest_ties_to_even(const Expr &x) {
     Expr odd = -cast(bits_type, ix & 1);
     // Make a mask of all ones if the result was a tie
     Expr tie = select(diff == one_half, cast(bits_type, -1), cast(bits_type, 0));
-    // If it was a tie, and the result is odd, we should have rounded towards
-    // zero instead of away. Conditionally subtract one (for positive inputs) or
-    // add one (for negative inputs).
+    // If it was a tie, and the result is odd, we should have rounded in the
+    // other direction.
     Expr correction = reinterpret(x.type(), odd & tie & one);
     return common_subexpression_elimination(simplify(a - correction));
 }
