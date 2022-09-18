@@ -1456,9 +1456,9 @@ private:
                 }
             }
         } else if (op->args.size() == 1 && interval.is_bounded() &&
-                   (op->name == "ceil_f32" || op->name == "ceil_f64" ||
+                   (op->is_intrinsic(Call::round) ||
+                    op->name == "ceil_f32" || op->name == "ceil_f64" ||
                     op->name == "floor_f32" || op->name == "floor_f64" ||
-                    op->name == "round_f32" || op->name == "round_f64" ||
                     op->name == "exp_f32" || op->name == "exp_f64" ||
                     op->name == "log_f32" || op->name == "log_f64")) {
             // For monotonic, pure, single-argument functions, we can
