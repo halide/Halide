@@ -2265,9 +2265,14 @@ Expr ceil(Expr x) {
     }
 }
 
-Expr round(const Expr &x) {
+Expr round(Expr x) {
     user_assert(x.defined()) << "round of undefined Expr\n";
-    return Internal::Call::make(x.type(), Internal::Call::round, {x}, Internal::Call::PureIntrinsic);
+    Type t = x.type();
+    if (!t.is_float()) {
+        x = cast<float>(x);
+        t = x.type();
+    }
+    return Internal::Call::make(t, Internal::Call::round, {std::move(x)}, Internal::Call::PureIntrinsic);
 }
 
 Expr trunc(Expr x) {

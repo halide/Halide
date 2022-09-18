@@ -1033,7 +1033,7 @@ Expr ceil(Expr x);
  * std::round in C, which rounds away from zero. On platforms without a native
  * instruction for this, it is emulated, and may be more expensive than
  * cast<int>(x + 0.5f) or similar. */
-Expr round(const Expr &x);
+Expr round(Expr x);
 
 /** Return the integer part of a floating-point expression. If the argument is
  * not floating-point, it is cast to Float(32). The return value is still in
