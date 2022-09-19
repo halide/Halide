@@ -93,97 +93,7 @@ std::pair<string, string> print_type(const LoweredArgument *arg) {
     }
 }
 
-}  // namespace
-
-PythonExtensionGen::PythonExtensionGen(std::ostream &dest)
-    : dest(dest) {
-}
-
-void PythonExtensionGen::compile(const Module &module) {
-    dest << "#include <string>\n";
-    dest << "#include <Python.h>\n";
-    dest << "#include \"HalideRuntime.h\"\n\n";
-
-    // Emit extern decls of the Halide-generated functions we use directly
-    // into this file, so that we don't have to #include the relevant .h
-    // file directly; this simplifies certain compile/build setups (since
-    // we don't have to build files in tandem and/or get include paths right),
-    // and should be totally safe, since we are using the same codegen logic
-    // that would be in the .h file anyway.
-    {
-        CodeGen_C extern_decl_gen(dest, module.target(), CodeGen_C::CPlusPlusExternDecl);
-        extern_decl_gen.compile(module);
-    }
-
-    dest << R"INLINE_CODE(
-namespace Halide::PythonRuntime {
-extern bool unpack_buffer(PyObject *py_obj,
-                          int py_getbuffer_flags,
-                          const char *name,
-                          int dimensions,
-                          Py_buffer &py_buf,
-                          halide_dimension_t *halide_dim,
-                          halide_buffer_t &halide_buf,
-                          bool &py_buf_valid);
-}  // namespace Halide::PythonRuntime
-
-namespace {
-
-template<int dimensions>
-struct PyHalideBuffer {
-    // Must allocate at least 1, even if d=0
-    static constexpr int dims_to_allocate = (dimensions < 1) ? 1 : dimensions;
-
-    Py_buffer py_buf;
-    halide_dimension_t halide_dim[dims_to_allocate];
-    halide_buffer_t halide_buf;
-    bool py_buf_needs_release = false;
-
-    bool unpack(PyObject *py_obj, int py_getbuffer_flags, const char *name) {
-        return Halide::PythonRuntime::unpack_buffer(py_obj, py_getbuffer_flags, name, dimensions, py_buf, halide_dim, halide_buf, py_buf_needs_release);
-    }
-
-    ~PyHalideBuffer() {
-        if (py_buf_needs_release) {
-            PyBuffer_Release(&py_buf);
-        }
-    }
-
-    PyHalideBuffer() = default;
-    PyHalideBuffer(const PyHalideBuffer &other) = delete;
-    PyHalideBuffer &operator=(const PyHalideBuffer &other) = delete;
-    PyHalideBuffer(PyHalideBuffer &&other) = delete;
-    PyHalideBuffer &operator=(PyHalideBuffer &&other) = delete;
-};
-
-}  // namespace
-
-)INLINE_CODE";
-
-    std::vector<std::string> fnames;
-    for (const auto &f : module.functions()) {
-        if (f.linkage == LinkageType::ExternalPlusMetadata) {
-            compile(f);
-            fnames.push_back(remove_namespaces(f.name));
-        }
-    }
-
-    dest << "\n";
-    dest << "#ifndef HALIDE_PYTHON_EXTENSION_OMIT_MODULE_DEFINITION\n";
-    dest << "\n";
-    dest << "#ifndef HALIDE_PYTHON_EXTENSION_MODULE\n";
-    dest << "#define HALIDE_PYTHON_EXTENSION_MODULE " << module.name() << "\n";
-    dest << "#endif  // HALIDE_PYTHON_EXTENSION_MODULE\n";
-    dest << "\n";
-    dest << "#ifndef HALIDE_PYTHON_EXTENSION_FUNCTIONS\n";
-    dest << "#define HALIDE_PYTHON_EXTENSION_FUNCTIONS";
-    for (const auto &fname : fnames) {
-        dest << " X(" << fname << ")";
-    }
-    dest << "\n";
-    dest << "#endif  // HALIDE_PYTHON_EXTENSION_FUNCTIONS\n";
-    dest << "\n";
-    dest << R"INLINE_CODE(
+const char kModuleRegistrationCode[] = R"INLINE_CODE(
 static_assert(PY_MAJOR_VERSION >= 3, "Python bindings for Halide require Python 3+");
 
 namespace Halide::PythonExtensions {
@@ -213,15 +123,15 @@ PyMethodDef _methods[] = {
 };
 
 PyModuleDef _moduledef = {
-    PyModuleDef_HEAD_INIT,                                          // base
-    _HALIDE_EXPAND_AND_STRINGIFY(HALIDE_PYTHON_EXTENSION_MODULE),   // name
-    nullptr,                                                        // doc
-    -1,                                                             // size
-    _methods,                                                       // methods
-    nullptr,                                                        // slots
-    nullptr,                                                        // traverse
-    nullptr,                                                        // clear
-    nullptr,                                                        // free
+    PyModuleDef_HEAD_INIT,                                              // base
+    _HALIDE_EXPAND_AND_STRINGIFY(HALIDE_PYTHON_EXTENSION_MODULE_NAME),  // name
+    nullptr,                                                            // doc
+    -1,                                                                 // size
+    _methods,                                                           // methods
+    nullptr,                                                            // slots
+    nullptr,                                                            // traverse
+    nullptr,                                                            // clear
+    nullptr,                                                            // free
 };
 
 #ifndef HALIDE_PYTHON_EXTENSION_OMIT_ERROR_AND_PRINT_HANDLERS
@@ -350,7 +260,7 @@ bool unpack_buffer(PyObject *py_obj,
 
 extern "C" {
 
-HALIDE_EXPORT_SYMBOL PyObject *_HALIDE_EXPAND_AND_CONCAT(PyInit_, HALIDE_PYTHON_EXTENSION_MODULE)() {
+HALIDE_EXPORT_SYMBOL PyObject *_HALIDE_EXPAND_AND_CONCAT(PyInit_, HALIDE_PYTHON_EXTENSION_MODULE_NAME)() {
     PyObject *m = PyModule_Create(&_moduledef);
     #ifndef HALIDE_PYTHON_EXTENSION_OMIT_ERROR_AND_PRINT_HANDLERS
     halide_set_error_handler(_module_halide_error);
@@ -360,9 +270,110 @@ HALIDE_EXPORT_SYMBOL PyObject *_HALIDE_EXPAND_AND_CONCAT(PyInit_, HALIDE_PYTHON_
 }
 
 }  // extern "C"
-
-#endif  // HALIDE_PYTHON_EXTENSION_OMIT_MODULE_DEFINITION
 )INLINE_CODE";
+
+}  // namespace
+
+PythonExtensionGen::PythonExtensionGen(std::ostream &dest)
+    : dest(dest) {
+}
+
+void PythonExtensionGen::compile(const Module &module) {
+    dest << "#include <string>\n";
+    dest << "#include <Python.h>\n";
+    dest << "#include \"HalideRuntime.h\"\n\n";
+
+    std::vector<std::string> fnames;
+
+    // Emit extern decls of the Halide-generated functions we use directly
+    // into this file, so that we don't have to #include the relevant .h
+    // file directly; this simplifies certain compile/build setups (since
+    // we don't have to build files in tandem and/or get include paths right),
+    // and should be totally safe, since we are using the same codegen logic
+    // that would be in the .h file anyway.
+    if (!module.functions().empty()) {
+        // The CodeGen_C dtor must run to finish codegen correctly,
+        // so wrap this in braces
+        {
+            CodeGen_C extern_decl_gen(dest, module.target(), CodeGen_C::CPlusPlusExternDecl);
+            extern_decl_gen.compile(module);
+        }
+
+        dest << R"INLINE_CODE(
+namespace Halide::PythonRuntime {
+extern bool unpack_buffer(PyObject *py_obj,
+                          int py_getbuffer_flags,
+                          const char *name,
+                          int dimensions,
+                          Py_buffer &py_buf,
+                          halide_dimension_t *halide_dim,
+                          halide_buffer_t &halide_buf,
+                          bool &py_buf_valid);
+}  // namespace Halide::PythonRuntime
+
+namespace {
+
+template<int dimensions>
+struct PyHalideBuffer {
+    // Must allocate at least 1, even if d=0
+    static constexpr int dims_to_allocate = (dimensions < 1) ? 1 : dimensions;
+
+    Py_buffer py_buf;
+    halide_dimension_t halide_dim[dims_to_allocate];
+    halide_buffer_t halide_buf;
+    bool py_buf_needs_release = false;
+
+    bool unpack(PyObject *py_obj, int py_getbuffer_flags, const char *name) {
+        return Halide::PythonRuntime::unpack_buffer(py_obj, py_getbuffer_flags, name, dimensions, py_buf, halide_dim, halide_buf, py_buf_needs_release);
+    }
+
+    ~PyHalideBuffer() {
+        if (py_buf_needs_release) {
+            PyBuffer_Release(&py_buf);
+        }
+    }
+
+    PyHalideBuffer() = default;
+    PyHalideBuffer(const PyHalideBuffer &other) = delete;
+    PyHalideBuffer &operator=(const PyHalideBuffer &other) = delete;
+    PyHalideBuffer(PyHalideBuffer &&other) = delete;
+    PyHalideBuffer &operator=(PyHalideBuffer &&other) = delete;
+};
+
+}  // namespace
+
+)INLINE_CODE";
+
+        for (const auto &f : module.functions()) {
+            if (f.linkage == LinkageType::ExternalPlusMetadata) {
+                compile(f);
+                fnames.push_back(remove_namespaces(f.name));
+            }
+        }
+    }
+
+    dest << "\n";
+    if (!fnames.empty()) {
+        dest << "#ifndef HALIDE_PYTHON_EXTENSION_OMIT_MODULE_DEFINITION\n";
+        dest << "\n";
+        dest << "#ifndef HALIDE_PYTHON_EXTENSION_MODULE_NAME\n";
+        dest << "#define HALIDE_PYTHON_EXTENSION_MODULE_NAME " << module.name() << "\n";
+        dest << "#endif  // HALIDE_PYTHON_EXTENSION_MODULE_NAME\n";
+        dest << "\n";
+        dest << "#ifndef HALIDE_PYTHON_EXTENSION_FUNCTIONS\n";
+        dest << "#define HALIDE_PYTHON_EXTENSION_FUNCTIONS";
+        for (const auto &fname : fnames) {
+            dest << " X(" << fname << ")";
+        }
+        dest << "\n";
+        dest << "#endif  // HALIDE_PYTHON_EXTENSION_FUNCTIONS\n";
+        dest << "\n";
+    }
+    dest << kModuleRegistrationCode;
+
+    if (!fnames.empty()) {
+        dest << "#endif  // HALIDE_PYTHON_EXTENSION_OMIT_MODULE_DEFINITION\n";
+    }
 }
 
 void PythonExtensionGen::compile(const LoweredFunc &f) {
@@ -378,8 +389,6 @@ void PythonExtensionGen::compile(const LoweredFunc &f) {
     indent.indent = 0;
 
     dest << R"INLINE_CODE(
-#ifndef HALIDE_PYTHON_EXTENSION_OMIT_FUNCTION_DEFINITIONS
-
 #ifndef HALIDE_PYTHON_EXTENSION_OMIT_ERROR_AND_PRINT_HANDLERS
 namespace Halide::PythonRuntime {
 extern thread_local std::string current_error;
@@ -419,7 +428,6 @@ extern thread_local std::string current_error;
             dest << indent << "return nullptr;\n";
             dest << "}\n";
             dest << "}  // namespace Halide::PythonExtensions\n";
-            dest << "#endif  // HALIDE_PYTHON_EXTENSION_OMIT_FUNCTION_DEFINITIONS\n";
             return;
         }
     }
@@ -511,8 +519,6 @@ extern thread_local std::string current_error;
     dest << "}\n";
     dest << "\n";
     dest << "}  // namespace Halide::PythonExtensions\n";
-    dest << "\n";
-    dest << "#endif  // HALIDE_PYTHON_EXTENSION_OMIT_FUNCTION_DEFINITIONS\n";
 }
 
 }  // namespace Internal
