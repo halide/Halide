@@ -269,7 +269,12 @@ string IRVisualization::function_div_header(const string &function_name, string 
     ss << "</span>";
     ss << "</span>";
 
-    ss << see_code_button_div(anchor_name, false);
+    // see code button
+    ss << "<button class='iconButton dottedIconButton' style='display: block; padding: 0px; ";
+    ss << "font-size:25px;' ";
+    ss << "onclick='scrollToFunctionVizToCode(\"" << anchor_name << "\")'>";
+    ss << "<i class='bi bi-arrow-left-short'></i>";
+    ss << "</button>";
 
     ss << "</div>";
 
@@ -948,7 +953,7 @@ void IRVisualization::visit(const Load *op) {
     vector<pair<string, string>> table_rows;
 
     if (op->type.is_scalar()) {
-        header = "Scalar ";
+        header = "[Scalar] ";
     }
 
     else if (op->type.is_vector()) {
@@ -963,15 +968,15 @@ void IRVisualization::visit(const Load *op) {
             if (ramp->stride.node_type() == IRNodeType::IntImm) {
                 int64_t stride = ramp->stride.as<IntImm>()->value;
                 if (stride == 1) {
-                    header = "Dense vector ";
+                    header = "[Dense, Vector] ";
                 } else {
-                    header = "Strided vector ";
+                    header = "[Strided, Vector] ";
                 }
             } else {
-                header = "Dense vector ";
+                header = "[Dense, Vector] ";
             }
         } else {
-            header = "Dense vector ";
+            header = "[Dense, Vector] ";
         }
     }
 
@@ -979,7 +984,7 @@ void IRVisualization::visit(const Load *op) {
         internal_error << "\n\nUnsupported type for Load: " << op->type << "\n\n";
     }
 
-    header += "load " + op->name;
+    header += "Load <i>" + op->name + "</i>";
 
     if (find_stmt_cost.is_local_variable(op->name)) {
         table_rows.push_back({"Variable Type", "local var"});
