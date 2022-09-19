@@ -140,11 +140,8 @@ halide_define_aot_test(async_parallel
 halide_define_aot_test(halide_context
                        ENABLE_IF (NOT ${USING_WASM} OR ${USING_WASM_THREADS})
                        OMIT_DEFAULT_GENERATOR OMIT_DEFAULT_LIBRARY
-                       EXTRA_LIBS async_parallel
+                       EXTRA_LIBS async_parallel async_parallel.runtime
                        GROUPS multithreaded)
-# add_executable(generator_aot_halide_context halide_context_aottest.cpp)
-# target_link_libraries(generator_aot_halide_context PRIVATE async_parallel)
-# add_halide_test(generator_aot_halide_context GROUPS generator multithreaded)
 
 # autograd_aottest.cpp
 # autograd_generator.cpp
