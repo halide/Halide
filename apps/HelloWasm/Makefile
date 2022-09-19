@@ -31,19 +31,19 @@ $(BIN)/wasm_simd/runtime.a: $(GENERATOR_BIN)/reaction_diffusion_generator
 
 $(BIN)/wasm_threads/reaction_diffusion_%.a: $(GENERATOR_BIN)/reaction_diffusion_generator
 	@mkdir -p $(@D)
-	$< -g reaction_diffusion_$* -o $(@D) target=wasm-32-wasmrt-wasm_threads-no_runtime threads=true
+	$< -g reaction_diffusion_$* -o $(@D) target=wasm-32-wasmrt-wasm_bulk_memory-wasm_threads-no_runtime threads=true
 
 $(BIN)/wasm_threads/runtime.a: $(GENERATOR_BIN)/reaction_diffusion_generator
 	@mkdir -p $(@D)
-	$< -r runtime -o $(@D) target=wasm-32-wasmrt-wasm_threads
+	$< -r runtime -o $(@D) target=wasm-32-wasmrt-wasm_bulk_memory-wasm_threads
 
 $(BIN)/wasm_simd_threads/reaction_diffusion_%.a: $(GENERATOR_BIN)/reaction_diffusion_generator
 	@mkdir -p $(@D)
-	$< -g reaction_diffusion_$* -o $(@D) target=wasm-32-wasmrt-wasm_simd128-wasm_threads-no_runtime threads=true
+	$< -g reaction_diffusion_$* -o $(@D) target=wasm-32-wasmrt-wasm_simd128-wasm_bulk_memory-wasm_threads-no_runtime threads=true
 
 $(BIN)/wasm_simd_threads/runtime.a: $(GENERATOR_BIN)/reaction_diffusion_generator
 	@mkdir -p $(@D)
-	$< -r runtime -o $(@D) target=wasm-32-wasmrt-wasm_simd128-wasm_threads
+	$< -r runtime -o $(@D) target=wasm-32-wasmrt-wasm_simd128-wasm_bulk_memory-wasm_threads
 
 $(BIN)/$(HL_TARGET)/reaction_diffusion_%.a: $(GENERATOR_BIN)/reaction_diffusion_generator
 	@mkdir -p $(@D)
