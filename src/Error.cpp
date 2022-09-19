@@ -3,6 +3,7 @@
 #include "Util.h"  // for get_env_variable
 
 #include <csignal>
+#include <iostream>
 
 #ifdef _MSC_VER
 #include <io.h>
@@ -172,6 +173,8 @@ ErrorReport::~ErrorReport() noexcept(false) {
     }
 
 #ifdef HALIDE_WITH_EXCEPTIONS
+std::cerr<<"ERR:"<<msg.str()<<"\n"<<std::flush;
+abort();
     if (std::uncaught_exceptions() > 0) {
         // This should never happen - evaluating one of the arguments
         // to the error message would have to throw an
