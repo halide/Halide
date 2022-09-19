@@ -133,7 +133,12 @@ halide_define_aot_test(argvcall)
 halide_define_aot_test(async_parallel
                        # Requires threading support, not yet available for wasm tests
                        ENABLE_IF NOT ${USING_WASM}
+                       FEATURES user_context
                        GROUPS multithreaded)
+
+add_executable(halide_context_aottest halide_context_aottest.cpp)
+target_link_libraries(halide_context_aottest PRIVATE async_parallel)
+add_halide_test(halide_context_aottest GROUPS generator multithreaded)
 
 # autograd_aottest.cpp
 # autograd_generator.cpp

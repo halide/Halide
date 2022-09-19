@@ -10,6 +10,7 @@ namespace Internal {
 using std::vector;
 
 void debug_arguments(LoweredFunc *func, const Target &t) {
+    return;
     internal_assert(func);
     vector<Stmt> stmts;
     stmts.push_back(Evaluate::make(print("Entering Pipeline " + func->name)));

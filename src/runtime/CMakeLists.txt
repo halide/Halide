@@ -14,9 +14,11 @@ set(RUNTIME_CPP
     cuda
     destructors
     device_interface
+    elf_halide_context
     errors
     fake_get_symbol
     fake_thread_pool
+    fake_halide_context
     float16_t
     force_include_types
     fuchsia_clock
@@ -59,6 +61,7 @@ set(RUNTIME_CPP
     posix_threads
     posix_threads_tsan
     posix_timer_profiler
+    posix_halide_context
     powerpc_cpu_features
     prefetch
     profiler

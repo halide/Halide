@@ -140,7 +140,7 @@ int main(int argc, char **argv) {
         sleeps = start++;
         Halide::Runtime::Buffer<int, 3> out(8, 8, 8);
 
-        async_parallel(out);
+        async_parallel(/*user_context*/ nullptr, out);
     }
 
     {

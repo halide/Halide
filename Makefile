@@ -765,9 +765,11 @@ RUNTIME_CPP_COMPONENTS = \
   cuda \
   destructors \
   device_interface \
+  elf_halide_context \
   errors \
   fake_get_symbol \
   fake_thread_pool \
+  fake_halide_context \
   float16_t \
   force_include_types \
   fuchsia_clock \
@@ -809,6 +811,7 @@ RUNTIME_CPP_COMPONENTS = \
   posix_print \
   posix_threads \
   posix_threads_tsan \
+  posix_halide_context \
   posix_timer_profiler \
   powerpc_cpu_features \
   prefetch \
@@ -1535,6 +1538,14 @@ $(BIN_DIR)/$(TARGET)/generator_aot_metadata_tester: $(FILTERS_DIR)/metadata_test
 
 $(BIN_DIR)/$(TARGET)/generator_aotcpp_metadata_tester: $(FILTERS_DIR)/metadata_tester_ucon.halide_generated.cpp
 
+$(BIN_DIR)/$(TARGET)/generator_aot_halide_context: $(ROOT_DIR)/test/generator/halide_context_aottest.cpp $(FILTERS_DIR)/async_parallel.a $(FILTERS_DIR)/async_parallel.h $(RUNTIME_EXPORTED_INCLUDES) $(BIN_DIR)/$(TARGET)/runtime.a
+	@mkdir -p $(@D)
+	$(CXX) $(GEN_AOT_CXX_FLAGS) $(filter %.cpp %.o %.a,$^) $(GEN_AOT_INCLUDES) $(GEN_AOT_LD_FLAGS) -o $@
+
+$(BIN_DIR)/$(TARGET)/generator_aotcpp_halide_context: $(ROOT_DIR)/test/generator/halide_context_aottest.cpp $(FILTERS_DIR)/async_parallel.halide_generated.cpp $(FILTERS_DIR)/async_parallel.h $(RUNTIME_EXPORTED_INCLUDES) $(BIN_DIR)/$(TARGET)/runtime.a
+	@mkdir -p $(@D)
+	$(CXX) $(GEN_AOT_CXX_FLAGS) $(filter %.cpp %.o %.a,$^) $(GEN_AOT_INCLUDES) $(GEN_AOT_LD_FLAGS) -o $@
+
 $(FILTERS_DIR)/multitarget.a: $(BIN_DIR)/multitarget.generator
 	@mkdir -p $(@D)
 	$(CURDIR)/$< -g multitarget -f "HalideTest::multitarget" $(GEN_AOT_OUTPUTS) -o $(CURDIR)/$(FILTERS_DIR) \
@@ -1558,6 +1569,11 @@ $(FILTERS_DIR)/user_context.a: $(BIN_DIR)/user_context.generator
 $(FILTERS_DIR)/user_context_insanity.a: $(BIN_DIR)/user_context_insanity.generator
 	@mkdir -p $(@D)
 	$(CURDIR)/$< -g user_context_insanity $(GEN_AOT_OUTPUTS) -o $(CURDIR)/$(FILTERS_DIR) target=$(TARGET)-no_runtime-user_context
+
+# ditto for async_parallel
+$(FILTERS_DIR)/async_parallel.a: $(BIN_DIR)/async_parallel.generator
+	@mkdir -p $(@D)
+	$(CURDIR)/$< -g async_parallel $(GEN_AOT_OUTPUTS) -o $(CURDIR)/$(FILTERS_DIR) target=$(TARGET)-no_runtime-user_context
 
 # Some .generators have additional dependencies (usually due to define_extern usage).
 # These typically require two extra dependencies:

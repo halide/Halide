@@ -1,16 +1,15 @@
 #define EXTENDED_DEBUG 0
 
 #if EXTENDED_DEBUG
-// This code is currently setup for Linux debugging. Switch to using pthread_self on e.g. Mac OS X.
-extern "C" int syscall(int);
+
 
 namespace {
-int gettid() {
-#ifdef BITS_32
-    return syscall(224);
-#else
-    return syscall(186);
+uint64_t gettid() {
+    uint64_t id = 0xdeadbeef;
+#ifdef USE_TID_HERE
+    (void) pthread_threadid_np(pthread_self(), &id);
 #endif
+    return id;
 }
 }  // namespace
 
@@ -44,6 +43,10 @@ struct work {
     int threads_reserved;
 
     void *user_context;
+    halide_context_info_t parent_halide_context_info;
+#if EXTENDED_DEBUG
+    uint64_t parent_thread_id;
+#endif
     int active_workers;
     int exit_status;
     int next_semaphore;
@@ -206,7 +209,11 @@ WEAK void worker_thread_already_locked(work *owned_job) {
     int spin_count = 0;
     const int max_spin_count = 40;
 
+    log_message("worker_thread_already_locked START owned_job="<<(void*)owned_job);
+
     while (owned_job ? owned_job->running() : !work_queue.shutdown) {
+        log_message("worker_thread_already_locked LOOP owned_job="<<(void*)owned_job<<" task.extent "<<owned_job->task.extent<<" active_workers "<<owned_job->active_workers);
+
         work *job = work_queue.jobs;
         work **prev_ptr = &work_queue.jobs;
 
@@ -317,7 +324,7 @@ WEAK void worker_thread_already_locked(work *owned_job) {
             spin_count = 0;
         }
 
-        log_message("Working on job " << job->task.name);
+        log_message("Working on job " << job->task.name << "[" << (void*) job << "]");
 
         // Increment the active_worker count so that other threads
         // are aware that this job is still in progress even
@@ -331,6 +338,11 @@ WEAK void worker_thread_already_locked(work *owned_job) {
             job->parent_job->threads_reserved += job->task.min_threads;
             log_message("Reserved " << job->task.min_threads << " on " << job->parent_job->task.name << " for " << job->task.name << " giving " << job->parent_job->threads_reserved << " of " << job->parent_job->task.min_threads);
         }
+
+        log_message("SET tlsinfo from parent_thread_id=" << job->parent_thread_id);
+        // Ensure this worker thread has its parent's tls info.
+        halide_context_info_t saved_halide_context_info = *halide_context_get_current_info();
+        halide_context_set_current_info(&job->parent_halide_context_info);
 
         int result = 0;
 
@@ -396,6 +408,9 @@ WEAK void worker_thread_already_locked(work *owned_job) {
             halide_mutex_lock(&work_queue.mutex);
         }
 
+        log_message("RESTORE tlsinfo from parent_thread_id=" << job->parent_thread_id);
+        halide_context_set_current_info(&saved_halide_context_info);
+
         if (result != 0) {
             log_message("Saw thread pool saw error from task: " << result);
         }
@@ -427,7 +442,7 @@ WEAK void worker_thread_already_locked(work *owned_job) {
         // We are no longer active on this job
         job->active_workers--;
 
-        log_message("Done working on job " << job->task.name);
+        log_message("Done working on job " << job->task.name << "[" << (void*) job << "]");
 
         if (wake_owners ||
             (job->active_workers == 0 && (job->task.extent == 0 || job->exit_status != 0) && job->owner_is_sleeping)) {
@@ -435,10 +450,12 @@ WEAK void worker_thread_already_locked(work *owned_job) {
             halide_cond_broadcast(&work_queue.wake_owners);
         }
     }
+    log_message("worker_thread_already_locked END owned_job="<<(void*)owned_job);
 }
 
 WEAK void worker_thread(void *arg) {
     halide_mutex_lock(&work_queue.mutex);
+log_message("WORKER THREAD\n");
     worker_thread_already_locked((work *)arg);
     halide_mutex_unlock(&work_queue.mutex);
 }
@@ -622,6 +639,10 @@ WEAK int halide_default_do_par_for(void *user_context, halide_task_t f,
     job.task.name = nullptr;
     job.task_fn = f;
     job.user_context = user_context;
+    job.parent_halide_context_info = *halide_context_get_current_info();
+#if EXTENDED_DEBUG
+    job.parent_thread_id = gettid();
+#endif
     job.exit_status = 0;
     job.active_workers = 0;
     job.next_semaphore = 0;
@@ -641,6 +662,10 @@ WEAK int halide_default_do_parallel_tasks(void *user_context, int num_tasks,
                                           void *task_parent) {
     work *jobs = (work *)__builtin_alloca(sizeof(work) * num_tasks);
 
+    auto *parent_halide_context_info = halide_context_get_current_info();
+#if EXTENDED_DEBUG
+    uint64_t parent_thread_id = gettid();
+#endif
     for (int i = 0; i < num_tasks; i++) {
         if (tasks->extent <= 0) {
             // Skip extent zero jobs
@@ -650,6 +675,10 @@ WEAK int halide_default_do_parallel_tasks(void *user_context, int num_tasks,
         jobs[i].task = *tasks++;
         jobs[i].task_fn = nullptr;
         jobs[i].user_context = user_context;
+        jobs[i].parent_halide_context_info = *parent_halide_context_info;
+#if EXTENDED_DEBUG
+        jobs[i].parent_thread_id = parent_thread_id;
+#endif
         jobs[i].exit_status = 0;
         jobs[i].active_workers = 0;
         jobs[i].next_semaphore = 0;
@@ -673,6 +702,7 @@ WEAK int halide_default_do_parallel_tasks(void *user_context, int num_tasks,
         }
     }
     halide_mutex_unlock(&work_queue.mutex);
+
     return exit_status;
 }
 
