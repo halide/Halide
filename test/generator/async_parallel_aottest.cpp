@@ -54,7 +54,7 @@ last_call *all_thread_lasts = nullptr;
 
 thread_local last_call thread_last = {};
 
-extern "C" int sleeper(int loc, int x, int y, int z, int v) {
+extern "C" int sleeper(void *user_context, int loc, int x, int y, int z, int v) {
     last_update++;
 
     thread_last.loc = loc;
