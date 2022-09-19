@@ -1765,7 +1765,7 @@ public:
                     << "<div class='title'>\n"
                     << "<h3>" << m.name() << "</h3>\n"
                     << "</div>\n"
-                    << "<div class='spacing'></div>\n"
+                    << "<div class='spacing' style='flex-grow: 1;'></div>\n"
                     << "<div class='button'>\n"
                     << "<h3><button class='informationBarButton'><i\n"
                     << "class='bi bi-info-square' data-bs-toggle='modal'\n"
