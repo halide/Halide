@@ -93,7 +93,6 @@ function(add_wasm_executable TARGET)
     # internal purposes. Consider adding ways to customize this as appropriate.
     set(EMCC_FLAGS
         -O3
-        -g
         -std=c++17
         -Wall
         -Wcast-qual
