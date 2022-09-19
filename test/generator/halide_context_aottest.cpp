@@ -91,7 +91,6 @@ int main(int argc, char **argv) {
     my_key = halide_context_allocate_key();
     assert(my_key != nullptr);
 
-    constexpr int max_halide_threads = 16;
     constexpr int max_cpp_threads = 8;
     for (int num_cpp_threads = 1; num_cpp_threads <= max_cpp_threads; num_cpp_threads++) {
         for (int num_halide_threads = max_cpp_threads/2; num_halide_threads <= max_cpp_threads*2; num_halide_threads *= 2) {
