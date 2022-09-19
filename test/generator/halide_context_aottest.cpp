@@ -14,14 +14,14 @@ namespace {
 
 halide_context_key_t my_key = nullptr;
 
-extern "C" {
-extern pthread_t pthread_self();
-extern int pthread_threadid_np(pthread_t thread, uint64_t *thread_id);
-}
+// extern "C" {
+// extern pthread_t pthread_self();
+// extern int pthread_threadid_np(pthread_t thread, uint64_t *thread_id);
+// }
 
 uint64_t _gettid() {
     uint64_t id = 0xdeadbeef;
-    (void) pthread_threadid_np(pthread_self(), &id);
+    //(void) pthread_threadid_np(pthread_self(), &id);
     return id;
 }
 
@@ -93,8 +93,8 @@ int main(int argc, char **argv) {
 
     constexpr int max_halide_threads = 16;
     constexpr int max_cpp_threads = 8;
-    for (int num_halide_threads = 1; num_halide_threads <= max_halide_threads; num_halide_threads++) {
-        for (int num_cpp_threads = 1; num_cpp_threads <= max_cpp_threads; num_cpp_threads++) {
+    for (int num_cpp_threads = 1; num_cpp_threads <= max_cpp_threads; num_cpp_threads++) {
+        for (int num_halide_threads = max_cpp_threads/2; num_halide_threads <= max_cpp_threads*2; num_halide_threads *= 2) {
             test_threads(num_halide_threads, num_cpp_threads);
         }
     }

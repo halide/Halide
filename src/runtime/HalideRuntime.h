@@ -2016,7 +2016,7 @@ extern void *halide_context_get_value(halide_context_key_t key);
 
 // Structure for internal use only; user code should never attempt to examine
 // or modify specific context entries.
-const int halide_context_key_count = 8;
+enum { halide_context_key_count = 8 };
 struct halide_context_info_t {
     void *values[halide_context_key_count];
 };
