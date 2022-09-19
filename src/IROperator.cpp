@@ -1466,7 +1466,7 @@ Expr require(Expr condition, const std::vector<Expr> &args) {
     return Internal::Call::make(args[0].type(),
                                 Internal::Call::require,
                                 {likely(std::move(condition)), args[0], std::move(err)},
-                                Internal::Call::PureIntrinsic);
+                                Internal::Call::Intrinsic);
 }
 
 Expr saturating_cast(Type t, Expr e) {
@@ -2608,7 +2608,7 @@ Expr strict_float(Expr e) {
 Expr undef(Type t) {
     return Internal::Call::make(t, Internal::Call::undef,
                                 std::vector<Expr>(),
-                                Internal::Call::PureIntrinsic);
+                                Internal::Call::Intrinsic);
 }
 
 namespace Internal {
@@ -2626,7 +2626,7 @@ Expr make_scatter_gather(const std::vector<Expr> &args) {
     return Halide::Internal::Call::make(args[0].type(),
                                         Halide::Internal::Call::scatter_gather,
                                         args,
-                                        Halide::Internal::Call::PureIntrinsic);
+                                        Halide::Internal::Call::Intrinsic);
 }
 }  // namespace
 
