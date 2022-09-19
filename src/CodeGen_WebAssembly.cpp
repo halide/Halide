@@ -113,6 +113,8 @@ const WasmIntrinsic intrinsic_defs[] = {
     {"extend_i32x4_to_i64x4", Int(64, 4), "widen_integer", {Int(32, 4)}, Target::WasmSimd128},
     {"extend_u32x4_to_u64x4", UInt(64, 4), "widen_integer", {UInt(32, 4)}, Target::WasmSimd128},
 
+    {"llvm.rint.v4f32", Float(32, 4), "rint", {Float(32, 4)}},
+    {"llvm.rint.v2f64", Float(64, 2), "rint", {Float(64, 2)}},
     {"llvm.rint.f32", Float(32), "rint", {Float(32)}},
     {"llvm.rint.f64", Float(64), "rint", {Float(64)}},
 };
