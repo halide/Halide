@@ -157,7 +157,7 @@ string IRVisualization::open_box_div(string class_name, const IRNode *op) {
 }
 string IRVisualization::close_box_div() const {
     stringstream ss;
-    ss << close_div();  // body div (opened at end of close_header())
+    ss << close_div();  // body div (opened at end of each open_header_...() instance)
     ss << close_div();  // content div
     ss << close_div();  // main box div
     return ss.str();
@@ -183,30 +183,48 @@ string IRVisualization::open_box_header_table_div() const {
 string IRVisualization::open_store_div() const {
     return "<div class='store'>";
 }
+string IRVisualization::open_body_div() const {
+    stringstream ss;
+    ss << "<div id='irViz" << num_of_nodes << "' class='boxBody'>";
+    return ss.str();
+}
 string IRVisualization::close_div() const {
     return "</div>";
 }
 
-string IRVisualization::open_header(const string &header, string anchor_name) {
+string IRVisualization::open_header(const string &header, string anchor_name,
+                                    vector<pair<string, string>> info_tooltip_table) {
     stringstream ss;
     ss << open_header_div();
 
     num_of_nodes++;
 
-    // buttons div
+    // to make buttons next to each other
+    ss << "<div style='display: flex;'>";
+
+    // collapse/expand buttons
     ss << "<div class='collapseExpandButtons'>";
-
-    // expand button - hidden to start
     ss << "<button id='irViz" << num_of_nodes
-       << "-show' class='iconButton irVizToggle' onclick='toggleCollapse(" << num_of_nodes
-       << ")' style='display: none;'><i class='bi "
+       << "-show' class='iconButton irVizToggle dottedIconButton' onclick='toggleCollapse("
+       << num_of_nodes << ")' style='display: none;'><i class='bi "
        << "bi-chevron-bar-down'></i></button>";
-
-    // collapse button
     ss << "<button id='irViz" << num_of_nodes
-       << "-hide' class='iconButton irVizToggle' onclick='toggleCollapse(" << num_of_nodes
-       << ")' ><i class='bi bi-chevron-bar-up'></i></button>"
-       << "</div>";
+       << "-hide' class='iconButton irVizToggle dottedIconButton' onclick='toggleCollapse("
+       << num_of_nodes << ")' ><i class='bi bi-chevron-bar-up'></i></button>";
+    ss << "</div>";
+
+    // see code button
+    ss << see_code_button_div(anchor_name);
+
+    // info button
+    if (info_tooltip_table.size() > 0) {
+        ss << "<div>";
+        ss << info_button_with_tooltip(tooltip_table(info_tooltip_table),
+                                       "iconButton dottedIconButton");
+        ss << "</div>";
+    }
+
+    ss << "</div>";  // to make buttons next to each other
 
     ss << open_box_header_title_div();
 
@@ -216,36 +234,27 @@ string IRVisualization::open_header(const string &header, string anchor_name) {
 
     ss << close_div();
 
-    // spacing purposes
-    ss << "<div class='spacing'></div>";
-
-    ss << open_box_header_table_div();
-
     return ss.str();
 }
-string IRVisualization::close_header(string anchor_name) const {
-    stringstream ss;
-
-    ss << close_div();  // header table div
-    ss << see_code_button_div(anchor_name);
-    ss << close_div();  // header div
-
-    // open body div
-    ss << "<div id='irViz" << num_of_nodes << "' class='boxBody'>";
-
-    return ss.str();
+string IRVisualization::close_header() const {
+    return close_div();
 }
-string IRVisualization::div_header(const string &header, StmtSize *size, string anchor_name) {
+string IRVisualization::div_header(const string &header, StmtSize *size, string anchor_name,
+                                   vector<pair<string, string>> info_tooltip_table = {}) {
     stringstream ss;
 
-    ss << open_header(header, anchor_name);
+    ss << open_header(header, anchor_name, info_tooltip_table);
+    ss << close_header();
 
     // add producer consumer size if size is provided
     if (size != nullptr) {
+        ss << open_box_header_table_div();
         ss << read_write_table(*size);
+        ss << close_div();
     }
 
-    ss << close_header(anchor_name);
+    // open body
+    ss << open_body_div();
 
     return ss.str();
 }
@@ -289,15 +298,20 @@ vector<string> IRVisualization::get_allocation_sizes(const Allocate *op) const {
     return sizes;
 }
 string IRVisualization::allocate_div_header(const Allocate *op, const string &header,
-                                            string anchor_name) {
+                                            string anchor_name,
+                                            vector<pair<string, string>> &info_tooltip_table) {
     stringstream ss;
 
-    ss << open_header(header, anchor_name);
+    ss << open_header(header, anchor_name, info_tooltip_table);
+    ss << close_header();
 
     vector<string> allocation_sizes = get_allocation_sizes(op);
+    ss << open_box_header_table_div();
     ss << allocate_table(allocation_sizes);
+    ss << close_div();
 
-    ss << close_header(anchor_name);
+    // open body
+    ss << open_body_div();
 
     return ss.str();
 }
@@ -305,12 +319,16 @@ string IRVisualization::for_loop_div_header(const For *op, const string &header,
                                             string anchor_name) {
     stringstream ss;
 
-    ss << open_header(header, anchor_name);
+    ss << open_header(header, anchor_name, {});
+    ss << close_header();
 
     string loopSize = get_loop_iterator(op);
+    ss << open_box_header_table_div();
     ss << for_loop_table(loopSize);
+    ss << close_div();
 
-    ss << close_header(anchor_name);
+    // open body
+    ss << open_body_div();
 
     return ss.str();
 }
@@ -514,22 +532,27 @@ string IRVisualization::for_loop_table(string loop_size) const {
 string IRVisualization::see_code_button_div(string anchor_name, bool put_div) const {
     stringstream ss;
     if (put_div) ss << "<div>";
-    ss << "<button class='iconButton'";
+    ss << "<button class='iconButton dottedIconButton' style='display: block;' ";
     ss << "onclick='scrollToFunctionVizToCode(\"" << anchor_name << "\")'>";
-    ss << "<i class='bi bi-code-square'></i>";
+    ss << "<i class='bi bi-arrow-left-short'></i>";
     ss << "</button>";
     if (put_div) ss << "</div>";
     return ss.str();
 }
 
-string IRVisualization::info_tooltip(string tooltip_text, string class_name = "") {
+string IRVisualization::info_button_with_tooltip(string tooltip_text, string button_class_name,
+                                                 string tooltip_class_name) {
     stringstream ss;
 
-    // info-button
+    // infoButton
     ir_viz_tooltip_count++;
     ss << "<button id='irVizButton" << ir_viz_tooltip_count << "' ";
     ss << "aria-describedby='irVizTooltip" << ir_viz_tooltip_count << "' ";
-    ss << "class='info-button' role='button' ";
+    ss << "class='infoButton";
+    if (button_class_name != "") {
+        ss << " " + button_class_name;
+    }
+    ss << "' role='button' ";
     ss << ">";
     ss << "<i class='bi bi-info'></i>";
     ss << "</button>";
@@ -537,8 +560,8 @@ string IRVisualization::info_tooltip(string tooltip_text, string class_name = ""
     // tooltip span
     ss << "<span id='irVizTooltip" << ir_viz_tooltip_count << "' ";
     ss << "class='tooltip";
-    if (class_name != "") {
-        ss << " " + class_name;
+    if (tooltip_class_name != "") {
+        ss << " " + tooltip_class_name;
     }
     ss << "'";
     ss << "role='irVizTooltip" << ir_viz_tooltip_count << "'>";
@@ -698,7 +721,7 @@ void IRVisualization::visit(const Variable *op) {
         html << "<div class='box center FunctionCallBox'>";
 
         html << "Function Call";
-        html << "<button class='function-scroll-button' role='button' ";
+        html << "<button class='functionButton' role='button' ";
         html << "onclick='scrollToFunctionCodeToViz(\"" << var_name << "\")'>";
 
         html << var_name;
@@ -843,8 +866,10 @@ void IRVisualization::visit(const IfThenElse *op) {
         // make condition smaller if it's too big
         if (condition_string.size() > MAX_CONDITION_LENGTH) {
             condition.str("");
-            condition << "...";
-            condition << info_tooltip(condition_string, "conditionTooltip");
+            condition << "(...";
+            condition << info_button_with_tooltip("condition: <br>" + condition_string, "",
+                                                  "conditionTooltip");
+            condition << ")";
         }
 
         if_header += condition.str();
@@ -910,11 +935,9 @@ void IRVisualization::visit(const Store *op) {
     table_rows.push_back({"Vector Size", std::to_string(op->index.type().lanes())});
     table_rows.push_back({"Bit Size", std::to_string(op->index.type().bits())});
 
-    header += info_tooltip(tooltip_table(table_rows));
-
     html << open_box_div("StoreBox", op);
 
-    html << div_header(header, &size, anchor_name);
+    html << div_header(header, &size, anchor_name, table_rows);
 
     op->value.accept(this);
 
@@ -971,7 +994,7 @@ void IRVisualization::visit(const Load *op) {
         table_rows.push_back({"Parameter", op->param.name()});
     }
 
-    header += info_tooltip(tooltip_table(table_rows));
+    header += info_button_with_tooltip(tooltip_table(table_rows), "");
 
     html << open_store_div();
     html << cost_colors(op);
@@ -1042,9 +1065,7 @@ void IRVisualization::visit(const Allocate *op) {
     table_rows.push_back({"Bit Size", std::to_string(op->type.bits())});
     table_rows.push_back({"Vector Size", std::to_string(op->type.lanes())});
 
-    header += info_tooltip(tooltip_table(table_rows));
-
-    html << allocate_div_header(op, header, anchor_name);
+    html << allocate_div_header(op, header, anchor_name, table_rows);
 
     op->body.accept(this);
 
@@ -1221,7 +1242,7 @@ const string IRVisualization::scroll_to_function_JS_viz_to_code = "\n \
 // scroll to function - viz to code\n \
 function makeVisible(element) { \n \
     if (!element) return; \n \
-    if (element.class_name == 'mainContent') return; \n \
+    if (element.className == 'mainContent') return; \n \
     if (element.style.visibility == 'hidden') { \n \
         element.style = ''; \n \
         show = document.getElementById(element.id + '-show'); \n \
@@ -1311,11 +1332,12 @@ div.memory-cost-div:hover, \n \
 div.computation-cost-div:hover { \n \
     border: 1px solid grey; \n \
 } \n \
-div.spacing { \n \
-    flex-grow: 1; \n \
-} \n \
 div.boxBody { \n \
     margin-left: 5px; \n \
+} \n \
+div.boxHeaderTable { \n \
+    padding-left: 5px; \n \
+    padding-bottom: 5px; \n \
 } \n \
 table { \n \
     border-radius: 5px; \n \
@@ -1328,10 +1350,9 @@ table { \n \
     border: 0px; \n \
 }  \n \
 .costTable { \n \
-    float: right; \n \
     text-align: center; \n \
     border: 0px; \n \
-    background-color: rgba(150, 150, 150, 0.5); \n \
+    background-color: rgba(150, 150, 150, 0.2); \n \
 } \n \
 .costTable td { \n \
     border-top: 1px dashed grey; \n \
@@ -1339,10 +1360,10 @@ table { \n \
 .costTableHeader, \n \
 .costTableData { \n \
     border-collapse: collapse; \n \
-    padding-top: 1px; \n \
-    padding-bottom: 1px; \n \
-    padding-left: 5px; \n \
-    padding-right: 5px; \n \
+    padding-top: 3px; \n \
+    padding-bottom: 3px; \n \
+    padding-left: 7px; \n \
+    padding-right: 7px; \n \
 } \n \
 span.intType { color: #099; } \n \
 span.stringType { color: #990073; } \n \
@@ -1365,8 +1386,33 @@ div.content { \n \
 } \n \
 div.boxHeaderTitle { \n \
     font-weight: bold; \n \
+    margin-top: auto; \n \
+    margin-bottom: auto; \n \
 } \n \
 .irVizToggle { \n \
     margin-right: 5px; \n \
+    margin-left: 0px; \n \
+} \n \
+.dottedIconButton { \n \
+    border: 1px dotted black; \n \
+    border-radius: 3px; \n \
+} \n \
+.dottedIconButton:hover { \n \
+    border: 1px dotted red; \n \
+} \n \
+.functionButton { \n \
+    background-color: #fff; \n \
+    border: 1px solid #d5d9d9; \n \
+    border-radius: 8px; \n \
+    box-shadow: rgba(213, 217, 217, .5) 0 2px 5px 0; \n \
+    position: relative; \n \
+    text-align: center; \n \
+    vertical-align: middle; \n \
+    margin-left: 5px; \n \
+    font-size: 15px; \n \
+    padding: 3px; \n \
+} \n \
+.functionButton:hover { \n \
+    background-color: #f7fafa; \n \
 } \n \
 ";

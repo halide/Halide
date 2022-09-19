@@ -335,9 +335,10 @@ private:
     string see_viz_button(const string &anchor_name) {
         stringstream s;
 
-        s << "<button class='iconButton' ";
+        s << "<button class='iconButton dottedIconButton' ";
+        s << "style='padding: 0px;' ";
         s << "onclick='scrollToFunctionCodeToViz(\"" + anchor_name + "_viz\")'>";
-        s << "<i class='bi bi-arrow-right-square'></i>";
+        s << "<i class='bi bi-arrow-right-short'></i>";
         s << "</button>";
 
         return s.str();
@@ -1555,7 +1556,9 @@ public:
         stream << GetStmtHierarchy::stmt_hierarchy_css;
         stream << code_mirror_css;
         stream << "</style>\n";
-        stream << "<script language='javascript' type='text/javascript'>" + js + "</script>\n";
+        stream << "<script language='javascript' type='text/javascript'>\n";
+        stream << js;
+        stream << "</script>\n";
         stream << "</head>\n";
         stream << "<body>\n";
     }
@@ -1736,7 +1739,7 @@ public:
               << "More information about the node will appear here."
               << "</span>";
 
-        popup << "        <button class='info-button' id='button" << tooltip_count
+        popup << "        <button class='infoButton' id='button" << tooltip_count
               << "' aria-describedby='tooltip" << tooltip_count << "'><i\n"
               << "                class='bi bi-info'></i></button><b \n"
               << "        style='font-weight: bold;'>Info Button:</b>\n"
@@ -2088,45 +2091,21 @@ div.Function:before {\n\
 const string StmtToViz::viz_css = "\n \
 /* Additional Code Visualization CSS */\n \
 span.ButtonSpacer { width: 5px; color: transparent; display: inline-block; }\n \
-.info-button { \n \
+.infoButton { \n \
     background-color: rgba(113, 113, 113, 0.1); \n \
     border: 1px solid rgb(113, 113, 113); \n \
     color: rgb(113, 113, 113); \n \
     border-radius: 8px; \n \
     box-shadow: rgba(213, 217, 217, .5) 0 2px 5px 0; \n \
     box-sizing: border-box; \n \
-    display: inline-block; \n \
-    position: relative; \n \
     text-align: center; \n \
-    text-decoration: none; \n \
-    -webkit-user-select: none; \n \
-    user-select: none; \n \
-    touch-action: manipulation; \n \
     vertical-align: middle; \n \
     margin-left: 5px; \n \
     margin-right: 5px; \n \
     font-size: 15px; \n \
 } \n \
-.info-button:hover, .function-scroll-button:hover { \n \
+.infoButton:hover { \n \
     background-color: #f7fafa; \n \
-} \n \
-.function-scroll-button { \n \
-    background-color: #fff; \n \
-    border: 1px solid #d5d9d9; \n \
-    border-radius: 8px; \n \
-    box-shadow: rgba(213, 217, 217, .5) 0 2px 5px 0; \n \
-    box-sizing: border-box; \n \
-    display: inline-block; \n \
-    position: relative; \n \
-    text-align: center; \n \
-    text-decoration: none; \n \
-    -webkit-user-select: none; \n \
-    user-select: none; \n \
-    touch-action: manipulation; \n \
-    vertical-align: middle; \n \
-    margin-left: 5px; \n \
-    font-size: 15px; \n \
-    padding: 3px; \n \
 } \n \
 .colorButton { \n \
     height: 15px; \n \
@@ -2142,6 +2121,7 @@ span.ButtonSpacer { width: 5px; color: transparent; display: inline-block; }\n \
 .iconButton { \n \
     border: 0px; \n \
     background: transparent; \n \
+    color: black; \n \
     font-size: 20px; \n \
     display: inline-block; \n \
     vertical-align: middle; \n \
@@ -2149,7 +2129,8 @@ span.ButtonSpacer { width: 5px; color: transparent; display: inline-block; }\n \
     margin-left: 5px; \n \
 } \n \
 .iconButton:hover { \n \
-    color: blue; \n \
+    color: red; \n \
+    background: transparent; \n \
 } \n \
 .resizeButton { \n \
     margin: 0px; \n \

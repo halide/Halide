@@ -111,15 +111,19 @@ private:
     string open_box_header_title_div() const;
     string open_box_header_table_div() const;
     string open_store_div() const;
+    string open_body_div() const;
     string close_div() const;
 
     // header functions
-    string open_header(const string &header, string anchor_name);
-    string close_header(string anchor_name) const;
-    string div_header(const string &header, StmtSize *size, string anchor_name);
+    string open_header(const string &header, string anchor_name,
+                       vector<pair<string, string>> info_tooltip_table);
+    string close_header() const;
+    string div_header(const string &header, StmtSize *size, string anchor_name,
+                      vector<pair<string, string>> info_tooltip_table);
     string function_div_header(const string &function_name, string anchor_name) const;
     vector<string> get_allocation_sizes(const Allocate *op) const;
-    string allocate_div_header(const Allocate *op, const string &header, string anchor_name);
+    string allocate_div_header(const Allocate *op, const string &header, string anchor_name,
+                               vector<pair<string, string>> &info_tooltip_table);
     string for_loop_div_header(const For *op, const string &header, string anchor_name);
 
     // opens and closes an if-tree
@@ -134,8 +138,10 @@ private:
     // generates code for button that will scroll to associated IR code line
     string see_code_button_div(string anchor_name, bool put_div = true) const;
 
-    // tooltip
-    string info_tooltip(string tooltip_text, string class_name);
+    // info button with tooltip
+    string info_button_with_tooltip(string tooltip_text, string button_class_name,
+                                    string tooltip_class_name = "");
+    string tooltip_table(vector<pair<string, string>> &table) const;
 
     // for cost colors - side bars
     string generate_computation_cost_div(const IRNode *op);
@@ -146,7 +152,6 @@ private:
     string color_button(int color_range);
     string computation_div(const IRNode *op);
     string data_movement_div(const IRNode *op);
-    string tooltip_table(vector<pair<string, string>> &table) const;
     string cost_colors(const IRNode *op);
 
     void visit_function(const LoweredFunc &func);
