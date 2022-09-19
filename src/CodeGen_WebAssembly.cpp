@@ -113,10 +113,10 @@ const WasmIntrinsic intrinsic_defs[] = {
     {"extend_i32x4_to_i64x4", Int(64, 4), "widen_integer", {Int(32, 4)}, Target::WasmSimd128},
     {"extend_u32x4_to_u64x4", UInt(64, 4), "widen_integer", {UInt(32, 4)}, Target::WasmSimd128},
 
-    {"llvm.rint.v4f32", Float(32, 4), "rint", {Float(32, 4)}},
-    {"llvm.rint.v2f64", Float(64, 2), "rint", {Float(64, 2)}},
-    {"llvm.rint.f32", Float(32), "rint", {Float(32)}},
-    {"llvm.rint.f64", Float(64), "rint", {Float(64)}},
+    {"llvm.nearbyint.v4f32", Float(32, 4), "nearbyint", {Float(32, 4)}, Target::WasmSimd128},
+    {"llvm.nearbyint.v2f64", Float(64, 2), "nearbyint", {Float(64, 2)}, Target::WasmSimd128},
+    {"llvm.nearbyint.f32", Float(32), "nearbyint", {Float(32)}},
+    {"llvm.nearbyint.f64", Float(64), "nearbyint", {Float(64)}},
 };
 // clang-format on
 
@@ -218,8 +218,8 @@ void CodeGen_WebAssembly::visit(const Call *op) {
     }
 
     if (op->is_intrinsic(Call::round)) {
-        // For webassembly, llvm.rint compiles to f32.nearest, which gives us the semantics we want.
-        value = call_overloaded_intrin(op->type, "rint", op->args);
+        // For webassembly, llvm.nearbyint compiles to f32.nearest, which gives us the semantics we want.
+        value = call_overloaded_intrin(op->type, "nearbyint", op->args);
         if (value) {
             return;
         }
