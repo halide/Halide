@@ -662,6 +662,7 @@ HEADER_FILES = \
   FuseGPUThreadLoops.h \
   FuzzFloatStores.h \
   Generator.h \
+  GetAssemblyInfoViz.h \
   GetStmtHierarchy.h \
   HexagonOffload.h \
   HexagonOptimize.h \
