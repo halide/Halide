@@ -14,19 +14,19 @@ extern void *pthread_getspecific(pthread_key_t key);
 
 extern int pthread_once(pthread_once_t *once, void (*init)(void));
 
-typedef long pthread_t;
-extern pthread_t pthread_self();
-extern int pthread_threadid_np(pthread_t thread, uint64_t *thread_id);
+// typedef long pthread_t;
+// extern pthread_t pthread_self();
+// extern int pthread_threadid_np(pthread_t thread, uint64_t *thread_id);
 
 }  // extern "C"
 
 namespace Halide::Runtime::Internal {
 
-WEAK uint64_t _gettid() {
-    uint64_t id = 0xdeadbeef;
-    (void)pthread_threadid_np(pthread_self(), &id);
-    return id;
-}
+// WEAK uint64_t _gettid() {
+//     uint64_t id = 0xdeadbeef;
+//     (void)pthread_threadid_np(pthread_self(), &id);
+//     return id;
+// }
 
 // Access to `key_in_use` is controlled by this mutex
 WEAK halide_mutex key_table_mutex = {{0}};
@@ -36,7 +36,7 @@ WEAK pthread_key_t tls_key() {
     static pthread_key_t halide_runtime_tls_key;
     static pthread_once_t halide_runtime_tls_key_once = PTHREAD_ONCE_INIT;
     (void)pthread_once(&halide_runtime_tls_key_once, []() {
-        debug(nullptr) << _gettid() << ": pthread_once\n";
+        //debug(nullptr) << _gettid() << ": pthread_once\n";
         (void)pthread_key_create(&halide_runtime_tls_key, [](void *arg) { free(arg); });
     });
     return halide_runtime_tls_key;
@@ -48,7 +48,7 @@ WEAK halide_context_info_t *current_info() {
     if (!info) {
         info = (halide_context_info_t *)malloc(sizeof(halide_context_info_t));
         memset(info->values, 0, sizeof(info->values));
-        debug(nullptr) << _gettid() << ": allocate new info -> " << (void *)info << "\n";
+        //debug(nullptr) << _gettid() << ": allocate new info -> " << (void *)info << "\n";
         (void)pthread_setspecific(mk, info);
     }
     return info;
@@ -111,7 +111,7 @@ WEAK int halide_context_set_value(halide_context_key_t key, void *value) {
     intptr_t index = (intptr_t)key - 1;
     halide_mutex_lock(&key_table_mutex);
     if (index >= 0 && index <= halide_context_key_count && keys_in_use[index] != 0) {
-        debug(nullptr) << _gettid() << ": halide_context_set_value[" << index << "] -> " << (uintptr_t)value << " @info=" << (void *)info << "\n";
+        //debug(nullptr) << _gettid() << ": halide_context_set_value[" << index << "] -> " << (uintptr_t)value << " @info=" << (void *)info << "\n";
         info->values[index] = value;
         result = 0;
     }

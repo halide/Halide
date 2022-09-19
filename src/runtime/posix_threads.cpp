@@ -43,7 +43,7 @@ extern int pthread_threadid_np(pthread_t thread, uint64_t *thread_id);
 namespace {
 uint64_t _gettid() {
     uint64_t id = 0xdeadbeef;
-    (void) pthread_threadid_np(pthread_self(), &id);
+    // (void) pthread_threadid_np(pthread_self(), &id);
     return id;
 }
 }  // namespace
