@@ -2362,7 +2362,7 @@ function populateCodeMirror(lineNumStart, lineNumberEnd) { \n \
     var code = codeHTML.textContent; \n \
     code = code.trimLeft(); \n \
     document.getElementById('assemblyCode').innerHTML = ''; \n \
-    var myCodeMirror = CodeMirror(document.getElementById('assemblyCode'), { value: code, lineNumbers: true, mode: { name: 'gas', architecture: 'ARMv6' }, readOnly: true, }); \n \
+    var myCodeMirror = CodeMirror(document.getElementById('assemblyCode'), { value: code, lineNumbers: true, lineWrapping: true, mode: { name: 'gas', architecture: 'ARMv6' }, readOnly: true, }); \n \
     jumpToLine(myCodeMirror, lineNumStart, lineNumberEnd); \n \
     document.getElementsByClassName('CodeMirror-sizer')[0].style.minWidth = '0px'; \n \
 } \n \
