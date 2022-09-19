@@ -2286,7 +2286,7 @@ function resize(e) { \n \
     codeDiv.style.display = 'block'; \n \
     irVizDiv.style.display = 'block'; \n \
     codeDiv.style.flexBasis = size; \n \
-    irVizDiv.style.flexBasis = `calc(${rect.right}px - ${size})`; \n \
+    irVizDiv.style.flexBasis = `calc(${rect.left}px - ${size})`; \n \
 } \n \
 function resizeAssembly(e) { \n \
     if (e.x > screen.width - 25) { \n \
@@ -2304,24 +2304,28 @@ function resizeAssembly(e) { \n \
  \n \
 } \n \
 function collapseCode() { \n \
-    codeDiv.style.display = 'none'; \n \
     irVizDiv.style.display = 'block'; \n \
-    irVizDiv.style.flexBasis = 'calc(100%)'; \n \
+    var rect = resizeBarAssembly.getBoundingClientRect(); \n \
+    irVizDiv.style.flexBasis = `${rect.left}px`; \n \
+    codeDiv.style.display = 'none'; \n \
 } \n \
 function collapseViz() { \n \
-    irVizDiv.style.display = 'none'; \n \
     codeDiv.style.display = 'block'; \n \
-    codeDiv.style.flexBasis = '100%'; \n \
+    var rect = resizeBarAssembly.getBoundingClientRect(); \n \
+    codeDiv.style.flexBasis = `${rect.left}px`; \n \
+    irVizDiv.style.display = 'none'; \n \
 } \n \
 function collapseVizAssembly() { \n \
-    irVizDiv.style.display = 'none'; \n \
     assemblyCodeDiv.style.display = 'block'; \n \
-    assemblyCodeDiv.style.flexBasis = '100%'; \n \
+    var rect = resizeBar.getBoundingClientRect(); \n \
+    assemblyCodeDiv.style.flexBasis = `calc(100% - ${rect.right}px)`; \n \
+    irVizDiv.style.display = 'none'; \n \
 } \n \
 function collapseAssembly() { \n \
-    assemblyCodeDiv.style.display = 'none'; \n \
     irVizDiv.style.display = 'block'; \n \
-    irVizDiv.style.flexBasis = '100%'; \n \
+    var rect = resizeBar.getBoundingClientRect(); \n \
+    irVizDiv.style.flexBasis = `calc(100% - ${rect.right}px)`; \n \
+    assemblyCodeDiv.style.display = 'none'; \n \
 } \n \
 ";
 
