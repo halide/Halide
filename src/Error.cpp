@@ -3,6 +3,7 @@
 #include "Util.h"  // for get_env_variable
 
 #include <csignal>
+#include <mutex>
 
 #ifdef _MSC_VER
 #include <io.h>
