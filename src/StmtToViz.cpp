@@ -30,15 +30,13 @@ string to_string(T value) {
 
 class StmtToViz : public IRVisitor {
 
-    static const string css, js;
-    static const string viz_css;
-    static const string cost_colors_css;
-    static const string flexbox_div_css;
-    static const string scroll_to_function_code_to_viz_js;
-    static const string line_numbers_css;
-    static const string tooltip_css;
-    static const string expand_code_js;
-    static const string code_mirror_css, code_mirror_js;
+    // CSS strings
+    static const string ir_code_css, code_viz_css, cost_colors_css, flexbox_div_css,
+        line_numbers_css, code_mirror_css, tooltip_css;
+
+    // JS strings
+    static const string ir_code_js, scroll_to_function_code_to_viz_js, expand_code_js,
+        code_mirror_js;
 
     // This allows easier access to individual elements.
     int id_count;
@@ -1548,19 +1546,16 @@ public:
                   "search.min.js'></script>\n";
 
         stream << "\n<style type='text/css'>";
-        stream << css;
-        stream << viz_css;
+        stream << ir_code_css;
+        stream << code_viz_css;
         stream << cost_colors_css;
-        stream << IRVisualization::ir_viz_CSS;
         stream << flexbox_div_css;
         stream << line_numbers_css;
-        stream << tooltip_css;
-        stream << GetStmtHierarchy::stmt_hierarchy_css;
         stream << code_mirror_css;
+        stream << tooltip_css;
+        stream << IRVisualization::ir_viz_CSS;
+        stream << GetStmtHierarchy::stmt_hierarchy_css;
         stream << "</style>\n";
-        stream << "<script language='javascript' type='text/javascript'>\n";
-        stream << js;
-        stream << "</script>\n";
         stream << "</head>\n";
         stream << "<body>\n";
     }
@@ -1578,14 +1573,15 @@ public:
                   "'-]').removeClass('Highlight'); }\n"
                << "} );\n";
 
-        stream << generate_tooltip_JS(tooltip_count);
-        stream << GetStmtHierarchy::stmt_hierarchy_collapse_expand_JS;
-        stream << get_stmt_hierarchy.generate_stmtHierarchy_js();
-        stream << ir_visualization.generate_irViz_js();
-        stream << IRVisualization::scroll_to_function_JS_viz_to_code;
+        stream << ir_code_js;
         stream << scroll_to_function_code_to_viz_js;
         stream << expand_code_js;
         stream << code_mirror_js;
+        stream << generate_tooltip_JS(tooltip_count);
+        stream << GetStmtHierarchy::stmt_hierarchy_collapse_expand_JS;
+        stream << IRVisualization::scroll_to_function_JS_viz_to_code;
+        stream << get_stmt_hierarchy.generate_stmtHierarchy_js();
+        stream << ir_visualization.generate_irViz_js();
         stream << "</script>\n";
         stream << "</body>";
     }
@@ -1895,7 +1891,7 @@ public:
     }
 };
 
-const string StmtToViz::css = "\n \
+const string StmtToViz::ir_code_css = "\n \
 /* Normal CSS */\n \
 body { font-family: Consolas, 'Liberation Mono', Menlo, Courier, monospace; font-size: 12px; background: #f8f8f8; margin-left:15px; } \n \
 a, a:hover, a:visited, a:active { color: inherit; text-decoration: none; } \n \
@@ -1933,137 +1929,7 @@ code.ptx { tab-size: 26; white-space: pre; }\n \
 .tf-tree { overflow: unset; }\n \
 ";
 
-const string StmtToViz::flexbox_div_css = "\n \
-/* Flexbox Div Styling CSS */ \n \
-div.outerDiv { \n \
-    height: 100vh; \n \
-    display: flex; \n \
-    flex-direction: column; \n \
-} \n \
-div.informationBar { \n \
-    display: flex; \n \
-} \n \
-div.mainContent { \n \
-    display: flex; \n \
-    flex-grow: 1; \n \
-    width: 100%; \n \
-    overflow: hidden; \n \
-    border-top: 1px solid rgb(200,200,200) \n \
-} \n \
-div.IRCode-code { \n \
-    counter-reset: line; \n \
-    padding-left: 50px; \n \
-    padding-top: 20px; \n \
-    overflow-y: scroll; \n \
-    position: relative; \n \
-} \n \
-div.IRVisualization { \n \
-    overflow-y: scroll; \n \
-    padding-top: 20px; \n \
-    padding-left: 20px; \n \
-    position: relative; \n \
-} \n \
-div.ResizeBar { \n \
-    background: rgb(201, 231, 190); \n \
-    cursor: col-resize; \n \
-    border-left: 1px solid rgb(0, 0, 0); \n \
-    border-right: 1px solid rgb(0, 0, 0); \n \
-} \n \
-div.collapseButtons { \n \
-    position: relative; \n \
-    top: 50%; \n \
-} \n \
-";
-
-const string StmtToViz::scroll_to_function_code_to_viz_js = "\n \
-// scroll to function - code to viz \n \
-function makeVisibleViz(element) { \n \
-    if (!element) return; \n \
-    if (element.className == 'mainContent') return; \n \
-    if (element.style.visibility == 'hidden') { \n \
-        element.style = ''; \n \
-        show = document.getElementById(element.id + '-show'); \n \
-        hide = document.getElementById(element.id + '-hide'); \n \
-        show.style.display = 'none'; \n \
-        hide.style.display = 'block'; \n \
-        return; \n \
-    } \n \
-    makeVisibleViz(element.parentNode); \n \
-} \n \
-function getOffsetTop(element) { \n \
-    if (!element) return 0; \n \
-    if (element.id == 'IRVisualization') return 0; \n \
-    return getOffsetTop(element.offsetParent) + element.offsetTop; \n \
-} \n \
-function getOffsetLeft(element) { \n \
-    if (!element) return 0; \n \
-    if (element.id == 'IRVisualization') return 0; \n \
-    return getOffsetLeft(element.offsetParent) + element.offsetLeft; \n \
-} \n \
-function scrollToFunctionCodeToViz(id) { \n \
-    var container = document.getElementById('IRVisualization'); \n \
-    var scrollToObject = document.getElementById(id); \n \
-    makeVisibleViz(scrollToObject); \n \
-    container.scrollTo({ \n \
-        top: getOffsetTop(scrollToObject) - 20, \n \
-        left: getOffsetLeft(scrollToObject) - 40, \n \
-        behavior: 'smooth' \n \
-    }); \n \
-    scrollToObject.style.backgroundColor = 'yellow'; \n \
-    scrollToObject.style.fontSize = '20px'; \n \
-    // change content for 1 second   \n \
-    setTimeout(function () { \n \
-        scrollToObject.style.backgroundColor = 'transparent'; \n \
-        scrollToObject.style.fontSize = '12px'; \n \
-    }, 1000); \n \
-} \n \
-";
-
-const string StmtToViz::line_numbers_css = "\n \
-/* Line Numbers CSS */\n \
-p.WrapLine,\n\
-div.WrapLine,\n\
-div.Consumer,\n\
-div.Produce,\n\
-div.For,\n\
-span.IfSpan,\n\
-div.Evaluate,\n\
-div.Allocate,\n\
-div.ClosingBrace,\n\
-div.Module,\n\
-div.Function {\n\
-    counter-increment: line;\n\
-}\n\
-p.WrapLine:before,\n\
-div.WrapLine:before {\n\
-    content: counter(line) '. ';\n\
-    display: inline-block;\n\
-    position: absolute;\n\
-    left: 30px;\n\
-    color: rgb(175, 175, 175);\n\
-    user-select: none;\n\
-    -webkit-user-select: none;\n\
-}\n\
-div.Consumer:before,\n\
-div.Produce:before,\n\
-div.For:before,\n\
-span.IfSpan:before,\n\
-div.Evaluate:before,\n\
-div.Allocate:before, \n\
-div.ClosingBrace:before,\n\
-div.Module:before, \n\
-div.Function:before {\n\
-    content: counter(line) '. ';\n\
-    display: inline-block;\n\
-    position: absolute;\n\
-    left: 0px;\n\
-    color: rgb(175, 175, 175);\n\
-    user-select: none;\n\
-    -webkit-user-select: none;\n\
-}\n\
-";
-
-const string StmtToViz::viz_css = "\n \
+const string StmtToViz::code_viz_css = "\n \
 /* Additional Code Visualization CSS */\n \
 span.ButtonSpacer { width: 5px; color: transparent; display: inline-block; }\n \
 .infoButton { \n \
@@ -2158,6 +2024,103 @@ span.smallColorIndent { position: absolute; left: 35px; } \n \
 span.bigColorIndent { position: absolute; left: 65px; } \n \
 ";
 
+const string StmtToViz::flexbox_div_css = "\n \
+/* Flexbox Div Styling CSS */ \n \
+div.outerDiv { \n \
+    height: 100vh; \n \
+    display: flex; \n \
+    flex-direction: column; \n \
+} \n \
+div.informationBar { \n \
+    display: flex; \n \
+} \n \
+div.mainContent { \n \
+    display: flex; \n \
+    flex-grow: 1; \n \
+    width: 100%; \n \
+    overflow: hidden; \n \
+    border-top: 1px solid rgb(200,200,200) \n \
+} \n \
+div.IRCode-code { \n \
+    counter-reset: line; \n \
+    padding-left: 50px; \n \
+    padding-top: 20px; \n \
+    overflow-y: scroll; \n \
+    position: relative; \n \
+} \n \
+div.IRVisualization { \n \
+    overflow-y: scroll; \n \
+    padding-top: 20px; \n \
+    padding-left: 20px; \n \
+    position: relative; \n \
+} \n \
+div.ResizeBar { \n \
+    background: rgb(201, 231, 190); \n \
+    cursor: col-resize; \n \
+    border-left: 1px solid rgb(0, 0, 0); \n \
+    border-right: 1px solid rgb(0, 0, 0); \n \
+} \n \
+div.collapseButtons { \n \
+    position: relative; \n \
+    top: 50%; \n \
+} \n \
+";
+
+const string StmtToViz::line_numbers_css = "\n \
+/* Line Numbers CSS */\n \
+p.WrapLine,\n\
+div.WrapLine,\n\
+div.Consumer,\n\
+div.Produce,\n\
+div.For,\n\
+span.IfSpan,\n\
+div.Evaluate,\n\
+div.Allocate,\n\
+div.ClosingBrace,\n\
+div.Module,\n\
+div.Function {\n\
+    counter-increment: line;\n\
+}\n\
+p.WrapLine:before,\n\
+div.WrapLine:before {\n\
+    content: counter(line) '. ';\n\
+    display: inline-block;\n\
+    position: absolute;\n\
+    left: 30px;\n\
+    color: rgb(175, 175, 175);\n\
+    user-select: none;\n\
+    -webkit-user-select: none;\n\
+}\n\
+div.Consumer:before,\n\
+div.Produce:before,\n\
+div.For:before,\n\
+span.IfSpan:before,\n\
+div.Evaluate:before,\n\
+div.Allocate:before, \n\
+div.ClosingBrace:before,\n\
+div.Module:before, \n\
+div.Function:before {\n\
+    content: counter(line) '. ';\n\
+    display: inline-block;\n\
+    position: absolute;\n\
+    left: 0px;\n\
+    color: rgb(175, 175, 175);\n\
+    user-select: none;\n\
+    -webkit-user-select: none;\n\
+}\n\
+";
+
+const string StmtToViz::code_mirror_css = "\n \
+/* CodeMirror */ \n \
+.CodeMirror { \n \
+    height: 100%; \n \
+    width: 100%; \n \
+} \n \
+.styled-background { \n \
+    background-color: #ff7; \n \
+} \n \
+";
+
 const string StmtToViz::tooltip_css = "\n \
 /* Tooltip CSS */\n \
 .left-table { text-align: right; color: grey; vertical-align: middle; font-size: 12px; }\n \
@@ -2188,6 +2151,90 @@ const string StmtToViz::tooltip_css = "\n \
 span.tooltipHelperText { \n \
     color: red; \n \
     margin-top: 5px; \n \
+} \n \
+";
+
+const string StmtToViz::ir_code_js = "\n \
+/* Expand/Collapse buttons */\n \
+function toggle(id, buttonId) { \n \
+    e = document.getElementById(id); \n \
+    show = document.getElementById(id + '-show'); \n \
+    hide = document.getElementById(id + '-hide'); \n \
+    button1 = document.getElementById('button' + buttonId); \n \
+    button2 = document.getElementById('button' + (buttonId - 1)); \n \
+    if (e.style.visibility != 'hidden') { \n \
+        e.style.height = '0px'; \n \
+        e.style.visibility = 'hidden'; \n \
+        show.style.display = 'block'; \n \
+        hide.style.display = 'none'; \n \
+        // make inclusive  \n \
+        if (button1 != null && button2 != null) { \n \
+            inclusiverange1 = button1.getAttribute('inclusiverange'); \n \
+            newClassName = button1.className.replace(/CostColor\\d+/, 'CostColor' + inclusiverange1); \n \
+            button1.className = newClassName; \n \
+            inclusiverange2 = button2.getAttribute('inclusiverange'); \n \
+            newClassName = button2.className.replace(/CostColor\\d+/, 'CostColor' + inclusiverange2); \n \
+            button2.className = newClassName; \n \
+        } \n \
+    } else { \n \
+        e.style = ''; \n \
+        show.style.display = 'none'; \n \
+        hide.style.display = 'block'; \n \
+        // make exclusive  \n \
+        if (button1 != null && button2 != null) { \n \
+            exclusiverange1 = button1.getAttribute('exclusiverange'); \n \
+            newClassName = button1.className.replace(/CostColor\\d+/, 'CostColor' + exclusiverange1); \n \
+            button1.className = newClassName; \n \
+            exclusiverange2 = button2.getAttribute('exclusiverange'); \n \
+            newClassName = button2.className.replace(/CostColor\\d+/, 'CostColor' + exclusiverange2); \n \
+            button2.className = newClassName; \n \
+        } \n \
+    } \n \
+    return false; \n \
+} \n \
+";
+
+const string StmtToViz::scroll_to_function_code_to_viz_js = "\n \
+// scroll to function - code to viz \n \
+function makeVisibleViz(element) { \n \
+    if (!element) return; \n \
+    if (element.className == 'mainContent') return; \n \
+    if (element.style.visibility == 'hidden') { \n \
+        element.style = ''; \n \
+        show = document.getElementById(element.id + '-show'); \n \
+        hide = document.getElementById(element.id + '-hide'); \n \
+        show.style.display = 'none'; \n \
+        hide.style.display = 'block'; \n \
+        return; \n \
+    } \n \
+    makeVisibleViz(element.parentNode); \n \
+} \n \
+function getOffsetTop(element) { \n \
+    if (!element) return 0; \n \
+    if (element.id == 'IRVisualization') return 0; \n \
+    return getOffsetTop(element.offsetParent) + element.offsetTop; \n \
+} \n \
+function getOffsetLeft(element) { \n \
+    if (!element) return 0; \n \
+    if (element.id == 'IRVisualization') return 0; \n \
+    return getOffsetLeft(element.offsetParent) + element.offsetLeft; \n \
+} \n \
+function scrollToFunctionCodeToViz(id) { \n \
+    var container = document.getElementById('IRVisualization'); \n \
+    var scrollToObject = document.getElementById(id); \n \
+    makeVisibleViz(scrollToObject); \n \
+    container.scrollTo({ \n \
+        top: getOffsetTop(scrollToObject) - 20, \n \
+        left: getOffsetLeft(scrollToObject) - 40, \n \
+        behavior: 'smooth' \n \
+    }); \n \
+    scrollToObject.style.backgroundColor = 'yellow'; \n \
+    scrollToObject.style.fontSize = '20px'; \n \
+    // change content for 1 second   \n \
+    setTimeout(function () { \n \
+        scrollToObject.style.backgroundColor = 'transparent'; \n \
+        scrollToObject.style.fontSize = '12px'; \n \
+    }, 1000); \n \
 } \n \
 ";
 
@@ -2288,17 +2335,6 @@ function collapseAssembly() { \n \
 } \n \
 ";
 
-const string StmtToViz::code_mirror_css = "\n \
-/* CodeMirror */ \n \
-.CodeMirror { \n \
-    height: 100%; \n \
-    width: 100%; \n \
-} \n \
-.styled-background { \n \
-    background-color: #ff7; \n \
-} \n \
-";
-
 const string StmtToViz::code_mirror_js = "\n \
 // CodeMirror \n \
 function jumpToLine(myCodeMirror, start, end) {\n \
@@ -2329,45 +2365,6 @@ populateCodeMirror(1, 1); \n \
 collapseAssembly(); \n \
 ";
 
-const string StmtToViz::js = "\n \
-/* Expand/Collapse buttons */\n \
-function toggle(id, buttonId) { \n \
-    e = document.getElementById(id); \n \
-    show = document.getElementById(id + '-show'); \n \
-    hide = document.getElementById(id + '-hide'); \n \
-    button1 = document.getElementById('button' + buttonId); \n \
-    button2 = document.getElementById('button' + (buttonId - 1)); \n \
-    if (e.style.visibility != 'hidden') { \n \
-        e.style.height = '0px'; \n \
-        e.style.visibility = 'hidden'; \n \
-        show.style.display = 'block'; \n \
-        hide.style.display = 'none'; \n \
-        // make inclusive  \n \
-        if (button1 != null && button2 != null) { \n \
-            inclusiverange1 = button1.getAttribute('inclusiverange'); \n \
-            newClassName = button1.className.replace(/CostColor\\d+/, 'CostColor' + inclusiverange1); \n \
-            button1.className = newClassName; \n \
-            inclusiverange2 = button2.getAttribute('inclusiverange'); \n \
-            newClassName = button2.className.replace(/CostColor\\d+/, 'CostColor' + inclusiverange2); \n \
-            button2.className = newClassName; \n \
-        } \n \
-    } else { \n \
-        e.style = ''; \n \
-        show.style.display = 'none'; \n \
-        hide.style.display = 'block'; \n \
-        // make exclusive  \n \
-        if (button1 != null && button2 != null) { \n \
-            exclusiverange1 = button1.getAttribute('exclusiverange'); \n \
-            newClassName = button1.className.replace(/CostColor\\d+/, 'CostColor' + exclusiverange1); \n \
-            button1.className = newClassName; \n \
-            exclusiverange2 = button2.getAttribute('exclusiverange'); \n \
-            newClassName = button2.className.replace(/CostColor\\d+/, 'CostColor' + exclusiverange2); \n \
-            button2.className = newClassName; \n \
-        } \n \
-    } \n \
-    return false; \n \
-} \n \
-";
 }  // namespace
 
 void print_to_viz(const string &filename, const Stmt &s) {
