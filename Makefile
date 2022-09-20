@@ -343,7 +343,7 @@ ifneq ($(TEST_METAL), )
 # tests to be valid Objective-C++, e.g. avoiding using the identifier "id"
 # in certain ways. In practice this is not enough of a problem to justify
 # the work to limit which files are compiled this way.
-TEST_CXX_FLAGS += -DTEST_METAL -ObjC++
+TEST_CXX_FLAGS += -DTEST_METAL -ObjC++ -Werror,-Wunused-command-line-argument
 endif
 
 ifneq ($(TEST_CUDA), )
