@@ -107,7 +107,16 @@ function(add_wasm_executable TARGET)
         -s ASSERTIONS=1
         -s ALLOW_MEMORY_GROWTH=1
         -s ENVIRONMENT=node
+        -s EXIT_RUNTIME=1
     )
+    if (Halide_TARGET MATCHES "wasm_threads")
+        set(EMCC_FLAGS ${EMCC_FLAGS}
+            -pthread
+            -matomics
+            -Wno-pthreads-mem-growth
+            -s PTHREAD_POOL_SIZE=32
+        )
+    endif()
 
     set(SRCS)
     foreach (S IN LISTS args_SRCS)

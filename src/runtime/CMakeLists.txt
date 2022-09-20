@@ -17,6 +17,7 @@ set(RUNTIME_CPP
     errors
     fake_get_symbol
     fake_thread_pool
+    fake_halide_context
     float16_t
     force_include_types
     fuchsia_clock
@@ -73,6 +74,7 @@ set(RUNTIME_CPP
     riscv_cpu_features
     runtime_api
     timer_profiler
+    tls_halide_context
     to_string
     trace_helper
     tracing

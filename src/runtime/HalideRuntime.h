@@ -1960,6 +1960,81 @@ struct halide_device_allocation_pool {
  * global lifetime, and its next field will be clobbered. */
 extern void halide_register_device_allocation_pool(struct halide_device_allocation_pool *);
 
+/** A halide_context_key_t is a pointer-sized key used to reference a thread-local
+ * storage value that can be used for arbitrary purposes by user code and/or
+ * a user-supplied override of some/all of the Halide Runtime. These can be
+ * used instead of user_context as a way to safely pass information across
+ * a halide runtime implementation.
+ *
+ * The key differentiator between using halide_context_key_t and using a C++ thread_local
+ * variable is that values stored via a halide_context_key_t are correctly propagated
+ * to all child threads, so any calls into the runtime fom parallel or async code
+ * will always correctly inherit the values for all halide_context_key_t's set by the
+ * calling thread. (Note, this is accomplished by TODO; if you replace halide_do_par_for
+ * or halide_do_parallel_tasks, you'll have to TODO)
+ *
+ * No valid halide_context_key_t will ever be nullptr, but otherwise,
+ * the bit content is arbitrary.
+ */
+struct halide_context_key_t_;
+typedef struct halide_context_key_t_ *halide_context_key_t;
+
+/** Allocate a new key to use with the Halide Runtime's halide_context lookup.
+ * Each key is a *global* allocation, across *all* Halide threads (and client threads).
+ *
+ * The runtime only supports a small number of keys to be allocated at once
+ * (8 at present); it will return nullptr if no more keys are available.
+ *
+ * This function must *never* be called from inside any Halide callback or
+ * runtime implementation.
+ */
+extern halide_context_key_t halide_context_allocate_key();
+
+/** Free a halide_context key, so that it can be re-used by future calls to halide_context_allocate_key.
+ * If the key passed in is not a valid, allocated key, a nonzero error will be returned.
+ *
+ * This function must *never* be called from inside any Halide callback or
+ * runtime implementation.
+ */
+extern int halide_context_free_key(halide_context_key_t key);
+
+/** Set the value associated with the halide_context key in this thread. If successful, return 0.
+ * If the key is invalid, return a nonzero value.
+ *
+ * This function must *never* be called from inside any Halide callback or
+ * runtime implementation.
+ */
+extern int halide_context_set_value(halide_context_key_t key, void *value);
+
+/** Get the value associated with the halide_context key in this thread.
+ * If it has never been set for the current thread, return nullptr.
+ * (Invalid keys will also return nullptr.)
+ *
+ * This function *is* OK to call anywhere, anytime.
+ **/
+extern void *halide_context_get_value(halide_context_key_t key);
+
+// Structure for internal use only; user code should never attempt to examine
+// or modify specific context entries.
+enum { halide_context_key_count = 8 };
+struct halide_context_info_t {
+    void *values[halide_context_key_count];
+};
+
+/** Return a pointer to the current halide_context values for the current thread.
+ * This should never return null.
+ *
+ * Unless you are implementing a custom thread pool, you should never
+ * need to use this call. */
+extern const struct halide_context_info_t *halide_context_get_current_info();
+
+/** Copies the data from info the current thread's TLS info.
+ * It is never legal to pass nullptr here.
+ *
+ * Unless you are implementing a custom thread pool, you should never
+ * need to use this call. */
+extern void halide_context_set_current_info(const struct halide_context_info_t *info);
+
 #ifdef __cplusplus
 }  // End extern "C"
 #endif

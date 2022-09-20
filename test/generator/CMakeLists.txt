@@ -3,7 +3,7 @@
 ##
 
 function(halide_define_aot_test NAME)
-    set(options OMIT_DEFAULT_GENERATOR)
+    set(options OMIT_DEFAULT_GENERATOR OMIT_DEFAULT_LIBRARY)
     set(oneValueArgs FUNCTION_NAME)
     set(multiValueArgs GEN_DEPS EXTRA_LIBS ENABLE_IF FEATURES PARAMS GEN_TARGET GROUPS)
     cmake_parse_arguments(args "${options}" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
@@ -12,13 +12,14 @@ function(halide_define_aot_test NAME)
         return()
     endif ()
 
-    add_halide_generator("${NAME}.generator"
-                         SOURCES "${NAME}_generator.cpp"
-                         LINK_LIBRARIES ${args_GEN_DEPS})
-
     set(TARGET "generator_aot_${NAME}")
     set(DEPS ${args_EXTRA_LIBS})
     if (NOT args_OMIT_DEFAULT_GENERATOR)
+        add_halide_generator("${NAME}.generator"
+                             SOURCES "${NAME}_generator.cpp"
+                             LINK_LIBRARIES ${args_GEN_DEPS})
+    endif ()
+    if (NOT args_OMIT_DEFAULT_LIBRARY)
         add_halide_library(${NAME}
                            FROM "${NAME}.generator"
                            PARAMS "${args_PARAMS}"
@@ -46,7 +47,7 @@ function(halide_define_aot_test NAME)
             "${Halide_SOURCE_DIR}/test/common"
             "${Halide_SOURCE_DIR}/tools"
         )
-        if (NOT args_OMIT_DEFAULT_GENERATOR)
+        if (NOT args_OMIT_DEFAULT_LIBRARY)
             target_link_libraries(${TARGET} PRIVATE ${NAME})
         endif ()
         if (args_EXTRA_LIBS)
@@ -72,7 +73,7 @@ endfunction()
 ##
 
 set(USING_WASM (TARGET_WEBASSEMBLY AND Halide_TARGET MATCHES "wasm"))
-
+set(USING_WASM_THREADS (${USING_WASM} AND Halide_TARGET MATCHES "wasm_threads"))
 if (NOT ${USING_WASM})
     # cxx_mangling_externs.cpp
     add_library(cxx_mangling_externs STATIC cxx_mangling_externs.cpp)
@@ -131,8 +132,15 @@ halide_define_aot_test(argvcall)
 # async_parallel_aottest.cpp
 # async_parallel_generator.cpp
 halide_define_aot_test(async_parallel
-                       # Requires threading support, not yet available for wasm tests
-                       ENABLE_IF NOT ${USING_WASM}
+                       # Requires threading support
+                       ENABLE_IF (NOT ${USING_WASM} OR ${USING_WASM_THREADS})
+                       FEATURES user_context
+                       GROUPS multithreaded)
+
+halide_define_aot_test(halide_context
+                       ENABLE_IF (NOT ${USING_WASM} OR ${USING_WASM_THREADS})
+                       OMIT_DEFAULT_GENERATOR OMIT_DEFAULT_LIBRARY
+                       EXTRA_LIBS async_parallel async_parallel.runtime
                        GROUPS multithreaded)
 
 # autograd_aottest.cpp
@@ -243,7 +251,7 @@ halide_define_aot_test(float16_t)
 # (Doesn't build/link properly under wasm, and isn't useful there anyway)
 if (NOT Halide_TARGET MATCHES "wasm")
     halide_define_aot_test(gpu_multi_context_threaded
-                           OMIT_DEFAULT_GENERATOR
+                           OMIT_DEFAULT_LIBRARY
                            EXTRA_LIBS
                            gpu_multi_context_threaded_add
                            gpu_multi_context_threaded_mul)
@@ -357,7 +365,7 @@ halide_define_aot_test(multitarget
 # nested_externs_aottest.cpp
 # nested_externs_generator.cpp
 halide_define_aot_test(nested_externs
-                       OMIT_DEFAULT_GENERATOR
+                       OMIT_DEFAULT_LIBRARY
                        EXTRA_LIBS
                        nested_externs_root
                        nested_externs_inner
