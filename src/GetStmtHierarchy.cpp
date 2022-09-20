@@ -102,7 +102,7 @@ string GetStmtHierarchy::generate_computation_cost_div(const IRNode *op) {
     stmt_hierarchy_tooltip_count++;
 
     stringstream ss;
-    string tooltip_text = ir_viz.generate_computation_cost_tooltip(op, false, "");
+    string tooltip_text = ir_viz.generate_computation_cost_tooltip(op, "");
 
     // tooltip span
     ss << "<span id='stmtHierarchyTooltip" << stmt_hierarchy_tooltip_count
@@ -124,7 +124,7 @@ string GetStmtHierarchy::generate_memory_cost_div(const IRNode *op) {
     stmt_hierarchy_tooltip_count++;
 
     stringstream ss;
-    string tooltip_text = ir_viz.generate_data_movement_cost_tooltip(op, false, "");
+    string tooltip_text = ir_viz.generate_data_movement_cost_tooltip(op, "");
 
     // tooltip span
     ss << "<span id='stmtHierarchyTooltip" << stmt_hierarchy_tooltip_count

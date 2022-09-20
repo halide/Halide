@@ -269,8 +269,8 @@ private:
         stringstream s;
         s << color_button(op, true, stmt_hierarchy_info);
 
-        string tooltip_text = ir_visualization.generate_computation_cost_tooltip(
-            op, false, "[Click to see full hierarchy]");
+        string tooltip_text =
+            ir_visualization.generate_computation_cost_tooltip(op, "[Click to see full hierarchy]");
 
         // tooltip span
         s << "<span id='tooltip" << tooltip_count << "' class='tooltip CostTooltip' ";
@@ -285,7 +285,7 @@ private:
         s << color_button(op, false, stmt_hierarchy_info);
 
         string tooltip_text = ir_visualization.generate_data_movement_cost_tooltip(
-            op, false, "[Click to see full hierarchy]");
+            op, "[Click to see full hierarchy]");
 
         // tooltip span
         s << "<span id='tooltip" << tooltip_count << "' class='tooltip CostTooltip' ";
@@ -2125,7 +2125,7 @@ const string StmtToViz::tooltip_css = "\n \
 /* Tooltip CSS */\n \
 .left-table { text-align: right; color: grey; vertical-align: middle; font-size: 12px; }\n \
 .right-table { text-align: left; vertical-align: middle; font-size: 12px; font-weight: bold; padding-left: 3px; }\n \
-.tooltipTable { border: 0px; } \n \
+.tooltipTable { border: 0px; margin-left: auto; margin-right: auto; } \n \
 .tooltip { \n \
     display: none; \n \
     position: absolute; \n \
@@ -2141,7 +2141,7 @@ const string StmtToViz::tooltip_css = "\n \
     box-shadow: rgba(100, 100, 100, 0.8) 0 2px 5px 0; \n \
 } \n \
 .CostTooltip { \n \
-    width: 240px; \n \
+    min-width: max-content; \n \
 } \n \
 .conditionTooltip { \n \
     width: 300px; \n \

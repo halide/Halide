@@ -86,8 +86,8 @@ public:
     string generate_irViz_js();
 
     // generates tooltip information based on given node
-    string generate_computation_cost_tooltip(const IRNode *op, bool inclusive, string extraNote);
-    string generate_data_movement_cost_tooltip(const IRNode *op, bool inclusive, string extraNote);
+    string generate_computation_cost_tooltip(const IRNode *op, string extraNote);
+    string generate_data_movement_cost_tooltip(const IRNode *op, string extraNote);
 
     // returns the range of the node's cost based on the other nodes' costs
     int get_color_range(const IRNode *op, bool inclusive, bool is_computation) const;

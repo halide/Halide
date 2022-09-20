@@ -582,7 +582,7 @@ string IRVisualization::generate_computation_cost_div(const IRNode *op) {
 
     ir_viz_tooltip_count++;
 
-    string tooltip_text = generate_computation_cost_tooltip(op, true, "");
+    string tooltip_text = generate_computation_cost_tooltip(op, "");
 
     // tooltip span
     ss << "<span id='irVizTooltip" << ir_viz_tooltip_count << "' class='tooltip CostTooltip' ";
@@ -608,7 +608,7 @@ string IRVisualization::generate_memory_cost_div(const IRNode *op) {
 
     ir_viz_tooltip_count++;
 
-    string tooltip_text = generate_data_movement_cost_tooltip(op, true, "");
+    string tooltip_text = generate_data_movement_cost_tooltip(op, "");
 
     // tooltip span
     ss << "<span id='irVizTooltip" << ir_viz_tooltip_count << "' class='tooltip CostTooltip' ";
@@ -638,12 +638,7 @@ int IRVisualization::get_cost_percentage(const IRNode *node, bool inclusive,
     } else {
         cost = find_stmt_cost.get_cost(node, inclusive, is_computation);
     }
-    int total_cost;
-    if (inclusive) {
-        total_cost = find_stmt_cost.get_max_cost(true, is_computation);
-    } else {
-        total_cost = find_stmt_cost.get_max_cost(false, is_computation);
-    }
+    int total_cost = find_stmt_cost.get_max_cost(true, is_computation);
     return (int)((float)cost / (float)total_cost * 100);
 }
 
@@ -659,58 +654,67 @@ string IRVisualization::tooltip_table(vector<pair<string, string>> &table, strin
     s << "</table>";
 
     if (extra_note != "") {
-        s << "<i><span class='tooltipHelperText'>" << extra_note << "</span></i>";
+        s << "<span class='tooltipHelperText'><i>" << extra_note << "</i></span>";
     }
     return s.str();
 }
 
 // generates tooltip information for the given node
-string IRVisualization::generate_computation_cost_tooltip(const IRNode *op, bool inclusive,
-                                                          string extra_note) {
+string IRVisualization::generate_computation_cost_tooltip(const IRNode *op, string extra_note) {
     int depth, computation_cost_exclusive, computation_cost_inclusive;
 
     if (op == nullptr) {
         depth = 0;
         computation_cost_exclusive = NORMAL_NODE_CC;
-        computation_cost_inclusive = get_cost_percentage(op, true, true);
     } else {
         depth = find_stmt_cost.get_depth(op);
-        computation_cost_exclusive = find_stmt_cost.get_cost(op, false, true);
-        computation_cost_inclusive = get_cost_percentage(op, true, true);
     }
+
+    computation_cost_exclusive = get_cost_percentage(op, false, true);
+    computation_cost_inclusive = get_cost_percentage(op, true, true);
 
     // build up values of the table that will be displayed
     vector<pair<string, string>> table_rows;
     table_rows.push_back({"Loop Depth", std::to_string(depth)});
-    table_rows.push_back(
-        {"Computation Cost (Inclusive)", std::to_string(computation_cost_inclusive) + "%"});
-    table_rows.push_back(
-        {"Computation Cost (Exclusive)", std::to_string(computation_cost_exclusive)});
+
+    if (computation_cost_exclusive == computation_cost_inclusive) {
+        table_rows.push_back(
+            {"Computation Cost", std::to_string(computation_cost_exclusive) + "%"});
+    } else {
+        table_rows.push_back(
+            {"Computation Cost (Exclusive)", std::to_string(computation_cost_exclusive) + "%"});
+        table_rows.push_back(
+            {"Computation Cost (Inclusive)", std::to_string(computation_cost_inclusive) + "%"});
+    }
 
     return tooltip_table(table_rows, extra_note);
 }
 
-string IRVisualization::generate_data_movement_cost_tooltip(const IRNode *op, bool inclusive,
-                                                            string extra_note) {
+string IRVisualization::generate_data_movement_cost_tooltip(const IRNode *op, string extra_note) {
     int depth, data_movement_cost_exclusive, data_movement_cost_inclusive;
 
     if (op == nullptr) {
         depth = 0;
-        data_movement_cost_exclusive = NORMAL_NODE_DMC;
-        data_movement_cost_inclusive = get_cost_percentage(op, true, false);
     } else {
         depth = find_stmt_cost.get_depth(op);
-        data_movement_cost_exclusive = find_stmt_cost.get_cost(op, false, false);
-        data_movement_cost_inclusive = get_cost_percentage(op, true, false);
     }
+
+    data_movement_cost_exclusive = get_cost_percentage(op, false, false);
+    data_movement_cost_inclusive = get_cost_percentage(op, true, false);
 
     // build up values of the table that will be displayed
     vector<pair<string, string>> table_rows;
     table_rows.push_back({"Loop Depth", std::to_string(depth)});
-    table_rows.push_back(
-        {"Data Movement Cost (Inclusive)", std::to_string(data_movement_cost_inclusive) + "%"});
-    table_rows.push_back(
-        {"Data Movement Cost (Exclusive)", std::to_string(data_movement_cost_exclusive)});
+
+    if (data_movement_cost_exclusive == data_movement_cost_inclusive) {
+        table_rows.push_back(
+            {"Data Movement Cost", std::to_string(data_movement_cost_exclusive) + "%"});
+    } else {
+        table_rows.push_back(
+            {"Data Movement Cost (Exclusive)", std::to_string(data_movement_cost_exclusive) + "%"});
+        table_rows.push_back(
+            {"Data Movement Cost (Inclusive)", std::to_string(data_movement_cost_inclusive) + "%"});
+    }
 
     return tooltip_table(table_rows, extra_note);
 }
@@ -772,7 +776,7 @@ string IRVisualization::computation_div(const IRNode *op) {
     stringstream ss;
     ss << color_button(computation_range);
 
-    string tooltip_text = generate_computation_cost_tooltip(op, false, "");
+    string tooltip_text = generate_computation_cost_tooltip(op, "");
 
     // tooltip span
     ss << "<span id='irVizTooltip" << ir_viz_tooltip_count << "' class='tooltip CostTooltip' ";
@@ -789,7 +793,7 @@ string IRVisualization::data_movement_div(const IRNode *op) {
     stringstream ss;
     ss << color_button(data_movement_range);
 
-    string tooltip_text = generate_data_movement_cost_tooltip(op, false, "");
+    string tooltip_text = generate_data_movement_cost_tooltip(op, "");
 
     // tooltip span
     ss << "<span id='irVizTooltip" << ir_viz_tooltip_count << "' class='tooltip CostTooltip' ";
