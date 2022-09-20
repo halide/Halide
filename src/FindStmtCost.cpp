@@ -12,30 +12,14 @@ void FindStmtCost::generate_costs(const Module &m) {
     set_max_costs(m);
 }
 
-int FindStmtCost::get_max_cost(bool inclusive, bool is_computation) const {
-    if (is_computation) {
-        if (inclusive) {
-            return max_computation_cost_inclusive;
-        } else {
-            return max_computation_cost_exclusive;
-        }
+int FindStmtCost::get_cost(const IRNode *node, bool inclusive, bool is_computation) const {
+    if (node->node_type == IRNodeType::IfThenElse) {
+        return get_if_node_cost(node, inclusive, is_computation);
+    } else if (is_computation) {
+        return get_computation_cost(node, inclusive);
     } else {
-        if (inclusive) {
-            return max_data_movement_cost_inclusive;
-        } else {
-            return max_data_movement_cost_exclusive;
-        }
+        return get_data_movement_cost(node, inclusive);
     }
-}
-
-void FindStmtCost::traverse(const Module &m) {
-
-    // traverse all functions
-    for (const auto &f : m.functions()) {
-        f.body.accept(this);
-    }
-
-    return;
 }
 
 int FindStmtCost::get_depth(const IRNode *node) const {
@@ -73,6 +57,33 @@ int FindStmtCost::get_depth(const IRNode *node) const {
 
     return it->second.depth;
 }
+
+int FindStmtCost::get_max_cost(bool inclusive, bool is_computation) const {
+    if (is_computation) {
+        if (inclusive) {
+            return max_computation_cost_inclusive;
+        } else {
+            return max_computation_cost_exclusive;
+        }
+    } else {
+        if (inclusive) {
+            return max_data_movement_cost_inclusive;
+        } else {
+            return max_data_movement_cost_exclusive;
+        }
+    }
+}
+
+void FindStmtCost::traverse(const Module &m) {
+
+    // traverse all functions
+    for (const auto &f : m.functions()) {
+        f.body.accept(this);
+    }
+
+    return;
+}
+
 int FindStmtCost::get_computation_cost(const IRNode *node, bool inclusive) const {
     if (node == nullptr) {
         internal_error << "\n"
@@ -172,16 +183,6 @@ int FindStmtCost::get_data_movement_cost(const IRNode *node, bool inclusive) con
     }
 
     return cost;
-}
-
-int FindStmtCost::get_cost(const IRNode *node, bool inclusive, bool is_computation) const {
-    if (node->node_type == IRNodeType::IfThenElse) {
-        return get_if_node_cost(node, inclusive, is_computation);
-    } else if (is_computation) {
-        return get_computation_cost(node, inclusive);
-    } else {
-        return get_data_movement_cost(node, inclusive);
-    }
 }
 
 int FindStmtCost::get_if_node_cost(const IRNode *op, bool inclusive, bool is_computation) const {

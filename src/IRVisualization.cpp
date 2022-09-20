@@ -122,6 +122,101 @@ string IRVisualization::generate_ir_visualization_html(const Module &m) {
     return html.str();
 }
 
+string IRVisualization::generate_computation_cost_tooltip(const IRNode *op, string extra_note) {
+    int depth, computation_cost_exclusive, computation_cost_inclusive;
+
+    if (op == nullptr) {
+        depth = 0;
+        computation_cost_exclusive = NORMAL_NODE_CC;
+    } else {
+        depth = find_stmt_cost.get_depth(op);
+    }
+
+    computation_cost_exclusive = get_cost_percentage(op, false, true);
+    computation_cost_inclusive = get_cost_percentage(op, true, true);
+
+    // build up values of the table that will be displayed
+    vector<pair<string, string>> table_rows;
+    table_rows.push_back({"Loop Depth", std::to_string(depth)});
+
+    if (computation_cost_exclusive == computation_cost_inclusive) {
+        table_rows.push_back(
+            {"Computation Cost", std::to_string(computation_cost_exclusive) + "%"});
+    } else {
+        table_rows.push_back(
+            {"Computation Cost (Exclusive)", std::to_string(computation_cost_exclusive) + "%"});
+        table_rows.push_back(
+            {"Computation Cost (Inclusive)", std::to_string(computation_cost_inclusive) + "%"});
+    }
+
+    return tooltip_table(table_rows, extra_note);
+}
+string IRVisualization::generate_data_movement_cost_tooltip(const IRNode *op, string extra_note) {
+    int depth, data_movement_cost_exclusive, data_movement_cost_inclusive;
+
+    if (op == nullptr) {
+        depth = 0;
+    } else {
+        depth = find_stmt_cost.get_depth(op);
+    }
+
+    data_movement_cost_exclusive = get_cost_percentage(op, false, false);
+    data_movement_cost_inclusive = get_cost_percentage(op, true, false);
+
+    // build up values of the table that will be displayed
+    vector<pair<string, string>> table_rows;
+    table_rows.push_back({"Loop Depth", std::to_string(depth)});
+
+    if (data_movement_cost_exclusive == data_movement_cost_inclusive) {
+        table_rows.push_back(
+            {"Data Movement Cost", std::to_string(data_movement_cost_exclusive) + "%"});
+    } else {
+        table_rows.push_back(
+            {"Data Movement Cost (Exclusive)", std::to_string(data_movement_cost_exclusive) + "%"});
+        table_rows.push_back(
+            {"Data Movement Cost (Inclusive)", std::to_string(data_movement_cost_inclusive) + "%"});
+    }
+
+    return tooltip_table(table_rows, extra_note);
+}
+
+int IRVisualization::get_color_range(const IRNode *op, bool inclusive, bool is_computation) const {
+    if (op == nullptr) {
+        return 0;
+    }
+
+    int range_size;
+    int cost;
+    int range;
+
+    // divide max cost by NUMBER_COST_COLORS and round up to get range size
+    if (inclusive) {
+        range_size = (find_stmt_cost.get_max_cost(true, is_computation) / NUMBER_COST_COLORS) + 1;
+        cost = find_stmt_cost.get_cost(op, inclusive, is_computation);
+        range = cost / range_size;
+    } else {
+        range_size = (find_stmt_cost.get_max_cost(false, is_computation) / NUMBER_COST_COLORS) + 1;
+        cost = find_stmt_cost.get_cost(op, inclusive, is_computation);
+        range = cost / range_size;
+    }
+    return range;
+}
+
+int IRVisualization::get_combined_color_range(const IRNode *op, bool is_computation) const {
+    if (op == nullptr) {
+        return 0;
+    }
+
+    // divide max cost by NUMBER_COST_COLORS and round up to get range size
+    int range_size = (find_stmt_cost.get_max_cost(false, is_computation) / NUMBER_COST_COLORS) + 1;
+    int cost = find_stmt_cost.get_cost(op, true, is_computation);
+    int range = cost / range_size;
+
+    if (range >= NUMBER_COST_COLORS) range = NUMBER_COST_COLORS - 1;
+
+    return range;
+}
+
 void IRVisualization::start_module_traversal(const Module &m) {
 
     // print main function first
@@ -659,103 +754,6 @@ string IRVisualization::tooltip_table(vector<pair<string, string>> &table, strin
     return s.str();
 }
 
-// generates tooltip information for the given node
-string IRVisualization::generate_computation_cost_tooltip(const IRNode *op, string extra_note) {
-    int depth, computation_cost_exclusive, computation_cost_inclusive;
-
-    if (op == nullptr) {
-        depth = 0;
-        computation_cost_exclusive = NORMAL_NODE_CC;
-    } else {
-        depth = find_stmt_cost.get_depth(op);
-    }
-
-    computation_cost_exclusive = get_cost_percentage(op, false, true);
-    computation_cost_inclusive = get_cost_percentage(op, true, true);
-
-    // build up values of the table that will be displayed
-    vector<pair<string, string>> table_rows;
-    table_rows.push_back({"Loop Depth", std::to_string(depth)});
-
-    if (computation_cost_exclusive == computation_cost_inclusive) {
-        table_rows.push_back(
-            {"Computation Cost", std::to_string(computation_cost_exclusive) + "%"});
-    } else {
-        table_rows.push_back(
-            {"Computation Cost (Exclusive)", std::to_string(computation_cost_exclusive) + "%"});
-        table_rows.push_back(
-            {"Computation Cost (Inclusive)", std::to_string(computation_cost_inclusive) + "%"});
-    }
-
-    return tooltip_table(table_rows, extra_note);
-}
-
-string IRVisualization::generate_data_movement_cost_tooltip(const IRNode *op, string extra_note) {
-    int depth, data_movement_cost_exclusive, data_movement_cost_inclusive;
-
-    if (op == nullptr) {
-        depth = 0;
-    } else {
-        depth = find_stmt_cost.get_depth(op);
-    }
-
-    data_movement_cost_exclusive = get_cost_percentage(op, false, false);
-    data_movement_cost_inclusive = get_cost_percentage(op, true, false);
-
-    // build up values of the table that will be displayed
-    vector<pair<string, string>> table_rows;
-    table_rows.push_back({"Loop Depth", std::to_string(depth)});
-
-    if (data_movement_cost_exclusive == data_movement_cost_inclusive) {
-        table_rows.push_back(
-            {"Data Movement Cost", std::to_string(data_movement_cost_exclusive) + "%"});
-    } else {
-        table_rows.push_back(
-            {"Data Movement Cost (Exclusive)", std::to_string(data_movement_cost_exclusive) + "%"});
-        table_rows.push_back(
-            {"Data Movement Cost (Inclusive)", std::to_string(data_movement_cost_inclusive) + "%"});
-    }
-
-    return tooltip_table(table_rows, extra_note);
-}
-
-int IRVisualization::get_color_range(const IRNode *op, bool inclusive, bool is_computation) const {
-    if (op == nullptr) {
-        return 0;
-    }
-
-    int range_size;
-    int cost;
-    int range;
-
-    // divide max cost by NUMBER_COST_COLORS and round up to get range size
-    if (inclusive) {
-        range_size = (find_stmt_cost.get_max_cost(true, is_computation) / NUMBER_COST_COLORS) + 1;
-        cost = find_stmt_cost.get_cost(op, inclusive, is_computation);
-        range = cost / range_size;
-    } else {
-        range_size = (find_stmt_cost.get_max_cost(false, is_computation) / NUMBER_COST_COLORS) + 1;
-        cost = find_stmt_cost.get_cost(op, inclusive, is_computation);
-        range = cost / range_size;
-    }
-    return range;
-}
-
-int IRVisualization::get_combined_color_range(const IRNode *op, bool is_computation) const {
-    if (op == nullptr) {
-        return 0;
-    }
-
-    // divide max cost by NUMBER_COST_COLORS and round up to get range size
-    int range_size = (find_stmt_cost.get_max_cost(false, is_computation) / NUMBER_COST_COLORS) + 1;
-    int cost = find_stmt_cost.get_cost(op, true, is_computation);
-    int range = cost / range_size;
-
-    if (range >= NUMBER_COST_COLORS) range = NUMBER_COST_COLORS - 1;
-
-    return range;
-}
-
 string IRVisualization::IRVisualization::color_button(int color_range) {
     stringstream ss;
 
@@ -768,7 +766,6 @@ string IRVisualization::IRVisualization::color_button(int color_range) {
 
     return ss.str();
 }
-
 string IRVisualization::computation_div(const IRNode *op) {
     // want exclusive cost (so that the colors match up with exclusive costs)
     int computation_range = get_color_range(op, false, true);
