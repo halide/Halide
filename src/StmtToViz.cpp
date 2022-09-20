@@ -2250,6 +2250,11 @@ function resizeAssembly(e) { \n \
  \n \
     var rect = resizeBar.getBoundingClientRect(); \n \
  \n \
+    if (e.x < rect.right) {\n \
+        collapseViz();\n \
+        return;\n \
+    }\n \
+ \n \
     const size = `${e.x}px`; \n \
     irVizDiv.style.display = 'block'; \n \
     assemblyCodeDiv.style.display = 'block'; \n \
