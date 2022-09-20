@@ -986,12 +986,6 @@ void IRVisualization::visit(const Load *op) {
 
     header += "Load <i>" + op->name + "</i>";
 
-    if (find_stmt_cost.is_local_variable(op->name)) {
-        table_rows.push_back({"Variable Type", "local var"});
-    } else {
-        table_rows.push_back({"Variable Type", "global var"});
-    }
-
     table_rows.push_back({"Bit Size", std::to_string(op->index.type().bits())});
     table_rows.push_back({"Vector Size", std::to_string(op->index.type().lanes())});
 

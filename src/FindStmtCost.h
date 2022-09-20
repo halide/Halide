@@ -15,12 +15,8 @@ using namespace std;
 
 #define NORMAL_NODE_CC 1
 #define NORMAL_NODE_DMC 0
-#define NORMAL_SCALE_FACTOR_DMC 1
-#define DEPTH_COST 3
 #define LOAD_DM_COST 2
 #define STORE_DM_COST 3
-#define LOAD_LOCAL_VAR_COST 3
-#define LOAD_GLOBAL_VAR_COST 10
 
 #define NUMBER_COST_COLORS 20
 
@@ -33,29 +29,6 @@ struct StmtCost {
     int data_movement_cost_inclusive;  // per entire node (includes cost of body)
     int computation_cost_exclusive;    // per line
     int data_movement_cost_exclusive;  // per line
-};
-
-/*
- * CostPreProcessor class
- */
-class CostPreProcessor : public IRVisitor {
-public:
-    // starts the traversal based on Module
-    void traverse(const Module &m);
-
-    // returns the number of lock accesses of the given lock name
-    int get_lock_access_count(const string name) const;
-
-private:
-    using IRVisitor::visit;
-
-    map<const string, int> lock_access_counts;  // key: lock name, value: number of accesses
-
-    // increases the lock access count
-    void increase_count(const string name);
-
-    void visit(const Acquire *op) override;
-    void visit(const Atomic *op) override;
 };
 
 /*
@@ -84,17 +57,12 @@ public:
     int get_combined_computation_color_range(const IRNode *op) const;
     int get_combined_data_movement_color_range(const IRNode *op) const;
 
-    // is local (defined in Allocate block) or not
-    bool is_local_variable(const string &name) const;
-
     // prints node type
     string print_node(const IRNode *node) const;
 
 private:
     unordered_map<const IRNode *, StmtCost> stmt_cost;  // key: node, value: cost
-    CostPreProcessor cost_preprocessor;                 // for Atomic and Acquire
     int current_loop_depth;                             // stores current loop depth level
-    vector<string> allocate_variables;                  // stores all allocate variables
 
     // these are used for determining the range of the cost
     int max_computation_cost_inclusive;
@@ -127,10 +95,8 @@ private:
                                    bool inclusive) const;
 
     // sets inclusive/exclusive costs
-    void set_inclusive_costs(const IRNode *node, vector<const IRNode *> children, int node_cc,
-                             int node_dmc, int scaling_factor_dmc);
-    void set_exclusive_costs(const IRNode *node, vector<const IRNode *> children, int node_cc,
-                             int node_dmc, int scaling_factor_dmc);
+    void set_costs(bool inclusive, const IRNode *node, vector<const IRNode *> children,
+                   std::function<int(int)> calculate_cc, std::function<int(int)> calculate_dmc);
 
     // sets max computation cost and max data movement cost (inclusive and exclusive)
     void set_max_costs(const Module &m);

@@ -902,8 +902,10 @@ private:
     }
     void visit(const Free *op) override {
         stream << open_div("Free WrapLine");
+        stream << open_cost_span(op);
         stream << keyword("free") << " ";
         stream << var(op->name);
+        stream << close_cost_span();
         stream << close_div();
     }
     void visit(const Realize *op) override {
