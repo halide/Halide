@@ -73,11 +73,11 @@ WEAK int halide_context_set_value(halide_context_key_t key, void *value) {
     return result;
 }
 
-WEAK const halide_context_info_t *halide_context_get_current_info() {
+WEAK const struct halide_context_info_t *halide_context_get_current_info() {
     return &tls_context_info;
 }
 
-WEAK void halide_context_set_current_info(const halide_context_info_t *info) {
+WEAK void halide_context_set_current_info(const struct halide_context_info_t *info) {
     tls_context_info = *info;
 }
 
