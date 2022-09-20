@@ -1,5 +1,7 @@
 #include "Halide.h"
 
+// The convenience macros only go up to 5 arguments; we need 6 here,
+// so we'll just extend it.
 #define HalideExtern_6(rt, name, t0, t1, t2, t3, t4, t5)                                                                                                                \
     Halide::Expr name(const Halide::Expr &a0, const Halide::Expr &a1, const Halide::Expr &a2, const Halide::Expr &a3, const Halide::Expr &a4, const Halide::Expr &a5) { \
         _halide_check_arg_type(Halide::type_of<t0>(), name, a0, 1);                                                                                                     \
