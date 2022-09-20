@@ -33,7 +33,7 @@ add_halide_library(fft_inverse_c2c FROM fft.generator
 # flag on os x, and testing this on one platform is sufficient.
 set(LDFLAGS "")
 if (CMAKE_SYSTEM_NAME MATCHES "Darwin")
-    set(LDFLAGS "-Wl,-stack_size;-Wl,0x100000")
+    set(LDFLAGS "LINKER:-stack_size,0x100000")
 endif()
 
 # Main executable
