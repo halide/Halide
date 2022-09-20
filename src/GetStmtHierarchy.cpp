@@ -102,7 +102,7 @@ string GetStmtHierarchy::generate_computation_cost_div(const IRNode *op) {
     stmt_hierarchy_tooltip_count++;
 
     stringstream ss;
-    string tooltip_text = find_stmt_cost.generate_computation_cost_tooltip(op, false, "");
+    string tooltip_text = ir_viz.generate_computation_cost_tooltip(op, false, "");
 
     // tooltip span
     ss << "<span id='stmtHierarchyTooltip" << stmt_hierarchy_tooltip_count
@@ -111,7 +111,7 @@ string GetStmtHierarchy::generate_computation_cost_div(const IRNode *op) {
        << "</span>";
 
     // color div
-    int computation_range = find_stmt_cost.get_computation_color_range(op, false);
+    int computation_range = ir_viz.get_color_range(op, false, true);
     string class_name = "computation-cost-div CostColor" + std::to_string(computation_range);
     ss << "<div id='stmtHierarchyButtonTooltip" << stmt_hierarchy_tooltip_count << "' ";
     ss << "aria-describedby='stmtHierarchyTooltip" << stmt_hierarchy_tooltip_count << "' ";
@@ -124,7 +124,7 @@ string GetStmtHierarchy::generate_memory_cost_div(const IRNode *op) {
     stmt_hierarchy_tooltip_count++;
 
     stringstream ss;
-    string tooltip_text = find_stmt_cost.generate_data_movement_cost_tooltip(op, false, "");
+    string tooltip_text = ir_viz.generate_data_movement_cost_tooltip(op, false, "");
 
     // tooltip span
     ss << "<span id='stmtHierarchyTooltip" << stmt_hierarchy_tooltip_count
@@ -133,7 +133,7 @@ string GetStmtHierarchy::generate_memory_cost_div(const IRNode *op) {
        << "</span>";
 
     // color div
-    int data_movement_range = find_stmt_cost.get_data_movement_color_range(op, false);
+    int data_movement_range = ir_viz.get_color_range(op, false, false);
     string class_name = "memory-cost-div CostColor" + std::to_string(data_movement_range);
     ss << "<div id='stmtHierarchyButtonTooltip" << stmt_hierarchy_tooltip_count << "' "
        << "aria-describedby='stmtHierarchyTooltip" << stmt_hierarchy_tooltip_count << "' "
@@ -175,7 +175,7 @@ string GetStmtHierarchy::open_node(const IRNode *op, string name) {
     ss << generate_memory_cost_div(op);
 
     ss << "<div class='nodeName'>" << name
-       << "<button class='stmtHierarchyButton info-button' onclick='handleClick(" << curr_node_ID
+       << "<button class='stmtHierarchyButton infoButton' onclick='handleClick(" << curr_node_ID
        << ")'>"
        << "<i id='stmtHierarchyButton" << curr_node_ID << "'></i> "
        << "</button>"

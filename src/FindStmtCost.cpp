@@ -12,125 +12,20 @@ void FindStmtCost::generate_costs(const Module &m) {
     set_max_costs(m);
 }
 
-string FindStmtCost::generate_computation_cost_tooltip(const IRNode *op, bool inclusive,
-                                                       string extra_note) {
-    int depth, computation_cost_exclusive, computation_cost_inclusive;
-
-    if (op == nullptr) {
-        depth = 0;
-        computation_cost_exclusive = NORMAL_NODE_CC;
-        computation_cost_inclusive = get_computation_cost_percentage(op, true);
+int FindStmtCost::get_max_cost(bool inclusive, bool is_computation) const {
+    if (is_computation) {
+        if (inclusive) {
+            return max_computation_cost_inclusive;
+        } else {
+            return max_computation_cost_exclusive;
+        }
     } else {
-        depth = get_depth(op);
-        computation_cost_exclusive = get_cost(op, false, true);
-        computation_cost_inclusive = get_computation_cost_percentage(op, true);
+        if (inclusive) {
+            return max_data_movement_cost_inclusive;
+        } else {
+            return max_data_movement_cost_exclusive;
+        }
     }
-
-    // build up values of the table that will be displayed
-    vector<pair<string, string>> table_rows;
-    table_rows.push_back({"Loop Depth", std::to_string(depth)});
-    table_rows.push_back(
-        {"Computation Cost (Inclusive)", std::to_string(computation_cost_inclusive) + "%"});
-    table_rows.push_back(
-        {"Computation Cost (Exclusive)", std::to_string(computation_cost_exclusive)});
-
-    return tooltip_table(table_rows, extra_note);
-}
-string FindStmtCost::generate_data_movement_cost_tooltip(const IRNode *op, bool inclusive,
-                                                         string extra_note) {
-    int depth, data_movement_cost_exclusive, data_movement_cost_inclusive;
-
-    if (op == nullptr) {
-        depth = 0;
-        data_movement_cost_exclusive = NORMAL_NODE_DMC;
-        data_movement_cost_inclusive = get_data_movement_cost_percentage(op, true);
-    } else {
-        depth = get_depth(op);
-        data_movement_cost_exclusive = get_cost(op, false, false);
-        data_movement_cost_inclusive = get_data_movement_cost_percentage(op, true);
-    }
-
-    // build up values of the table that will be displayed
-    vector<pair<string, string>> table_rows;
-    table_rows.push_back({"Loop Depth", std::to_string(depth)});
-    table_rows.push_back(
-        {"Data Movement Cost (Inclusive)", std::to_string(data_movement_cost_inclusive) + "%"});
-    table_rows.push_back(
-        {"Data Movement Cost (Exclusive)", std::to_string(data_movement_cost_exclusive)});
-
-    return tooltip_table(table_rows, extra_note);
-}
-
-int FindStmtCost::get_computation_color_range(const IRNode *op, bool inclusive) const {
-    if (op == nullptr) {
-        return 0;
-    }
-
-    int range_size;
-    int cost;
-    int range;
-
-    // divide max cost by NUMBER_COST_COLORS and round up to get range size
-    if (inclusive) {
-        range_size = (max_computation_cost_inclusive / NUMBER_COST_COLORS) + 1;
-        cost = get_cost(op, inclusive, true);
-        range = cost / range_size;
-    } else {
-        range_size = (max_computation_cost_exclusive / NUMBER_COST_COLORS) + 1;
-        cost = get_cost(op, inclusive, true);
-        range = cost / range_size;
-    }
-    return range;
-}
-int FindStmtCost::get_data_movement_color_range(const IRNode *op, bool inclusive) const {
-    if (op == nullptr) {
-        return 0;
-    }
-
-    int range_size;
-    int cost;
-    int range;
-
-    // divide max cost by NUMBER_COST_COLORS and round up to get range size
-    if (inclusive) {
-        range_size = (max_data_movement_cost_inclusive / NUMBER_COST_COLORS) + 1;
-        cost = get_cost(op, inclusive, false);
-        range = cost / range_size;
-    } else {
-        range_size = (max_data_movement_cost_exclusive / NUMBER_COST_COLORS) + 1;
-        cost = get_cost(op, inclusive, false);
-        range = cost / range_size;
-    }
-    return range;
-}
-
-int FindStmtCost::get_combined_computation_color_range(const IRNode *op) const {
-    if (op == nullptr) {
-        return 0;
-    }
-
-    // divide max cost by NUMBER_COST_COLORS and round up to get range size
-    int range_size = (max_computation_cost_exclusive / NUMBER_COST_COLORS) + 1;
-    int cost = get_cost(op, true, true);
-    int range = cost / range_size;
-
-    if (range >= NUMBER_COST_COLORS) range = NUMBER_COST_COLORS - 1;
-
-    return range;
-}
-int FindStmtCost::get_combined_data_movement_color_range(const IRNode *op) const {
-    if (op == nullptr) {
-        return 0;
-    }
-
-    // divide max cost by NUMBER_COST_COLORS and round up to get range size
-    int range_size = (max_data_movement_cost_exclusive / NUMBER_COST_COLORS) + 1;
-    int cost = get_cost(op, true, false);
-    int range = cost / range_size;
-
-    if (range >= NUMBER_COST_COLORS) range = NUMBER_COST_COLORS - 1;
-
-    return range;
 }
 
 void FindStmtCost::traverse(const Module &m) {
@@ -302,55 +197,23 @@ int FindStmtCost::get_if_node_cost(const IRNode *op, bool inclusive, bool is_com
 
     if (is_computation) {
         if (inclusive) {
-            int data_movement_cost =
-                get_computation_cost(if_then_else->condition.get(), inclusive) +
-                get_computation_cost(if_then_else->then_case.get(), inclusive);
-            cost = data_movement_cost;
+            int computation_cost = get_computation_cost(if_then_else->condition.get(), inclusive) +
+                                   get_computation_cost(if_then_else->then_case.get(), inclusive);
+            cost = computation_cost;
         } else {
             cost = NORMAL_NODE_CC;
         }
     } else {
         if (inclusive) {
-            int computation_cost =
+            int data_movement_cost =
                 get_data_movement_cost(if_then_else->condition.get(), inclusive) +
                 get_data_movement_cost(if_then_else->then_case.get(), inclusive);
-            cost = computation_cost;
+            cost = data_movement_cost;
         } else {
             cost = NORMAL_NODE_DMC;
         }
     }
     return cost;
-}
-
-int FindStmtCost::get_computation_cost_percentage(const IRNode *node, bool inclusive) const {
-    int cost;
-    if (node == nullptr) {
-        cost = NORMAL_NODE_CC;
-    } else {
-        cost = get_cost(node, inclusive, true);
-    }
-    int total_cost;
-    if (inclusive) {
-        total_cost = max_computation_cost_inclusive;
-    } else {
-        total_cost = max_computation_cost_exclusive;
-    }
-    return (int)((float)cost / (float)total_cost * 100);
-}
-int FindStmtCost::get_data_movement_cost_percentage(const IRNode *node, bool inclusive) const {
-    int cost;
-    if (node == nullptr) {
-        cost = NORMAL_NODE_DMC;
-    } else {
-        cost = get_cost(node, inclusive, false);
-    }
-    int total_cost;
-    if (inclusive) {
-        total_cost = max_data_movement_cost_inclusive;
-    } else {
-        total_cost = max_data_movement_cost_exclusive;
-    }
-    return (int)((float)cost / (float)total_cost * 100);
 }
 
 vector<int> FindStmtCost::get_costs_children(const IRNode *parent, vector<const IRNode *> children,
@@ -432,23 +295,6 @@ void FindStmtCost::set_max_costs(const Module &m) {
         }
     }
     max_data_movement_cost_exclusive = max_cost;
-}
-
-string FindStmtCost::tooltip_table(vector<pair<string, string>> &table, string extra_note) {
-    stringstream s;
-    s << "<table class='tooltipTable'>";
-    for (auto &row : table) {
-        s << "<tr>";
-        s << "<td class = 'left-table'>" << row.first << "</td>";
-        s << "<td class = 'right-table'> " << row.second << "</td>";
-        s << "</tr>";
-    }
-    s << "</table>";
-
-    if (extra_note != "") {
-        s << "<i><span class='tooltipHelperText'>" << extra_note << "</span></i>";
-    }
-    return s.str();
 }
 
 int FindStmtCost::get_scaling_factor(uint8_t bits, uint16_t lanes) const {
@@ -919,13 +765,14 @@ void FindStmtCost::visit(const IfThenElse *op) {
         main_node_children.push_back(op->condition.get());
         main_node_children.push_back(op->then_case.get());
 
+        // inclusive and exclusive costs are the same
+        set_costs(false, op, {op->condition.get(), op->then_case.get()});
+        set_costs(true, op, {op->condition.get(), op->then_case.get()});
+
         // if there is no else case, we are done
         if (!op->else_case.defined()) {
             break;
         }
-
-        op->else_case.accept(this);
-        main_node_children.push_back(op->else_case.get());
 
         // if else case is another ifthenelse, recurse and reset op to else case
         if (const IfThenElse *nested_if = op->else_case.as<IfThenElse>()) {
@@ -935,6 +782,7 @@ void FindStmtCost::visit(const IfThenElse *op) {
         // if else case is not another ifthenelse
         else {
             op->else_case.accept(this);
+            main_node_children.push_back(op->else_case.get());
             break;
         }
     }

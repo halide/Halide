@@ -14,6 +14,8 @@ using namespace Internal;
 #define MAX_CONDITION_LENGTH 35
 #define MAX_NUMBER_OF_NODES 15
 
+#define NUMBER_COST_COLORS 20
+
 struct StmtSize {
     map<string, string> writes;
     map<string, string> reads;
@@ -80,7 +82,18 @@ public:
     // generates the html for the IR Visualization
     string generate_ir_visualization_html(const Module &m);
 
+    // returns the JS for the IR Visualization
     string generate_irViz_js();
+
+    // generates tooltip information based on given node
+    string generate_computation_cost_tooltip(const IRNode *op, bool inclusive, string extraNote);
+    string generate_data_movement_cost_tooltip(const IRNode *op, bool inclusive, string extraNote);
+
+    // returns the range of the node's cost based on the other nodes' costs
+    int get_color_range(const IRNode *op, bool inclusive, bool is_computation) const;
+
+    // for when blocks are collapsed in code viz
+    int get_combined_color_range(const IRNode *op, bool is_computation) const;
 
 private:
     using IRVisitor::visit;
@@ -141,12 +154,17 @@ private:
     // info button with tooltip
     string info_button_with_tooltip(string tooltip_text, string button_class_name,
                                     string tooltip_class_name = "");
-    string tooltip_table(vector<pair<string, string>> &table) const;
 
     // for cost colors - side bars
     string generate_computation_cost_div(const IRNode *op);
     string generate_memory_cost_div(const IRNode *op);
     string open_content_div() const;
+
+    // get percentages
+    int get_cost_percentage(const IRNode *node, bool inclusive, bool is_computation) const;
+
+    // builds the tooltip cost table based on given input table
+    string tooltip_table(vector<pair<string, string>> &table, string extra_note = "");
 
     // for cost colors - side boxes
     string color_button(int color_range);

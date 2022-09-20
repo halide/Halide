@@ -225,11 +225,11 @@ private:
         int color_range_inclusive, color_range_exclusive;
 
         if (is_computation) {
-            color_range_inclusive = find_stmt_cost.get_combined_computation_color_range(op);
-            color_range_exclusive = find_stmt_cost.get_computation_color_range(op, false);
+            color_range_inclusive = ir_visualization.get_combined_color_range(op, true);
+            color_range_exclusive = ir_visualization.get_color_range(op, false, true);
         } else {
-            color_range_inclusive = find_stmt_cost.get_combined_data_movement_color_range(op);
-            color_range_exclusive = find_stmt_cost.get_data_movement_color_range(op, false);
+            color_range_inclusive = ir_visualization.get_combined_color_range(op, false);
+            color_range_exclusive = ir_visualization.get_color_range(op, false, false);
         }
         tooltip_count++;
 
@@ -271,7 +271,7 @@ private:
         stringstream s;
         s << color_button(op, true, stmt_hierarchy_info);
 
-        string tooltip_text = find_stmt_cost.generate_computation_cost_tooltip(
+        string tooltip_text = ir_visualization.generate_computation_cost_tooltip(
             op, false, "[Click to see full hierarchy]");
 
         // tooltip span
@@ -286,7 +286,7 @@ private:
         stringstream s;
         s << color_button(op, false, stmt_hierarchy_info);
 
-        string tooltip_text = find_stmt_cost.generate_data_movement_cost_tooltip(
+        string tooltip_text = ir_visualization.generate_data_movement_cost_tooltip(
             op, false, "[Click to see full hierarchy]");
 
         // tooltip span

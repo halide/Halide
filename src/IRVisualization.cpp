@@ -81,7 +81,6 @@ void StmtSizes::set_read_size(const IRNode *node, string read_var, string read_s
 
 void StmtSizes::visit(const Store *op) {
 
-    // TODO: is this correct?
     uint16_t lanes = op->index.type().lanes();
 
     set_write_size(op, op->name, int_span(lanes));
@@ -105,7 +104,6 @@ void StmtSizes::add_load_value(const string &name, const int lanes) {
 }
 void StmtSizes::visit(const Load *op) {
 
-    // TODO: make sure this logic is right
     int lanes = int(op->type.lanes());
 
     add_load_value(op->name, lanes);
@@ -584,7 +582,7 @@ string IRVisualization::generate_computation_cost_div(const IRNode *op) {
 
     ir_viz_tooltip_count++;
 
-    string tooltip_text = find_stmt_cost.generate_computation_cost_tooltip(op, true, "");
+    string tooltip_text = generate_computation_cost_tooltip(op, true, "");
 
     // tooltip span
     ss << "<span id='irVizTooltip" << ir_viz_tooltip_count << "' class='tooltip CostTooltip' ";
@@ -592,7 +590,7 @@ string IRVisualization::generate_computation_cost_div(const IRNode *op) {
     ss << tooltip_text;
     ss << "</span>";
 
-    int computation_range = find_stmt_cost.get_computation_color_range(op, true);
+    int computation_range = get_color_range(op, true, true);
     string class_name = "computation-cost-div CostColor" + std::to_string(computation_range);
     ss << "<div id='irVizButton" << ir_viz_tooltip_count << "' ";
     ss << "aria-describedby='irVizTooltip" << ir_viz_tooltip_count << "' ";
@@ -610,7 +608,7 @@ string IRVisualization::generate_memory_cost_div(const IRNode *op) {
 
     ir_viz_tooltip_count++;
 
-    string tooltip_text = find_stmt_cost.generate_data_movement_cost_tooltip(op, true, "");
+    string tooltip_text = generate_data_movement_cost_tooltip(op, true, "");
 
     // tooltip span
     ss << "<span id='irVizTooltip" << ir_viz_tooltip_count << "' class='tooltip CostTooltip' ";
@@ -618,7 +616,7 @@ string IRVisualization::generate_memory_cost_div(const IRNode *op) {
     ss << tooltip_text;
     ss << "</span>";
 
-    int data_movement_range = find_stmt_cost.get_data_movement_color_range(op, true);
+    int data_movement_range = get_color_range(op, true, false);
     string class_name = "memory-cost-div CostColor" + std::to_string(data_movement_range);
     ss << "<div id='irVizButton" << ir_viz_tooltip_count << "' ";
     ss << "aria-describedby='irVizTooltip" << ir_viz_tooltip_count << "' ";
@@ -632,7 +630,129 @@ string IRVisualization::open_content_div() const {
     return "<div class='content'>";
 }
 
-string IRVisualization::color_button(int color_range) {
+int IRVisualization::get_cost_percentage(const IRNode *node, bool inclusive,
+                                         bool is_computation) const {
+    int cost;
+    if (node == nullptr) {
+        cost = NORMAL_NODE_CC;
+    } else {
+        cost = find_stmt_cost.get_cost(node, inclusive, is_computation);
+    }
+    int total_cost;
+    if (inclusive) {
+        total_cost = find_stmt_cost.get_max_cost(true, is_computation);
+    } else {
+        total_cost = find_stmt_cost.get_max_cost(false, is_computation);
+    }
+    return (int)((float)cost / (float)total_cost * 100);
+}
+
+string IRVisualization::tooltip_table(vector<pair<string, string>> &table, string extra_note) {
+    stringstream s;
+    s << "<table class='tooltipTable'>";
+    for (auto &row : table) {
+        s << "<tr>";
+        s << "<td class = 'left-table'>" << row.first << "</td>";
+        s << "<td class = 'right-table'> " << row.second << "</td>";
+        s << "</tr>";
+    }
+    s << "</table>";
+
+    if (extra_note != "") {
+        s << "<i><span class='tooltipHelperText'>" << extra_note << "</span></i>";
+    }
+    return s.str();
+}
+
+// generates tooltip information for the given node
+string IRVisualization::generate_computation_cost_tooltip(const IRNode *op, bool inclusive,
+                                                          string extra_note) {
+    int depth, computation_cost_exclusive, computation_cost_inclusive;
+
+    if (op == nullptr) {
+        depth = 0;
+        computation_cost_exclusive = NORMAL_NODE_CC;
+        computation_cost_inclusive = get_cost_percentage(op, true, true);
+    } else {
+        depth = find_stmt_cost.get_depth(op);
+        computation_cost_exclusive = find_stmt_cost.get_cost(op, false, true);
+        computation_cost_inclusive = get_cost_percentage(op, true, true);
+    }
+
+    // build up values of the table that will be displayed
+    vector<pair<string, string>> table_rows;
+    table_rows.push_back({"Loop Depth", std::to_string(depth)});
+    table_rows.push_back(
+        {"Computation Cost (Inclusive)", std::to_string(computation_cost_inclusive) + "%"});
+    table_rows.push_back(
+        {"Computation Cost (Exclusive)", std::to_string(computation_cost_exclusive)});
+
+    return tooltip_table(table_rows, extra_note);
+}
+
+string IRVisualization::generate_data_movement_cost_tooltip(const IRNode *op, bool inclusive,
+                                                            string extra_note) {
+    int depth, data_movement_cost_exclusive, data_movement_cost_inclusive;
+
+    if (op == nullptr) {
+        depth = 0;
+        data_movement_cost_exclusive = NORMAL_NODE_DMC;
+        data_movement_cost_inclusive = get_cost_percentage(op, true, false);
+    } else {
+        depth = find_stmt_cost.get_depth(op);
+        data_movement_cost_exclusive = find_stmt_cost.get_cost(op, false, false);
+        data_movement_cost_inclusive = get_cost_percentage(op, true, false);
+    }
+
+    // build up values of the table that will be displayed
+    vector<pair<string, string>> table_rows;
+    table_rows.push_back({"Loop Depth", std::to_string(depth)});
+    table_rows.push_back(
+        {"Data Movement Cost (Inclusive)", std::to_string(data_movement_cost_inclusive) + "%"});
+    table_rows.push_back(
+        {"Data Movement Cost (Exclusive)", std::to_string(data_movement_cost_exclusive)});
+
+    return tooltip_table(table_rows, extra_note);
+}
+
+int IRVisualization::get_color_range(const IRNode *op, bool inclusive, bool is_computation) const {
+    if (op == nullptr) {
+        return 0;
+    }
+
+    int range_size;
+    int cost;
+    int range;
+
+    // divide max cost by NUMBER_COST_COLORS and round up to get range size
+    if (inclusive) {
+        range_size = (find_stmt_cost.get_max_cost(true, is_computation) / NUMBER_COST_COLORS) + 1;
+        cost = find_stmt_cost.get_cost(op, inclusive, is_computation);
+        range = cost / range_size;
+    } else {
+        range_size = (find_stmt_cost.get_max_cost(false, is_computation) / NUMBER_COST_COLORS) + 1;
+        cost = find_stmt_cost.get_cost(op, inclusive, is_computation);
+        range = cost / range_size;
+    }
+    return range;
+}
+
+int IRVisualization::get_combined_color_range(const IRNode *op, bool is_computation) const {
+    if (op == nullptr) {
+        return 0;
+    }
+
+    // divide max cost by NUMBER_COST_COLORS and round up to get range size
+    int range_size = (find_stmt_cost.get_max_cost(false, is_computation) / NUMBER_COST_COLORS) + 1;
+    int cost = find_stmt_cost.get_cost(op, true, true);
+    int range = cost / range_size;
+
+    if (range >= NUMBER_COST_COLORS) range = NUMBER_COST_COLORS - 1;
+
+    return range;
+}
+
+string IRVisualization::IRVisualization::color_button(int color_range) {
     stringstream ss;
 
     ir_viz_tooltip_count++;
@@ -647,12 +767,12 @@ string IRVisualization::color_button(int color_range) {
 
 string IRVisualization::computation_div(const IRNode *op) {
     // want exclusive cost (so that the colors match up with exclusive costs)
-    int computation_range = find_stmt_cost.get_computation_color_range(op, false);
+    int computation_range = get_color_range(op, false, true);
 
     stringstream ss;
     ss << color_button(computation_range);
 
-    string tooltip_text = find_stmt_cost.generate_computation_cost_tooltip(op, false, "");
+    string tooltip_text = generate_computation_cost_tooltip(op, false, "");
 
     // tooltip span
     ss << "<span id='irVizTooltip" << ir_viz_tooltip_count << "' class='tooltip CostTooltip' ";
@@ -664,12 +784,12 @@ string IRVisualization::computation_div(const IRNode *op) {
 }
 string IRVisualization::data_movement_div(const IRNode *op) {
     // want exclusive cost (so that the colors match up with exclusive costs)
-    int data_movement_range = find_stmt_cost.get_data_movement_color_range(op, false);
+    int data_movement_range = get_color_range(op, false, false);
 
     stringstream ss;
     ss << color_button(data_movement_range);
 
-    string tooltip_text = find_stmt_cost.generate_data_movement_cost_tooltip(op, false, "");
+    string tooltip_text = generate_data_movement_cost_tooltip(op, false, "");
 
     // tooltip span
     ss << "<span id='irVizTooltip" << ir_viz_tooltip_count << "' class='tooltip CostTooltip' ";
@@ -677,18 +797,6 @@ string IRVisualization::data_movement_div(const IRNode *op) {
     ss << tooltip_text;
     ss << "</span>";
 
-    return ss.str();
-}
-string IRVisualization::tooltip_table(vector<pair<string, string>> &table) const {
-    stringstream ss;
-    ss << "<table class='tooltipTable'>";
-    for (auto &row : table) {
-        ss << "<tr>";
-        ss << "<td class = 'left-table'>" << row.first << "</td>";
-        ss << "<td class = 'right-table'> " << row.second << "</td>";
-        ss << "</tr>";
-    }
-    ss << "</table>";
     return ss.str();
 }
 string IRVisualization::cost_colors(const IRNode *op) {

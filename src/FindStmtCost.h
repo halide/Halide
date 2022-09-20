@@ -18,8 +18,6 @@ using namespace std;
 #define LOAD_DM_COST 2
 #define STORE_DM_COST 3
 
-#define NUMBER_COST_COLORS 20
-
 /*
  * StmtCost struct
  */
@@ -42,20 +40,19 @@ public:
           max_data_movement_cost_inclusive(0), max_computation_cost_exclusive(0),
           max_data_movement_cost_exclusive(0) {
     }
+
     // starts the traversal of the given node
     void generate_costs(const Module &m);
 
-    // generates tooltip information based on given node
-    string generate_computation_cost_tooltip(const IRNode *op, bool inclusive, string extraNote);
-    string generate_data_movement_cost_tooltip(const IRNode *op, bool inclusive, string extraNote);
+    // checks if node is IfThenElse or something else - will call get_if_node_cost if it is,
+    // get_computation_cost/get_data_movement_cost otherwise
+    int get_cost(const IRNode *node, bool inclusive, bool is_computation) const;
 
-    // returns the range of the node's cost based on the other nodes' costs
-    int get_computation_color_range(const IRNode *op, bool inclusive) const;
-    int get_data_movement_color_range(const IRNode *op, bool inclusive) const;
+    // gets the depth of the node
+    int get_depth(const IRNode *node) const;
 
-    // for when blocks are collapsed in code viz
-    int get_combined_computation_color_range(const IRNode *op) const;
-    int get_combined_data_movement_color_range(const IRNode *op) const;
+    // get max costs
+    int get_max_cost(bool inclusive, bool is_computation) const;
 
     // prints node type
     string print_node(const IRNode *node) const;
@@ -73,22 +70,13 @@ private:
     // starts the traversal based on Module
     void traverse(const Module &m);
 
-    // calculates the total costs and depth of a node
-    int get_depth(const IRNode *node) const;
+    // calculates the total costs of a node
     int get_computation_cost(const IRNode *node, bool inclusive) const;
     int get_data_movement_cost(const IRNode *node, bool inclusive) const;
-
-    // checks if node is IfThenElse or something else - will call get_if_node_cost if it is,
-    // get_computation_cost/get_data_movement_cost otherwise
-    int get_cost(const IRNode *node, bool inclusive, bool is_computation) const;
 
     // treats if nodes differently when visualizing cost - will have cost be:
     //      cost of condition + cost of then_case
     int get_if_node_cost(const IRNode *op, bool inclusive, bool is_computation) const;
-
-    // get percentages
-    int get_computation_cost_percentage(const IRNode *node, bool inclusive) const;
-    int get_data_movement_cost_percentage(const IRNode *node, bool inclusive) const;
 
     // gets costs from `stmt_cost` map of children nodes and sum them up accordingly
     vector<int> get_costs_children(const IRNode *parent, vector<const IRNode *> children,
@@ -100,9 +88,6 @@ private:
 
     // sets max computation cost and max data movement cost (inclusive and exclusive)
     void set_max_costs(const Module &m);
-
-    // builds the tooltip cost table based on given input table
-    string tooltip_table(vector<pair<string, string>> &table, string extra_note);
 
     // gets scaling factor for Load/Store based on lanes and bits
     int get_scaling_factor(uint8_t bits, uint16_t lanes) const;

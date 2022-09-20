@@ -6,6 +6,7 @@
 #include "FindStmtCost.h"
 #include "IROperator.h"
 #include "IRVisitor.h"
+#include "IRVisualization.h"
 
 using namespace std;
 using namespace Halide;
@@ -24,8 +25,8 @@ public:
     static const string stmt_hierarchy_css, stmt_hierarchy_collapse_expand_JS;
 
     GetStmtHierarchy(FindStmtCost find_stmt_cost_populated)
-        : find_stmt_cost(find_stmt_cost_populated), curr_node_ID(0), num_nodes(0), viz_counter(0),
-          stmt_hierarchy_tooltip_count(0) {
+        : find_stmt_cost(find_stmt_cost_populated), ir_viz(find_stmt_cost_populated),
+          curr_node_ID(0), num_nodes(0), viz_counter(0), stmt_hierarchy_tooltip_count(0) {
     }
 
     // returns the generated hierarchy's html
@@ -40,7 +41,8 @@ public:
 
 private:
     stringstream html;            // html string
-    FindStmtCost find_stmt_cost;  // used to determine the color of each statement
+    FindStmtCost find_stmt_cost;  // used as input to IRVisualization
+    IRVisualization ir_viz;       // used to generate the tooltip information and cost colors
 
     // for expanding/collapsing nodes
     int curr_node_ID;   // ID of the current node in traversal
