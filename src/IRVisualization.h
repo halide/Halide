@@ -1,5 +1,5 @@
-#ifndef IRVVISUALIZATION_H
-#define IRVVISUALIZATION_H
+#ifndef IRVISUALIZATION_H
+#define IRVISUALIZATION_H
 
 #include "FindStmtCost.h"
 #include "IRVisitor.h"

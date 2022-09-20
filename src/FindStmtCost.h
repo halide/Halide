@@ -1,6 +1,7 @@
 #ifndef FINDSTMTCOST_H
 #define FINDSTMTCOST_H
 
+#include "Error.h"
 #include "ExternFuncArgument.h"
 #include "Function.h"
 #include "IRVisitor.h"

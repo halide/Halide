@@ -1,5 +1,4 @@
 #include "FindStmtCost.h"
-#include "Error.h"
 
 using namespace Halide;
 using namespace Internal;
