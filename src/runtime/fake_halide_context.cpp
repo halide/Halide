@@ -60,14 +60,12 @@ WEAK int halide_context_set_value(halide_context_key_t key, void *value) {
 }
 
 WEAK const halide_context_info_t *halide_context_get_current_info() {
-    static halide_context_info_t info;
-    return &info;
     halide_error(nullptr, "halide_context_get_current_info not implemented on this platform.");
     return nullptr;
 }
 
 WEAK void halide_context_set_current_info(const halide_context_info_t *info) {
-    //halide_error(nullptr, "halide_context_set_current_info not implemented on this platform.");
+    halide_error(nullptr, "halide_context_set_current_info not implemented on this platform.");
 }
 
 }  // extern "C"
