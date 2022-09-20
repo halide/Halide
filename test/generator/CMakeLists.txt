@@ -137,6 +137,7 @@ halide_define_aot_test(async_parallel
                        FEATURES user_context
                        GROUPS multithreaded)
 
+# halide_context_aottest.cpp
 halide_define_aot_test(halide_context
                        ENABLE_IF (NOT ${USING_WASM} OR ${USING_WASM_THREADS})
                        OMIT_DEFAULT_GENERATOR OMIT_DEFAULT_LIBRARY
