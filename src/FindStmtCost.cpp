@@ -64,10 +64,10 @@ string FindStmtCost::generate_computation_cost_tooltip(const IRNode *op, bool in
     if (op == nullptr) {
         depth = 0;
         computation_cost_exclusive = NORMAL_NODE_CC;
-        computation_cost_inclusive = NORMAL_NODE_CC;
+        computation_cost_inclusive = get_computation_cost_percentage(op, true);
     } else {
         depth = get_depth(op);
-        computation_cost_exclusive = get_computation_cost_percentage(op, false);
+        computation_cost_exclusive = get_cost(op, false, true);
         computation_cost_inclusive = get_computation_cost_percentage(op, true);
     }
 
@@ -77,7 +77,7 @@ string FindStmtCost::generate_computation_cost_tooltip(const IRNode *op, bool in
     table_rows.push_back(
         {"Computation Cost (Inclusive)", std::to_string(computation_cost_inclusive) + "%"});
     table_rows.push_back(
-        {"Computation Cost (Exclusive)", std::to_string(computation_cost_exclusive) + "%"});
+        {"Computation Cost (Exclusive)", std::to_string(computation_cost_exclusive)});
 
     return tooltip_table(table_rows, extra_note);
 }
@@ -88,20 +88,20 @@ string FindStmtCost::generate_data_movement_cost_tooltip(const IRNode *op, bool 
     if (op == nullptr) {
         depth = 0;
         data_movement_cost_exclusive = NORMAL_NODE_DMC;
-        data_movement_cost_inclusive = NORMAL_NODE_DMC;
+        data_movement_cost_inclusive = get_data_movement_cost_percentage(op, true);
     } else {
         depth = get_depth(op);
-        data_movement_cost_exclusive = get_data_movement_cost_percentage(op, false);
+        data_movement_cost_exclusive = get_cost(op, false, false);
         data_movement_cost_inclusive = get_data_movement_cost_percentage(op, true);
     }
 
     // build up values of the table that will be displayed
     vector<pair<string, string>> table_rows;
-    table_rows.push_back({"Depth", std::to_string(depth)});
+    table_rows.push_back({"Loop Depth", std::to_string(depth)});
     table_rows.push_back(
         {"Data Movement Cost (Inclusive)", std::to_string(data_movement_cost_inclusive) + "%"});
     table_rows.push_back(
-        {"Data Movement Cost (Exclusive)", std::to_string(data_movement_cost_exclusive) + "%"});
+        {"Data Movement Cost (Exclusive)", std::to_string(data_movement_cost_exclusive)});
 
     return tooltip_table(table_rows, extra_note);
 }
@@ -377,7 +377,12 @@ int FindStmtCost::get_if_node_cost(const IRNode *op, bool inclusive, bool is_com
 }
 
 int FindStmtCost::get_computation_cost_percentage(const IRNode *node, bool inclusive) const {
-    int cost = get_cost(node, inclusive, true);
+    int cost;
+    if (node == nullptr) {
+        cost = NORMAL_NODE_CC;
+    } else {
+        cost = get_cost(node, inclusive, true);
+    }
     int total_cost;
     if (inclusive) {
         total_cost = max_computation_cost_inclusive;
@@ -387,7 +392,12 @@ int FindStmtCost::get_computation_cost_percentage(const IRNode *node, bool inclu
     return (int)((float)cost / (float)total_cost * 100);
 }
 int FindStmtCost::get_data_movement_cost_percentage(const IRNode *node, bool inclusive) const {
-    int cost = get_cost(node, inclusive, false);
+    int cost;
+    if (node == nullptr) {
+        cost = NORMAL_NODE_DMC;
+    } else {
+        cost = get_cost(node, inclusive, false);
+    }
     int total_cost;
     if (inclusive) {
         total_cost = max_data_movement_cost_inclusive;
