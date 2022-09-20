@@ -744,7 +744,7 @@ int IRVisualization::get_combined_color_range(const IRNode *op, bool is_computat
 
     // divide max cost by NUMBER_COST_COLORS and round up to get range size
     int range_size = (find_stmt_cost.get_max_cost(false, is_computation) / NUMBER_COST_COLORS) + 1;
-    int cost = find_stmt_cost.get_cost(op, true, true);
+    int cost = find_stmt_cost.get_cost(op, true, is_computation);
     int range = cost / range_size;
 
     if (range >= NUMBER_COST_COLORS) range = NUMBER_COST_COLORS - 1;
