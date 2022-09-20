@@ -1155,18 +1155,11 @@ void IRVisualization::visit(const Allocate *op) {
         table_rows.push_back({"Condition", condition_string.str()});
     }
     if (op->new_expr.defined()) {
-        internal_error << "\n"
-                       << "IRVisualization: Allocate " << op->name
-                       << " `op->new_expr.defined()` is not supported.\n\n";
-
         stringstream new_expr_string;
         new_expr_string << op->new_expr;
         table_rows.push_back({"New Expr", new_expr_string.str()});
     }
     if (!op->free_function.empty()) {
-        internal_error << "\n"
-                       << "IRVisualization: Allocate " << op->name
-                       << " `!op->free_function.empty()` is not supported.\n\n";
 
         stringstream free_func_string;
         free_func_string << op->free_function;

@@ -1438,7 +1438,7 @@ public:
         // doesn't currently support submodules - could comment out error, no guarantee it'll work
         // as expected
         for (const auto &s : m.submodules()) {
-            internal_error << "\n\nDoes not support submodules yet\n\n";
+            internal_error << "\n\nStmtToViz does not support submodules yet\n\n";
             print(s);
         }
 
