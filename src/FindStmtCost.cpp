@@ -73,7 +73,7 @@ string FindStmtCost::generate_computation_cost_tooltip(const IRNode *op, bool in
 
     // build up values of the table that will be displayed
     vector<pair<string, string>> table_rows;
-    table_rows.push_back({"Depth", std::to_string(depth)});
+    table_rows.push_back({"Loop Depth", std::to_string(depth)});
     table_rows.push_back(
         {"Computation Cost (Inclusive)", std::to_string(computation_cost_inclusive) + "%"});
     table_rows.push_back(
@@ -420,14 +420,8 @@ void FindStmtCost::set_inclusive_costs(const IRNode *node, vector<const IRNode *
 
     int computation_cost;
     int data_movement_cost;
-    if (current_loop_depth == 0) {
-        computation_cost = node_cc + costs_children[0];
-        data_movement_cost = node_dmc + costs_children[1];
-    } else {
-        computation_cost = (node_cc * current_loop_depth * DEPTH_COST) + costs_children[0];
-        data_movement_cost =
-            scaling_factor_dmc * ((node_dmc * current_loop_depth * DEPTH_COST) + costs_children[1]);
-    }
+    computation_cost = node_cc + costs_children[0];
+    data_movement_cost = node_dmc + costs_children[1];
 
     auto it = stmt_cost.find(node);
     if (it == stmt_cost.end()) {
@@ -445,14 +439,8 @@ void FindStmtCost::set_exclusive_costs(const IRNode *node, vector<const IRNode *
 
     int computation_cost;
     int data_movement_cost;
-    if (current_loop_depth == 0) {
-        computation_cost = node_cc + costs_children[0];
-        data_movement_cost = node_dmc + costs_children[1];
-    } else {
-        computation_cost = (node_cc * current_loop_depth * DEPTH_COST) + costs_children[0];
-        data_movement_cost =
-            scaling_factor_dmc * ((node_dmc * current_loop_depth * DEPTH_COST) + costs_children[1]);
-    }
+    computation_cost = node_cc + costs_children[0];
+    data_movement_cost = node_dmc + costs_children[1];
 
     auto it = stmt_cost.find(node);
     if (it == stmt_cost.end()) {
