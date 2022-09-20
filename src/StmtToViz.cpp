@@ -1580,8 +1580,8 @@ public:
         stream << generate_tooltip_JS(tooltip_count);
         stream << GetStmtHierarchy::stmt_hierarchy_collapse_expand_JS;
         stream << IRVisualization::scroll_to_function_JS_viz_to_code;
-        stream << get_stmt_hierarchy.generate_stmtHierarchy_js();
-        stream << ir_visualization.generate_irViz_js();
+        stream << get_stmt_hierarchy.generate_stmt_hierarchy_js();
+        stream << ir_visualization.generate_ir_visualization_js();
         stream << "</script>\n";
         stream << "</body>";
     }

@@ -7,19 +7,19 @@ using namespace Halide;
 using namespace Internal;
 
 /*
- * StmtSizes class
+ * GetReadWrite class
  */
 
-void StmtSizes::generate_sizes(const Module &m) {
+void GetReadWrite::generate_sizes(const Module &m) {
     traverse(m);
 }
 
-StmtSize StmtSizes::get_size(const IRNode *node) const {
+StmtSize GetReadWrite::get_size(const IRNode *node) const {
     auto it = stmt_sizes.find(node);
 
     // errors if node is not found
     if (it == stmt_sizes.end()) {
-        internal_error << "\n\nStmtSizes::get_size - Node not found in StmtSizes: "
+        internal_error << "\n\nGetReadWrite::get_size - Node not found in stmt_sizes: "
                        << print_node(node) << "\n\n";
         return StmtSize();
     }
@@ -27,14 +27,14 @@ StmtSize StmtSizes::get_size(const IRNode *node) const {
     return it->second;
 }
 
-string StmtSizes::string_span(string var_name) const {
+string GetReadWrite::string_span(string var_name) const {
     return "<span class='stringType'>" + var_name + "</span>";
 }
-string StmtSizes::int_span(int64_t int_val) const {
+string GetReadWrite::int_span(int64_t int_val) const {
     return "<span class='intType'>" + std::to_string(int_val) + "</span>";
 }
 
-void StmtSizes::traverse(const Module &m) {
+void GetReadWrite::traverse(const Module &m) {
 
     // traverse all functions
     for (const auto &f : m.functions()) {
@@ -43,7 +43,7 @@ void StmtSizes::traverse(const Module &m) {
     }
 }
 
-string StmtSizes::get_simplified_string(string a, string b, string op) {
+string GetReadWrite::get_simplified_string(string a, string b, string op) {
     if (op == "+") {
         return a + " + " + b;
     }
@@ -59,19 +59,20 @@ string StmtSizes::get_simplified_string(string a, string b, string op) {
 
     else {
         internal_error << "\n"
-                       << "StmtSizes::get_simplified_string - Unsupported operator: " << op << "\n";
+                       << "GetReadWrite::get_simplified_string - Unsupported operator: " << op
+                       << "\n";
         return "";
     }
 }
 
-void StmtSizes::set_write_size(const IRNode *node, string write_var, string write_size) {
+void GetReadWrite::set_write_size(const IRNode *node, string write_var, string write_size) {
     auto it = stmt_sizes.find(node);
     if (it == stmt_sizes.end()) {
         stmt_sizes[node] = StmtSize();
     }
     stmt_sizes[node].writes[write_var] = write_size;
 }
-void StmtSizes::set_read_size(const IRNode *node, string read_var, string read_size) {
+void GetReadWrite::set_read_size(const IRNode *node, string read_var, string read_size) {
     auto it = stmt_sizes.find(node);
     if (it == stmt_sizes.end()) {
         stmt_sizes[node] = StmtSize();
@@ -79,7 +80,7 @@ void StmtSizes::set_read_size(const IRNode *node, string read_var, string read_s
     stmt_sizes[node].reads[read_var] = read_size;
 }
 
-void StmtSizes::visit(const Store *op) {
+void GetReadWrite::visit(const Store *op) {
 
     uint16_t lanes = op->index.type().lanes();
 
@@ -94,7 +95,7 @@ void StmtSizes::visit(const Store *op) {
         set_read_size(op, load_var.first, int_span(load_var.second));
     }
 }
-void StmtSizes::add_load_value(const string &name, const int lanes) {
+void GetReadWrite::add_load_value(const string &name, const int lanes) {
     auto it = curr_load_values.find(name);
     if (it == curr_load_values.end()) {
         curr_load_values[name] = lanes;
@@ -102,7 +103,7 @@ void StmtSizes::add_load_value(const string &name, const int lanes) {
         curr_load_values[name] += lanes;
     }
 }
-void StmtSizes::visit(const Load *op) {
+void GetReadWrite::visit(const Load *op) {
 
     int lanes = int(op->type.lanes());
 
@@ -113,7 +114,7 @@ void StmtSizes::visit(const Load *op) {
  * IRVisualization class
  */
 string IRVisualization::generate_ir_visualization_html(const Module &m) {
-    pre_processor.generate_sizes(m);
+    get_read_write.generate_sizes(m);
 
     html.str("");
     num_of_nodes = 0;
@@ -828,8 +829,8 @@ void IRVisualization::visit(const Variable *op) {
         var_name = var_name.substr(2);
     }
 
-    // see if var_name is in pre_processor.function_names
-    if (std::count(pre_processor.function_names.begin(), pre_processor.function_names.end(),
+    // see if var_name is in get_read_write.function_names
+    if (std::count(get_read_write.function_names.begin(), get_read_write.function_names.end(),
                    var_name)) {
 
         html << "<div class='box center FunctionCallBox'>";
@@ -870,13 +871,13 @@ string IRVisualization::get_loop_iterator(const For *op) const {
         int64_t min_vale = min.as<IntImm>()->value;
         int64_t extent_value = extent.as<IntImm>()->value;
         uint16_t range = uint16_t(extent_value - min_vale);
-        loop_iterator = pre_processor.int_span(range);
+        loop_iterator = get_read_write.int_span(range);
     }
 
     else if (min.node_type() == IRNodeType::IntImm && extent.node_type() == IRNodeType::Variable) {
         int64_t min_vale = min.as<IntImm>()->value;
-        string min_name = pre_processor.int_span(min_vale);
-        string extent_name = pre_processor.string_span(extent.as<Variable>()->name);
+        string min_name = get_read_write.int_span(min_vale);
+        string extent_name = get_read_write.string_span(extent.as<Variable>()->name);
 
         if (min_vale == 0) {
             loop_iterator = extent_name;
@@ -887,21 +888,22 @@ string IRVisualization::get_loop_iterator(const For *op) const {
 
     else if (min.node_type() == IRNodeType::IntImm && extent.node_type() == IRNodeType::Add) {
         int64_t min_vale = min.as<IntImm>()->value;
-        string min_name = pre_processor.int_span(min_vale);
+        string min_name = get_read_write.int_span(min_vale);
         string extent_name = "(";
 
         // deal with a
         if (extent.as<Add>()->a.node_type() == IRNodeType::IntImm) {
             int64_t extent_value = extent.as<Add>()->a.as<IntImm>()->value;
-            extent_name += pre_processor.int_span(extent_value);
+            extent_name += get_read_write.int_span(extent_value);
         } else if (extent.as<Add>()->a.node_type() == IRNodeType::Variable) {
-            extent_name += pre_processor.string_span(extent.as<Add>()->a.as<Variable>()->name);
+            extent_name += get_read_write.string_span(extent.as<Add>()->a.as<Variable>()->name);
         } else {
-            internal_error << "\n"
-                           << "In for loop: " << op->name << "\n"
-                           << pre_processor.print_node(extent.as<Add>()->a.get()) << "\n"
-                           << "StmtSizes::visit(const For *op): add->a isn't IntImm or Variable - "
-                              "can't generate irViz hierarchy yet. \n\n";
+            internal_error
+                << "\n"
+                << "In for loop: " << op->name << "\n"
+                << get_read_write.print_node(extent.as<Add>()->a.get()) << "\n"
+                << "GetReadWrite::visit(const For *op): add->a isn't IntImm or Variable - "
+                   "can't generate IRVisualization yet. \n\n";
         }
 
         extent_name += "+";
@@ -909,15 +911,16 @@ string IRVisualization::get_loop_iterator(const For *op) const {
         // deal with b
         if (extent.as<Add>()->b.node_type() == IRNodeType::IntImm) {
             int64_t extent_value = extent.as<Add>()->b.as<IntImm>()->value;
-            extent_name += pre_processor.int_span(extent_value);
+            extent_name += get_read_write.int_span(extent_value);
         } else if (extent.as<Add>()->b.node_type() == IRNodeType::Variable) {
-            extent_name += pre_processor.string_span(extent.as<Add>()->b.as<Variable>()->name);
+            extent_name += get_read_write.string_span(extent.as<Add>()->b.as<Variable>()->name);
         } else {
-            internal_error << "\n"
-                           << "In for loop: " << op->name << "\n"
-                           << pre_processor.print_node(extent.as<Add>()->b.get()) << "\n"
-                           << "StmtSizes::visit(const For *op): add->b isn't IntImm or Variable - "
-                              "can't generate irViz hierarchy yet. \n\n";
+            internal_error
+                << "\n"
+                << "In for loop: " << op->name << "\n"
+                << get_read_write.print_node(extent.as<Add>()->b.get()) << "\n"
+                << "GetReadWrite::visit(const For *op): add->b isn't IntImm or Variable - "
+                   "can't generate IRVisualization yet. \n\n";
         }
         extent_name += ")";
 
@@ -933,11 +936,11 @@ string IRVisualization::get_loop_iterator(const For *op) const {
         internal_error
             << "\n"
             << "In for loop: " << op->name << "\n"
-            << pre_processor.print_node(op->min.get()) << "\n"
-            << pre_processor.print_node(op->extent.get()) << "\n"
-            << "StmtSizes::visit(const For *op): min and extent are not of type (IntImm) "
+            << get_read_write.print_node(op->min.get()) << "\n"
+            << get_read_write.print_node(op->extent.get()) << "\n"
+            << "GetReadWrite::visit(const For *op): min and extent are not of type (IntImm) "
                "or (IntImm & Variable) or (IntImm & Add) - "
-               "can't generate irViz hierarchy yet. \n\n";
+               "can't generate IRVisualization yet. \n\n";
     }
 
     return loop_iterator;
@@ -1038,7 +1041,7 @@ void IRVisualization::visit(const IfThenElse *op) {
     html << "</div>";
 }
 void IRVisualization::visit(const Store *op) {
-    StmtSize size = pre_processor.get_size(op);
+    StmtSize size = get_read_write.get_size(op);
 
     store_count++;
     string anchor_name = "store" + std::to_string(store_count);
@@ -1180,7 +1183,7 @@ void IRVisualization::visit(const Allocate *op) {
     html << close_box_div();
 }
 
-string IRVisualization::generate_irViz_js() {
+string IRVisualization::generate_ir_visualization_js() {
     stringstream irVizJS;
 
     irVizJS << "\n// irViz JS\n"
@@ -1226,7 +1229,7 @@ string IRVisualization::generate_irViz_js() {
 /*
  * PRINT NODE
  */
-string StmtSizes::print_node(const IRNode *node) const {
+string GetReadWrite::print_node(const IRNode *node) const {
     stringstream ss;
     ss << "Node in question has type: ";
     IRNodeType type = node->node_type;

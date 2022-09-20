@@ -51,7 +51,7 @@ public:
     // gets the depth of the node
     int get_depth(const IRNode *node) const;
 
-    // get max costs
+    // gets max costs
     int get_max_cost(bool inclusive, bool is_computation) const;
 
     // prints node type
@@ -70,12 +70,12 @@ private:
     // starts the traversal based on Module
     void traverse(const Module &m);
 
-    // calculates the total costs of a node
+    // gets the total costs of a node
     int get_computation_cost(const IRNode *node, bool inclusive) const;
     int get_data_movement_cost(const IRNode *node, bool inclusive) const;
 
     // treats if nodes differently when visualizing cost - will have cost be:
-    //      cost of condition + cost of then_case
+    //      cost of condition + cost of then_case (exclude else_case in cost)
     int get_if_node_cost(const IRNode *op, bool inclusive, bool is_computation) const;
 
     // gets costs from `stmt_cost` map of children nodes and sum them up accordingly

@@ -37,7 +37,7 @@ public:
     StmtHierarchyInfo get_else_hierarchy_html();
 
     // generates the JS that is needed to add the tooltips
-    string generate_stmtHierarchy_js();
+    string generate_stmt_hierarchy_js();
 
 private:
     stringstream html;            // html string

@@ -26,9 +26,9 @@ struct StmtSize {
 };
 
 /*
- * StmtSizes class
+ * GetReadWrite class
  */
-class StmtSizes : public IRVisitor {
+class GetReadWrite : public IRVisitor {
 public:
     vector<string> function_names;  // used for figuring out whether variable is a function call
 
@@ -42,6 +42,7 @@ public:
     string string_span(string var_name) const;
     string int_span(int64_t int_val) const;
 
+    // prints nodes in error messages
     string print_node(const IRNode *node) const;
 
 private:
@@ -83,23 +84,23 @@ public:
     string generate_ir_visualization_html(const Module &m);
 
     // returns the JS for the IR Visualization
-    string generate_irViz_js();
+    string generate_ir_visualization_js();
 
-    // generates tooltip information based on given node
+    // generates tooltip tables based on given node
     string generate_computation_cost_tooltip(const IRNode *op, string extraNote);
     string generate_data_movement_cost_tooltip(const IRNode *op, string extraNote);
 
     // returns the range of the node's cost based on the other nodes' costs
     int get_color_range(const IRNode *op, bool inclusive, bool is_computation) const;
 
-    // for when blocks are collapsed in code viz
+    // returns color range when blocks are collapsed in code viz
     int get_combined_color_range(const IRNode *op, bool is_computation) const;
 
 private:
     using IRVisitor::visit;
 
     stringstream html;            // main html string
-    StmtSizes pre_processor;      // generates the sizes of the nodes
+    GetReadWrite get_read_write;  // generates the read/write sizes
     FindStmtCost find_stmt_cost;  // used to determine the color of each statement
     int num_of_nodes;             // keeps track of the number of nodes in the visualization
     int ir_viz_tooltip_count;     // tooltip count
@@ -155,18 +156,18 @@ private:
     string info_button_with_tooltip(string tooltip_text, string button_class_name,
                                     string tooltip_class_name = "");
 
-    // for cost colors - side bars
+    // for cost colors - side bars of boxes
     string generate_computation_cost_div(const IRNode *op);
     string generate_memory_cost_div(const IRNode *op);
     string open_content_div() const;
 
-    // get percentages
+    // gets cost percentages of a given node
     int get_cost_percentage(const IRNode *node, bool inclusive, bool is_computation) const;
 
     // builds the tooltip cost table based on given input table
     string tooltip_table(vector<pair<string, string>> &table, string extra_note = "");
 
-    // for cost colors - side boxes
+    // for cost colors - side boxes of Load nodes
     string color_button(int color_range);
     string computation_div(const IRNode *op);
     string data_movement_div(const IRNode *op);

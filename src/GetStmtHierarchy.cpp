@@ -600,7 +600,7 @@ void GetStmtHierarchy::visit(const Atomic *op) {
     }
 }
 
-string GetStmtHierarchy::generate_stmtHierarchy_js() {
+string GetStmtHierarchy::generate_stmt_hierarchy_js() {
     stringstream stmt_hierarchy_js;
 
     stmt_hierarchy_js

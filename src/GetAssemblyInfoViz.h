@@ -33,20 +33,29 @@ struct ForLoopLineNumber {
 class GetAssemblyInfoViz : public IRVisitor {
 
 public:
+    // generates the assembly info for the module
     void generate_assembly_information(const Module &m, const string &assembly_filename);
 
+    // returns html content that contains the assembly code
     string get_assembly_html();
 
-    // gets line numbers for producers and consumers + for loops
+    // gets line numbers for producers/consumers + for loops
     int get_line_number_prod_cons(const IRNode *op);
     ForLoopLineNumber get_line_numbers_for_loops(const IRNode *op);
 
 private:
+    using IRVisitor::visit;
+
+    // main html content
+    stringstream assembly_HTML;
+
+    // stores mapping of node to line number
     unordered_map<const IRNode *, int> node_to_line_number_prod_cons;
     unordered_map<const IRNode *, ForLoopLineNumber> node_to_line_numbers_for_loops;
+
+    // stores the markers
     vector<AssemblyInfoForLoop> for_loop_markers;
     vector<AssemblyInfoProdCons> producer_consumer_markers;
-    stringstream assembly_HTML;
 
     // for maping each node to unique marker in assembly
     int for_loop_count = 0;
@@ -62,7 +71,7 @@ private:
     // gets assembly file from stmt.viz.html file
     string get_assembly_filename(const string &filename);
 
-    //  checks if there is a marker that matches the assembly line, and if so, adds the line
+    // checks if there is a marker that matches the assembly line, and if so, adds the line
     // number and node to map, signifying a match
     void add_line_number(string &assembly_line, int line_number);
     void add_line_number_for_loop(string &assembly_line, AssemblyInfoForLoop &marker,
