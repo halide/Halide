@@ -1,5 +1,5 @@
-#include <cassert>
 #include <atomic>
+#include <cassert>
 #include <iostream>
 #include <mutex>
 #include <string>
@@ -85,10 +85,9 @@ void test_threads(int num_halide_threads, int num_cpp_threads) {
     for (auto &t : threads) {
         t.join();
     }
-
 }
 
-}
+}  // namespace
 
 int main(int argc, char **argv) {
     test_alloc_dealloc_all();
@@ -105,7 +104,7 @@ int main(int argc, char **argv) {
     constexpr int max_cpp_threads = 8;
 #endif
     for (int num_cpp_threads = 1; num_cpp_threads <= max_cpp_threads; num_cpp_threads *= 2) {
-        for (int num_halide_threads = std::max(1, num_cpp_threads/2); num_halide_threads <= max_cpp_threads*2; num_halide_threads *= 2) {
+        for (int num_halide_threads = std::max(1, num_cpp_threads / 2); num_halide_threads <= max_cpp_threads * 2; num_halide_threads *= 2) {
             test_threads(num_halide_threads, num_cpp_threads);
         }
     }

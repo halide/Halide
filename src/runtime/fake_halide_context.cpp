@@ -3,7 +3,7 @@
 
 namespace Halide::Runtime::Internal {
 
-WEAK uint8_t halide_context_keys_in_use[halide_context_key_count] = { 0 };
+WEAK uint8_t halide_context_keys_in_use[halide_context_key_count] = {0};
 WEAK void *halide_context_key_values[halide_context_key_count];
 
 }  // namespace Halide::Runtime::Internal
