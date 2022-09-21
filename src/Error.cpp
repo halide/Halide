@@ -3,6 +3,7 @@
 #include "Util.h"  // for get_env_variable
 
 #include <csignal>
+#include <mutex>
 
 #ifdef _MSC_VER
 #include <io.h>
@@ -148,6 +149,34 @@ ErrorReport::ErrorReport(const char *file, int line, const char *condition_strin
     }
 }
 
+#ifdef HALIDE_WITH_EXCEPTIONS
+namespace {
+
+// This is a trick: rethrow the pending (unhandled) exception
+// so that we can see what it is and log `what` before dying.
+// Strictly speaking, standard C++ doesn't allow you to do a try/throw/catch
+// within a terminate handler, but in practice, Clang and GCC (at least)
+// allow it, so we'll use it to improve quality-of-life for our tests.
+void UnhandledExceptionHandler() {
+    try {
+        throw;
+    } catch (Error &e) {
+        // Halide Errors are presume to be nicely formatted as-is
+        std::cerr << e.what() << std::flush;
+    } catch (std::exception &e) {
+        // Arbitrary C++ exceptions... who knows?
+        std::cerr << "Uncaught exception: " << e.what() << "\n"
+                  << std::flush;
+    } catch (...) {
+        std::cerr << "Uncaught exception: <unknown>\n"
+                  << std::flush;
+    }
+    abort();
+}
+
+}  // namespace
+#endif
+
 ErrorReport::~ErrorReport() noexcept(false) {
     if (!msg.str().empty() && msg.str().back() != '\n') {
         msg << "\n";
@@ -172,6 +201,11 @@ ErrorReport::~ErrorReport() noexcept(false) {
     }
 
 #ifdef HALIDE_WITH_EXCEPTIONS
+    static std::once_flag init;
+    std::call_once(init, []() {
+        std::set_terminate(UnhandledExceptionHandler);
+    });
+
     if (std::uncaught_exceptions() > 0) {
         // This should never happen - evaluating one of the arguments
         // to the error message would have to throw an
@@ -186,7 +220,7 @@ ErrorReport::~ErrorReport() noexcept(false) {
         throw InternalError(msg.str());
     }
 #else
-    std::cerr << msg.str();
+    std::cerr << msg.str() << std::flush;
     abort();
 #endif
 }
