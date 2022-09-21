@@ -806,6 +806,7 @@ RUNTIME_CPP_COMPONENTS = \
   posix_clock \
   posix_error_handler \
   posix_get_symbol \
+  posix_halide_context \
   posix_io \
   posix_print \
   posix_threads \
