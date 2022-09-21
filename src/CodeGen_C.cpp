@@ -1271,14 +1271,20 @@ public:
 
 void CodeGen_C::set_name_mangling_mode(NameMangling mode) {
     if (extern_c_open && mode != NameMangling::C) {
-        stream << "\n#ifdef __cplusplus\n";
-        stream << "}  // extern \"C\"\n";
-        stream << "#endif\n\n";
+        stream << R"INLINE_CODE(
+#ifdef __cplusplus
+}  // extern "C"
+#endif
+
+)INLINE_CODE";
         extern_c_open = false;
     } else if (!extern_c_open && mode == NameMangling::C) {
-        stream << "\n#ifdef __cplusplus\n";
-        stream << "extern \"C\" {\n";
-        stream << "#endif\n\n";
+        stream << R"INLINE_CODE(
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+)INLINE_CODE";
         extern_c_open = true;
     }
 }
@@ -2062,7 +2068,12 @@ void CodeGen_C::visit(const Variable *op) {
         // This is the name of a global, so we can't modify it.
         id = op->name;
     } else {
-        id = print_name(op->name);
+        // This substitution ensures const correctness for all calls
+        if (op->name == "__user_context") {
+            id = "_ucon";
+        } else {
+            id = print_name(op->name);
+        }
     }
 }
 
@@ -2753,7 +2764,7 @@ void CodeGen_C::visit(const Store *op) {
 void CodeGen_C::visit(const Let *op) {
     string id_value = print_expr(op->value);
     Expr body = op->body;
-    if (op->value.type().is_handle()) {
+    if (op->value.type().is_handle() && op->name != "__user_context") {
         // The body might contain a Load that references this directly
         // by name, so we can't rewrite the name.
         std::string name = print_name(op->name);
@@ -2848,7 +2859,7 @@ void CodeGen_C::visit(const LetStmt *op) {
     string id_value = print_expr(op->value);
     Stmt body = op->body;
 
-    if (op->value.type().is_handle()) {
+    if (op->value.type().is_handle() && op->name != "__user_context") {
         // The body might contain a Load or Store that references this
         // directly by name, so we can't rewrite the name.
         std::string name = print_name(op->name);

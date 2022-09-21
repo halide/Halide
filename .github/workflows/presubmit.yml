@@ -9,6 +9,9 @@ on:
       - '**.c'
       - '**.cpp'
 
+permissions:
+  contents: read
+
 jobs:
   check_clang_format:
     name: Check clang-format

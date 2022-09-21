@@ -693,7 +693,7 @@ gengen
   [-d 1|0] [-e EMIT_OPTIONS] [-n FILE_BASE_NAME] [-p PLUGIN_NAME]
   [-s AUTOSCHEDULER_NAME] [-t TIMEOUT]
   target=target-string[,target-string...]
-  [generator_arg=value [...]]
+  [generator_param=value [...]]
 
  -d  Build a module that is suitable for using for gradient descent calculation
      in TensorFlow or PyTorch. See Generator::build_gradient_module()

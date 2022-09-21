@@ -208,7 +208,7 @@ struct SpecificExpr {
 
     // What is the weakest and strongest IR node this could possibly be
     constexpr static IRNodeType min_node_type = IRNodeType::IntImm;
-    constexpr static IRNodeType max_node_type = IRNodeType::Shuffle;
+    constexpr static IRNodeType max_node_type = StrongestExprNodeType;
     constexpr static bool canonical = true;
 
     const BaseExprNode &expr;

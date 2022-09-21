@@ -1,20 +1,23 @@
+
 #include "Halide.h"
 
 using namespace Halide;
 
 class AddConstantGenerator : public Halide::Generator<AddConstantGenerator> {
 public:
-    Input<bool> constant_uint1{"constant_uint1"};
-    Input<uint8_t> constant_uint8{"constant_uint8"};
-    Input<uint16_t> constant_uint16{"constant_uint16"};
-    Input<uint32_t> constant_uint32{"constant_uint32"};
-    Input<uint64_t> constant_uint64{"constant_uint64"};
-    Input<int8_t> constant_int8{"constant_int8"};
-    Input<int16_t> constant_int16{"constant_int16"};
-    Input<int32_t> constant_int32{"constant_int32"};
-    Input<int64_t> constant_int64{"constant_int64"};
-    Input<float> constant_float{"constant_float"};
-    Input<double> constant_double{"constant_double"};
+    GeneratorParam<int> extra_int{"extra_int", 0};
+
+    Input<bool> scalar_uint1{"scalar_uint1"};
+    Input<uint8_t> scalar_uint8{"scalar_uint8"};
+    Input<uint16_t> scalar_uint16{"scalar_uint16"};
+    Input<uint32_t> scalar_uint32{"scalar_uint32"};
+    Input<uint64_t> scalar_uint64{"scalar_uint64"};
+    Input<int8_t> scalar_int8{"scalar_int8"};
+    Input<int16_t> scalar_int16{"scalar_int16"};
+    Input<int32_t> scalar_int32{"scalar_int32"};
+    Input<int64_t> scalar_int64{"scalar_int64"};
+    Input<float> scalar_float{"scalar_float"};
+    Input<double> scalar_double{"scalar_double"};
 
     Input<Buffer<uint8_t, 1>> input_uint8{"input_uint8"};
     Input<Buffer<uint16_t, 1>> input_uint16{"input_uint16"};
@@ -45,22 +48,24 @@ public:
     Var x, y, z;
 
     void generate() {
-        output_uint8(x) = input_uint8(x) + constant_uint8;
-        output_uint16(x) = input_uint16(x) + constant_uint16;
-        output_uint32(x) = input_uint32(x) + constant_uint32;
-        output_uint64(x) = input_uint64(x) + constant_uint64;
-        output_int8(x) = input_int8(x) + constant_int8;
-        output_int16(x) = input_int16(x) + constant_int16;
-        output_int32(x) = input_int32(x) + constant_int32;
-        output_int64(x) = input_int64(x) + constant_int64;
-        output_float(x) = input_float(x) + constant_float;
-        output_double(x) = input_double(x) + constant_double;
-        output_2d(x, y) = input_2d(x, y) + constant_int8;
-        output_3d(x, y, z) = input_3d(x, y, z) + constant_int8;
+        output_uint8(x) = input_uint8(x) + scalar_uint8;
+        output_uint16(x) = input_uint16(x) + scalar_uint16;
+        output_uint32(x) = input_uint32(x) + scalar_uint32;
+        output_uint64(x) = input_uint64(x) + scalar_uint64;
+        output_int8(x) = input_int8(x) + scalar_int8;
+        output_int16(x) = input_int16(x) + scalar_int16;
+        output_int32(x) = input_int32(x) + scalar_int32;
+        output_int64(x) = input_int64(x) + scalar_int64;
+        output_float(x) = input_float(x) + scalar_float;
+        output_double(x) = input_double(x) + scalar_double;
+        output_2d(x, y) = input_2d(x, y) + scalar_int8;
+        output_3d(x, y, z) = input_3d(x, y, z) + scalar_int8 + extra_int;
     }
 
     void schedule() {
     }
 };
 
-HALIDE_REGISTER_GENERATOR(AddConstantGenerator, addconstant)
+HALIDE_REGISTER_GENERATOR(AddConstantGenerator, addconstantcpp)
+HALIDE_REGISTER_GENERATOR_ALIAS(addconstantcpp_with_offset_42, addconstantcpp, {{"extra_int", "42"}})
+HALIDE_REGISTER_GENERATOR_ALIAS(addconstantcpp_with_negative_offset, addconstantcpp, {{"extra_int", "-1"}})
