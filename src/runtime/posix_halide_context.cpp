@@ -11,7 +11,7 @@ extern int pthread_key_create(pthread_key_t *key, void (*destructor)(void *));
 extern int pthread_setspecific(pthread_key_t key, const void *value);
 extern void *pthread_getspecific(pthread_key_t key);
 
-extern int pthread_once(pthread_once_t *once, void (*init)(void));
+extern int pthread_once(pthread_once_t *once, void (*init)());
 
 }  // extern "C"
 
