@@ -755,6 +755,11 @@ WEAK uint64_t halide_hexagon_get_device_size(void *user_context, struct halide_b
     return handle->size;
 }
 
+WEAK void *halide_hexagon_get_module_state(void *user_context, void **host) {
+    halide_abort_if_false(user_context, host != nullptr);
+    return host[0];
+}
+
 WEAK int halide_hexagon_device_and_host_malloc(void *user_context, struct halide_buffer_t *buf) {
     debug(user_context) << "halide_hexagon_device_and_host_malloc called.\n";
     int result = halide_hexagon_device_malloc(user_context, buf);

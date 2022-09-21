@@ -7,6 +7,7 @@
 #include "Debug.h"
 #include "Deinterleave.h"
 #include "ExprUsesVar.h"
+#include "FindIntrinsics.h"
 #include "Func.h"
 #include "IR.h"
 #include "IREquality.h"
@@ -1210,6 +1211,12 @@ private:
                     bounds_of_type(t);
                 }
             }
+        } else if (op->is_intrinsic(Call::saturating_cast)) {
+            internal_assert(op->args.size() == 1);
+
+            Expr a = lower_saturating_cast(op->type, op->args[0]);
+            a.accept(this);
+            return;
         } else if (op->is_intrinsic(Call::unsafe_promise_clamped) ||
                    op->is_intrinsic(Call::promise_clamped)) {
             // Unlike an explicit clamp, we are also permitted to
@@ -1500,6 +1507,15 @@ private:
                 result.include(interval);
             }
             interval = result;
+        } else if (op->is_intrinsic(Call::widen_right_add)) {
+            Expr add = Add::make(op->args[0], cast(op->args[0].type(), op->args[1]));
+            add.accept(this);
+        } else if (op->is_intrinsic(Call::widen_right_sub)) {
+            Expr sub = Sub::make(op->args[0], cast(op->args[0].type(), op->args[1]));
+            sub.accept(this);
+        } else if (op->is_intrinsic(Call::widen_right_mul)) {
+            Expr mul = Mul::make(op->args[0], cast(op->args[0].type(), op->args[1]));
+            mul.accept(this);
         } else if (op->call_type == Call::Halide) {
             bounds_of_func(op->name, op->value_index, op->type);
         } else {
@@ -3571,6 +3587,28 @@ void bounds_test() {
     Expr u8_2 = cast<uint8_t>(Load::make(Int(8), "buf", x + 17, Buffer<>(), Parameter(), const_true(), ModulusRemainder()));
     check(scope, cast<uint16_t>(u8_1) + cast<uint16_t>(u8_2),
           u16(0), u16(255 * 2));
+
+    check(scope, saturating_cast<uint8_t>(clamp(x, 5, 10)), cast<uint8_t>(5), cast<uint8_t>(10));
+    {
+        scope.push("x", Interval(UInt(32).min(), UInt(32).max()));
+        check(scope, saturating_cast<int32_t>(max(cast<uint32_t>(x), cast<uint32_t>(5))), cast<int32_t>(5), Int(32).max());
+        scope.pop("x");
+    }
+    {
+        Expr z = Variable::make(Float(32), "z");
+        scope.push("z", Interval(cast<float>(-1), cast<float>(1)));
+        check(scope, saturating_cast<int32_t>(z), cast<int32_t>(-1), cast<int32_t>(1));
+        check(scope, saturating_cast<double>(z), cast<double>(-1), cast<double>(1));
+        check(scope, saturating_cast<float16_t>(z), cast<float16_t>(-1), cast<float16_t>(1));
+        check(scope, saturating_cast<uint8_t>(z), cast<uint8_t>(0), cast<uint8_t>(1));
+        scope.pop("z");
+    }
+    {
+        Expr z = Variable::make(UInt(32), "z");
+        scope.push("z", Interval(UInt(32).max(), UInt(32).max()));
+        check(scope, saturating_cast<int32_t>(z), Int(32).max(), Int(32).max());
+        scope.pop("z");
+    }
 
     {
         Scope<Interval> scope;

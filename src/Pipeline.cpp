@@ -665,6 +665,11 @@ Callable Pipeline::compile_to_callable(const std::vector<Argument> &args_in, con
 
     for (const auto &out : outputs) {
         for (Type t : out.output_types()) {
+            // Note carefully: out.name() could well be a uniquified name with "$6" or similar tacked onto the end.
+            // For most downstream purposes, this is irrelevant, but for at least one case (parsing kwargs
+            // from Python) these will have to be stripped. We're deliberately *not* stripping here, to avoid
+            // injecting possible hard-to-debug issues from name collisions with "creative" uses; the downstream
+            // code must take care to strip any suffixes as needed.
             args.emplace_back(out.name(), Argument::OutputBuffer, t, out.dimensions(), ArgumentEstimates{});
         }
     }

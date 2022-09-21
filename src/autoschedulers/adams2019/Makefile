@@ -36,8 +36,8 @@ $(BIN)/baseline_weights.o: $(BIN)/baseline_weights.cpp
 	$(CXX) -c $< -o $@
 
 AUTOSCHED_COST_MODEL_LIBS=\
-$(BIN)/cost_model/cost_model.a \
-$(BIN)/cost_model/train_cost_model.a \
+$(BIN)/cost_model/adams2019_cost_model.a \
+$(BIN)/cost_model/adams2019_train_cost_model.a \
 
 $(BIN)/cost_model.generator: $(SRC)/cost_model_generator.cpp \
 				$(SRC)/cost_model_schedule.h \
@@ -50,9 +50,9 @@ $(BIN)/auto_schedule_runtime.a: $(BIN)/cost_model.generator
 	@mkdir -p $(@D)
 	$^ -r auto_schedule_runtime -o $(BIN) target=$(HL_TARGET)
 
-$(BIN)/cost_model/%.a: $(BIN)/cost_model.generator
+$(BIN)/cost_model/adams2019_%.a: $(BIN)/cost_model.generator
 	@mkdir -p $(@D)
-	$^ -g $* -o $(BIN)/cost_model -f $* target=$(HL_TARGET)-no_runtime -e stmt,static_library,h,assembly
+	$^ -g $* -o $(BIN)/cost_model -f $* -n adams2019_$* target=$(HL_TARGET)-no_runtime -e stmt,static_library,h,assembly
 
 # It's important to use dynamic lookups for undefined symbols here: all of libHalide
 # is expected to be present (in the loading binary), so we explicitly make the symbols

@@ -693,7 +693,7 @@ gengen
   [-d 1|0] [-e EMIT_OPTIONS] [-n FILE_BASE_NAME] [-p PLUGIN_NAME]
   [-s AUTOSCHEDULER_NAME] [-t TIMEOUT]
   target=target-string[,target-string...]
-  [generator_arg=value [...]]
+  [generator_param=value [...]]
 
  -d  Build a module that is suitable for using for gradient descent calculation
      in TensorFlow or PyTorch. See Generator::build_gradient_module()
@@ -1044,8 +1044,18 @@ namespace Internal {
 int generate_filter_main(int argc, char **argv, const GeneratorFactoryProvider &generator_factory_provider) {
     try {
         return generate_filter_main_inner(argc, argv, generator_factory_provider);
-    } catch (std::runtime_error &err) {
-        user_error << "Unhandled exception: " << err.what() << "\n";
+    } catch (::Halide::Error &err) {
+        // Do *not* use user_error here (or elsewhere in this function): it
+        // will throw an exception, and since there is almost certainly no
+        // try/catch block in our caller, it will call std::terminate,
+        // swallowing all error messages.
+        std::cerr << "Unhandled exception: " << err.what() << "\n";
+        return -1;
+    } catch (std::exception &err) {
+        std::cerr << "Unhandled exception: " << err.what() << "\n";
+        return -1;
+    } catch (...) {
+        std::cerr << "Unhandled exception: (unknown)\n";
         return -1;
     }
 }

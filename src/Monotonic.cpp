@@ -480,7 +480,8 @@ class DerivativeBounds : public IRVisitor {
         }
 
         if (op->is_intrinsic(Call::unsafe_promise_clamped) ||
-            op->is_intrinsic(Call::promise_clamped)) {
+            op->is_intrinsic(Call::promise_clamped) ||
+            op->is_intrinsic(Call::saturating_cast)) {
             op->args[0].accept(this);
             return;
         }

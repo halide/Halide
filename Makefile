@@ -381,7 +381,7 @@ ifneq ($(TEST_METAL), )
 # tests to be valid Objective-C++, e.g. avoiding using the identifier "id"
 # in certain ways. In practice this is not enough of a problem to justify
 # the work to limit which files are compiled this way.
-TEST_CXX_FLAGS += -DTEST_METAL -ObjC++
+TEST_CXX_FLAGS += -DTEST_METAL -ObjC++ -Werror,-Wunused-command-line-argument
 endif
 
 ifneq ($(TEST_CUDA), )
@@ -1055,7 +1055,26 @@ RUNTIME_TRIPLE_WIN_GENERIC_64 = "le64-unknown-windows-unknown"
 # standard but still skip threadsafe guards for static initialization in our runtime code)
 #
 # `-fno-rtti` is necessary to allow us to use classes with virtual functions in the runtime code
-RUNTIME_CXX_FLAGS = -std=c++17 -O3 -fno-vectorize -ffreestanding -fno-blocks -fno-exceptions -fno-unwind-tables -fno-threadsafe-statics -fno-rtti
+RUNTIME_CXX_FLAGS = \
+    -O3 \
+    -std=c++17 \
+    -ffreestanding \
+    -fno-blocks \
+    -fno-exceptions \
+    -fno-unwind-tables \
+    -fno-vectorize \
+    -fno-threadsafe-statics \
+    -fno-rtti \
+    -Wall \
+    -Wcast-qual \
+    -Werror \
+    -Wignored-qualifiers \
+    -Wno-comment \
+    -Wno-psabi \
+    -Wno-unknown-warning-option \
+    -Wno-unused-function \
+    -Wvla \
+    -Wsign-compare
 RUNTIME_CXX_FLAGS += $(HL_VERSION_FLAGS)
 
 $(BUILD_DIR)/initmod.windows_%_x86_32.ll: $(SRC_DIR)/runtime/windows_%_x86.cpp $(BUILD_DIR)/clang_ok
@@ -1583,6 +1602,11 @@ $(FILTERS_DIR)/user_context.a: $(BIN_DIR)/user_context.generator
 $(FILTERS_DIR)/user_context_insanity.a: $(BIN_DIR)/user_context_insanity.generator
 	@mkdir -p $(@D)
 	$(CURDIR)/$< -g user_context_insanity $(GEN_AOT_OUTPUTS) -o $(CURDIR)/$(FILTERS_DIR) target=$(TARGET)-no_runtime-user_context
+
+# ditto for async_parallel
+$(FILTERS_DIR)/async_parallel.a: $(BIN_DIR)/async_parallel.generator
+	@mkdir -p $(@D)
+	$(CURDIR)/$< -g async_parallel $(GEN_AOT_OUTPUTS) -o $(CURDIR)/$(FILTERS_DIR) target=$(TARGET)-no_runtime-user_context
 
 # Some .generators have additional dependencies (usually due to define_extern usage).
 # These typically require two extra dependencies:

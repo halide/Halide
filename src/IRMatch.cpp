@@ -384,6 +384,16 @@ class WithLanes : public IRMutator {
         }
     }
 
+    Expr visit(const Call *op) override {
+        if (op->is_intrinsic() && (op->type.lanes() != lanes)) {
+            auto new_args = mutate_with_changes(op->args).first;
+            return Call::make(with_lanes(op->type), op->name, new_args, op->call_type,
+                              op->func, op->value_index, op->image, op->param);
+        } else {
+            return IRMutator::visit(op);
+        }
+    }
+
 public:
     WithLanes(int lanes)
         : lanes(lanes) {

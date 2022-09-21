@@ -139,8 +139,8 @@ struct Rel {
     typedef typename T::addr_t addr_t;
     typedef typename T::addr_off_t addr_off_t;
 
-    addr_t r_offset;
-    addr_t r_info;
+    const addr_t r_offset;
+    const addr_t r_info;
 
     uint32_t r_type() const {
         if (sizeof(addr_t) == 8) {
@@ -158,28 +158,21 @@ struct Rel {
         }
     }
 
-    static addr_t make_info(uint32_t type, uint32_t sym) {
-        if (sizeof(addr_t) == 8) {
-            return (uint64_t)type | ((uint64_t)sym << 32);
-        } else {
-            return (type & 0xff) | (sym << 8);
-        }
-    }
-
-    void set_r_type(uint32_t type) {
-        r_info = make_info(type, r_sym());
-    }
-
-    void set_r_sym(uint32_t sym) {
-        r_info = make_info(r_type(), sym);
-    }
-
     Rel(addr_t offset, addr_t info)
         : r_offset(offset), r_info(info) {
     }
 
     Rel(addr_t offset, uint32_t type, uint32_t sym)
         : r_offset(offset), r_info(make_info(type, sym)) {
+    }
+
+private:
+    static addr_t make_info(uint32_t type, uint32_t sym) {
+        if (sizeof(addr_t) == 8) {
+            return (uint64_t)type | ((uint64_t)sym << 32);
+        } else {
+            return (type & 0xff) | (sym << 8);
+        }
     }
 };
 
@@ -188,7 +181,7 @@ struct Rela : public Rel<T> {
     typedef typename T::addr_t addr_t;
     typedef typename T::addr_off_t addr_off_t;
 
-    addr_off_t r_addend;
+    const addr_off_t r_addend;
 
     Rela(addr_t offset, addr_t info, addr_off_t addend)
         : Rel<T>(offset, info), r_addend(addend) {
@@ -218,15 +211,13 @@ struct Sym<Types<32>> {
         return st_info & 0xf;
     }
 
-    static uint8_t make_info(uint8_t binding, uint8_t type) {
-        return (binding << 4) | (type & 0xf);
+    void set_binding_and_type(uint8_t binding, uint8_t type) {
+        st_info = make_info(binding, type);
     }
 
-    void set_binding(uint8_t binding) {
-        st_info = make_info(binding, get_type());
-    }
-    void set_type(uint8_t type) {
-        st_info = make_info(get_binding(), type);
+private:
+    static uint8_t make_info(uint8_t binding, uint8_t type) {
+        return (binding << 4) | (type & 0xf);
     }
 };
 
@@ -798,8 +789,7 @@ std::vector<char> write_shared_object_internal(Object &obj, Linker *linker, cons
             safe_assign(sym.st_name, strings.get(s->get_name()));
             safe_assign(sym.st_value, value);
             safe_assign(sym.st_size, s->get_size());
-            sym.set_type(s->get_type());
-            sym.set_binding(s->get_binding());
+            sym.set_binding_and_type(s->get_binding(), s->get_type());
             safe_assign(sym.st_other, s->get_visibility());
             sym.st_shndx = section_idxs[s->get_section()];
 
