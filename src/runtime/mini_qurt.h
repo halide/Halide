@@ -244,4 +244,10 @@ extern int qurt_hvx_get_mode(void);
 
 typedef unsigned int qurt_size_t;
 typedef unsigned int qurt_mem_pool_t;
+
+int qurt_tls_create_key (int *key, void (*destructor)(void *));
+int qurt_tls_set_specific (int key, const void *value);
+void *qurt_tls_get_specific(int key);
+int qurt_tls_delete_key (int key);
+
 }

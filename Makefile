@@ -818,6 +818,7 @@ RUNTIME_CPP_COMPONENTS = \
   profiler_inlined \
   pseudostack \
   qurt_allocator \
+  qurt_halide_context \
   qurt_hvx \
   qurt_hvx_vtcm \
   qurt_threads \
