@@ -102,12 +102,6 @@ namespace Halide::PythonExtensions {
 #undef X
 }  // namespace Halide::PythonExtensions
 
-#ifndef HALIDE_PYTHON_EXTENSION_OMIT_ERROR_AND_PRINT_HANDLERS
-namespace Halide::PythonRuntime {
-      thread_local std::string current_error;
-}  // namespace Halide::PythonRuntime
-#endif  // HALIDE_PYTHON_EXTENSION_OMIT_ERROR_AND_PRINT_HANDLERS
-
 namespace {
 
 #define _HALIDE_STRINGIFY(x)            #x
@@ -136,17 +130,19 @@ PyModuleDef _moduledef = {
 
 #ifndef HALIDE_PYTHON_EXTENSION_OMIT_ERROR_AND_PRINT_HANDLERS
 void _module_halide_error(void *user_context, const char *msg) {
-    using Halide::PythonRuntime::current_error;
-    if (current_error.empty()) {
-        // fprintf(stderr, "Setting current_error=(%s)\n", msg);
-        current_error = msg;
-    } else {
-        // fprintf(stderr, "Warning: error (%s) ignored because current_error=(%s)\n", msg, current_error.c_str());
-    }
+    // Most Python code probably doesn't want to log the error text to stderr,
+    // so we won't do that by default.
+    #ifdef HALIDE_PYTHON_EXTENSION_LOG_ERRORS_TO_STDERR
+    PyGILState_STATE s = PyGILState_Ensure();
+    PySys_FormatStderr("%s\n", msg);
+    PyGILState_Release(s);
+    #endif
 }
 
 void _module_halide_print(void *user_context, const char *msg) {
+    PyGILState_STATE s = PyGILState_Ensure();
     PySys_FormatStdout("%s", msg);
+    PyGILState_Release(s);
 }
 #endif  // HALIDE_PYTHON_EXTENSION_OMIT_ERROR_AND_PRINT_HANDLERS
 
@@ -388,14 +384,6 @@ void PythonExtensionGen::compile(const LoweredFunc &f) {
     Indentation indent;
     indent.indent = 0;
 
-    dest << R"INLINE_CODE(
-#ifndef HALIDE_PYTHON_EXTENSION_OMIT_ERROR_AND_PRINT_HANDLERS
-namespace Halide::PythonRuntime {
-extern thread_local std::string current_error;
-}  // namespace Halide::PythonRuntime
-#endif  // HALIDE_PYTHON_EXTENSION_OMIT_ERROR_AND_PRINT_HANDLERS
-)INLINE_CODE";
-
     dest << "namespace Halide::PythonExtensions {\n";
     dest << "\n";
     dest << "namespace {\n";
@@ -502,9 +490,7 @@ extern thread_local std::string current_error;
     dest << indent << "if (result != 0) {\n";
     indent.indent += 2;
     dest << indent << "#ifndef HALIDE_PYTHON_EXTENSION_OMIT_ERROR_AND_PRINT_HANDLERS\n";
-    dest << indent << "std::string take;\n";
-    dest << indent << "std::swap(take, Halide::PythonRuntime::current_error);\n";
-    dest << indent << "PyErr_Format(PyExc_RuntimeError, \"Halide Runtime Error: %d (%s)\", result, take.c_str());\n";
+    dest << indent << "PyErr_Format(PyExc_RuntimeError, \"Halide Runtime Error: %d\", result);\n";
     dest << indent << "#else\n";
     dest << indent << "PyErr_Format(PyExc_ValueError, \"Halide error %d\", result);\n";
     dest << indent << "#endif  // HALIDE_PYTHON_EXTENSION_OMIT_ERROR_AND_PRINT_HANDLERS\n";
