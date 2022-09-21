@@ -860,87 +860,150 @@ void IRVisualization::visit(const ProducerConsumer *op) {
 
     html << close_box_div();
 }
+string IRVisualization::get_loop_iterator_binary(const IRNodeType &type, const Expr &a,
+                                                 const Expr &b) const {
+    stringstream extent_name;
+    extent_name << "(";
+
+    // deal with a
+    if (a.node_type() == IRNodeType::IntImm) {
+        int64_t extent_value = a.as<IntImm>()->value;
+        extent_name << get_read_write.int_span(extent_value);
+    } else if (a.node_type() == IRNodeType::Variable) {
+        extent_name << get_read_write.string_span(a.as<Variable>()->name);
+    } else {
+        extent_name << a;
+    }
+
+    // operator
+    if (type == IRNodeType::Add) {
+        extent_name << " + ";
+    } else if (type == IRNodeType::Sub) {
+        extent_name << " - ";
+    } else if (type == IRNodeType::Mul) {
+        extent_name << " * ";
+    } else if (type == IRNodeType::Div) {
+        extent_name << " / ";
+    } else if (type == IRNodeType::Mod) {
+        extent_name << " % ";
+    } else {
+        internal_error << "Unknown IRNodeType: \n";
+    }
+
+    // deal with b
+    if (b.node_type() == IRNodeType::IntImm) {
+        int64_t extent_value = b.as<IntImm>()->value;
+        extent_name << get_read_write.int_span(extent_value);
+    } else if (b.node_type() == IRNodeType::Variable) {
+        extent_name << get_read_write.string_span(b.as<Variable>()->name);
+    } else {
+        extent_name << b;
+    }
+
+    extent_name << ")";
+
+    return extent_name.str();
+}
 string IRVisualization::get_loop_iterator(const For *op) const {
     Expr min = op->min;
     Expr extent = op->extent;
 
     string loop_iterator;
 
-    // check if min and extend are of type IntImm
-    if (min.node_type() == IRNodeType::IntImm && extent.node_type() == IRNodeType::IntImm) {
-        int64_t min_vale = min.as<IntImm>()->value;
-        int64_t extent_value = extent.as<IntImm>()->value;
-        uint16_t range = uint16_t(extent_value - min_vale);
-        loop_iterator = get_read_write.int_span(range);
-    }
+    // if min is IntImm
+    if (min.node_type() == IRNodeType::IntImm) {
+        int64_t min_value = min.as<IntImm>()->value;
 
-    else if (min.node_type() == IRNodeType::IntImm && extent.node_type() == IRNodeType::Variable) {
-        int64_t min_vale = min.as<IntImm>()->value;
-        string min_name = get_read_write.int_span(min_vale);
-        string extent_name = get_read_write.string_span(extent.as<Variable>()->name);
+        // extent is IntImm
+        if (extent.node_type() == IRNodeType::IntImm) {
+            int64_t extent_value = extent.as<IntImm>()->value;
+            uint16_t range = uint16_t(extent_value - min_value);
+            loop_iterator = get_read_write.int_span(range);
+        }
 
-        if (min_vale == 0) {
-            loop_iterator = extent_name;
-        } else {
-            loop_iterator = "(" + extent_name + " - " + min_name + ")";
+        // extent is Variable
+        else if (extent.node_type() == IRNodeType::Variable) {
+            // int64_t min_value = min.as<IntImm>()->value;
+            string min_name = get_read_write.int_span(min_value);
+            string extent_name = get_read_write.string_span(extent.as<Variable>()->name);
+
+            if (min_value == 0) {
+                loop_iterator = extent_name;
+            } else {
+                loop_iterator = "(" + extent_name + " - " + min_name + ")";
+            }
+        }
+
+        // extent is binary op
+        else if (extent.node_type() == IRNodeType::Add) {
+            string min_name = get_read_write.int_span(min_value);
+            string extent_name =
+                get_loop_iterator_binary(IRNodeType::Add, extent.as<Add>()->a, extent.as<Add>()->b);
+
+            if (min_value == 0) {
+                loop_iterator = extent_name;
+            } else {
+                loop_iterator = "(" + extent_name + " - " + min_name + ")";
+            }
+        } else if (extent.node_type() == IRNodeType::Sub) {
+            string min_name = get_read_write.int_span(min_value);
+            string extent_name =
+                get_loop_iterator_binary(IRNodeType::Sub, extent.as<Sub>()->a, extent.as<Sub>()->b);
+
+            if (min_value == 0) {
+                loop_iterator = extent_name;
+            } else {
+                loop_iterator = "(" + extent_name + " - " + min_name + ")";
+            }
+        } else if (extent.node_type() == IRNodeType::Mul) {
+            string min_name = get_read_write.int_span(min_value);
+            string extent_name =
+                get_loop_iterator_binary(IRNodeType::Mul, extent.as<Mul>()->a, extent.as<Mul>()->b);
+
+            if (min_value == 0) {
+                loop_iterator = extent_name;
+            } else {
+                loop_iterator = "(" + extent_name + " - " + min_name + ")";
+            }
+        } else if (extent.node_type() == IRNodeType::Div) {
+            string min_name = get_read_write.int_span(min_value);
+            string extent_name =
+                get_loop_iterator_binary(IRNodeType::Div, extent.as<Div>()->a, extent.as<Div>()->b);
+
+            if (min_value == 0) {
+                loop_iterator = extent_name;
+            } else {
+                loop_iterator = "(" + extent_name + " - " + min_name + ")";
+            }
+        } else if (extent.node_type() == IRNodeType::Mod) {
+            string min_name = get_read_write.int_span(min_value);
+            string extent_name =
+                get_loop_iterator_binary(IRNodeType::Mod, extent.as<Mod>()->a, extent.as<Mod>()->b);
+
+            if (min_value == 0) {
+                loop_iterator = extent_name;
+            } else {
+                loop_iterator = "(" + extent_name + " - " + min_name + ")";
+            }
+        }
+
+        // extent is something else
+        else {
+            stringstream loop_it;
+            if (min_value == 0) {
+                loop_it << op->extent;
+            } else {
+                loop_it << "(" << op->extent << ") - (" << op->min << ")";
+            }
+            loop_iterator = loop_it.str();
         }
     }
 
-    else if (min.node_type() == IRNodeType::IntImm && extent.node_type() == IRNodeType::Add) {
-        int64_t min_vale = min.as<IntImm>()->value;
-        string min_name = get_read_write.int_span(min_vale);
-        string extent_name = "(";
-
-        // deal with a
-        if (extent.as<Add>()->a.node_type() == IRNodeType::IntImm) {
-            int64_t extent_value = extent.as<Add>()->a.as<IntImm>()->value;
-            extent_name += get_read_write.int_span(extent_value);
-        } else if (extent.as<Add>()->a.node_type() == IRNodeType::Variable) {
-            extent_name += get_read_write.string_span(extent.as<Add>()->a.as<Variable>()->name);
-        } else {
-            internal_error
-                << "\n"
-                << "In for loop: " << op->name << "\n"
-                << get_read_write.print_node(extent.as<Add>()->a.get()) << "\n"
-                << "GetReadWrite::visit(const For *op): add->a isn't IntImm or Variable - "
-                   "can't generate IRVisualization yet. \n\n";
-        }
-
-        extent_name += "+";
-
-        // deal with b
-        if (extent.as<Add>()->b.node_type() == IRNodeType::IntImm) {
-            int64_t extent_value = extent.as<Add>()->b.as<IntImm>()->value;
-            extent_name += get_read_write.int_span(extent_value);
-        } else if (extent.as<Add>()->b.node_type() == IRNodeType::Variable) {
-            extent_name += get_read_write.string_span(extent.as<Add>()->b.as<Variable>()->name);
-        } else {
-            internal_error
-                << "\n"
-                << "In for loop: " << op->name << "\n"
-                << get_read_write.print_node(extent.as<Add>()->b.get()) << "\n"
-                << "GetReadWrite::visit(const For *op): add->b isn't IntImm or Variable - "
-                   "can't generate IRVisualization yet. \n\n";
-        }
-        extent_name += ")";
-
-        if (min_vale == 0) {
-            loop_iterator = extent_name;
-        } else {
-            loop_iterator = "(" + extent_name + " - " + min_name + ")";
-        }
-
-    }
-
+    // min is not an IntImm
     else {
-        internal_error
-            << "\n"
-            << "In for loop: " << op->name << "\n"
-            << get_read_write.print_node(op->min.get()) << "\n"
-            << get_read_write.print_node(op->extent.get()) << "\n"
-            << "GetReadWrite::visit(const For *op): min and extent are not of type (IntImm) "
-               "or (IntImm & Variable) or (IntImm & Add) - "
-               "can't generate IRVisualization yet. \n\n";
+        stringstream loop_it;
+        loop_it << "(" << op->extent << ") - (" << op->min << ")";
+        loop_iterator = loop_it.str();
     }
 
     return loop_iterator;

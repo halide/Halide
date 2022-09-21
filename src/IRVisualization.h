@@ -176,6 +176,7 @@ private:
     void visit_function(const LoweredFunc &func);
     void visit(const Variable *op) override;
     void visit(const ProducerConsumer *op) override;
+    string get_loop_iterator_binary(const IRNodeType &type, const Expr &a, const Expr &b) const;
     string get_loop_iterator(const For *op) const;
     void visit(const For *op) override;
     void visit(const IfThenElse *op) override;
