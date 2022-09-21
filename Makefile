@@ -836,6 +836,7 @@ RUNTIME_CPP_COMPONENTS = \
   windows_d3d12compute_arm \
   windows_d3d12compute_x86 \
   windows_get_symbol \
+  windows_halide_context \
   windows_io \
   windows_opencl \
   windows_profiler \
