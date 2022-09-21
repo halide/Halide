@@ -75,19 +75,13 @@ clean:
 fft_aot_test: $(BIN)/$(HL_TARGET)/fft_aot_test
 	$^
 
-# TODO(srj): temporarily disable pending fix for https://github.com/halide/Halide/issues/7033,
-# to avoid unrelated buildbot failures
-#all: fft_aot_test bench_16x16 bench_32x32 bench_48x48 bench_64x64
-all: fft_aot_test
+all: fft_aot_test bench_16x16 bench_32x32 bench_48x48 bench_64x64
 
 # Ensure these are run sequentially and not in parallel
 test: $(BIN)/$(HL_TARGET)/bench_fft
-
-# TODO(srj): temporarily disable pending fix for https://github.com/halide/Halide/issues/7033,
-# to avoid unrelated buildbot failures
-# 	$< 8 8 $(<D)
-# 	$< 12 12 $(<D)
-# 	$< 16 16 $(<D)
-# 	$< 24 24 $(<D)
-# 	$< 32 32 $(<D)
-# 	$< 48 48 $(<D)
+	$< 8 8 $(<D)
+	$< 12 12 $(<D)
+	$< 16 16 $(<D)
+	$< 24 24 $(<D)
+	$< 32 32 $(<D)
+	$< 48 48 $(<D)
