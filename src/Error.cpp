@@ -154,22 +154,21 @@ namespace {
 
 // This is a trick: rethrow the pending (unhandled) exception
 // so that we can see what it is and log `what` before dying.
-// Strictly speaking, standard C++ doesn't allow you to do a try/throw/catch
-// within a terminate handler, but in practice, Clang and GCC (at least)
-// allow it, so we'll use it to improve quality-of-life for our tests.
 void UnhandledExceptionHandler() {
-    try {
-        throw;
-    } catch (Error &e) {
-        // Halide Errors are presume to be nicely formatted as-is
-        std::cerr << e.what() << std::flush;
-    } catch (std::exception &e) {
-        // Arbitrary C++ exceptions... who knows?
-        std::cerr << "Uncaught exception: " << e.what() << "\n"
-                  << std::flush;
-    } catch (...) {
-        std::cerr << "Uncaught exception: <unknown>\n"
-                  << std::flush;
+    if (auto ce = std::current_exception()) {
+        try {
+            std::rethrow_exception(ce);
+        } catch (Error &e) {
+            // Halide Errors are presume to be nicely formatted as-is
+            std::cerr << e.what() << std::flush;
+        } catch (std::exception &e) {
+            // Arbitrary C++ exceptions... who knows?
+            std::cerr << "Uncaught exception: " << e.what() << "\n"
+                      << std::flush;
+        } catch (...) {
+            std::cerr << "Uncaught exception: <unknown>\n"
+                      << std::flush;
+        }
     }
     abort();
 }
