@@ -343,7 +343,7 @@ ifneq ($(TEST_METAL), )
 # tests to be valid Objective-C++, e.g. avoiding using the identifier "id"
 # in certain ways. In practice this is not enough of a problem to justify
 # the work to limit which files are compiled this way.
-TEST_CXX_FLAGS += -DTEST_METAL -ObjC++
+TEST_CXX_FLAGS += -DTEST_METAL -ObjC++ -Werror,-Wunused-command-line-argument
 endif
 
 ifneq ($(TEST_CUDA), )
@@ -1564,6 +1564,11 @@ $(FILTERS_DIR)/user_context.a: $(BIN_DIR)/user_context.generator
 $(FILTERS_DIR)/user_context_insanity.a: $(BIN_DIR)/user_context_insanity.generator
 	@mkdir -p $(@D)
 	$(CURDIR)/$< -g user_context_insanity $(GEN_AOT_OUTPUTS) -o $(CURDIR)/$(FILTERS_DIR) target=$(TARGET)-no_runtime-user_context
+
+# ditto for async_parallel
+$(FILTERS_DIR)/async_parallel.a: $(BIN_DIR)/async_parallel.generator
+	@mkdir -p $(@D)
+	$(CURDIR)/$< -g async_parallel $(GEN_AOT_OUTPUTS) -o $(CURDIR)/$(FILTERS_DIR) target=$(TARGET)-no_runtime-user_context
 
 # Some .generators have additional dependencies (usually due to define_extern usage).
 # These typically require two extra dependencies:

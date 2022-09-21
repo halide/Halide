@@ -65,7 +65,7 @@ def _normalize_type_list(types: object) -> list[Type]:
         types = []
     elif isinstance(types, Type) and types == _UnspecifiedType():
         types = []
-    if not type(types) is list:
+    if type(types) is not list:
         types = [types];
     types = [_sanitize_type(t) for t in types]
     return types
@@ -185,7 +185,7 @@ class GeneratorParam:
         # Check the default value for validity
         GeneratorParam._parse_value(r._name, type(self._value), self._value)
 
-        if not value is None:
+        if value is not None:
             # parse replacement value for validity, and also for type match with default
             self._value = GeneratorParam._parse_value(r._name, type(self._value), value)
 
@@ -417,14 +417,14 @@ class Generator(ABC):
             a = generator._arginfos_in[i]
             k = a.name
             v = args[i]
-            _check(not k in inputs_set, "Input %s was specified multiple times." % k)
+            _check(k not in inputs_set, "Input %s was specified multiple times." % k)
             inputs_set.append(k)
             generator._bind_input(k, [v])
 
         input_names = [a.name for a in generator._arginfos_in]
         for k, v in kwargs.items():
             _check(k in input_names, "Unknown input '%s' specified via keyword argument." % k)
-            _check(not k in inputs_set, "Input %s specified multiple times." % k)
+            _check(k not in inputs_set, "Input %s specified multiple times." % k)
             inputs_set.append(k)
             generator._bind_input(k, [v])
 
@@ -492,7 +492,7 @@ class Generator(ABC):
     def _add_gpio(self, name: str, io, io_dict: dict, arginfos: Optional[list]) -> None:
         _check_valid_name(name)
         _check(
-            not name in self._requirements,
+            name not in self._requirements,
             "The name '%s' is used more than once in Generator %s." % (name, self._get_name()),
         )
         types, dimensions = io._get_types_and_dimensions()
@@ -500,7 +500,7 @@ class Generator(ABC):
         r = Requirement(name, types, dimensions)
         self._requirements[name] = r
         io_dict[name] = io
-        if not arginfos is None:
+        if arginfos is not None:
             arginfos.append(ArgInfo(name, *io._get_direction_and_kind(), types, dimensions))
 
     def add_input(self, name: str, io) -> None:
@@ -665,7 +665,7 @@ class Generator(ABC):
             self.autoscheduler().name = value
         elif name.startswith("autoscheduler."):
             sub_key = name[len("autoscheduler."):]
-            _check(not sub_key in self.autoscheduler().extra,
+            _check(sub_key not in self.autoscheduler().extra,
                    "The GeneratorParam %s cannot be set more than once" % name)
             self.autoscheduler().extra[sub_key] = value
         else:
@@ -717,7 +717,7 @@ class Generator(ABC):
         self._advance_to_stage(_Stage.configure_called)
         _check(len(values) == 1, "Too many values specified for input: %s" % name)
         _check(name in self._inputs_dict, "There is no input with the name: %s" % name)
-        assert not name in self._replacements
+        assert name not in self._replacements
         self._replacements[name] = self._inputs_dict[name]._make_replacement(values[0], self._requirements[name])
 
 
@@ -757,7 +757,7 @@ def alias(**kwargs):
         for k, v in kwargs.items():
             _check_valid_name(k)
             _check(hasattr(cls, "_halide_registered_name"), "@alias can only be used in conjunction with @generator.")
-            _check(not k in _python_generators, "The Generator name %s is already in use." % k)
+            _check(k not in _python_generators, "The Generator name %s is already in use." % k)
             _check(type(v) is dict, "The Generator alias %s specifies something other than a dict." % k)
             new_cls = type(k, (cls,), {"_halide_registered_name": k, "_halide_alias_generator_params": v})
             _python_generators[k] = new_cls
@@ -771,7 +771,7 @@ def generator(name:str=""):
     _check(sys.version_info >= (3, 7), "Halide Generators require Python 3.7 or later.")
     def generator_impl(cls):
         n = name if name else _fqname(cls)
-        _check(not n in _python_generators, "The Generator name %s is already in use." % n)
+        _check(n not in _python_generators, "The Generator name %s is already in use." % n)
         _check(isclass(cls), "@generator can only be used on classes.")
         # Allow (but don't require) explicit inheritance from hl.Generator;
         # static type checkers (e.g. pytype) can complain that the decorated class

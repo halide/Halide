@@ -322,7 +322,9 @@ string CodeGen_WebAssembly::mattrs() const {
         sep = ",";
     }
 
-    if (target.has_feature(Target::WasmBulkMemory)) {
+    // Recent Emscripten builds assume that specifying `-pthread` implies bulk-memory too,
+    // so quietly enable it if either of these are specified.
+    if (target.has_feature(Target::WasmBulkMemory) || target.has_feature(Target::WasmThreads)) {
         s << sep << "+bulk-memory";
         sep = ",";
     }
