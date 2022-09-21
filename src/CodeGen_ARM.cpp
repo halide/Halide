@@ -243,9 +243,9 @@ const ArmIntrinsic intrinsic_defs[] = {
     {"llvm.roundeven", "llvm.roundeven", Float(16, 8), "round", {Float(16, 8)}, ArmIntrinsic::RequireFp16},
     {"llvm.roundeven", "llvm.roundeven", Float(32, 4), "round", {Float(32, 4)}},
     {"llvm.roundeven", "llvm.roundeven", Float(64, 2), "round", {Float(64, 2)}},
-    {"llvm.roundeven", "llvm.roundeven", Float(16), "round", {Float(16)}, ArmIntrinsic::RequireFp16},
-    {"llvm.roundeven", "llvm.roundeven", Float(32), "round", {Float(32)}},
-    {"llvm.roundeven", "llvm.roundeven", Float(64), "round", {Float(64)}},
+    {"llvm.roundeven.f16", "llvm.roundeven.f16", Float(16), "round", {Float(16)}, ArmIntrinsic::RequireFp16 | ArmIntrinsic::NoMangle},
+    {"llvm.roundeven.f32", "llvm.roundeven.f32", Float(32), "round", {Float(32)}, ArmIntrinsic::NoMangle},
+    {"llvm.roundeven.f64", "llvm.roundeven.f64", Float(64), "round", {Float(64)}, ArmIntrinsic::NoMangle},
 
     // SABD, UABD - Absolute difference
     {"vabds", "sabd", UInt(8, 8), "absd", {Int(8, 8), Int(8, 8)}, ArmIntrinsic::HalfWidth},
@@ -735,11 +735,7 @@ void CodeGen_ARM::init_module() {
                     types = {ret_type};
                 }
                 for (const Type &t : types) {
-                    if (t.is_vector()) {
-                        mangled_name_builder << ".v" << t.lanes();
-                    } else {
-                        mangled_name_builder << ".";
-                    }
+                    mangled_name_builder << ".v" << t.lanes();
                     if (t.is_int() || t.is_uint()) {
                         mangled_name_builder << "i";
                     } else if (t.is_float()) {
