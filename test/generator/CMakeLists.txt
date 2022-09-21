@@ -133,6 +133,7 @@ halide_define_aot_test(argvcall)
 halide_define_aot_test(async_parallel
                        # Requires threading support, not yet available for wasm tests
                        ENABLE_IF NOT ${USING_WASM}
+                       FEATURES user_context
                        GROUPS multithreaded)
 
 # autograd_aottest.cpp

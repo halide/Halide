@@ -1559,6 +1559,11 @@ $(FILTERS_DIR)/user_context_insanity.a: $(BIN_DIR)/user_context_insanity.generat
 	@mkdir -p $(@D)
 	$(CURDIR)/$< -g user_context_insanity $(GEN_AOT_OUTPUTS) -o $(CURDIR)/$(FILTERS_DIR) target=$(TARGET)-no_runtime-user_context
 
+# ditto for async_parallel
+$(FILTERS_DIR)/async_parallel.a: $(BIN_DIR)/async_parallel.generator
+	@mkdir -p $(@D)
+	$(CURDIR)/$< -g async_parallel $(GEN_AOT_OUTPUTS) -o $(CURDIR)/$(FILTERS_DIR) target=$(TARGET)-no_runtime-user_context
+
 # Some .generators have additional dependencies (usually due to define_extern usage).
 # These typically require two extra dependencies:
 # (1) Ensuring the extra _generator.cpp is built into the .generator.
