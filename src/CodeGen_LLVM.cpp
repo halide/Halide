@@ -1930,7 +1930,13 @@ Value *CodeGen_LLVM::codegen_buffer_pointer(Value *base_address, Halide::Type ty
     // Promote index to 64-bit on targets that use 64-bit pointers.
     llvm::DataLayout d(module.get());
     if (d.getPointerSize() == 8) {
-        index = builder->CreateIntCast(index, i64_t, true);
+        llvm::Type *index_type = index->getType();
+        llvm::Type *desired_index_type = i64_t;
+        if (isa<VectorType>(index_type)) {
+            desired_index_type = VectorType::get(desired_index_type,
+                                                 dyn_cast<VectorType>(index_type)->getElementCount());
+        }
+        index = builder->CreateIntCast(index, desired_index_type, true);
     }
 
     return CreateInBoundsGEP(builder, load_type, base_address, index);
@@ -2336,7 +2342,7 @@ void CodeGen_LLVM::codegen_predicated_store(const Store *op) {
             Value *slice_mask = slice_vector(vpred, i, slice_lanes);
             Instruction *store;
             if (call_vector_predication_intrinsic("store", value_type.with_lanes(slice_lanes), slice_mask, slice_val,
-                                                  vec_ptr, nullptr, alignment, ".p0")) {
+                                                  vec_ptr, nullptr, alignment, ".p0", true)) {
                 store = dyn_cast<Instruction>(value);
             } else {
                 store = builder->CreateMaskedStore(slice_val, vec_ptr, llvm::Align(alignment), slice_mask);
@@ -3774,7 +3780,11 @@ void CodeGen_LLVM::visit(const Store *op) {
     } else {
         int alignment = value_type.bytes();
         const Ramp *ramp = op->index.as<Ramp>();
-        if (ramp && is_const_one(ramp->stride)) {
+        // TODO(zalman): consider splitting out vector predication path. Current
+        // code shows how vector predication would simplify things as the
+        // following scalarization cases would go away.
+        bool is_dense = ramp && is_const_one(ramp->stride);
+        if (use_llvm_vp_intrinsics || is_dense) {
 
             int native_bits = native_vector_bits();
             int native_bytes = native_bits / 8;
@@ -3802,16 +3812,41 @@ void CodeGen_LLVM::visit(const Store *op) {
             int store_lanes = value_type.lanes();
             int native_lanes = maximum_vector_bits() / value_type.bits();
 
+            Expr base = (ramp != nullptr) ? ramp->base : 0;
+            Expr stride = (ramp != nullptr) ? ramp->stride : 0;
+            Value *stride_val = (!is_dense && ramp != nullptr) ? codegen(stride) : nullptr;
+
+            Value *index = (ramp == nullptr) ? codegen(op->index) : nullptr;
+            
             for (int i = 0; i < store_lanes; i += native_lanes) {
                 int slice_lanes = std::min(native_lanes, store_lanes - i);
-                Expr slice_base = simplify(ramp->base + i);
+                Expr slice_base = simplify(base + i * stride);
                 Expr slice_stride = make_one(slice_base.type());
                 Expr slice_index = slice_lanes == 1 ? slice_base : Ramp::make(slice_base, slice_stride, slice_lanes);
                 Value *slice_val = slice_vector(val, i, slice_lanes);
                 Value *elt_ptr = codegen_buffer_pointer(op->name, value_type.element_of(), slice_base);
                 Value *vec_ptr = builder->CreatePointerCast(elt_ptr, slice_val->getType()->getPointerTo());
-                StoreInst *store = builder->CreateAlignedStore(slice_val, vec_ptr, llvm::Align(alignment));
-                annotate_store(store, slice_index);
+                if (is_dense || slice_lanes == 1) {
+                    if (call_vector_predication_intrinsic("store", value_type.with_lanes(slice_lanes), nullptr, slice_val,
+                                                          vec_ptr, nullptr, alignment, ".p0", true)) {
+                        add_tbaa_metadata(dyn_cast<Instruction>(value), op->name, slice_index);
+                    } else {
+                        StoreInst *store = builder->CreateAlignedStore(slice_val, vec_ptr, llvm::Align(alignment));
+                        annotate_store(store, slice_index);
+                    }
+                } else if (ramp != nullptr) {
+                    bool generated = call_vector_predication_intrinsic("strided.store", value_type.with_lanes(slice_lanes), nullptr, slice_val,
+                                                                       vec_ptr, stride_val, alignment, ".i64", true);
+                    internal_assert(generated) << "Using vector predicated intrinsics, but code generation was not successful for strided store.\n"; 
+                    add_tbaa_metadata(dyn_cast<Instruction>(value), op->name, slice_index);
+                } else {
+                    Value *slice_index = slice_vector(index, i, slice_lanes);
+                    Value *vec_ptrs = codegen_buffer_pointer(op->name, value_type, slice_index);
+                    bool generated = call_vector_predication_intrinsic("scatter", value_type.with_lanes(slice_lanes), nullptr, slice_val,
+                                                                       vec_ptrs, nullptr, alignment, mangle_llvm_vector_type(vec_ptrs->getType()), true);
+
+                    internal_assert(generated) << "Using vector predicated intrinsics, but code generation was not successful for gathering store.\n";
+                }
             }
         } else if (ramp) {
             Type ptr_type = value_type.element_of();
@@ -4598,7 +4633,9 @@ Value *CodeGen_LLVM::call_intrin(const llvm::Type *result_type, int intrin_lanes
 
         llvm::Type *intrinsic_result_type = result_type->getScalarType();
         if (intrin_lanes > 1) {
-            if (scalable_vector_result && effective_vscale != 0) {
+            if (result_type == void_t) {
+                intrinsic_result_type = void_t;
+            } else if (scalable_vector_result && effective_vscale != 0) {
                 intrinsic_result_type = get_vector_type(result_type->getScalarType(),
                                                         intrin_lanes / effective_vscale, VectorTypeConstraint::VScale);
             } else {
@@ -4618,7 +4655,9 @@ Value *CodeGen_LLVM::call_intrin(const llvm::Type *result_type, int intrin_lanes
                                  llvm::Function *intrin, vector<Value *> arg_values) {
     internal_assert(intrin);
     int arg_lanes = 1;
-    if (result_type->isVectorTy()) {
+    if (result_type == void_t) {
+        arg_lanes = intrin_lanes;
+    } else if (result_type->isVectorTy()) {
         arg_lanes = get_vector_num_elements(result_type);
     }
 
@@ -4657,7 +4696,7 @@ Value *CodeGen_LLVM::call_intrin(const llvm::Type *result_type, int intrin_lanes
                 }
             }
 
-            llvm::Type *result_slice_type =
+            llvm::Type *result_slice_type = (result_type == void_t) ? void_t :
                 get_vector_type(result_type->getScalarType(), intrin_lanes);
 
             results.push_back(call_intrin(result_slice_type, intrin_lanes, intrin, args));
@@ -5048,10 +5087,31 @@ llvm::Constant *CodeGen_LLVM::get_splat(int lanes, llvm::Constant *value,
     return ConstantVector::getSplat(ec, value);
 }
 
+std::string CodeGen_LLVM::mangle_llvm_vector_type(llvm::Type *type) {
+    std::string type_string = ".";
+    bool is_scalable = isa<llvm::ScalableVectorType>(type);
+    llvm::ElementCount llvm_vector_ec;
+    if (is_scalable) {
+        const auto *vt = cast<llvm::ScalableVectorType>(type);
+        const char *type_designator = vt->getElementType()->isIntegerTy() ? "i" : "f";
+        std::string bits_designator = std::to_string(vt->getScalarSizeInBits());
+        llvm_vector_ec = vt->getElementCount();
+        type_string = ".nxv" + std::to_string(vt->getMinNumElements()) + type_designator + bits_designator;
+    } else {
+        const auto *vt = cast<llvm::FixedVectorType>(type);
+        const char *type_designator = vt->getElementType()->isIntegerTy() ? "i" : "f";
+        std::string bits_designator = std::to_string(vt->getScalarSizeInBits());
+        llvm_vector_ec = vt->getElementCount();
+        type_string = ".v" + std::to_string(vt->getNumElements()) + type_designator + bits_designator;
+    }
+    return type_string;
+}
+
 bool CodeGen_LLVM::call_vector_predication_intrinsic(const std::string &name, const Type &result_type,
                                                      llvm::Value *mask,  // Pass nullptr for constrant true.
                                                      llvm::Value *a, llvm::Value *b, llvm::Value *c, int alignment,
-                                                     const char *overload_suffix) {
+                                                     const std::string &overload_suffix,
+                                                     bool void_return) {
     if (!use_llvm_vp_intrinsics ||
         result_type.is_scalar()) {
         return false;
@@ -5059,24 +5119,9 @@ bool CodeGen_LLVM::call_vector_predication_intrinsic(const std::string &name, co
 
     llvm::Type *llvm_result_type = llvm_type_of(result_type);
     int32_t length = result_type.lanes();
-    const char *type_designator = result_type.is_float() ? "f" : "i";
-    std::string type_string = ".";
-    bool is_scalable = isa<llvm::ScalableVectorType>(llvm_result_type);
-    llvm::ElementCount llvm_vector_ec;
-    if (is_scalable) {
-        const auto *vt = cast<llvm::ScalableVectorType>(llvm_result_type);
-        std::string bits_designator = std::to_string(vt->getScalarSizeInBits());
-        llvm_vector_ec = vt->getElementCount();
-        type_string = ".nxv" + std::to_string(vt->getMinNumElements()) + type_designator + bits_designator;
-    } else {
-        const auto *vt = cast<llvm::FixedVectorType>(llvm_result_type);
-        std::string bits_designator = std::to_string(vt->getScalarSizeInBits());
-        llvm_vector_ec = vt->getElementCount();
-        type_string = ".v" + std::to_string(vt->getNumElements()) + type_designator + bits_designator;
-    }
 
     const char *name_base = (starts_with(name, "strided")) ? "llvm.experimental.vp." : "llvm.vp.";
-    std::string full_name = name_base + name + type_string + overload_suffix;
+    std::string full_name = name_base + name + mangle_llvm_vector_type(llvm_result_type) + overload_suffix;
     int arg_count = 3 + (b != nullptr) + (c != nullptr);
     std::vector<llvm::Value *> args(arg_count);
     size_t i = 0;
@@ -5097,14 +5142,24 @@ bool CodeGen_LLVM::call_vector_predication_intrinsic(const std::string &name, co
     if (c != nullptr) { 
         args[i++] = c;
     }
+    bool is_scalable = isa<llvm::ScalableVectorType>(llvm_result_type);
     if (mask == nullptr) {
+        llvm::ElementCount llvm_vector_ec;
+        if (is_scalable) {
+            const auto *vt = cast<llvm::ScalableVectorType>(llvm_result_type);
+            llvm_vector_ec = vt->getElementCount();
+        } else {
+            const auto *vt = cast<llvm::FixedVectorType>(llvm_result_type);
+            llvm_vector_ec = vt->getElementCount();
+        }
+
         args[i++] = ConstantVector::getSplat(llvm_vector_ec, ConstantInt::get(i1_t, 1));
     } else {
         args[i++] = mask;
     }
     args[i++] = ConstantInt::get(i32_t, length);
 
-    value  = call_intrin(llvm_result_type, get_vector_num_elements(llvm_result_type), full_name, args, is_scalable);
+    value  = call_intrin(void_return ? void_t : llvm_result_type, get_vector_num_elements(llvm_result_type), full_name, args, is_scalable);
     if (alignment != 0 && ptr_index != -1 && isa<CallInst>(value)) {
         llvm::CallInst *call = dyn_cast<llvm::CallInst>(value);
         call->addParamAttr(ptr_index, Attribute::getWithAlignment(*context, llvm::Align(alignment)));

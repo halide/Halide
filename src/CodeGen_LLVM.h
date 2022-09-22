@@ -307,6 +307,9 @@ protected:
     llvm::Value *codegen_buffer_pointer(llvm::Value *base_address, Type type, llvm::Value *index);
     // @}
 
+    /** Return an appropriate type string for a type which is of VectorType. */
+    std::string mangle_llvm_vector_type(llvm::Type *type);
+
     /** Turn a Halide Type into an llvm::Value representing a constant halide_type_t */
     llvm::Value *make_halide_type_t(const Type &);
 
@@ -585,7 +588,8 @@ protected:
     virtual bool call_vector_predication_intrinsic(const std::string &name, const Type &result_type,
                                                    llvm::Value *mask, llvm::Value *a, llvm::Value *b = nullptr,
                                                    llvm::Value *c = nullptr, int alignment = 0,
-                                                   const char *overload_suffix = "");
+                                                   const std::string &overload_suffix = "",
+                                                   bool void_return = false);
 
     virtual bool call_vector_predication_comparison(const std::string &name, const Type &result_type,
                                                     llvm::Value *mask,  // Pass nullptr for constrant true.
