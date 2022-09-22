@@ -118,6 +118,10 @@ public:
             .tile(x, y, xi, yi, 256, 8)
             .vectorize(xi, natural_vector_size<float>());
 
+        for (int i = 0; i < 5; i++) {
+            new_state.update(i).unscheduled();
+        }
+
         blur
             .compute_at(new_state, xi)
             .vectorize(x);

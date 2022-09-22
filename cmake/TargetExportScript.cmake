@@ -20,6 +20,18 @@ function(target_export_script TARGET)
         return()
     endif ()
 
+    if (XCODE)
+        # There is a bug in Xcode where -Xlinker flags in the OTHER_LDFLAGS
+        # property creates a bogus dependency on a file named -Xlinker. No
+        # idea how this happens. CMake translates the EXPORTED_SYMBOLS_FLAG
+        # below to -Xlinker -exported_symbols_list -Xlinker ${ARG_APPLE_LD}
+        # which by rights should work, and in fact Xcode prints a link line
+        # that DOES work, but the aforementioned bug breaks the check. Going
+        # through the "official" Xcode attribute is a reasonable workaround.
+        set_property(TARGET "${TARGET}" PROPERTY XCODE_ATTRIBUTE_EXPORTED_SYMBOLS_FILE "${ARG_APPLE_LD}")
+        return()
+    endif ()
+
     ## More linkers support the GNU syntax (ld, lld, gold), so try it first.
     set(VERSION_SCRIPT_FLAG "LINKER:--version-script=${ARG_GNU_LD}")
     check_linker_flag(CXX "${VERSION_SCRIPT_FLAG}" LINKER_HAS_FLAG_VERSION_SCRIPT)

@@ -1166,7 +1166,11 @@ void CodeGen_LLVM::optimize_module() {
                 if (get_target().os == Target::OS::Linux) {
                     sanitizercoverage_options.StackDepth = true;
                 }
+#if LLVM_VERSION >= 160
+                mpm.addPass(SanitizerCoveragePass(sanitizercoverage_options));
+#else
                 mpm.addPass(ModuleSanitizerCoveragePass(sanitizercoverage_options));
+#endif
             });
     }
 
@@ -1185,8 +1189,13 @@ void CodeGen_LLVM::optimize_module() {
             constexpr bool use_global_gc = false;
             constexpr bool use_odr_indicator = true;
             constexpr auto destructor_kind = AsanDtorKind::Global;
+#if LLVM_VERSION >= 160
+            mpm.addPass(AddressSanitizerPass(
+                asan_options, use_global_gc, use_odr_indicator, destructor_kind));
+#else
             mpm.addPass(ModuleAddressSanitizerPass(
                 asan_options, use_global_gc, use_odr_indicator, destructor_kind));
+#endif
 #else
             constexpr bool compile_kernel = false;
             constexpr bool recover = false;
