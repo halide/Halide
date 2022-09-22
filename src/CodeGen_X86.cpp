@@ -1,3 +1,4 @@
+#include "CodeGen_Internal.h"
 #include "CodeGen_Posix.h"
 #include "ConciseCasts.h"
 #include "Debug.h"
@@ -118,6 +119,11 @@ const x86Intrinsic intrinsic_defs[] = {
     {"abs_i16x8", UInt(16, 8), "abs", {Int(16, 8)}, Target::SSE41},
     {"abs_i32x4", UInt(32, 4), "abs", {Int(32, 4)}, Target::SSE41},
     {"abs_f32x4", Float(32, 4), "abs", {Float(32, 4)}},
+
+    {"round_f32x4", Float(32, 4), "round", {Float(32, 4)}, Target::SSE41},
+    {"round_f64x2", Float(64, 2), "round", {Float(64, 2)}, Target::SSE41},
+    {"round_f32x8", Float(32, 8), "round", {Float(32, 8)}, Target::AVX},
+    {"round_f64x4", Float(64, 4), "round", {Float(64, 4)}, Target::AVX},
 
     {"llvm.sadd.sat.v32i8", Int(8, 32), "saturating_add", {Int(8, 32), Int(8, 32)}, Target::AVX2},
     {"llvm.sadd.sat.v16i8", Int(8, 16), "saturating_add", {Int(8, 16), Int(8, 16)}},
@@ -502,8 +508,15 @@ void CodeGen_X86::visit(const Cast *op) {
 }
 
 void CodeGen_X86::visit(const Call *op) {
+    if (op->is_intrinsic(Call::round)) {
+        value = call_overloaded_intrin(op->type, "round", op->args);
+        if (value) {
+            return;
+        }
+    }
+
     if (!op->type.is_vector()) {
-        // We only have peephole optimizations for vectors in here.
+        // We only have peephole optimizations for vectors beyond this point.
         CodeGen_Posix::visit(op);
         return;
     }

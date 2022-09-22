@@ -454,6 +454,10 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Call *op) {
             //  do_indent();
             stream << write_image.str();
         }
+    } else if (op->is_intrinsic(Call::round)) {
+        // In OpenCL, rint matches our rounding semantics
+        Expr equiv = Call::make(op->type, "rint", op->args, Call::PureExtern);
+        equiv.accept(this);
     } else {
         CodeGen_GPU_C::visit(op);
     }
@@ -1130,7 +1134,6 @@ void CodeGen_OpenCL_Dev::init_module() {
                << "#define abs_f32 fabs \n"
                << "#define floor_f32 floor \n"
                << "#define ceil_f32 ceil \n"
-               << "#define round_f32 round \n"
                << "#define trunc_f32 trunc \n"
                << "#define pow_f32 pow\n"
                << "#define asin_f32 asin \n"
@@ -1164,7 +1167,6 @@ void CodeGen_OpenCL_Dev::init_module() {
                    << "#define abs_f64 fabs\n"
                    << "#define floor_f64 floor\n"
                    << "#define ceil_f64 ceil\n"
-                   << "#define round_f64 round\n"
                    << "#define trunc_f64 trunc\n"
                    << "#define pow_f64 pow\n"
                    << "#define asin_f64 asin\n"
@@ -1197,7 +1199,6 @@ void CodeGen_OpenCL_Dev::init_module() {
                    << "#define abs_f16 fabs\n"
                    << "#define floor_f16 floor\n"
                    << "#define ceil_f16 ceil\n"
-                   << "#define round_f16 round\n"
                    << "#define trunc_f16 trunc\n"
                    << "#define pow_f16 pow\n"
                    << "#define asin_f16 asin\n"
