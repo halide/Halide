@@ -322,6 +322,15 @@ Stmt remove_promises(const Stmt &s);
  * the tagged expression. If not, returns the expression. */
 Expr unwrap_tags(const Expr &e);
 
+template<typename T>
+struct is_printable_arg {
+    static constexpr bool value = std::is_convertible<T, const char *>::value ||
+                                  std::is_convertible<T, Halide::Expr>::value;
+};
+
+template<typename... Args>
+struct all_are_printable_args : meta_and<is_printable_arg<Args>...> {};
+
 // Secondary args to print can be Exprs or const char *
 inline HALIDE_NO_USER_CODE_INLINE void collect_print_args(std::vector<Expr> &args) {
 }
@@ -341,6 +350,13 @@ inline HALIDE_NO_USER_CODE_INLINE void collect_print_args(std::vector<Expr> &arg
 Expr requirement_failed_error(Expr condition, const std::vector<Expr> &args);
 
 Expr memoize_tag_helper(Expr result, const std::vector<Expr> &cache_key_values);
+
+/** Compute a + widen(b). */
+Expr widen_right_add(Expr a, Expr b);
+/** Compute a * widen(b). */
+Expr widen_right_mul(Expr a, Expr b);
+/** Compute a - widen(b). */
+Expr widen_right_sub(Expr a, Expr b);
 
 /** Compute widen(a) + widen(b). */
 Expr widening_add(Expr a, Expr b);

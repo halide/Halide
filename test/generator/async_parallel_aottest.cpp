@@ -54,7 +54,7 @@ last_call *all_thread_lasts = nullptr;
 
 thread_local last_call thread_last = {};
 
-extern "C" int sleeper(int loc, int x, int y, int z, int v) {
+extern "C" int sleeper(void *user_context, int loc, int x, int y, int z, int v) {
     last_update++;
 
     thread_last.loc = loc;
@@ -140,7 +140,7 @@ int main(int argc, char **argv) {
         sleeps = start++;
         Halide::Runtime::Buffer<int, 3> out(8, 8, 8);
 
-        async_parallel(out);
+        async_parallel(/*user_context*/ nullptr, out);
     }
 
     {

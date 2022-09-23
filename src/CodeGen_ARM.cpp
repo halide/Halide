@@ -1331,6 +1331,7 @@ void CodeGen_ARM::codegen_vector_reduce(const VectorReduce *op, const Expr &init
         if (narrow.defined()) {
             if (init.defined() && target.bits == 32) {
                 // On 32-bit, we have an intrinsic for widening add-accumulate.
+                // TODO: this could be written as a pattern with widen_right_add (#6951).
                 intrin = "pairwise_widening_add_accumulate";
                 intrin_args = {accumulator, narrow};
                 accumulator = Expr();

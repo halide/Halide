@@ -147,12 +147,19 @@ Buffer<uint32_t> integer_divide_table_srz32() {
 }
 
 Expr fast_integer_divide_impl(Expr numerator, Expr denominator, bool round_to_zero) {
-    if (is_const(denominator)) {
-        // There's code elsewhere for this case.
-        return numerator / cast<uint8_t>(denominator);
-    }
-    user_assert(denominator.type() == UInt(8))
+    denominator = lossless_cast(UInt(8), denominator);
+    user_assert(denominator.defined())
         << "Fast integer divide requires a UInt(8) denominator\n";
+
+    if (is_const(denominator) && numerator.type().can_represent(denominator.type())) {
+        if (round_to_zero) {
+            return div_round_to_zero(numerator, cast(numerator.type(), denominator));
+        } else {
+            // There's code elsewhere for this case.
+            return numerator / cast(numerator.type(), denominator);
+        }
+    }
+
     Type t = numerator.type();
     user_assert(t.is_uint() || t.is_int())
         << "Fast integer divide requires an integer numerator\n";
@@ -269,7 +276,7 @@ Expr fast_integer_divide_impl(Expr numerator, Expr denominator, bool round_to_ze
 
         // Extract sign bit
         // Expr xsign = (t.bits() < 32) ? (numerator / (1 << (t.bits()-1))) : (numerator >> (t.bits()-1));
-        Expr xsign = select(numerator > 0, cast(t, 0), cast(t, -1));
+        Expr xsign = select(numerator >= 0, cast(t, 0), cast(t, -1));
 
         // Multiply-keep-high-half
         result = (cast(wide, mul) * numerator);

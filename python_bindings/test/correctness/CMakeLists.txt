@@ -27,10 +27,23 @@ set(tests
     var.py
     )
 
+set(PY_GENERATORS "${CMAKE_CURRENT_SOURCE_DIR}/../generators")
+
+set(PYPATH_addconstant_test           "$<TARGET_FILE_DIR:py_aot_addconstantcpp>")
+set(PYPATH_bit_test                   "$<TARGET_FILE_DIR:py_aot_bitcpp>")
+set(PYPATH_callable                   "$<TARGET_FILE_DIR:py_gen_simplecpp_pystub>;${PY_GENERATORS}")
+set(PYPATH_multi_method_module_test   "$<TARGET_FILE_DIR:pyext_multi_method_module>")
+set(PYPATH_pystub                     "$<TARGET_FILE_DIR:py_gen_bitcpp_pystub>;${PY_GENERATORS}")
+set(PYPATH_user_context_test          "$<TARGET_FILE_DIR:py_aot_user_context>;${PY_GENERATORS}")
+
 foreach (test IN LISTS tests)
+    cmake_path(GET test STEM test_name)
     add_python_test(
         FILE "${test}"
         LABEL python_correctness
-        PYTHONPATH "$<TARGET_FILE_DIR:py_aot_bit>" "$<TARGET_FILE_DIR:py_gen_bit.generator>"
+        # Ensure that everything in generators/ is built before us.
+        # This is dramatic overkill but simplifies our build setup considerably.
+        DEPENDS PythonCorrectnessGenerators
+        PYTHONPATH "${PYPATH_${test_name}}"
     )
 endforeach ()

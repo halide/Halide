@@ -80,7 +80,7 @@ else ()
 endif ()
 
 if (TARGET Halide_Adams2019)
-    set(autoscheduler_utils retrain_cost_model featurization_to_sample get_host_target weightsdir_to_weightsfile)
+    set(autoscheduler_utils adams2019_retrain_cost_model adams2019_featurization_to_sample adams2019_get_host_target adams2019_weightsdir_to_weightsfile)
     if (NOT CMAKE_INSTALL_RPATH)
         set_target_properties(${autoscheduler_utils} PROPERTIES INSTALL_RPATH "${rbase};${rbase}/${lib_dir}")
     endif ()

@@ -7,30 +7,6 @@
 namespace Halide {
 namespace PythonBindings {
 
-namespace {
-
-// TODO: clever template usage could generalize this to list-of-types-to-try.
-std::vector<Expr> args_to_vector_for_print(const py::args &args, size_t start_offset = 0) {
-    if (args.size() < start_offset) {
-        throw py::value_error("Not enough arguments");
-    }
-    std::vector<Expr> v;
-    v.reserve(args.size() - (start_offset));
-    for (size_t i = start_offset; i < args.size(); ++i) {
-        // No way to see if a cast will work: just have to try
-        // and fail. Normally we don't want string to be convertible
-        // to Expr, but in this unusual case we do.
-        try {
-            v.emplace_back(args[i].cast<std::string>());
-        } catch (...) {
-            v.push_back(args[i].cast<Expr>());
-        }
-    }
-    return v;
-}
-
-}  // namespace
-
 void define_operators(py::module &m) {
     m.def("max", [](const py::args &args) -> Expr {
         if (args.size() < 2) {
@@ -149,11 +125,11 @@ void define_operators(py::module &m) {
     m.def("reinterpret", (Expr(*)(Type, Expr)) & reinterpret);
     m.def("cast", (Expr(*)(Type, Expr)) & cast);
     m.def("print", [](const py::args &args) -> Expr {
-        return print(args_to_vector_for_print(args));
+        return print(collect_print_args(args));
     });
     m.def(
         "print_when", [](const Expr &condition, const py::args &args) -> Expr {
-            return print_when(condition, args_to_vector_for_print(args));
+            return print_when(condition, collect_print_args(args));
         },
         py::arg("condition"));
     m.def(

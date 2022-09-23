@@ -93,6 +93,7 @@ int CodeGen_RISCV::target_vscale() const {
         internal_assert((target.vector_bits % 64) == 0);
         return target.vector_bits / 64;
     }
+
     return 0;
 }
 

@@ -583,6 +583,15 @@ struct Call : public ExprNode<Call> {
         undef,
         unreachable,
         unsafe_promise_clamped,
+
+        // One-sided variants of widening_add, widening_mul, and widening_sub.
+        // arg[0] + widen(arg[1])
+        widen_right_add,
+        // arg[0] * widen(arg[1])
+        widen_right_mul,
+        // arg[0] - widen(arg[1])
+        widen_right_sub,
+
         widening_add,
         widening_mul,
         widening_shift_left,

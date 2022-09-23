@@ -1507,6 +1507,15 @@ private:
                 result.include(interval);
             }
             interval = result;
+        } else if (op->is_intrinsic(Call::widen_right_add)) {
+            Expr add = Add::make(op->args[0], cast(op->args[0].type(), op->args[1]));
+            add.accept(this);
+        } else if (op->is_intrinsic(Call::widen_right_sub)) {
+            Expr sub = Sub::make(op->args[0], cast(op->args[0].type(), op->args[1]));
+            sub.accept(this);
+        } else if (op->is_intrinsic(Call::widen_right_mul)) {
+            Expr mul = Mul::make(op->args[0], cast(op->args[0].type(), op->args[1]));
+            mul.accept(this);
         } else if (op->call_type == Call::Halide) {
             bounds_of_func(op->name, op->value_index, op->type);
         } else {

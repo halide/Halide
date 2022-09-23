@@ -13,6 +13,10 @@ define_property(TARGET PROPERTY Halide_GENERATOR_HAS_POST_BUILD
                 BRIEF_DOCS "On a Halide generator target, true if Halide.dll copy command has already been added."
                 FULL_DOCS "On a Halide generator target, true if Halide.dll copy command has already been added.")
 
+define_property(TARGET PROPERTY Halide_PYTHON_GENERATOR_SOURCE
+                BRIEF_DOCS "Used to store the source file(s) for a Python Generator"
+                FULL_DOCS "Used to store the source file(s) for a Python Generator")
+
 define_property(TARGET PROPERTY Halide_LIBRARY_RUNTIME_TARGET
                 BRIEF_DOCS "On a Halide library target, the runtime it uses."
                 FULL_DOCS "On a Halide library target, the runtime it uses.")
@@ -68,26 +72,47 @@ function(add_halide_generator TARGET)
             find_package(Halide REQUIRED)
         endif ()
 
-        add_executable(${TARGET} ${ARG_SOURCES})
-        add_executable(${gen} ALIAS ${TARGET})
-        target_link_libraries(${TARGET} PRIVATE Halide::Generator ${ARG_LINK_LIBRARIES})
+        if (ARG_SOURCES MATCHES ".py$")
+            if (ARG_LINK_LIBRARIES)
+                message(FATAL_ERROR "You cannot specify LINK_LIBRARIES in conjunction with Python source code.")
+            endif ()
+            if (ARG_PYSTUB)
+                message(FATAL_ERROR "You cannot specify PYSTUB in conjunction with Python source code (only C++ Generators can produce PyStubs).")
+            endif ()
 
-        if (NOT ARG_NO_DEFAULT_FLAGS AND NOT Halide_NO_DEFAULT_FLAGS)
-            # For crosscompiling builds, the Halide headers will be included using -isystem,
-            # which will cause all warnings to be ignored. This is not helpful, since
-            # we *want* deprecation warnings to be propagated. So we must set
-            # NO_SYSTEM_FROM_IMPORTED in order for it to be seen.
-            set_target_properties(${TARGET} PROPERTIES NO_SYSTEM_FROM_IMPORTED YES)
-            target_compile_options(${TARGET} PRIVATE
-                $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wdeprecated-declarations>
-                $<$<CXX_COMPILER_ID:MSVC>:/w14996>  # 4996: compiler encountered deprecated declaration
-            )
+            list(LENGTH ARG_SOURCES len)
+            if (NOT len EQUAL 1)
+                message(FATAL_ERROR "Python Generators must specify exactly one source file.")
+            endif()
+
+            # Make a fake target here that we can attach the Python source to,
+            # so that we can extract 'em in add_halide_library()
+            add_custom_target(${TARGET} ALL)
+            set_property(TARGET ${TARGET} PROPERTY Halide_PYTHON_GENERATOR_SOURCE "${CMAKE_CURRENT_SOURCE_DIR}/${ARG_SOURCES}")
+
+            # TODO: what do we need to do for PACKAGE_NAME PACKAGE_NAMESPACE EXPORT_FILE in this case?
+        else ()
+            add_executable(${TARGET} ${ARG_SOURCES})
+            add_executable(${gen} ALIAS ${TARGET})
+            target_link_libraries(${TARGET} PRIVATE Halide::Generator ${ARG_LINK_LIBRARIES})
+
+            if (NOT ARG_NO_DEFAULT_FLAGS AND NOT Halide_NO_DEFAULT_FLAGS)
+                # For crosscompiling builds, the Halide headers will be included using -isystem,
+                # which will cause all warnings to be ignored. This is not helpful, since
+                # we *want* deprecation warnings to be propagated. So we must set
+                # NO_SYSTEM_FROM_IMPORTED in order for it to be seen.
+                set_target_properties(${TARGET} PROPERTIES NO_SYSTEM_FROM_IMPORTED YES)
+                target_compile_options(${TARGET} PRIVATE
+                    $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wdeprecated-declarations>
+                    $<$<CXX_COMPILER_ID:MSVC>:/w14996>  # 4996: compiler encountered deprecated declaration
+                )
+            endif ()
+
+            add_dependencies("${ARG_PACKAGE_NAME}" ${TARGET})
+            export(TARGETS ${TARGET}
+                   NAMESPACE ${ARG_PACKAGE_NAMESPACE}
+                   APPEND FILE "${ARG_EXPORT_FILE}")
         endif ()
-
-        add_dependencies("${ARG_PACKAGE_NAME}" ${TARGET})
-        export(TARGETS ${TARGET}
-               NAMESPACE ${ARG_PACKAGE_NAMESPACE}
-               APPEND FILE "${ARG_EXPORT_FILE}")
     endif ()
 
     if (ARG_PYSTUB)
@@ -100,11 +125,12 @@ function(add_halide_generator TARGET)
                "#include \"Halide.h\"\n"
                "HALIDE_GENERATOR_PYSTUB(${GEN_NAME}, ${MODULE_NAME})\n")
 
-        file(WRITE
-             "${CMAKE_CURRENT_BINARY_DIR}/${TARGET}.py_stub_generated.cpp"
-             "${stub_text}")
+        set(stub_file "${CMAKE_CURRENT_BINARY_DIR}/${TARGET}.${GEN_NAME}.${MODULE_NAME}.py_stub_generated.cpp")
+        if (NOT EXISTS "${stub_file}")
+            file(WRITE "${stub_file}" "${stub_text}")
+        endif()
 
-        Python3_add_library(${TARGET}_pystub MODULE WITH_SOABI "${CMAKE_CURRENT_BINARY_DIR}/${TARGET}.py_stub_generated.cpp" ${ARG_SOURCES})
+        Python3_add_library(${TARGET}_pystub MODULE WITH_SOABI "${stub_file}" ${ARG_SOURCES})
         set_target_properties(${TARGET}_pystub PROPERTIES
                               CXX_VISIBILITY_PRESET hidden
                               VISIBILITY_INLINES_HIDDEN ON
@@ -200,17 +226,32 @@ function(add_halide_library TARGET)
         message(FATAL_ERROR "Missing FROM argument specifying a Halide generator target")
     endif ()
 
-    if (NOT TARGET ${ARG_FROM})
-        # FROM is usually an unqualified name; if we are crosscompiling, we might need a
-        # fully-qualified name, so add the default package name and retry
-        set(FQ_ARG_FROM "${PROJECT_NAME}::halide_generators::${ARG_FROM}")
-        if (NOT TARGET ${FQ_ARG_FROM})
-            message(FATAL_ERROR "Unable to locate FROM as either ${ARG_FROM} or ${FQ_ARG_FROM}")
+    get_property(py_src TARGET ${ARG_FROM} PROPERTY Halide_PYTHON_GENERATOR_SOURCE)
+    if (py_src)
+        # TODO: Python Generators need work to support crosscompiling (https://github.com/halide/Halide/issues/7014)
+        if (NOT TARGET Halide::Python)
+            message(FATAL_ERROR "This version of Halide was built without support for Python bindings; rebuild using WITH_PYTHON_BINDINGS=ON to use this rule with Python Generators.")
         endif ()
-        set(ARG_FROM "${FQ_ARG_FROM}")
-    endif ()
-
-    _Halide_place_dll(${ARG_FROM})
+        if (NOT TARGET Python3::Interpreter)
+            message(FATAL_ERROR "You must call find_package(Python3) in your CMake code in order to use this rule with Python Generators.")
+        endif ()
+        set(PYTHONPATH "$<TARGET_FILE_DIR:Halide::Python>/..")
+        set(GENERATOR_CMD ${CMAKE_COMMAND} -E env PYTHONPATH=${PYTHONPATH} ${Python3_EXECUTABLE} $<SHELL_PATH:${py_src}>)
+        set(GENERATOR_CMD_DEPS ${ARG_FROM} Halide::Python ${py_src})
+    else()
+        if (NOT TARGET ${ARG_FROM})
+            # FROM is usually an unqualified name; if we are crosscompiling, we might need a
+            # fully-qualified name, so add the default package name and retry
+            set(FQ_ARG_FROM "${PROJECT_NAME}::halide_generators::${ARG_FROM}")
+            if (NOT TARGET ${FQ_ARG_FROM})
+                message(FATAL_ERROR "Unable to locate FROM as either ${ARG_FROM} or ${FQ_ARG_FROM}")
+            endif ()
+            set(ARG_FROM "${FQ_ARG_FROM}")
+        endif()
+        set(GENERATOR_CMD "${ARG_FROM}")
+        set(GENERATOR_CMD_DEPS ${ARG_FROM})
+        _Halide_place_dll(${ARG_FROM})
+    endif()
 
     if (ARG_C_BACKEND)
         if (ARG_USE_RUNTIME)
@@ -376,7 +417,7 @@ function(add_halide_library TARGET)
     endif ()
 
     add_custom_command(OUTPUT ${generator_output_files}
-                       COMMAND ${ARG_FROM}
+                       COMMAND ${GENERATOR_CMD}
                        -n "${TARGET}"
                        -d "${gradient_descent}"
                        -g "${ARG_GENERATOR}"
@@ -386,7 +427,7 @@ function(add_halide_library TARGET)
                        -o .
                        "target=$<JOIN:${ARG_TARGETS},$<COMMA>>"
                        ${ARG_PARAMS}
-                       DEPENDS "${ARG_FROM}" ${ARG_PLUGINS}
+                       DEPENDS ${GENERATOR_CMD_DEPS} ${ARG_PLUGINS}
                        VERBATIM)
 
     list(TRANSFORM generator_output_files PREPEND "${CMAKE_CURRENT_BINARY_DIR}/")
@@ -454,26 +495,22 @@ function(add_halide_python_extension_library TARGET)
         message(FATAL_ERROR "${TARGET} requires all libraries to use the same Halide Runtime, but saw ${len}: ${runtimes}")
     endif ()
 
-    # Module def code is the same in all of them, so arbitrarily choose the first
-    list(GET pycpps 0 module_definition_cpp)
-    add_library(${TARGET}_module_definition OBJECT ${module_definition_cpp})
-    set_target_properties(${TARGET}_module_definition PROPERTIES
-                          CXX_VISIBILITY_PRESET hidden
-                          VISIBILITY_INLINES_HIDDEN ON
-                          POSITION_INDEPENDENT_CODE ON)
-    target_link_libraries(${TARGET}_module_definition PRIVATE Halide::Runtime Python3::Module)
-    # Compile it with the right preprocessor definitions to provide the module defs,
-    # but not the function implementations
-    target_compile_definitions(${TARGET}_module_definition PRIVATE
-                               HALIDE_PYTHON_EXTENSION_OMIT_FUNCTION_DEFINITIONS
-                               HALIDE_PYTHON_EXTENSION_MODULE=${ARG_MODULE_NAME}
-                               "HALIDE_PYTHON_EXTENSION_FUNCTIONS=${function_names}")
+    set(pyext_runtime_name ${TARGET}_module_definition)
+    set(pyext_module_definition_src "${CMAKE_CURRENT_BINARY_DIR}/${pyext_runtime_name}.py.cpp")
+    _Halide_gengen_ensure()
+    add_custom_command(OUTPUT ${pyext_module_definition_src}
+                       COMMAND _Halide_gengen -r "${pyext_runtime_name}" -e python_extension -o "${CMAKE_CURRENT_BINARY_DIR}" target=host
+                       DEPENDS _Halide_gengen
+                       VERBATIM)
 
-    # Now compile all the pycpps to build the function implementations (but not the module def)
-    Python3_add_library(${TARGET} MODULE WITH_SOABI ${pycpps} $<TARGET_OBJECTS:${TARGET}_module_definition>)
+    Python3_add_library(${TARGET} MODULE WITH_SOABI ${pycpps} ${pyext_module_definition_src})
     target_link_libraries(${TARGET} PRIVATE ${ARG_HALIDE_LIBRARIES})
     target_compile_definitions(${TARGET} PRIVATE
-                               HALIDE_PYTHON_EXTENSION_OMIT_MODULE_DEFINITION)
+                               # Skip the default module-definition code in each file
+                               HALIDE_PYTHON_EXTENSION_OMIT_MODULE_DEFINITION
+                               # Gotta explicitly specify the module name and function(s) for this mode
+                               HALIDE_PYTHON_EXTENSION_MODULE_NAME=${ARG_MODULE_NAME}
+                               "HALIDE_PYTHON_EXTENSION_FUNCTIONS=${function_names}")
     set_target_properties(${TARGET} PROPERTIES OUTPUT_NAME ${ARG_MODULE_NAME})
     _Halide_target_export_single_symbol(${TARGET} "PyInit_${ARG_MODULE_NAME}")
 endfunction()
@@ -530,11 +567,8 @@ function(add_halide_runtime RT)
     # so that GCD calculation doesn't get confused.
     list(TRANSFORM ARG_TARGETS APPEND "-no_runtime")
 
-    # Create a Generator that is GenGen.cpp and nothing else; all it can do is generate a runtime.
-    if (NOT TARGET _Halide_gengen)
-        add_executable(_Halide_gengen )
-        target_link_libraries(_Halide_gengen PRIVATE Halide::Generator)
-    endif ()
+    # Ensure _Halide_gengen is defined
+    _Halide_gengen_ensure()
 
     _Halide_get_platform_details(
             is_crosscompiling
@@ -663,15 +697,38 @@ function(_Halide_fix_xcode TARGET)
 endfunction()
 
 function(_Halide_target_export_single_symbol TARGET SYMBOL)
-    file(WRITE
-         "${CMAKE_CURRENT_BINARY_DIR}/${TARGET}.ldscript.apple"
-         "_${SYMBOL}\n")
-    file(WRITE
-         "${CMAKE_CURRENT_BINARY_DIR}/${TARGET}.ldscript"
-         "{ global: ${SYMBOL}; local: *; };\n")
+    if (NOT EXISTS "${CMAKE_CURRENT_BINARY_DIR}/${TARGET}.${SYMBOL}.ldscript.apple")
+        file(WRITE
+             "${CMAKE_CURRENT_BINARY_DIR}/${TARGET}.${SYMBOL}.ldscript.apple"
+             "_${SYMBOL}\n")
+    endif()
+    if (NOT EXISTS "${CMAKE_CURRENT_BINARY_DIR}/${TARGET}.${SYMBOL}.ldscript")
+        file(WRITE
+             "${CMAKE_CURRENT_BINARY_DIR}/${TARGET}.${SYMBOL}.ldscript"
+             "{ global: ${SYMBOL}; local: *; };\n")
+    endif ()
     target_export_script(
         ${TARGET}
-        APPLE_LD "${CMAKE_CURRENT_BINARY_DIR}/${TARGET}.ldscript.apple"
-        GNU_LD "${CMAKE_CURRENT_BINARY_DIR}/${TARGET}.ldscript"
+        APPLE_LD "${CMAKE_CURRENT_BINARY_DIR}/${TARGET}.${SYMBOL}.ldscript.apple"
+        GNU_LD "${CMAKE_CURRENT_BINARY_DIR}/${TARGET}.${SYMBOL}.ldscript"
     )
 endfunction()
+
+function(_Halide_gengen_ensure)
+    # Create a Generator that is GenGen.cpp and nothing else; all it can do is generate a runtime.
+    if (NOT TARGET _Halide_gengen)
+
+        # add_executable requires at least one source file for some
+        # configs (e.g. Xcode), because, uh, reasons, so we'll create
+        # an empty one here to satisfy it
+        set(empty "${CMAKE_CURRENT_BINARY_DIR}/_Halide_gengen.empty.cpp")
+        if (NOT EXISTS "${empty}")
+            file(WRITE "${empty}" "/* nothing */\n")
+        endif ()
+
+        add_executable(_Halide_gengen "${empty}")
+        target_link_libraries(_Halide_gengen PRIVATE Halide::Generator)
+        _Halide_place_dll(_Halide_gengen)
+    endif ()
+endfunction()
+
