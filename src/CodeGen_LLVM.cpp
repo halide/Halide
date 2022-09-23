@@ -2451,7 +2451,7 @@ llvm::Value *CodeGen_LLVM::codegen_vector_load(const Type &type, const std::stri
 
         Value *slice_mask = (vpred != nullptr) ? slice_vector(vpred, i, slice_lanes) : nullptr;
 
-        Instruction *load_inst;
+        Instruction *load_inst = nullptr;
         if (stride) {
             if (call_vector_predication_intrinsic("strided.load", type.with_lanes(slice_lanes), slice_mask,
                                                   vec_ptr, stride, nullptr, align_bytes, ".i64")) {
@@ -4642,9 +4642,7 @@ Value *CodeGen_LLVM::call_intrin(const llvm::Type *result_type, int intrin_lanes
 
         llvm::Type *intrinsic_result_type = result_type->getScalarType();
         if (intrin_lanes > 1) {
-            if (result_type == void_t) {
-                intrinsic_result_type = void_t;
-            } else if (scalable_vector_result && effective_vscale != 0) {
+            if (scalable_vector_result && effective_vscale != 0) {
                 intrinsic_result_type = get_vector_type(result_type->getScalarType(),
                                                         intrin_lanes / effective_vscale, VectorTypeConstraint::VScale);
             } else {
@@ -4705,7 +4703,7 @@ Value *CodeGen_LLVM::call_intrin(const llvm::Type *result_type, int intrin_lanes
                 }
             }
 
-            llvm::Type *result_slice_type = (result_type == void_t) ? void_t :
+            llvm::Type *result_slice_type =
                 get_vector_type(result_type->getScalarType(), intrin_lanes);
 
             results.push_back(call_intrin(result_slice_type, intrin_lanes, intrin, args));
@@ -5053,6 +5051,10 @@ llvm::Type *CodeGen_LLVM::get_vector_type(llvm::Type *t, int n,
                                           VectorTypeConstraint type_constraint) const {
     bool scalable;
 
+    if (t->isVoidTy()) {
+        return t;
+    }
+      
     switch (type_constraint) {
     case VectorTypeConstraint::None:
         scalable = effective_vscale != 0 &&
