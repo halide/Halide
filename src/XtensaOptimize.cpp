@@ -100,7 +100,7 @@ bool is_double_native_vector_type(const Type &t) {
 
 Type get_native_xtensa_vector(const Type &t) {
     if (t.bits() == 64) {
-      return t.with_lanes(16);
+        return t.with_lanes(16);
     }
     if (t.bits() == 24 || t.bits() == 48) {
         return t.with_lanes(1536 / t.bits());
@@ -1935,8 +1935,7 @@ private:
             {"halide_xtensa_narrow_i48_with_shift_i32", 2},
             {"halide_xtensa_narrow_i48_with_shift_u32", 2},
             {"halide_xtensa_widen_right_mul_i64", 2},
-            {"halide_xtensa_widen_right_mul_u64", 2}
-        };
+            {"halide_xtensa_widen_right_mul_u64", 2}};
         int slicing_multiplier = 1;
         if (slicing_multipliers.count(op->name) > 0) {
             slicing_multiplier = slicing_multipliers[op->name];

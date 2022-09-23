@@ -3393,18 +3393,24 @@ void CodeGen_Xtensa::visit(const Cast *op) {
 }
 
 void CodeGen_Xtensa::visit(const Reinterpret *op) {
-  if (is_native_vector_type(op->type) && is_native_vector_type(op->value.type())) {
-    string value = print_expr(op->value);
-    string op_name = "unsupported_reinterpet";
-    if (is_native_xtensa_vector<int32_t>(op->type) && is_native_xtensa_vector<uint32_t>(op->value.type())) {
-      op_name = "xb_vecN_2x32Uv_rtor_xb_vecN_2x32v";
-    } else if (is_native_xtensa_vector<uint32_t>(op->type) && is_native_xtensa_vector<int32_t>(op->value.type())) {
-      op_name = "xb_vecN_2x32v_rtor_xb_vecN_2x32Uv";
+    if (is_native_vector_type(op->type) && is_native_vector_type(op->value.type())) {
+        string op_name = "";
+        if (is_native_xtensa_vector<int32_t>(op->type) && is_native_xtensa_vector<uint32_t>(op->value.type())) {
+            op_name = "xb_vecN_2x32Uv_rtor_xb_vecN_2x32v";
+        } else if (is_native_xtensa_vector<uint32_t>(op->type) && is_native_xtensa_vector<int32_t>(op->value.type())) {
+            op_name = "xb_vecN_2x32v_rtor_xb_vecN_2x32Uv";
+        } else if (is_native_xtensa_vector<uint32_t>(op->type) && is_native_xtensa_vector<float>(op->value.type())) {
+            op_name = "IVP_MOVN_2X32_FROMN_2XF32";
+        } else if (is_native_xtensa_vector<float>(op->type) && is_native_xtensa_vector<uint32_t>(op->value.type())) {
+            op_name = "IVP_MOVN_2XF32_FROMN_2X32";
+        }
+        if (!op_name.empty()) {
+            string value = print_expr(op->value);
+            id = print_assignment(op->type, op_name + "(" + value + ")");
+            return;
+        }
     }
-    id = print_assignment(op->type, op_name + "(" + value + ")");
-    return ;
-  }
-  CodeGen_C::visit(op);
+    CodeGen_C::visit(op);
 }
 
 void CodeGen_Xtensa::visit(const For *op) {
