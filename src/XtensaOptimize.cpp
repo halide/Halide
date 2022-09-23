@@ -1226,7 +1226,7 @@ private:
         if (op->is_intrinsic()) {
             Expr lowered = lower_intrinsic(op);
             if (lowered.defined()) {
-                debug(0) << "Lowered intrinsic - " << op->name << "\n";
+                debug(1) << "Lowered intrinsic - " << op->name << "\n";
                 // lowered = simplify(lowered);
                 return mutate(lowered);
             }
