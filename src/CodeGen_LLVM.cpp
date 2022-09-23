@@ -4918,7 +4918,7 @@ llvm::Type *CodeGen_LLVM::get_vector_type(llvm::Type *t, int n,
     if (t->isVoidTy()) {
         return t;
     }
-      
+
     switch (type_constraint) {
     case VectorTypeConstraint::None:
         scalable = effective_vscale != 0 &&
