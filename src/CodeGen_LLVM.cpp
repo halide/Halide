@@ -4508,7 +4508,9 @@ Value *CodeGen_LLVM::call_intrin(const llvm::Type *result_type, int intrin_lanes
 
         llvm::Type *intrinsic_result_type = result_type->getScalarType();
         if (intrin_lanes > 1) {
-            if (scalable_vector_result && effective_vscale != 0) {
+            if (result_type == void_t) {
+                intrinsic_result_type = void_t;
+            } else if (scalable_vector_result && effective_vscale != 0) {
                 intrinsic_result_type = get_vector_type(result_type->getScalarType(),
                                                         intrin_lanes / effective_vscale, VectorTypeConstraint::VScale);
             } else {
@@ -4528,7 +4530,9 @@ Value *CodeGen_LLVM::call_intrin(const llvm::Type *result_type, int intrin_lanes
                                  llvm::Function *intrin, vector<Value *> arg_values) {
     internal_assert(intrin);
     int arg_lanes = 1;
-    if (result_type->isVectorTy()) {
+    if (result_type == void_t) {
+        arg_lanes = intrin_lanes;
+    } else if (result_type->isVectorTy()) {
         arg_lanes = get_vector_num_elements(result_type);
     }
 
@@ -4567,7 +4571,7 @@ Value *CodeGen_LLVM::call_intrin(const llvm::Type *result_type, int intrin_lanes
                 }
             }
 
-            llvm::Type *result_slice_type =
+            llvm::Type *result_slice_type = (result_type == void_t) ? void_t :
                 get_vector_type(result_type->getScalarType(), intrin_lanes);
 
             results.push_back(call_intrin(result_slice_type, intrin_lanes, intrin, args));
