@@ -196,6 +196,13 @@ void define_pipeline(py::module &m) {
             .def("defined", &Pipeline::defined)
             .def("invalidate_cache", &Pipeline::invalidate_cache)
 
+            .def(
+                "add_requirement", [](Pipeline &p, const Expr &condition, const py::args &error_args) -> void {
+                    auto v = collect_print_args(error_args);
+                    p.add_requirement(condition, v);
+                },
+                py::arg("condition"))
+
             .def("__repr__", [](const Pipeline &p) -> std::string {
                 std::ostringstream o;
                 o << "<halide.Pipeline [";
