@@ -4528,7 +4528,7 @@ Value *CodeGen_LLVM::call_intrin(const llvm::Type *result_type, int intrin_lanes
                                  llvm::Function *intrin, vector<Value *> arg_values) {
     internal_assert(intrin);
     int arg_lanes = 1;
-    if (result_type == void_t) {
+    if (result_type->isVoidTy()) {
         arg_lanes = intrin_lanes;
     } else if (result_type->isVectorTy()) {
         arg_lanes = get_vector_num_elements(result_type);
